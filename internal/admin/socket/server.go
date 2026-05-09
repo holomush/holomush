@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/pkg/proto/holomush/admin/v1/adminv1connect"
 )
 
 // ErrAdminSocketAlreadyHeld is returned by Start when another holomush
@@ -57,7 +59,7 @@ func (s *Server) Start() (<-chan error, error) {
 	if _, statErr := os.Stat(s.cfg.SocketPath); statErr == nil {
 		slog.Warn("admin: removing stale admin.sock", "path", s.cfg.SocketPath)
 		if rmErr := os.Remove(s.cfg.SocketPath); rmErr != nil {
-			_ = lockFile.Close()
+			_ = lockFile.Close() //nolint:errcheck // best-effort cleanup before returning error
 			return nil, oops.Code("ADMIN_SOCKET_STALE_REMOVE_FAILED").
 				With("path", s.cfg.SocketPath).Wrap(rmErr)
 		}
@@ -67,7 +69,7 @@ func (s *Server) Start() (<-chan error, error) {
 	ln, listenErr := net.Listen("unix", s.cfg.SocketPath)
 	syscall.Umask(oldUmask)
 	if listenErr != nil {
-		_ = lockFile.Close()
+		_ = lockFile.Close() //nolint:errcheck // best-effort cleanup before returning error
 		return nil, oops.Code("ADMIN_SOCKET_LISTEN_FAILED").
 			With("path", s.cfg.SocketPath).Wrap(listenErr)
 	}
@@ -105,7 +107,7 @@ func (s *Server) Stop(ctx context.Context) error {
 		slog.Warn("admin: failed to remove admin.sock", "path", s.cfg.SocketPath, "error", rmErr)
 	}
 	if s.lockFile != nil {
-		_ = s.lockFile.Close()
+		_ = s.lockFile.Close() //nolint:errcheck // best-effort release; flock is dropped when fd closes
 		s.lockFile = nil
 	}
 	return nil
@@ -118,8 +120,9 @@ func acquireLock(lockPath string) (*os.File, error) {
 	if err != nil {
 		return nil, oops.Code("ADMIN_LOCK_OPEN_FAILED").With("path", lockPath).Wrap(err)
 	}
-	if flockErr := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); flockErr != nil {
-		_ = f.Close()
+	fd := int(f.Fd()) //nolint:gosec // G115: fd fits in int on all supported platforms (file descriptor is always small)
+	if flockErr := syscall.Flock(fd, syscall.LOCK_EX|syscall.LOCK_NB); flockErr != nil {
+		_ = f.Close() //nolint:errcheck // best-effort cleanup before returning error
 		if errors.Is(flockErr, syscall.EWOULDBLOCK) {
 			return nil, ErrAdminSocketAlreadyHeld
 		}
@@ -128,8 +131,11 @@ func acquireLock(lockPath string) (*os.File, error) {
 	return f, nil
 }
 
-// buildMux constructs the ConnectRPC handler mux. Stub — statusHandler registered
-// after Task 5 implementation.
+// buildMux constructs the ConnectRPC handler mux. Handlers for sub-epics
+// D, E, and F will be registered here as they are implemented.
 func (s *Server) buildMux() *http.ServeMux {
-	return http.NewServeMux()
+	mux := http.NewServeMux()
+	path, handler := adminv1connect.NewAdminServiceHandler(&statusHandler{version: s.cfg.Version})
+	mux.Handle(path, handler)
+	return mux
 }

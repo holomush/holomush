@@ -80,7 +80,7 @@ func TestServerRejectsStartWhenLockHeld(t *testing.T) {
 	s1 := NewServer(cfg)
 	_, err := s1.Start()
 	require.NoError(t, err)
-	defer s1.Stop(context.Background()) //nolint:errcheck
+	t.Cleanup(func() { _ = s1.Stop(context.Background()) })
 
 	s2 := NewServer(cfg)
 	_, err = s2.Start()
@@ -98,7 +98,7 @@ func TestServerRecoversStaleLockAndSocket(t *testing.T) {
 	s := NewServer(cfg)
 	_, err := s.Start()
 	require.NoError(t, err, "must start cleanly despite stale files")
-	defer s.Stop(context.Background()) //nolint:errcheck
+	t.Cleanup(func() { _ = s.Stop(context.Background()) })
 }
 
 // TestServerAcceptsUnixConnections verifies the server accepts connections
@@ -109,7 +109,7 @@ func TestServerAcceptsUnixConnections(t *testing.T) {
 
 	_, err := s.Start()
 	require.NoError(t, err)
-	defer s.Stop(context.Background()) //nolint:errcheck
+	t.Cleanup(func() { _ = s.Stop(context.Background()) })
 
 	conn, err := net.DialTimeout("unix", cfg.SocketPath, 2*time.Second)
 	require.NoError(t, err)
