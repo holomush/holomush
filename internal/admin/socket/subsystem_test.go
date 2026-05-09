@@ -70,7 +70,7 @@ func TestAdminSocketSubsystemStartIsIdempotentWithFlock(t *testing.T) {
 	sub := NewAdminSocketSubsystem(cfg)
 
 	require.NoError(t, sub.Start(context.Background()))
-	defer sub.Stop(context.Background()) //nolint:errcheck
+	defer func() { _ = sub.Stop(context.Background()) }()
 
 	sub2 := NewAdminSocketSubsystem(cfg)
 	err := sub2.Start(context.Background())

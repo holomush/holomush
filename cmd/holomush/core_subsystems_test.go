@@ -24,10 +24,7 @@ func (s stubSubsystem) Start(_ context.Context) error      { return nil }
 func (s stubSubsystem) Stop(_ context.Context) error       { return nil }
 
 // TestProductionSubsystemsIncludesCluster asserts that the production
-// subsystem slice (as constructed by productionSubsystems) includes
-// SubsystemCluster. If a future refactor drops clusterSub from the
-// orchestrator wiring, this test fails — that's the regression catch
-// Phase 3c relies on.
+// subsystem slice includes SubsystemCluster.
 func TestProductionSubsystemsIncludesCluster(t *testing.T) {
 	subs := productionSubsystems(
 		stubSubsystem{id: lifecycle.SubsystemDatabase},
@@ -41,6 +38,7 @@ func TestProductionSubsystemsIncludesCluster(t *testing.T) {
 		stubSubsystem{id: lifecycle.SubsystemCluster},
 		stubSubsystem{id: lifecycle.SubsystemAuditProjection},
 		stubSubsystem{id: lifecycle.SubsystemGRPC},
+		stubSubsystem{id: lifecycle.SubsystemAdminSocket},
 	)
 
 	found := false
@@ -51,11 +49,10 @@ func TestProductionSubsystemsIncludesCluster(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatal("productionSubsystems does not include SubsystemCluster; clusterSub was dropped from the orchestrator wiring")
+		t.Fatal("productionSubsystems does not include SubsystemCluster")
 	}
-
-	if len(subs) != 11 {
-		t.Errorf("productionSubsystems returned %d subsystems; want 11 after Phase 3c", len(subs))
+	if len(subs) != 12 {
+		t.Errorf("productionSubsystems returned %d subsystems; want 12 after Phase 5 sub-epic C", len(subs))
 	}
 }
 
@@ -86,5 +83,35 @@ func TestSubsystemAdminSocketConstantExists(t *testing.T) {
 	}
 	if lifecycle.SubsystemAdminSocket.String() == "" {
 		t.Error("SubsystemAdminSocket.String() must not be empty")
+	}
+}
+
+// TestProductionSubsystemsIncludesAdminSocket verifies AC-C10: the admin
+// socket subsystem is present in the production orchestrator slice.
+func TestProductionSubsystemsIncludesAdminSocket(t *testing.T) {
+	subs := productionSubsystems(
+		stubSubsystem{id: lifecycle.SubsystemDatabase},
+		stubSubsystem{id: lifecycle.SubsystemABAC},
+		stubSubsystem{id: lifecycle.SubsystemAuth},
+		stubSubsystem{id: lifecycle.SubsystemWorld},
+		stubSubsystem{id: lifecycle.SubsystemSessions},
+		stubSubsystem{id: lifecycle.SubsystemPlugins},
+		stubSubsystem{id: lifecycle.SubsystemBootstrap},
+		stubSubsystem{id: lifecycle.SubsystemEventBus},
+		stubSubsystem{id: lifecycle.SubsystemCluster},
+		stubSubsystem{id: lifecycle.SubsystemAuditProjection},
+		stubSubsystem{id: lifecycle.SubsystemGRPC},
+		stubSubsystem{id: lifecycle.SubsystemAdminSocket},
+	)
+
+	found := false
+	for _, sub := range subs {
+		if sub.ID() == lifecycle.SubsystemAdminSocket {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("productionSubsystems does not include SubsystemAdminSocket")
 	}
 }

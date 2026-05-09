@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -21,6 +22,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
+	socket "github.com/holomush/holomush/internal/admin/socket"
 	authsetup "github.com/holomush/holomush/internal/auth/setup"
 	"github.com/holomush/holomush/internal/bootstrap"
 	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
@@ -234,6 +236,18 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		return oops.Code("TLS_SETUP_FAILED").With("operation", "set up TLS").With("certs_dir", certsDir).Wrap(err)
 	}
 	slog.Info("TLS certificates ready", "certs_dir", certsDir)
+
+	// Derive admin socket paths from XDG runtime dir. Resolved here (step 4)
+	// alongside certsDir so path failures surface before subsystems start.
+	runtimeDir, err := xdg.RuntimeDir()
+	if err != nil {
+		return oops.Code("ADMIN_SOCKET_RUNTIME_DIR_FAILED").With("operation", "get XDG runtime dir").Wrap(err)
+	}
+	if ensureErr := xdg.EnsureDir(runtimeDir); ensureErr != nil {
+		return oops.Code("ADMIN_SOCKET_RUNTIME_DIR_ENSURE_FAILED").With("path", runtimeDir).Wrap(ensureErr)
+	}
+	adminSocketPath := filepath.Join(runtimeDir, "admin.sock")
+	adminLockPath := filepath.Join(runtimeDir, "admin.lock")
 
 	// --- 5. Parse session configuration ---
 	sessionTTL, reaperInterval, err := parseSessionConfig(cfg)
@@ -520,6 +534,12 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		VerbRegistry:   verbRegistry,
 	})
 
+	adminSub := socket.NewAdminSocketSubsystem(socket.AdminSocketSubsystemConfig{
+		SocketPath: adminSocketPath,
+		LockPath:   adminLockPath,
+		Version:    version,
+	})
+
 	// --- 8. Orchestrator: register + start ---
 	// The database subsystem was pre-started (step 3) because the gameID must be
 	// available before TLS cert generation. Its Start() is idempotent, so the
@@ -530,6 +550,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		dbSub, abacSub, authSub, worldSub,
 		sessionSub, pluginSub, bootstrapSub,
 		eventBusSub, clusterSub, auditSub, grpcSub,
+		adminSub,
 	) {
 		orch.Register(sub)
 	}
@@ -848,11 +869,13 @@ func parseAutoMigrate() bool {
 func productionSubsystems(
 	dbSub, abacSub, authSub, worldSub,
 	sessionSub, pluginSub, bootstrapSub,
-	eventBusSub, clusterSub, auditSub, grpcSub lifecycle.Subsystem,
+	eventBusSub, clusterSub, auditSub, grpcSub,
+	adminSub lifecycle.Subsystem,
 ) []lifecycle.Subsystem {
 	return []lifecycle.Subsystem{
 		dbSub, abacSub, authSub, worldSub,
 		sessionSub, pluginSub, bootstrapSub,
 		eventBusSub, clusterSub, auditSub, grpcSub,
+		adminSub,
 	}
 }
