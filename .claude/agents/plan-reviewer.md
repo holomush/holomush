@@ -28,6 +28,9 @@ tools:
   - mcp__deepwiki__read_wiki_contents
   - mcp__exa__web_search_exa
   - mcp__exa__get_code_context_exa
+  - mcp__probe__search_code
+  - mcp__probe__extract_code
+  - mcp__probe__grep
   - Write
 skills:
   - superpowers:verification-before-completion
@@ -98,6 +101,10 @@ data:
 
 The MCP server instructions state: "Use even when you think you know the
 answer — your training data may not reflect recent changes." Follow that.
+
+## Code search priority
+
+Use `mcp__probe__search_code` (semantic symbol/function search) before `Grep`/`rg`. Use `mcp__probe__extract_code` to pull a known symbol without manual offset math. Fall back to `Grep`/`rg` only when probe returns stale results or you need raw-text flags. Never `Read` a whole file when a probe or targeted `Read offset/limit` suffices.
 
 ## Workflow (execute in order)
 

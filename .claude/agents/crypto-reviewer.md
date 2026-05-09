@@ -31,6 +31,9 @@ tools:
   - mcp__probe__grep
   - Bash
   - WebFetch
+  - mcp__probe__search_code
+  - mcp__probe__extract_code
+  - mcp__probe__grep
 memory: project
 ---
 
@@ -93,6 +96,10 @@ What it does NOT protect:
 - Operator-visible metadata (subject, type, timestamp, actor) — these stay cleartext by design
 - Plaintext at the gRPC delivery boundary — telnet/web clients receive plaintext over gRPC; the server is in the trust path
 - Plugin-direct access to plaintext for events the plugin is currently authorized for — plugin compromise leaks plaintext for in-flight grants
+
+## Code search priority
+
+Use `mcp__probe__search_code` (semantic symbol/function search) before `Grep`/`rg`. Use `mcp__probe__extract_code` to pull a known symbol without manual offset math. Fall back to `Grep`/`rg` only when probe returns stale results or you need raw-text flags. Never `Read` a whole file when a probe or targeted `Read offset/limit` suffices.
 
 ## Invariant checklist (review every PR against this)
 

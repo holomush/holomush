@@ -22,6 +22,9 @@ tools:
   - mcp__probe__grep
   - Bash
   - Write
+  - mcp__probe__search_code
+  - mcp__probe__extract_code
+  - mcp__probe__grep
 skills:
   - jj:jujutsu
   - beads:beads
@@ -84,6 +87,10 @@ In-bead `Closed:` or `Fixed:` comments and closed sub-fix beads are
 the cited fix in current code. If the comment cites `path:line`, read it. If
 it cites a behavior, grep for it. Mark KEEP and flag as `FALSE-FIX` if the
 claim doesn't hold.
+
+## Code search priority
+
+Use `mcp__probe__search_code` (semantic symbol/function search) before `Grep`/`rg`. Use `mcp__probe__extract_code` to pull a known symbol without manual offset math. Fall back to `Grep`/`rg` only when probe returns stale results or you need raw-text flags. Never `Read` a whole file when a probe or targeted `Read offset/limit` suffices.
 
 ## High-yield patterns
 
