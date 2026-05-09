@@ -31,9 +31,6 @@ tools:
   - mcp__probe__grep
   - Bash
   - WebFetch
-  - mcp__probe__search_code
-  - mcp__probe__extract_code
-  - mcp__probe__grep
 memory: project
 ---
 
