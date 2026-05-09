@@ -7,6 +7,7 @@ import (
 	"context"
 	"log/slog"
 	"sort"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -46,6 +47,7 @@ func validateCryptoOperators(
 ) ([]string, error) {
 	set := make(map[string]struct{}, len(configured))
 	for _, id := range configured {
+		id = strings.TrimSpace(id)
 		if id == "" {
 			continue
 		}
