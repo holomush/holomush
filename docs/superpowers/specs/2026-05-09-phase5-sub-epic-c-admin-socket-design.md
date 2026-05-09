@@ -208,7 +208,7 @@ syntax = "proto3";
 
 package holomush.admin.v1;
 
-option go_package = "github.com/holomush/holomush/pkg/proto/holomush/admin/v1";
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/admin/v1;adminv1";
 
 service AdminService {
   rpc Status(StatusRequest) returns (StatusResponse);
@@ -236,8 +236,8 @@ Generated output layout (matching existing convention):
 
 ```text
 pkg/proto/holomush/admin/v1/
-  admin.pb.go              ← protoc-gen-go (gRPC binding)
-  admin_grpc.pb.go         ← protoc-gen-go-grpc
+  admin.pb.go              ← protoc-gen-go (messages/types)
+  admin_grpc.pb.go         ← protoc-gen-go-grpc (gRPC binding)
   adminv1connect/
     admin.connect.go       ← protoc-gen-connect-go (ConnectRPC binding)
 ```

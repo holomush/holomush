@@ -10,6 +10,7 @@ import (
 	"os"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,17 +31,30 @@ func TestReadPeerCredReturnsNonZeroValuesOnDarwin(t *testing.T) {
 	ln, err := net.Listen("unix", sockPath)
 	require.NoError(t, err)
 	defer ln.Close()
-	connCh := make(chan *net.UnixConn, 1)
+	type acceptResult struct {
+		conn *net.UnixConn
+		err  error
+	}
+	connCh := make(chan acceptResult, 1)
 	go func() {
 		conn, acceptErr := ln.Accept()
-		if acceptErr == nil {
-			connCh <- conn.(*net.UnixConn)
+		if acceptErr != nil {
+			connCh <- acceptResult{err: acceptErr}
+			return
 		}
+		connCh <- acceptResult{conn: conn.(*net.UnixConn)}
 	}()
 	client, err := net.Dial("unix", sockPath)
 	require.NoError(t, err)
 	defer client.Close()
-	serverConn := <-connCh
+	var serverConn *net.UnixConn
+	select {
+	case res := <-connCh:
+		require.NoError(t, res.err)
+		serverConn = res.conn
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for server-side accept")
+	}
 	defer serverConn.Close()
 	cred, err := readPeerCred(serverConn)
 	require.NoError(t, err)

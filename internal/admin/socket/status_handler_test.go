@@ -17,39 +17,33 @@ import (
 	"github.com/holomush/holomush/pkg/proto/holomush/admin/v1/adminv1connect"
 )
 
-// TestStatusHandlerReturnsVersionAndHealthy verifies AC-C3.
-func TestStatusHandlerReturnsVersionAndHealthy(t *testing.T) {
-	h := &statusHandler{version: "v1.2.3-test"}
+// TestStatusHandlerStatus verifies AC-C3: Status returns the configured version
+// string and healthy=true across all version inputs.
+func TestStatusHandlerStatus(t *testing.T) {
+	tests := []struct {
+		name    string
+		version string
+	}{
+		{"returns version and healthy when version is set", "v1.2.3-test"},
+		{"returns empty version and healthy when version is unset", ""},
+	}
 
-	mux := http.NewServeMux()
-	path, handler := adminv1connect.NewAdminServiceHandler(h)
-	mux.Handle(path, handler)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := &statusHandler{version: tt.version}
 
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
+			mux := http.NewServeMux()
+			path, handler := adminv1connect.NewAdminServiceHandler(h)
+			mux.Handle(path, handler)
 
-	client := adminv1connect.NewAdminServiceClient(srv.Client(), srv.URL)
-	resp, err := client.Status(context.Background(), connect.NewRequest(&adminv1.StatusRequest{}))
-	require.NoError(t, err)
-	assert.Equal(t, "v1.2.3-test", resp.Msg.Version)
-	assert.True(t, resp.Msg.Healthy)
-}
+			srv := httptest.NewServer(mux)
+			defer srv.Close()
 
-// TestStatusHandlerReturnsEmptyVersionWhenUnset verifies that empty version
-// passes through unchanged.
-func TestStatusHandlerReturnsEmptyVersionWhenUnset(t *testing.T) {
-	h := &statusHandler{version: ""}
-
-	mux := http.NewServeMux()
-	path, handler := adminv1connect.NewAdminServiceHandler(h)
-	mux.Handle(path, handler)
-
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	client := adminv1connect.NewAdminServiceClient(srv.Client(), srv.URL)
-	resp, err := client.Status(context.Background(), connect.NewRequest(&adminv1.StatusRequest{}))
-	require.NoError(t, err)
-	assert.Equal(t, "", resp.Msg.Version)
-	assert.True(t, resp.Msg.Healthy)
+			client := adminv1connect.NewAdminServiceClient(srv.Client(), srv.URL)
+			resp, err := client.Status(context.Background(), connect.NewRequest(&adminv1.StatusRequest{}))
+			require.NoError(t, err)
+			assert.Equal(t, tt.version, resp.Msg.Version)
+			assert.True(t, resp.Msg.Healthy)
+		})
+	}
 }

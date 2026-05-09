@@ -41,15 +41,14 @@ type Server struct {
 
 // NewServer creates a Server. No live resources are allocated until Start.
 func NewServer(cfg Config) *Server {
-	return &Server{
-		cfg:   cfg,
-		errCh: make(chan error, 1),
-	}
+	return &Server{cfg: cfg}
 }
 
 // Start acquires admin.lock, removes stale admin.sock, binds the UDS, and
 // begins serving. Returns a channel that carries at most one server error.
 func (s *Server) Start() (<-chan error, error) {
+	s.errCh = make(chan error, 1)
+
 	lockFile, err := acquireLock(s.cfg.LockPath)
 	if err != nil {
 		return nil, err
@@ -65,13 +64,20 @@ func (s *Server) Start() (<-chan error, error) {
 		}
 	}
 
-	oldUmask := syscall.Umask(0o177)
 	ln, listenErr := net.Listen("unix", s.cfg.SocketPath)
-	syscall.Umask(oldUmask)
 	if listenErr != nil {
 		_ = lockFile.Close() //nolint:errcheck // best-effort cleanup before returning error
 		return nil, oops.Code("ADMIN_SOCKET_LISTEN_FAILED").
 			With("path", s.cfg.SocketPath).Wrap(listenErr)
+	}
+	// Set explicit 0600 permission via os.Chmod rather than a process-wide
+	// umask mutation. The parent directory (XDG runtime dir, mode 0700) is the
+	// primary access gate; os.Chmod adds the supplementary socket-level restriction.
+	if chmodErr := os.Chmod(s.cfg.SocketPath, 0o600); chmodErr != nil {
+		_ = ln.Close()         //nolint:errcheck // best-effort cleanup
+		_ = lockFile.Close()   //nolint:errcheck // best-effort cleanup
+		return nil, oops.Code("ADMIN_SOCKET_CHMOD_FAILED").
+			With("path", s.cfg.SocketPath).Wrap(chmodErr)
 	}
 	s.listener = ln
 
@@ -83,25 +89,28 @@ func (s *Server) Start() (<-chan error, error) {
 		ConnContext:       StoreUnixConn,
 	}
 
-	go func() {
-		defer close(s.errCh)
+	go func(errCh chan error) {
+		defer close(errCh)
 		if serveErr := s.httpServer.Serve(ln); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
 			slog.Error("admin: HTTP server error", "error", serveErr)
-			s.errCh <- serveErr
+			errCh <- serveErr
 		}
-	}()
+	}(s.errCh)
 
 	slog.Info("admin socket server started", "path", s.cfg.SocketPath)
 	return s.errCh, nil
 }
 
 // Stop shuts down the HTTP server, removes admin.sock, and releases admin.lock.
-// admin.lock itself is NOT removed — it is a permanent fixture.
+// admin.lock itself is NOT removed — it is a permanent fixture. Cleanup (socket
+// removal and lock release) always runs, even if Shutdown returns an error.
 func (s *Server) Stop(ctx context.Context) error {
+	var retErr error
 	if s.httpServer != nil {
 		if shutdownErr := s.httpServer.Shutdown(ctx); shutdownErr != nil {
-			return oops.Code("ADMIN_SOCKET_SHUTDOWN_FAILED").Wrap(shutdownErr)
+			retErr = oops.Code("ADMIN_SOCKET_SHUTDOWN_FAILED").Wrap(shutdownErr)
 		}
+		s.httpServer = nil
 	}
 	if rmErr := os.Remove(s.cfg.SocketPath); rmErr != nil && !os.IsNotExist(rmErr) {
 		slog.Warn("admin: failed to remove admin.sock", "path", s.cfg.SocketPath, "error", rmErr)
@@ -110,7 +119,8 @@ func (s *Server) Stop(ctx context.Context) error {
 		_ = s.lockFile.Close() //nolint:errcheck // best-effort release; flock is dropped when fd closes
 		s.lockFile = nil
 	}
-	return nil
+	s.listener = nil
+	return retErr
 }
 
 // acquireLock opens/creates the lock file and acquires an exclusive

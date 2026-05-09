@@ -23,7 +23,7 @@ func readPeerCred(conn *net.UnixConn) (PeerCred, error) {
 	var ucred *unix.Ucred
 	var ctrlErr error
 	if err := rawConn.Control(func(fd uintptr) {
-		ucred, ctrlErr = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)
+		ucred, ctrlErr = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED) //nolint:gosec // G115: fd is a valid file descriptor; uintptr→int is safe at syscall boundaries
 	}); err != nil {
 		return PeerCred{}, oops.Code("PEERCRED_CONTROL_FAILED").Wrap(err)
 	}
