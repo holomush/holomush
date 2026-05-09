@@ -3,3 +3,4 @@ settings.local.json
 ralph-loop*
 worktrees/
 agent-memory/*/reports/
+scheduled_tasks.lock
