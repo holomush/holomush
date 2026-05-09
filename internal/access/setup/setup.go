@@ -61,6 +61,11 @@ type ABACConfig struct {
 	CharacterRepo world.CharacterRepository
 	RoleStore     store.RoleStore
 	AuditMode     audit.Mode
+	// CryptoOperators is the list of player IDs (ULIDs) holding the
+	// crypto.operator capability. Passed to PlayerAttributeProvider at
+	// construction. Empty / nil → no operators (break-glass disabled).
+	// Sub-epic B (Phase 5).
+	CryptoOperators []string
 }
 
 // BuildABACStack constructs and wires all ABAC components in the correct dependency order:
@@ -102,6 +107,13 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 		if err := resolver.RegisterProvider(charProvider); err != nil {
 			return nil, eb.Wrapf(err, "register character provider")
 		}
+	}
+
+	// 8a. Player provider (subject namespace; resolves player.id and
+	// player.grants for "player:<ulid>" subjects). Sub-epic B (Phase 5).
+	playerProvider := attribute.NewPlayerAttributeProvider(cfg.CryptoOperators)
+	if err := resolver.RegisterProvider(playerProvider); err != nil {
+		return nil, eb.Wrapf(err, "register player provider")
 	}
 
 	// 9. Command provider (resolves resource.command.name for seed policies)
