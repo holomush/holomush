@@ -26,6 +26,7 @@ const (
 	SubsystemEventBus                           // eventbus
 	SubsystemAuditProjection                    // audit_projection
 	SubsystemCluster                            // cluster
+	SubsystemAdminSocket                        // admin_socket
 )
 
 // Subsystem is a top-level server component with lifecycle management

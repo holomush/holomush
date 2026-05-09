@@ -58,3 +58,33 @@ func TestProductionSubsystemsIncludesCluster(t *testing.T) {
 		t.Errorf("productionSubsystems returned %d subsystems; want 11 after Phase 3c", len(subs))
 	}
 }
+
+// TestSubsystemAdminSocketConstantExists verifies that SubsystemAdminSocket
+// is defined and distinct from all other SubsystemIDs.
+func TestSubsystemAdminSocketConstantExists(t *testing.T) {
+	ids := []lifecycle.SubsystemID{
+		lifecycle.SubsystemDatabase,
+		lifecycle.SubsystemTLS,
+		lifecycle.SubsystemABAC,
+		lifecycle.SubsystemAuth,
+		lifecycle.SubsystemWorld,
+		lifecycle.SubsystemPlugins,
+		lifecycle.SubsystemSessions,
+		lifecycle.SubsystemBootstrap,
+		lifecycle.SubsystemGRPC,
+		lifecycle.SubsystemEventBus,
+		lifecycle.SubsystemAuditProjection,
+		lifecycle.SubsystemCluster,
+		lifecycle.SubsystemAdminSocket,
+	}
+	seen := make(map[lifecycle.SubsystemID]bool)
+	for _, id := range ids {
+		if seen[id] {
+			t.Errorf("duplicate SubsystemID value: %v", id)
+		}
+		seen[id] = true
+	}
+	if lifecycle.SubsystemAdminSocket.String() == "" {
+		t.Error("SubsystemAdminSocket.String() must not be empty")
+	}
+}
