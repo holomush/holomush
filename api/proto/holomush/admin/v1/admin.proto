@@ -1,0 +1,28 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.admin.v1;
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/admin/v1;adminv1";
+
+// AdminService is the break-glass operator administration service. It is
+// served exclusively over a UNIX domain socket (admin.sock) and is never
+// exposed over the network.
+service AdminService {
+  // Status returns the admin-socket server's liveness state and binary version.
+  // It is intentionally minimal: it reports whether the admin socket is accepting
+  // requests, NOT whether the full server stack is healthy.
+  rpc Status(StatusRequest) returns (StatusResponse);
+}
+
+message StatusRequest {}
+
+message StatusResponse {
+  // version is the server binary version string (set via -X ldflag).
+  string version = 1;
+
+  // healthy is true iff the admin socket HTTP server is accepting requests.
+  bool healthy = 2;
+}
