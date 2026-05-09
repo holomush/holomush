@@ -2553,7 +2553,7 @@ In `internal/config/config.go::CryptoConfig`:
 ```go
 type CryptoConfig struct {
     // ... existing ...
-    DualControlRequired []string `yaml:"dual_control_required"`
+    DualControlRequired []string `koanf:"dual_control_required"`
 }
 ```
 

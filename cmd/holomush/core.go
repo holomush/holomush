@@ -306,6 +306,14 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// modes (sub-epic D), but today there is no error path to handle.
 	cryptoOperators, _ := validateCryptoOperators(ctx, dbSub.Pool(), cryptoConfig.Operators, slog.Default()) //nolint:errcheck // Phase 5 sub-epic B is lax+warn; sub-epic D will rewire to handle errors here.
 
+	// Filter crypto.dual_control_required against the known op_kind registry.
+	// Lax+warn: unknown op_kinds emit a structured warning and are excluded
+	// from enforcement; the server continues to start. Per spec §9.
+	// Deliberately blank-assigned here — T22 (holomush-jxo8.6.21) wires this
+	// into CryptoPolicySubsystem once that subsystem is constructed.
+	validatedDualControl := validateDualControlRequired(cryptoConfig.DualControlRequired, slog.Default())
+	_ = validatedDualControl // seam for T22 (holomush-jxo8.6.21): CryptoPolicySubsystem wiring
+
 	abacSub := abacsetup.NewABACSubsystem(abacsetup.ABACSubsystemConfig{
 		DB:              dbSub,
 		Registry:        registry,
