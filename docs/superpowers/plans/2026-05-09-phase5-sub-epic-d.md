@@ -1421,7 +1421,34 @@ type EmitDeps struct {
 func EmitCurrentSnapshot(ctx context.Context, deps EmitDeps, policyName string) error { ... }
 ```
 
-The actual envelope construction follows the existing publisher pattern in `internal/eventbus/publisher.go`: build `eventbusv1.Event` with `Subject`, `Type`, `Timestamp`, `Payload` (the JSON of `PolicySetPayload`). Publisher takes care of marshaling and JS publish.
+The emitter constructs an **in-memory** `eventbus.Event` (per `internal/eventbus/types.go:91`) and passes it to `eventbus.Publisher.Publish(ctx, event)` (per `internal/eventbus/bus.go:15`). The publisher chain (`JetStreamPublisher` etc.) marshals to the proto wire envelope on the way to JetStream — emitter code does NOT construct `eventbusv1.Event` directly and does NOT call `proto.Marshal`. Concretely:
+
+```go
+import (
+    "github.com/holomush/holomush/internal/core"
+    "github.com/holomush/holomush/internal/eventbus"
+)
+
+// inside EmitCurrentSnapshot, after computing the new PolicySetPayload:
+body, err := json.Marshal(&newPayload)
+if err != nil { return oops.Code("POLICY_EMIT_MARSHAL_FAILED").Wrap(err) }
+subj, err := eventbus.NewSubject(subject) // events.<game>.system.crypto_policy.<policy_name>
+if err != nil { return oops.Code("POLICY_EMIT_INVALID_SUBJECT").With("subject", subject).Wrap(err) }
+evtType, err := eventbus.NewType("crypto.policy_set")
+if err != nil { return oops.Code("POLICY_EMIT_INVALID_TYPE").Wrap(err) }
+ev := eventbus.Event{
+    ID:        core.NewULID(),
+    Subject:   subj,
+    Type:      evtType,
+    Timestamp: deps.Clock.Now(),
+    Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
+    Payload:   body,
+}
+if err := deps.Publisher.Publish(ctx, ev); err != nil {
+    return oops.Code("POLICY_EMIT_PUBLISH_FAILED").
+        With("policy_name", policyName).Wrap(err) // INV-D17 fail-closed
+}
+```
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -1684,8 +1711,8 @@ import (
     "github.com/oklog/ulid/v2"
     "github.com/samber/oops"
 
+    "github.com/holomush/holomush/internal/core"
     "github.com/holomush/holomush/internal/eventbus"
-    eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
     "github.com/holomush/holomush/internal/totp"
 )
 
@@ -1721,29 +1748,42 @@ func NewAuditingService(
 
 // emit publishes a single audit event. Per INV-D14, publish failure is
 // logged via slog.Warn and does NOT roll back the inner Service's PG
-// state. The error is intentionally swallowed by callers below.
-func (a *AuditingService) emit(ctx context.Context, subject, eventType string, payload any) {
+// state. Construction uses the **in-memory** eventbus.Event (NOT the
+// proto-wire eventbusv1.Event) — Publisher.Publish takes the in-memory
+// type and the publisher chain marshals to the proto envelope on the
+// wire (see internal/eventbus/types.go:91 + bus.go:15).
+func (a *AuditingService) emit(ctx context.Context, subjectStr, eventTypeStr string, payload any) {
     body, err := json.Marshal(payload)
     if err != nil {
         a.logger.Warn("totp_audit: payload marshal failed; emit skipped",
-            "event_type", eventType, "subject", subject, "error", err)
+            "event_type", eventTypeStr, "subject", subjectStr, "error", err)
         return
     }
-    ev := &eventbusv1.Event{
-        // Subject + Type + Payload — wire shape per
-        // pkg/proto/holomush/eventbus/v1/eventbus.pb.go::Event. Field
-        // names verified at plan time (package eventbusv1; type Event
-        // struct present). Implementer: confirm Subject / Type / Payload
-        // are the exact field names; if a Timestamp / additional field
-        // is required to satisfy the publisher, follow the pattern in
-        // internal/eventbus/publisher.go::buildEnvelope (or equivalent).
-        Subject: subject,
-        Type:    eventType,
+    subj, err := eventbus.NewSubject(subjectStr)
+    if err != nil {
+        a.logger.Warn("totp_audit: invalid subject; emit skipped",
+            "subject", subjectStr, "error", err)
+        return
+    }
+    evtType, err := eventbus.NewType(eventTypeStr)
+    if err != nil {
+        a.logger.Warn("totp_audit: invalid event type; emit skipped",
+            "event_type", eventTypeStr, "error", err)
+        return
+    }
+    ev := eventbus.Event{
+        ID:        core.NewULID(),
+        Subject:   subj,
+        Type:      evtType,
+        Timestamp: a.clock.Now(),
+        // System-emitted audit (no character/plugin actor); matches the
+        // host-owned audit pattern used by sub-epic A's reserved namespace.
+        Actor:   eventbus.Actor{Kind: eventbus.ActorKindSystem},
         Payload: body,
     }
     if err := a.pub.Publish(ctx, ev); err != nil {
         a.logger.Warn("totp_audit: Publish failed; audit event lost (informational, INV-D14)",
-            "event_type", eventType, "subject", subject, "publish_error", err)
+            "event_type", eventTypeStr, "subject", subjectStr, "publish_error", err)
     }
 }
 
@@ -1865,7 +1905,7 @@ func (a *AuditingService) Enroll(ctx context.Context, pid ulid.ULID) (totp.Enrol
 }
 ```
 
-(The `corev1.Event` import path may be `eventbusv1.Event` instead — verify the actual package name via `mcp__probe__extract_code` on `pkg/proto/holomush/eventbus/v1/eventbus.pb.go::Event` before implementation. Field names on the proto-generated Event struct may differ slightly from the inline shape above; use whatever the publisher.go path uses.)
+(The decorator constructs the **in-memory** `eventbus.Event` per `internal/eventbus/types.go:91`. The proto wire envelope `eventbusv1.Event` is the publisher chain's internal concern — emitter code never touches it. `core.NewULID()` is the canonical event-ID minter per `CLAUDE.md` "ULID Generation" — Event IDs use that, not `idgen.New()`.)
 
 - [ ] **Step 3: Run tests**
 
