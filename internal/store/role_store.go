@@ -5,7 +5,9 @@ package store
 
 import (
 	"context"
+	"errors"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/samber/oops"
 )
 
@@ -14,6 +16,10 @@ type RoleStore interface {
 	GetRoles(ctx context.Context, characterID string) ([]string, error)
 	AddRole(ctx context.Context, characterID, role string) error
 	RemoveRole(ctx context.Context, characterID, role string) error
+	// PlayerHasRole returns true iff at least one character belonging to
+	// playerID has the given role assigned. Used by sub-epic D's
+	// OperatorAuthProvider to gate operator authentication.
+	PlayerHasRole(ctx context.Context, playerID, role string) (bool, error)
 }
 
 // PostgresRoleStore implements RoleStore using PostgreSQL.
@@ -70,4 +76,26 @@ func (s *PostgresRoleStore) RemoveRole(ctx context.Context, characterID, role st
 		return oops.With("character_id", characterID).With("role", role).Wrap(err)
 	}
 	return nil
+}
+
+// PlayerHasRole returns true iff any character of playerID has role.
+func (s *PostgresRoleStore) PlayerHasRole(ctx context.Context, playerID, role string) (bool, error) {
+	var found int
+	err := s.pool.QueryRow(ctx, `
+		SELECT 1
+		  FROM character_roles cr
+		  JOIN characters c ON cr.character_id = c.id
+		 WHERE c.player_id = $1
+		   AND cr.role     = $2
+		 LIMIT 1
+	`, playerID, role).Scan(&found)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, oops.Code("ROLE_PLAYER_HAS_ROLE_FAILED").
+			With("player_id", playerID).
+			With("role", role).Wrap(err)
+	}
+	return found == 1, nil
 }
