@@ -6,6 +6,17 @@ itself after completing a review.
 
 Keep under 200 lines. Curate — don't hoard.
 
+## Sub-epic D plan-review reflexes (HoloMUSH 2026-05-09)
+
+- **`socket.PeerCred` is NOT `{OSUser string}`.** Real shape is `{UID uint32, GID uint32, PID int32}` (`internal/admin/socket/peercred.go:15-21`). Plans that inline `req.PeerCred.OSUser` will not compile. The `OperatorIdentity.OSUser "uid=1001 (alice)"` audit string needs an explicit formatter step that does not exist in any task today.
+- **INV-32/33/37 do NOT live in `BootstrapSubsystem.Start`.** They live in `kek.NewLocalAEADProvider` constructor (`internal/eventbus/crypto/kek/local_aead.go`) and run during EventBus subsystem setup. `internal/bootstrap/setup/subsystem.go::Start` does only policy/setting/admin seeding (5 steps). Plans (and specs) that say "alongside INV-32/33/37" pointing at BootstrapSubsystem are repo-fiction.
+- **`productionSubsystems` signature is named-param, not variadic.** `cmd/holomush/core.go:870-884` takes 12 named `lifecycle.Subsystem` params. Adding a 13th means: (a) extend signature, (b) update `TestProductionSubsystemsIncludesCluster` (count==12 assertion), (c) update `TestProductionSubsystemsIncludesAdminSocket` (12 args), (d) update `TestSubsystemAdminSocketConstantExists` ID list, (e) add `TestProductionSubsystemsIncludesCryptoPolicy`. Plans that say "append to the slice" understate the test cascade.
+- **Lifecycle SubsystemID iota gotcha.** New IDs go at END of const block (after `SubsystemAdminSocket` per `internal/lifecycle/subsystem.go:29`), then run `task generate` to regenerate `subsystemid_string.go`. Inserting "alphabetical-ish" near a middle constant breaks the linecomment-driven stringer.
+- **Type juggling between `ulid.ULID` and `string` for player IDs.** TOTP layer uses `ulid.ULID` value (`internal/totp/types.go:38-41`). Access/store layer uses string ULID. Plans that consume both layers in one provider will inline `player.ID.String()` repeatedly — that's intentional, not a smell.
+- **JCS canonicalizer import path is unusually deep.** `github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer` — verify before approving any plan that pins this lib. Use `mcp__deepwiki__ask_question` or `go list` to confirm.
+- **TDD red phase that's only "compile error" is degenerate.** When T6's `EnrollmentChecker` interface holds both `IsEnrolled` AND `Verify`, the production code can wire to raw `totp.Service` directly — the AuditingService decorator dependency is at the HANDLER level (T15), not the provider level. Bead-chain edges that gate `T6 → T13` over-constrain parallel execution.
+- **Repository differentiator-SELECT race.** When MarkApproved's atomic UPDATE returns 0 rows, a follow-up SELECT to determine WHICH predicate failed has a race window. Plans that say "differentiate the failure cases by re-querying" need to either accept the race or use `RETURNING` for deterministic differentiation. Also: `expires_at`-time-travel tests need explicit `Clock` injection AND test docs noting the direct-SQL `UPDATE expires_at` workaround.
+
 ## w9ml legacy_id-elimination plan-review reflexes (HoloMUSH 2026-05-04)
 
 - **`core.ActorUnknown` does NOT exist.** Three constants in `internal/core/event.go:147-152` (`ActorCharacter`, `ActorSystem`, `ActorPlugin`). The wire-side equivalent is `eventbus.ActorKindUnknown`. Plans that gate on `core.ActorUnknown` will not compile.
