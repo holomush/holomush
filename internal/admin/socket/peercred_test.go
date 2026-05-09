@@ -16,6 +16,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestWithPeerCredAndPeerCredFromContextRoundTrip verifies that WithPeerCred
+// stores a PeerCred in the context and PeerCredFromContext retrieves it.
+func TestWithPeerCredAndPeerCredFromContextRoundTrip(t *testing.T) {
+	in := PeerCred{UID: 1001, GID: 100, PID: 4242}
+	ctx := WithPeerCred(context.Background(), in)
+	out, ok := PeerCredFromContext(ctx)
+	require.True(t, ok)
+	assert.Equal(t, in, out)
+}
+
 // TestPeerCredFromContextReturnsFalseWhenAbsent verifies that PeerCredFromContext
 // returns ok=false when no PeerCred is stored in the context.
 func TestPeerCredFromContextReturnsFalseWhenAbsent(t *testing.T) {

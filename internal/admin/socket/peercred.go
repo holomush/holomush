@@ -44,6 +44,15 @@ func StoreUnixConn(ctx context.Context, c net.Conn) context.Context {
 	return ctx
 }
 
+// WithPeerCred returns ctx with the given PeerCred attached, using the
+// same context key the PeerCredMiddleware uses. Exported for tests that
+// need to construct a context outside the middleware path; production
+// code paths (handlers reached via the UDS server) get PeerCred via
+// the middleware automatically.
+func WithPeerCred(ctx context.Context, cred PeerCred) context.Context {
+	return context.WithValue(ctx, peerCredContextKey{}, cred)
+}
+
 // PeerCredMiddleware reads SO_PEERCRED (or platform equivalent) from the
 // underlying *net.UnixConn stored in the request context and attaches the
 // result as a PeerCred. If the platform does not support peer credentials,
