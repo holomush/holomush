@@ -27,6 +27,8 @@ const (
 	SubsystemAuditProjection                    // audit_projection
 	SubsystemCluster                            // cluster
 	SubsystemAdminSocket                        // admin_socket
+	SubsystemCryptoChainVerifier                // crypto_chain_verifier
+	SubsystemCryptoPolicy                       // crypto_policy
 )
 
 // Subsystem is a top-level server component with lifecycle management
