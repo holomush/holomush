@@ -319,6 +319,12 @@ existing `(character_id, role)` index on `character_roles` plus
 `characters` PK index keep the join cheap. One round-trip per Authenticate;
 Authenticate is rare.
 
+**Implementor note:** every existing implementor of `store.RoleStore`
+(production `PostgresRoleStore`, plus in-tree fakes such as
+`internal/bootstrap/admin_test.go::fakeRoleStore`) MUST gain a
+`PlayerHasRole` method when this interface extension lands. Compile-time
+enforcement makes the missed-update case loud rather than silent.
+
 ### `SessionStore`
 
 ```go
@@ -591,10 +597,26 @@ SELECT envelope, js_seq
  ORDER BY js_seq ASC
 ```
 
-For each row: `proto.Unmarshal(envelope, &corev1.Event{})` →
+For each row: `proto.Unmarshal(envelope, &eventbusv1.Event{})` →
 `json.Unmarshal(event.Payload, &PolicySetPayload{})`. The chain walk is
 identical in shape to the original sketch, but now grounded in the real
 columns:
+
+**Codec constraint:** the chain subject (`events.<game>.system.crypto_policy.<policy_name>`)
+MUST be bound to `IdentityCodec` in any production `KeySelector`
+deployment. The verifier's decode path bypasses the codec layer (it does
+`proto.Unmarshal` then `json.Unmarshal` directly on `Event.Payload`),
+which is correct for identity-codec pass-through (the default at
+`internal/eventbus/publisher.go:482-488` — `identityKeySelector`) but
+fails if the subject is bound to `xchacha20poly1305-v1` or any other
+non-identity codec. Encrypting the chain payload is unsupported in v1
+because the verifier runs in Bootstrap before the crypto provider /
+DEK manager are wired. (Sub-epic A's `events.<game>.system.crypto_totp.*`
+events follow the same constraint — the audit projection writes them
+through the identity path.) D's `KeySelector` setup MUST NOT register a
+non-identity codec for the chain subject; if a future deployment needs
+encrypted policy events, that is a master-spec amendment, not a
+sub-epic-internal refactor.
 
 ```go
 type chainEntry struct {
