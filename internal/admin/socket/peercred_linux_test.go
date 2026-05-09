@@ -42,4 +42,5 @@ func TestReadPeerCredReturnsNonZeroValuesOnLinux(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotZero(t, cred.UID, "UID must be non-zero")
 	assert.NotZero(t, cred.PID, "PID must be non-zero")
+	// GID is intentionally not asserted non-zero: GID=0 is valid for root processes.
 }
