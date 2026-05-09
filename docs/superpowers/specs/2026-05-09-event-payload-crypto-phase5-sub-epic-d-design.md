@@ -99,7 +99,7 @@ What D does NOT defend against (out of master-spec threat model):
 
 ## Section 2 — Invariants
 
-D introduces 16 numbered invariants. Each MUST be backed by at least one
+D introduces 19 numbered invariants. Each MUST be backed by at least one
 named test (unit, integration, or e2e). The Section 8 test strategy lists
 the test names.
 
@@ -107,12 +107,13 @@ the test names.
 
 | ID | Invariant | Test |
 |---|---|---|
-| INV-D1 | `OperatorAuthProvider.Authenticate`'s 5-step check sequence is order-fixed: ValidateCredentials → IsEnrolled → Verify → HasPlayerGrant → PeerCred capture. Later steps MUST NOT be reached on earlier failure. (Avoids leaking which step failed beyond the typed DENY code.) | `TestAuthenticateStepOrderFixedOnFailure` |
+| INV-D1 | `OperatorAuthProvider.Authenticate`'s 6-step check sequence is order-fixed: ValidateCredentials → IsEnrolled → Verify → HasPlayerGrant → PlayerHasRole(RoleAdmin) → PeerCred capture. Later steps MUST NOT be reached on earlier failure. (Avoids leaking which step failed beyond the typed DENY code.) | `TestAuthenticateStepOrderFixedOnFailure` |
 | INV-D2 | A session token MUST have a 10-minute TTL from issuance; `SessionStore.Get` MUST reject any token whose deadline has passed and emit `DENY_SESSION_EXPIRED`. | `TestSessionStoreRejectsExpiredToken` |
 | INV-D3 | The session map is per-process in-memory; restart loses all sessions by design. Operators re-authenticate. (Documented operational property — not a security claim.) | `TestSessionStoreEmptiedOnConstruction` |
 | INV-D4 | `PeerCred` captured by sub-epic C's middleware is recorded in `OperatorIdentity.OSUser` for audit only. It MUST NOT be consulted in any DENY decision. | `TestAuthenticateIgnoresPeerCredForGating` |
 | INV-D15 | Authenticate MUST reject any request whose verified `player_id` is not in the `crypto.operators` allow-list with `DENY_NOT_OPERATOR`. | `TestAuthenticateRejectsNonOperator` |
-| INV-D16 | `ResetTOTP` and `Approve` RPC handlers MUST re-assert the capability check on the resolving session's identity (defense in depth against capability revocation mid-session — not enforced today, but the gate exists). | `TestResetTOTPRequiresCapabilityOnHandler`, `TestApproveRequiresCapabilityOnHandler` |
+| INV-D16 | `ResetTOTP` and `Approve` RPC handlers MUST re-assert the capability check AND the role check on the resolving session's identity (defense in depth against grant or role revocation mid-session). | `TestResetTOTPRequiresCapabilityOnHandler`, `TestApproveRequiresCapabilityOnHandler`, `TestResetTOTPRequiresAdminRoleOnHandler` |
+| INV-D19 | Authenticate MUST reject any request whose verified `player_id` does not have at least one character with the `admin` role (`DENY_NOT_ADMIN_ROLE`). The `crypto.operator` capability is *narrowing* on top of `RoleAdmin` (master spec §5.9.1, sub-epic B `internal/access/grants.go:14-18` — "MUST be combined with `RoleAdmin`"). Decomposition spec Decision 5 line 177 makes the conjunction explicit. | `TestAuthenticateRejectsPlayerWithoutAdminRole` |
 
 ### Dual-control invariants
 
@@ -121,7 +122,7 @@ the test names.
 | INV-D5 | `admin_approvals.expires_at = created_at + 5 min`. Read paths MUST filter `expires_at < now()` so expired rows are invisible. (No background reaper in v1; rows are tiny.) | `TestApprovalRepoReadFiltersExpired` |
 | INV-D6 | Second-op `MarkApproved` MUST reject any request where the second-op `player_id` equals the row's `primary_player_id` (`DENY_DUAL_CONTROL_SELF`). | `TestMarkApprovedRejectsSelfApproval` |
 | INV-D7 | The Approve RPC handler MUST verify the second-op's identity holds `crypto.operator` (already enforced at Authenticate, but re-checked here as defense in depth — see INV-D16). | covered by INV-D16 test |
-| INV-D8 | `op_args_hash` MUST be computed as `SHA-256(proto.MarshalOptions{Deterministic: true}.Marshal(args))`. Any code path that produces or verifies the hash MUST agree on this exact algorithm. | `TestOpArgsHashAlgorithmStableAcrossProcesses` |
+| INV-D8 | `op_args_hash` MUST be computed as `SHA-256(proto.MarshalOptions{Deterministic: true}.Marshal(args))`. Any code path that produces or verifies the hash MUST agree on this exact algorithm. Cross-binary stability is load-bearing on the protobuf-go version pin (INV-D18). | `TestOpArgsHashAlgorithmStableAgainstGolden` |
 | INV-D9 | When the primary proceeds with the operation post-approval, the server MUST recompute `op_args_hash` from the proceeding-call's args; mismatch → `DENY_APPROVAL_ARGS_MISMATCH`. (Defended via E/F's handlers; D ships the algorithm.) | `TestOpArgsHashMismatchRejected` |
 
 ### Chain integrity invariants
@@ -138,6 +139,8 @@ the test names.
 | ID | Invariant | Test |
 |---|---|---|
 | INV-D14 | The `AuditingService` decorator emits exactly once per observed state transition (locked, recovery-consumed, cleared). Publish failure does NOT roll back the inner `Service` PG state — the operation succeeded; emission is informational. Failure is logged via `slog.Warn` with structured fields. (Distinct from F's INV-42 hard-required pre-emit gate for `AdminReadStream`.) | `TestAuditingServiceEmitsOnceOnTransition`, `TestAuditingServiceLogsAndContinuesOnPublishError` |
+| INV-D17 | `CryptoPolicySubsystem.EmitCurrentSnapshot` MUST fail-closed on Publish error (return error from `Subsystem.Start`; server refuses to start). Distinct from INV-D14 because chain integrity is a security claim, not informational audit — a dropped `policy_set` event would silently break chain continuity on the next boot. | `TestCryptoPolicySubsystemFailsStartOnPublishError` |
+| INV-D18 | The `google.golang.org/protobuf` module MUST be pinned in `go.mod` to a specific version. A meta-test asserts the pin so a silent dependency bump cannot land. Reasoning: `proto.MarshalOptions{Deterministic: true}` is documented stable within a binary version but NOT guaranteed stable across protobuf-go releases. Cross-process `op_args_hash` agreement (INV-D8/D9) and the meaning of `proto.MarshalDeterministic` are chain-of-custody load-bearing on this pin in the same way INV-D13 locks JCS. | `TestProtoDeterministicMarshalLockedToVendoredProtobuf` |
 
 ## Section 3 — Architecture overview
 
@@ -256,7 +259,7 @@ type OperatorAuthProvider interface {
 }
 ```
 
-The 5-step check sequence (`InGameCredentialsProvider`):
+The 6-step check sequence (`InGameCredentialsProvider`):
 
 1. `auth.Service.ValidateCredentials(ctx, req.Username, req.Password)` →
    `*Player` or typed error. Reuses the existing argon2id timing-safe path.
@@ -268,19 +271,53 @@ The 5-step check sequence (`InGameCredentialsProvider`):
    side effect, not a control-flow factor.)
 4. `access.HasPlayerGrant(ctx, resolver, player.ID,
    access.CapabilityCryptoOperator)` → bool. Miss → `DENY_NOT_OPERATOR`.
-5. PeerCred capture from `ctx` → `OperatorIdentity.OSUser`. Audit only;
+5. `roleStore.PlayerHasRole(ctx, player.ID, access.RoleAdmin)` → bool.
+   Miss → `DENY_NOT_ADMIN_ROLE`. (Per master spec §5.9 step 6 and
+   decomposition spec Decision 5 line 177: capability is *narrowing* on
+   top of `RoleAdmin`; the conjunction is the dual-key property. See §5
+   "Role helper" below for the SQL.)
+6. PeerCred capture from `ctx` → `OperatorIdentity.OSUser`. Audit only;
    never gates.
 
 On success, build `OperatorIdentity{PlayerID: player.ID, OSUser: …,
 TOTPVerified: true, AuthProviderName: "ingame-creds-totp"}`, mint a
 ULID session token via `SessionStore.Issue(identity)`, return.
 
-**Master spec §5.9 step 6 ("verify player holds the admin role") is
-DROPPED** — see §10 amendments. Roles in HoloMUSH attach to characters,
-not players, and the `crypto.operator` capability is the deliberate
-operator-tier vetting gate. Adding a player↔character role-resolution
-detour for a check that's redundant with capability-allow-list grant is
-unnecessary complexity.
+### Role helper — `RoleStore.PlayerHasRole`
+
+Roles in HoloMUSH attach to **characters**, not players (`character_roles`
+table; `RoleStore.GetRoles(characterID)` is character-keyed). To check
+"this player has the `admin` role" we ask "does any of this player's
+characters have it?" — semantics consistent with the bootstrap admin
+seed (`internal/bootstrap/admin.go:95` creates one player + one admin
+character).
+
+D extends the `RoleStore` interface (`internal/store/role_store.go`)
+with one method:
+
+```go
+// PlayerHasRole returns true iff at least one character belonging to
+// playerID has the given role assigned. Used by D's OperatorAuthProvider
+// to gate operator authentication.
+PlayerHasRole(ctx context.Context, playerID, role string) (bool, error)
+```
+
+Postgres implementation (single SQL, indexed):
+
+```sql
+SELECT 1
+  FROM character_roles cr
+  JOIN characters c ON cr.character_id = c.id
+ WHERE c.player_id = $1
+   AND cr.role     = $2
+ LIMIT 1
+```
+
+`character_roles.character_id` and `characters.id` are TEXT-typed ULIDs
+in the existing schema; `characters.player_id` is the player FK. The
+existing `(character_id, role)` index on `character_roles` plus
+`characters` PK index keep the join cheap. One round-trip per Authenticate;
+Authenticate is rare.
 
 ### `SessionStore`
 
@@ -296,8 +333,13 @@ In-memory implementation (`internal/admin/auth/session.go`):
 
 - `map[string]sessionEntry` guarded by `sync.RWMutex`.
 - `sessionEntry{Identity OperatorIdentity, ExpiresAt time.Time}`.
-- TTL = 10 minutes from issuance (covers Rekey's worst-case re-encryption +
-  Phase 5 cache-invalidate window).
+- TTL = 10 minutes from issuance. Starting value chosen to span
+  multiple RPCs in a typical operator flow (Authenticate → OpenApproval →
+  WaitForApproval → Rekey/AdminReadStream proceed). Sub-epic E will revise
+  if Rekey worst-case (cold-tier re-encrypt + Phase-5 N-of-N cache
+  invalidate) is observed to exceed it; the recovery path on session
+  expiry is "operator re-runs Authenticate to mint a fresh token and
+  resumes from checkpoint". No master-spec line pins this number.
 - Cleanup-on-Get: every `Get` checks `ExpiresAt`; expired entries are
   deleted in-line and `DENY_SESSION_EXPIRED` returned.
 - Optional periodic GC goroutine (every 1 min, deletes all expired) for
@@ -316,6 +358,7 @@ D introduces / consumes the following DENY codes (typed `oops.Code` values):
 | `DENY_BAD_TOTP` | step 3 | TOTP `Verify` outcome ≠ `OutcomeOK` |
 | `DENY_LOCKED` | step 3 | TOTP `Verify` outcome = `OutcomeLocked` (sub-classification of `DENY_BAD_TOTP`; surfaced separately for operator UX) |
 | `DENY_NOT_OPERATOR` | step 4 | `crypto.operator` grant absent |
+| `DENY_NOT_ADMIN_ROLE` | step 5 | no character of this player has the `admin` role |
 | `DENY_SESSION_INVALID` | session | token unknown |
 | `DENY_SESSION_EXPIRED` | session | token expired |
 | `DENY_DUAL_CONTROL_SELF` | Approve | second-op `player_id == primary_player_id` |
@@ -523,50 +566,118 @@ The verifier MUST recognize this as the chain root: walking backward and
 arriving at a null `prev_hash` is OK; walking backward and arriving at a
 non-null `prev_hash` whose predecessor cannot be found is FAIL.
 
-### Verifier (Bootstrap subsystem)
+### Verifier (Bootstrap subsystem) — data shape
 
-The verifier reads `events_audit` (already populated by the audit
-projection from prior boots' JetStream events) and validates each known
-policy_name's chain. v1 verifies one chain (`dual_control_required`).
+The chain payload (`PolicySetPayload`) lives **inside the marshaled `Event`
+proto envelope**, which `events_audit.envelope` stores as `BYTEA`
+(migration `000017_events_audit_envelope_rename.up.sql` renamed the column
+from `payload` to `envelope` to clarify this — the column has always
+contained `proto.Marshal(*Event)` bytes; the chain payload is the inner
+`Event.Payload` field, JSON-encoded). v1 stores `policy_hash` and
+`prev_hash` only inside the JSON payload; no structured columns are added
+to `events_audit`. The decode-at-verify-time cost is N JSON parses per
+boot (chain length is small in practice — one event per server-config
+change), and avoiding a column-shape coupling keeps `events_audit`
+agnostic to D's evolution.
+
+The verifier loads rows by exact subject and `js_seq` ordering (the
+JetStream sequence, which is the durable monotonic ordering on
+`events_audit` per migration 000011's index):
+
+```sql
+SELECT envelope, js_seq
+  FROM events_audit
+ WHERE subject = $1                  -- e.g., events.holomush.system.crypto_policy.dual_control_required
+ ORDER BY js_seq ASC
+```
+
+For each row: `proto.Unmarshal(envelope, &corev1.Event{})` →
+`json.Unmarshal(event.Payload, &PolicySetPayload{})`. The chain walk is
+identical in shape to the original sketch, but now grounded in the real
+columns:
 
 ```go
-func VerifyChain(ctx context.Context, pool *pgxpool.Pool, policyName string) error {
-    events, err := loadPolicySetEventsForName(ctx, pool, policyName) // ORDER BY event_seq ASC
+type chainEntry struct {
+    Seq     int64
+    Payload PolicySetPayload  // decoded from envelope.Event.Payload (JSON)
+}
+
+func VerifyChain(ctx context.Context, pool *pgxpool.Pool, subject string, policyName string) error {
+    entries, err := loadPolicySetChainEntries(ctx, pool, subject) // ORDER BY js_seq ASC
     if err != nil {
-        return oops.Code("POLICY_CHAIN_LOAD_FAILED").Wrap(err)
+        return oops.Code("POLICY_CHAIN_LOAD_FAILED").
+            With("subject", subject).Wrap(err)
     }
-    if len(events) == 0 {
-        return nil // fresh DB; emitter will write the genesis row
+    if len(entries) == 0 {
+        return nil // fresh DB; CryptoPolicySubsystem will write the genesis row
     }
-    // The first event MUST have prev_hash = nil; subsequent events MUST
-    // chain to the preceding event's policy_hash.
-    if events[0].PrevHash != nil {
-        return oops.Code("POLICY_CHAIN_BROKEN_GENESIS").Errorf(
-            "first %s event has non-null prev_hash", policyName)
+    if entries[0].Payload.PrevHash != nil {
+        return oops.Code("POLICY_CHAIN_BROKEN_GENESIS").
+            With("subject", subject).
+            With("js_seq", entries[0].Seq).
+            Errorf("first %s event has non-null prev_hash", policyName)
     }
-    for i := 1; i < len(events); i++ {
-        expectedPrev := events[i-1].PolicyHash
-        if !bytes.Equal(events[i].PrevHash, expectedPrev) {
+    for i := 1; i < len(entries); i++ {
+        expectedPrev := entries[i-1].Payload.PolicyHash
+        if !bytes.Equal(entries[i].Payload.PrevHash, expectedPrev) {
             return oops.Code("POLICY_CHAIN_BROKEN_LINK").
                 With("policy_name", policyName).
-                With("event_seq", events[i].Seq).
+                With("js_seq", entries[i].Seq).
                 Errorf("prev_hash does not match predecessor's policy_hash")
         }
         // Recompute and verify each event's own policy_hash to catch
-        // tampering of the payload itself.
-        recomputed, _ := computePolicyHash(events[i].Payload)
-        if !bytes.Equal(events[i].PolicyHash, recomputed) {
+        // tampering of the payload bytes themselves.
+        recomputed, _ := computePolicyHash(&entries[i].Payload)
+        if !bytes.Equal(entries[i].Payload.PolicyHash, recomputed) {
             return oops.Code("POLICY_CHAIN_HASH_MISMATCH").
-                With("policy_name", policyName).Errorf("policy_hash does not match canonicalized payload")
+                With("policy_name", policyName).
+                With("js_seq", entries[i].Seq).
+                Errorf("policy_hash does not match canonicalized payload")
         }
     }
     return nil
 }
 ```
 
+`loadPolicySetChainEntries` does the SQL above, the
+`proto.Unmarshal(envelope) → json.Unmarshal(event.Payload, &PolicySetPayload)`
+two-step decode, and returns the `chainEntry` slice ordered by `js_seq`.
+
 The verifier runs inside the Bootstrap subsystem
 (`internal/bootstrap/setup/subsystem.go::Start`) alongside INV-32/33/37
 and the orphan check. Failure aborts startup with a typed error.
+
+### Verifier consistency wrt audit projection async-write
+
+The verifier reads `events_audit` BEFORE the audit projection runs on
+this boot (Bootstrap subsystem starts before EventBus / AuditProjection
+in `productionSubsystems()`). The visible `events_audit` content reflects
+**what the previous server lifetime's projection successfully wrote** —
+plus whatever the just-this-boot's projection-resume writes after the
+verifier has already returned.
+
+This has one footnote: if the prior boot crashed with a `policy_set`
+event acked by JetStream but not yet projected to `events_audit`, the
+verifier on this boot misses that tail event. After AuditProjection
+starts on this boot, it'll re-deliver the JS message and write the
+projection row. The next-boot verifier will see it. The current boot's
+`CryptoPolicySubsystem.Start` (which depends on AuditProjection and
+runs after the projection drains its initial backlog) reads the
+now-projected tail and extends the chain correctly with `prev_hash`
+matching that tail's `policy_hash`.
+
+What this means for adversaries:
+- **Graceful shutdown:** projection drains before exit. No verifier gap.
+- **Crash:** chain may have an unprojected tail event for one boot
+  cycle. The next-boot verifier sees the recovered tail. An adversary
+  with shell who tampers with the in-flight JS message between boots
+  can break the chain — but tampering with JS is master-spec §1
+  trust-path territory (root-on-host bypasses audit by design).
+- **Cluster/replica:** v1 is single-replica; deferred for clustered
+  topologies (see §11 out of scope).
+
+INV-D11 ("startup verifier MUST be fail-closed") is preserved across
+all paths within the master-spec threat model.
 
 ### Emitter (`CryptoPolicySubsystem`)
 
@@ -612,6 +723,15 @@ and before gRPC.
 `PolicySnapshot` byte-equals (after JCS canonicalize) the current effective
 config, no new event is emitted. (Avoids growing the chain on every restart
 when nothing changed. Genuine restarts that change effective policy DO emit.)
+
+**Publish-failure handling (INV-D17): fail-closed.** If `eventbus.Publisher.Publish`
+returns an error during `EmitCurrentSnapshot`, the subsystem returns the error
+from `Subsystem.Start` and the lifecycle orchestrator refuses to start the
+server. This is **distinct from INV-D14's log-and-continue policy for TOTP
+lifecycle events** because chain integrity is a security claim: a silently-
+dropped `policy_set` event would break chain continuity on the next boot,
+making forensic reconstruction impossible. The publish call MUST block on
+JetStream ack before returning success.
 
 Per-invocation `policy_hash` for E/F's audit events: when E's RekeyHandler /
 F's AdminReadStreamHandler emit their own audit event, they include
@@ -711,6 +831,22 @@ hard-required pre-emit gate (no plaintext leaves the server until the audit
 event lands). TOTP-lifecycle events are informational; loss of one event is
 a forensic gap but not a security breach.
 
+**`RecoverAndClear` partial-emit window.** `RecoverAndClear` performs
+recovery-code consumption AND TOTP enrollment clear in a single PG
+transaction (sub-epic A INV-A6 + INV-A7). The decorator emits two events
+sequentially after the inner call returns success. If the first emit
+(`crypto.totp_recovery_code_consumed`) succeeds but the second
+(`crypto.totp_cleared`) fails, the audit log shows "recovery code
+consumed" without the matching "cleared" event, while PG state shows
+both have happened. This is a known forensic-drift window covered by
+INV-D14's log-and-continue contract. Operators reading `events_audit`
+SHOULD treat the inner Service / PG state (`player_totp` row absence +
+`player_totp_recovery_codes` row consumption) as the source of truth;
+the audit log is informational. The `slog.Warn` log line for the failed
+emit names the event type, player_id, and publish error; an operator
+investigating a "missing cleared event" can grep server logs to find
+the failed emit.
+
 ## Section 8 — Test strategy
 
 D ships tests at five layers. Every invariant in §2 has at least one named
@@ -721,14 +857,21 @@ test mapping to it.
 `internal/admin/auth/`:
 
 - `TestAuthenticateStepOrderFixedOnFailure` — ValidateCredentials fails →
-  IsEnrolled is never called (assert via mockery). Same for steps 2, 3, 4.
+  IsEnrolled is never called (assert via mockery). Same for steps 2, 3, 4, 5.
   (INV-D1)
 - `TestAuthenticateRejectsNonOperator` — ValidateCredentials + TOTP succeed
   but `HasPlayerGrant` returns false → DENY_NOT_OPERATOR; identity not
   issued; no session created. (INV-D15)
+- `TestAuthenticateRejectsPlayerWithoutAdminRole` — steps 1-4 succeed
+  but `RoleStore.PlayerHasRole(playerID, RoleAdmin)` returns false →
+  DENY_NOT_ADMIN_ROLE; identity not issued. (INV-D19)
 - `TestAuthenticateIgnoresPeerCredForGating` — same input twice with
   different PeerCred values returns identical (success or failure) outcomes;
   PeerCred surfaces in `OperatorIdentity.OSUser` only. (INV-D4)
+- `TestResetTOTPRequiresAdminRoleOnHandler` — session issued for player
+  with admin role; revoke role mid-session via direct `RoleStore.RemoveRole`
+  on the operator's admin character; new ResetTOTP call → DENY_NOT_ADMIN_ROLE.
+  (INV-D16 + INV-D19 defense-in-depth)
 - `TestSessionStoreEmptiedOnConstruction` — `NewSessionStore()` → `Get(...)`
   returns DENY_SESSION_INVALID. (INV-D3)
 - `TestSessionStoreRejectsExpiredToken` — Issue, advance fake clock past
@@ -745,9 +888,10 @@ test mapping to it.
   with secondOp X → DENY_DUAL_CONTROL_SELF. (INV-D6)
 - `TestApprovalRepoReadFiltersExpired` — insert expired row; Get returns
   not-found-equivalent; insert non-expired; Get returns row. (INV-D5)
-- `TestOpArgsHashAlgorithmStableAcrossProcesses` — table test with
+- `TestOpArgsHashAlgorithmStableAgainstGolden` — table test with
   representative `proto.Message` values; assert SHA-256 hex equals a
-  fixed expected value (golden file). (INV-D8)
+  fixed expected value (golden file). Cross-binary stability is locked
+  by INV-D18's protobuf-go version pin. (INV-D8)
 - `TestOpArgsHashMismatchRejected` — Open with hashA; proceed with hashB →
   DENY_APPROVAL_ARGS_MISMATCH. (INV-D9; combined with E/F handlers.)
 
@@ -765,9 +909,22 @@ test mapping to it.
 - `TestVerifierRefusesStartOnBrokenChain` — three inserted events; corrupt
   middle event's `prev_hash`; VerifyChain returns
   `POLICY_CHAIN_BROKEN_LINK`. (INV-D11)
+- `TestVerifierDecodesEnvelopeAndJSONPayload` — synthesize a valid
+  `events_audit` row whose `envelope` column contains a marshaled `Event`
+  with JSON `PolicySetPayload` in `Event.Payload`; verifier loads, decodes,
+  and walks. (Grounds INV-D10/D11/D12 against the actual data shape.)
+- `TestCryptoPolicySubsystemFailsStartOnPublishError` — wire a Publisher
+  stub that returns an error; assert `Subsystem.Start` returns the wrapped
+  error; assert no row was written to `events_audit` (no inflight). (INV-D17)
 - `TestJCSCanonicalizationLockedToVendoredImpl` — meta-test that reads
   `go.mod` / `go.sum` and asserts the `cyberphone/json-canonicalization`
   pseudo-version is exactly the pinned one. (INV-D13)
+- `TestProtoDeterministicMarshalLockedToVendoredProtobuf` — meta-test that
+  reads `go.mod` / `go.sum` and asserts `google.golang.org/protobuf` is
+  pinned to a specific version (chosen at implementation time from the
+  current `go.mod`; the test locks it). Documents in a `go.mod` comment
+  that the pin is load-bearing on `op_args_hash` cross-process equality
+  (INV-D8/D9). (INV-D18)
 
 `internal/admin/totp_audit/`:
 
@@ -907,15 +1064,20 @@ land alongside D's first PR. A meta-test
 
 | Section | Amendment |
 |---|---|
-| §5.9 step 6 | **REMOVE.** The "verify player holds the `admin` role" check is dropped. The `crypto.operator` capability check (step 5) is the sole player-level gate. Reasoning: roles attach to characters, not players; capability allow-list is the deliberate operator-tier vetting; conjunctive role+capability gate is redundant. |
 | §5.9 interface | Replace the `Authenticate(ctx, prompt PromptFunc)` and `RequireDualControl(ctx, primary, prompt PromptFunc)` shape with the server-side shape: `Authenticate(ctx, AuthRequest) (OperatorIdentity, error)`. The CLI-side `PromptFunc` was architecturally aspirational — a callback cannot run server-side across the UDS boundary. Dual-control orchestration moves from a provider method to an operation-handler concern (server creates `admin_approvals` row, primary's CLI blocks, second-op CLI calls Approve). |
-| §6.3.1 | Pin `op_args_hash = SHA-256(proto.MarshalOptions{Deterministic: true}.Marshal(args))`. JCS is reserved for `crypto.policy_set` chain hashing only. |
-| §4.6 (chain subject) | The `policy_set` chain subject is `events.<game>.system.crypto_policy.<policy_name>` (under `events.>` because the EVENTS JetStream stream binds only that prefix; sub-epic A established the same pattern for `crypto_totp.*`). The aspirational `audit.<game>.system.crypto_policy.<policy_name>` form in the original §4.6 is amended to the `events.>` form. |
-| §10 | The `DENY_SESSION_INVALID`, `DENY_SESSION_EXPIRED`, `DENY_DUAL_CONTROL_SELF`, `DENY_APPROVAL_EXPIRED`, and `DENY_APPROVAL_ALREADY_APPROVED` codes are new and live alongside the §10 "Operator-auth DENY codes" table. |
+| §5.9 default impl | Reorder default-implementation steps so the role check (step 5 in this amended sequence) follows the `crypto.operator` capability check (step 4) and precedes the PeerCred capture. Master spec original §5.9 left the order ambiguous between role and capability; D's 6-step sequence is the canonical wiring. (Conjunction property — `RoleAdmin AND crypto.operator` per decomposition spec line 89/177 — is preserved unchanged.) |
+| §5.9 step 6 → step 5 wiring | Reify the role check as `RoleStore.PlayerHasRole(playerID, RoleAdmin)`. Roles attach to characters in HoloMUSH; "player has role" is "any of player's characters has role". Sub-epic B's `internal/access/grants.go:14-18` doc comment ("MUST be combined with RoleAdmin") is preserved verbatim. |
+| §6.3.1 | Pin `op_args_hash = SHA-256(proto.MarshalOptions{Deterministic: true}.Marshal(args))`. JCS is reserved for `crypto.policy_set` chain hashing only. Cross-binary stability requires pinning `google.golang.org/protobuf` in `go.mod` (see INV-D18). |
+| §4.6 (chain subject) | Pin the `policy_set` chain subject to `events.<game>.system.crypto_policy.<policy_name>`, reconciling §4.6's mixed `audit.>` / `events.>` usage. The chosen form matches sub-epic A's `events.<game>.system.crypto_totp.*` precedent and the EVENTS JetStream stream's `events.>` filter. |
+| §4.6 (chain payload storage) | The chain payload (`PolicySetPayload`) is encoded as JSON inside the `Event.Payload` field of the `core.v1.Event` envelope. `events_audit.envelope` (post-000017 rename) stores the marshaled envelope. The verifier decodes envelope → JSON payload at read time; no structured columns added to `events_audit` in v1. |
+| §10 (DENY codes) | Add: `DENY_NOT_ADMIN_ROLE`, `DENY_SESSION_INVALID`, `DENY_SESSION_EXPIRED`, `DENY_DUAL_CONTROL_SELF`, `DENY_APPROVAL_EXPIRED`, `DENY_APPROVAL_ALREADY_APPROVED`. |
 
 D's master-spec amendments do not change any participant-facing crypto
 invariant (INV-1 through INV-50+). They reshape the operator authentication
-boundary to match what's architecturally enforceable.
+boundary and the chain-data storage shape to match what's architecturally
+enforceable, while **preserving B's RoleAdmin AND crypto.operator
+conjunction** (decomposition spec line 89/177; `internal/access/grants.go:14-18`
+doc comment; B's `TestSpecAmendmentsLanded` substrings).
 
 ## Section 11 — Out of scope (recap)
 
@@ -935,11 +1097,15 @@ None at the close of this brainstorm. Sub-issues:
 1. ~~OperatorAuthProvider topology~~ — server-side, separate Authenticate
    RPC + session token.
 2. ~~Session TTL~~ — 10-min, in-memory ULID-keyed map.
-3. ~~Player↔role resolution~~ — drop the role check; rely on
-   `crypto.operator` capability alone (master-spec amendment).
+3. ~~Player↔role resolution~~ — keep the role check (per
+   `design-reviewer` Finding 1); D ships `RoleStore.PlayerHasRole(playerID,
+   role)` helper (single SQL JOIN: `character_roles` × `characters` on
+   `player_id`). The B-shipped `RoleAdmin AND crypto.operator` conjunction
+   is preserved.
 4. ~~Second-op CLI transport~~ — ConnectRPC over the same UDS socket as the
    primary; sub-command of the same binary.
-5. ~~op_args_hash algorithm~~ — proto deterministic marshal + SHA-256.
+5. ~~op_args_hash algorithm~~ — proto deterministic marshal + SHA-256;
+   `google.golang.org/protobuf` version pinned in `go.mod` per INV-D18.
 6. ~~admin_approvals TTL enforcement~~ — read-time `expires_at < now()`
    filter; defer reaper.
 7. ~~Chain verify + emit ordering~~ — verify in Bootstrap; emit in new
