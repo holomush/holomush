@@ -379,6 +379,7 @@ package adminauth
 
 import (
     "context"
+    "fmt"
     "time"
 
     "github.com/holomush/holomush/internal/admin/socket"
@@ -387,7 +388,7 @@ import (
 // AuthRequest is the credential bundle the CLI collected via prompts and
 // sends in the Authenticate RPC payload. Per spec §4. PeerCred is the
 // raw struct from sub-epic C's middleware (UID/GID/PID); the formatted
-// audit string is built at session-issue time via PeerCredToString below.
+// audit string is built at session-issue time via PeerCredString below.
 type AuthRequest struct {
     Username string
     Password string
@@ -678,7 +679,7 @@ Tests (one per DENY path + happy path; uses mockery mocks for `auth.Service`, `t
 - `TestInGameAuthenticateRejectsLocked` — step 3 Outcome=OutcomeLocked → `DENY_LOCKED`.
 - `TestInGameAuthenticateRejectsNonOperator` — step 4 returns false → `DENY_NOT_OPERATOR`.
 - `TestInGameAuthenticateRejectsPlayerWithoutAdminRole` — step 5 returns false → `DENY_NOT_ADMIN_ROLE`. (INV-D19)
-- `TestInGameAuthenticateIgnoresPeerCredForGating` — step 6 PeerCred surfaces in OperatorIdentity.OSUser; same input twice with different PeerCred values returns identical outcomes. (INV-D4)
+- `TestInGameAuthenticateIgnoresPeerCredForGating` — same `AuthRequest` input with two different `PeerCred` values produces identical outcomes (success or DENY); the captured `OperatorIdentity.PeerCred` reflects the input but does not influence the gating. (INV-D4)
 - `TestInGameAuthenticateStepOrderFixedOnFailure` — for each of the 5 failing-step branches, assert mocks for later steps received zero calls. (INV-D1)
 
 (Each test follows the project's mockery pattern — `mocks.NewMockAuthService(t)`, `.EXPECT().ValidateCredentials(...).Return(...)`, etc. Mock interfaces will be regenerated in step 3.)
@@ -853,7 +854,7 @@ func (p *InGameCredentialsProvider) Authenticate(ctx context.Context, req AuthRe
 }
 ```
 
-(Note: the `socket.PeerCred` type's `OSUser` field name is taken from sub-epic C; double-check via probe and adjust if the field is `Username` or similar.)
+(`socket.PeerCred` is `{UID uint32, GID uint32, PID int32}` per `internal/admin/socket/peercred.go:17-21`. No name lookup; the audit string is built later via `OperatorIdentity.PeerCredString()`.)
 
 - [ ] **Step 5: Run tests**
 
@@ -901,7 +902,11 @@ Path: `internal/admin/approval/types.go`
 
 package approval
 
-import "time"
+import (
+    "time"
+
+    "github.com/oklog/ulid/v2"
+)
 
 // RequestID is the 16-byte ULID PK of an admin_approvals row.
 type RequestID [16]byte
@@ -944,7 +949,75 @@ Tests (real PG, build tag `integration`):
 - `TestRepoConcurrentMarkApproved` — fan-out 50 goroutines all calling MarkApproved with distinct second-op player_ids on the same pending row; exactly one succeeds; 49 get `DENY_APPROVAL_ALREADY_APPROVED`. (INV-D6 race serialization.)
 - `TestOpArgsHashAlgorithmStableAgainstGolden` — table test calling the `op_args_hash` helper with representative `proto.Message` values; assert SHA-256 hex equals fixed expected golden values. (INV-D8)
 
-- [ ] **Step 3: Implement `repo.go`**
+- [ ] **Step 3a: Implement the `op_args_hash` helper (INV-D8)**
+
+Path: `internal/admin/approval/oparghash.go`
+
+```go
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+package approval
+
+import (
+    "crypto/sha256"
+
+    "github.com/samber/oops"
+    "google.golang.org/protobuf/proto"
+)
+
+// ComputeOpArgsHash returns SHA-256 over the proto-deterministic-marshal
+// of args. Both the primary's CLI (computing the hash for Open) and the
+// server-side proceeding handler (recomputing for verification) use this
+// helper so the hashes byte-equal across processes. INV-D8 + INV-D9.
+//
+// Cross-binary stability is load-bearing on the google.golang.org/protobuf
+// version pin (INV-D18); the meta-test in T24 locks that pin.
+func ComputeOpArgsHash(msg proto.Message) ([]byte, error) {
+    raw, err := proto.MarshalOptions{Deterministic: true}.Marshal(msg)
+    if err != nil {
+        return nil, oops.Code("OP_ARGS_HASH_MARSHAL_FAILED").Wrap(err)
+    }
+    sum := sha256.Sum256(raw)
+    return sum[:], nil
+}
+```
+
+Test (`internal/admin/approval/oparghash_test.go`):
+
+```go
+func TestOpArgsHashAlgorithmStableAgainstGolden(t *testing.T) {
+    cases := []struct {
+        name     string
+        msg      proto.Message
+        wantHex  string // pin once on first green run; do NOT change without an INV-D8 review
+    }{
+        {
+            name:    "empty AuthenticateRequest",
+            msg:     &adminv1.AuthenticateRequest{},
+            wantHex: "<32-byte hex from first green run>",
+        },
+        {
+            name:    "AuthenticateRequest with creds",
+            msg:     &adminv1.AuthenticateRequest{Username: "alice", Password: "p", TotpCode: "123456"},
+            wantHex: "<32-byte hex from first green run>",
+        },
+        // Add one more case using a Rekey-like message stub to exercise
+        // a representative dual-control args shape.
+    }
+    for _, tc := range cases {
+        t.Run(tc.name, func(t *testing.T) {
+            got, err := approval.ComputeOpArgsHash(tc.msg)
+            require.NoError(t, err)
+            assert.Equal(t, tc.wantHex, hex.EncodeToString(got))
+        })
+    }
+}
+```
+
+(First green run produces the golden hex; thereafter the test pins the algorithm. Updates require an INV-D8 review per the master-spec amendment in T23.)
+
+- [ ] **Step 3b: Implement `repo.go`**
 
 Path: `internal/admin/approval/repo.go`
 
@@ -1591,7 +1664,208 @@ Tests (mock `totp.Service` + `eventbus.Publisher`):
 - `TestAuditingServiceLogsAndContinuesOnPublishError` — Publisher returns error; AuditingService returns inner result + nil error from the inner method (operation succeeded; emit failure logged). Use a `slog.Logger` with a captured `slog.Handler` to assert the warning. (INV-D14)
 - `TestAuditingServiceWrapsAllStateTransitionMethods` — table test asserting every `totp.Service` method has an emission helper or pass-through.
 
-- [ ] **Step 2: Implement `auditing.go`** — uses subject builders + payload structs + EventType constants from `internal/totp/audit.go`.
+- [ ] **Step 2: Implement `auditing.go`**
+
+Path: `internal/admin/totp_audit/auditing.go`
+
+The decorator wraps every method on `totp.Service` that produces an audit-relevant state transition. Subject builders, EventType constants, and `*Payload` structs are pre-existing in `internal/totp/audit.go` (sub-epic A's reserved namespace) — D consumes them, never redefines them.
+
+```go
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+package totpaudit
+
+import (
+    "context"
+    "encoding/json"
+    "log/slog"
+
+    "github.com/oklog/ulid/v2"
+    "github.com/samber/oops"
+
+    "github.com/holomush/holomush/internal/eventbus"
+    eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
+    "github.com/holomush/holomush/internal/totp"
+)
+
+// AuditingService wraps totp.Service to emit lifecycle audit events on
+// observed state transitions. Sub-epic A's host-shell CLIs continue to
+// use the raw totp.Service (no eventbus access — R5 Option Y). All
+// server-side callers SHOULD wire through this decorator so emissions
+// happen automatically.
+type AuditingService struct {
+    inner   totp.Service
+    pub     eventbus.Publisher
+    gameID  string
+    clock   totp.Clock
+    logger  *slog.Logger
+}
+
+// NewAuditingService constructs an AuditingService. None of the deps
+// may be nil; logger defaults to slog.Default() if not provided.
+func NewAuditingService(
+    inner totp.Service,
+    pub eventbus.Publisher,
+    gameID string,
+    clock totp.Clock,
+    logger *slog.Logger,
+) (*AuditingService, error) {
+    if inner == nil { return nil, oops.Code("TOTP_AUDIT_NIL_INNER").Errorf("inner totp.Service is required") }
+    if pub == nil   { return nil, oops.Code("TOTP_AUDIT_NIL_PUB").Errorf("eventbus.Publisher is required") }
+    if gameID == "" { return nil, oops.Code("TOTP_AUDIT_EMPTY_GAMEID").Errorf("gameID is required") }
+    if clock == nil { return nil, oops.Code("TOTP_AUDIT_NIL_CLOCK").Errorf("totp.Clock is required") }
+    if logger == nil { logger = slog.Default() }
+    return &AuditingService{inner: inner, pub: pub, gameID: gameID, clock: clock, logger: logger}, nil
+}
+
+// emit publishes a single audit event. Per INV-D14, publish failure is
+// logged via slog.Warn and does NOT roll back the inner Service's PG
+// state. The error is intentionally swallowed by callers below.
+func (a *AuditingService) emit(ctx context.Context, subject, eventType string, payload any) {
+    body, err := json.Marshal(payload)
+    if err != nil {
+        a.logger.Warn("totp_audit: payload marshal failed; emit skipped",
+            "event_type", eventType, "subject", subject, "error", err)
+        return
+    }
+    ev := &eventbusv1.Event{
+        // Subject + Type + Payload — wire shape per
+        // pkg/proto/holomush/eventbus/v1/eventbus.pb.go::Event. Field
+        // names verified at plan time (package eventbusv1; type Event
+        // struct present). Implementer: confirm Subject / Type / Payload
+        // are the exact field names; if a Timestamp / additional field
+        // is required to satisfy the publisher, follow the pattern in
+        // internal/eventbus/publisher.go::buildEnvelope (or equivalent).
+        Subject: subject,
+        Type:    eventType,
+        Payload: body,
+    }
+    if err := a.pub.Publish(ctx, ev); err != nil {
+        a.logger.Warn("totp_audit: Publish failed; audit event lost (informational, INV-D14)",
+            "event_type", eventType, "subject", subject, "publish_error", err)
+    }
+}
+
+// Verify wraps inner.Verify and emits crypto.totp_locked iff the result
+// shows a NULL→non-NULL locked_until transition.
+func (a *AuditingService) Verify(ctx context.Context, pid ulid.ULID, code string) (totp.VerifyResult, error) {
+    res, err := a.inner.Verify(ctx, pid, code)
+    if err != nil {
+        return res, err
+    }
+    if res.LockoutTransition {
+        a.emit(ctx,
+            totp.SubjectLocked(a.gameID, pid.String()),
+            totp.EventTypeLocked,
+            totp.LockedPayload{
+                PlayerID:    pid.String(),
+                LockedAt:    a.clock.Now(),
+                LockedUntil: res.LockedUntil,
+                Reason:      "brute_force_protection",
+            },
+        )
+    }
+    return res, nil
+}
+
+// ConsumeRecoveryCode wraps inner.ConsumeRecoveryCode and emits
+// crypto.totp_recovery_code_consumed on success.
+func (a *AuditingService) ConsumeRecoveryCode(ctx context.Context, pid ulid.ULID, code string) (totp.ConsumeRecoveryResult, error) {
+    res, err := a.inner.ConsumeRecoveryCode(ctx, pid, code)
+    if err != nil {
+        return res, err
+    }
+    a.emit(ctx,
+        totp.SubjectRecoveryConsumed(a.gameID, pid.String()),
+        totp.EventTypeRecoveryConsumed,
+        totp.RecoveryConsumedPayload{
+            PlayerID:       pid.String(),
+            ConsumedAt:     res.AuditConsumedAt,
+            RecoveryCodeID: res.RecoveryCodeID.String(),
+        },
+    )
+    return res, nil
+}
+
+// ClearTOTP wraps inner.ClearTOTP and emits crypto.totp_cleared on success.
+func (a *AuditingService) ClearTOTP(ctx context.Context, pid ulid.ULID, by totp.ClearReason) (totp.ClearResult, error) {
+    res, err := a.inner.ClearTOTP(ctx, pid, by)
+    if err != nil {
+        return res, err
+    }
+    a.emit(ctx,
+        totp.SubjectCleared(a.gameID, pid.String()),
+        totp.EventTypeCleared,
+        totp.ClearedPayload{
+            PlayerID:  pid.String(),
+            ClearedAt: res.AuditClearedAt,
+            ClearedBy: by,
+        },
+    )
+    return res, nil
+}
+
+// RecoverAndClear wraps inner.RecoverAndClear and emits BOTH events on
+// success: recovery_consumed (with the code's row id) and cleared (with
+// cleared_by=recovery_code). Per spec §7 partial-emit-failure window:
+// if the first emit succeeds and the second fails, the audit log shows
+// "consumed without clear" while PG shows both happened — operators
+// reading events_audit MUST consult Service / PG state as the truth
+// source.
+func (a *AuditingService) RecoverAndClear(ctx context.Context, pid ulid.ULID, code string) (totp.RecoverAndClearResult, error) {
+    res, err := a.inner.RecoverAndClear(ctx, pid, code)
+    if err != nil {
+        return res, err
+    }
+    a.emit(ctx,
+        totp.SubjectRecoveryConsumed(a.gameID, pid.String()),
+        totp.EventTypeRecoveryConsumed,
+        totp.RecoveryConsumedPayload{
+            PlayerID:       pid.String(),
+            ConsumedAt:     res.AuditConsumedAt,
+            RecoveryCodeID: res.RecoveryCodeID.String(),
+        },
+    )
+    a.emit(ctx,
+        totp.SubjectCleared(a.gameID, pid.String()),
+        totp.EventTypeCleared,
+        totp.ClearedPayload{
+            PlayerID:  pid.String(),
+            ClearedAt: res.AuditClearedAt,
+            ClearedBy: totp.ClearReasonRecoveryCode,
+        },
+    )
+    return res, nil
+}
+
+// Pass-throughs for methods that don't currently emit. Future server-
+// side enroll / bootstrap callers will gain emit shims here.
+
+func (a *AuditingService) IsEnrolled(ctx context.Context, pid ulid.ULID) (bool, error) {
+    return a.inner.IsEnrolled(ctx, pid)
+}
+func (a *AuditingService) PrepareBootstrap(ctx context.Context, pid ulid.ULID) (totp.BootstrapPreparation, error) {
+    return a.inner.PrepareBootstrap(ctx, pid)
+}
+func (a *AuditingService) CommitBootstrap(ctx context.Context, prep totp.BootstrapPreparation) (totp.BootstrapResult, error) {
+    return a.inner.CommitBootstrap(ctx, prep)
+}
+func (a *AuditingService) BootstrapEnroll(ctx context.Context, pid ulid.ULID) (totp.BootstrapResult, error) {
+    return a.inner.BootstrapEnroll(ctx, pid)
+}
+func (a *AuditingService) PrepareEnroll(ctx context.Context, pid ulid.ULID) (totp.EnrollPreparation, error) {
+    return a.inner.PrepareEnroll(ctx, pid)
+}
+func (a *AuditingService) CommitEnroll(ctx context.Context, prep totp.EnrollPreparation) (totp.EnrollResult, error) {
+    return a.inner.CommitEnroll(ctx, prep)
+}
+func (a *AuditingService) Enroll(ctx context.Context, pid ulid.ULID) (totp.EnrollResult, error) {
+    return a.inner.Enroll(ctx, pid)
+}
+```
+
+(The `corev1.Event` import path may be `eventbusv1.Event` instead — verify the actual package name via `mcp__probe__extract_code` on `pkg/proto/holomush/eventbus/v1/eventbus.pb.go::Event` before implementation. Field names on the proto-generated Event struct may differ slightly from the inline shape above; use whatever the publisher.go path uses.)
 
 - [ ] **Step 3: Run tests**
 
@@ -1692,6 +1966,35 @@ per repo convention."
 
 - Create: `internal/admin/auth/handler.go`
 - Create: `internal/admin/auth/handler_test.go`
+
+- [ ] **Step 0: Add the missing `socket.WithPeerCred` setter helper**
+
+Sub-epic C exports `socket.PeerCred` (struct), `socket.PeerCredFromContext(ctx) (PeerCred, bool)`, and the `PeerCredMiddleware` wrapper that injects via an unexported `peerCredContextKey{}`. There is currently no exported setter — tests cannot construct a context with PeerCred without going through the middleware. T15 needs one.
+
+Modify `internal/admin/socket/peercred.go` (one-line addition):
+
+```go
+// WithPeerCred returns ctx with the given PeerCred attached, using the
+// same context key the PeerCredMiddleware uses. Exported for tests that
+// need to construct a context outside the middleware path; production
+// code paths (handlers reached via the UDS server) get PeerCred via
+// the middleware automatically.
+func WithPeerCred(ctx context.Context, cred PeerCred) context.Context {
+    return context.WithValue(ctx, peerCredContextKey{}, cred)
+}
+```
+
+Add a unit test in `internal/admin/socket/peercred_test.go`:
+
+```go
+func TestWithPeerCredAndPeerCredFromContextRoundTrip(t *testing.T) {
+    in := socket.PeerCred{UID: 1001, GID: 100, PID: 4242}
+    ctx := socket.WithPeerCred(context.Background(), in)
+    out, ok := socket.PeerCredFromContext(ctx)
+    require.True(t, ok)
+    assert.Equal(t, in, out)
+}
+```
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1800,6 +2103,7 @@ package adminauth
 
 import (
     "context"
+    "errors"
 
     "connectrpc.com/connect"
     "github.com/samber/oops"
@@ -1807,7 +2111,7 @@ import (
 
     "github.com/holomush/holomush/internal/admin/socket"
     adminv1 "github.com/holomush/holomush/pkg/proto/holomush/admin/v1"
-    "github.com/holomush/holomush/pkg/proto/holomush/admin/v1/adminv1connect"
+    _ "github.com/holomush/holomush/pkg/proto/holomush/admin/v1/adminv1connect" // type-asserts via NewAdminServiceHandler in T18
 )
 
 // denyCodeToConnect maps typed DENY oops codes to ConnectRPC codes.
@@ -1852,7 +2156,7 @@ func (h *AuthenticateHandler) Authenticate(
     }
     identity, err := h.provider.Authenticate(ctx, auth)
     if err != nil {
-        return nil, mapDenyToConnect(err)
+        return nil, MapDenyToConnect(err)
     }
     token, expiresAt, err := h.sessions.Issue(identity)
     if err != nil {
@@ -1865,10 +2169,11 @@ func (h *AuthenticateHandler) Authenticate(
     }), nil
 }
 
-// mapDenyToConnect translates a typed oops error into a ConnectRPC error,
+// MapDenyToConnect translates a typed oops error into a ConnectRPC error,
 // preserving the original error in the chain so errutil.AssertErrorCode
-// still works in tests.
-func mapDenyToConnect(err error) error {
+// still works in tests. Exported so T16's Approve handler and T17's
+// ResetTOTP handler can share it.
+func MapDenyToConnect(err error) error {
     var oopsErr interface{ Code() string }
     if !errors.As(err, &oopsErr) {
         return connect.NewError(connect.CodeInternal, err)
@@ -2011,7 +2316,7 @@ func (h *ApproveHandler) Approve(
 }
 ```
 
-(`adminauth.MapDenyToConnect` is the helper introduced in T15; if it isn't exported there, export it during T15 OR duplicate it here — the design preference is to export.)
+(`adminauth.MapDenyToConnect` is the exported helper from T15's `internal/admin/auth/handler.go`. T16's Approve handler and T17's ResetTOTP handler both consume it.)
 
 - [ ] **Step 3: Run tests**
 
@@ -2132,7 +2437,7 @@ func (h *ResetTOTPHandler) ResetTOTP(
 }
 ```
 
-(`MapDenyToConnect` exported from T15; verify the exact name during T15 implementation. `totp.ClearResult` may not include `WasEnrolled` — verify via `mcp__probe__extract_code` on `internal/totp/types.go::ClearResult` and adjust the response field accordingly.)
+(`MapDenyToConnect` is exported from T15 (`internal/admin/auth/handler.go`). `totp.ClearResult.WasEnrolled bool` is a real field — verified at `internal/totp/types.go:132` (`false if call was a no-op; callers should skip emit`).)
 
 - [ ] **Step 3: Run tests**
 
@@ -2347,18 +2652,21 @@ credentials, authenticates, calls Approve(session_token, request_id)."
 - Modify: `cmd/holomush/deps.go` — add the constructor parameters.
 - Modify: `cmd/holomush/core_subsystems_test.go` — assert the new subsystem present.
 
-- [ ] **Step 1: Verify the existing helper file name**
+- [ ] **Step 1: (verified at plan time)**
 
-Run via `mcp__probe__search_code`: `runCoreWithDeps CoreDeps`. Note the actual file paths (`cmd/holomush/core.go`, plus deps file — may be `deps.go`, `coredeps.go`, or part of `core.go` itself). Update the "Files touched" list in this task and in bead `jxo8.6.21` to match what's actually in the tree.
+`runCoreWithDeps` lives in `cmd/holomush/core.go`. `CoreDeps` lives in `cmd/holomush/deps.go`. Both files exist (verified via `ls cmd/holomush/deps*.go`). Files-touched list is final; no probe needed at execution time.
 
 - [ ] **Step 2: Build the two new subsystem instances in `runCoreWithDeps`**
 
 Both `CryptoChainVerifierSubsystem` (T12) and `CryptoPolicySubsystem` (T11) need wiring. Inside `runCoreWithDeps`, after the existing subsystem constructors, build:
 
 ```go
-// Resolve effective config (from validated DualControlRequired list per T19).
+// Resolve effective config (from validated DualControlRequired list).
+// `validatedDualControl` is the local introduced by T19 step 3; consuming
+// it here avoids a redundant validator call (which would double-emit
+// slog.Warn lines on misconfig).
 effectiveConfig := policy.CryptoEffectiveConfig{
-    DualControlRequired: validateDualControlRequired(coreCfg.Crypto.DualControlRequired, logger),
+    DualControlRequired: validatedDualControl,
 }
 
 cryptoChainVerifierSub := policy.NewCryptoChainVerifierSubsystem(policy.CryptoChainVerifierConfig{
@@ -2427,7 +2735,7 @@ Update every caller of `productionSubsystems`. Currently exactly two callers (pe
 In `cmd/holomush/core_subsystems_test.go`:
 
 - `TestProductionSubsystemsIncludesCluster` (~line 28): add the two new stub args to the `productionSubsystems(...)` call; bump the length-check from `len(subs) != 12` to `len(subs) != 14`.
-- `TestProductionSubsystemsIncludesAdminSocket` (~line 89): same — add args; bump count to 14.
+- `TestProductionSubsystemsIncludesAdminSocket` (~line 91): add the two new stub args. (No length-check in this test today; do NOT add one — keep the diff minimal.)
 - `TestSubsystemAdminSocketConstantExists` (~line 61): extend the `ids` slice with `lifecycle.SubsystemCryptoChainVerifier` and `lifecycle.SubsystemCryptoPolicy`.
 
 - [ ] **Step 5: Add new tests for both new subsystems**
@@ -2512,6 +2820,7 @@ For each row in §10 amendments table of the design spec, locate the relevant ma
 - §4.6 chain subject: pin to `events.<game>.system.crypto_policy.<policy_name>`.
 - §4.6 chain payload storage: state JSON-inside-Event.Payload-inside-marshaled-envelope.
 - §10 DENY codes: append `DENY_NOT_ADMIN_ROLE`, `DENY_SESSION_INVALID`, `DENY_SESSION_EXPIRED`, `DENY_DUAL_CONTROL_SELF`, `DENY_APPROVAL_EXPIRED`, `DENY_APPROVAL_ALREADY_APPROVED`.
+- §4 OperatorIdentity: rename field `OSUser string` to `PeerCred socket.PeerCred` (raw struct from sub-epic C: `{UID, GID, PID}`). Add `PeerCredString() string` helper that formats as `"uid=<n> gid=<n> pid=<n>"`. Reasoning: the kernel-provided SO_PEERCRED triple is the authoritative audit fact; resolving UID to a username requires `/etc/passwd` / NSS lookup which is fragile (containers, LDAP outages) and adds attack surface. The audit record should be the kernel triple, not a translated label. Spec INV-D4 (line 113) and §3 wire-surface table also need the rename. Affects: `internal/admin/auth/types.go`, `internal/admin/auth/ingame.go` Step 6.
 
 - [ ] **Step 2: Extend the substring test**
 
@@ -2538,6 +2847,8 @@ func TestSpecAmendmentsLandedSubEpicD(t *testing.T) {
     removed := []string{
         "RequireDualControl(ctx context.Context, primary",
         "prompt PromptFunc",
+        "OperatorIdentity.OSUser",
+        "OSUser                  string",
     }
     for _, sub := range removed {
         require.NotContains(t, spec, sub, "removed substring still present: %s", sub)
@@ -2935,11 +3246,13 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 
 **Files touched:**
 - `internal/admin/approval/types.go` — new (RequestID, OpenRequest, Approval)
+- `internal/admin/approval/oparghash.go` — new (`ComputeOpArgsHash` helper for INV-D8)
+- `internal/admin/approval/oparghash_test.go` — new (golden-vector test)
 - `internal/admin/approval/repo.go` — new (interface + Postgres impl)
 - `internal/admin/approval/repo_test.go` — new
 - `internal/admin/approval/repo_integration_test.go` — new
 
-**Dependencies:** `jxo8.6.1` (migration), `jxo8.6.3` (proto deterministic marshal pin used downstream by Open's hash callers).
+**Dependencies:** `jxo8.6.1` (migration), `jxo8.6.3` (proto deterministic marshal pin — load-bearing on INV-D8 cross-binary stability).
 
 **Out of scope:** RPC handler (`jxo8.6.15`).
 
@@ -3223,7 +3536,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Files touched:**
 - `cmd/holomush/core.go` — modify `productionSubsystems` signature (12 → 14 params) + `runCoreWithDeps` wiring (build both subsystem instances + resolve effective config)
 - `cmd/holomush/core_subsystems_test.go` — bump length-checks; extend constants test; add two ordering tests
-- (verify via probe whether `cmd/holomush/deps.go` exists; if not, the deps live in `core.go` — update `Files touched` accordingly during implementation)
+- `cmd/holomush/deps.go` — extend `CoreDeps` with the new subsystem fields if needed (verified: file exists)
 
 **Dependencies:** `jxo8.6.2` (CryptoPolicy subsystem), `jxo8.6.11` (CryptoChainVerifier subsystem), `jxo8.6.18` (validated effective config).
 
