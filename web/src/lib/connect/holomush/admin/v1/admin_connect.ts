@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { StatusRequest, StatusResponse } from "./admin_pb.js";
+import { ApproveRequest, ApproveResponse, AuthenticateRequest, AuthenticateResponse, ResetTOTPRequest, ResetTOTPResponse, StatusRequest, StatusResponse } from "./admin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -21,8 +21,6 @@ export const AdminService = {
   methods: {
     /**
      * Status returns the admin-socket server's liveness state and binary version.
-     * It is intentionally minimal: it reports whether the admin socket is accepting
-     * requests, NOT whether the full server stack is healthy.
      *
      * @generated from rpc holomush.admin.v1.AdminService.Status
      */
@@ -30,6 +28,44 @@ export const AdminService = {
       name: "Status",
       I: StatusRequest,
       O: StatusResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Authenticate verifies operator credentials + TOTP and returns a
+     * short-lived (10 min) session token for use in Approve and ResetTOTP.
+     * Spec §3 wire surface; INV-D1, INV-D2.
+     *
+     * @generated from rpc holomush.admin.v1.AdminService.Authenticate
+     */
+    authenticate: {
+      name: "Authenticate",
+      I: AuthenticateRequest,
+      O: AuthenticateResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Approve is the second-op signoff on a pending admin_approvals row.
+     * Spec §3, §6 Approve flow; INV-D5, INV-D6, INV-D7.
+     *
+     * @generated from rpc holomush.admin.v1.AdminService.Approve
+     */
+    approve: {
+      name: "Approve",
+      I: ApproveRequest,
+      O: ApproveResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * ResetTOTP clears a target player's TOTP enrollment and emits a
+     * crypto.totp_cleared audit event with cleared_by="admin_reset".
+     * Spec §3, §4 reset flow.
+     *
+     * @generated from rpc holomush.admin.v1.AdminService.ResetTOTP
+     */
+    resetTOTP: {
+      name: "ResetTOTP",
+      I: ResetTOTPRequest,
+      O: ResetTOTPResponse,
       kind: MethodKind.Unary,
     },
   }

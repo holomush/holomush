@@ -30,3 +30,27 @@ func (h *statusHandler) Status(
 		Healthy: true,
 	}), nil
 }
+
+// Authenticate is not yet implemented; handler lands in T15.
+func (h *statusHandler) Authenticate(
+	_ context.Context,
+	_ *connect.Request[adminv1.AuthenticateRequest],
+) (*connect.Response[adminv1.AuthenticateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, nil)
+}
+
+// Approve is not yet implemented; handler lands in T16.
+func (h *statusHandler) Approve(
+	_ context.Context,
+	_ *connect.Request[adminv1.ApproveRequest],
+) (*connect.Response[adminv1.ApproveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, nil)
+}
+
+// ResetTOTP is not yet implemented; handler lands in T17.
+func (h *statusHandler) ResetTOTP(
+	_ context.Context,
+	_ *connect.Request[adminv1.ResetTOTPRequest],
+) (*connect.Response[adminv1.ResetTOTPResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, nil)
+}

@@ -22,7 +22,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AdminService_Status_FullMethodName = "/holomush.admin.v1.AdminService/Status"
+	AdminService_Status_FullMethodName       = "/holomush.admin.v1.AdminService/Status"
+	AdminService_Authenticate_FullMethodName = "/holomush.admin.v1.AdminService/Authenticate"
+	AdminService_Approve_FullMethodName      = "/holomush.admin.v1.AdminService/Approve"
+	AdminService_ResetTOTP_FullMethodName    = "/holomush.admin.v1.AdminService/ResetTOTP"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -34,9 +37,18 @@ const (
 // exposed over the network.
 type AdminServiceClient interface {
 	// Status returns the admin-socket server's liveness state and binary version.
-	// It is intentionally minimal: it reports whether the admin socket is accepting
-	// requests, NOT whether the full server stack is healthy.
 	Status(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	// Authenticate verifies operator credentials + TOTP and returns a
+	// short-lived (10 min) session token for use in Approve and ResetTOTP.
+	// Spec §3 wire surface; INV-D1, INV-D2.
+	Authenticate(ctx context.Context, in *AuthenticateRequest, opts ...grpc.CallOption) (*AuthenticateResponse, error)
+	// Approve is the second-op signoff on a pending admin_approvals row.
+	// Spec §3, §6 Approve flow; INV-D5, INV-D6, INV-D7.
+	Approve(ctx context.Context, in *ApproveRequest, opts ...grpc.CallOption) (*ApproveResponse, error)
+	// ResetTOTP clears a target player's TOTP enrollment and emits a
+	// crypto.totp_cleared audit event with cleared_by="admin_reset".
+	// Spec §3, §4 reset flow.
+	ResetTOTP(ctx context.Context, in *ResetTOTPRequest, opts ...grpc.CallOption) (*ResetTOTPResponse, error)
 }
 
 type adminServiceClient struct {
@@ -57,6 +69,36 @@ func (c *adminServiceClient) Status(ctx context.Context, in *StatusRequest, opts
 	return out, nil
 }
 
+func (c *adminServiceClient) Authenticate(ctx context.Context, in *AuthenticateRequest, opts ...grpc.CallOption) (*AuthenticateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AuthenticateResponse)
+	err := c.cc.Invoke(ctx, AdminService_Authenticate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) Approve(ctx context.Context, in *ApproveRequest, opts ...grpc.CallOption) (*ApproveResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApproveResponse)
+	err := c.cc.Invoke(ctx, AdminService_Approve_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) ResetTOTP(ctx context.Context, in *ResetTOTPRequest, opts ...grpc.CallOption) (*ResetTOTPResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResetTOTPResponse)
+	err := c.cc.Invoke(ctx, AdminService_ResetTOTP_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AdminServiceServer is the server API for AdminService service.
 // All implementations must embed UnimplementedAdminServiceServer
 // for forward compatibility.
@@ -66,9 +108,18 @@ func (c *adminServiceClient) Status(ctx context.Context, in *StatusRequest, opts
 // exposed over the network.
 type AdminServiceServer interface {
 	// Status returns the admin-socket server's liveness state and binary version.
-	// It is intentionally minimal: it reports whether the admin socket is accepting
-	// requests, NOT whether the full server stack is healthy.
 	Status(context.Context, *StatusRequest) (*StatusResponse, error)
+	// Authenticate verifies operator credentials + TOTP and returns a
+	// short-lived (10 min) session token for use in Approve and ResetTOTP.
+	// Spec §3 wire surface; INV-D1, INV-D2.
+	Authenticate(context.Context, *AuthenticateRequest) (*AuthenticateResponse, error)
+	// Approve is the second-op signoff on a pending admin_approvals row.
+	// Spec §3, §6 Approve flow; INV-D5, INV-D6, INV-D7.
+	Approve(context.Context, *ApproveRequest) (*ApproveResponse, error)
+	// ResetTOTP clears a target player's TOTP enrollment and emits a
+	// crypto.totp_cleared audit event with cleared_by="admin_reset".
+	// Spec §3, §4 reset flow.
+	ResetTOTP(context.Context, *ResetTOTPRequest) (*ResetTOTPResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -81,6 +132,15 @@ type UnimplementedAdminServiceServer struct{}
 
 func (UnimplementedAdminServiceServer) Status(context.Context, *StatusRequest) (*StatusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Status not implemented")
+}
+func (UnimplementedAdminServiceServer) Authenticate(context.Context, *AuthenticateRequest) (*AuthenticateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Authenticate not implemented")
+}
+func (UnimplementedAdminServiceServer) Approve(context.Context, *ApproveRequest) (*ApproveResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Approve not implemented")
+}
+func (UnimplementedAdminServiceServer) ResetTOTP(context.Context, *ResetTOTPRequest) (*ResetTOTPResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResetTOTP not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 func (UnimplementedAdminServiceServer) testEmbeddedByValue()                      {}
@@ -121,6 +181,60 @@ func _AdminService_Status_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_Authenticate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AuthenticateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).Authenticate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_Authenticate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).Authenticate(ctx, req.(*AuthenticateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_Approve_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApproveRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).Approve(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_Approve_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).Approve(ctx, req.(*ApproveRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_ResetTOTP_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResetTOTPRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ResetTOTP(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ResetTOTP_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ResetTOTP(ctx, req.(*ResetTOTPRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminService_ServiceDesc is the grpc.ServiceDesc for AdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -131,6 +245,18 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Status",
 			Handler:    _AdminService_Status_Handler,
+		},
+		{
+			MethodName: "Authenticate",
+			Handler:    _AdminService_Authenticate_Handler,
+		},
+		{
+			MethodName: "Approve",
+			Handler:    _AdminService_Approve_Handler,
+		},
+		{
+			MethodName: "ResetTOTP",
+			Handler:    _AdminService_ResetTOTP_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
