@@ -31,6 +31,9 @@ tools:
   - mcp__probe__grep
   - Bash
   - WebFetch
+skills:
+  - superpowers:verification-before-completion
+  - jj:jujutsu
 memory: project
 ---
 

@@ -144,8 +144,11 @@ if [ -f "$WS_ROOT/.beads/redirect" ] || [ -d "$WS_ROOT/.beads/dolt" ]; then
   exit 0
 fi
 
-# Same segment-splitting pattern as enforce-task-runner.sh.
-SEGMENTS=$(echo "$COMMAND" | awk '{gsub(/ *&& */, "\n"); gsub(/ *; */, "\n"); gsub(/ *\|\| */, "\n"); print}')
+# Strip single- and double-quoted string contents (across newlines) before
+# segment-splitting so commands like `jj describe -m 'msg containing bd'`
+# don't false-trigger. See enforce-gh-repo.sh for the same pattern + caveats.
+STRIPPED=$(printf '%s' "$COMMAND" | perl -0777 -pe "s/'[^']*'//g; s/\"[^\"]*\"//g" 2>/dev/null) || STRIPPED="$COMMAND"
+SEGMENTS=$(printf '%s' "$STRIPPED" | awk '{gsub(/ *&& */, "\n"); gsub(/ *; */, "\n"); gsub(/ *\|\| */, "\n"); print}')
 
 # Track whether an earlier segment exported BEADS_DIR so chained
 # commands like `export BEADS_DIR=...; bd ready` aren't false-positive
@@ -178,15 +181,19 @@ while IFS= read -r segment; do
   done <<< "$PIPE_PARTS"
 
   if [ -n "$triggered_part" ]; then
+    # Note: $triggered_part is derived from STRIPPED (quote-stripped form), so
+    # we don't interpolate it into the suggestion — quoted args (e.g.,
+    # `bd note 'foo bar'`) would be lost. The user has the original command
+    # in their shell history; we just tell them how to make it work.
     cat >&2 <<EOF
-\`bd\` invoked from a jj workspace ($WS_ROOT)
-without BEADS_DIR set. The workspace's .beads/ is empty; bd's lookup will
-fail with "no beads database found".
+\`bd\` invoked from a jj workspace ($WS_ROOT) without BEADS_DIR set.
+The workspace's .beads/ is empty; bd's lookup will fail with "no beads
+database found".
 
 Pick one:
 
-  • Prepend BEADS_DIR to the bd command:
-        BEADS_DIR='$MAIN_REPO/.beads' $triggered_part
+  • Prepend BEADS_DIR to your bd command, e.g.:
+        BEADS_DIR='$MAIN_REPO/.beads' bd ready
 
   • Permanent fix for this workspace (one-time, then bd works bare):
         printf '%s\n' '$MAIN_REPO/.beads' > '$WS_ROOT/.beads/redirect'

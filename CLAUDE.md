@@ -264,149 +264,12 @@ This repo is developed primarily by concurrent AI agent sessions. Because jj sna
 
 `bd` commands: see `.claude/rules/beads-project.md` and `bd prime`. `jj` workflow: see the `jj:jujutsu` skill.
 
-## Directory Structure
+## Reference
 
-```text
-api/                 # Protocol definitions
-  proto/             # Protobuf service definitions
-build/
-  plugins/           # Compiled binary plugin output (gitignored)
-cmd/holomush/        # Server entry point
-docs/
-  plans/             # Implementation plans (internal, in-progress work)
-  specs/             # Design specifications (internal)
-site/                # Documentation website (zensical)
-  docs/
-    guide/           # For players and game designers
-    operating/       # For server operators
-    extending/       # For plugin developers
-    contributing/    # For codebase contributors
-    reference/       # Auto-generated references
-internal/            # Private implementation
-  access/            # ABAC access control system
-  control/           # Control plane (admin API)
-  core/              # Event system, sessions
-  grpc/              # gRPC server implementation
-  logging/           # Structured logging setup
-  observability/     # Metrics and health endpoints
-  plugin/            # Plugin system (Lua, binary, settings; manifests, registry, DAG loader)
-  store/             # PostgreSQL implementations
-  telnet/            # Telnet protocol adapter
-  tls/               # TLS certificate management
-  web/               # WebSocket adapter (future)
-  world/             # World model (objects, locations, exits, scenes)
-  xdg/               # XDG base directory support
-pkg/                 # Public plugin API
-  plugin/            # Plugin SDK types and ServiceProvider interface
-  errutil/           # Error handling utilities
-plugins/             # Lua and binary plugins (each with manifest.yaml)
-scripts/             # Build and utility scripts
-  build-plugins.sh   # Plugin build discovery script
-test/                # Integration tests
-  integration/       # End-to-end test suites
-```
-
-## Key Interfaces
-
-### EventBus (`internal/eventbus`)
-
-The EventBus replaced the former `EventStore.Append` / `LISTEN`/`NOTIFY` stack
-as of the F1-F7 JetStream cutover. The old `EventStore` interface is deleted.
-
-Three narrow interfaces cover the three consumer roles:
-
-```go
-// Publisher — used by EventSink (emit path from plugins and host).
-type Publisher interface {
-    Publish(ctx context.Context, event Event) error
-}
-
-// Subscriber — used by the gRPC Subscribe handler.
-type Subscriber interface {
-    OpenSession(ctx context.Context, sessionID string, filters []Subject) (SessionStream, error)
-}
-
-// HistoryReader — used by the gRPC QueryHistory handler.
-type HistoryReader interface {
-    QueryHistory(ctx context.Context, q HistoryQuery) (HistoryStream, error)
-}
-
-// EventBus is the concrete implementation satisfying all three.
-type EventBus interface {
-    Publisher
-    Subscriber
-    HistoryReader
-}
-```
-
-Ordering is owned by JetStream's per-stream `uint64` sequence. Event ULIDs
-(`core.Event.ID`) are identity and dedup keys, not ordering keys.
-
-Durable audit lives in the `events_audit` PostgreSQL table (host-owned subjects)
-and in plugin-owned audit tables (plugin-declared subjects; e.g.,
-`plugin_core_scenes.scene_log`). `HistoryReader.QueryHistory` transparently
-falls back from JetStream (recent) to PostgreSQL audit (older than JS retention)
-so callers never see the boundary.
-
-Subject naming follows NATS dot-delimited conventions:
-`events.<game_id>.<domain>.<entity-id>[.<facet>...]`. The legacy colon-style
-subjects (e.g., `scene:01ABC`) are translated at the EventSink boundary by
-`internal/eventbus/subjectxlate/`.
-
-See [docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md](docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md)
-for the full design (§3 publish, §4 subscribe, §5 history, §6 PostgreSQL role).
-
-See [site/docs/contributing/event-store.md](site/docs/contributing/event-store.md)
-for contributor-oriented examples (plugin emit, manifest audit declarations,
-embedded vs cluster NATS).
-
-### ServiceRegistry (`internal/plugin`)
-
-Maps proto service names (e.g., `holomush.scene.v1.SceneService`) to registered
-service implementations. Used by the plugin loader to wire up service
-dependencies between plugins.
-
-### ServiceProvider (`pkg/plugin`)
-
-Interface implemented by binary plugins that provide gRPC services. The plugin
-host calls `RegisterServices` during plugin startup to let the plugin register
-its service implementations with the server.
-
-## Architecture Invariants
-
-### Gateway Boundary
-
-The gateway (`cmd/holomush/gateway.go`, `internal/web/`) is a **protocol
-translation layer only**. It MUST NOT access internal services directly:
-
-| Allowed                                  | Prohibited                                    |
-| ---------------------------------------- | --------------------------------------------- |
-| gRPC calls to core server                | Direct access to `WorldService`               |
-| Connection management (register/remove)  | Direct access to `SessionStore` for queries   |
-| Protocol translation (ConnectRPC ↔ gRPC) | Direct access to repositories or the database |
-| Static file serving                      | Business logic or data aggregation            |
-
-All game state queries (location state, presence, characters) MUST flow
-through core server RPCs. The gateway proxies; it does not compute.
-
-## Terminology
-
-Consistent terminology prevents confusion. Use these terms exactly:
-
-| Correct term     | Incorrect / ambiguous | Notes                                                         |
-| ---------------- | --------------------- | ------------------------------------------------------------- |
-| **location**     | room, area, zone      | A place in the world model. Event type: `location_state`.     |
-| **exit**         | door, path, passage   | A connection between locations.                               |
-| **character**    | player, user, avatar  | An in-game entity controlled by a player.                     |
-| **player**       | user, account         | The human behind one or more characters.                      |
-| **session**      | connection            | Server-side state for a character's ongoing presence.         |
-| **connection**   | socket, client        | A single client attachment to a session (terminal/telnet/etc).|
-| **presence**     | who's here, occupants | Active sessions at a location. Derived from session store.    |
-| **grid present** | online, visible       | Character is visible on the grid (has terminal/telnet conn).  |
-| **scene**        | RP scene              | A structured roleplay encounter with participants.            |
-
-**MUST NOT** mix terms. `room` is never used in code, comments, types, events,
-or variable names. The spatial concept is always `location`.
+- **Directory structure**: see top-level `tree -L 2` or `ls`. Public layout overview lives in `site/docs/contributing/`.
+- **Key interfaces** (`EventBus`, `ServiceRegistry`, `ServiceProvider`): `.claude/rules/event-interfaces.md` (auto-loads when editing eventbus / plugin code)
+- **Gateway boundary invariant**: `.claude/rules/gateway-boundary.md` (auto-loads in `cmd/holomush/`, `internal/web/`, `internal/grpc/`)
+- **Terminology** (location vs room, character vs player, etc.): `.claude/rules/terminology.md` (auto-loads on `*.md` and domain code)
 
 ## Core Systems
 
@@ -456,13 +319,7 @@ plugin info <name>     # Detailed plugin info (requires, provides, storage, comm
 
 Any host-side trust check, validation, or feature MUST apply to both binary and Lua plugins. Asymmetric behavior between plugin runtimes is forbidden — it creates a privilege gradient that violates the core plugin-system design.
 
-When designing security or authorization features that touch plugins:
-
-1. Find the **common code path** that handles both runtimes (e.g., `internal/plugin/event_emitter.go::Emit` is the shared emit boundary for both Lua return-value emits and binary gRPC emits).
-2. Place the gate at the common path so both runtimes are enforced uniformly.
-3. Runtime-specific code (e.g., the gRPC token mechanism for binary plugins, Lua state lifecycle) is acceptable for runtime-specific concerns (e.g., the binary forgery surface that doesn't exist on the Lua path), but MUST NOT differ in policy / trust / manifest-gate dimensions.
-
-Example (this PR — `holomush-ec22.1`): the `actor_kinds_claimable` manifest gate fires at `event_emitter.go::Emit` for both runtimes; the supplemental token-authentication mechanism applies only to the binary gRPC `EmitEvent` boundary because that's where the forgery surface exists. Both runtimes reach the same policy enforcement.
+Detail, rationale, and a worked example are in `.claude/rules/plugin-runtime-symmetry.md` (auto-loads in `internal/plugin/`, `pkg/plugin/`, `plugins/`, `internal/access/`).
 
 <!-- END: plugin-runtime-symmetry -->
 
@@ -519,21 +376,4 @@ runes patterns.
 
 ## Landing the Plane (Session Completion)
 
-**When ending a work session**, work is NOT complete until changes are pushed. This is a **jj-colocated repo** — use the `jj:jujutsu` skill for the command sequence.
-
-**MANDATORY:**
-
-1. File beads for remaining work
-2. Run `task pr-prep` (mirrors CI) if code changed
-3. Update issue status — close done, update in-progress
-4. Push: `jj git fetch` → targeted rebase (`jj rebase -r <change> -d main@origin` — never bare `-d main`) → set bookmark → `jj git push --branch <branch>` → verify with `jj st`
-5. Clean up workspace: `cd <repo-root> && jj workspace forget <name> && rm -rf <repo-parent>/.worktrees/<name>` (the `cd` matters — `../.worktrees/<name>` is unsafe from any nested cwd)
-6. Hand off context for the next session
-
-**CRITICAL RULES:**
-
-- Work is NOT complete until `jj git push` succeeds
-- NEVER stop before pushing — that leaves work stranded locally
-- NEVER say "ready to push when you are" — YOU must push
-- If push fails, resolve and retry until it succeeds
-- **jj-specific**: NEVER use bare `jj rebase -d main` — always scope with `-r <change-id>` to avoid sweeping up other agents' work
+Work is NOT complete until `jj git push` succeeds. The full session-completion checklist lives in `.claude/rules/landing-the-plane.md` (always loaded). Skip the chain only for small fixes (typo, dependency bump, single-file bug).

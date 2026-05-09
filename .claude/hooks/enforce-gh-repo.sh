@@ -249,7 +249,15 @@ if origin_url=$(git -C "$MAIN_REPO" remote get-url origin 2>/dev/null); then
   [ -n "$parsed" ] && GH_REPO_HINT="$parsed"
 fi
 
-SEGMENTS=$(echo "$COMMAND" | awk '{gsub(/ *&& */, "\n"); gsub(/ *; */, "\n"); gsub(/ *\|\| */, "\n"); print}')
+# Strip single- and double-quoted string contents (including across newlines)
+# before segment-splitting. This prevents commands like
+#   jj describe -m 'multi-line\nmessage starting with "gh ..."'
+# from false-triggering on lines whose first non-quote token happens to be
+# `gh`. Crude — does not handle escaped quotes inside quotes — but covers
+# real-world hook inputs. If `gh` appears OUTSIDE quotes anywhere, the
+# stripped form preserves it and we detect normally.
+STRIPPED=$(printf '%s' "$COMMAND" | perl -0777 -pe "s/'[^']*'//g; s/\"[^\"]*\"//g" 2>/dev/null) || STRIPPED="$COMMAND"
+SEGMENTS=$(printf '%s' "$STRIPPED" | awk '{gsub(/ *&& */, "\n"); gsub(/ *; */, "\n"); gsub(/ *\|\| */, "\n"); print}')
 
 # Track whether an earlier segment exported GH_REPO so chained commands like
 # `export GH_REPO=foo/bar; gh pr list` aren't false-positive blocked.
@@ -299,16 +307,19 @@ while IFS= read -r segment; do
 
   [[ $triggered -eq 0 ]] && continue
 
+  # Note: $triggered_part is derived from STRIPPED (quote-stripped form),
+  # so we don't interpolate it — quoted args (e.g., `gh pr create -t "Fix x"`)
+  # would be lost. The user has the original command in their shell history;
+  # we just tell them how to make it work.
   cat >&2 <<EOF
-\`gh\` invoked from a jj workspace ($WS_ROOT)
-without a repo specifier. jj workspaces don't have their own .git/, so gh
-will fail with: "fatal: not a git repository ... Stopping at filesystem
-boundary".
+\`gh\` invoked from a jj workspace ($WS_ROOT) without a repo specifier.
+jj workspaces don't have their own .git/, so gh will fail with:
+"fatal: not a git repository ... Stopping at filesystem boundary".
 
 Pick one:
 
-  • Set GH_REPO and re-run the gh command:
-        GH_REPO='$GH_REPO_HINT' $triggered_part
+  • Set GH_REPO and re-run your gh command, e.g.:
+        GH_REPO='$GH_REPO_HINT' gh pr view 123
 
   • Or pass -R/--repo to gh (e.g., -R '$GH_REPO_HINT').
 
