@@ -117,8 +117,8 @@ tasks:
       # store migration tests. See .codecov.yml for Codecov's merge behavior.
       - gotestsum --format pkgname -- -race -tags=integration -count=1 -coverprofile=coverage-int.out -covermode=atomic -coverpkg=./...
         ./cmd/holomush/ ./internal/access/setup/ ./internal/auth/postgres/ ./internal/content/ ./internal/eventbus/audit/
-        ./internal/eventbus/crypto/dek/ ./internal/eventbus/crypto/kek/ ./internal/eventbus/history/ ./internal/store/
-        ./plugins/core-scenes/ ./test/testutil/ ./test/integration/...
+        ./internal/eventbus/crypto/dek/ ./internal/eventbus/crypto/kek/ ./internal/eventbus/history/ ./internal/store/ ./plugins/core-scenes/
+        ./test/testutil/ ./test/integration/...
 
   test:int:focus:
     desc: Run focused integration tests with Ginkgo focus filter (pass -ginkgo.focus="..." after --)
@@ -181,6 +181,10 @@ tasks:
 
   test:bats:
     desc: Run bats shell tests under scripts/tests/
+    # bats_load_library searches BATS_LIB_PATH for bats-support/bats-assert.
+    # Cover macOS (Homebrew arm64+x86) and Linux (apt/manual install) paths.
+    env:
+      BATS_LIB_PATH: /opt/homebrew/lib:/usr/local/lib:/usr/lib
     cmds:
       - bats scripts/tests/
 

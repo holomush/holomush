@@ -89,7 +89,7 @@ issues in the decomposition-spec table); see
   bootstrap-time chain check (D).
 - A seeded ABAC policy that *uses* the grant — only attribute exposure
   and the typed facade. The seam for a future policy-driven gate is
-  documented in [Future seams](#future-seams) but not built.
+  documented as a future seam in the Architecture section but not built.
 - UDS / ConnectRPC plumbing (sub-epic C).
 - TOTP enrollment, verification, recovery codes, or audit emission
   (sub-epic A; merged).
@@ -363,6 +363,7 @@ The provider/resolver contract (per
   match exactly.
 
 **Test impact:**
+
 - Tests asserting on the provider's direct return shape use
   un-namespaced keys: `attrs["grants"]`.
 - Tests asserting on the resolved attribute bag use namespaced keys:
@@ -636,6 +637,7 @@ pattern: `internal/eventbus/crypto/dek/api_test.go::stubAllowSet` (per
 amendments are present.
 
 B's plan MUST select a concrete enforcement mechanism: either
+
 - a Go test that opens `docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md`
   and asserts each amendment's distinctive substring is present (e.g.,
   `"crypto.operator capability"` in §1 row 137; `"hard-required TOTP"`

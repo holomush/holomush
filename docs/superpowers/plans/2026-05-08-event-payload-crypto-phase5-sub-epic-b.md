@@ -131,7 +131,7 @@ Expected: PASS for all three.
 
 Commit using VCS-appropriate commands per `references/vcs-preamble.md`. Suggested message:
 
-```
+```text
 feat(access): add SubjectPlayer namespace constant (holomush-jxo8.5.1)
 
 Adds player: as a Subject prefix alongside character:, plugin:, system,
@@ -304,7 +304,7 @@ Expected: PASS for `TestCapabilityCryptoOperatorIsCryptoOperator`, `TestPlayerSu
 
 Suggested message:
 
-```
+```text
 feat(access): CapabilityCryptoOperator + PlayerSubject helper (holomush-jxo8.5.2)
 
 Adds the crypto.operator grant constant and the canonical subject-ID
@@ -447,7 +447,7 @@ Expected: PASS for both.
 
 Suggested message:
 
-```
+```text
 feat(auth): PlayerRepository.ExistingIDs bulk-existence helper (holomush-jxo8.5.3)
 
 Read-only bulk lookup for the crypto.operators startup cross-check.
@@ -592,7 +592,7 @@ Expected: PASS for all five.
 
 Suggested message:
 
-```
+```text
 feat(config): CryptoConfig with operators allow-list (holomush-jxo8.5.4)
 
 Introduces the top-level crypto: YAML block. First tenant is
@@ -756,7 +756,7 @@ Expected: PASS for the five Task-5 tests. (`ResolveSubject` not yet implemented;
 
 Suggested message:
 
-```
+```text
 feat(access): PlayerAttributeProvider scaffolding (holomush-jxo8.5.5)
 
 Implements Namespace(), Schema(), ResolveResource(), and the constructor
@@ -951,7 +951,7 @@ Expected: PASS for all four tests (operator, non-operator, non-player namespace,
 
 Suggested message:
 
-```
+```text
 feat(access): PlayerAttributeProvider.ResolveSubject (holomush-jxo8.5.6)
 
 Resolves player.id and player.grants for "player:<ulid>" subjects.
@@ -1078,7 +1078,7 @@ Expected: PASS.
 
 Suggested message:
 
-```
+```text
 test(access): HasPlayerGrant facade unit tests (holomush-jxo8.5.7)
 
 Covers operator-permit, non-operator-deny, exact-match semantics,
@@ -1181,7 +1181,7 @@ Expected: PASS, no data races.
 
 Suggested message:
 
-```
+```text
 test(access): PlayerAttributeProvider contract + concurrency + no-mutation (holomush-jxo8.5.8)
 
 Reuses existing assertProviderContract battery, adds parallel ResolveSubject
@@ -1340,7 +1340,7 @@ Expected: PASS.
 
 Suggested message:
 
-```
+```text
 feat(access): wire PlayerAttributeProvider into setup (holomush-jxo8.5.9)
 
 Registers PlayerAttributeProvider with the AttributeResolver alongside
@@ -1598,7 +1598,7 @@ Expected: PASS for all six tests.
 
 Suggested message:
 
-```
+```text
 feat(crypto): wire crypto.operators startup validation (holomush-jxo8.5.10)
 
 Loads CryptoConfig.Operators at server start, cross-checks against the
@@ -1654,13 +1654,13 @@ confuse the inventory ordering (A1 first) with the application order
 
 Edit line 137 of the master spec from:
 
-```
+```text
 | Compromised in-game wizard | Trigger destructive operations (Rekey, AdminReadStream) | Inside the auth tier but without shell access |
 ```
 
 to:
 
-```
+```text
 | Compromised in-game admin with crypto.operator capability | Trigger destructive operations (Rekey, AdminReadStream) | Inside the auth tier but without shell access |
 ```
 
@@ -1682,7 +1682,7 @@ Insert a new paragraph after the threat-model table (around line 145; check curr
 
 In §4.6, after the existing `audit.<game>.system.rekey.*` block, insert:
 
-```
+```text
 **`audit.<game>.system.crypto_policy.<policy_name>`** — emitted on every
 crypto-policy change (server startup writes the current effective policy;
 future reload paths emit on each change):
@@ -1707,7 +1707,8 @@ select an RFC-8785-compliant Go canonicalizer (e.g.,
 `go.mod`. Switching canonicalizer libraries or RFC interpretations is a
 chain-breaking change and MUST be treated as a master-spec amendment, not
 a sub-epic-internal refactor.
-```
+
+```text
 
 - [ ] **Step 4: Apply A4 (§4.6 `policy_hash` field on rekey/operator_read events)**
 
@@ -1735,6 +1736,7 @@ In §5.9 lines 1264–1325:
 After §5.9, add:
 
 ```
+
 #### 5.9.1 `crypto.operator` capability — storage and grant mechanism
 
 The `crypto.operator` capability is a player-attribute grant — a flat
@@ -1777,27 +1779,33 @@ the full configured set.
 
 **In-game grant UX:** Deferred to a P3 follow-up bead. Operators edit
 the YAML config and restart the server in v1.
-```
+
+```text
 
 - [ ] **Step 7: Apply A7 (§6.3 1.4)**
 
 Edit line 1433 from:
 
 ```
-  1.4  RekeyService verifies wizard role + TOTP factor
-```
+
+  1.4 RekeyService verifies wizard role + TOTP factor
+
+```text
 
 to:
 
 ```
-  1.4  RekeyService verifies admin role + crypto.operator capability + TOTP factor
-```
+
+  1.4 RekeyService verifies admin role + crypto.operator capability + TOTP factor
+
+```text
 
 - [ ] **Step 8: Apply A8 (new §6.3.1 subsection — dual-control protocol)**
 
 After §6.3, add:
 
 ```
+
 #### 6.3.1 Dual-control protocol
 
 Server-issued approval-token mechanism (sub-epic D ships the implementation):
@@ -1824,7 +1832,8 @@ Approval-token format: ULID. TTL: 5 minutes; expired rows MAY be left
 until a periodic sweep (rows are tiny). `op_args_hash` binds the
 approval to the primary's invocation args; mismatch on proceed → server
 rejects with `DENY_APPROVAL_ARGS_MISMATCH`.
-```
+
+```text
 
 - [ ] **Step 9: Apply A9 (§7.5 `s/wizard/admin/` + xref to §6.3.1)**
 
@@ -1867,30 +1876,38 @@ In §11.1's Phase 5 row scope list, append:
 In §11.3, edit step 5 line 2185 from:
 
 ```
+
 5. Decide on TOTP enrollment for wizard accounts. Required for `Rekey` and
    `AdminReadStream` once enabled in config.
-```
+
+```text
 
 to:
 
 ```
+
 5. Verify TOTP enrolled for admin accounts who hold the `crypto.operator` capability.
    Required for `Rekey` and `AdminReadStream`.
-```
+
+```text
 
 - [ ] **Step 14: Apply A14 (§4.6 line 833 actor metadata)**
 
 Edit line 833 from:
 
 ```
+
   actor:        {kind: operator, os_user: <uid>, player_id: <wizard player_id>}
-```
+
+```text
 
 to:
 
 ```
+
   actor:        {kind: operator, os_user: <uid>, player_id: <admin player_id>}
-```
+
+```text
 
 - [ ] **Step 15: Run `task lint` and verify markdown fmt**
 
@@ -1903,6 +1920,7 @@ If markdown linting flags any of the inserted blocks (e.g., table column alignme
 Suggested message:
 
 ```
+
 docs(crypto): master-spec amendments for sub-epic B (holomush-jxo8.5.11)
 
 Lands the 14 amendments per the sub-epic B design spec's amendments
@@ -1915,7 +1933,8 @@ rewrite, §4.6 line 833 actor-metadata correction.
 Two of the amendments (A13, A14) also correct drift in the decomposition
 spec's amendments table (already applied during brainstorm — verified by
 spec_amendments_test.go meta-test in next commit).
-```
+
+```text
 
 ---
 
@@ -2042,7 +2061,7 @@ Expected: PASS.
 
 Suggested message:
 
-```
+```text
 test(crypto): TestSpecAmendmentsLanded meta-test (holomush-jxo8.5.12)
 
 Enforces INV-B-AMEND: all 14 master-spec amendments + the two
@@ -2164,7 +2183,7 @@ The script's pass/fail outcome depends on Task 14's bead update. Don't expect gr
 
 Suggested message:
 
-```
+```text
 chore(crypto): bead-description gate for sub-epic B (holomush-jxo8.5.13)
 
 scripts/check_bead_jxo8_5.sh enforces INV-B-BEAD: jxo8.5's description
@@ -2253,7 +2272,7 @@ The doc-presence is implicitly enforced by reviewers reading the PR; an explicit
 
 In `site/docs/operating/crypto-setup.md`:
 
-```markdown
+````markdown
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
@@ -2329,7 +2348,7 @@ the YAML config file.
 
 - [Master spec — Section 5.9.1](../../../docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md): canonical definition of the `crypto.operator` capability.
 - [Sub-epic B design spec](../../../docs/superpowers/specs/2026-05-08-event-payload-crypto-phase5-sub-epic-b-design.md): full design of the capability mechanism.
-```
+````
 
 - [ ] **Step 3: Verify the file lints**
 
@@ -2343,14 +2362,16 @@ Run: `task docs:serve` and visit the local URL for the operating section. Confir
 
 Suggested message:
 
-```
+```text
+
 docs(operating): crypto-setup.md stub (holomush-jxo8.5.15)
 
 Minimal operator-facing doc for the crypto.operators YAML knob shipped
 in sub-epic B. Master spec §9.2 marks crypto-setup.md as Phase-8 work;
 this stub lands the config knob doc together with the code knob, and
 Phase 8 expands the file with the full master-key bootstrap runbook.
-```
+
+```text
 
 ---
 

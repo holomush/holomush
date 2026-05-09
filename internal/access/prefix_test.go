@@ -534,6 +534,11 @@ func TestKnownPrefixes_AllConstantsCovered(t *testing.T) {
 			constant: access.SubjectSession,
 			desc:     "SubjectSession",
 		},
+		{
+			name:     "subject player prefix",
+			constant: access.SubjectPlayer,
+			desc:     "SubjectPlayer",
+		},
 		// Resource prefixes
 		{
 			name:     "resource character prefix",

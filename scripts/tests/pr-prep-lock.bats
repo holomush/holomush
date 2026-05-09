@@ -18,6 +18,8 @@ setup_file() {
 }
 
 setup() {
+  bats_load_library bats-support
+  bats_load_library bats-assert
   init_test_env
 }
 
