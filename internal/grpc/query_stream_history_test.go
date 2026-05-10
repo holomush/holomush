@@ -1054,3 +1054,61 @@ func TestQueryStreamHistoryPassesZeroIdentityWhenBindingsNil(t *testing.T) {
 	assert.Equal(t, eventbus.IdentityKindUnknown, reader.gotQ.Identity.Kind,
 		"when bindings is nil, HistoryQuery.Identity must be zero-value (IdentityKindUnknown)")
 }
+
+// TestQueryStreamHistoryFiltersAuditOnlyEvents is the symmetric counterpart
+// of TestDispatchDeliverySkipsAuditOnlyEvents (subscribe path) for the
+// history-read path (QueryStreamHistory). AUDIT_ONLY events MUST NOT be
+// returned to client streams via either the live subscribe filter at
+// internal/grpc/server.go (~line 1019) or the history filter at
+// fetchHistoryFramesFromBus. Both surfaces must agree — otherwise a client
+// could read host-emit security audit content (crypto.totp_*, crypto.policy_set)
+// by paginating history even though live subscribe drops it.
+//
+// The fake reader returns a mix of normal and AUDIT_ONLY events; only the
+// non-audit ones must surface in the response.
+func TestQueryStreamHistoryFiltersAuditOnlyEvents(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	charID := ulid.MustParse("01HYXYZCHAR0000000000000CH")
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", CharacterID: charID, ExpiresAt: &future},
+	})
+	// Mix of audit-only and normal events on the same character stream.
+	// fakeHistoryReader returns events newest-first; fetchHistoryFramesFromBus
+	// reverses to oldest-first.
+	stream := eventbus.Subject("events.main.character." + charID.String())
+	auditEvent := eventbus.Event{
+		ID:        core.NewULID(),
+		Subject:   stream,
+		Type:      "crypto.totp_locked",
+		Timestamp: time.Now(),
+		Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
+		Payload:   []byte(`{}`),
+		Rendering: &eventbus.RenderingMetadata{
+			DisplayTarget: eventbus.EventChannelAuditOnly,
+			SourcePlugin:  "builtin",
+			Category:      "system",
+		},
+	}
+	normalEvent := eventbus.Event{
+		ID:        core.NewULID(),
+		Subject:   stream,
+		Type:      "scene.pose",
+		Timestamp: time.Now(),
+		Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
+		Payload:   []byte("p"),
+	}
+	reader := &fakeHistoryReader{events: []eventbus.Event{normalEvent, auditEvent}}
+	s := newQueryStreamHistoryServer(t, reader, sess)
+
+	resp, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "character:" + charID.String(),
+		Count:     10,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetEvents(), 1,
+		"AUDIT_ONLY events MUST NOT be returned via QueryStreamHistory (symmetric with dispatchDelivery)")
+	assert.Equal(t, "scene.pose", resp.GetEvents()[0].GetType(),
+		"only the non-audit event survives the filter")
+}

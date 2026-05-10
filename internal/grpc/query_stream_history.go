@@ -410,6 +410,14 @@ func fetchHistoryFramesFromBus(
 
 	// Drain up to count+1 events. DirectionBackward gives newest-first;
 	// we collect them and reverse below to restore ascending order.
+	//
+	// AUDIT_ONLY events (e.g. crypto.totp_*, crypto.policy_set) MUST NOT
+	// reach client streams — symmetric with the live dispatchDelivery
+	// filter at internal/grpc/server.go (~line 1019). Skip them while
+	// draining so the asymmetry between live subscribe and history reads
+	// cannot expose host-emit security audit content. Skipped events are
+	// not counted toward count+1 — we keep pulling until count+1 client-
+	// visible events accumulate or the stream EOFs.
 	collected := make([]eventbus.Event, 0, count+1)
 	for {
 		e, nextErr := stream.Next(ctx)
@@ -418,6 +426,9 @@ func fetchHistoryFramesFromBus(
 				break
 			}
 			return nil, oops.With("subject", string(sub)).Wrap(nextErr)
+		}
+		if e.Rendering != nil && e.Rendering.DisplayTarget == eventbus.EventChannelAuditOnly {
+			continue
 		}
 		collected = append(collected, e)
 		if len(collected) >= count+1 {

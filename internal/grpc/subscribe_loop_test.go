@@ -249,6 +249,36 @@ func TestDispatchDeliverySessionEndedBadPayloadLogsAndSurvives(t *testing.T) {
 	require.Len(t, stream.sent, 1)
 }
 
+// TestDispatchDeliverySkipsAuditOnlyEvents is the dispatch-side regression
+// lock for INV-D14 / holomush-jxo8.6.26: events tagged with
+// EventChannelAuditOnly (e.g. crypto.totp_*, crypto.policy_set) MUST be
+// ack'd and silently dropped before stream.Send. The persist-side
+// counterpart lives at test/integration/eventbus_e2e/audit_only_channel_test.go;
+// this is the unit-level dispatch filter assertion at
+// internal/grpc/server.go (~line 1019).
+func TestDispatchDeliverySkipsAuditOnlyEvents(t *testing.T) {
+	t.Parallel()
+	s := &CoreServer{}
+	info := &session.Info{ID: "s1"}
+	stream := &fakeSubscribeStream{ctx: context.Background()}
+	charID := core.NewULID().String()
+
+	d := makeDelivery(t, "crypto.totp_locked", charID)
+	d.ev.Subject = eventbus.Subject("events.main.system.crypto_totp." + charID + ".locked")
+	d.ev.Rendering = &eventbus.RenderingMetadata{
+		DisplayTarget: eventbus.EventChannelAuditOnly,
+		SourcePlugin:  "builtin",
+		Category:      "system",
+	}
+
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, d.acks(), "audit-only event must be ack'd so JS can age it out")
+	assert.Equal(t, 0, d.nacks())
+	assert.Empty(t, stream.sent,
+		"audit-only event must NOT reach client streams (INV-D14)")
+}
+
 // --- Tests: applyFilterCtrl -------------------------------------------
 
 func TestApplyFilterCtrlRejectsLocationStreams(t *testing.T) {
