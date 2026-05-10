@@ -237,18 +237,32 @@ func TestApproveHandlerSurfacesExpiredDenial(t *testing.T) {
 	assert.Equal(t, connect.CodeFailedPrecondition, ce.Code())
 }
 
-func TestApproveHandlerRejectsInvalidRequestIDLength(t *testing.T) {
-	sessions := &fakeSessions{identity: adminauth.OperatorIdentity{PlayerID: "01HZA00000000000000000000"}}
-	repo := &fakeApprovalRepo{}
-	resolver := &fakeResolver{grants: []string{access.CapabilityCryptoOperator}}
-	roles := &fakeRoleHasher{has: true}
-	h := newApproveHandler(sessions, repo, resolver, roles)
+func TestApproveHandlerRejectsInvalidRequestID(t *testing.T) {
+	cases := []struct {
+		name string
+		rid  []byte
+	}{
+		{"empty", []byte{}},
+		{"too short", []byte{0x01, 0x02}},
+		{"too long", make([]byte, 17)},
+		{"all zero (16 bytes)", make([]byte, 16)},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			sessions := &fakeSessions{identity: adminauth.OperatorIdentity{PlayerID: "01HZA00000000000000000000"}}
+			repo := &fakeApprovalRepo{}
+			resolver := &fakeResolver{grants: []string{access.CapabilityCryptoOperator}}
+			roles := &fakeRoleHasher{has: true}
+			h := newApproveHandler(sessions, repo, resolver, roles)
 
-	req := connect.NewRequest(&adminv1.ApproveRequest{SessionToken: "tk", RequestId: []byte{0x01, 0x02}})
-	_, err := h.Approve(context.Background(), req)
-	require.Error(t, err)
-	var ce *connect.Error
-	require.True(t, errors.As(err, &ce))
-	assert.Equal(t, connect.CodeInvalidArgument, ce.Code())
-	assert.Equal(t, 0, repo.markCalls)
+			req := connect.NewRequest(&adminv1.ApproveRequest{SessionToken: "tk", RequestId: tc.rid})
+			_, err := h.Approve(context.Background(), req)
+			require.Error(t, err)
+			var ce *connect.Error
+			require.True(t, errors.As(err, &ce))
+			assert.Equal(t, connect.CodeInvalidArgument, ce.Code())
+			assert.Equal(t, 0, repo.markCalls)
+		})
+	}
 }

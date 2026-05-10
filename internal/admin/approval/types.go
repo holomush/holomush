@@ -15,6 +15,18 @@ type RequestID [16]byte
 // String returns the ULID-formatted string.
 func (r RequestID) String() string { return ulid.ULID(r).String() }
 
+// IsZero reports whether r is the all-zero ULID. The all-zero value is
+// never a valid request ID (ULID encodes a non-zero timestamp) and is
+// the trivial forgery shape, so handlers reject it at the boundary.
+func (r RequestID) IsZero() bool {
+	for _, b := range r {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // OpenRequest is the minimal input to create a pending approval row.
 type OpenRequest struct {
 	PrimaryPlayerID string

@@ -43,9 +43,22 @@ func VerifyChain(ctx context.Context, pool *pgxpool.Pool, subject, policyName st
 // INV-D10: genesis prev_hash is nil. INV-D11: each entry's prev_hash equals
 // the predecessor's recomputed policy_hash. INV-D12: each entry's stored
 // policy_hash equals the recomputed hash over its own canonicalized payload.
+//
+// Cross-checks each entry's Payload.PolicyName against the expected
+// policyName argument. The loader queries by subject, but the payload's
+// PolicyName is independent JSON — a row whose subject and PolicyName
+// disagree is a chain-breaking corruption (or a misconfigured emitter)
+// and surfaces as POLICY_CHAIN_NAME_MISMATCH.
 func verifyChainEntries(entries []chainEntry, policyName string) error {
 	if len(entries) == 0 {
 		return nil
+	}
+	if entries[0].Payload.PolicyName != policyName {
+		return oops.Code("POLICY_CHAIN_NAME_MISMATCH").
+			With("policy_name", policyName).
+			With("payload_policy_name", entries[0].Payload.PolicyName).
+			With("js_seq", entries[0].Seq).
+			Errorf("payload.policy_name does not match expected policy_name")
 	}
 	if entries[0].Payload.PrevHash != nil {
 		return oops.Code("POLICY_CHAIN_BROKEN_GENESIS").
@@ -66,6 +79,13 @@ func verifyChainEntries(entries []chainEntry, policyName string) error {
 			Errorf("genesis policy_hash does not match canonicalized payload")
 	}
 	for i := 1; i < len(entries); i++ {
+		if entries[i].Payload.PolicyName != policyName {
+			return oops.Code("POLICY_CHAIN_NAME_MISMATCH").
+				With("policy_name", policyName).
+				With("payload_policy_name", entries[i].Payload.PolicyName).
+				With("js_seq", entries[i].Seq).
+				Errorf("payload.policy_name does not match expected policy_name")
+		}
 		prevHash, err := ComputePolicyHash(&entries[i-1].Payload)
 		if err != nil {
 			return oops.Code("POLICY_CHAIN_HASH_RECOMPUTE_FAILED").

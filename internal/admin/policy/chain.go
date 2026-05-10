@@ -36,9 +36,20 @@ type PolicySetPayload struct {
 // Caller pattern: build the payload with PolicyHash empty, call
 // ComputePolicyHash, set the result onto payload.PolicyHash, then marshal
 // the populated payload for storage.
+//
+// nil is the canonical absent form for both PolicyHash and PrevHash. An
+// empty (length-zero) []byte is normalized to nil before canonicalization
+// so callers cannot accidentally produce different hashes by passing
+// `[]byte{}` vs `nil` — `json.Marshal` emits `null` for nil and `""` for
+// `[]byte{}`, which canonicalize to different bytes. Genesis rows MUST
+// have PrevHash == nil (per INV-D10); this normalization makes the
+// genesis hash stable regardless of which empty form the caller used.
 func ComputePolicyHash(payload *PolicySetPayload) ([]byte, error) {
 	canon := *payload
 	canon.PolicyHash = nil
+	if len(canon.PrevHash) == 0 {
+		canon.PrevHash = nil
+	}
 	raw, err := json.Marshal(&canon)
 	if err != nil {
 		return nil, oops.Code("POLICY_HASH_JSON_MARSHAL_FAILED").Wrap(err)

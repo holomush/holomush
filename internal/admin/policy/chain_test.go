@@ -71,6 +71,26 @@ func TestComputePolicyHashExcludesPolicyHashField(t *testing.T) {
 	assert.Equal(t, h1, h2, "PolicyHash field must not bleed into its own input")
 }
 
+// TestComputePolicyHashNormalizesEmptyPrevHashToNil verifies that a
+// genesis-shaped payload with PrevHash=[]byte{} produces the same hash as
+// PrevHash=nil. INV-D10 says genesis prev_hash is nil; this guards against
+// json.Marshal's `null` vs `""` divergence silently producing two distinct
+// genesis hashes for callers that initialize PrevHash differently.
+func TestComputePolicyHashNormalizesEmptyPrevHashToNil(t *testing.T) {
+	pNil := fixedPayload()
+	pNil.PrevHash = nil
+	hNil, err := policy.ComputePolicyHash(pNil)
+	require.NoError(t, err)
+
+	pEmpty := fixedPayload()
+	pEmpty.PrevHash = []byte{}
+	hEmpty, err := policy.ComputePolicyHash(pEmpty)
+	require.NoError(t, err)
+
+	assert.Equal(t, hNil, hEmpty,
+		"nil and []byte{} PrevHash MUST produce the same hash (canonical absent form is nil)")
+}
+
 // TestComputePolicyHashStableUnderJSONFieldReorder verifies JCS sorts
 // keys deterministically. INV-D13 (the canonicalizer's own contract;
 // guards against future field-order changes in PolicySetPayload struct

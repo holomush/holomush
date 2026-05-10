@@ -67,10 +67,17 @@ func (h *ApproveHandler) Approve(
 
 	if len(req.Msg.GetRequestId()) != 16 {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			oops.Code("APPROVE_INVALID_REQUEST_ID").Errorf("request_id MUST be a 16-byte ULID"))
+			oops.Code("APPROVE_INVALID_REQUEST_ID").Errorf("request_id must be a non-zero 16-byte ULID"))
 	}
 	var rid RequestID
 	copy(rid[:], req.Msg.GetRequestId())
+	// All-zero request_id is never a valid ULID and is the trivial
+	// forgery shape — reject explicitly so callers cannot use it as a
+	// sentinel that round-trips through the repo layer.
+	if rid.IsZero() {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			oops.Code("APPROVE_INVALID_REQUEST_ID").Errorf("request_id must be a non-zero 16-byte ULID"))
+	}
 
 	if err := h.repo.MarkApproved(ctx, rid, identity.PlayerID); err != nil {
 		return nil, adminauth.MapDenyToConnect(err) //nolint:wrapcheck // MapDenyToConnect produces *connect.Error; wrapping again would hide the ConnectRPC code

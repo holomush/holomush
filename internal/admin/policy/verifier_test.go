@@ -122,12 +122,43 @@ func TestVerifyChainEntriesDecodesEnvelopeAndJSON(t *testing.T) {
 }
 
 // TestVerifyChainEntriesAcceptsMultiplePolicyNames verifies that the
-// verifier is policy-name agnostic — the policyName arg is used only for
-// error context and does not affect integrity checking.
+// verifier accepts each policy_name independently — i.e. a chain whose
+// every entry's payload.policy_name matches the expected name verifies
+// cleanly across the namespace.
 func TestVerifyChainEntriesAcceptsMultiplePolicyNames(t *testing.T) {
 	for _, name := range []string{"crypto.operators", "crypto.admins", "crypto.auditors"} {
 		gen := helperEntry(t, 1, helperPayload(name, nil, 1700000000))
 		require.NoError(t, verifyChainEntries([]chainEntry{gen}, name),
 			"expected valid genesis chain for policy %s", name)
 	}
+}
+
+// TestVerifyChainEntriesRejectsPolicyNameMismatchAtGenesis verifies the
+// cross-check between Payload.PolicyName and the expected policyName arg.
+// A genesis row whose payload encodes a different policy_name surfaces as
+// POLICY_CHAIN_NAME_MISMATCH (chain-breaking corruption / misconfigured
+// emitter). The error context includes both names + js_seq for diagnostics.
+func TestVerifyChainEntriesRejectsPolicyNameMismatchAtGenesis(t *testing.T) {
+	gen := helperEntry(t, 1, helperPayload("crypto.admins", nil, 1700000000))
+	err := verifyChainEntries([]chainEntry{gen}, "crypto.operators")
+	require.Error(t, err)
+	o, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, "POLICY_CHAIN_NAME_MISMATCH", o.Code())
+}
+
+// TestVerifyChainEntriesRejectsPolicyNameMismatchOnExtension verifies that
+// the cross-check fires on non-genesis rows too — a chain whose genesis
+// matches but later row's payload encodes a different policy_name still
+// surfaces as POLICY_CHAIN_NAME_MISMATCH.
+func TestVerifyChainEntriesRejectsPolicyNameMismatchOnExtension(t *testing.T) {
+	gen := helperEntry(t, 1, helperPayload("crypto.operators", nil, 1700000000))
+	// Build extension whose payload claims a different policy_name.
+	wrongName := helperPayload("crypto.admins", gen.Payload.PolicyHash, 1700000060)
+	ext := helperEntry(t, 2, wrongName)
+	err := verifyChainEntries([]chainEntry{gen, ext}, "crypto.operators")
+	require.Error(t, err)
+	o, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, "POLICY_CHAIN_NAME_MISMATCH", o.Code())
 }

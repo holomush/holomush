@@ -19,9 +19,14 @@ func TestProtoDeterministicMarshalLockedToVendoredProtobuf(t *testing.T) {
 		t.Fatalf("read go.mod: %v", err)
 	}
 	src := string(data)
-	re := regexp.MustCompile(`google\.golang\.org/protobuf v[0-9]+\.[0-9]+\.[0-9]+`)
+	// Lock the EXACT version (mirrors INV-D13's JCS pin in
+	// internal/admin/policy/jcs_meta_test.go). A bump of this
+	// dependency is a chain-breaking master-spec amendment per INV-D8 —
+	// the test must fail loudly when the version changes so that the
+	// op_args_hash audit chain is re-validated against the new encoder.
+	re := regexp.MustCompile(`google\.golang\.org/protobuf v1\.36\.11\b`)
 	if !re.MatchString(src) {
-		t.Fatalf("go.mod must pin google.golang.org/protobuf to a specific semver per INV-D18")
+		t.Fatalf("go.mod must pin google.golang.org/protobuf to v1.36.11 per INV-D18 / INV-D8 (chain-breaking on bump)")
 	}
 	// Negate: no replace directive without explicit master-spec amendment.
 	if strings.Contains(src, "replace google.golang.org/protobuf") {
