@@ -81,10 +81,18 @@ first_cmd_word() {
 # - || fallback clauses are checked as independent commands, which may
 #   produce false positives (e.g., "cmd || cat /dev/null").
 
+# Strip single- and double-quoted string contents (across newlines) before
+# segment-splitting so commands like `jj describe -m 'message contains find
+# or rg or cat in the body'` don't false-trigger on lines whose first
+# non-quote token happens to match a blocked tool name. Crude — does not
+# handle escaped quotes inside quotes — but covers real hook inputs. See
+# enforce-gh-repo.sh for the same pattern + caveats.
+STRIPPED=$(printf '%s' "$COMMAND" | perl -0777 -pe "s/'[^']*'//g; s/\"[^\"]*\"//g" 2>/dev/null) || STRIPPED="$COMMAND"
+
 # Split on && ; || using awk for portability (BSD sed does not support \n
 # in replacement strings). Note: || is consumed by the awk split, so the
 # pipe split below never misidentifies || as two separate pipe characters.
-SEGMENTS=$(echo "$COMMAND" | awk '{gsub(/ *&& */, "\n"); gsub(/ *; */, "\n"); gsub(/ *\|\| */, "\n"); print}')
+SEGMENTS=$(printf '%s' "$STRIPPED" | awk '{gsub(/ *&& */, "\n"); gsub(/ *; */, "\n"); gsub(/ *\|\| */, "\n"); print}')
 
 while IFS= read -r segment; do
   [[ -z "$segment" ]] && continue
@@ -140,8 +148,17 @@ while IFS= read -r segment; do
       exit 2
       ;;
     find)
-      echo "Use the Glob tool instead of find" >&2
-      exit 2
+      # Allow find when used with predicates Glob can't express:
+      # time-based (-mtime/-atime/-ctime/-mmin/-amin/-cmin/-newer/-newermt),
+      # metadata-based (-size/-perm/-user/-group/-uid/-gid/-empty),
+      # or actions (-exec/-delete/-printf). Block plain "find . -name '*.x'"
+      # patterns since Glob handles those.
+      if echo "$rest" | command grep -qE -- '(-(m|a|c)(time|min)|-newer|-size|-perm|-user|-group|-uid|-gid|-empty|-exec|-delete|-printf|-fprint|-iname|-iwholename|-i?regex|-maxdepth|-mindepth|-prune|-follow|-xdev)\b'; then
+        :  # allow
+      else
+        echo "Use the Glob tool instead of find (or add -mtime/-newer/-size/-exec/etc. if you need a predicate Glob can't express)" >&2
+        exit 2
+      fi
       ;;
   esac
 done <<< "$SEGMENTS"

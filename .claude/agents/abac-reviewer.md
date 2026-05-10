@@ -22,6 +22,7 @@ tools:
   - mcp__probe__grep
   - Write
 skills:
+  - superpowers:verification-before-completion
   - jj:jujutsu
 memory: project
 maxTurns: 50

@@ -13,6 +13,15 @@
           }
         ],
         "matcher": "Edit|Write"
+      },
+      {
+        "hooks": [
+          {
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-push-cleanup-nudge.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
       }
     ],
     "PreCompact": [
@@ -30,15 +39,6 @@
       {
         "hooks": [
           {
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/protect-main.sh",
-            "type": "command"
-          }
-        ],
-        "matcher": "Edit|Write"
-      },
-      {
-        "hooks": [
-          {
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/enforce-task-runner.sh",
             "type": "command"
           },
@@ -48,6 +48,10 @@
           },
           {
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/enforce-gh-repo.sh",
+            "type": "command"
+          },
+          {
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/nudge-probe-over-rg.sh",
             "type": "command"
           }
         ],
@@ -121,7 +125,6 @@
     "allow": [
       "WebFetch(domain:proxy.golang.org)",
       "WebFetch(domain:sum.golang.org)",
-      "WebFetch(domain:sum.golang.org)",
       "WebFetch(domain:dprint.dev)",
       "WebFetch(domain:plugins.dprint.dev)",
       "WebFetch(domain:release-assets.githubusercontent.com)",
@@ -130,7 +133,21 @@
       "Edit(~/Library/Caches/**)",
       "Edit(~/go/pkg/**)",
       "Edit(.git/**)",
-      "Edit(/.worktrees/**)"
+      "Edit(../.worktrees/**)",
+      "Bash(bd prime)",
+      "Bash(bd ready:*)",
+      "Bash(bd show:*)",
+      "Bash(bd list:*)",
+      "Bash(bd dep:*)",
+      "Bash(bd memories:*)",
+      "Bash(bd decision list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh api repos/*/pulls/*)",
+      "Bash(gh api repos/*/issues/*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)"
     ]
   },
   "sandbox": {
