@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/admin/approval"
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/eventbus"
@@ -39,7 +40,24 @@ import (
 // adminAuthEnv is the per-spec fixture: a fully-booted server (via
 // runCoreWithDeps), a UDS-dialing AdminServiceClient, an independent
 // query-only PG pool for events_audit assertions, and the secrets needed
-// to compute valid TOTP codes for both seeded operators.
+// to compute valid TOTP codes for the seeded operators.
+//
+// Seeding shape (extended for T26 dual-control scenarios):
+//   - alice (playerA): operator + admin — drives T25's Authenticate scenarios.
+//     Locked at end of T25 lockout scenario; no T26 scenario depends on her
+//     remaining unlocked.
+//   - bob (playerB): admin (NOT operator) — target of T25's ResetTOTP scenario.
+//     TOTP-cleared at end of T25 reset scenario; no T26 scenario depends on
+//     him remaining enrolled.
+//   - carol (playerC): operator + admin + TOTP enrolled — primary in T26
+//     dual-control scenarios. Untouched by T25.
+//   - dave (playerD): operator + admin + TOTP enrolled — second-op in T26
+//     dual-control scenarios. Untouched by T25. His admin role is removed
+//     mid-spec in the T26 INV-D16 scenario, so this scenario MUST run last
+//     among T26 scenarios.
+//
+// All four are listed in cryptoConfig.Operators. Bob is intentionally
+// NOT in Operators (T25's contract); carol and dave are.
 type adminAuthEnv struct {
 	ctx        context.Context
 	cancelCtx  context.CancelFunc
@@ -49,15 +67,33 @@ type adminAuthEnv struct {
 
 	playerA       ulid.ULID // alice — operator + admin role
 	playerB       ulid.ULID // bob — admin role, NOT operator (target of ResetTOTP)
+	playerC       ulid.ULID // carol — operator + admin role (T26 dual-control primary)
+	playerD       ulid.ULID // dave — operator + admin role (T26 dual-control second-op)
+	daveCharID    string    // dave's character (T26 role-removal scenario uses RoleStore.RemoveRole)
 	alicePassword string
 	bobPassword   string
+	carolPassword string
+	davePassword  string
 	aliceSecret   string
 	bobSecret     string
+	carolSecret   string
+	daveSecret    string
 
 	socketPath string
 	client     adminv1connect.AdminServiceClient
 
 	queryPool *pgxpool.Pool
+
+	// approvalRepo is constructed on queryPool and used by T26 dual-control
+	// scenarios to Open admin_approvals rows. Open is the legitimate
+	// primary-side step in the dual-control flow; the Approve RPC is exercised
+	// through the production UDS surface unchanged. T25 scenarios do not use
+	// this field.
+	approvalRepo approval.Repo
+
+	// roleStore is used by T26 to RemoveRole(RoleAdmin) from dave's character
+	// mid-spec to exercise the Approve handler's INV-D16 runtime role re-check.
+	roleStore store.RoleStore
 }
 
 // Teardown cancels the server context, drains the boot goroutine, and closes
@@ -214,14 +250,22 @@ func setupAdminAuthEnv(t *testing.T) *adminAuthEnv {
 	gameID := "main"
 	playerA := ulid.Make()
 	playerB := ulid.Make()
+	playerC := ulid.Make()
+	playerD := ulid.Make()
 	const alicePassword = "alice-correct-horse-battery-staple"
 	const bobPassword = "bob-tr0ub4dor-3-secure-pw"
+	const carolPassword = "carol-secret-passphrase-for-e2e"
+	const davePassword = "dave-other-secret-passphrase"
 
 	hasher := auth.NewArgon2idHasher()
 	aliceHash, err := hasher.Hash(alicePassword)
 	Expect(err).NotTo(HaveOccurred(), "Hash alicePassword")
 	bobHash, err := hasher.Hash(bobPassword)
 	Expect(err).NotTo(HaveOccurred(), "Hash bobPassword")
+	carolHash, err := hasher.Hash(carolPassword)
+	Expect(err).NotTo(HaveOccurred(), "Hash carolPassword")
+	daveHash, err := hasher.Hash(davePassword)
+	Expect(err).NotTo(HaveOccurred(), "Hash davePassword")
 
 	seedPool, err := pgxpool.New(context.Background(), connStr)
 	Expect(err).NotTo(HaveOccurred(), "pgxpool.New for seed")
@@ -237,6 +281,8 @@ func setupAdminAuthEnv(t *testing.T) *adminAuthEnv {
 	}{
 		{playerA.String(), "alice", aliceHash},
 		{playerB.String(), "bob", bobHash},
+		{playerC.String(), "carol", carolHash},
+		{playerD.String(), "dave", daveHash},
 	} {
 		_, err = seedPool.Exec(seedCtx, `
 			INSERT INTO players (id, username, password_hash, created_at, updated_at)
@@ -248,6 +294,8 @@ func setupAdminAuthEnv(t *testing.T) *adminAuthEnv {
 	// Characters (one per player). character_id is also a ULID.
 	aliceCharID := ulid.Make().String()
 	bobCharID := ulid.Make().String()
+	carolCharID := ulid.Make().String()
+	daveCharID := ulid.Make().String()
 	for _, row := range []struct {
 		id       string
 		playerID string
@@ -255,6 +303,8 @@ func setupAdminAuthEnv(t *testing.T) *adminAuthEnv {
 	}{
 		{aliceCharID, playerA.String(), "Alice"},
 		{bobCharID, playerB.String(), "Bob"},
+		{carolCharID, playerC.String(), "Carol"},
+		{daveCharID, playerD.String(), "Dave"},
 	} {
 		_, err = seedPool.Exec(seedCtx, `
 			INSERT INTO characters (id, player_id, name)
@@ -263,13 +313,15 @@ func setupAdminAuthEnv(t *testing.T) *adminAuthEnv {
 		Expect(err).NotTo(HaveOccurred(), "INSERT character %s", row.name)
 	}
 
-	// RoleAdmin on alice's character (step 5 of InGameCredentialsProvider).
+	// RoleAdmin on alice/carol/dave (step 5 of InGameCredentialsProvider).
 	// Bob does NOT need RoleAdmin — he's only the target of ResetTOTP, and
-	// his Authenticate attempt in spec 3 fails at step 2 (DENY_NOT_ENROLLED)
+	// his Authenticate attempt in T25 spec 3 fails at step 2 (DENY_NOT_ENROLLED)
 	// before ever reaching the role check.
 	rs := store.NewPostgresRoleStore(seedPool)
-	Expect(rs.AddRole(seedCtx, aliceCharID, access.RoleAdmin)).To(Succeed(),
-		"AddRole RoleAdmin on alice's character")
+	for _, charID := range []string{aliceCharID, carolCharID, daveCharID} {
+		Expect(rs.AddRole(seedCtx, charID, access.RoleAdmin)).To(Succeed(),
+			"AddRole RoleAdmin on character %s", charID)
+	}
 
 	// TOTP enrollments — share the same KEK file source so wrap_key_id at
 	// runtime matches what BootstrapEnroll persisted here.
@@ -287,14 +339,22 @@ func setupAdminAuthEnv(t *testing.T) *adminAuthEnv {
 	aliceBoot, err := totpSvc.BootstrapEnroll(seedCtx, playerA)
 	Expect(err).NotTo(HaveOccurred(), "BootstrapEnroll alice")
 
-	// bob via Enroll (the bootstrap key has been consumed by alice).
+	// bob, carol, dave via Enroll (the bootstrap key is consumed by alice).
 	bobEnroll, err := totpSvc.Enroll(seedCtx, playerB)
 	Expect(err).NotTo(HaveOccurred(), "Enroll bob")
+	carolEnroll, err := totpSvc.Enroll(seedCtx, playerC)
+	Expect(err).NotTo(HaveOccurred(), "Enroll carol")
+	daveEnroll, err := totpSvc.Enroll(seedCtx, playerD)
+	Expect(err).NotTo(HaveOccurred(), "Enroll dave")
 
 	aliceSecret := aliceBoot.Enrollment.Secret
 	bobSecret := bobEnroll.Enrollment.Secret
+	carolSecret := carolEnroll.Enrollment.Secret
+	daveSecret := daveEnroll.Enrollment.Secret
 	Expect(aliceSecret).NotTo(BeEmpty())
 	Expect(bobSecret).NotTo(BeEmpty())
+	Expect(carolSecret).NotTo(BeEmpty())
+	Expect(daveSecret).NotTo(BeEmpty())
 
 	seedPool.Close()
 
@@ -320,8 +380,15 @@ func setupAdminAuthEnv(t *testing.T) *adminAuthEnv {
 	}
 	authConfig := config.DefaultAuthConfig()
 	eventBusConfig := eventbus.Config{StoreDir: shortTempDir(t)}.Defaults()
+	// Operators: alice (T25), carol (T26 primary), dave (T26 second-op).
+	// Bob is intentionally omitted per T25's contract — he's the
+	// admin-with-no-operator-cap counterexample for ResetTOTP.
 	cryptoConfig := config.CryptoConfig{
-		Operators:           []string{playerA.String()}, // alice only
+		Operators: []string{
+			playerA.String(),
+			playerC.String(),
+			playerD.String(),
+		},
 		DualControlRequired: []string{},
 	}
 
@@ -357,9 +424,13 @@ func setupAdminAuthEnv(t *testing.T) *adminAuthEnv {
 	//        adminClientFromSocket already lives in this package. ---
 	client := adminClientFromSocket(socketPath)
 
-	// --- 8. Independent query pool for events_audit assertions. ---
+	// --- 8. Independent query pool for events_audit assertions and
+	//        T26 dual-control direct mutations (force-expire, RemoveRole).
 	queryPool, err := pgxpool.New(context.Background(), connStr)
 	Expect(err).NotTo(HaveOccurred(), "pgxpool.New for query")
+
+	approvalRepo := approval.NewPostgresRepo(queryPool, nil)
+	roleStore := store.NewPostgresRoleStore(queryPool)
 
 	return &adminAuthEnv{
 		ctx:           ctx,
@@ -368,13 +439,22 @@ func setupAdminAuthEnv(t *testing.T) *adminAuthEnv {
 		gameID:        gameID,
 		playerA:       playerA,
 		playerB:       playerB,
+		playerC:       playerC,
+		playerD:       playerD,
+		daveCharID:    daveCharID,
 		alicePassword: alicePassword,
 		bobPassword:   bobPassword,
+		carolPassword: carolPassword,
+		davePassword:  davePassword,
 		aliceSecret:   aliceSecret,
 		bobSecret:     bobSecret,
+		carolSecret:   carolSecret,
+		daveSecret:    daveSecret,
 		socketPath:    socketPath,
 		client:        client,
 		queryPool:     queryPool,
+		approvalRepo:  approvalRepo,
+		roleStore:     roleStore,
 	}
 }
 
@@ -459,5 +539,123 @@ var _ = Describe("Admin Authenticate Lifecycle (full-stack E2E)", func() {
 		Expect(lockedAuthErr).To(HaveOccurred(), "Authenticate must fail while locked")
 		Expect(connectErrCode(lockedAuthErr)).To(Equal(connect.CodeUnavailable),
 			"DENY_LOCKED -> connect.CodeUnavailable")
+
+		// =========================================================================
+		// T26: Admin Approve / dual-control scenarios
+		//
+		// These run within the same boot as T25 (single-process constraint:
+		// prometheus.DefaultRegisterer is process-wide) using the carol/dave
+		// players seeded by setupAdminAuthEnv. T25's destructive scenarios above
+		// have locked alice and TOTP-cleared bob; carol/dave are untouched and
+		// drive every T26 scenario.
+		//
+		// Coverage:
+		//   - Happy path: dave (second-op) approves carol's pending row.
+		//   - DENY_DUAL_CONTROL_SELF (INV-D6): carol tries to approve her own row.
+		//   - DENY_APPROVAL_EXPIRED (INV-D5): force-expire a row, then approve.
+		//   - DENY_APPROVAL_ALREADY_APPROVED (INV-D7): approve once, then again.
+		//   - DENY_NOT_ADMIN_ROLE (INV-D16): authenticate dave, RemoveRole, approve.
+		//
+		// Two intentional omissions, documented per Sub-Epic D plan §Task 26:
+		//
+		//   - DENY_NOT_OPERATOR (INV-D16 capability re-check): NOT reachable via
+		//     the E2E surface. The Approve handler's defense-in-depth re-check
+		//     fires after Authenticate, which itself requires crypto.operator
+		//     capability (InGameCredentialsProvider step 4). The
+		//     PlayerAttributeProvider's operator allow-list is captured at
+		//     runCoreWithDeps boot time and is read-only thereafter (sub-epic B
+		//     INV-B6: "no public mutation API"). There is no path through the
+		//     production UDS surface where a session can be issued for a player
+		//     who lacks crypto.operator at Approve time. Coverage of this branch
+		//     lives in handler-level unit tests
+		//     (internal/admin/approval/handler_test.go::TestApproveHandlerRejectsNotOperator).
+		//
+		//   - DENY_APPROVAL_ARGS_MISMATCH: NOT enforced by sub-epic D's Approve
+		//     handler. Args-hash validation lands as part of sub-epic E's
+		//     Rekey-proceed flow, where the primary reads back the approved row
+		//     and recomputes the hash before proceeding. This E2E suite is
+		//     bounded by sub-epic D's surface; the args-mismatch case will land
+		//     in sub-epic E.
+		// =========================================================================
+
+		By("T26 scenario 1: dave approves carol's pending row -> approved_at + approved_by_player_id set")
+		ridHappy := env.openApproval(env.playerC)
+		daveToken, err := env.authenticate("dave", env.davePassword, env.computeTOTP(env.daveSecret))
+		Expect(err).NotTo(HaveOccurred(), "Authenticate dave (T26 happy path)")
+		Expect(daveToken).NotTo(BeEmpty(), "session token must be non-empty")
+
+		Expect(env.approve(daveToken, ridHappy)).To(Succeed(),
+			"dave approves carol's row (happy path)")
+
+		approvedAt, approvedBy := env.approvalRow(ridHappy)
+		Expect(approvedAt).NotTo(BeNil(),
+			"approved_at MUST be set after successful Approve")
+		Expect(approvedBy).To(Equal(env.playerD.String()),
+			"approved_by_player_id MUST match second-op (dave)")
+
+		By("T26 scenario 2: carol tries to approve her own row -> DENY_DUAL_CONTROL_SELF / CodeFailedPrecondition")
+		ridSelf := env.openApproval(env.playerC)
+		carolToken, err := env.authenticate("carol", env.carolPassword, env.computeTOTP(env.carolSecret))
+		Expect(err).NotTo(HaveOccurred(), "Authenticate carol (for self-approval probe)")
+		Expect(carolToken).NotTo(BeEmpty())
+
+		selfErr := env.approve(carolToken, ridSelf)
+		Expect(selfErr).To(HaveOccurred(), "self-approval must fail")
+		// connect.Code is the over-the-wire contract; the inner oops code
+		// (DENY_DUAL_CONTROL_SELF, INV-D6) is server-internal taxonomy and is
+		// covered by handler_test.go unit tests. ConnectRPC does not transmit
+		// oops metadata to the client.
+		Expect(connectErrCode(selfErr)).To(Equal(connect.CodeFailedPrecondition),
+			"DENY_DUAL_CONTROL_SELF -> connect.CodeFailedPrecondition (INV-D6)")
+		stillPendingAt, _ := env.approvalRow(ridSelf)
+		Expect(stillPendingAt).To(BeNil(),
+			"self-approval rejection MUST NOT mutate approved_at")
+
+		By("T26 scenario 3: force-expired row -> DENY_APPROVAL_EXPIRED / CodeFailedPrecondition")
+		ridExpired := env.openApproval(env.playerC)
+		env.forceExpireApproval(ridExpired)
+
+		// Reuse dave's session token from scenario 1 — still valid (in-memory
+		// session store; not bound to TOTP step window).
+		expiredErr := env.approve(daveToken, ridExpired)
+		Expect(expiredErr).To(HaveOccurred(), "expired approval must fail")
+		Expect(connectErrCode(expiredErr)).To(Equal(connect.CodeFailedPrecondition),
+			"DENY_APPROVAL_EXPIRED -> connect.CodeFailedPrecondition (INV-D5)")
+
+		By("T26 scenario 4: dave approves carol's row, then carol tries again -> DENY_APPROVAL_ALREADY_APPROVED / CodeFailedPrecondition")
+		// Need a second-op who is NOT carol (primary) for the first approval —
+		// dave fits. After dave's successful approval, carol (also operator+admin,
+		// but the primary so DENY_DUAL_CONTROL_SELF would mask the row state) is
+		// the wrong identity to probe with. Use dave's second attempt (self-op-
+		// repeat is fine for already-approved differentiation: the UPDATE's
+		// approved_at IS NULL predicate fails before primary == secondOp could).
+		ridAlready := env.openApproval(env.playerC)
+		Expect(env.approve(daveToken, ridAlready)).To(Succeed(),
+			"dave approves carol's row first (T26 scenario 4)")
+
+		alreadyErr := env.approve(daveToken, ridAlready)
+		Expect(alreadyErr).To(HaveOccurred(),
+			"second approval on already-approved row must fail")
+		Expect(connectErrCode(alreadyErr)).To(Equal(connect.CodeFailedPrecondition),
+			"DENY_APPROVAL_ALREADY_APPROVED -> connect.CodeFailedPrecondition (INV-D7)")
+
+		By("T26 scenario 5 (LAST — destructive): RemoveRole on dave's character mid-session -> DENY_NOT_ADMIN_ROLE / CodePermissionDenied")
+		// dave authenticated successfully in scenario 1 (admin role present at
+		// the time, INV-D16 step 5 passed). Now we remove the role to simulate
+		// out-of-band revocation. The Approve handler's runtime role re-check
+		// MUST then reject dave's session even though the in-memory session
+		// store still holds his token.
+		Expect(env.roleStore.RemoveRole(env.ctx, env.daveCharID, access.RoleAdmin)).To(Succeed(),
+			"RemoveRole RoleAdmin on dave's character")
+
+		ridRoleRevoked := env.openApproval(env.playerC)
+		roleErr := env.approve(daveToken, ridRoleRevoked)
+		Expect(roleErr).To(HaveOccurred(),
+			"approve after role revocation must fail")
+		Expect(connectErrCode(roleErr)).To(Equal(connect.CodePermissionDenied),
+			"DENY_NOT_ADMIN_ROLE -> connect.CodePermissionDenied (INV-D16 runtime role re-check)")
+		rolePending, _ := env.approvalRow(ridRoleRevoked)
+		Expect(rolePending).To(BeNil(),
+			"role-rejected approval MUST NOT mutate approved_at")
 	})
 })
