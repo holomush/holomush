@@ -14,5 +14,6 @@ func NewAdminCmd() *cobra.Command {
 		Short: "Operator break-glass and admin commands (host-shell only)",
 	}
 	cmd.AddCommand(NewAdminTOTPCmd())
+	cmd.AddCommand(newAdminApproveCmd())
 	return cmd
 }
