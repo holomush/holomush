@@ -88,6 +88,36 @@ func (r *PostgresRepo) Get(ctx context.Context, id RequestID) (Approval, error) 
 	return a, nil
 }
 
+// getRaw returns the row by request_id WITHOUT filtering expired rows.
+// Used by WaitForApproval to detect expiry mid-poll and short-circuit
+// with DENY_APPROVAL_EXPIRED rather than sleeping until the caller's
+// deadline. The caller is responsible for the expiry check after fetch.
+func (r *PostgresRepo) getRaw(ctx context.Context, id RequestID) (Approval, error) {
+	row := r.pool.QueryRow(ctx, `
+		SELECT request_id, primary_player_id, op_kind, op_args_hash,
+		       expires_at, approved_at, COALESCE(approved_by_player_id, ''),
+		       created_at
+		  FROM admin_approvals
+		 WHERE request_id = $1
+	`, id[:])
+	var a Approval
+	var ridBytes []byte
+	var approvedAt *time.Time
+	if err := row.Scan(&ridBytes, &a.PrimaryPlayerID, &a.OpKind, &a.OpArgsHash,
+		&a.ExpiresAt, &approvedAt, &a.ApprovedByPlayerID, &a.CreatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Approval{}, oops.Code("APPROVAL_NOT_FOUND").
+				With("request_id", id.String()).
+				Errorf("admin_approvals row not found")
+		}
+		return Approval{}, oops.Code("APPROVAL_GET_FAILED").
+			With("request_id", id.String()).Wrap(err)
+	}
+	copy(a.RequestID[:], ridBytes)
+	a.ApprovedAt = approvedAt
+	return a, nil
+}
+
 // MarkApproved is the atomic single-statement second-op signoff per spec
 // §6 Approve flow. INV-D5 (TTL), INV-D6 (self-approval rejection),
 // INV-D7 (already-approved rejection).
@@ -150,7 +180,12 @@ func (r *PostgresRepo) MarkApproved(ctx context.Context, id RequestID, secondOpP
 	}
 }
 
-// WaitForApproval polls Get until approved_at is non-nil or deadline passes.
+// WaitForApproval polls until approved_at is non-nil, the row expires, or
+// the caller's deadline passes. Uses getRaw (unfiltered) so expiry is
+// detected as soon as expires_at < now() and surfaces immediately as
+// DENY_APPROVAL_EXPIRED — Get() would hide expired rows behind the
+// APPROVAL_NOT_FOUND code and the loop would sleep past the
+// server-enforced TTL until the caller's deadline.
 func (r *PostgresRepo) WaitForApproval(ctx context.Context, id RequestID, deadline time.Time) (Approval, error) {
 	const pollInterval = 500 * time.Millisecond
 	for {
@@ -159,12 +194,23 @@ func (r *PostgresRepo) WaitForApproval(ctx context.Context, id RequestID, deadli
 				With("request_id", id.String()).
 				Errorf("WaitForApproval deadline passed")
 		}
-		a, err := r.Get(ctx, id)
-		if err == nil && a.ApprovedAt != nil {
-			return a, nil
+		a, err := r.getRaw(ctx, id)
+		if err == nil {
+			// Server-enforced TTL: surface expiry immediately rather
+			// than polling past it. Mirrors MarkApproved's expiry path.
+			if !a.ExpiresAt.After(r.clock.Now()) {
+				return Approval{}, oops.Code("DENY_APPROVAL_EXPIRED").
+					With("request_id", id.String()).
+					With("expires_at", a.ExpiresAt).
+					Errorf("approval window expired")
+			}
+			if a.ApprovedAt != nil {
+				return a, nil
+			}
 		}
 		// On APPROVAL_NOT_FOUND, keep polling — the row may still be
-		// pending and visible on the next tick. On other errors, return.
+		// pending and visible on the next tick (race with Open). On
+		// other errors, return.
 		if err != nil && !isApprovalNotFound(err) {
 			return Approval{}, err
 		}

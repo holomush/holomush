@@ -67,27 +67,40 @@ func (s *AuthSubsystem) DependsOn() []lifecycle.SubsystemID {
 // before the orchestrator drives StartAll. Mirrors store.DatabaseSubsystem.Start.
 // codecov:ignore — tested by integration and E2E tests
 func (s *AuthSubsystem) Start(_ context.Context) error {
-	if s.authService != nil {
+	// Idempotency guard: only short-circuit if BOTH services are constructed.
+	// If a previous Start partially failed (e.g., resetSvc construction
+	// errored after authSvc was assigned), s.authService would be non-nil
+	// and the next Start would return nil while s.resetService remained
+	// nil — locking the subsystem into a partially-initialized state.
+	// Defer all field assignments to the end so partial failure leaves
+	// the subsystem in its initial zero state and a retry runs cleanly.
+	if s.authService != nil && s.resetService != nil {
 		return nil // already started
 	}
 	pool := s.cfg.DB.Pool()
 
-	s.playerRepo = authpostgres.NewPlayerRepository(pool)
-	s.resetRepo = authpostgres.NewPasswordResetRepository(pool)
-	s.playerSessionStore = store.NewPostgresPlayerSessionStore(pool)
-	s.hasher = auth.NewArgon2idHasher()
+	playerRepo := authpostgres.NewPlayerRepository(pool)
+	resetRepo := authpostgres.NewPasswordResetRepository(pool)
+	playerSessionStore := store.NewPostgresPlayerSessionStore(pool)
+	hasher := auth.NewArgon2idHasher()
 
-	authSvc, err := auth.NewAuthServiceWithLogger(s.playerRepo, s.playerSessionStore, s.hasher, slog.Default())
+	authSvc, err := auth.NewAuthServiceWithLogger(playerRepo, playerSessionStore, hasher, slog.Default())
 	if err != nil {
 		return oops.Code("AUTH_SETUP_FAILED").Wrap(err)
 	}
 	authSvc.SetMaxSessionsPerPlayer(s.cfg.MaxSessionsPerPlayer)
-	s.authService = authSvc
 
-	resetSvc, err := auth.NewPasswordResetServiceWithLogger(s.playerRepo, s.resetRepo, s.playerSessionStore, s.hasher, slog.Default())
+	resetSvc, err := auth.NewPasswordResetServiceWithLogger(playerRepo, resetRepo, playerSessionStore, hasher, slog.Default())
 	if err != nil {
 		return oops.Code("AUTH_SETUP_FAILED").Wrap(err)
 	}
+
+	// Commit all fields atomically only after every dependency built cleanly.
+	s.playerRepo = playerRepo
+	s.resetRepo = resetRepo
+	s.playerSessionStore = playerSessionStore
+	s.hasher = hasher
+	s.authService = authSvc
 	s.resetService = resetSvc
 
 	slog.Info("auth subsystem started")

@@ -312,3 +312,40 @@ func TestRepoWaitForApprovalDeadlineExpires(t *testing.T) {
 	require.Error(t, err)
 	assertCode(t, err, "APPROVAL_WAIT_DEADLINE")
 }
+
+// TestRepoWaitForApprovalSurfacesExpiry locks in CodeRabbit #4: when the
+// row's expires_at has passed, WaitForApproval MUST return
+// DENY_APPROVAL_EXPIRED immediately rather than polling past the
+// server-enforced TTL until the caller's deadline. The previous
+// implementation called Get(), which hides expired rows behind
+// APPROVAL_NOT_FOUND, so the loop slept past expiry and dropped the
+// intended DENY_APPROVAL_EXPIRED signal.
+func TestRepoWaitForApprovalSurfacesExpiry(t *testing.T) {
+	r := approval.NewPostgresRepo(testPool, nil)
+	primary := ulid.Make().String()
+	insertPlayerForApproval(t, primary)
+
+	id, err := r.Open(context.Background(), approval.OpenRequest{
+		PrimaryPlayerID: primary, OpKind: "rekey", OpArgsHash: []byte("h"),
+	})
+	require.NoError(t, err)
+
+	// Force-expire the row so the next poll observes expires_at < now().
+	_, err = testPool.Exec(context.Background(),
+		`UPDATE admin_approvals SET expires_at = now() - interval '1 minute' WHERE request_id = $1`,
+		id[:])
+	require.NoError(t, err)
+
+	// Use a generous deadline; the call MUST return well before then.
+	deadline := time.Now().Add(30 * time.Second)
+	start := time.Now()
+	_, err = r.WaitForApproval(context.Background(), id, deadline)
+	elapsed := time.Since(start)
+
+	require.Error(t, err)
+	assertCode(t, err, "DENY_APPROVAL_EXPIRED")
+	// Sanity: the call must short-circuit on expiry, not run to deadline.
+	// Allow generous slack (1s) for goroutine scheduling and DB roundtrip.
+	assert.Less(t, elapsed, 1*time.Second,
+		"WaitForApproval MUST return DENY_APPROVAL_EXPIRED quickly, not poll until deadline")
+}
