@@ -39,33 +39,51 @@ type fakeTOTPService struct {
 	consumeCalls  int
 	clearCalls    int
 	recoverCalls  int
+
+	// Pass-through method fakes (used by TestAuditingServicePassThroughs*).
+	isEnrolledRes      bool
+	isEnrolledErr      error
+	bootstrapPrepRes   totp.BootstrapPreparation
+	bootstrapPrepErr   error
+	bootstrapCommit    totp.BootstrapResult
+	bootstrapCommitErr error
+	bootstrapEnroll    totp.BootstrapResult
+	bootstrapEnrollErr error
+	enrollPrepRes      totp.EnrollPreparation
+	enrollPrepErr      error
+	enrollCommitRes    totp.EnrollResult
+	enrollCommitErr    error
+	enrollRes          totp.EnrollResult
+	enrollErr          error
 }
 
 func (f *fakeTOTPService) PrepareBootstrap(_ context.Context, _ ulid.ULID) (totp.BootstrapPreparation, error) {
-	return totp.BootstrapPreparation{}, nil
+	return f.bootstrapPrepRes, f.bootstrapPrepErr
 }
 
 func (f *fakeTOTPService) CommitBootstrap(_ context.Context, _ totp.BootstrapPreparation) (totp.BootstrapResult, error) {
-	return totp.BootstrapResult{}, nil
+	return f.bootstrapCommit, f.bootstrapCommitErr
 }
 
 func (f *fakeTOTPService) BootstrapEnroll(_ context.Context, _ ulid.ULID) (totp.BootstrapResult, error) {
-	return totp.BootstrapResult{}, nil
+	return f.bootstrapEnroll, f.bootstrapEnrollErr
 }
 
 func (f *fakeTOTPService) PrepareEnroll(_ context.Context, _ ulid.ULID) (totp.EnrollPreparation, error) {
-	return totp.EnrollPreparation{}, nil
+	return f.enrollPrepRes, f.enrollPrepErr
 }
 
 func (f *fakeTOTPService) CommitEnroll(_ context.Context, _ totp.EnrollPreparation) (totp.EnrollResult, error) {
-	return totp.EnrollResult{}, nil
+	return f.enrollCommitRes, f.enrollCommitErr
 }
 
 func (f *fakeTOTPService) Enroll(_ context.Context, _ ulid.ULID) (totp.EnrollResult, error) {
-	return totp.EnrollResult{}, nil
+	return f.enrollRes, f.enrollErr
 }
 
-func (f *fakeTOTPService) IsEnrolled(_ context.Context, _ ulid.ULID) (bool, error) { return false, nil }
+func (f *fakeTOTPService) IsEnrolled(_ context.Context, _ ulid.ULID) (bool, error) {
+	return f.isEnrolledRes, f.isEnrolledErr
+}
 
 func (f *fakeTOTPService) Verify(_ context.Context, _ ulid.ULID, _ string) (totp.VerifyResult, error) {
 	f.verifyCalls++
@@ -273,4 +291,200 @@ func TestAuditingServiceVerifyNilLockedUntilHandled(t *testing.T) {
 	// Emit still fires (locked_until is zero value in payload).
 	require.Len(t, pub.Events(), 1)
 	assert.Equal(t, eventbus.Type(totp.EventTypeLocked), pub.Events()[0].Type)
+}
+
+// TestAuditingServicePassThroughsReturnInnerValues asserts each pass-through
+// method (IsEnrolled, PrepareBootstrap, CommitBootstrap, BootstrapEnroll,
+// PrepareEnroll, CommitEnroll, Enroll) returns the inner Service's result
+// verbatim and emits no audit events. Extends the no-emit invariant covered
+// by TestAuditingServiceWrapsAllStateTransitionMethods with explicit return-
+// value pass-through assertions.
+func TestAuditingServicePassThroughsReturnInnerValues(t *testing.T) {
+	pid := ulid.Make()
+
+	bootstrapResult := totp.BootstrapResult{
+		Enrollment:      totp.Enrollment{Secret: "JBSWY3DPEHPK3PXP", ProvisioningURI: "otpauth://totp/x"},
+		AuditConsumedAt: time.Unix(1700000000, 0).UTC(),
+		AuditPlayerID:   pid,
+		BootstrapKey:    "k",
+	}
+	enrollResult := totp.EnrollResult{
+		Enrollment:      totp.Enrollment{Secret: "JBSWY3DPEHPK3PXP"},
+		AuditEnrolledAt: time.Unix(1700000001, 0).UTC(),
+		AuditPlayerID:   pid,
+	}
+
+	ts := &fakeTOTPService{
+		isEnrolledRes:    true,
+		bootstrapPrepRes: totp.BootstrapPreparation{Enrollment: totp.Enrollment{Secret: "BPSEC"}},
+		bootstrapCommit:  bootstrapResult,
+		bootstrapEnroll:  bootstrapResult,
+		enrollPrepRes:    totp.EnrollPreparation{Enrollment: totp.Enrollment{Secret: "EPSEC"}},
+		enrollCommitRes:  enrollResult,
+		enrollRes:        enrollResult,
+	}
+	pub := &fakePublisher{}
+	a := newAuditing(t, ts, pub, slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)))
+	ctx := context.Background()
+
+	gotEnrolled, err := a.IsEnrolled(ctx, pid)
+	require.NoError(t, err)
+	assert.True(t, gotEnrolled, "IsEnrolled must pass through inner result")
+
+	gotBP, err := a.PrepareBootstrap(ctx, pid)
+	require.NoError(t, err)
+	assert.Equal(t, "BPSEC", gotBP.Enrollment.Secret)
+
+	gotBC, err := a.CommitBootstrap(ctx, totp.BootstrapPreparation{})
+	require.NoError(t, err)
+	assert.Equal(t, bootstrapResult, gotBC)
+
+	gotBE, err := a.BootstrapEnroll(ctx, pid)
+	require.NoError(t, err)
+	assert.Equal(t, bootstrapResult, gotBE)
+
+	gotEP, err := a.PrepareEnroll(ctx, pid)
+	require.NoError(t, err)
+	assert.Equal(t, "EPSEC", gotEP.Enrollment.Secret)
+
+	gotEC, err := a.CommitEnroll(ctx, totp.EnrollPreparation{})
+	require.NoError(t, err)
+	assert.Equal(t, enrollResult, gotEC)
+
+	gotE, err := a.Enroll(ctx, pid)
+	require.NoError(t, err)
+	assert.Equal(t, enrollResult, gotE)
+
+	assert.Empty(t, pub.Events(), "pass-through methods must not emit")
+}
+
+// TestAuditingServicePassThroughsPropagateInnerErrors asserts each pass-
+// through method wraps and propagates errors from the inner Service. This
+// covers the `if err != nil { return ..., oops.Wrap(err) }` branch in each
+// pass-through (previously uncovered).
+func TestAuditingServicePassThroughsPropagateInnerErrors(t *testing.T) {
+	innerErr := errors.New("inner failure")
+	ts := &fakeTOTPService{
+		isEnrolledErr:      innerErr,
+		bootstrapPrepErr:   innerErr,
+		bootstrapCommitErr: innerErr,
+		bootstrapEnrollErr: innerErr,
+		enrollPrepErr:      innerErr,
+		enrollCommitErr:    innerErr,
+		enrollErr:          innerErr,
+	}
+	pub := &fakePublisher{}
+	a := newAuditing(t, ts, pub, slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)))
+	ctx := context.Background()
+	pid := ulid.Make()
+
+	_, err := a.IsEnrolled(ctx, pid)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, innerErr, "IsEnrolled must wrap inner error")
+
+	_, err = a.PrepareBootstrap(ctx, pid)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, innerErr)
+
+	_, err = a.CommitBootstrap(ctx, totp.BootstrapPreparation{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, innerErr)
+
+	_, err = a.BootstrapEnroll(ctx, pid)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, innerErr)
+
+	_, err = a.PrepareEnroll(ctx, pid)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, innerErr)
+
+	_, err = a.CommitEnroll(ctx, totp.EnrollPreparation{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, innerErr)
+
+	_, err = a.Enroll(ctx, pid)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, innerErr)
+
+	assert.Empty(t, pub.Events(), "errored pass-through methods must not emit")
+}
+
+// TestAuditingServiceVerifyPropagatesInnerError asserts Verify wraps a
+// non-nil inner error (covers the err-return branch in Verify).
+func TestAuditingServiceVerifyPropagatesInnerError(t *testing.T) {
+	innerErr := errors.New("verify failed")
+	ts := &fakeTOTPService{verifyErr: innerErr}
+	pub := &fakePublisher{}
+	a := newAuditing(t, ts, pub, slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)))
+
+	_, err := a.Verify(context.Background(), ulid.Make(), "123")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, innerErr)
+	assert.Empty(t, pub.Events(), "errored Verify must not emit")
+}
+
+// TestAuditingServiceConsumeRecoveryCodePropagatesInnerError covers the
+// err-return branch of ConsumeRecoveryCode.
+func TestAuditingServiceConsumeRecoveryCodePropagatesInnerError(t *testing.T) {
+	innerErr := errors.New("consume failed")
+	ts := &fakeTOTPService{consumeErr: innerErr}
+	pub := &fakePublisher{}
+	a := newAuditing(t, ts, pub, slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)))
+
+	_, err := a.ConsumeRecoveryCode(context.Background(), ulid.Make(), "code")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, innerErr)
+	assert.Empty(t, pub.Events())
+}
+
+// TestAuditingServiceClearTOTPPropagatesInnerError covers the err-return
+// branch of ClearTOTP.
+func TestAuditingServiceClearTOTPPropagatesInnerError(t *testing.T) {
+	innerErr := errors.New("clear failed")
+	ts := &fakeTOTPService{clearErr: innerErr}
+	pub := &fakePublisher{}
+	a := newAuditing(t, ts, pub, slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)))
+
+	_, err := a.ClearTOTP(context.Background(), ulid.Make(), totp.ClearReasonAdminReset)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, innerErr)
+	assert.Empty(t, pub.Events())
+}
+
+// TestAuditingServiceRecoverAndClearPropagatesInnerError covers the
+// err-return branch of RecoverAndClear.
+func TestAuditingServiceRecoverAndClearPropagatesInnerError(t *testing.T) {
+	innerErr := errors.New("recover failed")
+	ts := &fakeTOTPService{recoverErr: innerErr}
+	pub := &fakePublisher{}
+	a := newAuditing(t, ts, pub, slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)))
+
+	_, err := a.RecoverAndClear(context.Background(), ulid.Make(), "code")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, innerErr)
+	assert.Empty(t, pub.Events())
+}
+
+// TestAuditingServiceEmitSkipsOnInvalidSubject exercises the NewSubject
+// error branch in emit() by configuring an AuditingService with a gameID
+// containing characters that violate the subject token regex. The decorator
+// logs and skips the publish; the inner Verify result still propagates.
+func TestAuditingServiceEmitSkipsOnInvalidSubject(t *testing.T) {
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+	lockedUntil := time.Unix(1700000060, 0)
+	ts := &fakeTOTPService{verifyResult: totp.VerifyResult{LockoutTransition: true, LockedUntil: &lockedUntil}}
+	pub := &fakePublisher{}
+	// gameID with '@' is rejected by eventbus.NewSubject (token regex
+	// allows only [A-Za-z0-9_-]+). NewAuditingService doesn't validate
+	// the gameID format; it only rejects empty, so this passes construction
+	// and surfaces at emit time.
+	a, err := totpaudit.NewAuditingService(ts, pub, "bad@id", fakeClock{t: time.Unix(1700000000, 0)}, logger)
+	require.NoError(t, err)
+
+	_, err = a.Verify(context.Background(), ulid.Make(), "123456")
+	require.NoError(t, err, "inner success must propagate even when emit fails")
+	assert.Empty(t, pub.Events(), "invalid subject must skip the publish")
+	assert.Contains(t, logBuf.String(), "invalid subject")
 }

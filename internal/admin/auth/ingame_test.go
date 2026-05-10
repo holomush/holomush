@@ -19,6 +19,7 @@ import (
 	adminauth "github.com/holomush/holomush/internal/admin/auth"
 	"github.com/holomush/holomush/internal/admin/socket"
 	"github.com/holomush/holomush/internal/auth"
+	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/totp"
 )
 
@@ -261,6 +262,123 @@ func TestInGameAuthenticateIgnoresPeerCredForGating(t *testing.T) {
 	assert.NotEqual(t, id1.PeerCred.UID, id2.PeerCred.UID, "peer creds preserved through to identity")
 	assert.Equal(t, pl.ID.String(), id1.PlayerID)
 	assert.Equal(t, pl.ID.String(), id2.PlayerID)
+}
+
+// TestNewInGameCredentialsProviderRejectsNilDeps covers the four nil-guard
+// branches in NewInGameCredentialsProvider: each constructor argument that
+// must be non-nil is rejected with a typed code.
+func TestNewInGameCredentialsProviderRejectsNilDeps(t *testing.T) {
+	creds := &fakeCreds{}
+	ttp := &fakeTOTP{}
+	res := &fakeResolver{}
+	roles := &fakeRoles{}
+
+	tests := []struct {
+		name     string
+		creds    adminauth.CredentialValidator
+		totp     adminauth.EnrollmentChecker
+		resolver access.SubjectResolver
+		roles    store.RoleStore
+		wantCode string
+	}{
+		{name: "nil_creds", creds: nil, totp: ttp, resolver: res, roles: roles, wantCode: "INGAME_NIL_CREDS"},
+		{name: "nil_totp", creds: creds, totp: nil, resolver: res, roles: roles, wantCode: "INGAME_NIL_TOTP"},
+		{name: "nil_resolver", creds: creds, totp: ttp, resolver: nil, roles: roles, wantCode: "INGAME_NIL_RESOLVER"},
+		{name: "nil_roles", creds: creds, totp: ttp, resolver: res, roles: nil, wantCode: "INGAME_NIL_ROLESTORE"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := adminauth.NewInGameCredentialsProvider(tc.creds, tc.totp, tc.resolver, tc.roles)
+			require.Error(t, err)
+			o, ok := oops.AsOops(err)
+			require.True(t, ok)
+			assert.Equal(t, tc.wantCode, o.Code())
+		})
+	}
+}
+
+// TestInGameAuthenticateWrapsTOTPLookupError covers the infrastructure
+// error path INGAME_TOTP_LOOKUP_FAILED (step 2 returned err): the inner
+// error is wrapped, not swallowed, and step 3 must not execute.
+func TestInGameAuthenticateWrapsTOTPLookupError(t *testing.T) {
+	pl := happyPlayer()
+	infra := errors.New("totp store unavailable")
+	creds := &fakeCreds{player: pl}
+	ttp := &fakeTOTP{enrolledErr: infra}
+	res := &fakeResolver{}
+	roles := &fakeRoles{}
+	p := newProvider(t, creds, ttp, res, roles)
+
+	_, err := p.Authenticate(context.Background(), happyAuthRequest())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, infra)
+	o, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, "INGAME_TOTP_LOOKUP_FAILED", o.Code())
+	assert.Equal(t, 0, ttp.verifyCalls, "step 3 must not execute on step 2 infra error")
+}
+
+// TestInGameAuthenticateWrapsTOTPVerifyError covers the infrastructure
+// error path INGAME_TOTP_VERIFY_FAILED (step 3 returned err): the inner
+// error is wrapped, and steps 4-5 must not execute.
+func TestInGameAuthenticateWrapsTOTPVerifyError(t *testing.T) {
+	pl := happyPlayer()
+	infra := errors.New("totp verify backend down")
+	creds := &fakeCreds{player: pl}
+	ttp := &fakeTOTP{enrolled: true, verifyErr: infra}
+	res := &fakeResolver{}
+	roles := &fakeRoles{}
+	p := newProvider(t, creds, ttp, res, roles)
+
+	_, err := p.Authenticate(context.Background(), happyAuthRequest())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, infra)
+	o, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, "INGAME_TOTP_VERIFY_FAILED", o.Code())
+	assert.Equal(t, 0, res.calls, "step 4 must not execute on step 3 infra error")
+	assert.Equal(t, 0, roles.calls, "step 5 must not execute on step 3 infra error")
+}
+
+// TestInGameAuthenticateWrapsResolverError covers the
+// INGAME_GRANT_LOOKUP_FAILED path bubbling out of step 4 via
+// AssertOperatorAdmin. Step 5 must not execute.
+func TestInGameAuthenticateWrapsResolverError(t *testing.T) {
+	pl := happyPlayer()
+	infra := errors.New("attribute store unavailable")
+	creds := &fakeCreds{player: pl}
+	ttp := &fakeTOTP{enrolled: true, verifyResult: totp.VerifyResult{Outcome: totp.OutcomeOK}}
+	res := &fakeResolver{err: infra}
+	roles := &fakeRoles{}
+	p := newProvider(t, creds, ttp, res, roles)
+
+	_, err := p.Authenticate(context.Background(), happyAuthRequest())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, infra)
+	o, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, "INGAME_GRANT_LOOKUP_FAILED", o.Code())
+	assert.Equal(t, 0, roles.calls, "step 5 must not execute on step 4 infra error")
+}
+
+// TestInGameAuthenticateWrapsRoleStoreError covers the
+// INGAME_ROLE_LOOKUP_FAILED path bubbling out of step 5 via
+// AssertOperatorAdmin.
+func TestInGameAuthenticateWrapsRoleStoreError(t *testing.T) {
+	pl := happyPlayer()
+	infra := errors.New("role store unavailable")
+	creds := &fakeCreds{player: pl}
+	ttp := &fakeTOTP{enrolled: true, verifyResult: totp.VerifyResult{Outcome: totp.OutcomeOK}}
+	res := &fakeResolver{grants: []string{access.CapabilityCryptoOperator}}
+	roles := &fakeRoles{err: infra}
+	p := newProvider(t, creds, ttp, res, roles)
+
+	_, err := p.Authenticate(context.Background(), happyAuthRequest())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, infra)
+	o, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, "INGAME_ROLE_LOOKUP_FAILED", o.Code())
 }
 
 func TestInGameAuthenticateStepOrderFixedOnFailure(t *testing.T) {
