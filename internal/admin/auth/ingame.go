@@ -113,28 +113,11 @@ func (p *InGameCredentialsProvider) Authenticate(ctx context.Context, req AuthRe
 			Errorf("TOTP verify failed")
 	}
 
-	// Step 4: capability allow-list.
-	hasCap, err := access.HasPlayerGrant(ctx, p.resolver, player.ID.String(), access.CapabilityCryptoOperator)
-	if err != nil {
-		return OperatorIdentity{}, oops.Code("INGAME_GRANT_LOOKUP_FAILED").
-			With("player_id", player.ID.String()).Wrap(err)
-	}
-	if !hasCap {
-		return OperatorIdentity{}, oops.Code("DENY_NOT_OPERATOR").
-			With("player_id", player.ID.String()).
-			Errorf("player lacks crypto.operator capability")
-	}
-
-	// Step 5: RoleAdmin (any character).
-	isAdmin, err := p.roleStore.PlayerHasRole(ctx, player.ID.String(), access.RoleAdmin)
-	if err != nil {
-		return OperatorIdentity{}, oops.Code("INGAME_ROLE_LOOKUP_FAILED").
-			With("player_id", player.ID.String()).Wrap(err)
-	}
-	if !isAdmin {
-		return OperatorIdentity{}, oops.Code("DENY_NOT_ADMIN_ROLE").
-			With("player_id", player.ID.String()).
-			Errorf("no character of player has admin role")
+	// Steps 4-5: capability allow-list + RoleAdmin (any character).
+	// Both gates are re-asserted at every admin RPC entry point per
+	// INV-D16; the shared helper keeps the three sites in lockstep.
+	if err := AssertOperatorAdmin(ctx, p.resolver, p.roleStore, player.ID.String()); err != nil {
+		return OperatorIdentity{}, err
 	}
 
 	// Step 6: PeerCred capture (audit only). The struct is stored as-is;

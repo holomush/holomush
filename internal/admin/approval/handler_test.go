@@ -83,7 +83,7 @@ func (r *fakeResolver) ResolveSubjectAttributes(_ context.Context, _ string, _ s
 // Compile-time assertion.
 var _ access.SubjectResolver = (*fakeResolver)(nil)
 
-// fakeRoleHasher implements approval.RoleHasher.
+// fakeRoleHasher implements adminauth.PlayerRoleHasher.
 type fakeRoleHasher struct {
 	has bool
 	err error

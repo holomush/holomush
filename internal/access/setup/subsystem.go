@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
 	"github.com/holomush/holomush/internal/access/policy/types"
@@ -155,9 +156,12 @@ func (s *ABACSubsystem) HealthTracker() *lifecycle.HealthTracker {
 	return s.stack.HealthTracker
 }
 
-// Resolver returns the attribute resolver. Satisfies access.SubjectResolver
-// via *attribute.Resolver.ResolveSubjectAttributes. Panics if called before Start().
-func (s *ABACSubsystem) Resolver() *attribute.Resolver {
+// Resolver returns the attribute resolver as the narrow access.SubjectResolver
+// interface. The concrete *attribute.Resolver also exposes mutator methods
+// (RegisterProvider, UnregisterProvider, RegisterEnvironmentProvider) that
+// callers MUST NOT touch after Start — narrowing the return type makes that
+// invariant compile-time enforceable. Panics if called before Start().
+func (s *ABACSubsystem) Resolver() access.SubjectResolver {
 	if s.stack == nil {
 		panic("setup: Resolver() called before Start()")
 	}

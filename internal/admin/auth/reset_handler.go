@@ -24,7 +24,10 @@ type ClearTOTPCaller interface {
 }
 
 // PlayerRoleHasher is the narrow surface for INV-D16 role re-check.
-// Mirrors approval.RoleHasher per-package to avoid cross-package coupling.
+// Used by AssertOperatorAdmin and by the Approve / ResetTOTP handlers,
+// which import this canonical definition from this package (the previous
+// per-package duplicate in approval/handler.go was collapsed when
+// AssertOperatorAdmin was extracted).
 type PlayerRoleHasher interface {
 	PlayerHasRole(ctx context.Context, playerID, role string) (bool, error)
 }
@@ -57,22 +60,8 @@ func (h *ResetTOTPHandler) ResetTOTP(
 		return nil, MapDenyToConnect(err)
 	}
 
-	hasCap, err := access.HasPlayerGrant(ctx, h.grants, identity.PlayerID, access.CapabilityCryptoOperator)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, oops.Wrap(err))
-	}
-	if !hasCap {
-		return nil, MapDenyToConnect(oops.Code("DENY_NOT_OPERATOR").
-			With("player_id", identity.PlayerID).Errorf("crypto.operator capability absent"))
-	}
-
-	hasRole, err := h.roleStore.PlayerHasRole(ctx, identity.PlayerID, access.RoleAdmin)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, oops.Wrap(err))
-	}
-	if !hasRole {
-		return nil, MapDenyToConnect(oops.Code("DENY_NOT_ADMIN_ROLE").
-			With("player_id", identity.PlayerID).Errorf("admin role absent"))
+	if err = AssertOperatorAdmin(ctx, h.grants, h.roleStore, identity.PlayerID); err != nil {
+		return nil, MapDenyToConnect(err)
 	}
 
 	targetID, err := ulid.Parse(req.Msg.GetTargetPlayerId())

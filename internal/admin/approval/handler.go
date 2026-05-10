@@ -14,30 +14,27 @@ import (
 	adminv1 "github.com/holomush/holomush/pkg/proto/holomush/admin/v1"
 )
 
-// RoleHasher is the narrow surface ApproveHandler needs from store.RoleStore.
-// Mirrors the same shape used by adminauth.PlayerRoleHasher (T17). Defined
-// per-package to avoid cross-package coupling.
-type RoleHasher interface {
-	PlayerHasRole(ctx context.Context, playerID, role string) (bool, error)
-}
-
 // ApproveHandler is the ConnectRPC handler for AdminService.Approve.
 type ApproveHandler struct {
 	sessions  adminauth.SessionStore
 	repo      Repo
 	grants    access.SubjectResolver
-	roleStore RoleHasher
+	roleStore adminauth.PlayerRoleHasher
 }
 
 // NewApproveHandler constructs the handler with explicit dependencies.
-func NewApproveHandler(s adminauth.SessionStore, r Repo, g access.SubjectResolver, rh RoleHasher) *ApproveHandler {
+// roleStore is the canonical adminauth.PlayerRoleHasher (the per-package
+// duplicate previously defined here was collapsed when AssertOperatorAdmin
+// was extracted).
+func NewApproveHandler(s adminauth.SessionStore, r Repo, g access.SubjectResolver, rh adminauth.PlayerRoleHasher) *ApproveHandler {
 	return &ApproveHandler{sessions: s, repo: r, grants: g, roleStore: rh}
 }
 
 // Approve is the AdminService.Approve RPC entry point. It resolves the
 // session_token, re-asserts capability + role (defense-in-depth per
-// INV-D16), then calls Repo.MarkApproved which atomically rejects
-// self-approval, expired rows, and already-approved rows.
+// INV-D16) via adminauth.AssertOperatorAdmin, then calls Repo.MarkApproved
+// which atomically rejects self-approval, expired rows, and already-approved
+// rows.
 func (h *ApproveHandler) Approve(
 	ctx context.Context,
 	req *connect.Request[adminv1.ApproveRequest],
@@ -47,22 +44,8 @@ func (h *ApproveHandler) Approve(
 		return nil, adminauth.MapDenyToConnect(err) //nolint:wrapcheck // MapDenyToConnect produces *connect.Error; wrapping again would hide the ConnectRPC code
 	}
 
-	hasCap, err := access.HasPlayerGrant(ctx, h.grants, identity.PlayerID, access.CapabilityCryptoOperator)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, oops.Wrap(err))
-	}
-	if !hasCap {
-		return nil, adminauth.MapDenyToConnect(oops.Code("DENY_NOT_OPERATOR"). //nolint:wrapcheck // MapDenyToConnect produces *connect.Error; wrapping again would hide the ConnectRPC code
-											With("player_id", identity.PlayerID).Errorf("crypto.operator capability absent"))
-	}
-
-	hasRole, err := h.roleStore.PlayerHasRole(ctx, identity.PlayerID, access.RoleAdmin)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, oops.Wrap(err))
-	}
-	if !hasRole {
-		return nil, adminauth.MapDenyToConnect(oops.Code("DENY_NOT_ADMIN_ROLE"). //nolint:wrapcheck // MapDenyToConnect produces *connect.Error; wrapping again would hide the ConnectRPC code
-												With("player_id", identity.PlayerID).Errorf("admin role absent"))
+	if err = adminauth.AssertOperatorAdmin(ctx, h.grants, h.roleStore, identity.PlayerID); err != nil {
+		return nil, adminauth.MapDenyToConnect(err) //nolint:wrapcheck // MapDenyToConnect produces *connect.Error; wrapping again would hide the ConnectRPC code
 	}
 
 	if len(req.Msg.GetRequestId()) != 16 {
@@ -79,7 +62,7 @@ func (h *ApproveHandler) Approve(
 			oops.Code("APPROVE_INVALID_REQUEST_ID").Errorf("request_id must be a non-zero 16-byte ULID"))
 	}
 
-	if err := h.repo.MarkApproved(ctx, rid, identity.PlayerID); err != nil {
+	if err = h.repo.MarkApproved(ctx, rid, identity.PlayerID); err != nil {
 		return nil, adminauth.MapDenyToConnect(err) //nolint:wrapcheck // MapDenyToConnect produces *connect.Error; wrapping again would hide the ConnectRPC code
 	}
 	return connect.NewResponse(&adminv1.ApproveResponse{}), nil

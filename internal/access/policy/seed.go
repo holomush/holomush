@@ -243,5 +243,26 @@ func SeedPolicies() []SeedPolicy {
 			DSLText:     `forbid(principal is plugin, action in ["read"], resource is stream) when { resource.stream.name like "events.*.system.crypto_totp.*" };`,
 			SeedVersion: 1,
 		},
+
+		// --- Phase-5 sub-epic D crypto-policy audit namespace deny policies ---
+		//
+		// Reserved subject namespace events.<game>.system.crypto_policy.<event>
+		// (sub-epic D emits crypto.policy_set audit events). Parallel to the
+		// crypto_totp.* denies above. The dispatchDelivery filter at
+		// internal/grpc/server.go (~line 1019) drops AUDIT_ONLY events before
+		// stream.Send; these seeds are the second, ABAC-layer gate so the
+		// namespace is forbidden by policy and not only by display_target.
+		{
+			Name:        "seed:deny-events-system-crypto-policy-read-character",
+			Description: "Characters MUST NOT read events.*.system.crypto_policy.* streams (Phase 5 sub-epic D; parallel to seed:deny-events-system-crypto-totp-read-character)",
+			DSLText:     `forbid(principal is character, action in ["read"], resource is stream) when { resource.stream.name like "events.*.system.crypto_policy.*" };`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:deny-events-system-crypto-policy-read-plugin",
+			Description: "Plugins MUST NOT read events.*.system.crypto_policy.* streams (Phase 5 sub-epic D; parallel to seed:deny-events-system-crypto-totp-read-plugin)",
+			DSLText:     `forbid(principal is plugin, action in ["read"], resource is stream) when { resource.stream.name like "events.*.system.crypto_policy.*" };`,
+			SeedVersion: 1,
+		},
 	}
 }
