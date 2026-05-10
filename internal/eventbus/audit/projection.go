@@ -90,7 +90,14 @@ func newProjection(ctx context.Context, js jetstream.JetStream, pool *pgxpool.Po
 // spawns a single goroutine that stops the consume context when the
 // worker ctx is cancelled. The callback itself runs on the consumer's
 // internal goroutine pool.
+//
+// p.workerCtx MUST be assigned before Consume registers the callback.
+// JetStream may invoke p.handle (which calls persist, which reads
+// p.workerCtx) on its own goroutine the moment Consume returns; setting
+// the field after registration is a data race surfaced by sub-epic D's
+// full-boot E2E under -race.
 func (p *projection) start(ctx context.Context) error {
+	p.workerCtx = ctx
 	cc, err := p.consumer.Consume(p.handle)
 	if err != nil {
 		return oops.Code("AUDIT_CONSUME_FAILED").
@@ -98,7 +105,6 @@ func (p *projection) start(ctx context.Context) error {
 			Wrap(err)
 	}
 	p.cc = cc
-	p.workerCtx = ctx
 	go func() {
 		<-ctx.Done()
 		cc.Stop()
