@@ -52,7 +52,10 @@ func chainStateKey(policyName string) string {
 //
 // A missing row is treated as "not initialized" (first-boot path). An
 // underlying SQL error is wrapped — failing closed is the caller's
-// responsibility (VerifyChain).
+// responsibility (VerifyChain). An unexpected stored value (anything
+// other than "true") fails closed here with POLICY_CHAIN_STATE_INVALID:
+// silently treating a corrupted row as first-boot would re-open exactly
+// the truncation gap INV-D20 closes.
 func chainInitialized(ctx context.Context, pool *pgxpool.Pool, policyName string) (bool, error) {
 	var value string
 	err := pool.QueryRow(ctx, `
@@ -65,7 +68,13 @@ func chainInitialized(ctx context.Context, pool *pgxpool.Pool, policyName string
 		return false, oops.Code("POLICY_CHAIN_STATE_READ_FAILED").
 			With("policy_name", policyName).Wrap(err)
 	}
-	return value == "true", nil
+	if value != "true" {
+		return false, oops.Code("POLICY_CHAIN_STATE_INVALID").
+			With("policy_name", policyName).
+			With("value", value).
+			Errorf("unexpected chain-init value")
+	}
+	return true, nil
 }
 
 // markChainInitialized inserts the chain-init signal idempotently.

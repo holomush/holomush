@@ -43,10 +43,14 @@ func cleanupSubjectGinkgo(subject string) {
 
 // chainStateCleanupGinkgo is the Ginkgo equivalent of chainStateCleanup
 // (verifier_integration_test.go). Drops the bootstrap_metadata row that
-// records chain-init for policyName so subsequent specs see an
-// uninitialized chain.
+// records chain-init for policyName both BEFORE the spec runs (so a
+// stale row from a prior run doesn't make the spec order-dependent) and
+// after via DeferCleanup. Mirrors cleanupSubjectGinkgo's pre+post shape.
 func chainStateCleanupGinkgo(policyName string) {
 	GinkgoHelper()
+	_, _ = testPool.Exec(context.Background(),
+		`DELETE FROM bootstrap_metadata WHERE key = $1`,
+		"crypto.policy_chain_initialized."+policyName)
 	DeferCleanup(func() {
 		_, _ = testPool.Exec(context.Background(),
 			`DELETE FROM bootstrap_metadata WHERE key = $1`,

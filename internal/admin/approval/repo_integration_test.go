@@ -125,10 +125,11 @@ func TestRepoReadFiltersExpired(t *testing.T) {
 	require.NoError(t, err)
 
 	// Force expiry server-side.
-	_, err = testPool.Exec(context.Background(),
+	tag, err := testPool.Exec(context.Background(),
 		`UPDATE admin_approvals SET expires_at = now() - interval '1 minute' WHERE request_id = $1`,
 		id[:])
 	require.NoError(t, err)
+	require.Equal(t, int64(1), tag.RowsAffected(), "expected exactly one approval row to be force-expired")
 
 	_, err = r.Get(context.Background(), id)
 	require.Error(t, err)
@@ -191,10 +192,11 @@ func TestRepoMarkApprovedRejectsExpiredRow(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = testPool.Exec(context.Background(),
+	tag, err := testPool.Exec(context.Background(),
 		`UPDATE admin_approvals SET expires_at = now() - interval '1 minute' WHERE request_id = $1`,
 		id[:])
 	require.NoError(t, err)
+	require.Equal(t, int64(1), tag.RowsAffected(), "expected exactly one approval row to be force-expired")
 
 	err = r.MarkApproved(context.Background(), id, secondOp)
 	require.Error(t, err)
@@ -331,10 +333,11 @@ func TestRepoWaitForApprovalSurfacesExpiry(t *testing.T) {
 	require.NoError(t, err)
 
 	// Force-expire the row so the next poll observes expires_at < now().
-	_, err = testPool.Exec(context.Background(),
+	tag, err := testPool.Exec(context.Background(),
 		`UPDATE admin_approvals SET expires_at = now() - interval '1 minute' WHERE request_id = $1`,
 		id[:])
 	require.NoError(t, err)
+	require.Equal(t, int64(1), tag.RowsAffected(), "expected exactly one approval row to be force-expired")
 
 	// Use a generous deadline; the call MUST return well before then.
 	deadline := time.Now().Add(30 * time.Second)
