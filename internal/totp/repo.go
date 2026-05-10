@@ -203,11 +203,33 @@ func (r *repo) IncrementFailedAttempts(
 	ctx context.Context, playerID string,
 	threshold int, lockoutDuration time.Duration, now time.Time,
 ) (VerifyState, error) {
+	// $3::TIMESTAMPTZ and $4::BIGINT casts are load-bearing.
+	//
+	// Without $3::TIMESTAMPTZ, pgx infers $3 as text (the param's wire format),
+	// and `text + interval` makes the THEN branch resolve to `interval`, which
+	// mismatches the ELSE branch's `timestamptz` (locked_until column). PG then
+	// rejects the statement at execute time with
+	//
+	//   CASE types timestamp with time zone and interval cannot be matched
+	//   (SQLSTATE 42804)
+	//
+	// Without $4::BIGINT, pgx infers $4 as text (because of the `||` operator)
+	// and rejects the int64 argument with
+	//
+	//   unable to encode <N> into text format for text (OID 25): cannot find
+	//   encode plan
+	//
+	// Either error path means lockout NEVER fires in production. The mock-based
+	// unit tests in repo_unit_test.go don't catch either (pgxmock doesn't
+	// validate types or wire-format encoding); only a real PG round-trip does.
+	// Surfaced by Phase 5 sub-epic D's full-stack E2E (holomush-jxo8.6.23 / T25);
+	// regression-locked by that test plus the crypto.totp_locked persistence
+	// assertion in this same path.
 	const q = `
 		UPDATE player_totp
 		SET failed_attempts = failed_attempts + 1,
 		    locked_until    = CASE
-		      WHEN failed_attempts + 1 >= $2 THEN $3 + ($4 || ' microseconds')::INTERVAL
+		      WHEN failed_attempts + 1 >= $2 THEN $3::TIMESTAMPTZ + ($4::BIGINT || ' microseconds')::INTERVAL
 		      ELSE locked_until
 		    END
 		WHERE player_id = $1

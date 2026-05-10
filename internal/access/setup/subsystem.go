@@ -63,8 +63,15 @@ func (s *ABACSubsystem) DependsOn() []lifecycle.SubsystemID {
 }
 
 // Start builds the ABAC stack, registers health, and starts the poller.
+// Start is idempotent: if the subsystem is already started, it returns nil
+// immediately. This allows the ABAC subsystem to be pre-started in core
+// boot when admin handler construction needs Resolver() before the
+// orchestrator drives StartAll. Mirrors store.DatabaseSubsystem.Start.
 // codecov:ignore — tested by integration and E2E tests
 func (s *ABACSubsystem) Start(ctx context.Context) error {
+	if s.stack != nil {
+		return nil // already started — guard against double-start (would launch a duplicate poller goroutine)
+	}
 	pool := s.cfg.DB.Pool()
 
 	roleStore := store.NewPostgresRoleStore(pool)

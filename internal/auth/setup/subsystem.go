@@ -61,8 +61,15 @@ func (s *AuthSubsystem) DependsOn() []lifecycle.SubsystemID {
 }
 
 // Start creates auth repositories, hasher, and services.
+// Start is idempotent: if the subsystem is already started, it returns nil
+// immediately. This allows the auth subsystem to be pre-started in core
+// boot when admin handler construction needs Hasher() / AuthService()
+// before the orchestrator drives StartAll. Mirrors store.DatabaseSubsystem.Start.
 // codecov:ignore — tested by integration and E2E tests
 func (s *AuthSubsystem) Start(_ context.Context) error {
+	if s.authService != nil {
+		return nil // already started
+	}
 	pool := s.cfg.DB.Pool()
 
 	s.playerRepo = authpostgres.NewPlayerRepository(pool)

@@ -594,6 +594,27 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	})
 
 	// --- Admin handler construction (T22 / holomush-jxo8.6.21) ---
+	//
+	// Pre-start AuthSubsystem and ABACSubsystem so admin handler construction
+	// below can call authSub.Hasher() / authSub.AuthService() / abacSub.Resolver()
+	// without hitting the "called before Start()" panic guards. The orchestrator
+	// re-invokes both Start methods later via StartAll; both are idempotent
+	// (early-return when already initialized), mirroring the dbSub pre-start
+	// pattern at step 3 above.
+	//
+	// Surfaced by Phase 5 sub-epic D's E2E (holomush-jxo8.6.23 / T25): the
+	// production admin-handler wiring panics on every boot when KEK is
+	// available because the original T22 wiring constructed the handlers
+	// before the orchestrator ran. Without this pre-start the gated
+	// `if kekProvider != nil` branch panics during boot in any environment
+	// with a configured KEK (which is the production-deploy shape).
+	if abacStartErr := abacSub.Start(ctx); abacStartErr != nil {
+		return oops.Code("ABAC_PRESTART_FAILED").Wrap(abacStartErr)
+	}
+	if authStartErr := authSub.Start(ctx); authStartErr != nil {
+		return oops.Code("AUTH_PRESTART_FAILED").Wrap(authStartErr)
+	}
+
 	// Build the in-memory session store for Authenticate → Approve / ResetTOTP flow.
 	// totp.NewRealClock() satisfies adminauth.Clock (both require Now() time.Time).
 	adminSessionStore := adminauth.NewSessionStore(totp.NewRealClock(), 10*time.Minute)
