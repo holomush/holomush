@@ -36,6 +36,12 @@ const (
 	EventChannel_EVENT_CHANNEL_TERMINAL    EventChannel = 1
 	EventChannel_EVENT_CHANNEL_STATE       EventChannel = 2
 	EventChannel_EVENT_CHANNEL_BOTH        EventChannel = 3
+	// EVENT_CHANNEL_AUDIT_ONLY tags host-emit security/audit events that MUST
+	// persist to events_audit but MUST NOT be delivered to client surfaces
+	// (telnet, web). The gRPC Subscribe handler drops these before send;
+	// the audit projection persists them like any other event. Used by
+	// crypto.totp_*, crypto.policy_set, and similar host-emitted audit types.
+	EventChannel_EVENT_CHANNEL_AUDIT_ONLY EventChannel = 4
 )
 
 // Enum value maps for EventChannel.
@@ -45,12 +51,14 @@ var (
 		1: "EVENT_CHANNEL_TERMINAL",
 		2: "EVENT_CHANNEL_STATE",
 		3: "EVENT_CHANNEL_BOTH",
+		4: "EVENT_CHANNEL_AUDIT_ONLY",
 	}
 	EventChannel_value = map[string]int32{
 		"EVENT_CHANNEL_UNSPECIFIED": 0,
 		"EVENT_CHANNEL_TERMINAL":    1,
 		"EVENT_CHANNEL_STATE":       2,
 		"EVENT_CHANNEL_BOTH":        3,
+		"EVENT_CHANNEL_AUDIT_ONLY":  4,
 	}
 )
 
@@ -3167,12 +3175,13 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\x14player_session_token\x18\x03 \x01(\tR\x12playerSessionToken\"j\n" +
 	"\x1aListSessionStreamsResponse\x12\x18\n" +
 	"\astreams\x18\x01 \x03(\tR\astreams\x122\n" +
-	"\x04meta\x18\x02 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta*z\n" +
+	"\x04meta\x18\x02 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta*\x98\x01\n" +
 	"\fEventChannel\x12\x1d\n" +
 	"\x19EVENT_CHANNEL_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16EVENT_CHANNEL_TERMINAL\x10\x01\x12\x17\n" +
 	"\x13EVENT_CHANNEL_STATE\x10\x02\x12\x16\n" +
-	"\x12EVENT_CHANNEL_BOTH\x10\x03*u\n" +
+	"\x12EVENT_CHANNEL_BOTH\x10\x03\x12\x1c\n" +
+	"\x18EVENT_CHANNEL_AUDIT_ONLY\x10\x04*u\n" +
 	"\rControlSignal\x12\x1e\n" +
 	"\x1aCONTROL_SIGNAL_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eCONTROL_SIGNAL_REPLAY_COMPLETE\x10\x01\x12 \n" +

@@ -571,6 +571,14 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		DualControlRequired: validatedDualControl,
 	}
 
+	// Wrap the bare EventBus publisher with RenderingPublisher so the
+	// host-emit audit publishers stamp the App-Rendering NATS header
+	// required by audit/projection.go::persist (headerRendering check).
+	// Without this wrapping the projection rejects every host-emit audit
+	// event with AUDIT_MISSING_HEADER and they never reach events_audit.
+	// (holomush-jxo8.6.26 / INV-D14, INV-D17.)
+	auditPublisher := eventbus.NewRenderingPublisher(eventBusSub.Publisher(), verbRegistry)
+
 	// CryptoPolicySubsystem emits the current policy snapshot after AuditProjection.
 	cryptoPolicySub := policy.NewCryptoPolicySubsystem(policy.CryptoPolicySubsystemConfig{
 		EmitDeps: policy.EmitDeps{
@@ -578,7 +586,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			ServerStartULID: serverStartULID,
 			ServerIdentity:  serverIdentity,
 			Pool:            dbSub.Pool(),
-			Publisher:       eventBusSub.Publisher(),
+			Publisher:       auditPublisher,
 			Clock:           totp.NewRealClock(),
 			Config:          effectiveConfig,
 		},
@@ -627,7 +635,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	if adminTOTPSvc != nil {
 		builtAudit, auditErr := totpaudit.NewAuditingService(
 			adminTOTPSvc,
-			eventBusSub.Publisher(),
+			auditPublisher,
 			gameID,
 			totp.NewRealClock(),
 			slog.Default(),

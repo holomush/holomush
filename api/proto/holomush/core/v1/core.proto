@@ -175,6 +175,12 @@ enum EventChannel {
   EVENT_CHANNEL_TERMINAL = 1;
   EVENT_CHANNEL_STATE = 2;
   EVENT_CHANNEL_BOTH = 3;
+  // EVENT_CHANNEL_AUDIT_ONLY tags host-emit security/audit events that MUST
+  // persist to events_audit but MUST NOT be delivered to client surfaces
+  // (telnet, web). The gRPC Subscribe handler drops these before send;
+  // the audit projection persists them like any other event. Used by
+  // crypto.totp_*, crypto.policy_set, and similar host-emitted audit types.
+  EVENT_CHANNEL_AUDIT_ONLY = 4;
 }
 
 // RenderingMetadata carries cleartext rendering instructions for an event.

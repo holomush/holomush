@@ -75,6 +75,16 @@ func registerBuiltinTypes(r *VerbRegistry, hostVersion string) error {
 		// non-self subscriptions, hence BOTH so all surfaces receive it.
 		// Registered so RenderingPublisher does not block with EMIT_UNKNOWN_VERB.
 		{Type: "session_ended", Category: "system", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_BOTH, Source: "builtin"},
+
+		// Crypto audit (host-emit, persistence-only). DisplayTarget=AUDIT_ONLY
+		// so the gRPC Subscribe handler drops these before send; the audit
+		// projection persists them like any other event. Restores INV-D14
+		// (audit emission persists) and INV-D17 (chain genesis emit persists)
+		// for the sub-epic D host-emit subsystems (cryptoPolicySub + totpAuditSvc).
+		{Type: "crypto.totp_locked", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},
+		{Type: "crypto.totp_cleared", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},
+		{Type: "crypto.totp_recovery_code_consumed", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},
+		{Type: "crypto.policy_set", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},
 	}
 	for _, b := range builtins {
 		if err := r.RegisterWithSource(b, sourceVersion); err != nil {

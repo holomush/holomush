@@ -1012,6 +1012,18 @@ func (s *CoreServer) dispatchDelivery(
 	gameID := s.currentGameID()
 	legacyStream := subjectxlate.ToLegacy(string(event.Subject), gameID)
 
+	// AUDIT_ONLY events (e.g., crypto.totp_*, crypto.policy_set) MUST NOT
+	// reach client streams. They flow through the bus solely so the audit
+	// projection can persist them; we ack-and-skip here so JS retention
+	// can age them out at the stream level. (holomush-jxo8.6.26.)
+	if event.Rendering != nil && event.Rendering.DisplayTarget == eventbus.EventChannelAuditOnly {
+		if ackErr := delivery.Ack(); ackErr != nil {
+			slog.WarnContext(ctx, "subscribe: ack failed on audit-only skip; will redeliver",
+				"session_id", info.ID, "event_id", event.ID.String(), "error", ackErr)
+		}
+		return nil
+	}
+
 	// locationFollower consumes move events on character streams and
 	// replies with a synthetic location_state — in that case the raw
 	// event is dropped (ack'd) rather than forwarded.

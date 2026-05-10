@@ -70,6 +70,11 @@ const (
 	EventChannelState EventChannel = 2
 	// EventChannelBoth routes events to both terminal and state sidebar.
 	EventChannelBoth EventChannel = 3
+	// EventChannelAuditOnly routes events to events_audit only — the gRPC
+	// Subscribe handler drops these before send, and they are NEVER
+	// delivered to telnet or web clients. Used by host-emit security
+	// audit events (crypto.totp_*, crypto.policy_set).
+	EventChannelAuditOnly EventChannel = 4
 )
 
 // RenderingMetadata is the host-side representation of corev1.RenderingMetadata.

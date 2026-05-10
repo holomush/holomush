@@ -33,6 +33,10 @@ const (
 	EventChannel_EVENT_CHANNEL_TERMINAL    EventChannel = 1
 	EventChannel_EVENT_CHANNEL_STATE       EventChannel = 2
 	EventChannel_EVENT_CHANNEL_BOTH        EventChannel = 3
+	// EVENT_CHANNEL_AUDIT_ONLY mirrors corev1.EventChannel for INV-GW-16
+	// lockstep parity. These events are dropped at the gRPC Subscribe
+	// boundary and MUST NOT appear on the web wire format in practice.
+	EventChannel_EVENT_CHANNEL_AUDIT_ONLY EventChannel = 4
 )
 
 // Enum value maps for EventChannel.
@@ -42,12 +46,14 @@ var (
 		1: "EVENT_CHANNEL_TERMINAL",
 		2: "EVENT_CHANNEL_STATE",
 		3: "EVENT_CHANNEL_BOTH",
+		4: "EVENT_CHANNEL_AUDIT_ONLY",
 	}
 	EventChannel_value = map[string]int32{
 		"EVENT_CHANNEL_UNSPECIFIED": 0,
 		"EVENT_CHANNEL_TERMINAL":    1,
 		"EVENT_CHANNEL_STATE":       2,
 		"EVENT_CHANNEL_BOTH":        3,
+		"EVENT_CHANNEL_AUDIT_ONLY":  4,
 	}
 )
 
@@ -2918,12 +2924,13 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"#WebRevokeOtherPlayerSessionsRequest\"e\n" +
 	"$WebRevokeOtherPlayerSessionsResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
-	"\rrevoked_count\x18\x02 \x01(\x05R\frevokedCount*z\n" +
+	"\rrevoked_count\x18\x02 \x01(\x05R\frevokedCount*\x98\x01\n" +
 	"\fEventChannel\x12\x1d\n" +
 	"\x19EVENT_CHANNEL_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16EVENT_CHANNEL_TERMINAL\x10\x01\x12\x17\n" +
 	"\x13EVENT_CHANNEL_STATE\x10\x02\x12\x16\n" +
-	"\x12EVENT_CHANNEL_BOTH\x10\x03*u\n" +
+	"\x12EVENT_CHANNEL_BOTH\x10\x03\x12\x1c\n" +
+	"\x18EVENT_CHANNEL_AUDIT_ONLY\x10\x04*u\n" +
 	"\rControlSignal\x12\x1e\n" +
 	"\x1aCONTROL_SIGNAL_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eCONTROL_SIGNAL_REPLAY_COMPLETE\x10\x01\x12 \n" +
