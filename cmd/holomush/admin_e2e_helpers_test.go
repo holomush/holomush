@@ -69,10 +69,11 @@ func (e *adminAuthEnv) approvalRow(id approval.RequestID) (approvedAt *time.Time
 // the subsequent Approve call sees an expired row. Mirrors the same SQL the
 // approval/repo_integration_test uses for INV-D5 coverage.
 func (e *adminAuthEnv) forceExpireApproval(id approval.RequestID) {
-	_, err := e.queryPool.Exec(e.ctx,
+	tag, err := e.queryPool.Exec(e.ctx,
 		`UPDATE admin_approvals SET expires_at = now() - interval '1 minute' WHERE request_id = $1`,
 		id[:])
 	Expect(err).NotTo(HaveOccurred(), "force-expire admin_approvals row")
+	Expect(tag.RowsAffected()).To(Equal(int64(1)), "force-expire must touch exactly one row")
 }
 
 // Note: client-side error inspection is limited to connect.CodeOf(err)

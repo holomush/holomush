@@ -82,3 +82,4 @@ func TestCryptoPolicySubsystemStartEmitsNothingForEmptyPolicyNames(t *testing.T)
 	require.NoError(t, s.Start(context.Background()))
 	assert.Empty(t, pub.Events())
 }
+

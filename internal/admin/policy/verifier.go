@@ -115,11 +115,20 @@ func verifyChainEntries(entries []chainEntry, policyName string) error {
 // loadChainEntries reads events_audit rows for the given subject ordered by
 // js_seq and two-step decodes each row: proto unmarshal (envelope) -> JSON
 // unmarshal (PolicySetPayload).
+//
+// The query is scoped to type='crypto.policy_set' so foreign rows that
+// happen to share the subject (e.g., misrouted plugin emits) cannot be
+// folded into the policy chain. After decoding, the envelope's Subject
+// and Type are re-checked against the expected values: a mismatch
+// surfaces as POLICY_CHAIN_ENVELOPE_MISMATCH (defense-in-depth against
+// envelope tampering that left the SQL filter satisfied but corrupted
+// the encoded subject/type fields).
 func loadChainEntries(ctx context.Context, pool *pgxpool.Pool, subject string) ([]chainEntry, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT envelope, js_seq
 		  FROM events_audit
 		 WHERE subject = $1
+		   AND type = 'crypto.policy_set'
 		 ORDER BY js_seq ASC
 	`, subject)
 	if err != nil {
@@ -140,6 +149,14 @@ func loadChainEntries(ctx context.Context, pool *pgxpool.Pool, subject string) (
 		if err := proto.Unmarshal(envelopeBytes, &ev); err != nil {
 			return nil, oops.Code("POLICY_CHAIN_ENVELOPE_DECODE_FAILED").
 				With("js_seq", seq).Wrap(err)
+		}
+		if ev.Subject != subject || ev.Type != "crypto.policy_set" {
+			return nil, oops.Code("POLICY_CHAIN_ENVELOPE_MISMATCH").
+				With("subject", subject).
+				With("js_seq", seq).
+				With("envelope_subject", ev.Subject).
+				With("envelope_type", ev.Type).
+				Errorf("unexpected envelope subject/type in policy chain row")
 		}
 		var payload PolicySetPayload
 		if err := json.Unmarshal(ev.Payload, &payload); err != nil {

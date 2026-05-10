@@ -52,7 +52,12 @@ func TestAuditOnlyChannelPersistsToEventsAudit(t *testing.T) {
 	// One event per host-emit AUDIT_ONLY type. Subjects mirror the real
 	// patterns produced by internal/totp/audit.go and internal/admin/policy/emitter.go
 	// so the audit row's subject column carries production-shaped values.
-	gameID := "main"
+	//
+	// gameID is unique per test run (suffixed with a fresh ULID) so the
+	// downstream events_audit assertions only match rows produced by THIS
+	// run — a fixed "main" would let prior test runs pollute the result
+	// set when Postgres state persists across runs.
+	gameID := "main_" + core.NewULID().String()
 	auditEvents := []struct {
 		subject eventbus.Subject
 		typ     eventbus.Type
@@ -78,7 +83,10 @@ func TestAuditOnlyChannelPersistsToEventsAudit(t *testing.T) {
 	hostSub.AwaitDrained(t, 10*time.Second)
 	require.Eventually(t, func() bool {
 		var count int
-		err := pool.QueryRow(ctx, "SELECT COUNT(*) FROM events_audit").Scan(&count)
+		err := pool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM events_audit WHERE subject LIKE $1`,
+			"events."+gameID+".%",
+		).Scan(&count)
 		return err == nil && count >= len(auditEvents)
 	}, 10*time.Second, 100*time.Millisecond, "audit projection did not drain all AUDIT_ONLY events")
 
@@ -96,8 +104,12 @@ func TestAuditOnlyChannelPersistsToEventsAudit(t *testing.T) {
 			        rendering->>'source_plugin',
 			        rendering->>'category'
 			   FROM events_audit
-			  WHERE type = $1`,
+			  WHERE type = $1
+			    AND subject LIKE $2
+			  ORDER BY js_seq DESC
+			  LIMIT 1`,
 			string(ae.typ),
+			"events."+gameID+".%",
 		).Scan(&displayTarget, &sourcePlugin, &category)
 		require.NoError(t, err, "no events_audit row for type=%s — pre-fix bug?", ae.typ)
 		assert.Equal(t, "EVENT_CHANNEL_AUDIT_ONLY", displayTarget,

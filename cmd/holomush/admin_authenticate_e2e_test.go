@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"net"
 	"os"
 	"path/filepath"
@@ -20,6 +21,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/pquerna/otp/hotp"
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/proto"
 
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
@@ -34,6 +36,7 @@ import (
 	"github.com/holomush/holomush/internal/totp"
 	adminv1 "github.com/holomush/holomush/pkg/proto/holomush/admin/v1"
 	"github.com/holomush/holomush/pkg/proto/holomush/admin/v1/adminv1connect"
+	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	"github.com/holomush/holomush/test/testutil"
 )
 
@@ -498,6 +501,29 @@ var _ = Describe("Admin Authenticate Lifecycle (full-stack E2E)", func() {
 			return env.clearedEventCount(env.playerB)
 		}, "10s", "100ms").Should(Equal(1),
 			"exactly one crypto.totp_cleared row for bob (INV-D14)")
+
+		// Decode the projected envelope + payload and assert the
+		// cleared_by field carries the admin-reset contract value. A
+		// regression that emitted the event with the wrong cleared_by
+		// would still satisfy the count check above; this read closes
+		// that gap (CodeRabbit #1, INV-D14 contract).
+		clearedSubject := totp.SubjectCleared(env.gameID, env.playerB.String())
+		var envelopeBytes []byte
+		err = env.queryPool.QueryRow(env.ctx,
+			`SELECT envelope FROM events_audit
+			  WHERE subject = $1 AND type = $2
+			  ORDER BY js_seq DESC LIMIT 1`,
+			clearedSubject, totp.EventTypeCleared,
+		).Scan(&envelopeBytes)
+		Expect(err).NotTo(HaveOccurred(), "fetch crypto.totp_cleared envelope")
+		var clearedEv eventbusv1.Event
+		Expect(proto.Unmarshal(envelopeBytes, &clearedEv)).To(Succeed(),
+			"proto-unmarshal envelope")
+		var clearedPayload totp.ClearedPayload
+		Expect(json.Unmarshal(clearedEv.Payload, &clearedPayload)).To(Succeed(),
+			"json-unmarshal ClearedPayload")
+		Expect(clearedPayload.ClearedBy).To(Equal(totp.ClearReasonAdminReset),
+			"crypto.totp_cleared cleared_by MUST be admin_reset for ResetTOTP path")
 
 		// Bob can no longer authenticate: enrollment was cleared, so step 2 of
 		// InGameCredentialsProvider returns DENY_NOT_ENROLLED, mapped to

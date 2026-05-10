@@ -68,8 +68,13 @@ func EmitCurrentSnapshot(ctx context.Context, deps EmitDeps, policyName string) 
 		}
 	}
 
-	// Build the new snapshot.
-	snapshot := snapshotFromConfig(deps.Config, policyName)
+	// Build the new snapshot. Unknown policyName is fail-closed: any typo
+	// or config drift must stop startup rather than emit an empty snapshot
+	// that silently produces a valid chain entry.
+	snapshot, err := snapshotFromConfig(deps.Config, policyName)
+	if err != nil {
+		return err
+	}
 	newPayload := PolicySetPayload{
 		PolicyName:      policyName,
 		PolicySnapshot:  snapshot,
@@ -144,8 +149,10 @@ func EmitCurrentSnapshot(ctx context.Context, deps EmitDeps, policyName string) 
 // snapshotFromConfig builds the snapshot map for a policy_name. v1 only
 // supports "dual_control_required" — future policies land additional cases.
 // The slice is sorted+deduped to make canonicalization stable regardless
-// of input order.
-func snapshotFromConfig(cfg CryptoEffectiveConfig, policyName string) map[string]any {
+// of input order. An unsupported policyName is fail-closed: returning an
+// error so the caller stops startup (rather than emitting an empty snapshot
+// that would silently produce a chain entry).
+func snapshotFromConfig(cfg CryptoEffectiveConfig, policyName string) (map[string]any, error) {
 	switch policyName {
 	case "dual_control_required":
 		ops := append([]string(nil), cfg.DualControlRequired...)
@@ -155,9 +162,11 @@ func snapshotFromConfig(cfg CryptoEffectiveConfig, policyName string) map[string
 		for i, op := range ops {
 			anys[i] = op
 		}
-		return map[string]any{"required_op_kinds": anys}
+		return map[string]any{"required_op_kinds": anys}, nil
 	default:
-		return map[string]any{}
+		return nil, oops.Code("POLICY_EMIT_UNKNOWN_POLICY").
+			With("policy_name", policyName).
+			Errorf("unsupported policy_name")
 	}
 }
 

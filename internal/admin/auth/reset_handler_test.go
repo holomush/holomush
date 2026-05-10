@@ -176,3 +176,30 @@ func TestResetTOTPHandlerRejectsInvalidTargetPlayerID(t *testing.T) {
 	assert.Equal(t, connect.CodeInvalidArgument, ce.Code())
 	assert.Equal(t, 0, totpSvc.calls)
 }
+
+// TestResetTOTPHandlerRejectsZeroTargetPlayerID asserts that the all-zero
+// ULID (00000000000000000000000000) — accepted by ulid.Parse but a sentinel
+// that must never identify a real player — is rejected with
+// connect.CodeInvalidArgument and never forwarded to ClearTOTP. Mirrors the
+// Approve handler's all-zero request_id rejection.
+func TestResetTOTPHandlerRejectsZeroTargetPlayerID(t *testing.T) {
+	operatorID := "01HZA00000000000000000000"
+	sessions := &fakeResetSessions{
+		identity: adminauth.OperatorIdentity{PlayerID: operatorID},
+	}
+	resolver := &fakeResolver{grants: []string{access.CapabilityCryptoOperator}}
+	roles := &fakeRoles{playerRoles: map[string][]string{operatorID: {access.RoleAdmin}}}
+	totpSvc := &fakeClearTOTPCaller{}
+	h := newResetHandler(sessions, resolver, roles, totpSvc)
+
+	req := connect.NewRequest(&adminv1.ResetTOTPRequest{
+		SessionToken:   "tk",
+		TargetPlayerId: "00000000000000000000000000",
+	})
+	_, err := h.ResetTOTP(context.Background(), req)
+	require.Error(t, err)
+	var ce *connect.Error
+	require.True(t, errors.As(err, &ce))
+	assert.Equal(t, connect.CodeInvalidArgument, ce.Code())
+	assert.Equal(t, 0, totpSvc.calls, "ClearTOTP must not be invoked for zero ULID")
+}

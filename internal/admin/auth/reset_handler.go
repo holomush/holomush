@@ -71,6 +71,15 @@ func (h *ResetTOTPHandler) ResetTOTP(
 				With("target_player_id", req.Msg.GetTargetPlayerId()).
 				Errorf("target_player_id MUST be a ULID: %w", err))
 	}
+	// Reject the zero ULID — ulid.Parse accepts the all-zero shape, but
+	// 00000000000000000000000000 is a sentinel and must never identify
+	// a real player. Same defensive shape Approve uses for request_id.
+	if targetID == (ulid.ULID{}) {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			oops.Code("RESET_INVALID_TARGET_PID").
+				With("target_player_id", req.Msg.GetTargetPlayerId()).
+				Errorf("target_player_id MUST be a non-zero ULID"))
+	}
 
 	res, err := h.totpSvc.ClearTOTP(ctx, targetID, totp.ClearReasonAdminReset)
 	if err != nil {

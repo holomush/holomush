@@ -182,9 +182,9 @@ alongside the existing `Status` handler.
 
 | RPC | Caller | Server-side flow |
 |---|---|---|
-| `Authenticate(AuthenticateRequest{username, password, totp_code}) -> AuthenticateResponse{session_token, expires_at, identity_summary}` | every CLI sub-command | Run `OperatorAuthProvider.Authenticate` 5-step sequence; on success issue a fresh ULID session token, store identity in `SessionStore` with 10-min TTL, return token + `expires_at`. PeerCred captured from ctx (sub-epic C middleware) into `OperatorIdentity.OSUser` for audit only. |
-| `Approve(ApproveRequest{session_token, request_id}) -> ApproveResponse{}` | second-op CLI (`holomush admin approve <request_id>`) | Resolve `session_token` via `SessionStore.Get`; re-assert capability (INV-D16); look up `admin_approvals` row by `request_id` filtered by `expires_at >= now()` and `approved_at IS NULL`; reject if second-op `player_id == primary_player_id` (`DENY_DUAL_CONTROL_SELF`); otherwise `UPDATE admin_approvals SET approved_at = now(), approved_by_player_id = $session.PlayerID WHERE request_id = $1`. |
-| `ResetTOTP(ResetTOTPRequest{session_token, target_player_id}) -> ResetTOTPResponse{cleared}` | admin reset CLI (`holomush admin totp reset <player>`) | Resolve session; re-assert capability; call `AuditingService.ClearTOTP(target_player_id, ClearReasonAdminReset)`; decorator emits `crypto.totp_cleared` post-success. |
+| `Authenticate(AuthenticateRequest{username, password, totp_code}) -> AuthenticateResponse{session_token, expires_at, identity_summary}` | every CLI sub-command | Run `OperatorAuthProvider.Authenticate` 6-step sequence (see §4); on success issue a fresh ULID session token, store identity in `SessionStore` with 10-min TTL, return token + `expires_at`. PeerCred captured from ctx (sub-epic C middleware) into `OperatorIdentity.OSUser` for audit only. |
+| `Approve(ApproveRequest{session_token, request_id}) -> ApproveResponse{}` | second-op CLI (`holomush admin approve <request_id>`) | Resolve `session_token` via `SessionStore.Get`; re-validate BOTH `crypto.operator` capability AND `RoleAdmin` per INV-D16 (defense-in-depth against grant or role revocation mid-session); look up `admin_approvals` row by `request_id` filtered by `expires_at >= now()` and `approved_at IS NULL`; reject if second-op `player_id == primary_player_id` (`DENY_DUAL_CONTROL_SELF`); otherwise `UPDATE admin_approvals SET approved_at = now(), approved_by_player_id = $session.PlayerID WHERE request_id = $1`. |
+| `ResetTOTP(ResetTOTPRequest{session_token, target_player_id}) -> ResetTOTPResponse{cleared}` | admin reset CLI (`holomush admin totp reset <player>`) | Resolve session; re-validate BOTH `crypto.operator` capability AND `RoleAdmin` per INV-D16 (defense-in-depth against grant or role revocation mid-session); call `AuditingService.ClearTOTP(target_player_id, ClearReasonAdminReset)`; decorator emits `crypto.totp_cleared` post-success. |
 
 E's `Rekey` and F's `AdminReadStream` are added later on the same mux; both
 consume D's `SessionStore.Get(session_token)` to resolve identity and D's
@@ -202,14 +202,15 @@ CLI process (operator's terminal)
 holomush server process (admin socket subsystem)
   │
   │  PeerCred middleware (sub-epic C) → ctx
-  │  Authenticate handler → OperatorAuthProvider 5-step
+  │  Authenticate handler → OperatorAuthProvider 6-step
   │    │
   │    ├─→ auth.Service.ValidateCredentials  (existing — argon2id timing-safe)
   │    ├─→ totp.Service.IsEnrolled            (sub-epic A)
   │    ├─→ AuditingService.Verify              (sub-epic A + D's decorator;
   │    │                                       emits crypto.totp_locked on
   │    │                                       LockoutTransition)
-  │    ├─→ access.HasPlayerGrant              (sub-epic B)
+  │    ├─→ access.HasPlayerGrant              (sub-epic B; crypto.operator)
+  │    ├─→ roleStore.PlayerHasRole            (RoleAdmin per INV-D16)
   │    └─→ peercred capture                   (sub-epic C)
   │
   │  on success: SessionStore.Issue → ULID token
