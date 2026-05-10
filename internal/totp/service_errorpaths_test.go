@@ -16,9 +16,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/auth"
+	kekMocks "github.com/holomush/holomush/internal/eventbus/crypto/kek/mocks"
 	"github.com/holomush/holomush/internal/totp"
 	"github.com/holomush/holomush/internal/totp/mocks"
-	kekMocks "github.com/holomush/holomush/internal/eventbus/crypto/kek/mocks"
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
@@ -32,9 +32,9 @@ func TestServicePropagatesRepoAndKEKErrors(t *testing.T) {
 	pid := ulid.Make()
 
 	cases := []struct {
-		name    string
-		setup   func(repo *mocks.MockRepository, kp *kekMocks.MockProvider) error // returns the planted sentinel
-		invoke  func(svc totp.Service) error
+		name   string
+		setup  func(repo *mocks.MockRepository, kp *kekMocks.MockProvider) error // returns the planted sentinel
+		invoke func(svc totp.Service) error
 	}{
 		{
 			name: "BootstrapEnroll propagates PlayerExists error",

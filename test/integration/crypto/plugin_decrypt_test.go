@@ -270,7 +270,8 @@ func emitSensitiveWhisper(t *testing.T, h *pluginDecryptHarness, sceneID, plaint
 	actorResolver := func(_ context.Context, _ string) (core.Actor, error) {
 		return core.Actor{Kind: core.ActorPlugin, ID: plugintest.PluginULIDFromName("test-plugin").String()}, nil
 	}
-	emitter := plugins.NewPluginEventEmitter(h.publisher, manifestLookup, actorResolver,
+	emitter := plugins.NewPluginEventEmitter(
+		h.publisher, manifestLookup, actorResolver,
 		plugins.WithCryptoEnabled(true),
 	)
 

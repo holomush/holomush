@@ -34,11 +34,11 @@ func newMockedRepo(t *testing.T) (*repo, pgxmock.PgxPoolIface) {
 
 // stubHasher is a minimal RecoveryCodeHasher; selects which hashes match.
 type stubHasher struct {
-	matches map[string]bool
+	matches   map[string]bool
 	verifyErr error
 }
 
-func (s stubHasher) Verify(_ , encodedHash string) (bool, error) {
+func (s stubHasher) Verify(_, encodedHash string) (bool, error) {
 	if s.verifyErr != nil {
 		return false, s.verifyErr
 	}
@@ -147,12 +147,12 @@ func TestRepoInTransactionCommitsHappyPath(t *testing.T) {
 
 func TestRepoPlayerLookupWrapping(t *testing.T) {
 	cases := []struct {
-		name           string
-		invoke         func(r *repo) error
-		expectQuery    string
-		args           []any
-		failureCode    string
-		notFoundCode   string // "" if pgx.ErrNoRows is a non-error response (returns false/zero)
+		name         string
+		invoke       func(r *repo) error
+		expectQuery  string
+		args         []any
+		failureCode  string
+		notFoundCode string // "" if pgx.ErrNoRows is a non-error response (returns false/zero)
 	}{
 		{
 			name: "PlayerExists driver error",

@@ -54,10 +54,18 @@ require (
 	golang.org/x/tools v0.44.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260427160629-7cedc36a6bc4
 	google.golang.org/grpc v1.80.0
+	// op_args_hash cross-binary stability: pin protobuf-go since
+	// proto.MarshalOptions{Deterministic: true} is documented stable within
+	// a binary version but not guaranteed across releases (INV-D18).
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
 	pgregory.net/rapid v1.2.0
 )
+
+// crypto.policy_set chain hashing: SHA-256 over RFC 8785 JCS-canonicalized
+// JSON. Pin pseudo-version is load-bearing — switching libraries is a
+// chain-breaking master-spec amendment per INV-D13.
+require github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 
 require (
 	cel.dev/expr v0.25.1 // indirect

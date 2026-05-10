@@ -852,9 +852,15 @@ payload (cleartext):
     dual_control_partner_player_id: "01HXXX..." | null
 ```
 
-**`audit.<game>.system.crypto_policy.<policy_name>`** — emitted on every
+**`events.<game>.system.crypto_policy.<policy_name>`** — emitted on every
 crypto-policy change (server startup writes the current effective policy;
-future reload paths emit on each change):
+future reload paths emit on each change). Subject uses the `events.<game>.`
+prefix (matching sub-epic A's `events.<game>.system.crypto_totp.*` precedent
+and the EVENTS JetStream stream's `events.>` filter). Sub-epic B originally
+specified `audit.<game>.system.crypto_policy`; sub-epic D's §10 amendment
+reconciles this to `events.<game>.system.crypto_policy` to align with the
+EVENTS stream filter. The string `audit.<game>.system.crypto_policy`
+appeared in the B-era draft and is superseded.
 
 ```yaml
 metadata:
@@ -876,6 +882,15 @@ select an RFC-8785-compliant Go canonicalizer (e.g.,
 `go.mod`. Switching canonicalizer libraries or RFC interpretations is a
 chain-breaking change and MUST be treated as a master-spec amendment, not
 a sub-epic-internal refactor.
+
+**Chain payload storage shape:** The `PolicySetPayload` struct is encoded
+as JSON and stored in the `Event.Payload` field of the `core.v1.Event`
+proto envelope (JSON-inside-Event.Payload-inside-marshaled-envelope).
+The `events_audit.envelope` column (post-000017 rename) stores the
+marshaled envelope bytes. At read time the verifier decodes:
+envelope bytes → `core.v1.Event` → `Event.Payload` (JSON) → `PolicySetPayload`.
+No structured columns are added to `events_audit` for `policy_set` chain
+fields in v1.
 
 **`audit.<game>.system.operator_read.<context>`** and
 **`audit.<game>.system.provider_migrate.<context>`** follow the same
@@ -1309,46 +1324,64 @@ import "context"
 type OperatorAuthProvider interface {
     Name() string  // persisted in audit; e.g., "ingame-creds-totp"
 
-    // Authenticate runs the provider's challenge sequence against the
-    // operator. Implementations prompt at the CLI for credentials and
-    // TOTP codes via the supplied PromptFunc. Returns the verified
-    // identity on success.
-    Authenticate(ctx context.Context, prompt PromptFunc) (OperatorIdentity, error)
+    // Authenticate runs the provider's full challenge sequence server-side
+    // against the operator's submitted AuthRequest (credentials + TOTP).
+    // Returns the verified identity on success.
+    // The CLI-side PromptFunc callback is NOT used here — prompting happens
+    // on the CLI binary; the server receives a completed AuthRequest over UDS.
+    // Dual-control orchestration is an operation-handler concern: the server
+    // creates an admin_approvals row, the primary's CLI blocks, and the
+    // second operator's CLI calls Approve via a separate RPC.
+    Authenticate(ctx context.Context, req AuthRequest) (OperatorIdentity, error)
+}
 
-    // RequireDualControl prompts for a second operator's signoff and
-    // returns the second identity. The second identity MUST have a
-    // different player_id from the first AND MUST hold the admin role.
-    // Approvals expire 5 minutes from prompt issuance.
-    RequireDualControl(ctx context.Context, primary OperatorIdentity, prompt PromptFunc) (OperatorIdentity, error)
+// AuthRequest carries the operator's submitted credentials from the CLI to
+// the server over the UDS boundary. All prompting is done on the CLI side.
+type AuthRequest struct {
+    Username    string // player username
+    Password    string // cleartext; zeroed after Argon2id verify
+    TOTPCode    string // 6-digit code
 }
 
 // OperatorIdentity is the audit record shape per Section 4.6.
 type OperatorIdentity struct {
-    OSUser                  string  // "uid=1001 (sean)" — captured, not enforced
-    PlayerID                string  // ULID; the verified identity
+    PeerCred                socket.PeerCred  // UID/GID/PID from SO_PEERCRED — captured, not enforced
+    PlayerID                string           // ULID; the verified identity
     TOTPVerified            bool
     AuthProviderName        string
     ProviderSpecificID      string  // opaque, provider-defined (e.g., Vault entity ID)
 }
 
-// PromptFunc abstracts CLI/test prompts.
-type PromptFunc func(question string, secret bool) (string, error)
+// PeerCredString returns a human-readable summary of the PeerCred for audit logs.
+// Format: "uid=<uid> gid=<gid> pid=<pid>".
+func (o OperatorIdentity) PeerCredString() string {
+    return fmt.Sprintf("uid=%d gid=%d pid=%d", o.PeerCred.UID, o.PeerCred.GID, o.PeerCred.PID)
+}
 ```
 
 **Default implementation (`InGameCredentialsProvider`):**
 
-1. Prompt for player username; verify against `players` table.
-2. Prompt for password; verify Argon2id hash (same path as web auth).
-3. Look up TOTP enrollment for this player. **Hard-required:** if not
-   enrolled, refuse with `DENY_NOT_ENROLLED` and direct the operator to
-   the enrollment path. No config knob bypasses this.
-4. Prompt for 6-digit TOTP code and verify; on mismatch, refuse with
+Canonical 6-step sequence (sub-epic D amendment; previously ambiguous
+between steps 4 and 5):
+
+1. Verify username + password (`AuthRequest.Username`, `AuthRequest.Password`)
+   against `players` table via Argon2id hash (same path as web auth).
+   Refuse with `DENY_BAD_CREDS` on mismatch.
+2. Look up TOTP enrollment via `totp.Service.IsEnrolled(playerID)`.
+   **Hard-required:** if not enrolled, refuse with `DENY_NOT_ENROLLED`
+   and direct the operator to the enrollment path. No config knob bypasses this.
+3. Verify 6-digit TOTP code (`AuthRequest.TOTPCode`); on mismatch, refuse with
    `DENY_BAD_TOTP`.
-5. Verify player holds the `crypto.operator` capability via
+4. Verify player holds the `crypto.operator` capability via
    `access.HasPlayerGrant(ctx, resolver, playerID, access.CapabilityCryptoOperator)`.
    On miss, refuse with `DENY_NOT_OPERATOR`. (Capability-storage
    mechanism: see §5.9.1.)
-6. Verify player holds the `admin` role.
+5. Verify player holds `RoleAdmin` via `RoleStore.PlayerHasRole(playerID, RoleAdmin)`.
+   "Player has role" means any of the player's characters holds the role
+   (single SQL JOIN: `character_roles × characters` on `player_id`).
+   On miss, refuse with `DENY_NOT_ADMIN_ROLE`.
+6. Capture `PeerCred` from `socket.PeerCred` (SO_PEERCRED on the UDS
+   connection); store in `OperatorIdentity.PeerCred` for audit.
 
 **Future providers (gated by demand):**
 
@@ -1600,7 +1633,10 @@ Server-issued approval-token mechanism (sub-epic D ships the implementation):
    - `request_id` (ULID, primary key)
    - `primary_player_id`
    - `op_kind` (e.g., `"rekey"`, `"admin_read_stream"`)
-   - `op_args_hash` (SHA-256 over canonicalized invocation args)
+   - `op_args_hash` (SHA-256 over proto-serialized invocation args:
+     `SHA-256(proto.MarshalOptions{Deterministic: true}.Marshal(args))`;
+     cross-binary stability requires `google.golang.org/protobuf` pinned
+     in `go.mod` — see INV-D18)
    - `expires_at = now() + 5 min`
 3. Server prints `request_id` to primary's terminal; primary
    communicates it out-of-band to the second operator.
@@ -2235,6 +2271,12 @@ Each doc deliverable MUST be:
 | `DENY_DUAL_CONTROL_REQUIRED` | Server enforces site `dual_control_required` policy; rejects single-control invocations of the listed operations |
 | `DENY_APPROVAL_ARGS_MISMATCH` | Primary's invocation args do not match the stored `op_args_hash` from the approval row |
 | `DENY_POLICY_HASH_UNKNOWN` | Rekey / AdminReadStream invocation references a `policy_hash` not present in the `policy_set` chain |
+| `DENY_NOT_ADMIN_ROLE` | Operator's player does not hold `RoleAdmin` (checked via `RoleStore.PlayerHasRole`; sub-epic D step 5) |
+| `DENY_SESSION_INVALID` | Presented operator session token is not present in the server's in-memory session store |
+| `DENY_SESSION_EXPIRED` | Operator session token was found but its TTL (10 min) has elapsed |
+| `DENY_DUAL_CONTROL_SELF` | Second operator's `player_id` matches the primary's; self-approval is rejected |
+| `DENY_APPROVAL_EXPIRED` | `admin_approvals` row `expires_at < now()` at proceed time |
+| `DENY_APPROVAL_ALREADY_APPROVED` | `admin_approvals` row is already in `approved` state; replay / double-submit rejected |
 
 ---
 

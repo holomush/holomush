@@ -34,7 +34,8 @@ var noopInvalidator = func(_ context.Context, _ dek.ContextID, _ string, _, _ ui
 func newTestPGPool(t *testing.T) (string, func()) {
 	t.Helper()
 	ctx := context.Background()
-	pgContainer, err := postgres.Run(ctx,
+	pgContainer, err := postgres.Run(
+		ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
@@ -695,7 +696,8 @@ func TestManager_Add_ConcurrentSameBindingIsIdempotent(t *testing.T) {
 
 	// Seed: create the DEK with one initial participant.
 	ctxID := dek.ContextID{Type: "scene", ID: "concurrent-add"}
-	setupMgr, err := dek.NewManager(provider, store,
+	setupMgr, err := dek.NewManager(
+		provider, store,
 		dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		noopInvalidator, &stubBindingResolver{bindingID: "bind-initial"},
@@ -710,13 +712,15 @@ func TestManager_Add_ConcurrentSameBindingIsIdempotent(t *testing.T) {
 	// Two managers with separate caches but shared DB.
 	invA := &stubInvalidator{}
 	invB := &stubInvalidator{}
-	mgrA, err := dek.NewManager(newTestProvider(t), store,
+	mgrA, err := dek.NewManager(
+		newTestProvider(t), store,
 		dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		invA.call(), &stubBindingResolver{bindingID: "bind-concurrent"},
 	)
 	require.NoError(t, err)
-	mgrB, err := dek.NewManager(newTestProvider(t), store,
+	mgrB, err := dek.NewManager(
+		newTestProvider(t), store,
 		dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		invB.call(), &stubBindingResolver{bindingID: "bind-concurrent"},
@@ -777,7 +781,8 @@ func TestManager_Add_ConcurrentDistinctParticipantsPreservesBoth(t *testing.T) {
 	ctxID := dek.ContextID{Type: "scene", ID: "concurrent-distinct"}
 
 	// Seed: create the DEK with one initial participant.
-	setupMgr, err := dek.NewManager(newTestProvider(t), store,
+	setupMgr, err := dek.NewManager(
+		newTestProvider(t), store,
 		dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		noopInvalidator, &stubBindingResolver{bindingID: "bind-0"},
@@ -792,13 +797,15 @@ func TestManager_Add_ConcurrentDistinctParticipantsPreservesBoth(t *testing.T) {
 	// Two managers with separate caches but shared DB.
 	invA := &stubInvalidator{}
 	invB := &stubInvalidator{}
-	mgrA, err := dek.NewManager(newTestProvider(t), store,
+	mgrA, err := dek.NewManager(
+		newTestProvider(t), store,
 		dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		invA.call(), &stubBindingResolver{bindingID: "bind-A"},
 	)
 	require.NoError(t, err)
-	mgrB, err := dek.NewManager(newTestProvider(t), store,
+	mgrB, err := dek.NewManager(
+		newTestProvider(t), store,
 		dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		invB.call(), &stubBindingResolver{bindingID: "bind-B"},
@@ -837,7 +844,8 @@ func TestManager_Add_ConcurrentDistinctParticipantsPreservesBoth(t *testing.T) {
 	// Query from a fresh manager with clean caches to avoid reading
 	// stale cache state from mgrA/mgrB (which each seeded only their
 	// own participant during Add).
-	freshMgr, err := dek.NewManager(newTestProvider(t), store,
+	freshMgr, err := dek.NewManager(
+		newTestProvider(t), store,
 		dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		noopInvalidator, &stubBindingResolver{bindingID: "fresh"},
@@ -867,7 +875,8 @@ func TestManager_Add_WithExplicitBindingIDSkipsResolver(t *testing.T) {
 
 	// This stub returns an error if called — the test fails if Add invokes it.
 	invStub := &stubInvalidator{}
-	mgr, err := dek.NewManager(newTestProvider(t), store,
+	mgr, err := dek.NewManager(
+		newTestProvider(t), store,
 		dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		invStub.call(), &stubBindingResolver{bindingID: "should-not-be-used"},

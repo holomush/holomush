@@ -30,7 +30,8 @@ func TestLocalAEADProvider_Startup_RefusesIfWrapKeyIDUnknown(t *testing.T) {
 	// flaky on Mac/Windows because Docker's port-mapping table can lag
 	// the readiness log line; without the port wait, ConnectionString
 	// can fail with `port "5432/tcp" not found`. See holomush-bmcq.
-	pgContainer, err := postgres.Run(ctx,
+	pgContainer, err := postgres.Run(
+		ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),

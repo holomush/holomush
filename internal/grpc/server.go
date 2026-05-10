@@ -320,7 +320,8 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.HandleComman
 		requestID = req.Meta.RequestId
 	}
 
-	slog.DebugContext(ctx, "handle command request",
+	slog.DebugContext(
+		ctx, "handle command request",
 		"request_id", requestID,
 		"session_id", req.SessionId,
 		"command", req.Command,
@@ -334,7 +335,8 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.HandleComman
 		req.GetSessionId(),
 	)
 	if err != nil {
-		slog.DebugContext(ctx, "session ownership validation failed",
+		slog.DebugContext(
+			ctx, "session ownership validation failed",
 			"request_id", requestID,
 			"session_id", req.SessionId,
 			"error", err,
@@ -348,7 +350,8 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.HandleComman
 
 	// Record command in session history (best-effort)
 	if appendErr := s.sessionStore.AppendCommand(ctx, req.SessionId, req.Command, info.MaxHistory); appendErr != nil {
-		slog.WarnContext(ctx, "command history append failed",
+		slog.WarnContext(
+			ctx, "command history append failed",
 			"session_id", req.SessionId,
 			"error", appendErr,
 		)
@@ -356,7 +359,8 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.HandleComman
 
 	// Parse and execute command
 	if err := s.executeCommand(ctx, info, req.Command); err != nil {
-		slog.WarnContext(ctx, "command execution failed",
+		slog.WarnContext(
+			ctx, "command execution failed",
 			"request_id", requestID,
 			"session_id", req.SessionId,
 			"command", req.Command,
@@ -429,7 +433,8 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 			// If we can't append session_ended, subscribers will not receive
 			// STREAM_CLOSED. Retain the session row so the reaper can retry
 			// (or at least so the row is not orphaned from its audit event).
-			slog.WarnContext(ctx, "session_ended event failed — retaining session row for reap",
+			slog.WarnContext(
+				ctx, "session_ended event failed — retaining session row for reap",
 				"session_id", info.ID,
 				"error", endErr,
 			)
@@ -529,7 +534,8 @@ func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.Characte
 		Text: text,
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to marshal command_response payload",
+		slog.ErrorContext(
+			ctx, "failed to marshal command_response payload",
 			"character_id", char.ID.String(),
 			"error", err,
 		)
@@ -551,7 +557,8 @@ func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.Characte
 	}
 
 	if err := s.eventStore.Append(ctx, event); err != nil {
-		slog.WarnContext(ctx, "failed to append command_response event",
+		slog.WarnContext(
+			ctx, "failed to append command_response event",
 			"character_id", char.ID.String(),
 			"error", err,
 		)
@@ -566,7 +573,8 @@ func (s *CoreServer) runDisconnectHooks(ctx context.Context, info session.Info) 
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					slog.ErrorContext(ctx, "disconnect hook panicked",
+					slog.ErrorContext(
+						ctx, "disconnect hook panicked",
 						"panic", r,
 						"stack", string(debug.Stack()),
 					)
@@ -684,7 +692,8 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		requestID = req.Meta.RequestId
 	}
 
-	slog.DebugContext(ctx, "subscribe request",
+	slog.DebugContext(
+		ctx, "subscribe request",
 		"request_id", requestID,
 		"session_id", req.SessionId,
 	)
@@ -702,7 +711,8 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		req.GetPlayerSessionToken(),
 		req.GetSessionId(),
 	); err != nil {
-		slog.DebugContext(ctx, "subscribe session ownership validation failed",
+		slog.DebugContext(
+			ctx, "subscribe session ownership validation failed",
 			"request_id", requestID,
 			"session_id", req.SessionId,
 			"error", err,
@@ -742,7 +752,8 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 			defer cancel()
 			if rmErr := s.sessionStore.RemoveConnection(cleanupCtx, connID); rmErr != nil {
-				slog.WarnContext(ctx, "subscribe: failed to remove connection on stream close",
+				slog.WarnContext(
+					ctx, "subscribe: failed to remove connection on stream close",
 					"connection_id", connID.String(),
 					"session_id", req.GetSessionId(),
 					"error", rmErr,
@@ -777,11 +788,13 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 
 	// Ensure ambient streams are present even without a coordinator.
 	if len(plan.Streams) == 0 {
-		plan.Streams = append(plan.Streams,
+		plan.Streams = append(
+			plan.Streams,
 			focus.StreamWithMode{Stream: world.CharacterStream(info.CharacterID), Mode: focus.ReplayModeFromCursor},
 		)
 		if !info.LocationID.IsZero() {
-			plan.Streams = append(plan.Streams,
+			plan.Streams = append(
+				plan.Streams,
 				focus.StreamWithMode{Stream: world.LocationStream(info.LocationID), Mode: focus.ReplayModeFromCursor},
 			)
 		}
@@ -796,7 +809,8 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 				SessionID:   info.ID,
 			})
 			for _, ps := range pluginStreams {
-				plan.Streams = append(plan.Streams,
+				plan.Streams = append(
+					plan.Streams,
 					focus.StreamWithMode{Stream: ps, Mode: focus.ReplayModeFromCursor},
 				)
 			}
@@ -998,6 +1012,18 @@ func (s *CoreServer) dispatchDelivery(
 	gameID := s.currentGameID()
 	legacyStream := subjectxlate.ToLegacy(string(event.Subject), gameID)
 
+	// AUDIT_ONLY events (e.g., crypto.totp_*, crypto.policy_set) MUST NOT
+	// reach client streams. They flow through the bus solely so the audit
+	// projection can persist them; we ack-and-skip here so JS retention
+	// can age them out at the stream level. (holomush-jxo8.6.26.)
+	if event.Rendering != nil && event.Rendering.DisplayTarget == eventbus.EventChannelAuditOnly {
+		if ackErr := delivery.Ack(); ackErr != nil {
+			slog.WarnContext(ctx, "subscribe: ack failed on audit-only skip; will redeliver",
+				"session_id", info.ID, "event_id", event.ID.String(), "error", ackErr)
+		}
+		return nil
+	}
+
 	// locationFollower consumes move events on character streams and
 	// replies with a synthetic location_state — in that case the raw
 	// event is dropped (ack'd) rather than forwarded.
@@ -1128,7 +1154,8 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 		requestID = req.Meta.RequestId
 	}
 
-	slog.DebugContext(ctx, "disconnect request",
+	slog.DebugContext(
+		ctx, "disconnect request",
 		"request_id", requestID,
 		"session_id", req.SessionId,
 		"connection_id", req.ConnectionId,
@@ -1144,7 +1171,8 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 		req.GetPlayerSessionToken(),
 		req.GetSessionId(),
 	); err != nil {
-		slog.DebugContext(ctx, "disconnect session ownership validation failed",
+		slog.DebugContext(
+			ctx, "disconnect session ownership validation failed",
 			"request_id", requestID,
 			"session_id", req.SessionId,
 			"error", err,
@@ -1160,7 +1188,8 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 		connID, parseErr := ulid.Parse(req.ConnectionId)
 		if parseErr == nil {
 			if err := s.sessionStore.RemoveConnection(ctx, connID); err != nil {
-				slog.WarnContext(ctx, "failed to remove connection",
+				slog.WarnContext(
+					ctx, "failed to remove connection",
 					"request_id", requestID,
 					"connection_id", req.ConnectionId,
 					"error", err,
@@ -1188,7 +1217,8 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 	// TODO: replace two CountConnectionsByType calls with a single query.
 	totalCount, err := s.sessionStore.CountConnections(ctx, req.SessionId)
 	if err != nil {
-		slog.WarnContext(ctx, "failed to count connections — skipping lifecycle transition",
+		slog.WarnContext(
+			ctx, "failed to count connections — skipping lifecycle transition",
 			"request_id", requestID,
 			"session_id", req.SessionId,
 			"error", err,
@@ -1198,14 +1228,16 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 
 	termCount, err := s.sessionStore.CountConnectionsByType(ctx, req.SessionId, "terminal")
 	if err != nil {
-		slog.WarnContext(ctx, "failed to count terminal connections",
+		slog.WarnContext(
+			ctx, "failed to count terminal connections",
 			"request_id", requestID,
 			"error", err,
 		)
 	}
 	telCount, err := s.sessionStore.CountConnectionsByType(ctx, req.SessionId, "telnet")
 	if err != nil {
-		slog.WarnContext(ctx, "failed to count telnet connections",
+		slog.WarnContext(
+			ctx, "failed to count telnet connections",
 			"request_id", requestID,
 			"error", err,
 		)
@@ -1218,7 +1250,8 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 			// Guests can't reconnect — delete immediately
 			char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
 			if err := s.engine.HandleDisconnect(ctx, char, "quit"); err != nil {
-				slog.WarnContext(ctx, "leave event failed",
+				slog.WarnContext(
+					ctx, "leave event failed",
 					"request_id", requestID,
 					"error", err,
 				)
@@ -1229,7 +1262,8 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 				// If we can't append session_ended, subscribers will not receive
 				// STREAM_CLOSED. Retain the session row so the reaper can retry
 				// (or at least so the row is not orphaned from its audit event).
-				slog.WarnContext(ctx, "guest session_ended event failed — retaining session row for reap",
+				slog.WarnContext(
+					ctx, "guest session_ended event failed — retaining session row for reap",
 					"request_id", requestID,
 					"session_id", info.ID,
 					"error", endErr,
@@ -1242,7 +1276,8 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 			}
 
 			if err := s.sessionStore.Delete(ctx, req.SessionId); err != nil {
-				slog.WarnContext(ctx, "failed to delete guest session",
+				slog.WarnContext(
+					ctx, "failed to delete guest session",
 					"request_id", requestID,
 					"error", err,
 				)
@@ -1260,7 +1295,8 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 			expiresAt := now.Add(time.Duration(ttlSeconds) * time.Second)
 			if err := s.sessionStore.UpdateStatus(ctx, req.SessionId,
 				session.StatusDetached, &now, &expiresAt); err != nil {
-				slog.WarnContext(ctx, "failed to detach session",
+				slog.WarnContext(
+					ctx, "failed to detach session",
 					"request_id", requestID,
 					"error", err,
 				)
@@ -1273,14 +1309,16 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 		// Only comms_hub connections remain — phase out from grid
 		char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
 		if err := s.engine.HandleDisconnect(ctx, char, "phased out"); err != nil {
-			slog.WarnContext(ctx, "phase-out leave event failed",
+			slog.WarnContext(
+				ctx, "phase-out leave event failed",
 				"request_id", requestID,
 				"session_id", req.SessionId,
 				"error", err,
 			)
 		}
 		if err := s.sessionStore.UpdateGridPresent(ctx, req.SessionId, false); err != nil {
-			slog.WarnContext(ctx, "failed to update grid presence",
+			slog.WarnContext(
+				ctx, "failed to update grid presence",
 				"request_id", requestID,
 				"session_id", req.SessionId,
 				"error", err,
@@ -1288,7 +1326,8 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 		}
 	}
 
-	slog.InfoContext(ctx, "session disconnected",
+	slog.InfoContext(
+		ctx, "session disconnected",
 		"request_id", requestID,
 		"session_id", req.SessionId,
 		"character_id", info.CharacterID.String(),
@@ -1326,7 +1365,8 @@ func (s *CoreServer) GetCommandHistory(ctx context.Context, req *corev1.GetComma
 		req.GetPlayerSessionToken(),
 		req.GetSessionId(),
 	); err != nil {
-		slog.DebugContext(ctx, "get_command_history session ownership validation failed",
+		slog.DebugContext(
+			ctx, "get_command_history session ownership validation failed",
 			"request_id", requestID,
 			"session_id", req.GetSessionId(),
 			"error", err,

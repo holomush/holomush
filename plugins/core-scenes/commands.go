@@ -28,7 +28,8 @@ import (
 // command (no subcommand, browses the board) lands in Phase 8 and is
 // handled separately.
 func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
-	ctx, span := startSpan(ctx, "scene.command.dispatch",
+	ctx, span := startSpan(
+		ctx, "scene.command.dispatch",
 		attribute.String("subject_id", req.CharacterID),
 	)
 	defer span.End()
@@ -168,7 +169,8 @@ func (p *scenePlugin) handleEnd(ctx context.Context, req pluginsdk.CommandReques
 			// Enumeration failed entirely: host could not list members.
 			// DB transition has committed; focus state across sessions is
 			// inconsistent until a subsequent RestoreFocus reconciles.
-			slog.WarnContext(ctx, "scene.command.end focus sweep enumeration failed",
+			slog.WarnContext(
+				ctx, "scene.command.end focus sweep enumeration failed",
 				"subject_id", req.CharacterID,
 				"session_id", req.SessionID,
 				"scene_id", sceneID,
@@ -183,7 +185,8 @@ func (p *scenePlugin) handleEnd(ctx context.Context, req pluginsdk.CommandReques
 			for _, f := range result.Failed {
 				failedIDs = append(failedIDs, f.SessionID)
 			}
-			slog.WarnContext(ctx, "scene.command.end focus sweep partial",
+			slog.WarnContext(
+				ctx, "scene.command.end focus sweep partial",
 				"subject_id", req.CharacterID,
 				"session_id", req.SessionID,
 				"scene_id", sceneID,
@@ -349,7 +352,8 @@ func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandReque
 		// Misconfiguration, not a transient error: retries will hit the
 		// same nil guard. Surface the operator-action hint rather than the
 		// user-retry hint used for transient JoinFocus failures below.
-		slog.WarnContext(ctx, "scene.command.join focus client not configured; subscription not updated",
+		slog.WarnContext(
+			ctx, "scene.command.join focus client not configured; subscription not updated",
 			"subject_id", req.CharacterID,
 			"session_id", req.SessionID,
 			"scene_id", sceneID,
@@ -357,7 +361,8 @@ func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandReque
 		return pluginsdk.Errorf(
 			"Joined scene in database, but your session could not subscribe " +
 				"(focus client not configured — this is a server configuration error, " +
-				"please contact an administrator)."), nil
+				"please contact an administrator).",
+		), nil
 	}
 
 	err := p.focusClient.JoinFocus(ctx, req.SessionID, pluginsdk.FocusKey{
@@ -372,7 +377,8 @@ func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandReque
 				Output: fmt.Sprintf("Joined scene %s.", sceneID),
 			}, nil
 		}
-		slog.WarnContext(ctx, "scene.command.join focus join failed",
+		slog.WarnContext(
+			ctx, "scene.command.join focus join failed",
 			"subject_id", req.CharacterID,
 			"session_id", req.SessionID,
 			"scene_id", sceneID,
@@ -380,7 +386,8 @@ func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandReque
 		)
 		return pluginsdk.Errorf(
 			"Joined scene in database, but your session could not subscribe (%v). "+
-				"Please retry `scene join %s`.", err, sceneID), nil
+				"Please retry `scene join %s`.", err, sceneID,
+		), nil
 	}
 
 	return &pluginsdk.CommandResponse{
@@ -413,7 +420,8 @@ func (p *scenePlugin) handleLeave(ctx context.Context, req pluginsdk.CommandRequ
 			Kind:     pluginsdk.FocusKindScene,
 			TargetID: sceneID,
 		}); err != nil {
-			slog.WarnContext(ctx, "scene.command.leave focus leave failed",
+			slog.WarnContext(
+				ctx, "scene.command.leave focus leave failed",
 				"subject_id", req.CharacterID,
 				"session_id", req.SessionID,
 				"scene_id", sceneID,
@@ -521,7 +529,8 @@ func (p *scenePlugin) handleSwitch(ctx context.Context, req pluginsdk.CommandReq
 	sceneID := fields[0]
 
 	if p.focusClient == nil {
-		slog.WarnContext(ctx, "scene.command.switch focus client not configured",
+		slog.WarnContext(
+			ctx, "scene.command.switch focus client not configured",
 			"subject_id", req.CharacterID,
 			"session_id", req.SessionID,
 			"scene_id", sceneID,
@@ -536,9 +545,11 @@ func (p *scenePlugin) handleSwitch(ctx context.Context, req pluginsdk.CommandReq
 		var oe oops.OopsError
 		if errors.As(err, &oe) && oe.Code() == "FOCUS_NOT_MEMBER" {
 			return pluginsdk.Errorf(
-				"You are not a member of scene %s. Use `scene join %s` first.", sceneID, sceneID), nil
+				"You are not a member of scene %s. Use `scene join %s` first.", sceneID, sceneID,
+			), nil
 		}
-		slog.WarnContext(ctx, "scene.command.switch focus present failed",
+		slog.WarnContext(
+			ctx, "scene.command.switch focus present failed",
 			"subject_id", req.CharacterID,
 			"session_id", req.SessionID,
 			"scene_id", sceneID,

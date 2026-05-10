@@ -44,7 +44,8 @@ func (a *CharRepoAdapter) Create(ctx context.Context, char *world.Character) err
 // ExistsByName reports whether a character with the given name already exists (case-insensitive).
 func (a *CharRepoAdapter) ExistsByName(ctx context.Context, name string) (bool, error) {
 	var exists bool
-	err := a.pool.QueryRow(ctx,
+	err := a.pool.QueryRow(
+		ctx,
 		"SELECT EXISTS(SELECT 1 FROM characters WHERE LOWER(name) = LOWER($1))",
 		name,
 	).Scan(&exists)
@@ -57,7 +58,8 @@ func (a *CharRepoAdapter) ExistsByName(ctx context.Context, name string) (bool, 
 // CountByPlayer returns the number of characters owned by the given player.
 func (a *CharRepoAdapter) CountByPlayer(ctx context.Context, playerID ulid.ULID) (int, error) {
 	var count int
-	err := a.pool.QueryRow(ctx,
+	err := a.pool.QueryRow(
+		ctx,
 		"SELECT COUNT(*) FROM characters WHERE player_id = $1",
 		playerID.String(),
 	).Scan(&count)
@@ -69,7 +71,8 @@ func (a *CharRepoAdapter) CountByPlayer(ctx context.Context, playerID ulid.ULID)
 
 // ListByPlayer returns all characters owned by the given player, ordered by name.
 func (a *CharRepoAdapter) ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*world.Character, error) {
-	rows, err := a.pool.Query(ctx,
+	rows, err := a.pool.Query(
+		ctx,
 		`SELECT id, player_id, name, description, location_id, created_at
          FROM characters WHERE player_id = $1 ORDER BY name`,
 		playerID.String(),

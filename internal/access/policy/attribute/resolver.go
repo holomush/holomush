@@ -372,7 +372,8 @@ func (r *Resolver) safeResolve(ctx context.Context, provider AttributeProvider, 
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			attrs = nil // defense-in-depth: discard partially-mutated map
-			r.logger.Error("provider panicked during resolution",
+			r.logger.Error(
+				"provider panicked during resolution",
 				"namespace", provider.Namespace(),
 				"resolve_type", resolveType,
 				"entity_ref", entityRef,
@@ -409,7 +410,8 @@ func (r *Resolver) safeResolveEnvironment(ctx context.Context, provider Environm
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			attrs = nil // defense-in-depth: discard partially-mutated map
-			r.logger.Error("environment provider panicked during resolution",
+			r.logger.Error(
+				"environment provider panicked during resolution",
 				"namespace", provider.Namespace(),
 				"provider_type", "environment",
 				"panic", recovered,
@@ -437,7 +439,8 @@ func (r *Resolver) mergeAttributes(namespace string, attrs, bag map[string]any) 
 	for key, value := range attrs {
 		// S6: Validate key is registered in the provider's namespace schema
 		if !r.registry.IsRegistered(namespace, key) {
-			r.logger.Warn("provider returned attribute not in registered schema",
+			r.logger.Warn(
+				"provider returned attribute not in registered schema",
 				"namespace", namespace,
 				"key", key,
 			)

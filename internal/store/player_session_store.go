@@ -30,7 +30,8 @@ var _ auth.PlayerSessionRepository = (*PostgresPlayerSessionStore)(nil)
 
 // Create inserts a new player session.
 func (s *PostgresPlayerSessionStore) Create(ctx context.Context, session *auth.PlayerSession) error {
-	_, err := s.pool.Exec(ctx,
+	_, err := s.pool.Exec(
+		ctx,
 		`INSERT INTO player_sessions (id, player_id, token_hash, user_agent, ip_address, expires_at, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
 		session.ID.String(),
 		session.PlayerID.String(),
@@ -79,7 +80,8 @@ func (s *PostgresPlayerSessionStore) CreateWithCap(ctx context.Context, session 
 			With("player_id", session.PlayerID.String()).Wrap(err)
 	}
 
-	if _, err := tx.Exec(ctx,
+	if _, err := tx.Exec(
+		ctx,
 		`INSERT INTO player_sessions (id, player_id, token_hash, user_agent, ip_address, expires_at, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
 		session.ID.String(),
 		session.PlayerID.String(),
@@ -143,7 +145,8 @@ func (s *PostgresPlayerSessionStore) GetByTokenHash(ctx context.Context, tokenHa
 	var ps auth.PlayerSession
 	var idStr, playerIDStr string
 
-	err := s.pool.QueryRow(ctx,
+	err := s.pool.QueryRow(
+		ctx,
 		`SELECT id, player_id, token_hash, user_agent, ip_address, expires_at, created_at, updated_at FROM player_sessions WHERE token_hash = $1`,
 		tokenHash,
 	).Scan(&idStr, &playerIDStr, &ps.TokenHash, &ps.UserAgent, &ps.IPAddress, &ps.ExpiresAt, &ps.CreatedAt, &ps.UpdatedAt)
@@ -183,7 +186,8 @@ func (s *PostgresPlayerSessionStore) GetByID(ctx context.Context, id ulid.ULID) 
 	var ps auth.PlayerSession
 	var idStr, playerIDStr string
 
-	err := s.pool.QueryRow(ctx,
+	err := s.pool.QueryRow(
+		ctx,
 		`SELECT id, player_id, token_hash, user_agent, ip_address, expires_at, created_at, updated_at FROM player_sessions WHERE id = $1`,
 		id.String(),
 	).Scan(&idStr, &playerIDStr, &ps.TokenHash, &ps.UserAgent, &ps.IPAddress, &ps.ExpiresAt, &ps.CreatedAt, &ps.UpdatedAt)
@@ -213,7 +217,8 @@ func (s *PostgresPlayerSessionStore) GetByID(ctx context.Context, id ulid.ULID) 
 // CountActiveByPlayer returns the number of non-expired sessions for a player.
 func (s *PostgresPlayerSessionStore) CountActiveByPlayer(ctx context.Context, playerID ulid.ULID) (int, error) {
 	var n int
-	err := s.pool.QueryRow(ctx,
+	err := s.pool.QueryRow(
+		ctx,
 		`SELECT COUNT(*) FROM player_sessions WHERE player_id = $1 AND expires_at > now()`,
 		playerID.String(),
 	).Scan(&n)
@@ -225,7 +230,8 @@ func (s *PostgresPlayerSessionStore) CountActiveByPlayer(ctx context.Context, pl
 
 // ListByPlayer returns all non-expired sessions for a player, newest first.
 func (s *PostgresPlayerSessionStore) ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*auth.PlayerSession, error) {
-	rows, err := s.pool.Query(ctx,
+	rows, err := s.pool.Query(
+		ctx,
 		`SELECT id, player_id, token_hash, user_agent, ip_address, expires_at, created_at, updated_at
 		 FROM player_sessions
 		 WHERE player_id = $1 AND expires_at > now()
@@ -331,7 +337,8 @@ func (s *PostgresPlayerSessionStore) RefreshTTL(ctx context.Context, id ulid.ULI
 			Errorf("ttl must be positive")
 	}
 	now := time.Now()
-	_, err := s.pool.Exec(ctx,
+	_, err := s.pool.Exec(
+		ctx,
 		`UPDATE player_sessions SET expires_at = $1, updated_at = $2 WHERE id = $3`,
 		now.Add(ttl),
 		now,

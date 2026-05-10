@@ -106,7 +106,8 @@ func QueryEventsAuditByID(t *testing.T, pool *pgxpool.Pool, idBytes []byte) Even
 	var row EventsAuditRow
 	var dekRef sql.NullInt64
 	var dekVer sql.NullInt32
-	err := pool.QueryRow(context.Background(),
+	err := pool.QueryRow(
+		context.Background(),
 		`SELECT codec, envelope, dek_ref, dek_version FROM events_audit WHERE id = $1`,
 		idBytes,
 	).Scan(&row.Codec, &row.Envelope, &dekRef, &dekVer)

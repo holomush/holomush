@@ -78,7 +78,8 @@ func (s *pluginHostServiceServer) EmitEvent(ctx context.Context, req *pluginv1.P
 
 	storedActor, ok := tokenStore.Lookup(s.pluginName, tokens[0])
 	if !ok {
-		slog.WarnContext(ctx, "EmitEvent rejected: token not valid for this plugin",
+		slog.WarnContext(
+			ctx, "EmitEvent rejected: token not valid for this plugin",
 			"plugin", s.pluginName,
 			"code", "EMIT_TOKEN_REJECTED",
 		)

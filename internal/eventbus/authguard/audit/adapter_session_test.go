@@ -47,7 +47,8 @@ func TestSessionBridgeEmitterDelegatesToUnderlyingEmitter(t *testing.T) {
 
 	events := pub.snapshot()
 	require.Len(t, events, 1)
-	assert.Equal(t,
+	assert.Equal(
+		t,
 		eventbus.Subject("audit.test-game.plugin_decrypt.mod-filter"),
 		events[0].Subject,
 	)

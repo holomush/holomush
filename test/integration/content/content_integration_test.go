@@ -180,7 +180,8 @@ var _ = Describe("PostgresStore", func() {
 
 		// Verify search_vector is populated by running a ts_query against it.
 		var count int
-		err := env.pool.QueryRow(ctx,
+		err := env.pool.QueryRow(
+			ctx,
 			`SELECT COUNT(*) FROM content_items
 			  WHERE key = $1
 			    AND search_vector @@ to_tsquery('english', 'dragonfire')`,

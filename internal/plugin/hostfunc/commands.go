@@ -127,7 +127,8 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 				hadEngineError = true
 				engineErrorCount++
 				if engineErrorCount >= maxEngineErrors {
-					slog.WarnContext(ctx, "command list circuit breaker tripped",
+					slog.WarnContext(
+						ctx, "command list circuit breaker tripped",
 						"engine_failures", engineErrorCount,
 						"threshold", maxEngineErrors,
 					)

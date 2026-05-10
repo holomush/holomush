@@ -106,12 +106,14 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 	childCtx, childCancel := context.WithCancel(ctx)
 	defer childCancel()
 
-	slog.DebugContext(ctx, "telnet: client connected",
+	slog.DebugContext(
+		ctx, "telnet: client connected",
 		"remote_addr", h.conn.RemoteAddr().String(),
 	)
 
 	defer func() {
-		slog.DebugContext(ctx, "telnet: client disconnected",
+		slog.DebugContext(
+			ctx, "telnet: client disconnected",
 			"remote_addr", h.conn.RemoteAddr().String(),
 			"session_id", h.sessionID,
 		)
@@ -371,7 +373,8 @@ func (h *GatewayHandler) handleConnectPlayer(ctx context.Context, username, pass
 		return nil
 	}
 	if !resp.GetSuccess() {
-		slog.DebugContext(ctx, "telnet: player authentication failed",
+		slog.DebugContext(
+			ctx, "telnet: player authentication failed",
 			"remote_addr", h.conn.RemoteAddr().String(),
 		)
 		h.send("Login failed. Use `connect guest` to play.")
@@ -499,7 +502,8 @@ func (h *GatewayHandler) selectCharacter(ctx context.Context, ch *corev1.Charact
 	h.selectMode = false
 	h.characters = nil
 
-	slog.DebugContext(ctx, "telnet: authentication success",
+	slog.DebugContext(
+		ctx, "telnet: authentication success",
 		"session_id", h.sessionID,
 		"character_name", h.charName,
 	)
@@ -573,7 +577,8 @@ func (h *GatewayHandler) handleSay(ctx context.Context, message string) {
 		return
 	}
 
-	ctx, span := tracer.Start(ctx, "telnet.command",
+	ctx, span := tracer.Start(
+		ctx, "telnet.command",
 		trace.WithAttributes(
 			attribute.String("session.id", h.sessionID),
 			attribute.String("character.name", h.charName),
@@ -612,7 +617,8 @@ func (h *GatewayHandler) handlePose(ctx context.Context, action string) {
 		return
 	}
 
-	ctx, span := tracer.Start(ctx, "telnet.command",
+	ctx, span := tracer.Start(
+		ctx, "telnet.command",
 		trace.WithAttributes(
 			attribute.String("session.id", h.sessionID),
 			attribute.String("character.name", h.charName),
@@ -657,7 +663,8 @@ func (h *GatewayHandler) handleGenericCommand(ctx context.Context, cmd, arg stri
 		return
 	}
 
-	ctx, span := tracer.Start(ctx, "telnet.command",
+	ctx, span := tracer.Start(
+		ctx, "telnet.command",
 		trace.WithAttributes(
 			attribute.String("session.id", h.sessionID),
 			attribute.String("character.name", h.charName),
@@ -717,7 +724,8 @@ func (h *GatewayHandler) handleDisconnect(ctx context.Context) {
 func (h *GatewayHandler) handleQuit(ctx context.Context) {
 	if h.authed {
 		// Forward quit to the server so it can emit events and clean up.
-		spanCtx, span := tracer.Start(ctx, "telnet.command",
+		spanCtx, span := tracer.Start(
+			ctx, "telnet.command",
 			trace.WithAttributes(
 				attribute.String("session.id", h.sessionID),
 				attribute.String("character.name", h.charName),
@@ -830,7 +838,8 @@ func (h *GatewayHandler) drainUntilClosed(ctx context.Context, eventRecv <-chan 
 			// Timed out waiting for STREAM_CLOSED. Log so operators can
 			// see if this becomes common, and fall back to delivering
 			// the expected message to the client.
-			slog.WarnContext(ctx, "gateway: drain timed out waiting for STREAM_CLOSED",
+			slog.WarnContext(
+				ctx, "gateway: drain timed out waiting for STREAM_CLOSED",
 				"session_id", h.sessionID,
 				"fallback_msg", fallbackMsg,
 			)
@@ -871,7 +880,8 @@ func (h *GatewayHandler) sendProtoEvent(ev *corev1.EventFrame) {
 func (h *GatewayHandler) formatEvent(ev *corev1.EventFrame) string {
 	rendering := ev.GetRendering()
 	if rendering == nil {
-		slog.Error("telnet: dropping event with nil Rendering (INV-GW-5)",
+		slog.Error(
+			"telnet: dropping event with nil Rendering (INV-GW-5)",
 			"event_id", ev.GetId(),
 			"event_type", ev.GetType(),
 		)

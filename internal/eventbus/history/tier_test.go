@@ -570,7 +570,8 @@ func TestTierCrossoverPluginOwnedSubjectRoutesToPlugin(t *testing.T) {
 		}
 		hot := &fakeTier{tier: history.TierJetStream, err: errors.New("hot must not be consulted")}
 		cold := &fakeTier{tier: history.TierPostgres, err: errors.New("cold must not be consulted")}
-		r := testBuild(hot, cold, now,
+		r := testBuild(
+			hot, cold, now,
 			history.WithOwners(owners),
 			history.WithPluginRouter(router),
 		)
@@ -698,7 +699,8 @@ func TestReaderGuardsAgainstUnboundedBufferGrowth(t *testing.T) {
 	}
 	hot := &pathologicalTier{events: events, tier: history.TierJetStream}
 	cold := &fakeTier{tier: history.TierPostgres}
-	r := history.NewReader(nil, nil, 30*24*time.Hour, fixedClock(now),
+	r := history.NewReader(
+		nil, nil, 30*24*time.Hour, fixedClock(now),
 		history.WithHotTier(hot),
 		history.WithColdTier(cold),
 	)

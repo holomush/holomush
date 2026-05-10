@@ -5,6 +5,8 @@ syntax = "proto3";
 
 package holomush.admin.v1;
 
+import "google/protobuf/timestamp.proto";
+
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/admin/v1;adminv1";
 
 // AdminService is the break-glass operator administration service. It is
@@ -12,9 +14,21 @@ option go_package = "github.com/holomush/holomush/pkg/proto/holomush/admin/v1;ad
 // exposed over the network.
 service AdminService {
   // Status returns the admin-socket server's liveness state and binary version.
-  // It is intentionally minimal: it reports whether the admin socket is accepting
-  // requests, NOT whether the full server stack is healthy.
   rpc Status(StatusRequest) returns (StatusResponse);
+
+  // Authenticate verifies operator credentials + TOTP and returns a
+  // short-lived (10 min) session token for use in Approve and ResetTOTP.
+  // Spec §3 wire surface; INV-D1, INV-D2.
+  rpc Authenticate(AuthenticateRequest) returns (AuthenticateResponse);
+
+  // Approve is the second-op signoff on a pending admin_approvals row.
+  // Spec §3, §6 Approve flow; INV-D5, INV-D6, INV-D7.
+  rpc Approve(ApproveRequest) returns (ApproveResponse);
+
+  // ResetTOTP clears a target player's TOTP enrollment and emits a
+  // crypto.totp_cleared audit event with cleared_by="admin_reset".
+  // Spec §3, §4 reset flow.
+  rpc ResetTOTP(ResetTOTPRequest) returns (ResetTOTPResponse);
 }
 
 message StatusRequest {}
@@ -25,4 +39,32 @@ message StatusResponse {
 
   // healthy is true iff the admin socket HTTP server is accepting requests.
   bool healthy = 2;
+}
+
+message AuthenticateRequest {
+  string username = 1;
+  string password = 2;
+  string totp_code = 3;
+}
+
+message AuthenticateResponse {
+  string session_token = 1;
+  google.protobuf.Timestamp expires_at = 2;
+  string player_id = 3;
+}
+
+message ApproveRequest {
+  string session_token = 1;
+  bytes request_id = 2; // 16-byte ULID
+}
+
+message ApproveResponse {}
+
+message ResetTOTPRequest {
+  string session_token = 1;
+  string target_player_id = 2;
+}
+
+message ResetTOTPResponse {
+  bool cleared = 1;
 }

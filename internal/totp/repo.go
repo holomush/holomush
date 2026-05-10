@@ -159,7 +159,8 @@ func (r *repo) IsEnrolled(ctx context.Context, playerID string) (bool, error) {
 // InsertEnrollment inserts a player_totp row and all associated recovery codes.
 func (r *repo) InsertEnrollment(ctx context.Context, e EnrollmentRecord) error {
 	db := dbFromCtx(ctx, r.pool)
-	if _, err := db.Exec(ctx,
+	if _, err := db.Exec(
+		ctx,
 		`INSERT INTO player_totp (player_id, wrapped_secret, wrap_key_id, enrolled_at)
 		 VALUES ($1, $2, $3, $4)`,
 		e.PlayerID, e.WrappedSecret, e.WrapKeyID, e.EnrolledAt,
@@ -182,7 +183,8 @@ func (r *repo) InsertEnrollment(ctx context.Context, e EnrollmentRecord) error {
 func (r *repo) LoadEnrollment(ctx context.Context, playerID string) (VerifyState, error) {
 	var s VerifyState
 	s.PlayerID = playerID
-	err := dbFromCtx(ctx, r.pool).QueryRow(ctx,
+	err := dbFromCtx(ctx, r.pool).QueryRow(
+		ctx,
 		`SELECT wrapped_secret, wrap_key_id, last_used_step, failed_attempts, locked_until
 		 FROM player_totp WHERE player_id = $1 FOR UPDATE`, playerID,
 	).Scan(&s.WrappedSecret, &s.WrapKeyID, &s.LastUsedStep, &s.FailedAttempts, &s.LockedUntil)
@@ -201,18 +203,41 @@ func (r *repo) IncrementFailedAttempts(
 	ctx context.Context, playerID string,
 	threshold int, lockoutDuration time.Duration, now time.Time,
 ) (VerifyState, error) {
+	// $3::TIMESTAMPTZ and $4::BIGINT casts are load-bearing.
+	//
+	// Without $3::TIMESTAMPTZ, pgx infers $3 as text (the param's wire format),
+	// and `text + interval` makes the THEN branch resolve to `interval`, which
+	// mismatches the ELSE branch's `timestamptz` (locked_until column). PG then
+	// rejects the statement at execute time with
+	//
+	//   CASE types timestamp with time zone and interval cannot be matched
+	//   (SQLSTATE 42804)
+	//
+	// Without $4::BIGINT, pgx infers $4 as text (because of the `||` operator)
+	// and rejects the int64 argument with
+	//
+	//   unable to encode <N> into text format for text (OID 25): cannot find
+	//   encode plan
+	//
+	// Either error path means lockout NEVER fires in production. The mock-based
+	// unit tests in repo_unit_test.go don't catch either (pgxmock doesn't
+	// validate types or wire-format encoding); only a real PG round-trip does.
+	// Surfaced by Phase 5 sub-epic D's full-stack E2E (holomush-jxo8.6.23 / T25);
+	// regression-locked by that test plus the crypto.totp_locked persistence
+	// assertion in this same path.
 	const q = `
 		UPDATE player_totp
 		SET failed_attempts = failed_attempts + 1,
 		    locked_until    = CASE
-		      WHEN failed_attempts + 1 >= $2 THEN $3 + ($4 || ' microseconds')::INTERVAL
+		      WHEN failed_attempts + 1 >= $2 THEN $3::TIMESTAMPTZ + ($4::BIGINT || ' microseconds')::INTERVAL
 		      ELSE locked_until
 		    END
 		WHERE player_id = $1
 		RETURNING wrapped_secret, wrap_key_id, last_used_step, failed_attempts, locked_until`
 	var s VerifyState
 	s.PlayerID = playerID
-	err := dbFromCtx(ctx, r.pool).QueryRow(ctx, q,
+	err := dbFromCtx(ctx, r.pool).QueryRow(
+		ctx, q,
 		playerID, threshold, now, lockoutDuration.Microseconds(),
 	).Scan(&s.WrappedSecret, &s.WrapKeyID, &s.LastUsedStep, &s.FailedAttempts, &s.LockedUntil)
 	if err != nil {
@@ -224,7 +249,8 @@ func (r *repo) IncrementFailedAttempts(
 // MarkVerified resets failed_attempts and locked_until, and records the last
 // used TOTP step to prevent replay.
 func (r *repo) MarkVerified(ctx context.Context, playerID string, step int64, at time.Time) error {
-	_, err := dbFromCtx(ctx, r.pool).Exec(ctx,
+	_, err := dbFromCtx(ctx, r.pool).Exec(
+		ctx,
 		`UPDATE player_totp SET last_used_step = $2, last_verified_at = $3,
 		   failed_attempts = 0, locked_until = NULL
 		 WHERE player_id = $1`, playerID, step, at,

@@ -32,7 +32,8 @@ func (s *CoreServer) ListSessionStreams(ctx context.Context, req *corev1.ListSes
 	if req.Meta != nil {
 		requestID = req.Meta.RequestId
 	}
-	slog.DebugContext(ctx, "list session streams",
+	slog.DebugContext(
+		ctx, "list session streams",
 		"request_id", requestID,
 		"session_id", req.SessionId,
 	)
@@ -50,7 +51,8 @@ func (s *CoreServer) ListSessionStreams(ctx context.Context, req *corev1.ListSes
 		req.GetPlayerSessionToken(),
 		req.GetSessionId(),
 	); err != nil {
-		slog.DebugContext(ctx, "list session streams ownership validation failed",
+		slog.DebugContext(
+			ctx, "list session streams ownership validation failed",
 			"request_id", requestID,
 			"session_id", req.SessionId,
 			"error", err,
@@ -87,11 +89,13 @@ func (s *CoreServer) ListSessionStreams(ctx context.Context, req *corev1.ListSes
 	// assembly (server.go:787-816) so this RPC never returns a different
 	// stream set than Subscribe under any server configuration.
 	if len(plan.Streams) == 0 {
-		plan.Streams = append(plan.Streams,
+		plan.Streams = append(
+			plan.Streams,
 			focus.StreamWithMode{Stream: world.CharacterStream(info.CharacterID), Mode: focus.ReplayModeFromCursor},
 		)
 		if !info.LocationID.IsZero() {
-			plan.Streams = append(plan.Streams,
+			plan.Streams = append(
+				plan.Streams,
 				focus.StreamWithMode{Stream: world.LocationStream(info.LocationID), Mode: focus.ReplayModeFromCursor},
 			)
 		}
@@ -106,7 +110,8 @@ func (s *CoreServer) ListSessionStreams(ctx context.Context, req *corev1.ListSes
 				SessionID:   info.ID,
 			})
 			for _, ps := range pluginStreams {
-				plan.Streams = append(plan.Streams,
+				plan.Streams = append(
+					plan.Streams,
 					focus.StreamWithMode{Stream: ps, Mode: focus.ReplayModeFromCursor},
 				)
 			}

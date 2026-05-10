@@ -20,7 +20,8 @@ func TestPresentFocusUpdatesPresentingPointer(t *testing.T) {
 	targetID := ulid.MustNew(ulid.Now(), nil)
 	target := session.FocusKey{Kind: session.FocusKindScene, TargetID: targetID}
 
-	coord, _ := newTestCoordinator(t,
+	coord, _ := newTestCoordinator(
+		t,
 		map[string]*session.Info{
 			"sess-1": {
 				Status: session.StatusActive,
@@ -47,7 +48,8 @@ func TestPresentFocusRejectsNonMember(t *testing.T) {
 	target := session.FocusKey{Kind: session.FocusKindScene, TargetID: targetID}
 
 	// Session has no memberships.
-	coord, _ := newTestCoordinator(t,
+	coord, _ := newTestCoordinator(
+		t,
 		map[string]*session.Info{
 			"sess-1": {Status: session.StatusActive},
 		},
@@ -63,7 +65,8 @@ func TestPresentFocusRejectsExpiredSession(t *testing.T) {
 	targetID := ulid.MustNew(ulid.Now(), nil)
 	target := session.FocusKey{Kind: session.FocusKindScene, TargetID: targetID}
 
-	coord, _ := newTestCoordinator(t,
+	coord, _ := newTestCoordinator(
+		t,
 		map[string]*session.Info{
 			"sess-expired": {Status: session.StatusExpired},
 		},

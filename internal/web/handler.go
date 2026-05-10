@@ -99,7 +99,8 @@ func NewHandler(client CoreClient, opts ...HandlerOption) *Handler {
 // (see grpc/server.go AppendCommand call), so no additional work is
 // needed here.
 func (h *Handler) SendCommand(ctx context.Context, req *connect.Request[webv1.SendCommandRequest]) (*connect.Response[webv1.SendCommandResponse], error) {
-	slog.DebugContext(ctx, "web: SendCommand",
+	slog.DebugContext(
+		ctx, "web: SendCommand",
 		"session_id", req.Msg.GetSessionId(),
 		"command", req.Msg.GetText(),
 	)
@@ -166,7 +167,8 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 			ConnectionId:       connID.String(),
 			PlayerSessionToken: token,
 		}); disconnErr != nil {
-			slog.Warn("web: disconnect RPC failed on stream close",
+			slog.Warn(
+				"web: disconnect RPC failed on stream close",
 				"session_id", sessionID,
 				"connection_id", connID.String(),
 				"error", disconnErr,
@@ -391,7 +393,8 @@ func (h *Handler) WebGetContent(ctx context.Context, req *connect.Request[webv1.
 // WebQueryStreamHistory proxies paginated event history requests to CoreService.
 // Authorization is enforced by the core service; the gateway is a translation layer.
 func (h *Handler) WebQueryStreamHistory(ctx context.Context, req *connect.Request[webv1.WebQueryStreamHistoryRequest]) (*connect.Response[webv1.WebQueryStreamHistoryResponse], error) {
-	slog.DebugContext(ctx, "web: WebQueryStreamHistory",
+	slog.DebugContext(
+		ctx, "web: WebQueryStreamHistory",
 		"session_id", req.Msg.GetSessionId(),
 		"stream", req.Msg.GetStream(),
 	)
@@ -433,7 +436,8 @@ func (h *Handler) WebQueryStreamHistory(ctx context.Context, req *connect.Reques
 // auth.ValidateSessionOwnership; the gateway just forwards the
 // player_session_token header.
 func (h *Handler) WebListSessionStreams(ctx context.Context, req *connect.Request[webv1.WebListSessionStreamsRequest]) (*connect.Response[webv1.WebListSessionStreamsResponse], error) {
-	slog.DebugContext(ctx, "web: WebListSessionStreams",
+	slog.DebugContext(
+		ctx, "web: WebListSessionStreams",
 		"session_id", req.Msg.GetSessionId(),
 	)
 

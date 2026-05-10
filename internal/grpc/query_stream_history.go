@@ -49,7 +49,8 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		requestID = req.Meta.RequestId
 	}
 
-	slog.DebugContext(ctx, "query stream history",
+	slog.DebugContext(
+		ctx, "query stream history",
 		"request_id", requestID,
 		"session_id", req.SessionId,
 		"stream", req.Stream,
@@ -164,7 +165,8 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		// Layer 1: Membership gate (I-17). ABAC is never consulted for
 		// private streams — no policy override is possible.
 		if !sessionHasMembership(info, req.Stream) {
-			slog.InfoContext(ctx, "stream access denied by I-17 membership gate",
+			slog.InfoContext(
+				ctx, "stream access denied by I-17 membership gate",
 				"session_id", req.SessionId,
 				"character_id", info.CharacterID.String(),
 				"stream", req.Stream,
@@ -197,7 +199,8 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 				Wrap(evalErr)
 		}
 		if !decision.IsAllowed() {
-			slog.InfoContext(ctx, "stream access denied by ABAC",
+			slog.InfoContext(
+				ctx, "stream access denied by ABAC",
 				"session_id", req.SessionId,
 				"character_id", info.CharacterID.String(),
 				"stream", req.Stream,
@@ -407,6 +410,14 @@ func fetchHistoryFramesFromBus(
 
 	// Drain up to count+1 events. DirectionBackward gives newest-first;
 	// we collect them and reverse below to restore ascending order.
+	//
+	// AUDIT_ONLY events (e.g. crypto.totp_*, crypto.policy_set) MUST NOT
+	// reach client streams — symmetric with the live dispatchDelivery
+	// filter at internal/grpc/server.go (~line 1019). Skip them while
+	// draining so the asymmetry between live subscribe and history reads
+	// cannot expose host-emit security audit content. Skipped events are
+	// not counted toward count+1 — we keep pulling until count+1 client-
+	// visible events accumulate or the stream EOFs.
 	collected := make([]eventbus.Event, 0, count+1)
 	for {
 		e, nextErr := stream.Next(ctx)
@@ -415,6 +426,9 @@ func fetchHistoryFramesFromBus(
 				break
 			}
 			return nil, oops.With("subject", string(sub)).Wrap(nextErr)
+		}
+		if e.Rendering != nil && e.Rendering.DisplayTarget == eventbus.EventChannelAuditOnly {
+			continue
 		}
 		collected = append(collected, e)
 		if len(collected) >= count+1 {

@@ -91,7 +91,8 @@ func RunMigrationsFS(ctx context.Context, pool *pgxpool.Pool, migrations fs.FS) 
 			_ = tx.Rollback(ctx) //nolint:errcheck // best-effort rollback
 			return oops.Code("PLUGIN_MIGRATION_EXEC_FAILED").With("file", name).Wrap(execErr)
 		}
-		if _, trackErr := tx.Exec(ctx,
+		if _, trackErr := tx.Exec(
+			ctx,
 			"INSERT INTO plugin_migrations (version, name) VALUES ($1, $2)",
 			version, name,
 		); trackErr != nil {

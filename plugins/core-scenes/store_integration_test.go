@@ -74,7 +74,8 @@ func mustCreateScene(t *testing.T, store *SceneStore, sceneID, ownerID, visibili
 func assertParticipantRowExists(t *testing.T, store *SceneStore, sceneID, characterID, expectedRole string) {
 	t.Helper()
 	var role string
-	err := store.pool.QueryRow(context.Background(),
+	err := store.pool.QueryRow(
+		context.Background(),
 		`SELECT role FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
 		sceneID, characterID,
 	).Scan(&role)
@@ -87,7 +88,8 @@ func assertParticipantRowExists(t *testing.T, store *SceneStore, sceneID, charac
 func assertParticipantRowAbsent(t *testing.T, store *SceneStore, sceneID, characterID string) {
 	t.Helper()
 	var role string
-	err := store.pool.QueryRow(context.Background(),
+	err := store.pool.QueryRow(
+		context.Background(),
 		`SELECT role FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
 		sceneID, characterID,
 	).Scan(&role)
@@ -108,7 +110,8 @@ func assertOpsEventRecorded(t *testing.T, store *SceneStore, sceneID string, kin
 
 	// Step 1: assert exactly one matching row exists.
 	var count int
-	require.NoError(t, store.pool.QueryRow(context.Background(),
+	require.NoError(t, store.pool.QueryRow(
+		context.Background(),
 		`SELECT COUNT(*) FROM scene_ops_events WHERE scene_id = $1 AND kind = $2`,
 		sceneID, string(kind),
 	).Scan(&count))
@@ -120,7 +123,8 @@ func assertOpsEventRecorded(t *testing.T, store *SceneStore, sceneID string, kin
 		target  *string
 		payload []byte
 	)
-	err := store.pool.QueryRow(context.Background(), `
+	err := store.pool.QueryRow(
+		context.Background(), `
 		SELECT actor_id, target_id, payload FROM scene_ops_events
 		WHERE scene_id = $1 AND kind = $2`,
 		sceneID, string(kind),
@@ -145,12 +149,14 @@ func countOpsEvents(t *testing.T, store *SceneStore, sceneID string, kind OpsEve
 	var n int
 	var err error
 	if kind == "" {
-		err = store.pool.QueryRow(context.Background(),
+		err = store.pool.QueryRow(
+			context.Background(),
 			`SELECT COUNT(*) FROM scene_ops_events WHERE scene_id = $1`,
 			sceneID,
 		).Scan(&n)
 	} else {
-		err = store.pool.QueryRow(context.Background(),
+		err = store.pool.QueryRow(
+			context.Background(),
 			`SELECT COUNT(*) FROM scene_ops_events WHERE scene_id = $1 AND kind = $2`,
 			sceneID, string(kind),
 		).Scan(&n)
@@ -1518,10 +1524,12 @@ func TestSceneOwnerIDDenormAlwaysMatchesParticipantOwnerRow(t *testing.T) {
 			denormOwnerID    string
 			participantOwner string
 		)
-		require.NoError(t, store.pool.QueryRow(ctx,
+		require.NoError(t, store.pool.QueryRow(
+			ctx,
 			`SELECT owner_id FROM scenes WHERE id = $1`, sceneID,
 		).Scan(&denormOwnerID))
-		require.NoError(t, store.pool.QueryRow(ctx,
+		require.NoError(t, store.pool.QueryRow(
+			ctx,
 			`SELECT character_id FROM scene_participants WHERE scene_id = $1 AND role = 'owner'`,
 			sceneID,
 		).Scan(&participantOwner))
@@ -1622,7 +1630,8 @@ func TestParticipantPrimaryKeyPreventsDoubleInsertion(t *testing.T) {
 
 	// Direct insert of a duplicate row MUST fail at the PK constraint.
 	// This proves the schema, not the store API, prevents duplicates.
-	_, err := store.pool.Exec(ctx,
+	_, err := store.pool.Exec(
+		ctx,
 		`INSERT INTO scene_participants (scene_id, character_id, role) VALUES ($1, $2, 'member')`,
 		row.ID, "char-alice", // char-alice is already the owner row
 	)
@@ -1630,7 +1639,8 @@ func TestParticipantPrimaryKeyPreventsDoubleInsertion(t *testing.T) {
 
 	// Verify exactly one row exists for char-alice.
 	var count int
-	require.NoError(t, store.pool.QueryRow(ctx,
+	require.NoError(t, store.pool.QueryRow(
+		ctx,
 		`SELECT COUNT(*) FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
 		row.ID, "char-alice",
 	).Scan(&count))

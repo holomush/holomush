@@ -78,7 +78,8 @@ func (r *GuestReaper) reap(ctx context.Context) {
 		func() {
 			defer func() {
 				if p := recover(); p != nil {
-					slog.WarnContext(ctx, "guest_reaper: panic during reap",
+					slog.WarnContext(
+						ctx, "guest_reaper: panic during reap",
 						"player_id", guest.ID,
 						"username", guest.Username,
 						"panic", p,
@@ -87,7 +88,8 @@ func (r *GuestReaper) reap(ctx context.Context) {
 			}()
 
 			if err := r.cleaner.DeleteGuestPlayer(ctx, guest.ID); err != nil {
-				slog.WarnContext(ctx, "guest_reaper: failed to delete guest player",
+				slog.WarnContext(
+					ctx, "guest_reaper: failed to delete guest player",
 					"player_id", guest.ID,
 					"username", guest.Username,
 					"error", err,
@@ -95,7 +97,8 @@ func (r *GuestReaper) reap(ctx context.Context) {
 				return
 			}
 
-			slog.InfoContext(ctx, "guest_reaper: reaped idle guest player",
+			slog.InfoContext(
+				ctx, "guest_reaper: reaped idle guest player",
 				"player_id", guest.ID,
 				"username", guest.Username,
 			)

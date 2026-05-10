@@ -134,7 +134,8 @@ var _ = Describe("TOTP substrate E2E (PG + KEK; no eventbus)", func() {
 // Mirrors the helper in internal/totp/repo_integration_test.go but takes
 // ctx (matching the BeforeEach pattern).
 func insertPlayer(ctx context.Context, pool *pgxpool.Pool, id, username string) {
-	_, err := pool.Exec(ctx,
+	_, err := pool.Exec(
+		ctx,
 		`INSERT INTO players (id, username, password_hash) VALUES ($1, $2, $3)`,
 		id, username, "hash-placeholder",
 	)

@@ -42,7 +42,8 @@ func NewBrokerProxy(conn grpc.ClientConnInterface, pluginName string) func([]grp
 
 			proxyErr := plugins.ProxyStreams(stream, clientStream)
 
-			slog.Debug("broker proxy: call completed",
+			slog.Debug(
+				"broker proxy: call completed",
 				"plugin", pluginName,
 				"method", method,
 				"duration", time.Since(start),

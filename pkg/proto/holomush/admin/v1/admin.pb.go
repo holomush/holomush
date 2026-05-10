@@ -12,6 +12,7 @@ package adminv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -114,17 +115,343 @@ func (x *StatusResponse) GetHealthy() bool {
 	return false
 }
 
+type AuthenticateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	Password      string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	TotpCode      string                 `protobuf:"bytes,3,opt,name=totp_code,json=totpCode,proto3" json:"totp_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuthenticateRequest) Reset() {
+	*x = AuthenticateRequest{}
+	mi := &file_holomush_admin_v1_admin_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuthenticateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuthenticateRequest) ProtoMessage() {}
+
+func (x *AuthenticateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_admin_v1_admin_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuthenticateRequest.ProtoReflect.Descriptor instead.
+func (*AuthenticateRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_admin_v1_admin_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *AuthenticateRequest) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *AuthenticateRequest) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+func (x *AuthenticateRequest) GetTotpCode() string {
+	if x != nil {
+		return x.TotpCode
+	}
+	return ""
+}
+
+type AuthenticateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionToken  string                 `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	PlayerId      string                 `protobuf:"bytes,3,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuthenticateResponse) Reset() {
+	*x = AuthenticateResponse{}
+	mi := &file_holomush_admin_v1_admin_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuthenticateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuthenticateResponse) ProtoMessage() {}
+
+func (x *AuthenticateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_admin_v1_admin_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuthenticateResponse.ProtoReflect.Descriptor instead.
+func (*AuthenticateResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_admin_v1_admin_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *AuthenticateResponse) GetSessionToken() string {
+	if x != nil {
+		return x.SessionToken
+	}
+	return ""
+}
+
+func (x *AuthenticateResponse) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *AuthenticateResponse) GetPlayerId() string {
+	if x != nil {
+		return x.PlayerId
+	}
+	return ""
+}
+
+type ApproveRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionToken  string                 `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
+	RequestId     []byte                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"` // 16-byte ULID
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApproveRequest) Reset() {
+	*x = ApproveRequest{}
+	mi := &file_holomush_admin_v1_admin_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApproveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApproveRequest) ProtoMessage() {}
+
+func (x *ApproveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_admin_v1_admin_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApproveRequest.ProtoReflect.Descriptor instead.
+func (*ApproveRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_admin_v1_admin_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ApproveRequest) GetSessionToken() string {
+	if x != nil {
+		return x.SessionToken
+	}
+	return ""
+}
+
+func (x *ApproveRequest) GetRequestId() []byte {
+	if x != nil {
+		return x.RequestId
+	}
+	return nil
+}
+
+type ApproveResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApproveResponse) Reset() {
+	*x = ApproveResponse{}
+	mi := &file_holomush_admin_v1_admin_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApproveResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApproveResponse) ProtoMessage() {}
+
+func (x *ApproveResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_admin_v1_admin_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApproveResponse.ProtoReflect.Descriptor instead.
+func (*ApproveResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_admin_v1_admin_proto_rawDescGZIP(), []int{5}
+}
+
+type ResetTOTPRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	SessionToken   string                 `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
+	TargetPlayerId string                 `protobuf:"bytes,2,opt,name=target_player_id,json=targetPlayerId,proto3" json:"target_player_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ResetTOTPRequest) Reset() {
+	*x = ResetTOTPRequest{}
+	mi := &file_holomush_admin_v1_admin_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResetTOTPRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResetTOTPRequest) ProtoMessage() {}
+
+func (x *ResetTOTPRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_admin_v1_admin_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResetTOTPRequest.ProtoReflect.Descriptor instead.
+func (*ResetTOTPRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_admin_v1_admin_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ResetTOTPRequest) GetSessionToken() string {
+	if x != nil {
+		return x.SessionToken
+	}
+	return ""
+}
+
+func (x *ResetTOTPRequest) GetTargetPlayerId() string {
+	if x != nil {
+		return x.TargetPlayerId
+	}
+	return ""
+}
+
+type ResetTOTPResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Cleared       bool                   `protobuf:"varint,1,opt,name=cleared,proto3" json:"cleared,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResetTOTPResponse) Reset() {
+	*x = ResetTOTPResponse{}
+	mi := &file_holomush_admin_v1_admin_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResetTOTPResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResetTOTPResponse) ProtoMessage() {}
+
+func (x *ResetTOTPResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_admin_v1_admin_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResetTOTPResponse.ProtoReflect.Descriptor instead.
+func (*ResetTOTPResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_admin_v1_admin_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ResetTOTPResponse) GetCleared() bool {
+	if x != nil {
+		return x.Cleared
+	}
+	return false
+}
+
 var File_holomush_admin_v1_admin_proto protoreflect.FileDescriptor
 
 const file_holomush_admin_v1_admin_proto_rawDesc = "" +
 	"\n" +
-	"\x1dholomush/admin/v1/admin.proto\x12\x11holomush.admin.v1\"\x0f\n" +
+	"\x1dholomush/admin/v1/admin.proto\x12\x11holomush.admin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x0f\n" +
 	"\rStatusRequest\"D\n" +
 	"\x0eStatusResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x18\n" +
-	"\ahealthy\x18\x02 \x01(\bR\ahealthy2]\n" +
+	"\ahealthy\x18\x02 \x01(\bR\ahealthy\"j\n" +
+	"\x13AuthenticateRequest\x12\x1a\n" +
+	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\x12\x1b\n" +
+	"\ttotp_code\x18\x03 \x01(\tR\btotpCode\"\x93\x01\n" +
+	"\x14AuthenticateResponse\x12#\n" +
+	"\rsession_token\x18\x01 \x01(\tR\fsessionToken\x129\n" +
+	"\n" +
+	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12\x1b\n" +
+	"\tplayer_id\x18\x03 \x01(\tR\bplayerId\"T\n" +
+	"\x0eApproveRequest\x12#\n" +
+	"\rsession_token\x18\x01 \x01(\tR\fsessionToken\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x02 \x01(\fR\trequestId\"\x11\n" +
+	"\x0fApproveResponse\"a\n" +
+	"\x10ResetTOTPRequest\x12#\n" +
+	"\rsession_token\x18\x01 \x01(\tR\fsessionToken\x12(\n" +
+	"\x10target_player_id\x18\x02 \x01(\tR\x0etargetPlayerId\"-\n" +
+	"\x11ResetTOTPResponse\x12\x18\n" +
+	"\acleared\x18\x01 \x01(\bR\acleared2\xe8\x02\n" +
 	"\fAdminService\x12M\n" +
-	"\x06Status\x12 .holomush.admin.v1.StatusRequest\x1a!.holomush.admin.v1.StatusResponseB\xcb\x01\n" +
+	"\x06Status\x12 .holomush.admin.v1.StatusRequest\x1a!.holomush.admin.v1.StatusResponse\x12_\n" +
+	"\fAuthenticate\x12&.holomush.admin.v1.AuthenticateRequest\x1a'.holomush.admin.v1.AuthenticateResponse\x12P\n" +
+	"\aApprove\x12!.holomush.admin.v1.ApproveRequest\x1a\".holomush.admin.v1.ApproveResponse\x12V\n" +
+	"\tResetTOTP\x12#.holomush.admin.v1.ResetTOTPRequest\x1a$.holomush.admin.v1.ResetTOTPResponseB\xcb\x01\n" +
 	"\x15com.holomush.admin.v1B\n" +
 	"AdminProtoP\x01Z@github.com/holomush/holomush/pkg/proto/holomush/admin/v1;adminv1\xa2\x02\x03HAX\xaa\x02\x11Holomush.Admin.V1\xca\x02\x11Holomush\\Admin\\V1\xe2\x02\x1dHolomush\\Admin\\V1\\GPBMetadata\xea\x02\x13Holomush::Admin::V1b\x06proto3"
 
@@ -140,19 +467,33 @@ func file_holomush_admin_v1_admin_proto_rawDescGZIP() []byte {
 	return file_holomush_admin_v1_admin_proto_rawDescData
 }
 
-var file_holomush_admin_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_holomush_admin_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_holomush_admin_v1_admin_proto_goTypes = []any{
-	(*StatusRequest)(nil),  // 0: holomush.admin.v1.StatusRequest
-	(*StatusResponse)(nil), // 1: holomush.admin.v1.StatusResponse
+	(*StatusRequest)(nil),         // 0: holomush.admin.v1.StatusRequest
+	(*StatusResponse)(nil),        // 1: holomush.admin.v1.StatusResponse
+	(*AuthenticateRequest)(nil),   // 2: holomush.admin.v1.AuthenticateRequest
+	(*AuthenticateResponse)(nil),  // 3: holomush.admin.v1.AuthenticateResponse
+	(*ApproveRequest)(nil),        // 4: holomush.admin.v1.ApproveRequest
+	(*ApproveResponse)(nil),       // 5: holomush.admin.v1.ApproveResponse
+	(*ResetTOTPRequest)(nil),      // 6: holomush.admin.v1.ResetTOTPRequest
+	(*ResetTOTPResponse)(nil),     // 7: holomush.admin.v1.ResetTOTPResponse
+	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
 }
 var file_holomush_admin_v1_admin_proto_depIdxs = []int32{
-	0, // 0: holomush.admin.v1.AdminService.Status:input_type -> holomush.admin.v1.StatusRequest
-	1, // 1: holomush.admin.v1.AdminService.Status:output_type -> holomush.admin.v1.StatusResponse
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	8, // 0: holomush.admin.v1.AuthenticateResponse.expires_at:type_name -> google.protobuf.Timestamp
+	0, // 1: holomush.admin.v1.AdminService.Status:input_type -> holomush.admin.v1.StatusRequest
+	2, // 2: holomush.admin.v1.AdminService.Authenticate:input_type -> holomush.admin.v1.AuthenticateRequest
+	4, // 3: holomush.admin.v1.AdminService.Approve:input_type -> holomush.admin.v1.ApproveRequest
+	6, // 4: holomush.admin.v1.AdminService.ResetTOTP:input_type -> holomush.admin.v1.ResetTOTPRequest
+	1, // 5: holomush.admin.v1.AdminService.Status:output_type -> holomush.admin.v1.StatusResponse
+	3, // 6: holomush.admin.v1.AdminService.Authenticate:output_type -> holomush.admin.v1.AuthenticateResponse
+	5, // 7: holomush.admin.v1.AdminService.Approve:output_type -> holomush.admin.v1.ApproveResponse
+	7, // 8: holomush.admin.v1.AdminService.ResetTOTP:output_type -> holomush.admin.v1.ResetTOTPResponse
+	5, // [5:9] is the sub-list for method output_type
+	1, // [1:5] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_holomush_admin_v1_admin_proto_init() }
@@ -166,7 +507,7 @@ func file_holomush_admin_v1_admin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_admin_v1_admin_proto_rawDesc), len(file_holomush_admin_v1_admin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

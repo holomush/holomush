@@ -28,14 +28,17 @@ func TestEventsAuditTablePresentWithIndexes(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 
 	var n int
-	require.NoError(t,
-		db.QueryRowContext(ctx,
+	require.NoError(
+		t,
+		db.QueryRowContext(
+			ctx,
 			"SELECT count(*) FROM information_schema.tables WHERE table_name='events_audit'",
 		).Scan(&n),
 	)
 	require.Equal(t, 1, n, "events_audit table not created by migrations")
 
-	rows, err := db.QueryContext(ctx,
+	rows, err := db.QueryContext(
+		ctx,
 		"SELECT indexname FROM pg_indexes WHERE tablename='events_audit' ORDER BY indexname",
 	)
 	require.NoError(t, err)
@@ -82,7 +85,8 @@ func TestEventsAuditInsertOnConflictIsIdempotent(t *testing.T) {
 	require.EqualValues(t, 0, n2, "duplicate insert should affect 0 rows")
 
 	var count int
-	require.NoError(t,
+	require.NoError(
+		t,
 		db.QueryRowContext(ctx, "SELECT count(*) FROM events_audit WHERE id=$1", id[:]).Scan(&count),
 	)
 	require.Equal(t, 1, count)

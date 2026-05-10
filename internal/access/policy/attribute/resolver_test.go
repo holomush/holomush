@@ -912,7 +912,8 @@ func TestResolverResolveSubjectAttributesProducesSameSubjectBagAsResolveForSameI
 
 	// Call ResolveSubjectAttributes.
 	preflightBags, preflightErr := resolver.ResolveSubjectAttributes(
-		context.Background(), "character:01ABC", "read")
+		context.Background(), "character:01ABC", "read",
+	)
 	require.NoError(t, preflightErr)
 
 	// Call Resolve with an access request that includes a resource.

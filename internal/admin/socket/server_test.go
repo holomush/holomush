@@ -133,8 +133,8 @@ func TestServerStartFailsWhenSocketPathDirectoryMissing(t *testing.T) {
 	t.Cleanup(func() { os.RemoveAll(dir) })
 
 	cfg := Config{
-		LockPath:   filepath.Join(dir, "a.lock"),         // valid — lock succeeds
-		SocketPath: filepath.Join(dir, "nx", "a.sock"),   // parent dir missing — Listen fails
+		LockPath:   filepath.Join(dir, "a.lock"),       // valid — lock succeeds
+		SocketPath: filepath.Join(dir, "nx", "a.sock"), // parent dir missing — Listen fails
 	}
 	s := NewServer(cfg)
 	_, err = s.Start()

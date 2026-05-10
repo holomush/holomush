@@ -211,7 +211,8 @@ func TestSubscribeWithNonParticipantIdentityDeliversMetadataOnly(t *testing.T) {
 	actorResolver := func(_ context.Context, _ string) (core.Actor, error) {
 		return core.Actor{Kind: core.ActorPlugin, ID: testPluginActorID}, nil
 	}
-	emitter := plugins.NewPluginEventEmitter(h.publisher, manifestLookup, actorResolver,
+	emitter := plugins.NewPluginEventEmitter(
+		h.publisher, manifestLookup, actorResolver,
 		plugins.WithCryptoEnabled(true),
 	)
 
@@ -309,7 +310,8 @@ func TestSubscribeWithParticipantIdentityDeliversPlaintext(t *testing.T) {
 	actorResolver := func(_ context.Context, _ string) (core.Actor, error) {
 		return core.Actor{Kind: core.ActorPlugin, ID: testPluginActorID}, nil
 	}
-	emitter := plugins.NewPluginEventEmitter(h.publisher, manifestLookup, actorResolver,
+	emitter := plugins.NewPluginEventEmitter(
+		h.publisher, manifestLookup, actorResolver,
 		plugins.WithCryptoEnabled(true),
 	)
 

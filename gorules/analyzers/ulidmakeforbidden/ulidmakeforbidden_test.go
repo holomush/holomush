@@ -12,7 +12,8 @@ import (
 )
 
 func TestAnalyzerFlagsUlidMakeAndIgnoresNegativeCases(t *testing.T) {
-	analysistest.Run(t, analysistest.TestData(), ulidmakeforbidden.Analyzer,
+	analysistest.Run(
+		t, analysistest.TestData(), ulidmakeforbidden.Analyzer,
 		"example.com/positive",
 		"example.com/negative",
 	)

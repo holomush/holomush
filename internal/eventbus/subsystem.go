@@ -117,7 +117,8 @@ func (s *Subsystem) Start(ctx context.Context) error {
 			Errorf("embedded NATS server did not become ready")
 	}
 
-	conn, err := nats.Connect("",
+	conn, err := nats.Connect(
+		"",
 		nats.InProcessServer(s.server),
 		nats.Name(embeddedClientName),
 		// DrainTimeout bounds the drain phase in Stop. Pair with the

@@ -68,7 +68,8 @@ ON CONFLICT (key) DO UPDATE SET
 
 // Get retrieves a content item by key. Returns nil, nil when not found.
 func (s *PostgresStore) Get(ctx context.Context, key string) (*Item, error) {
-	row := s.pool.QueryRow(ctx,
+	row := s.pool.QueryRow(
+		ctx,
 		`SELECT key, content_type, body, metadata, updated_at
 		   FROM content_items
 		  WHERE key = $1`,
@@ -139,7 +140,8 @@ func (s *PostgresStore) List(ctx context.Context, prefix string, opts ListOption
 
 // Delete removes a content item. It is a no-op when the key does not exist.
 func (s *PostgresStore) Delete(ctx context.Context, key string) error {
-	_, err := s.pool.Exec(ctx,
+	_, err := s.pool.Exec(
+		ctx,
 		`DELETE FROM content_items WHERE key = $1`,
 		key,
 	)

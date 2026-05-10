@@ -26,6 +26,7 @@ var expectedTables = []string{
 	"access_audit_log",
 	"access_policies",
 	"access_policy_versions",
+	"admin_approvals",
 	"bootstrap_metadata",
 	"character_roles",
 	"characters",
@@ -112,7 +113,8 @@ func verifySeedData(t *testing.T, ctx context.Context, connStr string) {
 func TestMigrator_FullCycle(t *testing.T) {
 	ctx := context.Background()
 
-	pgContainer, err := postgres.Run(ctx,
+	pgContainer, err := postgres.Run(
+		ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
@@ -144,7 +146,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(19), version)
+	assert.Equal(t, uint(20), version)
 	assert.False(t, dirty)
 
 	tables = queryTableNames(t, ctx, connStr)
@@ -169,7 +171,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(19), version)
+	assert.Equal(t, uint(20), version)
 	assert.False(t, dirty)
 
 	tables = queryTableNames(t, ctx, connStr)
@@ -181,7 +183,8 @@ func TestMigrator_DirtyStateRecovery(t *testing.T) {
 	ctx := context.Background()
 
 	// Start PostgreSQL container
-	pgContainer, err := postgres.Run(ctx,
+	pgContainer, err := postgres.Run(
+		ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
@@ -252,7 +255,8 @@ func TestMigrator_ConcurrentUp(t *testing.T) {
 	ctx := context.Background()
 
 	// Start PostgreSQL container
-	pgContainer, err := postgres.Run(ctx,
+	pgContainer, err := postgres.Run(
+		ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
@@ -340,7 +344,8 @@ func TestMigrator_Force_VersionExceedsAvailable(t *testing.T) {
 	ctx := context.Background()
 
 	// Start PostgreSQL container
-	pgContainer, err := postgres.Run(ctx,
+	pgContainer, err := postgres.Run(
+		ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
@@ -411,7 +416,8 @@ func TestMigrator_ConcurrentMigrationDirtyStateHandling(t *testing.T) {
 	ctx := context.Background()
 
 	// Start PostgreSQL container
-	pgContainer, err := postgres.Run(ctx,
+	pgContainer, err := postgres.Run(
+		ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),

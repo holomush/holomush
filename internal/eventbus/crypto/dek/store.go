@@ -205,7 +205,8 @@ func (s *Store) updateParticipants(ctx context.Context, ctxID ContextID, p Parti
 	// SELECT the active row and lock it until the transaction commits.
 	var active row
 	var participantsJSON []byte
-	err = tx.QueryRow(ctx, `
+	err = tx.QueryRow(
+		ctx, `
 		SELECT id, context_type, context_id, version, wrapped_dek,
 		       wrap_provider, wrap_key_id, participants, created_at, rotated_at
 		  FROM crypto_keys
@@ -253,7 +254,8 @@ func (s *Store) updateParticipants(ctx context.Context, ctxID ContextID, p Parti
 		return row{}, false, oops.Code("DEK_PARTICIPANTS_MARSHAL_FAILED").Wrap(err)
 	}
 
-	_, err = tx.Exec(ctx, `
+	_, err = tx.Exec(
+		ctx, `
 		UPDATE crypto_keys
 		   SET participants = $3
 		 WHERE id = $1 AND version = $2
@@ -277,7 +279,8 @@ func (s *Store) updateParticipants(ctx context.Context, ctxID ContextID, p Parti
 
 // markRotated sets rotated_at and superseded_by on the target row.
 func (s *Store) markRotated(ctx context.Context, keyID codec.KeyID, version uint32, supersededBy int64) error {
-	tag, err := s.pool.Exec(ctx, `
+	tag, err := s.pool.Exec(
+		ctx, `
 		UPDATE crypto_keys
 		   SET rotated_at = NOW(), superseded_by = $3
 		 WHERE id = $1 AND version = $2 AND rotated_at IS NULL AND destroyed_at IS NULL`,
@@ -301,7 +304,8 @@ func (s *Store) markRotated(ctx context.Context, keyID codec.KeyID, version uint
 // markDestroyed sets destroyed_at on the target row. Best-effort
 // rollback helper — used when Rotate's invalidation fails.
 func (s *Store) markDestroyed(ctx context.Context, keyID codec.KeyID, version uint32) error {
-	_, err := s.pool.Exec(ctx, `
+	_, err := s.pool.Exec(
+		ctx, `
 		UPDATE crypto_keys
 		   SET destroyed_at = NOW()
 		 WHERE id = $1 AND version = $2 AND destroyed_at IS NULL`,
@@ -316,10 +320,11 @@ func (s *Store) markDestroyed(ctx context.Context, keyID codec.KeyID, version ui
 	return nil
 }
 
-//nolint:unused // used by rebind handler (Phase 4 integration, TBD)
 // selectByBindingID returns all active DEK rows whose participants
 // array contains an element with the given binding_id. Used by the
 // wizard-transfer rebind handler to find affected DEKs.
+//
+//nolint:unused // used by rebind handler (Phase 4 integration, TBD)
 func (s *Store) selectByBindingID(ctx context.Context, bindingID string) ([]row, error) {
 	probe := []map[string]string{{"binding_id": bindingID}}
 	probeJSON, err := json.Marshal(probe)
@@ -327,7 +332,8 @@ func (s *Store) selectByBindingID(ctx context.Context, bindingID string) ([]row,
 		return nil, oops.Code("DEK_BINDING_PROBE_MARSHAL_FAILED").Wrap(err)
 	}
 
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.pool.Query(
+		ctx, `
 		SELECT id, context_type, context_id, version, wrapped_dek,
 		       wrap_provider, wrap_key_id, participants, created_at, rotated_at
 		  FROM crypto_keys
@@ -394,7 +400,8 @@ func (s *Store) ResolveIntegrity(ctx context.Context) error {
 
 	for _, ck := range conflicted {
 		// Mark all but the max-version row as rotated.
-		_, err := s.pool.Exec(ctx, `
+		_, err := s.pool.Exec(
+			ctx, `
 			UPDATE crypto_keys
 			   SET rotated_at = NOW()
 			 WHERE context_type = $1 AND context_id = $2

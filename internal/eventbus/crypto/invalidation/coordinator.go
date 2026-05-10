@@ -148,7 +148,8 @@ func (c *coordinator) RequestInvalidation(
 	}
 	if len(selfFiltered) == 0 && len(missing) > 0 {
 		// Only self was missing → SELF_TIMEOUT
-		c.deps.Logger.Warn("invalidation: only Self() missing from acks; not pilling self",
+		c.deps.Logger.Warn(
+			"invalidation: only Self() missing from acks; not pilling self",
 			"self", string(self),
 			"action", string(action),
 		)
@@ -342,7 +343,8 @@ func (c *coordinator) handleInvalidate(msg *nats.Msg) {
 		return
 	}
 	if payload.ClusterID != c.cfg.ClusterID {
-		c.deps.Logger.Warn("invalidation: cross-cluster message dropped",
+		c.deps.Logger.Warn(
+			"invalidation: cross-cluster message dropped",
 			"got", payload.ClusterID, "want", c.cfg.ClusterID,
 		)
 		if c.deps.Metrics != nil {
@@ -368,7 +370,8 @@ func (c *coordinator) handleInvalidate(msg *nats.Msg) {
 		// No-op eviction per Decision 5; protocol ack still required.
 
 	default:
-		c.deps.Logger.Warn("invalidation: unknown action; not acking",
+		c.deps.Logger.Warn(
+			"invalidation: unknown action; not acking",
 			"action", string(payload.Action),
 		)
 		if c.deps.Metrics != nil {

@@ -73,7 +73,8 @@ func ValidateSessionOwnership(
 	}
 
 	if info.PlayerID.Compare(ps.PlayerID) != 0 {
-		slog.WarnContext(ctx, "session ownership mismatch",
+		slog.WarnContext(
+			ctx, "session ownership mismatch",
 			"player_id", ps.PlayerID.String(),
 			"session_id", sessionID,
 			"session_owner", info.PlayerID.String(),

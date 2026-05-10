@@ -122,13 +122,15 @@ func newDispatcherTestServerWithAliases(t *testing.T, store core.EventAppender, 
 		Events:  store,
 	})
 
-	dispatcher, err := command.NewDispatcher(reg, policyEngine,
+	dispatcher, err := command.NewDispatcher(
+		reg, policyEngine,
 		command.WithAliasCache(aliasCache),
 	)
 	require.NoError(t, err)
 
 	allOpts := make([]CoreServerOption, 0, 2+len(opts))
-	allOpts = append(allOpts,
+	allOpts = append(
+		allOpts,
 		WithEventStore(store),
 		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
 	)
@@ -293,7 +295,8 @@ func TestDispatcher_HandleCommand_Quit(t *testing.T) {
 	store := core.NewMemoryEventStore()
 
 	var hookCalled bool
-	server := newDispatcherTestServer(t, store,
+	server := newDispatcherTestServer(
+		t, store,
 		WithDisconnectHook(func(_ session.Info) {
 			hookCalled = true
 		}),
@@ -508,7 +511,8 @@ func TestAdminBootEmitsSessionEndedWithKickedCause(t *testing.T) {
 	dispatcher, err := command.NewDispatcher(reg, policyEngine)
 	require.NoError(t, err)
 
-	server := NewCoreServer(engine, sessStore, dispatcher, svc,
+	server := NewCoreServer(
+		engine, sessStore, dispatcher, svc,
 		WithEventStore(store),
 		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
 	)
@@ -618,7 +622,8 @@ func TestAdminBootRetainsSessionWhenEndSessionFails(t *testing.T) {
 	require.NoError(t, err)
 
 	var hookCalled bool
-	server := NewCoreServer(engine, sessStore, dispatcher, svc,
+	server := NewCoreServer(
+		engine, sessStore, dispatcher, svc,
 		WithEventStore(store),
 		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
 		WithDisconnectHook(func(_ session.Info) {

@@ -83,7 +83,8 @@ func (s *SceneServiceImpl) SetEventSink(sink pluginsdk.EventSink) {
 // Per-field validation (character_id non-empty, title min_len: 1, etc.)
 // happens via the protovalidate interceptor before this handler runs.
 func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateSceneRequest) (*scenev1.CreateSceneResponse, error) {
-	ctx, span := startSpan(ctx, "scene.service.create_scene",
+	ctx, span := startSpan(
+		ctx, "scene.service.create_scene",
 		attribute.String("subject_id", req.GetCharacterId()),
 	)
 	defer span.End()
@@ -128,7 +129,8 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 	intent, err := s.sceneCreatedIntent(row)
 	if err != nil {
 		recordError(span, err)
-		slog.WarnContext(ctx, "scene.service.create_scene emit-intent error",
+		slog.WarnContext(
+			ctx, "scene.service.create_scene emit-intent error",
 			"subject_id", req.GetCharacterId(),
 			"scene_id", id,
 			"error", err,
@@ -140,7 +142,8 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 			With("scene_id", row.ID).
 			New("scene event sink is not configured")
 		recordError(span, err)
-		slog.WarnContext(ctx, "scene.service.create_scene emit preflight error",
+		slog.WarnContext(
+			ctx, "scene.service.create_scene emit preflight error",
 			"subject_id", req.GetCharacterId(),
 			"scene_id", id,
 			"error", err,
@@ -150,7 +153,8 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 
 	if err := s.store.CreateWithOwner(ctx, row); err != nil {
 		recordError(span, err)
-		slog.WarnContext(ctx, "scene.service.create_scene store error",
+		slog.WarnContext(
+			ctx, "scene.service.create_scene store error",
 			"subject_id", req.GetCharacterId(),
 			"scene_id", id,
 			"error", err,
@@ -165,7 +169,8 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 		recordError(span, err)
 		// Do not delete persisted scene rows here. CreateWithOwner already
 		// appended lifecycle ops events, and those rows are append-only.
-		slog.WarnContext(ctx, "scene.service.create_scene emit error",
+		slog.WarnContext(
+			ctx, "scene.service.create_scene emit error",
 			"subject_id", req.GetCharacterId(),
 			"scene_id", id,
 			"error", err,
@@ -173,7 +178,8 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 		return nil, status.Errorf(codes.Internal, "failed to emit scene event: %v", err)
 	}
 	metricSceneCreated(string(visibility), false)
-	slog.InfoContext(ctx, "scene.service.create_scene ok",
+	slog.InfoContext(
+		ctx, "scene.service.create_scene ok",
 		"subject_id", req.GetCharacterId(),
 		"scene_id", id,
 		"title", title,
@@ -215,7 +221,8 @@ func (s *SceneServiceImpl) sceneCreatedIntent(row *SceneRow) (pluginsdk.EmitInte
 // Per-field validation (scene_id non-empty) happens via the protovalidate
 // interceptor before this handler runs.
 func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRequest) (*scenev1.GetSceneResponse, error) {
-	ctx, span := startSpan(ctx, "scene.service.get_scene",
+	ctx, span := startSpan(
+		ctx, "scene.service.get_scene",
 		attribute.String("scene_id", req.GetSceneId()),
 	)
 	defer span.End()
@@ -227,14 +234,16 @@ func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRe
 		if errors.As(err, &oe) && oe.Code() == "SCENE_NOT_FOUND" {
 			return nil, status.Errorf(codes.NotFound, "scene not found: %s", req.GetSceneId())
 		}
-		slog.WarnContext(ctx, "scene.service.get_scene store error",
+		slog.WarnContext(
+			ctx, "scene.service.get_scene store error",
 			"scene_id", req.GetSceneId(),
 			"error", err,
 		)
 		return nil, status.Errorf(codes.Internal, "failed to get scene: %v", err)
 	}
 
-	slog.InfoContext(ctx, "scene.service.get_scene ok",
+	slog.InfoContext(
+		ctx, "scene.service.get_scene ok",
 		"scene_id", row.ID,
 	)
 
@@ -250,7 +259,8 @@ func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRe
 // The store's End method uses Postgres RETURNING * to atomically return
 // the post-update row, so this handler doesn't need a separate Get call.
 func (s *SceneServiceImpl) EndScene(ctx context.Context, req *scenev1.EndSceneRequest) (*scenev1.EndSceneResponse, error) {
-	ctx, span := startSpan(ctx, "scene.lifecycle.end",
+	ctx, span := startSpan(
+		ctx, "scene.lifecycle.end",
 		attribute.String("subject_id", req.GetCharacterId()),
 		attribute.String("scene_id", req.GetSceneId()),
 	)
@@ -262,7 +272,8 @@ func (s *SceneServiceImpl) EndScene(ctx context.Context, req *scenev1.EndSceneRe
 		if grpcErr := mapTransitionError(err, req.GetSceneId()); grpcErr != nil {
 			return nil, grpcErr
 		}
-		slog.WarnContext(ctx, "scene.lifecycle.end store error",
+		slog.WarnContext(
+			ctx, "scene.lifecycle.end store error",
 			"subject_id", req.GetCharacterId(),
 			"scene_id", req.GetSceneId(),
 			"error", err,
@@ -271,7 +282,8 @@ func (s *SceneServiceImpl) EndScene(ctx context.Context, req *scenev1.EndSceneRe
 	}
 
 	metricSceneStateTransition(string(SceneStateActive)+"_or_paused", "ended", "rpc")
-	slog.InfoContext(ctx, "scene.lifecycle.end ok",
+	slog.InfoContext(
+		ctx, "scene.lifecycle.end ok",
 		"subject_id", req.GetCharacterId(),
 		"scene_id", row.ID,
 	)
@@ -281,7 +293,8 @@ func (s *SceneServiceImpl) EndScene(ctx context.Context, req *scenev1.EndSceneRe
 
 // PauseScene transitions an active scene to paused. Owner-only.
 func (s *SceneServiceImpl) PauseScene(ctx context.Context, req *scenev1.PauseSceneRequest) (*scenev1.PauseSceneResponse, error) {
-	ctx, span := startSpan(ctx, "scene.lifecycle.pause",
+	ctx, span := startSpan(
+		ctx, "scene.lifecycle.pause",
 		attribute.String("subject_id", req.GetCharacterId()),
 		attribute.String("scene_id", req.GetSceneId()),
 	)
@@ -293,7 +306,8 @@ func (s *SceneServiceImpl) PauseScene(ctx context.Context, req *scenev1.PauseSce
 		if grpcErr := mapTransitionError(err, req.GetSceneId()); grpcErr != nil {
 			return nil, grpcErr
 		}
-		slog.WarnContext(ctx, "scene.lifecycle.pause store error",
+		slog.WarnContext(
+			ctx, "scene.lifecycle.pause store error",
 			"subject_id", req.GetCharacterId(),
 			"scene_id", req.GetSceneId(),
 			"error", err,
@@ -302,7 +316,8 @@ func (s *SceneServiceImpl) PauseScene(ctx context.Context, req *scenev1.PauseSce
 	}
 
 	metricSceneStateTransition("active", "paused", "rpc")
-	slog.InfoContext(ctx, "scene.lifecycle.pause ok",
+	slog.InfoContext(
+		ctx, "scene.lifecycle.pause ok",
 		"subject_id", req.GetCharacterId(),
 		"scene_id", row.ID,
 	)
@@ -313,7 +328,8 @@ func (s *SceneServiceImpl) PauseScene(ctx context.Context, req *scenev1.PauseSce
 // ResumeScene transitions a paused scene to active. Phase 2 is owner-only;
 // Phase 3 widens to any member per spec D6 (async safety).
 func (s *SceneServiceImpl) ResumeScene(ctx context.Context, req *scenev1.ResumeSceneRequest) (*scenev1.ResumeSceneResponse, error) {
-	ctx, span := startSpan(ctx, "scene.lifecycle.resume",
+	ctx, span := startSpan(
+		ctx, "scene.lifecycle.resume",
 		attribute.String("subject_id", req.GetCharacterId()),
 		attribute.String("scene_id", req.GetSceneId()),
 	)
@@ -325,7 +341,8 @@ func (s *SceneServiceImpl) ResumeScene(ctx context.Context, req *scenev1.ResumeS
 		if grpcErr := mapTransitionError(err, req.GetSceneId()); grpcErr != nil {
 			return nil, grpcErr
 		}
-		slog.WarnContext(ctx, "scene.lifecycle.resume store error",
+		slog.WarnContext(
+			ctx, "scene.lifecycle.resume store error",
 			"subject_id", req.GetCharacterId(),
 			"scene_id", req.GetSceneId(),
 			"error", err,
@@ -334,7 +351,8 @@ func (s *SceneServiceImpl) ResumeScene(ctx context.Context, req *scenev1.ResumeS
 	}
 
 	metricSceneStateTransition("paused", "active", "rpc")
-	slog.InfoContext(ctx, "scene.lifecycle.resume ok",
+	slog.InfoContext(
+		ctx, "scene.lifecycle.resume ok",
 		"subject_id", req.GetCharacterId(),
 		"scene_id", row.ID,
 	)
@@ -352,7 +370,8 @@ func (s *SceneServiceImpl) ResumeScene(ctx context.Context, req *scenev1.ResumeS
 // in buildSceneUpdate; protovalidate constraints in scene.proto handle the
 // wire-level max_len / enum-value checks.
 func (s *SceneServiceImpl) UpdateScene(ctx context.Context, req *scenev1.UpdateSceneRequest) (*scenev1.UpdateSceneResponse, error) {
-	ctx, span := startSpan(ctx, "scene.service.update_scene",
+	ctx, span := startSpan(
+		ctx, "scene.service.update_scene",
 		attribute.String("subject_id", req.GetCharacterId()),
 		attribute.String("scene_id", req.GetSceneId()),
 	)
@@ -370,7 +389,8 @@ func (s *SceneServiceImpl) UpdateScene(ctx context.Context, req *scenev1.UpdateS
 		if grpcErr := mapTransitionError(err, req.GetSceneId()); grpcErr != nil {
 			return nil, grpcErr
 		}
-		slog.WarnContext(ctx, "scene.service.update_scene store error",
+		slog.WarnContext(
+			ctx, "scene.service.update_scene store error",
 			"subject_id", req.GetCharacterId(),
 			"scene_id", req.GetSceneId(),
 			"error", err,
@@ -378,7 +398,8 @@ func (s *SceneServiceImpl) UpdateScene(ctx context.Context, req *scenev1.UpdateS
 		return nil, status.Errorf(codes.Internal, "failed to update scene: %v", err)
 	}
 
-	slog.InfoContext(ctx, "scene.service.update_scene ok",
+	slog.InfoContext(
+		ctx, "scene.service.update_scene ok",
 		"subject_id", req.GetCharacterId(),
 		"scene_id", row.ID,
 	)
@@ -445,7 +466,8 @@ func buildSceneUpdate(req *scenev1.UpdateSceneRequest) (*SceneUpdate, error) {
 // membership.join events. The store's ParticipantOpResult enum drives
 // the emit-or-not decision inside the store transaction.
 func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinSceneRequest) (*scenev1.JoinSceneResponse, error) {
-	ctx, span := startSpan(ctx, "scene.service.join_scene",
+	ctx, span := startSpan(
+		ctx, "scene.service.join_scene",
 		attribute.String("subject_id", req.GetCharacterId()),
 		attribute.String("scene_id", req.GetSceneId()),
 	)
@@ -467,7 +489,8 @@ func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinScene
 					"character not invited to private scene")
 			}
 		}
-		slog.WarnContext(ctx, "scene.service.join_scene store error",
+		slog.WarnContext(
+			ctx, "scene.service.join_scene store error",
 			"subject_id", req.GetCharacterId(),
 			"scene_id", req.GetSceneId(),
 			"error", err,
@@ -475,7 +498,8 @@ func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinScene
 		return nil, status.Errorf(codes.Internal, "failed to join scene: %v", err)
 	}
 
-	slog.InfoContext(ctx, "scene.service.join_scene ok",
+	slog.InfoContext(
+		ctx, "scene.service.join_scene ok",
 		"subject_id", req.GetCharacterId(),
 		"scene_id", req.GetSceneId(),
 	)
@@ -491,7 +515,8 @@ func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinScene
 // The store's RemoveParticipant ALSO has a `WHERE role <> 'owner'` filter
 // for defense-in-depth.
 func (s *SceneServiceImpl) LeaveScene(ctx context.Context, req *scenev1.LeaveSceneRequest) (*scenev1.LeaveSceneResponse, error) {
-	ctx, span := startSpan(ctx, "scene.service.leave_scene",
+	ctx, span := startSpan(
+		ctx, "scene.service.leave_scene",
 		attribute.String("subject_id", req.GetCharacterId()),
 		attribute.String("scene_id", req.GetSceneId()),
 	)
@@ -531,7 +556,8 @@ func (s *SceneServiceImpl) LeaveScene(ctx context.Context, req *scenev1.LeaveSce
 					"scene owners cannot leave")
 			}
 		}
-		slog.WarnContext(ctx, "scene.service.leave_scene store error",
+		slog.WarnContext(
+			ctx, "scene.service.leave_scene store error",
 			"subject_id", req.GetCharacterId(),
 			"scene_id", req.GetSceneId(),
 			"error", err,
@@ -539,7 +565,8 @@ func (s *SceneServiceImpl) LeaveScene(ctx context.Context, req *scenev1.LeaveSce
 		return nil, status.Errorf(codes.Internal, "failed to leave scene: %v", err)
 	}
 
-	slog.InfoContext(ctx, "scene.service.leave_scene ok",
+	slog.InfoContext(
+		ctx, "scene.service.leave_scene ok",
 		"subject_id", req.GetCharacterId(),
 		"scene_id", req.GetSceneId(),
 	)
@@ -550,7 +577,8 @@ func (s *SceneServiceImpl) LeaveScene(ctx context.Context, req *scenev1.LeaveSce
 // InviteToScene adds an 'invited' participant row for the target character.
 // ABAC enforces owner-only invite at the dispatcher layer.
 func (s *SceneServiceImpl) InviteToScene(ctx context.Context, req *scenev1.InviteToSceneRequest) (*scenev1.InviteToSceneResponse, error) {
-	ctx, span := startSpan(ctx, "scene.service.invite_to_scene",
+	ctx, span := startSpan(
+		ctx, "scene.service.invite_to_scene",
 		attribute.String("subject_id", req.GetCharacterId()),
 		attribute.String("scene_id", req.GetSceneId()),
 		attribute.String("target_id", req.GetTargetCharacterId()),
@@ -563,7 +591,8 @@ func (s *SceneServiceImpl) InviteToScene(ctx context.Context, req *scenev1.Invit
 		if errors.As(err, &oe) && oe.Code() == "SCENE_INVITE_TARGET_ALREADY_MEMBER" {
 			return nil, status.Errorf(codes.AlreadyExists, "character is already a member of this scene")
 		}
-		slog.WarnContext(ctx, "scene.service.invite_to_scene store error",
+		slog.WarnContext(
+			ctx, "scene.service.invite_to_scene store error",
 			"subject_id", req.GetCharacterId(),
 			"scene_id", req.GetSceneId(),
 			"target_id", req.GetTargetCharacterId(),
@@ -572,7 +601,8 @@ func (s *SceneServiceImpl) InviteToScene(ctx context.Context, req *scenev1.Invit
 		return nil, status.Errorf(codes.Internal, "failed to invite: %v", err)
 	}
 
-	slog.InfoContext(ctx, "scene.service.invite_to_scene ok",
+	slog.InfoContext(
+		ctx, "scene.service.invite_to_scene ok",
 		"subject_id", req.GetCharacterId(),
 		"scene_id", req.GetSceneId(),
 		"target_id", req.GetTargetCharacterId(),
@@ -584,7 +614,8 @@ func (s *SceneServiceImpl) InviteToScene(ctx context.Context, req *scenev1.Invit
 // owner-only kick at the dispatcher layer. The store's WHERE filter is
 // the defense-in-depth layer that prevents owner removal.
 func (s *SceneServiceImpl) KickFromScene(ctx context.Context, req *scenev1.KickFromSceneRequest) (*scenev1.KickFromSceneResponse, error) {
-	ctx, span := startSpan(ctx, "scene.service.kick_from_scene",
+	ctx, span := startSpan(
+		ctx, "scene.service.kick_from_scene",
 		attribute.String("subject_id", req.GetCharacterId()),
 		attribute.String("scene_id", req.GetSceneId()),
 		attribute.String("target_id", req.GetTargetCharacterId()),
@@ -603,7 +634,8 @@ func (s *SceneServiceImpl) KickFromScene(ctx context.Context, req *scenev1.KickF
 					"scene owner cannot be kicked")
 			}
 		}
-		slog.WarnContext(ctx, "scene.service.kick_from_scene store error",
+		slog.WarnContext(
+			ctx, "scene.service.kick_from_scene store error",
 			"subject_id", req.GetCharacterId(),
 			"scene_id", req.GetSceneId(),
 			"target_id", req.GetTargetCharacterId(),
@@ -612,7 +644,8 @@ func (s *SceneServiceImpl) KickFromScene(ctx context.Context, req *scenev1.KickF
 		return nil, status.Errorf(codes.Internal, "failed to kick: %v", err)
 	}
 
-	slog.InfoContext(ctx, "scene.service.kick_from_scene ok",
+	slog.InfoContext(
+		ctx, "scene.service.kick_from_scene ok",
 		"subject_id", req.GetCharacterId(),
 		"scene_id", req.GetSceneId(),
 		"target_id", req.GetTargetCharacterId(),
@@ -625,7 +658,8 @@ func (s *SceneServiceImpl) KickFromScene(ctx context.Context, req *scenev1.KickF
 // Per design decision P3.D8, the target MUST be an existing member; the
 // previous owner becomes a member.
 func (s *SceneServiceImpl) TransferOwnership(ctx context.Context, req *scenev1.TransferOwnershipRequest) (*scenev1.TransferOwnershipResponse, error) {
-	ctx, span := startSpan(ctx, "scene.service.transfer_ownership",
+	ctx, span := startSpan(
+		ctx, "scene.service.transfer_ownership",
 		attribute.String("subject_id", req.GetCharacterId()),
 		attribute.String("scene_id", req.GetSceneId()),
 		attribute.String("new_owner", req.GetNewOwnerCharacterId()),
@@ -650,7 +684,8 @@ func (s *SceneServiceImpl) TransferOwnership(ctx context.Context, req *scenev1.T
 					"transfer target must be an existing member of the scene")
 			}
 		}
-		slog.WarnContext(ctx, "scene.service.transfer_ownership store error",
+		slog.WarnContext(
+			ctx, "scene.service.transfer_ownership store error",
 			"subject_id", req.GetCharacterId(),
 			"scene_id", req.GetSceneId(),
 			"new_owner", req.GetNewOwnerCharacterId(),
@@ -659,7 +694,8 @@ func (s *SceneServiceImpl) TransferOwnership(ctx context.Context, req *scenev1.T
 		return nil, status.Errorf(codes.Internal, "failed to transfer ownership: %v", err)
 	}
 
-	slog.InfoContext(ctx, "scene.service.transfer_ownership ok",
+	slog.InfoContext(
+		ctx, "scene.service.transfer_ownership ok",
 		"subject_id", req.GetCharacterId(),
 		"scene_id", req.GetSceneId(),
 		"new_owner", req.GetNewOwnerCharacterId(),

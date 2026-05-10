@@ -59,7 +59,8 @@ func TestDispatchPluginBackedCommand(t *testing.T) {
 	// Create a permit-all engine (AllowAllEngine handles both Layer 1 and Layer 2)
 	engine := policytest.AllowAllEngine()
 
-	dispatcher, err := command.NewDispatcher(registry, engine,
+	dispatcher, err := command.NewDispatcher(
+		registry, engine,
 		command.WithPluginDeliverer(deliverer),
 	)
 	require.NoError(t, err)

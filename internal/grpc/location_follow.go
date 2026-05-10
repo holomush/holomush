@@ -89,7 +89,8 @@ func (lf *locationFollower) handleMovePayload(
 		return false
 	}
 
-	slog.DebugContext(ctx, "location-following: character moved",
+	slog.DebugContext(
+		ctx, "location-following: character moved",
 		"character_id", lf.characterID.String(),
 		"from_location", lf.currentLocID.String(),
 		"to_location", newLocID.String(),
@@ -98,7 +99,8 @@ func (lf *locationFollower) handleMovePayload(
 	// Build and send synthetic location_state for the new location.
 	locState, err := lf.buildLocationState(ctx, newLocID)
 	if err != nil {
-		slog.WarnContext(ctx, "location-following: failed to build location_state",
+		slog.WarnContext(
+			ctx, "location-following: failed to build location_state",
 			"location_id", newLocID.String(),
 			"error", err,
 		)
@@ -106,7 +108,8 @@ func (lf *locationFollower) handleMovePayload(
 	}
 
 	if err := stream.Send(locState); err != nil {
-		slog.WarnContext(ctx, "location-following: failed to send location_state",
+		slog.WarnContext(
+			ctx, "location-following: failed to send location_state",
 			"location_id", newLocID.String(),
 			"error", err,
 		)

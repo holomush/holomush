@@ -125,12 +125,14 @@ func (s *SceneStore) Pool() *pgxpool.Pool {
 // OwnerID, State, PoseOrder, and Visibility; defaults from the schema apply
 // for unset nullable fields.
 func (s *SceneStore) Create(ctx context.Context, row *SceneRow) error {
-	ctx, span := startSpan(ctx, "scene.store.create",
+	ctx, span := startSpan(
+		ctx, "scene.store.create",
 		attribute.String("scene_id", row.ID),
 	)
 	defer span.End()
 
-	_, err := s.pool.Exec(ctx, `
+	_, err := s.pool.Exec(
+		ctx, `
         INSERT INTO scenes (
             id, title, description, location_id, owner_id, state, pose_order,
             visibility, idle_timeout_secs, template_id, content_warnings, tags
@@ -161,7 +163,8 @@ func (s *SceneStore) Create(ctx context.Context, row *SceneRow) error {
 // policies. The "create + insert owner row + emit ops event" trio MUST
 // be atomic.
 func (s *SceneStore) CreateWithOwner(ctx context.Context, row *SceneRow) error {
-	ctx, span := startSpan(ctx, "scene.store.create_with_owner",
+	ctx, span := startSpan(
+		ctx, "scene.store.create_with_owner",
 		attribute.String("scene_id", row.ID),
 	)
 	defer span.End()
@@ -174,7 +177,8 @@ func (s *SceneStore) CreateWithOwner(ctx context.Context, row *SceneRow) error {
 	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
 
 	// 1. Insert the scene row.
-	_, err = tx.Exec(ctx, `
+	_, err = tx.Exec(
+		ctx, `
 		INSERT INTO scenes (
 			id, title, description, location_id, owner_id, state, pose_order,
 			visibility, idle_timeout_secs, template_id, content_warnings, tags
@@ -192,7 +196,8 @@ func (s *SceneStore) CreateWithOwner(ctx context.Context, row *SceneRow) error {
 	}
 
 	// 2. Insert the owner participant row.
-	_, err = tx.Exec(ctx, `
+	_, err = tx.Exec(
+		ctx, `
 		INSERT INTO scene_participants (scene_id, character_id, role, joined_at)
 		VALUES ($1, $2, 'owner', NOW())`,
 		row.ID, row.OwnerID,
@@ -227,13 +232,15 @@ func (s *SceneStore) CreateWithOwner(ctx context.Context, row *SceneRow) error {
 // Get loads a single scene by ID. Returns a SCENE_NOT_FOUND error code if
 // the row does not exist.
 func (s *SceneStore) Get(ctx context.Context, id string) (*SceneRow, error) {
-	ctx, span := startSpan(ctx, "scene.store.get",
+	ctx, span := startSpan(
+		ctx, "scene.store.get",
 		attribute.String("scene_id", id),
 	)
 	defer span.End()
 
 	row := &SceneRow{}
-	err := scanSceneRow(s.pool.QueryRow(ctx, `
+	err := scanSceneRow(s.pool.QueryRow(
+		ctx, `
         SELECT `+sceneSelectColumns+`
         FROM scenes
         WHERE id = $1`,
@@ -260,13 +267,15 @@ func (s *SceneStore) Get(ctx context.Context, id string) (*SceneRow, error) {
 // indexed scene_participants(scene_id, role) index. No caching layer in
 // Phase 3.
 func (s *SceneStore) GetWithMembership(ctx context.Context, id string) (scene *SceneRow, participants, invitees []string, err error) {
-	ctx, span := startSpan(ctx, "scene.store.get_with_membership",
+	ctx, span := startSpan(
+		ctx, "scene.store.get_with_membership",
 		attribute.String("scene_id", id),
 	)
 	defer span.End()
 
 	row := &SceneRow{}
-	err = s.pool.QueryRow(ctx, `
+	err = s.pool.QueryRow(
+		ctx, `
 		SELECT
 			s.id, s.title, s.description, s.location_id, s.owner_id,
 			s.state, s.pose_order, s.visibility, s.idle_timeout_secs,
@@ -313,7 +322,8 @@ func (s *SceneStore) GetWithMembership(ctx context.Context, id string) (scene *S
 // non-members. Internal logs MAY tag the cases distinctly via slog
 // attributes; the function's return type does not.
 func (s *SceneStore) IsMember(ctx context.Context, sceneID, characterID string) (bool, error) {
-	ctx, span := startSpan(ctx, "scene.store.is_member",
+	ctx, span := startSpan(
+		ctx, "scene.store.is_member",
 		attribute.String("scene_id", sceneID),
 		attribute.String("character_id", characterID),
 	)
@@ -352,7 +362,8 @@ func (s *SceneStore) IsMember(ctx context.Context, sceneID, characterID string) 
 // matches the ID at all, or SCENE_TRANSITION_FORBIDDEN if the row exists
 // but is in a state that cannot be ended.
 func (s *SceneStore) End(ctx context.Context, id string) (*SceneRow, error) {
-	ctx, span := startSpan(ctx, "scene.store.end",
+	ctx, span := startSpan(
+		ctx, "scene.store.end",
 		attribute.String("scene_id", id),
 	)
 	defer span.End()
@@ -370,7 +381,8 @@ func (s *SceneStore) End(ctx context.Context, id string) (*SceneRow, error) {
 	// the pre-transition state in a single round trip.
 	row := &SceneRow{}
 	var priorState string
-	err = tx.QueryRow(ctx, `
+	err = tx.QueryRow(
+		ctx, `
         WITH prior AS (
             SELECT state FROM scenes WHERE id = $1
         )
@@ -410,7 +422,8 @@ func (s *SceneStore) End(ctx context.Context, id string) (*SceneRow, error) {
 // Pause transitions an active scene to the paused state and returns the
 // post-update row. Only scenes currently in `active` state can be paused.
 func (s *SceneStore) Pause(ctx context.Context, id string) (*SceneRow, error) {
-	ctx, span := startSpan(ctx, "scene.store.pause",
+	ctx, span := startSpan(
+		ctx, "scene.store.pause",
 		attribute.String("scene_id", id),
 	)
 	defer span.End()
@@ -423,7 +436,8 @@ func (s *SceneStore) Pause(ctx context.Context, id string) (*SceneRow, error) {
 	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
 
 	row := &SceneRow{}
-	err = scanSceneRow(tx.QueryRow(ctx, `
+	err = scanSceneRow(tx.QueryRow(
+		ctx, `
         UPDATE scenes
         SET state = 'paused'
         WHERE id = $1 AND state = 'active'
@@ -453,7 +467,8 @@ func (s *SceneStore) Pause(ctx context.Context, id string) (*SceneRow, error) {
 // Resume transitions a paused scene to the active state and returns the
 // post-update row. Only scenes currently in `paused` state can be resumed.
 func (s *SceneStore) Resume(ctx context.Context, id string) (*SceneRow, error) {
-	ctx, span := startSpan(ctx, "scene.store.resume",
+	ctx, span := startSpan(
+		ctx, "scene.store.resume",
 		attribute.String("scene_id", id),
 	)
 	defer span.End()
@@ -466,7 +481,8 @@ func (s *SceneStore) Resume(ctx context.Context, id string) (*SceneRow, error) {
 	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
 
 	row := &SceneRow{}
-	err = scanSceneRow(tx.QueryRow(ctx, `
+	err = scanSceneRow(tx.QueryRow(
+		ctx, `
         UPDATE scenes
         SET state = 'active'
         WHERE id = $1 AND state = 'paused'
@@ -546,7 +562,8 @@ func (u *SceneUpdate) HasChanges() bool {
 // Returns SCENE_NOT_FOUND if the scene doesn't exist, or
 // SCENE_TRANSITION_FORBIDDEN if it exists but is in a non-updatable state.
 func (s *SceneStore) Update(ctx context.Context, id string, update *SceneUpdate) (*SceneRow, error) {
-	ctx, span := startSpan(ctx, "scene.store.update",
+	ctx, span := startSpan(
+		ctx, "scene.store.update",
 		attribute.String("scene_id", id),
 	)
 	defer span.End()
@@ -668,7 +685,8 @@ func (s *SceneStore) Update(ctx context.Context, id string, update *SceneUpdate)
 // If the eligibility check fails, RETURNING is empty and we issue a
 // diagnostic SELECT (classifyJoinMiss) to figure out the precise reason.
 func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, ParticipantOpResult, error) {
-	ctx, span := startSpan(ctx, "scene.store.add_participant",
+	ctx, span := startSpan(
+		ctx, "scene.store.add_participant",
 		attribute.String("scene_id", sceneID),
 		attribute.String("character_id", characterID),
 	)
@@ -684,7 +702,8 @@ func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID st
 
 	row := &ParticipantRow{}
 	var wasInserted bool
-	err = tx.QueryRow(ctx, `
+	err = tx.QueryRow(
+		ctx, `
 		INSERT INTO scene_participants (scene_id, character_id, role, joined_at)
 		SELECT $1, $2, 'member', NOW()
 		FROM scenes
@@ -732,7 +751,8 @@ func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID st
 		// positive problem of statement_timestamp() heuristics under rapid
 		// back-to-back retries.
 		var promoted bool
-		err = tx.QueryRow(ctx, `
+		err = tx.QueryRow(
+			ctx, `
 			SELECT joined_at >= transaction_timestamp()
 			FROM scene_participants
 			WHERE scene_id = $1 AND character_id = $2`,
@@ -787,7 +807,8 @@ func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID st
 // Returns the removed row via RETURNING. Distinguishes "owner cannot leave"
 // from "participant not found" via a follow-up SELECT in the error path.
 func (s *SceneStore) RemoveParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, error) {
-	ctx, span := startSpan(ctx, "scene.store.remove_participant",
+	ctx, span := startSpan(
+		ctx, "scene.store.remove_participant",
 		attribute.String("scene_id", sceneID),
 		attribute.String("character_id", characterID),
 	)
@@ -802,7 +823,8 @@ func (s *SceneStore) RemoveParticipant(ctx context.Context, sceneID, characterID
 	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
 
 	row := &ParticipantRow{}
-	err = tx.QueryRow(ctx, `
+	err = tx.QueryRow(
+		ctx, `
 		DELETE FROM scene_participants
 		WHERE scene_id = $1 AND character_id = $2 AND role <> 'owner'
 		RETURNING scene_id, character_id, role, joined_at`,
@@ -812,7 +834,8 @@ func (s *SceneStore) RemoveParticipant(ctx context.Context, sceneID, characterID
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Either the row doesn't exist or it was the owner. Distinguish.
 			var existingRole string
-			err2 := tx.QueryRow(ctx, `
+			err2 := tx.QueryRow(
+				ctx, `
 				SELECT role FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
 				sceneID, characterID,
 			).Scan(&existingRole)
@@ -858,7 +881,8 @@ func (s *SceneStore) RemoveParticipant(ctx context.Context, sceneID, characterID
 // no second ops event). Rejected for existing members or owners with
 // SCENE_INVITE_TARGET_ALREADY_MEMBER.
 func (s *SceneStore) InviteParticipant(ctx context.Context, sceneID, inviterID, targetID string) (*ParticipantRow, error) {
-	ctx, span := startSpan(ctx, "scene.store.invite_participant",
+	ctx, span := startSpan(
+		ctx, "scene.store.invite_participant",
 		attribute.String("scene_id", sceneID),
 		attribute.String("inviter_id", inviterID),
 		attribute.String("target_id", targetID),
@@ -875,7 +899,8 @@ func (s *SceneStore) InviteParticipant(ctx context.Context, sceneID, inviterID, 
 	// Check existing role for target — distinguish "already invited" (no-op),
 	// "already member/owner" (error), and "not present" (insert).
 	var existingRole string
-	err = tx.QueryRow(ctx,
+	err = tx.QueryRow(
+		ctx,
 		`SELECT role FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
 		sceneID, targetID,
 	).Scan(&existingRole)
@@ -904,7 +929,8 @@ func (s *SceneStore) InviteParticipant(ctx context.Context, sceneID, inviterID, 
 	}
 
 	row := &ParticipantRow{}
-	err = tx.QueryRow(ctx, `
+	err = tx.QueryRow(
+		ctx, `
 		INSERT INTO scene_participants (scene_id, character_id, role, joined_at)
 		VALUES ($1, $2, 'invited', NOW())
 		RETURNING scene_id, character_id, role, joined_at`,
@@ -936,7 +962,8 @@ func (s *SceneStore) InviteParticipant(ctx context.Context, sceneID, inviterID, 
 // Returns SCENE_KICK_FORBIDDEN if the target is the owner; SCENE_PARTICIPANT_NOT_FOUND
 // if the target isn't in the scene at all.
 func (s *SceneStore) KickParticipant(ctx context.Context, sceneID, kickerID, targetID string) (*ParticipantRow, error) {
-	ctx, span := startSpan(ctx, "scene.store.kick_participant",
+	ctx, span := startSpan(
+		ctx, "scene.store.kick_participant",
 		attribute.String("scene_id", sceneID),
 		attribute.String("kicker_id", kickerID),
 		attribute.String("target_id", targetID),
@@ -951,7 +978,8 @@ func (s *SceneStore) KickParticipant(ctx context.Context, sceneID, kickerID, tar
 	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
 
 	row := &ParticipantRow{}
-	err = tx.QueryRow(ctx, `
+	err = tx.QueryRow(
+		ctx, `
 		DELETE FROM scene_participants
 		WHERE scene_id = $1 AND character_id = $2 AND role <> 'owner'
 		RETURNING scene_id, character_id, role, joined_at`,
@@ -961,7 +989,8 @@ func (s *SceneStore) KickParticipant(ctx context.Context, sceneID, kickerID, tar
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Distinguish "owner" from "not present".
 			var existing string
-			err2 := tx.QueryRow(ctx,
+			err2 := tx.QueryRow(
+				ctx,
 				`SELECT role FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
 				sceneID, targetID,
 			).Scan(&existing)
@@ -1006,7 +1035,8 @@ func (s *SceneStore) KickParticipant(ctx context.Context, sceneID, kickerID, tar
 // All three statements MUST succeed (non-empty RETURNING). Rolls back otherwise.
 // Idempotent when newOwnerID == currentOwnerID (returns nil without changes).
 func (s *SceneStore) TransferOwnership(ctx context.Context, sceneID, currentOwnerID, newOwnerID string) error {
-	ctx, span := startSpan(ctx, "scene.store.transfer_ownership",
+	ctx, span := startSpan(
+		ctx, "scene.store.transfer_ownership",
 		attribute.String("scene_id", sceneID),
 		attribute.String("current_owner", currentOwnerID),
 		attribute.String("new_owner", newOwnerID),
@@ -1026,7 +1056,8 @@ func (s *SceneStore) TransferOwnership(ctx context.Context, sceneID, currentOwne
 
 	// Statement 1: demote current owner.
 	var demotedID string
-	err = tx.QueryRow(ctx, `
+	err = tx.QueryRow(
+		ctx, `
 		UPDATE scene_participants SET role = 'member'
 		WHERE scene_id = $1 AND character_id = $2 AND role = 'owner'
 		RETURNING character_id`,
@@ -1042,7 +1073,8 @@ func (s *SceneStore) TransferOwnership(ctx context.Context, sceneID, currentOwne
 
 	// Statement 2: promote target (must currently be a member, not invited).
 	var promotedID string
-	err = tx.QueryRow(ctx, `
+	err = tx.QueryRow(
+		ctx, `
 		UPDATE scene_participants SET role = 'owner'
 		WHERE scene_id = $1 AND character_id = $2 AND role = 'member'
 		RETURNING character_id`,
@@ -1058,7 +1090,8 @@ func (s *SceneStore) TransferOwnership(ctx context.Context, sceneID, currentOwne
 
 	// Statement 3: update denormalised owner_id, gated on state.
 	var sceneIDOut string
-	err = tx.QueryRow(ctx, `
+	err = tx.QueryRow(
+		ctx, `
 		UPDATE scenes SET owner_id = $1
 		WHERE id = $2 AND owner_id = $3 AND state IN ('active', 'paused')
 		RETURNING id`,
@@ -1093,7 +1126,8 @@ func (s *SceneStore) classifyTransferMiss(ctx context.Context, sceneID, currentO
 		state         string
 		actualOwnerID string
 	)
-	err := s.pool.QueryRow(ctx,
+	err := s.pool.QueryRow(
+		ctx,
 		`SELECT state, owner_id FROM scenes WHERE id = $1`,
 		sceneID,
 	).Scan(&state, &actualOwnerID)
@@ -1119,7 +1153,8 @@ func (s *SceneStore) classifyTransferMiss(ctx context.Context, sceneID, currentO
 	}
 	// State is OK and caller IS the owner; the failure must be the target.
 	var targetRole string
-	err = s.pool.QueryRow(ctx,
+	err = s.pool.QueryRow(
+		ctx,
 		`SELECT role FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
 		sceneID, newOwnerID,
 	).Scan(&targetRole)
@@ -1136,12 +1171,14 @@ func (s *SceneStore) classifyTransferMiss(ctx context.Context, sceneID, currentO
 // ASC (so the owner appears first since CreateWithOwner inserts them at scene
 // creation).
 func (s *SceneStore) ListParticipants(ctx context.Context, sceneID string) ([]ParticipantRow, error) {
-	ctx, span := startSpan(ctx, "scene.store.list_participants",
+	ctx, span := startSpan(
+		ctx, "scene.store.list_participants",
 		attribute.String("scene_id", sceneID),
 	)
 	defer span.End()
 
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.pool.Query(
+		ctx, `
 		SELECT scene_id, character_id, role, joined_at
 		FROM scene_participants
 		WHERE scene_id = $1
@@ -1173,14 +1210,16 @@ func (s *SceneStore) ListParticipants(ctx context.Context, sceneID string) ([]Pa
 
 // GetParticipant returns a single participant row, or SCENE_PARTICIPANT_NOT_FOUND.
 func (s *SceneStore) GetParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, error) {
-	ctx, span := startSpan(ctx, "scene.store.get_participant",
+	ctx, span := startSpan(
+		ctx, "scene.store.get_participant",
 		attribute.String("scene_id", sceneID),
 		attribute.String("character_id", characterID),
 	)
 	defer span.End()
 
 	p := &ParticipantRow{}
-	err := s.pool.QueryRow(ctx, `
+	err := s.pool.QueryRow(
+		ctx, `
 		SELECT scene_id, character_id, role, joined_at
 		FROM scene_participants
 		WHERE scene_id = $1 AND character_id = $2`,
@@ -1213,7 +1252,8 @@ func (s *SceneStore) classifyJoinMiss(ctx context.Context, sceneID, characterID 
 		state      string
 		visibility string
 	)
-	err := s.pool.QueryRow(ctx, `
+	err := s.pool.QueryRow(
+		ctx, `
 		SELECT state, visibility FROM scenes WHERE id = $1`,
 		sceneID,
 	).Scan(&state, &visibility)

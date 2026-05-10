@@ -24,8 +24,9 @@ type fakePlayerRepo struct {
 	created *auth.Player
 }
 
-func (f *fakePlayerRepo) Count(_ context.Context) (int, error)           { return f.count, nil }
+func (f *fakePlayerRepo) Count(_ context.Context) (int, error) { return f.count, nil }
 func (f *fakePlayerRepo) Create(_ context.Context, p *auth.Player) error { f.created = p; return nil }
+
 func (f *fakePlayerRepo) GetByID(_ context.Context, _ ulid.ULID) (*auth.Player, error) {
 	return nil, nil
 }
@@ -37,8 +38,11 @@ func (f *fakePlayerRepo) GetByUsername(_ context.Context, _ string) (*auth.Playe
 func (f *fakePlayerRepo) GetByEmail(_ context.Context, _ string) (*auth.Player, error) {
 	return nil, nil
 }
-func (f *fakePlayerRepo) Update(_ context.Context, _ *auth.Player) error                { return nil }
+
+func (f *fakePlayerRepo) Update(_ context.Context, _ *auth.Player) error { return nil }
+
 func (f *fakePlayerRepo) UpdatePassword(_ context.Context, _ ulid.ULID, _ string) error { return nil }
+
 func (f *fakePlayerRepo) UpdatePasswordAndClearLockout(_ context.Context, _ ulid.ULID, _ string) error {
 	return nil
 }
@@ -64,7 +68,8 @@ func (f *fakeCharService) Create(_ context.Context, playerID ulid.ULID, name str
 }
 
 type fakeRoleStore struct {
-	addedRoles []struct{ charID, role string }
+	addedRoles  []struct{ charID, role string }
+	playerRoles map[string][]string
 }
 
 func (f *fakeRoleStore) GetRoles(_ context.Context, _ string) ([]string, error) { return nil, nil }
@@ -73,6 +78,14 @@ func (f *fakeRoleStore) AddRole(_ context.Context, charID, role string) error {
 	return nil
 }
 func (f *fakeRoleStore) RemoveRole(_ context.Context, _, _ string) error { return nil }
+func (f *fakeRoleStore) PlayerHasRole(_ context.Context, playerID, role string) (bool, error) {
+	for _, r := range f.playerRoles[playerID] {
+		if r == role {
+			return true, nil
+		}
+	}
+	return false, nil
+}
 
 type fakeHasher struct{}
 

@@ -45,7 +45,8 @@ func TestLogErrorContext_WithOopsError(t *testing.T) {
 		With("key", "value").
 		Errorf("context failure")
 
-	errutil.LogErrorContext(context.Background(), "ctx operation failed", err,
+	errutil.LogErrorContext(
+		context.Background(), "ctx operation failed", err,
 		"extra_key", "extra_val",
 	)
 

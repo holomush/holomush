@@ -15,6 +15,10 @@ enum EventChannel {
   EVENT_CHANNEL_TERMINAL = 1;
   EVENT_CHANNEL_STATE = 2;
   EVENT_CHANNEL_BOTH = 3;
+  // EVENT_CHANNEL_AUDIT_ONLY mirrors corev1.EventChannel for INV-GW-16
+  // lockstep parity. These events are dropped at the gRPC Subscribe
+  // boundary and MUST NOT appear on the web wire format in practice.
+  EVENT_CHANNEL_AUDIT_ONLY = 4;
 }
 
 enum ControlSignal {

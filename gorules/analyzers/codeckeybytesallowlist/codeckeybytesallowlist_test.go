@@ -12,7 +12,8 @@ import (
 )
 
 func TestAnalyzerFlagsCodecKeyBytesReadsExceptFromAllowlist(t *testing.T) {
-	analysistest.Run(t, analysistest.TestData(), codeckeybytesallowlist.Analyzer,
+	analysistest.Run(
+		t, analysistest.TestData(), codeckeybytesallowlist.Analyzer,
 		"github.com/holomush/holomush/plugins/positive",
 		"github.com/holomush/holomush/plugins/negative",
 		"github.com/holomush/holomush/internal/eventbus/codec/allow",

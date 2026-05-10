@@ -286,8 +286,8 @@ func (m *manager) Add(ctx context.Context, ctxID ContextID, p Participant) error
 
 // Rotate mints a new DEK version and marks the old one rotated.
 func (m *manager) Rotate(ctx context.Context, ctxID ContextID,
-	newParticipants []Participant, _ string) error {
-
+	newParticipants []Participant, _ string,
+) error {
 	if err := m.configured(); err != nil {
 		return err
 	}

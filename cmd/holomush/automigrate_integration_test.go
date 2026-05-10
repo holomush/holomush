@@ -28,7 +28,8 @@ func startPostgresContainer(t *testing.T) (string, func()) {
 	// flaky on Mac/Windows because Docker's port-mapping table can lag
 	// the readiness log line; without the port wait, ConnectionString
 	// can fail with `port "5432/tcp" not found`. See holomush-bmcq.
-	container, err := postgres.Run(ctx,
+	container, err := postgres.Run(
+		ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),

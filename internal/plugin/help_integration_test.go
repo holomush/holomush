@@ -281,7 +281,8 @@ func setupHelpTestWithEngine(engine accesstypes.AccessPolicyEngine) (*helpFixtur
 	}
 
 	registry := &mockHelpCommandRegistry{}
-	hostFuncs := hostfunc.New(nil,
+	hostFuncs := hostfunc.New(
+		nil,
 		hostfunc.WithCommandRegistry(registry),
 		hostfunc.WithEngine(engine),
 	)

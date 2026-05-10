@@ -58,6 +58,7 @@ func TestEventChannelEnumParity(t *testing.T) {
 		{eventbus.EventChannelTerminal, corev1.EventChannel_EVENT_CHANNEL_TERMINAL},
 		{eventbus.EventChannelState, corev1.EventChannel_EVENT_CHANNEL_STATE},
 		{eventbus.EventChannelBoth, corev1.EventChannel_EVENT_CHANNEL_BOTH},
+		{eventbus.EventChannelAuditOnly, corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY},
 	}
 	for _, c := range cases {
 		assert.Equal(t, int32(c.goVal), int32(c.protoVal))

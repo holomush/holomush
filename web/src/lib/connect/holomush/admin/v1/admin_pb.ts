@@ -7,13 +7,15 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file holomush/admin/v1/admin.proto.
  */
 export const file_holomush_admin_v1_admin: GenFile = /*@__PURE__*/
-  fileDesc("Ch1ob2xvbXVzaC9hZG1pbi92MS9hZG1pbi5wcm90bxIRaG9sb211c2guYWRtaW4udjEiDwoNU3RhdHVzUmVxdWVzdCIyCg5TdGF0dXNSZXNwb25zZRIPCgd2ZXJzaW9uGAEgASgJEg8KB2hlYWx0aHkYAiABKAgyXQoMQWRtaW5TZXJ2aWNlEk0KBlN0YXR1cxIgLmhvbG9tdXNoLmFkbWluLnYxLlN0YXR1c1JlcXVlc3QaIS5ob2xvbXVzaC5hZG1pbi52MS5TdGF0dXNSZXNwb25zZUJCWkBnaXRodWIuY29tL2hvbG9tdXNoL2hvbG9tdXNoL3BrZy9wcm90by9ob2xvbXVzaC9hZG1pbi92MTthZG1pbnYxYgZwcm90bzM");
+  fileDesc("Ch1ob2xvbXVzaC9hZG1pbi92MS9hZG1pbi5wcm90bxIRaG9sb211c2guYWRtaW4udjEiDwoNU3RhdHVzUmVxdWVzdCIyCg5TdGF0dXNSZXNwb25zZRIPCgd2ZXJzaW9uGAEgASgJEg8KB2hlYWx0aHkYAiABKAgiTAoTQXV0aGVudGljYXRlUmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCRIRCgl0b3RwX2NvZGUYAyABKAkicAoUQXV0aGVudGljYXRlUmVzcG9uc2USFQoNc2Vzc2lvbl90b2tlbhgBIAEoCRIuCgpleHBpcmVzX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCglwbGF5ZXJfaWQYAyABKAkiOwoOQXBwcm92ZVJlcXVlc3QSFQoNc2Vzc2lvbl90b2tlbhgBIAEoCRISCgpyZXF1ZXN0X2lkGAIgASgMIhEKD0FwcHJvdmVSZXNwb25zZSJDChBSZXNldFRPVFBSZXF1ZXN0EhUKDXNlc3Npb25fdG9rZW4YASABKAkSGAoQdGFyZ2V0X3BsYXllcl9pZBgCIAEoCSIkChFSZXNldFRPVFBSZXNwb25zZRIPCgdjbGVhcmVkGAEgASgIMugCCgxBZG1pblNlcnZpY2USTQoGU3RhdHVzEiAuaG9sb211c2guYWRtaW4udjEuU3RhdHVzUmVxdWVzdBohLmhvbG9tdXNoLmFkbWluLnYxLlN0YXR1c1Jlc3BvbnNlEl8KDEF1dGhlbnRpY2F0ZRImLmhvbG9tdXNoLmFkbWluLnYxLkF1dGhlbnRpY2F0ZVJlcXVlc3QaJy5ob2xvbXVzaC5hZG1pbi52MS5BdXRoZW50aWNhdGVSZXNwb25zZRJQCgdBcHByb3ZlEiEuaG9sb211c2guYWRtaW4udjEuQXBwcm92ZVJlcXVlc3QaIi5ob2xvbXVzaC5hZG1pbi52MS5BcHByb3ZlUmVzcG9uc2USVgoJUmVzZXRUT1RQEiMuaG9sb211c2guYWRtaW4udjEuUmVzZXRUT1RQUmVxdWVzdBokLmhvbG9tdXNoLmFkbWluLnYxLlJlc2V0VE9UUFJlc3BvbnNlQkJaQGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL2FkbWluL3YxO2FkbWludjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message holomush.admin.v1.StatusRequest
@@ -55,6 +57,136 @@ export const StatusResponseSchema: GenMessage<StatusResponse> = /*@__PURE__*/
   messageDesc(file_holomush_admin_v1_admin, 1);
 
 /**
+ * @generated from message holomush.admin.v1.AuthenticateRequest
+ */
+export type AuthenticateRequest = Message<"holomush.admin.v1.AuthenticateRequest"> & {
+  /**
+   * @generated from field: string username = 1;
+   */
+  username: string;
+
+  /**
+   * @generated from field: string password = 2;
+   */
+  password: string;
+
+  /**
+   * @generated from field: string totp_code = 3;
+   */
+  totpCode: string;
+};
+
+/**
+ * Describes the message holomush.admin.v1.AuthenticateRequest.
+ * Use `create(AuthenticateRequestSchema)` to create a new message.
+ */
+export const AuthenticateRequestSchema: GenMessage<AuthenticateRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_admin_v1_admin, 2);
+
+/**
+ * @generated from message holomush.admin.v1.AuthenticateResponse
+ */
+export type AuthenticateResponse = Message<"holomush.admin.v1.AuthenticateResponse"> & {
+  /**
+   * @generated from field: string session_token = 1;
+   */
+  sessionToken: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp expires_at = 2;
+   */
+  expiresAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: string player_id = 3;
+   */
+  playerId: string;
+};
+
+/**
+ * Describes the message holomush.admin.v1.AuthenticateResponse.
+ * Use `create(AuthenticateResponseSchema)` to create a new message.
+ */
+export const AuthenticateResponseSchema: GenMessage<AuthenticateResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_admin_v1_admin, 3);
+
+/**
+ * @generated from message holomush.admin.v1.ApproveRequest
+ */
+export type ApproveRequest = Message<"holomush.admin.v1.ApproveRequest"> & {
+  /**
+   * @generated from field: string session_token = 1;
+   */
+  sessionToken: string;
+
+  /**
+   * 16-byte ULID
+   *
+   * @generated from field: bytes request_id = 2;
+   */
+  requestId: Uint8Array;
+};
+
+/**
+ * Describes the message holomush.admin.v1.ApproveRequest.
+ * Use `create(ApproveRequestSchema)` to create a new message.
+ */
+export const ApproveRequestSchema: GenMessage<ApproveRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_admin_v1_admin, 4);
+
+/**
+ * @generated from message holomush.admin.v1.ApproveResponse
+ */
+export type ApproveResponse = Message<"holomush.admin.v1.ApproveResponse"> & {
+};
+
+/**
+ * Describes the message holomush.admin.v1.ApproveResponse.
+ * Use `create(ApproveResponseSchema)` to create a new message.
+ */
+export const ApproveResponseSchema: GenMessage<ApproveResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_admin_v1_admin, 5);
+
+/**
+ * @generated from message holomush.admin.v1.ResetTOTPRequest
+ */
+export type ResetTOTPRequest = Message<"holomush.admin.v1.ResetTOTPRequest"> & {
+  /**
+   * @generated from field: string session_token = 1;
+   */
+  sessionToken: string;
+
+  /**
+   * @generated from field: string target_player_id = 2;
+   */
+  targetPlayerId: string;
+};
+
+/**
+ * Describes the message holomush.admin.v1.ResetTOTPRequest.
+ * Use `create(ResetTOTPRequestSchema)` to create a new message.
+ */
+export const ResetTOTPRequestSchema: GenMessage<ResetTOTPRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_admin_v1_admin, 6);
+
+/**
+ * @generated from message holomush.admin.v1.ResetTOTPResponse
+ */
+export type ResetTOTPResponse = Message<"holomush.admin.v1.ResetTOTPResponse"> & {
+  /**
+   * @generated from field: bool cleared = 1;
+   */
+  cleared: boolean;
+};
+
+/**
+ * Describes the message holomush.admin.v1.ResetTOTPResponse.
+ * Use `create(ResetTOTPResponseSchema)` to create a new message.
+ */
+export const ResetTOTPResponseSchema: GenMessage<ResetTOTPResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_admin_v1_admin, 7);
+
+/**
  * AdminService is the break-glass operator administration service. It is
  * served exclusively over a UNIX domain socket (admin.sock) and is never
  * exposed over the network.
@@ -64,8 +196,6 @@ export const StatusResponseSchema: GenMessage<StatusResponse> = /*@__PURE__*/
 export const AdminService: GenService<{
   /**
    * Status returns the admin-socket server's liveness state and binary version.
-   * It is intentionally minimal: it reports whether the admin socket is accepting
-   * requests, NOT whether the full server stack is healthy.
    *
    * @generated from rpc holomush.admin.v1.AdminService.Status
    */
@@ -73,6 +203,41 @@ export const AdminService: GenService<{
     methodKind: "unary";
     input: typeof StatusRequestSchema;
     output: typeof StatusResponseSchema;
+  },
+  /**
+   * Authenticate verifies operator credentials + TOTP and returns a
+   * short-lived (10 min) session token for use in Approve and ResetTOTP.
+   * Spec §3 wire surface; INV-D1, INV-D2.
+   *
+   * @generated from rpc holomush.admin.v1.AdminService.Authenticate
+   */
+  authenticate: {
+    methodKind: "unary";
+    input: typeof AuthenticateRequestSchema;
+    output: typeof AuthenticateResponseSchema;
+  },
+  /**
+   * Approve is the second-op signoff on a pending admin_approvals row.
+   * Spec §3, §6 Approve flow; INV-D5, INV-D6, INV-D7.
+   *
+   * @generated from rpc holomush.admin.v1.AdminService.Approve
+   */
+  approve: {
+    methodKind: "unary";
+    input: typeof ApproveRequestSchema;
+    output: typeof ApproveResponseSchema;
+  },
+  /**
+   * ResetTOTP clears a target player's TOTP enrollment and emits a
+   * crypto.totp_cleared audit event with cleared_by="admin_reset".
+   * Spec §3, §4 reset flow.
+   *
+   * @generated from rpc holomush.admin.v1.AdminService.ResetTOTP
+   */
+  resetTOTP: {
+    methodKind: "unary";
+    input: typeof ResetTOTPRequestSchema;
+    output: typeof ResetTOTPResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_holomush_admin_v1_admin, 0);

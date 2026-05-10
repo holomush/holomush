@@ -42,7 +42,8 @@ func Init(ctx context.Context, serviceName, serviceVersion string) (func(context
 	// the collector is temporarily unreachable.
 	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(_ error) {}))
 
-	res, err := resource.New(ctx,
+	res, err := resource.New(
+		ctx,
 		resource.WithAttributes(
 			semconv.ServiceName(serviceName),
 			semconv.ServiceVersion(serviceVersion),

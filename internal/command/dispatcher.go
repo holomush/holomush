@@ -173,7 +173,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	metrics.SetCommandName(parsed.Name)
 
 	// Start trace span
-	ctx, span := tracer.Start(ctx, "command.execute",
+	ctx, span := tracer.Start(
+		ctx, "command.execute",
 		trace.WithAttributes(
 			attribute.String("command.name", parsed.Name),
 			attribute.String("character.id", exec.CharacterID().String()),
@@ -263,7 +264,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 		if !errors.Is(err, ErrSessionEnded) {
 			metrics.SetStatus(StatusError)
 		}
-		slog.WarnContext(ctx, "command execution failed",
+		slog.WarnContext(
+			ctx, "command execution failed",
 			"command", parsed.Name,
 			"character_id", exec.CharacterID().String(),
 			"error", err,
@@ -389,7 +391,8 @@ func (d *Dispatcher) dispatchToPlugin(ctx context.Context, entry *CommandEntry, 
 	// Process synchronous output: write to exec.Output().
 	if resp.Output != "" && exec.Output() != nil {
 		if _, writeErr := exec.Output().Write([]byte(resp.Output)); writeErr != nil {
-			slog.WarnContext(ctx, "failed to write plugin command output",
+			slog.WarnContext(
+				ctx, "failed to write plugin command output",
 				"command", entry.Name,
 				"error", writeErr,
 			)
@@ -469,7 +472,8 @@ func (d *Dispatcher) flushPluginAuditEvents(ctx context.Context) {
 		}
 
 		if logErr := d.auditLogger.Log(ctx, events[i]); logErr != nil {
-			slog.WarnContext(ctx, "plugin audit event flush failed",
+			slog.WarnContext(
+				ctx, "plugin audit event flush failed",
 				"subject", events[i].Subject,
 				"action", events[i].Action,
 				"resource", events[i].Resource,
@@ -504,7 +508,8 @@ func (d *Dispatcher) extractAuditHints(ctx context.Context, hints []pluginsdk.Au
 		// with the plugin-provided value (operators see the malformed
 		// string and can investigate).
 		if hint.Resource != "" && !isValidResourceRef(hint.Resource) {
-			slog.WarnContext(ctx, "plugin audit hint has malformed resource",
+			slog.WarnContext(
+				ctx, "plugin audit hint has malformed resource",
 				"plugin", hostComponent,
 				"resource", hint.Resource,
 				"hint_id", hint.ID,
@@ -527,7 +532,8 @@ func (d *Dispatcher) extractAuditHints(ctx context.Context, hints []pluginsdk.Au
 			effect = types.EffectDeny
 		default:
 			// Unknown effect from plugin — log and skip this hint.
-			slog.WarnContext(ctx, "plugin audit hint has unknown effect",
+			slog.WarnContext(
+				ctx, "plugin audit hint has unknown effect",
 				"plugin", hostComponent,
 				"effect", hint.Effect,
 				"hint_id", hint.ID,

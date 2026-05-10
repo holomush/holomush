@@ -21,11 +21,13 @@ func _() {
 	_ = x[SubsystemAuditProjection-10]
 	_ = x[SubsystemCluster-11]
 	_ = x[SubsystemAdminSocket-12]
+	_ = x[SubsystemCryptoChainVerifier-13]
+	_ = x[SubsystemCryptoPolicy-14]
 }
 
-const _SubsystemID_name = "databasetlsabacauthworldpluginssessionsbootstrapgrpceventbusaudit_projectionclusteradmin_socket"
+const _SubsystemID_name = "databasetlsabacauthworldpluginssessionsbootstrapgrpceventbusaudit_projectionclusteradmin_socketcrypto_chain_verifiercrypto_policy"
 
-var _SubsystemID_index = [...]uint8{0, 8, 11, 15, 19, 24, 31, 39, 48, 52, 60, 76, 83, 95}
+var _SubsystemID_index = [...]uint8{0, 8, 11, 15, 19, 24, 31, 39, 48, 52, 60, 76, 83, 95, 116, 129}
 
 func (i SubsystemID) String() string {
 	idx := int(i) - 0

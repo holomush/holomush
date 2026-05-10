@@ -276,7 +276,8 @@ func (a *authCharRepoAdapter) Create(ctx context.Context, char *world.Character)
 
 func (a *authCharRepoAdapter) ExistsByName(ctx context.Context, name string) (bool, error) {
 	var exists bool
-	err := a.pool.QueryRow(ctx,
+	err := a.pool.QueryRow(
+		ctx,
 		"SELECT EXISTS(SELECT 1 FROM characters WHERE LOWER(name) = LOWER($1))", name,
 	).Scan(&exists)
 	if err != nil {
@@ -287,7 +288,8 @@ func (a *authCharRepoAdapter) ExistsByName(ctx context.Context, name string) (bo
 
 func (a *authCharRepoAdapter) CountByPlayer(ctx context.Context, playerID ulid.ULID) (int, error) {
 	var count int
-	err := a.pool.QueryRow(ctx,
+	err := a.pool.QueryRow(
+		ctx,
 		"SELECT COUNT(*) FROM characters WHERE player_id = $1", playerID.String(),
 	).Scan(&count)
 	if err != nil {
@@ -297,7 +299,8 @@ func (a *authCharRepoAdapter) CountByPlayer(ctx context.Context, playerID ulid.U
 }
 
 func (a *authCharRepoAdapter) ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*world.Character, error) {
-	rows, err := a.pool.Query(ctx,
+	rows, err := a.pool.Query(
+		ctx,
 		`SELECT id, player_id, name, description, location_id, created_at
 		 FROM characters WHERE player_id = $1 ORDER BY name`, playerID.String(),
 	)

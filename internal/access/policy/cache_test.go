@@ -88,7 +88,9 @@ func (m *slowPolicyStore) Delete(_ context.Context, _ string) error             
 func (m *slowPolicyStore) DeleteBySource(_ context.Context, _, _ string) (int64, error) {
 	return 0, nil
 }
+
 func (m *slowPolicyStore) CreateBatch(_ context.Context, _ []*store.StoredPolicy) error { return nil }
+
 func (m *slowPolicyStore) ReplaceBySource(_ context.Context, _, _ string, _ []*store.StoredPolicy) error {
 	return nil
 }

@@ -38,14 +38,30 @@ const (
 const (
 	// AdminServiceStatusProcedure is the fully-qualified name of the AdminService's Status RPC.
 	AdminServiceStatusProcedure = "/holomush.admin.v1.AdminService/Status"
+	// AdminServiceAuthenticateProcedure is the fully-qualified name of the AdminService's Authenticate
+	// RPC.
+	AdminServiceAuthenticateProcedure = "/holomush.admin.v1.AdminService/Authenticate"
+	// AdminServiceApproveProcedure is the fully-qualified name of the AdminService's Approve RPC.
+	AdminServiceApproveProcedure = "/holomush.admin.v1.AdminService/Approve"
+	// AdminServiceResetTOTPProcedure is the fully-qualified name of the AdminService's ResetTOTP RPC.
+	AdminServiceResetTOTPProcedure = "/holomush.admin.v1.AdminService/ResetTOTP"
 )
 
 // AdminServiceClient is a client for the holomush.admin.v1.AdminService service.
 type AdminServiceClient interface {
 	// Status returns the admin-socket server's liveness state and binary version.
-	// It is intentionally minimal: it reports whether the admin socket is accepting
-	// requests, NOT whether the full server stack is healthy.
 	Status(context.Context, *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error)
+	// Authenticate verifies operator credentials + TOTP and returns a
+	// short-lived (10 min) session token for use in Approve and ResetTOTP.
+	// Spec §3 wire surface; INV-D1, INV-D2.
+	Authenticate(context.Context, *connect.Request[v1.AuthenticateRequest]) (*connect.Response[v1.AuthenticateResponse], error)
+	// Approve is the second-op signoff on a pending admin_approvals row.
+	// Spec §3, §6 Approve flow; INV-D5, INV-D6, INV-D7.
+	Approve(context.Context, *connect.Request[v1.ApproveRequest]) (*connect.Response[v1.ApproveResponse], error)
+	// ResetTOTP clears a target player's TOTP enrollment and emits a
+	// crypto.totp_cleared audit event with cleared_by="admin_reset".
+	// Spec §3, §4 reset flow.
+	ResetTOTP(context.Context, *connect.Request[v1.ResetTOTPRequest]) (*connect.Response[v1.ResetTOTPResponse], error)
 }
 
 // NewAdminServiceClient constructs a client for the holomush.admin.v1.AdminService service. By
@@ -65,12 +81,33 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(adminServiceMethods.ByName("Status")),
 			connect.WithClientOptions(opts...),
 		),
+		authenticate: connect.NewClient[v1.AuthenticateRequest, v1.AuthenticateResponse](
+			httpClient,
+			baseURL+AdminServiceAuthenticateProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("Authenticate")),
+			connect.WithClientOptions(opts...),
+		),
+		approve: connect.NewClient[v1.ApproveRequest, v1.ApproveResponse](
+			httpClient,
+			baseURL+AdminServiceApproveProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("Approve")),
+			connect.WithClientOptions(opts...),
+		),
+		resetTOTP: connect.NewClient[v1.ResetTOTPRequest, v1.ResetTOTPResponse](
+			httpClient,
+			baseURL+AdminServiceResetTOTPProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("ResetTOTP")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // adminServiceClient implements AdminServiceClient.
 type adminServiceClient struct {
-	status *connect.Client[v1.StatusRequest, v1.StatusResponse]
+	status       *connect.Client[v1.StatusRequest, v1.StatusResponse]
+	authenticate *connect.Client[v1.AuthenticateRequest, v1.AuthenticateResponse]
+	approve      *connect.Client[v1.ApproveRequest, v1.ApproveResponse]
+	resetTOTP    *connect.Client[v1.ResetTOTPRequest, v1.ResetTOTPResponse]
 }
 
 // Status calls holomush.admin.v1.AdminService.Status.
@@ -78,12 +115,36 @@ func (c *adminServiceClient) Status(ctx context.Context, req *connect.Request[v1
 	return c.status.CallUnary(ctx, req)
 }
 
+// Authenticate calls holomush.admin.v1.AdminService.Authenticate.
+func (c *adminServiceClient) Authenticate(ctx context.Context, req *connect.Request[v1.AuthenticateRequest]) (*connect.Response[v1.AuthenticateResponse], error) {
+	return c.authenticate.CallUnary(ctx, req)
+}
+
+// Approve calls holomush.admin.v1.AdminService.Approve.
+func (c *adminServiceClient) Approve(ctx context.Context, req *connect.Request[v1.ApproveRequest]) (*connect.Response[v1.ApproveResponse], error) {
+	return c.approve.CallUnary(ctx, req)
+}
+
+// ResetTOTP calls holomush.admin.v1.AdminService.ResetTOTP.
+func (c *adminServiceClient) ResetTOTP(ctx context.Context, req *connect.Request[v1.ResetTOTPRequest]) (*connect.Response[v1.ResetTOTPResponse], error) {
+	return c.resetTOTP.CallUnary(ctx, req)
+}
+
 // AdminServiceHandler is an implementation of the holomush.admin.v1.AdminService service.
 type AdminServiceHandler interface {
 	// Status returns the admin-socket server's liveness state and binary version.
-	// It is intentionally minimal: it reports whether the admin socket is accepting
-	// requests, NOT whether the full server stack is healthy.
 	Status(context.Context, *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error)
+	// Authenticate verifies operator credentials + TOTP and returns a
+	// short-lived (10 min) session token for use in Approve and ResetTOTP.
+	// Spec §3 wire surface; INV-D1, INV-D2.
+	Authenticate(context.Context, *connect.Request[v1.AuthenticateRequest]) (*connect.Response[v1.AuthenticateResponse], error)
+	// Approve is the second-op signoff on a pending admin_approvals row.
+	// Spec §3, §6 Approve flow; INV-D5, INV-D6, INV-D7.
+	Approve(context.Context, *connect.Request[v1.ApproveRequest]) (*connect.Response[v1.ApproveResponse], error)
+	// ResetTOTP clears a target player's TOTP enrollment and emits a
+	// crypto.totp_cleared audit event with cleared_by="admin_reset".
+	// Spec §3, §4 reset flow.
+	ResetTOTP(context.Context, *connect.Request[v1.ResetTOTPRequest]) (*connect.Response[v1.ResetTOTPResponse], error)
 }
 
 // NewAdminServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -99,10 +160,34 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(adminServiceMethods.ByName("Status")),
 		connect.WithHandlerOptions(opts...),
 	)
+	adminServiceAuthenticateHandler := connect.NewUnaryHandler(
+		AdminServiceAuthenticateProcedure,
+		svc.Authenticate,
+		connect.WithSchema(adminServiceMethods.ByName("Authenticate")),
+		connect.WithHandlerOptions(opts...),
+	)
+	adminServiceApproveHandler := connect.NewUnaryHandler(
+		AdminServiceApproveProcedure,
+		svc.Approve,
+		connect.WithSchema(adminServiceMethods.ByName("Approve")),
+		connect.WithHandlerOptions(opts...),
+	)
+	adminServiceResetTOTPHandler := connect.NewUnaryHandler(
+		AdminServiceResetTOTPProcedure,
+		svc.ResetTOTP,
+		connect.WithSchema(adminServiceMethods.ByName("ResetTOTP")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.admin.v1.AdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AdminServiceStatusProcedure:
 			adminServiceStatusHandler.ServeHTTP(w, r)
+		case AdminServiceAuthenticateProcedure:
+			adminServiceAuthenticateHandler.ServeHTTP(w, r)
+		case AdminServiceApproveProcedure:
+			adminServiceApproveHandler.ServeHTTP(w, r)
+		case AdminServiceResetTOTPProcedure:
+			adminServiceResetTOTPHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -114,4 +199,16 @@ type UnimplementedAdminServiceHandler struct{}
 
 func (UnimplementedAdminServiceHandler) Status(context.Context, *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.admin.v1.AdminService.Status is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) Authenticate(context.Context, *connect.Request[v1.AuthenticateRequest]) (*connect.Response[v1.AuthenticateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.admin.v1.AdminService.Authenticate is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) Approve(context.Context, *connect.Request[v1.ApproveRequest]) (*connect.Response[v1.ApproveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.admin.v1.AdminService.Approve is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) ResetTOTP(context.Context, *connect.Request[v1.ResetTOTPRequest]) (*connect.Response[v1.ResetTOTPResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.admin.v1.AdminService.ResetTOTP is not implemented"))
 }

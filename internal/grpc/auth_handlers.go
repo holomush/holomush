@@ -745,7 +745,8 @@ func (s *CoreServer) RevokePlayerSession(ctx context.Context, req *corev1.Revoke
 		return &corev1.RevokePlayerSessionResponse{Success: false, ErrorMessage: "session not found"}, nil
 	}
 	if target.PlayerID.Compare(caller.PlayerID) != 0 {
-		slog.WarnContext(ctx, "revoke player session: cross-player attempt",
+		slog.WarnContext(
+			ctx, "revoke player session: cross-player attempt",
 			"caller_id", caller.PlayerID.String(),
 			"target_owner", target.PlayerID.String(),
 			"target_id", targetID.String(),

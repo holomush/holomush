@@ -73,6 +73,12 @@ type CryptoConfig struct {
 	// Empty / missing → no operators → break-glass impossible.
 	// Reload requires server restart in v1.
 	Operators []string `koanf:"operators"`
+
+	// DualControlRequired lists op_kinds (e.g., "rekey", "admin_read_stream")
+	// that require a second-operator approval before proceeding. Lax+warn
+	// validation: unknown op_kinds are logged at server start and excluded
+	// from enforcement. Empty list means no dual-control is required (lax mode).
+	DualControlRequired []string `koanf:"dual_control_required"`
 }
 
 // DefaultCryptoConfig returns an empty CryptoConfig — no operators,

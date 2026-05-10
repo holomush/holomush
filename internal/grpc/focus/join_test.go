@@ -28,7 +28,8 @@ func TestJoinFocusAddsMembershipAndSendsStreams(t *testing.T) {
 		},
 	}
 
-	coord, sender := newTestCoordinator(t,
+	coord, sender := newTestCoordinator(
+		t,
 		map[string]*session.Info{
 			"sess-1": {Status: session.StatusActive},
 		},
@@ -59,7 +60,8 @@ func TestJoinFocusRejectsDuplicateMembership(t *testing.T) {
 	targetID := ulid.MustNew(ulid.Now(), nil)
 	target := session.FocusKey{Kind: session.FocusKindScene, TargetID: targetID}
 
-	coord, _ := newTestCoordinator(t,
+	coord, _ := newTestCoordinator(
+		t,
 		map[string]*session.Info{
 			"sess-1": {
 				Status: session.StatusActive,
@@ -80,7 +82,8 @@ func TestJoinFocusRejectsExpiredSession(t *testing.T) {
 	targetID := ulid.MustNew(ulid.Now(), nil)
 	target := session.FocusKey{Kind: session.FocusKindScene, TargetID: targetID}
 
-	coord, _ := newTestCoordinator(t,
+	coord, _ := newTestCoordinator(
+		t,
 		map[string]*session.Info{
 			"sess-expired": {Status: session.StatusExpired},
 		},
@@ -97,7 +100,8 @@ func TestJoinFocusRejectsUnregisteredKind(t *testing.T) {
 	target := session.FocusKey{Kind: session.FocusKindScene, TargetID: targetID}
 
 	// No policies registered.
-	coord, _ := newTestCoordinator(t,
+	coord, _ := newTestCoordinator(
+		t,
 		map[string]*session.Info{
 			"sess-1": {Status: session.StatusActive},
 		},
@@ -112,7 +116,8 @@ func TestJoinFocusRejectsNotFoundSession(t *testing.T) {
 	targetID := ulid.MustNew(ulid.Now(), nil)
 	target := session.FocusKey{Kind: session.FocusKindScene, TargetID: targetID}
 
-	coord, _ := newTestCoordinator(t, map[string]*session.Info{},
+	coord, _ := newTestCoordinator(
+		t, map[string]*session.Info{},
 		NewNullPolicy(session.FocusKindScene),
 	)
 

@@ -28,7 +28,8 @@ func TestLeaveFocusByTargetSweepsAllMatchingSessions(t *testing.T) {
 		streams: []string{streamName},
 	}
 
-	coord, sender := newTestCoordinator(t,
+	coord, sender := newTestCoordinator(
+		t,
 		map[string]*session.Info{
 			"sess-a": {
 				Status: session.StatusActive,
@@ -82,7 +83,8 @@ func TestLeaveFocusByTargetSweepsAllMatchingSessions(t *testing.T) {
 func TestLeaveFocusByTargetReturnsEmptyResultWhenNoSessionsMatch(t *testing.T) {
 	sceneID := ulid.Make()
 
-	coord, sender := newTestCoordinator(t,
+	coord, sender := newTestCoordinator(
+		t,
 		map[string]*session.Info{
 			"sess-a": {Status: session.StatusActive},
 		},
@@ -102,7 +104,8 @@ func TestLeaveFocusByTargetSkipsExpiredSessions(t *testing.T) {
 	sceneID := ulid.Make()
 	target := session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneID}
 
-	coord, _ := newTestCoordinator(t,
+	coord, _ := newTestCoordinator(
+		t,
 		map[string]*session.Info{
 			"sess-expired": {
 				Status: session.StatusExpired,
@@ -121,7 +124,8 @@ func TestLeaveFocusByTargetSkipsExpiredSessions(t *testing.T) {
 }
 
 func TestLeaveFocusByTargetAcceptsZeroTargetIDWithoutPanic(t *testing.T) {
-	coord, _ := newTestCoordinator(t,
+	coord, _ := newTestCoordinator(
+		t,
 		map[string]*session.Info{"sess-a": {Status: session.StatusActive}},
 		NewNullPolicy(session.FocusKindScene),
 	)

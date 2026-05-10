@@ -37,7 +37,8 @@ func NewHostMiddleware(next Host, tp trace.TracerProvider, mp metric.MeterProvid
 	tracer := tp.Tracer("holomush.plugin")
 	meter := mp.Meter("holomush.plugin")
 
-	commandDuration, err := meter.Float64Histogram("plugin_command_duration_seconds",
+	commandDuration, err := meter.Float64Histogram(
+		"plugin_command_duration_seconds",
 		metric.WithDescription("Duration of plugin command delivery"),
 		metric.WithUnit("s"),
 	)
@@ -45,14 +46,16 @@ func NewHostMiddleware(next Host, tp trace.TracerProvider, mp metric.MeterProvid
 		return nil, err
 	}
 
-	commandErrors, err := meter.Int64Counter("plugin_errors_total",
+	commandErrors, err := meter.Int64Counter(
+		"plugin_errors_total",
 		metric.WithDescription("Total plugin errors"),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	eventDuration, err := meter.Float64Histogram("plugin_event_duration_seconds",
+	eventDuration, err := meter.Float64Histogram(
+		"plugin_event_duration_seconds",
 		metric.WithDescription("Duration of plugin event delivery"),
 		metric.WithUnit("s"),
 	)
@@ -60,14 +63,16 @@ func NewHostMiddleware(next Host, tp trace.TracerProvider, mp metric.MeterProvid
 		return nil, err
 	}
 
-	eventErrors, err := meter.Int64Counter("plugin_event_errors_total",
+	eventErrors, err := meter.Int64Counter(
+		"plugin_event_errors_total",
 		metric.WithDescription("Total plugin event errors"),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	eventsEmitted, err := meter.Int64Counter("plugin_events_emitted_total",
+	eventsEmitted, err := meter.Int64Counter(
+		"plugin_events_emitted_total",
 		metric.WithDescription("Total events emitted by plugins"),
 	)
 	if err != nil {
@@ -103,7 +108,8 @@ func (m *HostMiddleware) DeliverCommand(ctx context.Context, name string, cmd pl
 		attribute.String("command.name", cmd.Command),
 	}
 
-	ctx, span := m.tracer.Start(ctx, "plugin.command",
+	ctx, span := m.tracer.Start(
+		ctx, "plugin.command",
 		trace.WithAttributes(attrs...),
 	)
 	defer span.End()
@@ -143,7 +149,8 @@ func (m *HostMiddleware) DeliverEvent(ctx context.Context, name string, event pl
 		attribute.String("event.type", string(event.Type)),
 	}
 
-	ctx, span := m.tracer.Start(ctx, "plugin.event",
+	ctx, span := m.tracer.Start(
+		ctx, "plugin.event",
 		trace.WithAttributes(attrs...),
 	)
 	defer span.End()

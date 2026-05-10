@@ -67,7 +67,7 @@ func (p *RenderingPublisher) Publish(ctx context.Context, event Event) error {
 		Category:            reg.Category,
 		Format:              reg.Format,
 		Label:               reg.Label,
-		DisplayTarget:       EventChannel(reg.DisplayTarget), //nolint:gosec // G115: EventChannel values are bounded 0-3 by proto enum; no overflow possible
+		DisplayTarget:       EventChannel(reg.DisplayTarget), //nolint:gosec // G115: EventChannel values are bounded 0-4 by proto enum; no overflow possible
 		SourcePlugin:        reg.Source,
 		SourcePluginVersion: p.registry.SourceVersion(reg.Source),
 	}

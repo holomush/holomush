@@ -1086,7 +1086,8 @@ func TestAliasCacheResolvePerformanceTarget(t *testing.T) {
 	p99Index := int(float64(iterations) * 0.99)
 	p99Ns := timings[p99Index]
 
-	t.Logf("alias resolution p99=%dns, median=%dns, max=%dns (threshold=%dns)",
+	t.Logf(
+		"alias resolution p99=%dns, median=%dns, max=%dns (threshold=%dns)",
 		p99Ns,
 		timings[iterations/2],
 		timings[iterations-1],

@@ -191,12 +191,14 @@ func WithHistoryAuth(
 	em eventbus.SessionAuditEmitter,
 ) Option {
 	return func(r *Reader) {
-		r.hotOpts = append(r.hotOpts,
+		r.hotOpts = append(
+			r.hotOpts,
 			WithHistoryAuthGuard(g),
 			WithHistoryDEKManager(m),
 			WithHistoryDecryptAuditEmitter(em),
 		)
-		r.coldOpts = append(r.coldOpts,
+		r.coldOpts = append(
+			r.coldOpts,
 			WithColdHistoryAuthGuard(g),
 			WithColdHistoryDEKManager(m),
 			WithColdHistoryDecryptAuditEmitter(em),

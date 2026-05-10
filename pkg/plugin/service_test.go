@@ -599,7 +599,8 @@ func startPluginHostServiceTestServer(t *testing.T, srv pluginv1.PluginHostServi
 		_ = listener.Close()
 	})
 
-	conn, err := grpc.NewClient("passthrough:///plugin-host-test",
+	conn, err := grpc.NewClient(
+		"passthrough:///plugin-host-test",
 		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
 			return listener.Dial()
 		}),

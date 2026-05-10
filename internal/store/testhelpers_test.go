@@ -22,7 +22,8 @@ import (
 func newTestPool(t *testing.T) (*pgxpool.Pool, func()) {
 	t.Helper()
 	ctx := context.Background()
-	pgC, err := postgres.Run(ctx,
+	pgC, err := postgres.Run(
+		ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),

@@ -81,14 +81,16 @@ func TestRenderingCompleteness(t *testing.T) {
 	// publisher. Spot-check the first row's source_plugin, then verify
 	// every host-builtin row reports source_plugin="builtin".
 	var sourcePlugin string
-	err = pool.QueryRow(ctx,
+	err = pool.QueryRow(
+		ctx,
 		"SELECT rendering->>'source_plugin' FROM events_audit ORDER BY js_seq LIMIT 1",
 	).Scan(&sourcePlugin)
 	require.NoError(t, err)
 	assert.Equal(t, "builtin", sourcePlugin)
 
 	var nonBuiltinCount int
-	err = pool.QueryRow(ctx,
+	err = pool.QueryRow(
+		ctx,
 		"SELECT COUNT(*) FROM events_audit WHERE rendering->>'source_plugin' <> 'builtin'",
 	).Scan(&nonBuiltinCount)
 	require.NoError(t, err)

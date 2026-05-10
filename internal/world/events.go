@@ -155,7 +155,8 @@ func EmitMoveEvent(ctx context.Context, emitter EventEmitter, payload MovePayloa
 	if payload.EntityType == EntityTypeCharacter {
 		charStream := CharacterStream(payload.EntityID)
 		if err := emitWithRetry(ctx, emitter, charStream, eventType, entityType, entityID, data); err != nil {
-			slog.WarnContext(ctx, "best-effort character stream emit failed",
+			slog.WarnContext(
+				ctx, "best-effort character stream emit failed",
 				"stream", charStream,
 				"event_type", eventType,
 				"entity_id", entityID,

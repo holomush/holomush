@@ -27,6 +27,12 @@ type Config struct {
 	SocketPath string
 	LockPath   string
 	Version    string
+	// Optional: when non-nil, the corresponding RPC dispatches to this
+	// handler. When nil, the RPC returns connect.CodeUnimplemented.
+	// Production wiring sets all three; tests may leave any/all nil.
+	AuthenticateHandler AuthenticateHandler
+	ApproveHandler      ApproveHandler
+	ResetTOTPHandler    ResetTOTPHandler
 }
 
 // Server is the admin-socket ConnectRPC server. Binds exclusively to a
@@ -74,8 +80,8 @@ func (s *Server) Start() (<-chan error, error) {
 	// umask mutation. The parent directory (XDG runtime dir, mode 0700) is the
 	// primary access gate; os.Chmod adds the supplementary socket-level restriction.
 	if chmodErr := os.Chmod(s.cfg.SocketPath, 0o600); chmodErr != nil {
-		_ = ln.Close()         //nolint:errcheck // best-effort cleanup
-		_ = lockFile.Close()   //nolint:errcheck // best-effort cleanup
+		_ = ln.Close()       //nolint:errcheck // best-effort cleanup
+		_ = lockFile.Close() //nolint:errcheck // best-effort cleanup
 		return nil, oops.Code("ADMIN_SOCKET_CHMOD_FAILED").
 			With("path", s.cfg.SocketPath).Wrap(chmodErr)
 	}
@@ -141,11 +147,18 @@ func acquireLock(lockPath string) (*os.File, error) {
 	return f, nil
 }
 
-// buildMux constructs the ConnectRPC handler mux. Handlers for sub-epics
-// D, E, and F will be registered here as they are implemented.
+// buildMux constructs the ConnectRPC handler mux using a compositeHandler
+// that routes each RPC to the registered handler, or returns Unimplemented
+// when the handler is nil.
 func (s *Server) buildMux() *http.ServeMux {
 	mux := http.NewServeMux()
-	path, handler := adminv1connect.NewAdminServiceHandler(&statusHandler{version: s.cfg.Version})
+	h := &compositeHandler{
+		version:             s.cfg.Version,
+		authenticateHandler: s.cfg.AuthenticateHandler,
+		approveHandler:      s.cfg.ApproveHandler,
+		resetTOTPHandler:    s.cfg.ResetTOTPHandler,
+	}
+	path, handler := adminv1connect.NewAdminServiceHandler(h)
 	mux.Handle(path, handler)
 	return mux
 }

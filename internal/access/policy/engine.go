@@ -44,7 +44,8 @@ func (e *Engine) EnterDegradedMode(reason string) {
 	if e.degraded.CompareAndSwap(false, true) {
 		degradedCount.Add(1)
 		degradedModeGauge.Set(1)
-		slog.Error("ABAC engine entering degraded mode — all requests will be denied",
+		slog.Error(
+			"ABAC engine entering degraded mode — all requests will be denied",
 			"reason", reason,
 		)
 	}
@@ -74,11 +75,13 @@ func (e *Engine) OnPolicyCorruption(policyID string, effect types.PolicyEffect) 
 	case types.PolicyEffectForbid:
 		e.EnterDegradedMode(fmt.Sprintf("corrupted forbid policy: %s", policyID))
 	case types.PolicyEffectPermit:
-		slog.Error("corrupted permit policy auto-disabled",
+		slog.Error(
+			"corrupted permit policy auto-disabled",
 			"policy_id", policyID,
 		)
 	default:
-		slog.Error("corrupted policy with unexpected effect type",
+		slog.Error(
+			"corrupted policy with unexpected effect type",
 			"policy_id", policyID,
 			"effect", string(effect),
 		)
@@ -110,7 +113,8 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 	// Step 2: System bypass — defense-in-depth (S1)
 	if req.Subject == "system" {
 		if !access.IsSystemContext(ctx) {
-			slog.ErrorContext(ctx, "system subject used without system context (S1 violation)",
+			slog.ErrorContext(
+				ctx, "system subject used without system context (S1 violation)",
 				"action", req.Action,
 				"resource", req.Resource,
 			)
@@ -144,7 +148,8 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 
 	// Step 3: Degraded mode check — AFTER system bypass so system ops still work
 	if e.degraded.Load() {
-		slog.ErrorContext(ctx, "CRITICAL: ABAC engine in degraded mode — denying all requests",
+		slog.ErrorContext(
+			ctx, "CRITICAL: ABAC engine in degraded mode — denying all requests",
 			"subject", req.Subject,
 			"action", req.Action,
 			"resource", req.Resource,
@@ -184,13 +189,15 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			var decision types.Decision
 			code, isStr := oopsErr.Code().(string)
 			if isOops && isStr && code == "SESSION_INVALID" {
-				slog.DebugContext(ctx, "session invalid during resolution",
+				slog.DebugContext(
+					ctx, "session invalid during resolution",
 					"session_id", sessionID,
 					"error", err,
 				)
 				decision = types.NewDecision(types.EffectDefaultDeny, "session invalid", "infra:session-invalid")
 			} else {
-				errutil.LogErrorContext(ctx, "session resolution failed",
+				errutil.LogErrorContext(
+					ctx, "session resolution failed",
 					err, "session_id", sessionID,
 				)
 				decision = types.NewDecision(types.EffectDefaultDeny, "session store error", "infra:session-store-error")
@@ -226,7 +233,8 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 	// Step 6: Eager attribute resolution — fail-closed on provider errors.
 	bags, resolveErr := e.resolver.Resolve(ctx, req)
 	if resolveErr != nil {
-		errutil.LogErrorContext(ctx, "attribute resolution failed — fail-closed",
+		errutil.LogErrorContext(
+			ctx, "attribute resolution failed — fail-closed",
 			resolveErr,
 			"subject", req.Subject,
 			"action", req.Action,
@@ -444,7 +452,8 @@ func (e *Engine) CanPerformAction(ctx context.Context, subject, action, resource
 	// whose conditions reference resource attributes.
 	bags, resolveErr := e.resolver.ResolveSubjectAttributes(ctx, subject, action)
 	if resolveErr != nil {
-		errutil.LogErrorContext(ctx, "CanPerformAction: attribute resolution failed — fail-closed",
+		errutil.LogErrorContext(
+			ctx, "CanPerformAction: attribute resolution failed — fail-closed",
 			resolveErr,
 			"subject", subject,
 			"action", action,

@@ -197,7 +197,8 @@ func TestPlayerProviderNoMutationAPI(t *testing.T) {
 	for i := 0; i < typ.NumMethod(); i++ {
 		m := typ.Method(i)
 		for _, banned := range bannedPrefixes {
-			assert.False(t,
+			assert.False(
+				t,
 				strings.HasPrefix(m.Name, banned),
 				"PlayerAttributeProvider must not expose mutator %q (INV-B6 — operator set is read-only post-construction)",
 				m.Name,

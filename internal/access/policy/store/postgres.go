@@ -203,7 +203,8 @@ func (s *PostgresStore) Update(ctx context.Context, p *StoredPolicy) error {
 	var currentVersion int
 	var currentDSL string
 	var policyID string
-	err = tx.QueryRow(ctx,
+	err = tx.QueryRow(
+		ctx,
 		`SELECT id, version, dsl_text FROM access_policies WHERE name = $1 FOR UPDATE`, p.Name,
 	).Scan(&policyID, &currentVersion, &currentDSL)
 	if errors.Is(err, pgx.ErrNoRows) {

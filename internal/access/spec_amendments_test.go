@@ -43,10 +43,10 @@ func TestSpecAmendmentsLanded(t *testing.T) {
 
 	// Forbidden substrings: pre-amendment text that MUST NOT remain.
 	forbiddenAfterAmendment := map[string]string{
-		"A1-stale":         "Compromised in-game wizard ", // trailing space avoids matching new text
-		"A5-stale-step3":   "If TOTP enrolled for this player: prompt for 6-digit code",
-		"A13-stale":        "Decide on TOTP enrollment for wizard accounts",
-		"A14-stale":        "<wizard player_id>",
+		"A1-stale":       "Compromised in-game wizard ", // trailing space avoids matching new text
+		"A5-stale-step3": "If TOTP enrolled for this player: prompt for 6-digit code",
+		"A13-stale":      "Decide on TOTP enrollment for wizard accounts",
+		"A14-stale":      "<wizard player_id>",
 	}
 
 	for id, fp := range fingerprints {
@@ -73,6 +73,44 @@ func TestDecompositionSpecDriftFixesLanded(t *testing.T) {
 	assert.NotContains(t, decomp,
 		"Strike \"Decide on TOTP enrollment for wizard accounts\"",
 		"decomposition spec must not retain the misattributed §12 strike text")
+}
+
+// TestSpecAmendmentsLandedSubEpicD enforces INV-D-AMEND: every master-spec
+// amendment listed in the sub-epic D design spec §10 amendments table must
+// leave a detectable fingerprint in the master spec text. Also negate-asserts
+// that removed text (PromptFunc, RequireDualControl, OSUser string) is gone.
+func TestSpecAmendmentsLandedSubEpicD(t *testing.T) {
+	masterSpec := readSpec(t,
+		"docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md")
+
+	// Each fingerprint is a distinctive substring that MUST appear
+	// post-amendment. Keyed by amendment ID for diagnostics.
+	fingerprints := map[string]string{
+		"D1_AuthenticateSignature":  "Authenticate(ctx context.Context, req AuthRequest) (OperatorIdentity, error)",
+		"D2_RoleStorePlayerHasRole": "RoleStore.PlayerHasRole",
+		"D3_ChainSubject":           "events.<game>.system.crypto_policy",
+		"D4_OpArgsHashAlgorithm":    "SHA-256(proto.MarshalOptions{Deterministic: true}.Marshal(args))",
+		"D5_DenyNotAdminRole":       "DENY_NOT_ADMIN_ROLE",
+		"D6_DenySessionExpired":     "DENY_SESSION_EXPIRED",
+		"D7_DenyDualControlSelf":    "DENY_DUAL_CONTROL_SELF",
+	}
+
+	// Forbidden substrings: pre-amendment text that MUST NOT remain.
+	forbiddenAfterAmendment := []string{
+		"RequireDualControl(ctx context.Context, primary",
+		"prompt PromptFunc",
+		"OperatorIdentity.OSUser",
+		"OSUser                  string",
+	}
+
+	for id, fp := range fingerprints {
+		assert.Contains(t, masterSpec, fp,
+			"INV-D-AMEND: amendment %s fingerprint missing from master spec", id)
+	}
+	for _, sub := range forbiddenAfterAmendment {
+		assert.NotContains(t, masterSpec, sub,
+			"INV-D-AMEND: pre-amendment text still present in master spec: %s", sub)
+	}
 }
 
 // readSpec resolves the path relative to repo root by walking up from

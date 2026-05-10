@@ -86,7 +86,8 @@ func (r *registry) Start(_ context.Context) error {
 	r.wg.Add(1)
 	go r.runEvictionSweeper(r.evTicker, r.evDone)
 
-	r.deps.Logger.Info("cluster.Registry started",
+	r.deps.Logger.Info(
+		"cluster.Registry started",
 		"self", string(r.self),
 		"cluster_id", r.cfg.ClusterID,
 		"heartbeat_interval", r.cfg.HeartbeatInterval.String(),
@@ -206,7 +207,8 @@ func (r *registry) runHeartbeatTicker(ticker *time.Ticker, done chan struct{}) {
 				if r.deps.HeartbeatMetrics != nil {
 					r.deps.HeartbeatMetrics.HeartbeatPublishFailedTotal.WithLabelValues(string(r.self)).Inc()
 				}
-				r.deps.Logger.Warn("heartbeat publish failed",
+				r.deps.Logger.Warn(
+					"heartbeat publish failed",
 					"self", string(r.self),
 					"err", err.Error(),
 				)
@@ -286,7 +288,8 @@ func (r *registry) handleAlive(msg *nats.Msg) {
 	// (no Go error returned because handleAlive is fire-and-forget).
 	if present && !existing.StartedAt.IsZero() && !p.StartedAt.Equal(existing.StartedAt) {
 		r.mu.Unlock()
-		r.deps.Logger.Warn("CLUSTER_MEMBER_DUPLICATE_ID; rejecting duplicate heartbeat",
+		r.deps.Logger.Warn(
+			"CLUSTER_MEMBER_DUPLICATE_ID; rejecting duplicate heartbeat",
 			"member_id", string(p.MemberID),
 			"existing_started_at", existing.StartedAt,
 			"duplicate_started_at", p.StartedAt,
@@ -309,7 +312,8 @@ func (r *registry) handleAlive(msg *nats.Msg) {
 		}
 		r.members[p.MemberID] = m
 		r.mu.Unlock()
-		r.deps.Logger.Info("cluster member joined",
+		r.deps.Logger.Info(
+			"cluster member joined",
 			"member_id", string(p.MemberID),
 			"version", p.HolomushVersion,
 		)
@@ -438,7 +442,8 @@ func (r *registry) recordSkew(source MemberID, skew float64) {
 	// log breadcrumb. The Prometheus gauge is the silent-observable
 	// path; gate ONLY the Set() call on the nil check.
 	if skew > r.cfg.SkewWarnThreshold.Seconds() {
-		r.deps.Logger.Warn("cluster member skew exceeds threshold",
+		r.deps.Logger.Warn(
+			"cluster member skew exceeds threshold",
 			"self", string(r.self),
 			"source_id", string(source),
 			"skew_seconds", skew,
