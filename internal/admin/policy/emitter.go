@@ -143,6 +143,15 @@ func EmitCurrentSnapshot(ctx context.Context, deps EmitDeps, policyName string) 
 		return oops.Code("POLICY_EMIT_PUBLISH_FAILED").
 			With("policy_name", policyName).Wrap(err)
 	}
+	// Record the chain-init signal so the verifier can later distinguish
+	// "first boot, no chain yet" from "chain existed and was truncated".
+	// Idempotent (INSERT ... ON CONFLICT DO NOTHING); safe to call on
+	// every successful emit. See chain_state.go for the design and the
+	// bootstrap_metadata key shape.
+	if err := markChainInitialized(ctx, deps.Pool, policyName); err != nil {
+		return oops.Code("POLICY_EMIT_STATE_MARK_FAILED").
+			With("policy_name", policyName).Wrap(err)
+	}
 	return nil
 }
 

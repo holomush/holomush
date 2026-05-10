@@ -27,13 +27,36 @@ type chainEntry struct {
 // walks the chain, and recomputes each event's policy_hash to catch
 // payload tampering.
 //
-// Returns nil on empty chain (fresh DB; the emitter writes the genesis row).
+// Empty-chain handling cross-checks against the persistent chain-init
+// signal in bootstrap_metadata (chain_state.go). On first boot the
+// signal is absent and an empty chain is permitted (the emitter will
+// write the genesis row and mark the signal). On any subsequent boot
+// the signal is present, so an empty audit row-set is treated as
+// full-chain truncation and surfaces as POLICY_CHAIN_TRUNCATED.
+//
 // Returns a typed POLICY_CHAIN_* error on any integrity failure.
 func VerifyChain(ctx context.Context, pool *pgxpool.Pool, subject, policyName string) error {
 	entries, err := loadChainEntries(ctx, pool, subject)
 	if err != nil {
 		return oops.Code("POLICY_CHAIN_LOAD_FAILED").
 			With("subject", subject).Wrap(err)
+	}
+	if len(entries) == 0 {
+		// Distinguish first-boot (no init signal) from truncation
+		// (signal present but every chain row missing).
+		initialized, stateErr := chainInitialized(ctx, pool, policyName)
+		if stateErr != nil {
+			return oops.Code("POLICY_CHAIN_STATE_LOAD_FAILED").
+				With("policy_name", policyName).Wrap(stateErr)
+		}
+		if initialized {
+			return oops.Code("POLICY_CHAIN_TRUNCATED").
+				With("policy_name", policyName).
+				With("subject", subject).
+				Errorf("chain truncated: bootstrap_metadata records prior init but events_audit holds no chain rows")
+		}
+		// First boot: emitter will write genesis and mark the signal.
+		return nil
 	}
 	return verifyChainEntries(entries, policyName)
 }

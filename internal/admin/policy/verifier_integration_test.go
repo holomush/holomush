@@ -106,6 +106,18 @@ func buildPayload(name string, prev []byte, ts int64) policy.PolicySetPayload {
 	}
 }
 
+// chainStateCleanup deletes the bootstrap_metadata row for a policyName
+// after the test, so subsequent runs (or other tests on the same DB)
+// see an uninitialized chain by default.
+func chainStateCleanup(t *testing.T, policyName string) {
+	t.Helper()
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(context.Background(),
+			`DELETE FROM bootstrap_metadata WHERE key = $1`,
+			"crypto.policy_chain_initialized."+policyName)
+	})
+}
+
 // TestVerifyChainAgainstRealEventsAudit inserts 3 valid chain rows into the
 // events_audit table, verifies the clean chain passes, then corrupts the
 // middle row's envelope (keeping the stored policy_hash unchanged) and
@@ -172,4 +184,80 @@ func TestVerifyChainAgainstRealEventsAudit(t *testing.T) {
 		[]string{"POLICY_CHAIN_HASH_MISMATCH", "POLICY_CHAIN_BROKEN_LINK"},
 		o.Code(),
 		"expected HASH_MISMATCH or BROKEN_LINK; got %s", o.Code())
+}
+
+// TestVerifyChainAcceptsEmptyOnFirstBoot covers the chain-init signal
+// added in CodeRabbit #11: an empty audit row-set with NO bootstrap
+// signal is the first-boot path and VerifyChain returns nil so the
+// emitter can write genesis.
+func TestVerifyChainAcceptsEmptyOnFirstBoot(t *testing.T) {
+	policyName := "first_boot_policy"
+	subject := "events.testgame.system.crypto_policy." + policyName
+	// Defensive: ensure no leftover state.
+	_, _ = testPool.Exec(context.Background(),
+		`DELETE FROM events_audit WHERE subject = $1`, subject)
+	chainStateCleanup(t, policyName)
+	_, _ = testPool.Exec(context.Background(),
+		`DELETE FROM bootstrap_metadata WHERE key = $1`,
+		"crypto.policy_chain_initialized."+policyName)
+
+	require.NoError(t, policy.VerifyChain(context.Background(), testPool, subject, policyName),
+		"first-boot empty chain MUST verify cleanly")
+}
+
+// TestVerifyChainRejectsTruncatedChain locks in the security-critical
+// branch of CodeRabbit #11. Initialize the chain (write the bootstrap
+// signal), then DELETE every events_audit row for the subject —
+// simulating full-chain truncation. The next VerifyChain MUST fail with
+// POLICY_CHAIN_TRUNCATED rather than silently treating an empty
+// row-set as fresh-DB.
+func TestVerifyChainRejectsTruncatedChain(t *testing.T) {
+	policyName := "truncated_policy"
+	subject := "events.testgame.system.crypto_policy." + policyName
+	chainStateCleanup(t, policyName)
+	defer testPool.Exec(context.Background(),
+		`DELETE FROM events_audit WHERE subject = $1`, subject) //nolint:errcheck
+
+	// Mark the chain as initialized (simulating a prior successful emit).
+	_, err := testPool.Exec(context.Background(),
+		`INSERT INTO bootstrap_metadata (key, value) VALUES ($1, 'true')
+		 ON CONFLICT (key) DO NOTHING`,
+		"crypto.policy_chain_initialized."+policyName)
+	require.NoError(t, err)
+
+	// Audit row-set is empty (no chain rows seeded). Truncation case.
+	err = policy.VerifyChain(context.Background(), testPool, subject, policyName)
+	require.Error(t, err)
+	o, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, "POLICY_CHAIN_TRUNCATED", o.Code(),
+		"empty chain + initialized signal MUST surface POLICY_CHAIN_TRUNCATED")
+}
+
+// TestEmitCurrentSnapshotMarksChainInitialized verifies the emitter
+// writes the chain-init signal after a successful Publish, so
+// subsequent VerifyChain calls can detect truncation.
+func TestEmitCurrentSnapshotMarksChainInitialized(t *testing.T) {
+	const policyName = "init-signal-game"
+	const gameID = "init-signal-game"
+	subject := "events." + gameID + ".system.crypto_policy.dual_control_required"
+	cleanupSubject(t, subject)
+	chainStateCleanup(t, "dual_control_required")
+
+	// Build emitter deps with a fakePublisher (the host does the audit
+	// projection in production; this unit-style test only verifies the
+	// emitter's own state-mark side effect).
+	pub := &fakePublisher{}
+	deps := emitDeps(t, gameID, pub, policy.CryptoEffectiveConfig{DualControlRequired: []string{"rekey"}})
+	require.NoError(t, policy.EmitCurrentSnapshot(context.Background(), deps, "dual_control_required"))
+	require.Len(t, pub.Events(), 1, "emit should publish exactly one event")
+
+	// Bootstrap signal MUST be present.
+	var value string
+	err := testPool.QueryRow(context.Background(),
+		`SELECT value FROM bootstrap_metadata WHERE key = $1`,
+		"crypto.policy_chain_initialized.dual_control_required",
+	).Scan(&value)
+	require.NoError(t, err, "chain-init signal MUST be recorded after successful emit")
+	assert.Equal(t, "true", value)
 }
