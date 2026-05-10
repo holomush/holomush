@@ -265,7 +265,8 @@ func (p *projection) persist(msg jetstream.Msg) error {
 	ctx, cancel := context.WithTimeout(parent, persistTimeout)
 	defer cancel()
 
-	_, err = p.pool.Exec(ctx, `
+	_, err = p.pool.Exec(
+		ctx, `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
 			envelope, schema_ver, codec, js_seq, rendering,

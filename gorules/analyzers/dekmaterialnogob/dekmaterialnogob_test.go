@@ -12,7 +12,8 @@ import (
 )
 
 func TestAnalyzerFlagsDEKMaterialPassedToGobSinks(t *testing.T) {
-	analysistest.Run(t, analysistest.TestData(), dekmaterialnogob.Analyzer,
+	analysistest.Run(
+		t, analysistest.TestData(), dekmaterialnogob.Analyzer,
 		"github.com/holomush/holomush/plugins/positive",
 		"github.com/holomush/holomush/plugins/negative",
 	)

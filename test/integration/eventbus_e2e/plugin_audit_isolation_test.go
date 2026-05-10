@@ -191,7 +191,8 @@ func (c *pgSceneLogClient) AuditEvent(ctx context.Context, req *pluginv1.AuditEv
 	if codecName == "" {
 		codecName = "identity"
 	}
-	_, err := c.pool.Exec(ctx, `
+	_, err := c.pool.Exec(
+		ctx, `
 		INSERT INTO plugin_core_scenes.scene_log (
 			id, subject, type, timestamp, actor_kind, actor_id,
 			payload, schema_ver, codec, js_seq

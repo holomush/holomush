@@ -56,7 +56,8 @@ func (s *PostgresRoleStore) GetRoles(ctx context.Context, characterID string) ([
 
 // AddRole assigns a role to a character. Idempotent — does nothing if already assigned.
 func (s *PostgresRoleStore) AddRole(ctx context.Context, characterID, role string) error {
-	_, err := s.pool.Exec(ctx,
+	_, err := s.pool.Exec(
+		ctx,
 		`INSERT INTO character_roles (character_id, role) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
 		characterID, role,
 	)
@@ -68,7 +69,8 @@ func (s *PostgresRoleStore) AddRole(ctx context.Context, characterID, role strin
 
 // RemoveRole removes a role from a character. No error if the role wasn't assigned.
 func (s *PostgresRoleStore) RemoveRole(ctx context.Context, characterID, role string) error {
-	_, err := s.pool.Exec(ctx,
+	_, err := s.pool.Exec(
+		ctx,
 		`DELETE FROM character_roles WHERE character_id = $1 AND role = $2`,
 		characterID, role,
 	)

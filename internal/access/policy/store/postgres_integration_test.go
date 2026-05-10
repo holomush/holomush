@@ -244,7 +244,8 @@ var _ = Describe("PostgresStore", func() {
 
 			// Verify version history was recorded.
 			var historyCount int
-			err = pool.QueryRow(ctx,
+			err = pool.QueryRow(
+				ctx,
 				"SELECT count(*) FROM access_policy_versions WHERE policy_id = $1", originalID,
 			).Scan(&historyCount)
 			Expect(err).NotTo(HaveOccurred())
@@ -253,7 +254,8 @@ var _ = Describe("PostgresStore", func() {
 			// Verify history content.
 			var historyDSL, historyNote string
 			var historyVersion int
-			err = pool.QueryRow(ctx,
+			err = pool.QueryRow(
+				ctx,
 				"SELECT version, dsl_text, change_note FROM access_policy_versions WHERE policy_id = $1",
 				originalID,
 			).Scan(&historyVersion, &historyDSL, &historyNote)
@@ -312,7 +314,8 @@ var _ = Describe("PostgresStore", func() {
 
 			// CASCADE should have removed version history.
 			var historyCount int
-			err = pool.QueryRow(ctx,
+			err = pool.QueryRow(
+				ctx,
 				"SELECT count(*) FROM access_policy_versions WHERE policy_id = $1", p.ID,
 			).Scan(&historyCount)
 			Expect(err).NotTo(HaveOccurred())

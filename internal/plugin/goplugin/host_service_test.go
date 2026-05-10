@@ -606,7 +606,8 @@ func newTestHostWithEmitter(t *testing.T, bus *eventbustest.Embedded, pluginName
 	t.Helper()
 	publisher := bus.Bus.Publisher()
 	require.NotNil(t, publisher)
-	emitter := plugins.NewPluginEventEmitter(publisher,
+	emitter := plugins.NewPluginEventEmitter(
+		publisher,
 		func(name string) *plugins.Manifest {
 			if name == pluginName {
 				return manifest

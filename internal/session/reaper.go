@@ -72,7 +72,8 @@ func (r *Reaper) reapExpired(ctx context.Context) {
 
 		// Mark as expired and delete
 		if err := r.store.UpdateStatus(ctx, info.ID, StatusExpired, nil, nil); err != nil {
-			slog.WarnContext(ctx, "reaper: failed to expire session",
+			slog.WarnContext(
+				ctx, "reaper: failed to expire session",
 				"session_id", info.ID,
 				"error", err,
 			)
@@ -80,13 +81,15 @@ func (r *Reaper) reapExpired(ctx context.Context) {
 		}
 
 		if err := r.store.Delete(ctx, info.ID); err != nil {
-			slog.WarnContext(ctx, "reaper: failed to delete expired session",
+			slog.WarnContext(
+				ctx, "reaper: failed to delete expired session",
 				"session_id", info.ID,
 				"error", err,
 			)
 		}
 
-		slog.InfoContext(ctx, "reaper: expired session cleaned up",
+		slog.InfoContext(
+			ctx, "reaper: expired session cleaned up",
 			"session_id", info.ID,
 			"character_name", info.CharacterName,
 			"is_guest", info.IsGuest,

@@ -22,8 +22,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
-	adminauth "github.com/holomush/holomush/internal/admin/auth"
 	"github.com/holomush/holomush/internal/admin/approval"
+	adminauth "github.com/holomush/holomush/internal/admin/auth"
 	"github.com/holomush/holomush/internal/admin/policy"
 	socket "github.com/holomush/holomush/internal/admin/socket"
 	totpaudit "github.com/holomush/holomush/internal/admin/totp_audit"
@@ -46,8 +46,8 @@ import (
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telemetry"
-	"github.com/holomush/holomush/internal/totp"
 	tlscerts "github.com/holomush/holomush/internal/tls"
+	"github.com/holomush/holomush/internal/totp"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	worldsetup "github.com/holomush/holomush/internal/world/setup"
 	"github.com/holomush/holomush/internal/xdg"
@@ -189,7 +189,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		}
 	}()
 
-	slog.Info("starting core process",
+	slog.Info(
+		"starting core process",
 		"grpc_addr", cfg.GRPCAddr,
 		"log_format", cfg.LogFormat,
 	)
@@ -704,7 +705,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	if readyErr := registry.WaitReady(readinessCtx); readyErr != nil {
 		for id, status := range registry.Status() {
 			if !status.Tier.IsReady() {
-				slog.Error("subsystem not ready",
+				slog.Error(
+					"subsystem not ready",
 					"subsystem", id.String(),
 					"tier", status.Tier.String(),
 				)
@@ -740,7 +742,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	defer signal.Stop(sigChan)
 
 	cmd.Println("Core process started")
-	slog.Info("core process ready",
+	slog.Info(
+		"core process ready",
 		"game_id", gameID,
 		"grpc_addr", cfg.GRPCAddr,
 	)
@@ -943,7 +946,8 @@ func monitorServerErrors(ctx context.Context, cancel context.CancelFunc, errCh <
 			return
 		}
 		if err != nil {
-			slog.Error("server error, triggering shutdown",
+			slog.Error(
+				"server error, triggering shutdown",
 				"server", serverName,
 				"error", err,
 			)

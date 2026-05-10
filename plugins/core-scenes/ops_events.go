@@ -85,7 +85,8 @@ func recordOpsEventTx(ctx context.Context, tx pgx.Tx, sceneID string, kind OpsEv
 		targetParam = targetID
 	}
 
-	_, err = tx.Exec(ctx, `
+	_, err = tx.Exec(
+		ctx, `
 		INSERT INTO scene_ops_events (id, scene_id, kind, actor_id, target_id, payload)
 		VALUES ($1, $2, $3, $4, $5, $6)`,
 		id, sceneID, string(kind), actorID, targetParam, payloadJSON,

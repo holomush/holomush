@@ -64,7 +64,8 @@ func (s *stubPluginRepo) SweepInactive(_ context.Context, _ int) ([]store.Plugin
 func newManagerForRegistryTest(t *testing.T, repo store.PluginRepo) *Manager {
 	t.Helper()
 	// NewManager enforces INV-GW-10: a VerbRegistry MUST be passed.
-	mgr, err := NewManager(t.TempDir(),
+	mgr, err := NewManager(
+		t.TempDir(),
 		WithPluginRepo(repo),
 		WithVerbRegistry(core.NewVerbRegistry()),
 	)
@@ -111,7 +112,8 @@ func TestManagerBootstrapRefusesPluginRowWithSentinelULID(t *testing.T) {
 			Name: "evil-plugin",
 		}},
 	}
-	_, err := NewManager(t.TempDir(),
+	_, err := NewManager(
+		t.TempDir(),
 		WithPluginRepo(repo),
 		WithVerbRegistry(core.NewVerbRegistry()),
 	)
@@ -360,7 +362,8 @@ func TestUnloadPluginWrapsHostUnloadFailure(t *testing.T) {
 }
 
 func TestUnloadPluginWrapsPolicyRemovalFailure(t *testing.T) {
-	mgr, err := NewManager(t.TempDir(),
+	mgr, err := NewManager(
+		t.TempDir(),
 		WithPluginRepo(&stubPluginRepo{}),
 		WithVerbRegistry(core.NewVerbRegistry()),
 		WithPolicyInstaller(&unloadStubPolicyInstaller{
@@ -391,7 +394,8 @@ func TestSweepInactiveRemovesFromActiveByNameRetainsNameByID(t *testing.T) {
 			{ID: staleID, Name: "stale", LastSeenAt: now.Add(-99 * 24 * time.Hour)},
 		},
 	}
-	mgr, err := NewManager(t.TempDir(),
+	mgr, err := NewManager(
+		t.TempDir(),
 		WithPluginRepo(repo),
 		WithVerbRegistry(core.NewVerbRegistry()),
 		WithRetentionDays(3),
@@ -416,7 +420,8 @@ func TestSweepInactiveRemovesFromActiveByNameRetainsNameByID(t *testing.T) {
 
 func TestRetentionDaysZeroDisablesSweep(t *testing.T) {
 	repo := &stubPluginRepo{}
-	mgr, err := NewManager(t.TempDir(),
+	mgr, err := NewManager(
+		t.TempDir(),
 		WithPluginRepo(repo),
 		WithVerbRegistry(core.NewVerbRegistry()),
 		WithRetentionDays(0),

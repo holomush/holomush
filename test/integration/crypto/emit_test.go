@@ -144,7 +144,8 @@ func TestSensitiveEmitProducesCiphertextOnBusAndInAudit(t *testing.T) {
 
 	// Phase 3a sensitivity fence is gated behind WithCryptoEnabled —
 	// this E2E exercises the enabled path end-to-end (encrypt + audit).
-	emitter := plugins.NewPluginEventEmitter(hostPub, manifestLookup, actorResolver,
+	emitter := plugins.NewPluginEventEmitter(
+		hostPub, manifestLookup, actorResolver,
 		plugins.WithCryptoEnabled(true),
 	)
 

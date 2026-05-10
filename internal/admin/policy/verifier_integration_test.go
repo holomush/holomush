@@ -20,8 +20,8 @@ import (
 
 	"github.com/holomush/holomush/internal/admin/policy"
 	"github.com/holomush/holomush/internal/store"
-	"github.com/holomush/holomush/test/testutil"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
+	"github.com/holomush/holomush/test/testutil"
 )
 
 var testPool *pgxpool.Pool

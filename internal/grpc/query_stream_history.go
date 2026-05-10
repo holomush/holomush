@@ -49,7 +49,8 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		requestID = req.Meta.RequestId
 	}
 
-	slog.DebugContext(ctx, "query stream history",
+	slog.DebugContext(
+		ctx, "query stream history",
 		"request_id", requestID,
 		"session_id", req.SessionId,
 		"stream", req.Stream,
@@ -164,7 +165,8 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		// Layer 1: Membership gate (I-17). ABAC is never consulted for
 		// private streams — no policy override is possible.
 		if !sessionHasMembership(info, req.Stream) {
-			slog.InfoContext(ctx, "stream access denied by I-17 membership gate",
+			slog.InfoContext(
+				ctx, "stream access denied by I-17 membership gate",
 				"session_id", req.SessionId,
 				"character_id", info.CharacterID.String(),
 				"stream", req.Stream,
@@ -197,7 +199,8 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 				Wrap(evalErr)
 		}
 		if !decision.IsAllowed() {
-			slog.InfoContext(ctx, "stream access denied by ABAC",
+			slog.InfoContext(
+				ctx, "stream access denied by ABAC",
 				"session_id", req.SessionId,
 				"character_id", info.CharacterID.String(),
 				"stream", req.Stream,

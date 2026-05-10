@@ -78,7 +78,8 @@ func bootstrapSeed(
 
 	// Policy exists with different source — admin collision, skip with warning.
 	if existing.Source != "seed" {
-		logger.Warn("seed policy name collision with non-seed policy, skipping",
+		logger.Warn(
+			"seed policy name collision with non-seed policy, skipping",
 			"name", seed.Name,
 			"existing_source", existing.Source,
 		)
@@ -90,7 +91,8 @@ func bootstrapSeed(
 		return upgradeSeedPolicy(ctx, policyStore, compiler, logger, seed, existing)
 	}
 
-	logger.Info("seed policy already current, skipping",
+	logger.Info(
+		"seed policy already current, skipping",
 		"name", seed.Name,
 		"version", seed.SeedVersion,
 	)
@@ -172,7 +174,8 @@ func upgradeSeedPolicy(
 		return fmt.Errorf("upgrading seed policy %q: %w", seed.Name, err)
 	}
 
-	logger.Info("seed policy upgraded",
+	logger.Info(
+		"seed policy upgraded",
 		"name", seed.Name,
 		"from_version", oldVersion,
 		"to_version", seed.SeedVersion,
@@ -210,7 +213,8 @@ func UpdateSeed(
 
 	// Compare-and-swap: skip with warning if admin customized.
 	if existing.DSLText != oldDSL {
-		logger.Warn("seed policy customized by admin, skipping migration update",
+		logger.Warn(
+			"seed policy customized by admin, skipping migration update",
 			"name", name,
 			"expected_dsl_prefix", truncate(oldDSL, 60),
 			"actual_dsl_prefix", truncate(existing.DSLText, 60),

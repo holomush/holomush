@@ -180,7 +180,8 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		}
 	}()
 
-	slog.Info("starting gateway process",
+	slog.Info(
+		"starting gateway process",
 		"telnet_addr", cfg.TelnetAddr,
 		"core_addr", cfg.CoreAddr,
 		"log_format", cfg.LogFormat,
@@ -334,7 +335,8 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 	go runTelnetAcceptLoop(ctx, telnetListener, grpcClient, cancel, slots, limits)
 
 	cmd.Println("Gateway process started")
-	slog.Info("gateway process ready",
+	slog.Info(
+		"gateway process ready",
 		"telnet_addr", telnetListener.Addr().String(),
 		"core_addr", cfg.CoreAddr,
 		"web_addr", webServer.Addr(),
@@ -434,7 +436,8 @@ func runTelnetAcceptLoop(
 ) {
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("panic in telnet accept loop, triggering shutdown",
+			slog.Error(
+				"panic in telnet accept loop, triggering shutdown",
 				"panic", r,
 			)
 			cancel()
@@ -452,7 +455,8 @@ func runTelnetAcceptLoop(
 			default:
 				backoff.failure()
 				waitDuration := backoff.wait()
-				slog.Error("telnet accept failed, backing off",
+				slog.Error(
+					"telnet accept failed, backing off",
 					"error", acceptErr,
 					"backoff", waitDuration,
 				)

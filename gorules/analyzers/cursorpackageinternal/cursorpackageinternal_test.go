@@ -12,7 +12,8 @@ import (
 )
 
 func TestAnalyzerFlagsCursorRefsExceptFromAllowlistedPackages(t *testing.T) {
-	analysistest.Run(t, analysistest.TestData(), cursorpackageinternal.Analyzer,
+	analysistest.Run(
+		t, analysistest.TestData(), cursorpackageinternal.Analyzer,
 		"github.com/holomush/holomush/plugins/positive",
 		"github.com/holomush/holomush/plugins/blankimport",
 		"github.com/holomush/holomush/internal/eventbus/allow",

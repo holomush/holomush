@@ -161,7 +161,7 @@ Run: `go list -m google.golang.org/protobuf` to discover the current resolved ve
 
 Use a `// indirect` style comment block above each pinned require directive:
 
-```
+```text
 // crypto.policy_set chain hashing: SHA-256 over RFC 8785 JCS-canonicalized
 // JSON. Pin pseudo-version is load-bearing — switching libraries is a
 // chain-breaking master-spec amendment per INV-D13.
@@ -1359,6 +1359,7 @@ Expected: PASS.
 Path: `internal/admin/policy/verifier_integration_test.go`
 
 `TestVerifierAgainstRealEventsAudit`:
+
 - Direct-insert 3 valid chain rows into `events_audit` (with marshaled envelopes containing JSON payloads).
 - VerifyChain → no error.
 - Corrupt second row's payload bytes (UPDATE the envelope column).
@@ -1640,6 +1641,7 @@ func (s *CryptoChainVerifierSubsystem) Stop(ctx context.Context) error { return 
 - [ ] **Step 3: Write integration test**
 
 `TestCryptoChainVerifierSubsystemFailsStartOnBrokenChain` (build tag `integration`):
+
 - Seed `events_audit` directly with two rows for `events.testgame.system.crypto_policy.dual_control_required` whose prev_hash linkage is broken.
 - Construct subsystem with `GameID: "testgame"`, `PolicyNames: []string{"dual_control_required"}`.
 - Call `subsystem.Start(ctx)`.
@@ -2508,6 +2510,7 @@ cleared_by='admin_reset' on success."
 - [ ] **Step 1: Pass the handlers in via `Config`**
 
 Extend `Config` (the struct used by `NewServer`) with fields for the three handlers (interface types for testability):
+
 - `AuthenticateHandler adminauth.AuthenticateHandler`
 - `ApproveHandler approval.ApproveHandler`
 - `ResetTOTPHandler adminauth.ResetTOTPHandler`
@@ -3144,7 +3147,7 @@ holomush-jxo8                       (existing epic — Phase 5: Rekey + AdminRea
 
 All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task `T28` (final `task pr-prep` gate) is procedural and has no bead.
 
-#### `jxo8.6.1` — Migration 000020 admin_approvals
+### `jxo8.6.1` — Migration 000020 admin_approvals
 
 **Goal:** Land migration 000020 creating the `admin_approvals` table for dual-control approval rows.
 
@@ -3157,6 +3160,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -- ./internal/store/...`; `task test:int -- ./internal/store/...`.
 
 **Files touched:**
+
 - `internal/store/migrations/000020_create_admin_approvals.up.sql` — new
 - `internal/store/migrations/000020_create_admin_approvals.down.sql` — new
 - `internal/store/migrate_integration_test.go` — add to expectedTables
@@ -3178,6 +3182,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -- ./internal/lifecycle/... ./internal/admin/policy/...`.
 
 **Files touched:**
+
 - `internal/lifecycle/subsystem.go` — add `SubsystemCryptoPolicy` constant
 - `internal/lifecycle/subsystem_test.go` — extend constants test
 - `internal/admin/policy/subsystem.go` — new
@@ -3200,6 +3205,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -- ./internal/admin/policy/... ./internal/admin/approval/...`; `go mod tidy && task build`.
 
 **Files touched:**
+
 - `go.mod` — add cyberphone/json-canonicalization at pinned pseudo-version; ensure protobuf-go pinned at specific semver; add comments explaining load-bearing role
 - `go.sum` — auto-regenerated
 - `internal/admin/policy/jcs_meta_test.go` — new
@@ -3222,6 +3228,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test`; `task test:int -- ./internal/store/...`.
 
 **Files touched:**
+
 - `internal/store/role_store.go` — add interface method + Postgres impl
 - `internal/store/role_store_integration_test.go` — new
 - `internal/bootstrap/admin_test.go` — update `fakeRoleStore`
@@ -3243,6 +3250,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -race -- ./internal/admin/auth/`.
 
 **Files touched:**
+
 - `internal/admin/auth/types.go` — new (OperatorIdentity, AuthRequest, OperatorAuthProvider interface, Clock)
 - `internal/admin/auth/session.go` — new
 - `internal/admin/auth/session_test.go` — new
@@ -3264,6 +3272,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -- ./internal/admin/auth/`.
 
 **Files touched:**
+
 - `internal/admin/auth/ingame.go` — new
 - `internal/admin/auth/ingame_test.go` — new
 - `mockery.yml` — register `internal/admin/auth/` interfaces; regenerate mocks via `task generate`
@@ -3285,6 +3294,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -- ./internal/admin/approval/`; `task test:int -- ./internal/admin/approval/`.
 
 **Files touched:**
+
 - `internal/admin/approval/types.go` — new (RequestID, OpenRequest, Approval)
 - `internal/admin/approval/oparghash.go` — new (`ComputeOpArgsHash` helper for INV-D8)
 - `internal/admin/approval/oparghash_test.go` — new (golden-vector test)
@@ -3309,6 +3319,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -- ./internal/admin/policy/`.
 
 **Files touched:**
+
 - `internal/admin/policy/chain.go` — new
 - `internal/admin/policy/chain_test.go` — new
 
@@ -3329,6 +3340,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -- ./internal/admin/policy/`; `task test:int -- ./internal/admin/policy/`.
 
 **Files touched:**
+
 - `internal/admin/policy/verifier.go` — new
 - `internal/admin/policy/verifier_test.go` — new
 - `internal/admin/policy/verifier_integration_test.go` — new
@@ -3350,6 +3362,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -- ./internal/admin/policy/`.
 
 **Files touched:**
+
 - `internal/admin/policy/emitter.go` — new
 - `internal/admin/policy/emitter_test.go` — new
 
@@ -3370,6 +3383,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -- ./internal/admin/policy/`; `task test:int -- ./internal/admin/policy/`.
 
 **Files touched:**
+
 - `internal/admin/policy/verifier_subsystem.go` — new
 - `internal/admin/policy/verifier_subsystem_test.go` — new
 - `internal/admin/policy/verifier_subsystem_integration_test.go` — new
@@ -3391,6 +3405,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -- ./internal/admin/totp_audit/`.
 
 **Files touched:**
+
 - `internal/admin/totp_audit/auditing.go` — new
 - `internal/admin/totp_audit/auditing_test.go` — new
 
@@ -3411,6 +3426,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task proto:generate`; `task test`; `task build`.
 
 **Files touched:**
+
 - `api/proto/holomush/admin/v1/admin.proto` — modify
 - `pkg/proto/holomush/admin/v1/*` — regenerated
 - `pkg/proto/holomush/admin/v1/adminv1connect/*` — regenerated
@@ -3432,6 +3448,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -- ./internal/admin/auth/`.
 
 **Files touched:**
+
 - `internal/admin/auth/handler.go` — new
 - `internal/admin/auth/handler_test.go` — new
 
@@ -3452,6 +3469,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -- ./internal/admin/approval/`.
 
 **Files touched:**
+
 - `internal/admin/approval/handler.go` — new
 - `internal/admin/approval/handler_test.go` — new
 
@@ -3472,6 +3490,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -- ./internal/admin/auth/`.
 
 **Files touched:**
+
 - `internal/admin/auth/reset_handler.go` — new
 - `internal/admin/auth/reset_handler_test.go` — new
 
@@ -3492,6 +3511,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -- ./internal/admin/socket/`; `task build`.
 
 **Files touched:**
+
 - `internal/admin/socket/server.go` — extend Config + buildMux
 - `internal/admin/socket/server_test.go` — extend
 - `cmd/holomush/sub_admin_socket.go` (or equivalent NewServer caller) — pass new handlers
@@ -3513,6 +3533,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -- ./cmd/holomush/...`.
 
 **Files touched:**
+
 - `internal/config/config.go` — add field
 - `cmd/holomush/crypto_dual_control_validation.go` — new
 - `cmd/holomush/crypto_dual_control_validation_test.go` — new
@@ -3534,6 +3555,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -- ./cmd/holomush/...`.
 
 **Files touched:**
+
 - `cmd/holomush/cmd_admin_totp_reset.go` — new
 - `cmd/holomush/cmd_admin_totp_reset_test.go` — new
 
@@ -3554,6 +3576,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -- ./cmd/holomush/...`.
 
 **Files touched:**
+
 - `cmd/holomush/cmd_admin_approve.go` — new
 - `cmd/holomush/cmd_admin_approve_test.go` — new
 
@@ -3574,6 +3597,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -- ./cmd/holomush/...`; `task build`.
 
 **Files touched:**
+
 - `cmd/holomush/core.go` — modify `productionSubsystems` signature (12 → 14 params) + `runCoreWithDeps` wiring (build both subsystem instances + resolve effective config)
 - `cmd/holomush/core_subsystems_test.go` — bump length-checks; extend constants test; add two ordering tests
 - `cmd/holomush/deps.go` — extend `CoreDeps` with the new subsystem fields if needed (verified: file exists)
@@ -3595,6 +3619,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test -- ./internal/access/...`; `task lint:markdown`.
 
 **Files touched:**
+
 - `docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md` — apply 7 amendments
 - `internal/access/spec_amendments_test.go` — extend with D's substrings
 
@@ -3615,6 +3640,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test:int -- ./test/integration/`.
 
 **Files touched:**
+
 - `test/integration/admin_authenticate_test.go` — new
 
 **Dependencies:** `jxo8.6.17` (mux), `jxo8.6.18` (config), `jxo8.6.19` (totp reset CLI).
@@ -3634,6 +3660,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test:int -- ./test/integration/`.
 
 **Files touched:**
+
 - `test/integration/admin_dual_control_test.go` — new
 
 **Dependencies:** `jxo8.6.15` (Approve handler), `jxo8.6.20` (approve CLI).
@@ -3653,6 +3680,7 @@ All 25 beads use parent `holomush-jxo8.6`, type `task`, priority `2`. Plan task 
 **Verification steps:** `task lint`; `task test:int -- ./test/integration/`.
 
 **Files touched:**
+
 - `test/integration/admin_policy_chain_test.go` — new
 
 **Dependencies:** `jxo8.6.10` (emitter), `jxo8.6.21` (productionSubsystems wiring).

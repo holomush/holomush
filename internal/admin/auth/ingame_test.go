@@ -87,9 +87,9 @@ type fakeRoles struct {
 	calls       int
 }
 
-func (f *fakeRoles) GetRoles(_ context.Context, _ string) ([]string, error)        { return nil, nil }
-func (f *fakeRoles) AddRole(_ context.Context, _, _ string) error                  { return nil }
-func (f *fakeRoles) RemoveRole(_ context.Context, _, _ string) error               { return nil }
+func (f *fakeRoles) GetRoles(_ context.Context, _ string) ([]string, error) { return nil, nil }
+func (f *fakeRoles) AddRole(_ context.Context, _, _ string) error           { return nil }
+func (f *fakeRoles) RemoveRole(_ context.Context, _, _ string) error        { return nil }
 func (f *fakeRoles) PlayerHasRole(_ context.Context, playerID, role string) (bool, error) {
 	f.calls++
 	if f.err != nil {

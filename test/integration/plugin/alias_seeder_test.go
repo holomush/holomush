@@ -75,7 +75,8 @@ var _ = Describe("Plugin Alias Seeding Integration", func() {
 			luaHost := pluginlua.NewHost()
 			defer func() { _ = luaHost.Close(ctx) }()
 
-			mgr, mgrErr := plugins.NewManager(pluginsDir,
+			mgr, mgrErr := plugins.NewManager(
+				pluginsDir,
 				plugins.WithLuaHost(luaHost),
 				plugins.WithAliasSeeder(repo, cache),
 				plugins.WithVerbRegistry(core.NewVerbRegistry()),
@@ -138,7 +139,8 @@ var _ = Describe("Plugin Alias Seeding Integration", func() {
 
 			// First boot: seed from manifests.
 			luaHost1 := pluginlua.NewHost()
-			mgr1, mgrErr := plugins.NewManager(pluginsDir,
+			mgr1, mgrErr := plugins.NewManager(
+				pluginsDir,
 				plugins.WithLuaHost(luaHost1),
 				plugins.WithAliasSeeder(repo, cache),
 				plugins.WithVerbRegistry(core.NewVerbRegistry()),
@@ -154,7 +156,8 @@ var _ = Describe("Plugin Alias Seeding Integration", func() {
 			// Second boot: simulate restart.
 			cache2 := command.NewAliasCache()
 			luaHost2 := pluginlua.NewHost()
-			mgr2, mgrErr := plugins.NewManager(pluginsDir,
+			mgr2, mgrErr := plugins.NewManager(
+				pluginsDir,
 				plugins.WithLuaHost(luaHost2),
 				plugins.WithAliasSeeder(repo, cache2),
 				plugins.WithVerbRegistry(core.NewVerbRegistry()),
@@ -166,7 +169,8 @@ var _ = Describe("Plugin Alias Seeding Integration", func() {
 			// Verify DB row reflects override: command, created_by, source all preserved.
 			var cmd, source string
 			var createdBy *string
-			err = pool.QueryRow(ctx,
+			err = pool.QueryRow(
+				ctx,
 				`SELECT command, created_by, source FROM system_aliases WHERE alias = $1`, `"`,
 			).Scan(&cmd, &createdBy, &source)
 			Expect(err).NotTo(HaveOccurred())
@@ -185,7 +189,8 @@ var _ = Describe("Plugin Alias Seeding Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			luaHost1 := pluginlua.NewHost()
-			mgr1, mgrErr := plugins.NewManager(pluginsDir,
+			mgr1, mgrErr := plugins.NewManager(
+				pluginsDir,
 				plugins.WithLuaHost(luaHost1),
 				plugins.WithAliasSeeder(repo, cache),
 				plugins.WithVerbRegistry(core.NewVerbRegistry()),
@@ -196,7 +201,8 @@ var _ = Describe("Plugin Alias Seeding Integration", func() {
 
 			cache2 := command.NewAliasCache()
 			luaHost2 := pluginlua.NewHost()
-			mgr2, mgrErr := plugins.NewManager(pluginsDir,
+			mgr2, mgrErr := plugins.NewManager(
+				pluginsDir,
 				plugins.WithLuaHost(luaHost2),
 				plugins.WithAliasSeeder(repo, cache2),
 				plugins.WithVerbRegistry(core.NewVerbRegistry()),

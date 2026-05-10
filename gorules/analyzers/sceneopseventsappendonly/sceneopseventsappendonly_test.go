@@ -12,7 +12,8 @@ import (
 )
 
 func TestAnalyzerFlagsForbiddenSQLAgainstSceneOpsEvents(t *testing.T) {
-	analysistest.Run(t, analysistest.TestData(), sceneopseventsappendonly.Analyzer,
+	analysistest.Run(
+		t, analysistest.TestData(), sceneopseventsappendonly.Analyzer,
 		"example.com/positive",
 		"example.com/negative",
 	)

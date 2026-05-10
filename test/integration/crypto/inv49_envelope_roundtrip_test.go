@@ -67,7 +67,8 @@ var _ = Describe("INV-49 envelope round-trip", func() {
 			BindingID:   "01BIND49AA0000000000000",
 		}
 		plaintext := `{"text":"inv49 character"}`
-		emitSensitivePluginEvent(ctx, suiteT, env,
+		emitSensitivePluginEvent(
+			ctx, suiteT, env,
 			"scene:"+sceneID, plaintext,
 			[]dek.Participant{{
 				PlayerID:    participantID.PlayerID,
@@ -121,7 +122,8 @@ var _ = Describe("INV-49 envelope round-trip", func() {
 		plaintext := `{"text":"inv49 plugin"}`
 		translated := "events.main.scene." + sceneID
 		pluginActorID := ulid.MustNew(ulid.Timestamp(time.Now()), nil)
-		publishSensitiveWithPluginActor(ctx, suiteT, env,
+		publishSensitiveWithPluginActor(
+			ctx, suiteT, env,
 			translated,
 			"test-plugin:whisper",
 			plaintext,
@@ -191,7 +193,8 @@ var _ = Describe("INV-49 envelope round-trip", func() {
 			}
 			translated := "events.main.scene." + tc.sceneID
 			if tc.usePluginActor {
-				publishSensitiveWithPluginActor(ctx, suiteT, env,
+				publishSensitiveWithPluginActor(
+					ctx, suiteT, env,
 					translated,
 					"test-plugin:whisper",
 					plaintext,
@@ -205,7 +208,8 @@ var _ = Describe("INV-49 envelope round-trip", func() {
 					}},
 				)
 			} else {
-				emitSensitivePluginEvent(ctx, suiteT, env,
+				emitSensitivePluginEvent(
+					ctx, suiteT, env,
 					"scene:"+tc.sceneID, plaintext,
 					[]dek.Participant{{
 						PlayerID:    participantID.PlayerID,

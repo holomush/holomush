@@ -23,7 +23,8 @@ import (
 // Enforced at constructor time (synchronous DB SELECT).
 func TestNoneProvider_Constructor_RefusesIfCryptoKeysNonempty(t *testing.T) {
 	ctx := context.Background()
-	pgContainer, err := postgres.Run(ctx,
+	pgContainer, err := postgres.Run(
+		ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),

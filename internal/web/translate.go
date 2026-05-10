@@ -49,7 +49,8 @@ func (h *Handler) translateEvent(ev *corev1.EventFrame) *webv1.GameEvent {
 
 	rendering := ev.GetRendering()
 	if rendering == nil {
-		slog.Error("web: dropping event with nil Rendering (INV-GW-5)",
+		slog.Error(
+			"web: dropping event with nil Rendering (INV-GW-5)",
 			"event_id", ev.GetId(),
 			"event_type", eventType,
 			"stream", ev.GetStream(),

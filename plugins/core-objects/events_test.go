@@ -20,7 +20,8 @@ func TestEventTypesAreQualifiedWithPluginName(t *testing.T) {
 		coreobj.EventTypeObjectExamine,
 		coreobj.EventTypeObjectGive,
 	} {
-		assert.True(t,
+		assert.True(
+			t,
 			strings.HasPrefix(string(et), "core-objects:"),
 			"event type %q must be qualified with plugin prefix", et,
 		)

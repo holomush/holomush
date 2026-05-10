@@ -31,6 +31,7 @@ type fakeResetSessions struct {
 func (f *fakeResetSessions) Issue(_ adminauth.OperatorIdentity) (string, time.Time, error) {
 	return "", time.Time{}, errors.New("not used in reset handler tests")
 }
+
 func (f *fakeResetSessions) Get(_ string) (adminauth.OperatorIdentity, error) {
 	return f.identity, f.err
 }

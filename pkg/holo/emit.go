@@ -121,7 +121,8 @@ func (e *Emitter) emit(stream string, eventType pluginsdk.EventType, payload Pay
 			"json marshal failed: stream=%s type=%s: %w", stream, eventType, err,
 		))
 		if e.logger != nil {
-			e.logger.Warn("json marshal failed",
+			e.logger.Warn(
+				"json marshal failed",
 				slog.String("stream", stream),
 				slog.String("event_type", string(eventType)),
 				slog.String("error", err.Error()),

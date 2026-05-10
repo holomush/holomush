@@ -108,7 +108,8 @@ func SeedAdmin(ctx context.Context, deps SeedAdminDeps) error {
 		}
 	}
 
-	slog.Info("admin account created", //nolint:gosec // values from env vars or generated, not untrusted user input
+	slog.Info(
+		"admin account created", //nolint:gosec // values from env vars or generated, not untrusted user input
 		slog.String("username", username),
 		slog.String("character", charName),
 	)

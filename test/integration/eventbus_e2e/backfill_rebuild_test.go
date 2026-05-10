@@ -41,7 +41,8 @@ func TestAuditBackfillProducesMatchingCounts(t *testing.T) {
 		require.NoError(t, pub.Publish(ctx, mintEvent(
 			eventbus.Subject("events.main.backfill.s1"),
 			"scene.pose",
-			`{"n":`+itoa(i)+`}`)))
+			`{"n":`+itoa(i)+`}`,
+		)))
 	}
 	// Sanity: events_audit is empty right now (no projection running).
 

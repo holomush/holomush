@@ -84,7 +84,8 @@ func StartPostgres(ctx context.Context) (*PostgresEnv, error) {
 }
 
 func startPostgresOnce(ctx context.Context) (*PostgresEnv, error) {
-	container, err := postgres.Run(ctx,
+	container, err := postgres.Run(
+		ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("holomush_test"),
 		postgres.WithUsername("postgres"),

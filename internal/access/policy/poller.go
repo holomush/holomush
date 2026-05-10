@@ -154,7 +154,8 @@ func (p *Poller) poll(ctx context.Context) {
 
 	// Change detected — reload
 	pollerChangesDetected.Inc()
-	slog.InfoContext(ctx, "policy poller: change detected, reloading cache",
+	slog.InfoContext(
+		ctx, "policy poller: change detected, reloading cache",
 		"previous_ts", p.lastUpdated,
 		"latest_ts", latest,
 		"previous_count", p.lastCount,

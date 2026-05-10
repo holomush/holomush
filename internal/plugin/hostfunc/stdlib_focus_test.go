@@ -81,7 +81,8 @@ func newFocusTestState(t *testing.T, fo hostfunc.FocusOps, hr hostfunc.HistoryRe
 	t.Helper()
 	L := lua.NewState()
 	t.Cleanup(L.Close)
-	hf := hostfunc.New(nil,
+	hf := hostfunc.New(
+		nil,
 		hostfunc.WithFocusOps(fo),
 		hostfunc.WithHistoryReader(hr),
 	)

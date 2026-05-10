@@ -70,7 +70,8 @@ func (r *SceneResolver) GetSchema(ctx context.Context, _ *pluginv1.GetSchemaRequ
 // Resource type other than "scene" is rejected with InvalidArgument so
 // host-side misrouting bugs surface immediately.
 func (r *SceneResolver) ResolveResource(ctx context.Context, req *pluginv1.ResolveResourceRequest) (*pluginv1.ResolveResourceResponse, error) {
-	ctx, span := startSpan(ctx, "scene.resolver.resolve_resource",
+	ctx, span := startSpan(
+		ctx, "scene.resolver.resolve_resource",
 		attribute.String("resource_type", req.GetResourceType()),
 		attribute.String("resource_id", req.GetResourceId()),
 	)

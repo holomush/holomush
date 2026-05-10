@@ -33,7 +33,8 @@ func startWorldServer(t *testing.T, svc *world.Service) worldv1.WorldServiceClie
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(func() { srv.Stop(); _ = lis.Close() })
 
-	conn, err := grpc.NewClient("passthrough:///bufconn",
+	conn, err := grpc.NewClient(
+		"passthrough:///bufconn",
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return lis.DialContext(ctx)
 		}),

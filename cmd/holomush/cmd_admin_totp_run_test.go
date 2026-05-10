@@ -74,11 +74,11 @@ func sampleEnrollment() totp.Enrollment {
 func TestRunBootstrapEnroll(t *testing.T) {
 	pid := ulid.Make()
 	cases := []struct {
-		name       string
-		setup      func(repo *mocks.MockRepository, svc *stubTOTPService) // configures mocks for the case
-		username   string
-		assertErr  func(t *testing.T, err error)
-		assertOut  func(t *testing.T, out string)
+		name      string
+		setup     func(repo *mocks.MockRepository, svc *stubTOTPService) // configures mocks for the case
+		username  string
+		assertErr func(t *testing.T, err error)
+		assertOut func(t *testing.T, out string)
 	}{
 		{
 			name: "happy path",
@@ -452,4 +452,3 @@ func (s *stubTOTPService) ClearTOTP(_ context.Context, _ ulid.ULID, _ totp.Clear
 func (s *stubTOTPService) RecoverAndClear(_ context.Context, _ ulid.ULID, _ string) (totp.RecoverAndClearResult, error) {
 	return s.recoverAndClearResult, s.recoverAndClearErr
 }
-

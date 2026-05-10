@@ -44,36 +44,45 @@ type fakeTOTPService struct {
 func (f *fakeTOTPService) PrepareBootstrap(_ context.Context, _ ulid.ULID) (totp.BootstrapPreparation, error) {
 	return totp.BootstrapPreparation{}, nil
 }
+
 func (f *fakeTOTPService) CommitBootstrap(_ context.Context, _ totp.BootstrapPreparation) (totp.BootstrapResult, error) {
 	return totp.BootstrapResult{}, nil
 }
+
 func (f *fakeTOTPService) BootstrapEnroll(_ context.Context, _ ulid.ULID) (totp.BootstrapResult, error) {
 	return totp.BootstrapResult{}, nil
 }
+
 func (f *fakeTOTPService) PrepareEnroll(_ context.Context, _ ulid.ULID) (totp.EnrollPreparation, error) {
 	return totp.EnrollPreparation{}, nil
 }
+
 func (f *fakeTOTPService) CommitEnroll(_ context.Context, _ totp.EnrollPreparation) (totp.EnrollResult, error) {
 	return totp.EnrollResult{}, nil
 }
+
 func (f *fakeTOTPService) Enroll(_ context.Context, _ ulid.ULID) (totp.EnrollResult, error) {
 	return totp.EnrollResult{}, nil
 }
+
 func (f *fakeTOTPService) IsEnrolled(_ context.Context, _ ulid.ULID) (bool, error) { return false, nil }
 
 func (f *fakeTOTPService) Verify(_ context.Context, _ ulid.ULID, _ string) (totp.VerifyResult, error) {
 	f.verifyCalls++
 	return f.verifyResult, f.verifyErr
 }
+
 func (f *fakeTOTPService) ConsumeRecoveryCode(_ context.Context, _ ulid.ULID, _ string) (totp.ConsumeRecoveryResult, error) {
 	f.consumeCalls++
 	return f.consumeResult, f.consumeErr
 }
+
 func (f *fakeTOTPService) ClearTOTP(_ context.Context, _ ulid.ULID, by totp.ClearReason) (totp.ClearResult, error) {
 	f.clearCalls++
 	f.clearByCalled = by
 	return f.clearResult, f.clearErr
 }
+
 func (f *fakeTOTPService) RecoverAndClear(_ context.Context, _ ulid.ULID, _ string) (totp.RecoverAndClearResult, error) {
 	f.recoverCalls++
 	return f.recoverResult, f.recoverErr

@@ -233,7 +233,8 @@ func NewHostWithFactory(factory ClientFactory, opts ...HostOption) *Host {
 		// host and each plugin subprocess. Production deployments MUST
 		// configure WithCA; surface the misconfiguration in operator logs
 		// so it cannot silently slip through.
-		slog.WarnContext(context.Background(),
+		slog.WarnContext(
+			context.Background(),
 			"binary plugin mTLS disabled: gRPC channel with plugin subprocess is unauthenticated and unencrypted; configure WithCA for production deployments",
 			"component", "goplugin.Host",
 			"mtls", "disabled",
@@ -495,7 +496,8 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 			go grpcPlugin.broker.AcceptAndServe(brokerID, proxyFactory)
 
 			requiredServices[svcName] = fmt.Sprintf("broker:%d", brokerID)
-			slog.Info("started broker proxy for required service",
+			slog.Info(
+				"started broker proxy for required service",
 				"plugin", manifest.Name,
 				"service", svcName,
 				"broker_id", brokerID,

@@ -23,7 +23,8 @@ func TestEventTypesAreQualifiedWithPluginName(t *testing.T) {
 		corecomm.EventTypeWhisper,
 		corecomm.EventTypeWhisperNotice,
 	} {
-		assert.True(t,
+		assert.True(
+			t,
 			strings.HasPrefix(string(et), "core-communication:"),
 			"event type %q must be qualified with plugin prefix", et,
 		)

@@ -158,7 +158,8 @@ func setupE2EEnv(ctx context.Context, t *testing.T) *e2eEnv {
 		guard:      sessionGuard,
 		auditEm:    sessionAuditEmitter,
 	}
-	env.cleanup = append(env.cleanup,
+	env.cleanup = append(
+		env.cleanup,
 		func() { pool.Close() },
 		func() { _ = hostSub.Stop(context.Background()) },
 		func() {
@@ -211,7 +212,8 @@ func emitSensitivePluginEvent(
 	actorResolver := func(_ context.Context, _ string) (core.Actor, error) {
 		return core.Actor{Kind: core.ActorPlugin, ID: pluginActorID}, nil
 	}
-	emitter := plugins.NewPluginEventEmitter(env.publisher, manifestLookup, actorResolver,
+	emitter := plugins.NewPluginEventEmitter(
+		env.publisher, manifestLookup, actorResolver,
 		plugins.WithCryptoEnabled(true),
 	)
 	intent := pluginsdk.EmitIntent{
@@ -302,7 +304,8 @@ func contextIDFromLegacySubject(subject string) (dek.ContextID, bool) {
 // event is read from cold.
 func buildColdReader(env *e2eEnv) *history.Reader {
 	farFuture := time.Now().UTC().Add(100 * 365 * 24 * time.Hour)
-	return history.NewReader(env.bus.JS, env.pool,
+	return history.NewReader(
+		env.bus.JS, env.pool,
 		eventbus.Config{}.Defaults().StreamMaxAge,
 		func() time.Time { return farFuture },
 		history.WithHistoryAuth(env.guard, env.dekMgr, env.auditEm),
@@ -345,7 +348,8 @@ var _ = Describe("Sensitive event end-to-end", func() {
 				CharacterID: "01CHARAA0000000000000000",
 				BindingID:   "01BINDAA0000000000000000",
 			}
-			emitSensitivePluginEvent(ctx, suiteT, env,
+			emitSensitivePluginEvent(
+				ctx, suiteT, env,
 				"scene:"+sceneID,
 				`{"text":"hello hot participant"}`,
 				[]dek.Participant{{
@@ -374,7 +378,8 @@ var _ = Describe("Sensitive event end-to-end", func() {
 
 		It("delivers metadata-only to a non-participant via hot tier", func() {
 			sceneID := "01HEEHOTNON0000000000000"
-			emitSensitivePluginEvent(ctx, suiteT, env,
+			emitSensitivePluginEvent(
+				ctx, suiteT, env,
 				"scene:"+sceneID,
 				`{"text":"hot secret"}`,
 				[]dek.Participant{{
@@ -418,7 +423,8 @@ var _ = Describe("Sensitive event end-to-end", func() {
 				BindingID:   "01BINDDD0000000000000000",
 			}
 			plaintext := `{"text":"cold participant secret"}`
-			emitSensitivePluginEvent(ctx, suiteT, env,
+			emitSensitivePluginEvent(
+				ctx, suiteT, env,
 				"scene:"+sceneID, plaintext,
 				[]dek.Participant{{
 					PlayerID:    participantID.PlayerID,
@@ -452,7 +458,8 @@ var _ = Describe("Sensitive event end-to-end", func() {
 
 		It("delivers metadata-only to a non-participant via cold tier", func() {
 			sceneID := "01HEECOLDNON000000000000"
-			emitSensitivePluginEvent(ctx, suiteT, env,
+			emitSensitivePluginEvent(
+				ctx, suiteT, env,
 				"scene:"+sceneID, `{"text":"cold secret"}`,
 				[]dek.Participant{{
 					PlayerID:    "01PLAYEREE000000000000000",
@@ -507,7 +514,8 @@ var _ = Describe("Sensitive event end-to-end", func() {
 			}
 			translated := "events.main.scene." + sceneID
 			pluginActorID := ulid.MustNew(ulid.Timestamp(time.Now()), nil)
-			publishSensitiveWithPluginActor(ctx, suiteT, env,
+			publishSensitiveWithPluginActor(
+				ctx, suiteT, env,
 				translated,
 				"test-plugin:whisper",
 				plaintext,

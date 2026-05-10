@@ -69,7 +69,8 @@ func TestSoftDeletedDEKAppearsAsNoRowsForProductionReads(t *testing.T) {
 	// Soft-delete the row directly via SQL. Drop both caches so the
 	// next read goes through the SQL filter rather than returning
 	// the cached material.
-	_, err = pool.Exec(ctx,
+	_, err = pool.Exec(
+		ctx,
 		`UPDATE crypto_keys SET destroyed_at = NOW() WHERE id = $1`,
 		int64(key.ID), //nolint:gosec // G115: codec.KeyID values are positive BIGSERIAL ids.
 	)
@@ -126,7 +127,8 @@ func TestSelectAnyByIDReturnsDestroyedRows(t *testing.T) {
 	require.NoError(t, err)
 
 	// Soft-delete the row.
-	_, err = pool.Exec(ctx,
+	_, err = pool.Exec(
+		ctx,
 		`UPDATE crypto_keys SET destroyed_at = NOW() WHERE id = $1`,
 		int64(key.ID), //nolint:gosec // G115: codec.KeyID values are positive BIGSERIAL ids.
 	)

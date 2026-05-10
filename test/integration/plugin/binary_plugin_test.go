@@ -205,7 +205,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			// Create manager with host and registry
 			bootstrapReg, bootErr := core.BootstrapVerbRegistry("test")
 			Expect(bootErr).NotTo(HaveOccurred())
-			manager, mgrErr := plugins.NewManager(pluginsDir,
+			manager, mgrErr := plugins.NewManager(
+				pluginsDir,
 				plugins.WithServiceRegistry(registry),
 				plugins.WithVerbRegistry(bootstrapReg),
 			)
@@ -609,7 +610,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 		// Helper for direct DB state read
 		readSceneState := func(id string) (state string, endedAt sql.NullTime) {
-			err := lifecyclepool.QueryRow(lifecyclectx,
+			err := lifecyclepool.QueryRow(
+				lifecyclectx,
 				`SELECT state, ended_at FROM plugin_core_scenes.scenes WHERE id = $1`,
 				id,
 			).Scan(&state, &endedAt)
@@ -771,7 +773,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				var title string
-				err = lifecyclepool.QueryRow(lifecyclectx,
+				err = lifecyclepool.QueryRow(
+					lifecyclectx,
 					`SELECT title FROM plugin_core_scenes.scenes WHERE id = $1`,
 					lifecyclesceneID,
 				).Scan(&title)
@@ -797,7 +800,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 					"UpdateScene on an ended scene must map to FailedPrecondition")
 
 				var title string
-				err = lifecyclepool.QueryRow(lifecyclectx,
+				err = lifecyclepool.QueryRow(
+					lifecyclectx,
 					`SELECT title FROM plugin_core_scenes.scenes WHERE id = $1`,
 					lifecyclesceneID,
 				).Scan(&title)
@@ -896,7 +900,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 				// DB validation: owner participant row inserted by CreateWithOwner.
 				var ownerRole string
-				Expect(membershipPool.QueryRow(membershipCtx,
+				Expect(membershipPool.QueryRow(
+					membershipCtx,
 					`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
 					sceneID, "char-alice",
 				).Scan(&ownerRole)).To(Succeed())
@@ -904,7 +909,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 				// DB validation: lifecycle.created ops event recorded exactly once.
 				var createdEventCount int
-				Expect(membershipPool.QueryRow(membershipCtx,
+				Expect(membershipPool.QueryRow(
+					membershipCtx,
 					`SELECT COUNT(*) FROM plugin_core_scenes.scene_ops_events WHERE scene_id = $1 AND kind = 'lifecycle.created'`,
 					sceneID,
 				).Scan(&createdEventCount)).To(Succeed())
@@ -920,7 +926,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 				// DB validation: invited row exists.
 				var bobRole string
-				Expect(membershipPool.QueryRow(membershipCtx,
+				Expect(membershipPool.QueryRow(
+					membershipCtx,
 					`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
 					sceneID, "char-bob",
 				).Scan(&bobRole)).To(Succeed())
@@ -933,7 +940,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 				})
 				Expect(err).NotTo(HaveOccurred())
 
-				Expect(membershipPool.QueryRow(membershipCtx,
+				Expect(membershipPool.QueryRow(
+					membershipCtx,
 					`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
 					sceneID, "char-bob",
 				).Scan(&bobRole)).To(Succeed())
@@ -943,7 +951,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 				// Parse the JSONB payload as a map so we don't depend on
 				// Postgres's whitespace normalisation of the stored bytes.
 				var joinPayloadBytes []byte
-				Expect(membershipPool.QueryRow(membershipCtx,
+				Expect(membershipPool.QueryRow(
+					membershipCtx,
 					`SELECT payload FROM plugin_core_scenes.scene_ops_events
 					 WHERE scene_id = $1 AND kind = 'membership.join' AND target_id = $2`,
 					sceneID, "char-bob",
@@ -962,7 +971,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				// DB validation: char-bob row gone.
-				err = membershipPool.QueryRow(membershipCtx,
+				err = membershipPool.QueryRow(
+					membershipCtx,
 					`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
 					sceneID, "char-bob",
 				).Scan(&bobRole)
@@ -970,7 +980,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 				// DB validation: membership.kick event recorded.
 				var kickCount int
-				Expect(membershipPool.QueryRow(membershipCtx,
+				Expect(membershipPool.QueryRow(
+					membershipCtx,
 					`SELECT COUNT(*) FROM plugin_core_scenes.scene_ops_events
 					 WHERE scene_id = $1 AND kind = 'membership.kick' AND target_id = $2`,
 					sceneID, "char-bob",
@@ -990,7 +1001,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 				})
 				Expect(err).NotTo(HaveOccurred())
 
-				Expect(membershipPool.QueryRow(membershipCtx,
+				Expect(membershipPool.QueryRow(
+					membershipCtx,
 					`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
 					sceneID, "char-bob",
 				).Scan(&bobRole)).To(Succeed())
@@ -1006,21 +1018,24 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 				// DB validation: char-bob is now owner, char-alice is member,
 				// scenes.owner_id is denormalised correctly.
-				Expect(membershipPool.QueryRow(membershipCtx,
+				Expect(membershipPool.QueryRow(
+					membershipCtx,
 					`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
 					sceneID, "char-bob",
 				).Scan(&bobRole)).To(Succeed())
 				Expect(bobRole).To(Equal("owner"))
 
 				var aliceRole string
-				Expect(membershipPool.QueryRow(membershipCtx,
+				Expect(membershipPool.QueryRow(
+					membershipCtx,
 					`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
 					sceneID, "char-alice",
 				).Scan(&aliceRole)).To(Succeed())
 				Expect(aliceRole).To(Equal("member"))
 
 				var denormOwner string
-				Expect(membershipPool.QueryRow(membershipCtx,
+				Expect(membershipPool.QueryRow(
+					membershipCtx,
 					`SELECT owner_id FROM plugin_core_scenes.scenes WHERE id = $1`,
 					sceneID,
 				).Scan(&denormOwner)).To(Succeed())
@@ -1028,7 +1043,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 				// DB validation: membership.ownership_transferred event recorded.
 				var transferCount int
-				Expect(membershipPool.QueryRow(membershipCtx,
+				Expect(membershipPool.QueryRow(
+					membershipCtx,
 					`SELECT COUNT(*) FROM plugin_core_scenes.scene_ops_events
 					 WHERE scene_id = $1 AND kind = 'membership.ownership_transferred'`,
 					sceneID,
@@ -1042,7 +1058,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 				})
 				Expect(err).NotTo(HaveOccurred())
 
-				err = membershipPool.QueryRow(membershipCtx,
+				err = membershipPool.QueryRow(
+					membershipCtx,
 					`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
 					sceneID, "char-alice",
 				).Scan(&aliceRole)
@@ -1050,7 +1067,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 				// DB validation: membership.leave event recorded.
 				var leaveCount int
-				Expect(membershipPool.QueryRow(membershipCtx,
+				Expect(membershipPool.QueryRow(
+					membershipCtx,
 					`SELECT COUNT(*) FROM plugin_core_scenes.scene_ops_events
 					 WHERE scene_id = $1 AND kind = 'membership.leave' AND target_id = $2`,
 					sceneID, "char-alice",

@@ -276,7 +276,8 @@ func TestPostgresStore_SearchVector_TextMarkdown(t *testing.T) {
 	}))
 
 	var sv *string
-	err := pool.QueryRow(ctx,
+	err := pool.QueryRow(
+		ctx,
 		`SELECT search_vector::text FROM content_items WHERE key = $1`,
 		"search.vector.text",
 	).Scan(&sv)
@@ -300,7 +301,8 @@ func TestPostgresStore_SearchVector_ImagePNG(t *testing.T) {
 	}))
 
 	var sv *string
-	err := pool.QueryRow(ctx,
+	err := pool.QueryRow(
+		ctx,
 		`SELECT search_vector::text FROM content_items WHERE key = $1`,
 		"search.vector.image",
 	).Scan(&sv)

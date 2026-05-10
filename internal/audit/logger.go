@@ -164,7 +164,8 @@ func (l *Logger) Log(ctx context.Context, event Event) error {
 			// Fallback to WAL
 			if walErr := l.writeToWAL(event); walErr != nil {
 				// Both failed - log error and return it to the caller
-				slog.Error("audit write failed: both DB and WAL failed",
+				slog.Error(
+					"audit write failed: both DB and WAL failed",
 					"db_error", err,
 					"wal_error", walErr,
 					"subject", event.Subject,
@@ -182,7 +183,8 @@ func (l *Logger) Log(ctx context.Context, event Event) error {
 					Errorf("audit write failed: both DB and WAL failed")
 			}
 			// WAL succeeded but primary DB failed — log degraded state
-			slog.Warn("audit DB write failed, fell back to WAL",
+			slog.Warn(
+				"audit DB write failed, fell back to WAL",
 				"db_error", err,
 				"subject", event.Subject,
 				"action", event.Action,
@@ -212,7 +214,8 @@ func (l *Logger) Log(ctx context.Context, event Event) error {
 		// Channel full - drop event, increment metric, and return error so
 		// engine callers can track audit loss via RecordEngineAuditFailure.
 		channelFullCounter.Inc()
-		slog.Warn("audit channel full: dropping async event",
+		slog.Warn(
+			"audit channel full: dropping async event",
 			"subject", event.Subject,
 			"action", event.Action,
 			"resource", event.Resource,
@@ -274,7 +277,8 @@ func (l *Logger) asyncConsumer() {
 		select {
 		case event := <-l.asyncChan:
 			if err := l.writer.WriteAsync(event); err != nil {
-				slog.Error("async audit write failed",
+				slog.Error(
+					"async audit write failed",
 					"error", err,
 					"subject", event.Subject,
 					"action", event.Action,
@@ -305,7 +309,8 @@ func (l *Logger) drainAsync() {
 		select {
 		case event := <-l.asyncChan:
 			if err := l.writer.WriteAsync(event); err != nil {
-				slog.Error("async audit write failed during drain",
+				slog.Error(
+					"async audit write failed during drain",
 					"error", err,
 					"subject", event.Subject,
 				)

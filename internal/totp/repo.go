@@ -159,7 +159,8 @@ func (r *repo) IsEnrolled(ctx context.Context, playerID string) (bool, error) {
 // InsertEnrollment inserts a player_totp row and all associated recovery codes.
 func (r *repo) InsertEnrollment(ctx context.Context, e EnrollmentRecord) error {
 	db := dbFromCtx(ctx, r.pool)
-	if _, err := db.Exec(ctx,
+	if _, err := db.Exec(
+		ctx,
 		`INSERT INTO player_totp (player_id, wrapped_secret, wrap_key_id, enrolled_at)
 		 VALUES ($1, $2, $3, $4)`,
 		e.PlayerID, e.WrappedSecret, e.WrapKeyID, e.EnrolledAt,
@@ -182,7 +183,8 @@ func (r *repo) InsertEnrollment(ctx context.Context, e EnrollmentRecord) error {
 func (r *repo) LoadEnrollment(ctx context.Context, playerID string) (VerifyState, error) {
 	var s VerifyState
 	s.PlayerID = playerID
-	err := dbFromCtx(ctx, r.pool).QueryRow(ctx,
+	err := dbFromCtx(ctx, r.pool).QueryRow(
+		ctx,
 		`SELECT wrapped_secret, wrap_key_id, last_used_step, failed_attempts, locked_until
 		 FROM player_totp WHERE player_id = $1 FOR UPDATE`, playerID,
 	).Scan(&s.WrappedSecret, &s.WrapKeyID, &s.LastUsedStep, &s.FailedAttempts, &s.LockedUntil)
@@ -212,7 +214,8 @@ func (r *repo) IncrementFailedAttempts(
 		RETURNING wrapped_secret, wrap_key_id, last_used_step, failed_attempts, locked_until`
 	var s VerifyState
 	s.PlayerID = playerID
-	err := dbFromCtx(ctx, r.pool).QueryRow(ctx, q,
+	err := dbFromCtx(ctx, r.pool).QueryRow(
+		ctx, q,
 		playerID, threshold, now, lockoutDuration.Microseconds(),
 	).Scan(&s.WrappedSecret, &s.WrapKeyID, &s.LastUsedStep, &s.FailedAttempts, &s.LockedUntil)
 	if err != nil {
@@ -224,7 +227,8 @@ func (r *repo) IncrementFailedAttempts(
 // MarkVerified resets failed_attempts and locked_until, and records the last
 // used TOTP step to prevent replay.
 func (r *repo) MarkVerified(ctx context.Context, playerID string, step int64, at time.Time) error {
-	_, err := dbFromCtx(ctx, r.pool).Exec(ctx,
+	_, err := dbFromCtx(ctx, r.pool).Exec(
+		ctx,
 		`UPDATE player_totp SET last_used_step = $2, last_verified_at = $3,
 		   failed_attempts = 0, locked_until = NULL
 		 WHERE player_id = $1`, playerID, step, at,

@@ -58,7 +58,8 @@ func NewBindingRepository(pool *pgxpool.Pool) *BindingRepository {
 // BINDING_NOT_FOUND if no active binding exists.
 func (s *BindingRepository) Current(ctx context.Context, characterID string) (string, error) {
 	var bindingID string
-	err := bindingDBFromCtx(ctx, s.pool).QueryRow(ctx,
+	err := bindingDBFromCtx(ctx, s.pool).QueryRow(
+		ctx,
 		`SELECT id FROM player_character_bindings WHERE character_id = $1 AND ended_at IS NULL`,
 		characterID,
 	).Scan(&bindingID)
@@ -81,7 +82,8 @@ func (s *BindingRepository) Create(ctx context.Context, playerID, characterID, r
 			Errorf("playerID and characterID required")
 	}
 	bindingID := idgen.New().String()
-	_, err := bindingDBFromCtx(ctx, s.pool).Exec(ctx,
+	_, err := bindingDBFromCtx(ctx, s.pool).Exec(
+		ctx,
 		`INSERT INTO player_character_bindings (id, player_id, character_id, ended_reason)
 		 VALUES ($1, $2, $3, $4)`,
 		bindingID, playerID, characterID, nullableString(reason),
@@ -99,7 +101,8 @@ func (s *BindingRepository) Create(ctx context.Context, playerID, characterID, r
 // binding doesn't exist; BINDING_ALREADY_ENDED if it's already ended.
 func (s *BindingRepository) End(ctx context.Context, bindingID, reason string) error {
 	db := bindingDBFromCtx(ctx, s.pool)
-	cmdTag, err := db.Exec(ctx,
+	cmdTag, err := db.Exec(
+		ctx,
 		`UPDATE player_character_bindings
 		 SET ended_at = now(), ended_reason = $2
 		 WHERE id = $1 AND ended_at IS NULL`,
@@ -110,7 +113,8 @@ func (s *BindingRepository) End(ctx context.Context, bindingID, reason string) e
 	}
 	if cmdTag.RowsAffected() == 0 {
 		var alreadyEnded bool
-		if scanErr := db.QueryRow(ctx,
+		if scanErr := db.QueryRow(
+			ctx,
 			`SELECT ended_at IS NOT NULL FROM player_character_bindings WHERE id = $1`,
 			bindingID,
 		).Scan(&alreadyEnded); scanErr != nil {

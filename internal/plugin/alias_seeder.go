@@ -46,7 +46,8 @@ func CollectManifestAliases(loaded []*DiscoveredPlugin) []ManifestAlias {
 			cmd := &dp.Manifest.Commands[i]
 			for _, alias := range cmd.Aliases {
 				if owner, dup := seen[alias]; dup {
-					slog.Warn("duplicate manifest alias, skipping",
+					slog.Warn(
+						"duplicate manifest alias, skipping",
 						"alias", alias,
 						"command", cmd.Name,
 						"plugin", dp.Manifest.Name,
@@ -99,7 +100,8 @@ func SeedManifestAliases(ctx context.Context, aliases []ManifestAlias, repo Alia
 			continue
 		}
 		if setErr := repo.SetSystemAlias(ctx, a.Alias, a.Command, "", a.Plugin); setErr != nil {
-			slog.ErrorContext(ctx, "failed to seed manifest alias",
+			slog.ErrorContext(
+				ctx, "failed to seed manifest alias",
 				"alias", a.Alias,
 				"command", a.Command,
 				"plugin", a.Plugin,

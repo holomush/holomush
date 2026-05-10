@@ -123,7 +123,8 @@ func TestProvisionSchemaCreatesRoleAndSchema(t *testing.T) {
 	defer pool.Close()
 
 	var canLogin, isSuperuser, canCreaterole bool
-	err = pool.QueryRow(ctx,
+	err = pool.QueryRow(
+		ctx,
 		"SELECT rolcanlogin, rolsuper, rolcreaterole FROM pg_roles WHERE rolname = $1",
 		"holomush_plugin_test_plugin",
 	).Scan(&canLogin, &isSuperuser, &canCreaterole)
@@ -134,7 +135,8 @@ func TestProvisionSchemaCreatesRoleAndSchema(t *testing.T) {
 
 	// Verify schema ownership.
 	var schemaOwner string
-	err = pool.QueryRow(ctx, `
+	err = pool.QueryRow(
+		ctx, `
 		SELECT r.rolname
 		FROM pg_namespace n
 		JOIN pg_roles r ON n.nspowner = r.oid
@@ -312,7 +314,8 @@ func TestPurgeSchemaRemovesRoleAndSchema(t *testing.T) {
 	defer pool.Close()
 
 	var roleExists bool
-	err = pool.QueryRow(ctx,
+	err = pool.QueryRow(
+		ctx,
 		"SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname = $1)",
 		"holomush_plugin_test_plugin",
 	).Scan(&roleExists)
@@ -321,7 +324,8 @@ func TestPurgeSchemaRemovesRoleAndSchema(t *testing.T) {
 
 	// Verify schema is gone.
 	var schemaExists bool
-	err = pool.QueryRow(ctx,
+	err = pool.QueryRow(
+		ctx,
 		"SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = $1)",
 		"plugin_test_plugin",
 	).Scan(&schemaExists)

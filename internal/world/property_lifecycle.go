@@ -84,12 +84,14 @@ func (d *OrphanDetector) StartupCheck(ctx context.Context) error {
 	}
 
 	if count > d.config.Threshold {
-		slog.ErrorContext(ctx, "orphan count exceeds threshold on startup",
+		slog.ErrorContext(
+			ctx, "orphan count exceeds threshold on startup",
 			"count", count,
 			"threshold", d.config.Threshold,
 		)
 	} else if count > 0 {
-		slog.WarnContext(ctx, "orphaned properties detected on startup",
+		slog.WarnContext(
+			ctx, "orphaned properties detected on startup",
 			"count", count,
 		)
 	}
@@ -169,7 +171,8 @@ func (d *OrphanDetector) RunCleanup(ctx context.Context) {
 	d.mu.Unlock()
 
 	if prevSeen == 0 {
-		slog.WarnContext(ctx, "orphaned properties detected",
+		slog.WarnContext(
+			ctx, "orphaned properties detected",
 			"count", count,
 		)
 		return
@@ -182,7 +185,8 @@ func (d *OrphanDetector) RunCleanup(ctx context.Context) {
 	}
 
 	if deleted > 0 {
-		slog.InfoContext(ctx, "orphaned properties cleaned up",
+		slog.InfoContext(
+			ctx, "orphaned properties cleaned up",
 			"deleted", deleted,
 		)
 	}

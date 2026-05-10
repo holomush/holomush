@@ -91,6 +91,7 @@ capability without shell"). D's contribution to the defense profile:
 | Row-137 bypasses dual-control on a `dual_control_required` op | Server-side enforcement of site policy — D's Authenticate / E's RekeyHandler reject the single-control invocation with `DENY_DUAL_CONTROL_REQUIRED` regardless of operator-supplied flags. |
 
 What D does NOT defend against (out of master-spec threat model):
+
 - An adversary with PG superuser AND host shell who edits both
   `events_audit` and JetStream consistently. Root-on-host is the trust path.
 - A new install with a fresh database — no prior chain to verify against.
@@ -441,6 +442,7 @@ The primary's CLI prints the ID to stderr for the operator to communicate
 out-of-band.
 
 `MarkApproved` enforces:
+
 - The row exists, is unexpired, and is unapproved (`expires_at >= now()`,
   `approved_at IS NULL`).
 - `secondOpPlayerID != Approval.PrimaryPlayerID` (INV-D6 →
@@ -691,6 +693,7 @@ now-projected tail and extends the chain correctly with `prev_hash`
 matching that tail's `policy_hash`.
 
 What this means for adversaries:
+
 - **Graceful shutdown:** projection drains before exit. No verifier gap.
 - **Crash:** chain may have an unprojected tail event for one boot
   cycle. The next-boot verifier sees the recovered tail. An adversary
@@ -980,7 +983,7 @@ test mapping to it.
 - `TestAdminApprovalsMigrationUpDownRoundtrip` — apply migration 000020,
   insert + select a row, run down migration, assert table dropped.
 - `TestApprovalRepoOpenGetMarkApprovedConcurrent` — fan out 50 Open calls
-  + 50 MarkApproved calls; assert no row gets approved twice; PG
+  - 50 MarkApproved calls; assert no row gets approved twice; PG
   `WHERE` predicates serialize correctly.
 - `TestVerifierOnRealChain` — synthesize 3 valid events; VerifyChain
   succeeds; corrupt `prev_hash` of event 2; VerifyChain fails with
@@ -1059,6 +1062,7 @@ func validateDualControlRequired(
 `knownOpKinds` is hard-coded to `{"rekey", "admin_read_stream"}` in v1.
 
 Behavior:
+
 - Unknown op_kind → `slog.Warn` and exclude from enforcement. Server starts
   successfully.
 - Empty / nil → no enforcement (single-control allowed for any op).

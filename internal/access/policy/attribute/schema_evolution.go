@@ -106,21 +106,24 @@ func ScanPoliciesForAttributes(namespace string, removedKeys, dslTexts []string)
 // LogSchemaChanges logs schema changes at appropriate severity levels.
 func LogSchemaChanges(namespace string, changes SchemaChanges) {
 	for _, key := range changes.Added {
-		slog.Info("schema evolution: attribute added",
+		slog.Info(
+			"schema evolution: attribute added",
 			"namespace", namespace,
 			"attribute", key,
 		)
 	}
 
 	for _, key := range changes.TypeChanged {
-		slog.Warn("schema evolution: attribute type changed — existing policies may break",
+		slog.Warn(
+			"schema evolution: attribute type changed — existing policies may break",
 			"namespace", namespace,
 			"attribute", key,
 		)
 	}
 
 	for _, key := range changes.Removed {
-		slog.Warn("schema evolution: attribute removed — scanning policies for references",
+		slog.Warn(
+			"schema evolution: attribute removed — scanning policies for references",
 			"namespace", namespace,
 			"attribute", key,
 		)
@@ -185,7 +188,8 @@ func (r *SchemaRegistry) UpdateNamespace(namespace string, newSchema *types.Name
 	if len(changes.Removed) > 0 && len(dslTexts) > 0 {
 		refs := ScanPoliciesForAttributes(namespace, changes.Removed, dslTexts)
 		for _, ref := range refs {
-			slog.Warn("policy references removed attribute — mark for review",
+			slog.Warn(
+				"policy references removed attribute — mark for review",
 				"namespace", namespace,
 				"attribute", ref.Attribute,
 			)
@@ -203,7 +207,8 @@ func (r *SchemaRegistry) RemoveNamespace(namespace string, dslTexts []string) er
 		return err
 	}
 	r.schema.Remove(namespace)
-	slog.Warn("schema evolution: namespace removed",
+	slog.Warn(
+		"schema evolution: namespace removed",
 		"namespace", namespace,
 	)
 	return nil

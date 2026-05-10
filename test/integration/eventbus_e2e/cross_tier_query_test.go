@@ -528,7 +528,8 @@ func insertAuditRowWithSeq(ctx context.Context, t *testing.T, pool *pgxpool.Pool
 		Payload: e.Payload,
 	})
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `
+	_, err = pool.Exec(
+		ctx, `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
 			envelope, schema_ver, codec, js_seq, rendering

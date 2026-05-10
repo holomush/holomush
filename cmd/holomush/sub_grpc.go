@@ -263,7 +263,8 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		return oops.Code("COMMAND_SERVICES_FAILED").Wrap(cmdSvcErr)
 	}
 
-	cmdDispatcher, cmdDispErr := command.NewDispatcher(cmdRegistry, policyEngine,
+	cmdDispatcher, cmdDispErr := command.NewDispatcher(
+		cmdRegistry, policyEngine,
 		command.WithAliasCache(aliasCache),
 		command.WithPluginDeliverer(pluginManager),
 	)
@@ -341,7 +342,8 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		holoFocus.WithStreamContributor(&focusStreamContributorAdapter{pm: pluginManager}),
 	}
 	if s.cfg.StreamRegistry != nil {
-		focusCoordOpts = append(focusCoordOpts,
+		focusCoordOpts = append(
+			focusCoordOpts,
 			holoFocus.WithStreamSender(holoGRPC.NewStreamSenderAdapter(s.cfg.StreamRegistry)),
 		)
 	}
@@ -381,7 +383,8 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 				ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID,
 			}
 			if dcErr := engine.HandleDisconnect(reaperCtx, char, "session expired"); dcErr != nil {
-				slog.Warn("reaper: leave event failed",
+				slog.Warn(
+					"reaper: leave event failed",
 					"session_id", info.ID,
 					"error", dcErr,
 				)

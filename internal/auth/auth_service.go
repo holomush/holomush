@@ -198,7 +198,8 @@ func (s *Service) AuthenticatePlayer(ctx context.Context, username, password, us
 			Wrap(err)
 	}
 	if len(trimmedIDs) > 0 {
-		s.logger.InfoContext(ctx, "session cap trimmed oldest sessions",
+		s.logger.InfoContext(
+			ctx, "session cap trimmed oldest sessions",
 			"event", "session_cap_trimmed",
 			"player_id", player.ID.String(),
 			"trimmed_count", len(trimmedIDs),
@@ -232,7 +233,8 @@ func (s *Service) AuthenticatePlayer(ctx context.Context, username, password, us
 				LocationID: child.LocationID,
 			}
 			if dcErr := s.engine.HandleDisconnect(ctx, char, "evicted"); dcErr != nil {
-				s.logger.WarnContext(ctx, "eviction: leave event failed",
+				s.logger.WarnContext(
+					ctx, "eviction: leave event failed",
 					"session_id", child.ID,
 					"player_session_id", child.PlayerSessionID.String(),
 					"error", dcErr,
@@ -241,7 +243,8 @@ func (s *Service) AuthenticatePlayer(ctx context.Context, username, password, us
 			if endErr := s.engine.EndSession(ctx, char, child.ID,
 				core.SessionEndedCauseEvicted,
 				"Session evicted — you logged in elsewhere."); endErr != nil {
-				s.logger.WarnContext(ctx, "eviction: session_ended failed",
+				s.logger.WarnContext(
+					ctx, "eviction: session_ended failed",
 					"session_id", child.ID,
 					"player_session_id", child.PlayerSessionID.String(),
 					"error", endErr,

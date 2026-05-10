@@ -528,7 +528,8 @@ lua-plugin:
 		removeFn: func(context.Context, string) error { return nil },
 	}
 
-	mgr, mgrErr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(
+		pluginsDir,
 		plugins.WithLuaHost(mockHost),
 		plugins.WithPolicyInstaller(installer),
 		plugins.WithVerbRegistry(core.NewVerbRegistry()),

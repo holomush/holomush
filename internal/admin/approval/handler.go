@@ -53,7 +53,7 @@ func (h *ApproveHandler) Approve(
 	}
 	if !hasCap {
 		return nil, adminauth.MapDenyToConnect(oops.Code("DENY_NOT_OPERATOR"). //nolint:wrapcheck // MapDenyToConnect produces *connect.Error; wrapping again would hide the ConnectRPC code
-									With("player_id", identity.PlayerID).Errorf("crypto.operator capability absent"))
+											With("player_id", identity.PlayerID).Errorf("crypto.operator capability absent"))
 	}
 
 	hasRole, err := h.roleStore.PlayerHasRole(ctx, identity.PlayerID, access.RoleAdmin)
@@ -62,7 +62,7 @@ func (h *ApproveHandler) Approve(
 	}
 	if !hasRole {
 		return nil, adminauth.MapDenyToConnect(oops.Code("DENY_NOT_ADMIN_ROLE"). //nolint:wrapcheck // MapDenyToConnect produces *connect.Error; wrapping again would hide the ConnectRPC code
-									With("player_id", identity.PlayerID).Errorf("admin role absent"))
+												With("player_id", identity.PlayerID).Errorf("admin role absent"))
 	}
 
 	if len(req.Msg.GetRequestId()) != 16 {

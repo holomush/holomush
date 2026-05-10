@@ -140,7 +140,8 @@ func newHandleCommandServer(t *testing.T, store core.EventAppender, sessStore se
 	require.NoError(t, err)
 
 	allOpts := make([]CoreServerOption, 0, 2+len(opts))
-	allOpts = append(allOpts,
+	allOpts = append(
+		allOpts,
 		WithEventStore(store),
 		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
 	)

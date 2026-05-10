@@ -23,8 +23,8 @@ import (
 type PolicySetPayload struct {
 	PolicyName      string         `json:"policy_name"`
 	PolicySnapshot  map[string]any `json:"policy_snapshot"`
-	PolicyHash      []byte         `json:"policy_hash"`      // computed; excluded from canon-input
-	PrevHash        []byte         `json:"prev_hash"`        // null at genesis
+	PolicyHash      []byte         `json:"policy_hash"` // computed; excluded from canon-input
+	PrevHash        []byte         `json:"prev_hash"`   // null at genesis
 	ServerStartULID string         `json:"server_start_ulid"`
 	ServerIdentity  string         `json:"server_identity"`
 	Timestamp       time.Time      `json:"timestamp"`

@@ -43,10 +43,10 @@ func TestSpecAmendmentsLanded(t *testing.T) {
 
 	// Forbidden substrings: pre-amendment text that MUST NOT remain.
 	forbiddenAfterAmendment := map[string]string{
-		"A1-stale":         "Compromised in-game wizard ", // trailing space avoids matching new text
-		"A5-stale-step3":   "If TOTP enrolled for this player: prompt for 6-digit code",
-		"A13-stale":        "Decide on TOTP enrollment for wizard accounts",
-		"A14-stale":        "<wizard player_id>",
+		"A1-stale":       "Compromised in-game wizard ", // trailing space avoids matching new text
+		"A5-stale-step3": "If TOTP enrolled for this player: prompt for 6-digit code",
+		"A13-stale":      "Decide on TOTP enrollment for wizard accounts",
+		"A14-stale":      "<wizard player_id>",
 	}
 
 	for id, fp := range fingerprints {

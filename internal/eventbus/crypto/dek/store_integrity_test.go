@@ -23,7 +23,8 @@ import (
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	ctx := context.Background()
-	pgContainer, err := postgres.Run(ctx,
+	pgContainer, err := postgres.Run(
+		ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),

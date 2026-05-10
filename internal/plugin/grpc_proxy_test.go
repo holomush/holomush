@@ -70,7 +70,8 @@ func startBackendServer(t *testing.T) *grpc.ClientConn {
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(func() { srv.Stop(); _ = lis.Close() })
 
-	conn, err := grpc.NewClient("passthrough:///bufconn",
+	conn, err := grpc.NewClient(
+		"passthrough:///bufconn",
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return lis.DialContext(ctx)
 		}),
@@ -91,7 +92,8 @@ func startFrontendWithProxy(t *testing.T, proxy *GRPCServiceProxy) *grpc.ClientC
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(func() { srv.Stop(); _ = lis.Close() })
 
-	conn, err := grpc.NewClient("passthrough:///bufconn",
+	conn, err := grpc.NewClient(
+		"passthrough:///bufconn",
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return lis.DialContext(ctx)
 		}),

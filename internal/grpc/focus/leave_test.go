@@ -26,7 +26,8 @@ func TestLeaveFocusRemovesMembershipAndUnsubscribes(t *testing.T) {
 		streams: []string{streamName},
 	}
 
-	coord, sender := newTestCoordinator(t,
+	coord, sender := newTestCoordinator(
+		t,
 		map[string]*session.Info{
 			"sess-1": {
 				Status: session.StatusActive,
@@ -57,7 +58,8 @@ func TestLeaveFocusClearsPresentingWhenPointingAtRemoved(t *testing.T) {
 	targetID := ulid.MustNew(ulid.Now(), nil)
 	target := session.FocusKey{Kind: session.FocusKindScene, TargetID: targetID}
 
-	coord, _ := newTestCoordinator(t,
+	coord, _ := newTestCoordinator(
+		t,
 		map[string]*session.Info{
 			"sess-1": {
 				Status: session.StatusActive,
@@ -83,7 +85,8 @@ func TestLeaveFocusIsIdempotentForNonMember(t *testing.T) {
 	targetID := ulid.MustNew(ulid.Now(), nil)
 	target := session.FocusKey{Kind: session.FocusKindScene, TargetID: targetID}
 
-	coord, sender := newTestCoordinator(t,
+	coord, sender := newTestCoordinator(
+		t,
 		map[string]*session.Info{
 			"sess-1": {Status: session.StatusActive},
 		},
@@ -100,7 +103,8 @@ func TestLeaveFocusRejectsExpiredSession(t *testing.T) {
 	targetID := ulid.MustNew(ulid.Now(), nil)
 	target := session.FocusKey{Kind: session.FocusKindScene, TargetID: targetID}
 
-	coord, _ := newTestCoordinator(t,
+	coord, _ := newTestCoordinator(
+		t,
 		map[string]*session.Info{
 			"sess-expired": {Status: session.StatusExpired},
 		},

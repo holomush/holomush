@@ -122,7 +122,8 @@ func (c *AliasCache) SetSystemAlias(alias, command string) error {
 		} else {
 			delete(c.systemAliases, alias)
 		}
-		slog.Debug("circular system alias rejected",
+		slog.Debug(
+			"circular system alias rejected",
 			slog.String("alias", alias),
 			slog.String("command", command),
 		)
@@ -153,7 +154,8 @@ func (c *AliasCache) SetPlayerAlias(playerID ulid.ULID, alias, command string) e
 		} else {
 			delete(c.playerAliases[playerID], alias)
 		}
-		slog.Debug("circular player alias rejected",
+		slog.Debug(
+			"circular player alias rejected",
 			slog.String("alias", alias),
 			slog.String("command", command),
 			slog.String("player_id", playerID.String()),

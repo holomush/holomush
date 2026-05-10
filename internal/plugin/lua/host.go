@@ -366,11 +366,12 @@ func (h *Host) QuerySessionStreams(ctx context.Context, name string, req plugins
 		return nil, nil
 	}
 
-	if err := h.invoke(ctx, L, name, "on_session_subscribe", lua.P{
-		Fn:      fn,
-		NRet:    1,
-		Protect: true,
-	},
+	if err := h.invoke(
+		ctx, L, name, "on_session_subscribe", lua.P{
+			Fn:      fn,
+			NRet:    1,
+			Protect: true,
+		},
 		lua.LString(req.CharacterID),
 		lua.LString(req.PlayerID),
 		lua.LString(req.SessionID),
@@ -494,7 +495,8 @@ func (h *Host) parseEmitEvents(ret lua.LValue) (emits []pluginsdk.EmitEvent, val
 		subject := emitTableString(eventTable, "subject")
 		if subject == "" {
 			if legacy := emitTableString(eventTable, "stream"); legacy != "" {
-				slog.Warn("plugin emit uses deprecated 'stream' key; migrate to 'subject'",
+				slog.Warn(
+					"plugin emit uses deprecated 'stream' key; migrate to 'subject'",
 					"key", "stream",
 					"index", index,
 				)

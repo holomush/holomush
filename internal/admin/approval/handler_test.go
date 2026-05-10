@@ -32,6 +32,7 @@ type fakeSessions struct {
 func (f *fakeSessions) Issue(_ adminauth.OperatorIdentity) (string, time.Time, error) {
 	return "", time.Time{}, errors.New("not used in handler tests")
 }
+
 func (f *fakeSessions) Get(_ string) (adminauth.OperatorIdentity, error) { return f.identity, f.err }
 func (f *fakeSessions) Revoke(_ string) error                            { return nil }
 
@@ -44,13 +45,16 @@ type fakeApprovalRepo struct {
 func (r *fakeApprovalRepo) Open(_ context.Context, _ approval.OpenRequest) (approval.RequestID, error) {
 	return approval.RequestID{}, errors.New("not used")
 }
+
 func (r *fakeApprovalRepo) Get(_ context.Context, _ approval.RequestID) (approval.Approval, error) {
 	return approval.Approval{}, errors.New("not used")
 }
+
 func (r *fakeApprovalRepo) MarkApproved(_ context.Context, _ approval.RequestID, _ string) error {
 	r.markCalls++
 	return r.markErr
 }
+
 func (r *fakeApprovalRepo) WaitForApproval(_ context.Context, _ approval.RequestID, _ time.Time) (approval.Approval, error) {
 	return approval.Approval{}, errors.New("not used")
 }

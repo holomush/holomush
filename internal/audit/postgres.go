@@ -58,7 +58,8 @@ func (w *PostgresWriter) WriteSync(ctx context.Context, event Event) error {
 		return oops.Wrap(err)
 	}
 
-	_, err = w.db.ExecContext(ctx, query,
+	_, err = w.db.ExecContext(
+		ctx, query,
 		idgen.New().String(),
 		event.Subject,
 		event.Action,
@@ -183,7 +184,8 @@ func (w *PostgresWriter) writeBatch(ctx context.Context, events []Event) error {
 			continue
 		}
 
-		_, err = stmt.ExecContext(ctx,
+		_, err = stmt.ExecContext(
+			ctx,
 			idgen.New().String(),
 			event.Subject,
 			event.Action,

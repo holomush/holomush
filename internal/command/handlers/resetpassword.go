@@ -160,7 +160,8 @@ func handleResetPassword(ctx context.Context, exec *command.CommandExecution, de
 	if len(password) < minPasswordLen {
 		//nolint:wrapcheck // WorldError creates a structured oops error
 		return command.WorldError(
-			fmt.Sprintf("Password must be at least %d characters.", minPasswordLen), nil)
+			fmt.Sprintf("Password must be at least %d characters.", minPasswordLen), nil,
+		)
 	}
 
 	// Hash password.
@@ -219,7 +220,8 @@ func handleResetPassword(ctx context.Context, exec *command.CommandExecution, de
 	}
 
 	// Audit log — includes actual outcomes, not just requested flags.
-	slog.InfoContext(ctx, "admin password reset",
+	slog.InfoContext(
+		ctx, "admin password reset",
 		"event", "admin_password_reset",
 		"admin_player_id", exec.PlayerID().String(),
 		"admin_character_id", exec.CharacterID().String(),

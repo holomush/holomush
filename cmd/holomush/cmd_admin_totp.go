@@ -38,6 +38,7 @@ func NewAdminTOTPCmd() *cobra.Command {
 	cmd.AddCommand(newAdminTOTPBootstrapEnrollCmd())
 	cmd.AddCommand(newAdminTOTPEnrollCmd())
 	cmd.AddCommand(newAdminTOTPRecoverCmd())
+	cmd.AddCommand(newAdminTOTPResetCmd())
 	return cmd
 }
 

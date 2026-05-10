@@ -606,7 +606,8 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 			delete(m.activeByName, row.Name)
 			// nameByID intentionally retained for historical resolution.
 			m.mu.Unlock()
-			slog.Info("plugin.gc",
+			slog.Info(
+				"plugin.gc",
 				"name", row.Name,
 				"id", row.ID.String(),
 				"last_seen_at", row.LastSeenAt.Format(time.RFC3339),
@@ -973,7 +974,8 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 
 	// Drift logging (no decision logic — log and continue per spec).
 	if drift != nil {
-		slog.Info("plugin.drift",
+		slog.Info(
+			"plugin.drift",
 			"name", dp.Manifest.Name,
 			"old_manifest_hash", hex.EncodeToString(drift.OldManifestHash),
 			"new_manifest_hash", hex.EncodeToString(drift.NewManifestHash),

@@ -157,7 +157,8 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	hostFuncs := hostfunc.New(nil, hostFuncOpts...) // KV store not yet available
 
 	// 3. Create Lua host.
-	luaHost := pluginlua.NewHostWithFunctions(hostFuncs,
+	luaHost := pluginlua.NewHostWithFunctions(
+		hostFuncs,
 		pluginlua.WithCPUTimeout(s.cfg.LuaTimeout),
 		pluginlua.WithStateFactory(pluginlua.NewStateFactory(
 			pluginlua.WithRegistryMaxSize(s.cfg.LuaRegistryMaxSize),
@@ -225,7 +226,8 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 
 	// Create binary plugin host (subprocess plugins via hashicorp/go-plugin).
 	var hostOpts []goplugin.HostOption
-	hostOpts = append(hostOpts,
+	hostOpts = append(
+		hostOpts,
 		goplugin.WithSchemaProvisioner(schemaProvisioner),
 		goplugin.WithServiceRegistry(s.registry),
 	)

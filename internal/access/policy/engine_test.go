@@ -1731,7 +1731,8 @@ type failingEnvProvider struct {
 	err       error
 }
 
-func (f *failingEnvProvider) Namespace() string                                 { return f.namespace }
+func (f *failingEnvProvider) Namespace() string { return f.namespace }
+
 func (f *failingEnvProvider) Resolve(_ context.Context) (map[string]any, error) { return nil, f.err }
 func (f *failingEnvProvider) Schema() *types.NamespaceSchema                    { return nil }
 

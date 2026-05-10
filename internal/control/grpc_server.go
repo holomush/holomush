@@ -85,7 +85,8 @@ func (s *GRPCServer) Start(addr string, tlsConfig *cryptotls.Config) (<-chan err
 	go func() {
 		err := s.grpcServer.Serve(listener)
 		if err != nil {
-			slog.Error("control gRPC server error",
+			slog.Error(
+				"control gRPC server error",
 				"component", s.component,
 				"error", err,
 			)
@@ -119,7 +120,8 @@ func (s *GRPCServer) Stop(_ context.Context) error {
 
 // Shutdown implements the Control.Shutdown RPC.
 func (s *GRPCServer) Shutdown(_ context.Context, req *controlv1.ShutdownRequest) (*controlv1.ShutdownResponse, error) {
-	slog.Info("shutdown requested via gRPC",
+	slog.Info(
+		"shutdown requested via gRPC",
 		"component", s.component,
 		"graceful", req.Graceful,
 	)

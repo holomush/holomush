@@ -101,7 +101,8 @@ func (r *ExitRepository) insertExitTx(ctx context.Context, tx pgx.Tx, exit *worl
 
 	visibleToStrings := ulidsToStrings(exit.VisibleTo)
 
-	_, err = tx.Exec(ctx, `
+	_, err = tx.Exec(
+		ctx, `
 		INSERT INTO exits (id, from_location_id, to_location_id, name, aliases, bidirectional,
 		                   return_name, visibility, visible_to, locked, lock_type, lock_data, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
@@ -136,7 +137,8 @@ func (r *ExitRepository) Update(ctx context.Context, exit *world.Exit) error {
 
 	visibleToStrings := ulidsToStrings(exit.VisibleTo)
 
-	result, err := r.pool.Exec(ctx, `
+	result, err := r.pool.Exec(
+		ctx, `
 		UPDATE exits SET from_location_id = $2, to_location_id = $3, name = $4, aliases = $5,
 		       bidirectional = $6, return_name = $7, visibility = $8, visible_to = $9,
 		       locked = $10, lock_type = $11, lock_data = $12

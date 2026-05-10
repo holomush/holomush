@@ -80,8 +80,8 @@ func (s *Server) Start() (<-chan error, error) {
 	// umask mutation. The parent directory (XDG runtime dir, mode 0700) is the
 	// primary access gate; os.Chmod adds the supplementary socket-level restriction.
 	if chmodErr := os.Chmod(s.cfg.SocketPath, 0o600); chmodErr != nil {
-		_ = ln.Close()         //nolint:errcheck // best-effort cleanup
-		_ = lockFile.Close()   //nolint:errcheck // best-effort cleanup
+		_ = ln.Close()       //nolint:errcheck // best-effort cleanup
+		_ = lockFile.Close() //nolint:errcheck // best-effort cleanup
 		return nil, oops.Code("ADMIN_SOCKET_CHMOD_FAILED").
 			With("path", s.cfg.SocketPath).Wrap(chmodErr)
 	}

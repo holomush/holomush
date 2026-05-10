@@ -132,7 +132,8 @@ func (s *SceneAuditStore) Insert(
 	if timestamp != nil {
 		ts = timestamp.AsTime()
 	}
-	_, err := s.pool.Exec(ctx, `
+	_, err := s.pool.Exec(
+		ctx, `
 		INSERT INTO scene_log (
 			id, subject, type, timestamp, actor_kind, actor_id,
 			payload, schema_ver, codec

@@ -238,7 +238,8 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 		playerSessionIDArg = info.PlayerSessionID.String()
 	}
 
-	_, err = s.pool.Exec(ctx,
+	_, err = s.pool.Exec(
+		ctx,
 		`INSERT INTO sessions (id, character_id, player_id, player_session_id,
 			character_name, location_id,
 			is_guest, status, grid_present,
@@ -639,7 +640,8 @@ func (s *PostgresSessionStore) UpdateFocusMemberships(ctx context.Context, sessi
 	// Read current state under the transaction.
 	var statusStr string
 	var focusMembershipsJSON, presentingFocusJSON []byte
-	err = tx.QueryRow(ctx,
+	err = tx.QueryRow(
+		ctx,
 		`SELECT status, focus_memberships, presenting_focus FROM sessions WHERE id = $1 FOR UPDATE`,
 		sessionID,
 	).Scan(&statusStr, &focusMembershipsJSON, &presentingFocusJSON)

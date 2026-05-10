@@ -377,7 +377,8 @@ func TestLoadAllSkipsBrokenPluginsWhenGracefulDegradationEnabled(t *testing.T) {
 	luaHost := pluginlua.NewHost()
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
-	mgr, mgrErr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(
+		pluginsDir,
 		plugins.WithLuaHost(luaHost),
 		plugins.WithGracefulDegradation(),
 		plugins.WithVerbRegistry(core.NewVerbRegistry()),
@@ -775,7 +776,8 @@ lua-plugin:
 	repo := &fakeAliasSeederMgr{existing: make(map[string]string)}
 	cache := command.NewAliasCache()
 
-	mgr, mgrErr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(
+		pluginsDir,
 		plugins.WithLuaHost(luaHost),
 		plugins.WithAliasSeeder(repo, cache),
 		plugins.WithVerbRegistry(core.NewVerbRegistry()),
@@ -849,7 +851,8 @@ lua-plugin:
 		repo := &fakeAliasSeederMgr{existing: make(map[string]string)}
 		cache := command.NewAliasCache()
 
-		mgr, mgrErr := plugins.NewManager(pluginsDir,
+		mgr, mgrErr := plugins.NewManager(
+			pluginsDir,
 			plugins.WithLuaHost(luaHost),
 			plugins.WithAliasSeeder(repo, cache),
 			plugins.WithVerbRegistry(core.NewVerbRegistry()),
@@ -1198,7 +1201,8 @@ func TestManagerWithTrustAllowlistDoesNotInterfereWithBasicLoad(t *testing.T) {
 	pluginsDir := filepath.Join(dir, "plugins")
 	mkdirAll(t, pluginsDir)
 
-	mgr, mgrErr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(
+		pluginsDir,
 		plugins.WithTrustAllowlist([]string{"trusted-one", "trusted-two"}),
 		plugins.WithVerbRegistry(core.NewVerbRegistry()),
 	)
@@ -1223,7 +1227,8 @@ func TestManagerLoadAllWarnsOnTrustAllowlistedPluginNotDiscovered(t *testing.T) 
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	defer slog.SetDefault(oldDefault)
 
-	mgr, mgrErr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(
+		pluginsDir,
 		plugins.WithTrustAllowlist([]string{"ghost-plugin", "phantom-plugin"}),
 		plugins.WithVerbRegistry(core.NewVerbRegistry()),
 	)
@@ -1251,7 +1256,8 @@ func TestManagerLoadAllDoesNotWarnWhenAllowlistMatchesDiscoveredPlugin(t *testin
 	pluginDir := filepath.Join(pluginsDir, "trusted-one")
 	mkdirAll(t, pluginDir)
 	writeFile(t, filepath.Join(pluginDir, "plugin.yaml"), []byte(
-		"name: trusted-one\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
+		"name: trusted-one\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua",
+	))
 	writeFile(t, filepath.Join(pluginDir, "main.lua"), []byte("function on_event(e) end"))
 
 	var buf bytes.Buffer
@@ -1262,7 +1268,8 @@ func TestManagerLoadAllDoesNotWarnWhenAllowlistMatchesDiscoveredPlugin(t *testin
 	luaHost := pluginlua.NewHost()
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
-	mgr, mgrErr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(
+		pluginsDir,
 		plugins.WithLuaHost(luaHost),
 		plugins.WithTrustAllowlist([]string{"trusted-one"}),
 		plugins.WithVerbRegistry(core.NewVerbRegistry()),
@@ -1288,7 +1295,8 @@ func TestManagerLoadAllStrictModeJoinsMultipleErrors(t *testing.T) {
 		pluginDir := filepath.Join(pluginsDir, name)
 		mkdirAll(t, pluginDir)
 		writeFile(t, filepath.Join(pluginDir, "plugin.yaml"), []byte(
-			"name: "+name+"\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
+			"name: "+name+"\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua",
+		))
 		writeFile(t, filepath.Join(pluginDir, "main.lua"), []byte("function broken"))
 	}
 
@@ -1477,7 +1485,8 @@ policies:
 		return true
 	}
 
-	mgr, mgrErr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(
+		pluginsDir,
 		plugins.WithAttributeProviderRegistrar(registrar),
 		plugins.WithAttributeProviderUnregistrar(unregistrar),
 		plugins.WithVerbRegistry(core.NewVerbRegistry()),
@@ -1717,7 +1726,8 @@ lua-plugin:
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
 	reg := core.NewVerbRegistry()
-	mgr, mgrErr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(
+		pluginsDir,
 		plugins.WithLuaHost(luaHost),
 		plugins.WithVerbRegistry(reg),
 	)
@@ -1774,7 +1784,8 @@ lua-plugin:
 		Source:        "builtin",
 	}, "host-test"))
 
-	mgr, mgrErr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(
+		pluginsDir,
 		plugins.WithLuaHost(luaHost),
 		plugins.WithVerbRegistry(reg),
 	)
@@ -1821,7 +1832,8 @@ lua-plugin:
 		Source:        "builtin",
 	}, "host-test"))
 
-	mgr, mgrErr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(
+		pluginsDir,
 		plugins.WithLuaHost(luaHost),
 		plugins.WithVerbRegistry(reg),
 	)

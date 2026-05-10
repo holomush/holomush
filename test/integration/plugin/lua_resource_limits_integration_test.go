@@ -39,7 +39,8 @@ func loadLuaResourceLimitsPlugin(dir, name string, opts ...pluginlua.HostOption)
 var _ = Describe("Lua plugin resource limits", func() {
 	Describe("CPU bomb", func() {
 		It("does not hang the dispatcher and remains responsive to subsequent events", func() {
-			h := loadLuaResourceLimitsPlugin("testdata/lua/cpu_bomb", "cpu-bomb",
+			h := loadLuaResourceLimitsPlugin(
+				"testdata/lua/cpu_bomb", "cpu-bomb",
 				pluginlua.WithCPUTimeout(200*time.Millisecond),
 			)
 
@@ -81,7 +82,8 @@ var _ = Describe("Lua plugin resource limits", func() {
 			// same shape at RegistryMaxSize=1024). Use a small cap here so
 			// recursion + 8 locals per frame overruns the value stack
 			// quickly.
-			h := loadLuaResourceLimitsPlugin("testdata/lua/memory_bomb", "memory-bomb",
+			h := loadLuaResourceLimitsPlugin(
+				"testdata/lua/memory_bomb", "memory-bomb",
 				pluginlua.WithCPUTimeout(5*time.Second), // generous — want the registry cap to fire first
 				pluginlua.WithStateFactory(pluginlua.NewStateFactory(
 					pluginlua.WithRegistryMaxSize(1024),

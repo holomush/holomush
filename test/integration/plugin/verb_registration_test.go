@@ -63,7 +63,8 @@ lua-plugin:
   entry: main.lua
 `, "function on_event(e) end")
 
-		mgr, mgrErr := plugins.NewManager(pluginsDir,
+		mgr, mgrErr := plugins.NewManager(
+			pluginsDir,
 			plugins.WithLuaHost(luaHost),
 			plugins.WithVerbRegistry(verbReg),
 		)
@@ -99,7 +100,8 @@ lua-plugin:
   entry: main.lua
 `, "function on_event(e) end")
 
-		mgr, mgrErr := plugins.NewManager(pluginsDir,
+		mgr, mgrErr := plugins.NewManager(
+			pluginsDir,
 			plugins.WithLuaHost(luaHost),
 			plugins.WithVerbRegistry(verbReg),
 		)
@@ -133,7 +135,8 @@ lua-plugin:
   entry: main.lua
 `, "function on_event(e) end")
 
-		mgr, mgrErr := plugins.NewManager(pluginsDir,
+		mgr, mgrErr := plugins.NewManager(
+			pluginsDir,
 			plugins.WithLuaHost(luaHost),
 			plugins.WithVerbRegistry(verbReg),
 		)

@@ -161,7 +161,8 @@ func (cb *CircuitBreaker) RecordProbeSuccess() {
 	cb.state = CircuitStateClosed
 	cb.calls = cb.calls[:0]
 	cb.probeInFlight = false
-	slog.Info("provider circuit breaker closed after successful probe",
+	slog.Info(
+		"provider circuit breaker closed after successful probe",
 		"provider", cb.provider,
 	)
 }
@@ -174,7 +175,8 @@ func (cb *CircuitBreaker) RecordProbeFailure() {
 	cb.state = CircuitStateOpen
 	cb.openedAt = time.Now()
 	cb.probeInFlight = false
-	slog.Warn("provider circuit breaker re-opened after failed probe",
+	slog.Warn(
+		"provider circuit breaker re-opened after failed probe",
 		"provider", cb.provider,
 	)
 }
@@ -210,7 +212,8 @@ func (cb *CircuitBreaker) checkTrip() {
 	if ratio > cb.config.CallRatioThreshold {
 		cb.state = CircuitStateOpen
 		cb.openedAt = time.Now()
-		slog.Error("provider circuit breaker opened: budget utilization threshold exceeded",
+		slog.Error(
+			"provider circuit breaker opened: budget utilization threshold exceeded",
 			"provider", cb.provider,
 			"exceeding_calls", exceeding,
 			"total_calls", len(cb.calls),

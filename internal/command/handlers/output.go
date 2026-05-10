@@ -28,7 +28,8 @@ import (
 //   - bytesWritten: number of bytes successfully written before error
 //   - err: the write error
 func logOutputError(ctx context.Context, cmd, charID string, bytesWritten int, err error) {
-	slog.WarnContext(ctx, "failed to write command output",
+	slog.WarnContext(
+		ctx, "failed to write command output",
 		"command", cmd,
 		"character_id", charID,
 		"bytes_written", bytesWritten,

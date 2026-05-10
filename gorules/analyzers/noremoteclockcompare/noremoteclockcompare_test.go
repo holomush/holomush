@@ -12,7 +12,8 @@ import (
 )
 
 func TestAnalyzerFlagsRemoteClockComparesAndIgnoresLocalOnes(t *testing.T) {
-	analysistest.Run(t, analysistest.TestData(), noremoteclockcompare.Analyzer,
+	analysistest.Run(
+		t, analysistest.TestData(), noremoteclockcompare.Analyzer,
 		"example.com/positive",
 		"example.com/negative",
 	)

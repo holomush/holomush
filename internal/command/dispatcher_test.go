@@ -2070,7 +2070,8 @@ func newTestDispatcherWithPlugin(t *testing.T, deliverer PluginCommandDeliverer)
 	})
 	require.NoError(t, reg.Register(entry))
 
-	dispatcher, err := NewDispatcher(reg, policytest.AllowAllEngine(),
+	dispatcher, err := NewDispatcher(
+		reg, policytest.AllowAllEngine(),
 		WithPluginDeliverer(deliverer),
 	)
 	require.NoError(t, err)
@@ -2090,7 +2091,8 @@ func newTestDispatcherWithPluginAndAudit(t *testing.T, deliverer PluginCommandDe
 	})
 	require.NoError(t, reg.Register(entry))
 
-	dispatcher, err := NewDispatcher(reg, policytest.AllowAllEngine(),
+	dispatcher, err := NewDispatcher(
+		reg, policytest.AllowAllEngine(),
 		WithPluginDeliverer(deliverer),
 		WithAuditLogger(logger),
 	)

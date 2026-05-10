@@ -108,7 +108,8 @@ func (p *scenePlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig) 
 	p.auditSrv.store = NewSceneAuditStore(store.Pool())
 	p.auditSrv.memberLookup = store // *SceneStore satisfies sceneMembershipLookup
 
-	slog.InfoContext(ctx, "core-scenes plugin initialised",
+	slog.InfoContext(
+		ctx, "core-scenes plugin initialised",
 		"storage", "postgres",
 	)
 	return nil

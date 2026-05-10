@@ -17,7 +17,8 @@ import (
 )
 
 func TestRestoreFocusReturnsEmptyPlanForNewSession(t *testing.T) {
-	coord, _ := newTestCoordinator(t,
+	coord, _ := newTestCoordinator(
+		t,
 		map[string]*session.Info{
 			"sess-1": {Status: session.StatusActive},
 		},
@@ -41,7 +42,8 @@ func TestRestoreFocusDispatchesToKindPolicyOnRestore(t *testing.T) {
 		},
 	}
 
-	coord, _ := newTestCoordinator(t,
+	coord, _ := newTestCoordinator(
+		t,
 		map[string]*session.Info{
 			"sess-detached": {
 				Status: session.StatusDetached,
@@ -73,7 +75,8 @@ func TestRestoreFocusIncludesPresentingStream(t *testing.T) {
 	}
 
 	presenting := session.FocusKey{Kind: session.FocusKindScene, TargetID: targetID}
-	coord, _ := newTestCoordinator(t,
+	coord, _ := newTestCoordinator(
+		t,
 		map[string]*session.Info{
 			"sess-1": {
 				Status: session.StatusActive,
@@ -157,7 +160,8 @@ func TestRestoreFocusDeduplicatesAmbientStreamsAgainstPolicyStreams(t *testing.T
 }
 
 func TestRestoreFocusRejectsExpiredSession(t *testing.T) {
-	coord, _ := newTestCoordinator(t,
+	coord, _ := newTestCoordinator(
+		t,
 		map[string]*session.Info{
 			"sess-expired": {Status: session.StatusExpired},
 		},

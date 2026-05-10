@@ -59,7 +59,8 @@ func (sp *SchemaProvisioner) Init(ctx context.Context) error {
 
 	var currentUser string
 	var hasCreaterole bool
-	err = pool.QueryRow(ctx,
+	err = pool.QueryRow(
+		ctx,
 		"SELECT current_user, rolcreaterole FROM pg_roles WHERE rolname = current_user",
 	).Scan(&currentUser, &hasCreaterole)
 	if err != nil {
@@ -230,7 +231,8 @@ func (sp *SchemaProvisioner) ensureRole(ctx context.Context, roleName, password 
 	roleID := pgx.Identifier{roleName}
 
 	var exists bool
-	err := sp.pool.QueryRow(ctx,
+	err := sp.pool.QueryRow(
+		ctx,
 		"SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname = $1)",
 		roleName,
 	).Scan(&exists)

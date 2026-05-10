@@ -291,7 +291,8 @@ func TestWithGameSessionFanoutIgnoresNilEngine(t *testing.T) {
 	gameStore := sessionmocks.NewMockStore(t)
 
 	// nil engine — fanout must be silently ignored.
-	svc, err := auth.NewAuthService(playerRepo, playerSessionRepo, hasher,
+	svc, err := auth.NewAuthService(
+		playerRepo, playerSessionRepo, hasher,
 		auth.WithGameSessionFanout(nil, gameStore),
 	)
 	require.NoError(t, err)
@@ -309,7 +310,8 @@ func TestWithGameSessionFanoutIgnoresNilGameStore(t *testing.T) {
 	engine := core.NewEngine(core.NewMemoryEventStore())
 
 	// nil gameSessions — fanout must be silently ignored.
-	svc, err := auth.NewAuthService(playerRepo, playerSessionRepo, hasher,
+	svc, err := auth.NewAuthService(
+		playerRepo, playerSessionRepo, hasher,
 		auth.WithGameSessionFanout(engine, nil),
 	)
 	require.NoError(t, err)

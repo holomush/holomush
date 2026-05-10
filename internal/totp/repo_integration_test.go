@@ -67,7 +67,8 @@ func TestMain(m *testing.M) {
 func insertPlayer(t *testing.T, pool *pgxpool.Pool, id, username string) {
 	t.Helper()
 	ctx := context.Background()
-	_, err := pool.Exec(ctx,
+	_, err := pool.Exec(
+		ctx,
 		`INSERT INTO players (id, username, password_hash) VALUES ($1, $2, $3)`,
 		id, username, "hash-placeholder",
 	)
@@ -301,7 +302,8 @@ func TestRepoMarkVerifiedResetsLockoutFields(t *testing.T) {
 	require.NoError(t, repo.InsertEnrollment(ctx, rec))
 
 	// Artificially set failed_attempts and locked_until.
-	_, err := testPool.Exec(ctx,
+	_, err := testPool.Exec(
+		ctx,
 		`UPDATE player_totp SET failed_attempts = 5, locked_until = $1 WHERE player_id = $2`,
 		now.Add(15*time.Minute), pid,
 	)

@@ -43,7 +43,8 @@ type PluginEmitterDeps struct {
 // When true, the fence runs and the publisher's DEK-manager-aware
 // crypto branch activates downstream.
 func BuildPluginEmitter(_ context.Context, cfg eventbus.Config, deps PluginEmitterDeps) (*plugins.PluginEventEmitter, error) {
-	return plugins.NewPluginEventEmitter(deps.Publisher, deps.Manifests, deps.Resolver,
+	return plugins.NewPluginEventEmitter(
+		deps.Publisher, deps.Manifests, deps.Resolver,
 		plugins.WithCryptoEnabled(cfg.Crypto.IsEnabled()),
 	), nil
 }

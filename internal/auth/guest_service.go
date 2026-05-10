@@ -153,7 +153,8 @@ func (s *GuestService) CreateGuest(ctx context.Context) (*GuestResult, error) {
 	// This is non-critical — guests can still log in even if this update fails.
 	player.DefaultCharacterID = &char.ID
 	if err = s.players.Update(ctx, player); err != nil {
-		slog.Warn("guest_service: failed to set default character on guest player",
+		slog.Warn(
+			"guest_service: failed to set default character on guest player",
 			"player_id", player.ID.String(),
 			"character_id", char.ID.String(),
 			"error", err,

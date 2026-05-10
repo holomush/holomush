@@ -183,7 +183,8 @@ func TestPluginEventEmitterIdempotentRetryIsNoOpOnStreamState(t *testing.T) {
 	// payload). The invariant under test lives in the Msg-Id header equals
 	// the envelope id — subscribers dedup on this key.
 	require.Len(t, msgs, 2)
-	assert.NotEqual(t,
+	assert.NotEqual(
+		t,
 		msgs[0].Header.Get(eventbus.HeaderMsgID),
 		msgs[1].Header.Get(eventbus.HeaderMsgID),
 		"two Emit calls MUST mint different ULIDs",
@@ -512,7 +513,8 @@ func TestEmitManifestGateRejectsCharacterClaimWithoutOptIn(t *testing.T) {
 		Name: "plug-A", Type: plugins.TypeLua, Emits: []string{"location"},
 		ActorKindsClaimable: []string{"plugin"}, // no character
 	}
-	e := newEmitter(t, bus,
+	e := newEmitter(
+		t, bus,
 		func(string) *plugins.Manifest { return manifest },
 		actorFromCtxResolver,
 	)
@@ -542,7 +544,8 @@ func TestEmitManifestGateAllowsClaimedKind(t *testing.T) {
 		Name: "plug-A", Type: plugins.TypeLua, Emits: []string{"location"},
 		ActorKindsClaimable: []string{"plugin", "character"},
 	}
-	e := newEmitter(t, bus,
+	e := newEmitter(
+		t, bus,
 		func(string) *plugins.Manifest { return manifest },
 		actorFromCtxResolver,
 	)
@@ -571,7 +574,8 @@ func TestEmitManifestGateAllowsPluginCascade(t *testing.T) {
 		Name: "plug-A", Type: plugins.TypeLua, Emits: []string{"location"},
 		ActorKindsClaimable: []string{"plugin"},
 	}
-	e := newEmitter(t, bus,
+	e := newEmitter(
+		t, bus,
 		func(string) *plugins.Manifest { return manifest },
 		actorFromCtxResolver,
 	)

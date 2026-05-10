@@ -109,7 +109,8 @@ func (a *AuditingService) Verify(ctx context.Context, pid ulid.ULID, code string
 		if res.LockedUntil != nil {
 			lockedUntil = *res.LockedUntil
 		}
-		a.emit(ctx,
+		a.emit(
+			ctx,
 			totp.SubjectLocked(a.gameID, pid.String()),
 			totp.EventTypeLocked,
 			totp.LockedPayload{
@@ -129,7 +130,8 @@ func (a *AuditingService) ConsumeRecoveryCode(ctx context.Context, pid ulid.ULID
 	if err != nil {
 		return res, oops.Wrap(err)
 	}
-	a.emit(ctx,
+	a.emit(
+		ctx,
 		totp.SubjectRecoveryConsumed(a.gameID, pid.String()),
 		totp.EventTypeRecoveryConsumed,
 		totp.RecoveryConsumedPayload{
@@ -147,7 +149,8 @@ func (a *AuditingService) ClearTOTP(ctx context.Context, pid ulid.ULID, by totp.
 	if err != nil {
 		return res, oops.Wrap(err)
 	}
-	a.emit(ctx,
+	a.emit(
+		ctx,
 		totp.SubjectCleared(a.gameID, pid.String()),
 		totp.EventTypeCleared,
 		totp.ClearedPayload{
@@ -167,7 +170,8 @@ func (a *AuditingService) RecoverAndClear(ctx context.Context, pid ulid.ULID, co
 	if err != nil {
 		return res, oops.Wrap(err)
 	}
-	a.emit(ctx,
+	a.emit(
+		ctx,
 		totp.SubjectRecoveryConsumed(a.gameID, pid.String()),
 		totp.EventTypeRecoveryConsumed,
 		totp.RecoveryConsumedPayload{
@@ -176,7 +180,8 @@ func (a *AuditingService) RecoverAndClear(ctx context.Context, pid ulid.ULID, co
 			RecoveryCodeID: res.RecoveryCodeID.String(),
 		},
 	)
-	a.emit(ctx,
+	a.emit(
+		ctx,
 		totp.SubjectCleared(a.gameID, pid.String()),
 		totp.EventTypeCleared,
 		totp.ClearedPayload{

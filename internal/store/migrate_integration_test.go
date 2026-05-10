@@ -113,7 +113,8 @@ func verifySeedData(t *testing.T, ctx context.Context, connStr string) {
 func TestMigrator_FullCycle(t *testing.T) {
 	ctx := context.Background()
 
-	pgContainer, err := postgres.Run(ctx,
+	pgContainer, err := postgres.Run(
+		ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
@@ -182,7 +183,8 @@ func TestMigrator_DirtyStateRecovery(t *testing.T) {
 	ctx := context.Background()
 
 	// Start PostgreSQL container
-	pgContainer, err := postgres.Run(ctx,
+	pgContainer, err := postgres.Run(
+		ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
@@ -253,7 +255,8 @@ func TestMigrator_ConcurrentUp(t *testing.T) {
 	ctx := context.Background()
 
 	// Start PostgreSQL container
-	pgContainer, err := postgres.Run(ctx,
+	pgContainer, err := postgres.Run(
+		ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
@@ -341,7 +344,8 @@ func TestMigrator_Force_VersionExceedsAvailable(t *testing.T) {
 	ctx := context.Background()
 
 	// Start PostgreSQL container
-	pgContainer, err := postgres.Run(ctx,
+	pgContainer, err := postgres.Run(
+		ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
@@ -412,7 +416,8 @@ func TestMigrator_ConcurrentMigrationDirtyStateHandling(t *testing.T) {
 	ctx := context.Background()
 
 	// Start PostgreSQL container
-	pgContainer, err := postgres.Run(ctx,
+	pgContainer, err := postgres.Run(
+		ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
