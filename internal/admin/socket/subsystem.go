@@ -17,6 +17,12 @@ type AdminSocketSubsystemConfig struct {
 	// Version is the binary version string returned by the Status RPC.
 	// Pass the package-level version var from cmd/holomush/ (ldflag-set).
 	Version string
+	// Optional RPC handlers. When non-nil, forwarded into Config so the
+	// ConnectRPC composite handler dispatches to real implementations.
+	// When nil, each RPC returns connect.CodeUnimplemented (backward-compat).
+	AuthenticateHandler AuthenticateHandler
+	ApproveHandler      ApproveHandler
+	ResetTOTPHandler    ResetTOTPHandler
 }
 
 // AdminSocketSubsystem manages the admin UNIX domain socket lifecycle.
@@ -53,9 +59,12 @@ func (s *AdminSocketSubsystem) Start(_ context.Context) error {
 		return nil
 	}
 	srv := NewServer(Config{
-		SocketPath: s.cfg.SocketPath,
-		LockPath:   s.cfg.LockPath,
-		Version:    s.cfg.Version,
+		SocketPath:          s.cfg.SocketPath,
+		LockPath:            s.cfg.LockPath,
+		Version:             s.cfg.Version,
+		AuthenticateHandler: s.cfg.AuthenticateHandler,
+		ApproveHandler:      s.cfg.ApproveHandler,
+		ResetTOTPHandler:    s.cfg.ResetTOTPHandler,
 	})
 
 	errCh, err := srv.Start()

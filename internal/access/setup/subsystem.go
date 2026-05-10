@@ -147,3 +147,12 @@ func (s *ABACSubsystem) HealthTracker() *lifecycle.HealthTracker {
 	}
 	return s.stack.HealthTracker
 }
+
+// Resolver returns the attribute resolver. Satisfies access.SubjectResolver
+// via *attribute.Resolver.ResolveSubjectAttributes. Panics if called before Start().
+func (s *ABACSubsystem) Resolver() *attribute.Resolver {
+	if s.stack == nil {
+		panic("setup: Resolver() called before Start()")
+	}
+	return s.stack.Resolver
+}

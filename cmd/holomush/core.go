@@ -22,7 +22,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
+	adminauth "github.com/holomush/holomush/internal/admin/auth"
+	"github.com/holomush/holomush/internal/admin/approval"
+	"github.com/holomush/holomush/internal/admin/policy"
 	socket "github.com/holomush/holomush/internal/admin/socket"
+	totpaudit "github.com/holomush/holomush/internal/admin/totp_audit"
 	authsetup "github.com/holomush/holomush/internal/auth/setup"
 	"github.com/holomush/holomush/internal/bootstrap"
 	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
@@ -42,6 +46,7 @@ import (
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telemetry"
+	"github.com/holomush/holomush/internal/totp"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	worldsetup "github.com/holomush/holomush/internal/world/setup"
@@ -309,10 +314,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// Filter crypto.dual_control_required against the known op_kind registry.
 	// Lax+warn: unknown op_kinds emit a structured warning and are excluded
 	// from enforcement; the server continues to start. Per spec §9.
-	// Deliberately blank-assigned here — T22 (holomush-jxo8.6.21) wires this
-	// into CryptoPolicySubsystem once that subsystem is constructed.
 	validatedDualControl := validateDualControlRequired(cryptoConfig.DualControlRequired, slog.Default())
-	_ = validatedDualControl // seam for T22 (holomush-jxo8.6.21): CryptoPolicySubsystem wiring
 
 	abacSub := abacsetup.NewABACSubsystem(abacsetup.ABACSubsystemConfig{
 		DB:              dbSub,
@@ -546,10 +548,130 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		VerbRegistry:   verbRegistry,
 	})
 
+	// --- Crypto subsystems (T22 / holomush-jxo8.6.21) ---
+	// CryptoChainVerifierSubsystem runs VerifyChain before EventBus starts.
+	cryptoChainVerifierSub := policy.NewCryptoChainVerifierSubsystem(policy.CryptoChainVerifierConfig{
+		Pool:        dbSub.Pool(),
+		GameID:      gameID,
+		PolicyNames: []string{"dual_control_required"},
+	})
+
+	// Mint a server-start ULID to stamp the CryptoPolicySubsystem's emits so
+	// a given run's events can be correlated in events_audit.
+	serverStartULID := core.NewULID().String()
+
+	// Derive server identity: prefer hostname, fall back to "holomush".
+	serverIdentity := "holomush"
+	if hostname, hostErr := os.Hostname(); hostErr == nil && hostname != "" {
+		serverIdentity = "holomush@" + hostname
+	}
+
+	effectiveConfig := policy.CryptoEffectiveConfig{
+		DualControlRequired: validatedDualControl,
+	}
+
+	// CryptoPolicySubsystem emits the current policy snapshot after AuditProjection.
+	cryptoPolicySub := policy.NewCryptoPolicySubsystem(policy.CryptoPolicySubsystemConfig{
+		EmitDeps: policy.EmitDeps{
+			GameID:          gameID,
+			ServerStartULID: serverStartULID,
+			ServerIdentity:  serverIdentity,
+			Pool:            dbSub.Pool(),
+			Publisher:       eventBusSub.Publisher(),
+			Clock:           totp.NewRealClock(),
+			Config:          effectiveConfig,
+		},
+		PolicyNames: []string{"dual_control_required"},
+	})
+
+	// --- Admin handler construction (T22 / holomush-jxo8.6.21) ---
+	// Build the in-memory session store for Authenticate → Approve / ResetTOTP flow.
+	// totp.NewRealClock() satisfies adminauth.Clock (both require Now() time.Time).
+	adminSessionStore := adminauth.NewSessionStore(totp.NewRealClock(), 10*time.Minute)
+
+	// Construct the TOTP service for use in the admin handlers. KEK provider is
+	// read from the same env-var path used by the admin-totp CLI (HOLOMUSH_KEK_FILE
+	// + HOLOMUSH_KEK_PASSPHRASE). On first boot without KEK env vars, Start will
+	// fail-open: the admin handlers will return errors on TOTP operations but the
+	// server continues to start (handler construction itself is always successful).
+	kekProvider, kekErr := buildKEKProviderFromConfig(ctx, dbSub.Pool())
+	if kekErr != nil {
+		slog.Warn("admin handlers: KEK provider unavailable — TOTP-gated admin RPCs will fail at runtime",
+			"error", kekErr)
+		kekProvider = nil
+	}
+
+	var adminTOTPSvc totp.Service
+	if kekProvider != nil {
+		totpRepo := totp.NewRepository(dbSub.Pool())
+		builtTOTP, totpErr := totp.NewService(
+			totp.Config{GameID: gameID},
+			totpRepo,
+			kekProvider,
+			totp.NewRealClock(),
+			authSub.Hasher(),
+		)
+		if totpErr != nil {
+			slog.Warn("admin handlers: TOTP service construction failed — admin TOTP RPCs will be unavailable at runtime",
+				"error", totpErr)
+		} else {
+			adminTOTPSvc = builtTOTP
+		}
+	}
+
+	// AuditingService wraps the totp.Service to emit crypto.totp_* events.
+	// When adminTOTPSvc is nil (KEK unavailable), totpAuditSvc is also nil and
+	// the admin handlers will return errors on any TOTP operation.
+	var totpAuditSvc *totpaudit.AuditingService
+	if adminTOTPSvc != nil {
+		builtAudit, auditErr := totpaudit.NewAuditingService(
+			adminTOTPSvc,
+			eventBusSub.Publisher(),
+			gameID,
+			totp.NewRealClock(),
+			slog.Default(),
+		)
+		if auditErr != nil {
+			slog.Warn("admin handlers: TOTP audit service construction failed", "error", auditErr)
+		} else {
+			totpAuditSvc = builtAudit
+		}
+	}
+
+	// Build the in-game credentials provider that walks the 6-step auth sequence.
+	adminRoleStore := store.NewPostgresRoleStore(dbSub.Pool())
+
+	var authenticateHandler socket.AuthenticateHandler
+	var approveHandler socket.ApproveHandler
+	var resetTOTPHandler socket.ResetTOTPHandler
+
+	if totpAuditSvc != nil {
+		ingameProvider, provErr := adminauth.NewInGameCredentialsProvider(
+			authSub.AuthService(),
+			totpAuditSvc,
+			abacSub.Resolver(),
+			adminRoleStore,
+		)
+		if provErr != nil {
+			slog.Warn("admin handlers: InGameCredentialsProvider construction failed — Authenticate will be unavailable",
+				"error", provErr)
+		} else {
+			approvalRepo := approval.NewPostgresRepo(dbSub.Pool(), nil)
+			authenticateHandler = adminauth.NewAuthenticateHandler(ingameProvider, adminSessionStore)
+			approveHandler = approval.NewApproveHandler(adminSessionStore, approvalRepo, abacSub.Resolver(), adminRoleStore)
+			resetTOTPHandler = adminauth.NewResetTOTPHandler(adminSessionStore, abacSub.Resolver(), adminRoleStore, totpAuditSvc)
+		}
+	} else {
+		slog.Warn("admin handlers: TOTP audit service unavailable — all three admin RPCs (Authenticate/Approve/ResetTOTP) will return errors")
+	}
+
 	adminSub := socket.NewAdminSocketSubsystem(socket.AdminSocketSubsystemConfig{
-		SocketPath: adminSocketPath,
-		LockPath:   adminLockPath,
-		Version:    version,
+		SocketPath:          adminSocketPath,
+		LockPath:            adminLockPath,
+		Version:             version,
+		AuthenticateHandler: authenticateHandler,
+		ApproveHandler:      approveHandler,
+		ResetTOTPHandler:    resetTOTPHandler,
 	})
 
 	// --- 8. Orchestrator: register + start ---
@@ -561,7 +683,10 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	for _, sub := range productionSubsystems(
 		dbSub, abacSub, authSub, worldSub,
 		sessionSub, pluginSub, bootstrapSub,
-		eventBusSub, clusterSub, auditSub, grpcSub,
+		cryptoChainVerifierSub,
+		eventBusSub, clusterSub, auditSub,
+		cryptoPolicySub,
+		grpcSub,
 		adminSub,
 	) {
 		orch.Register(sub)
@@ -881,13 +1006,18 @@ func parseAutoMigrate() bool {
 func productionSubsystems(
 	dbSub, abacSub, authSub, worldSub,
 	sessionSub, pluginSub, bootstrapSub,
-	eventBusSub, clusterSub, auditSub, grpcSub,
+	cryptoChainVerifierSub,
+	eventBusSub, clusterSub, auditSub,
+	cryptoPolicySub,
+	grpcSub,
 	adminSub lifecycle.Subsystem,
 ) []lifecycle.Subsystem {
 	return []lifecycle.Subsystem{
 		dbSub, abacSub, authSub, worldSub,
 		sessionSub, pluginSub, bootstrapSub,
-		eventBusSub, clusterSub, auditSub, grpcSub,
-		adminSub,
+		cryptoChainVerifierSub, // runs before EventBus (chain integrity check)
+		eventBusSub, clusterSub, auditSub,
+		cryptoPolicySub, // runs after AuditProjection (policy snapshot emit)
+		grpcSub, adminSub,
 	}
 }
