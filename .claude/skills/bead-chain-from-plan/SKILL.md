@@ -146,6 +146,50 @@ description. If the plan says "close `holomush-X`" but the bead is already
 closed, FLAG it. If the plan says "update parent linkage" but the parent has
 moved, FLAG it.
 
+#### Step 3a: Verify the plan + spec are reachable from main
+
+Beads filed by this skill will cite the plan path and the design spec path
+in their "Plan reference" and "Design reference" sections. Future sessions
+(and dispatched subagents whose workspaces fork from main via
+`task workspace:new`) will only see those files if they're reachable from
+the base branch the new workspace inherits from.
+
+Verify reachability:
+
+```bash
+# Plan
+git ls-tree main -- '<plan-path>'              # present on main right now?
+git log --all --oneline -- '<plan-path>'       # if not, where does it live?
+
+# Spec (if the plan's header names one)
+git ls-tree main -- '<spec-path>'
+git log --all --oneline -- '<spec-path>'
+```
+
+If either path is NOT on main:
+
+1. Surface to user: "The plan / spec is not on main — it lives on
+   commit(s) `<sha>` which is not reachable from any branch [or: reachable
+   only from branch `<name>` which has no open PR]. Future sessions will
+   see beads citing files they cannot open."
+2. Ask for one of:
+   - **Land it first** (recommended): pause materialization, open + merge a
+     PR for the plan/spec, re-invoke this skill after merge so the cited
+     paths are reachable.
+   - **Bookmark + acknowledge**: bookmark the chain head (`jj bookmark set
+     <name> -r <head>`) and proceed; the user accepts that subagents will
+     need explicit `jj new <bookmark>` to access the cited files. The
+     downstream consequence (handoff prompts, subagent briefings) is the
+     user's to manage.
+   - **Abort**: exit without creating beads.
+
+Do NOT silently proceed when paths are unreachable. The failure mode is
+delayed and confusing: beads file successfully, then days later a fresh
+session sees `Design reference: <path>` and `cat` reports no such file.
+Real example: Phase 5 sub-epic E (May 2026) shipped 42 beads citing a
+spec + plan that lived only on orphan commits; the next execution session
+spent significant context recovering before dispatching any work.
+
 ### Step 4: Generate the operation manifest
 
 Build an in-memory list of operations in the order they should execute:
@@ -248,6 +292,7 @@ First ready task: <bd ready output, top entry>
 
 - **Plan section missing**: if no `## Bead chain structure` heading exists in the plan or its sidecar, follow Step 1's delegation flow — offer to invoke `bead-chain-design` to generate the section. If the user declines, ask whether the plan is meant to skip bead creation entirely (some single-task plans are too small to warrant a chain).
 - **Description section missing**: per Step 2, this is a HARD STOP. Materialization MUST NOT proceed until the plan is amended (or regenerated via `bead-chain-design`) so every task bead description includes all 8 required sections. The Plan → Bead Chain convention is MUST-level; non-compliant beads are not acceptable.
+- **Plan / spec not reachable from main**: per Step 3a, surface to user and require explicit decision (land first, bookmark-and-acknowledge, or abort). Do not silently materialize beads that will cite unreachable paths.
 - **Bead already exists**: if `bd show` returns a bead the plan says to create as new (collision), abort and ask the user.
 - **Forward-reference bead**: if a `bd create` description references an ID that doesn't exist yet but will be created later in this run, that's expected — the cross-reference will resolve naturally once the run completes. Do NOT pre-validate cross-references.
 - **`bd dolt push` failure**: common. Retry once. If it persists, leave the local state with the changes applied and ask the user to debug remote sync separately.

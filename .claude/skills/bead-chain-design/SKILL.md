@@ -111,9 +111,17 @@ CLAUDE.md "Plan → Bead Chain" requirements:
 2. **Design reference** — the grounding spec / design doc named in the plan
    header, with the most-relevant section anchor
 3. **Plan reference** — the plan path with the task ID anchor
-   (`docs/superpowers/plans/<plan>.md` § Task Tn)
-4. **TDD acceptance criteria** — pulled from the plan's task TDD steps; for
-   merged beads, the union of the merged tasks' tests
+   (`docs/superpowers/plans/<plan>.md` § Task Tn). **MUST also include the
+   verbatim-read directive** (see "Plan reference: anti-inference guard"
+   below). Bead descriptions alone are a SUMMARY of intent, not a
+   structural spec; implementers who never open the plan produce work that
+   diverges from canonical type names, RPC streaming-vs-unary shapes, hash
+   algorithm choices, etc. The directive forces the plan-as-canonical
+   contract.
+4. **TDD acceptance criteria** — pulled from the plan's task TDD steps,
+   preserving test names verbatim (the plan-reviewer pass validates name
+   alignment with the spec INV catalog; renames here break that chain).
+   For merged beads, the union of the merged tasks' tests.
 5. **Verification steps** — pulled from the plan's task verification block;
    typically `task lint`, `task test -- ./pkg/`, `task pr-prep` for the
    closing bead
@@ -124,6 +132,32 @@ CLAUDE.md "Plan → Bead Chain" requirements:
 8. **Out of scope** — explicit non-goals; pulled from the plan's "Out of
    scope" section if present, otherwise generated from the design doc's
    deferred items
+
+#### Plan reference: anti-inference guard
+
+The "Plan reference" section MUST include language that forbids the
+implementer from inferring design from the bead summary alone. The
+canonical template (use verbatim or paraphrase tightly):
+
+```
+**Plan reference:** docs/superpowers/plans/<plan>.md § Task Tn.
+**The implementer MUST read this section's code blocks verbatim and
+translate plan → code — do not infer design from this 8-section bead
+summary alone. Structural details (RPC streaming-vs-unary, exact type
+and field names, hash algorithm choices, message-shape contracts) live
+in the plan code blocks, not in this bead. Deviation from the plan's
+canonical names breaks downstream beads that assume them.**
+```
+
+This is non-decorative. Real failure mode observed in May 2026 on the
+Phase 5 sub-epic E execution: bead `holomush-jxo8.7.27`'s description
+named "Rekey RPC additions" and listed five RPCs by name, but the bead
+did not specify that three of the five must be server-streaming. The
+implementer subagent inferred unary responses from the bead and produced
+a proto file that downstream handler/CLI beads could not consume. The
+work was abandoned and redone after the implementer was redirected to
+read plan §5772-5776 verbatim. The guard above is the cheapest fix that
+prevents the failure class.
 
 Generate descriptions in heredoc form so they're directly usable by
 `bd create`:
@@ -137,12 +171,17 @@ bd create \
   --description "$(cat <<'EOF'
 **Goal:** <one-sentence>
 
-**Design reference:** <doc>:<section>
-**Plan reference:** <plan>:<task-id>
+**Design reference:** <doc> § <section>
+
+**Plan reference:** <plan> § Task <Tn>. **The implementer MUST read this
+section's code blocks verbatim and translate plan → code — do not infer
+design from this 8-section bead summary alone. Structural details (RPC
+streaming-vs-unary, exact type and field names, hash algorithm choices,
+message-shape contracts) live in the plan code blocks, not in this bead.**
 
 **TDD acceptance criteria:**
-- <test name 1>
-- <test name 2>
+- `<TestName1>` (preserve verbatim; the plan-reviewer pass validates these against the spec INV catalog)
+- `<TestName2>`
 - ...
 
 **Verification steps:**
