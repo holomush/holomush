@@ -37,6 +37,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
+	"github.com/holomush/holomush/internal/eventbus/audit/chain"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/lifecycle"
@@ -549,12 +550,15 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		VerbRegistry:   verbRegistry,
 	})
 
-	// --- Crypto subsystems (T22 / holomush-jxo8.6.21) ---
-	// CryptoChainVerifierSubsystem runs VerifyChain before EventBus starts.
-	cryptoChainVerifierSub := policy.NewCryptoChainVerifierSubsystem(policy.CryptoChainVerifierConfig{
-		Pool:        dbSub.Pool(),
-		GameID:      gameID,
-		PolicyNames: []string{"dual_control_required"},
+	// --- Crypto subsystems (T22 / holomush-jxo8.6.21; generalized holomush-jxo8.7.8) ---
+	// auditchain.VerifierSubsystem walks every registered hash chain at boot,
+	// replacing D's policy-specific CryptoChainVerifierSubsystem.
+	// RekeyChain will be registered here in Task 19 (holomush-jxo8.7.17).
+	auditChainRepo := chain.NewPostgresRepo(dbSub.Pool())
+	cryptoChainVerifierSub := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
+		Repo:     auditChainRepo,
+		Handlers: []chain.Handler{policy.PolicySetHandlerFor(gameID)},
+		Logger:   slog.Default(),
 	})
 
 	// Mint a server-start ULID to stamp the CryptoPolicySubsystem's emits so
