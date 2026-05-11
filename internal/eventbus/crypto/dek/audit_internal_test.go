@@ -12,10 +12,10 @@ import (
 )
 
 // TestEncodeHashPtr_NilAndNonNil verifies the two arms:
-// - nil input represents the genesis prev_hash; encoded as a nil *string so
-//   json.Marshal emits `"prev_hash": null`.
-// - non-nil 32-byte input emits "sha256:<hex>" via encodeHash, matching the
-//   format decodeHashString reverses (audit_chain.go).
+//   - nil input represents the genesis prev_hash; encoded as a nil *string so
+//     json.Marshal emits `"prev_hash": null`.
+//   - non-nil 32-byte input emits "sha256:<hex>" via encodeHash, matching the
+//     format decodeHashString reverses (audit_chain.go).
 func TestEncodeHashPtr_NilAndNonNil(t *testing.T) {
 	require.Nil(t, encodeHashPtr(nil), "nil input → nil pointer (genesis)")
 

@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	cryptotls "crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -55,6 +56,7 @@ import (
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	worldsetup "github.com/holomush/holomush/internal/world/setup"
 	"github.com/holomush/holomush/internal/xdg"
+	"github.com/holomush/holomush/pkg/errutil"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
@@ -842,6 +844,13 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		}
 	}
 
+	// Lifted ahead of admin subsystem construction (holomush-jxo8.9) so the
+	// admin socket's post-startup error monitor can cancel the parent ctx on
+	// failure, matching obsServer/controlGRPCServer below. The same cancel is
+	// reused for the control gRPC server's monitorServerErrors wiring.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	adminSub := socket.NewAdminSocketSubsystem(socket.AdminSocketSubsystemConfig{
 		SocketPath:          adminSocketPath,
 		LockPath:            adminLockPath,
@@ -850,6 +859,10 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		ApproveHandler:      approveHandler,
 		ResetTOTPHandler:    resetTOTPHandler,
 		RekeyHandler:        rekeyW.RekeyHandler,
+		Shutdown: func(err error) {
+			errutil.LogError(slog.Default(), "admin socket failure — cancelling root context", err)
+			cancel()
+		},
 	})
 
 	// --- 8. Orchestrator: register + start ---
@@ -890,14 +903,19 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 				)
 			}
 		}
+		// Differentiate parent-context cancellation (e.g., admin-socket Shutdown
+		// callback fired per holomush-jxo8.9) from genuine readiness timeout so
+		// the operator log surfaces the real cause.
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return fmt.Errorf("startup aborted by parent context cancellation: %w", readyErr)
+		}
 		return fmt.Errorf("startup timeout: %w", readyErr)
 	}
 	startupComplete.Store(true)
 
 	// --- 10. Control server ---
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
+	// ctx/cancel were lifted above (holomush-jxo8.9) so the admin subsystem's
+	// Shutdown wiring shares the same cancel function. Reuse them here.
 	controlTLSConfig, tlsErr := deps.ControlTLSLoader(certsDir, "core")
 	if tlsErr != nil {
 		return oops.Code("CONTROL_TLS_FAILED").With("operation", "load control TLS config").With("component", "core").Wrap(tlsErr)

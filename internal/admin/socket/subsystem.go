@@ -8,6 +8,7 @@ import (
 	"log/slog"
 
 	"github.com/holomush/holomush/internal/lifecycle"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // AdminSocketSubsystemConfig configures the admin-socket subsystem.
@@ -27,6 +28,15 @@ type AdminSocketSubsystemConfig struct {
 	// RekeyStatus / RekeyList RPCs. Sub-epic E T44 production wiring
 	// (holomush-jxo8.7.44).
 	RekeyHandler RekeyRPCHandler
+	// Shutdown is invoked when the admin socket server returns a post-startup
+	// error on its errCh (e.g., UDS accept loop dies, corrupted listener
+	// state). Production wires this to the parent context's cancel func so
+	// admin-socket failure triggers graceful shutdown of the entire process,
+	// matching obsServer/controlGRPCServer at cmd/holomush/core.go:298,914.
+	// Per holomush-jxo8.9: silent log-only was a P1 gap (operators lose
+	// break-glass with no downstream signal). When nil, the monitor logs and
+	// returns; this is the test/dev default.
+	Shutdown func(error)
 }
 
 // AdminSocketSubsystem manages the admin UNIX domain socket lifecycle.
@@ -80,17 +90,37 @@ func (s *AdminSocketSubsystem) Start(_ context.Context) error {
 	s.server = srv
 	s.errCh = errCh
 
-	go func() {
-		if serveErr, ok := <-s.errCh; ok {
-			// Admin-socket failure is intentionally non-fatal: the socket is the
-			// operator break-glass path (sub-epics D/E/F) and an error here does
-			// not affect player connections or game state. Log loudly but let the
-			// server continue serving.
-			slog.Error("admin socket subsystem: server error — admin break-glass unavailable", "error", serveErr)
-		}
-	}()
+	go runErrMonitor(s.errCh, s.cfg.Shutdown)
 
 	return nil
+}
+
+// runErrMonitor watches errCh for post-startup server errors. On a non-nil
+// error delivery it logs at Error level and invokes shutdown (if non-nil) so
+// the parent process can cancel its context and exit gracefully. On normal
+// channel close (the Stop path) it returns without invoking shutdown.
+//
+// Mirrors cmd/holomush/core.go:1117 monitorServerErrors. Extracted as a
+// package-private function so the wiring is unit-testable without spinning
+// a real UDS listener.
+func runErrMonitor(errCh <-chan error, shutdown func(error)) {
+	serveErr, ok := <-errCh
+	if !ok {
+		// Channel closed during normal Stop — not a fatal event.
+		return
+	}
+	if serveErr == nil {
+		// Defensive: a nil error delivery is not a fatal event.
+		return
+	}
+	errutil.LogError(
+		slog.Default(),
+		"admin socket subsystem: server error — triggering graceful shutdown",
+		serveErr,
+	)
+	if shutdown != nil {
+		shutdown(serveErr)
+	}
 }
 
 // Stop shuts down the admin socket server and releases admin.lock.
