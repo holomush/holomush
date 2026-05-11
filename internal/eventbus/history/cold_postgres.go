@@ -21,6 +21,7 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/codec"
+	"github.com/holomush/holomush/internal/eventbus/history/source"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
@@ -34,10 +35,17 @@ type postgresColdTier struct {
 	// cold-tier history path. nil = pre-Phase 3b passthrough (mirrors
 	// jetStreamHotTier semantics at hot_jetstream.go:60-65).
 	authGuard eventbus.SessionAuthGuard
-	// dekManager resolves DEK material for sensitive events.
+	// dekManager resolves DEK material for sensitive events. Legacy seam:
+	// used when sourceResolver is nil. When sourceResolver IS set, dekManager
+	// is bypassed in favor of the resolver-aware dispatcher path.
 	dekManager eventbus.SessionDEKManager
 	// auditEmitter logs plugin decrypt records.
 	auditEmitter eventbus.SessionAuditEmitter
+	// sourceResolver, when non-nil, routes sensitive cold-tier reads through
+	// the resolver-aware dispatcher (DispatchFor). On the cold tier the
+	// resolver is typically a source.SimpleResolver (no further fallback
+	// past the cold tier itself) — sub-epic E T44 (holomush-jxo8.7.44).
+	sourceResolver source.SourceResolver
 }
 
 // ColdTierOption tunes postgresColdTier construction. Mirrors HotTierOption
@@ -61,6 +69,16 @@ func WithColdHistoryDEKManager(m eventbus.SessionDEKManager) ColdTierOption {
 // decrypt records on the cold-tier history path.
 func WithColdHistoryDecryptAuditEmitter(em eventbus.SessionAuditEmitter) ColdTierOption {
 	return func(c *postgresColdTier) { c.auditEmitter = em }
+}
+
+// WithColdHistorySourceResolver injects the source.SourceResolver for the
+// cold-tier history path. When set, the tier delegates to the resolver-aware
+// dispatcher (DispatchFor) instead of decodeAuthorizeAndDispatch. Cold-tier
+// production wiring typically uses a source.SimpleResolver: the cold tier is
+// the FallbackResolver's target, so a fallback resolver wired on cold reads
+// would recurse. Sub-epic E T44 (holomush-jxo8.7.44).
+func WithColdHistorySourceResolver(r source.SourceResolver) ColdTierOption {
+	return func(c *postgresColdTier) { c.sourceResolver = r }
 }
 
 func newPostgresColdTier(pool *pgxpool.Pool, opts ...ColdTierOption) *postgresColdTier {
@@ -241,7 +259,7 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 			DEKRef:     dekRef,
 			DEKVersion: dekVersion,
 		}
-		ev, metaOnly, dispatchErr := decodeColdRow(ctx, row, q.Identity, c.authGuard, c.dekManager, c.auditEmitter)
+		ev, metaOnly, dispatchErr := decodeColdRow(ctx, row, q.Identity, c.authGuard, c.dekManager, c.auditEmitter, c.sourceResolver)
 		if dispatchErr != nil {
 			return nil, dispatchErr
 		}
@@ -372,6 +390,7 @@ func decodeColdRow(
 	guard eventbus.SessionAuthGuard,
 	dekMgr eventbus.SessionDEKManager,
 	auditEm eventbus.SessionAuditEmitter,
+	resolver source.SourceResolver,
 ) (eventbus.Event, bool, error) {
 	var pbEnvelope eventbusv1.Event
 	if err := proto.Unmarshal(row.Envelope, &pbEnvelope); err != nil {
@@ -409,6 +428,13 @@ func decodeColdRow(
 		}
 		keyID = codec.KeyID(row.DEKRef.Int64)
 		keyVersion = uint32(row.DEKVersion.Int32)
+	}
+	if resolver != nil {
+		// Resolver-aware dispatch: routes through newDispatcher.DispatchFor
+		// which uses resolver.Resolve in place of the inline dekMgr.Resolve
+		// call. Sub-epic E T44 (holomush-jxo8.7.44).
+		d := newDispatcher(WithSourceResolver(resolver))
+		return d.DispatchFor(ctx, &pbEnvelope, codecName, keyID, keyVersion, identity, guard, auditEm)
 	}
 	return decodeAuthorizeAndDispatch(
 		ctx, &pbEnvelope, codecName, keyID, keyVersion,

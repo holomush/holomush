@@ -2,7 +2,7 @@
 -- Crypto rekey checkpoint table per
 -- docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md §3.1.
 
-CREATE TABLE crypto_rekey_checkpoints (
+CREATE TABLE IF NOT EXISTS crypto_rekey_checkpoints (
     request_id              bytea       PRIMARY KEY,
     context_type            text        NOT NULL,
     context_id              text        NOT NULL,
@@ -28,13 +28,13 @@ CREATE TABLE crypto_rekey_checkpoints (
     )
 );
 
-CREATE UNIQUE INDEX crypto_rekey_checkpoints_one_active_per_context
+CREATE UNIQUE INDEX IF NOT EXISTS crypto_rekey_checkpoints_one_active_per_context
     ON crypto_rekey_checkpoints (context_type, context_id)
     WHERE status NOT IN ('complete', 'aborted');
 
-CREATE INDEX crypto_rekey_checkpoints_status_idx
+CREATE INDEX IF NOT EXISTS crypto_rekey_checkpoints_status_idx
     ON crypto_rekey_checkpoints (status, last_heartbeat_at)
     WHERE status NOT IN ('complete', 'aborted');
 
-CREATE INDEX crypto_rekey_checkpoints_primary_player_idx
+CREATE INDEX IF NOT EXISTS crypto_rekey_checkpoints_primary_player_idx
     ON crypto_rekey_checkpoints (primary_player_id, started_at DESC);

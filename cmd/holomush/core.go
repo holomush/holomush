@@ -40,6 +40,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/audit/chain"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
+	"github.com/holomush/holomush/internal/eventbus/crypto/invalidation"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/lifecycle"
@@ -617,11 +618,11 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		chain.NewEmitter(auditChainRepo),
 		&rekeyAuditPublisherAdapter{publisher: auditPublisher, clock: totp.NewRealClock()},
 	)
-	// policyHashSource is constructed but only consumed by the orchestrator
-	// (T37 Step 1 / INV-E25); future wiring that builds dek.Manager will
-	// pass it to dek.NewOrchestrator. Reference it here so the helper file
-	// is exercised by production boot rather than dead-coded.
-	_ = newPolicyHashSourceFromAuditChain(auditChainRepo, gameID)
+	// policyHashSource backs the Phase 1 policy_hash freeze (INV-E25).
+	// Sub-epic E T44 (holomush-jxo8.7.44) consumes it via buildRekeyWiring
+	// below; earlier beads referenced the constructor but did not wire it
+	// into a Manager yet (no production dek.NewManager call site existed).
+	policyHashSrc := newPolicyHashSourceFromAuditChain(auditChainRepo, gameID)
 
 	rekeyCheckpointSweepSub := dek.NewCheckpointSweepSubsystem(dek.CheckpointSweepConfig{
 		Repo:         rekeyCheckpointRepo,
@@ -733,6 +734,86 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		slog.Warn("admin handlers: TOTP audit service unavailable — all three admin RPCs (Authenticate/Approve/ResetTOTP) will return errors")
 	}
 
+	// --- Phase 5 sub-epic E T44: production dek.Manager + rekey RPC wiring ---
+	//
+	// Constructs dek.Manager (no production call site existed before .44),
+	// dek.Orchestrator with all five post-construction seams, and the
+	// socket.RekeyHandler adapter chain. When kekProvider is nil (KEK env
+	// vars unavailable) buildRekeyWiring returns a zero-valued wiring so the
+	// admin socket falls back to Unimplemented for the Rekey RPCs but the
+	// rest of the server continues to start.
+	//
+	// invalidation.Coordinator is constructed here when the cluster substrate
+	// is available; cluster.Registry is the live Registry from clusterSub
+	// (lifecycle.Subsystem interface) and eventBusSub.Conn() is the
+	// already-started NATS connection. The Coordinator is itself NOT a
+	// lifecycle.Subsystem in Phase 5; we Start it inline alongside the
+	// orchestrator and Stop it via the deferred Stop path. Sub-epic E T44.
+	var invCoord invalidation.Coordinator
+	if kekProvider != nil {
+		invMetrics := invalidation.NewMetrics(prometheus.DefaultRegisterer)
+		// dekCacheForInv / partCacheForInv are NEW caches dedicated to the
+		// receive-side handler. They are NOT the same instances the dek.Manager
+		// uses; cross-replica invalidation drives evictions through dek.Cache's
+		// public InvalidateContext API, which buildRekeyWiring's Manager owns
+		// separately. Phase 3c grounding doc Decision 5 — Coordinator-only path.
+		dekCacheForInv := dek.NewCache(dek.CacheConfig{Capacity: 1024, TTL: 5 * time.Minute})
+		partCacheForInv := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 1024, TTL: 5 * time.Minute})
+		c, invErr := invalidation.New(invalidation.Config{ClusterID: gameID}, invalidation.Deps{
+			Conn:      eventBusSub.Conn(),
+			Registry:  clusterSub,
+			DEKCache:  dekCacheForInv,
+			PartCache: partCacheForInv,
+			Logger:    slog.Default(),
+			Metrics:   invMetrics,
+		})
+		if invErr != nil {
+			slog.Warn("invalidation.Coordinator construction failed — cluster fan-out unavailable; Rekey will surface INVALIDATION_NO_LIVE_MEMBERS",
+				"error", invErr)
+		} else {
+			if startErr := c.Start(ctx); startErr != nil {
+				slog.Warn("invalidation.Coordinator start failed — cluster fan-out unavailable",
+					"error", startErr)
+			} else {
+				invCoord = c
+				// Coordinator is not orchestrator-owned; stop it on normal exit.
+				defer func() {
+					stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+					if stopErr := c.Stop(stopCtx); stopErr != nil {
+						slog.Warn("invalidation.Coordinator stop error", "error", stopErr)
+					}
+				}()
+			}
+		}
+	}
+
+	rekeyW, rekeyWErr := buildRekeyWiring(ctx, rekeyWiringDeps{
+		Pool:              dbSub.Pool(),
+		KEKProvider:       kekProvider,
+		GameID:            gameID,
+		DataDir:           cfg.DataDir,
+		AuditChainRepo:    auditChainRepo,
+		RekeyAuditEmitter: rekeyAuditEmitter,
+		CheckpointRepo:    rekeyCheckpointRepo,
+		SubjectResolver:   abacSub.Resolver(),
+		SessionStore:      adminSessionStore,
+		RoleChecker:       adminRoleStore,
+		InvalidationCoord: invCoord,
+		PolicyHashSrc:     policyHashSrc,
+	})
+	if rekeyWErr != nil {
+		// Construction failure is fatal because it means the production
+		// shape is incoherent (Manager interface satisfied wrong, etc.).
+		// A missing dependency returns a zero wiring with nil error, NOT
+		// this branch.
+		return rekeyWErr
+	}
+	if rekeyW.RekeyHandler == nil {
+		slog.Warn("rekey wiring incomplete — Rekey admin RPCs will return Unimplemented",
+			"kek_available", kekProvider != nil)
+	}
+
 	adminSub := socket.NewAdminSocketSubsystem(socket.AdminSocketSubsystemConfig{
 		SocketPath:          adminSocketPath,
 		LockPath:            adminLockPath,
@@ -740,6 +821,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		AuthenticateHandler: authenticateHandler,
 		ApproveHandler:      approveHandler,
 		ResetTOTPHandler:    resetTOTPHandler,
+		RekeyHandler:        rekeyW.RekeyHandler,
 	})
 
 	// --- 8. Orchestrator: register + start ---

@@ -5,16 +5,46 @@ package socket
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/lifecycle"
+	adminv1 "github.com/holomush/holomush/pkg/proto/holomush/admin/v1"
 )
+
+// stubRekeyRPCHandler is a noop stub for RekeyHandler-forwarding tests. All
+// methods return a sentinel error; the tests assert only that the field is
+// non-nil on the Server's Config, not that any RPC succeeds.
+type stubRekeyRPCHandler struct{}
+
+var errStubRekey = errors.New("stub rekey handler")
+
+func (*stubRekeyRPCHandler) HandleRekey(_ context.Context, _ *connect.Request[adminv1.RekeyRequest], _ *connect.ServerStream[adminv1.RekeyProgress]) error {
+	return errStubRekey
+}
+
+func (*stubRekeyRPCHandler) HandleRekeyResume(_ context.Context, _ *connect.Request[adminv1.RekeyResumeRequest], _ *connect.ServerStream[adminv1.RekeyProgress]) error {
+	return errStubRekey
+}
+
+func (*stubRekeyRPCHandler) HandleRekeyAbort(_ context.Context, _ *connect.Request[adminv1.RekeyAbortRequest]) (*connect.Response[adminv1.RekeyAbortResponse], error) {
+	return nil, errStubRekey
+}
+
+func (*stubRekeyRPCHandler) HandleRekeyStatus(_ context.Context, _ *connect.Request[adminv1.RekeyStatusRequest]) (*connect.Response[adminv1.RekeyStatusResponse], error) {
+	return nil, errStubRekey
+}
+
+func (*stubRekeyRPCHandler) HandleRekeyList(_ context.Context, _ *connect.Request[adminv1.RekeyListRequest], _ *connect.ServerStream[adminv1.RekeyStatusResponse]) error {
+	return errStubRekey
+}
 
 func newTestSubsystemConfig(t *testing.T) AdminSocketSubsystemConfig {
 	t.Helper()
@@ -96,4 +126,22 @@ func TestAdminSocketSubsystemStopBeforeStartReturnsNil(t *testing.T) {
 	cfg := newTestSubsystemConfig(t)
 	sub := NewAdminSocketSubsystem(cfg)
 	require.NoError(t, sub.Stop(context.Background()))
+}
+
+// TestAdminSocketSubsystemForwardsRekeyHandlerToServerConfig verifies that
+// the AdminSocketSubsystemConfig.RekeyHandler field is plumbed through into
+// the underlying socket.Config when Start constructs the Server. This is the
+// sub-epic E T44 production-wiring seam (holomush-jxo8.7.44): without it the
+// Rekey RPCs are unreachable even when cmd/holomush builds a RekeyHandler.
+func TestAdminSocketSubsystemForwardsRekeyHandlerToServerConfig(t *testing.T) {
+	cfg := newTestSubsystemConfig(t)
+	cfg.RekeyHandler = &stubRekeyRPCHandler{}
+	sub := NewAdminSocketSubsystem(cfg)
+
+	require.NoError(t, sub.Start(context.Background()))
+	defer func() { _ = sub.Stop(context.Background()) }()
+
+	require.NotNil(t, sub.server, "Start must construct a Server")
+	require.NotNil(t, sub.server.cfg.RekeyHandler,
+		"AdminSocketSubsystemConfig.RekeyHandler must flow into socket.Config.RekeyHandler")
 }

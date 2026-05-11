@@ -9,7 +9,7 @@
 
 DROP TABLE IF EXISTS bootstrap_metadata;
 
-CREATE TABLE bootstrap_metadata (
+CREATE TABLE IF NOT EXISTS bootstrap_metadata (
     chain_name      text        NOT NULL,
     scope_key       text        NOT NULL,
     initialized_at  timestamptz NOT NULL DEFAULT now(),

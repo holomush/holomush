@@ -16,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/codec"
+	"github.com/holomush/holomush/internal/eventbus/history/source"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
 
@@ -46,6 +47,17 @@ func WithHistoryDecryptAuditEmitter(em eventbus.SessionAuditEmitter) HotTierOpti
 	return func(h *jetStreamHotTier) { h.auditEmitter = em }
 }
 
+// WithHistorySourceResolver injects the source.SourceResolver used to
+// resolve DEK material on the hot-tier history path. When set, the tier
+// delegates to the resolver-aware dispatcher (newDispatcher.DispatchFor)
+// instead of decodeAuthorizeAndDispatch, enabling the INV-39 hot→cold-tier
+// fallback. Production wiring at cmd/holomush/sub_grpc.go pairs this with
+// a source.FallbackResolver; when unset the tier falls back to the legacy
+// dekManager path. Sub-epic E T44 (holomush-jxo8.7.44).
+func WithHistorySourceResolver(r source.SourceResolver) HotTierOption {
+	return func(h *jetStreamHotTier) { h.sourceResolver = r }
+}
+
 // jetStreamHotTier serves history from JetStream via an ephemeral ordered
 // consumer. One consumer is created per Read call, scoped to the filter
 // subject and the relevant start policy. The consumer is released when
@@ -58,10 +70,16 @@ type jetStreamHotTier struct {
 	// authGuard evaluates sensitive event delivery decisions (Decision 5).
 	// nil = pre-Phase 3b passthrough.
 	authGuard eventbus.SessionAuthGuard
-	// dekManager resolves DEK material for sensitive events.
+	// dekManager resolves DEK material for sensitive events. Legacy seam:
+	// used when sourceResolver is nil. When sourceResolver IS set, dekManager
+	// is bypassed in favor of the resolver-aware dispatcher path.
 	dekManager eventbus.SessionDEKManager
 	// auditEmitter logs plugin decrypt records.
 	auditEmitter eventbus.SessionAuditEmitter
+	// sourceResolver, when non-nil, routes sensitive history reads through
+	// the resolver-aware dispatcher (DispatchFor) for INV-39 hot→cold-tier
+	// fallback. Sub-epic E T44 (holomush-jxo8.7.44).
+	sourceResolver source.SourceResolver
 }
 
 func newJetStreamHotTier(js jetstream.JetStream, selector codec.KeySelector, now func() time.Time, opts ...HotTierOption) *jetStreamHotTier {
@@ -161,7 +179,7 @@ func (h *jetStreamHotTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 		if fetchCtx.Err() != nil {
 			break
 		}
-		ev, decodeErr := decodeJetStreamMessage(ctx, msg, h.selector, q.Identity, h.authGuard, h.dekManager, h.auditEmitter)
+		ev, decodeErr := decodeJetStreamMessage(ctx, msg, h.selector, q.Identity, h.authGuard, h.dekManager, h.auditEmitter, h.sourceResolver)
 		if decodeErr != nil {
 			// Skip the message rather than abort the whole page; one
 			// undecodable message on a large history would be a DoS
@@ -396,6 +414,7 @@ func decodeJetStreamMessage(
 	guard eventbus.SessionAuthGuard,
 	dekMgr eventbus.SessionDEKManager,
 	auditEm eventbus.SessionAuditEmitter,
+	resolver source.SourceResolver,
 ) (eventbus.Event, error) {
 	h := msg.Headers()
 	msgIDStr := h.Get(eventbus.HeaderMsgID)
@@ -436,7 +455,18 @@ func decodeJetStreamMessage(
 		payload = envelope.GetPayload()
 	case guard != nil:
 		// Sensitive codec with AuthGuard wired: full Decision 5 order-of-operations.
-		ev, metaOnly, authErr := decodeAndAuthorizeHistory(ctx, msg, &envelope, codecName, identity, guard, dekMgr, auditEm)
+		// When the hot tier has a SourceResolver wired (sub-epic E T44), route
+		// through the resolver-aware DispatchFor path for INV-39 hot→cold-tier
+		// fallback. Otherwise fall back to the legacy decodeAuthorizeAndDispatch
+		// path that consumes dekMgr directly.
+		var ev eventbus.Event
+		var metaOnly bool
+		var authErr error
+		if resolver != nil {
+			ev, metaOnly, authErr = decodeViaResolver(ctx, msg, &envelope, codecName, identity, guard, resolver, auditEm)
+		} else {
+			ev, metaOnly, authErr = decodeAndAuthorizeHistory(ctx, msg, &envelope, codecName, identity, guard, dekMgr, auditEm)
+		}
 		if authErr != nil {
 			return eventbus.Event{}, authErr
 		}
@@ -519,6 +549,40 @@ func decodeAndAuthorizeHistory(
 		ctx, envelope, codecName, keyID, keyVersion,
 		identity, guard, dekMgr, auditEm,
 	)
+}
+
+// decodeViaResolver is the resolver-aware variant of decodeAndAuthorizeHistory:
+// parses DEK headers from the hot-tier JetStream message and dispatches via
+// the newDispatcher (DispatchFor) configured with the provided resolver.
+// Replaces the legacy dekMgr.Resolve seam with resolver.Resolve, enabling the
+// INV-39 hot→cold-tier fallback when the resolver is a *source.FallbackResolver.
+// Sub-epic E T44 (holomush-jxo8.7.44).
+func decodeViaResolver(
+	ctx context.Context,
+	msg jetstream.Msg,
+	envelope *eventbusv1.Event,
+	codecName codec.Name,
+	identity eventbus.SessionIdentity,
+	guard eventbus.SessionAuthGuard,
+	resolver source.SourceResolver,
+	auditEm eventbus.SessionAuditEmitter,
+) (eventbus.Event, bool, error) {
+	h := msg.Headers()
+	dekRefStr := h.Get(eventbus.HeaderDekRef)
+	dekVersionStr := h.Get(eventbus.HeaderDekVersion)
+	if dekRefStr == "" || dekVersionStr == "" {
+		return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_DEK_HEADER_MISSING").
+			With("has_dek_ref", dekRefStr != "").
+			With("has_dek_version", dekVersionStr != "").
+			With("codec", string(codecName)).
+			Errorf("sensitive codec event missing required DEK headers")
+	}
+	keyID, keyVersion, err := parseDEKHeaders(dekRefStr, dekVersionStr)
+	if err != nil {
+		return eventbus.Event{}, false, err
+	}
+	d := newDispatcher(WithSourceResolver(resolver))
+	return d.DispatchFor(ctx, envelope, codecName, keyID, keyVersion, identity, guard, auditEm)
 }
 
 // parseDEKHeaders parses the App-Dek-Ref / App-Dek-Version header values
