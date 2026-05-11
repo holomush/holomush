@@ -39,6 +39,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/admin/policy"
 	"github.com/holomush/holomush/internal/admin/socket"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit/chain"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
@@ -98,6 +99,53 @@ func (s *Server) GetAuditChainVerifier() chain.Verifier { return s.verifier }
 // GetDEKManager returns the DEK manager for seeding fixture DEK rows.
 func (s *Server) GetDEKManager() dek.Manager { return s.dekMgr }
 
+// GetPool returns the shared Postgres pool for direct SQL assertions.
+func (s *Server) GetPool() *pgxpool.Pool { return s.pool }
+
+// GetChainRepo returns the auditchain Repo for direct chain assertions.
+func (s *Server) GetChainRepo() chain.Repo { return s.chainRepo }
+
+// VerifierForChain returns a Verifier scoped to the given handler's Repo.
+// The returned Verifier is the same instance used by boot-time verification.
+func (s *Server) VerifierForChain(_ chain.Handler) chain.Verifier { return s.verifier }
+
+// EmitPolicySet emits one crypto.policy_set event for policyName with ops as
+// the required_op_kinds slice. Used by E2E tests to simulate a policy edit
+// that extends the policy_set chain. The event is inserted directly into
+// events_audit (bypassing NATS) via the directSQLPublisher adapter.
+func (s *Server) EmitPolicySet(policyName string, ops []string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	pub := &directSQLPublisher{pool: s.pool}
+	deps := policy.EmitDeps{
+		GameID:          s.cfg.Game,
+		ServerStartULID: ulid.Make().String(),
+		ServerIdentity:  "holomushtest@emit-policy-set",
+		Pool:            s.pool,
+		Publisher:       pub,
+		Clock:           wallClock{},
+		Config:          policy.CryptoEffectiveConfig{DualControlRequired: ops},
+	}
+	return policy.EmitCurrentSnapshot(ctx, deps, policyName)
+}
+
+// EditDualControlRequired emits a new crypto.policy_set event for
+// "dual_control_required" with the given op-kinds list, simulating a
+// runtime policy edit that extends the chain. This is equivalent to an
+// operator changing the dual_control_required setting on a live server.
+func (s *Server) EditDualControlRequired(ops []string) error {
+	return s.EmitPolicySet("dual_control_required", ops)
+}
+
+// RestartToReloadPolicy is a no-op in the in-process test harness. The chain
+// verifier reads from the DB on every call, so no restart is needed to pick up
+// a new policy_set row emitted by EditDualControlRequired. The method exists so
+// E2E spec bodies read naturally (matching what a real server would require).
+func (s *Server) RestartToReloadPolicy() {
+	// No-op: the in-process verifier reads from the DB on each VerifyScope call.
+}
+
 // Shutdown stops the admin UDS server gracefully.
 func (s *Server) Shutdown() {
 	if s.adminSrv != nil {
@@ -110,14 +158,22 @@ func (s *Server) Shutdown() {
 // AdminClient is a thin wrapper around the generated ConnectRPC admin client
 // providing convenience helpers for E2E specs.
 type AdminClient struct {
-	pool   *pgxpool.Pool
-	client adminv1connect.AdminServiceClient
-	t      *testing.T
+	pool            *pgxpool.Pool
+	client          adminv1connect.AdminServiceClient
+	t               *testing.T
+	defaultPlayerID string // set by SetDefaultPlayerID; used by Rekey/RekeyStatus/RekeyList helpers
 }
 
 // Raw returns the underlying AdminServiceClient for specs that need full
 // control over request construction (e.g. testing error paths).
 func (c *AdminClient) Raw() adminv1connect.AdminServiceClient { return c.client }
+
+// SetDefaultPlayerID sets the player ID used as the session token in the
+// convenience Rekey/RekeyStatus/RekeyList wrapper methods. Must be called
+// after SeedAdminPlayer to wire the primary operator's player ID.
+func (c *AdminClient) SetDefaultPlayerID(playerID string) {
+	c.defaultPlayerID = playerID
+}
 
 // SeedAdminPlayer creates a player + character in the database and returns
 // PlayerCreds for use in E2E specs.
@@ -205,6 +261,125 @@ func (c *AdminClient) Authenticate(username, password, totpCode string) (string,
 		return "", err
 	}
 	return resp.Msg.GetSessionToken(), nil
+}
+
+// RekeyResult holds the outcome of a successful Rekey stream.
+type RekeyResult struct {
+	requestID    []byte
+	auditEventID []byte
+}
+
+// RequestID returns the raw 16-byte request_id from the completed event.
+func (r RekeyResult) RequestID() []byte { return r.requestID }
+
+// AuditEventID returns the raw 16-byte audit_event_id from the completed event.
+func (r RekeyResult) AuditEventID() []byte { return r.auditEventID }
+
+// Rekey calls AdminService.Rekey over the UDS using the default player ID set
+// by SetDefaultPlayerID as the session token (noopRekeySessionStore echoes it
+// back as the player ID). Returns when the stream terminates with
+// RekeyCompleted or RekeyError.
+//
+// Callers MUST call SetDefaultPlayerID before invoking this method.
+func (c *AdminClient) Rekey(ctx dek.ContextID, justification string) (RekeyResult, error) {
+	tctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	playerID := c.defaultPlayerID
+	if playerID == "" {
+		return RekeyResult{}, rekeyClientError("AdminClient.Rekey: defaultPlayerID not set — call SetDefaultPlayerID first")
+	}
+
+	stream, err := c.client.Rekey(tctx, connect.NewRequest(&adminv1.RekeyRequest{
+		SessionToken:  playerID,
+		ContextType:   ctx.Type,
+		ContextId:     ctx.ID,
+		Justification: justification,
+	}))
+	if err != nil {
+		return RekeyResult{}, err
+	}
+	for stream.Receive() {
+		msg := stream.Msg()
+		switch ev := msg.Event.(type) {
+		case *adminv1.RekeyProgress_Completed:
+			return RekeyResult{
+				requestID:    ev.Completed.GetRequestId(),
+				auditEventID: ev.Completed.GetAuditEventId(),
+			}, nil
+		case *adminv1.RekeyProgress_Error:
+			return RekeyResult{}, connect.NewError(
+				connect.CodeInternal,
+				rekeyClientError(ev.Error.GetCode()+": "+ev.Error.GetMessage()),
+			)
+		}
+	}
+	if err := stream.Err(); err != nil {
+		return RekeyResult{}, err
+	}
+	return RekeyResult{}, connect.NewError(connect.CodeInternal,
+		rekeyClientError("Rekey stream closed without terminal event"))
+}
+
+// rekeyClientError is an error type for the AdminClient convenience wrappers.
+type rekeyClientError string
+
+func (e rekeyClientError) Error() string { return string(e) }
+
+// RekeyStatus calls AdminService.RekeyStatus over the UDS using the default
+// player ID set by SetDefaultPlayerID. rid is the 16-byte request_id.
+func (c *AdminClient) RekeyStatus(rid []byte) (*adminv1.RekeyStatusResponse, error) {
+	tctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	playerID := c.defaultPlayerID
+	if playerID == "" {
+		return nil, rekeyClientError("AdminClient.RekeyStatus: defaultPlayerID not set — call SetDefaultPlayerID first")
+	}
+
+	resp, err := c.client.RekeyStatus(tctx, connect.NewRequest(&adminv1.RekeyStatusRequest{
+		SessionToken: playerID,
+		RequestId:    rid,
+	}))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg, nil
+}
+
+// RekeyList calls AdminService.RekeyList over the UDS and drains the stream.
+// includeTerminal maps to the proto --include-terminal flag; contextPattern
+// is an empty string or SQL LIKE pattern matched against context_id.
+func (c *AdminClient) RekeyList(includeTerminal bool, contextPattern string) ([]*adminv1.RekeyStatusResponse, error) {
+	tctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	playerID := c.defaultPlayerID
+	if playerID == "" {
+		return nil, rekeyClientError("AdminClient.RekeyList: defaultPlayerID not set — call SetDefaultPlayerID first")
+	}
+
+	req := &adminv1.RekeyListRequest{
+		SessionToken:    playerID,
+		IncludeTerminal: includeTerminal,
+	}
+	if contextPattern != "" {
+		req.ContextPattern = &contextPattern
+	}
+
+	stream, err := c.client.RekeyList(tctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+
+	var rows []*adminv1.RekeyStatusResponse
+	for stream.Receive() {
+		rows = append(rows, stream.Msg())
+	}
+	if err := stream.Err(); err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 // --- internal helpers ---
@@ -569,3 +744,35 @@ func ckptToView(rid [16]byte, ckpt dek.Checkpoint) socket.CheckpointView {
 		NewDEKID:             ckpt.NewDEKID,
 	}
 }
+
+// directSQLPublisher satisfies eventbus.Publisher for test-harness policy emit
+// calls. It inserts the event payload directly into events_audit so the chain
+// verifier can read it without a live NATS connection.
+//
+// decodePolicyPayloadJSON tries proto.Unmarshal first, then falls back to raw
+// JSON. Storing the raw JSON payload directly triggers the fallback path, which
+// is sufficient for test correctness.
+type directSQLPublisher struct {
+	pool *pgxpool.Pool
+}
+
+func (p *directSQLPublisher) Publish(ctx context.Context, ev eventbus.Event) error {
+	// Store ev.Payload (raw JSON body) directly as the envelope column.
+	// The policy chain verifier's decodePolicyPayloadJSON falls back to raw JSON
+	// when proto.Unmarshal fails, so this path is correct for test usage.
+	_, err := p.pool.Exec(ctx,
+		`INSERT INTO events_audit
+		   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
+		 VALUES (gen_random_bytes(16), $1, $2, now(), 'system', $3, 1, 'identity',
+		         (SELECT COALESCE(MAX(js_seq), 0) + 1 FROM events_audit), '{}'::jsonb)`,
+		string(ev.Subject), string(ev.Type), ev.Payload)
+	return err
+}
+
+// wallClock satisfies policy.Clock using real wall time.
+type wallClock struct{}
+
+func (wallClock) Now() time.Time { return time.Now().UTC() }
+
+// ensure directSQLPublisher satisfies eventbus.Publisher at compile time.
+var _ eventbus.Publisher = (*directSQLPublisher)(nil)

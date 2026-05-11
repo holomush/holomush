@@ -12,13 +12,19 @@
 package crypto_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"testing"
 	"time"
 
-	. "github.com/onsi/gomega" //nolint:revive // gomega convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/holomush/holomush/internal/admin/policy"
+	auditchain "github.com/holomush/holomush/internal/eventbus/audit/chain"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/testsupport/holomushtest"
@@ -36,6 +42,9 @@ type Harness struct {
 	AdminPlayer    holomushtest.PlayerCreds
 	PartnerPlayer  holomushtest.PlayerCreds
 	SceneContext   dek.ContextID
+	// OriginalPolicyHash stores the policy_hash captured by RememberCurrentPolicyHash.
+	// Used by INV-E25 tests to assert the hash did not change after a policy edit.
+	OriginalPolicyHash string
 }
 
 // HarnessOption is a functional option for SetupRekeyHarness.
@@ -121,6 +130,9 @@ func SetupRekeyHarness(t *testing.T, opts ...HarnessOption) *Harness {
 	// Seed operator players — playerID echoed as session token by noopRekeySessionStore.
 	h.AdminPlayer = h.AdminCli.SeedAdminPlayer("01PRIMPLAYERID00000000", "wizard", "admin-pass")
 	h.PartnerPlayer = h.AdminCli.SeedAdminPlayer("01PARTPLAYERID00000000", "second-op", "partner-pass")
+
+	// Wire the default player ID for AdminCli.Rekey/RekeyStatus/RekeyList helpers.
+	h.AdminCli.SetDefaultPlayerID(h.AdminPlayer.PlayerID)
 
 	// Mint initial DEK + seed fixture events.
 	h.seedDEKAndEvents(t, cfg)
@@ -329,4 +341,213 @@ func itoa(n int) string {
 		buf = append([]byte{'-'}, buf...)
 	}
 	return string(buf)
+}
+
+// --- Status/list helpers (Task 48) ---
+
+// findCheckpoint returns the most recent checkpoint for the given context.
+// Fails the test if no checkpoint exists.
+func (h *Harness) findCheckpoint(ctxType, ctxID string) dek.Checkpoint {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	ckpt, found, err := h.Primary.GetCheckpointRepo().FindNonTerminalByContext(ctx, ctxType, ctxID)
+	if !found {
+		// Fall back to any terminal row for status/list assertions.
+		rows, ferr := h.Primary.GetCheckpointRepo().ListFiltered(ctx, dek.CheckpointListFilter{
+			IncludeTerminal: true,
+			ContextPattern:  &ctxID,
+		})
+		Expect(ferr).NotTo(HaveOccurred(), "findCheckpoint: ListFiltered for %s:%s", ctxType, ctxID)
+		Expect(rows).NotTo(BeEmpty(), "findCheckpoint: no checkpoint found for %s:%s", ctxType, ctxID)
+		return rows[0]
+	}
+	Expect(err).NotTo(HaveOccurred(), "findCheckpoint: FindNonTerminalByContext for %s:%s", ctxType, ctxID)
+	return ckpt
+}
+
+// SeedCompletedCheckpoint inserts a terminal (complete) checkpoint row for
+// (ctxType, ctxID). Used by list-filter specs that need a pre-existing
+// completed entry. Allocates its own DEK row using the same pattern as
+// SeedStaleCheckpoint (version=99, large synthetic id based on context strings).
+func (h *Harness) SeedCompletedCheckpoint(ctxType, ctxID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Compute a synthetic DEK id that is unlikely to collide: hash the key string
+	// into a large int64 using a stable deterministic formula.
+	dekID := seedDEKID(77770000, ctxType, ctxID)
+	_, _ = h.DB.Exec(ctx,
+		`INSERT INTO crypto_keys
+		   (id, context_type, context_id, version, wrapped_dek, wrap_provider,
+		    wrap_key_id, participants, created_at)
+		 VALUES ($1, $2, $3, 99, '\x00', 'seed-complete', 'seed-complete', '[]'::jsonb, now())
+		 ON CONFLICT (id) DO NOTHING`,
+		dekID, ctxType, ctxID)
+	// Verify the row exists (handles both "just inserted" and "already existed" cases).
+	var actualDEKID int64
+	err := h.DB.QueryRow(ctx,
+		`SELECT id FROM crypto_keys WHERE id = $1`, dekID).Scan(&actualDEKID)
+	Expect(err).NotTo(HaveOccurred(), "SeedCompletedCheckpoint: DEK not found for %s:%s", ctxType, ctxID)
+
+	rid := dek.RequestID(idgen.New())
+	_, err = h.DB.Exec(ctx, `
+		INSERT INTO crypto_rekey_checkpoints
+		  (request_id, context_type, context_id, op_args_hash, policy_hash,
+		   primary_player_id, status, old_dek_id, completed_at, last_heartbeat_at)
+		VALUES ($1, $2, $3, $4, $5, $6, 'complete', $7, now(), now())
+	`, rid[:], ctxType, ctxID,
+		make([]byte, 32), make([]byte, 32),
+		h.AdminPlayer.PlayerID, actualDEKID)
+	Expect(err).NotTo(HaveOccurred(), "SeedCompletedCheckpoint: checkpoint INSERT failed for %s:%s", ctxType, ctxID)
+}
+
+// SeedActiveCheckpoint inserts a non-terminal (pending) checkpoint row for
+// (ctxType, ctxID). Used by list-filter specs that need a live in-flight entry.
+// Allocates its own DEK row using the same synthetic-id pattern.
+func (h *Harness) SeedActiveCheckpoint(ctxType, ctxID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	dekID := seedDEKID(88890000, ctxType, ctxID)
+	_, _ = h.DB.Exec(ctx,
+		`INSERT INTO crypto_keys
+		   (id, context_type, context_id, version, wrapped_dek, wrap_provider,
+		    wrap_key_id, participants, created_at)
+		 VALUES ($1, $2, $3, 98, '\x00', 'seed-active', 'seed-active', '[]'::jsonb, now())
+		 ON CONFLICT (id) DO NOTHING`,
+		dekID, ctxType, ctxID)
+	var actualDEKID int64
+	err := h.DB.QueryRow(ctx,
+		`SELECT id FROM crypto_keys WHERE id = $1`, dekID).Scan(&actualDEKID)
+	Expect(err).NotTo(HaveOccurred(), "SeedActiveCheckpoint: DEK not found for %s:%s", ctxType, ctxID)
+
+	rid := dek.RequestID(idgen.New())
+	_, err = h.DB.Exec(ctx, `
+		INSERT INTO crypto_rekey_checkpoints
+		  (request_id, context_type, context_id, op_args_hash, policy_hash,
+		   primary_player_id, status, old_dek_id, last_heartbeat_at)
+		VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, now())
+	`, rid[:], ctxType, ctxID,
+		make([]byte, 32), make([]byte, 32),
+		h.AdminPlayer.PlayerID, actualDEKID)
+	Expect(err).NotTo(HaveOccurred(), "SeedActiveCheckpoint: checkpoint INSERT failed for %s:%s", ctxType, ctxID)
+}
+
+// seedDEKID produces a stable synthetic DEK id from a base and context strings.
+// The formula uses string lengths and byte sums to produce a value that
+// is deterministic yet unlikely to collide with production or harness DEK ids.
+func seedDEKID(base int64, ctxType, ctxID string) int64 {
+	var sum int64
+	for _, b := range []byte(ctxType + ctxID) {
+		sum += int64(b)
+	}
+	return base + sum%10000
+}
+
+// --- policy_set chain helpers (Task 49) ---
+
+// AssertPolicySetChainIntact walks the policy_set chain for policyName via
+// the primary's chain verifier (INV-D10/D11/D12 via the generalized verifier).
+func (h *Harness) AssertPolicySetChainIntact(policyName string) {
+	handler := policy.PolicySetHandlerFor(h.Game)
+	err := h.Primary.VerifierForChain(handler).VerifyScope(
+		context.Background(), handler, policyName)
+	Expect(err).NotTo(HaveOccurred(),
+		"INV-D10/D11/D12: policy_set chain must be intact for %q", policyName)
+}
+
+// TamperPolicySetSelfHash overwrites the policy_hash field in the most recent
+// policy_set audit row for policyName. The tampered value is a valid base64-
+// encoded 32-byte sequence (0xdeadbeef... repeated), which is a structurally
+// valid []byte but does not match the SHA-256 that RecomputeSelfHash would
+// compute. This causes AUDIT_CHAIN_HASH_MISMATCH on the next verification pass.
+//
+// The envelope is replaced with a JSON body whose policy_hash is the
+// base64 encoding of 32 0xde bytes (a sentinel "dead" value). Since
+// decodePolicyPayloadJSON falls back to raw-JSON parse for non-proto bytes,
+// and PolicySetPayload.PolicyHash is []byte (base64 in JSON), this produces
+// a valid parsed payload with the wrong hash.
+func (h *Harness) TamperPolicySetSelfHash(policyName string) {
+	subject := "events." + h.Game + ".system.crypto_policy." + policyName
+
+	// base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0xde}, 32))
+	// = "3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e"  (32 bytes of 0xde)
+	deadHash := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0xde}, 32))
+
+	tamperedJSON := `{"policy_name":"` + policyName + `","policy_hash":"` + deadHash + `","prev_hash":null,"policy_snapshot":{"required_op_kinds":["rekey"]},"timestamp":"2026-01-01T00:00:00Z","server_start_ulid":"01JX00000000000000000000000","server_identity":"tampered"}`
+
+	tag, err := h.DB.Exec(context.Background(),
+		`UPDATE events_audit
+		    SET envelope = $1
+		  WHERE id = (
+		    SELECT id FROM events_audit
+		     WHERE subject = $2 AND type = 'crypto.policy_set'
+		     ORDER BY js_seq DESC
+		     LIMIT 1
+		  )`,
+		[]byte(tamperedJSON), subject)
+	Expect(err).NotTo(HaveOccurred(), "TamperPolicySetSelfHash: UPDATE failed for %q", policyName)
+	Expect(tag.RowsAffected()).To(BeNumerically("==", 1),
+		"TamperPolicySetSelfHash: expected exactly 1 row updated for subject=%q", subject)
+}
+
+// --- policy-hash-frozen helpers (Task 50) ---
+
+// RememberCurrentPolicyHash reads the current tail hash of the policy_set chain
+// for policyName and stores it in h.OriginalPolicyHash. Used by INV-E25 tests
+// to capture the hash before a mid-Rekey policy edit.
+//
+// Encoding mirrors Phase 7's audit payload format:
+// - "sha256:<hex>" for an existing chain head (what Phase 1 would freeze).
+// - "sha256:" + 64 zero hex digits when the chain is empty (genesis): Phase 1
+//   stores make([]byte, 32) (zero sentinel) and Phase 7 encodes it as zeros.
+func (h *Harness) RememberCurrentPolicyHash(policyName string) {
+	chainRepo := h.Primary.GetChainRepo()
+	prevHash, err := chainEmitterForPolicy(chainRepo, h.Game, policyName)
+	Expect(err).NotTo(HaveOccurred(), "RememberCurrentPolicyHash: ComputePrevHashFor failed for %q", policyName)
+	if prevHash == nil {
+		// Genesis: Phase 1 stores 32 zero bytes. Phase 7 encodes as sha256:<zeros>.
+		h.OriginalPolicyHash = "sha256:" + hex.EncodeToString(make([]byte, 32))
+		return
+	}
+	h.OriginalPolicyHash = "sha256:" + hex.EncodeToString(prevHash)
+}
+
+// LoadRekeyAuditEvent loads and decodes the rekey audit event identified by
+// the given 16-byte raw request_id slice. Returns the decoded RekeyAuditPayload
+// so callers can assert PolicyHash (INV-E25) and other fields.
+//
+// The raw 16 bytes are converted to ULID string format (same as rid.String())
+// and matched against the "request_id" field in the JSON payload.
+func (h *Harness) LoadRekeyAuditEvent(rid []byte) dek.RekeyAuditPayload {
+	// Convert raw bytes → dek.RequestID → ULID string (same format as Phase 7 stores).
+	var rawRID dek.RequestID
+	copy(rawRID[:], rid)
+	ridStr := rawRID.String()
+
+	var envelope []byte
+	err := h.DB.QueryRow(context.Background(),
+		`SELECT envelope FROM events_audit
+		  WHERE type = 'crypto.system.rekey'
+		    AND convert_from(envelope, 'UTF8') LIKE $1
+		  ORDER BY js_seq DESC
+		  LIMIT 1`,
+		"%"+ridStr+"%").Scan(&envelope)
+	Expect(err).NotTo(HaveOccurred(), "LoadRekeyAuditEvent: query for request_id=%s", ridStr)
+
+	var payload dek.RekeyAuditPayload
+	Expect(json.Unmarshal(envelope, &payload)).NotTo(HaveOccurred(),
+		"LoadRekeyAuditEvent: unmarshal payload for request_id=%s", ridStr)
+	return payload
+}
+
+// chainEmitterForPolicy constructs a chain.Emitter from a chain.Repo and
+// calls ComputePrevHashFor for policyName. Returns the prev_hash bytes or nil
+// (genesis). Used by RememberCurrentPolicyHash.
+func chainEmitterForPolicy(repo auditchain.Repo, gameID, policyName string) ([]byte, error) {
+	em := auditchain.NewEmitter(repo)
+	handler := policy.PolicySetHandlerFor(gameID)
+	prevHash, _, err := em.ComputePrevHashFor(context.Background(), handler, policyName)
+	return prevHash, err
 }
