@@ -55,7 +55,7 @@ var _ = AfterSuite(func() {
 // cleanupContent removes all rows from content-related tables between tests.
 func cleanupContent(ctx context.Context, pool *pgxpool.Pool) {
 	_, _ = pool.Exec(ctx, "DELETE FROM content_items")
-	_, _ = pool.Exec(ctx, "DELETE FROM bootstrap_metadata")
+	_, _ = pool.Exec(ctx, "DELETE FROM setting_bootstrap_state")
 }
 
 // loadCrossroadsManifest reads and parses the crossroads plugin.yaml.

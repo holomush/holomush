@@ -137,3 +137,71 @@ func TestMigration_000031_CryptoRekeyCheckpoints(t *testing.T) {
 	require.Error(t, err, "CHECK constraint must reject complete-without-timestamp")
 	require.Contains(t, err.Error(), "crypto_rekey_checkpoints_terminal_consistency")
 }
+
+// TestMigration_000032_CreateSettingBootstrapState verifies the setting_bootstrap_state
+// migration DDL:
+//   - Up: creates setting_bootstrap_state(key, value, updated_at) with key as primary key.
+//   - INSERT ... ON CONFLICT (key) DO UPDATE performs an upsert correctly.
+//   - Down: drops the table cleanly.
+//
+// This table is the key-value store for SettingBootstrapper (content/setting bootstrap),
+// kept separate from bootstrap_metadata which is now owned by the auditchain primitive.
+func TestMigration_000032_CreateSettingBootstrapState(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup := newTestPool(t)
+	defer cleanup()
+
+	// Apply all migrations up through 000032.
+	require.NoError(t, runMigrations(ctx, pool, 32))
+
+	// Verify table exists with expected columns.
+	var colCount int
+	err := pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM information_schema.columns
+		WHERE table_name = 'setting_bootstrap_state'
+		  AND column_name IN ('key', 'value', 'updated_at')
+	`).Scan(&colCount)
+	require.NoError(t, err)
+	require.Equal(t, 3, colCount, "setting_bootstrap_state must have key, value, updated_at columns")
+
+	// INSERT a row.
+	_, err = pool.Exec(ctx,
+		`INSERT INTO setting_bootstrap_state(key, value) VALUES ('active_setting', 'crossroads')`)
+	require.NoError(t, err)
+
+	// Verify the row round-trips.
+	var value string
+	err = pool.QueryRow(ctx,
+		`SELECT value FROM setting_bootstrap_state WHERE key = $1`, "active_setting").Scan(&value)
+	require.NoError(t, err)
+	require.Equal(t, "crossroads", value)
+
+	// Upsert via ON CONFLICT updates the value.
+	_, err = pool.Exec(ctx,
+		`INSERT INTO setting_bootstrap_state(key, value, updated_at) VALUES ('active_setting', 'tavern', NOW())
+		 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`)
+	require.NoError(t, err)
+
+	err = pool.QueryRow(ctx,
+		`SELECT value FROM setting_bootstrap_state WHERE key = $1`, "active_setting").Scan(&value)
+	require.NoError(t, err)
+	require.Equal(t, "tavern", value, "upsert must update existing row")
+
+	// Duplicate primary key without ON CONFLICT is rejected.
+	_, err = pool.Exec(ctx,
+		`INSERT INTO setting_bootstrap_state(key, value) VALUES ('active_setting', 'duplicate')`)
+	require.Error(t, err, "duplicate key must be rejected by primary key")
+
+	// Migrate down: table must be dropped.
+	require.NoError(t, runMigrations(ctx, pool, 31))
+
+	var tableExists bool
+	err = pool.QueryRow(ctx, `
+		SELECT EXISTS(
+		    SELECT 1 FROM information_schema.tables
+		    WHERE table_name = 'setting_bootstrap_state'
+		)
+	`).Scan(&tableExists)
+	require.NoError(t, err)
+	require.False(t, tableExists, "down migration must drop setting_bootstrap_state")
+}

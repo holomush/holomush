@@ -1,0 +1,3 @@
+-- SPDX-License-Identifier: Apache-2.0
+-- Copyright 2026 HoloMUSH Contributors
+DROP TABLE IF EXISTS setting_bootstrap_state;
