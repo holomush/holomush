@@ -206,6 +206,37 @@ func streamProgress(stream RekeyStreamReader, noProgress bool, w io.Writer) erro
 	return oops.Code("CRYPTO_REKEY_STREAM_ENDED").Errorf("stream ended without completion event")
 }
 
+// mapErrToExitCodeForTest maps any error carrying a known oops code or
+// rekeyProgressError code to its sysexits.h integer (INV-E23).  Returns 1
+// for unknown errors.  This testable helper is callable from tests so the
+// exit-code logic is exercisable without invoking os.Exit.
+func mapErrToExitCodeForTest(err error) int {
+	if err == nil {
+		return 0
+	}
+	// Extract code string — try rekeyProgressError first, then oops.
+	code := ""
+	var pe *rekeyProgressError
+	if errors.As(err, &pe) {
+		code = pe.code
+	} else if oe, ok := oops.AsOops(err); ok {
+		if s, isStr := oe.Code().(string); isStr {
+			code = s
+		}
+	}
+	switch code {
+	case "DEK_REKEY_PHASE5_TIMEOUT":
+		return 75 // EX_TEMPFAIL
+	case "DEK_REKEY_ALREADY_IN_PROGRESS", "DEK_REKEY_ARGS_CONFLICT":
+		return 73 // EX_CANTCREAT
+	case "DEK_REKEY_PHASE7_AUDIT_FAILED":
+		return 70 // EX_SOFTWARE
+	case "DENY_SESSION_INVALID", "DENY_SESSION_EXPIRED", "DENY_CAPABILITY":
+		return 77 // EX_NOPERM
+	}
+	return 1
+}
+
 // mapToExitCodeErr maps a rekey error to an exitCodeError carrying the
 // appropriate sysexits.h code per INV-E23.  Unknown errors pass through
 // unchanged.
@@ -349,42 +380,166 @@ func promptForceDestroyConfirm(r io.Reader, w io.Writer, requestIDStr string) (s
 	return typed, nil
 }
 
-// --- Stub sub-subcommands (full implementations in bead .33) ---
+// --- Sub-subcommands: abort, status, list ---
 
-// newRekeyAbortCmd is a stub for `holomush crypto rekey abort <request_id>`.
-// Full implementation is in bead .33.
-func newRekeyAbortCmd(_ adminClientFactory) *cobra.Command {
+// newRekeyAbortCmd returns `holomush crypto rekey abort <request_id>`.
+// Authenticates the operator and calls the RekeyAbort unary RPC.
+func newRekeyAbortCmd(factory adminClientFactory) *cobra.Command {
 	return &cobra.Command{
 		Use:   "abort <request_id>",
-		Short: "Abort an in-flight rekey (stub — bead .33)",
+		Short: "Abort an in-flight rekey",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return oops.Code("NOT_IMPLEMENTED").Errorf("rekey abort not yet implemented (bead .33)")
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runRekeyAbort(cmd, factory, args[0])
 		},
 	}
 }
 
-// newRekeyStatusCmd is a stub for `holomush crypto rekey status <request_id>`.
-// Full implementation is in bead .33.
-func newRekeyStatusCmd(_ adminClientFactory) *cobra.Command {
+// runRekeyAbort is the testable core of `holomush crypto rekey abort`.
+// It parses the request_id, authenticates, and calls RekeyAbort.
+func runRekeyAbort(cmd *cobra.Command, factory adminClientFactory, requestIDStr string) error {
+	requestIDBytes, err := parseRequestID(requestIDStr)
+	if err != nil {
+		return oops.Code("CRYPTO_REKEY_ABORT_INVALID_REQUEST_ID").Wrap(err)
+	}
+	client, err := factory()
+	if err != nil {
+		return oops.Code("CRYPTO_REKEY_ABORT_CLIENT_FAILED").Wrap(err)
+	}
+	sessionToken, err := authenticateInteractive(cmd.Context(), client, cmd)
+	if err != nil {
+		return oops.Code("CRYPTO_REKEY_ABORT_AUTH_FAILED").Wrap(err)
+	}
+	res, err := client.RekeyAbort(cmd.Context(), connect.NewRequest(&adminv1.RekeyAbortRequest{
+		SessionToken: sessionToken,
+		RequestId:    requestIDBytes,
+	}))
+	if err != nil {
+		return oops.Code("CRYPTO_REKEY_ABORT_RPC_FAILED").Wrap(err)
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Aborted at %s; audit event id=%x\n", //nolint:errcheck // terminal success line; write errors non-fatal
+		res.Msg.GetAbortedAt().AsTime().UTC().Format("2006-01-02T15:04:05Z"),
+		res.Msg.GetAuditEventId())
+	return nil
+}
+
+// newRekeyStatusCmd returns `holomush crypto rekey status <request_id>`.
+// Authenticates the operator and calls the RekeyStatus unary RPC.
+func newRekeyStatusCmd(factory adminClientFactory) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status <request_id>",
-		Short: "Show rekey checkpoint details (stub — bead .33)",
+		Short: "Show rekey checkpoint details",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return oops.Code("NOT_IMPLEMENTED").Errorf("rekey status not yet implemented (bead .33)")
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runRekeyStatus(cmd, factory, args[0])
 		},
 	}
 }
 
-// newRekeyListCmd is a stub for `holomush crypto rekey list`.
-// Full implementation is in bead .33.
-func newRekeyListCmd(_ adminClientFactory) *cobra.Command {
-	return &cobra.Command{
+// runRekeyStatus is the testable core of `holomush crypto rekey status`.
+// It parses the request_id, authenticates, and calls RekeyStatus.
+func runRekeyStatus(cmd *cobra.Command, factory adminClientFactory, requestIDStr string) error {
+	requestIDBytes, err := parseRequestID(requestIDStr)
+	if err != nil {
+		return oops.Code("CRYPTO_REKEY_STATUS_INVALID_REQUEST_ID").Wrap(err)
+	}
+	client, err := factory()
+	if err != nil {
+		return oops.Code("CRYPTO_REKEY_STATUS_CLIENT_FAILED").Wrap(err)
+	}
+	sessionToken, err := authenticateInteractive(cmd.Context(), client, cmd)
+	if err != nil {
+		return oops.Code("CRYPTO_REKEY_STATUS_AUTH_FAILED").Wrap(err)
+	}
+	res, err := client.RekeyStatus(cmd.Context(), connect.NewRequest(&adminv1.RekeyStatusRequest{
+		SessionToken: sessionToken,
+		RequestId:    requestIDBytes,
+	}))
+	if err != nil {
+		return oops.Code("CRYPTO_REKEY_STATUS_RPC_FAILED").Wrap(err)
+	}
+	printRekeyStatus(cmd.OutOrStdout(), res.Msg)
+	return nil
+}
+
+// printRekeyStatus renders a RekeyStatusResponse to w in human-readable form.
+func printRekeyStatus(w io.Writer, r *adminv1.RekeyStatusResponse) {
+	fmt.Fprintf(w, "request_id:    %x\n", r.GetRequestId())              //nolint:errcheck // display output; write errors non-fatal
+	fmt.Fprintf(w, "context:       %s:%s\n", r.GetContextType(), r.GetContextId()) //nolint:errcheck // display output; write errors non-fatal
+	fmt.Fprintf(w, "status:        %s\n", r.GetStatus())                  //nolint:errcheck // display output; write errors non-fatal
+	if r.GetForceDestroy() {
+		fmt.Fprintf(w, "force_destroy: true\n") //nolint:errcheck // display output; write errors non-fatal
+	}
+	if len(r.GetPhase5MissingMembers()) > 0 {
+		fmt.Fprintf(w, "missing:       %s\n", strings.Join(r.GetPhase5MissingMembers(), ", ")) //nolint:errcheck // display output; write errors non-fatal
+	}
+}
+
+// newRekeyListCmd returns `holomush crypto rekey list [--include-terminal] [--context <pattern>]`.
+// Authenticates the operator and streams RekeyStatusResponse rows from RekeyList.
+func newRekeyListCmd(factory adminClientFactory) *cobra.Command {
+	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List rekey checkpoints (stub — bead .33)",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return oops.Code("NOT_IMPLEMENTED").Errorf("rekey list not yet implemented (bead .33)")
+		Short: "List rekey checkpoints",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runRekeyList(cmd, factory)
 		},
 	}
+	cmd.Flags().Bool("include-terminal", false, "Include complete/aborted checkpoints")
+	cmd.Flags().String("context", "", "Filter by context-id LIKE pattern")
+	return cmd
+}
+
+// runRekeyList is the testable core of `holomush crypto rekey list`.
+// It authenticates, issues a streaming RekeyList RPC, and renders each row.
+func runRekeyList(cmd *cobra.Command, factory adminClientFactory) error {
+	includeTerminal, _ := cmd.Flags().GetBool("include-terminal") //nolint:errcheck // flag defined in newRekeyListCmd; absence is a programmer error
+	ctxPattern, _ := cmd.Flags().GetString("context")             //nolint:errcheck // flag defined in newRekeyListCmd; absence is a programmer error
+
+	client, err := factory()
+	if err != nil {
+		return oops.Code("CRYPTO_REKEY_LIST_CLIENT_FAILED").Wrap(err)
+	}
+	sessionToken, err := authenticateInteractive(cmd.Context(), client, cmd)
+	if err != nil {
+		return oops.Code("CRYPTO_REKEY_LIST_AUTH_FAILED").Wrap(err)
+	}
+
+	req := &adminv1.RekeyListRequest{
+		SessionToken:    sessionToken,
+		IncludeTerminal: includeTerminal,
+	}
+	if ctxPattern != "" {
+		req.ContextPattern = &ctxPattern
+	}
+
+	stream, err := client.RekeyList(cmd.Context(), connect.NewRequest(req))
+	if err != nil {
+		return oops.Code("CRYPTO_REKEY_LIST_RPC_FAILED").Wrap(err)
+	}
+
+	w := cmd.OutOrStdout()
+	printRekeyListHeader(w)
+	for stream.Receive() {
+		printRekeyListRow(w, stream.Msg())
+	}
+	if err := stream.Err(); err != nil {
+		return oops.Code("CRYPTO_REKEY_LIST_STREAM_FAILED").Wrap(err)
+	}
+	return nil
+}
+
+// printRekeyListHeader prints the column header for rekey list output.
+func printRekeyListHeader(w io.Writer) {
+	fmt.Fprintf(w, "%-32s  %-16s  %-24s  %s\n", "REQUEST_ID", "CONTEXT", "STATUS", "STARTED_AT") //nolint:errcheck // display output; write errors non-fatal
+}
+
+// printRekeyListRow prints a single RekeyStatusResponse row.
+func printRekeyListRow(w io.Writer, r *adminv1.RekeyStatusResponse) {
+	contextStr := r.GetContextType() + ":" + r.GetContextId()
+	startedAt := ""
+	if ts := r.GetStartedAt(); ts != nil {
+		startedAt = ts.AsTime().UTC().Format("2006-01-02T15:04:05Z")
+	}
+	fmt.Fprintf(w, "%-32x  %-16s  %-24s  %s\n", r.GetRequestId(), contextStr, r.GetStatus(), startedAt) //nolint:errcheck // display output; write errors non-fatal
 }
