@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -55,13 +56,15 @@ func (f *fakeRekeyStreamReader) Err() error {
 
 // --- fakeAdminHandlerWithRekey implements adminv1connect.AdminServiceHandler ---
 
-// fakeAdminHandlerWithRekey extends the unimplemented handler with Authenticate
-// and Rekey streaming so unit tests can exercise the full happy/error paths of
-// runRekeyFresh and streamProgress without a live server.
+// fakeAdminHandlerWithRekey extends the unimplemented handler with Authenticate,
+// Rekey, and RekeyResume streaming so unit tests can exercise the full
+// happy/error paths of runRekeyFresh, runRekeyResume, and streamProgress
+// without a live server.
 type fakeAdminHandlerWithRekey struct {
 	adminv1connect.UnimplementedAdminServiceHandler
 	onAuthenticate func(context.Context, *connect.Request[adminv1.AuthenticateRequest]) (*connect.Response[adminv1.AuthenticateResponse], error)
 	onRekey        func(context.Context, *connect.Request[adminv1.RekeyRequest], *connect.ServerStream[adminv1.RekeyProgress]) error
+	onRekeyResume  func(context.Context, *connect.Request[adminv1.RekeyResumeRequest], *connect.ServerStream[adminv1.RekeyProgress]) error
 }
 
 func (f *fakeAdminHandlerWithRekey) Authenticate(
@@ -81,6 +84,17 @@ func (f *fakeAdminHandlerWithRekey) Rekey(
 ) error {
 	if f.onRekey != nil {
 		return f.onRekey(ctx, req, stream)
+	}
+	return connect.NewError(connect.CodeUnimplemented, nil)
+}
+
+func (f *fakeAdminHandlerWithRekey) RekeyResume(
+	ctx context.Context,
+	req *connect.Request[adminv1.RekeyResumeRequest],
+	stream *connect.ServerStream[adminv1.RekeyProgress],
+) error {
+	if f.onRekeyResume != nil {
+		return f.onRekeyResume(ctx, req, stream)
 	}
 	return connect.NewError(connect.CodeUnimplemented, nil)
 }
@@ -422,3 +436,325 @@ func TestMapToExitCodeErr_Unknown(t *testing.T) {
 	assert.False(t, assert.ObjectsAreEqual(exitErr, err))
 	assert.ErrorIs(t, err, input)
 }
+
+// --- Tests for runRekeyResume (bead holomush-jxo8.7.32) ---
+
+// setupRekeyResumeServerWithCompleted builds a fake server that authenticates
+// and responds to RekeyResume with a Completed event.  The onRekeyResume
+// callback receives the request so callers can assert on ForceDestroy.
+func setupRekeyResumeServerWithCompleted(
+	t *testing.T,
+	onRekeyResume func(*testing.T, *connect.Request[adminv1.RekeyResumeRequest], *connect.ServerStream[adminv1.RekeyProgress]) error,
+) (adminv1connect.AdminServiceClient, func()) {
+	t.Helper()
+	reqID := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+		0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}
+	h := &fakeAdminHandlerWithRekey{
+		onAuthenticate: func(_ context.Context, _ *connect.Request[adminv1.AuthenticateRequest]) (*connect.Response[adminv1.AuthenticateResponse], error) {
+			return connect.NewResponse(&adminv1.AuthenticateResponse{SessionToken: "tok-resume"}), nil
+		},
+		onRekeyResume: func(_ context.Context, req *connect.Request[adminv1.RekeyResumeRequest], stream *connect.ServerStream[adminv1.RekeyProgress]) error {
+			if onRekeyResume != nil {
+				return onRekeyResume(t, req, stream)
+			}
+			return stream.Send(&adminv1.RekeyProgress{
+				Event: &adminv1.RekeyProgress_Completed{
+					Completed: &adminv1.RekeyCompleted{
+						RequestId:  reqID,
+						DurationMs: 200,
+						Resumed:    true,
+					},
+				},
+			})
+		},
+	}
+	return newFakeAdminServerWithRekey(t, h)
+}
+
+// TestCmd_CryptoRekey_Resume_ForceDestroy_RequiresConfirmation is TDD
+// acceptance criterion: in non-TTY mode (stdin is strings.NewReader, not
+// *os.File), --force-destroy without --confirm must return an error with
+// exit code 64 (EX_USAGE) and contain "--confirm required".
+func TestCmd_CryptoRekey_Resume_ForceDestroy_RequiresConfirmation(t *testing.T) {
+	client, cleanup := setupRekeyResumeServerWithCompleted(t, nil)
+	defer cleanup()
+
+	factory := func() (adminv1connect.AdminServiceClient, error) { return client, nil }
+
+	// stdin is strings.NewReader — not *os.File — so isTTY=false path fires.
+	cmd, _ := newTestCmdWithIO("operator\nsecret\n123456\n")
+	cmd.SetContext(t.Context())
+	cmd.Flags().Bool("force-destroy", false, "")
+	cmd.Flags().String("confirm", "", "")
+	require.NoError(t, cmd.Flags().Set("force-destroy", "true"))
+	// No --confirm flag set.
+
+	err := runRekeyResume(cmd, factory, "01ARZ3NDEKTSV4RRFFQ69G5FAV")
+	require.Error(t, err)
+	var exitErr *exitCodeError
+	require.ErrorAs(t, err, &exitErr, "expected exitCodeError")
+	assert.Equal(t, 64, exitErr.exitCode, "must exit 64 EX_USAGE")
+	assert.Contains(t, exitErr.Error(), "--confirm required")
+}
+
+// TestCmd_CryptoRekey_Resume_ForceDestroy_WithConfirm is TDD acceptance
+// criterion: --force-destroy with matching --confirm passes ForceDestroy=true
+// to the RPC and exits 0 with "Rekey complete".
+func TestCmd_CryptoRekey_Resume_ForceDestroy_WithConfirm(t *testing.T) {
+	var capturedForceDestroy bool
+	reqID := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+		0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}
+
+	client, cleanup := setupRekeyResumeServerWithCompleted(t,
+		func(_ *testing.T, req *connect.Request[adminv1.RekeyResumeRequest], stream *connect.ServerStream[adminv1.RekeyProgress]) error {
+			capturedForceDestroy = req.Msg.GetForceDestroy()
+			return stream.Send(&adminv1.RekeyProgress{
+				Event: &adminv1.RekeyProgress_Completed{
+					Completed: &adminv1.RekeyCompleted{
+						RequestId:        reqID,
+						DurationMs:       300,
+						Resumed:          true,
+						ForceDestroyUsed: true,
+					},
+				},
+			})
+		})
+	defer cleanup()
+
+	factory := func() (adminv1connect.AdminServiceClient, error) { return client, nil }
+
+	cmd, out := newTestCmdWithIO("operator\nsecret\n123456\n")
+	cmd.SetContext(t.Context())
+	cmd.Flags().Bool("force-destroy", false, "")
+	cmd.Flags().String("confirm", "", "")
+	require.NoError(t, cmd.Flags().Set("force-destroy", "true"))
+	require.NoError(t, cmd.Flags().Set("confirm", "scene:01ABC"))
+
+	err := runRekeyResume(cmd, factory, "01ARZ3NDEKTSV4RRFFQ69G5FAV")
+	require.NoError(t, err)
+	assert.Contains(t, out.String(), "Rekey complete")
+	assert.True(t, capturedForceDestroy, "ForceDestroy must be true in RPC request")
+}
+
+// TestCmd_CryptoRekey_Resume_HappyPath verifies that a plain resume (no
+// force-destroy) authenticates, calls RekeyResume with ForceDestroy=false,
+// and renders "Rekey complete".
+func TestCmd_CryptoRekey_Resume_HappyPath(t *testing.T) {
+	var capturedForceDestroy bool
+	reqID := []byte{0xab, 0xcd}
+
+	client, cleanup := setupRekeyResumeServerWithCompleted(t,
+		func(_ *testing.T, req *connect.Request[adminv1.RekeyResumeRequest], stream *connect.ServerStream[adminv1.RekeyProgress]) error {
+			capturedForceDestroy = req.Msg.GetForceDestroy()
+			return stream.Send(&adminv1.RekeyProgress{
+				Event: &adminv1.RekeyProgress_Completed{
+					Completed: &adminv1.RekeyCompleted{RequestId: reqID, Resumed: true},
+				},
+			})
+		})
+	defer cleanup()
+
+	factory := func() (adminv1connect.AdminServiceClient, error) { return client, nil }
+
+	cmd, out := newTestCmdWithIO("operator\nsecret\n123456\n")
+	cmd.SetContext(t.Context())
+	cmd.Flags().Bool("force-destroy", false, "")
+	cmd.Flags().String("confirm", "", "")
+	// force-destroy is false (default)
+
+	err := runRekeyResume(cmd, factory, "01ARZ3NDEKTSV4RRFFQ69G5FAV")
+	require.NoError(t, err)
+	assert.Contains(t, out.String(), "Rekey complete")
+	assert.False(t, capturedForceDestroy, "ForceDestroy must be false in plain resume")
+}
+
+// TestCmd_CryptoRekey_Resume_AlreadyComplete verifies that a RekeyResume RPC
+// returning a Completed event is idempotent from the CLI's perspective (exit 0).
+func TestCmd_CryptoRekey_Resume_AlreadyComplete(t *testing.T) {
+	reqID := []byte{0xde, 0xad, 0xbe, 0xef}
+	h := &fakeAdminHandlerWithRekey{
+		onAuthenticate: func(_ context.Context, _ *connect.Request[adminv1.AuthenticateRequest]) (*connect.Response[adminv1.AuthenticateResponse], error) {
+			return connect.NewResponse(&adminv1.AuthenticateResponse{SessionToken: "tok-resume"}), nil
+		},
+		onRekeyResume: func(_ context.Context, _ *connect.Request[adminv1.RekeyResumeRequest], stream *connect.ServerStream[adminv1.RekeyProgress]) error {
+			// Handler returns completed immediately — checkpoint was already done.
+			return stream.Send(&adminv1.RekeyProgress{
+				Event: &adminv1.RekeyProgress_Completed{
+					Completed: &adminv1.RekeyCompleted{RequestId: reqID, Resumed: true},
+				},
+			})
+		},
+	}
+	client, cleanup := newFakeAdminServerWithRekey(t, h)
+	defer cleanup()
+
+	factory := func() (adminv1connect.AdminServiceClient, error) { return client, nil }
+	cmd, out := newTestCmdWithIO("operator\nsecret\n123456\n")
+	cmd.SetContext(t.Context())
+	cmd.Flags().Bool("force-destroy", false, "")
+	cmd.Flags().String("confirm", "", "")
+
+	err := runRekeyResume(cmd, factory, "01ARZ3NDEKTSV4RRFFQ69G5FAV")
+	require.NoError(t, err)
+	assert.Contains(t, out.String(), "Rekey complete")
+}
+
+// TestCmd_CryptoRekey_Resume_NonExistentID verifies that a server-returned
+// DEK_REKEY_CHECKPOINT_NOT_FOUND error surfaces from runRekeyResume.
+func TestCmd_CryptoRekey_Resume_NonExistentID(t *testing.T) {
+	h := &fakeAdminHandlerWithRekey{
+		onAuthenticate: func(_ context.Context, _ *connect.Request[adminv1.AuthenticateRequest]) (*connect.Response[adminv1.AuthenticateResponse], error) {
+			return connect.NewResponse(&adminv1.AuthenticateResponse{SessionToken: "tok-resume"}), nil
+		},
+		onRekeyResume: func(_ context.Context, _ *connect.Request[adminv1.RekeyResumeRequest], stream *connect.ServerStream[adminv1.RekeyProgress]) error {
+			return stream.Send(&adminv1.RekeyProgress{
+				Event: &adminv1.RekeyProgress_Error{
+					Error: &adminv1.RekeyError{
+						Code:    "DEK_REKEY_CHECKPOINT_NOT_FOUND",
+						Message: "no checkpoint found for request_id",
+					},
+				},
+			})
+		},
+	}
+	client, cleanup := newFakeAdminServerWithRekey(t, h)
+	defer cleanup()
+
+	factory := func() (adminv1connect.AdminServiceClient, error) { return client, nil }
+	cmd, _ := newTestCmdWithIO("operator\nsecret\n123456\n")
+	cmd.SetContext(t.Context())
+	cmd.Flags().Bool("force-destroy", false, "")
+	cmd.Flags().String("confirm", "", "")
+
+	err := runRekeyResume(cmd, factory, "01ARZ3NDEKTSV4RRFFQ69G5FAV")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "DEK_REKEY_CHECKPOINT_NOT_FOUND")
+}
+
+// TestCmd_CryptoRekey_Resume_AuthFailure verifies that authentication failure
+// surfaces as a non-nil error from runRekeyResume.
+func TestCmd_CryptoRekey_Resume_AuthFailure(t *testing.T) {
+	h := &fakeAdminHandlerWithRekey{
+		onAuthenticate: func(_ context.Context, _ *connect.Request[adminv1.AuthenticateRequest]) (*connect.Response[adminv1.AuthenticateResponse], error) {
+			return nil, connect.NewError(connect.CodeUnauthenticated, nil)
+		},
+	}
+	client, cleanup := newFakeAdminServerWithRekey(t, h)
+	defer cleanup()
+
+	factory := func() (adminv1connect.AdminServiceClient, error) { return client, nil }
+	cmd, _ := newTestCmdWithIO("operator\nbadpass\n000000\n")
+	cmd.SetContext(t.Context())
+	cmd.Flags().Bool("force-destroy", false, "")
+	cmd.Flags().String("confirm", "", "")
+
+	err := runRekeyResume(cmd, factory, "01ARZ3NDEKTSV4RRFFQ69G5FAV")
+	require.Error(t, err)
+}
+
+// TestCmd_CryptoRekey_Resume_ForceDestroy_PassThroughToRPC verifies that
+// ForceDestroy=true is passed through to RekeyResumeRequest when --confirm
+// is provided (non-TTY path).  The server asserts the field directly.
+func TestCmd_CryptoRekey_Resume_ForceDestroy_PassThroughToRPC(t *testing.T) {
+	var gotForceDestroy bool
+	reqID := []byte{0x01}
+	h := &fakeAdminHandlerWithRekey{
+		onAuthenticate: func(_ context.Context, _ *connect.Request[adminv1.AuthenticateRequest]) (*connect.Response[adminv1.AuthenticateResponse], error) {
+			return connect.NewResponse(&adminv1.AuthenticateResponse{SessionToken: "tok"}), nil
+		},
+		onRekeyResume: func(_ context.Context, req *connect.Request[adminv1.RekeyResumeRequest], stream *connect.ServerStream[adminv1.RekeyProgress]) error {
+			gotForceDestroy = req.Msg.GetForceDestroy()
+			return stream.Send(&adminv1.RekeyProgress{
+				Event: &adminv1.RekeyProgress_Completed{
+					Completed: &adminv1.RekeyCompleted{RequestId: reqID},
+				},
+			})
+		},
+	}
+	client, cleanup := newFakeAdminServerWithRekey(t, h)
+	defer cleanup()
+
+	factory := func() (adminv1connect.AdminServiceClient, error) { return client, nil }
+	cmd, _ := newTestCmdWithIO("operator\nsecret\n123456\n")
+	cmd.SetContext(t.Context())
+	cmd.Flags().Bool("force-destroy", false, "")
+	cmd.Flags().String("confirm", "", "")
+	require.NoError(t, cmd.Flags().Set("force-destroy", "true"))
+	require.NoError(t, cmd.Flags().Set("confirm", "scene:01ABC"))
+
+	err := runRekeyResume(cmd, factory, "01ARZ3NDEKTSV4RRFFQ69G5FAV")
+	require.NoError(t, err)
+	assert.True(t, gotForceDestroy, "ForceDestroy must be true in RekeyResumeRequest")
+}
+
+// TestCmd_CryptoRekey_Resume_InvalidRequestID verifies that a malformed
+// request_id (not ULID, not 32-char hex) returns a parse error before
+// hitting the server.
+func TestCmd_CryptoRekey_Resume_InvalidRequestID(t *testing.T) {
+	factory := func() (adminv1connect.AdminServiceClient, error) {
+		return nil, nil // should never be called
+	}
+	cmd, _ := newTestCmdWithIO("")
+	cmd.SetContext(t.Context())
+	cmd.Flags().Bool("force-destroy", false, "")
+	cmd.Flags().String("confirm", "", "")
+
+	err := runRekeyResume(cmd, factory, "not-a-valid-id")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "request_id")
+}
+
+// TestCmd_CryptoRekey_Resume_Registered verifies that the `resume` sub-subcommand
+// appears in the rekey command tree with its expected flags.
+func TestCmd_CryptoRekey_Resume_Registered(t *testing.T) {
+	factory := func() (adminv1connect.AdminServiceClient, error) { return nil, nil }
+	rekeyCmd := newCryptoRekeyCmd(factory)
+
+	var resumeCmd *cobra.Command
+	for _, sub := range rekeyCmd.Commands() {
+		if sub.Name() == "resume" {
+			resumeCmd = sub
+			break
+		}
+	}
+	require.NotNil(t, resumeCmd, "resume sub-subcommand must be registered")
+	assert.NotNil(t, resumeCmd.Flags().Lookup("force-destroy"), "must have --force-destroy flag")
+	assert.NotNil(t, resumeCmd.Flags().Lookup("confirm"), "must have --confirm flag")
+}
+
+// TestCmd_CryptoRekey_Resume_ForceDestroy_IgnoredWhenStatusNotTimeout verifies
+// that DEK_REKEY_FORCE_DESTROY_FORBIDDEN from the server surfaces as an error
+// (INV-E10: server-side guard).  The CLI passes the flag through; the server
+// rejects it.
+func TestCmd_CryptoRekey_Resume_ForceDestroy_RejectedByServer(t *testing.T) {
+	h := &fakeAdminHandlerWithRekey{
+		onAuthenticate: func(_ context.Context, _ *connect.Request[adminv1.AuthenticateRequest]) (*connect.Response[adminv1.AuthenticateResponse], error) {
+			return connect.NewResponse(&adminv1.AuthenticateResponse{SessionToken: "tok"}), nil
+		},
+		onRekeyResume: func(_ context.Context, _ *connect.Request[adminv1.RekeyResumeRequest], stream *connect.ServerStream[adminv1.RekeyProgress]) error {
+			return stream.Send(&adminv1.RekeyProgress{
+				Event: &adminv1.RekeyProgress_Error{
+					Error: &adminv1.RekeyError{
+						Code:    "DEK_REKEY_FORCE_DESTROY_FORBIDDEN",
+						Message: "force_destroy requires status=phase5_timeout",
+					},
+				},
+			})
+		},
+	}
+	client, cleanup := newFakeAdminServerWithRekey(t, h)
+	defer cleanup()
+
+	factory := func() (adminv1connect.AdminServiceClient, error) { return client, nil }
+	cmd, _ := newTestCmdWithIO("operator\nsecret\n123456\n")
+	cmd.SetContext(t.Context())
+	cmd.Flags().Bool("force-destroy", false, "")
+	cmd.Flags().String("confirm", "", "")
+	require.NoError(t, cmd.Flags().Set("force-destroy", "true"))
+	require.NoError(t, cmd.Flags().Set("confirm", "scene:01ABC"))
+
+	err := runRekeyResume(cmd, factory, "01ARZ3NDEKTSV4RRFFQ69G5FAV")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "DEK_REKEY_FORCE_DESTROY_FORBIDDEN")
+}
+

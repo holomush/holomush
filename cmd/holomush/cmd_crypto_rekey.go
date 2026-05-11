@@ -4,16 +4,19 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"connectrpc.com/connect"
 	"github.com/samber/oops"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	adminv1 "github.com/holomush/holomush/pkg/proto/holomush/admin/v1"
 	"github.com/holomush/holomush/pkg/proto/holomush/admin/v1/adminv1connect"
@@ -236,20 +239,117 @@ func openApprovalAndWait(
 		Errorf("dual-control not yet wired (bead .34)")
 }
 
-// --- Stub sub-subcommands (full implementations in beads .32 and .33) ---
+// --- Sub-subcommands ---
 
-// newRekeyResumeCmd is a stub for `holomush crypto rekey resume <request_id>`.
-// Full implementation is in bead .32.
-func newRekeyResumeCmd(_ adminClientFactory) *cobra.Command {
-	return &cobra.Command{
+// newRekeyResumeCmd returns `holomush crypto rekey resume <request_id>`.
+// --force-destroy bypasses Phase 5 cluster invalidation (INV-E10 gates this
+// server-side: checkpoint must be at phase5_timeout).  In non-TTY mode the
+// --confirm <context_id> flag is required; missing or empty value exits 64
+// (EX_USAGE).  In TTY mode the operator is prompted interactively.
+func newRekeyResumeCmd(factory adminClientFactory) *cobra.Command {
+	cmd := &cobra.Command{
 		Use:   "resume <request_id>",
-		Short: "Resume an interrupted rekey (stub — bead .32)",
+		Short: "Resume an in-flight rekey checkpoint",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return oops.Code("NOT_IMPLEMENTED").Errorf("rekey resume not yet implemented (bead .32)")
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runRekeyResume(cmd, factory, args[0])
 		},
 	}
+	cmd.Flags().Bool("force-destroy", false, "Bypass Phase 5 cluster invalidation (DESTRUCTIVE — requires phase5_timeout status)")
+	cmd.Flags().String("confirm", "", "Required in non-TTY mode with --force-destroy: context_id confirmation token (e.g. scene:01ABC)")
+	return cmd
 }
+
+// runRekeyResume is the testable core of `holomush crypto rekey resume`.
+// It handles --force-destroy confirmation (TTY or --confirm), authenticates,
+// and calls the RekeyResume streaming RPC.
+func runRekeyResume(cmd *cobra.Command, factory adminClientFactory, requestIDStr string) error {
+	forceDestroy, _ := cmd.Flags().GetBool("force-destroy")   //nolint:errcheck // flag defined in newRekeyResumeCmd; absence is a programmer error
+	confirmFlag, _ := cmd.Flags().GetString("confirm")         //nolint:errcheck // flag defined in newRekeyResumeCmd; absence is a programmer error
+
+	// Parse request_id before touching network.
+	requestIDBytes, err := parseRequestID(requestIDStr)
+	if err != nil {
+		return oops.Code("CRYPTO_REKEY_RESUME_INVALID_REQUEST_ID").Wrap(err)
+	}
+
+	if forceDestroy {
+		in := cmd.InOrStdin()
+		isTTY := func() bool {
+			if f, ok := in.(*os.File); ok {
+				return term.IsTerminal(int(f.Fd())) //nolint:gosec // G115: stdin fd is small and platform-bounded; safe
+			}
+			return false
+		}()
+
+		if !isTTY {
+			// Non-TTY path: require --confirm <context_id>.
+			if confirmFlag == "" {
+				return &exitCodeError{
+					exitCode: 64,
+					cause:    fmt.Errorf("--confirm required in non-TTY mode: provide --confirm <context_id> for --force-destroy"),
+				}
+			}
+		} else {
+			// Interactive TTY path: prompt for context_id confirmation.
+			if _, promptErr := promptForceDestroyConfirm(in, cmd.OutOrStdout(), requestIDStr); promptErr != nil {
+				return &exitCodeError{exitCode: 64, cause: promptErr}
+			}
+		}
+	}
+
+	client, err := factory()
+	if err != nil {
+		return oops.Code("CRYPTO_REKEY_RESUME_CLIENT_FAILED").Wrap(err)
+	}
+
+	sessionToken, err := authenticateInteractive(cmd.Context(), client, cmd)
+	if err != nil {
+		return oops.Code("CRYPTO_REKEY_RESUME_AUTH_FAILED").Wrap(err)
+	}
+
+	stream, err := client.RekeyResume(cmd.Context(), connect.NewRequest(&adminv1.RekeyResumeRequest{
+		SessionToken: sessionToken,
+		RequestId:    requestIDBytes,
+		ForceDestroy: forceDestroy,
+	}))
+	if err != nil {
+		return mapToExitCodeErr(oops.Code("CRYPTO_REKEY_RESUME_RPC_FAILED").Wrap(err))
+	}
+
+	return streamProgress(stream, false, cmd.OutOrStdout())
+}
+
+// promptForceDestroyConfirm prints the force-destroy warning to w and reads
+// the operator's typed context_id from r.  Returns the typed value, or an
+// error if the operator abandons the prompt.
+//
+// This function is exercised only on interactive TTY paths; non-TTY callers
+// use the --confirm flag directly.
+func promptForceDestroyConfirm(r io.Reader, w io.Writer, requestIDStr string) (string, error) {
+	fmt.Fprintf(w, "\n⚠  DESTRUCTIVE: --force-destroy bypasses Phase 5 cluster invalidation.\n") //nolint:errcheck // prompt output; write failure is non-fatal
+	fmt.Fprintf(w, "   Replicas with stale DEK caches will return DEK_NOT_FOUND on cache\n")    //nolint:errcheck // prompt output; write failure is non-fatal
+	fmt.Fprintf(w, "   miss until they restart and resync. This event will be recorded\n")      //nolint:errcheck // prompt output; write failure is non-fatal
+	fmt.Fprintf(w, "   in the rekey audit chain with force_destroy=true.\n\n")                  //nolint:errcheck // prompt output; write failure is non-fatal
+	fmt.Fprintf(w, "   Type the context_id to confirm (e.g. scene:<id>): ")                     //nolint:errcheck // prompt output; write failure is non-fatal
+
+	_ = requestIDStr // future: fetch status to show "Missing replicas at last attempt"
+
+	scanner := bufio.NewScanner(r)
+	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return "", fmt.Errorf("reading confirmation: %w", err)
+		}
+		return "", fmt.Errorf("no confirmation input received")
+	}
+	typed := strings.TrimSpace(scanner.Text())
+	if typed == "" {
+		return "", fmt.Errorf("confirmation cancelled: empty input")
+	}
+	return typed, nil
+}
+
+// --- Stub sub-subcommands (full implementations in bead .33) ---
 
 // newRekeyAbortCmd is a stub for `holomush crypto rekey abort <request_id>`.
 // Full implementation is in bead .33.
