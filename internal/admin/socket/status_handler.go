@@ -14,8 +14,8 @@ import (
 )
 
 // compositeHandler implements adminv1connect.AdminServiceHandler. It serves
-// Status directly and delegates Authenticate, Approve, and ResetTOTP to
-// optional per-RPC handlers registered in Config. When a handler is nil the
+// Status directly and delegates Authenticate, Approve, ResetTOTP, and Rekey
+// to optional per-RPC handlers registered in Config. When a handler is nil the
 // RPC returns connect.CodeUnimplemented, preserving backward compatibility for
 // callers that do not register all handlers.
 type compositeHandler struct {
@@ -23,6 +23,7 @@ type compositeHandler struct {
 	authenticateHandler AuthenticateHandler
 	approveHandler      ApproveHandler
 	resetTOTPHandler    ResetTOTPHandler
+	rekeyHandler        RekeyRPCHandler
 }
 
 // Compile-time assertion: compositeHandler satisfies the generated interface.
@@ -75,24 +76,30 @@ func (h *compositeHandler) ResetTOTP(
 	return h.resetTOTPHandler.ResetTOTP(ctx, req) //nolint:wrapcheck // handler returns *connect.Error; wrapping would discard the ConnectRPC code
 }
 
-// Rekey is implemented by the rekey handler (holomush-jxo8.7.28). Returns
-// Unimplemented until the handler is registered via Config.
+// Rekey delegates to the registered RekeyRPCHandler, or returns Unimplemented
+// if none was provided. (holomush-jxo8.7.28)
 func (h *compositeHandler) Rekey(
-	_ context.Context,
-	_ *connect.Request[adminv1.RekeyRequest],
-	_ *connect.ServerStream[adminv1.RekeyProgress],
+	ctx context.Context,
+	req *connect.Request[adminv1.RekeyRequest],
+	stream *connect.ServerStream[adminv1.RekeyProgress],
 ) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("Rekey not registered"))
+	if h.rekeyHandler == nil {
+		return connect.NewError(connect.CodeUnimplemented, errors.New("Rekey not registered"))
+	}
+	return h.rekeyHandler.HandleRekey(ctx, req, stream) //nolint:wrapcheck // handler returns *connect.Error; wrapping would discard the ConnectRPC code
 }
 
-// RekeyResume is implemented by the rekey handler (holomush-jxo8.7.28). Returns
-// Unimplemented until the handler is registered via Config.
+// RekeyResume delegates to the registered RekeyRPCHandler, or returns
+// Unimplemented if none was provided. (holomush-jxo8.7.28)
 func (h *compositeHandler) RekeyResume(
-	_ context.Context,
-	_ *connect.Request[adminv1.RekeyResumeRequest],
-	_ *connect.ServerStream[adminv1.RekeyProgress],
+	ctx context.Context,
+	req *connect.Request[adminv1.RekeyResumeRequest],
+	stream *connect.ServerStream[adminv1.RekeyProgress],
 ) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("RekeyResume not registered"))
+	if h.rekeyHandler == nil {
+		return connect.NewError(connect.CodeUnimplemented, errors.New("RekeyResume not registered"))
+	}
+	return h.rekeyHandler.HandleRekeyResume(ctx, req, stream) //nolint:wrapcheck // handler returns *connect.Error; wrapping would discard the ConnectRPC code
 }
 
 // RekeyAbort is implemented by the rekey handler (holomush-jxo8.7.29). Returns

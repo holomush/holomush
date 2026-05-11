@@ -29,10 +29,12 @@ type Config struct {
 	Version    string
 	// Optional: when non-nil, the corresponding RPC dispatches to this
 	// handler. When nil, the RPC returns connect.CodeUnimplemented.
-	// Production wiring sets all three; tests may leave any/all nil.
+	// Production wiring sets all handlers; tests may leave any/all nil.
 	AuthenticateHandler AuthenticateHandler
 	ApproveHandler      ApproveHandler
 	ResetTOTPHandler    ResetTOTPHandler
+	// RekeyHandler implements Rekey and RekeyResume RPCs (holomush-jxo8.7.28).
+	RekeyHandler RekeyRPCHandler
 }
 
 // Server is the admin-socket ConnectRPC server. Binds exclusively to a
@@ -157,6 +159,7 @@ func (s *Server) buildMux() *http.ServeMux {
 		authenticateHandler: s.cfg.AuthenticateHandler,
 		approveHandler:      s.cfg.ApproveHandler,
 		resetTOTPHandler:    s.cfg.ResetTOTPHandler,
+		rekeyHandler:        s.cfg.RekeyHandler,
 	}
 	path, handler := adminv1connect.NewAdminServiceHandler(h)
 	mux.Handle(path, handler)
