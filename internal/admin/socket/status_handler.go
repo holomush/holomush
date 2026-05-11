@@ -114,21 +114,27 @@ func (h *compositeHandler) RekeyAbort(
 	return h.rekeyHandler.HandleRekeyAbort(ctx, req) //nolint:wrapcheck // handler returns *connect.Error; wrapping would discard the ConnectRPC code
 }
 
-// RekeyStatus is implemented by the rekey handler (holomush-jxo8.7.30). Returns
-// Unimplemented until the handler is registered via Config.
+// RekeyStatus delegates to the registered RekeyRPCHandler (holomush-jxo8.7.30),
+// or returns Unimplemented if none was provided.
 func (h *compositeHandler) RekeyStatus(
-	_ context.Context,
-	_ *connect.Request[adminv1.RekeyStatusRequest],
+	ctx context.Context,
+	req *connect.Request[adminv1.RekeyStatusRequest],
 ) (*connect.Response[adminv1.RekeyStatusResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("RekeyStatus not registered"))
+	if h.rekeyHandler == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("RekeyStatus not registered"))
+	}
+	return h.rekeyHandler.HandleRekeyStatus(ctx, req) //nolint:wrapcheck // handler returns *connect.Error; wrapping would discard the ConnectRPC code
 }
 
-// RekeyList is implemented by the rekey handler (holomush-jxo8.7.30). Returns
-// Unimplemented until the handler is registered via Config.
+// RekeyList delegates to the registered RekeyRPCHandler (holomush-jxo8.7.30),
+// or returns Unimplemented if none was provided.
 func (h *compositeHandler) RekeyList(
-	_ context.Context,
-	_ *connect.Request[adminv1.RekeyListRequest],
-	_ *connect.ServerStream[adminv1.RekeyStatusResponse],
+	ctx context.Context,
+	req *connect.Request[adminv1.RekeyListRequest],
+	stream *connect.ServerStream[adminv1.RekeyStatusResponse],
 ) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("RekeyList not registered"))
+	if h.rekeyHandler == nil {
+		return connect.NewError(connect.CodeUnimplemented, errors.New("RekeyList not registered"))
+	}
+	return h.rekeyHandler.HandleRekeyList(ctx, req, stream) //nolint:wrapcheck // handler returns *connect.Error; wrapping would discard the ConnectRPC code
 }

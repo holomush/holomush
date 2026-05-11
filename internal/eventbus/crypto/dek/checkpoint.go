@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -203,7 +204,8 @@ func (r *CheckpointRepo) Open(ctx context.Context, req CheckpointOpenRequest) (R
 	return rid, nil
 }
 
-// Get returns the checkpoint row for rid, or an error if not found.
+// Get returns the checkpoint row for rid, or DEK_REKEY_CHECKPOINT_NOT_FOUND
+// if no row exists for that request_id.
 func (r *CheckpointRepo) Get(ctx context.Context, rid RequestID) (Checkpoint, error) {
 	row := r.pool.QueryRow(ctx, `
         SELECT request_id, context_type, context_id, op_args_hash, policy_hash,
@@ -214,7 +216,16 @@ func (r *CheckpointRepo) Get(ctx context.Context, rid RequestID) (Checkpoint, er
           FROM crypto_rekey_checkpoints
          WHERE request_id = $1
     `, rid[:])
-	return scanCheckpoint(row)
+	c, err := scanCheckpoint(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Checkpoint{}, oops.Code("DEK_REKEY_CHECKPOINT_NOT_FOUND").
+				With("request_id", rid.String()).
+				Errorf("rekey checkpoint not found")
+		}
+		return Checkpoint{}, err
+	}
+	return c, nil
 }
 
 // UpdateStatus transitions status from → to using a CAS UPDATE that
@@ -499,18 +510,51 @@ func (r *CheckpointRepo) RecordPhase5Success(ctx context.Context, rid RequestID)
 	return nil
 }
 
-// List returns all checkpoint rows (no filter). For operator inspection
-// and the admin list command. Ordered by started_at DESC.
-func (r *CheckpointRepo) List(ctx context.Context) ([]Checkpoint, error) {
-	rows, err := r.pool.Query(ctx, `
+// CheckpointListFilter parameterises ListFiltered. Limit defaults to 100
+// when zero or negative. ContextPattern, if non-nil, is used as a LIKE
+// pattern against context_id. Since, if non-nil, filters to rows with
+// started_at >= Since.
+type CheckpointListFilter struct {
+	IncludeTerminal bool
+	ContextPattern  *string
+	Since           *time.Time
+	Limit           int
+}
+
+// ListFiltered returns checkpoint rows matching the filter, ordered by
+// started_at DESC. Replaces the former no-arg List method. Used by the
+// production adapter that implements socket.CheckpointStatusReader.
+func (r *CheckpointRepo) ListFiltered(ctx context.Context, f CheckpointListFilter) ([]Checkpoint, error) {
+	args := []any{}
+	where := []string{"1=1"}
+	if !f.IncludeTerminal {
+		where = append(where, "status NOT IN ('complete','aborted')")
+	}
+	if f.ContextPattern != nil {
+		args = append(args, *f.ContextPattern)
+		where = append(where, fmt.Sprintf("context_id LIKE $%d", len(args)))
+	}
+	if f.Since != nil {
+		args = append(args, *f.Since)
+		where = append(where, fmt.Sprintf("started_at >= $%d", len(args)))
+	}
+	limit := f.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+	args = append(args, limit)
+	q := fmt.Sprintf(`
         SELECT request_id, context_type, context_id, op_args_hash, policy_hash,
                primary_player_id, status, last_processed_event_id, new_dek_id,
                old_dek_id, phase5_attempt_count, phase5_missing_members,
                force_destroy, started_at, last_heartbeat_at, completed_at,
                aborted_at, aborted_reason
           FROM crypto_rekey_checkpoints
+         WHERE %s
          ORDER BY started_at DESC
-    `)
+         LIMIT $%d`,
+		strings.Join(where, " AND "), len(args))
+	rows, err := r.pool.Query(ctx, q, args...)
 	if err != nil {
 		return nil, oops.Code("DEK_REKEY_LIST_FAILED").Wrap(err)
 	}
@@ -530,6 +574,8 @@ func (r *CheckpointRepo) List(ctx context.Context) ([]Checkpoint, error) {
 }
 
 // scanCheckpoint reads a pgx Rows or Row into a Checkpoint.
+// pgx.ErrNoRows is returned as-is so callers can distinguish not-found
+// from other scan errors.
 func scanCheckpoint(s checkpointScanner) (Checkpoint, error) {
 	var c Checkpoint
 	var rid []byte
@@ -541,6 +587,9 @@ func scanCheckpoint(s checkpointScanner) (Checkpoint, error) {
 		&c.AbortedAt, &c.AbortedReason,
 	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Checkpoint{}, pgx.ErrNoRows
+		}
 		return Checkpoint{}, oops.Code("DEK_REKEY_CHECKPOINT_SCAN_FAILED").Wrap(err)
 	}
 	copy(c.RequestID[:], rid)

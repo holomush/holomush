@@ -6,6 +6,7 @@ package socket_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/require"
@@ -130,7 +131,7 @@ func newHandlerWithOperator(t *testing.T, orch socket.OrchestratorRunner) *socke
 	}
 	grants := &fakeRekeyResolver{grants: []string{access.CapabilityCryptoOperator}}
 	roles := &fakeRekeyRoleChecker{roles: map[string][]string{rekeyTestPlayerID: {access.RoleAdmin}}}
-	return socket.NewRekeyHandler(sessions, grants, roles, orch, &fakeAbortRunner{})
+	return socket.NewRekeyHandler(sessions, grants, roles, orch, &fakeAbortRunner{}, nil)
 }
 
 // newHandlerNoOp creates a RekeyHandler where the session resolves but
@@ -144,7 +145,7 @@ func newHandlerNoOp(t *testing.T) *socket.RekeyHandler {
 	grants := &fakeRekeyResolver{grants: nil} // no capabilities
 	roles := &fakeRekeyRoleChecker{roles: map[string][]string{rekeyTestPlayerID: {access.RoleAdmin}}}
 	orch := &fakeOrchRunner{}
-	return socket.NewRekeyHandler(sessions, grants, roles, orch, &fakeAbortRunner{})
+	return socket.NewRekeyHandler(sessions, grants, roles, orch, &fakeAbortRunner{}, nil)
 }
 
 // --- tests ---
@@ -369,7 +370,7 @@ func newAbortHandlerWithOperator(t *testing.T, abort socket.RekeyAbortRunner) *s
 	grants := &fakeRekeyResolver{grants: []string{access.CapabilityCryptoOperator}}
 	roles := &fakeRekeyRoleChecker{roles: map[string][]string{rekeyTestPlayerID: {access.RoleAdmin}}}
 	orch := &fakeOrchRunner{}
-	return socket.NewRekeyHandler(sessions, grants, roles, orch, abort)
+	return socket.NewRekeyHandler(sessions, grants, roles, orch, abort, nil)
 }
 
 // TestRekeyHandler_Abort_SingleControl_Allowed verifies INV-E17: a session with
@@ -426,7 +427,7 @@ func TestRekeyHandler_Abort_Rejects_NoCryptoOperatorCap(t *testing.T) {
 	grants := &fakeRekeyResolver{grants: nil} // no capabilities
 	roles := &fakeRekeyRoleChecker{roles: map[string][]string{rekeyTestPlayerID: {access.RoleAdmin}}}
 	orch := &fakeOrchRunner{}
-	h := socket.NewRekeyHandler(sessions, grants, roles, orch, &fakeAbortRunner{})
+	h := socket.NewRekeyHandler(sessions, grants, roles, orch, &fakeAbortRunner{}, nil)
 
 	rid := [16]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
 		0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10}
@@ -493,4 +494,217 @@ func TestRekeyHandler_Abort_Rejects_EmptyRequestID(t *testing.T) {
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok, "expected oops error, got %T: %v", err, err)
 	require.Equal(t, "REKEY_INVALID_REQUEST_ID", oopsErr.Code())
+}
+
+// --- RekeyStatus + RekeyList fakes and tests ---
+
+// fakeCheckpointRepo implements socket.CheckpointStatusReader for tests.
+type fakeCheckpointRepo struct {
+	byID   map[[16]byte]socket.CheckpointView
+	rows   []socket.CheckpointView
+	getErr error
+	lstErr error
+}
+
+func (f *fakeCheckpointRepo) GetCheckpoint(_ context.Context, rid [16]byte) (socket.CheckpointView, error) {
+	if f.getErr != nil {
+		return socket.CheckpointView{}, f.getErr
+	}
+	c, ok := f.byID[rid]
+	if !ok {
+		return socket.CheckpointView{}, oops.Code("DEK_REKEY_CHECKPOINT_NOT_FOUND").Errorf("not found")
+	}
+	return c, nil
+}
+
+func (f *fakeCheckpointRepo) ListCheckpoints(_ context.Context, filter socket.CheckpointListFilter) ([]socket.CheckpointView, error) {
+	if f.lstErr != nil {
+		return nil, f.lstErr
+	}
+	var out []socket.CheckpointView
+	for _, c := range f.rows {
+		if !filter.IncludeTerminal && (c.Status == "complete" || c.Status == "aborted") {
+			continue
+		}
+		if filter.ContextPattern != nil && c.ContextID != *filter.ContextPattern {
+			continue
+		}
+		out = append(out, c)
+	}
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+var _ socket.CheckpointStatusReader = (*fakeCheckpointRepo)(nil)
+
+// fakeStatusStream collects sent RekeyStatusResponse messages.
+type fakeStatusStream struct {
+	sent []*adminv1.RekeyStatusResponse
+}
+
+func (s *fakeStatusStream) Send(r *adminv1.RekeyStatusResponse) error {
+	s.sent = append(s.sent, r)
+	return nil
+}
+
+var _ socket.RekeyListStream = (*fakeStatusStream)(nil)
+
+// newStatusHandlerWithOperator creates a RekeyHandler with a CheckpointStatusReader
+// and an operator session with crypto.operator + RoleAdmin.
+func newStatusHandlerWithOperator(t *testing.T, repo socket.CheckpointStatusReader) *socket.RekeyHandler {
+	t.Helper()
+	sessions := &fakeRekeySessionStore{
+		token:    rekeyTestToken,
+		identity: socket.OperatorSession{PlayerID: rekeyTestPlayerID, TOTPVerified: true},
+	}
+	grants := &fakeRekeyResolver{grants: []string{access.CapabilityCryptoOperator}}
+	roles := &fakeRekeyRoleChecker{roles: map[string][]string{rekeyTestPlayerID: {access.RoleAdmin}}}
+	return socket.NewRekeyHandler(sessions, grants, roles, &fakeOrchRunner{}, &fakeAbortRunner{}, repo)
+}
+
+var rekeyTestRID = [16]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+	0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10}
+
+// seedView constructs a minimal CheckpointView for test seeding.
+func seedView(rid [16]byte, status, ctxID string) socket.CheckpointView {
+	return socket.CheckpointView{
+		RequestID:       rid,
+		ContextType:     "scene",
+		ContextID:       ctxID,
+		Status:          status,
+		PrimaryPlayerID: rekeyTestPlayerID,
+		StartedAt:       time.Now(),
+		LastHeartbeatAt: time.Now(),
+	}
+}
+
+// TestRekeyHandler_Status_ReturnsAllFields verifies that RekeyStatus returns
+// the full checkpoint state with matching request_id and status.
+func TestRekeyHandler_Status_ReturnsAllFields(t *testing.T) {
+	view := seedView(rekeyTestRID, "phase1_complete", "01ABC")
+	repo := &fakeCheckpointRepo{
+		byID: map[[16]byte]socket.CheckpointView{rekeyTestRID: view},
+	}
+	h := newStatusHandlerWithOperator(t, repo)
+
+	res, err := h.RekeyStatus(context.Background(), &adminv1.RekeyStatusRequest{
+		SessionToken: rekeyTestToken,
+		RequestId:    rekeyTestRID[:],
+	})
+	require.NoError(t, err)
+	require.Equal(t, rekeyTestRID[:], res.RequestId)
+	require.Equal(t, "phase1_complete", res.Status)
+	require.Equal(t, rekeyTestPlayerID, res.PrimaryPlayerId)
+	require.NotNil(t, res.StartedAt)
+}
+
+// TestRekeyHandler_Status_NotFound verifies that a missing checkpoint
+// surfaces DEK_REKEY_CHECKPOINT_NOT_FOUND to the caller.
+func TestRekeyHandler_Status_NotFound(t *testing.T) {
+	repo := &fakeCheckpointRepo{byID: map[[16]byte]socket.CheckpointView{}}
+	h := newStatusHandlerWithOperator(t, repo)
+
+	_, err := h.RekeyStatus(context.Background(), &adminv1.RekeyStatusRequest{
+		SessionToken: rekeyTestToken,
+		RequestId:    rekeyTestRID[:],
+	})
+	require.Error(t, err)
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "expected oops error, got %T: %v", err, err)
+	require.Equal(t, "DEK_REKEY_CHECKPOINT_NOT_FOUND", oopsErr.Code())
+}
+
+// TestRekeyHandler_Status_Rejects_NoCryptoOperatorCap verifies that a session
+// without crypto.operator is denied on the status path.
+func TestRekeyHandler_Status_Rejects_NoCryptoOperatorCap(t *testing.T) {
+	sessions := &fakeRekeySessionStore{
+		token:    rekeyTestToken,
+		identity: socket.OperatorSession{PlayerID: rekeyTestPlayerID, TOTPVerified: true},
+	}
+	grants := &fakeRekeyResolver{grants: nil} // no capabilities
+	roles := &fakeRekeyRoleChecker{roles: map[string][]string{rekeyTestPlayerID: {access.RoleAdmin}}}
+	repo := &fakeCheckpointRepo{}
+	h := socket.NewRekeyHandler(sessions, grants, roles, &fakeOrchRunner{}, &fakeAbortRunner{}, repo)
+
+	_, err := h.RekeyStatus(context.Background(), &adminv1.RekeyStatusRequest{
+		SessionToken: rekeyTestToken,
+		RequestId:    rekeyTestRID[:],
+	})
+	require.Error(t, err)
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "expected oops error, got %T: %v", err, err)
+	require.Equal(t, "DENY_NOT_OPERATOR", oopsErr.Code())
+}
+
+// TestRekeyHandler_List_NonTerminalOnly_ByDefault verifies that RekeyList
+// excludes terminal checkpoints (complete, aborted) unless IncludeTerminal=true.
+func TestRekeyHandler_List_NonTerminalOnly_ByDefault(t *testing.T) {
+	activeRID := [16]byte{0x01, 0x02}
+	doneRID := [16]byte{0x03, 0x04}
+	repo := &fakeCheckpointRepo{
+		rows: []socket.CheckpointView{
+			seedView(activeRID, "phase1_complete", "01ACTIVE"),
+			seedView(doneRID, "complete", "01DONE"),
+		},
+	}
+	h := newStatusHandlerWithOperator(t, repo)
+
+	// Default: non-terminal only.
+	stream1 := &fakeStatusStream{}
+	err := h.RekeyList(context.Background(), &adminv1.RekeyListRequest{
+		SessionToken: rekeyTestToken,
+	}, stream1)
+	require.NoError(t, err)
+	require.Len(t, stream1.sent, 1, "default excludes terminal")
+
+	// IncludeTerminal=true: both rows.
+	stream2 := &fakeStatusStream{}
+	err = h.RekeyList(context.Background(), &adminv1.RekeyListRequest{
+		SessionToken:    rekeyTestToken,
+		IncludeTerminal: true,
+	}, stream2)
+	require.NoError(t, err)
+	require.Len(t, stream2.sent, 2)
+}
+
+// TestRekeyHandler_List_Rejects_NoCryptoOperatorCap verifies that a session
+// without crypto.operator is denied on the list path.
+func TestRekeyHandler_List_Rejects_NoCryptoOperatorCap(t *testing.T) {
+	sessions := &fakeRekeySessionStore{
+		token:    rekeyTestToken,
+		identity: socket.OperatorSession{PlayerID: rekeyTestPlayerID, TOTPVerified: true},
+	}
+	grants := &fakeRekeyResolver{grants: nil} // no capabilities
+	roles := &fakeRekeyRoleChecker{roles: map[string][]string{rekeyTestPlayerID: {access.RoleAdmin}}}
+	repo := &fakeCheckpointRepo{}
+	h := socket.NewRekeyHandler(sessions, grants, roles, &fakeOrchRunner{}, &fakeAbortRunner{}, repo)
+
+	stream := &fakeStatusStream{}
+	err := h.RekeyList(context.Background(), &adminv1.RekeyListRequest{
+		SessionToken: rekeyTestToken,
+	}, stream)
+	require.Error(t, err)
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "expected oops error, got %T: %v", err, err)
+	require.Equal(t, "DENY_NOT_OPERATOR", oopsErr.Code())
+}
+
+// TestRekeyHandler_List_EmptyResult verifies that List with no matching rows
+// sends zero stream messages and returns no error.
+func TestRekeyHandler_List_EmptyResult(t *testing.T) {
+	repo := &fakeCheckpointRepo{rows: nil}
+	h := newStatusHandlerWithOperator(t, repo)
+
+	stream := &fakeStatusStream{}
+	err := h.RekeyList(context.Background(), &adminv1.RekeyListRequest{
+		SessionToken: rekeyTestToken,
+	}, stream)
+	require.NoError(t, err)
+	require.Empty(t, stream.sent)
 }
