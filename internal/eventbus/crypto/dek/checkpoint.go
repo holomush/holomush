@@ -4,7 +4,9 @@
 package dek
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -109,6 +111,53 @@ func (c *Checkpoint) LastProcessedEventID() ([16]byte, bool) {
 	}
 	copy(out[:], c.lastProcessedEventID)
 	return out, true
+}
+
+// Phase5MissingMembers returns the persisted list of cluster members that
+// did not acknowledge the most recent Phase 5 invalidation fan-out. Returns
+// nil when the column is NULL (initial state, or after a successful Phase 5
+// run that cleared the column). A non-nil empty slice is also possible if
+// the column was explicitly written as an empty JSON array.
+//
+// INV-27 compliance: the underlying column is JSONB; this accessor decodes
+// it on every call rather than exposing the raw []byte. Callers that need
+// a stable view should snapshot the return value.
+//
+// The second result is non-nil only when the column held malformed JSON,
+// which should not happen in production — the orchestrator always writes
+// well-formed []string. Tests that build fixtures directly via SQL MUST
+// pass valid JSON.
+func (c *Checkpoint) Phase5MissingMembers() ([]string, error) {
+	if len(c.phase5MissingMembers) == 0 {
+		return nil, nil
+	}
+	var out []string
+	if err := json.Unmarshal(c.phase5MissingMembers, &out); err != nil {
+		return nil, oops.Code("DEK_REKEY_PHASE5_MISSING_MEMBERS_DECODE_FAILED").Wrap(err)
+	}
+	return out, nil
+}
+
+// Phase5HasMissingMembers reports whether phase5_missing_members is populated
+// (a non-empty JSON value). Useful for the Phase 5 timeout discriminator
+// without paying the JSON-decode cost. INV-E10's force-destroy gate consumes
+// this: force-destroy MUST be rejected unless the checkpoint sits in the
+// (status=phase5_invalidate, missing_members!=NULL) state.
+func (c *Checkpoint) Phase5HasMissingMembers() bool {
+	// A literal SQL NULL gives len()==0. A JSON "null" literal gives the
+	// 4 bytes "null"; treat that as NULL too. An empty JSON array "[]"
+	// (2 bytes) means "we wrote a result and zero members were missing"
+	// — that path can't happen in production (RecordPhase5Success clears
+	// the column to NULL on the zero-missing path) but we defensively
+	// treat it as "no missing".
+	if len(c.phase5MissingMembers) == 0 {
+		return false
+	}
+	trimmed := bytes.TrimSpace(c.phase5MissingMembers)
+	if bytes.Equal(trimmed, []byte("null")) || bytes.Equal(trimmed, []byte("[]")) {
+		return false
+	}
+	return true
 }
 
 // CheckpointRepo is the SQL persistence layer for crypto_rekey_checkpoints.

@@ -94,6 +94,7 @@ type Orchestrator struct {
 	policyHashSrc    PolicyHashSource
 	minter           Minter
 	materialResolver MaterialResolver
+	phase5Coord      Phase5Coordinator
 	batchHookForTest func(rowsRewrittenSoFar int)
 	logger           *slog.Logger
 }
