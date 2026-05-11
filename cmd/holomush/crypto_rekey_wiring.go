@@ -46,12 +46,6 @@ type rekeyWiring struct {
 	// AuditEmitter is the *dek.RekeyAuditEmitter; the abort path reuses it
 	// to emit the abort audit event (INV-E17).
 	AuditEmitter *dek.RekeyAuditEmitter
-	// InvalidationCoord is the live cluster cache-invalidation Coordinator;
-	// nil indicates the deployment cannot run cluster fan-out (e.g., embedded
-	// NATS unavailable). Phase5Coordinator falls back to a no-member shape
-	// in that branch, surfacing an INVALIDATION_NO_LIVE_MEMBERS error at
-	// runtime rather than silently succeeding.
-	InvalidationCoord invalidation.Coordinator
 	// RekeyHandler is the socket-layer RekeyConnectHandler ready to install
 	// in the admin-socket Config. nil when the upstream wiring (KEK / Manager)
 	// is unavailable — the admin socket then surfaces Unimplemented for the
@@ -75,12 +69,35 @@ type rekeyWiringDeps struct {
 	SubjectResolver   access.SubjectResolver
 	SessionStore      adminauth.SessionStore
 	RoleChecker       socket.OperatorRoleChecker
-	// InvalidationCoord is the constructed cluster invalidation Coordinator.
-	// May be nil when the deployment cannot wire cluster fan-out.
-	InvalidationCoord invalidation.Coordinator
+	// CoordHolder is the late-bound holder for the cluster invalidation
+	// Coordinator. Manager + Orchestrator are constructed before the
+	// Coordinator (the Coordinator's Deps.DEKCache/Deps.PartCache MUST
+	// reference the Manager's own caches per Phase 3c grounding Decision 5
+	// to preserve cross-replica forward secrecy). The Manager's Invalidator
+	// closure and the Orchestrator's Phase5Coordinator closure both
+	// indirect through this holder; the caller (cmd/holomush/core.go)
+	// MUST set holder.coord after construction and BEFORE serving traffic.
+	// Required (non-nil) when KEK is wired; the holder itself may carry a
+	// nil Coord during a degraded deployment, which surfaces
+	// INVALIDATION_NO_LIVE_MEMBERS at call time.
+	CoordHolder *coordHolder
 	// PolicyHashSrc is the auditchain-backed PolicyHashSource for Phase 1
 	// policy_hash freezing.
 	PolicyHashSrc dek.PolicyHashSource
+}
+
+// coordHolder is the late-bound indirection through which the Manager's
+// Invalidator closure and the Orchestrator's Phase5Coordinator reach the
+// invalidation.Coordinator. The Coordinator is constructed AFTER the
+// Manager (so Deps.DEKCache/PartCache can be sourced from the Manager's
+// dek.CacheAccessor — Phase 3c grounding Decision 5), so the closure
+// CANNOT capture the Coordinator by value at construction time. The
+// holder is set by the caller (cmd/holomush/core.go) after Coordinator
+// construction; a nil Coord during the construction window or when the
+// deployment cannot wire a Coordinator returns
+// INVALIDATION_NO_LIVE_MEMBERS at call time.
+type coordHolder struct {
+	coord invalidation.Coordinator
 }
 
 // buildRekeyWiring constructs the production dek.Manager + Orchestrator +
@@ -105,10 +122,14 @@ func buildRekeyWiring(
 ) (rekeyWiring, error) {
 	if deps.Pool == nil || deps.KEKProvider == nil || deps.CheckpointRepo == nil ||
 		deps.RekeyAuditEmitter == nil || deps.PolicyHashSrc == nil ||
-		deps.SubjectResolver == nil || deps.SessionStore == nil || deps.RoleChecker == nil {
+		deps.SubjectResolver == nil || deps.SessionStore == nil || deps.RoleChecker == nil ||
+		deps.CoordHolder == nil {
 		// Caller is responsible for logging the gap; we return an empty
 		// wiring so the admin socket falls back to Unimplemented and the
-		// rest of the server continues to start.
+		// rest of the server continues to start. CoordHolder is required
+		// (non-nil) — the caller MUST construct an empty holder so the
+		// Manager's Invalidator closure has a stable address to dereference;
+		// the holder.coord field MAY remain nil for the degraded path.
 		return rekeyWiring{}, nil
 	}
 
@@ -117,19 +138,28 @@ func buildRekeyWiring(
 	dekCache := dek.NewCache(cacheCfg)
 	partCache := dek.NewParticipantsCache(cacheCfg)
 
-	// Invalidator closure: when invCoord is wired, fan out via the
-	// Coordinator; otherwise short-circuit to a typed error so callers
-	// observing the no-cluster shape see the consistent failure rather
-	// than a silent success that could mask split-brain risk.
+	// Invalidator closure: dereferences the CoordHolder at call time so
+	// the Manager (and Phase5Coordinator) can be constructed BEFORE the
+	// Coordinator — the Coordinator's Deps.DEKCache/PartCache MUST share
+	// identity with the Manager's caches (Phase 3c grounding doc Decision
+	// 5; without that identity, cross-replica invalidation evicts
+	// dedicated caches while the Manager's caches keep serving stale OLD
+	// DEK material for up to TTL after a Rekey, breaking forward
+	// secrecy). When the holder's coord is still nil (degraded deployment
+	// or the construction window between Manager build and Coordinator
+	// build), short-circuit to a typed error so callers observing the
+	// no-cluster shape see the consistent failure rather than a silent
+	// success that could mask split-brain risk.
+	holder := deps.CoordHolder
 	invFn := func(ctx context.Context, ctxID dek.ContextID, action string, version, succVersion uint32) error {
-		if deps.InvalidationCoord == nil {
+		if holder.coord == nil {
 			return oops.Code("INVALIDATION_NO_LIVE_MEMBERS").
 				With("context_type", ctxID.Type).
 				With("context_id", ctxID.ID).
 				With("action", action).
 				Errorf("invalidation.Coordinator not wired — cluster fan-out disabled")
 		}
-		return deps.InvalidationCoord.RequestInvalidation(
+		return holder.coord.RequestInvalidation(
 			ctx, ctxID, invalidation.Action(action), version, succVersion,
 		)
 	}
@@ -188,12 +218,11 @@ func buildRekeyWiring(
 	connectHandler := socket.NewRekeyConnectHandler(rekeyHandler, adminauth.MapDenyToConnect)
 
 	return rekeyWiring{
-		Manager:           mgr,
-		Orchestrator:      orch,
-		CheckpointRepo:    deps.CheckpointRepo,
-		AuditEmitter:      deps.RekeyAuditEmitter,
-		InvalidationCoord: deps.InvalidationCoord,
-		RekeyHandler:      connectHandler,
+		Manager:        mgr,
+		Orchestrator:   orch,
+		CheckpointRepo: deps.CheckpointRepo,
+		AuditEmitter:   deps.RekeyAuditEmitter,
+		RekeyHandler:   connectHandler,
 	}, nil
 }
 

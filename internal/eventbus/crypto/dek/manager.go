@@ -72,6 +72,30 @@ type Manager interface {
 // Phase 3 consumes it via the package-private MaterialResolver interface
 // (see rekey_phase3.go), which *manager satisfies structurally.
 
+// CacheAccessor exposes the Manager's underlying DEK + participants
+// caches by reference. Production wiring (cmd/holomush/core.go) uses
+// this to plug invalidation.Coordinator's receive-side eviction
+// callbacks (Deps.DEKCache / Deps.PartCache) into the SAME cache
+// instances the Manager itself reads on Resolve/Participants — without
+// it, cross-replica invalidation evicts a separate set of caches and
+// peers continue serving stale OLD DEK material from the Manager's
+// cache for up to the cache TTL (~5min) after a Rekey completes,
+// breaking forward secrecy.
+//
+// Phase 3c grounding doc Decision 5 mandates this shape:
+//
+//	DEKCache  *dek.Cache         // from dek.Manager construction
+//
+// *manager satisfies CacheAccessor structurally; consumers MUST
+// type-assert and surface a clear failure if a future refactor breaks
+// the assertion (see cmd/holomush/crypto_rekey_wiring.go for the
+// production type-assertion pattern, mirroring MaterialResolver /
+// Destroyer).
+type CacheAccessor interface {
+	Cache() *Cache
+	PartCache() *ParticipantsCache
+}
+
 // ActiveDEKRecord is a minimal projection of a crypto_keys row exposed to the
 // Rekey orchestrator. Only the fields needed for Phase 1–6 are included;
 // the full row type (row) stays package-private.
@@ -98,6 +122,18 @@ type manager struct {
 	invalidate Invalidator
 	bindings   BindingResolver
 }
+
+// Cache returns the *Cache instance passed to NewManager. The pointer
+// identity is load-bearing: invalidation.Coordinator's receive callback
+// calls InvalidateContext on this very pointer, and the Manager's
+// Resolve hits this very pointer on the read path. Sharing identity is
+// what makes cross-replica forward secrecy work — see CacheAccessor
+// and Phase 3c grounding doc Decision 5.
+func (m *manager) Cache() *Cache { return m.cache }
+
+// PartCache returns the *ParticipantsCache instance passed to
+// NewManager. Same identity semantics as Cache().
+func (m *manager) PartCache() *ParticipantsCache { return m.partCache }
 
 // NewManager constructs a real Manager. Production callers (Phase 3+)
 // pass a real KEK provider, pgxpool.Pool-backed Store, DEK material

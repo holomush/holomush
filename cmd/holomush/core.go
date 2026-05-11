@@ -743,50 +743,29 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// admin socket falls back to Unimplemented for the Rekey RPCs but the
 	// rest of the server continues to start.
 	//
-	// invalidation.Coordinator is constructed here when the cluster substrate
-	// is available; cluster.Registry is the live Registry from clusterSub
-	// (lifecycle.Subsystem interface) and eventBusSub.Conn() is the
-	// already-started NATS connection. The Coordinator is itself NOT a
-	// lifecycle.Subsystem in Phase 5; we Start it inline alongside the
-	// orchestrator and Stop it via the deferred Stop path. Sub-epic E T44.
-	var invCoord invalidation.Coordinator
-	if kekProvider != nil {
-		invMetrics := invalidation.NewMetrics(prometheus.DefaultRegisterer)
-		// dekCacheForInv / partCacheForInv are NEW caches dedicated to the
-		// receive-side handler. They are NOT the same instances the dek.Manager
-		// uses; cross-replica invalidation drives evictions through dek.Cache's
-		// public InvalidateContext API, which buildRekeyWiring's Manager owns
-		// separately. Phase 3c grounding doc Decision 5 — Coordinator-only path.
-		dekCacheForInv := dek.NewCache(dek.CacheConfig{Capacity: 1024, TTL: 5 * time.Minute})
-		partCacheForInv := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 1024, TTL: 5 * time.Minute})
-		c, invErr := invalidation.New(invalidation.Config{ClusterID: gameID}, invalidation.Deps{
-			Conn:      eventBusSub.Conn(),
-			Registry:  clusterSub,
-			DEKCache:  dekCacheForInv,
-			PartCache: partCacheForInv,
-			Logger:    slog.Default(),
-			Metrics:   invMetrics,
-		})
-		if invErr != nil {
-			slog.Warn("invalidation.Coordinator construction failed — cluster fan-out unavailable; Rekey will surface INVALIDATION_NO_LIVE_MEMBERS",
-				"error", invErr)
-		} else {
-			if startErr := c.Start(ctx); startErr != nil {
-				slog.Warn("invalidation.Coordinator start failed — cluster fan-out unavailable",
-					"error", startErr)
-			} else {
-				invCoord = c
-				// Coordinator is not orchestrator-owned; stop it on normal exit.
-				defer func() {
-					stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-					defer cancel()
-					if stopErr := c.Stop(stopCtx); stopErr != nil {
-						slog.Warn("invalidation.Coordinator stop error", "error", stopErr)
-					}
-				}()
-			}
-		}
-	}
+	// Construction order is load-bearing per Phase 3c grounding doc
+	// Decision 5: the invalidation.Coordinator's Deps.DEKCache and
+	// Deps.PartCache MUST share pointer identity with the dek.Manager's
+	// own caches. Without that identity, the receive-side handler evicts
+	// dedicated caches while the Manager's caches keep serving stale OLD
+	// DEK material for up to the cache TTL (~5min) after a cross-replica
+	// Rekey — a forward-secrecy regression on the master crypto spec.
+	//
+	// So we:
+	//
+	//   1. Build the Manager + Orchestrator FIRST (with the Invalidator
+	//      closure indirecting through coordHolder; the closure returns
+	//      INVALIDATION_NO_LIVE_MEMBERS while holder.coord is nil).
+	//   2. Extract the Manager's caches via dek.CacheAccessor.
+	//   3. Build the invalidation.Coordinator with THOSE cache pointers.
+	//   4. Set holder.coord = coord; the Manager's Invalidator and the
+	//      Orchestrator's Phase5Coordinator both see the live Coordinator
+	//      from their next call onward.
+	//
+	// invalidation.Coordinator is itself NOT a lifecycle.Subsystem in Phase
+	// 5; we Start it inline alongside the orchestrator and Stop it via the
+	// deferred Stop path. Sub-epic E T44.
+	coordHolderPtr := &coordHolder{}
 
 	rekeyW, rekeyWErr := buildRekeyWiring(ctx, rekeyWiringDeps{
 		Pool:              dbSub.Pool(),
@@ -799,7 +778,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		SubjectResolver:   abacSub.Resolver(),
 		SessionStore:      adminSessionStore,
 		RoleChecker:       adminRoleStore,
-		InvalidationCoord: invCoord,
+		CoordHolder:       coordHolderPtr,
 		PolicyHashSrc:     policyHashSrc,
 	})
 	if rekeyWErr != nil {
@@ -812,6 +791,51 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	if rekeyW.RekeyHandler == nil {
 		slog.Warn("rekey wiring incomplete — Rekey admin RPCs will return Unimplemented",
 			"kek_available", kekProvider != nil)
+	}
+
+	// Build the invalidation.Coordinator USING the Manager's own caches
+	// (Phase 3c grounding doc Decision 5; without this identity, peers
+	// continue serving stale OLD DEK from the Manager's cache for up to
+	// TTL after a cross-replica Rekey — a forward-secrecy regression).
+	// Then set coordHolderPtr.coord so the Manager's Invalidator closure
+	// and the Orchestrator's Phase5Coordinator pick up the live
+	// Coordinator on their next call. Only proceed if the Manager was
+	// successfully constructed (rekeyW.Manager non-nil) — otherwise the
+	// Coordinator has no caches to bind to.
+	if rekeyW.Manager != nil {
+		accessor, accessorOK := rekeyW.Manager.(dek.CacheAccessor)
+		if !accessorOK {
+			// Fail closed: a regenerated Manager that drops the accessor
+			// would silently revert to the dedicated-caches regression.
+			return oops.Code("CRYPTO_DEK_MANAGER_CACHE_ACCESSOR_NOT_SATISFIED").
+				Errorf("dek.NewManager return value does not satisfy dek.CacheAccessor — required for invalidation.Coordinator wiring per Phase 3c grounding Decision 5")
+		}
+		invMetrics := invalidation.NewMetrics(prometheus.DefaultRegisterer)
+		c, invErr := invalidation.New(invalidation.Config{ClusterID: gameID}, invalidation.Deps{
+			Conn:      eventBusSub.Conn(),
+			Registry:  clusterSub,
+			DEKCache:  accessor.Cache(),
+			PartCache: accessor.PartCache(),
+			Logger:    slog.Default(),
+			Metrics:   invMetrics,
+		})
+		if invErr != nil {
+			slog.Warn("invalidation.Coordinator construction failed — cluster fan-out unavailable; Rekey will surface INVALIDATION_NO_LIVE_MEMBERS",
+				"error", invErr)
+		} else if startErr := c.Start(ctx); startErr != nil {
+			slog.Warn("invalidation.Coordinator start failed — cluster fan-out unavailable",
+				"error", startErr)
+		} else {
+			coordHolderPtr.coord = c
+			// Coordinator is not orchestrator-owned; stop it on normal exit.
+			defer func() {
+				stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if stopErr := c.Stop(stopCtx); stopErr != nil {
+					slog.Warn("invalidation.Coordinator stop error", "error", stopErr)
+				}
+			}()
+		}
 	}
 
 	adminSub := socket.NewAdminSocketSubsystem(socket.AdminSocketSubsystemConfig{
