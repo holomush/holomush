@@ -85,6 +85,12 @@ func registerBuiltinTypes(r *VerbRegistry, hostVersion string) error {
 		{Type: "crypto.totp_cleared", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},
 		{Type: "crypto.totp_recovery_code_consumed", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},
 		{Type: "crypto.policy_set", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},
+		// Rekey audit (host-emit, persistence-only). Emitted by Phase 7 of the
+		// Rekey orchestrator via rekeyAuditPublisherAdapter → RenderingPublisher.
+		// AUDIT_ONLY: gRPC Subscribe handler drops it before delivery; the audit
+		// projection persists it to events_audit. Registered here so
+		// RenderingPublisher does not reject it with EMIT_UNKNOWN_VERB (INV-E14).
+		{Type: "crypto.system.rekey", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},
 	}
 	for _, b := range builtins {
 		if err := r.RegisterWithSource(b, sourceVersion); err != nil {

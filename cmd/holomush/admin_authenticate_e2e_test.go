@@ -97,6 +97,18 @@ type adminAuthEnv struct {
 	// roleStore is used by T26 to RemoveRole(RoleAdmin) from dave's character
 	// mid-spec to exercise the Approve handler's INV-D16 runtime role re-check.
 	roleStore store.RoleStore
+
+	// rekeySceneContextType and rekeySceneContextID identify the scene context
+	// pre-seeded with a v1 DEK for the T27 Rekey E2E scenario. Populated by
+	// seedAdminRekeyDEK (admin_rekey_e2e_test.go) before server boot.
+	rekeySceneContextType string
+	rekeySceneContextID   string
+
+	// carolSessionToken stores carol's most-recent session token so T27 can
+	// reuse it rather than re-authenticating (which would fail with
+	// "TOTP verify failed" due to TOTP replay prevention within the same
+	// 30-second step window).
+	carolSessionToken string
 }
 
 // Teardown cancels the server context, drains the boot goroutine, and closes
@@ -359,6 +371,13 @@ func setupAdminAuthEnv(t *testing.T) *adminAuthEnv {
 	Expect(carolSecret).NotTo(BeEmpty())
 	Expect(daveSecret).NotTo(BeEmpty())
 
+	// T27 Rekey E2E — seed a v1 DEK for the scene context BEFORE boot.
+	// Defined in admin_rekey_e2e_test.go. Uses the same kekProvider so
+	// INV-33 (wrap_key_id fingerprint) is satisfied at runtime.
+	const rekeySceneCtxType = "scene"
+	const rekeySceneCtxID = "e2e-rekey-t27"
+	seedAdminRekeyDEK(seedCtx, seedPool, kekProvider, rekeySceneCtxType, rekeySceneCtxID)
+
 	seedPool.Close()
 
 	// --- 5. Build configs for runCoreWithDeps. ---
@@ -458,6 +477,9 @@ func setupAdminAuthEnv(t *testing.T) *adminAuthEnv {
 		queryPool:     queryPool,
 		approvalRepo:  approvalRepo,
 		roleStore:     roleStore,
+		// T27 Rekey E2E context (admin_rekey_e2e_test.go).
+		rekeySceneContextType: rekeySceneCtxType,
+		rekeySceneContextID:   rekeySceneCtxID,
 	}
 }
 
@@ -625,6 +647,10 @@ var _ = Describe("Admin Authenticate Lifecycle (full-stack E2E)", func() {
 		carolToken, err := env.authenticate("carol", env.carolPassword, env.computeTOTP(env.carolSecret))
 		Expect(err).NotTo(HaveOccurred(), "Authenticate carol (for self-approval probe)")
 		Expect(carolToken).NotTo(BeEmpty())
+		// Store carol's token for T27 Rekey E2E reuse (in-memory session store;
+		// not time-limited). Re-authenticating would fail with TOTP replay
+		// prevention within the same 30-second step window.
+		env.carolSessionToken = carolToken
 
 		selfErr := env.approve(carolToken, ridSelf)
 		Expect(selfErr).To(HaveOccurred(), "self-approval must fail")
@@ -684,5 +710,19 @@ var _ = Describe("Admin Authenticate Lifecycle (full-stack E2E)", func() {
 		rolePending, _ := env.approvalRow(ridRoleRevoked)
 		Expect(rolePending).To(BeNil(),
 			"role-rejected approval MUST NOT mutate approved_at")
+
+		// =========================================================================
+		// T27: AdminRekey production-boot E2E (bead jxo8.7.46)
+		//
+		// Runs within the same boot as T25/T26 (single-process prometheus
+		// constraint). Uses carol as the operator (untouched by T25/T26 except
+		// for T26 scenarios 1–4 which leave carol's session intact; T26 scenario
+		// 5 only revokes dave's admin role, not carol's). The scene context
+		// "e2e-rekey-t27" was pre-seeded with a v1 DEK by seedAdminRekeyDEK
+		// in setupAdminAuthEnv (before server boot). Carol re-authenticates here
+		// with a fresh TOTP code rather than reusing carolToken (which may have
+		// aged past a TOTP step boundary).
+		// =========================================================================
+		runAdminRekeyScenario(env)
 	})
 })
