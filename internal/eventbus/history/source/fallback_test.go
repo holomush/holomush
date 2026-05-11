@@ -190,3 +190,27 @@ func TestFallback_Case8_ColdReaderError_Wrapped(t *testing.T) {
 	require.True(t, ok, "cold lookup error MUST be wrapped as oops error")
 	assert.Equal(t, "EVENTBUS_SOURCE_COLD_LOOKUP_FAILED", oopsErr.Code())
 }
+
+// Case 9: cold DEK resolution returns a transient (non-typed) error.
+// The error MUST propagate as DEK_RESOLVE_TRANSIENT, NOT be masked as ErrMetadataOnly.
+func TestFallback_Case9_ColdTransientError_Propagates(t *testing.T) {
+	env := makeCiphertextEnvelope(t, 42, 3)
+	coldEnv := makeCiphertextEnvelope(t, 99, 4)
+	transient := errors.New("pg: connection reset by peer")
+	dm := &fakeDEKManager{fn: func(k codec.KeyID, _ uint32) (codec.Key, error) {
+		if k == 42 {
+			// Hot DEK is destroyed — triggers cold-tier fallback.
+			return codec.Key{}, oops.Code("DEK_DESTROYED").Errorf("rekey'd")
+		}
+		// Cold DEK resolution hits a transient DB error (not typed as DEK_NOT_FOUND / DEK_DESTROYED).
+		return codec.Key{}, transient
+	}}
+	cr := &fakeColdReader{env: coldEnv, found: true}
+	r := source.NewFallbackResolver(dm, cr, newTestMetrics(), slog.Default())
+	_, err := r.Resolve(context.Background(), env)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, source.ErrMetadataOnly, "transient cold-DEK error MUST NOT be masked as ErrMetadataOnly")
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "transient cold-DEK error MUST be wrapped as oops error")
+	assert.Equal(t, "DEK_RESOLVE_TRANSIENT", oopsErr.Code(), "transient cold-DEK error MUST carry DEK_RESOLVE_TRANSIENT code")
+}

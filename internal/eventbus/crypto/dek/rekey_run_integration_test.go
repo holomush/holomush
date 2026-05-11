@@ -406,3 +406,61 @@ func opArgsHashForReq(req dek.RekeyRequest) []byte {
 	Expect(err).NotTo(HaveOccurred())
 	return h[:]
 }
+
+var _ = Describe("Orchestrator_Phase7_AuditPayloadHasNonZeroPhase3Count (holomush-jxo8.7.54)", func() {
+	It("Phase 7 audit payload Phase3RowsRewritten is > 0 and matches actual rewrite count", func() {
+		// Use the phase3TestSetup to get a real encrypted-rows harness
+		// (real DEK, real events_audit rows encrypted under oldDEK).
+		ph3 := newPhase3TestSetup()
+
+		const rowCount = 3
+		ph3.InsertEncryptedRows(rowCount)
+
+		// Drive Phase 3 — rewrites the seeded rows under the new DEK.
+		// processPhase3Batch calls IncrementPhase3Count INSIDE each batch tx
+		// so ckpt.Phase3RowsRewritten accumulates atomically with the row
+		// rewrites and cursor advance.
+		n, err := ph3.orch.RunPhase3(context.Background(), ph3.RequestID())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(n).To(Equal(rowCount), "RunPhase3 must rewrite all seeded rows")
+
+		// Verify the count is persisted on the checkpoint row.
+		ckpt, err := ph3.repo.Get(context.Background(), ph3.RequestID())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ckpt.Phase3RowsRewritten).To(Equal(rowCount),
+			"checkpoint.Phase3RowsRewritten must be persisted after RunPhase3")
+
+		// Wire Phase 5 (fake coordinator) + Phase 6 + Phase 7 onto the same orchestrator
+		// to drive to completion and capture the Phase 7 payload.
+		coord := &fakePhase5Coordinator{}
+		coord.SetSuccess()
+		ph3.orch.SetPhase5Coordinator(coord)
+		ph3.orch.SetDestroyer(ph3.manager)
+		auditEmitter := &fakeAuditEmitter{}
+		ph3.orch.SetAuditEmitter(auditEmitter)
+		ph3.orch.SetDataDir(GinkgoT().TempDir())
+
+		// RunPhase5 + RunPhase6 + RunPhase7 in sequence.
+		Expect(ph3.orch.RunPhase5(context.Background(), ph3.RequestID())).To(Succeed())
+		Expect(ph3.orch.RunPhase6(context.Background(), ph3.RequestID())).To(Succeed())
+
+		req := dek.RekeyRequest{
+			ContextType:   "scene",
+			ContextID:     "01PH3",
+			Justification: "test",
+			Operator:      dek.OperatorIdentity{PlayerID: "01PLAYER"},
+		}
+		outcome, err := ph3.orch.RunPhase7(context.Background(), ph3.RequestID(), req)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(outcome.Phase3RowCount).To(Equal(rowCount),
+			"RekeyOutcome.Phase3RowCount must equal the number of rows rewritten by Phase 3")
+
+		// The emitted payload must also carry the count.
+		Expect(auditEmitter.emitted).To(HaveLen(1))
+		payload := auditEmitter.emitted[0]
+		Expect(payload.Phases.Phase3RowsRewritten).To(Equal(rowCount),
+			"RekeyAuditPayload.Phases.Phase3RowsRewritten must match actual rewrite count")
+		Expect(payload.Phases.Phase3RowsRewritten).To(BeNumerically(">", 0),
+			"Phase3RowsRewritten must be > 0 (the canonical fix for holomush-jxo8.7.54)")
+	})
+})

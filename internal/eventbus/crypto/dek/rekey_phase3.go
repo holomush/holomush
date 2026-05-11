@@ -5,7 +5,6 @@ package dek
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -190,11 +189,18 @@ func (o *Orchestrator) RunPhase3(ctx context.Context, rid RequestID) (int, error
 		}
 	}
 
-	// All rows rewritten — leave status at phase3_reencrypt_cold. Phase 5
-	// (.22) advances to phase5_invalidate. Don't transition here; the
-	// FSM only allows phase3_reencrypt_cold → phase5_invalidate, not a
-	// "phase3_complete" intermediate, and adding such a state crosses the
-	// out-of-scope line for this bead.
+	// The Phase 3 row count is now incremented atomically inside each
+	// batch transaction via IncrementPhase3Count (see processPhase3Batch).
+	// No post-loop persist call is needed: by the time we reach here, the
+	// checkpoint row's phase3_rows_rewritten column already reflects every
+	// committed batch's contribution. Crash-resume correctness is durable
+	// (holomush-jxo8.7.54 — crypto-reviewer correctness fix).
+
+	// Leave status at phase3_reencrypt_cold. Phase 5 (.22) advances to
+	// phase5_invalidate. Don't transition here; the FSM only allows
+	// phase3_reencrypt_cold → phase5_invalidate, not a "phase3_complete"
+	// intermediate, and adding such a state crosses the out-of-scope line
+	// for this bead.
 	return totalRewritten, nil
 }
 
@@ -373,6 +379,15 @@ func (o *Orchestrator) processPhase3Batch(
 		lastID = r.eventID
 	}
 
+	// Increment the per-batch row count INSIDE the transaction so the
+	// count, the row rewrites, and the cursor advance all commit
+	// atomically. A crash mid-batch rolls back all three; a crash AFTER
+	// commit leaves them consistent. This is load-bearing for audit-payload
+	// truth across crash-resume cycles (holomush-jxo8.7.54).
+	if countErr := o.repo.IncrementPhase3Count(ctx, tx, rid, len(batch)); countErr != nil {
+		return 0, nil, countErr
+	}
+
 	// Advance the cursor as the FINAL action inside the transaction so a
 	// rollback reverts both the row UPDATEs and the cursor advance
 	// atomically (INV-E7-COLD-RESUME-CURSOR). The CAS predicate inside
@@ -402,7 +417,3 @@ func hexEncodeBytes(b []byte) string {
 	return string(out)
 }
 
-// guard against "errors" being unused if the file is refactored to no
-// longer reference errors.Is; kept here so callers in the package can
-// extend with errors.Is matches without re-importing.
-var _ = errors.Is

@@ -15,7 +15,6 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
-	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/totp"
 )
@@ -83,14 +82,8 @@ func (a *AuditingService) emit(ctx context.Context, subjectStr, eventTypeStr str
 			"event_type", eventTypeStr, "error", err)
 		return
 	}
-	ev := eventbus.Event{
-		ID:        core.NewULID(),
-		Subject:   subj,
-		Type:      evtType,
-		Timestamp: a.clock.Now(),
-		Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
-		Payload:   body,
-	}
+	ev := eventbus.NewEvent(subj, evtType, eventbus.Actor{Kind: eventbus.ActorKindSystem}, body)
+	ev.Timestamp = a.clock.Now() // honour the injected clock rather than time.Now() inside NewEvent
 	if err := a.pub.Publish(ctx, ev); err != nil {
 		a.logger.Warn("totp_audit: Publish failed; audit event lost (informational, INV-D14)",
 			"event_type", eventTypeStr, "subject", subjectStr, "publish_error", err)

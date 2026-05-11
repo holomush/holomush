@@ -1261,18 +1261,11 @@ func (a *rekeyAuditPublisherAdapter) PublishAudit(
 		return ulid.ULID{}, oops.Code("DEK_REKEY_AUDIT_INVALID_TYPE").
 			With("type", evType).Wrap(err)
 	}
-	id := core.NewULID()
-	ev := eventbus.Event{
-		ID:        id,
-		Subject:   subj,
-		Type:      etyp,
-		Timestamp: a.clock.Now(),
-		Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
-		Payload:   payload,
-	}
+	ev := eventbus.NewEvent(subj, etyp, eventbus.Actor{Kind: eventbus.ActorKindSystem}, payload)
+	ev.Timestamp = a.clock.Now() // honour the injected clock rather than time.Now() inside NewEvent
 	if pubErr := a.publisher.Publish(ctx, ev); pubErr != nil {
 		return ulid.ULID{}, oops.Code("DEK_REKEY_AUDIT_PUBLISH_FAILED").
 			With("subject", subject).Wrap(pubErr)
 	}
-	return id, nil
+	return ev.ID, nil
 }

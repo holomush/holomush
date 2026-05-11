@@ -112,3 +112,28 @@ func TestEventSeqPreservesLiteralValueWhenSet(t *testing.T) {
 	e := eventbus.Event{Seq: 42}
 	assert.Equal(t, uint64(42), e.Seq)
 }
+
+// TestEventbus_NewEvent_AutoStampsULID verifies that eventbus.NewEvent()
+// returns an Event with a non-zero ULID ID and that the provided fields are
+// preserved (holomush-jxo8.7.53).
+func TestEventbus_NewEvent_AutoStampsULID(t *testing.T) {
+	t.Parallel()
+	subj := eventbus.MustSubject("events.main.scene.01TEST")
+	typ, err := eventbus.NewType("test.event")
+	require.NoError(t, err)
+	actor := eventbus.Actor{Kind: eventbus.ActorKindSystem}
+	payload := []byte(`{"hello":"world"}`)
+
+	ev := eventbus.NewEvent(subj, typ, actor, payload)
+
+	assert.NotEmpty(t, ev.ID, "NewEvent must stamp a non-zero ULID")
+	assert.Equal(t, subj, ev.Subject)
+	assert.Equal(t, typ, ev.Type)
+	assert.Equal(t, actor.Kind, ev.Actor.Kind)
+	assert.Equal(t, payload, ev.Payload)
+	assert.False(t, ev.Timestamp.IsZero(), "NewEvent must stamp a non-zero Timestamp")
+
+	// Two consecutive NewEvent calls MUST mint distinct ULIDs (monotonic).
+	ev2 := eventbus.NewEvent(subj, typ, actor, payload)
+	assert.NotEqual(t, ev.ID, ev2.ID, "each NewEvent call must mint a unique ULID")
+}

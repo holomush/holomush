@@ -73,25 +73,26 @@ func NewCheckpointOpenRequest(
 // Byte-slice fields are intentionally unexported (INV-27): they are
 // populated by scanCheckpoint and read only within this package.
 type Checkpoint struct {
-	RequestID            RequestID
-	ContextType          string
-	ContextID            string
-	opArgsHash           []byte
-	policyHash           []byte
-	PrimaryPlayerID      string
-	Justification        string
-	Status               CheckpointStatus
-	lastProcessedEventID []byte
-	NewDEKID             *int64
-	OldDEKID             int64
-	Phase5AttemptCount   int
-	phase5MissingMembers []byte
-	ForceDestroy         bool
-	StartedAt            time.Time
-	LastHeartbeatAt      time.Time
-	CompletedAt          *time.Time
-	AbortedAt            *time.Time
-	AbortedReason        *string
+	RequestID              RequestID
+	ContextType            string
+	ContextID              string
+	opArgsHash             []byte
+	policyHash             []byte
+	PrimaryPlayerID        string
+	Justification          string
+	Status                 CheckpointStatus
+	lastProcessedEventID   []byte
+	NewDEKID               *int64
+	OldDEKID               int64
+	Phase3RowsRewritten    int
+	Phase5AttemptCount     int
+	phase5MissingMembers   []byte
+	ForceDestroy           bool
+	StartedAt              time.Time
+	LastHeartbeatAt        time.Time
+	CompletedAt            *time.Time
+	AbortedAt              *time.Time
+	AbortedReason          *string
 }
 
 // PolicyHash returns the policy_hash captured at Phase 1 (INV-E25) as a
@@ -217,7 +218,7 @@ func (r *CheckpointRepo) Get(ctx context.Context, rid RequestID) (Checkpoint, er
 	row := r.pool.QueryRow(ctx, `
         SELECT request_id, context_type, context_id, op_args_hash, policy_hash,
                primary_player_id, justification, status, last_processed_event_id, new_dek_id,
-               old_dek_id, phase5_attempt_count, phase5_missing_members,
+               old_dek_id, phase3_rows_rewritten, phase5_attempt_count, phase5_missing_members,
                force_destroy, started_at, last_heartbeat_at, completed_at,
                aborted_at, aborted_reason
           FROM crypto_rekey_checkpoints
@@ -280,7 +281,7 @@ func (r *CheckpointRepo) FindByContextAndArgs(ctx context.Context, ctxType, ctxI
 	row := r.pool.QueryRow(ctx, `
         SELECT request_id, context_type, context_id, op_args_hash, policy_hash,
                primary_player_id, justification, status, last_processed_event_id, new_dek_id,
-               old_dek_id, phase5_attempt_count, phase5_missing_members,
+               old_dek_id, phase3_rows_rewritten, phase5_attempt_count, phase5_missing_members,
                force_destroy, started_at, last_heartbeat_at, completed_at,
                aborted_at, aborted_reason
           FROM crypto_rekey_checkpoints
@@ -305,7 +306,7 @@ func (r *CheckpointRepo) FindNonTerminalByContext(ctx context.Context, ctxType, 
 	row := r.pool.QueryRow(ctx, `
         SELECT request_id, context_type, context_id, op_args_hash, policy_hash,
                primary_player_id, justification, status, last_processed_event_id, new_dek_id,
-               old_dek_id, phase5_attempt_count, phase5_missing_members,
+               old_dek_id, phase3_rows_rewritten, phase5_attempt_count, phase5_missing_members,
                force_destroy, started_at, last_heartbeat_at, completed_at,
                aborted_at, aborted_reason
           FROM crypto_rekey_checkpoints
@@ -330,7 +331,7 @@ func (r *CheckpointRepo) ListExpired(ctx context.Context, ttl time.Duration) ([]
 	rows, err := r.pool.Query(ctx, `
         SELECT request_id, context_type, context_id, op_args_hash, policy_hash,
                primary_player_id, justification, status, last_processed_event_id, new_dek_id,
-               old_dek_id, phase5_attempt_count, phase5_missing_members,
+               old_dek_id, phase3_rows_rewritten, phase5_attempt_count, phase5_missing_members,
                force_destroy, started_at, last_heartbeat_at, completed_at,
                aborted_at, aborted_reason
           FROM crypto_rekey_checkpoints
@@ -427,6 +428,39 @@ func (r *CheckpointRepo) UpdateStatusForceDestroy(ctx context.Context, rid Reque
 		return oops.Code("DEK_REKEY_STALE_TRANSITION").
 			With("request_id", rid.String()).
 			Errorf("force_destroy predicate failed")
+	}
+	return nil
+}
+
+// IncrementPhase3Count atomically increments the cumulative Phase 3
+// row-rewrite count on the checkpoint row by delta. Called by
+// processPhase3Batch INSIDE the batch transaction so the count, the row
+// rewrites, and the cursor advance all commit atomically (INV-E7).
+// Crash-resume correctness: any successfully-committed batch is reflected
+// in the count; a crashed-mid-batch run leaves the count consistent with
+// the cursor (both unchanged from before the batch began).
+// The CAS predicate requires status='phase3_reencrypt_cold'.
+//
+// holomush-jxo8.7.54 — crypto-reviewer crash-resume correctness fix.
+func (r *CheckpointRepo) IncrementPhase3Count(ctx context.Context, tx pgx.Tx, rid RequestID, delta int) error {
+	tag, err := tx.Exec(ctx, `
+        UPDATE crypto_rekey_checkpoints
+           SET phase3_rows_rewritten = phase3_rows_rewritten + $2,
+               last_heartbeat_at = now()
+         WHERE request_id = $1 AND status = 'phase3_reencrypt_cold'
+    `, rid[:], delta)
+	if err != nil {
+		return oops.Code("DEK_REKEY_PHASE3_COUNT_INCREMENT_FAILED").Wrap(err)
+	}
+	if tag.RowsAffected() != 1 {
+		// Same code as AdvanceCursor / UpdateStatus / MarkAborted / etc. —
+		// the CAS predicate (status='phase3_reencrypt_cold') is the canonical
+		// stale-transition guard and operator-facing dashboards already
+		// classify this code class. Don't proliferate per-method codes.
+		return oops.Code("DEK_REKEY_STALE_TRANSITION").
+			With("request_id", rid.String()).
+			With("operation", "IncrementPhase3Count").
+			Errorf("expected 1 row affected, got %d (status drift from phase3_reencrypt_cold)", tag.RowsAffected())
 	}
 	return nil
 }
@@ -553,7 +587,7 @@ func (r *CheckpointRepo) ListFiltered(ctx context.Context, f CheckpointListFilte
 	q := fmt.Sprintf(`
         SELECT request_id, context_type, context_id, op_args_hash, policy_hash,
                primary_player_id, justification, status, last_processed_event_id, new_dek_id,
-               old_dek_id, phase5_attempt_count, phase5_missing_members,
+               old_dek_id, phase3_rows_rewritten, phase5_attempt_count, phase5_missing_members,
                force_destroy, started_at, last_heartbeat_at, completed_at,
                aborted_at, aborted_reason
           FROM crypto_rekey_checkpoints
@@ -589,7 +623,7 @@ func scanCheckpoint(s checkpointScanner) (Checkpoint, error) {
 	err := s.Scan(
 		&rid, &c.ContextType, &c.ContextID, &c.opArgsHash, &c.policyHash,
 		&c.PrimaryPlayerID, &c.Justification, &c.Status, &c.lastProcessedEventID, &c.NewDEKID,
-		&c.OldDEKID, &c.Phase5AttemptCount, &c.phase5MissingMembers,
+		&c.OldDEKID, &c.Phase3RowsRewritten, &c.Phase5AttemptCount, &c.phase5MissingMembers,
 		&c.ForceDestroy, &c.StartedAt, &c.LastHeartbeatAt, &c.CompletedAt,
 		&c.AbortedAt, &c.AbortedReason,
 	)

@@ -156,6 +156,7 @@ func (o *Orchestrator) RunPhase7(ctx context.Context, rid RequestID, req RekeyRe
 		// INV-E25: encoded verbatim from the row — never re-queried.
 		PolicyHash: fmt.Sprintf("sha256:%s", hex.EncodeToString(policyHashArr[:])),
 		Phases: RekeyAuditPhases{
+			Phase3RowsRewritten:       ckpt.Phase3RowsRewritten,
 			Phase5Attempts:            ckpt.Phase5AttemptCount,
 			Phase5FinalMissingMembers: missingMembers,
 			Phase6DestroyedAt:         time.Now(), // approximate; canonical record is DB state
