@@ -8,12 +8,12 @@ package dek_test
 import (
 	"context"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"google.golang.org/protobuf/proto"
 
 	"github.com/holomush/holomush/internal/eventbus/codec"
@@ -37,7 +37,6 @@ import (
 // checkpoint manually at phase2_mint_dek with the new DEK already minted.
 // This isolates the Phase 3 contract under test from upstream phases.
 type phase3TestSetup struct {
-	t         *testing.T
 	pool      *pgxpool.Pool
 	provider  kek.Provider
 	manager   dek.Manager
@@ -63,13 +62,12 @@ type phase3TestSetup struct {
 // newPhase3TestSetup builds a harness ready to drive RunPhase3. The
 // caller seeds events with InsertEncryptedRows(n) before invoking
 // orch.RunPhase3.
-func newPhase3TestSetup(t *testing.T) *phase3TestSetup {
-	t.Helper()
-	pool := testIntegrationPool(t)
+func newPhase3TestSetup() *phase3TestSetup {
+	pool := testIntegrationPool(suiteT)
 	const gameID = "g1"
 	dek.SetGameIDForTest(gameID)
 
-	provider := newTestProvider(t)
+	provider := newTestProvider(suiteT)
 	store := dek.NewStore(pool)
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute})
 	pcache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute})
@@ -79,7 +77,7 @@ func newPhase3TestSetup(t *testing.T) *phase3TestSetup {
 		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },
 		&stubBindingResolver{},
 	)
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 
 	// Seed an active DEK row via GetOrCreate so the wrapped_dek column
 	// carries a real wrapped key (not the '\xdeadbeef' placeholder used
@@ -87,23 +85,23 @@ func newPhase3TestSetup(t *testing.T) *phase3TestSetup {
 	// us the codec.Key for encrypting test events with the OLD DEK.
 	ctxID := dek.ContextID{Type: "scene", ID: "01PH3"}
 	oldKey, err := mgr.GetOrCreate(context.Background(), ctxID, nil)
-	require.NoError(t, err, "seed old DEK via GetOrCreate")
-	require.NotZero(t, oldKey.ID)
+	Expect(err).NotTo(HaveOccurred(), "seed old DEK via GetOrCreate")
+	Expect(oldKey.ID).NotTo(BeZero())
 
 	// Mint the new DEK now (mirrors Phase 2's MintNewDEKForRekey) so the
 	// harness can open the checkpoint pre-populated with new_dek_id.
 	// store.selectByPK lets us derive oldDEKID's PK from the active row.
 	oldRecord, err := mgr.ActiveDEKRow(context.Background(), ctxID)
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 	newDEKID, err := mgr.MintNewDEKForRekey(context.Background(), oldRecord.ID)
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 
 	// Resolve the new DEK material so encrypted-row seeding can verify
 	// round-trip later. We don't actually need newKey at setup, but it's
-	// load-bearing for INV-E8 assertions in TestPhase3_AADRebindOnRewrite.
+	// load-bearing for INV-E8 assertions in the AADRebindOnRewrite spec.
 	const newDEKVer uint32 = 2                                                         // GetOrCreate seeded at v1; MintNewDEKForRekey produces v2
 	newKey, err := mgr.Resolve(context.Background(), codec.KeyID(newDEKID), newDEKVer) //nolint:gosec // G115: newDEKID is a BIGSERIAL PK
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 
 	// Open the checkpoint at status=phase2_mint_dek with new_dek_id set.
 	// We bypass NewCheckpointOpenRequest/Open because that would land at
@@ -117,7 +115,7 @@ func newPhase3TestSetup(t *testing.T) *phase3TestSetup {
         VALUES ($1, $2, $3, $4, $5, $6, 'phase2_mint_dek', $7, $8)
     `, rid[:], ctxID.Type, ctxID.ID, make([]byte, 32), make([]byte, 32),
 		"01PLAYER", oldRecord.ID, newDEKID)
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 
 	repo := dek.NewCheckpointRepo(pool)
 	orch := dek.NewOrchestrator(store, repo, &nilPolicyHashSource{}, mgr)
@@ -127,7 +125,6 @@ func newPhase3TestSetup(t *testing.T) *phase3TestSetup {
 	orch.SetMaterialResolver(mgr.(dek.MaterialResolver))
 
 	setup := &phase3TestSetup{
-		t:         t,
 		pool:      pool,
 		provider:  provider,
 		manager:   mgr,
@@ -187,7 +184,6 @@ func compareBytes(a, b []byte) int {
 // round-trip can prove byte-equality. Returns the ULID stamped into
 // the row, which the test can use to load the row afterwards.
 func (s *phase3TestSetup) InsertEncryptedRow(plaintext []byte) ulid.ULID {
-	s.t.Helper()
 	id := idgen.New()
 
 	// Build the envelope proto with subject/type/timestamp/actor and a
@@ -207,17 +203,17 @@ func (s *phase3TestSetup) InsertEncryptedRow(plaintext []byte) ulid.ULID {
 	}
 
 	aadBytes, err := aad.Build(envelope, string(s.codecName), uint64(s.oldDEKID), s.oldDEKVer) //nolint:gosec // G115: oldDEKID is a BIGSERIAL PK
-	require.NoError(s.t, err)
+	Expect(err).NotTo(HaveOccurred())
 
 	codecImpl, err := codec.Resolve(s.codecName)
-	require.NoError(s.t, err)
+	Expect(err).NotTo(HaveOccurred())
 
 	ciphertext, err := codecImpl.Encode(context.Background(), plaintext, s.oldKey, aadBytes)
-	require.NoError(s.t, err)
+	Expect(err).NotTo(HaveOccurred())
 
 	envelope.Payload = ciphertext
 	envelopeBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(envelope)
-	require.NoError(s.t, err)
+	Expect(err).NotTo(HaveOccurred())
 
 	_, err = s.pool.Exec(context.Background(), `
         INSERT INTO events_audit
@@ -228,7 +224,7 @@ func (s *phase3TestSetup) InsertEncryptedRow(plaintext []byte) ulid.ULID {
     `, id[:], envelopeBytes, string(s.codecName),
 		int64(time.Now().UnixNano()),   // js_seq monotonic placeholder
 		s.oldDEKID, int32(s.oldDEKVer)) //nolint:gosec // G115: oldDEKVer is uint32 < 2^31
-	require.NoError(s.t, err)
+	Expect(err).NotTo(HaveOccurred())
 
 	s.eventIDs = append(s.eventIDs, id)
 	s.plaintexts = append(s.plaintexts, append([]byte(nil), plaintext...))
@@ -247,13 +243,12 @@ func (s *phase3TestSetup) InsertEncryptedRows(n int) {
 // AssertAllRowsReferenceDEK queries events_audit and fails the test if
 // any seeded row's dek_ref column is not equal to dekID.
 func (s *phase3TestSetup) AssertAllRowsReferenceDEK(dekID int64) {
-	s.t.Helper()
 	for _, id := range s.eventIDs {
 		var actual int64
 		err := s.pool.QueryRow(context.Background(),
 			`SELECT dek_ref FROM events_audit WHERE id = $1`, id[:]).Scan(&actual)
-		require.NoError(s.t, err)
-		require.Equal(s.t, dekID, actual, "row %s must reference DEK %d after rewrite", id.String(), dekID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(actual).To(Equal(dekID), "row %s must reference DEK %d after rewrite", id.String(), dekID)
 	}
 }
 
@@ -266,7 +261,6 @@ type phase3RewrittenRow struct {
 }
 
 func (s *phase3TestSetup) LoadEventsAuditRow(id ulid.ULID) phase3RewrittenRow {
-	s.t.Helper()
 	var r phase3RewrittenRow
 	var codecStr string
 	var dekVerInt32 int32
@@ -275,7 +269,7 @@ func (s *phase3TestSetup) LoadEventsAuditRow(id ulid.ULID) phase3RewrittenRow {
           FROM events_audit
          WHERE id = $1
     `, id[:]).Scan(&r.Envelope, &codecStr, &r.DEKRef, &dekVerInt32)
-	require.NoError(s.t, err)
+	Expect(err).NotTo(HaveOccurred())
 	r.Codec = codec.Name(codecStr)
 	r.DEKVersion = uint32(dekVerInt32) //nolint:gosec // G115: column constraint enforces non-negative
 	return r
@@ -284,228 +278,212 @@ func (s *phase3TestSetup) LoadEventsAuditRow(id ulid.ULID) phase3RewrittenRow {
 // stubBindingResolver / noopInvalidator are shared with manager_integration_test.go
 // (package dek_test). Re-declared here is unnecessary.
 
-// TestPhase3_RewriteAllRowsAtomically — INV-E7 happy path.
-// Seeds 100 events under old DEK, runs Phase 3, asserts:
-//   - rowsRewritten == 100
-//   - checkpoint status advanced to phase3_reencrypt_cold
-//   - every events_audit row now references new_dek_id
-//   - checkpoint cursor points at the last (highest-id) row
-func TestPhase3_RewriteAllRowsAtomically(t *testing.T) {
-	setup := newPhase3TestSetup(t)
-	const eventCount = 100
-	setup.InsertEncryptedRows(eventCount)
+var _ = Describe("Phase3_RewriteAllRowsAtomically (INV-E7)", func() {
+	It("rewrites all seeded rows atomically, advances checkpoint to phase3_reencrypt_cold, and sets cursor to largest-id row", func() {
+		setup := newPhase3TestSetup()
+		const eventCount = 100
+		setup.InsertEncryptedRows(eventCount)
 
-	rid := setup.RequestID()
-	rowsRewritten, err := setup.orch.RunPhase3(context.Background(), rid)
-	require.NoError(t, err)
-	require.Equal(t, eventCount, rowsRewritten,
-		"INV-E7: every seeded row must be rewritten in one invocation")
+		rid := setup.RequestID()
+		rowsRewritten, err := setup.orch.RunPhase3(context.Background(), rid)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(rowsRewritten).To(Equal(eventCount),
+			"INV-E7: every seeded row must be rewritten in one invocation")
 
-	ckpt, err := setup.repo.Get(context.Background(), rid)
-	require.NoError(t, err)
-	require.Equal(t, dek.CheckpointStatusPhase3ReencryptCold, ckpt.Status,
-		"Phase 3 leaves status at phase3_reencrypt_cold; phase5_invalidate transition is .22's job")
-	require.NotNil(t, ckpt.NewDEKID)
-	setup.AssertAllRowsReferenceDEK(*ckpt.NewDEKID)
+		ckpt, err := setup.repo.Get(context.Background(), rid)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ckpt.Status).To(Equal(dek.CheckpointStatusPhase3ReencryptCold),
+			"Phase 3 leaves status at phase3_reencrypt_cold; phase5_invalidate transition is .22's job")
+		Expect(ckpt.NewDEKID).NotTo(BeNil())
+		setup.AssertAllRowsReferenceDEK(*ckpt.NewDEKID)
 
-	// Cursor points at the row with the largest id processed. idgen.New
-	// is not strictly monotonic across rapid calls (entropy randomness),
-	// so the test computes the expected cursor by taking the max id from
-	// the seeded set rather than assuming insertion order matches sort
-	// order. This still tests the contract: AdvanceCursor sees the last
-	// row of the final batch, which (under the ORDER BY id ASC SELECT)
-	// is the largest-id row.
-	finalID, ok := ckpt.LastProcessedEventID()
-	require.True(t, ok, "cursor must be populated after a successful rewrite")
-	var maxSeed [16]byte
-	for _, id := range setup.eventIDs {
-		if compareBytes(id[:], maxSeed[:]) > 0 {
-			copy(maxSeed[:], id[:])
+		// Cursor points at the row with the largest id processed. idgen.New
+		// is not strictly monotonic across rapid calls (entropy randomness),
+		// so the test computes the expected cursor by taking the max id from
+		// the seeded set rather than assuming insertion order matches sort
+		// order. This still tests the contract: AdvanceCursor sees the last
+		// row of the final batch, which (under the ORDER BY id ASC SELECT)
+		// is the largest-id row.
+		finalID, ok := ckpt.LastProcessedEventID()
+		Expect(ok).To(BeTrue(), "cursor must be populated after a successful rewrite")
+		var maxSeed [16]byte
+		for _, id := range setup.eventIDs {
+			if compareBytes(id[:], maxSeed[:]) > 0 {
+				copy(maxSeed[:], id[:])
+			}
 		}
-	}
-	require.Equal(t, maxSeed, finalID,
-		"INV-E7: cursor advances to the largest-id row processed")
-}
+		Expect(finalID).To(Equal(maxSeed),
+			"INV-E7: cursor advances to the largest-id row processed")
+	})
+})
 
-// TestPhase3_CrashResumeIdempotent — INV-E7-COLD-RESUME-CURSOR.
-// Seeds 2500 rows (>2× batch size) so the loop crosses multiple batch
-// boundaries. Cancels the ctx after ~1000 rows via the test hook,
-// resumes with a fresh ctx, asserts the rewrite completes and the
-// cumulative state is identical to a non-crashed run.
-func TestPhase3_CrashResumeIdempotent(t *testing.T) {
-	setup := newPhase3TestSetup(t)
-	const eventCount = 2500
-	setup.InsertEncryptedRows(eventCount)
+var _ = Describe("Phase3_CrashResumeIdempotent (INV-E7-COLD-RESUME-CURSOR)", func() {
+	It("resumes from crash cursor and produces state identical to a non-crashed run", func() {
+		setup := newPhase3TestSetup()
+		const eventCount = 2500
+		setup.InsertEncryptedRows(eventCount)
 
-	rid := setup.RequestID()
+		rid := setup.RequestID()
 
-	// Crash simulation: cancel the parent ctx after the first batch
-	// commits (rowsRewritten >= 1000 on the inner counter).
-	var crashTriggered atomic.Bool
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	setup.orch.SetBatchHookForTest(func(rowsSoFar int) {
-		if rowsSoFar >= 1000 && crashTriggered.CompareAndSwap(false, true) {
-			cancel()
+		// Crash simulation: cancel the parent ctx after the first batch
+		// commits (rowsRewritten >= 1000 on the inner counter).
+		var crashTriggered atomic.Bool
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		setup.orch.SetBatchHookForTest(func(rowsSoFar int) {
+			if rowsSoFar >= 1000 && crashTriggered.CompareAndSwap(false, true) {
+				cancel()
+			}
+		})
+
+		firstAttemptCount, firstErr := setup.orch.RunPhase3(ctx, rid)
+		Expect(firstErr).To(HaveOccurred(), "INV-E7: context cancel must surface an error")
+		Expect(firstAttemptCount).To(BeNumerically(">=", 1000),
+			"first attempt processed at least one batch before crash")
+		Expect(firstAttemptCount).To(BeNumerically("<", eventCount),
+			"first attempt crashed before completing all rows")
+
+		// Verify the cursor advanced ONLY to the last committed batch
+		// boundary. The crashed batch's rows + cursor advance MUST have been
+		// rolled back together (INV-E7).
+		ckptMid, err := setup.repo.Get(context.Background(), rid)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ckptMid.Status).To(Equal(dek.CheckpointStatusPhase3ReencryptCold),
+			"crash leaves status at phase3_reencrypt_cold for the resume path")
+		_, cursorSet := ckptMid.LastProcessedEventID()
+		Expect(cursorSet).To(BeTrue(), "at least one batch committed before crash")
+
+		// Resume from the cursor with a fresh ctx.
+		setup.orch.SetBatchHookForTest(nil) // no crash this time
+		resumeCount, err := setup.orch.RunPhase3(context.Background(), rid)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(resumeCount).To(Equal(eventCount-firstAttemptCount),
+			"resume completes exactly the rows the first attempt did not")
+
+		ckptFinal, err := setup.repo.Get(context.Background(), rid)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ckptFinal.Status).To(Equal(dek.CheckpointStatusPhase3ReencryptCold))
+		Expect(ckptFinal.NewDEKID).NotTo(BeNil())
+		setup.AssertAllRowsReferenceDEK(*ckptFinal.NewDEKID)
+
+		// Plaintext round-trip: decrypt each rewritten row under the NEW
+		// DEK + new AAD; bytes MUST equal the seeded plaintext for that
+		// row. This is the strongest form of INV-E7 (final state is
+		// observationally identical to a non-crashed run).
+		codecImpl, err := codec.Resolve(setup.codecName)
+		Expect(err).NotTo(HaveOccurred())
+		for i, id := range setup.eventIDs {
+			row := setup.LoadEventsAuditRow(id)
+			var envelope eventbusv1.Event
+			Expect(proto.Unmarshal(row.Envelope, &envelope)).To(Succeed())
+			Expect(row.DEKRef).To(Equal(*ckptFinal.NewDEKID))
+			Expect(row.DEKVersion).To(Equal(setup.newDEKVer))
+
+			aadBytes, err := aad.Build(&envelope, string(row.Codec), uint64(row.DEKRef), row.DEKVersion) //nolint:gosec // G115: row.DEKRef is BIGSERIAL PK
+			Expect(err).NotTo(HaveOccurred())
+			decoded, err := codecImpl.Decode(context.Background(), envelope.GetPayload(), setup.newKey, aadBytes)
+			Expect(err).NotTo(HaveOccurred(), "row %d (%s) must decrypt under new DEK + new AAD after rewrite", i, id.String())
+			Expect(decoded).To(Equal(setup.plaintexts[i]),
+				"INV-E7: plaintext byte-equal between pre-rewrite and post-rewrite for row %d", i)
 		}
 	})
+})
 
-	firstAttemptCount, firstErr := setup.orch.RunPhase3(ctx, rid)
-	require.Error(t, firstErr, "INV-E7: context cancel must surface an error")
-	require.GreaterOrEqual(t, firstAttemptCount, 1000,
-		"first attempt processed at least one batch before crash")
-	require.Less(t, firstAttemptCount, eventCount,
-		"first attempt crashed before completing all rows")
+var _ = Describe("Phase3_AADRebindOnRewrite (INV-E8)", func() {
+	It("old AAD fails AEAD tag check and new AAD succeeds after rewrite", func() {
+		setup := newPhase3TestSetup()
+		setup.InsertEncryptedRows(1)
 
-	// Verify the cursor advanced ONLY to the last committed batch
-	// boundary. The crashed batch's rows + cursor advance MUST have been
-	// rolled back together (INV-E7).
-	ckptMid, err := setup.repo.Get(context.Background(), rid)
-	require.NoError(t, err)
-	require.Equal(t, dek.CheckpointStatusPhase3ReencryptCold, ckptMid.Status,
-		"crash leaves status at phase3_reencrypt_cold for the resume path")
-	_, cursorSet := ckptMid.LastProcessedEventID()
-	require.True(t, cursorSet, "at least one batch committed before crash")
+		rid := setup.RequestID()
+		_, err := setup.orch.RunPhase3(context.Background(), rid)
+		Expect(err).NotTo(HaveOccurred())
 
-	// Resume from the cursor with a fresh ctx.
-	setup.orch.SetBatchHookForTest(nil) // no crash this time
-	resumeCount, err := setup.orch.RunPhase3(context.Background(), rid)
-	require.NoError(t, err)
-	require.Equal(t, eventCount-firstAttemptCount, resumeCount,
-		"resume completes exactly the rows the first attempt did not")
+		ckpt, err := setup.repo.Get(context.Background(), rid)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ckpt.NewDEKID).NotTo(BeNil())
 
-	ckptFinal, err := setup.repo.Get(context.Background(), rid)
-	require.NoError(t, err)
-	require.Equal(t, dek.CheckpointStatusPhase3ReencryptCold, ckptFinal.Status)
-	require.NotNil(t, ckptFinal.NewDEKID)
-	setup.AssertAllRowsReferenceDEK(*ckptFinal.NewDEKID)
+		rewritten := setup.LoadEventsAuditRow(setup.eventIDs[0])
+		Expect(rewritten.DEKRef).To(Equal(*ckpt.NewDEKID))
 
-	// Plaintext round-trip: decrypt each rewritten row under the NEW
-	// DEK + new AAD; bytes MUST equal the seeded plaintext for that
-	// row. This is the strongest form of INV-E7 (final state is
-	// observationally identical to a non-crashed run).
-	codecImpl, err := codec.Resolve(setup.codecName)
-	require.NoError(t, err)
-	for i, id := range setup.eventIDs {
-		row := setup.LoadEventsAuditRow(id)
 		var envelope eventbusv1.Event
-		require.NoError(t, proto.Unmarshal(row.Envelope, &envelope))
-		require.Equal(t, *ckptFinal.NewDEKID, row.DEKRef)
-		require.Equal(t, setup.newDEKVer, row.DEKVersion)
+		Expect(proto.Unmarshal(rewritten.Envelope, &envelope)).To(Succeed())
 
-		aadBytes, err := aad.Build(&envelope, string(row.Codec), uint64(row.DEKRef), row.DEKVersion) //nolint:gosec // G115: row.DEKRef is BIGSERIAL PK
-		require.NoError(t, err)
-		decoded, err := codecImpl.Decode(context.Background(), envelope.GetPayload(), setup.newKey, aadBytes)
-		require.NoError(t, err, "row %d (%s) must decrypt under new DEK + new AAD after rewrite", i, id.String())
-		require.Equal(t, setup.plaintexts[i], decoded,
-			"INV-E7: plaintext byte-equal between pre-rewrite and post-rewrite for row %d", i)
-	}
-}
+		codecImpl, err := codec.Resolve(rewritten.Codec)
+		Expect(err).NotTo(HaveOccurred())
 
-// TestPhase3_AADRebindOnRewrite — INV-E8.
-// Seeds 1 row, runs Phase 3, asserts that attempting to decode the
-// rewritten ciphertext under the OLD AAD (built with old dek_version)
-// fails with AEAD tag mismatch. The new AAD MUST decode correctly.
-func TestPhase3_AADRebindOnRewrite(t *testing.T) {
-	setup := newPhase3TestSetup(t)
-	setup.InsertEncryptedRows(1)
+		// New AAD: must succeed.
+		newAAD, err := aad.Build(&envelope, string(rewritten.Codec), uint64(rewritten.DEKRef), rewritten.DEKVersion) //nolint:gosec // G115: rewritten.DEKRef is BIGSERIAL PK
+		Expect(err).NotTo(HaveOccurred())
+		_, err = codecImpl.Decode(context.Background(), envelope.GetPayload(), setup.newKey, newAAD)
+		Expect(err).NotTo(HaveOccurred(), "INV-E8: new AAD MUST decode the rewritten ciphertext")
 
-	rid := setup.RequestID()
-	_, err := setup.orch.RunPhase3(context.Background(), rid)
-	require.NoError(t, err)
+		// Old AAD: must fail. Two distinct mutations probe the rebind
+		// surface: (1) old dek_ref (= setup.oldDEKID) with new version,
+		// (2) new dek_ref with old version. Either mutation breaks the AEAD
+		// tag — both demonstrate the AAD bytes differ post-rewrite.
+		oldRefAAD, err := aad.Build(&envelope, string(rewritten.Codec), uint64(setup.oldDEKID), rewritten.DEKVersion) //nolint:gosec // G115
+		Expect(err).NotTo(HaveOccurred())
+		_, err = codecImpl.Decode(context.Background(), envelope.GetPayload(), setup.newKey, oldRefAAD)
+		Expect(err).To(HaveOccurred(), "INV-E8: old dek_ref in AAD MUST fail AEAD tag check")
 
-	ckpt, err := setup.repo.Get(context.Background(), rid)
-	require.NoError(t, err)
-	require.NotNil(t, ckpt.NewDEKID)
+		oldVerAAD, err := aad.Build(&envelope, string(rewritten.Codec), uint64(rewritten.DEKRef), setup.oldDEKVer) //nolint:gosec // G115
+		Expect(err).NotTo(HaveOccurred())
+		_, err = codecImpl.Decode(context.Background(), envelope.GetPayload(), setup.newKey, oldVerAAD)
+		Expect(err).To(HaveOccurred(), "INV-E8: old dek_version in AAD MUST fail AEAD tag check")
+	})
+})
 
-	rewritten := setup.LoadEventsAuditRow(setup.eventIDs[0])
-	require.Equal(t, *ckpt.NewDEKID, rewritten.DEKRef)
+var _ = Describe("Phase3_HeartbeatAdvancesDuringLongRun (INV-E19)", func() {
+	It("last_heartbeat_at advances past its pre-run value after RunPhase3 with multiple batches", func() {
+		setup := newPhase3TestSetup()
+		setup.InsertEncryptedRows(2500) // > 2 batches → multiple AdvanceCursor calls
 
-	var envelope eventbusv1.Event
-	require.NoError(t, proto.Unmarshal(rewritten.Envelope, &envelope))
+		rid := setup.RequestID()
+		ckptBefore, err := setup.repo.Get(context.Background(), rid)
+		Expect(err).NotTo(HaveOccurred())
+		beforeHB := ckptBefore.LastHeartbeatAt
 
-	codecImpl, err := codec.Resolve(rewritten.Codec)
-	require.NoError(t, err)
+		// Sleep 5ms so even fast batch commits produce a strictly-greater
+		// last_heartbeat_at (Postgres now() resolution is microsecond, but
+		// the test's pre-read can race the first AdvanceCursor on hot CI
+		// runners with clock skew).
+		time.Sleep(5 * time.Millisecond)
 
-	// New AAD: must succeed.
-	newAAD, err := aad.Build(&envelope, string(rewritten.Codec), uint64(rewritten.DEKRef), rewritten.DEKVersion) //nolint:gosec // G115: rewritten.DEKRef is BIGSERIAL PK
-	require.NoError(t, err)
-	_, err = codecImpl.Decode(context.Background(), envelope.GetPayload(), setup.newKey, newAAD)
-	require.NoError(t, err, "INV-E8: new AAD MUST decode the rewritten ciphertext")
+		_, err = setup.orch.RunPhase3(context.Background(), rid)
+		Expect(err).NotTo(HaveOccurred())
 
-	// Old AAD: must fail. Two distinct mutations probe the rebind
-	// surface: (1) old dek_ref (= setup.oldDEKID) with new version,
-	// (2) new dek_ref with old version. Either mutation breaks the AEAD
-	// tag — both demonstrate the AAD bytes differ post-rewrite.
-	oldRefAAD, err := aad.Build(&envelope, string(rewritten.Codec), uint64(setup.oldDEKID), rewritten.DEKVersion) //nolint:gosec // G115
-	require.NoError(t, err)
-	_, err = codecImpl.Decode(context.Background(), envelope.GetPayload(), setup.newKey, oldRefAAD)
-	require.Error(t, err, "INV-E8: old dek_ref in AAD MUST fail AEAD tag check")
+		ckptAfter, err := setup.repo.Get(context.Background(), rid)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ckptAfter.LastHeartbeatAt.After(beforeHB)).To(BeTrue(),
+			"INV-E19: heartbeat MUST advance during the Phase 3 loop (before=%s after=%s)",
+			beforeHB, ckptAfter.LastHeartbeatAt)
+	})
+})
 
-	oldVerAAD, err := aad.Build(&envelope, string(rewritten.Codec), uint64(rewritten.DEKRef), setup.oldDEKVer) //nolint:gosec // G115
-	require.NoError(t, err)
-	_, err = codecImpl.Decode(context.Background(), envelope.GetPayload(), setup.newKey, oldVerAAD)
-	require.Error(t, err, "INV-E8: old dek_version in AAD MUST fail AEAD tag check")
-}
+var _ = Describe("Phase3_RequiresPrecondition", func() {
+	It("refuses to run from status outside {phase2_mint_dek, phase3_reencrypt_cold}", func() {
+		setup := newPhase3TestSetup()
+		rid := setup.RequestID()
 
-// TestPhase3_HeartbeatAdvancesDuringLongRun — INV-E19.
-// Seeds enough rows that the run takes >30s to ensure at least one
-// heartbeat fires would be ideal, but at 1000-rows-per-batch + fast
-// crypto the wall-clock won't reach 30s in CI. The contract under test
-// is weaker but still meaningful: AdvanceCursor inside the batch tx
-// bumps last_heartbeat_at as a side-effect (see CheckpointRepo.AdvanceCursor
-// SQL), so every batch advances the heartbeat. We assert
-// post-run last_heartbeat_at strictly exceeds the pre-run value, which
-// proves the loop is making forward progress against the sweep-TTL clock.
-func TestPhase3_HeartbeatAdvancesDuringLongRun(t *testing.T) {
-	setup := newPhase3TestSetup(t)
-	setup.InsertEncryptedRows(2500) // > 2 batches → multiple AdvanceCursor calls
+		// Force the checkpoint into phase1_auth (illegal precondition).
+		_, err := setup.pool.Exec(context.Background(),
+			`UPDATE crypto_rekey_checkpoints SET status = 'phase1_auth' WHERE request_id = $1`, rid[:])
+		Expect(err).NotTo(HaveOccurred())
 
-	rid := setup.RequestID()
-	ckptBefore, err := setup.repo.Get(context.Background(), rid)
-	require.NoError(t, err)
-	beforeHB := ckptBefore.LastHeartbeatAt
+		_, err = setup.orch.RunPhase3(context.Background(), rid)
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "DEK_REKEY_PHASE_PRECONDITION_FAILED")
+	})
+})
 
-	// Sleep 5ms so even fast batch commits produce a strictly-greater
-	// last_heartbeat_at (Postgres now() resolution is microsecond, but
-	// the test's pre-read can race the first AdvanceCursor on hot CI
-	// runners with clock skew).
-	time.Sleep(5 * time.Millisecond)
+var _ = Describe("Phase3_NoResolver_FailsClosed", func() {
+	It("refuses with DEK_REKEY_MATERIAL_RESOLVER_NIL when SetMaterialResolver was not called", func() {
+		setup := newPhase3TestSetup()
+		// Reset the resolver to nil to simulate misconfigured wiring.
+		setup.orch.SetMaterialResolver(nil)
 
-	_, err = setup.orch.RunPhase3(context.Background(), rid)
-	require.NoError(t, err)
-
-	ckptAfter, err := setup.repo.Get(context.Background(), rid)
-	require.NoError(t, err)
-	require.True(t, ckptAfter.LastHeartbeatAt.After(beforeHB),
-		"INV-E19: heartbeat MUST advance during the Phase 3 loop (before=%s after=%s)",
-		beforeHB, ckptAfter.LastHeartbeatAt)
-}
-
-// TestPhase3_RequiresPrecondition — Phase 3 MUST refuse to run from any
-// status outside {phase2_mint_dek, phase3_reencrypt_cold}.
-func TestPhase3_RequiresPrecondition(t *testing.T) {
-	setup := newPhase3TestSetup(t)
-	rid := setup.RequestID()
-
-	// Force the checkpoint into phase1_auth (illegal precondition).
-	_, err := setup.pool.Exec(context.Background(),
-		`UPDATE crypto_rekey_checkpoints SET status = 'phase1_auth' WHERE request_id = $1`, rid[:])
-	require.NoError(t, err)
-
-	_, err = setup.orch.RunPhase3(context.Background(), rid)
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "DEK_REKEY_PHASE_PRECONDITION_FAILED")
-}
-
-// TestPhase3_NoResolver_FailsClosed — calling RunPhase3 without
-// SetMaterialResolver MUST refuse rather than NPE.
-func TestPhase3_NoResolver_FailsClosed(t *testing.T) {
-	setup := newPhase3TestSetup(t)
-	// Reset the resolver to nil to simulate misconfigured wiring.
-	setup.orch.SetMaterialResolver(nil)
-
-	_, err := setup.orch.RunPhase3(context.Background(), setup.RequestID())
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "DEK_REKEY_MATERIAL_RESOLVER_NIL")
-}
+		_, err := setup.orch.RunPhase3(context.Background(), setup.RequestID())
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "DEK_REKEY_MATERIAL_RESOLVER_NIL")
+	})
+})

@@ -9,11 +9,11 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/eventbus/audit/chain"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
@@ -22,12 +22,9 @@ import (
 
 // rekeyTestSetup is the sweep subsystem integration test harness.
 type rekeyTestSetup struct {
-	t         *testing.T
-	pool      *pgxpool.Pool
-	Repo      *dek.CheckpointRepo
-	Publisher *capturingPublisher // captures emitted audit events in memory
-	// AuditEmitter is a real *dek.RekeyAuditEmitter wired to Publisher.
-	// SweepOnceForTest drives abortAndAudit which calls Emit on this.
+	pool         *pgxpool.Pool
+	Repo         *dek.CheckpointRepo
+	Publisher    *capturingPublisher // captures emitted audit events in memory
 	AuditEmitter *dek.RekeyAuditEmitter
 	Logger       *slog.Logger
 }
@@ -36,9 +33,8 @@ type rekeyTestSetup struct {
 // It uses a real CheckpointRepo (postgres) and a real RekeyAuditEmitter
 // backed by a capturingPublisher (defined in audit_test.go) so that
 // emitted events are captured in-memory for assertion.
-func newRekeyTestSetup(t *testing.T) *rekeyTestSetup {
-	t.Helper()
-	pool := testIntegrationPool(t)
+func newRekeyTestSetup() *rekeyTestSetup {
+	pool := testIntegrationPool(suiteT)
 	const gameID = "g1"
 	dek.SetGameIDForTest(gameID)
 
@@ -48,7 +44,6 @@ func newRekeyTestSetup(t *testing.T) *rekeyTestSetup {
 	auditEmitter := dek.NewRekeyAuditEmitter(em, pub)
 
 	return &rekeyTestSetup{
-		t:            t,
 		pool:         pool,
 		Repo:         dek.NewCheckpointRepo(pool),
 		Publisher:    pub,
@@ -57,14 +52,10 @@ func newRekeyTestSetup(t *testing.T) *rekeyTestSetup {
 	}
 }
 
-// Cleanup is a no-op — testIntegrationPool registers t.Cleanup already.
-func (s *rekeyTestSetup) Cleanup() {}
-
 // OpenStaleCheckpoint inserts a checkpoint row that appears stale: the
 // last_heartbeat_at is set to now() minus age. It seeds a DEK row first
 // and returns the RequestID.
 func (s *rekeyTestSetup) OpenStaleCheckpoint(ctxType, ctxID string, age time.Duration) dek.RequestID {
-	s.t.Helper()
 	// Seed a DEK row to satisfy the FK constraint on crypto_rekey_checkpoints.
 	const dekID int64 = 999
 	_, _ = s.pool.Exec(context.Background(),
@@ -83,14 +74,12 @@ func (s *rekeyTestSetup) OpenStaleCheckpoint(ctxType, ctxID string, age time.Dur
 		make([]byte, 32), make([]byte, 32),
 		"01PLAYER", dekID,
 		age.String())
-	require.NoError(s.t, err)
+	Expect(err).NotTo(HaveOccurred())
 	return rid
 }
 
 // LoadEventsAuditBySubject returns all published audit events captured by
 // the in-memory publisher whose Subject matches the given subject string.
-// The returned slice is a view of capturingPublisher.published filtered by
-// subject.
 func (s *rekeyTestSetup) LoadEventsAuditBySubject(subject string) []capturedPublish {
 	var out []capturedPublish
 	for _, p := range s.Publisher.published {
@@ -101,136 +90,126 @@ func (s *rekeyTestSetup) LoadEventsAuditBySubject(subject string) []capturedPubl
 	return out
 }
 
-// TestSweep_TTLExpiryEmitsAudit verifies INV-E18-SWEEP-TTL-AUDIT:
-// the sweep aborts a TTL-expired checkpoint and emits a chained rekey
-// audit event with aborted_reason="ttl_expired".
-//
-// Test name matches spec §8 INV-E18 (TestSweep_TTLExpiryEmitsAudit).
-func TestSweep_TTLExpiryEmitsAudit(t *testing.T) {
-	setup := newRekeyTestSetup(t)
-	defer setup.Cleanup()
+var _ = Describe("Sweep_TTLExpiryEmitsAudit (INV-E18-SWEEP-TTL-AUDIT)", func() {
+	It("aborts a TTL-expired checkpoint and emits a chained rekey audit event with aborted_reason=ttl_expired", func() {
+		setup := newRekeyTestSetup()
 
-	// Insert a checkpoint whose last_heartbeat_at is 30h old (> 24h TTL).
-	rid := setup.OpenStaleCheckpoint("scene", "01ABC", 30*time.Hour)
+		// Insert a checkpoint whose last_heartbeat_at is 30h old (> 24h TTL).
+		rid := setup.OpenStaleCheckpoint("scene", "01ABC", 30*time.Hour)
 
-	sub := dek.NewCheckpointSweepSubsystem(dek.CheckpointSweepConfig{
-		Repo:         setup.Repo,
-		AuditEmitter: setup.AuditEmitter,
-		Logger:       setup.Logger,
-		TTL:          24 * time.Hour,
-		Interval:     1 * time.Hour, // unused — test calls SweepOnceForTest directly
+		sub := dek.NewCheckpointSweepSubsystem(dek.CheckpointSweepConfig{
+			Repo:         setup.Repo,
+			AuditEmitter: setup.AuditEmitter,
+			Logger:       setup.Logger,
+			TTL:          24 * time.Hour,
+			Interval:     1 * time.Hour, // unused — test calls SweepOnceForTest directly
+		})
+		Expect(sub.SweepOnceForTest(context.Background())).To(Succeed())
+
+		// The checkpoint MUST be aborted with reason "ttl_expired".
+		ckpt, err := setup.Repo.Get(context.Background(), rid)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ckpt.Status).To(Equal(dek.CheckpointStatusAborted),
+			"INV-E18: TTL-expired checkpoint MUST be marked aborted by sweep")
+		Expect(ckpt.AbortedReason).NotTo(BeNil())
+		Expect(*ckpt.AbortedReason).To(Equal("ttl_expired"),
+			"INV-E18: aborted_reason MUST be ttl_expired")
+
+		// INV-E18: chained audit event MUST be emitted for the aborted context.
+		events := setup.LoadEventsAuditBySubject("events.g1.system.rekey.scene.01ABC")
+		Expect(len(events)).To(BeNumerically(">=", 1),
+			"INV-E18: sweep MUST emit a chained audit event for each aborted checkpoint")
+
+		// Verify the emitted payload contains the expected context and reason.
+		var payload dek.RekeyAuditPayload
+		Expect(json.Unmarshal(events[0].Payload, &payload)).To(Succeed())
+		Expect(payload.Context.Type).To(Equal("scene"))
+		Expect(payload.Context.ID).To(Equal("01ABC"))
+		Expect(payload.Justification).To(ContainSubstring("ttl_expired"),
+			"INV-E18: audit payload Justification MUST reference ttl_expired")
 	})
-	require.NoError(t, sub.SweepOnceForTest(context.Background()))
+})
 
-	// The checkpoint MUST be aborted with reason "ttl_expired".
-	ckpt, err := setup.Repo.Get(context.Background(), rid)
-	require.NoError(t, err)
-	require.Equal(t, dek.CheckpointStatusAborted, ckpt.Status,
-		"INV-E18: TTL-expired checkpoint MUST be marked aborted by sweep")
-	require.NotNil(t, ckpt.AbortedReason)
-	require.Equal(t, "ttl_expired", *ckpt.AbortedReason,
-		"INV-E18: aborted_reason MUST be ttl_expired")
+var _ = Describe("Sweep_Lifecycle_StartStop", func() {
+	It("starts and stops cleanly including the background tick goroutine", func() {
+		setup := newRekeyTestSetup()
 
-	// INV-E18: chained audit event MUST be emitted for the aborted context.
-	events := setup.LoadEventsAuditBySubject("events.g1.system.rekey.scene.01ABC")
-	require.GreaterOrEqual(t, len(events), 1,
-		"INV-E18: sweep MUST emit a chained audit event for each aborted checkpoint")
+		sub := dek.NewCheckpointSweepSubsystem(dek.CheckpointSweepConfig{
+			Repo:         setup.Repo,
+			AuditEmitter: setup.AuditEmitter,
+			Logger:       setup.Logger,
+			TTL:          24 * time.Hour,
+			Interval:     100 * time.Millisecond, // fast interval for lifecycle test
+		})
 
-	// Verify the emitted payload contains the expected context and reason.
-	var payload dek.RekeyAuditPayload
-	require.NoError(t, json.Unmarshal(events[0].Payload, &payload))
-	require.Equal(t, "scene", payload.Context.Type)
-	require.Equal(t, "01ABC", payload.Context.ID)
-	require.Contains(t, payload.Justification, "ttl_expired",
-		"INV-E18: audit payload Justification MUST reference ttl_expired")
-}
-
-// TestSweep_Lifecycle_StartStop verifies that CheckpointSweepSubsystem
-// starts and stops cleanly, including the background tick goroutine.
-func TestSweep_Lifecycle_StartStop(t *testing.T) {
-	setup := newRekeyTestSetup(t)
-	defer setup.Cleanup()
-
-	sub := dek.NewCheckpointSweepSubsystem(dek.CheckpointSweepConfig{
-		Repo:         setup.Repo,
-		AuditEmitter: setup.AuditEmitter,
-		Logger:       setup.Logger,
-		TTL:          24 * time.Hour,
-		Interval:     100 * time.Millisecond, // fast interval for lifecycle test
-	})
-
-	ctx := context.Background()
-	require.NoError(t, sub.Start(ctx))
-	// Stop must return quickly and cleanly (goroutine exits on cancel).
-	stopCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	require.NoError(t, sub.Stop(stopCtx))
-}
-
-// TestSweep_TickScanAbortsExpired verifies that the background tick loop
-// (not just the boot-time sweep) will also abort expired checkpoints.
-// Inserts a stale checkpoint, starts the subsystem with a short interval,
-// and waits for the tick to fire and mark it aborted.
-func TestSweep_TickScanAbortsExpired(t *testing.T) {
-	setup := newRekeyTestSetup(t)
-	defer setup.Cleanup()
-
-	rid := setup.OpenStaleCheckpoint("scene", "01TK", 30*time.Hour)
-
-	sub := dek.NewCheckpointSweepSubsystem(dek.CheckpointSweepConfig{
-		Repo:         setup.Repo,
-		AuditEmitter: setup.AuditEmitter,
-		Logger:       setup.Logger,
-		TTL:          24 * time.Hour,
-		Interval:     50 * time.Millisecond, // fast tick for test
-	})
-
-	ctx := context.Background()
-	require.NoError(t, sub.Start(ctx))
-	defer func() {
+		ctx := context.Background()
+		Expect(sub.Start(ctx)).To(Succeed())
+		// Stop must return quickly and cleanly (goroutine exits on cancel).
 		stopCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
-		_ = sub.Stop(stopCtx)
-	}()
-
-	// Boot-time sweep should have fired; the checkpoint is already aborted.
-	ckpt, err := setup.Repo.Get(context.Background(), rid)
-	require.NoError(t, err)
-	require.Equal(t, dek.CheckpointStatusAborted, ckpt.Status,
-		"tick scan MUST abort expired checkpoints")
-}
-
-// TestSweep_IdempotentReScan verifies that a second SweepOnce on an
-// already-aborted checkpoint is a no-op (MarkAborted returns
-// DEK_REKEY_CHECKPOINT_TERMINAL but sweepOnce logs and continues).
-func TestSweep_IdempotentReScan(t *testing.T) {
-	setup := newRekeyTestSetup(t)
-	defer setup.Cleanup()
-
-	rid := setup.OpenStaleCheckpoint("scene", "01IDP", 30*time.Hour)
-
-	sub := dek.NewCheckpointSweepSubsystem(dek.CheckpointSweepConfig{
-		Repo:         setup.Repo,
-		AuditEmitter: setup.AuditEmitter,
-		Logger:       setup.Logger,
-		TTL:          24 * time.Hour,
-		Interval:     1 * time.Hour,
+		Expect(sub.Stop(stopCtx)).To(Succeed())
 	})
+})
 
-	// First sweep: aborts + emits audit.
-	require.NoError(t, sub.SweepOnceForTest(context.Background()))
-	ckpt, err := setup.Repo.Get(context.Background(), rid)
-	require.NoError(t, err)
-	require.Equal(t, dek.CheckpointStatusAborted, ckpt.Status)
+var _ = Describe("Sweep_TickScanAbortsExpired", func() {
+	It("background tick loop aborts expired checkpoints (not just boot-time sweep)", func() {
+		setup := newRekeyTestSetup()
 
-	// Second sweep: row is now terminal (aborted) so ListExpired must
-	// exclude it (status NOT IN ('complete','aborted')). The scan should
-	// be a no-op and return nil.
-	require.NoError(t, sub.SweepOnceForTest(context.Background()),
-		"second sweep on already-aborted checkpoint MUST be a no-op")
+		rid := setup.OpenStaleCheckpoint("scene", "01TK", 30*time.Hour)
 
-	// No additional audit events should have been emitted.
-	events := setup.LoadEventsAuditBySubject("events.g1.system.rekey.scene.01IDP")
-	require.Len(t, events, 1,
-		"idempotent re-scan MUST NOT emit duplicate audit events")
-}
+		sub := dek.NewCheckpointSweepSubsystem(dek.CheckpointSweepConfig{
+			Repo:         setup.Repo,
+			AuditEmitter: setup.AuditEmitter,
+			Logger:       setup.Logger,
+			TTL:          24 * time.Hour,
+			Interval:     50 * time.Millisecond, // fast tick for test
+		})
+
+		ctx := context.Background()
+		Expect(sub.Start(ctx)).To(Succeed())
+		DeferCleanup(func() {
+			stopCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			_ = sub.Stop(stopCtx)
+		})
+
+		// Boot-time sweep should have fired; the checkpoint is already aborted.
+		ckpt, err := setup.Repo.Get(context.Background(), rid)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ckpt.Status).To(Equal(dek.CheckpointStatusAborted),
+			"tick scan MUST abort expired checkpoints")
+	})
+})
+
+var _ = Describe("Sweep_IdempotentReScan", func() {
+	It("second SweepOnce on an already-aborted checkpoint is a no-op and does not emit duplicate audit events", func() {
+		setup := newRekeyTestSetup()
+
+		rid := setup.OpenStaleCheckpoint("scene", "01IDP", 30*time.Hour)
+
+		sub := dek.NewCheckpointSweepSubsystem(dek.CheckpointSweepConfig{
+			Repo:         setup.Repo,
+			AuditEmitter: setup.AuditEmitter,
+			Logger:       setup.Logger,
+			TTL:          24 * time.Hour,
+			Interval:     1 * time.Hour,
+		})
+
+		// First sweep: aborts + emits audit.
+		Expect(sub.SweepOnceForTest(context.Background())).To(Succeed())
+		ckpt, err := setup.Repo.Get(context.Background(), rid)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ckpt.Status).To(Equal(dek.CheckpointStatusAborted))
+
+		// Second sweep: row is now terminal (aborted) so ListExpired must
+		// exclude it (status NOT IN ('complete','aborted')). The scan should
+		// be a no-op and return nil.
+		Expect(sub.SweepOnceForTest(context.Background())).To(Succeed(),
+			"second sweep on already-aborted checkpoint MUST be a no-op")
+
+		// No additional audit events should have been emitted.
+		events := setup.LoadEventsAuditBySubject("events.g1.system.rekey.scene.01IDP")
+		Expect(events).To(HaveLen(1),
+			"idempotent re-scan MUST NOT emit duplicate audit events")
+	})
+})
