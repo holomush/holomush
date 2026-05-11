@@ -25,6 +25,7 @@ import (
 	"github.com/holomush/holomush/internal/admin/approval"
 	adminauth "github.com/holomush/holomush/internal/admin/auth"
 	"github.com/holomush/holomush/internal/admin/policy"
+	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	socket "github.com/holomush/holomush/internal/admin/socket"
 	totpaudit "github.com/holomush/holomush/internal/admin/totp_audit"
 	authsetup "github.com/holomush/holomush/internal/auth/setup"
@@ -553,11 +554,12 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// --- Crypto subsystems (T22 / holomush-jxo8.6.21; generalized holomush-jxo8.7.8) ---
 	// auditchain.VerifierSubsystem walks every registered hash chain at boot,
 	// replacing D's policy-specific CryptoChainVerifierSubsystem.
-	// RekeyChain will be registered here in Task 19 (holomush-jxo8.7.17).
+	// RekeyChain wired here per Task 19 (holomush-jxo8.7.17).
+	dek.SetGameIDForRekey(gameID) // must be set before RekeyHandlerFor is called below.
 	auditChainRepo := chain.NewPostgresRepo(dbSub.Pool())
 	cryptoChainVerifierSub := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
 		Repo:     auditChainRepo,
-		Handlers: []chain.Handler{policy.PolicySetHandlerFor(gameID)},
+		Handlers: []chain.Handler{policy.PolicySetHandlerFor(gameID), dek.RekeyHandlerFor(gameID)},
 		Logger:   slog.Default(),
 	})
 
