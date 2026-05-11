@@ -11,7 +11,7 @@ type SeedPolicy struct {
 	SeedVersion int
 }
 
-// SeedPolicies returns the complete set of 28 seed policies (25 permit, 3 forbid).
+// SeedPolicies returns the complete set of 34 seed policies (25 permit, 9 forbid).
 // The initial 18 (T22) minus 2 removed command policies, plus 5 gap-fill policies (T22b: G1-G4),
 // 1 phase-2 command policy, and 2 system bootstrap policies.
 // Default deny behavior is provided by EffectDefaultDeny (no matching policy = denied).
@@ -262,6 +262,30 @@ func SeedPolicies() []SeedPolicy {
 			Name:        "seed:deny-events-system-crypto-policy-read-plugin",
 			Description: "Plugins MUST NOT read events.*.system.crypto_policy.* streams (Phase 5 sub-epic D; parallel to seed:deny-events-system-crypto-totp-read-plugin)",
 			DSLText:     `forbid(principal is plugin, action in ["read"], resource is stream) when { resource.stream.name like "events.*.system.crypto_policy.*" };`,
+			SeedVersion: 1,
+		},
+
+		// --- Phase-5 sub-epic E broad events.*.system.* deny policies (A16 / INV-15 extension) ---
+		//
+		// Amendment A16 extended INV-15 to deny plugin/character subscribes to ALL
+		// events.*.system.* namespaces, explicitly including the rekey audit chain
+		// (events.<gameID>.system.rekey.<ct>.<cid>) added in sub-epic E.
+		// These broad seeds future-proof subsequent audit chains (future sub-epics
+		// that add new events.*.system.<name>.* namespaces are covered automatically).
+		// The narrow per-namespace seeds above (crypto_totp, crypto_policy) remain
+		// as explicit intent anchors; these broad seeds add the ABAC-layer gate
+		// required by master spec §4.6 + §7.7. The dispatchDelivery AUDIT_ONLY
+		// filter remains as defense-in-depth.
+		{
+			Name:        "seed:deny-events-system-read-character",
+			Description: "Characters MUST NOT read events.*.system.* streams (Phase 5 sub-epic E; A16 / INV-15 extension — covers rekey and all future system audit namespaces)",
+			DSLText:     `forbid(principal is character, action in ["read"], resource is stream) when { resource.stream.name like "events.*.system.*" };`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:deny-events-system-read-plugin",
+			Description: "Plugins MUST NOT read events.*.system.* streams (Phase 5 sub-epic E; A16 / INV-15 extension — covers rekey and all future system audit namespaces)",
+			DSLText:     `forbid(principal is plugin, action in ["read"], resource is stream) when { resource.stream.name like "events.*.system.*" };`,
 			SeedVersion: 1,
 		},
 	}
