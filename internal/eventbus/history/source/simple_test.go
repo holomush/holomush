@@ -45,6 +45,10 @@ func (s *stubDEKManager) Rekey(context.Context, dek.ContextID, string, dek.Opera
 	panic("unused")
 }
 
+func (s *stubDEKManager) ActiveDEKRow(_ context.Context, _ dek.ContextID) (dek.ActiveDEKRecord, error) {
+	panic("unused")
+}
+
 func TestSimpleResolver_IdentityCodecBypassesResolve(t *testing.T) {
 	env := eventbus.NewEnvelopeForTest(eventbus.EnvelopeFields{
 		Codec: codec.NameIdentity,

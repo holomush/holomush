@@ -84,6 +84,17 @@ type Checkpoint struct {
 	AbortedReason        *string
 }
 
+// PolicyHash returns the policy_hash captured at Phase 1 (INV-E25) as a
+// [32]byte array. Using a fixed-size array rather than []byte preserves
+// INV-27 (no exported []byte in the dek package). The array is zero-padded
+// if the stored slice is shorter than 32 bytes (should not happen in
+// production — the CHECK constraint enforces NOT NULL).
+func (c *Checkpoint) PolicyHash() [32]byte {
+	var out [32]byte
+	copy(out[:], c.policyHash)
+	return out
+}
+
 // CheckpointRepo is the SQL persistence layer for crypto_rekey_checkpoints.
 type CheckpointRepo struct {
 	pool *pgxpool.Pool

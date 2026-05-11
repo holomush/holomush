@@ -38,6 +38,19 @@ type Manager interface {
 
 	// Phase 5 stub — see holomush-jxo8.
 	Rekey(ctx context.Context, ctxID ContextID, justification string, ops OperatorFactors) error
+
+	// ActiveDEKRow returns the active crypto_keys row for ctxID. Used by
+	// the Rekey orchestrator's Phase 1 to obtain the OldDEKID for the
+	// checkpoint row. Returns DEK_NOT_FOUND if no active row exists.
+	ActiveDEKRow(ctx context.Context, ctxID ContextID) (ActiveDEKRecord, error)
+}
+
+// ActiveDEKRecord is a minimal projection of a crypto_keys row exposed to the
+// Rekey orchestrator. Only the fields needed for Phase 1–6 are included;
+// the full row type (row) stays package-private.
+type ActiveDEKRecord struct {
+	ID      int64
+	Version uint32
 }
 
 // Invalidator publishes a cache-invalidation request to all replicas.
@@ -361,6 +374,27 @@ func (m *manager) Rekey(_ context.Context, _ ContextID, _ string, _ OperatorFact
 		With("tracking_bead", "holomush-jxo8").
 		With("phase", 5).
 		Errorf("Manager.Rekey lands in Phase 5 (epic holomush-jxo8)")
+}
+
+// ActiveDEKRow returns the active crypto_keys row for ctxID. The Rekey
+// orchestrator calls this at Phase 1 to populate old_dek_id on the
+// checkpoint row. Returns DEK_NOT_FOUND if no active row exists.
+func (m *manager) ActiveDEKRow(ctx context.Context, ctxID ContextID) (ActiveDEKRecord, error) {
+	if m.store == nil {
+		return ActiveDEKRecord{}, oops.Code("DEK_MANAGER_NOT_CONFIGURED").
+			Errorf("ActiveDEKRow: manager not configured (store is nil)")
+	}
+	r, err := m.store.selectActive(ctx, ctxID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ActiveDEKRecord{}, oops.Code("DEK_NOT_FOUND").
+				With("context_type", ctxID.Type).
+				With("context_id", ctxID.ID).
+				Wrap(err)
+		}
+		return ActiveDEKRecord{}, oops.Code("DEK_STORE_SELECT_FAILED").Wrap(err)
+	}
+	return ActiveDEKRecord{ID: r.ID, Version: r.Version}, nil
 }
 
 func (m *manager) unwrapAndCache(ctx context.Context, r row) (codec.Key, error) {
