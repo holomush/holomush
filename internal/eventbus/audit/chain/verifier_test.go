@@ -338,3 +338,64 @@ func TestVerifier_EmptyChain_PreviouslyInitialized_TruncationDetected(t *testing
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "AUDIT_CHAIN_TRUNCATED")
 }
+
+// ---------------------------------------------------------------------------
+// Emitter tests — canonical names from bead holomush-jxo8.7.5 TDD criteria.
+// ---------------------------------------------------------------------------
+
+// TestEmitter_ComputePrevHashFor_GenesisReturnsNil: with no entries in the repo,
+// ComputePrevHashFor returns nil, nil, nil (genesis-eligible chain).
+func TestEmitter_ComputePrevHashFor_GenesisReturnsNil(t *testing.T) {
+	h := makeTestHandler(t)
+	repo := &fakeRepo{entries: nil}
+	em := chain.NewEmitter(repo)
+
+	prev, prevID, err := em.ComputePrevHashFor(context.Background(), h, "scopeA")
+	require.NoError(t, err)
+	require.Nil(t, prev)
+	require.Nil(t, prevID)
+}
+
+// TestEmitter_ComputePrevHashFor_ReturnsHashOfLastEntry: with one entry in the
+// repo, ComputePrevHashFor returns the recomputed self-hash of that entry.
+func TestEmitter_ComputePrevHashFor_ReturnsHashOfLastEntry(t *testing.T) {
+	h := makeTestHandler(t)
+	// Build an entry: placeholder self_hash so field is present, then compute real hash.
+	p1 := setPayloadSelfHash(t, buildPayload(t, "scopeA", nil), []byte{0x00})
+	p1 = setPayloadSelfHash(t, p1, mustRecomputeSelfHash(t, h, p1))
+	repo := &fakeRepo{
+		entries: map[string][]chain.Entry{"scopeA": {{JSSeq: 1, Payload: p1}}},
+	}
+	em := chain.NewEmitter(repo)
+
+	prev, _, err := em.ComputePrevHashFor(context.Background(), h, "scopeA")
+	require.NoError(t, err)
+
+	// Expected: same path as verifier — canonicalize, unmarshal to map, RecomputeSelfHash.
+	expected := mustRecomputeSelfHash(t, h, p1)
+	require.Equal(t, expected, prev)
+}
+
+// TestEmitter_ComputePrevHashFor_MultiEntry_ReturnsLatestByJSSeq: with multiple
+// entries, ComputePrevHashFor returns the self-hash of the entry with the
+// highest JSSeq (the tail of the chain).
+func TestEmitter_ComputePrevHashFor_MultiEntry_ReturnsLatestByJSSeq(t *testing.T) {
+	h := makeTestHandler(t)
+
+	// Build two valid chained entries.
+	e1 := buildValidEntry(t, h, "scopeA", nil, 1)
+	e1SelfHash := mustRecomputeSelfHash(t, h, e1.Payload)
+	e2 := buildValidEntry(t, h, "scopeA", e1SelfHash, 2)
+
+	repo := &fakeRepo{
+		entries: map[string][]chain.Entry{"scopeA": {e1, e2}},
+	}
+	em := chain.NewEmitter(repo)
+
+	prev, _, err := em.ComputePrevHashFor(context.Background(), h, "scopeA")
+	require.NoError(t, err)
+
+	// Emitter should return hash of the last entry (e2), not e1.
+	expectedE2Hash := mustRecomputeSelfHash(t, h, e2.Payload)
+	require.Equal(t, expectedE2Hash, prev)
+}
