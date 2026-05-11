@@ -276,6 +276,29 @@ func TestRekeyResumeHandler_Rejects_NoCryptoOperatorCap(t *testing.T) {
 	require.Equal(t, "DENY_NOT_OPERATOR", oopsErr.Code())
 }
 
+// TestRekeyResumeHandler_RequestID_PassThrough verifies that the request_id
+// bytes from the proto are forwarded verbatim as RekeyRunRequest.RequestID
+// to the OrchestratorRunner. This is the core fix for the code-reviewer
+// finding: the previous implementation discarded ridFixed with _ = ridFixed.
+func TestRekeyResumeHandler_RequestID_PassThrough(t *testing.T) {
+	capturer := &capturingOrchRunner{}
+	h := newHandlerWithOperator(t, capturer)
+
+	rid := [16]byte{
+		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+		0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
+	}
+	stream := &fakeRekeyStream{}
+	_ = h.RekeyResume(context.Background(), &adminv1.RekeyResumeRequest{
+		SessionToken: rekeyTestToken,
+		RequestId:    rid[:],
+		ForceDestroy: false,
+	}, stream)
+	require.Equal(t, rid, capturer.lastReq.RequestID,
+		"RequestID must be forwarded verbatim to OrchestratorRunner.Run — "+
+			"the adapter needs it to look up the checkpoint via RunByRequestID")
+}
+
 // TestRekeyResumeHandler_ForceDestroy_PassThrough verifies that
 // ForceDestroy=true from the proto request is forwarded to OrchestratorRunner.Run
 // (INV-E11 force-destroy escape hatch pass-through).

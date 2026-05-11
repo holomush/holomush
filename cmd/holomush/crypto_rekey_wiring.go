@@ -261,23 +261,46 @@ type productionOrchestratorRunner struct {
 	orch *dek.Orchestrator
 }
 
-// Run delegates to Orchestrator.Run, converting between the socket-layer
-// projection types and the dek-layer types so the socket package stays
-// free of dek imports.
+// Run delegates to Orchestrator.Run (fresh-start / auto-resume path) or
+// Orchestrator.RunByRequestID (explicit-resume path), converting between the
+// socket-layer projection types and the dek-layer types so the socket package
+// stays free of dek imports.
+//
+// Resume path: when req.RequestID is non-zero (RekeyResume RPC), the handler
+// supplies only RequestID + Operator + ForceDestroy. RunByRequestID looks up
+// the checkpoint by ID, enforces INV-E16 operator-binding, and drives the
+// remaining phases to completion.
 func (a *productionOrchestratorRunner) Run(ctx context.Context, req socket.RekeyRunRequest) (socket.RekeyRunOutcome, error) {
-	dekReq := dek.RekeyRequest{
-		ContextType:   req.ContextType,
-		ContextID:     req.ContextID,
-		Justification: req.Justification,
-		Operator: dek.OperatorIdentity{
-			PlayerID:         req.Operator.PlayerID,
-			OSUser:           req.Operator.OSUser,
-			TOTPVerified:     req.Operator.TOTPVerified,
-			AuthProviderName: req.Operator.AuthProviderName,
-		},
-		ForceDestroy: req.ForceDestroy,
+	operator := dek.OperatorIdentity{
+		PlayerID:         req.Operator.PlayerID,
+		OSUser:           req.Operator.OSUser,
+		TOTPVerified:     req.Operator.TOTPVerified,
+		AuthProviderName: req.Operator.AuthProviderName,
 	}
-	outcome, err := a.orch.Run(ctx, dekReq)
+
+	var (
+		outcome dek.RekeyOutcome
+		err     error
+	)
+
+	if req.RequestID != ([16]byte{}) {
+		// Explicit-resume path (RekeyResume RPC): delegate to RunByRequestID
+		// which loads the checkpoint and bypasses the context-and-args lookup.
+		rid := dek.RequestID(req.RequestID)
+		outcome, err = a.orch.RunByRequestID(ctx, rid, dek.RekeyRequest{
+			Operator:     operator,
+			ForceDestroy: req.ForceDestroy,
+		})
+	} else {
+		// Fresh-start / auto-resume path (Rekey RPC).
+		outcome, err = a.orch.Run(ctx, dek.RekeyRequest{
+			ContextType:   req.ContextType,
+			ContextID:     req.ContextID,
+			Justification: req.Justification,
+			Operator:      operator,
+			ForceDestroy:  req.ForceDestroy,
+		})
+	}
 	if err != nil {
 		return socket.RekeyRunOutcome{}, err
 	}

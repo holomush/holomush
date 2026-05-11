@@ -321,6 +321,70 @@ func (o *Orchestrator) runPhase7AndSetResumed(ctx context.Context, rid RequestID
 	return out, nil
 }
 
+// RunByRequestID resumes the checkpoint identified by rid, bypassing the
+// context-and-args lookup that Run performs. It is the explicit-resume entry
+// for the RekeyResume RPC path, where the operator supplies a request_id
+// directly instead of repeating all original arguments.
+//
+// RunByRequestID:
+//  1. Loads the checkpoint row (error on DEK_REKEY_CHECKPOINT_NOT_FOUND).
+//  2. Verifies the checkpoint is non-terminal (returns
+//     DEK_REKEY_CHECKPOINT_TERMINAL on status=complete or status=aborted).
+//  3. Enforces the operator-binding invariant (INV-E16): if the checkpoint's
+//     primary_player_id does not match req.Operator.PlayerID, returns
+//     DEK_REKEY_RESUME_OPERATOR_MISMATCH.
+//  4. Calls driveToCompletion with the checkpoint's ContextType and ContextID
+//     inserted into the request (needed by RunPhase7's audit payload).
+//     Justification is NOT stored in the checkpoint row; it is intentionally
+//     omitted from the resume-path audit record (the original justification
+//     was recorded in Phase 1).
+//
+// req.ForceDestroy is honored on the resume path per INV-E11.
+func (o *Orchestrator) RunByRequestID(ctx context.Context, rid RequestID, req RekeyRequest) (RekeyOutcome, error) {
+	ckpt, err := o.repo.Get(ctx, rid)
+	if err != nil {
+		return RekeyOutcome{}, oops.Code("DEK_REKEY_RESUME_CHECKPOINT_LOAD_FAILED").
+			With("request_id", rid.String()).
+			Wrap(err)
+	}
+
+	switch ckpt.Status {
+	case CheckpointStatusComplete:
+		return RekeyOutcome{}, oops.Code("DEK_REKEY_CHECKPOINT_TERMINAL").
+			With("request_id", rid.String()).
+			With("status", string(ckpt.Status)).
+			Errorf("checkpoint already complete; no resume needed")
+	case CheckpointStatusAborted:
+		return RekeyOutcome{}, oops.Code("DEK_REKEY_CHECKPOINT_TERMINAL").
+			With("request_id", rid.String()).
+			With("status", string(ckpt.Status)).
+			Errorf("checkpoint already aborted; open a fresh rekey to retry")
+	}
+
+	// INV-E16: only the original primary operator may resume.
+	if ckpt.PrimaryPlayerID != req.Operator.PlayerID {
+		return RekeyOutcome{}, oops.Code("DEK_REKEY_RESUME_OPERATOR_MISMATCH").
+			With("expected_player_id", ckpt.PrimaryPlayerID).
+			With("got_player_id", req.Operator.PlayerID).
+			With("request_id", rid.String()).
+			Errorf("INV-E16: only the original primary operator may resume")
+	}
+
+	// Populate context fields from the stored checkpoint row so RunPhase7's
+	// audit payload carries accurate context metadata. Justification is NOT
+	// stored in the checkpoint; it is omitted on the explicit-resume path.
+	resumeReq := RekeyRequest{
+		ContextType:  ckpt.ContextType,
+		ContextID:    ckpt.ContextID,
+		Operator:     req.Operator,
+		ForceDestroy: req.ForceDestroy,
+		// Justification intentionally zero: not stored in checkpoint.
+		// The original justification was captured at Phase 1.
+	}
+
+	return o.driveToCompletion(ctx, rid, resumeReq, true)
+}
+
 // derefString safely dereferences *string for error context. Returns the
 // empty string when p is nil rather than panicking.
 func derefString(p *string) string {

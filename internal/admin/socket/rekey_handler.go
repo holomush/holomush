@@ -104,7 +104,17 @@ type RekeyOperatorIdentity struct {
 // (which transitively imports adminauth, creating an import cycle through
 // approval.handler → adminauth → socket). The production adapter converts
 // RekeyRunRequest → dek.RekeyRequest and lives in the wiring layer.
+//
+// On the resume path (RekeyResume RPC), only RequestID, Operator, and
+// ForceDestroy are populated by the handler. ContextType, ContextID, and
+// Justification are zero — the production adapter resolves them from the
+// checkpoint row keyed by RequestID before forwarding to dek.Orchestrator.Run.
 type RekeyRunRequest struct {
+	// RequestID is the 16-byte ULID of the checkpoint to resume.
+	// Non-zero only on the RekeyResume path; zero on the fresh-start Rekey path.
+	// When non-zero, the adapter MUST resolve ContextType/ContextID/Justification
+	// from the checkpoint row before calling dek.Orchestrator.Run.
+	RequestID     [16]byte
 	ContextType   string
 	ContextID     string
 	Justification string
@@ -264,21 +274,20 @@ func (h *RekeyHandler) RekeyResume(
 			Errorf("request_id must be a non-zero ULID")
 	}
 
-	// RequestID is carried to the orchestrator via RekeyRunRequest so the
-	// runner can look up the checkpoint. We pack it into a fixed-size field
-	// on the request; the production adapter converts to dek.RequestID.
+	// Pack the validated request_id into a fixed-size [16]byte field.
+	// The adapter resolves ContextType/ContextID/Justification from the
+	// checkpoint row using this RequestID before forwarding to the orchestrator.
 	var ridFixed [16]byte
 	copy(ridFixed[:], req.GetRequestId())
 
 	orchReq := RekeyRunRequest{
+		RequestID:    ridFixed,
 		Operator:     RekeyOperatorIdentity(identity),
 		ForceDestroy: req.GetForceDestroy(),
-		// ContextType/ContextID/Justification are not supplied on the resume
-		// path — the production OrchestratorRunner adapter resolves them from
-		// the checkpoint row using ridFixed. The socket layer only forwards
-		// the operator identity and ForceDestroy flag.
+		// ContextType/ContextID/Justification are intentionally zero here.
+		// The OrchestratorRunner adapter looks them up from the checkpoint row
+		// keyed by RequestID before calling dek.Orchestrator.Run (INV-E4/E16).
 	}
-	_ = ridFixed // consumed by the production OrchestratorRunner adapter
 	return h.runWithProgress(ctx, orchReq, stream)
 }
 
