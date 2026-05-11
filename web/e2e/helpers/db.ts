@@ -145,9 +145,12 @@ export interface DbLocation {
 }
 
 export async function getStartingLocation(): Promise<DbLocation | null> {
-  // The bootstrap metadata table stores the starting location ID
+  // The setting_bootstrap_state table stores the starting location ID.
+  // Migration 30 split bootstrap_metadata into auditchain-owned (chain_name, scope_key)
+  // and migration 32 introduced setting_bootstrap_state as the (key, value) shape for
+  // content/setting bootstrap state — including starting_location_id.
   const { rows } = await getPool().query<{ value: string }>(
-    "SELECT value FROM bootstrap_metadata WHERE key = 'starting_location_id'",
+    "SELECT value FROM setting_bootstrap_state WHERE key = 'starting_location_id'",
   );
   if (!rows[0]) return null;
   const locId = rows[0].value;

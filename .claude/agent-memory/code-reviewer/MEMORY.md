@@ -219,6 +219,21 @@ Keep under 200 lines. Curate — don't hoard.
   lint over `docs/`. A stray bare ` ``` ` fence will fail `lint:markdown` and
   block CI. Run `task lint` after any plan file edit.
 
+- **Discarded-value "production adapter resolves it" smell.** When a handler
+  validates a field then blank-assigns it with a comment like
+  "consumed by the production X adapter," verify the adapter signature.
+  Pattern: handler does `var rid [N]byte; copy(rid[:], req.GetX()); ... _ = rid`
+  and constructs a downstream request struct *without* a field for `rid`.
+  The "production adapter" claim is unfalsifiable from the handler file
+  alone — must be cross-checked against the adapter's actual signature
+  (rg the adapter type + `func.*Run.*<RequestType>`). Encountered in
+  Phase 5 sub-epic E review (2026-05-11): `RekeyResume` handler drops
+  `request_id` because `socket.RekeyRunRequest` has no `RequestID` field
+  and the production adapter cannot synthesize one. Unit tests with
+  fake runners and E2E tests that exercise only the *auto-resume* path
+  (`Rekey` RPC, not `RekeyResume`) both miss the defect. Search heuristic:
+  `rg "_ = [a-zA-Z]+ // (consumed|used|resolved) by"` to surface candidates.
+
 - **`task test:int` explicit package list excludes `cmd/holomush/`**: `Taskfile.yaml:119-120`
   enumerates packages that contain `//go:build integration` files; `cmd/holomush/` is
   intentionally absent (see comment at line 107-111 about `./...` compilation failures).
