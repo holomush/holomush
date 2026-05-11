@@ -270,12 +270,14 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-D10/D11/D12)", func() {
 		o, ok := oops.AsOops(err)
 		Expect(ok).To(BeTrue(), "expected oops error; got %T: %v", err, err)
 		// oops.AsOops surfaces the deepest Code in the chain. The outer
-		// wrap is CRYPTO_CHAIN_VERIFY_FAILED; the inner verifier code is
-		// POLICY_CHAIN_HASH_MISMATCH (option (a)) or POLICY_CHAIN_BROKEN_LINK
-		// (option (b)). Both are acceptable fail-closed signals.
-		Expect([]string{"POLICY_CHAIN_HASH_MISMATCH", "POLICY_CHAIN_BROKEN_LINK"}).
+		// wraps are CRYPTO_CHAIN_VERIFY_FAILED → POLICY_CHAIN_VERIFY_FAILED;
+		// the inner verifier code is AUDIT_CHAIN_HASH_MISMATCH (option (a))
+		// or AUDIT_CHAIN_BROKEN_LINK (option (b)) after the Phase 5 sub-epic E
+		// refactor onto the generalized auditchain primitive (was
+		// POLICY_CHAIN_HASH_MISMATCH / POLICY_CHAIN_BROKEN_LINK pre-E).
+		Expect([]string{"AUDIT_CHAIN_HASH_MISMATCH", "AUDIT_CHAIN_BROKEN_LINK"}).
 			To(ContainElement(o.Code()),
-				"expected POLICY_CHAIN_HASH_MISMATCH or POLICY_CHAIN_BROKEN_LINK; got %s",
+				"expected AUDIT_CHAIN_HASH_MISMATCH or AUDIT_CHAIN_BROKEN_LINK; got %s",
 				o.Code())
 	})
 })

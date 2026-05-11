@@ -166,7 +166,13 @@ func buildPayload(name string, prev []byte, ts int64) policy.PolicySetPayload {
 var _ = Describe("VerifyChain (integration)", func() {
 	Context("with a clean 3-row chain in events_audit", func() {
 		It("verifies cleanly, then surfaces a chain integrity error after envelope tamper", func() {
-			subject := "events.testgame.system.crypto_policy.crypto_operators_int"
+			// Subject suffix MUST agree with payload.policy_name post Phase 5
+			// sub-epic E (INV-E27 — chain.Verifier enforces). D's pre-E verifier
+			// queried by subject directly and only cross-checked at the typed
+			// struct level, tolerating fixture mismatches like the prior
+			// "crypto_operators_int" subject paired with "crypto.operators"
+			// payload.policy_name.
+			subject := "events.testgame.system.crypto_policy.crypto.operators"
 
 			// Build genesis row.
 			gen := buildPayload("crypto.operators", nil, 1700000000)
@@ -220,12 +226,13 @@ var _ = Describe("VerifyChain (integration)", func() {
 			o, ok := oops.AsOops(err)
 			Expect(ok).To(BeTrue(), "expected oops error; got %T: %v", err, err)
 			// Mid row's stored policy_hash no longer matches the recomputed hash over
-			// the tampered payload → POLICY_CHAIN_HASH_MISMATCH. If the verifier
-			// reaches the tip row first via prev_hash comparison, BROKEN_LINK is also
+			// the tampered payload → AUDIT_CHAIN_HASH_MISMATCH (post-Phase-5-sub-epic-E
+			// generalization of POLICY_CHAIN_HASH_MISMATCH). If the verifier reaches the
+			// tip row first via prev_hash comparison, AUDIT_CHAIN_BROKEN_LINK is also
 			// acceptable (both indicate chain integrity failure).
-			Expect([]string{"POLICY_CHAIN_HASH_MISMATCH", "POLICY_CHAIN_BROKEN_LINK"}).
+			Expect([]string{"AUDIT_CHAIN_HASH_MISMATCH", "AUDIT_CHAIN_BROKEN_LINK"}).
 				To(ContainElement(o.Code()),
-					"expected HASH_MISMATCH or BROKEN_LINK; got %s", o.Code())
+					"expected AUDIT_CHAIN_HASH_MISMATCH or AUDIT_CHAIN_BROKEN_LINK; got %s", o.Code())
 		})
 	})
 
@@ -233,13 +240,12 @@ var _ = Describe("VerifyChain (integration)", func() {
 		It("returns nil (CodeRabbit #11 first-boot path)", func() {
 			policyName := "first_boot_policy"
 			subject := "events.testgame.system.crypto_policy." + policyName
-			// Defensive: ensure no leftover state.
+			// Defensive: ensure no leftover state. Post-E migration 000030
+			// the bootstrap_metadata schema is (chain_name, scope_key);
+			// chainStateCleanupGinkgo handles that purge.
 			_, _ = testPool.Exec(context.Background(),
 				`DELETE FROM events_audit WHERE subject = $1`, subject)
-			_, _ = testPool.Exec(context.Background(),
-				`DELETE FROM bootstrap_metadata WHERE key = $1`,
-				"crypto.policy_chain_initialized."+policyName)
-			chainStateCleanupGinkgo(policyName)
+			chainStateCleanupGinkgo("testgame", policyName)
 
 			Expect(policy.VerifyChain(context.Background(), testPool, subject, policyName)).
 				To(Succeed(), "first-boot empty chain MUST verify cleanly")
@@ -247,20 +253,23 @@ var _ = Describe("VerifyChain (integration)", func() {
 	})
 
 	Context("with an empty audit row-set but the chain-init signal recorded (truncation)", func() {
-		It("MUST surface POLICY_CHAIN_TRUNCATED (CodeRabbit #11 audit-integrity)", func() {
+		It("MUST surface AUDIT_CHAIN_TRUNCATED (CodeRabbit #11 audit-integrity)", func() {
 			policyName := "truncated_policy"
 			subject := "events.testgame.system.crypto_policy." + policyName
-			chainStateCleanupGinkgo(policyName)
+			chainStateCleanupGinkgo("testgame", policyName)
 			DeferCleanup(func() {
 				_, _ = testPool.Exec(context.Background(),
 					`DELETE FROM events_audit WHERE subject = $1`, subject)
 			})
 
 			// Mark the chain as initialized (simulating a prior successful emit).
+			// Post-E migration 000030: bootstrap_metadata keys on (chain_name, scope_key);
+			// chain_name = PolicySetChainFor(gameID).SubjectPrefix.
+			chainName := policy.PolicySetChainFor("testgame").SubjectPrefix
 			_, err := testPool.Exec(context.Background(),
-				`INSERT INTO bootstrap_metadata (key, value) VALUES ($1, 'true')
-				 ON CONFLICT (key) DO NOTHING`,
-				"crypto.policy_chain_initialized."+policyName)
+				`INSERT INTO bootstrap_metadata (chain_name, scope_key) VALUES ($1, $2)
+				 ON CONFLICT (chain_name, scope_key) DO NOTHING`,
+				chainName, policyName)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Audit row-set is empty (no chain rows seeded). Truncation case.
@@ -268,8 +277,11 @@ var _ = Describe("VerifyChain (integration)", func() {
 			Expect(err).To(HaveOccurred())
 			o, ok := oops.AsOops(err)
 			Expect(ok).To(BeTrue())
-			Expect(o.Code()).To(Equal("POLICY_CHAIN_TRUNCATED"),
-				"empty chain + initialized signal MUST surface POLICY_CHAIN_TRUNCATED")
+			// Post-E refactor: the generalized verifier owns the typed-error
+			// surface (AUDIT_CHAIN_TRUNCATED). policy.VerifyChain wraps with
+			// POLICY_CHAIN_VERIFY_FAILED; oops.AsOops surfaces the deepest code.
+			Expect(o.Code()).To(Equal("AUDIT_CHAIN_TRUNCATED"),
+				"empty chain + initialized signal MUST surface AUDIT_CHAIN_TRUNCATED")
 		})
 	})
 })
@@ -282,7 +294,7 @@ var _ = Describe("EmitCurrentSnapshot (chain-init signal)", func() {
 		const gameID = "init-signal-game"
 		subject := "events." + gameID + ".system.crypto_policy." + policyName
 		cleanupSubjectGinkgo(subject)
-		chainStateCleanupGinkgo(policyName)
+		chainStateCleanupGinkgo(gameID, policyName)
 
 		// Build emitter deps with a fakePublisher (the host does the audit
 		// projection in production; this unit-style test only verifies the
@@ -300,15 +312,23 @@ var _ = Describe("EmitCurrentSnapshot (chain-init signal)", func() {
 		Expect(policy.EmitCurrentSnapshot(context.Background(), deps, policyName)).To(Succeed())
 		Expect(pub.Events()).To(HaveLen(1), "emit should publish exactly one event")
 
-		// Bootstrap signal MUST be present.
-		var value string
+		// Bootstrap signal MUST be present. Post-E migration 000030
+		// the schema is (chain_name, scope_key); chain_name equals the
+		// auditchain SubjectPrefix from PolicySetChainFor(gameID).
+		expectedChainName := policy.PolicySetChainFor(gameID).SubjectPrefix
+		var exists bool
 		err := testPool.QueryRow(
 			context.Background(),
-			`SELECT value FROM bootstrap_metadata WHERE key = $1`,
-			"crypto.policy_chain_initialized."+policyName,
-		).Scan(&value)
+			`SELECT EXISTS(
+				SELECT 1 FROM bootstrap_metadata
+				 WHERE chain_name = $1 AND scope_key = $2
+			)`,
+			expectedChainName, policyName,
+		).Scan(&exists)
 		Expect(err).NotTo(HaveOccurred(),
 			"chain-init signal MUST be recorded after successful emit")
-		Expect(value).To(Equal("true"))
+		Expect(exists).To(BeTrue(),
+			"bootstrap_metadata row MUST exist for (chain_name=%q, scope_key=%q)",
+			expectedChainName, policyName)
 	})
 })

@@ -55,7 +55,7 @@ var _ = Describe("CryptoPolicySubsystem (integration)", func() {
 			gameID := "subsysok"
 			subject := "events." + gameID + ".system.crypto_policy.dual_control_required"
 			cleanupSubjectGinkgo(subject)
-			chainStateCleanupGinkgo("dual_control_required")
+			chainStateCleanupGinkgo(gameID, "dual_control_required")
 
 			s := policy.NewCryptoPolicySubsystem(policy.CryptoPolicySubsystemConfig{
 				EmitDeps: policy.EmitDeps{

@@ -23,14 +23,14 @@ import (
 // (CodeRabbit #10).
 var _ = Describe("CryptoChainVerifierSubsystem (integration)", func() {
 	Context("when seeded with a chain that has a corrupt prev_hash linkage", func() {
-		It("MUST fail-close at Start with a POLICY_CHAIN_* code", func() {
+		It("MUST fail-close at Start with an AUDIT_CHAIN_* code", func() {
 			gameID := "verifierbroken"
 			subject := "events." + gameID + ".system.crypto_policy.dual_control_required"
 			DeferCleanup(func() {
 				_, _ = testPool.Exec(context.Background(),
 					`DELETE FROM events_audit WHERE subject = $1`, subject)
 			})
-			chainStateCleanupGinkgo("dual_control_required")
+			chainStateCleanupGinkgo(gameID, "dual_control_required")
 
 			// Seed a valid genesis row.
 			gen := policy.PolicySetPayload{
@@ -69,10 +69,11 @@ var _ = Describe("CryptoChainVerifierSubsystem (integration)", func() {
 			Expect(err).To(HaveOccurred())
 			o, ok := oops.AsOops(err)
 			Expect(ok).To(BeTrue())
-			// oops.AsOops returns the deepest oops code; the verifier's code is
-			// POLICY_CHAIN_BROKEN_LINK or POLICY_CHAIN_HASH_MISMATCH depending on
-			// which fired first. Either is a valid fail-closed signal.
-			Expect([]string{"POLICY_CHAIN_BROKEN_LINK", "POLICY_CHAIN_HASH_MISMATCH"}).
+			// oops.AsOops returns the deepest oops code; post Phase 5 sub-epic E
+			// the verifier emits AUDIT_CHAIN_BROKEN_LINK or AUDIT_CHAIN_HASH_MISMATCH
+			// (depending on which fired first) — was POLICY_CHAIN_* pre-E.
+			// Either is a valid fail-closed signal.
+			Expect([]string{"AUDIT_CHAIN_BROKEN_LINK", "AUDIT_CHAIN_HASH_MISMATCH"}).
 				To(ContainElement(o.Code()),
 					"verifier should fail-closed; got %s", o.Code())
 		})
@@ -86,7 +87,7 @@ var _ = Describe("CryptoChainVerifierSubsystem (integration)", func() {
 				_, _ = testPool.Exec(context.Background(),
 					`DELETE FROM events_audit WHERE subject = $1`, subject)
 			})
-			chainStateCleanupGinkgo("dual_control_required")
+			chainStateCleanupGinkgo(gameID, "dual_control_required")
 
 			gen := policy.PolicySetPayload{
 				PolicyName:      "dual_control_required",

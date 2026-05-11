@@ -16,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/audit/chain"
 )
 
 // Clock abstracts time.Now for deterministic tests.
@@ -59,13 +60,17 @@ func EmitCurrentSnapshot(ctx context.Context, deps EmitDeps, policyName string) 
 			With("policy_name", policyName).Wrap(err)
 	}
 
-	var prevHash []byte
-	if len(entries) > 0 {
-		prevHash, err = ComputePolicyHash(&entries[len(entries)-1].Payload)
-		if err != nil {
-			return oops.Code("POLICY_EMIT_HASH_RECOMPUTE_FAILED").
-				With("policy_name", policyName).Wrap(err)
-		}
+	// Compute prev_hash via the generalized auditchain Emitter — keeps the
+	// emit-side hash computation byte-equivalent to the verifier's recompute
+	// path (chain.Verifier.VerifyScope calls the same Handler.Canonicalize +
+	// chain.RecomputeSelfHash). Genesis returns nil prev_hash.
+	repo := chain.NewPostgresRepo(deps.Pool)
+	em := chain.NewEmitter(repo)
+	h := PolicySetHandlerFor(deps.GameID)
+	prevHash, _, prevErr := em.ComputePrevHashFor(ctx, h, policyName)
+	if prevErr != nil {
+		return oops.Code("POLICY_EMIT_HASH_RECOMPUTE_FAILED").
+			With("policy_name", policyName).Wrap(prevErr)
 	}
 
 	// Build the new snapshot. Unknown policyName is fail-closed: any typo
@@ -148,7 +153,7 @@ func EmitCurrentSnapshot(ctx context.Context, deps EmitDeps, policyName string) 
 	// Idempotent (INSERT ... ON CONFLICT DO NOTHING); safe to call on
 	// every successful emit. See chain_state.go for the design and the
 	// bootstrap_metadata key shape.
-	if err := markChainInitialized(ctx, deps.Pool, policyName); err != nil {
+	if err := markChainInitialized(ctx, deps.Pool, deps.GameID, policyName); err != nil {
 		return oops.Code("POLICY_EMIT_STATE_MARK_FAILED").
 			With("policy_name", policyName).Wrap(err)
 	}
