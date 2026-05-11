@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"github.com/spf13/cobra"
 
@@ -599,6 +600,37 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		PolicyNames: []string{"dual_control_required"},
 	})
 
+	// --- Phase 5 sub-epic E rekey wiring (holomush-jxo8.7.34 / T37) ---
+	//
+	// Constructs the rekey audit emitter and checkpoint-sweep subsystem,
+	// the two components that can stand alone without the full DEK manager
+	// stack (the orchestrator + RekeyHandler need dek.Manager which a later
+	// bead wires; until then those RPCs remain unimplemented).
+	//
+	// The sweep subsystem auto-aborts non-terminal checkpoints whose
+	// last_heartbeat_at has exceeded TTL (INV-E18 / INV-E19, spec §6.2);
+	// it depends only on CheckpointRepo + AuditEmitter, both of which the
+	// host already has at this point.
+	cryptoCfg := cryptoConfig.Defaults()
+	rekeyCheckpointRepo := dek.NewCheckpointRepo(dbSub.Pool())
+	rekeyAuditEmitter := dek.NewRekeyAuditEmitter(
+		chain.NewEmitter(auditChainRepo),
+		&rekeyAuditPublisherAdapter{publisher: auditPublisher, clock: totp.NewRealClock()},
+	)
+	// policyHashSource is constructed but only consumed by the orchestrator
+	// (T37 Step 1 / INV-E25); future wiring that builds dek.Manager will
+	// pass it to dek.NewOrchestrator. Reference it here so the helper file
+	// is exercised by production boot rather than dead-coded.
+	_ = newPolicyHashSourceFromAuditChain(auditChainRepo, gameID)
+
+	rekeyCheckpointSweepSub := dek.NewCheckpointSweepSubsystem(dek.CheckpointSweepConfig{
+		Repo:         rekeyCheckpointRepo,
+		AuditEmitter: rekeyAuditEmitter,
+		Logger:       slog.Default(),
+		TTL:          cryptoCfg.RekeyCheckpointTTL,
+		Interval:     cryptoCfg.RekeyCheckpointSweepInterval,
+	})
+
 	// --- Admin handler construction (T22 / holomush-jxo8.6.21) ---
 	//
 	// Pre-start AuthSubsystem and ABACSubsystem so admin handler construction
@@ -724,6 +756,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		cryptoPolicySub,
 		grpcSub,
 		adminSub,
+		rekeyCheckpointSweepSub,
 	) {
 		orch.Register(sub)
 	}
@@ -1049,7 +1082,8 @@ func productionSubsystems(
 	eventBusSub, clusterSub, auditSub,
 	cryptoPolicySub,
 	grpcSub,
-	adminSub lifecycle.Subsystem,
+	adminSub,
+	rekeyCheckpointSweepSub lifecycle.Subsystem,
 ) []lifecycle.Subsystem {
 	return []lifecycle.Subsystem{
 		dbSub, abacSub, authSub, worldSub,
@@ -1058,5 +1092,59 @@ func productionSubsystems(
 		eventBusSub, clusterSub, auditSub,
 		cryptoPolicySub, // runs after AuditProjection (policy snapshot emit)
 		grpcSub, adminSub,
+		// Sweep auto-aborts non-terminal rekey checkpoints whose heartbeat
+		// has exceeded TTL. Runs after CryptoChainVerifier (chain integrity
+		// confirmed), EventBus (audit events route to JetStream), and
+		// AuditProjection (emitted events land in events_audit). Per
+		// spec §6.2 / Task 28 DependsOn declaration. Sub-epic E T37
+		// (holomush-jxo8.7.34).
+		rekeyCheckpointSweepSub,
 	}
+}
+
+// rekeyAuditPublisherAdapter adapts eventbus.Publisher to dek.AuditPublisher,
+// the narrow seam consumed by dek.RekeyAuditEmitter. The dek package cannot
+// import eventbus (cycle: eventbus → dek), so the bridge lives in the
+// wiring layer (cmd/holomush). Sub-epic E T37 (holomush-jxo8.7.34).
+//
+// PublishAudit mints an event ULID, builds the eventbus.Event from the
+// caller-supplied subject + type + payload, and delegates to the underlying
+// Publisher (which is RenderingPublisher in production — stamping the
+// App-Rendering header required by audit/projection.go::persist). Mirrors
+// the pattern used by internal/admin/policy/emitter.go for the
+// crypto.policy_set chain.
+type rekeyAuditPublisherAdapter struct {
+	publisher eventbus.Publisher
+	clock     interface{ Now() time.Time }
+}
+
+func (a *rekeyAuditPublisherAdapter) PublishAudit(
+	ctx context.Context,
+	subject, evType string,
+	payload []byte,
+) (ulid.ULID, error) {
+	subj, err := eventbus.NewSubject(subject)
+	if err != nil {
+		return ulid.ULID{}, oops.Code("DEK_REKEY_AUDIT_INVALID_SUBJECT").
+			With("subject", subject).Wrap(err)
+	}
+	etyp, err := eventbus.NewType(evType)
+	if err != nil {
+		return ulid.ULID{}, oops.Code("DEK_REKEY_AUDIT_INVALID_TYPE").
+			With("type", evType).Wrap(err)
+	}
+	id := core.NewULID()
+	ev := eventbus.Event{
+		ID:        id,
+		Subject:   subj,
+		Type:      etyp,
+		Timestamp: a.clock.Now(),
+		Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
+		Payload:   payload,
+	}
+	if pubErr := a.publisher.Publish(ctx, ev); pubErr != nil {
+		return ulid.ULID{}, oops.Code("DEK_REKEY_AUDIT_PUBLISH_FAILED").
+			With("subject", subject).Wrap(pubErr)
+	}
+	return id, nil
 }

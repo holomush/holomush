@@ -35,6 +35,10 @@ var coreOnlyFiles = map[string]struct{}{
 	"cmd_plugin_validate.go":          {},
 	"bootstrap_orphan.go":             {},
 	"bootstrap_orphan_test.go":        {},
+	// Phase 5 sub-epic E rekey wiring (holomush-jxo8.7.34). Constructs
+	// dek.PolicyHashSource over auditchain.Repo for the orchestrator's
+	// INV-E25 capture-at-Phase-1 dependency. Core-only.
+	"policy_hash_source.go": {},
 	// `holomush admin` CLI is a host-shell tool, not the gateway. It
 	// connects to the same PG/KEK as the core server for break-glass
 	// flows (TOTP enroll/verify/recover). Phase 5 sub-epic A.
