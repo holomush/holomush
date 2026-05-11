@@ -185,6 +185,7 @@ func (o *Orchestrator) RunPhase1Fresh(ctx context.Context, req RekeyRequest) (Re
 		policyHash,
 		req.Operator.PlayerID,
 		activeRow.ID,
+		req.Justification,
 	)
 	if err != nil {
 		return RequestID{}, oops.Code("DEK_REKEY_CHECKPOINT_OPEN_ARGS_INVALID").Wrap(err)

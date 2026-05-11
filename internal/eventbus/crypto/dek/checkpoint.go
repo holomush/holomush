@@ -35,15 +35,20 @@ type CheckpointOpenRequest struct {
 	policyHash      []byte // exactly 32 bytes
 	PrimaryPlayerID string
 	OldDEKID        int64
+	Justification   string
 }
 
 // NewCheckpointOpenRequest constructs a CheckpointOpenRequest. Both
-// opArgsHash and policyHash must be exactly 32 bytes.
+// opArgsHash and policyHash must be exactly 32 bytes. Justification is the
+// operator-supplied free-text reason recorded on the checkpoint row at
+// Phase 1 (holomush-jxo8.7.55) so RunByRequestID can rehydrate it into the
+// Phase 7 audit payload on the explicit-resume path.
 func NewCheckpointOpenRequest(
 	contextType, contextID string,
 	opArgsHash, policyHash []byte,
 	primaryPlayerID string,
 	oldDEKID int64,
+	justification string,
 ) (CheckpointOpenRequest, error) {
 	if len(opArgsHash) != 32 {
 		return CheckpointOpenRequest{}, oops.Code("DEK_REKEY_BAD_OP_ARGS_HASH").
@@ -60,6 +65,7 @@ func NewCheckpointOpenRequest(
 		policyHash:      policyHash,
 		PrimaryPlayerID: primaryPlayerID,
 		OldDEKID:        oldDEKID,
+		Justification:   justification,
 	}, nil
 }
 
@@ -73,6 +79,7 @@ type Checkpoint struct {
 	opArgsHash           []byte
 	policyHash           []byte
 	PrimaryPlayerID      string
+	Justification        string
 	Status               CheckpointStatus
 	lastProcessedEventID []byte
 	NewDEKID             *int64
@@ -188,10 +195,10 @@ func (r *CheckpointRepo) Open(ctx context.Context, req CheckpointOpenRequest) (R
 	_, err := r.pool.Exec(ctx, `
         INSERT INTO crypto_rekey_checkpoints
           (request_id, context_type, context_id, op_args_hash, policy_hash,
-           primary_player_id, status, old_dek_id)
-        VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
+           primary_player_id, status, old_dek_id, justification)
+        VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8)
     `, rid[:], req.ContextType, req.ContextID, req.opArgsHash, req.policyHash,
-		req.PrimaryPlayerID, req.OldDEKID)
+		req.PrimaryPlayerID, req.OldDEKID, req.Justification)
 	if err != nil {
 		if isUniqueViolation(err, "crypto_rekey_checkpoints_one_active_per_context") {
 			return RequestID{}, oops.Code("DEK_REKEY_ALREADY_IN_PROGRESS").
@@ -209,7 +216,7 @@ func (r *CheckpointRepo) Open(ctx context.Context, req CheckpointOpenRequest) (R
 func (r *CheckpointRepo) Get(ctx context.Context, rid RequestID) (Checkpoint, error) {
 	row := r.pool.QueryRow(ctx, `
         SELECT request_id, context_type, context_id, op_args_hash, policy_hash,
-               primary_player_id, status, last_processed_event_id, new_dek_id,
+               primary_player_id, justification, status, last_processed_event_id, new_dek_id,
                old_dek_id, phase5_attempt_count, phase5_missing_members,
                force_destroy, started_at, last_heartbeat_at, completed_at,
                aborted_at, aborted_reason
@@ -272,7 +279,7 @@ func (r *CheckpointRepo) Heartbeat(ctx context.Context, rid RequestID) error {
 func (r *CheckpointRepo) FindByContextAndArgs(ctx context.Context, ctxType, ctxID string, opArgsHash []byte) (Checkpoint, bool, error) {
 	row := r.pool.QueryRow(ctx, `
         SELECT request_id, context_type, context_id, op_args_hash, policy_hash,
-               primary_player_id, status, last_processed_event_id, new_dek_id,
+               primary_player_id, justification, status, last_processed_event_id, new_dek_id,
                old_dek_id, phase5_attempt_count, phase5_missing_members,
                force_destroy, started_at, last_heartbeat_at, completed_at,
                aborted_at, aborted_reason
@@ -297,7 +304,7 @@ func (r *CheckpointRepo) FindByContextAndArgs(ctx context.Context, ctxType, ctxI
 func (r *CheckpointRepo) FindNonTerminalByContext(ctx context.Context, ctxType, ctxID string) (Checkpoint, bool, error) {
 	row := r.pool.QueryRow(ctx, `
         SELECT request_id, context_type, context_id, op_args_hash, policy_hash,
-               primary_player_id, status, last_processed_event_id, new_dek_id,
+               primary_player_id, justification, status, last_processed_event_id, new_dek_id,
                old_dek_id, phase5_attempt_count, phase5_missing_members,
                force_destroy, started_at, last_heartbeat_at, completed_at,
                aborted_at, aborted_reason
@@ -322,7 +329,7 @@ func (r *CheckpointRepo) FindNonTerminalByContext(ctx context.Context, ctxType, 
 func (r *CheckpointRepo) ListExpired(ctx context.Context, ttl time.Duration) ([]Checkpoint, error) {
 	rows, err := r.pool.Query(ctx, `
         SELECT request_id, context_type, context_id, op_args_hash, policy_hash,
-               primary_player_id, status, last_processed_event_id, new_dek_id,
+               primary_player_id, justification, status, last_processed_event_id, new_dek_id,
                old_dek_id, phase5_attempt_count, phase5_missing_members,
                force_destroy, started_at, last_heartbeat_at, completed_at,
                aborted_at, aborted_reason
@@ -545,7 +552,7 @@ func (r *CheckpointRepo) ListFiltered(ctx context.Context, f CheckpointListFilte
 	args = append(args, limit)
 	q := fmt.Sprintf(`
         SELECT request_id, context_type, context_id, op_args_hash, policy_hash,
-               primary_player_id, status, last_processed_event_id, new_dek_id,
+               primary_player_id, justification, status, last_processed_event_id, new_dek_id,
                old_dek_id, phase5_attempt_count, phase5_missing_members,
                force_destroy, started_at, last_heartbeat_at, completed_at,
                aborted_at, aborted_reason
@@ -581,7 +588,7 @@ func scanCheckpoint(s checkpointScanner) (Checkpoint, error) {
 	var rid []byte
 	err := s.Scan(
 		&rid, &c.ContextType, &c.ContextID, &c.opArgsHash, &c.policyHash,
-		&c.PrimaryPlayerID, &c.Status, &c.lastProcessedEventID, &c.NewDEKID,
+		&c.PrimaryPlayerID, &c.Justification, &c.Status, &c.lastProcessedEventID, &c.NewDEKID,
 		&c.OldDEKID, &c.Phase5AttemptCount, &c.phase5MissingMembers,
 		&c.ForceDestroy, &c.StartedAt, &c.LastHeartbeatAt, &c.CompletedAt,
 		&c.AbortedAt, &c.AbortedReason,

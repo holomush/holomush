@@ -333,11 +333,10 @@ func (o *Orchestrator) runPhase7AndSetResumed(ctx context.Context, rid RequestID
 //  3. Enforces the operator-binding invariant (INV-E16): if the checkpoint's
 //     primary_player_id does not match req.Operator.PlayerID, returns
 //     DEK_REKEY_RESUME_OPERATOR_MISMATCH.
-//  4. Calls driveToCompletion with the checkpoint's ContextType and ContextID
-//     inserted into the request (needed by RunPhase7's audit payload).
-//     Justification is NOT stored in the checkpoint row; it is intentionally
-//     omitted from the resume-path audit record (the original justification
-//     was recorded in Phase 1).
+//  4. Calls driveToCompletion with the checkpoint's ContextType, ContextID,
+//     and Justification rehydrated from the stored checkpoint row (so that
+//     RunPhase7's audit payload carries the operator's original justification
+//     on the explicit-resume path).
 //
 // req.ForceDestroy is honored on the resume path per INV-E11.
 func (o *Orchestrator) RunByRequestID(ctx context.Context, rid RequestID, req RekeyRequest) (RekeyOutcome, error) {
@@ -371,15 +370,14 @@ func (o *Orchestrator) RunByRequestID(ctx context.Context, rid RequestID, req Re
 	}
 
 	// Populate context fields from the stored checkpoint row so RunPhase7's
-	// audit payload carries accurate context metadata. Justification is NOT
-	// stored in the checkpoint; it is omitted on the explicit-resume path.
+	// audit payload carries accurate context metadata, including the original
+	// justification rehydrated from the checkpoint row (holomush-jxo8.7.55).
 	resumeReq := RekeyRequest{
-		ContextType:  ckpt.ContextType,
-		ContextID:    ckpt.ContextID,
-		Operator:     req.Operator,
-		ForceDestroy: req.ForceDestroy,
-		// Justification intentionally zero: not stored in checkpoint.
-		// The original justification was captured at Phase 1.
+		ContextType:   ckpt.ContextType,
+		ContextID:     ckpt.ContextID,
+		Operator:      req.Operator,
+		ForceDestroy:  req.ForceDestroy,
+		Justification: ckpt.Justification,
 	}
 
 	return o.driveToCompletion(ctx, rid, resumeReq, true)
