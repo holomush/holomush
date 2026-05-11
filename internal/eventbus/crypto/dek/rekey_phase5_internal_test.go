@@ -56,6 +56,40 @@ type plainError string
 
 func (e plainError) Error() string { return string(e) }
 
+// TestExtractMissingMembers_JSONBytesPath — defensive []byte arm: when the
+// Coordinator stamps missing_members as a []byte holding a JSON array,
+// the extractor must json.Unmarshal it. Malformed JSON falls back to nil
+// (caller treats as "unknown set"), matching the production tolerance for
+// Coordinator quirks documented in rekey_phase5.go's algorithm comment.
+func TestExtractMissingMembers_JSONBytesPath(t *testing.T) {
+	good := oops.Code("X").
+		With("missing_members", []byte(`["a","b"]`)).
+		Errorf("boom")
+	require.Equal(t, []string{"a", "b"}, extractMissingMembers(good))
+
+	bad := oops.Code("X").
+		With("missing_members", []byte("not-json")).
+		Errorf("boom")
+	require.Nil(t, extractMissingMembers(bad), "malformed JSON → nil, not panic")
+}
+
+// TestStringifyMember_AllArms — exercises the three switch arms of
+// stringifyMember (string passthrough, []byte→string, default empty). The
+// integer case also exercises the []any path of extractMissingMembers
+// (default arm of stringifyMember returns "" for non-string-shaped values).
+func TestStringifyMember_AllArms(t *testing.T) {
+	require.Equal(t, "x", stringifyMember("x"))
+	require.Equal(t, "y", stringifyMember([]byte("y")))
+	require.Equal(t, "", stringifyMember(42))
+
+	// Also exercise extractMissingMembers via the []any path, which routes
+	// each element through stringifyMember.
+	mixed := oops.Code("X").
+		With("missing_members", []any{"a", []byte("b"), 7}).
+		Errorf("boom")
+	require.Equal(t, []string{"a", "b", ""}, extractMissingMembers(mixed))
+}
+
 // TestCheckpoint_Phase5HasMissingMembers_Null — the (NULL,
 // "null", "[]") cases all report false. INV-E10's force-destroy gate
 // depends on this tolerance: a row with an empty array MUST NOT be
