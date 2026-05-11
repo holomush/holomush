@@ -792,6 +792,10 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		slog.Warn("rekey wiring incomplete — Rekey admin RPCs will return Unimplemented",
 			"kek_available", kekProvider != nil)
 	}
+	// Thread the production dek.Manager into the gRPC subsystem so Start()
+	// can construct the AuthGuard + AuditEmitter for INV-39 FallbackResolver.
+	// When nil (KEK unavailable), the history reader keeps nil-auth passthrough.
+	grpcSub.cfg.RekeyManager = rekeyW.Manager
 
 	// Build the invalidation.Coordinator USING the Manager's own caches
 	// (Phase 3c grounding doc Decision 5; without this identity, peers

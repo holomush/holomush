@@ -89,6 +89,14 @@ func newPostgresColdTier(pool *pgxpool.Pool, opts ...ColdTierOption) *postgresCo
 	return c
 }
 
+// NewColdTierLookup returns a source.ColdTierLookup backed by the
+// events_audit PostgreSQL table. Used by cmd/holomush to construct a
+// source.FallbackResolver for the production INV-39 hot→cold fallback path
+// without exposing the unexported postgresColdTier type.
+func NewColdTierLookup(pool *pgxpool.Pool) source.ColdTierLookup {
+	return newPostgresColdTier(pool)
+}
+
 // Read satisfies ColdTier per §6.1 of the suos spec. Builds a parameterized
 // SELECT against events_audit, ordering by js_seq (NOT ULID — see spec §1
 // problem statement for why). Honors the subject filter, seq cursor(s),

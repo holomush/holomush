@@ -19,10 +19,14 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/prometheus/client_golang/prometheus"
 
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/auth"
 	authsetup "github.com/holomush/holomush/internal/auth/setup"
+	"github.com/holomush/holomush/internal/eventbus/authguard"
+	authguardaudit "github.com/holomush/holomush/internal/eventbus/authguard/audit"
+	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/config"
@@ -31,6 +35,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/history"
+	"github.com/holomush/holomush/internal/eventbus/history/source"
 	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	holoFocus "github.com/holomush/holomush/internal/grpc/focus"
@@ -75,6 +80,25 @@ type grpcSubsystemConfig struct {
 	// VerbRegistry is the seeded verb registry for rendering enrichment.
 	// Required by wrapPublisher (Task 19) which wraps the EventBus publisher.
 	VerbRegistry *core.VerbRegistry
+
+	// RekeyManager is the production dek.Manager for INV-39 hot→cold-tier
+	// FallbackResolver wiring (sub-epic E T44+). When non-nil, Start()
+	// constructs a full AuthGuard + AuditEmitter pipeline and threads them
+	// into newHistoryReader via WithHistoryAuthAndSourceResolver. When nil
+	// (degraded deployment without KEK), the history reader falls back to
+	// nil-auth passthrough (EVENTBUS_HISTORY_AUTH_GUARD_NIL).
+	//
+	// Populated by runCoreWithDeps from rekeyW.Manager after buildRekeyWiring.
+	RekeyManager dek.Manager // carries full interface (satisfies SessionDEKManager)
+	// AuthGuard overrides the default Guard constructed in Start(). When nil,
+	// Start() constructs the default Guard from available deps if RekeyManager
+	// is non-nil. Settable for test injection (nil is the prod default).
+	AuthGuard eventbus.SessionAuthGuard
+	// AuditEmitter overrides the default Emitter constructed in Start(). When
+	// nil, Start() constructs the default Emitter from available deps if
+	// RekeyManager is non-nil. Settable for test injection (nil is the prod
+	// default).
+	AuditEmitter eventbus.SessionAuditEmitter
 }
 
 // grpcSubsystem is the terminal subsystem that wires the gRPC server.
@@ -295,7 +319,42 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	js := s.cfg.EventBus.JS()
 	owners := historyOwnersFromPlugins(pluginManager)
 	router := audit.NewPluginHistoryRouter(pluginAuditClientProvider{mgr: pluginManager})
-	historyReader := newHistoryReader(js, pool, s.cfg.EventBus.Config(), owners, router, nil, nil, nil)
+
+	// INV-39 wiring: if RekeyManager is set (production shape with KEK wired),
+	// construct AuthGuard + AuditEmitter for the FallbackResolver path.
+	// AuthGuard and AuditEmitter may be pre-set for test injection; in prod they
+	// are always nil here and built below.
+	historyAuthGuard := s.cfg.AuthGuard
+	historyDEKMgr := s.cfg.RekeyManager
+	historyAuditEm := s.cfg.AuditEmitter
+	if s.cfg.RekeyManager != nil && historyAuthGuard == nil && historyAuditEm == nil {
+		auditEm, auditErr := authguardaudit.NewQueuedEmitter(publisher,
+			authguardaudit.WithGameID(s.cfg.EventBus.GameID()))
+		if auditErr != nil {
+			slog.Warn("history auth guard: audit emitter construction failed — INV-39 fallback disabled",
+				"error", auditErr)
+		} else {
+			sessionBridgeEm, bridgeErr := authguardaudit.NewSessionBridgeEmitter(auditEm)
+			if bridgeErr != nil {
+				slog.Warn("history auth guard: session bridge emitter construction failed — INV-39 fallback disabled",
+					"error", bridgeErr)
+			} else {
+				participantLookup := authguard.NewDEKParticipantLookup(s.cfg.RekeyManager)
+				manifestLookup := authguard.NewPluginManifestLookup(pluginManager)
+				guard, guardErr := authguard.New(participantLookup, manifestLookup, policyEngine, auditEm)
+				if guardErr != nil {
+					slog.Warn("history auth guard: guard construction failed — INV-39 fallback disabled",
+						"error", guardErr)
+				} else {
+					historyAuthGuard = authguard.NewSessionBridgeGuard(guard)
+					historyAuditEm = sessionBridgeEm
+				}
+			}
+		}
+	}
+
+	historyReader := newHistoryReader(js, pool, s.cfg.EventBus.Config(), owners, router,
+		historyAuthGuard, historyDEKMgr, historyAuditEm)
 
 	coreServerOpts := []holoGRPC.CoreServerOption{
 		holoGRPC.WithEventStore(eventStore),
@@ -668,9 +727,14 @@ func (a *focusStreamContributorAdapter) QuerySessionStreams(ctx context.Context,
 // prevents half-configured states where, e.g., the AuthGuard can permit
 // a decrypt but the DEKManager is nil and panics in decodeAuthorizeAndDispatch.
 //
-// When all three are non-nil, WithHistoryAuth forwards them symmetrically
-// to both hot and cold tiers. When all three are nil (production today),
-// behavior is unchanged — sensitive events surface EVENTBUS_HISTORY_AUTH_GUARD_NIL.
+// When all three are non-nil, WithHistoryAuthAndSourceResolver wires the
+// INV-39 hot→cold FallbackResolver on the hot tier and a SimpleResolver
+// on the cold tier (no further fallback past the cold tier itself). pool
+// may be nil — the FallbackResolver's ColdTierLookup is only invoked on
+// actual reads when a hot-tier DEK miss occurs.
+//
+// When all three are nil (degraded deployment), behavior is unchanged —
+// sensitive events surface EVENTBUS_HISTORY_AUTH_GUARD_NIL.
 func newHistoryReader(
 	js jetstream.JetStream,
 	pool *pgxpool.Pool,
@@ -689,7 +753,27 @@ func newHistoryReader(
 		opts = append(opts, history.WithPluginRouter(router))
 	}
 	if guard != nil && dekMgr != nil && auditEm != nil {
-		opts = append(opts, history.WithHistoryAuth(guard, dekMgr, auditEm))
+		// INV-39: wire FallbackResolver on hot tier (hot→cold fallback when DEK
+		// destroyed after Rekey) and SimpleResolver on cold tier (cold IS the
+		// fallback target; a further fallback resolver there would recurse).
+		//
+		// source.NewFallbackResolver and source.NewSimpleResolver require
+		// dek.Manager (the full interface). The production path always supplies
+		// a concrete *dek.manager; the type-assert fails only in tests that use
+		// a narrow stub, in which case we fall back to WithHistoryAuth (no
+		// FallbackResolver). This matches the all-or-nothing contract in the
+		// doc comment above.
+		if fullMgr, ok := dekMgr.(dek.Manager); ok {
+			sourceMetrics := source.NewMetrics(prometheus.DefaultRegisterer)
+			coldLookup := history.NewColdTierLookup(pool)
+			hotResolver := source.NewFallbackResolver(fullMgr, coldLookup, sourceMetrics, slog.Default())
+			coldResolver := source.NewSimpleResolver(fullMgr)
+			opts = append(opts, history.WithHistoryAuthAndSourceResolver(guard, dekMgr, auditEm, hotResolver, coldResolver))
+		} else {
+			// Narrow stub (test path or degraded deployment) — wire guard+dekMgr+auditEm
+			// without the FallbackResolver. Reads succeed but INV-39 fallback is inactive.
+			opts = append(opts, history.WithHistoryAuth(guard, dekMgr, auditEm))
+		}
 	}
 	return history.NewReader(js, pool, cfg.StreamMaxAge, time.Now, opts...)
 }

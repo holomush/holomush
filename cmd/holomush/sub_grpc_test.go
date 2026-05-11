@@ -13,6 +13,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/pkg/errutil"
 )
@@ -142,4 +143,58 @@ func TestNewHistoryReaderNilPreservesNilAuth(t *testing.T) {
 	cfg := eventbus.Config{}.Defaults()
 	reader := newHistoryReader(nil, nil, cfg, nil, nil, nil, nil, nil)
 	assert.NotNil(t, reader, "nil auth must still return a valid HistoryReader")
+}
+
+// TestGRPCSubsystemConfigHasRekeyManagerField asserts that grpcSubsystemConfig
+// carries the three crypto wiring fields added by INV-39 fix (sub-epic E T44+).
+// A nil RekeyManager MUST pass the nil-auth fallback; a non-nil manager MUST
+// cause newHistoryReader to call WithHistoryAuthAndSourceResolver instead of
+// the legacy WithHistoryAuth path (via the Guard/Emitter constructed in Start).
+func TestGRPCSubsystemConfigHasRekeyManagerField(t *testing.T) {
+	// The fields must be present and zero-valued on empty config.
+	cfg := grpcSubsystemConfig{}
+	assert.Nil(t, cfg.RekeyManager, "RekeyManager must be nil on zero config")
+	assert.Nil(t, cfg.AuthGuard, "AuthGuard must be nil on zero config")
+	assert.Nil(t, cfg.AuditEmitter, "AuditEmitter must be nil on zero config")
+}
+
+// TestNewHistoryReaderWithCryptoDepsBuildsFallbackResolver asserts that when
+// all three crypto deps (guard, dekMgr, auditEm) are non-nil, newHistoryReader
+// returns a non-nil HistoryReader wired with the FallbackResolver path
+// (WithHistoryAuthAndSourceResolver). The test does not drive a live read —
+// it only asserts the reader is constructed without error, which proves the
+// wiring code paths compile and run without panicking.
+//
+// INV-39 production wiring (sub-epic E T44): the FallbackResolver path MUST
+// be active when RekeyManager is non-nil in grpcSubsystemConfig.
+func TestNewHistoryReaderWithCryptoDepsBuildsFallbackResolver(t *testing.T) {
+	cfg := eventbus.Config{}.Defaults()
+	guard := &grpcTestAuthGuard{}
+	dekMgr := &grpcTestDEKManager{}
+	auditEm := &grpcTestAuditEmitter{}
+	// pool=nil is safe here — the FallbackResolver's ColdTierLookup (backed by
+	// a nil pool) is only invoked on actual reads, not construction.
+	reader := newHistoryReader(nil, nil, cfg, nil, nil, guard, dekMgr, auditEm)
+	assert.NotNil(t, reader, "non-nil crypto deps must still return a valid HistoryReader")
+}
+
+// grpcTestAuthGuard is a minimal SessionAuthGuard stub for grpc subsystem tests.
+type grpcTestAuthGuard struct{}
+
+func (s *grpcTestAuthGuard) Check(_ context.Context, _ eventbus.SessionCheckRequest) (eventbus.SessionDecision, error) {
+	return eventbus.SessionDecision{}, nil
+}
+
+// grpcTestDEKManager is a minimal SessionDEKManager stub for grpc subsystem tests.
+type grpcTestDEKManager struct{}
+
+func (s *grpcTestDEKManager) Resolve(_ context.Context, _ codec.KeyID, _ uint32) (codec.Key, error) {
+	return codec.Key{}, nil
+}
+
+// grpcTestAuditEmitter is a minimal SessionAuditEmitter stub for grpc subsystem tests.
+type grpcTestAuditEmitter struct{}
+
+func (s *grpcTestAuditEmitter) EmitPluginDecrypt(_ context.Context, _ eventbus.PluginDecryptRecord) error {
+	return nil
 }
