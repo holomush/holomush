@@ -8,6 +8,7 @@
 
 import { ApproveRequest, ApproveResponse, AuthenticateRequest, AuthenticateResponse, ResetTOTPRequest, ResetTOTPResponse, StatusRequest, StatusResponse } from "./admin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
+import { RekeyAbortRequest, RekeyAbortResponse, RekeyListRequest, RekeyProgress, RekeyRequest, RekeyResumeRequest, RekeyStatusRequest, RekeyStatusResponse } from "./rekey_pb.js";
 
 /**
  * AdminService is the break-glass operator administration service. It is
@@ -67,6 +68,66 @@ export const AdminService = {
       I: ResetTOTPRequest,
       O: ResetTOTPResponse,
       kind: MethodKind.Unary,
+    },
+    /**
+     * Rekey initiates a full DEK rekey for a context and streams 7-phase
+     * orchestrator progress back to the caller. Spec §7; INV-E surface.
+     *
+     * @generated from rpc holomush.admin.v1.AdminService.Rekey
+     */
+    rekey: {
+      name: "Rekey",
+      I: RekeyRequest,
+      O: RekeyProgress,
+      kind: MethodKind.ServerStreaming,
+    },
+    /**
+     * RekeyResume resumes a paused or interrupted rekey and streams progress.
+     * Spec §7; INV-E surface.
+     *
+     * @generated from rpc holomush.admin.v1.AdminService.RekeyResume
+     */
+    rekeyResume: {
+      name: "RekeyResume",
+      I: RekeyResumeRequest,
+      O: RekeyProgress,
+      kind: MethodKind.ServerStreaming,
+    },
+    /**
+     * RekeyAbort cancels an in-progress rekey operation.
+     * Spec §7; INV-E surface.
+     *
+     * @generated from rpc holomush.admin.v1.AdminService.RekeyAbort
+     */
+    rekeyAbort: {
+      name: "RekeyAbort",
+      I: RekeyAbortRequest,
+      O: RekeyAbortResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * RekeyStatus returns the current state of a single rekey operation.
+     * Spec §7; INV-E surface.
+     *
+     * @generated from rpc holomush.admin.v1.AdminService.RekeyStatus
+     */
+    rekeyStatus: {
+      name: "RekeyStatus",
+      I: RekeyStatusRequest,
+      O: RekeyStatusResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * RekeyList streams status records for active (and optionally terminal)
+     * rekey operations. Spec §7; INV-E surface.
+     *
+     * @generated from rpc holomush.admin.v1.AdminService.RekeyList
+     */
+    rekeyList: {
+      name: "RekeyList",
+      I: RekeyListRequest,
+      O: RekeyStatusResponse,
+      kind: MethodKind.ServerStreaming,
     },
   }
 } as const;

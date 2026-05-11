@@ -1,0 +1,130 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.admin.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/admin/v1;adminv1";
+
+// RekeyRequest initiates a full DEK rekey operation for a given context.
+// Spec §7; INV-E rekeying surface.
+message RekeyRequest {
+  string session_token = 1;
+  string context_type = 2;
+  string context_id = 3;
+  string justification = 4;
+  optional string approval_request_id = 5; // for dual-control
+}
+
+// RekeyProgress is a streamed progress event emitted during the 7-phase
+// rekey orchestrator. Clients render phase-by-phase progress from these.
+message RekeyProgress {
+  oneof event {
+    PhaseStarted phase_started = 1;
+    Phase3Progress phase3_progress = 2;
+    Phase5Attempt phase5_attempt = 3;
+    PhaseCompleted phase_completed = 4;
+    RekeyCompleted completed = 5;
+    RekeyError error = 6;
+  }
+}
+
+// PhaseStarted is emitted when a new orchestrator phase begins.
+message PhaseStarted {
+  string phase = 1;
+}
+
+// Phase3Progress reports incremental progress during the bulk re-encryption
+// phase (phase 3) of the rekey orchestrator.
+message Phase3Progress {
+  int64 rows_rewritten = 1;
+  int64 rows_remaining_estimate = 2;
+  bytes last_processed_event_id = 3;
+}
+
+// Phase5Attempt is emitted each time the orchestrator retries key-ceremony
+// quorum collection (phase 5).
+message Phase5Attempt {
+  int32 attempt_count = 1;
+  repeated string missing_members = 2;
+}
+
+// PhaseCompleted is emitted when an orchestrator phase finishes successfully.
+message PhaseCompleted {
+  string phase = 1;
+}
+
+// RekeyCompleted is the terminal success event streamed at the end of a
+// successful rekey operation.
+message RekeyCompleted {
+  bytes request_id = 1;
+  bytes audit_event_id = 2;
+  int64 duration_ms = 3;
+  int64 phase3_rows_rewritten = 4;
+  int32 phase5_attempts = 5;
+  bool force_destroy_used = 6;
+  bool resumed = 7;
+}
+
+// RekeyError is the terminal failure event streamed when the rekey
+// orchestrator cannot proceed.
+message RekeyError {
+  string code = 1;
+  string message = 2;
+  // Structured context (e.g., missing_members) as JSON-encoded bytes.
+  bytes details = 3;
+}
+
+// RekeyResumeRequest resumes a paused or interrupted rekey operation.
+message RekeyResumeRequest {
+  string session_token = 1;
+  bytes request_id = 2;
+  bool force_destroy = 3;
+}
+
+// RekeyAbortRequest cancels an in-progress rekey operation.
+message RekeyAbortRequest {
+  string session_token = 1;
+  bytes request_id = 2;
+}
+
+// RekeyAbortResponse confirms the abort and provides the audit trail.
+message RekeyAbortResponse {
+  google.protobuf.Timestamp aborted_at = 1;
+  bytes audit_event_id = 2;
+}
+
+// RekeyStatusRequest fetches the current state of a single rekey operation.
+message RekeyStatusRequest {
+  string session_token = 1;
+  bytes request_id = 2;
+}
+
+// RekeyStatusResponse describes the current state of one rekey operation.
+message RekeyStatusResponse {
+  bytes request_id = 1;
+  string context_type = 2;
+  string context_id = 3;
+  string status = 4;
+  string primary_player_id = 5;
+  google.protobuf.Timestamp started_at = 6;
+  google.protobuf.Timestamp last_heartbeat_at = 7;
+  google.protobuf.Timestamp completed_at = 8;
+  int32 phase5_attempt_count = 9;
+  repeated string phase5_missing_members = 10;
+  bool force_destroy = 11;
+  optional int64 old_dek_id = 12;
+  optional int64 new_dek_id = 13;
+}
+
+// RekeyListRequest queries active and optionally terminal rekey operations.
+message RekeyListRequest {
+  string session_token = 1;
+  bool include_terminal = 2;
+  optional string context_pattern = 3;
+  optional google.protobuf.Timestamp since = 4;
+  int32 limit = 5;
+}

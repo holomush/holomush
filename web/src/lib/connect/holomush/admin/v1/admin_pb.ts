@@ -9,13 +9,15 @@ import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegen
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import type { RekeyAbortRequestSchema, RekeyAbortResponseSchema, RekeyListRequestSchema, RekeyProgressSchema, RekeyRequestSchema, RekeyResumeRequestSchema, RekeyStatusRequestSchema, RekeyStatusResponseSchema } from "./rekey_pb";
+import { file_holomush_admin_v1_rekey } from "./rekey_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file holomush/admin/v1/admin.proto.
  */
 export const file_holomush_admin_v1_admin: GenFile = /*@__PURE__*/
-  fileDesc("Ch1ob2xvbXVzaC9hZG1pbi92MS9hZG1pbi5wcm90bxIRaG9sb211c2guYWRtaW4udjEiDwoNU3RhdHVzUmVxdWVzdCIyCg5TdGF0dXNSZXNwb25zZRIPCgd2ZXJzaW9uGAEgASgJEg8KB2hlYWx0aHkYAiABKAgiTAoTQXV0aGVudGljYXRlUmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCRIRCgl0b3RwX2NvZGUYAyABKAkicAoUQXV0aGVudGljYXRlUmVzcG9uc2USFQoNc2Vzc2lvbl90b2tlbhgBIAEoCRIuCgpleHBpcmVzX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCglwbGF5ZXJfaWQYAyABKAkiOwoOQXBwcm92ZVJlcXVlc3QSFQoNc2Vzc2lvbl90b2tlbhgBIAEoCRISCgpyZXF1ZXN0X2lkGAIgASgMIhEKD0FwcHJvdmVSZXNwb25zZSJDChBSZXNldFRPVFBSZXF1ZXN0EhUKDXNlc3Npb25fdG9rZW4YASABKAkSGAoQdGFyZ2V0X3BsYXllcl9pZBgCIAEoCSIkChFSZXNldFRPVFBSZXNwb25zZRIPCgdjbGVhcmVkGAEgASgIMugCCgxBZG1pblNlcnZpY2USTQoGU3RhdHVzEiAuaG9sb211c2guYWRtaW4udjEuU3RhdHVzUmVxdWVzdBohLmhvbG9tdXNoLmFkbWluLnYxLlN0YXR1c1Jlc3BvbnNlEl8KDEF1dGhlbnRpY2F0ZRImLmhvbG9tdXNoLmFkbWluLnYxLkF1dGhlbnRpY2F0ZVJlcXVlc3QaJy5ob2xvbXVzaC5hZG1pbi52MS5BdXRoZW50aWNhdGVSZXNwb25zZRJQCgdBcHByb3ZlEiEuaG9sb211c2guYWRtaW4udjEuQXBwcm92ZVJlcXVlc3QaIi5ob2xvbXVzaC5hZG1pbi52MS5BcHByb3ZlUmVzcG9uc2USVgoJUmVzZXRUT1RQEiMuaG9sb211c2guYWRtaW4udjEuUmVzZXRUT1RQUmVxdWVzdBokLmhvbG9tdXNoLmFkbWluLnYxLlJlc2V0VE9UUFJlc3BvbnNlQkJaQGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL2FkbWluL3YxO2FkbWludjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("Ch1ob2xvbXVzaC9hZG1pbi92MS9hZG1pbi5wcm90bxIRaG9sb211c2guYWRtaW4udjEiDwoNU3RhdHVzUmVxdWVzdCIyCg5TdGF0dXNSZXNwb25zZRIPCgd2ZXJzaW9uGAEgASgJEg8KB2hlYWx0aHkYAiABKAgiTAoTQXV0aGVudGljYXRlUmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCRIRCgl0b3RwX2NvZGUYAyABKAkicAoUQXV0aGVudGljYXRlUmVzcG9uc2USFQoNc2Vzc2lvbl90b2tlbhgBIAEoCRIuCgpleHBpcmVzX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCglwbGF5ZXJfaWQYAyABKAkiOwoOQXBwcm92ZVJlcXVlc3QSFQoNc2Vzc2lvbl90b2tlbhgBIAEoCRISCgpyZXF1ZXN0X2lkGAIgASgMIhEKD0FwcHJvdmVSZXNwb25zZSJDChBSZXNldFRPVFBSZXF1ZXN0EhUKDXNlc3Npb25fdG9rZW4YASABKAkSGAoQdGFyZ2V0X3BsYXllcl9pZBgCIAEoCSIkChFSZXNldFRPVFBSZXNwb25zZRIPCgdjbGVhcmVkGAEgASgIMqUGCgxBZG1pblNlcnZpY2USTQoGU3RhdHVzEiAuaG9sb211c2guYWRtaW4udjEuU3RhdHVzUmVxdWVzdBohLmhvbG9tdXNoLmFkbWluLnYxLlN0YXR1c1Jlc3BvbnNlEl8KDEF1dGhlbnRpY2F0ZRImLmhvbG9tdXNoLmFkbWluLnYxLkF1dGhlbnRpY2F0ZVJlcXVlc3QaJy5ob2xvbXVzaC5hZG1pbi52MS5BdXRoZW50aWNhdGVSZXNwb25zZRJQCgdBcHByb3ZlEiEuaG9sb211c2guYWRtaW4udjEuQXBwcm92ZVJlcXVlc3QaIi5ob2xvbXVzaC5hZG1pbi52MS5BcHByb3ZlUmVzcG9uc2USVgoJUmVzZXRUT1RQEiMuaG9sb211c2guYWRtaW4udjEuUmVzZXRUT1RQUmVxdWVzdBokLmhvbG9tdXNoLmFkbWluLnYxLlJlc2V0VE9UUFJlc3BvbnNlEkwKBVJla2V5Eh8uaG9sb211c2guYWRtaW4udjEuUmVrZXlSZXF1ZXN0GiAuaG9sb211c2guYWRtaW4udjEuUmVrZXlQcm9ncmVzczABElgKC1Jla2V5UmVzdW1lEiUuaG9sb211c2guYWRtaW4udjEuUmVrZXlSZXN1bWVSZXF1ZXN0GiAuaG9sb211c2guYWRtaW4udjEuUmVrZXlQcm9ncmVzczABElkKClJla2V5QWJvcnQSJC5ob2xvbXVzaC5hZG1pbi52MS5SZWtleUFib3J0UmVxdWVzdBolLmhvbG9tdXNoLmFkbWluLnYxLlJla2V5QWJvcnRSZXNwb25zZRJcCgtSZWtleVN0YXR1cxIlLmhvbG9tdXNoLmFkbWluLnYxLlJla2V5U3RhdHVzUmVxdWVzdBomLmhvbG9tdXNoLmFkbWluLnYxLlJla2V5U3RhdHVzUmVzcG9uc2USWgoJUmVrZXlMaXN0EiMuaG9sb211c2guYWRtaW4udjEuUmVrZXlMaXN0UmVxdWVzdBomLmhvbG9tdXNoLmFkbWluLnYxLlJla2V5U3RhdHVzUmVzcG9uc2UwAUJCWkBnaXRodWIuY29tL2hvbG9tdXNoL2hvbG9tdXNoL3BrZy9wcm90by9ob2xvbXVzaC9hZG1pbi92MTthZG1pbnYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_holomush_admin_v1_rekey]);
 
 /**
  * @generated from message holomush.admin.v1.StatusRequest
@@ -238,6 +240,61 @@ export const AdminService: GenService<{
     methodKind: "unary";
     input: typeof ResetTOTPRequestSchema;
     output: typeof ResetTOTPResponseSchema;
+  },
+  /**
+   * Rekey initiates a full DEK rekey for a context and streams 7-phase
+   * orchestrator progress back to the caller. Spec §7; INV-E surface.
+   *
+   * @generated from rpc holomush.admin.v1.AdminService.Rekey
+   */
+  rekey: {
+    methodKind: "server_streaming";
+    input: typeof RekeyRequestSchema;
+    output: typeof RekeyProgressSchema;
+  },
+  /**
+   * RekeyResume resumes a paused or interrupted rekey and streams progress.
+   * Spec §7; INV-E surface.
+   *
+   * @generated from rpc holomush.admin.v1.AdminService.RekeyResume
+   */
+  rekeyResume: {
+    methodKind: "server_streaming";
+    input: typeof RekeyResumeRequestSchema;
+    output: typeof RekeyProgressSchema;
+  },
+  /**
+   * RekeyAbort cancels an in-progress rekey operation.
+   * Spec §7; INV-E surface.
+   *
+   * @generated from rpc holomush.admin.v1.AdminService.RekeyAbort
+   */
+  rekeyAbort: {
+    methodKind: "unary";
+    input: typeof RekeyAbortRequestSchema;
+    output: typeof RekeyAbortResponseSchema;
+  },
+  /**
+   * RekeyStatus returns the current state of a single rekey operation.
+   * Spec §7; INV-E surface.
+   *
+   * @generated from rpc holomush.admin.v1.AdminService.RekeyStatus
+   */
+  rekeyStatus: {
+    methodKind: "unary";
+    input: typeof RekeyStatusRequestSchema;
+    output: typeof RekeyStatusResponseSchema;
+  },
+  /**
+   * RekeyList streams status records for active (and optionally terminal)
+   * rekey operations. Spec §7; INV-E surface.
+   *
+   * @generated from rpc holomush.admin.v1.AdminService.RekeyList
+   */
+  rekeyList: {
+    methodKind: "server_streaming";
+    input: typeof RekeyListRequestSchema;
+    output: typeof RekeyStatusResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_holomush_admin_v1_admin, 0);

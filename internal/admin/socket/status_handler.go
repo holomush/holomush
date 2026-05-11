@@ -74,3 +74,51 @@ func (h *compositeHandler) ResetTOTP(
 	}
 	return h.resetTOTPHandler.ResetTOTP(ctx, req) //nolint:wrapcheck // handler returns *connect.Error; wrapping would discard the ConnectRPC code
 }
+
+// Rekey is implemented by the rekey handler (holomush-jxo8.7.28). Returns
+// Unimplemented until the handler is registered via Config.
+func (h *compositeHandler) Rekey(
+	_ context.Context,
+	_ *connect.Request[adminv1.RekeyRequest],
+	_ *connect.ServerStream[adminv1.RekeyProgress],
+) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("Rekey not registered"))
+}
+
+// RekeyResume is implemented by the rekey handler (holomush-jxo8.7.28). Returns
+// Unimplemented until the handler is registered via Config.
+func (h *compositeHandler) RekeyResume(
+	_ context.Context,
+	_ *connect.Request[adminv1.RekeyResumeRequest],
+	_ *connect.ServerStream[adminv1.RekeyProgress],
+) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("RekeyResume not registered"))
+}
+
+// RekeyAbort is implemented by the rekey handler (holomush-jxo8.7.29). Returns
+// Unimplemented until the handler is registered via Config.
+func (h *compositeHandler) RekeyAbort(
+	_ context.Context,
+	_ *connect.Request[adminv1.RekeyAbortRequest],
+) (*connect.Response[adminv1.RekeyAbortResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("RekeyAbort not registered"))
+}
+
+// RekeyStatus is implemented by the rekey handler (holomush-jxo8.7.30). Returns
+// Unimplemented until the handler is registered via Config.
+func (h *compositeHandler) RekeyStatus(
+	_ context.Context,
+	_ *connect.Request[adminv1.RekeyStatusRequest],
+) (*connect.Response[adminv1.RekeyStatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("RekeyStatus not registered"))
+}
+
+// RekeyList is implemented by the rekey handler (holomush-jxo8.7.30). Returns
+// Unimplemented until the handler is registered via Config.
+func (h *compositeHandler) RekeyList(
+	_ context.Context,
+	_ *connect.Request[adminv1.RekeyListRequest],
+	_ *connect.ServerStream[adminv1.RekeyStatusResponse],
+) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("RekeyList not registered"))
+}

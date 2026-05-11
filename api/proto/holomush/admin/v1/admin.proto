@@ -6,6 +6,7 @@ syntax = "proto3";
 package holomush.admin.v1;
 
 import "google/protobuf/timestamp.proto";
+import "holomush/admin/v1/rekey.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/admin/v1;adminv1";
 
@@ -29,6 +30,26 @@ service AdminService {
   // crypto.totp_cleared audit event with cleared_by="admin_reset".
   // Spec §3, §4 reset flow.
   rpc ResetTOTP(ResetTOTPRequest) returns (ResetTOTPResponse);
+
+  // Rekey initiates a full DEK rekey for a context and streams 7-phase
+  // orchestrator progress back to the caller. Spec §7; INV-E surface.
+  rpc Rekey(RekeyRequest) returns (stream RekeyProgress);
+
+  // RekeyResume resumes a paused or interrupted rekey and streams progress.
+  // Spec §7; INV-E surface.
+  rpc RekeyResume(RekeyResumeRequest) returns (stream RekeyProgress);
+
+  // RekeyAbort cancels an in-progress rekey operation.
+  // Spec §7; INV-E surface.
+  rpc RekeyAbort(RekeyAbortRequest) returns (RekeyAbortResponse);
+
+  // RekeyStatus returns the current state of a single rekey operation.
+  // Spec §7; INV-E surface.
+  rpc RekeyStatus(RekeyStatusRequest) returns (RekeyStatusResponse);
+
+  // RekeyList streams status records for active (and optionally terminal)
+  // rekey operations. Spec §7; INV-E surface.
+  rpc RekeyList(RekeyListRequest) returns (stream RekeyStatusResponse);
 }
 
 message StatusRequest {}
