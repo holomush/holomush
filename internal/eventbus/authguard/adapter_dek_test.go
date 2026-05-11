@@ -49,6 +49,10 @@ func (s *stubDEKManager) ActiveDEKRow(_ context.Context, _ dek.ContextID) (dek.A
 	return dek.ActiveDEKRecord{}, nil // stub: unused in adapter tests
 }
 
+func (s *stubDEKManager) MintNewDEKForRekey(_ context.Context, _ int64) (int64, error) {
+	return 0, nil // stub: unused in adapter tests
+}
+
 func TestDEKParticipantLookupAdapterDelegatesToManager(t *testing.T) {
 	parts := []dek.Participant{{PlayerID: "01ABC", BindingID: "01DEF"}}
 	mgr := &stubDEKManager{parts: parts}

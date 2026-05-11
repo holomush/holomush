@@ -65,25 +65,39 @@ func (s *auditChainPolicyHashSource) CurrentPolicyHash(ctx context.Context, poli
 	return prevHash, nil
 }
 
-// Orchestrator runs the 7-phase Rekey lifecycle. Phase 1 is implemented here;
-// phases 2–7 land in subsequent beads (holomush-jxo8.7.20–.24).
+// Minter abstracts the Phase 2 DEK-minting operation so that the
+// Orchestrator is decoupled from the concrete *manager type.
+//
+// The sole production implementation is *manager.MintNewDEKForRekey.
+// Tests may substitute a fake.
+type Minter interface {
+	// MintNewDEKForRekey generates a fresh DEK, wraps it via Provider, and
+	// INSERTs a new crypto_keys row with version = old.version+1 and
+	// byte-equal participants (INV-E6). Returns the new row's primary key id.
+	MintNewDEKForRekey(ctx context.Context, oldDEKID int64) (int64, error)
+}
+
+// Orchestrator runs the 7-phase Rekey lifecycle. Phase 1 and Phase 2 are
+// implemented here; phases 3–7 land in subsequent beads (holomush-jxo8.7.21–.24).
 //
 // Thread-safety: Orchestrator is safe for concurrent use — all state lives
 // in the database (CheckpointRepo) with CAS updates guarding transitions.
 type Orchestrator struct {
-	store     *Store
-	repo      *CheckpointRepo
+	store         *Store
+	repo          *CheckpointRepo
 	policyHashSrc PolicyHashSource
-	logger    *slog.Logger
+	minter        Minter
+	logger        *slog.Logger
 }
 
-// NewOrchestrator constructs an Orchestrator. All three collaborators are
+// NewOrchestrator constructs an Orchestrator. All four collaborators are
 // required; nil arguments panic at construction time rather than surfacing
 // as nil-pointer dereferences at call time.
 func NewOrchestrator(
 	store *Store,
 	repo *CheckpointRepo,
 	policyHashSrc PolicyHashSource,
+	minter Minter,
 ) *Orchestrator {
 	if store == nil {
 		panic("dek.NewOrchestrator: store must not be nil")
@@ -94,10 +108,14 @@ func NewOrchestrator(
 	if policyHashSrc == nil {
 		panic("dek.NewOrchestrator: PolicyHashSource must not be nil")
 	}
+	if minter == nil {
+		panic("dek.NewOrchestrator: Minter must not be nil")
+	}
 	return &Orchestrator{
 		store:         store,
 		repo:          repo,
 		policyHashSrc: policyHashSrc,
+		minter:        minter,
 		logger:        slog.Default(),
 	}
 }
@@ -169,4 +187,40 @@ func (o *Orchestrator) RunPhase1Fresh(ctx context.Context, req RekeyRequest) (Re
 	}
 
 	return rid, nil
+}
+
+// RunPhase2 mints a new DEK for the rekey context, preserving the old DEK's
+// participant set byte-for-byte (INV-E6-PARTICIPANT-INVARIANCE), and advances
+// the checkpoint from phase1_auth to phase2_mint_dek atomically.
+//
+// Pre-condition: checkpoint status MUST be phase1_auth.
+//
+// Steps:
+//  1. Load the checkpoint row to obtain old_dek_id and verify pre-condition.
+//  2. Delegate to Minter.MintNewDEKForRekey to generate a fresh DEK,
+//     wrap it, and INSERT a new crypto_keys row (version = old + 1,
+//     participants byte-equal to old per INV-E6).
+//  3. Atomically persist new_dek_id and advance status to phase2_mint_dek
+//     via SetNewDEKAndAdvance (CAS UPDATE on status = 'phase1_auth').
+func (o *Orchestrator) RunPhase2(ctx context.Context, rid RequestID) error {
+	ckpt, err := o.repo.Get(ctx, rid)
+	if err != nil {
+		return err
+	}
+	if ckpt.Status != CheckpointStatusPhase1Auth {
+		return oops.Code("DEK_REKEY_PHASE_PRECONDITION_FAILED").
+			With("expected", CheckpointStatusPhase1Auth).
+			With("actual", ckpt.Status).
+			Errorf("Phase 2 requires status=%s", CheckpointStatusPhase1Auth)
+	}
+
+	// Mint new DEK via Minter (which calls Provider.Wrap and INSERTs into
+	// crypto_keys with participants copied from the old row — INV-E6).
+	newDEKID, err := o.minter.MintNewDEKForRekey(ctx, ckpt.OldDEKID)
+	if err != nil {
+		return oops.Code("DEK_REKEY_MINT_NEW_DEK_FAILED").Wrap(err)
+	}
+
+	// Persist new_dek_id and advance status atomically via CAS UPDATE.
+	return o.repo.SetNewDEKAndAdvance(ctx, rid, newDEKID)
 }

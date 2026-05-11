@@ -368,6 +368,56 @@ func (s *Store) selectByBindingID(ctx context.Context, bindingID string) ([]row,
 	return out, nil
 }
 
+// selectByPK returns the crypto_keys row whose primary key id equals id,
+// regardless of rotated_at or destroyed_at. Used by Phase 2 rekey to load
+// the old DEK row (participants + version) without knowing the version
+// up-front. Package-private: only the Orchestrator's MintNewDEKForRekey path
+// calls this.
+func (s *Store) selectByPK(ctx context.Context, id int64) (row, error) {
+	var r row
+	var participantsJSON []byte
+	err := s.pool.QueryRow(ctx, `
+        SELECT id, context_type, context_id, version, wrapped_dek,
+               wrap_provider, wrap_key_id, participants, created_at, rotated_at
+          FROM crypto_keys
+         WHERE id = $1
+    `, id).Scan(
+		&r.ID, &r.ContextType, &r.ContextID, &r.Version, &r.WrappedDEK,
+		&r.WrapProvider, &r.WrapKeyID, &participantsJSON, &r.CreatedAt, &r.RotatedAt,
+	)
+	if err != nil {
+		return row{}, oops.With("operation", "select_dek_by_pk").
+			With("id", id).Wrap(err)
+	}
+	if err := json.Unmarshal(participantsJSON, &r.Participants); err != nil {
+		return row{}, oops.Code("DEK_PARTICIPANTS_UNMARSHAL_FAILED").Wrap(err)
+	}
+	return r, nil
+}
+
+// insertRekeyed INSERTs a crypto_keys row at version = old.Version+1 with
+// the same participants column bytes as old (re-marshaled from the same Go
+// slice). Used by Phase 2 to mint the new DEK with INV-E6-PARTICIPANT-INVARIANCE.
+// Returns the new row's primary key id.
+func (s *Store) insertRekeyed(ctx context.Context, old row, wrapped []byte, wrapKeyID string) (int64, error) {
+	participantsJSON, err := json.Marshal(old.Participants)
+	if err != nil {
+		return 0, oops.Code("DEK_PARTICIPANTS_MARSHAL_FAILED").Wrap(err)
+	}
+	var id int64
+	err = s.pool.QueryRow(ctx, `
+        INSERT INTO crypto_keys (context_type, context_id, version, wrapped_dek,
+                                  wrap_provider, wrap_key_id, participants, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, now())
+        RETURNING id
+    `, old.ContextType, old.ContextID, old.Version+1, wrapped,
+		old.WrapProvider /* same provider */, wrapKeyID, participantsJSON).Scan(&id)
+	if err != nil {
+		return 0, oops.Code("DEK_REKEY_INSERT_NEW_ROW_FAILED").Wrap(err)
+	}
+	return id, nil
+}
+
 // ResolveIntegrity finds contexts with multiple unrotated, undestroyed
 // rows (crashed Rotate) and marks the earlier versions rotated, keeping
 // only the max version active. Idempotent — safe to run at every startup.

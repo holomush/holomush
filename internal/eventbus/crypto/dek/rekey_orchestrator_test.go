@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -17,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/admin/policy"
 	"github.com/holomush/holomush/internal/eventbus/audit/chain"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
+	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
 	"github.com/holomush/holomush/pkg/errutil"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
@@ -75,15 +77,30 @@ func computeExpectedPolicyHash(t *testing.T, pool *pgxpool.Pool, gameID, policyN
 }
 
 // newTestOrchestrator builds a test-ready Orchestrator backed by pool,
-// wiring the policy chain handler for the given gameID.
+// wiring the policy chain handler for the given gameID and a real KEK provider.
 func newTestOrchestrator(t *testing.T, pool *pgxpool.Pool, gameID string) *dek.Orchestrator {
+	t.Helper()
+	return newTestOrchestratorWithProvider(t, pool, gameID, newTestProvider(t))
+}
+
+// newTestOrchestratorWithProvider builds a test-ready Orchestrator with an
+// explicit KEK provider. Use when the same provider must be shared between
+// the orchestrator and seeded DEK rows (e.g., Phase 2 test).
+func newTestOrchestratorWithProvider(t *testing.T, pool *pgxpool.Pool, gameID string, provider kek.Provider) *dek.Orchestrator {
 	t.Helper()
 	repo := dek.NewCheckpointRepo(pool)
 	chainRepo := chain.NewPostgresRepo(pool)
 	policyHandler := policy.PolicySetHandlerFor(gameID)
 	policyHashSrc := dek.NewAuditChainPolicyHashSource(chainRepo, policyHandler)
 	store := dek.NewStore(pool)
-	return dek.NewOrchestrator(store, repo, policyHashSrc)
+	cfg := dek.CacheConfig{Capacity: 64, TTL: time.Minute}
+	mgr, err := dek.NewManager(provider, store,
+		dek.NewCache(cfg), dek.NewParticipantsCache(cfg),
+		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },
+		&stubBindingResolver{}, // stubBindingResolver defined in manager_test.go
+	)
+	require.NoError(t, err)
+	return dek.NewOrchestrator(store, repo, policyHashSrc, mgr)
 }
 
 // TestOrchestrator_Phase1_FreshStart_CapturesPolicyHash verifies:
@@ -200,4 +217,120 @@ func TestOrchestrator_Phase1_ConcurrentSameContext_Rejected(t *testing.T) {
 	_, err = orch.RunPhase1Fresh(context.Background(), req2)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "DEK_REKEY_ALREADY_IN_PROGRESS")
+}
+
+// seedActiveDEKWithParticipants inserts a crypto_keys row for (ctxType, ctxID)
+// at the given version with a participants JSONB column. The wrapped_dek is a
+// placeholder — the orchestrator only reads context_type, context_id, version,
+// and participants during Phase 2 minting. Returns the assigned row id.
+func seedActiveDEKWithParticipants(t *testing.T, pool *pgxpool.Pool, ctxType, ctxID string, version uint32, participants []dek.Participant) int64 {
+	t.Helper()
+	participantsJSON, err := json.Marshal(participants)
+	require.NoError(t, err)
+	var id int64
+	err = pool.QueryRow(context.Background(), `
+        INSERT INTO crypto_keys
+            (context_type, context_id, version, wrapped_dek, wrap_provider, wrap_key_id, participants, created_at)
+        VALUES ($1, $2, $3, '\xdeadbeef', 'test', 'test-key-id', $4::jsonb, now())
+        RETURNING id
+    `, ctxType, ctxID, version, participantsJSON).Scan(&id)
+	require.NoError(t, err)
+	return id
+}
+
+// cryptoKeyRowForTest is the minimal projection of a crypto_keys row
+// needed for Phase 2 participant-invariance assertions.
+type cryptoKeyRowForTest struct {
+	Version          uint32
+	ParticipantsJSON []byte
+}
+
+// loadCryptoKeyRow loads a crypto_keys row by its primary key id. Used to
+// assert INV-E6 (participants byte-equal between old and new DEK rows).
+func loadCryptoKeyRow(t *testing.T, pool *pgxpool.Pool, id int64) cryptoKeyRowForTest {
+	t.Helper()
+	var r cryptoKeyRowForTest
+	err := pool.QueryRow(context.Background(),
+		`SELECT version, participants::text FROM crypto_keys WHERE id = $1`, id,
+	).Scan(&r.Version, &r.ParticipantsJSON)
+	require.NoError(t, err)
+	return r
+}
+
+// TestOrchestrator_Phase2_MintsNewDEK_PreservesParticipants verifies:
+//   - RunPhase2 advances checkpoint status to phase2_mint_dek (INV-E1)
+//   - checkpoint.NewDEKID is populated after RunPhase2
+//   - new crypto_keys row has version = old+1
+//   - new row's participants JSON is byte-equal to old (INV-E6-PARTICIPANT-INVARIANCE)
+func TestOrchestrator_Phase2_MintsNewDEK_PreservesParticipants(t *testing.T) {
+	pool := testIntegrationPool(t)
+	const gameID = "g1"
+	dek.SetGameIDForTest(gameID)
+	provider := newTestProvider(t)
+
+	participants := []dek.Participant{
+		{PlayerID: "01PA", CharacterID: "01CA"},
+		{PlayerID: "01PB", CharacterID: "01CB"},
+	}
+	seedActiveDEKWithParticipants(t, pool, "scene", "01ABC", 3, participants)
+
+	policyHash := make([]byte, 32)
+	seedPolicySetHeadForOrch(t, pool, gameID, "dual_control_required", policyHash)
+
+	orch := newTestOrchestratorWithProvider(t, pool, gameID, provider)
+	req := dek.RekeyRequest{
+		ContextType:   "scene",
+		ContextID:     "01ABC",
+		Justification: "x",
+		Operator:      dek.OperatorIdentity{PlayerID: "01P"},
+	}
+	rid, err := orch.RunPhase1Fresh(context.Background(), req)
+	require.NoError(t, err)
+
+	require.NoError(t, orch.RunPhase2(context.Background(), rid))
+
+	repo := dek.NewCheckpointRepo(pool)
+	ckpt, err := repo.Get(context.Background(), rid)
+	require.NoError(t, err)
+	require.Equal(t, dek.CheckpointStatusPhase2MintDEK, ckpt.Status,
+		"INV-E1: checkpoint must advance to phase2_mint_dek after RunPhase2")
+	require.NotNil(t, ckpt.NewDEKID, "NewDEKID must be populated after Phase 2")
+
+	// INV-E6: new DEK row's participants MUST be byte-equal to old.
+	oldRow := loadCryptoKeyRow(t, pool, ckpt.OldDEKID)
+	newRow := loadCryptoKeyRow(t, pool, *ckpt.NewDEKID)
+	require.Equal(t, oldRow.ParticipantsJSON, newRow.ParticipantsJSON,
+		"INV-E6: new DEK row participants must be byte-equal to old")
+	require.Equal(t, oldRow.Version+1, newRow.Version,
+		"new DEK version must be old+1")
+}
+
+// TestOrchestrator_Phase2_RequiresPreconditionPhase1Auth verifies:
+//   - RunPhase2 returns DEK_REKEY_PHASE_PRECONDITION_FAILED when checkpoint
+//     is not in phase1_auth status (INV-E1 / INV-E6 rejection path)
+func TestOrchestrator_Phase2_RequiresPreconditionPhase1Auth(t *testing.T) {
+	pool := testIntegrationPool(t)
+	const gameID = "g1"
+	dek.SetGameIDForTest(gameID)
+
+	seedDEKRow(t, pool, 200, "scene", "01DEF", 1)
+
+	orch := newTestOrchestrator(t, pool, gameID)
+
+	// Open a checkpoint manually at 'pending' status — do NOT call RunPhase1Fresh
+	// so the status stays at 'pending', not 'phase1_auth'.
+	repo := dek.NewCheckpointRepo(pool)
+	openReq, err := dek.NewCheckpointOpenRequest(
+		"scene", "01DEF",
+		make([]byte, 32), make([]byte, 32),
+		"01PLAYER", 200,
+	)
+	require.NoError(t, err)
+	rid, err := repo.Open(context.Background(), openReq)
+	require.NoError(t, err)
+
+	// RunPhase2 with checkpoint at 'pending' (not 'phase1_auth') must fail.
+	err = orch.RunPhase2(context.Background(), rid)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "DEK_REKEY_PHASE_PRECONDITION_FAILED")
 }

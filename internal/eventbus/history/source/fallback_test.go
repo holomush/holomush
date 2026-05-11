@@ -64,6 +64,10 @@ func (f *fakeDEKManager) ActiveDEKRow(_ context.Context, _ dek.ContextID) (dek.A
 	panic("unused")
 }
 
+func (f *fakeDEKManager) MintNewDEKForRekey(context.Context, int64) (int64, error) {
+	panic("unused")
+}
+
 func newTestMetrics() *source.Metrics {
 	reg := prometheus.NewRegistry()
 	return source.NewMetricsForTest(reg)

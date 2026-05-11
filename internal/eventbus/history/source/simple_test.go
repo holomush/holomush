@@ -49,6 +49,10 @@ func (s *stubDEKManager) ActiveDEKRow(_ context.Context, _ dek.ContextID) (dek.A
 	panic("unused")
 }
 
+func (s *stubDEKManager) MintNewDEKForRekey(context.Context, int64) (int64, error) {
+	panic("unused")
+}
+
 func TestSimpleResolver_IdentityCodecBypassesResolve(t *testing.T) {
 	env := eventbus.NewEnvelopeForTest(eventbus.EnvelopeFields{
 		Codec: codec.NameIdentity,

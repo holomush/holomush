@@ -43,6 +43,13 @@ type Manager interface {
 	// the Rekey orchestrator's Phase 1 to obtain the OldDEKID for the
 	// checkpoint row. Returns DEK_NOT_FOUND if no active row exists.
 	ActiveDEKRow(ctx context.Context, ctxID ContextID) (ActiveDEKRecord, error)
+
+	// MintNewDEKForRekey is used by the Rekey orchestrator's Phase 2.
+	// Generates a fresh DEK, wraps it via Provider, and INSERTs a new
+	// crypto_keys row with version = old.version+1 and byte-equal
+	// participants (INV-E6). Returns the new row's primary key id.
+	// Manager satisfies dek.Minter via this method.
+	MintNewDEKForRekey(ctx context.Context, oldDEKID int64) (int64, error)
 }
 
 // ActiveDEKRecord is a minimal projection of a crypto_keys row exposed to the
@@ -420,6 +427,34 @@ func (m *manager) unwrapAndCache(ctx context.Context, r row) (codec.Key, error) 
 		r.Participants,
 	)
 	return material.AsCodecKey(keyID, r.Version), nil
+}
+
+// MintNewDEKForRekey is called by the Rekey orchestrator's Phase 2.
+// Generates a fresh 32-byte DEK via crypto/rand, wraps it via Provider,
+// reads the old row's participants column, and INSERTs a new crypto_keys
+// row with version = old.version+1 and the SAME participants bytes.
+// Returns the new row's primary key id.
+//
+// INV-E6-PARTICIPANT-INVARIANCE: the new row's participants column is
+// byte-equal to the old row's (same Go slice re-marshaled).
+func (m *manager) MintNewDEKForRekey(ctx context.Context, oldDEKID int64) (int64, error) {
+	if err := m.configured(); err != nil {
+		return 0, err
+	}
+
+	oldRow, err := m.store.selectByPK(ctx, oldDEKID)
+	if err != nil {
+		return 0, oops.Code("DEK_REKEY_OLD_ROW_LOOKUP_FAILED").Wrap(err)
+	}
+	var newDEK [DEKByteLength]byte
+	if _, rngErr := io.ReadFull(rand.Reader, newDEK[:]); rngErr != nil {
+		return 0, oops.Code("DEK_REKEY_GEN_NEW_DEK_FAILED").Wrap(rngErr)
+	}
+	wrapped, keyID, err := m.provider.Wrap(ctx, newDEK[:])
+	if err != nil {
+		return 0, oops.Code("DEK_REKEY_WRAP_FAILED").Wrap(err)
+	}
+	return m.store.insertRekeyed(ctx, oldRow, wrapped, keyID)
 }
 
 // validateProviderWrapOutput rejects malformed Wrap return values.
