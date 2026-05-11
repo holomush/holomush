@@ -78,16 +78,16 @@ type Minter interface {
 }
 
 // Orchestrator runs the 7-phase Rekey lifecycle. Phases 1, 2, and 3 are
-// implemented here (Phase 3 in rekey_phase3.go); phases 5–7 land in
-// subsequent beads (holomush-jxo8.7.22–.24).
+// implemented in rekey_orchestrator.go (Phase 3 in rekey_phase3.go); Phase 5
+// in rekey_phase5.go; Phase 6 in rekey_phase6.go; Phase 7 in rekey_phase7.go.
 //
 // Thread-safety: Orchestrator is safe for concurrent use — all state lives
 // in the database (CheckpointRepo) with CAS updates guarding transitions.
 //
-// materialResolver and batchHookForTest are populated post-construction
-// via the additive SetMaterialResolver / SetBatchHookForTest seams (see
-// rekey_phase3.go). NewOrchestrator's signature is unchanged so the
-// Phase 1 / Phase 2 wiring shipped in .19 / .20 continues to compile.
+// Phase-specific collaborators are wired post-construction via additive setter
+// methods (SetMaterialResolver, SetPhase5Coordinator, SetDestroyer,
+// SetAuditEmitter, SetDataDir). NewOrchestrator's signature is unchanged so
+// wiring from all earlier beads continues to compile.
 type Orchestrator struct {
 	store            *Store
 	repo             *CheckpointRepo
@@ -96,6 +96,9 @@ type Orchestrator struct {
 	materialResolver MaterialResolver
 	phase5Coord      Phase5Coordinator
 	dekDestroyer     Destroyer
+	auditEmitter     AuditEmitter // Phase 7: emit chained audit event (holomush-jxo8.7.24)
+	dataDir          string       // Phase 7: fallback log directory (INV-E13)
+	serverID         string       // Phase 7: server_identity field in audit payload
 	batchHookForTest func(rowsRewrittenSoFar int)
 	logger           *slog.Logger
 }
