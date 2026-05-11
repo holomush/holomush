@@ -365,41 +365,52 @@ to one chain. Cloning this for rekey would create N specialized verifiers
 as the platform grows (rekey, read-stream, KEK rotation, …). E extracts the
 primitive once.
 
-```go
-package auditchain
+> **Design amendment — 2026-05-10 (R6, post-implementation reconciliation).**
+> The original design declared `Chain` as a struct with function fields
+> (`SubjectFor`, `ScopeFromPayload`, `Canonicalize`, etc.) carrying behavior
+> per chain. During execution of bead `holomush-jxo8.7.2`, the primitive
+> shipped with `Chain` as a **pure-metadata struct** (4 dot-path string
+> fields), with per-chain behavior implemented as **standalone functions
+> in each chain's owning package** (e.g., `dek.CanonicalizeRekeyPayload`,
+> `dek.ParseRekeyScopeFromPayload` in `internal/eventbus/crypto/dek/`;
+> `policy.CanonicalizePolicySetPayload` etc. in the policy package). This
+> is the canonical landed shape; the spec is amended to reflect it. The
+> design rationale is in `internal/eventbus/audit/chain/chain.go`'s
+> package doc; verbatim landed code is at `chain.go:38-91`. Downstream
+> interfaces (Verifier, Emitter, VerifierSubsystem) are amended in §3.7
+> below.
 
+```go
+package chain // import path: internal/eventbus/audit/chain
+
+// Chain describes a single hash-chained audit-event family. Pure metadata;
+// no behavior is carried on the struct. Behavior (canonicalize / scope
+// extraction / subject construction) lives as standalone functions in the
+// owning chain's package, registered with the Verifier/Emitter via a
+// chain.Handler struct at wiring time.
 type Chain struct {
-    Name              string                                   // "crypto.policy_set" | "system.rekey" | future
-    EventType         string                                   // exact match against events_audit.type
-    SubjectFor        func(scope string) string                // builds the subject for a given scope key; MUST start with "events.<game>." (INV-E26)
-    SubjectPattern    string                                   // SQL LIKE for VerifyAll discovery
-    ScopeFromSubject  func(subject string) (string, error)     // inverse: parse scope from subject
-    ScopeFromPayload  func(payload []byte) (string, error)     // INV-E27: independent extraction from payload; verifier cross-checks
-    Canonicalize      func(payload []byte) ([]byte, error)     // RFC 8785 JCS or domain-specific deterministic canonicalization
-    SelfHashFieldName string                                   // payload field name to zero before recomputing self-hash (e.g., "policy_hash" / "rekey_chain.self_hash")
-    PrevHashOf        func(payload []byte) ([]byte, error)     // extract prev_hash from payload (nil for genesis)
-    SelfHashOf        func(payload []byte) ([]byte, error)     // extract self-hash from payload
+    SubjectPrefix     string // "events.<game>.system.rekey" (INV-E26 — MUST start "events.")
+    SelfHashField     string // dot-path zeroed before recompute (e.g., "rekey_chain.self_hash")
+    PrevHashField     string // dot-path of predecessor's hash (nil at genesis)
+    ScopePayloadField string // dot-path identifying chain's scope (INV-E27 — non-empty)
 }
 ```
 
 **Pinned recompute composition (INV-E28).** The verifier's self-hash
-recompute is fixed at the primitive level:
+recompute is fixed at the primitive level. The function signature takes
+the payload-as-map and the SelfHashField dot-path directly; per-chain
+`Canonicalize` is handled by the chain's owning package decoding the
+event payload into the map before calling `RecomputeSelfHash`:
 
 ```go
-// auditchain.RecomputeSelfHash is the SINGLE authoritative recompute
-// function. The hash function (SHA-256) is pinned across all chains.
-// The composition (zero self-hash field → chain-defined Canonicalize →
-// SHA-256) is pinned across all chains. The Canonicalize function is
-// chain-defined and MAY include input-normalization steps documented
-// as part of the chain's contract.
-func RecomputeSelfHash(c Chain, payload []byte) ([]byte, error) {
-    zeroed, err := zeroField(payload, c.SelfHashFieldName)
-    if err != nil { return nil, oops.Wrap(err) }
-    canonical, err := c.Canonicalize(zeroed)
-    if err != nil { return nil, oops.Wrap(err) }
-    sum := sha256.Sum256(canonical)
-    return sum[:], nil
-}
+// chain.RecomputeSelfHash is the SINGLE authoritative recompute function.
+// The hash function (SHA-256) is pinned across all chains. The composition
+// (zero self-hash field → RFC 8785 JCS canonicalize → SHA-256) is pinned
+// across all chains. Per-chain canonicalization (e.g., D's policy_set
+// PrevHash empty-form → nil normalization) MUST happen in the chain's
+// owning package BEFORE constructing the map[string]any payload passed
+// here — see internal/eventbus/audit/chain/chain.go:143-157.
+func RecomputeSelfHash(payload map[string]any, selfHashField string) ([]byte, error)
 ```
 
 D's `ComputePolicyHash` (`internal/admin/policy/chain.go:47-63`) reduces to
@@ -437,37 +448,60 @@ meta-test enforces this at the registry level.
 **Scope cross-check (INV-E27).** D's verifier enforces
 `payload.policy_name == expected policy_name` (cross-checked against the
 subject-derived scope). The generalized verifier does the same: every
-`Chain` registers `ScopeFromPayload` and the verifier rejects with
+registered chain provides a `ScopeFromPayload` extractor (via the
+`Handler` registration introduced below) and the verifier rejects with
 `AUDIT_CHAIN_SCOPE_MISMATCH` on disagreement. Test coverage at unit level
 (table-driven mismatch cases) and integration (synthesize a row whose
 subject and payload disagree, assert verifier rejects).
 
+> **Design amendment — 2026-05-10 (R6).** Per the Chain-shape amendment
+> above, the Repo / Verifier / Emitter / VerifierSubsystem interfaces
+> below are restated to take **chain metadata + a Handler bundle** rather
+> than a behavior-carrying Chain struct. The Handler is registered at
+> wiring time by the chain's owning package (e.g., `dek.RegisterRekey(v)`)
+> and carries the per-chain extraction/canonicalization callbacks. The
+> Repo's row queries reference chains by `SubjectPrefix` (the metadata
+> field that's unique per chain).
+
+```go
+// Handler bundles per-chain behavior. Registered with VerifierSubsystem
+// at wiring time by the chain's owning package.
+type Handler struct {
+    Chain            Chain                                       // metadata: SubjectPrefix/SelfHashField/PrevHashField/ScopePayloadField
+    SubjectFor       func(scope string) string                   // build full subject from scope: "events.<game>.system.rekey.<context_type>.<context_id>"
+    ScopeFromSubject func(subject string) (string, error)        // inverse: parse scope from subject for verifier cross-check (INV-E27)
+    ScopeFromPayload func(payload []byte) (string, error)        // independent extraction for verifier cross-check (INV-E27)
+    Canonicalize     func(payload []byte) ([]byte, error)        // unmarshal + chain-specific normalization (e.g., D's PrevHash empty-form → nil) → JSON bytes
+    PrevHashOf       func(payload []byte) ([]byte, error)        // extract prev_hash for chain walk (nil for genesis)
+    SelfHashOf       func(payload []byte) ([]byte, error)        // extract self-hash for chain walk
+}
+
 type Repo interface {
-    LoadEntriesByScope(ctx context.Context, c Chain, scope string) ([]Entry, error)
-    DiscoverScopes(ctx context.Context, c Chain) ([]string, error)
+    LoadEntriesByScope(ctx context.Context, subjectPrefix, scope string) ([]Entry, error)
+    DiscoverScopes(ctx context.Context, subjectPrefix string) ([]string, error)
     ChainInitialized(ctx context.Context, chainName, scope string) (bool, error)
     MarkChainInitialized(ctx context.Context, chainName, scope string) error
 }
 
 type Entry struct {
-    JSSeq int64
+    JSSeq   int64
     Subject string
     Payload []byte
 }
 
 type Verifier interface {
-    VerifyScope(ctx context.Context, c Chain, scope string) error
-    VerifyAll(ctx context.Context, c Chain) error
+    VerifyScope(ctx context.Context, h Handler, scope string) error
+    VerifyAll(ctx context.Context, h Handler) error
 }
 
 type Emitter interface {
-    ComputePrevHashFor(ctx context.Context, c Chain, scope string) (prevHash []byte, prevEventID *eventbus.EventID, err error)
+    ComputePrevHashFor(ctx context.Context, h Handler, scope string) (prevHash []byte, prevEventID *eventbus.EventID, err error)
 }
 
 type VerifierSubsystem struct {
-    chains []Chain
+    handlers []Handler
     verifier Verifier
-    log *slog.Logger
+    log      *slog.Logger
 }
 
 ```text
