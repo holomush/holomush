@@ -68,6 +68,10 @@ func (f *fakeDEKManager) MintNewDEKForRekey(context.Context, int64) (int64, erro
 	panic("unused")
 }
 
+func (f *fakeDEKManager) DestroyDEK(context.Context, int64) error { panic("unused") }
+
+func (f *fakeDEKManager) EvictCachedDEK(context.Context, int64) error { panic("unused") }
+
 func newTestMetrics() *source.Metrics {
 	reg := prometheus.NewRegistry()
 	return source.NewMetricsForTest(reg)

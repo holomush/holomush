@@ -53,6 +53,10 @@ func (s *stubDEKManager) MintNewDEKForRekey(context.Context, int64) (int64, erro
 	panic("unused")
 }
 
+func (s *stubDEKManager) DestroyDEK(context.Context, int64) error { panic("unused") }
+
+func (s *stubDEKManager) EvictCachedDEK(context.Context, int64) error { panic("unused") }
+
 func TestSimpleResolver_IdentityCodecBypassesResolve(t *testing.T) {
 	env := eventbus.NewEnvelopeForTest(eventbus.EnvelopeFields{
 		Codec: codec.NameIdentity,

@@ -50,6 +50,20 @@ type Manager interface {
 	// participants (INV-E6). Returns the new row's primary key id.
 	// Manager satisfies dek.Minter via this method.
 	MintNewDEKForRekey(ctx context.Context, oldDEKID int64) (int64, error)
+
+	// DestroyDEK soft-deletes the crypto_keys row whose primary key id
+	// equals dekID by setting destroyed_at = NOW(). Idempotent: a row
+	// already destroyed is a no-op success (INV-E12-PHASE6-IDEMPOTENT).
+	// Used by the Rekey orchestrator's Phase 6.
+	DestroyDEK(ctx context.Context, dekID int64) error
+
+	// EvictCachedDEK removes all locally cached material for the DEK
+	// context associated with dekID from the in-process DEK and
+	// participants caches. Looks up the row in the store to derive the
+	// ContextID for cache invalidation. A no-op if the DEK is not in
+	// cache. Used by the Rekey orchestrator's Phase 6 after DestroyDEK
+	// to prevent stale in-process cache hits.
+	EvictCachedDEK(ctx context.Context, dekID int64) error
 }
 
 // VersionForDEKID is defined on *manager (manager.go) but kept off the
@@ -461,6 +475,47 @@ func (m *manager) MintNewDEKForRekey(ctx context.Context, oldDEKID int64) (int64
 		return 0, oops.Code("DEK_REKEY_WRAP_FAILED").Wrap(err)
 	}
 	return m.store.insertRekeyed(ctx, oldRow, wrapped, keyID)
+}
+
+// DestroyDEK soft-deletes the crypto_keys row with the given primary key by
+// setting destroyed_at = NOW(). Idempotent: a row whose destroyed_at is
+// already set is unaffected — zero rows updated is treated as success,
+// satisfying INV-E12-PHASE6-IDEMPOTENT. Used by the Rekey orchestrator's
+// Phase 6.
+func (m *manager) DestroyDEK(ctx context.Context, dekID int64) error {
+	if err := m.configured(); err != nil {
+		return err
+	}
+	return m.store.markDestroyedByPK(ctx, dekID)
+}
+
+// EvictCachedDEK removes all locally cached DEK material and participant
+// entries for the context associated with dekID. Looks up the row in the
+// store to derive the ContextID for cache invalidation; uses InvalidateContext
+// so all versions for that context are evicted atomically. A no-op if the
+// DEK is not in the local cache. Used by the Rekey orchestrator's Phase 6
+// after DestroyDEK to prevent stale in-process cache hits.
+func (m *manager) EvictCachedDEK(ctx context.Context, dekID int64) error {
+	if m.store == nil || m.cache == nil || m.partCache == nil {
+		// Not configured (e.g., NewManagerForUnitTest); safe no-op.
+		return nil
+	}
+	// Load the row to derive its ContextID. selectByPK includes
+	// destroyed rows, which is required here since this method is called
+	// AFTER DestroyDEK has already set destroyed_at.
+	r, err := m.store.selectByPK(ctx, dekID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Row not found — nothing to evict.
+			return nil
+		}
+		return oops.Code("DEK_EVICT_CACHE_LOOKUP_FAILED").
+			With("dek_id", dekID).Wrap(err)
+	}
+	ctxID := ContextID{Type: r.ContextType, ID: r.ContextID}
+	m.cache.InvalidateContext(ctxID)
+	m.partCache.InvalidateContext(ctxID)
+	return nil
 }
 
 // VersionForDEKID returns the version column of the crypto_keys row whose

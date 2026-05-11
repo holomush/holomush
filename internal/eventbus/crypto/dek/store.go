@@ -320,6 +320,25 @@ func (s *Store) markDestroyed(ctx context.Context, keyID codec.KeyID, version ui
 	return nil
 }
 
+// markDestroyedByPK sets destroyed_at on the crypto_keys row with the
+// given primary key id. Idempotent: a row already destroyed (destroyed_at IS
+// NOT NULL) is unaffected — zero rows updated is a no-op success, satisfying
+// INV-E12-PHASE6-IDEMPOTENT. Used by Phase 6 of the Rekey orchestrator.
+func (s *Store) markDestroyedByPK(ctx context.Context, dekID int64) error {
+	_, err := s.pool.Exec(
+		ctx, `
+		UPDATE crypto_keys
+		   SET destroyed_at = NOW()
+		 WHERE id = $1 AND destroyed_at IS NULL`,
+		dekID,
+	)
+	if err != nil {
+		return oops.Code("DEK_MARK_DESTROYED_FAILED").
+			With("dek_id", dekID).Wrap(err)
+	}
+	return nil
+}
+
 // selectByBindingID returns all active DEK rows whose participants
 // array contains an element with the given binding_id. Used by the
 // wizard-transfer rebind handler to find affected DEKs.

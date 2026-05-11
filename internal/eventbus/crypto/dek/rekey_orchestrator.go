@@ -95,6 +95,7 @@ type Orchestrator struct {
 	minter           Minter
 	materialResolver MaterialResolver
 	phase5Coord      Phase5Coordinator
+	dekDestroyer     Destroyer
 	batchHookForTest func(rowsRewrittenSoFar int)
 	logger           *slog.Logger
 }
