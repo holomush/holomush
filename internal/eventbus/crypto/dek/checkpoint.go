@@ -328,8 +328,8 @@ func (r *CheckpointRepo) ListExpired(ctx context.Context, ttl time.Duration) ([]
                aborted_at, aborted_reason
           FROM crypto_rekey_checkpoints
          WHERE status NOT IN ('complete', 'aborted')
-           AND last_heartbeat_at < now() - $1::interval
-    `, ttl.String())
+           AND last_heartbeat_at < now() - make_interval(secs => $1)
+    `, int64(ttl.Seconds()))
 	if err != nil {
 		return nil, oops.Code("DEK_REKEY_LIST_EXPIRED_FAILED").Wrap(err)
 	}

@@ -56,7 +56,7 @@ func NewEnvelopeFromColdRow(row ColdRow) Envelope {
 		eventID:    row.EventID,
 		subject:    row.Subject,
 		evType:     row.Type,
-		payload:    row.Payload,
+		payload:    copyBytes(row.Payload),
 		codecName:  codec.Name(row.Codec),
 		keyID:      row.KeyID,
 		keyVersion: row.KeyVersion,
@@ -66,11 +66,15 @@ func NewEnvelopeFromColdRow(row ColdRow) Envelope {
 
 // EnvelopeFields is the constructor argument for Envelope when the caller has
 // the fields in hand directly (not from a cold-tier row). All zero values are
-// valid (identity codec, no DEK, empty payload). Subject/Type/Timestamp default
-// to zero values — callers that need them should populate the Envelope via
-// NewEnvelopeFromColdRow instead.
+// valid (identity codec, no DEK, empty payload, no subject/type/timestamp);
+// hot-tier callers that need full envelope metadata SHOULD populate every
+// field rather than relying on zero defaults — INV-25 AAD construction and
+// the history dispatch path both read Subject and Type.
 type EnvelopeFields struct {
 	EventID    EventID
+	Subject    string
+	Type       string
+	Timestamp  time.Time
 	Codec      codec.Name
 	KeyID      codec.KeyID
 	KeyVersion uint32
@@ -83,11 +87,26 @@ type EnvelopeFields struct {
 func NewEnvelopeFromFields(f EnvelopeFields) Envelope {
 	return Envelope{
 		eventID:    f.EventID,
+		subject:    f.Subject,
+		evType:     f.Type,
+		timestamp:  f.Timestamp,
 		codecName:  f.Codec,
 		keyID:      f.KeyID,
 		keyVersion: f.KeyVersion,
-		payload:    f.Payload,
+		payload:    copyBytes(f.Payload),
 	}
+}
+
+// copyBytes returns a defensive copy of b so Envelope cannot be mutated by
+// the caller via the original slice. nil and zero-length inputs return nil
+// to avoid unnecessary allocations on identity-codec envelopes.
+func copyBytes(b []byte) []byte {
+	if len(b) == 0 {
+		return nil
+	}
+	out := make([]byte, len(b))
+	copy(out, b)
+	return out
 }
 
 // NewEnvelopeForTest constructs an Envelope for use in unit tests.
@@ -107,7 +126,10 @@ func (e Envelope) Subject() string { return e.subject }
 func (e Envelope) Type() string { return e.evType }
 
 // Payload returns the raw marshaled Event proto bytes (events_audit.envelope).
-func (e Envelope) Payload() []byte { return e.payload }
+// Returns a defensive copy so callers cannot mutate the envelope's backing
+// storage. For identity-codec envelopes with empty payloads, returns nil
+// without allocating.
+func (e Envelope) Payload() []byte { return copyBytes(e.payload) }
 
 // Codec returns the codec name for this event.
 func (e Envelope) Codec() codec.Name { return e.codecName }

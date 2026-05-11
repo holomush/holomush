@@ -56,17 +56,22 @@ func NewRekeyAuditEmitter(ce chain.Emitter, pub AuditPublisher) *RekeyAuditEmitt
 // The payload's Context field determines the chain scope ("type:id") and
 // the NATS subject ("events.<game>.system.rekey.<ct>.<cid>").
 //
+// Returns the published eventID, the finalized payload (with scope,
+// prev_hash, self_hash filled in), and any error. The caller MUST persist
+// the finalized payload to the audit-fallback log on error so the recorded
+// chain-link fields match what would have been published (INV-E13).
+//
 // INV-E14: prev_hash is the recomputed self-hash of the tail entry, or nil
 // for genesis (empty chain for this scope).
 // INV-E28: self_hash is SHA-256(JCS(zero(payload, "rekey_chain.self_hash"))).
-func (e *RekeyAuditEmitter) Emit(ctx context.Context, payload RekeyAuditPayload) (ulid.ULID, error) {
+func (e *RekeyAuditEmitter) Emit(ctx context.Context, payload RekeyAuditPayload) (ulid.ULID, RekeyAuditPayload, error) {
 	h := RekeyHandlerFor(currentGameIDForRekey)
 	scope := payload.Context.Type + ":" + payload.Context.ID
 
 	// Step 1: compute prev_hash from the current chain head.
 	prevHashBytes, _, err := e.chainEmitter.ComputePrevHashFor(ctx, h, scope)
 	if err != nil {
-		return ulid.ULID{}, oops.Code("DEK_REKEY_AUDIT_PREV_HASH_FAILED").Wrap(err)
+		return ulid.ULID{}, payload, oops.Code("DEK_REKEY_AUDIT_PREV_HASH_FAILED").Wrap(err)
 	}
 
 	// Encode prev_hash as "sha256:<hex>" string, or nil for genesis.
@@ -78,32 +83,35 @@ func (e *RekeyAuditEmitter) Emit(ctx context.Context, payload RekeyAuditPayload)
 	// chain.RecomputeSelfHash (INV-E28 pinned composition).
 	raw, err := json.Marshal(&payload)
 	if err != nil {
-		return ulid.ULID{}, oops.Code("DEK_REKEY_AUDIT_MARSHAL_FAILED").Wrap(err)
+		return ulid.ULID{}, payload, oops.Code("DEK_REKEY_AUDIT_MARSHAL_FAILED").Wrap(err)
 	}
 	var m map[string]any
 	if err = json.Unmarshal(raw, &m); err != nil {
-		return ulid.ULID{}, oops.Code("DEK_REKEY_AUDIT_UNMARSHAL_FAILED").Wrap(err)
+		return ulid.ULID{}, payload, oops.Code("DEK_REKEY_AUDIT_UNMARSHAL_FAILED").Wrap(err)
 	}
 	selfHashBytes, err := chain.RecomputeSelfHash(m, h.Chain.SelfHashField)
 	if err != nil {
-		return ulid.ULID{}, oops.Code("DEK_REKEY_AUDIT_SELF_HASH_FAILED").Wrap(err)
+		return ulid.ULID{}, payload, oops.Code("DEK_REKEY_AUDIT_SELF_HASH_FAILED").Wrap(err)
 	}
 	payload.RekeyChainField.SelfHash = encodeHash(selfHashBytes)
 
 	// Step 3: re-marshal with self_hash populated.
 	raw, err = json.Marshal(&payload)
 	if err != nil {
-		return ulid.ULID{}, oops.Code("DEK_REKEY_AUDIT_REMARSHAL_FAILED").Wrap(err)
+		return ulid.ULID{}, payload, oops.Code("DEK_REKEY_AUDIT_REMARSHAL_FAILED").Wrap(err)
 	}
 
-	// Step 4: publish via the narrow AuditPublisher seam.
+	// Step 4: publish via the narrow AuditPublisher seam. On failure, the
+	// finalized payload (with chain-link fields populated) is returned so
+	// the caller's fallback log persists the exact record that would have
+	// been emitted (INV-E13).
 	subject := h.SubjectFor(scope)
 	eventID, err := e.publisher.PublishAudit(ctx, subject, rekeyEventType, raw)
 	if err != nil {
-		return ulid.ULID{}, oops.Code("DEK_REKEY_AUDIT_PUBLISH_FAILED").
+		return ulid.ULID{}, payload, oops.Code("DEK_REKEY_AUDIT_PUBLISH_FAILED").
 			With("subject", subject).Wrap(err)
 	}
-	return eventID, nil
+	return eventID, payload, nil
 }
 
 // rekeyEventType is the EventBus event type for rekey audit events.

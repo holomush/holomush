@@ -101,7 +101,7 @@ func TestMigration_000031_CryptoRekeyCheckpoints(t *testing.T) {
 		`INSERT INTO crypto_rekey_checkpoints
          (request_id, context_type, context_id, op_args_hash, policy_hash,
           primary_player_id, status, old_dek_id)
-         VALUES ($1, 'scene', '01ABC', $2, $3, '01PRIM', 'phase1_complete', $4)`,
+         VALUES ($1, 'scene', '01ABC', $2, $3, '01PRIM', 'phase1_auth', $4)`,
 		reqID, make([]byte, 32), make([]byte, 32), dekID)
 	require.NoError(t, err)
 
@@ -111,7 +111,7 @@ func TestMigration_000031_CryptoRekeyCheckpoints(t *testing.T) {
 		`INSERT INTO crypto_rekey_checkpoints
          (request_id, context_type, context_id, op_args_hash, policy_hash,
           primary_player_id, status, old_dek_id)
-         VALUES ($1, 'scene', '01ABC', $2, $3, '01OTHER', 'phase1_complete', $4)`,
+         VALUES ($1, 'scene', '01ABC', $2, $3, '01OTHER', 'phase1_auth', $4)`,
 		reqID2, make([]byte, 32), make([]byte, 32), dekID)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "crypto_rekey_checkpoints_one_active_per_context")
@@ -126,7 +126,7 @@ func TestMigration_000031_CryptoRekeyCheckpoints(t *testing.T) {
 		`INSERT INTO crypto_rekey_checkpoints
          (request_id, context_type, context_id, op_args_hash, policy_hash,
           primary_player_id, status, old_dek_id)
-         VALUES ($1, 'scene', '01ABC', $2, $3, '01OTHER', 'phase1_complete', $4)`,
+         VALUES ($1, 'scene', '01ABC', $2, $3, '01OTHER', 'phase1_auth', $4)`,
 		reqID2, make([]byte, 32), make([]byte, 32), dekID)
 	require.NoError(t, err, "after first is terminal, second can claim the slot")
 

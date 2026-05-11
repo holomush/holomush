@@ -21,9 +21,11 @@ import (
 // (defined in audit.go). Tests may substitute a fake.
 //
 // Emit fills in the rekey_chain block (INV-E14: prev_hash, INV-E28: self_hash)
-// and publishes the rekey audit event. Returns the minted event ULID.
+// and publishes the rekey audit event. Returns the minted event ULID along
+// with the finalized payload (scope/prev_hash/self_hash populated) so the
+// caller can persist the exact record on publish failure (INV-E13 fallback).
 type AuditEmitter interface {
-	Emit(ctx context.Context, payload RekeyAuditPayload) (ulid.ULID, error)
+	Emit(ctx context.Context, payload RekeyAuditPayload) (ulid.ULID, RekeyAuditPayload, error)
 }
 
 // SetAuditEmitter installs the Phase 7 audit-event emitter and is the
@@ -176,13 +178,15 @@ func (o *Orchestrator) RunPhase7(ctx context.Context, rid RequestID, req RekeyRe
 
 	// Step 5: emit via AuditEmitter (INV-E14 + INV-E28 are satisfied by the
 	// emitter itself — it calls ComputePrevHashFor + RecomputeSelfHash).
-	eventID, emitErr := o.auditEmitter.Emit(ctx, payload)
+	eventID, finalizedPayload, emitErr := o.auditEmitter.Emit(ctx, payload)
 	if emitErr != nil {
 		// INV-E13: on failure, write fallback log so the rekey record is
 		// not silently lost. The rekey state in the DB (DEK rows) is
 		// irreversibly committed; the audit emit is the cross-reference,
-		// not the canonical record.
-		if logErr := o.writeFallbackLog(rid, payload); logErr != nil {
+		// not the canonical record. Persist the FINALIZED payload (with
+		// rekey_chain.scope/prev_hash/self_hash populated) so manual
+		// recovery has the exact record that would have been emitted.
+		if logErr := o.writeFallbackLog(rid, finalizedPayload); logErr != nil {
 			o.logger.ErrorContext(
 				ctx, "rekey audit fallback log write failed",
 				"request_id", rid.String(),

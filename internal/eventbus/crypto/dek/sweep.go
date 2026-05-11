@@ -175,7 +175,7 @@ func (s *CheckpointSweepSubsystem) abortAndAudit(ctx context.Context, ckpt Check
 		payload.NewDEK = RekeyAuditDEK{ID: *ckpt.NewDEKID}
 	}
 
-	if _, err := s.cfg.AuditEmitter.Emit(ctx, payload); err != nil {
+	if _, _, err := s.cfg.AuditEmitter.Emit(ctx, payload); err != nil {
 		return oops.Code("DEK_REKEY_SWEEP_AUDIT_FAILED").Wrap(err)
 	}
 	return nil

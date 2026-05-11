@@ -29,12 +29,12 @@ type fakeAuditEmitter struct {
 }
 
 // Emit records the payload and returns the configured error (if any).
-func (f *fakeAuditEmitter) Emit(_ context.Context, p dek.RekeyAuditPayload) (ulid.ULID, error) {
+func (f *fakeAuditEmitter) Emit(_ context.Context, p dek.RekeyAuditPayload) (ulid.ULID, dek.RekeyAuditPayload, error) {
 	if f.failErr != nil {
-		return ulid.ULID{}, f.failErr
+		return ulid.ULID{}, p, f.failErr
 	}
 	f.emitted = append(f.emitted, p)
-	return ulid.Make(), nil
+	return ulid.Make(), p, nil
 }
 
 // SetEmitErrorForTest makes the next Emit call return err.

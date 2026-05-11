@@ -543,20 +543,32 @@ on the empty-DB case. No multi-step data migration is needed.
 // internal/eventbus/crypto/dek/audit_chain.go
 package dek
 
-var RekeyChain = auditchain.Chain{
-    Name:              "system.rekey",
-    EventType:         "crypto.system.rekey",
-    SubjectFor: func(scope string) string {
-        ct, cid := splitContextScope(scope)
-        return fmt.Sprintf("events.%s.system.rekey.%s.%s", currentGameID, ct, cid)
-    },
-    SubjectPattern:    "events.%.system.rekey.%.%",
-    ScopeFromSubject:  parseRekeyScopeFromSubject,    // extracts "<ct>:<cid>" from subject
-    ScopeFromPayload:  parseRekeyScopeFromPayload,    // INV-E27: extracts "<context.type>:<context.id>" from payload
-    Canonicalize:      CanonicalizeRekeyPayload,      // plain JCS; no empty-form renormalization needed
-    SelfHashFieldName: "rekey_chain.self_hash",       // INV-E28: nested field path zeroed before canonicalization
-    PrevHashOf:        extractRekeyPrevHash,          // payload.rekey_chain.prev_hash
-    SelfHashOf:        extractRekeySelfHash,          // payload.rekey_chain.self_hash
+// Chain is pure metadata per R6 (§3.6); behavior lives on Handler.
+func RekeyChainFor(gameID string) auditchain.Chain {
+    return auditchain.Chain{
+        SubjectPrefix:     fmt.Sprintf("events.%s.system.rekey", gameID),
+        SelfHashField:     "rekey_chain.self_hash",   // INV-E28: nested field zeroed before canonicalization
+        PrevHashField:     "rekey_chain.prev_hash",
+        ScopePayloadField: "context",                 // INV-E27: scope cross-checked against payload.context
+    }
+}
+
+// RekeyHandlerFor bundles RekeyChain metadata with the per-chain behavior
+// callbacks the Verifier/Emitter consume. Registered with the
+// auditchain.VerifierSubsystem at wiring time.
+func RekeyHandlerFor(gameID string) auditchain.Handler {
+    return auditchain.Handler{
+        Chain:            RekeyChainFor(gameID),
+        SubjectFor: func(scope string) string {
+            ct, cid := splitContextScope(scope)
+            return fmt.Sprintf("events.%s.system.rekey.%s.%s", gameID, ct, cid)
+        },
+        ScopeFromSubject: parseRekeyScopeFromSubject,    // inverse of SubjectFor; INV-E27 cross-check
+        ScopeFromPayload: parseRekeyScopeFromPayload,    // INV-E27: independent extraction from payload
+        Canonicalize:     CanonicalizeRekeyPayload,      // plain JCS; no empty-form renormalization needed
+        PrevHashOf:       extractRekeyPrevHash,          // payload.rekey_chain.prev_hash
+        SelfHashOf:       extractRekeySelfHash,          // payload.rekey_chain.self_hash
+    }
 }
 ```
 
@@ -899,14 +911,16 @@ Local eviction: `dek.Cache.Evict(old_dek_id)`, `dek.ParticipantsCache.Evict(old_
 
 **Pre-condition:** `status = 'phase6_complete'`.
 
-1. `prevHash, prevID, _ := auditchain.Emitter.ComputePrevHashFor(RekeyChain, scope)`.
+1. `prevHash, prevID, _ := auditchain.Emitter.ComputePrevHashFor(rekeyHandler, scope)`
+   where `rekeyHandler = dek.RekeyHandlerFor(gameID)` per R6 §3.6.
 2. Build `RekeyAuditPayload` (§3.3 + `rekey_chain` block from §3.7).
 3. Set `policy_hash` field by reading `crypto_rekey_checkpoints.policy_hash`
    for this `request_id` (the value persisted at Phase 1 step 6 — INV-E25).
    Never re-query the policy_set chain head; the persisted value is authoritative.
-4. Compute `self_hash = auditchain.RecomputeSelfHash(RekeyChain, payload)`
-   (the pinned `SHA-256(Canonicalize(zero(payload, "rekey_chain.self_hash")))`
-   composition — INV-E28).
+4. Compute `self_hash = auditchain.RecomputeSelfHash(payloadMap, rekeyHandler.Chain.SelfHashField)`
+   (the pinned `SHA-256(JCS_canonicalize(zero(payload, "rekey_chain.self_hash")))`
+   composition — INV-E28; caller decodes payload to map[string]any via
+   `rekeyHandler.Canonicalize` before invoking).
 5. Publish via `RekeyAuditEmitter.Emit`.
 6. Wait for `events_audit` projection ack (D's pattern).
 7. UPDATE checkpoint: `status = 'complete'`, `completed_at = now()`.

@@ -479,6 +479,10 @@ func TestMapToExitCodeErr_Unknown(t *testing.T) {
 // setupRekeyResumeServerWithCompleted builds a fake server that authenticates
 // and responds to RekeyResume with a Completed event.  The onRekeyResume
 // callback receives the request so callers can assert on ForceDestroy.
+//
+// The server also responds to RekeyStatus with a fixed context (scene:01ABC)
+// so the --force-destroy confirmation gate has a known value to match
+// against in tests.
 func setupRekeyResumeServerWithCompleted(
 	t *testing.T,
 	onRekeyResume func(*testing.T, *connect.Request[adminv1.RekeyResumeRequest], *connect.ServerStream[adminv1.RekeyProgress]) error,
@@ -491,6 +495,13 @@ func setupRekeyResumeServerWithCompleted(
 	h := &fakeAdminHandlerWithRekey{
 		onAuthenticate: func(_ context.Context, _ *connect.Request[adminv1.AuthenticateRequest]) (*connect.Response[adminv1.AuthenticateResponse], error) {
 			return connect.NewResponse(&adminv1.AuthenticateResponse{SessionToken: "tok-resume"}), nil
+		},
+		onRekeyStatus: func(_ context.Context, req *connect.Request[adminv1.RekeyStatusRequest]) (*connect.Response[adminv1.RekeyStatusResponse], error) {
+			return connect.NewResponse(&adminv1.RekeyStatusResponse{
+				RequestId:   req.Msg.GetRequestId(),
+				ContextType: "scene",
+				ContextId:   "01ABC",
+			}), nil
 		},
 		onRekeyResume: func(_ context.Context, req *connect.Request[adminv1.RekeyResumeRequest], stream *connect.ServerStream[adminv1.RekeyProgress]) error {
 			if onRekeyResume != nil {
@@ -703,6 +714,13 @@ func TestCmd_CryptoRekey_Resume_ForceDestroy_PassThroughToRPC(t *testing.T) {
 		onAuthenticate: func(_ context.Context, _ *connect.Request[adminv1.AuthenticateRequest]) (*connect.Response[adminv1.AuthenticateResponse], error) {
 			return connect.NewResponse(&adminv1.AuthenticateResponse{SessionToken: "tok"}), nil
 		},
+		onRekeyStatus: func(_ context.Context, req *connect.Request[adminv1.RekeyStatusRequest]) (*connect.Response[adminv1.RekeyStatusResponse], error) {
+			return connect.NewResponse(&adminv1.RekeyStatusResponse{
+				RequestId:   req.Msg.GetRequestId(),
+				ContextType: "scene",
+				ContextId:   "01ABC",
+			}), nil
+		},
 		onRekeyResume: func(_ context.Context, req *connect.Request[adminv1.RekeyResumeRequest], stream *connect.ServerStream[adminv1.RekeyProgress]) error {
 			gotForceDestroy = req.Msg.GetForceDestroy()
 			return stream.Send(&adminv1.RekeyProgress{
@@ -771,6 +789,13 @@ func TestCmd_CryptoRekey_Resume_ForceDestroy_RejectedByServer(t *testing.T) {
 	h := &fakeAdminHandlerWithRekey{
 		onAuthenticate: func(_ context.Context, _ *connect.Request[adminv1.AuthenticateRequest]) (*connect.Response[adminv1.AuthenticateResponse], error) {
 			return connect.NewResponse(&adminv1.AuthenticateResponse{SessionToken: "tok"}), nil
+		},
+		onRekeyStatus: func(_ context.Context, req *connect.Request[adminv1.RekeyStatusRequest]) (*connect.Response[adminv1.RekeyStatusResponse], error) {
+			return connect.NewResponse(&adminv1.RekeyStatusResponse{
+				RequestId:   req.Msg.GetRequestId(),
+				ContextType: "scene",
+				ContextId:   "01ABC",
+			}), nil
 		},
 		onRekeyResume: func(_ context.Context, _ *connect.Request[adminv1.RekeyResumeRequest], stream *connect.ServerStream[adminv1.RekeyProgress]) error {
 			return stream.Send(&adminv1.RekeyProgress{

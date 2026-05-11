@@ -34,8 +34,8 @@ import (
 // Used to simulate Phase 7 audit-emit failure in E2E tests (INV-E13).
 type alwaysFailAuditEmitter struct{}
 
-func (*alwaysFailAuditEmitter) Emit(_ context.Context, _ dek.RekeyAuditPayload) (ulid.ULID, error) {
-	return ulid.ULID{}, errors.New("simulated Phase 7 audit emit failure (E2E fault injection)")
+func (*alwaysFailAuditEmitter) Emit(_ context.Context, p dek.RekeyAuditPayload) (ulid.ULID, dek.RekeyAuditPayload, error) {
+	return ulid.ULID{}, p, errors.New("simulated Phase 7 audit emit failure (E2E fault injection)")
 }
 
 var _ = Describe("Rekey Phase 7 audit failure", func() {

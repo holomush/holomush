@@ -351,7 +351,7 @@ func (a *productionRekeyAbortRunner) RunAbort(ctx context.Context, req socket.Re
 		CompletedAt:     abortedAt,
 		SpecVersion:     "abort",
 	}
-	auditID, emitErr := a.emitter.Emit(ctx, payload)
+	auditID, _, emitErr := a.emitter.Emit(ctx, payload)
 	if emitErr != nil {
 		// Non-fatal: abort is committed; audit emit is best-effort.
 		// Log loudly so an operator can investigate.

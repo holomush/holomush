@@ -158,7 +158,7 @@ func runRekeyFresh(cmd *cobra.Command, factory adminClientFactory, ctxRef string
 		return mapToExitCodeErr(oops.Code("CRYPTO_REKEY_RPC_FAILED").Wrap(err))
 	}
 
-	return streamProgress(stream, noProgress, cmd.OutOrStdout())
+	return mapToExitCodeErr(streamProgress(stream, noProgress, cmd.OutOrStdout()))
 }
 
 // streamProgress reads RekeyProgress messages from stream and renders them to
@@ -304,6 +304,16 @@ func runRekeyResume(cmd *cobra.Command, factory adminClientFactory, requestIDStr
 		return oops.Code("CRYPTO_REKEY_RESUME_INVALID_REQUEST_ID").Wrap(err)
 	}
 
+	client, err := factory()
+	if err != nil {
+		return oops.Code("CRYPTO_REKEY_RESUME_CLIENT_FAILED").Wrap(err)
+	}
+
+	sessionToken, err := authenticateInteractive(cmd.Context(), client, cmd)
+	if err != nil {
+		return oops.Code("CRYPTO_REKEY_RESUME_AUTH_FAILED").Wrap(err)
+	}
+
 	if forceDestroy {
 		in := cmd.InOrStdin()
 		isTTY := func() bool {
@@ -313,30 +323,46 @@ func runRekeyResume(cmd *cobra.Command, factory adminClientFactory, requestIDStr
 			return false
 		}()
 
+		// Short-circuit: non-TTY without --confirm is an immediate usage error;
+		// don't make a network call to learn that.
+		if !isTTY && confirmFlag == "" {
+			return &exitCodeError{
+				exitCode: 64,
+				cause:    fmt.Errorf("--confirm required in non-TTY mode: provide --confirm <context_type>:<context_id> for --force-destroy"),
+			}
+		}
+
+		// Fetch the checkpoint's context_type:context_id so the confirmation
+		// gate verifies operator intent against a value they cannot trivially
+		// guess from the request_id alone.
+		statusRes, statusErr := client.RekeyStatus(cmd.Context(), connect.NewRequest(&adminv1.RekeyStatusRequest{
+			SessionToken: sessionToken,
+			RequestId:    requestIDBytes,
+		}))
+		if statusErr != nil {
+			return mapToExitCodeErr(oops.Code("CRYPTO_REKEY_RESUME_STATUS_LOOKUP_FAILED").Wrap(statusErr))
+		}
+		expected := fmt.Sprintf("%s:%s", statusRes.Msg.GetContextType(), statusRes.Msg.GetContextId())
+
 		if !isTTY {
-			// Non-TTY path: require --confirm <context_id>.
-			if confirmFlag == "" {
+			if confirmFlag != expected {
 				return &exitCodeError{
 					exitCode: 64,
-					cause:    fmt.Errorf("--confirm required in non-TTY mode: provide --confirm <context_id> for --force-destroy"),
+					cause:    fmt.Errorf("--confirm must equal the checkpoint's context (expected %q for --force-destroy)", expected),
 				}
 			}
 		} else {
-			// Interactive TTY path: prompt for context_id confirmation.
-			if _, promptErr := promptForceDestroyConfirm(in, cmd.OutOrStdout(), requestIDStr); promptErr != nil {
+			typed, promptErr := promptForceDestroyConfirm(in, cmd.OutOrStdout(), expected)
+			if promptErr != nil {
 				return &exitCodeError{exitCode: 64, cause: promptErr}
 			}
+			if typed != expected {
+				return &exitCodeError{
+					exitCode: 64,
+					cause:    fmt.Errorf("force-destroy confirmation does not match checkpoint context %q", expected),
+				}
+			}
 		}
-	}
-
-	client, err := factory()
-	if err != nil {
-		return oops.Code("CRYPTO_REKEY_RESUME_CLIENT_FAILED").Wrap(err)
-	}
-
-	sessionToken, err := authenticateInteractive(cmd.Context(), client, cmd)
-	if err != nil {
-		return oops.Code("CRYPTO_REKEY_RESUME_AUTH_FAILED").Wrap(err)
 	}
 
 	stream, err := client.RekeyResume(cmd.Context(), connect.NewRequest(&adminv1.RekeyResumeRequest{
@@ -348,23 +374,23 @@ func runRekeyResume(cmd *cobra.Command, factory adminClientFactory, requestIDStr
 		return mapToExitCodeErr(oops.Code("CRYPTO_REKEY_RESUME_RPC_FAILED").Wrap(err))
 	}
 
-	return streamProgress(stream, false, cmd.OutOrStdout())
+	return mapToExitCodeErr(streamProgress(stream, false, cmd.OutOrStdout()))
 }
 
 // promptForceDestroyConfirm prints the force-destroy warning to w and reads
-// the operator's typed context_id from r.  Returns the typed value, or an
-// error if the operator abandons the prompt.
+// the operator's typed context confirmation from r. The expected value is
+// "<context_type>:<context_id>" derived from RekeyStatus. Returns the typed
+// value (caller compares to expected), or an error if the operator abandons
+// the prompt.
 //
 // This function is exercised only on interactive TTY paths; non-TTY callers
 // use the --confirm flag directly.
-func promptForceDestroyConfirm(r io.Reader, w io.Writer, requestIDStr string) (string, error) {
+func promptForceDestroyConfirm(r io.Reader, w io.Writer, expected string) (string, error) {
 	fmt.Fprintf(w, "\n⚠  DESTRUCTIVE: --force-destroy bypasses Phase 5 cluster invalidation.\n") //nolint:errcheck // prompt output; write failure is non-fatal
 	fmt.Fprintf(w, "   Replicas with stale DEK caches will return DEK_NOT_FOUND on cache\n")     //nolint:errcheck // prompt output; write failure is non-fatal
 	fmt.Fprintf(w, "   miss until they restart and resync. This event will be recorded\n")       //nolint:errcheck // prompt output; write failure is non-fatal
 	fmt.Fprintf(w, "   in the rekey audit chain with force_destroy=true.\n\n")                   //nolint:errcheck // prompt output; write failure is non-fatal
-	fmt.Fprintf(w, "   Type the context_id to confirm (e.g. scene:<id>): ")                      //nolint:errcheck // prompt output; write failure is non-fatal
-
-	_ = requestIDStr // future: fetch status to show "Missing replicas at last attempt"
+	fmt.Fprintf(w, "   Type %q to confirm: ", expected)                                          //nolint:errcheck // prompt output; write failure is non-fatal
 
 	scanner := bufio.NewScanner(r)
 	if !scanner.Scan() {

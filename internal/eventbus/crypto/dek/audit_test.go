@@ -62,7 +62,10 @@ func (c *capturingPublisher) PublishAudit(_ context.Context, subject, evType str
 // - decoded payload has populated rekey_chain block (scope, nil prev_hash, non-empty self_hash)
 // Satisfies TDD acceptance criteria from bead holomush-jxo8.7.17.
 func TestRekeyAuditEmitter_Emit_PopulatesChainLinkage(t *testing.T) {
+	prevGameID := dek.GameIDForTest()
 	dek.SetGameIDForTest("g1")
+	t.Cleanup(func() { dek.SetGameIDForTest(prevGameID) })
+
 	fakeRepo := &fakeChainRepo{}
 	em := chain.NewEmitter(fakeRepo)
 	publisher := &capturingPublisher{}
@@ -77,9 +80,10 @@ func TestRekeyAuditEmitter_Emit_PopulatesChainLinkage(t *testing.T) {
 		StartedAt:   time.Now(),
 		CompletedAt: time.Now(),
 	}
-	eventID, err := auditEm.Emit(context.Background(), payload)
+	eventID, finalized, err := auditEm.Emit(context.Background(), payload)
 	require.NoError(t, err)
 	require.NotEmpty(t, eventID)
+	require.NotEmpty(t, finalized.RekeyChainField.SelfHash, "finalized payload exposes computed self_hash")
 
 	require.Len(t, publisher.published, 1)
 	pub := publisher.published[0]

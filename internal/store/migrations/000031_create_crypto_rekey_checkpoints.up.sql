@@ -21,9 +21,23 @@ CREATE TABLE IF NOT EXISTS crypto_rekey_checkpoints (
     completed_at            timestamptz,
     aborted_at              timestamptz,
     aborted_reason          text,
+    CONSTRAINT crypto_rekey_checkpoints_status_check CHECK (
+        status IN (
+            'pending',
+            'phase1_auth',
+            'phase2_mint_dek',
+            'phase3_reencrypt_cold',
+            'phase5_invalidate',
+            'phase6_destroy_old',
+            'phase7_audit',
+            'complete',
+            'aborted'
+        )
+    ),
     CONSTRAINT crypto_rekey_checkpoints_terminal_consistency CHECK (
-        (status NOT IN ('complete', 'aborted')) OR
-        (status = 'complete' AND completed_at IS NOT NULL AND aborted_at IS NULL) OR
+        (status NOT IN ('complete', 'aborted')
+            AND completed_at IS NULL AND aborted_at IS NULL AND aborted_reason IS NULL) OR
+        (status = 'complete' AND completed_at IS NOT NULL AND aborted_at IS NULL AND aborted_reason IS NULL) OR
         (status = 'aborted' AND aborted_at IS NOT NULL AND aborted_reason IS NOT NULL AND completed_at IS NULL)
     )
 );

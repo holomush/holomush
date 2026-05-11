@@ -506,11 +506,35 @@ func (m *manager) MintNewDEKForRekey(ctx context.Context, oldDEKID int64) (int64
 	if _, rngErr := io.ReadFull(rand.Reader, newDEK[:]); rngErr != nil {
 		return 0, oops.Code("DEK_REKEY_GEN_NEW_DEK_FAILED").Wrap(rngErr)
 	}
-	wrapped, keyID, err := m.provider.Wrap(ctx, newDEK[:])
+	wrapped, kekKeyID, err := m.provider.Wrap(ctx, newDEK[:])
 	if err != nil {
 		return 0, oops.Code("DEK_REKEY_WRAP_FAILED").Wrap(err)
 	}
-	return m.store.insertRekeyed(ctx, oldRow, wrapped, keyID)
+	if validateErr := validateProviderWrapOutput(wrapped, kekKeyID); validateErr != nil {
+		return 0, validateErr
+	}
+
+	newID, err := m.store.insertRekeyed(ctx, oldRow, wrapped, kekKeyID)
+	if err != nil {
+		return 0, err
+	}
+
+	// Seed the freshly minted DEK in cache so Phase 3 doesn't force a
+	// redundant unwrap. The plaintext material is already in scope here;
+	// dropping it on the floor would make the rekey happy path depend on
+	// the provider twice (mint + immediate re-unwrap) and fail rekey if
+	// the provider blips between Phase 2 and Phase 3.
+	ctxID := ContextID{Type: oldRow.ContextType, ID: oldRow.ContextID}
+	newVersion := oldRow.Version + 1
+	material := NewMaterial(newDEK[:])
+	//nolint:gosec // G115: newID is a DB BIGSERIAL value.
+	newKeyID := codec.KeyID(newID)
+	m.cache.Put(CacheKey{KeyID: newKeyID, Version: newVersion}, ctxID, material)
+	m.partCache.Put(
+		ParticipantsCacheKey{ContextType: ctxID.Type, ContextID: ctxID.ID, Version: newVersion},
+		oldRow.Participants,
+	)
+	return newID, nil
 }
 
 // DestroyDEK soft-deletes the crypto_keys row with the given primary key by

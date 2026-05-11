@@ -236,6 +236,10 @@ func SetGameIDForRekey(g string) { currentGameIDForRekey = g }
 // SetGameIDForTest is a test-only shim. Production code uses SetGameIDForRekey.
 func SetGameIDForTest(g string) { currentGameIDForRekey = g }
 
+// GameIDForTest returns the current rekey game ID; tests use it with
+// SetGameIDForTest + t.Cleanup to restore prior state.
+func GameIDForTest() string { return currentGameIDForRekey }
+
 // RekeyChainFor returns the [chain.Chain] descriptor for the system.rekey
 // hash chain parameterized by gameID. The subject prefix embeds gameID so
 // the verifier can scope its SQL LIKE query.

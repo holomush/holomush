@@ -700,7 +700,7 @@ func (a *rekeyAbortAdapter) RunAbort(ctx context.Context, req socket.RekeyAbortR
 		CompletedAt:     time.Now().UTC(),
 		SpecVersion:     "abort",
 	}
-	auditID, emitErr := a.emitter.Emit(ctx, payload)
+	auditID, _, emitErr := a.emitter.Emit(ctx, payload)
 	if emitErr != nil {
 		// Non-fatal: abort is committed; audit emit is best-effort.
 		auditID = ulid.ULID{}

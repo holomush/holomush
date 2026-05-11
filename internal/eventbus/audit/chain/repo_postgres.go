@@ -86,13 +86,16 @@ func (r *postgresRepo) LoadEntriesByScope(ctx context.Context, subjectPrefix, sc
 // have been emitted yet; this is not an error.
 func (r *postgresRepo) DiscoverScopes(ctx context.Context, subjectPrefix string) ([]string, error) {
 	// LIKE pattern: subjectPrefix + ".%" matches all subjects under this prefix.
-	pattern := subjectPrefix + ".%"
+	// Escape SQL LIKE metacharacters (_, %, \) in subjectPrefix so a chain whose
+	// game-id or namespace contains them cannot pull rows from sibling chains.
+	escapedPrefix := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(subjectPrefix)
+	pattern := escapedPrefix + ".%"
 	prefixWithDot := subjectPrefix + "."
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT DISTINCT subject
 		  FROM events_audit
-		 WHERE subject LIKE $1
+		 WHERE subject LIKE $1 ESCAPE '\'
 	`, pattern)
 	if err != nil {
 		return nil, oops.Code("AUDIT_CHAIN_DISCOVER_FAILED").
