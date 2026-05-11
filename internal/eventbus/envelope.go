@@ -21,7 +21,7 @@ type ColdRow struct {
 	EventID    EventID
 	Subject    string
 	Type       string
-	Payload    []byte      // The marshaled Event proto envelope bytes (events_audit.envelope column).
+	Payload    []byte // The marshaled Event proto envelope bytes (events_audit.envelope column).
 	Codec      string
 	KeyID      codec.KeyID
 	KeyVersion uint32
@@ -33,6 +33,10 @@ type ColdRow struct {
 // It intentionally does NOT duplicate the full eventbus.Event decoding — the
 // FallbackResolver hands the Envelope to the dispatcher for full decode after
 // DEK resolution succeeds.
+//
+// Callers MUST NOT construct Envelope literals directly; use one of the
+// constructors below (NewEnvelopeFromColdRow for cold-tier rows,
+// NewEnvelopeFromFields for direct construction, NewEnvelopeForTest in tests).
 type Envelope struct {
 	eventID    EventID
 	subject    string
@@ -58,6 +62,39 @@ func NewEnvelopeFromColdRow(row ColdRow) Envelope {
 		keyVersion: row.KeyVersion,
 		timestamp:  row.Timestamp,
 	}
+}
+
+// EnvelopeFields is the constructor argument for Envelope when the caller has
+// the fields in hand directly (not from a cold-tier row). All zero values are
+// valid (identity codec, no DEK, empty payload). Subject/Type/Timestamp default
+// to zero values — callers that need them should populate the Envelope via
+// NewEnvelopeFromColdRow instead.
+type EnvelopeFields struct {
+	EventID    EventID
+	Codec      codec.Name
+	KeyID      codec.KeyID
+	KeyVersion uint32
+	Payload    []byte
+}
+
+// NewEnvelopeFromFields constructs an Envelope from caller-supplied fields.
+// Used by adapters that have parsed payload + DEK columns directly rather
+// than via a cold-tier row.
+func NewEnvelopeFromFields(f EnvelopeFields) Envelope {
+	return Envelope{
+		eventID:    f.EventID,
+		codecName:  f.Codec,
+		keyID:      f.KeyID,
+		keyVersion: f.KeyVersion,
+		payload:    f.Payload,
+	}
+}
+
+// NewEnvelopeForTest constructs an Envelope for use in unit tests.
+// Identical to NewEnvelopeFromFields; named separately so test-only
+// callsites are easy to grep.
+func NewEnvelopeForTest(f EnvelopeFields) Envelope {
+	return NewEnvelopeFromFields(f)
 }
 
 // EventID returns the event's ULID identity.
