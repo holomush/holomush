@@ -33,6 +33,7 @@ var expectedTables = []string{
 	"content_items",
 	"crypto_bootstrap_state",
 	"crypto_keys",
+	"crypto_rekey_checkpoints",
 	"entity_properties",
 	"events_audit",
 	"exits",
@@ -146,7 +147,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(30), version)
+	assert.Equal(t, uint(31), version)
 	assert.False(t, dirty)
 
 	tables = queryTableNames(t, ctx, connStr)
@@ -171,7 +172,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(30), version)
+	assert.Equal(t, uint(31), version)
 	assert.False(t, dirty)
 
 	tables = queryTableNames(t, ctx, connStr)
