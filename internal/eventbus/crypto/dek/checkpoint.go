@@ -95,6 +95,22 @@ func (c *Checkpoint) PolicyHash() [32]byte {
 	return out
 }
 
+// LastProcessedEventID returns the Phase 3 batch cursor as a 16-byte
+// ULID array (the cursor is always a stored events_audit.id which is a
+// 16-byte ULID). The bool result distinguishes "cursor present"
+// (true → batches committed) from "cursor unset" (false → initial scan,
+// no batches yet). Using a fixed-size array rather than []byte preserves
+// INV-27 (no exported []byte in the dek package); the bool replaces the
+// nil-slice nullability signal.
+func (c *Checkpoint) LastProcessedEventID() ([16]byte, bool) {
+	var out [16]byte
+	if len(c.lastProcessedEventID) == 0 {
+		return out, false
+	}
+	copy(out[:], c.lastProcessedEventID)
+	return out, true
+}
+
 // CheckpointRepo is the SQL persistence layer for crypto_rekey_checkpoints.
 type CheckpointRepo struct {
 	pool *pgxpool.Pool

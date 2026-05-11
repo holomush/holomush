@@ -52,6 +52,12 @@ type Manager interface {
 	MintNewDEKForRekey(ctx context.Context, oldDEKID int64) (int64, error)
 }
 
+// VersionForDEKID is defined on *manager (manager.go) but kept off the
+// Manager interface to avoid expanding the public interface surface for
+// every test fake that already satisfies it. The Rekey orchestrator's
+// Phase 3 consumes it via the package-private MaterialResolver interface
+// (see rekey_phase3.go), which *manager satisfies structurally.
+
 // ActiveDEKRecord is a minimal projection of a crypto_keys row exposed to the
 // Rekey orchestrator. Only the fields needed for Phase 1–6 are included;
 // the full row type (row) stays package-private.
@@ -455,6 +461,30 @@ func (m *manager) MintNewDEKForRekey(ctx context.Context, oldDEKID int64) (int64
 		return 0, oops.Code("DEK_REKEY_WRAP_FAILED").Wrap(err)
 	}
 	return m.store.insertRekeyed(ctx, oldRow, wrapped, keyID)
+}
+
+// VersionForDEKID returns the version column of the crypto_keys row whose
+// primary key id equals dekID. Used by the Rekey orchestrator's Phase 3
+// to discover the new DEK's version for AAD construction (INV-E8). The
+// checkpoint row stores only new_dek_id; the version column is the row's
+// natural attribute, not duplicated.
+//
+// Returns DEK_NOT_FOUND if no row matches. Manager satisfies
+// dek.MaterialResolver via Resolve + this method.
+func (m *manager) VersionForDEKID(ctx context.Context, dekID int64) (uint32, error) {
+	if err := m.configured(); err != nil {
+		return 0, err
+	}
+	r, err := m.store.selectByPK(ctx, dekID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, oops.Code("DEK_NOT_FOUND").
+				With("dek_id", dekID).
+				Errorf("crypto_keys row id=%d not found", dekID)
+		}
+		return 0, oops.Code("DEK_STORE_SELECT_FAILED").Wrap(err)
+	}
+	return r.Version, nil
 }
 
 // validateProviderWrapOutput rejects malformed Wrap return values.

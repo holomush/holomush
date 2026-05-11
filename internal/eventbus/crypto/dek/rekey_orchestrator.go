@@ -77,17 +77,25 @@ type Minter interface {
 	MintNewDEKForRekey(ctx context.Context, oldDEKID int64) (int64, error)
 }
 
-// Orchestrator runs the 7-phase Rekey lifecycle. Phase 1 and Phase 2 are
-// implemented here; phases 3–7 land in subsequent beads (holomush-jxo8.7.21–.24).
+// Orchestrator runs the 7-phase Rekey lifecycle. Phases 1, 2, and 3 are
+// implemented here (Phase 3 in rekey_phase3.go); phases 5–7 land in
+// subsequent beads (holomush-jxo8.7.22–.24).
 //
 // Thread-safety: Orchestrator is safe for concurrent use — all state lives
 // in the database (CheckpointRepo) with CAS updates guarding transitions.
+//
+// materialResolver and batchHookForTest are populated post-construction
+// via the additive SetMaterialResolver / SetBatchHookForTest seams (see
+// rekey_phase3.go). NewOrchestrator's signature is unchanged so the
+// Phase 1 / Phase 2 wiring shipped in .19 / .20 continues to compile.
 type Orchestrator struct {
-	store         *Store
-	repo          *CheckpointRepo
-	policyHashSrc PolicyHashSource
-	minter        Minter
-	logger        *slog.Logger
+	store            *Store
+	repo             *CheckpointRepo
+	policyHashSrc    PolicyHashSource
+	minter           Minter
+	materialResolver MaterialResolver
+	batchHookForTest func(rowsRewrittenSoFar int)
+	logger           *slog.Logger
 }
 
 // NewOrchestrator constructs an Orchestrator. All four collaborators are
