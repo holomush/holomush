@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/samber/oops"
 )
@@ -81,14 +82,32 @@ type verifier struct {
 }
 
 // VerifyAll discovers all scopes for h.Chain.SubjectPrefix and verifies each.
+//
+// DiscoverScopes returns raw subject suffixes (e.g. "scene.01ABC" for subject
+// "events.g1.system.rekey.scene.01ABC"). These raw suffixes are converted to
+// canonical scope values via h.ScopeFromSubject before calling VerifyScope.
+// This ensures chains whose scope format differs from the raw subject suffix
+// (e.g. the rekey chain uses "scene:01ABC" with a colon while the subject uses
+// "scene.01ABC" with a dot) are verified correctly.
 func (v *verifier) VerifyAll(ctx context.Context, h Handler) error {
-	scopes, err := v.repo.DiscoverScopes(ctx, h.Chain.SubjectPrefix)
+	rawSuffixes, err := v.repo.DiscoverScopes(ctx, h.Chain.SubjectPrefix)
 	if err != nil {
 		return oops.Code("AUDIT_CHAIN_DISCOVER_FAILED").
 			With("chain", h.Chain.SubjectPrefix).Wrap(err)
 	}
-	for _, s := range scopes {
-		if err := v.VerifyScope(ctx, h, s); err != nil {
+	for _, suffix := range rawSuffixes {
+		// Convert the raw subject suffix back to the canonical scope via the
+		// chain's ScopeFromSubject. For chains that use a different separator
+		// in the scope (e.g. colon) vs the subject (dot), this converts
+		// "scene.01ABC" → "scene:01ABC" so ScopeFromPayload's return value
+		// agrees with the scope passed to VerifyScope (INV-E27 cross-check).
+		canonicalScope, scopeErr := h.ScopeFromSubject(h.Chain.SubjectPrefix + "." + suffix)
+		if scopeErr != nil {
+			return oops.Code("AUDIT_CHAIN_SCOPE_CONVERT_FAILED").
+				With("chain", h.Chain.SubjectPrefix).
+				With("suffix", suffix).Wrap(scopeErr)
+		}
+		if err := v.VerifyScope(ctx, h, canonicalScope); err != nil {
 			return err
 		}
 	}
@@ -96,8 +115,29 @@ func (v *verifier) VerifyAll(ctx context.Context, h Handler) error {
 }
 
 // VerifyScope validates the hash chain for scope.
+//
+// scope is the canonical domain scope (e.g. "scene:01ABC" for the rekey chain
+// or "dual_control_required" for the policy_set chain). The Repo's
+// LoadEntriesByScope queries events_audit by subject. For chains where the
+// canonical scope format differs from the subject suffix format (e.g. the
+// rekey chain uses "scene:01ABC" but the subject is "…scene.01ABC"), we
+// derive the DB lookup scope from h.SubjectFor(scope) — i.e. build the full
+// subject then strip the prefix to obtain the raw suffix. This ensures the
+// Repo query finds the correct rows regardless of separator choice.
 func (v *verifier) VerifyScope(ctx context.Context, h Handler, scope string) error {
-	entries, err := v.repo.LoadEntriesByScope(ctx, h.Chain.SubjectPrefix, scope)
+	// Derive the raw suffix for the Repo lookup from the full subject.
+	// h.SubjectFor(scope) builds "events.<game>.system.rekey.<ct>.<cid>";
+	// stripping the prefix + "." gives "scene.01ABC" (dot format) which
+	// matches the column value. For chains where scope == suffix (e.g.
+	// policy_set), this is a no-op: SubjectFor appends scope directly.
+	fullSubject := h.SubjectFor(scope)
+	prefixDot := h.Chain.SubjectPrefix + "."
+	rawSuffix := scope // fallback: use scope as-is if SubjectFor doesn't match expected shape
+	if strings.HasPrefix(fullSubject, prefixDot) {
+		rawSuffix = fullSubject[len(prefixDot):]
+	}
+
+	entries, err := v.repo.LoadEntriesByScope(ctx, h.Chain.SubjectPrefix, rawSuffix)
 	if err != nil {
 		return oops.Code("AUDIT_CHAIN_LOAD_FAILED").
 			With("chain", h.Chain.SubjectPrefix).With("scope", scope).Wrap(err)
@@ -119,6 +159,8 @@ func (v *verifier) VerifyScope(ctx context.Context, h Handler, scope string) err
 		return nil
 	}
 
+	// Pass the canonical scope to verifyEntries for the INV-E27 cross-check:
+	// ScopeFromPayload(entry.Payload) must equal scope.
 	return v.verifyEntries(ctx, h, scope, entries)
 }
 

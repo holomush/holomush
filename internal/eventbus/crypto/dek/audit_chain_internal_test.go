@@ -36,18 +36,40 @@ func TestParseRekeyScopeFromPayload(t *testing.T) {
 }
 
 func TestExtractRekeyPrevHash_AndSelfHash(t *testing.T) {
-	payload := []byte(`{"rekey_chain":{"prev_hash":"AAAA","self_hash":"BBBB"},"other":1}`)
+	// Hashes are stored as "sha256:<hex>" strings; extractors must decode them
+	// back to raw bytes so bytes.Equal comparisons against RecomputeSelfHash
+	// output (raw 32-byte SHA-256) hold correctly.
+	prevHex := "aa" + "bb" + "cc" + "dd" + // 32 bytes = 64 hex chars
+		"00" + "11" + "22" + "33" +
+		"44" + "55" + "66" + "77" +
+		"88" + "99" + "aa" + "bb" +
+		"cc" + "dd" + "ee" + "ff" +
+		"00" + "11" + "22" + "33" +
+		"44" + "55" + "66" + "77" +
+		"88" + "99" + "aa" + "bb"
+	selfHex := "ff" + "ee" + "dd" + "cc" +
+		"bb" + "aa" + "99" + "88" +
+		"77" + "66" + "55" + "44" +
+		"33" + "22" + "11" + "00" +
+		"aa" + "bb" + "cc" + "dd" +
+		"ee" + "ff" + "00" + "11" +
+		"22" + "33" + "44" + "55" +
+		"66" + "77" + "88" + "99"
+	payload := []byte(`{"rekey_chain":{"prev_hash":"sha256:` + prevHex + `","self_hash":"sha256:` + selfHex + `"},"other":1}`)
+
 	prev, err := extractRekeyPrevHash(payload)
 	require.NoError(t, err)
-	require.Equal(t, []byte("AAAA"), prev)
+	require.Len(t, prev, 32, "prev_hash must decode to 32 raw bytes")
 
 	self, err := extractRekeySelfHash(payload)
 	require.NoError(t, err)
-	require.Equal(t, []byte("BBBB"), self)
+	require.Len(t, self, 32, "self_hash must decode to 32 raw bytes")
 }
 
 func TestExtractRekeyPrevHash_GenesisReturnsNil(t *testing.T) {
-	payload := []byte(`{"rekey_chain":{"prev_hash":null,"self_hash":"BB"}}`)
+	selfHex := "aabbccdd" + "00112233" + "44556677" + "8899aabb" +
+		"ccddeeff" + "00112233" + "44556677" + "8899aabb"
+	payload := []byte(`{"rekey_chain":{"prev_hash":null,"self_hash":"sha256:` + selfHex + `"}}`)
 	prev, err := extractRekeyPrevHash(payload)
 	require.NoError(t, err)
 	require.Nil(t, prev)

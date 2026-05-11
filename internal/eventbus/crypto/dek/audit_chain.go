@@ -15,6 +15,7 @@
 package dek
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -159,10 +160,34 @@ func ParseRekeyScopeFromSubject(subject string) (string, error) {
 	return parts[0] + ":" + parts[1], nil
 }
 
-// extractRekeyPrevHash returns the prev_hash string from the rekey_chain block.
-// Returns empty string for a genesis entry (prev_hash is null or absent).
-//
-// Unexported — INV-27 prohibits exported []byte returns in the dek package.
+// decodeHashString decodes a "sha256:<hex>" encoded hash back to raw bytes.
+// Returns nil when s is empty (genesis prev_hash absent). This is the inverse
+// of audit.go's encodeHash / encodeHashPtr — the chain verifier and emitter
+// call SelfHashOf / PrevHashOf to extract stored bytes, then compare them to
+// raw bytes returned by chain.RecomputeSelfHash (which returns a 32-byte
+// SHA-256 digest). Both must be in the same format for bytes.Equal to hold.
+func decodeHashString(s string) ([]byte, error) {
+	if s == "" {
+		return nil, nil
+	}
+	const prefix = "sha256:"
+	if !strings.HasPrefix(s, prefix) {
+		return nil, oops.Code("DEK_REKEY_HASH_DECODE_FAILED").
+			With("value", s).
+			Errorf("hash string must start with %q", prefix)
+	}
+	b, err := hex.DecodeString(s[len(prefix):])
+	if err != nil {
+		return nil, oops.Code("DEK_REKEY_HASH_DECODE_FAILED").
+			With("value", s).Wrap(err)
+	}
+	return b, nil
+}
+
+// extractRekeyPrevHash extracts the prev_hash raw bytes from the rekey_chain
+// block. Returns nil for a genesis entry (prev_hash is null or absent).
+// Decodes from the "sha256:<hex>" string format stored in JSON so the returned
+// bytes match the 32-byte format produced by chain.RecomputeSelfHash.
 func extractRekeyPrevHash(payload []byte) ([]byte, error) {
 	var p struct {
 		RekeyChain struct {
@@ -175,12 +200,16 @@ func extractRekeyPrevHash(payload []byte) ([]byte, error) {
 	if p.RekeyChain.PrevHash == nil {
 		return nil, nil
 	}
-	return []byte(*p.RekeyChain.PrevHash), nil
+	raw, err := decodeHashString(*p.RekeyChain.PrevHash)
+	if err != nil {
+		return nil, oops.Code("DEK_REKEY_EXTRACT_PREV_HASH_FAILED").Wrap(err)
+	}
+	return raw, nil
 }
 
-// extractRekeySelfHash returns the self_hash string bytes from the rekey_chain block.
-//
-// Unexported — INV-27 prohibits exported []byte returns in the dek package.
+// extractRekeySelfHash extracts the self_hash raw bytes from the rekey_chain
+// block. Decodes from the "sha256:<hex>" string format stored in JSON so the
+// returned bytes match the 32-byte format produced by chain.RecomputeSelfHash.
 func extractRekeySelfHash(payload []byte) ([]byte, error) {
 	var p struct {
 		RekeyChain struct {
@@ -190,7 +219,11 @@ func extractRekeySelfHash(payload []byte) ([]byte, error) {
 	if err := json.Unmarshal(payload, &p); err != nil {
 		return nil, oops.Code("DEK_REKEY_EXTRACT_SELF_HASH_FAILED").Wrap(err)
 	}
-	return []byte(p.RekeyChain.SelfHash), nil
+	raw, err := decodeHashString(p.RekeyChain.SelfHash)
+	if err != nil {
+		return nil, oops.Code("DEK_REKEY_EXTRACT_SELF_HASH_FAILED").Wrap(err)
+	}
+	return raw, nil
 }
 
 // currentGameIDForRekey is set at boot from cfg.Game.ID via SetGameIDForRekey.

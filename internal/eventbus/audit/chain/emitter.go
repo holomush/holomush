@@ -6,6 +6,7 @@ package chain
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -44,8 +45,27 @@ type emitter struct {
 }
 
 // ComputePrevHashFor implements [Emitter].
+//
+// The scope parameter is the canonical domain scope (e.g. "scene:01ABC").
+// LoadEntriesByScope appends scope to the subject prefix to build the DB query
+// subject. For chains where the canonical scope uses a different separator than
+// the subject suffix (e.g. rekey uses "scene:01ABC" but the subject has
+// "scene.01ABC"), we derive the raw suffix via h.SubjectFor(scope), stripping
+// the prefix, to match the stored subject value.
 func (e *emitter) ComputePrevHashFor(ctx context.Context, h Handler, scope string) ([]byte, *ulid.ULID, error) {
-	entries, err := e.repo.LoadEntriesByScope(ctx, h.Chain.SubjectPrefix, scope)
+	// Convert canonical scope to the raw suffix for the Repo query.
+	// For policy_set, scope == rawSuffix (simple string, no separator difference).
+	// For rekey, scope = "scene:01ABC" but subject is "…scene.01ABC";
+	// SubjectFor("scene:01ABC") = "events.g1.system.rekey.scene.01ABC";
+	// strip prefix → rawSuffix = "scene.01ABC".
+	fullSubject := h.SubjectFor(scope)
+	prefixDot := h.Chain.SubjectPrefix + "."
+	rawSuffix := scope
+	if strings.HasPrefix(fullSubject, prefixDot) {
+		rawSuffix = fullSubject[len(prefixDot):]
+	}
+
+	entries, err := e.repo.LoadEntriesByScope(ctx, h.Chain.SubjectPrefix, rawSuffix)
 	if err != nil {
 		return nil, nil, oops.Code("AUDIT_CHAIN_LOAD_FAILED").
 			With("chain", h.Chain.SubjectPrefix).With("scope", scope).Wrap(err)

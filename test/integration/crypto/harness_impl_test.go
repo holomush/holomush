@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
+	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/testsupport/holomushtest"
 )
 
@@ -262,6 +263,47 @@ func (h *Harness) IsolateReplica(_ string) {
 // ReconnectReplica reverses IsolateReplica.
 func (h *Harness) ReconnectReplica(_ string) {
 	// TODO(holomush-jxo8.7.36): wire real NATS connection unblocking
+}
+
+// SeedStaleCheckpoint inserts a checkpoint row directly into the DB with
+// last_heartbeat_at set to now() minus age, simulating a stale in-flight
+// rekey whose operator has gone away. Used by sweep-TTL E2E specs.
+//
+// It allocates its own DEK row (with a unique ID based on contextType+contextID
+// to avoid conflicts) to satisfy the foreign-key constraint.
+func (h *Harness) SeedStaleCheckpoint(ctxType, ctxID string, age time.Duration) dek.RequestID {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Insert a minimal crypto_keys row to satisfy the FK on old_dek_id.
+	// Use a large synthetic ID to avoid collisions with DEKs seeded by SetupRekeyHarness.
+	const syntheticDEKID int64 = 88880001
+	_, _ = h.DB.Exec(ctx,
+		`INSERT INTO crypto_keys
+		   (id, context_type, context_id, version, wrapped_dek, wrap_provider,
+		    wrap_key_id, participants, created_at)
+		 VALUES ($1, $2, $3, 99, '\x00', 'stale-test', 'stale-test', '[]'::jsonb, now())
+		 ON CONFLICT (id) DO NOTHING`,
+		syntheticDEKID, ctxType, ctxID)
+
+	rid := dek.RequestID(idgen.New())
+	_, err := h.DB.Exec(ctx, `
+		INSERT INTO crypto_rekey_checkpoints
+		  (request_id, context_type, context_id, op_args_hash, policy_hash,
+		   primary_player_id, status, old_dek_id, last_heartbeat_at)
+		VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, now() - $8::interval)
+	`, rid[:], ctxType, ctxID,
+		make([]byte, 32), make([]byte, 32),
+		h.AdminPlayer.PlayerID, syntheticDEKID,
+		age.String())
+	Expect(err).NotTo(HaveOccurred(), "SeedStaleCheckpoint: INSERT failed")
+	return rid
+}
+
+// findCheckpointByID loads the checkpoint row for the given RequestID. Returns
+// (Checkpoint, error) rather than calling Expect so callers can use Eventually.
+func (h *Harness) findCheckpointByID(rid dek.RequestID) (dek.Checkpoint, error) {
+	return h.repo().Get(context.Background(), rid)
 }
 
 // repo is a convenience accessor for the primary's CheckpointRepo.
