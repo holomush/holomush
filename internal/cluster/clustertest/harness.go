@@ -46,13 +46,28 @@ type HarnessMember struct {
 	MemberID   cluster.MemberID
 }
 
+// Option is a functional option for [New]. Use [WithPillRateLimit] etc. to
+// override harness defaults from inside a specific test.
+type Option func(*cluster.Config)
+
+// WithPillRateLimit overrides the harness's default PillRateLimit (1s).
+// Use this in rate-limit assertion tests where the intermediate work between
+// pill calls can exceed the default window on slow CI runners — bumping the
+// window beyond plausible inter-call latency eliminates the wall-clock race.
+//
+// Resolves holomush-ivnc (P1 flake).
+func WithPillRateLimit(d time.Duration) Option {
+	return func(cfg *cluster.Config) { cfg.PillRateLimit = d }
+}
+
 // New constructs a Harness with n Registry members on a shared NATS
-// connection. All members use cluster_id=clusterID.
+// connection. All members use cluster_id=clusterID. Optional [Option] values
+// override the harness defaults (e.g. [WithPillRateLimit]).
 //
 // Accepts TB so callers can pass either *testing.T (plain Go
 // tests) or ginkgo.GinkgoT() (Ginkgo specs); both satisfy the Helper /
 // Fatalf / Cleanup methods this harness uses.
-func New(t TB, clusterID string, n int) *Harness {
+func New(t TB, clusterID string, n int, opts ...Option) *Harness {
 	t.Helper()
 	emb := eventbustest.New(t)
 
@@ -67,6 +82,9 @@ func New(t TB, clusterID string, n int) *Harness {
 		ProbeTimeout:      50 * time.Millisecond,
 		PillRateLimit:     1 * time.Second,
 		SkewWarnThreshold: 30 * time.Second,
+	}
+	for _, opt := range opts {
+		opt(&cfg)
 	}
 
 	for i := 0; i < n; i++ {

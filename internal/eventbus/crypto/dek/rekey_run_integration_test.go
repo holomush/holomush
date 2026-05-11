@@ -346,6 +346,58 @@ var _ = Describe("Orchestrator_Run_ResumeFromPhase7Audit_ManualRecovery (INV-E4,
 	})
 })
 
+var _ = Describe("Orchestrator_RunByRequestID_PreservesJustificationInAudit (holomush-jxo8.7.55)", func() {
+	It("rehydrates the original justification into the Phase 7 audit payload on the explicit-resume path", func() {
+		setup := newRunTestSetup("01RUN11")
+		const originalJustification = "X"
+
+		// Fresh run with justification 'X': drives Phase 1 only so the
+		// checkpoint stays non-terminal (status=phase1_auth).
+		req := dek.RekeyRequest{
+			ContextType:   setup.contextType,
+			ContextID:     setup.contextID,
+			Justification: originalJustification,
+			Operator:      dek.OperatorIdentity{PlayerID: "01PRIM"},
+		}
+		rid, err := setup.Orch.RunPhase1Fresh(context.Background(), req)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Resume via RunByRequestID — operator supplies a DIFFERENT
+		// justification on the resume request. This pins the
+		// rehydration-wins semantic (INV-E25 analog): the checkpoint row's
+		// Justification is authoritative, the resume-call value MUST be
+		// ignored. Without this sentinel, a regression that accidentally
+		// honored req.Justification would only be caught if the resume
+		// value happened to differ from the stored one. (crypto-reviewer
+		// finding #1 on PR #3673)
+		const overrideAttempt = "ATTEMPT-TO-OVERRIDE-MUST-BE-IGNORED"
+		resumeReq := dek.RekeyRequest{
+			Operator:      dek.OperatorIdentity{PlayerID: "01PRIM"},
+			Justification: overrideAttempt,
+		}
+		out, err := setup.Orch.RunByRequestID(context.Background(), rid, resumeReq)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(out.RequestID).To(Equal(rid))
+
+		// Phase 7 must have emitted exactly one audit event.
+		Expect(setup.Audit.emitted).To(HaveLen(1),
+			"Phase 7 must emit exactly one audit event on the RunByRequestID path")
+
+		// The emitted payload MUST carry the original justification (X)
+		// and MUST NOT carry the resume-call override attempt.
+		emittedPayload := setup.Audit.emitted[0]
+		Expect(emittedPayload.Justification).To(Equal(originalJustification),
+			"RunByRequestID must rehydrate justification from checkpoint row into Phase 7 audit payload")
+		Expect(emittedPayload.Justification).NotTo(Equal(overrideAttempt),
+			"resume-call Justification MUST NOT win over the stored checkpoint value (INV-E25 analog)")
+
+		// Sanity: checkpoint reached complete.
+		ckpt, err := setup.Repo.Get(context.Background(), rid)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ckpt.Status).To(Equal(dek.CheckpointStatusComplete))
+	})
+})
+
 // opArgsHashForReq computes the op_args_hash for a request — mirrors the
 // dek.ComputeRekeyArgsHash production path so seeded checkpoint rows match
 // what FindByContextAndArgs looks up.

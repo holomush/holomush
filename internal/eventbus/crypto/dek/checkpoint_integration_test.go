@@ -35,6 +35,7 @@ func mustOpenCheckpoint(t *testing.T, repo *dek.CheckpointRepo, ctxID string, ol
 		"scene", ctxID,
 		make([]byte, 32), make([]byte, 32),
 		"01PLAYER", oldDEK,
+		"",
 	)
 	require.NoError(t, err)
 	rid, err := repo.Open(context.Background(), req)
@@ -51,6 +52,7 @@ func TestCheckpointRepo_Open_ReturnsRequestID(t *testing.T) {
 		"scene", "01ABC",
 		make([]byte, 32), make([]byte, 32),
 		"01PLAYER", 100,
+		"",
 	)
 	require.NoError(t, err)
 	rid, err := repo.Open(context.Background(), req)
@@ -67,6 +69,7 @@ func TestCheckpointRepo_Open_ConcurrentSameContext_Rejected(t *testing.T) {
 		"scene", "01ABC",
 		make([]byte, 32), make([]byte, 32),
 		"01P1", 100,
+		"",
 	)
 	require.NoError(t, err)
 	_, err = repo.Open(context.Background(), req1)
@@ -76,6 +79,7 @@ func TestCheckpointRepo_Open_ConcurrentSameContext_Rejected(t *testing.T) {
 		"scene", "01ABC",
 		make([]byte, 32), make([]byte, 32),
 		"01P2", 100,
+		"",
 	)
 	require.NoError(t, err)
 	_, err = repo.Open(context.Background(), req2)
@@ -131,6 +135,7 @@ func TestCheckpointRepo_FindByContextAndArgs_Resume(t *testing.T) {
 		"scene", "01ABC",
 		opArgs, policy,
 		"01PLAYER", 100,
+		"",
 	)
 	require.NoError(t, err)
 	rid, err := repo.Open(context.Background(), req)

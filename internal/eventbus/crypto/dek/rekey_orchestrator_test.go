@@ -326,6 +326,7 @@ func TestOrchestrator_Phase2_RequiresPreconditionPhase1Auth(t *testing.T) {
 		"scene", "01DEF",
 		make([]byte, 32), make([]byte, 32),
 		"01PLAYER", 200,
+		"",
 	)
 	require.NoError(t, err)
 	rid, err := repo.Open(context.Background(), openReq)

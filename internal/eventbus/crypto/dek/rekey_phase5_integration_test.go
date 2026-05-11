@@ -389,6 +389,7 @@ func TestOrchestrator_Phase5_RejectsWrongStatus(t *testing.T) {
 		"scene", "01WRONG",
 		make([]byte, 32), make([]byte, 32),
 		"01PLAYER", setup.oldDEKID,
+		"",
 	)
 	require.NoError(t, err)
 	rid, err := setup.Repo.Open(context.Background(), req)

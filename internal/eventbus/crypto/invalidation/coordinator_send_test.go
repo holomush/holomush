@@ -59,8 +59,13 @@ func TestCoordinatorRequestInvalidationReturnsRateLimitedWhenProbeAndPillRefuses
 	// member 0 issues one pill against member 1. Coordinator's second
 	// call within the rate-limit window returns ErrRateLimited via
 	// the surfaced ErrPillRateLimited.
-
-	h := clustertest.New(t, "test-game", 2)
+	//
+	// PillRateLimit bumped to 10s (default 1s) to eliminate the wall-clock
+	// race on slow CI: the intermediate AwaitMemberPresent at line ~103
+	// can take up to 1s on a slow runner, pushing the second call out of
+	// the default 1s window and breaking the rate-limit assertion. The
+	// race is documented in holomush-ivnc.
+	h := clustertest.New(t, "test-game", 2, clustertest.WithPillRateLimit(10*time.Second))
 	h.AwaitConverged(t, 2*time.Second)
 
 	// Stop member 1 to make it unresponsive.
