@@ -27,8 +27,12 @@ const (
 	SubsystemAuditProjection                        // audit_projection
 	SubsystemCluster                                // cluster
 	SubsystemAdminSocket                            // admin_socket
+	// SubsystemCryptoChainVerifier is the generalized auditchain.VerifierSubsystem
+	// walking all registered chains (policy_set + rekey) at boot time. Declared by
+	// sub-epic D; broadened by sub-epic E to cover multiple chains.
 	SubsystemCryptoChainVerifier                    // crypto_chain_verifier
 	SubsystemCryptoPolicy                           // crypto_policy
+	SubsystemRekeyCheckpointSweep                   // rekey_checkpoint_sweep
 )
 
 // Subsystem is a top-level server component with lifecycle management

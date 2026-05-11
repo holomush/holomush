@@ -23,11 +23,14 @@ func (s stubSubsystem) DependsOn() []lifecycle.SubsystemID { return nil }
 func (s stubSubsystem) Start(_ context.Context) error      { return nil }
 func (s stubSubsystem) Stop(_ context.Context) error       { return nil }
 
-// allStubs returns the full 14-element stub list in production order.
+// allStubs returns the full 15-element stub list in production order.
 // Callers that only care about presence can use this; callers that care about
 // position should build the slice inline so the ordering is explicit.
-func allStubs() [14]stubSubsystem {
-	return [14]stubSubsystem{
+//
+// Index 14 (SubsystemRekeyCheckpointSweep) was added in sub-epic E Task 6.
+// The production-wiring assertion for the sweep subsystem lands in Task 37.
+func allStubs() [15]stubSubsystem {
+	return [15]stubSubsystem{
 		{id: lifecycle.SubsystemDatabase},
 		{id: lifecycle.SubsystemABAC},
 		{id: lifecycle.SubsystemAuth},
@@ -42,6 +45,7 @@ func allStubs() [14]stubSubsystem {
 		{id: lifecycle.SubsystemCryptoPolicy},
 		{id: lifecycle.SubsystemGRPC},
 		{id: lifecycle.SubsystemAdminSocket},
+		{id: lifecycle.SubsystemRekeyCheckpointSweep},
 	}
 }
 
@@ -88,6 +92,7 @@ func TestSubsystemAdminSocketConstantExists(t *testing.T) {
 		lifecycle.SubsystemAdminSocket,
 		lifecycle.SubsystemCryptoChainVerifier,
 		lifecycle.SubsystemCryptoPolicy,
+		lifecycle.SubsystemRekeyCheckpointSweep,
 	}
 	seen := make(map[lifecycle.SubsystemID]bool)
 	for _, id := range ids {
