@@ -7,10 +7,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -437,4 +439,62 @@ func actorFromAuditRow(kindStr string, idBytes []byte) eventbus.Actor {
 		a.ID = u
 	}
 	return a
+}
+
+// LookupByID implements source.ColdTierLookup for the events_audit-backed
+// cold tier. Used by the INV-39 fallback path: dispatcher's hot-tier DEK
+// lookup failed, ask the cold tier whether a re-encrypted copy exists.
+// Returns (envelope, false, nil) when no row exists.
+func (c *postgresColdTier) LookupByID(ctx context.Context, id eventbus.EventID) (eventbus.Envelope, bool, error) {
+	var (
+		idBytes    []byte
+		subject    string
+		evType     string
+		envelopeB  []byte
+		codecName  string
+		dekRef     *int64
+		dekVersion *uint32
+		ts         time.Time
+	)
+	err := c.pool.QueryRow(ctx, `
+		SELECT id, subject, type, envelope, codec, dek_ref, dek_version, timestamp
+		  FROM events_audit
+		 WHERE id = $1
+	`, id[:]).Scan(&idBytes, &subject, &evType, &envelopeB, &codecName, &dekRef, &dekVersion, &ts)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return eventbus.Envelope{}, false, nil
+		}
+		return eventbus.Envelope{}, false, oops.Code("COLD_LOOKUP_QUERY_FAILED").
+			With("event_id", id.String()).Wrap(err)
+	}
+	env := eventbus.NewEnvelopeFromColdRow(eventbus.ColdRow{
+		EventID:    id,
+		Subject:    subject,
+		Type:       evType,
+		Payload:    envelopeB,
+		Codec:      codecName,
+		KeyID:      derefKeyID(dekRef),
+		KeyVersion: derefUint32(dekVersion),
+		Timestamp:  ts,
+	})
+	return env, true, nil
+}
+
+// derefKeyID dereferences a nullable int64 pointer to a codec.KeyID.
+// Returns 0 for nil (identity-codec rows have no dek_ref).
+func derefKeyID(p *int64) codec.KeyID {
+	if p == nil {
+		return 0
+	}
+	return codec.KeyID(*p) //nolint:gosec // G115: dek_ref is a BIGSERIAL PK reference; always non-negative
+}
+
+// derefUint32 dereferences a nullable uint32 pointer.
+// Returns 0 for nil (identity-codec rows have no dek_version).
+func derefUint32(p *uint32) uint32 {
+	if p == nil {
+		return 0
+	}
+	return *p
 }
