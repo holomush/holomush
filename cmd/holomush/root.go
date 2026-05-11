@@ -40,6 +40,7 @@ WebAssembly plugins, and dual protocol support (telnet + web).`,
 	cmd.AddCommand(NewStatusCmd())
 	cmd.AddCommand(NewPluginCmd())
 	cmd.AddCommand(NewAdminCmd())
+	cmd.AddCommand(NewCryptoCmd())
 
 	return cmd
 }
