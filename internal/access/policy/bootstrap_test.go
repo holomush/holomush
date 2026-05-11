@@ -351,6 +351,8 @@ func TestBootstrapSetsCorrectPolicyEffect(t *testing.T) {
 		"seed:deny-events-system-crypto-totp-read-plugin":      true,
 		"seed:deny-events-system-crypto-policy-read-character": true,
 		"seed:deny-events-system-crypto-policy-read-plugin":    true,
+		"seed:deny-events-system-read-character":               true,
+		"seed:deny-events-system-read-plugin":                  true,
 	}
 	var forbidCount int
 	for _, created := range mockStore.created {
@@ -360,7 +362,7 @@ func TestBootstrapSetsCorrectPolicyEffect(t *testing.T) {
 				"unexpected forbid policy: %q", created.Name)
 		}
 	}
-	assert.Equal(t, 7, forbidCount, "expected 7 forbid policies (+2 phase-5 sub-epic A events.*.system.crypto_totp.* denies + 2 phase-5 sub-epic D events.*.system.crypto_policy.* denies)")
+	assert.Equal(t, 9, forbidCount, "expected 9 forbid policies (+2 phase-5 sub-epic A events.*.system.crypto_totp.* denies + 2 phase-5 sub-epic D events.*.system.crypto_policy.* denies + 2 phase-5 sub-epic E events.*.system.* broad denies)")
 }
 
 func TestBootstrapNilSeedVersionNotUpgraded(t *testing.T) {

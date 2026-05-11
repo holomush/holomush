@@ -72,7 +72,7 @@ func TestDecodeJetStreamMessageHappyPath(t *testing.T) {
 	t.Parallel()
 	h, id := validHeaders(t)
 	msg := &stubMsg{headers: h, data: validPayload(t)}
-	ev, err := decodeJetStreamMessage(context.Background(), msg, nil, eventbus.SessionIdentity{}, nil, nil, nil)
+	ev, err := decodeJetStreamMessage(context.Background(), msg, nil, eventbus.SessionIdentity{}, nil, nil, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, id, ev.ID)
 	assert.Equal(t, eventbus.Subject("events.main.audit"), ev.Subject)
@@ -83,7 +83,7 @@ func TestDecodeJetStreamMessageRejectsMissingMsgID(t *testing.T) {
 	h, _ := validHeaders(t)
 	h.Del(eventbus.HeaderMsgID)
 	msg := &stubMsg{headers: h, data: validPayload(t)}
-	_, err := decodeJetStreamMessage(context.Background(), msg, nil, eventbus.SessionIdentity{}, nil, nil, nil)
+	_, err := decodeJetStreamMessage(context.Background(), msg, nil, eventbus.SessionIdentity{}, nil, nil, nil, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_HISTORY_MISSING_HEADER")
 }
@@ -93,7 +93,7 @@ func TestDecodeJetStreamMessageRejectsBadMsgID(t *testing.T) {
 	h, _ := validHeaders(t)
 	h.Set(eventbus.HeaderMsgID, "nope")
 	msg := &stubMsg{headers: h, data: validPayload(t)}
-	_, err := decodeJetStreamMessage(context.Background(), msg, nil, eventbus.SessionIdentity{}, nil, nil, nil)
+	_, err := decodeJetStreamMessage(context.Background(), msg, nil, eventbus.SessionIdentity{}, nil, nil, nil, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_HISTORY_BAD_MSG_ID")
 }
@@ -103,7 +103,7 @@ func TestDecodeJetStreamMessageRejectsMissingCodec(t *testing.T) {
 	h, _ := validHeaders(t)
 	h.Del(eventbus.HeaderCodec)
 	msg := &stubMsg{headers: h, data: validPayload(t)}
-	_, err := decodeJetStreamMessage(context.Background(), msg, nil, eventbus.SessionIdentity{}, nil, nil, nil)
+	_, err := decodeJetStreamMessage(context.Background(), msg, nil, eventbus.SessionIdentity{}, nil, nil, nil, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_HISTORY_MISSING_HEADER")
 }
@@ -113,7 +113,7 @@ func TestDecodeJetStreamMessageRejectsUnknownCodec(t *testing.T) {
 	h, _ := validHeaders(t)
 	h.Set(eventbus.HeaderCodec, "bogus-codec")
 	msg := &stubMsg{headers: h, data: validPayload(t)}
-	_, err := decodeJetStreamMessage(context.Background(), msg, nil, eventbus.SessionIdentity{}, nil, nil, nil)
+	_, err := decodeJetStreamMessage(context.Background(), msg, nil, eventbus.SessionIdentity{}, nil, nil, nil, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_HISTORY_UNKNOWN_CODEC")
 }
@@ -122,7 +122,7 @@ func TestDecodeJetStreamMessageRejectsMalformedProto(t *testing.T) {
 	t.Parallel()
 	h, _ := validHeaders(t)
 	msg := &stubMsg{headers: h, data: []byte("not-proto-bytes-at-all")}
-	_, err := decodeJetStreamMessage(context.Background(), msg, nil, eventbus.SessionIdentity{}, nil, nil, nil)
+	_, err := decodeJetStreamMessage(context.Background(), msg, nil, eventbus.SessionIdentity{}, nil, nil, nil, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_HISTORY_UNMARSHAL_FAILED")
 }
@@ -259,7 +259,7 @@ func TestDecodeJetStreamMessageAuthGuardDenyStampsMetadataOnly(t *testing.T) {
 	identity := eventbus.SessionIdentity{Kind: eventbus.IdentityKindCharacter}
 
 	ev, err := decodeJetStreamMessage(context.Background(), msg, nil, identity,
-		historyAlwaysDenyGuard{}, historyErrorDEKManager{}, nil)
+		historyAlwaysDenyGuard{}, historyErrorDEKManager{}, nil, nil)
 	require.NoError(t, err)
 	assert.True(t, ev.MetadataOnly, "deny decision must stamp MetadataOnly=true")
 	assert.Empty(t, ev.Payload, "deny decision must return empty payload")
@@ -277,7 +277,7 @@ func TestDecodeJetStreamMessageAuthGuardPermitDecryptsAndDelivers(t *testing.T) 
 	identity := eventbus.SessionIdentity{Kind: eventbus.IdentityKindCharacter}
 
 	ev, err := decodeJetStreamMessage(context.Background(), msg, nil, identity,
-		historyAlwaysPermitGuard{}, historyKeyDEKManager{key: key}, nil)
+		historyAlwaysPermitGuard{}, historyKeyDEKManager{key: key}, nil, nil)
 	require.NoError(t, err)
 	assert.False(t, ev.MetadataOnly, "permit path must not stamp MetadataOnly")
 	assert.Equal(t, plaintext, ev.Payload, "permit path must return decrypted plaintext")
@@ -300,7 +300,7 @@ func TestDecodeJetStreamMessageAuthGuardPermitForPluginEmitsAuditAndDelivers(t *
 	audit := &historyRecordingAuditEmitter{}
 
 	ev, err := decodeJetStreamMessage(context.Background(), msg, nil, identity,
-		historyAlwaysPermitGuard{}, historyKeyDEKManager{key: key}, audit)
+		historyAlwaysPermitGuard{}, historyKeyDEKManager{key: key}, audit, nil)
 	require.NoError(t, err)
 	assert.False(t, ev.MetadataOnly)
 	assert.Equal(t, plaintext, ev.Payload)
@@ -329,7 +329,7 @@ func TestDecodeJetStreamMessageTOCTOUDefenseZerosPlaintextOnAuditQueueFull(t *te
 	audit := &historyRecordingAuditEmitter{retErr: auditErr}
 
 	ev, err := decodeJetStreamMessage(context.Background(), msg, nil, identity,
-		historyAlwaysPermitGuard{}, historyKeyDEKManager{key: key}, audit)
+		historyAlwaysPermitGuard{}, historyKeyDEKManager{key: key}, audit, nil)
 	require.NoError(t, err)
 	assert.True(t, ev.MetadataOnly, "AUDIT_QUEUE_FULL must stamp MetadataOnly=true")
 	assert.Empty(t, ev.Payload, "AUDIT_QUEUE_FULL must return empty payload")
@@ -347,7 +347,7 @@ func TestDecodeJetStreamMessageAuthGuardCheckErrorPropagates(t *testing.T) {
 	identity := eventbus.SessionIdentity{Kind: eventbus.IdentityKindCharacter}
 
 	_, err := decodeJetStreamMessage(context.Background(), msg, nil, identity,
-		historyErrorGuard{}, historyErrorDEKManager{}, nil)
+		historyErrorGuard{}, historyErrorDEKManager{}, nil, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_AUTHGUARD_CHECK_FAILED")
 }
@@ -363,7 +363,7 @@ func TestDecodeJetStreamMessageAuthGuardPermitDEKResolveErrorPropagates(t *testi
 	identity := eventbus.SessionIdentity{Kind: eventbus.IdentityKindCharacter}
 
 	_, err := decodeJetStreamMessage(context.Background(), msg, nil, identity,
-		historyAlwaysPermitGuard{}, historyErrorDEKManager{}, nil)
+		historyAlwaysPermitGuard{}, historyErrorDEKManager{}, nil, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_DEK_RESOLVE_FAILED")
 }
@@ -380,7 +380,7 @@ func TestDecodeJetStreamMessageAuthGuardPermitDecodeErrorPropagates(t *testing.T
 	identity := eventbus.SessionIdentity{Kind: eventbus.IdentityKindCharacter}
 
 	_, err := decodeJetStreamMessage(context.Background(), msg, nil, identity,
-		historyAlwaysPermitGuard{}, historyKeyDEKManager{key: wrongKey}, nil)
+		historyAlwaysPermitGuard{}, historyKeyDEKManager{key: wrongKey}, nil, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_CODEC_DECODE_FAILED")
 }
@@ -409,7 +409,7 @@ func TestDecodeJetStreamMessageNilDEKManagerAfterPermitFailsClosed(t *testing.T)
 	identity := eventbus.SessionIdentity{Kind: eventbus.IdentityKindCharacter}
 
 	_, err := decodeJetStreamMessage(context.Background(), msg, nil, identity,
-		historyAlwaysPermitGuard{}, nil, nil) // nil dekMgr
+		historyAlwaysPermitGuard{}, nil, nil, nil) // nil dekMgr
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_HISTORY_DEK_MANAGER_NIL")
 }
@@ -430,7 +430,7 @@ func TestDecodeJetStreamMessagePluginIdentityWithNilAuditEmitterFailsClosed(t *t
 	}
 
 	_, err := decodeJetStreamMessage(context.Background(), msg, nil, identity,
-		historyAlwaysPermitGuard{}, historyKeyDEKManager{key: key}, nil) // nil auditEm
+		historyAlwaysPermitGuard{}, historyKeyDEKManager{key: key}, nil, nil) // nil auditEm
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_HISTORY_AUDIT_EMITTER_NIL")
 }
@@ -451,7 +451,7 @@ func TestDecodeJetStreamMessagePluginNonQueueFullAuditErrorPropagates(t *testing
 
 	_, err := decodeJetStreamMessage(context.Background(), msg, nil, identity,
 		historyAlwaysPermitGuard{}, historyKeyDEKManager{key: key},
-		historyFailingAuditEmitterWithCode{code: "AUDIT_EMITTER_FAILED"})
+		historyFailingAuditEmitterWithCode{code: "AUDIT_EMITTER_FAILED"}, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_HISTORY_AUDIT_EMIT_FAILED")
 }
@@ -472,7 +472,7 @@ func TestDecodeJetStreamMessagePluginAuditQueueFullStillStampsMetadataOnly(t *te
 
 	ev, err := decodeJetStreamMessage(context.Background(), msg, nil, identity,
 		historyAlwaysPermitGuard{}, historyKeyDEKManager{key: key},
-		historyFailingAuditEmitterWithCode{code: "AUDIT_QUEUE_FULL"})
+		historyFailingAuditEmitterWithCode{code: "AUDIT_QUEUE_FULL"}, nil)
 	require.NoError(t, err)
 	assert.True(t, ev.MetadataOnly, "AUDIT_QUEUE_FULL must stamp MetadataOnly=true")
 	assert.Empty(t, ev.Payload, "AUDIT_QUEUE_FULL must return empty payload")

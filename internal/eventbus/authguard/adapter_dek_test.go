@@ -45,6 +45,22 @@ func (s *stubDEKManager) Rekey(_ context.Context, _ dek.ContextID, _ string, _ d
 	return nil
 }
 
+func (s *stubDEKManager) ActiveDEKRow(_ context.Context, _ dek.ContextID) (dek.ActiveDEKRecord, error) {
+	return dek.ActiveDEKRecord{}, nil // stub: unused in adapter tests
+}
+
+func (s *stubDEKManager) MintNewDEKForRekey(_ context.Context, _ int64) (int64, error) {
+	return 0, nil // stub: unused in adapter tests
+}
+
+func (s *stubDEKManager) DestroyDEK(_ context.Context, _ int64) error {
+	return nil // stub: unused in adapter tests
+}
+
+func (s *stubDEKManager) EvictCachedDEK(_ context.Context, _ int64) error {
+	return nil // stub: unused in adapter tests
+}
+
 func TestDEKParticipantLookupAdapterDelegatesToManager(t *testing.T) {
 	parts := []dek.Participant{{PlayerID: "01ABC", BindingID: "01DEF"}}
 	mgr := &stubDEKManager{parts: parts}

@@ -101,6 +101,75 @@ Proposed bead split for <plan-path>
 Where `<p>` is the parent epic ID (e.g. `holomush-ojw1.4`). Ask the user
 to approve, modify, or reject the split before continuing.
 
+### Step 2.5: Detect shared-surface ambiguity
+
+Before generating per-bead descriptions, scan the approved split for
+**shared-surface ambiguity** — pairs of beads that would both create or
+modify the same package-level surface (file path, new exported type, new
+package) without one explicitly owning it. This is a class of plan gap
+that produces parallel-dispatch conflicts: each implementer subagent acts
+reasonably within their scope and produces a competing version of the
+shared surface.
+
+For each pair of proposed beads (Bᵢ, Bⱼ) with i < j in dependency order:
+
+1. **File-path overlap**: do their "Files touched" lists intersect? If
+   so, is the intersection file existing-on-main (modifications can stack
+   cleanly) or new-in-this-chain (both would try to create it)?
+2. **New-type overlap**: scan the plan task code blocks for each bead. Do
+   both define the same exported type (`type X struct`, `type X interface`)
+   or the same exported function (`func X(...)`) in the same package
+   without explicit ownership in either bead's "Files touched" comment?
+3. **Conceptual overlap**: do both beads' Goal sections reference the
+   same conceptual surface ("introduce X type", "create X package") even
+   if the files differ?
+
+For each detected pair, propose a resolution to the user as a table:
+
+```text
+Shared-surface ambiguity detected
+
+| Surface | Bead Bᵢ (earlier) | Bead Bⱼ (later) | Proposed resolution |
+|---------|-------------------|-----------------|---------------------|
+| internal/eventbus/envelope.go (NEW) | jxo8.7.9 (cold-tier seam, needs Envelope+ColdRow+NewEnvelopeFromColdRow) | jxo8.7.10 (Resolver interface, needs Envelope+EnvelopeFields+NewEnvelopeForTest) | Add `bd dep add jxo8.7.10 jxo8.7.9`. Bead jxo8.7.9 owns the full eventbus.Envelope surface (struct + all constructors + accessors per plan §1886 accessor list). Bead jxo8.7.10 consumes it; its "Files touched" notes "depends on jxo8.7.9's Envelope shape — do not redefine". |
+```
+
+The default resolution is **"earlier task owns; later task depends and
+consumes"** — express via a `bd dep add` edge plus an explicit ownership
+note in each bead's "Files touched" or "Out of scope" section. This is
+the lowest-disruption fix: it preserves the existing 1:1 split, requires
+no plan re-write, and prevents parallel-dispatch conflicts.
+
+Alternative resolutions (use only if the default doesn't fit):
+
+- **Move the surface to a new earlier bead**: file a new bead Bₖ that
+  owns the shared surface; have both Bᵢ and Bⱼ depend on Bₖ. Use when
+  the surface is genuinely third-party to both consumers (e.g., neither
+  Bᵢ nor Bⱼ's scope feels right as the owner).
+- **Merge Bᵢ + Bⱼ**: collapse them into one bead. Use when their work
+  is so tightly coupled that splitting is fictional anyway.
+- **Amend plan**: ask the user whether the plan should be revised to make
+  ownership explicit. Use when the surface conflict reveals a genuine
+  design ambiguity that needs decision before execution.
+
+Display the proposed resolutions; ask explicitly:
+
+> "Apply N shared-surface resolutions (dependency edges + ownership notes)
+> to the bead split? (yes / no / modify)"
+
+Do not proceed to Step 3 (description generation) without the user's
+affirmative `yes` against the current state of resolutions.
+
+Real failure mode observed (May 2026 on Phase 5 sub-epic E): plan §Task
+9 (`cold_postgres.LookupByID`) and §Task 10 (`source.SourceResolver`)
+both implicitly needed `eventbus.Envelope` introduced. The plan §1886
+parenthetical hinted at it but assigned no owner. The chain shipped with
+.9 and .10 as siblings (no dep edge); parallel dispatch produced two
+competing `internal/eventbus/envelope.go` files; rebase conflict required
+manual merge. A dep edge `bd dep add jxo8.7.10 jxo8.7.9` would have
+serialized the dispatch, made .9 the canonical owner, and avoided the
+conflict.
+
 ### Step 3: Generate per-bead descriptions
 
 For each bead in the approved split, generate the 8-section description per
@@ -111,9 +180,17 @@ CLAUDE.md "Plan → Bead Chain" requirements:
 2. **Design reference** — the grounding spec / design doc named in the plan
    header, with the most-relevant section anchor
 3. **Plan reference** — the plan path with the task ID anchor
-   (`docs/superpowers/plans/<plan>.md` § Task Tn)
-4. **TDD acceptance criteria** — pulled from the plan's task TDD steps; for
-   merged beads, the union of the merged tasks' tests
+   (`docs/superpowers/plans/<plan>.md` § Task Tn). **MUST also include the
+   verbatim-read directive** (see "Plan reference: anti-inference guard"
+   below). Bead descriptions alone are a SUMMARY of intent, not a
+   structural spec; implementers who never open the plan produce work that
+   diverges from canonical type names, RPC streaming-vs-unary shapes, hash
+   algorithm choices, etc. The directive forces the plan-as-canonical
+   contract.
+4. **TDD acceptance criteria** — pulled from the plan's task TDD steps,
+   preserving test names verbatim (the plan-reviewer pass validates name
+   alignment with the spec INV catalog; renames here break that chain).
+   For merged beads, the union of the merged tasks' tests.
 5. **Verification steps** — pulled from the plan's task verification block;
    typically `task lint`, `task test -- ./pkg/`, `task pr-prep` for the
    closing bead
@@ -124,6 +201,32 @@ CLAUDE.md "Plan → Bead Chain" requirements:
 8. **Out of scope** — explicit non-goals; pulled from the plan's "Out of
    scope" section if present, otherwise generated from the design doc's
    deferred items
+
+#### Plan reference: anti-inference guard
+
+The "Plan reference" section MUST include language that forbids the
+implementer from inferring design from the bead summary alone. The
+canonical template (use verbatim or paraphrase tightly):
+
+```
+**Plan reference:** docs/superpowers/plans/<plan>.md § Task Tn.
+**The implementer MUST read this section's code blocks verbatim and
+translate plan → code — do not infer design from this 8-section bead
+summary alone. Structural details (RPC streaming-vs-unary, exact type
+and field names, hash algorithm choices, message-shape contracts) live
+in the plan code blocks, not in this bead. Deviation from the plan's
+canonical names breaks downstream beads that assume them.**
+```
+
+This is non-decorative. Real failure mode observed in May 2026 on the
+Phase 5 sub-epic E execution: bead `holomush-jxo8.7.27`'s description
+named "Rekey RPC additions" and listed five RPCs by name, but the bead
+did not specify that three of the five must be server-streaming. The
+implementer subagent inferred unary responses from the bead and produced
+a proto file that downstream handler/CLI beads could not consume. The
+work was abandoned and redone after the implementer was redirected to
+read plan §5772-5776 verbatim. The guard above is the cheapest fix that
+prevents the failure class.
 
 Generate descriptions in heredoc form so they're directly usable by
 `bd create`:
@@ -137,12 +240,17 @@ bd create \
   --description "$(cat <<'EOF'
 **Goal:** <one-sentence>
 
-**Design reference:** <doc>:<section>
-**Plan reference:** <plan>:<task-id>
+**Design reference:** <doc> § <section>
+
+**Plan reference:** <plan> § Task <Tn>. **The implementer MUST read this
+section's code blocks verbatim and translate plan → code — do not infer
+design from this 8-section bead summary alone. Structural details (RPC
+streaming-vs-unary, exact type and field names, hash algorithm choices,
+message-shape contracts) live in the plan code blocks, not in this bead.**
 
 **TDD acceptance criteria:**
-- <test name 1>
-- <test name 2>
+- `<TestName1>` (preserve verbatim; the plan-reviewer pass validates these against the spec INV catalog)
+- `<TestName2>`
 - ...
 
 **Verification steps:**

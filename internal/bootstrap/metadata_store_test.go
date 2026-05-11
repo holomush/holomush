@@ -33,7 +33,7 @@ func TestPostgresMetadataStore_Get(t *testing.T) {
 			key:  "bootstrap_complete",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
 				rows := pgxmock.NewRows([]string{"value"}).AddRow("true")
-				mock.ExpectQuery(`SELECT value FROM bootstrap_metadata WHERE key = \$1`).
+				mock.ExpectQuery(`SELECT value FROM setting_bootstrap_state WHERE key = \$1`).
 					WithArgs("bootstrap_complete").
 					WillReturnRows(rows)
 			},
@@ -44,7 +44,7 @@ func TestPostgresMetadataStore_Get(t *testing.T) {
 			name: "not found",
 			key:  "nonexistent_key",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
-				mock.ExpectQuery(`SELECT value FROM bootstrap_metadata WHERE key = \$1`).
+				mock.ExpectQuery(`SELECT value FROM setting_bootstrap_state WHERE key = \$1`).
 					WithArgs("nonexistent_key").
 					WillReturnError(pgx.ErrNoRows)
 			},
@@ -55,7 +55,7 @@ func TestPostgresMetadataStore_Get(t *testing.T) {
 			name: "database error",
 			key:  "bootstrap_complete",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
-				mock.ExpectQuery(`SELECT value FROM bootstrap_metadata WHERE key = \$1`).
+				mock.ExpectQuery(`SELECT value FROM setting_bootstrap_state WHERE key = \$1`).
 					WithArgs("bootstrap_complete").
 					WillReturnError(errors.New("connection lost"))
 			},
@@ -103,7 +103,7 @@ func TestPostgresMetadataStore_Set(t *testing.T) {
 			key:   "bootstrap_complete",
 			value: "true",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
-				mock.ExpectExec(`INSERT INTO bootstrap_metadata`).
+				mock.ExpectExec(`INSERT INTO setting_bootstrap_state`).
 					WithArgs("bootstrap_complete", "true").
 					WillReturnResult(pgxmock.NewResult("INSERT", 1))
 			},
@@ -113,7 +113,7 @@ func TestPostgresMetadataStore_Set(t *testing.T) {
 			key:   "bootstrap_complete",
 			value: "false",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
-				mock.ExpectExec(`INSERT INTO bootstrap_metadata`).
+				mock.ExpectExec(`INSERT INTO setting_bootstrap_state`).
 					WithArgs("bootstrap_complete", "false").
 					WillReturnResult(pgxmock.NewResult("INSERT", 0))
 			},
@@ -123,7 +123,7 @@ func TestPostgresMetadataStore_Set(t *testing.T) {
 			key:   "bootstrap_complete",
 			value: "true",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
-				mock.ExpectExec(`INSERT INTO bootstrap_metadata`).
+				mock.ExpectExec(`INSERT INTO setting_bootstrap_state`).
 					WithArgs("bootstrap_complete", "true").
 					WillReturnError(errors.New("connection lost"))
 			},
@@ -167,7 +167,7 @@ func TestPostgresMetadataStore_Delete(t *testing.T) {
 			name: "delete existing key",
 			key:  "bootstrap_complete",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
-				mock.ExpectExec(`DELETE FROM bootstrap_metadata WHERE key = \$1`).
+				mock.ExpectExec(`DELETE FROM setting_bootstrap_state WHERE key = \$1`).
 					WithArgs("bootstrap_complete").
 					WillReturnResult(pgxmock.NewResult("DELETE", 1))
 			},
@@ -176,7 +176,7 @@ func TestPostgresMetadataStore_Delete(t *testing.T) {
 			name: "delete nonexistent key",
 			key:  "nonexistent_key",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
-				mock.ExpectExec(`DELETE FROM bootstrap_metadata WHERE key = \$1`).
+				mock.ExpectExec(`DELETE FROM setting_bootstrap_state WHERE key = \$1`).
 					WithArgs("nonexistent_key").
 					WillReturnResult(pgxmock.NewResult("DELETE", 0))
 			},
@@ -185,7 +185,7 @@ func TestPostgresMetadataStore_Delete(t *testing.T) {
 			name: "database error",
 			key:  "bootstrap_complete",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
-				mock.ExpectExec(`DELETE FROM bootstrap_metadata WHERE key = \$1`).
+				mock.ExpectExec(`DELETE FROM setting_bootstrap_state WHERE key = \$1`).
 					WithArgs("bootstrap_complete").
 					WillReturnError(errors.New("connection lost"))
 			},

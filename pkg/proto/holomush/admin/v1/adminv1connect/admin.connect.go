@@ -45,6 +45,18 @@ const (
 	AdminServiceApproveProcedure = "/holomush.admin.v1.AdminService/Approve"
 	// AdminServiceResetTOTPProcedure is the fully-qualified name of the AdminService's ResetTOTP RPC.
 	AdminServiceResetTOTPProcedure = "/holomush.admin.v1.AdminService/ResetTOTP"
+	// AdminServiceRekeyProcedure is the fully-qualified name of the AdminService's Rekey RPC.
+	AdminServiceRekeyProcedure = "/holomush.admin.v1.AdminService/Rekey"
+	// AdminServiceRekeyResumeProcedure is the fully-qualified name of the AdminService's RekeyResume
+	// RPC.
+	AdminServiceRekeyResumeProcedure = "/holomush.admin.v1.AdminService/RekeyResume"
+	// AdminServiceRekeyAbortProcedure is the fully-qualified name of the AdminService's RekeyAbort RPC.
+	AdminServiceRekeyAbortProcedure = "/holomush.admin.v1.AdminService/RekeyAbort"
+	// AdminServiceRekeyStatusProcedure is the fully-qualified name of the AdminService's RekeyStatus
+	// RPC.
+	AdminServiceRekeyStatusProcedure = "/holomush.admin.v1.AdminService/RekeyStatus"
+	// AdminServiceRekeyListProcedure is the fully-qualified name of the AdminService's RekeyList RPC.
+	AdminServiceRekeyListProcedure = "/holomush.admin.v1.AdminService/RekeyList"
 )
 
 // AdminServiceClient is a client for the holomush.admin.v1.AdminService service.
@@ -62,6 +74,21 @@ type AdminServiceClient interface {
 	// crypto.totp_cleared audit event with cleared_by="admin_reset".
 	// Spec §3, §4 reset flow.
 	ResetTOTP(context.Context, *connect.Request[v1.ResetTOTPRequest]) (*connect.Response[v1.ResetTOTPResponse], error)
+	// Rekey initiates a full DEK rekey for a context and streams 7-phase
+	// orchestrator progress back to the caller. Spec §7; INV-E surface.
+	Rekey(context.Context, *connect.Request[v1.RekeyRequest]) (*connect.ServerStreamForClient[v1.RekeyProgress], error)
+	// RekeyResume resumes a paused or interrupted rekey and streams progress.
+	// Spec §7; INV-E surface.
+	RekeyResume(context.Context, *connect.Request[v1.RekeyResumeRequest]) (*connect.ServerStreamForClient[v1.RekeyProgress], error)
+	// RekeyAbort cancels an in-progress rekey operation.
+	// Spec §7; INV-E surface.
+	RekeyAbort(context.Context, *connect.Request[v1.RekeyAbortRequest]) (*connect.Response[v1.RekeyAbortResponse], error)
+	// RekeyStatus returns the current state of a single rekey operation.
+	// Spec §7; INV-E surface.
+	RekeyStatus(context.Context, *connect.Request[v1.RekeyStatusRequest]) (*connect.Response[v1.RekeyStatusResponse], error)
+	// RekeyList streams status records for active (and optionally terminal)
+	// rekey operations. Spec §7; INV-E surface.
+	RekeyList(context.Context, *connect.Request[v1.RekeyListRequest]) (*connect.ServerStreamForClient[v1.RekeyStatusResponse], error)
 }
 
 // NewAdminServiceClient constructs a client for the holomush.admin.v1.AdminService service. By
@@ -99,6 +126,36 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(adminServiceMethods.ByName("ResetTOTP")),
 			connect.WithClientOptions(opts...),
 		),
+		rekey: connect.NewClient[v1.RekeyRequest, v1.RekeyProgress](
+			httpClient,
+			baseURL+AdminServiceRekeyProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("Rekey")),
+			connect.WithClientOptions(opts...),
+		),
+		rekeyResume: connect.NewClient[v1.RekeyResumeRequest, v1.RekeyProgress](
+			httpClient,
+			baseURL+AdminServiceRekeyResumeProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("RekeyResume")),
+			connect.WithClientOptions(opts...),
+		),
+		rekeyAbort: connect.NewClient[v1.RekeyAbortRequest, v1.RekeyAbortResponse](
+			httpClient,
+			baseURL+AdminServiceRekeyAbortProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("RekeyAbort")),
+			connect.WithClientOptions(opts...),
+		),
+		rekeyStatus: connect.NewClient[v1.RekeyStatusRequest, v1.RekeyStatusResponse](
+			httpClient,
+			baseURL+AdminServiceRekeyStatusProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("RekeyStatus")),
+			connect.WithClientOptions(opts...),
+		),
+		rekeyList: connect.NewClient[v1.RekeyListRequest, v1.RekeyStatusResponse](
+			httpClient,
+			baseURL+AdminServiceRekeyListProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("RekeyList")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -108,6 +165,11 @@ type adminServiceClient struct {
 	authenticate *connect.Client[v1.AuthenticateRequest, v1.AuthenticateResponse]
 	approve      *connect.Client[v1.ApproveRequest, v1.ApproveResponse]
 	resetTOTP    *connect.Client[v1.ResetTOTPRequest, v1.ResetTOTPResponse]
+	rekey        *connect.Client[v1.RekeyRequest, v1.RekeyProgress]
+	rekeyResume  *connect.Client[v1.RekeyResumeRequest, v1.RekeyProgress]
+	rekeyAbort   *connect.Client[v1.RekeyAbortRequest, v1.RekeyAbortResponse]
+	rekeyStatus  *connect.Client[v1.RekeyStatusRequest, v1.RekeyStatusResponse]
+	rekeyList    *connect.Client[v1.RekeyListRequest, v1.RekeyStatusResponse]
 }
 
 // Status calls holomush.admin.v1.AdminService.Status.
@@ -130,6 +192,31 @@ func (c *adminServiceClient) ResetTOTP(ctx context.Context, req *connect.Request
 	return c.resetTOTP.CallUnary(ctx, req)
 }
 
+// Rekey calls holomush.admin.v1.AdminService.Rekey.
+func (c *adminServiceClient) Rekey(ctx context.Context, req *connect.Request[v1.RekeyRequest]) (*connect.ServerStreamForClient[v1.RekeyProgress], error) {
+	return c.rekey.CallServerStream(ctx, req)
+}
+
+// RekeyResume calls holomush.admin.v1.AdminService.RekeyResume.
+func (c *adminServiceClient) RekeyResume(ctx context.Context, req *connect.Request[v1.RekeyResumeRequest]) (*connect.ServerStreamForClient[v1.RekeyProgress], error) {
+	return c.rekeyResume.CallServerStream(ctx, req)
+}
+
+// RekeyAbort calls holomush.admin.v1.AdminService.RekeyAbort.
+func (c *adminServiceClient) RekeyAbort(ctx context.Context, req *connect.Request[v1.RekeyAbortRequest]) (*connect.Response[v1.RekeyAbortResponse], error) {
+	return c.rekeyAbort.CallUnary(ctx, req)
+}
+
+// RekeyStatus calls holomush.admin.v1.AdminService.RekeyStatus.
+func (c *adminServiceClient) RekeyStatus(ctx context.Context, req *connect.Request[v1.RekeyStatusRequest]) (*connect.Response[v1.RekeyStatusResponse], error) {
+	return c.rekeyStatus.CallUnary(ctx, req)
+}
+
+// RekeyList calls holomush.admin.v1.AdminService.RekeyList.
+func (c *adminServiceClient) RekeyList(ctx context.Context, req *connect.Request[v1.RekeyListRequest]) (*connect.ServerStreamForClient[v1.RekeyStatusResponse], error) {
+	return c.rekeyList.CallServerStream(ctx, req)
+}
+
 // AdminServiceHandler is an implementation of the holomush.admin.v1.AdminService service.
 type AdminServiceHandler interface {
 	// Status returns the admin-socket server's liveness state and binary version.
@@ -145,6 +232,21 @@ type AdminServiceHandler interface {
 	// crypto.totp_cleared audit event with cleared_by="admin_reset".
 	// Spec §3, §4 reset flow.
 	ResetTOTP(context.Context, *connect.Request[v1.ResetTOTPRequest]) (*connect.Response[v1.ResetTOTPResponse], error)
+	// Rekey initiates a full DEK rekey for a context and streams 7-phase
+	// orchestrator progress back to the caller. Spec §7; INV-E surface.
+	Rekey(context.Context, *connect.Request[v1.RekeyRequest], *connect.ServerStream[v1.RekeyProgress]) error
+	// RekeyResume resumes a paused or interrupted rekey and streams progress.
+	// Spec §7; INV-E surface.
+	RekeyResume(context.Context, *connect.Request[v1.RekeyResumeRequest], *connect.ServerStream[v1.RekeyProgress]) error
+	// RekeyAbort cancels an in-progress rekey operation.
+	// Spec §7; INV-E surface.
+	RekeyAbort(context.Context, *connect.Request[v1.RekeyAbortRequest]) (*connect.Response[v1.RekeyAbortResponse], error)
+	// RekeyStatus returns the current state of a single rekey operation.
+	// Spec §7; INV-E surface.
+	RekeyStatus(context.Context, *connect.Request[v1.RekeyStatusRequest]) (*connect.Response[v1.RekeyStatusResponse], error)
+	// RekeyList streams status records for active (and optionally terminal)
+	// rekey operations. Spec §7; INV-E surface.
+	RekeyList(context.Context, *connect.Request[v1.RekeyListRequest], *connect.ServerStream[v1.RekeyStatusResponse]) error
 }
 
 // NewAdminServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -178,6 +280,36 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(adminServiceMethods.ByName("ResetTOTP")),
 		connect.WithHandlerOptions(opts...),
 	)
+	adminServiceRekeyHandler := connect.NewServerStreamHandler(
+		AdminServiceRekeyProcedure,
+		svc.Rekey,
+		connect.WithSchema(adminServiceMethods.ByName("Rekey")),
+		connect.WithHandlerOptions(opts...),
+	)
+	adminServiceRekeyResumeHandler := connect.NewServerStreamHandler(
+		AdminServiceRekeyResumeProcedure,
+		svc.RekeyResume,
+		connect.WithSchema(adminServiceMethods.ByName("RekeyResume")),
+		connect.WithHandlerOptions(opts...),
+	)
+	adminServiceRekeyAbortHandler := connect.NewUnaryHandler(
+		AdminServiceRekeyAbortProcedure,
+		svc.RekeyAbort,
+		connect.WithSchema(adminServiceMethods.ByName("RekeyAbort")),
+		connect.WithHandlerOptions(opts...),
+	)
+	adminServiceRekeyStatusHandler := connect.NewUnaryHandler(
+		AdminServiceRekeyStatusProcedure,
+		svc.RekeyStatus,
+		connect.WithSchema(adminServiceMethods.ByName("RekeyStatus")),
+		connect.WithHandlerOptions(opts...),
+	)
+	adminServiceRekeyListHandler := connect.NewServerStreamHandler(
+		AdminServiceRekeyListProcedure,
+		svc.RekeyList,
+		connect.WithSchema(adminServiceMethods.ByName("RekeyList")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.admin.v1.AdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AdminServiceStatusProcedure:
@@ -188,6 +320,16 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 			adminServiceApproveHandler.ServeHTTP(w, r)
 		case AdminServiceResetTOTPProcedure:
 			adminServiceResetTOTPHandler.ServeHTTP(w, r)
+		case AdminServiceRekeyProcedure:
+			adminServiceRekeyHandler.ServeHTTP(w, r)
+		case AdminServiceRekeyResumeProcedure:
+			adminServiceRekeyResumeHandler.ServeHTTP(w, r)
+		case AdminServiceRekeyAbortProcedure:
+			adminServiceRekeyAbortHandler.ServeHTTP(w, r)
+		case AdminServiceRekeyStatusProcedure:
+			adminServiceRekeyStatusHandler.ServeHTTP(w, r)
+		case AdminServiceRekeyListProcedure:
+			adminServiceRekeyListHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -211,4 +353,24 @@ func (UnimplementedAdminServiceHandler) Approve(context.Context, *connect.Reques
 
 func (UnimplementedAdminServiceHandler) ResetTOTP(context.Context, *connect.Request[v1.ResetTOTPRequest]) (*connect.Response[v1.ResetTOTPResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.admin.v1.AdminService.ResetTOTP is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) Rekey(context.Context, *connect.Request[v1.RekeyRequest], *connect.ServerStream[v1.RekeyProgress]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("holomush.admin.v1.AdminService.Rekey is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) RekeyResume(context.Context, *connect.Request[v1.RekeyResumeRequest], *connect.ServerStream[v1.RekeyProgress]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("holomush.admin.v1.AdminService.RekeyResume is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) RekeyAbort(context.Context, *connect.Request[v1.RekeyAbortRequest]) (*connect.Response[v1.RekeyAbortResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.admin.v1.AdminService.RekeyAbort is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) RekeyStatus(context.Context, *connect.Request[v1.RekeyStatusRequest]) (*connect.Response[v1.RekeyStatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.admin.v1.AdminService.RekeyStatus is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) RekeyList(context.Context, *connect.Request[v1.RekeyListRequest], *connect.ServerStream[v1.RekeyStatusResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("holomush.admin.v1.AdminService.RekeyList is not implemented"))
 }

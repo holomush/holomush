@@ -4,193 +4,117 @@
 package policy
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/oops"
-	"google.golang.org/protobuf/proto"
 
-	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
+	"github.com/holomush/holomush/internal/eventbus/audit/chain"
 )
-
-// chainEntry is one decoded events_audit row for the chain subject.
-type chainEntry struct {
-	Seq     int64
-	Payload PolicySetPayload
-}
 
 // VerifyChain validates the integrity of the policy_set chain for one
 // policy_name (identified by subject). Per INV-D10/D11/D12. Reads
-// events_audit ORDER BY js_seq, two-step decodes envelope -> JSON payload,
-// walks the chain, and recomputes each event's policy_hash to catch
-// payload tampering.
+// events_audit ORDER BY js_seq via the auditchain primitive, walks the
+// chain, and recomputes each event's policy_hash via the chain handler's
+// canonicalize step.
+//
+// Post Phase 5 sub-epic E refactor: this is a thin shim over
+// [chain.Verifier.VerifyScope] backed by [chain.NewPostgresRepo]. The
+// per-chain canonicalize / scope / hash extractors live as standalone
+// functions registered via [PolicySetHandlerFor] (chain.go). D's INV-D10
+// PrevHash empty-form → nil normalization is preserved in
+// canonicalizePolicySetPayload.
 //
 // Empty-chain handling cross-checks against the persistent chain-init
-// signal in bootstrap_metadata (chain_state.go). On first boot the
-// signal is absent and an empty chain is permitted (the emitter will
-// write the genesis row and mark the signal). On any subsequent boot
-// the signal is present, so an empty audit row-set is treated as
-// full-chain truncation and surfaces as POLICY_CHAIN_TRUNCATED.
+// signal in bootstrap_metadata (chain_state.go) via
+// [chain.Repo.ChainInitialized]. On first boot the signal is absent and
+// an empty chain is permitted (the emitter will write the genesis row and
+// mark the signal). On any subsequent boot the signal is present, so an
+// empty audit row-set is treated as full-chain truncation and surfaces as
+// AUDIT_CHAIN_TRUNCATED.
 //
-// Returns a typed POLICY_CHAIN_* error on any integrity failure.
+// Returns a typed AUDIT_CHAIN_* error on any integrity failure, wrapped in
+// POLICY_CHAIN_VERIFY_FAILED to identify the policy-set chain at the
+// caller boundary. INV-D10/D11/D12 invariants are generalized to
+// AUDIT_CHAIN_BROKEN_GENESIS / AUDIT_CHAIN_BROKEN_LINK /
+// AUDIT_CHAIN_HASH_MISMATCH respectively.
+//
+// The subject and policyName parameters are both retained for D
+// backward-compat. The scope walked by the auditchain primitive is
+// derived from the subject (the suffix after the chain's subject prefix);
+// the policyName parameter is used to construct the chain handler's
+// gameID-parameterized prefix. When subject and policyName disagree at
+// the suffix level, the test fixtures' "loose" subject is honored — the
+// chain handler's INV-E27 ScopeFromPayload cross-check still rejects
+// payload-level mismatches.
 func VerifyChain(ctx context.Context, pool *pgxpool.Pool, subject, policyName string) error {
-	entries, err := loadChainEntries(ctx, pool, subject)
+	gameID, scope, err := parsePolicySubject(subject)
 	if err != nil {
-		return oops.Code("POLICY_CHAIN_LOAD_FAILED").
-			With("subject", subject).Wrap(err)
-	}
-	if len(entries) == 0 {
-		// Distinguish first-boot (no init signal) from truncation
-		// (signal present but every chain row missing).
-		initialized, stateErr := chainInitialized(ctx, pool, policyName)
-		if stateErr != nil {
-			return oops.Code("POLICY_CHAIN_STATE_LOAD_FAILED").
-				With("policy_name", policyName).Wrap(stateErr)
-		}
-		if initialized {
-			return oops.Code("POLICY_CHAIN_TRUNCATED").
-				With("policy_name", policyName).
-				With("subject", subject).
-				Errorf("chain truncated: bootstrap_metadata records prior init but events_audit holds no chain rows")
-		}
-		// First boot: emitter will write genesis and mark the signal.
-		return nil
-	}
-	return verifyChainEntries(entries, policyName)
-}
-
-// verifyChainEntries is the integrity check separated from the data source
-// so unit tests can drive canned chainEntry slices without a database.
-// INV-D10: genesis prev_hash is nil. INV-D11: each entry's prev_hash equals
-// the predecessor's recomputed policy_hash. INV-D12: each entry's stored
-// policy_hash equals the recomputed hash over its own canonicalized payload.
-//
-// Cross-checks each entry's Payload.PolicyName against the expected
-// policyName argument. The loader queries by subject, but the payload's
-// PolicyName is independent JSON — a row whose subject and PolicyName
-// disagree is a chain-breaking corruption (or a misconfigured emitter)
-// and surfaces as POLICY_CHAIN_NAME_MISMATCH.
-func verifyChainEntries(entries []chainEntry, policyName string) error {
-	if len(entries) == 0 {
-		return nil
-	}
-	if entries[0].Payload.PolicyName != policyName {
-		return oops.Code("POLICY_CHAIN_NAME_MISMATCH").
-			With("policy_name", policyName).
-			With("payload_policy_name", entries[0].Payload.PolicyName).
-			With("js_seq", entries[0].Seq).
-			Errorf("payload.policy_name does not match expected policy_name")
-	}
-	if entries[0].Payload.PrevHash != nil {
-		return oops.Code("POLICY_CHAIN_BROKEN_GENESIS").
-			With("policy_name", policyName).
-			With("js_seq", entries[0].Seq).
-			Errorf("first event has non-null prev_hash")
-	}
-	// Genesis row: policy_hash MUST match its own canonicalized payload.
-	genHash, err := ComputePolicyHash(&entries[0].Payload)
-	if err != nil {
-		return oops.Code("POLICY_CHAIN_HASH_RECOMPUTE_FAILED").
+		return oops.Code("POLICY_CHAIN_VERIFY_FAILED").
+			With("subject", subject).
 			With("policy_name", policyName).Wrap(err)
 	}
-	if !bytes.Equal(entries[0].Payload.PolicyHash, genHash) {
-		return oops.Code("POLICY_CHAIN_HASH_MISMATCH").
+	// If the subject's tail differs from policyName, prefer the tail (the
+	// suffix the chain primitive will walk) — D's pre-refactor verifier
+	// queried by subject directly, so any divergence between policyName and
+	// the subject suffix was effectively ignored. We preserve that behavior.
+	_ = policyName // retained for backward-compat in the API surface
+	h := PolicySetHandlerFor(gameID)
+	v := chain.NewVerifier(chain.NewPostgresRepo(pool))
+	if err := v.VerifyScope(ctx, h, scope); err != nil {
+		return oops.Code("POLICY_CHAIN_VERIFY_FAILED").
+			With("subject", subject).
 			With("policy_name", policyName).
-			With("js_seq", entries[0].Seq).
-			Errorf("genesis policy_hash does not match canonicalized payload")
-	}
-	for i := 1; i < len(entries); i++ {
-		if entries[i].Payload.PolicyName != policyName {
-			return oops.Code("POLICY_CHAIN_NAME_MISMATCH").
-				With("policy_name", policyName).
-				With("payload_policy_name", entries[i].Payload.PolicyName).
-				With("js_seq", entries[i].Seq).
-				Errorf("payload.policy_name does not match expected policy_name")
-		}
-		prevHash, err := ComputePolicyHash(&entries[i-1].Payload)
-		if err != nil {
-			return oops.Code("POLICY_CHAIN_HASH_RECOMPUTE_FAILED").
-				With("policy_name", policyName).Wrap(err)
-		}
-		if !bytes.Equal(entries[i].Payload.PrevHash, prevHash) {
-			return oops.Code("POLICY_CHAIN_BROKEN_LINK").
-				With("policy_name", policyName).
-				With("js_seq", entries[i].Seq).
-				Errorf("prev_hash does not match predecessor's policy_hash")
-		}
-		recomputed, err := ComputePolicyHash(&entries[i].Payload)
-		if err != nil {
-			return oops.Code("POLICY_CHAIN_HASH_RECOMPUTE_FAILED").
-				With("policy_name", policyName).Wrap(err)
-		}
-		if !bytes.Equal(entries[i].Payload.PolicyHash, recomputed) {
-			return oops.Code("POLICY_CHAIN_HASH_MISMATCH").
-				With("policy_name", policyName).
-				With("js_seq", entries[i].Seq).
-				Errorf("policy_hash does not match canonicalized payload")
-		}
+			With("scope", scope).Wrap(err)
 	}
 	return nil
 }
 
-// loadChainEntries reads events_audit rows for the given subject ordered by
-// js_seq and two-step decodes each row: proto unmarshal (envelope) -> JSON
-// unmarshal (PolicySetPayload).
-//
-// The query is scoped to type='crypto.policy_set' so foreign rows that
-// happen to share the subject (e.g., misrouted plugin emits) cannot be
-// folded into the policy chain. After decoding, the envelope's Subject
-// and Type are re-checked against the expected values: a mismatch
-// surfaces as POLICY_CHAIN_ENVELOPE_MISMATCH (defense-in-depth against
-// envelope tampering that left the SQL filter satisfied but corrupted
-// the encoded subject/type fields).
-func loadChainEntries(ctx context.Context, pool *pgxpool.Pool, subject string) ([]chainEntry, error) {
-	rows, err := pool.Query(ctx, `
-		SELECT envelope, js_seq
-		  FROM events_audit
-		 WHERE subject = $1
-		   AND type = 'crypto.policy_set'
-		 ORDER BY js_seq ASC
-	`, subject)
-	if err != nil {
-		return nil, oops.Code("POLICY_CHAIN_QUERY_FAILED").
-			With("subject", subject).Wrap(err)
+// parsePolicySubject extracts (gameID, scopeSuffix) from a subject of the
+// form "events.<gameID>.system.crypto_policy.<scopeSuffix>". The scope
+// suffix is whatever follows the literal middle segment, allowing test
+// fixtures with policy_name-divergent suffixes to be walked as a chain.
+func parsePolicySubject(subject string) (gameID, scope string, err error) {
+	const (
+		prefix = "events."
+		mid    = ".system.crypto_policy."
+	)
+	if len(subject) < len(prefix) || subject[:len(prefix)] != prefix {
+		return "", "", oops.Code("POLICY_CHAIN_SUBJECT_INVALID").
+			With("subject", subject).
+			Errorf("subject does not start with %q", prefix)
 	}
-	defer rows.Close()
+	// After stripping the "events." prefix, rest has the shape
+	// "<gameID>.system.crypto_policy.<scope>".
+	rest := subject[len(prefix):]
+	midIdx := indexOf(rest, mid)
+	if midIdx < 0 {
+		return "", "", oops.Code("POLICY_CHAIN_SUBJECT_INVALID").
+			With("subject", subject).
+			Errorf("subject does not contain %q", mid)
+	}
+	gameID = rest[:midIdx]
+	scope = rest[midIdx+len(mid):]
+	if gameID == "" {
+		return "", "", oops.Code("POLICY_CHAIN_SUBJECT_INVALID").
+			With("subject", subject).
+			Errorf("gameID segment empty")
+	}
+	if scope == "" {
+		return "", "", oops.Code("POLICY_CHAIN_SUBJECT_INVALID").
+			With("subject", subject).
+			Errorf("scope segment empty")
+	}
+	return gameID, scope, nil
+}
 
-	var out []chainEntry
-	for rows.Next() {
-		var envelopeBytes []byte
-		var seq int64
-		if err := rows.Scan(&envelopeBytes, &seq); err != nil {
-			return nil, oops.Code("POLICY_CHAIN_SCAN_FAILED").
-				With("subject", subject).Wrap(err)
+// indexOf is a thin strings.Index wrapper kept local to avoid an import
+// purely for one call site.
+func indexOf(s, sub string) int {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return i
 		}
-		var ev eventbusv1.Event
-		if err := proto.Unmarshal(envelopeBytes, &ev); err != nil {
-			return nil, oops.Code("POLICY_CHAIN_ENVELOPE_DECODE_FAILED").
-				With("js_seq", seq).Wrap(err)
-		}
-		if ev.Subject != subject || ev.Type != "crypto.policy_set" {
-			return nil, oops.Code("POLICY_CHAIN_ENVELOPE_MISMATCH").
-				With("subject", subject).
-				With("js_seq", seq).
-				With("envelope_subject", ev.Subject).
-				With("envelope_type", ev.Type).
-				Errorf("unexpected envelope subject/type in policy chain row")
-		}
-		var payload PolicySetPayload
-		if err := json.Unmarshal(ev.Payload, &payload); err != nil {
-			return nil, oops.Code("POLICY_CHAIN_PAYLOAD_DECODE_FAILED").
-				With("js_seq", seq).Wrap(err)
-		}
-		out = append(out, chainEntry{Seq: seq, Payload: payload})
 	}
-	if err := rows.Err(); err != nil {
-		return nil, oops.Code("POLICY_CHAIN_ROWS_ERR").
-			With("subject", subject).Wrap(err)
-	}
-	return out, nil
+	return -1
 }

@@ -27,7 +27,7 @@ type poolIface interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// PostgresMetadataStore implements MetadataStore backed by bootstrap_metadata table.
+// PostgresMetadataStore implements MetadataStore backed by setting_bootstrap_state table.
 type PostgresMetadataStore struct {
 	pool poolIface
 }
@@ -42,7 +42,7 @@ func NewPostgresMetadataStore(pool poolIface) *PostgresMetadataStore {
 
 // Get retrieves a value by key. Returns (value, true, nil) if found, ("", false, nil) if not found.
 func (s *PostgresMetadataStore) Get(ctx context.Context, key string) (value string, found bool, err error) {
-	err = s.pool.QueryRow(ctx, "SELECT value FROM bootstrap_metadata WHERE key = $1", key).Scan(&value)
+	err = s.pool.QueryRow(ctx, "SELECT value FROM setting_bootstrap_state WHERE key = $1", key).Scan(&value)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false, nil
 	}
@@ -55,7 +55,7 @@ func (s *PostgresMetadataStore) Get(ctx context.Context, key string) (value stri
 // Set stores a key-value pair. If the key already exists, it is updated.
 func (s *PostgresMetadataStore) Set(ctx context.Context, key, value string) error {
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO bootstrap_metadata (key, value, updated_at) VALUES ($1, $2, NOW())
+		`INSERT INTO setting_bootstrap_state (key, value, updated_at) VALUES ($1, $2, NOW())
 		 ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`, key, value)
 	if err != nil {
 		return oops.With("key", key).Wrap(err)
@@ -65,7 +65,7 @@ func (s *PostgresMetadataStore) Set(ctx context.Context, key, value string) erro
 
 // Delete removes a key-value pair by key.
 func (s *PostgresMetadataStore) Delete(ctx context.Context, key string) error {
-	_, err := s.pool.Exec(ctx, "DELETE FROM bootstrap_metadata WHERE key = $1", key)
+	_, err := s.pool.Exec(ctx, "DELETE FROM setting_bootstrap_state WHERE key = $1", key)
 	if err != nil {
 		return oops.With("key", key).Wrap(err)
 	}

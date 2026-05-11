@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"github.com/spf13/cobra"
 
@@ -37,6 +38,9 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
+	"github.com/holomush/holomush/internal/eventbus/audit/chain"
+	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
+	"github.com/holomush/holomush/internal/eventbus/crypto/invalidation"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/lifecycle"
@@ -549,12 +553,16 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		VerbRegistry:   verbRegistry,
 	})
 
-	// --- Crypto subsystems (T22 / holomush-jxo8.6.21) ---
-	// CryptoChainVerifierSubsystem runs VerifyChain before EventBus starts.
-	cryptoChainVerifierSub := policy.NewCryptoChainVerifierSubsystem(policy.CryptoChainVerifierConfig{
-		Pool:        dbSub.Pool(),
-		GameID:      gameID,
-		PolicyNames: []string{"dual_control_required"},
+	// --- Crypto subsystems (T22 / holomush-jxo8.6.21; generalized holomush-jxo8.7.8) ---
+	// auditchain.VerifierSubsystem walks every registered hash chain at boot,
+	// replacing D's policy-specific CryptoChainVerifierSubsystem.
+	// RekeyChain wired here per Task 19 (holomush-jxo8.7.17).
+	dek.SetGameIDForRekey(gameID) // must be set before RekeyHandlerFor is called below.
+	auditChainRepo := chain.NewPostgresRepo(dbSub.Pool())
+	cryptoChainVerifierSub := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
+		Repo:     auditChainRepo,
+		Handlers: []chain.Handler{policy.PolicySetHandlerFor(gameID), dek.RekeyHandlerFor(gameID)},
+		Logger:   slog.Default(),
 	})
 
 	// Mint a server-start ULID to stamp the CryptoPolicySubsystem's emits so
@@ -591,6 +599,37 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			Config:          effectiveConfig,
 		},
 		PolicyNames: []string{"dual_control_required"},
+	})
+
+	// --- Phase 5 sub-epic E rekey wiring (holomush-jxo8.7.34 / T37) ---
+	//
+	// Constructs the rekey audit emitter and checkpoint-sweep subsystem,
+	// the two components that can stand alone without the full DEK manager
+	// stack (the orchestrator + RekeyHandler need dek.Manager which a later
+	// bead wires; until then those RPCs remain unimplemented).
+	//
+	// The sweep subsystem auto-aborts non-terminal checkpoints whose
+	// last_heartbeat_at has exceeded TTL (INV-E18 / INV-E19, spec §6.2);
+	// it depends only on CheckpointRepo + AuditEmitter, both of which the
+	// host already has at this point.
+	cryptoCfg := cryptoConfig.Defaults()
+	rekeyCheckpointRepo := dek.NewCheckpointRepo(dbSub.Pool())
+	rekeyAuditEmitter := dek.NewRekeyAuditEmitter(
+		chain.NewEmitter(auditChainRepo),
+		&rekeyAuditPublisherAdapter{publisher: auditPublisher, clock: totp.NewRealClock()},
+	)
+	// policyHashSource backs the Phase 1 policy_hash freeze (INV-E25).
+	// Sub-epic E T44 (holomush-jxo8.7.44) consumes it via buildRekeyWiring
+	// below; earlier beads referenced the constructor but did not wire it
+	// into a Manager yet (no production dek.NewManager call site existed).
+	policyHashSrc := newPolicyHashSourceFromAuditChain(auditChainRepo, gameID)
+
+	rekeyCheckpointSweepSub := dek.NewCheckpointSweepSubsystem(dek.CheckpointSweepConfig{
+		Repo:         rekeyCheckpointRepo,
+		AuditEmitter: rekeyAuditEmitter,
+		Logger:       slog.Default(),
+		TTL:          cryptoCfg.RekeyCheckpointTTL,
+		Interval:     cryptoCfg.RekeyCheckpointSweepInterval,
 	})
 
 	// --- Admin handler construction (T22 / holomush-jxo8.6.21) ---
@@ -695,6 +734,114 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		slog.Warn("admin handlers: TOTP audit service unavailable — all three admin RPCs (Authenticate/Approve/ResetTOTP) will return errors")
 	}
 
+	// --- Phase 5 sub-epic E T44: production dek.Manager + rekey RPC wiring ---
+	//
+	// Constructs dek.Manager (no production call site existed before .44),
+	// dek.Orchestrator with all five post-construction seams, and the
+	// socket.RekeyHandler adapter chain. When kekProvider is nil (KEK env
+	// vars unavailable) buildRekeyWiring returns a zero-valued wiring so the
+	// admin socket falls back to Unimplemented for the Rekey RPCs but the
+	// rest of the server continues to start.
+	//
+	// Construction order is load-bearing per Phase 3c grounding doc
+	// Decision 5: the invalidation.Coordinator's Deps.DEKCache and
+	// Deps.PartCache MUST share pointer identity with the dek.Manager's
+	// own caches. Without that identity, the receive-side handler evicts
+	// dedicated caches while the Manager's caches keep serving stale OLD
+	// DEK material for up to the cache TTL (~5min) after a cross-replica
+	// Rekey — a forward-secrecy regression on the master crypto spec.
+	//
+	// So we:
+	//
+	//   1. Build the Manager + Orchestrator FIRST (with the Invalidator
+	//      closure indirecting through coordHolder; the closure returns
+	//      INVALIDATION_NO_LIVE_MEMBERS while holder.coord is nil).
+	//   2. Extract the Manager's caches via dek.CacheAccessor.
+	//   3. Build the invalidation.Coordinator with THOSE cache pointers.
+	//   4. Set holder.coord = coord; the Manager's Invalidator and the
+	//      Orchestrator's Phase5Coordinator both see the live Coordinator
+	//      from their next call onward.
+	//
+	// invalidation.Coordinator is itself NOT a lifecycle.Subsystem in Phase
+	// 5; we Start it inline alongside the orchestrator and Stop it via the
+	// deferred Stop path. Sub-epic E T44.
+	coordHolderPtr := &coordHolder{}
+
+	rekeyW, rekeyWErr := buildRekeyWiring(ctx, rekeyWiringDeps{
+		Pool:              dbSub.Pool(),
+		KEKProvider:       kekProvider,
+		GameID:            gameID,
+		DataDir:           cfg.DataDir,
+		AuditChainRepo:    auditChainRepo,
+		RekeyAuditEmitter: rekeyAuditEmitter,
+		CheckpointRepo:    rekeyCheckpointRepo,
+		SubjectResolver:   abacSub.Resolver(),
+		SessionStore:      adminSessionStore,
+		RoleChecker:       adminRoleStore,
+		CoordHolder:       coordHolderPtr,
+		PolicyHashSrc:     policyHashSrc,
+	})
+	if rekeyWErr != nil {
+		// Construction failure is fatal because it means the production
+		// shape is incoherent (Manager interface satisfied wrong, etc.).
+		// A missing dependency returns a zero wiring with nil error, NOT
+		// this branch.
+		return rekeyWErr
+	}
+	if rekeyW.RekeyHandler == nil {
+		slog.Warn("rekey wiring incomplete — Rekey admin RPCs will return Unimplemented",
+			"kek_available", kekProvider != nil)
+	}
+	// Thread the production dek.Manager into the gRPC subsystem so Start()
+	// can construct the AuthGuard + AuditEmitter for INV-39 FallbackResolver.
+	// When nil (KEK unavailable), the history reader keeps nil-auth passthrough.
+	grpcSub.cfg.RekeyManager = rekeyW.Manager
+
+	// Build the invalidation.Coordinator USING the Manager's own caches
+	// (Phase 3c grounding doc Decision 5; without this identity, peers
+	// continue serving stale OLD DEK from the Manager's cache for up to
+	// TTL after a cross-replica Rekey — a forward-secrecy regression).
+	// Then set coordHolderPtr.coord so the Manager's Invalidator closure
+	// and the Orchestrator's Phase5Coordinator pick up the live
+	// Coordinator on their next call. Only proceed if the Manager was
+	// successfully constructed (rekeyW.Manager non-nil) — otherwise the
+	// Coordinator has no caches to bind to.
+	if rekeyW.Manager != nil {
+		accessor, accessorOK := rekeyW.Manager.(dek.CacheAccessor)
+		if !accessorOK {
+			// Fail closed: a regenerated Manager that drops the accessor
+			// would silently revert to the dedicated-caches regression.
+			return oops.Code("CRYPTO_DEK_MANAGER_CACHE_ACCESSOR_NOT_SATISFIED").
+				Errorf("dek.NewManager return value does not satisfy dek.CacheAccessor — required for invalidation.Coordinator wiring per Phase 3c grounding Decision 5")
+		}
+		invMetrics := invalidation.NewMetrics(prometheus.DefaultRegisterer)
+		c, invErr := invalidation.New(invalidation.Config{ClusterID: gameID}, invalidation.Deps{
+			Conn:      eventBusSub.Conn(),
+			Registry:  clusterSub,
+			DEKCache:  accessor.Cache(),
+			PartCache: accessor.PartCache(),
+			Logger:    slog.Default(),
+			Metrics:   invMetrics,
+		})
+		if invErr != nil {
+			slog.Warn("invalidation.Coordinator construction failed — cluster fan-out unavailable; Rekey will surface INVALIDATION_NO_LIVE_MEMBERS",
+				"error", invErr)
+		} else if startErr := c.Start(ctx); startErr != nil {
+			slog.Warn("invalidation.Coordinator start failed — cluster fan-out unavailable",
+				"error", startErr)
+		} else {
+			coordHolderPtr.coord = c
+			// Coordinator is not orchestrator-owned; stop it on normal exit.
+			defer func() {
+				stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if stopErr := c.Stop(stopCtx); stopErr != nil {
+					slog.Warn("invalidation.Coordinator stop error", "error", stopErr)
+				}
+			}()
+		}
+	}
+
 	adminSub := socket.NewAdminSocketSubsystem(socket.AdminSocketSubsystemConfig{
 		SocketPath:          adminSocketPath,
 		LockPath:            adminLockPath,
@@ -702,6 +849,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		AuthenticateHandler: authenticateHandler,
 		ApproveHandler:      approveHandler,
 		ResetTOTPHandler:    resetTOTPHandler,
+		RekeyHandler:        rekeyW.RekeyHandler,
 	})
 
 	// --- 8. Orchestrator: register + start ---
@@ -718,6 +866,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		cryptoPolicySub,
 		grpcSub,
 		adminSub,
+		rekeyCheckpointSweepSub,
 	) {
 		orch.Register(sub)
 	}
@@ -1043,7 +1192,8 @@ func productionSubsystems(
 	eventBusSub, clusterSub, auditSub,
 	cryptoPolicySub,
 	grpcSub,
-	adminSub lifecycle.Subsystem,
+	adminSub,
+	rekeyCheckpointSweepSub lifecycle.Subsystem,
 ) []lifecycle.Subsystem {
 	return []lifecycle.Subsystem{
 		dbSub, abacSub, authSub, worldSub,
@@ -1052,5 +1202,59 @@ func productionSubsystems(
 		eventBusSub, clusterSub, auditSub,
 		cryptoPolicySub, // runs after AuditProjection (policy snapshot emit)
 		grpcSub, adminSub,
+		// Sweep auto-aborts non-terminal rekey checkpoints whose heartbeat
+		// has exceeded TTL. Runs after CryptoChainVerifier (chain integrity
+		// confirmed), EventBus (audit events route to JetStream), and
+		// AuditProjection (emitted events land in events_audit). Per
+		// spec §6.2 / Task 28 DependsOn declaration. Sub-epic E T37
+		// (holomush-jxo8.7.34).
+		rekeyCheckpointSweepSub,
 	}
+}
+
+// rekeyAuditPublisherAdapter adapts eventbus.Publisher to dek.AuditPublisher,
+// the narrow seam consumed by dek.RekeyAuditEmitter. The dek package cannot
+// import eventbus (cycle: eventbus → dek), so the bridge lives in the
+// wiring layer (cmd/holomush). Sub-epic E T37 (holomush-jxo8.7.34).
+//
+// PublishAudit mints an event ULID, builds the eventbus.Event from the
+// caller-supplied subject + type + payload, and delegates to the underlying
+// Publisher (which is RenderingPublisher in production — stamping the
+// App-Rendering header required by audit/projection.go::persist). Mirrors
+// the pattern used by internal/admin/policy/emitter.go for the
+// crypto.policy_set chain.
+type rekeyAuditPublisherAdapter struct {
+	publisher eventbus.Publisher
+	clock     interface{ Now() time.Time }
+}
+
+func (a *rekeyAuditPublisherAdapter) PublishAudit(
+	ctx context.Context,
+	subject, evType string,
+	payload []byte,
+) (ulid.ULID, error) {
+	subj, err := eventbus.NewSubject(subject)
+	if err != nil {
+		return ulid.ULID{}, oops.Code("DEK_REKEY_AUDIT_INVALID_SUBJECT").
+			With("subject", subject).Wrap(err)
+	}
+	etyp, err := eventbus.NewType(evType)
+	if err != nil {
+		return ulid.ULID{}, oops.Code("DEK_REKEY_AUDIT_INVALID_TYPE").
+			With("type", evType).Wrap(err)
+	}
+	id := core.NewULID()
+	ev := eventbus.Event{
+		ID:        id,
+		Subject:   subj,
+		Type:      etyp,
+		Timestamp: a.clock.Now(),
+		Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
+		Payload:   payload,
+	}
+	if pubErr := a.publisher.Publish(ctx, ev); pubErr != nil {
+		return ulid.ULID{}, oops.Code("DEK_REKEY_AUDIT_PUBLISH_FAILED").
+			With("subject", subject).Wrap(pubErr)
+	}
+	return id, nil
 }

@@ -22,8 +22,8 @@ type stubPolicy struct {
 	onRestore []StreamWithMode
 }
 
-func (p *stubPolicy) Kind() session.FocusKind                { return p.kind }
-func (p *stubPolicy) StreamsFor(_ session.FocusKey) []string { return p.streams }
+func (p *stubPolicy) Kind() session.FocusKind                          { return p.kind }
+func (p *stubPolicy) StreamsFor(_ session.FocusKey) []string           { return p.streams }
 func (p *stubPolicy) OnJoin(_ PolicyContext) ([]StreamWithMode, error) { return p.onJoin, p.onJoinErr }
 
 func (p *stubPolicy) OnRestore(_ PolicyContext) ([]StreamWithMode, error) {

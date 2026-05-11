@@ -26,6 +26,11 @@ const (
 	AdminService_Authenticate_FullMethodName = "/holomush.admin.v1.AdminService/Authenticate"
 	AdminService_Approve_FullMethodName      = "/holomush.admin.v1.AdminService/Approve"
 	AdminService_ResetTOTP_FullMethodName    = "/holomush.admin.v1.AdminService/ResetTOTP"
+	AdminService_Rekey_FullMethodName        = "/holomush.admin.v1.AdminService/Rekey"
+	AdminService_RekeyResume_FullMethodName  = "/holomush.admin.v1.AdminService/RekeyResume"
+	AdminService_RekeyAbort_FullMethodName   = "/holomush.admin.v1.AdminService/RekeyAbort"
+	AdminService_RekeyStatus_FullMethodName  = "/holomush.admin.v1.AdminService/RekeyStatus"
+	AdminService_RekeyList_FullMethodName    = "/holomush.admin.v1.AdminService/RekeyList"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -49,6 +54,21 @@ type AdminServiceClient interface {
 	// crypto.totp_cleared audit event with cleared_by="admin_reset".
 	// Spec §3, §4 reset flow.
 	ResetTOTP(ctx context.Context, in *ResetTOTPRequest, opts ...grpc.CallOption) (*ResetTOTPResponse, error)
+	// Rekey initiates a full DEK rekey for a context and streams 7-phase
+	// orchestrator progress back to the caller. Spec §7; INV-E surface.
+	Rekey(ctx context.Context, in *RekeyRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RekeyProgress], error)
+	// RekeyResume resumes a paused or interrupted rekey and streams progress.
+	// Spec §7; INV-E surface.
+	RekeyResume(ctx context.Context, in *RekeyResumeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RekeyProgress], error)
+	// RekeyAbort cancels an in-progress rekey operation.
+	// Spec §7; INV-E surface.
+	RekeyAbort(ctx context.Context, in *RekeyAbortRequest, opts ...grpc.CallOption) (*RekeyAbortResponse, error)
+	// RekeyStatus returns the current state of a single rekey operation.
+	// Spec §7; INV-E surface.
+	RekeyStatus(ctx context.Context, in *RekeyStatusRequest, opts ...grpc.CallOption) (*RekeyStatusResponse, error)
+	// RekeyList streams status records for active (and optionally terminal)
+	// rekey operations. Spec §7; INV-E surface.
+	RekeyList(ctx context.Context, in *RekeyListRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RekeyStatusResponse], error)
 }
 
 type adminServiceClient struct {
@@ -99,6 +119,83 @@ func (c *adminServiceClient) ResetTOTP(ctx context.Context, in *ResetTOTPRequest
 	return out, nil
 }
 
+func (c *adminServiceClient) Rekey(ctx context.Context, in *RekeyRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RekeyProgress], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AdminService_ServiceDesc.Streams[0], AdminService_Rekey_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[RekeyRequest, RekeyProgress]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AdminService_RekeyClient = grpc.ServerStreamingClient[RekeyProgress]
+
+func (c *adminServiceClient) RekeyResume(ctx context.Context, in *RekeyResumeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RekeyProgress], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AdminService_ServiceDesc.Streams[1], AdminService_RekeyResume_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[RekeyResumeRequest, RekeyProgress]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AdminService_RekeyResumeClient = grpc.ServerStreamingClient[RekeyProgress]
+
+func (c *adminServiceClient) RekeyAbort(ctx context.Context, in *RekeyAbortRequest, opts ...grpc.CallOption) (*RekeyAbortResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RekeyAbortResponse)
+	err := c.cc.Invoke(ctx, AdminService_RekeyAbort_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) RekeyStatus(ctx context.Context, in *RekeyStatusRequest, opts ...grpc.CallOption) (*RekeyStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RekeyStatusResponse)
+	err := c.cc.Invoke(ctx, AdminService_RekeyStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) RekeyList(ctx context.Context, in *RekeyListRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RekeyStatusResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AdminService_ServiceDesc.Streams[2], AdminService_RekeyList_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[RekeyListRequest, RekeyStatusResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AdminService_RekeyListClient = grpc.ServerStreamingClient[RekeyStatusResponse]
+
 // AdminServiceServer is the server API for AdminService service.
 // All implementations must embed UnimplementedAdminServiceServer
 // for forward compatibility.
@@ -120,6 +217,21 @@ type AdminServiceServer interface {
 	// crypto.totp_cleared audit event with cleared_by="admin_reset".
 	// Spec §3, §4 reset flow.
 	ResetTOTP(context.Context, *ResetTOTPRequest) (*ResetTOTPResponse, error)
+	// Rekey initiates a full DEK rekey for a context and streams 7-phase
+	// orchestrator progress back to the caller. Spec §7; INV-E surface.
+	Rekey(*RekeyRequest, grpc.ServerStreamingServer[RekeyProgress]) error
+	// RekeyResume resumes a paused or interrupted rekey and streams progress.
+	// Spec §7; INV-E surface.
+	RekeyResume(*RekeyResumeRequest, grpc.ServerStreamingServer[RekeyProgress]) error
+	// RekeyAbort cancels an in-progress rekey operation.
+	// Spec §7; INV-E surface.
+	RekeyAbort(context.Context, *RekeyAbortRequest) (*RekeyAbortResponse, error)
+	// RekeyStatus returns the current state of a single rekey operation.
+	// Spec §7; INV-E surface.
+	RekeyStatus(context.Context, *RekeyStatusRequest) (*RekeyStatusResponse, error)
+	// RekeyList streams status records for active (and optionally terminal)
+	// rekey operations. Spec §7; INV-E surface.
+	RekeyList(*RekeyListRequest, grpc.ServerStreamingServer[RekeyStatusResponse]) error
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -141,6 +253,21 @@ func (UnimplementedAdminServiceServer) Approve(context.Context, *ApproveRequest)
 }
 func (UnimplementedAdminServiceServer) ResetTOTP(context.Context, *ResetTOTPRequest) (*ResetTOTPResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ResetTOTP not implemented")
+}
+func (UnimplementedAdminServiceServer) Rekey(*RekeyRequest, grpc.ServerStreamingServer[RekeyProgress]) error {
+	return status.Error(codes.Unimplemented, "method Rekey not implemented")
+}
+func (UnimplementedAdminServiceServer) RekeyResume(*RekeyResumeRequest, grpc.ServerStreamingServer[RekeyProgress]) error {
+	return status.Error(codes.Unimplemented, "method RekeyResume not implemented")
+}
+func (UnimplementedAdminServiceServer) RekeyAbort(context.Context, *RekeyAbortRequest) (*RekeyAbortResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RekeyAbort not implemented")
+}
+func (UnimplementedAdminServiceServer) RekeyStatus(context.Context, *RekeyStatusRequest) (*RekeyStatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RekeyStatus not implemented")
+}
+func (UnimplementedAdminServiceServer) RekeyList(*RekeyListRequest, grpc.ServerStreamingServer[RekeyStatusResponse]) error {
+	return status.Error(codes.Unimplemented, "method RekeyList not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 func (UnimplementedAdminServiceServer) testEmbeddedByValue()                      {}
@@ -235,6 +362,75 @@ func _AdminService_ResetTOTP_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_Rekey_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(RekeyRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(AdminServiceServer).Rekey(m, &grpc.GenericServerStream[RekeyRequest, RekeyProgress]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AdminService_RekeyServer = grpc.ServerStreamingServer[RekeyProgress]
+
+func _AdminService_RekeyResume_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(RekeyResumeRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(AdminServiceServer).RekeyResume(m, &grpc.GenericServerStream[RekeyResumeRequest, RekeyProgress]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AdminService_RekeyResumeServer = grpc.ServerStreamingServer[RekeyProgress]
+
+func _AdminService_RekeyAbort_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RekeyAbortRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).RekeyAbort(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_RekeyAbort_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).RekeyAbort(ctx, req.(*RekeyAbortRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_RekeyStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RekeyStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).RekeyStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_RekeyStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).RekeyStatus(ctx, req.(*RekeyStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_RekeyList_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(RekeyListRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(AdminServiceServer).RekeyList(m, &grpc.GenericServerStream[RekeyListRequest, RekeyStatusResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AdminService_RekeyListServer = grpc.ServerStreamingServer[RekeyStatusResponse]
+
 // AdminService_ServiceDesc is the grpc.ServiceDesc for AdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -258,7 +454,31 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "ResetTOTP",
 			Handler:    _AdminService_ResetTOTP_Handler,
 		},
+		{
+			MethodName: "RekeyAbort",
+			Handler:    _AdminService_RekeyAbort_Handler,
+		},
+		{
+			MethodName: "RekeyStatus",
+			Handler:    _AdminService_RekeyStatus_Handler,
+		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Rekey",
+			Handler:       _AdminService_Rekey_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "RekeyResume",
+			Handler:       _AdminService_RekeyResume_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "RekeyList",
+			Handler:       _AdminService_RekeyList_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "holomush/admin/v1/admin.proto",
 }

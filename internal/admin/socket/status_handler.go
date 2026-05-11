@@ -14,8 +14,8 @@ import (
 )
 
 // compositeHandler implements adminv1connect.AdminServiceHandler. It serves
-// Status directly and delegates Authenticate, Approve, and ResetTOTP to
-// optional per-RPC handlers registered in Config. When a handler is nil the
+// Status directly and delegates Authenticate, Approve, ResetTOTP, and Rekey
+// to optional per-RPC handlers registered in Config. When a handler is nil the
 // RPC returns connect.CodeUnimplemented, preserving backward compatibility for
 // callers that do not register all handlers.
 type compositeHandler struct {
@@ -23,6 +23,7 @@ type compositeHandler struct {
 	authenticateHandler AuthenticateHandler
 	approveHandler      ApproveHandler
 	resetTOTPHandler    ResetTOTPHandler
+	rekeyHandler        RekeyRPCHandler
 }
 
 // Compile-time assertion: compositeHandler satisfies the generated interface.
@@ -73,4 +74,67 @@ func (h *compositeHandler) ResetTOTP(
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ResetTOTP not registered"))
 	}
 	return h.resetTOTPHandler.ResetTOTP(ctx, req) //nolint:wrapcheck // handler returns *connect.Error; wrapping would discard the ConnectRPC code
+}
+
+// Rekey delegates to the registered RekeyRPCHandler, or returns Unimplemented
+// if none was provided. (holomush-jxo8.7.28)
+func (h *compositeHandler) Rekey(
+	ctx context.Context,
+	req *connect.Request[adminv1.RekeyRequest],
+	stream *connect.ServerStream[adminv1.RekeyProgress],
+) error {
+	if h.rekeyHandler == nil {
+		return connect.NewError(connect.CodeUnimplemented, errors.New("Rekey not registered"))
+	}
+	return h.rekeyHandler.HandleRekey(ctx, req, stream) //nolint:wrapcheck // handler returns *connect.Error; wrapping would discard the ConnectRPC code
+}
+
+// RekeyResume delegates to the registered RekeyRPCHandler, or returns
+// Unimplemented if none was provided. (holomush-jxo8.7.28)
+func (h *compositeHandler) RekeyResume(
+	ctx context.Context,
+	req *connect.Request[adminv1.RekeyResumeRequest],
+	stream *connect.ServerStream[adminv1.RekeyProgress],
+) error {
+	if h.rekeyHandler == nil {
+		return connect.NewError(connect.CodeUnimplemented, errors.New("RekeyResume not registered"))
+	}
+	return h.rekeyHandler.HandleRekeyResume(ctx, req, stream) //nolint:wrapcheck // handler returns *connect.Error; wrapping would discard the ConnectRPC code
+}
+
+// RekeyAbort delegates to the registered RekeyRPCHandler (holomush-jxo8.7.29),
+// or returns Unimplemented if none was provided.
+func (h *compositeHandler) RekeyAbort(
+	ctx context.Context,
+	req *connect.Request[adminv1.RekeyAbortRequest],
+) (*connect.Response[adminv1.RekeyAbortResponse], error) {
+	if h.rekeyHandler == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("RekeyAbort not registered"))
+	}
+	return h.rekeyHandler.HandleRekeyAbort(ctx, req) //nolint:wrapcheck // handler returns *connect.Error; wrapping would discard the ConnectRPC code
+}
+
+// RekeyStatus delegates to the registered RekeyRPCHandler (holomush-jxo8.7.30),
+// or returns Unimplemented if none was provided.
+func (h *compositeHandler) RekeyStatus(
+	ctx context.Context,
+	req *connect.Request[adminv1.RekeyStatusRequest],
+) (*connect.Response[adminv1.RekeyStatusResponse], error) {
+	if h.rekeyHandler == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("RekeyStatus not registered"))
+	}
+	return h.rekeyHandler.HandleRekeyStatus(ctx, req) //nolint:wrapcheck // handler returns *connect.Error; wrapping would discard the ConnectRPC code
+}
+
+// RekeyList delegates to the registered RekeyRPCHandler (holomush-jxo8.7.30),
+// or returns Unimplemented if none was provided.
+func (h *compositeHandler) RekeyList(
+	ctx context.Context,
+	req *connect.Request[adminv1.RekeyListRequest],
+	stream *connect.ServerStream[adminv1.RekeyStatusResponse],
+) error {
+	if h.rekeyHandler == nil {
+		return connect.NewError(connect.CodeUnimplemented, errors.New("RekeyList not registered"))
+	}
+	return h.rekeyHandler.HandleRekeyList(ctx, req, stream) //nolint:wrapcheck // handler returns *connect.Error; wrapping would discard the ConnectRPC code
 }

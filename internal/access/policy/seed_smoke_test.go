@@ -812,3 +812,62 @@ func TestSeedSmokePemitAllowedForAdmin(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, decision.IsAllowed(), "admin should execute pemit; got: %s — %s", decision.Effect(), decision.Reason())
 }
+
+// Phase-5 sub-epic E ABAC-layer enforcement smoke tests (A16 / INV-15 extension)
+//
+// These tests verify that the ABAC engine (with seed policies loaded) denies
+// character and plugin principals from reading events.*.system.rekey.* streams.
+// The deny is enforced by seed:deny-events-system-read-{character,plugin} which
+// matches the broad events.*.system.* pattern. This is the authoritative ABAC
+// gate per master spec §4.6 + §7.7; the AUDIT_ONLY rendering filter is defense-in-depth.
+
+func TestSeedSmokeCharacterDeniedEventsSystemRekeyStream(t *testing.T) {
+	// A regular player character must NOT read the rekey audit stream.
+	// The broad seed:deny-events-system-read-character forbid must fire.
+	const streamName = "events.01GAME01.system.rekey.01CT000.01CID00"
+	engine := createSeedEngine(t, []attribute.AttributeProvider{
+		characterProvider(
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC000"},
+			nil,
+		),
+		streamProvider(map[string]any{"name": streamName}),
+	})
+
+	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject:  "character:01CHAR01",
+		Action:   "read",
+		Resource: "stream:" + streamName,
+	})
+	require.NoError(t, err)
+	assert.False(t, decision.IsAllowed(),
+		"character must NOT read events.*.system.rekey.* stream (ABAC seed gate A16/INV-15); got: %s — %s",
+		decision.Effect(), decision.Reason())
+}
+
+func TestSeedSmokePluginDeniedEventsSystemRekeyStream(t *testing.T) {
+	// A plugin principal must NOT read the rekey audit stream.
+	// The broad seed:deny-events-system-read-plugin forbid must fire.
+	const streamName = "events.01GAME01.system.rekey.01CT000.01CID00"
+	engine := createSeedEngine(t, []attribute.AttributeProvider{
+		&mockAttributeProvider{
+			namespace:  "plugin",
+			subjectMap: map[string]any{"name": "echo-bot"},
+			schema: &types.NamespaceSchema{
+				Attributes: map[string]types.AttrType{
+					"name": types.AttrTypeString,
+				},
+			},
+		},
+		streamProvider(map[string]any{"name": streamName}),
+	})
+
+	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject:  "plugin:echo-bot",
+		Action:   "read",
+		Resource: "stream:" + streamName,
+	})
+	require.NoError(t, err)
+	assert.False(t, decision.IsAllowed(),
+		"plugin must NOT read events.*.system.rekey.* stream (ABAC seed gate A16/INV-15); got: %s — %s",
+		decision.Effect(), decision.Reason())
+}

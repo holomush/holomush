@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
@@ -79,13 +80,51 @@ type CryptoConfig struct {
 	// validation: unknown op_kinds are logged at server start and excluded
 	// from enforcement. Empty list means no dual-control is required (lax mode).
 	DualControlRequired []string `koanf:"dual_control_required"`
+
+	// RekeyCheckpointTTL is the maximum age of a non-terminal rekey
+	// checkpoint's last_heartbeat_at before the sweep subsystem auto-aborts
+	// it (INV-E18 / spec §6.2). Defaults to 24h via Defaults() when
+	// unset/zero. Sub-epic E T37 (holomush-jxo8.7.34).
+	RekeyCheckpointTTL time.Duration `koanf:"rekey_checkpoint_ttl"`
+
+	// RekeyCheckpointSweepInterval is the interval between background sweep
+	// scans (INV-E19 / spec §6.2). Defaults to 1h via Defaults() when
+	// unset/zero. Sub-epic E T37 (holomush-jxo8.7.34).
+	RekeyCheckpointSweepInterval time.Duration `koanf:"rekey_checkpoint_sweep_interval"`
+}
+
+// DefaultRekeyCheckpointTTL is the default age cutoff for non-terminal rekey
+// checkpoints (spec §6.2 INV-E18). 24h matches the master spec default.
+const DefaultRekeyCheckpointTTL = 24 * time.Hour
+
+// DefaultRekeyCheckpointSweepInterval is the default scan cadence for the
+// rekey-checkpoint sweep subsystem (spec §6.2 INV-E19). 1h is the
+// master-spec default.
+const DefaultRekeyCheckpointSweepInterval = 1 * time.Hour
+
+// Defaults returns a copy of c with the zero-valued fields populated from
+// their defaults. Defaults() is idempotent and safe to call on every load.
+// Sub-epic E T37 (holomush-jxo8.7.34).
+func (c CryptoConfig) Defaults() CryptoConfig {
+	if c.Operators == nil {
+		c.Operators = []string{}
+	}
+	if c.RekeyCheckpointTTL <= 0 {
+		c.RekeyCheckpointTTL = DefaultRekeyCheckpointTTL
+	}
+	if c.RekeyCheckpointSweepInterval <= 0 {
+		c.RekeyCheckpointSweepInterval = DefaultRekeyCheckpointSweepInterval
+	}
+	return c
 }
 
 // DefaultCryptoConfig returns an empty CryptoConfig — no operators,
 // break-glass disabled. Operators MUST explicitly populate the list.
 func DefaultCryptoConfig() CryptoConfig {
 	return CryptoConfig{
-		Operators: []string{},
+		Operators:                    []string{},
+		RekeyCheckpointTTL:           DefaultRekeyCheckpointTTL,
+		RekeyCheckpointSweepInterval: DefaultRekeyCheckpointSweepInterval,
 	}
 }
 

@@ -23,6 +23,10 @@ type AdminSocketSubsystemConfig struct {
 	AuthenticateHandler AuthenticateHandler
 	ApproveHandler      ApproveHandler
 	ResetTOTPHandler    ResetTOTPHandler
+	// RekeyHandler dispatches the Rekey / RekeyResume / RekeyAbort /
+	// RekeyStatus / RekeyList RPCs. Sub-epic E T44 production wiring
+	// (holomush-jxo8.7.44).
+	RekeyHandler RekeyRPCHandler
 }
 
 // AdminSocketSubsystem manages the admin UNIX domain socket lifecycle.
@@ -65,6 +69,7 @@ func (s *AdminSocketSubsystem) Start(_ context.Context) error {
 		AuthenticateHandler: s.cfg.AuthenticateHandler,
 		ApproveHandler:      s.cfg.ApproveHandler,
 		ResetTOTPHandler:    s.cfg.ResetTOTPHandler,
+		RekeyHandler:        s.cfg.RekeyHandler,
 	})
 
 	errCh, err := srv.Start()

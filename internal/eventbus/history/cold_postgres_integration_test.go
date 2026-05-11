@@ -21,6 +21,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/codec"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	"github.com/holomush/holomush/test/testutil"
 )
@@ -333,4 +334,59 @@ func TestColdReadReturnsStaleWhenNoSnapshotAndCursorMissing(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, eventbus.ErrCursorStale,
 		"without snapshot, missing cursor must be STALE")
+}
+
+// insertColdRowWithDEK inserts a minimal events_audit row with dek_ref and
+// dek_version set. Used by LookupByID tests to verify that the DEK columns
+// round-trip through the Envelope accessors.
+func insertColdRowWithDEK(t *testing.T, pool *pgxpool.Pool, id ulid.ULID, subject, evType string, dekRef int64, dekVersion int32) {
+	t.Helper()
+	envelopeBytes, err := proto.Marshal(&eventbusv1.Event{
+		Id:        id[:],
+		Subject:   subject,
+		Type:      evType,
+		Timestamp: timestamppb.New(time.Now().UTC()),
+		Actor:     &eventbusv1.Actor{Kind: eventbusv1.ActorKind_ACTOR_KIND_SYSTEM},
+	})
+	require.NoError(t, err)
+	_, err = pool.Exec(context.Background(), `
+		INSERT INTO events_audit (
+			id, subject, type, timestamp, actor_kind, actor_id,
+			envelope, schema_ver, codec, js_seq, rendering,
+			dek_ref, dek_version
+		) VALUES ($1, $2, $3, now(), 'system', NULL, $4, 1, 'xchacha20v1', 1, '{}'::jsonb, $5, $6)
+	`, id[:], subject, evType, envelopeBytes, dekRef, dekVersion)
+	require.NoError(t, err)
+}
+
+// TestReader_LookupByID_ReturnsEnvelope verifies that LookupByID returns the
+// Envelope with correct EventID, KeyID, and KeyVersion from the cold tier row.
+// This is the INV-39 seam: FallbackResolver calls LookupByID when the hot-tier
+// DEK lookup fails (post-Rekey stale dek_ref).
+func TestReader_LookupByID_ReturnsEnvelope(t *testing.T) {
+	pool := newTestPool(t)
+
+	eventID := testULID(t, 10000001)
+	insertColdRowWithDEK(t, pool, eventID, "events.g1.scene.A.ic", "scene.event", 42, 7)
+
+	tier := newPostgresColdTier(pool)
+	env, found, err := tier.LookupByID(context.Background(), eventID)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, eventID, env.EventID())
+	require.Equal(t, codec.KeyID(42), env.KeyID())
+	require.Equal(t, uint32(7), env.KeyVersion())
+}
+
+// TestReader_LookupByID_NotFound verifies that LookupByID returns (zero, false, nil)
+// when no row exists for the given event ID — the not-found sentinel that
+// FallbackResolver uses to trigger the cold_dek_miss metric path.
+func TestReader_LookupByID_NotFound(t *testing.T) {
+	pool := newTestPool(t)
+
+	tier := newPostgresColdTier(pool)
+	nonExistent := testULID(t, 99999999)
+	_, found, err := tier.LookupByID(context.Background(), nonExistent)
+	require.NoError(t, err)
+	require.False(t, found)
 }

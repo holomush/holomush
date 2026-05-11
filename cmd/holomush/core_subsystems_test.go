@@ -23,11 +23,14 @@ func (s stubSubsystem) DependsOn() []lifecycle.SubsystemID { return nil }
 func (s stubSubsystem) Start(_ context.Context) error      { return nil }
 func (s stubSubsystem) Stop(_ context.Context) error       { return nil }
 
-// allStubs returns the full 14-element stub list in production order.
+// allStubs returns the full 15-element stub list in production order.
 // Callers that only care about presence can use this; callers that care about
 // position should build the slice inline so the ordering is explicit.
-func allStubs() [14]stubSubsystem {
-	return [14]stubSubsystem{
+//
+// Index 14 (SubsystemRekeyCheckpointSweep) was added in sub-epic E Task 6.
+// The production-wiring assertion for the sweep subsystem lands in Task 37.
+func allStubs() [15]stubSubsystem {
+	return [15]stubSubsystem{
 		{id: lifecycle.SubsystemDatabase},
 		{id: lifecycle.SubsystemABAC},
 		{id: lifecycle.SubsystemAuth},
@@ -42,6 +45,7 @@ func allStubs() [14]stubSubsystem {
 		{id: lifecycle.SubsystemCryptoPolicy},
 		{id: lifecycle.SubsystemGRPC},
 		{id: lifecycle.SubsystemAdminSocket},
+		{id: lifecycle.SubsystemRekeyCheckpointSweep},
 	}
 }
 
@@ -51,7 +55,7 @@ func TestProductionSubsystemsIncludesCluster(t *testing.T) {
 	s := allStubs()
 	subs := productionSubsystems(
 		s[0], s[1], s[2], s[3], s[4], s[5], s[6],
-		s[7], s[8], s[9], s[10], s[11], s[12], s[13],
+		s[7], s[8], s[9], s[10], s[11], s[12], s[13], s[14],
 	)
 
 	found := false
@@ -64,8 +68,8 @@ func TestProductionSubsystemsIncludesCluster(t *testing.T) {
 	if !found {
 		t.Fatal("productionSubsystems does not include SubsystemCluster")
 	}
-	if len(subs) != 14 {
-		t.Errorf("productionSubsystems returned %d subsystems; want 14 after Phase 5 sub-epic D T22", len(subs))
+	if len(subs) != 15 {
+		t.Errorf("productionSubsystems returned %d subsystems; want 15 after Phase 5 sub-epic E T37", len(subs))
 	}
 }
 
@@ -88,6 +92,7 @@ func TestSubsystemAdminSocketConstantExists(t *testing.T) {
 		lifecycle.SubsystemAdminSocket,
 		lifecycle.SubsystemCryptoChainVerifier,
 		lifecycle.SubsystemCryptoPolicy,
+		lifecycle.SubsystemRekeyCheckpointSweep,
 	}
 	seen := make(map[lifecycle.SubsystemID]bool)
 	for _, id := range ids {
@@ -107,7 +112,7 @@ func TestProductionSubsystemsIncludesAdminSocket(t *testing.T) {
 	s := allStubs()
 	subs := productionSubsystems(
 		s[0], s[1], s[2], s[3], s[4], s[5], s[6],
-		s[7], s[8], s[9], s[10], s[11], s[12], s[13],
+		s[7], s[8], s[9], s[10], s[11], s[12], s[13], s[14],
 	)
 
 	found := false
@@ -128,7 +133,7 @@ func TestProductionSubsystemsIncludesCryptoChainVerifier(t *testing.T) {
 	s := allStubs()
 	subs := productionSubsystems(
 		s[0], s[1], s[2], s[3], s[4], s[5], s[6],
-		s[7], s[8], s[9], s[10], s[11], s[12], s[13],
+		s[7], s[8], s[9], s[10], s[11], s[12], s[13], s[14],
 	)
 
 	bootstrapIdx := -1
@@ -162,7 +167,7 @@ func TestProductionSubsystemsIncludesCryptoPolicy(t *testing.T) {
 	s := allStubs()
 	subs := productionSubsystems(
 		s[0], s[1], s[2], s[3], s[4], s[5], s[6],
-		s[7], s[8], s[9], s[10], s[11], s[12], s[13],
+		s[7], s[8], s[9], s[10], s[11], s[12], s[13], s[14],
 	)
 
 	auditIdx := -1
@@ -187,5 +192,46 @@ func TestProductionSubsystemsIncludesCryptoPolicy(t *testing.T) {
 	if auditIdx >= policyIdx || policyIdx >= grpcIdx {
 		t.Errorf("ordering violated: AuditProjection(%d) < CryptoPolicy(%d) < GRPC(%d)",
 			auditIdx, policyIdx, grpcIdx)
+	}
+}
+
+// TestProductionSubsystemsIncludesRekeyCheckpointSweep verifies that
+// RekeyCheckpointSweep is present AND positioned after CryptoChainVerifier,
+// EventBus, and AuditProjection per Task 28's DependsOn declaration
+// (sub-epic E T37 / holomush-jxo8.7.34).
+func TestProductionSubsystemsIncludesRekeyCheckpointSweep(t *testing.T) {
+	s := allStubs()
+	subs := productionSubsystems(
+		s[0], s[1], s[2], s[3], s[4], s[5], s[6],
+		s[7], s[8], s[9], s[10], s[11], s[12], s[13], s[14],
+	)
+
+	indexOf := func(id lifecycle.SubsystemID) int {
+		for i, sub := range subs {
+			if sub.ID() == id {
+				return i
+			}
+		}
+		return -1
+	}
+	sweepIdx := indexOf(lifecycle.SubsystemRekeyCheckpointSweep)
+	chainIdx := indexOf(lifecycle.SubsystemCryptoChainVerifier)
+	eventBusIdx := indexOf(lifecycle.SubsystemEventBus)
+	auditProjIdx := indexOf(lifecycle.SubsystemAuditProjection)
+
+	if sweepIdx < 0 {
+		t.Fatal("productionSubsystems does not include SubsystemRekeyCheckpointSweep")
+	}
+	if sweepIdx <= chainIdx {
+		t.Errorf("sweep (%d) must run after CryptoChainVerifier (%d)", sweepIdx, chainIdx)
+	}
+	if sweepIdx <= eventBusIdx {
+		t.Errorf("sweep (%d) must run after EventBus (%d)", sweepIdx, eventBusIdx)
+	}
+	if sweepIdx <= auditProjIdx {
+		t.Errorf("sweep (%d) must run after AuditProjection (%d)", sweepIdx, auditProjIdx)
+	}
+	if len(subs) != 15 {
+		t.Errorf("productionSubsystems returned %d subsystems; want 15 after Phase 5 sub-epic E T37", len(subs))
 	}
 }

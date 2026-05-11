@@ -35,6 +35,14 @@ lint:
   ignore_only:
     PACKAGE_DIRECTORY_MATCH:
       - internal/eventbus/cursor/cursor.proto
+    # Rekey RPCs intentionally share RekeyProgress (Rekey + RekeyResume) and
+    # RekeyStatusResponse (RekeyStatus + RekeyList). The shared streaming type
+    # is the canonical plan shape (jxo8.7.27) — naming per-RPC would require
+    # aliasing identical messages, which adds no semantic value.
+    RPC_REQUEST_RESPONSE_UNIQUE:
+      - api/proto/holomush/admin/v1/admin.proto
+    RPC_RESPONSE_STANDARD_NAME:
+      - api/proto/holomush/admin/v1/admin.proto
 breaking:
   use:
     - FILE

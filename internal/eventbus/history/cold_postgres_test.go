@@ -50,7 +50,7 @@ func TestColdPostgresUnmarshalsEnvelope(t *testing.T) {
 		DEKVersion: sql.NullInt32{Valid: false},
 	}
 
-	ev, metaOnly, err := decodeColdRow(context.Background(), row, eventbus.SessionIdentity{}, nil, nil, nil)
+	ev, metaOnly, err := decodeColdRow(context.Background(), row, eventbus.SessionIdentity{}, nil, nil, nil, nil)
 	require.NoError(t, err)
 	assert.False(t, metaOnly)
 	assert.Equal(t, actorID, ev.Actor.ID.Bytes(),
@@ -92,7 +92,7 @@ func TestColdPostgresRejectsSensitiveRowMissingDEKColumns(t *testing.T) {
 		DEKVersion: sql.NullInt32{Valid: false},
 	}
 
-	_, _, err = decodeColdRow(context.Background(), row, eventbus.SessionIdentity{}, nil, nil, nil)
+	_, _, err = decodeColdRow(context.Background(), row, eventbus.SessionIdentity{}, nil, nil, nil, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_COLD_DEK_COLUMNS_MISSING")
 }
@@ -122,7 +122,7 @@ func TestColdPostgresRejectsSensitiveRowNegativeDEKValues(t *testing.T) {
 		DEKVersion: sql.NullInt32{Valid: true, Int32: 0},
 	}
 
-	_, _, err = decodeColdRow(context.Background(), row, eventbus.SessionIdentity{}, nil, nil, nil)
+	_, _, err = decodeColdRow(context.Background(), row, eventbus.SessionIdentity{}, nil, nil, nil, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_COLD_BAD_DEK_COLUMNS")
 }

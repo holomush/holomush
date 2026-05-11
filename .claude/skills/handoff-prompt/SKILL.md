@@ -56,6 +56,49 @@ the prompt is self-contained without becoming the work itself.
 If the work spans multiple beads (epic + children, or a chain), capture the
 chain structure briefly.
 
+### Step 1.5: Verify cited resources are reachable from the new session's base branch
+
+A handoff that names a spec, plan, or bead-chain manifest is making a
+promise that the new session can `bd show <id>` and `cat <path>` and find
+the cited content. If the cited resource lives only on an unpublished
+branch, an orphaned commit, or a workspace that hasn't been pushed, the
+new session starts from a false premise and may produce work that diverges
+from the (invisible) spec.
+
+For each cited resource in the draft handoff, verify reachability from the
+branch the new session will start its workspace from (typically `main` via
+`task workspace:new`):
+
+```bash
+# Spec / plan / design doc files
+git log --all --oneline -- '<path>' | head -5         # any commits touching it
+git branch --contains <commit-from-above>             # is it on a branch?
+git ls-tree main -- '<path>'                          # is it on main right now?
+
+# Beads
+bd show <bead-id> >/dev/null && echo "reachable" || echo "missing"
+```
+
+Resolve any unreachable resource BEFORE writing the handoff. Options:
+
+- **Land it first**: ask the user to push and PR the orphan chain so the
+  new session sees it on main. This is the default for in-flight design
+  work that should already be visible.
+- **Bookmark + name it**: if the work is intentionally pre-PR (e.g., an
+  in-flight chain the new session will continue), bookmark the chain head
+  (`jj bookmark set <name> -r <head>`) and surface the bookmark in the
+  handoff workflow block (Step 4) so the new session can `jj new <bookmark>`
+  to access it.
+- **Inline the content**: if the resource is short (a few hundred lines)
+  and the new session's path is short-lived, paste critical excerpts into
+  the handoff body itself. Don't do this for full specs/plans — the
+  handoff becomes the work.
+
+If the user-stated premise of the handoff (e.g., "Stages 1-5 complete")
+is contradicted by the verification, surface that to the user BEFORE
+writing the handoff. A premise mismatch this early is the cheapest place
+to catch it.
+
 ### Step 2: Identify the cross-cutting surface
 
 Run targeted greps to map the file surface the new session will touch:
@@ -100,6 +143,27 @@ conventions:
 - `task pr-prep` before push
 
 This keeps the new session from re-discovering the project's gates.
+
+**Subagent base-revision note (jj-colocated repos):** `task workspace:new`
+is hardcoded to `-r main@origin` (Taskfile.yaml). The `WorktreeCreate` hook
+routes the Agent tool's `isolation: "worktree"` through the same primitive.
+So every subagent dispatched from the new session starts on `main`, NOT on
+the new session's `@`. If the new session works on top of in-flight chain
+state (the typical execution-resume case), the handoff MUST tell it to do
+ONE of:
+
+- Bookmark the chain head and tell subagents to `jj new <bookmark>` as
+  their first action (the handoff's Setup block should include the exact
+  bookmark name)
+- Land the in-flight chain to main first, so subagent workspaces inherit
+  it via the standard fork-from-main path
+
+The handoff's subagent-briefing template (if it covers dispatch) MUST
+include `jj new <bookmark>` in the subagent's setup steps and a `jj log
+-r 'main..@' --no-graph` verification gate — without this, subagents
+will run blind to the in-flight work and produce designs inferred from
+beads alone (which is structurally insufficient; see `bead-chain-design`'s
+"Plan reference" guidance).
 
 ### Step 5: List explicit out-of-scope items
 
@@ -233,8 +297,16 @@ commentary inside the block. After the block, briefly note:
   link the grounding doc, the bead, or the PR review.
 - **Don't pre-decide design questions** that the new session should answer.
   Surface the trade-off space; let brainstorming pick.
+- **Verify-before-citing.** Every spec / plan / bead the handoff mentions
+  by path or ID MUST be reachable from the new session's base branch
+  (Step 1.5). A handoff that claims "the plan is at X" when X is on an
+  orphan commit starts the new session on a false premise. The fix is
+  EITHER land the orphan first OR bookmark + name the bookmark in the
+  workflow block — never both silently rely on the resource being there.
 - **Respect the project's session-isolation discipline** — every handoff
-  recommends `task workspace:new -- <name>` for the new session.
+  recommends `task workspace:new -- <name>` for the new session, and if
+  the new session will dispatch subagents that need in-flight state,
+  recommends `jj new <bookmark>` for subagent setup (Step 4 expansion).
 - **Match the structure in Step 7.** The shape was extracted from two
   recent kickoff prompts (Phase 3d resume; `legacy_id` elimination
   kickoff) and codified here as the convention going forward. New

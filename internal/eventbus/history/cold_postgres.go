@@ -7,10 +7,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -19,6 +21,7 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/codec"
+	"github.com/holomush/holomush/internal/eventbus/history/source"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
@@ -32,10 +35,17 @@ type postgresColdTier struct {
 	// cold-tier history path. nil = pre-Phase 3b passthrough (mirrors
 	// jetStreamHotTier semantics at hot_jetstream.go:60-65).
 	authGuard eventbus.SessionAuthGuard
-	// dekManager resolves DEK material for sensitive events.
+	// dekManager resolves DEK material for sensitive events. Legacy seam:
+	// used when sourceResolver is nil. When sourceResolver IS set, dekManager
+	// is bypassed in favor of the resolver-aware dispatcher path.
 	dekManager eventbus.SessionDEKManager
 	// auditEmitter logs plugin decrypt records.
 	auditEmitter eventbus.SessionAuditEmitter
+	// sourceResolver, when non-nil, routes sensitive cold-tier reads through
+	// the resolver-aware dispatcher (DispatchFor). On the cold tier the
+	// resolver is typically a source.SimpleResolver (no further fallback
+	// past the cold tier itself) — sub-epic E T44 (holomush-jxo8.7.44).
+	sourceResolver source.SourceResolver
 }
 
 // ColdTierOption tunes postgresColdTier construction. Mirrors HotTierOption
@@ -61,12 +71,30 @@ func WithColdHistoryDecryptAuditEmitter(em eventbus.SessionAuditEmitter) ColdTie
 	return func(c *postgresColdTier) { c.auditEmitter = em }
 }
 
+// WithColdHistorySourceResolver injects the source.SourceResolver for the
+// cold-tier history path. When set, the tier delegates to the resolver-aware
+// dispatcher (DispatchFor) instead of decodeAuthorizeAndDispatch. Cold-tier
+// production wiring typically uses a source.SimpleResolver: the cold tier is
+// the FallbackResolver's target, so a fallback resolver wired on cold reads
+// would recurse. Sub-epic E T44 (holomush-jxo8.7.44).
+func WithColdHistorySourceResolver(r source.SourceResolver) ColdTierOption {
+	return func(c *postgresColdTier) { c.sourceResolver = r }
+}
+
 func newPostgresColdTier(pool *pgxpool.Pool, opts ...ColdTierOption) *postgresColdTier {
 	c := &postgresColdTier{pool: pool}
 	for _, o := range opts {
 		o(c)
 	}
 	return c
+}
+
+// NewColdTierLookup returns a source.ColdTierLookup backed by the
+// events_audit PostgreSQL table. Used by cmd/holomush to construct a
+// source.FallbackResolver for the production INV-39 hot→cold fallback path
+// without exposing the unexported postgresColdTier type.
+func NewColdTierLookup(pool *pgxpool.Pool) source.ColdTierLookup {
+	return newPostgresColdTier(pool)
 }
 
 // Read satisfies ColdTier per §6.1 of the suos spec. Builds a parameterized
@@ -239,7 +267,7 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 			DEKRef:     dekRef,
 			DEKVersion: dekVersion,
 		}
-		ev, metaOnly, dispatchErr := decodeColdRow(ctx, row, q.Identity, c.authGuard, c.dekManager, c.auditEmitter)
+		ev, metaOnly, dispatchErr := decodeColdRow(ctx, row, q.Identity, c.authGuard, c.dekManager, c.auditEmitter, c.sourceResolver)
 		if dispatchErr != nil {
 			return nil, dispatchErr
 		}
@@ -370,6 +398,7 @@ func decodeColdRow(
 	guard eventbus.SessionAuthGuard,
 	dekMgr eventbus.SessionDEKManager,
 	auditEm eventbus.SessionAuditEmitter,
+	resolver source.SourceResolver,
 ) (eventbus.Event, bool, error) {
 	var pbEnvelope eventbusv1.Event
 	if err := proto.Unmarshal(row.Envelope, &pbEnvelope); err != nil {
@@ -408,6 +437,13 @@ func decodeColdRow(
 		keyID = codec.KeyID(row.DEKRef.Int64)
 		keyVersion = uint32(row.DEKVersion.Int32)
 	}
+	if resolver != nil {
+		// Resolver-aware dispatch: routes through newDispatcher.DispatchFor
+		// which uses resolver.Resolve in place of the inline dekMgr.Resolve
+		// call. Sub-epic E T44 (holomush-jxo8.7.44).
+		d := newDispatcher(WithSourceResolver(resolver))
+		return d.DispatchFor(ctx, &pbEnvelope, codecName, keyID, keyVersion, identity, guard, auditEm)
+	}
 	return decodeAuthorizeAndDispatch(
 		ctx, &pbEnvelope, codecName, keyID, keyVersion,
 		identity, guard, dekMgr, auditEm,
@@ -437,4 +473,62 @@ func actorFromAuditRow(kindStr string, idBytes []byte) eventbus.Actor {
 		a.ID = u
 	}
 	return a
+}
+
+// LookupByID implements source.ColdTierLookup for the events_audit-backed
+// cold tier. Used by the INV-39 fallback path: dispatcher's hot-tier DEK
+// lookup failed, ask the cold tier whether a re-encrypted copy exists.
+// Returns (envelope, false, nil) when no row exists.
+func (c *postgresColdTier) LookupByID(ctx context.Context, id eventbus.EventID) (eventbus.Envelope, bool, error) {
+	var (
+		idBytes    []byte
+		subject    string
+		evType     string
+		envelopeB  []byte
+		codecName  string
+		dekRef     *int64
+		dekVersion *uint32
+		ts         time.Time
+	)
+	err := c.pool.QueryRow(ctx, `
+		SELECT id, subject, type, envelope, codec, dek_ref, dek_version, timestamp
+		  FROM events_audit
+		 WHERE id = $1
+	`, id[:]).Scan(&idBytes, &subject, &evType, &envelopeB, &codecName, &dekRef, &dekVersion, &ts)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return eventbus.Envelope{}, false, nil
+		}
+		return eventbus.Envelope{}, false, oops.Code("COLD_LOOKUP_QUERY_FAILED").
+			With("event_id", id.String()).Wrap(err)
+	}
+	env := eventbus.NewEnvelopeFromColdRow(eventbus.ColdRow{
+		EventID:    id,
+		Subject:    subject,
+		Type:       evType,
+		Payload:    envelopeB,
+		Codec:      codecName,
+		KeyID:      derefKeyID(dekRef),
+		KeyVersion: derefUint32(dekVersion),
+		Timestamp:  ts,
+	})
+	return env, true, nil
+}
+
+// derefKeyID dereferences a nullable int64 pointer to a codec.KeyID.
+// Returns 0 for nil (identity-codec rows have no dek_ref).
+func derefKeyID(p *int64) codec.KeyID {
+	if p == nil {
+		return 0
+	}
+	return codec.KeyID(*p) //nolint:gosec // G115: dek_ref is a BIGSERIAL PK reference; always non-negative
+}
+
+// derefUint32 dereferences a nullable uint32 pointer.
+// Returns 0 for nil (identity-codec rows have no dek_version).
+func derefUint32(p *uint32) uint32 {
+	if p == nil {
+		return 0
+	}
+	return *p
 }

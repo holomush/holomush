@@ -11,6 +11,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
+
+	"github.com/holomush/holomush/internal/admin/policy"
 )
 
 // TestPolicyIntegration is the Ginkgo entry point for the
@@ -43,17 +45,22 @@ func cleanupSubjectGinkgo(subject string) {
 
 // chainStateCleanupGinkgo is the Ginkgo equivalent of chainStateCleanup
 // (verifier_integration_test.go). Drops the bootstrap_metadata row that
-// records chain-init for policyName both BEFORE the spec runs (so a
-// stale row from a prior run doesn't make the spec order-dependent) and
-// after via DeferCleanup. Mirrors cleanupSubjectGinkgo's pre+post shape.
-func chainStateCleanupGinkgo(policyName string) {
+// records chain-init for (gameID, policyName) both BEFORE the spec runs
+// (so a stale row from a prior run doesn't make the spec order-dependent)
+// and after via DeferCleanup. Mirrors cleanupSubjectGinkgo's pre+post shape.
+//
+// Post Phase 5 sub-epic E migration 000030: bootstrap_metadata is keyed
+// on (chain_name, scope_key); chain_name = SubjectPrefix from
+// PolicySetChainFor(gameID).
+func chainStateCleanupGinkgo(gameID, policyName string) {
 	GinkgoHelper()
+	chainName := policy.PolicySetChainFor(gameID).SubjectPrefix
 	_, _ = testPool.Exec(context.Background(),
-		`DELETE FROM bootstrap_metadata WHERE key = $1`,
-		"crypto.policy_chain_initialized."+policyName)
+		`DELETE FROM bootstrap_metadata WHERE chain_name = $1 AND scope_key = $2`,
+		chainName, policyName)
 	DeferCleanup(func() {
 		_, _ = testPool.Exec(context.Background(),
-			`DELETE FROM bootstrap_metadata WHERE key = $1`,
-			"crypto.policy_chain_initialized."+policyName)
+			`DELETE FROM bootstrap_metadata WHERE chain_name = $1 AND scope_key = $2`,
+			chainName, policyName)
 	})
 }

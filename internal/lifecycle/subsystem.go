@@ -14,21 +14,25 @@ type SubsystemID int
 
 // SubsystemID constants enumerate all registered server subsystems.
 const (
-	SubsystemDatabase            SubsystemID = iota // database
-	SubsystemTLS                                    // tls
-	SubsystemABAC                                   // abac
-	SubsystemAuth                                   // auth
-	SubsystemWorld                                  // world
-	SubsystemPlugins                                // plugins
-	SubsystemSessions                               // sessions
-	SubsystemBootstrap                              // bootstrap
-	SubsystemGRPC                                   // grpc
-	SubsystemEventBus                               // eventbus
-	SubsystemAuditProjection                        // audit_projection
-	SubsystemCluster                                // cluster
-	SubsystemAdminSocket                            // admin_socket
-	SubsystemCryptoChainVerifier                    // crypto_chain_verifier
-	SubsystemCryptoPolicy                           // crypto_policy
+	SubsystemDatabase        SubsystemID = iota // database
+	SubsystemTLS                                // tls
+	SubsystemABAC                               // abac
+	SubsystemAuth                               // auth
+	SubsystemWorld                              // world
+	SubsystemPlugins                            // plugins
+	SubsystemSessions                           // sessions
+	SubsystemBootstrap                          // bootstrap
+	SubsystemGRPC                               // grpc
+	SubsystemEventBus                           // eventbus
+	SubsystemAuditProjection                    // audit_projection
+	SubsystemCluster                            // cluster
+	SubsystemAdminSocket                        // admin_socket
+	// SubsystemCryptoChainVerifier is the generalized auditchain.VerifierSubsystem
+	// walking all registered chains (policy_set + rekey) at boot time. Declared by
+	// sub-epic D; broadened by sub-epic E to cover multiple chains.
+	SubsystemCryptoChainVerifier  // crypto_chain_verifier
+	SubsystemCryptoPolicy         // crypto_policy
+	SubsystemRekeyCheckpointSweep // rekey_checkpoint_sweep
 )
 
 // Subsystem is a top-level server component with lifecycle management

@@ -30,3 +30,15 @@ type ApproveHandler interface {
 type ResetTOTPHandler interface {
 	ResetTOTP(ctx context.Context, req *connect.Request[adminv1.ResetTOTPRequest]) (*connect.Response[adminv1.ResetTOTPResponse], error)
 }
+
+// RekeyRPCHandler is the narrow surface the socket server needs from the
+// RekeyConnectHandler (holomush-jxo8.7.28, holomush-jxo8.7.29,
+// holomush-jxo8.7.30). When nil, all Rekey RPCs return
+// connect.CodeUnimplemented.
+type RekeyRPCHandler interface {
+	HandleRekey(ctx context.Context, req *connect.Request[adminv1.RekeyRequest], stream *connect.ServerStream[adminv1.RekeyProgress]) error
+	HandleRekeyResume(ctx context.Context, req *connect.Request[adminv1.RekeyResumeRequest], stream *connect.ServerStream[adminv1.RekeyProgress]) error
+	HandleRekeyAbort(ctx context.Context, req *connect.Request[adminv1.RekeyAbortRequest]) (*connect.Response[adminv1.RekeyAbortResponse], error)
+	HandleRekeyStatus(ctx context.Context, req *connect.Request[adminv1.RekeyStatusRequest]) (*connect.Response[adminv1.RekeyStatusResponse], error)
+	HandleRekeyList(ctx context.Context, req *connect.Request[adminv1.RekeyListRequest], stream *connect.ServerStream[adminv1.RekeyStatusResponse]) error
+}

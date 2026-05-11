@@ -38,6 +38,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/codec"
+	"github.com/holomush/holomush/internal/eventbus/history/source"
 )
 
 // DefaultSafetyMargin is subtracted from StreamMaxAge when computing the
@@ -202,6 +203,43 @@ func WithHistoryAuth(
 			WithColdHistoryAuthGuard(g),
 			WithColdHistoryDEKManager(m),
 			WithColdHistoryDecryptAuditEmitter(em),
+		)
+	}
+}
+
+// WithHistoryAuthAndSourceResolver wires AuthGuard + DecryptAuditEmitter
+// into both tiers PLUS a per-tier source.SourceResolver. The hot tier
+// receives `hotResolver` (typically a *source.FallbackResolver wired to a
+// cold-tier LookupByID seam, enabling INV-39 hot→cold-tier fallback). The
+// cold tier receives `coldResolver` (typically a *source.SimpleResolver —
+// fallback on cold reads would recurse since cold IS the fallback target).
+//
+// DEKManager is also wired on both tiers as a backstop: the resolver-aware
+// dispatcher path replaces the legacy dekMgr seam at runtime, but a nil
+// resolver causes the dispatcher to fall back to the legacy path, so a
+// DEKManager remains required for that branch.
+//
+// Sub-epic E T44 production wiring (holomush-jxo8.7.44).
+func WithHistoryAuthAndSourceResolver(
+	g eventbus.SessionAuthGuard,
+	m eventbus.SessionDEKManager,
+	em eventbus.SessionAuditEmitter,
+	hotResolver, coldResolver source.SourceResolver,
+) Option {
+	return func(r *Reader) {
+		r.hotOpts = append(
+			r.hotOpts,
+			WithHistoryAuthGuard(g),
+			WithHistoryDEKManager(m),
+			WithHistoryDecryptAuditEmitter(em),
+			WithHistorySourceResolver(hotResolver),
+		)
+		r.coldOpts = append(
+			r.coldOpts,
+			WithColdHistoryAuthGuard(g),
+			WithColdHistoryDEKManager(m),
+			WithColdHistoryDecryptAuditEmitter(em),
+			WithColdHistorySourceResolver(coldResolver),
 		)
 	}
 }

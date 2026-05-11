@@ -24,7 +24,7 @@ type fakePlayerRepo struct {
 	created *auth.Player
 }
 
-func (f *fakePlayerRepo) Count(_ context.Context) (int, error) { return f.count, nil }
+func (f *fakePlayerRepo) Count(_ context.Context) (int, error)           { return f.count, nil }
 func (f *fakePlayerRepo) Create(_ context.Context, p *auth.Player) error { f.created = p; return nil }
 
 func (f *fakePlayerRepo) GetByID(_ context.Context, _ ulid.ULID) (*auth.Player, error) {

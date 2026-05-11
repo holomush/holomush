@@ -7,6 +7,7 @@ package integration
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,6 +22,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
+	"github.com/holomush/holomush/internal/eventbus/audit/chain"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	"github.com/holomush/holomush/test/testutil"
 )
@@ -31,9 +33,9 @@ import (
 // Spec invariants validated:
 //   - INV-D10: genesis row of a chain has prev_hash == nil.
 //   - INV-D11: every chain extension's prev_hash equals the predecessor's
-//              recomputed policy_hash.
+//     recomputed policy_hash.
 //   - INV-D12: every row's stored policy_hash equals the recomputed hash
-//              over its own canonicalized payload.
+//     over its own canonicalized payload.
 //
 // Strategy deviation from plan §Task 27 step text ("boot the full server"):
 //
@@ -45,11 +47,13 @@ import (
 // "duplicate metrics collector registration attempted". Strategy Z avoids
 // that constraint while still validating the precise contract T27 cares
 // about: the chain emitter (CryptoPolicySubsystem) and chain verifier
-// (CryptoChainVerifierSubsystem), publishing through the production
-// RenderingPublisher into a real embedded JetStream and projecting through
-// the real audit.Subsystem into the real events_audit table. The full-boot
-// subsystem-ordering wiring (verifier-before-emitter) is separately
-// validated by T22's wiring tests (cmd/holomush/core_subsystems_test.go).
+// (auditchain.VerifierSubsystem with PolicySetHandlerFor), publishing through
+// the production RenderingPublisher into a real embedded JetStream and
+// projecting through the real audit.Subsystem into the real events_audit table.
+// The full-boot subsystem-ordering wiring (verifier-before-emitter) is
+// separately validated by T22's wiring tests (cmd/holomush/core_subsystems_test.go).
+// CryptoChainVerifierSubsystem was replaced by auditchain.VerifierSubsystem
+// in holomush-jxo8.7.8.
 //
 // Each "boot" is modeled as a fresh subsystem instantiation against the
 // same persistent pool + JetStream — exactly what production reboot
@@ -136,12 +140,8 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-D10/D11/D12)", func() {
 			"events_audit row count for subject %s", subject)
 	}
 
-	// loadChain returns the chain entries via the production verifier path
-	// (proto envelope decode → JSON payload decode), in js_seq order.
+	// loadChain returns the chain entries via SQL, in js_seq order.
 	loadChain := func() []policy.PolicySetPayload {
-		// Use a fresh CryptoChainVerifierSubsystem.Start to indirectly
-		// validate the chain through the production read path; then read
-		// raw rows for direct field assertions.
 		entries := loadChainEntriesViaSQL(ctx, pool, subject)
 		return entries
 	}
@@ -165,10 +165,10 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-D10/D11/D12)", func() {
 
 		// Production verifier path (loads from events_audit, two-step decode,
 		// walks chain): clean genesis chain MUST verify.
-		verifier := policy.NewCryptoChainVerifierSubsystem(policy.CryptoChainVerifierConfig{
-			Pool:        pool,
-			GameID:      gameID,
-			PolicyNames: []string{policyName},
+		verifier := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
+			Repo:     chain.NewPostgresRepo(pool),
+			Handlers: []chain.Handler{policy.PolicySetHandlerFor(gameID)},
+			Logger:   slog.Default(),
 		})
 		Expect(verifier.Start(ctx)).To(Succeed(),
 			"genesis chain MUST pass verifier")
@@ -212,10 +212,10 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-D10/D11/D12)", func() {
 			"epoch 2 snapshot must differ from epoch 1 (else idempotency skips)")
 
 		// Production verifier path on the clean two-row chain MUST succeed.
-		verifier := policy.NewCryptoChainVerifierSubsystem(policy.CryptoChainVerifierConfig{
-			Pool:        pool,
-			GameID:      gameID,
-			PolicyNames: []string{policyName},
+		verifier := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
+			Repo:     chain.NewPostgresRepo(pool),
+			Handlers: []chain.Handler{policy.PolicySetHandlerFor(gameID)},
+			Logger:   slog.Default(),
 		})
 		Expect(verifier.Start(ctx)).To(Succeed(),
 			"two-row chain MUST pass verifier on second-boot path")
@@ -232,10 +232,10 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-D10/D11/D12)", func() {
 		awaitChainLength(2)
 
 		// Sanity: clean chain verifies.
-		cleanVerifier := policy.NewCryptoChainVerifierSubsystem(policy.CryptoChainVerifierConfig{
-			Pool:        pool,
-			GameID:      gameID,
-			PolicyNames: []string{policyName},
+		cleanVerifier := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
+			Repo:     chain.NewPostgresRepo(pool),
+			Handlers: []chain.Handler{policy.PolicySetHandlerFor(gameID)},
+			Logger:   slog.Default(),
 		})
 		Expect(cleanVerifier.Start(ctx)).To(Succeed(),
 			"sanity: clean chain MUST verify before tamper")
@@ -253,15 +253,14 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-D10/D11/D12)", func() {
 		// pattern verifier_integration_test.go uses for the same invariant.
 		tamperSecondRowEnvelope(ctx, pool, subject)
 
-		// "Next boot": fresh CryptoChainVerifierSubsystem.Start. The
+		// "Next boot": fresh chain.VerifierSubsystem.Start. The
 		// orchestrator-level fail-closed contract is that Start returns a
-		// non-nil error wrapping POLICY_CHAIN_HASH_MISMATCH or
-		// POLICY_CHAIN_BROKEN_LINK; in production this propagates up
-		// through lifecycle.Run and the server refuses to boot.
-		tamperedVerifier := policy.NewCryptoChainVerifierSubsystem(policy.CryptoChainVerifierConfig{
-			Pool:        pool,
-			GameID:      gameID,
-			PolicyNames: []string{policyName},
+		// non-nil error; in production this propagates up through
+		// lifecycle.Run and the server refuses to boot.
+		tamperedVerifier := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
+			Repo:     chain.NewPostgresRepo(pool),
+			Handlers: []chain.Handler{policy.PolicySetHandlerFor(gameID)},
+			Logger:   slog.Default(),
 		})
 		err := tamperedVerifier.Start(ctx)
 		Expect(err).To(HaveOccurred(),
@@ -270,12 +269,14 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-D10/D11/D12)", func() {
 		o, ok := oops.AsOops(err)
 		Expect(ok).To(BeTrue(), "expected oops error; got %T: %v", err, err)
 		// oops.AsOops surfaces the deepest Code in the chain. The outer
-		// wrap is CRYPTO_CHAIN_VERIFY_FAILED; the inner verifier code is
-		// POLICY_CHAIN_HASH_MISMATCH (option (a)) or POLICY_CHAIN_BROKEN_LINK
-		// (option (b)). Both are acceptable fail-closed signals.
-		Expect([]string{"POLICY_CHAIN_HASH_MISMATCH", "POLICY_CHAIN_BROKEN_LINK"}).
+		// wraps are CRYPTO_CHAIN_VERIFY_FAILED → POLICY_CHAIN_VERIFY_FAILED;
+		// the inner verifier code is AUDIT_CHAIN_HASH_MISMATCH (option (a))
+		// or AUDIT_CHAIN_BROKEN_LINK (option (b)) after the Phase 5 sub-epic E
+		// refactor onto the generalized auditchain primitive (was
+		// POLICY_CHAIN_HASH_MISMATCH / POLICY_CHAIN_BROKEN_LINK pre-E).
+		Expect([]string{"AUDIT_CHAIN_HASH_MISMATCH", "AUDIT_CHAIN_BROKEN_LINK"}).
 			To(ContainElement(o.Code()),
-				"expected POLICY_CHAIN_HASH_MISMATCH or POLICY_CHAIN_BROKEN_LINK; got %s",
+				"expected AUDIT_CHAIN_HASH_MISMATCH or AUDIT_CHAIN_BROKEN_LINK; got %s",
 				o.Code())
 	})
 })
