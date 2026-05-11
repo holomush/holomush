@@ -28,10 +28,10 @@ import (
 	"log/slog"
 	"time"
 
-	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
-	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/eventbus/audit/chain"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"

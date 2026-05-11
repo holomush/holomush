@@ -97,7 +97,8 @@ var _ = Describe("Rekey force-destroy", func() {
 			ForceDestroy:  true,
 		}
 		outcome, forceErr := h.Primary.GetRekeyOrchestrator().Run(
-			context.Background(), forceReq)
+			context.Background(), forceReq,
+		)
 		Expect(forceErr).NotTo(HaveOccurred(),
 			"INV-E10: force-destroy on a phase5_timeout checkpoint must succeed")
 		Expect(outcome.ForceDestroyUsed).To(BeTrue(),
@@ -127,7 +128,8 @@ var _ = Describe("Rekey force-destroy", func() {
 
 		// Attempt force-destroy via RunPhase5WithForceDestroy at a non-timeout state.
 		forceErr := h.Primary.GetRekeyOrchestrator().RunPhase5WithForceDestroy(
-			context.Background(), rid)
+			context.Background(), rid,
+		)
 		Expect(forceErr).To(HaveOccurred(),
 			"INV-E10: force-destroy must be rejected before phase5_timeout")
 		Expect(forceErr.Error()).To(ContainSubstring("phase5_invalidate"),
@@ -156,7 +158,8 @@ var _ = Describe("Rekey force-destroy", func() {
 
 		// Attempt force-destroy: must be rejected because missing_members IS NULL.
 		forceErr := h.Primary.GetRekeyOrchestrator().RunPhase5WithForceDestroy(
-			context.Background(), rid)
+			context.Background(), rid,
+		)
 		Expect(forceErr).To(HaveOccurred(),
 			"INV-E10: force-destroy must be rejected after a successful Phase 5")
 		Expect(forceErr.Error()).To(ContainSubstring("phase5_invalidate"),

@@ -159,7 +159,8 @@ func newPhase5TestSetup(t *testing.T) *phase5TestSetup {
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 64, TTL: 0})
 	pcache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 64, TTL: 0})
 
-	mgr, err := dek.NewManager(provider, store, cache, pcache,
+	mgr, err := dek.NewManager(
+		provider, store, cache, pcache,
 		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },
 		&stubBindingResolver{},
 	)
@@ -413,7 +414,8 @@ func TestOrchestrator_Phase5_NoCoordinator_FailsClosed(t *testing.T) {
 	pcache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: 0})
 
 	provider := newTestProvider(t)
-	mgr, err := dek.NewManager(provider, store, cache, pcache,
+	mgr, err := dek.NewManager(
+		provider, store, cache, pcache,
 		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },
 		&stubBindingResolver{},
 	)

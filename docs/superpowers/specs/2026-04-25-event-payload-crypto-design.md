@@ -445,21 +445,36 @@ construction (INV-21 ensures the bytes are identical).
 
 ### Rekey flow (CLI-only)
 
+Sub-epic E (holomush-jxo8.7) ships the full rekey surface. Subcommands:
+
+```text
+holomush crypto rekey <ctx-type>:<ctx-id> --justification "..." [--dual-control]
+holomush crypto rekey resume <request_id> [--force-destroy]
+holomush crypto rekey abort <request_id>
+holomush crypto rekey status <request_id>
+holomush crypto rekey list [--include-terminal] [--context <pattern>] [--since <duration>]
+```
+
+`--purge-hot` (enumerate and delete JS messages with the old `dek_ref`) is deferred
+to `holomush-ujuv` (P4). INV-39 fallback handles the steady-state window where hot-tier
+messages reference a destroyed DEK.
+
 ```text
 Operator on host shell:
-  $ holomush crypto rekey --context scene:01ABC \
+  $ holomush crypto rekey scene:01ABC \
       --justification "Banned user retroactive access removal, ticket #1234" \
       [--dual-control]
-        ├── CLI authenticates: file-perm check on key file OR systemd credential OR Vault auth
+        ├── CLI authenticates via OperatorAuthProvider (admin creds + TOTP)
         ├── If --dual-control: prompt for second operator's signed approval within 5 min
-        ├── DEKManager.Rekey(context_id, justification, operator_id)
-        │     ├── Mint DEK_new
-        │     ├── PG: SELECT events_audit rows WHERE dek_ref = DEK_old
-        │     ├── For each: Decrypt(DEK_old) → Encrypt(DEK_new) → UPDATE
-        │     ├── JetStream: hot-tier rolls off naturally; reads fall back to cold tier (INV-39)
-        │     ├── CryptoProvider: destroy DEK_old wrapped record
-        │     └── DecryptAuditEmitter.Emit(audit.system.rekey.<context>) (INV-15)
-        └── Returns rekey audit event ID for operator's records
+        │     (see §6.3.1 dual-control protocol; resume invocations bypass approval per INV-E16)
+        ├── RekeyService.Rekey over localhost UNIX admin socket
+        │     ├── 7-phase orchestrator with crash-resumable checkpoint (§6.3, E §4)
+        │     ├── Phase 3: re-encrypt cold tier (events_audit rows for this context)
+        │     ├── Phase 4: hot-tier handling — no rewrite; reads fall back to cold (INV-39)
+        │     ├── Phase 5: synchronous cluster cache invalidation (N-of-N ack)
+        │     ├── Phase 6: soft-destroy old DEK row
+        │     └── Phase 7: emit events.<game>.system.rekey.<ctx_type>.<ctx_id> audit event
+        └── Returns checkpoint request_id for status tracking
 ```
 
 ### What's deliberately NOT in this picture
@@ -827,13 +842,19 @@ payload (cleartext):
   grant_id:             <ABAC grant ID that authorized this, ULID>
 ```
 
-**`audit.<game>.system.rekey.<context_type>.<context_id>`** — emitted on
-every `Rekey`:
+**`events.<game>.system.rekey.<context_type>.<context_id>`** — emitted on
+every `Rekey`. Subject uses the `events.<game>.` prefix (same rationale as
+`events.<game>.system.crypto_policy`: the EVENTS JetStream `events.>` SubjectFilter
+is the only path by which audit projection writes to `events_audit`, so chain-bearing
+audit events MUST live under that filter to be readable by the `auditchain.Verifier`
+and `auditchain.Repo`. Sub-epic B's original `audit.*` prefix for this subject was
+superseded by sub-epic E's amendment; per INV-E26 all registered audit chains use the
+`events.` prefix):
 
 ```yaml
 metadata:
   actor:        {kind: operator, os_user: <uid>, player_id: <admin player_id>}
-  event_type:   "system:rekey"
+  event_type:   "crypto.system.rekey"
   timestamp:    <now>
 payload (cleartext):
   context_type:                     <type>
@@ -842,7 +863,10 @@ payload (cleartext):
   new_dek_id:                       <int64; new crypto_keys.id>
   rows_re_encrypted:                <int>
   justification:                    <operator-supplied free text>
+  force_destroy:                    true | false     # true only when --force-destroy bypass used
+  final_missing_members:            [...]            # populated when force_destroy=true
   policy_hash:        <bytes>           # references the active crypto.policy_set event at invocation time
+                                        # captured at Phase 1 INSERT; never re-queried mid-rekey (INV-E25)
   operator_factors:
     os_user:                        "uid=1001 (sean)"
     player_id:                      "01HXXX..."
@@ -850,6 +874,9 @@ payload (cleartext):
     auth_provider:                  "ingame-creds-totp"
     provider_specific_identity:     <opaque>
     dual_control_partner_player_id: "01HXXX..." | null
+  rekey_chain:
+    prev_hash:  <bytes nullable>    # null at genesis (first rekey for this context)
+    self_hash:  <bytes>             # SHA-256(JCS(zero(payload, "rekey_chain.self_hash")))
 ```
 
 **`events.<game>.system.crypto_policy.<policy_name>`** — emitted on every
@@ -898,17 +925,56 @@ pattern (including the `policy_hash` field referencing the active
 `policy_set` event at invocation time).
 
 ABAC policy MUST deny any plugin or character from subscribing to
-`audit.*.plugin_decrypt.*` and `audit.*.system.*`. INV-15 verifies this
-denial at the gRPC subscribe handler boundary. NATS-level deny rules
-do not apply: game-topic NATS is single-principal by architectural
-design (only the holomush server connects on these subjects), so there
-is no plugin or character NATS account principal to deny. The
-authoritative isolation gate is ABAC at the gRPC subscribe handler;
-defense-in-depth is at the architectural level (gRPC mediation between
-plugins/characters and NATS), not the substrate level. See §7.7 for
+`audit.*.plugin_decrypt.*`, `audit.*.system.*`, and `events.*.system.*`. INV-15
+verifies this denial at the gRPC subscribe handler boundary. The `events.*.system.*`
+namespace covers both the `crypto.policy_set` chain (sub-epic D) and the
+`crypto.system.rekey` chain (sub-epic E), plus all future system-level audit chains
+under this prefix. The gRPC subscribe handler's deny enforcement extends to the new
+namespace (E amendment closing the latent gap from D's subject migration). NATS-level
+deny rules do not apply: game-topic NATS is single-principal by architectural design
+(only the holomush server connects on these subjects), so there is no plugin or
+character NATS account principal to deny. The authoritative isolation gate is ABAC at
+the gRPC subscribe handler; defense-in-depth is at the architectural level (gRPC
+mediation between plugins/characters and NATS), not the substrate level. See §7.7 for
 the full architectural framing.
-Operators read these via `holomush admin audit query …` on the localhost
-UNIX admin socket.
+Operators read these via `holomush admin audit query …` on the localhost UNIX admin
+socket.
+
+### 4.6.X Audit-chain integrity
+
+Sub-epic D introduced the `crypto.policy_set` chain; sub-epic E generalized it into a
+reusable `auditchain` primitive (`internal/eventbus/audit/chain/`) and registered the
+`crypto.system.rekey` chain as the second participant.
+
+**Audit-chain integrity** is a boot-time invariant: the server refuses to start
+(`AUDIT_CHAIN_BROKEN`) when any registered chain has a hash-link break, using the same
+fail-closed pattern as INV-32 / INV-33 / INV-37.
+
+**Chain registration model:** each chain is a `chain.Chain` struct (4 dot-path string
+fields) plus a `chain.Handler` bundle (behavior callbacks) registered at wiring time.
+Per-scope chain heads are maintained by `auditchain.Repo`; the `auditchain.Verifier`
+walks all registered chains at boot. Every chain's `SubjectPrefix` MUST start with
+`events.<game>.` so events reach `events_audit` via the EVENTS JetStream `events.>`
+SubjectFilter (INV-E26).
+
+**Hash algorithm:** `SHA-256(JCS(zero(payload, SelfHashFieldName)))` — the hash
+function and composition order are pinned at the primitive level. Canonicalization
+(JCS via pinned `github.com/cyberphone/json-canonicalization`) is the chain's
+responsibility. Divergence in hash function is forbidden.
+
+**Scope cross-check:** the verifier rejects any row where the scope derived from the
+event subject differs from the scope derived from the payload (INV-E27), defending
+against subject/payload misrouting.
+
+**Registered chains (as of sub-epic E):**
+
+| Chain | Subject prefix | Scope |
+| --- | --- | --- |
+| `policy_set` | `events.<game>.system.crypto_policy` | policy name |
+| `rekey` | `events.<game>.system.rekey` | `<context_type>:<context_id>` |
+
+Future chains under `events.<game>.system.*` (Phase 6 KEK rotation, Phase 7
+plugin-owned audit) follow the same registration model.
 
 ### 4.7 `events_audit` migration
 
@@ -1532,27 +1598,32 @@ authenticates per Section 7.5.
 Never invocable from gRPC or in-game commands (INV-16,
 INV-40).
 
-**Mechanics:**
+**Mechanics:** Sub-epic E implements the full 7-phase orchestrator with a
+crash-resumable `crypto_rekey_checkpoints` table (E §3.1). The typed
+`CheckpointStatus` state machine (E §4.1) defines the forward-only transition
+sequence; `complete` and `aborted` are absorbing states. Phase 4 introduces
+no status transitions in the orchestrator — it is a no-op policy declaration
+(Phase 4 introduces no status transitions, reads fall back to cold tier via INV-39).
 
 ```text
-Phase 1 — Authenticate & authorize:
+Phase 1 — Authenticate & authorize (checkpoint status: phase1_auth):
   1.1  CLI prompts for and verifies operator credentials per OperatorAuthProvider
   1.2  If --dual-control: prompt for second operator within 5-min window
   1.3  CLI calls server's RekeyService over a localhost UNIX domain socket
        with SO_PEERCRED check
   1.4  RekeyService verifies admin role + crypto.operator capability + TOTP factor
+  1.5  INSERT crypto_rekey_checkpoints row; capture policy_hash at INSERT time (INV-E25)
 
-Phase 2 — Mint new DEK:
+Phase 2 — Mint new DEK (checkpoint status: phase2_mint_dek):
   2.1  Generate fresh DEK_new (32 random bytes from crypto/rand)
   2.2  Provider.Wrap(DEK_new) → wrapped_new, keyID_new
   2.3  INSERT new crypto_keys row:
          version       = current max + 1
-         participants  = current active version's participants (Rekey does
-                         not change membership; use Rotate for that, then
-                         Rekey if forced revocation needed)
-         rekey_audit_id = pre-allocated UUID for the audit event
+         participants  = current active version's participants (INV-E6:
+                         Rekey does not change membership; use Rotate for
+                         that, then Rekey if forced revocation needed)
 
-Phase 3 — Re-encrypt cold tier (events_audit):
+Phase 3 — Re-encrypt cold tier (events_audit) (checkpoint status: phase3_reencrypt):
   3.1  SELECT id, payload, codec FROM events_audit
        WHERE dek_ref = DEK_old.id ORDER BY id (deterministic for resumability)
   3.2  In batches of 1000:
@@ -1561,34 +1632,35 @@ Phase 3 — Re-encrypt cold tier (events_audit):
          UPDATE events_audit
          SET payload = re_encrypted, dek_ref = DEK_new.id, dek_version = N+1
          WHERE id = current_id
-  3.3  Track progress in a checkpoint row so a crashed Rekey resumes
-       cleanly instead of starting over.
+  3.3  Track progress in checkpoint.last_processed_event_id for crash-resume (INV-E7).
+       AAD is rebuilt from (subject, type, new_key_id, new_version, codec); old AAD
+       fails with AEAD tag mismatch (INV-E8).
 
-Phase 4 — Hot tier handling:
+Phase 4 — Hot tier handling (no checkpoint status transition):
   4.1  Hot tier (JetStream) is append-only for live messages.
   4.2  Approach: do NOT attempt to rewrite JS messages. Old JS messages
        referencing DEK_old.id remain on the stream until JS retention
        rolls them off (~7d default).
-  4.3  Subscribe / QueryStreamHistory MUST handle "DEK referenced by
-       hot-tier message no longer exists in crypto_keys" by falling
-       back to the cold tier (INV-39).
-  4.4  Optional --purge-hot flag enumerates and deletes JS messages with
-       dek_ref = DEK_old.id. Slow, operator-opt-in. Default off.
+  4.3  Subscribe / QueryStreamHistory handles "DEK referenced by hot-tier
+       message no longer exists in crypto_keys" via SourceResolver /
+       FallbackResolver (INV-39; see §8.4 and E §5).
+  4.4  --purge-hot flag deferred to holomush-ujuv (P4).
 
-Phase 5 — Synchronous cross-replica cache invalidation (CRITICAL):
-  5.1  Issue NATS request-reply on internal.cache_invalidate.dek.<context_id>
-       with payload {context_id, old_key_id, new_key_id, action: "rekey"}
-  5.2  Wait for N-of-N replica acks (registered server identities)
-       within 5s timeout.
+Phase 5 — Synchronous cross-replica cache invalidation (CRITICAL)
+          (checkpoint status: phase5_invalidate or phase5_timeout):
+  5.1  Invoke invalidation.Coordinator.RequestInvalidation with Action: ActionRekey
+       (reuses the existing Phase 3c coordinator — INV-E22).
+  5.2  Wait for N-of-N replica acks within 5s timeout.
   5.3  Each replica on receiving the request:
          - Evicts (context_id, *) from its DEK cache and ParticipantsCache
          - Replies with ack
-  5.4  On timeout: rollback. New DEK row stays (orphan, picked up by
-       next Rekey retry); cold-tier rows already updated; old DEK NOT
-       destroyed. Operator is told which replicas failed to ack.
-  5.5  Phase 5 MUST complete successfully before Phase 6.
+  5.4  On timeout: checkpoint transitions to phase5_timeout; DEK_old NOT
+       destroyed. Operator is told which replicas failed to ack (via
+       `holomush crypto rekey status`). Operator may retry (resume) or use
+       --force-destroy escape hatch (INV-E10; gated on phase5_timeout status).
+  5.5  Phase 5 MUST complete (phase5_invalidate or force-destroy bypass) before Phase 6.
 
-Phase 6 — Destroy old DEK:
+Phase 6 — Destroy old DEK (checkpoint status: phase6_complete):
   6.1  UPDATE crypto_keys
        SET destroyed_at = NOW()
        WHERE id = DEK_old.id
@@ -1596,13 +1668,15 @@ Phase 6 — Destroy old DEK:
        achieving the same operational effect as hard-delete while
        preserving the row for forensic audit per INV-11. Phase 3c
        grounding doc Decision 4.)
+  6.2  Idempotent on retry — second invocation is a no-op (INV-E12).
 
-Phase 7 — Emit audit event:
-  7.1  audit.<game>.system.rekey.<context_type>.<context_id>
-       (full operator_factors per Section 4.6)
-  7.2  Must complete before CLI returns success. If audit emit fails,
-       Rekey is logged as completed-without-audit-event in a fallback
-       host-side log file; operator MUST escalate per documented runbook.
+Phase 7 — Emit audit event (checkpoint status: complete):
+  7.1  events.<game>.system.rekey.<context_type>.<context_id>
+       (full operator_factors + rekey_chain fields per Section 4.6)
+  7.2  Audit emission confirmed via projection ack before transition to complete
+       (INV-E13). If audit emit fails, Rekey is logged as completed-without-audit
+       in a fallback host-local log file; CLI exits 70 (EX_SOFTWARE); operator
+       MUST escalate per documented runbook.
 ```
 
 `Rekey` accesses the server via a localhost UNIX socket, not gRPC, to keep
@@ -1614,10 +1688,7 @@ public gRPC services literally don't have a `Rekey` method.
 - Crash during Phase 3: checkpoint allows resume. Phase 5 is gated on
   Phase 3 completion. As long as DEK_old still exists, the cold tier
   remains readable.
-- Crash during Phase 5: idempotent retry. If DEK_old row is gone but some
-  `events_audit` rows still reference it (shouldn't happen if Phase 3
-  completed cleanly), startup integrity check refuses to come up until
-  manually resolved.
+- Phase 5 timeout: see §6.3.2 below.
 - Phase 7 audit emit failure: see 7.2. Rekey is recorded in a host-local
   log as fallback. The one place we tolerate an audit gap, with a
   documented escalation path. Justified because the Rekey itself is
@@ -1649,10 +1720,50 @@ Server-issued approval-token mechanism (sub-epic D ships the implementation):
 7. Primary's still-blocking CLI proceeds to Rekey / AdminReadStream
    execution.
 
+Resume invocations bypass approval per INV-E16 when the resuming session's
+`player_id` matches the checkpoint's `primary_player_id`. Cross-operator resume
+is rejected with `DEK_REKEY_RESUME_OPERATOR_MISMATCH`.
+
 Approval-token format: ULID. TTL: 5 minutes; expired rows MAY be left
 until a periodic sweep (rows are tiny). `op_args_hash` binds the
 approval to the primary's invocation args; mismatch on proceed → server
 rejects with `DENY_APPROVAL_ARGS_MISMATCH`.
+
+#### 6.3.2 Resume, abort, force-destroy
+
+**Resume semantics.** When the operator re-invokes `holomush crypto rekey` with
+matching `(op_args_hash, primary_player_id)` and a non-terminal checkpoint exists for
+the same context, the orchestrator auto-resumes from the last committed
+`last_processed_event_id`. No re-approval required (INV-E16). Same-args detection uses
+`op_args_hash` so the resume is safe across binary restarts.
+
+**Abort semantics.** `holomush crypto rekey abort <request_id>` accepts single-control
+regardless of the site policy on `rekey` (INV-E17). Abort is non-destructive: the
+orphan DEK remains valid; reads continue without interruption. A chained audit event is
+emitted for the abort. Any operator with the `crypto.operator` capability may abort, not
+just the original primary.
+
+**Force-destroy escape hatch.** When Phase 5 times out persistently and the operator
+cannot heal the missing replicas, `holomush crypto rekey resume <request_id> --force-destroy`
+bypasses Phase 5 cluster invalidation (INV-E10: gated on `phase5_timeout` status only).
+Replicas that did not ack will return `DEK_NOT_FOUND` on cache miss until they restart.
+The rekey audit event captures `force_destroy=true` and `final_missing_members`
+(INV-E11). On non-TTY invocation, `--confirm <context_id>` is required.
+
+#### 6.3.3 Operator UX commitments
+
+Sub-epic E ships structured CLI output for the rekey surface:
+
+- **Phase 5 timeout error** — structured table showing missing replicas, last-seen
+  timestamps, cluster snapshot size, and actionable next-steps (resume, investigate,
+  force-destroy escalation).
+- **Phase 3 streaming progress** — `holomush crypto rekey <ctx>` streams percentage
+  complete as Phase 3 runs over large cold tiers.
+- **Status query** — `holomush crypto rekey status <request_id>` returns all checkpoint
+  fields (status, phases complete, cursor, heartbeat, missing members).
+- **List** — `holomush crypto rekey list` with status/context/since filters; 100-row cap
+  default; `--include-terminal` for completed/aborted rows.
+- **Exit codes** — sysexits.h mapping per §7.4 (INV-E23).
 
 ---
 
@@ -2054,30 +2165,36 @@ When a hot-tier message references a `dek_ref` that no longer exists in
 `crypto_keys` (which happens after `Rekey` destroys the old DEK while old
 JS messages haven't rolled off yet), the reader falls back to the cold tier.
 
-```text
-For each event from hot tier:
-  if codec != identity:
-    if DEK lookup fails (dek_ref not in crypto_keys):
-      cold_row = events_audit.SELECT WHERE id = event.id
-      if cold_row exists:
-        substitute cold_row for hot_row
-      else:
-        emit metric: crypto.cold_dek_miss
-        deliver event with metadata_only=true (metric-only signaling)
+Sub-epic E implements this via the `SourceResolver` interface
+(`internal/eventbus/history/source/`) and a production `FallbackResolver` binding
+(E §5). The `FallbackResolver` wraps the existing `cold_postgres.Reader` adapter and
+is wired into the `history.Dispatcher` at startup:
+
+```go
+resolver := source.NewFallbackResolver(dekMgr, coldReader, resolverMetrics, logger)
+dispatcher := history.NewDispatcher(history.WithSourceResolver(resolver), ...)
 ```
 
-This case is rare (only happens during the JS-retention window after
-`Rekey`) but needs to be handled cleanly. Behavior is conservative: prefer
-the cold tier (re-encrypted under the new DEK), fall back to metadata-only
-with a metric if both tiers diverged.
+The fallback algorithm:
+
+1. Attempt hot-tier DEK resolve. If successful → deliver normally (TierHot).
+2. If DEK lookup returns `DESTROYED` or `NOT_FOUND` → look up the cold-tier row by
+   event ID via `cold_postgres.LookupByID`.
+3. If cold row found and cold DEK resolves → substitute cold envelope; rebuild AAD
+   from substituted envelope's fields (INV-E20); deliver from cold tier (TierColdFallback).
+4. If cold row exists but cold DEK also missing → deliver `metadata_only=true`
+   (`ErrMetadataOnly`, INV-E21).
+5. If cold row missing entirely → deliver `metadata_only=true`.
+6. Transient DEK errors propagate as errors (not fallback).
+
+This case is rare (only during the JS-retention window after `Rekey`) but must be
+handled cleanly. Behavior is conservative: prefer the cold tier (re-encrypted under
+the new DEK), fall back to metadata-only with a metric if both tiers diverged.
 
 **Signaling: metric-only.** Per Phase 3d Decision 5, the terminal
 "cold-itself-can't-decrypt" branch is signaled via the `crypto.cold_dek_miss`
-metric only — no typed wire-header on the event. The earlier draft of this
-section proposed a typed warning header; that was dropped because the
-on-the-wire envelope round-trip (INV-49) is the contractual surface, and
-out-of-band fallback signaling belongs in metrics, not in the event
-envelope. INV-39 (hot→cold fallback loop) remains deferred to Phase 5.
+metric only — no typed wire-header on the event. The `crypto.cold_dek_miss` metric
+naming and metric-only signaling decision remain authoritative in this section.
 
 ### 8.5 Audit-of-audit subjects
 
@@ -2086,9 +2203,16 @@ host's normal audit projection (the `audit.*` namespace is host-owned, not
 plugin-owned). They are always plaintext (codec = `identity`); they have no
 `dek_ref`. Standard infrastructure handles them.
 
+Rekey audit events ride the `events.<game>.system.rekey.<ct>.<id>` chain
+(per-context scope) via the audit-chain primitive (§4.6.X). Each rekey event carries
+`rekey_chain.prev_hash` linking back to its predecessor, and `rekey_chain.self_hash`
+for verification. The `auditchain.Verifier` walks both the `policy_set` and `rekey`
+chains at boot; a break in either causes `AUDIT_CHAIN_BROKEN` (INV-E15).
+
 ABAC denies all plugin/character subjects from subscribing to
-`audit.*.plugin_decrypt.*` and `audit.*.system.*`. Operators read these via
-`holomush admin audit query …` on the localhost UNIX socket.
+`audit.*.plugin_decrypt.*`, `audit.*.system.*`, and `events.*.system.*` (see §4.6
+ABAC policy note). Operators read these via `holomush admin audit query …` on the
+localhost UNIX socket.
 
 ---
 
@@ -2231,21 +2355,23 @@ Each doc deliverable MUST be:
 | Failure | Detection | Behavior |
 | --- | --- | --- |
 | Crashed `Rotate` | Startup integrity check (INV-37) | Auto-resolve. |
-| Crashed `Rekey` | Checkpoint table (INV-38) | Resume from checkpoint on retry. Phase 5 (DEK destroy) gated on Phase 3 completion. |
-| `Rekey` audit emit failure (Phase 7) | Subscribe ack timeout | CLI exit code; rekey recorded in fallback host log; documented escalation. |
+| Crashed `Rekey` | `crypto_rekey_checkpoints` table (INV-38) | Resume from checkpoint on retry (`holomush crypto rekey resume <request_id>`). Phase 5 (DEK destroy) gated on Phase 3 completion. |
+| `Rekey` audit emit failure (Phase 7) | Subscribe ack timeout | CLI exit 70 (EX_SOFTWARE); rekey recorded in fallback host log; documented escalation. |
 | `AdminReadStream` audit emit failure | Pre-data-emit check (INV-42) | Refuse to proceed; no plaintext leaves the server. |
 | Provider migration mid-flight failure | Per-row retry | Idempotent on resume. |
 | KEK rotation mid-flight failure (LocalAEAD) | Detection at next emit/read | Provider holds old + new in memory until DEKs re-wrap; restart integrity check refuses to come up if any DEK can't be unwrapped; operator re-runs from checkpoint. |
 | Concurrent `Add` and `Rotate` on same context | PG row-level lock | `Add` waits, retries against new active version. |
 | Concurrent `Rotate` attempts | PG row-level lock | One wins, other exits as no-op. |
+| Force-destroy used | `crypto_rekey_checkpoints.force_destroy = true` | Rekey completes; replicas that did not ack Phase 5 return `DEK_NOT_FOUND` on cache miss until they restart. Alert: `crypto_rekey_force_destroy_total > 0` (see `crypto-monitoring.md`). |
 
 ### Audit emission failures
 
 | Failure | Detection | Behavior |
 | --- | --- | --- |
 | `audit.<game>.plugin_decrypt.*` emit queue full (default 10,000 entries per plugin) | Queue insert returns `ErrFull` | AuthGuard returns `DENY_AUDIT_BACKPRESSURE` for that plugin; recipient receives `metadata_only=true`. Decryption resumes when queue drains below 50%. INV-19 preserved: no plaintext is delivered without a successfully-queued audit event. (Per §7.6 — the single audit-backpressure mechanism.) |
-| `audit.<game>.system.rekey.*` failure | Subscribe ack timeout | See `Rekey` Phase 7. |
+| `events.<game>.system.rekey.*` emission failure | Subscribe ack timeout | See `Rekey` Phase 7. CLI exits 70 (EX_SOFTWARE); fallback host log written. |
 | `audit.<game>.system.operator_read.*` failure | Pre-data-emit check | Refuse to proceed. |
+| Rekey audit-chain verifier detects break at boot | `auditchain.Verifier` finds `prev_hash` mismatch in any registered chain | Server refuses to start with `AUDIT_CHAIN_BROKEN` (consistent with INV-32 / INV-33 fail-closed pattern). Operator investigates via chain walk tool. |
 
 ### Substrate failures
 
@@ -2277,6 +2403,17 @@ Each doc deliverable MUST be:
 | `DENY_DUAL_CONTROL_SELF` | Second operator's `player_id` matches the primary's; self-approval is rejected |
 | `DENY_APPROVAL_EXPIRED` | `admin_approvals` row `expires_at < now()` at proceed time |
 | `DENY_APPROVAL_ALREADY_APPROVED` | `admin_approvals` row is already in `approved` state; replay / double-submit rejected |
+| `DEK_REKEY_ALREADY_IN_PROGRESS` | A non-terminal checkpoint exists for the same context with a different `op_args_hash` (args conflict — must abort first) |
+| `DEK_REKEY_ARGS_CONFLICT` | Same as `DEK_REKEY_ALREADY_IN_PROGRESS`; used when the conflict is detected at the concurrent-fresh-start path |
+| `DEK_REKEY_RESUME_OPERATOR_MISMATCH` | Resuming operator's `player_id` does not match the checkpoint's `primary_player_id` |
+| `DEK_REKEY_CHECKPOINT_NOT_FOUND` | No checkpoint row found for the provided `request_id` |
+| `DEK_REKEY_CHECKPOINT_TERMINAL` | Checkpoint is in a terminal state (`complete` or `aborted`); operation not valid |
+| `DEK_REKEY_PHASE5_TIMEOUT` | Phase 5 cluster invalidation timed out; checkpoint is in `phase5_timeout` state |
+| `DEK_REKEY_PHASE7_AUDIT_FAILED` | Phase 7 audit emit failed; rekey state committed; fallback log written; CLI exits 70 |
+| `DEK_REKEY_FORCE_DESTROY_FORBIDDEN` | `--force-destroy` was requested but the checkpoint is not in `phase5_timeout` state |
+| `DEK_REKEY_INVALID_TRANSITION` | State-machine guard rejected the attempted status transition |
+| `AUDIT_CHAIN_BROKEN` | Boot-time `auditchain.Verifier` detected a hash-link break in a registered chain |
+| `AUDIT_CHAIN_SCOPE_MISMATCH` | A chain row's subject-derived scope differs from its payload-derived scope |
 
 ---
 
@@ -2301,7 +2438,7 @@ phase 3.
 | 2 | `KEKProvider` interface + `LocalAEADProvider` + `NoneProvider` + `crypto_keys` table migration + `events_audit` columns migration + `DEKManager` skeleton + `dek.Material` type + lint rule | Server can wrap/unwrap DEKs; events_audit gains the new columns; nothing emits or reads sensitive yet |
 | 3 | **COMPLETE** (Phase 3d closed 2026-05-03). EventSink encryption path + new codec impls (`xchacha20poly1305-v1`) + AAD canonicalization + AuthGuard (4 branches) + decrypt-on-fan-out + cache + request-reply cache-invalidation protocol + audit subject namespaces + emit-time sensitivity fence (INV-6/7 — host-side ground-truth check at emit) + cold-tier `QueryStreamHistory` crypto path for host-owned audit + Crypto.Enabled default flipped to true + INV-49 envelope round-trip + INV-15 ABAC subscribe denial + plugin-actor & character-actor E2E. Note: NATS account-level deny rules dropped per Phase 3d Decision 4 (game-topic NATS is single-principal by architectural design — see §7.7 amendment); the cold-tier read fence (INV-50) is plugin-owned-audit-specific and lands in Phase 7. Phase 3c grounding doc at [`docs/superpowers/specs/2026-05-02-event-payload-crypto-phase3c-grounding.md`](2026-05-02-event-payload-crypto-phase3c-grounding.md). Phase 3d grounding doc at [`docs/superpowers/specs/2026-05-03-event-payload-crypto-phase3d-grounding.md`](2026-05-03-event-payload-crypto-phase3d-grounding.md). Cluster substrate (`internal/cluster/`) landed as prerequisite. | End-to-end sensitive event flow works for host-owned audit subjects; players-as-character get full plaintext; previous-tenure player-kind reads emit per-session audit |
 | 4 | `Add` + `Rotate` lifecycle ops with synchronous N-of-N replica cache invalidation | Participant changes work; player-rebind triggers `Rotate` correctly |
-| 5 | `Rekey` CLI + `AdminReadStream` CLI + localhost UNIX admin socket + `OperatorAuthProvider` (default in-game-creds + TOTP) + `crypto.policy_set` audit-event emission (sub-epic D) + `admin_approvals` table (sub-epic D) + `player_totp` table (sub-epic A; merged) + `crypto_rekey_checkpoints` table (sub-epic E) | Operator break-glass and destructive revocation paths exist |
+| 5 | Sub-epic D (`holomush-jxo8.6`, merged 2026-05-10): `AdminReadStream` CLI + localhost UNIX admin socket + `OperatorAuthProvider` + `crypto.policy_set` audit-chain + `admin_approvals` table (sub-epic D) + `player_totp` table. Sub-epic E (`holomush-jxo8.7`): 7-phase `Rekey` orchestrator + `crypto_rekey_checkpoints` table (crash-resumable, UNIQUE partial index enforcing one-active-per-context) + INV-39 `SourceResolver`/`FallbackResolver` + `auditchain` primitive (generalizes D's policy_set verifier) + `events.<game>.system.rekey.*` audit chain + `RekeyCheckpointSweepSubsystem` + rekey CLI surface (`rekey`, `resume`, `abort`, `status`, `list`) + `--force-destroy` escape hatch | Operator break-glass and destructive revocation paths exist; audit chains provide tamper-evident hash linkage for both policy and rekey operations |
 | 6 | `VaultTransitProvider` + provider migration CLI + KEK rotation CLI | Orgs with Vault can use it; provider-migrate and KEK rotation exercised |
 | 7 | Plugin SDK helpers (`pkg/plugin/audit.go`); plugin-owned audit table integration; INV-50 downgrade fence test against plugin-owned audit | Plugin-owned audit handles sensitive events transparently; downgrade attack from a malicious plugin is detected |
 | 8 | Site documentation deliverables (Section 9) | All five audiences have current docs |
@@ -2378,13 +2515,15 @@ a beads issue filed at spec commit time.
 | 3 | Right-to-be-forgotten beyond `Rekey`. Old ciphertext bytes persist in JS until retention rolls off, and PG backups still contain old wrapped DEKs. Two-tier content-addressed model (Q2 option B from the brainstorm) is the path for stronger deletion. | Future work; gated by GDPR / equivalent |
 | 4 | Per-event DEKs vs per-context DEKs. Settled on per-context for v1; per-event would be cleaner cryptographically but with overhead. | Future work |
 | 5 | Subject obfuscation. Subjects leak structural metadata. Becomes a problem if HoloMUSH grows multi-tenant or hosted-shared. The `subjectxlate` shim (`holomush-ec22.3`) is the existing surface. | Future work; gated by deployment model evolution |
-| 6 | Client-side / E2E encryption. Server is in the trust path in v1. Worth revisiting if threat model evolves. | Future work |
+| 6 | Client-visible stale-DEK signaling. Per Phase 3d Decision 5 the terminal "cold-itself-can't-decrypt" branch is signaled via the `crypto.cold_dek_miss` metric only (no typed wire-header). Tracked permanently as `holomush-ojw1.6` (P3 child). | Permanent tracking bead `holomush-ojw1.6` |
 | 7 | Memory-locking unwrapped DEKs (`mlock` + zero-on-free). Not in v1 because gdb-on-server is out of scope. | Future work |
 | 8 | Hardware-token operator auth. `OperatorAuthProvider` is pluggable; hardware-token impl is future work. | Future work; gated by demand |
 | 9 | Cloudflare-Workers-bridged `KEKSource`. Possible but requires operator to run their own Worker as a bridge. Out of v1 scope. | Future work; gated by Cloudflare product evolution |
 | 10 | Automated DEK-leak detection. We have the audit trail; we don't have automated detection of suspicious decrypt patterns or DEK exfiltration. | Future work |
 | 11 | System events emitted by the host itself (not by a plugin) — ad-hoc admin announcements, system messages — go through what manifest declaration path? Probably a host pseudo-manifest. | Implementation detail |
 | 12 | Failed-decrypt sentinel. AAD-mismatch is very rare (suggests tampering or codec bug). Should it surface as `metadata_only=true` or a distinct `payload_corrupt=true` flag? | Implementation detail |
+| 13 | Background GC for orphan DEK rows from aborted rekey checkpoints. The new DEK minted in Phase 2 that is never promoted (aborted before Phase 6) leaves an orphan `crypto_keys` row. Counting query is straightforward; sweep policy and operator UX deserve their own bead. | Future work; P3 follow-up bead filed during E plan stage |
+| 14 | E2E encryption (client-side). Server is in the trust path in v1. Worth revisiting if threat model evolves. | Future work |
 
 ---
 

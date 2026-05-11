@@ -94,7 +94,8 @@ func newTestOrchestratorWithProvider(t *testing.T, pool *pgxpool.Pool, gameID st
 	policyHashSrc := dek.NewAuditChainPolicyHashSource(chainRepo, policyHandler)
 	store := dek.NewStore(pool)
 	cfg := dek.CacheConfig{Capacity: 64, TTL: time.Minute}
-	mgr, err := dek.NewManager(provider, store,
+	mgr, err := dek.NewManager(
+		provider, store,
 		dek.NewCache(cfg), dek.NewParticipantsCache(cfg),
 		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },
 		&stubBindingResolver{}, // stubBindingResolver defined in manager_test.go
@@ -250,7 +251,8 @@ type cryptoKeyRowForTest struct {
 func loadCryptoKeyRow(t *testing.T, pool *pgxpool.Pool, id int64) cryptoKeyRowForTest {
 	t.Helper()
 	var r cryptoKeyRowForTest
-	err := pool.QueryRow(context.Background(),
+	err := pool.QueryRow(
+		context.Background(),
 		`SELECT version, participants::text FROM crypto_keys WHERE id = $1`, id,
 	).Scan(&r.Version, &r.ParticipantsJSON)
 	require.NoError(t, err)

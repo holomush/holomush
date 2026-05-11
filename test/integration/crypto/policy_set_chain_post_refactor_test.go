@@ -21,8 +21,8 @@ package crypto_test
 import (
 	"context"
 
-	. "github.com/onsi/ginkgo/v2"   //nolint:revive // ginkgo convention
-	. "github.com/onsi/gomega"       //nolint:revive // gomega convention
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/admin/policy"

@@ -484,8 +484,10 @@ func setupRekeyResumeServerWithCompleted(
 	onRekeyResume func(*testing.T, *connect.Request[adminv1.RekeyResumeRequest], *connect.ServerStream[adminv1.RekeyProgress]) error,
 ) (adminv1connect.AdminServiceClient, func()) {
 	t.Helper()
-	reqID := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-		0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}
+	reqID := []byte{
+		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+		0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+	}
 	h := &fakeAdminHandlerWithRekey{
 		onAuthenticate: func(_ context.Context, _ *connect.Request[adminv1.AuthenticateRequest]) (*connect.Response[adminv1.AuthenticateResponse], error) {
 			return connect.NewResponse(&adminv1.AuthenticateResponse{SessionToken: "tok-resume"}), nil
@@ -539,8 +541,10 @@ func TestCmd_CryptoRekey_Resume_ForceDestroy_RequiresConfirmation(t *testing.T) 
 // to the RPC and exits 0 with "Rekey complete".
 func TestCmd_CryptoRekey_Resume_ForceDestroy_WithConfirm(t *testing.T) {
 	var capturedForceDestroy bool
-	reqID := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-		0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}
+	reqID := []byte{
+		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+		0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+	}
 
 	client, cleanup := setupRekeyResumeServerWithCompleted(t,
 		func(_ *testing.T, req *connect.Request[adminv1.RekeyResumeRequest], stream *connect.ServerStream[adminv1.RekeyProgress]) error {
@@ -802,8 +806,10 @@ func TestCmd_CryptoRekey_Resume_ForceDestroy_RejectedByServer(t *testing.T) {
 func TestCmd_CryptoRekey_Abort(t *testing.T) {
 	abortedAt := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)
 	auditEventID := []byte{0xde, 0xad, 0xbe, 0xef, 0x01, 0x02, 0x03, 0x04}
-	reqID := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-		0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}
+	reqID := []byte{
+		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+		0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+	}
 	h := &fakeAdminHandlerWithRekey{
 		onAuthenticate: func(_ context.Context, _ *connect.Request[adminv1.AuthenticateRequest]) (*connect.Response[adminv1.AuthenticateResponse], error) {
 			return connect.NewResponse(&adminv1.AuthenticateResponse{SessionToken: "tok-abort"}), nil
@@ -856,8 +862,10 @@ func TestCmd_CryptoRekey_Abort_TerminalRejection(t *testing.T) {
 // TestCmd_CryptoRekey_Status verifies that runRekeyStatus authenticates, calls
 // RekeyStatus, and prints the checkpoint fields including status.
 func TestCmd_CryptoRekey_Status(t *testing.T) {
-	reqID := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-		0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}
+	reqID := []byte{
+		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+		0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+	}
 	h := &fakeAdminHandlerWithRekey{
 		onAuthenticate: func(_ context.Context, _ *connect.Request[adminv1.AuthenticateRequest]) (*connect.Response[adminv1.AuthenticateResponse], error) {
 			return connect.NewResponse(&adminv1.AuthenticateResponse{SessionToken: "tok-status"}), nil
@@ -913,8 +921,10 @@ func TestCmd_CryptoRekey_Status_NotFound(t *testing.T) {
 // TestCmd_CryptoRekey_List verifies that runRekeyList authenticates, streams
 // RekeyStatusResponse rows, and prints a header + one row per checkpoint.
 func TestCmd_CryptoRekey_List(t *testing.T) {
-	reqID := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-		0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}
+	reqID := []byte{
+		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+		0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+	}
 	h := &fakeAdminHandlerWithRekey{
 		onAuthenticate: func(_ context.Context, _ *connect.Request[adminv1.AuthenticateRequest]) (*connect.Response[adminv1.AuthenticateResponse], error) {
 			return connect.NewResponse(&adminv1.AuthenticateResponse{SessionToken: "tok-list"}), nil

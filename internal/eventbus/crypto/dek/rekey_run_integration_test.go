@@ -50,7 +50,8 @@ func newRunTestSetup(t *testing.T, contextID string) *runTestSetup {
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute})
 	pcache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute})
 
-	mgr, err := dek.NewManager(provider, store, cache, pcache,
+	mgr, err := dek.NewManager(
+		provider, store, cache, pcache,
 		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },
 		&stubBindingResolver{},
 	)

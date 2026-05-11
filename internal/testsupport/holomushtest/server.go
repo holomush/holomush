@@ -424,7 +424,7 @@ func buildServer(t *testing.T, cfg ServerConfig) *Server {
 	orch := dek.NewOrchestrator(dekStore, ckptRepo, policyHashSrc, mgr)
 	orch.SetMaterialResolver(mgr.(dek.MaterialResolver)) //nolint:forcetypeassert // *manager satisfies MaterialResolver
 	orch.SetAuditEmitter(auditEmitter)
-	orch.SetDestroyer(mgr)                               //nolint:forcetypeassert // *manager satisfies DEKDestroyer
+	orch.SetDestroyer(mgr) //nolint:forcetypeassert // *manager satisfies DEKDestroyer
 	orch.SetPhase5Coordinator(&noopPhase5Coordinator{})
 
 	// Chain verifier (used for assertion helpers).

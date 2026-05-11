@@ -126,7 +126,8 @@ func (o *Orchestrator) RunPhase7(ctx context.Context, rid RequestID, req RekeyRe
 	// an empty list rather than blocking the audit emit.
 	missingMembers, memberErr := ckpt.Phase5MissingMembers()
 	if memberErr != nil {
-		o.logger.WarnContext(ctx, "phase7 missing_members decode failed; using empty list",
+		o.logger.WarnContext(
+			ctx, "phase7 missing_members decode failed; using empty list",
 			"request_id", rid.String(),
 			"err", memberErr.Error(),
 		)
@@ -182,7 +183,8 @@ func (o *Orchestrator) RunPhase7(ctx context.Context, rid RequestID, req RekeyRe
 		// irreversibly committed; the audit emit is the cross-reference,
 		// not the canonical record.
 		if logErr := o.writeFallbackLog(rid, payload); logErr != nil {
-			o.logger.ErrorContext(ctx, "rekey audit fallback log write failed",
+			o.logger.ErrorContext(
+				ctx, "rekey audit fallback log write failed",
 				"request_id", rid.String(),
 				"err", logErr.Error(),
 			)
@@ -203,7 +205,7 @@ func (o *Orchestrator) RunPhase7(ctx context.Context, rid RequestID, req RekeyRe
 		ForceDestroyUsed: ckpt.ForceDestroy,
 		StartedAt:        ckpt.StartedAt,
 		CompletedAt:      time.Now(),
-		DurationMs: time.Since(ckpt.StartedAt).Milliseconds(), //nolint:noremoteclockcompare // observability-only; ckpt.StartedAt is used for duration display, not protocol decisions
+		DurationMs:       time.Since(ckpt.StartedAt).Milliseconds(), //nolint:noremoteclockcompare // observability-only; ckpt.StartedAt is used for duration display, not protocol decisions
 	}, nil
 }
 

@@ -42,19 +42,19 @@ func buildTamperedRekeyPayload() []byte {
 	// The exact field values are secondary; what matters is that self_hash does
 	// not match the SHA-256(JCS(zeroed payload)) that RecomputeSelfHash computes.
 	type chainBlock struct {
-		Scope         string  `json:"scope"`
-		PrevHash      *string `json:"prev_hash"`
-		PrevEventID   *string `json:"prev_event_id"`
-		SelfHash      string  `json:"self_hash"`
+		Scope       string  `json:"scope"`
+		PrevHash    *string `json:"prev_hash"`
+		PrevEventID *string `json:"prev_event_id"`
+		SelfHash    string  `json:"self_hash"`
 	}
 	type context_ struct {
 		Type string `json:"type"`
 		ID   string `json:"id"`
 	}
 	type payload struct {
-		RequestID   string     `json:"request_id"`
-		Context     context_   `json:"context"`
-		RekeyChain  chainBlock `json:"rekey_chain"`
+		RequestID  string     `json:"request_id"`
+		Context    context_   `json:"context"`
+		RekeyChain chainBlock `json:"rekey_chain"`
 	}
 	selfHash := "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
 	p := payload{
@@ -93,7 +93,8 @@ var _ = Describe("Rekey chain verifier", func() {
 		scope := h.SceneContext.Type + ":" + h.SceneContext.ID
 		handler := dek.RekeyHandlerFor(h.Game)
 		cleanErr := h.Primary.GetAuditChainVerifier().VerifyScope(
-			context.Background(), handler, scope)
+			context.Background(), handler, scope,
+		)
 		Expect(cleanErr).NotTo(HaveOccurred(),
 			"INV-E15: clean chain must verify without error before tampering")
 
@@ -126,7 +127,8 @@ var _ = Describe("Rekey chain verifier", func() {
 		// The error is an oops.OopsError with Code()="AUDIT_CHAIN_HASH_MISMATCH";
 		// its .Error() string contains the message "self_hash does not match recompute".
 		bootErr := h.Primary.GetAuditChainVerifier().VerifyScope(
-			context.Background(), handler, scope)
+			context.Background(), handler, scope,
+		)
 		Expect(bootErr).To(HaveOccurred(),
 			"INV-E15: chain verifier MUST detect tampering")
 		// Extract the oops error code (the code is not in .Error() for direct calls;

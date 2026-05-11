@@ -137,8 +137,8 @@ type OrchestratorRunner interface {
 // It carries the request_id (as a fixed-size [16]byte) and the aborter's
 // player ID. The production adapter converts this to dek.RequestID.
 type RekeyAbortRequest struct {
-	RequestID  [16]byte
-	PlayerID   string
+	RequestID [16]byte
+	PlayerID  string
 }
 
 // RekeyAbortOutcome is the socket-layer projection of the abort result.
@@ -410,7 +410,7 @@ func (h *RekeyHandler) buildRekeyRequest(
 		ContextType:   req.GetContextType(),
 		ContextID:     req.GetContextId(),
 		Justification: req.GetJustification(),
-		Operator: RekeyOperatorIdentity(identity),
+		Operator:      RekeyOperatorIdentity(identity),
 	}
 }
 

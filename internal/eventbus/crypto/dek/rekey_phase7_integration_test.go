@@ -66,7 +66,8 @@ func newPhase7TestSetup(t *testing.T) *phase7TestSetupImpl {
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute})
 	pcache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute})
 
-	mgr, err := dek.NewManager(provider, store, cache, pcache,
+	mgr, err := dek.NewManager(
+		provider, store, cache, pcache,
 		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },
 		&stubBindingResolver{},
 	)
@@ -256,7 +257,8 @@ func TestOrchestrator_Phase7_RequiresPreconditionPhase6Complete(t *testing.T) {
 
 	store := dek.NewStore(pool)
 	provider := newTestProvider(t)
-	mgr, merr := dek.NewManager(provider, store,
+	mgr, merr := dek.NewManager(
+		provider, store,
 		dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },
@@ -284,7 +286,8 @@ func TestOrchestrator_Phase7_NoAuditEmitter_FailsClosed(t *testing.T) {
 
 	provider := newTestProvider(t)
 	store := dek.NewStore(pool)
-	mgr, merr := dek.NewManager(provider, store,
+	mgr, merr := dek.NewManager(
+		provider, store,
 		dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
 		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },

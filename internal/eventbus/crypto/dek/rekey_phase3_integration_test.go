@@ -74,7 +74,8 @@ func newPhase3TestSetup(t *testing.T) *phase3TestSetup {
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute})
 	pcache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute})
 
-	mgr, err := dek.NewManager(provider, store, cache, pcache,
+	mgr, err := dek.NewManager(
+		provider, store, cache, pcache,
 		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },
 		&stubBindingResolver{},
 	)
@@ -100,7 +101,7 @@ func newPhase3TestSetup(t *testing.T) *phase3TestSetup {
 	// Resolve the new DEK material so encrypted-row seeding can verify
 	// round-trip later. We don't actually need newKey at setup, but it's
 	// load-bearing for INV-E8 assertions in TestPhase3_AADRebindOnRewrite.
-	const newDEKVer uint32 = 2 // GetOrCreate seeded at v1; MintNewDEKForRekey produces v2
+	const newDEKVer uint32 = 2                                                         // GetOrCreate seeded at v1; MintNewDEKForRekey produces v2
 	newKey, err := mgr.Resolve(context.Background(), codec.KeyID(newDEKID), newDEKVer) //nolint:gosec // G115: newDEKID is a BIGSERIAL PK
 	require.NoError(t, err)
 
@@ -225,7 +226,7 @@ func (s *phase3TestSetup) InsertEncryptedRow(plaintext []byte) ulid.ULID {
         VALUES ($1, 'events.g1.system.scene.01PH3', 'test.event', now(),
                 'system', $2, 1, $3, $4, '{}'::jsonb, $5, $6)
     `, id[:], envelopeBytes, string(s.codecName),
-		int64(time.Now().UnixNano()), // js_seq monotonic placeholder
+		int64(time.Now().UnixNano()),   // js_seq monotonic placeholder
 		s.oldDEKID, int32(s.oldDEKVer)) //nolint:gosec // G115: oldDEKVer is uint32 < 2^31
 	require.NoError(s.t, err)
 

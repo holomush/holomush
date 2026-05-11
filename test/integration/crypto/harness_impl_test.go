@@ -20,8 +20,8 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/jackc/pgx/v5/pgxpool"
+	. "github.com/onsi/gomega" //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/admin/policy"
 	auditchain "github.com/holomush/holomush/internal/eventbus/audit/chain"
@@ -34,14 +34,14 @@ import (
 // sharing one Postgres pool, a pre-seeded 1000-event fixture, and assertion /
 // fault-injection helpers.
 type Harness struct {
-	Primary        *holomushtest.Server
-	Secondary      *holomushtest.Server
-	AdminCli       *holomushtest.AdminClient
-	DB             *pgxpool.Pool
-	Game           string
-	AdminPlayer    holomushtest.PlayerCreds
-	PartnerPlayer  holomushtest.PlayerCreds
-	SceneContext   dek.ContextID
+	Primary       *holomushtest.Server
+	Secondary     *holomushtest.Server
+	AdminCli      *holomushtest.AdminClient
+	DB            *pgxpool.Pool
+	Game          string
+	AdminPlayer   holomushtest.PlayerCreds
+	PartnerPlayer holomushtest.PlayerCreds
+	SceneContext  dek.ContextID
 	// OriginalPolicyHash stores the policy_hash captured by RememberCurrentPolicyHash.
 	// Used by INV-E25 tests to assert the hash did not change after a policy edit.
 	OriginalPolicyHash string
@@ -242,7 +242,8 @@ func (h *Harness) AssertAuditEventEmitted(subjectPattern, eventType string) {
 func (h *Harness) AssertRekeyChainIntactForContext(ctx dek.ContextID) {
 	scope := ctx.Type + ":" + ctx.ID
 	err := h.Primary.GetAuditChainVerifier().VerifyScope(
-		context.Background(), dek.RekeyHandlerFor(h.Game), scope)
+		context.Background(), dek.RekeyHandlerFor(h.Game), scope,
+	)
 	Expect(err).NotTo(HaveOccurred(), "INV-E14/E15: chain intact for %s", scope)
 }
 
@@ -452,7 +453,8 @@ func seedDEKID(base int64, ctxType, ctxID string) int64 {
 func (h *Harness) AssertPolicySetChainIntact(policyName string) {
 	handler := policy.PolicySetHandlerFor(h.Game)
 	err := h.Primary.VerifierForChain(handler).VerifyScope(
-		context.Background(), handler, policyName)
+		context.Background(), handler, policyName,
+	)
 	Expect(err).NotTo(HaveOccurred(),
 		"INV-D10/D11/D12: policy_set chain must be intact for %q", policyName)
 }
@@ -499,9 +501,9 @@ func (h *Harness) TamperPolicySetSelfHash(policyName string) {
 // to capture the hash before a mid-Rekey policy edit.
 //
 // Encoding mirrors Phase 7's audit payload format:
-// - "sha256:<hex>" for an existing chain head (what Phase 1 would freeze).
-// - "sha256:" + 64 zero hex digits when the chain is empty (genesis): Phase 1
-//   stores make([]byte, 32) (zero sentinel) and Phase 7 encodes it as zeros.
+//   - "sha256:<hex>" for an existing chain head (what Phase 1 would freeze).
+//   - "sha256:" + 64 zero hex digits when the chain is empty (genesis): Phase 1
+//     stores make([]byte, 32) (zero sentinel) and Phase 7 encodes it as zeros.
 func (h *Harness) RememberCurrentPolicyHash(policyName string) {
 	chainRepo := h.Primary.GetChainRepo()
 	prevHash, err := chainEmitterForPolicy(chainRepo, h.Game, policyName)

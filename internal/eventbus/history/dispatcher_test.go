@@ -16,11 +16,11 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/holomush/holomush/pkg/errutil"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/eventbus/crypto/aad"
 	"github.com/holomush/holomush/internal/eventbus/history/source"
+	"github.com/holomush/holomush/pkg/errutil"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
 

@@ -44,7 +44,8 @@ func newPhase6TestSetup(t *testing.T) *phase6TestSetupImpl {
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute})
 	pcache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute})
 
-	mgr, err := dek.NewManager(provider, store, cache, pcache,
+	mgr, err := dek.NewManager(
+		provider, store, cache, pcache,
 		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },
 		&stubBindingResolver{},
 	)
@@ -103,7 +104,8 @@ func (s *phase6TestSetupImpl) RunUpToPhase5Complete() dek.RequestID {
 func (s *phase6TestSetupImpl) loadDestroyedAt(dekID int64) *time.Time {
 	s.t.Helper()
 	var destroyedAt *time.Time
-	err := s.pool.QueryRow(context.Background(),
+	err := s.pool.QueryRow(
+		context.Background(),
 		`SELECT destroyed_at FROM crypto_keys WHERE id = $1`, dekID,
 	).Scan(&destroyedAt)
 	require.NoError(s.t, err)
@@ -175,7 +177,8 @@ func TestOrchestrator_Phase6_NoDestroyer_FailsClosed(t *testing.T) {
 	store := dek.NewStore(pool)
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute})
 	pcache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute})
-	mgr, err := dek.NewManager(provider, store, cache, pcache,
+	mgr, err := dek.NewManager(
+		provider, store, cache, pcache,
 		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },
 		&stubBindingResolver{},
 	)

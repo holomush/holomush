@@ -96,16 +96,16 @@ func (o *Orchestrator) SetPhase5Coordinator(c Phase5Coordinator) {
 //  3. Resolve old + new DEK versions via store.selectByPK (orchestrator
 //     has the PKs from the checkpoint row).
 //  4. Call Phase5Coordinator.RequestInvalidation with action="rekey".
-//  5a. On N-of-N success (coord returns nil): RecordPhase5Success — the
-//      checkpoint advances to phase5_invalidate with phase5_missing_members
-//      cleared to NULL.
-//  5b. On partial-ack failure (coord returns an oops error with
-//      Context()["missing_members"]): extract the missing-member set, JSON-
-//      encode it, RecordPhase5Timeout — the checkpoint advances to (or
-//      stays at) phase5_invalidate with phase5_missing_members populated.
-//      Returns DEK_REKEY_PHASE5_TIMEOUT.
-//  5c. On any other Coordinator error: surface it wrapped under
-//      DEK_REKEY_PHASE5_FAILED. No checkpoint mutation.
+//     5a. On N-of-N success (coord returns nil): RecordPhase5Success — the
+//     checkpoint advances to phase5_invalidate with phase5_missing_members
+//     cleared to NULL.
+//     5b. On partial-ack failure (coord returns an oops error with
+//     Context()["missing_members"]): extract the missing-member set, JSON-
+//     encode it, RecordPhase5Timeout — the checkpoint advances to (or
+//     stays at) phase5_invalidate with phase5_missing_members populated.
+//     Returns DEK_REKEY_PHASE5_TIMEOUT.
+//     5c. On any other Coordinator error: surface it wrapped under
+//     DEK_REKEY_PHASE5_FAILED. No checkpoint mutation.
 //
 // Status-mapping note: the FSM (checkpoint_fsm.go, owned by .14) declares
 // CheckpointStatusPhase5Invalidate as the single Phase-5-related status.
@@ -272,13 +272,15 @@ func (o *Orchestrator) RunPhase5WithForceDestroy(ctx context.Context, rid Reques
 	// member list.
 	missing, decodeErr := ckpt.Phase5MissingMembers()
 	if decodeErr != nil {
-		o.logger.WarnContext(ctx, "phase5 force-destroy: missing_members decode failed; logging without member list",
+		o.logger.WarnContext(
+			ctx, "phase5 force-destroy: missing_members decode failed; logging without member list",
 			"request_id", rid.String(),
 			"err", decodeErr.Error(),
 		)
 		missing = nil
 	}
-	o.logger.WarnContext(ctx, "phase5 force-destroy bypass invoked — split-brain risk",
+	o.logger.WarnContext(
+		ctx, "phase5 force-destroy bypass invoked — split-brain risk",
 		"request_id", rid.String(),
 		"context_type", ckpt.ContextType,
 		"context_id", ckpt.ContextID,

@@ -101,7 +101,8 @@ var _ = Describe("Rekey with dual-control site policy", func() {
 		// Fetch the events_audit row for the rekey audit event by subject pattern
 		// and event type, then decode the envelope to check the payload.
 		var rawEnvelope []byte
-		err = h.DB.QueryRow(ctx,
+		err = h.DB.QueryRow(
+			ctx,
 			`SELECT envelope FROM events_audit
 			  WHERE subject LIKE $1
 			    AND type = $2

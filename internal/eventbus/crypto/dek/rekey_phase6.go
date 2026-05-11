@@ -107,7 +107,8 @@ func (o *Orchestrator) RunPhase6(ctx context.Context, rid RequestID) error {
 		// Cache eviction failure is non-fatal for correctness — the row is
 		// already destroyed so any Resolve call will miss the DB row. Log
 		// via the CAS update path; do not block the state transition.
-		o.logger.WarnContext(ctx, "phase6 local cache eviction failed; proceeding with state transition",
+		o.logger.WarnContext(
+			ctx, "phase6 local cache eviction failed; proceeding with state transition",
 			"request_id", rid.String(),
 			"old_dek_id", ckpt.OldDEKID,
 			"err", err.Error(),

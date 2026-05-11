@@ -28,11 +28,11 @@ import (
 	"log/slog"
 	"time"
 
-	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
-	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/protobuf/proto"
 
@@ -62,7 +62,8 @@ func (d *directColdLookup) LookupByID(ctx context.Context, id eventbus.EventID) 
 		dekVersion *uint32
 		ts         time.Time
 	)
-	err := d.pool.QueryRow(ctx,
+	err := d.pool.QueryRow(
+		ctx,
 		`SELECT id, subject, type, envelope, codec, dek_ref, dek_version, timestamp
 		   FROM events_audit
 		  WHERE id = $1`,

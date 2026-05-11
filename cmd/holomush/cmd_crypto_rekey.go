@@ -295,8 +295,8 @@ func newRekeyResumeCmd(factory adminClientFactory) *cobra.Command {
 // It handles --force-destroy confirmation (TTY or --confirm), authenticates,
 // and calls the RekeyResume streaming RPC.
 func runRekeyResume(cmd *cobra.Command, factory adminClientFactory, requestIDStr string) error {
-	forceDestroy, _ := cmd.Flags().GetBool("force-destroy")   //nolint:errcheck // flag defined in newRekeyResumeCmd; absence is a programmer error
-	confirmFlag, _ := cmd.Flags().GetString("confirm")         //nolint:errcheck // flag defined in newRekeyResumeCmd; absence is a programmer error
+	forceDestroy, _ := cmd.Flags().GetBool("force-destroy") //nolint:errcheck // flag defined in newRekeyResumeCmd; absence is a programmer error
+	confirmFlag, _ := cmd.Flags().GetString("confirm")      //nolint:errcheck // flag defined in newRekeyResumeCmd; absence is a programmer error
 
 	// Parse request_id before touching network.
 	requestIDBytes, err := parseRequestID(requestIDStr)
@@ -359,10 +359,10 @@ func runRekeyResume(cmd *cobra.Command, factory adminClientFactory, requestIDStr
 // use the --confirm flag directly.
 func promptForceDestroyConfirm(r io.Reader, w io.Writer, requestIDStr string) (string, error) {
 	fmt.Fprintf(w, "\n⚠  DESTRUCTIVE: --force-destroy bypasses Phase 5 cluster invalidation.\n") //nolint:errcheck // prompt output; write failure is non-fatal
-	fmt.Fprintf(w, "   Replicas with stale DEK caches will return DEK_NOT_FOUND on cache\n")    //nolint:errcheck // prompt output; write failure is non-fatal
-	fmt.Fprintf(w, "   miss until they restart and resync. This event will be recorded\n")      //nolint:errcheck // prompt output; write failure is non-fatal
-	fmt.Fprintf(w, "   in the rekey audit chain with force_destroy=true.\n\n")                  //nolint:errcheck // prompt output; write failure is non-fatal
-	fmt.Fprintf(w, "   Type the context_id to confirm (e.g. scene:<id>): ")                     //nolint:errcheck // prompt output; write failure is non-fatal
+	fmt.Fprintf(w, "   Replicas with stale DEK caches will return DEK_NOT_FOUND on cache\n")     //nolint:errcheck // prompt output; write failure is non-fatal
+	fmt.Fprintf(w, "   miss until they restart and resync. This event will be recorded\n")       //nolint:errcheck // prompt output; write failure is non-fatal
+	fmt.Fprintf(w, "   in the rekey audit chain with force_destroy=true.\n\n")                   //nolint:errcheck // prompt output; write failure is non-fatal
+	fmt.Fprintf(w, "   Type the context_id to confirm (e.g. scene:<id>): ")                      //nolint:errcheck // prompt output; write failure is non-fatal
 
 	_ = requestIDStr // future: fetch status to show "Missing replicas at last attempt"
 
@@ -464,9 +464,9 @@ func runRekeyStatus(cmd *cobra.Command, factory adminClientFactory, requestIDStr
 
 // printRekeyStatus renders a RekeyStatusResponse to w in human-readable form.
 func printRekeyStatus(w io.Writer, r *adminv1.RekeyStatusResponse) {
-	fmt.Fprintf(w, "request_id:    %x\n", r.GetRequestId())              //nolint:errcheck // display output; write errors non-fatal
+	fmt.Fprintf(w, "request_id:    %x\n", r.GetRequestId())                        //nolint:errcheck // display output; write errors non-fatal
 	fmt.Fprintf(w, "context:       %s:%s\n", r.GetContextType(), r.GetContextId()) //nolint:errcheck // display output; write errors non-fatal
-	fmt.Fprintf(w, "status:        %s\n", r.GetStatus())                  //nolint:errcheck // display output; write errors non-fatal
+	fmt.Fprintf(w, "status:        %s\n", r.GetStatus())                           //nolint:errcheck // display output; write errors non-fatal
 	if r.GetForceDestroy() {
 		fmt.Fprintf(w, "force_destroy: true\n") //nolint:errcheck // display output; write errors non-fatal
 	}
