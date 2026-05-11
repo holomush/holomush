@@ -7,19 +7,220 @@
 // dispatcher.go: header-free shared logic. Hot path supplies inputs from
 // jetstream.Msg headers; cold path supplies inputs from PG row columns.
 // Both call decodeAuthorizeAndDispatch.
+//
+// Task 12 (holomush-jxo8.7.12) adds the dispatcher struct + WithSourceResolver
+// option, replacing inline dekMgr.Resolve with resolver.Resolve for INV-39
+// fallback support.
 package history
 
 import (
 	"context"
+	"errors"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/eventbus/crypto/aad"
+	"github.com/holomush/holomush/internal/eventbus/history/source"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
+
+// dispatcher wraps the per-call source resolution via a SourceResolver.
+// Construct via newDispatcher; configure with WithSourceResolver.
+//
+// DispatchFor replaces the inline dekMgr.Resolve call in
+// decodeAuthorizeAndDispatch with resolver.Resolve, enabling the INV-39
+// hot→cold-tier fallback (holomush-jxo8.7.12).
+type dispatcher struct {
+	resolver source.SourceResolver
+}
+
+// DispatcherOption configures a dispatcher.
+type DispatcherOption func(*dispatcher)
+
+// WithSourceResolver injects the SourceResolver used for DEK resolution and
+// optional cold-tier fallback (INV-39). Required for sensitive codec events.
+func WithSourceResolver(r source.SourceResolver) DispatcherOption {
+	return func(d *dispatcher) { d.resolver = r }
+}
+
+// newDispatcher constructs a dispatcher and applies opts.
+func newDispatcher(opts ...DispatcherOption) *dispatcher {
+	d := &dispatcher{}
+	for _, o := range opts {
+		o(d)
+	}
+	return d
+}
+
+// DispatchFor is the resolver-aware dispatcher for historical reads. It
+// replaces the inline dekMgr.Resolve block in decodeAuthorizeAndDispatch
+// with d.resolver.Resolve, enabling the INV-39 hot→cold-tier fallback.
+//
+// Auth flow is identical to decodeAuthorizeAndDispatch: identity codec
+// short-circuits; AuthGuard decision gates decryption; plugin decrypts
+// produce an audit record.
+//
+// INV-E20: AAD is constructed from resolved.Envelope's fields, not the
+// original envelope parameter. For TierColdFallback, resolved.Envelope
+// carries the cold-tier substitute proto bytes; its keyID/keyVersion supply
+// the DEK reference that was used to re-encrypt during Rekey.
+//
+// INV-E21: when resolver returns ErrMetadataOnly (double miss), the event is
+// delivered with MetadataOnly=true and empty payload.
+func (d *dispatcher) DispatchFor(
+	ctx context.Context,
+	envelope *eventbusv1.Event,
+	codecName codec.Name,
+	keyID codec.KeyID,
+	keyVersion uint32,
+	identity eventbus.SessionIdentity,
+	guard eventbus.SessionAuthGuard,
+	auditEm eventbus.SessionAuditEmitter,
+) (eventbus.Event, bool, error) {
+	var eventID ulid.ULID
+	if rawID := envelope.GetId(); len(rawID) == 16 {
+		copy(eventID[:], rawID)
+	}
+
+	// Identity codec: passthrough. AuthGuard NOT invoked.
+	if codecName == codec.NameIdentity {
+		return buildHistoryEventFromEnvelope(eventID, envelope, envelope.GetPayload()), false, nil
+	}
+
+	if guard == nil {
+		return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_AUTH_GUARD_NIL").
+			With("event_type", envelope.GetType()).
+			With("codec", string(codecName)).
+			Errorf("encrypted history read requires AuthGuard but got nil — cold-tier wiring is incomplete")
+	}
+
+	req := eventbus.SessionCheckRequest{
+		Identity:   identity,
+		KeyID:      keyID,
+		KeyVersion: keyVersion,
+		EventType:  envelope.GetType(),
+		EventID:    eventID,
+	}
+
+	decision, err := guard.Check(ctx, req)
+	if err != nil {
+		return eventbus.Event{}, false, oops.Code("EVENTBUS_AUTHGUARD_CHECK_FAILED").
+			With("event_type", envelope.GetType()).
+			Wrap(err)
+	}
+
+	if !decision.Permit {
+		return buildHistoryEventFromEnvelope(eventID, envelope, nil), true, nil
+	}
+
+	// Permit: resolve via SourceResolver.
+	if d.resolver == nil {
+		return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_RESOLVER_NIL").
+			Errorf("AuthGuard permitted decrypt but SourceResolver is nil — misconfiguration")
+	}
+
+	// Build the hot envelope to pass to the resolver. Payload carries the
+	// ciphertext bytes from the hot proto; subject/type/timestamp are not
+	// needed by SimpleResolver or FallbackResolver (only keyID/keyVersion are
+	// consulted for DEK lookup, and eventID for cold-tier lookup-by-id).
+	hotEnv := eventbus.NewEnvelopeFromFields(eventbus.EnvelopeFields{
+		EventID:    eventID,
+		Codec:      codecName,
+		KeyID:      keyID,
+		KeyVersion: keyVersion,
+		Payload:    envelope.GetPayload(),
+	})
+
+	resolved, err := d.resolver.Resolve(ctx, hotEnv)
+	if errors.Is(err, source.ErrMetadataOnly) {
+		// INV-E21: double miss — deliver metadata-only, no error.
+		return buildHistoryEventFromEnvelope(eventID, envelope, nil), true, nil
+	}
+	if err != nil {
+		return eventbus.Event{}, false, oops.Code("EVENTBUS_SOURCE_RESOLVE_FAILED").
+			With("event_id", eventID.String()).
+			Wrap(err)
+	}
+
+	// INV-E20: AAD and ciphertext come from resolved.Envelope, not the
+	// original envelope. For TierColdFallback, resolved.Envelope carries
+	// the cold-tier proto bytes (marshaled eventbusv1.Event); we unmarshal
+	// them to obtain the cold envelope's Subject/Type/Actor/Timestamp
+	// needed by aad.Build. For TierHot, the original proto is used directly.
+	var activeProto *eventbusv1.Event
+	var ciphertext []byte
+	switch resolved.SourceTier {
+	case source.TierColdFallback:
+		// Cold-tier payload bytes are the full marshaled eventbusv1.Event proto.
+		var coldProto eventbusv1.Event
+		if unmarshalErr := proto.Unmarshal(resolved.Envelope.Payload(), &coldProto); unmarshalErr != nil {
+			return eventbus.Event{}, false, oops.Code("EVENTBUS_SOURCE_COLD_UNMARSHAL_FAILED").
+				With("event_id", eventID.String()).
+				Wrap(unmarshalErr)
+		}
+		activeProto = &coldProto
+		ciphertext = coldProto.GetPayload()
+	default:
+		// TierHot: use the original proto envelope for metadata; ciphertext is
+		// the hot payload (same as resolved.Envelope.Payload() for hot tier).
+		activeProto = envelope
+		ciphertext = resolved.Envelope.Payload()
+	}
+
+	// INV-E20: AAD is built from activeProto (resolved envelope's fields).
+	aadBytes, err := aad.Build(activeProto, string(codecName), uint64(resolved.KeyID), resolved.KeyVersion)
+	if err != nil {
+		return eventbus.Event{}, false, oops.Code("EVENTBUS_AAD_BUILD_FAILED").Wrap(err)
+	}
+
+	c, err := codec.Resolve(codecName)
+	if err != nil {
+		return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_UNKNOWN_CODEC").
+			With("codec", string(codecName)).Wrap(err)
+	}
+
+	plaintext, err := c.Decode(ctx, ciphertext, resolved.Key, aadBytes)
+	if err != nil {
+		return eventbus.Event{}, false, oops.Code("EVENTBUS_CODEC_DECODE_FAILED").
+			With("codec", string(codecName)).Wrap(err)
+	}
+
+	// Plugin recipient: INV-19 — every plugin decrypt MUST produce an audit
+	// record. Fail closed if the emitter is absent or fails unexpectedly.
+	if identity.Kind == eventbus.IdentityKindPlugin {
+		if auditEm == nil {
+			return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_AUDIT_EMITTER_NIL").
+				Errorf("AuthGuard permitted plugin decrypt but no DecryptAuditEmitter configured (INV-19)")
+		}
+		rec := eventbus.PluginDecryptRecord{
+			PluginName:       identity.PluginName,
+			PluginInstanceID: identity.InstanceID,
+			EventID:          eventID,
+			EventSubject:     eventbus.Subject(activeProto.GetSubject()),
+			EventType:        eventbus.Type(activeProto.GetType()),
+			DEKRef:           resolved.KeyID,
+			DEKVersion:       resolved.KeyVersion,
+			GrantID:          decision.GrantID,
+		}
+		if emitErr := auditEm.EmitPluginDecrypt(ctx, rec); emitErr != nil {
+			if isHistoryAuditQueueFull(emitErr) {
+				for i := range plaintext {
+					plaintext[i] = 0
+				}
+				return buildHistoryEventFromEnvelope(eventID, envelope, nil), true, nil
+			}
+			return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_AUDIT_EMIT_FAILED").
+				With("emit_error", emitErr.Error()).
+				Errorf("plugin decrypt audit emit failed — cannot confirm audit landed (INV-19)")
+		}
+	}
+
+	return buildHistoryEventFromEnvelope(eventID, activeProto, plaintext), false, nil
+}
 
 // decodeAuthorizeAndDispatch is the header-free shared dispatcher for
 // historical reads. Both the hot tier (JetStream) and cold tier (PG)
