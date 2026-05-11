@@ -5,9 +5,11 @@ package socket
 
 import (
 	"context"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/samber/oops"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/access"
 	adminv1 "github.com/holomush/holomush/pkg/proto/holomush/admin/v1"
@@ -84,6 +86,30 @@ type OrchestratorRunner interface {
 	Run(ctx context.Context, req RekeyRunRequest) (RekeyRunOutcome, error)
 }
 
+// RekeyAbortRequest is the socket-layer projection of the abort input.
+// It carries the request_id (as a fixed-size [16]byte) and the aborter's
+// player ID. The production adapter converts this to dek.RequestID.
+type RekeyAbortRequest struct {
+	RequestID  [16]byte
+	PlayerID   string
+}
+
+// RekeyAbortOutcome is the socket-layer projection of the abort result.
+type RekeyAbortOutcome struct {
+	AbortedAt    time.Time
+	AuditEventID [16]byte
+}
+
+// RekeyAbortRunner is the narrow seam the RekeyHandler consumes for the
+// unary abort operation. The production wiring adapts dek.CheckpointRepo
+// and dek.RekeyAuditEmitter behind this interface to avoid importing dek
+// (which would create an import cycle via approval → adminauth → socket).
+//
+// INV-E17: the runner MUST accept single-control regardless of site policy.
+type RekeyAbortRunner interface {
+	RunAbort(ctx context.Context, req RekeyAbortRequest) (RekeyAbortOutcome, error)
+}
+
 // RekeyStreamSender is the narrow interface the RekeyHandler uses to emit
 // progress events. *connect.ServerStream[adminv1.RekeyProgress] satisfies
 // this at the ConnectRPC call site; tests use a fake.
@@ -91,11 +117,12 @@ type RekeyStreamSender interface {
 	Send(*adminv1.RekeyProgress) error
 }
 
-// RekeyHandler implements the Rekey and RekeyResume admin RPCs.
+// RekeyHandler implements the Rekey, RekeyResume, and RekeyAbort admin RPCs.
 //
 // It validates the operator session via RekeySessionStore, re-asserts the
 // crypto.operator capability and admin role (INV-D16 defense-in-depth),
-// then delegates to the OrchestratorRunner for the 7-phase lifecycle.
+// then delegates to the OrchestratorRunner for the 7-phase lifecycle or to
+// RekeyAbortRunner for the unary abort operation.
 //
 // MVP streaming: one RekeyCompleted or RekeyError event at end.
 // Per-phase progress updates are a follow-up enhancement; the proto
@@ -105,6 +132,7 @@ type RekeyHandler struct {
 	grants    access.SubjectResolver
 	roleStore OperatorRoleChecker
 	orch      OrchestratorRunner
+	abort     RekeyAbortRunner
 }
 
 // NewRekeyHandler constructs a RekeyHandler with explicit dependencies.
@@ -113,12 +141,14 @@ func NewRekeyHandler(
 	grants access.SubjectResolver,
 	roleStore OperatorRoleChecker,
 	orch OrchestratorRunner,
+	abort RekeyAbortRunner,
 ) *RekeyHandler {
 	return &RekeyHandler{
 		sessions:  sessions,
 		grants:    grants,
 		roleStore: roleStore,
 		orch:      orch,
+		abort:     abort,
 	}
 }
 
@@ -194,6 +224,66 @@ func (h *RekeyHandler) RekeyResume(
 	}
 	_ = ridFixed // consumed by the production OrchestratorRunner adapter
 	return h.runWithProgress(ctx, orchReq, stream)
+}
+
+// RekeyAbort is the AdminService.RekeyAbort RPC entry point. Validates the
+// session and crypto.operator capability, then delegates to RekeyAbortRunner.
+//
+// INV-E17-ABORT-NO-DUAL-CONTROL: abort is single-control regardless of site
+// dual_control_required policy. Any crypto.operator session may abort any
+// non-terminal checkpoint — not just the original primary operator.
+func (h *RekeyHandler) RekeyAbort(
+	ctx context.Context,
+	req *adminv1.RekeyAbortRequest,
+) (*adminv1.RekeyAbortResponse, error) {
+	identity, err := h.sessions.GetOperatorSession(req.GetSessionToken())
+	if err != nil {
+		return nil, oops.Wrap(err)
+	}
+	// INV-E17: only the crypto.operator capability is required — no admin role
+	// re-check, no dual-control approval. Abort is a non-destructive control
+	// operation; the destructive phase (DEK destroy) is part of rekey itself.
+	hasCap, err := access.HasPlayerGrant(ctx, h.grants, identity.PlayerID, access.CapabilityCryptoOperator)
+	if err != nil {
+		return nil, oops.Code("INGAME_GRANT_LOOKUP_FAILED").
+			With("player_id", identity.PlayerID).Wrap(err)
+	}
+	if !hasCap {
+		return nil, oops.Code("DENY_NOT_OPERATOR").
+			With("player_id", identity.PlayerID).
+			Errorf("crypto.operator capability absent")
+	}
+
+	if len(req.GetRequestId()) != 16 {
+		return nil, oops.Code("REKEY_INVALID_REQUEST_ID").
+			Errorf("request_id must be a 16-byte ULID")
+	}
+	var hasNonZero bool
+	for _, b := range req.GetRequestId() {
+		if b != 0 {
+			hasNonZero = true
+			break
+		}
+	}
+	if !hasNonZero {
+		return nil, oops.Code("REKEY_INVALID_REQUEST_ID").
+			Errorf("request_id must be a non-zero ULID")
+	}
+
+	var rid [16]byte
+	copy(rid[:], req.GetRequestId())
+
+	out, err := h.abort.RunAbort(ctx, RekeyAbortRequest{
+		RequestID: rid,
+		PlayerID:  identity.PlayerID,
+	})
+	if err != nil {
+		return nil, err //nolint:wrapcheck // runner returns typed oops errors; re-wrapping would discard the error code
+	}
+	return &adminv1.RekeyAbortResponse{
+		AbortedAt:    timestamppb.New(out.AbortedAt),
+		AuditEventId: out.AuditEventID[:],
+	}, nil
 }
 
 // assertOperatorAdmin re-asserts the two INV-D16 defense-in-depth gates:
@@ -318,4 +408,17 @@ func (c *RekeyConnectHandler) HandleRekeyResume(
 		return c.deny(err)
 	}
 	return nil
+}
+
+// HandleRekeyAbort adapts a ConnectRPC unary call to the
+// RekeyHandler.RekeyAbort method.
+func (c *RekeyConnectHandler) HandleRekeyAbort(
+	ctx context.Context,
+	req *connect.Request[adminv1.RekeyAbortRequest],
+) (*connect.Response[adminv1.RekeyAbortResponse], error) {
+	res, err := c.inner.RekeyAbort(ctx, req.Msg)
+	if err != nil {
+		return nil, c.deny(err)
+	}
+	return connect.NewResponse(res), nil
 }

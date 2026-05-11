@@ -102,13 +102,16 @@ func (h *compositeHandler) RekeyResume(
 	return h.rekeyHandler.HandleRekeyResume(ctx, req, stream) //nolint:wrapcheck // handler returns *connect.Error; wrapping would discard the ConnectRPC code
 }
 
-// RekeyAbort is implemented by the rekey handler (holomush-jxo8.7.29). Returns
-// Unimplemented until the handler is registered via Config.
+// RekeyAbort delegates to the registered RekeyRPCHandler (holomush-jxo8.7.29),
+// or returns Unimplemented if none was provided.
 func (h *compositeHandler) RekeyAbort(
-	_ context.Context,
-	_ *connect.Request[adminv1.RekeyAbortRequest],
+	ctx context.Context,
+	req *connect.Request[adminv1.RekeyAbortRequest],
 ) (*connect.Response[adminv1.RekeyAbortResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("RekeyAbort not registered"))
+	if h.rekeyHandler == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("RekeyAbort not registered"))
+	}
+	return h.rekeyHandler.HandleRekeyAbort(ctx, req) //nolint:wrapcheck // handler returns *connect.Error; wrapping would discard the ConnectRPC code
 }
 
 // RekeyStatus is implemented by the rekey handler (holomush-jxo8.7.30). Returns

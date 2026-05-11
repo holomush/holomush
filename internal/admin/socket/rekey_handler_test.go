@@ -9,6 +9,7 @@ import (
 
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
@@ -119,6 +120,8 @@ const (
 
 // newHandlerWithOperator creates a RekeyHandler backed by fakes where the
 // registered token maps to a player with crypto.operator + RoleAdmin.
+// The abort runner is set to a no-op fake (tests that verify abort behavior
+// should use newAbortHandlerWithOperator instead).
 func newHandlerWithOperator(t *testing.T, orch socket.OrchestratorRunner) *socket.RekeyHandler {
 	t.Helper()
 	sessions := &fakeRekeySessionStore{
@@ -127,7 +130,7 @@ func newHandlerWithOperator(t *testing.T, orch socket.OrchestratorRunner) *socke
 	}
 	grants := &fakeRekeyResolver{grants: []string{access.CapabilityCryptoOperator}}
 	roles := &fakeRekeyRoleChecker{roles: map[string][]string{rekeyTestPlayerID: {access.RoleAdmin}}}
-	return socket.NewRekeyHandler(sessions, grants, roles, orch)
+	return socket.NewRekeyHandler(sessions, grants, roles, orch, &fakeAbortRunner{})
 }
 
 // newHandlerNoOp creates a RekeyHandler where the session resolves but
@@ -141,7 +144,7 @@ func newHandlerNoOp(t *testing.T) *socket.RekeyHandler {
 	grants := &fakeRekeyResolver{grants: nil} // no capabilities
 	roles := &fakeRekeyRoleChecker{roles: map[string][]string{rekeyTestPlayerID: {access.RoleAdmin}}}
 	orch := &fakeOrchRunner{}
-	return socket.NewRekeyHandler(sessions, grants, roles, orch)
+	return socket.NewRekeyHandler(sessions, grants, roles, orch, &fakeAbortRunner{})
 }
 
 // --- tests ---
@@ -334,6 +337,158 @@ func TestRekeyResumeHandler_Rejects_EmptyRequestID(t *testing.T) {
 		RequestId:    nil,
 		ForceDestroy: false,
 	}, stream)
+	require.Error(t, err)
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "expected oops error, got %T: %v", err, err)
+	require.Equal(t, "REKEY_INVALID_REQUEST_ID", oopsErr.Code())
+}
+
+// --- RekeyAbort fakes and tests ---
+
+// fakeAbortRunner implements socket.RekeyAbortRunner for tests.
+type fakeAbortRunner struct {
+	outcome socket.RekeyAbortOutcome
+	err     error
+}
+
+func (f *fakeAbortRunner) RunAbort(_ context.Context, _ socket.RekeyAbortRequest) (socket.RekeyAbortOutcome, error) {
+	return f.outcome, f.err
+}
+
+var _ socket.RekeyAbortRunner = (*fakeAbortRunner)(nil)
+
+// newAbortHandlerWithOperator creates a RekeyHandler backed by fakes where
+// the registered token maps to an operator with crypto.operator + RoleAdmin,
+// and with the provided abort runner.
+func newAbortHandlerWithOperator(t *testing.T, abort socket.RekeyAbortRunner) *socket.RekeyHandler {
+	t.Helper()
+	sessions := &fakeRekeySessionStore{
+		token:    rekeyTestToken,
+		identity: socket.OperatorSession{PlayerID: rekeyTestPlayerID, TOTPVerified: true},
+	}
+	grants := &fakeRekeyResolver{grants: []string{access.CapabilityCryptoOperator}}
+	roles := &fakeRekeyRoleChecker{roles: map[string][]string{rekeyTestPlayerID: {access.RoleAdmin}}}
+	orch := &fakeOrchRunner{}
+	return socket.NewRekeyHandler(sessions, grants, roles, orch, abort)
+}
+
+// TestRekeyHandler_Abort_SingleControl_Allowed verifies INV-E17: a session with
+// only crypto.operator capability (no dual-control approval) can abort an
+// in-flight checkpoint even when site policy mandates dual-control for rekey.
+func TestRekeyHandler_Abort_SingleControl_Allowed(t *testing.T) {
+	abortedAt := timestamppb.Now()
+	eventID := [16]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+		0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10}
+	abort := &fakeAbortRunner{
+		outcome: socket.RekeyAbortOutcome{
+			AbortedAt:    abortedAt.AsTime(),
+			AuditEventID: eventID,
+		},
+	}
+	h := newAbortHandlerWithOperator(t, abort)
+	rid := [16]byte{0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+		0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20}
+
+	res, err := h.RekeyAbort(context.Background(), &adminv1.RekeyAbortRequest{
+		SessionToken: rekeyTestToken,
+		RequestId:    rid[:],
+	})
+	require.NoError(t, err, "INV-E17: Abort accepts single-control even when site mandates dual for rekey")
+	require.NotNil(t, res)
+	require.NotNil(t, res.AbortedAt, "AbortedAt must be populated")
+	require.Equal(t, eventID[:], res.AuditEventId, "AuditEventId must be the runner's returned event ID")
+}
+
+// TestRekeyHandler_Abort_Rejects_NoSession verifies that an empty session token
+// causes DENY_SESSION_INVALID before any abort logic.
+func TestRekeyHandler_Abort_Rejects_NoSession(t *testing.T) {
+	h := newAbortHandlerWithOperator(t, &fakeAbortRunner{})
+	rid := [16]byte{0x01}
+
+	_, err := h.RekeyAbort(context.Background(), &adminv1.RekeyAbortRequest{
+		SessionToken: "",
+		RequestId:    rid[:],
+	})
+	require.Error(t, err)
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "expected oops error, got %T: %v", err, err)
+	require.Equal(t, "DENY_SESSION_INVALID", oopsErr.Code())
+}
+
+// TestRekeyHandler_Abort_Rejects_NoCryptoOperatorCap verifies that a session
+// without crypto.operator is denied on the abort path.
+func TestRekeyHandler_Abort_Rejects_NoCryptoOperatorCap(t *testing.T) {
+	// newHandlerNoOp has no grants; we also need an abort runner
+	sessions := &fakeRekeySessionStore{
+		token:    rekeyTestToken,
+		identity: socket.OperatorSession{PlayerID: rekeyTestPlayerID, TOTPVerified: true},
+	}
+	grants := &fakeRekeyResolver{grants: nil} // no capabilities
+	roles := &fakeRekeyRoleChecker{roles: map[string][]string{rekeyTestPlayerID: {access.RoleAdmin}}}
+	orch := &fakeOrchRunner{}
+	h := socket.NewRekeyHandler(sessions, grants, roles, orch, &fakeAbortRunner{})
+
+	rid := [16]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+		0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10}
+	_, err := h.RekeyAbort(context.Background(), &adminv1.RekeyAbortRequest{
+		SessionToken: rekeyTestToken,
+		RequestId:    rid[:],
+	})
+	require.Error(t, err)
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "expected oops error, got %T: %v", err, err)
+	require.Equal(t, "DENY_NOT_OPERATOR", oopsErr.Code())
+}
+
+// TestRekeyHandler_Abort_Terminal verifies that when the abort runner returns
+// DEK_REKEY_CHECKPOINT_TERMINAL the handler surfaces it to the caller.
+func TestRekeyHandler_Abort_Terminal(t *testing.T) {
+	abort := &fakeAbortRunner{
+		err: oops.Code("DEK_REKEY_CHECKPOINT_TERMINAL").Errorf("checkpoint already terminal"),
+	}
+	h := newAbortHandlerWithOperator(t, abort)
+	rid := [16]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+		0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10}
+
+	_, err := h.RekeyAbort(context.Background(), &adminv1.RekeyAbortRequest{
+		SessionToken: rekeyTestToken,
+		RequestId:    rid[:],
+	})
+	require.Error(t, err)
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "expected oops error, got %T: %v", err, err)
+	require.Equal(t, "DEK_REKEY_CHECKPOINT_TERMINAL", oopsErr.Code())
+}
+
+// TestRekeyHandler_Abort_NotFound verifies that DEK_REKEY_CHECKPOINT_NOT_FOUND
+// from the runner is surfaced to the caller unchanged.
+func TestRekeyHandler_Abort_NotFound(t *testing.T) {
+	abort := &fakeAbortRunner{
+		err: oops.Code("DEK_REKEY_CHECKPOINT_NOT_FOUND").Errorf("checkpoint not found"),
+	}
+	h := newAbortHandlerWithOperator(t, abort)
+	rid := [16]byte{0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x01, 0x02,
+		0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A}
+
+	_, err := h.RekeyAbort(context.Background(), &adminv1.RekeyAbortRequest{
+		SessionToken: rekeyTestToken,
+		RequestId:    rid[:],
+	})
+	require.Error(t, err)
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "expected oops error, got %T: %v", err, err)
+	require.Equal(t, "DEK_REKEY_CHECKPOINT_NOT_FOUND", oopsErr.Code())
+}
+
+// TestRekeyHandler_Abort_Rejects_EmptyRequestID verifies that a nil/empty
+// RequestId is rejected before the abort runner is invoked.
+func TestRekeyHandler_Abort_Rejects_EmptyRequestID(t *testing.T) {
+	h := newAbortHandlerWithOperator(t, &fakeAbortRunner{})
+
+	_, err := h.RekeyAbort(context.Background(), &adminv1.RekeyAbortRequest{
+		SessionToken: rekeyTestToken,
+		RequestId:    nil,
+	})
 	require.Error(t, err)
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok, "expected oops error, got %T: %v", err, err)
