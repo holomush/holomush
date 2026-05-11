@@ -128,6 +128,81 @@ func TestAdminSocketSubsystemStopBeforeStartReturnsNil(t *testing.T) {
 	require.NoError(t, sub.Stop(context.Background()))
 }
 
+// TestRunErrMonitor_InvokesShutdownOnServerError verifies that a non-nil error
+// arriving on errCh causes the configured shutdown callback to fire with that
+// error. This is the holomush-jxo8.9 fix: replace silent log-only behavior
+// with parent-context cancel propagation, matching obsServer/controlGRPCServer
+// at cmd/holomush/core.go:298,914 via monitorServerErrors.
+func TestRunErrMonitor_InvokesShutdownOnServerError(t *testing.T) {
+	errCh := make(chan error, 1)
+	shutdownCh := make(chan error, 1)
+
+	go runErrMonitor(errCh, func(err error) { shutdownCh <- err })
+
+	sentinel := errors.New("admin socket accept loop died")
+	errCh <- sentinel
+
+	select {
+	case got := <-shutdownCh:
+		require.ErrorIs(t, got, sentinel)
+	case <-time.After(2 * time.Second):
+		t.Fatal("shutdown callback was not invoked within 2s of error delivery")
+	}
+}
+
+// TestRunErrMonitor_NilShutdownLogsOnly verifies the monitor tolerates a nil
+// shutdown (test/dev wiring) and returns cleanly without panic.
+func TestRunErrMonitor_NilShutdownLogsOnly(t *testing.T) {
+	errCh := make(chan error, 1)
+	done := make(chan struct{})
+	go func() {
+		runErrMonitor(errCh, nil)
+		close(done)
+	}()
+
+	errCh <- errors.New("test error with nil shutdown")
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runErrMonitor did not return after error with nil shutdown")
+	}
+}
+
+// TestRunErrMonitor_ChannelCloseReturnsWithoutShutdown verifies that closing
+// errCh (the normal Stop path) returns the monitor goroutine without firing
+// the shutdown callback. Stop is not a fatal error.
+func TestRunErrMonitor_ChannelCloseReturnsWithoutShutdown(t *testing.T) {
+	errCh := make(chan error)
+	done := make(chan struct{})
+
+	shutdownFired := false
+	go func() {
+		runErrMonitor(errCh, func(error) { shutdownFired = true })
+		close(done)
+	}()
+
+	close(errCh)
+
+	select {
+	case <-done:
+		assert.False(t, shutdownFired, "shutdown must NOT fire on normal channel close (Stop path)")
+	case <-time.After(2 * time.Second):
+		t.Fatal("runErrMonitor did not return after channel close")
+	}
+}
+
+// TestAdminSocketSubsystemConfig_ShutdownFieldExists is a compile-time sanity
+// check that the production wiring seam exists on the config struct. core.go
+// at admin subsystem construction MUST populate this with a cancel-the-parent
+// callback so post-startup server errors trigger graceful shutdown.
+func TestAdminSocketSubsystemConfig_ShutdownFieldExists(t *testing.T) {
+	cfg := AdminSocketSubsystemConfig{
+		Shutdown: func(error) {},
+	}
+	require.NotNil(t, cfg.Shutdown)
+}
+
 // TestAdminSocketSubsystemForwardsRekeyHandlerToServerConfig verifies that
 // the AdminSocketSubsystemConfig.RekeyHandler field is plumbed through into
 // the underlying socket.Config when Start constructs the Server. This is the

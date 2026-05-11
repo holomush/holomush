@@ -425,4 +425,3 @@ func buildEncryptedDispatchInputs(t *testing.T, plaintext []byte) (codec.Key, *e
 	})
 	return testKey, hotProto, hotEnv
 }
-

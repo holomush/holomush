@@ -116,8 +116,8 @@ tasks:
       # 0% despite being fully exercised by test/integration/audit/ and the
       # store migration tests. See .codecov.yml for Codecov's merge behavior.
       - gotestsum --format pkgname -- -race -tags=integration -count=1 -coverprofile=coverage-int.out -covermode=atomic -coverpkg=./...
-        ./cmd/holomush/ ./internal/access/setup/ ./internal/admin/approval/ ./internal/auth/postgres/ ./internal/content/
-        ./internal/eventbus/audit/ ./internal/eventbus/audit/chain/ ./internal/admin/policy/ ./internal/eventbus/crypto/dek/
+        ./cmd/holomush/ ./internal/access/setup/ ./internal/admin/approval/ ./internal/admin/socket/ ./internal/auth/postgres/
+        ./internal/content/ ./internal/eventbus/audit/ ./internal/eventbus/audit/chain/ ./internal/admin/policy/ ./internal/eventbus/crypto/dek/
         ./internal/eventbus/crypto/kek/ ./internal/eventbus/history/ ./internal/store/ ./plugins/core-scenes/ ./test/testutil/
         ./test/integration/...
 

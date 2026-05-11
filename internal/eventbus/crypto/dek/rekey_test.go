@@ -10,9 +10,9 @@ import (
 )
 
 // TestRequestID_StringAndIsZero covers the two RequestID accessors:
-// - zero value: IsZero==true, String returns the 26-char zero-ULID.
-// - non-zero (minted via idgen.New per CLAUDE.md "ULID Generation"):
-//   IsZero==false, String is 26 chars.
+//   - zero value: IsZero==true, String returns the 26-char zero-ULID.
+//   - non-zero (minted via idgen.New per CLAUDE.md "ULID Generation"):
+//     IsZero==false, String is 26 chars.
 func TestRequestID_StringAndIsZero(t *testing.T) {
 	var zero dek.RequestID
 	require.True(t, zero.IsZero())
