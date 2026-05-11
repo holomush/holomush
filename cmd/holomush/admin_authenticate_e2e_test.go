@@ -509,7 +509,8 @@ var _ = Describe("Admin Authenticate Lifecycle (full-stack E2E)", func() {
 		// that gap (CodeRabbit #1, INV-D14 contract).
 		clearedSubject := totp.SubjectCleared(env.gameID, env.playerB.String())
 		var envelopeBytes []byte
-		err = env.queryPool.QueryRow(env.ctx,
+		err = env.queryPool.QueryRow(
+			env.ctx,
 			`SELECT envelope FROM events_audit
 			  WHERE subject = $1 AND type = $2
 			  ORDER BY js_seq DESC LIMIT 1`,

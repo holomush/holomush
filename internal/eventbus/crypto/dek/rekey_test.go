@@ -4,8 +4,8 @@ package dek_test
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
+	"github.com/stretchr/testify/require"
 )
 
 func TestComputeRekeyArgsHash_StableAcrossEncodings(t *testing.T) {

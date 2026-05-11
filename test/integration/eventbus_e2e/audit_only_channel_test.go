@@ -83,7 +83,8 @@ func TestAuditOnlyChannelPersistsToEventsAudit(t *testing.T) {
 	hostSub.AwaitDrained(t, 10*time.Second)
 	require.Eventually(t, func() bool {
 		var count int
-		err := pool.QueryRow(ctx,
+		err := pool.QueryRow(
+			ctx,
 			`SELECT COUNT(*) FROM events_audit WHERE subject LIKE $1`,
 			"events."+gameID+".%",
 		).Scan(&count)

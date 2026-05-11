@@ -302,7 +302,8 @@ var _ = Describe("EmitCurrentSnapshot (chain-init signal)", func() {
 
 		// Bootstrap signal MUST be present.
 		var value string
-		err := testPool.QueryRow(context.Background(),
+		err := testPool.QueryRow(
+			context.Background(),
 			`SELECT value FROM bootstrap_metadata WHERE key = $1`,
 			"crypto.policy_chain_initialized."+policyName,
 		).Scan(&value)

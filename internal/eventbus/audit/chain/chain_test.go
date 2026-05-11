@@ -109,9 +109,9 @@ func TestRecomputeSelfHash_DeterministicOverPayloadOrder(t *testing.T) {
 // whose SubjectPrefix does not start with "events." is rejected.
 func TestValidateRegistration_RejectsNonEventsPrefix(t *testing.T) {
 	bad := chain.Chain{
-		SubjectPrefix:    "audit.game.system.rekey",
-		SelfHashField:    "self_hash",
-		PrevHashField:    "prev_hash",
+		SubjectPrefix:     "audit.game.system.rekey",
+		SelfHashField:     "self_hash",
+		PrevHashField:     "prev_hash",
 		ScopePayloadField: "scope",
 	}
 	err := chain.ValidateRegistration(bad)
@@ -123,9 +123,9 @@ func TestValidateRegistration_RejectsNonEventsPrefix(t *testing.T) {
 // a Chain with an empty ScopePayloadField is rejected.
 func TestValidateRegistration_RejectsMissingScopeFromPayload(t *testing.T) {
 	bad := chain.Chain{
-		SubjectPrefix:    "events.game.system.rekey",
-		SelfHashField:    "self_hash",
-		PrevHashField:    "prev_hash",
+		SubjectPrefix:     "events.game.system.rekey",
+		SelfHashField:     "self_hash",
+		PrevHashField:     "prev_hash",
 		ScopePayloadField: "", // missing
 	}
 	err := chain.ValidateRegistration(bad)
@@ -136,9 +136,9 @@ func TestValidateRegistration_RejectsMissingScopeFromPayload(t *testing.T) {
 // descriptor passes validation without error.
 func TestValidateRegistration_AcceptsValidChain(t *testing.T) {
 	good := chain.Chain{
-		SubjectPrefix:    "events.game.system.rekey",
-		SelfHashField:    "self_hash",
-		PrevHashField:    "prev_hash",
+		SubjectPrefix:     "events.game.system.rekey",
+		SelfHashField:     "self_hash",
+		PrevHashField:     "prev_hash",
 		ScopePayloadField: "scope",
 	}
 	require.NoError(t, chain.ValidateRegistration(good))
@@ -148,9 +148,9 @@ func TestValidateRegistration_AcceptsValidChain(t *testing.T) {
 // missing a SelfHashField name is rejected.
 func TestValidateRegistration_RejectsEmptySelfHashField(t *testing.T) {
 	bad := chain.Chain{
-		SubjectPrefix:    "events.game.system.rekey",
-		SelfHashField:    "", // missing
-		PrevHashField:    "prev_hash",
+		SubjectPrefix:     "events.game.system.rekey",
+		SelfHashField:     "", // missing
+		PrevHashField:     "prev_hash",
 		ScopePayloadField: "scope",
 	}
 	err := chain.ValidateRegistration(bad)
@@ -161,9 +161,9 @@ func TestValidateRegistration_RejectsEmptySelfHashField(t *testing.T) {
 // missing a PrevHashField name is rejected.
 func TestValidateRegistration_RejectsEmptyPrevHashField(t *testing.T) {
 	bad := chain.Chain{
-		SubjectPrefix:    "events.game.system.rekey",
-		SelfHashField:    "self_hash",
-		PrevHashField:    "", // missing
+		SubjectPrefix:     "events.game.system.rekey",
+		SelfHashField:     "self_hash",
+		PrevHashField:     "", // missing
 		ScopePayloadField: "scope",
 	}
 	err := chain.ValidateRegistration(bad)

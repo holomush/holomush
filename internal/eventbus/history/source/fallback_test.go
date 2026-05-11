@@ -45,13 +45,17 @@ func (f *fakeDEKManager) Resolve(_ context.Context, k codec.KeyID, v uint32) (co
 func (f *fakeDEKManager) GetOrCreate(context.Context, dek.ContextID, []dek.Participant) (codec.Key, error) {
 	panic("unused")
 }
+
 func (f *fakeDEKManager) Participants(context.Context, codec.KeyID, uint32) ([]dek.Participant, error) {
 	panic("unused")
 }
+
 func (f *fakeDEKManager) Add(context.Context, dek.ContextID, dek.Participant) error { panic("unused") }
+
 func (f *fakeDEKManager) Rotate(context.Context, dek.ContextID, []dek.Participant, string) error {
 	panic("unused")
 }
+
 func (f *fakeDEKManager) Rekey(context.Context, dek.ContextID, string, dek.OperatorFactors) error {
 	panic("unused")
 }

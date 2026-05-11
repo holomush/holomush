@@ -31,9 +31,9 @@ import (
 // Spec invariants validated:
 //   - INV-D10: genesis row of a chain has prev_hash == nil.
 //   - INV-D11: every chain extension's prev_hash equals the predecessor's
-//              recomputed policy_hash.
+//     recomputed policy_hash.
 //   - INV-D12: every row's stored policy_hash equals the recomputed hash
-//              over its own canonicalized payload.
+//     over its own canonicalized payload.
 //
 // Strategy deviation from plan §Task 27 step text ("boot the full server"):
 //

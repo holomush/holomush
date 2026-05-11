@@ -70,7 +70,7 @@ const (
 // Rule: every forward phase transition plus every non-terminal → Aborted edge
 // is listed here. Terminal states (Complete, Aborted) have no outgoing edges.
 var validTransitions = map[CheckpointStatus][]CheckpointStatus{
-	CheckpointStatusPending:              {CheckpointStatusPhase1Auth, CheckpointStatusAborted},
+	CheckpointStatusPending:             {CheckpointStatusPhase1Auth, CheckpointStatusAborted},
 	CheckpointStatusPhase1Auth:          {CheckpointStatusPhase2MintDEK, CheckpointStatusAborted},
 	CheckpointStatusPhase2MintDEK:       {CheckpointStatusPhase3ReencryptCold, CheckpointStatusAborted},
 	CheckpointStatusPhase3ReencryptCold: {CheckpointStatusPhase5Invalidate, CheckpointStatusAborted},

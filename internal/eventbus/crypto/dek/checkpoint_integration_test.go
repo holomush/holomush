@@ -92,7 +92,8 @@ func TestCheckpointRepo_UpdateStatus_CASRejectsStaleWriter(t *testing.T) {
 	// Row is at 'pending'. Try a transition from Phase2MintDEK → Phase3ReencryptCold
 	// which the FSM allows, but the CAS predicate (status = 'phase2_mint_dek') fails
 	// because the row is actually 'pending'. (INV-E1)
-	err := repo.UpdateStatus(context.Background(), rid,
+	err := repo.UpdateStatus(
+		context.Background(), rid,
 		dek.CheckpointStatusPhase2MintDEK,
 		dek.CheckpointStatusPhase3ReencryptCold,
 	)

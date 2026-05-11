@@ -30,22 +30,22 @@ import (
 // Codec is identity (cleartext) per master spec §8.5; rides the
 // system.rekey chain via auditchain primitive.
 type RekeyAuditPayload struct {
-	RequestID            string           `json:"request_id"`
+	RequestID            string            `json:"request_id"`
 	Context              RekeyAuditContext `json:"context"`
-	OldDEK               RekeyAuditDEK    `json:"old_dek"`
-	NewDEK               RekeyAuditDEK    `json:"new_dek"`
-	PrimaryOperator      RekeyAuditOp     `json:"primary_operator"`
-	DualControlPartner   *RekeyAuditPart  `json:"dual_control_partner,omitempty"`
-	Justification        string           `json:"justification"`
-	PolicyHash           string           `json:"policy_hash"`
-	PolicyChainGenesisID string           `json:"policy_chain_genesis_id"`
-	Phases               RekeyAuditPhases `json:"phases"`
-	ForceDestroy         bool             `json:"force_destroy"`
-	StartedAt            time.Time        `json:"started_at"`
-	CompletedAt          time.Time        `json:"completed_at"`
-	ServerIdentity       string           `json:"server_identity"`
-	SpecVersion          string           `json:"spec_version"`
-	RekeyChainField      RekeyChainBlock  `json:"rekey_chain"`
+	OldDEK               RekeyAuditDEK     `json:"old_dek"`
+	NewDEK               RekeyAuditDEK     `json:"new_dek"`
+	PrimaryOperator      RekeyAuditOp      `json:"primary_operator"`
+	DualControlPartner   *RekeyAuditPart   `json:"dual_control_partner,omitempty"`
+	Justification        string            `json:"justification"`
+	PolicyHash           string            `json:"policy_hash"`
+	PolicyChainGenesisID string            `json:"policy_chain_genesis_id"`
+	Phases               RekeyAuditPhases  `json:"phases"`
+	ForceDestroy         bool              `json:"force_destroy"`
+	StartedAt            time.Time         `json:"started_at"`
+	CompletedAt          time.Time         `json:"completed_at"`
+	ServerIdentity       string            `json:"server_identity"`
+	SpecVersion          string            `json:"spec_version"`
+	RekeyChainField      RekeyChainBlock   `json:"rekey_chain"`
 }
 
 // RekeyAuditContext is the context (type+id) embedded in the rekey audit payload.
@@ -87,7 +87,7 @@ type RekeyAuditPhases struct {
 // round-trips are byte-stable without base64 encoding.
 type RekeyChainBlock struct {
 	Scope       string  `json:"scope"`
-	PrevHash    *string `json:"prev_hash"`    // null at genesis
+	PrevHash    *string `json:"prev_hash"` // null at genesis
 	PrevEventID string  `json:"prev_event_id"`
 	SelfHash    string  `json:"self_hash"`
 }
