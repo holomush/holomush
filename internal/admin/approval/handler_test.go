@@ -55,6 +55,10 @@ func (r *fakeApprovalRepo) MarkApproved(_ context.Context, _ approval.RequestID,
 	return r.markErr
 }
 
+func (r *fakeApprovalRepo) GetByOpArgsHash(_ context.Context, _ string, _ []byte, _ string) (approval.Approval, error) {
+	return approval.Approval{}, errors.New("not used")
+}
+
 func (r *fakeApprovalRepo) WaitForApproval(_ context.Context, _ approval.RequestID, _ time.Time) (approval.Approval, error) {
 	return approval.Approval{}, errors.New("not used")
 }
