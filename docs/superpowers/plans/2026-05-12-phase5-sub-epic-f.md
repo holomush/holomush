@@ -1,7 +1,7 @@
 # Phase 5 Sub-Epic F Implementation Plan — `AdminReadStream` + Pre-Data Audit + `read-stream` CLI
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
+>
 > **PLAN STATUS (revision 8, 2026-05-12):** The original 27-task plan (Tasks 0–26, materializing as 24 child beads under `holomush-jxo8.8`) was implemented to completion at bookmark `jxo8-f-target`. Post-implementation review surfaced an architectural error: F's coupling to `HistoryReader`/`dispatcher` was the root cause of the merge-source-drop bug and produced four compensation wrappers that should never have existed. **The 24-commit chain is abandoned.** This plan is amended with **§Revision 8 Supplement** (immediately below) listing the rewritten task set. See [ADR 0017](../../adr/0017-admin-readstream-bypasses-history-reader.md) for the decision and reasoning.
 
 ## Revision 8 Supplement (canonical task set)
@@ -45,6 +45,7 @@ Numbering uses `R.<n>` prefix to distinguish from the original Task 0–26 set. 
 **Net-new — handler (rewritten from old T16+T17+T18):**
 
 - **R.13** `internal/admin/readstream/handler.go` — orchestration. Pseudocode:
+
   ```text
   Config {
     SessionStore, SubjectResolver  (auth deps, no SessionAuthorizer adapter)
@@ -79,6 +80,7 @@ Numbering uses `R.<n>` prefix to distinguish from the original Task 0–26 set. 
     10. stream.Send(buildFinishedFrame(term, eventsScanned, decryptFails))
     11. AuditEmitter.EmitCompleted(ctx, completedPayload, requestID)  → on err, WARN + metric, return streamErr
   ```
+
   Production type is **closed** (no test-only fields). ~300 LOC.
 - **R.13-tests** Handler invariant tests (INV-F1, F2, F3, F10, F11, F15). Tests use `testHandler` wrapper from `export_test.go` (see R.13a).
 - **R.13a** `internal/admin/readstream/export_test.go` — `testHandler` wrapper exposing internal stages; `recordingStream` test impl of stream sender. Production Handler stays closed.
@@ -118,6 +120,7 @@ The following old tasks are deleted entirely and the corresponding code does not
 | T26 INV-F meta-test | `uv` (8e1) | Bookkeeping, not safety; INV-F18 deleted. |
 
 Plus partial deletions:
+
 - `staleDEKColdResolver` + `isDEKMissingErr` from old T21 wiring (commit `nz` 258) — superseded by R.11's `decrypt.go`.
 - `operatorSessionAuthorizer` adapter + `SessionAuthorizer` interface from old T21 wiring — superseded by R.13's inline 2-call.
 - `streamDataOverride`, `responseSenderWrapper`, `SetResponseSenderWrapperForTest`, `SessionAuthorizerWrapperForTest`, `ReadStreamAuditEmitterWrapperForTest` test seams from old T16/T17/T21 — superseded by R.13a's `testHandler` wrapper.

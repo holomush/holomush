@@ -71,7 +71,7 @@ full reasoning, the alternatives considered, and the rejected approaches.
 - The dual-control flow (`GetByOpArgsHash` idempotent reuse + `Open` +
   `WaitForApproval` + timeout; INV-F11, INV-F17).
 - The 2-call session→capability authorization pattern (`sessions.GetOperatorSession`
-  + `access.HasPlayerGrant`); inlined into the handler instead of wrapped in
+  - `access.HasPlayerGrant`); inlined into the handler instead of wrapped in
   the `SessionAuthorizer` adapter.
 - `NoPlaintextReason` enum expansion 4→7 (proto + Go mirror; INV-F16
   stamping-locality).
@@ -113,8 +113,6 @@ sections marked **[SUPERSEDED by §0]** below replaced by the r8 shape:
 - §7 Validation strategy / harness fold-in — preserved.
 
 ---
-
-
 
 ## Authors
 
