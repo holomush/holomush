@@ -148,7 +148,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(34), version)
+	assert.Equal(t, uint(35), version)
 	assert.False(t, dirty)
 
 	tables = queryTableNames(t, ctx, connStr)
@@ -173,7 +173,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(34), version)
+	assert.Equal(t, uint(35), version)
 	assert.False(t, dirty)
 
 	tables = queryTableNames(t, ctx, connStr)
@@ -546,4 +546,74 @@ func TestMigrator_ConcurrentMigrationDirtyStateHandling(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, finalVersion, v2Final, "migrator2 should see same final version")
 	assert.False(t, dirty2Final, "migrator2 should see clean state")
+}
+
+// TestMigration000035_DropsCryptoRekeyCheckpointFKs asserts the load-bearing
+// post-condition of migration 000035 (holomush-jxo8.7.48): no foreign-key
+// constraints remain on crypto_rekey_checkpoints.{new_dek_id,old_dek_id}.
+//
+// Without this assertion, a future regression that names the constraints
+// differently (e.g. explicit CONSTRAINT clause in 000031) would silently
+// leave the FKs in place — the migration's DROP CONSTRAINT IF EXISTS would
+// match nothing, no error, no test failure. Asserting the actual
+// information_schema state is the load-bearing check.
+func TestMigration000035_DropsCryptoRekeyCheckpointFKs(t *testing.T) {
+	ctx := context.Background()
+
+	pgContainer, err := postgres.Run(
+		ctx,
+		"postgres:18-alpine",
+		postgres.WithDatabase("test"),
+		postgres.WithUsername("test"),
+		postgres.WithPassword("test"),
+		postgres.BasicWaitStrategies(),
+	)
+	require.NoError(t, err)
+	defer pgContainer.Terminate(ctx)
+
+	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	require.NoError(t, err)
+
+	migrator, err := store.NewMigrator(connStr)
+	require.NoError(t, err)
+	defer migrator.Close()
+
+	require.NoError(t, migrator.Up())
+
+	conn, err := pgx.Connect(ctx, connStr)
+	require.NoError(t, err)
+	defer conn.Close(ctx)
+
+	// Count remaining FK constraints on crypto_rekey_checkpoints. After
+	// migration 000035 there MUST be zero. (The table itself still has
+	// PRIMARY KEY, CHECK, and UNIQUE constraints — those are unaffected.)
+	var fkCount int
+	err = conn.QueryRow(ctx, `
+        SELECT COUNT(*)
+          FROM information_schema.table_constraints
+         WHERE table_name = 'crypto_rekey_checkpoints'
+           AND constraint_type = 'FOREIGN KEY'
+    `).Scan(&fkCount)
+	require.NoError(t, err)
+	assert.Equal(t, 0, fkCount,
+		"migration 000035 (holomush-jxo8.7.48) MUST drop both FKs on crypto_rekey_checkpoints "+
+			"(new_dek_id, old_dek_id). Future migrations that re-introduce a FK to crypto_keys "+
+			"would defeat the no-prod-shape design — see spec §3.6.1.")
+
+	// Defense-in-depth: also confirm the specific column FKs aren't present
+	// (an FK to a different table wouldn't be caught by the count-zero
+	// check above, but it would be even worse).
+	var perColumnFKCount int
+	err = conn.QueryRow(ctx, `
+        SELECT COUNT(*)
+          FROM information_schema.referential_constraints rc
+          JOIN information_schema.key_column_usage kcu
+            ON kcu.constraint_name = rc.constraint_name
+         WHERE kcu.table_name = 'crypto_rekey_checkpoints'
+           AND kcu.column_name IN ('new_dek_id', 'old_dek_id')
+    `).Scan(&perColumnFKCount)
+	require.NoError(t, err)
+	assert.Equal(t, 0, perColumnFKCount,
+		"no FK from crypto_rekey_checkpoints.{new_dek_id,old_dek_id} to any table is permitted "+
+			"after migration 000035")
 }

@@ -198,8 +198,8 @@ CREATE TABLE crypto_rekey_checkpoints (
     primary_player_id       text        NOT NULL,               -- ULID; resume must match this
     status                  text        NOT NULL,               -- CheckpointStatus enum (§3.2)
     last_processed_event_id bytea,                              -- ULID, Phase 3 cursor (nullable)
-    new_dek_id              bigint      REFERENCES crypto_keys(id),  -- nullable until Phase 2
-    old_dek_id              bigint      NOT NULL REFERENCES crypto_keys(id),
+    new_dek_id              bigint,                                 -- nullable until Phase 2; no FK (see §3.6.1)
+    old_dek_id              bigint      NOT NULL,                   -- no FK (see §3.6.1)
     phase5_attempt_count    int         NOT NULL DEFAULT 0,
     phase5_missing_members  jsonb,                              -- last attempt's missing list
     force_destroy           boolean     NOT NULL DEFAULT false, -- true when --force-destroy used
@@ -237,6 +237,44 @@ Notes:
 - `phase5_missing_members` is `jsonb`, matching the on-the-wire shape of
   `invalidation.Reply` and naturally JSON-serializable.
 - The CHECK constraint enforces terminal-state consistency at the DB layer.
+
+#### §3.6.1 DEK-id referential integrity (no FK)
+
+`new_dek_id` and `old_dek_id` carry `crypto_keys.id` bigint values but are
+**deliberately not declared as foreign keys** (migration 000035,
+`holomush-jxo8.7.48`). This matches the existing precedent for
+`events_audit.dek_ref` (also no FK to `crypto_keys`) and removes an inherited
+operational dead-end for future hard-cleanup tooling.
+
+**Rationale:** Phase 6 of the Rekey lifecycle SOFT-deletes DEK rows
+(`destroyed_at = NOW()`, row stays); the FK would not block soft-delete but
+WOULD block any future hard-cleanup script
+(e.g. `DELETE FROM crypto_keys WHERE destroyed_at < now() - interval '90 days'`).
+A blocked cleanup forces either (i) lockstep hard-deletion of audit-trail
+checkpoint rows (data loss on the operator record of a rekey), (ii) a strict
+archival ordering between checkpoint and DEK pruning (operational coupling),
+or (iii) a production foot-gun where the cleanup script errors at runtime.
+
+**Integrity model (application-enforced):**
+
+- **Phase 1** (`RunPhase1Fresh`) verifies the old DEK row exists at INSERT
+  time: it selects the active DEK row for the context BEFORE opening the
+  checkpoint and stamps its `id` into `old_dek_id`. A missing old DEK is a
+  fail-closed precondition error
+  (`DEK_REKEY_NO_ACTIVE_DEK_FOR_CONTEXT`), not silent corruption.
+- **Phase 2** (`RunPhase2`) inserts the new DEK row and stamps `new_dek_id`
+  on the checkpoint atomically (single repo call,
+  `SetNewDEKAndAdvance`).
+- **Future hard-cleanup scripts** can prune old DEK rows freely;
+  checkpoint rows referencing pruned DEKs retain the `bigint` id as a
+  historical record. Operator joins to `crypto_keys` MUST tolerate
+  unmatched ids (LEFT JOIN) and surface them as "DEK retired before audit
+  pruning" in reports.
+
+Per the `no-prod-shape-for-undeployed` project rule (CLAUDE.md): the
+constraint shape ships in DDL, not in operational scripts, so the prod
+policy is fixed at deployment time even though the cleanup tooling does
+not yet exist.
 
 ### 3.2 `CheckpointStatus` enum
 
