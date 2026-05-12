@@ -83,8 +83,14 @@ func (r *FallbackResolver) Resolve(ctx context.Context, hot eventbus.Envelope) (
 	}
 
 	// Step 5: attempt to resolve the cold-tier DEK.
+	// Mirror the hot-tier classification: typed DEK_NOT_FOUND / DEK_DESTROYED
+	// → ErrMetadataOnly; any other error is a transient DB failure and MUST
+	// propagate so callers can distinguish retryable from permanent misses.
 	coldKey, err := r.DEKManager.Resolve(ctx, coldEnv.KeyID(), coldEnv.KeyVersion())
 	if err != nil {
+		if !isDEKMissing(err) {
+			return ResolvedSource{}, oops.Code("DEK_RESOLVE_TRANSIENT").Wrap(err)
+		}
 		r.Metrics.ColdDEKMiss.Inc()
 		return ResolvedSource{}, ErrMetadataOnly
 	}

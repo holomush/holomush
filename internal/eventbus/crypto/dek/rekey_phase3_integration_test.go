@@ -366,6 +366,17 @@ var _ = Describe("Phase3_CrashResumeIdempotent (INV-E7-COLD-RESUME-CURSOR)", fun
 		Expect(ckptFinal.NewDEKID).NotTo(BeNil())
 		setup.AssertAllRowsReferenceDEK(*ckptFinal.NewDEKID)
 
+		// holomush-jxo8.7.54 — Phase 3 row count must be CUMULATIVE across
+		// the crash + resume cycle. IncrementPhase3Count runs inside each
+		// batch's transaction, so committed batches contribute to the
+		// count and rolled-back batches don't. The final count MUST equal
+		// the total row count, NOT just the resume invocation's count.
+		// Without the in-tx increment fix, this would report only the
+		// resume-invocation's contribution (eventCount-firstAttemptCount)
+		// and silently drop the firstAttemptCount rows from the audit trail.
+		Expect(ckptFinal.Phase3RowsRewritten).To(Equal(eventCount),
+			"INV-E7 + jxo8.7.54: Phase3RowsRewritten on checkpoint must be cumulative across crash-resume cycles")
+
 		// Plaintext round-trip: decrypt each rewritten row under the NEW
 		// DEK + new AAD; bytes MUST equal the seeded plaintext for that
 		// row. This is the strongest form of INV-E7 (final state is

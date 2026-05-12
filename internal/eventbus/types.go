@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
+
+	"github.com/holomush/holomush/internal/core"
 )
 
 // Subject is a typed JetStream subject. Constructed via NewSubject which
@@ -169,6 +171,26 @@ type Event struct {
 	// set MetadataOnly=true (holomush-ojw1.6). Mirrored to the wire via
 	// EventFrame.no_plaintext_reason.
 	NoPlaintextReason NoPlaintextReason
+}
+
+// NewEvent constructs an Event with a monotonic ULID (from core.NewULID()),
+// the current timestamp, and the provided fields. This is the canonical
+// construction path for eventbus.Event values that will be published — it
+// mirrors the core.NewEvent() convention and prevents accidental omission of
+// the ID stamp (holomush-jxo8.7.53).
+//
+// Callers that need to override specific fields after construction (e.g.
+// Sensitive, Headers, Rendering) MUST still use NewEvent for the base value
+// rather than a raw Event{} literal.
+func NewEvent(subject Subject, typ Type, actor Actor, payload []byte) Event {
+	return Event{
+		ID:        core.NewULID(),
+		Subject:   subject,
+		Type:      typ,
+		Timestamp: time.Now(),
+		Actor:     actor,
+		Payload:   payload,
+	}
 }
 
 // subjectTokenRe permits NATS subject tokens: letters, digits, dashes,

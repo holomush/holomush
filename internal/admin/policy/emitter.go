@@ -14,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/oops"
 
-	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit/chain"
 )
@@ -136,14 +135,8 @@ func EmitCurrentSnapshot(ctx context.Context, deps EmitDeps, policyName string) 
 		return oops.Code("POLICY_EMIT_INVALID_TYPE").Wrap(err)
 	}
 
-	ev := eventbus.Event{
-		ID:        core.NewULID(),
-		Subject:   subj,
-		Type:      evtType,
-		Timestamp: deps.Clock.Now(),
-		Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
-		Payload:   body,
-	}
+	ev := eventbus.NewEvent(subj, evtType, eventbus.Actor{Kind: eventbus.ActorKindSystem}, body)
+	ev.Timestamp = deps.Clock.Now() // honour the injected clock rather than time.Now() inside NewEvent
 	if err := deps.Publisher.Publish(ctx, ev); err != nil {
 		return oops.Code("POLICY_EMIT_PUBLISH_FAILED").
 			With("policy_name", policyName).Wrap(err)
