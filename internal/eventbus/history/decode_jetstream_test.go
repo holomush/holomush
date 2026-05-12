@@ -249,8 +249,8 @@ func validSensitiveHistoryPayload(t *testing.T) []byte {
 }
 
 // TestDecodeJetStreamMessageAuthGuardDenyStampsMetadataOnly verifies that when
-// AuthGuard denies a sensitive-codec history message, MetadataOnly=true and
-// Payload is empty.
+// AuthGuard denies a sensitive-codec history message, MetadataOnly=true,
+// Payload is empty, and NoPlaintextReason is AUTHGUARD_DENY (holomush-ojw1.6).
 func TestDecodeJetStreamMessageAuthGuardDenyStampsMetadataOnly(t *testing.T) {
 	t.Parallel()
 
@@ -263,6 +263,8 @@ func TestDecodeJetStreamMessageAuthGuardDenyStampsMetadataOnly(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, ev.MetadataOnly, "deny decision must stamp MetadataOnly=true")
 	assert.Empty(t, ev.Payload, "deny decision must return empty payload")
+	assert.Equal(t, eventbus.NoPlaintextReasonAuthGuardDeny, ev.NoPlaintextReason,
+		"AuthGuard deny must stamp NoPlaintextReasonAuthGuardDeny")
 }
 
 // TestDecodeJetStreamMessageAuthGuardPermitDecryptsAndDelivers verifies that
@@ -458,7 +460,8 @@ func TestDecodeJetStreamMessagePluginNonQueueFullAuditErrorPropagates(t *testing
 
 // TestDecodeJetStreamMessagePluginAuditQueueFullStillStampsMetadataOnly
 // verifies that the AUDIT_QUEUE_FULL code (specifically) triggers the TOCTOU
-// plaintext-zero + metadata_only fallback in the history path.
+// plaintext-zero + metadata_only fallback in the history path, and stamps
+// NoPlaintextReasonAuditQueueFull (holomush-ojw1.6).
 func TestDecodeJetStreamMessagePluginAuditQueueFullStillStampsMetadataOnly(t *testing.T) {
 	t.Parallel()
 
@@ -476,4 +479,6 @@ func TestDecodeJetStreamMessagePluginAuditQueueFullStillStampsMetadataOnly(t *te
 	require.NoError(t, err)
 	assert.True(t, ev.MetadataOnly, "AUDIT_QUEUE_FULL must stamp MetadataOnly=true")
 	assert.Empty(t, ev.Payload, "AUDIT_QUEUE_FULL must return empty payload")
+	assert.Equal(t, eventbus.NoPlaintextReasonAuditQueueFull, ev.NoPlaintextReason,
+		"AUDIT_QUEUE_FULL must stamp NoPlaintextReasonAuditQueueFull")
 }

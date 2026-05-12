@@ -508,16 +508,17 @@ func rewrapFrameCursorsForPlugin(frames []*corev1.EventFrame, pluginName string)
 			}
 		}
 		out[i] = &corev1.EventFrame{
-			Id:           f.GetId(),
-			Stream:       f.GetStream(),
-			Type:         f.GetType(),
-			Timestamp:    f.GetTimestamp(),
-			ActorType:    f.GetActorType(),
-			ActorId:      f.GetActorId(),
-			Payload:      f.GetPayload(),
-			Cursor:       pluginCursor,
-			Rendering:    f.GetRendering(),
-			MetadataOnly: f.GetMetadataOnly(),
+			Id:                f.GetId(),
+			Stream:            f.GetStream(),
+			Type:              f.GetType(),
+			Timestamp:         f.GetTimestamp(),
+			ActorType:         f.GetActorType(),
+			ActorId:           f.GetActorId(),
+			Payload:           f.GetPayload(),
+			Cursor:            pluginCursor,
+			Rendering:         f.GetRendering(),
+			MetadataOnly:      f.GetMetadataOnly(),
+			NoPlaintextReason: f.GetNoPlaintextReason(),
 		}
 	}
 	return out
@@ -528,19 +529,22 @@ func rewrapFrameCursorsForPlugin(frames []*corev1.EventFrame, pluginName string)
 // (e.g. "location:01ABC") that the web client expects in the Stream field.
 // Event.MetadataOnly (populated by the hot-tier AuthGuard on deny) is
 // stamped into EventFrame.metadata_only (Phase 3b grounding doc Decision 4).
+// Event.NoPlaintextReason is stamped into EventFrame.no_plaintext_reason
+// (holomush-ojw1.6) to let clients distinguish causes.
 // reg resolves plugin/system ULIDs to display names; nil falls back to
 // ULID-string form (same behaviour as actorIDString in server.go).
 func eventbusEventToEventFrame(e eventbus.Event, legacyStreamName string, reg plugins.IdentityRegistry) *corev1.EventFrame {
 	actorID := actorIDString(e.Actor, reg)
 	return &corev1.EventFrame{
-		Id:           e.ID.String(),
-		Stream:       legacyStreamName,
-		Type:         string(e.Type),
-		Timestamp:    timestamppb.New(e.Timestamp),
-		ActorType:    e.Actor.Kind.String(),
-		ActorId:      actorID,
-		Payload:      e.Payload,
-		Rendering:    eventbus.RenderingToProto(e.Rendering),
-		MetadataOnly: e.MetadataOnly,
+		Id:                e.ID.String(),
+		Stream:            legacyStreamName,
+		Type:              string(e.Type),
+		Timestamp:         timestamppb.New(e.Timestamp),
+		ActorType:         e.Actor.Kind.String(),
+		ActorId:           actorID,
+		Payload:           e.Payload,
+		Rendering:         eventbus.RenderingToProto(e.Rendering),
+		MetadataOnly:      e.MetadataOnly,
+		NoPlaintextReason: corev1.NoPlaintextReason(e.NoPlaintextReason),
 	}
 }

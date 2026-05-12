@@ -19,6 +19,29 @@ type Subject string
 // NewType which validates against allowed character set.
 type Type string
 
+// NoPlaintextReason enumerates the causes for metadata_only=true on a
+// delivered event so operators and clients can distinguish authorization
+// denials, stale-DEK double-misses, and audit-queue backpressure.
+// Mirrors corev1.NoPlaintextReason; kept in sync by INV-GW-14 convention.
+type NoPlaintextReason uint8
+
+const (
+	// NoPlaintextReasonUnspecified is the zero value; MUST hold when
+	// MetadataOnly=false.
+	NoPlaintextReasonUnspecified NoPlaintextReason = 0
+	// NoPlaintextReasonAuthGuardDeny indicates the recipient was not in the
+	// DEK's participant set or lacked the requisite plugin manifest
+	// declaration / ABAC grant. Phase 3b AuthGuard deny.
+	NoPlaintextReasonAuthGuardDeny NoPlaintextReason = 1
+	// NoPlaintextReasonStaleDEK indicates both hot AND cold tier DEKs are
+	// indecipherable. Production-real post sub-epic E rekey + DEK
+	// destruction. INV-E21 double miss.
+	NoPlaintextReasonStaleDEK NoPlaintextReason = 2
+	// NoPlaintextReasonAuditQueueFull indicates plugin audit-emit
+	// backpressure (queue full). Host-side TOCTOU defense.
+	NoPlaintextReasonAuditQueueFull NoPlaintextReason = 3
+)
+
 // Direction selects the iteration order of HistoryStream.
 type Direction uint8
 
@@ -140,6 +163,12 @@ type Event struct {
 	// EventFrame.metadata_only from this field (Phase 3b T10).
 	// NEVER serialized to the wire event envelope; never persisted.
 	MetadataOnly bool
+
+	// NoPlaintextReason classifies why MetadataOnly=true was stamped.
+	// Unspecified when MetadataOnly=false. Stamped at the same sites that
+	// set MetadataOnly=true (holomush-ojw1.6). Mirrored to the wire via
+	// EventFrame.no_plaintext_reason.
+	NoPlaintextReason NoPlaintextReason
 }
 
 // subjectTokenRe permits NATS subject tokens: letters, digits, dashes,

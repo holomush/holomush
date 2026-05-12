@@ -588,7 +588,8 @@ func (s *CoreServer) runDisconnectHooks(ctx context.Context, info session.Info) 
 // toProtoSubscribeResponse maps an eventbus.Event and its MetadataOnly flag
 // to a gRPC SubscribeResponse frame. metadataOnly comes from
 // Delivery.MetadataOnly() and is stamped onto EventFrame.metadata_only
-// (Phase 3b grounding doc Decision 4). The stream field is
+// (Phase 3b grounding doc Decision 4). ev.NoPlaintextReason is stamped into
+// EventFrame.no_plaintext_reason (holomush-ojw1.6). The stream field is
 // reverse-translated from the JetStream subject back to the colon-delimited
 // shape existing web/telnet clients expect
 // (e.g. "events.main.character.01ABC" → "character:01ABC"). F5 migrates
@@ -598,16 +599,17 @@ func (s *CoreServer) toProtoSubscribeResponse(ev eventbus.Event, metadataOnly bo
 	return &corev1.SubscribeResponse{
 		Frame: &corev1.SubscribeResponse_Event{
 			Event: &corev1.EventFrame{
-				Id:           ev.ID.String(),
-				Stream:       subjectxlate.ToLegacy(string(ev.Subject), gameID),
-				Type:         string(ev.Type),
-				Timestamp:    timestamppb.New(ev.Timestamp),
-				ActorType:    ev.Actor.Kind.String(),
-				ActorId:      actorIDString(ev.Actor, s.identityRegistry),
-				Payload:      ev.Payload,
-				Cursor:       encodeEventCursor(ev),
-				Rendering:    eventbus.RenderingToProto(ev.Rendering),
-				MetadataOnly: metadataOnly,
+				Id:                ev.ID.String(),
+				Stream:            subjectxlate.ToLegacy(string(ev.Subject), gameID),
+				Type:              string(ev.Type),
+				Timestamp:         timestamppb.New(ev.Timestamp),
+				ActorType:         ev.Actor.Kind.String(),
+				ActorId:           actorIDString(ev.Actor, s.identityRegistry),
+				Payload:           ev.Payload,
+				Cursor:            encodeEventCursor(ev),
+				Rendering:         eventbus.RenderingToProto(ev.Rendering),
+				MetadataOnly:      metadataOnly,
+				NoPlaintextReason: corev1.NoPlaintextReason(ev.NoPlaintextReason),
 			},
 		},
 	}
