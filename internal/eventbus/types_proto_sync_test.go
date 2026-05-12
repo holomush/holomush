@@ -64,3 +64,28 @@ func TestEventChannelEnumParity(t *testing.T) {
 		assert.Equal(t, int32(c.goVal), int32(c.protoVal))
 	}
 }
+
+// TestNoPlaintextReasonEnumParity asserts Go-side NoPlaintextReason mirror
+// values match proto enum values (INV-GW-14 — holomush-ojw1.6).
+//
+// The length check catches one-sided enum extension: if a new value is added
+// to the proto without a Go-side mirror (or vice versa), the test fails
+// before the per-value comparison would silently miss the new entry.
+func TestNoPlaintextReasonEnumParity(t *testing.T) {
+	cases := []struct {
+		goVal    eventbus.NoPlaintextReason
+		protoVal corev1.NoPlaintextReason
+	}{
+		{eventbus.NoPlaintextReasonUnspecified, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_UNSPECIFIED},
+		{eventbus.NoPlaintextReasonAuthGuardDeny, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_AUTHGUARD_DENY},
+		{eventbus.NoPlaintextReasonStaleDEK, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_STALE_DEK},
+		{eventbus.NoPlaintextReasonAuditQueueFull, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL},
+	}
+	assert.Len(t, cases, len(corev1.NoPlaintextReason_name),
+		"every proto NoPlaintextReason value MUST have a Go-side mirror in cases above; "+
+			"if a new value was added on one side only, mirror it on the other side")
+	for _, c := range cases {
+		assert.Equal(t, int32(c.goVal), int32(c.protoVal),
+			"Go NoPlaintextReason and proto NoPlaintextReason must have equal numeric values")
+	}
+}

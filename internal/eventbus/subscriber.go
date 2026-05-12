@@ -627,7 +627,9 @@ func decodeAndAuthorize(
 
 	// If not permitted: return metadata-only event with empty payload.
 	if !decision.Permit {
-		return buildEventFromEnvelope(eventID, envelope, nil), true, nil
+		ev := buildEventFromEnvelope(eventID, envelope, nil)
+		ev.NoPlaintextReason = NoPlaintextReasonAuthGuardDeny
+		return ev, true, nil
 	}
 
 	// Permit: resolve key, build AAD, decode plaintext.
@@ -689,7 +691,9 @@ func decodeAndAuthorize(
 				for i := range plaintext {
 					plaintext[i] = 0
 				}
-				return buildEventFromEnvelope(eventID, envelope, nil), true, nil
+				ev := buildEventFromEnvelope(eventID, envelope, nil)
+				ev.NoPlaintextReason = NoPlaintextReasonAuditQueueFull
+				return ev, true, nil
 			}
 			return Event{}, false, oops.Code("EVENTBUS_AUDIT_EMIT_FAILED").
 				With("emit_error", emitErr.Error()).

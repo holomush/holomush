@@ -73,7 +73,8 @@ func TestDispatcher_AuthGuardCheckFailed(t *testing.T) {
 
 // TestDispatcher_AuthGuardDeniesProducesMetadataOnly asserts that an
 // AuthGuard returning Permit=false produces a metadata-only event with no
-// error and no resolver call (dispatcher.go:116-118).
+// error and no resolver call (dispatcher.go:116-118), and stamps
+// NoPlaintextReasonAuthGuardDeny (holomush-ojw1.6).
 func TestDispatcher_AuthGuardDeniesProducesMetadataOnly(t *testing.T) {
 	stub := &dispatcherStubResolver{}
 	d := newDispatcher(WithSourceResolver(stub))
@@ -100,6 +101,8 @@ func TestDispatcher_AuthGuardDeniesProducesMetadataOnly(t *testing.T) {
 	assert.True(t, metaOnly, "deny must produce metadata-only delivery")
 	assert.Empty(t, ev.Payload, "deny must redact payload")
 	assert.False(t, stub.called, "resolver must NOT be called when guard denies")
+	assert.Equal(t, eventbus.NoPlaintextReasonAuthGuardDeny, ev.NoPlaintextReason,
+		"AuthGuard deny must stamp NoPlaintextReasonAuthGuardDeny")
 }
 
 // TestDispatcher_SourceResolveFailed verifies that a resolver returning a
@@ -332,7 +335,8 @@ func TestDispatcher_PluginAuditEmitFailedPropagates(t *testing.T) {
 // TestDispatcher_PluginAuditQueueFullProducesMetadataOnly verifies the
 // TOCTOU defense (Decision 3): an AUDIT_QUEUE_FULL emitter error must
 // produce a metadata-only event with empty payload, NOT an error
-// (dispatcher.go:210-215).
+// (dispatcher.go:210-215), and stamps NoPlaintextReasonAuditQueueFull
+// (holomush-ojw1.6).
 func TestDispatcher_PluginAuditQueueFullProducesMetadataOnly(t *testing.T) {
 	testKey, hotProto, hotEnv := buildEncryptedDispatchInputs(t, []byte("plaintext-for-plugin"))
 	stub := &dispatcherStubResolver{
@@ -363,6 +367,42 @@ func TestDispatcher_PluginAuditQueueFullProducesMetadataOnly(t *testing.T) {
 	require.NoError(t, err, "AUDIT_QUEUE_FULL must not surface as an error (TOCTOU defense)")
 	assert.True(t, metaOnly, "AUDIT_QUEUE_FULL must stamp metadataOnly=true")
 	assert.Empty(t, ev.Payload, "AUDIT_QUEUE_FULL must zero/empty the payload")
+	assert.Equal(t, eventbus.NoPlaintextReasonAuditQueueFull, ev.NoPlaintextReason,
+		"AUDIT_QUEUE_FULL must stamp NoPlaintextReasonAuditQueueFull")
+}
+
+// TestDispatcher_StaleDEKProducesMetadataOnlyWithStaleDEKReason verifies
+// INV-E21: when the resolver returns ErrMetadataOnly (hot+cold double miss),
+// the event is delivered with metadataOnly=true and NoPlaintextReasonStaleDEK
+// (holomush-ojw1.6, dispatcher.go:141-143).
+func TestDispatcher_StaleDEKProducesMetadataOnlyWithStaleDEKReason(t *testing.T) {
+	t.Parallel()
+
+	stub := &dispatcherStubResolver{err: source.ErrMetadataOnly}
+	d := newDispatcher(WithSourceResolver(stub))
+	hotProto := &eventbusv1.Event{
+		Id:        makeULIDBytes(t),
+		Subject:   "events.g1.scene.scn001.pose",
+		Type:      "scene.pose",
+		Timestamp: timestamppb.New(dispatcherTestEpoch()),
+		Payload:   []byte("ciphertext"),
+	}
+
+	ev, metaOnly, err := d.DispatchFor(
+		context.Background(),
+		hotProto,
+		codec.NameXChaCha20v1,
+		codec.KeyID(1),
+		uint32(1),
+		eventbus.SessionIdentity{Kind: eventbus.IdentityKindCharacter},
+		&dispatcherAlwaysPermitGuard{},
+		nil,
+	)
+	require.NoError(t, err, "INV-E21: ErrMetadataOnly must not surface as an error")
+	assert.True(t, metaOnly, "stale-DEK double miss must stamp metadataOnly=true")
+	assert.Empty(t, ev.Payload, "stale-DEK double miss must redact payload")
+	assert.Equal(t, eventbus.NoPlaintextReasonStaleDEK, ev.NoPlaintextReason,
+		"stale-DEK double miss must stamp NoPlaintextReasonStaleDEK")
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

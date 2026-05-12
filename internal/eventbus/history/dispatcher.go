@@ -114,7 +114,9 @@ func (d *dispatcher) DispatchFor(
 	}
 
 	if !decision.Permit {
-		return buildHistoryEventFromEnvelope(eventID, envelope, nil), true, nil
+		ev := buildHistoryEventFromEnvelope(eventID, envelope, nil)
+		ev.NoPlaintextReason = eventbus.NoPlaintextReasonAuthGuardDeny
+		return ev, true, nil
 	}
 
 	// Permit: resolve via SourceResolver.
@@ -138,7 +140,9 @@ func (d *dispatcher) DispatchFor(
 	resolved, err := d.resolver.Resolve(ctx, hotEnv)
 	if errors.Is(err, source.ErrMetadataOnly) {
 		// INV-E21: double miss — deliver metadata-only, no error.
-		return buildHistoryEventFromEnvelope(eventID, envelope, nil), true, nil
+		ev := buildHistoryEventFromEnvelope(eventID, envelope, nil)
+		ev.NoPlaintextReason = eventbus.NoPlaintextReasonStaleDEK
+		return ev, true, nil
 	}
 	if err != nil {
 		return eventbus.Event{}, false, oops.Code("EVENTBUS_SOURCE_RESOLVE_FAILED").
@@ -211,7 +215,15 @@ func (d *dispatcher) DispatchFor(
 				for i := range plaintext {
 					plaintext[i] = 0
 				}
-				return buildHistoryEventFromEnvelope(eventID, envelope, nil), true, nil
+				// Use activeProto (resolved hot/cold source), not envelope
+				// (hot proto), so the metadata-only event returned on
+				// TierColdFallback carries the cold record's subject/type
+				// rather than potentially-stale hot envelope metadata.
+				// Consistent with line 228 success path and lines 207-208
+				// audit-record fields.
+				ev := buildHistoryEventFromEnvelope(eventID, activeProto, nil)
+				ev.NoPlaintextReason = eventbus.NoPlaintextReasonAuditQueueFull
+				return ev, true, nil
 			}
 			return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_AUDIT_EMIT_FAILED").
 				With("emit_error", emitErr.Error()).
@@ -288,7 +300,9 @@ func decodeAuthorizeAndDispatch(
 	}
 
 	if !decision.Permit {
-		return buildHistoryEventFromEnvelope(eventID, envelope, nil), true, nil
+		ev := buildHistoryEventFromEnvelope(eventID, envelope, nil)
+		ev.NoPlaintextReason = eventbus.NoPlaintextReasonAuthGuardDeny
+		return ev, true, nil
 	}
 
 	// Permit: resolve key, build AAD, decode.
@@ -350,7 +364,9 @@ func decodeAuthorizeAndDispatch(
 				for i := range plaintext {
 					plaintext[i] = 0
 				}
-				return buildHistoryEventFromEnvelope(eventID, envelope, nil), true, nil
+				ev := buildHistoryEventFromEnvelope(eventID, envelope, nil)
+				ev.NoPlaintextReason = eventbus.NoPlaintextReasonAuditQueueFull
+				return ev, true, nil
 			}
 			return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_AUDIT_EMIT_FAILED").
 				With("emit_error", emitErr.Error()).
