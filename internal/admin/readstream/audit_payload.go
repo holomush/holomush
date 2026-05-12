@@ -23,15 +23,13 @@ type ContextRef struct {
 // encodeHash mirrors internal/eventbus/crypto/dek/audit.go::encodeHash
 // (package-private there). MUST produce byte-identical output to maintain
 // cross-chain JCS canonical-form parity (INV-F7).
-// Used by audit_emitter.go in the same package.
-func encodeHash(b []byte) string { //nolint:unused // used by audit_emitter.go
+func encodeHash(b []byte) string {
 	return fmt.Sprintf("sha256:%s", hex.EncodeToString(b))
 }
 
 // encodeHashPtr returns nil for genesis entries (b == nil), or a pointer to
 // the encoded hash string otherwise.
-// Used by audit_emitter.go in the same package.
-func encodeHashPtr(b []byte) *string { //nolint:unused // used by audit_emitter.go
+func encodeHashPtr(b []byte) *string {
 	if b == nil {
 		return nil
 	}
