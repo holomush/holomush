@@ -2,9 +2,119 @@
 
 ## Status
 
-Draft, revision 7 (incorporates design-reviewer findings R1–R5 2026-05-11
-through 2026-05-12 plus plan-reviewer findings 2026-05-12 R1 on substrate
-API grounding). Tracking bead: `holomush-jxo8.8`.
+Draft, revision 8. Tracking bead: `holomush-jxo8.8`.
+
+Revisions:
+
+- r1–r7 (2026-05-11 through 2026-05-12) — original design rounds, design-reviewer
+  findings R1–R5, plan-reviewer findings on substrate API grounding.
+- **r8 (2026-05-12) — Architectural correction.** Post-implementation review
+  surfaced that F's coupling to `HistoryReader`/`dispatcher` is the root cause
+  of an emergent bug class (k-way merge source-drop, audit truthfulness
+  violation, F.21 F-E17 redesign). Three rounds of adversarial review
+  converged on the conclusion that F is not a `HistoryReader` consumer and
+  must own its own cold-tier read + decrypt + classify path. See
+  **[ADR 0017](../../adr/0017-admin-readstream-bypasses-history-reader.md)**
+  and **§0 below**. The 24-commit chain at bookmark `jxo8-f-target` is
+  abandoned; r8 is the canonical design.
+
+## 0. Architectural correction (revision 8)
+
+**Decision:** F bypasses `HistoryReader`/`dispatcher`/`postgresColdTier.Read`.
+F owns its own cold-tier read, decrypt, and classifier path in
+`internal/admin/readstream/`. The shared eventbus history machinery stays
+unmodified — for subscribers and other consumers that legitimately need
+per-event AuthGuard decisions, plugin identities, and per-decrypt audit
+emit.
+
+**Why:** the first implementation accumulated four wrapper layers
+(`OperatorReadAuthGuard`, `NoOpDecryptAuditEmitter`, `staleDEKColdResolver`,
+`mergeStreams`) each compensating for a mismatch between F's
+break-glass-read shape and the shared infrastructure's subscriber shape. The
+mismatch produced the k-way merge correctness bug. ADR 0017 lays out the
+full reasoning, the alternatives considered, and the rejected approaches.
+
+**What changes from r1–r7:**
+
+| r1–r7 design                                                | r8 design                                                       |
+| ----------------------------------------------------------- | --------------------------------------------------------------- |
+| F constructs `history.NewReader(...)` with F-local guard    | F does not construct a `HistoryReader`                          |
+| `OperatorReadAuthGuard` (unconditional permit)              | Deleted — F has no per-event auth                               |
+| `NoOpDecryptAuditEmitter`                                   | Deleted — F has no per-decrypt audit                            |
+| `staleDEKColdResolver` wrapper on cold-tier resolver        | Deleted — F's `decrypt.go` handles classification at the source |
+| `mergeStreams` k-way merge over N `HistoryStream`s          | Deleted — F's `cold_reader.go` issues one SQL with `subject = ANY($1)` |
+| F-local `Classifier` interface + `DefaultClassifier`        | Unexported `classifyDecryptErr` function in F's `decrypt.go`    |
+| `SessionAuthorizer` adapter interface + `Operator` struct   | Deleted — handler takes `SessionStore` + `SubjectResolver` directly; 2-call sequence inlined |
+| `codec.TypeRegistry` + `RegisterBuiltinTypes`               | Deleted — 4 hardcoded sensitive types in `filter.go` package map |
+| `AdminReadStreamResponse.Event` payload = `eventbusv1.Event` | `corev1.EventFrame` (typed `metadata_only` + `no_plaintext_reason`) |
+| F.20 CLI: `len(Event.Payload) == 0` heuristic for redaction | F.20 CLI: reads `EventFrame.metadata_only` directly             |
+| `Classifier` policy via `Classifier` interface (1 impl)     | Unexported function (no interface)                              |
+| `ResponseSender` narrow seam + `streamDataOverride` test hook on production Handler | Moved into `export_test.go` `testHandler` wrapper |
+| 18 INV-F invariants, including F4/F5/F18 bookkeeping        | 13 INV-F invariants; F4/F5/F18 deleted (impl details of deleted abstractions / naming bookkeeping) |
+| INV-F meta-test enforces test-name binding                  | Deleted; INV catalog is documentation                           |
+
+**What stays from r1–r7:**
+
+- The four-stage handler flow: capability check → bounds validation →
+  dual-control approval → pre-data audit emit → ReadStarted frame → bulk
+  read+stream → ReadFinished frame → post-data audit emit (INV-42 anchor;
+  INV-F1/F2/F3 ordering preserved by construction).
+- The audit payload struct shapes (`OperatorReadStartPayload`,
+  `OperatorReadCompletedPayload`) with `Requested-*` vs `Resolved-*`
+  distinction (INV-F7).
+- The audit chain integration (`OperatorReadChainFor`, `OperatorReadHandlerFor`,
+  Path C shared subject), including 7-field `chain.Handler` (3 real
+  consumers across rekey, policy, operator-read — the factory earns its keep).
+- The audit emitter (`EmitStart`, `EmitCompleted`) with chain prev-hash
+  computation and `holomush_admin_readstream_completed_audit_failures_total`
+  metric (INV-F10).
+- The dual-control flow (`GetByOpArgsHash` idempotent reuse + `Open` +
+  `WaitForApproval` + timeout; INV-F11, INV-F17).
+- The 2-call session→capability authorization pattern (`sessions.GetOperatorSession`
+  + `access.HasPlayerGrant`); inlined into the handler instead of wrapped in
+  the `SessionAuthorizer` adapter.
+- `NoPlaintextReason` enum expansion 4→7 (proto + Go mirror; INV-F16
+  stamping-locality).
+- `Approval.Repo.GetByOpArgsHash` + migration 000036.
+- The builtin event-type registrations (`crypto.system.operator_read` +
+  `crypto.system.operator_read_completed`; INV-F13).
+- The proto wire surface modulo the `Event` → `EventFrame` payload change.
+- The ConnectRPC adapter and admin-socket subsystem wiring.
+- The CLI subcommand modulo the redaction-heuristic deletion.
+- The dual-control + lifecycle E2E scenarios (F-E3, F-E5, F-E6, F-E7,
+  F-E10, F-E12, F-E16), the validation scenarios (F-E4, F-E8, F-E9,
+  F-E11, F-E15), and the happy-path scenarios (F-E1, F-E2, F-E13, F-E14,
+  F-E17 — F-E17 reverts to the originally-planned shape: 5 metadata-only
+  frames with `DEK_MISSING` + `DEK_BAD_COLUMNS` reasons, no longer
+  redesigned around the infinite-loop bug since the bug class no longer
+  exists).
+
+The remainder of this spec (§1–§7) is the original r7 design with the
+sections marked **[SUPERSEDED by §0]** below replaced by the r8 shape:
+
+- §2.1 ConnectRPC adapter — preserved (no functional change).
+- §2.2 Handler config struct — **SUPERSEDED**: see r8 `Config` shape in plan §Task R.handler.
+- §2.3 Operator authorization (2-call pattern) — preserved; just inlined into handler.
+- §2.4 HistoryReader auth+audit seam — **DELETED IN r8**: F does not use HistoryReader.
+- §2.5 Configuration wiring — **SUPERSEDED**: see plan §Task R.wiring for r8 production wiring.
+- §2.6 Type registry — **SUPERSEDED**: 4 hardcoded types in F's `filter.go`.
+- §2.7 Approval substrate (GetByOpArgsHash) — preserved.
+- §2.8 HistoryQuery.SensitiveOnly — substrate field preserved for non-F use; F does not query through HistoryReader so the field is unused by F.
+- §3 Wire surface — modulo Event → EventFrame for the response payload.
+- §4.1 ResolveBounds — preserved as F's `filter.go`.
+- §4.2 Handler flow — preserved (ordering invariants).
+- §4.3 Subject construction — preserved as F's `subjects.go`; single SQL
+  with `subject = ANY($1)` replaces the per-subject query + merge.
+- §4.4 streamData loop — **SUPERSEDED**: see plan §Task R.cold-reader + R.decrypt for the direct read+decrypt path.
+- §4.5 Classifier matrix — preserved as F's `decrypt.go::classifyDecryptErr` unexported helper. INV-F12's six branches remain; only the API shape changes (function not interface).
+- §4.6 Per-frame write deadline — preserved as F's `deadline_writer.go`.
+- §5 CLI — preserved modulo redaction-heuristic deletion.
+- §6 INV-F catalog — **AMENDED**: INV-F4, INV-F5, INV-F18 deleted; remaining 13 invariants stay.
+- §7 Validation strategy / harness fold-in — preserved.
+
+---
+
+
 
 ## Authors
 

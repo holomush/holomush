@@ -2,7 +2,162 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship the operator break-glass decrypted-read RPC on the admin UDS with INV-42 pre-data audit anchor, best-effort decrypt with typed `NoPlaintextReason`, optional dual-control via D's `admin_approvals`, and the `holomush admin read-stream` CLI.
+> **PLAN STATUS (revision 8, 2026-05-12):** The original 27-task plan (Tasks 0–26, materializing as 24 child beads under `holomush-jxo8.8`) was implemented to completion at bookmark `jxo8-f-target`. Post-implementation review surfaced an architectural error: F's coupling to `HistoryReader`/`dispatcher` was the root cause of the merge-source-drop bug and produced four compensation wrappers that should never have existed. **The 24-commit chain is abandoned.** This plan is amended with **§Revision 8 Supplement** (immediately below) listing the rewritten task set. See [ADR 0017](../../adr/0017-admin-readstream-bypasses-history-reader.md) for the decision and reasoning.
+
+## Revision 8 Supplement (canonical task set)
+
+**Decision reference:** [ADR 0017](../../adr/0017-admin-readstream-bypasses-history-reader.md). **Spec reference:** spec §0 (revision 8).
+
+The r8 implementation is structured as ~14 commits. Many port verbatim from the abandoned chain; several are rewritten; a handful are deleted entirely.
+
+### r8 task list
+
+Numbering uses `R.<n>` prefix to distinguish from the original Task 0–26 set. Materialization happens via new child beads under `holomush-jxo8.8`.
+
+**Substrate / shared infra (mostly verbatim from abandoned chain):**
+
+- **R.1 [VERBATIM from old T1]** `NoPlaintextReason` proto enum expansion 4→7 + Go mirror + INV-F16 stamping-locality parity test. Cherry-pick old commit `kn` (15a). No functional change.
+- **R.2 [VERBATIM from old T3]** `approval.Repo.GetByOpArgsHash` + migration 000036 + 5 INV-F17 integration tests. Cherry-pick old commit `zz` (ba). No functional change.
+- **R.3 [VERBATIM from old T5]** Builtin event-type registrations (`crypto.system.operator_read`, `crypto.system.operator_read_completed`) + INV-F13. Cherry-pick old commit `vl` (74b). No functional change.
+
+**F-local files (verbatim from abandoned chain):**
+
+- **R.4 [VERBATIM from old T6]** F-local audit payload structs (`OperatorReadStartPayload`, `OperatorReadCompletedPayload`, `ContextRef`) + `encodeHash`/`encodeHashPtr` helpers + 4 unit tests (INV-F7). Cherry-pick old commit `vk` (640).
+- **R.5 [VERBATIM from old T9]** Chain factories (`OperatorReadChainFor`, `OperatorReadHandlerFor`) + 5 unit tests (INV-F8, F9). Cherry-pick old commit `ull` (a3f).
+- **R.6 [VERBATIM from old T10]** `OperatorReadAuditEmitter` (`EmitStart`, `EmitCompleted`) + chain prev-hash + `holomush_admin_readstream_completed_audit_failures_total` metric + 6 unit tests (INV-F10). Cherry-pick old commit `kz` (a31).
+- **R.7 [VERBATIM from old T12]** `ResolveBounds` validation (`filter.go`) + `Request`/`Resolved`/`ResolvedFlags` types + 11 unit tests (INV-F6, F7). Cherry-pick old commit `wn` (4b7). Type registry replaced by hardcoded package map (see R.7a).
+- **R.7a** Replace `codec.TypeRegistry` dependency in `filter.go` with a package-private map of the 4 sensitive context types (`scene`, `location`, `character`, `dm`). Delete `internal/eventbus/codec/typeregistry.go` and tests entirely.
+- **R.8 [VERBATIM from old T13]** `buildSubjects` (`subjects.go`) + 4 unit tests. Cherry-pick old commit `tv` (a09). The k-way merge piece of old T13 is dropped (no merge in r8).
+- **R.9 [VERBATIM from old T15]** `sendWithDeadline` shim (`deadline_writer.go`) + `ErrWriteDeadlineExceeded` + drain-after-deadline + client-disconnect detection + 3 unit tests (INV-F14). Cherry-pick from old commits `tv` (a09) + `rxv` (8a6) for the F.23 hardening additions.
+
+**Net-new — F's own read/decrypt path:**
+
+- **R.10** `internal/admin/readstream/cold_reader.go` — direct SQL against `events_audit`. Function `(c *coldReader).Read(ctx, query coldQuery) ([]ColdRow, error)` where `coldQuery` carries `Subjects []eventbus.Subject`, `Since, Until time.Time`. One paged SQL query: `SELECT ... FROM events_audit WHERE subject = ANY($1) AND dek_ref IS NOT NULL AND timestamp BETWEEN $2 AND $3 ORDER BY timestamp ASC`. Returns rows as `ColdRow{Subject, Type, Timestamp, Ciphertext, KeyID, KeyVersion, Codec, JsSeq}` — no decrypt, no envelope unmarshal beyond surface fields. ~150 LOC.
+- **R.10-tests** Integration tests: multi-subject merge, time bounds, `dek_ref IS NOT NULL` filter, empty-result termination, ORDER BY timestamp.
+- **R.11** `internal/admin/readstream/decrypt.go` — per-row decrypt + classifier. Function `decryptRow(ctx, row ColdRow, dekMgr dek.Manager, codecRegistry codec.Registry) (plaintext []byte, reason eventbus.NoPlaintextReason, fatal bool, err error)`. Inlines AAD construction (mirrors `dispatcher.go:179`), codec resolution (mirrors `:184`), DEK resolution. Unexported `classifyDecryptErr(err) (reason, fatal)` covers INV-F12's six-branch matrix. ~80 LOC + ~40 LOC classifier.
+- **R.11-tests** Unit tests: 6-branch classifier matrix (nil, ctx.Canceled, ctx.DeadlineExceeded, `source.ErrMetadataOnly`, `EVENTBUS_COLD_DEK_COLUMNS_MISSING`, `EVENTBUS_COLD_BAD_DEK_COLUMNS`, default) + happy-path decrypt (real AAD + codec) + DEK-destroyed → `STALE_DEK` + AAD-tampered → `INTERNAL`.
+
+**Net-new — wire shape correction:**
+
+- **R.12** Amend `api/proto/holomush/admin/v1/read_stream.proto`: `AdminReadStreamResponse.Event` field's payload type changes from `eventbusv1.Event` to `corev1.EventFrame` (which has typed `metadata_only` + `no_plaintext_reason` fields). Run `task proto:gen`.
+- **R.12-tests** Round-trip test that EventFrame's typed fields preserve through the wire.
+
+**Net-new — handler (rewritten from old T16+T17+T18):**
+
+- **R.13** `internal/admin/readstream/handler.go` — orchestration. Pseudocode:
+  ```text
+  Config {
+    SessionStore, SubjectResolver  (auth deps, no SessionAuthorizer adapter)
+    Approvals     approval.Repo
+    ColdReader    *coldReader     (NEW: F's own reader)
+    DEKMgr        dek.Manager     (NEW: passed to decrypt)
+    CodecRegistry codec.Registry  (NEW: passed to decrypt)
+    AuditEmitter  *OperatorReadAuditEmitter
+    PolicyHash    string
+    Clock         func() time.Time
+    Logger        *slog.Logger
+    Game          string
+    MaxWindow, DefaultWindow, WriteDeadline, ApprovalTTL  time.Duration
+  }
+
+  handleInternal(ctx, req, stream):
+    1. operator := authorize(ctx, req.SessionToken, "crypto.operator")   // inline 2-call
+    2. resolved, flags, err := ResolveBounds(req, sensitiveTypes, Clock(), Default, Max)
+    3. if req.DualControl: acquireApproval(ctx, operator, opArgsHash, stream)
+    4. requestID := idgen.New(); payload := buildStartPayload(operator, resolved, flags, requestID, policyHash)
+    5. AuditEmitter.EmitStart(ctx, payload, requestID)  → on err, DENY_AUDIT_PRE_DATA_PUBLISH (no frames)
+    6. stream.Send(buildStartedFrame(requestID, resolved, payload))
+    7. subjects := buildSubjects(resolved.Contexts, Game)
+    8. rows, err := ColdReader.Read(ctx, coldQuery{subjects, resolved.Since, resolved.Until})
+    9. eventsScanned, decryptFails := 0, 0
+       for row in rows:
+         plaintext, reason, fatal, err := decryptRow(ctx, row, DEKMgr, CodecRegistry)
+         if fatal: term = classifyTerminator(err); break
+         frame := buildEventFrame(row, plaintext, reason)   // EventFrame typed
+         sendWithDeadline(ctx, stream.Send, frame, WriteDeadline)
+         eventsScanned++; if reason != UNSPECIFIED: decryptFails++
+    10. stream.Send(buildFinishedFrame(term, eventsScanned, decryptFails))
+    11. AuditEmitter.EmitCompleted(ctx, completedPayload, requestID)  → on err, WARN + metric, return streamErr
+  ```
+  Production type is **closed** (no test-only fields). ~300 LOC.
+- **R.13-tests** Handler invariant tests (INV-F1, F2, F3, F10, F11, F15). Tests use `testHandler` wrapper from `export_test.go` (see R.13a).
+- **R.13a** `internal/admin/readstream/export_test.go` — `testHandler` wrapper exposing internal stages; `recordingStream` test impl of stream sender. Production Handler stays closed.
+
+**Net-new — dual-control flow (R.13's `acquireApproval` step):**
+
+- **R.13b [LOGIC from old T17]** `acquireApproval` inline in handler.go — `GetByOpArgsHash` idempotent reuse + `Open` + `WaitForApproval` + timeout path emits `ReadFinished{DUAL_CONTROL_TIMEOUT}`. 3 INV-F11 tests via `testHandler`.
+
+**Net-new — production wiring (rewritten from old T21):**
+
+- **R.14** `cmd/holomush/readstream_wiring.go` — construct `coldReader`, `OperatorReadAuditEmitter`, `Handler`. NO `history.NewReader` construction, NO `staleDEKColdResolver`, NO `operatorSessionAuthorizer` adapter (handler takes `SessionStore` + `SubjectResolver` directly). Extend existing `VerifierSubsystem.Handlers` with `OperatorReadHandlerFor(gameID)` (one in-place append). Add 4 `AdminSocketConfig` timing fields with defaults. WARN log on `MaxWindow > 90d`.
+- **R.14-tests** Smoke test that wiring composes without err and `adminSocketCfg.ReadStreamHandler != nil`.
+
+**ConnectRPC adapter + CLI (verbatim/amended):**
+
+- **R.15 [VERBATIM from old T19+T20]** Socket-layer adapter (`AdminReadStreamConnectHandler` + subsystem registration). Cherry-pick old commit `norp` (b3a6).
+- **R.16 [AMENDED from old T22]** CLI subcommand. Cherry-pick old commit `ko` (638), then amend the frame renderer to read `EventFrame.MetadataOnly` + `EventFrame.NoPlaintextReason` directly instead of inferring from `len(Payload) == 0`. Update 1 unit test that exercised the heuristic.
+
+**E2E (verbatim/amended from old T23+T24+T25):**
+
+- **R.17 [AMENDED]** Happy-path scenarios F-E1, F-E2, F-E13, F-E14, F-E17 + helper functions (`seedAdminReadStreamData`, `RunAdminReadStream`, `adminReadStreamView`). Cherry-pick old commit `vms` (fae). Two amendments: (a) helpers seed via direct `pgx.Pool` write to `events_audit` (no HistoryReader detour); (b) F-E17 reverts to originally-planned 5 metadata-only frames (DEK_MISSING × 2 + DEK_BAD_COLUMNS × 3) — the infinite-loop bug class no longer exists.
+- **R.18 [VERBATIM from old T24]** Validation scenarios F-E4, F-E8, F-E9, F-E11, F-E15 + fault-injection seams. Cherry-pick old commit `rrw` (3e). One amendment: the `SessionAuthorizerWrapperForTest` and `ReadStreamAuditEmitterWrapperForTest` test-only seams move into `export_test.go` (no longer on production `CoreDeps`).
+- **R.19 [AMENDED from old T25]** Lifecycle scenarios F-E3, F-E5, F-E6, F-E7, F-E10, F-E12, F-E16. Cherry-pick old commit `rxv` (8a6). Amendments: (a) `staleDEKColdResolver` deletion absorbed into R.11's `decrypt.go::classifyDecryptErr`; (b) F-E3 `StaleDEKColdResolver` wiring becomes direct path in decrypt.go; (c) drain-after-deadline + client-disconnect detection in `sendWithDeadline` already covered by R.9.
+
+### Deleted from r1–r7
+
+The following old tasks are deleted entirely and the corresponding code does not exist in r8:
+
+| Old task | Old commit | Reason deleted |
+| -------- | ---------- | -------------- |
+| T0 `HistoryQuery.SensitiveOnly` substrate | `qq` (30a) | F bypasses HistoryReader; cold_reader's SQL filters `dek_ref IS NOT NULL` directly. (The field stays in `HistoryQuery` for other-consumer future use; the substrate change is harmless.) Actually KEPT in shared infra for non-F use; just F doesn't use it. |
+| T2 `codec.TypeRegistry` + builtins | `mkv` (cf0) | 4 hardcoded types in `filter.go` package map. |
+| T7 `OperatorReadAuthGuard` | `lnk` (154, partial) | F has no per-event auth. |
+| T8 `NoOpDecryptAuditEmitter` | `lnk` (154, partial) | F has no per-decrypt audit. |
+| T11 Decrypt-fail classifier matrix (`classify.go` + `Classifier` interface) | `zor` (153) | Substance moves to `decrypt.go::classifyDecryptErr` unexported function in R.11. |
+| T14 k-way merge | `tx` (16) | No merge in r8 — one SQL handles multi-subject. |
+| T26 INV-F meta-test | `uv` (8e1) | Bookkeeping, not safety; INV-F18 deleted. |
+
+Plus partial deletions:
+- `staleDEKColdResolver` + `isDEKMissingErr` from old T21 wiring (commit `nz` 258) — superseded by R.11's `decrypt.go`.
+- `operatorSessionAuthorizer` adapter + `SessionAuthorizer` interface from old T21 wiring — superseded by R.13's inline 2-call.
+- `streamDataOverride`, `responseSenderWrapper`, `SetResponseSenderWrapperForTest`, `SessionAuthorizerWrapperForTest`, `ReadStreamAuditEmitterWrapperForTest` test seams from old T16/T17/T21 — superseded by R.13a's `testHandler` wrapper.
+- INV-F4, INV-F5, INV-F18 invariants — deleted (impl details of deleted abstractions / naming bookkeeping).
+
+### Invariants in r8
+
+13 substantive invariants remain (down from 18):
+
+- **INV-F1** Pre-data audit ordering (audit-start publishes before any data frame).
+- **INV-F2** Audit-publish failure refuses (no data flows on EmitStart err).
+- **INV-F3** Capability check precedes audit (rejection emits zero audit rows).
+- **INV-F7** Audit payload preserves `Requested-*` and `Resolved-*` distinction.
+- **INV-F8** RequestID coherence (start.request_id == completed.request_id).
+- **INV-F9** Audit chain links start → completed via prev_hash.
+- **INV-F10** Completion-audit failure logs WARN + increments metric (does not raise).
+- **INV-F11** Dual-control idempotent reuse via `GetByOpArgsHash` (excludes self-author).
+- **INV-F12** Decrypt classifier matrix covers 6 branches.
+- **INV-F13** Builtin event types registered.
+- **INV-F14** Per-frame write deadline.
+- **INV-F15** Cold-tier read filters to `dek_ref IS NOT NULL`.
+- **INV-F16** `NoPlaintextReason` proto-Go parity + stamping-locality.
+- **INV-F17** `GetByOpArgsHash` filter matrix (5 SQL predicates server-side).
+
+**Deleted invariants:** F4 (guard-always-permits is impl detail of deleted null-object); F5 (standard-runtime-guard-never-seen is structurally impossible without a HistoryReader instance); F18 (meta-test enforces naming, not behavior).
+
+### Migration shape
+
+1. **jj abandon** the 24-commit chain at `jxo8-f-target` (preserved in op-log).
+2. **Reset bookmark** `jxo8-f-target` to `main@origin`.
+3. **Cherry-pick verbatim-portable commits** (R.1, R.2, R.3, R.4, R.5, R.6, R.7, R.8 portion, R.9, R.15, R.17, R.18, R.19 — some with the in-file amendments listed above).
+4. **Write fresh** R.7a, R.10, R.11, R.12, R.13, R.13a, R.13b, R.14, R.16 (amendment).
+5. **Run cumulative reviews + pr-prep** on the new ~14-commit chain.
+6. **One PR.** Squash-merged to main.
+
+---
+
+## Original r1–r7 plan (preserved below for historical reference)
+
+The remainder of this document is the original 27-task plan as written. Tasks marked **[SUPERSEDED by R.x]** below are no longer the canonical implementation guide — see the Revision 8 Supplement above. Tasks marked **[VERBATIM CHERRY-PICK]** port to r8 unchanged.
 
 **Architecture:** Server-streaming ConnectRPC method on the existing admin UDS. Composes D's `OperatorAuthProvider` + `Repo.WaitForApproval` + new `Repo.GetByOpArgsHash`, E's `internal/eventbus/audit/chain` primitive via a new `OperatorReadHandlerFor` factory (Path C: shared NATS subject differentiated by `Event.Type`), and the existing `HistoryReader` with `WithHistoryAuth`. Four F-introduced substrate amendments land in scope: `NoPlaintextReason` proto enum expansion 4 → 7, `codec.TypeRegistry` (built-ins only), `approval.Repo.GetByOpArgsHash` + migration 000036, and `HistoryQuery.SensitiveOnly bool`.
 
