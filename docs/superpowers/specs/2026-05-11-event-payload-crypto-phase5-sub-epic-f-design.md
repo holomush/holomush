@@ -2,8 +2,9 @@
 
 ## Status
 
-Draft, revision 4 (incorporates design-reviewer findings R1 2026-05-11,
-R2 2026-05-12, R3 2026-05-12). Tracking bead: `holomush-jxo8.8`.
+Draft, revision 7 (incorporates design-reviewer findings R1–R5 2026-05-11
+through 2026-05-12 plus plan-reviewer findings 2026-05-12 R1 on substrate
+API grounding). Tracking bead: `holomush-jxo8.8`.
 
 ## Authors
 
@@ -53,7 +54,7 @@ F MUST NOT replicate or rebuild any of D's or E's substrate. It composes:
 - The existing `HistoryReader` with `WithHistoryAuth` (history-reader
   crypto-options design, 2026-05-05) for the cold-tier read.
 
-F also lands three explicit substrate amendments inside its own scope:
+F also lands four explicit substrate amendments inside its own scope:
 
 1. **`NoPlaintextReason` proto enum expansion** (4 → 7 values) + Go-side
    mirror + INV-GW-14 parity update. New reasons (`DEK_MISSING`,
@@ -72,6 +73,12 @@ F also lands three explicit substrate amendments inside its own scope:
 3. **`approval.Repo.GetByOpArgsHash`** — new method on D's `Repo`
    interface enabling idempotent dual-control reuse for repeated
    identical invocations. Declared in §2.7.
+4. **`eventbus.HistoryQuery.SensitiveOnly bool`** — new field on the
+   existing `HistoryQuery` struct that filters the cold-tier read to
+   encrypted rows only (`WHERE dek_ref IS NOT NULL`) and the hot-tier
+   read to events with `Sensitive=true`. Default false preserves all
+   existing callers; F sets it true on every query. INV-F15 depends on
+   this. Declared in §2.8.
 
 ## Section 1 — Scope & Goals
 
@@ -499,6 +506,52 @@ Integration tests in `internal/admin/approval/repo_integration_test.go`:
   approval where they are `primary_player_id`.
 - `TestRepo_GetByOpArgsHash_FiltersUnapproved` — pending row not returned.
 - `TestRepo_GetByOpArgsHash_TiebreakerMostRecent` — picks freshest.
+
+### 2.8 New substrate: `eventbus.HistoryQuery.SensitiveOnly`
+
+Add a `SensitiveOnly bool` field to the existing `HistoryQuery` struct
+(`internal/eventbus/bus.go:98-124`). Default false preserves all existing
+callers (hot subscribe, gRPC QueryHistory handler, plugin history routes).
+F is the only setter at handler construction time.
+
+```go
+type HistoryQuery struct {
+    // ... existing fields (Subject, AfterSeq, AfterID, BeforeSeq, BeforeID,
+    //     NotBefore, NotAfter, Direction, PageSize, Caller, Identity) ...
+
+    // SensitiveOnly restricts the query to events that carry an encryption
+    // envelope. Cold tier appends "AND dek_ref IS NOT NULL" to its SQL;
+    // hot tier skips events where Sensitive=false at the decode boundary.
+    // Default false preserves existing behavior. Set true by sub-epic F's
+    // AdminReadStream handler (INV-F15).
+    SensitiveOnly bool
+}
+```
+
+Implementation seams:
+
+- `internal/eventbus/history/cold_postgres.go::buildQuery` (or the
+  equivalent query-builder function around line 139) appends the
+  `AND dek_ref IS NOT NULL` predicate when `q.SensitiveOnly`. The
+  predicate composes with existing `WHERE` clauses; no migration needed
+  (the column already exists).
+- `internal/eventbus/history/hot_jetstream.go` (or equivalent hot-tier
+  reader) skips events where `q.SensitiveOnly && !event.Sensitive` at
+  the post-decode boundary, before yielding to the caller.
+
+Tests added to F's scope (Task A in the plan):
+
+- `TestHistoryQuery_SensitiveOnly_ColdFiltersDekRefNull` — bus-integration
+  with a seeded `events_audit` table containing one encrypted row and one
+  identity-codec row; assert only the encrypted row is returned.
+- `TestHistoryQuery_SensitiveOnly_DefaultPreservesPublicRows` — same
+  fixture with `SensitiveOnly=false`; both rows returned.
+- `TestHistoryQuery_SensitiveOnly_HotSkipsNonSensitive` — hot-tier
+  test asserting the filter at the decode boundary.
+
+The field is additive on the wire if `HistoryQuery` is ever serialized
+(currently it's a Go struct used only in-process), and a no-op in old
+deployments that omit it. No version flag needed.
 
 ## Section 3 — Data model
 
@@ -985,10 +1038,15 @@ merges with a min-heap keyed by event timestamp.
 
 ### 4.4 Sensitive-content filter (INV-F15)
 
-Discard rows where `events_audit.dek_ref IS NULL` (the identity-codec
-indicator; matches `internal/eventbus/history/cold_postgres.go:421-428`'s
-`!row.DEKRef.Valid` check). Public events do not count toward
-`events_scanned` or `decrypt_fail_count`.
+F sets `HistoryQuery.SensitiveOnly=true` on every read. The cold tier
+appends `AND dek_ref IS NOT NULL` to its SQL (filtering identity-codec
+rows server-side at `internal/eventbus/history/cold_postgres.go:139`'s
+query builder). The hot tier defensively skips events where
+`Sensitive=false`. Public events never appear in the merged stream and
+do not count toward `events_scanned` or `decrypt_fail_count`.
+
+`HistoryQuery.SensitiveOnly` is added by F (§2.8). Default false preserves
+all existing callers; F is the only setter at handler construction time.
 
 ### 4.5 Decrypt-fail classifier (F-local; INV-F12)
 
@@ -1046,9 +1104,11 @@ Producer grounding (verified by `rg` 2026-05-12):
 The streaming loop in `streamData`:
 
 ```text
+// HistoryQuery.SensitiveOnly=true means the merged stream has ALREADY
+// filtered public/identity-codec rows at the cold-tier SQL boundary
+// (and the hot-tier decode boundary). No further filter is needed in
+// streamData. INV-F15 is enforced upstream of this loop.
 for row in mergedStream:
-    if !row.DEKRef.Valid: continue                  // INV-F15
-
     eventsScanned++
 
     plaintext, err := decryptUsing(row, h.dekMgr, h.history)
@@ -1163,7 +1223,7 @@ $ echo $?
 | **INV-F12** | F's classifier (`classify.go::Classify`) MUST match its documented matrix (§4.5 table). Every branch corresponds to a production-verified error producer. Unknown errors MUST surface as `NO_PLAINTEXT_REASON_INTERNAL` with a WARN log. | Unit (classifier matrix table-test) |
 | **INV-F13** | `crypto.system.operator_read` and `crypto.system.operator_read_completed` MUST be registered in `internal/core/builtins.go` with `DisplayTarget == corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY` (mirrors `crypto.system.rekey` precedent at `builtins.go:93`). Both rows pass `VerbRegistration.registerNoLock` validation. | Unit (builtins golden test) |
 | **INV-F14** | Per-frame write deadline (`WriteDeadline`, default 30s) MUST be enforced via `sendWithDeadline`; total stream duration MUST NOT be capped. | Unit + integration |
-| **INV-F15** | `streamData` MUST NOT emit `Event` frames for events where `events_audit.dek_ref IS NULL`. Filtered events do NOT count toward `events_scanned` or `decrypt_fail_count`. | Unit + E2E `F-E14` |
+| **INV-F15** | F MUST set `HistoryQuery.SensitiveOnly=true` on every cold-tier query. The cold-tier `WHERE dek_ref IS NOT NULL` append is the canonical server-side filter. Identity-codec rows MUST NOT reach the operator's stream. Filtered events do NOT count toward `events_scanned` or `decrypt_fail_count`. | Unit (handler passes SensitiveOnly=true) + bus-integration (SQL filters public rows) + E2E `F-E14` |
 | **INV-F16** | The `NoPlaintextReason` enum expansion (4 → 7) MUST preserve INV-GW-14 parity, AND the new values (`DEK_MISSING`, `DEK_BAD_COLUMNS`, `INTERNAL`) MUST NOT be stamped by `cold_postgres.go::decodeColdRow` or `history/dispatcher.go` — F's classifier is the only producer. | Unit (parity test + negative tests on hot/cold paths) |
 | **INV-F17** | `approval.Repo.GetByOpArgsHash` MUST apply all filters server-side (`op_kind`, `op_args_hash`, `expires_at > now()`, `approved_at IS NOT NULL`, `primary_player_id != excludePlayerID`). Tiebreaker: most recently approved. | DB integration |
 | **INV-F18** | Each `INV-F[N]` MUST be referenced in exactly one test name (e.g., `TestINV_F1_PreDataAuditOrdering`). | Meta-test |
@@ -1286,6 +1346,7 @@ on `ph1l` (Ginkgo Ordered refactor).
 | `sha256:<hex>` hash-string convention | E, `internal/eventbus/crypto/dek/audit.go:121-136` (package-private; F duplicates the encoder) | Shipped (helper not exported) |
 | `chain.Repo.LoadEntriesByScope` shared-subject behavior | E, `internal/eventbus/audit/chain/repo_postgres.go:44-78` | Shipped (used as-is) |
 | `HistoryQuery.Subject` (single `Subject`) | `internal/eventbus/bus.go:98` | Shipped |
+| `HistoryQuery.SensitiveOnly bool` | F (this spec, §2.8) — additive field on existing struct | **NEW (F-touching eventbus)** |
 | INV-39 `SourceResolver` / `FallbackResolver` | E §5 | Shipped (production path) |
 | `HistoryReader` with `WithHistoryAuth` | history-reader-crypto-options design 2026-05-05 | Shipped |
 | `NoPlaintextReason` enum (4 values) | `pkg/proto/holomush/core/v1/core.pb.go:52-63` | Shipped; F expands to 7 |
