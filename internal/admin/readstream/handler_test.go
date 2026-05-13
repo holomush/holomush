@@ -593,6 +593,49 @@ func TestDualControlTimeout_EmitsFinishedAndReturnsErr(t *testing.T) {
 		"TerminatedBy must be DUAL_CONTROL_TIMEOUT")
 }
 
+// TestDualControlNonDeadlineError_EmitsFinishedAndReturnsWrappedErr tests
+// Finding 3 (R.20): when WaitForApproval returns a non-deadline error (DB
+// outage, context cancel, etc.), the handler MUST send a best-effort
+// ReadFinished{SERVER_ERROR} frame before returning so the operator CLI
+// gets a structured terminator. No Event frames are expected (EmitStart
+// was not called). The error is wrapped with READSTREAM_DUAL_CONTROL_ERROR.
+func TestDualControlNonDeadlineError_EmitsFinishedAndReturnsWrappedErr(t *testing.T) {
+	cfg := newTestConfig()
+	openedID := approval.RequestID(ulid.MustParse("01HZB000000000000000000003"))
+	repo := &fakeApprovalRepo{
+		getErr:     oops.Code("APPROVAL_NOT_FOUND").Errorf("none yet"),
+		openResult: openedID,
+		waitErr:    errors.New("database connection lost"),
+	}
+	cfg.Approvals = repo
+
+	emitter := &fakeAuditEmitter{}
+	cfg.AuditEmitter = emitter
+
+	req := validHandlerRequest(testSessionToken)
+	req.DualControl = true
+
+	stream, err := runHandler(t, cfg, req)
+
+	require.Error(t, err, "handler must return error on non-deadline WaitForApproval failure")
+	errutil.AssertErrorCode(t, err, "READSTREAM_DUAL_CONTROL_ERROR")
+
+	// EmitStart MUST NOT have fired.
+	assert.Equal(t, 0, emitter.StartCalls(),
+		"EmitStart MUST NOT be called — read never started")
+
+	// Frames: PendingApproval, then ReadFinished{SERVER_ERROR}. No event frames.
+	frames := stream.Frames()
+	require.Len(t, frames, 2, "exactly two frames: PendingApproval + ReadFinished")
+	_, isPending := frames[0].GetPayload().(*adminv1.AdminReadStreamResponse_PendingApproval)
+	assert.True(t, isPending, "first frame must be PendingApproval")
+	fin, isFinished := frames[1].GetPayload().(*adminv1.AdminReadStreamResponse_Finished)
+	require.True(t, isFinished, "second frame must be ReadFinished")
+	assert.Equal(t, adminv1.ReadFinished_TERMINATED_BY_SERVER_ERROR,
+		fin.Finished.GetTerminatedBy(),
+		"TerminatedBy must be SERVER_ERROR for non-deadline dual-control failures")
+}
+
 // ---------- INV-F15: cold-tier filters on dek_ref IS NOT NULL ----------
 
 // TestINV_F15_ColdReaderFiltersByDekRefNotNull asserts that the cold-tier

@@ -120,9 +120,11 @@ func classifyDecryptErr(err error) (eventbus.NoPlaintextReason, bool) {
 	if isOopsCode(err, "DEK_NOT_FOUND") || isOopsCode(err, "DEK_DESTROYED") {
 		return eventbus.NoPlaintextReasonStaleDEK, false
 	}
-	// Branch 5: DEK row columns malformed / zero KeyID — use DEKMissing.
-	if isOopsCode(err, "ADMIN_READSTREAM_COLD_NO_DEK") {
-		return eventbus.NoPlaintextReasonDEKMissing, false
+	// Branch 5: DEK row columns malformed — dek_ref present but dek_version NULL
+	// (INV-49 violation) or zero KeyID. Classified as DEKBadColumns so operators
+	// see a structured reason rather than a misleading STALE_DEK.
+	if isOopsCode(err, "ADMIN_READSTREAM_COLD_DEK_VERSION_NULL") || isOopsCode(err, "ADMIN_READSTREAM_COLD_NO_DEK") {
+		return eventbus.NoPlaintextReasonDEKBadColumns, false
 	}
 	// Branch 6: catch-all — AAD mismatch, codec failure, unmarshal error, etc.
 	return eventbus.NoPlaintextReasonInternal, false

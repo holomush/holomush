@@ -151,6 +151,19 @@ func TestINV_F12_ClassifierMatrix(t *testing.T) {
 			wantReason: eventbus.NoPlaintextReasonInternal,
 			wantFatal:  false,
 		},
+		// Branch 5 additions: malformed DEK columns → DEKBadColumns (Finding 1, R.20).
+		{
+			name:       "ADMIN_READSTREAM_COLD_DEK_VERSION_NULL → DEK_BAD_COLUMNS, fatal=false",
+			injectErr:  oops.Code("ADMIN_READSTREAM_COLD_DEK_VERSION_NULL").Errorf("dek_version NULL with dek_ref present"),
+			wantReason: eventbus.NoPlaintextReasonDEKBadColumns,
+			wantFatal:  false,
+		},
+		{
+			name:       "ADMIN_READSTREAM_COLD_NO_DEK → DEK_BAD_COLUMNS, fatal=false",
+			injectErr:  oops.Code("ADMIN_READSTREAM_COLD_NO_DEK").Errorf("row has no dek_ref"),
+			wantReason: eventbus.NoPlaintextReasonDEKBadColumns,
+			wantFatal:  false,
+		},
 	}
 
 	for _, tt := range tests {

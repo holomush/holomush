@@ -2266,6 +2266,10 @@ func scenarioFE16IdempotentDualControlReuse(env *adminAuthEnv) {
 		"F-E16: first invocation audit approver_player_id MUST equal playerD")
 }
 
+// Test-only adapter (//go:build integration): bypasses session validation to
+// exercise the cross-operator idempotent-reuse path. Production wiring uses
+// adminauth.SessionStore.Get unchanged — see readstream_wiring.go::readstreamSessionStore.
+//
 // envSessionStoreFE16Adapter wraps the base envSessionStoreAdapter with
 // an extra (token, playerID) pair. F-E16 uses this to add a synthetic
 // alice token so the second invocation can run under a DIFFERENT

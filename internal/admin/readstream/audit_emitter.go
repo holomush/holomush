@@ -110,7 +110,10 @@ func (e *operatorReadAuditEmitter) EmitStart(ctx context.Context, payload Operat
 // EmitCompleted implements OperatorReadAuditEmitter.
 //
 // INV-F9: prev_hash MUST equal the recomputed self_hash of the start event.
-// INV-F10: publish failure MUST NOT raise; logs WARN and increments metric.
+// Returns a wrapped error on publish/chain failure; the caller MUST log and
+// discard the error per INV-F10 (see handler.go::handleInternal step 10).
+// CompletedAuditFailuresTotal is incremented inside this method on every
+// failure path before returning.
 func (e *operatorReadAuditEmitter) EmitCompleted(ctx context.Context, payload OperatorReadCompletedPayload, requestID ulid.ULID) error {
 	scope := requestID.String()
 

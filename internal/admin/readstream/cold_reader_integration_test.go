@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/pkg/errutil"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	"github.com/holomush/holomush/test/testutil"
 )
@@ -223,4 +224,44 @@ func TestColdReader_EmptyResultEofTermination(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Nil(t, rows, "empty result must be nil slice, not an error")
+}
+
+// TestColdReader_DEKVersionNullWithDEKRefPresent tests Finding 1 (R.20): when a
+// row has dek_ref IS NOT NULL but dek_version IS NULL, Read returns
+// ADMIN_READSTREAM_COLD_DEK_VERSION_NULL rather than silently producing
+// keyVersion=0 which would misroute to DEK_NOT_FOUND/STALE_DEK (INV-49).
+func TestColdReader_DEKVersionNullWithDEKRefPresent(t *testing.T) {
+	pool := newColdReaderTestPool(t)
+	now := time.Now().UTC()
+	subject := eventbus.Subject("events.game.scene.DEKVNULL.>")
+	id := testULIDAt(t, 9001)
+
+	envelopeBytes, err := proto.Marshal(&eventbusv1.Event{
+		Id:        id[:],
+		Subject:   string(subject),
+		Type:      "test.encrypted",
+		Timestamp: timestamppb.New(now),
+		Actor:     &eventbusv1.Actor{Kind: eventbusv1.ActorKind_ACTOR_KIND_SYSTEM},
+	})
+	require.NoError(t, err)
+
+	// Insert a row with dek_ref set but dek_version explicitly NULL.
+	// This violates INV-49 and must be detected by the scanner.
+	_, err = pool.Exec(context.Background(), `
+		INSERT INTO events_audit (
+			id, subject, type, timestamp, actor_kind, actor_id,
+			envelope, schema_ver, codec, js_seq,
+			dek_ref, dek_version
+		) VALUES ($1, $2, 'test.encrypted', $3, 'system', NULL,
+		          $4, 1, 'xchacha20poly1305-v1', $5,
+		          42, NULL)
+	`, id[:], string(subject), now, envelopeBytes, int64(9001))
+	require.NoError(t, err)
+
+	cr := NewColdReader(pool)
+	_, readErr := cr.Read(context.Background(), ColdQuery{
+		Subjects: []eventbus.Subject{subject},
+	})
+	require.Error(t, readErr)
+	errutil.AssertErrorCode(t, readErr, "ADMIN_READSTREAM_COLD_DEK_VERSION_NULL")
 }

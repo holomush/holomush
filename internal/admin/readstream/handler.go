@@ -377,7 +377,19 @@ func (h *Handler) acquireApproval(
 				With("inner_err", waitErr.Error()).
 				Errorf("dual-control approval timeout: %s", waitErr.Error())
 		}
-		return nil, oops.Wrap(waitErr)
+		// Non-deadline WaitForApproval failures (DB outage mid-poll, ctx cancel,
+		// etc.) are wrapped with a distinct code so the CLI exit-code mapper can
+		// distinguish dual-control errors from other server errors. A best-effort
+		// ReadFinished{SERVER_ERROR} is sent so the operator CLI receives a
+		// structured terminator rather than an abrupt stream error. EmitStart has
+		// not been called yet so no audit row is emitted — absence is per-spec.
+		wrapped := oops.Code("READSTREAM_DUAL_CONTROL_ERROR").
+			With("request_id", rid.String()).
+			Wrap(waitErr)
+		_ = stream.Send(buildFinishedFrame( //nolint:errcheck // best-effort terminator send; client may have disconnected
+			adminv1.ReadFinished_TERMINATED_BY_SERVER_ERROR, 0, 0, h.cfg.Clock(),
+		))
+		return nil, wrapped
 	}
 
 	rec := &approvalRecord{RequestID: ulid.ULID(rid)}

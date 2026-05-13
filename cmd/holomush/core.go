@@ -851,10 +851,11 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// to Unimplemented for AdminReadStream. WARN-log on OperatorReadMaxWindow
 	// > 90d (operators can configure values above the cap, but oversized
 	// windows greatly inflate row-count + memory pressure on the cold-tier
-	// reader). Per ADR-0017, F bypasses history.NewReader entirely; the
-	// abandoned chain's staleDEKColdResolver / operatorSessionAuthorizer /
-	// OperatorReadAuthGuard / NoOpDecryptAuditEmitter null-objects are
-	// absent by design.
+	// reader).
+	//
+	// AdminReadStream wiring follows ADR 0017 — F bypasses HistoryReader/dispatcher
+	// entirely. See docs/adr/0017-admin-readstream-bypasses-history-reader.md for
+	// the architectural decision and the wrappers it deliberately omits.
 	const operatorReadMaxWindowWarnThreshold = 90 * 24 * time.Hour
 	if cryptoCfg.OperatorReadMaxWindow > operatorReadMaxWindowWarnThreshold {
 		slog.Warn("admin readstream: OperatorReadMaxWindow > 90d — oversized windows greatly inflate cold-tier read row-count and memory pressure",

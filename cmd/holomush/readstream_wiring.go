@@ -46,11 +46,9 @@ var readstreamGrantsOverrideForTest access.SubjectResolver
 // by runCoreWithDeps to populate the admin-socket Config and extend the
 // VerifierSubsystem's handlers list.
 //
-// Sub-epic F R.14 (holomush-jxo8.8.38). Per ADR-0017, F bypasses
-// history.NewReader entirely and owns its own ColdReader + audit emitter;
-// the abandoned chain's staleDEKColdResolver / operatorSessionAuthorizer /
-// OperatorReadAuthGuard / NoOpDecryptAuditEmitter null-objects are absent
-// by design.
+// AdminReadStream wiring follows ADR 0017 — F bypasses HistoryReader/dispatcher
+// entirely. See docs/adr/0017-admin-readstream-bypasses-history-reader.md for
+// the architectural decision and the wrappers it deliberately omits.
 type readStreamWiring struct {
 	// Handler is the AdminReadStream RPC handler ready to install in the
 	// admin-socket Config. nil when buildReadStreamWiring's deps gate
