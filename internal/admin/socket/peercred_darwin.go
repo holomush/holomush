@@ -7,7 +7,6 @@ package socket
 
 import (
 	"net"
-	"syscall"
 
 	"github.com/samber/oops"
 	"golang.org/x/sys/unix"
@@ -16,7 +15,7 @@ import (
 // readPeerCred reads peer credentials from the UNIX domain socket on Darwin
 // using two getsockopt calls:
 //   - unix.GetsockoptXucred(SOL_LOCAL, LOCAL_PEERCRED) → uid, gid
-//   - syscall.GetsockoptInt(SOL_LOCAL, LOCAL_PEERPID)  → pid
+//   - unix.GetsockoptInt(SOL_LOCAL, LOCAL_PEERPID)     → pid
 func readPeerCred(conn *net.UnixConn) (PeerCred, error) {
 	rawConn, err := conn.SyscallConn()
 	if err != nil {
@@ -32,7 +31,7 @@ func readPeerCred(conn *net.UnixConn) (PeerCred, error) {
 			return
 		}
 
-		pid, err := syscall.GetsockoptInt(int(fd), int(unix.SOL_LOCAL), int(unix.LOCAL_PEERPID)) //nolint:gosec // G115: fd and SOL_LOCAL/LOCAL_PEERPID are syscall constants; conversions are safe
+		pid, err := unix.GetsockoptInt(int(fd), unix.SOL_LOCAL, unix.LOCAL_PEERPID) //nolint:gosec // G115: fd is a valid file descriptor; uintptr→int is safe at syscall boundaries
 		if err != nil {
 			ctrlErr = oops.Code("PEERCRED_PEERPID_FAILED").Wrap(err)
 			return
