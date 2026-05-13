@@ -724,5 +724,25 @@ var _ = Describe("Admin Authenticate Lifecycle (full-stack E2E)", func() {
 		// aged past a TOTP step boundary).
 		// =========================================================================
 		runAdminRekeyScenario(env)
+
+		// =========================================================================
+		// F r8 (sub-epic F): AdminReadStream production-boot E2E scenarios
+		// (bead jxo8.8.41 / R.17).
+		//
+		// Runs within the same boot as T25/T26/T27 (prometheus.DefaultRegisterer
+		// is process-wide). Reuses env.carolSessionToken from T26 scenario 2 —
+		// in-memory session store has no expiry, so the token survives all
+		// prior scenarios. T26 scenario 5 revokes dave's admin role but does
+		// NOT touch carol; she retains crypto.operator + admin.
+		//
+		// Scenarios driven by runAdminReadStreamScenarios (defined in
+		// admin_read_stream_e2e_test.go):
+		//   - F-E1:  happy path single context
+		//   - F-E2:  whole-game wildcard with defaulted bounds
+		//   - F-E13: multi-context k-way merge (global timestamp order)
+		//   - F-E14: sensitive-content filter (INV-F15)
+		//   - F-E17: classifier surface (INV-F12 producers)
+		// =========================================================================
+		runAdminReadStreamScenarios(env)
 	})
 })

@@ -196,13 +196,15 @@ func decodeHashString(s string) ([]byte, error) {
 }
 
 // extractProtoPayloadField performs a minimal protowire scan to extract
-// field 4 (payload bytes) from a serialized eventbusv1.Event envelope.
-// Field 4 is the payload field per the eventbus v1 proto schema.
+// field 6 (payload bytes) from a serialized eventbusv1.Event envelope.
+// Field 6 is the payload field per the eventbus v1 proto schema (field 4
+// is Timestamp — a common transcription error caught by F-E1's audit-row
+// assertion against real events_audit envelopes, sub-epic F r8 R.17).
 // This avoids importing the proto package (which would create a cycle) while
 // still supporting production envelopes stored in events_audit.envelope.
 func extractProtoPayloadField(b []byte) ([]byte, error) {
 	// Protobuf wire format: each field is (tag << 3 | wire_type), value.
-	// Field 4, wire type 2 (length-delimited) → tag = (4 << 3) | 2 = 0x22.
+	// Field 6, wire type 2 (length-delimited) → tag = (6 << 3) | 2 = 0x32.
 	for len(b) > 0 {
 		tag, n := decodeVarint(b)
 		if n <= 0 {
@@ -227,8 +229,9 @@ func extractProtoPayloadField(b []byte) ([]byte, error) {
 			if length > uint64(len(b)) {
 				return nil, oops.Code("OPERATOR_READ_PROTO_SCAN_FAILED").Errorf("truncated field")
 			}
-			if fieldNum == 4 {
-				// Field 4 is the payload bytes in eventbusv1.Event.
+			if fieldNum == 6 {
+				// Field 6 is the payload bytes in eventbusv1.Event
+				// (per api/proto/holomush/eventbus/v1/eventbus.proto:41).
 				result := make([]byte, length)
 				copy(result, b[:length])
 				return result, nil
