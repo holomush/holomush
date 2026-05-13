@@ -13,7 +13,10 @@ func NewAdminCmd() *cobra.Command {
 		Use:   "admin",
 		Short: "Operator break-glass and admin commands (host-shell only)",
 	}
+	bindAdminSocketFlag(cmd)
+	factory := defaultAdminReadStreamClientFactory(cmd)
 	cmd.AddCommand(NewAdminTOTPCmd())
 	cmd.AddCommand(newAdminApproveCmd())
+	cmd.AddCommand(newAdminReadStreamCmd(factory))
 	return cmd
 }
