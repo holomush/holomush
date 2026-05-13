@@ -745,6 +745,10 @@ func TestConfigValidate_RejectsMissingRequired(t *testing.T) {
 		{"Game empty", func(c *readstream.Config) { c.Game = "" }},
 		{"MaxWindow zero", func(c *readstream.Config) { c.MaxWindow = 0 }},
 		{"DefaultWindow zero", func(c *readstream.Config) { c.DefaultWindow = 0 }},
+		{"DefaultWindow exceeds MaxWindow", func(c *readstream.Config) {
+			c.MaxWindow = 1 * time.Hour
+			c.DefaultWindow = 2 * time.Hour
+		}},
 		{"WriteDeadline zero", func(c *readstream.Config) { c.WriteDeadline = 0 }},
 		{"ApprovalTTL zero", func(c *readstream.Config) { c.ApprovalTTL = 0 }},
 	}
@@ -757,6 +761,55 @@ func TestConfigValidate_RejectsMissingRequired(t *testing.T) {
 			errutil.AssertErrorCode(t, err, "READSTREAM_CONFIG_INVALID")
 		})
 	}
+}
+
+// ---------- opArgsHash resolved-bounds semantics ----------
+
+// TestComputeReadStreamArgsHash_ResolvedBoundsSemantics verifies the critical
+// security invariant: the op-args hash binds the EFFECTIVE (resolved) window,
+// not the raw proto fields. This prevents approval reuse across different
+// actual time ranges.
+func TestComputeReadStreamArgsHash_ResolvedBoundsSemantics(t *testing.T) {
+	const justification = "audit investigation for incident-2026"
+	ctx := []readstream.ContextRef{{Type: "scene", IDs: []string{"01ARZ3NDEKTSV4RRFFQ69G5FAV"}}}
+
+	t0 := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	t1 := t0.Add(time.Hour)
+	t2 := t0.Add(2 * time.Hour)
+
+	resolvedA := readstream.Resolved{
+		Contexts:      ctx,
+		Since:         t0,
+		Until:         t1,
+		Justification: justification,
+	}
+	resolvedB := readstream.Resolved{
+		Contexts:      ctx,
+		Since:         t1,
+		Until:         t2,
+		Justification: justification,
+	}
+	resolvedASame := readstream.Resolved{
+		Contexts:      ctx,
+		Since:         t0,
+		Until:         t1,
+		Justification: justification,
+	}
+
+	hashA, err := readstream.ComputeReadStreamArgsHashForTest(resolvedA)
+	require.NoError(t, err)
+	hashB, err := readstream.ComputeReadStreamArgsHashForTest(resolvedB)
+	require.NoError(t, err)
+	hashASame, err := readstream.ComputeReadStreamArgsHashForTest(resolvedASame)
+	require.NoError(t, err)
+
+	// Different resolved windows → different hashes (approval not reusable).
+	assert.NotEqual(t, hashA, hashB,
+		"different resolved windows must produce different hashes (prevents cross-window approval reuse)")
+
+	// Same resolved window → same hash (approval correctly reusable).
+	assert.Equal(t, hashA, hashASame,
+		"identical resolved values must produce the same hash (approval reuse must work)")
 }
 
 // ---------- TerminatedBy classification ----------

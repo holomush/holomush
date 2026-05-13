@@ -119,3 +119,10 @@ func BuildPlaintextEventFrameForTest(row ColdRow, plaintext []byte) *adminv1.Adm
 func ClassifyTerminatorForTest(err error) adminv1.ReadFinished_TerminatedBy {
 	return classifyTerminator(err)
 }
+
+// ComputeReadStreamArgsHashForTest exposes the package-private hash helper
+// so tests can assert the resolved-bounds semantics without driving the full
+// handler flow.
+func ComputeReadStreamArgsHashForTest(resolved Resolved) ([]byte, error) {
+	return computeReadStreamArgsHash(resolved)
+}

@@ -27,6 +27,14 @@ func validRequest() *readstream.Request {
 	}
 }
 
+// TestResolveBounds_NilRequestReturnsError verifies that a nil *Request returns
+// a typed validation error rather than a nil-pointer panic.
+func TestResolveBounds_NilRequestReturnsError(t *testing.T) {
+	_, _, err := readstream.ResolveBounds(nil, time.Now(), time.Hour, 24*time.Hour)
+	require.Error(t, err, "nil request must be rejected")
+	errutil.AssertErrorCode(t, err, "DENY_OPERATOR_READ_INVALID_REQUEST")
+}
+
 func TestResolveBounds_DefaultsFromZeroBounds(t *testing.T) {
 	now := time.Now()
 	req := &readstream.Request{

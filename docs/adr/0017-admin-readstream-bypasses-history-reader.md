@@ -110,8 +110,7 @@ carries three parameters meaningful only to fan-out subscribers:
 
 F has no plugin identity (operator capability is the principal), checks
 capability once at handler entry (never per-row), and emits one pre-data
-
-- one post-data audit pair (not per-decrypt). Passing null-objects for
+plus one post-data audit pair (not per-decrypt). Passing null-objects for
 fields that don't apply is a code smell pointing at a bundle that should
 not include F.
 

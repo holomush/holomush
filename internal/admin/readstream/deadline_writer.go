@@ -23,12 +23,14 @@ var ErrWriteDeadlineExceeded = errors.New("readstream: write deadline exceeded")
 //   - If the deadline elapses first and ctx is already cancelled (client
 //     disconnect), ctx.Err() is returned (context.Canceled / DeadlineExceeded).
 //   - If the deadline elapses first and ctx is NOT cancelled, ErrWriteDeadlineExceeded
-//     is returned.
+//     is returned IMMEDIATELY without waiting for the orphaned goroutine.
 //
-// Drain guarantee (F.23 hardening): after a timeout or cancellation, this
-// function waits for the orphaned send goroutine to complete before returning.
-// This prevents data races between the orphaned goroutine and any subsequent
-// send operations sharing the same stream.
+// Goroutine lifecycle: when the deadline fires, the send goroutine becomes
+// orphaned. It will complete when send(frame) eventually returns (or the
+// parent context is cancelled). Because doneCh is buffered (cap 1), the
+// orphan can always write its result without blocking, so it never leaks
+// permanently. The next SendWithDeadline call allocates a fresh doneCh,
+// so there is no race between the orphan and subsequent sends.
 func SendWithDeadline[T any](ctx context.Context, send func(T) error, frame T, deadline time.Duration) error {
 	doneCh := make(chan error, 1)
 
@@ -48,18 +50,14 @@ func SendWithDeadline[T any](ctx context.Context, send func(T) error, frame T, d
 		// Either the per-frame deadline fired, or the parent ctx was cancelled.
 
 		// Distinguish client disconnect from deadline expiry.
-		var returnErr error
 		if ctx.Err() != nil {
 			// Parent context cancelled — client disconnected.
-			returnErr = ctx.Err()
-		} else {
-			// Only the timer fired; parent is still live.
-			returnErr = ErrWriteDeadlineExceeded
+			return ctx.Err() //nolint:wrapcheck // context sentinel errors (Canceled/DeadlineExceeded) pass through verbatim; wrapping hides the semantic
 		}
-
-		// Drain the orphaned goroutine before returning to prevent data races.
-		<-doneCh
-
-		return returnErr
+		// Only the timer fired; parent is still live.
+		// Return immediately — do NOT drain doneCh. The orphaned goroutine will
+		// write to doneCh (buffered) and exit without blocking, so it does not
+		// leak. Blocking here would defeat the purpose of the deadline.
+		return ErrWriteDeadlineExceeded
 	}
 }

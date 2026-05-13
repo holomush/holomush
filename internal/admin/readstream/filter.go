@@ -85,6 +85,12 @@ const (
 // Deduplication: by (type, joined-ids) key after canonicalisation.
 // MUST NOT mutate the input *Request.
 func ResolveBounds(req *Request, now time.Time, defaultWindow, maxWindow time.Duration) (Resolved, ResolvedFlags, error) {
+	if req == nil {
+		return Resolved{}, ResolvedFlags{}, oops.
+			Code("DENY_OPERATOR_READ_INVALID_REQUEST").
+			Errorf("request must not be nil")
+	}
+
 	var flags ResolvedFlags
 
 	// --- Defaulting (applied before temporal validation) ---

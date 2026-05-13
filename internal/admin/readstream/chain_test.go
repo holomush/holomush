@@ -58,6 +58,40 @@ func TestOperatorReadHandler_ScopeFromSubjectRejectsBadPrefix(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "OPERATOR_READ_SCOPE_FROM_SUBJECT_FAILED")
 }
 
+// TestOperatorReadHandler_ScopeFromSubjectRejectsInvalidSuffix verifies that
+// ScopeFromSubject rejects empty and multi-segment suffixes, accepting only a
+// single non-empty scope segment.
+func TestOperatorReadHandler_ScopeFromSubjectRejectsInvalidSuffix(t *testing.T) {
+	h := readstream.OperatorReadHandlerFor("game-1")
+	prefix := "events.game-1.system.operator_read"
+
+	cases := []struct {
+		name    string
+		subject string
+	}{
+		{
+			name:    "empty suffix (trailing dot only)",
+			subject: prefix + ".",
+		},
+		{
+			name:    "multi-segment suffix (extra dot)",
+			subject: prefix + ".01ARZ3NDEKTSV4RRFFQ69G5FAV.extra",
+		},
+		{
+			name:    "multi-segment suffix (two extra dots)",
+			subject: prefix + ".a.b.c",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := h.ScopeFromSubject(tc.subject)
+			require.Error(t, err, "invalid suffix must be rejected")
+			errutil.AssertErrorCode(t, err, "OPERATOR_READ_SCOPE_FROM_SUBJECT_FAILED")
+		})
+	}
+}
+
 func TestINV_F9_AuditChainLinksStartToCompletedSameSubject(t *testing.T) {
 	// INV-F9: both events share NATS subject; chain primitive links them.
 	// Construct fake start + completed envelopes with shared request_id.

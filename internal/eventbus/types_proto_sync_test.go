@@ -7,6 +7,8 @@ package eventbus_test
 
 import (
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -131,13 +133,15 @@ func TestINV_F16_NoPlaintextReasonProtoGoParity(t *testing.T) {
 // comment mentioning the constant would flag — intentional, since comments are
 // also specifications.
 func TestINV_F16_HotColdStampersDoNotEmitNewValues(t *testing.T) {
-	// Paths are relative to the module root. The test must be run from the
-	// repo root (task test handles this) or with the correct working directory.
-	// We resolve via runtime.Caller to get the module root.
+	// Resolve absolute paths via runtime.Caller so the test is stable
+	// regardless of the working directory when invoked.
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok, "runtime.Caller must resolve current test file")
+	moduleRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", ".."))
 	files := []string{
-		"../../internal/eventbus/history/cold_postgres.go",
-		"../../internal/eventbus/history/dispatcher.go",
-		"../../internal/eventbus/subscriber.go",
+		filepath.Join(moduleRoot, "internal/eventbus/history/cold_postgres.go"),
+		filepath.Join(moduleRoot, "internal/eventbus/history/dispatcher.go"),
+		filepath.Join(moduleRoot, "internal/eventbus/subscriber.go"),
 	}
 
 	// The three new constant names in both Go and proto form.

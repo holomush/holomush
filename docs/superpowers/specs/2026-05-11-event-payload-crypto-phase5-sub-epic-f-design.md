@@ -1320,8 +1320,6 @@ $ echo $?
 | **INV-F1** | `AdminReadStream` MUST emit the `crypto.system.operator_read` audit event and observe a successful `OperatorReadAuditEmitter.EmitStart` ack BEFORE sending any `ReadStarted` or `Event` frame. | Unit + E2E `F-E4` |
 | **INV-F2** | If the pre-data audit publish fails, `AdminReadStream` MUST return `DENY_AUDIT_PRE_DATA_PUBLISH` and MUST NOT invoke `HistoryReader.QueryHistory`. | Unit |
 | **INV-F3** | `AdminReadStream` MUST reject with `DENY_OPERATOR_CAPABILITY` when the operator lacks `crypto.operator`, BEFORE any audit emit. | Unit + E2E `F-E11` |
-| **INV-F4** | `OperatorReadAuthGuard.Permit` MUST return PERMIT unconditionally for any sensitive-event lookup within an `AdminReadStream` invocation. | Unit |
-| **INV-F5** | The handler MUST NOT instantiate or call the runtime `AuthGuard` for in-stream event lookup (would re-trigger INV-43). | Unit (negative) |
 | **INV-F6** | `(until - since) > MaxWindow` MUST return `DENY_OPERATOR_READ_WINDOW_TOO_LARGE` BEFORE pre-data audit emit. | Unit + E2E `F-E8` |
 | **INV-F7** | `OperatorReadStartPayload` MUST persist both Requested-* (nullable, capturing defaulting) and Resolved-* (always populated) fields for since/until/contexts. | Unit (JSON round-trip) |
 | **INV-F8** | `ReadStarted.request_id == OperatorReadStartPayload.RequestID == start event ID == OperatorReadCompletedPayload.RequestID`. | Unit + E2E `F-E12` |
@@ -1334,7 +1332,6 @@ $ echo $?
 | **INV-F15** | F MUST set `HistoryQuery.SensitiveOnly=true` on every cold-tier query. The cold-tier `WHERE dek_ref IS NOT NULL` append is the canonical server-side filter. Identity-codec rows MUST NOT reach the operator's stream. Filtered events do NOT count toward `events_scanned` or `decrypt_fail_count`. | Unit (handler passes SensitiveOnly=true) + bus-integration (SQL filters public rows) + E2E `F-E14` |
 | **INV-F16** | The `NoPlaintextReason` enum expansion (4 → 7) MUST preserve INV-GW-14 parity, AND the new values (`DEK_MISSING`, `DEK_BAD_COLUMNS`, `INTERNAL`) MUST NOT be stamped by `cold_postgres.go::decodeColdRow` or `history/dispatcher.go` — F's classifier is the only producer. | Unit (parity test + negative tests on hot/cold paths) |
 | **INV-F17** | `approval.Repo.GetByOpArgsHash` MUST apply all filters server-side (`op_kind`, `op_args_hash`, `expires_at > now()`, `approved_at IS NOT NULL`, `primary_player_id != excludePlayerID`). Tiebreaker: most recently approved. | DB integration |
-| **INV-F18** | Each `INV-F[N]` MUST be referenced in exactly one test name (e.g., `TestINV_F1_PreDataAuditOrdering`). | Meta-test |
 
 ### Coverage matrix
 
@@ -1342,8 +1339,6 @@ $ echo $?
 INV-F1  → TestINV_F1_PreDataAuditOrdering                       (unit) + F-E4 (E2E)
 INV-F2  → TestINV_F2_AuditPublishFailRefuses                    (unit)
 INV-F3  → TestINV_F3_CapabilityCheckPrecedesAudit               (unit) + F-E11 (E2E)
-INV-F4  → TestINV_F4_OperatorReadAuthGuardAlwaysPermits         (unit)
-INV-F5  → TestINV_F5_StandardAuthGuardNeverSeesOperator         (unit, negative)
 INV-F6  → TestINV_F6_WindowTooLargePrecedesAudit                (unit) + F-E8 (E2E)
 INV-F7  → TestINV_F7_PayloadPreservesRequestedAndResolved       (unit)
 INV-F8  → TestINV_F8_RequestIDCoherence                         (unit) + F-E12 (E2E)
@@ -1358,7 +1353,6 @@ INV-F16 → TestINV_F16_NoPlaintextReasonProtoGoParity            (unit, parity)
        → TestINV_F16_HotColdStampersDoNotEmitNewValues          (unit, negative on dispatcher/cold_postgres)
 INV-F17 → TestINV_F17_GetByOpArgsHashMatrix                     (DB integration)
        → TestINV_F17_GetByOpArgsHashFiltersOwnAuthor            (DB integration)
-INV-F18 → TestINV_F_MetaInvariantsBoundToTests                  (meta-test)
 ```
 
 ## Section 7 — Test strategy

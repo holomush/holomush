@@ -58,7 +58,14 @@ func OperatorReadHandlerFor(gameID string) chain.Handler {
 					With("expected_prefix", prefixDot).
 					Errorf("subject prefix mismatch")
 			}
-			return subject[len(prefixDot):], nil
+			scope := subject[len(prefixDot):]
+			if scope == "" || strings.Contains(scope, ".") {
+				return "", oops.Code("OPERATOR_READ_SCOPE_FROM_SUBJECT_FAILED").
+					With("subject", subject).
+					With("expected_format", prefixDot+"<request_id>").
+					Errorf("invalid scope segment: must be a single non-empty segment")
+			}
+			return scope, nil
 		},
 		ScopeFromPayload: operatorReadScopeFromPayload,
 		Canonicalize:     canonicalizeOperatorReadPayload,

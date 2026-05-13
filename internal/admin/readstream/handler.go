@@ -141,6 +141,8 @@ func (c Config) Validate() error {
 		return oops.Code("READSTREAM_CONFIG_INVALID").Errorf("MaxWindow must be positive")
 	case c.DefaultWindow <= 0:
 		return oops.Code("READSTREAM_CONFIG_INVALID").Errorf("DefaultWindow must be positive")
+	case c.DefaultWindow > c.MaxWindow:
+		return oops.Code("READSTREAM_CONFIG_INVALID").Errorf("DefaultWindow must be <= MaxWindow")
 	case c.WriteDeadline <= 0:
 		return oops.Code("READSTREAM_CONFIG_INVALID").Errorf("WriteDeadline must be positive")
 	case c.ApprovalTTL <= 0:
@@ -233,8 +235,11 @@ func (h *Handler) handleInternal(
 		return oops.Wrap(err)
 	}
 
-	// Step 4: compute op-args hash (binds the work, NOT the session token).
-	opArgsHash, err := computeReadStreamArgsHash(req)
+	// Step 4: compute op-args hash from the RESOLVED bounds so that two
+	// requests that omit since/until hash identically only when they resolve
+	// to the same effective window — preventing approval reuse across
+	// different actual time ranges.
+	opArgsHash, err := computeReadStreamArgsHash(resolved)
 	if err != nil {
 		return oops.Wrap(err)
 	}
@@ -690,21 +695,39 @@ func protoToDomesticRequest(req *adminv1.AdminReadStreamRequest) Request {
 }
 
 // computeReadStreamArgsHash returns the op-args hash for dual-control reuse.
-// Hashes the WORK (context, since, until, justification) — never the
-// session_token or dual_control flag. Mirrors dek.ComputeRekeyArgsHash's
-// "bind the work, not who" pattern.
-func computeReadStreamArgsHash(req *adminv1.AdminReadStreamRequest) ([]byte, error) {
+//
+// The hash is computed from the RESOLVED bounds (Resolved.Since,
+// Resolved.Until, Resolved.Contexts, Resolved.Justification) — NOT from the
+// raw proto request. This ensures that:
+//   - Two requests that omit since/until resolve to the same effective window
+//     AND hash identically, so approval reuse works correctly for equivalent
+//     requests.
+//   - Two requests that default to different wall-clock windows (e.g., invoked
+//     minutes apart) produce different hashes, preventing an approval for one
+//     window from being incorrectly reused for another.
+//
+// The resolved values are carried via a stable proto message to reuse
+// approval.ComputeOpArgsHash's deterministic-marshal + SHA-256 primitive.
+// Contexts are materialized from Resolved.Contexts (canonical, sorted by
+// ResolveBounds) rather than from the raw proto Context repeated field.
+func computeReadStreamArgsHash(resolved Resolved) ([]byte, error) {
+	contexts := make([]*adminv1.ContextRef, 0, len(resolved.Contexts))
+	for _, c := range resolved.Contexts {
+		ids := make([]string, len(c.IDs))
+		copy(ids, c.IDs)
+		contexts = append(contexts, &adminv1.ContextRef{
+			Type: c.Type,
+			Ids:  ids,
+		})
+	}
 	stable := &adminv1.AdminReadStreamRequest{
-		// Intentionally include only the fields that bind the work:
-		SubjectPattern: req.GetSubjectPattern(),
-		TypeFilter:     req.GetTypeFilter(),
-		Context:        req.GetContext(),
-		Since:          req.GetSince(),
-		Until:          req.GetUntil(),
-		Limit:          req.GetLimit(),
-		Justification:  req.GetJustification(),
-		// SessionToken, DualControl, DualControlTimeoutSeconds are
-		// intentionally omitted: they identify WHO, not WHAT.
+		Context:       contexts,
+		Since:         timestamppb.New(resolved.Since),
+		Until:         timestamppb.New(resolved.Until),
+		Justification: resolved.Justification,
+		// SessionToken, DualControl, SubjectPattern, TypeFilter, Limit are
+		// intentionally omitted: they identify WHO or are not part of the
+		// effective query shape (contexts+window+justification are).
 	}
 	return approval.ComputeOpArgsHash(stable) //nolint:wrapcheck // helper returns oops-coded error; wrapping discards the code
 }

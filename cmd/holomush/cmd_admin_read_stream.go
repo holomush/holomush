@@ -5,6 +5,7 @@ package main
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -69,6 +70,12 @@ func runAdminReadStream(cmd *cobra.Command, factory adminClientFactory) error {
 	untilStr, _ := cmd.Flags().GetString("until")  //nolint:errcheck // flag defined in newAdminReadStreamCmd
 	dualControl, _ := cmd.Flags().GetBool("dual-control") //nolint:errcheck // flag defined in newAdminReadStreamCmd
 	output, _ := cmd.Flags().GetString("output") //nolint:errcheck // flag defined in newAdminReadStreamCmd
+	if output != "text" && output != "json" {
+		return &exitCodeError{
+			exitCode: 64, // EX_USAGE
+			cause:    oops.Code("ADMIN_READSTREAM_BAD_OUTPUT").Errorf("unsupported output format %q (want text|json)", output),
+		}
+	}
 
 	req := &adminv1.AdminReadStreamRequest{
 		Justification: just,
@@ -245,7 +252,99 @@ func exitCodeForTerminatedBy(t adminv1.ReadFinished_TerminatedBy) int {
 //     if metadata_only: stdout: "[redacted: <reason>] subject=... type=... timestamp=..."
 //     else: stdout: <payload> + metadata line
 //   - ReadFinished    → stderr: "finished: terminated_by=... events_scanned=... decrypt_fail_count=..."
-func renderFrame(frame *adminv1.AdminReadStreamResponse, _ string, stdout, stderr io.Writer) {
+// renderFrameJSON marshals an AdminReadStreamResponse as a single-line JSON
+// object to stdout. Fields are selected for operator usability: the frame type
+// is included as "frame_type" so consumers can dispatch without inspecting
+// oneof shapes.
+func renderFrameJSON(frame *adminv1.AdminReadStreamResponse, stdout io.Writer) {
+	type jsonFrame struct {
+		FrameType string `json:"frame_type"`
+		// PendingApproval fields
+		RequestID string `json:"request_id,omitempty"`
+		ExpiresAt string `json:"expires_at,omitempty"`
+		// ReadStarted fields
+		PolicyHash      string   `json:"policy_hash,omitempty"`
+		ResolvedSince   string   `json:"resolved_since,omitempty"`
+		ResolvedUntil   string   `json:"resolved_until,omitempty"`
+		ResolvedContexts []string `json:"resolved_contexts,omitempty"`
+		// Event fields
+		Stream         string `json:"stream,omitempty"`
+		EventType      string `json:"event_type,omitempty"`
+		Timestamp      string `json:"timestamp,omitempty"`
+		MetadataOnly   bool   `json:"metadata_only,omitempty"`
+		NoPlaintextReason string `json:"no_plaintext_reason,omitempty"`
+		Payload        []byte `json:"payload,omitempty"`
+		// ReadFinished fields
+		TerminatedBy    string `json:"terminated_by,omitempty"`
+		EventsScanned   int64  `json:"events_scanned,omitempty"`
+		DecryptFailCount int64  `json:"decrypt_fail_count,omitempty"`
+	}
+
+	var out jsonFrame
+	switch {
+	case frame.GetPendingApproval() != nil:
+		pa := frame.GetPendingApproval()
+		out.FrameType = "pending_approval"
+		out.RequestID = fmt.Sprintf("%x", pa.GetRequestId())
+		if pa.GetExpiresAt() != nil {
+			out.ExpiresAt = pa.GetExpiresAt().AsTime().UTC().Format(time.RFC3339)
+		}
+	case frame.GetStarted() != nil:
+		s := frame.GetStarted()
+		out.FrameType = "started"
+		out.RequestID = s.GetRequestId()
+		out.PolicyHash = fmt.Sprintf("%x", s.GetPolicyHash())
+		if s.GetResolvedSince() != nil {
+			out.ResolvedSince = s.GetResolvedSince().AsTime().UTC().Format(time.RFC3339)
+		}
+		if s.GetResolvedUntil() != nil {
+			out.ResolvedUntil = s.GetResolvedUntil().AsTime().UTC().Format(time.RFC3339)
+		}
+		for _, c := range s.GetResolvedContexts() {
+			out.ResolvedContexts = append(out.ResolvedContexts, c.GetType()+":"+strings.Join(c.GetIds(), ":"))
+		}
+	case frame.GetEvent() != nil:
+		ef := frame.GetEvent()
+		out.FrameType = "event"
+		out.Stream = ef.GetStream()
+		out.EventType = ef.GetType()
+		out.MetadataOnly = ef.GetMetadataOnly()
+		out.NoPlaintextReason = ef.GetNoPlaintextReason().String()
+		if ef.GetTimestamp() != nil {
+			out.Timestamp = ef.GetTimestamp().AsTime().UTC().Format(time.RFC3339Nano)
+		}
+		if !ef.GetMetadataOnly() {
+			out.Payload = ef.GetPayload()
+		}
+	case frame.GetFinished() != nil:
+		f := frame.GetFinished()
+		out.FrameType = "finished"
+		out.TerminatedBy = f.GetTerminatedBy().String()
+		out.EventsScanned = f.GetEventsScanned()
+		out.DecryptFailCount = f.GetDecryptFailCount()
+	default:
+		out.FrameType = "unknown"
+	}
+
+	b, err := json.Marshal(out)
+	if err == nil {
+		fmt.Fprintln(stdout, string(b)) //nolint:errcheck // non-fatal CLI output
+	}
+}
+
+// renderFrame prints one AdminReadStreamResponse frame to stdout/stderr.
+//
+//   - PendingApproval → stderr: "pending: request_id=... expires_at=..."
+//   - ReadStarted     → stderr: "started: request_id=... policy_hash=... window=[since,until] contexts=..."
+//   - Event (corev1.EventFrame) →
+//     if metadata_only: stdout: "[redacted: <reason>] subject=... type=... timestamp=..."
+//     else: stdout: <payload> + metadata line
+//   - ReadFinished    → stderr: "finished: terminated_by=... events_scanned=... decrypt_fail_count=..."
+func renderFrame(frame *adminv1.AdminReadStreamResponse, output string, stdout, stderr io.Writer) {
+	if output == "json" {
+		renderFrameJSON(frame, stdout)
+		return
+	}
 	switch {
 	case frame.GetPendingApproval() != nil:
 		pa := frame.GetPendingApproval()

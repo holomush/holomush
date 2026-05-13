@@ -5,6 +5,8 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/samber/oops"
@@ -245,4 +247,69 @@ func TestRenderFrame_ReadFinished(t *testing.T) {
 	assert.Contains(t, stderr.String(), "events_scanned=42")
 	assert.Contains(t, stderr.String(), "decrypt_fail_count=1")
 	assert.Empty(t, stdout.String())
+}
+
+// --- renderFrame JSON output ---
+
+// TestRenderFrame_JSONOutputEventFrame verifies that output=="json" renders an
+// event frame as a single-line JSON object to stdout (not stderr), carrying
+// frame_type, subject, metadata_only, and no_plaintext_reason.
+func TestRenderFrame_JSONOutputEventFrame(t *testing.T) {
+	frame := &adminv1.AdminReadStreamResponse{
+		Payload: &adminv1.AdminReadStreamResponse_Event{
+			Event: &corev1.EventFrame{
+				Stream:            "scene.01HZAVGE83MGFEXQQH5SP9NXKF",
+				Type:              "scene.emote",
+				MetadataOnly:      true,
+				NoPlaintextReason: corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_DEK_MISSING,
+				Timestamp:         timestamppb.Now(),
+			},
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	renderFrame(frame, "json", &stdout, &stderr)
+
+	line := stdout.String()
+	assert.NotEmpty(t, line, "JSON output must be non-empty on stdout")
+	assert.Empty(t, stderr.String(), "JSON output must not write to stderr")
+
+	// Must be valid JSON.
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(line)), &decoded),
+		"JSON output must be valid JSON")
+
+	assert.Equal(t, "event", decoded["frame_type"])
+	assert.Equal(t, "scene.01HZAVGE83MGFEXQQH5SP9NXKF", decoded["stream"])
+	assert.Equal(t, true, decoded["metadata_only"])
+	assert.Contains(t, decoded["no_plaintext_reason"], "DEK_MISSING")
+}
+
+// TestRenderFrame_JSONOutputFinished verifies that output=="json" renders a
+// ReadFinished frame with terminated_by and counters.
+func TestRenderFrame_JSONOutputFinished(t *testing.T) {
+	frame := &adminv1.AdminReadStreamResponse{
+		Payload: &adminv1.AdminReadStreamResponse_Finished{
+			Finished: &adminv1.ReadFinished{
+				TerminatedBy:     adminv1.ReadFinished_TERMINATED_BY_CLIENT_EOF,
+				EventsScanned:    7,
+				DecryptFailCount: 2,
+			},
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	renderFrame(frame, "json", &stdout, &stderr)
+
+	line := stdout.String()
+	assert.NotEmpty(t, line)
+	assert.Empty(t, stderr.String())
+
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(line)), &decoded))
+	assert.Equal(t, "finished", decoded["frame_type"])
+	assert.Contains(t, decoded["terminated_by"], "CLIENT_EOF")
+	// JSON numbers decode as float64 when unmarshaling into map[string]any.
+	assert.EqualValues(t, 7, decoded["events_scanned"])
+	assert.EqualValues(t, 2, decoded["decrypt_fail_count"])
 }

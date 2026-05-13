@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -129,6 +130,11 @@ func (r *PostgresRepo) getRaw(ctx context.Context, id RequestID) (Approval, erro
 // Returns APPROVAL_NOT_FOUND if no matching row exists (expired, unapproved,
 // authored by excludePlayerID, or simply absent).
 func (r *PostgresRepo) GetByOpArgsHash(ctx context.Context, opKind string, opArgsHash []byte, excludePlayerID string) (Approval, error) {
+	if strings.TrimSpace(excludePlayerID) == "" {
+		return Approval{}, oops.Code("APPROVAL_INVALID_ARGUMENT").
+			Errorf("exclude_player_id is required")
+	}
+
 	row := r.pool.QueryRow(ctx, `
 		SELECT request_id, primary_player_id, op_kind, op_args_hash,
 		       expires_at, approved_at, COALESCE(approved_by_player_id, ''),
