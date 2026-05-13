@@ -24,6 +24,23 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 )
 
+// readstreamAuditEmitterWrapper is nil in production. Tests may install a
+// one-shot wrapper to fault-inject the audit emitter. The wrapper fires once
+// per buildReadStreamWiring call; tests MUST reset to nil after use.
+//
+// This pattern mirrors the test-only-var convention used elsewhere in cmd/holomush
+// (e.g., crypto_rekey_wiring.go test seams). Deliberately NOT a field on
+// readStreamWiringDeps — that would contaminate production call sites.
+var readstreamAuditEmitterWrapper func(readstream.OperatorReadAuditEmitter) readstream.OperatorReadAuditEmitter
+
+// readstreamGrantsOverrideForTest is nil in production. Tests may install a
+// replacement access.SubjectResolver to fault-inject capability checks (e.g.,
+// F-E11: simulate a player without crypto.operator). Reset to nil after use.
+//
+// Like readstreamAuditEmitterWrapper, this is intentionally a package-level
+// var and NOT a field on readStreamWiringDeps or the handler config struct.
+var readstreamGrantsOverrideForTest access.SubjectResolver
+
 // readStreamWiring bundles the constructed pieces of the production
 // AdminReadStream substrate. Returned by buildReadStreamWiring and consumed
 // by runCoreWithDeps to populate the admin-socket Config and extend the
@@ -122,6 +139,18 @@ func buildReadStreamWiring(
 		deps.AuditPublisher,
 		operatorReadHandler,
 	)
+	// Test-only fault-injection seam: wrap the emitter when a test installs
+	// readstreamAuditEmitterWrapper (nil in production, always).
+	if readstreamAuditEmitterWrapper != nil {
+		auditEmitter = readstreamAuditEmitterWrapper(auditEmitter)
+	}
+
+	// Test-only grants override: substitute the SubjectResolver when a test
+	// installs readstreamGrantsOverrideForTest (nil in production, always).
+	grants := deps.SubjectResolver
+	if readstreamGrantsOverrideForTest != nil {
+		grants = readstreamGrantsOverrideForTest
+	}
 
 	// Compute the canonical policy_hash string. INV-E25 / INV-F-policy_hash:
 	// the audit payload stores "sha256:<hex>"; the ReadStarted wire frame
@@ -144,7 +173,7 @@ func buildReadStreamWiring(
 
 	handler, hErr := readstream.NewHandler(readstream.Config{
 		Sessions:      &readstreamSessionStore{inner: deps.SessionStore},
-		Grants:        deps.SubjectResolver,
+		Grants:        grants,
 		Approvals:     approvalRepo,
 		ColdReader:    coldReader,
 		DEK:           deps.DEKManager, // dek.Manager.Resolve already satisfies readstream.DEKResolver
