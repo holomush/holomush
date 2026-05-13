@@ -42,3 +42,14 @@ type RekeyRPCHandler interface {
 	HandleRekeyStatus(ctx context.Context, req *connect.Request[adminv1.RekeyStatusRequest]) (*connect.Response[adminv1.RekeyStatusResponse], error)
 	HandleRekeyList(ctx context.Context, req *connect.Request[adminv1.RekeyListRequest], stream *connect.ServerStream[adminv1.RekeyStatusResponse]) error
 }
+
+// ReadStreamRPCHandler is the narrow surface the socket needs from the
+// AdminReadStream handler (holomush-jxo8.8.36). When nil, AdminReadStream
+// returns connect.CodeUnimplemented. R.15 will supply the real implementation.
+type ReadStreamRPCHandler interface {
+	HandleAdminReadStream(
+		ctx context.Context,
+		req *connect.Request[adminv1.AdminReadStreamRequest],
+		stream *connect.ServerStream[adminv1.AdminReadStreamResponse],
+	) error
+}

@@ -57,6 +57,9 @@ const (
 	AdminServiceRekeyStatusProcedure = "/holomush.admin.v1.AdminService/RekeyStatus"
 	// AdminServiceRekeyListProcedure is the fully-qualified name of the AdminService's RekeyList RPC.
 	AdminServiceRekeyListProcedure = "/holomush.admin.v1.AdminService/RekeyList"
+	// AdminServiceAdminReadStreamProcedure is the fully-qualified name of the AdminService's
+	// AdminReadStream RPC.
+	AdminServiceAdminReadStreamProcedure = "/holomush.admin.v1.AdminService/AdminReadStream"
 )
 
 // AdminServiceClient is a client for the holomush.admin.v1.AdminService service.
@@ -89,6 +92,11 @@ type AdminServiceClient interface {
 	// RekeyList streams status records for active (and optionally terminal)
 	// rekey operations. Spec §7; INV-E surface.
 	RekeyList(context.Context, *connect.Request[v1.RekeyListRequest]) (*connect.ServerStreamForClient[v1.RekeyStatusResponse], error)
+	// AdminReadStream is the operator break-glass streaming read RPC.
+	// Streams EventFrame payloads (with typed metadata_only + no_plaintext_reason
+	// redaction fields) for the requested context(s) and time bounds.
+	// Spec sub-epic F §3.2, §3.3; ADR-0017.
+	AdminReadStream(context.Context, *connect.Request[v1.AdminReadStreamRequest]) (*connect.ServerStreamForClient[v1.AdminReadStreamResponse], error)
 }
 
 // NewAdminServiceClient constructs a client for the holomush.admin.v1.AdminService service. By
@@ -156,20 +164,27 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(adminServiceMethods.ByName("RekeyList")),
 			connect.WithClientOptions(opts...),
 		),
+		adminReadStream: connect.NewClient[v1.AdminReadStreamRequest, v1.AdminReadStreamResponse](
+			httpClient,
+			baseURL+AdminServiceAdminReadStreamProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("AdminReadStream")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // adminServiceClient implements AdminServiceClient.
 type adminServiceClient struct {
-	status       *connect.Client[v1.StatusRequest, v1.StatusResponse]
-	authenticate *connect.Client[v1.AuthenticateRequest, v1.AuthenticateResponse]
-	approve      *connect.Client[v1.ApproveRequest, v1.ApproveResponse]
-	resetTOTP    *connect.Client[v1.ResetTOTPRequest, v1.ResetTOTPResponse]
-	rekey        *connect.Client[v1.RekeyRequest, v1.RekeyProgress]
-	rekeyResume  *connect.Client[v1.RekeyResumeRequest, v1.RekeyProgress]
-	rekeyAbort   *connect.Client[v1.RekeyAbortRequest, v1.RekeyAbortResponse]
-	rekeyStatus  *connect.Client[v1.RekeyStatusRequest, v1.RekeyStatusResponse]
-	rekeyList    *connect.Client[v1.RekeyListRequest, v1.RekeyStatusResponse]
+	status          *connect.Client[v1.StatusRequest, v1.StatusResponse]
+	authenticate    *connect.Client[v1.AuthenticateRequest, v1.AuthenticateResponse]
+	approve         *connect.Client[v1.ApproveRequest, v1.ApproveResponse]
+	resetTOTP       *connect.Client[v1.ResetTOTPRequest, v1.ResetTOTPResponse]
+	rekey           *connect.Client[v1.RekeyRequest, v1.RekeyProgress]
+	rekeyResume     *connect.Client[v1.RekeyResumeRequest, v1.RekeyProgress]
+	rekeyAbort      *connect.Client[v1.RekeyAbortRequest, v1.RekeyAbortResponse]
+	rekeyStatus     *connect.Client[v1.RekeyStatusRequest, v1.RekeyStatusResponse]
+	rekeyList       *connect.Client[v1.RekeyListRequest, v1.RekeyStatusResponse]
+	adminReadStream *connect.Client[v1.AdminReadStreamRequest, v1.AdminReadStreamResponse]
 }
 
 // Status calls holomush.admin.v1.AdminService.Status.
@@ -217,6 +232,11 @@ func (c *adminServiceClient) RekeyList(ctx context.Context, req *connect.Request
 	return c.rekeyList.CallServerStream(ctx, req)
 }
 
+// AdminReadStream calls holomush.admin.v1.AdminService.AdminReadStream.
+func (c *adminServiceClient) AdminReadStream(ctx context.Context, req *connect.Request[v1.AdminReadStreamRequest]) (*connect.ServerStreamForClient[v1.AdminReadStreamResponse], error) {
+	return c.adminReadStream.CallServerStream(ctx, req)
+}
+
 // AdminServiceHandler is an implementation of the holomush.admin.v1.AdminService service.
 type AdminServiceHandler interface {
 	// Status returns the admin-socket server's liveness state and binary version.
@@ -247,6 +267,11 @@ type AdminServiceHandler interface {
 	// RekeyList streams status records for active (and optionally terminal)
 	// rekey operations. Spec §7; INV-E surface.
 	RekeyList(context.Context, *connect.Request[v1.RekeyListRequest], *connect.ServerStream[v1.RekeyStatusResponse]) error
+	// AdminReadStream is the operator break-glass streaming read RPC.
+	// Streams EventFrame payloads (with typed metadata_only + no_plaintext_reason
+	// redaction fields) for the requested context(s) and time bounds.
+	// Spec sub-epic F §3.2, §3.3; ADR-0017.
+	AdminReadStream(context.Context, *connect.Request[v1.AdminReadStreamRequest], *connect.ServerStream[v1.AdminReadStreamResponse]) error
 }
 
 // NewAdminServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -310,6 +335,12 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(adminServiceMethods.ByName("RekeyList")),
 		connect.WithHandlerOptions(opts...),
 	)
+	adminServiceAdminReadStreamHandler := connect.NewServerStreamHandler(
+		AdminServiceAdminReadStreamProcedure,
+		svc.AdminReadStream,
+		connect.WithSchema(adminServiceMethods.ByName("AdminReadStream")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.admin.v1.AdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AdminServiceStatusProcedure:
@@ -330,6 +361,8 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 			adminServiceRekeyStatusHandler.ServeHTTP(w, r)
 		case AdminServiceRekeyListProcedure:
 			adminServiceRekeyListHandler.ServeHTTP(w, r)
+		case AdminServiceAdminReadStreamProcedure:
+			adminServiceAdminReadStreamHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -373,4 +406,8 @@ func (UnimplementedAdminServiceHandler) RekeyStatus(context.Context, *connect.Re
 
 func (UnimplementedAdminServiceHandler) RekeyList(context.Context, *connect.Request[v1.RekeyListRequest], *connect.ServerStream[v1.RekeyStatusResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("holomush.admin.v1.AdminService.RekeyList is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) AdminReadStream(context.Context, *connect.Request[v1.AdminReadStreamRequest], *connect.ServerStream[v1.AdminReadStreamResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("holomush.admin.v1.AdminService.AdminReadStream is not implemented"))
 }

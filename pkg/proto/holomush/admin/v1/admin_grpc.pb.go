@@ -22,15 +22,16 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AdminService_Status_FullMethodName       = "/holomush.admin.v1.AdminService/Status"
-	AdminService_Authenticate_FullMethodName = "/holomush.admin.v1.AdminService/Authenticate"
-	AdminService_Approve_FullMethodName      = "/holomush.admin.v1.AdminService/Approve"
-	AdminService_ResetTOTP_FullMethodName    = "/holomush.admin.v1.AdminService/ResetTOTP"
-	AdminService_Rekey_FullMethodName        = "/holomush.admin.v1.AdminService/Rekey"
-	AdminService_RekeyResume_FullMethodName  = "/holomush.admin.v1.AdminService/RekeyResume"
-	AdminService_RekeyAbort_FullMethodName   = "/holomush.admin.v1.AdminService/RekeyAbort"
-	AdminService_RekeyStatus_FullMethodName  = "/holomush.admin.v1.AdminService/RekeyStatus"
-	AdminService_RekeyList_FullMethodName    = "/holomush.admin.v1.AdminService/RekeyList"
+	AdminService_Status_FullMethodName          = "/holomush.admin.v1.AdminService/Status"
+	AdminService_Authenticate_FullMethodName    = "/holomush.admin.v1.AdminService/Authenticate"
+	AdminService_Approve_FullMethodName         = "/holomush.admin.v1.AdminService/Approve"
+	AdminService_ResetTOTP_FullMethodName       = "/holomush.admin.v1.AdminService/ResetTOTP"
+	AdminService_Rekey_FullMethodName           = "/holomush.admin.v1.AdminService/Rekey"
+	AdminService_RekeyResume_FullMethodName     = "/holomush.admin.v1.AdminService/RekeyResume"
+	AdminService_RekeyAbort_FullMethodName      = "/holomush.admin.v1.AdminService/RekeyAbort"
+	AdminService_RekeyStatus_FullMethodName     = "/holomush.admin.v1.AdminService/RekeyStatus"
+	AdminService_RekeyList_FullMethodName       = "/holomush.admin.v1.AdminService/RekeyList"
+	AdminService_AdminReadStream_FullMethodName = "/holomush.admin.v1.AdminService/AdminReadStream"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -69,6 +70,11 @@ type AdminServiceClient interface {
 	// RekeyList streams status records for active (and optionally terminal)
 	// rekey operations. Spec §7; INV-E surface.
 	RekeyList(ctx context.Context, in *RekeyListRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RekeyStatusResponse], error)
+	// AdminReadStream is the operator break-glass streaming read RPC.
+	// Streams EventFrame payloads (with typed metadata_only + no_plaintext_reason
+	// redaction fields) for the requested context(s) and time bounds.
+	// Spec sub-epic F §3.2, §3.3; ADR-0017.
+	AdminReadStream(ctx context.Context, in *AdminReadStreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AdminReadStreamResponse], error)
 }
 
 type adminServiceClient struct {
@@ -196,6 +202,25 @@ func (c *adminServiceClient) RekeyList(ctx context.Context, in *RekeyListRequest
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AdminService_RekeyListClient = grpc.ServerStreamingClient[RekeyStatusResponse]
 
+func (c *adminServiceClient) AdminReadStream(ctx context.Context, in *AdminReadStreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AdminReadStreamResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AdminService_ServiceDesc.Streams[3], AdminService_AdminReadStream_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[AdminReadStreamRequest, AdminReadStreamResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AdminService_AdminReadStreamClient = grpc.ServerStreamingClient[AdminReadStreamResponse]
+
 // AdminServiceServer is the server API for AdminService service.
 // All implementations must embed UnimplementedAdminServiceServer
 // for forward compatibility.
@@ -232,6 +257,11 @@ type AdminServiceServer interface {
 	// RekeyList streams status records for active (and optionally terminal)
 	// rekey operations. Spec §7; INV-E surface.
 	RekeyList(*RekeyListRequest, grpc.ServerStreamingServer[RekeyStatusResponse]) error
+	// AdminReadStream is the operator break-glass streaming read RPC.
+	// Streams EventFrame payloads (with typed metadata_only + no_plaintext_reason
+	// redaction fields) for the requested context(s) and time bounds.
+	// Spec sub-epic F §3.2, §3.3; ADR-0017.
+	AdminReadStream(*AdminReadStreamRequest, grpc.ServerStreamingServer[AdminReadStreamResponse]) error
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -268,6 +298,9 @@ func (UnimplementedAdminServiceServer) RekeyStatus(context.Context, *RekeyStatus
 }
 func (UnimplementedAdminServiceServer) RekeyList(*RekeyListRequest, grpc.ServerStreamingServer[RekeyStatusResponse]) error {
 	return status.Error(codes.Unimplemented, "method RekeyList not implemented")
+}
+func (UnimplementedAdminServiceServer) AdminReadStream(*AdminReadStreamRequest, grpc.ServerStreamingServer[AdminReadStreamResponse]) error {
+	return status.Error(codes.Unimplemented, "method AdminReadStream not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 func (UnimplementedAdminServiceServer) testEmbeddedByValue()                      {}
@@ -431,6 +464,17 @@ func _AdminService_RekeyList_Handler(srv interface{}, stream grpc.ServerStream) 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AdminService_RekeyListServer = grpc.ServerStreamingServer[RekeyStatusResponse]
 
+func _AdminService_AdminReadStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(AdminReadStreamRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(AdminServiceServer).AdminReadStream(m, &grpc.GenericServerStream[AdminReadStreamRequest, AdminReadStreamResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AdminService_AdminReadStreamServer = grpc.ServerStreamingServer[AdminReadStreamResponse]
+
 // AdminService_ServiceDesc is the grpc.ServiceDesc for AdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -477,6 +521,11 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "RekeyList",
 			Handler:       _AdminService_RekeyList_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "AdminReadStream",
+			Handler:       _AdminService_AdminReadStream_Handler,
 			ServerStreams: true,
 		},
 	},
