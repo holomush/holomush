@@ -194,8 +194,10 @@ func TestColdReader_BuildSQL_SelectsCorrectColumns(t *testing.T) {
 	require.NoError(t, err)
 
 	// All required columns must be present in the SELECT list
-	for _, col := range []string{"id", "subject", "type", "timestamp", "actor_kind", "actor_id",
-		"envelope", "codec", "dek_ref", "dek_version", "js_seq"} {
+	for _, col := range []string{
+		"id", "subject", "type", "timestamp", "actor_kind", "actor_id",
+		"envelope", "codec", "dek_ref", "dek_version", "js_seq",
+	} {
 		assert.Contains(t, sqlStr, col, "SELECT must include column: %s", col)
 	}
 }

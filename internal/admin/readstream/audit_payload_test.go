@@ -25,10 +25,10 @@ func TestEncodeHash_HasSha256Prefix(t *testing.T) {
 	// The canonical form is validated by checking that any value we put in
 	// PolicyHash starting with "sha256:" round-trips through JSON unchanged.
 	payload := readstream.OperatorReadStartPayload{
-		PolicyHash: "sha256:deadbeef",
-		SelfHash:   "sha256:cafebabe",
-		RequestID:  "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		StartedAt:  time.Now().UTC().Truncate(time.Millisecond),
+		PolicyHash:    "sha256:deadbeef",
+		SelfHash:      "sha256:cafebabe",
+		RequestID:     "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		StartedAt:     time.Now().UTC().Truncate(time.Millisecond),
 		ResolvedSince: time.Now().UTC().Truncate(time.Millisecond),
 		ResolvedUntil: time.Now().UTC().Add(time.Hour).Truncate(time.Millisecond),
 	}

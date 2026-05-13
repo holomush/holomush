@@ -557,15 +557,13 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 
 	// --- Crypto subsystems (T22 / holomush-jxo8.6.21; generalized holomush-jxo8.7.8) ---
 	// auditchain.VerifierSubsystem walks every registered hash chain at boot,
-	// replacing D's policy-specific CryptoChainVerifierSubsystem.
-	// RekeyChain wired here per Task 19 (holomush-jxo8.7.17).
+	// replacing D's policy-specific CryptoChainVerifierSubsystem. RekeyChain
+	// wired here per Task 19 (holomush-jxo8.7.17); OperatorReadChain wired
+	// per sub-epic F R.14 (holomush-jxo8.8.38) — the verifier subsystem is
+	// constructed below, after readstream wiring runs, so we can append
+	// readstream.OperatorReadHandlerFor(gameID) to its Handlers slice.
 	dek.SetGameIDForRekey(gameID) // must be set before RekeyHandlerFor is called below.
 	auditChainRepo := chain.NewPostgresRepo(dbSub.Pool())
-	cryptoChainVerifierSub := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
-		Repo:     auditChainRepo,
-		Handlers: []chain.Handler{policy.PolicySetHandlerFor(gameID), dek.RekeyHandlerFor(gameID)},
-		Logger:   slog.Default(),
-	})
 
 	// Mint a server-start ULID to stamp the CryptoPolicySubsystem's emits so
 	// a given run's events can be correlated in events_audit.
@@ -844,6 +842,71 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		}
 	}
 
+	// --- Phase 5 sub-epic F R.14 AdminReadStream wiring (holomush-jxo8.8.38) ---
+	//
+	// Constructs the operator-read handler (ColdReader, audit emitter, DEK +
+	// codec adapters, session-store adapter). When the upstream deps are
+	// unavailable (KEK missing → no dek.Manager; pre-start failures), the
+	// helper returns a zero-valued wiring and the admin socket falls back
+	// to Unimplemented for AdminReadStream. WARN-log on OperatorReadMaxWindow
+	// > 90d (operators can configure values above the cap, but oversized
+	// windows greatly inflate row-count + memory pressure on the cold-tier
+	// reader). Per ADR-0017, F bypasses history.NewReader entirely; the
+	// abandoned chain's staleDEKColdResolver / operatorSessionAuthorizer /
+	// OperatorReadAuthGuard / NoOpDecryptAuditEmitter null-objects are
+	// absent by design.
+	const operatorReadMaxWindowWarnThreshold = 90 * 24 * time.Hour
+	if cryptoCfg.OperatorReadMaxWindow > operatorReadMaxWindowWarnThreshold {
+		slog.Warn("admin readstream: OperatorReadMaxWindow > 90d — oversized windows greatly inflate cold-tier read row-count and memory pressure",
+			"configured", cryptoCfg.OperatorReadMaxWindow,
+			"threshold", operatorReadMaxWindowWarnThreshold)
+	}
+
+	readStreamW, readStreamWErr := buildReadStreamWiring(ctx, readStreamWiringDeps{
+		Pool:            dbSub.Pool(),
+		GameID:          gameID,
+		AuditChainRepo:  auditChainRepo,
+		AuditPublisher:  auditPublisher,
+		SubjectResolver: abacSub.Resolver(),
+		SessionStore:    adminSessionStore,
+		DEKManager:      rekeyW.Manager,
+		PolicyHashSrc:   policyHashSrc,
+		MaxWindow:       cryptoCfg.OperatorReadMaxWindow,
+		DefaultWindow:   cryptoCfg.OperatorReadDefaultWindow,
+		WriteDeadline:   cryptoCfg.OperatorReadWriteDeadline,
+		ApprovalTTL:     cryptoCfg.OperatorReadApprovalTTL,
+	})
+	if readStreamWErr != nil {
+		// Construction failure is fatal because it means a required
+		// invariant is incoherent (e.g., handler.Validate rejected the
+		// config). A missing dependency returns a zero wiring with nil
+		// error, NOT this branch.
+		return readStreamWErr
+	}
+	if readStreamW.Handler == nil {
+		slog.Warn("admin readstream wiring incomplete — AdminReadStream RPC will return Unimplemented",
+			"dek_manager_available", rekeyW.Manager != nil)
+	}
+
+	// Construct the audit-chain verifier subsystem now that we know which
+	// chains the host registered. operator_read joins the static
+	// policy_set + rekey pair when readstream wiring succeeded; otherwise
+	// the chain stays unregistered (its DB rows would still be visible to
+	// a future verifier run, but boot-time integrity is skipped — matching
+	// the "no events yet" shape).
+	chainHandlers := []chain.Handler{
+		policy.PolicySetHandlerFor(gameID),
+		dek.RekeyHandlerFor(gameID),
+	}
+	if readStreamW.Handler != nil {
+		chainHandlers = append(chainHandlers, readStreamW.AuditChainHandler)
+	}
+	cryptoChainVerifierSub := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
+		Repo:     auditChainRepo,
+		Handlers: chainHandlers,
+		Logger:   slog.Default(),
+	})
+
 	// Lifted ahead of admin subsystem construction (holomush-jxo8.9) so the
 	// admin socket's post-startup error monitor can cancel the parent ctx on
 	// failure, matching obsServer/controlGRPCServer below. The same cancel is
@@ -859,6 +922,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		ApproveHandler:      approveHandler,
 		ResetTOTPHandler:    resetTOTPHandler,
 		RekeyHandler:        rekeyW.RekeyHandler,
+		ReadStreamHandler:   readStreamW.Handler,
 		Shutdown: func(err error) {
 			errutil.LogError(slog.Default(), "admin socket failure — cancelling root context", err)
 			cancel()

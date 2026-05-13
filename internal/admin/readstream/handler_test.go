@@ -33,9 +33,11 @@ import (
 
 // ---------- Test fakes ----------
 
-const testPlayerULID = "01HZAVGE83MGFEXQQH5SP9NXKF"
-const otherPlayerULID = "01HZAVGE83MGFEXQQH5SP9NXKG"
-const testSessionToken = "01HZAVGEAA000000000000000A"
+const (
+	testPlayerULID   = "01HZAVGE83MGFEXQQH5SP9NXKF"
+	otherPlayerULID  = "01HZAVGE83MGFEXQQH5SP9NXKG"
+	testSessionToken = "01HZAVGEAA000000000000000A"
+)
 
 // fakeSessionStore is a stub SessionStore. When token == storedToken, it
 // returns storedSession. Otherwise it returns DENY_SESSION_INVALID.
@@ -160,7 +162,12 @@ func (f *fakeAuditEmitter) EmitCompleted(_ context.Context, _ readstream.Operato
 	return nil
 }
 
-func (f *fakeAuditEmitter) StartCalls() int { f.mu.Lock(); defer f.mu.Unlock(); return len(f.startCallTimes) }
+func (f *fakeAuditEmitter) StartCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.startCallTimes)
+}
+
 func (f *fakeAuditEmitter) CompletedCalls() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -721,12 +728,16 @@ func TestClassifyTerminator(t *testing.T) {
 		want adminv1.ReadFinished_TerminatedBy
 	}{
 		{"nil → CLIENT_EOF", nil, adminv1.ReadFinished_TERMINATED_BY_CLIENT_EOF},
-		{"audit-emit oops → AUDIT_EMIT_FAILURE",
+		{
+			"audit-emit oops → AUDIT_EMIT_FAILURE",
 			oops.Code("DENY_AUDIT_PRE_DATA_PUBLISH").Errorf("emit fail"),
-			adminv1.ReadFinished_TERMINATED_BY_AUDIT_EMIT_FAILURE},
-		{"dual-control timeout oops → DUAL_CONTROL_TIMEOUT",
+			adminv1.ReadFinished_TERMINATED_BY_AUDIT_EMIT_FAILURE,
+		},
+		{
+			"dual-control timeout oops → DUAL_CONTROL_TIMEOUT",
 			oops.Code("READSTREAM_DUAL_CONTROL_TIMEOUT").Errorf("timeout"),
-			adminv1.ReadFinished_TERMINATED_BY_DUAL_CONTROL_TIMEOUT},
+			adminv1.ReadFinished_TERMINATED_BY_DUAL_CONTROL_TIMEOUT,
+		},
 		{"context.Canceled → CLIENT_DISCONNECT", context.Canceled, adminv1.ReadFinished_TERMINATED_BY_CLIENT_DISCONNECT},
 		{"context.DeadlineExceeded → DEADLINE_EXCEEDED", context.DeadlineExceeded, adminv1.ReadFinished_TERMINATED_BY_DEADLINE_EXCEEDED},
 		{"write-deadline sentinel → DEADLINE_EXCEEDED", readstream.ErrWriteDeadlineExceeded, adminv1.ReadFinished_TERMINATED_BY_DEADLINE_EXCEEDED},

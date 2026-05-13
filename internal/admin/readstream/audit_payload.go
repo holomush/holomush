@@ -86,8 +86,8 @@ type OperatorReadStartPayload struct {
 // OperatorReadCompletedPayload is the JSON-shaped payload of the
 // crypto.system.operator_read_completed audit event.
 type OperatorReadCompletedPayload struct {
-	RequestID        string    `json:"request_id"`        // 26-char ULID Base32; chain ScopePayloadField; links to start
-	TerminatedBy string `json:"terminated_by"` //nolint:tagliatelle // canonical field name from spec §3.5
+	RequestID        string    `json:"request_id"`    // 26-char ULID Base32; chain ScopePayloadField; links to start
+	TerminatedBy     string    `json:"terminated_by"` //nolint:tagliatelle // canonical field name from spec §3.5
 	EventsScanned    int64     `json:"events_scanned"`
 	DecryptFailCount int64     `json:"decrypt_fail_count"`
 	PolicyHash       string    `json:"policy_hash"` // "sha256:<hex>"

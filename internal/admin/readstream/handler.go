@@ -252,7 +252,8 @@ func (h *Handler) handleInternal(
 			if isOopsCode(err, "READSTREAM_DUAL_CONTROL_TIMEOUT") {
 				_ = stream.Send(buildFinishedFrame( //nolint:errcheck // best-effort terminator send on already-failing handler path; transport errors are unrecoverable here
 					adminv1.ReadFinished_TERMINATED_BY_DUAL_CONTROL_TIMEOUT,
-					0, 0, h.cfg.Clock()))
+					0, 0, h.cfg.Clock(),
+				))
 			}
 			return oops.Wrap(err)
 		}

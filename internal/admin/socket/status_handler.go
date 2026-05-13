@@ -19,12 +19,12 @@ import (
 // handler is nil the RPC returns connect.CodeUnimplemented, preserving backward
 // compatibility for callers that do not register all handlers.
 type compositeHandler struct {
-	version              string
-	authenticateHandler  AuthenticateHandler
-	approveHandler       ApproveHandler
-	resetTOTPHandler     ResetTOTPHandler
-	rekeyHandler         RekeyRPCHandler
-	readStreamHandler    ReadStreamRPCHandler
+	version             string
+	authenticateHandler AuthenticateHandler
+	approveHandler      ApproveHandler
+	resetTOTPHandler    ResetTOTPHandler
+	rekeyHandler        RekeyRPCHandler
+	readStreamHandler   ReadStreamRPCHandler
 }
 
 // Compile-time assertion: compositeHandler satisfies the generated interface.

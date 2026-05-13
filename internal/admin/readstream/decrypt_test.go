@@ -102,11 +102,11 @@ func TestINV_F12_ClassifierMatrix(t *testing.T) {
 	// We test classifyDecryptErr indirectly through DecryptRow by injecting
 	// errors at the DEK-resolve step and checking the (reason, fatal) output.
 	tests := []struct {
-		name         string
-		injectErr    error
-		wantReason   eventbus.NoPlaintextReason
-		wantFatal    bool
-		wantErrNil   bool
+		name       string
+		injectErr  error
+		wantReason eventbus.NoPlaintextReason
+		wantFatal  bool
+		wantErrNil bool
 	}{
 		{
 			name:       "nil error (success branch — tested via happy path)",

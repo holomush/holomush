@@ -23,19 +23,19 @@ func TestAdminReadStreamRequest_RoundTrip(t *testing.T) {
 
 	ts := timestamppb.New(time.Date(2026, 5, 12, 10, 0, 0, 0, time.UTC))
 	original := &adminv1.AdminReadStreamRequest{
-		SessionToken:               "tok-abc123",
-		SubjectPattern:             "scene.>",
-		TypeFilter:                 "crypto.",
+		SessionToken:   "tok-abc123",
+		SubjectPattern: "scene.>",
+		TypeFilter:     "crypto.",
 		Context: []*adminv1.ContextRef{
 			{Type: "scene", Ids: []string{"01H", "01J"}},
 			{Type: "dm", Ids: []string{"01A", "01B", "01C"}},
 		},
-		Since:                      ts,
-		Until:                      ts,
-		Limit:                      500,
-		DualControl:                true,
-		DualControlTimeoutSeconds:  120,
-		Justification:              "incident-2026-05-12 P0 investigation",
+		Since:                     ts,
+		Until:                     ts,
+		Limit:                     500,
+		DualControl:               true,
+		DualControlTimeoutSeconds: 120,
+		Justification:             "incident-2026-05-12 P0 investigation",
 	}
 
 	b, err := proto.Marshal(original)
@@ -95,10 +95,10 @@ func TestEventFrameRoundTripPreservesMetadataOnly(t *testing.T) {
 	t.Parallel()
 
 	frame := &corev1.EventFrame{
-		Id:              "01JWZZ0000000000000000000A",
-		Stream:          "scene.01H",
-		Type:            "crypto.system.operator_read.started",
-		MetadataOnly:    true,
+		Id:                "01JWZZ0000000000000000000A",
+		Stream:            "scene.01H",
+		Type:              "crypto.system.operator_read.started",
+		MetadataOnly:      true,
 		NoPlaintextReason: corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_DEK_MISSING,
 	}
 
@@ -119,7 +119,8 @@ func TestEventFrameRoundTripPreservesMetadataOnly(t *testing.T) {
 	require.NotNil(t, ev.Event)
 
 	assert.True(t, ev.Event.GetMetadataOnly(), "metadata_only must round-trip as true")
-	assert.Equal(t,
+	assert.Equal(
+		t,
 		corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_DEK_MISSING,
 		ev.Event.GetNoPlaintextReason(),
 		"no_plaintext_reason must round-trip with the typed value",

@@ -197,7 +197,8 @@ func TestColdReader_OrderByTimestampAsc(t *testing.T) {
 
 	// Verify monotonically ascending timestamps
 	for i := 1; i < len(rows); i++ {
-		assert.True(t,
+		assert.True(
+			t,
 			!rows[i].Timestamp.Before(rows[i-1].Timestamp),
 			"rows[%d].Timestamp=%v must be >= rows[%d].Timestamp=%v",
 			i, rows[i].Timestamp, i-1, rows[i-1].Timestamp,
