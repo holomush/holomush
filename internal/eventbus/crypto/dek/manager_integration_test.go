@@ -904,3 +904,99 @@ func TestManager_Add_WithExplicitBindingIDSkipsResolver(t *testing.T) {
 	require.Len(t, parts, 2)
 	assert.Equal(t, "bind-explicit", parts[1].BindingID)
 }
+
+// dekCapturingProvider wraps a real kek.Provider and captures the
+// plaintext byte slices flowing through Wrap (input) and Unwrap (output)
+// so tests can inspect post-call zeroize behavior (holomush-e49r.4).
+type dekCapturingProvider struct {
+	inner       kek.Provider
+	wrapPlain   [][]byte
+	unwrapPlain [][]byte
+}
+
+func (p *dekCapturingProvider) Name() string {
+	return p.inner.Name()
+}
+
+func (p *dekCapturingProvider) RotateKEK(ctx context.Context) (string, error) {
+	return p.inner.RotateKEK(ctx) //nolint:wrapcheck // pass-through in spy
+}
+
+func (p *dekCapturingProvider) HealthCheck(ctx context.Context) error {
+	return p.inner.HealthCheck(ctx) //nolint:wrapcheck // pass-through in spy
+}
+
+func (p *dekCapturingProvider) Wrap(ctx context.Context, plaintext []byte) ([]byte, string, error) {
+	p.wrapPlain = append(p.wrapPlain, plaintext)
+	return p.inner.Wrap(ctx, plaintext) //nolint:wrapcheck // pass-through in spy
+}
+
+func (p *dekCapturingProvider) Unwrap(ctx context.Context, wrapped []byte, kekKeyID string) ([]byte, error) {
+	plaintext, err := p.inner.Unwrap(ctx, wrapped, kekKeyID)
+	if err == nil {
+		p.unwrapPlain = append(p.unwrapPlain, plaintext)
+	}
+	return plaintext, err //nolint:wrapcheck // pass-through in spy
+}
+
+// TestE49R4_GetOrCreateZeroizesPlaintextDEK verifies the defense-in-depth
+// invariant (bead holomush-e49r.4): after GetOrCreate returns, the plaintext
+// DEK byte slice the provider's Wrap call saw is zeroed, preventing
+// long-lived heap-resident DEK material from surfacing in coredumps or
+// heap dumps.
+func TestE49R4_GetOrCreateZeroizesPlaintextDEK(t *testing.T) {
+	ctx := context.Background()
+	pool := testIntegrationPool(t)
+	cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+	partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+
+	spy := &dekCapturingProvider{inner: newTestProvider(t)}
+	mgr, err := dek.NewManager(spy, dek.NewStore(pool), cache, partCache, noopInvalidator, &stubBindingResolver{})
+	require.NoError(t, err)
+
+	ctxID := dek.ContextID{Type: "scene", ID: "e49r4-getorcreate"}
+	_, err = mgr.GetOrCreate(ctx, ctxID, []dek.Participant{})
+	require.NoError(t, err)
+
+	require.Len(t, spy.wrapPlain, 1, "Wrap MUST have been called exactly once during fresh GetOrCreate")
+	captured := spy.wrapPlain[0]
+	require.Len(t, captured, dek.DEKByteLength, "captured plaintext must be DEK-length")
+	for i, b := range captured {
+		require.Zerof(t, b,
+			"captured plaintext byte[%d] MUST be zeroed after GetOrCreate returns (e49r.4 defense-in-depth)", i)
+	}
+}
+
+// TestE49R4_ResolveZeroizesUnwrappedDEK verifies the same defense-in-depth
+// invariant on the unwrapAndCache path: after Resolve returns, the plaintext
+// DEK returned by provider.Unwrap is zeroed.
+func TestE49R4_ResolveZeroizesUnwrappedDEK(t *testing.T) {
+	ctx := context.Background()
+	pool := testIntegrationPool(t)
+	cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+	partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+
+	spy := &dekCapturingProvider{inner: newTestProvider(t)}
+	mgr, err := dek.NewManager(spy, dek.NewStore(pool), cache, partCache, noopInvalidator, &stubBindingResolver{})
+	require.NoError(t, err)
+
+	ctxID := dek.ContextID{Type: "scene", ID: "e49r4-resolve"}
+	key, err := mgr.GetOrCreate(ctx, ctxID, []dek.Participant{})
+	require.NoError(t, err)
+
+	// Drop cache so Resolve must call provider.Unwrap, then reset the
+	// capture so we only inspect the unwrap-path plaintext.
+	cache.Invalidate(dek.CacheKey{KeyID: key.ID, Version: 1})
+	spy.unwrapPlain = nil
+
+	_, err = mgr.Resolve(ctx, key.ID, 1)
+	require.NoError(t, err)
+
+	require.Len(t, spy.unwrapPlain, 1, "Unwrap MUST have been called exactly once after cache eviction")
+	captured := spy.unwrapPlain[0]
+	require.Len(t, captured, dek.DEKByteLength, "captured plaintext must be DEK-length")
+	for i, b := range captured {
+		require.Zerof(t, b,
+			"unwrapped plaintext byte[%d] MUST be zeroed after Resolve returns (e49r.4 defense-in-depth)", i)
+	}
+}

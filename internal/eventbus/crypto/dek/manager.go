@@ -217,6 +217,12 @@ func (m *manager) GetOrCreate(ctx context.Context, ctxID ContextID, initial []Pa
 
 	// Mint a fresh DEK and INSERT.
 	dekBytes := make([]byte, DEKByteLength)
+	// Defense-in-depth (e49r.4): zero the plaintext DEK on every return path
+	// so heap dumps / coredumps after this function exits don't carry the
+	// key material. NewMaterial copies into the Material below, and
+	// provider.Wrap consumes the bytes for its wrap output, so neither
+	// depends on the slice after this defer runs.
+	defer clear(dekBytes)
 	if _, err := io.ReadFull(rand.Reader, dekBytes); err != nil {
 		return codec.Key{}, oops.Code("DEK_RNG_FAILED").Wrap(err)
 	}
@@ -379,6 +385,12 @@ func (m *manager) Rotate(ctx context.Context, ctxID ContextID,
 	}
 
 	dekBytes := make([]byte, DEKByteLength)
+	// Defense-in-depth (e49r.4): zero the plaintext DEK on every return path
+	// so heap dumps / coredumps after this function exits don't carry the
+	// key material. NewMaterial copies into the Material below, and
+	// provider.Wrap consumes the bytes for its wrap output, so neither
+	// depends on the slice after this defer runs.
+	defer clear(dekBytes)
 	if _, err = io.ReadFull(rand.Reader, dekBytes); err != nil {
 		return oops.Code("DEK_RNG_FAILED").Wrap(err)
 	}
@@ -468,6 +480,10 @@ func (m *manager) unwrapAndCache(ctx context.Context, r row) (codec.Key, error) 
 			With("version", r.Version).
 			Wrap(err)
 	}
+	// Defense-in-depth (e49r.4): zero plaintext DEK once Material has its
+	// defensive copy. The provider's unwrap output is owned by us after
+	// return per the kek.Provider contract.
+	defer clear(dekBytes)
 	if err := validateProviderUnwrapOutput(dekBytes, r.ID, r.Version); err != nil {
 		return codec.Key{}, err
 	}
@@ -503,6 +519,10 @@ func (m *manager) MintNewDEKForRekey(ctx context.Context, oldDEKID int64) (int64
 		return 0, oops.Code("DEK_REKEY_OLD_ROW_LOOKUP_FAILED").Wrap(err)
 	}
 	var newDEK [DEKByteLength]byte
+	// Defense-in-depth (e49r.4): zero plaintext DEK on every return path.
+	// The underlying array may escape to the heap when newDEK[:] is passed
+	// to provider.Wrap below.
+	defer clear(newDEK[:])
 	if _, rngErr := io.ReadFull(rand.Reader, newDEK[:]); rngErr != nil {
 		return 0, oops.Code("DEK_REKEY_GEN_NEW_DEK_FAILED").Wrap(rngErr)
 	}
