@@ -2152,6 +2152,14 @@ func scenarioFE16IdempotentDualControlReuse(env *adminAuthEnv) {
 	contexts := []*adminv1.ContextRef{
 		{Type: "scene", Ids: []string{sceneID}},
 	}
+	// INV-F11 idempotent reuse requires that invocation 2's opArgsHash equal
+	// invocation 1's. ResolveBounds defaults missing Since/Until from
+	// time.Now() at the resolve site, so two invocations submitted seconds
+	// apart resolve to DIFFERENT bounds → different hashes → reuse miss →
+	// fall through to WaitForApproval → 5-min dual-control timeout. Pin
+	// explicit bounds so both invocations resolve identically (holomush-7jkr).
+	sinceFixed := time.Now().Add(-30 * time.Minute)
+	untilFixed := time.Now()
 
 	// --- Invocation 1: carol opens an approval, we MarkApproved ---
 	view1Ch := make(chan *adminReadStreamView, 1)
@@ -2159,6 +2167,8 @@ func scenarioFE16IdempotentDualControlReuse(env *adminAuthEnv) {
 		view1Ch <- env.RunAdminReadStream(RunAdminReadStreamArgs{
 			Justification: justification,
 			Contexts:      contexts,
+			Since:         sinceFixed,
+			Until:         untilFixed,
 			DualControl:   true,
 		})
 	}()
@@ -2208,6 +2218,8 @@ func scenarioFE16IdempotentDualControlReuse(env *adminAuthEnv) {
 			SessionToken:  aliceToken,
 			Justification: justification,
 			Context:       contexts,
+			Since:         timestamppb.New(sinceFixed),
+			Until:         timestamppb.New(untilFixed),
 			DualControl:   true,
 		},
 		recorder2,

@@ -35,6 +35,16 @@ func PeerCredFromContext(ctx context.Context) (PeerCred, bool) {
 	return v, ok
 }
 
+// UnixConnFromContext extracts the *net.UnixConn injected by StoreUnixConn
+// (wired as http.Server.ConnContext). ok is false when the request did not
+// arrive over the admin UDS (e.g., in unit tests that bypass the server).
+// Callers MUST treat a missing conn as a test-only condition — production
+// requests on the admin socket always have one.
+func UnixConnFromContext(ctx context.Context) (*net.UnixConn, bool) {
+	uc, ok := ctx.Value(unixConnContextKey{}).(*net.UnixConn)
+	return uc, ok
+}
+
 // StoreUnixConn is called from http.Server.ConnContext to attach the
 // *net.UnixConn to the connection-level context before any request handler runs.
 func StoreUnixConn(ctx context.Context, c net.Conn) context.Context {

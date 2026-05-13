@@ -6,6 +6,7 @@ package readstream_test
 import (
 	"context"
 	"errors"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,128 +17,196 @@ import (
 	"github.com/holomush/holomush/internal/admin/readstream"
 )
 
-// TestSendWithDeadline_FastPasses verifies that a sender completing before the
-// deadline returns nil.
-func TestSendWithDeadline_FastPasses(t *testing.T) {
-	ctx := context.Background()
-	frame := "hello"
-	err := readstream.SendWithDeadline(ctx, func(_ string) error {
-		return nil // instant
-	}, frame, 500*time.Millisecond)
-	require.NoError(t, err)
+// recordingSetDeadline returns a setDeadline stub plus a pointer to the slice
+// that captures every time argument passed to it. Used by tests that assert
+// on the deadline-set call pattern (set, then clear).
+func recordingSetDeadline() (func(time.Time) error, *[]time.Time) {
+	calls := &[]time.Time{}
+	return func(t time.Time) error {
+		*calls = append(*calls, t)
+		return nil
+	}, calls
 }
 
-// TestINV_F14_SendWithDeadlineTrips verifies that a slow sender triggers
-// ErrWriteDeadlineExceeded when the deadline elapses before the send
-// completes.
+// noopSetDeadline is the canonical "I don't care about deadlines" stub used by
+// tests that aren't asserting on the deadline-set call pattern.
+func noopSetDeadline(_ time.Time) error { return nil }
+
+// TestSendWithDeadline_FastPasses verifies that a sender completing
+// successfully returns nil AND that the deadline is set + cleared
+// across the call.
+func TestSendWithDeadline_FastPasses(t *testing.T) {
+	setDeadline, calls := recordingSetDeadline()
+	err := readstream.SendWithDeadline(
+		context.Background(),
+		func(_ string) error { return nil },
+		"hello",
+		500*time.Millisecond,
+		setDeadline,
+	)
+	require.NoError(t, err)
+	require.Len(t, *calls, 2, "setDeadline MUST be called twice: once to set, once to clear")
+	assert.False(t, (*calls)[0].IsZero(), "first call sets a real (non-zero) deadline")
+	assert.True(t, (*calls)[1].IsZero(), "second call clears the deadline (zero time)")
+}
+
+// TestSendWithDeadline_PassesDeadlineToSetter verifies the first call to
+// setDeadline supplies now+deadline (within a tolerance window).
+func TestSendWithDeadline_PassesDeadlineToSetter(t *testing.T) {
+	setDeadline, calls := recordingSetDeadline()
+	const dur = 100 * time.Millisecond
+	before := time.Now()
+	_ = readstream.SendWithDeadline(
+		context.Background(),
+		func(_ string) error { return nil },
+		"frame",
+		dur,
+		setDeadline,
+	)
+	after := time.Now()
+	require.Len(t, *calls, 2)
+	assert.False(t, (*calls)[0].Before(before.Add(dur)),
+		"first call must set deadline ≥ before+dur; got %v (before+dur=%v)", (*calls)[0], before.Add(dur))
+	assert.False(t, (*calls)[0].After(after.Add(dur)),
+		"first call must set deadline ≤ after+dur; got %v (after+dur=%v)", (*calls)[0], after.Add(dur))
+}
+
+// TestINV_F14_SendWithDeadlineTrips verifies that when send returns
+// os.ErrDeadlineExceeded (the kernel-level signal that the write deadline
+// tripped at the conn), SendWithDeadline returns ErrWriteDeadlineExceeded.
 func TestINV_F14_SendWithDeadlineTrips(t *testing.T) {
-	ctx := context.Background()
-	frame := "slow"
-	err := readstream.SendWithDeadline(ctx, func(_ string) error {
-		time.Sleep(200 * time.Millisecond) // longer than deadline
-		return nil
-	}, frame, 50*time.Millisecond)
+	err := readstream.SendWithDeadline(
+		context.Background(),
+		func(_ string) error { return os.ErrDeadlineExceeded },
+		"slow",
+		50*time.Millisecond,
+		noopSetDeadline,
+	)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, readstream.ErrWriteDeadlineExceeded),
 		"expected ErrWriteDeadlineExceeded, got %v", err)
 }
 
-// TestSendWithDeadline_PropagatesSenderError verifies that the sender's error
-// is returned verbatim when it completes before the deadline.
+// TestSendWithDeadline_PropagatesSenderError verifies a non-deadline sender
+// error is returned verbatim.
 func TestSendWithDeadline_PropagatesSenderError(t *testing.T) {
-	ctx := context.Background()
 	sentinelErr := errors.New("send failed: stream closed")
-	frame := "payload"
-	err := readstream.SendWithDeadline(ctx, func(_ string) error {
-		return sentinelErr
-	}, frame, 500*time.Millisecond)
+	err := readstream.SendWithDeadline(
+		context.Background(),
+		func(_ string) error { return sentinelErr },
+		"payload",
+		500*time.Millisecond,
+		noopSetDeadline,
+	)
 	require.Error(t, err)
-	assert.Equal(t, sentinelErr, err)
+	assert.ErrorIs(t, err, sentinelErr)
 	assert.False(t, errors.Is(err, readstream.ErrWriteDeadlineExceeded))
 }
 
-// TestSendWithDeadline_DeadlineReturnsImmediately verifies that
-// SendWithDeadline returns ErrWriteDeadlineExceeded promptly — without
-// blocking on the orphaned send goroutine completing. The orphaned goroutine
-// is allowed to complete asynchronously after the function returns.
-func TestSendWithDeadline_DeadlineReturnsImmediately(t *testing.T) {
-	ctx := context.Background()
-	frame := "slow"
-	const deadlineDur = 30 * time.Millisecond
-	const sendDur = 300 * time.Millisecond // 10× the deadline
-
+// TestSendWithDeadline_NoOrphanGoroutine is the regression test for
+// holomush-v0fy. The previous design spawned a goroutine that could continue
+// writing to the HTTP response after SendWithDeadline returned, racing the
+// conn.serve teardown. This test verifies that send completes BEFORE
+// SendWithDeadline returns — synchronous semantics, no orphan, no race.
+func TestSendWithDeadline_NoOrphanGoroutine(t *testing.T) {
+	var sendCompleted atomic.Bool
 	start := time.Now()
-	err := readstream.SendWithDeadline(ctx, func(_ string) error {
-		time.Sleep(sendDur)
-		return nil
-	}, frame, deadlineDur)
+	err := readstream.SendWithDeadline(
+		context.Background(),
+		func(_ string) error {
+			// Simulate a slow Write that the kernel cuts off after the
+			// deadline. In production, conn.SetWriteDeadline does the
+			// cutting; here we approximate with a Sleep + ErrDeadlineExceeded.
+			time.Sleep(40 * time.Millisecond)
+			sendCompleted.Store(true)
+			return os.ErrDeadlineExceeded
+		},
+		"frame",
+		10*time.Millisecond,
+		noopSetDeadline,
+	)
 	elapsed := time.Since(start)
-
-	require.Error(t, err)
-	assert.True(t, errors.Is(err, readstream.ErrWriteDeadlineExceeded),
-		"expected ErrWriteDeadlineExceeded, got %v", err)
-
-	// Must return well before the slow send completes. Allow 5× the deadline
-	// to absorb CI scheduling jitter; still far less than sendDur.
-	assert.Less(t, elapsed, 5*deadlineDur,
-		"SendWithDeadline must return promptly after deadline fires, not block on orphan: elapsed=%v", elapsed)
-}
-
-// TestSendWithDeadline_OrphanedGoroutineEventuallyCompletes verifies the
-// buffered-channel guarantee: the orphaned goroutine can always write its
-// result to doneCh (cap 1) and exits without blocking, even after the caller
-// has long since returned.
-func TestSendWithDeadline_OrphanedGoroutineEventuallyCompletes(t *testing.T) {
-	ctx := context.Background()
-	frame := "slow"
-
-	var completed atomic.Bool
-	err := readstream.SendWithDeadline(ctx, func(_ string) error {
-		time.Sleep(150 * time.Millisecond)
-		completed.Store(true)
-		return nil
-	}, frame, 30*time.Millisecond)
-
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, readstream.ErrWriteDeadlineExceeded))
-
-	// The goroutine completes asynchronously after SendWithDeadline returns.
-	// Poll for up to 500ms to let it finish without blocking the test.
-	deadline := time.Now().Add(500 * time.Millisecond)
-	for !completed.Load() {
-		if time.Now().After(deadline) {
-			t.Fatal("orphaned goroutine did not complete within 500ms")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	assert.True(t, completed.Load(), "orphaned goroutine must eventually complete (buffered channel)")
+	assert.True(t, sendCompleted.Load(),
+		"send MUST complete before SendWithDeadline returns; orphan-goroutine pattern FORBIDDEN per holomush-v0fy")
+	assert.GreaterOrEqual(t, elapsed, 40*time.Millisecond,
+		"SendWithDeadline must block until send returns (no premature return); elapsed=%v", elapsed)
 }
 
-// TestSendWithDeadline_ClientDisconnect verifies that when the parent context
-// is cancelled (client disconnect) while the sender is running, the function
+// TestSendWithDeadline_ClientDisconnect verifies that when the parent
+// context is cancelled and the sender returns ctx.Err(), SendWithDeadline
 // returns context.Canceled — NOT ErrWriteDeadlineExceeded.
 func TestSendWithDeadline_ClientDisconnect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 
-	started := make(chan struct{})
-	frame := "payload"
-
-	go func() {
-		<-started
-		// Cancel the parent context while the sender is mid-flight.
-		time.Sleep(10 * time.Millisecond)
-		cancel()
-	}()
-
-	err := readstream.SendWithDeadline(ctx, func(_ string) error {
-		close(started)
-		time.Sleep(300 * time.Millisecond) // slow send
-		return nil
-	}, frame, 500*time.Millisecond) // deadline is generous — cancel fires first
-
+	err := readstream.SendWithDeadline(
+		ctx,
+		func(_ string) error { return ctx.Err() },
+		"payload",
+		500*time.Millisecond,
+		noopSetDeadline,
+	)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.Canceled,
 		"client disconnect must return context.Canceled, not ErrWriteDeadlineExceeded")
-	assert.False(t, errors.Is(err, readstream.ErrWriteDeadlineExceeded),
-		"must NOT return ErrWriteDeadlineExceeded on client disconnect")
+	assert.False(t, errors.Is(err, readstream.ErrWriteDeadlineExceeded))
+}
+
+// TestSendWithDeadline_ClientDisconnectWithDeadlineErr verifies that if send
+// returns os.ErrDeadlineExceeded BUT ctx is also cancelled, the context
+// error wins (so callers can distinguish operator timeout from a client
+// drop that incidentally also tripped the conn deadline).
+func TestSendWithDeadline_ClientDisconnectWithDeadlineErr(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := readstream.SendWithDeadline(
+		ctx,
+		func(_ string) error { return os.ErrDeadlineExceeded },
+		"payload",
+		500*time.Millisecond,
+		noopSetDeadline,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled,
+		"cancelled ctx MUST win over kernel deadline error; attribution must be client-side")
+	assert.False(t, errors.Is(err, readstream.ErrWriteDeadlineExceeded))
+}
+
+// TestSendWithDeadline_SetDeadlineErrorSurfaces verifies that a failure to
+// set the deadline is wrapped + returned WITHOUT invoking send.
+func TestSendWithDeadline_SetDeadlineErrorSurfaces(t *testing.T) {
+	sentinel := errors.New("setsockopt: bad descriptor")
+	var sendCalled atomic.Bool
+	err := readstream.SendWithDeadline(
+		context.Background(),
+		func(_ string) error {
+			sendCalled.Store(true)
+			return nil
+		},
+		"payload",
+		100*time.Millisecond,
+		func(_ time.Time) error { return sentinel },
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sentinel, "setDeadline error must surface to the caller")
+	assert.False(t, sendCalled.Load(), "send MUST NOT be called when setDeadline fails")
+}
+
+// TestSendWithDeadline_DeadlineClearedAfterSendError verifies the
+// defer-clear fires even when send returns a non-deadline error, so
+// subsequent writes on the same conn start with no stale deadline.
+func TestSendWithDeadline_DeadlineClearedAfterSendError(t *testing.T) {
+	setDeadline, calls := recordingSetDeadline()
+	_ = readstream.SendWithDeadline(
+		context.Background(),
+		func(_ string) error { return errors.New("send err") },
+		"payload",
+		100*time.Millisecond,
+		setDeadline,
+	)
+	require.Len(t, *calls, 2, "setDeadline must be cleared even on send error")
+	assert.True(t, (*calls)[1].IsZero(), "deadline cleared (zero time)")
 }
