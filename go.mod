@@ -5,7 +5,7 @@ go 1.26.2
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260415201107-50325440f8f2.1
 	buf.build/go/protovalidate v1.1.3
-	connectrpc.com/connect v1.19.1
+	connectrpc.com/connect v1.19.2
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/alecthomas/participle/v2 v2.1.4
 	github.com/docker/go-connections v0.6.0
