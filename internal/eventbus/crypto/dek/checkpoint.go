@@ -73,26 +73,26 @@ func NewCheckpointOpenRequest(
 // Byte-slice fields are intentionally unexported (INV-27): they are
 // populated by scanCheckpoint and read only within this package.
 type Checkpoint struct {
-	RequestID              RequestID
-	ContextType            string
-	ContextID              string
-	opArgsHash             []byte
-	policyHash             []byte
-	PrimaryPlayerID        string
-	Justification          string
-	Status                 CheckpointStatus
-	lastProcessedEventID   []byte
-	NewDEKID               *int64
-	OldDEKID               int64
-	Phase3RowsRewritten    int
-	Phase5AttemptCount     int
-	phase5MissingMembers   []byte
-	ForceDestroy           bool
-	StartedAt              time.Time
-	LastHeartbeatAt        time.Time
-	CompletedAt            *time.Time
-	AbortedAt              *time.Time
-	AbortedReason          *string
+	RequestID            RequestID
+	ContextType          string
+	ContextID            string
+	opArgsHash           []byte
+	policyHash           []byte
+	PrimaryPlayerID      string
+	Justification        string
+	Status               CheckpointStatus
+	lastProcessedEventID []byte
+	NewDEKID             *int64
+	OldDEKID             int64
+	Phase3RowsRewritten  int
+	Phase5AttemptCount   int
+	phase5MissingMembers []byte
+	ForceDestroy         bool
+	StartedAt            time.Time
+	LastHeartbeatAt      time.Time
+	CompletedAt          *time.Time
+	AbortedAt            *time.Time
+	AbortedReason        *string
 }
 
 // PolicyHash returns the policy_hash captured at Phase 1 (INV-E25) as a

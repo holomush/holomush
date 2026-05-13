@@ -9,6 +9,7 @@
 import { ApproveRequest, ApproveResponse, AuthenticateRequest, AuthenticateResponse, ResetTOTPRequest, ResetTOTPResponse, StatusRequest, StatusResponse } from "./admin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { RekeyAbortRequest, RekeyAbortResponse, RekeyListRequest, RekeyProgress, RekeyRequest, RekeyResumeRequest, RekeyStatusRequest, RekeyStatusResponse } from "./rekey_pb.js";
+import { AdminReadStreamRequest, AdminReadStreamResponse } from "./read_stream_pb.js";
 
 /**
  * AdminService is the break-glass operator administration service. It is
@@ -127,6 +128,20 @@ export const AdminService = {
       name: "RekeyList",
       I: RekeyListRequest,
       O: RekeyStatusResponse,
+      kind: MethodKind.ServerStreaming,
+    },
+    /**
+     * AdminReadStream is the operator break-glass streaming read RPC.
+     * Streams EventFrame payloads (with typed metadata_only + no_plaintext_reason
+     * redaction fields) for the requested context(s) and time bounds.
+     * Spec sub-epic F §3.2, §3.3; ADR-0017.
+     *
+     * @generated from rpc holomush.admin.v1.AdminService.AdminReadStream
+     */
+    adminReadStream: {
+      name: "AdminReadStream",
+      I: AdminReadStreamRequest,
+      O: AdminReadStreamResponse,
       kind: MethodKind.ServerStreaming,
     },
   }

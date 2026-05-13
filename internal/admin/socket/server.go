@@ -35,6 +35,9 @@ type Config struct {
 	ResetTOTPHandler    ResetTOTPHandler
 	// RekeyHandler implements Rekey and RekeyResume RPCs (holomush-jxo8.7.28).
 	RekeyHandler RekeyRPCHandler
+	// ReadStreamHandler implements AdminReadStream RPC (holomush-jxo8.8.36).
+	// When nil, AdminReadStream returns connect.CodeUnimplemented until R.15 wires it.
+	ReadStreamHandler ReadStreamRPCHandler
 }
 
 // Server is the admin-socket ConnectRPC server. Binds exclusively to a
@@ -160,6 +163,7 @@ func (s *Server) buildMux() *http.ServeMux {
 		approveHandler:      s.cfg.ApproveHandler,
 		resetTOTPHandler:    s.cfg.ResetTOTPHandler,
 		rekeyHandler:        s.cfg.RekeyHandler,
+		readStreamHandler:   s.cfg.ReadStreamHandler,
 	}
 	path, handler := adminv1connect.NewAdminServiceHandler(h)
 	mux.Handle(path, handler)

@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -19,6 +20,10 @@ import (
 type Repo interface {
 	Open(ctx context.Context, req OpenRequest) (RequestID, error)
 	Get(ctx context.Context, id RequestID) (Approval, error)
+	// GetByOpArgsHash returns the most-recently-approved fresh approval for the
+	// given (opKind, opArgsHash) pair that was not authored by excludePlayerID.
+	// Returns APPROVAL_NOT_FOUND if no matching row exists.
+	GetByOpArgsHash(ctx context.Context, opKind string, opArgsHash []byte, excludePlayerID string) (Approval, error)
 	MarkApproved(ctx context.Context, id RequestID, secondOpPlayerID string) error
 	WaitForApproval(ctx context.Context, id RequestID, deadline time.Time) (Approval, error)
 }
@@ -112,6 +117,49 @@ func (r *PostgresRepo) getRaw(ctx context.Context, id RequestID) (Approval, erro
 		}
 		return Approval{}, oops.Code("APPROVAL_GET_FAILED").
 			With("request_id", id.String()).Wrap(err)
+	}
+	copy(a.RequestID[:], ridBytes)
+	a.ApprovedAt = approvedAt
+	return a, nil
+}
+
+// GetByOpArgsHash returns the most-recently-approved fresh approval for the
+// given (opKind, opArgsHash) pair that was not authored by excludePlayerID.
+// All filters are applied server-side in a single query. INV-F17.
+//
+// Returns APPROVAL_NOT_FOUND if no matching row exists (expired, unapproved,
+// authored by excludePlayerID, or simply absent).
+func (r *PostgresRepo) GetByOpArgsHash(ctx context.Context, opKind string, opArgsHash []byte, excludePlayerID string) (Approval, error) {
+	if strings.TrimSpace(excludePlayerID) == "" {
+		return Approval{}, oops.Code("APPROVAL_INVALID_ARGUMENT").
+			Errorf("exclude_player_id is required")
+	}
+
+	row := r.pool.QueryRow(ctx, `
+		SELECT request_id, primary_player_id, op_kind, op_args_hash,
+		       expires_at, approved_at, COALESCE(approved_by_player_id, ''),
+		       created_at
+		  FROM admin_approvals
+		 WHERE op_kind = $1
+		   AND op_args_hash = $2
+		   AND expires_at > now()
+		   AND approved_at IS NOT NULL
+		   AND primary_player_id != $3
+		 ORDER BY approved_at DESC
+		 LIMIT 1
+	`, opKind, opArgsHash, excludePlayerID)
+	var a Approval
+	var ridBytes []byte
+	var approvedAt *time.Time
+	if err := row.Scan(&ridBytes, &a.PrimaryPlayerID, &a.OpKind, &a.OpArgsHash,
+		&a.ExpiresAt, &approvedAt, &a.ApprovedByPlayerID, &a.CreatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Approval{}, oops.Code("APPROVAL_NOT_FOUND").
+				With("op_kind", opKind).
+				Errorf("no matching fresh approved row found")
+		}
+		return Approval{}, oops.Code("APPROVAL_GET_FAILED").
+			With("op_kind", opKind).Wrap(err)
 	}
 	copy(a.RequestID[:], ridBytes)
 	a.ApprovedAt = approvedAt

@@ -45,6 +45,15 @@ const (
 	NoPlaintextReason_NO_PLAINTEXT_REASON_STALE_DEK NoPlaintextReason = 2
 	// Plugin audit emit backpressure (queue full). Host-side TOCTOU.
 	NoPlaintextReason_NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL NoPlaintextReason = 3
+	// Cold-tier audit row has no dek_ref (DEK reference column missing or
+	// NULL). Stamped exclusively by F's operator-read classifier (INV-F16).
+	NoPlaintextReason_NO_PLAINTEXT_REASON_DEK_MISSING NoPlaintextReason = 4
+	// Cold-tier audit row references a DEK whose column set does not match
+	// the event's AAD declaration. Stamped exclusively by F's classifier.
+	NoPlaintextReason_NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS NoPlaintextReason = 5
+	// Catch-all for unexpected decrypt failures not covered by the
+	// specific cases above. Stamped exclusively by F's classifier.
+	NoPlaintextReason_NO_PLAINTEXT_REASON_INTERNAL NoPlaintextReason = 6
 )
 
 // Enum value maps for NoPlaintextReason.
@@ -54,12 +63,18 @@ var (
 		1: "NO_PLAINTEXT_REASON_AUTHGUARD_DENY",
 		2: "NO_PLAINTEXT_REASON_STALE_DEK",
 		3: "NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL",
+		4: "NO_PLAINTEXT_REASON_DEK_MISSING",
+		5: "NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS",
+		6: "NO_PLAINTEXT_REASON_INTERNAL",
 	}
 	NoPlaintextReason_value = map[string]int32{
 		"NO_PLAINTEXT_REASON_UNSPECIFIED":      0,
 		"NO_PLAINTEXT_REASON_AUTHGUARD_DENY":   1,
 		"NO_PLAINTEXT_REASON_STALE_DEK":        2,
 		"NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL": 3,
+		"NO_PLAINTEXT_REASON_DEK_MISSING":      4,
+		"NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS":  5,
+		"NO_PLAINTEXT_REASON_INTERNAL":         6,
 	}
 )
 
@@ -3251,12 +3266,15 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\x14player_session_token\x18\x03 \x01(\tR\x12playerSessionToken\"j\n" +
 	"\x1aListSessionStreamsResponse\x12\x18\n" +
 	"\astreams\x18\x01 \x03(\tR\astreams\x122\n" +
-	"\x04meta\x18\x02 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta*\xad\x01\n" +
+	"\x04meta\x18\x02 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta*\x9d\x02\n" +
 	"\x11NoPlaintextReason\x12#\n" +
 	"\x1fNO_PLAINTEXT_REASON_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"NO_PLAINTEXT_REASON_AUTHGUARD_DENY\x10\x01\x12!\n" +
 	"\x1dNO_PLAINTEXT_REASON_STALE_DEK\x10\x02\x12(\n" +
-	"$NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL\x10\x03*\x98\x01\n" +
+	"$NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL\x10\x03\x12#\n" +
+	"\x1fNO_PLAINTEXT_REASON_DEK_MISSING\x10\x04\x12'\n" +
+	"#NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS\x10\x05\x12 \n" +
+	"\x1cNO_PLAINTEXT_REASON_INTERNAL\x10\x06*\x98\x01\n" +
 	"\fEventChannel\x12\x1d\n" +
 	"\x19EVENT_CHANNEL_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16EVENT_CHANNEL_TERMINAL\x10\x01\x12\x17\n" +

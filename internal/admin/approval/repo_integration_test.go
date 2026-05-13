@@ -352,3 +352,133 @@ func TestRepoWaitForApprovalSurfacesExpiry(t *testing.T) {
 	assert.Less(t, elapsed, 1*time.Second,
 		"WaitForApproval MUST return DENY_APPROVAL_EXPIRED quickly, not poll until deadline")
 }
+
+// openAndApprove is a test helper that opens a fresh approval and immediately
+// marks it approved by secondOp, returning the resulting Approval.
+func openAndApprove(t *testing.T, r *approval.PostgresRepo, primary, secondOp, opKind string, opArgsHash []byte) approval.Approval {
+	t.Helper()
+	id, err := r.Open(context.Background(), approval.OpenRequest{
+		PrimaryPlayerID: primary, OpKind: opKind, OpArgsHash: opArgsHash,
+	})
+	require.NoError(t, err)
+	require.NoError(t, r.MarkApproved(context.Background(), id, secondOp))
+	a, err := r.Get(context.Background(), id)
+	require.NoError(t, err)
+	return a
+}
+
+// TestINV_F17_GetByOpArgsHashMatrix_ReturnsApproved is the INV-F17 happy path:
+// an approved, non-expired row not authored by excludePlayerID is returned.
+func TestINV_F17_GetByOpArgsHashMatrix_ReturnsApproved(t *testing.T) {
+	r := approval.NewPostgresRepo(testPool, nil)
+	primary := ulid.Make().String()
+	secondOp := ulid.Make().String()
+	other := ulid.Make().String()
+	insertPlayerForApproval(t, primary)
+	insertPlayerForApproval(t, secondOp)
+
+	hash := []byte("hash-happy")
+	openAndApprove(t, r, primary, secondOp, "rekey", hash)
+
+	got, err := r.GetByOpArgsHash(context.Background(), "rekey", hash, other)
+	require.NoError(t, err)
+	assert.Equal(t, primary, got.PrimaryPlayerID)
+	assert.NotNil(t, got.ApprovedAt)
+}
+
+// TestINV_F17_GetByOpArgsHashMatrix_FiltersExpired verifies that GetByOpArgsHash
+// returns APPROVAL_NOT_FOUND for rows where expires_at <= now().
+func TestINV_F17_GetByOpArgsHashMatrix_FiltersExpired(t *testing.T) {
+	r := approval.NewPostgresRepo(testPool, nil)
+	primary := ulid.Make().String()
+	secondOp := ulid.Make().String()
+	other := ulid.Make().String()
+	insertPlayerForApproval(t, primary)
+	insertPlayerForApproval(t, secondOp)
+
+	hash := []byte("hash-expired")
+	a := openAndApprove(t, r, primary, secondOp, "rekey", hash)
+
+	// Force-expire the row.
+	_, err := testPool.Exec(context.Background(),
+		`UPDATE admin_approvals SET expires_at = now() - interval '1 minute' WHERE request_id = $1`,
+		a.RequestID[:])
+	require.NoError(t, err)
+
+	_, err = r.GetByOpArgsHash(context.Background(), "rekey", hash, other)
+	require.Error(t, err)
+	assertCode(t, err, "APPROVAL_NOT_FOUND")
+}
+
+// TestINV_F17_GetByOpArgsHashFiltersOwnAuthor verifies that GetByOpArgsHash
+// returns APPROVAL_NOT_FOUND when primary_player_id == excludePlayerID.
+func TestINV_F17_GetByOpArgsHashFiltersOwnAuthor(t *testing.T) {
+	r := approval.NewPostgresRepo(testPool, nil)
+	primary := ulid.Make().String()
+	secondOp := ulid.Make().String()
+	insertPlayerForApproval(t, primary)
+	insertPlayerForApproval(t, secondOp)
+
+	hash := []byte("hash-self-author")
+	openAndApprove(t, r, primary, secondOp, "rekey", hash)
+
+	// Exclude the primary author — should be filtered.
+	_, err := r.GetByOpArgsHash(context.Background(), "rekey", hash, primary)
+	require.Error(t, err)
+	assertCode(t, err, "APPROVAL_NOT_FOUND")
+}
+
+// TestINV_F17_GetByOpArgsHashMatrix_FiltersUnapproved verifies that
+// GetByOpArgsHash returns APPROVAL_NOT_FOUND for rows where approved_at IS NULL.
+func TestINV_F17_GetByOpArgsHashMatrix_FiltersUnapproved(t *testing.T) {
+	r := approval.NewPostgresRepo(testPool, nil)
+	primary := ulid.Make().String()
+	other := ulid.Make().String()
+	insertPlayerForApproval(t, primary)
+
+	hash := []byte("hash-unapproved")
+	// Open without approving — approved_at stays NULL.
+	_, err := r.Open(context.Background(), approval.OpenRequest{
+		PrimaryPlayerID: primary, OpKind: "rekey", OpArgsHash: hash,
+	})
+	require.NoError(t, err)
+
+	_, err = r.GetByOpArgsHash(context.Background(), "rekey", hash, other)
+	require.Error(t, err)
+	assertCode(t, err, "APPROVAL_NOT_FOUND")
+}
+
+// TestINV_F17_GetByOpArgsHashMatrix_TiebreakerMostRecent verifies that when
+// two approved rows match, GetByOpArgsHash returns the most-recently-approved.
+func TestINV_F17_GetByOpArgsHashMatrix_TiebreakerMostRecent(t *testing.T) {
+	r := approval.NewPostgresRepo(testPool, nil)
+	primary1 := ulid.Make().String()
+	primary2 := ulid.Make().String()
+	secondOp1 := ulid.Make().String()
+	secondOp2 := ulid.Make().String()
+	other := ulid.Make().String()
+	insertPlayerForApproval(t, primary1)
+	insertPlayerForApproval(t, primary2)
+	insertPlayerForApproval(t, secondOp1)
+	insertPlayerForApproval(t, secondOp2)
+
+	hash := []byte("hash-tiebreaker")
+
+	// Insert first approval and capture its request_id.
+	a1 := openAndApprove(t, r, primary1, secondOp1, "rekey", hash)
+
+	// Insert second approval with a later approved_at.
+	a2 := openAndApprove(t, r, primary2, secondOp2, "rekey", hash)
+
+	// Force a1.approved_at to be clearly earlier so the ORDER BY is deterministic.
+	_, err := testPool.Exec(context.Background(),
+		`UPDATE admin_approvals SET approved_at = now() - interval '10 minutes' WHERE request_id = $1`,
+		a1.RequestID[:])
+	require.NoError(t, err)
+
+	got, err := r.GetByOpArgsHash(context.Background(), "rekey", hash, other)
+	require.NoError(t, err)
+	// Should return the row approved most recently (a2).
+	assert.Equal(t, a2.PrimaryPlayerID, got.PrimaryPlayerID,
+		"GetByOpArgsHash must return the most-recently-approved matching row")
+}

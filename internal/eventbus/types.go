@@ -42,6 +42,18 @@ const (
 	// NoPlaintextReasonAuditQueueFull indicates plugin audit-emit
 	// backpressure (queue full). Host-side TOCTOU defense.
 	NoPlaintextReasonAuditQueueFull NoPlaintextReason = 3
+	// NoPlaintextReasonDEKMissing indicates the cold-tier audit row has no
+	// dek_ref (DEK reference column missing or NULL). Stamped exclusively by
+	// F's operator-read classifier (INV-F16).
+	NoPlaintextReasonDEKMissing NoPlaintextReason = 4
+	// NoPlaintextReasonDEKBadColumns indicates the cold-tier audit row
+	// references a DEK whose column set does not match the event's AAD
+	// declaration. Stamped exclusively by F's operator-read classifier.
+	NoPlaintextReasonDEKBadColumns NoPlaintextReason = 5
+	// NoPlaintextReasonInternal is the catch-all for unexpected decrypt
+	// failures not covered by the specific cases above. Stamped exclusively
+	// by F's operator-read classifier.
+	NoPlaintextReasonInternal NoPlaintextReason = 6
 )
 
 // Direction selects the iteration order of HistoryStream.

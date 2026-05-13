@@ -423,7 +423,7 @@ var File_holomush_admin_v1_admin_proto protoreflect.FileDescriptor
 
 const file_holomush_admin_v1_admin_proto_rawDesc = "" +
 	"\n" +
-	"\x1dholomush/admin/v1/admin.proto\x12\x11holomush.admin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dholomush/admin/v1/rekey.proto\"\x0f\n" +
+	"\x1dholomush/admin/v1/admin.proto\x12\x11holomush.admin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a#holomush/admin/v1/read_stream.proto\x1a\x1dholomush/admin/v1/rekey.proto\"\x0f\n" +
 	"\rStatusRequest\"D\n" +
 	"\x0eStatusResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x18\n" +
@@ -446,7 +446,7 @@ const file_holomush_admin_v1_admin_proto_rawDesc = "" +
 	"\rsession_token\x18\x01 \x01(\tR\fsessionToken\x12(\n" +
 	"\x10target_player_id\x18\x02 \x01(\tR\x0etargetPlayerId\"-\n" +
 	"\x11ResetTOTPResponse\x12\x18\n" +
-	"\acleared\x18\x01 \x01(\bR\acleared2\xa5\x06\n" +
+	"\acleared\x18\x01 \x01(\bR\acleared2\x91\a\n" +
 	"\fAdminService\x12M\n" +
 	"\x06Status\x12 .holomush.admin.v1.StatusRequest\x1a!.holomush.admin.v1.StatusResponse\x12_\n" +
 	"\fAuthenticate\x12&.holomush.admin.v1.AuthenticateRequest\x1a'.holomush.admin.v1.AuthenticateResponse\x12P\n" +
@@ -457,7 +457,8 @@ const file_holomush_admin_v1_admin_proto_rawDesc = "" +
 	"\n" +
 	"RekeyAbort\x12$.holomush.admin.v1.RekeyAbortRequest\x1a%.holomush.admin.v1.RekeyAbortResponse\x12\\\n" +
 	"\vRekeyStatus\x12%.holomush.admin.v1.RekeyStatusRequest\x1a&.holomush.admin.v1.RekeyStatusResponse\x12Z\n" +
-	"\tRekeyList\x12#.holomush.admin.v1.RekeyListRequest\x1a&.holomush.admin.v1.RekeyStatusResponse0\x01B\xcb\x01\n" +
+	"\tRekeyList\x12#.holomush.admin.v1.RekeyListRequest\x1a&.holomush.admin.v1.RekeyStatusResponse0\x01\x12j\n" +
+	"\x0fAdminReadStream\x12).holomush.admin.v1.AdminReadStreamRequest\x1a*.holomush.admin.v1.AdminReadStreamResponse0\x01B\xcb\x01\n" +
 	"\x15com.holomush.admin.v1B\n" +
 	"AdminProtoP\x01Z@github.com/holomush/holomush/pkg/proto/holomush/admin/v1;adminv1\xa2\x02\x03HAX\xaa\x02\x11Holomush.Admin.V1\xca\x02\x11Holomush\\Admin\\V1\xe2\x02\x1dHolomush\\Admin\\V1\\GPBMetadata\xea\x02\x13Holomush::Admin::V1b\x06proto3"
 
@@ -475,23 +476,25 @@ func file_holomush_admin_v1_admin_proto_rawDescGZIP() []byte {
 
 var file_holomush_admin_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_holomush_admin_v1_admin_proto_goTypes = []any{
-	(*StatusRequest)(nil),         // 0: holomush.admin.v1.StatusRequest
-	(*StatusResponse)(nil),        // 1: holomush.admin.v1.StatusResponse
-	(*AuthenticateRequest)(nil),   // 2: holomush.admin.v1.AuthenticateRequest
-	(*AuthenticateResponse)(nil),  // 3: holomush.admin.v1.AuthenticateResponse
-	(*ApproveRequest)(nil),        // 4: holomush.admin.v1.ApproveRequest
-	(*ApproveResponse)(nil),       // 5: holomush.admin.v1.ApproveResponse
-	(*ResetTOTPRequest)(nil),      // 6: holomush.admin.v1.ResetTOTPRequest
-	(*ResetTOTPResponse)(nil),     // 7: holomush.admin.v1.ResetTOTPResponse
-	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
-	(*RekeyRequest)(nil),          // 9: holomush.admin.v1.RekeyRequest
-	(*RekeyResumeRequest)(nil),    // 10: holomush.admin.v1.RekeyResumeRequest
-	(*RekeyAbortRequest)(nil),     // 11: holomush.admin.v1.RekeyAbortRequest
-	(*RekeyStatusRequest)(nil),    // 12: holomush.admin.v1.RekeyStatusRequest
-	(*RekeyListRequest)(nil),      // 13: holomush.admin.v1.RekeyListRequest
-	(*RekeyProgress)(nil),         // 14: holomush.admin.v1.RekeyProgress
-	(*RekeyAbortResponse)(nil),    // 15: holomush.admin.v1.RekeyAbortResponse
-	(*RekeyStatusResponse)(nil),   // 16: holomush.admin.v1.RekeyStatusResponse
+	(*StatusRequest)(nil),           // 0: holomush.admin.v1.StatusRequest
+	(*StatusResponse)(nil),          // 1: holomush.admin.v1.StatusResponse
+	(*AuthenticateRequest)(nil),     // 2: holomush.admin.v1.AuthenticateRequest
+	(*AuthenticateResponse)(nil),    // 3: holomush.admin.v1.AuthenticateResponse
+	(*ApproveRequest)(nil),          // 4: holomush.admin.v1.ApproveRequest
+	(*ApproveResponse)(nil),         // 5: holomush.admin.v1.ApproveResponse
+	(*ResetTOTPRequest)(nil),        // 6: holomush.admin.v1.ResetTOTPRequest
+	(*ResetTOTPResponse)(nil),       // 7: holomush.admin.v1.ResetTOTPResponse
+	(*timestamppb.Timestamp)(nil),   // 8: google.protobuf.Timestamp
+	(*RekeyRequest)(nil),            // 9: holomush.admin.v1.RekeyRequest
+	(*RekeyResumeRequest)(nil),      // 10: holomush.admin.v1.RekeyResumeRequest
+	(*RekeyAbortRequest)(nil),       // 11: holomush.admin.v1.RekeyAbortRequest
+	(*RekeyStatusRequest)(nil),      // 12: holomush.admin.v1.RekeyStatusRequest
+	(*RekeyListRequest)(nil),        // 13: holomush.admin.v1.RekeyListRequest
+	(*AdminReadStreamRequest)(nil),  // 14: holomush.admin.v1.AdminReadStreamRequest
+	(*RekeyProgress)(nil),           // 15: holomush.admin.v1.RekeyProgress
+	(*RekeyAbortResponse)(nil),      // 16: holomush.admin.v1.RekeyAbortResponse
+	(*RekeyStatusResponse)(nil),     // 17: holomush.admin.v1.RekeyStatusResponse
+	(*AdminReadStreamResponse)(nil), // 18: holomush.admin.v1.AdminReadStreamResponse
 }
 var file_holomush_admin_v1_admin_proto_depIdxs = []int32{
 	8,  // 0: holomush.admin.v1.AuthenticateResponse.expires_at:type_name -> google.protobuf.Timestamp
@@ -504,17 +507,19 @@ var file_holomush_admin_v1_admin_proto_depIdxs = []int32{
 	11, // 7: holomush.admin.v1.AdminService.RekeyAbort:input_type -> holomush.admin.v1.RekeyAbortRequest
 	12, // 8: holomush.admin.v1.AdminService.RekeyStatus:input_type -> holomush.admin.v1.RekeyStatusRequest
 	13, // 9: holomush.admin.v1.AdminService.RekeyList:input_type -> holomush.admin.v1.RekeyListRequest
-	1,  // 10: holomush.admin.v1.AdminService.Status:output_type -> holomush.admin.v1.StatusResponse
-	3,  // 11: holomush.admin.v1.AdminService.Authenticate:output_type -> holomush.admin.v1.AuthenticateResponse
-	5,  // 12: holomush.admin.v1.AdminService.Approve:output_type -> holomush.admin.v1.ApproveResponse
-	7,  // 13: holomush.admin.v1.AdminService.ResetTOTP:output_type -> holomush.admin.v1.ResetTOTPResponse
-	14, // 14: holomush.admin.v1.AdminService.Rekey:output_type -> holomush.admin.v1.RekeyProgress
-	14, // 15: holomush.admin.v1.AdminService.RekeyResume:output_type -> holomush.admin.v1.RekeyProgress
-	15, // 16: holomush.admin.v1.AdminService.RekeyAbort:output_type -> holomush.admin.v1.RekeyAbortResponse
-	16, // 17: holomush.admin.v1.AdminService.RekeyStatus:output_type -> holomush.admin.v1.RekeyStatusResponse
-	16, // 18: holomush.admin.v1.AdminService.RekeyList:output_type -> holomush.admin.v1.RekeyStatusResponse
-	10, // [10:19] is the sub-list for method output_type
-	1,  // [1:10] is the sub-list for method input_type
+	14, // 10: holomush.admin.v1.AdminService.AdminReadStream:input_type -> holomush.admin.v1.AdminReadStreamRequest
+	1,  // 11: holomush.admin.v1.AdminService.Status:output_type -> holomush.admin.v1.StatusResponse
+	3,  // 12: holomush.admin.v1.AdminService.Authenticate:output_type -> holomush.admin.v1.AuthenticateResponse
+	5,  // 13: holomush.admin.v1.AdminService.Approve:output_type -> holomush.admin.v1.ApproveResponse
+	7,  // 14: holomush.admin.v1.AdminService.ResetTOTP:output_type -> holomush.admin.v1.ResetTOTPResponse
+	15, // 15: holomush.admin.v1.AdminService.Rekey:output_type -> holomush.admin.v1.RekeyProgress
+	15, // 16: holomush.admin.v1.AdminService.RekeyResume:output_type -> holomush.admin.v1.RekeyProgress
+	16, // 17: holomush.admin.v1.AdminService.RekeyAbort:output_type -> holomush.admin.v1.RekeyAbortResponse
+	17, // 18: holomush.admin.v1.AdminService.RekeyStatus:output_type -> holomush.admin.v1.RekeyStatusResponse
+	17, // 19: holomush.admin.v1.AdminService.RekeyList:output_type -> holomush.admin.v1.RekeyStatusResponse
+	18, // 20: holomush.admin.v1.AdminService.AdminReadStream:output_type -> holomush.admin.v1.AdminReadStreamResponse
+	11, // [11:21] is the sub-list for method output_type
+	1,  // [1:11] is the sub-list for method input_type
 	1,  // [1:1] is the sub-list for extension type_name
 	1,  // [1:1] is the sub-list for extension extendee
 	0,  // [0:1] is the sub-list for field type_name
@@ -525,6 +530,7 @@ func file_holomush_admin_v1_admin_proto_init() {
 	if File_holomush_admin_v1_admin_proto != nil {
 		return
 	}
+	file_holomush_admin_v1_read_stream_proto_init()
 	file_holomush_admin_v1_rekey_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{

@@ -28,6 +28,9 @@ type AdminSocketSubsystemConfig struct {
 	// RekeyStatus / RekeyList RPCs. Sub-epic E T44 production wiring
 	// (holomush-jxo8.7.44).
 	RekeyHandler RekeyRPCHandler
+	// ReadStreamHandler dispatches the AdminReadStream RPC (holomush-jxo8.8.36).
+	// When nil, AdminReadStream returns connect.CodeUnimplemented until R.15 wires it.
+	ReadStreamHandler ReadStreamRPCHandler
 	// Shutdown is invoked when the admin socket server returns a post-startup
 	// error on its errCh (e.g., UDS accept loop dies, corrupted listener
 	// state). Production wires this to the parent context's cancel func so
@@ -80,6 +83,7 @@ func (s *AdminSocketSubsystem) Start(_ context.Context) error {
 		ApproveHandler:      s.cfg.ApproveHandler,
 		ResetTOTPHandler:    s.cfg.ResetTOTPHandler,
 		RekeyHandler:        s.cfg.RekeyHandler,
+		ReadStreamHandler:   s.cfg.ReadStreamHandler,
 	})
 
 	errCh, err := srv.Start()

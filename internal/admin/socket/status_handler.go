@@ -14,16 +14,17 @@ import (
 )
 
 // compositeHandler implements adminv1connect.AdminServiceHandler. It serves
-// Status directly and delegates Authenticate, Approve, ResetTOTP, and Rekey
-// to optional per-RPC handlers registered in Config. When a handler is nil the
-// RPC returns connect.CodeUnimplemented, preserving backward compatibility for
-// callers that do not register all handlers.
+// Status directly and delegates Authenticate, Approve, ResetTOTP, Rekey, and
+// AdminReadStream to optional per-RPC handlers registered in Config. When a
+// handler is nil the RPC returns connect.CodeUnimplemented, preserving backward
+// compatibility for callers that do not register all handlers.
 type compositeHandler struct {
 	version             string
 	authenticateHandler AuthenticateHandler
 	approveHandler      ApproveHandler
 	resetTOTPHandler    ResetTOTPHandler
 	rekeyHandler        RekeyRPCHandler
+	readStreamHandler   ReadStreamRPCHandler
 }
 
 // Compile-time assertion: compositeHandler satisfies the generated interface.
@@ -137,4 +138,18 @@ func (h *compositeHandler) RekeyList(
 		return connect.NewError(connect.CodeUnimplemented, errors.New("RekeyList not registered"))
 	}
 	return h.rekeyHandler.HandleRekeyList(ctx, req, stream) //nolint:wrapcheck // handler returns *connect.Error; wrapping would discard the ConnectRPC code
+}
+
+// AdminReadStream delegates to the registered ReadStreamRPCHandler
+// (holomush-jxo8.8.36), or returns Unimplemented until R.15 wires the
+// ConnectRPC adapter.
+func (h *compositeHandler) AdminReadStream(
+	ctx context.Context,
+	req *connect.Request[adminv1.AdminReadStreamRequest],
+	stream *connect.ServerStream[adminv1.AdminReadStreamResponse],
+) error {
+	if h.readStreamHandler == nil {
+		return connect.NewError(connect.CodeUnimplemented, errors.New("AdminReadStream not yet wired"))
+	}
+	return h.readStreamHandler.HandleAdminReadStream(ctx, req, stream) //nolint:wrapcheck // handler returns *connect.Error; wrapping would discard the ConnectRPC code
 }

@@ -2,9 +2,117 @@
 
 ## Status
 
-Draft, revision 7 (incorporates design-reviewer findings R1–R5 2026-05-11
-through 2026-05-12 plus plan-reviewer findings 2026-05-12 R1 on substrate
-API grounding). Tracking bead: `holomush-jxo8.8`.
+Draft, revision 8. Tracking bead: `holomush-jxo8.8`.
+
+Revisions:
+
+- r1–r7 (2026-05-11 through 2026-05-12) — original design rounds, design-reviewer
+  findings R1–R5, plan-reviewer findings on substrate API grounding.
+- **r8 (2026-05-12) — Architectural correction.** Post-implementation review
+  surfaced that F's coupling to `HistoryReader`/`dispatcher` is the root cause
+  of an emergent bug class (k-way merge source-drop, audit truthfulness
+  violation, F.21 F-E17 redesign). Three rounds of adversarial review
+  converged on the conclusion that F is not a `HistoryReader` consumer and
+  must own its own cold-tier read + decrypt + classify path. See
+  **[ADR 0017](../../adr/0017-admin-readstream-bypasses-history-reader.md)**
+  and **§0 below**. The 24-commit chain at bookmark `jxo8-f-target` is
+  abandoned; r8 is the canonical design.
+
+## 0. Architectural correction (revision 8)
+
+**Decision:** F bypasses `HistoryReader`/`dispatcher`/`postgresColdTier.Read`.
+F owns its own cold-tier read, decrypt, and classifier path in
+`internal/admin/readstream/`. The shared eventbus history machinery stays
+unmodified — for subscribers and other consumers that legitimately need
+per-event AuthGuard decisions, plugin identities, and per-decrypt audit
+emit.
+
+**Why:** the first implementation accumulated four wrapper layers
+(`OperatorReadAuthGuard`, `NoOpDecryptAuditEmitter`, `staleDEKColdResolver`,
+`mergeStreams`) each compensating for a mismatch between F's
+break-glass-read shape and the shared infrastructure's subscriber shape. The
+mismatch produced the k-way merge correctness bug. ADR 0017 lays out the
+full reasoning, the alternatives considered, and the rejected approaches.
+
+**What changes from r1–r7:**
+
+| r1–r7 design                                                | r8 design                                                       |
+| ----------------------------------------------------------- | --------------------------------------------------------------- |
+| F constructs `history.NewReader(...)` with F-local guard    | F does not construct a `HistoryReader`                          |
+| `OperatorReadAuthGuard` (unconditional permit)              | Deleted — F has no per-event auth                               |
+| `NoOpDecryptAuditEmitter`                                   | Deleted — F has no per-decrypt audit                            |
+| `staleDEKColdResolver` wrapper on cold-tier resolver        | Deleted — F's `decrypt.go` handles classification at the source |
+| `mergeStreams` k-way merge over N `HistoryStream`s          | Deleted — F's `cold_reader.go` issues one SQL with `subject = ANY($1)` |
+| F-local `Classifier` interface + `DefaultClassifier`        | Unexported `classifyDecryptErr` function in F's `decrypt.go`    |
+| `SessionAuthorizer` adapter interface + `Operator` struct   | Deleted — handler takes `SessionStore` + `SubjectResolver` directly; 2-call sequence inlined |
+| `codec.TypeRegistry` + `RegisterBuiltinTypes`               | Deleted — 4 hardcoded sensitive types in `filter.go` package map |
+| `AdminReadStreamResponse.Event` payload = `eventbusv1.Event` | `corev1.EventFrame` (typed `metadata_only` + `no_plaintext_reason`) |
+| F.20 CLI: `len(Event.Payload) == 0` heuristic for redaction | F.20 CLI: reads `EventFrame.metadata_only` directly             |
+| `Classifier` policy via `Classifier` interface (1 impl)     | Unexported function (no interface)                              |
+| `ResponseSender` narrow seam + `streamDataOverride` test hook on production Handler | Moved into `export_test.go` `testHandler` wrapper |
+| 18 INV-F invariants, including F4/F5/F18 bookkeeping        | 13 INV-F invariants; F4/F5/F18 deleted (impl details of deleted abstractions / naming bookkeeping) |
+| INV-F meta-test enforces test-name binding                  | Deleted; INV catalog is documentation                           |
+
+**What stays from r1–r7:**
+
+- The four-stage handler flow: capability check → bounds validation →
+  dual-control approval → pre-data audit emit → ReadStarted frame → bulk
+  read+stream → ReadFinished frame → post-data audit emit (INV-42 anchor;
+  INV-F1/F2/F3 ordering preserved by construction).
+- The audit payload struct shapes (`OperatorReadStartPayload`,
+  `OperatorReadCompletedPayload`) with `Requested-*` vs `Resolved-*`
+  distinction (INV-F7).
+- The audit chain integration (`OperatorReadChainFor`, `OperatorReadHandlerFor`,
+  Path C shared subject), including 7-field `chain.Handler` (3 real
+  consumers across rekey, policy, operator-read — the factory earns its keep).
+- The audit emitter (`EmitStart`, `EmitCompleted`) with chain prev-hash
+  computation and `holomush_admin_readstream_completed_audit_failures_total`
+  metric (INV-F10).
+- The dual-control flow (`GetByOpArgsHash` idempotent reuse + `Open` +
+  `WaitForApproval` + timeout; INV-F11, INV-F17).
+- The 2-call session→capability authorization pattern (`sessions.GetOperatorSession`
+  - `access.HasPlayerGrant`); inlined into the handler instead of wrapped in
+  the `SessionAuthorizer` adapter.
+- `NoPlaintextReason` enum expansion 4→7 (proto + Go mirror; INV-F16
+  stamping-locality).
+- `Approval.Repo.GetByOpArgsHash` + migration 000036.
+- The builtin event-type registrations (`crypto.system.operator_read` +
+  `crypto.system.operator_read_completed`; INV-F13).
+- The proto wire surface modulo the `Event` → `EventFrame` payload change.
+- The ConnectRPC adapter and admin-socket subsystem wiring.
+- The CLI subcommand modulo the redaction-heuristic deletion.
+- The dual-control + lifecycle E2E scenarios (F-E3, F-E5, F-E6, F-E7,
+  F-E10, F-E12, F-E16), the validation scenarios (F-E4, F-E8, F-E9,
+  F-E11, F-E15), and the happy-path scenarios (F-E1, F-E2, F-E13, F-E14,
+  F-E17 — F-E17 reverts to the originally-planned shape: 5 metadata-only
+  frames with `DEK_MISSING` + `DEK_BAD_COLUMNS` reasons, no longer
+  redesigned around the infinite-loop bug since the bug class no longer
+  exists).
+
+The remainder of this spec (§1–§7) is the original r7 design with the
+sections marked **[SUPERSEDED by §0]** below replaced by the r8 shape:
+
+- §2.1 ConnectRPC adapter — preserved (no functional change).
+- §2.2 Handler config struct — **SUPERSEDED**: see r8 `Config` shape in plan §Task R.handler.
+- §2.3 Operator authorization (2-call pattern) — preserved; just inlined into handler.
+- §2.4 HistoryReader auth+audit seam — **DELETED IN r8**: F does not use HistoryReader.
+- §2.5 Configuration wiring — **SUPERSEDED**: see plan §Task R.wiring for r8 production wiring.
+- §2.6 Type registry — **SUPERSEDED**: 4 hardcoded types in F's `filter.go`.
+- §2.7 Approval substrate (GetByOpArgsHash) — preserved.
+- §2.8 HistoryQuery.SensitiveOnly — substrate field preserved for non-F use; F does not query through HistoryReader so the field is unused by F.
+- §3 Wire surface — modulo Event → EventFrame for the response payload.
+- §4.1 ResolveBounds — preserved as F's `filter.go`.
+- §4.2 Handler flow — preserved (ordering invariants).
+- §4.3 Subject construction — preserved as F's `subjects.go`; single SQL
+  with `subject = ANY($1)` replaces the per-subject query + merge.
+- §4.4 streamData loop — **SUPERSEDED**: see plan §Task R.cold-reader + R.decrypt for the direct read+decrypt path.
+- §4.5 Classifier matrix — preserved as F's `decrypt.go::classifyDecryptErr` unexported helper. INV-F12's six branches remain; only the API shape changes (function not interface).
+- §4.6 Per-frame write deadline — preserved as F's `deadline_writer.go`.
+- §5 CLI — preserved modulo redaction-heuristic deletion.
+- §6 INV-F catalog — **AMENDED**: INV-F4, INV-F5, INV-F18 deleted; remaining 13 invariants stay.
+- §7 Validation strategy / harness fold-in — preserved.
+
+---
 
 ## Authors
 
@@ -1212,8 +1320,6 @@ $ echo $?
 | **INV-F1** | `AdminReadStream` MUST emit the `crypto.system.operator_read` audit event and observe a successful `OperatorReadAuditEmitter.EmitStart` ack BEFORE sending any `ReadStarted` or `Event` frame. | Unit + E2E `F-E4` |
 | **INV-F2** | If the pre-data audit publish fails, `AdminReadStream` MUST return `DENY_AUDIT_PRE_DATA_PUBLISH` and MUST NOT invoke `HistoryReader.QueryHistory`. | Unit |
 | **INV-F3** | `AdminReadStream` MUST reject with `DENY_OPERATOR_CAPABILITY` when the operator lacks `crypto.operator`, BEFORE any audit emit. | Unit + E2E `F-E11` |
-| **INV-F4** | `OperatorReadAuthGuard.Permit` MUST return PERMIT unconditionally for any sensitive-event lookup within an `AdminReadStream` invocation. | Unit |
-| **INV-F5** | The handler MUST NOT instantiate or call the runtime `AuthGuard` for in-stream event lookup (would re-trigger INV-43). | Unit (negative) |
 | **INV-F6** | `(until - since) > MaxWindow` MUST return `DENY_OPERATOR_READ_WINDOW_TOO_LARGE` BEFORE pre-data audit emit. | Unit + E2E `F-E8` |
 | **INV-F7** | `OperatorReadStartPayload` MUST persist both Requested-* (nullable, capturing defaulting) and Resolved-* (always populated) fields for since/until/contexts. | Unit (JSON round-trip) |
 | **INV-F8** | `ReadStarted.request_id == OperatorReadStartPayload.RequestID == start event ID == OperatorReadCompletedPayload.RequestID`. | Unit + E2E `F-E12` |
@@ -1226,7 +1332,6 @@ $ echo $?
 | **INV-F15** | F MUST set `HistoryQuery.SensitiveOnly=true` on every cold-tier query. The cold-tier `WHERE dek_ref IS NOT NULL` append is the canonical server-side filter. Identity-codec rows MUST NOT reach the operator's stream. Filtered events do NOT count toward `events_scanned` or `decrypt_fail_count`. | Unit (handler passes SensitiveOnly=true) + bus-integration (SQL filters public rows) + E2E `F-E14` |
 | **INV-F16** | The `NoPlaintextReason` enum expansion (4 → 7) MUST preserve INV-GW-14 parity, AND the new values (`DEK_MISSING`, `DEK_BAD_COLUMNS`, `INTERNAL`) MUST NOT be stamped by `cold_postgres.go::decodeColdRow` or `history/dispatcher.go` — F's classifier is the only producer. | Unit (parity test + negative tests on hot/cold paths) |
 | **INV-F17** | `approval.Repo.GetByOpArgsHash` MUST apply all filters server-side (`op_kind`, `op_args_hash`, `expires_at > now()`, `approved_at IS NOT NULL`, `primary_player_id != excludePlayerID`). Tiebreaker: most recently approved. | DB integration |
-| **INV-F18** | Each `INV-F[N]` MUST be referenced in exactly one test name (e.g., `TestINV_F1_PreDataAuditOrdering`). | Meta-test |
 
 ### Coverage matrix
 
@@ -1234,8 +1339,6 @@ $ echo $?
 INV-F1  → TestINV_F1_PreDataAuditOrdering                       (unit) + F-E4 (E2E)
 INV-F2  → TestINV_F2_AuditPublishFailRefuses                    (unit)
 INV-F3  → TestINV_F3_CapabilityCheckPrecedesAudit               (unit) + F-E11 (E2E)
-INV-F4  → TestINV_F4_OperatorReadAuthGuardAlwaysPermits         (unit)
-INV-F5  → TestINV_F5_StandardAuthGuardNeverSeesOperator         (unit, negative)
 INV-F6  → TestINV_F6_WindowTooLargePrecedesAudit                (unit) + F-E8 (E2E)
 INV-F7  → TestINV_F7_PayloadPreservesRequestedAndResolved       (unit)
 INV-F8  → TestINV_F8_RequestIDCoherence                         (unit) + F-E12 (E2E)
@@ -1250,7 +1353,6 @@ INV-F16 → TestINV_F16_NoPlaintextReasonProtoGoParity            (unit, parity)
        → TestINV_F16_HotColdStampersDoNotEmitNewValues          (unit, negative on dispatcher/cold_postgres)
 INV-F17 → TestINV_F17_GetByOpArgsHashMatrix                     (DB integration)
        → TestINV_F17_GetByOpArgsHashFiltersOwnAuthor            (DB integration)
-INV-F18 → TestINV_F_MetaInvariantsBoundToTests                  (meta-test)
 ```
 
 ## Section 7 — Test strategy

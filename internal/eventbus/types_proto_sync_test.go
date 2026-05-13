@@ -6,6 +6,9 @@
 package eventbus_test
 
 import (
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -80,6 +83,9 @@ func TestNoPlaintextReasonEnumParity(t *testing.T) {
 		{eventbus.NoPlaintextReasonAuthGuardDeny, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_AUTHGUARD_DENY},
 		{eventbus.NoPlaintextReasonStaleDEK, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_STALE_DEK},
 		{eventbus.NoPlaintextReasonAuditQueueFull, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL},
+		{eventbus.NoPlaintextReasonDEKMissing, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_DEK_MISSING},
+		{eventbus.NoPlaintextReasonDEKBadColumns, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS},
+		{eventbus.NoPlaintextReasonInternal, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_INTERNAL},
 	}
 	assert.Len(t, cases, len(corev1.NoPlaintextReason_name),
 		"every proto NoPlaintextReason value MUST have a Go-side mirror in cases above; "+
@@ -87,5 +93,77 @@ func TestNoPlaintextReasonEnumParity(t *testing.T) {
 	for _, c := range cases {
 		assert.Equal(t, int32(c.goVal), int32(c.protoVal),
 			"Go NoPlaintextReason and proto NoPlaintextReason must have equal numeric values")
+	}
+}
+
+// TestINV_F16_NoPlaintextReasonProtoGoParity is the INV-F16 parity test for
+// the 4→7 expansion. Asserts all 7 values have matching proto-Go pairs in both
+// directions. This is an alias for the extended TestNoPlaintextReasonEnumParity
+// kept separately so the invariant name appears in test output.
+func TestINV_F16_NoPlaintextReasonProtoGoParity(t *testing.T) {
+	cases := []struct {
+		name     string
+		goVal    eventbus.NoPlaintextReason
+		protoVal corev1.NoPlaintextReason
+	}{
+		{"UNSPECIFIED", eventbus.NoPlaintextReasonUnspecified, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_UNSPECIFIED},
+		{"AUTHGUARD_DENY", eventbus.NoPlaintextReasonAuthGuardDeny, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_AUTHGUARD_DENY},
+		{"STALE_DEK", eventbus.NoPlaintextReasonStaleDEK, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_STALE_DEK},
+		{"AUDIT_QUEUE_FULL", eventbus.NoPlaintextReasonAuditQueueFull, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL},
+		{"DEK_MISSING", eventbus.NoPlaintextReasonDEKMissing, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_DEK_MISSING},
+		{"DEK_BAD_COLUMNS", eventbus.NoPlaintextReasonDEKBadColumns, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS},
+		{"INTERNAL", eventbus.NoPlaintextReasonInternal, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_INTERNAL},
+	}
+	require.Len(t, cases, 7, "expected exactly 7 NoPlaintextReason values after 4→7 expansion")
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, int32(c.goVal), int32(c.protoVal),
+				"Go and proto NoPlaintextReason numeric values must match")
+		})
+	}
+}
+
+// TestINV_F16_HotColdStampersDoNotEmitNewValues asserts that the three new
+// NoPlaintextReason values (DEK_MISSING, DEK_BAD_COLUMNS, INTERNAL) are NOT
+// referenced in the hot/cold tier stampers or subscriber. These values MUST be
+// stamped exclusively by F's operator-read classifier (INV-F16).
+//
+// This is a static-analysis-style test: it reads the source files and fails if
+// any of the new constant names appear. Because Go source is text, even a
+// comment mentioning the constant would flag — intentional, since comments are
+// also specifications.
+func TestINV_F16_HotColdStampersDoNotEmitNewValues(t *testing.T) {
+	// Resolve absolute paths via runtime.Caller so the test is stable
+	// regardless of the working directory when invoked.
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok, "runtime.Caller must resolve current test file")
+	moduleRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", ".."))
+	files := []string{
+		filepath.Join(moduleRoot, "internal/eventbus/history/cold_postgres.go"),
+		filepath.Join(moduleRoot, "internal/eventbus/history/dispatcher.go"),
+		filepath.Join(moduleRoot, "internal/eventbus/subscriber.go"),
+	}
+
+	// The three new constant names in both Go and proto form.
+	forbidden := []string{
+		"NoPlaintextReasonDEKMissing",
+		"NoPlaintextReasonDEKBadColumns",
+		"NoPlaintextReasonInternal",
+		"NO_PLAINTEXT_REASON_DEK_MISSING",
+		"NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS",
+		"NO_PLAINTEXT_REASON_INTERNAL",
+	}
+
+	for _, relPath := range files {
+		t.Run(relPath, func(t *testing.T) {
+			data, err := os.ReadFile(relPath)
+			require.NoError(t, err, "source file must be readable")
+			src := string(data)
+			for _, name := range forbidden {
+				assert.NotContains(t, src, name,
+					"hot/cold stamper %s MUST NOT reference new NoPlaintextReason value %s; "+
+						"only F's classifier produces these (INV-F16)", relPath, name)
+			}
+		})
 	}
 }

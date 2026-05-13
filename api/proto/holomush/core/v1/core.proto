@@ -189,6 +189,15 @@ enum NoPlaintextReason {
   NO_PLAINTEXT_REASON_STALE_DEK = 2;
   // Plugin audit emit backpressure (queue full). Host-side TOCTOU.
   NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL = 3;
+  // Cold-tier audit row has no dek_ref (DEK reference column missing or
+  // NULL). Stamped exclusively by F's operator-read classifier (INV-F16).
+  NO_PLAINTEXT_REASON_DEK_MISSING = 4;
+  // Cold-tier audit row references a DEK whose column set does not match
+  // the event's AAD declaration. Stamped exclusively by F's classifier.
+  NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS = 5;
+  // Catch-all for unexpected decrypt failures not covered by the
+  // specific cases above. Stamped exclusively by F's classifier.
+  NO_PLAINTEXT_REASON_INTERNAL = 6;
 }
 
 // EventChannel identifies the destination channel for event delivery.

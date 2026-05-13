@@ -6,6 +6,7 @@ syntax = "proto3";
 package holomush.admin.v1;
 
 import "google/protobuf/timestamp.proto";
+import "holomush/admin/v1/read_stream.proto";
 import "holomush/admin/v1/rekey.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/admin/v1;adminv1";
@@ -50,6 +51,12 @@ service AdminService {
   // RekeyList streams status records for active (and optionally terminal)
   // rekey operations. Spec §7; INV-E surface.
   rpc RekeyList(RekeyListRequest) returns (stream RekeyStatusResponse);
+
+  // AdminReadStream is the operator break-glass streaming read RPC.
+  // Streams EventFrame payloads (with typed metadata_only + no_plaintext_reason
+  // redaction fields) for the requested context(s) and time bounds.
+  // Spec sub-epic F §3.2, §3.3; ADR-0017.
+  rpc AdminReadStream(AdminReadStreamRequest) returns (stream AdminReadStreamResponse);
 }
 
 message StatusRequest {}

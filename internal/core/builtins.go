@@ -91,6 +91,13 @@ func registerBuiltinTypes(r *VerbRegistry, hostVersion string) error {
 		// projection persists it to events_audit. Registered here so
 		// RenderingPublisher does not reject it with EMIT_UNKNOWN_VERB (INV-E14).
 		{Type: "crypto.system.rekey", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},
+		// Operator-read audit events (host-emit, persistence-only). Emitted by
+		// F's AdminReadStream handler at stream-start and stream-end respectively.
+		// AUDIT_ONLY: gRPC Subscribe drops before delivery; audit projection
+		// persists to events_audit. Registered here so RenderingPublisher does
+		// not reject with EMIT_UNKNOWN_VERB (INV-F13).
+		{Type: "crypto.system.operator_read", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},
+		{Type: "crypto.system.operator_read_completed", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},
 	}
 	for _, b := range builtins {
 		if err := r.RegisterWithSource(b, sourceVersion); err != nil {

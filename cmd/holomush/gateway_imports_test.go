@@ -44,6 +44,12 @@ var coreOnlyFiles = map[string]struct{}{
 	// dek/chain/invalidation/kek/world/access/admin; core-only by design.
 	"crypto_rekey_wiring.go":      {},
 	"crypto_rekey_wiring_test.go": {},
+	// Phase 5 sub-epic F R.14 AdminReadStream wiring (holomush-jxo8.8.38).
+	// Production readstream.Handler construction (ColdReader, audit emitter,
+	// session/DEK/codec adapters). Imports access/admin/eventbus/dek;
+	// core-only by design (matches crypto_rekey_wiring.go precedent).
+	"readstream_wiring.go":      {},
+	"readstream_wiring_test.go": {},
 	// `holomush admin` CLI is a host-shell tool, not the gateway. It
 	// connects to the same PG/KEK as the core server for break-glass
 	// flows (TOTP enroll/verify/recover). Phase 5 sub-epic A.

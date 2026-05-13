@@ -91,6 +91,27 @@ type CryptoConfig struct {
 	// scans (INV-E19 / spec §6.2). Defaults to 1h via Defaults() when
 	// unset/zero. Sub-epic E T37 (holomush-jxo8.7.34).
 	RekeyCheckpointSweepInterval time.Duration `koanf:"rekey_checkpoint_sweep_interval"`
+
+	// OperatorReadDefaultWindow is the size of since-defaulted AdminReadStream
+	// reads (INV-F6 / spec §6). Defaults to 1h via Defaults() when unset/zero.
+	// Sub-epic F R.14 (holomush-jxo8.8.38).
+	OperatorReadDefaultWindow time.Duration `koanf:"operator_read_default_window"`
+
+	// OperatorReadMaxWindow caps the (until - since) span on AdminReadStream
+	// requests (INV-F6). Defaults to 30d via Defaults() when unset/zero.
+	// Operators configuring values >90d trigger a WARN at boot — the cap
+	// remains in force but oversized windows greatly inflate row-count and
+	// memory pressure on the cold-tier reader.
+	OperatorReadMaxWindow time.Duration `koanf:"operator_read_max_window"`
+
+	// OperatorReadWriteDeadline is the per-frame send deadline on the
+	// AdminReadStream server stream (INV-F14). Defaults to 30s via Defaults()
+	// when unset/zero.
+	OperatorReadWriteDeadline time.Duration `koanf:"operator_read_write_deadline"`
+
+	// OperatorReadApprovalTTL is the dual-control wait budget on AdminReadStream
+	// (INV-F11). Defaults to 5m via Defaults() when unset/zero.
+	OperatorReadApprovalTTL time.Duration `koanf:"operator_read_approval_ttl"`
 }
 
 // DefaultRekeyCheckpointTTL is the default age cutoff for non-terminal rekey
@@ -102,9 +123,26 @@ const DefaultRekeyCheckpointTTL = 24 * time.Hour
 // master-spec default.
 const DefaultRekeyCheckpointSweepInterval = 1 * time.Hour
 
+// DefaultOperatorReadDefaultWindow is the default since-defaulted window for
+// AdminReadStream reads (INV-F6). Sub-epic F R.14 (holomush-jxo8.8.38).
+const DefaultOperatorReadDefaultWindow = 1 * time.Hour
+
+// DefaultOperatorReadMaxWindow caps the (until - since) span on
+// AdminReadStream reads (INV-F6). Sub-epic F R.14.
+const DefaultOperatorReadMaxWindow = 30 * 24 * time.Hour
+
+// DefaultOperatorReadWriteDeadline is the per-frame send deadline on the
+// AdminReadStream server stream (INV-F14). Sub-epic F R.14.
+const DefaultOperatorReadWriteDeadline = 30 * time.Second
+
+// DefaultOperatorReadApprovalTTL is the default dual-control wait budget on
+// AdminReadStream (INV-F11). Sub-epic F R.14.
+const DefaultOperatorReadApprovalTTL = 5 * time.Minute
+
 // Defaults returns a copy of c with the zero-valued fields populated from
 // their defaults. Defaults() is idempotent and safe to call on every load.
-// Sub-epic E T37 (holomush-jxo8.7.34).
+// Sub-epic E T37 (holomush-jxo8.7.34); operator-read fields added by
+// sub-epic F R.14 (holomush-jxo8.8.38).
 func (c CryptoConfig) Defaults() CryptoConfig {
 	if c.Operators == nil {
 		c.Operators = []string{}
@@ -114,6 +152,18 @@ func (c CryptoConfig) Defaults() CryptoConfig {
 	}
 	if c.RekeyCheckpointSweepInterval <= 0 {
 		c.RekeyCheckpointSweepInterval = DefaultRekeyCheckpointSweepInterval
+	}
+	if c.OperatorReadDefaultWindow <= 0 {
+		c.OperatorReadDefaultWindow = DefaultOperatorReadDefaultWindow
+	}
+	if c.OperatorReadMaxWindow <= 0 {
+		c.OperatorReadMaxWindow = DefaultOperatorReadMaxWindow
+	}
+	if c.OperatorReadWriteDeadline <= 0 {
+		c.OperatorReadWriteDeadline = DefaultOperatorReadWriteDeadline
+	}
+	if c.OperatorReadApprovalTTL <= 0 {
+		c.OperatorReadApprovalTTL = DefaultOperatorReadApprovalTTL
 	}
 	return c
 }
@@ -125,6 +175,10 @@ func DefaultCryptoConfig() CryptoConfig {
 		Operators:                    []string{},
 		RekeyCheckpointTTL:           DefaultRekeyCheckpointTTL,
 		RekeyCheckpointSweepInterval: DefaultRekeyCheckpointSweepInterval,
+		OperatorReadDefaultWindow:    DefaultOperatorReadDefaultWindow,
+		OperatorReadMaxWindow:        DefaultOperatorReadMaxWindow,
+		OperatorReadWriteDeadline:    DefaultOperatorReadWriteDeadline,
+		OperatorReadApprovalTTL:      DefaultOperatorReadApprovalTTL,
 	}
 }
 
