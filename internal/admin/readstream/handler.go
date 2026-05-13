@@ -35,6 +35,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/admin/approval"
+	"github.com/holomush/holomush/internal/admin/socket"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/idgen"
 	adminv1 "github.com/holomush/holomush/pkg/proto/holomush/admin/v1"
@@ -429,6 +430,17 @@ func (h *Handler) scanAndStream( //nolint:gocritic // unnamedResult: three-retur
 	var eventsScanned, decryptFails int64
 	send := stream.Send
 
+	// Per INV-F14: per-frame write deadline. Production requests carry the
+	// underlying *net.UnixConn via socket.UnixConnFromContext (wired through
+	// http.Server.ConnContext), so SendWithDeadline enforces the deadline at
+	// the kernel I/O layer with no orphan goroutine. Unit tests that bypass
+	// the admin socket fall back to a no-op setter — the unit tests for
+	// deadline semantics live in deadline_writer_test.go.
+	setDeadline := func(_ time.Time) error { return nil }
+	if conn, ok := socket.UnixConnFromContext(ctx); ok {
+		setDeadline = conn.SetWriteDeadline
+	}
+
 	for i := range rows {
 		row := rows[i]
 		plaintext, reason, fatal, decryptErr := DecryptRow(ctx, row, h.cfg.DEK, h.cfg.Codecs)
@@ -443,7 +455,7 @@ func (h *Handler) scanAndStream( //nolint:gocritic // unnamedResult: three-retur
 			frame = buildPlaintextEventFrame(row, plaintext)
 		}
 
-		if sendErr := SendWithDeadline(ctx, send, frame, h.cfg.WriteDeadline); sendErr != nil {
+		if sendErr := SendWithDeadline(ctx, send, frame, h.cfg.WriteDeadline, setDeadline); sendErr != nil {
 			return eventsScanned, decryptFails, oops.Wrap(sendErr)
 		}
 
