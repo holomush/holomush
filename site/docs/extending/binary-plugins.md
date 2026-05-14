@@ -609,3 +609,48 @@ broker-backed client. `EventSink` and `FocusClient` share a single
 
 - Plugin adoption spec: [B10 core-scenes Adoption](../../../docs/superpowers/specs/2026-04-16-b10-core-scenes-adoption-design.md)
 - Implementation: `pkg/plugin/focus_client.go`
+
+## Audit-row SDK helpers (Phase 7)
+
+Plugin authors don't write crypto code. The host owns encryption,
+decryption, and authorization. After Phase 7, plugin-owned audit
+tables hold ciphertext byte-equal to the bus envelope for sensitive
+events; the plugin's `PluginAuditService.QueryHistory` returns those
+ciphertext bytes verbatim to the host, which validates and decrypts
+before delivering to clients.
+
+The `pluginsdk` package provides two helpers in `pkg/plugin/audit.go`:
+
+### `pluginsdk.StoreFromMessage(msg jetstream.Msg) (AuditRow, error)`
+
+Call at `PluginAuditService.AuditEvent` RPC handler. Extracts an
+`AuditRow` from the JetStream message — projection fields (id,
+subject, type, timestamp, actor) plus crypto envelope (codec, payload,
+dek_ref, dek_version) plus schema_ver. Plugin authors persist the row
+fields verbatim into their own audit table.
+
+### `pluginsdk.LoadForQuery(row AuditRow) (*pluginauditpb.AuditRow, error)`
+
+Call at `PluginAuditService.QueryHistory` RPC handler. Converts a
+stored `AuditRow` back to the proto frame returned on the stream.
+Round-trip stable with `StoreFromMessage`.
+
+### Plugin audit table schema
+
+Phase 7 requires plugin audit tables to mirror `events_audit` for
+crypto-bearing columns:
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | `BYTEA PRIMARY KEY` | 16-byte ULID; matches `AuditRow.id` |
+| `subject` | `TEXT NOT NULL` | bus subject |
+| `type` | `TEXT NOT NULL` | qualified `<plugin>:<event_type>` |
+| `timestamp` | `TIMESTAMPTZ NOT NULL` | |
+| `actor_kind`, `actor_id` | `TEXT`, `BYTEA` | from `AuditRow.actor` |
+| `payload` | `BYTEA NOT NULL` | ciphertext when `codec != identity` |
+| `schema_ver` | `SMALLINT NOT NULL` | from `AuditRow.schema_ver` |
+| `codec` | `TEXT NOT NULL` | `identity` or `xchacha20poly1305-v1` |
+| `dek_ref` | `BIGINT NULL` | NULL for identity codec |
+| `dek_version` | `INTEGER NULL` | NULL for identity codec |
+
+See `plugins/core-scenes/audit.go` for a reference implementation.
