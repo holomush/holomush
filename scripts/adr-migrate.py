@@ -230,6 +230,79 @@ Legacy ADR number: {adr.number:04d}
 """
 
 
+def run(cmd: list[str], stdin: str | None = None, check: bool = True) -> str:
+    """Run a subprocess; return stdout. Raise on non-zero unless check=False."""
+    p = subprocess.run(
+        cmd,
+        input=stdin,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if check and p.returncode != 0:
+        sys.stderr.write(f"ERROR: {cmd!r} exited {p.returncode}\n")
+        sys.stderr.write(p.stderr)
+        raise SystemExit(p.returncode)
+    return p.stdout
+
+
+BD_ID_PATTERN = re.compile(r"Created issue: (\S+)")
+# Self-test on module load: catches a future bd CLI stdout change at import
+# time rather than mid-migration (when 17 records have already been written).
+assert BD_ID_PATTERN.search(
+    "✓ Created issue: holomush-xxxx — title"
+), "BD_ID_PATTERN no longer matches bd create stdout; update the regex."
+
+
+def bd_create_decision(title: str, description: str) -> str:
+    """`bd create -t decision --validate`; return the new bd-id."""
+    out = run([
+        "bd", "create",
+        "-t", "decision",
+        "--validate",
+        "--title", title,
+        "--description", description,
+    ])
+    m = BD_ID_PATTERN.search(out)
+    if not m:
+        sys.stderr.write(f"ERROR: could not parse bd-id from:\n{out}\n")
+        raise SystemExit(1)
+    return m.group(1)
+
+
+def bd_dep_supersedes(new_id: str, old_id: str) -> None:
+    """Record a supersedes dep edge: new_id supersedes old_id."""
+    run(["bd", "dep", "add", new_id, old_id, "--type", "supersedes"])
+
+
+def bd_close_superseded(old_id: str, new_id: str) -> None:
+    """Close the superseded record with a reason."""
+    run(["bd", "close", old_id, "--reason", f"Superseded by {new_id}"])
+
+
+def bd_dolt_commit(message: str) -> None:
+    run(["bd", "dolt", "commit", "-m", message])
+
+
+def apply_migration(adrs: list[LegacyADR]) -> None:
+    """Mutate state: create bd records, rename files, write stubs, regen README."""
+    # Pass 1: create bd records for every ADR; populate bd_id.
+    for a in adrs:
+        a.slug = slugify(a.title) or a.slug
+        body = render_bd_description(a)
+        a.bd_id = bd_create_decision(a.title, body)
+        print(f"  bd: {a.bd_id} ← ADR-{a.number:04d} ({a.title!r})")
+
+    # Pass 2: build number→bd-id index for supersession edges.
+    by_number = {a.number: a for a in adrs}  # noqa: F841 -- used in Pass 4 (task 12)
+
+    # Pass 3: rename files, write stubs (next task).
+    # Pass 4: supersession edges + close (next task).
+    # Pass 5: regenerate README (next task).
+    # Pass 6: inline asserts / verification (next task).
+    # Pass 7: bd dolt commit (next task).
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--apply", action="store_true",
@@ -250,9 +323,9 @@ def main() -> int:
         print("\nDry-run complete. Re-run with --apply to mutate state.")
         return 0
 
-    # Apply phase added in subsequent tasks.
-    sys.stderr.write("ERROR: --apply not yet implemented (task 10+)\n")
-    return 1
+    apply_migration(adrs)
+    print("\nMigration apply phase 1 (bd create) complete.")
+    return 0
 
 
 if __name__ == "__main__":
