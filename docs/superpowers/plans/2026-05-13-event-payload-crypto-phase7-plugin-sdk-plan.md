@@ -12,19 +12,14 @@
 
 **Parent epic:** `holomush-1r0v`.
 
-**Plan revision:** v3. v2 returned NOT READY from plan-reviewer with 4 BLOCKING (real catches: `AuditRowOf` Builder-alternative deferral hedge; sync/async fence emit contradiction; B.1.5 wire-format hedging not fully removed; struct-value mutation bug — `eventbus.Event` is a value type, so the fence MUST return a modified copy, not mutate the local). v3 patches: all 4 BLOCKING + all 5 non-blocking applied; `LoadForQuery` and `AuditRowToEvent` function bodies converted to prose contracts per user direction.
+**Revision history** (current: v4):
 
-**Plan revision:** v2. v1 (this same file's git history) returned NOT READY from `plan-reviewer` with 7 BLOCKING findings, including one real architectural bug: the fence's `Next()` returning a stream-fatal error short-circuits the entire stream, violating the spec's per-row `metadata_only=true` refusal contract. v2 patches:
+- **v4**: Addressed plan-reviewer v3 NOT READY (4 BLOCKING cross-reference-drift findings, all mechanical). Patches: (1) D.2.1 `TestDowngradeAttackerMaliciousPathRefuses` assertion rewritten — fence returns per-row metadata_only, not stream-fatal error (consistency with C.3.3 rule 3). (2) Bead 1r0v.3 "Files touched" updated to list both `types.go` AND new `internal/eventbus/audit_row_access.go` (matches C.0.2's split). (3) B.1.5 "Detailed pseudo-Go" preamble hedge struck. (4) Self-review coverage table gains INV-P7-7b + INV-P7-C0 rows. Plus non-blockers: revision-history block consolidated; `WaitForRowInSceneLog` / `WaitForFixtureCachePopulated` helpers explicitly defined in B.5; "no new edges" claim corrected to acknowledge new `eventbus → pluginauditpb` import edge.
+- **v3**: Addressed plan-reviewer v2 NOT READY (4 BLOCKING — `AuditRowOf` deferral hedge, sync/async fence emit contradiction, B.1.5 wire-format hedging body, struct-value mutation bug). Pinned: exported `eventbus.AuditRowOf` accessor in new file; synchronous emit with 100ms bounded timeout; "copy ev, modify copy, return (refused, nil)" semantics. `LoadForQuery` + `AuditRowToEvent` function bodies converted to prose contracts.
+- **v2**: Addressed plan-reviewer v1 NOT READY (7 BLOCKING). Most significant: fence semantics rewritten from stream-fatal-error to per-row `metadata_only=true` + new `NoPlaintextReasonDowngradeRefused` enum value. New Task C.0 substrate (enum + `auditRow` field on `Event` + audit-router stamp). Proto path corrected to `api/proto/holomush/plugin/v1/audit.proto`. Constructor at `NewPluginConsumerManager` made variadic; production wiring site corrected from `deps.go` to `cmd/holomush/core.go:488`. `holomush-demb` bead removed (verified no-op — `ON CONFLICT` already present at `plugins/core-scenes/audit.go:141`).
+- **v1**: Initial decomposition into 5-bead chain.
 
-- **C.3 architectural decision pinned** (was deferred to "agent decides"): fence sees the underlying `*pluginauditpb.AuditRow` via an unexported `auditRow *pluginauditpb.AuditRow` field stamped onto `eventbus.Event` by the audit-package router. Package-internal accessor reads it; no interface refactor needed.
-- **C.3 fence semantics rewritten**: fence emits `Event{MetadataOnly: true, NoPlaintextReason: NoPlaintextReasonDowngradeRefused}` per row, NOT a stream-fatal error. New enum value `NoPlaintextReasonDowngradeRefused = 7` added to `internal/eventbus/types.go`. Asynchronous audit emit on INV-P7-7 refusals; stream continues to subsequent rows.
-- **B.1.5 hedging removed**: verified facts via direct file read — `internal/eventbus/publisher.go:266-292` (encode) + `internal/eventbus/history/hot_jetstream.go:441-444` (decode) confirm the codec encrypts `event.Payload` in place; cleartext envelope metadata stays cleartext; `msg.Data()` is the marshaled envelope. Plan now states the fact without hedging.
-- **B.1.6 constructor signature fix**: `NewPluginConsumerManager(js)` (single-arg today at `plugin_consumer.go:89`) is made variadic (`opts ...PluginConsumerManagerOption`). All existing call sites preserved (variadic-empty matches single-arg). Production wiring site is `cmd/holomush/core.go:488` (verified — NOT `deps.go` as v1 claimed).
-- **B.1.6 selector-purpose note added**: `keySelector` field on `PluginConsumerManager` is for substrate symmetry only; NOT consumed by `pluginConsumer.dispatch` in Phase 7. INV-P7-9 pointer-identity test validates the substrate, not a functional dispatch path.
-- **B.1.7 parser-location decision pinned**: `internal/eventbus/audit/header_parser.go` (NOT moved to `pkg/`). `pkg/plugin/audit.go::StoreFromMessage` imports `internal/eventbus/audit` — same-module import is permitted by Go. Documented inline with a comment explaining the SDK→internal coupling.
-- **B.2.4a step added**: audit existing `plugins/core-scenes/audit_test.go` for fallback-path-dependent tests before mechanically migrating to `req.GetRow()` reads.
-- **E.3 wiring site corrected**: `cmd/holomush/core.go:488`, not `cmd/holomush/core.go`.
-- **Non-blockers applied**: `schema_provisioner.go:165` (was :163), `Task E.2 → E.3` cross-ref drift in B.4, `Reader.selector` field-name to be grepped at impl time, `testFixtureCachedRow()` populate-via-emit pinned, meta-test uses `runtime.Caller(0)` walk, master-spec line citations re-grepped via new E.1.0 step.
+**Code-block discipline** (per user direction post-v1 review): code blocks remain only for load-bearing artifacts — proto schemas (A.2), SQL migrations (B.2), plugin manifest YAML (D.1), key Go type signatures. Function bodies and most test bodies are described in prose + test name + acceptance criteria. Rationale: v1's fence stream-fatal bug crept in precisely because I wrote out the full `Next()` body and got the semantics wrong; with a prose description, the executing agent has to think it through against the spec.
 
 **Code-block discipline** (per user direction post-v1 review): code blocks remain only for load-bearing artifacts — proto schemas (A.2), SQL migrations (B.2), plugin manifest YAML (D.1), key Go type signatures. Function bodies and most test bodies are described in prose + test name + acceptance criteria. Rationale: v1's fence stream-fatal bug crept in precisely because I wrote out the full `Next()` body and got the semantics wrong; with a prose description, the executing agent has to think it through against the spec.
 
@@ -795,7 +790,7 @@ Update `internal/eventbus/audit/plugin_consumer.go`. Replace the `decodeEnvelope
 2. Decodes the proto envelope bytes from `msg.Data()` ONLY for projection fields (id, subject, type, timestamp, actor) — does NOT decrypt the payload. For `codec=identity`, the envelope's payload IS the plaintext (kept verbatim); for `codec != identity`, the envelope's payload IS the ciphertext (kept verbatim).
 3. Constructs `*pluginauditpb.AuditRow` with projection fields drawn from the unmarshaled envelope. `AuditRow.Payload` is set to `envelope.GetPayload()` — the codec encrypts the payload field in place inside the proto envelope (per master INV-49 envelope byte-equality + verified at `internal/eventbus/publisher.go:266-292` encode path + `internal/eventbus/history/hot_jetstream.go:441-444` decode path); projection fields stay cleartext regardless of codec. `msg.Data()` is the marshaled envelope (NOT the payload).
 
-Detailed pseudo-Go (the agent must verify wire-format details before locking the exact field extraction):
+Pseudo-Go (wire-format pinned in step 3 above; no agent re-verification needed):
 
 ```go
 // buildAuditRow constructs the AuditRow forwarded to the plugin's
@@ -1374,6 +1369,20 @@ Refs: holomush-1r0v
 
 - Create: `test/integration/eventbus_e2e/plugin_audit_round_trip_test.go`
 
+- [ ] **Step B.5.0: Define the `WaitForRowInSceneLog` helper**
+
+This helper polls the plugin's `scene_log` table until a row with the given `event_id` appears (or timeout fires). Used by B.5.1 + C.2.1 (and D.2.1's analogous `WaitForFixtureCachePopulated`). The helper does NOT exist in the repo today — define it in `test/integration/eventbus_e2e/suite_test.go` (or wherever the suite scaffolding lives).
+
+**Behavior contract:**
+
+- Signature: `func (s *Suite) WaitForRowInSceneLog(t *testing.T, eventID []byte, timeout time.Duration)`.
+- Polls `SELECT 1 FROM plugin_core_scenes.scene_log WHERE id = $1` every 10ms.
+- Returns successfully when the row exists.
+- On timeout: `t.Fatalf("scene_log row %x not present after %s", eventID, timeout)`.
+- Uses the suite's existing `pool *pgxpool.Pool` and `t.Context()`.
+
+Add `WaitForFixtureCachePopulated(t, timeout)` to the downgrade-attacker suite per the same pattern: polls `fixtureCache.Load()` in a loop with 10ms sleep, fatal on timeout.
+
 - [ ] **Step B.5.1: Write the round-trip test**
 
 ```go
@@ -1565,7 +1574,7 @@ type Event struct {
 }
 ```
 
-**Pinned accessor (no alternative):** new file `internal/eventbus/audit_row_access.go` (package `eventbus`) exporting `func AuditRowOf(ev Event) *pluginauditpb.AuditRow { return ev.auditRow }`. Called from the fence at `internal/eventbus/history/plugin_downgrade_fence.go` as `eventbus.AuditRowOf(ev)`. Import direction: history → eventbus (already established at `internal/eventbus/history/tier.go`); no new edges, no cycle.
+**Pinned accessor (no alternative):** new file `internal/eventbus/audit_row_access.go` (package `eventbus`) exporting `func AuditRowOf(ev Event) *pluginauditpb.AuditRow { return ev.auditRow }`. Called from the fence at `internal/eventbus/history/plugin_downgrade_fence.go` as `eventbus.AuditRowOf(ev)`. Import direction: history → eventbus already exists at `internal/eventbus/history/tier.go:39`. The new field on `eventbus.Event` adds a one-way edge `internal/eventbus → pkg/proto/holomush/plugin/v1` (proto pkg does NOT reverse-import — no cycle).
 
 - [ ] **Step C.0.3: Stamp `Event.auditRow` in the audit-package router**
 
@@ -2113,15 +2122,27 @@ func TestDowngradeAttackerMaliciousPathRefuses(t *testing.T) {
 	defer suite.Close()
 
 	// No emit needed — malicious plugin fabricates the row.
-	_, err := suite.QueryStreamHistory(t, "events.test.test_downgrade.01ABC.ic")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "AUDIT_ROW_DOWNGRADE_DETECTED",
-		"INV-P7-10: malicious downgrade MUST be refused")
+	// Fence returns the row per-row with metadata_only=true (NOT a
+	// stream-fatal error) per the per-row refusal contract in Task
+	// C.3.3 rule 3.
+	resp, err := suite.QueryStreamHistory(t, "events.test.test_downgrade.01ABC.ic")
+	require.NoError(t, err, "fence refusal is per-row, not stream-fatal")
+	require.Len(t, resp.Events, 1)
+	assert.True(t, resp.Events[0].MetadataOnly,
+		"INV-P7-10: malicious downgrade row MUST surface as metadata_only=true")
+	assert.Equal(t, eventbusv1.NoPlaintextReason_NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED,
+		resp.Events[0].NoPlaintextReason,
+		"INV-P7-10: refusal reason MUST be DowngradeRefused")
+	assert.Empty(t, resp.Events[0].Payload,
+		"INV-P7-10: refused row MUST NOT leak plaintext payload")
 
+	// The violation audit emit fires synchronously with bounded timeout
+	// per Task C.3.3 rule 3. Verify operator-visible signal landed.
 	violations := suite.GetEmittedViolations(t)
 	require.Len(t, violations, 1)
 	assert.Equal(t, "test-downgrade-attacker", violations[0].PluginName)
 	assert.Equal(t, "test-downgrade-attacker:secret", violations[0].EventType)
+	assert.Equal(t, "AUDIT_ROW_DOWNGRADE_DETECTED", violations[0].RefusalCode)
 }
 ```
 
@@ -2136,8 +2157,9 @@ Expected: PASS both subtests.
 test(eventbus_e2e): INV-P7-10 e2e downgrade attacker
 
 Two subtests: honest path delivers plaintext through the full
-stack; malicious path refuses with AUDIT_ROW_DOWNGRADE_DETECTED
-and emits plugin_integrity_violation audit.
+stack; malicious path surfaces per-row metadata_only=true with
+NoPlaintextReason=DowngradeRefused and emits plugin_integrity_violation
+audit with refusal_code=AUDIT_ROW_DOWNGRADE_DETECTED.
 
 Refs: holomush-1r0v
 ```
@@ -2637,7 +2659,7 @@ Each bead's `--description` MUST include all 8 sections. Below are the canonical
 - **Verification steps**:
   - `task test -- ./internal/eventbus/ ./internal/eventbus/history/` green.
   - `task test:int -- -run "Test(AuditRowToEvent|Fence|RoundTripProducesByteEqualAAD|AuditRowOfStampedByRouter)"` green.
-- **Files touched**: `internal/eventbus/types.go` (new enum value + `auditRow` field + `AuditRowOf` accessor), `internal/eventbus/audit/plugin_router.go` (stamp `auditRow` on conversion), `internal/eventbus/history/plugin_aad_adapter.go` (new), `internal/eventbus/history/plugin_aad_adapter_test.go` (new), `internal/eventbus/history/plugin_aad_reconstruction_test.go` (new), `internal/eventbus/history/plugin_downgrade_fence.go` (new — per-row semantics), `internal/eventbus/history/plugin_downgrade_fence_test.go` (new), `internal/eventbus/history/tier.go` (single-line + new option).
+- **Files touched**: `internal/eventbus/types.go` (new enum value `NoPlaintextReasonDowngradeRefused` + unexported `auditRow *pluginauditpb.AuditRow` field on `Event`), `internal/eventbus/audit_row_access.go` (NEW — exported `AuditRowOf(ev Event) *pluginauditpb.AuditRow` accessor; package `eventbus`), `internal/eventbus/audit/plugin_router.go` (stamp `auditRow` on conversion), `internal/eventbus/history/plugin_aad_adapter.go` (new), `internal/eventbus/history/plugin_aad_adapter_test.go` (new), `internal/eventbus/history/plugin_aad_reconstruction_test.go` (new), `internal/eventbus/history/plugin_downgrade_fence.go` (new — per-row semantics), `internal/eventbus/history/plugin_downgrade_fence_test.go` (new), `internal/eventbus/history/tier.go` (single-line + new option).
 - **Dependencies**: blocked by `1r0v.2` (needs the AuditRow proto + scene_log columns + integration-test scaffolding).
 - **Out of scope**: production wiring (`1r0v.5`); e2e binary fixture (`1r0v.4`); spec polish (`1r0v.5`).
 
@@ -2746,8 +2768,10 @@ User approves; bead creation fires sequentially (per `[feedback_bd_create_no_par
 | INV-P7-14 | D.4 (meta-test) |
 | INV-P7-15 | C.3 (`TestFenceRefusesUnknownDekRef`) |
 | INV-P7-16 | C.2 (`TestRoundTripProducesByteEqualAAD`) |
+| INV-P7-7b (v3+, plan-only key) | C.3 (`TestFenceContinuesStreamAfterRefusal`) — per-row, not stream-fatal |
+| INV-P7-C0 (v3+, plan-only key) | C.0 (`TestAuditRowOfStampedByRouter`) — substrate accessor |
 
-All 16 invariants covered.
+All 16 spec invariants + 2 plan-internal substrate keys covered. The v3+ keys (`-7b`, `-C0`) are NOT part of the spec §2 table; they exist to drift-protect tests that v3 added during plan-reviewer fixes (per-row fence semantics, accessor stamping). The meta-test in D.4.1 enforces both spec and plan-internal keys.
 
 **2. Placeholder scan.** Searched the plan for TBD/TODO/FIXME — only the explicit `TODO — implemented in Task B.1` panic-stub in A.3 (intentional, replaced in B.1). No other placeholders.
 
@@ -2757,7 +2781,10 @@ All 16 invariants covered.
 - `pluginauditpb.AuditRow` proto fields match across A.2, B.1, B.2, C.1, D.1.
 - `CryptoKeysLookup` / `ViolationEmitter` interfaces defined in C.3 and consumed in E.3 wiring.
 
-**4. Verification gaps.** Two agent-decision points are explicitly flagged in the plan (codec wire-format question in B.1.5; row-extraction approach in C.3.4). Both must be verified by reading actual code before locking the implementation; the plan instructs the agent on what to read.
+**4. No deferred decisions.** Both v1 agent-decision points are PINNED in v3+:
+- B.1.5 codec wire-format: pinned per verified facts in `publisher.go:266-292` + `hot_jetstream.go:441-444` (codec encrypts payload field in place; projection fields cleartext; `msg.Data()` is the marshaled envelope).
+- C.0.2 row-extraction: pinned to exported `eventbus.AuditRowOf(ev) *pluginauditpb.AuditRow` accessor in new file `internal/eventbus/audit_row_access.go`.
+No "agent picks at implementation time" hedges remain.
 
 No fixes needed. Plan complete.
 
