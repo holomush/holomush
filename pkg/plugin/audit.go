@@ -10,8 +10,16 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	// audit imports the same-module internal package because Layer 2
+	// StoreFromMessage MUST use the same parser as the host's audit
+	// projection (INV-P7-2). Same-module import is structurally permitted
+	// by Go's internal/ rules. SDK consumers (plugin authors) MUST NOT
+	// follow this precedent — internal/ is host-only.
+	audit "github.com/holomush/holomush/internal/eventbus/audit"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	pluginauditpb "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -192,24 +200,51 @@ type AuditRow struct {
 // (internal/eventbus/audit/header_parser.go) for typed crypto/schema
 // values — INV-P7-2 byte-equality across the host-projection branch
 // and the per-plugin dispatcher branch is structural.
-func StoreFromMessage(_ jetstream.Msg) (AuditRow, error) {
-	// Implementation: parse JS headers via audit.ParseAuditHeaders;
-	// unmarshal msg.Data() into eventbusv1.Event ONLY to extract the
-	// projection fields (NOT payload — payload stays as msg.Data()
-	// byte-equal so ciphertext is preserved). Build AuditRow.
-	// Full implementation in Task B.1 once the plugin_consumer.go
-	// integration point pins the exact extraction sequence.
-	//
-	// Returns errors with codes:
-	//   AUDIT_PLUGIN_ENVELOPE_UNMARSHAL_FAILED
-	//   AUDIT_MISSING_HEADER / AUDIT_BAD_SCHEMA_VERSION /
-	//   AUDIT_DEK_REF_PARSE_FAILED / AUDIT_DEK_VERSION_PARSE_FAILED
-	//   (from audit.ParseAuditHeaders).
-	// NOTE: this is intentionally a panic per plan §"Task A.3.4". Full body
-	// lands in Task B.1; until then, no internal caller exists. If a plugin
-	// author hits this, that's a clear signal they're using a not-yet-shipped
-	// API — the panic message is more informative than a silent stub.
-	panic("StoreFromMessage: TODO — implemented in Task B.1")
+//
+// Mirrors the host dispatcher's buildAuditRow construction so plugin
+// authors who choose to use Layer 2 see the same projection-field +
+// crypto-header extraction behaviour as the host audit projection.
+//
+// Returns errors with codes:
+//
+//	AUDIT_PLUGIN_ENVELOPE_UNMARSHAL_FAILED
+//	AUDIT_MISSING_HEADER / AUDIT_BAD_SCHEMA_VERSION /
+//	AUDIT_DEK_REF_PARSE_FAILED / AUDIT_DEK_VERSION_PARSE_FAILED
+//	  (from audit.ParseAuditHeaders).
+func StoreFromMessage(msg jetstream.Msg) (AuditRow, error) {
+	hdrMeta, err := audit.ParseAuditHeaders(msg.Headers())
+	if err != nil {
+		return AuditRow{}, err //nolint:wrapcheck // error already coded by parser
+	}
+
+	var ev eventbusv1.Event
+	if err := proto.Unmarshal(msg.Data(), &ev); err != nil {
+		return AuditRow{}, oops.Code("AUDIT_PLUGIN_ENVELOPE_UNMARSHAL_FAILED").Wrap(err)
+	}
+
+	row := AuditRow{
+		Subject:   ev.GetSubject(),
+		Type:      ev.GetType(),
+		Actor:     ev.GetActor(),
+		Codec:     hdrMeta.Codec,
+		Payload:   ev.GetPayload(),
+		SchemaVer: hdrMeta.SchemaVer,
+	}
+	if id := ev.GetId(); len(id) == 16 {
+		copy(row.EventID[:], id)
+	}
+	if ts := ev.GetTimestamp(); ts != nil {
+		row.Timestamp = ts.AsTime()
+	}
+	if hdrMeta.DEKRef != nil {
+		v := uint64(*hdrMeta.DEKRef)
+		row.DEKRef = &v
+	}
+	if hdrMeta.DEKVersion != nil {
+		v := uint32(*hdrMeta.DEKVersion)
+		row.DEKVersion = &v
+	}
+	return row, nil
 }
 
 // LoadForQuery converts a stored AuditRow into the proto frame returned
