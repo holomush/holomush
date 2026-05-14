@@ -80,5 +80,60 @@ expect_case "non-edit-tool-bail" \
   '{"tool_name":"Read","tool_input":{"file_path":"/repo/docs/specs/foo.md"}}' \
   0 ""
 
+# Helper: write content + marker to a file under tmpdir; return path.
+make_spec() {
+  local name="$1" content="$2"
+  local p="$tmpdir/docs/specs/$name.md"
+  mkdir -p "$(dirname "$p")"
+  printf '%s' "$content" > "$p"
+  printf '%s' "$p"
+}
+
+# Compute SHA the way the hook will (after stripping any trailing marker line).
+spec_sha() {
+  local file="$1"
+  # Drop trailing marker line if last line matches; sha256sum the rest.
+  awk 'BEGIN{prev=""} {if(NR>1)print prev; prev=$0} END{
+    if(prev ~ /^<!-- adr-capture: .*-->$/) {}
+    else { if(NR>0) print prev }
+  }' "$file" | sha256sum | cut -c1-16
+}
+
+# --- Case 9: spec with no marker → nudge (currently still stub; xfail until hook impl) ---
+no_marker_path="$(make_spec "no-marker" 'spec body without marker\n')"
+expect_case "no-marker-nudges" \
+  "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$no_marker_path")" \
+  0 'hookSpecificOutput.*PostToolUse.*no marker'
+
+# --- Case 10: spec with fresh (matching) marker → silent ---
+fresh_body="fresh content\n"
+fresh_path="$(make_spec "fresh-marker" "$fresh_body")"
+fresh_sha="$(spec_sha "$fresh_path")"
+printf '\n<!-- adr-capture: sha256=%s; session=test; ts=2026-05-14T00:00:00Z; adrs= -->\n' "$fresh_sha" >> "$fresh_path"
+expect_case "fresh-marker-silent" \
+  "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$fresh_path")" \
+  0 ""
+
+# --- Case 11: spec with stale (mismatched) marker → nudge ---
+stale_path="$(make_spec "stale-marker" "original content")"
+printf '\n<!-- adr-capture: sha256=deadbeefdeadbeef; session=test; ts=2026-05-14T00:00:00Z; adrs= -->\n' >> "$stale_path"
+expect_case "stale-marker-nudges" \
+  "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$stale_path")" \
+  0 'hookSpecificOutput.*PostToolUse.*content changed'
+
+# --- Case 12: opt-out marker → silent (no nudge) ---
+optout_path="$(make_spec "optout" "doc body")"
+printf '\n<!-- adr-capture: optout=true; reason="external doc" -->\n' >> "$optout_path"
+expect_case "optout-silent" \
+  "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$optout_path")" \
+  0 ""
+
+# --- Case 13: malformed marker (prefix but no sha256= and no optout=) → nudge ---
+mal_path="$(make_spec "malformed" "doc body")"
+printf '\n<!-- adr-capture: foo=bar -->\n' >> "$mal_path"
+expect_case "malformed-nudges" \
+  "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$mal_path")" \
+  0 'hookSpecificOutput.*PostToolUse'
+
 echo "passed=$pass failed=$fail"
 [ "$fail" -eq 0 ]
