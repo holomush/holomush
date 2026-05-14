@@ -147,6 +147,89 @@ def split_h2_sections(text: str) -> dict[str, str]:
     return out
 
 
+def slugify(title: str) -> str:
+    """Kebab-case the title, drop stop-words, cap 60 chars."""
+    s = title.lower()
+    s = re.sub(r"[^\w\s-]", "", s)
+    s = re.sub(r"\s+", "-", s).strip("-")
+    stop = {"a", "an", "the", "for", "of", "to", "in", "on", "with"}
+    parts = [p for p in s.split("-") if p and p not in stop]
+    return "-".join(parts)[:60].rstrip("-")
+
+
+def render_adr(adr: LegacyADR, bd_id: str) -> str:
+    """Render the unified-format markdown body for the new ADR file."""
+    return f"""<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 HoloMUSH Contributors -->
+
+# {adr.title}
+
+**Date:** {adr.date}
+**Status:** {adr.status}
+**Decision:** {bd_id}
+**Originally:** ADR {adr.number:04d}
+**Deciders:** HoloMUSH Contributors
+
+## Context
+
+{adr.context}
+
+## Decision
+
+{adr.decision}
+
+## Rationale
+
+{adr.rationale}
+
+## Alternatives Considered
+
+{adr.alternatives}
+
+## Consequences
+
+{adr.consequences}
+
+## References
+
+{adr.references}
+"""
+
+
+def render_bd_description(adr: LegacyADR) -> str:
+    """Render the body to feed `bd create -t decision --description`.
+
+    Identical to the file body BUT omits the `**Decision:**` header line
+    (the bd record IS the decision; cross-linking is one-way: file → bd).
+    """
+    return f"""## Context
+
+{adr.context}
+
+## Decision
+
+{adr.decision}
+
+## Rationale
+
+{adr.rationale}
+
+## Alternatives Considered
+
+{adr.alternatives}
+
+## Consequences
+
+{adr.consequences}
+
+## References
+
+{adr.references}
+
+Legacy ADR number: {adr.number:04d}
+"""
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--apply", action="store_true",
@@ -157,9 +240,10 @@ def main() -> int:
     print(f"Found {len(adrs)} legacy ADR files in {ADR_DIR}.")
     for a in adrs:
         parse_legacy(a)
-        print(f"  {a.path.name}: title={a.title!r} date={a.date} "
-              f"status={a.status!r}"
-              + (f" supersededBy=ADR-{a.superseded_by_number:04d}"
+        a.slug = slugify(a.title) or a.slug  # prefer title-derived slug
+        print(f"  ADR-{a.number:04d}  →  <bd-id>-{a.slug}.md  "
+              f"({a.date}, {a.status})"
+              + (f"  [supersededBy=ADR-{a.superseded_by_number:04d}]"
                  if a.superseded_by_number else ""))
 
     if not args.apply:
