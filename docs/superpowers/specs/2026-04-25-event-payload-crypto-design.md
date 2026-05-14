@@ -924,11 +924,15 @@ fields in v1.
 pattern (including the `policy_hash` field referencing the active
 `policy_set` event at invocation time).
 
-**`audit.<game>.system.plugin_integrity_violation`** — emitted by the host's
+**`events.<game>.system.plugin_integrity_violation`** — emitted by the host's
 `PluginDowngradeFence` (Phase 7) on every INV-P7-7 refusal (codec=identity
 arriving for a manifest-declared `sensitivity: always` event type). Per-event
-one-shot violation report; no chain participation. ABAC inherits the
-`audit.*.system.*` deny rule:
+one-shot violation report; no chain participation. Subject prefix is
+`events.<game>.` per INV-E26 (Phase 5 sub-epic E §3.6 supersession of master
+§4.6 line 830): the EVENTS JetStream `events.>` SubjectFilter is the only
+path by which audit projection writes to `events_audit`, so audit-bearing
+events MUST live under that filter (the legacy `audit.<game>.` prefix is
+forbidden by INV-E26). ABAC inherits the `events.*.system.*` deny rule:
 
 ```yaml
 metadata:
@@ -2147,7 +2151,7 @@ the plugin's audit table IS the cold record per §8.2.
 See [`pkg/plugin/audit.go`](../../../pkg/plugin/audit.go) for the canonical
 `AuditRow` struct shape and the `StoreFromMessage` / `LoadForQuery` helper
 signatures. The Phase 7 implementation tracks the proto contract in
-`api/proto/plugin/audit/v1/audit.proto`; the in-spec Go example was
+`api/proto/holomush/plugin/v1/audit.proto`; the in-spec Go example was
 aspirational pre-Phase-7 and has been superseded by the canonical sources.
 
 The SDK helpers are the path of least resistance, and the integration

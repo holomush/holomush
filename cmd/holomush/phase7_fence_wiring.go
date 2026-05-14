@@ -155,7 +155,13 @@ func (e *violationEmitter) EmitViolation(
 		// log an emit-error on every refusal.
 		return nil
 	}
-	subjectStr := fmt.Sprintf("audit.%s.system.plugin_integrity_violation", e.gameID)
+	// Subject prefix MUST be `events.<game>.` per INV-E26 (Phase 5 sub-epic E
+	// §3.6 supersession of master spec §4.6 line 830): the EVENTS JetStream
+	// SubjectFilter at internal/eventbus/subsystem.go:24,27 is the only path
+	// by which audit projection writes to events_audit, so audit-bearing
+	// events MUST live under that filter. The `audit.<game>.` prefix is
+	// forbidden — it bypasses the filter and silently drops the event.
+	subjectStr := fmt.Sprintf("events.%s.system.plugin_integrity_violation", e.gameID)
 	subj, err := eventbus.NewSubject(subjectStr)
 	if err != nil {
 		return oops.Code("PLUGIN_INTEGRITY_VIOLATION_INVALID_SUBJECT").

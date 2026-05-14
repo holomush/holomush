@@ -98,6 +98,15 @@ func registerBuiltinTypes(r *VerbRegistry, hostVersion string) error {
 		// not reject with EMIT_UNKNOWN_VERB (INV-F13).
 		{Type: "crypto.system.operator_read", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},
 		{Type: "crypto.system.operator_read_completed", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},
+		// Phase 7 PluginDowngradeFence violation audit (host-emit, persistence-only).
+		// Emitted by cmd/holomush/phase7_fence_wiring.go::violationEmitter on every
+		// INV-P7-7 row refusal, via RenderingPublisher. AUDIT_ONLY so the gRPC
+		// Subscribe handler drops the event before delivery; audit projection
+		// persists it to events_audit on subject audit.<game>.system.plugin_integrity_violation.
+		// Registered here so RenderingPublisher does not reject with
+		// EMIT_UNKNOWN_VERB — without this entry the documented operator-facing
+		// integrity-violation signal silently fails on every refusal.
+		{Type: "system:plugin_integrity_violation", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},
 	}
 	for _, b := range builtins {
 		if err := r.RegisterWithSource(b, sourceVersion); err != nil {

@@ -62,7 +62,8 @@ var coreOnlyFiles = map[string]struct{}{
 	// helpers (always-sensitive set, crypto_keys lookup, violation
 	// emitter). Imports eventbus/codec/history/plugin; core-only by
 	// design (matches crypto_rekey_wiring.go precedent).
-	"phase7_fence_wiring.go": {},
+	"phase7_fence_wiring.go":      {},
+	"phase7_fence_wiring_test.go": {},
 }
 
 var forbidden = []string{
