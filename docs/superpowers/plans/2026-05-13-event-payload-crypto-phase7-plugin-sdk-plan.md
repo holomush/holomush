@@ -16,8 +16,6 @@
 
 - **v5**: Applied plan-reviewer v4's 4 BLOCKING fixes via the reviewer's own grep-verification commands (all 4 now pass: `rg -c "Code-block discipline"` = 1; `rg -n "deps\.go"` = revision-history-only; `rg -n "Task E\.2"` = section-header-only; `rg -c "eventbusv1\.NoPlaintextReason"` = 0). Also applied non-blocker: C.0.1 gains explicit proto-side enum-mirror sub-step (edit `core.proto`, run `task proto`, verify regen). Plan-reviewer NOT re-run per user direction — execution-phase agents catch remaining cross-reference drift in seconds. v5 is the authoritative plan.
 
-
-
 - **v4**: Addressed plan-reviewer v3 NOT READY (4 BLOCKING cross-reference-drift findings, all mechanical). Patches: (1) D.2.1 `TestDowngradeAttackerMaliciousPathRefuses` assertion rewritten — fence returns per-row metadata_only, not stream-fatal error (consistency with C.3.3 rule 3). (2) Bead 1r0v.3 "Files touched" updated to list both `types.go` AND new `internal/eventbus/audit_row_access.go` (matches C.0.2's split). (3) B.1.5 "Detailed pseudo-Go" preamble hedge struck. (4) Self-review coverage table gains INV-P7-7b + INV-P7-C0 rows. Plus non-blockers: revision-history block consolidated; `WaitForRowInSceneLog` / `WaitForFixtureCachePopulated` helpers explicitly defined in B.5; "no new edges" claim corrected to acknowledge new `eventbus → pluginauditpb` import edge.
 - **v3**: Addressed plan-reviewer v2 NOT READY (4 BLOCKING — `AuditRowOf` deferral hedge, sync/async fence emit contradiction, B.1.5 wire-format hedging body, struct-value mutation bug). Pinned: exported `eventbus.AuditRowOf` accessor in new file; synchronous emit with 100ms bounded timeout; "copy ev, modify copy, return (refused, nil)" semantics. `LoadForQuery` + `AuditRowToEvent` function bodies converted to prose contracts.
 - **v2**: Addressed plan-reviewer v1 NOT READY (7 BLOCKING). Most significant: fence semantics rewritten from stream-fatal-error to per-row `metadata_only=true` + new `NoPlaintextReasonDowngradeRefused` enum value. New Task C.0 substrate (enum + `auditRow` field on `Event` + audit-router stamp). Proto path corrected to `api/proto/holomush/plugin/v1/audit.proto`. Constructor at `NewPluginConsumerManager` made variadic; production wiring site corrected from `deps.go` to `cmd/holomush/core.go:488`. `holomush-demb` bead removed (verified no-op — `ON CONFLICT` already present at `plugins/core-scenes/audit.go:141`).
@@ -1323,6 +1321,7 @@ func TestDispatcherAndHotTierShareSelector(t *testing.T) {
 Add test-only accessors:
 
 `internal/eventbus/audit/plugin_consumer_test_export_test.go`:
+
 ```go
 //go:build integration
 
@@ -1334,6 +1333,7 @@ func (m *PluginConsumerManager) KeySelectorForTest() codec.KeySelector { return 
 ```
 
 `internal/eventbus/history/tier_test_export_test.go`:
+
 ```go
 //go:build integration
 
@@ -1593,7 +1593,6 @@ Write a unit test that constructs a `pluginauditpb.AuditRow`, runs it through th
 - [ ] **Step C.0.5: Commit**
 
 Commit message: `feat(eventbus): substrate for Phase 7 fence — NoPlaintextReasonDowngradeRefused enum + auditRow stamp`. Refs `holomush-1r0v`.
-
 
 ### Task C.1: AAD reconstruction adapter
 
@@ -2343,6 +2342,7 @@ or buggy plugin could return rows with `codec=identity` and cleartext
 `payload` for events that should have been sensitive. The host's
 `PluginDowngradeFence` is the QueryStreamHistory pre-decrypt fence
 (layer 1) covering two checks:
+
 1. **Manifest-set heuristic** — host maintains a static set of
    `<plugin_name>:<event_type>` keys from manifests declaring
    `sensitivity: always`. Rows with `codec=identity` and a type in the
@@ -2497,6 +2497,7 @@ Refs: holomush-1r0v
 Verified production wiring site: `cmd/holomush/core.go:488` calls `audit.NewPluginConsumerManager(js)`. Other call sites (test wirings: `plugin_crash_resilience_test.go:71`, `plugin_audit_isolation_test.go:77`) preserved by variadic-empty compatibility per Task B.1.6.
 
 Find the construction of:
+
 - `audit.PluginConsumerManager` (existing wiring)
 - `history.NewReader` (existing wiring with `WithCodecSelector`)
 - Locate where the always-sensitive set should be built (from the manifest registry)
@@ -2733,7 +2734,7 @@ Each `task` bead is a child of the `holomush-1r0v` epic via `--parent holomush-1
 
 `bead-chain-from-plan` will run dry-run first showing:
 
-```
+```text
 Would create 5 beads under parent holomush-1r0v:
   - holomush-1r0v.1 (task, P2): Foundations — shared header parser + AuditRow proto + SDK Layer 2
   - holomush-1r0v.2 (task, P2): Plugin dispatcher widening + scene_log schema + caller migrations
@@ -2782,12 +2783,14 @@ All 16 spec invariants + 2 plan-internal substrate keys covered. The v3+ keys (`
 **2. Placeholder scan.** Searched the plan for TBD/TODO/FIXME — only the explicit `TODO — implemented in Task B.1` panic-stub in A.3 (intentional, replaced in B.1). No other placeholders.
 
 **3. Type consistency.** Function signatures cited in later tasks match definitions in earlier tasks:
+
 - `ParseAuditHeaders` defined in A.1, used in B.1 (StoreFromMessage), and referenced in A.4 parity test.
 - `pluginsdk.AuditRow` struct fields match across A.3, B.1, B.2, C.2.
 - `pluginauditpb.AuditRow` proto fields match across A.2, B.1, B.2, C.1, D.1.
 - `CryptoKeysLookup` / `ViolationEmitter` interfaces defined in C.3 and consumed in E.3 wiring.
 
 **4. No deferred decisions.** Both v1 agent-decision points are PINNED in v3+:
+
 - B.1.5 codec wire-format: pinned per verified facts in `publisher.go:266-292` + `hot_jetstream.go:441-444` (codec encrypts payload field in place; projection fields cleartext; `msg.Data()` is the marshaled envelope).
 - C.0.2 row-extraction: pinned to exported `eventbus.AuditRowOf(ev) *pluginauditpb.AuditRow` accessor in new file `internal/eventbus/audit_row_access.go`.
 No "agent picks at implementation time" hedges remain.

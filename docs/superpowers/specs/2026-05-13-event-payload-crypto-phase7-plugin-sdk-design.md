@@ -22,7 +22,7 @@ patches, no architectural rethink. v3 applies the patches:
 - C1: `may`-elevated downgrade gap accepted and documented explicitly
   in §1 threat model + §8 failure modes. Two-layer fence reframed
   honestly: manifest-set layer is `always`-only by design; `may`-elevated
-  + tampering on any AAD-bound field falls to the AEAD AAD-binding
+  - tampering on any AAD-bound field falls to the AEAD AAD-binding
   layer with a deliberately worse operator UX (decrypt-side error code,
   no `plugin_integrity_violation` emission).
 - C2: New INV-P7-15 carries master spec INV-48 onto the plugin-routed
@@ -213,7 +213,8 @@ connection.
 plugin's `scene_log` (and analogous plugin-owned audit tables) hold
 ciphertext + dek_ref + dek_version for sensitive events. An operator
 with direct database shell access can pair a plugin row's ciphertext
-+ dek_ref/dek_version with a host `crypto_keys` read to attempt offline
+
+- dek_ref/dek_version with a host `crypto_keys` read to attempt offline
 plaintext recovery. This is the same offline-decryption surface as
 operator-with-shell on `events_audit` (host-owned subjects) — Phase 7
 does NOT introduce a new leak shape, it extends the existing one to
@@ -750,10 +751,10 @@ Phase 7 is a single PR containing:
    `NewPluginDowngradeFence(audit.NewPluginHistoryRouter(...))`. No new
    import edges in the package graph.
 3a. New `internal/eventbus/history/plugin_aad_adapter.go` — implements
-    the `pluginauditpb.AuditRow → *eventbusv1.Event` per-field copy
-    used by the decrypt path to reconstruct AAD via `aad.Build`
-    (`internal/eventbus/crypto/aad/aad.go:62`). Six fields copied; two
-    nil-safety guards (Actor, Timestamp).
+   the `pluginauditpb.AuditRow → *eventbusv1.Event` per-field copy
+   used by the decrypt path to reconstruct AAD via `aad.Build`
+   (`internal/eventbus/crypto/aad/aad.go:62`). Six fields copied; two
+   nil-safety guards (Actor, Timestamp).
 4. Reshaped `api/proto/holomush/plugin/v1/audit.proto` + regenerated proto code:
    new `AuditRow` message (id, subject, type, timestamp, actor, codec,
    payload, dek_ref optional, dek_version optional, schema_ver);
