@@ -9,6 +9,21 @@ vars:
   MAIN_PKG: ./cmd/holomush
   MIGRATIONS_DIR: internal/store/migrations
   LICENSE_DIRS: api cmd internal pkg plugins scripts
+  # Canonical docs-only path globs. MUST stay byte-identical with
+  # .github/workflows/ci.yaml's paths-ignore: blocks and
+  # .github/workflows/ci-docs-skip.yaml's paths: blocks.
+  # Enforced by `task lint:docs-paths-sync`. Spec:
+  # docs/superpowers/specs/2026-05-14-pr-prep-docs-fast-lane-design.md §4.1.
+  DOCS_ONLY_PATHS: |
+    site/**
+    docs/**
+    **/*.md
+    .claude/agents/**
+    .claude/commands/**
+    .claude/rules/**
+    .claude/agent-memory/**
+    LICENSE
+    LICENSE_HEADER
 
 tasks:
   default:
