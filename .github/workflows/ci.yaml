@@ -3,8 +3,28 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - site/**
+      - docs/**
+      - "**/*.md"
+      - .claude/agents/**
+      - .claude/commands/**
+      - .claude/rules/**
+      - .claude/agent-memory/**
+      - LICENSE
+      - LICENSE_HEADER
   pull_request:
     branches: [main]
+    paths-ignore:
+      - site/**
+      - docs/**
+      - "**/*.md"
+      - .claude/agents/**
+      - .claude/commands/**
+      - .claude/rules/**
+      - .claude/agent-memory/**
+      - LICENSE
+      - LICENSE_HEADER
   workflow_dispatch:
 
 permissions:
