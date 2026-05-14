@@ -68,3 +68,9 @@ Keep under 200 lines. Curate — don't hoard.
 - **`.jj/repo` dir-vs-file**: in the main checkout (`default` workspace) it is a directory; in any other jj workspace it is a file containing a relative path back to the main repo. Anything that needs to know "am I in the default workspace" or "where is MAIN_REPO" should use this. Reference implementation lives at `Taskfile.yaml:521-530`.
 - **SessionStart hook output**: plain stdout is concatenated as additional context. `bd prime` is the canonical example. JSON `hookSpecificOutput.additionalContext` is the alternative but no in-tree hook uses it.
 - **`task` cannot mutate caller's shell `pwd`/env**: any spec that wants "after this task, your shell is in directory X" must be a shell function/wrapper, not a task target. Treat as a hard constraint when reviewing automation specs.
+
+## Phase 7 plugin SDK review patterns (2026-05-13)
+
+- [Proto-path claims need verbatim filesystem verification](feedback_proto_path_verification.md) — `api/plugin/v1/plugin.proto` may be the logical path; on-disk is often `api/proto/holomush/<pkg>/<file>.proto`. Verify with `Glob` and `source:` line in generated `.pb.go`.
+- [Clean-break proto reshape MUST enumerate every caller of dropped fields](feedback_clean_break_enumerate_callers.md) — `[feedback_no_prod_shape_for_undeployed]` exempts `reserved` markers, NOT the spec from naming every callsite. rg `GetFieldName` across repo. Test files count.
+- [Existing-hook claims need path:symbol citation](feedback_existing_hook_claim_verification.md) — "refreshed on manifest reload via existing hook" without cited symbol is unprovable. ABAC provider registrars are load-only, not manifest-change subscriptions.

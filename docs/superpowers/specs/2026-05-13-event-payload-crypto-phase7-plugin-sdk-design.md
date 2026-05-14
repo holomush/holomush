@@ -2,15 +2,41 @@
 
 ## Status
 
-DRAFT v2 — supersedes v1 in this same file's git history. v1 proposed a
-host-owned crypto-ref side table that contradicted the master spec's
-deliberate §8.2 commitment. Both gate reviewers (`design-reviewer` and
-`crypto-reviewer`) returned NOT READY on v1; the central blocking
-finding was that the v1 threat model presupposed data flow
-(plugin-receives-ciphertext) that the current `plugin_consumer.go:343`
-explicitly rejects today, with the inline comment marking it as parked
-work waiting for KeySelector wiring. v2 follows the master spec's
-original intent.
+DRAFT v3. v1 proposed a host-owned crypto-ref side table that
+contradicted the master spec's deliberate §8.2 commitment; both gate
+reviewers returned NOT READY. v2 reverted to the master spec's intent
+(plugin tables mirror events_audit shape including crypto columns,
+dispatcher widens to forward ciphertext); both gate reviewers returned
+NOT READY again with substantially fewer findings — all tactical
+patches, no architectural rethink. v3 applies the patches:
+
+- D1: Corrected proto path `api/proto/holomush/plugin/v1/audit.proto`
+  throughout.
+- D2: `AuditRow` proto gains `schema_ver` field; `headers` map drop is
+  enumerated with all callers + test-stub migration steps.
+- D3: `PluginDowngradeFence` placed in `internal/eventbus/audit/`
+  alongside `PluginHistoryRouter`; explicit import-direction note.
+- D4: INV-P7-8 dropped (no manifest hot-reload exists today); follow-up
+  bead `holomush-kl9w` files the future hot-reload work; new invariant
+  asserts the no-hot-reload property so future regression is detectable.
+- C1: `may`-elevated downgrade gap accepted and documented explicitly
+  in §1 threat model + §8 failure modes. Two-layer fence reframed
+  honestly: manifest-set layer is `always`-only by design; `may`-elevated
+  + tampering on any AAD-bound field falls to the AEAD AAD-binding
+  layer with a deliberately worse operator UX (decrypt-side error code,
+  no `plugin_integrity_violation` emission).
+- C2: New INV-P7-15 carries master spec INV-48 onto the plugin-routed
+  read path.
+- C3: Master spec polish list expanded — §8.2's `events_audit` fallback
+  pseudo-code amended for plugin-owned subjects.
+- Plus several WARN-tier clarifications (audit-emission backpressure
+  cross-ref; qualified vs bare event-type form; operator-with-shell
+  threat ack).
+- Companion bead `holomush-demb` (P2 bug) files the
+  `scene_log.Insert` missing `ON CONFLICT DO NOTHING` — naturally
+  lands as part of Phase 7 since v3 touches the file extensively.
+
+The v2 architectural direction is preserved verbatim.
 
 ## Authors
 
@@ -18,7 +44,7 @@ Sean Brandt + Claude Opus 4.7
 
 ## Date
 
-2026-05-13 (v2)
+2026-05-13 (v3)
 
 ## Context
 
@@ -69,19 +95,35 @@ encrypt/decrypt guarantees without owning crypto code.
 This design **fulfills** the master spec
 (`docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md`)
 §8.2 and §8.3 as written, not as I (v1's author) initially re-proposed.
-v1's substrate revision is abandoned. Master spec needs only minor
-polish:
+v1's substrate revision is abandoned.
+
+### Master spec polish list (lands in the same PR)
 
 1. **§4.6 audit-subjects catalog** — register
    `audit.<game>.system.plugin_integrity_violation` (new subject
    emitted by the Phase 7 downgrade fence).
-2. **Section 2 INV-50 wording** — pin the manifest-set heuristic
-   ground truth more explicitly (the current wording is consistent;
-   Phase 7 wants it cross-referenced from the new INV-P7-N corpus).
-3. **§8.3 `AuditRow` Go-struct example** — update field set to mirror
-   the proto definition committed in Phase 7 (no field-name renames; just
-   match `dek_ref` / `dek_version` capitalization to the proto-generated
-   Go).
+2. **§8.2 pseudo-code amendment** — the current §8.2 paragraph (master
+   spec lines 2107-2118) contains pseudo-code that says
+   "fall back to events_audit (host-owned ground truth) if present"
+   and asserts "the host's events_audit is the byte-equal mirror of
+   what was actually published; if the plugin's response disagrees
+   with the host's mirror, the host's mirror wins." Both statements
+   are **structurally false for plugin-owned subjects**:
+   `internal/eventbus/audit/projection.go:130-149` ack-and-skips
+   plugin-owned messages; `events_audit` has no row for them. Phase 7
+   amends §8.2 to strike the events_audit-fallback pseudo-code line
+   and the "host's mirror wins" sentence for plugin-owned subjects,
+   replacing with the v3 two-layer fence text from §1 verbatim
+   (manifest-set heuristic on `always`-declared types + AEAD
+   AAD-binding as the cryptographic ground truth; explicit
+   `may`-elevated coverage boundary).
+3. **Section 2 INV-50 wording** — cross-reference INV-P7-7 (which
+   re-scopes the original wording onto the qualified event-type form
+   and pins the `always`-only coverage boundary).
+4. **§8.3 `AuditRow` Go-struct example** — update field set to mirror
+   the proto definition committed in Phase 7 (id / Subject / Type /
+   Timestamp / Actor / Codec / Payload / DEKRef pointer / DEKVersion
+   pointer / SchemaVer).
 
 No invariant overturns. `crypto-reviewer` still fires because the
 substrate touch is significant (plugin RPC proto reshape, audit
@@ -94,13 +136,28 @@ Inherited from master spec §1. Phase 7 adds one explicit adversary:
 
 | Adversary | Capability | Phase 7 defence |
 |---|---|---|
-| **Malicious or buggy plugin** | After Phase 7's dispatcher widening, plugins receive ciphertext for sensitive events. A misbehaving plugin's `QueryHistory` could return rows with `codec=identity` + a forged cleartext `payload`, attempting to bypass encryption for events that should have been sensitive. | Two-layer fence: (1) **Manifest-set heuristic at the host's QueryStreamHistory.** Host maintains the always-sensitive event-type set from loaded manifests; on every plugin-returned row, if `frame.type ∈ always_sensitive_types AND frame.codec = "identity"`, REFUSE with `AUDIT_ROW_DOWNGRADE_DETECTED` + emit `audit.<game>.system.plugin_integrity_violation`. (2) **AEAD AAD-binding at decrypt.** Per master INV-25, any tampering of the AAD-bound projection fields (subject, type, actor, timestamp, event_id, codec, dek_ref, dek_version) causes AEAD tag-mismatch at decrypt time and refuses to yield plaintext. The two layers are independent and complementary: (1) catches the named downgrade attack with a clear error code + violation audit; (2) catches all other tamper shapes via cryptographic ground truth. |
+| **Malicious or buggy plugin** | After Phase 7's dispatcher widening, plugins receive ciphertext for sensitive events. A misbehaving plugin's `QueryHistory` could return rows with `codec=identity` + a forged cleartext `payload`, attempting to bypass encryption for events that should have been sensitive. | **Two-layer fence with documented coverage boundary.** (1) **Manifest-set heuristic at QueryStreamHistory.** Host maintains an always-sensitive event-type set computed from `crypto.emits: sensitivity: always` declarations across loaded manifests. On every plugin-returned row, if `frame.type ∈ always_sensitive_types AND frame.codec = "identity"`, REFUSE with `AUDIT_ROW_DOWNGRADE_DETECTED` + emit `audit.<game>.system.plugin_integrity_violation`. **The heuristic is `always`-only by design and does NOT cover `may`-declared events that were runtime-elevated to encrypted (via INV-6/INV-7 `sensitivity_fence.go::EnforceSensitivity` promoting `may + claim=true → SensitivityAlways` at emit time).** A malicious plugin returning `codec=identity` + cleartext for a `may`-elevated event_id WILL bypass layer (1) because the manifest-set is built from declared `always`, not the runtime-elevation state which the read-side fence has no record of (no host shadow). (2) **AEAD AAD-binding at decrypt.** Per master INV-25, any tampering of the AAD-bound projection fields (subject, type, actor, timestamp, event_id, codec, dek_ref, dek_version) causes AEAD tag-mismatch at decrypt and refuses to yield plaintext. **Layer (2) IS the catch for `may`-elevated downgrade**: the host's decrypt path reconstructs AAD using the values from the plugin's frame; the bound `codec` value in AAD differs from what was used at encrypt; tag-check fails; the host surfaces a decrypt-side error and refuses plaintext. **Coverage trade explicitly documented**: layer (2) preserves the cryptographic guarantee (plaintext never leaks under any tamper), but for `may`-elevated downgrade specifically, the operator-visible signal is a generic decrypt error rather than the dedicated `AUDIT_ROW_DOWNGRADE_DETECTED` + `plugin_integrity_violation` audit. This is the cost of the no-host-shadow architecture. A future enhancement bead (e.g., per-event `was_encrypted` shadow flag) MAY close this UX gap; deliberately out of scope for Phase 7. |
 
 The plugin role's Postgres credentials cannot tamper with
 `events_audit`, `crypto_keys`, or the host-owned audit chain:
 `schema_provisioner.go:163` REVOKEs all on schema `public` from the
 plugin role, so the table names don't even resolve under the plugin's
 connection.
+
+**Operator-with-shell access (inherited threat).** After Phase 7,
+plugin's `scene_log` (and analogous plugin-owned audit tables) hold
+ciphertext + dek_ref + dek_version for sensitive events. An operator
+with direct database shell access can pair a plugin row's ciphertext
++ dek_ref/dek_version with a host `crypto_keys` read to attempt offline
+plaintext recovery. This is the same offline-decryption surface as
+operator-with-shell on `events_audit` (host-owned subjects) — Phase 7
+does NOT introduce a new leak shape, it extends the existing one to
+plugin-owned subjects. The `AdminReadStream` audit-chain + dual-control
+controls (Phase 5, master spec §5.9 / §7.5) bound *server-mediated*
+operator reads; they do not (and never claimed to) bound direct DB
+access for either tier. Operational mitigation (DB read-role
+separation, audit log on `crypto_keys` access) is master spec §9.2
+operator-runbook territory, not Phase 7's scope.
 
 ## Section 2 — Invariants & testable proofs
 
@@ -118,10 +175,11 @@ in the tree, and a meta-test asserts existence-by-name.
 | **INV-P7-4** | Plugin SDK Layer 2: `pluginsdk.AuditRow` Go struct fields MUST be 1:1 with `pluginauditpb.AuditRow` proto fields (id, subject, type, timestamp, actor, codec, payload, dek_ref, dek_version). | Compile-time + unit: `audit_test.go::TestAuditRowStructMirrorsProto`. |
 | **INV-P7-5** | `pluginsdk.StoreFromMessage(msg)` round-tripped through `pluginsdk.LoadForQuery(row)` MUST yield byte-equal `payload`, identical projection fields, AND identical `codec` / `dek_ref` / `dek_version` typed values. | Unit: `audit_test.go::TestAuditRowRoundTripPreservesAllFields`. |
 | **INV-P7-6** (extends master INV-46) | A plugin's stored audit row MUST byte-equal the row received via the `AuditEvent` RPC: `(payload, codec, dek_ref, dek_version)` are written verbatim and returned verbatim. Together with INV-P7-1 (dispatcher forwards bus-byte-equal), this gives the bus-to-plugin-stored-row byte-equality that master INV-46 asserts; INV-P7-6 holds the plugin side, INV-P7-1 holds the dispatcher side, master INV-46 is the composition. | Integration: `plugin_audit_round_trip_test.go::TestSceneLogPreservesCiphertextAndCryptoHeaders`. |
-| **INV-P7-7** (re-scopes master INV-50) | The host's `QueryStreamHistory` handler MUST refuse a plugin-returned row where `row.codec = "identity"` AND `row.type ∈ always_sensitive_types`, where `always_sensitive_types` is computed from `crypto.emits: sensitivity: always` declarations across all loaded manifests, refreshed on manifest reload. Refusal emits `AUDIT_ROW_DOWNGRADE_DETECTED` AND `audit.<game>.system.plugin_integrity_violation` (single-event subject; no chain participation; see Section 7). | Unit: `plugin_history_fence_test.go::TestRefusesIdentityForAlwaysSensitiveType`. Integration: `plugins-test-downgrade-attacker-e2e.go` (e2e). |
-| **INV-P7-8** | The always-sensitive event-type set used by INV-P7-7 MUST refresh atomically on manifest reload. Concurrent reads during a reload MUST see either the old set or the new set in entirety, never a partial state. | Unit: `always_sensitive_set_test.go::TestSetRefreshIsAtomic`. |
+| **INV-P7-7** (re-scopes master INV-50) | The host's `QueryStreamHistory` handler MUST refuse a plugin-returned row where `row.codec = "identity"` AND `row.type ∈ always_sensitive_types`. The set is keyed by the **qualified event-type form** `<plugin_name>:<event_type>` (matching `Event.type` as emitted by plugins per existing `event_emitter_crypto_test.go` fixtures). The set is computed from `crypto.emits: sensitivity: always` declarations across all loaded manifests at initial-manifest-load time. Refusal emits `AUDIT_ROW_DOWNGRADE_DETECTED` AND `audit.<game>.system.plugin_integrity_violation` (single-event subject; no chain participation; see Section 7). **This invariant covers the named threat (`always`-declared events); the `may`-elevated downgrade class is caught by AEAD AAD-binding only — see §1 threat-model coverage boundary and §8 failure modes.** | Unit: `plugin_history_fence_test.go::TestRefusesIdentityForAlwaysSensitiveType` + `::TestQualifiedTypeFormKey`. Integration: `test_downgrade_attacker_e2e_test.go`. |
+| **INV-P7-8** | Plugin manifests are **NOT hot-reloaded at runtime today**. The always-sensitive set used by INV-P7-7 is built once at server startup (during `internal/plugin/manager.go::Manager.Load`-equivalent path) and is immutable for the server's lifetime. A regression that introduces hot-reload without also adding atomicity guarantees on this set MUST be caught: the invariant test asserts the set's pointer is set exactly once during boot and never reassigned. Follow-up bead `holomush-kl9w` files the future hot-reload work, which MUST land with its own atomicity invariant. | Unit: `always_sensitive_set_test.go::TestSetBuiltOnceAtBoot`. |
 | **INV-P7-9** | The dispatcher's KeySelector wiring (Section 5.2) MUST be the SAME KeySelector instance the host's hot-tier reader uses (`internal/eventbus/history/hot_jetstream.go`). No second selector, no parallel cache. | Integration: `dispatcher_selector_identity_test.go::TestDispatcherAndHotTierShareSelector`. |
 | **INV-P7-10** | Plugin migrations MAY run before or after Phase 7's host migration (`event_crypto_refs` is NOT introduced — there is no host-side schema change beyond what Phases 2–5 already shipped). The two crypto columns added to plugin tables are nullable and don't require any new host-side support. | Integration: `plugin_migration_test.go::TestPhase7PluginMigrationStandalone`. |
+| **INV-P7-15** (carries master INV-48 onto plugin-routed path) | The host's `QueryStreamHistory` plugin path MUST refuse any plugin-returned row where `row.codec != "identity"` AND `row.dek_ref` is absent OR `row.dek_ref` is not present in `crypto_keys` (filtering out soft-deleted rows where `destroyed_at IS NOT NULL`). Refusal surfaces to the client as `metadata_only=true` per master INV-26 — NOT as a `plugin_integrity_violation`, since the failure mode is "host can't find the DEK," which is indistinguishable from a legitimate `Rekey`-destroyed-DEK case. There is **no fallback for plugin-owned subjects** (the plugin row IS the cold record; no host shadow exists); the read terminates with metadata-only, no loop. | Integration: `plugin_history_fence_test.go::TestRefusesUnknownDekRef` + `::TestNoColdFallbackForPluginOwnedSubjects`. |
 
 ### What MUST NOT be true
 
@@ -136,9 +194,11 @@ in the tree, and a meta-test asserts existence-by-name.
 
 A single test file
 `internal/eventbus/audit/phase7_boundary_meta_test.go` walks every
-`INV-P7-N` in this section's tables and asserts the named test exists
-in the tree (`path:function` lookup). Drift between this table and the
-test corpus fails CI.
+`INV-P7-N` in this section's tables (INV-P7-1 through INV-P7-15,
+excluding INV-P7-2 and INV-P7-14 which themselves contain meta
+assertions) and asserts the named test exists in the tree
+(`path:function` lookup). Drift between this table and the test
+corpus fails CI.
 
 ## Section 3 — Architecture
 
@@ -218,16 +278,17 @@ Plugin-owned history read flow
 | Component | Status | Responsibility |
 |---|---|---|
 | `pkg/plugin/audit.go` | EXTENDED | Add `AuditRow` + `StoreFromMessage` + `LoadForQuery` Layer-2 helpers below the existing Layer-1 ABAC decision-hint recorder. `AuditRow` mirrors `pluginauditpb.AuditRow` 1:1. Top-of-file doc enumerates Layer 1 and Layer 2 surfaces. |
-| `api/plugin/v1/plugin.proto` | RESHAPED | New `AuditRow` message (id, subject, type, timestamp, actor, codec, payload, dek_ref optional, dek_version optional). `AuditEventRequest.event` field replaced with `AuditRow row = 1`. `QueryHistoryResponse.event` replaced with `AuditRow row = 1`. Clean break (no `reserved` markers, no compat shims — per `[feedback_no_prod_shape_for_undeployed]`). Proto regen via `task proto`. |
+| `api/proto/holomush/plugin/v1/audit.proto` | RESHAPED | New `AuditRow` message (id, subject, type, timestamp, actor, codec, payload, dek_ref optional, dek_version optional, schema_ver). `AuditEventRequest`: `event` + `headers` fields BOTH replaced with `AuditRow row = 1`. `QueryHistoryResponse`: `event` replaced with `AuditRow row = 1`. Clean break (no `reserved` markers, no compat shims — per `[feedback_no_prod_shape_for_undeployed]`). Existing `headers` map callers MUST be migrated (enumerated below). Proto regen via `task proto`. **Affected callers** (verified by design-reviewer): `plugins/core-scenes/audit.go:160-237` (reads `auditHeaderCodec` / `auditHeaderSchemaVer` / `auditHeaderEventType` / `auditHeaderActorKind` / `auditHeaderActorID` from `req.GetHeaders()`) — rewrites to read from `req.GetRow().GetCodec()` etc.; `test/integration/eventbus_e2e/plugin_audit_isolation_test.go:175-220` (test stub mirroring core-scenes shape) — rewrites parallel to the real handler; `internal/eventbus/audit/plugin_consumer_unit_test.go:82` (`assert.NotEmpty(t, cli.gotReq.GetHeaders())`) — replaced with `assert.NotNil(t, cli.gotReq.GetRow())` + per-field assertions. |
 | `internal/eventbus/audit/plugin_consumer.go` | MODIFIED | Remove `AUDIT_PLUGIN_CODEC_UNSUPPORTED` rejection at line 343. Wire KeySelector through `PluginConsumerManager` (same instance as `hot_jetstream` reader). Build `AuditRow` from raw msg bytes + parsed headers via shared parser (Section 5.4). Forward ciphertext byte-equal. |
-| `internal/eventbus/audit/header_parser.go` | NEW | Extract the codec / `App-Dek-Ref` / `App-Dek-Version` parsing logic from `projection.go:240-262` into a shared helper. Both the projection (`events_audit` writer) AND `plugin_consumer.go` use it; byte-equality between the two branches is structural (INV-P7-2). |
+| `internal/eventbus/audit/header_parser.go` | NEW | Extract the codec / `App-Dek-Ref` / `App-Dek-Version` parsing logic from `projection.go:240-262` into a shared helper. Both the projection (`events_audit` writer) AND `plugin_consumer.go` use it; byte-equality between the two branches is structural (INV-P7-2). **Error-code unification**: the parser returns errors with codes `AUDIT_DEK_REF_PARSE_FAILED` / `AUDIT_DEK_VERSION_PARSE_FAILED` (matching `projection.go`'s current codes); both call sites surface them as-is without re-wrapping under `AUDIT_PLUGIN_*` prefixes — INV-P7-2 byte-equality extends to the error surface so a header-parse failure produces the same operator-visible diagnostic regardless of which consumer caught it. |
+| `plugins/core-scenes/audit.go::SceneAuditStore.Insert` SQL | FIXED | Append `ON CONFLICT (id) DO NOTHING` to the INSERT statement (the docstring at line 116 already claims this behaviour; the actual SQL omits it — companion bead `holomush-demb` P2). Phase 7 touches this file extensively to consume the new `AuditRow` proto; the one-line ON CONFLICT addition rides along. |
 | `internal/eventbus/audit/projection.go` | TRIMMED | Use the shared parser. Behaviour unchanged. |
-| `internal/eventbus/history/plugin_downgrade_fence.go` | NEW | Wraps the existing `PluginHistoryRouter`. On every returned `AuditRow`, checks `row.codec == "identity" AND row.type ∈ always_sensitive_types` → refuse. Emits `audit.<game>.system.plugin_integrity_violation` on refusal. Owns the `always_sensitive_types` set (refreshed on manifest reload via existing manifest-registry hook). |
+| `internal/eventbus/audit/plugin_downgrade_fence.go` | NEW | Lives in `internal/eventbus/audit/` alongside the existing `PluginHistoryRouter` concrete implementation (`plugin_router.go`). Wraps the structural `history.PluginHistoryRouter` interface (defined in `internal/eventbus/history/tier.go:79-84`) — wrapper imports the history-package interface; the history package does NOT import audit. Import direction: `eventbus/audit → eventbus/history` interface only (no audit→history concrete-type dependency). On every returned `AuditRow`, checks `row.codec == "identity" AND row.type ∈ always_sensitive_types` → refuse. Emits `audit.<game>.system.plugin_integrity_violation` on refusal. Owns the always-sensitive set (built once at boot per INV-P7-8). |
 | `internal/eventbus/history/tier.go` | EXTENDED | `Reader.QueryHistory` plugin branch routes through `PluginDowngradeFence` before returning the stream. Single-line change at `tier.go:367`. |
 | `plugins/core-scenes/migrations/0000XX_add_scene_log_dek_columns.{up,down}.sql` | NEW | `ALTER TABLE scene_log ADD COLUMN dek_ref BIGINT NULL, ADD COLUMN dek_version INTEGER NULL`. Down migration drops them. Additive; existing rows correctly NULL. |
 | `plugins/core-scenes/audit.go` | EXTENDED | `SceneAuditStore.Insert` accepts dek_ref + dek_version params; `queryLog` returns them; `AuditEvent` RPC populates them from `AuditRow.dek_ref` / `.dek_version`; `QueryHistory` returns them on `AuditRow`. |
 | `test/integration/plugin/testdata/test_downgrade_attacker/` | NEW | Test fixture: plugin manifest declares `crypto.emits: [{event_type: secret, sensitivity: always}]`. Happy path emits one sensitive event (host encrypts, dispatcher forwards ciphertext, plugin stores byte-equal). Malicious `QueryHistory` returns the same `event_id` with `codec = "identity"` + cleartext `payload`. Lives under `test/integration/plugin/testdata/` (not under `plugins/`) so `task plugin:build-all` does NOT see it and production builds are unaffected. Loaded by the e2e test harness directly. |
-| `internal/eventbus/history/plugin_downgrade_fence_test.go` | NEW | Unit: truth-table tests against router fake. INV-P7-7 and INV-P7-8 coverage. |
+| `internal/eventbus/audit/plugin_downgrade_fence_test.go` | NEW | Unit: truth-table tests against router fake. INV-P7-7, INV-P7-8, INV-P7-15 coverage. |
 | `internal/eventbus/audit/header_parser_test.go` | NEW | Unit: typed parser coverage. INV-P7-2. |
 | `internal/eventbus/audit/plugin_consumer_test.go` | EXTENDED | INV-P7-1, INV-P7-11. |
 | `pkg/plugin/audit_test.go` | EXTENDED | INV-P7-4, INV-P7-5. |
@@ -315,7 +376,7 @@ dek_ref/dek_version columns (migration 000014). `crypto_keys` unchanged.
 ### 4.2 `pluginauditpb.AuditRow` proto
 
 ```proto
-// api/plugin/v1/plugin.proto
+// api/proto/holomush/plugin/v1/audit.proto
 
 import "holomush/eventbus/v1/actor.proto";
 import "google/protobuf/timestamp.proto";
@@ -340,6 +401,12 @@ message AuditRow {
     // Host enforces the agreement (codec=identity ⇔ both absent).
     optional uint64 dek_ref = 8;
     optional uint32 dek_version = 9;
+
+    // Audit schema version. Today's wire carries this via
+    // App-Schema-Version header; v3 moves it onto the row so the proto
+    // is the complete contract and the existing scene_log.schema_ver
+    // NOT NULL column has a typed source.
+    int32 schema_ver = 10;
 }
 
 message AuditEventRequest {
@@ -375,6 +442,10 @@ type AuditRow struct {
     // identity codec.
     DEKRef     *uint64
     DEKVersion *uint32
+
+    // SchemaVer mirrors AuditRow.schema_ver from the proto. Plain int32
+    // because the proto field is non-optional (every row has one).
+    SchemaVer  int32
 }
 
 // StoreFromMessage extracts an AuditRow from a JetStream message,
@@ -489,7 +560,7 @@ conversion. `projection.go` and `plugin_consumer.go` both call it.
 
 | Layer | Tests | Build tag |
 |---|---|---|
-| **Unit** | `plugin_consumer_test.go` — INV-P7-1, INV-P7-11 (dispatcher forwards ciphertext byte-equal; no decrypt). `header_parser_test.go` — INV-P7-2 (typed value coverage). `plugin_downgrade_fence_test.go` — INV-P7-7, INV-P7-8 (truth table, atomic reload). `audit_test.go` — INV-P7-4, INV-P7-5 (struct↔proto mirroring, round-trip). Meta-test — INV-P7-14. | none — `task test` |
+| **Unit** | `plugin_consumer_test.go` — INV-P7-1, INV-P7-11 (dispatcher forwards ciphertext byte-equal; no decrypt). `header_parser_test.go` — INV-P7-2 (typed value coverage, error-code surface). `plugin_downgrade_fence_test.go` — INV-P7-7, INV-P7-8, INV-P7-15 (truth table, set-built-once-at-boot, dek_ref-not-in-crypto-keys refusal). `audit_test.go` — INV-P7-4, INV-P7-5 (struct↔proto mirroring including `SchemaVer`, round-trip). Meta-test — INV-P7-14. | none — `task test` |
 | **Integration** | `plugin_migration_test.go` — INV-P7-3, INV-P7-10 (column add, standalone runnability). `plugin_audit_round_trip_test.go` — INV-P7-6 (byte-equal store+return for sensitive event). `sensitive_event_storage_test.go` — INV-P7-12 (plugin row is ciphertext). `plugin_role_permissions_test.go` — INV-P7-13. `dispatcher_projection_parity_test.go` — INV-P7-2 cross-branch. `dispatcher_selector_identity_test.go` — INV-P7-9. | `//go:build integration` |
 | **End-to-end** | `test_downgrade_attacker_e2e_test.go` — uses `test/integration/plugin/testdata/test_downgrade_attacker/` fixture. Happy path: plugin emits one `sensitivity: always` event; host encrypts; dispatcher forwards ciphertext; plugin stores ciphertext byte-equal; plugin's `QueryHistory` returns ciphertext; host decrypts and delivers. Attack path: same plugin's malicious `QueryHistory` returns the same event with `codec=identity` + cleartext payload; `PluginDowngradeFence` refuses with `AUDIT_ROW_DOWNGRADE_DETECTED`; `plugin_integrity_violation` audit event is emitted. | `//go:build integration` |
 | **Lint / static** | Existing `gorules/dek_no_serialize.go` continues; no new ruleguard rules. | `task lint` |
@@ -514,6 +585,16 @@ New audit subject introduced by Phase 7. Updates master spec §4.6.
   (master spec §4.6); plugin / character subjects cannot subscribe.
   Operators read via the localhost UNIX admin socket
   (`holomush admin audit query`).
+- **Backpressure:** `plugin_integrity_violation` is under
+  `audit.<game>.system.*`, NOT under `audit.<game>.plugin_decrypt.*`.
+  Master spec §7.6's "audit emission backpressure mechanism" applies
+  to plugin-decrypt audit specifically; this subject does NOT
+  participate. Cardinality is naturally bounded: fence-refusal
+  short-circuits stream processing for the offending event_id (the
+  client receives `metadata_only=true` and the validator emits at
+  most one violation per fenced event), so a malicious-plugin
+  streaming attack cannot inflate violation emissions beyond the
+  query's own page-size cap.
 
 `site/docs/reference/audit-subjects.md` gets the registration row.
 
@@ -522,8 +603,9 @@ New audit subject introduced by Phase 7. Updates master spec §4.6.
 | Failure | Detected by | Behaviour |
 |---|---|---|
 | Plugin's `QueryHistory` returns a row where `codec=identity` for an event whose type is `sensitivity: always` in some plugin's manifest | `PluginDowngradeFence` (INV-P7-7) | Refuse the row with `AUDIT_ROW_DOWNGRADE_DETECTED`. Emit `plugin_integrity_violation`. Surface refusal to the client as `metadata_only=true` for that event_id (per master INV-26 contract). |
-| Plugin's `QueryHistory` returns a row where AAD-bound fields (subject, type, actor, timestamp) are tampered but codec/dek_ref match the host's expectation | AEAD AAD-binding at decrypt (INV-25) | Decrypt fails with tag-mismatch; existing error path. No `plugin_integrity_violation` emitted (the fence didn't trip); the decrypt-side error is the operator signal. Per the two-layer fence design — Section 1 threat model — this is the cryptographic ground truth catching what the heuristic doesn't. |
-| Plugin's `QueryHistory` returns a row with `codec != "identity"` AND `dek_ref` pointing at a non-existent `crypto_keys` row | Host hot-tier decrypt path (existing) | Decrypt fails with `EVENTBUS_HISTORY_DEK_HEADER_MISSING`-style error; falls back to cold tier per INV-39. For plugin-owned subjects there is no host cold tier, so the final outcome is `metadata_only=true` per INV-26. |
+| Plugin's `QueryHistory` returns a row where AAD-bound fields (subject, type, actor, timestamp) are tampered but codec/dek_ref match the host's expectation | AEAD AAD-binding at decrypt (master INV-25) | Decrypt fails with tag-mismatch; existing error path. No `plugin_integrity_violation` emitted (the fence didn't trip); the decrypt-side error is the operator signal. Per the two-layer fence design (§1 threat model), this is the cryptographic ground truth catching what the heuristic doesn't. **Operator-UX rationale**: emitting `plugin_integrity_violation` from the decrypt path would couple two unrelated failure modes (key resolution failure vs intentional row tampering) under the same diagnostic label. Operators chasing a decrypt failure follow the existing crypto runbook; the malicious-plugin signal stays distinct in `plugin_integrity_violation` audits for the cases the heuristic catches. |
+| **`may`-elevated downgrade**: plugin returns `codec="identity"` + cleartext payload for an event_id whose `event_type` is manifest-declared `may` AND the event was runtime-elevated to `SensitivityAlways` via INV-6/INV-7 (so the host encrypted at emit) | AEAD AAD-binding at decrypt (master INV-25) | Same as the AAD-tamper row above. The manifest-set fence misses this class by design (the set is `always`-only); the AAD-binding catches it. Operator-visible signal is the decrypt-side error, NOT `plugin_integrity_violation`. **Documented gap** (§1 threat-model coverage boundary); accepted as the cost of the no-host-shadow architecture. Future enhancement bead MAY close this UX gap with a per-event `was_encrypted` shadow flag if operational experience shows the dedicated signal is needed. |
+| Plugin's `QueryHistory` returns a row with `codec != "identity"` AND `dek_ref` pointing at a non-existent or soft-deleted `crypto_keys` row | `PluginDowngradeFence` pre-decrypt check (INV-P7-15) | Refuse with `metadata_only=true` per master INV-26. **No fallback** — for plugin-owned subjects the plugin's row IS the cold record; no host shadow exists. The read terminates immediately with metadata-only. No `plugin_integrity_violation` audit emitted (the failure mode is indistinguishable from a legitimate `Rekey`-destroyed-DEK case). |
 | Plugin dispatcher's KeySelector unwired | Boot-time check (INV-P7-9) | Panic at startup: `PLUGIN_DISPATCHER_NO_SELECTOR`. Pre-Phase-7 this dispatch path rejected any non-identity codec; post-Phase-7 the absence of a selector is a misconfiguration that MUST surface at boot, not at first sensitive event. |
 | `plugin_integrity_violation` audit emit fails (NATS down, queue full) | Existing `AuditEmitter` error path | Operator-visible error logged; refusal of the offending row still proceeds (the client gets `metadata_only=true`). The audit gap is accepted here because the alternative — refusing reads — is worse than a missed diagnostic record. Documented in `site/docs/operating/crypto-runbook.md` (Phase 8). |
 | Plugin migration runs without host migrations | Plugin runner | Succeeds; ALTER ADD COLUMN is idempotent and standalone (INV-P7-10). |
@@ -537,19 +619,39 @@ Phase 7 is a single PR containing:
    extracted from existing projection.go logic).
 2. Modified `internal/eventbus/audit/plugin_consumer.go` (removes
    identity-codec rejection; wires KeySelector; forwards ciphertext).
-3. New `internal/eventbus/history/plugin_downgrade_fence.go` +
-   wrapper integration into `tier.go::Reader.QueryHistory`.
-4. Reshaped `api/plugin/v1/plugin.proto` + regenerated proto code
-   (`AuditRow` message; `AuditEventRequest.row`; `QueryHistoryResponse.row`).
-5. Extended `pkg/plugin/audit.go` (Layer 2 helpers).
-6. Plugin migration: `plugins/core-scenes/migrations/0000XX_add_scene_log_dek_columns.{up,down}.sql`.
-7. Updated `plugins/core-scenes/audit.go` (handles new columns,
-   constructs `AuditRow` proto on QueryHistory).
-8. New test fixture under `test/integration/plugin/testdata/test_downgrade_attacker/`.
-9. Test corpus per Section 6.
-10. Master spec polish (§4.6 audit-subjects, §2 INV-50 cross-reference,
-    §8.3 Go-struct field-name capitalization).
-11. PR-blocking docs: `site/docs/extending/binary-plugins.md` SDK pointer,
+3. New `internal/eventbus/audit/plugin_downgrade_fence.go` (lives
+   alongside `PluginHistoryRouter` impl; wraps the structural
+   `history.PluginHistoryRouter` interface) + wrapper integration into
+   `tier.go::Reader.QueryHistory`.
+4. Reshaped `api/proto/holomush/plugin/v1/audit.proto` + regenerated proto code:
+   new `AuditRow` message (id, subject, type, timestamp, actor, codec,
+   payload, dek_ref optional, dek_version optional, schema_ver);
+   `AuditEventRequest.event` + `headers` fields dropped, replaced with
+   `AuditRow row = 1`; `QueryHistoryResponse.event` replaced with
+   `AuditRow row = 1`.
+5. Migrated all `pluginauditpb.AuditEventRequest.GetEvent()` / `.GetHeaders()`
+   callers to the new shape:
+   - `plugins/core-scenes/audit.go:160-237` — reads from `req.GetRow()` fields
+     instead of the headers map.
+   - `test/integration/eventbus_e2e/plugin_audit_isolation_test.go:175-220`
+     test stub mirrors the real handler shape.
+   - `internal/eventbus/audit/plugin_consumer_unit_test.go:82` —
+     `cli.gotReq.GetHeaders()` assertion replaced with `.GetRow()` field
+     assertions.
+6. Extended `pkg/plugin/audit.go` (Layer 2 helpers with `SchemaVer`).
+7. Plugin migration: `plugins/core-scenes/migrations/0000XX_add_scene_log_dek_columns.{up,down}.sql`.
+8. Updated `plugins/core-scenes/audit.go`: handles new dek_ref/dek_version
+   columns; constructs `AuditRow` proto on QueryHistory; SQL INSERT
+   appends `ON CONFLICT (id) DO NOTHING` (companion bead `holomush-demb`
+   P2 bug fix — the docstring already claimed this behaviour but the
+   SQL omitted it).
+9. New test fixture under `test/integration/plugin/testdata/test_downgrade_attacker/`.
+10. Test corpus per Section 6.
+11. Master spec polish (per "Master spec polish list" in §Context):
+    §4.6 audit-subjects registration; §8.2 pseudo-code amendment
+    striking the events_audit-fallback line; §2 INV-50 cross-reference;
+    §8.3 Go-struct example field-set match.
+12. PR-blocking docs: `site/docs/extending/binary-plugins.md` SDK pointer,
     `site/docs/reference/audit-subjects.md` violation-subject registration.
 
 No backfill required: existing `scene_log` rows have `codec=identity`;
