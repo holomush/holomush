@@ -44,8 +44,10 @@ func TestDispatcherAndHotTierShareSelector(t *testing.T) {
 	t.Parallel()
 
 	// The single shared selector instance — INV-P7-9 requires both
-	// substrates to hold this exact pointer.
-	selector := fakeKeySelectorForIdentityTest{}
+	// substrates to hold this exact pointer. Pointer (not value) so
+	// reflect.ValueOf(iface).Pointer() returns the address at line 68
+	// rather than panicking on a struct-kind interface value.
+	selector := &fakeKeySelectorForIdentityTest{}
 
 	// Mirror cmd/holomush/core.go:488 — Phase 7 substrate accepts the
 	// option but production wiring does NOT pass it yet.
