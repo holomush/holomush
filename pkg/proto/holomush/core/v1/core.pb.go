@@ -54,6 +54,13 @@ const (
 	// Catch-all for unexpected decrypt failures not covered by the
 	// specific cases above. Stamped exclusively by F's classifier.
 	NoPlaintextReason_NO_PLAINTEXT_REASON_INTERNAL NoPlaintextReason = 6
+	// Phase 7 PluginDowngradeFence layer (1) refusal — the host's read-side
+	// fence rejected the row before decrypt either because the type is in
+	// the always-sensitive manifest set and the plugin returned identity
+	// codec (INV-P7-7), or because the dek_ref is unknown / absent for a
+	// non-identity codec (INV-P7-15). Original event_id is preserved;
+	// payload is empty per master INV-26.
+	NoPlaintextReason_NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED NoPlaintextReason = 7
 )
 
 // Enum value maps for NoPlaintextReason.
@@ -66,15 +73,17 @@ var (
 		4: "NO_PLAINTEXT_REASON_DEK_MISSING",
 		5: "NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS",
 		6: "NO_PLAINTEXT_REASON_INTERNAL",
+		7: "NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED",
 	}
 	NoPlaintextReason_value = map[string]int32{
-		"NO_PLAINTEXT_REASON_UNSPECIFIED":      0,
-		"NO_PLAINTEXT_REASON_AUTHGUARD_DENY":   1,
-		"NO_PLAINTEXT_REASON_STALE_DEK":        2,
-		"NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL": 3,
-		"NO_PLAINTEXT_REASON_DEK_MISSING":      4,
-		"NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS":  5,
-		"NO_PLAINTEXT_REASON_INTERNAL":         6,
+		"NO_PLAINTEXT_REASON_UNSPECIFIED":       0,
+		"NO_PLAINTEXT_REASON_AUTHGUARD_DENY":    1,
+		"NO_PLAINTEXT_REASON_STALE_DEK":         2,
+		"NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL":  3,
+		"NO_PLAINTEXT_REASON_DEK_MISSING":       4,
+		"NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS":   5,
+		"NO_PLAINTEXT_REASON_INTERNAL":          6,
+		"NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED": 7,
 	}
 )
 
@@ -3266,7 +3275,7 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\x14player_session_token\x18\x03 \x01(\tR\x12playerSessionToken\"j\n" +
 	"\x1aListSessionStreamsResponse\x12\x18\n" +
 	"\astreams\x18\x01 \x03(\tR\astreams\x122\n" +
-	"\x04meta\x18\x02 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta*\x9d\x02\n" +
+	"\x04meta\x18\x02 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta*\xc8\x02\n" +
 	"\x11NoPlaintextReason\x12#\n" +
 	"\x1fNO_PLAINTEXT_REASON_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"NO_PLAINTEXT_REASON_AUTHGUARD_DENY\x10\x01\x12!\n" +
@@ -3274,7 +3283,8 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"$NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL\x10\x03\x12#\n" +
 	"\x1fNO_PLAINTEXT_REASON_DEK_MISSING\x10\x04\x12'\n" +
 	"#NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS\x10\x05\x12 \n" +
-	"\x1cNO_PLAINTEXT_REASON_INTERNAL\x10\x06*\x98\x01\n" +
+	"\x1cNO_PLAINTEXT_REASON_INTERNAL\x10\x06\x12)\n" +
+	"%NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED\x10\a*\x98\x01\n" +
 	"\fEventChannel\x12\x1d\n" +
 	"\x19EVENT_CHANNEL_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16EVENT_CHANNEL_TERMINAL\x10\x01\x12\x17\n" +

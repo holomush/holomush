@@ -86,6 +86,7 @@ func TestNoPlaintextReasonEnumParity(t *testing.T) {
 		{eventbus.NoPlaintextReasonDEKMissing, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_DEK_MISSING},
 		{eventbus.NoPlaintextReasonDEKBadColumns, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS},
 		{eventbus.NoPlaintextReasonInternal, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_INTERNAL},
+		{eventbus.NoPlaintextReasonDowngradeRefused, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED},
 	}
 	assert.Len(t, cases, len(corev1.NoPlaintextReason_name),
 		"every proto NoPlaintextReason value MUST have a Go-side mirror in cases above; "+
@@ -113,8 +114,9 @@ func TestINV_F16_NoPlaintextReasonProtoGoParity(t *testing.T) {
 		{"DEK_MISSING", eventbus.NoPlaintextReasonDEKMissing, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_DEK_MISSING},
 		{"DEK_BAD_COLUMNS", eventbus.NoPlaintextReasonDEKBadColumns, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS},
 		{"INTERNAL", eventbus.NoPlaintextReasonInternal, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_INTERNAL},
+		{"DOWNGRADE_REFUSED", eventbus.NoPlaintextReasonDowngradeRefused, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED},
 	}
-	require.Len(t, cases, 7, "expected exactly 7 NoPlaintextReason values after 4→7 expansion")
+	require.Len(t, cases, 8, "expected exactly 8 NoPlaintextReason values after Phase 7 fence (DOWNGRADE_REFUSED) addition")
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			assert.Equal(t, int32(c.goVal), int32(c.protoVal),
