@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: CI
+
+# Same-name skip workflow for docs-only PRs. When ci.yaml is path-skipped,
+# branch-protection required checks (Build, Lint, Test) would otherwise stay
+# in 'Pending' state forever. This workflow provides no-op jobs whose names
+# are byte-identical to ci.yaml's required-check job names, so GitHub treats
+# them as the same required check and reports green.
+#
+# DOCS_ONLY_PATHS — must remain byte-identical with ci.yaml's paths-ignore
+# blocks and Taskfile.yaml's DOCS_ONLY_PATHS var. Enforced by
+# `task lint:docs-paths-sync`.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - site/**
+      - docs/**
+      - "**/*.md"
+      - .claude/agents/**
+      - .claude/commands/**
+      - .claude/rules/**
+      - .claude/agent-memory/**
+      - LICENSE
+      - LICENSE_HEADER
+  pull_request:
+    branches: [main]
+    paths:
+      - site/**
+      - docs/**
+      - "**/*.md"
+      - .claude/agents/**
+      - .claude/commands/**
+      - .claude/rules/**
+      - .claude/agent-memory/**
+      - LICENSE
+      - LICENSE_HEADER
+
+permissions:
+  contents: read
+
+jobs:
+  Lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only PR — Lint skipped (no code changes)"
+  Test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only PR — Test skipped (no code changes)"
+  Build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only PR — Build skipped (no code changes)"
+  Integration:
+    name: Integration Test
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only PR — Integration skipped (no code changes)"
+  E2E:
+    name: E2E Test
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only PR — E2E skipped (no code changes)"

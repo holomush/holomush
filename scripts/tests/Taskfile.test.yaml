@@ -23,6 +23,24 @@ tasks:
     cmds:
       - cmd: |
           set -euo pipefail
+
+          # ─────────────────────────────────────────────────────────────
+          # Docs-only detection (mirrors production pr-prep at
+          # Taskfile.yaml:534-563). Same subshell as flock body below.
+          # ─────────────────────────────────────────────────────────────
+          if [ "${HOLOMUSH_PR_PREP_FORCE_FULL:-}" != "1" ]; then
+            timeout 5 git fetch -q origin main 2>/dev/null || true
+            CHANGED=$(timeout 5 git diff --name-only origin/main...HEAD 2>/dev/null || true)
+            if [ -n "$CHANGED" ]; then
+              # Fixture taskfile lives at scripts/tests/; repo root is two levels up.
+              DOCS_REGEX=$(bash "$(dirname "{{.TASKFILE}}")/../../scripts/docs-paths-regex.sh")
+              if ! printf '%s\n' "$CHANGED" | grep -vE "$DOCS_REGEX" >/dev/null; then
+                echo "▸ docs-only diff detected; running pr-prep:docs"
+                exec task -t "{{.TASKFILE}}" pr-prep:docs
+              fi
+            fi
+          fi
+
           LOCK_DIR="{{.LOCK_DIR}}"
           mkdir -p "$LOCK_DIR"
           LOCK="$LOCK_DIR/lock"
@@ -84,3 +102,9 @@ tasks:
           if [ -n "${STUB_EXIT:-}" ]; then
             exit "$STUB_EXIT"
           fi
+
+  pr-prep:docs:
+    cmds:
+      - cmd: |-
+          DOCS_MARKER="${STUB_DOCS_MARKER:-/tmp/pr-prep-docs-marker.$$}"
+          : > "$DOCS_MARKER"

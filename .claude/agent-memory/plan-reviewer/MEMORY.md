@@ -17,6 +17,56 @@ Keep under 200 lines. Curate — don't hoard.
 - **`core-scenes/audit.go:177-191` has header→Event.Type fallback chain**: existing AuditEvent reads `headers[auditHeaderEventType]` with fallback to `ev.GetType()`. Plans rewriting to `row.GetType()` only must explicitly say whether the fallback is dropped intentionally (because the new wire guarantees row.Type via dispatcher) and audit existing tests for the fallback path.
 - **`MetadataOnly` field on `eventbus.Event` exists** (`internal/eventbus/types.go:172-179`) but `NoPlaintextReason` enum needs a NEW entry for fence-refusal cases. Don't reuse `NoPlaintextReasonAuthGuardDeny` or `NoPlaintextReasonStaleDEK` — those have specific semantics in operator runbooks.
 
+## Shell-script plan reflexes (HoloMUSH 2026-05-14)
+
+- **`yq` (mikefarah v4, the one in `task setup`) emits literal "null" on
+  missing keys with exit 0.** Plans that guard extraction with
+  `[ -n "$VAR" ]` silently accept the literal string `null` and proceed to
+  process it as data. Verified locally: `yq '.absent.key' file.yaml` →
+  prints `null`, exits 0. Correct guard: `yq -e '...'` (exits 1 on no
+  match) AND a `[ "$VAR" = "null" ]` belt-and-braces check. The
+  `pr-prep-docs-fast-lane` rev3 plan ships both `docs-paths-regex.sh` and
+  `lint-docs-paths-sync.sh` with the broken guard; under any future
+  rename of `vars.DOCS_ONLY_PATHS`, every diff classifies as full-lane
+  silently (defeats the whole feature).
+- **bats integration tests against production `task <X>` are recursion
+  traps.** When the task under test transitively calls `task test:bats`
+  (which the holomush `pr-prep:run` does at Taskfile.yaml:577-578), and
+  the bats file under `scripts/tests/` is the one driving the test, the
+  outer test invocation spawns an inner bats invocation that re-runs the
+  same file. The existing `scripts/tests/pr-prep-lock.bats` solves this
+  via a `fixture_taskfile` indirection
+  (`scripts/tests/Taskfile.test.yaml`) — extract the production cmd block
+  into a fixture and let bats drive `task -t <fixture> <task>`. Plans that
+  invoke `task pr-prep` directly under bats inherit lock contention
+  (`/tmp/holomush-pr-prep/lock`) plus arbitrary-state real-lint output
+  racing the test's stdout assertion.
+- **`timeout 5 task ...` is not a substitute for fixture-based test
+  isolation.** It can mask false positives (the `docs-only diff detected`
+  marker is printed BEFORE the `exec`, so even a docs lane that crashes
+  AFTER the marker still satisfies a contains-marker assertion) and
+  produces non-deterministic test runtimes.
+- **Plan author's "regression-guard" stdout-marker selection.** Plans that
+  assert `! [[ "$output" == *"pr-prep:run"* ]]` to prove the flock body
+  didn't run are picking the wrong proxy — `pr-prep:run` appears in
+  multiple unrelated stdout paths (task --list, desc strings, error
+  messages). The spec's recommended assertion (lock-file existence under
+  a `BATS_TEST_TMPDIR`-scoped `TMPDIR`) is structurally sounder than the
+  plan's "pinned decision" override.
+- **Line-range citations in plan modify lists drift by ±1 from the
+  separator blank line.** Plan said "Replace lines 7-12 with: …" but
+  current `Taskfile.yaml:12` is the blank separator before `tasks:`.
+  Literal subagent execution would consume the separator. Always Read
+  the cited range to confirm whether the blank-line separator is
+  inside or outside the replacement.
+- **Intermediate-commit broken `task lint` from out-of-order wiring.**
+  When the plan wires a new sub-lint into the `lint:` umbrella in
+  Task N (before the YAML/code that the sub-lint validates lands in
+  Task N+1, N+2), every commit between N and N+2 leaves `task lint`
+  broken. Breaks `jj bisect` / `git bisect` and traps concurrent agents
+  running `task lint` during that window. The fix is either to reorder
+  (data-first, lint-last) or to introduce a temporary intermediate
+  umbrella that's not called from the general `lint:` task.
 ## Sub-epic F plan-review reflexes (HoloMUSH 2026-05-12)
 
 - **`eventbus.ActorKindHost` does NOT exist.** Real constants at `internal/eventbus/types.go:62-71` are `ActorKindUnknown / Character / Player / System / Plugin`. Host audit emit uses `ActorKindSystem` (precedent: `internal/eventbus/authguard/audit/emitter.go:259`). Plans saying `Actor.Kind: ActorKindHost` with a hedge "If the constant name differs (e.g. ActorHost), align" are placeholder-asks the implementer to guess.

@@ -9,6 +9,21 @@ vars:
   MAIN_PKG: ./cmd/holomush
   MIGRATIONS_DIR: internal/store/migrations
   LICENSE_DIRS: api cmd internal pkg plugins scripts
+  # Canonical docs-only path globs. MUST stay byte-identical with
+  # .github/workflows/ci.yaml's paths-ignore: blocks and
+  # .github/workflows/ci-docs-skip.yaml's paths: blocks.
+  # Enforced by `task lint:docs-paths-sync`. Spec:
+  # docs/superpowers/specs/2026-05-14-pr-prep-docs-fast-lane-design.md §4.1.
+  DOCS_ONLY_PATHS: |
+    site/**
+    docs/**
+    **/*.md
+    .claude/agents/**
+    .claude/commands/**
+    .claude/rules/**
+    .claude/agent-memory/**
+    LICENSE
+    LICENSE_HEADER
 
 tasks:
   default:
@@ -71,6 +86,7 @@ tasks:
       - task: lint:test-helpers
       - task: lint:plugin-manifests
       - task: lint:docs-symmetry
+      - task: lint:docs-paths-sync
 
   fmt:
     desc: Format all files
@@ -443,6 +459,11 @@ tasks:
     cmds:
       - go run ./cmd/lint-plugin-manifests
 
+  lint:docs-paths-sync:
+    desc: Verify DOCS_ONLY_PATHS is byte-identical across Taskfile.yaml, ci.yaml, ci-docs-skip.yaml.
+    cmds:
+      - bash scripts/lint-docs-paths-sync.sh
+
   lint:docs-symmetry:
     desc: Verify AGENTS.md and CLAUDE.md plugin-runtime-symmetry subsection is byte-identical.
     cmds:
@@ -526,13 +547,33 @@ tasks:
   # ──────────────────────────────────────────
 
   pr-prep:
-    desc: Run all CI checks locally before pushing (mirrors ALL CI jobs) [serialized via flock]
+    desc: Run all CI checks locally before pushing (mirrors ALL CI jobs) [serialized via flock; auto-selects docs lane on
+      docs-only diffs]
     preconditions:
       - sh: command -v flock >/dev/null 2>&1
         msg: "flock(1) is required. Install with 'brew install flock' (macOS) or 'apt install util-linux' (Linux)."
     cmds:
       - cmd: |
           set -euo pipefail
+
+          # ─────────────────────────────────────────────────────────────
+          # Docs-only detection. MUST live in this same `- cmd:` block as
+          # the flock body below — go-task spawns each `- cmd:` in its own
+          # subshell, so `exec` only short-circuits within the same shell.
+          # Spec §4.3.1.
+          # ─────────────────────────────────────────────────────────────
+          if [ "${HOLOMUSH_PR_PREP_FORCE_FULL:-}" != "1" ]; then
+            timeout 5 git fetch -q origin main 2>/dev/null || true
+            CHANGED=$(timeout 5 git diff --name-only origin/main...HEAD 2>/dev/null || true)
+            if [ -n "$CHANGED" ]; then
+              DOCS_REGEX=$(bash scripts/docs-paths-regex.sh)
+              if ! printf '%s\n' "$CHANGED" | grep -vE "$DOCS_REGEX" >/dev/null; then
+                echo "▸ docs-only diff detected; running pr-prep:docs"
+                exec task pr-prep:docs
+              fi
+            fi
+          fi
+
           LOCK_DIR="${TMPDIR:-/tmp}/holomush-pr-prep"
           mkdir -p "$LOCK_DIR"
           LOCK="$LOCK_DIR/lock"
@@ -605,6 +646,18 @@ tasks:
       - task: test:e2e
       - echo "✓ All PR checks passed."
 
+  pr-prep:docs:
+    desc: Docs-only fast lane (auto-selected by pr-prep on docs-only diffs).
+    cmds:
+      - echo "▸ Running docs-only fast lane"
+      - task: lint:markdown
+      - task: lint:yaml
+      - task: lint:docs-symmetry
+      - task: fmt:check
+      - task: license:check
+      - task: lint:docs-paths-sync
+      - echo "✓ Docs lane passed."
+
   # ──────────────────────────────────────────
   # Setup (run once)
   # ──────────────────────────────────────────
@@ -616,6 +669,7 @@ tasks:
         flock bats-core yq
       - brew install steveyegge/beads/bd
       - go install github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc@latest
+      - go install github.com/google/addlicense@latest
       - lefthook install
       - bd hooks install --chain
       - echo "✓ Dev environment ready. Run 'task dev' to start."

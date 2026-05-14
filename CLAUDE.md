@@ -241,12 +241,17 @@ task test:int                                    # Integration tests (needs Dock
 | **SHOULD** run `task fmt`              | Before committing to ensure consistent formatting  |
 
 **MUST** run `task pr-prep` before creating a PR or pushing to a PR branch.
-This mirrors all CI jobs (lint, format, schema, license, unit, integration,
-E2E) and MUST pass with zero failures. Do NOT push to a PR branch without
-a green `task pr-prep`. Docker is always available — never skip E2E tests.
-The gate is serialized per user — only one `task pr-prep` runs at a time on
-a given machine. See [pr-prep](site/docs/contributing/pr-prep.md) for
-collision behavior.
+It auto-detects docs-only diffs (per `Taskfile.yaml` `vars.DOCS_ONLY_PATHS`)
+and runs the `pr-prep:docs` fast lane in that case; for any non-docs path,
+it runs the full pipeline mirroring all CI jobs (lint, format, schema,
+license, unit, integration, E2E) and MUST pass with zero failures. Use
+`HOLOMUSH_PR_PREP_FORCE_FULL=1 task pr-prep` to force the full lane.
+Docker is always available — never skip E2E tests on the full lane. The
+full lane is serialized per user — only one runs at a time on a given
+machine. Note: docs detection relies on jj's snapshot of `@`; run `jj st`
+first if you've made edits since the last `jj` command. See
+[pr-prep](site/docs/contributing/pr-prep.md) for collision behavior and
+the docs lane.
 
 ### Session isolation
 
