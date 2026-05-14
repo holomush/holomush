@@ -86,8 +86,8 @@ func validPluginHeaders(t *testing.T) nats.Header {
 	return h
 }
 
-// newValidEnvelopeBytes proto-marshals a valid Event envelope so decodeEnvelope
-// returns success.
+// newValidEnvelopeBytes proto-marshals a valid Event envelope so
+// unmarshalProjectionOnly returns success.
 func newValidEnvelopeBytes(t *testing.T) []byte {
 	t.Helper()
 	e := &eventbusv1.Event{
