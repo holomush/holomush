@@ -22,6 +22,7 @@
   import { pushCommand } from '$lib/stores/commandHistoryStore';
   import * as Resizable from '$lib/components/ui/resizable';
   import { authState, clearAuth, clearCharacterSession } from '$lib/stores/authStore';
+  import { get } from 'svelte/store';
   import TerminalView from '$lib/components/terminal/TerminalView.svelte';
   import CommandInput from '$lib/components/terminal/CommandInput.svelte';
   import Rail from '$lib/components/terminal/Rail.svelte';
@@ -264,12 +265,20 @@
                   false,
                 );
               }
+              // If TopBar's logout already cleared player auth, that handler
+              // owns the navigation (to /). Skipping our own goto('/characters')
+              // here prevents a navigation race that strands the user on
+              // /characters with the (authed) layout's auth check still
+              // racing the server-side session teardown (zhjl).
+              const isLoggingOut = !get(authState).isPlayerAuthenticated;
               clearCharacterSession();
               connected = false;
               sessionId = '';
               rejectStreamReady(generation, new Error(ctrl.message || 'Stream closed'));
               setConnectionStatus('disconnected');
-              goto('/characters');
+              if (!isLoggingOut) {
+                goto('/characters');
+              }
               return;
             }
           } else if (response.frame.case === 'event') {
