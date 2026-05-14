@@ -22,18 +22,14 @@ import (
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
-// Audit header names mirror the host's `internal/eventbus/audit` projection
-// so the plugin stores the same metadata the host does for its own subjects.
-const (
-	auditHeaderCodec     = "App-Codec"
-	auditHeaderSchemaVer = "App-Schema-Version"
-	auditHeaderEventType = "App-Event-Type"
-	auditHeaderActorKind = "App-Actor-Kind"
-	auditHeaderActorID   = "App-Actor-ID"
-)
-
 // defaultActorKind matches the host audit projection default. When the
-// publisher omits App-Actor-Kind, the audit row records "system".
+// dispatcher's Row.Actor is nil (no actor set on the publisher's envelope),
+// the audit row records "system".
+//
+// Pre-Phase-7 the plugin separately consumed App-Actor-Kind / App-Actor-ID /
+// App-Codec / App-Schema-Version / App-Event-Type headers; with the wire
+// reshape (INV-P7-1) those values now arrive on the AuditRow proto fields
+// populated by the host dispatcher's buildAuditRow.
 const defaultActorKind = "system"
 
 // auditMaxPageSize mirrors the host-side cap (spec §5) so plugin-served
@@ -65,6 +61,8 @@ type sceneAuditLogStore interface {
 		payload []byte,
 		schemaVer int,
 		codec string,
+		dekRef *int64,
+		dekVersion *int32,
 	) error
 	queryLog(
 		ctx context.Context,
@@ -117,6 +115,10 @@ func NewSceneAuditStore(pool *pgxpool.Pool) *SceneAuditStore {
 // redelivery is idempotent — the same Nats-Msg-Id delivered twice (on
 // restart before the ack reached the server) becomes a no-op, and the
 // caller still Acks.
+//
+// dekRef / dekVersion are nil for identity-codec rows and non-nil for
+// AEAD-codec rows. The plugin stores the values opaquely (INV-P7-3); the
+// host owns interpretation.
 func (s *SceneAuditStore) Insert(
 	ctx context.Context,
 	id []byte,
@@ -127,6 +129,8 @@ func (s *SceneAuditStore) Insert(
 	payload []byte,
 	schemaVer int,
 	codec string,
+	dekRef *int64,
+	dekVersion *int32,
 ) error {
 	var ts any
 	if timestamp != nil {
@@ -136,10 +140,10 @@ func (s *SceneAuditStore) Insert(
 		ctx, `
 		INSERT INTO scene_log (
 			id, subject, type, timestamp, actor_kind, actor_id,
-			payload, schema_ver, codec
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			payload, schema_ver, codec, dek_ref, dek_version
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (id) DO NOTHING`,
-		id, subject, eventType, ts, actorKind, actorID, payload, schemaVer, codec,
+		id, subject, eventType, ts, actorKind, actorID, payload, schemaVer, codec, dekRef, dekVersion,
 	)
 	if err != nil {
 		return oops.Code("SCENE_AUDIT_INSERT_FAILED").
@@ -151,83 +155,76 @@ func (s *SceneAuditStore) Insert(
 }
 
 // AuditEvent is the per-message ingestion RPC. The host per-plugin consumer
-// forwards each JetStream delivery here with headers mapped verbatim from
-// the JS message. A successful return ⇒ host acks the JS message.
+// forwards each JetStream delivery here as a *pluginv1.AuditRow built by
+// `internal/eventbus/audit.buildAuditRow` (Phase 7 widening, INV-P7-1 +
+// INV-P7-11). A successful return ⇒ host acks the JS message.
 //
-// Validation mirrors the host projection's contract checks (spec §5)
-// exactly, so a malformed publisher contract surfaces the same error
-// regardless of which owner handles the subject.
+// The Row shape guarantees crypto + projection fields at the wire level —
+// no fallback to `req.Event` / `req.Headers` is needed (those legacy
+// fields no longer exist on the proto). Validation still mirrors the
+// host projection's contract checks (spec §5).
 func (s *SceneAuditServer) AuditEvent(ctx context.Context, req *pluginv1.AuditEventRequest) (*pluginv1.AuditEventResponse, error) {
-	if req == nil || req.GetEvent() == nil {
-		return nil, oops.Code("SCENE_AUDIT_MISSING_EVENT").Errorf("AuditEventRequest.event required")
+	if req == nil || req.GetRow() == nil {
+		return nil, oops.Code("SCENE_AUDIT_MISSING_ROW").Errorf("AuditEventRequest.row required")
 	}
-	ev := req.GetEvent()
-	headers := req.GetHeaders()
+	row := req.GetRow()
 
-	codec := headers[auditHeaderCodec]
+	codec := row.GetCodec()
 	if codec == "" {
-		return nil, oops.Code("SCENE_AUDIT_MISSING_HEADER").With("header", auditHeaderCodec).
-			Errorf("missing header")
-	}
-	schemaVer := headers[auditHeaderSchemaVer]
-	if schemaVer == "" {
-		return nil, oops.Code("SCENE_AUDIT_MISSING_HEADER").With("header", auditHeaderSchemaVer).
-			Errorf("missing header")
-	}
-	ver, err := parseSchemaVer(schemaVer)
-	if err != nil {
-		return nil, err
+		return nil, oops.Code("SCENE_AUDIT_MISSING_FIELD").With("field", "codec").
+			Errorf("missing field")
 	}
 
-	eventType := headers[auditHeaderEventType]
-	if eventType == "" {
-		// Fall back to the Event proto's type field. The host projection
-		// requires the header, but the plugin tolerates either source so
-		// a publisher that sets only proto.Type still yields a complete row.
-		eventType = ev.GetType()
-	}
-	if eventType == "" {
-		return nil, oops.Code("SCENE_AUDIT_MISSING_HEADER").With("header", auditHeaderEventType).
-			Errorf("missing header and event.type empty")
+	schemaVer := int(row.GetSchemaVer())
+	if schemaVer < 0 || schemaVer > 32767 {
+		return nil, oops.Code("SCENE_AUDIT_BAD_SCHEMA_VERSION").With("value", schemaVer).
+			Errorf("schema version out of range")
 	}
 
-	actorKind := headers[auditHeaderActorKind]
-	if actorKind == "" {
-		if actor := ev.GetActor(); actor != nil {
-			actorKind = actor.GetKind().String()
-		}
+	eventType := row.GetType()
+	if eventType == "" {
+		return nil, oops.Code("SCENE_AUDIT_MISSING_FIELD").With("field", "type").
+			Errorf("missing field")
+	}
+
+	if len(row.GetId()) != 16 {
+		return nil, oops.Code("SCENE_AUDIT_MISSING_ID").Errorf("row.id required (16-byte ULID)")
+	}
+
+	var actorKind string
+	var actorID []byte
+	if a := row.GetActor(); a != nil {
+		actorKind = a.GetKind().String()
+		actorID = a.GetId()
 	}
 	if actorKind == "" {
 		actorKind = defaultActorKind
 	}
 
-	var actorID []byte
-	if v := headers[auditHeaderActorID]; v != "" {
-		parsed, parseErr := ulid.Parse(v)
-		if parseErr != nil {
-			return nil, oops.Code("SCENE_AUDIT_BAD_ACTOR_ID").With("value", v).Wrap(parseErr)
-		}
-		b := parsed.Bytes()
-		actorID = b
-	} else if actor := ev.GetActor(); actor != nil && len(actor.GetId()) > 0 {
-		actorID = actor.GetId()
+	var dekRef *int64
+	if row.DekRef != nil {
+		v := int64(*row.DekRef)
+		dekRef = &v
 	}
-
-	if len(ev.GetId()) == 0 {
-		return nil, oops.Code("SCENE_AUDIT_MISSING_ID").Errorf("event.id required")
+	var dekVersion *int32
+	if row.DekVersion != nil {
+		v := int32(*row.DekVersion)
+		dekVersion = &v
 	}
 
 	if err := s.store.Insert(
 		ctx,
-		ev.GetId(),
-		ev.GetSubject(),
+		row.GetId(),
+		row.GetSubject(),
 		eventType,
-		ev.GetTimestamp(),
+		row.GetTimestamp(),
 		actorKind,
 		actorID,
-		ev.GetPayload(),
-		ver,
+		row.GetPayload(),
+		schemaVer,
 		codec,
+		dekRef,
+		dekVersion,
 	); err != nil {
 		// SceneAuditStore.Insert already wraps with SCENE_AUDIT_INSERT_FAILED
 		// and the same subject/type context — propagate as-is.
@@ -354,15 +351,29 @@ func (s *SceneAuditServer) QueryHistory(req *pluginv1.QueryHistoryRequest, strea
 	}
 
 	for i := range rows {
-		row := &rows[i]
+		r := &rows[i]
+		var dekRefU64 *uint64
+		if r.dekRef != nil {
+			v := uint64(*r.dekRef)
+			dekRefU64 = &v
+		}
+		var dekVerU32 *uint32
+		if r.dekVersion != nil {
+			v := uint32(*r.dekVersion)
+			dekVerU32 = &v
+		}
 		resp := &pluginv1.QueryHistoryResponse{
-			Event: &eventbusv1.Event{
-				Id:        row.id,
-				Subject:   row.subject,
-				Type:      row.eventType,
-				Timestamp: timestamppb.New(row.timestamp),
-				Actor:     actorProtoFromRow(row.actorKind, row.actorID),
-				Payload:   row.payload,
+			Row: &pluginv1.AuditRow{
+				Id:         r.id,
+				Subject:    r.subject,
+				Type:       r.eventType,
+				Timestamp:  timestamppb.New(r.timestamp),
+				Actor:      actorProtoFromRow(r.actorKind, r.actorID),
+				Codec:      r.codec,
+				Payload:    r.payload,
+				DekRef:     dekRefU64,
+				DekVersion: dekVerU32,
+				SchemaVer:  int32(r.schemaVer),
 			},
 		}
 		if err := stream.Send(resp); err != nil {
@@ -406,13 +417,17 @@ func parseSceneSubject(subject string) (string, error) {
 
 // logRow is the scanned representation of one scene_log row.
 type logRow struct {
-	id        []byte
-	subject   string
-	eventType string
-	timestamp time.Time
-	actorKind string
-	actorID   []byte
-	payload   []byte
+	id         []byte
+	subject    string
+	eventType  string
+	timestamp  time.Time
+	actorKind  string
+	actorID    []byte
+	payload    []byte
+	schemaVer  int
+	codec      string
+	dekRef     *int64
+	dekVersion *int32
 }
 
 // queryLog runs the scene_log SELECT with optional subject, cursor, and
@@ -464,7 +479,7 @@ func (s *SceneAuditStore) queryLog(
 	args = append(args, pageSize)
 	limitIdx := itoa(idx)
 
-	query := "SELECT id, subject, type, timestamp, actor_kind, actor_id, payload FROM scene_log WHERE " +
+	query := "SELECT id, subject, type, timestamp, actor_kind, actor_id, payload, schema_ver, codec, dek_ref, dek_version FROM scene_log WHERE " +
 		strings.Join(conds, " AND ") +
 		" ORDER BY id " + order + " LIMIT $" + limitIdx
 
@@ -479,7 +494,7 @@ func (s *SceneAuditStore) queryLog(
 	var out []logRow
 	for pgRows.Next() {
 		var r logRow
-		if err := pgRows.Scan(&r.id, &r.subject, &r.eventType, &r.timestamp, &r.actorKind, &r.actorID, &r.payload); err != nil {
+		if err := pgRows.Scan(&r.id, &r.subject, &r.eventType, &r.timestamp, &r.actorKind, &r.actorID, &r.payload, &r.schemaVer, &r.codec, &r.dekRef, &r.dekVersion); err != nil {
 			return nil, oops.Code("SCENE_AUDIT_SCAN_FAILED").Wrap(err)
 		}
 		out = append(out, r)
@@ -522,25 +537,6 @@ func actorKindFromString(s string) eventbusv1.ActorKind {
 	default:
 		return eventbusv1.ActorKind_ACTOR_KIND_UNSPECIFIED
 	}
-}
-
-// parseSchemaVer validates and parses the App-Schema-Version header. The
-// column is SMALLINT; values outside [0, 32767] are rejected at the
-// boundary rather than relying on a silent pgx downcast.
-func parseSchemaVer(s string) (int, error) {
-	n := 0
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return 0, oops.Code("SCENE_AUDIT_BAD_SCHEMA_VERSION").With("value", s).
-				Errorf("non-numeric schema version")
-		}
-		n = n*10 + int(c-'0')
-		if n > 32767 {
-			return 0, oops.Code("SCENE_AUDIT_BAD_SCHEMA_VERSION").With("value", s).
-				Errorf("schema version exceeds int16 range")
-		}
-	}
-	return n, nil
 }
 
 // itoa formats a small non-negative int without strconv — the query

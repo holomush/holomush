@@ -71,6 +71,8 @@ func (s *fakeAuditStore) Insert(
 	_ []byte,
 	_ int,
 	_ string,
+	_ *int64,
+	_ *int32,
 ) error {
 	return nil
 }
@@ -198,7 +200,7 @@ func TestQueryHistoryAllowsMemberAndReturnsRows(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, stream.sends, 1)
-	assert.Equal(t, "scene.pose.posted", stream.sends[0].GetEvent().GetType())
+	assert.Equal(t, "scene.pose.posted", stream.sends[0].GetRow().GetType())
 }
 
 func TestQueryHistoryDeniesNonMemberWithoutHittingLogStore(t *testing.T) {
