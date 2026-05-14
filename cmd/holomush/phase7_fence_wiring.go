@@ -33,7 +33,7 @@ import (
 // configured codec.KeySelector and returns it unchanged. The single
 // pointer is what matters for INV-P7-9.
 func buildKeySelector() codec.KeySelector {
-	return identityProductionKeySelector{}
+	return &identityProductionKeySelector{}
 }
 
 // identityProductionKeySelector is the placeholder selector used while

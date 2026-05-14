@@ -50,7 +50,7 @@ func TestParseAuditHeaders_MissingCodec(t *testing.T) {
 
 	_, err := ParseAuditHeaders(h)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "missing header")
+	errutil.AssertErrorCode(t, err, "AUDIT_MISSING_HEADER")
 }
 
 func TestParseAuditHeaders_BadDekRef(t *testing.T) {

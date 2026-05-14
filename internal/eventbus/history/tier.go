@@ -29,6 +29,7 @@ import (
 	"context"
 	"io"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -127,9 +128,16 @@ func WithPluginDowngradeFence(
 	lookup CryptoKeysLookup,
 	emitter ViolationEmitter,
 ) Option {
+	// Copy at capture-time so post-NewReader mutation by the caller cannot
+	// alter the fence's refusal surface (INV-P7-8 "built once at boot"
+	// applies even though fence construction is lazy in fencedRouter).
+	copied := make(map[string]struct{}, len(alwaysSensitive))
+	for k := range alwaysSensitive {
+		copied[k] = struct{}{}
+	}
 	return func(r *Reader) {
 		r.fenceOpts = []PluginDowngradeFenceOption{
-			WithAlwaysSensitiveTypes(alwaysSensitive),
+			WithAlwaysSensitiveTypes(copied),
 			WithCryptoKeysLookup(lookup),
 			WithViolationEmitter(emitter),
 		}
@@ -340,7 +348,12 @@ type Reader struct {
 	// first plugin-owned QueryHistory call when fenceOpts is non-empty;
 	// nil otherwise. Plugin route is single-routered so a single fence
 	// instance covers every plugin under this Reader.
-	fence PluginHistoryRouter
+	//
+	// Reader is shared across concurrent gRPC requests; fenceOnce ensures
+	// the lazy build is data-race-free and constructs exactly one fence
+	// instance even under simultaneous plugin-owned QueryHistory calls.
+	fence     PluginHistoryRouter
+	fenceOnce sync.Once
 }
 
 // NewReader constructs a Reader. `js` and `pool` MAY be nil if the caller
@@ -426,9 +439,9 @@ func (r *Reader) fencedRouter() PluginHistoryRouter {
 	if len(r.fenceOpts) == 0 {
 		return r.router
 	}
-	if r.fence == nil {
+	r.fenceOnce.Do(func() {
 		r.fence = NewPluginDowngradeFence(r.router, r.fenceOpts...)
-	}
+	})
 	return r.fence
 }
 

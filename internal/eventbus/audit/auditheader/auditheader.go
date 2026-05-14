@@ -88,21 +88,21 @@ func Parse(h nats.Header) (Metadata, error) {
 
 	if v := h.Get(HeaderDekRef); v != "" {
 		parsed, parseErr := strconv.ParseInt(v, 10, 64)
-		if parseErr != nil {
+		if parseErr != nil || parsed < 0 {
 			return meta, oops.Code("AUDIT_DEK_REF_PARSE_FAILED").
 				With("header", HeaderDekRef).
 				With("value", v).
-				Wrap(parseErr)
+				Errorf("dek_ref must be a non-negative integer (parse=%v)", parseErr)
 		}
 		meta.DEKRef = &parsed
 	}
 	if v := h.Get(HeaderDekVersion); v != "" {
 		parsed, parseErr := strconv.ParseInt(v, 10, 32)
-		if parseErr != nil {
+		if parseErr != nil || parsed < 0 {
 			return meta, oops.Code("AUDIT_DEK_VERSION_PARSE_FAILED").
 				With("header", HeaderDekVersion).
 				With("value", v).
-				Wrap(parseErr)
+				Errorf("dek_version must be a non-negative integer (parse=%v)", parseErr)
 		}
 		v32 := int32(parsed)
 		meta.DEKVersion = &v32

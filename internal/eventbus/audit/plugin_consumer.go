@@ -109,7 +109,9 @@ func WithKeySelector(sel codec.KeySelector) PluginConsumerManagerOption {
 func NewPluginConsumerManager(js jetstream.JetStream, opts ...PluginConsumerManagerOption) *PluginConsumerManager {
 	m := &PluginConsumerManager{js: js}
 	for _, opt := range opts {
-		opt(m)
+		if opt != nil {
+			opt(m)
+		}
 	}
 	return m
 }

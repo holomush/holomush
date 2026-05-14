@@ -187,6 +187,12 @@ func (s *SceneAuditServer) AuditEvent(ctx context.Context, req *pluginv1.AuditEv
 			Errorf("missing field")
 	}
 
+	subject := row.GetSubject()
+	if subject == "" {
+		return nil, oops.Code("SCENE_AUDIT_MISSING_FIELD").With("field", "subject").
+			Errorf("missing field")
+	}
+
 	if len(row.GetId()) != 16 {
 		return nil, oops.Code("SCENE_AUDIT_MISSING_ID").Errorf("row.id required (16-byte ULID)")
 	}
@@ -215,7 +221,7 @@ func (s *SceneAuditServer) AuditEvent(ctx context.Context, req *pluginv1.AuditEv
 	if err := s.store.Insert(
 		ctx,
 		row.GetId(),
-		row.GetSubject(),
+		subject,
 		eventType,
 		row.GetTimestamp(),
 		actorKind,

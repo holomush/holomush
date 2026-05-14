@@ -237,9 +237,13 @@ func StoreFromMessage(msg jetstream.Msg) (AuditRow, error) {
 		Payload:   ev.GetPayload(),
 		SchemaVer: hdrMeta.SchemaVer,
 	}
-	if id := ev.GetId(); len(id) == 16 {
-		copy(row.EventID[:], id)
+	id := ev.GetId()
+	if len(id) != 16 {
+		return AuditRow{}, oops.Code("AUDIT_PLUGIN_BAD_EVENT_ID").
+			With("length", len(id)).
+			Errorf("event.id must be 16 bytes (ULID); got %d", len(id))
 	}
+	copy(row.EventID[:], id)
 	if ts := ev.GetTimestamp(); ts != nil {
 		row.Timestamp = ts.AsTime()
 	}
