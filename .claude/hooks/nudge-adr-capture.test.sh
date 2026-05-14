@@ -135,5 +135,15 @@ expect_case "malformed-nudges" \
   "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$mal_path")" \
   0 'hookSpecificOutput.*PostToolUse'
 
+# --- Case 14: file_path missing entirely → silent ---
+expect_case "missing-file-path" \
+  '{"tool_name":"Edit","tool_input":{}}' \
+  0 ""
+
+# --- Case 15: file_path points at non-existent file → silent ---
+expect_case "nonexistent-file" \
+  '{"tool_name":"Edit","tool_input":{"file_path":"/tmp/this/does/not/exist/docs/specs/x.md"}}' \
+  0 ""
+
 echo "passed=$pass failed=$fail"
 [ "$fail" -eq 0 ]
