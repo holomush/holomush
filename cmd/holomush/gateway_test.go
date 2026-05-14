@@ -974,6 +974,13 @@ func TestAcceptLoopRefusesAtCapacity(t *testing.T) {
 // TestAcceptLoopReleasesSlotOnHandlerExit verifies that when a handler
 // goroutine exits, its slot is released back to the semaphore so later
 // accepts can proceed.
+//
+// Slot-release is observed via the production-supplied withOnSlotReleased
+// test hook (a deterministic channel signal) rather than polling the
+// telnet.ConnectionsActive Prometheus gauge with require.Eventually. The
+// gauge-polling variant was flaky under CI contention because handler exit
+// is event-driven (deadline expiry + goroutine scheduling) and a 2s polling
+// ceiling is borderline on slow runners. See bead holomush-rfzb.
 func TestAcceptLoopReleasesSlotOnHandlerExit(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -988,9 +995,20 @@ func TestAcceptLoopReleasesSlotOnHandlerExit(t *testing.T) {
 
 	slots := make(chan struct{}, 1)
 
+	// Buffered to absorb the release signal even if the test goroutine is
+	// not yet receiving when the deferred onSlotReleased fires.
+	released := make(chan struct{}, 4)
+
 	loopDone := make(chan struct{})
 	go func() {
-		runTelnetAcceptLoop(ctx, ln, &mockGRPCClient{}, cancel, slots, limits)
+		runTelnetAcceptLoop(ctx, ln, &mockGRPCClient{}, cancel, slots, limits,
+			withOnSlotReleased(func() {
+				select {
+				case released <- struct{}{}:
+				default:
+				}
+			}),
+		)
 		close(loopDone)
 	}()
 
@@ -999,19 +1017,27 @@ func TestAcceptLoopReleasesSlotOnHandlerExit(t *testing.T) {
 	require.NoError(t, err)
 	_ = c.Close()
 
-	// Wait for slot to free.
-	require.Eventually(t, func() bool {
-		return testutil.ToFloat64(telnet.ConnectionsActive) == 0
-	}, 2*time.Second, 10*time.Millisecond)
+	// Wait deterministically for the handler to exit and free its slot.
+	// 10s is the worst-case CI-runner timeout; under normal load this fires
+	// within tens of milliseconds (handler hits IdleReadTimeout=200ms above
+	// when it sees the closed peer).
+	select {
+	case <-released:
+	case <-time.After(10 * time.Second):
+		t.Fatal("handler did not release slot within 10s")
+	}
 
 	// Second connection MUST succeed (slot was freed).
 	c2, err := net.Dial("tcp", ln.Addr().String())
 	require.NoError(t, err)
 	defer func() { _ = c2.Close() }()
 
+	// Slot-acquire path: dial returns once TCP handshake completes, and the
+	// accept loop's Inc fires shortly after. Polling the gauge is fine here
+	// (no event-vs-poll mismatch); generous ceiling for CI contention.
 	require.Eventually(t, func() bool {
 		return testutil.ToFloat64(telnet.ConnectionsActive) >= 1
-	}, 2*time.Second, 10*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 
 	cancel()
 	_ = ln.Close()

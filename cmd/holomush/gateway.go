@@ -422,6 +422,27 @@ func (b *acceptBackoff) wait() time.Duration {
 	return b.current
 }
 
+// acceptLoopHooks bundles test-only observability seams. Production callers
+// pass no options; tests use withOnSlotReleased to receive a deterministic
+// signal when a handler goroutine exits and frees its semaphore slot.
+//
+// Without this seam, tests must poll the `telnet.ConnectionsActive` Prometheus
+// gauge with `require.Eventually`, which is timing-sensitive under CI
+// contention (handler.Handle's deadline-driven exit + goroutine scheduling +
+// gauge propagation can together exceed a 2s ceiling on a busy runner — see
+// bead holomush-rfzb).
+type acceptLoopHooks struct {
+	onSlotReleased func()
+}
+
+type acceptLoopOption func(*acceptLoopHooks)
+
+// withOnSlotReleased sets a callback fired after the handler goroutine
+// drains its slot and decrements the active-connections gauge. Test-only.
+func withOnSlotReleased(cb func()) acceptLoopOption {
+	return func(h *acceptLoopHooks) { h.onSlotReleased = cb }
+}
+
 // runTelnetAcceptLoop accepts telnet connections with exponential backoff on errors.
 // slots bounds the number of concurrent handler goroutines; a full slots channel
 // triggers immediate refusal via RefuseOverCapacity. The cancel function is called
@@ -433,7 +454,13 @@ func runTelnetAcceptLoop(
 	cancel func(),
 	slots chan struct{},
 	limits telnet.Limits,
+	opts ...acceptLoopOption,
 ) {
+	var hooks acceptLoopHooks
+	for _, opt := range opts {
+		opt(&hooks)
+	}
+
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error(
@@ -479,6 +506,9 @@ func runTelnetAcceptLoop(
 				defer func() {
 					<-slots
 					telnet.DecConnectionsActive()
+					if hooks.onSlotReleased != nil {
+						hooks.onSlotReleased()
+					}
 				}()
 				handler.Handle(ctx)
 			}()
