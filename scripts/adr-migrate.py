@@ -507,6 +507,9 @@ def main() -> int:
                  if a.superseded_by_number else ""))
 
     if not args.apply:
+        # INV-A18: dry-run MUST NOT mutate any state.
+        # Defensive: explicitly do NOT call bd_create / file rename / file writes.
+        # The print loop above only reads; we exit before apply_migration.
         print("\nDry-run complete. Re-run with --apply to mutate state.")
         return 0
 
