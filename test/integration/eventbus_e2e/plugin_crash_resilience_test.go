@@ -40,7 +40,8 @@ func TestPluginCrashResilienceDoesNotDuplicate(t *testing.T) {
 	bus := eventbustest.New(t)
 	pool := freshPool(t)
 
-	// scene_log schema. Matches plugins/core-scenes/migrations/000004.
+	// scene_log schema. Matches plugins/core-scenes/migrations/000004 +
+	// 000005 (Phase 7: dek_ref + dek_version per INV-P7-3).
 	ensurePluginSchema(ctx, t, pool, "plugin_core_scenes", `
 		CREATE TABLE IF NOT EXISTS plugin_core_scenes.scene_log (
 			id          BYTEA PRIMARY KEY,
@@ -53,6 +54,8 @@ func TestPluginCrashResilienceDoesNotDuplicate(t *testing.T) {
 			schema_ver  SMALLINT NOT NULL,
 			codec       TEXT NOT NULL,
 			js_seq      BIGINT,
+			dek_ref     BIGINT,
+			dek_version INTEGER,
 			inserted_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		);
 	`)
