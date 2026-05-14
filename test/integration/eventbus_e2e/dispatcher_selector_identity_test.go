@@ -30,16 +30,13 @@ func (fakeKeySelectorForIdentityTest) SelectForDecrypt(_ context.Context, _ code
 	return codec.NoKey, nil
 }
 
-// TestDispatcherAndHotTierShareSelector — INV-P7-9. Drives the
-// production wiring path at cmd/holomush/core.go:488. Until Task E.3
-// threads the same codec.KeySelector instance into both
-// PluginConsumerManager and history.NewReader, this test fails with the
-// PluginConsumerManager carrying a nil selector.
-//
-// The test is deliberately PARKED-FAIL per the bead acceptance criteria:
-// it asserts production wiring that lands in 1r0v.5 (Phase E.3). The
-// substrate (WithKeySelector option + KeySelectorForTest accessor) ships
-// in 1r0v.2.
+// TestDispatcherAndHotTierShareSelector — INV-P7-9. Mirrors the
+// production wiring path at cmd/holomush/core.go:488 +
+// cmd/holomush/sub_grpc.go::newHistoryReader: a single
+// codec.KeySelector instance is constructed once at boot and threaded
+// into both PluginConsumerManager (via WithKeySelector) and
+// history.Reader (via WithCodecSelector). E.3 (1r0v.5) lands the
+// production wiring; this test guards the contract.
 func TestDispatcherAndHotTierShareSelector(t *testing.T) {
 	t.Parallel()
 
@@ -49,14 +46,13 @@ func TestDispatcherAndHotTierShareSelector(t *testing.T) {
 	// rather than panicking on a struct-kind interface value.
 	selector := &fakeKeySelectorForIdentityTest{}
 
-	// Mirror cmd/holomush/core.go:488 — Phase 7 substrate accepts the
-	// option but production wiring does NOT pass it yet.
-	pcm := audit.NewPluginConsumerManager(nil /* js — not exercised here */)
+	// Mirror cmd/holomush/core.go:488 — Phase 7 production threads the
+	// shared selector into the consumer manager via WithKeySelector.
+	pcm := audit.NewPluginConsumerManager(nil, /* js — not exercised here */
+		audit.WithKeySelector(selector))
 
-	// Mirror cmd/holomush/sub_grpc.go's history.NewReader call. This
-	// branch DOES wire the selector via WithCodecSelector today; it's
-	// the dispatcher half (PluginConsumerManager) that's missing the
-	// option until E.3.
+	// Mirror cmd/holomush/sub_grpc.go's history.NewReader call — both
+	// halves get the same selector instance.
 	reader := history.NewReader(nil, nil, time.Hour, time.Now,
 		history.WithCodecSelector(selector))
 

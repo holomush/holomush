@@ -141,7 +141,7 @@ func TestGrpcSubsystemWrapPublisherWithoutRegistry(t *testing.T) {
 // the existing nil-auth behavior (no WithHistoryAuth appended).
 func TestNewHistoryReaderNilPreservesNilAuth(t *testing.T) {
 	cfg := eventbus.Config{}.Defaults()
-	reader := newHistoryReader(nil, nil, cfg, nil, nil, nil, nil, nil)
+	reader := newHistoryReader(nil, nil, cfg, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.NotNil(t, reader, "nil auth must still return a valid HistoryReader")
 }
 
@@ -174,7 +174,7 @@ func TestNewHistoryReaderWithCryptoDepsBuildsFallbackResolver(t *testing.T) {
 	auditEm := &grpcTestAuditEmitter{}
 	// pool=nil is safe here — the FallbackResolver's ColdTierLookup (backed by
 	// a nil pool) is only invoked on actual reads, not construction.
-	reader := newHistoryReader(nil, nil, cfg, nil, nil, guard, dekMgr, auditEm)
+	reader := newHistoryReader(nil, nil, cfg, nil, nil, guard, dekMgr, auditEm, nil, nil, nil, nil)
 	assert.NotNil(t, reader, "non-nil crypto deps must still return a valid HistoryReader")
 }
 

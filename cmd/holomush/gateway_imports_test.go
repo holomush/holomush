@@ -57,6 +57,12 @@ var coreOnlyFiles = map[string]struct{}{
 	"cmd_admin_test.go":      {},
 	"cmd_admin_totp.go":      {},
 	"cmd_admin_totp_deps.go": {},
+	// Phase 7 INV-P7-9 + INV-P7-7 + INV-P7-15 wiring (holomush-1r0v.5).
+	// Constructs the boot-time codec.KeySelector + PluginDowngradeFence
+	// helpers (always-sensitive set, crypto_keys lookup, violation
+	// emitter). Imports eventbus/codec/history/plugin; core-only by
+	// design (matches crypto_rekey_wiring.go precedent).
+	"phase7_fence_wiring.go": {},
 }
 
 var forbidden = []string{
