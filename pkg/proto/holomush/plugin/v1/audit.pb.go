@@ -26,19 +26,142 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type AuditEventRequest struct {
+// AuditRow is the canonical wire shape for plugin-owned audit rows.
+// Used in both directions: dispatcher → plugin (AuditEventRequest)
+// and plugin → host (QueryHistoryResponse). Mirrors the events_audit
+// row shape so the proto wire format and the storage shape are
+// coupled.
+type AuditRow struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Event *v1.Event              `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
-	// Headers carried verbatim from the JS message (App-Codec,
-	// App-Schema-Version, App-Event-Type, etc.) so the plugin can store them.
-	Headers       map[string]string `protobuf:"bytes,2,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Cleartext projection fields
+	Id        []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"` // 16-byte ULID
+	Subject   string                 `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
+	Type      string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	Timestamp *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Actor     *v1.Actor              `protobuf:"bytes,5,opt,name=actor,proto3" json:"actor,omitempty"`
+	// Crypto envelope
+	Codec   string `protobuf:"bytes,6,opt,name=codec,proto3" json:"codec,omitempty"`     // "identity" | "xchacha20poly1305-v1"
+	Payload []byte `protobuf:"bytes,7,opt,name=payload,proto3" json:"payload,omitempty"` // ciphertext when codec != "identity"
+	// DEK reference — absent on identity codec, required otherwise.
+	// Host enforces the agreement (codec=identity ⇔ both absent).
+	DekRef     *uint64 `protobuf:"varint,8,opt,name=dek_ref,json=dekRef,proto3,oneof" json:"dek_ref,omitempty"`
+	DekVersion *uint32 `protobuf:"varint,9,opt,name=dek_version,json=dekVersion,proto3,oneof" json:"dek_version,omitempty"`
+	// Audit schema version (was App-Schema-Version header).
+	SchemaVer     int32 `protobuf:"varint,10,opt,name=schema_ver,json=schemaVer,proto3" json:"schema_ver,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuditRow) Reset() {
+	*x = AuditRow{}
+	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuditRow) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuditRow) ProtoMessage() {}
+
+func (x *AuditRow) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuditRow.ProtoReflect.Descriptor instead.
+func (*AuditRow) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_audit_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *AuditRow) GetId() []byte {
+	if x != nil {
+		return x.Id
+	}
+	return nil
+}
+
+func (x *AuditRow) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+func (x *AuditRow) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *AuditRow) GetTimestamp() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Timestamp
+	}
+	return nil
+}
+
+func (x *AuditRow) GetActor() *v1.Actor {
+	if x != nil {
+		return x.Actor
+	}
+	return nil
+}
+
+func (x *AuditRow) GetCodec() string {
+	if x != nil {
+		return x.Codec
+	}
+	return ""
+}
+
+func (x *AuditRow) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *AuditRow) GetDekRef() uint64 {
+	if x != nil && x.DekRef != nil {
+		return *x.DekRef
+	}
+	return 0
+}
+
+func (x *AuditRow) GetDekVersion() uint32 {
+	if x != nil && x.DekVersion != nil {
+		return *x.DekVersion
+	}
+	return 0
+}
+
+func (x *AuditRow) GetSchemaVer() int32 {
+	if x != nil {
+		return x.SchemaVer
+	}
+	return 0
+}
+
+type AuditEventRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Row           *AuditRow              `protobuf:"bytes,1,opt,name=row,proto3" json:"row,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AuditEventRequest) Reset() {
 	*x = AuditEventRequest{}
-	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[0]
+	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -50,7 +173,7 @@ func (x *AuditEventRequest) String() string {
 func (*AuditEventRequest) ProtoMessage() {}
 
 func (x *AuditEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[0]
+	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -63,19 +186,12 @@ func (x *AuditEventRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuditEventRequest.ProtoReflect.Descriptor instead.
 func (*AuditEventRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_audit_proto_rawDescGZIP(), []int{0}
+	return file_holomush_plugin_v1_audit_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *AuditEventRequest) GetEvent() *v1.Event {
+func (x *AuditEventRequest) GetRow() *AuditRow {
 	if x != nil {
-		return x.Event
-	}
-	return nil
-}
-
-func (x *AuditEventRequest) GetHeaders() map[string]string {
-	if x != nil {
-		return x.Headers
+		return x.Row
 	}
 	return nil
 }
@@ -88,7 +204,7 @@ type AuditEventResponse struct {
 
 func (x *AuditEventResponse) Reset() {
 	*x = AuditEventResponse{}
-	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[1]
+	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -100,7 +216,7 @@ func (x *AuditEventResponse) String() string {
 func (*AuditEventResponse) ProtoMessage() {}
 
 func (x *AuditEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[1]
+	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -113,7 +229,7 @@ func (x *AuditEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuditEventResponse.ProtoReflect.Descriptor instead.
 func (*AuditEventResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_audit_proto_rawDescGZIP(), []int{1}
+	return file_holomush_plugin_v1_audit_proto_rawDescGZIP(), []int{2}
 }
 
 type QueryHistoryRequest struct {
@@ -138,7 +254,7 @@ type QueryHistoryRequest struct {
 
 func (x *QueryHistoryRequest) Reset() {
 	*x = QueryHistoryRequest{}
-	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[2]
+	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -150,7 +266,7 @@ func (x *QueryHistoryRequest) String() string {
 func (*QueryHistoryRequest) ProtoMessage() {}
 
 func (x *QueryHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[2]
+	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -163,7 +279,7 @@ func (x *QueryHistoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryHistoryRequest.ProtoReflect.Descriptor instead.
 func (*QueryHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_audit_proto_rawDescGZIP(), []int{2}
+	return file_holomush_plugin_v1_audit_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *QueryHistoryRequest) GetSubject() string {
@@ -224,14 +340,14 @@ func (x *QueryHistoryRequest) GetCaller() *v1.Actor {
 
 type QueryHistoryResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Event         *v1.Event              `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
+	Row           *AuditRow              `protobuf:"bytes,1,opt,name=row,proto3" json:"row,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *QueryHistoryResponse) Reset() {
 	*x = QueryHistoryResponse{}
-	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[3]
+	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -243,7 +359,7 @@ func (x *QueryHistoryResponse) String() string {
 func (*QueryHistoryResponse) ProtoMessage() {}
 
 func (x *QueryHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[3]
+	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -256,12 +372,12 @@ func (x *QueryHistoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryHistoryResponse.ProtoReflect.Descriptor instead.
 func (*QueryHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_audit_proto_rawDescGZIP(), []int{3}
+	return file_holomush_plugin_v1_audit_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *QueryHistoryResponse) GetEvent() *v1.Event {
+func (x *QueryHistoryResponse) GetRow() *AuditRow {
 	if x != nil {
-		return x.Event
+		return x.Row
 	}
 	return nil
 }
@@ -270,13 +386,26 @@ var File_holomush_plugin_v1_audit_proto protoreflect.FileDescriptor
 
 const file_holomush_plugin_v1_audit_proto_rawDesc = "" +
 	"\n" +
-	"\x1eholomush/plugin/v1/audit.proto\x12\x12holomush.plugin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a#holomush/eventbus/v1/eventbus.proto\"\xd0\x01\n" +
-	"\x11AuditEventRequest\x121\n" +
-	"\x05event\x18\x01 \x01(\v2\x1b.holomush.eventbus.v1.EventR\x05event\x12L\n" +
-	"\aheaders\x18\x02 \x03(\v22.holomush.plugin.v1.AuditEventRequest.HeadersEntryR\aheaders\x1a:\n" +
-	"\fHeadersEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x14\n" +
+	"\x1eholomush/plugin/v1/audit.proto\x12\x12holomush.plugin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a#holomush/eventbus/v1/eventbus.proto\"\xe4\x02\n" +
+	"\bAuditRow\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\fR\x02id\x12\x18\n" +
+	"\asubject\x18\x02 \x01(\tR\asubject\x12\x12\n" +
+	"\x04type\x18\x03 \x01(\tR\x04type\x128\n" +
+	"\ttimestamp\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x121\n" +
+	"\x05actor\x18\x05 \x01(\v2\x1b.holomush.eventbus.v1.ActorR\x05actor\x12\x14\n" +
+	"\x05codec\x18\x06 \x01(\tR\x05codec\x12\x18\n" +
+	"\apayload\x18\a \x01(\fR\apayload\x12\x1c\n" +
+	"\adek_ref\x18\b \x01(\x04H\x00R\x06dekRef\x88\x01\x01\x12$\n" +
+	"\vdek_version\x18\t \x01(\rH\x01R\n" +
+	"dekVersion\x88\x01\x01\x12\x1d\n" +
+	"\n" +
+	"schema_ver\x18\n" +
+	" \x01(\x05R\tschemaVerB\n" +
+	"\n" +
+	"\b_dek_refB\x0e\n" +
+	"\f_dek_version\"C\n" +
+	"\x11AuditEventRequest\x12.\n" +
+	"\x03row\x18\x01 \x01(\v2\x1c.holomush.plugin.v1.AuditRowR\x03row\"\x14\n" +
 	"\x12AuditEventResponse\"\xc1\x02\n" +
 	"\x13QueryHistoryRequest\x12\x18\n" +
 	"\asubject\x18\x01 \x01(\tR\asubject\x12\x14\n" +
@@ -287,9 +416,9 @@ const file_holomush_plugin_v1_audit_proto_rawDesc = "" +
 	"\n" +
 	"not_before\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tnotBefore\x127\n" +
 	"\tnot_after\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\bnotAfter\x123\n" +
-	"\x06caller\x18\b \x01(\v2\x1b.holomush.eventbus.v1.ActorR\x06caller\"I\n" +
-	"\x14QueryHistoryResponse\x121\n" +
-	"\x05event\x18\x01 \x01(\v2\x1b.holomush.eventbus.v1.EventR\x05event2\xd6\x01\n" +
+	"\x06caller\x18\b \x01(\v2\x1b.holomush.eventbus.v1.ActorR\x06caller\"F\n" +
+	"\x14QueryHistoryResponse\x12.\n" +
+	"\x03row\x18\x01 \x01(\v2\x1c.holomush.plugin.v1.AuditRowR\x03row2\xd6\x01\n" +
 	"\x12PluginAuditService\x12[\n" +
 	"\n" +
 	"AuditEvent\x12%.holomush.plugin.v1.AuditEventRequest\x1a&.holomush.plugin.v1.AuditEventResponse\x12c\n" +
@@ -311,31 +440,31 @@ func file_holomush_plugin_v1_audit_proto_rawDescGZIP() []byte {
 
 var file_holomush_plugin_v1_audit_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_holomush_plugin_v1_audit_proto_goTypes = []any{
-	(*AuditEventRequest)(nil),     // 0: holomush.plugin.v1.AuditEventRequest
-	(*AuditEventResponse)(nil),    // 1: holomush.plugin.v1.AuditEventResponse
-	(*QueryHistoryRequest)(nil),   // 2: holomush.plugin.v1.QueryHistoryRequest
-	(*QueryHistoryResponse)(nil),  // 3: holomush.plugin.v1.QueryHistoryResponse
-	nil,                           // 4: holomush.plugin.v1.AuditEventRequest.HeadersEntry
-	(*v1.Event)(nil),              // 5: holomush.eventbus.v1.Event
-	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
-	(*v1.Actor)(nil),              // 7: holomush.eventbus.v1.Actor
+	(*AuditRow)(nil),              // 0: holomush.plugin.v1.AuditRow
+	(*AuditEventRequest)(nil),     // 1: holomush.plugin.v1.AuditEventRequest
+	(*AuditEventResponse)(nil),    // 2: holomush.plugin.v1.AuditEventResponse
+	(*QueryHistoryRequest)(nil),   // 3: holomush.plugin.v1.QueryHistoryRequest
+	(*QueryHistoryResponse)(nil),  // 4: holomush.plugin.v1.QueryHistoryResponse
+	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
+	(*v1.Actor)(nil),              // 6: holomush.eventbus.v1.Actor
 }
 var file_holomush_plugin_v1_audit_proto_depIdxs = []int32{
-	5, // 0: holomush.plugin.v1.AuditEventRequest.event:type_name -> holomush.eventbus.v1.Event
-	4, // 1: holomush.plugin.v1.AuditEventRequest.headers:type_name -> holomush.plugin.v1.AuditEventRequest.HeadersEntry
-	6, // 2: holomush.plugin.v1.QueryHistoryRequest.not_before:type_name -> google.protobuf.Timestamp
-	6, // 3: holomush.plugin.v1.QueryHistoryRequest.not_after:type_name -> google.protobuf.Timestamp
-	7, // 4: holomush.plugin.v1.QueryHistoryRequest.caller:type_name -> holomush.eventbus.v1.Actor
-	5, // 5: holomush.plugin.v1.QueryHistoryResponse.event:type_name -> holomush.eventbus.v1.Event
-	0, // 6: holomush.plugin.v1.PluginAuditService.AuditEvent:input_type -> holomush.plugin.v1.AuditEventRequest
-	2, // 7: holomush.plugin.v1.PluginAuditService.QueryHistory:input_type -> holomush.plugin.v1.QueryHistoryRequest
-	1, // 8: holomush.plugin.v1.PluginAuditService.AuditEvent:output_type -> holomush.plugin.v1.AuditEventResponse
-	3, // 9: holomush.plugin.v1.PluginAuditService.QueryHistory:output_type -> holomush.plugin.v1.QueryHistoryResponse
-	8, // [8:10] is the sub-list for method output_type
-	6, // [6:8] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	5, // 0: holomush.plugin.v1.AuditRow.timestamp:type_name -> google.protobuf.Timestamp
+	6, // 1: holomush.plugin.v1.AuditRow.actor:type_name -> holomush.eventbus.v1.Actor
+	0, // 2: holomush.plugin.v1.AuditEventRequest.row:type_name -> holomush.plugin.v1.AuditRow
+	5, // 3: holomush.plugin.v1.QueryHistoryRequest.not_before:type_name -> google.protobuf.Timestamp
+	5, // 4: holomush.plugin.v1.QueryHistoryRequest.not_after:type_name -> google.protobuf.Timestamp
+	6, // 5: holomush.plugin.v1.QueryHistoryRequest.caller:type_name -> holomush.eventbus.v1.Actor
+	0, // 6: holomush.plugin.v1.QueryHistoryResponse.row:type_name -> holomush.plugin.v1.AuditRow
+	1, // 7: holomush.plugin.v1.PluginAuditService.AuditEvent:input_type -> holomush.plugin.v1.AuditEventRequest
+	3, // 8: holomush.plugin.v1.PluginAuditService.QueryHistory:input_type -> holomush.plugin.v1.QueryHistoryRequest
+	2, // 9: holomush.plugin.v1.PluginAuditService.AuditEvent:output_type -> holomush.plugin.v1.AuditEventResponse
+	4, // 10: holomush.plugin.v1.PluginAuditService.QueryHistory:output_type -> holomush.plugin.v1.QueryHistoryResponse
+	9, // [9:11] is the sub-list for method output_type
+	7, // [7:9] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_holomush_plugin_v1_audit_proto_init() }
@@ -343,6 +472,7 @@ func file_holomush_plugin_v1_audit_proto_init() {
 	if File_holomush_plugin_v1_audit_proto != nil {
 		return
 	}
+	file_holomush_plugin_v1_audit_proto_msgTypes[0].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
