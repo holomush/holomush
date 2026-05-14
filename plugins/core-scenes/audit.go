@@ -203,12 +203,12 @@ func (s *SceneAuditServer) AuditEvent(ctx context.Context, req *pluginv1.AuditEv
 
 	var dekRef *int64
 	if row.DekRef != nil {
-		v := int64(*row.DekRef)
+		v := int64(*row.DekRef) //nolint:gosec // scene_log.dek_ref column is BIGINT (signed); uint64→int64 matches column shape
 		dekRef = &v
 	}
 	var dekVersion *int32
 	if row.DekVersion != nil {
-		v := int32(*row.DekVersion)
+		v := int32(*row.DekVersion) //nolint:gosec // scene_log.dek_version column is INTEGER (signed); uint32→int32 matches column shape
 		dekVersion = &v
 	}
 
@@ -354,12 +354,12 @@ func (s *SceneAuditServer) QueryHistory(req *pluginv1.QueryHistoryRequest, strea
 		r := &rows[i]
 		var dekRefU64 *uint64
 		if r.dekRef != nil {
-			v := uint64(*r.dekRef)
+			v := uint64(*r.dekRef) //nolint:gosec // dek_ref originates as crypto_keys.id (always >= 0); int64→uint64 widening is safe
 			dekRefU64 = &v
 		}
 		var dekVerU32 *uint32
 		if r.dekVersion != nil {
-			v := uint32(*r.dekVersion)
+			v := uint32(*r.dekVersion) //nolint:gosec // dek_version is a 1-based counter (always >= 0); int32→uint32 widening is safe
 			dekVerU32 = &v
 		}
 		resp := &pluginv1.QueryHistoryResponse{
@@ -373,7 +373,7 @@ func (s *SceneAuditServer) QueryHistory(req *pluginv1.QueryHistoryRequest, strea
 				Payload:    r.payload,
 				DekRef:     dekRefU64,
 				DekVersion: dekVerU32,
-				SchemaVer:  int32(r.schemaVer),
+				SchemaVer:  int32(r.schemaVer), //nolint:gosec // schema_ver column is SMALLINT (validated <= 32767 at insert); int→int32 is safe
 			},
 		}
 		if err := stream.Send(resp); err != nil {

@@ -25,6 +25,7 @@ type fakeKeySelectorForIdentityTest struct{}
 func (fakeKeySelectorForIdentityTest) SelectForEncrypt(_ context.Context, _ string) (codec.Name, codec.KeyLabel, error) {
 	return codec.NameIdentity, "", nil
 }
+
 func (fakeKeySelectorForIdentityTest) SelectForDecrypt(_ context.Context, _ codec.Name, _ codec.KeyID) (codec.Key, error) {
 	return codec.NoKey, nil
 }

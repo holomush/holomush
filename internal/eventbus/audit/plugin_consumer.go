@@ -376,11 +376,11 @@ func buildAuditRow(msg jetstream.Msg) (*pluginv1.AuditRow, error) {
 		SchemaVer: hdrMeta.SchemaVer,
 	}
 	if hdrMeta.DEKRef != nil {
-		v := uint64(*hdrMeta.DEKRef)
+		v := uint64(*hdrMeta.DEKRef) //nolint:gosec // dek_ref originates as crypto_keys.id (BIGSERIAL, always >= 0); int64→uint64 widening is safe
 		row.DekRef = &v
 	}
 	if hdrMeta.DEKVersion != nil {
-		v := uint32(*hdrMeta.DEKVersion)
+		v := uint32(*hdrMeta.DEKVersion) //nolint:gosec // dek_version originates as a 1-based counter (always >= 0); int32→uint32 is safe
 		row.DekVersion = &v
 	}
 	return row, nil

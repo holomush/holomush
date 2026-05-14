@@ -14,12 +14,19 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	// audit imports the same-module internal package because Layer 2
-	// StoreFromMessage MUST use the same parser as the host's audit
-	// projection (INV-P7-2). Same-module import is structurally permitted
-	// by Go's internal/ rules. SDK consumers (plugin authors) MUST NOT
-	// follow this precedent — internal/ is host-only.
-	audit "github.com/holomush/holomush/internal/eventbus/audit"
+	// auditheader is a leaf sub-package that owns the JetStream-header
+	// parser used by both the host audit projection and SDK Layer 2.
+	// Going through the leaf rather than internal/eventbus/audit avoids
+	// the test-time cycle that would otherwise form via internal/core's
+	// cross-package event-type assertions (event_test.go imports
+	// pkg/plugin; the audit package transitively imports internal/core
+	// through internal/eventbus.RenderingPublisher).
+	//
+	// Same-module import of the internal/ leaf is structurally permitted
+	// by Go's internal/ rules (both packages live under
+	// github.com/holomush/holomush/). SDK consumers (plugin authors)
+	// MUST NOT follow this precedent — internal/ is host-only.
+	"github.com/holomush/holomush/internal/eventbus/audit/auditheader"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	pluginauditpb "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -212,7 +219,7 @@ type AuditRow struct {
 //	AUDIT_DEK_REF_PARSE_FAILED / AUDIT_DEK_VERSION_PARSE_FAILED
 //	  (from audit.ParseAuditHeaders).
 func StoreFromMessage(msg jetstream.Msg) (AuditRow, error) {
-	hdrMeta, err := audit.ParseAuditHeaders(msg.Headers())
+	hdrMeta, err := auditheader.Parse(msg.Headers())
 	if err != nil {
 		return AuditRow{}, err //nolint:wrapcheck // error already coded by parser
 	}
@@ -237,11 +244,11 @@ func StoreFromMessage(msg jetstream.Msg) (AuditRow, error) {
 		row.Timestamp = ts.AsTime()
 	}
 	if hdrMeta.DEKRef != nil {
-		v := uint64(*hdrMeta.DEKRef)
+		v := uint64(*hdrMeta.DEKRef) //nolint:gosec // dek_ref originates as crypto_keys.id (BIGSERIAL, always >= 0); int64→uint64 widening is safe
 		row.DEKRef = &v
 	}
 	if hdrMeta.DEKVersion != nil {
-		v := uint32(*hdrMeta.DEKVersion)
+		v := uint32(*hdrMeta.DEKVersion) //nolint:gosec // dek_version originates as a 1-based counter (always >= 0); int32→uint32 is safe
 		row.DEKVersion = &v
 	}
 	return row, nil
@@ -263,7 +270,7 @@ func StoreFromMessage(msg jetstream.Msg) (AuditRow, error) {
 // agreement check to host-side code per spec §4.5 (host owns the
 // envelope semantics).
 func LoadForQuery(row AuditRow) (*pluginauditpb.AuditRow, error) {
-	proto := &pluginauditpb.AuditRow{
+	out := &pluginauditpb.AuditRow{
 		Id:        row.EventID[:],
 		Subject:   row.Subject,
 		Type:      row.Type,
@@ -274,10 +281,10 @@ func LoadForQuery(row AuditRow) (*pluginauditpb.AuditRow, error) {
 		SchemaVer: row.SchemaVer,
 	}
 	if row.DEKRef != nil {
-		proto.DekRef = row.DEKRef
+		out.DekRef = row.DEKRef
 	}
 	if row.DEKVersion != nil {
-		proto.DekVersion = row.DEKVersion
+		out.DekVersion = row.DEKVersion
 	}
-	return proto, nil
+	return out, nil
 }

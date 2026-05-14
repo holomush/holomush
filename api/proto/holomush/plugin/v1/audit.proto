@@ -29,15 +29,15 @@ service PluginAuditService {
 // coupled.
 message AuditRow {
   // Cleartext projection fields
-  bytes id = 1;                                   // 16-byte ULID
+  bytes id = 1; // 16-byte ULID
   string subject = 2;
   string type = 3;
   google.protobuf.Timestamp timestamp = 4;
   holomush.eventbus.v1.Actor actor = 5;
 
   // Crypto envelope
-  string codec = 6;                               // "identity" | "xchacha20poly1305-v1"
-  bytes payload = 7;                              // ciphertext when codec != "identity"
+  string codec = 6; // "identity" | "xchacha20poly1305-v1"
+  bytes payload = 7; // ciphertext when codec != "identity"
 
   // DEK reference — absent on identity codec, required otherwise.
   // Host enforces the agreement (codec=identity ⇔ both absent).
