@@ -4,9 +4,11 @@
 package history_test
 
 import (
-	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -19,8 +21,8 @@ import (
 // invariants table in
 // docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md
 // §2. For each INV-P7-N (1..16) plus the two plan-internal substrate
-// keys (INV-P7-7b, INV-P7-C0), the test rg-greps the repo for the named
-// test that pins the invariant.
+// keys (INV-P7-7b, INV-P7-C0), the test verifies the named test that
+// pins the invariant exists somewhere in the repo's *_test.go corpus.
 //
 // If this test FAILS:
 //   - Either an invariant was removed without updating this table, OR
@@ -36,8 +38,10 @@ import (
 // named test in the Go corpus.
 //
 // Implementation: walk the test file's location via runtime.Caller(0),
-// climb until a `go.mod` is found, and rg from there. This avoids the
-// cwd-fragility of relative paths like `../../`.
+// climb until a `go.mod` is found, then walk the tree with go/parser
+// to enumerate top-level Test* function names. Pure-Go (no external
+// `rg` dependency) so the test runs in any environment with a Go
+// toolchain — including stripped-down CI runners.
 func TestPhase7InvariantsHaveNamedTests(t *testing.T) {
 	cases := []struct {
 		inv      string
@@ -66,31 +70,13 @@ func TestPhase7InvariantsHaveNamedTests(t *testing.T) {
 	}
 
 	repoRoot := findRepoRoot(t)
+	testNames := collectTestFuncNames(t, repoRoot)
 
 	for _, tc := range cases {
 		t.Run(tc.inv, func(t *testing.T) {
-			// rg -l prints filenames containing matches, one per line.
-			// `func <Name>(` anchors on the function definition so we
-			// don't false-positive on call sites OR on a longer test
-			// name that begins with the same prefix (e.g. renaming
-			// TestFenceRefusesUnknownDekRef to
-			// TestFenceRefusesUnknownDekRefRENAMED would silently still
-			// match without the trailing `(`).
-			cmd := exec.Command("rg", "-l", `func `+tc.testName+`\(`, repoRoot) //nolint:gosec // testName values are compile-time constants from the cases slice
-			out, err := cmd.Output()
-			if err != nil {
-				// rg exits with code 1 when no matches are found. Any other
-				// exit code (or absent rg binary) is an infrastructure
-				// failure — surface it loudly rather than silently passing
-				// or hanging.
-				var exitErr *exec.ExitError
-				if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
-					t.Fatalf("%s: named test %q NOT FOUND under %s", tc.inv, tc.testName, repoRoot)
-				}
-				t.Fatalf("%s: rg failed for %q: %v", tc.inv, tc.testName, err)
+			if _, ok := testNames[tc.testName]; !ok {
+				t.Fatalf("%s: named test %q NOT FOUND under %s", tc.inv, tc.testName, repoRoot)
 			}
-			require.NotEmpty(t, strings.TrimSpace(string(out)),
-				"%s: named test %q not found in tree (rg returned empty)", tc.inv, tc.testName)
 		})
 	}
 }
@@ -115,4 +101,65 @@ func findRepoRoot(t *testing.T) string {
 		}
 		dir = parent
 	}
+}
+
+// collectTestFuncNames walks repoRoot, parses every *_test.go file with
+// go/parser, and returns the set of top-level Test* function names found.
+// Skipped directories: vendor/, node_modules/, build/, and any dot-prefixed
+// directory (covers .git/, .jj/, .beads/, .claude/, .svelte-kit/, etc.).
+//
+// A single malformed/generated test file does not fail the whole walk —
+// the parse error is logged and the file is skipped. Drift detection still
+// works as long as the test corpus is parseable.
+func collectTestFuncNames(t *testing.T, repoRoot string) map[string]struct{} {
+	t.Helper()
+	names := make(map[string]struct{})
+	fset := token.NewFileSet()
+
+	err := filepath.WalkDir(repoRoot, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if name == "vendor" || name == "node_modules" || name == "build" {
+				return filepath.SkipDir
+			}
+			// Skip any dot-prefixed directory (.git, .jj, .beads, .claude,
+			// .svelte-kit, etc.) — these never hold load-bearing Go test
+			// files. The repoRoot itself never matches because filepath.Dir
+			// strips the trailing slash from a non-dot input path.
+			if strings.HasPrefix(name, ".") && path != repoRoot {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		f, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
+		if err != nil {
+			// Tolerate a single malformed file (generated stubs, intentionally
+			// broken fixtures) — drift detection survives partial corpus.
+			t.Logf("parse %s: %v (skipping)", path, err)
+			return nil
+		}
+		for _, decl := range f.Decls {
+			fd, ok := decl.(*ast.FuncDecl)
+			if !ok {
+				continue
+			}
+			// Top-level (no receiver) Test* function.
+			if fd.Recv != nil {
+				continue
+			}
+			if !strings.HasPrefix(fd.Name.Name, "Test") {
+				continue
+			}
+			names[fd.Name.Name] = struct{}{}
+		}
+		return nil
+	})
+	require.NoError(t, err, "failed walking %s", repoRoot)
+	return names
 }
