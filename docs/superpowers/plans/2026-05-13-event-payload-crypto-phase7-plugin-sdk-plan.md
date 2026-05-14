@@ -12,6 +12,8 @@
 
 **Parent epic:** `holomush-1r0v`.
 
+**Plan revision:** v3. v2 returned NOT READY from plan-reviewer with 4 BLOCKING (real catches: `AuditRowOf` Builder-alternative deferral hedge; sync/async fence emit contradiction; B.1.5 wire-format hedging not fully removed; struct-value mutation bug — `eventbus.Event` is a value type, so the fence MUST return a modified copy, not mutate the local). v3 patches: all 4 BLOCKING + all 5 non-blocking applied; `LoadForQuery` and `AuditRowToEvent` function bodies converted to prose contracts per user direction.
+
 **Plan revision:** v2. v1 (this same file's git history) returned NOT READY from `plan-reviewer` with 7 BLOCKING findings, including one real architectural bug: the fence's `Next()` returning a stream-fatal error short-circuits the entire stream, violating the spec's per-row `metadata_only=true` refusal contract. v2 patches:
 
 - **C.3 architectural decision pinned** (was deferred to "agent decides"): fence sees the underlying `*pluginauditpb.AuditRow` via an unexported `auditRow *pluginauditpb.AuditRow` field stamped onto `eventbus.Event` by the audit-package router. Package-internal accessor reads it; no interface refactor needed.
@@ -567,26 +569,15 @@ func StoreFromMessage(msg jetstream.Msg) (AuditRow, error) {
 // LoadForQuery converts a stored AuditRow into the proto frame returned
 // by PluginAuditService.QueryHistory. Round-trip stable with
 // StoreFromMessage (INV-P7-5).
-func LoadForQuery(row AuditRow) (*pluginauditpb.AuditRow, error) {
-	proto := &pluginauditpb.AuditRow{
-		Id:        row.EventID[:],
-		Subject:   row.Subject,
-		Type:      row.Type,
-		Timestamp: timestamppb.New(row.Timestamp),
-		Actor:     row.Actor,
-		Codec:     row.Codec,
-		Payload:   row.Payload,
-		SchemaVer: row.SchemaVer,
-	}
-	if row.DEKRef != nil {
-		proto.DekRef = row.DEKRef
-	}
-	if row.DEKVersion != nil {
-		proto.DekVersion = row.DEKVersion
-	}
-	return proto, nil
-}
+func LoadForQuery(row AuditRow) (*pluginauditpb.AuditRow, error)
 ```
+
+**`LoadForQuery` behavior contract:**
+
+- Per-field copy from `AuditRow` to `*pluginauditpb.AuditRow`: EventID → Id (use `row.EventID[:]`); Subject, Type, Codec, Payload, SchemaVer → same-named proto fields verbatim; Timestamp → `timestamppb.New(row.Timestamp)`; Actor → same.
+- Optional fields: if `row.DEKRef != nil`, set `proto.DekRef = row.DEKRef` (proto type `*uint64`); same for DEKVersion.
+- Returns `(*pluginauditpb.AuditRow, error)` — error is reserved for future validation; in v1 always returns `(proto, nil)`.
+- Round-trip stability with `StoreFromMessage` is asserted by `TestAuditRowRoundTripPreservesAllFields` (INV-P7-5).
 
 Add imports to the existing `pkg/plugin/audit.go` import block:
 
@@ -802,7 +793,7 @@ Update `internal/eventbus/audit/plugin_consumer.go`. Replace the `decodeEnvelope
 
 1. Parses JS headers via `ParseAuditHeaders` (Task A.1).
 2. Decodes the proto envelope bytes from `msg.Data()` ONLY for projection fields (id, subject, type, timestamp, actor) — does NOT decrypt the payload. For `codec=identity`, the envelope's payload IS the plaintext (kept verbatim); for `codec != identity`, the envelope's payload IS the ciphertext (kept verbatim).
-3. Constructs `*pluginauditpb.AuditRow` with projection fields + `Payload: msg.Data()` if the bus carries the codec-encoded bytes raw, or extracts the raw payload from the envelope per current Phase 3 conventions (verify against `internal/eventbus/publisher.go` and `internal/eventbus/codec/` to confirm the wire-format invariant — INV-49 says envelope byte-equality across emit→audit→cold-read, so `msg.Data()` is the codec-encoded envelope proto bytes; the row's `payload` field gets the *envelope's* payload (which is the ciphertext for encrypted events) not `msg.Data()` itself).
+3. Constructs `*pluginauditpb.AuditRow` with projection fields drawn from the unmarshaled envelope. `AuditRow.Payload` is set to `envelope.GetPayload()` — the codec encrypts the payload field in place inside the proto envelope (per master INV-49 envelope byte-equality + verified at `internal/eventbus/publisher.go:266-292` encode path + `internal/eventbus/history/hot_jetstream.go:441-444` decode path); projection fields stay cleartext regardless of codec. `msg.Data()` is the marshaled envelope (NOT the payload).
 
 Detailed pseudo-Go (the agent must verify wire-format details before locking the exact field extraction):
 
@@ -1356,7 +1347,7 @@ import "github.com/holomush/holomush/internal/eventbus/codec"
 func (r *Reader) KeySelectorForTest() codec.KeySelector { return r.selector }
 ```
 
-**Verify the field name** on `Reader` struct before pinning. Run `rg -n "selector\s+codec\.KeySelector\|WithCodecSelector" internal/eventbus/history/tier.go` to find the actual field name. If it's not `r.selector` (e.g., it might be `r.codecSelector` set by `WithCodecSelector` option), update the accessor body to match. The field name is implementation-internal and may have evolved since the spec was written.
+Field name verified: `r.selector` at `internal/eventbus/history/tier.go:283` (`selector codec.KeySelector`). Accessor body `return r.selector` is correct as written.
 
 - [ ] **Step B.4.3: Run integration test (will fail until Task E.2 wires deps.go)**
 
@@ -1574,7 +1565,7 @@ type Event struct {
 }
 ```
 
-(Concrete approach for unexported-cross-package access: a same-package accessor file `internal/eventbus/audit_row_access.go` exporting `func AuditRowOf(ev Event) *pluginauditpb.AuditRow { return ev.auditRow }`, used by the fence. Package-internal to eventbus, called from history via that package's existing `eventbus.HistoryStream` API surface. Alternative: stamp via a Builder pattern — agent picks the simpler shape at implementation time.)
+**Pinned accessor (no alternative):** new file `internal/eventbus/audit_row_access.go` (package `eventbus`) exporting `func AuditRowOf(ev Event) *pluginauditpb.AuditRow { return ev.auditRow }`. Called from the fence at `internal/eventbus/history/plugin_downgrade_fence.go` as `eventbus.AuditRowOf(ev)`. Import direction: history → eventbus (already established at `internal/eventbus/history/tier.go`); no new edges, no cycle.
 
 - [ ] **Step C.0.3: Stamp `Event.auditRow` in the audit-package router**
 
@@ -1674,33 +1665,15 @@ import (
 // AuditRowToEvent converts a plugin-returned AuditRow into the
 // *eventbusv1.Event shape consumed by aad.Build for AAD
 // reconstruction (INV-P7-16, master INV-25).
-//
-// Per-field copy contract — see spec §5.4:
-//   - id, subject, type, timestamp, actor: copied verbatim
-//   - codec, dek_ref, dek_version: NOT copied (passed as scalar
-//     args to aad.Build separately)
-//   - payload: NOT copied (ciphertext input to AEAD, not AAD)
-//   - schema_ver: NOT copied (not in AAD canonical inputs per
-//     master §4.2, verified at aad.go:106-114)
-//   - rendering: NOT copied (Event.rendering field 7; not in
-//     AAD per master §4.2)
-//
-// Nil-safety: Actor and Timestamp may be nil on some event shapes.
-// Caller (aad.Build) tolerates nil via event.GetActor() and the
-// unconditional UnixNano() path.
-func AuditRowToEvent(row *pluginauditpb.AuditRow) *eventbusv1.Event {
-	if row == nil {
-		return nil
-	}
-	return &eventbusv1.Event{
-		Id:        row.GetId(),
-		Subject:   row.GetSubject(),
-		Type:      row.GetType(),
-		Timestamp: row.GetTimestamp(),
-		Actor:     row.GetActor(),
-	}
-}
+func AuditRowToEvent(row *pluginauditpb.AuditRow) *eventbusv1.Event
 ```
+
+**`AuditRowToEvent` behavior contract** (per spec §5.4 adapter table):
+
+- Nil input → nil output.
+- Per-field copy from `AuditRow` to `*eventbusv1.Event`: Id, Subject, Type, Timestamp, Actor — all verbatim via the proto getters (`row.GetId()`, etc.).
+- NOT copied: codec, dek_ref, dek_version (passed as scalar args to `aad.Build`); payload (AEAD input, not AAD); schema_ver and rendering (not in AAD canonical inputs per master §4.2, verified at `aad.go:62-117`).
+- Nil-safety: Actor and Timestamp may be nil. `aad.Build` tolerates both via `event.GetActor()` and the unconditional `UnixNano()` path on the result of `event.GetTimestamp()` — no defensive code needed in the adapter.
 
 - [ ] **Step C.1.4: Run test to verify it passes**
 
@@ -1843,20 +1816,20 @@ The fence wraps `inner PluginHistoryRouter.QueryHistory(...)` and returns a wrap
 1. Call `inner.Next(ctx)`. If `inner` returns `err != nil`, forward it unchanged (including `io.EOF`).
 2. Retrieve the underlying `*pluginauditpb.AuditRow` via the package-internal accessor (`eventbus.AuditRowOf(ev)` — substrate landed in Task C.0). If the accessor returns `nil` (event not sourced from a plugin), pass the event through unchanged.
 3. **INV-P7-7 (manifest-set heuristic)** — if `row.GetCodec() == "identity"` AND `row.GetType()` is in the always-sensitive set:
-   - **Mutate the returned event** to set `ev.MetadataOnly = true` and `ev.NoPlaintextReason = NoPlaintextReasonDowngradeRefused` (the new enum value from Task C.0).
-   - **Asynchronously** fire `f.emitter.EmitViolation(...)` in a goroutine (or via a bounded queue if the emit can backpressure). Emit failures MUST log but MUST NOT propagate to the caller.
-   - **Return `(ev, nil)`** — NOT a stream-fatal error. The stream MUST continue to subsequent rows. (v1 returned an error here; that bug let a malicious plugin DoS legitimate rows by putting the downgrade event first.)
+   - **Build a refused `Event` value**: copy `ev` into a local (`refused := ev`), set `refused.MetadataOnly = true`, set `refused.NoPlaintextReason = NoPlaintextReasonDowngradeRefused` (the new enum value from Task C.0). **Do NOT mutate `ev` in place** — `eventbus.Event` is a struct value (`internal/eventbus/types.go:127`), not a pointer; mutating the local has no effect on the caller's copy returned by the underlying `inner.Next`.
+   - **Synchronously fire `f.emitter.EmitViolation(...)` with a bounded timeout** (`100ms` via `context.WithTimeout`). On timeout or error, log at WARN but DO NOT propagate to the caller (the row refusal still proceeds — losing the audit signal is worse than blocking the stream). The synchronous-with-timeout choice prevents backpressured `audit.<game>.system.*` from blocking the row indefinitely while keeping the audit ordering predictable.
+   - **Return `(refused, nil)`** — NOT a stream-fatal error. The stream MUST continue to subsequent rows. (v1 returned an error here; that bug let a malicious plugin DoS legitimate rows by putting the downgrade event first.)
 4. **INV-P7-15 (DEK existence)** — if `row.GetCodec() != "identity"`:
-   - If `row.DekRef == nil`: set `ev.MetadataOnly = true`, `ev.NoPlaintextReason = NoPlaintextReasonDowngradeRefused`, return `(ev, nil)`. No violation audit (indistinguishable from legitimate Rekey-destroyed case per spec INV-P7-15).
+   - If `row.DekRef == nil`: build refused = copy + `MetadataOnly = true` + `NoPlaintextReason = NoPlaintextReasonDowngradeRefused`; return `(refused, nil)`. No violation audit (indistinguishable from legitimate Rekey-destroyed case per spec INV-P7-15).
    - Call `f.cryptoKeysLookup.Exists(ctx, *row.DekRef)`. On error, return `(ev, wrapped-with-AUDIT_ROW_DEK_LOOKUP_FAILED)` — this IS a stream-fatal error because it's an infrastructure failure, not a per-row refusal.
-   - If `!exists`: set `ev.MetadataOnly = true`, `ev.NoPlaintextReason = NoPlaintextReasonDowngradeRefused`, return `(ev, nil)`.
+   - If `!exists`: build refused as above; return `(refused, nil)`.
 5. Otherwise (clean row): return `(ev, nil)` unchanged.
 
 `Close()` forwards to `inner.Close()`.
 
 **Why per-row metadata_only, not stream-fatal error:** spec INV-P7-7 wording: "Refusal surfaces to the client as `metadata_only=true` for that event_id". The plugin's response may legitimately interleave honest rows with refused rows; the stream MUST yield all rows. Spec §8 row 1: "Refuse the row... Surface refusal to the client as `metadata_only=true` for that event_id". v1's stream-fatal-error implementation would have let any malicious plugin DoS legitimate reads by putting a downgrade event first in the response. The asynchronous violation emit means the audit signal still fires for INV-P7-7 cases without blocking the stream.
 
-**Synchronous vs asynchronous emit — pick at impl time, document rationale:** synchronous emit blocks `Next()` until the audit lands (operator gets the diagnostic before the client gets metadata_only); asynchronous keeps stream throughput. Spec §7 backpressure note says `plugin_integrity_violation` is bounded by query page-size cardinality, so synchronous is acceptable. Default to synchronous; switch to async + bounded queue if benchmarks show it matters.
+(Emit policy pinned in rule 3 above: synchronous with 100ms bounded timeout. No alternative considered.)
 
 - [ ] **Step C.3.4: Verify row extraction via Task C.0's accessor**
 
@@ -2122,6 +2095,12 @@ func TestDowngradeAttackerHonestPathDelivers(t *testing.T) {
 	suite.EmitSensitive(t, "events.test.test_downgrade.01ABC.ic",
 		"test-downgrade-attacker:secret", []byte("plaintext"))
 
+	// Wait for the fixture's AuditEvent RPC to populate fixtureCache
+	// before querying — same pattern as B.5.1's WaitForRowInSceneLog.
+	// Without this, the query may race ahead of the per-plugin consumer
+	// dispatch and find an empty cache.
+	suite.WaitForFixtureCachePopulated(t, 5*time.Second)
+
 	resp, err := suite.QueryStreamHistory(t, "events.test.test_downgrade.01ABC.ic")
 	require.NoError(t, err)
 	require.Len(t, resp.Events, 1)
@@ -2252,7 +2231,9 @@ func TestPhase7InvariantsHaveNamedTests(t *testing.T) {
 		{"INV-P7-5", "TestAuditRowRoundTripPreservesAllFields"},
 		{"INV-P7-6", "TestSceneLogPreservesCiphertextAndAuditHeaders"},
 		{"INV-P7-7", "TestFenceRefusesIdentityForAlwaysSensitiveType"},
+		{"INV-P7-7b", "TestFenceContinuesStreamAfterRefusal"}, // per-row, not stream-fatal
 		{"INV-P7-8", "TestFenceSetBuiltOnceAtBoot"},
+		{"INV-P7-C0", "TestAuditRowOfStampedByRouter"}, // C.0 substrate (auditRow stamp + accessor)
 		{"INV-P7-9", "TestDispatcherAndHotTierShareSelector"},
 		{"INV-P7-10", "TestDowngradeAttackerMaliciousPathRefuses"},
 		{"INV-P7-11", "TestDispatchDoesNotDecryptBeforeForward"},
@@ -2590,7 +2571,7 @@ The plan decomposes into **5 task beads** that each produce a self-contained, te
 | `1r0v.1` | Foundations — shared header parser + AuditRow proto + SDK Layer 2 | A.1, A.2, A.3, A.4 | INV-P7-2, INV-P7-4, INV-P7-5 |
 | `1r0v.2` | Plugin dispatcher widening + scene_log schema + caller migrations | B.1, B.2, B.3, B.4, B.5, B.6 | INV-P7-1, INV-P7-3, INV-P7-6, INV-P7-9, INV-P7-10, INV-P7-11, INV-P7-12 |
 | `1r0v.3` | Read-side fence — substrate (C.0) + AAD adapter (C.1, C.2) + PluginDowngradeFence (C.3) + tier.go wiring (C.4) | C.0, C.1, C.2, C.3, C.4 | INV-P7-7, INV-P7-8, INV-P7-15, INV-P7-16 |
-| `1r0v.4` | E2E binary fixture + cross-cutting tests + meta-test | D.1, D.2, D.3, D.4 | INV-P7-10 (e2e), INV-P7-13, INV-P7-14 |
+| `1r0v.4` | E2E binary fixture + cross-cutting tests + meta-test | D.1, D.2, D.3, D.4 | INV-P7-10 (e2e), INV-P7-13, INV-P7-14 (meta-test itself — self-referential) |
 | `1r0v.5` | Production wiring + master spec polish + PR-blocking docs | E.1, E.2, E.3 | INV-P7-9 (final pass) |
 
 ### Bead 8-section descriptions (per `bead-create-smart` convention)
