@@ -174,6 +174,34 @@ for f in "$ADR_DIR"/holomush-*-*.md; do
   fi
 done
 
+# --- invariant_coverage (meta-test) ---
+note "invariant_coverage"
+SURFACE_ENUM='doctor|hook-test|skill-test|migration-assert|manual'
+# Extract every '| INV-A<n> | <surface> |' row from the spec.
+while IFS='|' read -r _ id surface _; do
+  id="$(echo "$id" | tr -d ' ')"
+  surface="$(echo "$surface" | sed 's/^ *//;s/ *$//')"
+  case "$id" in INV-A[0-9]*) ;; *) continue ;; esac
+  if [ -z "$surface" ]; then
+    check_fail "meta-test: $id has empty Surface column"
+    continue
+  fi
+  # Validate every '+' -joined token is in the enum.
+  IFS='+' read -ra toks <<< "$(echo "$surface" | tr -d ' `')"
+  for tok in "${toks[@]}"; do
+    case "$tok" in
+      doctor|hook-test|skill-test|migration-assert|manual) ;;
+      *) check_fail "meta-test: $id has Surface token '$tok' not in {$SURFACE_ENUM}" ;;
+    esac
+  done
+  # If doctor-tagged, this script must mention '# INV-A<n>' in a comment.
+  if echo "$surface" | grep -q 'doctor'; then
+    if ! grep -qE "#.*$id\b" "$0"; then
+      check_fail "meta-test: $id is doctor-tagged but no '# $id' comment exists in adr-doctor.sh"
+    fi
+  fi
+done < "$SPEC"
+
 if [ "$fail_count" -gt 0 ]; then
   echo "$fail_count check(s) failed." >&2
   exit 1
