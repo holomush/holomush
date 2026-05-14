@@ -86,6 +86,7 @@ tasks:
       - task: lint:test-helpers
       - task: lint:plugin-manifests
       - task: lint:docs-symmetry
+      - task: lint:docs-paths-sync
 
   fmt:
     desc: Format all files
@@ -457,6 +458,11 @@ tasks:
     desc: Lint plugin.yaml manifests for actor_kinds_claimable coverage (spec ec22.1).
     cmds:
       - go run ./cmd/lint-plugin-manifests
+
+  lint:docs-paths-sync:
+    desc: Verify DOCS_ONLY_PATHS is byte-identical across Taskfile.yaml, ci.yaml, ci-docs-skip.yaml.
+    cmds:
+      - bash scripts/lint-docs-paths-sync.sh
 
   lint:docs-symmetry:
     desc: Verify AGENTS.md and CLAUDE.md plugin-runtime-symmetry subsection is byte-identical.
