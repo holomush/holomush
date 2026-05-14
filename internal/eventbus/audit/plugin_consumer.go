@@ -292,11 +292,12 @@ func (pc *pluginConsumer) dispatch(msg jetstream.Msg) error {
 		return oops.Code("AUDIT_PLUGIN_BAD_MSG_ID").With("msg_id", msgID).Wrap(err)
 	}
 
-	headers := make(map[string]string, len(h))
-	for k, v := range h {
-		if len(v) > 0 {
-			headers[k] = v[0]
-		}
+	meta, err := ParseAuditHeaders(h)
+	if err != nil {
+		return oops.Code("AUDIT_PLUGIN_HEADER_PARSE_FAILED").
+			With("plugin", pc.cfg.PluginName).
+			With("subject", msg.Subject()).
+			Wrap(err)
 	}
 
 	envelope, err := decodeEnvelope(h, msg.Data())
@@ -314,10 +315,24 @@ func (pc *pluginConsumer) dispatch(msg jetstream.Msg) error {
 	ctx, cancel := context.WithTimeout(parent, persistTimeout)
 	defer cancel()
 
-	_, err = pc.cfg.Client.AuditEvent(ctx, &pluginv1.AuditEventRequest{
-		Event:   envelope,
-		Headers: headers,
-	})
+	// Bridge: post-A.2 proto reshape requires Row, not Event/Headers.
+	// SchemaVer + Codec come from the shared ParseAuditHeaders so INV-P7-2
+	// cross-branch parity holds in Phase A. Full dispatcher widening
+	// (KeySelector wiring, ciphertext byte-equal forwarding, removal of
+	// the reject-non-identity guard above) lands in Task B.1
+	// (bead holomush-1r0v.2), which will replace the Row construction below
+	// to forward msg.Data() byte-equal as Payload instead of decoding.
+	row := &pluginv1.AuditRow{
+		Id:        envelope.GetId(),
+		Subject:   envelope.GetSubject(),
+		Type:      envelope.GetType(),
+		Timestamp: envelope.GetTimestamp(),
+		Actor:     envelope.GetActor(),
+		Codec:     meta.Codec,
+		Payload:   envelope.GetPayload(),
+		SchemaVer: meta.SchemaVer,
+	}
+	_, err = pc.cfg.Client.AuditEvent(ctx, &pluginv1.AuditEventRequest{Row: row})
 	if err != nil {
 		return oops.Code("AUDIT_PLUGIN_DISPATCH_FAILED").
 			With("plugin", pc.cfg.PluginName).

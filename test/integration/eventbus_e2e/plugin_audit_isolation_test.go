@@ -173,7 +173,11 @@ type pgSceneLogClient struct {
 }
 
 func (c *pgSceneLogClient) AuditEvent(ctx context.Context, req *pluginv1.AuditEventRequest) (*pluginv1.AuditEventResponse, error) {
-	env := req.GetEvent()
+	// Bridge per holomush-1r0v.1 follow-up: post-A.2 proto reshape moved
+	// projection fields off Event/Headers onto AuditRow. Full Row-shape
+	// coverage (DEKRef/DEKVersion plumbing, ciphertext byte-equal
+	// forwarding) lands in B.1.
+	env := req.GetRow()
 	if env == nil {
 		return nil, errPluginEnvelope("nil envelope")
 	}
@@ -182,12 +186,11 @@ func (c *pgSceneLogClient) AuditEvent(ctx context.Context, req *pluginv1.AuditEv
 	if a := env.GetActor(); a != nil && len(a.GetId()) == 16 {
 		actorID = a.GetId()
 	}
-	// Pull schema version + codec from headers — those are carried on the
-	// request alongside the envelope so the plugin can persist them
-	// without decoding the payload.
-	headers := req.GetHeaders()
-	schemaVer := int16(1)
-	codecName := headers["App-Codec"]
+	schemaVer := int16(1) //nolint:gosec // bridge per holomush-1r0v.1; B.1 will carry SchemaVer through verbatim
+	if v := env.GetSchemaVer(); v > 0 && v <= 32767 {
+		schemaVer = int16(v)
+	}
+	codecName := env.GetCodec()
 	if codecName == "" {
 		codecName = "identity"
 	}

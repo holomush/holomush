@@ -79,8 +79,8 @@ func TestPluginConsumerDispatchSuccess(t *testing.T) {
 	require.NoError(t, pc.dispatch(msg))
 	assert.True(t, cli.called)
 	require.NotNil(t, cli.gotReq)
-	assert.NotEmpty(t, cli.gotReq.GetHeaders())
-	assert.Equal(t, "events.main.plugin.test", cli.gotReq.GetEvent().GetSubject())
+	// Bridge per holomush-1r0v.1 follow-up; full Row-shape coverage lands in B.1 tests.
+	assert.Equal(t, "events.main.plugin.test", cli.gotReq.GetRow().GetSubject())
 }
 
 func TestPluginConsumerDispatchMissingMsgID(t *testing.T) {
@@ -138,7 +138,9 @@ func TestPluginConsumerDispatchRejectsMissingCodecHeader(t *testing.T) {
 		data:    newValidEnvelopeBytes(t),
 	})
 	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "AUDIT_PLUGIN_MISSING_HEADER")
+	// errutil unwraps to the innermost oops code — ParseAuditHeaders returns
+	// AUDIT_MISSING_HEADER which is wrapped by AUDIT_PLUGIN_HEADER_PARSE_FAILED.
+	errutil.AssertErrorCode(t, err, "AUDIT_MISSING_HEADER")
 }
 
 func TestPluginConsumerDispatchPropagatesClientError(t *testing.T) {

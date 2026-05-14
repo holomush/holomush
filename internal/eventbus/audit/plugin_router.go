@@ -174,7 +174,7 @@ func (s *pluginHistoryStream) Next(ctx context.Context) (eventbus.Event, error) 
 			With("subject", s.subject).
 			Wrap(err)
 	}
-	ev := resp.GetEvent()
+	ev := resp.GetRow()
 	if ev == nil {
 		return eventbus.Event{}, oops.Code("AUDIT_PLUGIN_HISTORY_EMPTY_EVENT").
 			With("plugin", s.pluginName).

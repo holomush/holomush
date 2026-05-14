@@ -92,7 +92,7 @@ func TestPluginHistoryRouterForwardsQueryAndAdaptsStream(t *testing.T) {
 
 	fs := &fakeStream{
 		resps: []*pluginv1.QueryHistoryResponse{
-			{Event: &eventbusv1.Event{
+			{Row: &pluginv1.AuditRow{
 				Id:        idBytes[:],
 				Subject:   "events.main.scene.01ABC",
 				Type:      "scene.lifecycle.created",
@@ -177,7 +177,7 @@ func TestPluginHistoryRouterWrapsRecvError(t *testing.T) {
 func TestPluginHistoryRouterRejectsEmptyEvent(t *testing.T) {
 	t.Parallel()
 	fs := &fakeStream{resps: []*pluginv1.QueryHistoryResponse{
-		{Event: nil},
+		{Row: nil},
 	}}
 	fc := &fakeHistoryClient{stream: fs}
 	router := audit.NewPluginHistoryRouter(stubProvider{name: "core", client: fc})
@@ -195,7 +195,7 @@ func TestPluginHistoryRouterAcceptsRawULIDBytes(t *testing.T) {
 	id := core.NewULID()
 	raw := id.Bytes()
 	fs := &fakeStream{resps: []*pluginv1.QueryHistoryResponse{
-		{Event: &eventbusv1.Event{
+		{Row: &pluginv1.AuditRow{
 			Id:        raw[:],
 			Subject:   "events.main.plugin.x",
 			Type:      "t",
@@ -260,7 +260,7 @@ func TestPluginHistoryRouterForwardsCallerVerbatim(t *testing.T) {
 
 	fs := &fakeStream{
 		resps: []*pluginv1.QueryHistoryResponse{
-			{Event: &eventbusv1.Event{
+			{Row: &pluginv1.AuditRow{
 				Id:        idBytes[:],
 				Subject:   "events.main.scene.01ABC.ic",
 				Type:      "scene.lifecycle.created",
