@@ -28,14 +28,6 @@ func AuditRowOf(ev Event) *pluginauditpb.AuditRow {
 	return ev.auditRow
 }
 
-// stampAuditRow assigns the plugin-source-of-truth row onto an Event.
-// Package-internal helper used exclusively by audit.PluginHistoryRouter
-// (via the exported StampAuditRow shim below). Kept unexported on Event
-// itself to prevent random call sites from forging the field.
-func stampAuditRow(ev *Event, row *pluginauditpb.AuditRow) {
-	ev.auditRow = row
-}
-
 // StampAuditRow is the package-export entry point used by
 // audit.PluginHistoryRouter to stamp the plugin-source-of-truth row
 // onto an Event after converting a QueryHistoryResponse. This is the
@@ -47,5 +39,5 @@ func stampAuditRow(ev *Event, row *pluginauditpb.AuditRow) {
 // via the same router both flow through here, so the field is stamped
 // uniformly regardless of plugin runtime.
 func StampAuditRow(ev *Event, row *pluginauditpb.AuditRow) {
-	stampAuditRow(ev, row)
+	ev.auditRow = row
 }

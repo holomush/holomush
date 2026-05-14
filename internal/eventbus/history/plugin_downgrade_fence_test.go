@@ -98,17 +98,17 @@ type recordedViolation struct {
 	plugin     string
 	rowType    string
 	expected   string
-	refusalCod string
+	refusalCode string
 }
 
-func (r *recordingEmitter) EmitViolation(_ context.Context, plugin string, row *pluginauditpb.AuditRow, expected, refusalCode string) error {
+func (r *recordingEmitter) EmitViolation(_ context.Context, plugin string, row *pluginauditpb.AuditRow, expected, refusalCodee string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.calls = append(r.calls, recordedViolation{
 		plugin:     plugin,
 		rowType:    row.GetType(),
 		expected:   expected,
-		refusalCod: refusalCode,
+		refusalCode: refusalCodee,
 	})
 	return r.err
 }
@@ -185,7 +185,7 @@ func TestFenceRefusesIdentityForAlwaysSensitiveType(t *testing.T) {
 	require.Len(t, calls, 1, "INV-P7-7 refusal MUST emit exactly one violation")
 	assert.Equal(t, "test-plugin", calls[0].plugin)
 	assert.Equal(t, "test-plugin:secret", calls[0].rowType)
-	assert.Equal(t, "AUDIT_ROW_DOWNGRADE_DETECTED", calls[0].refusalCod)
+	assert.Equal(t, "AUDIT_ROW_DOWNGRADE_DETECTED", calls[0].refusalCode)
 }
 
 // TestFenceContinuesStreamAfterRefusal — INV-P7-7. The original v1
