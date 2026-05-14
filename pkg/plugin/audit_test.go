@@ -5,12 +5,16 @@ package pluginsdk_test
 
 import (
 	"context"
+	"reflect"
 	"testing"
+	"time"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
 
 func TestAuditRecorderDenyAccumulatesHintOnContext(t *testing.T) {
@@ -104,4 +108,106 @@ func TestAuditRecorderAllowWithEmptyIDIsSilentlyDroppedAndLogged(t *testing.T) {
 	hints := pluginsdk.HarvestAuditHints(ctx)
 	assert.Empty(t, hints,
 		"recorder must silently drop Allow hints with empty ID, mirroring the Deny path")
+}
+
+// ptrTo returns a pointer to the supplied value. Test-local mirror of
+// k8s.io/utils/ptr.To; inlined to avoid bringing a new module dep.
+func ptrTo[T any](v T) *T { return &v }
+
+// ulidFromString parses a 26-char ULID string. Test-local helper; failing
+// the parse fails the test immediately because no test should construct
+// AuditRow.EventID from a malformed ULID.
+func ulidFromString(t *testing.T, s string) ulid.ULID {
+	t.Helper()
+	u, err := ulid.Parse(s)
+	require.NoError(t, err)
+	return u
+}
+
+func TestAuditRowStructMirrorsProto(t *testing.T) {
+	// Compile-time + runtime assertion that the Go struct's exported
+	// fields match the proto's field set.
+	row := pluginsdk.AuditRow{
+		EventID:    ulid.ULID{},
+		Subject:    "events.test.scene.01ABC.ic",
+		Type:       "test-plugin:secret",
+		Timestamp:  time.Unix(1700000000, 0),
+		Actor:      nil,
+		Codec:      "identity",
+		Payload:    []byte("hello"),
+		DEKRef:     nil,
+		DEKVersion: nil,
+		SchemaVer:  1,
+	}
+
+	got := reflect.TypeOf(row)
+	wantFields := []string{
+		"EventID", "Subject", "Type", "Timestamp", "Actor",
+		"Codec", "Payload", "DEKRef", "DEKVersion", "SchemaVer",
+	}
+	require.Equal(t, len(wantFields), got.NumField(),
+		"AuditRow field count drifted from proto; INV-P7-4 broken")
+	for i, want := range wantFields {
+		assert.Equal(t, want, got.Field(i).Name)
+	}
+}
+
+func TestAuditRowRoundTripPreservesAllFields(t *testing.T) {
+	cases := []struct {
+		name string
+		row  pluginsdk.AuditRow
+	}{
+		{
+			name: "identity_codec_nil_dek",
+			row: pluginsdk.AuditRow{
+				EventID:    ulidFromString(t, "01JD9R7N5VFKQM5T1JX6S9PYRJ"),
+				Subject:    "events.test.scene.01ABC.ic",
+				Type:       "test-plugin:plaintext",
+				Timestamp:  time.Unix(1700000000, 0).UTC(),
+				Actor:      nil,
+				Codec:      "identity",
+				Payload:    []byte("hello"),
+				DEKRef:     nil,
+				DEKVersion: nil,
+				SchemaVer:  1,
+			},
+		},
+		{
+			name: "encrypted_codec_with_dek",
+			row: pluginsdk.AuditRow{
+				EventID:    ulidFromString(t, "01JD9R7N5VFKQM5T1JX6S9PYRK"),
+				Subject:    "events.test.scene.01ABC.ic",
+				Type:       "test-plugin:secret",
+				Timestamp:  time.Unix(1700000000, 123456789).UTC(),
+				Actor:      &eventbusv1.Actor{Kind: eventbusv1.ActorKind_ACTOR_KIND_CHARACTER, Id: []byte("char-01")},
+				Codec:      "xchacha20poly1305-v1",
+				Payload:    []byte{0xDE, 0xAD, 0xBE, 0xEF},
+				DEKRef:     ptrTo(uint64(42)),
+				DEKVersion: ptrTo(uint32(7)),
+				SchemaVer:  2,
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Round-trip via the proto shape.
+			proto, err := pluginsdk.LoadForQuery(tc.row)
+			require.NoError(t, err)
+			require.NotNil(t, proto)
+
+			assert.Equal(t, tc.row.EventID[:], proto.GetId())
+			assert.Equal(t, tc.row.Subject, proto.GetSubject())
+			assert.Equal(t, tc.row.Type, proto.GetType())
+			assert.Equal(t, tc.row.Timestamp.UnixNano(), proto.GetTimestamp().AsTime().UnixNano())
+			assert.Equal(t, tc.row.Codec, proto.GetCodec())
+			assert.Equal(t, tc.row.Payload, proto.GetPayload())
+			if tc.row.DEKRef != nil {
+				assert.Equal(t, *tc.row.DEKRef, proto.GetDekRef())
+			}
+			if tc.row.DEKVersion != nil {
+				assert.Equal(t, *tc.row.DEKVersion, proto.GetDekVersion())
+			}
+			assert.Equal(t, tc.row.SchemaVer, proto.GetSchemaVer())
+		})
+	}
 }
