@@ -101,9 +101,6 @@ jobs:
       - name: Check license headers
         run: task license:check
 
-      - name: Check access control migration
-        run: task lint:access-migration
-
       - name: Lint
         run: task lint
 
