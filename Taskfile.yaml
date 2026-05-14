@@ -207,12 +207,15 @@ tasks:
 
   test:bats:
     desc: Run bats shell tests under scripts/tests/
-    # bats_load_library searches BATS_LIB_PATH for bats-support/bats-assert.
-    # Cover macOS (Homebrew arm64+x86) and Linux (apt/manual install) paths.
-    env:
-      BATS_LIB_PATH: /opt/homebrew/lib:/usr/local/lib:/usr/lib
     cmds:
-      - bats scripts/tests/
+      # bats_load_library searches BATS_LIB_PATH for bats-support/bats-assert.
+      # Default covers macOS (Homebrew arm64+x86) and Linux (apt/manual install).
+      # Respect an externally-set BATS_LIB_PATH so CI workflows that install
+      # bats helpers to a custom location (e.g., bats-core/bats-action) work
+      # without requiring this default to match.
+      - cmd: |
+          BATS_LIB_PATH="${BATS_LIB_PATH:-/opt/homebrew/lib:/usr/local/lib:/usr/lib}" \
+            bats scripts/tests/
 
   test:bench:
     desc: Run benchmarks
