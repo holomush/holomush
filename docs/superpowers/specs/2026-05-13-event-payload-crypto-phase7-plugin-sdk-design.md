@@ -2,7 +2,15 @@
 
 ## Status
 
-DRAFT — awaiting `design-reviewer` and `crypto-reviewer` gates.
+DRAFT v2 — supersedes v1 in this same file's git history. v1 proposed a
+host-owned crypto-ref side table that contradicted the master spec's
+deliberate §8.2 commitment. Both gate reviewers (`design-reviewer` and
+`crypto-reviewer`) returned NOT READY on v1; the central blocking
+finding was that the v1 threat model presupposed data flow
+(plugin-receives-ciphertext) that the current `plugin_consumer.go:343`
+explicitly rejects today, with the inline comment marking it as parked
+work waiting for KeySelector wiring. v2 follows the master spec's
+original intent.
 
 ## Authors
 
@@ -10,412 +18,574 @@ Sean Brandt + Claude Opus 4.7
 
 ## Date
 
-2026-05-13
+2026-05-13 (v2)
 
 ## Context
 
 ### Project context
 
 Phase 7 of the Event Payload Cryptography epic (`holomush-1r0v`, parent
-`holomush-e49r`). Phases 2–5 shipped the crypto substrate for host-emitted
-events: encryption at emit, AuthGuard, decrypt-on-fanout, DEK lifecycle,
-operator break-glass via `AdminReadStream`. The substrate stops at the host
-boundary.
+`holomush-e49r`). Phases 2–5 shipped the crypto substrate for
+host-emitted events. The substrate stops at the plugin boundary:
+`internal/eventbus/audit/plugin_consumer.go:332-335` documents this
+explicitly —
 
-Phase 7 brings third-party plugin authors into the encryption story without
-requiring them to reimplement crypto. Today, a plugin that wants to emit a
-private event (DM, whisper, scene-private state change) would have to:
+> "Only the identity codec is supported here because
+> PluginConsumerManager has no KeySelector wired **yet** — a
+> non-identity codec returns an error so misconfigurations surface at
+> dispatch time rather than forwarding ciphertext to the plugin."
 
-- Own its own audit table and store host-emitted event rows.
-- Mirror the `events_audit` schema's crypto-metadata columns (`dek_ref`,
-  `dek_version`, `codec`) byte-for-byte.
-- Implement its own `PluginAuditService.QueryHistory` returning those
-  columns unchanged.
-- Trust the host to validate everything correctly on the read path.
-
-Each of those is a footgun for plugin authors and a privilege gradient
-the host has no way to enforce uniformly. The master spec
-(`docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md` §8.2,
-§8.3) proposed mirroring `events_audit`'s crypto columns into plugin
-tables and retrofitting INV-50 as a read-time manifest-set heuristic.
-This design re-examines that contract and proposes a cleaner trust
-boundary instead.
+Phase 7 closes that gap. After Phase 7, the per-plugin audit consumer
+forwards ciphertext + crypto headers to the plugin's `AuditEvent` RPC;
+plugin-owned audit tables mirror `events_audit`'s shape (payload +
+codec + dek_ref + dek_version); the plugin's `QueryHistory` returns
+ciphertext bytes byte-equal to what the bus carried; the host's
+`QueryStreamHistory` decrypts and delivers (or refuses, per the new
+read-side downgrade fence). Third-party plugin authors get the
+encrypt/decrypt guarantees without owning crypto code.
 
 ### Out of scope (non-goals)
 
-- Backfill of pre-Phase-7 plugin audit rows. Clean break: Phase 7
-  migration truncates `scene_log` and any other plugin-owned audit
-  tables. No prod, no deployments
-  ([feedback_no_prod_shape_for_undeployed]).
+- Backfill of pre-Phase-7 plugin audit rows. Plugin migration ADDS the
+  two crypto columns (`dek_ref BIGINT NULL`, `dek_version INTEGER
+  NULL`); existing rows get NULL on both, which is correct for
+  identity-codec rows. Not a clean break — the additive migration is
+  the natural shape since the new columns are nullable.
 - New sensitivity tiers beyond `always` / `may` / `never`. Existing
   taxonomy holds.
-- Multi-tenant per-plugin key separation. Single-game scope; no
-  plugin-scoped KEKs.
-- Codec versioning / migration logic in the validator. The validator's
-  only job is disagreement detection; codec evolution is a separate
-  cross-cutting concern.
-- Plugin domain tables (scenes, participants, ops_events, etc.)
-  participating in crypto. Manifest `audit:` subjects only.
+- Multi-tenant per-plugin key separation.
+- Codec versioning / migration logic in the validator.
+- Plugin domain tables (scenes, participants, ops_events) participating
+  in crypto. Manifest `audit:` subjects only per master spec §8.2.
 - Phase 8 site documentation. Tracked separately under `holomush-hd8h`.
-  Phase 7 carries only the PR-blocking inline docs (§8.2/§8.3 spec
-  revision + `binary-plugins.md` SDK pointer).
-- Vault provider integration. Detached to `holomush-aub5` P4; not a
-  Phase 7 dependency.
+  Phase 7 carries only PR-blocking inline docs:
+  `site/docs/extending/binary-plugins.md` SDK pointer +
+  `site/docs/reference/audit-subjects.md` registration of the new
+  `plugin_integrity_violation` subject.
+- Vault provider integration (`holomush-aub5` P4, not a dependency).
 
 ### Relationship to substrate spec
 
-This design **revises** the master spec in two specific places:
+This design **fulfills** the master spec
+(`docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md`)
+§8.2 and §8.3 as written, not as I (v1's author) initially re-proposed.
+v1's substrate revision is abandoned. Master spec needs only minor
+polish:
 
-1. **§8.2** — the "plugin audit table mirrors `events_audit` shape"
-   contract is replaced with "plugin tables hold projection-only fields;
-   crypto metadata lives in a host-owned `event_crypto_refs` table."
-2. **§8.3** — `AuditRow` struct drops the `Codec`, `DEKRef`, and
-   `DEKVersion` fields. They were never plugin-domain knowledge.
-3. **Section 2 invariants** — INV-46, INV-48, INV-50 wordings updated to
-   reference concrete byte-level disagreement against `event_crypto_refs`
-   rather than the manifest-set heuristic. New Phase-7-scoped invariants
-   (INV-P7-1 through INV-P7-14) are introduced in this document.
+1. **§4.6 audit-subjects catalog** — register
+   `audit.<game>.system.plugin_integrity_violation` (new subject
+   emitted by the Phase 7 downgrade fence).
+2. **Section 2 INV-50 wording** — pin the manifest-set heuristic
+   ground truth more explicitly (the current wording is consistent;
+   Phase 7 wants it cross-referenced from the new INV-P7-N corpus).
+3. **§8.3 `AuditRow` Go-struct example** — update field set to mirror
+   the proto definition committed in Phase 7 (no field-name renames; just
+   match `dek_ref` / `dek_version` capitalization to the proto-generated
+   Go).
 
-The substrate change is significant enough that `crypto-reviewer`
-(in addition to `design-reviewer`) MUST run before `writing-plans` is
-invoked on this spec.
+No invariant overturns. `crypto-reviewer` still fires because the
+substrate touch is significant (plugin RPC proto reshape, audit
+projection helper extraction, dispatcher contract change), but the
+audit scope is narrower than v1.
 
 ## Section 1 — Threat model
 
-Inherited from the master spec (§1, "Threat model"). Phase 7 adds one
-explicit adversary:
+Inherited from master spec §1. Phase 7 adds one explicit adversary:
 
 | Adversary | Capability | Phase 7 defence |
 |---|---|---|
-| **Malicious or buggy plugin** | Returns rows from `PluginAuditService.QueryHistory` that disagree with what the host originally encrypted — e.g., `codec=identity` plus cleartext `payload` for an event the host encrypted, hoping the host will deliver it. | Host-owned `event_crypto_refs` is the ground truth for every event's codec + DEK refs. The `PluginRowValidator` is the only path from plugin frame → bus delivery, and it cross-references every frame against `event_crypto_refs`. Any disagreement refuses the row and emits `plugin_integrity_violation` audit. |
+| **Malicious or buggy plugin** | After Phase 7's dispatcher widening, plugins receive ciphertext for sensitive events. A misbehaving plugin's `QueryHistory` could return rows with `codec=identity` + a forged cleartext `payload`, attempting to bypass encryption for events that should have been sensitive. | Two-layer fence: (1) **Manifest-set heuristic at the host's QueryStreamHistory.** Host maintains the always-sensitive event-type set from loaded manifests; on every plugin-returned row, if `frame.type ∈ always_sensitive_types AND frame.codec = "identity"`, REFUSE with `AUDIT_ROW_DOWNGRADE_DETECTED` + emit `audit.<game>.system.plugin_integrity_violation`. (2) **AEAD AAD-binding at decrypt.** Per master INV-25, any tampering of the AAD-bound projection fields (subject, type, actor, timestamp, event_id, codec, dek_ref, dek_version) causes AEAD tag-mismatch at decrypt time and refuses to yield plaintext. The two layers are independent and complementary: (1) catches the named downgrade attack with a clear error code + violation audit; (2) catches all other tamper shapes via cryptographic ground truth. |
 
-The plugin role's Postgres credentials cannot directly tamper with
-`event_crypto_refs`: each plugin gets a dedicated role with `REVOKE ALL
-ON SCHEMA public` (`internal/plugin/schema_provisioner.go:139-170`), so
-the table name doesn't even resolve under the plugin's connection.
+The plugin role's Postgres credentials cannot tamper with
+`events_audit`, `crypto_keys`, or the host-owned audit chain:
+`schema_provisioner.go:163` REVOKEs all on schema `public` from the
+plugin role, so the table names don't even resolve under the plugin's
+connection.
 
 ## Section 2 — Invariants & testable proofs
 
-Numbered RFC2119 invariants, each mapped to a named test. A meta-test
-walks this table at compile/test time and asserts every named test
-exists in the tree.
+Numbered RFC2119 invariants. Phase 7's invariants extend the master
+spec's corpus rather than replacing entries; each maps to a named test
+in the tree, and a meta-test asserts existence-by-name.
 
 ### What MUST be true
 
 | ID | Invariant | Verification |
 |---|---|---|
-| **INV-P7-1** | The host audit projection MUST write an `event_crypto_refs` row for every JetStream delivery whose subject resolves to a plugin owner, before acknowledging the delivery to JetStream. | Integration: `event_crypto_refs_projection_test.go::TestProjectionWritesCryptoRefRowBeforeAck`. |
-| **INV-P7-2** | Every code path that delivers a plugin-supplied row to a client MUST cross `PluginRowValidator.Validate`. The type contract enforces this at the boundary: plugin routers return `*pluginauditpb.AuditEvent` (raw); bus delivery requires `*eventbus.HistoryFrame` (validated); the only legitimate conversion lives in the validator. A meta-test (`phase7_boundary_meta_test.go`) grep-asserts no other conversion site exists. | Static + Meta-test. |
-| **INV-P7-3** (replaces master spec INV-50) | The validator MUST refuse a frame where `frame.codec = "identity"` AND the joined `event_crypto_refs.codec ≠ "identity"`. Error code `AUDIT_ROW_DOWNGRADE_DETECTED`. Audit event `audit.<game>.system.plugin_integrity_violation` emitted on refusal. | Unit (`plugin_validator_test.go::TestValidateRefusesDowngradeAttack`) + Integration (`plugins/test-downgrade-attacker/` binary fixture). |
-| **INV-P7-4** (replaces master spec INV-48) | The validator MUST refuse a frame where `frame.codec ≠ event_crypto_refs.codec` for any disagreement (not only the identity-vs-non-identity case). Error code `AUDIT_ROW_CODEC_MISMATCH`. INV-P7-3 is the named special case of this rule where the disagreement is specifically the downgrade-attack shape (`frame.codec = "identity"` + `event_crypto_refs.codec ≠ "identity"`); it carries its own error code and triggers the `plugin_integrity_violation` audit emission because it's the threat-model adversary we explicitly defend against. INV-P7-4 covers all other disagreements (e.g., codec version drift). | Unit: `plugin_validator_test.go::TestValidateRefusesCodecMismatch`. |
-| **INV-P7-5** | The validator MUST refuse a frame whose `event_id` has no matching `event_crypto_refs` row. Error `AUDIT_ROW_NOT_FOUND`. (Should be impossible after the clean-break truncation; rule exists to make the proceeds-or-refuses decision total.) | Unit: `plugin_validator_test.go::TestValidateRefusesMissingCryptoRef`. |
-| **INV-P7-6** | `event_crypto_refs.codec = "identity"` MUST coincide with both `dek_ref` and `dek_version` being NULL; `codec ≠ "identity"` MUST coincide with both being non-NULL. | DB constraint (`event_crypto_refs_codec_dek_agreement` CHECK) + integration test. |
-| **INV-P7-7** | `pluginsdk.StoreFromMessage(msg)` round-tripped through `pluginsdk.LoadForQuery(row)` MUST yield byte-equal `payload` and identical projection fields (event_id, subject, type, timestamp, actor). | Unit: `audit_test.go::TestAuditRowRoundTripPreservesProjectionFields`. |
-| **INV-P7-8** | The audit projection's plugin-owned-subject branch MUST be idempotent under JetStream redelivery: the same `Nats-Msg-Id` delivered twice MUST result in exactly one `event_crypto_refs` row. | Integration: `event_crypto_refs_projection_test.go::TestProjectionIdempotentOnRedelivery`. |
-| **INV-P7-9** | The Phase 7 plugin-schema migration (truncate + drop codec) MUST be runnable independently of host-schema state (plugin migrations run in plugin's own runner). | Integration: `plugin_migration_test.go::TestPhase7CleanBreakMigrationStandalone`. |
+| **INV-P7-1** | The per-plugin audit dispatcher (`internal/eventbus/audit/plugin_consumer.go`) MUST forward ciphertext bytes byte-equal to what arrived on JetStream when the message's `App-Codec` header is non-identity. No decode-to-plaintext step occurs before forwarding. (Replaces the existing `AUDIT_PLUGIN_CODEC_UNSUPPORTED` rejection at `plugin_consumer.go:343`.) | Unit: `plugin_consumer_test.go::TestDispatchForwardsCiphertextByteEqual` drives the dispatcher with an xchacha20poly1305-v1 message; asserts the plugin RPC receives `AuditRow.payload == msg.Data()`. |
+| **INV-P7-2** | The dispatcher MUST populate `AuditRow.codec`, `AuditRow.dek_ref`, `AuditRow.dek_version` from the JS message's `App-Codec` / `App-Dek-Ref` / `App-Dek-Version` headers using a **shared parser** (see Section 5.4). The same parser is used by the host audit projection's `events_audit` writer; byte-equality across the two branches is structural. | Unit: `audit_header_parser_test.go::TestParserBindsCodecDekRefDekVersionTypes`. Integration: `dispatcher_projection_parity_test.go::TestPluginAndHostBranchesParseHeadersIdentically`. |
+| **INV-P7-3** | Plugin audit tables MUST add `dek_ref BIGINT NULL` and `dek_version INTEGER NULL` columns (per master spec §8.2 mirror-events_audit contract). The columns are nullable; identity-codec rows store NULL on both. | Integration: `plugin_migration_test.go::TestSceneLogHasDekColumns`. |
+| **INV-P7-4** | Plugin SDK Layer 2: `pluginsdk.AuditRow` Go struct fields MUST be 1:1 with `pluginauditpb.AuditRow` proto fields (id, subject, type, timestamp, actor, codec, payload, dek_ref, dek_version). | Compile-time + unit: `audit_test.go::TestAuditRowStructMirrorsProto`. |
+| **INV-P7-5** | `pluginsdk.StoreFromMessage(msg)` round-tripped through `pluginsdk.LoadForQuery(row)` MUST yield byte-equal `payload`, identical projection fields, AND identical `codec` / `dek_ref` / `dek_version` typed values. | Unit: `audit_test.go::TestAuditRowRoundTripPreservesAllFields`. |
+| **INV-P7-6** (extends master INV-46) | A plugin's stored audit row MUST byte-equal the row received via the `AuditEvent` RPC: `(payload, codec, dek_ref, dek_version)` are written verbatim and returned verbatim. Together with INV-P7-1 (dispatcher forwards bus-byte-equal), this gives the bus-to-plugin-stored-row byte-equality that master INV-46 asserts; INV-P7-6 holds the plugin side, INV-P7-1 holds the dispatcher side, master INV-46 is the composition. | Integration: `plugin_audit_round_trip_test.go::TestSceneLogPreservesCiphertextAndCryptoHeaders`. |
+| **INV-P7-7** (re-scopes master INV-50) | The host's `QueryStreamHistory` handler MUST refuse a plugin-returned row where `row.codec = "identity"` AND `row.type ∈ always_sensitive_types`, where `always_sensitive_types` is computed from `crypto.emits: sensitivity: always` declarations across all loaded manifests, refreshed on manifest reload. Refusal emits `AUDIT_ROW_DOWNGRADE_DETECTED` AND `audit.<game>.system.plugin_integrity_violation` (single-event subject; no chain participation; see Section 7). | Unit: `plugin_history_fence_test.go::TestRefusesIdentityForAlwaysSensitiveType`. Integration: `plugins-test-downgrade-attacker-e2e.go` (e2e). |
+| **INV-P7-8** | The always-sensitive event-type set used by INV-P7-7 MUST refresh atomically on manifest reload. Concurrent reads during a reload MUST see either the old set or the new set in entirety, never a partial state. | Unit: `always_sensitive_set_test.go::TestSetRefreshIsAtomic`. |
+| **INV-P7-9** | The dispatcher's KeySelector wiring (Section 5.2) MUST be the SAME KeySelector instance the host's hot-tier reader uses (`internal/eventbus/history/hot_jetstream.go`). No second selector, no parallel cache. | Integration: `dispatcher_selector_identity_test.go::TestDispatcherAndHotTierShareSelector`. |
+| **INV-P7-10** | Plugin migrations MAY run before or after Phase 7's host migration (`event_crypto_refs` is NOT introduced — there is no host-side schema change beyond what Phases 2–5 already shipped). The two crypto columns added to plugin tables are nullable and don't require any new host-side support. | Integration: `plugin_migration_test.go::TestPhase7PluginMigrationStandalone`. |
 
 ### What MUST NOT be true
 
 | ID | Invariant | Verification |
 |---|---|---|
-| **INV-P7-10** | A plugin's `PluginAuditService.QueryHistory` response MUST NOT cause the host to deliver plaintext for any event whose `event_crypto_refs.codec` is non-identity, even if the plugin returns `codec=identity` with a cleartext payload. | End-to-end: `plugins/test-downgrade-attacker/` binary fixture exercises the full loader/gRPC/projection-consumer/validator chain. |
-| **INV-P7-11** | The validator MUST NOT consult plugin-supplied `codec` or DEK metadata as ground truth — only as a candidate to verify against host-owned `event_crypto_refs`. | Unit: `plugin_validator_test.go::TestValidateIgnoresPluginSuppliedCryptoMetadataAsGroundTruth`. |
-| **INV-P7-12** | The plugin SDK Layer 2 (`AuditRow` / `StoreFromMessage` / `LoadForQuery`) MUST NOT expose any crypto metadata field (codec, dek_ref, dek_version). The type system makes them unrepresentable. | Compile-time + unit: `audit_test.go::TestAuditRowHasNoCryptoFields`. |
-| **INV-P7-13** | Plugin code MUST NOT have a path that writes to `event_crypto_refs`. The plugin's Postgres role lacks USAGE on schema `public` (per `internal/plugin/schema_provisioner.go:163`), so any direct INSERT fails with `permission denied for schema public`. | Integration: `plugin_role_permissions_test.go::TestPluginRoleCannotWriteEventCryptoRefs`. |
-| **INV-P7-14** | The `crypto.emits` manifest declaration is the ONLY emit-time gate for plugin-emitted sensitive events (existing INV-6/INV-7 / `sensitivity_fence.go`). Phase 7 MUST NOT add a second emit-time gate. | Static review + meta-test: `phase7_boundary_meta_test.go::TestNoNewEmitTimeSensitivityGates`. |
+| **INV-P7-11** | The dispatcher MUST NOT decrypt to plaintext before forwarding to the plugin. The plugin receives ciphertext; the host (and only the host) decrypts. (This preserves master spec §8.2's pass-through guarantee — the plugin participates in storage, not in decryption.) | Unit: `plugin_consumer_test.go::TestDispatchDoesNotDecryptBeforeForward` asserts `AuditRow.payload` is byte-equal to `msg.Data()` even for xchacha20poly1305-v1 codec. |
+| **INV-P7-12** | The plugin's stored row MUST NOT carry any cleartext content for sensitive events. The plugin sees `codec=xchacha20poly1305-v1` + ciphertext bytes; even an inspect-the-row plugin (or a leaked DB dump) reveals nothing. | Integration: `sensitive_event_storage_test.go::TestPluginRowIsCiphertextForSensitiveEvents`. |
+| **INV-P7-13** | Plugin code MUST NOT have a path that writes directly to host-owned tables (`events_audit`, `crypto_keys`, etc.). Plugin's Postgres role lacks USAGE on schema `public` (per `internal/plugin/schema_provisioner.go:163`); any INSERT fails with `permission denied for schema public`. | Integration: `plugin_role_permissions_test.go::TestPluginRoleCannotWriteHostTables`. |
+| **INV-P7-14** | Phase 7 MUST NOT add a second emit-time sensitivity gate. The `crypto.emits` manifest declaration enforced by `internal/plugin/sensitivity_fence.go` (INV-6 / INV-7) is the sole emit-time gate. | Static + meta-test: `phase7_boundary_meta_test.go::TestNoNewEmitTimeSensitivityGates` grep-asserts no new sensitivity check is added outside `sensitivity_fence.go`. |
 
 ### Meta-test
 
-A single test file `internal/eventbus/history/phase7_boundary_meta_test.go`
-walks every `INV-P7-N` in this section's tables and asserts the named
-test exists in the tree (by `path:function` lookup). Drift between this
-table and the test corpus fails CI.
+A single test file
+`internal/eventbus/audit/phase7_boundary_meta_test.go` walks every
+`INV-P7-N` in this section's tables and asserts the named test exists
+in the tree (`path:function` lookup). Drift between this table and the
+test corpus fails CI.
 
 ## Section 3 — Architecture
 
 ### 3.1 Trust-boundary picture
 
 ```text
-Plugin-emitted event flow (sensitive)
-─────────────────────────────────────
+Plugin-emitted sensitive event flow (Phase 7)
+─────────────────────────────────────────────
   Plugin code  ─emit→  HostPluginService.Emit  ─[INV-6/INV-7 fence]→  encrypt(host KEK/DEK)  →  JetStream
-                                                                              │
-                                                                              ▼
-                                                                  headers: dek_ref, dek_version, codec
-                                                                              (host-set)
+                                                                                                       │
+                                                                                                       ▼
+                                                                              headers: App-Codec, App-Dek-Ref, App-Dek-Version
+                                                                                       (host-set)
 
-Audit projection (host)
-───────────────────────
-  JetStream  ─consumer→  HostAuditProjection
-                              │
-                              ├── owner = host    →  INSERT events_audit (full row)             [existing]
-                              └── owner = plugin  →  INSERT event_crypto_refs (narrow row)      [NEW Phase 7]
-                                                 →  forward to plugin.AuditEvent RPC            [existing, unchanged]
+Audit projection (host — UNCHANGED in Phase 7)
+──────────────────────────────────────────────
+  JetStream  ─main audit consumer→  HostAuditProjection
+                                          │
+                                          ├── owner = host    →  INSERT events_audit (full row, parses crypto headers)  [unchanged]
+                                          └── owner = plugin  →  ack-and-skip                                            [unchanged]
+
+Audit projection (plugin — CHANGED in Phase 7)
+──────────────────────────────────────────────
+  JetStream  ─per-plugin consumer→  PluginConsumer (one per plugin, FilterSubjects on plugin's audit subjects)
+                                          │
+                                          ▼
+                            [PHASE 7] Parse codec/dek headers via shared parser (Section 5.4)
+                            [PHASE 7] Remove identity-codec rejection at plugin_consumer.go:343
+                                          │
+                                          ▼
+                            Build pluginauditpb.AuditRow{
+                                payload  = msg.Data(),           // CIPHERTEXT byte-equal — INV-P7-1/11
+                                codec    = parsed codec,
+                                dek_ref  = parsed dek_ref,       // NULL on identity
+                                dek_version = parsed dek_version,// NULL on identity
+                                + projection fields (id, subject, type, timestamp, actor)
+                            }
+                                          │
+                                          ▼
+                              plugin.PluginAuditService.AuditEvent(AuditEventRequest{row})
+                                          │
+                                          ▼
+                            Plugin stores row in scene_log (or analogous plugin-owned table)
+                            with new dek_ref/dek_version columns (INV-P7-3)
 
 Plugin-owned history read flow
 ──────────────────────────────
   Client  ─QueryStreamHistory→  CoreServer  →  history.Reader  ─owner=plugin→  PluginHistoryRouter
-                                                                                     │
-                                                                                     ▼
-                                                                         plugin.QueryHistory (gRPC)
-                                                                                     │
-                                                                            raw *pluginauditpb.AuditEvent
-                                                                                     │
-                                                                                     ▼
-                                                                            PluginRowValidator   ←─ joins event_crypto_refs
-                                                                            (INV-P7-3/4/5)             (host ground truth)
-                                                                                     │
-                                                                                     ▼
-                                                                         validated *eventbus.HistoryFrame
-                                                                                     │
-                                                                                     ▼
-                                                                         AuthGuard + DEK decrypt + delivery (existing)
+                                                                                       │
+                                                                                       ▼
+                                                                           plugin.QueryHistory (gRPC)
+                                                                                       │
+                                                                                       ▼
+                                                                           Plugin reads its scene_log; returns
+                                                                           QueryHistoryResponse{ AuditRow row } stream
+                                                                                       │
+                                                                                       ▼
+                                                                  [PHASE 7] PluginDowngradeFence wraps the stream:
+                                                                    For each AuditRow:
+                                                                      if row.codec == "identity" AND
+                                                                         row.type ∈ always_sensitive_types:
+                                                                          REFUSE → AUDIT_ROW_DOWNGRADE_DETECTED
+                                                                          emit audit.<game>.system.plugin_integrity_violation
+                                                                          [INV-P7-7]
+                                                                      else:
+                                                                          pass through
+                                                                                       │
+                                                                                       ▼
+                                                                  AuthGuard + DEK decrypt + delivery (existing path,
+                                                                  uses AAD with subject/type/actor/timestamp/codec/dek_ref;
+                                                                  AAD-tag-mismatch refuses with INV-25 — the second
+                                                                  fence layer)
 ```
 
-### 3.2 Components added/changed
+### 3.2 Components changed by Phase 7
 
 | Component | Status | Responsibility |
 |---|---|---|
-| `pkg/plugin/audit.go` | EXTENDED | Add `AuditRow` + `StoreFromMessage` + `LoadForQuery` Layer-2 helpers below the existing Layer-1 ABAC decision-hint recorder; package-level doc enumerates both surfaces. |
-| `internal/store/migrations/0000XX_create_event_crypto_refs.{up,down}.sql` | NEW | `event_crypto_refs(event_id BYTEA PK, codec TEXT NOT NULL, dek_ref BIGINT NULL, dek_version INTEGER NULL, inserted_at TIMESTAMPTZ)` + CHECK constraint + partial index on `dek_ref`. |
-| `internal/eventbus/audit/projection.go` | EXTENDED | Plugin-owned-subject branch: write narrow `event_crypto_refs` row from JS headers (today ack-and-skips). |
-| `internal/eventbus/history/plugin_validator.go` | NEW | `PluginRowValidator` type; owns INV-P7-3 / 4 / 5 / 11 checks; queries `event_crypto_refs` for ground truth; emits `plugin_integrity_violation` audit on refusal. |
-| `internal/eventbus/history/tier.go` | EXTENDED | `Reader.QueryHistory` plugin branch routes router output through validator before returning stream. |
-| `plugins/core-scenes/migrations/0000XX_truncate_scene_log_drop_codec.{up,down}.sql` | NEW | Phase 7 clean-break: `TRUNCATE scene_log; ALTER TABLE scene_log DROP COLUMN codec`. |
-| `plugins/core-scenes/audit.go` | TRIMMED | Remove `codec` column read/write (now host's domain); `payload` and other projection fields unchanged. |
-| `plugins/test-downgrade-attacker/` | NEW | Binary plugin fixture for INV-P7-10 e2e test: manifest declares one `sensitivity: always` event type; happy path emits one event (host encrypts, projection writes crypto ref); malicious `QueryHistory` returns the same `event_id` with `codec=identity` + cleartext payload. |
-| `internal/eventbus/history/plugin_validator_test.go` | NEW | Truth-table unit tests against router fake (INV-P7-3 / 4 / 5 / 6 / 11). |
-| `internal/eventbus/history/event_crypto_refs_projection_test.go` | NEW | Integration: drives audit projection with both host- and plugin-owned subjects (INV-P7-1, INV-P7-6, INV-P7-8). |
-| `internal/eventbus/history/plugin_role_permissions_test.go` | NEW | Integration: asserts plugin role cannot INSERT into `event_crypto_refs` (INV-P7-13). |
-| `internal/eventbus/history/phase7_boundary_meta_test.go` | NEW | Meta-test for INV-P7-2 / INV-P7-14: grep-asserts no other plugin-frame → bus-frame conversion site, no new emit-time sensitivity gates. |
-| `pkg/plugin/audit_test.go` | EXTENDED | Layer-2 round-trip (INV-P7-7), type shape (INV-P7-12). |
-| `docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md` | REVISED | §8.2 contract update; §8.3 `AuditRow` field set update; §2 INV-46/48/50 wording. |
-| `site/docs/extending/binary-plugins.md` | EXTENDED | Document the Layer-2 SDK helpers (`pluginsdk.AuditRow`, `StoreFromMessage`, `LoadForQuery`) and how plugin-owned audit tables relate to host-owned `event_crypto_refs`. PR-blocking inline doc; broader docs ramp under Phase 8. |
+| `pkg/plugin/audit.go` | EXTENDED | Add `AuditRow` + `StoreFromMessage` + `LoadForQuery` Layer-2 helpers below the existing Layer-1 ABAC decision-hint recorder. `AuditRow` mirrors `pluginauditpb.AuditRow` 1:1. Top-of-file doc enumerates Layer 1 and Layer 2 surfaces. |
+| `api/plugin/v1/plugin.proto` | RESHAPED | New `AuditRow` message (id, subject, type, timestamp, actor, codec, payload, dek_ref optional, dek_version optional). `AuditEventRequest.event` field replaced with `AuditRow row = 1`. `QueryHistoryResponse.event` replaced with `AuditRow row = 1`. Clean break (no `reserved` markers, no compat shims — per `[feedback_no_prod_shape_for_undeployed]`). Proto regen via `task proto`. |
+| `internal/eventbus/audit/plugin_consumer.go` | MODIFIED | Remove `AUDIT_PLUGIN_CODEC_UNSUPPORTED` rejection at line 343. Wire KeySelector through `PluginConsumerManager` (same instance as `hot_jetstream` reader). Build `AuditRow` from raw msg bytes + parsed headers via shared parser (Section 5.4). Forward ciphertext byte-equal. |
+| `internal/eventbus/audit/header_parser.go` | NEW | Extract the codec / `App-Dek-Ref` / `App-Dek-Version` parsing logic from `projection.go:240-262` into a shared helper. Both the projection (`events_audit` writer) AND `plugin_consumer.go` use it; byte-equality between the two branches is structural (INV-P7-2). |
+| `internal/eventbus/audit/projection.go` | TRIMMED | Use the shared parser. Behaviour unchanged. |
+| `internal/eventbus/history/plugin_downgrade_fence.go` | NEW | Wraps the existing `PluginHistoryRouter`. On every returned `AuditRow`, checks `row.codec == "identity" AND row.type ∈ always_sensitive_types` → refuse. Emits `audit.<game>.system.plugin_integrity_violation` on refusal. Owns the `always_sensitive_types` set (refreshed on manifest reload via existing manifest-registry hook). |
+| `internal/eventbus/history/tier.go` | EXTENDED | `Reader.QueryHistory` plugin branch routes through `PluginDowngradeFence` before returning the stream. Single-line change at `tier.go:367`. |
+| `plugins/core-scenes/migrations/0000XX_add_scene_log_dek_columns.{up,down}.sql` | NEW | `ALTER TABLE scene_log ADD COLUMN dek_ref BIGINT NULL, ADD COLUMN dek_version INTEGER NULL`. Down migration drops them. Additive; existing rows correctly NULL. |
+| `plugins/core-scenes/audit.go` | EXTENDED | `SceneAuditStore.Insert` accepts dek_ref + dek_version params; `queryLog` returns them; `AuditEvent` RPC populates them from `AuditRow.dek_ref` / `.dek_version`; `QueryHistory` returns them on `AuditRow`. |
+| `test/integration/plugin/testdata/test_downgrade_attacker/` | NEW | Test fixture: plugin manifest declares `crypto.emits: [{event_type: secret, sensitivity: always}]`. Happy path emits one sensitive event (host encrypts, dispatcher forwards ciphertext, plugin stores byte-equal). Malicious `QueryHistory` returns the same `event_id` with `codec = "identity"` + cleartext `payload`. Lives under `test/integration/plugin/testdata/` (not under `plugins/`) so `task plugin:build-all` does NOT see it and production builds are unaffected. Loaded by the e2e test harness directly. |
+| `internal/eventbus/history/plugin_downgrade_fence_test.go` | NEW | Unit: truth-table tests against router fake. INV-P7-7 and INV-P7-8 coverage. |
+| `internal/eventbus/audit/header_parser_test.go` | NEW | Unit: typed parser coverage. INV-P7-2. |
+| `internal/eventbus/audit/plugin_consumer_test.go` | EXTENDED | INV-P7-1, INV-P7-11. |
+| `pkg/plugin/audit_test.go` | EXTENDED | INV-P7-4, INV-P7-5. |
+| Integration tests (Section 6) | NEW | INV-P7-3, INV-P7-6, INV-P7-9, INV-P7-10, INV-P7-12, INV-P7-13. |
+| Master spec polish | UPDATED | §4.6 audit-subjects table adds `plugin_integrity_violation`. Section 2 INV-50 wording cross-references INV-P7-7. §8.3 Go-struct example field-name capitalization. |
+| `site/docs/extending/binary-plugins.md` | EXTENDED | Document the Layer 2 SDK helpers and the post-Phase-7 contract that plugin audit tables mirror `events_audit` shape including crypto columns. PR-blocking inline doc. |
+| `site/docs/reference/audit-subjects.md` | EXTENDED | Register `audit.<game>.system.plugin_integrity_violation` subject (one-shot violation, no chain participation). |
 
-### 3.3 Boundaries (what each component MUST/MUST NOT know)
+### 3.3 Boundaries (what each component MUST / MUST NOT know)
 
-- **Plugin code** MUST NOT know the codec, the DEK ref, or anything
-  cryptographic. It stores the bytes it receives via `AuditEvent` RPC and
-  returns them on `QueryHistory`. Schema simplifies (codec column drops).
-- **`PluginRowValidator`** is the sole reader of `event_crypto_refs` at
-  query time. No other host code reads this table during reads; the
-  validator owns the join + the agreement check.
-- **Plugin SDK Layer 2 helpers** are convenience for plugin authors;
-  they do NOT enforce anything host-side. Host has its own ground truth
-  in `event_crypto_refs` and does not trust SDK output.
+- **Plugin code** MUST NOT decrypt. It receives `AuditRow` with
+  ciphertext `payload` + codec/dek_ref/dek_version metadata, stores it
+  verbatim, returns it verbatim on `QueryHistory`. Plugin is a
+  pass-through store.
+- **`plugin_consumer.go` dispatcher** MUST NOT decrypt before forwarding
+  (INV-P7-11). The dispatcher forwards ciphertext byte-equal without
+  using the KeySelector for the forward path itself. KeySelector wiring
+  in Phase 7 is for substrate *symmetry* with the hot-tier reader: if a
+  future phase adds a dispatcher-side validation (e.g., "refuse if the
+  message's `dek_ref` doesn't resolve to a real `crypto_keys` row"), the
+  substrate is ready and we don't have to revisit the wiring point.
+  INV-P7-9 pins the symmetric-wiring invariant.
+- **`PluginDowngradeFence`** is the ONLY READ-side enforcer of the
+  downgrade attack. Master spec §8.2's "host's events_audit is the
+  byte-equal mirror" applies only to host-owned subjects; for
+  plugin-owned subjects, the plugin's own table IS the byte-equal
+  mirror (INV-P7-6 enforces this; the host has no shadow copy).
+- **Plugin SDK Layer 2** is convenience for plugin authors. Host has
+  the AEAD AAD-binding as the cryptographic ground truth; SDK
+  correctness is verified by `audit_test.go`, not relied on by the
+  host's threat model.
 
 ### 3.4 Why this shape
 
-- **Ownership boundaries match knowledge boundaries.** Plugin owns its
-  projection (subject, type, actor, timestamp, payload). Host owns
-  crypto metadata (codec, dek_ref, dek_version). Neither lies because
-  neither stores what it cannot authoritatively prove.
-- **Type system enforces the trust boundary.** No code path can deliver
-  a plugin-supplied row to a client without crossing
-  `PluginRowValidator`. INV-P7-3, INV-P7-4, INV-P7-5 are co-located
-  corollaries of one architectural commitment, not three independent
-  retrofits.
-- **Plugin migrations stay simple.** Phase 7 reduces plugin schema
-  complexity (drops a column); it doesn't add new requirements plugin
-  authors have to know about. Future crypto-metadata evolution
-  (audit-chain hash, schema versions, replay tokens) lands in host
-  migrations only.
-- **Spec coherence improved.** §8.2's mirror-events_audit contract was a
-  coupling that didn't match the trust model. Phase 7 fixes the spec
-  along with the implementation.
+- **Follows the master spec's deliberate design.** v1 of this design
+  tried to "fix" §8.2 with a host-owned side table; that was
+  overturning a prior architectural commitment without recognizing it
+  was deliberate. v2 fulfills §8.2 as written.
+- **The plugin's table IS the cold-tier mirror.** No host shadow copy
+  exists for plugin-owned subjects. The plugin owns its cold tier
+  end-to-end, with the host's per-plugin role isolation +
+  Postgres-schema REVOKE providing the integrity boundary, and the
+  host's `PluginDowngradeFence` + AAD-binding providing the read-side
+  validation.
+- **Two-layer fence is conservative.** Manifest-set heuristic catches
+  the named downgrade attack cheaply. AEAD AAD-binding catches all
+  other tamper shapes through cryptographic ground truth. The two
+  layers are documented as such; neither is load-bearing alone.
+- **Shared header parser closes the byte-divergence risk
+  (crypto-reviewer B3).** The two branches (host projection,
+  plugin_consumer) that interpret the same JS-header crypto metadata
+  use the same code path. Future header changes propagate to both
+  branches by construction.
+- **Clean proto reshape.** Per `[feedback_no_prod_shape_for_undeployed]`,
+  no `reserved` markers, no compat shims, no deprecation period. The
+  `AuditRow` proto message becomes the canonical shape for both
+  ingest and query.
 
 ## Section 4 — Data model
 
-### 4.1 New host table: `event_crypto_refs`
+### 4.1 Plugin schema migration
 
 ```sql
-CREATE TABLE event_crypto_refs (
-    event_id     BYTEA       PRIMARY KEY,         -- 16-byte ULID, matches Event.id
-    codec        TEXT        NOT NULL,            -- "identity" | "xchacha20poly1305-v1" | future
-    dek_ref      BIGINT      NULL,                -- NULL for codec=identity
-    dek_version  INTEGER     NULL,                -- NULL for codec=identity
-    inserted_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+-- plugins/core-scenes/migrations/0000XX_add_scene_log_dek_columns.up.sql
+ALTER TABLE scene_log
+    ADD COLUMN IF NOT EXISTS dek_ref     BIGINT,
+    ADD COLUMN IF NOT EXISTS dek_version INTEGER;
 
-CREATE INDEX event_crypto_refs_dek_ref
-    ON event_crypto_refs (dek_ref)
+CREATE INDEX IF NOT EXISTS scene_log_dek_ref
+    ON scene_log (dek_ref)
     WHERE dek_ref IS NOT NULL;
-
-ALTER TABLE event_crypto_refs ADD CONSTRAINT event_crypto_refs_codec_dek_agreement
-    CHECK ((codec = 'identity' AND dek_ref IS NULL AND dek_version IS NULL)
-        OR (codec <> 'identity' AND dek_ref IS NOT NULL AND dek_version IS NOT NULL));
 ```
 
-No foreign key to `crypto_keys`. `Rekey` destroys old `crypto_keys` rows
-by design (master spec §4.7); the same rule applies here as in
-`events_audit.dek_ref`.
+No CHECK constraint between codec column and dek columns — `scene_log`
+already carries the `codec` column (existing schema); the agreement
+between codec and dek columns is enforced at the **host's projection
+emit** side (the JS publisher sets the headers consistently), not at the
+plugin table. The plugin stores what it receives; if it ever stored an
+inconsistent shape, INV-P7-6 round-trip and AAD validation surface the
+break.
 
-Idempotency: `INSERT ... ON CONFLICT (event_id) DO NOTHING`.
+No host-side schema change in Phase 7. `events_audit` already has
+dek_ref/dek_version columns (migration 000014). `crypto_keys` unchanged.
 
-### 4.2 Modified plugin table: `scene_log` (and any future plugin audit table)
+### 4.2 `pluginauditpb.AuditRow` proto
 
-```sql
-TRUNCATE scene_log;
-ALTER TABLE scene_log DROP COLUMN codec;
-```
+```proto
+// api/plugin/v1/plugin.proto
 
-Plugin's audit table schema after Phase 7 holds projection-only fields:
-`(id BYTEA PK, subject TEXT, type TEXT, timestamp TIMESTAMPTZ,
-actor_kind TEXT, actor_id BYTEA, payload BYTEA, schema_ver SMALLINT,
-js_seq BIGINT, inserted_at TIMESTAMPTZ)`.
+import "holomush/eventbus/v1/actor.proto";
+import "google/protobuf/timestamp.proto";
 
-### 4.3 Plugin SDK — Layer 2 type contracts
+// AuditRow is the canonical wire shape for plugin-owned audit rows. Used
+// in both directions: dispatcher → plugin (AuditEventRequest) and
+// plugin → host (QueryHistoryResponse). Mirrors the events_audit row
+// shape so the proto wire format and the storage shape are coupled.
+message AuditRow {
+    // Cleartext projection fields
+    bytes id = 1;                                   // 16-byte ULID
+    string subject = 2;
+    string type = 3;
+    google.protobuf.Timestamp timestamp = 4;
+    holomush.eventbus.v1.Actor actor = 5;
 
-```go
-// AuditRow is the canonical projection-only shape for plugin-owned audit
-// rows. Crypto-metadata fields (codec, dek_ref, dek_version) are
-// intentionally absent — those live in host-owned event_crypto_refs.
-type AuditRow struct {
-    EventID   ulid.ULID
-    Subject   string
-    Type      string                // "<plugin>:<event_type>"
-    Timestamp time.Time
-    Actor     *eventbuspb.Actor
-    Payload   []byte                // opaque bytes — ciphertext when host encrypted; plaintext otherwise
+    // Crypto envelope
+    string codec = 6;                               // "identity" | "xchacha20poly1305-v1"
+    bytes payload = 7;                              // ciphertext when codec != "identity"
+
+    // DEK reference — absent on identity codec, required on others.
+    // Host enforces the agreement (codec=identity ⇔ both absent).
+    optional uint64 dek_ref = 8;
+    optional uint32 dek_version = 9;
 }
 
-// StoreFromMessage builds an AuditRow from a JetStream message. Discards
-// crypto headers (dek_ref, dek_version, codec) — those flow separately
-// to the host's audit projection consumer.
+message AuditEventRequest {
+    AuditRow row = 1;
+}
+
+message QueryHistoryResponse {
+    AuditRow row = 1;
+}
+```
+
+The `eventbusv1.Event` reuse in today's proto is dropped from
+`AuditEventRequest` and `QueryHistoryResponse`; both messages now
+exclusively use `AuditRow`. Other RPCs continue to use `eventbusv1.Event`
+where appropriate.
+
+### 4.3 Plugin SDK Layer 2 — `pkg/plugin/audit.go`
+
+```go
+// AuditRow is the Go-side mirror of pluginauditpb.AuditRow. Fields and
+// names match the proto-generated Go 1:1 for INV-P7-4.
+type AuditRow struct {
+    EventID    ulid.ULID
+    Subject    string
+    Type       string
+    Timestamp  time.Time
+    Actor      *eventbuspb.Actor
+
+    Codec      string
+    Payload    []byte                // ciphertext when Codec != "identity"
+
+    // Pointers map to the proto's optional fields. nil ⇔ NULL ⇔
+    // identity codec.
+    DEKRef     *uint64
+    DEKVersion *uint32
+}
+
+// StoreFromMessage extracts an AuditRow from a JetStream message,
+// preserving payload bytes byte-equal and using the shared header
+// parser (header_parser.go) so the typed values match what the host
+// audit projection records for host-owned subjects.
 func StoreFromMessage(msg jetstream.Msg) (AuditRow, error)
 
-// LoadForQuery converts a stored AuditRow into the proto frame returned
-// by PluginAuditService.QueryHistory. Round-trip stable with StoreFromMessage.
-func LoadForQuery(row AuditRow) (*pluginauditpb.AuditEvent, error)
+// LoadForQuery converts a stored AuditRow into the proto frame
+// returned by PluginAuditService.QueryHistory. Round-trip stable with
+// StoreFromMessage. Verified by INV-P7-5.
+func LoadForQuery(row AuditRow) (*pluginauditpb.AuditRow, error)
 ```
 
-### 4.4 Host-side validator
+### 4.4 Always-sensitive type set
+
+`PluginDowngradeFence` holds an atomically-updatable set keyed by
+qualified event type (`<plugin_name>:<event_type>`). On manifest
+reload, the set is recomputed and swapped in atomically (Go
+`atomic.Pointer` or RWMutex around a map; choice is implementation
+detail, INV-P7-8 pins the atomicity).
+
+The set is fed from `internal/plugin/Manifest.crypto.emits` entries
+where `Sensitivity == SensitivityAlways`. The reload hook attaches to
+the existing manifest-registry callback path (no new manifest-watch
+infrastructure).
+
+## Section 5 — Implementation notes
+
+### 5.1 Plugin dispatcher widening
+
+`internal/eventbus/audit/plugin_consumer.go::decodeEnvelope`'s current
+behaviour: parses `App-Codec` header; if non-identity, rejects with
+`AUDIT_PLUGIN_CODEC_UNSUPPORTED`. Phase 7 removes the rejection. New
+behaviour:
+
+- Parse `App-Codec`, `App-Dek-Ref`, `App-Dek-Version` via the shared
+  header parser (Section 5.4).
+- Build `pluginauditpb.AuditRow` directly from `msg.Data()` (ciphertext
+  payload byte-equal) + the parsed headers + the projection fields
+  read from the proto envelope's cleartext metadata. For sensitive
+  events, `payload` is ciphertext; for identity events, it's the
+  plaintext-encoded envelope bytes (unchanged from today).
+- Forward `AuditEventRequest{row: AuditRow}` to the plugin RPC.
+
+The function signature and error-code surface change to reflect
+ciphertext forwarding; tests at
+`plugin_consumer_unit_test.go::TestPluginConsumerDispatchRejectsNonIdentityCodec`
+are deleted (the test name itself encodes the deprecated behaviour).
+
+### 5.2 KeySelector wiring
+
+`PluginConsumerManager` gains a `keySelector codec.KeySelector` field.
+At wiring time (`cmd/holomush/deps.go`), the same selector instance
+that's passed to `history.NewReader` via `WithCodecSelector` is also
+passed to `PluginConsumerManager`. INV-P7-9 verifies the identity.
+
+In Phase 7, the dispatcher doesn't *use* the selector for the forward
+path. It's wired for substrate symmetry; future work (e.g.,
+dispatcher-side DEK existence check) lands without re-wiring.
+
+### 5.3 PluginDowngradeFence
 
 ```go
-// PluginRowValidator is the typed trust boundary between raw plugin
-// frames and the host's bus-event delivery path. Every check the host
-// enforces against plugin responses lives here.
-type PluginRowValidator interface {
-    // Validate converts an unchecked plugin frame into a validated bus
-    // frame, cross-referencing the host-owned event_crypto_refs row.
-    //
-    // Typed errors:
-    //   - AUDIT_ROW_DOWNGRADE_DETECTED (INV-P7-3)
-    //   - AUDIT_ROW_CODEC_MISMATCH     (INV-P7-4)
-    //   - AUDIT_ROW_NOT_FOUND          (INV-P7-5)
-    Validate(ctx context.Context, frame *pluginauditpb.AuditEvent) (*eventbus.HistoryFrame, error)
+// internal/eventbus/history/plugin_downgrade_fence.go
+
+type PluginDowngradeFence struct {
+    inner             PluginHistoryRouter
+    sensitiveTypes    atomic.Pointer[map[string]struct{}]
+    integrityEmitter  AuditEmitter   // for plugin_integrity_violation
 }
+
+func (f *PluginDowngradeFence) QueryHistory(ctx context.Context,
+    pluginName string, q eventbus.HistoryQuery) (eventbus.HistoryStream, error) {
+    inner, err := f.inner.QueryHistory(ctx, pluginName, q)
+    if err != nil { return nil, err }
+    return &fencedStream{inner: inner, fence: f}, nil
+}
+
+// fencedStream wraps the inner stream; Next() applies the
+// manifest-set check per row.
 ```
 
-The concrete implementation takes a host pool (for `event_crypto_refs`
-lookup) and an audit emitter (for `plugin_integrity_violation` events on
-refusal).
+Per-row check is cheap: one set lookup keyed by `row.type`. Fence emits
+`plugin_integrity_violation` audit synchronously when refusing
+(blocking the client's read until the audit emit completes — operator
+visibility is the point).
 
-## Section 5 — Audit projection change
+### 5.4 Shared header parser
 
-The existing `internal/eventbus/audit/projection.go` ack-and-skips
-plugin-owned subjects today. Phase 7 routes those into a narrow
-`event_crypto_refs` INSERT:
+```go
+// internal/eventbus/audit/header_parser.go
 
-```text
-For each JetStream delivery msg:
-  subject_owner = owners.Resolve(msg.Subject)
-  switch subject_owner:
-    case Host:
-      INSERT events_audit (full row + crypto cols)                       [unchanged]
-    case Plugin:
-      INSERT event_crypto_refs (event_id, codec, dek_ref, dek_version)   [NEW]
-      forward msg to plugin.PluginAuditService.AuditEvent RPC            [unchanged]
+// HeaderCryptoMetadata is the typed projection of a JetStream
+// message's crypto-related headers. Both the host audit projection
+// (events_audit writer) and the per-plugin dispatcher use this parser;
+// byte-equality of typed values across the two branches is structural
+// (INV-P7-2).
+type HeaderCryptoMetadata struct {
+    Codec      string
+    DEKRef     *int64     // matches pgx nullable int8 ⇔ proto uint64 conversion handled by caller
+    DEKVersion *int32     // matches pgx nullable int4 ⇔ proto uint32 conversion handled by caller
+}
+
+func ParseCryptoHeaders(h nats.Header) (HeaderCryptoMetadata, error)
 ```
 
-Both branches use `ON CONFLICT (event_id) DO NOTHING` for redelivery
-idempotency. The two INSERTs in the plugin branch (host `event_crypto_refs`
-+ plugin `scene_log` via RPC) are NOT atomic; the host write commits first,
-then the plugin RPC is invoked. JetStream redelivery handles partial
-failures (host wrote, plugin RPC failed): redelivery re-runs both
-INSERTs idempotently. INV-P7-8 covers this.
+The parser is the single source of truth for header → typed-value
+conversion. `projection.go` and `plugin_consumer.go` both call it.
 
 ## Section 6 — Test strategy
 
 | Layer | Tests | Build tag |
 |---|---|---|
-| **Unit** | `plugin_validator_test.go` — exhaustive truth table (INV-P7-3 / 4 / 5 / 6 / 11). Router fake feeds synthesized frames; constructed `event_crypto_refs` fixtures via testdb helper. `audit_test.go` Layer-2 round-trip (INV-P7-7). Layer-2 type shape (INV-P7-12). Meta-test (INV-P7-2, INV-P7-14). | none — runs in `task test` |
-| **Integration** | `event_crypto_refs_projection_test.go` — drives audit projection with host- and plugin-owned subjects; asserts narrow-row write on plugin subjects (INV-P7-1, INV-P7-6, INV-P7-8). `plugin_role_permissions_test.go` — INV-P7-13 perm denial. `plugin_migration_test.go` — INV-P7-9 standalone migration runnability. | `//go:build integration` |
-| **End-to-end** | `plugins/test-downgrade-attacker/` binary fixture: manifest declares `crypto.emits: [{event_type: secret, sensitivity: always}]`; emits one sensitive event (host encrypts, projection writes `event_crypto_refs` with `codec=xchacha20poly1305-v1`); deliberately-malicious `QueryHistory` returns the same `event_id` with `codec=identity` + cleartext `payload`. Host e2e test calls `QueryStreamHistory`, asserts refusal + `plugin_integrity_violation` audit emission (INV-P7-3, INV-P7-10). Plus one happy-path: same plugin with non-malicious `QueryHistory` delivers correctly. | `//go:build integration` |
-| **Lint / static** | Existing `gorules/dek_no_serialize.go` continues. No new ruleguard rules. | `task lint` |
-| **Coverage gate** | Per project rule: >80% per package. `internal/eventbus/history/` and `pkg/plugin/` MUST stay above; new files covered by their named unit tests. | `task test:cover` |
+| **Unit** | `plugin_consumer_test.go` — INV-P7-1, INV-P7-11 (dispatcher forwards ciphertext byte-equal; no decrypt). `header_parser_test.go` — INV-P7-2 (typed value coverage). `plugin_downgrade_fence_test.go` — INV-P7-7, INV-P7-8 (truth table, atomic reload). `audit_test.go` — INV-P7-4, INV-P7-5 (struct↔proto mirroring, round-trip). Meta-test — INV-P7-14. | none — `task test` |
+| **Integration** | `plugin_migration_test.go` — INV-P7-3, INV-P7-10 (column add, standalone runnability). `plugin_audit_round_trip_test.go` — INV-P7-6 (byte-equal store+return for sensitive event). `sensitive_event_storage_test.go` — INV-P7-12 (plugin row is ciphertext). `plugin_role_permissions_test.go` — INV-P7-13. `dispatcher_projection_parity_test.go` — INV-P7-2 cross-branch. `dispatcher_selector_identity_test.go` — INV-P7-9. | `//go:build integration` |
+| **End-to-end** | `test_downgrade_attacker_e2e_test.go` — uses `test/integration/plugin/testdata/test_downgrade_attacker/` fixture. Happy path: plugin emits one `sensitivity: always` event; host encrypts; dispatcher forwards ciphertext; plugin stores ciphertext byte-equal; plugin's `QueryHistory` returns ciphertext; host decrypts and delivers. Attack path: same plugin's malicious `QueryHistory` returns the same event with `codec=identity` + cleartext payload; `PluginDowngradeFence` refuses with `AUDIT_ROW_DOWNGRADE_DETECTED`; `plugin_integrity_violation` audit event is emitted. | `//go:build integration` |
+| **Lint / static** | Existing `gorules/dek_no_serialize.go` continues; no new ruleguard rules. | `task lint` |
+| **Coverage gate** | Per project rule: >80% per package. `internal/eventbus/audit/`, `internal/eventbus/history/`, `pkg/plugin/` MUST stay above. | `task test:cover` |
 
-## Section 7 — Spec revision summary
+## Section 7 — `plugin_integrity_violation` audit subject
 
-The Phase 7 PR carries a single-section revision to
-`docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md`:
+New audit subject introduced by Phase 7. Updates master spec §4.6.
 
-- **§8.2 table** — "Plugin's audit table schema" row changes from
-  `Mirrors events_audit shape: payload BYTEA, codec TEXT, dek_ref BIGINT,
-  dek_version INT` to `Projection-only fields: payload BYTEA. Crypto
-  metadata (codec, dek_ref, dek_version) is host-owned in
-  event_crypto_refs.`
-- **§8.2 downgrade-attack-fence paragraph** — pseudo-code rewritten to
-  express the concrete `event_crypto_refs.codec ≠ frame.codec`
-  disagreement check, replacing the manifest-set heuristic.
-- **§8.3** — `AuditRow` struct definition updated to omit `Codec`,
-  `DEKRef`, `DEKVersion` fields. Surrounding prose updated.
-- **Section 2 invariants** — INV-46 / INV-48 / INV-50 wording updated to
-  reflect concrete-disagreement semantics; cross-references added to the
-  new INV-P7-N corpus in this design doc.
+- **Subject:** `audit.<game>.system.plugin_integrity_violation`
+- **Emit trigger:** `PluginDowngradeFence` refuses a plugin-returned
+  row per INV-P7-7.
+- **Payload fields (cleartext):** `plugin_name`, `event_id`,
+  `event_type`, `claimed_codec`, `expected_sensitivity`, `refusal_code`
+  (`AUDIT_ROW_DOWNGRADE_DETECTED`).
+- **Sensitivity:** `never`. The violation report itself is operator
+  diagnostic data; it carries no game-content.
+- **Chain participation:** NONE. This is a one-shot violation report,
+  not a hash-linked state machine. (Master spec §4.6.X registered
+  chains: `policy_set`, `rekey`; Phase 7 does NOT add a chain.)
+- **ABAC:** Inherits the existing `audit.*.system.*` ABAC deny rule
+  (master spec §4.6); plugin / character subjects cannot subscribe.
+  Operators read via the localhost UNIX admin socket
+  (`holomush admin audit query`).
 
-This is a substrate-level spec change. `crypto-reviewer` gate fires on
-the design doc + spec revision before `superpowers:writing-plans` can be
-invoked.
+`site/docs/reference/audit-subjects.md` gets the registration row.
 
 ## Section 8 — Failure modes
 
 | Failure | Detected by | Behaviour |
 |---|---|---|
-| Plugin `QueryHistory` returns `codec=identity` for an event whose `event_crypto_refs.codec` is non-identity | `PluginRowValidator.Validate` | Refuse row with `AUDIT_ROW_DOWNGRADE_DETECTED`; emit `audit.<game>.system.plugin_integrity_violation`. |
-| Plugin `QueryHistory` returns any other codec disagreement (e.g., `xchacha20poly1305-v1` when host stored `xchacha20poly1305-v2`) | `PluginRowValidator.Validate` | Refuse row with `AUDIT_ROW_CODEC_MISMATCH`; emit `plugin_integrity_violation`. |
-| Plugin returns a frame whose `event_id` has no matching `event_crypto_refs` row | `PluginRowValidator.Validate` | Refuse row with `AUDIT_ROW_NOT_FOUND`. Logged at WARN — should be impossible after the clean-break truncation; the rule exists to keep the validator's decision total. |
-| Audit projection's plugin-owned-subject branch crashes between writing `event_crypto_refs` and forwarding to the plugin RPC | JetStream redelivery + `ON CONFLICT DO NOTHING` | Redelivery re-runs both inserts idempotently. INV-P7-8 covers this. |
-| Plugin role attempts direct `INSERT INTO event_crypto_refs` | PostgreSQL permission check | `permission denied for schema public` (schema-level USAGE revoked at provisioning). INV-P7-13 asserts. |
-| Pre-Phase-7 plugin audit row exists at read time (e.g., dev DB) | Clean-break migration | Should be impossible after the migration runs. If it happens, validator returns `AUDIT_ROW_NOT_FOUND`. Operator remediation: re-run plugin migrations. |
+| Plugin's `QueryHistory` returns a row where `codec=identity` for an event whose type is `sensitivity: always` in some plugin's manifest | `PluginDowngradeFence` (INV-P7-7) | Refuse the row with `AUDIT_ROW_DOWNGRADE_DETECTED`. Emit `plugin_integrity_violation`. Surface refusal to the client as `metadata_only=true` for that event_id (per master INV-26 contract). |
+| Plugin's `QueryHistory` returns a row where AAD-bound fields (subject, type, actor, timestamp) are tampered but codec/dek_ref match the host's expectation | AEAD AAD-binding at decrypt (INV-25) | Decrypt fails with tag-mismatch; existing error path. No `plugin_integrity_violation` emitted (the fence didn't trip); the decrypt-side error is the operator signal. Per the two-layer fence design — Section 1 threat model — this is the cryptographic ground truth catching what the heuristic doesn't. |
+| Plugin's `QueryHistory` returns a row with `codec != "identity"` AND `dek_ref` pointing at a non-existent `crypto_keys` row | Host hot-tier decrypt path (existing) | Decrypt fails with `EVENTBUS_HISTORY_DEK_HEADER_MISSING`-style error; falls back to cold tier per INV-39. For plugin-owned subjects there is no host cold tier, so the final outcome is `metadata_only=true` per INV-26. |
+| Plugin dispatcher's KeySelector unwired | Boot-time check (INV-P7-9) | Panic at startup: `PLUGIN_DISPATCHER_NO_SELECTOR`. Pre-Phase-7 this dispatch path rejected any non-identity codec; post-Phase-7 the absence of a selector is a misconfiguration that MUST surface at boot, not at first sensitive event. |
+| `plugin_integrity_violation` audit emit fails (NATS down, queue full) | Existing `AuditEmitter` error path | Operator-visible error logged; refusal of the offending row still proceeds (the client gets `metadata_only=true`). The audit gap is accepted here because the alternative — refusing reads — is worse than a missed diagnostic record. Documented in `site/docs/operating/crypto-runbook.md` (Phase 8). |
+| Plugin migration runs without host migrations | Plugin runner | Succeeds; ALTER ADD COLUMN is idempotent and standalone (INV-P7-10). |
+| Plugin role attempts INSERT into `events_audit` | PostgreSQL permission check | `permission denied for schema public` (INV-P7-13). |
 
 ## Section 9 — Migration / cutover
 
-Phase 7 is a single PR. The PR contains:
+Phase 7 is a single PR containing:
 
-1. Host migration adding `event_crypto_refs` table + CHECK + index.
-2. Plugin migration truncating `scene_log` + dropping `codec` column.
-3. Audit projection consumer change.
-4. New `PluginRowValidator` + plugin-frame-to-bus-frame wiring at
-   `Reader.QueryHistory`.
-5. SDK Layer 2 additions to `pkg/plugin/audit.go`.
-6. Test corpus per Section 6.
-7. `plugins/test-downgrade-attacker/` binary fixture.
-8. Spec revision to master event-payload-crypto-design doc.
-9. `site/docs/extending/binary-plugins.md` SDK reference update.
+1. New `internal/eventbus/audit/header_parser.go` (shared parser
+   extracted from existing projection.go logic).
+2. Modified `internal/eventbus/audit/plugin_consumer.go` (removes
+   identity-codec rejection; wires KeySelector; forwards ciphertext).
+3. New `internal/eventbus/history/plugin_downgrade_fence.go` +
+   wrapper integration into `tier.go::Reader.QueryHistory`.
+4. Reshaped `api/plugin/v1/plugin.proto` + regenerated proto code
+   (`AuditRow` message; `AuditEventRequest.row`; `QueryHistoryResponse.row`).
+5. Extended `pkg/plugin/audit.go` (Layer 2 helpers).
+6. Plugin migration: `plugins/core-scenes/migrations/0000XX_add_scene_log_dek_columns.{up,down}.sql`.
+7. Updated `plugins/core-scenes/audit.go` (handles new columns,
+   constructs `AuditRow` proto on QueryHistory).
+8. New test fixture under `test/integration/plugin/testdata/test_downgrade_attacker/`.
+9. Test corpus per Section 6.
+10. Master spec polish (§4.6 audit-subjects, §2 INV-50 cross-reference,
+    §8.3 Go-struct field-name capitalization).
+11. PR-blocking docs: `site/docs/extending/binary-plugins.md` SDK pointer,
+    `site/docs/reference/audit-subjects.md` violation-subject registration.
 
-No backfill. No rollback path: an environment that already ran the
-plugin clean-break migration cannot return to the codec-column world
-without restoring from backup. For an undeployed codebase this is
-acceptable; documented in §1 out-of-scope.
+No backfill required: existing `scene_log` rows have `codec=identity`;
+the new `dek_ref`/`dek_version` columns default NULL, which is correct
+for identity rows.
+
+Rollback: drop the new columns + revert the dispatcher change. The
+proto reshape is a clean break and isn't trivially reversible, which is
+acceptable for the no-deployments codebase.
 
 ## Prerequisites and dependencies
 
-- Phase 3 (`holomush-ojw1`) — DONE. Provides the encryption substrate
-  (codec, AuthGuard, DEK lifecycle, AAD discipline, decrypt-on-fanout).
-- Phase 5 (`holomush-jxo8`) — DONE. Provides `AdminReadStream` and
-  break-glass audit semantics referenced from §8.5 of the master spec.
-- No new external dependencies; no schema changes to `crypto_keys` or
-  `events_audit`.
+- Phase 3 (`holomush-ojw1`) — DONE. Provides encryption substrate,
+  codec, AuthGuard, DEK lifecycle, AAD discipline.
+- Phase 5 (`holomush-jxo8`) — DONE. Provides AdminReadStream
+  break-glass semantics referenced from master spec §7.5.
+- No external dependency changes; no schema changes to `crypto_keys`
+  or `events_audit`.
 
 ## References
 
 - Master spec: `docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md`
-  (especially §2, §4.6, §7, §8, §11.1 row 7).
-- Phase 3d grounding: `docs/superpowers/specs/2026-05-03-event-payload-crypto-phase3d-grounding.md`.
+  (especially §2, §4.6, §7, §8.2, §8.3, §11.1 row 7).
+- Phase 3d grounding:
+  `docs/superpowers/specs/2026-05-03-event-payload-crypto-phase3d-grounding.md`.
 - Plugin schema isolation: `internal/plugin/schema_provisioner.go`.
 - Existing plugin-owned audit pattern: `plugins/core-scenes/audit.go`,
   `plugins/core-scenes/migrations/000004_create_scene_log.up.sql`.
 - Existing emit-time sensitivity fence: `internal/plugin/sensitivity_fence.go`.
-- Existing host-side QueryStreamHistory: `internal/grpc/query_stream_history.go`.
-- Existing tier reader with plugin routing: `internal/eventbus/history/tier.go:346-369`.
+- Existing host audit projection:
+  `internal/eventbus/audit/projection.go` (especially line 240-262
+  header parsing extracted to `header_parser.go` in Phase 7).
+- Existing per-plugin audit dispatcher:
+  `internal/eventbus/audit/plugin_consumer.go` (especially line 332-365
+  documenting the parked KeySelector wiring).
+- Existing tier reader with plugin routing:
+  `internal/eventbus/history/tier.go:346-369`.
+- Existing test fixture pattern:
+  `test/integration/plugin/testdata/forgery_plugin/`.
