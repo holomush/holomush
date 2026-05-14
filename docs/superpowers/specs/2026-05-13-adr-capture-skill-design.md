@@ -947,3 +947,4 @@ elsewhere in the repo).
   `.claude/hooks/remind-pre-action-review.sh` (style reference)
 - ADR 0017 (`admin-readstream-bypasses-history-reader`): gold-standard
   example of the unified format target
+<!-- adr-capture: sha256=6d6269129baf5ec3; session=dogfood; ts=2026-05-14T13:58:54Z; adrs= -->
