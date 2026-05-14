@@ -95,7 +95,7 @@ request cycle is an edge case that resolves on the next request.
 
 ## Alternatives Considered
 
-**Option A: Eager resolution (collect-then-evaluate)**
+### Option A: Eager resolution (collect-then-evaluate)
 
 Call all registered attribute providers before evaluating any policy. Assemble complete
 `AttributeBags` with every known attribute for the subject, resource, and environment.
@@ -106,7 +106,7 @@ Then evaluate all candidate policies against these bags.
 | Strengths  | Simple, predictable; complete attribute snapshot for every decision; powers audit logging and `policy test` debugging; no ordering dependencies between providers |
 | Weaknesses | May fetch attributes that no policy references; all providers called even if no policy needs their data                                                           |
 
-**Option B: Lazy resolution (resolve-on-reference)**
+### Option B: Lazy resolution (resolve-on-reference)
 
 Resolve attributes only when a policy condition references them. Cache resolved values
 for subsequent references within the same evaluation.

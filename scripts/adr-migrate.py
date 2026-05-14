@@ -12,11 +12,12 @@ Usage:
 
 See docs/superpowers/specs/2026-05-13-adr-capture-skill-design.md §4.
 """
+
 import argparse
 import re
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -102,11 +103,12 @@ def parse_legacy(adr: LegacyADR) -> None:
     # If current format (no Alternatives Considered H2 but Options Considered
     # nested under Context), lift it out.
     if not adr.alternatives:
-        m = re.search(r"###\s+Options Considered\s*\n(.+?)(?=^##\s|\Z)",
-                      adr.context, re.DOTALL | re.MULTILINE)
+        m = re.search(
+            r"###\s+Options Considered\s*\n(.+?)(?=^##\s|\Z)", adr.context, re.DOTALL | re.MULTILINE
+        )
         if m:
             adr.alternatives = m.group(1).strip()
-            adr.context = adr.context[:m.start()].rstrip()
+            adr.context = adr.context[: m.start()].rstrip()
 
     # Some ADRs use a top-level `## Options Considered` H2 instead of
     # `## Alternatives Considered` (ADRs 0005-0008).
@@ -129,19 +131,24 @@ def parse_legacy(adr: LegacyADR) -> None:
         )
 
     # All required sections must be non-empty after the lift.
-    for fld in ("title", "date", "context", "decision", "rationale", "alternatives", "consequences"):
+    for fld in (
+        "title",
+        "date",
+        "context",
+        "decision",
+        "rationale",
+        "alternatives",
+        "consequences",
+    ):
         if not getattr(adr, fld):
-            sys.stderr.write(
-                f"WARN: {adr.path.name}: empty field {fld!r} after parse\n"
-            )
+            sys.stderr.write(f"WARN: {adr.path.name}: empty field {fld!r} after parse\n")
 
 
 def split_h2_sections(text: str) -> dict[str, str]:
     """Return {section_name: body} for each `## Section` block."""
     out: dict[str, str] = {}
     # Find each `## Name` header and the text up to the next `## ` or EOF.
-    pattern = re.compile(r"^##\s+(.+?)\s*\n(.*?)(?=^##\s|\Z)",
-                         re.DOTALL | re.MULTILINE)
+    pattern = re.compile(r"^##\s+(.+?)\s*\n(.*?)(?=^##\s|\Z)", re.DOTALL | re.MULTILINE)
     for m in pattern.finditer(text):
         out[m.group(1).strip()] = m.group(2).strip()
     return out
@@ -249,20 +256,26 @@ def run(cmd: list[str], stdin: str | None = None, check: bool = True) -> str:
 BD_ID_PATTERN = re.compile(r"Created issue: (\S+)")
 # Self-test on module load: catches a future bd CLI stdout change at import
 # time rather than mid-migration (when 17 records have already been written).
-assert BD_ID_PATTERN.search(
-    "✓ Created issue: holomush-xxxx — title"
-), "BD_ID_PATTERN no longer matches bd create stdout; update the regex."
+assert BD_ID_PATTERN.search("✓ Created issue: holomush-xxxx — title"), (
+    "BD_ID_PATTERN no longer matches bd create stdout; update the regex."
+)
 
 
 def bd_create_decision(title: str, description: str) -> str:
     """`bd create -t decision --validate`; return the new bd-id."""
-    out = run([
-        "bd", "create",
-        "-t", "decision",
-        "--validate",
-        "--title", title,
-        "--description", description,
-    ])
+    out = run(
+        [
+            "bd",
+            "create",
+            "-t",
+            "decision",
+            "--validate",
+            "--title",
+            title,
+            "--description",
+            description,
+        ]
+    )
     m = BD_ID_PATTERN.search(out)
     if not m:
         sys.stderr.write(f"ERROR: could not parse bd-id from:\n{out}\n")
@@ -378,18 +391,17 @@ shape and use `bd create -t decision --validate` to file the record.
 def verify_post_migration(adrs: list[LegacyADR]) -> None:
     """Inline asserts enforcing INV-A12, A13."""
     real_files = sorted(
-        p.name for p in ADR_DIR.iterdir()
-        if re.match(r"^[a-z0-9]+-[a-z0-9-]+\.md$", p.name)
-        and not re.match(r"^\d{4}-", p.name)
+        p.name
+        for p in ADR_DIR.iterdir()
+        if re.match(r"^[a-z0-9]+-[a-z0-9-]+\.md$", p.name) and not re.match(r"^\d{4}-", p.name)
     )
-    stubs = sorted(
-        p.name for p in ADR_DIR.iterdir()
-        if re.match(r"^\d{4}-.+\.md$", p.name)
-    )
+    stubs = sorted(p.name for p in ADR_DIR.iterdir() if re.match(r"^\d{4}-.+\.md$", p.name))
     assert len(real_files) == 17, f"expected 17 real files, got {len(real_files)}: {real_files}"
     assert len(stubs) == 17, f"expected 17 stubs, got {len(stubs)}: {stubs}"
     assert (ADR_DIR / "README.md").exists(), "README.md missing"
-    assert not (ADR_DIR / "legacy").exists(), "legacy/ subdirectory MUST NOT exist (INV-A12 flat-stub rule)"
+    assert not (ADR_DIR / "legacy").exists(), (
+        "legacy/ subdirectory MUST NOT exist (INV-A12 flat-stub rule)"
+    )
 
     # Each stub links to an existing real file.
     for stub_name in stubs:
@@ -413,9 +425,11 @@ def verify_post_migration(adrs: list[LegacyADR]) -> None:
             f"supersession edge missing: {superseder.bd_id} should supersede {a.bd_id}\n{deps}"
         )
 
-    print(f"\n✓ Post-migration verification passed: "
-          f"{len(real_files)} real + {len(stubs)} stubs + README + "
-          f"{len(sup)} supersession edges.")
+    print(
+        f"\n✓ Post-migration verification passed: "
+        f"{len(real_files)} real + {len(stubs)} stubs + README + "
+        f"{len(sup)} supersession edges."
+    )
 
 
 def apply_migration(adrs: list[LegacyADR]) -> None:
@@ -492,8 +506,7 @@ def apply_migration(adrs: list[LegacyADR]) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--apply", action="store_true",
-                    help="Actually mutate state (default: dry-run)")
+    ap.add_argument("--apply", action="store_true", help="Actually mutate state (default: dry-run)")
     args = ap.parse_args()
 
     adrs = discover_legacy_adrs()
@@ -501,10 +514,15 @@ def main() -> int:
     for a in adrs:
         parse_legacy(a)
         a.slug = slugify(a.title) or a.slug  # prefer title-derived slug
-        print(f"  ADR-{a.number:04d}  →  <bd-id>-{a.slug}.md  "
-              f"({a.date}, {a.status})"
-              + (f"  [supersededBy=ADR-{a.superseded_by_number:04d}]"
-                 if a.superseded_by_number else ""))
+        print(
+            f"  ADR-{a.number:04d}  →  <bd-id>-{a.slug}.md  "
+            f"({a.date}, {a.status})"
+            + (
+                f"  [supersededBy=ADR-{a.superseded_by_number:04d}]"
+                if a.superseded_by_number
+                else ""
+            )
+        )
 
     if not args.apply:
         # INV-A18: dry-run MUST NOT mutate any state.

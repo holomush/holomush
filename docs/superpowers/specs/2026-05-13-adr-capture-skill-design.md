@@ -492,6 +492,8 @@ Return JSON per the schema in your system prompt. Do not prepend prose.
         "neutral": ["..."]
       },
       "spec_section": "§3.5",
+      "start_line": 123,
+      "end_line": 147,
       "transcript_quotes": ["..."],
       "worthiness_score": 0,
       "supersedes": null
@@ -795,15 +797,15 @@ scripts/adr-doctor.sh --explain   # additionally print which invariants each che
 | `hook_executable` | `.claude/hooks/nudge-adr-capture.sh` is executable and passes `shellcheck`. |
 | `forbid_skill_commits` (INV-A2) | `grep -E '(jj commit\|jj describe\|git commit\|git add)' .claude/skills/capture-adrs/SKILL.md` returns no matches. The skill MUST NOT commit; user runs commits. |
 | `invariant_coverage` (meta-test) | See §Invariants §Meta-test for the canonical rule. Walks every `\| INV-A<n> \|` row, validates each row's `Surface` column against the fixed enum, and for `doctor`-tagged invariants requires a matching `# INV-A<n>` comment in this script. |
-| `supersession_edges` (INV-A13) | For each ADR file whose `**Status:**` line contains "Superseded by `<bd-id>`", `bd dep list <bd-id> | grep -q supersedes` succeeds (i.e., the superseder's bd record has a `supersedes` dep edge to this file's bd-id). |
+| `supersession_edges` (INV-A13) | For each ADR file whose `**Status:**` line contains "Superseded by `<bd-id>`", `bd dep list <bd-id> \| grep -q supersedes` succeeds (i.e., the superseder's bd record has a `supersedes` dep edge to this file's bd-id). |
 
 **Exit codes:** 0 on full pass; 1 on any check failure with a per-check
 report on stderr; 2 on missing tools (`bd`, `jq`) or unexpected
 preconditions.
 
 **Wiring:** `Taskfile.yaml` `lint:adr` target is added under `lint`'s
-deps; runs `scripts/adr-doctor.sh`. `task lint` therefore runs it. CI
-fails on non-zero.
+`cmds:` list (`- task: lint:adr`); runs `scripts/adr-doctor.sh`.
+`task lint` therefore runs it. CI fails on non-zero.
 
 ## Invariants
 
@@ -827,7 +829,7 @@ invariant carries a `Surface` value from this fixed enum:
 | INV-A5 | `doctor` | The `**Decision:** <bd-id>` line MUST resolve via `bd show <bd-id>` for every file in `docs/adr/<bd-id>-*.md`. | `adr-doctor.sh` `file_has_decision_header` check; wired into `task lint`. |
 | INV-A6 | `hook-test` | The hook MUST exit 0 on every non-error path; it MUST NOT block Edit/Write. | `nudge-adr-capture.test.sh` cases assert exit code 0 for: non-spec path, no marker, stale marker, fresh marker, opt-out marker, missing file. |
 | INV-A7 | `hook-test` | The hook MUST suppress nudges when marker SHA matches stripped content SHA. | `nudge-adr-capture.test.sh` "fresh marker" fixture asserts stdout is empty. |
-| INV-A8 | `hook-test` | The hook MUST emit, on the nudge path, a single JSON object on stdout matching `{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"..."}}` with the spec path embedded in `additionalContext`. Bare `<system-reminder>` strings are forbidden (PostToolUse stdout does not reach Claude as text — only `additionalContext` JSON does). | `nudge-adr-capture.test.sh` "no marker" and "stale marker" fixtures: assert `jq -e '.hookSpecificOutput.hookEventName == "PostToolUse"'` passes AND `jq -e '.hookSpecificOutput.additionalContext | contains("<spec-path>")'` passes. |
+| INV-A8 | `hook-test` | The hook MUST emit, on the nudge path, a single JSON object on stdout matching `{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"..."}}` with the spec path embedded in `additionalContext`. Bare `<system-reminder>` strings are forbidden (PostToolUse stdout does not reach Claude as text — only `additionalContext` JSON does). | `nudge-adr-capture.test.sh` "no marker" and "stale marker" fixtures: assert `jq -e '.hookSpecificOutput.hookEventName == "PostToolUse"'` passes AND `jq -e '.hookSpecificOutput.additionalContext \| contains("<spec-path>")'` passes. |
 | INV-A9 | `skill-test` | The skill MUST write the marker even when zero candidates are accepted (so the hook does not re-nudge on the same content). | Skill end-to-end test with "user skips all" fixture; assert marker is written with `adrs=` empty. |
 | INV-A10 | `hook-test` + `skill-test` | The skill AND hook MUST honor a well-formed `optout=true` marker as a suppression signal. The skill MUST NOT overwrite an opt-out marker; if invoked on an opt-out-marked spec it MUST abort with a clear message naming the opt-out `reason`, regardless of `--re-run`. The hook MUST exit 0 with no stdout on opt-out specs. | `nudge-adr-capture.test.sh` "opt-out marker" fixture asserts hook stdout empty + exit 0. Skill end-to-end test "opt-out spec" fixture asserts the skill aborts with the reason in its message AND does NOT modify the file. |
 | INV-A11 | `manual` | The migration MUST land in a single jj change; partial failure recovery is `jj abandon` + fix + rerun, not a script-level idempotency layer. | Manual verification in the PR (commit log shows single change). |
@@ -922,7 +924,7 @@ The full delta the implementation PR ships:
 | Path | Change |
 |------|--------|
 | `.claude/settings.json` | Add `nudge-adr-capture.sh` to PostToolUse `Edit\|Write` matcher block |
-| `Taskfile.yaml` | Add `adr:migrate` and `lint:adr` targets; wire `lint:adr` into `lint` deps |
+| `Taskfile.yaml` | Add `adr:migrate` and `lint:adr` targets; append `- task: lint:adr` to `lint`'s `cmds:` list |
 | `docs/adr/README.md` | Full rewrite per §"README shape" |
 | `docs/adr/[0-9]{4}-<slug>.md` (×17) | Rewritten as stubs at legacy paths |
 | `.beads/dolt/...` | Dolt commit adding 17 decision records + 1 supersession edge |

@@ -117,7 +117,7 @@ rotation). Overkill for our use case.
 
 - Every authenticated request requires a database lookup
 - Cannot verify tokens without database availability
-- Horizontal scaling requires shared database (not a concern at MUSH scale)
+- Horizontal scaling requires a shared database (not a concern at MUSH scale)
 
 ### Neutral
 

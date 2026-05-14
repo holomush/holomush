@@ -88,6 +88,8 @@ The schema:
         "neutral": ["..."]
       },
       "spec_section": "§3.5",
+      "start_line": 123,
+      "end_line": 147,
       "transcript_quotes": ["..."],
       "worthiness_score": 0..4,
       "supersedes": null | "<bd-id>"
