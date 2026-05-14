@@ -2130,7 +2130,8 @@ or buggy plugin could return rows with `codec=identity` and cleartext
    `<plugin_name>:<event_type>` keys from manifests declaring
    `sensitivity: always`. Rows with `codec=identity` and a type in the
    set are refused with `AUDIT_ROW_DOWNGRADE_DETECTED` + emit
-   `audit.<game>.system.plugin_integrity_violation`.
+   `events.<game>.system.plugin_integrity_violation` (subject prefix
+   per INV-E26 — see §4.6 catalog entry).
 2. **DEK existence check** — for non-identity codecs, the host
    verifies `dek_ref` is present in `crypto_keys` (with the production
    `destroyed_at IS NULL` filter). Missing DEK surfaces as

@@ -128,8 +128,10 @@ func (l *cryptoKeysLookup) Exists(ctx context.Context, dekRef uint64) (bool, err
 }
 
 // newViolationEmitter wraps the host's audit Publisher to publish
-// `audit.<game>.system.plugin_integrity_violation` events on every
-// PluginDowngradeFence INV-P7-7 refusal. The emitter MUST NOT block —
+// `events.<game>.system.plugin_integrity_violation` events on every
+// PluginDowngradeFence INV-P7-7 refusal. The events.> prefix is required
+// by INV-E26 (Phase 5 sub-epic E §3.6) — only the EVENTS JetStream
+// SubjectFilter feeds events_audit. The emitter MUST NOT block —
 // the fence already enforces a 100ms ceiling around EmitViolation, but
 // this implementation also serializes the payload into a tiny Event so
 // it never allocates beyond the violation message itself.

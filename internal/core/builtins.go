@@ -102,7 +102,8 @@ func registerBuiltinTypes(r *VerbRegistry, hostVersion string) error {
 		// Emitted by cmd/holomush/phase7_fence_wiring.go::violationEmitter on every
 		// INV-P7-7 row refusal, via RenderingPublisher. AUDIT_ONLY so the gRPC
 		// Subscribe handler drops the event before delivery; audit projection
-		// persists it to events_audit on subject audit.<game>.system.plugin_integrity_violation.
+		// persists it to events_audit on subject events.<game>.system.plugin_integrity_violation
+		// (events.> prefix per INV-E26 — only events.> reaches the EVENTS stream filter).
 		// Registered here so RenderingPublisher does not reject with
 		// EMIT_UNKNOWN_VERB — without this entry the documented operator-facing
 		// integrity-violation signal silently fails on every refusal.
