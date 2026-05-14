@@ -87,6 +87,17 @@ tasks:
       - task: lint:plugin-manifests
       - task: lint:docs-symmetry
       - task: lint:docs-paths-sync
+      - task: lint:adr
+
+  lint:adr:
+    desc: "Run docs/adr/ health check (adr-doctor.sh)"
+    cmds:
+      - scripts/adr-doctor.sh
+
+  adr:migrate:
+    desc: "One-shot migration of legacy ADRs to bd-id filename convention. Use -- --apply to mutate."
+    cmds:
+      - python3 scripts/adr-migrate.py {{.CLI_ARGS}}
 
   fmt:
     desc: Format all files
