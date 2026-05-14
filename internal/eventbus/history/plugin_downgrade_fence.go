@@ -288,4 +288,3 @@ func (f *PluginDowngradeFence) AlwaysSensitiveTypesForTest() map[string]struct{}
 	}
 	return out
 }
-

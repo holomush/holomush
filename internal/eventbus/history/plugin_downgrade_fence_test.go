@@ -95,9 +95,9 @@ type recordingEmitter struct {
 }
 
 type recordedViolation struct {
-	plugin     string
-	rowType    string
-	expected   string
+	plugin      string
+	rowType     string
+	expected    string
 	refusalCode string
 }
 
@@ -105,9 +105,9 @@ func (r *recordingEmitter) EmitViolation(_ context.Context, plugin string, row *
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.calls = append(r.calls, recordedViolation{
-		plugin:     plugin,
-		rowType:    row.GetType(),
-		expected:   expected,
+		plugin:      plugin,
+		rowType:     row.GetType(),
+		expected:    expected,
 		refusalCode: refusalCodee,
 	})
 	return r.err
@@ -438,4 +438,3 @@ func TestFenceForwardsEOF(t *testing.T) {
 	_, err = out.Next(context.Background())
 	assert.ErrorIs(t, err, io.EOF)
 }
-

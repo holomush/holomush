@@ -151,11 +151,11 @@ func TestRenderFrame_TypedRedactionRendersReason(t *testing.T) {
 	frame := &adminv1.AdminReadStreamResponse{
 		Payload: &adminv1.AdminReadStreamResponse_Event{
 			Event: &corev1.EventFrame{
-				Stream:           "scene.01HZAVGE83MGFEXQQH5SP9NXKF",
-				Type:             "scene.emote",
-				MetadataOnly:     true,
+				Stream:            "scene.01HZAVGE83MGFEXQQH5SP9NXKF",
+				Type:              "scene.emote",
+				MetadataOnly:      true,
 				NoPlaintextReason: corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_DEK_MISSING,
-				Timestamp:        timestamppb.Now(),
+				Timestamp:         timestamppb.Now(),
 			},
 		},
 	}

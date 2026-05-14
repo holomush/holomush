@@ -99,7 +99,8 @@ func newDowngradeAttackerSuite(t *testing.T) *downgradeAttackerSuite {
 	always := alwaysSensitiveFromManifest(manifest)
 
 	emitter := &capturingViolationEmitter{}
-	fence := history.NewPluginDowngradeFence(router,
+	fence := history.NewPluginDowngradeFence(
+		router,
 		history.WithAlwaysSensitiveTypes(always),
 		history.WithCryptoKeysLookup(fenceLookupAlwaysFound{}),
 		history.WithViolationEmitter(emitter),
