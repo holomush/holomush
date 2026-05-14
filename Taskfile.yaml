@@ -637,6 +637,7 @@ tasks:
         flock bats-core yq
       - brew install steveyegge/beads/bd
       - go install github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc@latest
+      - go install github.com/google/addlicense@latest
       - lefthook install
       - bd hooks install --chain
       - echo "✓ Dev environment ready. Run 'task dev' to start."
