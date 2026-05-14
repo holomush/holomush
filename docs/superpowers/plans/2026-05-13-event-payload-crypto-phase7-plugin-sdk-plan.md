@@ -12,6 +12,20 @@
 
 **Parent epic:** `holomush-1r0v`.
 
+**Plan revision:** v2. v1 (this same file's git history) returned NOT READY from `plan-reviewer` with 7 BLOCKING findings, including one real architectural bug: the fence's `Next()` returning a stream-fatal error short-circuits the entire stream, violating the spec's per-row `metadata_only=true` refusal contract. v2 patches:
+
+- **C.3 architectural decision pinned** (was deferred to "agent decides"): fence sees the underlying `*pluginauditpb.AuditRow` via an unexported `auditRow *pluginauditpb.AuditRow` field stamped onto `eventbus.Event` by the audit-package router. Package-internal accessor reads it; no interface refactor needed.
+- **C.3 fence semantics rewritten**: fence emits `Event{MetadataOnly: true, NoPlaintextReason: NoPlaintextReasonDowngradeRefused}` per row, NOT a stream-fatal error. New enum value `NoPlaintextReasonDowngradeRefused = 7` added to `internal/eventbus/types.go`. Asynchronous audit emit on INV-P7-7 refusals; stream continues to subsequent rows.
+- **B.1.5 hedging removed**: verified facts via direct file read — `internal/eventbus/publisher.go:266-292` (encode) + `internal/eventbus/history/hot_jetstream.go:441-444` (decode) confirm the codec encrypts `event.Payload` in place; cleartext envelope metadata stays cleartext; `msg.Data()` is the marshaled envelope. Plan now states the fact without hedging.
+- **B.1.6 constructor signature fix**: `NewPluginConsumerManager(js)` (single-arg today at `plugin_consumer.go:89`) is made variadic (`opts ...PluginConsumerManagerOption`). All existing call sites preserved (variadic-empty matches single-arg). Production wiring site is `cmd/holomush/core.go:488` (verified — NOT `deps.go` as v1 claimed).
+- **B.1.6 selector-purpose note added**: `keySelector` field on `PluginConsumerManager` is for substrate symmetry only; NOT consumed by `pluginConsumer.dispatch` in Phase 7. INV-P7-9 pointer-identity test validates the substrate, not a functional dispatch path.
+- **B.1.7 parser-location decision pinned**: `internal/eventbus/audit/header_parser.go` (NOT moved to `pkg/`). `pkg/plugin/audit.go::StoreFromMessage` imports `internal/eventbus/audit` — same-module import is permitted by Go. Documented inline with a comment explaining the SDK→internal coupling.
+- **B.2.4a step added**: audit existing `plugins/core-scenes/audit_test.go` for fallback-path-dependent tests before mechanically migrating to `req.GetRow()` reads.
+- **E.3 wiring site corrected**: `cmd/holomush/core.go:488`, not `cmd/holomush/core.go`.
+- **Non-blockers applied**: `schema_provisioner.go:165` (was :163), `Task E.2 → E.3` cross-ref drift in B.4, `Reader.selector` field-name to be grepped at impl time, `testFixtureCachedRow()` populate-via-emit pinned, meta-test uses `runtime.Caller(0)` walk, master-spec line citations re-grepped via new E.1.0 step.
+
+**Code-block discipline** (per user direction post-v1 review): code blocks remain only for load-bearing artifacts — proto schemas (A.2), SQL migrations (B.2), plugin manifest YAML (D.1), key Go type signatures. Function bodies and most test bodies are described in prose + test name + acceptance criteria. Rationale: v1's fence stream-fatal bug crept in precisely because I wrote out the full `Next()` body and got the semantics wrong; with a prose description, the executing agent has to think it through against the spec.
+
 ---
 
 ## File Structure
@@ -51,7 +65,7 @@
 | `internal/eventbus/history/tier.go` | Single-line change at line 367: wrap `r.router` in `NewPluginDowngradeFence(r.router, ...)` before serving. | C |
 | `plugins/core-scenes/audit.go` | (a) `SceneAuditStore.Insert` signature + SQL gain `dek_ref *int64, dek_version *int32`. (b) `queryLog` SELECT returns the new columns. (c) `SceneAuditServer.AuditEvent` reads from `req.GetRow()` instead of `req.GetHeaders()`. (d) `SceneAuditServer.QueryHistory` constructs `*pluginauditpb.AuditRow` rather than the old `eventbusv1.Event` reuse. | B |
 | `test/integration/eventbus_e2e/plugin_audit_isolation_test.go` | Update test-stub mirror at lines 175-220 to match the new request shape. | B |
-| `cmd/holomush/deps.go` | Wire `PluginDowngradeFence` around the existing audit-router construction. Pass the same `codec.KeySelector` instance into `PluginConsumerManager` that's passed to `history.NewReader`. | E |
+| `cmd/holomush/core.go` | Wire `PluginDowngradeFence` around the existing audit-router construction. Pass the same `codec.KeySelector` instance into `PluginConsumerManager` that's passed to `history.NewReader`. | E |
 | `docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md` | Polish: §4.6 register `plugin_integrity_violation`; §8.2 amend pseudo-code (strike events_audit-fallback line for plugin-owned subjects); §2 INV-50 cross-reference INV-P7-7; §8.3 Go-struct field set; §2 INV-39 scope clarification. | E |
 | `site/docs/extending/binary-plugins.md` | New SDK section documenting `pluginsdk.AuditRow`, `StoreFromMessage`, `LoadForQuery`, and the post-Phase-7 contract. | E |
 | `site/docs/reference/audit-subjects.md` | Register `audit.<game>.system.plugin_integrity_violation` row. | E |
@@ -851,34 +865,33 @@ func unmarshalProjectionOnly(data []byte) (*eventbusv1.Event, error) {
 }
 ```
 
-**IMPORTANT — agent verification step:** before writing the function, read `internal/eventbus/codec/xchacha20poly1305_v1.go` and `internal/eventbus/codec/identity.go` to confirm the wire-format invariant: is the *payload field of the envelope* the ciphertext, or are the *envelope bytes themselves* encrypted? If the latter, the design above is wrong and the plan must be revised. The spec assumes per-field payload encryption per master spec §4.1 — verify.
-
-Use `mcp__probe__search_code` for the codec files first; don't rg.
+**Wire-format invariant (verified, no agent re-verification needed):** the codec encrypts the `event.Payload` field in place; cleartext envelope metadata fields (id, subject, type, timestamp, actor) are NOT encrypted; `msg.Data()` is the marshaled envelope proto. Verified at `internal/eventbus/publisher.go:266-292` (encode path) and `internal/eventbus/history/hot_jetstream.go:441-444` (decode path). Therefore `Payload: envelope.GetPayload()` correctly captures ciphertext for encrypted events and plaintext for identity-codec events — both byte-equal to what's stored in `events_audit` for host-owned subjects.
 
 Replace the call site in `dispatch` (around line 295-300 today) to call `buildAuditRow` and pass `*pluginauditpb.AuditRow` into `AuditEventRequest{Row: row}` instead of `Event` + `Headers`.
 
 Remove all references to `decodeEnvelope`. Remove the `AUDIT_PLUGIN_CODEC_UNSUPPORTED` and `AUDIT_PLUGIN_CODEC_UNKNOWN` error codes (they're no longer reachable).
 
-- [ ] **Step B.1.6: Wire `codec.KeySelector` field on `PluginConsumerManager`**
+- [ ] **Step B.1.6: Make `NewPluginConsumerManager` variadic + add KeySelector field**
 
-Add field:
-
-```go
-type PluginConsumerManager struct {
-	// ... existing fields ...
-	keySelector codec.KeySelector  // INV-P7-9: same instance as hot-tier
-}
-```
-
-Add constructor option:
+Change `internal/eventbus/audit/plugin_consumer.go:89` constructor signature from:
 
 ```go
-func WithKeySelector(sel codec.KeySelector) PluginConsumerManagerOption {
-	return func(m *PluginConsumerManager) { m.keySelector = sel }
-}
+func NewPluginConsumerManager(js jetstream.JetStream) *PluginConsumerManager
 ```
 
-The field is unused in Phase 7's forward path (the dispatcher just forwards ciphertext per INV-P7-11). Wiring exists for substrate symmetry with the hot-tier reader.
+to:
+
+```go
+type PluginConsumerManagerOption func(*PluginConsumerManager)
+
+func NewPluginConsumerManager(js jetstream.JetStream, opts ...PluginConsumerManagerOption) *PluginConsumerManager
+```
+
+All existing call sites preserved (variadic-empty `NewPluginConsumerManager(js)` matches the new signature). Verified call sites: `cmd/holomush/core.go:488`, `test/integration/eventbus_e2e/plugin_crash_resilience_test.go:71`, `test/integration/eventbus_e2e/plugin_audit_isolation_test.go:77`, plus several `_test.go` files in the audit package.
+
+Add `keySelector codec.KeySelector` field to the struct + `WithKeySelector(sel codec.KeySelector) PluginConsumerManagerOption` option that sets it.
+
+**Important behavioral note — substrate-symmetry only.** The `keySelector` field is wired on the manager per INV-P7-9 (pointer identity with the hot-tier reader) but is **NOT consumed** by `pluginConsumer.dispatch` in Phase 7. The per-consumer struct has no backpointer to the manager and no need for one: the dispatcher forwards ciphertext byte-equal without invoking the codec (INV-P7-11). Future work that wants dispatcher-side validation (e.g., "refuse if dek_ref doesn't resolve to a real crypto_keys row" before forwarding) can thread the selector through; Phase 7 ships the substrate so that future change doesn't have to re-wire the constructor. INV-P7-9's pointer-identity test (Task B.4) validates the substrate, not a functional dispatch path. Document this with a code comment on the field declaration.
 
 - [ ] **Step B.1.7: Update `StoreFromMessage` in `pkg/plugin/audit.go`**
 
@@ -931,7 +944,17 @@ Adds new import to `pkg/plugin/audit.go`:
 audit "github.com/holomush/holomush/internal/eventbus/audit"
 ```
 
-NOTE: importing `internal/eventbus/audit` from `pkg/plugin/` is structurally questionable (pkg/ shouldn't depend on internal/). Verify with `go build` — if it fails, the agent moves `ParseAuditHeaders` to a shared neutral package (`pkg/eventbus/auditheader/` or similar) before re-running the build. This decision IS in scope for this task; revising the parser's package location is the right call if the import fails.
+**Parser location decision (pinned in v2):** `ParseAuditHeaders` STAYS in `internal/eventbus/audit/header_parser.go` (Task A.1's location); `pkg/plugin/audit.go` imports it via `audit "github.com/holomush/holomush/internal/eventbus/audit"`. Go's `internal/` mechanism permits same-module imports — both packages live under `github.com/holomush/holomush/` so the import is legal. Document the coupling with an inline comment on the import:
+
+```go
+// audit imports the same-module internal package because Layer 2
+// StoreFromMessage MUST use the same parser as the host's audit
+// projection (INV-P7-2). Same-module import is structurally permitted
+// by Go's internal/ rules. SDK consumers (plugin authors) MUST NOT
+// follow this precedent — internal/ is host-only.
+```
+
+Alternative considered: move parser to `pkg/eventbus/auditheader/` for cleaner SDK package boundary. Rejected because the parser uses header-name constants (`headerCodec`, `headerSchemaVersion`) that are private to the `audit` package today; moving the parser would require exporting those constants or duplicating them. The SDK→internal coupling with a documented comment is simpler and isolates the precedent to one explicit, called-out site.
 
 - [ ] **Step B.1.8: Run tests**
 
@@ -1153,6 +1176,18 @@ func (s *SceneAuditServer) AuditEvent(ctx context.Context, req *pluginv1.AuditEv
 
 Update the `sceneAuditLogStore` interface signature to match the new `Insert`.
 
+- [ ] **Step B.2.4a: Audit existing core-scenes tests for fallback-path dependence**
+
+The existing `SceneAuditServer.AuditEvent` (current `plugins/core-scenes/audit.go:177-203`) has FALLBACK logic when headers are missing: `eventType` falls back to `ev.GetType()` if `headers[auditHeaderEventType]` is empty; `actor_kind`/`actor_id` fall back similarly. Phase 7's `req.GetRow()` shape guarantees these fields at the wire level via the dispatcher's `buildAuditRow` (Task B.1), so the fallbacks are no longer needed. But existing tests in `plugins/core-scenes/audit_test.go` may probe the fallback path.
+
+**Audit step (DO before mechanical migration of test assertions):**
+
+1. Grep `plugins/core-scenes/audit_test.go` for test functions exercising the header-missing-falls-back-to-event-field path (e.g., tests that set `req.Event.Type` but omit `req.Headers[auditHeaderEventType]`).
+2. For each such test, decide: (a) it asserts a deprecated codepath — rewrite to set `req.Row.Type` directly; (b) it asserts a contract still in force — keep, but rewrite to use the new shape.
+3. Document the decision per-test in the commit message. DO NOT silently delete tests.
+
+**Why this matters:** the v1 plan said "tests need mechanical updates" — but tests that depended on the fallback chain need semantic rewrites, not mechanical signature changes. Without this audit step, sub-agents would either restore broken fallback logic in the production code or silently break tests they don't understand.
+
 - [ ] **Step B.2.5: Migrate `SceneAuditServer.QueryHistory` to return `*pluginauditpb.AuditRow`**
 
 Replace the response construction (lines 356-376) with `AuditRow`-shaped response:
@@ -1250,7 +1285,7 @@ Refs: holomush-1r0v
 
 ### Task B.4: KeySelector pointer-identity integration test
 
-**Why:** INV-P7-9 — same selector instance threaded through `PluginConsumerManager` and `history.NewReader`. Caught by integration test against the wiring at `cmd/holomush/deps.go` (Task E.2).
+**Why:** INV-P7-9 — same selector instance threaded through `PluginConsumerManager` and `history.NewReader`. Caught by integration test against the wiring at `cmd/holomush/core.go` (Task E.2).
 
 **Files:**
 
@@ -1295,7 +1330,7 @@ func TestDispatcherAndHotTierShareSelector(t *testing.T) {
 
 `KeySelectorForTest` accessor methods land in `internal_test.go` files in each respective package, exported only under the test build tag.
 
-- [ ] **Step B.4.2: Wire the accessor (Phase E.2 final wiring will land the production-side ctor)**
+- [ ] **Step B.4.2: Wire the accessor (Phase E.3 final wiring will land the production-side ctor)**
 
 Add test-only accessors:
 
@@ -1321,10 +1356,12 @@ import "github.com/holomush/holomush/internal/eventbus/codec"
 func (r *Reader) KeySelectorForTest() codec.KeySelector { return r.selector }
 ```
 
+**Verify the field name** on `Reader` struct before pinning. Run `rg -n "selector\s+codec\.KeySelector\|WithCodecSelector" internal/eventbus/history/tier.go` to find the actual field name. If it's not `r.selector` (e.g., it might be `r.codecSelector` set by `WithCodecSelector` option), update the accessor body to match. The field name is implementation-internal and may have evolved since the spec was written.
+
 - [ ] **Step B.4.3: Run integration test (will fail until Task E.2 wires deps.go)**
 
 Run: `task test:int -- -run TestDispatcherAndHotTierShareSelector ./test/integration/eventbus_e2e/`
-Expected: FAIL — the wiring at `cmd/holomush/deps.go` doesn't yet pass the same selector to both constructors. Pinned to be addressed in Task E.2.
+Expected: FAIL — the wiring at `cmd/holomush/core.go` doesn't yet pass the same selector to both constructors. Pinned to be addressed in Task E.2.
 
 - [ ] **Step B.4.4: Commit (with a note that the test is parked failing)**
 
@@ -1492,6 +1529,65 @@ Refs: holomush-1r0v
 ## Phase C — Read-side fence (AAD adapter + fence + wiring)
 
 After Phase C, the host's `Reader.QueryHistory` plugin path routes through `PluginDowngradeFence` (layer 1 — manifest-set + DEK existence) and the AAD adapter pre-feeds `aad.Build` for the downstream decrypt path (layer 2 backbone).
+
+### Task C.0: Substrate preliminaries — enum value + row-stamp field
+
+Two small substrate changes the fence depends on. Land them first so C.1-C.4 can reference them cleanly.
+
+**Files:**
+
+- Modify: `internal/eventbus/types.go` — add `NoPlaintextReasonDowngradeRefused`
+- Modify: `internal/eventbus/types.go` (or wherever `Event` is defined) — add unexported `auditRow *pluginauditpb.AuditRow` field
+- Modify: `internal/eventbus/audit/plugin_router.go` — stamp `Event.auditRow` when converting plugin response → event
+
+- [ ] **Step C.0.1: Add `NoPlaintextReasonDowngradeRefused` enum value**
+
+`internal/eventbus/types.go` currently defines `NoPlaintextReason` values 0-6 (Unspecified, AuthGuardDeny, StaleDEK, AuditQueueFull, DEKMissing, DEKBadColumns, Internal). Append a new value:
+
+```go
+// NoPlaintextReasonDowngradeRefused indicates the PluginDowngradeFence
+// refused the row at the layer (1) pre-decrypt check — either
+// manifest-set heuristic (INV-P7-7) or DEK existence (INV-P7-15).
+// The original event_id is preserved; payload is empty per master INV-26.
+NoPlaintextReasonDowngradeRefused NoPlaintextReason = 7
+```
+
+Mirror the new value into `corev1.NoPlaintextReason` proto enum per the project's INV-GW-14 convention (same comment notes the mirror).
+
+- [ ] **Step C.0.2: Pin row-extraction approach — `Event.auditRow` field**
+
+The fence at Task C.3 needs access to the underlying `*pluginauditpb.AuditRow` after the audit-package router has converted it into an `eventbus.Event`. The decision (one of three options the v1 plan deferred): **stamp an unexported field on `Event`**. The audit-package router populates it; the fence reads via a package-internal accessor.
+
+Locate the `eventbus.Event` definition (`internal/eventbus/types.go`). Add the unexported field:
+
+```go
+type Event struct {
+    // ... existing fields ...
+
+    // auditRow is the unexported plugin-source-of-truth pointer.
+    // Populated by audit.PluginHistoryRouter when converting a plugin's
+    // QueryHistoryResponse → Event for the read path. Consumed by
+    // history.PluginDowngradeFence to apply INV-P7-7 / INV-P7-15
+    // checks against the plugin-supplied original. nil for events
+    // not sourced from a plugin (host-owned subjects).
+    auditRow *pluginauditpb.AuditRow
+}
+```
+
+(Concrete approach for unexported-cross-package access: a same-package accessor file `internal/eventbus/audit_row_access.go` exporting `func AuditRowOf(ev Event) *pluginauditpb.AuditRow { return ev.auditRow }`, used by the fence. Package-internal to eventbus, called from history via that package's existing `eventbus.HistoryStream` API surface. Alternative: stamp via a Builder pattern — agent picks the simpler shape at implementation time.)
+
+- [ ] **Step C.0.3: Stamp `Event.auditRow` in the audit-package router**
+
+`internal/eventbus/audit/plugin_router.go` is the existing concrete `PluginHistoryRouter` impl. Find the site that converts a plugin's `QueryHistoryResponse.row` into `eventbus.Event` (post-Phase-7, since `QueryHistoryResponse.row` is the new field — Tasks A.2 + B.2 land it). Stamp `event.auditRow = row` at the conversion site.
+
+- [ ] **Step C.0.4: Unit test the stamp + accessor**
+
+Write a unit test that constructs a `pluginauditpb.AuditRow`, runs it through the router's conversion path, and asserts `eventbus.AuditRowOf(event)` returns the stamped row (pointer-equal).
+
+- [ ] **Step C.0.5: Commit**
+
+Commit message: `feat(eventbus): substrate for Phase 7 fence — NoPlaintextReasonDowngradeRefused enum + auditRow stamp`. Refs `holomush-1r0v`.
+
 
 ### Task C.1: AAD reconstruction adapter
 
@@ -1708,284 +1804,63 @@ Refs: holomush-1r0v
 - Create: `internal/eventbus/history/plugin_downgrade_fence.go`
 - Create: `internal/eventbus/history/plugin_downgrade_fence_test.go`
 
-- [ ] **Step C.3.1: Write the failing fence tests**
+- [ ] **Step C.3.1: Write the failing fence tests (behavioral description)**
 
-```go
-package history
+Create `internal/eventbus/history/plugin_downgrade_fence_test.go`. Write the following named tests against the fence's behavior contract from Step C.3.3. Use `fakeRouter`, `stubCryptoLookupAlwaysFound`, `stubCryptoLookupNotFound`, `recordingEmitter` test fakes defined alongside; `AlwaysSensitiveTypesForTest` package-internal accessor for INV-P7-8.
 
-import (
-	"context"
-	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
-	"github.com/holomush/holomush/internal/eventbus"
-	pluginauditpb "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
-)
-
-func TestFenceRefusesIdentityForAlwaysSensitiveType(t *testing.T) {
-	innerRouter := &fakeRouter{rows: []*pluginauditpb.AuditRow{
-		{
-			Id:      []byte("0123456789ABCDEF"),
-			Subject: "events.test.scene.01ABC.ic",
-			Type:    "test-plugin:secret",   // declared sensitivity:always
-			Codec:   "identity",             // downgrade attempt
-			Payload: []byte("cleartext"),
-		},
-	}}
-
-	fence := NewPluginDowngradeFence(innerRouter,
-		WithAlwaysSensitiveTypes(map[string]struct{}{"test-plugin:secret": {}}),
-		WithCryptoKeysLookup(stubCryptoLookupAlwaysFound{}),
-		WithViolationEmitter(noopEmitter{}),
-	)
-
-	stream, err := fence.QueryHistory(context.Background(), "test-plugin",
-		eventbus.HistoryQuery{Subject: "events.test.scene.01ABC.ic"})
-	require.NoError(t, err)
-
-	_, err = stream.Next(context.Background())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "AUDIT_ROW_DOWNGRADE_DETECTED",
-		"INV-P7-7: fence MUST refuse identity-codec for always-sensitive types")
-}
-
-func TestFenceAllowsIdentityForNonSensitiveType(t *testing.T) {
-	innerRouter := &fakeRouter{rows: []*pluginauditpb.AuditRow{
-		{
-			Id:      []byte("0123456789ABCDEF"),
-			Subject: "events.test.foo",
-			Type:    "test-plugin:plain",
-			Codec:   "identity",
-			Payload: []byte("legit cleartext"),
-		},
-	}}
-
-	fence := NewPluginDowngradeFence(innerRouter,
-		WithAlwaysSensitiveTypes(map[string]struct{}{}),
-		WithCryptoKeysLookup(stubCryptoLookupAlwaysFound{}),
-		WithViolationEmitter(noopEmitter{}),
-	)
-
-	stream, err := fence.QueryHistory(context.Background(), "test-plugin",
-		eventbus.HistoryQuery{Subject: "events.test.foo"})
-	require.NoError(t, err)
-
-	ev, err := stream.Next(context.Background())
-	require.NoError(t, err)
-	assert.Equal(t, []byte("legit cleartext"), ev.Payload)
-}
-
-func TestFenceRefusesUnknownDekRef(t *testing.T) {
-	dekRef := uint64(9999999)
-	innerRouter := &fakeRouter{rows: []*pluginauditpb.AuditRow{
-		{
-			Id:        []byte("0123456789ABCDEF"),
-			Subject:   "events.test.scene.01ABC.ic",
-			Type:      "test-plugin:secret",
-			Codec:     "xchacha20poly1305-v1",
-			Payload:   []byte("ciphertext"),
-			DekRef:    &dekRef,
-		},
-	}}
-
-	fence := NewPluginDowngradeFence(innerRouter,
-		WithAlwaysSensitiveTypes(map[string]struct{}{"test-plugin:secret": {}}),
-		WithCryptoKeysLookup(stubCryptoLookupNotFound{}),
-		WithViolationEmitter(noopEmitter{}),
-	)
-
-	stream, err := fence.QueryHistory(context.Background(), "test-plugin",
-		eventbus.HistoryQuery{Subject: "events.test.scene.01ABC.ic"})
-	require.NoError(t, err)
-
-	ev, err := stream.Next(context.Background())
-	// INV-P7-15: refusal surfaces as metadata_only=true per master INV-26.
-	require.NoError(t, err)
-	assert.True(t, ev.MetadataOnly,
-		"INV-P7-15: unknown dek_ref MUST surface as metadata_only=true")
-}
-
-func TestFenceSetBuiltOnceAtBoot(t *testing.T) {
-	fence := NewPluginDowngradeFence(&fakeRouter{},
-		WithAlwaysSensitiveTypes(map[string]struct{}{"a:b": {}}),
-		WithCryptoKeysLookup(stubCryptoLookupAlwaysFound{}),
-		WithViolationEmitter(noopEmitter{}),
-	)
-
-	// INV-P7-8: no public method exists to mutate the set after construction.
-	// Compile-time check — if a setter is added, the test corpus must adapt.
-	// Runtime check: assert the set is non-empty and the fence value's
-	// internal field is set exactly once.
-	got := fence.AlwaysSensitiveTypesForTest()
-	assert.Contains(t, got, "a:b")
-}
-```
-
-`fakeRouter`, `stubCryptoLookupAlwaysFound`, `stubCryptoLookupNotFound`, `noopEmitter`, `AlwaysSensitiveTypesForTest` are test-fakes/exports defined in the same `_test.go` file or a `tier_test_export_test.go` alongside.
+| Test name | What it asserts | Maps to INV |
+|---|---|---|
+| `TestFenceRefusesIdentityForAlwaysSensitiveType` | Plugin returns `codec=identity` + cleartext for a `test-plugin:secret` event whose type is in the always-sensitive set → fence MUST return `(ev, nil)` (not error) with `ev.MetadataOnly == true` AND `ev.NoPlaintextReason == NoPlaintextReasonDowngradeRefused`. Recording emitter MUST have received a violation call with `refusalCode == "AUDIT_ROW_DOWNGRADE_DETECTED"`. | INV-P7-7 |
+| `TestFenceContinuesStreamAfterRefusal` | Plugin returns TWO rows: row 0 is a downgrade attempt, row 1 is a legitimate identity-codec event for a non-sensitive type. `Next()` returns row 0 with metadata_only; `Next()` again returns row 1 with `MetadataOnly == false` and the original payload. (v1's stream-fatal-error bug would have stopped at row 0.) | INV-P7-7 |
+| `TestFenceAllowsIdentityForNonSensitiveType` | Plugin returns `codec=identity` + cleartext for a `test-plugin:plain` event whose type is NOT in the always-sensitive set → fence MUST pass through unchanged. | INV-P7-7 (negative) |
+| `TestFenceRefusesUnknownDekRef` | Plugin returns `codec=xchacha20poly1305-v1` + `dek_ref=9999999` for a row whose dek_ref does NOT resolve in `crypto_keys` (lookup returns `(false, nil)`) → fence MUST return `(ev, nil)` with `ev.MetadataOnly == true` AND `ev.NoPlaintextReason == NoPlaintextReasonDowngradeRefused`. NO violation emit (recording emitter empty). | INV-P7-15 |
+| `TestFenceRefusesAbsentDekRefForNonIdentityCodec` | Plugin returns `codec=xchacha20poly1305-v1` + `dek_ref=nil` → fence MUST surface `metadata_only=true` per INV-P7-15. | INV-P7-15 |
+| `TestFenceForwardsCryptoKeysLookupError` | `cryptoKeysLookup.Exists` returns `(false, errors.New("connection refused"))` → fence MUST return `(ev, err)` with `err` coded `AUDIT_ROW_DEK_LOOKUP_FAILED` (stream-fatal — infrastructure failure, not per-row refusal). | INV-P7-15 (error path) |
+| `TestFenceSetBuiltOnceAtBoot` | Construct fence with non-empty set; assert `AlwaysSensitiveTypesForTest()` returns the set verbatim. No public method MUST exist to mutate the set after construction (compile-time check — if a future setter is added, the test corpus adapts). | INV-P7-8 |
 
 - [ ] **Step C.3.2: Run tests to verify they fail**
 
 Run: `task test -- -run TestFence ./internal/eventbus/history/`
 Expected: FAIL with "undefined: NewPluginDowngradeFence".
 
-- [ ] **Step C.3.3: Implement the fence**
+- [ ] **Step C.3.3: Implement the fence (behavioral spec, not code body)**
 
-```go
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 HoloMUSH Contributors
+The fence's responsibilities and required behaviors are pinned below. The executing agent writes the actual Go code against this contract.
 
-package history
+**Package + types:**
 
-import (
-	"context"
+- File: `internal/eventbus/history/plugin_downgrade_fence.go` (package `history`).
+- Public type `PluginDowngradeFence` implements `history.PluginHistoryRouter` (the interface defined at `tier.go:79-84`) — drop-in replacement at the wiring site.
+- Public functional options: `WithAlwaysSensitiveTypes(map[string]struct{}) PluginDowngradeFenceOption`, `WithCryptoKeysLookup(CryptoKeysLookup) PluginDowngradeFenceOption`, `WithViolationEmitter(ViolationEmitter) PluginDowngradeFenceOption`.
+- Public interfaces (consumed by production wiring in Task E.3):
+  - `CryptoKeysLookup`: `Exists(ctx context.Context, dekRef uint64) (bool, error)` — applies the production `destroyed_at IS NULL` filter.
+  - `ViolationEmitter`: `EmitViolation(ctx context.Context, pluginName string, row *pluginauditpb.AuditRow, expectedSensitivity string, refusalCode string) error`.
 
-	"github.com/samber/oops"
+**Behavior contract (the load-bearing part — this is what v1 got wrong):**
 
-	"github.com/holomush/holomush/internal/eventbus"
-	pluginauditpb "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
-)
+The fence wraps `inner PluginHistoryRouter.QueryHistory(...)` and returns a wrapped `eventbus.HistoryStream`. The wrapped stream's `Next(ctx)` MUST follow these rules in order:
 
-// CryptoKeysLookup is the read-only interface PluginDowngradeFence needs
-// to check DEK existence (INV-P7-15). Production wiring uses the same
-// crypto_keys reader the rest of the host uses; tests inject fakes.
-type CryptoKeysLookup interface {
-	// Exists returns true iff the dek_ref corresponds to a non-soft-deleted
-	// crypto_keys row (production filter: destroyed_at IS NULL).
-	Exists(ctx context.Context, dekRef uint64) (bool, error)
-}
+1. Call `inner.Next(ctx)`. If `inner` returns `err != nil`, forward it unchanged (including `io.EOF`).
+2. Retrieve the underlying `*pluginauditpb.AuditRow` via the package-internal accessor (`eventbus.AuditRowOf(ev)` — substrate landed in Task C.0). If the accessor returns `nil` (event not sourced from a plugin), pass the event through unchanged.
+3. **INV-P7-7 (manifest-set heuristic)** — if `row.GetCodec() == "identity"` AND `row.GetType()` is in the always-sensitive set:
+   - **Mutate the returned event** to set `ev.MetadataOnly = true` and `ev.NoPlaintextReason = NoPlaintextReasonDowngradeRefused` (the new enum value from Task C.0).
+   - **Asynchronously** fire `f.emitter.EmitViolation(...)` in a goroutine (or via a bounded queue if the emit can backpressure). Emit failures MUST log but MUST NOT propagate to the caller.
+   - **Return `(ev, nil)`** — NOT a stream-fatal error. The stream MUST continue to subsequent rows. (v1 returned an error here; that bug let a malicious plugin DoS legitimate rows by putting the downgrade event first.)
+4. **INV-P7-15 (DEK existence)** — if `row.GetCodec() != "identity"`:
+   - If `row.DekRef == nil`: set `ev.MetadataOnly = true`, `ev.NoPlaintextReason = NoPlaintextReasonDowngradeRefused`, return `(ev, nil)`. No violation audit (indistinguishable from legitimate Rekey-destroyed case per spec INV-P7-15).
+   - Call `f.cryptoKeysLookup.Exists(ctx, *row.DekRef)`. On error, return `(ev, wrapped-with-AUDIT_ROW_DEK_LOOKUP_FAILED)` — this IS a stream-fatal error because it's an infrastructure failure, not a per-row refusal.
+   - If `!exists`: set `ev.MetadataOnly = true`, `ev.NoPlaintextReason = NoPlaintextReasonDowngradeRefused`, return `(ev, nil)`.
+5. Otherwise (clean row): return `(ev, nil)` unchanged.
 
-// ViolationEmitter publishes audit.<game>.system.plugin_integrity_violation
-// events for INV-P7-7 refusals. Synchronous emit per spec §5.3.
-type ViolationEmitter interface {
-	EmitViolation(ctx context.Context, pluginName string, row *pluginauditpb.AuditRow,
-		expectedSensitivity string, refusalCode string) error
-}
+`Close()` forwards to `inner.Close()`.
 
-// PluginDowngradeFence is the layer (1) QueryStreamHistory pre-decrypt
-// fence. Wraps a PluginHistoryRouter. Owns the always-sensitive
-// event-type set (boot-built per INV-P7-8) and the crypto_keys lookup
-// for DEK existence (INV-P7-15).
-type PluginDowngradeFence struct {
-	inner            PluginHistoryRouter
-	alwaysSensitive  map[string]struct{}
-	cryptoKeysLookup CryptoKeysLookup
-	emitter          ViolationEmitter
-}
+**Why per-row metadata_only, not stream-fatal error:** spec INV-P7-7 wording: "Refusal surfaces to the client as `metadata_only=true` for that event_id". The plugin's response may legitimately interleave honest rows with refused rows; the stream MUST yield all rows. Spec §8 row 1: "Refuse the row... Surface refusal to the client as `metadata_only=true` for that event_id". v1's stream-fatal-error implementation would have let any malicious plugin DoS legitimate reads by putting a downgrade event first in the response. The asynchronous violation emit means the audit signal still fires for INV-P7-7 cases without blocking the stream.
 
-// PluginDowngradeFenceOption configures NewPluginDowngradeFence.
-type PluginDowngradeFenceOption func(*PluginDowngradeFence)
+**Synchronous vs asynchronous emit — pick at impl time, document rationale:** synchronous emit blocks `Next()` until the audit lands (operator gets the diagnostic before the client gets metadata_only); asynchronous keeps stream throughput. Spec §7 backpressure note says `plugin_integrity_violation` is bounded by query page-size cardinality, so synchronous is acceptable. Default to synchronous; switch to async + bounded queue if benchmarks show it matters.
 
-func WithAlwaysSensitiveTypes(set map[string]struct{}) PluginDowngradeFenceOption {
-	return func(f *PluginDowngradeFence) { f.alwaysSensitive = set }
-}
+- [ ] **Step C.3.4: Verify row extraction via Task C.0's accessor**
 
-func WithCryptoKeysLookup(l CryptoKeysLookup) PluginDowngradeFenceOption {
-	return func(f *PluginDowngradeFence) { f.cryptoKeysLookup = l }
-}
-
-func WithViolationEmitter(e ViolationEmitter) PluginDowngradeFenceOption {
-	return func(f *PluginDowngradeFence) { f.emitter = e }
-}
-
-func NewPluginDowngradeFence(inner PluginHistoryRouter, opts ...PluginDowngradeFenceOption) *PluginDowngradeFence {
-	f := &PluginDowngradeFence{inner: inner, alwaysSensitive: map[string]struct{}{}}
-	for _, opt := range opts {
-		opt(f)
-	}
-	return f
-}
-
-// QueryHistory implements PluginHistoryRouter. Forwards the call to
-// the inner router and wraps the returned stream with a per-row check.
-func (f *PluginDowngradeFence) QueryHistory(ctx context.Context, pluginName string,
-	q eventbus.HistoryQuery) (eventbus.HistoryStream, error) {
-	inner, err := f.inner.QueryHistory(ctx, pluginName, q)
-	if err != nil {
-		return nil, err //nolint:wrapcheck // forwarding upstream error
-	}
-	return &fencedStream{fence: f, pluginName: pluginName, inner: inner}, nil
-}
-
-type fencedStream struct {
-	fence      *PluginDowngradeFence
-	pluginName string
-	inner      eventbus.HistoryStream
-}
-
-func (s *fencedStream) Next(ctx context.Context) (eventbus.Event, error) {
-	ev, err := s.inner.Next(ctx)
-	if err != nil {
-		return ev, err //nolint:wrapcheck
-	}
-
-	// Inner stream produces eventbus.Event with AuditRow proto fields
-	// projected on it. To run the fence checks we need access to the
-	// underlying AuditRow — see Task C.4 below for the wire-up.
-	row := AuditRowFromEvent(ev)
-	if row == nil {
-		// Inner router didn't carry an AuditRow projection — pass through.
-		return ev, nil
-	}
-
-	// (1a) Manifest-set heuristic — INV-P7-7.
-	if row.GetCodec() == "identity" {
-		if _, isSensitive := s.fence.alwaysSensitive[row.GetType()]; isSensitive {
-			_ = s.fence.emitter.EmitViolation(ctx, s.pluginName, row,
-				"always", "AUDIT_ROW_DOWNGRADE_DETECTED")
-			return ev, oops.Code("AUDIT_ROW_DOWNGRADE_DETECTED").
-				With("plugin", s.pluginName).
-				With("event_type", row.GetType()).
-				Errorf("plugin returned codec=identity for sensitivity:always event type")
-		}
-	}
-
-	// (1b) DEK existence check — INV-P7-15.
-	if row.GetCodec() != "identity" {
-		if row.DekRef == nil {
-			ev.MetadataOnly = true
-			return ev, nil
-		}
-		exists, lookupErr := s.fence.cryptoKeysLookup.Exists(ctx, *row.DekRef)
-		if lookupErr != nil {
-			return ev, oops.Code("AUDIT_ROW_DEK_LOOKUP_FAILED").Wrap(lookupErr)
-		}
-		if !exists {
-			ev.MetadataOnly = true
-			return ev, nil
-		}
-	}
-
-	return ev, nil
-}
-
-func (s *fencedStream) Close() error { return s.inner.Close() }
-
-// AuditRowFromEvent recovers the *pluginauditpb.AuditRow that produced
-// an eventbus.Event in the plugin-routed read path. Implementation
-// pins how the audit-package router stamps the row onto the event.
-// See plugin_router.go's RowExtractor for the production wiring.
-func AuditRowFromEvent(ev eventbus.Event) *pluginauditpb.AuditRow {
-	// Implementation lives in the same package or behind an unexported
-	// extension on eventbus.Event. Concrete approach decided when
-	// wiring the audit-package router in Task C.4.
-	panic("AuditRowFromEvent: implementation deferred to Task C.4")
-}
-```
-
-**IMPORTANT — agent verification step before locking the row-extraction approach:** Read `internal/eventbus/audit/plugin_router.go` to find where `*pluginauditpb.AuditRow` is converted to `eventbus.Event` (today's behaviour: per-row response from `PluginAuditService.QueryHistory` is mapped to `eventbus.Event`). The fence needs access to the original row OR the conversion site needs to carry the row through. Pick one of:
-- (a) Extend `eventbus.Event` with an unexported `auditRow *pluginauditpb.AuditRow` field that the audit router stamps; fence reads via test export.
-- (b) Re-decode the row from `ev.Payload` (but ev.Payload is the bus-shape payload, not the proto — wrong).
-- (c) Have the audit router emit a richer stream type (e.g., `AuditRowStream` parallel to `HistoryStream`) and have the fence wrap that. This is the cleanest but changes the `PluginHistoryRouter` interface signature.
-
-Recommendation: (c) — extend the interface. The `PluginHistoryRouter` interface today (`tier.go:79-84`) returns `eventbus.HistoryStream`. Phase 7 changes the interface to add a `QueryHistoryRows(ctx, plugin, q) (PluginRowStream, error)` method that returns the rows pre-conversion. `Reader.QueryHistory` calls the new method on the fence, then converts after validation.
-
-But that means the fence's signature is NOT a drop-in `PluginHistoryRouter`. Renaming the interface is cleaner. Agent decides during implementation.
-
-- [ ] **Step C.3.4: Wire the row extraction (agent picks approach)**
-
-Implement `AuditRowFromEvent` or refactor the router interface as decided above.
+The fence reads the underlying `*pluginauditpb.AuditRow` via `eventbus.AuditRowOf(ev)` — the accessor landed in Task C.0.2. No additional wiring needed at this task; the substrate is already in place.
 
 - [ ] **Step C.3.5: Run tests to verify they pass**
 
@@ -2031,7 +1906,7 @@ Where `fencedRouter()` returns either `r.router` (no fence configured) or `NewPl
 
 ```go
 // WithPluginDowngradeFence wires the Phase 7 read-side fence around
-// the inner PluginHistoryRouter. Production wiring at cmd/holomush/deps.go
+// the inner PluginHistoryRouter. Production wiring at cmd/holomush/core.go
 // (Task E.2) provides the always-sensitive set + crypto_keys lookup +
 // violation emitter.
 func WithPluginDowngradeFence(
@@ -2062,7 +1937,7 @@ Expected: all PASS (existing tier_test.go uses a nil fence — behaviour preserv
 feat(history): wire PluginDowngradeFence into Reader.QueryHistory
 
 Single-line change at tier.go:367 + new WithPluginDowngradeFence
-option for cmd/holomush/deps.go wiring. Reader's plugin-routed
+option for cmd/holomush/core.go wiring. Reader's plugin-routed
 branch now routes through the fence before returning the stream.
 
 Refs: holomush-1r0v
@@ -2146,9 +2021,13 @@ type fixtureAuditServer struct {
 	mode string
 }
 
-func (s *fixtureAuditServer) AuditEvent(_ context.Context, _ *pluginv1.AuditEventRequest) (*pluginv1.AuditEventResponse, error) {
-	// Fixture doesn't persist; the e2e test injects the row via the
-	// QueryHistory return value directly.
+func (s *fixtureAuditServer) AuditEvent(_ context.Context, req *pluginv1.AuditEventRequest) (*pluginv1.AuditEventResponse, error) {
+	// Honest mode: cache the incoming row so QueryHistory can return it
+	// byte-equal. Malicious mode: ignore (QueryHistory fabricates the
+	// downgrade row anyway).
+	if req != nil && req.GetRow() != nil {
+		fixtureCache.Store(req.GetRow())
+	}
 	return &pluginv1.AuditEventResponse{}, nil
 }
 
@@ -2176,11 +2055,16 @@ func (s *fixtureAuditServer) QueryHistory(req *pluginv1.QueryHistoryRequest, str
 	}
 }
 
+// testFixtureCachedRow returns the most-recently-ingested row, which
+// the e2e test populates by calling AuditEvent before QueryHistory.
+// Honest mode returns this verbatim; malicious mode ignores it and
+// returns a fabricated row.
+var fixtureCache atomic.Pointer[pluginv1.AuditRow]
+
 func testFixtureCachedRow() *pluginv1.AuditRow {
-	// Real ciphertext bytes captured from a prior emit; baked into the
-	// fixture at test setup time.
-	return &pluginv1.AuditRow{ /* ... */ }
+	return fixtureCache.Load()
 }
+
 
 func main() {
 	mode := os.Getenv("TEST_DOWNGRADE_MODE")
@@ -2329,7 +2213,7 @@ test(plugin): INV-P7-13 plugin role denied write on host tables
 
 Asserts the existing schema_provisioner REVOKE-ALL on schema public
 prevents plugin roles from writing to events_audit. Permission
-boundary already enforced by substrate (schema_provisioner.go:163);
+boundary already enforced by substrate (schema_provisioner.go:165);
 this test pins the regression.
 
 Refs: holomush-1r0v
@@ -2389,7 +2273,7 @@ func TestPhase7InvariantsHaveNamedTests(t *testing.T) {
 }
 ```
 
-The meta-test uses `rg` (the project standard for grep). It walks up two dirs to scan the whole tree; if the test is run from a worktree the relative path needs adjustment.
+The meta-test uses `rg` (the project standard for grep). To find the repo root deterministically regardless of cwd, use `runtime.Caller(0)` to get the test file's path and walk up until a `go.mod` is found — pass that path to `rg` as the search root. The skeletal `../../` in the example above is illustrative; the executing agent MUST use the `runtime.Caller(0)` walk.
 
 - [ ] **Step D.4.2: Run the meta-test**
 
@@ -2411,7 +2295,7 @@ Refs: holomush-1r0v
 
 ## Phase E — Wiring + spec polish + PR-blocking docs
 
-After Phase E, production wiring is complete (`cmd/holomush/deps.go`), the master spec amendments land, and Phase-7-blocking docs (binary-plugins.md, audit-subjects.md) ship.
+After Phase E, production wiring is complete (`cmd/holomush/core.go`), the master spec amendments land, and Phase-7-blocking docs (binary-plugins.md, audit-subjects.md) ship.
 
 ### Task E.1: Master spec polish
 
@@ -2420,6 +2304,17 @@ After Phase E, production wiring is complete (`cmd/holomush/deps.go`), the maste
 **Files:**
 
 - Modify: `docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md`
+
+- [ ] **Step E.1.0: Re-grep master spec for current line numbers of cited sections**
+
+Master spec line citations (`§4.6 lines 2099-2118`, `§8.2 line 2107-2118`, `§2 INV-50 line 345`, `§8.3 line 2129`, `§2 INV-39 line 320`) were captured during v3 review and may have drifted. Before applying any edit:
+
+```bash
+rg -n '^## Section 4|^## Section 8|^### 8\.2|^### 8\.3|^### 4\.6' docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md
+rg -n 'INV-50\b|INV-39\b' docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md
+```
+
+Update polish items E.1.1-E.1.5 below with the CURRENT line numbers before editing. This avoids the v1 anti-pattern of trusting stale line references.
 
 - [ ] **Step E.1.1: Apply polish item 1 — register `plugin_integrity_violation` subject in §4.6**
 
@@ -2580,15 +2475,17 @@ PR-blocking per the Phase 7 spec's § Out of scope carve-out.
 Refs: holomush-1r0v
 ```
 
-### Task E.3: Production wiring at `cmd/holomush/deps.go`
+### Task E.3: Production wiring at `cmd/holomush/core.go`
 
 **Why:** Hook the fence + selector identity into the production dependency graph. Without this, the fence isn't actually invoked at runtime and INV-P7-9 pointer-identity test stays failing.
 
 **Files:**
 
-- Modify: `cmd/holomush/deps.go`
+- Modify: `cmd/holomush/core.go`
 
-- [ ] **Step E.3.1: Read existing `deps.go`**
+- [ ] **Step E.3.1: Read existing wiring at `cmd/holomush/core.go:488`**
+
+Verified production wiring site: `cmd/holomush/core.go:488` calls `audit.NewPluginConsumerManager(js)`. Other call sites (test wirings: `plugin_crash_resilience_test.go:71`, `plugin_audit_isolation_test.go:77`) preserved by variadic-empty compatibility per Task B.1.6.
 
 Find the construction of:
 - `audit.PluginConsumerManager` (existing wiring)
@@ -2668,7 +2565,7 @@ Expected: green (all CI mirrors pass).
 ```text
 feat(deps): wire Phase 7 fence + selector identity into production
 
-cmd/holomush/deps.go threads the same codec.KeySelector instance
+cmd/holomush/core.go threads the same codec.KeySelector instance
 into PluginConsumerManager and history.NewReader; constructs the
 always-sensitive type set from manifest crypto.emits declarations;
 wires CryptoKeysLookup + ViolationEmitter into PluginDowngradeFence.
@@ -2692,7 +2589,7 @@ The plan decomposes into **5 task beads** that each produce a self-contained, te
 |---|---|---|---|
 | `1r0v.1` | Foundations — shared header parser + AuditRow proto + SDK Layer 2 | A.1, A.2, A.3, A.4 | INV-P7-2, INV-P7-4, INV-P7-5 |
 | `1r0v.2` | Plugin dispatcher widening + scene_log schema + caller migrations | B.1, B.2, B.3, B.4, B.5, B.6 | INV-P7-1, INV-P7-3, INV-P7-6, INV-P7-9, INV-P7-10, INV-P7-11, INV-P7-12 |
-| `1r0v.3` | Read-side fence — AAD adapter + PluginDowngradeFence + tier.go wiring | C.1, C.2, C.3, C.4 | INV-P7-7, INV-P7-8, INV-P7-15, INV-P7-16 |
+| `1r0v.3` | Read-side fence — substrate (C.0) + AAD adapter (C.1, C.2) + PluginDowngradeFence (C.3) + tier.go wiring (C.4) | C.0, C.1, C.2, C.3, C.4 | INV-P7-7, INV-P7-8, INV-P7-15, INV-P7-16 |
 | `1r0v.4` | E2E binary fixture + cross-cutting tests + meta-test | D.1, D.2, D.3, D.4 | INV-P7-10 (e2e), INV-P7-13, INV-P7-14 |
 | `1r0v.5` | Production wiring + master spec polish + PR-blocking docs | E.1, E.2, E.3 | INV-P7-9 (final pass) |
 
@@ -2739,23 +2636,27 @@ Each bead's `--description` MUST include all 8 sections. Below are the canonical
 - **Dependencies**: blocked by `1r0v.1`.
 - **Out of scope**: fence (`1r0v.3`); INV-P7-9 final wiring (`1r0v.5`); test_downgrade_attacker fixture (`1r0v.4`).
 
-#### `1r0v.3` — Read-side fence
+#### `1r0v.3` — Read-side fence (+ C.0 substrate)
 
-- **Goal**: Build `PluginDowngradeFence` (manifest-set + DEK existence) and the `AuditRow → *eventbusv1.Event` AAD adapter; wire fence into `Reader.QueryHistory` plugin branch. After this bead, malicious-plugin downgrade attempts are refused at the host's read path.
-- **Design reference**: spec §3.1, §3.2, §5.3, §5.4; INV-P7-7, INV-P7-8, INV-P7-15, INV-P7-16.
-- **Plan reference**: plan Phase C (Tasks C.1-C.4).
+- **Goal**: Land Phase 7 substrate (Task C.0: `NoPlaintextReasonDowngradeRefused` enum + `Event.auditRow` stamp); build `PluginDowngradeFence` (manifest-set + DEK existence, per-row `metadata_only=true` — NOT stream-fatal) and the `AuditRow → *eventbusv1.Event` AAD adapter; wire fence into `Reader.QueryHistory` plugin branch. After this bead, malicious-plugin downgrade attempts are refused at the host's read path per row without stopping the stream.
+- **Design reference**: spec §1 (threat model two-layer fence), §3.1, §3.2, §5.3, §5.4, §8 (failure mode rows); INV-P7-7, INV-P7-8, INV-P7-15, INV-P7-16.
+- **Plan reference**: plan Phase C (Tasks C.0-C.4).
 - **TDD acceptance criteria**:
+  - `TestAuditRowOfStampedByRouter` PASS (C.0.4).
   - `TestAuditRowToEvent_CopiesAllAADFields` PASS.
   - `TestAuditRowToEvent_NilSafety` PASS.
   - `TestRoundTripProducesByteEqualAAD` PASS (CRITICAL — byte-equal AAD reconstruction).
-  - `TestFenceRefusesIdentityForAlwaysSensitiveType` PASS.
+  - `TestFenceRefusesIdentityForAlwaysSensitiveType` PASS — verifies per-row `metadata_only=true` + `NoPlaintextReasonDowngradeRefused`, NOT stream-fatal.
+  - `TestFenceContinuesStreamAfterRefusal` PASS — INV-P7-7 per-row semantics test that v1 was missing.
   - `TestFenceAllowsIdentityForNonSensitiveType` PASS.
   - `TestFenceRefusesUnknownDekRef` PASS.
+  - `TestFenceRefusesAbsentDekRefForNonIdentityCodec` PASS.
+  - `TestFenceForwardsCryptoKeysLookupError` PASS — infrastructure failure IS stream-fatal.
   - `TestFenceSetBuiltOnceAtBoot` PASS.
 - **Verification steps**:
-  - `task test -- ./internal/eventbus/history/` green.
-  - `task test:int -- -run "Test(AuditRowToEvent|Fence|RoundTripProducesByteEqualAAD)"` green.
-- **Files touched**: `internal/eventbus/history/plugin_aad_adapter.go` (new), `internal/eventbus/history/plugin_aad_adapter_test.go` (new), `internal/eventbus/history/plugin_aad_reconstruction_test.go` (new), `internal/eventbus/history/plugin_downgrade_fence.go` (new), `internal/eventbus/history/plugin_downgrade_fence_test.go` (new), `internal/eventbus/history/tier.go` (single-line + new option).
+  - `task test -- ./internal/eventbus/ ./internal/eventbus/history/` green.
+  - `task test:int -- -run "Test(AuditRowToEvent|Fence|RoundTripProducesByteEqualAAD|AuditRowOfStampedByRouter)"` green.
+- **Files touched**: `internal/eventbus/types.go` (new enum value + `auditRow` field + `AuditRowOf` accessor), `internal/eventbus/audit/plugin_router.go` (stamp `auditRow` on conversion), `internal/eventbus/history/plugin_aad_adapter.go` (new), `internal/eventbus/history/plugin_aad_adapter_test.go` (new), `internal/eventbus/history/plugin_aad_reconstruction_test.go` (new), `internal/eventbus/history/plugin_downgrade_fence.go` (new — per-row semantics), `internal/eventbus/history/plugin_downgrade_fence_test.go` (new), `internal/eventbus/history/tier.go` (single-line + new option).
 - **Dependencies**: blocked by `1r0v.2` (needs the AuditRow proto + scene_log columns + integration-test scaffolding).
 - **Out of scope**: production wiring (`1r0v.5`); e2e binary fixture (`1r0v.4`); spec polish (`1r0v.5`).
 
@@ -2779,7 +2680,7 @@ Each bead's `--description` MUST include all 8 sections. Below are the canonical
 
 #### `1r0v.5` — Production wiring + spec polish + docs
 
-- **Goal**: Land final production wiring at `cmd/holomush/deps.go`; apply 5 master-spec polish amendments; ship PR-blocking site docs (binary-plugins.md + audit-subjects.md); pass `task pr-prep`. After this bead, Phase 7 is production-ready and merge-ready.
+- **Goal**: Land final production wiring at `cmd/holomush/core.go`; apply 5 master-spec polish amendments; ship PR-blocking site docs (binary-plugins.md + audit-subjects.md); pass `task pr-prep`. After this bead, Phase 7 is production-ready and merge-ready.
 - **Design reference**: spec § Context master-spec polish list; § Out of scope (PR-blocking docs); § Section 5.2, INV-P7-9 final.
 - **Plan reference**: plan Phase E (Tasks E.1-E.3).
 - **TDD acceptance criteria**:
@@ -2790,7 +2691,7 @@ Each bead's `--description` MUST include all 8 sections. Below are the canonical
   - `task test:int -- -run TestDispatcherAndHotTierShareSelector` green.
   - `task docs:build` green.
   - `task pr-prep` green (mirrors all CI jobs).
-- **Files touched**: `cmd/holomush/deps.go`, `docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md` (5 polish amendments), `site/docs/extending/binary-plugins.md`, `site/docs/reference/audit-subjects.md`.
+- **Files touched**: `cmd/holomush/core.go`, `docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md` (5 polish amendments), `site/docs/extending/binary-plugins.md`, `site/docs/reference/audit-subjects.md`.
 - **Dependencies**: blocked by `1r0v.4` (the full test corpus including meta-test must pass before merge).
 - **Out of scope**: future hot-reload work (separate bead `holomush-kl9w`); UX-gap closure for `may`-elevated downgrade (deferred per spec § Section 1 threat-model note).
 
