@@ -12,6 +12,11 @@ init_test_env() {
   export INFO_FILE="$LOCK_DIR_OVERRIDE/info"
   export LOCK_FILE="$LOCK_DIR_OVERRIDE/lock"
   rm -rf "$LOCK_DIR_OVERRIDE"
+  # Existing lock tests do not exercise docs-only detection. Force the full
+  # lane so the detection prologue (added to the fixture in the next step
+  # of this task) falls through. The new pr-prep-docs-detection.bats
+  # explicitly `unset`s this in its own setup to re-enable detection.
+  export HOLOMUSH_PR_PREP_FORCE_FULL=1
 }
 
 # Path to the fixture taskfile, computed relative to the repo root.

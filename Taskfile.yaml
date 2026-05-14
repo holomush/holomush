@@ -547,13 +547,33 @@ tasks:
   # ──────────────────────────────────────────
 
   pr-prep:
-    desc: Run all CI checks locally before pushing (mirrors ALL CI jobs) [serialized via flock]
+    desc: Run all CI checks locally before pushing (mirrors ALL CI jobs) [serialized via flock; auto-selects docs lane on
+      docs-only diffs]
     preconditions:
       - sh: command -v flock >/dev/null 2>&1
         msg: "flock(1) is required. Install with 'brew install flock' (macOS) or 'apt install util-linux' (Linux)."
     cmds:
       - cmd: |
           set -euo pipefail
+
+          # ─────────────────────────────────────────────────────────────
+          # Docs-only detection. MUST live in this same `- cmd:` block as
+          # the flock body below — go-task spawns each `- cmd:` in its own
+          # subshell, so `exec` only short-circuits within the same shell.
+          # Spec §4.3.1.
+          # ─────────────────────────────────────────────────────────────
+          if [ "${HOLOMUSH_PR_PREP_FORCE_FULL:-}" != "1" ]; then
+            timeout 5 git fetch -q origin main 2>/dev/null || true
+            CHANGED=$(timeout 5 git diff --name-only origin/main...HEAD 2>/dev/null || true)
+            if [ -n "$CHANGED" ]; then
+              DOCS_REGEX=$(bash scripts/docs-paths-regex.sh)
+              if ! printf '%s\n' "$CHANGED" | grep -vE "$DOCS_REGEX" >/dev/null; then
+                echo "▸ docs-only diff detected; running pr-prep:docs"
+                exec task pr-prep:docs
+              fi
+            fi
+          fi
+
           LOCK_DIR="${TMPDIR:-/tmp}/holomush-pr-prep"
           mkdir -p "$LOCK_DIR"
           LOCK="$LOCK_DIR/lock"
