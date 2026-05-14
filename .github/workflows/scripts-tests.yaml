@@ -7,6 +7,8 @@ on:
   pull_request:
     paths:
       - "scripts/**"
+      - "Taskfile.yaml"
+      - ".github/workflows/scripts-tests.yaml"
 
 permissions:
   contents: read
@@ -32,3 +34,44 @@ jobs:
         run: |-
           uv run --group dev ruff check .
           uv run --group dev ruff format --check .
+
+  bats:
+    name: Bats tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup bats + bats-support + bats-assert
+        # Installs bats + plugins. The action exposes the install location
+        # as the `lib-path` STEP OUTPUT (not as $GITHUB_ENV), so the
+        # subsequent run step wires it into BATS_LIB_PATH explicitly.
+        id: setup-bats
+        uses: bats-core/bats-action@4.0.0
+
+      - name: Install yq (mikefarah)
+        # Required by scripts/docs-paths-regex.sh + scripts/lint-docs-paths-sync.sh.
+        # Ubuntu's apt `yq` is the python kislyuk wrapper with different syntax;
+        # we need mikefarah's Go implementation. Pinned + SHA256-verified to
+        # match the project's ci.yaml install pattern.
+        run: |-
+          YQ_VERSION="v4.53.2"
+          YQ_SHA256="d56bf5c6819e8e696340c312bd70f849dc1678a7cda9c2ad63eebd906371d56b"
+          YQ_URL="https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          sudo curl -fsSL "${YQ_URL}" -o /usr/local/bin/yq
+          echo "${YQ_SHA256}  /usr/local/bin/yq" | sudo sha256sum -c -
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run bats
+        # Plumb the bats-action install path into BATS_LIB_PATH so
+        # `bats_load_library bats-support` / `bats-assert` resolve.
+        # Taskfile's test:bats respects an externally-set BATS_LIB_PATH.
+        env:
+          BATS_LIB_PATH: ${{ steps.setup-bats.outputs.lib-path }}
+        run: task test:bats
