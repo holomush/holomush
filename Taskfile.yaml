@@ -626,6 +626,18 @@ tasks:
       - task: test:e2e
       - echo "✓ All PR checks passed."
 
+  pr-prep:docs:
+    desc: Docs-only fast lane (auto-selected by pr-prep on docs-only diffs).
+    cmds:
+      - echo "▸ Running docs-only fast lane"
+      - task: lint:markdown
+      - task: lint:yaml
+      - task: lint:docs-symmetry
+      - task: fmt:check
+      - task: license:check
+      - task: lint:docs-paths-sync
+      - echo "✓ Docs lane passed."
+
   # ──────────────────────────────────────────
   # Setup (run once)
   # ──────────────────────────────────────────
