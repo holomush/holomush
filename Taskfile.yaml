@@ -118,8 +118,7 @@ tasks:
   test:int:
     desc: Run integration tests (needs Docker for testcontainers)
     cmds:
-      - echo "▸ Building binary plugins for host platform..."
-      - GOOS={{OS}} GOARCH={{ARCH}} ./scripts/build-plugins.sh
+      - task: plugin:build-all
       # The explicit package list is load-bearing: `./...` under `-tags=integration`
       # tries to compile packages like `internal/grpc/` whose unit tests depend on
       # `core.NewMemoryEventStore` (a file with `//go:build !integration`), causing
@@ -140,8 +139,7 @@ tasks:
   test:int:focus:
     desc: Run focused integration tests with Ginkgo focus filter (pass -ginkgo.focus="..." after --)
     cmds:
-      - echo "▸ Building binary plugins for host platform..."
-      - GOOS={{OS}} GOARCH={{ARCH}} ./scripts/build-plugins.sh
+      - task: plugin:build-all
       - gotestsum --format pkgname -- -race -tags=integration -count=1 -timeout 8m github.com/holomush/holomush/test/integration/plugin
         {{.CLI_ARGS}}
 
@@ -238,6 +236,33 @@ tasks:
 
   plugin:build-all:
     desc: Discover and compile all binary plugins (host + linux/amd64 + linux/arm64)
+    # Sources cover the plugin tree, the SDK packages plugins import
+    # (pkg/plugin/**, pkg/proto/**), and the module manifest. pkg/proto
+    # catches `task proto` regenerations; pkg/plugin catches SDK changes;
+    # go.mod/go.sum catch dep bumps.
+    #
+    # NOT covered: internal/** — including it would invalidate the cache
+    # on most pr-prep iterations (internal/ changes frequently), defeating
+    # the whole optimization. Within pr-prep:run, an internal/** change
+    # that breaks plugin builds is caught downstream by `task lint` and
+    # `task test` (both re-compile plugin sources via go vet / go test)
+    # BEFORE `test:int` would exercise a stale subprocess binary.
+    # Direct `task test:int` invocations after an internal/** API change
+    # may run against a stale cached binary; if symptoms are confusing,
+    # `rm -rf build/plugins && task test:int` forces rebuild.
+    sources:
+      - plugins/**/*.go
+      - plugins/**/plugin.yaml
+      - plugins/**/migrations/**
+      - pkg/plugin/**/*.go
+      - pkg/proto/**/*.go
+      - scripts/build-plugins.sh
+      - go.mod
+      - go.sum
+    generates:
+      - build/plugins/*/plugin.yaml
+      - build/plugins/*/*-*/*
+      - build/plugins/*/migrations/**
     cmds:
       - ./scripts/build-plugins.sh
 
