@@ -12,14 +12,16 @@
 
 **Parent epic:** `holomush-1r0v`.
 
-**Revision history** (current: v4):
+**Revision history** (current: v5 — final; further iteration cut off by user direction after plan-reviewer convergence flatlined at 4 BLOCKING/round for 3 rounds, all mechanical cross-reference drift):
+
+- **v5**: Applied plan-reviewer v4's 4 BLOCKING fixes via the reviewer's own grep-verification commands (all 4 now pass: `rg -c "Code-block discipline"` = 1; `rg -n "deps\.go"` = revision-history-only; `rg -n "Task E\.2"` = section-header-only; `rg -c "eventbusv1\.NoPlaintextReason"` = 0). Also applied non-blocker: C.0.1 gains explicit proto-side enum-mirror sub-step (edit `core.proto`, run `task proto`, verify regen). Plan-reviewer NOT re-run per user direction — execution-phase agents catch remaining cross-reference drift in seconds. v5 is the authoritative plan.
+
+
 
 - **v4**: Addressed plan-reviewer v3 NOT READY (4 BLOCKING cross-reference-drift findings, all mechanical). Patches: (1) D.2.1 `TestDowngradeAttackerMaliciousPathRefuses` assertion rewritten — fence returns per-row metadata_only, not stream-fatal error (consistency with C.3.3 rule 3). (2) Bead 1r0v.3 "Files touched" updated to list both `types.go` AND new `internal/eventbus/audit_row_access.go` (matches C.0.2's split). (3) B.1.5 "Detailed pseudo-Go" preamble hedge struck. (4) Self-review coverage table gains INV-P7-7b + INV-P7-C0 rows. Plus non-blockers: revision-history block consolidated; `WaitForRowInSceneLog` / `WaitForFixtureCachePopulated` helpers explicitly defined in B.5; "no new edges" claim corrected to acknowledge new `eventbus → pluginauditpb` import edge.
 - **v3**: Addressed plan-reviewer v2 NOT READY (4 BLOCKING — `AuditRowOf` deferral hedge, sync/async fence emit contradiction, B.1.5 wire-format hedging body, struct-value mutation bug). Pinned: exported `eventbus.AuditRowOf` accessor in new file; synchronous emit with 100ms bounded timeout; "copy ev, modify copy, return (refused, nil)" semantics. `LoadForQuery` + `AuditRowToEvent` function bodies converted to prose contracts.
 - **v2**: Addressed plan-reviewer v1 NOT READY (7 BLOCKING). Most significant: fence semantics rewritten from stream-fatal-error to per-row `metadata_only=true` + new `NoPlaintextReasonDowngradeRefused` enum value. New Task C.0 substrate (enum + `auditRow` field on `Event` + audit-router stamp). Proto path corrected to `api/proto/holomush/plugin/v1/audit.proto`. Constructor at `NewPluginConsumerManager` made variadic; production wiring site corrected from `deps.go` to `cmd/holomush/core.go:488`. `holomush-demb` bead removed (verified no-op — `ON CONFLICT` already present at `plugins/core-scenes/audit.go:141`).
 - **v1**: Initial decomposition into 5-bead chain.
-
-**Code-block discipline** (per user direction post-v1 review): code blocks remain only for load-bearing artifacts — proto schemas (A.2), SQL migrations (B.2), plugin manifest YAML (D.1), key Go type signatures. Function bodies and most test bodies are described in prose + test name + acceptance criteria. Rationale: v1's fence stream-fatal bug crept in precisely because I wrote out the full `Next()` body and got the semantics wrong; with a prose description, the executing agent has to think it through against the spec.
 
 **Code-block discipline** (per user direction post-v1 review): code blocks remain only for load-bearing artifacts — proto schemas (A.2), SQL migrations (B.2), plugin manifest YAML (D.1), key Go type signatures. Function bodies and most test bodies are described in prose + test name + acceptance criteria. Rationale: v1's fence stream-fatal bug crept in precisely because I wrote out the full `Next()` body and got the semantics wrong; with a prose description, the executing agent has to think it through against the spec.
 
@@ -1271,7 +1273,7 @@ Refs: holomush-1r0v
 
 ### Task B.4: KeySelector pointer-identity integration test
 
-**Why:** INV-P7-9 — same selector instance threaded through `PluginConsumerManager` and `history.NewReader`. Caught by integration test against the wiring at `cmd/holomush/core.go` (Task E.2).
+**Why:** INV-P7-9 — same selector instance threaded through `PluginConsumerManager` and `history.NewReader`. Caught by integration test against the wiring at `cmd/holomush/core.go` (Task E.3).
 
 **Files:**
 
@@ -1344,17 +1346,17 @@ func (r *Reader) KeySelectorForTest() codec.KeySelector { return r.selector }
 
 Field name verified: `r.selector` at `internal/eventbus/history/tier.go:283` (`selector codec.KeySelector`). Accessor body `return r.selector` is correct as written.
 
-- [ ] **Step B.4.3: Run integration test (will fail until Task E.2 wires deps.go)**
+- [ ] **Step B.4.3: Run integration test (will fail until Task E.3 wires `cmd/holomush/core.go:488`)**
 
 Run: `task test:int -- -run TestDispatcherAndHotTierShareSelector ./test/integration/eventbus_e2e/`
-Expected: FAIL — the wiring at `cmd/holomush/core.go` doesn't yet pass the same selector to both constructors. Pinned to be addressed in Task E.2.
+Expected: FAIL — the wiring at `cmd/holomush/core.go` doesn't yet pass the same selector to both constructors. Pinned to be addressed in Task E.3.
 
 - [ ] **Step B.4.4: Commit (with a note that the test is parked failing)**
 
 ```text
 test(eventbus_e2e): INV-P7-9 selector pointer-identity test (parked)
 
-Drives the deps.go wiring path; will pass once Task E.2 threads
+Drives the `cmd/holomush/core.go:488` wiring path; will pass once Task E.3 threads
 the same codec.KeySelector instance into both PluginConsumerManager
 and history.NewReader. Failing-now is expected and documented.
 
@@ -1552,7 +1554,11 @@ Two small substrate changes the fence depends on. Land them first so C.1-C.4 can
 NoPlaintextReasonDowngradeRefused NoPlaintextReason = 7
 ```
 
-Mirror the new value into `corev1.NoPlaintextReason` proto enum per the project's INV-GW-14 convention (same comment notes the mirror).
+Mirror the new value into `corev1.NoPlaintextReason` proto enum per the project's INV-GW-14 convention:
+
+1. Edit `api/proto/holomush/core/v1/core.proto`: in the `NoPlaintextReason` enum, append `NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED = 7;` after the existing `NO_PLAINTEXT_REASON_INTERNAL = 6;` value (verified next-free at `pkg/proto/holomush/core/v1/core.pb.go:36-56`).
+2. Run `task proto` to regenerate `pkg/proto/holomush/core/v1/core.pb.go`.
+3. Verify the regenerated Go enum now exports `corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED`. The D.2.1 test (Task D.2) consumes this fully-qualified name.
 
 - [ ] **Step C.0.2: Pin row-extraction approach — `Event.auditRow` field**
 
@@ -1889,7 +1895,7 @@ Where `fencedRouter()` returns either `r.router` (no fence configured) or `NewPl
 ```go
 // WithPluginDowngradeFence wires the Phase 7 read-side fence around
 // the inner PluginHistoryRouter. Production wiring at cmd/holomush/core.go
-// (Task E.2) provides the always-sensitive set + crypto_keys lookup +
+// (Task E.3) provides the always-sensitive set + crypto_keys lookup +
 // violation emitter.
 func WithPluginDowngradeFence(
 	alwaysSensitive map[string]struct{},
@@ -2130,9 +2136,9 @@ func TestDowngradeAttackerMaliciousPathRefuses(t *testing.T) {
 	require.Len(t, resp.Events, 1)
 	assert.True(t, resp.Events[0].MetadataOnly,
 		"INV-P7-10: malicious downgrade row MUST surface as metadata_only=true")
-	assert.Equal(t, eventbusv1.NoPlaintextReason_NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED,
+	assert.Equal(t, corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED,
 		resp.Events[0].NoPlaintextReason,
-		"INV-P7-10: refusal reason MUST be DowngradeRefused")
+		"INV-P7-10: refusal reason MUST be DowngradeRefused (proto enum in corev1, NOT eventbusv1; verified at pkg/proto/holomush/core/v1/core.pb.go:36)")
 	assert.Empty(t, resp.Events[0].Payload,
 		"INV-P7-10: refused row MUST NOT leak plaintext payload")
 
