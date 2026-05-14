@@ -31,7 +31,7 @@ edge and the file's `**Status:**` reflects the supersession.
 | [Timing-Attack Resistant Authentication](holomush-8qbl-timing-attack-resistant-authentication.md) | 2026-02-02 | Accepted | `holomush-8qbl` |
 | [Command State Management for Multi-Turn Interactions](holomush-8j8q-command-state-management-multi-turn-interactions.md) | 2026-02-02 | Proposed (Deferred to post-v1) | `holomush-8j8q` |
 | [Unified Command Registry](holomush-5nu7-unified-command-registry.md) | 2026-02-02 | Accepted | `holomush-5nu7` |
-| [Command Security Model](holomush-vi5e-command-security-model.md) | 2026-02-02 | Superseded by [ADR 0014](0014-direct-static-access-control-replacement.md) | `holomush-vi5e` |
+| [Command Security Model](holomush-vi5e-command-security-model.md) | 2026-02-02 | Superseded by `holomush-7kvy` | `holomush-vi5e` |
 | [Command Conflict Resolution](holomush-ogb4-command-conflict-resolution.md) | 2026-02-02 | Accepted | `holomush-ogb4` |
 
 <!-- BEGIN MIGRATION MAP -->

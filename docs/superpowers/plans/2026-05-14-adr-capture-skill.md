@@ -981,7 +981,7 @@ available, agent should pull the rejected-Go discussion and bump to 4.
 
 Create `.claude/agents/adr-extractor.testdata/README.md`:
 
-```markdown
+````markdown
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
@@ -995,16 +995,12 @@ the agent's system prompt to catch prompt drift.
 ```bash
 task test:agents
 ```
-```
-
-```text
 
 (Wired in Task 19 of the implementation plan.)
 
 Each fixture's expected behavior is documented inline at the bottom of
 the fixture file.
-
-```text
+````
 
 - [ ] **Step 7: Run task fmt**
 

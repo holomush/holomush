@@ -218,7 +218,9 @@ falls through to `malformed`.
   as kind=`optout` per the table above. Mid-file or malformed opt-out
   comments are ignored.
 
-**Stamping rule (skill side):**
+<!-- rumdl-disable-next-line MD032 -->
+
+### Stamping rule (skill side)
 
 The skill stamps the marker by:
 
