@@ -88,4 +88,71 @@ Without that env var, `pr-prep:run` exits non-zero with a message pointing at th
 
 - Spec: `docs/superpowers/specs/2026-04-26-pr-prep-concurrency-safety-design.md`
 - Tracking bead: `holomush-71zq`
+
+## Docs-only fast lane
+
+`task pr-prep` auto-detects when a diff touches only documentation paths
+(per the canonical `DOCS_ONLY_PATHS` list in `Taskfile.yaml`'s `vars:` block)
+and delegates to `task pr-prep:docs`, a lightweight lane that runs:
+
+- `lint:markdown` (rumdl)
+- `lint:yaml` (yamlfmt)
+- `lint:docs-symmetry` (AGENTS.md ↔ CLAUDE.md byte-equivalence)
+- `fmt:check` (dprint + rumdl)
+- `license:check` (addlicense)
+- `lint:docs-paths-sync` (verifies the canonical glob list is in sync
+  across `Taskfile.yaml` + `.github/workflows/ci.yaml` + `.github/workflows/ci-docs-skip.yaml`)
+
+The docs lane has no Docker dependency, runs no Go compile, and does not
+acquire the `pr-prep` flock — concurrent docs lanes are safe.
+
+### When is a diff "docs-only"?
+
+A diff is docs-only when every changed path matches one of the canonical
+globs:
+
+- `site/**`
+- `docs/**`
+- `**/*.md` (including `README.md`, `web/CLAUDE.md`, `.github/PULL_REQUEST_TEMPLATE.md`)
+- `.claude/agents/**`
+- `.claude/commands/**`
+- `.claude/rules/**`
+- `.claude/agent-memory/**`
+- `LICENSE`, `LICENSE_HEADER`
+
+Non-docs paths (any `.go`, `.proto`, `.yaml` outside the included dirs,
+`.claude/hooks/**`, `.claude/settings*.json`, `.github/workflows/**`, etc.)
+route the entire diff to the full lane.
+
+### Forcing the full lane
+
+```bash
+HOLOMUSH_PR_PREP_FORCE_FULL=1 task pr-prep
+```
+
+Use this when a markdown change references not-yet-merged code via
+`mkdocstrings`-style includes, or when you want full validation regardless
+of diff classification.
+
+### jj snapshot caveat
+
+Detection uses `git diff --name-only origin/main...HEAD`, which reflects
+jj's last auto-snapshot of `@`. If you've edited files since the last jj
+command, the changes are on disk but not yet in `@`. Run `jj st` (or any
+read-only jj command) before `task pr-prep` to force a snapshot.
+
+### Same-name skip workflow
+
+On the CI side, `.github/workflows/ci.yaml` has `paths-ignore` for the
+same glob list. A separate workflow `.github/workflows/ci-docs-skip.yaml`
+runs on the inverse path filter with workflow name `CI` and jobs named
+`Lint`, `Test`, `Build` (no-op `echo`s). GitHub's check-identity rule
+treats `(workflow_name, job_name)` as the same required check across
+files, so branch-protection required checks stay green on docs-only PRs
+without invoking the full pipeline.
+
+If you ever edit `DOCS_ONLY_PATHS`, edit all three locations
+(Taskfile.yaml + ci.yaml + ci-docs-skip.yaml) and run
+`task lint:docs-paths-sync` to verify byte-equivalence.
+
 - Open follow-up: `holomush-71zq.12` — design issue around descendant fd inheritance (the "kill the process tree" caveat above is the documentation mitigation; future code fix may add `setsid` or a SIGTERM trap to make single-PID kill reliable).
