@@ -58,3 +58,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo "docs-only PR — Build skipped (no code changes)"
+  Integration:
+    name: Integration Test
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only PR — Integration skipped (no code changes)"
+  E2E:
+    name: E2E Test
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only PR — E2E skipped (no code changes)"
