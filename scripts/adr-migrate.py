@@ -284,6 +284,140 @@ def bd_dolt_commit(message: str) -> None:
     run(["bd", "dolt", "commit", "-m", message])
 
 
+def stub_body(a: LegacyADR) -> str:
+    return f"""<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 HoloMUSH Contributors -->
+
+# Moved
+
+This ADR has moved to **[`{a.new_filename}`]({a.new_filename})**.
+
+- **bd decision:** `{a.bd_id}` (run `bd show {a.bd_id}` for live status)
+- **Legacy number:** ADR {a.number:04d}
+- **Date migrated:** 2026-05-14
+"""
+
+
+def regenerate_readme(adrs: list[LegacyADR]) -> None:
+    """Rewrite docs/adr/README.md end-to-end."""
+    by_date_desc = sorted(adrs, key=lambda a: a.date, reverse=True)
+    index_rows = "\n".join(
+        f"| [{a.title}]({a.new_filename}) | {a.date} | {a.status} | `{a.bd_id}` |"
+        for a in by_date_desc
+    )
+    migration_rows = "\n".join(
+        f"| ADR {a.number:04d} | `{a.bd_id}` | [{a.new_filename}]({a.new_filename}) |"
+        for a in sorted(adrs, key=lambda a: a.number)
+    )
+    content = f"""<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 HoloMUSH Contributors -->
+
+# Architecture Decision Records (ADRs)
+
+This directory contains Architecture Decision Records (ADRs) documenting
+significant design decisions made during HoloMUSH development. Each ADR
+captures the context, options considered, decision made, and consequences
+of architectural choices.
+
+ADRs are immutable once accepted. If a decision is reversed, a new ADR
+supersedes the old one; the bd decision record gains a `--type supersedes`
+edge and the file's `**Status:**` reflects the supersession.
+
+## Index
+
+| Title | Date | Status | bd decision |
+|-------|------|--------|-------------|
+{index_rows}
+
+<!-- BEGIN MIGRATION MAP -->
+
+## Migration map (2026-05-14)
+
+The legacy `NNNN-<slug>.md` numbering was retired in favor of
+bd-decision IDs. Stubs at the old paths preserve external references.
+
+| Legacy | bd decision | Current file |
+|--------|-------------|--------------|
+{migration_rows}
+
+<!-- END MIGRATION MAP -->
+
+## Format
+
+See `docs/superpowers/specs/2026-05-13-adr-capture-skill-design.md`
+§"ADR format (unified)" for the canonical template. All ADRs use one
+format: Context, Decision, Rationale, Alternatives Considered,
+Consequences, References.
+
+## Template
+
+New ADRs are written by the `/capture-adrs` skill, which renders from
+the spec's format definition. To write one manually, follow the same
+shape and use `bd create -t decision --validate` to file the record.
+
+## Writing guidelines
+
+| Guideline                 | Description                                                                                              |
+| ------------------------- | -------------------------------------------------------------------------------------------------------- |
+| **Immutability**          | ADRs are permanent records — do not edit accepted ADRs to change decisions                               |
+| **Supersession**          | To reverse a decision, create a new ADR and mark the old one as "Superseded by `<bd-id>`"                |
+| **RFC2119 keywords**      | Use MUST/SHOULD/MAY in consequences when describing implementation requirements                          |
+| **Comprehensive options** | Document ALL options considered, not just the chosen one                                                 |
+| **Trade-off clarity**     | Consequences should honestly capture both benefits and costs                                             |
+| **Future-proof**          | Assume readers in 5 years won't have context — explain everything                                        |
+
+## References
+
+- [Michael Nygard's ADR template](https://github.com/joelparkerhenderson/architecture-decision-record)
+- [ADR Tools GitHub](https://github.com/npryce/adr-tools)
+- [RFC 2119: Key words for RFCs](https://www.ietf.org/rfc/rfc2119.txt)
+"""
+    (ADR_DIR / "README.md").write_text(content, encoding="utf-8")
+
+
+def verify_post_migration(adrs: list[LegacyADR]) -> None:
+    """Inline asserts enforcing INV-A12, A13."""
+    real_files = sorted(
+        p.name for p in ADR_DIR.iterdir()
+        if re.match(r"^[a-z0-9]+-[a-z0-9-]+\.md$", p.name)
+        and not re.match(r"^\d{4}-", p.name)
+    )
+    stubs = sorted(
+        p.name for p in ADR_DIR.iterdir()
+        if re.match(r"^\d{4}-.+\.md$", p.name)
+    )
+    assert len(real_files) == 17, f"expected 17 real files, got {len(real_files)}: {real_files}"
+    assert len(stubs) == 17, f"expected 17 stubs, got {len(stubs)}: {stubs}"
+    assert (ADR_DIR / "README.md").exists(), "README.md missing"
+    assert not (ADR_DIR / "legacy").exists(), "legacy/ subdirectory MUST NOT exist (INV-A12 flat-stub rule)"
+
+    # Each stub links to an existing real file.
+    for stub_name in stubs:
+        stub = ADR_DIR / stub_name
+        text = stub.read_text(encoding="utf-8")
+        m = re.search(r"\[`([a-z0-9-]+\.md)`\]", text)
+        assert m, f"{stub_name}: no link in stub"
+        target = m.group(1)
+        assert (ADR_DIR / target).exists(), f"{stub_name} links to missing {target}"
+
+    # Supersession edge present (ADR 0007 → 0014).
+    sup = [a for a in adrs if a.superseded_by_number is not None]
+    if sup:
+        # Should be exactly 1 in the current backlog.
+        assert len(sup) == 1, f"expected 1 supersession, got {len(sup)}"
+        a = sup[0]
+        superseder = next(s for s in adrs if s.number == a.superseded_by_number)
+        # Cross-check the dep edge exists.
+        deps = run(["bd", "dep", "list", superseder.bd_id])
+        assert "supersedes" in deps and a.bd_id in deps, (
+            f"supersession edge missing: {superseder.bd_id} should supersede {a.bd_id}\n{deps}"
+        )
+
+    print(f"\n✓ Post-migration verification passed: "
+          f"{len(real_files)} real + {len(stubs)} stubs + README + "
+          f"{len(sup)} supersession edges.")
+
+
 def apply_migration(adrs: list[LegacyADR]) -> None:
     """Mutate state: create bd records, rename files, write stubs, regen README."""
     # Pass 1: create bd records for every ADR; populate bd_id.
@@ -294,13 +428,66 @@ def apply_migration(adrs: list[LegacyADR]) -> None:
         print(f"  bd: {a.bd_id} ← ADR-{a.number:04d} ({a.title!r})")
 
     # Pass 2: build number→bd-id index for supersession edges.
-    by_number = {a.number: a for a in adrs}  # noqa: F841 -- used in Pass 4 (task 12)
+    by_number = {a.number: a for a in adrs}
 
-    # Pass 3: rename files, write stubs (next task).
-    # Pass 4: supersession edges + close (next task).
-    # Pass 5: regenerate README (next task).
-    # Pass 6: inline asserts / verification (next task).
-    # Pass 7: bd dolt commit (next task).
+    # Pass 3: rename files + write stubs.
+    # jj has no `mv` subcommand; the snapshotter auto-detects the rename
+    # from a filesystem move, preserving `jj log --follow` continuity
+    # (INV-A17).
+    for a in adrs:
+        new_path = ADR_DIR / a.new_filename
+        body = render_adr(a, a.bd_id)
+        # Filesystem rename — jj detects this when it next snapshots.
+        a.path.rename(new_path)
+        # Overwrite the renamed file with the unified-format body.
+        new_path.write_text(body, encoding="utf-8")
+        # Write stub at the legacy path (fresh file at the OLD name).
+        a.path.write_text(stub_body(a), encoding="utf-8")
+        print(f"  renamed: {a.path.name} → {a.new_filename}; stub written")
+
+    # Pass 4: supersession edges + close.
+    for a in adrs:
+        if a.superseded_by_number is None:
+            continue
+        superseder = by_number.get(a.superseded_by_number)
+        if superseder is None:
+            sys.stderr.write(
+                f"WARN: ADR-{a.number:04d} says superseded by "
+                f"ADR-{a.superseded_by_number:04d} but that ADR is "
+                f"not present.\n"
+            )
+            continue
+        bd_dep_supersedes(superseder.bd_id, a.bd_id)
+        bd_close_superseded(a.bd_id, superseder.bd_id)
+        # Rewrite the superseded file's Status header to use bd-id.
+        new_path = ADR_DIR / a.new_filename
+        text = new_path.read_text(encoding="utf-8")
+        text = re.sub(
+            r"^\*\*Status:\*\*\s+.+$",
+            f"**Status:** Superseded by {superseder.bd_id}",
+            text,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        new_path.write_text(text, encoding="utf-8")
+        # Mirror the on-disk Status update into the in-memory model so
+        # Pass 5's regenerate_readme() emits the new bd-id in the README's
+        # Status column. (Without this, the README index would retain the
+        # parsed legacy "Superseded by [ADR 0014](0014-...md)" markdown link
+        # which then points at the legacy stub instead of the renamed file.)
+        a.status = f"Superseded by {superseder.bd_id}"
+        print(f"  supersession: {a.bd_id} ← superseded by {superseder.bd_id}")
+
+    # Pass 5: regenerate README.
+    regenerate_readme(adrs)
+
+    # Pass 6: inline assertions (INV-A12, A13).
+    # Run BEFORE bd_dolt_commit so a verify failure leaves the bd database
+    # un-committed and the working copy abandonable via `jj abandon`.
+    verify_post_migration(adrs)
+
+    # Pass 7: bd dolt commit. Only reached if verification passed.
+    bd_dolt_commit("migration: import 17 legacy ADRs as decision records")
 
 
 def main() -> int:
