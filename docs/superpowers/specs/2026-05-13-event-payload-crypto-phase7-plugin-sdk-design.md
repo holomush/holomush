@@ -539,16 +539,17 @@ func LoadForQuery(row AuditRow) (*pluginauditpb.AuditRow, error)
 
 ### 4.4 Always-sensitive type set
 
-`PluginDowngradeFence` holds an atomically-updatable set keyed by
-qualified event type (`<plugin_name>:<event_type>`). On manifest
-reload, the set is recomputed and swapped in atomically (Go
-`atomic.Pointer` or RWMutex around a map; choice is implementation
-detail, INV-P7-8 pins the atomicity).
+`PluginDowngradeFence` holds an immutable-after-boot set keyed by
+qualified event type (`<plugin_name>:<event_type>`), built once at
+server startup from loaded manifests' `crypto.emits` declarations
+per INV-P7-8. The set is NOT updated at runtime — manifests are not
+hot-reloaded today, and the fence's set follows that constraint.
 
 The set is fed from `internal/plugin/Manifest.crypto.emits` entries
-where `Sensitivity == SensitivityAlways`. The reload hook attaches to
-the existing manifest-registry callback path (no new manifest-watch
-infrastructure).
+where `Sensitivity == SensitivityAlways`. Future hot-reload support
+(post-Phase-7) lands via bead `holomush-kl9w`, which will add a
+manifest-registry reload callback and must extend INV-P7-8 to mandate
+atomic refresh at that time.
 
 ## Section 5 — Implementation notes
 
@@ -750,18 +751,18 @@ Phase 7 is a single PR containing:
    `tier.go:79-84`). Composition at wiring time:
    `NewPluginDowngradeFence(audit.NewPluginHistoryRouter(...))`. No new
    import edges in the package graph.
-3a. New `internal/eventbus/history/plugin_aad_adapter.go` — implements
+4. New `internal/eventbus/history/plugin_aad_adapter.go` — implements
    the `pluginauditpb.AuditRow → *eventbusv1.Event` per-field copy
    used by the decrypt path to reconstruct AAD via `aad.Build`
    (`internal/eventbus/crypto/aad/aad.go:62`). Six fields copied; two
    nil-safety guards (Actor, Timestamp).
-4. Reshaped `api/proto/holomush/plugin/v1/audit.proto` + regenerated proto code:
+5. Reshaped `api/proto/holomush/plugin/v1/audit.proto` + regenerated proto code:
    new `AuditRow` message (id, subject, type, timestamp, actor, codec,
    payload, dek_ref optional, dek_version optional, schema_ver);
    `AuditEventRequest.event` + `headers` fields dropped, replaced with
    `AuditRow row = 1`; `QueryHistoryResponse.event` replaced with
    `AuditRow row = 1`.
-5. Migrated all `pluginauditpb.AuditEventRequest.GetEvent()` / `.GetHeaders()`
+6. Migrated all `pluginauditpb.AuditEventRequest.GetEvent()` / `.GetHeaders()`
    callers to the new shape:
    - `plugins/core-scenes/audit.go:160-237` — reads from `req.GetRow()` fields
      instead of the headers map.
@@ -770,18 +771,18 @@ Phase 7 is a single PR containing:
    - `internal/eventbus/audit/plugin_consumer_unit_test.go:82` —
      `cli.gotReq.GetHeaders()` assertion replaced with `.GetRow()` field
      assertions.
-6. Extended `pkg/plugin/audit.go` (Layer 2 helpers with `SchemaVer`).
-7. Plugin migration: `plugins/core-scenes/migrations/0000XX_add_scene_log_dek_columns.{up,down}.sql`.
-8. Updated `plugins/core-scenes/audit.go`: handles new dek_ref/dek_version
+7. Extended `pkg/plugin/audit.go` (Layer 2 helpers with `SchemaVer`).
+8. Plugin migration: `plugins/core-scenes/migrations/0000XX_add_scene_log_dek_columns.{up,down}.sql`.
+9. Updated `plugins/core-scenes/audit.go`: handles new dek_ref/dek_version
    columns; constructs `AuditRow` proto on QueryHistory; reads from
    `AuditEventRequest.GetRow()` instead of headers map.
-9. New test fixture under `test/integration/plugin/testdata/test_downgrade_attacker/`.
-10. Test corpus per Section 6.
-11. Master spec polish (per "Master spec polish list" in §Context):
+10. New test fixture under `test/integration/plugin/testdata/test_downgrade_attacker/`.
+11. Test corpus per Section 6.
+12. Master spec polish (per "Master spec polish list" in §Context):
     §4.6 audit-subjects registration; §8.2 pseudo-code amendment
     striking the events_audit-fallback line; §2 INV-50 cross-reference;
     §8.3 Go-struct example field-set match.
-12. PR-blocking docs: `site/docs/extending/binary-plugins.md` SDK pointer,
+13. PR-blocking docs: `site/docs/extending/binary-plugins.md` SDK pointer,
     `site/docs/reference/audit-subjects.md` violation-subject registration.
 
 No backfill required: existing `scene_log` rows have `codec=identity`;
