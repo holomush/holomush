@@ -3,146 +3,89 @@
 
 # Architecture Decision Records (ADRs)
 
-This directory contains Architecture Decision Records (ADRs) documenting significant design
-decisions made during HoloMUSH development. Each ADR captures the context, options
-considered, decision made, and consequences of architectural choices.
+This directory contains Architecture Decision Records (ADRs) documenting
+significant design decisions made during HoloMUSH development. Each ADR
+captures the context, options considered, decision made, and consequences
+of architectural choices.
 
-## Purpose
-
-ADRs provide:
-
-- **Historical context** — Why was this choice made?
-- **Trade-off analysis** — What alternatives were considered and why were they rejected?
-- **Consequences** — What are the implications of this decision?
-- **Rationale** — What reasoning led to this conclusion?
-
-ADRs are immutable once accepted. If a decision is reversed, a new ADR supersedes the old
-one rather than modifying the original.
+ADRs are immutable once accepted. If a decision is reversed, a new ADR
+supersedes the old one; the bd decision record gains a `--type supersedes`
+edge and the file's `**Status:**` reflects the supersession.
 
 ## Index
 
-| ADR                                                      | Title                                                  | Date       | Status             |
-| -------------------------------------------------------- | ------------------------------------------------------ | ---------- | ------------------ |
-| [0001](0001-opaque-session-tokens.md)                    | Use Opaque Session Tokens Instead of Signed JWTs       | 2026-02-02 | Accepted           |
-| [0002](0002-argon2id-password-hashing.md)                | Argon2id Password Hashing                              | 2026-02-02 | Accepted           |
-| [0003](0003-player-character-auth-model.md)              | Player-Character Authentication Model                  | 2026-02-02 | Accepted           |
-| [0004](0004-timing-attack-resistant-auth.md)             | Timing-Attack Resistant Authentication                 | 2026-02-02 | Accepted           |
-| [0005](0005-command-state-management.md)                 | Command State Management for Multi-Turn Interactions   | 2026-02-04 | Accepted           |
-| [0006](0006-unified-command-registry.md)                 | Unified Command Registry                               | 2026-02-04 | Accepted           |
-| [0007](0007-command-security-model.md)                   | Command Security Model                                 | 2026-02-04 | Superseded by 0014 |
-| [0008](0008-command-conflict-resolution.md)              | Command Conflict Resolution                            | 2026-02-04 | Accepted           |
-| [0009](0009-custom-go-native-abac-engine.md)             | Custom Go-Native ABAC Engine                           | 2026-02-05 | Accepted           |
-| [0010](0010-cedar-aligned-fail-safe-type-semantics.md)   | Cedar-Aligned Fail-Safe Type Semantics                 | 2026-02-05 | Accepted           |
-| [0011](0011-deny-overrides-without-priority.md)          | Deny-Overrides Without Priority Ordering               | 2026-02-05 | Accepted           |
-| [0012](0012-eager-attribute-resolution.md)               | Eager Attribute Resolution with Per-Request Caching    | 2026-02-05 | Accepted           |
-| [0013](0013-properties-as-first-class-entities.md)       | Properties as First-Class World Model Entities         | 2026-02-05 | Accepted           |
-| [0014](0014-direct-static-access-control-replacement.md) | Direct StaticAccessControl Replacement                 | 2026-02-05 | Accepted           |
-| [0015](0015-three-layer-player-access-control.md)        | Three-Layer Player Access Control                      | 2026-02-05 | Accepted           |
-| [0016](0016-listen-notify-policy-cache-invalidation.md)  | PostgreSQL LISTEN/NOTIFY for Policy Cache Invalidation | 2026-02-05 | Accepted           |
+| Title | Date | Status | bd decision |
+|-------|------|--------|-------------|
+| [AdminReadStream Bypasses HistoryReader/Dispatcher](holomush-8f2x-adminreadstream-bypasses-historyreaderdispatcher.md) | 2026-05-12 | Accepted | `holomush-8f2x` |
+| [Custom Go-Native ABAC Engine](holomush-kokk-custom-go-native-abac-engine.md) | 2026-02-05 | Accepted | `holomush-kokk` |
+| [Cedar-Aligned Fail-Safe Type Semantics](holomush-iv43-cedar-aligned-fail-safe-type-semantics.md) | 2026-02-05 | Accepted | `holomush-iv43` |
+| [Deny-Overrides Without Priority Ordering](holomush-501i-deny-overrides-without-priority-ordering.md) | 2026-02-05 | Accepted | `holomush-501i` |
+| [Eager Attribute Resolution with Per-Request Caching](holomush-fvn5-eager-attribute-resolution-per-request-caching.md) | 2026-02-05 | Accepted | `holomush-fvn5` |
+| [Properties as First-Class World Model Entities](holomush-xx3e-properties-as-first-class-world-model-entities.md) | 2026-02-05 | Accepted | `holomush-xx3e` |
+| [Direct StaticAccessControl Replacement](holomush-7kvy-direct-staticaccesscontrol-replacement.md) | 2026-02-05 | Accepted | `holomush-7kvy` |
+| [Three-Layer Player Access Control](holomush-0tq6-three-layer-player-access-control.md) | 2026-02-05 | Accepted | `holomush-0tq6` |
+| [PostgreSQL LISTEN/NOTIFY for Policy Cache Invalidation](holomush-5z2y-postgresql-listennotify-policy-cache-invalidation.md) | 2026-02-05 | Accepted | `holomush-5z2y` |
+| [Use Opaque Session Tokens Instead of Signed JWTs](holomush-ydti-use-opaque-session-tokens-instead-signed-jwts.md) | 2026-02-02 | Accepted | `holomush-ydti` |
+| [Argon2id Password Hashing](holomush-4x7x-argon2id-password-hashing.md) | 2026-02-02 | Accepted | `holomush-4x7x` |
+| [Player-Character Authentication Model](holomush-ex40-player-character-authentication-model.md) | 2026-02-02 | Accepted | `holomush-ex40` |
+| [Timing-Attack Resistant Authentication](holomush-8qbl-timing-attack-resistant-authentication.md) | 2026-02-02 | Accepted | `holomush-8qbl` |
+| [Command State Management for Multi-Turn Interactions](holomush-8j8q-command-state-management-multi-turn-interactions.md) | 2026-02-02 | Proposed (Deferred to post-v1) | `holomush-8j8q` |
+| [Unified Command Registry](holomush-5nu7-unified-command-registry.md) | 2026-02-02 | Accepted | `holomush-5nu7` |
+| [Command Security Model](holomush-vi5e-command-security-model.md) | 2026-02-02 | Superseded by [ADR 0014](0014-direct-static-access-control-replacement.md) | `holomush-vi5e` |
+| [Command Conflict Resolution](holomush-ogb4-command-conflict-resolution.md) | 2026-02-02 | Accepted | `holomush-ogb4` |
 
-## Format Evolution
+<!-- BEGIN MIGRATION MAP -->
 
-ADRs in this repository use two valid formats:
+## Migration map (2026-05-14)
 
-### Original Format (ADRs 0001-0008)
+The legacy `NNNN-<slug>.md` numbering was retired in favor of
+bd-decision IDs. Stubs at the old paths preserve external references.
 
-- **Context** — Problem statement and background
-- **Decision** — The choice made
-- **Rationale** — Why this decision was made
-- **Consequences** — Positive, negative, and neutral outcomes
-- **Alternatives Considered** — Separate section for rejected options
-- **References** — Related documents and implementations
+| Legacy | bd decision | Current file |
+|--------|-------------|--------------|
+| ADR 0001 | `holomush-ydti` | [holomush-ydti-use-opaque-session-tokens-instead-signed-jwts.md](holomush-ydti-use-opaque-session-tokens-instead-signed-jwts.md) |
+| ADR 0002 | `holomush-4x7x` | [holomush-4x7x-argon2id-password-hashing.md](holomush-4x7x-argon2id-password-hashing.md) |
+| ADR 0003 | `holomush-ex40` | [holomush-ex40-player-character-authentication-model.md](holomush-ex40-player-character-authentication-model.md) |
+| ADR 0004 | `holomush-8qbl` | [holomush-8qbl-timing-attack-resistant-authentication.md](holomush-8qbl-timing-attack-resistant-authentication.md) |
+| ADR 0005 | `holomush-8j8q` | [holomush-8j8q-command-state-management-multi-turn-interactions.md](holomush-8j8q-command-state-management-multi-turn-interactions.md) |
+| ADR 0006 | `holomush-5nu7` | [holomush-5nu7-unified-command-registry.md](holomush-5nu7-unified-command-registry.md) |
+| ADR 0007 | `holomush-vi5e` | [holomush-vi5e-command-security-model.md](holomush-vi5e-command-security-model.md) |
+| ADR 0008 | `holomush-ogb4` | [holomush-ogb4-command-conflict-resolution.md](holomush-ogb4-command-conflict-resolution.md) |
+| ADR 0009 | `holomush-kokk` | [holomush-kokk-custom-go-native-abac-engine.md](holomush-kokk-custom-go-native-abac-engine.md) |
+| ADR 0010 | `holomush-iv43` | [holomush-iv43-cedar-aligned-fail-safe-type-semantics.md](holomush-iv43-cedar-aligned-fail-safe-type-semantics.md) |
+| ADR 0011 | `holomush-501i` | [holomush-501i-deny-overrides-without-priority-ordering.md](holomush-501i-deny-overrides-without-priority-ordering.md) |
+| ADR 0012 | `holomush-fvn5` | [holomush-fvn5-eager-attribute-resolution-per-request-caching.md](holomush-fvn5-eager-attribute-resolution-per-request-caching.md) |
+| ADR 0013 | `holomush-xx3e` | [holomush-xx3e-properties-as-first-class-world-model-entities.md](holomush-xx3e-properties-as-first-class-world-model-entities.md) |
+| ADR 0014 | `holomush-7kvy` | [holomush-7kvy-direct-staticaccesscontrol-replacement.md](holomush-7kvy-direct-staticaccesscontrol-replacement.md) |
+| ADR 0015 | `holomush-0tq6` | [holomush-0tq6-three-layer-player-access-control.md](holomush-0tq6-three-layer-player-access-control.md) |
+| ADR 0016 | `holomush-5z2y` | [holomush-5z2y-postgresql-listennotify-policy-cache-invalidation.md](holomush-5z2y-postgresql-listennotify-policy-cache-invalidation.md) |
+| ADR 0017 | `holomush-8f2x` | [holomush-8f2x-adminreadstream-bypasses-historyreaderdispatcher.md](holomush-8f2x-adminreadstream-bypasses-historyreaderdispatcher.md) |
 
-### Current Format (ADRs 0009+)
+<!-- END MIGRATION MAP -->
 
-- **Context** — Problem statement with embedded **Options Considered** subsection
-- **Decision** — The choice made
-- **Rationale** — Why this decision was made
-- **Consequences** — Positive, negative, and neutral outcomes (may include testing requirements)
-- **References** — Related documents and implementations
+## Format
 
-Both formats are valid. The evolution reflects a preference for more compact ADRs with
-options embedded in context rather than separated. New ADRs SHOULD use the current format.
+See `docs/superpowers/specs/2026-05-13-adr-capture-skill-design.md`
+§"ADR format (unified)" for the canonical template. All ADRs use one
+format: Context, Decision, Rationale, Alternatives Considered,
+Consequences, References.
 
-## Template for New ADRs
+## Template
 
-```markdown
-# ADR NNNN: Title
+New ADRs are written by the `/capture-adrs` skill, which renders from
+the spec's format definition. To write one manually, follow the same
+shape and use `bd create -t decision --validate` to file the record.
 
-**Date:** YYYY-MM-DD
-**Status:** Proposed | Accepted | Deprecated | Superseded by ADR-XXXX
-**Deciders:** HoloMUSH Contributors
+## Writing guidelines
 
-## Context
-
-[Describe the problem, background, and relevant constraints]
-
-### Options Considered
-
-**Option A: [Name]**
-
-[Description]
-
-| Aspect     | Assessment                   |
-| ---------- | ---------------------------- |
-| Strengths  | [What this option does well] |
-| Weaknesses | [What this option lacks]     |
-
-**Option B: [Name]**
-
-[Description]
-
-| Aspect     | Assessment                   |
-| ---------- | ---------------------------- |
-| Strengths  | [What this option does well] |
-| Weaknesses | [What this option lacks]     |
-
-## Decision
-
-**Option [X]: [Chosen option name].**
-
-[Brief statement of the decision and key details]
-
-## Rationale
-
-[Detailed explanation of WHY this decision was made]
-
-- **Key factor 1:** [Explanation]
-- **Key factor 2:** [Explanation]
-
-## Consequences
-
-**Positive:**
-
-- [Benefit 1]
-- [Benefit 2]
-
-**Negative:**
-
-- [Trade-off 1]
-- [Trade-off 2]
-
-**Neutral:**
-
-- [Neither good nor bad implication]
-
-## References
-
-- [Related spec](../specs/filename.md)
-- [Related design decision](../specs/design-decisions.md#anchor)
-- [External reference](https://example.com)
-```
-
-## Writing Guidelines
-
-| Guideline                 | Description                                                                              |
-| ------------------------- | ---------------------------------------------------------------------------------------- |
-| **Immutability**          | ADRs are permanent records — do not edit accepted ADRs to change decisions               |
-| **Supersession**          | To reverse a decision, create a new ADR and mark the old one as "Superseded by ADR-XXXX" |
-| **RFC2119 keywords**      | Use MUST/SHOULD/MAY in consequences when describing implementation requirements          |
-| **Comprehensive options** | Document ALL options considered, not just the chosen one                                 |
-| **Trade-off clarity**     | Consequences should honestly capture both benefits and costs                             |
-| **Future-proof**          | Assume readers in 5 years won't have context — explain everything                        |
+| Guideline                 | Description                                                                                              |
+| ------------------------- | -------------------------------------------------------------------------------------------------------- |
+| **Immutability**          | ADRs are permanent records — do not edit accepted ADRs to change decisions                               |
+| **Supersession**          | To reverse a decision, create a new ADR and mark the old one as "Superseded by `<bd-id>`"                |
+| **RFC2119 keywords**      | Use MUST/SHOULD/MAY in consequences when describing implementation requirements                          |
+| **Comprehensive options** | Document ALL options considered, not just the chosen one                                                 |
+| **Trade-off clarity**     | Consequences should honestly capture both benefits and costs                                             |
+| **Future-proof**          | Assume readers in 5 years won't have context — explain everything                                        |
 
 ## References
 

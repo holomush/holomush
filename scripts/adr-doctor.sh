@@ -168,8 +168,10 @@ for f in "$ADR_DIR"/holomush-*-*.md; do
   [ -n "$status" ] || continue
   this_id=$(grep -oE '^\*\*Decision:\*\*\s+holomush-[a-z0-9]+' "$f" | grep -oE 'holomush-[a-z0-9]+')
   superseder=$(echo "$status" | grep -oE 'holomush-[a-z0-9]+')
-  # Confirm bd dep list shows the edge.
-  if ! bd dep list "$superseder" 2>/dev/null | grep -q "supersedes.*$this_id"; then
+  # Confirm bd dep list shows the edge. bd renders deps as:
+  #   "  <dep-id>: <title> [P<n>] (<status>) via <dep-type>"
+  # so the superseded id appears BEFORE the literal 'supersedes'.
+  if ! bd dep list "$superseder" 2>/dev/null | grep -q "$this_id.*via supersedes"; then
     check_fail "$f: Status says superseded by $superseder, but bd dep edge missing"
   fi
 done
