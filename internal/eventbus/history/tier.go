@@ -109,6 +109,33 @@ func WithPluginRouter(router PluginHistoryRouter) Option {
 	return func(r *Reader) { r.router = router }
 }
 
+// WithPluginDowngradeFence wires the Phase 7 read-side fence around the
+// inner PluginHistoryRouter. The fence applies INV-P7-7 (manifest-set
+// heuristic) and INV-P7-15 (DEK existence) checks before forwarding rows
+// to the caller; refusals surface as per-row metadata_only=true.
+//
+// Production wiring at cmd/holomush/core.go (Task E.3 / bead 1r0v.5)
+// supplies the always-sensitive set (built once at boot per INV-P7-8),
+// the crypto_keys lookup, and the violation emitter. Until then this
+// option is exposed for integration tests; an unset fence preserves
+// pre-Phase-7 behaviour (router output passes through unfenced).
+//
+// Multiple WithPluginDowngradeFence calls overwrite the captured options;
+// last-writer-wins.
+func WithPluginDowngradeFence(
+	alwaysSensitive map[string]struct{},
+	lookup CryptoKeysLookup,
+	emitter ViolationEmitter,
+) Option {
+	return func(r *Reader) {
+		r.fenceOpts = []PluginDowngradeFenceOption{
+			WithAlwaysSensitiveTypes(alwaysSensitive),
+			WithCryptoKeysLookup(lookup),
+			WithViolationEmitter(emitter),
+		}
+	}
+}
+
 // WithCodecSelector injects the KeySelector used to decrypt JS payloads on
 // read. Mirrors eventbus.WithSubscriberCodecSelector. Unset deployments
 // decode identity-codec payloads (the default).
@@ -301,6 +328,19 @@ type Reader struct {
 	// caller injects a test fake via WithHotTier (that path owns its
 	// own option wiring).
 	hotOpts []HotTierOption
+
+	// fenceOpts captures the Phase 7 PluginDowngradeFence configuration
+	// supplied via WithPluginDowngradeFence. nil/empty means no fence
+	// is applied — router output flows through unfenced (pre-Phase-7
+	// behaviour). When non-empty, fencedRouter() lazily wraps r.router
+	// the first time a plugin-owned subject is queried.
+	fenceOpts []PluginDowngradeFenceOption
+
+	// fence is the lazily-built fence wrapping r.router. Built on the
+	// first plugin-owned QueryHistory call when fenceOpts is non-empty;
+	// nil otherwise. Plugin route is single-routered so a single fence
+	// instance covers every plugin under this Reader.
+	fence PluginHistoryRouter
 }
 
 // NewReader constructs a Reader. `js` and `pool` MAY be nil if the caller
@@ -363,8 +403,8 @@ func (r *Reader) QueryHistory(ctx context.Context, q eventbus.HistoryQuery) (eve
 					With("plugin", owner.PluginName).
 					Errorf("plugin-owned subject requires PluginHistoryRouter")
 			}
-			//nolint:wrapcheck // forwarding plugin RPC error to caller
-			return r.router.QueryHistory(ctx, owner.PluginName, q)
+			//nolint:wrapcheck // forwarding plugin RPC / fence error to caller
+			return r.fencedRouter().QueryHistory(ctx, owner.PluginName, q)
 		}
 	}
 
@@ -374,6 +414,22 @@ func (r *Reader) QueryHistory(ctx context.Context, q eventbus.HistoryQuery) (eve
 	startTier := selectStartTier(ctx, q, edge, now, snap)
 
 	return newCrossoverStream(ctx, r.hot, r.cold, q, edge, startTier, snap), nil
+}
+
+// fencedRouter returns r.router unwrapped when no fence is configured
+// (Phase B / pre-7 behaviour preserved), or a lazily-built
+// PluginDowngradeFence wrapping r.router when WithPluginDowngradeFence
+// supplied options. The fence is built once and reused across plugin
+// queries — the always-sensitive set is captured by copy at construction
+// per INV-P7-8 (no hot-reload).
+func (r *Reader) fencedRouter() PluginHistoryRouter {
+	if len(r.fenceOpts) == 0 {
+		return r.router
+	}
+	if r.fence == nil {
+		r.fence = NewPluginDowngradeFence(r.router, r.fenceOpts...)
+	}
+	return r.fence
 }
 
 // validateQuery enforces the invariants that are free to check before
