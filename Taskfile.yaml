@@ -618,7 +618,6 @@ tasks:
       - echo "▸ Running bats shell tests..."
       - task: test:bats
       - echo "▸ Verifying schema is current..."
-      - task: generate:schema
       - cmd: |
           SCHEMA=schemas/plugin.schema.json
           BEFORE=$(sha256sum "$SCHEMA" | cut -d' ' -f1)
