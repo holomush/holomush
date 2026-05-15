@@ -9,13 +9,41 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/pkg/errutil"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
+
+// fakeJSMsg is the minimal jetstream.Msg surface StoreFromMessage reads:
+// Headers() and Data(). All other methods panic — they are unreached on
+// the parse path under test.
+type fakeJSMsg struct {
+	headers nats.Header
+	data    []byte
+}
+
+func (f *fakeJSMsg) Headers() nats.Header                  { return f.headers }
+func (f *fakeJSMsg) Data() []byte                          { return f.data }
+func (f *fakeJSMsg) Subject() string                       { panic("not used in StoreFromMessage tests") }
+func (f *fakeJSMsg) Reply() string                         { panic("not used in StoreFromMessage tests") }
+func (f *fakeJSMsg) Ack() error                            { panic("not used in StoreFromMessage tests") }
+func (f *fakeJSMsg) DoubleAck(_ context.Context) error     { panic("not used in StoreFromMessage tests") }
+func (f *fakeJSMsg) Nak() error                            { panic("not used in StoreFromMessage tests") }
+func (f *fakeJSMsg) NakWithDelay(_ time.Duration) error    { panic("not used in StoreFromMessage tests") }
+func (f *fakeJSMsg) InProgress() error                     { panic("not used in StoreFromMessage tests") }
+func (f *fakeJSMsg) Term() error                           { panic("not used in StoreFromMessage tests") }
+func (f *fakeJSMsg) TermWithReason(_ string) error         { panic("not used in StoreFromMessage tests") }
+func (f *fakeJSMsg) Metadata() (*jetstream.MsgMetadata, error) {
+	panic("not used in StoreFromMessage tests")
+}
 
 func TestAuditRecorderDenyAccumulatesHintOnContext(t *testing.T) {
 	ctx := pluginsdk.NewContextForHandler(context.Background())
@@ -210,4 +238,148 @@ func TestAuditRowRoundTripPreservesAllFields(t *testing.T) {
 			assert.Equal(t, tc.row.SchemaVer, proto.GetSchemaVer())
 		})
 	}
+}
+
+// validStoreHeaders builds the App-* header set that auditheader.Parse
+// requires for a non-error parse. Tests delete or override individual
+// entries to exercise specific failure paths.
+func validStoreHeaders() nats.Header {
+	h := nats.Header{}
+	h.Set("App-Codec", "identity")
+	h.Set("App-Schema-Version", "1")
+	return h
+}
+
+// marshalEnvelope is a test helper that proto-marshals an Event with the
+// supplied id. Length of id MUST be 16 except for the explicit-bad-id
+// test that verifies AUDIT_PLUGIN_BAD_EVENT_ID.
+func marshalEnvelope(t *testing.T, id []byte) []byte {
+	t.Helper()
+	ev := &eventbusv1.Event{
+		Id:        id,
+		Subject:   "events.test.scene.01ABC.ic",
+		Type:      "test-plugin:secret",
+		Timestamp: timestamppb.New(time.Unix(1700000000, 0).UTC()),
+		Payload:   []byte("envelope-payload-bytes"),
+		Actor: &eventbusv1.Actor{
+			Kind: eventbusv1.ActorKind_ACTOR_KIND_CHARACTER,
+			Id:   []byte("char-id-16-bytes"),
+		},
+	}
+	bs, err := proto.Marshal(ev)
+	require.NoError(t, err)
+	return bs
+}
+
+func TestStoreFromMessage_IdentityCodecHappyPath(t *testing.T) {
+	t.Parallel()
+	rowID := ulid.Make().Bytes()
+	msg := &fakeJSMsg{headers: validStoreHeaders(), data: marshalEnvelope(t, rowID[:])}
+
+	row, err := pluginsdk.StoreFromMessage(msg)
+	require.NoError(t, err)
+	assert.Equal(t, "identity", row.Codec)
+	assert.Equal(t, int32(1), row.SchemaVer)
+	assert.Equal(t, "events.test.scene.01ABC.ic", row.Subject)
+	assert.Equal(t, "test-plugin:secret", row.Type)
+	assert.Equal(t, []byte("envelope-payload-bytes"), row.Payload,
+		"INV-P7-1: payload bytes from envelope must round-trip verbatim")
+	assert.Equal(t, rowID[:], row.EventID[:])
+	assert.Nil(t, row.DEKRef, "identity codec MUST have nil DEKRef")
+	assert.Nil(t, row.DEKVersion, "identity codec MUST have nil DEKVersion")
+}
+
+func TestStoreFromMessage_EncryptedCodecWithDEK(t *testing.T) {
+	t.Parallel()
+	h := validStoreHeaders()
+	h.Set("App-Codec", "xchacha20poly1305-v1")
+	h.Set("App-Dek-Ref", "42")
+	h.Set("App-Dek-Version", "7")
+	rowID := ulid.Make().Bytes()
+	msg := &fakeJSMsg{headers: h, data: marshalEnvelope(t, rowID[:])}
+
+	row, err := pluginsdk.StoreFromMessage(msg)
+	require.NoError(t, err)
+	assert.Equal(t, "xchacha20poly1305-v1", row.Codec)
+	require.NotNil(t, row.DEKRef)
+	assert.Equal(t, uint64(42), *row.DEKRef)
+	require.NotNil(t, row.DEKVersion)
+	assert.Equal(t, uint32(7), *row.DEKVersion)
+}
+
+func TestStoreFromMessage_RejectsMissingHeader(t *testing.T) {
+	t.Parallel()
+	h := validStoreHeaders()
+	h.Del("App-Codec") // parser-level required field
+	msg := &fakeJSMsg{headers: h, data: marshalEnvelope(t, ulid.Make().Bytes())}
+
+	_, err := pluginsdk.StoreFromMessage(msg)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "AUDIT_MISSING_HEADER")
+}
+
+func TestStoreFromMessage_RejectsBadSchemaVersion(t *testing.T) {
+	t.Parallel()
+	h := validStoreHeaders()
+	h.Set("App-Schema-Version", "not-a-number")
+	msg := &fakeJSMsg{headers: h, data: marshalEnvelope(t, ulid.Make().Bytes())}
+
+	_, err := pluginsdk.StoreFromMessage(msg)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "AUDIT_BAD_SCHEMA_VERSION")
+}
+
+func TestStoreFromMessage_RejectsNegativeDEKRef(t *testing.T) {
+	t.Parallel()
+	h := validStoreHeaders()
+	h.Set("App-Codec", "xchacha20poly1305-v1")
+	h.Set("App-Dek-Ref", "-1")
+	msg := &fakeJSMsg{headers: h, data: marshalEnvelope(t, ulid.Make().Bytes())}
+
+	_, err := pluginsdk.StoreFromMessage(msg)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "AUDIT_DEK_REF_PARSE_FAILED")
+}
+
+func TestStoreFromMessage_RejectsUnmarshalableEnvelope(t *testing.T) {
+	t.Parallel()
+	msg := &fakeJSMsg{
+		headers: validStoreHeaders(),
+		data:    []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+	}
+
+	_, err := pluginsdk.StoreFromMessage(msg)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "AUDIT_PLUGIN_ENVELOPE_UNMARSHAL_FAILED")
+}
+
+func TestStoreFromMessage_RejectsBadEventID(t *testing.T) {
+	t.Parallel()
+	// 8-byte id (not 16) — INV: ULID is 16 bytes.
+	msg := &fakeJSMsg{
+		headers: validStoreHeaders(),
+		data:    marshalEnvelope(t, []byte("8-bytes!")),
+	}
+
+	_, err := pluginsdk.StoreFromMessage(msg)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "AUDIT_PLUGIN_BAD_EVENT_ID")
+}
+
+func TestStoreFromMessage_NilTimestampTolerated(t *testing.T) {
+	t.Parallel()
+	// Manually construct an envelope with no timestamp.
+	ev := &eventbusv1.Event{
+		Id:      ulid.Make().Bytes(),
+		Subject: "events.test.scene.01ABC.ic",
+		Type:    "test-plugin:secret",
+		Payload: []byte("p"),
+	}
+	data, err := proto.Marshal(ev)
+	require.NoError(t, err)
+	msg := &fakeJSMsg{headers: validStoreHeaders(), data: data}
+
+	row, err := pluginsdk.StoreFromMessage(msg)
+	require.NoError(t, err)
+	assert.True(t, row.Timestamp.IsZero(), "missing envelope ts MUST yield zero time, not panic")
 }
