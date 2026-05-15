@@ -112,7 +112,7 @@ jobs:
     runs-on: namespace-profile-linux-amd64-4x8
     services:
       postgres:
-        image: postgres:18@sha256:78481659c47e862334611ccdaf7c369c986b3046da9857112f3b309114a65fb4
+        image: postgres:18@sha256:270cac6290e2dbf63201faa0e474bfa391fdeba5c439326904d43753b6f3387c
         env:
           POSTGRES_USER: holomush
           POSTGRES_PASSWORD: holomush
