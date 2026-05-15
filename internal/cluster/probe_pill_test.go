@@ -81,7 +81,7 @@ func TestPillRateLimitBlocksSecondPillWithinWindow(t *testing.T) {
 
 	target := cluster.MemberID("01HSYNTHETIC0VICTIM00000000")
 	h.PublishSyntheticHeartbeat(t, "test-game", target, "test")
-	h.AwaitMemberPresent(t, 0, target, 1*time.Second)
+	h.AwaitMemberPresent(t, 0, target, 5*time.Second)
 
 	if err := r.ProbeAndPill(context.Background(), target, cluster.PillReasonMissedInvalidationAck); err != nil {
 		t.Fatalf("first pill returned %v; want nil", err)

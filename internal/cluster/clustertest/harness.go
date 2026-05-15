@@ -195,24 +195,70 @@ func (h *Harness) PublishSyntheticHeartbeat(t TB, clusterID string, memberID clu
 }
 
 // AwaitMemberPresent blocks until member i sees `target` in its
-// registry view, or fails the test on timeout. Used by probe-and-pill
+// registry view, or fails the test on deadline. Used by probe-and-pill
 // tests that need to be sure the synthetic peer is present before
 // invoking ProbeAndPill against it.
+//
+// The wait is event-driven: a MemberObserver is registered before the
+// presence check, so the OnMemberJoined callback fires the wakeup
+// channel as soon as Registry.handleAlive stores the new member and
+// calls notifyJoined (internal/cluster/heartbeat.go:320). Replaces a
+// 20ms polling loop whose tight 1s default deadline raced with NATS
+// deliver→handler latency on slow CI (holomush-1r0v.15). The deadline
+// is now a fast-fail diagnostic — heartbeat propagation never approaches
+// it under healthy conditions, but a hung registry surfaces a useful
+// error well before `go test -timeout` fires.
+//
+// Subscribe-then-check ordering is required to avoid the lost-wakeup
+// race: a heartbeat that lands between Subscribe and the presence
+// check still gets caught by the check (because handleAlive's store
+// at heartbeat.go:313 precedes notifyJoined at :320, and Member()
+// acquires the same r.mu the store wrote under).
 func (h *Harness) AwaitMemberPresent(t TB, i int, target cluster.MemberID, deadline time.Duration) {
 	t.Helper()
 	if i < 0 || i >= len(h.Members) {
 		t.Fatalf("AwaitMemberPresent: member index %d out of range [0,%d)", i, len(h.Members))
 		return
 	}
-	start := time.Now()
-	for time.Since(start) < deadline {
-		if _, ok := h.Members[i].Registry.Member(target); ok {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+	reg := h.Members[i].Registry
+
+	joined := make(chan struct{}, 1)
+	cancel := reg.Subscribe(memberJoinSignaler{target: target, fire: joined})
+	defer cancel()
+
+	if _, ok := reg.Member(target); ok {
+		return
 	}
-	t.Fatalf("AwaitMemberPresent: member %d did not observe %q within %v", i, target, deadline)
+
+	select {
+	case <-joined:
+		return
+	case <-time.After(deadline):
+		t.Fatalf("AwaitMemberPresent: member %d did not observe %q within %v", i, target, deadline)
+	}
 }
+
+// memberJoinSignaler is a MemberObserver that fires a non-blocking
+// send on `fire` exactly once per OnMemberJoined for the configured
+// target. The channel is buffered (1) so the signal is preserved if
+// the receiver hasn't yet entered its select.
+type memberJoinSignaler struct {
+	target cluster.MemberID
+	fire   chan<- struct{}
+}
+
+func (s memberJoinSignaler) OnMemberJoined(m cluster.Member) {
+	if m.ID != s.target {
+		return
+	}
+	select {
+	case s.fire <- struct{}{}:
+	default:
+	}
+}
+
+func (s memberJoinSignaler) OnMemberLeft(cluster.MemberID, cluster.LeaveReason)         {}
+func (s memberJoinSignaler) OnMemberStatusChanged(cluster.MemberID, cluster.MemberStatus) {}
 
 func (h *Harness) snapshot() string {
 	out := ""
