@@ -48,9 +48,7 @@ func TestViolationEmitterReachesRenderingPublisher(t *testing.T) {
 	require.NoError(t, err)
 
 	inner := &fakeRenderingInnerPublisher{}
-	rp := eventbus.NewRenderingPublisher(inner, registry)
-
-	emitter := newViolationEmitter(rp, "test-game")
+	emitter := newViolationEmitter(inner, registry, "test-game")
 
 	rowID := ulid.Make()
 	rowIDBytes := rowID.Bytes()
@@ -113,7 +111,7 @@ func validViolationRow() *pluginauditpb.AuditRow {
 // error log.
 func TestViolationEmitter_NilPublisher_GracefulNoop(t *testing.T) {
 	t.Parallel()
-	emitter := newViolationEmitter(nil, "test-game")
+	emitter := newViolationEmitter(nil, nil, "test-game")
 
 	err := emitter.EmitViolation(
 		context.Background(),
@@ -125,15 +123,30 @@ func TestViolationEmitter_NilPublisher_GracefulNoop(t *testing.T) {
 	require.NoError(t, err, "nil publisher MUST be a graceful no-op (degraded deployment)")
 }
 
-// TestViolationEmitter_PublishError_WrappedAsEmitFailed verifies the
-// EMIT_FAILED wrap path when the underlying publisher errors. The fence
-// uses this code to log the emit failure (refusal still proceeds).
-func TestViolationEmitter_PublishError_WrappedAsEmitFailed(t *testing.T) {
+// TestViolationEmitter_PublishError_PropagatesFromRenderingPublisher
+// verifies the error path when the underlying publisher errors. With
+// the newViolationEmitter refactor (rawPub + registry → wraps with
+// RenderingPublisher internally), the publish path is:
+//
+//   errPublisher → RenderingPublisher(EMIT_PUBLISH_FAILED) → EmitViolation(PLUGIN_INTEGRITY_VIOLATION_EMIT_FAILED)
+//
+// samber/oops returns the DEEPEST oops code via OopsError.Code(), so
+// AsOops surfaces EMIT_PUBLISH_FAILED. The outer
+// PLUGIN_INTEGRITY_VIOLATION_EMIT_FAILED layer still contributes
+// context (plugin_name, subject) for structured logging — the fence's
+// log line at plugin_downgrade_fence.go:292-295 logs the full error
+// chain, not just the code — but the canonical machine-readable code
+// is the publisher's. errors.Is still unwraps to the sentinel so
+// callers retain root-cause-matching semantics.
+func TestViolationEmitter_PublishError_PropagatesFromRenderingPublisher(t *testing.T) {
 	t.Parallel()
-	sentinel := errors.New("nats unavailable")
-	emitter := newViolationEmitter(&errPublisher{err: sentinel}, "test-game")
+	registry, err := core.BootstrapVerbRegistry("test-publish-err")
+	require.NoError(t, err)
 
-	err := emitter.EmitViolation(
+	sentinel := errors.New("nats unavailable")
+	emitter := newViolationEmitter(&errPublisher{err: sentinel}, registry, "test-game")
+
+	err = emitter.EmitViolation(
 		context.Background(),
 		"test-plugin",
 		validViolationRow(),
@@ -141,7 +154,7 @@ func TestViolationEmitter_PublishError_WrappedAsEmitFailed(t *testing.T) {
 		"AUDIT_ROW_DOWNGRADE_DETECTED",
 	)
 	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "PLUGIN_INTEGRITY_VIOLATION_EMIT_FAILED")
+	errutil.AssertErrorCode(t, err, "EMIT_PUBLISH_FAILED")
 	require.ErrorIs(t, err, sentinel, "underlying publisher error MUST wrap, not swallow")
 }
 
@@ -151,11 +164,16 @@ func TestViolationEmitter_PublishError_WrappedAsEmitFailed(t *testing.T) {
 // rather than a downstream NATS reject.
 func TestViolationEmitter_InvalidGameID_RejectsSubject(t *testing.T) {
 	t.Parallel()
-	// gameID with embedded space — produces "events.bad game.system.…"
-	// which fails eventbus.NewSubject's tokenization.
-	emitter := newViolationEmitter(&errPublisher{err: nil}, "bad game")
+	registry, err := core.BootstrapVerbRegistry("test-bad-gameid")
+	require.NoError(t, err)
 
-	err := emitter.EmitViolation(
+	// gameID with embedded space — produces "events.bad game.system.…"
+	// which fails eventbus.NewSubject's tokenization. The publisher
+	// path is never invoked because the subject validation fails first,
+	// so the inner publisher's behavior doesn't matter here.
+	emitter := newViolationEmitter(&errPublisher{err: nil}, registry, "bad game")
+
+	err = emitter.EmitViolation(
 		context.Background(),
 		"test-plugin",
 		validViolationRow(),
@@ -176,8 +194,7 @@ func TestViolationEmitter_BadEventID_StillEmits(t *testing.T) {
 	registry, err := core.BootstrapVerbRegistry("test-bad-id")
 	require.NoError(t, err)
 	inner := &fakeRenderingInnerPublisher{}
-	rp := eventbus.NewRenderingPublisher(inner, registry)
-	emitter := newViolationEmitter(rp, "test-game")
+	emitter := newViolationEmitter(inner, registry, "test-game")
 
 	row := validViolationRow()
 	row.Id = []byte("8-bytes!") // not 16

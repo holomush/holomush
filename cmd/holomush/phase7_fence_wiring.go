@@ -14,6 +14,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/eventbus/history"
@@ -127,7 +128,7 @@ func (l *cryptoKeysLookup) Exists(ctx context.Context, dekRef uint64) (bool, err
 	return true, nil
 }
 
-// newViolationEmitter wraps the host's audit Publisher to publish
+// newViolationEmitter constructs a ViolationEmitter that publishes
 // `events.<game>.system.plugin_integrity_violation` events on every
 // PluginDowngradeFence INV-P7-7 refusal. The events.> prefix is required
 // by INV-E26 (Phase 5 sub-epic E §3.6) — only the EVENTS JetStream
@@ -136,19 +137,26 @@ func (l *cryptoKeysLookup) Exists(ctx context.Context, dekRef uint64) (bool, err
 // this implementation also serializes the payload into a tiny Event so
 // it never allocates beyond the violation message itself.
 //
-// Publisher contract: pub MUST be a publisher chain that does NOT yet
-// stamp App-Rendering — typically a freshly-wrapped RenderingPublisher
-// over the raw EventBus publisher. Passing a chain that already stamped
-// App-Rendering fails with EMIT_RESERVED_HEADER inside
-// RenderingPublisher.Publish. In particular, the gRPC subsystem's
-// primary `publisher` (the one returned by grpcSubsystem.wrapPublisher)
-// is already wrapped and MUST NOT be passed here; the production wiring
-// in grpcSubsystem.Start constructs a dedicated wrapper for this emitter
-// instead. Pass nil for the degraded "no audit publisher configured"
-// deployment — EmitViolation becomes a no-op, the fence still refuses
-// the row.
-func newViolationEmitter(pub eventbus.Publisher, gameID string) history.ViolationEmitter {
-	return &violationEmitter{publisher: pub, gameID: gameID}
+// Takes the RAW EventBus publisher and the verb registry separately,
+// then wraps internally with a fresh RenderingPublisher. Encapsulating
+// the wrap here makes it structurally impossible for callers to pass a
+// pre-wrapped publisher chain — which would otherwise fail with
+// EMIT_RESERVED_HEADER inside RenderingPublisher.Publish (the inner RP
+// sees App-Rendering already stamped by the outer one). Pass nil
+// rawPub for the degraded "no audit publisher configured" deployment —
+// EmitViolation becomes a no-op, the fence still refuses the row.
+//
+// registry is required when rawPub is non-nil; passing nil registry
+// with non-nil rawPub panics, mirroring eventbus.NewRenderingPublisher's
+// own nil-registry contract.
+func newViolationEmitter(rawPub eventbus.Publisher, registry *core.VerbRegistry, gameID string) history.ViolationEmitter {
+	if rawPub == nil {
+		return &violationEmitter{publisher: nil, gameID: gameID}
+	}
+	return &violationEmitter{
+		publisher: eventbus.NewRenderingPublisher(rawPub, registry),
+		gameID:    gameID,
+	}
 }
 
 type violationEmitter struct {
