@@ -60,11 +60,12 @@ func TestCoordinatorRequestInvalidationReturnsRateLimitedWhenProbeAndPillRefuses
 	// call within the rate-limit window returns ErrRateLimited via
 	// the surfaced ErrPillRateLimited.
 	//
-	// PillRateLimit bumped to 10s (default 1s) to eliminate the wall-clock
-	// race on slow CI: the intermediate AwaitMemberPresent at line ~103
-	// can take up to 1s on a slow runner, pushing the second call out of
-	// the default 1s window and breaking the rate-limit assertion. The
-	// race is documented in holomush-ivnc.
+	// PillRateLimit is bumped to 10s (default 1s) so the test's two
+	// RequestInvalidation calls comfortably fit inside one rate-limit
+	// window even on slow CI (holomush-ivnc). AwaitMemberPresent is now
+	// event-driven (holomush-1r0v.15) — its deadline is a fast-fail
+	// diagnostic, not a propagation timer. 5s is generous; healthy
+	// runs return in <50ms.
 	h := clustertest.New(t, "test-game", 2, clustertest.WithPillRateLimit(10*time.Second))
 	h.AwaitConverged(t, 2*time.Second)
 
@@ -72,7 +73,7 @@ func TestCoordinatorRequestInvalidationReturnsRateLimitedWhenProbeAndPillRefuses
 	_ = h.Members[1].Registry.Stop(context.Background())
 	// Re-inject synthetic heartbeat so member 0 still sees it.
 	h.PublishSyntheticHeartbeat(t, "test-game", h.Members[1].MemberID, "")
-	h.AwaitMemberPresent(t, 0, h.Members[1].MemberID, 1*time.Second)
+	h.AwaitMemberPresent(t, 0, h.Members[1].MemberID, 5*time.Second)
 
 	cache := dek.NewCache(dek.CacheConfig{})
 	partCache := dek.NewParticipantsCache(dek.CacheConfig{})
@@ -105,7 +106,7 @@ func TestCoordinatorRequestInvalidationReturnsRateLimitedWhenProbeAndPillRefuses
 
 	// Re-inject synthetic and verify second call hits rate limit.
 	h.PublishSyntheticHeartbeat(t, "test-game", h.Members[1].MemberID, "")
-	h.AwaitMemberPresent(t, 0, h.Members[1].MemberID, 1*time.Second)
+	h.AwaitMemberPresent(t, 0, h.Members[1].MemberID, 5*time.Second)
 
 	err = coord.RequestInvalidation(
 		context.Background(),
