@@ -10,6 +10,7 @@ This project uses [Beads (bd)](https://github.com/steveyegge/beads) for issue tr
 - Use `bd dolt push` at end of session to sync the beads database with remote
 - Run `bd prime` for complete workflow context (SSOT for operational commands)
 - **VCS**: This repo is **jj-colocated** (`.jj/` present) — prefer `jj` over `git`. `bd dolt push` syncs the beads DB only; pushing code is a separate step (see [Landing the Plane](../../CLAUDE.md#landing-the-plane-session-completion) in CLAUDE.md)
+- **Strategic themes**: multi-epic clusters use `theme:<slug>` labels paired with a narrative section in [`docs/roadmap.md`](../../docs/roadmap.md). When adding a `theme:*` label to a bead, MUST also add/update the roadmap section. When closing all work in a theme, MUST move its roadmap section to "Completed themes" with a date. Full directive at root CLAUDE.md "Strategic Themes".
 
 ## Quick Reference
 

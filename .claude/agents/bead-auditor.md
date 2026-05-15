@@ -94,7 +94,7 @@ Use `mcp__probe__search_code` (semantic symbol/function search) before `Grep`/`r
 Audit the open queue in roughly this order — early patterns are cheap and
 high-yield:
 
-1. **Duplicates by title.** `bd list --status open --json | jq -r '.[].title' | sort | uniq -d` — usually two reviewers caught the same thing. Verify both, close one as duplicate of the other. (Don't blanket-close — both may be stale, or only one may be fixed.)
+1. **Duplicates by title.** `bd list --limit 0 --status open --json | jq -r '.[].title' | sort | uniq -d` — usually two reviewers caught the same thing. Verify both, close one as duplicate of the other. (Don't blanket-close — both may be stale, or only one may be fixed.)
 
 2. **Beads with explicit `Closed:`/`Fixed:` comments but `status=open`.** Iterate `bd show <id>` and grep the output for `Closed:` patterns. Each is a candidate but **subject to the false-fix rule above**. Cheap independent verification required.
 
@@ -144,7 +144,7 @@ high-yield:
 1. **Scope.** Determine which beads to audit. If the user names a cluster
    (epic prefix, label, PR number), use that. Otherwise default to:
    ```
-   bd list --status open --json
+   bd list --limit 0 --status open --json
    ```
    Report the total before starting.
 
