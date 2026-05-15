@@ -445,3 +445,81 @@ func TestAuditEventHappyPathPersistsViaStore(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, resp, "successful AuditEvent MUST return a non-nil response")
 }
+
+// TestActorKindFromStringCoversAllVariants gates the read-side mapping
+// against publisher contract drift: AuditEvent stores enum.String()
+// ("ACTOR_KIND_PLAYER"), while pre-spec writers used the lowercase form
+// ("player"). Both MUST round-trip to the same enum, and unknown values
+// MUST fall through to UNSPECIFIED per the spec's tolerance.
+func TestActorKindFromStringCoversAllVariants(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		in   string
+		want eventbusv1.ActorKind
+	}{
+		{"ACTOR_KIND_UNSPECIFIED", eventbusv1.ActorKind_ACTOR_KIND_UNSPECIFIED},
+		{"unspecified", eventbusv1.ActorKind_ACTOR_KIND_UNSPECIFIED},
+		{"ACTOR_KIND_CHARACTER", eventbusv1.ActorKind_ACTOR_KIND_CHARACTER},
+		{"character", eventbusv1.ActorKind_ACTOR_KIND_CHARACTER},
+		{"ACTOR_KIND_SYSTEM", eventbusv1.ActorKind_ACTOR_KIND_SYSTEM},
+		{"system", eventbusv1.ActorKind_ACTOR_KIND_SYSTEM},
+		{"ACTOR_KIND_PLUGIN", eventbusv1.ActorKind_ACTOR_KIND_PLUGIN},
+		{"plugin", eventbusv1.ActorKind_ACTOR_KIND_PLUGIN},
+		{"ACTOR_KIND_PLAYER", eventbusv1.ActorKind_ACTOR_KIND_PLAYER},
+		{"player", eventbusv1.ActorKind_ACTOR_KIND_PLAYER},
+		{"", eventbusv1.ActorKind_ACTOR_KIND_UNSPECIFIED},
+		{"garbage", eventbusv1.ActorKind_ACTOR_KIND_UNSPECIFIED},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, actorKindFromString(tc.in))
+		})
+	}
+}
+
+// TestQueryHistoryPreservesPlayerActorKind is the round-trip gate: a row
+// stored with the PLAYER enum's String() form MUST surface as
+// ACTOR_KIND_PLAYER on QueryHistory. Without the PLAYER case in
+// actorKindFromString this resolved to UNSPECIFIED, silently dropping
+// the attribution.
+func TestQueryHistoryPreservesPlayerActorKind(t *testing.T) {
+	sceneID := "01ABC000000000000000000000"
+	charIDStr := "01CHAR00000000000000000000"
+	charBytes := ulidStringBytes(t, charIDStr)
+	playerID := ulidStringBytes(t, "01PXAYER000000000000000000")
+
+	logStore := &fakeAuditStore{
+		rows: []logRow{
+			{
+				id:        ulidStringBytes(t, "01EVENT0000000000000000000"),
+				subject:   "events.main.scene." + sceneID + ".ic",
+				eventType: "scene.pose.posted",
+				timestamp: time.Unix(100, 0),
+				actorKind: eventbusv1.ActorKind_ACTOR_KIND_PLAYER.String(),
+				actorID:   playerID,
+			},
+		},
+	}
+	memberStore := &fakeAuditStore{
+		isMemberMap: map[string]bool{sceneID + "|" + charIDStr: true},
+	}
+
+	srv := &SceneAuditServer{store: logStore, memberLookup: memberStore}
+	stream := &fakeAuditServerStream{ctx: context.Background()}
+
+	err := srv.QueryHistory(&pluginv1.QueryHistoryRequest{
+		Subject: "events.main.scene." + sceneID + ".ic",
+		Caller: &eventbusv1.Actor{
+			Kind: eventbusv1.ActorKind_ACTOR_KIND_CHARACTER,
+			Id:   charBytes,
+		},
+	}, stream)
+
+	require.NoError(t, err)
+	require.Len(t, stream.sends, 1)
+	actor := stream.sends[0].GetRow().GetActor()
+	require.NotNil(t, actor, "PLAYER actor MUST survive read-back")
+	assert.Equal(t, eventbusv1.ActorKind_ACTOR_KIND_PLAYER, actor.GetKind())
+	assert.Equal(t, playerID, actor.GetId())
+}

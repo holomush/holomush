@@ -537,11 +537,13 @@ func actorProtoFromRow(kind string, id []byte) *eventbusv1.Actor {
 	}
 }
 
-// actorKindFromString maps the stored string back to the proto enum. The
-// host projection writes one of "character" / "system" / "plugin" via the
-// proto enum's String() method, so the reverse mapping is keyed the same
-// way. Unknown values fall through to ACTOR_KIND_UNSPECIFIED, matching
-// the spec's tolerance for publisher contract drift.
+// actorKindFromString maps the stored string back to the proto enum.
+// AuditEvent writes the enum's String() form (e.g. "ACTOR_KIND_PLAYER"),
+// while older or external publishers may write the lowercase variant
+// ("player"); both are accepted here so the read path round-trips every
+// kind the write path can produce. Unknown values fall through to
+// ACTOR_KIND_UNSPECIFIED, matching the spec's tolerance for publisher
+// contract drift.
 func actorKindFromString(s string) eventbusv1.ActorKind {
 	switch s {
 	case "ACTOR_KIND_CHARACTER", "character":
@@ -550,6 +552,8 @@ func actorKindFromString(s string) eventbusv1.ActorKind {
 		return eventbusv1.ActorKind_ACTOR_KIND_SYSTEM
 	case "ACTOR_KIND_PLUGIN", "plugin":
 		return eventbusv1.ActorKind_ACTOR_KIND_PLUGIN
+	case "ACTOR_KIND_PLAYER", "player":
+		return eventbusv1.ActorKind_ACTOR_KIND_PLAYER
 	default:
 		return eventbusv1.ActorKind_ACTOR_KIND_UNSPECIFIED
 	}

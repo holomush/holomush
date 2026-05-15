@@ -238,10 +238,11 @@ func (s *fencedStream) Close() error {
 	return s.inner.Close()
 }
 
-// refuseEvent returns a copy of ev with the metadata-only stamp set
-// and the per-branch refusal reason. Critically operates on a value
-// copy (Event is a struct, not a pointer at internal/eventbus/types.go),
-// so mutating the returned copy does not affect any caller-held event.
+// refuseEvent wraps eventbus.Event.Refused with the fence's reason
+// taxonomy in one place. Delegates payload + auditRow.Payload clearing
+// to eventbus.Event.Refused, which is the canonical refusal semantic
+// (master spec INV-26: refused row payload empty — both Event.Payload
+// AND the embedded plugin-source-of-truth auditRow's Payload).
 //
 // The reason MUST distinguish the spec-mandated branches:
 //   - INV-P7-7 downgrade detected → NoPlaintextReasonDowngradeRefused
@@ -253,11 +254,7 @@ func (s *fencedStream) Close() error {
 //     (configuration failure — production wiring at E.3 always supplies a
 //     non-nil lookup; only test fakes hit this fail-closed branch).
 func refuseEvent(ev eventbus.Event, reason eventbus.NoPlaintextReason) eventbus.Event {
-	refused := ev
-	refused.MetadataOnly = true
-	refused.NoPlaintextReason = reason
-	refused.Payload = nil
-	return refused
+	return ev.Refused(reason)
 }
 
 // emitViolationBounded fires the INV-P7-7 audit emit synchronously
