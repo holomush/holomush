@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/stretchr/testify/require"
 )
@@ -149,11 +150,7 @@ func collectTestFuncNames(t *testing.T, repoRoot string) map[string]struct{} {
 			if !ok {
 				continue
 			}
-			// Top-level (no receiver) Test* function.
-			if fd.Recv != nil {
-				continue
-			}
-			if !strings.HasPrefix(fd.Name.Name, "Test") {
+			if !isRunnableGoTest(fd) {
 				continue
 			}
 			names[fd.Name.Name] = struct{}{}
@@ -162,4 +159,49 @@ func collectTestFuncNames(t *testing.T, repoRoot string) map[string]struct{} {
 	})
 	require.NoError(t, err, "failed walking %s", repoRoot)
 	return names
+}
+
+// isRunnableGoTest reports whether fd matches the signature `go test` will
+// actually execute: top-level (no receiver), name `TestXxx` with a capital
+// letter after `Test`, exactly one `*testing.T` parameter, no return values,
+// non-variadic. Without this filter a misshapen signature like
+// `func TestFoo(t *testing.T) error` or `func TestFoo()` would be picked up
+// by the meta-test as a "named test exists" hit but never run under
+// `go test` — silently masking drift the meta-test exists to catch.
+//
+// Mirrors the rules in cmd/go/internal/test/test.go (Go's own test discovery).
+func isRunnableGoTest(fd *ast.FuncDecl) bool {
+	if fd.Recv != nil || fd.Type == nil {
+		return false
+	}
+	if fd.Type.Results != nil && len(fd.Type.Results.List) > 0 {
+		return false
+	}
+	name := fd.Name.Name
+	if !strings.HasPrefix(name, "Test") {
+		return false
+	}
+	// Plain `Test` (no suffix) is not a runnable test, and a lowercase letter
+	// after `Test` (e.g. `Testify`) is not either — Go requires the next rune
+	// to be an uppercase letter or non-letter.
+	if len(name) == 4 {
+		return false
+	}
+	if r := rune(name[4]); unicode.IsLetter(r) && unicode.IsLower(r) {
+		return false
+	}
+	if fd.Type.Params == nil || len(fd.Type.Params.List) != 1 {
+		return false
+	}
+	param := fd.Type.Params.List[0]
+	star, ok := param.Type.(*ast.StarExpr)
+	if !ok {
+		return false
+	}
+	sel, ok := star.X.(*ast.SelectorExpr)
+	if !ok || sel.Sel == nil || sel.Sel.Name != "T" {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	return ok && pkg.Name == "testing"
 }
