@@ -180,6 +180,27 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 			Wrap(ErrPayloadTooLarge)
 	}
 
+	// Truncate the event timestamp to microsecond precision BEFORE both
+	// aad.Build and envelope marshal. PostgreSQL TIMESTAMPTZ — used by
+	// plugin-owned audit storage (e.g. plugins/core-scenes/scene_log) —
+	// stores microsecond precision; sub-microsecond nanos are dropped on
+	// INSERT. The plugin's QueryHistory then returns a microsecond-
+	// truncated value, and the host's read-side AAD reconstruction
+	// (history.AuditRowToEvent → aad.Build) would no longer be byte-equal
+	// to the encrypt-side AAD that used the full nanosecond timestamp,
+	// failing AEAD tag-check on every sensitive plugin-stored event whose
+	// publish-time time.Now() carried sub-microsecond nanos.
+	//
+	// Truncating at the publisher establishes microsecond precision as
+	// the canonical event timestamp resolution system-wide, so AAD
+	// reconstruction matches at read time regardless of which storage
+	// path round-trips the event (events_audit envelope bytes preserve
+	// it exactly; plugin scene_log per-field columns preserve it because
+	// PG TIMESTAMPTZ already stores µs). Microsecond precision is
+	// sufficient for audit semantics. (See holomush-1r0v.3 crypto-review
+	// finding; INV-P7-16.)
+	truncatedTimestamp := event.Timestamp.Truncate(time.Microsecond)
+
 	// Build the envelope with cleartext fields. event.Payload stays as the
 	// raw (plugin) bytes for now; it is replaced below with ciphertext after
 	// codec selection and key resolution.
@@ -187,7 +208,7 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 		Id:        event.ID.Bytes(),
 		Subject:   string(event.Subject),
 		Type:      string(event.Type),
-		Timestamp: timestamppb.New(event.Timestamp),
+		Timestamp: timestamppb.New(truncatedTimestamp),
 		Actor:     ActorToProto(event.Actor),
 		Payload:   event.Payload,
 		Rendering: RenderingToProto(event.Rendering),

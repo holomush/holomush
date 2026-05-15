@@ -1,0 +1,267 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+package main
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/oklog/ulid/v2"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/codec"
+	"github.com/holomush/holomush/pkg/errutil"
+	pluginauditpb "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
+)
+
+// fakeRenderingInnerPublisher captures Publish calls for assertion.
+type fakeRenderingInnerPublisher struct {
+	published []eventbus.Event
+}
+
+func (f *fakeRenderingInnerPublisher) Publish(_ context.Context, ev eventbus.Event) error {
+	f.published = append(f.published, ev)
+	return nil
+}
+
+// TestViolationEmitterReachesRenderingPublisher is the regression guard for
+// the bead-1r0v.5 crypto-review BLOCKING finding: the fence's audit-emit
+// path goes through RenderingPublisher, which rejects unregistered event
+// types with EMIT_UNKNOWN_VERB. Without `system:plugin_integrity_violation`
+// in the builtin verb registry, every fence refusal silently drops the
+// documented operator audit signal — INV-P7-7's audit-emit half is dead.
+//
+// This test wires a production-shaped emitter (newViolationEmitter) over a
+// REAL RenderingPublisher backed by core.BootstrapVerbRegistry, then
+// invokes EmitViolation. Pre-fix: assert fails with EMIT_UNKNOWN_VERB.
+// Post-fix: publishes cleanly and the fake inner publisher captures the
+// fully-stamped event.
+func TestViolationEmitterReachesRenderingPublisher(t *testing.T) {
+	t.Parallel()
+
+	registry, err := core.BootstrapVerbRegistry("test-1r0v.5")
+	require.NoError(t, err)
+
+	inner := &fakeRenderingInnerPublisher{}
+	rp := eventbus.NewRenderingPublisher(inner, registry)
+
+	emitter := newViolationEmitter(rp, "test-game")
+
+	rowID := ulid.Make()
+	rowIDBytes := rowID.Bytes()
+	row := &pluginauditpb.AuditRow{
+		Id:      rowIDBytes[:],
+		Subject: "events.test-game.scene.01ABC.ic",
+		Type:    "test-plugin:secret",
+		Codec:   "identity",
+	}
+
+	err = emitter.EmitViolation(
+		context.Background(),
+		"test-plugin",
+		row,
+		"sensitivity:always",
+		"AUDIT_ROW_DOWNGRADE_DETECTED",
+	)
+	require.NoError(t, err,
+		"INV-P7-7 audit emit MUST succeed through the production RenderingPublisher; "+
+			"if this fails with EMIT_UNKNOWN_VERB, the system:plugin_integrity_violation "+
+			"verb is missing from internal/core/builtins.go::registerBuiltinTypes")
+
+	require.Len(t, inner.published, 1, "exactly one violation event MUST reach the inner publisher")
+	got := inner.published[0]
+	assert.Equal(t, "system:plugin_integrity_violation", string(got.Type))
+	assert.Equal(t, "events.test-game.system.plugin_integrity_violation", string(got.Subject))
+	require.NotNil(t, got.Rendering, "RenderingPublisher MUST stamp event.Rendering on the violation event")
+	assert.Equal(t, "system", got.Rendering.Category)
+	assert.Equal(t, "audit", got.Rendering.Format)
+	assert.Equal(t, eventbus.EventChannelAuditOnly, got.Rendering.DisplayTarget)
+}
+
+// errPublisher is the simplest fake publisher that always returns a
+// sentinel error — used to drive the violation-emitter's
+// PLUGIN_INTEGRITY_VIOLATION_EMIT_FAILED wrap path.
+type errPublisher struct {
+	err error
+}
+
+func (e *errPublisher) Publish(_ context.Context, _ eventbus.Event) error { return e.err }
+
+// validViolationRow builds a syntactically valid AuditRow fixture for the
+// violation-emitter tests. Tests that care about specific fields override
+// after construction.
+func validViolationRow() *pluginauditpb.AuditRow {
+	id := ulid.Make()
+	idBytes := id.Bytes()
+	return &pluginauditpb.AuditRow{
+		Id:      idBytes[:],
+		Subject: "events.test-game.scene.01ABC.ic",
+		Type:    "test-plugin:secret",
+		Codec:   "identity",
+	}
+}
+
+// TestViolationEmitter_NilPublisher_GracefulNoop verifies the documented
+// degraded-deployment path: when the publisher is nil, EmitViolation
+// returns nil rather than erroring on every fence refusal. The fence
+// still refuses the row; this just suppresses the never-going-to-emit
+// error log.
+func TestViolationEmitter_NilPublisher_GracefulNoop(t *testing.T) {
+	t.Parallel()
+	emitter := newViolationEmitter(nil, "test-game")
+
+	err := emitter.EmitViolation(
+		context.Background(),
+		"test-plugin",
+		validViolationRow(),
+		"sensitivity:always",
+		"AUDIT_ROW_DOWNGRADE_DETECTED",
+	)
+	require.NoError(t, err, "nil publisher MUST be a graceful no-op (degraded deployment)")
+}
+
+// TestViolationEmitter_PublishError_WrappedAsEmitFailed verifies the
+// EMIT_FAILED wrap path when the underlying publisher errors. The fence
+// uses this code to log the emit failure (refusal still proceeds).
+func TestViolationEmitter_PublishError_WrappedAsEmitFailed(t *testing.T) {
+	t.Parallel()
+	sentinel := errors.New("nats unavailable")
+	emitter := newViolationEmitter(&errPublisher{err: sentinel}, "test-game")
+
+	err := emitter.EmitViolation(
+		context.Background(),
+		"test-plugin",
+		validViolationRow(),
+		"sensitivity:always",
+		"AUDIT_ROW_DOWNGRADE_DETECTED",
+	)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "PLUGIN_INTEGRITY_VIOLATION_EMIT_FAILED")
+	require.ErrorIs(t, err, sentinel, "underlying publisher error MUST wrap, not swallow")
+}
+
+// TestViolationEmitter_InvalidGameID_RejectsSubject verifies the subject
+// validation path. eventbus.NewSubject rejects subjects with spaces; an
+// invalid gameID surfaces via PLUGIN_INTEGRITY_VIOLATION_INVALID_SUBJECT
+// rather than a downstream NATS reject.
+func TestViolationEmitter_InvalidGameID_RejectsSubject(t *testing.T) {
+	t.Parallel()
+	// gameID with embedded space — produces "events.bad game.system.…"
+	// which fails eventbus.NewSubject's tokenization.
+	emitter := newViolationEmitter(&errPublisher{err: nil}, "bad game")
+
+	err := emitter.EmitViolation(
+		context.Background(),
+		"test-plugin",
+		validViolationRow(),
+		"sensitivity:always",
+		"AUDIT_ROW_DOWNGRADE_DETECTED",
+	)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "PLUGIN_INTEGRITY_VIOLATION_INVALID_SUBJECT")
+}
+
+// TestViolationEmitter_BadEventID_StillEmits verifies that a malformed
+// row.Id (not 16 bytes) is silently rendered as the zero ULID rather
+// than failing the emit. The fence already refused the row before
+// invoking the emitter, so logging "best effort" identifying info is
+// sufficient even if the offending row's id is malformed.
+func TestViolationEmitter_BadEventID_StillEmits(t *testing.T) {
+	t.Parallel()
+	registry, err := core.BootstrapVerbRegistry("test-bad-id")
+	require.NoError(t, err)
+	inner := &fakeRenderingInnerPublisher{}
+	rp := eventbus.NewRenderingPublisher(inner, registry)
+	emitter := newViolationEmitter(rp, "test-game")
+
+	row := validViolationRow()
+	row.Id = []byte("8-bytes!") // not 16
+
+	err = emitter.EmitViolation(
+		context.Background(),
+		"test-plugin",
+		row,
+		"sensitivity:always",
+		"AUDIT_ROW_DOWNGRADE_DETECTED",
+	)
+	require.NoError(t, err, "malformed row.Id MUST NOT block the emit; zero ULID is acceptable")
+	require.Len(t, inner.published, 1)
+}
+
+// TestIdentityProductionKeySelector_SelectForEncrypt verifies the
+// placeholder selector returns the expected (NameIdentity, "", nil)
+// triple for any subject. Trivial branch coverage; pinned in case a
+// future refactor changes the placeholder behaviour without updating
+// the INV-P7-9 substrate test (which only asserts pointer identity, not
+// return values).
+func TestIdentityProductionKeySelector_SelectForEncrypt(t *testing.T) {
+	t.Parallel()
+	sel := &identityProductionKeySelector{}
+	name, label, err := sel.SelectForEncrypt(context.Background(), "events.any.subject")
+	require.NoError(t, err)
+	assert.Equal(t, codec.NameIdentity, name)
+	assert.Equal(t, codec.KeyLabel(""), label)
+}
+
+// TestIdentityProductionKeySelector_SelectForDecrypt mirrors the encrypt
+// test for the decrypt path.
+func TestIdentityProductionKeySelector_SelectForDecrypt(t *testing.T) {
+	t.Parallel()
+	sel := &identityProductionKeySelector{}
+	key, err := sel.SelectForDecrypt(context.Background(), codec.NameIdentity, codec.KeyID(0))
+	require.NoError(t, err)
+	assert.Equal(t, codec.NoKey, key)
+}
+
+// TestStartsWith covers the tiny stdlib-free prefix helper used by
+// buildAlwaysSensitiveSet's plugin-name qualification logic.
+func TestStartsWith(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name   string
+		s      string
+		prefix string
+		want   bool
+	}{
+		{"prefix matches", "core-scenes:secret", "core-scenes:", true},
+		{"empty prefix always matches", "anything", "", true},
+		{"empty string and empty prefix matches", "", "", true},
+		{"prefix longer than string is false", "abc", "abcdef", false},
+		{"prefix-with-different-content false", "core-scenes:secret", "core-comms:", false},
+		{"exact-length match", "abc", "abc", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, startsWith(tc.s, tc.prefix))
+		})
+	}
+}
+
+// TestBuildAlwaysSensitiveSet_NilManager verifies the documented nil-mgr
+// path: returns an empty (non-nil) map. The other branches (manifest
+// walking, sensitivity filtering, prefix qualification) are exercised
+// by the integration test that boots a real plugin manager with a real
+// manifest declaring crypto.emits[].sensitivity:always.
+func TestBuildAlwaysSensitiveSet_NilManager(t *testing.T) {
+	t.Parallel()
+	out := buildAlwaysSensitiveSet(nil)
+	require.NotNil(t, out, "MUST return non-nil map even for nil mgr (caller iterates without nil-check)")
+	assert.Empty(t, out)
+}
+
+// TestCryptoKeysLookup_NilPool verifies the fail-closed defensive guard
+// against a misconfigured deployment. Production wiring always supplies
+// a non-nil pool; the nil-pool branch is the safety net.
+func TestCryptoKeysLookup_NilPool(t *testing.T) {
+	t.Parallel()
+	lookup := newCryptoKeysLookup(nil)
+	exists, err := lookup.Exists(context.Background(), 42)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "CRYPTO_KEYS_LOOKUP_POOL_NIL")
+	assert.False(t, exists, "nil pool MUST NOT report existence")
+}

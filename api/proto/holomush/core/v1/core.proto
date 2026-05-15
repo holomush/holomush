@@ -198,6 +198,13 @@ enum NoPlaintextReason {
   // Catch-all for unexpected decrypt failures not covered by the
   // specific cases above. Stamped exclusively by F's classifier.
   NO_PLAINTEXT_REASON_INTERNAL = 6;
+  // Phase 7 PluginDowngradeFence layer (1) refusal — the host's read-side
+  // fence rejected the row before decrypt either because the type is in
+  // the always-sensitive manifest set and the plugin returned identity
+  // codec (INV-P7-7), or because the dek_ref is unknown / absent for a
+  // non-identity codec (INV-P7-15). Original event_id is preserved;
+  // payload is empty per master INV-26.
+  NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED = 7;
 }
 
 // EventChannel identifies the destination channel for event delivery.

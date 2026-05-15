@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+# test_downgrade_attacker is a test-only binary plugin used by the
+# Phase 7 INV-P7-10 e2e suite (test/integration/eventbus_e2e/
+# plugin_downgrade_attacker_test.go). It exercises the read-side
+# PluginDowngradeFence end-to-end via real loader / gRPC / dispatcher
+# / fence chain.
+#
+# crypto.emits declares `secret` as sensitivity:always so the host's
+# manifest-set heuristic (INV-P7-7) treats `test-downgrade-attacker:secret`
+# as always-sensitive. The malicious QueryHistory branch returns
+# codec=identity for that type to simulate the downgrade attack.
+#
+# Lives under test/integration/plugin/testdata/ (not plugins/) so the
+# production scripts/build-plugins.sh discovery loop (line 103) does
+# not see it. The e2e test compiles + spawns the binary directly.
+#
+# Mode selection: go-plugin strips environment variables (only PATH +
+# the cert env vars survive — see internal/plugin/goplugin/host.go:79
+# and :421). Mode is therefore inferred from the QueryHistory subject
+# substring `.test_downgrade_honest.` vs `.test_downgrade_malicious.`
+# rather than env var. See main.go for the full subject convention.
+name: test-downgrade-attacker
+version: 0.1.0
+type: binary
+
+requires: []
+provides:
+  - holomush.plugin.v1.PluginAuditService
+
+crypto:
+  emits:
+    - event_type: secret
+      sensitivity: always
+      description: "Test fixture sensitive event."
+
+audit:
+  - subjects: ["events.*.test_downgrade_*.>"]
+    schema: plugin_test_downgrade_attacker
+    table: scene_log_fake
+
+binary-plugin:
+  executable: test-downgrade-attacker

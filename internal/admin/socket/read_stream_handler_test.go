@@ -87,7 +87,8 @@ func TestAdminReadStreamConnectHandler_Delegates(t *testing.T) {
 		msg := stream.Msg()
 		if msg.GetFinished() != nil {
 			gotFinished = true
-			assert.Equal(t,
+			assert.Equal(
+				t,
 				adminv1.ReadFinished_TERMINATED_BY_CLIENT_EOF,
 				msg.GetFinished().GetTerminatedBy(),
 			)

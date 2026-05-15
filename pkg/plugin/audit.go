@@ -6,6 +6,29 @@ package pluginsdk
 import (
 	"context"
 	"log/slog"
+	"time"
+
+	"github.com/nats-io/nats.go/jetstream"
+	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	// auditheader is a leaf sub-package that owns the JetStream-header
+	// parser used by both the host audit projection and SDK Layer 2.
+	// Going through the leaf rather than internal/eventbus/audit avoids
+	// the test-time cycle that would otherwise form via internal/core's
+	// cross-package event-type assertions (event_test.go imports
+	// pkg/plugin; the audit package transitively imports internal/core
+	// through internal/eventbus.RenderingPublisher).
+	//
+	// Same-module import of the internal/ leaf is structurally permitted
+	// by Go's internal/ rules (both packages live under
+	// github.com/holomush/holomush/). SDK consumers (plugin authors)
+	// MUST NOT follow this precedent — internal/ is host-only.
+	"github.com/holomush/holomush/internal/eventbus/audit/auditheader"
+	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
+	pluginauditpb "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
 // AuditAttrs is a convenience alias for plugin-provided audit attribute maps.
@@ -138,4 +161,134 @@ func (r *contextRecorder) record(id, message string, effect AuditEffect, attrs A
 		Effect:     effect,
 		Attributes: copied,
 	})
+}
+
+// -----------------------------------------------------------------------
+// Layer 2: plugin-owned audit row mirror.
+//
+// pluginsdk.AuditRow is the projection-only-plus-crypto-envelope shape
+// plugins store in their audit tables (e.g. plugin_core_scenes.scene_log)
+// and return on PluginAuditService.QueryHistory. It mirrors
+// pluginauditpb.AuditRow 1:1 (INV-P7-4) and is consumed via the two
+// helpers below.
+//
+// Plugin authors typically don't construct AuditRow manually — they use
+// StoreFromMessage(msg) at AuditEvent RPC ingest, persist the row
+// fields verbatim, then use LoadForQuery(row) to construct the proto
+// frame returned on QueryHistory. Round-trip stability is INV-P7-5.
+//
+// crypto fields (Codec, Payload, DEKRef, DEKVersion) are OPAQUE to the
+// plugin — plugin code MUST store and return them byte-for-byte. The
+// host owns interpretation. Plugin Layer 2 is convenience for plugin
+// authors; the host's threat model does not rely on Layer 2 correctness
+// (INV-P7-6 and INV-P7-7 are enforced host-side).
+
+// AuditRow is the Go-side mirror of pluginauditpb.AuditRow. Field
+// ordering matches the proto field-numbering for stability across
+// proto regenerations.
+type AuditRow struct {
+	EventID   ulid.ULID
+	Subject   string
+	Type      string
+	Timestamp time.Time
+	Actor     *eventbusv1.Actor
+
+	Codec   string
+	Payload []byte
+
+	DEKRef     *uint64 // nil ⇔ identity codec ⇔ proto field absent
+	DEKVersion *uint32
+
+	SchemaVer int32
+}
+
+// StoreFromMessage extracts an AuditRow from a JetStream message.
+// Preserves payload bytes byte-equal; uses the shared header parser
+// (internal/eventbus/audit/header_parser.go) for typed crypto/schema
+// values — INV-P7-2 byte-equality across the host-projection branch
+// and the per-plugin dispatcher branch is structural.
+//
+// Mirrors the host dispatcher's buildAuditRow construction so plugin
+// authors who choose to use Layer 2 see the same projection-field +
+// crypto-header extraction behaviour as the host audit projection.
+//
+// Returns errors with codes:
+//
+//	AUDIT_PLUGIN_ENVELOPE_UNMARSHAL_FAILED
+//	AUDIT_MISSING_HEADER / AUDIT_BAD_SCHEMA_VERSION /
+//	AUDIT_DEK_REF_PARSE_FAILED / AUDIT_DEK_VERSION_PARSE_FAILED
+//	  (from audit.ParseAuditHeaders).
+func StoreFromMessage(msg jetstream.Msg) (AuditRow, error) {
+	hdrMeta, err := auditheader.Parse(msg.Headers())
+	if err != nil {
+		return AuditRow{}, err //nolint:wrapcheck // error already coded by parser
+	}
+
+	var ev eventbusv1.Event
+	if err := proto.Unmarshal(msg.Data(), &ev); err != nil {
+		return AuditRow{}, oops.Code("AUDIT_PLUGIN_ENVELOPE_UNMARSHAL_FAILED").Wrap(err)
+	}
+
+	row := AuditRow{
+		Subject:   ev.GetSubject(),
+		Type:      ev.GetType(),
+		Actor:     ev.GetActor(),
+		Codec:     hdrMeta.Codec,
+		Payload:   ev.GetPayload(),
+		SchemaVer: hdrMeta.SchemaVer,
+	}
+	id := ev.GetId()
+	if len(id) != 16 {
+		return AuditRow{}, oops.Code("AUDIT_PLUGIN_BAD_EVENT_ID").
+			With("length", len(id)).
+			Errorf("event.id must be 16 bytes (ULID); got %d", len(id))
+	}
+	copy(row.EventID[:], id)
+	if ts := ev.GetTimestamp(); ts != nil {
+		row.Timestamp = ts.AsTime()
+	}
+	if hdrMeta.DEKRef != nil {
+		v := uint64(*hdrMeta.DEKRef) //nolint:gosec // dek_ref originates as crypto_keys.id (BIGSERIAL, always >= 0); int64→uint64 widening is safe
+		row.DEKRef = &v
+	}
+	if hdrMeta.DEKVersion != nil {
+		v := uint32(*hdrMeta.DEKVersion) //nolint:gosec // dek_version originates as a 1-based counter (always >= 0); int32→uint32 is safe
+		row.DEKVersion = &v
+	}
+	return row, nil
+}
+
+// LoadForQuery converts a stored AuditRow into the proto frame returned
+// by PluginAuditService.QueryHistory. Round-trip stable with
+// StoreFromMessage (INV-P7-5).
+//
+// Per-field copy from AuditRow to *pluginauditpb.AuditRow:
+//   - EventID → Id (raw 16-byte ULID via row.EventID[:])
+//   - Subject, Type, Codec, Payload, SchemaVer → same-named proto fields verbatim
+//   - Timestamp → timestamppb.New(row.Timestamp)
+//   - Actor → row.Actor (proto type matches)
+//   - DEKRef / DEKVersion → only set when non-nil (proto optional)
+//
+// Returns (proto, nil) in v1; the error return is reserved for future
+// validation (e.g. enforce codec=identity ⇔ DEKRef==nil). Defer the
+// agreement check to host-side code per spec §4.5 (host owns the
+// envelope semantics).
+func LoadForQuery(row AuditRow) (*pluginauditpb.AuditRow, error) {
+	out := &pluginauditpb.AuditRow{
+		Id:        row.EventID[:],
+		Subject:   row.Subject,
+		Type:      row.Type,
+		Timestamp: timestamppb.New(row.Timestamp),
+		Actor:     row.Actor,
+		Codec:     row.Codec,
+		Payload:   row.Payload,
+		SchemaVer: row.SchemaVer,
+	}
+	if row.DEKRef != nil {
+		out.DekRef = row.DEKRef
+	}
+	if row.DEKVersion != nil {
+		out.DekVersion = row.DEKVersion
+	}
+	return out, nil
 }

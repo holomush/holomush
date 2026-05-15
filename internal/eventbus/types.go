@@ -11,6 +11,7 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	"github.com/holomush/holomush/internal/core"
+	pluginauditpb "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
 // Subject is a typed JetStream subject. Constructed via NewSubject which
@@ -54,6 +55,13 @@ const (
 	// failures not covered by the specific cases above. Stamped exclusively
 	// by F's operator-read classifier.
 	NoPlaintextReasonInternal NoPlaintextReason = 6
+	// NoPlaintextReasonDowngradeRefused indicates the PluginDowngradeFence
+	// refused the row at layer (1) pre-decrypt — either the manifest-set
+	// heuristic (INV-P7-7: identity codec for an always-sensitive type) or
+	// the DEK existence pre-check (INV-P7-15: unknown / absent dek_ref for
+	// a non-identity codec). The original event_id is preserved; payload
+	// is empty per master INV-26.
+	NoPlaintextReasonDowngradeRefused NoPlaintextReason = 7
 )
 
 // Direction selects the iteration order of HistoryStream.
@@ -183,6 +191,16 @@ type Event struct {
 	// set MetadataOnly=true (holomush-ojw1.6). Mirrored to the wire via
 	// EventFrame.no_plaintext_reason.
 	NoPlaintextReason NoPlaintextReason
+
+	// auditRow is the unexported plugin-source-of-truth pointer.
+	// Populated by audit.PluginHistoryRouter when converting a plugin's
+	// QueryHistoryResponse → Event for the read path. Consumed by
+	// history.PluginDowngradeFence (via the package-internal accessor
+	// AuditRowOf, see audit_row_access.go) to apply INV-P7-7 / INV-P7-15
+	// checks against the plugin-supplied original. nil for events not
+	// sourced from a plugin (host-owned subjects). Never serialized;
+	// never persisted.
+	auditRow *pluginauditpb.AuditRow
 }
 
 // NewEvent constructs an Event with a monotonic ULID (from core.NewULID()),

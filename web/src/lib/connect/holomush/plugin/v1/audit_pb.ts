@@ -9,7 +9,7 @@ import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegen
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import type { Actor, Event } from "../../eventbus/v1/eventbus_pb";
+import type { Actor } from "../../eventbus/v1/eventbus_pb";
 import { file_holomush_eventbus_v1_eventbus } from "../../eventbus/v1/eventbus_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -17,24 +17,99 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/plugin/v1/audit.proto.
  */
 export const file_holomush_plugin_v1_audit: GenFile = /*@__PURE__*/
-  fileDesc("Ch5ob2xvbXVzaC9wbHVnaW4vdjEvYXVkaXQucHJvdG8SEmhvbG9tdXNoLnBsdWdpbi52MSK0AQoRQXVkaXRFdmVudFJlcXVlc3QSKgoFZXZlbnQYASABKAsyGy5ob2xvbXVzaC5ldmVudGJ1cy52MS5FdmVudBJDCgdoZWFkZXJzGAIgAygLMjIuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0RXZlbnRSZXF1ZXN0LkhlYWRlcnNFbnRyeRouCgxIZWFkZXJzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASIUChJBdWRpdEV2ZW50UmVzcG9uc2Ui9wEKE1F1ZXJ5SGlzdG9yeVJlcXVlc3QSDwoHc3ViamVjdBgBIAEoCRINCgVhZnRlchgCIAEoDBIOCgZiZWZvcmUYAyABKAwSEQoJcGFnZV9zaXplGAQgASgFEhEKCWRpcmVjdGlvbhgFIAEoBRIuCgpub3RfYmVmb3JlGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBItCglub3RfYWZ0ZXIYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKBmNhbGxlchgIIAEoCzIbLmhvbG9tdXNoLmV2ZW50YnVzLnYxLkFjdG9yIkIKFFF1ZXJ5SGlzdG9yeVJlc3BvbnNlEioKBWV2ZW50GAEgASgLMhsuaG9sb211c2guZXZlbnRidXMudjEuRXZlbnQy1gEKElBsdWdpbkF1ZGl0U2VydmljZRJbCgpBdWRpdEV2ZW50EiUuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0RXZlbnRSZXF1ZXN0GiYuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0RXZlbnRSZXNwb25zZRJjCgxRdWVyeUhpc3RvcnkSJy5ob2xvbXVzaC5wbHVnaW4udjEuUXVlcnlIaXN0b3J5UmVxdWVzdBooLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeUhpc3RvcnlSZXNwb25zZTABQkRaQmdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL3BsdWdpbi92MTtwbHVnaW52MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_holomush_eventbus_v1_eventbus]);
+  fileDesc("Ch5ob2xvbXVzaC9wbHVnaW4vdjEvYXVkaXQucHJvdG8SEmhvbG9tdXNoLnBsdWdpbi52MSKQAgoIQXVkaXRSb3cSCgoCaWQYASABKAwSDwoHc3ViamVjdBgCIAEoCRIMCgR0eXBlGAMgASgJEi0KCXRpbWVzdGFtcBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKgoFYWN0b3IYBSABKAsyGy5ob2xvbXVzaC5ldmVudGJ1cy52MS5BY3RvchINCgVjb2RlYxgGIAEoCRIPCgdwYXlsb2FkGAcgASgMEhQKB2Rla19yZWYYCCABKARIAIgBARIYCgtkZWtfdmVyc2lvbhgJIAEoDUgBiAEBEhIKCnNjaGVtYV92ZXIYCiABKAVCCgoIX2Rla19yZWZCDgoMX2Rla192ZXJzaW9uIj4KEUF1ZGl0RXZlbnRSZXF1ZXN0EikKA3JvdxgBIAEoCzIcLmhvbG9tdXNoLnBsdWdpbi52MS5BdWRpdFJvdyIUChJBdWRpdEV2ZW50UmVzcG9uc2Ui9wEKE1F1ZXJ5SGlzdG9yeVJlcXVlc3QSDwoHc3ViamVjdBgBIAEoCRINCgVhZnRlchgCIAEoDBIOCgZiZWZvcmUYAyABKAwSEQoJcGFnZV9zaXplGAQgASgFEhEKCWRpcmVjdGlvbhgFIAEoBRIuCgpub3RfYmVmb3JlGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBItCglub3RfYWZ0ZXIYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKBmNhbGxlchgIIAEoCzIbLmhvbG9tdXNoLmV2ZW50YnVzLnYxLkFjdG9yIkEKFFF1ZXJ5SGlzdG9yeVJlc3BvbnNlEikKA3JvdxgBIAEoCzIcLmhvbG9tdXNoLnBsdWdpbi52MS5BdWRpdFJvdzLWAQoSUGx1Z2luQXVkaXRTZXJ2aWNlElsKCkF1ZGl0RXZlbnQSJS5ob2xvbXVzaC5wbHVnaW4udjEuQXVkaXRFdmVudFJlcXVlc3QaJi5ob2xvbXVzaC5wbHVnaW4udjEuQXVkaXRFdmVudFJlc3BvbnNlEmMKDFF1ZXJ5SGlzdG9yeRInLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeUhpc3RvcnlSZXF1ZXN0GiguaG9sb211c2gucGx1Z2luLnYxLlF1ZXJ5SGlzdG9yeVJlc3BvbnNlMAFCRFpCZ2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvcGx1Z2luL3YxO3BsdWdpbnYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_holomush_eventbus_v1_eventbus]);
+
+/**
+ * AuditRow is the canonical wire shape for plugin-owned audit rows.
+ * Used in both directions: dispatcher → plugin (AuditEventRequest)
+ * and plugin → host (QueryHistoryResponse). Mirrors the events_audit
+ * row shape so the proto wire format and the storage shape are
+ * coupled.
+ *
+ * @generated from message holomush.plugin.v1.AuditRow
+ */
+export type AuditRow = Message<"holomush.plugin.v1.AuditRow"> & {
+  /**
+   * Cleartext projection fields
+   *
+   * 16-byte ULID
+   *
+   * @generated from field: bytes id = 1;
+   */
+  id: Uint8Array;
+
+  /**
+   * @generated from field: string subject = 2;
+   */
+  subject: string;
+
+  /**
+   * @generated from field: string type = 3;
+   */
+  type: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp timestamp = 4;
+   */
+  timestamp?: Timestamp | undefined;
+
+  /**
+   * @generated from field: holomush.eventbus.v1.Actor actor = 5;
+   */
+  actor?: Actor | undefined;
+
+  /**
+   * Crypto envelope
+   *
+   * "identity" | "xchacha20poly1305-v1"
+   *
+   * @generated from field: string codec = 6;
+   */
+  codec: string;
+
+  /**
+   * ciphertext when codec != "identity"
+   *
+   * @generated from field: bytes payload = 7;
+   */
+  payload: Uint8Array;
+
+  /**
+   * DEK reference — absent on identity codec, required otherwise.
+   * Host enforces the agreement (codec=identity ⇔ both absent).
+   *
+   * @generated from field: optional uint64 dek_ref = 8;
+   */
+  dekRef?: bigint | undefined;
+
+  /**
+   * @generated from field: optional uint32 dek_version = 9;
+   */
+  dekVersion?: number | undefined;
+
+  /**
+   * Audit schema version (was App-Schema-Version header).
+   *
+   * @generated from field: int32 schema_ver = 10;
+   */
+  schemaVer: number;
+};
+
+/**
+ * Describes the message holomush.plugin.v1.AuditRow.
+ * Use `create(AuditRowSchema)` to create a new message.
+ */
+export const AuditRowSchema: GenMessage<AuditRow> = /*@__PURE__*/
+  messageDesc(file_holomush_plugin_v1_audit, 0);
 
 /**
  * @generated from message holomush.plugin.v1.AuditEventRequest
  */
 export type AuditEventRequest = Message<"holomush.plugin.v1.AuditEventRequest"> & {
   /**
-   * @generated from field: holomush.eventbus.v1.Event event = 1;
+   * @generated from field: holomush.plugin.v1.AuditRow row = 1;
    */
-  event?: Event | undefined;
-
-  /**
-   * Headers carried verbatim from the JS message (App-Codec,
-   * App-Schema-Version, App-Event-Type, etc.) so the plugin can store them.
-   *
-   * @generated from field: map<string, string> headers = 2;
-   */
-  headers: { [key: string]: string };
+  row?: AuditRow | undefined;
 };
 
 /**
@@ -42,7 +117,7 @@ export type AuditEventRequest = Message<"holomush.plugin.v1.AuditEventRequest"> 
  * Use `create(AuditEventRequestSchema)` to create a new message.
  */
 export const AuditEventRequestSchema: GenMessage<AuditEventRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_audit, 0);
+  messageDesc(file_holomush_plugin_v1_audit, 1);
 
 /**
  * @generated from message holomush.plugin.v1.AuditEventResponse
@@ -55,7 +130,7 @@ export type AuditEventResponse = Message<"holomush.plugin.v1.AuditEventResponse"
  * Use `create(AuditEventResponseSchema)` to create a new message.
  */
 export const AuditEventResponseSchema: GenMessage<AuditEventResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_audit, 1);
+  messageDesc(file_holomush_plugin_v1_audit, 2);
 
 /**
  * @generated from message holomush.plugin.v1.QueryHistoryRequest
@@ -122,16 +197,16 @@ export type QueryHistoryRequest = Message<"holomush.plugin.v1.QueryHistoryReques
  * Use `create(QueryHistoryRequestSchema)` to create a new message.
  */
 export const QueryHistoryRequestSchema: GenMessage<QueryHistoryRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_audit, 2);
+  messageDesc(file_holomush_plugin_v1_audit, 3);
 
 /**
  * @generated from message holomush.plugin.v1.QueryHistoryResponse
  */
 export type QueryHistoryResponse = Message<"holomush.plugin.v1.QueryHistoryResponse"> & {
   /**
-   * @generated from field: holomush.eventbus.v1.Event event = 1;
+   * @generated from field: holomush.plugin.v1.AuditRow row = 1;
    */
-  event?: Event | undefined;
+  row?: AuditRow | undefined;
 };
 
 /**
@@ -139,7 +214,7 @@ export type QueryHistoryResponse = Message<"holomush.plugin.v1.QueryHistoryRespo
  * Use `create(QueryHistoryResponseSchema)` to create a new message.
  */
 export const QueryHistoryResponseSchema: GenMessage<QueryHistoryResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_audit, 3);
+  messageDesc(file_holomush_plugin_v1_audit, 4);
 
 /**
  * PluginAuditService is implemented by plugins that declare audit

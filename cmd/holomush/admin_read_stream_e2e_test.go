@@ -695,18 +695,18 @@ func (e *adminAuthEnv) buildInProcessReadStreamClient(
 	auditEmitter readstream.OperatorReadAuditEmitter,
 ) (adminv1connect.AdminServiceClient, func()) {
 	cfg := readstream.Config{
-		Sessions: &readstreamSessionStore{inner: &envSessionStoreAdapter{env: e}},
-		Grants:   grantsResolver,
-		Approvals: nopApprovalRepo{},
-		ColdReader: readstream.NewColdReader(e.queryPool),
-		DEK:        e.readstreamDEKManager(e.ctx, e.queryPool),
-		Codecs:     codecRegistryAdapter{},
-		AuditEmitter: auditEmitter,
-		PolicyHash:   "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-		Clock:        time.Now,
-		Logger:       slog.New(slog.DiscardHandler),
-		Game:         e.gameID,
-		MaxWindow:    30 * 24 * time.Hour,
+		Sessions:      &readstreamSessionStore{inner: &envSessionStoreAdapter{env: e}},
+		Grants:        grantsResolver,
+		Approvals:     nopApprovalRepo{},
+		ColdReader:    readstream.NewColdReader(e.queryPool),
+		DEK:           e.readstreamDEKManager(e.ctx, e.queryPool),
+		Codecs:        codecRegistryAdapter{},
+		AuditEmitter:  auditEmitter,
+		PolicyHash:    "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+		Clock:         time.Now,
+		Logger:        slog.New(slog.DiscardHandler),
+		Game:          e.gameID,
+		MaxWindow:     30 * 24 * time.Hour,
 		DefaultWindow: 1 * time.Hour,
 		WriteDeadline: 30 * time.Second,
 		ApprovalTTL:   5 * time.Minute,
@@ -1744,7 +1744,8 @@ func scenarioFE6DualControlTimeout(env *adminAuthEnv) {
 	Expect(err).NotTo(HaveOccurred(), "F-E6: NewExternalTestHandler")
 
 	recorder := &readstream.ExternalRecordingStream{}
-	handlerErr := th.HandleInternalForExternalTest(env.ctx,
+	handlerErr := th.HandleInternalForExternalTest(
+		env.ctx,
 		&adminv1.AdminReadStreamRequest{
 			SessionToken:  env.carolSessionToken,
 			Justification: "F-E6 dual-control timeout",
@@ -2013,7 +2014,8 @@ func scenarioFE10WriteDeadline(env *adminAuthEnv) {
 	Expect(err).NotTo(HaveOccurred(), "F-E10 sanity: NewTestHandler")
 	sanityRecorder := &readstream.ExternalRecordingStream{}
 	sanityStream := &slowStreamSender{inner: sanityRecorder, sleepPer: 5 * time.Millisecond}
-	sanityErr := sanityHandler.HandleInternalForExternalTest(env.ctx,
+	sanityErr := sanityHandler.HandleInternalForExternalTest(
+		env.ctx,
 		&adminv1.AdminReadStreamRequest{
 			SessionToken:  env.carolSessionToken,
 			Justification: "F-E10 sanity (healthy slow consumer)",
@@ -2213,7 +2215,8 @@ func scenarioFE16IdempotentDualControlReuse(env *adminAuthEnv) {
 	Expect(err).NotTo(HaveOccurred(), "F-E16: NewTestHandler for second invocation")
 
 	recorder2 := &readstream.ExternalRecordingStream{}
-	handlerErr := th.HandleInternalForExternalTest(env.ctx,
+	handlerErr := th.HandleInternalForExternalTest(
+		env.ctx,
 		&adminv1.AdminReadStreamRequest{
 			SessionToken:  aliceToken,
 			Justification: justification,

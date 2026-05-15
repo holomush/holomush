@@ -317,7 +317,7 @@ for full rationale (Decisions 1–8).
 | **INV-36** | Concurrent `Add` operations on the same context MUST be serialized; no participant entry is duplicated; resulting participants list is exactly the set-union. | Integration |
 | **INV-37** | A crashed `Rotate` MUST be resolvable by startup integrity check without manual intervention. | Integration |
 | **INV-38** | A `Rekey` MUST be resumable from any checkpoint without producing duplicate ciphertext or skipped rows. | Integration |
-| **INV-39** | Reads of historical events whose `dek_ref` no longer exists in `crypto_keys` MUST automatically fall back to the cold tier. Production read paths return NoRows for soft-deleted rows (`destroyed_at IS NOT NULL`), hitting the same fallback path. | Integration |
+| **INV-39** | Reads of historical events whose `dek_ref` no longer exists in `crypto_keys` MUST automatically fall back to the cold tier. Production read paths return NoRows for soft-deleted rows (`destroyed_at IS NOT NULL`), hitting the same fallback path. **Scope**: host-owned subjects only. Plugin-owned subjects have no separate cold tier (the plugin row IS the cold record); the Phase 7 plugin-routed read path terminates with `metadata_only=true` per INV-P7-15 instead of falling back. | Integration |
 | **INV-40** | `Rekey` MUST NOT be invocable over any public gRPC service or any in-game command. | Static + Integration |
 
 ### Plugin authorization correctness invariants
@@ -342,7 +342,7 @@ for full rationale (Decisions 1–8).
 | **INV-46** | Plugin-owned audit projection consumers MUST NOT decrypt or modify the `payload` and `codec` fields received from the bus. Plugin audit tables MUST contain byte-equal payload to the bus event. | Integration |
 | **INV-47** | Plugin `PluginAuditService.QueryHistory` MUST return rows with the original ciphertext payload, codec, `dek_ref`, and `dek_version` unchanged. | Integration |
 | **INV-48** | The host's `QueryStreamHistory` handler MUST refuse a row from a plugin where `codec != identity` arrives without a matching `dek_ref` (or with a `dek_ref` not present in `crypto_keys`). | Integration |
-| **INV-50** | The host's `QueryStreamHistory` handler MUST refuse a row from a plugin where `codec = identity` arrives for an event whose `type` field matches a manifest-declared `sensitivity: always` event type. The host maintains the always-sensitive event-type set from loaded manifests and uses it as the ground truth. Defeats a malicious or buggy plugin that returns plaintext for sensitive events. | Integration |
+| **INV-50** | The host's `QueryStreamHistory` handler MUST refuse a row from a plugin where `codec = identity` arrives for an event whose `type` field matches a manifest-declared `sensitivity: always` event type. The host maintains the always-sensitive event-type set from loaded manifests and uses it as the ground truth. Defeats a malicious or buggy plugin that returns plaintext for sensitive events. Re-scoped by Phase 7 INV-P7-7; see [`docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md`](2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md) §2. | Integration |
 | **INV-51** | A player-kind subscription that resolves a DEK via `participant.player_id` membership (the previous-tenure read path) MUST emit `audit.<game>.system.player_history_read` once per session-context pair, before the first plaintext event is delivered. | Integration |
 | **INV-52** | Retired per Phase 3d Decision 4 — see §7.7 amendment. Game-topic NATS is single-principal by architectural design; no NATS account-level deny rule has a target. | Retired |
 
@@ -923,6 +923,30 @@ fields in v1.
 **`audit.<game>.system.provider_migrate.<context>`** follow the same
 pattern (including the `policy_hash` field referencing the active
 `policy_set` event at invocation time).
+
+**`events.<game>.system.plugin_integrity_violation`** — emitted by the host's
+`PluginDowngradeFence` (Phase 7) on every INV-P7-7 refusal (codec=identity
+arriving for a manifest-declared `sensitivity: always` event type). Per-event
+one-shot violation report; no chain participation. Subject prefix is
+`events.<game>.` per INV-E26 (Phase 5 sub-epic E §3.6 supersession of master
+§4.6 line 830): the EVENTS JetStream `events.>` SubjectFilter is the only
+path by which audit projection writes to `events_audit`, so audit-bearing
+events MUST live under that filter (the legacy `audit.<game>.` prefix is
+forbidden by INV-E26). ABAC inherits the `events.*.system.*` deny rule:
+
+```yaml
+metadata:
+  actor:        {kind: system, server_identity: <server-id>}
+  event_type:   "system:plugin_integrity_violation"
+  timestamp:    <now>
+payload (cleartext):
+  plugin_name:           <string>          # plugin that returned the offending row
+  event_id:              <ULID>            # offending row's id
+  event_type:            <string>          # qualified `<plugin>:<event_type>`
+  claimed_codec:         <string>          # MUST be "identity" (the downgrade)
+  expected_sensitivity:  "always"          # what the manifest declared
+  refusal_code:          "AUDIT_ROW_DOWNGRADE_DETECTED"
+```
 
 ABAC policy MUST deny any plugin or character from subscribing to
 `audit.*.plugin_decrypt.*`, `audit.*.system.*`, and `events.*.system.*`. INV-15
@@ -2096,64 +2120,40 @@ The clean split:
 never handle crypto operations.** They store and return ciphertext bytes;
 the host owns all encryption, decryption, and authorization.
 
-**Downgrade-attack fence (INV-50).** A malicious or buggy plugin could
-return rows with `codec=identity` and cleartext `payload`, bypassing
-encryption for events that should have been sensitive. The host defeats
-this by maintaining a static "always-sensitive event-type set" computed
-from loaded manifests' `crypto.emits` declarations. On every row received
-from a plugin's `PluginAuditService.QueryHistory`, the host's
-`QueryStreamHistory` handler compares the row's `type` against this set:
+**Downgrade-attack fence (Phase 7 INV-P7-7 + INV-P7-15).** A malicious
+or buggy plugin could return rows with `codec=identity` and cleartext
+`payload` for events that should have been sensitive. The host's
+`PluginDowngradeFence` is the QueryStreamHistory pre-decrypt fence
+(layer 1) covering two checks:
 
-```text
-For each row from plugin.QueryHistory:
-  if row.type ∈ always_sensitive_types AND row.codec == "identity":
-    REFUSE: oops.Code("AUDIT_ROW_DOWNGRADE_DETECTED")
-    emit audit.<game>.system.plugin_integrity_violation
-    fall back to events_audit (host-owned ground truth) if present
-```
+1. **Manifest-set heuristic** — host maintains a static set of
+   `<plugin_name>:<event_type>` keys from manifests declaring
+   `sensitivity: always`. Rows with `codec=identity` and a type in the
+   set are refused with `AUDIT_ROW_DOWNGRADE_DETECTED` + emit
+   `events.<game>.system.plugin_integrity_violation` (subject prefix
+   per INV-E26 — see §4.6 catalog entry).
+2. **DEK existence check** — for non-identity codecs, the host
+   verifies `dek_ref` is present in `crypto_keys` (with the production
+   `destroyed_at IS NULL` filter). Missing DEK surfaces as
+   `metadata_only=true` per INV-26 (indistinguishable from
+   legitimate `Rekey`-destroyed-DEK case).
 
-The host's `events_audit` is the byte-equal mirror of what was actually
-published; if the plugin's response disagrees with the host's mirror, the
-host's mirror wins. INV-46 (byte-equality) and INV-50 (downgrade detection)
-together close the fence in both directions.
+Layer (1) does not cover `may`-declared events that were runtime-elevated
+to encrypted at emit (via `EnforceSensitivity` promoting
+`may + claim=true → SensitivityAlways`). For those, the AEAD AAD-binding
+(layer 2, master INV-25) catches tampering at decrypt time at the cost
+of a less specific operator UX signal.
+
+There is no host-side events_audit shadow for plugin-owned subjects —
+the plugin's audit table IS the cold record per §8.2.
 
 ### 8.3 Plugin SDK helpers
 
-```go
-// pkg/plugin/audit.go
-
-// AuditRow is the canonical schema plugins MUST use for their audit
-// tables when persisting host-published events. The crypto-related
-// fields are opaque to the plugin and MUST be stored byte-for-byte
-// from the bus message.
-type AuditRow struct {
-    // Cleartext fields mirroring eventbuspb.Event (per §4.1 — no
-    // separate EventMetadata message exists; the cleartext metadata
-    // IS the event's top-level fields minus payload).
-    EventID    ulid.ULID
-    Subject    string
-    Type       string                  // "<plugin>:<event_type>"
-    Timestamp  time.Time
-    Actor      *eventbuspb.Actor
-
-    // OPAQUE crypto-related fields (plugin MUST store byte-for-byte;
-    // host owns interpretation):
-    Codec      string                  // codec.Name, e.g. "identity" or "xchacha20poly1305-v1"
-    Payload    []byte                  // ciphertext when Codec != "identity"
-    DEKRef     codec.KeyID             // 0 for identity codec; matches crypto_keys.id
-    DEKVersion uint32                  // 0 for identity codec; per-context version
-}
-
-// StoreFromMessage extracts an AuditRow from a NATS JetStream message,
-// preserving codec/payload/dek_ref byte-for-byte. Plugins MUST use this
-// helper rather than constructing AuditRow manually, to avoid accidental
-// transformation of crypto fields.
-func StoreFromMessage(msg jetstream.Msg) (AuditRow, error)
-
-// LoadForQuery returns a row in the shape PluginAuditService.QueryHistory
-// is expected to emit. Round-trip-stable with StoreFromMessage.
-func LoadForQuery(row AuditRow) (*pluginauditpb.AuditEvent, error)
-```
+See [`pkg/plugin/audit.go`](../../../pkg/plugin/audit.go) for the canonical
+`AuditRow` struct shape and the `StoreFromMessage` / `LoadForQuery` helper
+signatures. The Phase 7 implementation tracks the proto contract in
+`api/proto/holomush/plugin/v1/audit.proto`; the in-spec Go example was
+aspirational pre-Phase-7 and has been superseded by the canonical sources.
 
 The SDK helpers are the path of least resistance, and the integration
 tests (INV-46, INV-47,

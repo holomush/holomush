@@ -459,6 +459,15 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// clients); the orchestrator enforces that ordering via DependsOn.
 	auditSub := audit.NewSubsystem(eventBusSub, dbSub, audit.Config{})
 
+	// Phase 7 INV-P7-9: build the codec.KeySelector ONCE at boot. The
+	// SAME pointer-identity instance is threaded into BOTH the
+	// PluginConsumerManager (audit closure below at the
+	// audit.NewPluginConsumerManager call) AND the history.Reader
+	// (via grpcSubsystemConfig.KeySelector → newHistoryReader →
+	// history.WithCodecSelector). Pointer-identity is asserted by
+	// TestDispatcherAndHotTierShareSelector.
+	pluginCodecKeySelector := buildKeySelector()
+
 	// F5: wire per-plugin audit plumbing. Both the OwnerMap (drives host-
 	// projection ack-and-skip) and the per-plugin consumer manager (drives
 	// dispatch to the plugin's PluginAuditService.AuditEvent RPC) are
@@ -485,7 +494,12 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			slog.Warn("plugin audit consumer manager: JetStream not available; host projection will handle all audit subjects")
 			return nil, nil
 		}
-		pcm := audit.NewPluginConsumerManager(js)
+		// INV-P7-9: thread the boot-time pluginCodecKeySelector into the
+		// PluginConsumerManager. The SAME instance is also passed to the
+		// gRPC subsystem (grpcSubsystemConfig.KeySelector) for
+		// history.NewReader's WithCodecSelector — pointer-identity is
+		// asserted by TestDispatcherAndHotTierShareSelector.
+		pcm := audit.NewPluginConsumerManager(js, audit.WithKeySelector(pluginCodecKeySelector))
 		byPlugin := make(map[string][]string)
 		for _, d := range decls {
 			byPlugin[d.PluginName] = append(byPlugin[d.PluginName], d.Subject)
@@ -553,6 +567,10 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		GameConfig:     gameConfig,
 		StreamRegistry: streamRegistry,
 		VerbRegistry:   verbRegistry,
+		// Phase 7 INV-P7-9: SAME selector instance the audit closure
+		// passes into PluginConsumerManager. history.NewReader gets it
+		// via newHistoryReader's WithCodecSelector branch.
+		KeySelector: pluginCodecKeySelector,
 	})
 
 	// --- Crypto subsystems (T22 / holomush-jxo8.6.21; generalized holomush-jxo8.7.8) ---

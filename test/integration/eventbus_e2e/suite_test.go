@@ -97,3 +97,18 @@ func TestSuiteCompiles(t *testing.T) {
 	t.Parallel()
 	// No assertions — presence is the contract.
 }
+
+// waitForRowInSceneLog polls plugin_core_scenes.scene_log for a row with
+// the given event id (raw 16-byte ULID) until it appears or the timeout
+// fires. Used by the Phase 7 round-trip + plugin-isolation tests
+// (B.5.0 helper per the implementation plan). Uses require.Eventually
+// to honour the suite's no-time.Sleep convention.
+func waitForRowInSceneLog(t *testing.T, pool *pgxpool.Pool, eventID []byte, timeout time.Duration) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		var found int
+		err := pool.QueryRow(t.Context(),
+			`SELECT 1 FROM plugin_core_scenes.scene_log WHERE id = $1`, eventID).Scan(&found)
+		return err == nil && found == 1
+	}, timeout, 10*time.Millisecond, "scene_log row %x not present after %s", eventID, timeout)
+}

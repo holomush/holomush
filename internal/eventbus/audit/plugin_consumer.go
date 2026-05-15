@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/samber/oops"
 	"google.golang.org/protobuf/proto"
@@ -81,13 +80,40 @@ type PluginConsumerManager struct {
 	js        jetstream.JetStream
 	consumers []*pluginConsumer
 	started   bool
+
+	// keySelector is wired on the manager per INV-P7-9 (substrate-symmetry
+	// with the hot-tier reader at internal/eventbus/history/tier.go) so
+	// production wiring (cmd/holomush/core.go:488) can thread the same
+	// codec.KeySelector instance to both. Phase 7's per-consumer dispatch
+	// path (pluginConsumer.dispatch) does NOT consume the selector — it
+	// forwards ciphertext byte-equal without invoking any codec
+	// (INV-P7-11). The field exists so future dispatcher-side validation
+	// (e.g. "refuse if dek_ref doesn't resolve" before forwarding) can
+	// thread the selector without re-wiring the constructor.
+	keySelector codec.KeySelector
+}
+
+// PluginConsumerManagerOption configures NewPluginConsumerManager.
+type PluginConsumerManagerOption func(*PluginConsumerManager)
+
+// WithKeySelector wires a codec.KeySelector onto the manager. The selector
+// is substrate per INV-P7-9 — see PluginConsumerManager.keySelector for
+// the in-Phase-7 semantics.
+func WithKeySelector(sel codec.KeySelector) PluginConsumerManagerOption {
+	return func(m *PluginConsumerManager) { m.keySelector = sel }
 }
 
 // NewPluginConsumerManager constructs a manager bound to js. js MUST be
 // the same JetStream context the host projection uses — consumers share
 // the EVENTS stream.
-func NewPluginConsumerManager(js jetstream.JetStream) *PluginConsumerManager {
-	return &PluginConsumerManager{js: js}
+func NewPluginConsumerManager(js jetstream.JetStream, opts ...PluginConsumerManagerOption) *PluginConsumerManager {
+	m := &PluginConsumerManager{js: js}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(m)
+		}
+	}
+	return m
 }
 
 // Add creates (or updates) a durable consumer for the given plugin block
@@ -276,11 +302,13 @@ func (pc *pluginConsumer) handle(msg jetstream.Msg) {
 // retried delivery on the host side therefore produces zero duplicate
 // plugin rows.
 //
-// The raw msg.Data() is the codec-encoded proto envelope (potentially
-// encrypted). Plugin audit storage MUST receive the original payload, not
-// the envelope/ciphertext, so dispatch decodes the envelope first and
-// populates the AuditEventRequest.Event from the decoded fields (including
-// the publisher-stamped Timestamp, not the JetStream metadata timestamp).
+// Per Phase 7 spec §3 + §5.1 (INV-P7-1, INV-P7-11): the dispatcher
+// forwards ciphertext byte-equal — it does NOT decrypt the envelope's
+// payload before forwarding. The envelope projection fields (id,
+// subject, type, timestamp, actor) are read from a no-decryption
+// proto.Unmarshal — those fields are cleartext regardless of codec
+// (the codec encrypts only the Payload field in place; verified at
+// publisher.go:266-292 + hot_jetstream.go:441-444).
 func (pc *pluginConsumer) dispatch(msg jetstream.Msg) error {
 	h := msg.Headers()
 
@@ -292,19 +320,9 @@ func (pc *pluginConsumer) dispatch(msg jetstream.Msg) error {
 		return oops.Code("AUDIT_PLUGIN_BAD_MSG_ID").With("msg_id", msgID).Wrap(err)
 	}
 
-	headers := make(map[string]string, len(h))
-	for k, v := range h {
-		if len(v) > 0 {
-			headers[k] = v[0]
-		}
-	}
-
-	envelope, err := decodeEnvelope(h, msg.Data())
+	row, err := buildAuditRow(msg)
 	if err != nil {
-		return oops.Code("AUDIT_PLUGIN_DECODE_FAILED").
-			With("plugin", pc.cfg.PluginName).
-			With("subject", msg.Subject()).
-			Wrap(err)
+		return err
 	}
 
 	parent := pc.workerCtx
@@ -314,11 +332,7 @@ func (pc *pluginConsumer) dispatch(msg jetstream.Msg) error {
 	ctx, cancel := context.WithTimeout(parent, persistTimeout)
 	defer cancel()
 
-	_, err = pc.cfg.Client.AuditEvent(ctx, &pluginv1.AuditEventRequest{
-		Event:   envelope,
-		Headers: headers,
-	})
-	if err != nil {
+	if _, err := pc.cfg.Client.AuditEvent(ctx, &pluginv1.AuditEventRequest{Row: row}); err != nil {
 		return oops.Code("AUDIT_PLUGIN_DISPATCH_FAILED").
 			With("plugin", pc.cfg.PluginName).
 			With("subject", msg.Subject()).
@@ -327,41 +341,65 @@ func (pc *pluginConsumer) dispatch(msg jetstream.Msg) error {
 	return nil
 }
 
-// decodeEnvelope decodes the JetStream message data into an eventbusv1.Event.
-// The data is codec-encoded proto envelope bytes; this resolves the codec by
-// the App-Codec header, calls Decode, then proto.Unmarshal. Only the identity
-// codec is supported here because PluginConsumerManager has no KeySelector
-// wired yet — a non-identity codec returns an error so misconfigurations
-// surface at dispatch time rather than forwarding ciphertext to the plugin.
-func decodeEnvelope(h nats.Header, data []byte) (*eventbusv1.Event, error) {
-	codecNameStr := h.Get(headerCodec)
-	if codecNameStr == "" {
-		return nil, oops.Code("AUDIT_PLUGIN_MISSING_HEADER").
-			With("header", headerCodec).
-			Errorf("missing header")
-	}
-	if codec.Name(codecNameStr) != codec.NameIdentity {
-		return nil, oops.Code("AUDIT_PLUGIN_CODEC_UNSUPPORTED").
-			With("codec", codecNameStr).
-			Errorf("plugin audit dispatcher does not have a KeySelector; only identity codec is supported")
-	}
-	c, err := codec.Resolve(codec.Name(codecNameStr))
+// buildAuditRow constructs the AuditRow forwarded to the plugin's
+// AuditEvent RPC. NEVER decrypts (INV-P7-11). Payload bytes are
+// preserved byte-equal from the bus envelope (INV-P7-1).
+//
+// Wire-format invariant (verified at publisher.go:266-292 + hot_jetstream.go:441-444):
+// the codec encrypts the event.Payload field in place; cleartext
+// envelope metadata fields (id, subject, type, timestamp, actor) are
+// NOT encrypted; msg.Data() is the marshaled envelope proto. Therefore
+// `Payload: envelope.GetPayload()` correctly captures ciphertext for
+// encrypted events and plaintext for identity-codec events — both
+// byte-equal to what's stored in events_audit for host-owned subjects.
+func buildAuditRow(msg jetstream.Msg) (*pluginv1.AuditRow, error) {
+	hdrMeta, err := ParseAuditHeaders(msg.Headers())
 	if err != nil {
-		return nil, oops.Code("AUDIT_PLUGIN_CODEC_UNKNOWN").
-			With("codec", codecNameStr).
-			Wrap(err)
+		return nil, oops.Code("AUDIT_PLUGIN_HEADER_PARSE_FAILED").Wrap(err)
 	}
-	plain, err := c.Decode(context.Background(), data, codec.Key{}, nil)
+
+	// Unmarshal the envelope ONLY to read projection fields. We do NOT
+	// invoke the codec's Decode here — the projection fields are
+	// cleartext regardless of codec, and decrypting would violate
+	// INV-P7-11 (no decrypt before forward).
+	envelope, err := unmarshalProjectionOnly(msg.Data())
 	if err != nil {
-		return nil, oops.Code("AUDIT_PLUGIN_CODEC_DECODE_FAILED").
-			With("codec", codecNameStr).
-			Wrap(err)
+		return nil, oops.Code("AUDIT_PLUGIN_ENVELOPE_UNMARSHAL_FAILED").Wrap(err)
 	}
-	var envelope eventbusv1.Event
-	if unmarshalErr := proto.Unmarshal(plain, &envelope); unmarshalErr != nil {
-		return nil, oops.Code("AUDIT_PLUGIN_ENVELOPE_UNMARSHAL_FAILED").Wrap(unmarshalErr)
+
+	row := &pluginv1.AuditRow{
+		Id:        envelope.GetId(),
+		Subject:   envelope.GetSubject(),
+		Type:      envelope.GetType(),
+		Timestamp: envelope.GetTimestamp(),
+		Actor:     envelope.GetActor(),
+		Codec:     hdrMeta.Codec,
+		Payload:   envelope.GetPayload(), // ciphertext when codec != identity
+		SchemaVer: hdrMeta.SchemaVer,
 	}
-	return &envelope, nil
+	if hdrMeta.DEKRef != nil {
+		v := uint64(*hdrMeta.DEKRef) //nolint:gosec // dek_ref originates as crypto_keys.id (BIGSERIAL, always >= 0); int64→uint64 widening is safe
+		row.DekRef = &v
+	}
+	if hdrMeta.DEKVersion != nil {
+		v := uint32(*hdrMeta.DEKVersion) //nolint:gosec // dek_version originates as a 1-based counter (always >= 0); int32→uint32 is safe
+		row.DekVersion = &v
+	}
+	return row, nil
+}
+
+// unmarshalProjectionOnly proto-unmarshals msg.Data() into eventbusv1.Event.
+// Per the codec contract (internal/eventbus/codec/xchacha20poly1305_v1.go),
+// the codec encrypts the Event.payload field in-place — projection
+// fields are always cleartext in the envelope, regardless of codec.
+// We re-use proto.Unmarshal directly here rather than invoking the
+// codec's Decode (which would decrypt).
+func unmarshalProjectionOnly(data []byte) (*eventbusv1.Event, error) {
+	var ev eventbusv1.Event
+	if err := proto.Unmarshal(data, &ev); err != nil {
+		return nil, err //nolint:wrapcheck // wrapped by caller with AUDIT_PLUGIN_ENVELOPE_UNMARSHAL_FAILED
+	}
+	return &ev, nil
 }
 
 // pluginDurableName derives the JetStream durable consumer name. Matches

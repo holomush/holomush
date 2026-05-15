@@ -33,6 +33,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/authguard"
 	authguardaudit "github.com/holomush/holomush/internal/eventbus/authguard/audit"
+	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/eventbus/history"
 	"github.com/holomush/holomush/internal/eventbus/history/source"
@@ -99,6 +100,14 @@ type grpcSubsystemConfig struct {
 	// RekeyManager is non-nil. Settable for test injection (nil is the prod
 	// default).
 	AuditEmitter eventbus.SessionAuditEmitter
+
+	// KeySelector is the SHARED codec.KeySelector instance threaded into
+	// both audit.PluginConsumerManager (via WithKeySelector) and
+	// history.NewReader (via WithCodecSelector). Required by INV-P7-9 —
+	// the test at test/integration/eventbus_e2e/dispatcher_selector_identity_test.go
+	// asserts pointer-identity between the two. When nil, both paths
+	// fall back to identity decoding.
+	KeySelector codec.KeySelector
 }
 
 // grpcSubsystem is the terminal subsystem that wires the gRPC server.
@@ -353,8 +362,21 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		}
 	}
 
+	// Phase 7 INV-P7-7 + INV-P7-15: assemble the PluginDowngradeFence
+	// inputs from already-loaded deps. pluginManager is the same
+	// pluginSub.Manager() the audit closure used to build the
+	// PluginConsumerManager — its manifests are populated by now
+	// (DependsOn enforces plugin Start before gRPC Start).
+	alwaysSensitive := buildAlwaysSensitiveSet(pluginManager)
+	cryptoKeysLookupForFence := newCryptoKeysLookup(pool)
+	violationEmitterForFence := newViolationEmitter(
+		eventbus.NewRenderingPublisher(s.cfg.EventBus.Publisher(), s.cfg.VerbRegistry),
+		s.cfg.EventBus.GameID(),
+	)
+
 	historyReader := newHistoryReader(js, pool, s.cfg.EventBus.Config(), owners, router,
-		historyAuthGuard, historyDEKMgr, historyAuditEm)
+		historyAuthGuard, historyDEKMgr, historyAuditEm,
+		s.cfg.KeySelector, alwaysSensitive, cryptoKeysLookupForFence, violationEmitterForFence)
 
 	coreServerOpts := []holoGRPC.CoreServerOption{
 		holoGRPC.WithEventStore(eventStore),
@@ -744,6 +766,10 @@ func newHistoryReader(
 	guard eventbus.SessionAuthGuard, // nil = passthrough (current behavior)
 	dekMgr eventbus.SessionDEKManager, // nil = passthrough (current behavior)
 	auditEm eventbus.SessionAuditEmitter, // nil = passthrough (current behavior)
+	keySelector codec.KeySelector, // nil = identity decoding (Phase 7 INV-P7-9)
+	alwaysSensitive map[string]struct{}, // empty = INV-P7-7 manifest-set check off
+	cryptoKeysLookup history.CryptoKeysLookup, // nil = INV-P7-15 DEK-existence check off
+	violationEmitter history.ViolationEmitter, // nil = no plugin_integrity_violation publish
 ) eventbus.HistoryReader {
 	opts := []history.Option{}
 	if owners != nil {
@@ -751,6 +777,24 @@ func newHistoryReader(
 	}
 	if router != nil {
 		opts = append(opts, history.WithPluginRouter(router))
+	}
+	if keySelector != nil {
+		// INV-P7-9: the SAME selector instance must be threaded into the
+		// PluginConsumerManager (cmd/holomush/core.go:488 audit closure)
+		// for cross-tier pointer identity. Production wiring constructs
+		// the selector once and passes it via grpcSubsystemConfig.KeySelector.
+		opts = append(opts, history.WithCodecSelector(keySelector))
+	}
+	// Phase 7 INV-P7-7 + INV-P7-15: install the read-side fence around
+	// plugin-routed history. Both lookup and emitter may be nil in
+	// degraded deployments; the fence's internal nil-handling preserves
+	// the per-row refusal semantics.
+	if len(alwaysSensitive) > 0 || cryptoKeysLookup != nil || violationEmitter != nil {
+		opts = append(opts, history.WithPluginDowngradeFence(
+			alwaysSensitive,
+			cryptoKeysLookup,
+			violationEmitter,
+		))
 	}
 	if guard != nil && dekMgr != nil && auditEm != nil {
 		// INV-39: wire FallbackResolver on hot tier (hot→cold fallback when DEK

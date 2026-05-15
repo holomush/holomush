@@ -66,10 +66,10 @@ func runAdminReadStream(cmd *cobra.Command, factory adminClientFactory) error {
 		ctxRefs = append(ctxRefs, ref)
 	}
 
-	sinceStr, _ := cmd.Flags().GetString("since") //nolint:errcheck // flag defined in newAdminReadStreamCmd
-	untilStr, _ := cmd.Flags().GetString("until")  //nolint:errcheck // flag defined in newAdminReadStreamCmd
+	sinceStr, _ := cmd.Flags().GetString("since")         //nolint:errcheck // flag defined in newAdminReadStreamCmd
+	untilStr, _ := cmd.Flags().GetString("until")         //nolint:errcheck // flag defined in newAdminReadStreamCmd
 	dualControl, _ := cmd.Flags().GetBool("dual-control") //nolint:errcheck // flag defined in newAdminReadStreamCmd
-	output, _ := cmd.Flags().GetString("output") //nolint:errcheck // flag defined in newAdminReadStreamCmd
+	output, _ := cmd.Flags().GetString("output")          //nolint:errcheck // flag defined in newAdminReadStreamCmd
 	if output != "text" && output != "json" {
 		return &exitCodeError{
 			exitCode: 64, // EX_USAGE
@@ -252,6 +252,7 @@ func exitCodeForTerminatedBy(t adminv1.ReadFinished_TerminatedBy) int {
 //     if metadata_only: stdout: "[redacted: <reason>] subject=... type=... timestamp=..."
 //     else: stdout: <payload> + metadata line
 //   - ReadFinished    → stderr: "finished: terminated_by=... events_scanned=... decrypt_fail_count=..."
+//
 // renderFrameJSON marshals an AdminReadStreamResponse as a single-line JSON
 // object to stdout. Fields are selected for operator usability: the frame type
 // is included as "frame_type" so consumers can dispatch without inspecting
@@ -263,20 +264,20 @@ func renderFrameJSON(frame *adminv1.AdminReadStreamResponse, stdout io.Writer) {
 		RequestID string `json:"request_id,omitempty"`
 		ExpiresAt string `json:"expires_at,omitempty"`
 		// ReadStarted fields
-		PolicyHash      string   `json:"policy_hash,omitempty"`
-		ResolvedSince   string   `json:"resolved_since,omitempty"`
-		ResolvedUntil   string   `json:"resolved_until,omitempty"`
+		PolicyHash       string   `json:"policy_hash,omitempty"`
+		ResolvedSince    string   `json:"resolved_since,omitempty"`
+		ResolvedUntil    string   `json:"resolved_until,omitempty"`
 		ResolvedContexts []string `json:"resolved_contexts,omitempty"`
 		// Event fields
-		Stream         string `json:"stream,omitempty"`
-		EventType      string `json:"event_type,omitempty"`
-		Timestamp      string `json:"timestamp,omitempty"`
-		MetadataOnly   bool   `json:"metadata_only,omitempty"`
+		Stream            string `json:"stream,omitempty"`
+		EventType         string `json:"event_type,omitempty"`
+		Timestamp         string `json:"timestamp,omitempty"`
+		MetadataOnly      bool   `json:"metadata_only,omitempty"`
 		NoPlaintextReason string `json:"no_plaintext_reason,omitempty"`
-		Payload        []byte `json:"payload,omitempty"`
+		Payload           []byte `json:"payload,omitempty"`
 		// ReadFinished fields
-		TerminatedBy    string `json:"terminated_by,omitempty"`
-		EventsScanned   int64  `json:"events_scanned,omitempty"`
+		TerminatedBy     string `json:"terminated_by,omitempty"`
+		EventsScanned    int64  `json:"events_scanned,omitempty"`
 		DecryptFailCount int64  `json:"decrypt_fail_count,omitempty"`
 	}
 
@@ -407,7 +408,7 @@ func renderEventFrame(ef *corev1.EventFrame, stdout io.Writer) {
 	}
 
 	// Plaintext delivery.
-	fmt.Fprintf(stdout, "%s", ef.GetPayload())             //nolint:errcheck // event payload; write errors non-fatal
+	fmt.Fprintf(stdout, "%s", ef.GetPayload()) //nolint:errcheck // event payload; write errors non-fatal
 	if len(ef.GetPayload()) > 0 && ef.GetPayload()[len(ef.GetPayload())-1] != '\n' {
 		fmt.Fprintln(stdout) //nolint:errcheck // ensure newline after payload
 	}

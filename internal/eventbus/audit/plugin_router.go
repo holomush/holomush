@@ -174,7 +174,7 @@ func (s *pluginHistoryStream) Next(ctx context.Context) (eventbus.Event, error) 
 			With("subject", s.subject).
 			Wrap(err)
 	}
-	ev := resp.GetEvent()
+	ev := resp.GetRow()
 	if ev == nil {
 		return eventbus.Event{}, oops.Code("AUDIT_PLUGIN_HISTORY_EMPTY_EVENT").
 			With("plugin", s.pluginName).
@@ -223,14 +223,19 @@ func (s *pluginHistoryStream) Next(ctx context.Context) (eventbus.Event, error) 
 			actor.ID = raw
 		}
 	}
-	return eventbus.Event{
+	out := eventbus.Event{
 		ID:        id,
 		Subject:   eventbus.Subject(ev.GetSubject()),
 		Type:      eventbus.Type(ev.GetType()),
 		Timestamp: ev.GetTimestamp().AsTime(),
 		Actor:     actor,
 		Payload:   ev.GetPayload(),
-	}, nil
+	}
+	// Stamp the plugin-source-of-truth row so the read-side fence
+	// (history.PluginDowngradeFence) can recover codec / dek_ref /
+	// dek_version verbatim — INV-P7-7 + INV-P7-15 (Phase 7).
+	eventbus.StampAuditRow(&out, ev)
+	return out, nil
 }
 
 // Close cancels the underlying RPC. Idempotent.

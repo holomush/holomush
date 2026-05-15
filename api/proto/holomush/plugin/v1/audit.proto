@@ -22,11 +22,34 @@ service PluginAuditService {
   rpc QueryHistory(QueryHistoryRequest) returns (stream QueryHistoryResponse);
 }
 
+// AuditRow is the canonical wire shape for plugin-owned audit rows.
+// Used in both directions: dispatcher → plugin (AuditEventRequest)
+// and plugin → host (QueryHistoryResponse). Mirrors the events_audit
+// row shape so the proto wire format and the storage shape are
+// coupled.
+message AuditRow {
+  // Cleartext projection fields
+  bytes id = 1; // 16-byte ULID
+  string subject = 2;
+  string type = 3;
+  google.protobuf.Timestamp timestamp = 4;
+  holomush.eventbus.v1.Actor actor = 5;
+
+  // Crypto envelope
+  string codec = 6; // "identity" | "xchacha20poly1305-v1"
+  bytes payload = 7; // ciphertext when codec != "identity"
+
+  // DEK reference — absent on identity codec, required otherwise.
+  // Host enforces the agreement (codec=identity ⇔ both absent).
+  optional uint64 dek_ref = 8;
+  optional uint32 dek_version = 9;
+
+  // Audit schema version (was App-Schema-Version header).
+  int32 schema_ver = 10;
+}
+
 message AuditEventRequest {
-  holomush.eventbus.v1.Event event = 1;
-  // Headers carried verbatim from the JS message (App-Codec,
-  // App-Schema-Version, App-Event-Type, etc.) so the plugin can store them.
-  map<string, string> headers = 2;
+  AuditRow row = 1;
 }
 
 message AuditEventResponse {}
@@ -50,5 +73,5 @@ message QueryHistoryRequest {
 }
 
 message QueryHistoryResponse {
-  holomush.eventbus.v1.Event event = 1;
+  AuditRow row = 1;
 }

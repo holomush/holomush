@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/pkg/errutil"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -71,6 +72,8 @@ func (s *fakeAuditStore) Insert(
 	_ []byte,
 	_ int,
 	_ string,
+	_ *int64,
+	_ *int32,
 ) error {
 	return nil
 }
@@ -198,7 +201,7 @@ func TestQueryHistoryAllowsMemberAndReturnsRows(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, stream.sends, 1)
-	assert.Equal(t, "scene.pose.posted", stream.sends[0].GetEvent().GetType())
+	assert.Equal(t, "scene.pose.posted", stream.sends[0].GetRow().GetType())
 }
 
 func TestQueryHistoryDeniesNonMemberWithoutHittingLogStore(t *testing.T) {
@@ -334,4 +337,111 @@ func TestQueryHistoryFailsClosedWhenMemberLookupNotConfigured(t *testing.T) {
 	require.True(t, ok, "nil memberLookup MUST surface as a gRPC status error")
 	assert.Equal(t, codes.Internal, st.Code(),
 		"nil memberLookup MUST fail closed with codes.Internal, not panic")
+}
+
+// validAuditRow returns a syntactically valid AuditRow fixture for the
+// AuditEvent validation tests. Tests that exercise specific validation
+// paths blank or override individual fields.
+func validAuditRow(t *testing.T) *pluginv1.AuditRow {
+	t.Helper()
+	id := ulid.Make()
+	idBytes := id.Bytes()
+	return &pluginv1.AuditRow{
+		Id:        idBytes[:],
+		Subject:   "events.test.scene.01ABC.ic",
+		Type:      "core-scenes:pose",
+		Timestamp: timestamppb.New(time.Unix(1700000000, 0).UTC()),
+		Codec:     "identity",
+		SchemaVer: 1,
+		Payload:   []byte("p"),
+	}
+}
+
+func TestAuditEventRejectsMissingTimestamp(t *testing.T) {
+	t.Parallel()
+	srv := &SceneAuditServer{store: &fakeAuditStore{}}
+	row := validAuditRow(t)
+	row.Timestamp = nil
+	_, err := srv.AuditEvent(context.Background(), &pluginv1.AuditEventRequest{Row: row})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_AUDIT_MISSING_FIELD")
+	errutil.AssertErrorContext(t, err, "field", "timestamp")
+}
+
+func TestAuditEventRejectsNilRequest(t *testing.T) {
+	t.Parallel()
+	srv := &SceneAuditServer{store: &fakeAuditStore{}}
+	_, err := srv.AuditEvent(context.Background(), nil)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_AUDIT_MISSING_ROW")
+}
+
+func TestAuditEventRejectsNilRow(t *testing.T) {
+	t.Parallel()
+	srv := &SceneAuditServer{store: &fakeAuditStore{}}
+	_, err := srv.AuditEvent(context.Background(), &pluginv1.AuditEventRequest{})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_AUDIT_MISSING_ROW")
+}
+
+func TestAuditEventRejectsMissingCodec(t *testing.T) {
+	t.Parallel()
+	srv := &SceneAuditServer{store: &fakeAuditStore{}}
+	row := validAuditRow(t)
+	row.Codec = ""
+	_, err := srv.AuditEvent(context.Background(), &pluginv1.AuditEventRequest{Row: row})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_AUDIT_MISSING_FIELD")
+}
+
+func TestAuditEventRejectsBadSchemaVersion(t *testing.T) {
+	t.Parallel()
+	srv := &SceneAuditServer{store: &fakeAuditStore{}}
+	row := validAuditRow(t)
+	row.SchemaVer = -1
+	_, err := srv.AuditEvent(context.Background(), &pluginv1.AuditEventRequest{Row: row})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_AUDIT_BAD_SCHEMA_VERSION")
+}
+
+func TestAuditEventRejectsMissingType(t *testing.T) {
+	t.Parallel()
+	srv := &SceneAuditServer{store: &fakeAuditStore{}}
+	row := validAuditRow(t)
+	row.Type = ""
+	_, err := srv.AuditEvent(context.Background(), &pluginv1.AuditEventRequest{Row: row})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_AUDIT_MISSING_FIELD")
+}
+
+func TestAuditEventRejectsMissingSubject(t *testing.T) {
+	t.Parallel()
+	srv := &SceneAuditServer{store: &fakeAuditStore{}}
+	row := validAuditRow(t)
+	row.Subject = ""
+	_, err := srv.AuditEvent(context.Background(), &pluginv1.AuditEventRequest{Row: row})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_AUDIT_MISSING_FIELD")
+}
+
+func TestAuditEventRejectsMissingID(t *testing.T) {
+	t.Parallel()
+	srv := &SceneAuditServer{store: &fakeAuditStore{}}
+	row := validAuditRow(t)
+	row.Id = []byte("8-bytes!") // not 16
+	_, err := srv.AuditEvent(context.Background(), &pluginv1.AuditEventRequest{Row: row})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_AUDIT_MISSING_ID")
+}
+
+// TestAuditEventHappyPathPersistsViaStore exercises the full validation
+// chain with valid input. fakeAuditStore.Insert is a no-op so this only
+// verifies AuditEvent does NOT error on a syntactically valid row — the
+// actual PG INSERT is covered by integration tests.
+func TestAuditEventHappyPathPersistsViaStore(t *testing.T) {
+	t.Parallel()
+	srv := &SceneAuditServer{store: &fakeAuditStore{}}
+	resp, err := srv.AuditEvent(context.Background(), &pluginv1.AuditEventRequest{Row: validAuditRow(t)})
+	require.NoError(t, err)
+	assert.NotNil(t, resp, "successful AuditEvent MUST return a non-nil response")
 }
