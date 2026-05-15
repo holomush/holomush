@@ -350,10 +350,22 @@ func validAuditRow(t *testing.T) *pluginv1.AuditRow {
 		Id:        idBytes[:],
 		Subject:   "events.test.scene.01ABC.ic",
 		Type:      "core-scenes:pose",
+		Timestamp: timestamppb.New(time.Unix(1700000000, 0).UTC()),
 		Codec:     "identity",
 		SchemaVer: 1,
 		Payload:   []byte("p"),
 	}
+}
+
+func TestAuditEventRejectsMissingTimestamp(t *testing.T) {
+	t.Parallel()
+	srv := &SceneAuditServer{store: &fakeAuditStore{}}
+	row := validAuditRow(t)
+	row.Timestamp = nil
+	_, err := srv.AuditEvent(context.Background(), &pluginv1.AuditEventRequest{Row: row})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_AUDIT_MISSING_FIELD")
+	errutil.AssertErrorContext(t, err, "field", "timestamp")
 }
 
 func TestAuditEventRejectsNilRequest(t *testing.T) {

@@ -129,7 +129,9 @@ func NewPluginDowngradeFence(inner PluginHistoryRouter, opts ...PluginDowngradeF
 		log:             slog.Default(),
 	}
 	for _, o := range opts {
-		o(f)
+		if o != nil {
+			o(f)
+		}
 	}
 	return f
 }
@@ -183,7 +185,7 @@ func (s *fencedStream) Next(ctx context.Context) (eventbus.Event, error) {
 	if codec == "identity" {
 		if _, sensitive := s.fence.alwaysSensitive[row.GetType()]; sensitive {
 			s.fence.emitViolationBounded(ctx, s.pluginName, row)
-			return refuseEvent(ev), nil
+			return refuseEvent(ev, eventbus.NoPlaintextReasonDowngradeRefused), nil
 		}
 		// identity + non-sensitive: pass through.
 		return ev, nil
@@ -193,15 +195,19 @@ func (s *fencedStream) Next(ctx context.Context) (eventbus.Event, error) {
 	if row.DekRef == nil {
 		// Absent dek_ref for non-identity codec is unrecoverable. No
 		// violation emit — indistinguishable from legitimate
-		// Rekey-destroyed row.
-		return refuseEvent(ev), nil
+		// Rekey-destroyed row. NoPlaintextReasonDEKMissing per the
+		// "looks like destroyed-DEK metadata-only" contract; using
+		// DowngradeRefused here would mis-attribute a normal Rekey-aged
+		// row as a malicious downgrade.
+		return refuseEvent(ev, eventbus.NoPlaintextReasonDEKMissing), nil
 	}
 	if s.fence.cryptoKeysLookup == nil {
 		// Without a configured lookup the fence cannot validate. Treat
 		// as refusal (fail-closed) — production wiring at E.3 always
 		// supplies a non-nil lookup; only test fakes hit this branch
-		// when they intentionally omit it.
-		return refuseEvent(ev), nil
+		// when they intentionally omit it. Reason is Internal to
+		// distinguish from the legitimate DEK-gone case.
+		return refuseEvent(ev, eventbus.NoPlaintextReasonInternal), nil
 	}
 	exists, lookupErr := s.fence.cryptoKeysLookup.Exists(ctx, *row.DekRef)
 	if lookupErr != nil {
@@ -214,7 +220,12 @@ func (s *fencedStream) Next(ctx context.Context) (eventbus.Event, error) {
 			Wrap(lookupErr)
 	}
 	if !exists {
-		return refuseEvent(ev), nil
+		// DEK existed at publish time but is now absent (legitimate
+		// Rekey-destroyed) or never existed (malformed publisher). Both
+		// surface as NoPlaintextReasonDEKMissing — the read-side cannot
+		// distinguish them, and the operator UX should match the
+		// legitimate destroyed-DEK case.
+		return refuseEvent(ev, eventbus.NoPlaintextReasonDEKMissing), nil
 	}
 
 	// Clean row — pass through.
@@ -228,13 +239,23 @@ func (s *fencedStream) Close() error {
 }
 
 // refuseEvent returns a copy of ev with the metadata-only stamp set
-// per INV-P7-7 / INV-P7-15. Critically operates on a value copy (Event
-// is a struct, not a pointer at internal/eventbus/types.go:133), so
-// mutating the returned copy does not affect any caller-held event.
-func refuseEvent(ev eventbus.Event) eventbus.Event {
+// and the per-branch refusal reason. Critically operates on a value
+// copy (Event is a struct, not a pointer at internal/eventbus/types.go),
+// so mutating the returned copy does not affect any caller-held event.
+//
+// The reason MUST distinguish the spec-mandated branches:
+//   - INV-P7-7 downgrade detected → NoPlaintextReasonDowngradeRefused
+//   - INV-P7-15 DEK absent / DEK lookup-miss → NoPlaintextReasonDEKMissing
+//     (so the row reads operationally identical to the legitimate
+//     destroyed-DEK metadata-only case per master spec INV-26 — a malicious
+//     plugin that omits dek_ref MUST NOT be reported as a "downgrade").
+//   - INV-P7-15 nil-lookup fail-closed → NoPlaintextReasonInternal
+//     (configuration failure — production wiring at E.3 always supplies a
+//     non-nil lookup; only test fakes hit this fail-closed branch).
+func refuseEvent(ev eventbus.Event, reason eventbus.NoPlaintextReason) eventbus.Event {
 	refused := ev
 	refused.MetadataOnly = true
-	refused.NoPlaintextReason = eventbus.NoPlaintextReasonDowngradeRefused
+	refused.NoPlaintextReason = reason
 	refused.Payload = nil
 	return refused
 }
@@ -256,7 +277,11 @@ func (f *PluginDowngradeFence) emitViolationBounded(
 	emitCtx, cancel := context.WithTimeout(parent, violationEmitTimeout)
 	defer cancel()
 
-	err := f.emitter.EmitViolation(emitCtx, pluginName, row, "always_sensitive", "AUDIT_ROW_DOWNGRADE_DETECTED")
+	// expected_sensitivity payload value MUST be "always" per the
+	// `events.<game>.system.plugin_integrity_violation` schema documented
+	// in master spec §4.6 (Phase 7 amendment). "always_sensitive" was a
+	// pre-spec wording that produces an off-schema payload.
+	err := f.emitter.EmitViolation(emitCtx, pluginName, row, "always", "AUDIT_ROW_DOWNGRADE_DETECTED")
 	if err == nil {
 		return
 	}

@@ -197,6 +197,16 @@ func (s *SceneAuditServer) AuditEvent(ctx context.Context, req *pluginv1.AuditEv
 		return nil, oops.Code("SCENE_AUDIT_MISSING_ID").Errorf("row.id required (16-byte ULID)")
 	}
 
+	// Reject nil timestamp at ingest time. scene_log.timestamp is a
+	// non-null TIMESTAMPTZ and queryLog scans it into a non-null
+	// time.Time; a single row with nil ts persisted as SQL NULL would
+	// turn every subsequent QueryHistory page that includes it into
+	// SCENE_AUDIT_SCAN_FAILED. Fail-fast at the boundary.
+	if row.GetTimestamp() == nil {
+		return nil, oops.Code("SCENE_AUDIT_MISSING_FIELD").With("field", "timestamp").
+			Errorf("missing field")
+	}
+
 	var actorKind string
 	var actorID []byte
 	if a := row.GetActor(); a != nil {

@@ -39,36 +39,56 @@ func readPluginMigration(t *testing.T, dir string, n int) string {
 	return string(body)
 }
 
-// applyPluginMigrationsUpTo applies migrations [1..n] in order, all under
-// the search_path of `schema`. Each .sql file is executed in a single
-// pool.Exec — adequate for the simple, single-statement migrations these
-// plugin migrations contain (CREATE TABLE / ALTER TABLE).
+// applyPluginMigrationsUpTo applies migrations [1..n] in order under the
+// search_path of `schema`, pinned to a SINGLE acquired connection. The
+// pool.Exec("SET search_path") path is connection-scoped — pool may
+// hand out a different connection on the next Exec, dropping the
+// search_path setting and silently creating tables in `public` instead.
+// Acquiring once + routing all DDL through that connection guarantees
+// the migration ran in the intended schema.
 func applyPluginMigrationsUpTo(t *testing.T, pool *pgxpool.Pool, dir, schema string, n int) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
-	_, err := pool.Exec(ctx, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", schema))
+	conn, err := pool.Acquire(ctx)
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, fmt.Sprintf("SET search_path TO %s, public", schema))
+	defer conn.Release()
+
+	_, err = conn.Exec(ctx, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", schema))
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, fmt.Sprintf("SET search_path TO %s, public", schema))
 	require.NoError(t, err)
 	for i := 1; i <= n; i++ {
-		applyPluginMigrationN(t, pool, dir, i)
+		body := readPluginMigration(t, dir, i)
+		_, err := conn.Exec(ctx, body)
+		require.NoErrorf(t, err, "applying migration %d failed", i)
 	}
 }
 
-// applyPluginMigrationN runs a single migration .up.sql file. The current
-// search_path on `pool` MUST already point at the target schema.
-func applyPluginMigrationN(t *testing.T, pool *pgxpool.Pool, dir string, n int) {
+// applyPluginMigrationN runs a single migration .up.sql file pinned to
+// a single acquired connection from the pool with search_path set to
+// `schema`. Stand-alone variant of the loop in applyPluginMigrationsUpTo
+// for tests that exercise one migration in isolation.
+func applyPluginMigrationN(t *testing.T, pool *pgxpool.Pool, dir, schema string, n int) {
 	t.Helper()
 	body := readPluginMigration(t, dir, n)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
-	_, err := pool.Exec(ctx, body)
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+
+	_, err = conn.Exec(ctx, fmt.Sprintf("SET search_path TO %s, public", schema))
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, body)
 	require.NoErrorf(t, err, "applying migration %d failed", n)
 }
 
-// pluginMigrationPool opens a pool against a fresh DB. The pool is bound
-// to t.Cleanup.
+// pluginMigrationPool opens a pool against a fresh DB and creates the
+// target schema. Per-connection search_path setting is moved to the
+// individual migration helpers so the schema is established at the same
+// connection where the DDL runs (not lost across pool-connection
+// hand-offs). The pool is bound to t.Cleanup.
 func pluginMigrationPool(t *testing.T, schema string) *pgxpool.Pool {
 	t.Helper()
 	shared := testutil.SharedPostgres(t)
@@ -79,8 +99,6 @@ func pluginMigrationPool(t *testing.T, schema string) *pgxpool.Pool {
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 	_, err = pool.Exec(ctx, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", schema))
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, fmt.Sprintf("SET search_path TO %s, public", schema))
 	require.NoError(t, err)
 	return pool
 }
@@ -124,7 +142,7 @@ func TestPhase7PluginMigrationStandalone(t *testing.T) {
 		"dek_ref/dek_version MUST NOT exist before migration 000005")
 
 	// Apply migration 5 in isolation.
-	applyPluginMigrationN(t, pool, migrationsDirCoreScenes, 5)
+	applyPluginMigrationN(t, pool, migrationsDirCoreScenes, schema, 5)
 
 	got := listSceneLogDekColumns(t, pool, schema)
 	assert.Equal(t, []string{"dek_ref", "dek_version"}, got,
@@ -132,7 +150,7 @@ func TestPhase7PluginMigrationStandalone(t *testing.T) {
 
 	// Idempotency: re-applying migration 5 is a no-op (CREATE INDEX IF
 	// NOT EXISTS + ADD COLUMN IF NOT EXISTS).
-	applyPluginMigrationN(t, pool, migrationsDirCoreScenes, 5)
+	applyPluginMigrationN(t, pool, migrationsDirCoreScenes, schema, 5)
 	got = listSceneLogDekColumns(t, pool, schema)
 	assert.Equal(t, []string{"dek_ref", "dek_version"}, got,
 		"INV-P7-10: re-applying migration 5 MUST be idempotent")

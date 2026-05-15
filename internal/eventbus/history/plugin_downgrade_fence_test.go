@@ -10,12 +10,12 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/history"
+	"github.com/holomush/holomush/pkg/errutil"
 	pluginauditpb "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
@@ -304,7 +304,8 @@ func TestFenceRefusesUnknownDekRef(t *testing.T) {
 	ev, err := out.Next(context.Background())
 	require.NoError(t, err, "INV-P7-15 unknown DEK MUST be per-row refusal, not stream-fatal")
 	assert.True(t, ev.MetadataOnly)
-	assert.Equal(t, eventbus.NoPlaintextReasonDowngradeRefused, ev.NoPlaintextReason)
+	assert.Equal(t, eventbus.NoPlaintextReasonDEKMissing, ev.NoPlaintextReason,
+		"INV-P7-15 unknown-DEK MUST report DEKMissing (legitimate Rekey-destroyed lookalike), NOT DowngradeRefused")
 	assert.Empty(t, rec.snapshot(), "INV-P7-15 path MUST NOT emit violation audit")
 }
 
@@ -339,7 +340,8 @@ func TestFenceRefusesAbsentDekRefForNonIdentityCodec(t *testing.T) {
 	ev, err := out.Next(context.Background())
 	require.NoError(t, err)
 	assert.True(t, ev.MetadataOnly)
-	assert.Equal(t, eventbus.NoPlaintextReasonDowngradeRefused, ev.NoPlaintextReason)
+	assert.Equal(t, eventbus.NoPlaintextReasonDEKMissing, ev.NoPlaintextReason,
+		"INV-P7-15 absent-dek_ref MUST report DEKMissing (Rekey-destroyed lookalike), NOT DowngradeRefused")
 }
 
 // TestFenceForwardsCryptoKeysLookupError — INV-P7-15 error path. A
@@ -376,10 +378,7 @@ func TestFenceForwardsCryptoKeysLookupError(t *testing.T) {
 
 	_, err = out.Next(context.Background())
 	require.Error(t, err)
-	var oe oops.OopsError
-	require.True(t, errors.As(err, &oe), "expected oops error with code")
-	assert.Equal(t, "AUDIT_ROW_DEK_LOOKUP_FAILED", oe.Code(),
-		"infrastructure failure MUST be wrapped with AUDIT_ROW_DEK_LOOKUP_FAILED")
+	errutil.AssertErrorCode(t, err, "AUDIT_ROW_DEK_LOOKUP_FAILED")
 }
 
 // TestFenceSetBuiltOnceAtBoot — INV-P7-8. The always-sensitive set is

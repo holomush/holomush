@@ -227,6 +227,13 @@ func TestAuditRowRoundTripPreservesAllFields(t *testing.T) {
 			assert.Equal(t, tc.row.Subject, proto.GetSubject())
 			assert.Equal(t, tc.row.Type, proto.GetType())
 			assert.Equal(t, tc.row.Timestamp.UnixNano(), proto.GetTimestamp().AsTime().UnixNano())
+			if tc.row.Actor == nil {
+				assert.Nil(t, proto.GetActor(), "nil Actor MUST round-trip as nil (not zero-value)")
+			} else {
+				require.NotNil(t, proto.GetActor())
+				assert.Equal(t, tc.row.Actor.GetKind(), proto.GetActor().GetKind())
+				assert.Equal(t, tc.row.Actor.GetId(), proto.GetActor().GetId())
+			}
 			assert.Equal(t, tc.row.Codec, proto.GetCodec())
 			assert.Equal(t, tc.row.Payload, proto.GetPayload())
 			if tc.row.DEKRef != nil {
