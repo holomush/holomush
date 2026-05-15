@@ -14,6 +14,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/eventbus/history"
@@ -127,7 +128,7 @@ func (l *cryptoKeysLookup) Exists(ctx context.Context, dekRef uint64) (bool, err
 	return true, nil
 }
 
-// newViolationEmitter wraps the host's audit Publisher to publish
+// newViolationEmitter constructs a ViolationEmitter that publishes
 // `events.<game>.system.plugin_integrity_violation` events on every
 // PluginDowngradeFence INV-P7-7 refusal. The events.> prefix is required
 // by INV-E26 (Phase 5 sub-epic E §3.6) — only the EVENTS JetStream
@@ -135,8 +136,27 @@ func (l *cryptoKeysLookup) Exists(ctx context.Context, dekRef uint64) (bool, err
 // the fence already enforces a 100ms ceiling around EmitViolation, but
 // this implementation also serializes the payload into a tiny Event so
 // it never allocates beyond the violation message itself.
-func newViolationEmitter(pub eventbus.Publisher, gameID string) history.ViolationEmitter {
-	return &violationEmitter{publisher: pub, gameID: gameID}
+//
+// Takes the RAW EventBus publisher and the verb registry separately,
+// then wraps internally with a fresh RenderingPublisher. Encapsulating
+// the wrap here makes it structurally impossible for callers to pass a
+// pre-wrapped publisher chain — which would otherwise fail with
+// EMIT_RESERVED_HEADER inside RenderingPublisher.Publish (the inner RP
+// sees App-Rendering already stamped by the outer one). Pass nil
+// rawPub for the degraded "no audit publisher configured" deployment —
+// EmitViolation becomes a no-op, the fence still refuses the row.
+//
+// registry is required when rawPub is non-nil; passing nil registry
+// with non-nil rawPub panics, mirroring eventbus.NewRenderingPublisher's
+// own nil-registry contract.
+func newViolationEmitter(rawPub eventbus.Publisher, registry *core.VerbRegistry, gameID string) history.ViolationEmitter {
+	if rawPub == nil {
+		return &violationEmitter{publisher: nil, gameID: gameID}
+	}
+	return &violationEmitter{
+		publisher: eventbus.NewRenderingPublisher(rawPub, registry),
+		gameID:    gameID,
+	}
 }
 
 type violationEmitter struct {
