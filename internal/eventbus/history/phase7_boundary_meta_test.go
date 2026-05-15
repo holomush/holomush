@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
 )
@@ -187,13 +188,25 @@ func isRunnableGoTest(fd *ast.FuncDecl) bool {
 	if len(name) == 4 {
 		return false
 	}
-	if r := rune(name[4]); unicode.IsLetter(r) && unicode.IsLower(r) {
+	// Decode the full rune (not just the first byte) so non-ASCII names are
+	// classified correctly — e.g. capital epsilon TestΕxample's leading
+	// byte 0xCE looks like a non-letter under rune(name[4]) but the actual
+	// rune Ε is uppercase and Go would happily run that test.
+	r, _ := utf8.DecodeRuneInString(name[4:])
+	if unicode.IsLetter(r) && unicode.IsLower(r) {
 		return false
 	}
 	if fd.Type.Params == nil || len(fd.Type.Params.List) != 1 {
 		return false
 	}
 	param := fd.Type.Params.List[0]
+	// AST groups same-typed params into one Field with multiple Names —
+	// e.g. `func TestFoo(t, u *testing.T)` is one Field with len(Names)==2.
+	// Go test discovery requires exactly one parameter total; reject the
+	// multi-name field even though its Type matches.
+	if len(param.Names) > 1 {
+		return false
+	}
 	star, ok := param.Type.(*ast.StarExpr)
 	if !ok {
 		return false
