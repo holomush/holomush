@@ -369,6 +369,12 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	// (DependsOn enforces plugin Start before gRPC Start).
 	alwaysSensitive := buildAlwaysSensitiveSet(pluginManager)
 	cryptoKeysLookupForFence := newCryptoKeysLookup(pool)
+	// Wrap a FRESH RenderingPublisher over the raw EventBus publisher for
+	// the violation emitter. We cannot reuse the subsystem's primary
+	// `publisher` (set in Start via wrapPublisher) because it is already a
+	// RenderingPublisher — feeding it back through another stamping pass
+	// would fail with EMIT_RESERVED_HEADER inside RenderingPublisher.Publish.
+	// See the newViolationEmitter doc comment for the full contract.
 	violationEmitterForFence := newViolationEmitter(
 		eventbus.NewRenderingPublisher(s.cfg.EventBus.Publisher(), s.cfg.VerbRegistry),
 		s.cfg.EventBus.GameID(),

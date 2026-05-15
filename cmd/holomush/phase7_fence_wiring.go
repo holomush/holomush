@@ -135,6 +135,18 @@ func (l *cryptoKeysLookup) Exists(ctx context.Context, dekRef uint64) (bool, err
 // the fence already enforces a 100ms ceiling around EmitViolation, but
 // this implementation also serializes the payload into a tiny Event so
 // it never allocates beyond the violation message itself.
+//
+// Publisher contract: pub MUST be a publisher chain that does NOT yet
+// stamp App-Rendering — typically a freshly-wrapped RenderingPublisher
+// over the raw EventBus publisher. Passing a chain that already stamped
+// App-Rendering fails with EMIT_RESERVED_HEADER inside
+// RenderingPublisher.Publish. In particular, the gRPC subsystem's
+// primary `publisher` (the one returned by grpcSubsystem.wrapPublisher)
+// is already wrapped and MUST NOT be passed here; the production wiring
+// in grpcSubsystem.Start constructs a dedicated wrapper for this emitter
+// instead. Pass nil for the degraded "no audit publisher configured"
+// deployment — EmitViolation becomes a no-op, the fence still refuses
+// the row.
 func newViolationEmitter(pub eventbus.Publisher, gameID string) history.ViolationEmitter {
 	return &violationEmitter{publisher: pub, gameID: gameID}
 }
