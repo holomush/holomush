@@ -344,6 +344,100 @@ func TestFenceRefusesAbsentDekRefForNonIdentityCodec(t *testing.T) {
 		"INV-P7-15 absent-dek_ref MUST report DEKMissing (Rekey-destroyed lookalike), NOT DowngradeRefused")
 }
 
+// TestFenceRefusalClearsEmbeddedAuditRowPayload — master spec INV-26
+// (refused row payload empty). Pre-1r0v.9, refuseEvent nilled the
+// outer Event.Payload but left the embedded *pluginauditpb.AuditRow
+// intact — the value-copied refused.auditRow still pointed at the
+// original row, which retained the plugin-supplied cleartext bytes.
+//
+// A future feature that surfaces auditRow metadata (e.g. operator-read
+// classifier extending its inspection to plugin rows) would silently
+// re-leak the cleartext. eventbus.Event.Refused now strips both the
+// outer Payload AND the embedded auditRow.Payload; this test gates
+// that contract end-to-end through the fence.
+func TestFenceRefusalClearsEmbeddedAuditRowPayload(t *testing.T) {
+	t.Parallel()
+
+	row := &pluginauditpb.AuditRow{
+		Id:      []byte("0123456789ABCDEF"),
+		Subject: "events.test.scene.01ABC.ic",
+		Type:    "test-plugin:secret",
+		Codec:   "identity",
+		Payload: []byte("malicious-cleartext-leak"),
+	}
+	stream := &fakeFenceStream{events: []eventbus.Event{stampedEvent(row)}}
+	fence := history.NewPluginDowngradeFence(
+		&fakeRouter{stream: stream},
+		history.WithAlwaysSensitiveTypes(sensitiveSet("test-plugin:secret")),
+		history.WithCryptoKeysLookup(&stubLookupAlwaysFound{}),
+		history.WithViolationEmitter(&recordingEmitter{}),
+	)
+
+	out, err := fence.QueryHistory(context.Background(), "test-plugin", eventbus.HistoryQuery{
+		Subject: "events.test.scene.01ABC.ic",
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = out.Close() })
+
+	ev, err := out.Next(context.Background())
+	require.NoError(t, err)
+	require.True(t, ev.MetadataOnly, "test precondition: row MUST have been refused")
+	require.Nil(t, ev.Payload, "outer Event.Payload MUST be nil on refusal")
+
+	embedded := eventbus.AuditRowOf(ev)
+	require.NotNil(t, embedded, "embedded auditRow MUST survive refusal (diagnostic metadata preserved)")
+	assert.Empty(t, embedded.GetPayload(),
+		"INV-26: refused row MUST NOT carry cleartext anywhere — embedded auditRow.Payload MUST be empty")
+	// Diagnostic metadata (codec) is intentionally preserved so an
+	// operator-read classifier can still see WHY the row was refused.
+	assert.Equal(t, "identity", embedded.GetCodec(),
+		"diagnostic metadata (codec) MUST survive refusal — only Payload is stripped")
+}
+
+// TestFenceFailsClosedWithNilCryptoKeysLookup — INV-P7-15 fail-closed
+// guard. Production wiring (E.3) always supplies a non-nil lookup, but
+// a future change to the default ("nil → refuse" to "nil → pass") would
+// silently weaken the fence. A non-identity codec + dek_ref-present row
+// fed through a fence built WITHOUT WithCryptoKeysLookup MUST be
+// refused with NoPlaintextReasonInternal (the configuration-failure
+// reason — distinct from DEKMissing, which is the legitimate
+// Rekey-destroyed case).
+func TestFenceFailsClosedWithNilCryptoKeysLookup(t *testing.T) {
+	t.Parallel()
+
+	dr := uint64(42)
+	dv := uint32(1)
+	row := &pluginauditpb.AuditRow{
+		Id:         []byte("0123456789ABCDEF"),
+		Subject:    "events.test.scene.01ABC.ic",
+		Type:       "test-plugin:secret",
+		Codec:      "xchacha20poly1305-v1",
+		Payload:    []byte("ciphertext"),
+		DekRef:     &dr,
+		DekVersion: &dv,
+	}
+	stream := &fakeFenceStream{events: []eventbus.Event{stampedEvent(row)}}
+	fence := history.NewPluginDowngradeFence(
+		&fakeRouter{stream: stream},
+		history.WithAlwaysSensitiveTypes(sensitiveSet("test-plugin:secret")),
+		// WithCryptoKeysLookup intentionally omitted — exercises
+		// the fail-closed branch at plugin_downgrade_fence.go.
+		history.WithViolationEmitter(&recordingEmitter{}),
+	)
+
+	out, err := fence.QueryHistory(context.Background(), "test-plugin", eventbus.HistoryQuery{
+		Subject: "events.test.scene.01ABC.ic",
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = out.Close() })
+
+	ev, err := out.Next(context.Background())
+	require.NoError(t, err, "nil-lookup fail-closed MUST be per-row refusal, not stream-fatal")
+	assert.True(t, ev.MetadataOnly)
+	assert.Equal(t, eventbus.NoPlaintextReasonInternal, ev.NoPlaintextReason,
+		"nil cryptoKeysLookup is a configuration failure — MUST report Internal, NOT DEKMissing or DowngradeRefused")
+}
+
 // TestFenceForwardsCryptoKeysLookupError — INV-P7-15 error path. A
 // non-nil error from the crypto_keys lookup is infrastructure failure,
 // stream-fatal — distinguishes "DEK doesn't exist" (per-row refusal)

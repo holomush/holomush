@@ -38,6 +38,49 @@ func AuditRowOf(ev Event) *pluginauditpb.AuditRow {
 // Plugin-runtime symmetry: Lua and binary plugins that surface rows
 // via the same router both flow through here, so the field is stamped
 // uniformly regardless of plugin runtime.
+//
+// Unique-pointer contract: callers MUST pass a row pointer that is
+// uniquely owned by ev. Sharing a single *pluginauditpb.AuditRow
+// across multiple events causes Event.Refused to mutate all aliases
+// (the method nils auditRow.Payload through the shared pointer); the
+// production router satisfies this by allocating a fresh row per
+// gRPC Recv.
 func StampAuditRow(ev *Event, row *pluginauditpb.AuditRow) {
 	ev.auditRow = row
+}
+
+// Refused returns a metadata-only value-copy of e with the supplied
+// NoPlaintextReason stamped. Payload is cleared and — critically —
+// the embedded auditRow's Payload is also nilled so a future reader
+// of the row metadata via the proto field (e.g. an operator-read
+// classifier extending its inspection to plugin rows) cannot recover
+// the original cleartext. Diagnostic metadata (codec, dek_ref,
+// dek_version, etc.) is preserved on the auditRow.
+//
+// Aliasing note: the auditRow pointer is copied verbatim into the
+// returned value-copy, so nilling auditRow.Payload also strips the
+// proto field on the original e.auditRow. This is intentional given
+// the StampAuditRow unique-pointer contract — the row was freshly
+// allocated for this Event by the router, so no other Event aliases
+// it. Master spec INV-26 (refused row payload empty).
+//
+// Slice-header semantics: nilling Payload drops the slice header but
+// does not zero the underlying byte array. Concurrent readers that
+// captured a slice copy BEFORE the refusal still see the bytes; this
+// is acceptable because INV-26 governs proto-field reachability, not
+// GC-bounded in-memory residue.
+//
+// This method lives in package eventbus because auditRow is unexported;
+// callers in sibling packages (e.g. history.PluginDowngradeFence) MUST
+// use this single canonical "refuse" semantic rather than rolling their
+// own — keeps the invariant local to the field's owning package.
+func (e Event) Refused(reason NoPlaintextReason) Event {
+	refused := e
+	refused.MetadataOnly = true
+	refused.NoPlaintextReason = reason
+	refused.Payload = nil
+	if refused.auditRow != nil {
+		refused.auditRow.Payload = nil
+	}
+	return refused
 }
