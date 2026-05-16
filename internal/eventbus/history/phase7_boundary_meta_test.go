@@ -66,7 +66,14 @@ func TestPhase7InvariantsHaveNamedTests(t *testing.T) {
 		// INV-P7-12 shares its named test with INV-P7-6 (one round-trip
 		// covers both cleartext-vs-ciphertext invariants).
 		{"INV-P7-12", "TestSceneLogPreservesCiphertextAndAuditHeaders"},
-		{"INV-P7-13", "TestPluginRoleCannotWriteHostTables"},
+		// INV-P7-13 was carried by func TestPluginRoleCannotWriteHostTables
+		// until the 1hq.26 testify+ginkgo migration converted the spec to a
+		// Ginkgo Describe registered under the suite entry TestBinaryPlugin
+		// (see test/integration/plugin/plugin_role_permissions_test.go).
+		// The meta-test maps to the suite entry — the spec name "Plugin role
+		// cannot write host tables (INV-P7-13)" remains greppable inside
+		// that file for invariant traceability.
+		{"INV-P7-13", "TestBinaryPlugin"},
 		{"INV-P7-15", "TestFenceRefusesUnknownDekRef"},
 		{"INV-P7-16", "TestRoundTripProducesByteEqualAAD"},
 	}
