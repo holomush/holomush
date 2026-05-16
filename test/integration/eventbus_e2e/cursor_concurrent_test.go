@@ -17,7 +17,6 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	"github.com/holomush/holomush/internal/eventbus"
-	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 )
 
 // Cursor concurrent pagination specs reproduce the exact scenario the
@@ -93,8 +92,8 @@ var _ = Describe("Cursor pagination under concurrent publishers with drifted ULI
 
 	Context("backward direction (newest → oldest)", func() {
 		It("returns exactly totalEvents in strictly decreasing seq order with no duplicates", func() {
-			bus := eventbustest.New(suiteT)
-			pool := freshPool(suiteT)
+			bus := freshBus()
+			pool := freshPool()
 
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			DeferCleanup(cancel)
@@ -162,8 +161,8 @@ var _ = Describe("Cursor pagination under concurrent publishers with drifted ULI
 
 	Context("forward direction (oldest → newest)", func() {
 		It("returns exactly totalEvents in strictly increasing seq order with no duplicates", func() {
-			bus := eventbustest.New(suiteT)
-			pool := freshPool(suiteT)
+			bus := freshBus()
+			pool := freshPool()
 
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			DeferCleanup(cancel)

@@ -59,19 +59,40 @@ func TestPhase7InvariantsHaveNamedTests(t *testing.T) {
 		{"INV-P7-3", "TestBinaryPlugin"},
 		{"INV-P7-4", "TestAuditRowStructMirrorsProto"},
 		{"INV-P7-5", "TestAuditRowRoundTripPreservesAllFields"},
-		{"INV-P7-6", "TestSceneLogPreservesCiphertextAndAuditHeaders"},
+		// INV-P7-6 was carried by func TestSceneLogPreservesCiphertextAndAuditHeaders
+		// until the holomush-cz4s testify+ginkgo migration converted the spec to a
+		// Ginkgo Describe registered under the suite entry TestEventbusE2E (see
+		// test/integration/eventbus_e2e/plugin_audit_round_trip_test.go). The spec
+		// name "Scene log preserves ciphertext and audit headers (INV-P7-6, INV-P7-12)"
+		// remains greppable inside that file for invariant traceability.
+		{"INV-P7-6", "TestEventbusE2E"},
 		{"INV-P7-7", "TestFenceRefusesIdentityForAlwaysSensitiveType"},
 		// INV-P7-7b — per-row, NOT stream-fatal (the corrected v3 design).
 		{"INV-P7-7b", "TestFenceContinuesStreamAfterRefusal"},
 		{"INV-P7-8", "TestFenceSetBuiltOnceAtBoot"},
 		// INV-P7-C0 — Phase C.0 substrate (auditRow stamp + accessor).
 		{"INV-P7-C0", "TestAuditRowOfStampedByRouter"},
-		{"INV-P7-9", "TestDispatcherAndHotTierShareSelector"},
-		{"INV-P7-10", "TestDowngradeAttackerMaliciousPathRefuses"},
+		// INV-P7-9 was carried by func TestDispatcherAndHotTierShareSelector until
+		// the holomush-cz4s testify+ginkgo migration converted the spec to a Ginkgo
+		// Describe registered under the suite entry TestEventbusE2E (see
+		// test/integration/eventbus_e2e/dispatcher_selector_identity_test.go). The
+		// spec name "Dispatcher and hot tier share selector (INV-P7-9)" remains
+		// greppable inside that file for invariant traceability.
+		{"INV-P7-9", "TestEventbusE2E"},
+		// INV-P7-10 was carried by func TestDowngradeAttackerMaliciousPathRefuses until
+		// the holomush-cz4s testify+ginkgo migration converted the spec to a Ginkgo
+		// Describe registered under the suite entry TestEventbusE2E (see
+		// test/integration/eventbus_e2e/plugin_downgrade_attacker_test.go). The spec
+		// name "Downgrade attacker malicious path refuses (INV-P7-10)" remains
+		// greppable inside that file for invariant traceability.
+		{"INV-P7-10", "TestEventbusE2E"},
 		{"INV-P7-11", "TestDispatchDoesNotDecryptBeforeForward"},
-		// INV-P7-12 shares its named test with INV-P7-6 (one round-trip
-		// covers both cleartext-vs-ciphertext invariants).
-		{"INV-P7-12", "TestSceneLogPreservesCiphertextAndAuditHeaders"},
+		// INV-P7-12 shares its named Ginkgo spec with INV-P7-6 (one round-trip
+		// covers both cleartext-vs-ciphertext invariants). Was carried by func
+		// TestSceneLogPreservesCiphertextAndAuditHeaders until the holomush-cz4s
+		// testify+ginkgo migration; now registered under TestEventbusE2E (see
+		// test/integration/eventbus_e2e/plugin_audit_round_trip_test.go).
+		{"INV-P7-12", "TestEventbusE2E"},
 		// INV-P7-13 was carried by func TestPluginRoleCannotWriteHostTables
 		// until the 1hq.26 testify+ginkgo migration converted the spec to a
 		// Ginkgo Describe registered under the suite entry TestBinaryPlugin

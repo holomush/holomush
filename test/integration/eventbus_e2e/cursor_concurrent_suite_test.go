@@ -15,17 +15,15 @@ import (
 // suiteT captures the testing.T from the Ginkgo bootstrap so spec bodies can
 // invoke local helpers (freshPool, drainStream, currentStreamLastSeq,
 // buildReader) which take *testing.T. Mirrors the world_suite_test.go pattern.
-//
-// Other test files in this package use plain testing.T directly; they don't
-// run through the Ginkgo entry point and ignore suiteT. Filed as
-// holomush-suos.2 to convert the rest of the directory.
 var suiteT *testing.T
 
-// TestCursorConcurrentSpecs is the Ginkgo entry point for the
-// cursor_concurrent_test.go specs. Other Test* functions in this package
-// run independently of this entry point.
-func TestCursorConcurrentSpecs(t *testing.T) {
+// TestEventbusE2E is the Ginkgo entry point for the entire eventbus_e2e
+// package. Renamed from TestCursorConcurrentSpecs when holomush-cz4s
+// landed the rest of the directory's conversions; the variable suiteT
+// (set on line below) is still required by cursor_concurrent_test.go's
+// helpers which take *testing.T.
+func TestEventbusE2E(t *testing.T) {
 	suiteT = t
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Cursor Concurrent Pagination Specs")
+	RunSpecs(t, "EventbusE2E Suite")
 }
