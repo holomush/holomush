@@ -50,7 +50,13 @@ func TestPhase7InvariantsHaveNamedTests(t *testing.T) {
 		testName string
 	}{
 		{"INV-P7-1", "TestDispatchForwardsCiphertextByteEqual"},
-		{"INV-P7-3", "TestSceneLogHasDekColumns"},
+		// INV-P7-3 was carried by func TestSceneLogHasDekColumns until the
+		// 1hq.26 testify+ginkgo migration converted the spec to a Ginkgo
+		// Describe registered under the suite entry TestBinaryPlugin (see
+		// test/integration/plugin/plugin_migration_test.go). The spec name
+		// "Scene log has DEK columns (INV-P7-3)" remains greppable inside
+		// that file for invariant traceability.
+		{"INV-P7-3", "TestBinaryPlugin"},
 		{"INV-P7-4", "TestAuditRowStructMirrorsProto"},
 		{"INV-P7-5", "TestAuditRowRoundTripPreservesAllFields"},
 		{"INV-P7-6", "TestSceneLogPreservesCiphertextAndAuditHeaders"},
