@@ -7,74 +7,42 @@ package totp_test
 
 import (
 	"context"
-	"os"
 	"sync"
-	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
-	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/totp"
 	"github.com/holomush/holomush/pkg/errutil"
 	"github.com/holomush/holomush/test/testutil"
 )
 
-// testPool is the shared database pool for integration tests.
-var testPool *pgxpool.Pool
-
-// TestMain sets up a PostgreSQL testcontainer for integration tests.
-func TestMain(m *testing.M) {
-	ctx := context.Background()
-
-	pgEnv, err := testutil.StartPostgres(ctx)
-	if err != nil {
-		panic("failed to start postgres container: " + err.Error())
-	}
-
-	migrator, err := store.NewMigrator(pgEnv.ConnStr)
-	if err != nil {
-		_ = pgEnv.Terminate(ctx)
-		panic("failed to create migrator: " + err.Error())
-	}
-	if err := migrator.Up(); err != nil {
-		_ = migrator.Close()
-		_ = pgEnv.Terminate(ctx)
-		panic("failed to run migrations: " + err.Error())
-	}
-	_ = migrator.Close()
-
-	pool, err := pgxpool.New(ctx, pgEnv.ConnStr)
-	if err != nil {
-		_ = pgEnv.Terminate(ctx)
-		panic("failed to create pool: " + err.Error())
-	}
-
-	testPool = pool
-
-	code := m.Run()
-
-	pool.Close()
-	_ = pgEnv.Terminate(ctx)
-
-	os.Exit(code)
+// newTOTPPool opens a pgxpool against a fresh migrated test database.
+// Each spec gets its own isolated database.
+func newTOTPPool() *pgxpool.Pool {
+	GinkgoHelper()
+	connStr := testutil.FreshDatabase(suiteT, sharedPG)
+	pool, err := pgxpool.New(context.Background(), connStr)
+	Expect(err).NotTo(HaveOccurred())
+	DeferCleanup(pool.Close)
+	return pool
 }
 
-// insertPlayer inserts a minimal player row for use as a foreign-key anchor.
-func insertPlayer(t *testing.T, pool *pgxpool.Pool, id, username string) {
-	t.Helper()
+// insertTOTPPlayer inserts a minimal player row for use as a foreign-key anchor.
+func insertTOTPPlayer(pool *pgxpool.Pool, id, username string) {
+	GinkgoHelper()
 	ctx := context.Background()
 	_, err := pool.Exec(
 		ctx,
 		`INSERT INTO players (id, username, password_hash) VALUES ($1, $2, $3)`,
 		id, username, "hash-placeholder",
 	)
-	require.NoError(t, err, "insertPlayer")
-	t.Cleanup(func() {
-		_, _ = pool.Exec(ctx, `DELETE FROM players WHERE id = $1`, id)
+	Expect(err).NotTo(HaveOccurred(), "insertTOTPPlayer")
+	DeferCleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM players WHERE id = $1`, id)
 	})
 }
 
@@ -87,315 +55,325 @@ func (fakeHasher) Verify(rawCode, encodedHash string) (bool, error) {
 	return rawCode == encodedHash, nil
 }
 
-// --- INV-A2: concurrent BootstrapClaim atomicity ---
+var _ = Describe("TOTPRepository", func() {
+	Describe("BootstrapClaim concurrent atomicity (INV-A2)", func() {
+		It("exactly one goroutine wins when N goroutines race to claim the same bootstrap key", func() {
+			pool := newTOTPPool()
+			repo := totp.NewRepository(pool)
+			ctx := context.Background()
 
-// TestRepoBootstrapClaimConcurrentExactlyOneSucceeds verifies INV-A2: when N
-// goroutines race to claim the same bootstrap key, exactly one succeeds.
-func TestRepoBootstrapClaimConcurrentExactlyOneSucceeds(t *testing.T) {
-	repo := totp.NewRepository(testPool)
-	ctx := context.Background()
-
-	const N = 8
-	players := make([]string, N)
-	for i := range players {
-		players[i] = ulid.Make().String()
-		insertPlayer(t, testPool, players[i], "u"+players[i])
-	}
-
-	now := time.Now().UTC()
-	key := "totp_v1_concurrent_" + ulid.Make().String() // unique per test run
-	var (
-		wg        sync.WaitGroup
-		successes int
-		mu        sync.Mutex
-	)
-	wg.Add(N)
-	for i := 0; i < N; i++ {
-		pid := players[i]
-		go func() {
-			defer wg.Done()
-			ok, err := repo.BootstrapClaim(ctx, key, pid, now)
-			// Don't use require.NoError here — t.FailNow must be called only
-			// from the goroutine running the test; mark + return instead.
-			if err != nil {
-				mu.Lock()
-				t.Errorf("BootstrapClaim returned error: %v", err)
-				mu.Unlock()
-				return
+			const N = 8
+			players := make([]string, N)
+			for i := range players {
+				players[i] = ulid.Make().String()
+				insertTOTPPlayer(pool, players[i], "u"+players[i])
 			}
-			if ok {
-				mu.Lock()
-				successes++
-				mu.Unlock()
+
+			now := time.Now().UTC()
+			key := "totp_v1_concurrent_" + ulid.Make().String() // unique per test run
+			var (
+				wg        sync.WaitGroup
+				successes int
+				errs      []error
+				mu        sync.Mutex
+			)
+			wg.Add(N)
+			for i := 0; i < N; i++ {
+				pid := players[i]
+				go func() {
+					defer wg.Done()
+					ok, err := repo.BootstrapClaim(ctx, key, pid, now)
+					mu.Lock()
+					defer mu.Unlock()
+					if err != nil {
+						errs = append(errs, err)
+						return
+					}
+					if ok {
+						successes++
+					}
+				}()
 			}
-		}()
-	}
-	wg.Wait()
-	assert.Equal(t, 1, successes, "exactly one BootstrapClaim must win (INV-A2)")
-}
-
-// --- BootstrapEnrollAtomic rollback ---
-
-// TestRepoBootstrapEnrollAtomicRollsBackOnInsertError verifies that when
-// InsertEnrollment fails (duplicate player_id), the BootstrapClaim row is
-// also rolled back, leaving the key available for re-claim.
-func TestRepoBootstrapEnrollAtomicRollsBackOnInsertError(t *testing.T) {
-	repo := totp.NewRepository(testPool)
-	ctx := context.Background()
-
-	pid := ulid.Make().String()
-	insertPlayer(t, testPool, pid, "uatm"+pid)
-
-	now := time.Now().UTC()
-	key := "totp_atomic_rollback_" + ulid.Make().String()
-
-	rec := totp.EnrollmentRecord{
-		PlayerID:      pid,
-		WrappedSecret: []byte("secret"),
-		WrapKeyID:     "wk1",
-		EnrolledAt:    now,
-		RecoveryCodes: []totp.HashedRecoveryCode{
-			{ID: ulid.Make(), CodeHash: "code1", CreatedAt: now},
-		},
-	}
-
-	// First call succeeds.
-	err := repo.BootstrapEnrollAtomic(ctx, key, pid, rec)
-	require.NoError(t, err, "first BootstrapEnrollAtomic should succeed")
-
-	// Second call with same key must fail with TOTP_BOOTSTRAP_CONSUMED.
-	err = repo.BootstrapEnrollAtomic(ctx, key, pid, rec)
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "TOTP_BOOTSTRAP_CONSUMED")
-}
-
-// --- PlayerExists ---
-
-// TestRepoPlayerExistsReturnsTrueForExistingPlayer verifies the happy path.
-func TestRepoPlayerExistsReturnsTrueForExistingPlayer(t *testing.T) {
-	repo := totp.NewRepository(testPool)
-	ctx := context.Background()
-
-	pid := ulid.Make().String()
-	insertPlayer(t, testPool, pid, "upex"+pid)
-
-	exists, err := repo.PlayerExists(ctx, pid)
-	require.NoError(t, err)
-	assert.True(t, exists)
-}
-
-// TestRepoPlayerExistsReturnsFalseForMissingPlayer verifies the not-found path.
-func TestRepoPlayerExistsReturnsFalseForMissingPlayer(t *testing.T) {
-	repo := totp.NewRepository(testPool)
-	ctx := context.Background()
-
-	exists, err := repo.PlayerExists(ctx, ulid.Make().String())
-	require.NoError(t, err)
-	assert.False(t, exists)
-}
-
-// --- PlayerIDFromUsername ---
-
-// TestRepoPlayerIDFromUsernameReturnsIDForKnownUsername verifies the happy path.
-func TestRepoPlayerIDFromUsernameReturnsIDForKnownUsername(t *testing.T) {
-	repo := totp.NewRepository(testPool)
-	ctx := context.Background()
-
-	pid := ulid.Make().String()
-	username := "uname_" + pid[:6]
-	insertPlayer(t, testPool, pid, username)
-
-	got, err := repo.PlayerIDFromUsername(ctx, username)
-	require.NoError(t, err)
-	assert.Equal(t, pid, got)
-}
-
-// TestRepoPlayerIDFromUsernameReturnsErrorForUnknownUsername verifies error on miss.
-func TestRepoPlayerIDFromUsernameReturnsErrorForUnknownUsername(t *testing.T) {
-	repo := totp.NewRepository(testPool)
-	ctx := context.Background()
-
-	_, err := repo.PlayerIDFromUsername(ctx, "no_such_user_ever")
-	require.Error(t, err)
-}
-
-// --- InsertEnrollment round-trip ---
-
-// TestRepoInsertEnrollmentRoundTrip verifies that an enrollment written by
-// InsertEnrollment is subsequently readable via IsEnrolled and LoadEnrollment.
-func TestRepoInsertEnrollmentRoundTrip(t *testing.T) {
-	repo := totp.NewRepository(testPool)
-	ctx := context.Background()
-
-	pid := ulid.Make().String()
-	insertPlayer(t, testPool, pid, "uins"+pid)
-
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	rec := totp.EnrollmentRecord{
-		PlayerID:      pid,
-		WrappedSecret: []byte("mysecret"),
-		WrapKeyID:     "wk-test",
-		EnrolledAt:    now,
-		RecoveryCodes: []totp.HashedRecoveryCode{
-			{ID: ulid.Make(), CodeHash: "h1", CreatedAt: now},
-			{ID: ulid.Make(), CodeHash: "h2", CreatedAt: now},
-		},
-	}
-	err := repo.InsertEnrollment(ctx, rec)
-	require.NoError(t, err)
-
-	enrolled, err := repo.IsEnrolled(ctx, pid)
-	require.NoError(t, err)
-	assert.True(t, enrolled)
-
-	// LoadEnrollment requires a transaction (FOR UPDATE).
-	var state totp.VerifyState
-	txErr := repo.InTransaction(ctx, func(txCtx context.Context) error {
-		var e error
-		state, e = repo.LoadEnrollment(txCtx, pid)
-		return e
+			wg.Wait()
+			Expect(errs).To(BeEmpty(), "BootstrapClaim goroutines returned errors")
+			Expect(successes).To(Equal(1), "exactly one BootstrapClaim must win (INV-A2)")
+		})
 	})
-	require.NoError(t, txErr)
-	assert.Equal(t, pid, state.PlayerID)
-	assert.Equal(t, []byte("mysecret"), state.WrappedSecret)
-	assert.Equal(t, "wk-test", state.WrapKeyID)
-	assert.Equal(t, 0, state.FailedAttempts)
-	assert.Nil(t, state.LockedUntil)
-}
 
-// --- LoadEnrollment ErrNotEnrolled ---
+	Describe("BootstrapEnrollAtomic rollback", func() {
+		It("rolls back BootstrapClaim when InsertEnrollment fails with duplicate player_id", func() {
+			pool := newTOTPPool()
+			repo := totp.NewRepository(pool)
+			ctx := context.Background()
 
-// TestRepoLoadEnrollmentReturnsErrNotEnrolled verifies that LoadEnrollment
-// returns ErrNotEnrolled when no enrollment exists for the player.
-func TestRepoLoadEnrollmentReturnsErrNotEnrolled(t *testing.T) {
-	repo := totp.NewRepository(testPool)
-	ctx := context.Background()
+			pid := ulid.Make().String()
+			insertTOTPPlayer(pool, pid, "uatm"+pid)
 
-	pid := ulid.Make().String()
-	insertPlayer(t, testPool, pid, "ulen"+pid)
+			now := time.Now().UTC()
+			key := "totp_atomic_rollback_" + ulid.Make().String()
 
-	txErr := repo.InTransaction(ctx, func(txCtx context.Context) error {
-		_, err := repo.LoadEnrollment(txCtx, pid)
-		return err
+			rec := totp.EnrollmentRecord{
+				PlayerID:      pid,
+				WrappedSecret: []byte("secret"),
+				WrapKeyID:     "wk1",
+				EnrolledAt:    now,
+				RecoveryCodes: []totp.HashedRecoveryCode{
+					{ID: ulid.Make(), CodeHash: "code1", CreatedAt: now},
+				},
+			}
+
+			// Pre-enroll so that BootstrapEnrollAtomic's InsertEnrollment
+			// step fails on duplicate player_id (PK violation on
+			// totp_enrollments.player_id). This forces the rollback path.
+			Expect(repo.InsertEnrollment(ctx, rec)).NotTo(HaveOccurred(),
+				"setup: pre-enrolling player_id should succeed")
+
+			// BootstrapEnrollAtomic must fail during the InsertEnrollment
+			// step (duplicate PK on player_totp.player_id, wrapped in
+			// TOTP_REPO_INSERT_TOTP at repo.go:168) and roll back the
+			// BootstrapClaim it just inserted in the same transaction.
+			err := repo.BootstrapEnrollAtomic(ctx, key, pid, rec)
+			Expect(err).To(HaveOccurred(),
+				"BootstrapEnrollAtomic must fail when InsertEnrollment hits duplicate player_id")
+			errutil.AssertErrorCode(suiteT, err, "TOTP_REPO_INSERT_TOTP")
+
+			// Rollback assertion: the bootstrap claim was NOT persisted,
+			// so a different player can still successfully claim the same
+			// key. If the rollback were broken, the claim row would
+			// survive and this call would return TOTP_BOOTSTRAP_CONSUMED.
+			otherPID := ulid.Make().String()
+			insertTOTPPlayer(pool, otherPID, "uatm_other_"+otherPID)
+			ok, claimErr := repo.BootstrapClaim(ctx, key, otherPID, now)
+			Expect(claimErr).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue(),
+				"BootstrapClaim should still win for a different player after the prior atomic call rolled back")
+		})
 	})
-	errutil.AssertErrorCode(t, txErr, "TOTP_NOT_ENROLLED")
-}
 
-// --- MarkVerified ---
+	Describe("PlayerExists", func() {
+		It("returns true for an existing player", func() {
+			pool := newTOTPPool()
+			repo := totp.NewRepository(pool)
+			ctx := context.Background()
 
-// TestRepoMarkVerifiedResetsLockoutFields verifies that MarkVerified zeroes
-// failed_attempts, clears locked_until, and sets last_used_step.
-func TestRepoMarkVerifiedResetsLockoutFields(t *testing.T) {
-	repo := totp.NewRepository(testPool)
-	ctx := context.Background()
+			pid := ulid.Make().String()
+			insertTOTPPlayer(pool, pid, "upex"+pid)
 
-	pid := ulid.Make().String()
-	insertPlayer(t, testPool, pid, "umv"+pid)
+			exists, err := repo.PlayerExists(ctx, pid)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exists).To(BeTrue())
+		})
 
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	rec := totp.EnrollmentRecord{
-		PlayerID:      pid,
-		WrappedSecret: []byte("s"),
-		WrapKeyID:     "k",
-		EnrolledAt:    now,
-	}
-	require.NoError(t, repo.InsertEnrollment(ctx, rec))
+		It("returns false for a missing player", func() {
+			pool := newTOTPPool()
+			repo := totp.NewRepository(pool)
+			ctx := context.Background()
 
-	// Artificially set failed_attempts and locked_until.
-	_, err := testPool.Exec(
-		ctx,
-		`UPDATE player_totp SET failed_attempts = 5, locked_until = $1 WHERE player_id = $2`,
-		now.Add(15*time.Minute), pid,
-	)
-	require.NoError(t, err)
-
-	step := int64(42)
-	require.NoError(t, repo.MarkVerified(ctx, pid, step, now))
-
-	var state totp.VerifyState
-	txErr := repo.InTransaction(ctx, func(txCtx context.Context) error {
-		var e error
-		state, e = repo.LoadEnrollment(txCtx, pid)
-		return e
+			exists, err := repo.PlayerExists(ctx, ulid.Make().String())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exists).To(BeFalse())
+		})
 	})
-	require.NoError(t, txErr)
-	assert.Equal(t, 0, state.FailedAttempts)
-	assert.Nil(t, state.LockedUntil)
-	require.NotNil(t, state.LastUsedStep)
-	assert.Equal(t, step, *state.LastUsedStep)
-}
 
-// --- ConsumeRecoveryCode single-use ---
+	Describe("PlayerIDFromUsername", func() {
+		It("returns player ID for a known username", func() {
+			pool := newTOTPPool()
+			repo := totp.NewRepository(pool)
+			ctx := context.Background()
 
-// TestRepoConsumeRecoveryCodeSingleUse verifies that a recovery code can only
-// be consumed once; the second attempt returns ErrInvalidRecoveryCode.
-func TestRepoConsumeRecoveryCodeSingleUse(t *testing.T) {
-	repo := totp.NewRepository(testPool)
-	ctx := context.Background()
+			pid := ulid.Make().String()
+			username := "uname_" + pid[:6]
+			insertTOTPPlayer(pool, pid, username)
 
-	pid := ulid.Make().String()
-	insertPlayer(t, testPool, pid, "ucrc"+pid)
+			got, err := repo.PlayerIDFromUsername(ctx, username)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got).To(Equal(pid))
+		})
 
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	rawCode := "test-recovery-code"
-	codeID := ulid.Make()
-	rec := totp.EnrollmentRecord{
-		PlayerID:      pid,
-		WrappedSecret: []byte("s"),
-		WrapKeyID:     "k",
-		EnrolledAt:    now,
-		RecoveryCodes: []totp.HashedRecoveryCode{
-			// fakeHasher stores the raw value as the hash.
-			{ID: codeID, CodeHash: rawCode, CreatedAt: now},
-		},
-	}
-	require.NoError(t, repo.InsertEnrollment(ctx, rec))
+		It("returns an error for an unknown username", func() {
+			pool := newTOTPPool()
+			repo := totp.NewRepository(pool)
+			ctx := context.Background()
 
-	hasher := fakeHasher{}
+			_, err := repo.PlayerIDFromUsername(ctx, "no_such_user_ever")
+			Expect(err).To(HaveOccurred())
+			errutil.AssertErrorCode(suiteT, err, "TOTP_REPO_PLAYER_NOT_FOUND")
+		})
+	})
 
-	// First consume succeeds and returns the right ULID.
-	gotID, err := repo.ConsumeRecoveryCode(ctx, pid, rawCode, hasher, now)
-	require.NoError(t, err)
-	assert.Equal(t, codeID, gotID)
+	Describe("InsertEnrollment round-trip", func() {
+		It("enrollment written by InsertEnrollment is readable via IsEnrolled and LoadEnrollment", func() {
+			pool := newTOTPPool()
+			repo := totp.NewRepository(pool)
+			ctx := context.Background()
 
-	// Second consume on the same code must fail.
-	_, err = repo.ConsumeRecoveryCode(ctx, pid, rawCode, hasher, now)
-	errutil.AssertErrorCode(t, err, "TOTP_INVALID_RECOVERY_CODE")
-}
+			pid := ulid.Make().String()
+			insertTOTPPlayer(pool, pid, "uins"+pid)
 
-// --- ClearEnrollment ---
+			now := time.Now().UTC().Truncate(time.Microsecond)
+			rec := totp.EnrollmentRecord{
+				PlayerID:      pid,
+				WrappedSecret: []byte("mysecret"),
+				WrapKeyID:     "wk-test",
+				EnrolledAt:    now,
+				RecoveryCodes: []totp.HashedRecoveryCode{
+					{ID: ulid.Make(), CodeHash: "h1", CreatedAt: now},
+					{ID: ulid.Make(), CodeHash: "h2", CreatedAt: now},
+				},
+			}
+			err := repo.InsertEnrollment(ctx, rec)
+			Expect(err).NotTo(HaveOccurred())
 
-// TestRepoClearEnrollmentReturnsWasEnrolled verifies that ClearEnrollment
-// returns wasEnrolled=true for an enrolled player and false for a non-enrolled player.
-func TestRepoClearEnrollmentReturnsWasEnrolled(t *testing.T) {
-	repo := totp.NewRepository(testPool)
-	ctx := context.Background()
+			enrolled, err := repo.IsEnrolled(ctx, pid)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(enrolled).To(BeTrue())
 
-	// Enrolled player.
-	pid := ulid.Make().String()
-	insertPlayer(t, testPool, pid, "uclea"+pid)
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	require.NoError(t, repo.InsertEnrollment(ctx, totp.EnrollmentRecord{
-		PlayerID:      pid,
-		WrappedSecret: []byte("s"),
-		WrapKeyID:     "k",
-		EnrolledAt:    now,
-	}))
+			// LoadEnrollment requires a transaction (FOR UPDATE).
+			var state totp.VerifyState
+			txErr := repo.InTransaction(ctx, func(txCtx context.Context) error {
+				var e error
+				state, e = repo.LoadEnrollment(txCtx, pid)
+				return e
+			})
+			Expect(txErr).NotTo(HaveOccurred())
+			Expect(state.PlayerID).To(Equal(pid))
+			Expect(state.WrappedSecret).To(Equal([]byte("mysecret")))
+			Expect(state.WrapKeyID).To(Equal("wk-test"))
+			Expect(state.FailedAttempts).To(Equal(0))
+			Expect(state.LockedUntil).To(BeNil())
+		})
+	})
 
-	wasEnrolled, err := repo.ClearEnrollment(ctx, pid)
-	require.NoError(t, err)
-	assert.True(t, wasEnrolled, "ClearEnrollment should return wasEnrolled=true")
+	Describe("LoadEnrollment ErrNotEnrolled", func() {
+		It("returns TOTP_NOT_ENROLLED when no enrollment exists for the player", func() {
+			pool := newTOTPPool()
+			repo := totp.NewRepository(pool)
+			ctx := context.Background()
 
-	// Confirm enrollment is gone.
-	enrolled, err := repo.IsEnrolled(ctx, pid)
-	require.NoError(t, err)
-	assert.False(t, enrolled)
+			pid := ulid.Make().String()
+			insertTOTPPlayer(pool, pid, "ulen"+pid)
 
-	// Not-enrolled player.
-	pid2 := ulid.Make().String()
-	insertPlayer(t, testPool, pid2, "ucleb"+pid2)
+			txErr := repo.InTransaction(ctx, func(txCtx context.Context) error {
+				_, err := repo.LoadEnrollment(txCtx, pid)
+				return err
+			})
+			errutil.AssertErrorCode(suiteT, txErr, "TOTP_NOT_ENROLLED")
+		})
+	})
 
-	wasEnrolled2, err := repo.ClearEnrollment(ctx, pid2)
-	require.NoError(t, err)
-	assert.False(t, wasEnrolled2, "ClearEnrollment on non-enrolled player should return wasEnrolled=false")
-}
+	Describe("MarkVerified", func() {
+		It("zeroes failed_attempts, clears locked_until, and sets last_used_step", func() {
+			pool := newTOTPPool()
+			repo := totp.NewRepository(pool)
+			ctx := context.Background()
+
+			pid := ulid.Make().String()
+			insertTOTPPlayer(pool, pid, "umv"+pid)
+
+			now := time.Now().UTC().Truncate(time.Microsecond)
+			rec := totp.EnrollmentRecord{
+				PlayerID:      pid,
+				WrappedSecret: []byte("s"),
+				WrapKeyID:     "k",
+				EnrolledAt:    now,
+			}
+			Expect(repo.InsertEnrollment(ctx, rec)).NotTo(HaveOccurred())
+
+			// Artificially set failed_attempts and locked_until.
+			_, err := pool.Exec(
+				ctx,
+				`UPDATE player_totp SET failed_attempts = 5, locked_until = $1 WHERE player_id = $2`,
+				now.Add(15*time.Minute), pid,
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			step := int64(42)
+			Expect(repo.MarkVerified(ctx, pid, step, now)).NotTo(HaveOccurred())
+
+			var state totp.VerifyState
+			txErr := repo.InTransaction(ctx, func(txCtx context.Context) error {
+				var e error
+				state, e = repo.LoadEnrollment(txCtx, pid)
+				return e
+			})
+			Expect(txErr).NotTo(HaveOccurred())
+			Expect(state.FailedAttempts).To(Equal(0))
+			Expect(state.LockedUntil).To(BeNil())
+			Expect(state.LastUsedStep).NotTo(BeNil())
+			Expect(*state.LastUsedStep).To(Equal(step))
+		})
+	})
+
+	Describe("ConsumeRecoveryCode single-use", func() {
+		It("recovery code can only be consumed once; second attempt returns TOTP_INVALID_RECOVERY_CODE", func() {
+			pool := newTOTPPool()
+			repo := totp.NewRepository(pool)
+			ctx := context.Background()
+
+			pid := ulid.Make().String()
+			insertTOTPPlayer(pool, pid, "ucrc"+pid)
+
+			now := time.Now().UTC().Truncate(time.Microsecond)
+			rawCode := "test-recovery-code"
+			codeID := ulid.Make()
+			rec := totp.EnrollmentRecord{
+				PlayerID:      pid,
+				WrappedSecret: []byte("s"),
+				WrapKeyID:     "k",
+				EnrolledAt:    now,
+				RecoveryCodes: []totp.HashedRecoveryCode{
+					// fakeHasher stores the raw value as the hash.
+					{ID: codeID, CodeHash: rawCode, CreatedAt: now},
+				},
+			}
+			Expect(repo.InsertEnrollment(ctx, rec)).NotTo(HaveOccurred())
+
+			hasher := fakeHasher{}
+
+			// First consume succeeds and returns the right ULID.
+			gotID, err := repo.ConsumeRecoveryCode(ctx, pid, rawCode, hasher, now)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(gotID).To(Equal(codeID))
+
+			// Second consume on the same code must fail.
+			_, err = repo.ConsumeRecoveryCode(ctx, pid, rawCode, hasher, now)
+			errutil.AssertErrorCode(suiteT, err, "TOTP_INVALID_RECOVERY_CODE")
+		})
+	})
+
+	Describe("ClearEnrollment", func() {
+		It("returns wasEnrolled=true for enrolled player and false for non-enrolled player", func() {
+			pool := newTOTPPool()
+			repo := totp.NewRepository(pool)
+			ctx := context.Background()
+
+			// Enrolled player.
+			pid := ulid.Make().String()
+			insertTOTPPlayer(pool, pid, "uclea"+pid)
+			now := time.Now().UTC().Truncate(time.Microsecond)
+			Expect(repo.InsertEnrollment(ctx, totp.EnrollmentRecord{
+				PlayerID:      pid,
+				WrappedSecret: []byte("s"),
+				WrapKeyID:     "k",
+				EnrolledAt:    now,
+			})).NotTo(HaveOccurred())
+
+			wasEnrolled, err := repo.ClearEnrollment(ctx, pid)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(wasEnrolled).To(BeTrue(), "ClearEnrollment should return wasEnrolled=true")
+
+			// Confirm enrollment is gone.
+			enrolled, err := repo.IsEnrolled(ctx, pid)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(enrolled).To(BeFalse())
+
+			// Not-enrolled player.
+			pid2 := ulid.Make().String()
+			insertTOTPPlayer(pool, pid2, "ucleb"+pid2)
+
+			wasEnrolled2, err := repo.ClearEnrollment(ctx, pid2)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(wasEnrolled2).To(BeFalse(), "ClearEnrollment on non-enrolled player should return wasEnrolled=false")
+		})
+	})
+})

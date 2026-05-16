@@ -9,14 +9,13 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
-	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/samber/oops"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -35,45 +34,41 @@ func newErrorSnapshotForTest(err error) *StreamStateSnapshot {
 	return s
 }
 
-// newTestPool opens a pgxpool against a fresh migrated test database and
-// registers cleanup. Each test gets its own isolated database so rows from
-// one test cannot interfere with another.
-func newTestPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	shared := testutil.SharedPostgres(t)
-	connStr := testutil.FreshDatabase(t, shared)
+// newIntegrationPool opens a pgxpool against a fresh migrated test database.
+// Each test gets its own isolated database so rows from one test cannot
+// interfere with another.
+func newIntegrationPool() *pgxpool.Pool {
+	GinkgoHelper()
+	connStr := testutil.FreshDatabase(suiteT, sharedPG)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	pool, err := pgxpool.New(ctx, connStr)
-	require.NoError(t, err)
-	t.Cleanup(pool.Close)
+	Expect(err).NotTo(HaveOccurred())
+	DeferCleanup(pool.Close)
 	return pool
 }
 
-// testULID returns a unique ULID for use in tests. The ms parameter is used
-// as the timestamp component to create ordered ULIDs; entropy comes from
+// integrationULID returns a unique ULID for use in tests. The ms parameter is
+// used as the timestamp component to create ordered ULIDs; entropy comes from
 // crypto/rand.
-func testULID(t *testing.T, ms uint64) ulid.ULID {
-	t.Helper()
+func integrationULID(ms uint64) ulid.ULID {
+	GinkgoHelper()
 	u, err := ulid.New(ms, rand.Reader)
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 	return u
 }
 
-// insertAuditRow inserts a minimal events_audit row with the given id, subject,
-// seq, and current timestamp.
-func insertAuditRow(t *testing.T, pool *pgxpool.Pool, id ulid.ULID, subject eventbus.Subject, seq uint64) {
-	t.Helper()
-	insertAuditRowAt(t, pool, id, subject, seq, time.Now().UTC())
+// insertIntegrationAuditRow inserts a minimal events_audit row with the given
+// id, subject, seq, and current timestamp.
+func insertIntegrationAuditRow(pool *pgxpool.Pool, id ulid.ULID, subject eventbus.Subject, seq uint64) {
+	GinkgoHelper()
+	insertIntegrationAuditRowAt(pool, id, subject, seq, time.Now().UTC())
 }
 
-// insertAuditRowAt inserts a minimal events_audit row with an explicit timestamp.
-//
-// The envelope column carries a marshaled eventbusv1.Event matching what
-// the audit projection would persist. Required post-Phase 3d Task 5 because
-// the cold reader unmarshals the envelope to recover Subject/Type/Actor.
-func insertAuditRowAt(t *testing.T, pool *pgxpool.Pool, id ulid.ULID, subject eventbus.Subject, seq uint64, ts time.Time) {
-	t.Helper()
+// insertIntegrationAuditRowAt inserts a minimal events_audit row with an
+// explicit timestamp.
+func insertIntegrationAuditRowAt(pool *pgxpool.Pool, id ulid.ULID, subject eventbus.Subject, seq uint64, ts time.Time) {
+	GinkgoHelper()
 	envelopeBytes, err := proto.Marshal(&eventbusv1.Event{
 		Id:        id[:],
 		Subject:   string(subject),
@@ -81,266 +76,21 @@ func insertAuditRowAt(t *testing.T, pool *pgxpool.Pool, id ulid.ULID, subject ev
 		Timestamp: timestamppb.New(ts),
 		Actor:     &eventbusv1.Actor{Kind: eventbusv1.ActorKind_ACTOR_KIND_SYSTEM},
 	})
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 	_, err = pool.Exec(context.Background(), `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
 			envelope, schema_ver, codec, js_seq, rendering
 		) VALUES ($1, $2, 'test.event', $4, 'system', NULL, $5, 1, 'identity', $3, '{}'::jsonb)
 	`, id[:], string(subject), int64(seq), ts, envelopeBytes)
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 }
 
-// TestColdReadValidatesAndDiscardsCursorEcho: forward read with a valid
-// cursor returns rows after the cursor, having validated and discarded
-// the cursor row from the result.
-func TestColdReadValidatesAndDiscardsCursorEcho(t *testing.T) {
-	pool := newTestPool(t)
-	ctx := context.Background()
-
-	subject := eventbus.Subject("events.main.location.01HXTESTLOCAAA0000000000A")
-	id1 := testULID(t, 1000001)
-	id2 := testULID(t, 1000002)
-	id3 := testULID(t, 1000003)
-
-	insertAuditRow(t, pool, id1, subject, 1)
-	insertAuditRow(t, pool, id2, subject, 2)
-	insertAuditRow(t, pool, id3, subject, 3)
-
-	tier := newPostgresColdTier(pool)
-	q := eventbus.HistoryQuery{
-		Subject:   subject,
-		AfterSeq:  1,
-		AfterID:   id1,
-		Direction: eventbus.DirectionForward,
-	}
-	out, err := tier.Read(ctx, q, time.Time{}, 10, nil)
-	require.NoError(t, err)
-	require.Len(t, out, 2, "should return events after cursor; cursor row is discarded")
-	assert.Equal(t, uint64(2), out[0].Seq)
-	assert.Equal(t, id2, out[0].ID)
-	assert.Equal(t, uint64(3), out[1].Seq)
-	assert.Equal(t, id3, out[1].ID)
-}
-
-// TestColdReadReturnsStaleOnIDMismatch: cursor seq matches a row but the id
-// does not — returns ErrCursorStale.
-func TestColdReadReturnsStaleOnIDMismatch(t *testing.T) {
-	pool := newTestPool(t)
-	ctx := context.Background()
-
-	subject := eventbus.Subject("events.main.location.01HXTESTLOCBBB0000000000B")
-	idActual := testULID(t, 2000001)
-	idCursor := testULID(t, 2000099) // different id for the same seq
-
-	insertAuditRow(t, pool, idActual, subject, 1)
-
-	tier := newPostgresColdTier(pool)
-	q := eventbus.HistoryQuery{
-		Subject:   subject,
-		AfterSeq:  1,
-		AfterID:   idCursor, // mismatched id for seq 1
-		Direction: eventbus.DirectionForward,
-	}
-	_, err := tier.Read(ctx, q, time.Time{}, 10, nil)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, eventbus.ErrCursorStale)
-}
-
-// TestColdReadReturnsStaleOnMissingCursorSeq: cursor seq does not exist in
-// events_audit — returns ErrCursorStale.
-func TestColdReadReturnsStaleOnMissingCursorSeq(t *testing.T) {
-	pool := newTestPool(t)
-	ctx := context.Background()
-
-	subject := eventbus.Subject("events.main.location.01HXTESTLOCCCC0000000000C")
-	insertAuditRow(t, pool, testULID(t, 3000001), subject, 1)
-
-	tier := newPostgresColdTier(pool)
-	q := eventbus.HistoryQuery{
-		Subject:   subject,
-		AfterSeq:  99, // seq 99 does not exist
-		AfterID:   testULID(t, 3000099),
-		Direction: eventbus.DirectionForward,
-	}
-	_, err := tier.Read(ctx, q, time.Time{}, 10, nil)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, eventbus.ErrCursorStale)
-}
-
-// TestColdReadCursorAtEdgePassesEdgeFilter: when an edge time is supplied and
-// the cursor row is AT or before the edge, the cursor echo is validated and
-// discarded; rows after the edge are excluded. The page is empty because
-// the only available post-cursor row falls after the edge timestamp.
-func TestColdReadCursorAtEdgePassesEdgeFilter(t *testing.T) {
-	pool := newTestPool(t)
-	ctx := context.Background()
-
-	subject := eventbus.Subject("events.main.location.01HXTESTLOCDDD0000000000D")
-	idAtEdge := testULID(t, 4000005)
-	idAfterEdge := testULID(t, 4000006)
-
-	now := time.Now().UTC()
-	insertAuditRowAt(t, pool, idAtEdge, subject, 5, now.Add(-1*time.Hour))
-	insertAuditRowAt(t, pool, idAfterEdge, subject, 6, now)
-
-	tier := newPostgresColdTier(pool)
-	q := eventbus.HistoryQuery{
-		Subject:   subject,
-		AfterSeq:  5,
-		AfterID:   idAtEdge,
-		Direction: eventbus.DirectionForward,
-	}
-	edge := now.Add(-30 * time.Minute)
-	out, err := tier.Read(ctx, q, edge, 10, nil)
-	require.NoError(t, err)
-	// Cursor echo is validated and discarded; idAfterEdge is filtered by edge.
-	assert.Empty(t, out)
-}
-
-// TestColdReadReturnsLagWhenCursorSeqMissingFromColdButPresentInJS uses a
-// stubbed snapshot to simulate cursor.Seq=50 being in JS (LastSeq=100) but
-// not yet projected into cold. Expect ErrCursorLag.
-func TestColdReadReturnsLagWhenCursorSeqMissingFromColdButPresentInJS(t *testing.T) {
-	pool := newTestPool(t)
-	ctx := context.Background()
-
-	subject := eventbus.Subject("events.main.location.01HXTESTLOCEEE0000000000E")
-	// Insert seq=1 only; cursor will point to seq=50 which is absent.
-	insertAuditRow(t, pool, testULID(t, 5000001), subject, 1)
-
-	tier := newPostgresColdTier(pool)
-	q := eventbus.HistoryQuery{
-		Subject:   subject,
-		AfterSeq:  50,
-		AfterID:   testULID(t, 5000050),
-		Direction: eventbus.DirectionForward,
-		PageSize:  10,
-	}
-	// Snapshot: JS contains seqs 1..100; cursor.Seq=50 is within [1,100] → LAG.
-	snap := newSnapshotForTest(1, 100)
-	_, err := tier.Read(ctx, q, time.Time{}, q.PageSize, snap)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, eventbus.ErrCursorLag,
-		"cursor seq within JS range must be LAG, not STALE")
-}
-
-// TestColdReadReturnsStaleWhenCursorSeqBeyondJS uses a stubbed snapshot where
-// cursor.Seq exceeds the snapshot's LastSeq — the seq doesn't exist anywhere,
-// so it's truly STALE.
-func TestColdReadReturnsStaleWhenCursorSeqBeyondJS(t *testing.T) {
-	pool := newTestPool(t)
-	ctx := context.Background()
-
-	subject := eventbus.Subject("events.main.location.01HXTESTLOCFFF0000000000F")
-	// Insert seq=1 only; cursor will point to seq=200 which exceeds JS.
-	insertAuditRow(t, pool, testULID(t, 6000001), subject, 1)
-
-	tier := newPostgresColdTier(pool)
-	q := eventbus.HistoryQuery{
-		Subject:   subject,
-		AfterSeq:  200,
-		AfterID:   testULID(t, 6000200),
-		Direction: eventbus.DirectionForward,
-		PageSize:  10,
-	}
-	// Snapshot: JS only has seqs 1..100; cursor.Seq=200 > lastSeq=100 → STALE.
-	snap := newSnapshotForTest(1, 100)
-	_, err := tier.Read(ctx, q, time.Time{}, q.PageSize, snap)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, eventbus.ErrCursorStale,
-		"cursor seq beyond JS range must be STALE")
-}
-
-// TestColdReadReturnsStaleWhenCursorBelowJSFirstSeq verifies that a cursor
-// whose seq is below the snapshot's firstSeq (i.e., retention has aged it
-// out of JS but it was never projected into cold) returns ErrCursorStale.
-func TestColdReadReturnsStaleWhenCursorBelowJSFirstSeq(t *testing.T) {
-	pool := newTestPool(t)
-	ctx := context.Background()
-
-	// Snapshot: JS has seq=10..100; cursor points to seq=5 which is below firstSeq.
-	subject := eventbus.Subject("events.main.location.01HXTESTLOCHHH0000000000H")
-	// No cold row for the cursor seq (absent from cold).
-	insertAuditRow(t, pool, testULID(t, 8000001), subject, 99)
-
-	tier := newPostgresColdTier(pool)
-	q := eventbus.HistoryQuery{
-		Subject:   subject,
-		AfterSeq:  5,
-		AfterID:   testULID(t, 8000005),
-		Direction: eventbus.DirectionForward,
-		PageSize:  10,
-	}
-	// Snapshot: firstSeq=10 > cursorSeq=5 → not in LAG range → STALE.
-	snap := newSnapshotForTest(10, 100)
-	_, err := tier.Read(ctx, q, time.Time{}, q.PageSize, snap)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, eventbus.ErrCursorStale,
-		"cursor seq below JS firstSeq must be STALE (retention aged it out)")
-}
-
-// TestColdReadPropagatesSnapshotError verifies that an error returned by
-// the snapshot's Get() propagates to the caller unchanged and is NOT
-// classified as ErrCursorStale or ErrCursorLag.
-func TestColdReadPropagatesSnapshotError(t *testing.T) {
-	pool := newTestPool(t)
-	ctx := context.Background()
-
-	// Insert one row so the query reaches the cursor-validation branch.
-	subject := eventbus.Subject("events.main.location.01HXTESTLOCIII0000000000I")
-	insertAuditRow(t, pool, testULID(t, 9000001), subject, 1)
-
-	tier := newPostgresColdTier(pool)
-	q := eventbus.HistoryQuery{
-		Subject:   subject,
-		AfterSeq:  50,
-		AfterID:   testULID(t, 9000050),
-		Direction: eventbus.DirectionForward,
-		PageSize:  10,
-	}
-	snapErr := oops.Code("EVENTBUS_HISTORY_STREAM_LOOKUP_FAILED").Errorf("js unreachable")
-	snap := newErrorSnapshotForTest(snapErr)
-	_, err := tier.Read(ctx, q, time.Time{}, q.PageSize, snap)
-	require.Error(t, err)
-	assert.False(t, errors.Is(err, eventbus.ErrCursorStale),
-		"snapshot error must not be classified as ErrCursorStale")
-	assert.False(t, errors.Is(err, eventbus.ErrCursorLag),
-		"snapshot error must not be classified as ErrCursorLag")
-	// The infra error propagates as-is.
-	assert.ErrorIs(t, err, snapErr)
-}
-
-// TestColdReadReturnsStaleWhenNoSnapshotAndCursorMissing verifies that without
-// a snapshot (nil), a missing cursor seq always returns ErrCursorStale
-// (can't distinguish LAG from STALE).
-func TestColdReadReturnsStaleWhenNoSnapshotAndCursorMissing(t *testing.T) {
-	pool := newTestPool(t)
-	ctx := context.Background()
-
-	subject := eventbus.Subject("events.main.location.01HXTESTLOCGGG0000000000G")
-	insertAuditRow(t, pool, testULID(t, 7000001), subject, 1)
-
-	tier := newPostgresColdTier(pool)
-	q := eventbus.HistoryQuery{
-		Subject:   subject,
-		AfterSeq:  50,
-		AfterID:   testULID(t, 7000050),
-		Direction: eventbus.DirectionForward,
-		PageSize:  10,
-	}
-	// No snapshot — falls back to STALE.
-	_, err := tier.Read(ctx, q, time.Time{}, q.PageSize, nil)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, eventbus.ErrCursorStale,
-		"without snapshot, missing cursor must be STALE")
-}
-
-// insertColdRowWithDEK inserts a minimal events_audit row with dek_ref and
-// dek_version set. Used by LookupByID tests to verify that the DEK columns
-// round-trip through the Envelope accessors.
-func insertColdRowWithDEK(t *testing.T, pool *pgxpool.Pool, id ulid.ULID, subject, evType string, dekRef int64, dekVersion int32) {
-	t.Helper()
+// insertIntegrationColdRowWithDEK inserts a minimal events_audit row with
+// dek_ref and dek_version set. Used by LookupByID tests to verify that the
+// DEK columns round-trip through the Envelope accessors.
+func insertIntegrationColdRowWithDEK(pool *pgxpool.Pool, id ulid.ULID, subject, evType string, dekRef int64, dekVersion int32) {
+	GinkgoHelper()
 	envelopeBytes, err := proto.Marshal(&eventbusv1.Event{
 		Id:        id[:],
 		Subject:   subject,
@@ -348,7 +98,7 @@ func insertColdRowWithDEK(t *testing.T, pool *pgxpool.Pool, id ulid.ULID, subjec
 		Timestamp: timestamppb.New(time.Now().UTC()),
 		Actor:     &eventbusv1.Actor{Kind: eventbusv1.ActorKind_ACTOR_KIND_SYSTEM},
 	})
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 	_, err = pool.Exec(context.Background(), `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
@@ -356,37 +106,256 @@ func insertColdRowWithDEK(t *testing.T, pool *pgxpool.Pool, id ulid.ULID, subjec
 			dek_ref, dek_version
 		) VALUES ($1, $2, $3, now(), 'system', NULL, $4, 1, 'xchacha20v1', 1, '{}'::jsonb, $5, $6)
 	`, id[:], subject, evType, envelopeBytes, dekRef, dekVersion)
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 }
 
-// TestReader_LookupByID_ReturnsEnvelope verifies that LookupByID returns the
-// Envelope with correct EventID, KeyID, and KeyVersion from the cold tier row.
-// This is the INV-39 seam: FallbackResolver calls LookupByID when the hot-tier
-// DEK lookup fails (post-Rekey stale dek_ref).
-func TestReader_LookupByID_ReturnsEnvelope(t *testing.T) {
-	pool := newTestPool(t)
+var _ = Describe("PostgresColdTier", func() {
+	Describe("forward read cursor validation and discard", func() {
+		It("validates and discards cursor echo, returning rows after cursor", func() {
+			pool := newIntegrationPool()
+			ctx := context.Background()
 
-	eventID := testULID(t, 10000001)
-	insertColdRowWithDEK(t, pool, eventID, "events.g1.scene.A.ic", "scene.event", 42, 7)
+			subject := eventbus.Subject("events.main.location.01HXTESTLOCAAA0000000000A")
+			id1 := integrationULID(1000001)
+			id2 := integrationULID(1000002)
+			id3 := integrationULID(1000003)
 
-	tier := newPostgresColdTier(pool)
-	env, found, err := tier.LookupByID(context.Background(), eventID)
-	require.NoError(t, err)
-	require.True(t, found)
-	require.Equal(t, eventID, env.EventID())
-	require.Equal(t, codec.KeyID(42), env.KeyID())
-	require.Equal(t, uint32(7), env.KeyVersion())
-}
+			insertIntegrationAuditRow(pool, id1, subject, 1)
+			insertIntegrationAuditRow(pool, id2, subject, 2)
+			insertIntegrationAuditRow(pool, id3, subject, 3)
 
-// TestReader_LookupByID_NotFound verifies that LookupByID returns (zero, false, nil)
-// when no row exists for the given event ID — the not-found sentinel that
-// FallbackResolver uses to trigger the cold_dek_miss metric path.
-func TestReader_LookupByID_NotFound(t *testing.T) {
-	pool := newTestPool(t)
+			tier := newPostgresColdTier(pool)
+			q := eventbus.HistoryQuery{
+				Subject:   subject,
+				AfterSeq:  1,
+				AfterID:   id1,
+				Direction: eventbus.DirectionForward,
+			}
+			out, err := tier.Read(ctx, q, time.Time{}, 10, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(out).To(HaveLen(2), "should return events after cursor; cursor row is discarded")
+			Expect(out[0].Seq).To(Equal(uint64(2)))
+			Expect(out[0].ID).To(Equal(id2))
+			Expect(out[1].Seq).To(Equal(uint64(3)))
+			Expect(out[1].ID).To(Equal(id3))
+		})
+	})
 
-	tier := newPostgresColdTier(pool)
-	nonExistent := testULID(t, 99999999)
-	_, found, err := tier.LookupByID(context.Background(), nonExistent)
-	require.NoError(t, err)
-	require.False(t, found)
-}
+	Describe("cursor stale and lag detection", func() {
+		It("returns ErrCursorStale when cursor seq matches a row but id does not", func() {
+			pool := newIntegrationPool()
+			ctx := context.Background()
+
+			subject := eventbus.Subject("events.main.location.01HXTESTLOCBBB0000000000B")
+			idActual := integrationULID(2000001)
+			idCursor := integrationULID(2000099) // different id for the same seq
+
+			insertIntegrationAuditRow(pool, idActual, subject, 1)
+
+			tier := newPostgresColdTier(pool)
+			q := eventbus.HistoryQuery{
+				Subject:   subject,
+				AfterSeq:  1,
+				AfterID:   idCursor, // mismatched id for seq 1
+				Direction: eventbus.DirectionForward,
+			}
+			_, err := tier.Read(ctx, q, time.Time{}, 10, nil)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, eventbus.ErrCursorStale)).To(BeTrue())
+		})
+
+		It("returns ErrCursorStale when cursor seq does not exist in events_audit", func() {
+			pool := newIntegrationPool()
+			ctx := context.Background()
+
+			subject := eventbus.Subject("events.main.location.01HXTESTLOCCCC0000000000C")
+			insertIntegrationAuditRow(pool, integrationULID(3000001), subject, 1)
+
+			tier := newPostgresColdTier(pool)
+			q := eventbus.HistoryQuery{
+				Subject:   subject,
+				AfterSeq:  99, // seq 99 does not exist
+				AfterID:   integrationULID(3000099),
+				Direction: eventbus.DirectionForward,
+			}
+			_, err := tier.Read(ctx, q, time.Time{}, 10, nil)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, eventbus.ErrCursorStale)).To(BeTrue())
+		})
+
+		It("validates and discards cursor echo at edge; filters post-edge rows, returning empty page", func() {
+			pool := newIntegrationPool()
+			ctx := context.Background()
+
+			subject := eventbus.Subject("events.main.location.01HXTESTLOCDDD0000000000D")
+			idAtEdge := integrationULID(4000005)
+			idAfterEdge := integrationULID(4000006)
+
+			now := time.Now().UTC()
+			insertIntegrationAuditRowAt(pool, idAtEdge, subject, 5, now.Add(-1*time.Hour))
+			insertIntegrationAuditRowAt(pool, idAfterEdge, subject, 6, now)
+
+			tier := newPostgresColdTier(pool)
+			q := eventbus.HistoryQuery{
+				Subject:   subject,
+				AfterSeq:  5,
+				AfterID:   idAtEdge,
+				Direction: eventbus.DirectionForward,
+			}
+			edge := now.Add(-30 * time.Minute)
+			out, err := tier.Read(ctx, q, edge, 10, nil)
+			Expect(err).NotTo(HaveOccurred())
+			// Cursor echo is validated and discarded; idAfterEdge is filtered by edge.
+			Expect(out).To(BeEmpty())
+		})
+
+		It("returns ErrCursorLag when cursor seq is within JS range but missing from cold", func() {
+			pool := newIntegrationPool()
+			ctx := context.Background()
+
+			subject := eventbus.Subject("events.main.location.01HXTESTLOCEEE0000000000E")
+			// Insert seq=1 only; cursor will point to seq=50 which is absent.
+			insertIntegrationAuditRow(pool, integrationULID(5000001), subject, 1)
+
+			tier := newPostgresColdTier(pool)
+			q := eventbus.HistoryQuery{
+				Subject:   subject,
+				AfterSeq:  50,
+				AfterID:   integrationULID(5000050),
+				Direction: eventbus.DirectionForward,
+				PageSize:  10,
+			}
+			// Snapshot: JS contains seqs 1..100; cursor.Seq=50 is within [1,100] → LAG.
+			snap := newSnapshotForTest(1, 100)
+			_, err := tier.Read(ctx, q, time.Time{}, q.PageSize, snap)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, eventbus.ErrCursorLag)).To(BeTrue(),
+				"cursor seq within JS range must be LAG, not STALE")
+		})
+
+		It("returns ErrCursorStale when cursor seq exceeds JS snapshot lastSeq", func() {
+			pool := newIntegrationPool()
+			ctx := context.Background()
+
+			subject := eventbus.Subject("events.main.location.01HXTESTLOCFFF0000000000F")
+			// Insert seq=1 only; cursor will point to seq=200 which exceeds JS.
+			insertIntegrationAuditRow(pool, integrationULID(6000001), subject, 1)
+
+			tier := newPostgresColdTier(pool)
+			q := eventbus.HistoryQuery{
+				Subject:   subject,
+				AfterSeq:  200,
+				AfterID:   integrationULID(6000200),
+				Direction: eventbus.DirectionForward,
+				PageSize:  10,
+			}
+			// Snapshot: JS only has seqs 1..100; cursor.Seq=200 > lastSeq=100 → STALE.
+			snap := newSnapshotForTest(1, 100)
+			_, err := tier.Read(ctx, q, time.Time{}, q.PageSize, snap)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, eventbus.ErrCursorStale)).To(BeTrue(),
+				"cursor seq beyond JS range must be STALE")
+		})
+
+		It("returns ErrCursorStale when cursor seq is below JS snapshot firstSeq (retention aged out)", func() {
+			pool := newIntegrationPool()
+			ctx := context.Background()
+
+			// Snapshot: JS has seq=10..100; cursor points to seq=5 which is below firstSeq.
+			subject := eventbus.Subject("events.main.location.01HXTESTLOCHHH0000000000H")
+			// No cold row for the cursor seq (absent from cold).
+			insertIntegrationAuditRow(pool, integrationULID(8000001), subject, 99)
+
+			tier := newPostgresColdTier(pool)
+			q := eventbus.HistoryQuery{
+				Subject:   subject,
+				AfterSeq:  5,
+				AfterID:   integrationULID(8000005),
+				Direction: eventbus.DirectionForward,
+				PageSize:  10,
+			}
+			// Snapshot: firstSeq=10 > cursorSeq=5 → not in LAG range → STALE.
+			snap := newSnapshotForTest(10, 100)
+			_, err := tier.Read(ctx, q, time.Time{}, q.PageSize, snap)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, eventbus.ErrCursorStale)).To(BeTrue(),
+				"cursor seq below JS firstSeq must be STALE (retention aged it out)")
+		})
+
+		It("propagates snapshot error unchanged, not classified as cursor error", func() {
+			pool := newIntegrationPool()
+			ctx := context.Background()
+
+			// Insert one row so the query reaches the cursor-validation branch.
+			subject := eventbus.Subject("events.main.location.01HXTESTLOCIII0000000000I")
+			insertIntegrationAuditRow(pool, integrationULID(9000001), subject, 1)
+
+			tier := newPostgresColdTier(pool)
+			q := eventbus.HistoryQuery{
+				Subject:   subject,
+				AfterSeq:  50,
+				AfterID:   integrationULID(9000050),
+				Direction: eventbus.DirectionForward,
+				PageSize:  10,
+			}
+			snapErr := oops.Code("EVENTBUS_HISTORY_STREAM_LOOKUP_FAILED").Errorf("js unreachable")
+			snap := newErrorSnapshotForTest(snapErr)
+			_, err := tier.Read(ctx, q, time.Time{}, q.PageSize, snap)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, eventbus.ErrCursorStale)).To(BeFalse(),
+				"snapshot error must not be classified as ErrCursorStale")
+			Expect(errors.Is(err, eventbus.ErrCursorLag)).To(BeFalse(),
+				"snapshot error must not be classified as ErrCursorLag")
+			Expect(errors.Is(err, snapErr)).To(BeTrue())
+		})
+
+		It("returns ErrCursorStale when no snapshot and cursor seq is missing", func() {
+			pool := newIntegrationPool()
+			ctx := context.Background()
+
+			subject := eventbus.Subject("events.main.location.01HXTESTLOCGGG0000000000G")
+			insertIntegrationAuditRow(pool, integrationULID(7000001), subject, 1)
+
+			tier := newPostgresColdTier(pool)
+			q := eventbus.HistoryQuery{
+				Subject:   subject,
+				AfterSeq:  50,
+				AfterID:   integrationULID(7000050),
+				Direction: eventbus.DirectionForward,
+				PageSize:  10,
+			}
+			// No snapshot — falls back to STALE.
+			_, err := tier.Read(ctx, q, time.Time{}, q.PageSize, nil)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, eventbus.ErrCursorStale)).To(BeTrue(),
+				"without snapshot, missing cursor must be STALE")
+		})
+	})
+
+	Describe("LookupByID", func() {
+		It("returns Envelope with correct EventID, KeyID, and KeyVersion from cold tier row", func() {
+			pool := newIntegrationPool()
+
+			eventID := integrationULID(10000001)
+			insertIntegrationColdRowWithDEK(pool, eventID, "events.g1.scene.A.ic", "scene.event", 42, 7)
+
+			tier := newPostgresColdTier(pool)
+			env, found, err := tier.LookupByID(context.Background(), eventID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(env.EventID()).To(Equal(eventID))
+			Expect(env.KeyID()).To(Equal(codec.KeyID(42)))
+			Expect(env.KeyVersion()).To(Equal(uint32(7)))
+		})
+
+		It("returns (zero, false, nil) when no row exists for the given event ID", func() {
+			pool := newIntegrationPool()
+
+			tier := newPostgresColdTier(pool)
+			nonExistent := integrationULID(99999999)
+			_, found, err := tier.LookupByID(context.Background(), nonExistent)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(found).To(BeFalse())
+		})
+	})
+})
