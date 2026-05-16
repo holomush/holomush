@@ -30,17 +30,26 @@ type fakeJSMsg struct {
 	data    []byte
 }
 
-func (f *fakeJSMsg) Headers() nats.Header                  { return f.headers }
-func (f *fakeJSMsg) Data() []byte                          { return f.data }
-func (f *fakeJSMsg) Subject() string                       { panic("not used in StoreFromMessage tests") }
-func (f *fakeJSMsg) Reply() string                         { panic("not used in StoreFromMessage tests") }
-func (f *fakeJSMsg) Ack() error                            { panic("not used in StoreFromMessage tests") }
-func (f *fakeJSMsg) DoubleAck(_ context.Context) error     { panic("not used in StoreFromMessage tests") }
-func (f *fakeJSMsg) Nak() error                            { panic("not used in StoreFromMessage tests") }
-func (f *fakeJSMsg) NakWithDelay(_ time.Duration) error    { panic("not used in StoreFromMessage tests") }
-func (f *fakeJSMsg) InProgress() error                     { panic("not used in StoreFromMessage tests") }
-func (f *fakeJSMsg) Term() error                           { panic("not used in StoreFromMessage tests") }
-func (f *fakeJSMsg) TermWithReason(_ string) error         { panic("not used in StoreFromMessage tests") }
+func (f *fakeJSMsg) Headers() nats.Header { return f.headers }
+func (f *fakeJSMsg) Data() []byte         { return f.data }
+func (f *fakeJSMsg) Subject() string { panic("not used in StoreFromMessage tests") }
+
+func (f *fakeJSMsg) Reply() string { panic("not used in StoreFromMessage tests") }
+
+func (f *fakeJSMsg) Ack() error { panic("not used in StoreFromMessage tests") }
+
+func (f *fakeJSMsg) DoubleAck(_ context.Context) error { panic("not used in StoreFromMessage tests") }
+
+func (f *fakeJSMsg) Nak() error { panic("not used in StoreFromMessage tests") }
+
+func (f *fakeJSMsg) NakWithDelay(_ time.Duration) error { panic("not used in StoreFromMessage tests") }
+
+func (f *fakeJSMsg) InProgress() error { panic("not used in StoreFromMessage tests") }
+
+func (f *fakeJSMsg) Term() error { panic("not used in StoreFromMessage tests") }
+
+func (f *fakeJSMsg) TermWithReason(_ string) error { panic("not used in StoreFromMessage tests") }
+
 func (f *fakeJSMsg) Metadata() (*jetstream.MsgMetadata, error) {
 	panic("not used in StoreFromMessage tests")
 }

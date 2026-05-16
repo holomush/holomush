@@ -7,18 +7,18 @@ package eventbus_e2e_test
 
 import (
 	"context"
-	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 )
 
-// TestJSStorageCorruptionRebuildFromPGAuditPreservesULIDs covers spec §8
-// "Embedded JS storage corruption -> Rebuild from PG audit; ULIDs stable".
+// JS storage corruption specs — covers spec §8 "Embedded JS storage
+// corruption -> Rebuild from PG audit; ULIDs stable".
 //
 // Preserved ULIDs is the load-bearing invariant: the PG audit row id MUST
 // equal the original publish ULID, so a rebuild that republishes via the
@@ -34,40 +34,42 @@ import (
 //  4. TODO: asserts the new JS stream has the same N ULIDs in the same order.
 //
 // Follow-up: holomush-6nds — JS storage rebuild from PG audit.
-func TestJSStorageCorruptionRebuildFromPGAuditPreservesULIDs(t *testing.T) {
-	t.Skip("TODO(holomush-6nds): JS storage rebuild tool not yet implemented — skeleton retained for the follow-up bead")
+var _ = Describe("JS storage corruption rebuild from PG audit preserves ULIDs", func() {
+	It("rebuild from PG audit preserves original ULIDs in same order", func() {
+		Skip("TODO(holomush-6nds): JS storage rebuild tool not yet implemented — skeleton retained for the follow-up bead")
 
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
 
-	bus := eventbustest.New(t)
-	pool := freshPool(t)
+		bus := eventbustest.New(suiteT)
+		pool := freshPool(suiteT)
 
-	hostSub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-	require.NoError(t, hostSub.Start(ctx))
-	t.Cleanup(func() { _ = hostSub.Stop(context.Background()) })
+		hostSub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
+		Expect(hostSub.Start(ctx)).To(Succeed())
+		DeferCleanup(func() { _ = hostSub.Stop(context.Background()) })
 
-	pub := bus.Bus.Publisher()
-	const count = 10
-	originalIDs := make([][]byte, 0, count)
-	for i := 0; i < count; i++ {
-		evt := mintEvent(eventbus.Subject("events.main.jsrebuild.s1"), "scene.pose", `{"n":`+itoa(i)+`}`)
-		require.NoError(t, pub.Publish(ctx, evt))
-		originalIDs = append(originalIDs, evt.ID.Bytes())
-	}
-	hostSub.AwaitDrained(t, 10*time.Second)
+		pub := bus.Bus.Publisher()
+		const count = 10
+		originalIDs := make([][]byte, 0, count)
+		for i := 0; i < count; i++ {
+			evt := mintEvent(eventbus.Subject("events.main.jsrebuild.s1"), "scene.pose", `{"n":`+itoa(i)+`}`)
+			Expect(pub.Publish(ctx, evt)).To(Succeed())
+			originalIDs = append(originalIDs, evt.ID.Bytes())
+		}
+		hostSub.AwaitDrained(suiteT, 10*time.Second)
 
-	// Purge the EVENTS stream to simulate JS storage loss.
-	stream, err := bus.JS.Stream(ctx, eventbus.StreamName)
-	require.NoError(t, err)
-	require.NoError(t, stream.Purge(ctx))
+		// Purge the EVENTS stream to simulate JS storage loss.
+		stream, err := bus.JS.Stream(ctx, eventbus.StreamName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(stream.Purge(ctx)).To(Succeed())
 
-	// TODO(holomush-6nds): invoke rebuild tool, e.g.:
-	//   require.NoError(t, rebuild.FromPGAudit(ctx, pool, bus.Bus.Publisher()))
-	//
-	// After rebuild:
-	//   Assertion: stream.Info LastSeq == count
-	//   Assertion: every original ULID is present (via audit OR via a drain)
+		// TODO(holomush-6nds): invoke rebuild tool, e.g.:
+		//   Expect(rebuild.FromPGAudit(ctx, pool, bus.Bus.Publisher())).To(Succeed())
+		//
+		// After rebuild:
+		//   Assertion: stream.Info LastSeq == count
+		//   Assertion: every original ULID is present (via audit OR via a drain)
 
-	_ = originalIDs
-}
+		_ = originalIDs
+	})
+})

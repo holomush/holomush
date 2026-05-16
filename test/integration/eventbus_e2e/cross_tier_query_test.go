@@ -15,8 +15,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -28,7 +28,7 @@ import (
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
 
-// TestCrossTierQueryEndToEnd mirrors the 12-scenario tier suite from
+// Cross-tier query end-to-end specs — mirrors the 12-scenario tier suite from
 // internal/eventbus/history/tier_test.go but runs against the real
 // JetStream hot tier + real PostgreSQL cold tier. The in-memory suite
 // uses fakeTier; this suite uses the JS-backed and PG-backed real
@@ -49,385 +49,404 @@ import (
 //   - Per scenario we assert:
 //     (a) the right set of events is returned in the right order,
 //     (b) tier-specific counters/assertions match spec expectations.
-func TestCrossTierQueryEndToEnd(t *testing.T) {
-	// A single bus + pool serve all subtests to keep setup cost down.
-	// Each subtest picks a distinct subject so there's no cross-talk on
-	// events_audit or on the EVENTS stream.
-	bus := eventbustest.New(t)
-	pool := freshPool(t)
+var _ = Describe("Cross-tier query end-to-end", func() {
+	var (
+		bus          *eventbustest.Embedded
+		pool         *pgxpool.Pool
+		pub          eventbus.Publisher
+		streamMaxAge time.Duration
+		baseNow      time.Time
+		edge         time.Time
+	)
 
-	streamMaxAge := 30 * 24 * time.Hour // matches production default
-	safety := time.Hour
+	BeforeEach(func() {
+		// A single bus + pool serve all specs to keep setup cost down.
+		// Each spec picks a distinct subject so there's no cross-talk on
+		// events_audit or on the EVENTS stream.
+		bus = eventbustest.New(suiteT)
+		pool = freshPool(suiteT)
 
-	// "now" for every subtest. Edge = now - 30d + 1h.
-	baseNow := time.Date(2026, 4, 19, 12, 0, 0, 0, time.UTC)
-	edge := baseNow.Add(-streamMaxAge).Add(safety)
+		streamMaxAge = 30 * 24 * time.Hour // matches production default
+		safety := time.Hour
 
-	// Shared pub for JS seeding.
-	pub := bus.Bus.Publisher()
-	require.NotNil(t, pub)
+		// "now" for every spec. Edge = now - 30d + 1h.
+		baseNow = time.Date(2026, 4, 19, 12, 0, 0, 0, time.UTC)
+		edge = baseNow.Add(-streamMaxAge).Add(safety)
 
-	scenarios := []struct {
-		name string
-		run  func(t *testing.T, ctx context.Context, subject eventbus.Subject)
-	}{
-		{
-			name: "scenario1_cursor_within_js_retention",
-			run: func(t *testing.T, ctx context.Context, subject eventbus.Subject) {
-				// All events recent; Reader served entirely from JS, zero PG.
-				hot := []eventbus.Event{
-					mintAt(subject, baseNow.Add(-2*time.Hour), "a"),
-					mintAt(subject, baseNow.Add(-1*time.Hour), "b"),
-				}
-				publishAll(ctx, t, pub, hot)
-				// Barrier so JS has committed before we read.
-				bus.AwaitStreamLastSeq(t, currentStreamLastSeq(t, bus)+0, 5*time.Second)
+		// Shared pub for JS seeding.
+		pub = bus.Bus.Publisher()
+		Expect(pub).NotTo(BeNil())
+	})
 
-				r := buildReader(bus, pool, streamMaxAge, baseNow)
-				stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
-					Subject:   subject,
-					NotBefore: baseNow.Add(-3 * time.Hour),
-					Direction: eventbus.DirectionForward,
-					PageSize:  50,
-				})
-				require.NoError(t, err)
-				t.Cleanup(func() { _ = stream.Close() })
+	It("scenario1: cursor within JS retention serves entirely from hot tier", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+		subject := eventbus.Subject(subjectForScenario(1))
 
-				got := drainStream(t, stream)
-				require.Len(t, got, len(hot))
-				assert.Equal(t, hot[0].ID, got[0].ID)
-				assert.Equal(t, hot[1].ID, got[1].ID)
-			},
-		},
-		{
-			name: "scenario2_cursor_older_than_retention",
-			run: func(t *testing.T, ctx context.Context, subject eventbus.Subject) {
-				// All events aged — projected directly to events_audit.
-				cold := []eventbus.Event{
-					mintAt(subject, edge.Add(-10*24*time.Hour), "a"),
-					mintAt(subject, edge.Add(-5*24*time.Hour), "b"),
-				}
-				insertAuditRows(ctx, t, bus, pub, pool, cold)
+		// All events recent; Reader served entirely from JS, zero PG.
+		hot := []eventbus.Event{
+			mintAt(subject, baseNow.Add(-2*time.Hour), "a"),
+			mintAt(subject, baseNow.Add(-1*time.Hour), "b"),
+		}
+		publishAll(ctx, suiteT, pub, hot)
+		// Barrier so JS has committed before we read.
+		bus.AwaitStreamLastSeq(suiteT, currentStreamLastSeq(suiteT, bus)+0, 5*time.Second)
 
-				r := buildReader(bus, pool, streamMaxAge, baseNow)
-				stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
-					Subject:   subject,
-					NotBefore: edge.Add(-20 * 24 * time.Hour),
-					Direction: eventbus.DirectionForward,
-					PageSize:  50,
-				})
-				require.NoError(t, err)
-				t.Cleanup(func() { _ = stream.Close() })
-
-				got := drainStream(t, stream)
-				require.Len(t, got, len(cold))
-				assert.Equal(t, cold[0].ID, got[0].ID)
-				assert.Equal(t, cold[1].ID, got[1].ID)
-			},
-		},
-		{
-			name: "scenario3_cursor_at_boundary_edge",
-			run: func(t *testing.T, ctx context.Context, subject eventbus.Subject) {
-				// Event exactly at edge — routes to JS per "ties go hot".
-				atEdge := mintAt(subject, edge, "edge")
-				publishAll(ctx, t, pub, []eventbus.Event{atEdge})
-
-				r := buildReader(bus, pool, streamMaxAge, baseNow)
-				stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
-					Subject:   subject,
-					NotBefore: edge,
-					Direction: eventbus.DirectionForward,
-					PageSize:  10,
-				})
-				require.NoError(t, err)
-				t.Cleanup(func() { _ = stream.Close() })
-
-				got := drainStream(t, stream)
-				require.Len(t, got, 1)
-				assert.Equal(t, atEdge.ID, got[0].ID)
-			},
-		},
-		{
-			name: "scenario4_page_boundary_crosses",
-			run: func(t *testing.T, ctx context.Context, subject eventbus.Subject) {
-				cold := []eventbus.Event{
-					mintAt(subject, edge.Add(-3*time.Hour), "c1"),
-					mintAt(subject, edge.Add(-2*time.Hour), "c2"),
-				}
-				hot := []eventbus.Event{
-					mintAt(subject, edge.Add(time.Hour), "h1"),
-					mintAt(subject, edge.Add(2*time.Hour), "h2"),
-				}
-				insertAuditRows(ctx, t, bus, pub, pool, cold)
-				publishAll(ctx, t, pub, hot)
-
-				r := buildReader(bus, pool, streamMaxAge, baseNow)
-				stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
-					Subject:   subject,
-					NotBefore: edge.Add(-5 * time.Hour),
-					Direction: eventbus.DirectionForward,
-					PageSize:  10,
-				})
-				require.NoError(t, err)
-				t.Cleanup(func() { _ = stream.Close() })
-
-				got := drainStream(t, stream)
-				require.Len(t, got, 4, "all 4 across both tiers")
-				for i := 1; i < len(got); i++ {
-					assert.True(t, got[i-1].ID.Compare(got[i].ID) < 0,
-						"expected strictly ascending ULID at position %d", i)
-				}
-			},
-		},
-		{
-			name: "scenario5_clock_skew_absorbed",
-			run: func(t *testing.T, ctx context.Context, subject eventbus.Subject) {
-				// Place an event at edge-5s: within safetyMargin window. It
-				// lives in JS; we also INSERT it in PG to represent the
-				// "lagging projection" overlap. Dedup must suppress the dup.
-				dup := mintAt(subject, edge.Add(-5*time.Second), "overlap")
-				seqBefore := currentStreamLastSeq(t, bus)
-				publishAll(ctx, t, pub, []eventbus.Event{dup})
-				bus.AwaitStreamLastSeq(t, seqBefore+1, 5*time.Second)
-				dupSeq := currentStreamLastSeq(t, bus)
-				// Insert into cold with the SAME JS seq so seenSeqs dedup
-				// recognises the overlap event as already delivered.
-				insertAuditRowWithSeq(ctx, t, pool, dup, dupSeq)
-
-				r := buildReader(bus, pool, streamMaxAge, baseNow)
-				stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
-					Subject:   subject,
-					NotBefore: edge.Add(-24 * time.Hour),
-					Direction: eventbus.DirectionForward,
-					PageSize:  10,
-				})
-				require.NoError(t, err)
-				t.Cleanup(func() { _ = stream.Close() })
-
-				got := drainStream(t, stream)
-				require.Len(t, got, 1, "ULID dedup must suppress the duplicate")
-				assert.Equal(t, dup.ID, got[0].ID)
-			},
-		},
-		{
-			name: "scenario6_forward_direction",
-			run: func(t *testing.T, ctx context.Context, subject eventbus.Subject) {
-				cold := []eventbus.Event{
-					mintAt(subject, edge.Add(-10*24*time.Hour), "c1"),
-					mintAt(subject, edge.Add(-5*24*time.Hour), "c2"),
-				}
-				hot := []eventbus.Event{
-					mintAt(subject, edge.Add(time.Hour), "h1"),
-					mintAt(subject, edge.Add(10*time.Hour), "h2"),
-				}
-				insertAuditRows(ctx, t, bus, pub, pool, cold)
-				publishAll(ctx, t, pub, hot)
-
-				r := buildReader(bus, pool, streamMaxAge, baseNow)
-				stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
-					Subject:   subject,
-					NotBefore: edge.Add(-100 * 24 * time.Hour),
-					Direction: eventbus.DirectionForward,
-					PageSize:  10,
-				})
-				require.NoError(t, err)
-				t.Cleanup(func() { _ = stream.Close() })
-
-				got := drainStream(t, stream)
-				require.Len(t, got, 4)
-				// Oldest -> newest.
-				assert.Equal(t, cold[0].ID, got[0].ID)
-				assert.Equal(t, hot[1].ID, got[3].ID)
-			},
-		},
-		{
-			name: "scenario7_backward_direction",
-			run: func(t *testing.T, ctx context.Context, subject eventbus.Subject) {
-				cold := []eventbus.Event{
-					mintAt(subject, edge.Add(-10*24*time.Hour), "c1"),
-					mintAt(subject, edge.Add(-5*24*time.Hour), "c2"),
-				}
-				hot := []eventbus.Event{
-					mintAt(subject, edge.Add(time.Hour), "h1"),
-					mintAt(subject, edge.Add(10*time.Hour), "h2"),
-				}
-				insertAuditRows(ctx, t, bus, pub, pool, cold)
-				publishAll(ctx, t, pub, hot)
-
-				r := buildReader(bus, pool, streamMaxAge, baseNow)
-				stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
-					Subject:   subject,
-					NotAfter:  baseNow,
-					Direction: eventbus.DirectionBackward,
-					PageSize:  10,
-				})
-				require.NoError(t, err)
-				t.Cleanup(func() { _ = stream.Close() })
-
-				got := drainStream(t, stream)
-				require.Len(t, got, 4)
-				// Newest -> oldest.
-				assert.Equal(t, hot[1].ID, got[0].ID)
-				assert.Equal(t, cold[0].ID, got[3].ID)
-			},
-		},
-		{
-			name: "scenario8_empty_pg_full_js",
-			run: func(t *testing.T, ctx context.Context, subject eventbus.Subject) {
-				hot := []eventbus.Event{
-					mintAt(subject, edge.Add(time.Hour), "h1"),
-					mintAt(subject, edge.Add(2*time.Hour), "h2"),
-				}
-				publishAll(ctx, t, pub, hot)
-
-				r := buildReader(bus, pool, streamMaxAge, baseNow)
-				stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
-					Subject:   subject,
-					NotBefore: edge.Add(30 * time.Minute),
-					Direction: eventbus.DirectionForward,
-					PageSize:  10,
-				})
-				require.NoError(t, err)
-				t.Cleanup(func() { _ = stream.Close() })
-
-				got := drainStream(t, stream)
-				require.Len(t, got, 2)
-			},
-		},
-		{
-			name: "scenario9_empty_js_full_pg",
-			run: func(t *testing.T, ctx context.Context, subject eventbus.Subject) {
-				cold := []eventbus.Event{
-					mintAt(subject, edge.Add(-10*24*time.Hour), "c1"),
-					mintAt(subject, edge.Add(-5*24*time.Hour), "c2"),
-				}
-				insertAuditRows(ctx, t, bus, pub, pool, cold)
-
-				r := buildReader(bus, pool, streamMaxAge, baseNow)
-				stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
-					Subject:   subject,
-					NotBefore: edge.Add(-30 * 24 * time.Hour),
-					Direction: eventbus.DirectionForward,
-					PageSize:  10,
-				})
-				require.NoError(t, err)
-				t.Cleanup(func() { _ = stream.Close() })
-
-				got := drainStream(t, stream)
-				require.Len(t, got, 2)
-			},
-		},
-		{
-			name: "scenario10_both_empty",
-			run: func(t *testing.T, ctx context.Context, subject eventbus.Subject) {
-				r := buildReader(bus, pool, streamMaxAge, baseNow)
-				stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
-					Subject:   subject,
-					Direction: eventbus.DirectionForward,
-					PageSize:  10,
-				})
-				require.NoError(t, err)
-				t.Cleanup(func() { _ = stream.Close() })
-
-				_, nerr := stream.Next(ctx)
-				assert.ErrorIs(t, nerr, io.EOF)
-			},
-		},
-		{
-			name: "scenario11_nonexistent_subject",
-			run: func(t *testing.T, ctx context.Context, subject eventbus.Subject) {
-				// Seed events on a DIFFERENT subject; query for ours.
-				other := eventbus.Subject("events.main.elsewhere.zzz")
-				publishAll(ctx, t, pub, []eventbus.Event{mintAt(other, edge.Add(time.Hour), "x")})
-				insertAuditRows(ctx, t, bus, pub, pool, []eventbus.Event{mintAt(other, edge.Add(-time.Hour), "y")})
-
-				r := buildReader(bus, pool, streamMaxAge, baseNow)
-				stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
-					Subject:   subject,
-					Direction: eventbus.DirectionForward,
-					PageSize:  10,
-				})
-				require.NoError(t, err)
-				t.Cleanup(func() { _ = stream.Close() })
-
-				_, nerr := stream.Next(ctx)
-				assert.ErrorIs(t, nerr, io.EOF)
-			},
-		},
-		{
-			name: "scenario_w9ml_plugin_actor_ulid_round_trip",
-			run: func(t *testing.T, ctx context.Context, subject eventbus.Subject) {
-				// Post-w9ml: plugin actors carry a ULID via Actor.ID
-				// (resolved at stamp time via IdentityRegistry.IDByName).
-				// This scenario asserts a publishd plugin-actor event
-				// round-trips through JS hot tier with the ULID intact —
-				// i.e., publisher serializes ULID bytes into the proto
-				// envelope, subscriber/reader reconstructs them, and the
-				// resulting eventbus.Event.Actor preserves both Kind and ID.
-				pluginULID := plugintest.PluginULIDFromName("core-scenes")
-				pluginEv := mintAt(subject, baseNow.Add(-30*time.Minute), "plugin")
-				pluginEv.Actor = eventbus.Actor{
-					Kind: eventbus.ActorKindPlugin,
-					ID:   pluginULID,
-				}
-				publishAll(ctx, t, pub, []eventbus.Event{pluginEv})
-				bus.AwaitStreamLastSeq(t, currentStreamLastSeq(t, bus)+0, 5*time.Second)
-
-				r := buildReader(bus, pool, streamMaxAge, baseNow)
-				stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
-					Subject:   subject,
-					NotBefore: baseNow.Add(-1 * time.Hour),
-					Direction: eventbus.DirectionForward,
-					PageSize:  10,
-				})
-				require.NoError(t, err)
-				t.Cleanup(func() { _ = stream.Close() })
-
-				got := drainStream(t, stream)
-				require.Len(t, got, 1)
-				assert.Equal(t, pluginEv.ID, got[0].ID)
-				assert.Equal(t, eventbus.ActorKindPlugin, got[0].Actor.Kind,
-					"plugin Actor.Kind MUST round-trip through hot tier")
-				assert.Equal(t, pluginULID, got[0].Actor.ID,
-					"plugin Actor.ID (ULID) MUST round-trip byte-equal through hot tier")
-			},
-		},
-		{
-			name: "scenario12_plugin_owned_subject_routes_to_plugin",
-			run: func(t *testing.T, ctx context.Context, subject eventbus.Subject) {
-				// For plugin-owned subjects the Reader MUST NOT fall back
-				// to host tiers. Without a router wired, we expect the
-				// explicit EVENTBUS_PLUGIN_HISTORY_NOT_WIRED error. This
-				// is the documented F4 ship state; wiring a real router
-				// is exercised by the plugin_audit_isolation_test.
-				owners, err := audit.NewOwnerMap([]audit.SubjectOwner{
-					{PluginName: "core-scenes", Pattern: "events.*.scene.>"},
-				})
-				require.NoError(t, err)
-				r := buildReader(bus, pool, streamMaxAge, baseNow, history.WithOwners(owners))
-				pluginSubject := eventbus.Subject("events.main.scene.01ABC.ic")
-				_, qerr := r.QueryHistory(ctx, eventbus.HistoryQuery{
-					Subject:   pluginSubject,
-					Direction: eventbus.DirectionForward,
-					PageSize:  10,
-				})
-				require.Error(t, qerr)
-				assert.Contains(t, qerr.Error(), "plugin-owned subject requires PluginHistoryRouter")
-			},
-		},
-	}
-
-	for i, sc := range scenarios {
-		sc := sc
-		t.Run(sc.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-			defer cancel()
-			// Per-subtest subject so state doesn't leak between scenarios.
-			subject := eventbus.Subject(subjectForScenario(i))
-			sc.run(t, ctx, subject)
+		r := buildReader(bus, pool, streamMaxAge, baseNow)
+		stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
+			Subject:   subject,
+			NotBefore: baseNow.Add(-3 * time.Hour),
+			Direction: eventbus.DirectionForward,
+			PageSize:  50,
 		})
-	}
-}
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = stream.Close() })
+
+		got := drainStream(suiteT, stream)
+		Expect(got).To(HaveLen(len(hot)))
+		Expect(got[0].ID).To(Equal(hot[0].ID))
+		Expect(got[1].ID).To(Equal(hot[1].ID))
+	})
+
+	It("scenario2: cursor older than retention serves from cold tier", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+		subject := eventbus.Subject(subjectForScenario(2))
+
+		// All events aged — projected directly to events_audit.
+		cold := []eventbus.Event{
+			mintAt(subject, edge.Add(-10*24*time.Hour), "a"),
+			mintAt(subject, edge.Add(-5*24*time.Hour), "b"),
+		}
+		insertAuditRows(ctx, suiteT, bus, pub, pool, cold)
+
+		r := buildReader(bus, pool, streamMaxAge, baseNow)
+		stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
+			Subject:   subject,
+			NotBefore: edge.Add(-20 * 24 * time.Hour),
+			Direction: eventbus.DirectionForward,
+			PageSize:  50,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = stream.Close() })
+
+		got := drainStream(suiteT, stream)
+		Expect(got).To(HaveLen(len(cold)))
+		Expect(got[0].ID).To(Equal(cold[0].ID))
+		Expect(got[1].ID).To(Equal(cold[1].ID))
+	})
+
+	It("scenario3: cursor at boundary edge routes to JS per ties-go-hot", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+		subject := eventbus.Subject(subjectForScenario(3))
+
+		// Event exactly at edge — routes to JS per "ties go hot".
+		atEdge := mintAt(subject, edge, "edge")
+		publishAll(ctx, suiteT, pub, []eventbus.Event{atEdge})
+
+		r := buildReader(bus, pool, streamMaxAge, baseNow)
+		stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
+			Subject:   subject,
+			NotBefore: edge,
+			Direction: eventbus.DirectionForward,
+			PageSize:  10,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = stream.Close() })
+
+		got := drainStream(suiteT, stream)
+		Expect(got).To(HaveLen(1))
+		Expect(got[0].ID).To(Equal(atEdge.ID))
+	})
+
+	It("scenario4: page boundary crosses tiers returning all events in order", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+		subject := eventbus.Subject(subjectForScenario(4))
+
+		cold := []eventbus.Event{
+			mintAt(subject, edge.Add(-3*time.Hour), "c1"),
+			mintAt(subject, edge.Add(-2*time.Hour), "c2"),
+		}
+		hot := []eventbus.Event{
+			mintAt(subject, edge.Add(time.Hour), "h1"),
+			mintAt(subject, edge.Add(2*time.Hour), "h2"),
+		}
+		insertAuditRows(ctx, suiteT, bus, pub, pool, cold)
+		publishAll(ctx, suiteT, pub, hot)
+
+		r := buildReader(bus, pool, streamMaxAge, baseNow)
+		stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
+			Subject:   subject,
+			NotBefore: edge.Add(-5 * time.Hour),
+			Direction: eventbus.DirectionForward,
+			PageSize:  10,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = stream.Close() })
+
+		got := drainStream(suiteT, stream)
+		Expect(got).To(HaveLen(4), "all 4 across both tiers")
+		for i := 1; i < len(got); i++ {
+			Expect(got[i-1].ID.Compare(got[i].ID)).To(BeNumerically("<", 0),
+				"expected strictly ascending ULID at position %d", i)
+		}
+	})
+
+	It("scenario5: clock skew within safety margin is absorbed by ULID dedup", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+		subject := eventbus.Subject(subjectForScenario(5))
+
+		// Place an event at edge-5s: within safetyMargin window. It
+		// lives in JS; we also INSERT it in PG to represent the
+		// "lagging projection" overlap. Dedup must suppress the dup.
+		dup := mintAt(subject, edge.Add(-5*time.Second), "overlap")
+		seqBefore := currentStreamLastSeq(suiteT, bus)
+		publishAll(ctx, suiteT, pub, []eventbus.Event{dup})
+		bus.AwaitStreamLastSeq(suiteT, seqBefore+1, 5*time.Second)
+		dupSeq := currentStreamLastSeq(suiteT, bus)
+		// Insert into cold with the SAME JS seq so seenSeqs dedup
+		// recognises the overlap event as already delivered.
+		insertAuditRowWithSeq(ctx, suiteT, pool, dup, dupSeq)
+
+		r := buildReader(bus, pool, streamMaxAge, baseNow)
+		stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
+			Subject:   subject,
+			NotBefore: edge.Add(-24 * time.Hour),
+			Direction: eventbus.DirectionForward,
+			PageSize:  10,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = stream.Close() })
+
+		got := drainStream(suiteT, stream)
+		Expect(got).To(HaveLen(1), "ULID dedup must suppress the duplicate")
+		Expect(got[0].ID).To(Equal(dup.ID))
+	})
+
+	It("scenario6: forward direction returns events oldest to newest", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+		subject := eventbus.Subject(subjectForScenario(6))
+
+		cold := []eventbus.Event{
+			mintAt(subject, edge.Add(-10*24*time.Hour), "c1"),
+			mintAt(subject, edge.Add(-5*24*time.Hour), "c2"),
+		}
+		hot := []eventbus.Event{
+			mintAt(subject, edge.Add(time.Hour), "h1"),
+			mintAt(subject, edge.Add(10*time.Hour), "h2"),
+		}
+		insertAuditRows(ctx, suiteT, bus, pub, pool, cold)
+		publishAll(ctx, suiteT, pub, hot)
+
+		r := buildReader(bus, pool, streamMaxAge, baseNow)
+		stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
+			Subject:   subject,
+			NotBefore: edge.Add(-100 * 24 * time.Hour),
+			Direction: eventbus.DirectionForward,
+			PageSize:  10,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = stream.Close() })
+
+		got := drainStream(suiteT, stream)
+		Expect(got).To(HaveLen(4))
+		// Oldest -> newest.
+		Expect(got[0].ID).To(Equal(cold[0].ID))
+		Expect(got[3].ID).To(Equal(hot[1].ID))
+	})
+
+	It("scenario7: backward direction returns events newest to oldest", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+		subject := eventbus.Subject(subjectForScenario(7))
+
+		cold := []eventbus.Event{
+			mintAt(subject, edge.Add(-10*24*time.Hour), "c1"),
+			mintAt(subject, edge.Add(-5*24*time.Hour), "c2"),
+		}
+		hot := []eventbus.Event{
+			mintAt(subject, edge.Add(time.Hour), "h1"),
+			mintAt(subject, edge.Add(10*time.Hour), "h2"),
+		}
+		insertAuditRows(ctx, suiteT, bus, pub, pool, cold)
+		publishAll(ctx, suiteT, pub, hot)
+
+		r := buildReader(bus, pool, streamMaxAge, baseNow)
+		stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
+			Subject:   subject,
+			NotAfter:  baseNow,
+			Direction: eventbus.DirectionBackward,
+			PageSize:  10,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = stream.Close() })
+
+		got := drainStream(suiteT, stream)
+		Expect(got).To(HaveLen(4))
+		// Newest -> oldest.
+		Expect(got[0].ID).To(Equal(hot[1].ID))
+		Expect(got[3].ID).To(Equal(cold[0].ID))
+	})
+
+	It("scenario8: empty PG with hot-tier events returns hot events", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+		subject := eventbus.Subject(subjectForScenario(8))
+
+		hot := []eventbus.Event{
+			mintAt(subject, edge.Add(time.Hour), "h1"),
+			mintAt(subject, edge.Add(2*time.Hour), "h2"),
+		}
+		publishAll(ctx, suiteT, pub, hot)
+
+		r := buildReader(bus, pool, streamMaxAge, baseNow)
+		stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
+			Subject:   subject,
+			NotBefore: edge.Add(30 * time.Minute),
+			Direction: eventbus.DirectionForward,
+			PageSize:  10,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = stream.Close() })
+
+		got := drainStream(suiteT, stream)
+		Expect(got).To(HaveLen(2))
+	})
+
+	It("scenario9: empty JS with cold-tier events returns cold events", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+		subject := eventbus.Subject(subjectForScenario(9))
+
+		cold := []eventbus.Event{
+			mintAt(subject, edge.Add(-10*24*time.Hour), "c1"),
+			mintAt(subject, edge.Add(-5*24*time.Hour), "c2"),
+		}
+		insertAuditRows(ctx, suiteT, bus, pub, pool, cold)
+
+		r := buildReader(bus, pool, streamMaxAge, baseNow)
+		stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
+			Subject:   subject,
+			NotBefore: edge.Add(-30 * 24 * time.Hour),
+			Direction: eventbus.DirectionForward,
+			PageSize:  10,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = stream.Close() })
+
+		got := drainStream(suiteT, stream)
+		Expect(got).To(HaveLen(2))
+	})
+
+	It("scenario10: both tiers empty yields EOF immediately", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+		subject := eventbus.Subject(subjectForScenario(10))
+
+		r := buildReader(bus, pool, streamMaxAge, baseNow)
+		stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
+			Subject:   subject,
+			Direction: eventbus.DirectionForward,
+			PageSize:  10,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = stream.Close() })
+
+		_, nerr := stream.Next(ctx)
+		Expect(errors.Is(nerr, io.EOF)).To(BeTrue())
+	})
+
+	It("scenario11: nonexistent subject returns no events", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+		subject := eventbus.Subject(subjectForScenario(11))
+
+		// Seed events on a DIFFERENT subject; query for ours.
+		other := eventbus.Subject("events.main.elsewhere.zzz")
+		publishAll(ctx, suiteT, pub, []eventbus.Event{mintAt(other, edge.Add(time.Hour), "x")})
+		insertAuditRows(ctx, suiteT, bus, pub, pool, []eventbus.Event{mintAt(other, edge.Add(-time.Hour), "y")})
+
+		r := buildReader(bus, pool, streamMaxAge, baseNow)
+		stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
+			Subject:   subject,
+			Direction: eventbus.DirectionForward,
+			PageSize:  10,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = stream.Close() })
+
+		_, nerr := stream.Next(ctx)
+		Expect(errors.Is(nerr, io.EOF)).To(BeTrue())
+	})
+
+	It("scenario_w9ml: plugin actor ULID round-trips through hot tier byte-equal", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+		subject := eventbus.Subject(subjectForScenario(12))
+
+		// Post-w9ml: plugin actors carry a ULID via Actor.ID
+		// (resolved at stamp time via IdentityRegistry.IDByName).
+		// This scenario asserts a published plugin-actor event
+		// round-trips through JS hot tier with the ULID intact —
+		// i.e., publisher serializes ULID bytes into the proto
+		// envelope, subscriber/reader reconstructs them, and the
+		// resulting eventbus.Event.Actor preserves both Kind and ID.
+		pluginULID := plugintest.PluginULIDFromName("core-scenes")
+		pluginEv := mintAt(subject, baseNow.Add(-30*time.Minute), "plugin")
+		pluginEv.Actor = eventbus.Actor{
+			Kind: eventbus.ActorKindPlugin,
+			ID:   pluginULID,
+		}
+		publishAll(ctx, suiteT, pub, []eventbus.Event{pluginEv})
+		bus.AwaitStreamLastSeq(suiteT, currentStreamLastSeq(suiteT, bus)+0, 5*time.Second)
+
+		r := buildReader(bus, pool, streamMaxAge, baseNow)
+		stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
+			Subject:   subject,
+			NotBefore: baseNow.Add(-1 * time.Hour),
+			Direction: eventbus.DirectionForward,
+			PageSize:  10,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = stream.Close() })
+
+		got := drainStream(suiteT, stream)
+		Expect(got).To(HaveLen(1))
+		Expect(got[0].ID).To(Equal(pluginEv.ID))
+		Expect(got[0].Actor.Kind).To(Equal(eventbus.ActorKindPlugin),
+			"plugin Actor.Kind MUST round-trip through hot tier")
+		Expect(got[0].Actor.ID).To(Equal(pluginULID),
+			"plugin Actor.ID (ULID) MUST round-trip byte-equal through hot tier")
+	})
+
+	It("scenario12: plugin-owned subject returns EVENTBUS_PLUGIN_HISTORY_NOT_WIRED error", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+
+		// For plugin-owned subjects the Reader MUST NOT fall back
+		// to host tiers. Without a router wired, we expect the
+		// explicit EVENTBUS_PLUGIN_HISTORY_NOT_WIRED error. This
+		// is the documented F4 ship state; wiring a real router
+		// is exercised by the plugin_audit_isolation_test.
+		owners, err := audit.NewOwnerMap([]audit.SubjectOwner{
+			{PluginName: "core-scenes", Pattern: "events.*.scene.>"},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		r := buildReader(bus, pool, streamMaxAge, baseNow, history.WithOwners(owners))
+		pluginSubject := eventbus.Subject("events.main.scene.01ABC.ic")
+		_, qerr := r.QueryHistory(ctx, eventbus.HistoryQuery{
+			Subject:   pluginSubject,
+			Direction: eventbus.DirectionForward,
+			PageSize:  10,
+		})
+		Expect(qerr).To(HaveOccurred())
+		Expect(qerr.Error()).To(ContainSubstring("plugin-owned subject requires PluginHistoryRouter"))
+	})
+})
 
 // subjectForScenario produces a unique subject per scenario index. Kept
 // out-of-band so scenarios are identified by their deterministic slot.
@@ -473,7 +492,9 @@ func mintAt(subject eventbus.Subject, ts time.Time, body string) eventbus.Event 
 func publishAll(ctx context.Context, t *testing.T, pub eventbus.Publisher, events []eventbus.Event) {
 	t.Helper()
 	for _, e := range events {
-		require.NoError(t, pub.Publish(ctx, e))
+		if err := pub.Publish(ctx, e); err != nil {
+			t.Fatalf("publishAll: %v", err)
+		}
 	}
 }
 
@@ -495,7 +516,9 @@ func insertAuditRows(ctx context.Context, t *testing.T, bus *eventbustest.Embedd
 	t.Helper()
 	for _, e := range events {
 		seqBefore := currentStreamLastSeq(t, bus)
-		require.NoError(t, pub.Publish(ctx, e))
+		if err := pub.Publish(ctx, e); err != nil {
+			t.Fatalf("insertAuditRows publish: %v", err)
+		}
 		bus.AwaitStreamLastSeq(t, seqBefore+1, 5*time.Second)
 		seq := currentStreamLastSeq(t, bus)
 		insertAuditRowWithSeq(ctx, t, pool, e, seq)
@@ -527,8 +550,10 @@ func insertAuditRowWithSeq(ctx context.Context, t *testing.T, pool *pgxpool.Pool
 		},
 		Payload: e.Payload,
 	})
-	require.NoError(t, err)
-	_, err = pool.Exec(
+	if err != nil {
+		t.Fatalf("insertAuditRowWithSeq marshal: %v", err)
+	}
+	_, qerr := pool.Exec(
 		ctx, `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
@@ -547,7 +572,9 @@ func insertAuditRowWithSeq(ctx context.Context, t *testing.T, pool *pgxpool.Pool
 		int64(seq), //nolint:gosec // G115: seq is always a positive JetStream sequence; fits safely in int64
 		[]byte(`{}`),
 	)
-	require.NoError(t, err)
+	if qerr != nil {
+		t.Fatalf("insertAuditRowWithSeq exec: %v", qerr)
+	}
 }
 
 // actorKindToProto maps the eventbus.ActorKind enum to its proto twin.
@@ -579,7 +606,9 @@ func drainStream(t *testing.T, stream eventbus.HistoryStream) []eventbus.Event {
 		if errors.Is(err, io.EOF) {
 			return out
 		}
-		require.NoError(t, err)
+		if err != nil {
+			t.Fatalf("drainStream: %v", err)
+		}
 		out = append(out, e)
 	}
 }
@@ -589,7 +618,7 @@ func drainStream(t *testing.T, stream eventbus.HistoryStream) []eventbus.Event {
 // "no offset known yet").
 func currentStreamLastSeq(t *testing.T, bus *eventbustest.Embedded) uint64 {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	s, err := bus.JS.Stream(ctx, eventbus.StreamName)
 	if err != nil {

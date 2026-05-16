@@ -14,11 +14,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
-	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/eventbus"
@@ -63,31 +62,29 @@ const (
 	downgradeAttackerCachedDekVer = uint32(1)
 )
 
-// newDowngradeAttackerSuite compiles the fixture, spawns it via the real
-// goplugin.Host, and assembles a fence over a real PluginHistoryRouter.
-// Cleanup (host shutdown, binary removal) is registered on t.Cleanup.
-func newDowngradeAttackerSuite(t *testing.T) *downgradeAttackerSuite {
-	t.Helper()
-
-	pluginDir, manifest := buildDowngradeAttackerBinary(t)
+// newDowngradeAttackerSuiteForGinkgo compiles the fixture, spawns it via
+// the real goplugin.Host, and assembles a fence over a real
+// PluginHistoryRouter. Cleanup is registered via DeferCleanup.
+func newDowngradeAttackerSuiteForGinkgo() *downgradeAttackerSuite {
+	pluginDir, manifest := buildDowngradeAttackerBinary(suiteT)
 
 	host := goplugin.NewHost(
 		goplugin.WithIdentityRegistry(plugintest.NewStubRegistry(downgradeAttackerPluginName)),
 	)
-	t.Cleanup(func() {
-		// Use a fresh ctx — t.Context() is cancelled on Cleanup ordering.
+	DeferCleanup(func() {
+		// Use a fresh ctx — context may be cancelled by the time cleanup runs.
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = host.Close(ctx)
 	})
 
-	loadCtx, loadCancel := context.WithTimeout(t.Context(), 30*time.Second)
+	loadCtx, loadCancel := context.WithTimeout(suiteT.Context(), 30*time.Second)
 	defer loadCancel()
-	require.NoError(t, host.Load(loadCtx, manifest, pluginDir),
+	Expect(host.Load(loadCtx, manifest, pluginDir)).To(Succeed(),
 		"goplugin host MUST load the test_downgrade_attacker fixture")
 
 	auditCli := host.PluginAuditClient(downgradeAttackerPluginName)
-	require.NotNil(t, auditCli,
+	Expect(auditCli).NotTo(BeNil(),
 		"fixture MUST register PluginAuditService — manifest provides it")
 
 	provider := singletonAuditProvider{
@@ -116,12 +113,11 @@ func newDowngradeAttackerSuite(t *testing.T) *downgradeAttackerSuite {
 	}
 }
 
-// PrimeHonestCache populates the fixture's in-memory row cache via the
+// primeHonestCache populates the fixture's in-memory row cache via the
 // real AuditEvent RPC. The honest QueryHistory branch returns the cached
 // row byte-equal; supplying a non-identity codec + dek_ref simulates an
 // encrypted payload the host would later decrypt.
-func (s *downgradeAttackerSuite) PrimeHonestCache(t *testing.T, payload []byte) {
-	t.Helper()
+func (s *downgradeAttackerSuite) primeHonestCache(payload []byte) {
 	dekRef := downgradeAttackerCachedDekRef
 	dekVer := downgradeAttackerCachedDekVer
 	row := &pluginauditpb.AuditRow{
@@ -135,32 +131,31 @@ func (s *downgradeAttackerSuite) PrimeHonestCache(t *testing.T, payload []byte) 
 		DekVersion: &dekVer,
 		SchemaVer:  1,
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(suiteT.Context(), 5*time.Second)
 	defer cancel()
 	_, err := s.auditCli.AuditEvent(ctx, &pluginauditpb.AuditEventRequest{Row: row})
-	require.NoError(t, err, "AuditEvent RPC MUST succeed against the fixture")
+	Expect(err).NotTo(HaveOccurred(), "AuditEvent RPC MUST succeed against the fixture")
 }
 
-// QueryFenced runs subject through the PluginDowngradeFence and drains
+// queryFenced runs subject through the PluginDowngradeFence and drains
 // the resulting stream. Returns the events the fence delivered.
-func (s *downgradeAttackerSuite) QueryFenced(t *testing.T, subject string) []eventbus.Event {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+func (s *downgradeAttackerSuite) queryFenced(subject string) []eventbus.Event {
+	ctx, cancel := context.WithTimeout(suiteT.Context(), 10*time.Second)
 	defer cancel()
 
 	stream, err := s.fence.QueryHistory(ctx, s.pluginName, eventbus.HistoryQuery{
 		Subject:  eventbus.Subject(subject),
 		PageSize: 10,
 	})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = stream.Close() })
+	Expect(err).NotTo(HaveOccurred())
+	DeferCleanup(func() { _ = stream.Close() })
 
 	var out []eventbus.Event
 	for {
 		ev, nextErr := stream.Next(ctx)
 		if nextErr != nil {
-			// io.EOF terminates cleanly; any other error fails the test.
-			require.True(t, errors.Is(nextErr, io.EOF), "stream MUST end with EOF, got %v", nextErr)
+			// io.EOF terminates cleanly; any other error fails the spec.
+			Expect(errors.Is(nextErr, io.EOF)).To(BeTrue(), "stream MUST end with EOF, got %v", nextErr)
 			break
 		}
 		out = append(out, ev)
@@ -168,69 +163,61 @@ func (s *downgradeAttackerSuite) QueryFenced(t *testing.T, subject string) []eve
 	return out
 }
 
-// TestDowngradeAttackerHonestPathDelivers — INV-P7-10 honest path.
-// Honest mode replays the AuditEvent-cached row byte-equal. The fence
-// passes it through (codec=xchacha20poly1305-v1, dek_ref present, fake
-// CryptoKeysLookup reports Exists=true). The caller observes the row's
-// payload verbatim — host-side decryption is exercised by the existing
-// crypto round-trip tests; this test pins the wire-level pass-through.
-func TestDowngradeAttackerHonestPathDelivers(t *testing.T) {
-	suite := newDowngradeAttackerSuite(t)
+// Downgrade attacker specs — INV-P7-10. Covers both the honest path and the
+// malicious path of the PluginDowngradeFence via a real binary fixture.
+var _ = Describe("Downgrade attacker malicious path refuses (INV-P7-10)", func() {
+	It("fence refuses malicious downgrade row with metadata_only and violation signal", func() {
+		suite := newDowngradeAttackerSuiteForGinkgo()
 
-	cachedPayload := []byte("ciphertext-bytes-from-publisher")
-	suite.PrimeHonestCache(t, cachedPayload)
+		// No primeHonestCache — malicious branch fabricates its own row.
+		events := suite.queryFenced(downgradeMaliciousSubject)
+		Expect(events).To(HaveLen(1), "malicious mode MUST yield exactly one fabricated row")
 
-	events := suite.QueryFenced(t, downgradeHonestSubject)
-	require.Len(t, events, 1, "honest mode MUST replay exactly one cached row")
+		got := events[0]
+		Expect(got.MetadataOnly).To(BeTrue(),
+			"INV-P7-10: malicious downgrade row MUST surface as metadata_only=true")
+		Expect(got.NoPlaintextReason).To(Equal(eventbus.NoPlaintextReasonDowngradeRefused),
+			"INV-P7-10: refusal reason MUST be DowngradeRefused")
+		Expect(got.Payload).To(BeEmpty(),
+			"INV-P7-10: refused row MUST NOT leak plaintext payload")
 
-	got := events[0]
-	assert.False(t, got.MetadataOnly,
-		"INV-P7-10 honest path: row MUST NOT be marked metadata_only")
-	assert.Equal(t, eventbus.NoPlaintextReasonUnspecified, got.NoPlaintextReason,
-		"INV-P7-10 honest path: NoPlaintextReason MUST be unset for clean rows")
-	assert.Equal(t, cachedPayload, got.Payload,
-		"INV-P7-10 honest path: fence MUST pass payload through byte-equal")
+		violations := suite.emitter.snapshot()
+		Expect(violations).To(HaveLen(1),
+			"INV-P7-10: violation emitter MUST fire exactly once for the refused row")
+		Expect(violations[0].pluginName).To(Equal(downgradeAttackerPluginName))
+		Expect(violations[0].rowType).To(Equal(downgradeAttackerSensitive))
+		Expect(violations[0].refusalCode).To(Equal("AUDIT_ROW_DOWNGRADE_DETECTED"))
+	})
+})
 
-	row := eventbus.AuditRowOf(got)
-	require.NotNil(t, row, "router MUST stamp the source-of-truth AuditRow")
-	assert.Equal(t, downgradeAttackerCachedCodec, row.GetCodec())
-	require.NotNil(t, row.DekRef)
-	assert.Equal(t, downgradeAttackerCachedDekRef, *row.DekRef)
+var _ = Describe("Downgrade attacker honest path delivers", func() {
+	It("fence passes honest encrypted row through byte-equal with no violation signal", func() {
+		suite := newDowngradeAttackerSuiteForGinkgo()
 
-	require.Empty(t, suite.emitter.snapshot(),
-		"INV-P7-10 honest path: violation emitter MUST NOT fire")
-}
+		cachedPayload := []byte("ciphertext-bytes-from-publisher")
+		suite.primeHonestCache(cachedPayload)
 
-// TestDowngradeAttackerMaliciousPathRefuses — INV-P7-10 attack path.
-// Malicious mode fabricates a row with codec=identity + cleartext payload
-// for an always-sensitive type. The fence MUST refuse per-row
-// (metadata_only=true, NoPlaintextReason=DowngradeRefused, Payload=nil)
-// AND emit a plugin_integrity_violation audit with refusal_code=
-// AUDIT_ROW_DOWNGRADE_DETECTED. Refusal is per-row, NOT stream-fatal —
-// a malicious plugin that puts a downgrade row first MUST NOT DoS
-// subsequent honest rows on the same stream (Task C.3.3 rule 3).
-func TestDowngradeAttackerMaliciousPathRefuses(t *testing.T) {
-	suite := newDowngradeAttackerSuite(t)
+		events := suite.queryFenced(downgradeHonestSubject)
+		Expect(events).To(HaveLen(1), "honest mode MUST replay exactly one cached row")
 
-	// No PrimeHonestCache — malicious branch fabricates its own row.
-	events := suite.QueryFenced(t, downgradeMaliciousSubject)
-	require.Len(t, events, 1, "malicious mode MUST yield exactly one fabricated row")
+		got := events[0]
+		Expect(got.MetadataOnly).To(BeFalse(),
+			"INV-P7-10 honest path: row MUST NOT be marked metadata_only")
+		Expect(got.NoPlaintextReason).To(Equal(eventbus.NoPlaintextReasonUnspecified),
+			"INV-P7-10 honest path: NoPlaintextReason MUST be unset for clean rows")
+		Expect(got.Payload).To(Equal(cachedPayload),
+			"INV-P7-10 honest path: fence MUST pass payload through byte-equal")
 
-	got := events[0]
-	assert.True(t, got.MetadataOnly,
-		"INV-P7-10: malicious downgrade row MUST surface as metadata_only=true")
-	assert.Equal(t, eventbus.NoPlaintextReasonDowngradeRefused, got.NoPlaintextReason,
-		"INV-P7-10: refusal reason MUST be DowngradeRefused")
-	assert.Empty(t, got.Payload,
-		"INV-P7-10: refused row MUST NOT leak plaintext payload")
+		row := eventbus.AuditRowOf(got)
+		Expect(row).NotTo(BeNil(), "router MUST stamp the source-of-truth AuditRow")
+		Expect(row.GetCodec()).To(Equal(downgradeAttackerCachedCodec))
+		Expect(row.DekRef).NotTo(BeNil())
+		Expect(*row.DekRef).To(Equal(downgradeAttackerCachedDekRef))
 
-	violations := suite.emitter.snapshot()
-	require.Len(t, violations, 1,
-		"INV-P7-10: violation emitter MUST fire exactly once for the refused row")
-	assert.Equal(t, downgradeAttackerPluginName, violations[0].pluginName)
-	assert.Equal(t, downgradeAttackerSensitive, violations[0].rowType)
-	assert.Equal(t, "AUDIT_ROW_DOWNGRADE_DETECTED", violations[0].refusalCode)
-}
+		Expect(suite.emitter.snapshot()).To(BeEmpty(),
+			"INV-P7-10 honest path: violation emitter MUST NOT fire")
+	})
+})
 
 // --- Test helpers ---
 
@@ -259,7 +246,7 @@ func (fenceLookupAlwaysFound) Exists(_ context.Context, _ uint64) (bool, error) 
 }
 
 // capturingViolationEmitter records EmitViolation calls so the malicious
-// test can assert the audit signal fired with the expected refusal code.
+// spec can assert the audit signal fired with the expected refusal code.
 type capturingViolationEmitter struct {
 	mu    sync.Mutex
 	calls []capturedViolation
@@ -316,27 +303,40 @@ func alwaysSensitiveFromManifest(m *plugins.Manifest) map[string]struct{} {
 //	<tempdir>/plugin.yaml
 //	<tempdir>/<os>-<arch>/test-downgrade-attacker
 //
-// The compiled binary is removed via t.Cleanup. Returns the plugin
+// The compiled binary is removed via suiteT.Cleanup. Returns the plugin
 // directory and the parsed manifest.
-func buildDowngradeAttackerBinary(t *testing.T) (string, *plugins.Manifest) {
-	t.Helper()
-
+func buildDowngradeAttackerBinary(t interface {
+	Helper()
+	Fatalf(string, ...any)
+	Cleanup(func())
+	TempDir() string
+	Context() context.Context
+},
+) (string, *plugins.Manifest) {
 	_, thisFile, _, _ := runtime.Caller(0)
 	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
 	src := filepath.Join(repoRoot, "test", "integration", "plugin", "testdata", "test_downgrade_attacker")
 
 	manifestPath := filepath.Join(src, "plugin.yaml")
 	manifestData, err := os.ReadFile(manifestPath) //nolint:gosec // test fixture path under repo root
-	require.NoError(t, err, "fixture manifest MUST exist at %s", manifestPath)
+	if err != nil {
+		t.Fatalf("fixture manifest MUST exist at %s: %v", manifestPath, err)
+	}
 
 	manifest, err := plugins.ParseManifest(manifestData)
-	require.NoError(t, err, "fixture manifest MUST parse")
+	if err != nil {
+		t.Fatalf("fixture manifest MUST parse: %v", err)
+	}
 
 	pluginDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.yaml"), manifestData, 0o644)) //nolint:gosec // test artifact under TempDir
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.yaml"), manifestData, 0o644); err != nil { //nolint:gosec // test artifact under TempDir
+		t.Fatalf("write plugin.yaml: %v", err)
+	}
 
 	platformDir := filepath.Join(pluginDir, runtime.GOOS+"-"+runtime.GOARCH)
-	require.NoError(t, os.MkdirAll(platformDir, 0o755))
+	if err := os.MkdirAll(platformDir, 0o755); err != nil {
+		t.Fatalf("mkdir platformDir: %v", err)
+	}
 
 	exe := filepath.Join(platformDir, manifest.BinaryPlugin.Executable)
 
@@ -346,7 +346,9 @@ func buildDowngradeAttackerBinary(t *testing.T) (string, *plugins.Manifest) {
 	cmd.Dir = repoRoot
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 	out, buildErr := cmd.CombinedOutput()
-	require.NoError(t, buildErr, "go build of fixture MUST succeed:\n%s", string(out))
+	if buildErr != nil {
+		t.Fatalf("go build of fixture MUST succeed:\n%s", string(out))
+	}
 
 	t.Cleanup(func() {
 		// pluginDir is a TempDir — Go's testing.TempDir auto-cleans, but

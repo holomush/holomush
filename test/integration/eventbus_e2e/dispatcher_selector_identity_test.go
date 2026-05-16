@@ -8,14 +8,14 @@ package eventbus_e2e_test
 import (
 	"context"
 	"reflect"
-	"testing"
 	"time"
+
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/eventbus/history"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // fakeKeySelectorForIdentityTest is a no-op selector — the test only
@@ -30,39 +30,39 @@ func (fakeKeySelectorForIdentityTest) SelectForDecrypt(_ context.Context, _ code
 	return codec.NoKey, nil
 }
 
-// TestDispatcherAndHotTierShareSelector — INV-P7-9. Mirrors the
+// Dispatcher and hot tier share selector specs — INV-P7-9. Mirrors the
 // production wiring path at cmd/holomush/core.go:488 +
 // cmd/holomush/sub_grpc.go::newHistoryReader: a single
 // codec.KeySelector instance is constructed once at boot and threaded
 // into both PluginConsumerManager (via WithKeySelector) and
 // history.Reader (via WithCodecSelector). E.3 (1r0v.5) lands the
-// production wiring; this test guards the contract.
-func TestDispatcherAndHotTierShareSelector(t *testing.T) {
-	t.Parallel()
+// production wiring; this spec guards the contract.
+var _ = Describe("Dispatcher and hot tier share selector (INV-P7-9)", func() {
+	It("PluginConsumerManager and history.Reader hold the same KeySelector instance", func() {
+		// The single shared selector instance — INV-P7-9 requires both
+		// substrates to hold this exact pointer. Pointer (not value) so
+		// reflect.ValueOf(iface).Pointer() returns the address at line 68
+		// rather than panicking on a struct-kind interface value.
+		selector := &fakeKeySelectorForIdentityTest{}
 
-	// The single shared selector instance — INV-P7-9 requires both
-	// substrates to hold this exact pointer. Pointer (not value) so
-	// reflect.ValueOf(iface).Pointer() returns the address at line 68
-	// rather than panicking on a struct-kind interface value.
-	selector := &fakeKeySelectorForIdentityTest{}
+		// Mirror cmd/holomush/core.go:488 — Phase 7 production threads the
+		// shared selector into the consumer manager via WithKeySelector.
+		pcm := audit.NewPluginConsumerManager(nil, /* js — not exercised here */
+			audit.WithKeySelector(selector))
 
-	// Mirror cmd/holomush/core.go:488 — Phase 7 production threads the
-	// shared selector into the consumer manager via WithKeySelector.
-	pcm := audit.NewPluginConsumerManager(nil, /* js — not exercised here */
-		audit.WithKeySelector(selector))
+		// Mirror cmd/holomush/sub_grpc.go's history.NewReader call — both
+		// halves get the same selector instance.
+		reader := history.NewReader(nil, nil, time.Hour, time.Now,
+			history.WithCodecSelector(selector))
 
-	// Mirror cmd/holomush/sub_grpc.go's history.NewReader call — both
-	// halves get the same selector instance.
-	reader := history.NewReader(nil, nil, time.Hour, time.Now,
-		history.WithCodecSelector(selector))
+		pcmSel := pcm.KeySelectorForTest()
+		readerSel := reader.KeySelectorForTest()
 
-	pcmSel := pcm.KeySelectorForTest()
-	readerSel := reader.KeySelectorForTest()
-
-	require.NotNil(t, readerSel,
-		"history.Reader MUST hold the shared selector (substrate already wired)")
-	assert.NotNil(t, pcmSel,
-		"INV-P7-9: PluginConsumerManager MUST hold the shared selector — wiring lands in Task E.3 (1r0v.5)")
-	assert.True(t, pcmSel != nil && reflect.ValueOf(pcmSel).Pointer() == reflect.ValueOf(readerSel).Pointer(),
-		"INV-P7-9: PluginConsumerManager and history.Reader MUST share the same KeySelector instance")
-}
+		Expect(readerSel).NotTo(BeNil(),
+			"history.Reader MUST hold the shared selector (substrate already wired)")
+		Expect(pcmSel).NotTo(BeNil(),
+			"INV-P7-9: PluginConsumerManager MUST hold the shared selector — wiring lands in Task E.3 (1r0v.5)")
+		Expect(pcmSel != nil && reflect.ValueOf(pcmSel).Pointer() == reflect.ValueOf(readerSel).Pointer()).To(BeTrue(),
+			"INV-P7-9: PluginConsumerManager and history.Reader MUST share the same KeySelector instance")
+	})
+})

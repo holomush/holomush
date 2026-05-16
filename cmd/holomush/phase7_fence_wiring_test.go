@@ -128,7 +128,7 @@ func TestViolationEmitter_NilPublisher_GracefulNoop(t *testing.T) {
 // the newViolationEmitter refactor (rawPub + registry → wraps with
 // RenderingPublisher internally), the publish path is:
 //
-//   errPublisher → RenderingPublisher(EMIT_PUBLISH_FAILED) → EmitViolation(PLUGIN_INTEGRITY_VIOLATION_EMIT_FAILED)
+//	errPublisher → RenderingPublisher(EMIT_PUBLISH_FAILED) → EmitViolation(PLUGIN_INTEGRITY_VIOLATION_EMIT_FAILED)
 //
 // samber/oops returns the DEEPEST oops code via OopsError.Code(), so
 // AsOops surfaces EMIT_PUBLISH_FAILED. The outer
