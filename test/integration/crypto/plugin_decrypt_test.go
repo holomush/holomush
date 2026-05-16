@@ -20,8 +20,8 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -158,14 +158,18 @@ func buildPluginDecryptHarness(t *testing.T) *pluginDecryptHarness {
 		Subjects: []string{"audit.>"},
 		Storage:  jetstream.MemoryStorage,
 	})
-	require.NoError(t, err, "create AUDIT JetStream stream")
+	if err != nil {
+		t.Fatalf("buildPluginDecryptHarness: CreateOrUpdateStream AUDIT: %v", err)
+	}
 
 	kekHex := testutil.RandomKEKHex(t)
 	t.Setenv("HOLOMUSH_PLUGIN_DECRYPT_KEK", kekHex)
 	kekSource := kek.NewEnvSource("HOLOMUSH_PLUGIN_DECRYPT_KEK", false)
 
 	provider, err := kek.NewLocalAEADProvider(ctx, kekSource, pool)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("buildPluginDecryptHarness: NewLocalAEADProvider: %v", err)
+	}
 
 	dekStore := dek.NewStore(pool)
 	dekCache := dek.NewCache(dek.CacheConfig{Capacity: 64})
@@ -173,24 +177,32 @@ func buildPluginDecryptHarness(t *testing.T) *pluginDecryptHarness {
 	dekMgr, err := dek.NewManager(provider, dekStore, dekCache, dekPartCache,
 		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },
 		&dekBindingStub{bindingID: "bind-decrypt"})
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("buildPluginDecryptHarness: NewManager: %v", err)
+	}
 
 	// Host audit subsystem: populates events_audit. Handle stays local —
 	// no test calls AwaitDrained on it.
 	hostSub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-	require.NoError(t, hostSub.Start(ctx))
+	if err := hostSub.Start(ctx); err != nil {
+		t.Fatalf("buildPluginDecryptHarness: hostSub.Start: %v", err)
+	}
 	t.Cleanup(func() { _ = hostSub.Stop(context.Background()) })
 
 	registry, err := core.BootstrapVerbRegistry("test")
-	require.NoError(t, err)
-	require.NoError(t, registry.RegisterWithSource(core.VerbRegistration{
+	if err != nil {
+		t.Fatalf("buildPluginDecryptHarness: BootstrapVerbRegistry: %v", err)
+	}
+	if err := registry.RegisterWithSource(core.VerbRegistration{
 		Type:          "test-plugin:whisper",
 		Category:      "communication",
 		Format:        "speech",
 		Label:         "whispers",
 		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
 		Source:        "test-plugin",
-	}, "1.0.0"))
+	}, "1.0.0"); err != nil {
+		t.Fatalf("buildPluginDecryptHarness: RegisterWithSource: %v", err)
+	}
 
 	rawPub := eventbus.NewJetStreamPublisher(
 		bus.JS,
@@ -205,7 +217,9 @@ func buildPluginDecryptHarness(t *testing.T) *pluginDecryptHarness {
 
 	participantLookup := authguard.NewDEKParticipantLookup(dekMgr)
 	guard, err := authguard.New(participantLookup, manifests, abacEngine, noopBackpressure{})
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("buildPluginDecryptHarness: authguard.New: %v", err)
+	}
 
 	sessionGuard := authguard.NewSessionBridgeGuard(guard)
 
@@ -216,14 +230,18 @@ func buildPluginDecryptHarness(t *testing.T) *pluginDecryptHarness {
 	// for audit events and publishes directly to JetStream.
 	auditPub := &auditPassthroughPublisher{inner: rawPub, js: bus.JS}
 	auditEmitter, err := guardaudit.NewQueuedEmitter(auditPub)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("buildPluginDecryptHarness: NewQueuedEmitter: %v", err)
+	}
 	t.Cleanup(func() {
 		shutCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		_ = auditEmitter.Shutdown(shutCtx)
 	})
 	sessionAuditEmitter, err := guardaudit.NewSessionBridgeEmitter(auditEmitter)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("buildPluginDecryptHarness: NewSessionBridgeEmitter: %v", err)
+	}
 
 	sub := eventbus.NewJetStreamSubscriber(
 		bus.JS,
@@ -281,7 +299,9 @@ func emitSensitiveWhisper(t *testing.T, h *pluginDecryptHarness, sceneID, plaint
 		Payload:   plaintext,
 		Sensitive: true,
 	}
-	require.NoError(t, emitter.Emit(ctx, "test-plugin", intent))
+	if err := emitter.Emit(ctx, "test-plugin", intent); err != nil {
+		t.Fatalf("emitSensitiveWhisper: %v", err)
+	}
 }
 
 // TestPluginDecryptManifestGateDeniesWithoutDeclaration verifies INV-17:
@@ -289,126 +309,130 @@ func emitSensitiveWhisper(t *testing.T, h *pluginDecryptHarness, sceneID, plaint
 // receive metadata-only delivery for events of that class, regardless of
 // subject subscription. The manifest gate fires before the ABAC evaluation
 // (guard.go:123), so even with an ABAC grant, the plugin is denied.
-func TestPluginDecryptManifestGateDeniesWithoutDeclaration(t *testing.T) {
-	h := buildPluginDecryptHarness(t)
+var _ = Describe("Plugin decrypt manifest gate denies without declaration (INV-17)", func() {
+	It("plugin without requests_decryption receives MetadataOnly=true", func() {
+		h := buildPluginDecryptHarness(suiteT)
 
-	const (
-		sceneID              = "01HXXXINV17SCENE00000001"
-		pluginName           = "inv17-no-manifest"
-		sessionID            = "inv17-session"
-		participantBindingID = "01INV17PARTICIPANTBIND00"
-	)
+		const (
+			sceneID              = "01HXXXINV17SCENE00000001"
+			pluginName           = "inv17-no-manifest"
+			sessionID            = "inv17-session"
+			participantBindingID = "01INV17PARTICIPANTBIND00"
+		)
 
-	// Pre-create DEK with a participant so the event is encryptable.
-	ctx := context.Background()
-	ctxID := dek.ContextID{Type: "scene", ID: sceneID}
-	_, err := h.dekMgr.GetOrCreate(ctx, ctxID, []dek.Participant{
-		{
-			PlayerID:    "01INV17PLAYER00000000",
-			CharacterID: "01INV17CHARACT00000000",
-			BindingID:   participantBindingID,
-			JoinedAt:    time.Now().UTC(),
-			AddedVia:    "test_setup",
-		},
+		// Pre-create DEK with a participant so the event is encryptable.
+		ctx := context.Background()
+		ctxID := dek.ContextID{Type: "scene", ID: sceneID}
+		_, err := h.dekMgr.GetOrCreate(ctx, ctxID, []dek.Participant{
+			{
+				PlayerID:    "01INV17PLAYER00000000",
+				CharacterID: "01INV17CHARACT00000000",
+				BindingID:   participantBindingID,
+				JoinedAt:    time.Now().UTC(),
+				AddedVia:    "test_setup",
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Register a grant for this plugin to prove the manifest gate fires
+		// before ABAC evaluation — the ABAC engine would permit, but the
+		// manifest gate denies first.
+		h.abacEngine.Grant("plugin:"+pluginName, "decrypt", "dek:1:1")
+
+		// Do NOT register the plugin in manifests — this is the INV-17 condition.
+
+		const plaintext = `{"text":"inv17 secret"}`
+		emitSensitiveWhisper(suiteT, h, sceneID, plaintext)
+
+		pluginID := eventbus.SessionIdentity{
+			Kind:       eventbus.IdentityKindPlugin,
+			PluginName: pluginName,
+		}
+		stream, err := h.subscriber.OpenSession(ctx, sessionID, pluginID, []eventbus.Subject{"events.>"})
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = stream.Close() })
+
+		receiveCtx, cancel := context.WithTimeout(ctx, testutil.DefaultWait)
+		defer cancel()
+
+		delivery, err := stream.Next(receiveCtx)
+		Expect(err).NotTo(HaveOccurred(), "expected delivery from stream")
+		Expect(delivery.Ack()).NotTo(HaveOccurred())
+
+		// Verifies: INV-17
+		Expect(delivery.MetadataOnly()).To(BeTrue(), "INV-17: plugin without requests_decryption must receive MetadataOnly=true")
+		Expect(delivery.Event().Payload).To(BeEmpty(), "INV-17: metadata-only delivery must have empty payload")
 	})
-	require.NoError(t, err)
-
-	// Register a grant for this plugin to prove the manifest gate fires
-	// before ABAC evaluation — the ABAC engine would permit, but the
-	// manifest gate denies first.
-	h.abacEngine.Grant("plugin:"+pluginName, "decrypt", "dek:1:1")
-
-	// Do NOT register the plugin in manifests — this is the INV-17 condition.
-
-	const plaintext = `{"text":"inv17 secret"}`
-	emitSensitiveWhisper(t, h, sceneID, plaintext)
-
-	pluginID := eventbus.SessionIdentity{
-		Kind:       eventbus.IdentityKindPlugin,
-		PluginName: pluginName,
-	}
-	stream, err := h.subscriber.OpenSession(ctx, sessionID, pluginID, []eventbus.Subject{"events.>"})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = stream.Close() })
-
-	receiveCtx, cancel := context.WithTimeout(ctx, testutil.DefaultWait)
-	defer cancel()
-
-	delivery, err := stream.Next(receiveCtx)
-	require.NoError(t, err, "expected delivery from stream")
-	require.NoError(t, delivery.Ack())
-
-	// Verifies: INV-17
-	assert.True(t, delivery.MetadataOnly(), "INV-17: plugin without requests_decryption must receive MetadataOnly=true")
-	assert.Empty(t, delivery.Event().Payload, "INV-17: metadata-only delivery must have empty payload")
-}
+})
 
 // TestPluginDecryptABACGateDeniesWithoutGrant verifies INV-18: a plugin
 // with manifest declaration but without an active ABAC grant MUST receive
 // metadata-only. The manifest gate passes (requests_decryption declared)
 // but the ABAC evaluation denies (guard.go:143-144).
-func TestPluginDecryptABACGateDeniesWithoutGrant(t *testing.T) {
-	h := buildPluginDecryptHarness(t)
+var _ = Describe("Plugin decrypt ABAC gate denies without grant (INV-18)", func() {
+	It("plugin with manifest but no ABAC grant receives MetadataOnly=true", func() {
+		h := buildPluginDecryptHarness(suiteT)
 
-	const (
-		sceneID    = "01HXXXINV18SCENE00000002"
-		pluginName = "inv18-has-manifest"
-		sessionID  = "inv18-session"
-	)
+		const (
+			sceneID    = "01HXXXINV18SCENE00000002"
+			pluginName = "inv18-has-manifest"
+			sessionID  = "inv18-session"
+		)
 
-	// Pre-create DEK with a participant.
-	ctx := context.Background()
-	ctxID := dek.ContextID{Type: "scene", ID: sceneID}
-	_, err := h.dekMgr.GetOrCreate(ctx, ctxID, []dek.Participant{
-		{
-			PlayerID:    "01INV18PLAYER00000000",
-			CharacterID: "01INV18CHARACT00000000",
-			BindingID:   "01INV18PARTICIPANTBIND00",
-			JoinedAt:    time.Now().UTC(),
-			AddedVia:    "test_setup",
-		},
-	})
-	require.NoError(t, err)
+		// Pre-create DEK with a participant.
+		ctx := context.Background()
+		ctxID := dek.ContextID{Type: "scene", ID: sceneID}
+		_, err := h.dekMgr.GetOrCreate(ctx, ctxID, []dek.Participant{
+			{
+				PlayerID:    "01INV18PLAYER00000000",
+				CharacterID: "01INV18CHARACT00000000",
+				BindingID:   "01INV18PARTICIPANTBIND00",
+				JoinedAt:    time.Now().UTC(),
+				AddedVia:    "test_setup",
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
 
-	// Register the plugin's manifest with requests_decryption — this
-	// passes the manifest gate (guard.go:123) but ABAC will deny because
-	// no grant is configured for this plugin in the GrantEngine.
-	h.manifests[pluginName] = &plugins.Manifest{
-		Name: pluginName,
-		Crypto: &plugins.CryptoSection{
-			Consumes: []plugins.CryptoConsume{
-				{
-					Subjects:           []string{"events.>"},
-					RequestsDecryption: []string{"test-plugin:whisper"},
+		// Register the plugin's manifest with requests_decryption — this
+		// passes the manifest gate (guard.go:123) but ABAC will deny because
+		// no grant is configured for this plugin in the GrantEngine.
+		h.manifests[pluginName] = &plugins.Manifest{
+			Name: pluginName,
+			Crypto: &plugins.CryptoSection{
+				Consumes: []plugins.CryptoConsume{
+					{
+						Subjects:           []string{"events.>"},
+						RequestsDecryption: []string{"test-plugin:whisper"},
+					},
 				},
 			},
-		},
-	}
+		}
 
-	// Do NOT call h.abacEngine.Grant — this is the INV-18 condition.
+		// Do NOT call h.abacEngine.Grant — this is the INV-18 condition.
 
-	const plaintext = `{"text":"inv18 secret"}`
-	emitSensitiveWhisper(t, h, sceneID, plaintext)
+		const plaintext = `{"text":"inv18 secret"}`
+		emitSensitiveWhisper(suiteT, h, sceneID, plaintext)
 
-	pluginID := eventbus.SessionIdentity{
-		Kind:       eventbus.IdentityKindPlugin,
-		PluginName: pluginName,
-	}
-	stream, err := h.subscriber.OpenSession(ctx, sessionID, pluginID, []eventbus.Subject{"events.>"})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = stream.Close() })
+		pluginID := eventbus.SessionIdentity{
+			Kind:       eventbus.IdentityKindPlugin,
+			PluginName: pluginName,
+		}
+		stream, err := h.subscriber.OpenSession(ctx, sessionID, pluginID, []eventbus.Subject{"events.>"})
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = stream.Close() })
 
-	receiveCtx, cancel := context.WithTimeout(ctx, testutil.DefaultWait)
-	defer cancel()
+		receiveCtx, cancel := context.WithTimeout(ctx, testutil.DefaultWait)
+		defer cancel()
 
-	delivery, err := stream.Next(receiveCtx)
-	require.NoError(t, err, "expected delivery from stream")
-	require.NoError(t, delivery.Ack())
+		delivery, err := stream.Next(receiveCtx)
+		Expect(err).NotTo(HaveOccurred(), "expected delivery from stream")
+		Expect(delivery.Ack()).NotTo(HaveOccurred())
 
-	// Verifies: INV-18
-	assert.True(t, delivery.MetadataOnly(), "INV-18: plugin with manifest but no ABAC grant must receive MetadataOnly=true")
-	assert.Empty(t, delivery.Event().Payload, "INV-18: metadata-only delivery must have empty payload")
-}
+		// Verifies: INV-18
+		Expect(delivery.MetadataOnly()).To(BeTrue(), "INV-18: plugin with manifest but no ABAC grant must receive MetadataOnly=true")
+		Expect(delivery.Event().Payload).To(BeEmpty(), "INV-18: metadata-only delivery must have empty payload")
+	})
+})
 
 // TestPluginDecryptEmitsAuditOnPermitAndIsolation verifies INV-19: every
 // plugin decryption MUST emit an audit event on a subject the plugin cannot
@@ -417,97 +441,99 @@ func TestPluginDecryptABACGateDeniesWithoutGrant(t *testing.T) {
 // gameID to "holomush" per emitter.go:29), which is outside the events.>
 // subject namespace. The plugin session subscribes to events.> only, so
 // the audit event is invisible by construction.
-func TestPluginDecryptEmitsAuditOnPermitAndIsolation(t *testing.T) {
-	h := buildPluginDecryptHarness(t)
+var _ = Describe("Plugin decrypt emits audit on permit and isolation (INV-19)", func() {
+	It("permitted plugin receives plaintext and audit event is isolated from plugin session", func() {
+		h := buildPluginDecryptHarness(suiteT)
 
-	const (
-		sceneID    = "01HXXXINV19SCENE00000003"
-		pluginName = "inv19-audit-plugin"
-		sessionID  = "inv19-session"
-	)
+		const (
+			sceneID    = "01HXXXINV19SCENE00000003"
+			pluginName = "inv19-audit-plugin"
+			sessionID  = "inv19-session"
+		)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Pre-create DEK with a participant and capture the key coordinates
-	// for the ABAC grant (guard.go:127-129 constructs resource as
-	// "dek:<keyID>:<version>").
-	ctxID := dek.ContextID{Type: "scene", ID: sceneID}
-	key, err := h.dekMgr.GetOrCreate(ctx, ctxID, []dek.Participant{
-		{
-			PlayerID:    "01INV19PLAYER00000000",
-			CharacterID: "01INV19CHARACT00000000",
-			BindingID:   "01INV19PARTICIPANTBIND00",
-			JoinedAt:    time.Now().UTC(),
-			AddedVia:    "test_setup",
-		},
-	})
-	require.NoError(t, err)
+		// Pre-create DEK with a participant and capture the key coordinates
+		// for the ABAC grant (guard.go:127-129 constructs resource as
+		// "dek:<keyID>:<version>").
+		ctxID := dek.ContextID{Type: "scene", ID: sceneID}
+		key, err := h.dekMgr.GetOrCreate(ctx, ctxID, []dek.Participant{
+			{
+				PlayerID:    "01INV19PLAYER00000000",
+				CharacterID: "01INV19CHARACT00000000",
+				BindingID:   "01INV19PARTICIPANTBIND00",
+				JoinedAt:    time.Now().UTC(),
+				AddedVia:    "test_setup",
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
 
-	// Register the manifest with requests_decryption.
-	h.manifests[pluginName] = &plugins.Manifest{
-		Name: pluginName,
-		Crypto: &plugins.CryptoSection{
-			Consumes: []plugins.CryptoConsume{
-				{
-					Subjects:           []string{"events.>"},
-					RequestsDecryption: []string{"test-plugin:whisper"},
+		// Register the manifest with requests_decryption.
+		h.manifests[pluginName] = &plugins.Manifest{
+			Name: pluginName,
+			Crypto: &plugins.CryptoSection{
+				Consumes: []plugins.CryptoConsume{
+					{
+						Subjects:           []string{"events.>"},
+						RequestsDecryption: []string{"test-plugin:whisper"},
+					},
 				},
 			},
-		},
-	}
+		}
 
-	// Grant the ABAC permission using the captured DEK coordinates.
-	h.abacEngine.Grant(
-		"plugin:"+pluginName,
-		"decrypt",
-		fmt.Sprintf("dek:%d:%d", key.ID, key.Version),
-	)
+		// Grant the ABAC permission using the captured DEK coordinates.
+		h.abacEngine.Grant(
+			"plugin:"+pluginName,
+			"decrypt",
+			fmt.Sprintf("dek:%d:%d", key.ID, key.Version),
+		)
 
-	const plaintext = `{"text":"inv19 audit secret"}`
-	emitSensitiveWhisper(t, h, sceneID, plaintext)
+		const plaintext = `{"text":"inv19 audit secret"}`
+		emitSensitiveWhisper(suiteT, h, sceneID, plaintext)
 
-	// Open the plugin session.
-	pluginID := eventbus.SessionIdentity{
-		Kind:       eventbus.IdentityKindPlugin,
-		PluginName: pluginName,
-	}
-	stream, err := h.subscriber.OpenSession(ctx, sessionID, pluginID, []eventbus.Subject{"events.>"})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = stream.Close() })
+		// Open the plugin session.
+		pluginID := eventbus.SessionIdentity{
+			Kind:       eventbus.IdentityKindPlugin,
+			PluginName: pluginName,
+		}
+		stream, err := h.subscriber.OpenSession(ctx, sessionID, pluginID, []eventbus.Subject{"events.>"})
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = stream.Close() })
 
-	receiveCtx, cancel := context.WithTimeout(ctx, testutil.DefaultWait)
-	defer cancel()
+		receiveCtx, cancel := context.WithTimeout(ctx, testutil.DefaultWait)
+		defer cancel()
 
-	delivery, err := stream.Next(receiveCtx)
-	require.NoError(t, err, "expected delivery from stream")
-	require.NoError(t, delivery.Ack())
+		delivery, err := stream.Next(receiveCtx)
+		Expect(err).NotTo(HaveOccurred(), "expected delivery from stream")
+		Expect(delivery.Ack()).NotTo(HaveOccurred())
 
-	// Assertion 1: plugin received plaintext (permit path).
-	// Verifies: INV-19 (permit branch)
-	assert.False(t, delivery.MetadataOnly(), "INV-19: permitted plugin must receive MetadataOnly=false")
-	assert.Equal(t, []byte(plaintext), delivery.Event().Payload, "INV-19: permitted plugin must receive original plaintext")
+		// Assertion 1: plugin received plaintext (permit path).
+		// Verifies: INV-19 (permit branch)
+		Expect(delivery.MetadataOnly()).To(BeFalse(), "INV-19: permitted plugin must receive MetadataOnly=false")
+		Expect(delivery.Event().Payload).To(Equal([]byte(plaintext)), "INV-19: permitted plugin must receive original plaintext")
 
-	// Assertion 2: audit event exists on audit.holomush.plugin_decrypt.inv19-audit-plugin.
-	// The guardaudit.Emitter publishes to the AUDIT stream (not events.>).
-	// Verifies: INV-19 (audit-on-permit)
-	auditSubject := "audit.holomush.plugin_decrypt." + pluginName
-	auditMsg := testutil.WaitForOneJetStreamMsgOnStream(t, h.bus, "AUDIT", auditSubject, testutil.DefaultWait)
-	assert.Equal(t, "audit:plugin_decrypt", auditMsg.Headers().Get("App-Event-Type"),
-		"INV-19: audit event must have type audit:plugin_decrypt")
+		// Assertion 2: audit event exists on audit.holomush.plugin_decrypt.inv19-audit-plugin.
+		// The guardaudit.Emitter publishes to the AUDIT stream (not events.>).
+		// Verifies: INV-19 (audit-on-permit)
+		auditSubject := "audit.holomush.plugin_decrypt." + pluginName
+		auditMsg := testutil.WaitForOneJetStreamMsgOnStream(suiteT, h.bus, "AUDIT", auditSubject, testutil.DefaultWait)
+		Expect(auditMsg.Headers().Get("App-Event-Type")).To(Equal("audit:plugin_decrypt"),
+			"INV-19: audit event must have type audit:plugin_decrypt")
 
-	// Assertion 3: the plugin session did NOT receive the audit event.
-	// The session subscribes to events.>; the audit event is on audit.>,
-	// which is outside the filter. We verify this by draining the session
-	// with a short timeout — only the sensitive event should appear.
-	//
-	// The session already consumed the sensitive event above. If the audit
-	// event were visible on events.>, stream.Next would return it.
-	// Instead, we expect a timeout (no more messages).
-	noMoreCtx, noMoreCancel := context.WithTimeout(ctx, 500*time.Millisecond)
-	defer noMoreCancel()
-	_, noMoreErr := stream.Next(noMoreCtx)
-	assert.Error(t, noMoreErr, "INV-19: plugin session must not receive audit events (audit.> is outside events.> filter)")
-}
+		// Assertion 3: the plugin session did NOT receive the audit event.
+		// The session subscribes to events.>; the audit event is on audit.>,
+		// which is outside the filter. We verify this by draining the session
+		// with a short timeout — only the sensitive event should appear.
+		//
+		// The session already consumed the sensitive event above. If the audit
+		// event were visible on events.>, stream.Next would return it.
+		// Instead, we expect a timeout (no more messages).
+		noMoreCtx, noMoreCancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer noMoreCancel()
+		_, noMoreErr := stream.Next(noMoreCtx)
+		Expect(noMoreErr).To(HaveOccurred(), "INV-19: plugin session must not receive audit events (audit.> is outside events.> filter)")
+	})
+})
 
 // TestPluginDecryptDenialDoesNotBlockFanout verifies INV-20: a plugin
 // authorization failure MUST NOT block fan-out to other recipients.
@@ -516,82 +542,84 @@ func TestPluginDecryptEmitsAuditOnPermitAndIsolation(t *testing.T) {
 // test asserts both receive the event — the character gets plaintext
 // and the plugin gets metadata-only — proving that the plugin's deny
 // did not block the character's delivery.
-func TestPluginDecryptDenialDoesNotBlockFanout(t *testing.T) {
-	h := buildPluginDecryptHarness(t)
+var _ = Describe("Plugin decrypt denial does not block fanout (INV-20)", func() {
+	It("character receives plaintext and denied plugin receives MetadataOnly without blocking each other", func() {
+		h := buildPluginDecryptHarness(suiteT)
 
-	const (
-		sceneID              = "01HXXXINV20SCENE00000004"
-		participantPlayerID  = "01INV20PLAYER00000000"
-		participantCharID    = "01INV20CHARACT00000000"
-		participantBindingID = "01INV20PARTICIPANTBIND00"
-		deniedPluginName     = "inv20-denied-plugin"
-		characterSessionID   = "inv20-character-session"
-		pluginSessionID      = "inv20-plugin-session"
-	)
+		const (
+			sceneID              = "01HXXXINV20SCENE00000004"
+			participantPlayerID  = "01INV20PLAYER00000000"
+			participantCharID    = "01INV20CHARACT00000000"
+			participantBindingID = "01INV20PARTICIPANTBIND00"
+			deniedPluginName     = "inv20-denied-plugin"
+			characterSessionID   = "inv20-character-session"
+			pluginSessionID      = "inv20-plugin-session"
+		)
 
-	// Pre-create DEK with a participant (for the character session).
-	ctx := context.Background()
-	ctxID := dek.ContextID{Type: "scene", ID: sceneID}
-	_, err := h.dekMgr.GetOrCreate(ctx, ctxID, []dek.Participant{
-		{
+		// Pre-create DEK with a participant (for the character session).
+		ctx := context.Background()
+		ctxID := dek.ContextID{Type: "scene", ID: sceneID}
+		_, err := h.dekMgr.GetOrCreate(ctx, ctxID, []dek.Participant{
+			{
+				PlayerID:    participantPlayerID,
+				CharacterID: participantCharID,
+				BindingID:   participantBindingID,
+				JoinedAt:    time.Now().UTC(),
+				AddedVia:    "test_setup",
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Do NOT register the denied plugin's manifest — INV-20 condition.
+
+		const plaintext = `{"text":"inv20 fanout secret"}`
+
+		// Open character session (participant — permitted).
+		charID := eventbus.SessionIdentity{
+			Kind:        eventbus.IdentityKindCharacter,
 			PlayerID:    participantPlayerID,
 			CharacterID: participantCharID,
 			BindingID:   participantBindingID,
-			JoinedAt:    time.Now().UTC(),
-			AddedVia:    "test_setup",
-		},
+		}
+		charStream, err := h.subscriber.OpenSession(ctx, characterSessionID, charID, []eventbus.Subject{"events.>"})
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = charStream.Close() })
+
+		// Open plugin session (no manifest — denied).
+		pluginID := eventbus.SessionIdentity{
+			Kind:       eventbus.IdentityKindPlugin,
+			PluginName: deniedPluginName,
+		}
+		pluginStream, err := h.subscriber.OpenSession(ctx, pluginSessionID, pluginID, []eventbus.Subject{"events.>"})
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = pluginStream.Close() })
+
+		// Publish the sensitive event after both sessions are open.
+		emitSensitiveWhisper(suiteT, h, sceneID, plaintext)
+
+		// Receive from character session.
+		charRecvCtx, charCancel := context.WithTimeout(ctx, testutil.DefaultWait)
+		defer charCancel()
+
+		charDelivery, err := charStream.Next(charRecvCtx)
+		Expect(err).NotTo(HaveOccurred(), "character session must receive the event")
+		Expect(charDelivery.Ack()).NotTo(HaveOccurred())
+
+		// Receive from plugin session.
+		pluginRecvCtx, pluginCancel := context.WithTimeout(ctx, testutil.DefaultWait)
+		defer pluginCancel()
+
+		pluginDelivery, err := pluginStream.Next(pluginRecvCtx)
+		Expect(err).NotTo(HaveOccurred(), "plugin session must receive the event (metadata-only)")
+		Expect(pluginDelivery.Ack()).NotTo(HaveOccurred())
+
+		// Verifies: INV-20 — the character's plaintext delivery proves the
+		// plugin's deny did not block fan-out to other recipients.
+		Expect(charDelivery.MetadataOnly()).To(BeFalse(), "INV-20: character participant must receive MetadataOnly=false (plaintext)")
+		Expect(charDelivery.Event().Payload).To(Equal([]byte(plaintext)), "INV-20: character must receive original plaintext")
+
+		// The plugin's deny is expected (INV-17 manifest gate).
+		Expect(pluginDelivery.MetadataOnly()).To(BeTrue(), "INV-20: denied plugin must receive MetadataOnly=true")
+		Expect(pluginDelivery.Event().Payload).To(BeEmpty(), "INV-20: denied plugin payload must be empty")
 	})
-	require.NoError(t, err)
-
-	// Do NOT register the denied plugin's manifest — INV-20 condition.
-
-	const plaintext = `{"text":"inv20 fanout secret"}`
-
-	// Open character session (participant — permitted).
-	charID := eventbus.SessionIdentity{
-		Kind:        eventbus.IdentityKindCharacter,
-		PlayerID:    participantPlayerID,
-		CharacterID: participantCharID,
-		BindingID:   participantBindingID,
-	}
-	charStream, err := h.subscriber.OpenSession(ctx, characterSessionID, charID, []eventbus.Subject{"events.>"})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = charStream.Close() })
-
-	// Open plugin session (no manifest — denied).
-	pluginID := eventbus.SessionIdentity{
-		Kind:       eventbus.IdentityKindPlugin,
-		PluginName: deniedPluginName,
-	}
-	pluginStream, err := h.subscriber.OpenSession(ctx, pluginSessionID, pluginID, []eventbus.Subject{"events.>"})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pluginStream.Close() })
-
-	// Publish the sensitive event after both sessions are open.
-	emitSensitiveWhisper(t, h, sceneID, plaintext)
-
-	// Receive from character session.
-	charRecvCtx, charCancel := context.WithTimeout(ctx, testutil.DefaultWait)
-	defer charCancel()
-
-	charDelivery, err := charStream.Next(charRecvCtx)
-	require.NoError(t, err, "character session must receive the event")
-	require.NoError(t, charDelivery.Ack())
-
-	// Receive from plugin session.
-	pluginRecvCtx, pluginCancel := context.WithTimeout(ctx, testutil.DefaultWait)
-	defer pluginCancel()
-
-	pluginDelivery, err := pluginStream.Next(pluginRecvCtx)
-	require.NoError(t, err, "plugin session must receive the event (metadata-only)")
-	require.NoError(t, pluginDelivery.Ack())
-
-	// Verifies: INV-20 — the character's plaintext delivery proves the
-	// plugin's deny did not block fan-out to other recipients.
-	assert.False(t, charDelivery.MetadataOnly(), "INV-20: character participant must receive MetadataOnly=false (plaintext)")
-	assert.Equal(t, []byte(plaintext), charDelivery.Event().Payload, "INV-20: character must receive original plaintext")
-
-	// The plugin's deny is expected (INV-17 manifest gate).
-	assert.True(t, pluginDelivery.MetadataOnly(), "INV-20: denied plugin must receive MetadataOnly=true")
-	assert.Empty(t, pluginDelivery.Event().Payload, "INV-20: denied plugin payload must be empty")
-}
+})
