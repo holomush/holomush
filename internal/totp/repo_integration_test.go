@@ -122,14 +122,29 @@ var _ = Describe("TOTPRepository", func() {
 				},
 			}
 
-			// First call succeeds.
-			err := repo.BootstrapEnrollAtomic(ctx, key, pid, rec)
-			Expect(err).NotTo(HaveOccurred(), "first BootstrapEnrollAtomic should succeed")
+			// Pre-enroll so that BootstrapEnrollAtomic's InsertEnrollment
+			// step fails on duplicate player_id (PK violation on
+			// totp_enrollments.player_id). This forces the rollback path.
+			Expect(repo.InsertEnrollment(ctx, rec)).NotTo(HaveOccurred(),
+				"setup: pre-enrolling player_id should succeed")
 
-			// Second call with same key must fail with TOTP_BOOTSTRAP_CONSUMED.
-			err = repo.BootstrapEnrollAtomic(ctx, key, pid, rec)
-			Expect(err).To(HaveOccurred())
-			errutil.AssertErrorCode(suiteT, err, "TOTP_BOOTSTRAP_CONSUMED")
+			// BootstrapEnrollAtomic must fail during the InsertEnrollment
+			// step (duplicate PK) and roll back the BootstrapClaim it just
+			// inserted in the same transaction.
+			err := repo.BootstrapEnrollAtomic(ctx, key, pid, rec)
+			Expect(err).To(HaveOccurred(),
+				"BootstrapEnrollAtomic must fail when InsertEnrollment hits duplicate player_id")
+
+			// Rollback assertion: the bootstrap claim was NOT persisted,
+			// so a different player can still successfully claim the same
+			// key. If the rollback were broken, the claim row would
+			// survive and this call would return TOTP_BOOTSTRAP_CONSUMED.
+			otherPID := ulid.Make().String()
+			insertTOTPPlayer(pool, otherPID, "uatm_other_"+otherPID)
+			ok, claimErr := repo.BootstrapClaim(ctx, key, otherPID, now)
+			Expect(claimErr).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue(),
+				"BootstrapClaim should still win for a different player after the prior atomic call rolled back")
 		})
 	})
 
