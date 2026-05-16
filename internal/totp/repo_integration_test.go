@@ -180,6 +180,7 @@ var _ = Describe("TOTPRepository", func() {
 
 			_, err := repo.PlayerIDFromUsername(ctx, "no_such_user_ever")
 			Expect(err).To(HaveOccurred())
+			errutil.AssertErrorCode(suiteT, err, "TOTP_REPO_PLAYER_NOT_FOUND")
 		})
 	})
 
