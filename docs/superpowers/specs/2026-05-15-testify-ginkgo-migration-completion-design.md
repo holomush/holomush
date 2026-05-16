@@ -1,5 +1,49 @@
 # Testify + Ginkgo Migration Completion Design
 
+> **STATUS: SUPERSEDED — 2026-05-16.** Work complete; design bead
+> [`holomush-rccc`](https://github.com/holomush/holomush/issues/3884)
+> closed (epic 8/8). Retained for historical record.
+>
+> **CORRECTION (binding for any future migration work):** Canonical Pattern A's
+> prescription to pass `GinkgoT()` to helpers taking `testing.TB` is
+> **WRONG**. Go 1.26's `testing.TB` has an unexported `private()` method
+> that prevents third-party types (including `ginkgo.FullGinkgoTInterface`)
+> from satisfying it. The errutil widening shipped under PR #3950 is
+> harmless-but-useless for its stated `GinkgoT()` purpose.
+>
+> The **correct pattern** (used by ~30 pre-existing Ginkgo specs in this
+> codebase before this migration even began) is:
+>
+> 1. Each suite bootstrap declares `var suiteT *testing.T` at package level.
+> 2. The `TestX` entry func captures `suiteT = t` before `RunSpecs`.
+> 3. Spec bodies pass `suiteT` (a real `*testing.T`) to any helper taking
+>    `*testing.T` or `testing.TB`.
+>
+> See PR #3951 (`test/integration/plugin/plugin_role_permissions_test.go`)
+> as the canonical worked example. PR #4015 includes additional cautions:
+> capture-shared `suiteT.Cleanup` and `suiteT.Setenv` leak across specs
+> in one suite — use `DeferCleanup` and per-spec `os.Setenv` + restore
+> instead.
+>
+> **Also relevant for future migrations:**
+>
+> - INV-tagged test names that the AST-walking meta-test at
+>   `internal/eventbus/history/phase7_boundary_meta_test.go` pins must be
+>   remapped to the Ginkgo suite entry func (e.g.,
+>   `TestBinaryPlugin`, `TestEventbusE2E`); the INV reference stays
+>   greppable in the spec's `Describe` name. See PRs #3951 and #4015 for
+>   the protocol.
+> - The plan's "40 files" inventory swept in 2 helper-only files (zero
+>   test funcs) — `test/integration/auth/core_client_shim_test.go` and
+>   `test/integration/plugin/counting_proxy_test.go`. True conversion
+>   scope was 38. Future inventory queries should filter by
+>   `rg -c 'func Test|t.Run'` rather than just by import absence.
+> - Postgres roles are cluster-level; specs in the same Ginkgo `Describe`
+>   share state across calls. Use unique-per-spec role names or
+>   `DROP ROLE IF EXISTS` guards. See PRs #3951 and #4015 for examples.
+
+---
+
 This document defines the execution plan for completing the testify + ginkgo
 test-framework adoption tracked under `holomush-1hq.26`.
 
@@ -471,3 +515,5 @@ None at design time. Section answered by user decisions captured in
   `*_integration_test.go` (40 files total) after re-grounding surfaced 18
   additional plain-`testing.T` integration tests outside the original tree
   (2026-05-15).
+
+<!-- adr-capture: sha256=2ba0d9f8a0c14b93; session=cli; ts=2026-05-16T22:31:10Z; adrs=holomush-1f1w,holomush-iv7l -->

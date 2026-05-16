@@ -16,6 +16,8 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Use suiteT Capture Pattern Instead of GinkgoT() for testing.TB](holomush-1f1w-suitet-capture-pattern-ginkgo-testing-tb.md) | 2026-05-16 | Accepted | `holomush-1f1w` |
+| [Remap INV-Pinned Test\* Functions to Ginkgo Suite Entries on Migration](holomush-iv7l-remap-inv-pinned-tests-ginkgo-suite-entries.md) | 2026-05-16 | Accepted | `holomush-iv7l` |
 | [AdminReadStream Bypasses HistoryReader/Dispatcher](holomush-8f2x-adminreadstream-bypasses-historyreaderdispatcher.md) | 2026-05-12 | Accepted | `holomush-8f2x` |
 | [Custom Go-Native ABAC Engine](holomush-kokk-custom-go-native-abac-engine.md) | 2026-02-05 | Accepted | `holomush-kokk` |
 | [Cedar-Aligned Fail-Safe Type Semantics](holomush-iv43-cedar-aligned-fail-safe-type-semantics.md) | 2026-02-05 | Accepted | `holomush-iv43` |
