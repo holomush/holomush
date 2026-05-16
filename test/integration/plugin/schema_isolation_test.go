@@ -80,6 +80,12 @@ var _ = Describe("Schema isolation: SchemaProvisioner role + schema lifecycle", 
 		Expect(err).NotTo(HaveOccurred())
 		defer adminConn.Close(ctx)
 
+		// Defensive: drop any stale role from a prior run. Postgres roles
+		// are cluster-level, and a testcontainers reuse-mode container
+		// would otherwise carry this role across `task test:int` runs and
+		// fail the CREATE with "role already exists".
+		_, err = adminConn.Exec(ctx, "DROP ROLE IF EXISTS restricted")
+		Expect(err).NotTo(HaveOccurred())
 		_, err = adminConn.Exec(ctx, "CREATE ROLE restricted LOGIN PASSWORD 'restricted'")
 		Expect(err).NotTo(HaveOccurred())
 		adminConn.Close(ctx)
