@@ -11,7 +11,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -24,7 +25,7 @@ func seedDEKRow(t *testing.T, pool *pgxpool.Pool, id int64, ctxType, ctxID strin
 		`INSERT INTO crypto_keys (id, context_type, context_id, version, wrapped_dek, wrap_provider, wrap_key_id, participants, created_at)
          VALUES ($1, $2, $3, $4, '\x00', 'test', 'test', '[]'::jsonb, now())`,
 		id, ctxType, ctxID, version)
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 }
 
 // mustOpenCheckpoint opens a checkpoint row and returns the RequestID.
@@ -37,151 +38,154 @@ func mustOpenCheckpoint(t *testing.T, repo *dek.CheckpointRepo, ctxID string, ol
 		"01PLAYER", oldDEK,
 		"",
 	)
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 	rid, err := repo.Open(context.Background(), req)
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 	return rid
 }
 
-func TestCheckpointRepo_Open_ReturnsRequestID(t *testing.T) {
-	pool := testIntegrationPool(t)
-	seedDEKRow(t, pool, 100, "scene", "01ABC", 3)
+// Phase 5/6 DEK lifecycle — CheckpointRepo integration specs.
+var _ = Describe("CheckpointRepo", func() {
+	It("Open returns a RequestID", func() {
+		pool := testIntegrationPool(suiteT)
+		seedDEKRow(suiteT, pool, 100, "scene", "01ABC", 3)
 
-	repo := dek.NewCheckpointRepo(pool)
-	req, err := dek.NewCheckpointOpenRequest(
-		"scene", "01ABC",
-		make([]byte, 32), make([]byte, 32),
-		"01PLAYER", 100,
-		"",
-	)
-	require.NoError(t, err)
-	rid, err := repo.Open(context.Background(), req)
-	require.NoError(t, err)
-	require.Len(t, rid, 16, "ULID is 16 bytes")
-}
+		repo := dek.NewCheckpointRepo(pool)
+		req, err := dek.NewCheckpointOpenRequest(
+			"scene", "01ABC",
+			make([]byte, 32), make([]byte, 32),
+			"01PLAYER", 100,
+			"",
+		)
+		Expect(err).NotTo(HaveOccurred())
+		rid, err := repo.Open(context.Background(), req)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(rid).To(HaveLen(16), "ULID is 16 bytes")
+	})
 
-func TestCheckpointRepo_Open_ConcurrentSameContext_Rejected(t *testing.T) {
-	pool := testIntegrationPool(t)
-	seedDEKRow(t, pool, 100, "scene", "01ABC", 3)
-	repo := dek.NewCheckpointRepo(pool)
+	It("Open concurrent same context is rejected", func() {
+		pool := testIntegrationPool(suiteT)
+		seedDEKRow(suiteT, pool, 100, "scene", "01ABC", 3)
+		repo := dek.NewCheckpointRepo(pool)
 
-	req1, err := dek.NewCheckpointOpenRequest(
-		"scene", "01ABC",
-		make([]byte, 32), make([]byte, 32),
-		"01P1", 100,
-		"",
-	)
-	require.NoError(t, err)
-	_, err = repo.Open(context.Background(), req1)
-	require.NoError(t, err)
+		req1, err := dek.NewCheckpointOpenRequest(
+			"scene", "01ABC",
+			make([]byte, 32), make([]byte, 32),
+			"01P1", 100,
+			"",
+		)
+		Expect(err).NotTo(HaveOccurred())
+		_, err = repo.Open(context.Background(), req1)
+		Expect(err).NotTo(HaveOccurred())
 
-	req2, err := dek.NewCheckpointOpenRequest(
-		"scene", "01ABC",
-		make([]byte, 32), make([]byte, 32),
-		"01P2", 100,
-		"",
-	)
-	require.NoError(t, err)
-	_, err = repo.Open(context.Background(), req2)
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "DEK_REKEY_ALREADY_IN_PROGRESS")
-}
+		req2, err := dek.NewCheckpointOpenRequest(
+			"scene", "01ABC",
+			make([]byte, 32), make([]byte, 32),
+			"01P2", 100,
+			"",
+		)
+		Expect(err).NotTo(HaveOccurred())
+		_, err = repo.Open(context.Background(), req2)
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "DEK_REKEY_ALREADY_IN_PROGRESS")
+	})
 
-func TestCheckpointRepo_UpdateStatus_CASRejectsStaleWriter(t *testing.T) {
-	pool := testIntegrationPool(t)
-	seedDEKRow(t, pool, 100, "scene", "01ABC", 3)
-	repo := dek.NewCheckpointRepo(pool)
-	rid := mustOpenCheckpoint(t, repo, "01ABC", 100)
+	It("UpdateStatus CAS rejects stale writer", func() {
+		pool := testIntegrationPool(suiteT)
+		seedDEKRow(suiteT, pool, 100, "scene", "01ABC", 3)
+		repo := dek.NewCheckpointRepo(pool)
+		rid := mustOpenCheckpoint(suiteT, repo, "01ABC", 100)
 
-	// Row is at 'pending'. Try a transition from Phase2MintDEK → Phase3ReencryptCold
-	// which the FSM allows, but the CAS predicate (status = 'phase2_mint_dek') fails
-	// because the row is actually 'pending'. (INV-E1)
-	err := repo.UpdateStatus(
-		context.Background(), rid,
-		dek.CheckpointStatusPhase2MintDEK,
-		dek.CheckpointStatusPhase3ReencryptCold,
-	)
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "DEK_REKEY_STALE_TRANSITION")
-}
+		// Row is at 'pending'. Try a transition from Phase2MintDEK → Phase3ReencryptCold
+		// which the FSM allows, but the CAS predicate (status = 'phase2_mint_dek') fails
+		// because the row is actually 'pending'. (INV-E1)
+		err := repo.UpdateStatus(
+			context.Background(), rid,
+			dek.CheckpointStatusPhase2MintDEK,
+			dek.CheckpointStatusPhase3ReencryptCold,
+		)
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "DEK_REKEY_STALE_TRANSITION")
+	})
 
-func TestCheckpointRepo_Heartbeat_UpdatesTimestamp(t *testing.T) {
-	pool := testIntegrationPool(t)
-	seedDEKRow(t, pool, 100, "scene", "01ABC", 3)
-	repo := dek.NewCheckpointRepo(pool)
-	rid := mustOpenCheckpoint(t, repo, "01ABC", 100)
+	It("Heartbeat updates timestamp", func() {
+		pool := testIntegrationPool(suiteT)
+		seedDEKRow(suiteT, pool, 100, "scene", "01ABC", 3)
+		repo := dek.NewCheckpointRepo(pool)
+		rid := mustOpenCheckpoint(suiteT, repo, "01ABC", 100)
 
-	ckpt, err := repo.Get(context.Background(), rid)
-	require.NoError(t, err)
-	initial := ckpt.LastHeartbeatAt
-	time.Sleep(10 * time.Millisecond)
-	require.NoError(t, repo.Heartbeat(context.Background(), rid))
-	ckpt2, err := repo.Get(context.Background(), rid)
-	require.NoError(t, err)
-	require.True(t, ckpt2.LastHeartbeatAt.After(initial))
-}
+		ckpt, err := repo.Get(context.Background(), rid)
+		Expect(err).NotTo(HaveOccurred())
+		initial := ckpt.LastHeartbeatAt
+		time.Sleep(10 * time.Millisecond)
+		Expect(repo.Heartbeat(context.Background(), rid)).To(Succeed())
+		ckpt2, err := repo.Get(context.Background(), rid)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ckpt2.LastHeartbeatAt.After(initial)).To(BeTrue())
+	})
 
-func TestCheckpointRepo_FindByContextAndArgs_Resume(t *testing.T) {
-	pool := testIntegrationPool(t)
-	seedDEKRow(t, pool, 100, "scene", "01ABC", 3)
-	repo := dek.NewCheckpointRepo(pool)
+	It("FindByContextAndArgs resumes existing checkpoint", func() {
+		pool := testIntegrationPool(suiteT)
+		seedDEKRow(suiteT, pool, 100, "scene", "01ABC", 3)
+		repo := dek.NewCheckpointRepo(pool)
 
-	opArgs := make([]byte, 32)
-	opArgs[0] = 0xAB
-	policy := make([]byte, 32)
-	policy[0] = 0xCD
+		opArgs := make([]byte, 32)
+		opArgs[0] = 0xAB
+		policy := make([]byte, 32)
+		policy[0] = 0xCD
 
-	req, err := dek.NewCheckpointOpenRequest(
-		"scene", "01ABC",
-		opArgs, policy,
-		"01PLAYER", 100,
-		"",
-	)
-	require.NoError(t, err)
-	rid, err := repo.Open(context.Background(), req)
-	require.NoError(t, err)
+		req, err := dek.NewCheckpointOpenRequest(
+			"scene", "01ABC",
+			opArgs, policy,
+			"01PLAYER", 100,
+			"",
+		)
+		Expect(err).NotTo(HaveOccurred())
+		rid, err := repo.Open(context.Background(), req)
+		Expect(err).NotTo(HaveOccurred())
 
-	ckpt, found, err := repo.FindByContextAndArgs(context.Background(), "scene", "01ABC", opArgs)
-	require.NoError(t, err)
-	require.True(t, found)
-	require.Equal(t, rid, ckpt.RequestID)
+		ckpt, found, err := repo.FindByContextAndArgs(context.Background(), "scene", "01ABC", opArgs)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(found).To(BeTrue())
+		Expect(ckpt.RequestID).To(Equal(rid))
 
-	// Different op_args_hash → not found.
-	other := make([]byte, 32)
-	other[0] = 0xEF
-	_, found, err = repo.FindByContextAndArgs(context.Background(), "scene", "01ABC", other)
-	require.NoError(t, err)
-	require.False(t, found)
-}
+		// Different op_args_hash → not found.
+		other := make([]byte, 32)
+		other[0] = 0xEF
+		_, found, err = repo.FindByContextAndArgs(context.Background(), "scene", "01ABC", other)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(found).To(BeFalse())
+	})
 
-func TestCheckpointRepo_ListExpired(t *testing.T) {
-	pool := testIntegrationPool(t)
-	seedDEKRow(t, pool, 100, "scene", "01ABC", 3)
-	repo := dek.NewCheckpointRepo(pool)
-	rid := mustOpenCheckpoint(t, repo, "01ABC", 100)
+	It("ListExpired returns backdate-heartbeat rows", func() {
+		pool := testIntegrationPool(suiteT)
+		seedDEKRow(suiteT, pool, 100, "scene", "01ABC", 3)
+		repo := dek.NewCheckpointRepo(pool)
+		rid := mustOpenCheckpoint(suiteT, repo, "01ABC", 100)
 
-	// Backdate heartbeat by 25h.
-	_, err := pool.Exec(context.Background(),
-		`UPDATE crypto_rekey_checkpoints SET last_heartbeat_at = now() - interval '25 hours' WHERE request_id = $1`,
-		rid[:])
-	require.NoError(t, err)
+		// Backdate heartbeat by 25h.
+		_, err := pool.Exec(context.Background(),
+			`UPDATE crypto_rekey_checkpoints SET last_heartbeat_at = now() - interval '25 hours' WHERE request_id = $1`,
+			rid[:])
+		Expect(err).NotTo(HaveOccurred())
 
-	expired, err := repo.ListExpired(context.Background(), 24*time.Hour)
-	require.NoError(t, err)
-	require.Len(t, expired, 1)
-	require.Equal(t, rid, expired[0].RequestID)
-}
+		expired, err := repo.ListExpired(context.Background(), 24*time.Hour)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(expired).To(HaveLen(1))
+		Expect(expired[0].RequestID).To(Equal(rid))
+	})
 
-func TestCheckpointRepo_MarkAborted_AndPersistsReason(t *testing.T) {
-	pool := testIntegrationPool(t)
-	seedDEKRow(t, pool, 100, "scene", "01ABC", 3)
-	repo := dek.NewCheckpointRepo(pool)
-	rid := mustOpenCheckpoint(t, repo, "01ABC", 100)
+	It("MarkAborted persists abort reason", func() {
+		pool := testIntegrationPool(suiteT)
+		seedDEKRow(suiteT, pool, 100, "scene", "01ABC", 3)
+		repo := dek.NewCheckpointRepo(pool)
+		rid := mustOpenCheckpoint(suiteT, repo, "01ABC", 100)
 
-	require.NoError(t, repo.MarkAborted(context.Background(), rid, "operator_abort"))
-	ckpt, err := repo.Get(context.Background(), rid)
-	require.NoError(t, err)
-	require.Equal(t, dek.CheckpointStatusAborted, ckpt.Status)
-	require.NotNil(t, ckpt.AbortedAt)
-	require.Equal(t, "operator_abort", *ckpt.AbortedReason)
-}
+		Expect(repo.MarkAborted(context.Background(), rid, "operator_abort")).To(Succeed())
+		ckpt, err := repo.Get(context.Background(), rid)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ckpt.Status).To(Equal(dek.CheckpointStatusAborted))
+		Expect(ckpt.AbortedAt).NotTo(BeNil())
+		Expect(*ckpt.AbortedReason).To(Equal("operator_abort"))
+	})
+})

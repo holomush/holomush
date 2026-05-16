@@ -7,10 +7,10 @@ package kek_test
 
 import (
 	"context"
-	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
@@ -21,46 +21,48 @@ import (
 // TestNoneProvider_Constructor_RefusesIfCryptoKeysNonempty verifies INV-32:
 // startup with provider.name=none MUST refuse if any crypto_keys row exists.
 // Enforced at constructor time (synchronous DB SELECT).
-func TestNoneProvider_Constructor_RefusesIfCryptoKeysNonempty(t *testing.T) {
-	ctx := context.Background()
-	pgContainer, err := postgres.Run(
-		ctx,
-		"postgres:18-alpine",
-		postgres.WithDatabase("test"),
-		postgres.WithUsername("test"),
-		postgres.WithPassword("test"),
-		postgres.BasicWaitStrategies(),
-	)
-	require.NoError(t, err)
-	defer pgContainer.Terminate(ctx)
+var _ = Describe("NoneProvider startup (INV-32)", func() {
+	It("refuses startup if crypto_keys table is non-empty", func() {
+		ctx := context.Background()
+		pgContainer, err := postgres.Run(
+			ctx,
+			"postgres:18-alpine",
+			postgres.WithDatabase("test"),
+			postgres.WithUsername("test"),
+			postgres.WithPassword("test"),
+			postgres.BasicWaitStrategies(),
+		)
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = pgContainer.Terminate(ctx) })
 
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
+		connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+		Expect(err).NotTo(HaveOccurred())
 
-	migrator, err := store.NewMigrator(connStr)
-	require.NoError(t, err)
-	defer migrator.Close()
-	require.NoError(t, migrator.Up())
+		migrator, err := store.NewMigrator(connStr)
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(migrator.Close)
+		Expect(migrator.Up()).To(Succeed())
 
-	pool, err := pgx.Connect(ctx, connStr)
-	require.NoError(t, err)
-	defer pool.Close(ctx)
+		pool, err := pgx.Connect(ctx, connStr)
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = pool.Close(ctx) })
 
-	// Empty table: constructor succeeds.
-	provider, err := kek.NewNoneProvider(ctx, pool)
-	require.NoError(t, err)
-	require.NotNil(t, provider)
+		// Empty table: constructor succeeds.
+		provider, err := kek.NewNoneProvider(ctx, pool)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(provider).NotTo(BeNil())
 
-	// Insert a row (simulating a previously-encrypted deployment).
-	_, err = pool.Exec(ctx, `
+		// Insert a row (simulating a previously-encrypted deployment).
+		_, err = pool.Exec(ctx, `
         INSERT INTO crypto_keys
             (context_type, context_id, version, wrapped_dek, wrap_provider, wrap_key_id, participants)
         VALUES ('scene', 'test-scene', 1, '\x00', 'local-aead/file', 'kek-fingerprint', '[]')
     `)
-	require.NoError(t, err)
+		Expect(err).NotTo(HaveOccurred())
 
-	// Non-empty table: constructor refuses.
-	_, err = kek.NewNoneProvider(ctx, pool)
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "CRYPTO_KEYS_NONEMPTY_WITH_NONE_PROVIDER")
-}
+		// Non-empty table: constructor refuses.
+		_, err = kek.NewNoneProvider(ctx, pool)
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "CRYPTO_KEYS_NONEMPTY_WITH_NONE_PROVIDER")
+	})
+})
