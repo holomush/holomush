@@ -23,6 +23,7 @@ HoloMUSH is a modern MUSH platform with:
 | Directory                | Purpose                                      | Audience                |
 | ------------------------ | -------------------------------------------- | ----------------------- |
 | `site/docs/`             | Public documentation website (zensical)      | All users               |
+| `docs/roadmap.md`        | Strategic themes spanning multiple epics (substrate-and-uses framing) | Contributors (internal) |
 | `docs/plans/`            | Implementation plans, in-progress work       | Contributors (internal) |
 | `docs/specs/`            | Design specifications, architectural designs | Contributors (internal) |
 | `docs/superpowers/plans/`| AI-generated implementation plans (superpowers skill) | Contributors (internal) |
@@ -130,6 +131,29 @@ Plans with multiple tracked tasks MUST contain a `## Bead chain structure` secti
 Each task bead's `--description` MUST include all 8 sections: **Goal**, **Design reference**, **Plan reference**, **TDD acceptance criteria**, **Verification steps**, **Files touched**, **Dependencies**, **Out of scope**.
 
 Skills `bead-chain-design` (writes the section) and `bead-chain-from-plan` (materializes `bd` issues + edges + parent linkage) operate on this convention. If the chain section is missing, `bead-chain-from-plan` delegates to `bead-chain-design` first.
+
+## Strategic Themes
+
+Multi-epic work clusters are tracked via `theme:<slug>` bd labels paired with a narrative section in [`docs/roadmap.md`](docs/roadmap.md). The label provides cross-epic queryability; the doc carries the **why** (substrate-and-uses framing, sequencing rationale, risks) alongside the code.
+
+This complements `bd` (single-task tracking) and the stage-gated workflow above (per-task lifecycle). Themes are the layer for "what cluster of work is this part of, and why now?"
+
+| Requirement                       | Description                                                                                                                                  |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| **SHOULD** add a theme            | When 2+ epics or a 5+ bead cluster share a strategic frame (e.g., `theme:social-spaces` covers scenes + channels + forums + discord)         |
+| **MUST** keep `docs/roadmap.md` current | When adding a `theme:*` label to any bead, also add or update the section in `docs/roadmap.md`; when a theme's work completes, move the section to "Completed themes" with a date |
+| **MUST NOT** orphan labels        | If a `theme:*` label exists with no narrative section in `docs/roadmap.md`, either add the section or drop the label                         |
+| **SHOULD** file a decision bead   | Use `bd create -t decision -l theme:<slug>` to record the framing alongside the roadmap edit; the bead carries enduring rationale            |
+| **SHOULD** refresh after pivots   | After major architectural pivots or audit cleanups, re-read active themes and verify they still match reality; demote/retire stale ones      |
+| **MUST NOT** use GitHub Projects   | Until team size or external visibility makes the double-entry cost worthwhile; bd labels + roadmap doc is the project-management surface     |
+
+**Query a theme** (includes `in_progress`, not just `open`):
+
+```bash
+bd list -l theme:<slug> --limit 0 --json | jq -r '.[] | select(.status != "closed") | "\(.id) [P\(.priority)] \(.title)"'
+```
+
+Plain `bd list --status open` excludes `in_progress` beads, so use the JSON filter when surfacing active theme work.
 
 ## Pre-Push Review Gates
 

@@ -105,6 +105,18 @@ Specs define requirements. They MUST include:
 
 Naming: `YYYY-MM-DD-<feature-name>.md`
 
+### Roadmap (`docs/roadmap.md`)
+
+Single file (not per-theme docs) tracking strategic themes that span multiple epics. Paired with `theme:<slug>` bd labels for cross-epic queryability. The doc carries the **why** (substrate-and-uses framing, sequencing rationale, risks); `bd` carries the **what** (individual beads).
+
+Maintenance rules live in the root `CLAUDE.md` "Strategic Themes" section. Key directives:
+
+- **MUST** keep current when adding/removing a `theme:*` label
+- **MUST NOT** create per-theme markdown files (single roadmap, sectioned)
+- **SHOULD** move completed themes to a "Completed themes" section with a date rather than deleting
+
+When editing `docs/roadmap.md`, also file or update a `bd create -t decision` recording the framing.
+
 ## Nested Code Blocks
 
 When documenting markdown within markdown (e.g., README templates), avoid nested code fences. Instead:
