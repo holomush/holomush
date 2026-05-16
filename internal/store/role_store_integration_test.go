@@ -8,11 +8,11 @@ package store_test
 import (
 	"context"
 
-	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/store"
 )
 
@@ -24,8 +24,8 @@ var _ = Describe("RoleStore", func() {
 			defer cleanup()
 			Expect(runMigrations(ctx, pool, 20)).To(Succeed())
 
-			playerID := ulid.Make().String()
-			charID := ulid.Make().String()
+			playerID := idgen.New().String()
+			charID := idgen.New().String()
 			_, err := pool.Exec(ctx, `INSERT INTO players (id, username, password_hash, created_at, updated_at)
 				VALUES ($1, $2, $3, now(), now())`, playerID, "alice-"+playerID[:8], "hash")
 			Expect(err).NotTo(HaveOccurred())
@@ -47,8 +47,8 @@ var _ = Describe("RoleStore", func() {
 			defer cleanup()
 			Expect(runMigrations(ctx, pool, 20)).To(Succeed())
 
-			playerID := ulid.Make().String()
-			charID := ulid.Make().String()
+			playerID := idgen.New().String()
+			charID := idgen.New().String()
 			_, err := pool.Exec(ctx, `INSERT INTO players (id, username, password_hash, created_at, updated_at)
 				VALUES ($1, $2, $3, now(), now())`, playerID, "bob-"+playerID[:8], "hash")
 			Expect(err).NotTo(HaveOccurred())
@@ -73,7 +73,7 @@ var _ = Describe("RoleStore", func() {
 			Expect(runMigrations(ctx, pool, 20)).To(Succeed())
 
 			rs := store.NewPostgresRoleStore(pool)
-			has, err := rs.PlayerHasRole(ctx, ulid.Make().String(), access.RoleAdmin)
+			has, err := rs.PlayerHasRole(ctx, idgen.New().String(), access.RoleAdmin)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(has).To(BeFalse())
 		})
