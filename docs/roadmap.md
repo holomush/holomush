@@ -167,6 +167,38 @@ Site docs at `site/docs/operating/` are substantial; future themes here
 might cover observability dashboards, deployment patterns, sandbox
 operations refinements. Not yet shaped as multi-epic work.
 
+## Maintenance (not strategic themes, but worth surfacing)
+
+Hygiene work that's tracked but isn't shaped as a multi-epic narrative.
+Listed here so future sessions know it exists without grepping `docs/`.
+
+### Repo audit 2026-05-13 (4 reports)
+
+Four read-only audit reports live at `docs/repository-audit/2026-05-13/`:
+
+| Report                       | Tracking epic   | State                                                               |
+| ---------------------------- | --------------- | ------------------------------------------------------------------- |
+| `architecture-audit.md`      | `holomush-dj95` | 13 children materialized; in-flight                                 |
+| `design-alignment-review.md` | `holomush-yvdm` | empty container; high-leverage findings re-filed as top-level beads |
+| `humanization-review.md`     | `holomush-89o9` | empty container; high-leverage findings re-filed as top-level beads |
+| `layer-review.md`            | `holomush-1bft` | empty container; high-leverage findings re-filed as top-level beads |
+
+The reports' own framing (esp. humanization): **"rolling-cleanup territory,
+not a mega-PR — treat as gardening: do a little, regularly."** A handful of
+high-leverage findings have been re-filed as top-level beads carrying the
+`repo-audit` label plus `mechanical`/`design-needed` so they surface in
+`bd ready`. The tracking epics remain as containers for the rest of the
+findings if/when someone decides to drive the cleanup more aggressively.
+
+Query the high-leverage cohort:
+
+```bash
+bd list -l repo-audit --limit 0 --json | \
+  jq -r '.[] | select(.status != "closed") |
+         select((.labels // []) | any(. == "mechanical" or . == "design-needed")) |
+         "P\(.priority) \(.id) \(.title)"' | sort
+```
+
 ## Conventions
 
 - **Theme label format**: `theme:<kebab-case-slug>`. Examples: `theme:social-spaces`, `theme:hardening`. No nesting (flat namespace).
