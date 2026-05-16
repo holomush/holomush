@@ -1001,7 +1001,8 @@ func TestAcceptLoopReleasesSlotOnHandlerExit(t *testing.T) {
 
 	loopDone := make(chan struct{})
 	go func() {
-		runTelnetAcceptLoop(ctx, ln, &mockGRPCClient{}, cancel, slots, limits,
+		runTelnetAcceptLoop(
+			ctx, ln, &mockGRPCClient{}, cancel, slots, limits,
 			withOnSlotReleased(func() {
 				select {
 				case released <- struct{}{}:

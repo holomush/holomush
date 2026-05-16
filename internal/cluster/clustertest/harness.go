@@ -257,7 +257,7 @@ func (s memberJoinSignaler) OnMemberJoined(m cluster.Member) {
 	}
 }
 
-func (s memberJoinSignaler) OnMemberLeft(cluster.MemberID, cluster.LeaveReason)         {}
+func (s memberJoinSignaler) OnMemberLeft(cluster.MemberID, cluster.LeaveReason)           {}
 func (s memberJoinSignaler) OnMemberStatusChanged(cluster.MemberID, cluster.MemberStatus) {}
 
 func (h *Harness) snapshot() string {
