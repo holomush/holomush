@@ -50,7 +50,13 @@ func TestPhase7InvariantsHaveNamedTests(t *testing.T) {
 		testName string
 	}{
 		{"INV-P7-1", "TestDispatchForwardsCiphertextByteEqual"},
-		{"INV-P7-3", "TestSceneLogHasDekColumns"},
+		// INV-P7-3 was carried by func TestSceneLogHasDekColumns until the
+		// 1hq.26 testify+ginkgo migration converted the spec to a Ginkgo
+		// Describe registered under the suite entry TestBinaryPlugin (see
+		// test/integration/plugin/plugin_migration_test.go). The spec name
+		// "Scene log has DEK columns (INV-P7-3)" remains greppable inside
+		// that file for invariant traceability.
+		{"INV-P7-3", "TestBinaryPlugin"},
 		{"INV-P7-4", "TestAuditRowStructMirrorsProto"},
 		{"INV-P7-5", "TestAuditRowRoundTripPreservesAllFields"},
 		{"INV-P7-6", "TestSceneLogPreservesCiphertextAndAuditHeaders"},
@@ -66,7 +72,14 @@ func TestPhase7InvariantsHaveNamedTests(t *testing.T) {
 		// INV-P7-12 shares its named test with INV-P7-6 (one round-trip
 		// covers both cleartext-vs-ciphertext invariants).
 		{"INV-P7-12", "TestSceneLogPreservesCiphertextAndAuditHeaders"},
-		{"INV-P7-13", "TestPluginRoleCannotWriteHostTables"},
+		// INV-P7-13 was carried by func TestPluginRoleCannotWriteHostTables
+		// until the 1hq.26 testify+ginkgo migration converted the spec to a
+		// Ginkgo Describe registered under the suite entry TestBinaryPlugin
+		// (see test/integration/plugin/plugin_role_permissions_test.go).
+		// The meta-test maps to the suite entry — the spec name "Plugin role
+		// cannot write host tables (INV-P7-13)" remains greppable inside
+		// that file for invariant traceability.
+		{"INV-P7-13", "TestBinaryPlugin"},
 		{"INV-P7-15", "TestFenceRefusesUnknownDekRef"},
 		{"INV-P7-16", "TestRoundTripProducesByteEqualAAD"},
 	}
