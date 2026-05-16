@@ -32,5 +32,5 @@ var adminAuthSuiteT *testing.T
 func TestAdminAuthenticateE2E(t *testing.T) {
 	adminAuthSuiteT = t
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Admin Authenticate E2E Lifecycle Suite")
+	RunSpecs(t, "Holomush Integration Suite")
 }
