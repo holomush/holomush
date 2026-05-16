@@ -1609,7 +1609,8 @@ var _ = Describe("SceneStore", func() {
 	})
 
 	Describe("IsMember", func() {
-		DescribeTable("returns expected result by role and scene state",
+		DescribeTable(
+			"returns expected result by role and scene state",
 			func(sceneID string, visible SceneVisibility, setupFn func(*SceneStore), probe string, want bool, wantMsg string) {
 				store := newTestStore()
 				ctx := context.Background()
@@ -1636,12 +1637,14 @@ var _ = Describe("SceneStore", func() {
 					Expect(got).To(Equal(want))
 				}
 			},
-			Entry("returns true for owner",
+			Entry(
+				"returns true for owner",
 				"scene-isM-1", SceneVisibilityOpen,
 				nil,
 				"char-alice", true, "owner MUST be reported as member",
 			),
-			Entry("returns true for joined member",
+			Entry(
+				"returns true for joined member",
 				"scene-isM-2", SceneVisibilityOpen,
 				func(store *SceneStore) {
 					_, _, err := store.AddParticipant(context.Background(), "scene-isM-2", "char-bob")
@@ -1649,7 +1652,8 @@ var _ = Describe("SceneStore", func() {
 				},
 				"char-bob", true, "",
 			),
-			Entry("returns false for invited-only",
+			Entry(
+				"returns false for invited-only",
 				"scene-isM-3", SceneVisibilityPrivate,
 				func(store *SceneStore) {
 					_, err := store.InviteParticipant(context.Background(), "scene-isM-3", "char-alice", "char-bob")
@@ -1657,12 +1661,14 @@ var _ = Describe("SceneStore", func() {
 				},
 				"char-bob", false, "invited-only rows MUST return false — invitation grants join, not read",
 			),
-			Entry("returns false for non-participant",
+			Entry(
+				"returns false for non-participant",
 				"scene-isM-4", SceneVisibilityOpen,
 				nil,
 				"char-stranger", false, "",
 			),
-			Entry("returns false for missing scene",
+			Entry(
+				"returns false for missing scene",
 				"scene-isM-missing", SceneVisibility(""), // sentinel: skip scene creation
 				nil,
 				"char-alice", false, "missing scene MUST be nil error per spec §5.4 (info-hiding)",

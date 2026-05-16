@@ -1,7 +1,7 @@
-//go:build integration
-
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
+
+//go:build integration
 
 package main
 
@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	"github.com/holomush/holomush/internal/bootstrap"
@@ -19,15 +19,14 @@ import (
 )
 
 // startPostgresContainer starts a PostgreSQL container for testing.
+// Uses postgres.BasicWaitStrategies() which combines the log wait with
+// wait.ForListeningPort to avoid the Docker port-mapping race documented
+// in holomush-bmcq. Called from both Ginkgo specs (passing suiteT) and
+// plain testing.T helpers (e.g., bootstrap_orphan_test.go).
 func startPostgresContainer(t *testing.T) (string, func()) {
 	t.Helper()
 	ctx := context.Background()
 
-	// Use postgres.BasicWaitStrategies() which combines the log wait
-	// with wait.ForListeningPort. Bare wait.ForLog is documented as
-	// flaky on Mac/Windows because Docker's port-mapping table can lag
-	// the readiness log line; without the port wait, ConnectionString
-	// can fail with `port "5432/tcp" not found`. See holomush-bmcq.
 	container, err := postgres.Run(
 		ctx,
 		"postgres:18-alpine",
@@ -36,10 +35,15 @@ func startPostgresContainer(t *testing.T) (string, func()) {
 		postgres.WithPassword("test"),
 		postgres.BasicWaitStrategies(),
 	)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("startPostgresContainer: run: %v", err)
+	}
 
 	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
+	if err != nil {
+		_ = container.Terminate(ctx)
+		t.Fatalf("startPostgresContainer: connection string: %v", err)
+	}
 
 	cleanup := func() {
 		_ = container.Terminate(ctx)
@@ -54,7 +58,7 @@ func schemaTableExists(ctx context.Context, connStr string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer conn.Close(ctx)
+	defer conn.Close(ctx) //nolint:errcheck // best-effort cleanup
 
 	var exists bool
 	query := `SELECT EXISTS (
@@ -72,7 +76,7 @@ func getMigrationVersion(ctx context.Context, connStr string) (int, bool, error)
 	if err != nil {
 		return 0, false, err
 	}
-	defer conn.Close(ctx)
+	defer conn.Close(ctx) //nolint:errcheck // best-effort cleanup
 
 	var version int
 	var dirty bool
@@ -84,97 +88,81 @@ func getMigrationVersion(ctx context.Context, connStr string) (int, bool, error)
 	return version, dirty, nil
 }
 
-func TestAutoMigrate_Integration_RunsOnStartup(t *testing.T) {
-	ctx := context.Background()
+var _ = Describe("autoMigration", func() {
+	Describe("runAutoMigration integration", func() {
+		It("runs on startup: creates schema_migrations and records a version > 0", func() {
+			ctx := context.Background()
+			connStr, cleanup := startPostgresContainer(adminAuthSuiteT)
+			DeferCleanup(cleanup)
 
-	connStr, cleanup := startPostgresContainer(t)
-	defer cleanup()
+			exists, err := schemaTableExists(ctx, connStr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exists).To(BeFalse(), "schema_migrations should not exist before auto-migrate")
 
-	// Verify schema_migrations doesn't exist yet
-	exists, err := schemaTableExists(ctx, connStr)
-	require.NoError(t, err)
-	assert.False(t, exists, "schema_migrations should not exist before auto-migrate")
+			Expect(runAutoMigration(connStr, func(url string) (bootstrap.AutoMigrator, error) {
+				return store.NewMigrator(url)
+			})).NotTo(HaveOccurred())
 
-	// Run auto-migration using the runAutoMigration function
-	err = runAutoMigration(connStr, func(url string) (bootstrap.AutoMigrator, error) {
-		return store.NewMigrator(url)
+			exists, err = schemaTableExists(ctx, connStr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exists).To(BeTrue(), "schema_migrations should exist after auto-migrate")
+
+			version, dirty, err := getMigrationVersion(ctx, connStr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(version).To(BeNumerically(">", 0), "migration version should be > 0 after auto-migrate")
+			Expect(dirty).To(BeFalse(), "database should not be in dirty state after successful migration")
+		})
+
+		It("is skipped when auto-migrate is disabled: schema_migrations is not created", func() {
+			ctx := context.Background()
+			connStr, cleanup := startPostgresContainer(adminAuthSuiteT)
+			DeferCleanup(cleanup)
+
+			exists, err := schemaTableExists(ctx, connStr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exists).To(BeFalse(), "schema_migrations should not exist initially")
+
+			deps := &CoreDeps{
+				DatabaseURLGetter: func() string { return connStr },
+				AutoMigrateGetter: func() bool { return false },
+				MigratorFactory: func(url string) (bootstrap.AutoMigrator, error) {
+					Fail("MigratorFactory should not be called when auto-migrate is disabled")
+					return store.NewMigrator(url)
+				},
+			}
+
+			if deps.AutoMigrateGetter() {
+				Expect(runAutoMigration(connStr, deps.MigratorFactory)).NotTo(HaveOccurred())
+			}
+
+			exists, err = schemaTableExists(ctx, connStr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exists).To(BeFalse(), "schema_migrations should not exist when auto-migrate is disabled")
+		})
+
+		It("is idempotent: re-running does not change migration version or dirty flag", func() {
+			ctx := context.Background()
+			connStr, cleanup := startPostgresContainer(adminAuthSuiteT)
+			DeferCleanup(cleanup)
+
+			migratorFactory := func(url string) (bootstrap.AutoMigrator, error) {
+				return store.NewMigrator(url)
+			}
+
+			Expect(runAutoMigration(connStr, migratorFactory)).NotTo(HaveOccurred())
+
+			versionAfterFirst, dirtyAfterFirst, err := getMigrationVersion(ctx, connStr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(versionAfterFirst).To(BeNumerically(">", 0))
+			Expect(dirtyAfterFirst).To(BeFalse())
+
+			Expect(runAutoMigration(connStr, migratorFactory)).NotTo(HaveOccurred())
+
+			versionAfterSecond, dirtyAfterSecond, err := getMigrationVersion(ctx, connStr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(versionAfterSecond).To(Equal(versionAfterFirst),
+				"version should be unchanged after idempotent re-run")
+			Expect(dirtyAfterSecond).To(BeFalse())
+		})
 	})
-	require.NoError(t, err)
-
-	// Verify schema_migrations now exists
-	exists, err = schemaTableExists(ctx, connStr)
-	require.NoError(t, err)
-	assert.True(t, exists, "schema_migrations should exist after auto-migrate")
-
-	// Verify a migration version was recorded (version > 0)
-	version, dirty, err := getMigrationVersion(ctx, connStr)
-	require.NoError(t, err)
-	assert.Greater(t, version, 0, "migration version should be > 0 after auto-migrate")
-	assert.False(t, dirty, "database should not be in dirty state after successful migration")
-}
-
-func TestAutoMigrate_Integration_SkippedWhenDisabled(t *testing.T) {
-	ctx := context.Background()
-
-	connStr, cleanup := startPostgresContainer(t)
-	defer cleanup()
-
-	// Verify schema_migrations doesn't exist initially
-	exists, err := schemaTableExists(ctx, connStr)
-	require.NoError(t, err)
-	assert.False(t, exists, "schema_migrations should not exist initially")
-
-	// Create CoreDeps with auto-migrate disabled
-	deps := &CoreDeps{
-		DatabaseURLGetter: func() string { return connStr },
-		AutoMigrateGetter: func() bool { return false },
-		MigratorFactory: func(url string) (bootstrap.AutoMigrator, error) {
-			t.Error("MigratorFactory should not be called when auto-migrate is disabled")
-			return store.NewMigrator(url)
-		},
-	}
-
-	// Simulate the auto-migrate check from runCoreWithDeps
-	// We just check the logic branch - if AutoMigrateGetter returns false,
-	// runAutoMigration should not be called
-	if deps.AutoMigrateGetter() {
-		err = runAutoMigration(connStr, deps.MigratorFactory)
-		require.NoError(t, err)
-	}
-
-	// Verify schema_migrations still doesn't exist (no migration ran)
-	exists, err = schemaTableExists(ctx, connStr)
-	require.NoError(t, err)
-	assert.False(t, exists, "schema_migrations should not exist when auto-migrate is disabled")
-}
-
-func TestAutoMigrate_Integration_IdempotentOnRerun(t *testing.T) {
-	ctx := context.Background()
-
-	connStr, cleanup := startPostgresContainer(t)
-	defer cleanup()
-
-	migratorFactory := func(url string) (bootstrap.AutoMigrator, error) {
-		return store.NewMigrator(url)
-	}
-
-	// Run auto-migration first time
-	err := runAutoMigration(connStr, migratorFactory)
-	require.NoError(t, err)
-
-	// Get version after first run
-	versionAfterFirst, dirtyAfterFirst, err := getMigrationVersion(ctx, connStr)
-	require.NoError(t, err)
-	assert.Greater(t, versionAfterFirst, 0)
-	assert.False(t, dirtyAfterFirst)
-
-	// Run auto-migration second time (should be idempotent)
-	err = runAutoMigration(connStr, migratorFactory)
-	require.NoError(t, err)
-
-	// Verify version is unchanged
-	versionAfterSecond, dirtyAfterSecond, err := getMigrationVersion(ctx, connStr)
-	require.NoError(t, err)
-	assert.Equal(t, versionAfterFirst, versionAfterSecond, "version should be unchanged after idempotent re-run")
-	assert.False(t, dirtyAfterSecond)
-}
+})
