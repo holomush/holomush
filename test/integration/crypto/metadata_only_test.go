@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/core"
@@ -70,7 +70,9 @@ func buildSubscribeHarness(t *testing.T) *subscribeHarness {
 	kekSource := kek.NewEnvSource("HOLOMUSH_TEST_SUBSCRIBER_KEK", false)
 
 	provider, err := kek.NewLocalAEADProvider(ctx, kekSource, pool)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("buildSubscribeHarness: NewLocalAEADProvider: %v", err)
+	}
 
 	dekStore := dek.NewStore(pool)
 	dekCache := dek.NewCache(dek.CacheConfig{Capacity: 64})
@@ -78,27 +80,35 @@ func buildSubscribeHarness(t *testing.T) *subscribeHarness {
 	dekMgr, err := dek.NewManager(provider, dekStore, dekCache, dekPartCache,
 		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },
 		&dekBindingStub{bindingID: "bind-metadata"})
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("buildSubscribeHarness: NewManager: %v", err)
+	}
 
 	// Audit subsystem: needed so events_audit is populated (same pattern as
 	// emit_test.go). Not strictly required for subscribe assertions but keeps
 	// the test environment representative.
 	hostSub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-	require.NoError(t, hostSub.Start(ctx))
+	if err := hostSub.Start(ctx); err != nil {
+		t.Fatalf("buildSubscribeHarness: hostSub.Start: %v", err)
+	}
 	t.Cleanup(func() { _ = hostSub.Stop(context.Background()) })
 
 	// Verb registry: the RenderingPublisher requires test-plugin:whisper to be
 	// registered so the App-Rendering header is stamped correctly.
 	registry, err := core.BootstrapVerbRegistry("test")
-	require.NoError(t, err)
-	require.NoError(t, registry.RegisterWithSource(core.VerbRegistration{
+	if err != nil {
+		t.Fatalf("buildSubscribeHarness: BootstrapVerbRegistry: %v", err)
+	}
+	if err := registry.RegisterWithSource(core.VerbRegistration{
 		Type:          "test-plugin:whisper",
 		Category:      "communication",
 		Format:        "speech",
 		Label:         "whispers",
 		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
 		Source:        "test-plugin",
-	}, "1.0.0"))
+	}, "1.0.0"); err != nil {
+		t.Fatalf("buildSubscribeHarness: RegisterWithSource: %v", err)
+	}
 
 	rawPub := eventbus.NewJetStreamPublisher(
 		bus.JS,
@@ -115,21 +125,27 @@ func buildSubscribeHarness(t *testing.T) *subscribeHarness {
 	participantLookup := authguard.NewDEKParticipantLookup(dekMgr)
 	abacEngine := policytest.AllowAllEngine()
 	guard, err := authguard.New(participantLookup, alwaysDenyManifest{}, abacEngine, noopBackpressure{})
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("buildSubscribeHarness: authguard.New: %v", err)
+	}
 
 	sessionGuard := authguard.NewSessionBridgeGuard(guard)
 
 	// Audit emitter for plugin decrypt records. nil is safe for character
 	// sessions; pass it anyway so WithSubscriberDecryptAuditEmitter is wired.
 	auditEmitter, err := guardaudit.NewQueuedEmitter(rawPub)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("buildSubscribeHarness: NewQueuedEmitter: %v", err)
+	}
 	t.Cleanup(func() {
 		shutCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		_ = auditEmitter.Shutdown(shutCtx)
 	})
 	sessionAuditEmitter, err := guardaudit.NewSessionBridgeEmitter(auditEmitter)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("buildSubscribeHarness: NewSessionBridgeEmitter: %v", err)
+	}
 
 	sub := eventbus.NewJetStreamSubscriber(
 		bus.JS,
@@ -154,107 +170,109 @@ func buildSubscribeHarness(t *testing.T) *subscribeHarness {
 //   - Publishes a sensitive event whose DEK has exactly one participant.
 //   - Opens a session as a different identity (non-participant binding_id).
 //   - Asserts: MetadataOnly()==true, Event().Payload is empty.
-func TestSubscribeWithNonParticipantIdentityDeliversMetadataOnly(t *testing.T) {
-	ctx := context.Background()
-	h := buildSubscribeHarness(t)
+var _ = Describe("Subscribe with non-participant identity delivers MetadataOnly (INV-26, INV-9)", func() {
+	It("non-participant receives MetadataOnly=true with empty payload", func() {
+		ctx := context.Background()
+		h := buildSubscribeHarness(suiteT)
 
-	const (
-		participantPlayerID    = "01PARTICIPANTPLAYER00000"
-		participantCharacterID = "01PARTICIPANTCHARACT0000"
-		participantBindingID   = "01PARTICIPANTBINDING0000"
+		const (
+			participantPlayerID    = "01PARTICIPANTPLAYER00000"
+			participantCharacterID = "01PARTICIPANTCHARACT0000"
+			participantBindingID   = "01PARTICIPANTBINDING0000"
 
-		nonParticipantPlayerID    = "01NONPARTICIPANTPLAYER00"
-		nonParticipantCharacterID = "01NONPARTICIPANTCHARACT0"
-		nonParticipantBindingID   = "01NONPARTICIPANTBINDING0"
-	)
+			nonParticipantPlayerID    = "01NONPARTICIPANTPLAYER00"
+			nonParticipantCharacterID = "01NONPARTICIPANTCHARACT0"
+			nonParticipantBindingID   = "01NONPARTICIPANTBINDING0"
+		)
 
-	sceneID := "01HXXXTESTSCENE000000001"
+		sceneID := "01HXXXTESTSCENE000000001"
 
-	// Pre-create the DEK with the participant set BEFORE the publisher calls
-	// GetOrCreate. Because GetOrCreate is idempotent (INSERT or SELECT), the
-	// publisher's subsequent GetOrCreate(ctx, ctxID, nil) call will return the
-	// existing DEK row — with participants already stored.
-	ctxID := dek.ContextID{Type: "scene", ID: sceneID}
-	_, err := h.dekMgr.GetOrCreate(ctx, ctxID, []dek.Participant{
-		{
-			PlayerID:    participantPlayerID,
-			CharacterID: participantCharacterID,
-			BindingID:   participantBindingID,
-			JoinedAt:    time.Now().UTC(),
-			AddedVia:    "test_setup",
-		},
-	})
-	require.NoError(t, err, "pre-create DEK with participant")
-
-	// Emit the sensitive event. The publisher resolves the ContextID from the
-	// translated subject (events.main.scene.<sceneID>) and calls GetOrCreate
-	// which returns the existing DEK (participants already set).
-	manifest := &plugins.Manifest{
-		Name:                "test-plugin",
-		Emits:               []string{"scene"},
-		ActorKindsClaimable: []string{"plugin"},
-		Crypto: &plugins.CryptoSection{
-			Emits: []plugins.CryptoEmit{
-				{EventType: "test-plugin:whisper", Sensitivity: plugins.SensitivityMay},
+		// Pre-create the DEK with the participant set BEFORE the publisher calls
+		// GetOrCreate. Because GetOrCreate is idempotent (INSERT or SELECT), the
+		// publisher's subsequent GetOrCreate(ctx, ctxID, nil) call will return the
+		// existing DEK row — with participants already stored.
+		ctxID := dek.ContextID{Type: "scene", ID: sceneID}
+		_, err := h.dekMgr.GetOrCreate(ctx, ctxID, []dek.Participant{
+			{
+				PlayerID:    participantPlayerID,
+				CharacterID: participantCharacterID,
+				BindingID:   participantBindingID,
+				JoinedAt:    time.Now().UTC(),
+				AddedVia:    "test_setup",
 			},
-		},
-	}
-	manifestLookup := func(name string) *plugins.Manifest {
-		if name == "test-plugin" {
-			return manifest
+		})
+		Expect(err).NotTo(HaveOccurred(), "pre-create DEK with participant")
+
+		// Emit the sensitive event. The publisher resolves the ContextID from the
+		// translated subject (events.main.scene.<sceneID>) and calls GetOrCreate
+		// which returns the existing DEK (participants already set).
+		manifest := &plugins.Manifest{
+			Name:                "test-plugin",
+			Emits:               []string{"scene"},
+			ActorKindsClaimable: []string{"plugin"},
+			Crypto: &plugins.CryptoSection{
+				Emits: []plugins.CryptoEmit{
+					{EventType: "test-plugin:whisper", Sensitivity: plugins.SensitivityMay},
+				},
+			},
 		}
-		return nil
-	}
-	// Post-w9ml: Actor.ID MUST be a ULID string (strict-gate
-	// coreActorToEventbusActor rejects non-ULID IDs).
-	testPluginActorID := plugintest.PluginULIDFromName("test-plugin").String()
-	actorResolver := func(_ context.Context, _ string) (core.Actor, error) {
-		return core.Actor{Kind: core.ActorPlugin, ID: testPluginActorID}, nil
-	}
-	emitter := plugins.NewPluginEventEmitter(
-		h.publisher, manifestLookup, actorResolver,
-		plugins.WithCryptoEnabled(true),
-	)
+		manifestLookup := func(name string) *plugins.Manifest {
+			if name == "test-plugin" {
+				return manifest
+			}
+			return nil
+		}
+		// Post-w9ml: Actor.ID MUST be a ULID string (strict-gate
+		// coreActorToEventbusActor rejects non-ULID IDs).
+		testPluginActorID := plugintest.PluginULIDFromName("test-plugin").String()
+		actorResolver := func(_ context.Context, _ string) (core.Actor, error) {
+			return core.Actor{Kind: core.ActorPlugin, ID: testPluginActorID}, nil
+		}
+		emitter := plugins.NewPluginEventEmitter(
+			h.publisher, manifestLookup, actorResolver,
+			plugins.WithCryptoEnabled(true),
+		)
 
-	const plaintext = `{"text":"secret message for participant only"}`
-	intent := pluginsdk.EmitIntent{
-		Subject:   "scene:" + sceneID,
-		Type:      pluginsdk.EventType("test-plugin:whisper"),
-		Payload:   plaintext,
-		Sensitive: true,
-	}
-	require.NoError(t, emitter.Emit(ctx, "test-plugin", intent))
+		const plaintext = `{"text":"secret message for participant only"}`
+		intent := pluginsdk.EmitIntent{
+			Subject:   "scene:" + sceneID,
+			Type:      pluginsdk.EventType("test-plugin:whisper"),
+			Payload:   plaintext,
+			Sensitive: true,
+		}
+		Expect(emitter.Emit(ctx, "test-plugin", intent)).NotTo(HaveOccurred())
 
-	// Open a session as the NON-participant identity.
-	nonParticipantID := eventbus.SessionIdentity{
-		Kind:        eventbus.IdentityKindCharacter,
-		PlayerID:    nonParticipantPlayerID,
-		CharacterID: nonParticipantCharacterID,
-		BindingID:   nonParticipantBindingID,
-	}
-	sessionID := "nonparticipant-session-" + sceneID
+		// Open a session as the NON-participant identity.
+		nonParticipantID := eventbus.SessionIdentity{
+			Kind:        eventbus.IdentityKindCharacter,
+			PlayerID:    nonParticipantPlayerID,
+			CharacterID: nonParticipantCharacterID,
+			BindingID:   nonParticipantBindingID,
+		}
+		sessionID := "nonparticipant-session-" + sceneID
 
-	stream, err := h.subscriber.OpenSession(ctx, sessionID, nonParticipantID, []eventbus.Subject{"events.>"})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = stream.Close() })
+		stream, err := h.subscriber.OpenSession(ctx, sessionID, nonParticipantID, []eventbus.Subject{"events.>"})
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = stream.Close() })
 
-	receiveCtx, cancel := context.WithTimeout(ctx, testutil.DefaultWait)
-	defer cancel()
+		receiveCtx, cancel := context.WithTimeout(ctx, testutil.DefaultWait)
+		defer cancel()
 
-	delivery, err := stream.Next(receiveCtx)
-	require.NoError(t, err, "expected delivery from stream")
-	require.NoError(t, delivery.Ack())
+		delivery, err := stream.Next(receiveCtx)
+		Expect(err).NotTo(HaveOccurred(), "expected delivery from stream")
+		Expect(delivery.Ack()).NotTo(HaveOccurred())
 
-	// INV-26: non-participant must receive metadata-only delivery (no plaintext).
-	assert.True(t, delivery.MetadataOnly(), "INV-26: non-participant must receive MetadataOnly=true")
-	// INV-9: the delivery payload must be empty — no plaintext visible to non-participant.
-	assert.Empty(t, delivery.Event().Payload, "INV-9: non-participant payload must be empty bytes")
+		// INV-26: non-participant must receive metadata-only delivery (no plaintext).
+		Expect(delivery.MetadataOnly()).To(BeTrue(), "INV-26: non-participant must receive MetadataOnly=true")
+		// INV-9: the delivery payload must be empty — no plaintext visible to non-participant.
+		Expect(delivery.Event().Payload).To(BeEmpty(), "INV-9: non-participant payload must be empty bytes")
 
-	// Metadata fields must still be present.
-	assert.Equal(t, eventbus.Type("test-plugin:whisper"), delivery.Event().Type,
-		"metadata: event type must be visible to non-participant")
-	assert.NotZero(t, delivery.Event().Timestamp, "metadata: timestamp must be visible")
-}
+		// Metadata fields must still be present.
+		Expect(delivery.Event().Type).To(Equal(eventbus.Type("test-plugin:whisper")),
+			"metadata: event type must be visible to non-participant")
+		Expect(delivery.Event().Timestamp).NotTo(BeZero(), "metadata: timestamp must be visible")
+	})
+})
 
 // TestSubscribeWithParticipantIdentityDeliversPlaintext covers INV-26
 // (delivery contract — permit path):
@@ -262,99 +280,101 @@ func TestSubscribeWithNonParticipantIdentityDeliversMetadataOnly(t *testing.T) {
 //   - Same setup as the non-participant test above, but opens the session
 //     as the participant identity.
 //   - Asserts: MetadataOnly()==false, Event().Payload equals the original JSON.
-func TestSubscribeWithParticipantIdentityDeliversPlaintext(t *testing.T) {
-	ctx := context.Background()
-	h := buildSubscribeHarness(t)
+var _ = Describe("Subscribe with participant identity delivers plaintext (INV-26)", func() {
+	It("participant receives MetadataOnly=false with original plaintext", func() {
+		ctx := context.Background()
+		h := buildSubscribeHarness(suiteT)
 
-	const (
-		participantPlayerID    = "01PARTICIPANTPLAYER00001"
-		participantCharacterID = "01PARTICIPANTCHARACT0001"
-		participantBindingID   = "01PARTICIPANTBINDING0001"
-	)
+		const (
+			participantPlayerID    = "01PARTICIPANTPLAYER00001"
+			participantCharacterID = "01PARTICIPANTCHARACT0001"
+			participantBindingID   = "01PARTICIPANTBINDING0001"
+		)
 
-	sceneID := "01HXXXTESTSCENE000000002"
+		sceneID := "01HXXXTESTSCENE000000002"
 
-	// Pre-create DEK with participant.
-	ctxID := dek.ContextID{Type: "scene", ID: sceneID}
-	_, err := h.dekMgr.GetOrCreate(ctx, ctxID, []dek.Participant{
-		{
+		// Pre-create DEK with participant.
+		ctxID := dek.ContextID{Type: "scene", ID: sceneID}
+		_, err := h.dekMgr.GetOrCreate(ctx, ctxID, []dek.Participant{
+			{
+				PlayerID:    participantPlayerID,
+				CharacterID: participantCharacterID,
+				BindingID:   participantBindingID,
+				JoinedAt:    time.Now().UTC(),
+				AddedVia:    "test_setup",
+			},
+		})
+		Expect(err).NotTo(HaveOccurred(), "pre-create DEK with participant")
+
+		// Emit the sensitive event.
+		manifest := &plugins.Manifest{
+			Name:                "test-plugin",
+			Emits:               []string{"scene"},
+			ActorKindsClaimable: []string{"plugin"},
+			Crypto: &plugins.CryptoSection{
+				Emits: []plugins.CryptoEmit{
+					{EventType: "test-plugin:whisper", Sensitivity: plugins.SensitivityMay},
+				},
+			},
+		}
+		manifestLookup := func(name string) *plugins.Manifest {
+			if name == "test-plugin" {
+				return manifest
+			}
+			return nil
+		}
+		// Post-w9ml: Actor.ID MUST be a ULID string (strict-gate
+		// coreActorToEventbusActor rejects non-ULID IDs).
+		testPluginActorID := plugintest.PluginULIDFromName("test-plugin").String()
+		actorResolver := func(_ context.Context, _ string) (core.Actor, error) {
+			return core.Actor{Kind: core.ActorPlugin, ID: testPluginActorID}, nil
+		}
+		emitter := plugins.NewPluginEventEmitter(
+			h.publisher, manifestLookup, actorResolver,
+			plugins.WithCryptoEnabled(true),
+		)
+
+		const plaintext = `{"text":"hello participant"}`
+		intent := pluginsdk.EmitIntent{
+			Subject:   "scene:" + sceneID,
+			Type:      pluginsdk.EventType("test-plugin:whisper"),
+			Payload:   plaintext,
+			Sensitive: true,
+		}
+		Expect(emitter.Emit(ctx, "test-plugin", intent)).NotTo(HaveOccurred())
+
+		// Open a session as the PARTICIPANT identity.
+		participantID := eventbus.SessionIdentity{
+			Kind:        eventbus.IdentityKindCharacter,
 			PlayerID:    participantPlayerID,
 			CharacterID: participantCharacterID,
 			BindingID:   participantBindingID,
-			JoinedAt:    time.Now().UTC(),
-			AddedVia:    "test_setup",
-		},
-	})
-	require.NoError(t, err, "pre-create DEK with participant")
-
-	// Emit the sensitive event.
-	manifest := &plugins.Manifest{
-		Name:                "test-plugin",
-		Emits:               []string{"scene"},
-		ActorKindsClaimable: []string{"plugin"},
-		Crypto: &plugins.CryptoSection{
-			Emits: []plugins.CryptoEmit{
-				{EventType: "test-plugin:whisper", Sensitivity: plugins.SensitivityMay},
-			},
-		},
-	}
-	manifestLookup := func(name string) *plugins.Manifest {
-		if name == "test-plugin" {
-			return manifest
 		}
-		return nil
-	}
-	// Post-w9ml: Actor.ID MUST be a ULID string (strict-gate
-	// coreActorToEventbusActor rejects non-ULID IDs).
-	testPluginActorID := plugintest.PluginULIDFromName("test-plugin").String()
-	actorResolver := func(_ context.Context, _ string) (core.Actor, error) {
-		return core.Actor{Kind: core.ActorPlugin, ID: testPluginActorID}, nil
-	}
-	emitter := plugins.NewPluginEventEmitter(
-		h.publisher, manifestLookup, actorResolver,
-		plugins.WithCryptoEnabled(true),
-	)
+		sessionID := "participant-session-" + sceneID
 
-	const plaintext = `{"text":"hello participant"}`
-	intent := pluginsdk.EmitIntent{
-		Subject:   "scene:" + sceneID,
-		Type:      pluginsdk.EventType("test-plugin:whisper"),
-		Payload:   plaintext,
-		Sensitive: true,
-	}
-	require.NoError(t, emitter.Emit(ctx, "test-plugin", intent))
+		stream, err := h.subscriber.OpenSession(ctx, sessionID, participantID, []eventbus.Subject{"events.>"})
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = stream.Close() })
 
-	// Open a session as the PARTICIPANT identity.
-	participantID := eventbus.SessionIdentity{
-		Kind:        eventbus.IdentityKindCharacter,
-		PlayerID:    participantPlayerID,
-		CharacterID: participantCharacterID,
-		BindingID:   participantBindingID,
-	}
-	sessionID := "participant-session-" + sceneID
+		receiveCtx, cancel := context.WithTimeout(ctx, testutil.DefaultWait)
+		defer cancel()
 
-	stream, err := h.subscriber.OpenSession(ctx, sessionID, participantID, []eventbus.Subject{"events.>"})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = stream.Close() })
+		delivery, err := stream.Next(receiveCtx)
+		Expect(err).NotTo(HaveOccurred(), "expected delivery from stream")
+		Expect(delivery.Ack()).NotTo(HaveOccurred())
 
-	receiveCtx, cancel := context.WithTimeout(ctx, testutil.DefaultWait)
-	defer cancel()
+		// INV-26: participant must receive full plaintext (MetadataOnly=false).
+		Expect(delivery.MetadataOnly()).To(BeFalse(), "INV-26: participant must receive MetadataOnly=false")
 
-	delivery, err := stream.Next(receiveCtx)
-	require.NoError(t, err, "expected delivery from stream")
-	require.NoError(t, delivery.Ack())
+		// INV-9 (permit path): payload must be the original plaintext.
+		// The publisher encrypts event.Payload (the JSON bytes) and the subscriber
+		// decrypts to recover the original bytes.
+		Expect(delivery.Event().Payload).To(Equal([]byte(plaintext)),
+			"INV-26: participant payload must equal original plaintext")
 
-	// INV-26: participant must receive full plaintext (MetadataOnly=false).
-	assert.False(t, delivery.MetadataOnly(), "INV-26: participant must receive MetadataOnly=false")
-
-	// INV-9 (permit path): payload must be the original plaintext.
-	// The publisher encrypts event.Payload (the JSON bytes) and the subscriber
-	// decrypts to recover the original bytes.
-	assert.Equal(t, []byte(plaintext), delivery.Event().Payload,
-		"INV-26: participant payload must equal original plaintext")
-
-	// Metadata fields also present.
-	assert.Equal(t, eventbus.Type("test-plugin:whisper"), delivery.Event().Type,
-		"metadata: event type must be visible to participant")
-	assert.NotZero(t, delivery.Event().Timestamp, "metadata: timestamp must be visible")
-}
+		// Metadata fields also present.
+		Expect(delivery.Event().Type).To(Equal(eventbus.Type("test-plugin:whisper")),
+			"metadata: event type must be visible to participant")
+		Expect(delivery.Event().Timestamp).NotTo(BeZero(), "metadata: timestamp must be visible")
+	})
+})
