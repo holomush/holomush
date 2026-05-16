@@ -1,5 +1,65 @@
 # Testify + Ginkgo Migration Completion Implementation Plan
 
+> **STATUS: SUPERSEDED — 2026-05-16.** Work complete; epic
+> [`holomush-rccc`](https://github.com/holomush/holomush/issues/3884)
+> closed (8 PRs merged: #3950, #3951, #4011, #4012, #4013, #4014, #4015,
+> #4016). Retained for historical record.
+>
+> **CORRECTION (binding for any future migration work):**
+>
+> Canonical Pattern A's prescription to pass `GinkgoT()` to helpers
+> taking `testing.TB` is **WRONG** and the errutil widening (Task A1
+> "Prerequisite") was unnecessary. Go 1.26's `testing.TB` has an
+> unexported `private()` method preventing third-party types (including
+> `ginkgo.FullGinkgoTInterface`) from satisfying it.
+>
+> The **correct pattern** (already used by ~30 pre-existing Ginkgo
+> specs in this codebase) is `suiteT` capture: the suite bootstrap
+> declares `var suiteT *testing.T`, the `TestX` entry captures
+> `suiteT = t`, and spec bodies pass `suiteT` to helpers. See PR
+> [#3951](https://github.com/holomush/holomush/pull/3951)
+> (`test/integration/plugin/plugin_role_permissions_test.go`) as the
+> canonical worked example.
+>
+> Additional lessons learned (captured during execution):
+>
+> - `suiteT.Cleanup` / `suiteT.Setenv` are SUITE-scoped (`*testing.T`
+>   from the entry func), not spec-scoped. Use `DeferCleanup` and
+>   per-spec `os.Setenv` + restore for true per-spec isolation. See
+>   PR [#4015](https://github.com/holomush/holomush/pull/4015) — the
+>   sub-agent's `specTB` adapter and `freshBus()` / `freshPool()`
+>   no-arg helpers prevent resource accumulation across specs.
+> - INV-tagged test funcs that
+>   `internal/eventbus/history/phase7_boundary_meta_test.go` pins are
+>   invisible to its AST walk once converted to `Describe`/`It`.
+>   Remap each INV to the Ginkgo suite entry (e.g., `TestBinaryPlugin`,
+>   `TestEventbusE2E`); keep the INV reference greppable in the spec
+>   `Describe` name.
+> - Cluster-level state (Postgres roles especially) leaks across specs
+>   sharing a Ginkgo `Describe`. Use unique-per-spec role names or
+>   `DROP ROLE IF EXISTS` guards.
+> - Plan's "40 files" inventory swept in 2 helper-only files (zero test
+>   funcs): `test/integration/auth/core_client_shim_test.go` and
+>   `test/integration/plugin/counting_proxy_test.go`. True conversion
+>   scope was 38. Future inventory queries should also filter by
+>   `rg -c 'func Test|t.Run'`.
+> - **Sub-agent fan-out caveats:** parallel `task pr-prep` invocations
+>   are serialized by a machine-wide flock, so parallel sub-agents
+>   stall waiting for the lock. Parallel `task test:int` invocations
+>   from different worktrees hit the SAME shared testcontainer and
+>   produce cross-contamination failures that masquerade as real test
+>   failures. For future fan-outs, sequence the verification steps
+>   (`task test:int` and `task pr-prep`) explicitly rather than letting
+>   each sub-agent run them in parallel.
+> - **Verify sub-agent semantic changes:** one sub-agent silently
+>   stripped `dek_ref` / `dek_version` handling from a test helper as
+>   part of a refactor and the orchestrator-dispatched code-reviewer
+>   missed it; CI surfaced the regression. Future sub-agent dispatch
+>   prompts should explicitly require diff-vs-main verification, not
+>   just `task pr-prep`.
+
+---
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Complete the testify + ginkgo migration tracked under `holomush-1hq.26` by converting the remaining 40 plain-`testing.T` integration test files to Ginkgo / Gomega in two parallel-safe phases across 8 PRs.
@@ -1190,3 +1250,5 @@ Optional but recommended: append a `bd note` to the umbrella `holomush-1hq` epic
 - [ ] `task test:int` is green on `main`.
 
 <!-- adr-capture: sha256=6a2a56a70030199c; session=cli; ts=2026-05-15T17:36:38Z; adrs= -->
+
+<!-- adr-capture: sha256=3084f160f0e9f060; session=cli; ts=2026-05-16T22:31:10Z; adrs=holomush-1f1w,holomush-iv7l -->
