@@ -176,6 +176,10 @@ type pgSceneLogClient struct {
 }
 
 func (c *pgSceneLogClient) AuditEvent(ctx context.Context, req *pluginv1.AuditEventRequest) (*pluginv1.AuditEventResponse, error) {
+	// Phase 7 (INV-P7-1, INV-P7-3): the host dispatcher's buildAuditRow
+	// populates Row.{Codec,SchemaVer,DekRef,DekVersion} from the JS
+	// headers; the test stub mirrors the real plugin Insert by carrying
+	// those fields verbatim into the plugin's scene_log table.
 	row := req.GetRow()
 	if row == nil {
 		return nil, errPluginEnvelope("nil row")
@@ -185,20 +189,30 @@ func (c *pgSceneLogClient) AuditEvent(ctx context.Context, req *pluginv1.AuditEv
 	if a := row.GetActor(); a != nil && len(a.GetId()) == 16 {
 		actorID = a.GetId()
 	}
+	schemaVer := int16(1)
+	if v := row.GetSchemaVer(); v > 0 && v <= 32767 {
+		schemaVer = int16(v) //nolint:gosec // bounded above by the >0 && <=32767 guard
+	}
 	codecName := row.GetCodec()
 	if codecName == "" {
 		codecName = "identity"
 	}
-	schemaVer := int16(row.GetSchemaVer())
-	if schemaVer == 0 {
-		schemaVer = 1
+	var dekRef *int64
+	if row.DekRef != nil {
+		v := int64(*row.DekRef) //nolint:gosec // dek_ref column is BIGINT (signed) — uint64→int64 widening matches column shape
+		dekRef = &v
+	}
+	var dekVersion *int32
+	if row.DekVersion != nil {
+		v := int32(*row.DekVersion) //nolint:gosec // dek_version column is INTEGER (signed) — uint32→int32 matches column shape
+		dekVersion = &v
 	}
 	_, err := c.pool.Exec(
 		ctx, `
 		INSERT INTO plugin_core_scenes.scene_log (
 			id, subject, type, timestamp, actor_kind, actor_id,
-			payload, schema_ver, codec, js_seq
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			payload, schema_ver, codec, js_seq, dek_ref, dek_version
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		ON CONFLICT (id) DO NOTHING`,
 		row.GetId(),
 		row.GetSubject(),
@@ -209,9 +223,13 @@ func (c *pgSceneLogClient) AuditEvent(ctx context.Context, req *pluginv1.AuditEv
 		row.GetPayload(),
 		schemaVer,
 		codecName,
-		// Plugin dispatch path does not carry the JS seq; 0 is acceptable
+		// Plugin dispatch path does not carry the JS seq explicitly; the
+		// plugin can use it for its own ordering by spying on headers in
+		// a future proto revision. For this test, 0 is acceptable
 		// (scene_log.js_seq is nullable).
 		int64(0),
+		dekRef,
+		dekVersion,
 	)
 	if err != nil {
 		//nolint:wrapcheck // test dispatcher — surface raw DB error
