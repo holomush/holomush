@@ -119,7 +119,7 @@ var _ = Describe("Soak publish 1k/sec for 5 minutes", func() {
 		hostSub.AwaitDrained(suiteT, 60*time.Second)
 
 		// Row-count parity — every published event lands in events_audit.
-		Expect(countRows(pool, "events_audit", "")).To(Equal(int(published)),
+		Expect(countRows(ctx, pool, "events_audit", "")).To(Equal(int(published)),
 			"audit row count must equal published count after drain")
 
 		// Goroutine leak check. 10 × publishers exit; allow some slack for

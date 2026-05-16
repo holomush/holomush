@@ -95,13 +95,13 @@ var _ = Describe("Plugin crash resilience", func() {
 
 		// Wait until scene_log has the row (implies redelivery succeeded).
 		Eventually(func() bool {
-			return countRows(pool, "plugin_core_scenes.scene_log",
+			return countRows(ctx, pool, "plugin_core_scenes.scene_log",
 				"id = '\\x"+bytesToHex(evt.ID.Bytes())+"'") == 1
 		}, 5*time.Second, 20*time.Millisecond).Should(BeTrue(),
 			"plugin must persist the redelivered event exactly once")
 
 		// There must be exactly one row even though the first dispatch failed.
-		Expect(countRows(pool, "plugin_core_scenes.scene_log", "")).To(Equal(1),
+		Expect(countRows(ctx, pool, "plugin_core_scenes.scene_log", "")).To(Equal(1),
 			"ON CONFLICT DO NOTHING must prevent duplicate rows under redelivery")
 
 		// And the client saw at least 2 calls (initial failure + successful

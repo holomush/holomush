@@ -127,35 +127,35 @@ var _ = Describe("Plugin audit isolation", func() {
 		// parallel; we separately poll scene_log to assert arrival.
 		hostSub.AwaitDrained(suiteT, 10*time.Second)
 		Eventually(func() bool {
-			return countRows(pool, "plugin_core_scenes.scene_log", "") == len(sceneEvents)
+			return countRows(ctx, pool, "plugin_core_scenes.scene_log", "") == len(sceneEvents)
 		}, 10*time.Second, 20*time.Millisecond).Should(BeTrue(),
 			"plugin scene_log did not see all plugin-owned events")
 
 		// Host audit table MUST NOT contain plugin-owned rows.
-		Expect(countRows(pool, "events_audit", "subject LIKE 'events.main.scene.%'")).To(BeZero(),
+		Expect(countRows(ctx, pool, "events_audit", "subject LIKE 'events.main.scene.%'")).To(BeZero(),
 			"events_audit must be empty for plugin-owned subjects")
 
 		// Host audit table MUST contain the host-owned rows.
-		Expect(countRows(pool, "events_audit", "subject LIKE 'events.main.loc.%'")).To(Equal(len(hostEvents)),
+		Expect(countRows(ctx, pool, "events_audit", "subject LIKE 'events.main.loc.%'")).To(Equal(len(hostEvents)),
 			"events_audit must hold host-owned rows")
 
 		// Plugin scene_log MUST contain exactly the plugin-owned rows.
-		Expect(countRows(pool, "plugin_core_scenes.scene_log", "")).To(Equal(len(sceneEvents)),
+		Expect(countRows(ctx, pool, "plugin_core_scenes.scene_log", "")).To(Equal(len(sceneEvents)),
 			"plugin scene_log must hold exactly the plugin-owned rows")
 	})
 })
 
 // countRows counts rows in `table` with optional WHERE clause (pass "" for none).
-func countRows(pool *pgxpool.Pool, table, where string) int {
+// Takes the spec's context so the query respects the It's deadline (vs the
+// previous context.Background() which sidestepped the spec timeout) and uses a
+// Gomega assertion instead of panic so failures surface as proper spec failures.
+func countRows(ctx context.Context, pool *pgxpool.Pool, table, where string) int {
 	q := "SELECT count(*) FROM " + table
 	if where != "" {
 		q += " WHERE " + where
 	}
 	var n int
-	err := pool.QueryRow(context.Background(), q).Scan(&n)
-	if err != nil {
-		panic("countRows: " + err.Error())
-	}
+	Expect(pool.QueryRow(ctx, q).Scan(&n)).To(Succeed())
 	return n
 }
 

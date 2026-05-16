@@ -7,6 +7,7 @@ package eventbus_e2e_test
 
 import (
 	"context"
+	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -72,7 +73,18 @@ var _ = Describe("Scene log preserves ciphertext and audit headers (INV-P7-6, IN
 
 		// KEK + DEK manager (mirrors test/integration/crypto/emit_test.go setup).
 		kekHex := testutil.RandomKEKHex(suiteT)
-		suiteT.Setenv("HOLOMUSH_TEST_ROUND_TRIP_KEK", kekHex)
+		// Per-spec env var with restore (NOT suiteT.Setenv — that's suite-scoped
+		// and would leak across specs through the shared *testing.T).
+		const kekEnv = "HOLOMUSH_TEST_ROUND_TRIP_KEK"
+		prevKek, prevKekSet := os.LookupEnv(kekEnv)
+		Expect(os.Setenv(kekEnv, kekHex)).To(Succeed())
+		DeferCleanup(func() {
+			if prevKekSet {
+				_ = os.Setenv(kekEnv, prevKek)
+			} else {
+				_ = os.Unsetenv(kekEnv)
+			}
+		})
 		provider, err := kek.NewLocalAEADProvider(ctx,
 			kek.NewEnvSource("HOLOMUSH_TEST_ROUND_TRIP_KEK", false), pool)
 		Expect(err).NotTo(HaveOccurred())

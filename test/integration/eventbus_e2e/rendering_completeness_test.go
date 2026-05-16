@@ -46,12 +46,18 @@ var _ = Describe("Rendering completeness", func() {
 
 		// Publish three host-builtin events of different types. The OwnerMap is
 		// empty (default Config), so every subject is host-owned and lands in
-		// events_audit.
+		// events_audit. Use a run-scoped subject prefix so assertions only
+		// consider rows from THIS spec invocation (events_audit accumulates
+		// across specs in the same Ginkgo run; the original "events.main.test.*"
+		// subjects would be contaminated by prior runs in the same container).
+		gameID := "rc_" + core.NewULID().String()
+		subjectPrefix := "events." + gameID + ".test."
+		subjectLike := "events." + gameID + ".%"
 		types := []eventbus.Type{"arrive", "leave", "system"}
 		for i, typ := range types {
 			ev := eventbus.Event{
 				ID:        core.NewULID(),
-				Subject:   eventbus.Subject("events.main.test." + string(typ)),
+				Subject:   eventbus.Subject(subjectPrefix + string(typ)),
 				Type:      typ,
 				Timestamp: time.Now().UTC(),
 				Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
@@ -64,7 +70,10 @@ var _ = Describe("Rendering completeness", func() {
 		hostSub.AwaitDrained(suiteT, 10*time.Second)
 		Eventually(func() bool {
 			var count int
-			qerr := pool.QueryRow(ctx, "SELECT COUNT(*) FROM events_audit").Scan(&count)
+			qerr := pool.QueryRow(ctx,
+				"SELECT COUNT(*) FROM events_audit WHERE subject LIKE $1",
+				subjectLike,
+			).Scan(&count)
 			return qerr == nil && count >= len(types)
 		}, 10*time.Second, 100*time.Millisecond).Should(BeTrue(),
 			"audit projection did not drain all events")
@@ -73,23 +82,26 @@ var _ = Describe("Rendering completeness", func() {
 		// enforces NOT NULL, but we assert here so a regression that drops the
 		// constraint or writes 'null' JSONB is caught.
 		var nullCount int
-		Expect(pool.QueryRow(ctx, "SELECT COUNT(*) FROM events_audit WHERE rendering IS NULL").Scan(&nullCount)).To(Succeed())
+		Expect(pool.QueryRow(ctx,
+			"SELECT COUNT(*) FROM events_audit WHERE subject LIKE $1 AND rendering IS NULL",
+			subjectLike,
+		).Scan(&nullCount)).To(Succeed())
 		Expect(nullCount).To(BeZero(), "INV-GW-6: every events_audit row MUST have non-null rendering")
 
 		// INV-GW-13: rendering column carries the metadata stamped by the
 		// publisher. Spot-check the first row's source_plugin, then verify
 		// every host-builtin row reports source_plugin="builtin".
 		var sourcePlugin string
-		Expect(pool.QueryRow(
-			ctx,
-			"SELECT rendering->>'source_plugin' FROM events_audit ORDER BY js_seq LIMIT 1",
+		Expect(pool.QueryRow(ctx,
+			"SELECT rendering->>'source_plugin' FROM events_audit WHERE subject LIKE $1 ORDER BY js_seq LIMIT 1",
+			subjectLike,
 		).Scan(&sourcePlugin)).To(Succeed())
 		Expect(sourcePlugin).To(Equal("builtin"))
 
 		var nonBuiltinCount int
-		Expect(pool.QueryRow(
-			ctx,
-			"SELECT COUNT(*) FROM events_audit WHERE rendering->>'source_plugin' <> 'builtin'",
+		Expect(pool.QueryRow(ctx,
+			"SELECT COUNT(*) FROM events_audit WHERE subject LIKE $1 AND rendering->>'source_plugin' <> 'builtin'",
+			subjectLike,
 		).Scan(&nonBuiltinCount)).To(Succeed())
 		Expect(nonBuiltinCount).To(BeZero(),
 			"INV-GW-13: every host-builtin row must report source_plugin='builtin'")

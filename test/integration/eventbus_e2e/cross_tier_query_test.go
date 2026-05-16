@@ -25,6 +25,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	"github.com/holomush/holomush/internal/eventbus/history"
 	"github.com/holomush/holomush/internal/plugin/plugintest"
+	"github.com/holomush/holomush/pkg/errutil"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
 
@@ -444,7 +445,7 @@ var _ = Describe("Cross-tier query end-to-end", func() {
 			PageSize:  10,
 		})
 		Expect(qerr).To(HaveOccurred())
-		Expect(qerr.Error()).To(ContainSubstring("plugin-owned subject requires PluginHistoryRouter"))
+		errutil.AssertErrorCode(suiteT, qerr, "EVENTBUS_PLUGIN_HISTORY_NOT_WIRED")
 	})
 })
 
