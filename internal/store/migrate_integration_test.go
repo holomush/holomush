@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -112,508 +114,509 @@ func verifySeedData(t *testing.T, ctx context.Context, connStr string) {
 	assert.Equal(t, 1, charCount, "should have 'TestChar' character")
 }
 
-func TestMigrator_FullCycle(t *testing.T) {
-	ctx := context.Background()
-
-	pgContainer, err := postgres.Run(
-		ctx,
-		"postgres:18-alpine",
-		postgres.WithDatabase("test"),
-		postgres.WithUsername("test"),
-		postgres.WithPassword("test"),
-		postgres.BasicWaitStrategies(),
-	)
-	require.NoError(t, err)
-	defer pgContainer.Terminate(ctx)
-
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-
-	migrator, err := store.NewMigrator(connStr)
-	require.NoError(t, err)
-	defer migrator.Close()
-
-	// Phase 1: Fresh database — version 0, no tables
-	version, dirty, err := migrator.Version()
-	require.NoError(t, err)
-	assert.Equal(t, uint(0), version)
-	assert.False(t, dirty)
-
-	tables := queryTableNames(t, ctx, connStr)
-	assert.Empty(t, tables, "fresh database should have no user tables")
-
-	// Phase 2: Up — apply all migrations, verify all tables
-	err = migrator.Up()
-	require.NoError(t, err)
-
-	version, dirty, err = migrator.Version()
-	require.NoError(t, err)
-	assert.Equal(t, uint(36), version)
-	assert.False(t, dirty)
-
-	tables = queryTableNames(t, ctx, connStr)
-	assert.Equal(t, expectedTables, tables, "Up() should create all expected tables")
-	verifySeedData(t, ctx, connStr)
-
-	// Phase 3: Down — rollback, verify all tables gone
-	err = migrator.Down()
-	require.NoError(t, err)
-
-	version, dirty, err = migrator.Version()
-	require.NoError(t, err)
-	assert.Equal(t, uint(0), version)
-	assert.False(t, dirty)
-
-	tables = queryTableNames(t, ctx, connStr)
-	assert.Empty(t, tables, "Down() should remove all user tables")
-
-	// Phase 4: Re-apply — prove idempotency
-	err = migrator.Up()
-	require.NoError(t, err)
-
-	version, dirty, err = migrator.Version()
-	require.NoError(t, err)
-	assert.Equal(t, uint(36), version)
-	assert.False(t, dirty)
-
-	tables = queryTableNames(t, ctx, connStr)
-	assert.Equal(t, expectedTables, tables, "second Up() should recreate all tables")
-	verifySeedData(t, ctx, connStr)
-}
-
-func TestMigrator_DirtyStateRecovery(t *testing.T) {
-	ctx := context.Background()
-
-	// Start PostgreSQL container
-	pgContainer, err := postgres.Run(
-		ctx,
-		"postgres:18-alpine",
-		postgres.WithDatabase("test"),
-		postgres.WithUsername("test"),
-		postgres.WithPassword("test"),
-		postgres.BasicWaitStrategies(),
-	)
-	require.NoError(t, err)
-	defer pgContainer.Terminate(ctx)
-
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-
-	// Create migrator and apply migrations
-	migrator, err := store.NewMigrator(connStr)
-	require.NoError(t, err)
-	defer migrator.Close()
-
-	err = migrator.Up()
-	require.NoError(t, err)
-
-	// Capture current version before simulating dirty state
-	currentVersion, dirty, err := migrator.Version()
-	require.NoError(t, err)
-	require.False(t, dirty, "database should start clean")
-	require.Greater(t, currentVersion, uint(0), "should have at least one migration applied")
-
-	// Simulate dirty state using raw SQL
-	conn, err := pgx.Connect(ctx, connStr)
-	require.NoError(t, err)
-	defer conn.Close(ctx)
-
-	_, err = conn.Exec(ctx, "UPDATE schema_migrations SET dirty = true")
-	require.NoError(t, err)
-
-	// Verify dirty state is reflected
-	version, dirty, err := migrator.Version()
-	require.NoError(t, err)
-	assert.Equal(t, currentVersion, version)
-	assert.True(t, dirty, "database should be dirty after manual update")
-
-	// Verify Up() fails when database is dirty
-	// golang-migrate returns ErrDirty when trying to run migrations on a dirty database
-	err = migrator.Up()
-	require.Error(t, err, "Up() should fail when database is dirty")
-	assert.Contains(t, err.Error(), "Dirty", "error should indicate dirty state")
-
-	// Verify Steps() also fails when dirty
-	err = migrator.Steps(1)
-	require.Error(t, err, "Steps() should fail when database is dirty")
-	assert.Contains(t, err.Error(), "Dirty", "error should indicate dirty state")
-
-	// Use Force() to recover from dirty state
-	err = migrator.Force(int(currentVersion))
-	require.NoError(t, err, "Force() should succeed and clear dirty flag")
-
-	// Verify dirty flag is cleared
-	version, dirty, err = migrator.Version()
-	require.NoError(t, err)
-	assert.Equal(t, currentVersion, version, "version should remain unchanged after Force()")
-	assert.False(t, dirty, "dirty flag should be cleared after Force()")
-
-	// Verify migrations can continue - Up() should succeed (or return no change)
-	err = migrator.Up()
-	require.NoError(t, err, "Up() should succeed after Force() clears dirty state")
-}
-
-func TestMigrator_ConcurrentUp(t *testing.T) {
-	ctx := context.Background()
-
-	// Start PostgreSQL container
-	pgContainer, err := postgres.Run(
-		ctx,
-		"postgres:18-alpine",
-		postgres.WithDatabase("test"),
-		postgres.WithUsername("test"),
-		postgres.WithPassword("test"),
-		postgres.BasicWaitStrategies(),
-	)
-	require.NoError(t, err)
-	defer pgContainer.Terminate(ctx)
-
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-
-	// Create two migrators pointing to the same database
-	migrator1, err := store.NewMigrator(connStr)
-	require.NoError(t, err)
-	defer migrator1.Close()
-
-	migrator2, err := store.NewMigrator(connStr)
-	require.NoError(t, err)
-	defer migrator2.Close()
-
-	// Run migrations concurrently
-	var wg sync.WaitGroup
-	var err1, err2 error
-
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		err1 = migrator1.Up()
-	}()
-	go func() {
-		defer wg.Done()
-		err2 = migrator2.Up()
-	}()
-	wg.Wait()
-
-	// At least one should succeed (or both if sequential lock acquisition)
-	// ErrNoChange is acceptable (means migrations already applied)
-	// Both succeeding is fine due to lock serialization
-	successCount := 0
-	if err1 == nil {
-		successCount++
-	}
-	if err2 == nil {
-		successCount++
-	}
-	assert.GreaterOrEqual(t, successCount, 1, "at least one migration should succeed")
-
-	// Verify consistent final state using a fresh migrator
-	verifier, err := store.NewMigrator(connStr)
-	require.NoError(t, err)
-	defer verifier.Close()
-
-	version, dirty, err := verifier.Version()
-	require.NoError(t, err)
-	assert.Greater(t, version, uint(0), "migrations should have been applied")
-	assert.False(t, dirty, "database should not be in dirty state")
-
-	// Verify both migrators report same version
-	v1, dirty1, err := migrator1.Version()
-	require.NoError(t, err)
-	assert.Equal(t, version, v1, "migrator1 should report same version")
-	assert.False(t, dirty1)
-
-	v2, dirty2, err := migrator2.Version()
-	require.NoError(t, err)
-	assert.Equal(t, version, v2, "migrator2 should report same version")
-	assert.False(t, dirty2)
-}
-
-// TestMigrator_Force_VersionExceedsAvailable documents the behavior when
-// Force() is called with a version higher than available migrations.
-//
-// While Force() accepts any version value, the consequences are:
-// - Version() returns the forced version (999)
-// - Up() returns an error (migration file not found)
-// - PendingMigrations() returns empty (thinks we're past all migrations)
-//
-// This is dangerous because PendingMigrations() indicates nothing is pending,
-// but Up() will fail. The only recovery is to Force() back to a valid version.
-//
-// Force() should only be used for recovery from dirty state, never to
-// artificially advance the version.
-func TestMigrator_Force_VersionExceedsAvailable(t *testing.T) {
-	ctx := context.Background()
-
-	// Start PostgreSQL container
-	pgContainer, err := postgres.Run(
-		ctx,
-		"postgres:18-alpine",
-		postgres.WithDatabase("test"),
-		postgres.WithUsername("test"),
-		postgres.WithPassword("test"),
-		postgres.BasicWaitStrategies(),
-	)
-	require.NoError(t, err)
-	defer pgContainer.Terminate(ctx)
-
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-
-	// Create migrator
-	migrator, err := store.NewMigrator(connStr)
-	require.NoError(t, err)
-	defer migrator.Close()
-
-	// Apply all available migrations first
-	err = migrator.Up()
-	require.NoError(t, err)
-
-	// Verify we're at the latest version
-	latestVersion, dirty, err := migrator.Version()
-	require.NoError(t, err)
-	require.False(t, dirty)
-	require.Greater(t, latestVersion, uint(0), "should have at least one migration")
-
-	// DANGEROUS: Force version to a value higher than any available migration
-	// This should NOT be done in production - only for documenting behavior
-	err = migrator.Force(999)
-	require.NoError(t, err, "Force() accepts any version, even non-existent ones")
-
-	// Verify version is now 999
-	version, dirty, err := migrator.Version()
-	require.NoError(t, err)
-	assert.Equal(t, uint(999), version, "Force() sets version to arbitrary value")
-	assert.False(t, dirty, "Force() clears dirty flag")
-
-	// Up() returns an error because there's no migration file for version 999
-	// golang-migrate tries to read the current version's down migration and fails
-	err = migrator.Up()
-	require.Error(t, err, "Up() should fail when forced to non-existent version")
-	assert.Contains(t, err.Error(), "999",
-		"error message should reference the invalid version")
-
-	// PendingMigrations() returns empty because version 999 > all migrations
-	// This is misleading since Up() will actually fail
-	pending, err := migrator.PendingMigrations()
-	require.NoError(t, err)
-	assert.Empty(t, pending, "PendingMigrations() returns empty when version exceeds all migrations")
-
-	// Version remains 999
-	version, _, err = migrator.Version()
-	require.NoError(t, err)
-	assert.Equal(t, uint(999), version, "version unchanged after failed Up()")
-}
-
-// TestMigrator_ConcurrentMigrationDirtyStateHandling verifies that dirty state
-// detection works correctly when multiple migrators access the same database
-// and one experiences a partial failure (simulated via dirty flag).
-//
-// This test simulates the scenario where:
-// 1. Two migrators point to the same database
-// 2. A migration fails partway through (leaving dirty state)
-// 3. Both migrators detect the dirty state
-// 4. Force() can recover the database to a clean state
-func TestMigrator_ConcurrentMigrationDirtyStateHandling(t *testing.T) {
-	ctx := context.Background()
-
-	// Start PostgreSQL container
-	pgContainer, err := postgres.Run(
-		ctx,
-		"postgres:18-alpine",
-		postgres.WithDatabase("test"),
-		postgres.WithUsername("test"),
-		postgres.WithPassword("test"),
-		postgres.BasicWaitStrategies(),
-	)
-	require.NoError(t, err)
-	defer pgContainer.Terminate(ctx)
-
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-
-	// Apply migrations first to establish baseline
-	migrator1, err := store.NewMigrator(connStr)
-	require.NoError(t, err)
-	defer migrator1.Close()
-
-	err = migrator1.Up()
-	require.NoError(t, err)
-
-	baseVersion, dirty, err := migrator1.Version()
-	require.NoError(t, err)
-	require.False(t, dirty, "database should start clean")
-	require.Greater(t, baseVersion, uint(0), "should have at least one migration applied")
-
-	// Roll back to version 0 so we can simulate concurrent migration attempts
-	err = migrator1.Down()
-	require.NoError(t, err)
-
-	version, dirty, err := migrator1.Version()
-	require.NoError(t, err)
-	assert.Equal(t, uint(0), version, "should be at version 0 after Down()")
-	assert.False(t, dirty)
-
-	// Now simulate a concurrent scenario where one migrator sets dirty state
-	// mid-execution (as would happen if a migration fails partway through).
-	// We'll:
-	// 1. Start migrator2
-	// 2. Manually set dirty state (simulating mid-migration crash)
-	// 3. Verify both migrators detect the dirty state
-	// 4. Verify Force() recovery works
-
-	migrator2, err := store.NewMigrator(connStr)
-	require.NoError(t, err)
-	defer migrator2.Close()
-
-	// First, apply one migration step to create the schema_migrations table
-	// and establish a version for dirty state simulation
-	err = migrator1.Steps(1)
-	require.NoError(t, err)
-
-	currentVersion, dirty, err := migrator1.Version()
-	require.NoError(t, err)
-	require.False(t, dirty)
-	require.Greater(t, currentVersion, uint(0))
-
-	// Simulate a partial migration failure by setting dirty flag directly.
-	// This simulates what happens when a migration crashes mid-execution:
-	// the database is left in a dirty state at the current version.
-	conn, err := pgx.Connect(ctx, connStr)
-	require.NoError(t, err)
-	defer conn.Close(ctx)
-
-	_, err = conn.Exec(ctx, "UPDATE schema_migrations SET dirty = true")
-	require.NoError(t, err)
-
-	// Test: Both migrators detect the dirty state
-	v1, dirty1, err := migrator1.Version()
-	require.NoError(t, err)
-	assert.Equal(t, currentVersion, v1, "migrator1 should report correct version")
-	assert.True(t, dirty1, "migrator1 should detect dirty state")
-
-	v2, dirty2, err := migrator2.Version()
-	require.NoError(t, err)
-	assert.Equal(t, currentVersion, v2, "migrator2 should report correct version")
-	assert.True(t, dirty2, "migrator2 should detect dirty state")
-
-	// Test: Up() fails for both migrators due to dirty state
-	err = migrator1.Up()
-	require.Error(t, err, "migrator1.Up() should fail when database is dirty")
-	assert.Contains(t, err.Error(), "Dirty", "error should indicate dirty state")
-
-	err = migrator2.Up()
-	require.Error(t, err, "migrator2.Up() should fail when database is dirty")
-	assert.Contains(t, err.Error(), "Dirty", "error should indicate dirty state")
-
-	// Test: Steps() fails for both migrators due to dirty state
-	err = migrator1.Steps(1)
-	require.Error(t, err, "migrator1.Steps() should fail when database is dirty")
-	assert.Contains(t, err.Error(), "Dirty", "error should indicate dirty state")
-
-	err = migrator2.Steps(1)
-	require.Error(t, err, "migrator2.Steps() should fail when database is dirty")
-	assert.Contains(t, err.Error(), "Dirty", "error should indicate dirty state")
-
-	// Test: Force() can recover from dirty state
-	// Using migrator1 to force the version clears dirty flag
-	err = migrator1.Force(int(currentVersion))
-	require.NoError(t, err, "migrator1.Force() should succeed")
-
-	// Test: Both migrators now see clean state
-	v1, dirty1, err = migrator1.Version()
-	require.NoError(t, err)
-	assert.Equal(t, currentVersion, v1)
-	assert.False(t, dirty1, "migrator1 should see dirty flag cleared after Force()")
-
-	v2, dirty2, err = migrator2.Version()
-	require.NoError(t, err)
-	assert.Equal(t, currentVersion, v2)
-	assert.False(t, dirty2, "migrator2 should see dirty flag cleared after Force()")
-
-	// Test: Migrations can continue after Force() recovery
-	err = migrator1.Up()
-	require.NoError(t, err, "migrator1.Up() should succeed after Force() recovery")
-
-	// Verify final state
-	finalVersion, dirty, err := migrator1.Version()
-	require.NoError(t, err)
-	assert.Equal(t, baseVersion, finalVersion, "should reach final version after recovery")
-	assert.False(t, dirty, "database should be clean after recovery and Up()")
-
-	// migrator2 should also see the consistent final state
-	v2Final, dirty2Final, err := migrator2.Version()
-	require.NoError(t, err)
-	assert.Equal(t, finalVersion, v2Final, "migrator2 should see same final version")
-	assert.False(t, dirty2Final, "migrator2 should see clean state")
-}
-
-// TestMigration000035_DropsCryptoRekeyCheckpointFKs asserts the load-bearing
-// post-condition of migration 000035 (holomush-jxo8.7.48): no foreign-key
-// constraints remain on crypto_rekey_checkpoints.{new_dek_id,old_dek_id}.
-//
-// Without this assertion, a future regression that names the constraints
-// differently (e.g. explicit CONSTRAINT clause in 000031) would silently
-// leave the FKs in place — the migration's DROP CONSTRAINT IF EXISTS would
-// match nothing, no error, no test failure. Asserting the actual
-// information_schema state is the load-bearing check.
-func TestMigration000035_DropsCryptoRekeyCheckpointFKs(t *testing.T) {
-	ctx := context.Background()
-
-	pgContainer, err := postgres.Run(
-		ctx,
-		"postgres:18-alpine",
-		postgres.WithDatabase("test"),
-		postgres.WithUsername("test"),
-		postgres.WithPassword("test"),
-		postgres.BasicWaitStrategies(),
-	)
-	require.NoError(t, err)
-	defer pgContainer.Terminate(ctx)
-
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-
-	migrator, err := store.NewMigrator(connStr)
-	require.NoError(t, err)
-	defer migrator.Close()
-
-	require.NoError(t, migrator.Up())
-
-	conn, err := pgx.Connect(ctx, connStr)
-	require.NoError(t, err)
-	defer conn.Close(ctx)
-
-	// Count remaining FK constraints on crypto_rekey_checkpoints. After
-	// migration 000035 there MUST be zero. (The table itself still has
-	// PRIMARY KEY, CHECK, and UNIQUE constraints — those are unaffected.)
-	var fkCount int
-	err = conn.QueryRow(ctx, `
-        SELECT COUNT(*)
-          FROM information_schema.table_constraints
-         WHERE table_name = 'crypto_rekey_checkpoints'
-           AND constraint_type = 'FOREIGN KEY'
-    `).Scan(&fkCount)
-	require.NoError(t, err)
-	assert.Equal(t, 0, fkCount,
-		"migration 000035 (holomush-jxo8.7.48) MUST drop both FKs on crypto_rekey_checkpoints "+
-			"(new_dek_id, old_dek_id). Future migrations that re-introduce a FK to crypto_keys "+
-			"would defeat the no-prod-shape design — see spec §3.6.1.")
-
-	// Defense-in-depth: also confirm the specific column FKs aren't present
-	// (an FK to a different table wouldn't be caught by the count-zero
-	// check above, but it would be even worse).
-	var perColumnFKCount int
-	err = conn.QueryRow(ctx, `
-        SELECT COUNT(*)
-          FROM information_schema.referential_constraints rc
-          JOIN information_schema.key_column_usage kcu
-            ON kcu.constraint_name = rc.constraint_name
-         WHERE kcu.table_name = 'crypto_rekey_checkpoints'
-           AND kcu.column_name IN ('new_dek_id', 'old_dek_id')
-    `).Scan(&perColumnFKCount)
-	require.NoError(t, err)
-	assert.Equal(t, 0, perColumnFKCount,
-		"no FK from crypto_rekey_checkpoints.{new_dek_id,old_dek_id} to any table is permitted "+
-			"after migration 000035")
-}
+var _ = Describe("Migrator", func() {
+	Describe("FullCycle", func() {
+		It("applies all migrations, rolls back to zero, and is idempotent on re-apply", func() {
+			ctx := context.Background()
+
+			pgContainer, err := postgres.Run(
+				ctx,
+				"postgres:18-alpine",
+				postgres.WithDatabase("test"),
+				postgres.WithUsername("test"),
+				postgres.WithPassword("test"),
+				postgres.BasicWaitStrategies(),
+			)
+			Expect(err).NotTo(HaveOccurred())
+			defer pgContainer.Terminate(ctx) //nolint:errcheck // best-effort cleanup
+
+			connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+			Expect(err).NotTo(HaveOccurred())
+
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator.Close()
+
+			// Phase 1: Fresh database — version 0, no tables
+			version, dirty, err := migrator.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(version).To(Equal(uint(0)))
+			Expect(dirty).To(BeFalse())
+
+			tables := queryTableNames(suiteT, ctx, connStr)
+			Expect(tables).To(BeEmpty(), "fresh database should have no user tables")
+
+			// Phase 2: Up — apply all migrations, verify all tables
+			Expect(migrator.Up()).To(Succeed())
+
+			version, dirty, err = migrator.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(version).To(Equal(uint(36)))
+			Expect(dirty).To(BeFalse())
+
+			tables = queryTableNames(suiteT, ctx, connStr)
+			Expect(tables).To(Equal(expectedTables), "Up() should create all expected tables")
+			verifySeedData(suiteT, ctx, connStr)
+
+			// Phase 3: Down — rollback, verify all tables gone
+			Expect(migrator.Down()).To(Succeed())
+
+			version, dirty, err = migrator.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(version).To(Equal(uint(0)))
+			Expect(dirty).To(BeFalse())
+
+			tables = queryTableNames(suiteT, ctx, connStr)
+			Expect(tables).To(BeEmpty(), "Down() should remove all user tables")
+
+			// Phase 4: Re-apply — prove idempotency
+			Expect(migrator.Up()).To(Succeed())
+
+			version, dirty, err = migrator.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(version).To(Equal(uint(36)))
+			Expect(dirty).To(BeFalse())
+
+			tables = queryTableNames(suiteT, ctx, connStr)
+			Expect(tables).To(Equal(expectedTables), "second Up() should recreate all tables")
+			verifySeedData(suiteT, ctx, connStr)
+		})
+	})
+
+	Describe("DirtyStateRecovery", func() {
+		It("detects dirty state and recovers via Force()", func() {
+			ctx := context.Background()
+
+			// Start PostgreSQL container
+			pgContainer, err := postgres.Run(
+				ctx,
+				"postgres:18-alpine",
+				postgres.WithDatabase("test"),
+				postgres.WithUsername("test"),
+				postgres.WithPassword("test"),
+				postgres.BasicWaitStrategies(),
+			)
+			Expect(err).NotTo(HaveOccurred())
+			defer pgContainer.Terminate(ctx) //nolint:errcheck // best-effort cleanup
+
+			connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+			Expect(err).NotTo(HaveOccurred())
+
+			// Create migrator and apply migrations
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator.Close()
+
+			Expect(migrator.Up()).To(Succeed())
+
+			// Capture current version before simulating dirty state
+			currentVersion, dirty, err := migrator.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(dirty).To(BeFalse(), "database should start clean")
+			Expect(currentVersion).To(BeNumerically(">", uint(0)), "should have at least one migration applied")
+
+			// Simulate dirty state using raw SQL
+			conn, err := pgx.Connect(ctx, connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer conn.Close(ctx)
+
+			_, err = conn.Exec(ctx, "UPDATE schema_migrations SET dirty = true")
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify dirty state is reflected
+			version, dirty, err := migrator.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(version).To(Equal(currentVersion))
+			Expect(dirty).To(BeTrue(), "database should be dirty after manual update")
+
+			// Verify Up() fails when database is dirty
+			// golang-migrate returns ErrDirty when trying to run migrations on a dirty database
+			err = migrator.Up()
+			Expect(err).To(HaveOccurred(), "Up() should fail when database is dirty")
+			Expect(err.Error()).To(ContainSubstring("Dirty"), "error should indicate dirty state")
+
+			// Verify Steps() also fails when dirty
+			err = migrator.Steps(1)
+			Expect(err).To(HaveOccurred(), "Steps() should fail when database is dirty")
+			Expect(err.Error()).To(ContainSubstring("Dirty"), "error should indicate dirty state")
+
+			// Use Force() to recover from dirty state
+			Expect(migrator.Force(int(currentVersion))).To(Succeed(), "Force() should succeed and clear dirty flag")
+
+			// Verify dirty flag is cleared
+			version, dirty, err = migrator.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(version).To(Equal(currentVersion), "version should remain unchanged after Force()")
+			Expect(dirty).To(BeFalse(), "dirty flag should be cleared after Force()")
+
+			// Verify migrations can continue - Up() should succeed (or return no change)
+			Expect(migrator.Up()).To(Succeed(), "Up() should succeed after Force() clears dirty state")
+		})
+	})
+
+	Describe("ConcurrentUp", func() {
+		It("allows at least one concurrent Up() to succeed with consistent final state", func() {
+			ctx := context.Background()
+
+			// Start PostgreSQL container
+			pgContainer, err := postgres.Run(
+				ctx,
+				"postgres:18-alpine",
+				postgres.WithDatabase("test"),
+				postgres.WithUsername("test"),
+				postgres.WithPassword("test"),
+				postgres.BasicWaitStrategies(),
+			)
+			Expect(err).NotTo(HaveOccurred())
+			defer pgContainer.Terminate(ctx) //nolint:errcheck // best-effort cleanup
+
+			connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+			Expect(err).NotTo(HaveOccurred())
+
+			// Create two migrators pointing to the same database
+			migrator1, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator1.Close()
+
+			migrator2, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator2.Close()
+
+			// Run migrations concurrently
+			var wg sync.WaitGroup
+			var err1, err2 error
+
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				err1 = migrator1.Up()
+			}()
+			go func() {
+				defer wg.Done()
+				err2 = migrator2.Up()
+			}()
+			wg.Wait()
+
+			// At least one should succeed (or both if sequential lock acquisition)
+			// ErrNoChange is acceptable (means migrations already applied)
+			// Both succeeding is fine due to lock serialization
+			successCount := 0
+			if err1 == nil {
+				successCount++
+			}
+			if err2 == nil {
+				successCount++
+			}
+			Expect(successCount).To(BeNumerically(">=", 1), "at least one migration should succeed")
+
+			// Verify consistent final state using a fresh migrator
+			verifier, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer verifier.Close()
+
+			version, dirty, err := verifier.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(version).To(BeNumerically(">", uint(0)), "migrations should have been applied")
+			Expect(dirty).To(BeFalse(), "database should not be in dirty state")
+
+			// Verify both migrators report same version
+			v1, dirty1, err := migrator1.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v1).To(Equal(version), "migrator1 should report same version")
+			Expect(dirty1).To(BeFalse())
+
+			v2, dirty2, err := migrator2.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v2).To(Equal(version), "migrator2 should report same version")
+			Expect(dirty2).To(BeFalse())
+		})
+	})
+
+	// Force_VersionExceedsAvailable documents the behavior when Force() is called
+	// with a version higher than available migrations.
+	//
+	// While Force() accepts any version value, the consequences are:
+	//   - Version() returns the forced version (999)
+	//   - Up() returns an error (migration file not found)
+	//   - PendingMigrations() returns empty (thinks we're past all migrations)
+	//
+	// This is dangerous because PendingMigrations() indicates nothing is pending,
+	// but Up() will actually fail. The only recovery is to Force() back to a valid version.
+	//
+	// Force() should only be used for recovery from dirty state, never to
+	// artificially advance the version.
+	Describe("Force_VersionExceedsAvailable", func() {
+		It("documents dangerous behavior: PendingMigrations() returns empty but Up() fails", func() {
+			ctx := context.Background()
+
+			// Start PostgreSQL container
+			pgContainer, err := postgres.Run(
+				ctx,
+				"postgres:18-alpine",
+				postgres.WithDatabase("test"),
+				postgres.WithUsername("test"),
+				postgres.WithPassword("test"),
+				postgres.BasicWaitStrategies(),
+			)
+			Expect(err).NotTo(HaveOccurred())
+			defer pgContainer.Terminate(ctx) //nolint:errcheck // best-effort cleanup
+
+			connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+			Expect(err).NotTo(HaveOccurred())
+
+			// Create migrator
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator.Close()
+
+			// Apply all available migrations first
+			Expect(migrator.Up()).To(Succeed())
+
+			// Verify we're at the latest version
+			latestVersion, dirty, err := migrator.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(dirty).To(BeFalse())
+			Expect(latestVersion).To(BeNumerically(">", uint(0)), "should have at least one migration")
+
+			// DANGEROUS: Force version to a value higher than any available migration
+			// This should NOT be done in production - only for documenting behavior
+			Expect(migrator.Force(999)).To(Succeed(), "Force() accepts any version, even non-existent ones")
+
+			// Verify version is now 999
+			version, dirty, err := migrator.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(version).To(Equal(uint(999)), "Force() sets version to arbitrary value")
+			Expect(dirty).To(BeFalse(), "Force() clears dirty flag")
+
+			// Up() returns an error because there's no migration file for version 999
+			// golang-migrate tries to read the current version's down migration and fails
+			err = migrator.Up()
+			Expect(err).To(HaveOccurred(), "Up() should fail when forced to non-existent version")
+			Expect(err.Error()).To(ContainSubstring("999"),
+				"error message should reference the invalid version")
+
+			// PendingMigrations() returns empty because version 999 > all migrations
+			// This is misleading since Up() will actually fail
+			pending, err := migrator.PendingMigrations()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pending).To(BeEmpty(), "PendingMigrations() returns empty when version exceeds all migrations")
+
+			// Version remains 999
+			version, _, err = migrator.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(version).To(Equal(uint(999)), "version unchanged after failed Up()")
+		})
+	})
+
+	// ConcurrentMigrationDirtyStateHandling verifies that dirty state
+	// detection works correctly when multiple migrators access the same database
+	// and one experiences a partial failure (simulated via dirty flag).
+	//
+	// This test simulates the scenario where:
+	// 1. Two migrators point to the same database
+	// 2. A migration fails partway through (leaving dirty state)
+	// 3. Both migrators detect the dirty state
+	// 4. Force() can recover the database to a clean state
+	Describe("ConcurrentMigrationDirtyStateHandling", func() {
+		It("both migrators detect dirty state and recover via Force()", func() {
+			ctx := context.Background()
+
+			// Start PostgreSQL container
+			pgContainer, err := postgres.Run(
+				ctx,
+				"postgres:18-alpine",
+				postgres.WithDatabase("test"),
+				postgres.WithUsername("test"),
+				postgres.WithPassword("test"),
+				postgres.BasicWaitStrategies(),
+			)
+			Expect(err).NotTo(HaveOccurred())
+			defer pgContainer.Terminate(ctx) //nolint:errcheck // best-effort cleanup
+
+			connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+			Expect(err).NotTo(HaveOccurred())
+
+			// Apply migrations first to establish baseline
+			migrator1, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator1.Close()
+
+			Expect(migrator1.Up()).To(Succeed())
+
+			baseVersion, dirty, err := migrator1.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(dirty).To(BeFalse(), "database should start clean")
+			Expect(baseVersion).To(BeNumerically(">", uint(0)), "should have at least one migration applied")
+
+			// Roll back to version 0 so we can simulate concurrent migration attempts
+			Expect(migrator1.Down()).To(Succeed())
+
+			version, dirty, err := migrator1.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(version).To(Equal(uint(0)), "should be at version 0 after Down()")
+			Expect(dirty).To(BeFalse())
+
+			// Now simulate a concurrent scenario where one migrator sets dirty state
+			// mid-execution (as would happen if a migration fails partway through).
+			// We'll:
+			// 1. Start migrator2
+			// 2. Manually set dirty state (simulating mid-migration crash)
+			// 3. Verify both migrators detect the dirty state
+			// 4. Verify Force() recovery works
+
+			migrator2, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator2.Close()
+
+			// First, apply one migration step to create the schema_migrations table
+			// and establish a version for dirty state simulation
+			Expect(migrator1.Steps(1)).To(Succeed())
+
+			currentVersion, dirty, err := migrator1.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(dirty).To(BeFalse())
+			Expect(currentVersion).To(BeNumerically(">", uint(0)))
+
+			// Simulate a partial migration failure by setting dirty flag directly.
+			// This simulates what happens when a migration crashes mid-execution:
+			// the database is left in a dirty state at the current version.
+			conn, err := pgx.Connect(ctx, connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer conn.Close(ctx)
+
+			_, err = conn.Exec(ctx, "UPDATE schema_migrations SET dirty = true")
+			Expect(err).NotTo(HaveOccurred())
+
+			// Test: Both migrators detect the dirty state
+			v1, dirty1, err := migrator1.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v1).To(Equal(currentVersion), "migrator1 should report correct version")
+			Expect(dirty1).To(BeTrue(), "migrator1 should detect dirty state")
+
+			v2, dirty2, err := migrator2.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v2).To(Equal(currentVersion), "migrator2 should report correct version")
+			Expect(dirty2).To(BeTrue(), "migrator2 should detect dirty state")
+
+			// Test: Up() fails for both migrators due to dirty state
+			err = migrator1.Up()
+			Expect(err).To(HaveOccurred(), "migrator1.Up() should fail when database is dirty")
+			Expect(err.Error()).To(ContainSubstring("Dirty"), "error should indicate dirty state")
+
+			err = migrator2.Up()
+			Expect(err).To(HaveOccurred(), "migrator2.Up() should fail when database is dirty")
+			Expect(err.Error()).To(ContainSubstring("Dirty"), "error should indicate dirty state")
+
+			// Test: Steps() fails for both migrators due to dirty state
+			err = migrator1.Steps(1)
+			Expect(err).To(HaveOccurred(), "migrator1.Steps() should fail when database is dirty")
+			Expect(err.Error()).To(ContainSubstring("Dirty"), "error should indicate dirty state")
+
+			err = migrator2.Steps(1)
+			Expect(err).To(HaveOccurred(), "migrator2.Steps() should fail when database is dirty")
+			Expect(err.Error()).To(ContainSubstring("Dirty"), "error should indicate dirty state")
+
+			// Test: Force() can recover from dirty state
+			// Using migrator1 to force the version clears dirty flag
+			Expect(migrator1.Force(int(currentVersion))).To(Succeed(), "migrator1.Force() should succeed")
+
+			// Test: Both migrators now see clean state
+			v1, dirty1, err = migrator1.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v1).To(Equal(currentVersion))
+			Expect(dirty1).To(BeFalse(), "migrator1 should see dirty flag cleared after Force()")
+
+			v2, dirty2, err = migrator2.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v2).To(Equal(currentVersion))
+			Expect(dirty2).To(BeFalse(), "migrator2 should see dirty flag cleared after Force()")
+
+			// Test: Migrations can continue after Force() recovery
+			Expect(migrator1.Up()).To(Succeed(), "migrator1.Up() should succeed after Force() recovery")
+
+			// Verify final state
+			finalVersion, dirty, err := migrator1.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(finalVersion).To(Equal(baseVersion), "should reach final version after recovery")
+			Expect(dirty).To(BeFalse(), "database should be clean after recovery and Up()")
+
+			// migrator2 should also see the consistent final state
+			v2Final, dirty2Final, err := migrator2.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v2Final).To(Equal(finalVersion), "migrator2 should see same final version")
+			Expect(dirty2Final).To(BeFalse(), "migrator2 should see clean state")
+		})
+	})
+
+	// Migration000035_DropsCryptoRekeyCheckpointFKs asserts the load-bearing
+	// post-condition of migration 000035 (holomush-jxo8.7.48): no foreign-key
+	// constraints remain on crypto_rekey_checkpoints.{new_dek_id,old_dek_id}.
+	//
+	// Without this assertion, a future regression that names the constraints
+	// differently (e.g. explicit CONSTRAINT clause in 000031) would silently
+	// leave the FKs in place — the migration's DROP CONSTRAINT IF EXISTS would
+	// match nothing, no error, no test failure. Asserting the actual
+	// information_schema state is the load-bearing check.
+	Describe("Migration000035_DropsCryptoRekeyCheckpointFKs", func() {
+		It("drops both FK constraints on crypto_rekey_checkpoints after migration 000035", func() {
+			ctx := context.Background()
+
+			pgContainer, err := postgres.Run(
+				ctx,
+				"postgres:18-alpine",
+				postgres.WithDatabase("test"),
+				postgres.WithUsername("test"),
+				postgres.WithPassword("test"),
+				postgres.BasicWaitStrategies(),
+			)
+			Expect(err).NotTo(HaveOccurred())
+			defer pgContainer.Terminate(ctx) //nolint:errcheck // best-effort cleanup
+
+			connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+			Expect(err).NotTo(HaveOccurred())
+
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator.Close()
+
+			Expect(migrator.Up()).To(Succeed())
+
+			conn, err := pgx.Connect(ctx, connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer conn.Close(ctx)
+
+			// Count remaining FK constraints on crypto_rekey_checkpoints. After
+			// migration 000035 there MUST be zero. (The table itself still has
+			// PRIMARY KEY, CHECK, and UNIQUE constraints — those are unaffected.)
+			var fkCount int
+			err = conn.QueryRow(ctx, `
+		        SELECT COUNT(*)
+		          FROM information_schema.table_constraints
+		         WHERE table_name = 'crypto_rekey_checkpoints'
+		           AND constraint_type = 'FOREIGN KEY'
+		    `).Scan(&fkCount)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fkCount).To(Equal(0),
+				"migration 000035 (holomush-jxo8.7.48) MUST drop both FKs on crypto_rekey_checkpoints "+
+					"(new_dek_id, old_dek_id). Future migrations that re-introduce a FK to crypto_keys "+
+					"would defeat the no-prod-shape design — see spec §3.6.1.")
+
+			// Defense-in-depth: also confirm the specific column FKs aren't present
+			// (an FK to a different table wouldn't be caught by the count-zero
+			// check above, but it would be even worse).
+			var perColumnFKCount int
+			err = conn.QueryRow(ctx, `
+		        SELECT COUNT(*)
+		          FROM information_schema.referential_constraints rc
+		          JOIN information_schema.key_column_usage kcu
+		            ON kcu.constraint_name = rc.constraint_name
+		         WHERE kcu.table_name = 'crypto_rekey_checkpoints'
+		           AND kcu.column_name IN ('new_dek_id', 'old_dek_id')
+		    `).Scan(&perColumnFKCount)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(perColumnFKCount).To(Equal(0),
+				"no FK from crypto_rekey_checkpoints.{new_dek_id,old_dek_id} to any table is permitted "+
+					"after migration 000035")
+		})
+	})
+})

@@ -7,71 +7,75 @@ package store_test
 
 import (
 	"context"
-	"testing"
 
 	"github.com/oklog/ulid/v2"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/store"
 )
 
-func TestPlayerHasRole_ReturnsTrueForPlayerWithAdminCharacter(t *testing.T) {
-	ctx := context.Background()
-	pool, cleanup := newTestPool(t)
-	defer cleanup()
-	require.NoError(t, runMigrations(ctx, pool, 20))
+var _ = Describe("RoleStore", func() {
+	Describe("PlayerHasRole", func() {
+		It("returns true for player with admin character", func() {
+			ctx := context.Background()
+			pool, cleanup := newTestPool(suiteT)
+			defer cleanup()
+			Expect(runMigrations(ctx, pool, 20)).To(Succeed())
 
-	playerID := ulid.Make().String()
-	charID := ulid.Make().String()
-	_, err := pool.Exec(ctx, `INSERT INTO players (id, username, password_hash, created_at, updated_at)
-		VALUES ($1, $2, $3, now(), now())`, playerID, "alice-"+playerID[:8], "hash")
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `INSERT INTO characters (id, player_id, name)
-		VALUES ($1, $2, $3)`, charID, playerID, "Alice-"+charID[:8])
-	require.NoError(t, err)
+			playerID := ulid.Make().String()
+			charID := ulid.Make().String()
+			_, err := pool.Exec(ctx, `INSERT INTO players (id, username, password_hash, created_at, updated_at)
+				VALUES ($1, $2, $3, now(), now())`, playerID, "alice-"+playerID[:8], "hash")
+			Expect(err).NotTo(HaveOccurred())
+			_, err = pool.Exec(ctx, `INSERT INTO characters (id, player_id, name)
+				VALUES ($1, $2, $3)`, charID, playerID, "Alice-"+charID[:8])
+			Expect(err).NotTo(HaveOccurred())
 
-	rs := store.NewPostgresRoleStore(pool)
-	require.NoError(t, rs.AddRole(ctx, charID, access.RoleAdmin))
+			rs := store.NewPostgresRoleStore(pool)
+			Expect(rs.AddRole(ctx, charID, access.RoleAdmin)).To(Succeed())
 
-	has, err := rs.PlayerHasRole(ctx, playerID, access.RoleAdmin)
-	require.NoError(t, err)
-	require.True(t, has)
-}
+			has, err := rs.PlayerHasRole(ctx, playerID, access.RoleAdmin)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(has).To(BeTrue())
+		})
 
-func TestPlayerHasRole_ReturnsFalseForPlayerWithoutAnyAdminCharacter(t *testing.T) {
-	ctx := context.Background()
-	pool, cleanup := newTestPool(t)
-	defer cleanup()
-	require.NoError(t, runMigrations(ctx, pool, 20))
+		It("returns false for player without any admin character", func() {
+			ctx := context.Background()
+			pool, cleanup := newTestPool(suiteT)
+			defer cleanup()
+			Expect(runMigrations(ctx, pool, 20)).To(Succeed())
 
-	playerID := ulid.Make().String()
-	charID := ulid.Make().String()
-	_, err := pool.Exec(ctx, `INSERT INTO players (id, username, password_hash, created_at, updated_at)
-		VALUES ($1, $2, $3, now(), now())`, playerID, "bob-"+playerID[:8], "hash")
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `INSERT INTO characters (id, player_id, name)
-		VALUES ($1, $2, $3)`, charID, playerID, "Bob-"+charID[:8])
-	require.NoError(t, err)
+			playerID := ulid.Make().String()
+			charID := ulid.Make().String()
+			_, err := pool.Exec(ctx, `INSERT INTO players (id, username, password_hash, created_at, updated_at)
+				VALUES ($1, $2, $3, now(), now())`, playerID, "bob-"+playerID[:8], "hash")
+			Expect(err).NotTo(HaveOccurred())
+			_, err = pool.Exec(ctx, `INSERT INTO characters (id, player_id, name)
+				VALUES ($1, $2, $3)`, charID, playerID, "Bob-"+charID[:8])
+			Expect(err).NotTo(HaveOccurred())
 
-	rs := store.NewPostgresRoleStore(pool)
-	// Add and then remove to assert the negative path explicitly.
-	require.NoError(t, rs.AddRole(ctx, charID, access.RoleAdmin))
-	require.NoError(t, rs.RemoveRole(ctx, charID, access.RoleAdmin))
+			rs := store.NewPostgresRoleStore(pool)
+			// Add and then remove to assert the negative path explicitly.
+			Expect(rs.AddRole(ctx, charID, access.RoleAdmin)).To(Succeed())
+			Expect(rs.RemoveRole(ctx, charID, access.RoleAdmin)).To(Succeed())
 
-	has, err := rs.PlayerHasRole(ctx, playerID, access.RoleAdmin)
-	require.NoError(t, err)
-	require.False(t, has)
-}
+			has, err := rs.PlayerHasRole(ctx, playerID, access.RoleAdmin)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(has).To(BeFalse())
+		})
 
-func TestPlayerHasRole_ReturnsFalseForUnknownPlayer(t *testing.T) {
-	ctx := context.Background()
-	pool, cleanup := newTestPool(t)
-	defer cleanup()
-	require.NoError(t, runMigrations(ctx, pool, 20))
+		It("returns false for unknown player", func() {
+			ctx := context.Background()
+			pool, cleanup := newTestPool(suiteT)
+			defer cleanup()
+			Expect(runMigrations(ctx, pool, 20)).To(Succeed())
 
-	rs := store.NewPostgresRoleStore(pool)
-	has, err := rs.PlayerHasRole(ctx, ulid.Make().String(), access.RoleAdmin)
-	require.NoError(t, err)
-	require.False(t, has)
-}
+			rs := store.NewPostgresRoleStore(pool)
+			has, err := rs.PlayerHasRole(ctx, ulid.Make().String(), access.RoleAdmin)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(has).To(BeFalse())
+		})
+	})
+})
