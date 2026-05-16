@@ -47,8 +47,8 @@ var _ = Describe("Scene log preserves ciphertext and audit headers (INV-P7-6, IN
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		DeferCleanup(cancel)
 
-		pool := freshPool(suiteT)
-		bus := testutil.StartEmbeddedJetStream(suiteT)
+		pool := freshPool()
+		bus := freshBus()
 
 		// scene_log schema. Matches plugins/core-scenes/migrations/000004 +
 		// 000005 (Phase 7 dek_ref + dek_version).

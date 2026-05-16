@@ -63,8 +63,8 @@ var _ = Describe("Cross-tier query end-to-end", func() {
 		// A single bus + pool serve all specs to keep setup cost down.
 		// Each spec picks a distinct subject so there's no cross-talk on
 		// events_audit or on the EVENTS stream.
-		bus = eventbustest.New(suiteT)
-		pool = freshPool(suiteT)
+		bus = freshBus()
+		pool = freshPool()
 
 		streamMaxAge = 30 * 24 * time.Hour // matches production default
 		safety := time.Hour

@@ -21,7 +21,6 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
-	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 )
 
 // Soak specs — matches spec §8 "Chaos and soak — 1k events/sec for
@@ -58,8 +57,8 @@ var _ = Describe("Soak publish 1k/sec for 5 minutes", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), duration+2*time.Minute)
 		DeferCleanup(cancel)
 
-		bus := eventbustest.New(suiteT)
-		pool := freshPool(suiteT)
+		bus := freshBus()
+		pool := freshPool()
 		hostSub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
 		Expect(hostSub.Start(ctx)).To(Succeed())
 		DeferCleanup(func() { _ = hostSub.Stop(context.Background()) })

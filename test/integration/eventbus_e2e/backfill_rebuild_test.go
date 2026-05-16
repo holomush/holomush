@@ -14,7 +14,6 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
-	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 )
 
 // Backfill rebuild specs — covers spec §8 "Backfill rebuild ->
@@ -31,8 +30,8 @@ var _ = Describe("Audit backfill produces matching counts", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		DeferCleanup(cancel)
 
-		bus := eventbustest.New(suiteT)
-		pool := freshPool(suiteT)
+		bus := freshBus()
+		pool := freshPool()
 		pub := bus.Bus.Publisher()
 
 		// Publish N events while the audit projection is NOT running, so

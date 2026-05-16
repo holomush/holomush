@@ -17,7 +17,6 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
-	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -39,8 +38,8 @@ var _ = Describe("Plugin audit isolation", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		DeferCleanup(cancel)
 
-		bus := eventbustest.New(suiteT)
-		pool := freshPool(suiteT)
+		bus := freshBus()
+		pool := freshPool()
 
 		// Create the plugin's audit schema + scene_log table by hand. In
 		// production the schema provisioner runs the plugin's migrations; for
@@ -58,6 +57,8 @@ var _ = Describe("Plugin audit isolation", func() {
 				schema_ver  SMALLINT NOT NULL,
 				codec       TEXT NOT NULL,
 				js_seq      BIGINT,
+				dek_ref     BIGINT,
+				dek_version INTEGER,
 				inserted_at TIMESTAMPTZ NOT NULL DEFAULT now()
 			);
 		`)

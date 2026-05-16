@@ -15,7 +15,6 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
-	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 )
 
 // Rendering completeness specs — covers INV-GW-6 + INV-GW-13. After
@@ -32,8 +31,8 @@ var _ = Describe("Rendering completeness", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		DeferCleanup(cancel)
 
-		bus := eventbustest.New(suiteT)
-		pool := freshPool(suiteT)
+		bus := freshBus()
+		pool := freshPool()
 
 		// Stand up the host audit projection so publishes reach events_audit.
 		hostSub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})

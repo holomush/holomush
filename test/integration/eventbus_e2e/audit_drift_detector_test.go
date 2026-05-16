@@ -14,7 +14,6 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
-	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 )
 
 // Audit drift detector specs — covers spec §8 "Audit drift detector ->
@@ -39,8 +38,8 @@ var _ = Describe("Audit drift detector reports tampered row", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		DeferCleanup(cancel)
 
-		bus := eventbustest.New(suiteT)
-		pool := freshPool(suiteT)
+		bus := freshBus()
+		pool := freshPool()
 
 		// Stand up the host projection so publishes reach events_audit.
 		hostSub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})

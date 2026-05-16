@@ -13,7 +13,6 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/eventbus"
-	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 )
 
 // Multi-protocol fan-out specs — covers spec §8 "Multi-protocol fan-out ->
@@ -39,7 +38,7 @@ var _ = Describe("Multi-protocol fan-out telnet and web see same pose", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		DeferCleanup(cancel)
 
-		bus := eventbustest.New(suiteT)
+		bus := freshBus()
 		pub := bus.Bus.Publisher()
 		subSvc := bus.Bus.Subscriber()
 

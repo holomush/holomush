@@ -14,7 +14,6 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
-	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 )
 
 // JS storage corruption specs — covers spec §8 "Embedded JS storage
@@ -41,8 +40,8 @@ var _ = Describe("JS storage corruption rebuild from PG audit preserves ULIDs", 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		DeferCleanup(cancel)
 
-		bus := eventbustest.New(suiteT)
-		pool := freshPool(suiteT)
+		bus := freshBus()
+		pool := freshPool()
 
 		hostSub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
 		Expect(hostSub.Start(ctx)).To(Succeed())

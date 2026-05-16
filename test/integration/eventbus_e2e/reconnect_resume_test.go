@@ -13,7 +13,6 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/eventbus"
-	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 )
 
 // Reconnect-resume specs — assert the reconnect-resume contract from spec §8:
@@ -31,7 +30,7 @@ var _ = Describe("Reconnect resume", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		DeferCleanup(cancel)
 
-		bus := eventbustest.New(suiteT)
+		bus := freshBus()
 		pub := bus.Bus.Publisher()
 		sub := bus.Bus.Subscriber()
 		Expect(pub).NotTo(BeNil())
