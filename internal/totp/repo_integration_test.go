@@ -129,11 +129,13 @@ var _ = Describe("TOTPRepository", func() {
 				"setup: pre-enrolling player_id should succeed")
 
 			// BootstrapEnrollAtomic must fail during the InsertEnrollment
-			// step (duplicate PK) and roll back the BootstrapClaim it just
-			// inserted in the same transaction.
+			// step (duplicate PK on player_totp.player_id, wrapped in
+			// TOTP_REPO_INSERT_TOTP at repo.go:168) and roll back the
+			// BootstrapClaim it just inserted in the same transaction.
 			err := repo.BootstrapEnrollAtomic(ctx, key, pid, rec)
 			Expect(err).To(HaveOccurred(),
 				"BootstrapEnrollAtomic must fail when InsertEnrollment hits duplicate player_id")
+			errutil.AssertErrorCode(suiteT, err, "TOTP_REPO_INSERT_TOTP")
 
 			// Rollback assertion: the bootstrap claim was NOT persisted,
 			// so a different player can still successfully claim the same
