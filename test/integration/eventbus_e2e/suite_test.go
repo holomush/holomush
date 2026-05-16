@@ -89,15 +89,6 @@ func ensurePluginSchema(ctx context.Context, t *testing.T, pool *pgxpool.Pool, s
 	require.NoError(t, err)
 }
 
-// TestMainCompiles keeps `go test -tags=integration ./...` from failing
-// when the package contains only skeleton tests. Without at least one
-// top-level Test func, `go test` reports "no test files" under some Go
-// toolchains; keep this minimal guard alongside any real tests.
-func TestSuiteCompiles(t *testing.T) {
-	t.Parallel()
-	// No assertions — presence is the contract.
-}
-
 // waitForRowInSceneLog polls plugin_core_scenes.scene_log for a row with
 // the given event id (raw 16-byte ULID) until it appears or the timeout
 // fires. Used by the Phase 7 round-trip + plugin-isolation tests
