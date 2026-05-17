@@ -46,8 +46,11 @@ This plan touches these paths. **Bold** = new files. Path:line cites for existin
 
 **Binary side (`internal/plugin/goplugin/`):**
 
-- Modify: `internal/plugin/goplugin/host.go:528-535` (capture `InitResponse.RegisteredEmitTypes` from Init RPC).
-- Modify: `internal/plugin/goplugin/host.go:537-542` (extend `loadedPlugin` struct + implement `PluginEmitRegistry`).
+- Modify: `internal/plugin/goplugin/host.go:509` (extend Init RPC gate to ALSO fire when `manifest.Crypto != nil && len(manifest.Crypto.Emits) > 0`).
+- Modify: `internal/plugin/goplugin/host.go:528` (capture `InitResponse.RegisteredEmitTypes` from Init RPC).
+- Modify: `internal/plugin/goplugin/host.go:183-190` (extend `loadedPlugin` struct definition with `registeredEmitTypes []string`).
+- Modify: `internal/plugin/goplugin/host.go:537-544` (struct literal: populate new field).
+- Add: `internal/plugin/goplugin/host.go::PluginEmitRegistry` method implementation.
 
 **Plugin adoptions:**
 
@@ -177,7 +180,9 @@ bd close holomush-jg9b.2 --reason="Audit precondition verified: in-tree plugin s
 
 **Goal:** Land the full INV-S5 mechanism per the mechanism design spec, with both plugin adoptions, in one coherent change. Fail-closed from day one — no warn-only intermediate state.
 
-This task has many bite-sized TDD steps grouped by commit boundary. Each commit boundary is named **Commit: <description>**; the implementer commits between groups.
+This task has many bite-sized TDD steps grouped by commit boundary. **Group order matters: plugin adoptions (G+H) MUST land BEFORE the manager validator wiring (F), or the test suite goes RED at the F commit boundary** (validator would fire fail-closed against not-yet-adopted plugins). The corrected order is A→B→C→D→E→G→H→F→I.
+
+**Scope note (INV-S5 does NOT catch all plaintext-emit drift).** This task implements INV-S5 per the mechanism spec: substrate validates set-equality between `crypto.emits` event-type strings and the strings the plugin's code registers via `register_emit_type` / `RegisterEmitType`. The validator does NOT catch a separate drift class: the manifest's `crypto.emits` uses UNQUALIFIED event types (e.g., `event_type: say`) but runtime emits use QUALIFIED types (e.g., `core-communication:say`). `internal/plugin/crypto_manifest.go::LookupEmitSensitivity` does literal string comparison, so qualified runtime emits silently match no manifest entry and fall through to `SensitivityNever`. This pre-existing drift is OUT OF SCOPE for INV-S5 as designed and SHOULD be filed as a separate follow-up bead (see "Follow-up beads" at the bottom of this plan).
 
 **Files:** see "File structure → Substrate cap + adoptions" above.
 
@@ -854,34 +859,73 @@ in Group D.
 
 #### Step 2.D.1: Write failing test for Lua Host PluginEmitRegistry
 
-Add to `internal/plugin/lua/host_test.go` (existing file — examine first):
+Add to `internal/plugin/lua/host_test.go` (existing file). The fixture pattern is borrowed from `internal/plugin/communication_integration_test.go:34-87` (`setupCommunicationTest`) but adapted for synthetic in-test plugins via `t.TempDir()` instead of `findPluginsDir()`:
 
 ```go
-func TestLuaHost_PluginEmitRegistry_LoadedPluginWithCryptoEmits(t *testing.T) {
-	// Load a synthetic Lua plugin with manifest declaring crypto.emits: [a, b]
-	// and code calling register_emit_type for "a" and "b". After Load, verify
-	// PluginEmitRegistry returns ([a, b], true).
-	//
-	// Use the existing test harness for constructing a stub plugin manifest
-	// and registry; follow the pattern in TestHost_Load_* tests in this file.
-}
-
 func TestLuaHost_PluginEmitRegistry_NotLoaded_ReturnsFalse(t *testing.T) {
-	h := NewHost(...)  // use existing test constructor
+	h := NewHostWithFunctions(hostfunc.New(nil))
+	defer h.Close(context.Background())
 	got, ok := h.PluginEmitRegistry("nonexistent")
 	require.False(t, ok)
 	require.Nil(t, got)
 }
 
 func TestLuaHost_PluginEmitRegistry_LoadedWithoutCryptoEmits_ReturnsNilTrue(t *testing.T) {
-	// Load a synthetic Lua plugin with manifest crypto: nil (or emits: []).
-	// Verify PluginEmitRegistry returns (nil, true) — loaded but INV-S5 not applicable.
+	// Synthetic plugin with no crypto: block. Existing syntax-check pass
+	// runs unchanged; PluginEmitRegistry returns (nil, true).
+	pluginDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "main.lua"),
+		[]byte(`function on_event(e) return {} end`), 0644))
+	manifest := &plugins.Manifest{
+		Name:      "synth-no-crypto",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaPluginConfig{Entry: "main.lua"},
+	}
+
+	h := NewHostWithFunctions(hostfunc.New(nil))
+	defer h.Close(context.Background())
+	require.NoError(t, h.Load(context.Background(), manifest, pluginDir))
+
+	got, ok := h.PluginEmitRegistry("synth-no-crypto")
+	require.True(t, ok)
+	require.Nil(t, got)
+}
+
+func TestLuaHost_PluginEmitRegistry_LoadedPluginWithCryptoEmits(t *testing.T) {
+	// Synthetic plugin with crypto.emits: [a, b] and top-level
+	// register_emit_type calls for both. After Load, PluginEmitRegistry
+	// returns ([a, b], true). This is the load-bearing test for INV-S5.
+	pluginDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "main.lua"), []byte(`
+holomush.register_emit_type("a")
+holomush.register_emit_type("b")
+function on_event(e) return {} end
+`), 0644))
+	manifest := &plugins.Manifest{
+		Name:      "synth-with-crypto",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaPluginConfig{Entry: "main.lua"},
+		Crypto: &plugins.CryptoSection{
+			Emits: []plugins.CryptoEmit{
+				{EventType: "a", Sensitivity: plugins.SensitivityNever},
+				{EventType: "b", Sensitivity: plugins.SensitivityNever},
+			},
+		},
+	}
+
+	h := NewHostWithFunctions(hostfunc.New(nil))
+	defer h.Close(context.Background())
+	require.NoError(t, h.Load(context.Background(), manifest, pluginDir))
+
+	got, ok := h.PluginEmitRegistry("synth-with-crypto")
+	require.True(t, ok)
+	require.ElementsMatch(t, []string{"a", "b"}, got)
 }
 ```
 
-Implementer fills in the harness setup based on existing test patterns.
+Required imports for the test file (add if not already present): `"context"`, `"os"`, `"path/filepath"`, `"testing"`, `"github.com/stretchr/testify/require"`, `"github.com/holomush/holomush/internal/plugin/hostfunc"`, `plugins "github.com/holomush/holomush/internal/plugin"`.
 
-- [ ] **Step 2.D.1: write Lua host PluginEmitRegistry tests**
+- [ ] **Step 2.D.1: write 3 Lua host PluginEmitRegistry tests with inlined fixtures**
 
 #### Step 2.D.2: Run failing tests
 
@@ -948,24 +992,50 @@ Expected: 2 of 3 tests pass (the not-loaded and empty-crypto-emits cases). The "
 
 #### Step 2.D.6: Write failing test for binary Host PluginEmitRegistry
 
-Add to `internal/plugin/goplugin/host_test.go` (existing file — examine first):
+Add to `internal/plugin/goplugin/host_test.go` (existing file). The fixture pattern comes from `newMockHost` at `internal/plugin/goplugin/host_test.go:176-186`, which constructs a `Host` with mock `PluginClient` for in-process tests (no real subprocess). Extend the existing `mockPluginClient` to control InitResponse.
 
 ```go
-func TestGoPluginHost_PluginEmitRegistry_LoadedPluginWithCryptoEmits(t *testing.T) {
-	// Use the existing test fixture pattern (likely involves a real subprocess
-	// or a test-only Host fixture). Plugin with crypto.emits and EmitTypeRegistrar
-	// returning [a, b]. After Load + Init, PluginEmitRegistry returns ([a, b], true).
-}
-
 func TestGoPluginHost_PluginEmitRegistry_NotLoaded_ReturnsFalse(t *testing.T) {
-	h := &Host{plugins: map[string]*loadedPlugin{}}
+	h, _ := newMockHost(t)
 	got, ok := h.PluginEmitRegistry("nonexistent")
 	require.False(t, ok)
 	require.Nil(t, got)
 }
+
+func TestGoPluginHost_PluginEmitRegistry_LoadedWithRegisteredEmitTypes(t *testing.T) {
+	// Use newMockHost to construct a Host with mock client. The mock's
+	// pluginClient.Init returns InitResponse{RegisteredEmitTypes: [a, b]}.
+	// After Load, PluginEmitRegistry returns ([a, b], true).
+	h, mockClient := newMockHost(t)
+	mockClient.initResponse = &pluginv1.InitResponse{
+		RegisteredEmitTypes: []string{"a", "b"},
+	}
+
+	manifest := &plugins.Manifest{
+		Name:     "synth-binary",
+		Type:     plugins.TypeBinary,
+		Requires: []string{"holomush.world.v1.WorldService"}, // any non-empty requires triggers Init
+		Crypto: &plugins.CryptoSection{
+			Emits: []plugins.CryptoEmit{
+				{EventType: "a", Sensitivity: plugins.SensitivityNever},
+				{EventType: "b", Sensitivity: plugins.SensitivityNever},
+			},
+		},
+	}
+
+	// Skip schema provisioning + broker setup for the mock case; Load on
+	// the mock-client Host returns successfully without external state.
+	require.NoError(t, h.Load(context.Background(), manifest, t.TempDir()))
+
+	got, ok := h.PluginEmitRegistry("synth-binary")
+	require.True(t, ok)
+	require.ElementsMatch(t, []string{"a", "b"}, got)
+}
 ```
 
-- [ ] **Step 2.D.6: write binary host tests**
+**Mock extension required.** Extend `mockPluginClient` (existing struct in `host_test.go`) to support an `initResponse *pluginv1.InitResponse` field that the mock's `Init` method returns. The current mock's `Init` likely returns a zero-valued response; making it configurable enables this test. If existing tests assert on the zero behavior, default to a zero-valued response when `initResponse` is nil.
+
+- [ ] **Step 2.D.6: write 2 binary host tests; extend mockPluginClient with initResponse field**
 
 #### Step 2.D.7: Run failing tests
 
@@ -976,38 +1046,60 @@ Expected: FAIL.
 
 #### Step 2.D.8: Implement on binary Host
 
-Modify `internal/plugin/goplugin/host.go`. Add `registeredEmitTypes` field to `loadedPlugin` struct (around line 537):
+Modify `internal/plugin/goplugin/host.go`. The `loadedPlugin` struct definition lives at **lines 183-190**. Replace it with the new shape (preserve existing fields exactly, add `registeredEmitTypes`):
 
 ```go
+// loadedPlugin holds state for a single loaded binary plugin.
 type loadedPlugin struct {
 	manifest             *plugins.Manifest
-	client               *hashiplug.Client
-	registeredEmitTypes  []string  // INV-S5: populated from InitResponse.RegisteredEmitTypes
-	// ... existing fields ...
+	client               PluginClient
+	plugin               pluginv1.PluginServiceClient
+	conn                 grpc.ClientConnInterface // underlying gRPC conn to the plugin process
+	certDir              string                   // temp cert directory, cleaned up on unload
+	broker               *hashiplug.GRPCBroker    // broker for service injection, nil if factory-mocked
+	registeredEmitTypes  []string                 // INV-S5: populated from InitResponse.RegisteredEmitTypes
 }
 ```
 
-Modify the existing `pluginClient.Init(ctx, initReq)` call (line 528 area) to CAPTURE the response:
+**Extend the Init RPC gate at line 509.** Today the Init RPC is gated by `if len(manifest.Requires) > 0 || len(manifest.Provides) > 0 || manifest.Storage == plugins.StoragePostgres`. INV-M3 requires binary plugins with non-empty `crypto.emits` to receive the Init RPC so the host can read `RegisteredEmitTypes`. Extend the gate:
+
+```go
+// Call Init on plugins that need service injection (storage or requires)
+// OR opt into INV-S5 validation (crypto.emits non-empty).
+needsInit := len(manifest.Requires) > 0 ||
+	len(manifest.Provides) > 0 ||
+	manifest.Storage == plugins.StoragePostgres ||
+	(manifest.Crypto != nil && len(manifest.Crypto.Emits) > 0)
+if needsInit {
+	// ... existing Init RPC body unchanged ...
+}
+```
+
+**Capture the InitResponse at line 528.** Today the call drops the response: `if _, initErr := pluginClient.Init(...)`. Replace with:
 
 ```go
 initResp, initErr := pluginClient.Init(ctx, initReq)
 if initErr != nil {
 	client.Kill()
 	if certDir != "" {
-		_ = os.RemoveAll(certDir)
+		_ = os.RemoveAll(certDir) //nolint:errcheck // best-effort cleanup
 	}
 	return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "init").Wrap(initErr)
 }
-// Cache registered emit types for INV-S5 validation by the manager.
+```
+
+After the Init RPC block ends, capture `registeredEmitTypes` (declared outside the `needsInit` block so it's in scope for the struct-literal assignment):
+
+```go
 var registeredEmitTypes []string
-if initResp != nil {
+if needsInit && initResp != nil {
 	registeredEmitTypes = initResp.GetRegisteredEmitTypes()
 }
 ```
 
-Then in the `h.plugins[manifest.Name] = &loadedPlugin{...}` block (around line 537), include `registeredEmitTypes: registeredEmitTypes`.
+In the existing `h.plugins[manifest.Name] = &loadedPlugin{...}` struct literal (lines 537-544), add `registeredEmitTypes: registeredEmitTypes` to the field assignments alongside the existing 6 fields.
 
-For plugins that SKIP the Init RPC (`len(manifest.Requires) == 0 && len(manifest.Provides) == 0 && manifest.Storage != plugins.StoragePostgres`), `registeredEmitTypes` stays nil — that's the correct behavior because those plugins don't have crypto.emits either (INV-M1 gate skips them).
+For plugins that SKIP the Init RPC under the extended gate (no requires/provides/storage AND no crypto.emits), `registeredEmitTypes` stays nil — INV-M1 gates them out of validation entirely, so this is correct.
 
 Add the method:
 
@@ -1070,37 +1162,53 @@ Re-run the test from Step 2.D.1 (`TestLuaHost_PluginEmitRegistry_LoadedPluginWit
 
 - [ ] **Step 2.E.1: confirm failing test still in place**
 
-#### Step 2.E.2: Modify Lua Host Load to add second pass
+#### Step 2.E.2: Modify Lua Host Load to use a branched pass (replaces syntax-check for crypto plugins)
 
-Modify `internal/plugin/lua/host.go::Load` (function starts at line 111). After the existing syntax-check throwaway state ends (after line 155) and before storing the `luaPlugin` (line 157), insert:
+Per amended mechanism spec §2.2: the existing syntax-check pass at `lua/host.go:147-155` runs `DoString` WITHOUT calling `hostFuncs.Register` — `holomush` is undefined there. If a Lua plugin's top-level acquires `holomush.register_emit_type(...)` calls (Groups G/H), the syntax-check pass would fail before any INV-S5 work runs. The fix is to **REPLACE** the syntax-check pass with a branched implementation: non-crypto plugins keep the existing behavior; crypto plugins get the INV-S5 capture pass instead (which doubles as syntax-check).
+
+Modify `internal/plugin/lua/host.go::Load` (function starts at line 111). **REPLACE** the entire existing syntax-check block (lines 147-155) with:
 
 ```go
-// INV-S5 Load-pass: capture top-level register_emit_type calls into
-// a per-plugin LuaEmitRegistry. Only fires for plugins with non-empty
-// crypto.emits per INV-M1. See docs/superpowers/specs/2026-05-17-inv-s5-mechanism-design.md.
+// Branch the Load pass on whether INV-S5 capture is needed.
+//
+// Plugins WITHOUT non-empty crypto.emits: existing syntax-check
+// throwaway state (no hostfuncs registered). Unchanged from today.
+//
+// Plugins WITH non-empty crypto.emits: capture-and-validate pass
+// (hostfuncs registered including register_emit_type). The
+// captured registry is stored on luaPlugin for the validator
+// (manager.go::loadPlugin reads via Host.PluginEmitRegistry).
+//
+// In both branches, DoString errors fail plugin load with the
+// existing oops shape (operation=load); only the Hint differs.
 var emitRegistry []string
-if manifest.Crypto != nil && len(manifest.Crypto.Emits) > 0 {
-	L2, err := h.factory.NewState(ctx)
-	if err != nil {
-		return oops.In("lua").With("plugin", manifest.Name).
-			With("operation", "load_inv_s5_pass").
-			Hint("failed to create INV-S5 capture state").Wrap(err)
-	}
-	defer L2.Close()
+L, err := h.factory.NewState(ctx)
+if err != nil {
+	return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
+		Hint("failed to create validation state").Wrap(err)
+}
+defer L.Close()
 
+if manifest.Crypto != nil && len(manifest.Crypto.Emits) > 0 {
+	// INV-S5 capture pass: hostfuncs registered, captures top-level
+	// holomush.register_emit_type calls into the per-plugin LuaEmitRegistry.
 	reg := hostfunc.NewLuaEmitRegistry()
 	if h.hostFuncs != nil {
-		h.hostFuncs.RegisterWithEmitCapture(L2, manifest.Name, reg, manifest.Requires...)
+		h.hostFuncs.RegisterWithEmitCapture(L, manifest.Name, reg, manifest.Requires...)
 	}
-
-	if err := L2.DoString(string(code)); err != nil {
-		return oops.In("lua").With("plugin", manifest.Name).
-			With("operation", "load_inv_s5_pass").
+	if err := L.DoString(string(code)); err != nil {
+		return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
 			With("entry", manifest.LuaPlugin.Entry).
-			Hint("INV-S5 Load-pass execution error").Wrap(err)
+			Hint("INV-S5 capture pass execution error").Wrap(err)
 	}
-
 	emitRegistry = reg.Types()
+} else {
+	// Existing syntax-check pass — no hostfuncs registered.
+	if err := L.DoString(string(code)); err != nil {
+		return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
+			With("entry", manifest.LuaPlugin.Entry).
+			Hint("syntax error").Wrap(err)
+	}
 }
 ```
 
@@ -1114,32 +1222,53 @@ h.plugins[manifest.Name] = &luaPlugin{
 }
 ```
 
-Add the `hostfunc` import to the file if not already present.
+Add the `hostfunc` import (`"github.com/holomush/holomush/internal/plugin/hostfunc"`) to the file if not already present.
 
-- [ ] **Step 2.E.2: modify Load**
+- [ ] **Step 2.E.2: replace syntax-check block with branched pass**
 
 #### Step 2.E.3: Run Lua tests to verify all PluginEmitRegistry tests pass
 
 Run: `task test -- ./internal/plugin/lua/ -run TestLuaHost_PluginEmitRegistry`
-Expected: PASS — all 3 tests.
+Expected: PASS — all 3 tests. The crypto-plugin test now correctly captures registrations; the no-crypto test verifies the existing syntax-check path is unchanged.
 
 - [ ] **Step 2.E.3: verify pass**
 
-#### Step 2.E.4: Write additional Lua Host test for Load-pass error path
+#### Step 2.E.4: Write additional Lua Host test for capture-pass error path
 
-Add:
+Add to the test file:
 
 ```go
-func TestLuaHost_Load_INVS5PassExecutionError_Fails(t *testing.T) {
-	// Synthetic plugin with manifest crypto.emits: [a] but main.lua top-level
-	// that throws a Lua error (e.g., `error("intentional")` at top level).
-	// Verify Load returns error with operation="load_inv_s5_pass".
+func TestLuaHost_LoadCapturePassExecutionError_Fails(t *testing.T) {
+	// Synthetic Lua plugin with manifest crypto.emits: [a] and main.lua
+	// top-level that throws a Lua error (e.g., `error("intentional")`).
+	// Verify Load returns error with operation="load" and
+	// Hint="INV-S5 capture pass execution error".
+	//
+	// Use the same harness pattern as Step 2.D.1: write synthetic plugin
+	// to t.TempDir(), construct manifest with crypto.emits, call Load.
+	pluginDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "main.lua"),
+		[]byte(`error("intentional load failure")`), 0644))
+	manifest := &plugins.Manifest{
+		Name:      "synth-fail",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaPluginConfig{Entry: "main.lua"},
+		Crypto:    &plugins.CryptoSection{Emits: []plugins.CryptoEmit{{EventType: "a"}}},
+	}
+
+	hostFuncs := hostfunc.New(nil)
+	h := pluginlua.NewHostWithFunctions(hostFuncs)
+	defer h.Close(context.Background())
+
+	err := h.Load(context.Background(), manifest, pluginDir)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "INV-S5 capture pass execution error")
 }
 ```
 
-Then run and verify FAIL→implementation→PASS.
+Run and verify PASS (the implementation in Step 2.E.2 already handles this path).
 
-- [ ] **Step 2.E.4: write Load-pass error test, verify it passes (covered by existing error path in implementation)**
+- [ ] **Step 2.E.4: write capture-pass error test, verify pass**
 
 #### Step 2.E.5: Run task lint
 
@@ -1153,11 +1282,21 @@ Expected: PASS.
 Commit message:
 
 ```text
-feat(plugin/lua): Load second pass captures emit-type registrations (jg9b.3)
+feat(plugin/lua): branched Load pass for INV-S5 capture (jg9b.3)
 
-Group E of jg9b.3. Lua Host's Load now does a SECOND stateful pass
-for plugins with non-empty crypto.emits, running top-level code in a
-state with holomush.register_emit_type registered to capture into a
+Group E of jg9b.3. Replaces the existing syntax-check pass at
+lua/host.go:147-155 with a branched implementation per amended
+mechanism spec §2.2: non-crypto plugins use the existing
+syntax-check pass unchanged; crypto plugins use the INV-S5
+capture pass (hostfuncs registered, captures top-level
+register_emit_type calls). Both branches produce operation=load
+errors with intentionally branch-specific Hint strings.
+
+Result: one Load-time execution per Lua plugin regardless of
+crypto.emits scope. Opt-in scope per ADR holomush-7h0c preserved.
+
+PluginEmitRegistry now returns the captured set (Group D wired
+the accessor; this group makes it non-nil for crypto plugins).
 per-plugin LuaEmitRegistry. The captured types feed PluginEmitRegistry
 for the validator (Group F).
 
@@ -1171,33 +1310,94 @@ syntax-check errors).
 
 ### Group F: Manager wiring (validator call + fail-closed)
 
+> ⚠️ **EXECUTION ORDER: DEFER Group F until Groups G+H have landed.** The plan's group letters are alphabetic for stable references; execution order is A→B→C→D→E→G→H→F→I per Task 2 preamble. If you execute F before G+H, the test suite goes RED at this commit boundary (validator fires fail-closed against not-yet-adopted plugins). Groups G+H are the core-communication + core-objects adoptions. After both land, F's commit produces no regression because the registered sets match.
+
 #### Step 2.F.1: Write failing test for manager validator wiring
 
-Add to `internal/plugin/manager_test.go`:
+Add to `internal/plugin/manager_test.go`. The harness pattern mirrors the synthetic-plugin pattern from the Lua host tests (Step 2.D.1) — write plugin manifest + main.lua into `t.TempDir()`, construct a Manager with a Lua Host, call `manager.LoadAll`.
 
 ```go
 func TestManager_LoadPlugin_EmitTypeMismatch_FailsClosed(t *testing.T) {
-	// Synthetic Lua plugin with manifest crypto.emits: [a, b] but code that
-	// only calls register_emit_type("a"). loadPlugin returns
-	// EVENT_TYPE_REGISTRY_MISMATCH oops error naming "b" in
+	// Plugin declares crypto.emits: [a, b] but main.lua only registers "a".
+	// loadPlugin returns EVENT_TYPE_REGISTRY_MISMATCH with "b" in
 	// declared_but_unregistered.
+	pluginDir := writeMismatchPlugin(t, "synth-mismatch",
+		[]string{"a", "b"},  // declared
+		[]string{"a"},       // registered (missing "b")
+	)
+
+	mgr, err := plugins.NewManager(filepath.Dir(pluginDir),
+		plugins.WithLuaHost(pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
+	require.NoError(t, err)
+
+	err = mgr.LoadAll(context.Background())
+	require.Error(t, err)
+	require.True(t, oops.Code("EVENT_TYPE_REGISTRY_MISMATCH").Is(err) ||
+		strings.Contains(err.Error(), "EVENT_TYPE_REGISTRY_MISMATCH"),
+		"expected EVENT_TYPE_REGISTRY_MISMATCH, got: %v", err)
 }
 
 func TestManager_LoadPlugin_EmitTypeMatch_Succeeds(t *testing.T) {
-	// Synthetic plugin with matching declared + registered sets. loadPlugin
-	// succeeds; manager.plugins contains the plugin.
+	pluginDir := writeMismatchPlugin(t, "synth-match",
+		[]string{"a", "b"}, []string{"a", "b"})
+
+	mgr, err := plugins.NewManager(filepath.Dir(pluginDir),
+		plugins.WithLuaHost(pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
+	require.NoError(t, err)
+	require.NoError(t, mgr.LoadAll(context.Background()))
 }
 
 func TestManager_LoadPlugin_NoCryptoEmits_SkipsValidation(t *testing.T) {
-	// Synthetic plugin with no crypto block. loadPlugin succeeds and never
-	// calls host.PluginEmitRegistry (verified via spy host or absence-of-error
-	// on a host whose PluginEmitRegistry would panic).
+	// Plugin with NO crypto: block. Validator never fires; loadPlugin
+	// succeeds without consulting PluginEmitRegistry.
+	pluginDir := writeMismatchPlugin(t, "synth-no-crypto",
+		nil, nil) // nil declared signals "no crypto block in manifest"
+
+	mgr, err := plugins.NewManager(filepath.Dir(pluginDir),
+		plugins.WithLuaHost(pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
+	require.NoError(t, err)
+	require.NoError(t, mgr.LoadAll(context.Background()))
+}
+
+// writeMismatchPlugin creates a synthetic Lua plugin manifest + main.lua under
+// t.TempDir(). If declared is nil, no crypto: block is written. If registered
+// is nil, no register_emit_type calls are added to main.lua. Returns the
+// plugin's directory path. The PARENT of the returned path is what
+// plugins.NewManager takes as pluginsDir.
+func writeMismatchPlugin(t *testing.T, name string, declared, registered []string) string {
+	t.Helper()
+	pluginsDir := t.TempDir()
+	pluginDir := filepath.Join(pluginsDir, name)
+	require.NoError(t, os.MkdirAll(pluginDir, 0755))
+
+	// main.lua
+	var luaLines []string
+	for _, r := range registered {
+		luaLines = append(luaLines, fmt.Sprintf(`holomush.register_emit_type(%q)`, r))
+	}
+	luaLines = append(luaLines, `function on_event(e) return {} end`)
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "main.lua"),
+		[]byte(strings.Join(luaLines, "\n")), 0644))
+
+	// plugin.yaml
+	var manifestYaml strings.Builder
+	manifestYaml.WriteString(fmt.Sprintf("name: %s\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua\n", name))
+	if declared != nil {
+		manifestYaml.WriteString("crypto:\n  emits:\n")
+		for _, d := range declared {
+			manifestYaml.WriteString(fmt.Sprintf("    - event_type: %s\n      sensitivity: never\n", d))
+		}
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.yaml"),
+		[]byte(manifestYaml.String()), 0644))
+
+	return pluginDir
 }
 ```
 
-Use the existing test harness in `manager_test.go` for synthesizing plugins. Follow existing patterns.
+Required imports for the test file: `"context"`, `"fmt"`, `"os"`, `"path/filepath"`, `"strings"`, `"testing"`, `"github.com/stretchr/testify/require"`, `"github.com/samber/oops"`, `"github.com/holomush/holomush/internal/plugin/hostfunc"`, `pluginlua "github.com/holomush/holomush/internal/plugin/lua"`.
 
-- [ ] **Step 2.F.1: write 3 manager tests**
+- [ ] **Step 2.F.1: write 3 manager tests + writeMismatchPlugin helper**
 
 #### Step 2.F.2: Run failing tests
 
@@ -1256,12 +1456,14 @@ Expected: PASS — all 3.
 
 - [ ] **Step 2.F.4: verify pass**
 
-#### Step 2.F.5: Run full plugin test suite to check for regressions
+#### Step 2.F.5: Run full plugin test suite to confirm Groups G+H already landed cleanly
 
 Run: `task test -- ./internal/plugin/ ./pkg/plugin/ ./internal/plugin/hostfunc/ ./internal/plugin/lua/ ./internal/plugin/goplugin/`
-Expected: PASS. Any regression here is likely a test fixture missing crypto.emits coverage — investigate.
+Expected: PASS — because Groups G+H already adopted `register_emit_type` for `core-communication` and `core-objects` (those plugins are the only in-tree plugins with non-empty `crypto.emits`; the audit at jg9b.2 confirmed scope). The validator now active in Group F's commit fires against already-matching sets and produces no failures.
 
-- [ ] **Step 2.F.5: verify no regressions**
+**If Group F is incorrectly executed BEFORE Groups G+H**, this step would FAIL: the validator would compute `DeclaredButUnregistered = [say, pose, ooc, emit, page, whisper, pemit, whisper_notice]` for core-communication (and the 5 object types for core-objects), and integration tests at `test/integration/plugin/alias_seeder_test.go:85` (`Expect(mgr.LoadAll(ctx)).To(Succeed())`) would error with `EVENT_TYPE_REGISTRY_MISMATCH`. If you see that error here, STOP — execute Groups G+H first, then re-run this step.
+
+- [ ] **Step 2.F.5: verify no regressions (precondition: G+H already landed)**
 
 #### Step 2.F.6: Run task lint
 
@@ -1401,9 +1603,9 @@ under fail-closed INV-S5 validation.
 
 #### Step 2.I.1: Write parity test
 
-Create `internal/plugin/manager_parity_test.go` (new file in the `plugins` package). The test exercises the same logical scenario (manifest declares `[a, b]`, code registers `[a, b]`) through BOTH a Lua plugin path and a binary plugin path, asserting identical validator output.
+Create `internal/plugin/manager_parity_test.go` (new file in the `plugins` package). The test exercises the same logical scenario through BOTH a Lua plugin path and a binary plugin path, asserting identical validator output. Per INV-M7 / INV-S3.
 
-The implementer chooses fixture cost: either spin up a real binary subprocess (using existing goplugin test fixtures under `internal/plugin/goplugin/`) or use a test-only Host fixture that satisfies the Host interface without process isolation.
+**Fixture choice:** use the test-only `goplugin.Host` fixture (`newMockHost` from `goplugin/host_test.go:176-186`) rather than a real subprocess. Subprocess spawning is heavy and adds test flakiness without changing what the parity test verifies (the validator path is shared across runtimes via `Host.PluginEmitRegistry`; runtime asymmetry stops at the host implementation, which is what the mock exercises). The mock satisfies the Host interface via in-process gRPC stubs.
 
 ```go
 // SPDX-License-Identifier: Apache-2.0
@@ -1413,19 +1615,29 @@ package plugins
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/require"
+
+	"github.com/holomush/holomush/internal/plugin/goplugin"
+	"github.com/holomush/holomush/internal/plugin/hostfunc"
+	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
 // TestManager_INVS5_ParityAcrossRuntimes verifies that the validator
 // produces identical output for Lua and binary plugins given identical
-// manifest declarations and code registrations. Per INV-S3 / INV-M7.
+// manifest declarations and code registrations. Per INV-M7 / INV-S3.
 func TestManager_INVS5_ParityAcrossRuntimes(t *testing.T) {
 	scenarios := []struct {
-		name       string
-		declared   []string
-		registered []string
+		name         string
+		declared     []string
+		registered   []string
 		wantMismatch bool
 	}{
 		{"match", []string{"a", "b"}, []string{"a", "b"}, false},
@@ -1434,22 +1646,101 @@ func TestManager_INVS5_ParityAcrossRuntimes(t *testing.T) {
 	}
 
 	for _, s := range scenarios {
+		s := s // capture for parallel subtests
 		t.Run(s.name+"-lua", func(t *testing.T) {
-			// Set up Lua Host fixture, synthesize plugin manifest+code,
-			// run loadPlugin, assert mismatch outcome matches s.wantMismatch.
+			// Lua path: write synthetic plugin to tempdir; LoadAll.
+			pluginsDir := writeSyntheticLuaPlugin(t, "synth-"+s.name+"-lua", s.declared, s.registered)
+			mgr, err := NewManager(pluginsDir,
+				WithLuaHost(pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
+			require.NoError(t, err)
+
+			err = mgr.LoadAll(context.Background())
+			assertParityOutcome(t, err, s.wantMismatch)
 		})
 		t.Run(s.name+"-binary", func(t *testing.T) {
-			// Set up binary Host fixture (test-only or subprocess),
-			// synthesize plugin manifest + EmitTypeRegistrar impl,
-			// run loadPlugin, assert mismatch outcome matches s.wantMismatch.
+			// Binary path: use the existing goplugin mock harness. The mock's
+			// pluginClient.Init returns InitResponse{RegisteredEmitTypes: s.registered}.
+			binaryHost, mockClient := goplugin.NewMockHost(t) // exported test helper; if newMockHost is lowercase, expose via _test.go file in this package or add a NewMockHost wrapper.
+			mockClient.SetInitResponse(&pluginv1.InitResponse{
+				RegisteredEmitTypes: s.registered,
+			})
+
+			pluginsDir := writeSyntheticBinaryManifest(t, "synth-"+s.name+"-bin", s.declared)
+			mgr, err := NewManager(pluginsDir, WithBinaryHost(binaryHost))
+			require.NoError(t, err)
+
+			err = mgr.LoadAll(context.Background())
+			assertParityOutcome(t, err, s.wantMismatch)
 		})
 	}
 }
+
+// assertParityOutcome unifies the verdict shape for both runtimes:
+// match → no error; mismatch → EVENT_TYPE_REGISTRY_MISMATCH oops code.
+func assertParityOutcome(t *testing.T, err error, wantMismatch bool) {
+	t.Helper()
+	if wantMismatch {
+		require.Error(t, err)
+		require.True(t, oops.Code("EVENT_TYPE_REGISTRY_MISMATCH").Is(err) ||
+			strings.Contains(err.Error(), "EVENT_TYPE_REGISTRY_MISMATCH"),
+			"expected EVENT_TYPE_REGISTRY_MISMATCH, got: %v", err)
+	} else {
+		require.NoError(t, err)
+	}
+}
+
+// writeSyntheticLuaPlugin reuses the writeMismatchPlugin pattern from
+// Step 2.F.1 — returns the pluginsDir (parent of pluginDir).
+func writeSyntheticLuaPlugin(t *testing.T, name string, declared, registered []string) string {
+	t.Helper()
+	pluginsDir := t.TempDir()
+	pluginDir := filepath.Join(pluginsDir, name)
+	require.NoError(t, os.MkdirAll(pluginDir, 0755))
+
+	var luaLines []string
+	for _, r := range registered {
+		luaLines = append(luaLines, fmt.Sprintf(`holomush.register_emit_type(%q)`, r))
+	}
+	luaLines = append(luaLines, `function on_event(e) return {} end`)
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "main.lua"),
+		[]byte(strings.Join(luaLines, "\n")), 0644))
+
+	var manifestYaml strings.Builder
+	manifestYaml.WriteString(fmt.Sprintf("name: %s\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua\n", name))
+	manifestYaml.WriteString("crypto:\n  emits:\n")
+	for _, d := range declared {
+		manifestYaml.WriteString(fmt.Sprintf("    - event_type: %s\n      sensitivity: never\n", d))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.yaml"),
+		[]byte(manifestYaml.String()), 0644))
+
+	return pluginsDir
+}
+
+// writeSyntheticBinaryManifest writes a synthetic binary plugin manifest
+// (no executable; the mock host doesn't spawn a process). Returns pluginsDir.
+func writeSyntheticBinaryManifest(t *testing.T, name string, declared []string) string {
+	t.Helper()
+	pluginsDir := t.TempDir()
+	pluginDir := filepath.Join(pluginsDir, name)
+	require.NoError(t, os.MkdirAll(pluginDir, 0755))
+
+	var manifestYaml strings.Builder
+	manifestYaml.WriteString(fmt.Sprintf("name: %s\nversion: 1.0.0\ntype: binary\nbinary-plugin:\n  executable: %s\nrequires:\n  - holomush.world.v1.WorldService\n", name, name))
+	manifestYaml.WriteString("crypto:\n  emits:\n")
+	for _, d := range declared {
+		manifestYaml.WriteString(fmt.Sprintf("    - event_type: %s\n      sensitivity: never\n", d))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.yaml"),
+		[]byte(manifestYaml.String()), 0644))
+
+	return pluginsDir
+}
 ```
 
-Implementer fills in the harness setup per existing test fixtures in the package.
+**Implementation note for the implementer:** if `goplugin.newMockHost` is unexported (lowercase) and there is no public `goplugin.NewMockHost`, add either (a) a thin `NewMockHost(t)` exported wrapper in `goplugin/mock_export_test.go` (build-tag-free; test-only), or (b) put the parity test under `goplugin/` so it can call the unexported helper directly. Same applies to `SetInitResponse` on the mock if it needs to be added as an exported method.
 
-- [ ] **Step 2.I.1: write parity test scaffold and fill in via existing fixtures**
+- [ ] **Step 2.I.1: write parity test + helpers; expose goplugin.NewMockHost if needed**
 
 #### Step 2.I.2: Run parity test
 
@@ -1707,6 +1998,27 @@ Expected: pushes notes + dep edges to remote dolt; no errors.
 
 - [ ] **Step 5.4: sync bd state**
 
+### Step 5.4b: Amend parent spec §7.1 bead-chain prose to reflect new numbering
+
+The parent substrate-contract spec at `docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md` §7.1 still shows the OLD 7-bead chain with `jg9b.1`-`jg9b.7` and `jg9b.4` as the fail-closed flip. This plan materialized a different chain (`jg9b.1` is now the INV-S5 mechanism design bead; substrate cap + adoptions is `jg9b.3`; etc.). The parent spec needs a small amendment so future readers don't get confused by the obsolete chain diagram.
+
+Edit `docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md` §7.1: replace the bead-chain diagram with the new chain shape (5 beads: jg9b.2 audit, jg9b.3 substrate+adoptions, jg9b.4 docs, jg9b.5 roadmap, jg9b.6 hygiene). Add a brief note that the renumbering was done because `jg9b.1` was claimed by the INV-S5 mechanism design bead (the child brainstorm that surfaced the mechanism gap).
+
+Run: `rumdl check docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md`
+Expected: PASS.
+
+Commit message:
+
+```text
+docs(specs): amend parent substrate-contract §7.1 with materialized bead chain (jg9b.6)
+
+Replaces the original 7-bead chain proposal with the actual 5-bead
+chain shape that materialized after the child INV-S5 mechanism design
+bead claimed jg9b.1. Documentation hygiene; no behavior change.
+```
+
+- [ ] **Step 5.4b: amend parent spec §7.1; commit**
+
 ### Step 5.5: Close jg9b.6
 
 ```bash
@@ -1732,5 +2044,7 @@ bd close holomush-jg9b.6 --reason="Bead hygiene complete: dep edges added (5rh.1
 - Parity-test template establishment as a project-wide convention (per parent-spec design-reviewer round 2 non-blocking #3).
 - Binary plugin Prometheus metrics infrastructure (separate substrate-infra brainstorm; per parent spec §11.1 STILL OPEN).
 - Future `task lint:plugin-boundary` CI predicate to mechanically enforce INV-S1 (per ADR `holomush-z1e7`).
+- **Qualified-vs-unqualified emit-type drift** (per plan-reviewer R1 non-blocking #1): `internal/plugin/event_emitter.go:171` calls `LookupEmitSensitivity(manifest, "core-communication:say")` (qualified) but manifest declares `event_type: say` (unqualified); silently matches no entry and falls through to `SensitivityNever`. INV-S5 does not catch this because the unqualified manifest set and the unqualified registered set are equal — the drift is between *manifest* and *runtime*, not between *manifest* and *code-registration*. File a follow-up bead to (a) normalize the qualifier at one boundary, (b) add a runtime-emit lookup test, or (c) update `LookupEmitSensitivity` to match on both qualified and unqualified forms.
+- **Lua top-level idempotency lint** (per plan-reviewer R1 non-blocking #5): the Task 1 audit manually verifies that Lua plugins with non-empty `crypto.emits` have idempotent top-level code. A future `task lint:plugin-top-level-idempotency` check could enforce this mechanically. File when a third crypto.emits-declaring Lua plugin appears.
 
 These are NOT part of `jg9b`'s scope; file as separate beads when the time comes.
