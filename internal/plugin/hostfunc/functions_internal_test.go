@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	lua "github.com/yuin/gopher-lua"
 
 	"github.com/holomush/holomush/internal/world"
 )
@@ -119,4 +120,68 @@ func TestSanitizeKVErrorForPluginLogsFullContext(t *testing.T) {
 	assert.Contains(t, logOutput, "user-pref", "log should include key")
 	assert.Contains(t, logOutput, "pq: connection refused", "log should include full error")
 	assert.Contains(t, logOutput, "error_id", "log should include correlation ID")
+}
+
+// TestRegisterWithEmitCapture_LuaCallsAccumulate verifies that after
+// RegisterWithEmitCapture, a Lua script calling holomush.register_emit_type
+// adds the type to the passed registry.
+func TestRegisterWithEmitCapture_LuaCallsAccumulate(t *testing.T) {
+	t.Parallel()
+
+	f := New(nil)
+	L := lua.NewState()
+	t.Cleanup(L.Close)
+
+	reg := NewLuaEmitRegistry()
+	f.RegisterWithEmitCapture(L, "test-plugin", reg)
+
+	err := L.DoString(`holomush.register_emit_type("alpha")`)
+	require.NoError(t, err)
+
+	require.Equal(t, []string{"alpha"}, reg.Types())
+}
+
+// TestRegisterWithEmitCapture_DuplicateCallsIdempotent verifies that
+// repeated register_emit_type calls remain idempotent through the
+// RegisterWithEmitCapture entry point.
+func TestRegisterWithEmitCapture_DuplicateCallsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	f := New(nil)
+	L := lua.NewState()
+	t.Cleanup(L.Close)
+
+	reg := NewLuaEmitRegistry()
+	f.RegisterWithEmitCapture(L, "test-plugin", reg)
+
+	err := L.DoString(`
+holomush.register_emit_type("x")
+holomush.register_emit_type("x")
+`)
+	require.NoError(t, err)
+
+	require.Equal(t, []string{"x"}, reg.Types())
+}
+
+// TestRegisterWithEmitCapture_PreservesStandardNamespace verifies that the
+// standard holomush.* namespace is also installed (log, new_request_id,
+// etc.) — confirming RegisterWithEmitCapture wraps Register, not replaces.
+func TestRegisterWithEmitCapture_PreservesStandardNamespace(t *testing.T) {
+	t.Parallel()
+
+	f := New(nil)
+	L := lua.NewState()
+	t.Cleanup(L.Close)
+
+	reg := NewLuaEmitRegistry()
+	f.RegisterWithEmitCapture(L, "test-plugin", reg)
+
+	// holomush.log and holomush.new_request_id are part of the standard
+	// stdlib; both should be present alongside register_emit_type.
+	err := L.DoString(`
+assert(type(holomush.log) == "function", "holomush.log should be a function")
+assert(type(holomush.new_request_id) == "function", "holomush.new_request_id should be a function")
+assert(type(holomush.register_emit_type) == "function", "holomush.register_emit_type should be a function")
+`)
+	require.NoError(t, err)
 }
