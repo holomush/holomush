@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -51,6 +52,7 @@ type Service struct {
 	engine        types.AccessPolicyEngine
 	eventEmitter  EventEmitter
 	transactor    Transactor
+	movementHook  MovementHook
 }
 
 // NewService creates a new Service with the given configuration.
@@ -75,7 +77,19 @@ func NewService(cfg ServiceConfig) *Service {
 		engine:        cfg.Engine,
 		eventEmitter:  cfg.EventEmitter,
 		transactor:    cfg.Transactor,
+		movementHook:  NoopMovementHook{},
 	}
+}
+
+// SetMovementHook registers a hook that is invoked after each successful
+// character location update and before the move event is emitted.
+// Passing nil resets to the no-op default.
+func (s *Service) SetMovementHook(h MovementHook) {
+	if h == nil {
+		s.movementHook = NoopMovementHook{}
+		return
+	}
+	s.movementHook = h
 }
 
 // entityPrefix is a typed string for checkAccess error code prefixes.
@@ -788,6 +802,21 @@ func (s *Service) MoveCharacter(ctx context.Context, subjectID string, character
 	// Update character location
 	if err := s.characterRepo.UpdateLocation(ctx, characterID, &toLocationID); err != nil {
 		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(err, "update character %s location", characterID)
+	}
+
+	// Fire movement hook — propagates new location to dependent stores (e.g. session store)
+	// before the move event is emitted so consumers see a consistent view.
+	arrivedAt := time.Now().UTC()
+	if hookErr := s.movementHook.OnCharacterMoved(ctx, characterID, toLocationID, arrivedAt); hookErr != nil {
+		// move_succeeded=true: the character row was already committed (line
+		// 803 above). Callers MUST NOT retry the move as if it were atomic
+		// with the hook; this attribute lets them distinguish the partial-
+		// failure case from a pre-DB-commit failure.
+		return oops.Code("CHARACTER_MOVE_FAILED").
+			With("character_id", characterID.String()).
+			With("phase", "movement_hook").
+			With("move_succeeded", true).
+			Wrap(hookErr)
 	}
 
 	// Build move payload
