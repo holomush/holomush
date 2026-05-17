@@ -299,7 +299,11 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 			session.StatusActive, nil, nil); updateErr != nil {
 			slog.WarnContext(ctx, "failed to reactivate session", "error", updateErr)
 		}
+		if loErr := s.sessionStore.BumpLocationArrivedAt(ctx, existingSession.ID, now); loErr != nil {
+			slog.WarnContext(ctx, "failed to reset LocationArrivedAt on reattach", "error", loErr)
+		}
 		existingSession.Status = session.StatusActive
+		existingSession.LocationArrivedAt = now
 		existingSession.UpdatedAt = now
 
 		return &corev1.SelectCharacterResponse{
@@ -329,18 +333,19 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 	}
 
 	sessionInfo := &session.Info{
-		ID:              sessionID.String(),
-		CharacterID:     charID,
-		PlayerID:        playerSession.PlayerID,
-		PlayerSessionID: playerSession.ID,
-		CharacterName:   selectedChar.Name,
-		LocationID:      locationID,
-		Status:          session.StatusActive,
-		GridPresent:     true,
-		TTLSeconds:      ttlSeconds,
-		MaxHistory:      maxHistory,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		ID:                sessionID.String(),
+		CharacterID:       charID,
+		PlayerID:          playerSession.PlayerID,
+		PlayerSessionID:   playerSession.ID,
+		CharacterName:     selectedChar.Name,
+		LocationID:        locationID,
+		Status:            session.StatusActive,
+		GridPresent:       true,
+		TTLSeconds:        ttlSeconds,
+		MaxHistory:        maxHistory,
+		LocationArrivedAt: now,
+		CreatedAt:         now,
+		UpdatedAt:         now,
 	}
 
 	if err := s.sessionStore.Set(ctx, sessionID.String(), sessionInfo); err != nil {

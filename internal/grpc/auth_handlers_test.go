@@ -378,6 +378,102 @@ func TestSelectCharacter_SameTokenTwice(t *testing.T) {
 	assert.True(t, resp2.Reattached)
 }
 
+func TestSelectCharacter_FreshSession_SetsLocationArrivedAt(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+	charID := ulid.Make()
+	locID := ulid.Make()
+	sessionID := core.NewULID()
+
+	ps := makePlayerSession(playerID)
+	sessionRepo := setupSessionRepo(t, ps)
+
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{
+			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+		}, nil)
+
+	sessionStore := session.NewMemStore()
+
+	before := time.Now()
+	server := &CoreServer{
+		engine:            core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore:      sessionStore,
+		playerSessionRepo: sessionRepo,
+		charRepo:          charRepo,
+		newSessionID:      func() ulid.ULID { return sessionID },
+	}
+
+	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+		PlayerSessionToken: validToken,
+		CharacterId:        charID.String(),
+	})
+	require.NoError(t, err)
+	require.True(t, resp.Success)
+	assert.False(t, resp.Reattached)
+
+	stored, err := sessionStore.Get(ctx, sessionID.String())
+	require.NoError(t, err)
+	assert.False(t, stored.LocationArrivedAt.IsZero(),
+		"LocationArrivedAt must be set on fresh session create")
+	assert.False(t, stored.LocationArrivedAt.Before(before),
+		"LocationArrivedAt must not be before the test started")
+}
+
+func TestSelectCharacter_Reattach_ResetsLocationArrivedAt(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+	charID := ulid.Make()
+	locID := ulid.Make()
+	existingSessionID := core.NewULID().String()
+
+	ps := makePlayerSession(playerID)
+	sessionRepo := setupSessionRepo(t, ps)
+
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{
+			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+		}, nil)
+
+	oldArrival := time.Now().Add(-2 * time.Hour)
+	sessionStore := session.NewMemStore()
+	require.NoError(t, sessionStore.Set(ctx, existingSessionID, &session.Info{
+		ID:                existingSessionID,
+		CharacterID:       charID,
+		CharacterName:     "Alice",
+		LocationID:        locID,
+		Status:            session.StatusDetached,
+		LocationArrivedAt: oldArrival,
+		CreatedAt:         oldArrival,
+		UpdatedAt:         oldArrival,
+	}))
+
+	before := time.Now()
+	server := &CoreServer{
+		engine:            core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore:      sessionStore,
+		playerSessionRepo: sessionRepo,
+		charRepo:          charRepo,
+		newSessionID:      func() ulid.ULID { return core.NewULID() },
+	}
+
+	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+		PlayerSessionToken: validToken,
+		CharacterId:        charID.String(),
+	})
+	require.NoError(t, err)
+	require.True(t, resp.Success)
+	assert.True(t, resp.Reattached)
+
+	stored, err := sessionStore.Get(ctx, existingSessionID)
+	require.NoError(t, err)
+	assert.False(t, stored.LocationArrivedAt.Before(before),
+		"LocationArrivedAt must be reset to at least the time of reattach, got %v, before=%v",
+		stored.LocationArrivedAt, before)
+}
+
 // --- CreatePlayer ---
 
 func TestCreatePlayer_Success(t *testing.T) {
