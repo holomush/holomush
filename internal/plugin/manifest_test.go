@@ -47,6 +47,7 @@ type: lua
 lua-plugin:
   entry: main.lua
 emits: [scene, notifications]
+history_scope: grid
 `)
 
 	manifest, err := plugins.ParseManifest(data)
@@ -113,6 +114,7 @@ type: binary
 binary-plugin:
   executable: emit-binary
 emits: [" scene ", notifications]
+history_scope: scene
 `)
 
 	manifest, err := plugins.ParseManifest(data)
@@ -2464,4 +2466,103 @@ lua-plugin:
 	m, err := plugins.ParseManifest([]byte(src))
 	require.NoError(t, err)
 	assert.Nil(t, m.Crypto)
+}
+
+func TestManifest_HistoryScopeValidation(t *testing.T) {
+	tests := []struct {
+		name      string
+		yaml      string
+		wantErr   bool
+		errContains string
+	}{
+		{
+			name: "plugin with no emits does not require history_scope",
+			yaml: `
+name: no-emits
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr: false,
+		},
+		{
+			name: "plugin emitting events with history_scope=grid is accepted",
+			yaml: `
+name: grid-plugin
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+emits: [location]
+history_scope: grid
+`,
+			wantErr: false,
+		},
+		{
+			name: "plugin emitting events with history_scope=scene is accepted",
+			yaml: `
+name: scene-plugin
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+emits: [scene]
+history_scope: scene
+`,
+			wantErr: false,
+		},
+		{
+			name: "plugin emitting events with history_scope=custom is accepted",
+			yaml: `
+name: custom-plugin
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+emits: [custom-ns]
+history_scope: custom
+`,
+			wantErr: false,
+		},
+		{
+			name: "plugin emitting events without history_scope is rejected",
+			yaml: `
+name: missing-scope
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+emits: [location]
+`,
+			wantErr:     true,
+			errContains: "history_scope",
+		},
+		{
+			name: "plugin with unknown history_scope value is rejected",
+			yaml: `
+name: bad-scope
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+emits: [location]
+history_scope: unknown
+`,
+			wantErr:     true,
+			errContains: "history_scope",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := plugins.ParseManifest([]byte(tt.yaml))
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errContains)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

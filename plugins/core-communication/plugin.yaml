@@ -9,6 +9,7 @@ lua-plugin:
 requires:
   - holomush.session.v1.SessionService
 emits: [location, character]
+history_scope: grid
 actor_kinds_claimable: [plugin, character]
 commands:
   - name: say
