@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -2135,4 +2136,38 @@ error("intentional capture-pass failure")
 			assert.Equal(t, tt.expectedRegistry, got)
 		})
 	}
+}
+
+// TestLuaHost_Load_CryptoEmitsCapturePassExecutionError verifies that a
+// plugin whose top-level Lua throws an error during the INV-S5 capture
+// pass fails Load with operation=load and a hint mentioning the capture
+// pass.
+func TestLuaHost_Load_CryptoEmitsCapturePassExecutionError(t *testing.T) {
+	dir := t.TempDir()
+	writeMainLua(t, dir, `
+error("intentional capture-pass failure")
+`)
+
+	host := pluginlua.NewHostWithFunctions(hostfunc.New(nil))
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "explodes",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+		Crypto: &plugins.CryptoSection{
+			Emits: []plugins.CryptoEmit{
+				{EventType: "ignored", Sensitivity: plugins.SensitivityNever},
+			},
+		},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.Error(t, err)
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "Load failure should be an oops error")
+	assert.Equal(t, "INV-S5 capture pass execution error", oopsErr.Hint(),
+		"hint must surface that the capture pass failed")
+	assert.Equal(t, "load", oopsErr.Context()["operation"])
 }

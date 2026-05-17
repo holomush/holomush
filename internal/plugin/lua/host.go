@@ -144,20 +144,55 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").With("path", realEntry).Hint("failed to read entry file").Wrap(err)
 	}
 
-	// Validate syntax by compiling in a throwaway state
+	// Branch the Load pass on whether INV-S5 capture is needed.
+	//
+	// Plugins WITHOUT non-empty crypto.emits: existing syntax-check
+	// throwaway state (no hostfuncs). Unchanged from today.
+	//
+	// Plugins WITH non-empty crypto.emits: capture-and-validate pass
+	// (hostfuncs registered including register_emit_type). The captured
+	// registry is stored on luaPlugin for the validator
+	// (manager.go::loadPlugin reads via Host.PluginEmitRegistry).
+	var emitRegistry []string
 	L, err := h.factory.NewState(ctx)
 	if err != nil {
 		return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").Hint("failed to create validation state").Wrap(err)
 	}
 	defer L.Close()
 
-	if err := L.DoString(string(code)); err != nil {
-		return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").With("entry", manifest.LuaPlugin.Entry).Hint("syntax error").Wrap(err)
+	if manifest.Crypto != nil && len(manifest.Crypto.Emits) > 0 {
+		// INV-S5 capture pass. Install ONLY register_emit_type so the
+		// pass is side-effect-isolated: top-level plugin code can register
+		// emit types but cannot call kv_set, create_location, or any
+		// other holomush.* hostfunc. Exposing the full surface here
+		// would persist substrate mutations even if validation later
+		// rejects the plugin (host.Unload rolls back manager-level
+		// plugin state but not substrate KV/world side effects).
+		// Per-delivery state still gets the full hostfunc surface via
+		// Functions.Register.
+		reg := hostfunc.NewLuaEmitRegistry()
+		mod := L.NewTable()
+		hostfunc.RegisterEmitTypeFuncs(L, mod, reg)
+		L.SetGlobal("holomush", mod)
+		if err := L.DoString(string(code)); err != nil {
+			return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
+				With("entry", manifest.LuaPlugin.Entry).
+				Hint("INV-S5 capture pass execution error").Wrap(err)
+		}
+		emitRegistry = reg.Types()
+	} else {
+		// Existing syntax-check pass — no hostfuncs registered.
+		if err := L.DoString(string(code)); err != nil {
+			return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
+				With("entry", manifest.LuaPlugin.Entry).
+				Hint("syntax error").Wrap(err)
+		}
 	}
 
 	h.plugins[manifest.Name] = &luaPlugin{
-		manifest: manifest,
-		code:     string(code),
+		manifest:     manifest,
+		code:         string(code),
+		emitRegistry: emitRegistry,
 	}
 
 	return nil
