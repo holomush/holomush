@@ -187,7 +187,19 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 	if err := a.serviceProvider.Init(ctx, config); err != nil {
 		return nil, oops.With("phase", "init").Wrap(err)
 	}
-	return &pluginv1.InitResponse{}, nil
+
+	// INV-S5: populate RegisteredEmitTypes from EmitTypeRegistrar if the
+	// provider opts in. Plugins without crypto.emits leave the set empty.
+	// A registrar may legally return nil from EmitRegistry() (e.g., during
+	// early construction); guard the dereference to avoid an init-time
+	// panic.
+	resp := &pluginv1.InitResponse{}
+	if registrar, ok := a.serviceProvider.(EmitTypeRegistrar); ok {
+		if reg := registrar.EmitRegistry(); reg != nil {
+			resp.RegisteredEmitTypes = reg.RegisteredEmitTypes()
+		}
+	}
+	return resp, nil
 }
 
 // HandleEvent implements pluginv1.PluginServiceServer.

@@ -100,6 +100,12 @@ message InitRequest {
 message InitResponse {
   // gRPC service names this plugin provides on the go-plugin transport.
   repeated string provided_services = 1;
+
+  // Set of plugin-owned event types this plugin may emit. Host validates
+  // set-equality against manifest's crypto.emits per INV-S5. Plugins
+  // without crypto.emits leave empty and skip validation; plugins WITH
+  // crypto.emits MUST populate (mismatch fails load).
+  repeated string registered_emit_types = 2;
 }
 
 // Event represents a game event delivered to plugins.
