@@ -152,10 +152,12 @@ type EmitTypeRegistrar interface {
 Modify `pkg/plugin/sdk.go:152 pluginServerAdapter.Init`. After delegating to the provider's Init (existing behavior), check the `EmitTypeRegistrar` opt-in and populate the response:
 
 ```go
-// At the end of Init, after the provider's Init returns:
-resp := &pluginv1.InitResponse{
-    ProvidedServices: providedServices,
-}
+// At the end of Init, after the provider's Init returns. Today the SDK
+// adapter returns &pluginv1.InitResponse{} with no populated fields;
+// this change adds the RegisteredEmitTypes population. The proto's
+// provided_services field (field 1) is currently unpopulated by the
+// adapter and remains out of scope for this spec — orthogonal.
+resp := &pluginv1.InitResponse{}
 if registrar, ok := a.serviceProvider.(EmitTypeRegistrar); ok {
     resp.RegisteredEmitTypes = registrar.EmitRegistry().RegisteredEmitTypes()
 }
@@ -222,7 +224,7 @@ h.plugins[manifest.Name] = &luaPlugin{
 }
 ```
 
-**Top-level idempotency requirement.** The Load second pass executes the plugin's full top-level code, not just `register_emit_type` calls. Top-level lua code that calls non-idempotent hostfuncs (e.g., `holomush.kv_set(...)`, `holomush.create_location(...)`, `holomush.log(...)`) would fire BOTH at Load AND on every subsequent `DeliverEvent`/`DeliverCommand` (which already re-runs top-level per-delivery). Plugin authors with non-empty `crypto.emits` MUST keep top-level code idempotent — register handlers, declare locals, call `register_emit_type` — and put non-idempotent work inside `on_event`/`on_command` handlers. This is already the de-facto pattern in current plugins (`core-communication/main.lua` top-level is all `local function` declarations + one constant table) but becomes load-bearing under INV-S5.
+**Top-level idempotency requirement.** Today's Lua Host already executes plugin top-level code at `lua/host.go:153` (the existing "syntax-check" pass uses `DoString`, which actually runs the code, not just compiles it). For plugins with non-empty `crypto.emits`, the new INV-S5 pass adds a SECOND Load-time execution (capture state) — bringing the Load-time count to two — plus the existing per-delivery execution on every `DeliverEvent`/`DeliverCommand`. Top-level lua code that calls non-idempotent hostfuncs (e.g., `holomush.kv_set(...)`, `holomush.create_location(...)`) would fire on every one of those executions. Plugin authors with non-empty `crypto.emits` MUST keep top-level code idempotent — register handlers, declare locals, call `register_emit_type` — and put non-idempotent work inside `on_event`/`on_command` handlers. This is already the de-facto pattern in current plugins (`core-communication/main.lua` top-level is all `local function` declarations + one constant table; `core-objects/main.lua` is similar) but becomes load-bearing under INV-S5.
 
 ### 2.3 New hostfunc
 
