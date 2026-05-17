@@ -59,7 +59,7 @@ The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are used per RFC2119.
 | INV-M3 | Binary plugins with non-empty `crypto.emits` MUST implement `pluginsdk.EmitTypeRegistrar` and populate `pluginv1.InitResponse.registered_emit_types` (new proto field 2). Mismatch fails plugin load. | SDK adapter `pkg/plugin/sdk.go:152 pluginServerAdapter.Init` auto-populates from `EmitTypeRegistrar.EmitRegistry()` |
 | INV-M4 | Lua plugins with non-empty `crypto.emits` MUST call `holomush.register_emit_type(<type>)` at top level for every emit type they may produce. The Load-pass captures these calls; missing registrations fail plugin load. | `internal/plugin/lua/host.go::Load` branched pass (replaces syntax-check for crypto plugins); `internal/plugin/hostfunc/stdlib_emit_registry.go` |
 | INV-M5 | The validator SHALL fire in `internal/plugin/manager.go::loadPlugin` AFTER `host.Load` returns successfully and BEFORE the plugin is added to the manager's plugin cache as ready. | `Host.PluginEmitRegistry(name) ([]string, bool)` interface method; validator call in `loadPlugin` post-`host.Load` |
-| INV-M6 | Lua Load-pass `DoString` errors SHALL fail plugin load (same shape as the existing syntax-check error). | `lua/host.go::Load` returns wrapped error from the branched-pass `DoString` (either syntax-check OR INV-S5 capture, both produce `operation=load` errors) |
+| INV-M6 | Lua Load-pass `DoString` errors SHALL fail plugin load (same wrapper shape as the existing syntax-check error: `oops.In("lua")`, `With("operation", "load")`, `Wrap(err)`). The `Hint` string is intentionally branch-specific (`"syntax error"` for non-crypto plugins; `"INV-S5 capture pass execution error"` for crypto plugins). | `lua/host.go::Load` returns wrapped error from the branched-pass `DoString` |
 | INV-M7 | Every primitive in this design SHALL ship Go SDK + Lua hostfunc + parity test together (per parent spec INV-S3). | Single PR / coordinated change; parity test exercises both runtimes with identical logical scenarios |
 
 ---
@@ -621,7 +621,7 @@ None blocking. Two minor items deferred:
 - [`pkg/plugin/focus_client.go`](../../pkg/plugin/focus_client.go) + [`internal/plugin/hostfunc/stdlib_focus.go`](../../internal/plugin/hostfunc/stdlib_focus.go) — Go + Lua parity template the new emit-registry primitives follow.
 - [`internal/plugin/crypto_manifest.go:14-21`](../../internal/plugin/crypto_manifest.go) — sensitivity enum (`always`/`may`/`never`).
 - [`internal/plugin/sensitivity_fence.go:23-48`](../../internal/plugin/sensitivity_fence.go) — runtime truth table this validator complements.
-- [`internal/plugin/lua/host.go:111`](../../internal/plugin/lua/host.go) — Lua Host.Load (target of the second-pass modification).
+- [`internal/plugin/lua/host.go:111`](../../internal/plugin/lua/host.go) — Lua Host.Load (target of the branched-pass modification per amended §2.2).
 - [`internal/plugin/goplugin/host.go:528`](../../internal/plugin/goplugin/host.go) — binary Init RPC call site (target of registry capture).
 - [`internal/plugin/manager.go:849,989`](../../internal/plugin/manager.go) — loadPlugin + host.Load call site (target of validator wiring).
 - [`pkg/plugin/sdk.go:152`](../../pkg/plugin/sdk.go) — pluginServerAdapter.Init (target of InitResponse population).
