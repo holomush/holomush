@@ -145,7 +145,13 @@ type Info struct {
 	PlayerSessionID ulid.ULID
 	CharacterName   string
 	LocationID      ulid.ULID
-	IsGuest         bool
+	// LocationArrivedAt is the per-session attach floor for history queries
+	// (invariant I-PRIV-1). Set on login and on each location move.
+	LocationArrivedAt time.Time
+	// GuestCharacterCreatedAt is the guest identity overlay floor for history
+	// queries (invariant I-PRIV-2). Zero for non-guest sessions.
+	GuestCharacterCreatedAt time.Time
+	IsGuest                 bool
 	Status          Status
 	GridPresent     bool
 	CommandHistory  []string
@@ -278,6 +284,30 @@ type Store interface {
 
 	// UpdateGridPresent sets the grid_present flag on a session.
 	UpdateGridPresent(ctx context.Context, id string, present bool) error
+
+	// UpdateLocationOnMove atomically updates the LocationID and
+	// LocationArrivedAt for all Active sessions belonging to characterID.
+	// Detached and Expired sessions are not touched.
+	// Called by the movement hook after a character changes location.
+	//
+	// arrivedAt MUST be non-zero — a zero time.Time would collapse the
+	// I-PRIV-1 per-session location floor to year-1 and silently disable
+	// history privacy. Implementations MUST return INVALID_ARGUMENT in
+	// that case.
+	UpdateLocationOnMove(ctx context.Context, characterID, newLocationID ulid.ULID, arrivedAt time.Time) error
+
+	// BumpLocationArrivedAt updates LocationArrivedAt for a single session
+	// regardless of its status. Used by the reattach path to refresh the
+	// floor when a player reconnects to a different location than where they
+	// last detached.
+	//
+	// arrivedAt MUST be non-zero — same I-PRIV-1 invariant as
+	// UpdateLocationOnMove.
+	//
+	// Errors:
+	//   INVALID_ARGUMENT — arrivedAt is the zero value.
+	//   SESSION_NOT_FOUND — sessionID does not match any session.
+	BumpLocationArrivedAt(ctx context.Context, sessionID string, arrivedAt time.Time) error
 
 	// ListActiveByLocation returns active sessions whose LocationID matches.
 	// Used for presence lists — "who is connected at this location?"

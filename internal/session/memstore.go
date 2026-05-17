@@ -474,6 +474,63 @@ func (m *MemStore) UpdateLastWhispered(_ context.Context, id, name string) error
 	return nil
 }
 
+// UpdateLocationOnMove atomically updates LocationID and LocationArrivedAt for
+// all Active sessions belonging to characterID. Detached and Expired sessions
+// are not modified.
+//
+// arrivedAt MUST be non-zero — a zero time.Time would collapse the I-PRIV-1
+// per-session location floor to year-1 and silently disable history privacy.
+func (m *MemStore) UpdateLocationOnMove(_ context.Context, characterID, newLocationID ulid.ULID, arrivedAt time.Time) error {
+	if arrivedAt.IsZero() {
+		return oops.Code("INVALID_ARGUMENT").
+			With("operation", "update_location_on_move").
+			With("character_id", characterID.String()).
+			Errorf("arrivedAt must be non-zero")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, info := range m.sessions {
+		if info.CharacterID != characterID {
+			continue
+		}
+		if info.Status != StatusActive {
+			continue
+		}
+		info.LocationID = newLocationID
+		info.LocationArrivedAt = arrivedAt
+		info.UpdatedAt = arrivedAt
+	}
+	return nil
+}
+
+// BumpLocationArrivedAt updates LocationArrivedAt for a single session
+// regardless of status.
+//
+// arrivedAt MUST be non-zero — a zero time.Time would collapse the I-PRIV-1
+// per-session location floor to year-1 and silently disable history privacy.
+//
+// Errors:
+//
+//	INVALID_ARGUMENT — arrivedAt is the zero value.
+//	SESSION_NOT_FOUND — sessionID does not match any session.
+func (m *MemStore) BumpLocationArrivedAt(_ context.Context, sessionID string, arrivedAt time.Time) error {
+	if arrivedAt.IsZero() {
+		return oops.Code("INVALID_ARGUMENT").
+			With("operation", "bump_location_arrived_at").
+			With("session_id", sessionID).
+			Errorf("arrivedAt must be non-zero")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	info, ok := m.sessions[sessionID]
+	if !ok {
+		return oops.Code("SESSION_NOT_FOUND").With("session_id", sessionID).Errorf("session not found")
+	}
+	info.LocationArrivedAt = arrivedAt
+	info.UpdatedAt = arrivedAt
+	return nil
+}
+
 // copyInfo returns a defensive copy of an Info to prevent external modification.
 func copyInfo(info *Info) *Info {
 	history := make([]string, len(info.CommandHistory))

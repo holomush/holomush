@@ -37,6 +37,8 @@ var (
 const sessionSelectColumns = `id, character_id, player_id,
 	COALESCE(player_session_id, '') AS player_session_id,
 	character_name, location_id,
+	COALESCE(location_arrived_at, '0001-01-01 00:00:00Z') AS location_arrived_at,
+	COALESCE(guest_character_created_at, '0001-01-01 00:00:00Z') AS guest_character_created_at,
 	is_guest, status, grid_present,
 	command_history, ttl_seconds, max_history,
 	detached_at, expires_at, created_at, updated_at,
@@ -118,6 +120,8 @@ func scanSession(row pgx.Row) (*session.Info, error) {
 		&playerSessionIDStr,
 		&info.CharacterName,
 		&locIDStr,
+		&info.LocationArrivedAt,
+		&info.GuestCharacterCreatedAt,
 		&info.IsGuest,
 		&statusStr,
 		&info.GridPresent,
@@ -160,6 +164,8 @@ func scanSessions(rows pgx.Rows) ([]*session.Info, error) {
 			&playerSessionIDStr,
 			&info.CharacterName,
 			&locIDStr,
+			&info.LocationArrivedAt,
+			&info.GuestCharacterCreatedAt,
 			&info.IsGuest,
 			&statusStr,
 			&info.GridPresent,
@@ -238,22 +244,49 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 		playerSessionIDArg = info.PlayerSessionID.String()
 	}
 
+	// location_arrived_at and guest_character_created_at are NOT NULL
+	// (migration 037: DEFAULT NOW() and DEFAULT 'epoch'). Pass NULL from
+	// Go when the in-memory Info carries a zero-time and let SQL handle
+	// it in two distinct ways:
+	//
+	//   - On INSERT: COALESCE(NULL, NOW()/epoch) → migration default fires.
+	//   - On ON CONFLICT UPDATE: COALESCE(NULL, sessions.X) → existing
+	//     stored value is preserved, so a Set() that does not own the
+	//     timestamp (e.g., a pre-iwzt-T3 caller) does NOT clobber it.
+	//
+	// The ON CONFLICT clause references the raw $7/$8 parameters rather
+	// than EXCLUDED.X so it can see "input was zero" (NULL) instead of
+	// the COALESCEd VALUES result.
+	var locationArrivedAtArg any
+	if !info.LocationArrivedAt.IsZero() {
+		locationArrivedAtArg = info.LocationArrivedAt
+	}
+	var guestCharacterCreatedAtArg any
+	if !info.GuestCharacterCreatedAt.IsZero() {
+		guestCharacterCreatedAtArg = info.GuestCharacterCreatedAt
+	}
+
 	_, err = s.pool.Exec(
 		ctx,
 		`INSERT INTO sessions (id, character_id, player_id, player_session_id,
-			character_name, location_id,
+			character_name, location_id, location_arrived_at, guest_character_created_at,
 			is_guest, status, grid_present,
 			command_history, ttl_seconds, max_history,
 			detached_at, expires_at, created_at,
 			last_paged, last_whispered,
 			focus_memberships, presenting_focus)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19::jsonb)
+		 VALUES ($1, $2, $3, $4, $5, $6,
+			COALESCE($7::timestamptz, now()),
+			COALESCE($8::timestamptz, 'epoch'::timestamptz),
+			$9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb, $21::jsonb)
 		 ON CONFLICT (id) DO UPDATE SET
 			character_id = EXCLUDED.character_id,
 			player_id = EXCLUDED.player_id,
 			player_session_id = EXCLUDED.player_session_id,
 			character_name = EXCLUDED.character_name,
 			location_id = EXCLUDED.location_id,
+			location_arrived_at = COALESCE($7::timestamptz, sessions.location_arrived_at),
+			guest_character_created_at = COALESCE($8::timestamptz, sessions.guest_character_created_at),
 			is_guest = EXCLUDED.is_guest,
 			status = EXCLUDED.status,
 			grid_present = EXCLUDED.grid_present,
@@ -273,6 +306,8 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 		playerSessionIDArg,
 		info.CharacterName,
 		info.LocationID.String(),
+		locationArrivedAtArg,
+		guestCharacterCreatedAtArg,
 		info.IsGuest,
 		string(info.Status),
 		info.GridPresent,
@@ -715,6 +750,62 @@ func (s *PostgresSessionStore) UpdateFocusMemberships(ctx context.Context, sessi
 	if commitErr := tx.Commit(ctx); commitErr != nil {
 		return oops.With("operation", "commit focus memberships").
 			With("session_id", sessionID).Wrap(commitErr)
+	}
+	return nil
+}
+
+// UpdateLocationOnMove atomically updates location_id and location_arrived_at
+// for all Active sessions belonging to characterID.
+// Detached and Expired sessions are not touched.
+//
+// arrivedAt MUST be non-zero — a zero time.Time would collapse the I-PRIV-1
+// per-session location floor to year-1 and silently disable history privacy.
+func (s *PostgresSessionStore) UpdateLocationOnMove(ctx context.Context, characterID, newLocationID ulid.ULID, arrivedAt time.Time) error {
+	if arrivedAt.IsZero() {
+		return oops.Code("INVALID_ARGUMENT").
+			With("operation", "update_location_on_move").
+			With("character_id", characterID.String()).
+			Errorf("arrivedAt must be non-zero")
+	}
+	query := `UPDATE sessions
+	          SET location_id = $1, location_arrived_at = $2, updated_at = $2
+	          WHERE character_id = $3 AND status = 'active'`
+	_, err := s.pool.Exec(ctx, query, newLocationID.String(), arrivedAt, characterID.String())
+	if err != nil {
+		return oops.With("operation", "update_location_on_move").
+			With("character_id", characterID.String()).Wrap(err)
+	}
+	return nil
+}
+
+// BumpLocationArrivedAt updates location_arrived_at for a single session
+// regardless of status.
+//
+// arrivedAt MUST be non-zero — a zero time.Time would collapse the I-PRIV-1
+// per-session location floor to year-1 and silently disable history privacy.
+//
+// Errors:
+//
+//	INVALID_ARGUMENT — arrivedAt is the zero value.
+//	SESSION_NOT_FOUND — sessionID does not match any session.
+func (s *PostgresSessionStore) BumpLocationArrivedAt(ctx context.Context, sessionID string, arrivedAt time.Time) error {
+	if arrivedAt.IsZero() {
+		return oops.Code("INVALID_ARGUMENT").
+			With("operation", "bump_location_arrived_at").
+			With("session_id", sessionID).
+			Errorf("arrivedAt must be non-zero")
+	}
+	query := `UPDATE sessions
+	          SET location_arrived_at = $1, updated_at = $1
+	          WHERE id = $2`
+	res, err := s.pool.Exec(ctx, query, arrivedAt, sessionID)
+	if err != nil {
+		return oops.With("operation", "bump_location_arrived_at").
+			With("session_id", sessionID).Wrap(err)
+	}
+	n := res.RowsAffected()
+	if n == 0 {
+		return oops.Code("SESSION_NOT_FOUND").With("session_id", sessionID).Errorf("session not found")
 	}
 	return nil
 }
