@@ -333,8 +333,9 @@ func TestQueryStreamHistoryDeniedByABAC(t *testing.T) {
 func TestQueryStreamHistoryBusErrorSurfacesAsInternal(t *testing.T) {
 	t.Parallel()
 	future := time.Now().Add(time.Hour)
+	locID := ulid.MustParse("01HYXYZ0C0000000000000000C")
 	sess := newTestSessionStore(t, map[string]*session.Info{
-		"s1": {ID: "s1", ExpiresAt: &future},
+		"s1": {ID: "s1", ExpiresAt: &future, LocationID: locID},
 	})
 	reader := &fakeHistoryReader{err: errors.New("bus down")}
 	s := newQueryStreamHistoryServer(t, reader, sess)
@@ -349,8 +350,9 @@ func TestQueryStreamHistoryBusErrorSurfacesAsInternal(t *testing.T) {
 func TestQueryStreamHistoryHasMoreReflectsCountPlusOne(t *testing.T) {
 	t.Parallel()
 	future := time.Now().Add(time.Hour)
+	locID := ulid.MustParse("01HYXYZ0C0000000000000000C")
 	sess := newTestSessionStore(t, map[string]*session.Info{
-		"s1": {ID: "s1", ExpiresAt: &future},
+		"s1": {ID: "s1", ExpiresAt: &future, LocationID: locID},
 	})
 	// 4 events, count=3 → has_more=true; response trims to 3 (newest).
 	evts := make([]eventbus.Event, 0, 4)
@@ -381,8 +383,9 @@ func TestQueryStreamHistoryHasMoreReflectsCountPlusOne(t *testing.T) {
 func TestQueryStreamHistoryCountDefaultsWhenZero(t *testing.T) {
 	t.Parallel()
 	future := time.Now().Add(time.Hour)
+	locID := ulid.MustParse("01HYXYZ0C0000000000000000C")
 	sess := newTestSessionStore(t, map[string]*session.Info{
-		"s1": {ID: "s1", ExpiresAt: &future},
+		"s1": {ID: "s1", ExpiresAt: &future, LocationID: locID},
 	})
 	reader := &fakeHistoryReader{}
 	s := newQueryStreamHistoryServer(t, reader, sess)
@@ -398,8 +401,9 @@ func TestQueryStreamHistoryCountDefaultsWhenZero(t *testing.T) {
 func TestQueryStreamHistoryCountCappedAtMax(t *testing.T) {
 	t.Parallel()
 	future := time.Now().Add(time.Hour)
+	locID := ulid.MustParse("01HYXYZ0C0000000000000000C")
 	sess := newTestSessionStore(t, map[string]*session.Info{
-		"s1": {ID: "s1", ExpiresAt: &future},
+		"s1": {ID: "s1", ExpiresAt: &future, LocationID: locID},
 	})
 	reader := &fakeHistoryReader{}
 	s := newQueryStreamHistoryServer(t, reader, sess)
@@ -415,8 +419,9 @@ func TestQueryStreamHistoryCountCappedAtMax(t *testing.T) {
 func TestQueryStreamHistoryCursorForwardsToBus(t *testing.T) {
 	t.Parallel()
 	future := time.Now().Add(time.Hour)
+	locID := ulid.MustParse("01HYXYZ0C0000000000000000C")
 	sess := newTestSessionStore(t, map[string]*session.Info{
-		"s1": {ID: "s1", ExpiresAt: &future},
+		"s1": {ID: "s1", ExpiresAt: &future, LocationID: locID},
 	})
 	beforeID := core.NewULID()
 	const beforeSeq uint64 = 42
@@ -444,8 +449,9 @@ func TestQueryStreamHistoryCursorForwardsToBus(t *testing.T) {
 func TestQueryStreamHistoryNotBeforeMsForwardsToBus(t *testing.T) {
 	t.Parallel()
 	future := time.Now().Add(time.Hour)
+	locID := ulid.MustParse("01HYXYZ0C0000000000000000C")
 	sess := newTestSessionStore(t, map[string]*session.Info{
-		"s1": {ID: "s1", ExpiresAt: &future},
+		"s1": {ID: "s1", ExpiresAt: &future, LocationID: locID},
 	})
 	notBefore := time.Now().Add(-2 * time.Hour).UnixMilli()
 	reader := &fakeHistoryReader{}
@@ -532,8 +538,9 @@ func TestQueryStreamHistoryWithPluginCursorRewrapsFrames(t *testing.T) {
 	t.Parallel()
 	future := time.Now().Add(time.Hour)
 	charID := ulid.MustParse("01HYXYZCHAR0000000000000CH")
+	locID := ulid.MustParse("01HYXYZ0C0000000000000000C")
 	sess := newTestSessionStore(t, map[string]*session.Info{
-		"s1": {ID: "s1", CharacterID: charID, ExpiresAt: &future},
+		"s1": {ID: "s1", CharacterID: charID, ExpiresAt: &future, LocationID: locID},
 	})
 
 	// Build a plugin cursor with a 16-byte inner ULID.
@@ -586,8 +593,9 @@ func TestQueryStreamHistoryWithPluginCursorStringInner(t *testing.T) {
 	t.Parallel()
 	future := time.Now().Add(time.Hour)
 	charID := ulid.MustParse("01HYXYZCHAR0000000000000CH")
+	locID := ulid.MustParse("01HYXYZ0C0000000000000000C")
 	sess := newTestSessionStore(t, map[string]*session.Info{
-		"s1": {ID: "s1", CharacterID: charID, ExpiresAt: &future},
+		"s1": {ID: "s1", CharacterID: charID, ExpiresAt: &future, LocationID: locID},
 	})
 
 	// Build a plugin cursor whose inner bytes are the string form of a ULID
@@ -620,8 +628,9 @@ func TestQueryStreamHistoryWithPluginCursorStringInner(t *testing.T) {
 func TestQueryStreamHistoryEventFrameCarriesCursor(t *testing.T) {
 	t.Parallel()
 	future := time.Now().Add(time.Hour)
+	locID := ulid.MustParse("01HYXYZ0C0000000000000000C")
 	sess := newTestSessionStore(t, map[string]*session.Info{
-		"s1": {ID: "s1", ExpiresAt: &future},
+		"s1": {ID: "s1", ExpiresAt: &future, LocationID: locID},
 	})
 	evt := eventbus.Event{
 		ID:        core.NewULID(),
@@ -659,8 +668,9 @@ func TestQueryStreamHistoryEventFrameCarriesCursor(t *testing.T) {
 func TestQueryStreamHistoryNextCursorSetWhenHasMore(t *testing.T) {
 	t.Parallel()
 	future := time.Now().Add(time.Hour)
+	locID := ulid.MustParse("01HYXYZ0C0000000000000000C")
 	sess := newTestSessionStore(t, map[string]*session.Info{
-		"s1": {ID: "s1", ExpiresAt: &future},
+		"s1": {ID: "s1", ExpiresAt: &future, LocationID: locID},
 	})
 	// 4 events with count=3 → has_more=true, NextCursor from oldest frame.
 	evts := make([]eventbus.Event, 4)
@@ -834,8 +844,9 @@ func TestMapHistoryErrorPassesThroughInvalidArgumentWithDetails(t *testing.T) {
 func TestQueryStreamHistoryEncodeEventCursorWithZeroSeq(t *testing.T) {
 	t.Parallel()
 	future := time.Now().Add(time.Hour)
+	locID := ulid.MustParse("01HYXYZ0C0000000000000000C")
 	sess := newTestSessionStore(t, map[string]*session.Info{
-		"s1": {ID: "s1", ExpiresAt: &future},
+		"s1": {ID: "s1", ExpiresAt: &future, LocationID: locID},
 	})
 	// Event without Seq (Seq==0) — encodeEventCursor must not fail.
 	evt := eventbus.Event{
@@ -872,11 +883,13 @@ func TestQueryStreamHistoryThreadsCallerFromSession(t *testing.T) {
 	t.Parallel()
 
 	charID := ulid.MustParse("01HYXCHAR0000000000000000C")
+	locID := ulid.MustParse("01HYXYZ0C0000000000000000C")
 	future := time.Now().Add(time.Hour)
 	sess := newTestSessionStore(t, map[string]*session.Info{
 		"sess-1": {
 			ID:          "sess-1",
 			CharacterID: charID,
+			LocationID:  locID,
 			ExpiresAt:   &future,
 		},
 	})
@@ -884,12 +897,11 @@ func TestQueryStreamHistoryThreadsCallerFromSession(t *testing.T) {
 	reader := &fakeHistoryReader{}
 	server := newQueryStreamHistoryServer(t, reader, sess)
 
-	// Public stream so the I-17 gate doesn't fire — focuses the test on
-	// caller threading. The harness wires policytest.AllowAllEngine() by
-	// default per newQueryStreamHistoryServer.
+	// Location stream: the hard-gate passes because the session is seeded at
+	// the queried location. The test focuses on caller threading.
 	_, err := server.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "sess-1",
-		Stream:    "location:01HYXLOC00000000000000000",
+		Stream:    "location:" + locID.String(),
 		Count:     10,
 	})
 	require.NoError(t, err)
@@ -961,12 +973,14 @@ func TestQueryStreamHistoryPassesIdentityFromBindingsToHistoryQuery(t *testing.T
 	charID := core.NewULID()
 	playerID := core.NewULID()
 	bindingID := "bnd-test-001"
+	locID := ulid.MustParse("01HYXYZ0C0000000000000000C")
 
 	sess := newTestSessionStore(t, map[string]*session.Info{
 		"s1": {
 			ID:          "s1",
 			CharacterID: charID,
 			PlayerID:    playerID,
+			LocationID:  locID,
 			ExpiresAt:   &future,
 		},
 	})
@@ -1000,12 +1014,14 @@ func TestQueryStreamHistoryBindingLookupFailureReturnsError(t *testing.T) {
 	future := time.Now().Add(time.Hour)
 	charID := core.NewULID()
 	playerID := core.NewULID()
+	locID := ulid.MustParse("01HYXYZ0C0000000000000000C")
 
 	sess := newTestSessionStore(t, map[string]*session.Info{
 		"s1": {
 			ID:          "s1",
 			CharacterID: charID,
 			PlayerID:    playerID,
+			LocationID:  locID,
 			ExpiresAt:   &future,
 		},
 	})
@@ -1032,12 +1048,14 @@ func TestQueryStreamHistoryPassesZeroIdentityWhenBindingsNil(t *testing.T) {
 	future := time.Now().Add(time.Hour)
 	charID := core.NewULID()
 	playerID := core.NewULID()
+	locID := ulid.MustParse("01HYXYZ0C0000000000000000C")
 
 	sess := newTestSessionStore(t, map[string]*session.Info{
 		"s1": {
 			ID:          "s1",
 			CharacterID: charID,
 			PlayerID:    playerID,
+			LocationID:  locID,
 			ExpiresAt:   &future,
 		},
 	})
@@ -1111,4 +1129,30 @@ func TestQueryStreamHistoryFiltersAuditOnlyEvents(t *testing.T) {
 		"AUDIT_ONLY events MUST NOT be returned via QueryStreamHistory (symmetric with dispatchDelivery)")
 	assert.Equal(t, "scene.pose", resp.GetEvents()[0].GetType(),
 		"only the non-audit event survives the filter")
+}
+
+// TestQueryStreamHistory_LocationHardGate_DeniedWhenNotInLocation verifies
+// that a session requesting a location stream is denied when the session's
+// LocationID does not match the requested location (I-PRIV-1 Tier 1).
+func TestQueryStreamHistory_LocationHardGate_DeniedWhenNotInLocation(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	locA := ulid.MustParse("01HYXLOCA0000000000000000A")
+	locB := ulid.MustParse("01HYXLOCB0000000000000000B")
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {
+			ID:         "s1",
+			LocationID: locA,
+			ExpiresAt:  &future,
+		},
+	})
+	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, sess)
+
+	resp, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:" + locB.String(),
+	})
+	require.Nil(t, resp)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "STREAM_ACCESS_DENIED")
 }
