@@ -3,6 +3,14 @@
 
 -- core-objects: provides describe, examine, create, and set commands.
 
+-- INV-S5: register the 5 event types this plugin can emit.
+-- These MUST match plugin.yaml's crypto.emits block exactly.
+holomush.register_emit_type("object_create")
+holomush.register_emit_type("object_destroy")
+holomush.register_emit_type("object_use")
+holomush.register_emit_type("object_examine")
+holomush.register_emit_type("object_give")
+
 -- trim removes leading and trailing whitespace.
 local function trim(s)
     return s:match("^%s*(.-)%s*$")
