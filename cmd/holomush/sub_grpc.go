@@ -50,6 +50,7 @@ import (
 	"github.com/holomush/holomush/internal/settings"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telnet"
+	"github.com/holomush/holomush/internal/world"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	worldsetup "github.com/holomush/holomush/internal/world/setup"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
@@ -177,6 +178,12 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	authPlayerRepo := s.cfg.Auth.PlayerRepo()
 	authPlayerSessionRepo := s.cfg.Auth.PlayerSessionStore()
 	sessionStore := s.cfg.Sessions.Store()
+
+	// Wire session store as the movement hook so character moves propagate
+	// LocationID + LocationArrivedAt to active sessions before the move event
+	// is emitted (ADR holomush-kmac; I-PRIV-1 Tier 1).
+	worldService.SetMovementHook(&sessionStoreMovementHook{sessions: sessionStore})
+
 	startLocationID := s.cfg.Bootstrap.StartLocationID()
 	pluginManager := s.cfg.Plugins.Manager()
 	cmdRegistry := s.cfg.Plugins.CommandRegistry()
@@ -616,6 +623,20 @@ func coreActorKindToBus(k core.ActorKind) eventbus.ActorKind {
 		return eventbus.ActorKindUnknown
 	}
 }
+
+// sessionStoreMovementHook implements world.MovementHook by delegating to
+// session.Store.UpdateLocationOnMove. Wired at gRPC subsystem startup so
+// character moves propagate LocationID + LocationArrivedAt to active sessions
+// before the move event is emitted (ADR holomush-kmac; I-PRIV-1 Tier 1).
+type sessionStoreMovementHook struct {
+	sessions session.Store
+}
+
+func (h *sessionStoreMovementHook) OnCharacterMoved(ctx context.Context, characterID, newLocationID ulid.ULID, arrivedAt time.Time) error {
+	return h.sessions.UpdateLocationOnMove(ctx, characterID, newLocationID, arrivedAt)
+}
+
+var _ world.MovementHook = (*sessionStoreMovementHook)(nil)
 
 // busHistoryReaderAdapter bridges eventbus.HistoryReader (QueryHistory) to
 // plugins.HistoryReader (ReplayTail). Used by the plugin subsystem for
