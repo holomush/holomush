@@ -863,7 +863,7 @@ Add to `internal/plugin/lua/host_test.go` (existing file). The fixture pattern i
 
 ```go
 func TestLuaHost_PluginEmitRegistry_NotLoaded_ReturnsFalse(t *testing.T) {
-	h := NewHostWithFunctions(hostfunc.New(nil))
+	h := pluginlua.NewHostWithFunctions(hostfunc.New(nil))
 	defer h.Close(context.Background())
 	got, ok := h.PluginEmitRegistry("nonexistent")
 	require.False(t, ok)
@@ -879,10 +879,10 @@ func TestLuaHost_PluginEmitRegistry_LoadedWithoutCryptoEmits_ReturnsNilTrue(t *t
 	manifest := &plugins.Manifest{
 		Name:      "synth-no-crypto",
 		Type:      plugins.TypeLua,
-		LuaPlugin: &plugins.LuaPluginConfig{Entry: "main.lua"},
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
-	h := NewHostWithFunctions(hostfunc.New(nil))
+	h := pluginlua.NewHostWithFunctions(hostfunc.New(nil))
 	defer h.Close(context.Background())
 	require.NoError(t, h.Load(context.Background(), manifest, pluginDir))
 
@@ -904,7 +904,7 @@ function on_event(e) return {} end
 	manifest := &plugins.Manifest{
 		Name:      "synth-with-crypto",
 		Type:      plugins.TypeLua,
-		LuaPlugin: &plugins.LuaPluginConfig{Entry: "main.lua"},
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 		Crypto: &plugins.CryptoSection{
 			Emits: []plugins.CryptoEmit{
 				{EventType: "a", Sensitivity: plugins.SensitivityNever},
@@ -913,7 +913,7 @@ function on_event(e) return {} end
 		},
 	}
 
-	h := NewHostWithFunctions(hostfunc.New(nil))
+	h := pluginlua.NewHostWithFunctions(hostfunc.New(nil))
 	defer h.Close(context.Background())
 	require.NoError(t, h.Load(context.Background(), manifest, pluginDir))
 
@@ -923,7 +923,7 @@ function on_event(e) return {} end
 }
 ```
 
-Required imports for the test file (add if not already present): `"context"`, `"os"`, `"path/filepath"`, `"testing"`, `"github.com/stretchr/testify/require"`, `"github.com/holomush/holomush/internal/plugin/hostfunc"`, `plugins "github.com/holomush/holomush/internal/plugin"`.
+Required imports for the test file (add if not already present): `"context"`, `"os"`, `"path/filepath"`, `"testing"`, `"github.com/stretchr/testify/require"`, `"github.com/holomush/holomush/internal/plugin/hostfunc"`, `plugins "github.com/holomush/holomush/internal/plugin"`, `pluginlua "github.com/holomush/holomush/internal/plugin/lua"`. (Note: `internal/plugin/lua/host_test.go` is `package lua_test`, so `NewHostWithFunctions` must be qualified as `pluginlua.NewHostWithFunctions(...)`. The tests above use the qualified form.)
 
 - [ ] **Step 2.D.1: write 3 Lua host PluginEmitRegistry tests with inlined fixtures**
 
@@ -988,7 +988,7 @@ func (h *Host) PluginEmitRegistry(name string) ([]string, bool) {
 Run: `task test -- ./internal/plugin/lua/ -run TestLuaHost_PluginEmitRegistry`
 Expected: 2 of 3 tests pass (the not-loaded and empty-crypto-emits cases). The "loaded with crypto.emits" test still fails because Load doesn't populate emitRegistry yet.
 
-- [ ] **Step 2.D.5: verify partial pass (2/3)**
+- [ ] **Step 2.D.5: verify partial pass (2 of 3 PASS; `TestLuaHost_PluginEmitRegistry_LoadedPluginWithCryptoEmits` is expected to FAIL here — Group E Step 2.E.3 flips it green)**
 
 #### Step 2.D.6: Write failing test for binary Host PluginEmitRegistry
 
@@ -1252,7 +1252,7 @@ func TestLuaHost_LoadCapturePassExecutionError_Fails(t *testing.T) {
 	manifest := &plugins.Manifest{
 		Name:      "synth-fail",
 		Type:      plugins.TypeLua,
-		LuaPlugin: &plugins.LuaPluginConfig{Entry: "main.lua"},
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 		Crypto:    &plugins.CryptoSection{Emits: []plugins.CryptoEmit{{EventType: "a"}}},
 	}
 
@@ -1327,7 +1327,7 @@ func TestManager_LoadPlugin_EmitTypeMismatch_FailsClosed(t *testing.T) {
 	)
 
 	mgr, err := plugins.NewManager(filepath.Dir(pluginDir),
-		plugins.WithLuaHost(pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
+		plugins.WithLuaHost(pluginlua.pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
 	require.NoError(t, err)
 
 	err = mgr.LoadAll(context.Background())
@@ -1342,7 +1342,7 @@ func TestManager_LoadPlugin_EmitTypeMatch_Succeeds(t *testing.T) {
 		[]string{"a", "b"}, []string{"a", "b"})
 
 	mgr, err := plugins.NewManager(filepath.Dir(pluginDir),
-		plugins.WithLuaHost(pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
+		plugins.WithLuaHost(pluginlua.pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
 	require.NoError(t, err)
 	require.NoError(t, mgr.LoadAll(context.Background()))
 }
@@ -1354,7 +1354,7 @@ func TestManager_LoadPlugin_NoCryptoEmits_SkipsValidation(t *testing.T) {
 		nil, nil) // nil declared signals "no crypto block in manifest"
 
 	mgr, err := plugins.NewManager(filepath.Dir(pluginDir),
-		plugins.WithLuaHost(pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
+		plugins.WithLuaHost(pluginlua.pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
 	require.NoError(t, err)
 	require.NoError(t, mgr.LoadAll(context.Background()))
 }
@@ -1395,7 +1395,7 @@ func writeMismatchPlugin(t *testing.T, name string, declared, registered []strin
 }
 ```
 
-Required imports for the test file: `"context"`, `"fmt"`, `"os"`, `"path/filepath"`, `"strings"`, `"testing"`, `"github.com/stretchr/testify/require"`, `"github.com/samber/oops"`, `"github.com/holomush/holomush/internal/plugin/hostfunc"`, `pluginlua "github.com/holomush/holomush/internal/plugin/lua"`.
+Required imports for the test file: `"context"`, `"fmt"`, `"os"`, `"path/filepath"`, `"strings"`, `"testing"`, `"github.com/stretchr/testify/require"`, `"github.com/samber/oops"`, `plugins "github.com/holomush/holomush/internal/plugin"`, `"github.com/holomush/holomush/internal/plugin/hostfunc"`, `pluginlua "github.com/holomush/holomush/internal/plugin/lua"`. (The `plugins` alias is already declared in the existing `manager_test.go` imports; additive edits inherit it.)
 
 - [ ] **Step 2.F.1: write 3 manager tests + writeMismatchPlugin helper**
 
@@ -1651,7 +1651,7 @@ func TestManager_INVS5_ParityAcrossRuntimes(t *testing.T) {
 			// Lua path: write synthetic plugin to tempdir; LoadAll.
 			pluginsDir := writeSyntheticLuaPlugin(t, "synth-"+s.name+"-lua", s.declared, s.registered)
 			mgr, err := NewManager(pluginsDir,
-				WithLuaHost(pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
+				WithLuaHost(pluginlua.pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
 			require.NoError(t, err)
 
 			err = mgr.LoadAll(context.Background())
@@ -1666,8 +1666,11 @@ func TestManager_INVS5_ParityAcrossRuntimes(t *testing.T) {
 			})
 
 			pluginsDir := writeSyntheticBinaryManifest(t, "synth-"+s.name+"-bin", s.declared)
-			mgr, err := NewManager(pluginsDir, WithBinaryHost(binaryHost))
+			mgr, err := NewManager(pluginsDir)
 			require.NoError(t, err)
+			// No WithBinaryHost ManagerOption exists; use RegisterHost
+			// (verified at manager.go:280: `func (m *Manager) RegisterHost(hostType Type, host Host)`).
+			mgr.RegisterHost(plugins.TypeBinary, binaryHost)
 
 			err = mgr.LoadAll(context.Background())
 			assertParityOutcome(t, err, s.wantMismatch)
@@ -1738,7 +1741,14 @@ func writeSyntheticBinaryManifest(t *testing.T, name string, declared []string) 
 }
 ```
 
-**Implementation note for the implementer:** if `goplugin.newMockHost` is unexported (lowercase) and there is no public `goplugin.NewMockHost`, add either (a) a thin `NewMockHost(t)` exported wrapper in `goplugin/mock_export_test.go` (build-tag-free; test-only), or (b) put the parity test under `goplugin/` so it can call the unexported helper directly. Same applies to `SetInitResponse` on the mock if it needs to be added as an exported method.
+**Implementation note (committed approach):** verified at `internal/plugin/goplugin/host_test.go:177` — `newMockHost` is unexported (`package goplugin`-private), and `mockPluginClient` has no `SetInitResponse` method (Init RPC returns hardcoded `&pluginv1.InitResponse{}` at host_test.go:123-130). Two changes required:
+
+1. **Add an exported `SetInitResponse(*pluginv1.InitResponse)` method on `mockGRPCPluginClient`** (the underlying mock that owns the Init response). Modify `mockGRPCPluginClient.Init` at host_test.go:123-130 to return the configured response (defaulting to `&pluginv1.InitResponse{}` when nil for backward compat with existing tests).
+2. **Add an exported `NewMockHost(t *testing.T) (*Host, *mockGRPCPluginClient)` wrapper** in `internal/plugin/goplugin/mock_export_test.go` (new file, `package goplugin`, test-only) that calls the existing private `newMockHost` and returns `(host, mockClient.protocol.pluginClient)` so callers can configure `SetInitResponse`.
+
+These are two small additive changes within `package goplugin`'s test files; they keep the parity test in `package plugins` with normal cross-package mock access via the new exports.
+
+(Alternative considered and rejected: putting the parity test in `package goplugin` and calling the private helper directly — would make the parity test live in the wrong package conceptually since the validator is in `package plugins`.)
 
 - [ ] **Step 2.I.1: write parity test + helpers; expose goplugin.NewMockHost if needed**
 
@@ -2002,7 +2012,13 @@ Expected: pushes notes + dep edges to remote dolt; no errors.
 
 The parent substrate-contract spec at `docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md` §7.1 still shows the OLD 7-bead chain with `jg9b.1`-`jg9b.7` and `jg9b.4` as the fail-closed flip. This plan materialized a different chain (`jg9b.1` is now the INV-S5 mechanism design bead; substrate cap + adoptions is `jg9b.3`; etc.). The parent spec needs a small amendment so future readers don't get confused by the obsolete chain diagram.
 
-Edit `docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md` §7.1: replace the bead-chain diagram with the new chain shape (5 beads: jg9b.2 audit, jg9b.3 substrate+adoptions, jg9b.4 docs, jg9b.5 roadmap, jg9b.6 hygiene). Add a brief note that the renumbering was done because `jg9b.1` was claimed by the INV-S5 mechanism design bead (the child brainstorm that surfaced the mechanism gap).
+Edit `docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md` to amend ALL stale `jg9b.N` references:
+
+```bash
+rg -n "jg9b\.(1|4|7)" docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md
+```
+
+Expected: hits at lines 48 (INV-S5 invariant row), 113 (§1.2 prose), 430 (§3.4 prose), 534 (§4.2 prose), 693 (§7.1 diagram), 717 + 721 (§7.2 table). Update each to the new numbering: `jg9b.1` = INV-S5 mechanism design bead; `jg9b.2` = audit; `jg9b.3` = substrate cap + adoptions; `jg9b.4` = docs; `jg9b.5` = roadmap; `jg9b.6` = hygiene. Add a brief note (in §7.1 or §6 supersession map) that the renumbering happened because the INV-S5 mechanism gap was surfaced post-original-plan-write and the child mechanism design bead claimed `jg9b.1`.
 
 Run: `rumdl check docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md`
 Expected: PASS.
