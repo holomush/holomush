@@ -57,9 +57,9 @@ The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are used per RFC2119.
 | INV-M1 | INV-S5 SHALL apply only to plugins with non-empty `manifest.Crypto.Emits`. Plugins without `crypto.emits` SKIP the Load-pass + validation entirely. | `manager.go::loadPlugin` checks `manifest.Crypto != nil && len(manifest.Crypto.Emits) > 0` before invoking validator |
 | INV-M2 | The code-side registry SHALL contain ALL plugin-owned event types the plugin may emit (not just sensitive ones). Host-owned types (e.g., `pluginsdk.HostEventTypeSystem`) MUST NOT be registered. | SDK + hostfunc surface accepts any string; substrate filters host-owned types before comparison (filter list maintained centrally) |
 | INV-M3 | Binary plugins with non-empty `crypto.emits` MUST implement `pluginsdk.EmitTypeRegistrar` and populate `pluginv1.InitResponse.registered_emit_types` (new proto field 2). Mismatch fails plugin load. | SDK adapter `pkg/plugin/sdk.go:152 pluginServerAdapter.Init` auto-populates from `EmitTypeRegistrar.EmitRegistry()` |
-| INV-M4 | Lua plugins with non-empty `crypto.emits` MUST call `holomush.register_emit_type(<type>)` at top level for every emit type they may produce. The Load-pass captures these calls; missing registrations fail plugin load. | `internal/plugin/lua/host.go::Load` second pass; `internal/plugin/hostfunc/stdlib_emit_registry.go` |
+| INV-M4 | Lua plugins with non-empty `crypto.emits` MUST call `holomush.register_emit_type(<type>)` at top level for every emit type they may produce. The Load-pass captures these calls; missing registrations fail plugin load. | `internal/plugin/lua/host.go::Load` branched pass (replaces syntax-check for crypto plugins); `internal/plugin/hostfunc/stdlib_emit_registry.go` |
 | INV-M5 | The validator SHALL fire in `internal/plugin/manager.go::loadPlugin` AFTER `host.Load` returns successfully and BEFORE the plugin is added to the manager's plugin cache as ready. | `Host.PluginEmitRegistry(name) ([]string, bool)` interface method; validator call in `loadPlugin` post-`host.Load` |
-| INV-M6 | Lua Load-pass `DoString` errors SHALL fail plugin load (same shape as the existing syntax-check error). | `lua/host.go::Load` returns wrapped error from the second-pass `DoString` |
+| INV-M6 | Lua Load-pass `DoString` errors SHALL fail plugin load (same shape as the existing syntax-check error). | `lua/host.go::Load` returns wrapped error from the branched-pass `DoString` (either syntax-check OR INV-S5 capture, both produce `operation=load` errors) |
 | INV-M7 | Every primitive in this design SHALL ship Go SDK + Lua hostfunc + parity test together (per parent spec INV-S3). | Single PR / coordinated change; parity test exercises both runtimes with identical logical scenarios |
 
 ---
@@ -178,43 +178,62 @@ Modify `internal/plugin/lua/host.go:33`:
 type luaPlugin struct {
     manifest      *plugins.Manifest
     code          string
-    emitRegistry  []string  // INV-S5: populated during Load second pass.
-                            // nil when manifest.Crypto.Emits is empty (skipped).
+    emitRegistry  []string  // INV-S5: populated during the Load capture pass.
+                            // nil when manifest.Crypto.Emits is empty (syntax-check pass runs instead).
 }
 ```
 
-### 2.2 Load second pass
+### 2.2 Load pass — branching on crypto.emits
 
-Modify `internal/plugin/lua/host.go::Load` (starts at line 111). After the existing syntax-check throwaway state (lines 147-155) and before storing the `luaPlugin` (line 157), add a second pass when `manifest.Crypto != nil && len(manifest.Crypto.Emits) > 0`:
+**Critical detail caught by plan-reviewer round 1 (2026-05-17):** the existing syntax-check pass at `internal/plugin/lua/host.go:147-155` runs `L.DoString(string(code))` in a state created via `h.factory.NewState(ctx)` **without** calling `h.hostFuncs.Register(L, ...)`. The `holomush` global is undefined in that state. If a Lua plugin's top-level code calls `holomush.register_emit_type(...)`, the syntax-check pass fails with Lua's `attempt to index nil value (global 'holomush')` BEFORE any INV-S5 capture work runs.
+
+This means **the original "add a second pass" design is wrong**: the syntax-check pass cannot tolerate the new top-level hostfunc calls that INV-S5 requires. The fix is to **replace** the syntax-check pass with a hostfuncs-registered pass when `manifest.Crypto != nil && len(manifest.Crypto.Emits) > 0`, NOT add a second pass alongside it.
+
+The result: **one Load-time execution per Lua plugin, regardless of crypto.emits scope.** Plugins without crypto.emits use the existing syntax-check pass (unchanged). Plugins with crypto.emits use the INV-S5 capture pass instead (which is itself a syntax-check + a registration capture). Total Load-time execution count stays at one per plugin — same as today.
+
+Modify `internal/plugin/lua/host.go::Load` (starts at line 111). REPLACE the existing syntax-check throwaway state block (lines 147-155) with a branched implementation:
 
 ```go
-// Existing syntax-check pass (unchanged) ...
-
+// Branch the Load pass on whether INV-S5 capture is needed.
+//
+// Plugins WITHOUT non-empty crypto.emits: existing syntax-check
+// throwaway state (no hostfuncs registered). Unchanged from today.
+//
+// Plugins WITH non-empty crypto.emits: capture-and-validate pass
+// (hostfuncs registered including register_emit_type). The
+// captured registry is stored on luaPlugin for the validator
+// (manager.go::loadPlugin reads via Host.PluginEmitRegistry).
+//
+// In both branches, DoString errors fail plugin load with the
+// existing oops shape.
 var emitRegistry []string
-if manifest.Crypto != nil && len(manifest.Crypto.Emits) > 0 {
-    // INV-S5 Load-pass: run top-level code in a stateful state to capture
-    // holomush.register_emit_type calls. Per INV-M4, Lua plugins with
-    // non-empty crypto.emits MUST call register_emit_type at top level
-    // for every emit type they produce.
-    L2, err := h.factory.NewState(ctx)
-    if err != nil {
-        return oops.In("lua").With("plugin", manifest.Name).With("operation", "load_inv_s5_pass").
-            Hint("failed to create INV-S5 capture state").Wrap(err)
-    }
-    defer L2.Close()
+L, err := h.factory.NewState(ctx)
+if err != nil {
+    return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
+        Hint("failed to create validation state").Wrap(err)
+}
+defer L.Close()
 
+if manifest.Crypto != nil && len(manifest.Crypto.Emits) > 0 {
+    // INV-S5 capture pass: hostfuncs registered, captures
+    // top-level holomush.register_emit_type calls.
     reg := hostfunc.NewLuaEmitRegistry()
     if h.hostFuncs != nil {
-        h.hostFuncs.RegisterWithEmitCapture(L2, manifest.Name, reg, manifest.Requires...)
+        h.hostFuncs.RegisterWithEmitCapture(L, manifest.Name, reg, manifest.Requires...)
     }
-
-    if err := L2.DoString(string(code)); err != nil {
-        return oops.In("lua").With("plugin", manifest.Name).With("operation", "load_inv_s5_pass").
+    if err := L.DoString(string(code)); err != nil {
+        return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
             With("entry", manifest.LuaPlugin.Entry).
-            Hint("INV-S5 Load-pass execution error").Wrap(err)
+            Hint("INV-S5 capture pass execution error").Wrap(err)
     }
-
     emitRegistry = reg.Types()
+} else {
+    // Existing syntax-check pass (no hostfuncs registered).
+    if err := L.DoString(string(code)); err != nil {
+        return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
+            With("entry", manifest.LuaPlugin.Entry).
+            Hint("syntax error").Wrap(err)
+    }
 }
 
 h.plugins[manifest.Name] = &luaPlugin{
@@ -224,7 +243,9 @@ h.plugins[manifest.Name] = &luaPlugin{
 }
 ```
 
-**Top-level idempotency requirement.** Today's Lua Host already executes plugin top-level code at `lua/host.go:153` (the existing "syntax-check" pass uses `DoString`, which actually runs the code, not just compiles it). For plugins with non-empty `crypto.emits`, the new INV-S5 pass adds a SECOND Load-time execution (capture state) — bringing the Load-time count to two — plus the existing per-delivery execution on every `DeliverEvent`/`DeliverCommand`. Top-level lua code that calls non-idempotent hostfuncs (e.g., `holomush.kv_set(...)`, `holomush.create_location(...)`) would fire on every one of those executions. Plugin authors with non-empty `crypto.emits` MUST keep top-level code idempotent — register handlers, declare locals, call `register_emit_type` — and put non-idempotent work inside `on_event`/`on_command` handlers. This is already the de-facto pattern in current plugins (`core-communication/main.lua` top-level is all `local function` declarations + one constant table; `core-objects/main.lua` is similar) but becomes load-bearing under INV-S5.
+**Top-level idempotency requirement.** The Load pass executes the plugin's full top-level code via `DoString` (this is true today and remains true after this change). For plugins with non-empty `crypto.emits`, hostfuncs are registered during this execution — so top-level code that calls hostfuncs other than `register_emit_type` (e.g., `holomush.kv_set(...)`, `holomush.create_location(...)`) would fire both at Load AND on every subsequent `DeliverEvent`/`DeliverCommand` (which already re-runs top-level per-delivery). Plugin authors with non-empty `crypto.emits` MUST keep top-level code idempotent — register handlers, declare locals, call `register_emit_type` — and put non-idempotent work inside `on_event`/`on_command` handlers. This is already the de-facto pattern in current plugins (`core-communication/main.lua` top-level is all `local function` declarations + one constant table; `core-objects/main.lua` is similar) but becomes load-bearing under INV-S5.
+
+**For plugins WITHOUT crypto.emits, nothing changes:** the syntax-check pass continues to run without hostfuncs, exactly as today. Per ADR `holomush-7h0c`, the opt-in scope is preserved — non-crypto plugins see no behavior change.
 
 ### 2.3 New hostfunc
 
@@ -493,7 +514,7 @@ A single PR (or 1 substrate + 2 plugin-adoption PRs that merge together) contain
 1. Proto field addition to `pluginv1.InitResponse` + regenerated bindings.
 2. `pkg/plugin/emit_registry.go` (SDK API + `EmitTypeRegistrar` interface).
 3. `pkg/plugin/sdk.go` modification (adapter populates `InitResponse.RegisteredEmitTypes`).
-4. `internal/plugin/lua/host.go` modification (Load second pass + `luaPlugin.emitRegistry`).
+4. `internal/plugin/lua/host.go` modification (Load branched pass: replace existing syntax-check throwaway state with branched syntax-check-OR-INV-S5-capture; `luaPlugin.emitRegistry` field).
 5. `internal/plugin/hostfunc/stdlib_emit_registry.go` (new Lua hostfunc + `LuaEmitRegistry`).
 6. `internal/plugin/hostfunc/functions.go` (new `RegisterWithEmitCapture` entry point).
 7. `internal/plugin/host.go` interface extension (`PluginEmitRegistry` method).
@@ -525,8 +546,8 @@ Add to `internal/plugin/lua/host_test.go` (or create a new test file):
 - **Pass case:** load a synthetic Lua plugin with manifest `crypto.emits: [a, b]` and code `holomush.register_emit_type("a"); holomush.register_emit_type("b")`. Verify Load succeeds; `PluginEmitRegistry` returns `[a, b]`.
 - **Mismatch — declared-but-unregistered:** manifest `crypto.emits: [a, b]` but code registers only `a`. Verify validator returns mismatch with `DeclaredButUnregistered: [b]`.
 - **Mismatch — registered-but-undeclared:** manifest `crypto.emits: [a]` but code registers `a` and `b`. Verify validator returns mismatch with `RegisteredButUndeclared: [b]`.
-- **No crypto.emits:** plugin without `crypto.emits` block; Load second pass SHOULD NOT fire; `PluginEmitRegistry` returns `(nil, true)`.
-- **DoString error in Load pass:** plugin's top-level code intentionally throws; Load returns error wrapped with `load_inv_s5_pass` operation.
+- **No crypto.emits:** plugin without `crypto.emits` block; existing syntax-check pass runs (no INV-S5 capture); `PluginEmitRegistry` returns `(nil, true)`.
+- **DoString error in INV-S5 capture branch:** plugin with `crypto.emits` whose top-level code intentionally throws; Load returns error with operation="load" + Hint="INV-S5 capture pass execution error".
 
 ### 5.3 Binary plugin integration test
 
@@ -612,3 +633,4 @@ None blocking. Two minor items deferred:
 | Date | Action | Notes |
 |------|--------|-------|
 | 2026-05-17 | DRAFT authored | Brainstorming session under bead `holomush-jg9b.1`; closes mechanism gap surfaced by parent-plan-reviewer round 1 |
+| 2026-05-17 | §2.2 amended | plan-reviewer round 1 (NEW plan, 2026-05-17 2249) caught that existing syntax-check pass at `lua/host.go:147-155` runs `DoString` WITHOUT `hostFuncs.Register` — the `holomush` global is undefined. Original "add a second pass" design would have failed plugin Load before reaching the INV-S5 pass once top-level `holomush.register_emit_type(...)` calls are added. Amendment: REPLACE the syntax-check pass with a branched pass for crypto.emits plugins (one Load-time execution instead of two; opt-in scope per ADR `holomush-7h0c` preserved). Idempotency requirement updated to reflect single execution. |
