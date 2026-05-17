@@ -13,8 +13,8 @@ import (
 
 func TestSeedPoliciesCount(t *testing.T) {
 	seeds := SeedPolicies()
-	// 25 permit + 9 forbid = 34 total (18 base − 2 removed command policies + 5 gap-fill from T22b + 1 phase-2 command + 2 system bootstrap + 1 location-stream read + 2 phase-3b audit deny + 2 phase-5 sub-epic A events.*.system.crypto_totp.* deny seeds + 2 phase-5 sub-epic D events.*.system.crypto_policy.* deny seeds + 2 phase-5 sub-epic E events.*.system.* broad deny seeds)
-	assert.Len(t, seeds, 34, "expected 34 seed policies (25 permit, 9 forbid)")
+	// 26 permit + 9 forbid = 35 total (18 base − 2 removed command policies + 5 gap-fill from T22b + 1 phase-2 command + 2 system bootstrap + 1 location-stream read + 2 phase-3b audit deny + 2 phase-5 sub-epic A events.*.system.crypto_totp.* deny seeds + 2 phase-5 sub-epic D events.*.system.crypto_policy.* deny seeds + 2 phase-5 sub-epic E events.*.system.* broad deny seeds + 1 phase-5 iwzt staff-read-unrestricted-history)
+	assert.Len(t, seeds, 35, "expected 35 seed policies (26 permit, 9 forbid)")
 }
 
 func TestSeedPoliciesAllNamesHaveSeedPrefix(t *testing.T) {
@@ -71,7 +71,7 @@ func TestSeedPoliciesEffectDistribution(t *testing.T) {
 			forbidCount++
 		}
 	}
-	assert.Equal(t, 25, permitCount, "expected 25 permit policies")
+	assert.Equal(t, 26, permitCount, "expected 26 permit policies")
 	assert.Equal(t, 9, forbidCount, "expected 9 forbid policies (+2 phase-5 sub-epic A events.*.system.crypto_totp.* denies + 2 phase-5 sub-epic D events.*.system.crypto_policy.* denies + 2 phase-5 sub-epic E events.*.system.* broad denies)")
 }
 
@@ -119,6 +119,8 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 		// Phase-5 sub-epic E broad events.*.system.* deny policies (A16 future-proof + rekey namespace)
 		"seed:deny-events-system-read-character",
 		"seed:deny-events-system-read-plugin",
+		// Phase-5 iwzt history-scope-privacy staff override policy (I-PRIV-6)
+		"seed:staff-read-unrestricted-history",
 	}
 
 	seeds := SeedPolicies()
@@ -395,6 +397,20 @@ func TestSeedPoliciesIncludesEventsSystemRekeyDenyForPlugin(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "events.*.system.* broad deny seed for plugin MUST be present (A16 / INV-15)")
+}
+
+// Phase-5 iwzt history-scope-privacy policy tests
+
+func TestSeed_IncludesStaffUnrestrictedHistoryPolicy(t *testing.T) {
+	seeds := SeedPolicies()
+	var found bool
+	for _, s := range seeds {
+		if s.Name == "seed:staff-read-unrestricted-history" {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "Phase 5 must seed seed:staff-read-unrestricted-history policy")
 }
 
 // Phase-2 command policy tests
