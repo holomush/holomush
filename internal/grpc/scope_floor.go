@@ -4,9 +4,11 @@
 package grpc
 
 import (
+	"context"
 	"strings"
 	"time"
 
+	accessTypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/session"
 )
 
@@ -58,8 +60,20 @@ func isLocationStream(stream string) bool {
 
 // extractLocationID returns the ULID portion of a location stream.
 // Caller MUST check isLocationStream first; otherwise behavior is undefined.
-func extractLocationID(stream string) string { //nolint:unused // consumed by QueryStreamHistory in iwzt.8
+func extractLocationID(stream string) string {
 	return strings.TrimPrefix(stream, "location:")
+}
+
+// staffOverride is a stub for Phase 5 (staff ABAC override). Returns false
+// unconditionally so the location hard-gate is exercised in Phase 2.
+// Phase 5 / iwzt.20 replaces with a real
+//
+//	s.accessEngine.Evaluate(ctx, NewAccessRequest("character:"+info.CharacterID.String(),
+//	                                               "read_unrestricted_history", "stream", nil))
+//
+// per ADR wxty / I-PRIV-6.
+func staffOverride(_ context.Context, _ *session.Info, _ accessTypes.AccessPolicyEngine) bool {
+	return false
 }
 
 // extractSceneID returns the scene ULID from a scene:<id>:ic or scene:<id>:ooc subject.

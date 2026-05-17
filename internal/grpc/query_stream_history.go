@@ -153,8 +153,12 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		}
 	}
 
-	// Step 5: Authorization — two-layer model.
-	if isPrivateStream(req.Stream) {
+	// Step 5: Authorization — three-way classifier.
+	//   1. Private streams (character:*, scene:*:ic, scene:*:ooc): membership gate (I-17).
+	//   2. Location streams (location:<id>): hard-gate via session.LocationID (I-PRIV-1).
+	//   3. Other public streams (global, system, …): ABAC engine.Evaluate.
+	switch {
+	case isPrivateStream(req.Stream):
 		// Validate scene stream format up-front so malformed scene streams
 		// surface as INVALID_ARGUMENT rather than STREAM_ACCESS_DENIED.
 		if strings.HasPrefix(req.Stream, "scene:") {
@@ -176,8 +180,24 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 				With("stream", req.Stream).
 				Errorf("not authorized to read stream")
 		}
-	} else {
-		// Layer 2: ABAC policy for public streams.
+	case isLocationStream(req.Stream):
+		// Layer 2: Location hard-gate (I-PRIV-1). The session must be currently
+		// located in the requested location. staffOverride returns false until
+		// Phase 5 (iwzt.20) wires the real engine.Evaluate call.
+		if !staffOverride(ctx, info, s.accessEngine) {
+			if info.LocationID.String() != extractLocationID(req.Stream) {
+				slog.InfoContext(ctx, "stream access denied by location hard-gate",
+					"session_id", req.SessionId, "denial_reason", "wrong_location",
+					"character_id", info.CharacterID.String(),
+					"session_location", info.LocationID.String(),
+					"requested_stream", req.Stream)
+				return nil, oops.Code("STREAM_ACCESS_DENIED").
+					With("session_id", req.SessionId).With("stream", req.Stream).
+					Errorf("not authorized to read stream")
+			}
+		}
+	default:
+		// Layer 3: ABAC policy for other public streams (global, system, …).
 		if s.accessEngine == nil {
 			return nil, oops.Code("STREAM_ACCESS_DENIED").
 				With("stream", req.Stream).
@@ -213,10 +233,14 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		}
 	}
 
-	// Step 6: Parse not_before.
+	// Step 6: Compute effective NotBefore = MAX(client-supplied, server-side scope floor).
 	var notBefore time.Time
 	if req.NotBeforeMs > 0 {
 		notBefore = time.UnixMilli(req.NotBeforeMs).UTC()
+	}
+	scopeFloor := streamScopeFloor(info, req.Stream)
+	if scopeFloor.After(notBefore) {
+		notBefore = scopeFloor
 	}
 
 	// Step 7: Fetch count+1 to detect has_more.
