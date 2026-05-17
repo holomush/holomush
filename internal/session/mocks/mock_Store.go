@@ -125,6 +125,54 @@ func (_c *MockStore_AppendCommand_Call) RunAndReturn(run func(context.Context, s
 	return _c
 }
 
+// BumpLocationArrivedAt provides a mock function with given fields: ctx, sessionID, arrivedAt
+func (_m *MockStore) BumpLocationArrivedAt(ctx context.Context, sessionID string, arrivedAt time.Time) error {
+	ret := _m.Called(ctx, sessionID, arrivedAt)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BumpLocationArrivedAt")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, time.Time) error); ok {
+		r0 = rf(ctx, sessionID, arrivedAt)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockStore_BumpLocationArrivedAt_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BumpLocationArrivedAt'
+type MockStore_BumpLocationArrivedAt_Call struct {
+	*mock.Call
+}
+
+// BumpLocationArrivedAt is a helper method to define mock.On call
+//   - ctx context.Context
+//   - sessionID string
+//   - arrivedAt time.Time
+func (_e *MockStore_Expecter) BumpLocationArrivedAt(ctx interface{}, sessionID interface{}, arrivedAt interface{}) *MockStore_BumpLocationArrivedAt_Call {
+	return &MockStore_BumpLocationArrivedAt_Call{Call: _e.mock.On("BumpLocationArrivedAt", ctx, sessionID, arrivedAt)}
+}
+
+func (_c *MockStore_BumpLocationArrivedAt_Call) Run(run func(ctx context.Context, sessionID string, arrivedAt time.Time)) *MockStore_BumpLocationArrivedAt_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockStore_BumpLocationArrivedAt_Call) Return(_a0 error) *MockStore_BumpLocationArrivedAt_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockStore_BumpLocationArrivedAt_Call) RunAndReturn(run func(context.Context, string, time.Time) error) *MockStore_BumpLocationArrivedAt_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CountConnections provides a mock function with given fields: ctx, sessionID
 func (_m *MockStore) CountConnections(ctx context.Context, sessionID string) (int, error) {
 	ret := _m.Called(ctx, sessionID)
@@ -1321,6 +1369,55 @@ func (_c *MockStore_UpdateLastWhispered_Call) Return(_a0 error) *MockStore_Updat
 }
 
 func (_c *MockStore_UpdateLastWhispered_Call) RunAndReturn(run func(context.Context, string, string) error) *MockStore_UpdateLastWhispered_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateLocationOnMove provides a mock function with given fields: ctx, characterID, newLocationID, arrivedAt
+func (_m *MockStore) UpdateLocationOnMove(ctx context.Context, characterID, newLocationID ulid.ULID, arrivedAt time.Time) error {
+	ret := _m.Called(ctx, characterID, newLocationID, arrivedAt)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateLocationOnMove")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, ulid.ULID, time.Time) error); ok {
+		r0 = rf(ctx, characterID, newLocationID, arrivedAt)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockStore_UpdateLocationOnMove_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateLocationOnMove'
+type MockStore_UpdateLocationOnMove_Call struct {
+	*mock.Call
+}
+
+// UpdateLocationOnMove is a helper method to define mock.On call
+//   - ctx context.Context
+//   - characterID ulid.ULID
+//   - newLocationID ulid.ULID
+//   - arrivedAt time.Time
+func (_e *MockStore_Expecter) UpdateLocationOnMove(ctx interface{}, characterID interface{}, newLocationID interface{}, arrivedAt interface{}) *MockStore_UpdateLocationOnMove_Call {
+	return &MockStore_UpdateLocationOnMove_Call{Call: _e.mock.On("UpdateLocationOnMove", ctx, characterID, newLocationID, arrivedAt)}
+}
+
+func (_c *MockStore_UpdateLocationOnMove_Call) Run(run func(ctx context.Context, characterID, newLocationID ulid.ULID, arrivedAt time.Time)) *MockStore_UpdateLocationOnMove_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(ulid.ULID), args[3].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockStore_UpdateLocationOnMove_Call) Return(_a0 error) *MockStore_UpdateLocationOnMove_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockStore_UpdateLocationOnMove_Call) RunAndReturn(run func(context.Context, ulid.ULID, ulid.ULID, time.Time) error) *MockStore_UpdateLocationOnMove_Call {
 	_c.Call.Return(run)
 	return _c
 }

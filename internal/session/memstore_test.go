@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -705,4 +706,85 @@ func TestMemStoreListByPlayerSessionSkipsExpiredSessions(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 1, "only the active session must be returned")
 	assert.Equal(t, "active", got[0].ID)
+}
+
+func TestMemStoreUpdateLocationOnMove(t *testing.T) {
+	store := NewMemStore()
+	ctx := context.Background()
+	charID := ulid.Make()
+	origLoc := ulid.Make()
+	newLoc := ulid.Make()
+	origArrival := time.Now().UTC().Add(-time.Hour)
+	newArrival := time.Now().UTC()
+
+	info := &Info{
+		ID: ulid.Make().String(), CharacterID: charID,
+		LocationID: origLoc, LocationArrivedAt: origArrival,
+		Status: StatusActive, CreatedAt: origArrival, UpdatedAt: origArrival,
+	}
+	require.NoError(t, store.Set(ctx, info.ID, info))
+
+	require.NoError(t, store.UpdateLocationOnMove(ctx, charID, newLoc, newArrival))
+
+	got, err := store.Get(ctx, info.ID)
+	require.NoError(t, err)
+	assert.Equal(t, newLoc, got.LocationID)
+	assert.True(t, got.LocationArrivedAt.Equal(newArrival))
+}
+
+func TestMemStoreUpdateLocationOnMove_SkipsDetached(t *testing.T) {
+	store := NewMemStore()
+	ctx := context.Background()
+	charID := ulid.Make()
+	origLoc := ulid.Make()
+	newLoc := ulid.Make()
+	arrival := time.Now().UTC()
+
+	// Detached session — must NOT be updated.
+	detached := &Info{
+		ID: ulid.Make().String(), CharacterID: charID,
+		LocationID: origLoc, LocationArrivedAt: arrival.Add(-time.Hour),
+		Status: StatusDetached, CreatedAt: arrival, UpdatedAt: arrival,
+	}
+	require.NoError(t, store.Set(ctx, detached.ID, detached))
+
+	require.NoError(t, store.UpdateLocationOnMove(ctx, charID, newLoc, arrival))
+
+	got, err := store.Get(ctx, detached.ID)
+	require.NoError(t, err)
+	// Location must remain unchanged for detached sessions.
+	assert.Equal(t, origLoc, got.LocationID)
+}
+
+func TestMemStoreBumpLocationArrivedAt(t *testing.T) {
+	store := NewMemStore()
+	ctx := context.Background()
+	origArrival := time.Now().UTC().Add(-time.Hour)
+	newArrival := time.Now().UTC()
+
+	info := &Info{
+		ID: ulid.Make().String(), CharacterID: ulid.Make(),
+		LocationID: ulid.Make(), LocationArrivedAt: origArrival,
+		Status: StatusDetached, CreatedAt: origArrival, UpdatedAt: origArrival,
+	}
+	require.NoError(t, store.Set(ctx, info.ID, info))
+
+	require.NoError(t, store.BumpLocationArrivedAt(ctx, info.ID, newArrival))
+
+	got, err := store.Get(ctx, info.ID)
+	require.NoError(t, err)
+	assert.True(t, got.LocationArrivedAt.Equal(newArrival), "LocationArrivedAt must be bumped to newArrival")
+	assert.True(t, got.UpdatedAt.Equal(newArrival), "UpdatedAt must also be bumped")
+	// Status-agnostic: detached session is also updated.
+	assert.Equal(t, StatusDetached, got.Status)
+}
+
+func TestMemStoreBumpLocationArrivedAt_NotFound(t *testing.T) {
+	store := NewMemStore()
+	ctx := context.Background()
+	err := store.BumpLocationArrivedAt(ctx, "no-such-session", time.Now().UTC())
+	require.Error(t, err)
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, "SESSION_NOT_FOUND", oopsErr.Code())
 }
