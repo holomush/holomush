@@ -6,6 +6,40 @@ itself after completing a review.
 
 Keep under 200 lines. Curate — don't hoard.
 
+## R2-fix regressions in INV-S5 plan (HoloMUSH 2026-05-17 round 3)
+
+- **Global find-replace double-qualification.** When R2 fixes a "bare
+  `NewHostWithFunctions` won't resolve in `package lua_test`" finding by
+  global-replacing `NewHostWithFunctions` → `pluginlua.NewHostWithFunctions`,
+  the replacement also fires on sites that were ALREADY qualified
+  `pluginlua.NewHostWithFunctions`, producing
+  `pluginlua.pluginlua.NewHostWithFunctions`. Always require: "scope the
+  replace to bare (un-prefixed) occurrences only," and grep
+  `<pkg>\.<pkg>\.` after every revision that performs symbol qualification.
+- **Package-internal qualifier inside a test file declared in that
+  package.** When the parity test file is `package plugins` (the
+  package being tested), `WithLuaHost` is unqualified — but
+  `plugins.TypeBinary` reads naturally to a planner who has been
+  thinking in cross-package call sites. Always grep the test file
+  block for `<own-package>\.` after writing/revising; any hit is a
+  package-internal qualifier and a Go compile error.
+- **`_test.go` symbols don't cross package boundaries.** A wrapper
+  `NewMockHost` placed in `internal/plugin/goplugin/mock_export_test.go`
+  is visible only when building tests of `package goplugin` — NOT when
+  `go test ./internal/plugin/` imports `goplugin` as a regular library.
+  Cross-package test helpers MUST live in a non-`_test.go` file (or
+  the parity test moves into the helper's own package). Plans that
+  propose "expose via _test.go file" as if it were sufficient are
+  wrong — always demand a non-test file or an explicit acknowledgment
+  the test must move.
+- **`oops.Code("X").Is(err)`** matches ANY `OopsError` regardless of
+  code (per `samber/oops@v1.21.0/error.go:87-93`). Test assertions
+  using `oops.Code("X").Is(err) || strings.Contains(err.Error(), "X")`
+  pass for any oops-wrapped error in the first disjunct. Repo
+  convention is `errutil.AssertErrorCode(t, err, "CODE")` which DOES
+  check code identity. Treat the `oops.Code(...).Is` pattern in test
+  assertions as a non-blocking finding to flag.
+
 ## INV-S5 emit-type-validation plan-review reflexes (HoloMUSH 2026-05-16)
 
 - **Lua plugins have NO init phase** (`internal/plugin/lua/host.go:111-163`).

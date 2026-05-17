@@ -59,7 +59,7 @@ This plan touches these paths. **Bold** = new files. Path:line cites for existin
 
 **Parity test:**
 
-- **`internal/plugin/manager_parity_test.go`** — Lua + binary parity per mechanism spec INV-M7.
+- **`internal/plugin/goplugin/manager_parity_test.go`** — Lua + binary parity per mechanism spec INV-M7 (in `package goplugin` so it can call private mock helpers directly; see Step 2.I.1 for rationale).
 
 ### Docs (Task 3)
 
@@ -1003,13 +1003,17 @@ func TestGoPluginHost_PluginEmitRegistry_NotLoaded_ReturnsFalse(t *testing.T) {
 }
 
 func TestGoPluginHost_PluginEmitRegistry_LoadedWithRegisteredEmitTypes(t *testing.T) {
-	// Use newMockHost to construct a Host with mock client. The mock's
-	// pluginClient.Init returns InitResponse{RegisteredEmitTypes: [a, b]}.
-	// After Load, PluginEmitRegistry returns ([a, b], true).
+	// Use newMockHost to construct a Host with mock client. Configure the
+	// inner mockGRPCPluginClient (the one whose Init RPC the host calls)
+	// to return RegisteredEmitTypes: [a, b]. After Load, PluginEmitRegistry
+	// returns ([a, b], true).
 	h, mockClient := newMockHost(t)
-	mockClient.initResponse = &pluginv1.InitResponse{
+	// newMockHost returns (*Host, *mockPluginClient). The Init RPC lives on
+	// mockGRPCPluginClient, accessed via mockClient.protocol.pluginClient.
+	// See host_test.go:62-66 for the wiring.
+	mockClient.protocol.pluginClient.(*mockGRPCPluginClient).setInitResponse(&pluginv1.InitResponse{
 		RegisteredEmitTypes: []string{"a", "b"},
-	}
+	})
 
 	manifest := &plugins.Manifest{
 		Name:     "synth-binary",
@@ -1033,7 +1037,11 @@ func TestGoPluginHost_PluginEmitRegistry_LoadedWithRegisteredEmitTypes(t *testin
 }
 ```
 
-**Mock extension required.** Extend `mockPluginClient` (existing struct in `host_test.go`) to support an `initResponse *pluginv1.InitResponse` field that the mock's `Init` method returns. The current mock's `Init` likely returns a zero-valued response; making it configurable enables this test. If existing tests assert on the zero behavior, default to a zero-valued response when `initResponse` is nil.
+**Mock extension required.** The Init RPC lives on `mockGRPCPluginClient` (verified at `host_test.go:123-130`, NOT `mockPluginClient`). Extend `mockGRPCPluginClient` to support a configurable response:
+
+1. Add field `initResponse *pluginv1.InitResponse` to the `mockGRPCPluginClient` struct.
+2. Add method `func (m *mockGRPCPluginClient) setInitResponse(r *pluginv1.InitResponse) { m.initResponse = r }` (lowercase — caller is same `package goplugin`).
+3. Modify `mockGRPCPluginClient.Init` at host_test.go:123-130 to return `m.initResponse` when non-nil, falling back to `&pluginv1.InitResponse{}` to keep existing tests green.
 
 - [ ] **Step 2.D.6: write 2 binary host tests; extend mockPluginClient with initResponse field**
 
@@ -1327,14 +1335,11 @@ func TestManager_LoadPlugin_EmitTypeMismatch_FailsClosed(t *testing.T) {
 	)
 
 	mgr, err := plugins.NewManager(filepath.Dir(pluginDir),
-		plugins.WithLuaHost(pluginlua.pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
+		plugins.WithLuaHost(pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
 	require.NoError(t, err)
 
 	err = mgr.LoadAll(context.Background())
-	require.Error(t, err)
-	require.True(t, oops.Code("EVENT_TYPE_REGISTRY_MISMATCH").Is(err) ||
-		strings.Contains(err.Error(), "EVENT_TYPE_REGISTRY_MISMATCH"),
-		"expected EVENT_TYPE_REGISTRY_MISMATCH, got: %v", err)
+	errutil.AssertErrorCode(t, err, "EVENT_TYPE_REGISTRY_MISMATCH")
 }
 
 func TestManager_LoadPlugin_EmitTypeMatch_Succeeds(t *testing.T) {
@@ -1342,7 +1347,7 @@ func TestManager_LoadPlugin_EmitTypeMatch_Succeeds(t *testing.T) {
 		[]string{"a", "b"}, []string{"a", "b"})
 
 	mgr, err := plugins.NewManager(filepath.Dir(pluginDir),
-		plugins.WithLuaHost(pluginlua.pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
+		plugins.WithLuaHost(pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
 	require.NoError(t, err)
 	require.NoError(t, mgr.LoadAll(context.Background()))
 }
@@ -1354,7 +1359,7 @@ func TestManager_LoadPlugin_NoCryptoEmits_SkipsValidation(t *testing.T) {
 		nil, nil) // nil declared signals "no crypto block in manifest"
 
 	mgr, err := plugins.NewManager(filepath.Dir(pluginDir),
-		plugins.WithLuaHost(pluginlua.pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
+		plugins.WithLuaHost(pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
 	require.NoError(t, err)
 	require.NoError(t, mgr.LoadAll(context.Background()))
 }
@@ -1395,7 +1400,7 @@ func writeMismatchPlugin(t *testing.T, name string, declared, registered []strin
 }
 ```
 
-Required imports for the test file: `"context"`, `"fmt"`, `"os"`, `"path/filepath"`, `"strings"`, `"testing"`, `"github.com/stretchr/testify/require"`, `"github.com/samber/oops"`, `plugins "github.com/holomush/holomush/internal/plugin"`, `"github.com/holomush/holomush/internal/plugin/hostfunc"`, `pluginlua "github.com/holomush/holomush/internal/plugin/lua"`. (The `plugins` alias is already declared in the existing `manager_test.go` imports; additive edits inherit it.)
+Required imports for the test file: `"context"`, `"fmt"`, `"os"`, `"path/filepath"`, `"strings"`, `"testing"`, `"github.com/stretchr/testify/require"`, `"github.com/holomush/holomush/pkg/errutil"`, `plugins "github.com/holomush/holomush/internal/plugin"`, `"github.com/holomush/holomush/internal/plugin/hostfunc"`, `pluginlua "github.com/holomush/holomush/internal/plugin/lua"`. (The `plugins` alias is already declared in the existing `manager_test.go` imports; additive edits inherit it. `errutil.AssertErrorCode` provides code-identity assertion — `oops.Code(...).Is()` would falsely pass for any oops-wrapped error regardless of code.)
 
 - [ ] **Step 2.F.1: write 3 manager tests + writeMismatchPlugin helper**
 
@@ -1603,15 +1608,25 @@ under fail-closed INV-S5 validation.
 
 #### Step 2.I.1: Write parity test
 
-Create `internal/plugin/manager_parity_test.go` (new file in the `plugins` package). The test exercises the same logical scenario through BOTH a Lua plugin path and a binary plugin path, asserting identical validator output. Per INV-M7 / INV-S3.
+Create `internal/plugin/goplugin/manager_parity_test.go` (new file in `package goplugin`). The test exercises the same logical scenario through BOTH a Lua plugin path and a binary plugin path, asserting identical validator output. Per INV-M7 / INV-S3.
 
-**Fixture choice:** use the test-only `goplugin.Host` fixture (`newMockHost` from `goplugin/host_test.go:176-186`) rather than a real subprocess. Subprocess spawning is heavy and adds test flakiness without changing what the parity test verifies (the validator path is shared across runtimes via `Host.PluginEmitRegistry`; runtime asymmetry stops at the host implementation, which is what the mock exercises). The mock satisfies the Host interface via in-process gRPC stubs.
+**File location rationale:** the parity test lives in `package goplugin` (not `package plugins`) for ONE reason: the binary mock harness (`newMockHost`, `mockGRPCPluginClient`) is unexported and lives in `internal/plugin/goplugin/host_test.go` (verified `package goplugin` at line 4). An in-package test file accesses these helpers directly; a cross-package test would require new exported wrappers (rejected). The test still drives `plugins.NewManager` and `plugins.LoadAll` via the regular package import — the validator path being tested lives in `package plugins`, the only thing changing is where the test FILE lives.
+
+**Fixture choice:** in-process mock host via `newMockHost`, not a real subprocess. Subprocess spawning is heavy and flaky; the parity test verifies the validator's runtime-agnosticism via `Host.PluginEmitRegistry`, which the mock satisfies in-process.
+
+**Required mock extension:** `mockGRPCPluginClient.Init` at `host_test.go:123-130` currently returns hardcoded `&pluginv1.InitResponse{}`. To exercise INV-S5, the mock needs a configurable response. Add:
+
+- A field `initResponse *pluginv1.InitResponse` on `mockGRPCPluginClient`.
+- A `setInitResponse(*pluginv1.InitResponse)` method (lowercase OK — caller in same `package goplugin`).
+- Modify `Init` to `if m.initResponse != nil { return m.initResponse, nil }; return &pluginv1.InitResponse{}, nil`.
+
+(These mock changes live in the SAME existing `host_test.go` file or a new `*_test.go` file in `package goplugin`. They're test-only and require no exported surface.)
 
 ```go
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-package plugins
+package goplugin
 
 import (
 	"context"
@@ -1621,10 +1636,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/samber/oops"
 	"github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/plugin/goplugin"
+	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/pkg/errutil"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -1650,26 +1665,25 @@ func TestManager_INVS5_ParityAcrossRuntimes(t *testing.T) {
 		t.Run(s.name+"-lua", func(t *testing.T) {
 			// Lua path: write synthetic plugin to tempdir; LoadAll.
 			pluginsDir := writeSyntheticLuaPlugin(t, "synth-"+s.name+"-lua", s.declared, s.registered)
-			mgr, err := NewManager(pluginsDir,
-				WithLuaHost(pluginlua.pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
+			mgr, err := plugins.NewManager(pluginsDir,
+				plugins.WithLuaHost(pluginlua.NewHostWithFunctions(hostfunc.New(nil))))
 			require.NoError(t, err)
 
 			err = mgr.LoadAll(context.Background())
 			assertParityOutcome(t, err, s.wantMismatch)
 		})
 		t.Run(s.name+"-binary", func(t *testing.T) {
-			// Binary path: use the existing goplugin mock harness. The mock's
-			// pluginClient.Init returns InitResponse{RegisteredEmitTypes: s.registered}.
-			binaryHost, mockClient := goplugin.NewMockHost(t) // exported test helper; if newMockHost is lowercase, expose via _test.go file in this package or add a NewMockHost wrapper.
-			mockClient.SetInitResponse(&pluginv1.InitResponse{
+			// Binary path: use the in-package mock harness directly.
+			binaryHost, mockClient := newMockHost(t)
+			mockClient.protocol.pluginClient.(*mockGRPCPluginClient).setInitResponse(&pluginv1.InitResponse{
 				RegisteredEmitTypes: s.registered,
 			})
 
 			pluginsDir := writeSyntheticBinaryManifest(t, "synth-"+s.name+"-bin", s.declared)
-			mgr, err := NewManager(pluginsDir)
+			mgr, err := plugins.NewManager(pluginsDir)
 			require.NoError(t, err)
-			// No WithBinaryHost ManagerOption exists; use RegisterHost
-			// (verified at manager.go:280: `func (m *Manager) RegisterHost(hostType Type, host Host)`).
+			// No WithBinaryHost ManagerOption exists; RegisterHost is the wire-up
+			// (verified at manager.go:280: func (m *Manager) RegisterHost(hostType Type, host Host)).
 			mgr.RegisterHost(plugins.TypeBinary, binaryHost)
 
 			err = mgr.LoadAll(context.Background())
@@ -1680,13 +1694,14 @@ func TestManager_INVS5_ParityAcrossRuntimes(t *testing.T) {
 
 // assertParityOutcome unifies the verdict shape for both runtimes:
 // match → no error; mismatch → EVENT_TYPE_REGISTRY_MISMATCH oops code.
+//
+// Uses errutil.AssertErrorCode for code-identity assertion (oops.Code(...).Is()
+// returns true for ANY oops error, so a wrong-code mismatch would falsely pass —
+// see plan-reviewer R3 non-blocking #1).
 func assertParityOutcome(t *testing.T, err error, wantMismatch bool) {
 	t.Helper()
 	if wantMismatch {
-		require.Error(t, err)
-		require.True(t, oops.Code("EVENT_TYPE_REGISTRY_MISMATCH").Is(err) ||
-			strings.Contains(err.Error(), "EVENT_TYPE_REGISTRY_MISMATCH"),
-			"expected EVENT_TYPE_REGISTRY_MISMATCH, got: %v", err)
+		errutil.AssertErrorCode(t, err, "EVENT_TYPE_REGISTRY_MISMATCH")
 	} else {
 		require.NoError(t, err)
 	}
@@ -1741,16 +1756,7 @@ func writeSyntheticBinaryManifest(t *testing.T, name string, declared []string) 
 }
 ```
 
-**Implementation note (committed approach):** verified at `internal/plugin/goplugin/host_test.go:177` — `newMockHost` is unexported (`package goplugin`-private), and `mockPluginClient` has no `SetInitResponse` method (Init RPC returns hardcoded `&pluginv1.InitResponse{}` at host_test.go:123-130). Two changes required:
-
-1. **Add an exported `SetInitResponse(*pluginv1.InitResponse)` method on `mockGRPCPluginClient`** (the underlying mock that owns the Init response). Modify `mockGRPCPluginClient.Init` at host_test.go:123-130 to return the configured response (defaulting to `&pluginv1.InitResponse{}` when nil for backward compat with existing tests).
-2. **Add an exported `NewMockHost(t *testing.T) (*Host, *mockGRPCPluginClient)` wrapper** in `internal/plugin/goplugin/mock_export_test.go` (new file, `package goplugin`, test-only) that calls the existing private `newMockHost` and returns `(host, mockClient.protocol.pluginClient)` so callers can configure `SetInitResponse`.
-
-These are two small additive changes within `package goplugin`'s test files; they keep the parity test in `package plugins` with normal cross-package mock access via the new exports.
-
-(Alternative considered and rejected: putting the parity test in `package goplugin` and calling the private helper directly — would make the parity test live in the wrong package conceptually since the validator is in `package plugins`.)
-
-- [ ] **Step 2.I.1: write parity test + helpers; expose goplugin.NewMockHost if needed**
+- [ ] **Step 2.I.1: write parity test in package goplugin + extend mockGRPCPluginClient with initResponse field/setter**
 
 #### Step 2.I.2: Run parity test
 
