@@ -1,5 +1,7 @@
 # Social Spaces Substrate Contract Implementation Plan
 
+> **⚠️ SUPERSEDED** — this plan was rejected by `plan-reviewer` round 1 (INV-S5 mechanism gap surfaced; mechanism was undefined for both Lua and binary runtimes). The corrected READY plan is at [`2026-05-17-social-spaces-substrate-contract-plan.md`](2026-05-17-social-spaces-substrate-contract-plan.md). **Do not execute this plan.**
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `dev-flow:subagent-driven-development` (recommended) or `dev-flow:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver the substrate work mandated by the substrate-contract spec ([`docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md`](../specs/2026-05-16-social-spaces-substrate-contract.md)): manifest emit-type startup validation (INV-S5), plugin adoption of the new API, fail-closed flip, plus docs/roadmap/bead-hygiene propagation.

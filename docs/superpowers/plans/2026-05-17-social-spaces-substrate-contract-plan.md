@@ -163,8 +163,8 @@ Create `pkg/plugin/emit_registry.go`:
 package pluginsdk
 
 import (
-	"sort"
-	"sync"
+    "sort"
+    "sync"
 )
 
 // EmitRegistry accumulates the set of event types a binary plugin can
@@ -172,37 +172,37 @@ import (
 // reads the set via InitResponse.registered_emit_types and validates
 // against manifest's crypto.emits per INV-S5.
 type EmitRegistry struct {
-	mu    sync.Mutex
-	types map[string]struct{}
+    mu    sync.Mutex
+    types map[string]struct{}
 }
 
 func NewEmitRegistry() *EmitRegistry {
-	return &EmitRegistry{types: make(map[string]struct{})}
+    return &EmitRegistry{types: make(map[string]struct{})}
 }
 
 func (r *EmitRegistry) RegisterEmitType(eventType string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.types[eventType] = struct{}{}
+    r.mu.Lock()
+    defer r.mu.Unlock()
+    r.types[eventType] = struct{}{}
 }
 
 func (r *EmitRegistry) RegisterEmitTypes(eventTypes []string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, t := range eventTypes {
-		r.types[t] = struct{}{}
-	}
+    r.mu.Lock()
+    defer r.mu.Unlock()
+    for _, t := range eventTypes {
+        r.types[t] = struct{}{}
+    }
 }
 
 func (r *EmitRegistry) RegisteredEmitTypes() []string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	out := make([]string, 0, len(r.types))
-	for t := range r.types {
-		out = append(out, t)
-	}
-	sort.Strings(out)
-	return out
+    r.mu.Lock()
+    defer r.mu.Unlock()
+    out := make([]string, 0, len(r.types))
+    for t := range r.types {
+        out = append(out, t)
+    }
+    sort.Strings(out)
+    return out
 }
 
 // EmitTypeRegistrar is the optional interface binary plugins implement
@@ -212,7 +212,7 @@ func (r *EmitRegistry) RegisteredEmitTypes() []string {
 // the substrate validator fails load on mismatch. Plugins without
 // crypto.emits are out of INV-S5 scope (per INV-M1) and may skip.
 type EmitTypeRegistrar interface {
-	EmitRegistry() *EmitRegistry
+    EmitRegistry() *EmitRegistry
 }
 ```
 
@@ -246,58 +246,58 @@ Create `internal/plugin/emit_type_validator.go`. Per INV-M2 (mechanism spec line
 package plugins
 
 import (
-	"sort"
+    "sort"
 
-	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+    pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
 // hostOwnedEmitTypes lists event-type strings that are host-owned (per
 // pkg/plugin/event.go constants) and therefore filtered out of the
 // registered set before INV-S5 set-equality comparison. Per INV-M2.
 var hostOwnedEmitTypes = map[string]struct{}{
-	string(pluginsdk.HostEventTypeSystem):          {},
-	string(pluginsdk.HostEventTypeSessionEnded):    {},
-	string(pluginsdk.HostEventTypeCommandResponse): {},
-	string(pluginsdk.HostEventTypeCommandError):    {},
-	string(pluginsdk.HostEventTypeArrive):          {},
-	string(pluginsdk.HostEventTypeLeave):           {},
-	string(pluginsdk.HostEventTypeMove):            {},
-	string(pluginsdk.HostEventTypeLocationState):   {},
-	string(pluginsdk.HostEventTypeExitUpdate):      {},
+    string(pluginsdk.HostEventTypeSystem):          {},
+    string(pluginsdk.HostEventTypeSessionEnded):    {},
+    string(pluginsdk.HostEventTypeCommandResponse): {},
+    string(pluginsdk.HostEventTypeCommandError):    {},
+    string(pluginsdk.HostEventTypeArrive):          {},
+    string(pluginsdk.HostEventTypeLeave):           {},
+    string(pluginsdk.HostEventTypeMove):            {},
+    string(pluginsdk.HostEventTypeLocationState):   {},
+    string(pluginsdk.HostEventTypeExitUpdate):      {},
 }
 
 // EmitTypeMismatch describes the diff between a plugin's manifest-declared
 // crypto.emits set and the SDK-registered emit-type set per INV-S5.
 type EmitTypeMismatch struct {
-	DeclaredButUnregistered []string
-	RegisteredButUndeclared []string
+    DeclaredButUnregistered []string
+    RegisteredButUndeclared []string
 }
 
 func (m EmitTypeMismatch) HasMismatch() bool {
-	return len(m.DeclaredButUnregistered) > 0 || len(m.RegisteredButUndeclared) > 0
+    return len(m.DeclaredButUnregistered) > 0 || len(m.RegisteredButUndeclared) > 0
 }
 
 // ValidateEmitTypeSetEquality compares the manifest-declared emit-type
 // set against the SDK-registered set (with host-owned types filtered out
 // per INV-M2). Per INV-S5, the two sets MUST be equal in both directions.
 func ValidateEmitTypeSetEquality(declared, registered []string) EmitTypeMismatch {
-	declSet := toEmitSet(declared)
-	regSet := toEmitSet(filterHostOwned(registered))
+    declSet := toEmitSet(declared)
+    regSet := toEmitSet(filterHostOwned(registered))
 
-	var mismatch EmitTypeMismatch
-	for d := range declSet {
-		if _, ok := regSet[d]; !ok {
-			mismatch.DeclaredButUnregistered = append(mismatch.DeclaredButUnregistered, d)
-		}
-	}
-	for r := range regSet {
-		if _, ok := declSet[r]; !ok {
-			mismatch.RegisteredButUndeclared = append(mismatch.RegisteredButUndeclared, r)
-		}
-	}
-	sort.Strings(mismatch.DeclaredButUnregistered)
-	sort.Strings(mismatch.RegisteredButUndeclared)
-	return mismatch
+    var mismatch EmitTypeMismatch
+    for d := range declSet {
+        if _, ok := regSet[d]; !ok {
+            mismatch.DeclaredButUnregistered = append(mismatch.DeclaredButUnregistered, d)
+        }
+    }
+    for r := range regSet {
+        if _, ok := declSet[r]; !ok {
+            mismatch.RegisteredButUndeclared = append(mismatch.RegisteredButUndeclared, r)
+        }
+    }
+    sort.Strings(mismatch.DeclaredButUnregistered)
+    sort.Strings(mismatch.RegisteredButUndeclared)
+    return mismatch
 }
 
 // filterHostOwned removes host-owned event types from the registered
@@ -305,21 +305,21 @@ func ValidateEmitTypeSetEquality(declared, registered []string) EmitTypeMismatch
 // SDK + hostfunc surface accepts any string (plugins MAY register host-
 // owned types; the validator MUST NOT count them as plugin-owned).
 func filterHostOwned(registered []string) []string {
-	out := registered[:0:len(registered)]
-	for _, r := range registered {
-		if _, host := hostOwnedEmitTypes[r]; !host {
-			out = append(out, r)
-		}
-	}
-	return out
+    out := registered[:0:len(registered)]
+    for _, r := range registered {
+        if _, host := hostOwnedEmitTypes[r]; !host {
+            out = append(out, r)
+        }
+    }
+    return out
 }
 
 func toEmitSet(s []string) map[string]struct{} {
-	out := make(map[string]struct{}, len(s))
-	for _, v := range s {
-		out[v] = struct{}{}
-	}
-	return out
+    out := make(map[string]struct{}, len(s))
+    for _, v := range s {
+        out[v] = struct{}{}
+    }
+    return out
 }
 ```
 
@@ -372,38 +372,38 @@ Create `internal/plugin/hostfunc/stdlib_emit_registry.go`:
 package hostfunc
 
 import (
-	"sort"
-	"sync"
+    "sort"
+    "sync"
 
-	lua "github.com/yuin/gopher-lua"
+    lua "github.com/yuin/gopher-lua"
 )
 
 // LuaEmitRegistry accumulates registrations from holomush.register_emit_type
 // calls during a Lua plugin's INV-S5 Load-pass. One instance per plugin.
 type LuaEmitRegistry struct {
-	mu    sync.Mutex
-	types map[string]struct{}
+    mu    sync.Mutex
+    types map[string]struct{}
 }
 
 func NewLuaEmitRegistry() *LuaEmitRegistry {
-	return &LuaEmitRegistry{types: make(map[string]struct{})}
+    return &LuaEmitRegistry{types: make(map[string]struct{})}
 }
 
 func (r *LuaEmitRegistry) add(t string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.types[t] = struct{}{}
+    r.mu.Lock()
+    defer r.mu.Unlock()
+    r.types[t] = struct{}{}
 }
 
 func (r *LuaEmitRegistry) Types() []string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	out := make([]string, 0, len(r.types))
-	for t := range r.types {
-		out = append(out, t)
-	}
-	sort.Strings(out)
-	return out
+    r.mu.Lock()
+    defer r.mu.Unlock()
+    out := make([]string, 0, len(r.types))
+    for t := range r.types {
+        out = append(out, t)
+    }
+    sort.Strings(out)
+    return out
 }
 
 // RegisterEmitTypeFuncs installs holomush.register_emit_type(type) on
@@ -416,12 +416,12 @@ func (r *LuaEmitRegistry) Types() []string {
 // correct end-state behavior (registrations are Load-time-only) by
 // absence-by-default.
 func RegisterEmitTypeFuncs(ls *lua.LState, mod *lua.LTable, reg *LuaEmitRegistry) {
-	ls.SetField(mod, "register_emit_type", ls.NewFunction(func(ls *lua.LState) int {
-		eventType := ls.CheckString(1)
-		reg.add(eventType)
-		ls.Push(lua.LTrue)
-		return 1
-	}))
+    ls.SetField(mod, "register_emit_type", ls.NewFunction(func(ls *lua.LState) int {
+        eventType := ls.CheckString(1)
+        reg.add(eventType)
+        ls.Push(lua.LTrue)
+        return 1
+    }))
 }
 ```
 
@@ -452,15 +452,15 @@ Modify `internal/plugin/hostfunc/functions.go`. Add below the existing `Register
 // Lua Host's INV-S5 Load-pass. Identical to Register, but ALSO installs
 // holomush.register_emit_type which appends to reg.
 func (f *Functions) RegisterWithEmitCapture(
-	ls *lua.LState,
-	pluginName string,
-	reg *LuaEmitRegistry,
-	requires ...string,
+    ls *lua.LState,
+    pluginName string,
+    reg *LuaEmitRegistry,
+    requires ...string,
 ) {
-	f.Register(ls, pluginName, requires...)
-	if mod, ok := ls.GetGlobal("holomush").(*lua.LTable); ok {
-		RegisterEmitTypeFuncs(ls, mod, reg)
-	}
+    f.Register(ls, pluginName, requires...)
+    if mod, ok := ls.GetGlobal("holomush").(*lua.LTable); ok {
+        RegisterEmitTypeFuncs(ls, mod, reg)
+    }
 }
 ```
 
@@ -529,7 +529,7 @@ Modify `pkg/plugin/sdk.go::pluginServerAdapter.Init` (line 152). Replace the fin
 // provider opts in. Plugins without crypto.emits leave the set empty.
 resp := &pluginv1.InitResponse{}
 if registrar, ok := a.serviceProvider.(EmitTypeRegistrar); ok {
-	resp.RegisteredEmitTypes = registrar.EmitRegistry().RegisteredEmitTypes()
+    resp.RegisteredEmitTypes = registrar.EmitRegistry().RegisteredEmitTypes()
 }
 return resp, nil
 ```
@@ -593,9 +593,9 @@ Modify `internal/plugin/lua/host.go`. Add `emitRegistry` field to `luaPlugin` (e
 
 ```go
 type luaPlugin struct {
-	manifest     *plugins.Manifest
-	code         string
-	emitRegistry []string // INV-S5: populated during Load capture pass; nil when crypto.emits empty
+    manifest     *plugins.Manifest
+    code         string
+    emitRegistry []string // INV-S5: populated during Load capture pass; nil when crypto.emits empty
 }
 ```
 
@@ -604,13 +604,13 @@ Add the method on `*Host`:
 ```go
 // PluginEmitRegistry implements plugins.Host.
 func (h *Host) PluginEmitRegistry(name string) ([]string, bool) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	p, ok := h.plugins[name]
-	if !ok {
-		return nil, false
-	}
-	return p.emitRegistry, true
+    h.mu.RLock()
+    defer h.mu.RUnlock()
+    p, ok := h.plugins[name]
+    if !ok {
+        return nil, false
+    }
+    return p.emitRegistry, true
 }
 ```
 
@@ -655,13 +655,13 @@ Modify `internal/plugin/goplugin/host.go`:
 
 ```go
 type loadedPlugin struct {
-	manifest             *plugins.Manifest
-	client               PluginClient
-	plugin               pluginv1.PluginServiceClient
-	conn                 grpc.ClientConnInterface
-	certDir              string
-	broker               *hashiplug.GRPCBroker
-	registeredEmitTypes  []string // INV-S5: populated from InitResponse.RegisteredEmitTypes
+    manifest             *plugins.Manifest
+    client               PluginClient
+    plugin               pluginv1.PluginServiceClient
+    conn                 grpc.ClientConnInterface
+    certDir              string
+    broker               *hashiplug.GRPCBroker
+    registeredEmitTypes  []string // INV-S5: populated from InitResponse.RegisteredEmitTypes
 }
 ```
 
@@ -669,11 +669,11 @@ type loadedPlugin struct {
 
 ```go
 needsInit := len(manifest.Requires) > 0 ||
-	len(manifest.Provides) > 0 ||
-	manifest.Storage == plugins.StoragePostgres ||
-	(manifest.Crypto != nil && len(manifest.Crypto.Emits) > 0)
+    len(manifest.Provides) > 0 ||
+    manifest.Storage == plugins.StoragePostgres ||
+    (manifest.Crypto != nil && len(manifest.Crypto.Emits) > 0)
 if needsInit {
-	// ... existing Init RPC body unchanged ...
+    // ... existing Init RPC body unchanged ...
 }
 ```
 
@@ -682,11 +682,11 @@ if needsInit {
 ```go
 initResp, initErr := pluginClient.Init(ctx, initReq)
 if initErr != nil {
-	client.Kill()
-	if certDir != "" {
-		_ = os.RemoveAll(certDir) //nolint:errcheck // best-effort cleanup
-	}
-	return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "init").Wrap(initErr)
+    client.Kill()
+    if certDir != "" {
+        _ = os.RemoveAll(certDir) //nolint:errcheck // best-effort cleanup
+    }
+    return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "init").Wrap(initErr)
 }
 ```
 
@@ -695,7 +695,7 @@ After the `needsInit` block ends, capture `registeredEmitTypes` for the struct l
 ```go
 var registeredEmitTypes []string
 if needsInit && initResp != nil {
-	registeredEmitTypes = initResp.GetRegisteredEmitTypes()
+    registeredEmitTypes = initResp.GetRegisteredEmitTypes()
 }
 ```
 
@@ -706,13 +706,13 @@ In the existing struct literal at lines 537-544, add `registeredEmitTypes: regis
 ```go
 // PluginEmitRegistry implements plugins.Host.
 func (h *Host) PluginEmitRegistry(name string) ([]string, bool) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	p, ok := h.plugins[name]
-	if !ok {
-		return nil, false
-	}
-	return p.registeredEmitTypes, true
+    h.mu.RLock()
+    defer h.mu.RUnlock()
+    p, ok := h.plugins[name]
+    if !ok {
+        return nil, false
+    }
+    return p.registeredEmitTypes, true
 }
 ```
 
@@ -764,31 +764,31 @@ Modify `internal/plugin/lua/host.go::Load`. **REPLACE** the entire existing synt
 var emitRegistry []string
 L, err := h.factory.NewState(ctx)
 if err != nil {
-	return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
-		Hint("failed to create validation state").Wrap(err)
+    return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
+        Hint("failed to create validation state").Wrap(err)
 }
 defer L.Close()
 
 if manifest.Crypto != nil && len(manifest.Crypto.Emits) > 0 {
-	// INV-S5 capture pass: hostfuncs registered, captures top-level
-	// holomush.register_emit_type calls into per-plugin LuaEmitRegistry.
-	reg := hostfunc.NewLuaEmitRegistry()
-	if h.hostFuncs != nil {
-		h.hostFuncs.RegisterWithEmitCapture(L, manifest.Name, reg, manifest.Requires...)
-	}
-	if err := L.DoString(string(code)); err != nil {
-		return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
-			With("entry", manifest.LuaPlugin.Entry).
-			Hint("INV-S5 capture pass execution error").Wrap(err)
-	}
-	emitRegistry = reg.Types()
+    // INV-S5 capture pass: hostfuncs registered, captures top-level
+    // holomush.register_emit_type calls into per-plugin LuaEmitRegistry.
+    reg := hostfunc.NewLuaEmitRegistry()
+    if h.hostFuncs != nil {
+        h.hostFuncs.RegisterWithEmitCapture(L, manifest.Name, reg, manifest.Requires...)
+    }
+    if err := L.DoString(string(code)); err != nil {
+        return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
+            With("entry", manifest.LuaPlugin.Entry).
+            Hint("INV-S5 capture pass execution error").Wrap(err)
+    }
+    emitRegistry = reg.Types()
 } else {
-	// Existing syntax-check pass — no hostfuncs registered.
-	if err := L.DoString(string(code)); err != nil {
-		return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
-			With("entry", manifest.LuaPlugin.Entry).
-			Hint("syntax error").Wrap(err)
-	}
+    // Existing syntax-check pass — no hostfuncs registered.
+    if err := L.DoString(string(code)); err != nil {
+        return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
+            With("entry", manifest.LuaPlugin.Entry).
+            Hint("syntax error").Wrap(err)
+    }
 }
 ```
 
@@ -796,9 +796,9 @@ Update the existing `luaPlugin` struct literal (around line 157) to set the new 
 
 ```go
 h.plugins[manifest.Name] = &luaPlugin{
-	manifest:     manifest,
-	code:         string(code),
-	emitRegistry: emitRegistry,
+    manifest:     manifest,
+    code:         string(code),
+    emitRegistry: emitRegistry,
 }
 ```
 
@@ -950,21 +950,21 @@ Modify `internal/plugin/manager.go::loadPlugin`. After `host.Load(ctx, dp.Manife
 // INV-S5: manifest emit-type startup validation. Scope per INV-M1:
 // only plugins with non-empty crypto.emits participate.
 if dp.Manifest.Crypto != nil && len(dp.Manifest.Crypto.Emits) > 0 {
-	registered, ok := host.PluginEmitRegistry(dp.Manifest.Name)
-	if !ok {
-		return oops.Code("PLUGIN_EMIT_REGISTRY_UNAVAILABLE").
-			In("manager").With("plugin", dp.Manifest.Name).
-			Errorf("host loaded plugin but PluginEmitRegistry returned not-found")
-	}
-	declared := manifestDeclaredEmitTypes(dp.Manifest)
-	mismatch := ValidateEmitTypeSetEquality(declared, registered)
-	if mismatch.HasMismatch() {
-		return oops.Code("EVENT_TYPE_REGISTRY_MISMATCH").
-			In("manager").With("plugin", dp.Manifest.Name).
-			With("declared_but_unregistered", mismatch.DeclaredButUnregistered).
-			With("registered_but_undeclared", mismatch.RegisteredButUndeclared).
-			Errorf("plugin crypto.emits manifest does not match registered emit-type set (INV-S5)")
-	}
+    registered, ok := host.PluginEmitRegistry(dp.Manifest.Name)
+    if !ok {
+        return oops.Code("PLUGIN_EMIT_REGISTRY_UNAVAILABLE").
+            In("manager").With("plugin", dp.Manifest.Name).
+            Errorf("host loaded plugin but PluginEmitRegistry returned not-found")
+    }
+    declared := manifestDeclaredEmitTypes(dp.Manifest)
+    mismatch := ValidateEmitTypeSetEquality(declared, registered)
+    if mismatch.HasMismatch() {
+        return oops.Code("EVENT_TYPE_REGISTRY_MISMATCH").
+            In("manager").With("plugin", dp.Manifest.Name).
+            With("declared_but_unregistered", mismatch.DeclaredButUnregistered).
+            With("registered_but_undeclared", mismatch.RegisteredButUndeclared).
+            Errorf("plugin crypto.emits manifest does not match registered emit-type set (INV-S5)")
+    }
 }
 ```
 
@@ -972,14 +972,14 @@ Add the helper in the same file:
 
 ```go
 func manifestDeclaredEmitTypes(m *Manifest) []string {
-	if m.Crypto == nil {
-		return nil
-	}
-	out := make([]string, 0, len(m.Crypto.Emits))
-	for _, e := range m.Crypto.Emits {
-		out = append(out, e.EventType)
-	}
-	return out
+    if m.Crypto == nil {
+        return nil
+    }
+    out := make([]string, 0, len(m.Crypto.Emits))
+    for _, e := range m.Crypto.Emits {
+        out = append(out, e.EventType)
+    }
+    return out
 }
 ```
 
@@ -1101,7 +1101,7 @@ Target ~150 lines. Canonical detail stays in the specs.
 
 ### Step 3.3: Lint + build + commit + close
 
-Run `rumdl check`, `task docs:build`. If both pass:
+Run `task lint:markdown`, `task docs:build`. If both pass:
 
 ```text
 docs(extending): add substrate-contract orientation page (jg9b.4)
@@ -1196,7 +1196,7 @@ Verify notes via `bd show <id>` spot-checks.
 
 Mechanism spec §6 said the parent spec needs amendment for stale `jg9b.N` references. Run `rg -n "jg9b\.(1|4|7)" docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md`. Expected hits: lines 48 (INV-S5 row), 113 (§1.2 prose), 430 (§3.4), 534 (§4.2), 693 (§7.1 diagram), 717 + 721 (§7.2). Update each to the new numbering: `jg9b.1` = INV-S5 design bead; `jg9b.2` = audit; `jg9b.3` = substrate + adoptions; `jg9b.4` = docs; `jg9b.5` = roadmap; `jg9b.6` = hygiene.
 
-Run `rumdl check`. Commit:
+Run `task lint:markdown`. Commit:
 
 ```text
 docs(specs): amend parent substrate-contract for materialized bead chain (jg9b.6)

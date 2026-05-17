@@ -2,9 +2,9 @@
 
 ## Status
 
-**DRAFT** — pending `design-reviewer` verdict.
+**READY** — `design-reviewer` round 3 approved. Implementation tracked under `holomush-jg9b` epic.
 
-**Tracking bead:** [`holomush-jg9b`](https://github.com/holomush/holomush/issues) — promoted to epic on `plan-to-beads` materialization.
+**Tracking bead:** `holomush-jg9b` (bd epic — `bd show holomush-jg9b`). Issues are tracked in bd, not GitHub Issues; `bd github sync` is banned per `.claude/rules/beads-project.md`.
 
 **Supersedes (for substrate concerns):** [`docs/superpowers/specs/2026-04-06-scenes-and-rp-design-v2.md`](2026-04-06-scenes-and-rp-design-v2.md) (the scenes v2 design).
 

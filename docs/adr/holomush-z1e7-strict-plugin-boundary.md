@@ -68,9 +68,10 @@ distinguish "we deliberately evolved substrate to enable this use" from
 "a plugin author edited substrate to make their plugin compile."
 
 **Mechanical enforcement is easy.** The check is a one-line predicate:
-"does this PR's file list intersect with `internal/` or `pkg/plugin/`?"
-Human `code-reviewer` agents can apply this on every plugin PR; a future
-`task lint:plugin-boundary` CI predicate is a tractable follow-up.
+"does this PR's file list intersect with `internal/`, or with `pkg/plugin/`
+outside the approved SDK/generated-proto allowlist?" Human `code-reviewer`
+agents can apply this on every plugin PR; a future `task lint:plugin-boundary`
+CI predicate is a tractable follow-up.
 
 **Two-PR cost is acceptable.** Plugin authors who discover a substrate
 gap mid-implementation must file a separate bead and pause until the

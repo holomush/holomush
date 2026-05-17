@@ -2,7 +2,7 @@
 
 ## Status
 
-**DRAFT** — pending `design-reviewer` verdict.
+**READY** — `design-reviewer` round 3 approved.
 
 **Tracking bead:** `holomush-jg9b.1` (child of parent substrate-contract design bead `holomush-jg9b`).
 
