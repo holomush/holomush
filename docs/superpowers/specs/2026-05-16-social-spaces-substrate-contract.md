@@ -97,15 +97,15 @@ events.<game_id>.<domain>.<entity-id>[.<facet>...]
 
 **Provides:** encrypted-at-rest event payloads with KEK/DEK rotation, per-event-type sensitivity classification, AuthGuard fence, INV-50 downgrade fence.
 
-**Manifest declaration:** Plugin's [`plugin.yaml::crypto.emits[]`](../../plugins/core-communication/plugin.yaml) declares each event type with `sensitivity` (`always`/`may`/`never` — see [`internal/plugin/crypto_manifest.go:16-21`](../../internal/plugin/crypto_manifest.go)) and a human description. Working reference: [`plugins/core-communication/plugin.yaml:272-297`](../../plugins/core-communication/plugin.yaml) classifies 8 event types.
+**Manifest declaration:** Plugin's [`plugin.yaml::crypto.emits[]`](../../plugins/core-communication/plugin.yaml) declares each event type with `sensitivity` (`always`/`may`/`never` — see [`internal/plugin/crypto_manifest.go:14-21`](../../internal/plugin/crypto_manifest.go)) and a human description. Working reference: [`plugins/core-communication/plugin.yaml:272-297`](../../plugins/core-communication/plugin.yaml) classifies 8 event types.
 
-Per-event "visible only to authorized consumers" routing emerges from the AuthGuard fence acting on encrypted payloads, NOT from a per-sensitivity classification value. A plugin classifies an event type as `always` (every emit MUST be `Sensitive=true`), `may` (caller decides per-emit via `Sensitive=true`/`false`), or `never` (every emit MUST be plaintext). The truth table is enforced by [`internal/plugin/sensitivity_fence.go:23-44`](../../internal/plugin/sensitivity_fence.go); see master crypto design at [`docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md`](2026-04-25-event-payload-crypto-design.md) for the full classification model.
+Per-event "visible only to authorized consumers" routing emerges from the AuthGuard fence acting on encrypted payloads, NOT from a per-sensitivity classification value. A plugin classifies an event type as `always` (every emit MUST be `Sensitive=true`), `may` (caller decides per-emit via `Sensitive=true`/`false`), or `never` (every emit MUST be plaintext). The truth table is enforced by [`internal/plugin/sensitivity_fence.go:23-48`](../../internal/plugin/sensitivity_fence.go); see master crypto design at [`docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md`](2026-04-25-event-payload-crypto-design.md) for the full classification model.
 
 **Storage shape:** Host-owned audit table `events_audit` carries `dek_ref` (BIGINT, nullable) + `dek_version` (INTEGER, nullable); per-plugin audit tables conform to the same shape. Canonical reference: [`internal/store/migrations/000009_create_events_audit.up.sql`](../../internal/store/migrations/000009_create_events_audit.up.sql) (with subsequent amendments). Plugin-side worked example: [`plugins/core-scenes/migrations/000005_add_scene_log_dek_columns.up.sql`](../../plugins/core-scenes/migrations/000005_add_scene_log_dek_columns.up.sql). Identity-codec rows have both NULL.
 
 **Review gate:** Any change to `crypto.emits` declarations or to the surrounding crypto stack triggers the `crypto-reviewer` agent BEFORE `code-reviewer`. See [`CLAUDE.md`](../../CLAUDE.md) "Pre-Push Review Gates."
 
-**Mandated additional substrate work (this spec, INV-S5):** manifest emit-type startup validation. Today's baseline at [`internal/plugin/event_emitter.go::Emit`](../../internal/plugin/event_emitter.go) (truth table verified against [`internal/plugin/sensitivity_fence.go:23-44`](../../internal/plugin/sensitivity_fence.go)): undeclared event types fall through `LookupEmitSensitivity` to `SensitivityNever`. An emit of an undeclared type with `Sensitive=false` is **silently accepted as plaintext**; only `Sensitive=true` on an undeclared (or `never`-declared) type is rejected with `EVENT_SENSITIVITY_NOT_DECLARED` (INV-6). This leaves two failure modes silent:
+**Mandated additional substrate work (this spec, INV-S5):** manifest emit-type startup validation. Today's baseline at [`internal/plugin/event_emitter.go::Emit`](../../internal/plugin/event_emitter.go) (truth table verified against [`internal/plugin/sensitivity_fence.go:23-48`](../../internal/plugin/sensitivity_fence.go)): undeclared event types fall through `LookupEmitSensitivity` to `SensitivityNever`. An emit of an undeclared type with `Sensitive=false` is **silently accepted as plaintext**; only `Sensitive=true` on an undeclared (or `never`-declared) type is rejected with `EVENT_SENSITIVITY_NOT_DECLARED` (INV-6). This leaves two failure modes silent:
 
 - **(a) declared-but-unregistered:** a `crypto.emits` entry the code never emits (dead declaration / typo).
 - **(b) registered-but-undeclared:** plugin code emitting an event type the manifest never declared, with `Sensitive=false` (silently plaintext).
@@ -245,8 +245,10 @@ This split is more honest than a unified "groupkit covering everything." Forums 
 | Scenes | ✓ replay + cryptoemit | ✓ all 3 |
 | Channels | ✓ replay + cryptoemit | ✓ all 3 |
 | Forums | ✓ replay + cryptoemit | ✗ (INV-S10) |
-| Discord | ✗ (bridge, consumes substrate directly) | ✗ (INV-S10) |
+| Discord | default ✗ / conditional ✓ `replay` if cross-history sync requires ABAC-filtered replay (per INV-S10 + §4.4) | ✗ (INV-S10) |
 | `core-communication` (existing) | could adopt cryptoemit | ✗ |
+
+Matrix legend: `✓` = expected adoption; `✗` = forbidden by an invariant (cite shown); `default ✗ / conditional ✓` = permitted only when the named condition holds, decided by the use's design brainstorm.
 
 ### 3.2 `eventkit` — broadly useful primitives
 
