@@ -229,14 +229,15 @@ Add `internal/plugin/emit_type_validator_test.go`. Test cases:
 3. Registered-but-undeclared → mismatch with correct extras
 4. Both directions diff
 5. Both empty → no mismatch
+6. **INV-M2 host-owned filter**: registered set contains host-owned types (e.g., `system`, `move`, `arrive` from `pkg/plugin/event.go:34-44`) → those are filtered out before comparison; if the remaining filtered set matches `declared`, no mismatch is reported.
 
 Run: FAIL.
 
 - [ ] **Step 2.A.3**
 
-#### Step 2.A.4: Implement validator
+#### Step 2.A.4: Implement validator (with INV-M2 host-owned filter)
 
-Create `internal/plugin/emit_type_validator.go`:
+Create `internal/plugin/emit_type_validator.go`. Per INV-M2 (mechanism spec line 58), the substrate MUST filter host-owned event types from the registered set before comparison — the registry contains ALL types the plugin may emit, but host-owned types (the per-`pkg/plugin/event.go` constants) are not subject to `crypto.emits` validation:
 
 ```go
 // SPDX-License-Identifier: Apache-2.0
@@ -244,7 +245,26 @@ Create `internal/plugin/emit_type_validator.go`:
 
 package plugins
 
-import "sort"
+import (
+	"sort"
+
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+)
+
+// hostOwnedEmitTypes lists event-type strings that are host-owned (per
+// pkg/plugin/event.go constants) and therefore filtered out of the
+// registered set before INV-S5 set-equality comparison. Per INV-M2.
+var hostOwnedEmitTypes = map[string]struct{}{
+	string(pluginsdk.HostEventTypeSystem):          {},
+	string(pluginsdk.HostEventTypeSessionEnded):    {},
+	string(pluginsdk.HostEventTypeCommandResponse): {},
+	string(pluginsdk.HostEventTypeCommandError):    {},
+	string(pluginsdk.HostEventTypeArrive):          {},
+	string(pluginsdk.HostEventTypeLeave):           {},
+	string(pluginsdk.HostEventTypeMove):            {},
+	string(pluginsdk.HostEventTypeLocationState):   {},
+	string(pluginsdk.HostEventTypeExitUpdate):      {},
+}
 
 // EmitTypeMismatch describes the diff between a plugin's manifest-declared
 // crypto.emits set and the SDK-registered emit-type set per INV-S5.
@@ -258,11 +278,11 @@ func (m EmitTypeMismatch) HasMismatch() bool {
 }
 
 // ValidateEmitTypeSetEquality compares the manifest-declared emit-type
-// set against the SDK-registered set. Per INV-S5, the two sets MUST be
-// equal in both directions.
+// set against the SDK-registered set (with host-owned types filtered out
+// per INV-M2). Per INV-S5, the two sets MUST be equal in both directions.
 func ValidateEmitTypeSetEquality(declared, registered []string) EmitTypeMismatch {
 	declSet := toEmitSet(declared)
-	regSet := toEmitSet(registered)
+	regSet := toEmitSet(filterHostOwned(registered))
 
 	var mismatch EmitTypeMismatch
 	for d := range declSet {
@@ -280,6 +300,20 @@ func ValidateEmitTypeSetEquality(declared, registered []string) EmitTypeMismatch
 	return mismatch
 }
 
+// filterHostOwned removes host-owned event types from the registered
+// set before INV-S5 comparison. Per INV-M2 — substrate filters; the
+// SDK + hostfunc surface accepts any string (plugins MAY register host-
+// owned types; the validator MUST NOT count them as plugin-owned).
+func filterHostOwned(registered []string) []string {
+	out := registered[:0:len(registered)]
+	for _, r := range registered {
+		if _, host := hostOwnedEmitTypes[r]; !host {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 func toEmitSet(s []string) map[string]struct{} {
 	out := make(map[string]struct{}, len(s))
 	for _, v := range s {
@@ -289,7 +323,9 @@ func toEmitSet(s []string) map[string]struct{} {
 }
 ```
 
-Run tests: PASS.
+Note: `filterHostOwned` uses a `s[:0:len(s)]` slice trick to filter in-place without allocating; this is fine because the callers pass a freshly-returned `RegisteredEmitTypes()` slice that is not held elsewhere.
+
+Run tests: PASS — all 6 cases (including the new INV-M2 filter case).
 
 - [ ] **Step 2.A.4**
 
@@ -395,11 +431,15 @@ Run tests: PASS.
 
 #### Step 2.B.3: Failing test — `Functions.RegisterWithEmitCapture`
 
-Add a test (existing test file or new internal test). Verify: after calling `RegisterWithEmitCapture`, a Lua script that calls `holomush.register_emit_type("x")` accumulates into the passed registry.
+Add a test to `internal/plugin/hostfunc/functions_internal_test.go` (the method is on `*Functions` so internal-test gives the cleanest access; existing `functions_internal_test.go` already has package-private test patterns to mimic).
 
-Pattern: examine existing `functions_test.go` or `functions_internal_test.go` for the `Functions` test harness pattern.
+Test cases:
 
-Run: FAIL.
+1. After `RegisterWithEmitCapture`, a Lua script calling `holomush.register_emit_type("x")` adds `"x"` to the passed registry.
+2. Two `register_emit_type("x")` calls in the same script result in registry containing `{"x"}` (idempotent at hostfunc level — already covered in Step 2.B.1, but verifies the integration via `RegisterWithEmitCapture` doesn't break it).
+3. `RegisterWithEmitCapture` installs the standard `holomush.*` namespace too: after the call, `holomush.log` and other stdlib functions are still present (this confirms the wrapper invokes the base `Register` and doesn't replace the table).
+
+Run: FAIL (`RegisterWithEmitCapture` method doesn't exist).
 
 - [ ] **Step 2.B.3**
 
@@ -585,13 +625,25 @@ Add 2 tests to `internal/plugin/goplugin/host_test.go` (file is `package goplugi
 1. Not-loaded plugin → `(nil, false)`
 2. Loaded plugin where mock InitResponse returned `RegisteredEmitTypes: [a, b]` → `(set, true)`
 
-For test 2, the mock needs a configurable `InitResponse`. Add to `mockGRPCPluginClient` (existing struct in `host_test.go`):
+**Mock extension required** (these changes live in `host_test.go`, all in-package — no exported surface needed):
 
-- New field `initResponse *pluginv1.InitResponse`
-- New method `setInitResponse(*pluginv1.InitResponse)` (lowercase — caller is same package)
-- Modify the existing `Init` method (around line 123) to return `m.initResponse` when non-nil, falling back to `&pluginv1.InitResponse{}` for backward compat with existing tests
+- Add field `initResponse *pluginv1.InitResponse` to the existing `mockGRPCPluginClient` struct.
+- Add method `func (m *mockGRPCPluginClient) setInitResponse(r *pluginv1.InitResponse) { m.initResponse = r }` (lowercase; package-internal).
+- Modify the existing `Init` method on `mockGRPCPluginClient` (around line 123) to return `m.initResponse` when non-nil, else fall back to `&pluginv1.InitResponse{}` (preserves existing-test behavior).
+- Add a single-line accessor for the inner gRPC mock so callers (Step 2.D.4 test 2 and Step 2.I.1's binary branch) don't have to do the awkward `mockClient.protocol.pluginClient.(*mockGRPCPluginClient)` cast at every call site:
 
-Run: FAIL.
+  ```go
+  // grpcMockFor extracts the underlying *mockGRPCPluginClient from a
+  // *mockPluginClient returned by newMockHost. Use this when tests need
+  // to configure InitResponse via setInitResponse.
+  func grpcMockFor(c *mockPluginClient) *mockGRPCPluginClient {
+      return c.protocol.pluginClient.(*mockGRPCPluginClient)
+  }
+  ```
+
+Step 2.D.4 test 2 then reads: `grpcMockFor(mockClient).setInitResponse(&pluginv1.InitResponse{RegisteredEmitTypes: []string{"a", "b"}})`.
+
+Run: FAIL (`PluginEmitRegistry` not yet implemented).
 
 - [ ] **Step 2.D.4**
 
@@ -670,6 +722,8 @@ Run tests: PASS.
 
 #### Step 2.D.6: Lint + commit Group D
 
+**Note on test suite state at this commit:** the Step 2.D.1 subtest `TestLuaHost_PluginEmitRegistry_LoadedPluginWithCryptoEmits` remains RED at this commit boundary — it is intentionally on a chain that includes one failing test until Group E lands the branched Load pass (Step 2.E.2 flips it green). All other subtests pass. The pr-prep gate at Step 2.I.2 is the only mandatory all-green checkpoint within Task 2; intermediate commits in this group chain are acceptable to leave one specific test red, provided each subsequent commit moves toward green.
+
 Commit:
 
 ```text
@@ -678,7 +732,11 @@ feat(plugin): PluginEmitRegistry method + Host interface extension (jg9b.3)
 Group D: Host.PluginEmitRegistry method on the interface; impls on Lua
 and binary hosts. Binary side captures InitResponse.RegisteredEmitTypes;
 gate at host.go:509 extended to fire Init for crypto.emits plugins.
-Lua side returns luaPlugin.emitRegistry (still nil until Group E).
+Lua side returns luaPlugin.emitRegistry (still nil until Group E lands
+the branched Load pass that populates it).
+
+Intermediate test suite state: one Lua subtest red until Group E;
+pr-prep gate at Step 2.I.2 enforces final all-green.
 ```
 
 - [ ] **Step 2.D.6**
@@ -931,11 +989,13 @@ Run tests from Step 2.F.1: ALL PASS.
 
 #### Step 2.F.3: Full plugin test suite
 
+**Precondition check:** Before running this step, verify Groups G + H landed by `git log --oneline -5` (or `jj log -r @-` ancestry) and confirming the two adoption commits ("feat(core-communication): adopt register_emit_type" and "feat(core-objects): adopt register_emit_type") are present on the current branch. If either is missing, STOP — execute the missing group(s) first. The two adoption type-lists (8 for core-communication, 5 for core-objects) are sourced from Step 1.2's verified count; any deviation MUST trigger a Task 2 rewind.
+
 Run: `task test -- ./internal/plugin/ ./pkg/plugin/ ./internal/plugin/hostfunc/ ./internal/plugin/lua/ ./internal/plugin/goplugin/`
 
 Expected: PASS, because Groups G + H already adopted `register_emit_type` for the two real plugins with non-empty `crypto.emits`. The validator now active fires against already-matching sets.
 
-**If you see `EVENT_TYPE_REGISTRY_MISMATCH` errors here against `core-communication` or `core-objects`**: Groups G/H were not actually executed before F. STOP, execute G+H, re-run.
+**If you see `EVENT_TYPE_REGISTRY_MISMATCH` errors here against `core-communication` or `core-objects`**: the precondition check missed something. STOP, verify Groups G/H, re-run.
 
 - [ ] **Step 2.F.3**
 
