@@ -775,6 +775,15 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 				With("session_id", req.SessionId).
 				Errorf("session reattach CAS lost — another handler won the race")
 		}
+		now := time.Now()
+		// Use a detached context like RemoveConnection above — this is
+		// best-effort cleanup that must run independent of stream
+		// cancellation if the client disconnects mid-reattach.
+		bumpCtx, bumpCancel := context.WithTimeout(context.Background(), cleanupTimeout)
+		if loErr := s.sessionStore.BumpLocationArrivedAt(bumpCtx, req.SessionId, now); loErr != nil {
+			slog.WarnContext(ctx, "failed to reset LocationArrivedAt on ReattachCAS", "error", loErr)
+		}
+		bumpCancel()
 	}
 
 	// RestoreFocus — produces the full stream list and replay modes.

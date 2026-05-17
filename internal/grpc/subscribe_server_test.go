@@ -372,3 +372,53 @@ func (c *identityCapturingSubscriber) OpenSession(_ context.Context, _ string, i
 }
 
 var _ eventbus.Subscriber = (*identityCapturingSubscriber)(nil)
+
+func TestSubscribeReattachCAS_AdvancesLocationArrivedAt(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	oldArrival := time.Now().Add(-2 * time.Hour)
+	info := &session.Info{
+		ID:                "s1",
+		ExpiresAt:         &future,
+		Status:            session.StatusDetached,
+		CharacterID:       core.NewULID(),
+		LocationArrivedAt: oldArrival,
+	}
+	bs := newFakeSessionStream()
+	sub := &fakeSubscriber{stream: bs}
+	sessStore := newTestSessionStore(t, map[string]*session.Info{"s1": info})
+	s := &CoreServer{
+		subscriber:        sub,
+		sessionStore:      sessStore,
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
+	}
+
+	before := time.Now()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream := &concurrentSubscribeStream{ctx: ctx}
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- s.Subscribe(&corev1.SubscribeRequest{
+			SessionId:          "s1",
+			PlayerSessionToken: testPlayerSessionToken,
+		}, stream)
+	}()
+
+	require.Eventually(t, func() bool {
+		return stream.sentLen() >= 1
+	}, 2*time.Second, 10*time.Millisecond)
+	cancel()
+	select {
+	case err := <-errCh:
+		assert.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Subscribe did not return after ctx cancel")
+	}
+
+	stored, err := sessStore.Get(context.Background(), "s1")
+	require.NoError(t, err)
+	assert.False(t, stored.LocationArrivedAt.Before(before),
+		"LocationArrivedAt must be advanced on ReattachCAS, got %v, before=%v",
+		stored.LocationArrivedAt, before)
+}
