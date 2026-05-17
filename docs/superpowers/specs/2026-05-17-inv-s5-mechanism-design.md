@@ -634,3 +634,5 @@ None blocking. Two minor items deferred:
 |------|--------|-------|
 | 2026-05-17 | DRAFT authored | Brainstorming session under bead `holomush-jg9b.1`; closes mechanism gap surfaced by parent-plan-reviewer round 1 |
 | 2026-05-17 | §2.2 amended | plan-reviewer round 1 (NEW plan, 2026-05-17 2249) caught that existing syntax-check pass at `lua/host.go:147-155` runs `DoString` WITHOUT `hostFuncs.Register` — the `holomush` global is undefined. Original "add a second pass" design would have failed plugin Load before reaching the INV-S5 pass once top-level `holomush.register_emit_type(...)` calls are added. Amendment: REPLACE the syntax-check pass with a branched pass for crypto.emits plugins (one Load-time execution instead of two; opt-in scope per ADR `holomush-7h0c` preserved). Idempotency requirement updated to reflect single execution. |
+
+<!-- adr-capture: session=jg9b1-spec-r3; ts=2026-05-17T05:34:00Z; adrs=holomush-vie9,holomush-7h0c -->

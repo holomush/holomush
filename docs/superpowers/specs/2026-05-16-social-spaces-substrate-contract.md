@@ -809,3 +809,5 @@ Carried forward from v2 §11 plus new items. Each gets its own brainstorm before
 | Date | Action | Notes |
 |------|--------|-------|
 | 2026-05-16 | DRAFT authored | Brainstorming session (bead `holomush-jg9b`); supersedes scenes v2 substrate concerns |
+
+<!-- adr-capture: session=jg9b-spec-r3; ts=2026-05-16T22:30:00Z; adrs=holomush-p7w0,holomush-lrt3,holomush-z1e7,holomush-3vsb,holomush-c8a9 -->

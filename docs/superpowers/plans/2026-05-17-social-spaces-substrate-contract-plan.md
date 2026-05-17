@@ -1235,3 +1235,5 @@ bd close holomush-jg9b.6 --reason="Hygiene complete: dep edges added; 7 affected
 - `task lint:plugin-boundary` CI predicate to mechanically enforce INV-S1 (per ADR `holomush-z1e7`).
 - Qualified-vs-unqualified emit-type drift: runtime emits use `core-communication:say` (qualified) while manifest declares `say` (unqualified); `LookupEmitSensitivity` does literal string compare and silently falls through. INV-S5 does not catch this (different drift class). File a follow-up to normalize the qualifier at one boundary OR update `LookupEmitSensitivity` to match both forms.
 - Lua top-level idempotency lint check (future `task lint:plugin-top-level-idempotency`).
+
+<!-- adr-capture: session=jg9b-plan-r5; ts=2026-05-17T12:00:00Z; adrs= -->
