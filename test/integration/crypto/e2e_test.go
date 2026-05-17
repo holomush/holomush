@@ -362,7 +362,7 @@ var _ = Describe("Sensitive event end-to-end", func() {
 				"test-plugin",
 			)
 
-			stream, err := env.subscriber.OpenSession(ctx, "hot-part-"+sceneID, participantID, []eventbus.Subject{"events.>"})
+			stream, err := env.subscriber.OpenSession(ctx, "hot-part-"+sceneID, participantID, []eventbus.Subject{"events.>"}, time.Time{})
 			Expect(err).NotTo(HaveOccurred())
 			DeferCleanup(func() { _ = stream.Close() })
 
@@ -399,7 +399,7 @@ var _ = Describe("Sensitive event end-to-end", func() {
 				BindingID:   "01BINDCC0000000000000000",
 			}
 			sessID := "hot-nonpart-" + strconv.Itoa(int(time.Now().UnixNano()))
-			stream, err := env.subscriber.OpenSession(ctx, sessID, nonParticipantID, []eventbus.Subject{"events.>"})
+			stream, err := env.subscriber.OpenSession(ctx, sessID, nonParticipantID, []eventbus.Subject{"events.>"}, time.Time{})
 			Expect(err).NotTo(HaveOccurred())
 			DeferCleanup(func() { _ = stream.Close() })
 

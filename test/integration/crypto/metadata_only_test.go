@@ -251,7 +251,7 @@ var _ = Describe("Subscribe with non-participant identity delivers MetadataOnly 
 		}
 		sessionID := "nonparticipant-session-" + sceneID
 
-		stream, err := h.subscriber.OpenSession(ctx, sessionID, nonParticipantID, []eventbus.Subject{"events.>"})
+		stream, err := h.subscriber.OpenSession(ctx, sessionID, nonParticipantID, []eventbus.Subject{"events.>"}, time.Time{})
 		Expect(err).NotTo(HaveOccurred())
 		DeferCleanup(func() { _ = stream.Close() })
 
@@ -352,7 +352,7 @@ var _ = Describe("Subscribe with participant identity delivers plaintext (INV-26
 		}
 		sessionID := "participant-session-" + sceneID
 
-		stream, err := h.subscriber.OpenSession(ctx, sessionID, participantID, []eventbus.Subject{"events.>"})
+		stream, err := h.subscriber.OpenSession(ctx, sessionID, participantID, []eventbus.Subject{"events.>"}, time.Time{})
 		Expect(err).NotTo(HaveOccurred())
 		DeferCleanup(func() { _ = stream.Close() })
 

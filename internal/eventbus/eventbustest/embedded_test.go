@@ -61,7 +61,7 @@ func TestAwaitAckedSeqReachesTargetAfterServerConfirmedAck(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	testID := eventbus.SessionIdentity{Kind: eventbus.IdentityKindCharacter, PlayerID: "01TESTPLAYER01234567890A", CharacterID: "01TESTCHARACTER0123456A", BindingID: "01TESTBINDING01234567AB"}
-	stream, err := sub.OpenSession(ctx, sessionID, testID, []eventbus.Subject{subject})
+	stream, err := sub.OpenSession(ctx, sessionID, testID, []eventbus.Subject{subject}, time.Time{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 
@@ -84,7 +84,7 @@ func TestAwaitDeliveredSeqReachesTargetAfterServerDelivers(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	testID2 := eventbus.SessionIdentity{Kind: eventbus.IdentityKindCharacter, PlayerID: "01TESTPLAYER01234567890A", CharacterID: "01TESTCHARACTER0123456A", BindingID: "01TESTBINDING01234567AB"}
-	stream, err := sub.OpenSession(ctx, sessionID, testID2, []eventbus.Subject{subject})
+	stream, err := sub.OpenSession(ctx, sessionID, testID2, []eventbus.Subject{subject}, time.Time{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 

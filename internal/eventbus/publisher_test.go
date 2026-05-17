@@ -274,7 +274,7 @@ func TestPublisherStampsAllRequiredHeaders(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	stream, err := sub.OpenSession(ctx, sessID, testIdentity(), []eventbus.Subject{subject})
+	stream, err := sub.OpenSession(ctx, sessID, testIdentity(), []eventbus.Subject{subject}, time.Time{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 
@@ -322,7 +322,7 @@ func TestPublisherTruncatesTimestampToMicrosecond(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	stream, err := sub.OpenSession(ctx, sessID, testIdentity(), []eventbus.Subject{subject})
+	stream, err := sub.OpenSession(ctx, sessID, testIdentity(), []eventbus.Subject{subject}, time.Time{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 
@@ -387,7 +387,7 @@ func TestPublisherCopiesRenderingIntoEnvelope(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	stream, err := sub.OpenSession(ctx, sessID, testIdentity(), []eventbus.Subject{subject})
+	stream, err := sub.OpenSession(ctx, sessID, testIdentity(), []eventbus.Subject{subject}, time.Time{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 
@@ -472,7 +472,7 @@ func TestIdentityKeySelectorReturnsIdentityAndNoKey(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	stream, err := sub.OpenSession(ctx, sessID, testIdentity(), []eventbus.Subject{subject})
+	stream, err := sub.OpenSession(ctx, sessID, testIdentity(), []eventbus.Subject{subject}, time.Time{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 

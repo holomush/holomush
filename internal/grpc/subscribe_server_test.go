@@ -70,7 +70,7 @@ type fakeSubscriber struct {
 	opens   int
 }
 
-func (f *fakeSubscriber) OpenSession(_ context.Context, _ string, _ eventbus.SessionIdentity, _ []eventbus.Subject) (eventbus.SessionStream, error) {
+func (f *fakeSubscriber) OpenSession(_ context.Context, _ string, _ eventbus.SessionIdentity, _ []eventbus.Subject, _ time.Time) (eventbus.SessionStream, error) {
 	f.opens++
 	if f.openErr != nil {
 		return nil, f.openErr
@@ -365,7 +365,7 @@ type identityCapturingSubscriber struct {
 	capturedIdentity eventbus.SessionIdentity
 }
 
-func (c *identityCapturingSubscriber) OpenSession(_ context.Context, _ string, identity eventbus.SessionIdentity, _ []eventbus.Subject) (eventbus.SessionStream, error) {
+func (c *identityCapturingSubscriber) OpenSession(_ context.Context, _ string, identity eventbus.SessionIdentity, _ []eventbus.Subject, _ time.Time) (eventbus.SessionStream, error) {
 	c.opens++
 	c.capturedIdentity = identity
 	return c.stream, nil

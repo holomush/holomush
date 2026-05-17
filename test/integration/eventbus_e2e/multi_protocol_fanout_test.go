@@ -46,10 +46,10 @@ var _ = Describe("Multi-protocol fan-out telnet and web see same pose", func() {
 
 		// Two subscribers on the same subject simulate two protocol adapters.
 		testID := eventbus.SessionIdentity{Kind: eventbus.IdentityKindCharacter, PlayerID: "01TESTPLAYER01234567890A", CharacterID: "01TESTCHARACTER0123456A", BindingID: "01TESTBINDING01234567AB"}
-		s1, err := subSvc.OpenSession(ctx, freshSessionID(), testID, []eventbus.Subject{subject})
+		s1, err := subSvc.OpenSession(ctx, freshSessionID(), testID, []eventbus.Subject{subject}, time.Time{})
 		Expect(err).NotTo(HaveOccurred())
 		DeferCleanup(func() { _ = s1.Close() })
-		s2, err := subSvc.OpenSession(ctx, freshSessionID(), testID, []eventbus.Subject{subject})
+		s2, err := subSvc.OpenSession(ctx, freshSessionID(), testID, []eventbus.Subject{subject}, time.Time{})
 		Expect(err).NotTo(HaveOccurred())
 		DeferCleanup(func() { _ = s2.Close() })
 

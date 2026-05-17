@@ -85,7 +85,7 @@ func TestCrossSubjectSequenceOrderingUnderConcurrentPublishers(t *testing.T) {
 		// monotonicity (just uniqueness) so use unseeded crypto/rand.
 		sid := ulid.MustNew(ulid.Timestamp(time.Now()), crand.Reader).String()
 		sessionIDs[i] = sid
-		s, err := subSvc.OpenSession(t.Context(), sid, testIdentity(), subjects)
+		s, err := subSvc.OpenSession(t.Context(), sid, testIdentity(), subjects, time.Time{})
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = s.Close() })
 		streams[i] = s

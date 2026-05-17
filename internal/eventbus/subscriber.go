@@ -156,7 +156,7 @@ func NewJetStreamSubscriber(js jetstream.JetStream, opts ...SubscribeOption) *Je
 // consumer — sessions resume across reconnect via the durable's retained
 // cursor. Consumer teardown is handled by InactiveThreshold (passive) or by
 // the session-lifecycle listener in F5 (active, on session_ended).
-func (s *JetStreamSubscriber) OpenSession(ctx context.Context, sessionID string, identity SessionIdentity, filters []Subject) (SessionStream, error) {
+func (s *JetStreamSubscriber) OpenSession(ctx context.Context, sessionID string, identity SessionIdentity, filters []Subject, minFloor time.Time) (SessionStream, error) {
 	if s.js == nil {
 		return nil, oops.Code("EVENTBUS_SUBSCRIBER_NOT_READY").Errorf("JetStream context is nil")
 	}
@@ -174,12 +174,6 @@ func (s *JetStreamSubscriber) OpenSession(ctx context.Context, sessionID string,
 			With("session_id", sessionID).
 			Errorf("at least one subject filter required")
 	}
-	// Compute minFloor across subjects — Phase 3 wires this from session info.
-	// For now (this task only), pass time.Time{} so first-create gets
-	// DeliverAllPolicy, preserving existing behavior. iwzt.14 (Task 13)
-	// replaces the zero value with the real minFloor computation.
-	minFloor := time.Time{}
-
 	cfg, err := buildConsumerConfig(ctx, jsConsumerLookupAdapter{js: s.js}, StreamName, name, subjects, minFloor)
 	if err != nil {
 		return nil, err

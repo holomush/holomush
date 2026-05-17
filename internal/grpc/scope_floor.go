@@ -12,6 +12,31 @@ import (
 	"github.com/holomush/holomush/internal/session"
 )
 
+// maxStreamScopeFloor returns MAX(streamScopeFloor(info, subj)) across every
+// filter subject — the per-session aggregate floor used at OpenSession entry.
+// Per holomush-iwzt §6.2 Tier 1: MAX (not MIN) yields the smallest set that
+// includes events visible to at least one subject; iwzt.15 then drops events
+// below the per-subject floor at delivery time.
+//
+// NOTE: streamScopeFloor currently inspects legacy stream-name prefixes
+// ("location:", "scene:"), but production callers pass NATS subjects
+// ("events.<gid>.location.X"), so the loop returns time.Time{} for every
+// real-world subject today. Until that format mismatch is closed (tracked
+// as a separate follow-up bead), the aggregate floor is effectively zero —
+// preserving the pre-iwzt DeliverAllPolicy behavior. The helper exists so
+// the MAX-semantics are testable in isolation and the wiring is in place
+// when the format gap is closed.
+func maxStreamScopeFloor(info *session.Info, filters []string) time.Time {
+	var minFloor time.Time
+	for _, subj := range filters {
+		f := streamScopeFloor(info, subj)
+		if f.After(minFloor) {
+			minFloor = f
+		}
+	}
+	return minFloor
+}
+
 // streamScopeFloor returns the temporal floor for a session's view of the
 // given stream. Per holomush-iwzt §6.1.
 func streamScopeFloor(info *session.Info, stream string) time.Time {
