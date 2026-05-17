@@ -6,6 +6,85 @@ itself after completing a review.
 
 Keep under 200 lines. Curate — don't hoard.
 
+## R2-fix regressions in INV-S5 plan (HoloMUSH 2026-05-17 round 3)
+
+- **Global find-replace double-qualification.** When R2 fixes a "bare
+  `NewHostWithFunctions` won't resolve in `package lua_test`" finding by
+  global-replacing `NewHostWithFunctions` → `pluginlua.NewHostWithFunctions`,
+  the replacement also fires on sites that were ALREADY qualified
+  `pluginlua.NewHostWithFunctions`, producing
+  `pluginlua.pluginlua.NewHostWithFunctions`. Always require: "scope the
+  replace to bare (un-prefixed) occurrences only," and grep
+  `<pkg>\.<pkg>\.` after every revision that performs symbol qualification.
+- **Package-internal qualifier inside a test file declared in that
+  package.** When the parity test file is `package plugins` (the
+  package being tested), `WithLuaHost` is unqualified — but
+  `plugins.TypeBinary` reads naturally to a planner who has been
+  thinking in cross-package call sites. Always grep the test file
+  block for `<own-package>\.` after writing/revising; any hit is a
+  package-internal qualifier and a Go compile error.
+- **`_test.go` symbols don't cross package boundaries.** A wrapper
+  `NewMockHost` placed in `internal/plugin/goplugin/mock_export_test.go`
+  is visible only when building tests of `package goplugin` — NOT when
+  `go test ./internal/plugin/` imports `goplugin` as a regular library.
+  Cross-package test helpers MUST live in a non-`_test.go` file (or
+  the parity test moves into the helper's own package). Plans that
+  propose "expose via _test.go file" as if it were sufficient are
+  wrong — always demand a non-test file or an explicit acknowledgment
+  the test must move.
+- **`oops.Code("X").Is(err)`** matches ANY `OopsError` regardless of
+  code (per `samber/oops@v1.21.0/error.go:87-93`). Test assertions
+  using `oops.Code("X").Is(err) || strings.Contains(err.Error(), "X")`
+  pass for any oops-wrapped error in the first disjunct. Repo
+  convention is `errutil.AssertErrorCode(t, err, "CODE")` which DOES
+  check code identity. Treat the `oops.Code(...).Is` pattern in test
+  assertions as a non-blocking finding to flag.
+
+## INV-S5 emit-type-validation plan-review reflexes (HoloMUSH 2026-05-16)
+
+- **Lua plugins have NO init phase** (`internal/plugin/lua/host.go:111-163`).
+  `Host.Load` runs `L.DoString(code)` in a THROWAWAY state from
+  `factory.NewState(ctx)` with `defer L.Close()` and does NOT call
+  `hostFuncs.Register(L, name, requires...)` — the `holomush` global table
+  doesn't exist there. Every `DeliverEvent` / `DeliverCommand` (host.go:186, 264)
+  creates a fresh state and calls `Functions.Register` per delivery. Plans
+  shaped "plugin init registers types, host reads after Init" against the Lua
+  runtime are operating on a phase that does not exist. To add one: extend
+  `*luaPlugin` with a registry field, run script-once on Load in a state where
+  hostFuncs ARE registered, capture the resulting registry, store on the
+  `*luaPlugin`. "Examine the existing host interface" hedge cannot substitute
+  for substrate machinery.
+- **Binary plugins are out-of-process** (`internal/plugin/goplugin/host.go:420`
+  `exec.Command(realExec)`). Host's only handle is `pluginv1.PluginServiceClient`
+  + `pluginv1.PluginHostServiceClient` over mTLS gRPC. A Go method like
+  `func (p *scenePlugin) EmitRegistry() *pluginsdk.EmitRegistry` returning a
+  pointer to in-memory plugin state is unreachable by host code. To expose
+  plugin state to host: either add a field to `pluginv1.InitResponse` (proto
+  change + regen, populated in `pluginServerAdapter.Init` from the
+  ServiceProvider) OR add a new `PluginService.GetEmitTypes` RPC.
+- **`internal/plugin/goplugin/host.go:528`** is where binary plugin Init RPC
+  is invoked: `pluginClient.Init(ctx, initReq)`. The InitResponse today carries
+  only `provided_services` — extending it is the cheapest path to add
+  post-Init plugin metadata to the host's view.
+- **`internal/plugin/manager.go::loadPlugin`** starts at **line 849**, not 844.
+  `host.Load(...)` is invoked at **line 989**, NOT inside semantic validation
+  (lines 880-904 — that block runs BEFORE host.Load). Plans wiring "post-Init
+  validation" against manager.go:880 are inserting the call BEFORE any Init
+  has fired. For Lua, "post-Init" doesn't apply (no Init phase). For binary,
+  the Init RPC lives in goplugin/host.go:528, not in manager.go::loadPlugin
+  — the manager-level wrapper has no return-value handle on Init outputs.
+- **`(*Manifest).Crypto.Emits []CryptoEmit`** (`internal/plugin/crypto_manifest.go:26-37`)
+  is where to read declared event types. `m.Crypto == nil` guard required (per
+  `LookupEmitSensitivity` precedent at line 60-69).
+- **Plan-deferred substrate seams**: "the implementer settles based on the
+  current Host interface shape" / "discover during task" / "examine the
+  existing test harness" — each is a plan-failure finding when the seam is
+  load-bearing (Task 1 wiring), acceptable when peripheral (Task 5 site nav).
+- **Fail-closed flip without fixture audit**: plans that say "flip fail-closed,
+  investigate test fixtures if they break" have unscoped blast radius. The
+  audit (`rg "^crypto:" plugins/ test/`, classify each manifest) MUST precede
+  the flip, not chase it via prose after `task test:int` breaks.
+
 ## Phase 7 plugin-SDK plan-review reflexes (HoloMUSH 2026-05-13)
 
 - **Per-row fence refusal must NOT be stream-fatal.** A `Next() (ev, err)` where `err != nil` short-circuits the entire history stream — caller stops iterating. Plans that wrap a HistoryStream with a fence returning `oops.Code("AUDIT_ROW_DOWNGRADE_DETECTED")` on the FIRST refused row will DoS legitimate subsequent rows. Per-row refusals MUST surface as `(ev, nil)` with `ev.MetadataOnly=true` + a typed `NoPlaintextReason` enum value. Add the new reason to `internal/eventbus/types.go` (existing `NoPlaintextReason` enum at `types.go:28`) — don't reuse a generic reason.
