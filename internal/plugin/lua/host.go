@@ -31,8 +31,9 @@ var (
 
 // luaPlugin holds compiled Lua code for a plugins.
 type luaPlugin struct {
-	manifest *plugins.Manifest
-	code     string // Lua source (compiled at load time in future)
+	manifest     *plugins.Manifest
+	code         string   // Lua source (compiled at load time in future)
+	emitRegistry []string // INV-S5: populated during Load capture pass; nil when crypto.emits empty
 }
 
 // Host manages Lua plugins.
@@ -326,6 +327,20 @@ func (h *Host) Plugins() []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+// PluginEmitRegistry implements plugins.Host. Returns a defensive copy so
+// callers cannot mutate host-held registry state. Preserves nil-vs-empty
+// semantics — plugins without crypto.emits keep their nil registry; plugins
+// with crypto.emits but zero captured types get an empty (non-nil) slice.
+func (h *Host) PluginEmitRegistry(name string) ([]string, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	p, ok := h.plugins[name]
+	if !ok {
+		return nil, false
+	}
+	return append([]string(nil), p.emitRegistry...), true
 }
 
 // QuerySessionStreams calls the plugin's on_session_subscribe(character_id, player_id, session_id)

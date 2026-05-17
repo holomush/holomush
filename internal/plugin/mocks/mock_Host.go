@@ -241,6 +241,64 @@ func (_c *MockHost_Load_Call) RunAndReturn(run func(context.Context, *plugins.Ma
 	return _c
 }
 
+// PluginEmitRegistry provides a mock function with given fields: name
+func (_m *MockHost) PluginEmitRegistry(name string) ([]string, bool) {
+	ret := _m.Called(name)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PluginEmitRegistry")
+	}
+
+	var r0 []string
+	var r1 bool
+	if rf, ok := ret.Get(0).(func(string) ([]string, bool)); ok {
+		return rf(name)
+	}
+	if rf, ok := ret.Get(0).(func(string) []string); ok {
+		r0 = rf(name)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(string) bool); ok {
+		r1 = rf(name)
+	} else {
+		r1 = ret.Get(1).(bool)
+	}
+
+	return r0, r1
+}
+
+// MockHost_PluginEmitRegistry_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PluginEmitRegistry'
+type MockHost_PluginEmitRegistry_Call struct {
+	*mock.Call
+}
+
+// PluginEmitRegistry is a helper method to define mock.On call
+//   - name string
+func (_e *MockHost_Expecter) PluginEmitRegistry(name interface{}) *MockHost_PluginEmitRegistry_Call {
+	return &MockHost_PluginEmitRegistry_Call{Call: _e.mock.On("PluginEmitRegistry", name)}
+}
+
+func (_c *MockHost_PluginEmitRegistry_Call) Run(run func(name string)) *MockHost_PluginEmitRegistry_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *MockHost_PluginEmitRegistry_Call) Return(_a0 []string, _a1 bool) *MockHost_PluginEmitRegistry_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockHost_PluginEmitRegistry_Call) RunAndReturn(run func(string) ([]string, bool)) *MockHost_PluginEmitRegistry_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Plugins provides a mock function with no fields
 func (_m *MockHost) Plugins() []string {
 	ret := _m.Called()

@@ -587,8 +587,9 @@ func (h *mockBinaryHost) DeliverEvent(_ context.Context, _ string, _ pluginsdk.E
 func (h *mockBinaryHost) DeliverCommand(_ context.Context, _ string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
 	return nil, nil
 }
-func (h *mockBinaryHost) Plugins() []string             { return h.pluginList }
-func (h *mockBinaryHost) Close(_ context.Context) error { return h.closeErr }
+func (h *mockBinaryHost) Plugins() []string                            { return h.pluginList }
+func (h *mockBinaryHost) PluginEmitRegistry(_ string) ([]string, bool) { return nil, false }
+func (h *mockBinaryHost) Close(_ context.Context) error                { return h.closeErr }
 func (h *mockBinaryHost) PluginConn(_ string) (grpc.ClientConnInterface, error) {
 	return h.conn, h.connErr
 }

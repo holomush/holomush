@@ -191,6 +191,11 @@ func (m *HostMiddleware) Plugins() []string {
 	return m.next.Plugins()
 }
 
+// PluginEmitRegistry delegates to the wrapped host.
+func (m *HostMiddleware) PluginEmitRegistry(name string) ([]string, bool) {
+	return m.next.PluginEmitRegistry(name)
+}
+
 // Close delegates to the wrapped host.
 func (m *HostMiddleware) Close(ctx context.Context) error {
 	return m.next.Close(ctx)

@@ -34,6 +34,7 @@ type subscriberHost struct {
 func (h *subscriberHost) Load(context.Context, *plugins.Manifest, string) error { return nil }
 func (h *subscriberHost) Unload(context.Context, string) error                  { return nil }
 func (h *subscriberHost) Plugins() []string                                     { return []string{"test"} }
+func (h *subscriberHost) PluginEmitRegistry(string) ([]string, bool)            { return nil, false }
 func (h *subscriberHost) Close(context.Context) error                           { return nil }
 
 func (h *subscriberHost) DeliverCommand(_ context.Context, _ string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
@@ -531,6 +532,7 @@ type slowSubscriberHost struct {
 func (h *slowSubscriberHost) Load(context.Context, *plugins.Manifest, string) error { return nil }
 func (h *slowSubscriberHost) Unload(context.Context, string) error                  { return nil }
 func (h *slowSubscriberHost) Plugins() []string                                     { return []string{"test"} }
+func (h *slowSubscriberHost) PluginEmitRegistry(string) ([]string, bool)            { return nil, false }
 func (h *slowSubscriberHost) Close(context.Context) error                           { return nil }
 
 func (h *slowSubscriberHost) DeliverCommand(_ context.Context, _ string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {

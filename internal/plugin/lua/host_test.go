@@ -2008,3 +2008,131 @@ func TestLuaHostLoadEntryLegitimatePathSucceeds(t *testing.T) {
 	err = host.Load(context.Background(), manifest, tmpDir)
 	require.NoError(t, err, "legitimate nested entry path should load successfully")
 }
+
+// TestLuaHost_INVS5 covers the INV-S5 mechanism across the PluginEmitRegistry
+// lookup surface (not-loaded, loaded-without-emits, loaded-with-emits) and
+// the capture-pass execution-error path. Each case shares the same shape:
+// optionally write main.lua + manifest, optionally Load, then either assert
+// registry lookup OR error context+hint depending on the scenario.
+func TestLuaHost_INVS5(t *testing.T) {
+	tests := []struct {
+		name string
+		// luaSource = "" means do not write main.lua / do not Load.
+		luaSource string
+		// useHostWithFunctions=true picks NewHostWithFunctions(hostfunc.New(nil));
+		// false picks bare NewHost.
+		useHostWithFunctions bool
+		// pluginName is the manifest's Name; also the key used for the
+		// PluginEmitRegistry lookup. Required when luaSource != "".
+		pluginName string
+		// declaredEmits populates manifest.Crypto.Emits when non-empty;
+		// nil/empty means no Crypto section is built.
+		declaredEmits []string
+		// expectLoadErr = true means Load must return an error matching
+		// expectedHint + operation=load context.
+		expectLoadErr bool
+		expectedHint  string
+		// lookupName is the key passed to PluginEmitRegistry. Defaults to
+		// pluginName when empty.
+		lookupName string
+		// expectedOk + expectedRegistry encode the assertion for the
+		// PluginEmitRegistry lookup when expectLoadErr is false.
+		expectedOk       bool
+		expectedRegistry []string
+	}{
+		{
+			name:       "not-loaded plugin returns (nil, false)",
+			lookupName: "missing",
+			// no Load; expectedOk defaults to false; expectedRegistry nil
+		},
+		{
+			name: "loaded plugin without crypto.emits returns (nil, true)",
+			luaSource: `
+function on_event(event)
+    return nil
+end
+`,
+			pluginName: "noemit",
+			expectedOk: true,
+			// expectedRegistry nil — plugin known but out of INV-S5 scope
+		},
+		{
+			name: "loaded plugin with crypto.emits returns ([alpha beta], true) from capture pass",
+			luaSource: `
+holomush.register_emit_type("alpha")
+holomush.register_emit_type("beta")
+
+function on_event(event)
+    return nil
+end
+`,
+			useHostWithFunctions: true,
+			pluginName:           "withemits",
+			declaredEmits:        []string{"alpha", "beta"},
+			expectedOk:           true,
+			expectedRegistry:     []string{"alpha", "beta"},
+		},
+		{
+			name: "capture-pass execution error surfaces operation=load + INV-S5 hint",
+			luaSource: `
+error("intentional capture-pass failure")
+`,
+			useHostWithFunctions: true,
+			pluginName:           "explodes",
+			declaredEmits:        []string{"ignored"},
+			expectLoadErr:        true,
+			expectedHint:         "INV-S5 capture pass execution error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var host *pluginlua.Host
+			if tt.useHostWithFunctions {
+				host = pluginlua.NewHostWithFunctions(hostfunc.New(nil))
+			} else {
+				host = pluginlua.NewHost()
+			}
+			defer closeHost(t, host)
+
+			if tt.luaSource != "" {
+				dir := t.TempDir()
+				writeMainLua(t, dir, tt.luaSource)
+
+				manifest := &plugins.Manifest{
+					Name:      tt.pluginName,
+					Version:   "1.0.0",
+					Type:      plugins.TypeLua,
+					LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+				}
+				if len(tt.declaredEmits) > 0 {
+					emits := make([]plugins.CryptoEmit, len(tt.declaredEmits))
+					for i, et := range tt.declaredEmits {
+						emits[i] = plugins.CryptoEmit{EventType: et, Sensitivity: plugins.SensitivityNever}
+					}
+					manifest.Crypto = &plugins.CryptoSection{Emits: emits}
+				}
+
+				err := host.Load(context.Background(), manifest, dir)
+				if tt.expectLoadErr {
+					require.Error(t, err)
+					oopsErr, ok := oops.AsOops(err)
+					require.True(t, ok, "Load failure should be an oops error")
+					assert.Equal(t, tt.expectedHint, oopsErr.Hint(),
+						"hint must surface why the capture pass failed")
+					assert.Equal(t, "load", oopsErr.Context()["operation"])
+					return
+				}
+				require.NoError(t, err)
+			}
+
+			lookup := tt.lookupName
+			if lookup == "" {
+				lookup = tt.pluginName
+			}
+			got, ok := host.PluginEmitRegistry(lookup)
+			assert.Equal(t, tt.expectedOk, ok)
+			assert.Equal(t, tt.expectedRegistry, got)
+		})
+	}
+}

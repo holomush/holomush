@@ -113,11 +113,25 @@ type mockGRPCPluginClient struct {
 	commandCtx   context.Context
 
 	// Init tracking
-	initCalled bool
-	initReq    *pluginv1.InitRequest
-	initErr    error
+	initCalled   bool
+	initReq      *pluginv1.InitRequest
+	initErr      error
+	initResponse *pluginv1.InitResponse // INV-S5: per-test override; nil falls back to empty InitResponse
 
 	QuerySessionStreamsFunc func(ctx context.Context, req *pluginv1.QuerySessionStreamsRequest) (*pluginv1.QuerySessionStreamsResponse, error)
+}
+
+// setInitResponse installs a per-test override for the Init RPC response
+// (used by INV-S5 tests to feed RegisteredEmitTypes through the host).
+func (m *mockGRPCPluginClient) setInitResponse(r *pluginv1.InitResponse) {
+	m.initResponse = r
+}
+
+// grpcMockFor extracts the underlying *mockGRPCPluginClient from a
+// *mockPluginClient returned by newMockHost. Use this when tests need
+// to configure InitResponse via setInitResponse.
+func grpcMockFor(c *mockPluginClient) *mockGRPCPluginClient {
+	return c.protocol.pluginClient.(*mockGRPCPluginClient)
 }
 
 func (m *mockGRPCPluginClient) Init(_ context.Context, req *pluginv1.InitRequest, _ ...grpc.CallOption) (*pluginv1.InitResponse, error) {
@@ -125,6 +139,9 @@ func (m *mockGRPCPluginClient) Init(_ context.Context, req *pluginv1.InitRequest
 	m.initReq = req
 	if m.initErr != nil {
 		return nil, m.initErr
+	}
+	if m.initResponse != nil {
+		return m.initResponse, nil
 	}
 	return &pluginv1.InitResponse{}, nil
 }
@@ -2054,4 +2071,48 @@ func assertNoRecoverInFunction(t *testing.T, funcName string) {
 			"Host.%s MUST NOT contain recover() — would swallow panics and skip deferred token Revoke", funcName)
 		return true
 	})
+}
+
+// TestBinaryHost_PluginEmitRegistry_NotLoaded verifies that
+// PluginEmitRegistry returns (nil, false) for a plugin that has not been
+// loaded.
+func TestBinaryHost_PluginEmitRegistry_NotLoaded(t *testing.T) {
+	host, _ := newMockHost(t)
+
+	got, ok := host.PluginEmitRegistry("missing")
+	assert.False(t, ok)
+	assert.Nil(t, got)
+}
+
+// TestBinaryHost_PluginEmitRegistry_LoadedPluginCapturesInitResponse
+// verifies that a successfully-loaded plugin with InitResponse populated by
+// the plugin returns the captured set.
+func TestBinaryHost_PluginEmitRegistry_LoadedPluginCapturesInitResponse(t *testing.T) {
+	host, mockClient := newMockHost(t)
+	grpcMockFor(mockClient).setInitResponse(&pluginv1.InitResponse{
+		RegisteredEmitTypes: []string{"a", "b"},
+	})
+
+	tmpDir := t.TempDir()
+	require.NoError(t, createTempExecutable(tmpDir+"/withemits"))
+
+	manifest := &plugins.Manifest{
+		Name:    "withemits",
+		Version: "1.0.0",
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
+			Executable: "withemits",
+		},
+		Crypto: &plugins.CryptoSection{
+			Emits: []plugins.CryptoEmit{
+				{EventType: "a", Sensitivity: plugins.SensitivityNever},
+				{EventType: "b", Sensitivity: plugins.SensitivityNever},
+			},
+		},
+	}
+	require.NoError(t, host.Load(context.Background(), manifest, tmpDir))
+
+	got, ok := host.PluginEmitRegistry("withemits")
+	assert.True(t, ok)
+	assert.Equal(t, []string{"a", "b"}, got)
 }

@@ -1374,7 +1374,7 @@ func (_c *MockStore_UpdateLastWhispered_Call) RunAndReturn(run func(context.Cont
 }
 
 // UpdateLocationOnMove provides a mock function with given fields: ctx, characterID, newLocationID, arrivedAt
-func (_m *MockStore) UpdateLocationOnMove(ctx context.Context, characterID, newLocationID ulid.ULID, arrivedAt time.Time) error {
+func (_m *MockStore) UpdateLocationOnMove(ctx context.Context, characterID ulid.ULID, newLocationID ulid.ULID, arrivedAt time.Time) error {
 	ret := _m.Called(ctx, characterID, newLocationID, arrivedAt)
 
 	if len(ret) == 0 {
@@ -1405,7 +1405,7 @@ func (_e *MockStore_Expecter) UpdateLocationOnMove(ctx interface{}, characterID 
 	return &MockStore_UpdateLocationOnMove_Call{Call: _e.mock.On("UpdateLocationOnMove", ctx, characterID, newLocationID, arrivedAt)}
 }
 
-func (_c *MockStore_UpdateLocationOnMove_Call) Run(run func(ctx context.Context, characterID, newLocationID ulid.ULID, arrivedAt time.Time)) *MockStore_UpdateLocationOnMove_Call {
+func (_c *MockStore_UpdateLocationOnMove_Call) Run(run func(ctx context.Context, characterID ulid.ULID, newLocationID ulid.ULID, arrivedAt time.Time)) *MockStore_UpdateLocationOnMove_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(ulid.ULID), args[3].(time.Time))
 	})
