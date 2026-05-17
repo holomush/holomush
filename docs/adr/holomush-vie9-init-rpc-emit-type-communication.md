@@ -49,12 +49,15 @@ non-empty `crypto.emits` implement a new opt-in
 (`pkg/plugin/sdk.go::pluginServerAdapter.Init`) auto-populates the
 field from the plugin's `EmitRegistry`.
 
-**Lua side:** extend `internal/plugin/lua/host.go::Load` with a SECOND
-pass that runs the plugin's top-level code in a stateful Lua state
-with a new `holomush.register_emit_type(type)` hostfunc registered.
-The hostfunc accumulates calls into a per-plugin `LuaEmitRegistry`
-which is stored on the `luaPlugin` struct. The pass fires only for
-plugins with non-empty `crypto.emits` (per
+**Lua side:** branch `internal/plugin/lua/host.go::Load` so that
+plugins with non-empty `crypto.emits` run their top-level code in a
+stateful Lua state with hostfuncs registered (including a new
+`holomush.register_emit_type(type)` hostfunc); plugins without
+`crypto.emits` continue to run the existing syntax-check pass in a
+throwaway state without hostfuncs. The capture branch's hostfunc
+accumulates calls into a per-plugin `LuaEmitRegistry` stored on the
+`luaPlugin` struct. Total Load-time execution count stays at one per
+plugin regardless of branch (per
 [`holomush-7h0c`](holomush-7h0c-lua-load-pass-optin-scope.md)).
 
 **Validator wiring:** add a new `Host.PluginEmitRegistry(name) ([]string, bool)`
@@ -69,9 +72,10 @@ on mismatch (fail-closed from day one).
 
 **Reuses existing Init lifecycle on both runtimes.** No new
 inter-process RPC, no build-time codegen pipeline, no static analysis.
-The proto field extension is additive; the Lua Load second-pass is a
-new lifecycle phase but reuses the existing `factory.NewState` +
-`DoString` + hostFuncs.Register infrastructure.
+The proto field extension is additive; the Lua Load capture branch
+reuses the existing `factory.NewState` + `DoString` +
+`hostFuncs.Register` infrastructure (rather than introducing a new
+lifecycle phase — see [`holomush-7h0c`](holomush-7h0c-lua-load-pass-optin-scope.md)).
 
 **Symmetric across runtimes per parent ADR's INV-S3** (Go+Lua parity
 invariant). Both runtimes expose the same `PluginEmitRegistry` Host
@@ -139,7 +143,7 @@ later for other purposes does not conflict.
 - [Substrate Contract Spec — INV-S5](../superpowers/specs/2026-05-16-social-spaces-substrate-contract.md)
 - [INV-S5 Mechanism Design Spec](../superpowers/specs/2026-05-17-inv-s5-mechanism-design.md)
 - [Parent ADR: Startup-Time Set-Equality Validation (`holomush-3vsb`)](holomush-3vsb-manifest-emit-type-startup-validation.md) — the WHAT this ADR settles the HOW for.
-- [Sibling ADR: Lua Load Pass Opt-In Scope (`holomush-7h0c`)](holomush-7h0c-lua-load-pass-optin-scope.md) — scope decision for the Lua Load second-pass introduced by this ADR.
+- [Sibling ADR: Lua Load Pass Opt-In Scope (`holomush-7h0c`)](holomush-7h0c-lua-load-pass-optin-scope.md) — scope decision for the Lua Load capture branch introduced by this ADR.
 - [`.claude/rules/plugin-runtime-symmetry.md`](../../.claude/rules/plugin-runtime-symmetry.md) — parent INV-S3 Go+Lua parity invariant.
 - `internal/plugin/lua/host.go:111` — Load entry point modified by this design.
 - `internal/plugin/goplugin/host.go:528` — binary Init RPC call site that consumes the new proto field.

@@ -22,7 +22,7 @@ edge and the file's `**Status:**` reflects the supersession.
 | [Session-Store Sync Hook on Character Move](holomush-kmac-session-store-sync-hook-character-move.md) | 2026-05-17 | Accepted | `holomush-kmac` |
 | [In-Process Filter-at-Delivery as Load-Bearing Privacy Gate; NATS-as-Source-of-Truth for Consumer Config](holomush-ghpx-filter-at-delivery-and-nats-source-of-truth.md) | 2026-05-17 | Accepted | `holomush-ghpx` |
 | [Use Init-RPC Protocol Extension to Communicate Code-Registered Emit Types](holomush-vie9-init-rpc-emit-type-communication.md) | 2026-05-17 | Accepted | `holomush-vie9` |
-| [Scope Lua Load Second Pass to crypto.emits-Declaring Plugins Only](holomush-7h0c-lua-load-pass-optin-scope.md) | 2026-05-17 | Accepted | `holomush-7h0c` |
+| [Scope Lua Load Capture Pass to crypto.emits-Declaring Plugins Only](holomush-7h0c-lua-load-pass-optin-scope.md) | 2026-05-17 | Accepted | `holomush-7h0c` |
 | [Split Plugin SDK into eventkit and groupkit by Scope](holomush-p7w0-split-plugin-sdk-eventkit-groupkit.md) | 2026-05-16 | Accepted | `holomush-p7w0` |
 | [Require N=2 Consumer Validation Before SDK Primitive Extraction](holomush-lrt3-n2-consumer-validation-sdk-extraction.md) | 2026-05-16 | Accepted | `holomush-lrt3` |
 | [Strict Plugin-Boundary: Plugins Must Not Modify internal/](holomush-z1e7-strict-plugin-boundary.md) | 2026-05-16 | Accepted | `holomush-z1e7` |
