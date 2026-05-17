@@ -1,0 +1,401 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+//go:build integration
+
+// Package privacytest provides the integration-test harness for holomush-iwzt
+// history-scope privacy tests. It wraps a real in-process holomush stack
+// (Postgres + NATS JetStream + CoreServer) so downstream integration tests
+// (Tasks 9–22) can express privacy invariants against live RPCs.
+//
+// Usage:
+//
+//	ts := privacytest.Start(t)
+//	defer ts.Stop()
+//	sess := ts.ConnectGuest(ctx)
+//	sess.SendCommand(ctx, "look")
+//	sess.Logout(ctx)
+//
+// Build tag: integration. This package is never imported by production code.
+package privacytest
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
+	"github.com/stretchr/testify/require"
+
+	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/auth"
+	authpg "github.com/holomush/holomush/internal/auth/postgres"
+	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus/eventbustest"
+	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/internal/naming"
+	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/internal/telnet"
+	"github.com/holomush/holomush/internal/world"
+	worldpg "github.com/holomush/holomush/internal/world/postgres"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	"github.com/holomush/holomush/test/testutil"
+)
+
+// Server is the privacy-test harness wrapping a real in-process holomush
+// stack (Postgres + NATS JetStream + CoreServer) for integration testing of
+// holomush-iwzt history-scope privacy invariants.
+//
+// Nine downstream integration tasks (iwzt.9 and later) depend on this
+// package. Methods that rely on iwzt-introduced RPCs or fields not yet
+// implemented will panic via t.Fatalf with a TODO message directing the
+// implementer to the relevant bead.
+type Server struct {
+	t *testing.T
+
+	// pool is the shared Postgres connection pool.
+	pool *pgxpool.Pool
+
+	// stores / repos
+	playerSessionStore *store.PostgresPlayerSessionStore
+	playerRepo         *authpg.PlayerRepository
+	charRepo           auth.CharacterRepository
+	sessionStore       session.Store
+	locRepo            *worldpg.LocationRepository
+
+	// services
+	authService *auth.Service
+	guestSvc    *auth.GuestService
+
+	// bus (embedded NATS JetStream)
+	bus *eventbustest.Embedded
+
+	// coreServer is the in-process CoreServer (no network transport).
+	coreServer *holoGRPC.CoreServer
+
+	// guestStartLocationID is the location all guests are placed into.
+	guestStartLocationID ulid.ULID
+}
+
+// Start bootstraps a full in-process holomush stack and returns a Server.
+// The caller MUST call Stop() (typically via defer) to release resources.
+//
+// The stack consists of:
+//   - A shared Postgres testcontainer with migrations applied (per-test DB)
+//   - An embedded NATS JetStream server (in-memory, per-test isolation)
+//   - An in-process CoreServer wired to the above
+//
+// AllowAll ABAC engine: tests focus on privacy gates, not role enforcement.
+func Start(t *testing.T) *Server {
+	t.Helper()
+
+	ctx := context.Background()
+
+	// Postgres: shared container, fresh per-test database.
+	shared := testutil.SharedPostgres(t)
+	connStr := testutil.FreshDatabase(t, shared)
+
+	evStore, err := store.NewPostgresEventStore(ctx, connStr)
+	require.NoError(t, err, "privacytest.Start: open event store")
+	t.Cleanup(evStore.Close)
+
+	pool := evStore.Pool()
+
+	// Stores and repos.
+	playerSessionStore := store.NewPostgresPlayerSessionStore(pool)
+	playerRepo := authpg.NewPlayerRepository(pool)
+	hasher := auth.NewArgon2idHasher()
+
+	authService, err := auth.NewAuthService(playerRepo, playerSessionStore, hasher)
+	require.NoError(t, err, "privacytest.Start: create auth service")
+
+	charRepo := &authCharRepoAdapter{pool: pool, charRepo: worldpg.NewCharacterRepository(pool)}
+	sessionStoreInst := store.NewPostgresSessionStore(pool)
+	locRepo := worldpg.NewLocationRepository(pool)
+
+	// Guest start location: create a persistent location for guests.
+	guestLocID := idgen.New()
+	guestLoc := &world.Location{
+		ID:           guestLocID,
+		Name:         "Crossroads",
+		Description:  "A well-travelled intersection.",
+		Type:         world.LocationTypePersistent,
+		ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
+	}
+	err = locRepo.Create(ctx, guestLoc)
+	require.NoError(t, err, "privacytest.Start: create guest start location")
+
+	// GuestService wiring.
+	guestNamer := naming.NewGemstoneElementTheme()
+	guestBindingRepo := worldpg.NewBindingRepository(pool)
+	guestTransactor := worldpg.NewTransactor(pool)
+	guestSvc, err := auth.NewGuestService(
+		telnet.NewGuestAuthenticator(guestNamer, guestLocID),
+		playerRepo, charRepo, playerSessionStore,
+		guestTransactor, guestBindingRepo,
+	)
+	require.NoError(t, err, "privacytest.Start: create guest service")
+
+	// Embedded NATS bus (in-memory, cleaned up via t.Cleanup).
+	bus := eventbustest.New(t)
+
+	// AllowAll ABAC engine — privacy tests focus on session/history gates,
+	// not role enforcement. We use a local implementation to avoid importing
+	// the policytest helper package from non-_test.go code.
+	pe := &allowAllPolicyEngine{}
+
+	// Command dispatcher (minimal: no commands registered).
+	dispatcher, err := command.NewDispatcher(command.NewRegistry(), pe)
+	require.NoError(t, err, "privacytest.Start: create command dispatcher")
+	cmdServices := command.NewTestServices(command.ServicesConfig{Engine: pe})
+
+	// Core engine with a no-op event appender.
+	engine := core.NewEngine(&noopEventAppender{})
+
+	// CoreServer wired with all required subsystems.
+	coreServer := holoGRPC.NewCoreServer(
+		engine,
+		sessionStoreInst,
+		dispatcher,
+		cmdServices,
+		holoGRPC.WithAuthService(authService),
+		holoGRPC.WithPlayerSessionRepo(playerSessionStore),
+		holoGRPC.WithPlayerRepo(playerRepo),
+		holoGRPC.WithCharacterRepo(charRepo),
+		holoGRPC.WithSessionStore(sessionStoreInst),
+		holoGRPC.WithGuestService(guestSvc),
+		// Wire embedded bus subscriber so Subscribe calls succeed for
+		// WaitForEvent / DrainEvents paths.
+		holoGRPC.WithSubscriber(bus.Bus.Subscriber()),
+	)
+
+	return &Server{
+		t:                    t,
+		pool:                 pool,
+		playerSessionStore:   playerSessionStore,
+		playerRepo:           playerRepo,
+		charRepo:             charRepo,
+		sessionStore:         sessionStoreInst,
+		locRepo:              locRepo,
+		authService:          authService,
+		guestSvc:             guestSvc,
+		bus:                  bus,
+		coreServer:           coreServer,
+		guestStartLocationID: guestLocID,
+	}
+}
+
+// Stop tears down the in-process stack. Idempotent.
+// Postgres and NATS cleanup are handled by t.Cleanup() registered in Start.
+func (s *Server) Stop() {
+	// Resources cleaned up by t.Cleanup handlers registered in Start.
+}
+
+// NewLocation creates a fresh persistent location in the world and returns
+// its ULID. Bypasses ABAC (direct repo write for test convenience).
+func (s *Server) NewLocation(ctx context.Context) ulid.ULID {
+	s.t.Helper()
+	locID := idgen.New()
+	loc := &world.Location{
+		ID:           locID,
+		Name:         "TestLoc_" + locID.String()[:8],
+		Description:  "A test location.",
+		Type:         world.LocationTypePersistent,
+		ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
+	}
+	err := s.locRepo.Create(ctx, loc)
+	require.NoError(s.t, err, "privacytest.Server.NewLocation: create location")
+	return loc.ID
+}
+
+// NewSceneWithoutMember creates a scene with no members and returns its ULID.
+//
+// TODO(iwzt-9): implement via FocusCoordinator once scene RPCs are wired.
+func (s *Server) NewSceneWithoutMember(_ context.Context) ulid.ULID {
+	s.t.Fatalf("privacytest.Server.NewSceneWithoutMember: TODO iwzt-9 — scene RPCs not yet wired")
+	return ulid.ULID{}
+}
+
+// ExpireSession directly marks a session row as expired in Postgres.
+// Used by iwzt tests to force session-expiry scenarios.
+func (s *Server) ExpireSession(ctx context.Context, sessionID string) {
+	s.t.Helper()
+	now := time.Now().UTC()
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE sessions SET status = $1, expires_at = $2, updated_at = $2 WHERE id = $3`,
+		string(session.StatusExpired), now, sessionID)
+	require.NoError(s.t, err, "privacytest.Server.ExpireSession")
+	require.Equalf(s.t, int64(1), tag.RowsAffected(),
+		"privacytest.Server.ExpireSession: expected 1 row affected, got %d (sessionID=%s)", tag.RowsAffected(), sessionID)
+}
+
+// ConnectGuest creates a guest player+character and opens a game session.
+// The returned Session is ready for SendCommand / DrainEvents / Logout calls.
+func (s *Server) ConnectGuest(ctx context.Context) *Session {
+	s.t.Helper()
+
+	resp, err := s.coreServer.CreateGuest(ctx, &corev1.CreateGuestRequest{})
+	require.NoError(s.t, err, "privacytest.ConnectGuest: CreateGuest RPC")
+	require.True(s.t, resp.GetSuccess(), "privacytest.ConnectGuest: CreateGuest failed: %s", resp.GetErrorMessage())
+
+	rawToken := resp.GetPlayerSessionToken()
+	charID, parseErr := ulid.Parse(resp.GetDefaultCharacterId())
+	require.NoError(s.t, parseErr, "privacytest.ConnectGuest: parse character ID")
+
+	selResp, err := s.coreServer.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+		PlayerSessionToken: rawToken,
+		CharacterId:        charID.String(),
+	})
+	require.NoError(s.t, err, "privacytest.ConnectGuest: SelectCharacter RPC")
+	require.True(s.t, selResp.GetSuccess(),
+		"privacytest.ConnectGuest: SelectCharacter failed: %s", selResp.GetErrorMessage())
+
+	now := time.Now()
+	return &Session{
+		server:             s,
+		SessionID:          selResp.GetSessionId(),
+		CharacterID:        charID,
+		CharacterName:      selResp.GetCharacterName(),
+		LocationID:         s.guestStartLocationID,
+		OriginalLocationID: s.guestStartLocationID,
+		LocationArrivedAt:  now,
+		SessionCreatedAt:   now,
+		LastReattachAt:     time.Time{},
+		playerSessionToken: rawToken,
+	}
+}
+
+// ConnectAuthed creates a named player+character and opens a game session.
+//
+// TODO(iwzt-9): implement authed-player creation path.
+func (s *Server) ConnectAuthed(_ context.Context, _ string) *Session {
+	s.t.Fatalf("privacytest.Server.ConnectAuthed: TODO iwzt-9 — authed player creation not yet wired")
+	return nil
+}
+
+// ConnectAuthedWithRoles creates a named player+character with the given
+// roles and opens a game session.
+//
+// TODO(iwzt-9): implement role assignment path.
+func (s *Server) ConnectAuthedWithRoles(_ context.Context, _ string, _ []string) *Session {
+	s.t.Fatalf("privacytest.Server.ConnectAuthedWithRoles: TODO iwzt-9 — role-bearing player creation not yet wired")
+	return nil
+}
+
+// AuthedPlayer returns an AuthedPlayer handle for multi-session continuity tests.
+//
+// TODO(iwzt-9): implement authed player creation.
+func (s *Server) AuthedPlayer(_ context.Context, _ string) *AuthedPlayer {
+	s.t.Fatalf("privacytest.Server.AuthedPlayer: TODO iwzt-9 — authed player creation not yet wired")
+	return nil
+}
+
+// --- internal helpers ---
+
+// noopEventAppender satisfies core.EventAppender for tests that don't
+// exercise event storage. Mirrors the pattern in test/integration/auth/.
+type noopEventAppender struct{}
+
+func (*noopEventAppender) Append(_ context.Context, _ core.Event) error { return nil }
+
+var _ core.EventAppender = (*noopEventAppender)(nil)
+
+// authCharRepoAdapter wraps *worldpg.CharacterRepository to satisfy
+// auth.CharacterRepository. Mirrors test/integration/auth/auth_suite_test.go.
+type authCharRepoAdapter struct {
+	pool     *pgxpool.Pool
+	charRepo *worldpg.CharacterRepository
+}
+
+func (a *authCharRepoAdapter) Create(ctx context.Context, char *world.Character) error {
+	return a.charRepo.Create(ctx, char)
+}
+
+func (a *authCharRepoAdapter) ExistsByName(ctx context.Context, name string) (bool, error) {
+	var exists bool
+	err := a.pool.QueryRow(
+		ctx,
+		"SELECT EXISTS(SELECT 1 FROM characters WHERE LOWER(name) = LOWER($1))", name,
+	).Scan(&exists)
+	if err != nil {
+		return false, oops.Code("CHARACTER_EXISTS_CHECK_FAILED").With("name", name).Wrap(err)
+	}
+	return exists, nil
+}
+
+func (a *authCharRepoAdapter) CountByPlayer(ctx context.Context, playerID ulid.ULID) (int, error) {
+	var count int
+	err := a.pool.QueryRow(
+		ctx,
+		"SELECT COUNT(*) FROM characters WHERE player_id = $1", playerID.String(),
+	).Scan(&count)
+	if err != nil {
+		return 0, oops.Code("CHARACTER_COUNT_FAILED").With("player_id", playerID.String()).Wrap(err)
+	}
+	return count, nil
+}
+
+func (a *authCharRepoAdapter) ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*world.Character, error) {
+	rows, err := a.pool.Query(
+		ctx,
+		`SELECT id, player_id, name, description, location_id, created_at
+		 FROM characters WHERE player_id = $1 ORDER BY name`, playerID.String(),
+	)
+	if err != nil {
+		return nil, oops.Code("CHARACTER_LIST_FAILED").With("player_id", playerID.String()).Wrap(err)
+	}
+	defer rows.Close()
+
+	var chars []*world.Character
+	for rows.Next() {
+		var c world.Character
+		var idStr, pidStr string
+		var locStr *string
+		if scanErr := rows.Scan(&idStr, &pidStr, &c.Name, &c.Description, &locStr, &c.CreatedAt); scanErr != nil {
+			return nil, oops.Code("CHARACTER_SCAN_FAILED").Wrap(scanErr)
+		}
+		var parseErr error
+		c.ID, parseErr = ulid.Parse(idStr)
+		if parseErr != nil {
+			return nil, oops.Code("CHARACTER_ULID_DECODE_FAILED").With("field", "id").Wrap(parseErr)
+		}
+		c.PlayerID, parseErr = ulid.Parse(pidStr)
+		if parseErr != nil {
+			return nil, oops.Code("CHARACTER_ULID_DECODE_FAILED").With("field", "player_id").Wrap(parseErr)
+		}
+		if locStr != nil {
+			lid, locParseErr := ulid.Parse(*locStr)
+			if locParseErr != nil {
+				return nil, oops.Code("CHARACTER_ULID_DECODE_FAILED").With("field", "location_id").Wrap(locParseErr)
+			}
+			c.LocationID = &lid
+		}
+		chars = append(chars, &c)
+	}
+	if rows.Err() != nil {
+		return nil, oops.Code("CHARACTER_ROWS_FAILED").Wrap(rows.Err())
+	}
+	return chars, nil
+}
+
+var _ auth.CharacterRepository = (*authCharRepoAdapter)(nil)
+
+// allowAllPolicyEngine is a minimal AccessPolicyEngine that grants every
+// request. Used in the privacy-test harness so tests focus on session/history
+// privacy gates rather than ABAC policy enforcement.
+type allowAllPolicyEngine struct{}
+
+func (*allowAllPolicyEngine) Evaluate(_ context.Context, _ types.AccessRequest) (types.Decision, error) {
+	return types.NewDecision(types.EffectAllow, "harness-allow-all", ""), nil
+}
+
+func (*allowAllPolicyEngine) CanPerformAction(_ context.Context, _, _, _, _ string) (bool, error) {
+	return true, nil
+}
+
+var _ types.AccessPolicyEngine = (*allowAllPolicyEngine)(nil)
