@@ -1979,3 +1979,96 @@ func TestEmitPluginEventPropagatesSensitive(t *testing.T) {
 	assert.True(t, pub.events[0].Sensitive,
 		"EmitEvent.Sensitive=true MUST propagate through manager.EmitPluginEvent → EmitIntent.Sensitive → event.Sensitive")
 }
+
+// writeINVS5LuaPlugin writes a synthetic Lua plugin under pluginsDir whose
+// main.lua calls register_emit_type with `registered` and whose plugin.yaml
+// declares `declared` in crypto.emits. Used by INV-S5 manager validator tests.
+func writeINVS5LuaPlugin(t *testing.T, pluginsDir, name string, declared, registered []string) {
+	t.Helper()
+	dir := filepath.Join(pluginsDir, name)
+	mkdirAll(t, dir)
+
+	var manifest strings.Builder
+	manifest.WriteString("name: ")
+	manifest.WriteString(name)
+	manifest.WriteString("\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua\n")
+	if len(declared) > 0 {
+		manifest.WriteString("crypto:\n  emits:\n")
+		for _, t := range declared {
+			manifest.WriteString("    - event_type: " + t + "\n      sensitivity: never\n")
+		}
+	}
+	writeFile(t, filepath.Join(dir, "plugin.yaml"), []byte(manifest.String()))
+
+	var main strings.Builder
+	for _, t := range registered {
+		main.WriteString(`holomush.register_emit_type("` + t + "\")\n")
+	}
+	main.WriteString("function on_event(event) return nil end\n")
+	writeFile(t, filepath.Join(dir, "main.lua"), []byte(main.String()))
+}
+
+// TestManagerLoadAll_INVS5 covers the manager-level INV-S5 wiring across
+// mismatch (declared/registered set inequality), matching-sets (equal sets),
+// and no-crypto-emits (validator gated off via INV-M1) scenarios. Each case
+// shares the same setup → LoadAll → assert flow; a table form keeps future
+// scenario additions cheap.
+func TestManagerLoadAll_INVS5(t *testing.T) {
+	tests := []struct {
+		name              string
+		pluginName        string
+		declaredEmits     []string
+		registeredEmits   []string
+		expectError       bool
+		expectedErrorCode string // checked when expectError is true
+		assertMsg         string
+	}{
+		{
+			name:              "mismatch fails load with canonical EVENT_TYPE_REGISTRY_MISMATCH",
+			pluginName:        "mismatched",
+			declaredEmits:     []string{"a", "b"},
+			registeredEmits:   []string{"a"},
+			expectError:       true,
+			expectedErrorCode: "EVENT_TYPE_REGISTRY_MISMATCH",
+			assertMsg:         "INV-S5 mismatch must surface as a load error",
+		},
+		{
+			name:            "matching sets load successfully",
+			pluginName:      "matched",
+			declaredEmits:   []string{"a", "b"},
+			registeredEmits: []string{"a", "b"},
+			assertMsg:       "matched INV-S5 sets must load cleanly",
+		},
+		{
+			name:       "no crypto.emits skips validator entirely (INV-M1 gate)",
+			pluginName: "no-emits",
+			assertMsg:  "plugins without crypto.emits must load cleanly",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			pluginsDir := filepath.Join(dir, "plugins")
+			writeINVS5LuaPlugin(t, pluginsDir, tt.pluginName, tt.declaredEmits, tt.registeredEmits)
+
+			luaHost := pluginlua.NewHostWithFunctions(hostfunc.New(nil))
+			t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+			mgr, mgrErr := plugins.NewManager(pluginsDir,
+				plugins.WithLuaHost(luaHost),
+				plugins.WithVerbRegistry(core.NewVerbRegistry()),
+			)
+			require.NoError(t, mgrErr)
+
+			err := mgr.LoadAll(context.Background())
+			if tt.expectError {
+				require.Error(t, err, tt.assertMsg)
+				errutil.AssertErrorCode(t, err, tt.expectedErrorCode)
+				return
+			}
+			require.NoError(t, err, tt.assertMsg)
+			require.Contains(t, mgr.ListPlugins(), tt.pluginName)
+		})
+	}
+}

@@ -990,6 +990,40 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 		return oops.In("manager").With("plugin", dp.Manifest.Name).With("operation", "load").Wrap(err)
 	}
 
+	// INV-S5: manifest emit-type startup validation. Scope per INV-M1:
+	// only plugins with non-empty crypto.emits participate.
+	if dp.Manifest.Crypto != nil && len(dp.Manifest.Crypto.Emits) > 0 {
+		registered, ok := host.PluginEmitRegistry(dp.Manifest.Name)
+		if !ok {
+			// Roll back the successful host.Load so the host's plugin
+			// table (and any live subprocess / gRPC client for binary
+			// plugins) does not leak after fail-closed rejection.
+			if unloadErr := host.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
+				slog.Error("failed to rollback plugin load after PluginEmitRegistry not-found",
+					"plugin", dp.Manifest.Name, "error", unloadErr)
+			}
+			return oops.Code("PLUGIN_EMIT_REGISTRY_UNAVAILABLE").
+				In("manager").With("plugin", dp.Manifest.Name).
+				Errorf("host loaded plugin but PluginEmitRegistry returned not-found")
+		}
+		declared := manifestDeclaredEmitTypes(dp.Manifest)
+		mismatch := ValidateEmitTypeSetEquality(declared, registered)
+		if mismatch.HasMismatch() {
+			// Roll back the successful host.Load so the host's plugin
+			// table (and any live subprocess / gRPC client for binary
+			// plugins) does not leak after fail-closed rejection.
+			if unloadErr := host.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
+				slog.Error("failed to rollback plugin load after INV-S5 mismatch",
+					"plugin", dp.Manifest.Name, "error", unloadErr)
+			}
+			return oops.Code("EVENT_TYPE_REGISTRY_MISMATCH").
+				In("manager").With("plugin", dp.Manifest.Name).
+				With("declared_but_unregistered", mismatch.DeclaredButUnregistered).
+				With("registered_but_undeclared", mismatch.RegisteredButUndeclared).
+				Errorf("plugin crypto.emits manifest does not match registered emit-type set (INV-S5)")
+		}
+	}
+
 	// Discover and register attribute providers for plugin resource types.
 	// schemas is non-nil only for binary plugins that declare resource_types.
 	var schemas map[string]*types.NamespaceSchema
@@ -1554,4 +1588,18 @@ func displayTargetFromString(s string) corev1.EventChannel {
 	default:
 		return corev1.EventChannel_EVENT_CHANNEL_UNSPECIFIED
 	}
+}
+
+// manifestDeclaredEmitTypes extracts the event-type strings from
+// manifest.Crypto.Emits for INV-S5 set-equality validation. Returns nil
+// when manifest.Crypto is nil.
+func manifestDeclaredEmitTypes(m *Manifest) []string {
+	if m.Crypto == nil {
+		return nil
+	}
+	out := make([]string, 0, len(m.Crypto.Emits))
+	for _, e := range m.Crypto.Emits {
+		out = append(out, e.EventType)
+	}
+	return out
 }
