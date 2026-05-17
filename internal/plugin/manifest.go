@@ -113,6 +113,14 @@ type Manifest struct {
 	// on those subjects are forwarded to the plugin's QueryHistory RPC.
 	Audit []AuditBlock `yaml:"audit,omitempty" json:"audit,omitempty"`
 
+	// HistoryScope declares which history visibility bucket the plugin's
+	// emitted events fall into. Required when emits is non-empty (I-PRIV-7).
+	// Valid values: "grid" (visible to all observers in the grid),
+	// "scene" (visible to scene participants only),
+	// "custom" (plugin owns visibility via QueryHistory RPC).
+	// See spec docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md §I-PRIV-7.
+	HistoryScope string `yaml:"history_scope,omitempty" json:"history_scope,omitempty"`
+
 	// ABAC trust boundary fields
 	ResourceTypes []string     `yaml:"resource_types,omitempty" json:"resource_types,omitempty"`
 	Actions       []string     `yaml:"actions,omitempty" json:"actions,omitempty"`
@@ -302,6 +310,14 @@ const maxNameLength = 64
 // Cannot end with a hyphen. Single character names are allowed.
 var namePattern = regexp.MustCompile(`^[a-z](-?[a-z0-9])*$`)
 
+// validHistoryScopes is the closed enum of accepted history_scope values.
+// Enforced by I-PRIV-7: any plugin that declares emits MUST declare one.
+var validHistoryScopes = map[string]bool{
+	"grid":   true,
+	"scene":  true,
+	"custom": true,
+}
+
 // ParseManifest parses and validates a plugin.yaml file.
 func ParseManifest(data []byte) (*Manifest, error) {
 	if len(data) == 0 {
@@ -443,6 +459,17 @@ func (m *Manifest) Validate() error {
 			return err
 		}
 		m.Emits = validated
+	}
+	// I-PRIV-7: validate history_scope closed enum and require it when emits is non-empty.
+	if m.HistoryScope != "" && !validHistoryScopes[m.HistoryScope] {
+		return oops.In("manifest").With("name", m.Name).
+			With("history_scope", m.HistoryScope).
+			Errorf("history_scope %q is invalid; valid: grid, scene, custom", m.HistoryScope)
+	}
+	if len(m.Emits) > 0 && m.HistoryScope == "" {
+		return oops.In("manifest").With("name", m.Name).
+			With("emits", m.Emits).
+			New("plugin emits events but manifest does not declare history_scope (holomush-iwzt I-PRIV-7)")
 	}
 	// Validate load priority: priorities below -999 are reserved (historically for core plugins).
 	if m.Priority != nil && int(*m.Priority) < -999 {

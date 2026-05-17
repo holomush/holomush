@@ -63,6 +63,7 @@ version: 1.0.0
 type: lua
 emits:
   - location
+history_scope: grid
 actor_kinds_claimable:
   - plugin
   - character
@@ -82,6 +83,7 @@ version: 1.0.0
 type: lua
 emits:
   - location
+history_scope: grid
 actor_kinds_claimable:
   - plugin
   - character
@@ -179,6 +181,7 @@ version: 1.0.0
 type: binary
 emits:
   - scene
+history_scope: scene
 binary-plugin:
   executable: scene-binary
 `))

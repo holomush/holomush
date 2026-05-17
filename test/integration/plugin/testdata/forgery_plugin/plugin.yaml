@@ -18,6 +18,7 @@ version: 0.0.0
 type: binary
 emits:
   - location
+history_scope: grid
 actor_kinds_claimable: [plugin, character]
 requires: []
 # Declares a fictional provided service so the host's Init gate fires
