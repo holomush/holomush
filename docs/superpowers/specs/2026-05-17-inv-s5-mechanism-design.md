@@ -222,6 +222,8 @@ h.plugins[manifest.Name] = &luaPlugin{
 }
 ```
 
+**Top-level idempotency requirement.** The Load second pass executes the plugin's full top-level code, not just `register_emit_type` calls. Top-level lua code that calls non-idempotent hostfuncs (e.g., `holomush.kv_set(...)`, `holomush.create_location(...)`, `holomush.log(...)`) would fire BOTH at Load AND on every subsequent `DeliverEvent`/`DeliverCommand` (which already re-runs top-level per-delivery). Plugin authors with non-empty `crypto.emits` MUST keep top-level code idempotent — register handlers, declare locals, call `register_emit_type` — and put non-idempotent work inside `on_event`/`on_command` handlers. This is already the de-facto pattern in current plugins (`core-communication/main.lua` top-level is all `local function` declarations + one constant table) but becomes load-bearing under INV-S5.
+
 ### 2.3 New hostfunc
 
 Create `internal/plugin/hostfunc/stdlib_emit_registry.go`:
@@ -268,10 +270,16 @@ func (r *LuaEmitRegistry) Types() []string {
 // given module table; calls append to reg.
 //
 // Usage: only called via the Functions.RegisterWithEmitCapture path during
-// the Lua Host's INV-S5 Load-pass. The standard per-delivery Functions.Register
-// path does NOT install this hostfunc — register_emit_type is undefined in
-// per-delivery Lua states (no-op-by-absence; calling it raises a Lua error,
-// which is the desired behavior since registrations are Load-time-only).
+// the Lua Host's INV-S5 Load-pass. The standard per-delivery
+// Functions.Register path does NOT install register_emit_type. A
+// per-delivery Lua plugin attempting to call holomush.register_emit_type
+// will dispatch to nil and raise Lua's standard "attempt to call a nil
+// value" error, failing the handler. This is correct end-state behavior
+// (registrations are Load-time-only) but it is absence-by-default, not
+// install-and-reject. Plugin authors who put register_emit_type calls
+// inside on_event/on_command handlers (rather than top-level) will see
+// the handler fail at runtime — which is the desired signal but is not
+// a specifically-thrown error message.
 func RegisterEmitTypeFuncs(ls *lua.LState, mod *lua.LTable, reg *LuaEmitRegistry) {
     ls.SetField(mod, "register_emit_type", ls.NewFunction(func(ls *lua.LState) int {
         eventType := ls.CheckString(1)
@@ -466,12 +474,15 @@ Per `feedback_no_prod_shape_for_undeployed` and confirmed by user 2026-05-17: Ho
 
 ### 4.1 Audit precondition
 
-Before the change merges: enumerate all in-tree plugin manifests and verify which declare `crypto.emits`. The known set at spec time:
+Before the change merges: enumerate all in-tree plugin manifests and verify which declare non-empty `crypto.emits`. The complete set at spec time (verified via `rg -l '^crypto:' plugins/`):
 
-- `plugins/core-communication/plugin.yaml` — non-empty crypto.emits (8 types). Adopts in this change.
-- `plugins/core-scenes/plugin.yaml` — empty crypto.emits. Adopts in this change (implements `EmitTypeRegistrar` with empty registry).
+| Plugin | Runtime | crypto.emits | Adoption required |
+|--------|---------|--------------|-------------------|
+| `plugins/core-communication/plugin.yaml` | Lua | 8 types (`say`, `pose`, `ooc`, `emit`, `page`, `whisper`, `pemit`, `whisper_notice`) | YES — top-level `holomush.register_emit_type` calls for all 8 |
+| `plugins/core-objects/plugin.yaml` | Lua | 5 types (`object_create`, `object_destroy`, `object_use`, `object_examine`, `object_give`) | YES — top-level `holomush.register_emit_type` calls for all 5 |
+| `plugins/core-scenes/plugin.yaml` | Binary | **empty** (`crypto.emits: []`) | NO — per INV-M1, plugins without non-empty `crypto.emits` SKIP the Load-pass + validation entirely. No code change |
 
-Other in-tree plugins (`plugins/core-aliases/`, `plugins/core-building/`, `plugins/core-help/`, `plugins/core-objects/`, `plugins/echo-bot/`, `plugins/setting-crossroads/`, `plugins/setting-skeleton/`, `plugins/test-abac-widget/`) MUST be inventoried during implementation to confirm none have non-empty `crypto.emits` that go unaddressed. Per INV-M1, plugins without `crypto.emits` need zero changes.
+Per INV-M1, plugins without non-empty `crypto.emits` (the remaining in-tree plugins: `core-aliases`, `core-building`, `core-help`, `core-scenes`, `echo-bot`, `setting-crossroads`, `setting-skeleton`, `test-abac-widget`) need zero changes. The validator never fires for them.
 
 ### 4.2 Change shape
 
@@ -487,9 +498,11 @@ A single PR (or 1 substrate + 2 plugin-adoption PRs that merge together) contain
 8. `internal/plugin/lua/host.go` + `internal/plugin/goplugin/host.go` interface implementations.
 9. `internal/plugin/emit_type_validator.go` (validator).
 10. `internal/plugin/manager.go::loadPlugin` modification (validator call after `host.Load`).
-11. `plugins/core-communication/main.lua` modification (8 top-level `holomush.register_emit_type` calls).
-12. `plugins/core-scenes/main.go` modification (implements `EmitTypeRegistrar` with empty registry; field added to `scenePlugin` struct).
+11. `plugins/core-communication/main.lua` modification (8 top-level `holomush.register_emit_type` calls — `say`, `pose`, `ooc`, `emit`, `page`, `whisper`, `pemit`, `whisper_notice`).
+12. `plugins/core-objects/main.lua` modification (5 top-level `holomush.register_emit_type` calls — `object_create`, `object_destroy`, `object_use`, `object_examine`, `object_give`).
 13. Tests per §5.
+
+(Note: `core-scenes` requires NO plugin-side change. Its `crypto.emits` block is empty (`crypto.emits: []`), so INV-M1 gates it out of validation entirely. When Phase 4 (`5rh.13`) populates `crypto.emits` with `scene_ic`/`scene_ooc`/etc., Phase 4's brainstorm + plan handle the binary-side `EmitTypeRegistrar` implementation at that point.)
 
 ---
 
@@ -536,7 +549,7 @@ Add to `internal/plugin/manager_test.go`:
 
 Add a parity test that exercises the SAME logical scenario (manifest declares `[a, b]`, code registers `[a, b]`) through BOTH a Lua plugin path and a binary plugin path; assert identical validator output. Failure mode is also exercised symmetrically.
 
-This test lives at `internal/plugin/inv_s5_parity_test.go` (new file) so the parity assertion is co-located with the substrate validator.
+**Path placement:** the parity test SHOULD live at `internal/plugin/manager_parity_test.go` (new file) under the existing `plugins` package, where both `lua.Host` and `goplugin.Host` are already importable and the manager's `loadPlugin` is the integration entry. Spinning up a binary subprocess fixture is heavy (existing fixtures under `internal/plugin/goplugin/` show the pattern), so the parity test MAY use a test-only `goplugin.Host` fixture rather than a real subprocess if the parity assertion can be satisfied without process isolation. Implementation chooses based on existing fixture infrastructure cost.
 
 ---
 
@@ -548,13 +561,15 @@ Updated parent bead chain after this design lands READY (collapsed per `feedback
 
 | Bead | Title |
 |---|---|
-| `jg9b.2` | Substrate + plugin adoptions (single coherent change: proto, SDK, validator, Lua host, hostfunc, manager wiring, core-communication adopt, core-scenes adopt; fail-closed) |
+| `jg9b.2` | Substrate + plugin adoptions (single coherent change: proto, SDK, validator, Lua host, hostfunc, manager wiring, core-communication adopt, core-objects adopt; fail-closed) |
 | `jg9b.3` | Audit: enumerate in-tree plugins, confirm none with `crypto.emits` go unaddressed |
 | `jg9b.4` | Docs: substrate-contract orientation page in `site/docs/extending/` |
 | `jg9b.5` | Roadmap: update `theme:social-spaces` section in `docs/roadmap.md` |
 | `jg9b.6` | Bead hygiene: notes + dep edges on `5rh.13`, `5rh.14`, `5rh.15`, `0sc.12`, `djj`, `aqq`, `5rh.9` |
 
-The parent spec's plan is re-written after this design lands READY; that re-write materializes the new chain via `plan-to-beads`.
+**Dep-edge re-cite required.** The parent spec's §7.2 and §7.1 bead-chain diagram cite `jg9b.4` as the unblocking dependency for `5rh.13` (Scenes Phase 4) and `0sc.12` (Channels rework) — `jg9b.4` in the OLD numbering was the fail-closed flip. Under the NEW numbering (single-coherent-change rollout), the equivalent unblocking gate is `jg9b.2`. The `jg9b.6` bead-hygiene work MUST update those dep edges (`bd dep add holomush-5rh.13 holomush-jg9b.2`, `bd dep add holomush-0sc.12 holomush-jg9b.2`) AND the parent spec's prose references — not just append new notes.
+
+The parent spec's plan is re-written after this design lands READY; that re-write materializes the new chain via `plan-to-beads` and explicitly handles the dep-edge re-cite as part of `jg9b.6`.
 
 ---
 
