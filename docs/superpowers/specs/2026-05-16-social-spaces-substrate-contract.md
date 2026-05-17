@@ -37,20 +37,20 @@ The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are used per RFC2119.
 
 ## Invariants
 
-Numbered invariants this spec asserts. Each is testable; the per-Phase brainstorms and `plan-reviewer` are expected to verify continuing compliance.
+Numbered invariants this spec asserts. Each invariant has a named enforcement mechanism (column below) — some are mechanically tested (CI / grep / Postgres roles), others rely on human review during `code-reviewer` agent passes or per-Phase brainstorms. Process invariants are explicitly marked as such.
 
-| # | Invariant | Section |
-|---|-----------|---------|
-| INV-S1 | Plugins MUST NOT modify or contribute to `internal/` or any code beyond their own plugin directory and approved SDK packages (`pkg/plugin/*`, generated proto). | §2 |
-| INV-S2 | Substrate MUST stay domain-free: no `internal/` package SHALL contain entity types, event vocabularies, or domain logic for scenes/channels/forums/discord/etc. | §2 |
-| INV-S3 | Every Plugin Host RPC and SDK primitive MUST ship Go SDK + Lua hostfunc together. Asymmetric capability between runtimes is forbidden. | §1.5 |
-| INV-S4 | New event subjects MUST use NATS dot-style `events.<game_id>.<domain>.<entity-id>[.<facet>...]`. Colon-style is legacy and translated at the EventSink boundary. | §1.1 |
-| INV-S5 | Every plugin declaring `crypto.emits` MUST be subject to startup-time validation: the manifest-declared emit-type set MUST equal the code-registered emit-type set. Mismatch SHALL fail plugin startup. | §1.2 |
-| INV-S6 | Per-plugin Postgres schemas MUST remain isolated: plugin code MUST NOT open SQL connections to another plugin's schema. Cross-plugin data flow MUST be via proto contracts (`requires`/`provides`). | §1.6 |
-| INV-S7 | `eventkit` and `groupkit` SDK primitives MUST NOT land as substrate code until two distinct use plugins validate the primitive's shape (N=2 discipline). | §3.4 |
-| INV-S8 | `internal/access/` MUST NOT acquire group-domain primitives. Member-of-resource attribute resolution is a plugin-side helper (`groupkit/groupabac`), not a substrate concept. | §2.5 |
-| INV-S9 | The hard privacy boundary for scenes (and any future use with the same shape) MUST remain plugin-code-enforced. ABAC SHALL NOT be in the path for scene-log reads. | §4.1 |
-| INV-S10 | Forums and Discord uses MUST NOT consume `groupkit` primitives. Forums uses `eventkit` only; Discord is a bridge plugin and consumes substrate directly without SDK. | §4.3, §4.4 |
+| # | Invariant | Section | Enforcement |
+|---|-----------|---------|-------------|
+| INV-S1 | Plugins MUST NOT modify or contribute to `internal/` or any code beyond their own plugin directory and approved SDK packages (`pkg/plugin/*`, generated proto). | §2 | Human `code-reviewer` agent pass on every plugin PR's file list. Future follow-up: `task lint:plugin-boundary` CI predicate |
+| INV-S2 | Substrate MUST stay domain-free: no `internal/` package SHALL contain entity types, event vocabularies, or domain logic for scenes/channels/forums/discord/etc. | §2 | Human `code-reviewer`; `rg` for use-specific identifiers (scene, channel, forum, discord) under `internal/` |
+| INV-S3 | Every Plugin Host RPC and SDK primitive MUST ship Go SDK + Lua hostfunc together. Asymmetric capability between runtimes is forbidden. | §1.5 | Per-primitive parity test (mandated in §3.5); `code-reviewer` checks for paired Go + Lua delivery |
+| INV-S4 | New event subjects MUST use NATS dot-style `events.<game_id>.<domain>.<entity-id>[.<facet>...]`. Colon-style is legacy and translated at the EventSink boundary. | §1.1 | `rg "scene:\|channel:\|forum:"` for legacy emit sites in new code; `subjectxlate` boundary translates existing colon-style |
+| INV-S5 | Every plugin declaring `crypto.emits` MUST be subject to startup-time validation: the manifest-declared emit-type set MUST equal the code-registered emit-type set, in both directions. Mismatch SHALL fail plugin startup. | §1.2 | Substrate code mandated by `jg9b.1` (capability) and `jg9b.4` (flip fail-closed): startup-time set-equality check fails plugin load on mismatch |
+| INV-S6 | Per-plugin Postgres schemas MUST remain isolated: plugin code MUST NOT open SQL connections to another plugin's schema. Cross-plugin data flow MUST be via proto contracts (`requires`/`provides`). | §1.6 | Postgres role + schema isolation (substrate-mechanical: schema-level GRANT/REVOKE prevents cross-plugin reads) |
+| INV-S7 | `eventkit` and `groupkit` SDK primitives MUST NOT land as substrate code until two distinct use plugins validate the primitive's shape (N=2 discipline). | §3.4 | **Process invariant.** Enforcement artifact = a `## SDK primitive validation` section in `0sc.12`'s eventual design spec, with per-primitive verdict (`adopt as-is` / `adopt with API tweak` / `reject as not-fit`). `plan-reviewer` checks for this artifact before approving any SDK-extraction plan |
+| INV-S8 | `internal/access/` MUST NOT acquire group-domain primitives. Member-of-resource attribute resolution is a plugin-side helper (`groupkit/groupabac`), not a substrate concept. | §2.5 | Human `code-reviewer`; `rg "member.*group\|group.*member" internal/access/` should return zero hits for substrate-side group concepts |
+| INV-S9 | The hard privacy boundary for scenes (and any future use with the same shape) MUST remain plugin-code-enforced. ABAC SHALL NOT be in the path for scene-log reads. | §4.1 | Phase 6 plugin-code test: scene log read by non-participant MUST fail before the ABAC engine is consulted (call-stack assertion or boundary-violation test) |
+| INV-S10 | Forums and Discord MUST NOT consume `groupkit` primitives. Forums uses `eventkit` only. Discord defaults to no SDK; `eventkit` adoption is permitted if cross-history sync requires ABAC-filtered replay. | §4.3, §4.4 | **Process invariant.** Forums brainstorm (`djj`) and Discord brainstorm (`aqq`) MUST document SDK adoption choices in their design specs; human review of resulting plugin's import graph confirms no `groupkit` import |
 
 ---
 
@@ -97,13 +97,20 @@ events.<game_id>.<domain>.<entity-id>[.<facet>...]
 
 **Provides:** encrypted-at-rest event payloads with KEK/DEK rotation, per-event-type sensitivity classification, AuthGuard fence, INV-50 downgrade fence.
 
-**Manifest declaration:** Plugin's [`plugin.yaml::crypto.emits[]`](../../plugins/core-communication/plugin.yaml) declares each event type with `sensitivity` (`never`/`participants`/`always`) and a human description. Working reference: [`plugins/core-communication/plugin.yaml:272-297`](../../plugins/core-communication/plugin.yaml) classifies 8 event types.
+**Manifest declaration:** Plugin's [`plugin.yaml::crypto.emits[]`](../../plugins/core-communication/plugin.yaml) declares each event type with `sensitivity` (`always`/`may`/`never` — see [`internal/plugin/crypto_manifest.go:16-21`](../../internal/plugin/crypto_manifest.go)) and a human description. Working reference: [`plugins/core-communication/plugin.yaml:272-297`](../../plugins/core-communication/plugin.yaml) classifies 8 event types.
 
-**Storage shape:** Per-plugin audit tables carry `dek_ref` (BIGINT, nullable) + `dek_version` (INTEGER, nullable). Identity-codec rows have both NULL. See [`plugins/core-scenes/migrations/000005_add_scene_log_dek_columns.up.sql`](../../plugins/core-scenes/migrations/000005_add_scene_log_dek_columns.up.sql).
+Per-event "visible only to authorized consumers" routing emerges from the AuthGuard fence acting on encrypted payloads, NOT from a per-sensitivity classification value. A plugin classifies an event type as `always` (every emit MUST be `Sensitive=true`), `may` (caller decides per-emit via `Sensitive=true`/`false`), or `never` (every emit MUST be plaintext). The truth table is enforced by [`internal/plugin/sensitivity_fence.go:23-44`](../../internal/plugin/sensitivity_fence.go); see master crypto design at [`docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md`](2026-04-25-event-payload-crypto-design.md) for the full classification model.
+
+**Storage shape:** Host-owned audit table `events_audit` carries `dek_ref` (BIGINT, nullable) + `dek_version` (INTEGER, nullable); per-plugin audit tables conform to the same shape. Canonical reference: [`internal/store/migrations/000009_create_events_audit.up.sql`](../../internal/store/migrations/000009_create_events_audit.up.sql) (with subsequent amendments). Plugin-side worked example: [`plugins/core-scenes/migrations/000005_add_scene_log_dek_columns.up.sql`](../../plugins/core-scenes/migrations/000005_add_scene_log_dek_columns.up.sql). Identity-codec rows have both NULL.
 
 **Review gate:** Any change to `crypto.emits` declarations or to the surrounding crypto stack triggers the `crypto-reviewer` agent BEFORE `code-reviewer`. See [`CLAUDE.md`](../../CLAUDE.md) "Pre-Push Review Gates."
 
-**Mandated additional substrate work (this spec, INV-S5):** manifest emit-type startup validation. Today, an emit of a type not in `crypto.emits` is rejected at first attempt by `internal/plugin/event_emitter.go::Emit`; a manifest-declared type that the plugin code never registers is silent. This spec mandates a startup-time validator that fails plugin load if the declared set and registered set differ. Implementation lands as bead `jg9b.1` (substrate capability) + `jg9b.4` (flip fail-closed) — see §7.
+**Mandated additional substrate work (this spec, INV-S5):** manifest emit-type startup validation. Today's baseline at [`internal/plugin/event_emitter.go::Emit`](../../internal/plugin/event_emitter.go) (truth table verified against [`internal/plugin/sensitivity_fence.go:23-44`](../../internal/plugin/sensitivity_fence.go)): undeclared event types fall through `LookupEmitSensitivity` to `SensitivityNever`. An emit of an undeclared type with `Sensitive=false` is **silently accepted as plaintext**; only `Sensitive=true` on an undeclared (or `never`-declared) type is rejected with `EVENT_SENSITIVITY_NOT_DECLARED` (INV-6). This leaves two failure modes silent:
+
+- **(a) declared-but-unregistered:** a `crypto.emits` entry the code never emits (dead declaration / typo).
+- **(b) registered-but-undeclared:** plugin code emitting an event type the manifest never declared, with `Sensitive=false` (silently plaintext).
+
+INV-S5's startup validator catches **both directions** by requiring set-equality between manifest-declared and code-registered emit-type sets. Implementation lands as bead `jg9b.1` (substrate capability, no-op default) + `jg9b.4` (flip fail-closed) — see §7.
 
 ### 1.3 ABAC engine
 
@@ -548,13 +555,13 @@ The brainstorm for `0sc.12` will react to this spec. It MUST:
 
 **Deferred to forums brainstorm (`djj.1` design):** thread/post entity design, web UI shape, notification routing, in-game `forum recent` command, edit/delete-as-new-event model.
 
-### 4.4 Discord (`holomush-aqq`) — bridge, no SDK adoption (INV-S10)
+### 4.4 Discord (`holomush-aqq`) — bridge, defaults to no SDK (INV-S10)
 
 **Substrate consumed:** §1 selectively (channels-related parts).
 
-**SDKs consumed:** none. Discord plugin is a bridge, not a group owner.
+**SDKs consumed:** **default: none.** Discord plugin is a bridge, not a group owner. `groupkit` is forbidden by INV-S10 (no local membership state). `eventkit/replay` adoption IS permitted if cross-history sync (matching Discord's message history with HoloMUSH channel history for a given OAuth-linked account) requires ABAC-filtered replay of HoloMUSH channel history — that's the document-style read shape `replay` is designed for. The discord brainstorm (`aqq.1`) decides whether this is needed.
 
-**Why not in any SDK:** Discord does not have local membership — it mirrors Discord's groups (via OAuth-linked accounts) and forwards events between Discord and HoloMUSH's channels (`holomush-0sc`). There is no "Discord channel member" stored locally; the bridge state is presence-sync + OAuth links.
+**Why no `groupkit`:** Discord does not have local membership — it mirrors Discord's groups (via OAuth-linked accounts) and forwards events between Discord and HoloMUSH's channels (`holomush-0sc`). There is no "Discord channel member" stored locally; the bridge state is presence-sync + OAuth links. `groupkit/membership`, `groupkit/focuswire`, and `groupkit/groupabac` have no analog here.
 
 **What discord uses from substrate:**
 
@@ -626,7 +633,7 @@ For every section of [`2026-04-06-scenes-and-rp-design-v2.md`](2026-04-06-scenes
 | §1.2 State machine | CARRIED FORWARD | `active/paused/ended/archived` |
 | §1.3 Scene Participant fields | REVISED | `OriginLocationID` and `PublishVote` v2 fields were deferred in Phase 3; reinstate decision lives with Phase 6 brainstorm (`5rh.15`). Shipped Phase 3 schema: `(scene_id, character_id, role, joined_at)` |
 | §1.4 Scene Template | CARRIED FORWARD | Phase 7 work |
-| §1.5 Scene Log (Published) — name collision | REVISED | The v2 publication-snapshot concept conflicts with the shipped `scene_log` audit-projection table. Phase 6 brainstorm renames the publication artifact (proposed: `scene_publication`); `scene_log` stays the audit-projection table |
+| §1.5 Scene Log (Published) — name collision | REVISED (collision identified) / DEFERRED (rename) | The v2 publication-snapshot concept conflicts with the shipped `scene_log` audit-projection table. Phase 6 brainstorm renames the publication artifact (proposed: `scene_publication`); `scene_log` stays the audit-projection table |
 | §2 Membership vs Focus | CARRIED FORWARD | Principle holds; Phase 5 contract still pending |
 | §3.1 Stream naming | REVISED | NATS-style `events.<game_id>.scene.<id>.<facet>` per INV-S4 and `.claude/rules/event-conventions.md`. Colon-style is legacy and translated at boundary |
 | §3.2–3.4 Routing, output, subscription | REVISED | Mechanism updated: focus coordinator is the subscription router; JetStream is the delivery substrate; replay composes `HistoryReader` |
@@ -647,7 +654,7 @@ For every section of [`2026-04-06-scenes-and-rp-design-v2.md`](2026-04-06-scenes
 | §10.2 Metrics | STILL OPEN | Binary plugin metrics infrastructure unresolved; `plugins/core-scenes/metrics.go:1-30` confirms no-op stubs |
 | §10.3–10.4 Logs + business events | CARRIED FORWARD | Shipped |
 | §11.1 Binary plugin metrics path | STILL OPEN | Defer to separate plugin-infrastructure spec |
-| §11.2 Plugin→server event emission contract | RESOLVED | Closed by PR #207; see `internal/plugin/event_emitter.go::Emit` and `.claude/rules/event-conventions.md` |
+| §11.2 Plugin→server event emission contract | RESOLVED | Closed; see `internal/plugin/event_emitter.go::Emit` and `.claude/rules/event-conventions.md` "Emitting from plugins" |
 | §11.3 Telnet edge cases | DEFERRED | Phase 10 work |
 | §11.4 Content warning taxonomy | DEFERRED | Phase 8 work |
 | §11.5 Idle timeout defaults | DEFERRED | Phase 2/Phase 10 work |
