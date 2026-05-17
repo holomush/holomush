@@ -45,7 +45,7 @@ Numbered invariants this spec asserts. Each invariant has a named enforcement me
 | INV-S2 | Substrate MUST stay domain-free: no `internal/` package SHALL contain entity types, event vocabularies, or domain logic for scenes/channels/forums/discord/etc. | §2 | Human `code-reviewer`; `rg` for use-specific identifiers (scene, channel, forum, discord) under `internal/` |
 | INV-S3 | Every Plugin Host RPC and SDK primitive MUST ship Go SDK + Lua hostfunc together. Asymmetric capability between runtimes is forbidden. | §1.5 | Per-primitive parity test (mandated in §3.5); `code-reviewer` checks for paired Go + Lua delivery |
 | INV-S4 | New event subjects MUST use NATS dot-style `events.<game_id>.<domain>.<entity-id>[.<facet>...]`. Colon-style is legacy and translated at the EventSink boundary. | §1.1 | `rg "scene:\|channel:\|forum:"` for legacy emit sites in new code; `subjectxlate` boundary translates existing colon-style |
-| INV-S5 | Every plugin declaring `crypto.emits` MUST be subject to startup-time validation: the manifest-declared emit-type set MUST equal the code-registered emit-type set, in both directions. Mismatch SHALL fail plugin startup. | §1.2 | Substrate code mandated by `jg9b.1` (capability) and `jg9b.4` (flip fail-closed): startup-time set-equality check fails plugin load on mismatch |
+| INV-S5 | Every plugin declaring `crypto.emits` MUST be subject to startup-time validation: the manifest-declared emit-type set MUST equal the code-registered emit-type set, in both directions. Mismatch SHALL fail plugin startup. | §1.2 | Substrate code mandated by `jg9b.3` (single coherent change: substrate cap + plugin adoptions + fail-closed): startup-time set-equality check fails plugin load on mismatch |
 | INV-S6 | Per-plugin Postgres schemas MUST remain isolated: plugin code MUST NOT open SQL connections to another plugin's schema. Cross-plugin data flow MUST be via proto contracts (`requires`/`provides`). | §1.6 | Postgres role + schema isolation (substrate-mechanical: schema-level GRANT/REVOKE prevents cross-plugin reads) |
 | INV-S7 | `eventkit` and `groupkit` SDK primitives MUST NOT land as substrate code until two distinct use plugins validate the primitive's shape (N=2 discipline). | §3.4 | **Process invariant.** Enforcement artifact = a `## SDK primitive validation` section in `0sc.12`'s eventual design spec, with per-primitive verdict (`adopt as-is` / `adopt with API tweak` / `reject as not-fit`). `plan-reviewer` checks for this artifact before approving any SDK-extraction plan |
 | INV-S8 | `internal/access/` MUST NOT acquire group-domain primitives. Member-of-resource attribute resolution is a plugin-side helper (`groupkit/groupabac`), not a substrate concept. | §2.5 | Human `code-reviewer`; `rg "member.*group\|group.*member" internal/access/` should return zero hits for substrate-side group concepts |
@@ -110,7 +110,7 @@ Per-event "visible only to authorized consumers" routing emerges from the AuthGu
 - **(a) declared-but-unregistered:** a `crypto.emits` entry the code never emits (dead declaration / typo).
 - **(b) registered-but-undeclared:** plugin code emitting an event type the manifest never declared, with `Sensitive=false` (silently plaintext).
 
-INV-S5's startup validator catches **both directions** by requiring set-equality between manifest-declared and code-registered emit-type sets. Implementation lands as bead `jg9b.1` (substrate capability, no-op default) + `jg9b.4` (flip fail-closed) — see §7.
+INV-S5's startup validator catches **both directions** by requiring set-equality between manifest-declared and code-registered emit-type sets. Implementation lands as bead `jg9b.3` (single coherent change: substrate cap + plugin adoptions + fail-closed) — see §7.
 
 ### 1.3 ABAC engine
 
@@ -427,7 +427,7 @@ func PopulateParticipants(
 - After channels-rework validates a primitive (N=2 met for that primitive), a substrate bead files to extract it into `pkg/plugin/eventkit/<primitive>/` or `pkg/plugin/groupkit/<primitive>/` with Lua hostfunc parity.
 - Scenes-bespoke code refactors to consume the new SDK primitive (retroactive consolidation; cleanup beads under `5rh`).
 
-**No SDK code lands as part of this spec's materialization.** Beads `jg9b.1`-`jg9b.7` are exclusively the substrate-contract output: the mandated INV-S5 capability + adoption + hygiene. SDK extraction is downstream of `0sc.12`.
+**No SDK code lands as part of this spec's materialization.** Beads `jg9b.1`-`jg9b.6` are exclusively the substrate-contract output: the INV-S5 mechanism design (`.1`) + the mandated INV-S5 capability + plugin adoptions + hygiene (`.2`-`.6`). SDK extraction is downstream of `0sc.12`.
 
 ### 3.5 Go + Lua parity is structural (INV-S3)
 
@@ -531,7 +531,7 @@ The brainstorm for `0sc.12` will react to this spec. It MUST:
 
 **Phases unblocked by this spec:**
 
-- `0sc.12` channels rework — next major channels frontier after substrate beads (`jg9b.4`) land.
+- `0sc.12` channels rework — next major channels frontier after substrate beads (`jg9b.3`) land.
 - Post-`0sc.12` validation: substrate beads to extract SDK primitives.
 - `0sc.3`-`0sc.7` remaining channel features build on substrate + SDKs.
 
@@ -684,28 +684,29 @@ For every section of [`2026-04-06-scenes-and-rp-design-v2.md`](2026-04-06-scenes
 
 ### 7.1 What this spec enables to start immediately
 
-After this spec lands READY (design-reviewer verdict) and `plan-to-beads` materializes the chain:
+After this spec lands READY (design-reviewer verdict), the INV-S5
+runtime mechanism is settled in a child brainstorm (`holomush-jg9b.1`,
+see [INV-S5 mechanism design spec](2026-05-17-inv-s5-mechanism-design.md)),
+and `plan-to-beads` materializes the chain:
 
 ```text
 holomush-jg9b (epic) — Substrate contract: theme:social-spaces
 │
-├─ Phase A: Substrate capability
-│  ├─ jg9b.1  Substrate: manifest emit-type validation capability
-│  │
-│  ├─ jg9b.2  Plugin: core-communication adopts RegisterEmitTypes   (parallel)
-│  ├─ jg9b.3  Plugin: core-scenes adopts RegisterEmitTypes (empty)   (parallel)
-│  │  (.2 ∧ .3 depend on .1)
-│  │
-│  └─ jg9b.4  Substrate: flip emit-type validation fail-closed
-│             (depends on .2 ∧ .3)
+├─ jg9b.1  Design: INV-S5 runtime mechanism (Lua + binary) — child brainstorm; READY
 │
-└─ Phase B: Hygiene + propagation (parallel after .4 closes)
-   ├─ jg9b.5  Documentation: substrate-contract orientation in site/docs
-   ├─ jg9b.6  Roadmap: update theme:social-spaces narrative
-   └─ jg9b.7  Bead-hygiene: update affected beads to reference spec
+├─ Phase A: Substrate capability (single coherent rollout)
+│  ├─ jg9b.2  Audit: enumerate in-tree plugins declaring crypto.emits   (precondition)
+│  └─ jg9b.3  Substrate: INV-S5 cap + core-communication + core-objects adoptions (atomic)
+│             (single change: proto, SDK, validator, Lua host, hostfunc, manager wiring,
+│              plugin adoptions, fail-closed; depends on .2)
+│
+└─ Phase B: Hygiene + propagation (parallel after .3 closes)
+   ├─ jg9b.4  Documentation: substrate-contract orientation in site/docs/extending/
+   ├─ jg9b.5  Roadmap: update theme:social-spaces narrative
+   └─ jg9b.6  Bead-hygiene: propagate spec refs + dep edges on affected beads
 ```
 
-**`jg9b.4` unblocks (via dep edges, not parentage):**
+**`jg9b.3` unblocks (via dep edges, not parentage):**
 
 - `5rh.13` Scenes Phase 4 (event streams + pose order) — will add `crypto.emits` entries.
 - `0sc.12` Channels plugin rework — will add `crypto.emits` entries and serve as N=2 validator for SDK primitives.
@@ -714,11 +715,11 @@ holomush-jg9b (epic) — Substrate contract: theme:social-spaces
 
 | Bead | Parent epic | Status |
 |------|-------------|--------|
-| `5rh.13` Phase 4 | `5rh` Scenes & RP | OPEN — depends on `jg9b.4` |
+| `5rh.13` Phase 4 | `5rh` Scenes & RP | OPEN — depends on `jg9b.3` |
 | `5rh.14` Phase 5 | `5rh` Scenes & RP | OPEN — depends on `5rh.13` |
 | `5rh.15` Phase 6 | `5rh` Scenes & RP | OPEN |
 | `5rh.16`-`5rh.19` Phases 7-10 | `5rh` Scenes & RP | OPEN |
-| `0sc.12` Channels rework | `0sc` Channels | IN_PROGRESS — depends on `jg9b.4`; N=2 validator |
+| `0sc.12` Channels rework | `0sc` Channels | IN_PROGRESS — depends on `jg9b.3`; N=2 validator |
 | `0sc.2`-`0sc.7`, `0sc.10`, `0sc.11` | `0sc` Channels | OPEN; may re-shuffle post-`0sc.12` |
 | `djj.1`-`djj.5` Forums | `djj` Forums | OPEN; independent brainstorm |
 | `aqq.1`-`aqq.7` Discord | `aqq` Discord | OPEN; depends on channels |
@@ -731,8 +732,8 @@ After `0sc.12` validates `eventkit` and `groupkit` primitive shapes, a separate 
 
 | Brainstorm | Trigger | Decides |
 |------------|---------|---------|
-| Phase 4 emit + pose order (`5rh.13`) | After `jg9b.4` lands | crypto sensitivity matrix; GetPoseOrder RPC; ops vs content event vocabulary |
-| Channels rework (`0sc.12`) | After `jg9b.4` lands | type vocabulary; moderation primitives; history-replay UX; SDK validation feedback |
+| Phase 4 emit + pose order (`5rh.13`) | After `jg9b.3` lands | crypto sensitivity matrix; GetPoseOrder RPC; ops vs content event vocabulary |
+| Channels rework (`0sc.12`) | After `jg9b.3` lands | type vocabulary; moderation primitives; history-replay UX; SDK validation feedback |
 | Phase 5 focus integration (`5rh.14`) | After Phase 4 | auto-focus-on-join; membership-vs-focus crossover |
 | Phase 6 publish vote + privacy + `scene_log` rename (`5rh.15`) | After Phase 5 | publication artifact name; vote machinery; OriginLocationID / PublishVote reinstate decision |
 | Phases 7-10 (`5rh.16`-`5rh.19`) | Sequential after Phase 6 | templates; scene board; web client; polish |
@@ -765,11 +766,11 @@ Carried forward from v2 §11 plus new items. Each gets its own brainstorm before
 
 | Area | Status | Brainstorm trigger |
 |------|--------|---------------------|
-| Phase 4 emit + pose order | OPEN | After `jg9b.4` lands |
+| Phase 4 emit + pose order | OPEN | After `jg9b.3` lands |
 | Phase 5 focus model integration | OPEN | After Phase 4 |
 | Phase 6 publish vote + privacy + `scene_log` rename | OPEN | After Phase 5 |
 | Phases 7-10 scenes polish | OPEN | Sequential after Phase 6 |
-| Channels rework + SDK validation | OPEN | After `jg9b.4` lands |
+| Channels rework + SDK validation | OPEN | After `jg9b.3` lands |
 | Forums design | OPEN | Independent |
 | Discord design | OPEN | After channels |
 | Binary plugin Prometheus metrics | OPEN | Separate substrate-infra brainstorm |

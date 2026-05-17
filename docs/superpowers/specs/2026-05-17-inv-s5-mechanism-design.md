@@ -580,19 +580,19 @@ Add a parity test that exercises the SAME logical scenario (manifest declares `[
 
 This design's READY verdict unblocks the parent spec's implementation work. The parent spec's bead chain (originally `jg9b.1`-`jg9b.7`) needs renumbering — `jg9b.1` is now this design bead.
 
-Updated parent bead chain after this design lands READY (collapsed per `feedback_no_prod_shape_for_undeployed`):
+Updated parent bead chain after this design lands READY (collapsed per `feedback_no_prod_shape_for_undeployed`; audit precedes substrate atomic per plan-to-beads materialization):
 
 | Bead | Title |
 |---|---|
-| `jg9b.2` | Substrate + plugin adoptions (single coherent change: proto, SDK, validator, Lua host, hostfunc, manager wiring, core-communication adopt, core-objects adopt; fail-closed) |
-| `jg9b.3` | Audit: enumerate in-tree plugins, confirm none with `crypto.emits` go unaddressed |
+| `jg9b.2` | Audit: enumerate in-tree plugins, confirm none with `crypto.emits` go unaddressed (precondition for `.3`) |
+| `jg9b.3` | Substrate + plugin adoptions (single coherent change: proto, SDK, validator, Lua host, hostfunc, manager wiring, core-communication adopt, core-objects adopt; fail-closed) |
 | `jg9b.4` | Docs: substrate-contract orientation page in `site/docs/extending/` |
 | `jg9b.5` | Roadmap: update `theme:social-spaces` section in `docs/roadmap.md` |
 | `jg9b.6` | Bead hygiene: notes + dep edges on `5rh.13`, `5rh.14`, `5rh.15`, `0sc.12`, `djj`, `aqq`, `5rh.9` |
 
-**Dep-edge re-cite required.** The parent spec's §7.2 and §7.1 bead-chain diagram cite `jg9b.4` as the unblocking dependency for `5rh.13` (Scenes Phase 4) and `0sc.12` (Channels rework) — `jg9b.4` in the OLD numbering was the fail-closed flip. Under the NEW numbering (single-coherent-change rollout), the equivalent unblocking gate is `jg9b.2`. The `jg9b.6` bead-hygiene work MUST update those dep edges (`bd dep add holomush-5rh.13 holomush-jg9b.2`, `bd dep add holomush-0sc.12 holomush-jg9b.2`) AND the parent spec's prose references — not just append new notes.
+**Dep-edge re-cite handled in this PR's parent-spec amendments.** The parent spec's §7.1 chain diagram, §7.1 unblocks prose, §7.2 downstream table, and §7.4 brainstorms table previously cited `jg9b.4` as the unblocking dependency for `5rh.13` (Scenes Phase 4) and `0sc.12` (Channels rework) — `jg9b.4` in the OLD numbering was the fail-closed flip. Under the NEW numbering (single-coherent-change rollout with audit first), the equivalent unblocking gate is `jg9b.3` (substrate cap + plugin adoptions atomic; fail-closed). Those parent-spec references have been updated in this PR; the `jg9b.6` bead-hygiene work owns the bd dep-edge wiring only (`bd dep add holomush-5rh.13 holomush-jg9b.3`, `bd dep add holomush-0sc.12 holomush-jg9b.3`).
 
-The parent spec's plan is re-written after this design lands READY; that re-write materializes the new chain via `plan-to-beads` and explicitly handles the dep-edge re-cite as part of `jg9b.6`.
+The parent spec's plan is re-written after this design lands READY; that re-write materializes the new chain via `plan-to-beads` and `jg9b.6` handles the bd dep-edge wiring.
 
 ---
 
