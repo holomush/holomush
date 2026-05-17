@@ -33,7 +33,14 @@ func streamScopeFloor(info *session.Info, stream string) time.Time {
 	default:
 		return time.Time{}
 	}
-	if info.IsGuest && info.GuestCharacterCreatedAt.After(base) {
+	// Guest identity overlay: when GuestCharacterCreatedAt is non-zero (set
+	// at session creation for guest players), apply it as the floor if it's
+	// later than the base. Use the non-zero timestamp as the guest signal
+	// rather than session.Info.IsGuest — the IsGuest flag is also read at
+	// `internal/grpc/server.go::Disconnect` to trigger immediate session
+	// deletion, which breaks page-reload reattach. Tracked as a separate
+	// follow-up to redesign that disconnect path.
+	if !info.GuestCharacterCreatedAt.IsZero() && info.GuestCharacterCreatedAt.After(base) {
 		return info.GuestCharacterCreatedAt
 	}
 	return base

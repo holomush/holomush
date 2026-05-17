@@ -2307,3 +2307,74 @@ func TestLogoutFanoutContinuesAfterIndividualSessionErrors(t *testing.T) {
 	assert.Equal(t, 2, sessionEndedAppends,
 		"logout fanout must attempt EndSession for every child game session, not stop after the first failure")
 }
+
+// =============================================================================
+// Guest session I-PRIV-2 floor fields (iwzt.5)
+// =============================================================================
+
+// TestGuestSessionCarriesCharacterCreatedAt verifies that SelectCharacter for a
+// guest player stamps a non-zero GuestCharacterCreatedAt on the created
+// session.Info so that QueryStreamHistory has a temporal floor for I-PRIV-2
+// (per-session attach interval). IsGuest is intentionally NOT stamped — see
+// holomush-hfvc for the disconnect-path redesign that will re-enable it.
+func TestGuestSessionCarriesCharacterCreatedAt(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+	charID := ulid.Make()
+	locID := ulid.Make()
+	charCreatedAt := time.Now().Add(-5 * time.Minute) // non-zero, fixed reference
+
+	ps := makePlayerSession(playerID)
+	sessionRepo := setupSessionRepo(t, ps)
+
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{
+			{
+				ID:        charID,
+				PlayerID:  playerID,
+				Name:      "Sapphire Diamond",
+				LocationID: &locID,
+				CreatedAt: charCreatedAt,
+			},
+		}, nil)
+
+	playerRepo := authmocks.NewMockPlayerRepository(t)
+	playerRepo.EXPECT().GetByID(mock.Anything, playerID).
+		Return(&auth.Player{
+			ID:      playerID,
+			IsGuest: true,
+		}, nil)
+
+	sessionStore := session.NewMemStore()
+	sessionID := core.NewULID()
+
+	server := &CoreServer{
+		engine:            core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore:      sessionStore,
+		playerSessionRepo: sessionRepo,
+		charRepo:          charRepo,
+		playerRepo:        playerRepo,
+		newSessionID:      func() ulid.ULID { return sessionID },
+	}
+
+	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+		PlayerSessionToken: validToken,
+		CharacterId:        charID.String(),
+	})
+	require.NoError(t, err)
+	require.True(t, resp.Success)
+
+	info, err := sessionStore.Get(ctx, resp.SessionId)
+	require.NoError(t, err)
+
+	// Non-zero GuestCharacterCreatedAt is the I-PRIV-2 guest-overlay signal
+	// used by streamScopeFloor. We intentionally do NOT stamp IsGuest=true
+	// here — that flag also drives the immediate-delete branch at
+	// server.go::Disconnect:1260 which breaks page-reload reattach.
+	// Redesign of that disconnect path is tracked separately.
+	assert.False(t, info.GuestCharacterCreatedAt.IsZero(),
+		"guest session must capture character.CreatedAt for I-PRIV-2 floor")
+	assert.WithinDuration(t, charCreatedAt, info.GuestCharacterCreatedAt, time.Second,
+		"GuestCharacterCreatedAt must match character.CreatedAt")
+}

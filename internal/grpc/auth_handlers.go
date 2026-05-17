@@ -284,6 +284,30 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 		}, nil
 	}
 
+	// Determine the guest temporal floor for I-PRIV-2 BEFORE the reattach
+	// branch — both fresh and reattach paths need GuestCharacterCreatedAt
+	// so a reattach to a pre-iwzt-T5 session can backfill the floor.
+	// Best-effort: if the player lookup fails (or playerRepo is
+	// unconfigured) we log a warning but do not block session creation —
+	// the floor is left at zero (no guest overlay).
+	//
+	// Note: we intentionally DO NOT set session.Info.IsGuest=true here.
+	// The IsGuest flag is also read by Disconnect at server.go:1260 to
+	// trigger immediate session deletion, which breaks page-reload
+	// reattach. The non-zero GuestCharacterCreatedAt timestamp is the
+	// guest-overlay signal used by streamScopeFloor; redesigning the
+	// disconnect path is tracked as a separate follow-up.
+	var guestCharCreatedAt time.Time
+	if s.playerRepo != nil {
+		player, playerErr := s.playerRepo.GetByID(ctx, playerSession.PlayerID)
+		if playerErr != nil {
+			slog.WarnContext(ctx, "select_character: player lookup failed; guest floor will be zero",
+				"player_id", playerSession.PlayerID.String(), "error", playerErr)
+		} else if player.IsGuest {
+			guestCharCreatedAt = selectedChar.CreatedAt
+		}
+	}
+
 	// Check for existing session to reattach.
 	existingSession, findErr := s.sessionStore.FindByCharacter(ctx, charID)
 	if findErr != nil {
@@ -305,6 +329,19 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 		existingSession.Status = session.StatusActive
 		existingSession.LocationArrivedAt = now
 		existingSession.UpdatedAt = now
+
+		// In-memory backfill of guest floor if absent (session created
+		// pre-iwzt-T5). NOT persisted here: calling sessionStore.Set would
+		// overwrite the just-issued UpdateStatus(active) clearing of
+		// detached_at/expires_at because the in-memory existingSession still
+		// carries the stale pre-reattach values for those fields. A targeted
+		// SetGuestMetadata store method is the proper persistent backfill —
+		// tracked as holomush-omy8. The temporal floor for QueryStreamHistory
+		// uses the in-memory session.Info, so the response still gets the
+		// right guest overlay even without persistence.
+		if !guestCharCreatedAt.IsZero() && existingSession.GuestCharacterCreatedAt.IsZero() {
+			existingSession.GuestCharacterCreatedAt = guestCharCreatedAt
+		}
 
 		return &corev1.SelectCharacterResponse{
 			Success:       true,
@@ -333,19 +370,20 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 	}
 
 	sessionInfo := &session.Info{
-		ID:                sessionID.String(),
-		CharacterID:       charID,
-		PlayerID:          playerSession.PlayerID,
-		PlayerSessionID:   playerSession.ID,
-		CharacterName:     selectedChar.Name,
-		LocationID:        locationID,
-		Status:            session.StatusActive,
-		GridPresent:       true,
-		TTLSeconds:        ttlSeconds,
-		MaxHistory:        maxHistory,
-		LocationArrivedAt: now,
-		CreatedAt:         now,
-		UpdatedAt:         now,
+		ID:                      sessionID.String(),
+		CharacterID:             charID,
+		PlayerID:                playerSession.PlayerID,
+		PlayerSessionID:         playerSession.ID,
+		CharacterName:           selectedChar.Name,
+		LocationID:              locationID,
+		LocationArrivedAt:       now,
+		Status:                  session.StatusActive,
+		GridPresent:             true,
+		TTLSeconds:              ttlSeconds,
+		MaxHistory:              maxHistory,
+		GuestCharacterCreatedAt: guestCharCreatedAt,
+		CreatedAt:               now,
+		UpdatedAt:               now,
 	}
 
 	if err := s.sessionStore.Set(ctx, sessionID.String(), sessionInfo); err != nil {
