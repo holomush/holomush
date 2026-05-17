@@ -16,6 +16,11 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Plugin Manifests Opt-In to history_scope (vs Spec's Exempt-List Framing)](holomush-jhl5-plugin-history-scope-opt-in.md) | 2026-05-17 | Accepted | `holomush-jhl5` |
+| [Hard-Gate (Current-Location-Only) for Location-Stream History Reads](holomush-wxty-hard-gate-location-stream-history.md) | 2026-05-17 | Accepted | `holomush-wxty` |
+| [Per-Session Attach Intervals on SessionInfo for Multi-Session Continuity](holomush-rc8b-per-session-attach-intervals.md) | 2026-05-17 | Accepted | `holomush-rc8b` |
+| [Session-Store Sync Hook on Character Move](holomush-kmac-session-store-sync-hook-character-move.md) | 2026-05-17 | Accepted | `holomush-kmac` |
+| [In-Process Filter-at-Delivery as Load-Bearing Privacy Gate; NATS-as-Source-of-Truth for Consumer Config](holomush-ghpx-filter-at-delivery-and-nats-source-of-truth.md) | 2026-05-17 | Accepted | `holomush-ghpx` |
 | [Use suiteT Capture Pattern Instead of GinkgoT() for testing.TB](holomush-1f1w-suitet-capture-pattern-ginkgo-testing-tb.md) | 2026-05-16 | Accepted | `holomush-1f1w` |
 | [Remap INV-Pinned Test\* Functions to Ginkgo Suite Entries on Migration](holomush-iv7l-remap-inv-pinned-tests-ginkgo-suite-entries.md) | 2026-05-16 | Accepted | `holomush-iv7l` |
 | [AdminReadStream Bypasses HistoryReader/Dispatcher](holomush-8f2x-adminreadstream-bypasses-historyreaderdispatcher.md) | 2026-05-12 | Accepted | `holomush-8f2x` |

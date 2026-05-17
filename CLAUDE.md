@@ -102,13 +102,12 @@ Work is tracked in `bd` (see `.claude/rules/beads-project.md` and `bd prime`). S
 
 | Stage | Skill / Action                                  | Gate before next stage         |
 | ----- | ----------------------------------------------- | ------------------------------ |
-| 1     | `superpowers:brainstorming`                     | (conversation only)            |
+| 1     | `dev-flow:brainstorming`                        | (conversation only)            |
 | 2     | (writes spec from brainstorming)                | `design-reviewer` — READY      |
-| 3     | `superpowers:writing-plans`                     | `plan-reviewer` — READY        |
-| 4     | `bead-chain-design`                             | user reviews proposed split    |
-| 5     | `bead-chain-from-plan`                          | user reviews dry-run manifest  |
-| 6     | `superpowers:subagent-driven-development`       | `code-reviewer` (+ `crypto-reviewer` / `abac-reviewer` when applicable) before push |
-| 7     | `gh pr create`                                  | `task pr-prep` green; `/autofix <PR#>` for CodeRabbit |
+| 3     | `dev-flow:writing-plans`                        | `plan-reviewer` — READY        |
+| 4     | `dev-flow:plan-to-beads` (auto-fired by writing-plans on READY; preceded by `dev-flow:capture-adrs`) | user reviews dry-run manifest before materialization |
+| 5     | `dev-flow:subagent-driven-development`          | `code-reviewer` (+ `crypto-reviewer` / `abac-reviewer` when applicable) before push |
+| 6     | `gh pr create`                                  | `task pr-prep` green; `/autofix <PR#>` for CodeRabbit |
 
 Detail on each gate is in `## Pre-Push Review Gates`. Skipping requires explicit user override.
 
@@ -124,13 +123,11 @@ All tasks MUST be reviewed before completion via `pr-review-toolkit:review-pr`. 
 | **MUST** address all findings              | Fix issues or document why not applicable            |
 | **MUST NOT** skip review                   | Even for "simple" changes                            |
 
-### Plan → Bead Chain convention
+### Plan → bd materialization
 
-Plans with multiple tracked tasks MUST contain a `## Bead chain structure` section (level-2, exact wording, case-sensitive) covering: parent epic, each task bead, supersessions, follow-up beads, and `bd dep add` edges.
+Plans drive bd state via `dev-flow:plan-to-beads`, which reads the plan's task table (each `### Task N:` heading inside a `## Phase N:` section) and materializes the epic + child beads + dependency graph in one pass. **Plans do NOT carry a `## Bead chain structure` section** — bd is the source of truth for graph topology (per the `dev-flow:plan-to-beads` skill spec Rule 4). The ancestor `bead-chain-design` / `bead-chain-from-plan` convention is superseded.
 
-Each task bead's `--description` MUST include all 8 sections: **Goal**, **Design reference**, **Plan reference**, **TDD acceptance criteria**, **Verification steps**, **Files touched**, **Dependencies**, **Out of scope**.
-
-Skills `bead-chain-design` (writes the section) and `bead-chain-from-plan` (materializes `bd` issues + edges + parent linkage) operate on this convention. If the chain section is missing, `bead-chain-from-plan` delegates to `bead-chain-design` first.
+Per Rule 3, each task bead's `--description` is **narrative only** (Goal, Plan reference, Files touched, Out of scope). Acceptance criteria, verification commands, dependencies, and labels live in their dedicated bd flags (`--acceptance`, `--deps`, `--labels`, `--skills`).
 
 ## Strategic Themes
 
@@ -163,8 +160,8 @@ by providing an earlier, in-session review pass.
 
 | Agent             | Fires before                                                                           | Invocation                              |
 | ----------------- | -------------------------------------------------------------------------------------- | --------------------------------------- |
-| `design-reviewer` | `superpowers:writing-plans` is invoked on a spec                                       | `/review-design [<spec-path>]` or auto  |
-| `plan-reviewer`   | `superpowers:executing-plans` or `superpowers:subagent-driven-development` runs a plan | `/review-plan [<plan-path>]` or auto    |
+| `design-reviewer` | `dev-flow:writing-plans` is invoked on a spec                                       | `/review-design [<spec-path>]` or auto  |
+| `plan-reviewer`   | `dev-flow:executing-plans` or `dev-flow:subagent-driven-development` runs a plan | `/review-plan [<plan-path>]` or auto    |
 | `code-reviewer`   | `bd close`, `jj git push`, or PR creation                                              | `/review-code [<target>]` or auto       |
 | `crypto-reviewer` | `code-reviewer` (runs FIRST), for changes touching `internal/eventbus/crypto/`, `internal/eventbus/codec/`, `internal/eventbus/history/dispatcher.go`, `internal/eventbus/history/cold_postgres.go`, `internal/plugin/event_emitter.go::Emit`, `internal/eventbus/audit/projection.go`, plugin manifest `crypto.emits` declarations, or migrations on `crypto_keys` / `events_audit` | `/review-crypto` or auto via `remind-pre-action-review.sh` |
 | `abac-reviewer`   | `code-reviewer` (runs alongside), for changes touching `internal/access/`              | `/review-abac` or auto via `remind-pre-action-review.sh` |
@@ -224,7 +221,7 @@ Detail in `.claude/rules/testing.md` (auto-loads when editing test files): cover
 
 | Always-on rule                       | Description                                                                  |
 | ------------------------------------ | ---------------------------------------------------------------------------- |
-| **MUST** write tests before impl     | TDD — see `superpowers:test-driven-development`                              |
+| **MUST** write tests before impl     | TDD — see `dev-flow:test-driven-development`                              |
 | **MUST** maintain >80% coverage      | Per-package; verify with `task test:cover`                                   |
 | **MUST** use Ginkgo/Gomega for E2E   | Build tag `//go:build integration`; runs via `task test:int`                 |
 | **MUST** run `task test:int` on refactors | `task test` does NOT compile integration files — refactors of shared types break silently otherwise |
