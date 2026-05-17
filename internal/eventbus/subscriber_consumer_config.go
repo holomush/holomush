@@ -32,12 +32,9 @@ type consumerLookup interface {
 
 // jsConsumerLookupAdapter wraps a jetstream.JetStream so it satisfies the
 // narrow consumerLookup interface buildConsumerConfig consumes. Wired into
-// OpenSession and SetFilters by Task 12 (holomush-iwzt.13).
-//
-//nolint:unused // production adapter; wired in Task 12 (holomush-iwzt.13)
+// OpenSession and SetFilters by Task 13 (holomush-iwzt.13).
 type jsConsumerLookupAdapter struct{ js jetstream.JetStream }
 
-//nolint:unused // production adapter; wired in Task 12 (holomush-iwzt.13)
 func (a jsConsumerLookupAdapter) LookupConsumer(ctx context.Context, stream, name string) (consumerInfo, error) {
 	c, err := a.js.Consumer(ctx, stream, name)
 	if err != nil {
@@ -63,7 +60,6 @@ func (a jsConsumerLookupAdapter) LookupConsumer(ctx context.Context, stream, nam
 //
 //  3. Any other error: fails closed with EVENTBUS_CONSUMER_LOOKUP_FAILED.
 //     Callers MUST NOT call CreateOrUpdateConsumer when this error is returned.
-//nolint:unparam // streamName is always "STREAM" in unit tests but carries real stream names in production (Task 12 call sites)
 func buildConsumerConfig(
 	ctx context.Context, js consumerLookup,
 	streamName, consumerName string,

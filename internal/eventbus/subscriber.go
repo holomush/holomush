@@ -174,16 +174,22 @@ func (s *JetStreamSubscriber) OpenSession(ctx context.Context, sessionID string,
 			With("session_id", sessionID).
 			Errorf("at least one subject filter required")
 	}
-	cfg := jetstream.ConsumerConfig{
-		Durable:           name,
-		Name:              name,
-		FilterSubjects:    subjects,
-		AckPolicy:         jetstream.AckExplicitPolicy,
-		AckWait:           s.ackWait,
-		MaxAckPending:     s.maxAckPending,
-		InactiveThreshold: s.inactiveThreshold,
-		DeliverPolicy:     jetstream.DeliverAllPolicy,
+	// Compute minFloor across subjects — Phase 3 wires this from session info.
+	// For now (this task only), pass time.Time{} so first-create gets
+	// DeliverAllPolicy, preserving existing behavior. iwzt.14 (Task 13)
+	// replaces the zero value with the real minFloor computation.
+	minFloor := time.Time{}
+
+	cfg, err := buildConsumerConfig(ctx, jsConsumerLookupAdapter{js: s.js}, StreamName, name, subjects, minFloor)
+	if err != nil {
+		return nil, err
 	}
+	// Augment cfg with the non-start-policy defaults that OpenSession owns.
+	cfg.AckPolicy = jetstream.AckExplicitPolicy
+	cfg.AckWait = s.ackWait
+	cfg.MaxAckPending = s.maxAckPending
+	cfg.InactiveThreshold = s.inactiveThreshold
+
 	cons, err := s.js.CreateOrUpdateConsumer(ctx, StreamName, cfg)
 	if err != nil {
 		return nil, oops.Code("EVENTBUS_SESSION_CONSUMER_FAILED").
@@ -345,17 +351,24 @@ func (j *jetStreamSessionStream) SetFilters(ctx context.Context, filters []Subje
 			With("session_id", j.sessionID).
 			Errorf("at least one subject filter required")
 	}
-	cfg := jetstream.ConsumerConfig{
-		Durable:           j.consumerName,
-		Name:              j.consumerName,
-		FilterSubjects:    subjects,
-		AckPolicy:         jetstream.AckExplicitPolicy,
-		AckWait:           j.ackWait,
-		MaxAckPending:     j.maxPending,
-		InactiveThreshold: j.inactiveTTL,
-		DeliverPolicy:     jetstream.DeliverAllPolicy,
+	// SetFilters is called on an existing durable — the builder's
+	// existing-consumer branch preserves DeliverPolicy/OptStartTime/OptStartSeq
+	// from the live consumer, so the cursor is not reset on filter rotation.
+	// minFloor is unused here (the consumer already exists); pass zero.
+	cfg, err := buildConsumerConfig(ctx, jsConsumerLookupAdapter{js: j.js}, StreamName, j.consumerName, subjects, time.Time{})
+	if err != nil {
+		return oops.Code("EVENTBUS_SESSION_SETFILTERS_FAILED").
+			With("session_id", j.sessionID).
+			With("consumer", j.consumerName).
+			Wrap(err)
 	}
-	_, err := j.js.CreateOrUpdateConsumer(ctx, StreamName, cfg)
+	// Augment cfg with the non-start-policy defaults that SetFilters owns.
+	cfg.AckPolicy = jetstream.AckExplicitPolicy
+	cfg.AckWait = j.ackWait
+	cfg.MaxAckPending = j.maxPending
+	cfg.InactiveThreshold = j.inactiveTTL
+
+	_, err = j.js.CreateOrUpdateConsumer(ctx, StreamName, cfg)
 	if err != nil {
 		return oops.Code("EVENTBUS_SESSION_SETFILTERS_FAILED").
 			With("session_id", j.sessionID).
