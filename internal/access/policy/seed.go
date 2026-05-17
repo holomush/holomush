@@ -11,7 +11,7 @@ type SeedPolicy struct {
 	SeedVersion int
 }
 
-// SeedPolicies returns the complete set of 34 seed policies (25 permit, 9 forbid).
+// SeedPolicies returns the complete set of 35 seed policies (26 permit, 9 forbid).
 // The initial 18 (T22) minus 2 removed command policies, plus 5 gap-fill policies (T22b: G1-G4),
 // 1 phase-2 command policy, and 2 system bootstrap policies.
 // Default deny behavior is provided by EffectDefaultDeny (no matching policy = denied).
@@ -286,6 +286,19 @@ func SeedPolicies() []SeedPolicy {
 			Name:        "seed:deny-events-system-read-plugin",
 			Description: "Plugins MUST NOT read events.*.system.* streams (Phase 5 sub-epic E; A16 / INV-15 extension — covers rekey and all future system audit namespaces)",
 			DSLText:     `forbid(principal is plugin, action in ["read"], resource is stream) when { resource.stream.name like "events.*.system.*" };`,
+			SeedVersion: 1,
+		},
+
+		// --- Phase-5 iwzt history-scope-privacy staff override policy (I-PRIV-6) ---
+		//
+		// Staff and admins may bypass the per-session temporal floor (the read_unrestricted_history
+		// action) but NOT the location hard-gate (ADR wxty preserves the gate for all principals).
+		// Action-only seed; no resource-type guard because the gate is about the action class,
+		// not the resource namespace.
+		{
+			Name:        "seed:staff-read-unrestricted-history",
+			Description: "Staff and admins may bypass the per-session temporal floor for history reads (I-PRIV-6); location hard-gate still applies (ADR wxty)",
+			DSLText:     `permit(principal is character, action in ["read_unrestricted_history"], resource) when { "staff" in principal.character.roles || "admin" in principal.character.roles };`,
 			SeedVersion: 1,
 		},
 	}
