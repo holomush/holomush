@@ -1134,6 +1134,8 @@ func TestQueryStreamHistoryFiltersAuditOnlyEvents(t *testing.T) {
 // TestQueryStreamHistory_LocationHardGate_DeniedWhenNotInLocation verifies
 // that a session requesting a location stream is denied when the session's
 // LocationID does not match the requested location (I-PRIV-1 Tier 1).
+// Uses DenyAllEngine so the staff override path (I-PRIV-6) returns false,
+// exercising the hard-gate denial without ABAC interference.
 func TestQueryStreamHistory_LocationHardGate_DeniedWhenNotInLocation(t *testing.T) {
 	t.Parallel()
 	future := time.Now().Add(time.Hour)
@@ -1146,7 +1148,13 @@ func TestQueryStreamHistory_LocationHardGate_DeniedWhenNotInLocation(t *testing.
 			ExpiresAt:  &future,
 		},
 	})
-	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, sess)
+	// DenyAllEngine ensures staffOverride returns false, so the I-PRIV-1
+	// hard-gate rejects the request when the session is at a different location.
+	s := &CoreServer{
+		sessionStore:  sess,
+		historyReader: &fakeHistoryReader{},
+		accessEngine:  policytest.DenyAllEngine(),
+	}
 
 	resp, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
@@ -1155,4 +1163,48 @@ func TestQueryStreamHistory_LocationHardGate_DeniedWhenNotInLocation(t *testing.
 	require.Nil(t, resp)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "STREAM_ACCESS_DENIED")
+}
+
+// TestQueryStreamHistory_StaffOverride_BypassesHardGate verifies that a
+// session whose character is granted read_unrestricted_history via ABAC can
+// query a location stream even when not co-located with that location
+// (I-PRIV-6 / ADR wxty). The staff override path bypasses the I-PRIV-1
+// location hard-gate.
+func TestQueryStreamHistory_StaffOverride_BypassesHardGate(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	locA := ulid.MustParse("01HYXLOCA0000000000000000A")
+	locB := ulid.MustParse("01HYXLOCB0000000000000000B")
+	charID := ulid.MustParse("01HYXCHAR00000000000000001")
+
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"staff-1": {
+			ID:          "staff-1",
+			CharacterID: charID,
+			LocationID:  locA, // in locA, but will query locB
+			ExpiresAt:   &future,
+		},
+	})
+
+	// staffGrantEngine grants read_unrestricted_history for the character
+	// subject (any resource), matching what the real seed policy does.
+	staffEngine := policytest.NewGrantEngine()
+	staffEngine.Grant(
+		"character:"+charID.String(),
+		"read_unrestricted_history",
+		"stream:*",
+	)
+
+	reader := &fakeHistoryReader{events: nil}
+	s := &CoreServer{
+		sessionStore:  sess,
+		historyReader: reader,
+		accessEngine:  staffEngine,
+	}
+
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "staff-1",
+		Stream:    "location:" + locB.String(),
+	})
+	require.NoError(t, err, "staff role must bypass location hard-gate (I-PRIV-6)")
 }

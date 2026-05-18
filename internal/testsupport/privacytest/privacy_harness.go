@@ -35,6 +35,7 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
+	"github.com/holomush/holomush/internal/eventbus/history"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/naming"
@@ -157,6 +158,13 @@ func Start(t *testing.T) *Server {
 	// Core engine with a no-op event appender.
 	engine := core.NewEngine(&noopEventAppender{})
 
+	// HistoryReader: minimal wiring against the embedded bus's JetStream
+	// and the test Postgres pool. All crypto/audit/fence options are
+	// nil-defaulted — the production newHistoryReader in
+	// cmd/holomush/sub_grpc.go layers those on, but for privacy-invariant
+	// tests the bare JS+Postgres tier is sufficient.
+	historyReader := history.NewReader(bus.JS, pool, 30*24*time.Hour, time.Now)
+
 	// CoreServer wired with all required subsystems.
 	coreServer := holoGRPC.NewCoreServer(
 		engine,
@@ -172,6 +180,15 @@ func Start(t *testing.T) *Server {
 		// Wire embedded bus subscriber so Subscribe calls succeed for
 		// WaitForEvent / DrainEvents paths.
 		holoGRPC.WithSubscriber(bus.Bus.Subscriber()),
+		// HistoryReader powers QueryStreamHistory end-to-end so privacy
+		// integration tests can exercise the full RPC path.
+		holoGRPC.WithHistoryReader(historyReader),
+		// AccessEngine drives staffOverride() in QueryStreamHistory; with
+		// it unwired, every override check returns false (the nil-engine
+		// short-circuit), defeating I-PRIV-6 tests. The harness uses
+		// allowAllPolicyEngine so override semantics are exercised
+		// without the operational complexity of seeded ABAC policies.
+		holoGRPC.WithAccessEngine(pe),
 	)
 
 	return &Server{
@@ -255,7 +272,11 @@ func (s *Server) ConnectGuest(ctx context.Context) *Session {
 	require.True(s.t, selResp.GetSuccess(),
 		"privacytest.ConnectGuest: SelectCharacter failed: %s", selResp.GetErrorMessage())
 
-	now := time.Now()
+	// Hydrate session timestamps from the persisted row, NOT from time.Now() —
+	// see the parallel block in ConnectAuthedWithRoles for the rationale.
+	persisted, getErr := s.sessionStore.Get(ctx, selResp.GetSessionId())
+	require.NoError(s.t, getErr, "privacytest.ConnectGuest: read persisted session")
+
 	return &Session{
 		server:             s,
 		SessionID:          selResp.GetSessionId(),
@@ -263,28 +284,83 @@ func (s *Server) ConnectGuest(ctx context.Context) *Session {
 		CharacterName:      selResp.GetCharacterName(),
 		LocationID:         s.guestStartLocationID,
 		OriginalLocationID: s.guestStartLocationID,
-		LocationArrivedAt:  now,
-		SessionCreatedAt:   now,
+		LocationArrivedAt:  persisted.LocationArrivedAt,
+		SessionCreatedAt:   persisted.CreatedAt,
 		LastReattachAt:     time.Time{},
 		playerSessionToken: rawToken,
 	}
 }
 
 // ConnectAuthed creates a named player+character and opens a game session.
-//
-// TODO(iwzt-9): implement authed-player creation path.
-func (s *Server) ConnectAuthed(_ context.Context, _ string) *Session {
-	s.t.Fatalf("privacytest.Server.ConnectAuthed: TODO iwzt-9 — authed player creation not yet wired")
-	return nil
+// The character is placed at the server's guest start location.
+func (s *Server) ConnectAuthed(ctx context.Context, charName string) *Session {
+	return s.ConnectAuthedWithRoles(ctx, charName, nil)
 }
 
 // ConnectAuthedWithRoles creates a named player+character with the given
-// roles and opens a game session.
-//
-// TODO(iwzt-9): implement role assignment path.
-func (s *Server) ConnectAuthedWithRoles(_ context.Context, _ string, _ []string) *Session {
-	s.t.Fatalf("privacytest.Server.ConnectAuthedWithRoles: TODO iwzt-9 — role-bearing player creation not yet wired")
-	return nil
+// roles and opens a game session. If roles is non-nil, each role is inserted
+// into character_roles directly via Postgres (bypassing ABAC for harness
+// convenience).
+func (s *Server) ConnectAuthedWithRoles(ctx context.Context, charName string, roles []string) *Session {
+	s.t.Helper()
+
+	// Unique username per character name to avoid collisions across tests.
+	username := charName + "_" + idgen.New().String()[:8]
+	password := "TestPassword1!"
+
+	// Register the player account.
+	player, playerSession, rawToken, err := s.authService.CreatePlayer(ctx, username, password, "")
+	require.NoError(s.t, err, "privacytest.ConnectAuthedWithRoles: CreatePlayer")
+
+	// Persist the player session so SelectCharacter can resolve the token.
+	require.NoError(s.t, s.playerSessionStore.Create(ctx, playerSession),
+		"privacytest.ConnectAuthedWithRoles: persist player session")
+
+	// Create the character directly (bypasses characterService wiring).
+	startLocID := s.guestStartLocationID
+	char, err := world.NewCharacter(player.ID, charName)
+	require.NoError(s.t, err, "privacytest.ConnectAuthedWithRoles: NewCharacter")
+	char.LocationID = &startLocID
+	// authCharRepoAdapter.Create delegates to worldpg.CharacterRepository.Create.
+	require.NoError(s.t, s.charRepo.Create(ctx, char),
+		"privacytest.ConnectAuthedWithRoles: persist character")
+
+	// Stamp roles into character_roles.
+	for _, role := range roles {
+		_, roleErr := s.pool.Exec(ctx,
+			`INSERT INTO character_roles (character_id, role) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+			char.ID.String(), role)
+		require.NoError(s.t, roleErr, "privacytest.ConnectAuthedWithRoles: insert role %q", role)
+	}
+
+	// Open a game session by selecting the character.
+	selResp, err := s.coreServer.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+		PlayerSessionToken: rawToken,
+		CharacterId:        char.ID.String(),
+	})
+	require.NoError(s.t, err, "privacytest.ConnectAuthedWithRoles: SelectCharacter RPC")
+	require.True(s.t, selResp.GetSuccess(),
+		"privacytest.ConnectAuthedWithRoles: SelectCharacter failed: %s", selResp.GetErrorMessage())
+
+	// Hydrate session timestamps from the persisted session row, NOT from
+	// time.Now() — the server-side LocationArrivedAt drives the I-PRIV-1 /
+	// I-PRIV-6 floor in QueryStreamHistory, so tests that assert against
+	// it MUST see the canonical value (per CodeRabbit thread on PR #4048).
+	persisted, getErr := s.sessionStore.Get(ctx, selResp.GetSessionId())
+	require.NoError(s.t, getErr, "privacytest.ConnectAuthedWithRoles: read persisted session")
+
+	return &Session{
+		server:             s,
+		SessionID:          selResp.GetSessionId(),
+		CharacterID:        char.ID,
+		CharacterName:      selResp.GetCharacterName(),
+		LocationID:         s.guestStartLocationID,
+		OriginalLocationID: s.guestStartLocationID,
+		LocationArrivedAt:  persisted.LocationArrivedAt,
+		SessionCreatedAt:   persisted.CreatedAt,
+		LastReattachAt:     time.Time{},
+		playerSessionToken: rawToken,
+	}
 }
 
 // AuthedPlayer returns an AuthedPlayer handle for multi-session continuity tests.
