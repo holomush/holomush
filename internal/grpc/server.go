@@ -775,15 +775,12 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 				With("session_id", req.SessionId).
 				Errorf("session reattach CAS lost — another handler won the race")
 		}
-		now := time.Now()
-		// Use a detached context like RemoveConnection above — this is
-		// best-effort cleanup that must run independent of stream
-		// cancellation if the client disconnects mid-reattach.
-		bumpCtx, bumpCancel := context.WithTimeout(context.Background(), cleanupTimeout)
-		if loErr := s.sessionStore.BumpLocationArrivedAt(bumpCtx, req.SessionId, now); loErr != nil {
-			slog.WarnContext(ctx, "failed to reset LocationArrivedAt on ReattachCAS", "error", loErr)
-		}
-		bumpCancel()
+		// Transport reattach: the session row was held open across a
+		// transport disconnect. The session is the SAME continuing
+		// session — its LocationArrivedAt MUST NOT be reset. Per spec §2
+		// (post-2026-05-17 amendment): only session-create and
+		// character-move advance the floor. See SelectCharacter reattach
+		// branch for the matching commentary.
 	}
 
 	// RestoreFocus — produces the full stream list and replay modes.
