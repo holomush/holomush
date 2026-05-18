@@ -317,17 +317,22 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 		}
 	}
 	if findErr == nil && existingSession != nil {
-		// Reattach: update session status back to active.
+		// Reattach: the session row was held open across a transport
+		// disconnect (status=Detached, TTL window in `expires_at`). The
+		// session is the SAME continuing session — its LocationArrivedAt
+		// MUST NOT be reset. Per spec §2 (post-2026-05-17 amendment): only
+		// session-create and character-move advance the floor; reattach
+		// within TTL preserves it so the user's own pre-disconnect
+		// scrollback survives page reload, WiFi blip, and tmux-style
+		// telnet reattach. A genuinely-absent character whose session
+		// expires past TTL gets a fresh floor via §5 row 1
+		// (SelectCharacter creates a new session row).
 		now := time.Now()
 		if updateErr := s.sessionStore.UpdateStatus(ctx, existingSession.ID,
 			session.StatusActive, nil, nil); updateErr != nil {
 			slog.WarnContext(ctx, "failed to reactivate session", "error", updateErr)
 		}
-		if loErr := s.sessionStore.BumpLocationArrivedAt(ctx, existingSession.ID, now); loErr != nil {
-			slog.WarnContext(ctx, "failed to reset LocationArrivedAt on reattach", "error", loErr)
-		}
 		existingSession.Status = session.StatusActive
-		existingSession.LocationArrivedAt = now
 		existingSession.UpdatedAt = now
 
 		// In-memory backfill of guest floor if absent (session created

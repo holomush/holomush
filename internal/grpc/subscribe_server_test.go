@@ -373,16 +373,22 @@ func (c *identityCapturingSubscriber) OpenSession(_ context.Context, _ string, i
 
 var _ eventbus.Subscriber = (*identityCapturingSubscriber)(nil)
 
-func TestSubscribeReattachCAS_AdvancesLocationArrivedAt(t *testing.T) {
+// TestSubscribeReattachCAS_PreservesLocationArrivedAt asserts the
+// session-row-as-continuity rule (spec §5 row 3 + I-PRIV-3, amended
+// 2026-05-18): transport-level reattach via Subscribe.ReattachCAS leaves
+// LocationArrivedAt UNCHANGED. The session row exists across the
+// disconnect; the floor was set at session-create and is only advanced
+// by character-move (§5 row 5).
+func TestSubscribeReattachCAS_PreservesLocationArrivedAt(t *testing.T) {
 	t.Parallel()
 	future := time.Now().Add(time.Hour)
-	oldArrival := time.Now().Add(-2 * time.Hour)
+	originalArrival := time.Now().Add(-2 * time.Hour)
 	info := &session.Info{
 		ID:                "s1",
 		ExpiresAt:         &future,
 		Status:            session.StatusDetached,
 		CharacterID:       core.NewULID(),
-		LocationArrivedAt: oldArrival,
+		LocationArrivedAt: originalArrival,
 	}
 	bs := newFakeSessionStream()
 	sub := &fakeSubscriber{stream: bs}
@@ -393,7 +399,6 @@ func TestSubscribeReattachCAS_AdvancesLocationArrivedAt(t *testing.T) {
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 
-	before := time.Now()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	stream := &concurrentSubscribeStream{ctx: ctx}
@@ -418,7 +423,9 @@ func TestSubscribeReattachCAS_AdvancesLocationArrivedAt(t *testing.T) {
 
 	stored, err := sessStore.Get(context.Background(), "s1")
 	require.NoError(t, err)
-	assert.False(t, stored.LocationArrivedAt.Before(before),
-		"LocationArrivedAt must be advanced on ReattachCAS, got %v, before=%v",
-		stored.LocationArrivedAt, before)
+	assert.True(t, stored.LocationArrivedAt.Equal(originalArrival),
+		"LocationArrivedAt MUST be unchanged on ReattachCAS (spec §5 row 3, I-PRIV-3); got %v, want %v",
+		stored.LocationArrivedAt, originalArrival)
+	assert.Equal(t, session.StatusActive, stored.Status,
+		"ReattachCAS MUST flip status back to Active")
 }

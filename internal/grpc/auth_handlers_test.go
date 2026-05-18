@@ -421,7 +421,13 @@ func TestSelectCharacter_FreshSession_SetsLocationArrivedAt(t *testing.T) {
 		"LocationArrivedAt must not be before the test started")
 }
 
-func TestSelectCharacter_Reattach_ResetsLocationArrivedAt(t *testing.T) {
+// TestSelectCharacter_Reattach_PreservesLocationArrivedAt asserts the
+// session-row-as-continuity rule (spec §5 row 2 + I-PRIV-3, amended
+// 2026-05-18): reattach within TTL is the same session continuing — its
+// LocationArrivedAt MUST NOT be advanced. The original floor is preserved
+// so the player's own pre-disconnect scrollback survives page reload,
+// WiFi blip, and tmux-style telnet reattach.
+func TestSelectCharacter_Reattach_PreservesLocationArrivedAt(t *testing.T) {
 	ctx := context.Background()
 	playerID := ulid.Make()
 	charID := ulid.Make()
@@ -437,7 +443,7 @@ func TestSelectCharacter_Reattach_ResetsLocationArrivedAt(t *testing.T) {
 			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
 		}, nil)
 
-	oldArrival := time.Now().Add(-2 * time.Hour)
+	originalArrival := time.Now().Add(-2 * time.Hour)
 	sessionStore := session.NewMemStore()
 	require.NoError(t, sessionStore.Set(ctx, existingSessionID, &session.Info{
 		ID:                existingSessionID,
@@ -445,12 +451,11 @@ func TestSelectCharacter_Reattach_ResetsLocationArrivedAt(t *testing.T) {
 		CharacterName:     "Alice",
 		LocationID:        locID,
 		Status:            session.StatusDetached,
-		LocationArrivedAt: oldArrival,
-		CreatedAt:         oldArrival,
-		UpdatedAt:         oldArrival,
+		LocationArrivedAt: originalArrival,
+		CreatedAt:         originalArrival,
+		UpdatedAt:         originalArrival,
 	}))
 
-	before := time.Now()
 	server := &CoreServer{
 		engine:            core.NewEngine(core.NewMemoryEventStore()),
 		sessionStore:      sessionStore,
@@ -469,9 +474,11 @@ func TestSelectCharacter_Reattach_ResetsLocationArrivedAt(t *testing.T) {
 
 	stored, err := sessionStore.Get(ctx, existingSessionID)
 	require.NoError(t, err)
-	assert.False(t, stored.LocationArrivedAt.Before(before),
-		"LocationArrivedAt must be reset to at least the time of reattach, got %v, before=%v",
-		stored.LocationArrivedAt, before)
+	assert.True(t, stored.LocationArrivedAt.Equal(originalArrival),
+		"LocationArrivedAt MUST be unchanged on reattach (spec §5 row 2, I-PRIV-3); got %v, want %v",
+		stored.LocationArrivedAt, originalArrival)
+	assert.Equal(t, session.StatusActive, stored.Status,
+		"reattach MUST flip status back to Active")
 }
 
 // --- CreatePlayer ---
