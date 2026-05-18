@@ -27,7 +27,7 @@ type Publisher interface {
 // cycle: eventbus → authguard → plugin → eventbus. Callers with an
 // authguard.Identity use authguard.ToSessionIdentity to convert.
 type Subscriber interface {
-	OpenSession(ctx context.Context, sessionID string, identity SessionIdentity, filters []Subject) (SessionStream, error)
+	OpenSession(ctx context.Context, sessionID string, identity SessionIdentity, filters []Subject, minFloor time.Time) (SessionStream, error)
 }
 
 // HistoryReader serves paginated history reads. Used by gRPC QueryHistory

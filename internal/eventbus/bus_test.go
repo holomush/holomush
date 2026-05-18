@@ -6,6 +6,7 @@ package eventbus_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -18,7 +19,7 @@ import (
 type fakeBus struct{}
 
 func (fakeBus) Publish(_ context.Context, _ eventbus.Event) error { return nil }
-func (fakeBus) OpenSession(_ context.Context, _ string, _ eventbus.SessionIdentity, _ []eventbus.Subject) (eventbus.SessionStream, error) {
+func (fakeBus) OpenSession(_ context.Context, _ string, _ eventbus.SessionIdentity, _ []eventbus.Subject, _ time.Time) (eventbus.SessionStream, error) {
 	return nil, nil
 }
 

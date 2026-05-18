@@ -855,10 +855,19 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		sessionIdentity = authguard.ToSessionIdentity(identity)
 	}
 
+	// Compute minFloor across all subscribed subjects per holomush-iwzt §6.2 Tier 1.
+	// See maxStreamScopeFloor in scope_floor.go for MAX semantics + the legacy-vs-NATS
+	// subject format gap that currently keeps minFloor at zero for production filters.
+	filterStrings := make([]string, len(filters))
+	for i, subj := range filters {
+		filterStrings[i] = string(subj)
+	}
+	minFloor := maxStreamScopeFloor(info, filterStrings)
+
 	// Open the bus session. JS preserves the durable consumer's cursor
 	// across reconnect, so events not acked last time get redelivered
 	// automatically; there is no explicit replay phase.
-	busStream, subErr := s.subscriber.OpenSession(ctx, req.SessionId, sessionIdentity, filters)
+	busStream, subErr := s.subscriber.OpenSession(ctx, req.SessionId, sessionIdentity, filters, minFloor)
 	if subErr != nil {
 		return oops.Code("SUBSCRIBE_FAILED").With("session_id", req.SessionId).Wrap(subErr)
 	}

@@ -348,7 +348,7 @@ var _ = Describe("Plugin decrypt manifest gate denies without declaration (INV-1
 			Kind:       eventbus.IdentityKindPlugin,
 			PluginName: pluginName,
 		}
-		stream, err := h.subscriber.OpenSession(ctx, sessionID, pluginID, []eventbus.Subject{"events.>"})
+		stream, err := h.subscriber.OpenSession(ctx, sessionID, pluginID, []eventbus.Subject{"events.>"}, time.Time{})
 		Expect(err).NotTo(HaveOccurred())
 		DeferCleanup(func() { _ = stream.Close() })
 
@@ -417,7 +417,7 @@ var _ = Describe("Plugin decrypt ABAC gate denies without grant (INV-18)", func(
 			Kind:       eventbus.IdentityKindPlugin,
 			PluginName: pluginName,
 		}
-		stream, err := h.subscriber.OpenSession(ctx, sessionID, pluginID, []eventbus.Subject{"events.>"})
+		stream, err := h.subscriber.OpenSession(ctx, sessionID, pluginID, []eventbus.Subject{"events.>"}, time.Time{})
 		Expect(err).NotTo(HaveOccurred())
 		DeferCleanup(func() { _ = stream.Close() })
 
@@ -496,7 +496,7 @@ var _ = Describe("Plugin decrypt emits audit on permit and isolation (INV-19)", 
 			Kind:       eventbus.IdentityKindPlugin,
 			PluginName: pluginName,
 		}
-		stream, err := h.subscriber.OpenSession(ctx, sessionID, pluginID, []eventbus.Subject{"events.>"})
+		stream, err := h.subscriber.OpenSession(ctx, sessionID, pluginID, []eventbus.Subject{"events.>"}, time.Time{})
 		Expect(err).NotTo(HaveOccurred())
 		DeferCleanup(func() { _ = stream.Close() })
 
@@ -581,7 +581,7 @@ var _ = Describe("Plugin decrypt denial does not block fanout (INV-20)", func() 
 			CharacterID: participantCharID,
 			BindingID:   participantBindingID,
 		}
-		charStream, err := h.subscriber.OpenSession(ctx, characterSessionID, charID, []eventbus.Subject{"events.>"})
+		charStream, err := h.subscriber.OpenSession(ctx, characterSessionID, charID, []eventbus.Subject{"events.>"}, time.Time{})
 		Expect(err).NotTo(HaveOccurred())
 		DeferCleanup(func() { _ = charStream.Close() })
 
@@ -590,7 +590,7 @@ var _ = Describe("Plugin decrypt denial does not block fanout (INV-20)", func() 
 			Kind:       eventbus.IdentityKindPlugin,
 			PluginName: deniedPluginName,
 		}
-		pluginStream, err := h.subscriber.OpenSession(ctx, pluginSessionID, pluginID, []eventbus.Subject{"events.>"})
+		pluginStream, err := h.subscriber.OpenSession(ctx, pluginSessionID, pluginID, []eventbus.Subject{"events.>"}, time.Time{})
 		Expect(err).NotTo(HaveOccurred())
 		DeferCleanup(func() { _ = pluginStream.Close() })
 

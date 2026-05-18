@@ -41,7 +41,7 @@ var _ = Describe("Reconnect resume", func() {
 
 		// Open, consume + ack 3 events.
 		testID := eventbus.SessionIdentity{Kind: eventbus.IdentityKindCharacter, PlayerID: "01TESTPLAYER01234567890A", CharacterID: "01TESTCHARACTER0123456A", BindingID: "01TESTBINDING01234567AB"}
-		s1, err := sub.OpenSession(ctx, sessionID, testID, []eventbus.Subject{subject})
+		s1, err := sub.OpenSession(ctx, sessionID, testID, []eventbus.Subject{subject}, time.Time{})
 		Expect(err).NotTo(HaveOccurred())
 
 		const beforeDisconnect = 3
@@ -78,7 +78,7 @@ var _ = Describe("Reconnect resume", func() {
 		}
 
 		// Reconnect.
-		s2, err := sub.OpenSession(ctx, sessionID, testID, []eventbus.Subject{subject})
+		s2, err := sub.OpenSession(ctx, sessionID, testID, []eventbus.Subject{subject}, time.Time{})
 		Expect(err).NotTo(HaveOccurred())
 		DeferCleanup(func() { _ = s2.Close() })
 
