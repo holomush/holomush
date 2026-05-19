@@ -91,6 +91,10 @@ service CoreService {
   // subscribed to, derived from focusCoordinator.RestoreFocus. Used by
   // web clients to enumerate streams for backfill on reload. Pure read.
   rpc ListSessionStreams(ListSessionStreamsRequest) returns (ListSessionStreamsResponse);
+
+  // ListFocusPresence returns the presence snapshot for the session's current
+  // focus context (location or scene). Pure read — no session mutation.
+  rpc ListFocusPresence(ListFocusPresenceRequest) returns (ListFocusPresenceResponse);
 }
 
 message HandleCommandRequest {
@@ -221,6 +225,39 @@ enum EventChannel {
   // the audit projection persists them like any other event. Used by
   // crypto.totp_*, crypto.policy_set, and similar host-emitted audit types.
   EVENT_CHANNEL_AUDIT_ONLY = 4;
+}
+
+enum PresenceContext {
+  PRESENCE_CONTEXT_UNSPECIFIED = 0;
+  PRESENCE_CONTEXT_LOCATION = 1;
+  PRESENCE_CONTEXT_SCENE = 2; // wire-reserved; resolver in follow-up bead
+}
+
+enum PresenceState {
+  PRESENCE_STATE_UNSPECIFIED = 0;
+  PRESENCE_STATE_ACTIVE = 1;
+  PRESENCE_STATE_DETACHED = 2; // emitted by future scene resolver
+  PRESENCE_STATE_INACTIVE = 3; // emitted by future scene resolver
+}
+
+message PresenceEntry {
+  string character_id = 1;
+  string character_name = 2;
+  PresenceState state = 3;
+  // Deliberately NO arrived_at_ms — see spec §D-4 (no duration-of-presence leak).
+}
+
+message ListFocusPresenceRequest {
+  RequestMeta meta = 1;
+  string player_session_token = 2;
+  string session_id = 3;
+}
+
+message ListFocusPresenceResponse {
+  ResponseMeta meta = 1;
+  PresenceContext context = 2;
+  string context_id = 3; // LOCATION → location_id; SCENE → scene_id (future)
+  repeated PresenceEntry entries = 4;
 }
 
 // RenderingMetadata carries cleartext rendering instructions for an event.

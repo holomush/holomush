@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, CheckPlayerSessionRequest, CheckPlayerSessionResponse, ConfirmPasswordResetRequest, ConfirmPasswordResetResponse, CreateCharacterRequest, CreateCharacterResponse, CreateGuestRequest, CreateGuestResponse, CreatePlayerRequest, CreatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, ListCharactersRequest, ListCharactersResponse, ListPlayerSessionsRequest, ListPlayerSessionsResponse, ListSessionStreamsRequest, ListSessionStreamsResponse, LogoutRequest, LogoutResponse, QueryStreamHistoryRequest, QueryStreamHistoryResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, RevokeOtherPlayerSessionsRequest, RevokeOtherPlayerSessionsResponse, RevokePlayerSessionRequest, RevokePlayerSessionResponse, SelectCharacterRequest, SelectCharacterResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
+import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, CheckPlayerSessionRequest, CheckPlayerSessionResponse, ConfirmPasswordResetRequest, ConfirmPasswordResetResponse, CreateCharacterRequest, CreateCharacterResponse, CreateGuestRequest, CreateGuestResponse, CreatePlayerRequest, CreatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, ListCharactersRequest, ListCharactersResponse, ListFocusPresenceRequest, ListFocusPresenceResponse, ListPlayerSessionsRequest, ListPlayerSessionsResponse, ListSessionStreamsRequest, ListSessionStreamsResponse, LogoutRequest, LogoutResponse, QueryStreamHistoryRequest, QueryStreamHistoryResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, RevokeOtherPlayerSessionsRequest, RevokeOtherPlayerSessionsResponse, RevokePlayerSessionRequest, RevokePlayerSessionResponse, SelectCharacterRequest, SelectCharacterResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -235,6 +235,18 @@ export const CoreService = {
       name: "ListSessionStreams",
       I: ListSessionStreamsRequest,
       O: ListSessionStreamsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * ListFocusPresence returns the presence snapshot for the session's current
+     * focus context (location or scene). Pure read — no session mutation.
+     *
+     * @generated from rpc holomush.core.v1.CoreService.ListFocusPresence
+     */
+    listFocusPresence: {
+      name: "ListFocusPresence",
+      I: ListFocusPresenceRequest,
+      O: ListFocusPresenceResponse,
       kind: MethodKind.Unary,
     },
   }

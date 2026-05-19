@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/core/v1/core.proto.
  */
 export const file_holomush_core_v1_core: GenFile = /*@__PURE__*/
-  fileDesc("Chtob2xvbXVzaC9jb3JlL3YxL2NvcmUucHJvdG8SEGhvbG9tdXNoLmNvcmUudjEiUAoLUmVxdWVzdE1ldGESEgoKcmVxdWVzdF9pZBgBIAEoCRItCgl0aW1lc3RhbXAYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlEKDFJlc3BvbnNlTWV0YRISCgpyZXF1ZXN0X2lkGAEgASgJEi0KCXRpbWVzdGFtcBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAihgEKFEhhbmRsZUNvbW1hbmRSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSDwoHY29tbWFuZBgDIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgEIAEoCSJrChVIYW5kbGVDb21tYW5kUmVzcG9uc2USLAoEbWV0YRgBIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuUmVzcG9uc2VNZXRhEg8KB3N1Y2Nlc3MYAiABKAgSDQoFZXJyb3IYBCABKAlKBAgDEAQixgEKEFN1YnNjcmliZVJlcXVlc3QSKwoEbWV0YRgBIAEoCzIdLmhvbG9tdXNoLmNvcmUudjEuUmVxdWVzdE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgFIAEoCRIVCg1jb25uZWN0aW9uX2lkGAYgASgJEhMKC2NsaWVudF90eXBlGAcgASgJSgQIAxAESgQIBBAFUgdzdHJlYW1zUhJyZXBsYXlfZnJvbV9jdXJzb3IivQIKCkV2ZW50RnJhbWUSCgoCaWQYASABKAkSDgoGc3RyZWFtGAIgASgJEgwKBHR5cGUYAyABKAkSLQoJdGltZXN0YW1wGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBISCgphY3Rvcl90eXBlGAUgASgJEhAKCGFjdG9yX2lkGAYgASgJEg8KB3BheWxvYWQYByABKAwSDgoGY3Vyc29yGAggASgMEjYKCXJlbmRlcmluZxgJIAEoCzIjLmhvbG9tdXNoLmNvcmUudjEuUmVuZGVyaW5nTWV0YWRhdGESFQoNbWV0YWRhdGFfb25seRgKIAEoCBJAChNub19wbGFpbnRleHRfcmVhc29uGAsgASgOMiMuaG9sb211c2guY29yZS52MS5Ob1BsYWludGV4dFJlYXNvbiLyAgoRUmVuZGVyaW5nTWV0YWRhdGESGQoIY2F0ZWdvcnkYASABKAlCB7pIBHICEAESFwoGZm9ybWF0GAIgASgJQge6SARyAhABEg0KBWxhYmVsGAMgASgJEkIKDmRpc3BsYXlfdGFyZ2V0GAQgASgOMh4uaG9sb211c2guY29yZS52MS5FdmVudENoYW5uZWxCCrpIB4IBBBABIAASHgoNc291cmNlX3BsdWdpbhgFIAEoCUIHukgEcgIQARImChVzb3VyY2VfcGx1Z2luX3ZlcnNpb24YBiABKAlCB7pIBHICEAE6jQG6SIkBGoYBCixyZW5kZXJpbmdfbWV0YWRhdGEubGFiZWxfcmVxdWlyZWRfZm9yX3NwZWVjaBIpbGFiZWwgbXVzdCBiZSBzZXQgd2hlbiBmb3JtYXQgaXMgJ3NwZWVjaCcaK3RoaXMuZm9ybWF0ICE9ICdzcGVlY2gnIHx8IHRoaXMubGFiZWwgIT0gJyciUAoMQ29udHJvbEZyYW1lEi8KBnNpZ25hbBgBIAEoDjIfLmhvbG9tdXNoLmNvcmUudjEuQ29udHJvbFNpZ25hbBIPCgdtZXNzYWdlGAIgASgJIn4KEVN1YnNjcmliZVJlc3BvbnNlEi0KBWV2ZW50GAEgASgLMhwuaG9sb211c2guY29yZS52MS5FdmVudEZyYW1lSAASMQoHY29udHJvbBgCIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuQ29udHJvbEZyYW1lSABCBwoFZnJhbWUiiQEKEURpc2Nvbm5lY3RSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSFQoNY29ubmVjdGlvbl9pZBgDIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgEIAEoCSJTChJEaXNjb25uZWN0UmVzcG9uc2USLAoEbWV0YRgBIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuUmVzcG9uc2VNZXRhEg8KB3N1Y2Nlc3MYAiABKAgieQoYR2V0Q29tbWFuZEhpc3RvcnlSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAyABKAkiewoZR2V0Q29tbWFuZEhpc3RvcnlSZXNwb25zZRIsCgRtZXRhGAEgASgLMh4uaG9sb211c2guY29yZS52MS5SZXNwb25zZU1ldGESDwoHc3VjY2VzcxgCIAEoCBIQCghjb21tYW5kcxgDIAMoCRINCgVlcnJvchgEIAEoCSKjAQoQQ2hhcmFjdGVyU3VtbWFyeRIUCgxjaGFyYWN0ZXJfaWQYASABKAkSFgoOY2hhcmFjdGVyX25hbWUYAiABKAkSGgoSaGFzX2FjdGl2ZV9zZXNzaW9uGAMgASgIEhYKDnNlc3Npb25fc3RhdHVzGAQgASgJEhUKDWxhc3RfbG9jYXRpb24YBSABKAkSFgoObGFzdF9wbGF5ZWRfYXQYBiABKAMiawoZQXV0aGVudGljYXRlUGxheWVyUmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCRIVCg1jYXB0Y2hhX3Rva2VuGAMgASgJEhMKC3JlbWVtYmVyX21lGAQgASgIItUBChpBdXRoZW50aWNhdGVQbGF5ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJEhUKDWVycm9yX21lc3NhZ2UYAyABKAkSNgoKY2hhcmFjdGVycxgEIAMoCzIiLmhvbG9tdXNoLmNvcmUudjEuQ2hhcmFjdGVyU3VtbWFyeRIcChRkZWZhdWx0X2NoYXJhY3Rlcl9pZBgFIAEoCRIbChNzZXNzaW9uX3R0bF9zZWNvbmRzGAYgASgDIkwKFlNlbGVjdENoYXJhY3RlclJlcXVlc3QSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YASABKAkSFAoMY2hhcmFjdGVyX2lkGAIgASgJIoEBChdTZWxlY3RDaGFyYWN0ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhIKCnNlc3Npb25faWQYAiABKAkSFgoOY2hhcmFjdGVyX25hbWUYAyABKAkSEgoKcmVhdHRhY2hlZBgEIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAUgASgJIl8KE0NyZWF0ZVBsYXllclJlcXVlc3QSEAoIdXNlcm5hbWUYASABKAkSEAoIcGFzc3dvcmQYAiABKAkSDQoFZW1haWwYAyABKAkSFQoNY2FwdGNoYV90b2tlbhgEIAEoCSKxAQoUQ3JlYXRlUGxheWVyUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgCIAEoCRI2CgpjaGFyYWN0ZXJzGAMgAygLMiIuaG9sb211c2guY29yZS52MS5DaGFyYWN0ZXJTdW1tYXJ5EhUKDWVycm9yX21lc3NhZ2UYBCABKAkSGwoTc2Vzc2lvbl90dGxfc2Vjb25kcxgFIAEoAyIUChJDcmVhdGVHdWVzdFJlcXVlc3QizgEKE0NyZWF0ZUd1ZXN0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAIgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAMgASgJEjYKCmNoYXJhY3RlcnMYBCADKAsyIi5ob2xvbXVzaC5jb3JlLnYxLkNoYXJhY3RlclN1bW1hcnkSHAoUZGVmYXVsdF9jaGFyYWN0ZXJfaWQYBSABKAkSGwoTc2Vzc2lvbl90dGxfc2Vjb25kcxgGIAEoAyJOChZDcmVhdGVDaGFyYWN0ZXJSZXF1ZXN0EhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJIm8KF0NyZWF0ZUNoYXJhY3RlclJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSFAoMY2hhcmFjdGVyX2lkGAIgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAMgASgJEhUKDWVycm9yX21lc3NhZ2UYBCABKAkiNQoVTGlzdENoYXJhY3RlcnNSZXF1ZXN0EhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJIlAKFkxpc3RDaGFyYWN0ZXJzUmVzcG9uc2USNgoKY2hhcmFjdGVycxgBIAMoCzIiLmhvbG9tdXNoLmNvcmUudjEuQ2hhcmFjdGVyU3VtbWFyeSIsChtSZXF1ZXN0UGFzc3dvcmRSZXNldFJlcXVlc3QSDQoFZW1haWwYASABKAkiLwocUmVxdWVzdFBhc3N3b3JkUmVzZXRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIkIKG0NvbmZpcm1QYXNzd29yZFJlc2V0UmVxdWVzdBINCgV0b2tlbhgBIAEoCRIUCgxuZXdfcGFzc3dvcmQYAiABKAkiRgocQ29uZmlybVBhc3N3b3JkUmVzZXRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhUKDWVycm9yX21lc3NhZ2UYAiABKAkiLQoNTG9nb3V0UmVxdWVzdBIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgBIAEoCSIQCg5Mb2dvdXRSZXNwb25zZSI5ChlDaGVja1BsYXllclNlc3Npb25SZXF1ZXN0EhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJIo4BChpDaGVja1BsYXllclNlc3Npb25SZXNwb25zZRITCgtwbGF5ZXJfbmFtZRgBIAEoCRIRCglwbGF5ZXJfaWQYAiABKAkSEAoIaXNfZ3Vlc3QYAyABKAgSNgoKY2hhcmFjdGVycxgEIAMoCzIiLmhvbG9tdXNoLmNvcmUudjEuQ2hhcmFjdGVyU3VtbWFyeSI5ChlMaXN0UGxheWVyU2Vzc2lvbnNSZXF1ZXN0EhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJIrwBChFQbGF5ZXJTZXNzaW9uSW5mbxIKCgJpZBgBIAEoCRIuCgpjcmVhdGVkX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtsYXN0X2FjdGl2ZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKdXNlcl9hZ2VudBgEIAEoCRISCgppcF9hZGRyZXNzGAUgASgJEhIKCmlzX2N1cnJlbnQYBiABKAgiUwoaTGlzdFBsYXllclNlc3Npb25zUmVzcG9uc2USNQoIc2Vzc2lvbnMYASADKAsyIy5ob2xvbXVzaC5jb3JlLnYxLlBsYXllclNlc3Npb25JbmZvIlUKGlJldm9rZVBsYXllclNlc3Npb25SZXF1ZXN0EhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJEhkKEXRhcmdldF9zZXNzaW9uX2lkGAIgASgJIkUKG1Jldm9rZVBsYXllclNlc3Npb25SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhUKDWVycm9yX21lc3NhZ2UYAiABKAkiQAogUmV2b2tlT3RoZXJQbGF5ZXJTZXNzaW9uc1JlcXVlc3QSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YASABKAkiSwohUmV2b2tlT3RoZXJQbGF5ZXJTZXNzaW9uc1Jlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSFQoNcmV2b2tlZF9jb3VudBgCIAEoBSKiAQoZUXVlcnlTdHJlYW1IaXN0b3J5UmVxdWVzdBIrCgRtZXRhGAEgASgLMh0uaG9sb211c2guY29yZS52MS5SZXF1ZXN0TWV0YRISCgpzZXNzaW9uX2lkGAIgASgJEg4KBnN0cmVhbRgDIAEoCRINCgVjb3VudBgEIAEoBRIVCg1ub3RfYmVmb3JlX21zGAUgASgDEg4KBmN1cnNvchgGIAEoDCKfAQoaUXVlcnlTdHJlYW1IaXN0b3J5UmVzcG9uc2USLAoEbWV0YRgBIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuUmVzcG9uc2VNZXRhEiwKBmV2ZW50cxgCIAMoCzIcLmhvbG9tdXNoLmNvcmUudjEuRXZlbnRGcmFtZRIQCghoYXNfbW9yZRgDIAEoCBITCgtuZXh0X2N1cnNvchgEIAEoDCJ6ChlMaXN0U2Vzc2lvblN0cmVhbXNSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAyABKAkiWwoaTGlzdFNlc3Npb25TdHJlYW1zUmVzcG9uc2USDwoHc3RyZWFtcxgBIAMoCRIsCgRtZXRhGAIgASgLMh4uaG9sb211c2guY29yZS52MS5SZXNwb25zZU1ldGEqyAIKEU5vUGxhaW50ZXh0UmVhc29uEiMKH05PX1BMQUlOVEVYVF9SRUFTT05fVU5TUEVDSUZJRUQQABImCiJOT19QTEFJTlRFWFRfUkVBU09OX0FVVEhHVUFSRF9ERU5ZEAESIQodTk9fUExBSU5URVhUX1JFQVNPTl9TVEFMRV9ERUsQAhIoCiROT19QTEFJTlRFWFRfUkVBU09OX0FVRElUX1FVRVVFX0ZVTEwQAxIjCh9OT19QTEFJTlRFWFRfUkVBU09OX0RFS19NSVNTSU5HEAQSJwojTk9fUExBSU5URVhUX1JFQVNPTl9ERUtfQkFEX0NPTFVNTlMQBRIgChxOT19QTEFJTlRFWFRfUkVBU09OX0lOVEVSTkFMEAYSKQolTk9fUExBSU5URVhUX1JFQVNPTl9ET1dOR1JBREVfUkVGVVNFRBAHKpgBCgxFdmVudENoYW5uZWwSHQoZRVZFTlRfQ0hBTk5FTF9VTlNQRUNJRklFRBAAEhoKFkVWRU5UX0NIQU5ORUxfVEVSTUlOQUwQARIXChNFVkVOVF9DSEFOTkVMX1NUQVRFEAISFgoSRVZFTlRfQ0hBTk5FTF9CT1RIEAMSHAoYRVZFTlRfQ0hBTk5FTF9BVURJVF9PTkxZEAQqdQoNQ29udHJvbFNpZ25hbBIeChpDT05UUk9MX1NJR05BTF9VTlNQRUNJRklFRBAAEiIKHkNPTlRST0xfU0lHTkFMX1JFUExBWV9DT01QTEVURRABEiAKHENPTlRST0xfU0lHTkFMX1NUUkVBTV9DTE9TRUQQAjLpDwoLQ29yZVNlcnZpY2USYAoNSGFuZGxlQ29tbWFuZBImLmhvbG9tdXNoLmNvcmUudjEuSGFuZGxlQ29tbWFuZFJlcXVlc3QaJy5ob2xvbXVzaC5jb3JlLnYxLkhhbmRsZUNvbW1hbmRSZXNwb25zZRJWCglTdWJzY3JpYmUSIi5ob2xvbXVzaC5jb3JlLnYxLlN1YnNjcmliZVJlcXVlc3QaIy5ob2xvbXVzaC5jb3JlLnYxLlN1YnNjcmliZVJlc3BvbnNlMAESVwoKRGlzY29ubmVjdBIjLmhvbG9tdXNoLmNvcmUudjEuRGlzY29ubmVjdFJlcXVlc3QaJC5ob2xvbXVzaC5jb3JlLnYxLkRpc2Nvbm5lY3RSZXNwb25zZRJsChFHZXRDb21tYW5kSGlzdG9yeRIqLmhvbG9tdXNoLmNvcmUudjEuR2V0Q29tbWFuZEhpc3RvcnlSZXF1ZXN0GisuaG9sb211c2guY29yZS52MS5HZXRDb21tYW5kSGlzdG9yeVJlc3BvbnNlEm8KEkF1dGhlbnRpY2F0ZVBsYXllchIrLmhvbG9tdXNoLmNvcmUudjEuQXV0aGVudGljYXRlUGxheWVyUmVxdWVzdBosLmhvbG9tdXNoLmNvcmUudjEuQXV0aGVudGljYXRlUGxheWVyUmVzcG9uc2USZgoPU2VsZWN0Q2hhcmFjdGVyEiguaG9sb211c2guY29yZS52MS5TZWxlY3RDaGFyYWN0ZXJSZXF1ZXN0GikuaG9sb211c2guY29yZS52MS5TZWxlY3RDaGFyYWN0ZXJSZXNwb25zZRJdCgxDcmVhdGVQbGF5ZXISJS5ob2xvbXVzaC5jb3JlLnYxLkNyZWF0ZVBsYXllclJlcXVlc3QaJi5ob2xvbXVzaC5jb3JlLnYxLkNyZWF0ZVBsYXllclJlc3BvbnNlEloKC0NyZWF0ZUd1ZXN0EiQuaG9sb211c2guY29yZS52MS5DcmVhdGVHdWVzdFJlcXVlc3QaJS5ob2xvbXVzaC5jb3JlLnYxLkNyZWF0ZUd1ZXN0UmVzcG9uc2USZgoPQ3JlYXRlQ2hhcmFjdGVyEiguaG9sb211c2guY29yZS52MS5DcmVhdGVDaGFyYWN0ZXJSZXF1ZXN0GikuaG9sb211c2guY29yZS52MS5DcmVhdGVDaGFyYWN0ZXJSZXNwb25zZRJjCg5MaXN0Q2hhcmFjdGVycxInLmhvbG9tdXNoLmNvcmUudjEuTGlzdENoYXJhY3RlcnNSZXF1ZXN0GiguaG9sb211c2guY29yZS52MS5MaXN0Q2hhcmFjdGVyc1Jlc3BvbnNlEnUKFFJlcXVlc3RQYXNzd29yZFJlc2V0Ei0uaG9sb211c2guY29yZS52MS5SZXF1ZXN0UGFzc3dvcmRSZXNldFJlcXVlc3QaLi5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RQYXNzd29yZFJlc2V0UmVzcG9uc2USdQoUQ29uZmlybVBhc3N3b3JkUmVzZXQSLS5ob2xvbXVzaC5jb3JlLnYxLkNvbmZpcm1QYXNzd29yZFJlc2V0UmVxdWVzdBouLmhvbG9tdXNoLmNvcmUudjEuQ29uZmlybVBhc3N3b3JkUmVzZXRSZXNwb25zZRJLCgZMb2dvdXQSHy5ob2xvbXVzaC5jb3JlLnYxLkxvZ291dFJlcXVlc3QaIC5ob2xvbXVzaC5jb3JlLnYxLkxvZ291dFJlc3BvbnNlEm8KEkNoZWNrUGxheWVyU2Vzc2lvbhIrLmhvbG9tdXNoLmNvcmUudjEuQ2hlY2tQbGF5ZXJTZXNzaW9uUmVxdWVzdBosLmhvbG9tdXNoLmNvcmUudjEuQ2hlY2tQbGF5ZXJTZXNzaW9uUmVzcG9uc2USbwoSTGlzdFBsYXllclNlc3Npb25zEisuaG9sb211c2guY29yZS52MS5MaXN0UGxheWVyU2Vzc2lvbnNSZXF1ZXN0GiwuaG9sb211c2guY29yZS52MS5MaXN0UGxheWVyU2Vzc2lvbnNSZXNwb25zZRJyChNSZXZva2VQbGF5ZXJTZXNzaW9uEiwuaG9sb211c2guY29yZS52MS5SZXZva2VQbGF5ZXJTZXNzaW9uUmVxdWVzdBotLmhvbG9tdXNoLmNvcmUudjEuUmV2b2tlUGxheWVyU2Vzc2lvblJlc3BvbnNlEoQBChlSZXZva2VPdGhlclBsYXllclNlc3Npb25zEjIuaG9sb211c2guY29yZS52MS5SZXZva2VPdGhlclBsYXllclNlc3Npb25zUmVxdWVzdBozLmhvbG9tdXNoLmNvcmUudjEuUmV2b2tlT3RoZXJQbGF5ZXJTZXNzaW9uc1Jlc3BvbnNlEm8KElF1ZXJ5U3RyZWFtSGlzdG9yeRIrLmhvbG9tdXNoLmNvcmUudjEuUXVlcnlTdHJlYW1IaXN0b3J5UmVxdWVzdBosLmhvbG9tdXNoLmNvcmUudjEuUXVlcnlTdHJlYW1IaXN0b3J5UmVzcG9uc2USbwoSTGlzdFNlc3Npb25TdHJlYW1zEisuaG9sb211c2guY29yZS52MS5MaXN0U2Vzc2lvblN0cmVhbXNSZXF1ZXN0GiwuaG9sb211c2guY29yZS52MS5MaXN0U2Vzc2lvblN0cmVhbXNSZXNwb25zZUJAWj5naXRodWIuY29tL2hvbG9tdXNoL2hvbG9tdXNoL3BrZy9wcm90by9ob2xvbXVzaC9jb3JlL3YxO2NvcmV2MWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_timestamp]);
+  fileDesc("Chtob2xvbXVzaC9jb3JlL3YxL2NvcmUucHJvdG8SEGhvbG9tdXNoLmNvcmUudjEiUAoLUmVxdWVzdE1ldGESEgoKcmVxdWVzdF9pZBgBIAEoCRItCgl0aW1lc3RhbXAYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlEKDFJlc3BvbnNlTWV0YRISCgpyZXF1ZXN0X2lkGAEgASgJEi0KCXRpbWVzdGFtcBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAihgEKFEhhbmRsZUNvbW1hbmRSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSDwoHY29tbWFuZBgDIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgEIAEoCSJrChVIYW5kbGVDb21tYW5kUmVzcG9uc2USLAoEbWV0YRgBIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuUmVzcG9uc2VNZXRhEg8KB3N1Y2Nlc3MYAiABKAgSDQoFZXJyb3IYBCABKAlKBAgDEAQixgEKEFN1YnNjcmliZVJlcXVlc3QSKwoEbWV0YRgBIAEoCzIdLmhvbG9tdXNoLmNvcmUudjEuUmVxdWVzdE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgFIAEoCRIVCg1jb25uZWN0aW9uX2lkGAYgASgJEhMKC2NsaWVudF90eXBlGAcgASgJSgQIAxAESgQIBBAFUgdzdHJlYW1zUhJyZXBsYXlfZnJvbV9jdXJzb3IivQIKCkV2ZW50RnJhbWUSCgoCaWQYASABKAkSDgoGc3RyZWFtGAIgASgJEgwKBHR5cGUYAyABKAkSLQoJdGltZXN0YW1wGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBISCgphY3Rvcl90eXBlGAUgASgJEhAKCGFjdG9yX2lkGAYgASgJEg8KB3BheWxvYWQYByABKAwSDgoGY3Vyc29yGAggASgMEjYKCXJlbmRlcmluZxgJIAEoCzIjLmhvbG9tdXNoLmNvcmUudjEuUmVuZGVyaW5nTWV0YWRhdGESFQoNbWV0YWRhdGFfb25seRgKIAEoCBJAChNub19wbGFpbnRleHRfcmVhc29uGAsgASgOMiMuaG9sb211c2guY29yZS52MS5Ob1BsYWludGV4dFJlYXNvbiJtCg1QcmVzZW5jZUVudHJ5EhQKDGNoYXJhY3Rlcl9pZBgBIAEoCRIWCg5jaGFyYWN0ZXJfbmFtZRgCIAEoCRIuCgVzdGF0ZRgDIAEoDjIfLmhvbG9tdXNoLmNvcmUudjEuUHJlc2VuY2VTdGF0ZSJ5ChhMaXN0Rm9jdXNQcmVzZW5jZVJlcXVlc3QSKwoEbWV0YRgBIAEoCzIdLmhvbG9tdXNoLmNvcmUudjEuUmVxdWVzdE1ldGESHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSEgoKc2Vzc2lvbl9pZBgDIAEoCSLDAQoZTGlzdEZvY3VzUHJlc2VuY2VSZXNwb25zZRIsCgRtZXRhGAEgASgLMh4uaG9sb211c2guY29yZS52MS5SZXNwb25zZU1ldGESMgoHY29udGV4dBgCIAEoDjIhLmhvbG9tdXNoLmNvcmUudjEuUHJlc2VuY2VDb250ZXh0EhIKCmNvbnRleHRfaWQYAyABKAkSMAoHZW50cmllcxgEIAMoCzIfLmhvbG9tdXNoLmNvcmUudjEuUHJlc2VuY2VFbnRyeSLyAgoRUmVuZGVyaW5nTWV0YWRhdGESGQoIY2F0ZWdvcnkYASABKAlCB7pIBHICEAESFwoGZm9ybWF0GAIgASgJQge6SARyAhABEg0KBWxhYmVsGAMgASgJEkIKDmRpc3BsYXlfdGFyZ2V0GAQgASgOMh4uaG9sb211c2guY29yZS52MS5FdmVudENoYW5uZWxCCrpIB4IBBBABIAASHgoNc291cmNlX3BsdWdpbhgFIAEoCUIHukgEcgIQARImChVzb3VyY2VfcGx1Z2luX3ZlcnNpb24YBiABKAlCB7pIBHICEAE6jQG6SIkBGoYBCixyZW5kZXJpbmdfbWV0YWRhdGEubGFiZWxfcmVxdWlyZWRfZm9yX3NwZWVjaBIpbGFiZWwgbXVzdCBiZSBzZXQgd2hlbiBmb3JtYXQgaXMgJ3NwZWVjaCcaK3RoaXMuZm9ybWF0ICE9ICdzcGVlY2gnIHx8IHRoaXMubGFiZWwgIT0gJyciUAoMQ29udHJvbEZyYW1lEi8KBnNpZ25hbBgBIAEoDjIfLmhvbG9tdXNoLmNvcmUudjEuQ29udHJvbFNpZ25hbBIPCgdtZXNzYWdlGAIgASgJIn4KEVN1YnNjcmliZVJlc3BvbnNlEi0KBWV2ZW50GAEgASgLMhwuaG9sb211c2guY29yZS52MS5FdmVudEZyYW1lSAASMQoHY29udHJvbBgCIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuQ29udHJvbEZyYW1lSABCBwoFZnJhbWUiiQEKEURpc2Nvbm5lY3RSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSFQoNY29ubmVjdGlvbl9pZBgDIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgEIAEoCSJTChJEaXNjb25uZWN0UmVzcG9uc2USLAoEbWV0YRgBIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuUmVzcG9uc2VNZXRhEg8KB3N1Y2Nlc3MYAiABKAgieQoYR2V0Q29tbWFuZEhpc3RvcnlSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAyABKAkiewoZR2V0Q29tbWFuZEhpc3RvcnlSZXNwb25zZRIsCgRtZXRhGAEgASgLMh4uaG9sb211c2guY29yZS52MS5SZXNwb25zZU1ldGESDwoHc3VjY2VzcxgCIAEoCBIQCghjb21tYW5kcxgDIAMoCRINCgVlcnJvchgEIAEoCSKjAQoQQ2hhcmFjdGVyU3VtbWFyeRIUCgxjaGFyYWN0ZXJfaWQYASABKAkSFgoOY2hhcmFjdGVyX25hbWUYAiABKAkSGgoSaGFzX2FjdGl2ZV9zZXNzaW9uGAMgASgIEhYKDnNlc3Npb25fc3RhdHVzGAQgASgJEhUKDWxhc3RfbG9jYXRpb24YBSABKAkSFgoObGFzdF9wbGF5ZWRfYXQYBiABKAMiawoZQXV0aGVudGljYXRlUGxheWVyUmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCRIVCg1jYXB0Y2hhX3Rva2VuGAMgASgJEhMKC3JlbWVtYmVyX21lGAQgASgIItUBChpBdXRoZW50aWNhdGVQbGF5ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJEhUKDWVycm9yX21lc3NhZ2UYAyABKAkSNgoKY2hhcmFjdGVycxgEIAMoCzIiLmhvbG9tdXNoLmNvcmUudjEuQ2hhcmFjdGVyU3VtbWFyeRIcChRkZWZhdWx0X2NoYXJhY3Rlcl9pZBgFIAEoCRIbChNzZXNzaW9uX3R0bF9zZWNvbmRzGAYgASgDIkwKFlNlbGVjdENoYXJhY3RlclJlcXVlc3QSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YASABKAkSFAoMY2hhcmFjdGVyX2lkGAIgASgJIoEBChdTZWxlY3RDaGFyYWN0ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhIKCnNlc3Npb25faWQYAiABKAkSFgoOY2hhcmFjdGVyX25hbWUYAyABKAkSEgoKcmVhdHRhY2hlZBgEIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAUgASgJIl8KE0NyZWF0ZVBsYXllclJlcXVlc3QSEAoIdXNlcm5hbWUYASABKAkSEAoIcGFzc3dvcmQYAiABKAkSDQoFZW1haWwYAyABKAkSFQoNY2FwdGNoYV90b2tlbhgEIAEoCSKxAQoUQ3JlYXRlUGxheWVyUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgCIAEoCRI2CgpjaGFyYWN0ZXJzGAMgAygLMiIuaG9sb211c2guY29yZS52MS5DaGFyYWN0ZXJTdW1tYXJ5EhUKDWVycm9yX21lc3NhZ2UYBCABKAkSGwoTc2Vzc2lvbl90dGxfc2Vjb25kcxgFIAEoAyIUChJDcmVhdGVHdWVzdFJlcXVlc3QizgEKE0NyZWF0ZUd1ZXN0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAIgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAMgASgJEjYKCmNoYXJhY3RlcnMYBCADKAsyIi5ob2xvbXVzaC5jb3JlLnYxLkNoYXJhY3RlclN1bW1hcnkSHAoUZGVmYXVsdF9jaGFyYWN0ZXJfaWQYBSABKAkSGwoTc2Vzc2lvbl90dGxfc2Vjb25kcxgGIAEoAyJOChZDcmVhdGVDaGFyYWN0ZXJSZXF1ZXN0EhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJIm8KF0NyZWF0ZUNoYXJhY3RlclJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSFAoMY2hhcmFjdGVyX2lkGAIgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAMgASgJEhUKDWVycm9yX21lc3NhZ2UYBCABKAkiNQoVTGlzdENoYXJhY3RlcnNSZXF1ZXN0EhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJIlAKFkxpc3RDaGFyYWN0ZXJzUmVzcG9uc2USNgoKY2hhcmFjdGVycxgBIAMoCzIiLmhvbG9tdXNoLmNvcmUudjEuQ2hhcmFjdGVyU3VtbWFyeSIsChtSZXF1ZXN0UGFzc3dvcmRSZXNldFJlcXVlc3QSDQoFZW1haWwYASABKAkiLwocUmVxdWVzdFBhc3N3b3JkUmVzZXRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIkIKG0NvbmZpcm1QYXNzd29yZFJlc2V0UmVxdWVzdBINCgV0b2tlbhgBIAEoCRIUCgxuZXdfcGFzc3dvcmQYAiABKAkiRgocQ29uZmlybVBhc3N3b3JkUmVzZXRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhUKDWVycm9yX21lc3NhZ2UYAiABKAkiLQoNTG9nb3V0UmVxdWVzdBIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgBIAEoCSIQCg5Mb2dvdXRSZXNwb25zZSI5ChlDaGVja1BsYXllclNlc3Npb25SZXF1ZXN0EhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJIo4BChpDaGVja1BsYXllclNlc3Npb25SZXNwb25zZRITCgtwbGF5ZXJfbmFtZRgBIAEoCRIRCglwbGF5ZXJfaWQYAiABKAkSEAoIaXNfZ3Vlc3QYAyABKAgSNgoKY2hhcmFjdGVycxgEIAMoCzIiLmhvbG9tdXNoLmNvcmUudjEuQ2hhcmFjdGVyU3VtbWFyeSI5ChlMaXN0UGxheWVyU2Vzc2lvbnNSZXF1ZXN0EhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJIrwBChFQbGF5ZXJTZXNzaW9uSW5mbxIKCgJpZBgBIAEoCRIuCgpjcmVhdGVkX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtsYXN0X2FjdGl2ZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKdXNlcl9hZ2VudBgEIAEoCRISCgppcF9hZGRyZXNzGAUgASgJEhIKCmlzX2N1cnJlbnQYBiABKAgiUwoaTGlzdFBsYXllclNlc3Npb25zUmVzcG9uc2USNQoIc2Vzc2lvbnMYASADKAsyIy5ob2xvbXVzaC5jb3JlLnYxLlBsYXllclNlc3Npb25JbmZvIlUKGlJldm9rZVBsYXllclNlc3Npb25SZXF1ZXN0EhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJEhkKEXRhcmdldF9zZXNzaW9uX2lkGAIgASgJIkUKG1Jldm9rZVBsYXllclNlc3Npb25SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhUKDWVycm9yX21lc3NhZ2UYAiABKAkiQAogUmV2b2tlT3RoZXJQbGF5ZXJTZXNzaW9uc1JlcXVlc3QSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YASABKAkiSwohUmV2b2tlT3RoZXJQbGF5ZXJTZXNzaW9uc1Jlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSFQoNcmV2b2tlZF9jb3VudBgCIAEoBSKiAQoZUXVlcnlTdHJlYW1IaXN0b3J5UmVxdWVzdBIrCgRtZXRhGAEgASgLMh0uaG9sb211c2guY29yZS52MS5SZXF1ZXN0TWV0YRISCgpzZXNzaW9uX2lkGAIgASgJEg4KBnN0cmVhbRgDIAEoCRINCgVjb3VudBgEIAEoBRIVCg1ub3RfYmVmb3JlX21zGAUgASgDEg4KBmN1cnNvchgGIAEoDCKfAQoaUXVlcnlTdHJlYW1IaXN0b3J5UmVzcG9uc2USLAoEbWV0YRgBIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuUmVzcG9uc2VNZXRhEiwKBmV2ZW50cxgCIAMoCzIcLmhvbG9tdXNoLmNvcmUudjEuRXZlbnRGcmFtZRIQCghoYXNfbW9yZRgDIAEoCBITCgtuZXh0X2N1cnNvchgEIAEoDCJ6ChlMaXN0U2Vzc2lvblN0cmVhbXNSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAyABKAkiWwoaTGlzdFNlc3Npb25TdHJlYW1zUmVzcG9uc2USDwoHc3RyZWFtcxgBIAMoCRIsCgRtZXRhGAIgASgLMh4uaG9sb211c2guY29yZS52MS5SZXNwb25zZU1ldGEqyAIKEU5vUGxhaW50ZXh0UmVhc29uEiMKH05PX1BMQUlOVEVYVF9SRUFTT05fVU5TUEVDSUZJRUQQABImCiJOT19QTEFJTlRFWFRfUkVBU09OX0FVVEhHVUFSRF9ERU5ZEAESIQodTk9fUExBSU5URVhUX1JFQVNPTl9TVEFMRV9ERUsQAhIoCiROT19QTEFJTlRFWFRfUkVBU09OX0FVRElUX1FVRVVFX0ZVTEwQAxIjCh9OT19QTEFJTlRFWFRfUkVBU09OX0RFS19NSVNTSU5HEAQSJwojTk9fUExBSU5URVhUX1JFQVNPTl9ERUtfQkFEX0NPTFVNTlMQBRIgChxOT19QTEFJTlRFWFRfUkVBU09OX0lOVEVSTkFMEAYSKQolTk9fUExBSU5URVhUX1JFQVNPTl9ET1dOR1JBREVfUkVGVVNFRBAHKpgBCgxFdmVudENoYW5uZWwSHQoZRVZFTlRfQ0hBTk5FTF9VTlNQRUNJRklFRBAAEhoKFkVWRU5UX0NIQU5ORUxfVEVSTUlOQUwQARIXChNFVkVOVF9DSEFOTkVMX1NUQVRFEAISFgoSRVZFTlRfQ0hBTk5FTF9CT1RIEAMSHAoYRVZFTlRfQ0hBTk5FTF9BVURJVF9PTkxZEAQqbgoPUHJlc2VuY2VDb250ZXh0EiAKHFBSRVNFTkNFX0NPTlRFWFRfVU5TUEVDSUZJRUQQABIdChlQUkVTRU5DRV9DT05URVhUX0xPQ0FUSU9OEAESGgoWUFJFU0VOQ0VfQ09OVEVYVF9TQ0VORRACKoQBCg1QcmVzZW5jZVN0YXRlEh4KGlBSRVNFTkNFX1NUQVRFX1VOU1BFQ0lGSUVEEAASGQoVUFJFU0VOQ0VfU1RBVEVfQUNUSVZFEAESGwoXUFJFU0VOQ0VfU1RBVEVfREVUQUNIRUQQAhIbChdQUkVTRU5DRV9TVEFURV9JTkFDVElWRRADKnUKDUNvbnRyb2xTaWduYWwSHgoaQ09OVFJPTF9TSUdOQUxfVU5TUEVDSUZJRUQQABIiCh5DT05UUk9MX1NJR05BTF9SRVBMQVlfQ09NUExFVEUQARIgChxDT05UUk9MX1NJR05BTF9TVFJFQU1fQ0xPU0VEEAIy1xAKC0NvcmVTZXJ2aWNlEmAKDUhhbmRsZUNvbW1hbmQSJi5ob2xvbXVzaC5jb3JlLnYxLkhhbmRsZUNvbW1hbmRSZXF1ZXN0GicuaG9sb211c2guY29yZS52MS5IYW5kbGVDb21tYW5kUmVzcG9uc2USVgoJU3Vic2NyaWJlEiIuaG9sb211c2guY29yZS52MS5TdWJzY3JpYmVSZXF1ZXN0GiMuaG9sb211c2guY29yZS52MS5TdWJzY3JpYmVSZXNwb25zZTABElcKCkRpc2Nvbm5lY3QSIy5ob2xvbXVzaC5jb3JlLnYxLkRpc2Nvbm5lY3RSZXF1ZXN0GiQuaG9sb211c2guY29yZS52MS5EaXNjb25uZWN0UmVzcG9uc2USbAoRR2V0Q29tbWFuZEhpc3RvcnkSKi5ob2xvbXVzaC5jb3JlLnYxLkdldENvbW1hbmRIaXN0b3J5UmVxdWVzdBorLmhvbG9tdXNoLmNvcmUudjEuR2V0Q29tbWFuZEhpc3RvcnlSZXNwb25zZRJvChJBdXRoZW50aWNhdGVQbGF5ZXISKy5ob2xvbXVzaC5jb3JlLnYxLkF1dGhlbnRpY2F0ZVBsYXllclJlcXVlc3QaLC5ob2xvbXVzaC5jb3JlLnYxLkF1dGhlbnRpY2F0ZVBsYXllclJlc3BvbnNlEmYKD1NlbGVjdENoYXJhY3RlchIoLmhvbG9tdXNoLmNvcmUudjEuU2VsZWN0Q2hhcmFjdGVyUmVxdWVzdBopLmhvbG9tdXNoLmNvcmUudjEuU2VsZWN0Q2hhcmFjdGVyUmVzcG9uc2USXQoMQ3JlYXRlUGxheWVyEiUuaG9sb211c2guY29yZS52MS5DcmVhdGVQbGF5ZXJSZXF1ZXN0GiYuaG9sb211c2guY29yZS52MS5DcmVhdGVQbGF5ZXJSZXNwb25zZRJaCgtDcmVhdGVHdWVzdBIkLmhvbG9tdXNoLmNvcmUudjEuQ3JlYXRlR3Vlc3RSZXF1ZXN0GiUuaG9sb211c2guY29yZS52MS5DcmVhdGVHdWVzdFJlc3BvbnNlEmYKD0NyZWF0ZUNoYXJhY3RlchIoLmhvbG9tdXNoLmNvcmUudjEuQ3JlYXRlQ2hhcmFjdGVyUmVxdWVzdBopLmhvbG9tdXNoLmNvcmUudjEuQ3JlYXRlQ2hhcmFjdGVyUmVzcG9uc2USYwoOTGlzdENoYXJhY3RlcnMSJy5ob2xvbXVzaC5jb3JlLnYxLkxpc3RDaGFyYWN0ZXJzUmVxdWVzdBooLmhvbG9tdXNoLmNvcmUudjEuTGlzdENoYXJhY3RlcnNSZXNwb25zZRJ1ChRSZXF1ZXN0UGFzc3dvcmRSZXNldBItLmhvbG9tdXNoLmNvcmUudjEuUmVxdWVzdFBhc3N3b3JkUmVzZXRSZXF1ZXN0Gi4uaG9sb211c2guY29yZS52MS5SZXF1ZXN0UGFzc3dvcmRSZXNldFJlc3BvbnNlEnUKFENvbmZpcm1QYXNzd29yZFJlc2V0Ei0uaG9sb211c2guY29yZS52MS5Db25maXJtUGFzc3dvcmRSZXNldFJlcXVlc3QaLi5ob2xvbXVzaC5jb3JlLnYxLkNvbmZpcm1QYXNzd29yZFJlc2V0UmVzcG9uc2USSwoGTG9nb3V0Eh8uaG9sb211c2guY29yZS52MS5Mb2dvdXRSZXF1ZXN0GiAuaG9sb211c2guY29yZS52MS5Mb2dvdXRSZXNwb25zZRJvChJDaGVja1BsYXllclNlc3Npb24SKy5ob2xvbXVzaC5jb3JlLnYxLkNoZWNrUGxheWVyU2Vzc2lvblJlcXVlc3QaLC5ob2xvbXVzaC5jb3JlLnYxLkNoZWNrUGxheWVyU2Vzc2lvblJlc3BvbnNlEm8KEkxpc3RQbGF5ZXJTZXNzaW9ucxIrLmhvbG9tdXNoLmNvcmUudjEuTGlzdFBsYXllclNlc3Npb25zUmVxdWVzdBosLmhvbG9tdXNoLmNvcmUudjEuTGlzdFBsYXllclNlc3Npb25zUmVzcG9uc2UScgoTUmV2b2tlUGxheWVyU2Vzc2lvbhIsLmhvbG9tdXNoLmNvcmUudjEuUmV2b2tlUGxheWVyU2Vzc2lvblJlcXVlc3QaLS5ob2xvbXVzaC5jb3JlLnYxLlJldm9rZVBsYXllclNlc3Npb25SZXNwb25zZRKEAQoZUmV2b2tlT3RoZXJQbGF5ZXJTZXNzaW9ucxIyLmhvbG9tdXNoLmNvcmUudjEuUmV2b2tlT3RoZXJQbGF5ZXJTZXNzaW9uc1JlcXVlc3QaMy5ob2xvbXVzaC5jb3JlLnYxLlJldm9rZU90aGVyUGxheWVyU2Vzc2lvbnNSZXNwb25zZRJvChJRdWVyeVN0cmVhbUhpc3RvcnkSKy5ob2xvbXVzaC5jb3JlLnYxLlF1ZXJ5U3RyZWFtSGlzdG9yeVJlcXVlc3QaLC5ob2xvbXVzaC5jb3JlLnYxLlF1ZXJ5U3RyZWFtSGlzdG9yeVJlc3BvbnNlEm8KEkxpc3RTZXNzaW9uU3RyZWFtcxIrLmhvbG9tdXNoLmNvcmUudjEuTGlzdFNlc3Npb25TdHJlYW1zUmVxdWVzdBosLmhvbG9tdXNoLmNvcmUudjEuTGlzdFNlc3Npb25TdHJlYW1zUmVzcG9uc2USbAoRTGlzdEZvY3VzUHJlc2VuY2USKi5ob2xvbXVzaC5jb3JlLnYxLkxpc3RGb2N1c1ByZXNlbmNlUmVxdWVzdBorLmhvbG9tdXNoLmNvcmUudjEuTGlzdEZvY3VzUHJlc2VuY2VSZXNwb25zZUJAWj5naXRodWIuY29tL2hvbG9tdXNoL2hvbG9tdXNoL3BrZy9wcm90by9ob2xvbXVzaC9jb3JlL3YxO2NvcmV2MWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_timestamp]);
 
 /**
  * RequestMeta contains metadata for request correlation and debugging.
@@ -273,6 +273,96 @@ export const EventFrameSchema: GenMessage<EventFrame> = /*@__PURE__*/
   messageDesc(file_holomush_core_v1_core, 5);
 
 /**
+ * @generated from message holomush.core.v1.PresenceEntry
+ */
+export type PresenceEntry = Message<"holomush.core.v1.PresenceEntry"> & {
+  /**
+   * @generated from field: string character_id = 1;
+   */
+  characterId: string;
+
+  /**
+   * @generated from field: string character_name = 2;
+   */
+  characterName: string;
+
+  /**
+   * Deliberately NO arrived_at_ms — see spec §D-4 (no duration-of-presence leak).
+   *
+   * @generated from field: holomush.core.v1.PresenceState state = 3;
+   */
+  state: PresenceState;
+};
+
+/**
+ * Describes the message holomush.core.v1.PresenceEntry.
+ * Use `create(PresenceEntrySchema)` to create a new message.
+ */
+export const PresenceEntrySchema: GenMessage<PresenceEntry> = /*@__PURE__*/
+  messageDesc(file_holomush_core_v1_core, 6);
+
+/**
+ * @generated from message holomush.core.v1.ListFocusPresenceRequest
+ */
+export type ListFocusPresenceRequest = Message<"holomush.core.v1.ListFocusPresenceRequest"> & {
+  /**
+   * @generated from field: holomush.core.v1.RequestMeta meta = 1;
+   */
+  meta?: RequestMeta | undefined;
+
+  /**
+   * @generated from field: string player_session_token = 2;
+   */
+  playerSessionToken: string;
+
+  /**
+   * @generated from field: string session_id = 3;
+   */
+  sessionId: string;
+};
+
+/**
+ * Describes the message holomush.core.v1.ListFocusPresenceRequest.
+ * Use `create(ListFocusPresenceRequestSchema)` to create a new message.
+ */
+export const ListFocusPresenceRequestSchema: GenMessage<ListFocusPresenceRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_core_v1_core, 7);
+
+/**
+ * @generated from message holomush.core.v1.ListFocusPresenceResponse
+ */
+export type ListFocusPresenceResponse = Message<"holomush.core.v1.ListFocusPresenceResponse"> & {
+  /**
+   * @generated from field: holomush.core.v1.ResponseMeta meta = 1;
+   */
+  meta?: ResponseMeta | undefined;
+
+  /**
+   * @generated from field: holomush.core.v1.PresenceContext context = 2;
+   */
+  context: PresenceContext;
+
+  /**
+   * LOCATION → location_id; SCENE → scene_id (future)
+   *
+   * @generated from field: string context_id = 3;
+   */
+  contextId: string;
+
+  /**
+   * @generated from field: repeated holomush.core.v1.PresenceEntry entries = 4;
+   */
+  entries: PresenceEntry[];
+};
+
+/**
+ * Describes the message holomush.core.v1.ListFocusPresenceResponse.
+ * Use `create(ListFocusPresenceResponseSchema)` to create a new message.
+ */
+export const ListFocusPresenceResponseSchema: GenMessage<ListFocusPresenceResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_core_v1_core, 8);
+
+/**
  * RenderingMetadata carries cleartext rendering instructions for an event.
  * Populated by RenderingPublisher.Publish at emit time from the verb
  * registry. See docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md.
@@ -330,7 +420,7 @@ export type RenderingMetadata = Message<"holomush.core.v1.RenderingMetadata"> & 
  * Use `create(RenderingMetadataSchema)` to create a new message.
  */
 export const RenderingMetadataSchema: GenMessage<RenderingMetadata> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 6);
+  messageDesc(file_holomush_core_v1_core, 9);
 
 /**
  * @generated from message holomush.core.v1.ControlFrame
@@ -352,7 +442,7 @@ export type ControlFrame = Message<"holomush.core.v1.ControlFrame"> & {
  * Use `create(ControlFrameSchema)` to create a new message.
  */
 export const ControlFrameSchema: GenMessage<ControlFrame> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 7);
+  messageDesc(file_holomush_core_v1_core, 10);
 
 /**
  * @generated from message holomush.core.v1.SubscribeResponse
@@ -381,7 +471,7 @@ export type SubscribeResponse = Message<"holomush.core.v1.SubscribeResponse"> & 
  * Use `create(SubscribeResponseSchema)` to create a new message.
  */
 export const SubscribeResponseSchema: GenMessage<SubscribeResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 8);
+  messageDesc(file_holomush_core_v1_core, 11);
 
 /**
  * @generated from message holomush.core.v1.DisconnectRequest
@@ -419,7 +509,7 @@ export type DisconnectRequest = Message<"holomush.core.v1.DisconnectRequest"> & 
  * Use `create(DisconnectRequestSchema)` to create a new message.
  */
 export const DisconnectRequestSchema: GenMessage<DisconnectRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 9);
+  messageDesc(file_holomush_core_v1_core, 12);
 
 /**
  * @generated from message holomush.core.v1.DisconnectResponse
@@ -441,7 +531,7 @@ export type DisconnectResponse = Message<"holomush.core.v1.DisconnectResponse"> 
  * Use `create(DisconnectResponseSchema)` to create a new message.
  */
 export const DisconnectResponseSchema: GenMessage<DisconnectResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 10);
+  messageDesc(file_holomush_core_v1_core, 13);
 
 /**
  * @generated from message holomush.core.v1.GetCommandHistoryRequest
@@ -472,7 +562,7 @@ export type GetCommandHistoryRequest = Message<"holomush.core.v1.GetCommandHisto
  * Use `create(GetCommandHistoryRequestSchema)` to create a new message.
  */
 export const GetCommandHistoryRequestSchema: GenMessage<GetCommandHistoryRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 11);
+  messageDesc(file_holomush_core_v1_core, 14);
 
 /**
  * @generated from message holomush.core.v1.GetCommandHistoryResponse
@@ -504,7 +594,7 @@ export type GetCommandHistoryResponse = Message<"holomush.core.v1.GetCommandHist
  * Use `create(GetCommandHistoryResponseSchema)` to create a new message.
  */
 export const GetCommandHistoryResponseSchema: GenMessage<GetCommandHistoryResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 12);
+  messageDesc(file_holomush_core_v1_core, 15);
 
 /**
  * @generated from message holomush.core.v1.CharacterSummary
@@ -546,7 +636,7 @@ export type CharacterSummary = Message<"holomush.core.v1.CharacterSummary"> & {
  * Use `create(CharacterSummarySchema)` to create a new message.
  */
 export const CharacterSummarySchema: GenMessage<CharacterSummary> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 13);
+  messageDesc(file_holomush_core_v1_core, 16);
 
 /**
  * @generated from message holomush.core.v1.AuthenticatePlayerRequest
@@ -578,7 +668,7 @@ export type AuthenticatePlayerRequest = Message<"holomush.core.v1.AuthenticatePl
  * Use `create(AuthenticatePlayerRequestSchema)` to create a new message.
  */
 export const AuthenticatePlayerRequestSchema: GenMessage<AuthenticatePlayerRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 14);
+  messageDesc(file_holomush_core_v1_core, 17);
 
 /**
  * @generated from message holomush.core.v1.AuthenticatePlayerResponse
@@ -624,7 +714,7 @@ export type AuthenticatePlayerResponse = Message<"holomush.core.v1.AuthenticateP
  * Use `create(AuthenticatePlayerResponseSchema)` to create a new message.
  */
 export const AuthenticatePlayerResponseSchema: GenMessage<AuthenticatePlayerResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 15);
+  messageDesc(file_holomush_core_v1_core, 18);
 
 /**
  * @generated from message holomush.core.v1.SelectCharacterRequest
@@ -646,7 +736,7 @@ export type SelectCharacterRequest = Message<"holomush.core.v1.SelectCharacterRe
  * Use `create(SelectCharacterRequestSchema)` to create a new message.
  */
 export const SelectCharacterRequestSchema: GenMessage<SelectCharacterRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 16);
+  messageDesc(file_holomush_core_v1_core, 19);
 
 /**
  * @generated from message holomush.core.v1.SelectCharacterResponse
@@ -683,7 +773,7 @@ export type SelectCharacterResponse = Message<"holomush.core.v1.SelectCharacterR
  * Use `create(SelectCharacterResponseSchema)` to create a new message.
  */
 export const SelectCharacterResponseSchema: GenMessage<SelectCharacterResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 17);
+  messageDesc(file_holomush_core_v1_core, 20);
 
 /**
  * @generated from message holomush.core.v1.CreatePlayerRequest
@@ -715,7 +805,7 @@ export type CreatePlayerRequest = Message<"holomush.core.v1.CreatePlayerRequest"
  * Use `create(CreatePlayerRequestSchema)` to create a new message.
  */
 export const CreatePlayerRequestSchema: GenMessage<CreatePlayerRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 18);
+  messageDesc(file_holomush_core_v1_core, 21);
 
 /**
  * @generated from message holomush.core.v1.CreatePlayerResponse
@@ -754,7 +844,7 @@ export type CreatePlayerResponse = Message<"holomush.core.v1.CreatePlayerRespons
  * Use `create(CreatePlayerResponseSchema)` to create a new message.
  */
 export const CreatePlayerResponseSchema: GenMessage<CreatePlayerResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 19);
+  messageDesc(file_holomush_core_v1_core, 22);
 
 /**
  * @generated from message holomush.core.v1.CreateGuestRequest
@@ -767,7 +857,7 @@ export type CreateGuestRequest = Message<"holomush.core.v1.CreateGuestRequest"> 
  * Use `create(CreateGuestRequestSchema)` to create a new message.
  */
 export const CreateGuestRequestSchema: GenMessage<CreateGuestRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 20);
+  messageDesc(file_holomush_core_v1_core, 23);
 
 /**
  * @generated from message holomush.core.v1.CreateGuestResponse
@@ -812,7 +902,7 @@ export type CreateGuestResponse = Message<"holomush.core.v1.CreateGuestResponse"
  * Use `create(CreateGuestResponseSchema)` to create a new message.
  */
 export const CreateGuestResponseSchema: GenMessage<CreateGuestResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 21);
+  messageDesc(file_holomush_core_v1_core, 24);
 
 /**
  * @generated from message holomush.core.v1.CreateCharacterRequest
@@ -834,7 +924,7 @@ export type CreateCharacterRequest = Message<"holomush.core.v1.CreateCharacterRe
  * Use `create(CreateCharacterRequestSchema)` to create a new message.
  */
 export const CreateCharacterRequestSchema: GenMessage<CreateCharacterRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 22);
+  messageDesc(file_holomush_core_v1_core, 25);
 
 /**
  * @generated from message holomush.core.v1.CreateCharacterResponse
@@ -866,7 +956,7 @@ export type CreateCharacterResponse = Message<"holomush.core.v1.CreateCharacterR
  * Use `create(CreateCharacterResponseSchema)` to create a new message.
  */
 export const CreateCharacterResponseSchema: GenMessage<CreateCharacterResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 23);
+  messageDesc(file_holomush_core_v1_core, 26);
 
 /**
  * @generated from message holomush.core.v1.ListCharactersRequest
@@ -883,7 +973,7 @@ export type ListCharactersRequest = Message<"holomush.core.v1.ListCharactersRequ
  * Use `create(ListCharactersRequestSchema)` to create a new message.
  */
 export const ListCharactersRequestSchema: GenMessage<ListCharactersRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 24);
+  messageDesc(file_holomush_core_v1_core, 27);
 
 /**
  * @generated from message holomush.core.v1.ListCharactersResponse
@@ -900,7 +990,7 @@ export type ListCharactersResponse = Message<"holomush.core.v1.ListCharactersRes
  * Use `create(ListCharactersResponseSchema)` to create a new message.
  */
 export const ListCharactersResponseSchema: GenMessage<ListCharactersResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 25);
+  messageDesc(file_holomush_core_v1_core, 28);
 
 /**
  * @generated from message holomush.core.v1.RequestPasswordResetRequest
@@ -917,7 +1007,7 @@ export type RequestPasswordResetRequest = Message<"holomush.core.v1.RequestPassw
  * Use `create(RequestPasswordResetRequestSchema)` to create a new message.
  */
 export const RequestPasswordResetRequestSchema: GenMessage<RequestPasswordResetRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 26);
+  messageDesc(file_holomush_core_v1_core, 29);
 
 /**
  * @generated from message holomush.core.v1.RequestPasswordResetResponse
@@ -934,7 +1024,7 @@ export type RequestPasswordResetResponse = Message<"holomush.core.v1.RequestPass
  * Use `create(RequestPasswordResetResponseSchema)` to create a new message.
  */
 export const RequestPasswordResetResponseSchema: GenMessage<RequestPasswordResetResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 27);
+  messageDesc(file_holomush_core_v1_core, 30);
 
 /**
  * @generated from message holomush.core.v1.ConfirmPasswordResetRequest
@@ -956,7 +1046,7 @@ export type ConfirmPasswordResetRequest = Message<"holomush.core.v1.ConfirmPassw
  * Use `create(ConfirmPasswordResetRequestSchema)` to create a new message.
  */
 export const ConfirmPasswordResetRequestSchema: GenMessage<ConfirmPasswordResetRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 28);
+  messageDesc(file_holomush_core_v1_core, 31);
 
 /**
  * @generated from message holomush.core.v1.ConfirmPasswordResetResponse
@@ -978,7 +1068,7 @@ export type ConfirmPasswordResetResponse = Message<"holomush.core.v1.ConfirmPass
  * Use `create(ConfirmPasswordResetResponseSchema)` to create a new message.
  */
 export const ConfirmPasswordResetResponseSchema: GenMessage<ConfirmPasswordResetResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 29);
+  messageDesc(file_holomush_core_v1_core, 32);
 
 /**
  * @generated from message holomush.core.v1.LogoutRequest
@@ -995,7 +1085,7 @@ export type LogoutRequest = Message<"holomush.core.v1.LogoutRequest"> & {
  * Use `create(LogoutRequestSchema)` to create a new message.
  */
 export const LogoutRequestSchema: GenMessage<LogoutRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 30);
+  messageDesc(file_holomush_core_v1_core, 33);
 
 /**
  * @generated from message holomush.core.v1.LogoutResponse
@@ -1008,7 +1098,7 @@ export type LogoutResponse = Message<"holomush.core.v1.LogoutResponse"> & {
  * Use `create(LogoutResponseSchema)` to create a new message.
  */
 export const LogoutResponseSchema: GenMessage<LogoutResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 31);
+  messageDesc(file_holomush_core_v1_core, 34);
 
 /**
  * @generated from message holomush.core.v1.CheckPlayerSessionRequest
@@ -1025,7 +1115,7 @@ export type CheckPlayerSessionRequest = Message<"holomush.core.v1.CheckPlayerSes
  * Use `create(CheckPlayerSessionRequestSchema)` to create a new message.
  */
 export const CheckPlayerSessionRequestSchema: GenMessage<CheckPlayerSessionRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 32);
+  messageDesc(file_holomush_core_v1_core, 35);
 
 /**
  * @generated from message holomush.core.v1.CheckPlayerSessionResponse
@@ -1062,7 +1152,7 @@ export type CheckPlayerSessionResponse = Message<"holomush.core.v1.CheckPlayerSe
  * Use `create(CheckPlayerSessionResponseSchema)` to create a new message.
  */
 export const CheckPlayerSessionResponseSchema: GenMessage<CheckPlayerSessionResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 33);
+  messageDesc(file_holomush_core_v1_core, 36);
 
 /**
  * @generated from message holomush.core.v1.ListPlayerSessionsRequest
@@ -1079,7 +1169,7 @@ export type ListPlayerSessionsRequest = Message<"holomush.core.v1.ListPlayerSess
  * Use `create(ListPlayerSessionsRequestSchema)` to create a new message.
  */
 export const ListPlayerSessionsRequestSchema: GenMessage<ListPlayerSessionsRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 34);
+  messageDesc(file_holomush_core_v1_core, 37);
 
 /**
  * @generated from message holomush.core.v1.PlayerSessionInfo
@@ -1131,7 +1221,7 @@ export type PlayerSessionInfo = Message<"holomush.core.v1.PlayerSessionInfo"> & 
  * Use `create(PlayerSessionInfoSchema)` to create a new message.
  */
 export const PlayerSessionInfoSchema: GenMessage<PlayerSessionInfo> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 35);
+  messageDesc(file_holomush_core_v1_core, 38);
 
 /**
  * @generated from message holomush.core.v1.ListPlayerSessionsResponse
@@ -1148,7 +1238,7 @@ export type ListPlayerSessionsResponse = Message<"holomush.core.v1.ListPlayerSes
  * Use `create(ListPlayerSessionsResponseSchema)` to create a new message.
  */
 export const ListPlayerSessionsResponseSchema: GenMessage<ListPlayerSessionsResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 36);
+  messageDesc(file_holomush_core_v1_core, 39);
 
 /**
  * @generated from message holomush.core.v1.RevokePlayerSessionRequest
@@ -1173,7 +1263,7 @@ export type RevokePlayerSessionRequest = Message<"holomush.core.v1.RevokePlayerS
  * Use `create(RevokePlayerSessionRequestSchema)` to create a new message.
  */
 export const RevokePlayerSessionRequestSchema: GenMessage<RevokePlayerSessionRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 37);
+  messageDesc(file_holomush_core_v1_core, 40);
 
 /**
  * @generated from message holomush.core.v1.RevokePlayerSessionResponse
@@ -1195,7 +1285,7 @@ export type RevokePlayerSessionResponse = Message<"holomush.core.v1.RevokePlayer
  * Use `create(RevokePlayerSessionResponseSchema)` to create a new message.
  */
 export const RevokePlayerSessionResponseSchema: GenMessage<RevokePlayerSessionResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 38);
+  messageDesc(file_holomush_core_v1_core, 41);
 
 /**
  * @generated from message holomush.core.v1.RevokeOtherPlayerSessionsRequest
@@ -1212,7 +1302,7 @@ export type RevokeOtherPlayerSessionsRequest = Message<"holomush.core.v1.RevokeO
  * Use `create(RevokeOtherPlayerSessionsRequestSchema)` to create a new message.
  */
 export const RevokeOtherPlayerSessionsRequestSchema: GenMessage<RevokeOtherPlayerSessionsRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 39);
+  messageDesc(file_holomush_core_v1_core, 42);
 
 /**
  * @generated from message holomush.core.v1.RevokeOtherPlayerSessionsResponse
@@ -1234,7 +1324,7 @@ export type RevokeOtherPlayerSessionsResponse = Message<"holomush.core.v1.Revoke
  * Use `create(RevokeOtherPlayerSessionsResponseSchema)` to create a new message.
  */
 export const RevokeOtherPlayerSessionsResponseSchema: GenMessage<RevokeOtherPlayerSessionsResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 40);
+  messageDesc(file_holomush_core_v1_core, 43);
 
 /**
  * @generated from message holomush.core.v1.QueryStreamHistoryRequest
@@ -1283,7 +1373,7 @@ export type QueryStreamHistoryRequest = Message<"holomush.core.v1.QueryStreamHis
  * Use `create(QueryStreamHistoryRequestSchema)` to create a new message.
  */
 export const QueryStreamHistoryRequestSchema: GenMessage<QueryStreamHistoryRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 41);
+  messageDesc(file_holomush_core_v1_core, 44);
 
 /**
  * @generated from message holomush.core.v1.QueryStreamHistoryResponse
@@ -1317,7 +1407,7 @@ export type QueryStreamHistoryResponse = Message<"holomush.core.v1.QueryStreamHi
  * Use `create(QueryStreamHistoryResponseSchema)` to create a new message.
  */
 export const QueryStreamHistoryResponseSchema: GenMessage<QueryStreamHistoryResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 42);
+  messageDesc(file_holomush_core_v1_core, 45);
 
 /**
  * @generated from message holomush.core.v1.ListSessionStreamsRequest
@@ -1344,7 +1434,7 @@ export type ListSessionStreamsRequest = Message<"holomush.core.v1.ListSessionStr
  * Use `create(ListSessionStreamsRequestSchema)` to create a new message.
  */
 export const ListSessionStreamsRequestSchema: GenMessage<ListSessionStreamsRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 43);
+  messageDesc(file_holomush_core_v1_core, 46);
 
 /**
  * @generated from message holomush.core.v1.ListSessionStreamsResponse
@@ -1366,7 +1456,7 @@ export type ListSessionStreamsResponse = Message<"holomush.core.v1.ListSessionSt
  * Use `create(ListSessionStreamsResponseSchema)` to create a new message.
  */
 export const ListSessionStreamsResponseSchema: GenMessage<ListSessionStreamsResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 44);
+  messageDesc(file_holomush_core_v1_core, 47);
 
 /**
  * NoPlaintextReason enumerates causes for metadata_only=true so clients
@@ -1498,6 +1588,69 @@ export const EventChannelSchema: GenEnum<EventChannel> = /*@__PURE__*/
   enumDesc(file_holomush_core_v1_core, 1);
 
 /**
+ * @generated from enum holomush.core.v1.PresenceContext
+ */
+export enum PresenceContext {
+  /**
+   * @generated from enum value: PRESENCE_CONTEXT_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: PRESENCE_CONTEXT_LOCATION = 1;
+   */
+  LOCATION = 1,
+
+  /**
+   * wire-reserved; resolver in follow-up bead
+   *
+   * @generated from enum value: PRESENCE_CONTEXT_SCENE = 2;
+   */
+  SCENE = 2,
+}
+
+/**
+ * Describes the enum holomush.core.v1.PresenceContext.
+ */
+export const PresenceContextSchema: GenEnum<PresenceContext> = /*@__PURE__*/
+  enumDesc(file_holomush_core_v1_core, 2);
+
+/**
+ * @generated from enum holomush.core.v1.PresenceState
+ */
+export enum PresenceState {
+  /**
+   * @generated from enum value: PRESENCE_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: PRESENCE_STATE_ACTIVE = 1;
+   */
+  ACTIVE = 1,
+
+  /**
+   * emitted by future scene resolver
+   *
+   * @generated from enum value: PRESENCE_STATE_DETACHED = 2;
+   */
+  DETACHED = 2,
+
+  /**
+   * emitted by future scene resolver
+   *
+   * @generated from enum value: PRESENCE_STATE_INACTIVE = 3;
+   */
+  INACTIVE = 3,
+}
+
+/**
+ * Describes the enum holomush.core.v1.PresenceState.
+ */
+export const PresenceStateSchema: GenEnum<PresenceState> = /*@__PURE__*/
+  enumDesc(file_holomush_core_v1_core, 3);
+
+/**
  * @generated from enum holomush.core.v1.ControlSignal
  */
 export enum ControlSignal {
@@ -1521,7 +1674,7 @@ export enum ControlSignal {
  * Describes the enum holomush.core.v1.ControlSignal.
  */
 export const ControlSignalSchema: GenEnum<ControlSignal> = /*@__PURE__*/
-  enumDesc(file_holomush_core_v1_core, 2);
+  enumDesc(file_holomush_core_v1_core, 4);
 
 /**
  * CoreService is the main game service.
@@ -1729,6 +1882,17 @@ export const CoreService: GenService<{
     methodKind: "unary";
     input: typeof ListSessionStreamsRequestSchema;
     output: typeof ListSessionStreamsResponseSchema;
+  },
+  /**
+   * ListFocusPresence returns the presence snapshot for the session's current
+   * focus context (location or scene). Pure read — no session mutation.
+   *
+   * @generated from rpc holomush.core.v1.CoreService.ListFocusPresence
+   */
+  listFocusPresence: {
+    methodKind: "unary";
+    input: typeof ListFocusPresenceRequestSchema;
+    output: typeof ListFocusPresenceResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_holomush_core_v1_core, 0);

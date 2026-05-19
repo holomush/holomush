@@ -41,6 +41,7 @@ const (
 	CoreService_RevokeOtherPlayerSessions_FullMethodName = "/holomush.core.v1.CoreService/RevokeOtherPlayerSessions"
 	CoreService_QueryStreamHistory_FullMethodName        = "/holomush.core.v1.CoreService/QueryStreamHistory"
 	CoreService_ListSessionStreams_FullMethodName        = "/holomush.core.v1.CoreService/ListSessionStreams"
+	CoreService_ListFocusPresence_FullMethodName         = "/holomush.core.v1.CoreService/ListFocusPresence"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -98,6 +99,9 @@ type CoreServiceClient interface {
 	// subscribed to, derived from focusCoordinator.RestoreFocus. Used by
 	// web clients to enumerate streams for backfill on reload. Pure read.
 	ListSessionStreams(ctx context.Context, in *ListSessionStreamsRequest, opts ...grpc.CallOption) (*ListSessionStreamsResponse, error)
+	// ListFocusPresence returns the presence snapshot for the session's current
+	// focus context (location or scene). Pure read — no session mutation.
+	ListFocusPresence(ctx context.Context, in *ListFocusPresenceRequest, opts ...grpc.CallOption) (*ListFocusPresenceResponse, error)
 }
 
 type coreServiceClient struct {
@@ -307,6 +311,16 @@ func (c *coreServiceClient) ListSessionStreams(ctx context.Context, in *ListSess
 	return out, nil
 }
 
+func (c *coreServiceClient) ListFocusPresence(ctx context.Context, in *ListFocusPresenceRequest, opts ...grpc.CallOption) (*ListFocusPresenceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListFocusPresenceResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListFocusPresence_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -362,6 +376,9 @@ type CoreServiceServer interface {
 	// subscribed to, derived from focusCoordinator.RestoreFocus. Used by
 	// web clients to enumerate streams for backfill on reload. Pure read.
 	ListSessionStreams(context.Context, *ListSessionStreamsRequest) (*ListSessionStreamsResponse, error)
+	// ListFocusPresence returns the presence snapshot for the session's current
+	// focus context (location or scene). Pure read — no session mutation.
+	ListFocusPresence(context.Context, *ListFocusPresenceRequest) (*ListFocusPresenceResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -428,6 +445,9 @@ func (UnimplementedCoreServiceServer) QueryStreamHistory(context.Context, *Query
 }
 func (UnimplementedCoreServiceServer) ListSessionStreams(context.Context, *ListSessionStreamsRequest) (*ListSessionStreamsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListSessionStreams not implemented")
+}
+func (UnimplementedCoreServiceServer) ListFocusPresence(context.Context, *ListFocusPresenceRequest) (*ListFocusPresenceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListFocusPresence not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -785,6 +805,24 @@ func _CoreService_ListSessionStreams_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_ListFocusPresence_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListFocusPresenceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListFocusPresence(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListFocusPresence_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListFocusPresence(ctx, req.(*ListFocusPresenceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -863,6 +901,10 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListSessionStreams",
 			Handler:    _CoreService_ListSessionStreams_Handler,
+		},
+		{
+			MethodName: "ListFocusPresence",
+			Handler:    _CoreService_ListFocusPresence_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

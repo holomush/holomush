@@ -79,6 +79,12 @@ service WebService {
   rpc WebListPlayerSessions(WebListPlayerSessionsRequest) returns (WebListPlayerSessionsResponse);
   rpc WebRevokePlayerSession(WebRevokePlayerSessionRequest) returns (WebRevokePlayerSessionResponse);
   rpc WebRevokeOtherPlayerSessions(WebRevokeOtherPlayerSessionsRequest) returns (WebRevokeOtherPlayerSessionsResponse);
+
+  // WebListFocusPresence returns the presence snapshot for the session's
+  // current focus context (location or scene). Proxies to
+  // CoreService.ListFocusPresence — authorization is enforced by core.
+  // player_session_token is read from the HTTP cookie by gateway middleware.
+  rpc WebListFocusPresence(WebListFocusPresenceRequest) returns (WebListFocusPresenceResponse);
 }
 
 message SendCommandRequest {
@@ -348,4 +354,35 @@ message WebRevokeOtherPlayerSessionsRequest {}
 message WebRevokeOtherPlayerSessionsResponse {
   bool success = 1;
   int32 revoked_count = 2;
+}
+
+// --- Presence messages ---
+
+enum WebPresenceContext {
+  WEB_PRESENCE_CONTEXT_UNSPECIFIED = 0;
+  WEB_PRESENCE_CONTEXT_LOCATION = 1;
+  WEB_PRESENCE_CONTEXT_SCENE = 2;
+}
+
+enum WebPresenceState {
+  WEB_PRESENCE_STATE_UNSPECIFIED = 0;
+  WEB_PRESENCE_STATE_ACTIVE = 1;
+  WEB_PRESENCE_STATE_DETACHED = 2;
+  WEB_PRESENCE_STATE_INACTIVE = 3;
+}
+
+message WebPresenceEntry {
+  string character_id = 1;
+  string character_name = 2;
+  WebPresenceState state = 3;
+}
+
+message WebListFocusPresenceRequest {
+  string session_id = 1;
+}
+
+message WebListFocusPresenceResponse {
+  WebPresenceContext context = 1;
+  string context_id = 2;
+  repeated WebPresenceEntry entries = 3;
 }

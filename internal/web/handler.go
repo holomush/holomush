@@ -463,6 +463,14 @@ func (h *Handler) WebListSessionStreams(ctx context.Context, req *connect.Reques
 	}), nil
 }
 
+// WebListFocusPresence is the gateway proxy for CoreService.ListFocusPresence.
+// The real forwarder lands in holomush-5b2j.12 (T9); this stub keeps *Handler
+// satisfying webv1connect.WebServiceHandler so the proto addition can land
+// independently of the gateway implementation.
+func (h *Handler) WebListFocusPresence(_ context.Context, _ *connect.Request[webv1.WebListFocusPresenceRequest]) (*connect.Response[webv1.WebListFocusPresenceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("WebListFocusPresence pending — see holomush-5b2j.12"))
+}
+
 // WebListContent returns content items matching a key prefix.
 func (h *Handler) WebListContent(ctx context.Context, req *connect.Request[webv1.WebListContentRequest]) (*connect.Response[webv1.WebListContentResponse], error) {
 	slog.DebugContext(ctx, "web: WebListContent", "prefix", req.Msg.GetPrefix())

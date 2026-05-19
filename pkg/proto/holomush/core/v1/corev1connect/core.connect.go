@@ -89,6 +89,9 @@ const (
 	// CoreServiceListSessionStreamsProcedure is the fully-qualified name of the CoreService's
 	// ListSessionStreams RPC.
 	CoreServiceListSessionStreamsProcedure = "/holomush.core.v1.CoreService/ListSessionStreams"
+	// CoreServiceListFocusPresenceProcedure is the fully-qualified name of the CoreService's
+	// ListFocusPresence RPC.
+	CoreServiceListFocusPresenceProcedure = "/holomush.core.v1.CoreService/ListFocusPresence"
 )
 
 // CoreServiceClient is a client for the holomush.core.v1.CoreService service.
@@ -142,6 +145,9 @@ type CoreServiceClient interface {
 	// subscribed to, derived from focusCoordinator.RestoreFocus. Used by
 	// web clients to enumerate streams for backfill on reload. Pure read.
 	ListSessionStreams(context.Context, *connect.Request[v1.ListSessionStreamsRequest]) (*connect.Response[v1.ListSessionStreamsResponse], error)
+	// ListFocusPresence returns the presence snapshot for the session's current
+	// focus context (location or scene). Pure read — no session mutation.
+	ListFocusPresence(context.Context, *connect.Request[v1.ListFocusPresenceRequest]) (*connect.Response[v1.ListFocusPresenceResponse], error)
 }
 
 // NewCoreServiceClient constructs a client for the holomush.core.v1.CoreService service. By
@@ -269,6 +275,12 @@ func NewCoreServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(coreServiceMethods.ByName("ListSessionStreams")),
 			connect.WithClientOptions(opts...),
 		),
+		listFocusPresence: connect.NewClient[v1.ListFocusPresenceRequest, v1.ListFocusPresenceResponse](
+			httpClient,
+			baseURL+CoreServiceListFocusPresenceProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("ListFocusPresence")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -293,6 +305,7 @@ type coreServiceClient struct {
 	revokeOtherPlayerSessions *connect.Client[v1.RevokeOtherPlayerSessionsRequest, v1.RevokeOtherPlayerSessionsResponse]
 	queryStreamHistory        *connect.Client[v1.QueryStreamHistoryRequest, v1.QueryStreamHistoryResponse]
 	listSessionStreams        *connect.Client[v1.ListSessionStreamsRequest, v1.ListSessionStreamsResponse]
+	listFocusPresence         *connect.Client[v1.ListFocusPresenceRequest, v1.ListFocusPresenceResponse]
 }
 
 // HandleCommand calls holomush.core.v1.CoreService.HandleCommand.
@@ -390,6 +403,11 @@ func (c *coreServiceClient) ListSessionStreams(ctx context.Context, req *connect
 	return c.listSessionStreams.CallUnary(ctx, req)
 }
 
+// ListFocusPresence calls holomush.core.v1.CoreService.ListFocusPresence.
+func (c *coreServiceClient) ListFocusPresence(ctx context.Context, req *connect.Request[v1.ListFocusPresenceRequest]) (*connect.Response[v1.ListFocusPresenceResponse], error) {
+	return c.listFocusPresence.CallUnary(ctx, req)
+}
+
 // CoreServiceHandler is an implementation of the holomush.core.v1.CoreService service.
 type CoreServiceHandler interface {
 	// HandleCommand processes a game command.
@@ -441,6 +459,9 @@ type CoreServiceHandler interface {
 	// subscribed to, derived from focusCoordinator.RestoreFocus. Used by
 	// web clients to enumerate streams for backfill on reload. Pure read.
 	ListSessionStreams(context.Context, *connect.Request[v1.ListSessionStreamsRequest]) (*connect.Response[v1.ListSessionStreamsResponse], error)
+	// ListFocusPresence returns the presence snapshot for the session's current
+	// focus context (location or scene). Pure read — no session mutation.
+	ListFocusPresence(context.Context, *connect.Request[v1.ListFocusPresenceRequest]) (*connect.Response[v1.ListFocusPresenceResponse], error)
 }
 
 // NewCoreServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -564,6 +585,12 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(coreServiceMethods.ByName("ListSessionStreams")),
 		connect.WithHandlerOptions(opts...),
 	)
+	coreServiceListFocusPresenceHandler := connect.NewUnaryHandler(
+		CoreServiceListFocusPresenceProcedure,
+		svc.ListFocusPresence,
+		connect.WithSchema(coreServiceMethods.ByName("ListFocusPresence")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.core.v1.CoreService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CoreServiceHandleCommandProcedure:
@@ -604,6 +631,8 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 			coreServiceQueryStreamHistoryHandler.ServeHTTP(w, r)
 		case CoreServiceListSessionStreamsProcedure:
 			coreServiceListSessionStreamsHandler.ServeHTTP(w, r)
+		case CoreServiceListFocusPresenceProcedure:
+			coreServiceListFocusPresenceHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -687,4 +716,8 @@ func (UnimplementedCoreServiceHandler) QueryStreamHistory(context.Context, *conn
 
 func (UnimplementedCoreServiceHandler) ListSessionStreams(context.Context, *connect.Request[v1.ListSessionStreamsRequest]) (*connect.Response[v1.ListSessionStreamsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.ListSessionStreams is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) ListFocusPresence(context.Context, *connect.Request[v1.ListFocusPresenceRequest]) (*connect.Response[v1.ListFocusPresenceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.ListFocusPresence is not implemented"))
 }
