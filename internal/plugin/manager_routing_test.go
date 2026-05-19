@@ -131,6 +131,8 @@ func (h *testEventEmitterHost) QuerySessionStreams(context.Context, string, plug
 
 func (h *testEventEmitterHost) Plugins() []string { return append([]string(nil), h.loadedNames...) }
 
+func (h *testEventEmitterHost) PluginEmitRegistry(string) ([]string, bool) { return nil, false }
+
 func (h *testEventEmitterHost) Close(context.Context) error { return nil }
 
 func TestManagerRegisterHost(t *testing.T) {

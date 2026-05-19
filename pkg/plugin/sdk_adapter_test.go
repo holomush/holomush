@@ -15,9 +15,19 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
+
+// fakeHandlerNoOp is a no-op Handler used by adapter unit tests that
+// don't exercise HandleEvent. (Internal package can't see testHandler
+// from package pluginsdk_test.)
+type fakeHandlerNoOp struct{}
+
+func (fakeHandlerNoOp) HandleEvent(_ context.Context, _ Event) ([]EmitEvent, error) {
+	return nil, nil
+}
 
 // captureCmdHandler is a test CommandHandler that records the context
 // and request it received and returns a pre-canned response (optionally
@@ -224,6 +234,85 @@ func TestSdkAuditEffectToProtoMapsAllKnownValues(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := sdkAuditEffectToProto(tc.in)
 			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// fakeServiceProviderWithRegistry is a minimal ServiceProvider that also
+// implements EmitTypeRegistrar; used to verify the SDK adapter populates
+// InitResponse.RegisteredEmitTypes from the registry.
+type fakeServiceProviderWithRegistry struct {
+	registry *EmitRegistry
+}
+
+func (f *fakeServiceProviderWithRegistry) RegisterServices(_ grpc.ServiceRegistrar) {}
+func (f *fakeServiceProviderWithRegistry) Init(_ context.Context, _ *pluginv1.ServiceConfig) error {
+	return nil
+}
+func (f *fakeServiceProviderWithRegistry) EmitRegistry() *EmitRegistry { return f.registry }
+
+// fakeServiceProviderNoRegistry is a ServiceProvider that does NOT implement
+// EmitTypeRegistrar; used to verify the adapter leaves RegisteredEmitTypes
+// empty when the optional interface is absent.
+type fakeServiceProviderNoRegistry struct{}
+
+func (f *fakeServiceProviderNoRegistry) RegisterServices(_ grpc.ServiceRegistrar) {}
+func (f *fakeServiceProviderNoRegistry) Init(_ context.Context, _ *pluginv1.ServiceConfig) error {
+	return nil
+}
+
+func TestPluginServerAdapterInit_RegisteredEmitTypesPopulation(t *testing.T) {
+	t.Parallel()
+
+	regWithEntries := NewEmitRegistry()
+	regWithEntries.RegisterEmitTypes([]string{"foo", "bar"})
+
+	tests := []struct {
+		name     string
+		provider ServiceProvider
+		expected []string
+		assertFn func(t *testing.T, got []string)
+	}{
+		{
+			name:     "populates from EmitTypeRegistrar with non-empty registry",
+			provider: &fakeServiceProviderWithRegistry{registry: regWithEntries},
+			expected: []string{"bar", "foo"},
+			assertFn: func(t *testing.T, got []string) {
+				assert.Equal(t, []string{"bar", "foo"}, got,
+					"adapter must surface the sorted EmitRegistry contents")
+			},
+		},
+		{
+			name:     "leaves empty when provider does not implement EmitTypeRegistrar",
+			provider: &fakeServiceProviderNoRegistry{},
+			assertFn: func(t *testing.T, got []string) {
+				assert.Empty(t, got,
+					"adapter must leave RegisteredEmitTypes empty when provider does not opt in")
+			},
+		},
+		{
+			name:     "does not panic when EmitRegistry returns nil",
+			provider: &fakeServiceProviderWithRegistry{registry: nil},
+			assertFn: func(t *testing.T, got []string) {
+				assert.Empty(t, got,
+					"adapter must guard against nil EmitRegistry() and leave the field empty")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			adapter := &pluginServerAdapter{
+				handler:         fakeHandlerNoOp{},
+				serviceProvider: tt.provider,
+			}
+
+			resp, err := adapter.Init(context.Background(), &pluginv1.InitRequest{})
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			tt.assertFn(t, resp.GetRegisteredEmitTypes())
 		})
 	}
 }

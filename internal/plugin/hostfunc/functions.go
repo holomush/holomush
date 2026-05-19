@@ -185,11 +185,47 @@ func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...stri
 	// Register focus management functions.
 	RegisterFocusFuncs(ls, mod, f.focusOps, f.historyReader)
 
+	// INV-S5: install a no-op register_emit_type in the per-delivery
+	// hostfunc surface. Lua plugins call register_emit_type at top level
+	// (idempotent registrations), and main.lua is re-executed on every
+	// event/command delivery — so the function MUST exist at runtime even
+	// though only Load-time calls matter. RegisterWithEmitCapture (used by
+	// the Lua Host's INV-S5 Load pass) overwrites this with the capturing
+	// variant.
+	ls.SetField(mod, "register_emit_type", ls.NewFunction(func(ls *lua.LState) int {
+		_ = ls.CheckString(1)
+		ls.Push(lua.LTrue)
+		return 1
+	}))
+
 	ls.SetGlobal("holomush", mod)
 
 	// Inject capability modules for declared requires.
 	if f.capabilities != nil && len(requires) > 0 {
 		f.capabilities.InjectRequired(ls, requires, pluginName)
+	}
+}
+
+// RegisterWithEmitCapture is the variant of Register used during the
+// Lua Host's INV-S5 Load-pass. Identical to Register, but overwrites the
+// no-op register_emit_type stub with the capturing variant that appends
+// to reg.
+//
+// The standard per-delivery Functions.Register installs a no-op
+// register_emit_type (see the no-op installation block above); plugin
+// main.lua is re-executed on every event/command delivery, so calls to
+// register_emit_type MUST not raise at runtime. Only Load-time captures
+// are honored by the INV-S5 substrate validator — per-delivery calls
+// are accepted but discarded by the no-op stub.
+func (f *Functions) RegisterWithEmitCapture(
+	ls *lua.LState,
+	pluginName string,
+	reg *LuaEmitRegistry,
+	requires ...string,
+) {
+	f.Register(ls, pluginName, requires...)
+	if mod, ok := ls.GetGlobal("holomush").(*lua.LTable); ok {
+		RegisterEmitTypeFuncs(ls, mod, reg)
 	}
 }
 
@@ -236,6 +272,9 @@ func (f *Functions) RegisteredFunctionsForAudit() []AuditEntry {
 		{Name: "holomush.leave_focus"},
 		{Name: "holomush.present_focus"},
 		{Name: "holomush.query_stream_history"},
+		// INV-S5 (jg9b.3): per-delivery no-op; Load-pass capturing variant
+		// is installed by RegisterWithEmitCapture.
+		{Name: "holomush.register_emit_type"},
 	}
 }
 

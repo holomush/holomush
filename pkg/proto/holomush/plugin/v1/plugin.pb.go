@@ -344,8 +344,13 @@ type InitResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// gRPC service names this plugin provides on the go-plugin transport.
 	ProvidedServices []string `protobuf:"bytes,1,rep,name=provided_services,json=providedServices,proto3" json:"provided_services,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Set of plugin-owned event types this plugin may emit. Host validates
+	// set-equality against manifest's crypto.emits per INV-S5. Plugins
+	// without crypto.emits leave empty and skip validation; plugins WITH
+	// crypto.emits MUST populate (mismatch fails load).
+	RegisteredEmitTypes []string `protobuf:"bytes,2,rep,name=registered_emit_types,json=registeredEmitTypes,proto3" json:"registered_emit_types,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *InitResponse) Reset() {
@@ -381,6 +386,13 @@ func (*InitResponse) Descriptor() ([]byte, []int) {
 func (x *InitResponse) GetProvidedServices() []string {
 	if x != nil {
 		return x.ProvidedServices
+	}
+	return nil
+}
+
+func (x *InitResponse) GetRegisteredEmitTypes() []string {
+	if x != nil {
+		return x.RegisteredEmitTypes
 	}
 	return nil
 }
@@ -2503,9 +2515,10 @@ const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"H\n" +
 	"\vInitRequest\x129\n" +
-	"\x06config\x18\x01 \x01(\v2!.holomush.plugin.v1.ServiceConfigR\x06config\";\n" +
+	"\x06config\x18\x01 \x01(\v2!.holomush.plugin.v1.ServiceConfigR\x06config\"o\n" +
 	"\fInitResponse\x12+\n" +
-	"\x11provided_services\x18\x01 \x03(\tR\x10providedServices\"\x85\x02\n" +
+	"\x11provided_services\x18\x01 \x03(\tR\x10providedServices\x122\n" +
+	"\x15registered_emit_types\x18\x02 \x03(\tR\x13registeredEmitTypes\"\x85\x02\n" +
 	"\x05Event\x12\x17\n" +
 	"\x02id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x02id\x12\x1f\n" +
 	"\x06stream\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06stream\x12\x1b\n" +

@@ -181,12 +181,13 @@ type Host struct {
 
 // loadedPlugin holds state for a single loaded binary plugin.
 type loadedPlugin struct {
-	manifest *plugins.Manifest
-	client   PluginClient
-	plugin   pluginv1.PluginServiceClient
-	conn     grpc.ClientConnInterface // underlying gRPC conn to the plugin process
-	certDir  string                   // temp cert directory, cleaned up on unload
-	broker   *hashiplug.GRPCBroker    // broker for service injection, nil if factory-mocked
+	manifest            *plugins.Manifest
+	client              PluginClient
+	plugin              pluginv1.PluginServiceClient
+	conn                grpc.ClientConnInterface // underlying gRPC conn to the plugin process
+	certDir             string                   // temp cert directory, cleaned up on unload
+	broker              *hashiplug.GRPCBroker    // broker for service injection, nil if factory-mocked
+	registeredEmitTypes []string                 // INV-S5: populated from InitResponse.RegisteredEmitTypes
 }
 
 // NewHost creates a new binary plugin host.
@@ -505,8 +506,14 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		}
 	}
 
-	// Call Init on plugins that need service injection (storage or requires).
-	if len(manifest.Requires) > 0 || len(manifest.Provides) > 0 || manifest.Storage == plugins.StoragePostgres {
+	// Call Init on plugins that need service injection (storage or requires)
+	// OR plugins that declare crypto.emits (INV-S5 needs InitResponse).
+	needsInit := len(manifest.Requires) > 0 ||
+		len(manifest.Provides) > 0 ||
+		manifest.Storage == plugins.StoragePostgres ||
+		(manifest.Crypto != nil && len(manifest.Crypto.Emits) > 0)
+	var registeredEmitTypes []string
+	if needsInit {
 		initReq := &pluginv1.InitRequest{
 			Config: &pluginv1.ServiceConfig{
 				RequiredServices: requiredServices,
@@ -525,25 +532,43 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 			initReq.Config.ConnectionString = connStr
 		}
 
-		if _, initErr := pluginClient.Init(ctx, initReq); initErr != nil {
+		initResp, initErr := pluginClient.Init(ctx, initReq)
+		if initErr != nil {
 			client.Kill()
 			if certDir != "" {
 				_ = os.RemoveAll(certDir) //nolint:errcheck // best-effort cleanup
 			}
 			return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "init").Wrap(initErr)
 		}
+		if initResp != nil {
+			registeredEmitTypes = initResp.GetRegisteredEmitTypes()
+		}
 	}
 
 	h.plugins[manifest.Name] = &loadedPlugin{
-		manifest: manifest,
-		client:   client,
-		plugin:   pluginClient,
-		conn:     pluginConn,
-		certDir:  certDir,
-		broker:   grpcPlugin.broker,
+		manifest:            manifest,
+		client:              client,
+		plugin:              pluginClient,
+		conn:                pluginConn,
+		certDir:             certDir,
+		broker:              grpcPlugin.broker,
+		registeredEmitTypes: registeredEmitTypes,
 	}
 
 	return nil
+}
+
+// PluginEmitRegistry implements plugins.Host. Returns the
+// InitResponse.RegisteredEmitTypes captured at Load time, or (nil, false)
+// when the plugin is not loaded.
+func (h *Host) PluginEmitRegistry(name string) ([]string, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	p, ok := h.plugins[name]
+	if !ok {
+		return nil, false
+	}
+	return p.registeredEmitTypes, true
 }
 
 // Unload tears down a plugin.
