@@ -152,17 +152,17 @@ type Info struct {
 	// queries (invariant I-PRIV-2). Zero for non-guest sessions.
 	GuestCharacterCreatedAt time.Time
 	IsGuest                 bool
-	Status          Status
-	GridPresent     bool
-	CommandHistory  []string
-	TTLSeconds      int
-	MaxHistory      int
-	DetachedAt      *time.Time
-	ExpiresAt       *time.Time
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	LastPaged       string
-	LastWhispered   string
+	Status                  Status
+	GridPresent             bool
+	CommandHistory          []string
+	TTLSeconds              int
+	MaxHistory              int
+	DetachedAt              *time.Time
+	ExpiresAt               *time.Time
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
+	LastPaged               string
+	LastWhispered           string
 
 	// FocusMemberships is the set of focused contexts this session is
 	// actively participating in. Mutated only via FocusCoordinator

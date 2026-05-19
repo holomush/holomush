@@ -2470,9 +2470,9 @@ lua-plugin:
 
 func TestManifest_HistoryScopeValidation(t *testing.T) {
 	tests := []struct {
-		name      string
-		yaml      string
-		wantErr   bool
+		name        string
+		yaml        string
+		wantErr     bool
 		errContains string
 	}{
 		{

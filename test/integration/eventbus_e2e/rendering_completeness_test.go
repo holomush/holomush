@@ -70,7 +70,8 @@ var _ = Describe("Rendering completeness", func() {
 		hostSub.AwaitDrained(suiteT, 10*time.Second)
 		Eventually(func() bool {
 			var count int
-			qerr := pool.QueryRow(ctx,
+			qerr := pool.QueryRow(
+				ctx,
 				"SELECT COUNT(*) FROM events_audit WHERE subject LIKE $1",
 				subjectLike,
 			).Scan(&count)
@@ -82,7 +83,8 @@ var _ = Describe("Rendering completeness", func() {
 		// enforces NOT NULL, but we assert here so a regression that drops the
 		// constraint or writes 'null' JSONB is caught.
 		var nullCount int
-		Expect(pool.QueryRow(ctx,
+		Expect(pool.QueryRow(
+			ctx,
 			"SELECT COUNT(*) FROM events_audit WHERE subject LIKE $1 AND rendering IS NULL",
 			subjectLike,
 		).Scan(&nullCount)).To(Succeed())
@@ -92,14 +94,16 @@ var _ = Describe("Rendering completeness", func() {
 		// publisher. Spot-check the first row's source_plugin, then verify
 		// every host-builtin row reports source_plugin="builtin".
 		var sourcePlugin string
-		Expect(pool.QueryRow(ctx,
+		Expect(pool.QueryRow(
+			ctx,
 			"SELECT rendering->>'source_plugin' FROM events_audit WHERE subject LIKE $1 ORDER BY js_seq LIMIT 1",
 			subjectLike,
 		).Scan(&sourcePlugin)).To(Succeed())
 		Expect(sourcePlugin).To(Equal("builtin"))
 
 		var nonBuiltinCount int
-		Expect(pool.QueryRow(ctx,
+		Expect(pool.QueryRow(
+			ctx,
 			"SELECT COUNT(*) FROM events_audit WHERE subject LIKE $1 AND rendering->>'source_plugin' <> 'builtin'",
 			subjectLike,
 		).Scan(&nonBuiltinCount)).To(Succeed())

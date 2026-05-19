@@ -20,13 +20,13 @@ func TestValidateEmitTypeSetEquality(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name                     string
-		declared                 []string
-		registered               []string
-		wantMismatch             bool
-		wantDeclaredButUnreg     []string
-		wantRegisteredButUndecl  []string
-		assertMsg                string
+		name                    string
+		declared                []string
+		registered              []string
+		wantMismatch            bool
+		wantDeclaredButUnreg    []string
+		wantRegisteredButUndecl []string
+		assertMsg               string
 	}{
 		{
 			name:       "matching sets produce no mismatch",
