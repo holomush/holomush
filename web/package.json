@@ -21,7 +21,7 @@
     "@opentelemetry/resources": "2.6.1",
     "@opentelemetry/sdk-trace-web": "2.6.1",
     "@opentelemetry/semantic-conventions": "1.40.0",
-    "@playwright/test": "1.58.2",
+    "@playwright/test": "1.60.0",
     "@sveltejs/adapter-static": "3.0.10",
     "@sveltejs/kit": "2.55.0",
     "@sveltejs/vite-plugin-svelte": "5.1.1",
