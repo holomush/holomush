@@ -59,7 +59,7 @@ require (
 	// a binary version but not guaranteed across releases (INV-D18).
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
-	pgregory.net/rapid v1.2.0
+	pgregory.net/rapid v1.3.0
 )
 
 // crypto.policy_set chain hashing: SHA-256 over RFC 8785 JCS-canonicalized
