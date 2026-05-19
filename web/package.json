@@ -33,7 +33,7 @@
     "jsdom": "29.0.2",
     "paneforge": "1.0.2",
     "pg": "8.20.0",
-    "svelte": "5.55.7",
+    "svelte": "5.55.8",
     "svelte-check": "4.4.8",
     "tailwindcss": "4.2.2",
     "typescript": "5.9.3",
