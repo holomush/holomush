@@ -6,4 +6,7 @@ reviews:
     enabled: true
     auto_incremental_review: true
     auto_pause_after_reviewed_commits: 0
-    ignore_usernames: []
+    ignore_usernames:
+      - "dependabot[bot]"
+      - "renovate[bot]"
+      - "github-actions[bot]"
