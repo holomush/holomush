@@ -29,7 +29,7 @@ jobs:
     runs-on: namespace-profile-linux-amd64-2x4
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: bufbuild/buf-action@b46cbc051dd8fd10a3c2213e784498790d3fe388 # v1.0.3
+      - uses: bufbuild/buf-action@fd21066df7214747548607aaa45548ba2b9bc1ff # v1.4.0
         with:
           token: ${{ secrets.BUF_TOKEN }}
           lint: true
@@ -44,7 +44,7 @@ jobs:
     needs: [lint]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: bufbuild/buf-action@b46cbc051dd8fd10a3c2213e784498790d3fe388 # v1.0.3
+      - uses: bufbuild/buf-action@fd21066df7214747548607aaa45548ba2b9bc1ff # v1.4.0
         with:
           token: ${{ secrets.BUF_TOKEN }}
           lint: false
