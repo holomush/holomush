@@ -42,6 +42,13 @@ For binary plugins that declare custom resource types. Documents the host
 contract for `GetSchema` and `ResolveResource`, load-time policy/schema
 validation, and common anti-patterns.
 
+### [Substrate Contract](substrate-contract.md)
+
+The rules governing what plugins can rely on from the substrate and what they
+MUST NOT touch. Covers INV-S1 plugin-boundary, INV-S5 manifest emit-type
+validation (Lua and binary), and the named-but-not-yet-built eventkit/groupkit
+SDKs.
+
 ### [Event Reference](events.md)
 
 Event types, payload schemas, and stream patterns. Everything you need to know
