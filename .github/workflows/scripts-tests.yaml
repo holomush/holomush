@@ -46,7 +46,7 @@ jobs:
         # as the `lib-path` STEP OUTPUT (not as $GITHUB_ENV), so the
         # subsequent run step wires it into BATS_LIB_PATH explicitly.
         id: setup-bats
-        uses: bats-core/bats-action@4.0.0
+        uses: bats-core/bats-action@77d6fb60505b4d0d1d73e48bd035b55074bbfb43 # 4.0.0
 
       - name: Install yq (mikefarah)
         # Required by scripts/docs-paths-regex.sh + scripts/lint-docs-paths-sync.sh.
