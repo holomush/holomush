@@ -1,11 +1,25 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 HoloMUSH Contributors
+#
+# DISABLED on PRs (holomush-61en) — 2026-05-19.
+#
+# This workflow ran on every PR to main and took 1.5-5 min while contributing
+# no signal for non-policy-engine changes. The benchmarks live in a single
+# package (internal/access/policy/) but the workflow had no path filter, so
+# docs-only PRs (e.g. #4114, #4116) paid the full cost.
+#
+# Re-enable plan tracked in holomush-61en. At minimum, re-enable with:
+#   1. paths-ignore for DOCS_ONLY_PATHS (skip docs-only PRs)
+#   2. paths: filter scoped to internal/access/policy/** + .benchmarks/baseline.txt
+#
+# Until then, the workflow can still be run manually via the Actions tab
+# (workflow_dispatch) to spot-check regressions before merging policy-engine
+# changes.
 
 name: Benchmark Regression Check
 
 on:
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
