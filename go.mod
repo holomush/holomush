@@ -20,7 +20,7 @@ require (
 	github.com/knadh/koanf/providers/posflag v1.0.1
 	github.com/knadh/koanf/v2 v2.3.3
 	github.com/nats-io/nats-server/v2 v2.12.7
-	github.com/nats-io/nats.go v1.51.0
+	github.com/nats-io/nats.go v1.52.0
 	github.com/nats-io/prometheus-nats-exporter v0.19.2
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/onsi/ginkgo/v2 v2.28.1
