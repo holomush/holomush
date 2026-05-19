@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/oklog/ulid/v2"
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
