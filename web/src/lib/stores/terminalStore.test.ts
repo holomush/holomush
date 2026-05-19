@@ -12,7 +12,7 @@ describe('terminalStore.appendLine', () => {
 
   it('sets timestamp from numeric millis when provided', () => {
     const ms = 1713456789000;
-    appendLine({ type: 'say', characterName: 'A', text: 'hi' }, false, ms);
+    appendLine({ type: 'say', category: 'communication', format: 'speech', actor: 'A', text: 'hi' }, false, ms);
     const [line] = get(lines);
     expect(line.timestamp).toBeInstanceOf(Date);
     expect(line.timestamp.getTime()).toBe(ms);
@@ -20,7 +20,7 @@ describe('terminalStore.appendLine', () => {
 
   it('falls back to Date.now() when timestamp is 0', () => {
     const before = Date.now();
-    appendLine({ type: 'say', characterName: 'A', text: 'hi' }, false, 0);
+    appendLine({ type: 'say', category: 'communication', format: 'speech', actor: 'A', text: 'hi' }, false, 0);
     const after = Date.now();
     const [line] = get(lines);
     expect(line.timestamp.getTime()).toBeGreaterThanOrEqual(before);
@@ -29,7 +29,7 @@ describe('terminalStore.appendLine', () => {
 
   it('falls back to Date.now() when timestamp is omitted', () => {
     const before = Date.now();
-    appendLine({ type: 'say', characterName: 'A', text: 'hi' }, false);
+    appendLine({ type: 'say', category: 'communication', format: 'speech', actor: 'A', text: 'hi' }, false);
     const after = Date.now();
     const [line] = get(lines);
     expect(line.timestamp.getTime()).toBeGreaterThanOrEqual(before);

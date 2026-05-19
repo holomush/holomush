@@ -261,7 +261,7 @@
               }
               if (ctrl.message) {
                 appendLine(
-                  { type: 'system', characterName: '', text: ctrl.message, channel: 0 },
+                  { type: 'system', category: 'system', format: 'text', actor: '', text: ctrl.message },
                   false,
                 );
               }
