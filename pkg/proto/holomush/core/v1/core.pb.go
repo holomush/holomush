@@ -177,6 +177,107 @@ func (EventChannel) EnumDescriptor() ([]byte, []int) {
 	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{1}
 }
 
+type PresenceContext int32
+
+const (
+	PresenceContext_PRESENCE_CONTEXT_UNSPECIFIED PresenceContext = 0
+	PresenceContext_PRESENCE_CONTEXT_LOCATION    PresenceContext = 1
+	PresenceContext_PRESENCE_CONTEXT_SCENE       PresenceContext = 2 // wire-reserved; resolver in follow-up bead
+)
+
+// Enum value maps for PresenceContext.
+var (
+	PresenceContext_name = map[int32]string{
+		0: "PRESENCE_CONTEXT_UNSPECIFIED",
+		1: "PRESENCE_CONTEXT_LOCATION",
+		2: "PRESENCE_CONTEXT_SCENE",
+	}
+	PresenceContext_value = map[string]int32{
+		"PRESENCE_CONTEXT_UNSPECIFIED": 0,
+		"PRESENCE_CONTEXT_LOCATION":    1,
+		"PRESENCE_CONTEXT_SCENE":       2,
+	}
+)
+
+func (x PresenceContext) Enum() *PresenceContext {
+	p := new(PresenceContext)
+	*p = x
+	return p
+}
+
+func (x PresenceContext) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PresenceContext) Descriptor() protoreflect.EnumDescriptor {
+	return file_holomush_core_v1_core_proto_enumTypes[2].Descriptor()
+}
+
+func (PresenceContext) Type() protoreflect.EnumType {
+	return &file_holomush_core_v1_core_proto_enumTypes[2]
+}
+
+func (x PresenceContext) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PresenceContext.Descriptor instead.
+func (PresenceContext) EnumDescriptor() ([]byte, []int) {
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{2}
+}
+
+type PresenceState int32
+
+const (
+	PresenceState_PRESENCE_STATE_UNSPECIFIED PresenceState = 0
+	PresenceState_PRESENCE_STATE_ACTIVE      PresenceState = 1
+	PresenceState_PRESENCE_STATE_DETACHED    PresenceState = 2 // emitted by future scene resolver
+	PresenceState_PRESENCE_STATE_INACTIVE    PresenceState = 3 // emitted by future scene resolver
+)
+
+// Enum value maps for PresenceState.
+var (
+	PresenceState_name = map[int32]string{
+		0: "PRESENCE_STATE_UNSPECIFIED",
+		1: "PRESENCE_STATE_ACTIVE",
+		2: "PRESENCE_STATE_DETACHED",
+		3: "PRESENCE_STATE_INACTIVE",
+	}
+	PresenceState_value = map[string]int32{
+		"PRESENCE_STATE_UNSPECIFIED": 0,
+		"PRESENCE_STATE_ACTIVE":      1,
+		"PRESENCE_STATE_DETACHED":    2,
+		"PRESENCE_STATE_INACTIVE":    3,
+	}
+)
+
+func (x PresenceState) Enum() *PresenceState {
+	p := new(PresenceState)
+	*p = x
+	return p
+}
+
+func (x PresenceState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PresenceState) Descriptor() protoreflect.EnumDescriptor {
+	return file_holomush_core_v1_core_proto_enumTypes[3].Descriptor()
+}
+
+func (PresenceState) Type() protoreflect.EnumType {
+	return &file_holomush_core_v1_core_proto_enumTypes[3]
+}
+
+func (x PresenceState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PresenceState.Descriptor instead.
+func (PresenceState) EnumDescriptor() ([]byte, []int) {
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{3}
+}
+
 type ControlSignal int32
 
 const (
@@ -210,11 +311,11 @@ func (x ControlSignal) String() string {
 }
 
 func (ControlSignal) Descriptor() protoreflect.EnumDescriptor {
-	return file_holomush_core_v1_core_proto_enumTypes[2].Descriptor()
+	return file_holomush_core_v1_core_proto_enumTypes[4].Descriptor()
 }
 
 func (ControlSignal) Type() protoreflect.EnumType {
-	return &file_holomush_core_v1_core_proto_enumTypes[2]
+	return &file_holomush_core_v1_core_proto_enumTypes[4]
 }
 
 func (x ControlSignal) Number() protoreflect.EnumNumber {
@@ -223,7 +324,7 @@ func (x ControlSignal) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ControlSignal.Descriptor instead.
 func (ControlSignal) EnumDescriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{2}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{4}
 }
 
 // RequestMeta contains metadata for request correlation and debugging.
@@ -691,6 +792,194 @@ func (x *EventFrame) GetNoPlaintextReason() NoPlaintextReason {
 	return NoPlaintextReason_NO_PLAINTEXT_REASON_UNSPECIFIED
 }
 
+type PresenceEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	CharacterName string                 `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
+	State         PresenceState          `protobuf:"varint,3,opt,name=state,proto3,enum=holomush.core.v1.PresenceState" json:"state,omitempty"` // Deliberately NO arrived_at_ms — see spec §D-4 (no duration-of-presence leak).
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PresenceEntry) Reset() {
+	*x = PresenceEntry{}
+	mi := &file_holomush_core_v1_core_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PresenceEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PresenceEntry) ProtoMessage() {}
+
+func (x *PresenceEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_core_v1_core_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PresenceEntry.ProtoReflect.Descriptor instead.
+func (*PresenceEntry) Descriptor() ([]byte, []int) {
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *PresenceEntry) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
+	}
+	return ""
+}
+
+func (x *PresenceEntry) GetCharacterName() string {
+	if x != nil {
+		return x.CharacterName
+	}
+	return ""
+}
+
+func (x *PresenceEntry) GetState() PresenceState {
+	if x != nil {
+		return x.State
+	}
+	return PresenceState_PRESENCE_STATE_UNSPECIFIED
+}
+
+type ListFocusPresenceRequest struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Meta               *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	PlayerSessionToken string                 `protobuf:"bytes,2,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	SessionId          string                 `protobuf:"bytes,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *ListFocusPresenceRequest) Reset() {
+	*x = ListFocusPresenceRequest{}
+	mi := &file_holomush_core_v1_core_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListFocusPresenceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListFocusPresenceRequest) ProtoMessage() {}
+
+func (x *ListFocusPresenceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_core_v1_core_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListFocusPresenceRequest.ProtoReflect.Descriptor instead.
+func (*ListFocusPresenceRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ListFocusPresenceRequest) GetMeta() *RequestMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *ListFocusPresenceRequest) GetPlayerSessionToken() string {
+	if x != nil {
+		return x.PlayerSessionToken
+	}
+	return ""
+}
+
+func (x *ListFocusPresenceRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+type ListFocusPresenceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *ResponseMeta          `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Context       PresenceContext        `protobuf:"varint,2,opt,name=context,proto3,enum=holomush.core.v1.PresenceContext" json:"context,omitempty"`
+	ContextId     string                 `protobuf:"bytes,3,opt,name=context_id,json=contextId,proto3" json:"context_id,omitempty"` // LOCATION → location_id; SCENE → scene_id (future)
+	Entries       []*PresenceEntry       `protobuf:"bytes,4,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListFocusPresenceResponse) Reset() {
+	*x = ListFocusPresenceResponse{}
+	mi := &file_holomush_core_v1_core_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListFocusPresenceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListFocusPresenceResponse) ProtoMessage() {}
+
+func (x *ListFocusPresenceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_core_v1_core_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListFocusPresenceResponse.ProtoReflect.Descriptor instead.
+func (*ListFocusPresenceResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ListFocusPresenceResponse) GetMeta() *ResponseMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *ListFocusPresenceResponse) GetContext() PresenceContext {
+	if x != nil {
+		return x.Context
+	}
+	return PresenceContext_PRESENCE_CONTEXT_UNSPECIFIED
+}
+
+func (x *ListFocusPresenceResponse) GetContextId() string {
+	if x != nil {
+		return x.ContextId
+	}
+	return ""
+}
+
+func (x *ListFocusPresenceResponse) GetEntries() []*PresenceEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
 // RenderingMetadata carries cleartext rendering instructions for an event.
 // Populated by RenderingPublisher.Publish at emit time from the verb
 // registry. See docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md.
@@ -716,7 +1005,7 @@ type RenderingMetadata struct {
 
 func (x *RenderingMetadata) Reset() {
 	*x = RenderingMetadata{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[6]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -728,7 +1017,7 @@ func (x *RenderingMetadata) String() string {
 func (*RenderingMetadata) ProtoMessage() {}
 
 func (x *RenderingMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[6]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -741,7 +1030,7 @@ func (x *RenderingMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenderingMetadata.ProtoReflect.Descriptor instead.
 func (*RenderingMetadata) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{6}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *RenderingMetadata) GetCategory() string {
@@ -796,7 +1085,7 @@ type ControlFrame struct {
 
 func (x *ControlFrame) Reset() {
 	*x = ControlFrame{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[7]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -808,7 +1097,7 @@ func (x *ControlFrame) String() string {
 func (*ControlFrame) ProtoMessage() {}
 
 func (x *ControlFrame) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[7]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -821,7 +1110,7 @@ func (x *ControlFrame) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ControlFrame.ProtoReflect.Descriptor instead.
 func (*ControlFrame) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{7}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ControlFrame) GetSignal() ControlSignal {
@@ -851,7 +1140,7 @@ type SubscribeResponse struct {
 
 func (x *SubscribeResponse) Reset() {
 	*x = SubscribeResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[8]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -863,7 +1152,7 @@ func (x *SubscribeResponse) String() string {
 func (*SubscribeResponse) ProtoMessage() {}
 
 func (x *SubscribeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[8]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -876,7 +1165,7 @@ func (x *SubscribeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeResponse.ProtoReflect.Descriptor instead.
 func (*SubscribeResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{8}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SubscribeResponse) GetFrame() isSubscribeResponse_Frame {
@@ -935,7 +1224,7 @@ type DisconnectRequest struct {
 
 func (x *DisconnectRequest) Reset() {
 	*x = DisconnectRequest{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[9]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -947,7 +1236,7 @@ func (x *DisconnectRequest) String() string {
 func (*DisconnectRequest) ProtoMessage() {}
 
 func (x *DisconnectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[9]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -960,7 +1249,7 @@ func (x *DisconnectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisconnectRequest.ProtoReflect.Descriptor instead.
 func (*DisconnectRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{9}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *DisconnectRequest) GetMeta() *RequestMeta {
@@ -1001,7 +1290,7 @@ type DisconnectResponse struct {
 
 func (x *DisconnectResponse) Reset() {
 	*x = DisconnectResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[10]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1013,7 +1302,7 @@ func (x *DisconnectResponse) String() string {
 func (*DisconnectResponse) ProtoMessage() {}
 
 func (x *DisconnectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[10]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1026,7 +1315,7 @@ func (x *DisconnectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisconnectResponse.ProtoReflect.Descriptor instead.
 func (*DisconnectResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{10}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DisconnectResponse) GetMeta() *ResponseMeta {
@@ -1057,7 +1346,7 @@ type GetCommandHistoryRequest struct {
 
 func (x *GetCommandHistoryRequest) Reset() {
 	*x = GetCommandHistoryRequest{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[11]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1069,7 +1358,7 @@ func (x *GetCommandHistoryRequest) String() string {
 func (*GetCommandHistoryRequest) ProtoMessage() {}
 
 func (x *GetCommandHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[11]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1082,7 +1371,7 @@ func (x *GetCommandHistoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCommandHistoryRequest.ProtoReflect.Descriptor instead.
 func (*GetCommandHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{11}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetCommandHistoryRequest) GetMeta() *RequestMeta {
@@ -1118,7 +1407,7 @@ type GetCommandHistoryResponse struct {
 
 func (x *GetCommandHistoryResponse) Reset() {
 	*x = GetCommandHistoryResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[12]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1130,7 +1419,7 @@ func (x *GetCommandHistoryResponse) String() string {
 func (*GetCommandHistoryResponse) ProtoMessage() {}
 
 func (x *GetCommandHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[12]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1143,7 +1432,7 @@ func (x *GetCommandHistoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCommandHistoryResponse.ProtoReflect.Descriptor instead.
 func (*GetCommandHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{12}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GetCommandHistoryResponse) GetMeta() *ResponseMeta {
@@ -1188,7 +1477,7 @@ type CharacterSummary struct {
 
 func (x *CharacterSummary) Reset() {
 	*x = CharacterSummary{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[13]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1200,7 +1489,7 @@ func (x *CharacterSummary) String() string {
 func (*CharacterSummary) ProtoMessage() {}
 
 func (x *CharacterSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[13]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1213,7 +1502,7 @@ func (x *CharacterSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CharacterSummary.ProtoReflect.Descriptor instead.
 func (*CharacterSummary) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{13}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *CharacterSummary) GetCharacterId() string {
@@ -1270,7 +1559,7 @@ type AuthenticatePlayerRequest struct {
 
 func (x *AuthenticatePlayerRequest) Reset() {
 	*x = AuthenticatePlayerRequest{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[14]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1282,7 +1571,7 @@ func (x *AuthenticatePlayerRequest) String() string {
 func (*AuthenticatePlayerRequest) ProtoMessage() {}
 
 func (x *AuthenticatePlayerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[14]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1295,7 +1584,7 @@ func (x *AuthenticatePlayerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthenticatePlayerRequest.ProtoReflect.Descriptor instead.
 func (*AuthenticatePlayerRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{14}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *AuthenticatePlayerRequest) GetUsername() string {
@@ -1343,7 +1632,7 @@ type AuthenticatePlayerResponse struct {
 
 func (x *AuthenticatePlayerResponse) Reset() {
 	*x = AuthenticatePlayerResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[15]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1355,7 +1644,7 @@ func (x *AuthenticatePlayerResponse) String() string {
 func (*AuthenticatePlayerResponse) ProtoMessage() {}
 
 func (x *AuthenticatePlayerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[15]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1368,7 +1657,7 @@ func (x *AuthenticatePlayerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthenticatePlayerResponse.ProtoReflect.Descriptor instead.
 func (*AuthenticatePlayerResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{15}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *AuthenticatePlayerResponse) GetSuccess() bool {
@@ -1423,7 +1712,7 @@ type SelectCharacterRequest struct {
 
 func (x *SelectCharacterRequest) Reset() {
 	*x = SelectCharacterRequest{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[16]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1435,7 +1724,7 @@ func (x *SelectCharacterRequest) String() string {
 func (*SelectCharacterRequest) ProtoMessage() {}
 
 func (x *SelectCharacterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[16]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1448,7 +1737,7 @@ func (x *SelectCharacterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SelectCharacterRequest.ProtoReflect.Descriptor instead.
 func (*SelectCharacterRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{16}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SelectCharacterRequest) GetPlayerSessionToken() string {
@@ -1478,7 +1767,7 @@ type SelectCharacterResponse struct {
 
 func (x *SelectCharacterResponse) Reset() {
 	*x = SelectCharacterResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[17]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1490,7 +1779,7 @@ func (x *SelectCharacterResponse) String() string {
 func (*SelectCharacterResponse) ProtoMessage() {}
 
 func (x *SelectCharacterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[17]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1503,7 +1792,7 @@ func (x *SelectCharacterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SelectCharacterResponse.ProtoReflect.Descriptor instead.
 func (*SelectCharacterResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{17}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SelectCharacterResponse) GetSuccess() bool {
@@ -1553,7 +1842,7 @@ type CreatePlayerRequest struct {
 
 func (x *CreatePlayerRequest) Reset() {
 	*x = CreatePlayerRequest{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[18]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1565,7 +1854,7 @@ func (x *CreatePlayerRequest) String() string {
 func (*CreatePlayerRequest) ProtoMessage() {}
 
 func (x *CreatePlayerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[18]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1578,7 +1867,7 @@ func (x *CreatePlayerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreatePlayerRequest.ProtoReflect.Descriptor instead.
 func (*CreatePlayerRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{18}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *CreatePlayerRequest) GetUsername() string {
@@ -1623,7 +1912,7 @@ type CreatePlayerResponse struct {
 
 func (x *CreatePlayerResponse) Reset() {
 	*x = CreatePlayerResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[19]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1635,7 +1924,7 @@ func (x *CreatePlayerResponse) String() string {
 func (*CreatePlayerResponse) ProtoMessage() {}
 
 func (x *CreatePlayerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[19]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1648,7 +1937,7 @@ func (x *CreatePlayerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreatePlayerResponse.ProtoReflect.Descriptor instead.
 func (*CreatePlayerResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{19}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *CreatePlayerResponse) GetSuccess() bool {
@@ -1694,7 +1983,7 @@ type CreateGuestRequest struct {
 
 func (x *CreateGuestRequest) Reset() {
 	*x = CreateGuestRequest{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[20]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1706,7 +1995,7 @@ func (x *CreateGuestRequest) String() string {
 func (*CreateGuestRequest) ProtoMessage() {}
 
 func (x *CreateGuestRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[20]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1719,7 +2008,7 @@ func (x *CreateGuestRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateGuestRequest.ProtoReflect.Descriptor instead.
 func (*CreateGuestRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{20}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{23}
 }
 
 type CreateGuestResponse struct {
@@ -1738,7 +2027,7 @@ type CreateGuestResponse struct {
 
 func (x *CreateGuestResponse) Reset() {
 	*x = CreateGuestResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[21]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1750,7 +2039,7 @@ func (x *CreateGuestResponse) String() string {
 func (*CreateGuestResponse) ProtoMessage() {}
 
 func (x *CreateGuestResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[21]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1763,7 +2052,7 @@ func (x *CreateGuestResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateGuestResponse.ProtoReflect.Descriptor instead.
 func (*CreateGuestResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{21}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *CreateGuestResponse) GetSuccess() bool {
@@ -1818,7 +2107,7 @@ type CreateCharacterRequest struct {
 
 func (x *CreateCharacterRequest) Reset() {
 	*x = CreateCharacterRequest{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[22]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1830,7 +2119,7 @@ func (x *CreateCharacterRequest) String() string {
 func (*CreateCharacterRequest) ProtoMessage() {}
 
 func (x *CreateCharacterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[22]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1843,7 +2132,7 @@ func (x *CreateCharacterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCharacterRequest.ProtoReflect.Descriptor instead.
 func (*CreateCharacterRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{22}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *CreateCharacterRequest) GetPlayerSessionToken() string {
@@ -1872,7 +2161,7 @@ type CreateCharacterResponse struct {
 
 func (x *CreateCharacterResponse) Reset() {
 	*x = CreateCharacterResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[23]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1884,7 +2173,7 @@ func (x *CreateCharacterResponse) String() string {
 func (*CreateCharacterResponse) ProtoMessage() {}
 
 func (x *CreateCharacterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[23]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1897,7 +2186,7 @@ func (x *CreateCharacterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCharacterResponse.ProtoReflect.Descriptor instead.
 func (*CreateCharacterResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{23}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *CreateCharacterResponse) GetSuccess() bool {
@@ -1937,7 +2226,7 @@ type ListCharactersRequest struct {
 
 func (x *ListCharactersRequest) Reset() {
 	*x = ListCharactersRequest{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[24]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1949,7 +2238,7 @@ func (x *ListCharactersRequest) String() string {
 func (*ListCharactersRequest) ProtoMessage() {}
 
 func (x *ListCharactersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[24]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1962,7 +2251,7 @@ func (x *ListCharactersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCharactersRequest.ProtoReflect.Descriptor instead.
 func (*ListCharactersRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{24}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ListCharactersRequest) GetPlayerSessionToken() string {
@@ -1981,7 +2270,7 @@ type ListCharactersResponse struct {
 
 func (x *ListCharactersResponse) Reset() {
 	*x = ListCharactersResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[25]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1993,7 +2282,7 @@ func (x *ListCharactersResponse) String() string {
 func (*ListCharactersResponse) ProtoMessage() {}
 
 func (x *ListCharactersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[25]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2006,7 +2295,7 @@ func (x *ListCharactersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCharactersResponse.ProtoReflect.Descriptor instead.
 func (*ListCharactersResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{25}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ListCharactersResponse) GetCharacters() []*CharacterSummary {
@@ -2025,7 +2314,7 @@ type RequestPasswordResetRequest struct {
 
 func (x *RequestPasswordResetRequest) Reset() {
 	*x = RequestPasswordResetRequest{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[26]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2037,7 +2326,7 @@ func (x *RequestPasswordResetRequest) String() string {
 func (*RequestPasswordResetRequest) ProtoMessage() {}
 
 func (x *RequestPasswordResetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[26]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2050,7 +2339,7 @@ func (x *RequestPasswordResetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestPasswordResetRequest.ProtoReflect.Descriptor instead.
 func (*RequestPasswordResetRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{26}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *RequestPasswordResetRequest) GetEmail() string {
@@ -2069,7 +2358,7 @@ type RequestPasswordResetResponse struct {
 
 func (x *RequestPasswordResetResponse) Reset() {
 	*x = RequestPasswordResetResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[27]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2081,7 +2370,7 @@ func (x *RequestPasswordResetResponse) String() string {
 func (*RequestPasswordResetResponse) ProtoMessage() {}
 
 func (x *RequestPasswordResetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[27]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2094,7 +2383,7 @@ func (x *RequestPasswordResetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestPasswordResetResponse.ProtoReflect.Descriptor instead.
 func (*RequestPasswordResetResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{27}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *RequestPasswordResetResponse) GetSuccess() bool {
@@ -2114,7 +2403,7 @@ type ConfirmPasswordResetRequest struct {
 
 func (x *ConfirmPasswordResetRequest) Reset() {
 	*x = ConfirmPasswordResetRequest{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[28]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2126,7 +2415,7 @@ func (x *ConfirmPasswordResetRequest) String() string {
 func (*ConfirmPasswordResetRequest) ProtoMessage() {}
 
 func (x *ConfirmPasswordResetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[28]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2139,7 +2428,7 @@ func (x *ConfirmPasswordResetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfirmPasswordResetRequest.ProtoReflect.Descriptor instead.
 func (*ConfirmPasswordResetRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{28}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ConfirmPasswordResetRequest) GetToken() string {
@@ -2166,7 +2455,7 @@ type ConfirmPasswordResetResponse struct {
 
 func (x *ConfirmPasswordResetResponse) Reset() {
 	*x = ConfirmPasswordResetResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[29]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2178,7 +2467,7 @@ func (x *ConfirmPasswordResetResponse) String() string {
 func (*ConfirmPasswordResetResponse) ProtoMessage() {}
 
 func (x *ConfirmPasswordResetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[29]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2191,7 +2480,7 @@ func (x *ConfirmPasswordResetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfirmPasswordResetResponse.ProtoReflect.Descriptor instead.
 func (*ConfirmPasswordResetResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{29}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ConfirmPasswordResetResponse) GetSuccess() bool {
@@ -2217,7 +2506,7 @@ type LogoutRequest struct {
 
 func (x *LogoutRequest) Reset() {
 	*x = LogoutRequest{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[30]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2229,7 +2518,7 @@ func (x *LogoutRequest) String() string {
 func (*LogoutRequest) ProtoMessage() {}
 
 func (x *LogoutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[30]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2242,7 +2531,7 @@ func (x *LogoutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutRequest.ProtoReflect.Descriptor instead.
 func (*LogoutRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{30}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *LogoutRequest) GetPlayerSessionToken() string {
@@ -2260,7 +2549,7 @@ type LogoutResponse struct {
 
 func (x *LogoutResponse) Reset() {
 	*x = LogoutResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[31]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2272,7 +2561,7 @@ func (x *LogoutResponse) String() string {
 func (*LogoutResponse) ProtoMessage() {}
 
 func (x *LogoutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[31]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2285,7 +2574,7 @@ func (x *LogoutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutResponse.ProtoReflect.Descriptor instead.
 func (*LogoutResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{31}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{34}
 }
 
 type CheckPlayerSessionRequest struct {
@@ -2297,7 +2586,7 @@ type CheckPlayerSessionRequest struct {
 
 func (x *CheckPlayerSessionRequest) Reset() {
 	*x = CheckPlayerSessionRequest{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[32]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2309,7 +2598,7 @@ func (x *CheckPlayerSessionRequest) String() string {
 func (*CheckPlayerSessionRequest) ProtoMessage() {}
 
 func (x *CheckPlayerSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[32]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2322,7 +2611,7 @@ func (x *CheckPlayerSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckPlayerSessionRequest.ProtoReflect.Descriptor instead.
 func (*CheckPlayerSessionRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{32}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *CheckPlayerSessionRequest) GetPlayerSessionToken() string {
@@ -2348,7 +2637,7 @@ type CheckPlayerSessionResponse struct {
 
 func (x *CheckPlayerSessionResponse) Reset() {
 	*x = CheckPlayerSessionResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[33]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2360,7 +2649,7 @@ func (x *CheckPlayerSessionResponse) String() string {
 func (*CheckPlayerSessionResponse) ProtoMessage() {}
 
 func (x *CheckPlayerSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[33]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2373,7 +2662,7 @@ func (x *CheckPlayerSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckPlayerSessionResponse.ProtoReflect.Descriptor instead.
 func (*CheckPlayerSessionResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{33}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *CheckPlayerSessionResponse) GetPlayerName() string {
@@ -2413,7 +2702,7 @@ type ListPlayerSessionsRequest struct {
 
 func (x *ListPlayerSessionsRequest) Reset() {
 	*x = ListPlayerSessionsRequest{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[34]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2425,7 +2714,7 @@ func (x *ListPlayerSessionsRequest) String() string {
 func (*ListPlayerSessionsRequest) ProtoMessage() {}
 
 func (x *ListPlayerSessionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[34]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2438,7 +2727,7 @@ func (x *ListPlayerSessionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPlayerSessionsRequest.ProtoReflect.Descriptor instead.
 func (*ListPlayerSessionsRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{34}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ListPlayerSessionsRequest) GetPlayerSessionToken() string {
@@ -2469,7 +2758,7 @@ type PlayerSessionInfo struct {
 
 func (x *PlayerSessionInfo) Reset() {
 	*x = PlayerSessionInfo{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[35]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2481,7 +2770,7 @@ func (x *PlayerSessionInfo) String() string {
 func (*PlayerSessionInfo) ProtoMessage() {}
 
 func (x *PlayerSessionInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[35]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2494,7 +2783,7 @@ func (x *PlayerSessionInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlayerSessionInfo.ProtoReflect.Descriptor instead.
 func (*PlayerSessionInfo) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{35}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *PlayerSessionInfo) GetId() string {
@@ -2548,7 +2837,7 @@ type ListPlayerSessionsResponse struct {
 
 func (x *ListPlayerSessionsResponse) Reset() {
 	*x = ListPlayerSessionsResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[36]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2560,7 +2849,7 @@ func (x *ListPlayerSessionsResponse) String() string {
 func (*ListPlayerSessionsResponse) ProtoMessage() {}
 
 func (x *ListPlayerSessionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[36]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2573,7 +2862,7 @@ func (x *ListPlayerSessionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPlayerSessionsResponse.ProtoReflect.Descriptor instead.
 func (*ListPlayerSessionsResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{36}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ListPlayerSessionsResponse) GetSessions() []*PlayerSessionInfo {
@@ -2595,7 +2884,7 @@ type RevokePlayerSessionRequest struct {
 
 func (x *RevokePlayerSessionRequest) Reset() {
 	*x = RevokePlayerSessionRequest{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[37]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2607,7 +2896,7 @@ func (x *RevokePlayerSessionRequest) String() string {
 func (*RevokePlayerSessionRequest) ProtoMessage() {}
 
 func (x *RevokePlayerSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[37]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2620,7 +2909,7 @@ func (x *RevokePlayerSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokePlayerSessionRequest.ProtoReflect.Descriptor instead.
 func (*RevokePlayerSessionRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{37}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *RevokePlayerSessionRequest) GetPlayerSessionToken() string {
@@ -2647,7 +2936,7 @@ type RevokePlayerSessionResponse struct {
 
 func (x *RevokePlayerSessionResponse) Reset() {
 	*x = RevokePlayerSessionResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[38]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2659,7 +2948,7 @@ func (x *RevokePlayerSessionResponse) String() string {
 func (*RevokePlayerSessionResponse) ProtoMessage() {}
 
 func (x *RevokePlayerSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[38]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2672,7 +2961,7 @@ func (x *RevokePlayerSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokePlayerSessionResponse.ProtoReflect.Descriptor instead.
 func (*RevokePlayerSessionResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{38}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *RevokePlayerSessionResponse) GetSuccess() bool {
@@ -2698,7 +2987,7 @@ type RevokeOtherPlayerSessionsRequest struct {
 
 func (x *RevokeOtherPlayerSessionsRequest) Reset() {
 	*x = RevokeOtherPlayerSessionsRequest{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[39]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2710,7 +2999,7 @@ func (x *RevokeOtherPlayerSessionsRequest) String() string {
 func (*RevokeOtherPlayerSessionsRequest) ProtoMessage() {}
 
 func (x *RevokeOtherPlayerSessionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[39]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2723,7 +3012,7 @@ func (x *RevokeOtherPlayerSessionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeOtherPlayerSessionsRequest.ProtoReflect.Descriptor instead.
 func (*RevokeOtherPlayerSessionsRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{39}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *RevokeOtherPlayerSessionsRequest) GetPlayerSessionToken() string {
@@ -2743,7 +3032,7 @@ type RevokeOtherPlayerSessionsResponse struct {
 
 func (x *RevokeOtherPlayerSessionsResponse) Reset() {
 	*x = RevokeOtherPlayerSessionsResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[40]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2755,7 +3044,7 @@ func (x *RevokeOtherPlayerSessionsResponse) String() string {
 func (*RevokeOtherPlayerSessionsResponse) ProtoMessage() {}
 
 func (x *RevokeOtherPlayerSessionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[40]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2768,7 +3057,7 @@ func (x *RevokeOtherPlayerSessionsResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use RevokeOtherPlayerSessionsResponse.ProtoReflect.Descriptor instead.
 func (*RevokeOtherPlayerSessionsResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{40}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *RevokeOtherPlayerSessionsResponse) GetSuccess() bool {
@@ -2801,7 +3090,7 @@ type QueryStreamHistoryRequest struct {
 
 func (x *QueryStreamHistoryRequest) Reset() {
 	*x = QueryStreamHistoryRequest{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[41]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2813,7 +3102,7 @@ func (x *QueryStreamHistoryRequest) String() string {
 func (*QueryStreamHistoryRequest) ProtoMessage() {}
 
 func (x *QueryStreamHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[41]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2826,7 +3115,7 @@ func (x *QueryStreamHistoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryStreamHistoryRequest.ProtoReflect.Descriptor instead.
 func (*QueryStreamHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{41}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *QueryStreamHistoryRequest) GetMeta() *RequestMeta {
@@ -2884,7 +3173,7 @@ type QueryStreamHistoryResponse struct {
 
 func (x *QueryStreamHistoryResponse) Reset() {
 	*x = QueryStreamHistoryResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[42]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2896,7 +3185,7 @@ func (x *QueryStreamHistoryResponse) String() string {
 func (*QueryStreamHistoryResponse) ProtoMessage() {}
 
 func (x *QueryStreamHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[42]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2909,7 +3198,7 @@ func (x *QueryStreamHistoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryStreamHistoryResponse.ProtoReflect.Descriptor instead.
 func (*QueryStreamHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{42}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *QueryStreamHistoryResponse) GetMeta() *ResponseMeta {
@@ -2951,7 +3240,7 @@ type ListSessionStreamsRequest struct {
 
 func (x *ListSessionStreamsRequest) Reset() {
 	*x = ListSessionStreamsRequest{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[43]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2963,7 +3252,7 @@ func (x *ListSessionStreamsRequest) String() string {
 func (*ListSessionStreamsRequest) ProtoMessage() {}
 
 func (x *ListSessionStreamsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[43]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2976,7 +3265,7 @@ func (x *ListSessionStreamsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSessionStreamsRequest.ProtoReflect.Descriptor instead.
 func (*ListSessionStreamsRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{43}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *ListSessionStreamsRequest) GetMeta() *RequestMeta {
@@ -3010,7 +3299,7 @@ type ListSessionStreamsResponse struct {
 
 func (x *ListSessionStreamsResponse) Reset() {
 	*x = ListSessionStreamsResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[44]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3022,7 +3311,7 @@ func (x *ListSessionStreamsResponse) String() string {
 func (*ListSessionStreamsResponse) ProtoMessage() {}
 
 func (x *ListSessionStreamsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[44]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3035,7 +3324,7 @@ func (x *ListSessionStreamsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSessionStreamsResponse.ProtoReflect.Descriptor instead.
 func (*ListSessionStreamsResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{44}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *ListSessionStreamsResponse) GetStreams() []string {
@@ -3097,7 +3386,22 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\trendering\x18\t \x01(\v2#.holomush.core.v1.RenderingMetadataR\trendering\x12#\n" +
 	"\rmetadata_only\x18\n" +
 	" \x01(\bR\fmetadataOnly\x12S\n" +
-	"\x13no_plaintext_reason\x18\v \x01(\x0e2#.holomush.core.v1.NoPlaintextReasonR\x11noPlaintextReason\"\xbd\x03\n" +
+	"\x13no_plaintext_reason\x18\v \x01(\x0e2#.holomush.core.v1.NoPlaintextReasonR\x11noPlaintextReason\"\x90\x01\n" +
+	"\rPresenceEntry\x12!\n" +
+	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12%\n" +
+	"\x0echaracter_name\x18\x02 \x01(\tR\rcharacterName\x125\n" +
+	"\x05state\x18\x03 \x01(\x0e2\x1f.holomush.core.v1.PresenceStateR\x05state\"\x9e\x01\n" +
+	"\x18ListFocusPresenceRequest\x121\n" +
+	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x120\n" +
+	"\x14player_session_token\x18\x02 \x01(\tR\x12playerSessionToken\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x03 \x01(\tR\tsessionId\"\xe6\x01\n" +
+	"\x19ListFocusPresenceResponse\x122\n" +
+	"\x04meta\x18\x01 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta\x12;\n" +
+	"\acontext\x18\x02 \x01(\x0e2!.holomush.core.v1.PresenceContextR\acontext\x12\x1d\n" +
+	"\n" +
+	"context_id\x18\x03 \x01(\tR\tcontextId\x129\n" +
+	"\aentries\x18\x04 \x03(\v2\x1f.holomush.core.v1.PresenceEntryR\aentries\"\xbd\x03\n" +
 	"\x11RenderingMetadata\x12#\n" +
 	"\bcategory\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\bcategory\x12\x1f\n" +
 	"\x06format\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06format\x12\x14\n" +
@@ -3290,11 +3594,20 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\x16EVENT_CHANNEL_TERMINAL\x10\x01\x12\x17\n" +
 	"\x13EVENT_CHANNEL_STATE\x10\x02\x12\x16\n" +
 	"\x12EVENT_CHANNEL_BOTH\x10\x03\x12\x1c\n" +
-	"\x18EVENT_CHANNEL_AUDIT_ONLY\x10\x04*u\n" +
+	"\x18EVENT_CHANNEL_AUDIT_ONLY\x10\x04*n\n" +
+	"\x0fPresenceContext\x12 \n" +
+	"\x1cPRESENCE_CONTEXT_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19PRESENCE_CONTEXT_LOCATION\x10\x01\x12\x1a\n" +
+	"\x16PRESENCE_CONTEXT_SCENE\x10\x02*\x84\x01\n" +
+	"\rPresenceState\x12\x1e\n" +
+	"\x1aPRESENCE_STATE_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15PRESENCE_STATE_ACTIVE\x10\x01\x12\x1b\n" +
+	"\x17PRESENCE_STATE_DETACHED\x10\x02\x12\x1b\n" +
+	"\x17PRESENCE_STATE_INACTIVE\x10\x03*u\n" +
 	"\rControlSignal\x12\x1e\n" +
 	"\x1aCONTROL_SIGNAL_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eCONTROL_SIGNAL_REPLAY_COMPLETE\x10\x01\x12 \n" +
-	"\x1cCONTROL_SIGNAL_STREAM_CLOSED\x10\x022\xe9\x0f\n" +
+	"\x1cCONTROL_SIGNAL_STREAM_CLOSED\x10\x022\xd7\x10\n" +
 	"\vCoreService\x12`\n" +
 	"\rHandleCommand\x12&.holomush.core.v1.HandleCommandRequest\x1a'.holomush.core.v1.HandleCommandResponse\x12V\n" +
 	"\tSubscribe\x12\".holomush.core.v1.SubscribeRequest\x1a#.holomush.core.v1.SubscribeResponse0\x01\x12W\n" +
@@ -3315,7 +3628,8 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\x13RevokePlayerSession\x12,.holomush.core.v1.RevokePlayerSessionRequest\x1a-.holomush.core.v1.RevokePlayerSessionResponse\x12\x84\x01\n" +
 	"\x19RevokeOtherPlayerSessions\x122.holomush.core.v1.RevokeOtherPlayerSessionsRequest\x1a3.holomush.core.v1.RevokeOtherPlayerSessionsResponse\x12o\n" +
 	"\x12QueryStreamHistory\x12+.holomush.core.v1.QueryStreamHistoryRequest\x1a,.holomush.core.v1.QueryStreamHistoryResponse\x12o\n" +
-	"\x12ListSessionStreams\x12+.holomush.core.v1.ListSessionStreamsRequest\x1a,.holomush.core.v1.ListSessionStreamsResponseB\xc3\x01\n" +
+	"\x12ListSessionStreams\x12+.holomush.core.v1.ListSessionStreamsRequest\x1a,.holomush.core.v1.ListSessionStreamsResponse\x12l\n" +
+	"\x11ListFocusPresence\x12*.holomush.core.v1.ListFocusPresenceRequest\x1a+.holomush.core.v1.ListFocusPresenceResponseB\xc3\x01\n" +
 	"\x14com.holomush.core.v1B\tCoreProtoP\x01Z>github.com/holomush/holomush/pkg/proto/holomush/core/v1;corev1\xa2\x02\x03HCX\xaa\x02\x10Holomush.Core.V1\xca\x02\x10Holomush\\Core\\V1\xe2\x02\x1cHolomush\\Core\\V1\\GPBMetadata\xea\x02\x12Holomush::Core::V1b\x06proto3"
 
 var (
@@ -3330,132 +3644,144 @@ func file_holomush_core_v1_core_proto_rawDescGZIP() []byte {
 	return file_holomush_core_v1_core_proto_rawDescData
 }
 
-var file_holomush_core_v1_core_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_holomush_core_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
+var file_holomush_core_v1_core_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_holomush_core_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
 var file_holomush_core_v1_core_proto_goTypes = []any{
 	(NoPlaintextReason)(0),                    // 0: holomush.core.v1.NoPlaintextReason
 	(EventChannel)(0),                         // 1: holomush.core.v1.EventChannel
-	(ControlSignal)(0),                        // 2: holomush.core.v1.ControlSignal
-	(*RequestMeta)(nil),                       // 3: holomush.core.v1.RequestMeta
-	(*ResponseMeta)(nil),                      // 4: holomush.core.v1.ResponseMeta
-	(*HandleCommandRequest)(nil),              // 5: holomush.core.v1.HandleCommandRequest
-	(*HandleCommandResponse)(nil),             // 6: holomush.core.v1.HandleCommandResponse
-	(*SubscribeRequest)(nil),                  // 7: holomush.core.v1.SubscribeRequest
-	(*EventFrame)(nil),                        // 8: holomush.core.v1.EventFrame
-	(*RenderingMetadata)(nil),                 // 9: holomush.core.v1.RenderingMetadata
-	(*ControlFrame)(nil),                      // 10: holomush.core.v1.ControlFrame
-	(*SubscribeResponse)(nil),                 // 11: holomush.core.v1.SubscribeResponse
-	(*DisconnectRequest)(nil),                 // 12: holomush.core.v1.DisconnectRequest
-	(*DisconnectResponse)(nil),                // 13: holomush.core.v1.DisconnectResponse
-	(*GetCommandHistoryRequest)(nil),          // 14: holomush.core.v1.GetCommandHistoryRequest
-	(*GetCommandHistoryResponse)(nil),         // 15: holomush.core.v1.GetCommandHistoryResponse
-	(*CharacterSummary)(nil),                  // 16: holomush.core.v1.CharacterSummary
-	(*AuthenticatePlayerRequest)(nil),         // 17: holomush.core.v1.AuthenticatePlayerRequest
-	(*AuthenticatePlayerResponse)(nil),        // 18: holomush.core.v1.AuthenticatePlayerResponse
-	(*SelectCharacterRequest)(nil),            // 19: holomush.core.v1.SelectCharacterRequest
-	(*SelectCharacterResponse)(nil),           // 20: holomush.core.v1.SelectCharacterResponse
-	(*CreatePlayerRequest)(nil),               // 21: holomush.core.v1.CreatePlayerRequest
-	(*CreatePlayerResponse)(nil),              // 22: holomush.core.v1.CreatePlayerResponse
-	(*CreateGuestRequest)(nil),                // 23: holomush.core.v1.CreateGuestRequest
-	(*CreateGuestResponse)(nil),               // 24: holomush.core.v1.CreateGuestResponse
-	(*CreateCharacterRequest)(nil),            // 25: holomush.core.v1.CreateCharacterRequest
-	(*CreateCharacterResponse)(nil),           // 26: holomush.core.v1.CreateCharacterResponse
-	(*ListCharactersRequest)(nil),             // 27: holomush.core.v1.ListCharactersRequest
-	(*ListCharactersResponse)(nil),            // 28: holomush.core.v1.ListCharactersResponse
-	(*RequestPasswordResetRequest)(nil),       // 29: holomush.core.v1.RequestPasswordResetRequest
-	(*RequestPasswordResetResponse)(nil),      // 30: holomush.core.v1.RequestPasswordResetResponse
-	(*ConfirmPasswordResetRequest)(nil),       // 31: holomush.core.v1.ConfirmPasswordResetRequest
-	(*ConfirmPasswordResetResponse)(nil),      // 32: holomush.core.v1.ConfirmPasswordResetResponse
-	(*LogoutRequest)(nil),                     // 33: holomush.core.v1.LogoutRequest
-	(*LogoutResponse)(nil),                    // 34: holomush.core.v1.LogoutResponse
-	(*CheckPlayerSessionRequest)(nil),         // 35: holomush.core.v1.CheckPlayerSessionRequest
-	(*CheckPlayerSessionResponse)(nil),        // 36: holomush.core.v1.CheckPlayerSessionResponse
-	(*ListPlayerSessionsRequest)(nil),         // 37: holomush.core.v1.ListPlayerSessionsRequest
-	(*PlayerSessionInfo)(nil),                 // 38: holomush.core.v1.PlayerSessionInfo
-	(*ListPlayerSessionsResponse)(nil),        // 39: holomush.core.v1.ListPlayerSessionsResponse
-	(*RevokePlayerSessionRequest)(nil),        // 40: holomush.core.v1.RevokePlayerSessionRequest
-	(*RevokePlayerSessionResponse)(nil),       // 41: holomush.core.v1.RevokePlayerSessionResponse
-	(*RevokeOtherPlayerSessionsRequest)(nil),  // 42: holomush.core.v1.RevokeOtherPlayerSessionsRequest
-	(*RevokeOtherPlayerSessionsResponse)(nil), // 43: holomush.core.v1.RevokeOtherPlayerSessionsResponse
-	(*QueryStreamHistoryRequest)(nil),         // 44: holomush.core.v1.QueryStreamHistoryRequest
-	(*QueryStreamHistoryResponse)(nil),        // 45: holomush.core.v1.QueryStreamHistoryResponse
-	(*ListSessionStreamsRequest)(nil),         // 46: holomush.core.v1.ListSessionStreamsRequest
-	(*ListSessionStreamsResponse)(nil),        // 47: holomush.core.v1.ListSessionStreamsResponse
-	(*timestamppb.Timestamp)(nil),             // 48: google.protobuf.Timestamp
+	(PresenceContext)(0),                      // 2: holomush.core.v1.PresenceContext
+	(PresenceState)(0),                        // 3: holomush.core.v1.PresenceState
+	(ControlSignal)(0),                        // 4: holomush.core.v1.ControlSignal
+	(*RequestMeta)(nil),                       // 5: holomush.core.v1.RequestMeta
+	(*ResponseMeta)(nil),                      // 6: holomush.core.v1.ResponseMeta
+	(*HandleCommandRequest)(nil),              // 7: holomush.core.v1.HandleCommandRequest
+	(*HandleCommandResponse)(nil),             // 8: holomush.core.v1.HandleCommandResponse
+	(*SubscribeRequest)(nil),                  // 9: holomush.core.v1.SubscribeRequest
+	(*EventFrame)(nil),                        // 10: holomush.core.v1.EventFrame
+	(*PresenceEntry)(nil),                     // 11: holomush.core.v1.PresenceEntry
+	(*ListFocusPresenceRequest)(nil),          // 12: holomush.core.v1.ListFocusPresenceRequest
+	(*ListFocusPresenceResponse)(nil),         // 13: holomush.core.v1.ListFocusPresenceResponse
+	(*RenderingMetadata)(nil),                 // 14: holomush.core.v1.RenderingMetadata
+	(*ControlFrame)(nil),                      // 15: holomush.core.v1.ControlFrame
+	(*SubscribeResponse)(nil),                 // 16: holomush.core.v1.SubscribeResponse
+	(*DisconnectRequest)(nil),                 // 17: holomush.core.v1.DisconnectRequest
+	(*DisconnectResponse)(nil),                // 18: holomush.core.v1.DisconnectResponse
+	(*GetCommandHistoryRequest)(nil),          // 19: holomush.core.v1.GetCommandHistoryRequest
+	(*GetCommandHistoryResponse)(nil),         // 20: holomush.core.v1.GetCommandHistoryResponse
+	(*CharacterSummary)(nil),                  // 21: holomush.core.v1.CharacterSummary
+	(*AuthenticatePlayerRequest)(nil),         // 22: holomush.core.v1.AuthenticatePlayerRequest
+	(*AuthenticatePlayerResponse)(nil),        // 23: holomush.core.v1.AuthenticatePlayerResponse
+	(*SelectCharacterRequest)(nil),            // 24: holomush.core.v1.SelectCharacterRequest
+	(*SelectCharacterResponse)(nil),           // 25: holomush.core.v1.SelectCharacterResponse
+	(*CreatePlayerRequest)(nil),               // 26: holomush.core.v1.CreatePlayerRequest
+	(*CreatePlayerResponse)(nil),              // 27: holomush.core.v1.CreatePlayerResponse
+	(*CreateGuestRequest)(nil),                // 28: holomush.core.v1.CreateGuestRequest
+	(*CreateGuestResponse)(nil),               // 29: holomush.core.v1.CreateGuestResponse
+	(*CreateCharacterRequest)(nil),            // 30: holomush.core.v1.CreateCharacterRequest
+	(*CreateCharacterResponse)(nil),           // 31: holomush.core.v1.CreateCharacterResponse
+	(*ListCharactersRequest)(nil),             // 32: holomush.core.v1.ListCharactersRequest
+	(*ListCharactersResponse)(nil),            // 33: holomush.core.v1.ListCharactersResponse
+	(*RequestPasswordResetRequest)(nil),       // 34: holomush.core.v1.RequestPasswordResetRequest
+	(*RequestPasswordResetResponse)(nil),      // 35: holomush.core.v1.RequestPasswordResetResponse
+	(*ConfirmPasswordResetRequest)(nil),       // 36: holomush.core.v1.ConfirmPasswordResetRequest
+	(*ConfirmPasswordResetResponse)(nil),      // 37: holomush.core.v1.ConfirmPasswordResetResponse
+	(*LogoutRequest)(nil),                     // 38: holomush.core.v1.LogoutRequest
+	(*LogoutResponse)(nil),                    // 39: holomush.core.v1.LogoutResponse
+	(*CheckPlayerSessionRequest)(nil),         // 40: holomush.core.v1.CheckPlayerSessionRequest
+	(*CheckPlayerSessionResponse)(nil),        // 41: holomush.core.v1.CheckPlayerSessionResponse
+	(*ListPlayerSessionsRequest)(nil),         // 42: holomush.core.v1.ListPlayerSessionsRequest
+	(*PlayerSessionInfo)(nil),                 // 43: holomush.core.v1.PlayerSessionInfo
+	(*ListPlayerSessionsResponse)(nil),        // 44: holomush.core.v1.ListPlayerSessionsResponse
+	(*RevokePlayerSessionRequest)(nil),        // 45: holomush.core.v1.RevokePlayerSessionRequest
+	(*RevokePlayerSessionResponse)(nil),       // 46: holomush.core.v1.RevokePlayerSessionResponse
+	(*RevokeOtherPlayerSessionsRequest)(nil),  // 47: holomush.core.v1.RevokeOtherPlayerSessionsRequest
+	(*RevokeOtherPlayerSessionsResponse)(nil), // 48: holomush.core.v1.RevokeOtherPlayerSessionsResponse
+	(*QueryStreamHistoryRequest)(nil),         // 49: holomush.core.v1.QueryStreamHistoryRequest
+	(*QueryStreamHistoryResponse)(nil),        // 50: holomush.core.v1.QueryStreamHistoryResponse
+	(*ListSessionStreamsRequest)(nil),         // 51: holomush.core.v1.ListSessionStreamsRequest
+	(*ListSessionStreamsResponse)(nil),        // 52: holomush.core.v1.ListSessionStreamsResponse
+	(*timestamppb.Timestamp)(nil),             // 53: google.protobuf.Timestamp
 }
 var file_holomush_core_v1_core_proto_depIdxs = []int32{
-	48, // 0: holomush.core.v1.RequestMeta.timestamp:type_name -> google.protobuf.Timestamp
-	48, // 1: holomush.core.v1.ResponseMeta.timestamp:type_name -> google.protobuf.Timestamp
-	3,  // 2: holomush.core.v1.HandleCommandRequest.meta:type_name -> holomush.core.v1.RequestMeta
-	4,  // 3: holomush.core.v1.HandleCommandResponse.meta:type_name -> holomush.core.v1.ResponseMeta
-	3,  // 4: holomush.core.v1.SubscribeRequest.meta:type_name -> holomush.core.v1.RequestMeta
-	48, // 5: holomush.core.v1.EventFrame.timestamp:type_name -> google.protobuf.Timestamp
-	9,  // 6: holomush.core.v1.EventFrame.rendering:type_name -> holomush.core.v1.RenderingMetadata
+	53, // 0: holomush.core.v1.RequestMeta.timestamp:type_name -> google.protobuf.Timestamp
+	53, // 1: holomush.core.v1.ResponseMeta.timestamp:type_name -> google.protobuf.Timestamp
+	5,  // 2: holomush.core.v1.HandleCommandRequest.meta:type_name -> holomush.core.v1.RequestMeta
+	6,  // 3: holomush.core.v1.HandleCommandResponse.meta:type_name -> holomush.core.v1.ResponseMeta
+	5,  // 4: holomush.core.v1.SubscribeRequest.meta:type_name -> holomush.core.v1.RequestMeta
+	53, // 5: holomush.core.v1.EventFrame.timestamp:type_name -> google.protobuf.Timestamp
+	14, // 6: holomush.core.v1.EventFrame.rendering:type_name -> holomush.core.v1.RenderingMetadata
 	0,  // 7: holomush.core.v1.EventFrame.no_plaintext_reason:type_name -> holomush.core.v1.NoPlaintextReason
-	1,  // 8: holomush.core.v1.RenderingMetadata.display_target:type_name -> holomush.core.v1.EventChannel
-	2,  // 9: holomush.core.v1.ControlFrame.signal:type_name -> holomush.core.v1.ControlSignal
-	8,  // 10: holomush.core.v1.SubscribeResponse.event:type_name -> holomush.core.v1.EventFrame
-	10, // 11: holomush.core.v1.SubscribeResponse.control:type_name -> holomush.core.v1.ControlFrame
-	3,  // 12: holomush.core.v1.DisconnectRequest.meta:type_name -> holomush.core.v1.RequestMeta
-	4,  // 13: holomush.core.v1.DisconnectResponse.meta:type_name -> holomush.core.v1.ResponseMeta
-	3,  // 14: holomush.core.v1.GetCommandHistoryRequest.meta:type_name -> holomush.core.v1.RequestMeta
-	4,  // 15: holomush.core.v1.GetCommandHistoryResponse.meta:type_name -> holomush.core.v1.ResponseMeta
-	16, // 16: holomush.core.v1.AuthenticatePlayerResponse.characters:type_name -> holomush.core.v1.CharacterSummary
-	16, // 17: holomush.core.v1.CreatePlayerResponse.characters:type_name -> holomush.core.v1.CharacterSummary
-	16, // 18: holomush.core.v1.CreateGuestResponse.characters:type_name -> holomush.core.v1.CharacterSummary
-	16, // 19: holomush.core.v1.ListCharactersResponse.characters:type_name -> holomush.core.v1.CharacterSummary
-	16, // 20: holomush.core.v1.CheckPlayerSessionResponse.characters:type_name -> holomush.core.v1.CharacterSummary
-	48, // 21: holomush.core.v1.PlayerSessionInfo.created_at:type_name -> google.protobuf.Timestamp
-	48, // 22: holomush.core.v1.PlayerSessionInfo.last_active:type_name -> google.protobuf.Timestamp
-	38, // 23: holomush.core.v1.ListPlayerSessionsResponse.sessions:type_name -> holomush.core.v1.PlayerSessionInfo
-	3,  // 24: holomush.core.v1.QueryStreamHistoryRequest.meta:type_name -> holomush.core.v1.RequestMeta
-	4,  // 25: holomush.core.v1.QueryStreamHistoryResponse.meta:type_name -> holomush.core.v1.ResponseMeta
-	8,  // 26: holomush.core.v1.QueryStreamHistoryResponse.events:type_name -> holomush.core.v1.EventFrame
-	3,  // 27: holomush.core.v1.ListSessionStreamsRequest.meta:type_name -> holomush.core.v1.RequestMeta
-	4,  // 28: holomush.core.v1.ListSessionStreamsResponse.meta:type_name -> holomush.core.v1.ResponseMeta
-	5,  // 29: holomush.core.v1.CoreService.HandleCommand:input_type -> holomush.core.v1.HandleCommandRequest
-	7,  // 30: holomush.core.v1.CoreService.Subscribe:input_type -> holomush.core.v1.SubscribeRequest
-	12, // 31: holomush.core.v1.CoreService.Disconnect:input_type -> holomush.core.v1.DisconnectRequest
-	14, // 32: holomush.core.v1.CoreService.GetCommandHistory:input_type -> holomush.core.v1.GetCommandHistoryRequest
-	17, // 33: holomush.core.v1.CoreService.AuthenticatePlayer:input_type -> holomush.core.v1.AuthenticatePlayerRequest
-	19, // 34: holomush.core.v1.CoreService.SelectCharacter:input_type -> holomush.core.v1.SelectCharacterRequest
-	21, // 35: holomush.core.v1.CoreService.CreatePlayer:input_type -> holomush.core.v1.CreatePlayerRequest
-	23, // 36: holomush.core.v1.CoreService.CreateGuest:input_type -> holomush.core.v1.CreateGuestRequest
-	25, // 37: holomush.core.v1.CoreService.CreateCharacter:input_type -> holomush.core.v1.CreateCharacterRequest
-	27, // 38: holomush.core.v1.CoreService.ListCharacters:input_type -> holomush.core.v1.ListCharactersRequest
-	29, // 39: holomush.core.v1.CoreService.RequestPasswordReset:input_type -> holomush.core.v1.RequestPasswordResetRequest
-	31, // 40: holomush.core.v1.CoreService.ConfirmPasswordReset:input_type -> holomush.core.v1.ConfirmPasswordResetRequest
-	33, // 41: holomush.core.v1.CoreService.Logout:input_type -> holomush.core.v1.LogoutRequest
-	35, // 42: holomush.core.v1.CoreService.CheckPlayerSession:input_type -> holomush.core.v1.CheckPlayerSessionRequest
-	37, // 43: holomush.core.v1.CoreService.ListPlayerSessions:input_type -> holomush.core.v1.ListPlayerSessionsRequest
-	40, // 44: holomush.core.v1.CoreService.RevokePlayerSession:input_type -> holomush.core.v1.RevokePlayerSessionRequest
-	42, // 45: holomush.core.v1.CoreService.RevokeOtherPlayerSessions:input_type -> holomush.core.v1.RevokeOtherPlayerSessionsRequest
-	44, // 46: holomush.core.v1.CoreService.QueryStreamHistory:input_type -> holomush.core.v1.QueryStreamHistoryRequest
-	46, // 47: holomush.core.v1.CoreService.ListSessionStreams:input_type -> holomush.core.v1.ListSessionStreamsRequest
-	6,  // 48: holomush.core.v1.CoreService.HandleCommand:output_type -> holomush.core.v1.HandleCommandResponse
-	11, // 49: holomush.core.v1.CoreService.Subscribe:output_type -> holomush.core.v1.SubscribeResponse
-	13, // 50: holomush.core.v1.CoreService.Disconnect:output_type -> holomush.core.v1.DisconnectResponse
-	15, // 51: holomush.core.v1.CoreService.GetCommandHistory:output_type -> holomush.core.v1.GetCommandHistoryResponse
-	18, // 52: holomush.core.v1.CoreService.AuthenticatePlayer:output_type -> holomush.core.v1.AuthenticatePlayerResponse
-	20, // 53: holomush.core.v1.CoreService.SelectCharacter:output_type -> holomush.core.v1.SelectCharacterResponse
-	22, // 54: holomush.core.v1.CoreService.CreatePlayer:output_type -> holomush.core.v1.CreatePlayerResponse
-	24, // 55: holomush.core.v1.CoreService.CreateGuest:output_type -> holomush.core.v1.CreateGuestResponse
-	26, // 56: holomush.core.v1.CoreService.CreateCharacter:output_type -> holomush.core.v1.CreateCharacterResponse
-	28, // 57: holomush.core.v1.CoreService.ListCharacters:output_type -> holomush.core.v1.ListCharactersResponse
-	30, // 58: holomush.core.v1.CoreService.RequestPasswordReset:output_type -> holomush.core.v1.RequestPasswordResetResponse
-	32, // 59: holomush.core.v1.CoreService.ConfirmPasswordReset:output_type -> holomush.core.v1.ConfirmPasswordResetResponse
-	34, // 60: holomush.core.v1.CoreService.Logout:output_type -> holomush.core.v1.LogoutResponse
-	36, // 61: holomush.core.v1.CoreService.CheckPlayerSession:output_type -> holomush.core.v1.CheckPlayerSessionResponse
-	39, // 62: holomush.core.v1.CoreService.ListPlayerSessions:output_type -> holomush.core.v1.ListPlayerSessionsResponse
-	41, // 63: holomush.core.v1.CoreService.RevokePlayerSession:output_type -> holomush.core.v1.RevokePlayerSessionResponse
-	43, // 64: holomush.core.v1.CoreService.RevokeOtherPlayerSessions:output_type -> holomush.core.v1.RevokeOtherPlayerSessionsResponse
-	45, // 65: holomush.core.v1.CoreService.QueryStreamHistory:output_type -> holomush.core.v1.QueryStreamHistoryResponse
-	47, // 66: holomush.core.v1.CoreService.ListSessionStreams:output_type -> holomush.core.v1.ListSessionStreamsResponse
-	48, // [48:67] is the sub-list for method output_type
-	29, // [29:48] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	3,  // 8: holomush.core.v1.PresenceEntry.state:type_name -> holomush.core.v1.PresenceState
+	5,  // 9: holomush.core.v1.ListFocusPresenceRequest.meta:type_name -> holomush.core.v1.RequestMeta
+	6,  // 10: holomush.core.v1.ListFocusPresenceResponse.meta:type_name -> holomush.core.v1.ResponseMeta
+	2,  // 11: holomush.core.v1.ListFocusPresenceResponse.context:type_name -> holomush.core.v1.PresenceContext
+	11, // 12: holomush.core.v1.ListFocusPresenceResponse.entries:type_name -> holomush.core.v1.PresenceEntry
+	1,  // 13: holomush.core.v1.RenderingMetadata.display_target:type_name -> holomush.core.v1.EventChannel
+	4,  // 14: holomush.core.v1.ControlFrame.signal:type_name -> holomush.core.v1.ControlSignal
+	10, // 15: holomush.core.v1.SubscribeResponse.event:type_name -> holomush.core.v1.EventFrame
+	15, // 16: holomush.core.v1.SubscribeResponse.control:type_name -> holomush.core.v1.ControlFrame
+	5,  // 17: holomush.core.v1.DisconnectRequest.meta:type_name -> holomush.core.v1.RequestMeta
+	6,  // 18: holomush.core.v1.DisconnectResponse.meta:type_name -> holomush.core.v1.ResponseMeta
+	5,  // 19: holomush.core.v1.GetCommandHistoryRequest.meta:type_name -> holomush.core.v1.RequestMeta
+	6,  // 20: holomush.core.v1.GetCommandHistoryResponse.meta:type_name -> holomush.core.v1.ResponseMeta
+	21, // 21: holomush.core.v1.AuthenticatePlayerResponse.characters:type_name -> holomush.core.v1.CharacterSummary
+	21, // 22: holomush.core.v1.CreatePlayerResponse.characters:type_name -> holomush.core.v1.CharacterSummary
+	21, // 23: holomush.core.v1.CreateGuestResponse.characters:type_name -> holomush.core.v1.CharacterSummary
+	21, // 24: holomush.core.v1.ListCharactersResponse.characters:type_name -> holomush.core.v1.CharacterSummary
+	21, // 25: holomush.core.v1.CheckPlayerSessionResponse.characters:type_name -> holomush.core.v1.CharacterSummary
+	53, // 26: holomush.core.v1.PlayerSessionInfo.created_at:type_name -> google.protobuf.Timestamp
+	53, // 27: holomush.core.v1.PlayerSessionInfo.last_active:type_name -> google.protobuf.Timestamp
+	43, // 28: holomush.core.v1.ListPlayerSessionsResponse.sessions:type_name -> holomush.core.v1.PlayerSessionInfo
+	5,  // 29: holomush.core.v1.QueryStreamHistoryRequest.meta:type_name -> holomush.core.v1.RequestMeta
+	6,  // 30: holomush.core.v1.QueryStreamHistoryResponse.meta:type_name -> holomush.core.v1.ResponseMeta
+	10, // 31: holomush.core.v1.QueryStreamHistoryResponse.events:type_name -> holomush.core.v1.EventFrame
+	5,  // 32: holomush.core.v1.ListSessionStreamsRequest.meta:type_name -> holomush.core.v1.RequestMeta
+	6,  // 33: holomush.core.v1.ListSessionStreamsResponse.meta:type_name -> holomush.core.v1.ResponseMeta
+	7,  // 34: holomush.core.v1.CoreService.HandleCommand:input_type -> holomush.core.v1.HandleCommandRequest
+	9,  // 35: holomush.core.v1.CoreService.Subscribe:input_type -> holomush.core.v1.SubscribeRequest
+	17, // 36: holomush.core.v1.CoreService.Disconnect:input_type -> holomush.core.v1.DisconnectRequest
+	19, // 37: holomush.core.v1.CoreService.GetCommandHistory:input_type -> holomush.core.v1.GetCommandHistoryRequest
+	22, // 38: holomush.core.v1.CoreService.AuthenticatePlayer:input_type -> holomush.core.v1.AuthenticatePlayerRequest
+	24, // 39: holomush.core.v1.CoreService.SelectCharacter:input_type -> holomush.core.v1.SelectCharacterRequest
+	26, // 40: holomush.core.v1.CoreService.CreatePlayer:input_type -> holomush.core.v1.CreatePlayerRequest
+	28, // 41: holomush.core.v1.CoreService.CreateGuest:input_type -> holomush.core.v1.CreateGuestRequest
+	30, // 42: holomush.core.v1.CoreService.CreateCharacter:input_type -> holomush.core.v1.CreateCharacterRequest
+	32, // 43: holomush.core.v1.CoreService.ListCharacters:input_type -> holomush.core.v1.ListCharactersRequest
+	34, // 44: holomush.core.v1.CoreService.RequestPasswordReset:input_type -> holomush.core.v1.RequestPasswordResetRequest
+	36, // 45: holomush.core.v1.CoreService.ConfirmPasswordReset:input_type -> holomush.core.v1.ConfirmPasswordResetRequest
+	38, // 46: holomush.core.v1.CoreService.Logout:input_type -> holomush.core.v1.LogoutRequest
+	40, // 47: holomush.core.v1.CoreService.CheckPlayerSession:input_type -> holomush.core.v1.CheckPlayerSessionRequest
+	42, // 48: holomush.core.v1.CoreService.ListPlayerSessions:input_type -> holomush.core.v1.ListPlayerSessionsRequest
+	45, // 49: holomush.core.v1.CoreService.RevokePlayerSession:input_type -> holomush.core.v1.RevokePlayerSessionRequest
+	47, // 50: holomush.core.v1.CoreService.RevokeOtherPlayerSessions:input_type -> holomush.core.v1.RevokeOtherPlayerSessionsRequest
+	49, // 51: holomush.core.v1.CoreService.QueryStreamHistory:input_type -> holomush.core.v1.QueryStreamHistoryRequest
+	51, // 52: holomush.core.v1.CoreService.ListSessionStreams:input_type -> holomush.core.v1.ListSessionStreamsRequest
+	12, // 53: holomush.core.v1.CoreService.ListFocusPresence:input_type -> holomush.core.v1.ListFocusPresenceRequest
+	8,  // 54: holomush.core.v1.CoreService.HandleCommand:output_type -> holomush.core.v1.HandleCommandResponse
+	16, // 55: holomush.core.v1.CoreService.Subscribe:output_type -> holomush.core.v1.SubscribeResponse
+	18, // 56: holomush.core.v1.CoreService.Disconnect:output_type -> holomush.core.v1.DisconnectResponse
+	20, // 57: holomush.core.v1.CoreService.GetCommandHistory:output_type -> holomush.core.v1.GetCommandHistoryResponse
+	23, // 58: holomush.core.v1.CoreService.AuthenticatePlayer:output_type -> holomush.core.v1.AuthenticatePlayerResponse
+	25, // 59: holomush.core.v1.CoreService.SelectCharacter:output_type -> holomush.core.v1.SelectCharacterResponse
+	27, // 60: holomush.core.v1.CoreService.CreatePlayer:output_type -> holomush.core.v1.CreatePlayerResponse
+	29, // 61: holomush.core.v1.CoreService.CreateGuest:output_type -> holomush.core.v1.CreateGuestResponse
+	31, // 62: holomush.core.v1.CoreService.CreateCharacter:output_type -> holomush.core.v1.CreateCharacterResponse
+	33, // 63: holomush.core.v1.CoreService.ListCharacters:output_type -> holomush.core.v1.ListCharactersResponse
+	35, // 64: holomush.core.v1.CoreService.RequestPasswordReset:output_type -> holomush.core.v1.RequestPasswordResetResponse
+	37, // 65: holomush.core.v1.CoreService.ConfirmPasswordReset:output_type -> holomush.core.v1.ConfirmPasswordResetResponse
+	39, // 66: holomush.core.v1.CoreService.Logout:output_type -> holomush.core.v1.LogoutResponse
+	41, // 67: holomush.core.v1.CoreService.CheckPlayerSession:output_type -> holomush.core.v1.CheckPlayerSessionResponse
+	44, // 68: holomush.core.v1.CoreService.ListPlayerSessions:output_type -> holomush.core.v1.ListPlayerSessionsResponse
+	46, // 69: holomush.core.v1.CoreService.RevokePlayerSession:output_type -> holomush.core.v1.RevokePlayerSessionResponse
+	48, // 70: holomush.core.v1.CoreService.RevokeOtherPlayerSessions:output_type -> holomush.core.v1.RevokeOtherPlayerSessionsResponse
+	50, // 71: holomush.core.v1.CoreService.QueryStreamHistory:output_type -> holomush.core.v1.QueryStreamHistoryResponse
+	52, // 72: holomush.core.v1.CoreService.ListSessionStreams:output_type -> holomush.core.v1.ListSessionStreamsResponse
+	13, // 73: holomush.core.v1.CoreService.ListFocusPresence:output_type -> holomush.core.v1.ListFocusPresenceResponse
+	54, // [54:74] is the sub-list for method output_type
+	34, // [34:54] is the sub-list for method input_type
+	34, // [34:34] is the sub-list for extension type_name
+	34, // [34:34] is the sub-list for extension extendee
+	0,  // [0:34] is the sub-list for field type_name
 }
 
 func init() { file_holomush_core_v1_core_proto_init() }
@@ -3463,7 +3789,7 @@ func file_holomush_core_v1_core_proto_init() {
 	if File_holomush_core_v1_core_proto != nil {
 		return
 	}
-	file_holomush_core_v1_core_proto_msgTypes[8].OneofWrappers = []any{
+	file_holomush_core_v1_core_proto_msgTypes[11].OneofWrappers = []any{
 		(*SubscribeResponse_Event)(nil),
 		(*SubscribeResponse_Control)(nil),
 	}
@@ -3472,8 +3798,8 @@ func file_holomush_core_v1_core_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_core_v1_core_proto_rawDesc), len(file_holomush_core_v1_core_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   45,
+			NumEnums:      5,
+			NumMessages:   48,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
