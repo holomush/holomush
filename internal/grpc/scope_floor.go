@@ -89,16 +89,26 @@ func extractLocationID(stream string) string {
 	return strings.TrimPrefix(stream, "location:")
 }
 
-// staffOverride is a stub for Phase 5 (staff ABAC override). Returns false
-// unconditionally so the location hard-gate is exercised in Phase 2.
-// Phase 5 / iwzt.20 replaces with a real
-//
-//	s.accessEngine.Evaluate(ctx, NewAccessRequest("character:"+info.CharacterID.String(),
-//	                                               "read_unrestricted_history", "stream", nil))
-//
-// per ADR wxty / I-PRIV-6.
-func staffOverride(_ context.Context, _ *session.Info, _ accessTypes.AccessPolicyEngine) bool {
-	return false
+// staffOverride reports whether the session's character has been granted the
+// read_unrestricted_history action via ABAC (I-PRIV-6 / ADR wxty). When true,
+// the location hard-gate (I-PRIV-1) is bypassed; the temporal floor still
+// applies. Returns false if the engine is nil or if evaluation fails
+// (fail-closed).
+func staffOverride(ctx context.Context, info *session.Info, engine accessTypes.AccessPolicyEngine) bool {
+	if engine == nil {
+		return false
+	}
+	accessReq, err := accessTypes.NewAccessRequest(
+		"character:"+info.CharacterID.String(),
+		"read_unrestricted_history",
+		"stream:*",
+		nil,
+	)
+	if err != nil {
+		return false
+	}
+	decision, evalErr := engine.Evaluate(ctx, accessReq)
+	return evalErr == nil && decision.IsAllowed()
 }
 
 // extractSceneID returns the scene ULID from a scene:<id>:ic or scene:<id>:ooc subject.

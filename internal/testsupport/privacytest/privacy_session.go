@@ -65,8 +65,8 @@ func (s *Session) SendCommand(ctx context.Context, cmd string) error {
 		return oops.Code("COMMAND_REJECTED").
 			With("operation", "send_command").
 			With("command", cmd).
-			With("error_message", resp.GetErrorMessage()).
-			Errorf("command rejected by server: %s", resp.GetErrorMessage())
+			With("error_message", resp.GetError()).
+			Errorf("command rejected by server: %s", resp.GetError())
 	}
 	return nil
 }
@@ -160,14 +160,18 @@ func (s *Session) JoinScene(_ context.Context, _ ulid.ULID) {
 }
 
 // QueryStreamHistory fetches the event history for the given stream subject.
-// Returns the full page of events (up to the server's default page size).
-//
-// TODO(iwzt-9): wire historyReader into the CoreServer so
-// QueryStreamHistory can actually serve results. Until then this panics
-// because CoreServer.historyReader is nil and returns INTERNAL.
-func (s *Session) QueryStreamHistory(_ context.Context, _ string) []*corev1.EventFrame {
-	s.server.t.Fatalf("privacytest.Session.QueryStreamHistory: TODO iwzt-9 — historyReader not yet wired")
-	return nil
+// Returns the events from the response (may be empty if no history exists).
+// The caller must pass a stream the session is authorized to read; access
+// denials propagate as test failures via the returned error.
+func (s *Session) QueryStreamHistory(ctx context.Context, stream string) ([]*corev1.EventFrame, error) {
+	resp, err := s.server.coreServer.QueryStreamHistory(ctx, &corev1.QueryStreamHistoryRequest{
+		SessionId: s.SessionID,
+		Stream:    stream,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetEvents(), nil
 }
 
 // AuthedPlayer represents a named player (with hashed password) that can
