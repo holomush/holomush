@@ -21,7 +21,7 @@ context, skills, or tool habits from the parent session.
 | TDD | run `task test -- ./<package>` per change; use Ginkgo for integration tests (build tag `//go:build integration`) |
 | Sub-agent dispatch | model floor is `sonnet` (never `haiku` for sub-agents) |
 | jj workspace work | verify `jj st` is clean BEFORE they run `jj describe` — otherwise their describe clobbers the in-flight change's description |
-| Anything destructive | NEVER `jj op restore`. Reason: op log is repo-global; rewinding from one workspace silently wipes other agents' in-flight work in every other workspace. |
+| Op-log mutations | `jj op restore` / `jj op abandon` are gated by the `jj:jujutsu` plugin's `guard-jj-mutating` hook (bypass: `# jj-op-approved`); ensure the sub-agent's frontmatter lists `jj:jujutsu` in `skills:` so they read the recovery ladder before reaching for either command |
 | Closing beads | grounded evidence required; in-bead "Closed:"/"Fixed:" comments are NOT proof — verify the cited fix in current code (the `bead-auditor` agent caught false-fix cases on `wfza.21`, `wfza.62`) |
 
 ## Anti-patterns

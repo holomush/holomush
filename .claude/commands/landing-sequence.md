@@ -25,12 +25,18 @@ for push; otherwise infer from the current jj workspace).
    - If pr-prep fails: STOP, surface the failure, do not push.
    - For `.claude/`-touching changes, additionally verify `task lint:docs-symmetry` passes (the docs-symmetry lint runs as part of `task lint`, which `task pr-prep` invokes — but call it out separately if a CLAUDE.md/AGENTS.md edit was the primary motivation).
 
-4. **Targeted rebase**
-   - `jj git fetch`
-   - `jj rebase -r <change-id> -d main@origin` — scope to YOUR change only. NEVER bare `jj rebase -d main`. Reason: bare rebase sweeps up descendants of other agents' in-flight work in other workspaces.
+4. **Pre-push rebase** — defer to the `jj:jujutsu` skill's "Pre-Push Rebase" section. The chain-safe recipe handles single-commit PRs and chains identically:
+
+   ```bash
+   jj git fetch
+   jj rebase -s "$(jj --no-pager log -r 'roots(trunk()..@)' --no-graph -T 'change_id.short(12)')" -o main@origin --skip-emptied
+   ```
+
+   The `guard-jj-rebase-chain` PreToolUse hook (shipped with the `jj` plugin) BLOCKS the truncation-prone `jj rebase -r @ -o <trunk>` shape — the failure mode that lost 8 of 9 commits on PR #4049 (`holomush-lfri`). If you genuinely need to extract `@` alone (confirmed single-commit PR), append `# jj-exempt` to escalate-to-ASK.
 
 5. **Push**
    - `jj bookmark set <branch> -r @-` (or whichever rev is the tip)
+   - Sanity-check the chain length one more time before push: `jj log -r 'main@origin..@' --no-pager --no-graph -T 'change_id ++ "\n"' | wc -l`. If it dropped unexpectedly between sessions (e.g., 9 → 1), STOP — investigate before pushing.
    - `jj git push --branch <branch>`
    - `jj st` to verify
 

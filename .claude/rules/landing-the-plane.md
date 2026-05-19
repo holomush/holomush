@@ -9,8 +9,8 @@ When ending a work session, work is **NOT complete until changes are pushed**. T
 3. **Update issue status** — `bd close` what's done; `bd update` what's still in flight
 4. **Push:**
    - `jj git fetch`
-   - Targeted rebase: `jj rebase -r <change-id> -d main@origin` — **never bare `jj rebase -d main`**. Reason: bare rebase sweeps up descendants of other agents' in-flight work.
-   - Set bookmark: `jj bookmark set <branch> -r @-` (or whichever rev)
+   - **Pre-push rebase**: follow the `jj:jujutsu` skill's "Pre-Push Rebase" section. The chain-safe `jj rebase -s "$(jj log -r 'roots(trunk()..@)' --no-graph -T 'change_id.short(12)')" -o main@origin --skip-emptied` shape works for single-commit PRs *and* chains. The `guard-jj-rebase-chain` PreToolUse hook blocks the truncation-prone `jj rebase -r @ -o <trunk>` shape (PR #4049 lost 8 of 9 commits to it). Bypass via `# jj-exempt` only when extracting `@` alone is intentional.
+   - Set bookmark: `jj bookmark set <branch> -r @-` (or whichever rev is the tip)
    - `jj git push --branch <branch>`
    - Verify with `jj st`
 5. **Clean up workspace:**
@@ -28,7 +28,7 @@ When ending a work session, work is **NOT complete until changes are pushed**. T
 - NEVER stop before pushing — that leaves work stranded locally
 - NEVER say "ready to push when you are" — YOU must push
 - If push fails, resolve and retry until it succeeds
-- NEVER use `jj op restore` to "fix" an unexpected state without explicit user direction. Reason: the op log is repo-global; rewinding from one workspace silently wipes other agents' in-flight work in every other workspace. Treat it like `git push --force` to a shared branch.
+- `jj op restore` / `jj op abandon` rewind the global op log and silently corrupt sibling workspaces — both are gated by the `jj:jujutsu` plugin's `guard-jj-mutating` PreToolUse hook (bypass: `# jj-op-approved`). Recovery ladder (`jj undo`, `jj op revert`, etc.) is documented in the skill.
 
 ## Skipping the chain
 
