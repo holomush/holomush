@@ -16,19 +16,26 @@
       "addLabels": ["go"]
     },
     {
-      "description": "Auto-merge GitHub Actions (minor/patch)",
+      "description": "Auto-merge GitHub Actions (minor/patch/digest)",
       "matchManagers": ["github-actions"],
-      "matchUpdateTypes": ["minor", "patch"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
       "automerge": true,
       "groupName": "GitHub Actions",
       "addLabels": ["github-actions"]
     },
     {
-      "description": "Auto-merge Docker minor/patch",
-      "matchManagers": ["dockerfile"],
-      "matchUpdateTypes": ["minor", "patch"],
+      "description": "Auto-merge Docker minor/patch/digest",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
       "automerge": true,
       "addLabels": ["docker"]
+    },
+    {
+      "description": "Auto-merge npm minor/patch (incl. lockfile-only updates)",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true,
+      "addLabels": ["npm"]
     },
     {
       "description": "Group OpenTelemetry packages",
@@ -66,6 +73,16 @@
       ]
     },
     {
+      "description": "NATS packages — extra stabilization time, grouped, weekly schedule",
+      "matchPackageNames": [
+        "github.com/nats-io/nats-server/v2",
+        "github.com/nats-io/nats.go"
+      ],
+      "minimumReleaseAge": "14 days",
+      "groupName": "nats",
+      "schedule": ["after 9am on Monday"]
+    },
+    {
       "description": "Major version bumps require manual review",
       "matchUpdateTypes": ["major"],
       "automerge": false,
@@ -74,8 +91,5 @@
   ],
   "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths"],
   "commitMessagePrefix": "deps:",
-  "commitMessageAction": "bump",
-  "prConcurrentLimit": 2,
-  "branchConcurrentLimit": 2,
-  "prHourlyLimit": 1
+  "commitMessageAction": "bump"
 }
