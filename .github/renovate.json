@@ -5,7 +5,7 @@
   ],
   "schedule": ["before 9am on monday"],
   "timezone": "America/New_York",
-  "labels": ["dependencies"],
+  "labels": ["dependencies", "renovate-bot"],
   "platformAutomerge": true,
   "packageRules": [
     {
