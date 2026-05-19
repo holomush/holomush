@@ -177,19 +177,32 @@ func (h *Harness) seedDEKAndEvents(t *testing.T, cfg HarnessConfig) {
 		Expect(err).NotTo(HaveOccurred(), "seedDEKAndEvents: GetOrCreate DEK")
 	}
 
-	// Seed EventCount plaintext events_audit rows. The rows use a fixed
-	// subject matching HarnessConfig.EventSubject. For fixture purposes
-	// the envelope is a minimal identity-codec JSON payload; E2E specs
-	// exercise Phase 3 cold re-encryption which transforms these rows.
-	for i := 0; i < cfg.EventCount; i++ {
-		payload := []byte(`{"type":"test","seq":` + itoa(i) + `}`)
-		_, err := h.DB.Exec(ctx,
-			`INSERT INTO events_audit
-			   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
-			 VALUES (gen_random_bytes(16), $1, 'test.event', now(), 'system', $2, 1, 'identity', $3, '{}'::jsonb)`,
-			cfg.EventSubject, payload, int64(i+1))
-		Expect(err).NotTo(HaveOccurred(), "seedDEKAndEvents: insert event %d", i)
-	}
+	// Seed EventCount plaintext events_audit rows in a single round-trip.
+	// The rows use a fixed subject matching HarnessConfig.EventSubject. For
+	// fixture purposes the envelope is a minimal identity-codec JSON payload
+	// (`{"type":"test","seq":N}`, N starting at 0); E2E specs exercise Phase 3
+	// cold re-encryption which transforms these rows. js_seq is 1-indexed.
+	//
+	// Note: now() evaluates once per statement, so all seeded rows share one
+	// timestamp. Specs that need a deterministic order over the seed rows
+	// MUST order by js_seq, not timestamp.
+	_, err := h.DB.Exec(ctx, `
+		INSERT INTO events_audit
+		    (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
+		SELECT
+		    gen_random_bytes(16),
+		    $1,
+		    'test.event',
+		    now(),
+		    'system',
+		    convert_to('{"type":"test","seq":' || (g.i - 1)::text || '}', 'UTF8'),
+		    1,
+		    'identity',
+		    g.i,
+		    '{}'::jsonb
+		FROM generate_series(1, $2::int) AS g(i)`,
+		cfg.EventSubject, cfg.EventCount)
+	Expect(err).NotTo(HaveOccurred(), "seedDEKAndEvents: bulk insert events")
 }
 
 // --- Assertion helpers ---
@@ -322,26 +335,6 @@ func (h *Harness) findCheckpointByID(rid dek.RequestID) (dek.Checkpoint, error) 
 // repo is a convenience accessor for the primary's CheckpointRepo.
 func (h *Harness) repo() *dek.CheckpointRepo {
 	return h.Primary.GetCheckpointRepo()
-}
-
-// itoa converts an int to its decimal string representation without importing fmt.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	buf := make([]byte, 0, 20)
-	for n > 0 {
-		buf = append([]byte{byte('0' + n%10)}, buf...)
-		n /= 10
-	}
-	if neg {
-		buf = append([]byte{'-'}, buf...)
-	}
-	return string(buf)
 }
 
 // --- Status/list helpers (Task 48) ---
