@@ -63,7 +63,7 @@ permissions:
 jobs:
   bootstrap:
     name: Bootstrap Sandbox Infrastructure
-    runs-on: namespace-profile-linux-amd64-4x8
+    runs-on: namespace-profile-linux-amd64-2x4
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
