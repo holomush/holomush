@@ -75,6 +75,7 @@
   "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths"],
   "commitMessagePrefix": "deps:",
   "commitMessageAction": "bump",
-  "prConcurrentLimit": 5,
-  "prHourlyLimit": 2
+  "prConcurrentLimit": 2,
+  "branchConcurrentLimit": 2,
+  "prHourlyLimit": 1
 }

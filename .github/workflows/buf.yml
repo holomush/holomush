@@ -26,7 +26,7 @@ permissions:
 jobs:
   lint:
     name: Buf Lint
-    runs-on: namespace-profile-linux-amd64-4x8
+    runs-on: namespace-profile-linux-amd64-2x4
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: bufbuild/buf-action@b46cbc051dd8fd10a3c2213e784498790d3fe388 # v1.0.3
@@ -39,7 +39,7 @@ jobs:
 
   push:
     name: Buf Push to BSR
-    runs-on: namespace-profile-linux-amd64-4x8
+    runs-on: namespace-profile-linux-amd64-2x4
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [lint]
     steps:
