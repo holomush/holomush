@@ -8,7 +8,7 @@ require (
 	connectrpc.com/connect v1.19.2
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/alecthomas/participle/v2 v2.1.4
-	github.com/docker/go-connections v0.6.0
+	github.com/docker/go-connections v0.7.0
 	github.com/exaring/otelpgx v0.10.0
 	github.com/gobwas/glob v0.2.3
 	github.com/golang-migrate/migrate/v4 v4.19.1
