@@ -148,8 +148,8 @@ func makeDelivery(t *testing.T, evType, characterID string) *fakeDelivery {
 
 func TestDispatchDeliveryForwardsAndAcks(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	charID := core.NewULID().String()
 	d := makeDelivery(t, "say", charID)
@@ -164,8 +164,8 @@ func TestDispatchDeliveryForwardsAndAcks(t *testing.T) {
 
 func TestDispatchDeliveryNacksOnSendError(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	stream := &fakeSubscribeStream{ctx: context.Background(), err: errors.New("send boom")}
 	charID := core.NewULID().String()
 	d := makeDelivery(t, "say", charID)
@@ -178,8 +178,8 @@ func TestDispatchDeliveryNacksOnSendError(t *testing.T) {
 
 func TestDispatchDeliveryAckFailureLogsButReturnsNil(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	charID := core.NewULID().String()
 	d := makeDelivery(t, "say", charID)
@@ -192,8 +192,8 @@ func TestDispatchDeliveryAckFailureLogsButReturnsNil(t *testing.T) {
 
 func TestDispatchDeliveryTerminatesOnMatchingSessionEnded(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	charID := core.NewULID().String()
 
@@ -215,8 +215,8 @@ func TestDispatchDeliveryTerminatesOnMatchingSessionEnded(t *testing.T) {
 
 func TestDispatchDeliveryIgnoresNonMatchingSessionEnded(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	charID := core.NewULID().String()
 
@@ -236,8 +236,8 @@ func TestDispatchDeliveryIgnoresNonMatchingSessionEnded(t *testing.T) {
 
 func TestDispatchDeliverySessionEndedBadPayloadLogsAndSurvives(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	charID := core.NewULID().String()
 
@@ -258,8 +258,8 @@ func TestDispatchDeliverySessionEndedBadPayloadLogsAndSurvives(t *testing.T) {
 // internal/grpc/server.go (~line 1019).
 func TestDispatchDeliverySkipsAuditOnlyEvents(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	charID := core.NewULID().String()
 
@@ -279,12 +279,212 @@ func TestDispatchDeliverySkipsAuditOnlyEvents(t *testing.T) {
 		"audit-only event must NOT reach client streams (INV-D14)")
 }
 
+// makeLocationDelivery builds a fakeDelivery carrying an event on the given
+// NATS-form location subject with an explicit timestamp. The Subject is the
+// production format (events.<game>.location.<locID>); dispatchDelivery
+// translates it to legacy form via subjectxlate.ToLegacy before invoking
+// streamScopeFloor.
+// gameID is fixed to "main" — every dispatchDelivery test in this file uses
+// the default game; if a multi-game test arrives later it should construct
+// its own delivery rather than re-introducing an always-"main" parameter.
+func makeLocationDelivery(t *testing.T, locID string, ts time.Time) *fakeDelivery {
+	t.Helper()
+	return &fakeDelivery{
+		ev: eventbus.Event{
+			ID:        core.NewULID(),
+			Subject:   eventbus.Subject("events.main.location." + locID),
+			Type:      eventbus.Type("say"),
+			Timestamp: ts,
+			Payload:   []byte("{}"),
+		},
+	}
+}
+
+// erroringSessionStore returns a fixed error from Get and panics from any
+// other method. Used to exercise the fail-closed branch of
+// dispatchDelivery's filter-at-delivery prelude.
+type erroringSessionStore struct {
+	session.Store // embedded so any unused method panics via nil deref
+	getErr        error
+}
+
+func (e *erroringSessionStore) Get(_ context.Context, _ string) (*session.Info, error) {
+	return nil, e.getErr
+}
+
+// TestDispatchDeliveryForwardsEventTruncatedWithinSameMicrosecondAsFloor
+// pins the off-by-precision semantic: events are published with timestamps
+// truncated to microseconds (eventbus/publisher.go::Publish), while session
+// floors (LocationArrivedAt etc.) retain time.Now() nanosecond precision.
+// An event emitted within the same microsecond as session creation has a
+// truncated timestamp strictly LESS than the floor — but it is NOT a
+// privacy violation to forward it. The filter MUST truncate the floor to
+// µs before comparing, otherwise a session's own arrive event (and any
+// other event in the same µs window as session-create / move / focus-join)
+// gets dropped. Regression caught by web/e2e/terminal.spec.ts:136 (presence
+// list) — the symptom was page2's panel missing its own self-arrival.
+func TestDispatchDeliveryForwardsEventTruncatedWithinSameMicrosecondAsFloor(t *testing.T) {
+	t.Parallel()
+	locID := core.NewULID()
+	// LocationArrivedAt with nanosecond precision (mirrors time.Now()).
+	arrivedAt := time.Date(2026, 5, 21, 12, 0, 0, 300_123_456, time.UTC)
+	info := &session.Info{
+		ID:                "s1",
+		CharacterID:       core.NewULID(),
+		LocationID:        locID,
+		LocationArrivedAt: arrivedAt,
+	}
+	store := newTestSessionStore(t, map[string]*session.Info{"s1": info})
+	s := &CoreServer{sessionStore: store}
+	stream := &fakeSubscribeStream{ctx: context.Background()}
+
+	// Event timestamp emitted 333ns AFTER LocationArrivedAt, then truncated
+	// to µs by the publisher → 300_123_000 ns, which is strictly LESS than
+	// the un-truncated floor (300_123_456). Without the µs-truncated floor
+	// comparison this would be dropped — a false positive.
+	emittedAt := arrivedAt.Add(333 * time.Nanosecond)
+	publishedAt := emittedAt.Truncate(time.Microsecond)
+	require.True(t, publishedAt.Before(arrivedAt),
+		"sanity: truncated event ts must be strictly before un-truncated floor for this test to be meaningful")
+
+	d := makeLocationDelivery(t, locID.String(), publishedAt)
+
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, d.acks())
+	assert.Equal(t, 0, d.nacks())
+	require.Len(t, stream.sent, 1,
+		"event emitted in same µs as session-create must reach client; "+
+			"the filter compares against a µs-truncated floor, matching publisher precision")
+}
+
+// TestDispatchDeliveryDropsBelowScopeFloor is the unit-level regression lock
+// for holomush-iwzt I-PRIV-1 Tier 2 (load-bearing privacy gate per spec
+// §6.2): events with a timestamp strictly before the session's
+// streamScopeFloor for the event's subject MUST be ack'd and dropped before
+// stream.Send. Ack-and-return (not skip-without-ack) so JetStream does not
+// redeliver the dropped event indefinitely.
+func TestDispatchDeliveryDropsBelowScopeFloor(t *testing.T) {
+	t.Parallel()
+	locID := core.NewULID()
+	arrivedAt := time.Now()
+	info := &session.Info{
+		ID:                "s1",
+		CharacterID:       core.NewULID(),
+		LocationID:        locID,
+		LocationArrivedAt: arrivedAt,
+	}
+	store := newTestSessionStore(t, map[string]*session.Info{"s1": info})
+	s := &CoreServer{sessionStore: store}
+	stream := &fakeSubscribeStream{ctx: context.Background()}
+
+	// Event timestamp one hour BEFORE LocationArrivedAt → below floor.
+	d := makeLocationDelivery(t, locID.String(),arrivedAt.Add(-time.Hour))
+
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, d.acks(),
+		"below-floor event must be ack'd so JS does not redeliver indefinitely")
+	assert.Equal(t, 0, d.nacks())
+	assert.Empty(t, stream.sent,
+		"below-floor event must NOT reach client stream (I-PRIV-1 Tier 2)")
+}
+
+// TestDispatchDeliveryForwardsAtOrAboveScopeFloor asserts the converse: an
+// event at or after the session's scope floor flows through to the client.
+func TestDispatchDeliveryForwardsAtOrAboveScopeFloor(t *testing.T) {
+	t.Parallel()
+	locID := core.NewULID()
+	arrivedAt := time.Now().Add(-time.Hour)
+	info := &session.Info{
+		ID:                "s1",
+		CharacterID:       core.NewULID(),
+		LocationID:        locID,
+		LocationArrivedAt: arrivedAt,
+	}
+	store := newTestSessionStore(t, map[string]*session.Info{"s1": info})
+	s := &CoreServer{sessionStore: store}
+	stream := &fakeSubscribeStream{ctx: context.Background()}
+
+	// Event timestamp one minute AFTER LocationArrivedAt → above floor.
+	d := makeLocationDelivery(t, locID.String(),arrivedAt.Add(time.Minute))
+
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, d.acks())
+	assert.Equal(t, 0, d.nacks())
+	require.Len(t, stream.sent, 1,
+		"above-floor event must reach client stream")
+	assert.Equal(t, "say", stream.sent[0].GetEvent().GetType())
+}
+
+// TestDispatchDeliveryFallsBackToCachedInfoOnLookupFailure exercises the
+// store-lookup-failure branch: when sessionStore.Get returns an error
+// (typically because the session was just deleted by quit/evict), the
+// filter uses the cached `info` parameter for floor evaluation rather than
+// dropping the event. This lets the in-flight session_ended event reach
+// the client so the Subscribe stream closes gracefully — otherwise the
+// client would be orphaned on /terminal forever waiting for a redirect.
+func TestDispatchDeliveryFallsBackToCachedInfoOnLookupFailure(t *testing.T) {
+	t.Parallel()
+	locID := core.NewULID()
+	arrivedAt := time.Now().Add(-time.Hour)
+	info := &session.Info{
+		ID:                "s1",
+		CharacterID:       core.NewULID(),
+		LocationID:        locID,
+		LocationArrivedAt: arrivedAt,
+	}
+	store := &erroringSessionStore{getErr: errors.New("session not found")}
+	s := &CoreServer{sessionStore: store}
+	stream := &fakeSubscribeStream{ctx: context.Background()}
+
+	// Event timestamp AFTER cached LocationArrivedAt → above cached floor.
+	// With fallback to cached info, the event passes through.
+	d := makeLocationDelivery(t, locID.String(),arrivedAt.Add(time.Minute))
+
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	require.NoError(t, err,
+		"lookup failure must not propagate — JS would redeliver forever")
+	assert.Equal(t, 1, d.acks())
+	require.Len(t, stream.sent, 1,
+		"lookup failure falls back to cached info; above-cached-floor event reaches client")
+}
+
+// TestDispatchDeliveryUsesCachedFloorOnLookupFailure asserts the cached-info
+// fallback still enforces privacy: an event BELOW the cached floor is still
+// dropped even when Get fails. This pins the invariant that the fallback is
+// a refresh-failure tolerance, not a privacy escape hatch.
+func TestDispatchDeliveryUsesCachedFloorOnLookupFailure(t *testing.T) {
+	t.Parallel()
+	locID := core.NewULID()
+	arrivedAt := time.Now()
+	info := &session.Info{
+		ID:                "s1",
+		CharacterID:       core.NewULID(),
+		LocationID:        locID,
+		LocationArrivedAt: arrivedAt,
+	}
+	store := &erroringSessionStore{getErr: errors.New("session not found")}
+	s := &CoreServer{sessionStore: store}
+	stream := &fakeSubscribeStream{ctx: context.Background()}
+
+	// Event timestamp BEFORE cached LocationArrivedAt → still dropped.
+	d := makeLocationDelivery(t, locID.String(),arrivedAt.Add(-time.Hour))
+
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, d.acks(), "below-cached-floor event must still be ack'd and dropped")
+	assert.Empty(t, stream.sent,
+		"cached-info fallback still enforces the Subscribe-open floor")
+}
+
 // --- Tests: applyFilterCtrl -------------------------------------------
 
 func TestApplyFilterCtrlRejectsLocationStreams(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	bs := newFakeSessionStream()
 	filterSet := map[eventbus.Subject]struct{}{}
 
@@ -297,8 +497,8 @@ func TestApplyFilterCtrlRejectsLocationStreams(t *testing.T) {
 
 func TestApplyFilterCtrlAddsAndCallsSetFilters(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	bs := newFakeSessionStream()
 	filterSet := map[eventbus.Subject]struct{}{}
 
@@ -312,8 +512,8 @@ func TestApplyFilterCtrlAddsAndCallsSetFilters(t *testing.T) {
 
 func TestApplyFilterCtrlAddIdempotentWhenExists(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	bs := newFakeSessionStream()
 	charID := core.NewULID().String()
 	sub := eventbus.Subject("events.main.character." + charID)
@@ -327,8 +527,8 @@ func TestApplyFilterCtrlAddIdempotentWhenExists(t *testing.T) {
 
 func TestApplyFilterCtrlRemovesAndCallsSetFilters(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	bs := newFakeSessionStream()
 	charID := core.NewULID().String()
 	sub := eventbus.Subject("events.main.character." + charID)
@@ -343,8 +543,8 @@ func TestApplyFilterCtrlRemovesAndCallsSetFilters(t *testing.T) {
 
 func TestApplyFilterCtrlRemoveIdempotentWhenMissing(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	bs := newFakeSessionStream()
 	filterSet := map[eventbus.Subject]struct{}{}
 
@@ -357,8 +557,8 @@ func TestApplyFilterCtrlRemoveIdempotentWhenMissing(t *testing.T) {
 
 func TestApplyFilterCtrlRejectsInvalidStream(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	bs := newFakeSessionStream()
 	filterSet := map[eventbus.Subject]struct{}{}
 
@@ -369,8 +569,8 @@ func TestApplyFilterCtrlRejectsInvalidStream(t *testing.T) {
 
 func TestApplyFilterCtrlPropagatesSetFiltersError(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	bs := newFakeSessionStream()
 	bs.setFiltersErr = errors.New("js bust")
 	filterSet := map[eventbus.Subject]struct{}{}
@@ -447,8 +647,8 @@ func TestMakeFilterUpdaterNoopForEmptyStrings(t *testing.T) {
 
 func TestRunSubscribeLoopDeliversEventsThenReturnsOnCtxCancel(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	bs := newFakeSessionStream()
 	charID := core.NewULID().String()
 
@@ -488,8 +688,8 @@ func TestRunSubscribeLoopDeliversEventsThenReturnsOnCtxCancel(t *testing.T) {
 
 func TestRunSubscribeLoopReturnsOnSendError(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	bs := newFakeSessionStream()
 	charID := core.NewULID().String()
 
@@ -509,8 +709,8 @@ func TestRunSubscribeLoopReturnsOnSendError(t *testing.T) {
 
 func TestRunSubscribeLoopReturnsNilOnSessionEnded(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	bs := newFakeSessionStream()
 	charID := core.NewULID().String()
 
@@ -530,8 +730,8 @@ func TestRunSubscribeLoopReturnsNilOnSessionEnded(t *testing.T) {
 
 func TestRunSubscribeLoopAppliesFilterCtrl(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	bs := newFakeSessionStream()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -563,8 +763,8 @@ func TestRunSubscribeLoopAppliesFilterCtrl(t *testing.T) {
 
 func TestRunSubscribeLoopReturnsNilOnCtrlChClose(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	bs := newFakeSessionStream()
 	ctx := context.Background()
 	stream := &fakeSubscribeStream{ctx: ctx}
@@ -577,8 +777,8 @@ func TestRunSubscribeLoopReturnsNilOnCtrlChClose(t *testing.T) {
 
 func TestRunSubscribeLoopReturnsNilOnDeliveriesClose(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	bs := newFakeSessionStream()
 	// Close immediately → Next returns io.EOF → loop returns nil.
 	_ = bs.Close()
@@ -592,8 +792,8 @@ func TestRunSubscribeLoopReturnsNilOnDeliveriesClose(t *testing.T) {
 
 func TestRunSubscribeLoopPropagatesNextError(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 
 	// Use a custom fake whose Next returns a non-EOF non-canceled error.
 	bs := &errorNextStream{err: errors.New("js bust")}
@@ -635,8 +835,8 @@ func (u ulidEntropy) Read(p []byte) (int, error) {
 
 func TestDispatchDeliveryStampsMetadataOnlyWhenDeliveryReportsTrue(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	charID := core.NewULID().String()
 
@@ -652,8 +852,8 @@ func TestDispatchDeliveryStampsMetadataOnlyWhenDeliveryReportsTrue(t *testing.T)
 
 func TestDispatchDeliveryDoesNotStampMetadataOnlyWhenFalse(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
+	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	charID := core.NewULID().String()
 
