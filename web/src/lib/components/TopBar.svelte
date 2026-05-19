@@ -3,7 +3,7 @@
   Copyright 2026 HoloMUSH Contributors
 -->
 <script lang="ts">
-  import { LogOut, ArrowLeftRight, Palette, PanelRightOpen, Command as CommandIcon } from 'lucide-svelte';
+  import { LogOut, ArrowLeftRight, Palette, PanelRightOpen, Command as CommandIcon } from '@lucide/svelte';
   import { page } from '$app/stores';
   import { authState, clearAuth } from '$lib/stores/authStore';
   import {

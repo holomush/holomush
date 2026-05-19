@@ -3,7 +3,7 @@
   Copyright 2026 HoloMUSH Contributors
 -->
 <script lang="ts">
-  import { X } from 'lucide-svelte';
+  import { X } from '@lucide/svelte';
   import {
     uiPrefs,
     closeComposer,

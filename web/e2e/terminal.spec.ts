@@ -559,16 +559,16 @@ test.describe('Terminal UI', () => {
   test('Cmd+K opens palette, Escape closes it', async ({ page }) => {
     await connectAsGuest(page);
     await page.keyboard.press('ControlOrMeta+k');
-    await expect(page.locator('[data-cmdk-dialog]')).toBeVisible({ timeout: 3000 });
-    // Wait for focus to settle on the cmdk input before typing — without
-    // this guard the test races FocusScope's rAF auto-focus and `theme`
-    // can land in the inline command-input textarea (holomush-ceon).
-    await expect(page.locator('[data-cmdk-input]')).toBeFocused();
+    await expect(page.locator('[data-dialog-content]')).toBeVisible({ timeout: 3000 });
+    // Wait for focus to settle on the command input before typing — without
+    // this guard the test races bits-ui FocusScope's rAF auto-focus and
+    // `theme` can land in the inline command-input textarea (holomush-ceon).
+    await expect(page.locator('[data-command-input]')).toBeFocused();
     // Type to filter
     await page.keyboard.type('theme');
-    await expect(page.locator('[data-cmdk-item]').first()).toContainText(/theme/i);
+    await expect(page.locator('[data-command-item]').first()).toContainText(/theme/i);
     await page.keyboard.press('Escape');
-    await expect(page.locator('[data-cmdk-dialog]')).toBeHidden();
+    await expect(page.locator('[data-dialog-content]')).toBeHidden();
   });
 
   test('Cmd+B toggles rail visibility', async ({ page }) => {
@@ -638,6 +638,6 @@ test.describe('Terminal UI', () => {
       window.dispatchEvent(ev);
     });
     // Palette must not open
-    await expect(page.locator('[data-cmdk-dialog]')).toBeHidden();
+    await expect(page.locator('[data-dialog-content]')).toBeHidden();
   });
 });

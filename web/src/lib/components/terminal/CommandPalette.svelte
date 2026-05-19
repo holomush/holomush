@@ -3,7 +3,7 @@
   Copyright 2026 HoloMUSH Contributors
 -->
 <script lang="ts">
-  import { Command } from 'cmdk-sv';
+  import { Command, Dialog } from 'bits-ui';
   import {
     uiPrefs,
     openPalette,
@@ -62,50 +62,58 @@
 
 <!--
   Controlled-mode: pass `open` one-way and route close through onOpenChange.
-  Two-way `bind:open={$store.field}` through cmdk-sv (Svelte 4 compat) into
-  bits-ui v2 ($bindable) is unreliable on rapid open/close — the writeback
-  to the runes-mode store-field expression doesn't always settle before the
-  next event cycle. Controlled mode keeps the store as the single source
-  of truth (holomush-ceon).
+  Bind-through to a store-field expression is unreliable on rapid open/close
+  in runes mode — the writeback doesn't always settle before the next event
+  cycle. Controlled mode keeps the store as the single source of truth
+  (holomush-ceon).
 -->
-<Command.Dialog
+<Dialog.Root
   open={$uiPrefs.paletteOpen}
-  label="Command palette"
   onOpenChange={(open: boolean) => {
     if (open) openPalette(); else closePalette();
   }}
 >
-  <!-- autofocus={true} kicks cmdk-sv's 10ms focus action; combined with
-       FocusScope's rAF auto-focus this gives two paths to focus the input
-       before user keystrokes can race past dialog open. -->
-  <Command.Input
-    name="command-palette-query"
-    placeholder="Type a command…"
-    autofocus={true}
-  />
-  <Command.List>
-    <Command.Empty>No matches</Command.Empty>
-    {#each items as item (item.id)}
-      <Command.Item value={item.label} onSelect={() => runAndClose(item)}>
-        <span class="pl-label">{item.label}</span>
-        {#if item.hint}<kbd class="pl-hint">{item.hint}</kbd>{/if}
-      </Command.Item>
-    {/each}
-  </Command.List>
-</Command.Dialog>
+  <Dialog.Portal>
+    <Dialog.Overlay class="pl-overlay" />
+    <Dialog.Content class="pl-content">
+      <Dialog.Title class="sr-only">Command palette</Dialog.Title>
+      <Dialog.Description class="sr-only">
+        Search and run client commands.
+      </Dialog.Description>
+      <Command.Root label="Command palette">
+        <Command.Input
+          name="command-palette-query"
+          placeholder="Type a command…"
+        />
+        <Command.List>
+          <Command.Viewport>
+            <Command.Empty>No matches</Command.Empty>
+            {#each items as item (item.id)}
+              <Command.Item value={item.label} onSelect={() => runAndClose(item)}>
+                <span class="pl-label">{item.label}</span>
+                {#if item.hint}<kbd class="pl-hint">{item.hint}</kbd>{/if}
+              </Command.Item>
+            {/each}
+          </Command.Viewport>
+        </Command.List>
+      </Command.Root>
+    </Dialog.Content>
+  </Dialog.Portal>
+</Dialog.Root>
 
 <style>
-  :global([data-cmdk-dialog]) {
+  :global(.pl-overlay) {
     position: fixed;
     inset: 0;
     z-index: 200;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding-top: 15vh;
     background: rgba(0,0,0,0.4);
   }
-  :global([data-cmdk-root]) {
+  :global(.pl-content) {
+    position: fixed;
+    top: 15vh;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 201;
     width: min(560px, 92vw);
     background: var(--color-card);
     border: 1px solid var(--color-border);
@@ -113,8 +121,13 @@
     box-shadow: 0 16px 48px rgba(0,0,0,0.5);
     overflow: hidden;
     font-family: inherit;
+    outline: none;
   }
-  :global([data-cmdk-input]) {
+  :global([data-command-root]) {
+    display: flex;
+    flex-direction: column;
+  }
+  :global([data-command-input]) {
     width: 100%;
     padding: 12px 14px;
     background: transparent;
@@ -124,12 +137,12 @@
     font-size: 14px;
     border-bottom: 1px solid var(--color-border);
   }
-  :global([data-cmdk-list]) {
+  :global([data-command-list]) {
     max-height: 320px;
     overflow-y: auto;
     padding: 4px;
   }
-  :global([data-cmdk-item]) {
+  :global([data-command-item]) {
     display: flex; align-items: center; justify-content: space-between;
     gap: 8px;
     padding: 8px 10px;
@@ -138,14 +151,23 @@
     font-size: 13px;
     cursor: pointer;
   }
-  :global([data-cmdk-item][data-selected="true"]) {
+  :global([data-command-item][data-selected]) {
     background: color-mix(in srgb, var(--color-primary) 18%, transparent);
   }
-  :global([data-cmdk-empty]) {
+  :global([data-command-empty]) {
     padding: 16px;
     text-align: center;
     color: var(--color-status-text);
     font-size: 12px;
+  }
+  :global(.sr-only) {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
   .pl-hint {
     font-family: inherit; font-size: 10px;

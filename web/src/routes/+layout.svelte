@@ -73,7 +73,7 @@
       clearLines();
       return;
     }
-    // Esc: no-op at this level — palette is handled by cmdk-sv, composer by
+    // Esc: no-op at this level — palette is handled by bits-ui Dialog, composer by
     // its own window listener (both installed with capture:true and fire
     // before this handler), and CommandInput's local Esc clears its draft.
   }
