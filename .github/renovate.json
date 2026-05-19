@@ -31,9 +31,10 @@
       "addLabels": ["docker"]
     },
     {
-      "description": "Auto-merge npm minor/patch (incl. lockfile-only updates)",
+      "description": "Batch all non-major npm/pnpm bumps into a single PR",
       "matchManagers": ["npm"],
       "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "npm dependencies",
       "automerge": true,
       "addLabels": ["npm"]
     },
