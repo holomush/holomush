@@ -16,6 +16,9 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Snapshot RPC as Source of Truth for Current-State Presence](holomush-da2q-snapshot-rpc-source-of-truth-presence.md) | 2026-05-19 | Accepted | `holomush-da2q` |
+| [Current-State Presence Snapshot Exempt from I-PRIV-1 Temporal Floor](holomush-o46k-presence-snapshot-exempt-from-priv-floor.md) | 2026-05-19 | Accepted | `holomush-o46k` |
+| [Introduce list_presence ABAC Action with Default-Deny and Same-Location Seed](holomush-lp65-list-presence-abac-action.md) | 2026-05-19 | Accepted | `holomush-lp65` |
 | [Plugin Manifests Opt-In to history_scope (vs Spec's Exempt-List Framing)](holomush-jhl5-plugin-history-scope-opt-in.md) | 2026-05-17 | Accepted | `holomush-jhl5` |
 | [Hard-Gate (Current-Location-Only) for Location-Stream History Reads](holomush-wxty-hard-gate-location-stream-history.md) | 2026-05-17 | Accepted | `holomush-wxty` |
 | [Per-Session Attach Intervals on SessionInfo for Multi-Session Continuity](holomush-rc8b-per-session-attach-intervals.md) | 2026-05-17 | Accepted | `holomush-rc8b` |
