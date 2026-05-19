@@ -504,20 +504,24 @@ tasks:
       - bash scripts/lint-docs-paths-sync.sh
 
   lint:docs-symmetry:
-    desc: Verify AGENTS.md and CLAUDE.md plugin-runtime-symmetry subsection is byte-identical.
+    desc: Verify AGENTS.md is a symlink to CLAUDE.md (single source of truth — drift structurally impossible).
     cmds:
       - |
         set -euo pipefail
-        a=$(awk '/<!-- BEGIN: plugin-runtime-symmetry -->/,/<!-- END: plugin-runtime-symmetry -->/' AGENTS.md)
-        c=$(awk '/<!-- BEGIN: plugin-runtime-symmetry -->/,/<!-- END: plugin-runtime-symmetry -->/' CLAUDE.md)
-        if [ -z "$a" ]; then echo "ERROR: AGENTS.md missing plugin-runtime-symmetry anchored subsection"; exit 1; fi
-        if [ -z "$c" ]; then echo "ERROR: CLAUDE.md missing plugin-runtime-symmetry anchored subsection"; exit 1; fi
-        if [ "$a" != "$c" ]; then
-          echo "ERROR: plugin-runtime-symmetry subsection diverged between AGENTS.md and CLAUDE.md"
-          diff <(echo "$a") <(echo "$c") || true
+        if [ ! -f CLAUDE.md ]; then
+          echo "ERROR: CLAUDE.md is missing (this is the source-of-truth file)"; exit 1
+        fi
+        if [ ! -L AGENTS.md ]; then
+          echo "ERROR: AGENTS.md is not a symlink — it MUST be a relative symlink to CLAUDE.md (holomush-f7t2)."
+          echo "Fix: rm AGENTS.md && ln -s CLAUDE.md AGENTS.md"
           exit 1
         fi
-        echo "AGENTS.md and CLAUDE.md plugin-runtime-symmetry subsection is byte-identical."
+        target=$(readlink AGENTS.md)
+        if [ "$target" != "CLAUDE.md" ]; then
+          echo "ERROR: AGENTS.md symlinks to '$target', expected 'CLAUDE.md' (relative, same directory)."
+          exit 1
+        fi
+        echo "AGENTS.md → CLAUDE.md symlink intact."
 
   # ──────────────────────────────────────────
   # Formatters (called by `task fmt`)

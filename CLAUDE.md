@@ -2,6 +2,8 @@
 
 This document provides instructions for AI coding assistants working on HoloMUSH.
 
+> **`AGENTS.md` is a relative symlink to this file** — single source of truth, so the two AI-tooling entry points (Claude Code reads `CLAUDE.md`; OpenAI/Codex reads `AGENTS.md`) cannot drift. Always edit `CLAUDE.md`. `task lint:docs-symmetry` enforces the symlink integrity (`holomush-f7t2`).
+
 ## Project Overview
 
 HoloMUSH is a modern MUSH platform with:
