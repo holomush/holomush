@@ -32,7 +32,7 @@ type fakeJSMsg struct {
 
 func (f *fakeJSMsg) Headers() nats.Header { return f.headers }
 func (f *fakeJSMsg) Data() []byte         { return f.data }
-func (f *fakeJSMsg) Subject() string { panic("not used in StoreFromMessage tests") }
+func (f *fakeJSMsg) Subject() string      { panic("not used in StoreFromMessage tests") }
 
 func (f *fakeJSMsg) Reply() string { panic("not used in StoreFromMessage tests") }
 

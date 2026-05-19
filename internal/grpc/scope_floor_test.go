@@ -27,18 +27,26 @@ func TestStreamScopeFloor(t *testing.T) {
 		stream string
 		want   time.Time
 	}{
-		{"location current — non-guest", &session.Info{CharacterID: charID, LocationID: locID, LocationArrivedAt: arrival},
-			"location:" + locID.String(), arrival},
-		{"location current — guest, arrival later than guest_created",
+		{
+			"location current — non-guest", &session.Info{CharacterID: charID, LocationID: locID, LocationArrivedAt: arrival},
+			"location:" + locID.String(), arrival,
+		},
+		{
+			"location current — guest, arrival later than guest_created",
 			&session.Info{CharacterID: charID, LocationID: locID, LocationArrivedAt: arrival, IsGuest: true, GuestCharacterCreatedAt: guestCreated},
-			"location:" + locID.String(), arrival},
-		{"location current — guest, guest_created later than arrival (shouldn't happen but MAX wins)",
+			"location:" + locID.String(), arrival,
+		},
+		{
+			"location current — guest, guest_created later than arrival (shouldn't happen but MAX wins)",
 			&session.Info{CharacterID: charID, LocationID: locID, LocationArrivedAt: time.Time{}, IsGuest: true, GuestCharacterCreatedAt: guestCreated},
-			"location:" + locID.String(), guestCreated},
-		{"scene member — non-guest, uses JoinedAt",
+			"location:" + locID.String(), guestCreated,
+		},
+		{
+			"scene member — non-guest, uses JoinedAt",
 			&session.Info{CharacterID: charID, FocusMemberships: []session.FocusMembership{
 				{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: sceneJoin},
-			}}, "scene:" + sceneID.String() + ":ic", sceneJoin},
+			}}, "scene:" + sceneID.String() + ":ic", sceneJoin,
+		},
 		{"character own stream — no floor", &session.Info{CharacterID: charID}, "character:" + charID.String(), time.Time{}},
 	}
 	for _, tc := range cases {
@@ -85,8 +93,11 @@ func TestMaxStreamScopeFloor(t *testing.T) {
 		{"location + character — MAX is location", []string{locStream, charStream}, arrival},
 		{"location + scene — MAX is scene (later)", []string{locStream, sceneStream}, sceneJoin},
 		{"scene + location — order-independent — MAX is scene", []string{sceneStream, locStream}, sceneJoin},
-		{"unknown subjects fall through to zero — MAX with known still wins",
-			[]string{"global", "events.gid.location.unknown", locStream}, arrival},
+		{
+			"unknown subjects fall through to zero — MAX with known still wins",
+			[]string{"global", "events.gid.location.unknown", locStream},
+			arrival,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

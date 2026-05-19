@@ -64,7 +64,8 @@ func TestManager_INVS5_ParityAcrossRuntimes(t *testing.T) {
 			luaHost := pluginlua.NewHostWithFunctions(hostfunc.New(nil))
 			t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
-			mgr, mgrErr := plugins.NewManager(pluginsDir,
+			mgr, mgrErr := plugins.NewManager(
+				pluginsDir,
 				plugins.WithLuaHost(luaHost),
 				plugins.WithVerbRegistry(core.NewVerbRegistry()),
 			)
@@ -99,7 +100,8 @@ func TestManager_INVS5_ParityAcrossRuntimes(t *testing.T) {
 			})
 			t.Cleanup(func() { _ = host.Close(context.Background()) })
 
-			mgr, mgrErr := plugins.NewManager(pluginsDir,
+			mgr, mgrErr := plugins.NewManager(
+				pluginsDir,
 				plugins.WithVerbRegistry(core.NewVerbRegistry()),
 			)
 			require.NoError(t, mgrErr)

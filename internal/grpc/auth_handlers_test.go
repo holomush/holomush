@@ -2338,11 +2338,11 @@ func TestGuestSessionCarriesCharacterCreatedAt(t *testing.T) {
 	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
 		Return([]*world.Character{
 			{
-				ID:        charID,
-				PlayerID:  playerID,
-				Name:      "Sapphire Diamond",
+				ID:         charID,
+				PlayerID:   playerID,
+				Name:       "Sapphire Diamond",
 				LocationID: &locID,
-				CreatedAt: charCreatedAt,
+				CreatedAt:  charCreatedAt,
 			},
 		}, nil)
 

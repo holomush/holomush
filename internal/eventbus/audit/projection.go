@@ -43,10 +43,15 @@ const persistTimeout = DefaultDrainTimeout
 // projection holds the durable pull consumer and the INSERT loop.
 type projection struct {
 	consumer jetstream.Consumer
-	pool     *pgxpool.Pool
-	cfg      Config
-	owners   *OwnerMap // may be nil: nil ⇒ host owns every subject
-	cc       jetstream.ConsumeContext
+	// js is retained solely so AwaitDrained (a test helper) can resolve
+	// the underlying stream to read its LastSeq. Avoids a cold-start race
+	// where the consumer's pending count momentarily reports 0 before it
+	// has synced with a just-published message.
+	js     jetstream.JetStream
+	pool   *pgxpool.Pool
+	cfg    Config
+	owners *OwnerMap // may be nil: nil ⇒ host owns every subject
+	cc     jetstream.ConsumeContext
 	// workerCtx is stored at start() time so persist() can derive its
 	// Exec context from it. Subsystem.Stop cancels workerCtx; any
 	// pending INSERT then cancels as well, so drain() cannot return
@@ -81,7 +86,7 @@ func newProjection(ctx context.Context, js jetstream.JetStream, pool *pgxpool.Po
 			With("consumer", cfg.ConsumerName).
 			Wrap(err)
 	}
-	return &projection{consumer: cons, pool: pool, cfg: cfg, owners: cfg.Owners}, nil
+	return &projection{consumer: cons, js: js, pool: pool, cfg: cfg, owners: cfg.Owners}, nil
 }
 
 // start attaches the Consume callback synchronously so Subsystem.Start
@@ -294,15 +299,40 @@ func (p *projection) drain(ctx context.Context) error {
 	}
 }
 
-// awaitDrained polls ConsumerInfo until NumPending and NumAckPending are
-// both zero, or until timeout. Uses time.After (not time.Sleep) because
-// forbidigo bans time.Sleep across the eventbus package tree.
+// awaitDrained polls ConsumerInfo until the consumer's AckFloor has
+// caught up to the stream's LastSeq AND there are no acks in flight, or
+// until timeout. Anchoring to the stream's LastSeq (rather than only the
+// consumer's NumPending) eliminates a cold-start race:
+//
+// When AwaitDrained is called immediately after a publish, the consumer's
+// view can briefly report NumPending==0 and NumAckPending==0 before it
+// has synced with the stream and observed the new message. A check that
+// only looks at consumer pending counts returns "drained" in that window,
+// causing tests to query the audit table before the INSERT has run
+// (observed flake: TestProjectionDrainsPublishedMessageToAuditTable
+// returning sql.ErrNoRows on projection_test.go:159, bd holomush-1nl7).
+//
+// Stream.Info() is authoritative for "is there a message?" — if a publish
+// has been ack'd by the server, LastSeq reflects it. We wait until the
+// consumer's AckFloor.Stream has advanced through that LastSeq, which
+// requires the consumer to have observed AND acknowledged the message.
+//
+// Uses time.After (not time.Sleep) because the forbidigo linter bans
+// time.Sleep across the eventbus package tree.
 func (p *projection) awaitDrained(t AwaitT, timeout time.Duration) {
 	t.Helper()
+	stream, err := p.js.Stream(context.Background(), eventbus.StreamName)
+	if err != nil {
+		t.Fatalf("audit projection awaitDrained: stream lookup failed: %v", err)
+		return
+	}
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		info, err := p.consumer.Info(context.Background())
-		if err == nil && info.NumPending == 0 && info.NumAckPending == 0 {
+		cInfo, cErr := p.consumer.Info(context.Background())
+		sInfo, sErr := stream.Info(context.Background())
+		if cErr == nil && sErr == nil &&
+			cInfo.NumAckPending == 0 &&
+			cInfo.AckFloor.Stream >= sInfo.State.LastSeq {
 			return
 		}
 		<-time.After(AwaitPollInterval)

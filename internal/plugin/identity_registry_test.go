@@ -309,9 +309,9 @@ func (h *unloadStubHost) DeliverCommand(_ context.Context, _ string, _ pluginsdk
 func (h *unloadStubHost) QuerySessionStreams(_ context.Context, _ string, _ SessionStreamsRequest) ([]string, error) {
 	return nil, nil
 }
-func (h *unloadStubHost) Plugins() []string                              { return nil }
-func (h *unloadStubHost) PluginEmitRegistry(_ string) ([]string, bool)   { return nil, false }
-func (h *unloadStubHost) Close(_ context.Context) error                  { return nil }
+func (h *unloadStubHost) Plugins() []string                            { return nil }
+func (h *unloadStubHost) PluginEmitRegistry(_ string) ([]string, bool) { return nil, false }
+func (h *unloadStubHost) Close(_ context.Context) error                { return nil }
 
 // unloadStubPolicyInstaller satisfies PluginPolicyInstaller and lets tests
 // inject a configurable error from RemovePluginPolicies.

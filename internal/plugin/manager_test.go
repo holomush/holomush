@@ -2055,7 +2055,8 @@ func TestManagerLoadAll_INVS5(t *testing.T) {
 			luaHost := pluginlua.NewHostWithFunctions(hostfunc.New(nil))
 			t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
-			mgr, mgrErr := plugins.NewManager(pluginsDir,
+			mgr, mgrErr := plugins.NewManager(
+				pluginsDir,
 				plugins.WithLuaHost(luaHost),
 				plugins.WithVerbRegistry(core.NewVerbRegistry()),
 			)
