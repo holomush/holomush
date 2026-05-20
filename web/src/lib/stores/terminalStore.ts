@@ -3,9 +3,20 @@
 
 import { writable, get } from 'svelte/store';
 
+// Mirrors EventRenderer.Props.event — the proto GameEvent is the source of
+// truth (web_pb.ts), and this narrows it to the fields the renderers consume.
+// Keep these in sync; structural assignability lets routeEvent pass a full
+// GameEvent here without an explicit cast.
 export interface TerminalLine {
   id: string;
-  event: { type: string; characterName: string; text: string; channel?: number; metadata?: unknown };
+  event: {
+    type: string;
+    category: string;
+    format: string;
+    actor: string;
+    text: string;
+    metadata?: Record<string, unknown>;
+  };
   replayed: boolean;
   timestamp: Date;
 }

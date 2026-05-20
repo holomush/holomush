@@ -16,48 +16,36 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
-	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/pkg/errutil"
+	"github.com/holomush/holomush/test/testutil"
 )
 
 // noopInvalidator is a no-op Invalidator for tests that exercise
 // GetOrCreate / Resolve / Participants but never Add / Rotate.
 var noopInvalidator = func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil }
 
+// newTestPGPool returns a connection string for a fresh, fully-migrated
+// database, backed by a process-wide shared postgres container.
+//
+// Each call yields a new database created from a pre-migrated template
+// via CREATE DATABASE … WITH TEMPLATE (fast — typically <100ms per call),
+// so the 13 specs that need their own schema-isolated DB no longer pay
+// the 5–10s container-startup cost each. The shared container is
+// initialized once per test binary via testutil.SharedPostgres; database
+// cleanup is registered by testutil.FreshDatabase via t.Cleanup. The
+// returned no-op closure preserves the previous (connStr, teardown)
+// caller contract.
 func newTestPGPool(t *testing.T) (string, func()) {
 	t.Helper()
-	ctx := context.Background()
-	pgContainer, err := postgres.Run(
-		ctx,
-		"postgres:18-alpine",
-		postgres.WithDatabase("test"),
-		postgres.WithUsername("test"),
-		postgres.WithPassword("test"),
-		postgres.BasicWaitStrategies(),
-	)
-	if err != nil {
-		t.Fatalf("failed to start postgres container: %v", err)
-	}
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		t.Fatalf("failed to get connection string: %v", err)
-	}
-	migrator, err := store.NewMigrator(connStr)
-	if err != nil {
-		t.Fatalf("failed to create migrator: %v", err)
-	}
-	if err := migrator.Up(); err != nil {
-		t.Fatalf("failed to run migrations: %v", err)
-	}
-	migrator.Close()
-	return connStr, func() { _ = pgContainer.Terminate(ctx) }
+	env := testutil.SharedPostgres(t)
+	connStr := testutil.FreshDatabase(t, env)
+	return connStr, func() {}
 }
 
 func newTestProvider(t *testing.T) kek.Provider {

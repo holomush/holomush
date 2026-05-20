@@ -3,7 +3,7 @@
   Copyright 2026 HoloMUSH Contributors
 -->
 <script lang="ts">
-  import { Home, MessageSquare, Map, NotebookPen, Settings } from 'lucide-svelte';
+  import { Home, MessageSquare, Map, NotebookPen, Settings } from '@lucide/svelte';
   import { uiPrefs, toggleDensity } from '$lib/stores/uiPrefsStore';
   import {
     themePreferences,

@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/go-connections/nat"
 	"github.com/jackc/pgx/v5"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -131,9 +130,9 @@ func adminConnectionString(ctx context.Context, container *postgres.PostgresCont
 		return "", fmt.Errorf("resolve container host: %w", err)
 	}
 
-	port, err := container.MappedPort(ctx, nat.Port("5432/tcp"))
+	port, err := container.MappedPort(ctx, "5432/tcp")
 	if err != nil {
-		port, err = container.MappedPort(ctx, nat.Port("5432"))
+		port, err = container.MappedPort(ctx, "5432")
 		if err != nil {
 			return "", fmt.Errorf("resolve postgres port: %w", err)
 		}

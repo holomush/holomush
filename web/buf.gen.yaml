@@ -1,11 +1,23 @@
 # buf.gen.yaml — TypeScript ConnectRPC code generation
+#
+# `include_imports: true` makes both plugins emit code for transitive
+# imports (notably `buf/validate/validate.proto` from
+# buf.build/bufbuild/protovalidate, which the generated _pb.ts files
+# reference at runtime via `file_buf_validate_validate`). Without it,
+# the import path resolves to a missing file and svelte-check fails.
+#
+# `include_wkt` is left at its default (false): google/protobuf/* well-
+# known types are supplied by `@bufbuild/protobuf` and MUST NOT be
+# regenerated locally — doing so creates duplicate runtime registries.
 version: v2
 plugins:
   - remote: buf.build/bufbuild/es
     out: src/lib/connect
     opt: target=ts
+    include_imports: true
   - remote: buf.build/connectrpc/es
     out: src/lib/connect
     opt: target=ts
+    include_imports: true
 inputs:
   - directory: ../api/proto
