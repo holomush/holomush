@@ -1410,3 +1410,23 @@ func (s *SceneStore) classifyTransitionMiss(ctx context.Context, id string, span
 		With("current_state", currentState).
 		Errorf("scene in state %q cannot be %sed", currentState, op)
 }
+
+// dotStyleSceneSubject returns the NATS dot-style entity-level subject
+// for a scene per substrate INV-S4: events.<gameID>.scene.<sceneID>.
+// Used for lifecycle/system events that target the scene itself, not
+// a facet. ADR holomush-s9nu.
+func dotStyleSceneSubject(gameID, sceneID string) string {
+	return "events." + gameID + ".scene." + sceneID
+}
+
+// dotStyleSceneSubjectIC returns the NATS dot-style IC-facet subject:
+// events.<gameID>.scene.<sceneID>.ic.
+func dotStyleSceneSubjectIC(gameID, sceneID string) string {
+	return dotStyleSceneSubject(gameID, sceneID) + ".ic"
+}
+
+// dotStyleSceneSubjectOOC returns the NATS dot-style OOC-facet subject:
+// events.<gameID>.scene.<sceneID>.ooc.
+func dotStyleSceneSubjectOOC(gameID, sceneID string) string {
+	return dotStyleSceneSubject(gameID, sceneID) + ".ooc"
+}

@@ -72,13 +72,15 @@ type SceneServiceImpl struct {
 	scenev1.UnimplementedSceneServiceServer
 	store     sceneStorer
 	eventSink pluginsdk.EventSink
+	gameID    string // per substrate INV-S4. Defaults to "main"; wired in Init.
 }
 
 // NewSceneServiceImpl returns a service backed by the given store.
 // Used by tests; main() constructs the service directly with a nil store
-// and assigns it after Init.
+// and assigns it after Init. The gameID defaults to "main" matching the
+// substrate default (see internal/grpc/server.go:181).
 func NewSceneServiceImpl(store sceneStorer) *SceneServiceImpl {
-	return &SceneServiceImpl{store: store}
+	return &SceneServiceImpl{store: store, gameID: "main"}
 }
 
 // SetEventSink installs the host callback event sink used for service-owned
@@ -220,7 +222,7 @@ func (s *SceneServiceImpl) sceneCreatedIntent(row *SceneRow) (pluginsdk.EmitInte
 	}
 
 	return pluginsdk.EmitIntent{
-		Subject: "scene:" + row.ID,
+		Subject: dotStyleSceneSubject(s.gameID, row.ID),
 		Type:    pluginsdk.HostEventTypeSystem,
 		Payload: string(payload),
 	}, nil

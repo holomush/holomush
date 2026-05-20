@@ -207,11 +207,17 @@ Each scene gets two event streams:
 
 | Stream | Convention | Content | Archived in log |
 |--------|-----------|---------|-----------------|
-| IC | `scene:<id>:ic` | Poses, says, arrives, leaves, system | Yes |
-| OOC | `scene:<id>:ooc` | OOC chat, pose order notifications | Never |
+| IC | `events.<game_id>.scene.<scene_id>.ic` | Poses, says, arrives, leaves, system | Yes |
+| OOC | `events.<game_id>.scene.<scene_id>.ooc` | OOC chat, pose order notifications | Never |
 | Notifications | `notifications:<character_id>` | Cross-scene activity markers for non-focused members | Never |
 
 Grid locations continue using `location:<id>` as today.
+
+> **Note (Phase 4 — holomush-5rh.13):** Scene IC/OOC rows were migrated from
+> colon-style (`scene:<id>:ic`) to NATS dot-style subjects
+> (`events.<game_id>.scene.<scene_id>.ic`) as part of the Phase 4 scene-aware
+> substrate work. Other entries (location, character, notifications) remain
+> colon-style and are tracked separately by holomush-rops. ADR: holomush-s9nu.
 
 ### 3.2 Command Routing
 
