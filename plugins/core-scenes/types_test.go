@@ -3,7 +3,12 @@
 
 package main
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestSceneStateIsValidReturnsTrueForKnownStates(t *testing.T) {
 	cases := []SceneState{
@@ -53,4 +58,21 @@ func TestPoseOrderModeIsValidReturnsFalseForUnknownMode(t *testing.T) {
 	if PoseOrderMode("bogus").IsValid() {
 		t.Error("PoseOrderMode(\"bogus\").IsValid() = true, want false")
 	}
+}
+
+func TestParticipantsWithPoseMeta_ZeroValueValid(t *testing.T) {
+	t.Parallel()
+	var pm ParticipantsWithPoseMeta
+	assert.Equal(t, uint32(0), pm.TotalPoseCount)
+	assert.Empty(t, pm.Participants)
+}
+
+func TestParticipantWithPoseMeta_NeverPosed_NilFields(t *testing.T) {
+	t.Parallel()
+	p := ParticipantWithPoseMeta{
+		CharacterID: "char-alice",
+		JoinedAt:    time.Now(),
+	}
+	assert.Nil(t, p.LastPoseAt)
+	assert.Nil(t, p.LastPoseSeq)
 }
