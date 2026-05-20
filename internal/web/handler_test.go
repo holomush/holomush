@@ -99,6 +99,10 @@ type mockCoreClient struct {
 	revokeOtherResp *corev1.RevokeOtherPlayerSessionsResponse
 	revokeOtherErr  error
 	revokeOtherReq  *corev1.RevokeOtherPlayerSessionsRequest // captured for assertion
+
+	listFocusPresenceResp *corev1.ListFocusPresenceResponse
+	listFocusPresenceErr  error
+	listFocusPresenceReq  *corev1.ListFocusPresenceRequest // captured for assertion
 }
 
 func (m *mockCoreClient) HandleCommand(_ context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
@@ -203,6 +207,11 @@ func (m *mockCoreClient) RevokePlayerSession(_ context.Context, req *corev1.Revo
 func (m *mockCoreClient) RevokeOtherPlayerSessions(_ context.Context, req *corev1.RevokeOtherPlayerSessionsRequest) (*corev1.RevokeOtherPlayerSessionsResponse, error) {
 	m.revokeOtherReq = req
 	return m.revokeOtherResp, m.revokeOtherErr
+}
+
+func (m *mockCoreClient) ListFocusPresence(_ context.Context, req *corev1.ListFocusPresenceRequest) (*corev1.ListFocusPresenceResponse, error) {
+	m.listFocusPresenceReq = req
+	return m.listFocusPresenceResp, m.listFocusPresenceErr
 }
 
 func TestHandler_SendCommand_Success(t *testing.T) {
@@ -779,4 +788,41 @@ func TestWebListSessionStreamsForwardsPlayerSessionToken(t *testing.T) {
 	require.NotNil(t, client.listSessionStreamsReq, "ListSessionStreams should have been called")
 	assert.Equal(t, token, client.listSessionStreamsReq.GetPlayerSessionToken())
 	assert.Equal(t, "sess-5", client.listSessionStreamsReq.GetSessionId())
+}
+
+func TestWebListFocusPresenceForwardsToCoreService(t *testing.T) {
+	sessID := "sess-1"
+	token := "tok-from-header"
+	coreResp := &corev1.ListFocusPresenceResponse{
+		Context:   corev1.PresenceContext_PRESENCE_CONTEXT_LOCATION,
+		ContextId: "01HYXLOCATION0000000000001",
+		Entries: []*corev1.PresenceEntry{
+			{
+				CharacterId:   "01HYXCHARALICE0000000000AA",
+				CharacterName: "alice",
+				State:         corev1.PresenceState_PRESENCE_STATE_ACTIVE,
+			},
+		},
+	}
+	client := &mockCoreClient{
+		listFocusPresenceResp: coreResp,
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebListFocusPresenceRequest{SessionId: sessID})
+	req.Header().Set(headerInjectSessionToken, token)
+
+	resp, err := h.WebListFocusPresence(context.Background(), req)
+	require.NoError(t, err)
+
+	require.NotNil(t, client.listFocusPresenceReq, "ListFocusPresence should have been called")
+	assert.Equal(t, sessID, client.listFocusPresenceReq.GetSessionId())
+	assert.Equal(t, token, client.listFocusPresenceReq.GetPlayerSessionToken())
+
+	msg := resp.Msg
+	assert.Equal(t, webv1.WebPresenceContext_WEB_PRESENCE_CONTEXT_LOCATION, msg.GetContext())
+	assert.Equal(t, "01HYXLOCATION0000000000001", msg.GetContextId())
+	require.Len(t, msg.GetEntries(), 1)
+	assert.Equal(t, "alice", msg.GetEntries()[0].GetCharacterName())
+	assert.Equal(t, webv1.WebPresenceState_WEB_PRESENCE_STATE_ACTIVE, msg.GetEntries()[0].GetState())
 }

@@ -290,6 +290,15 @@ func (c *Client) RevokeOtherPlayerSessions(ctx context.Context, req *corev1.Revo
 	return resp, nil
 }
 
+// ListFocusPresence returns the presence entries for the session's focus context.
+func (c *Client) ListFocusPresence(ctx context.Context, req *corev1.ListFocusPresenceRequest) (*corev1.ListFocusPresenceResponse, error) {
+	resp, err := c.client.ListFocusPresence(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "ListFocusPresence").Wrap(err)
+	}
+	return resp, nil
+}
+
 // GetContent retrieves a single content item by key from the content service.
 func (c *Client) GetContent(ctx context.Context, req *contentv1.GetContentRequest) (*contentv1.GetContentResponse, error) {
 	resp, err := c.contentClient.GetContent(ctx, req)
