@@ -31,7 +31,7 @@ type actorCapturingHost struct {
 
 func (h *actorCapturingHost) Load(context.Context, *Manifest, string) error { return nil }
 func (h *actorCapturingHost) Unload(context.Context, string) error          { return nil }
-func (h *actorCapturingHost) Plugins() []string { return []string{"test-plugin"} }
+func (h *actorCapturingHost) Plugins() []string                             { return []string{"test-plugin"} }
 
 func (h *actorCapturingHost) PluginEmitRegistry(string) ([]string, bool) { return nil, false }
 func (h *actorCapturingHost) Close(context.Context) error                { return nil }
