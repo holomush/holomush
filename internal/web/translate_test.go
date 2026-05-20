@@ -82,6 +82,7 @@ func TestTranslateEvent_Say(t *testing.T) {
 	ev := &corev1.EventFrame{
 		Type:      "core-communication:say",
 		Timestamp: timestamppb.New(timestamppb.Now().AsTime()),
+		ActorId:   "01HYXCHARALICE0000000000AA",
 		Payload:   mustMarshal(t, map[string]string{"character_name": "Alice", "message": "Hello!"}),
 	}
 
@@ -92,6 +93,10 @@ func TestTranslateEvent_Say(t *testing.T) {
 	assert.Equal(t, "speech", got.GetFormat())
 	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetDisplayTarget())
 	assert.Equal(t, "Alice", got.GetActor())
+	// holomush-5b2j.13: actor_id (ULID) is now forwarded from corev1.EventFrame
+	// so the client can key by stable identity (e.g., presence list, self-message
+	// detection) instead of by display name.
+	assert.Equal(t, "01HYXCHARALICE0000000000AA", got.GetActorId())
 	assert.Equal(t, "Hello!", got.GetText())
 	require.NotNil(t, got.GetMetadata())
 	assert.Equal(t, "says", got.GetMetadata().AsMap()["label"])

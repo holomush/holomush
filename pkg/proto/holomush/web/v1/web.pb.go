@@ -455,7 +455,14 @@ type GameEvent struct {
 	EventId       string                 `protobuf:"bytes,9,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"` // ULID; populated from corev1.EventFrame.id
 	// cursor is the opaque pagination cursor for this event. Mirrors
 	// corev1.EventFrame.cursor for reconnect-with-backfill support.
-	Cursor        []byte `protobuf:"bytes,10,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	Cursor []byte `protobuf:"bytes,10,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	// actor_id is the ULID identity of the actor (character/plugin/system),
+	// forwarded from corev1.EventFrame.actor_id. Distinct from `actor` above
+	// which is the display name extracted from the JSON payload — name is for
+	// rendering; actor_id is for stable cross-event keying (e.g., presence
+	// list dedup, self-message detection, ABAC correlation). Empty for events
+	// without a typed actor. Added by holomush-5b2j.13.
+	ActorId       string `protobuf:"bytes,11,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -558,6 +565,13 @@ func (x *GameEvent) GetCursor() []byte {
 		return x.Cursor
 	}
 	return nil
+}
+
+func (x *GameEvent) GetActorId() string {
+	if x != nil {
+		return x.ActorId
+	}
+	return ""
 }
 
 type StreamEventsResponse struct {
@@ -3013,7 +3027,7 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"N\n" +
 	"\x13StreamEventsRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionIdJ\x04\b\x02\x10\x03R\x12replay_from_cursor\"\xc9\x02\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionIdJ\x04\b\x02\x10\x03R\x12replay_from_cursor\"\xe4\x02\n" +
 	"\tGameEvent\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1a\n" +
 	"\bcategory\x18\x02 \x01(\tR\bcategory\x12\x16\n" +
@@ -3025,7 +3039,8 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\bmetadata\x18\b \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12\x19\n" +
 	"\bevent_id\x18\t \x01(\tR\aeventId\x12\x16\n" +
 	"\x06cursor\x18\n" +
-	" \x01(\fR\x06cursor\"\x8e\x01\n" +
+	" \x01(\fR\x06cursor\x12\x19\n" +
+	"\bactor_id\x18\v \x01(\tR\aactorId\"\x8e\x01\n" +
 	"\x14StreamEventsResponse\x122\n" +
 	"\x05event\x18\x01 \x01(\v2\x1a.holomush.web.v1.GameEventH\x00R\x05event\x129\n" +
 	"\acontrol\x18\x02 \x01(\v2\x1d.holomush.web.v1.ControlFrameH\x00R\acontrolB\a\n" +

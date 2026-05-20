@@ -118,6 +118,13 @@ message GameEvent {
   // cursor is the opaque pagination cursor for this event. Mirrors
   // corev1.EventFrame.cursor for reconnect-with-backfill support.
   bytes cursor = 10;
+  // actor_id is the ULID identity of the actor (character/plugin/system),
+  // forwarded from corev1.EventFrame.actor_id. Distinct from `actor` above
+  // which is the display name extracted from the JSON payload — name is for
+  // rendering; actor_id is for stable cross-event keying (e.g., presence
+  // list dedup, self-message detection, ABAC correlation). Empty for events
+  // without a typed actor. Added by holomush-5b2j.13.
+  string actor_id = 11;
 }
 
 message StreamEventsResponse {

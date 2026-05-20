@@ -10,7 +10,10 @@
   import { ControlSignal } from '$lib/connect/holomush/web/v1/web_pb';
   import { routeEvent } from '$lib/stores/eventRouter';
   import { appendLine, clearLines, replayActive } from '$lib/stores/terminalStore';
+  import { createPresenceStore, type PresenceState } from '$lib/presence/store';
+  import { mirrorMovementPresence as mirrorMovementPresenceFn } from '$lib/presence/mirror';
   import { addPresence, removePresence } from '$lib/stores/sidebarStore';
+  import { WebPresenceState, type WebPresenceEntry } from '$lib/connect/holomush/web/v1/web_pb';
   import { themePreferences, terminalBlackOverrideVars } from '$lib/stores/themeStore';
   import { setConnectionStatus } from '$lib/stores/connectionStore';
   import { uiPrefs, setSidebarWidthPx } from '$lib/stores/uiPrefsStore';
@@ -35,6 +38,27 @@
   import type { GameEvent } from '$lib/connect/holomush/web/v1/web_pb';
 
   const client = createClient(WebService, transport);
+
+  // Presence store — keyed by characterId (ULID from snapshot; name as fallback
+  // for live arrive/leave events that don't carry the character ULID on the web wire).
+  const presence = createPresenceStore();
+
+  function presenceStateFromProto(s: WebPresenceState): PresenceState {
+    switch (s) {
+      case WebPresenceState.ACTIVE: return 'ACTIVE';
+      case WebPresenceState.DETACHED: return 'DETACHED';
+      case WebPresenceState.INACTIVE: return 'INACTIVE';
+      default: return 'UNSPECIFIED';
+    }
+  }
+
+  // Bind the testable mirrorMovementPresence helper to the local presence
+  // store and the legacy sidebar functions. The pure function lives in
+  // $lib/presence/mirror and is covered by mirror.test.ts. T12 drops the
+  // legacy parameter once PresenceList.svelte migrates its binding.
+  function mirrorMovementPresence(ev: GameEvent) {
+    mirrorMovementPresenceFn(ev, presence, { add: addPresence, remove: removePresence });
+  }
 
   async function handleStaleSession() {
     // Abort any in-flight stream/backfill before redirecting so post-logout
@@ -292,6 +316,7 @@
             } else {
               if (ev.eventId && seenEventIds.has(ev.eventId)) continue;
               if (ev.eventId) seenEventIds.add(ev.eventId);
+              mirrorMovementPresence(ev);
               routeEvent(ev, false);
             }
           }
@@ -322,6 +347,40 @@
         localSpan.end();
       }
     })();
+
+    // Fetch presence snapshot in parallel with backfill (T11 of holomush-5b2j).
+    // Failures are swallowed — empty presence is the safe fallback.
+    const snapshotFetchPromise = client
+      .webListFocusPresence({ sessionId }, { signal: localController.signal })
+      .catch((err: unknown) => {
+        if (isUnimplementedError(err)) {
+          console.debug('[presence] snapshot unavailable (scene focus not implemented)');
+        } else if (err instanceof Error && err.name === 'AbortError') {
+          // Controller was aborted (reconnect or unmount) — silent.
+        } else {
+          console.warn('[presence] snapshot fetch failed', err);
+        }
+        return { entries: [] as WebPresenceEntry[] };
+      });
+
+    // Bound the wait so a hanging snapshot RPC can't stall the live-buffer
+    // drain. After SNAPSHOT_TIMEOUT_MS we proceed with an empty seed; the
+    // late response is discarded by the `.catch()` above (no unhandled
+    // rejection). Three seconds is well below the gateway's rpcTimeout
+    // (10s) so the timeout only matters when the gateway/server hangs.
+    const SNAPSHOT_TIMEOUT_MS = 3000;
+    const snapshotPromise = Promise.race<{ entries: WebPresenceEntry[] }>([
+      snapshotFetchPromise,
+      new Promise((resolve) => {
+        const timer = window.setTimeout(() => {
+          console.warn('[presence] snapshot timed out; seeding empty');
+          resolve({ entries: [] });
+        }, SNAPSHOT_TIMEOUT_MS);
+        // Clear the timer if the fetch wins so we don't leave a dangling
+        // handle for the remainder of SNAPSHOT_TIMEOUT_MS.
+        void snapshotFetchPromise.finally(() => window.clearTimeout(timer));
+      }),
+    ]);
 
     // Backfill: enumerate streams via WebListSessionStreams, fan-out
     // WebQueryStreamHistory per stream, render as replayed=true. Failures
@@ -369,29 +428,43 @@
         }
       }
     } finally {
+      // Await the snapshot (it was kicked off in parallel with backfill) and
+      // seed the presence store BEFORE draining liveBuffer. This ensures that
+      // Subscribe-buffered arrive/leave events merge INTO the seeded store.
+      //
+      // Guard against stale/aborted invocations: a reconnect or unmount can
+      // race ahead of an older hydrateAndStream() that hasn't reached this
+      // finally block yet — without the guard, the stale snapshot would
+      // overwrite the newer generation's presence state.
+      const snapshot = await snapshotPromise;
+      if (generation === streamGeneration && !localController.signal.aborted) {
+        presence.seed(
+          snapshot.entries.map((e) => ({
+            characterId: e.characterId,
+            name: e.characterName,
+            state: presenceStateFromProto(e.state),
+          })),
+        );
+      }
+
       backfillDone = true;
       if (generation === streamGeneration && !localController.signal.aborted) {
         replayActive.set(false);
         // Drain Subscribe events that arrived during backfill, deduping.
         for (const ev of liveBuffer) {
+          // Mirror every movement event to BOTH presence stores. The
+          // routeEvent path below also calls addPresence/removePresence via
+          // eventRouter for non-replayed events — that's idempotent on the
+          // OLD store (set-based, no name dupes) and only fires for the
+          // non-dedup branch. The mirror call here covers the dedup branch
+          // (where routeEvent is skipped) and ensures the NEW PresenceStore
+          // sees every movement regardless of branch.
+          mirrorMovementPresence(ev);
           if (ev.eventId && seenEventIds.has(ev.eventId)) {
-            // Terminal dedup: suppress duplicate output. But movement events
-            // (arrive/leave) may have been fetched by backfill as historical
-            // (replayed=true, sidebar suppressed) and now need to update the
-            // presence list as a live event. Apply the sidebar delta here so
-            // the presence list stays accurate when two clients connect in
-            // rapid succession.
-            //
-            // TODO(holomush-1tvn.15): Fix backfill to exclude events published
-            // after subscribe started; then this guard can be removed.
-            const evRec = ev as Record<string, unknown>;
-            if (evRec.category === 'movement') {
-              const actor = evRec.actor as string | undefined;
-              if (actor) {
-                if (evRec.type === 'arrive') addPresence(actor);
-                else if (evRec.type === 'leave') removePresence(actor);
-              }
-            }
+            // Terminal dedup: suppress duplicate output. Presence sidebar
+            // update already happened via mirrorMovementPresence above.
+            // TODO(holomush-1tvn.15): once backfill excludes events published
+            // after subscribe started, this whole branch can be removed.
             continue;
           }
           if (ev.eventId) seenEventIds.add(ev.eventId);
