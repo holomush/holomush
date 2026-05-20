@@ -33,7 +33,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/require"
-	postgrestc "github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
@@ -44,9 +43,9 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
-	"github.com/holomush/holomush/internal/store"
 	adminv1 "github.com/holomush/holomush/pkg/proto/holomush/admin/v1"
 	"github.com/holomush/holomush/pkg/proto/holomush/admin/v1/adminv1connect"
+	"github.com/holomush/holomush/test/testutil"
 )
 
 // PlayerCreds holds the credentials seeded for a test operator.
@@ -215,8 +214,10 @@ func StartEmbeddedNATS(t *testing.T) string {
 	return bus.Conn.ConnectedUrl()
 }
 
-// StartPG starts a dedicated Postgres testcontainer with migrations applied
-// and returns an open pgxpool.Pool. Cleanup is registered on t.Cleanup.
+// StartPG returns a pgxpool.Pool bound to a fresh per-test database on the
+// process-wide shared Postgres testcontainer (migrations already applied via
+// the template DB). The container outlives any single test; per-test
+// databases are dropped on t.Cleanup, and the pool is closed on t.Cleanup.
 func StartPG(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	return startPGPool(t)
@@ -470,30 +471,16 @@ func buildServer(t *testing.T, cfg ServerConfig) *Server {
 	}
 }
 
-// startPGPool creates a testcontainer-backed pgxpool.Pool with migrations applied.
+// startPGPool opens a pgxpool.Pool against a fresh per-test database
+// template-cloned from testutil.SharedPostgres. The Postgres container is
+// process-scope (started once per test binary); the database itself is
+// dropped on t.Cleanup, and the pool is closed on t.Cleanup.
 func startPGPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	ctx := context.Background()
 
-	pgContainer, err := postgrestc.Run(
-		ctx,
-		"postgres:18-alpine",
-		postgrestc.WithDatabase("holomush_e2e"),
-		postgrestc.WithUsername("test"),
-		postgrestc.WithPassword("test"),
-		postgrestc.BasicWaitStrategies(),
-	)
-	require.NoError(t, err, "holomushtest.startPGPool: start postgres container")
-
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err, "holomushtest.startPGPool: get connection string")
-
-	migrator, err := store.NewMigrator(connStr)
-	require.NoError(t, err, "holomushtest.startPGPool: create migrator")
-	require.NoError(t, migrator.Up(), "holomushtest.startPGPool: run migrations")
-	migrator.Close() //nolint:errcheck // best-effort cleanup
-
-	t.Cleanup(func() { _ = pgContainer.Terminate(ctx) }) //nolint:errcheck // test cleanup
+	shared := testutil.SharedPostgres(t)
+	connStr := testutil.FreshDatabase(t, shared)
 
 	pool, err := pgxpool.New(ctx, connStr)
 	require.NoError(t, err, "holomushtest.startPGPool: open pool")
