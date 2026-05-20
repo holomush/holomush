@@ -41,6 +41,51 @@ Scenes work triggered the JetStream cutover. Now that the diversion has
 shipped, scenes Phase 4+ can resume on the substrate it pulled into
 existence.
 
+#### Substrate-contract (shipped — `holomush-jg9b`)
+
+The substrate pivots listed above were all in place by mid-May 2026, but the
+formal contract binding uses to substrate had not been written. Epic `jg9b`
+filled that gap.
+
+**What shipped:**
+
+- **INV-S5 (emit-type set-equality)** — startup-time validator that enforces
+  plugin `crypto.emits` manifest declarations match code-registered emit types
+  in both directions (declared-but-unregistered AND registered-but-undeclared
+  both fail load). Shipped as a single coherent change in PR #4049 (`jg9b.3`):
+  substrate cap, binary proto extension, Lua Load-pass, and adoption by
+  `core-scenes`. Orientation page shipped via PR #4137 (`jg9b.4`).
+- **Boundary invariants** (INV-S1 through INV-S10) — codified in the substrate-
+  contract spec below. Key ones: substrate stays domain-free (INV-S2), Go+Lua
+  runtime parity for every new host RPC (INV-S3), per-plugin Postgres schema
+  isolation enforced by Postgres roles (INV-S6), ABAC engine stays out of the
+  scene-log read path (INV-S9).
+
+**Future primitives named but not yet built (INV-S7):**
+
+`eventkit` (`pkg/plugin/eventkit/`) and `groupkit` (`pkg/plugin/groupkit/`) are
+co-designed in the substrate-contract spec as SDK bundles for joint patterns
+across uses. INV-S7 mandates N=2 consumer validation before either primitive
+lands as substrate code — the second consumer (`0sc.12` channels rework) must
+adopt cleanly before any extraction. Both are named here so future brainstorms
+know they exist; neither has code yet.
+
+**Unblocked by `jg9b.3`:**
+
+- **Scenes Phase 4** (`5rh.13`) — IC/OOC event emission + pose order. Was
+  blocked on INV-S5 enforcement landing (Phase 4 will add `crypto.emits:
+  [scene_ic, scene_ooc]` to core-scenes, which is only safe with the
+  fail-closed validator in place).
+- **Channels rework** (`0sc.12`) — channel plugin rebuild on plugin ABAC
+  substrate. Depends on the substrate contract being written so the channels
+  design brainstorm binds to the correct invariants (esp. INV-S7 for groupkit
+  adoption).
+
+**Specs:**
+
+- [Substrate-contract design](superpowers/specs/2026-05-16-social-spaces-substrate-contract.md) — boundary invariants, substrate inventory, INV-S1 – INV-S10
+- [INV-S5 mechanism design](superpowers/specs/2026-05-17-inv-s5-mechanism-design.md) — runtime validator (Load-pass + proto extension)
+
 #### Uses (in development, in priority order)
 
 | Use          | Epic           | Frontier bead                                                | State                                    |
