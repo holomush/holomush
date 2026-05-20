@@ -1235,3 +1235,103 @@ func TestKickFromScene_EmitsSceneLeaveIC_ReasonKicked(t *testing.T) {
 	assert.Contains(t, found.Payload, `"reason":"kicked"`)
 	assert.Contains(t, found.Payload, `"removed_by":"char-owner"`)
 }
+
+func TestUpdateScene_EmitsPoseOrderChangedIC_OnModeChange(t *testing.T) {
+	t.Parallel()
+	// Scene starts with pose_order_mode = "free" (CreateScene default);
+	// owner updates it to "strict". Expect scene_pose_order_changed_ic.
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:        "scene-mode-change",
+		OwnerID:   "char-owner",
+		State:     string(SceneStateActive),
+		Visibility: string(SceneVisibilityOpen),
+		PoseOrder: string(PoseOrderModeFree),
+	}))
+	sink := &recordingEventSink{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(sink)
+
+	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
+		SceneId:       "scene-mode-change",
+		CharacterId:   "char-owner",
+		UpdateMask:    &fieldmaskpb.FieldMask{Paths: []string{"pose_order_mode"}},
+		PoseOrderMode: "strict",
+	})
+	require.NoError(t, err)
+
+	found := findIntentByType(sink.intents, "scene_pose_order_changed_ic")
+	require.NotNil(t, found, "UpdateScene MUST auto-emit scene_pose_order_changed_ic on mode change")
+	assert.Equal(t, dotStyleSceneSubjectIC("main", "scene-mode-change"), found.Subject)
+	assert.False(t, found.Sensitive, "scene_pose_order_changed_ic is sensitivity:never")
+	assert.Contains(t, found.Payload, `"old_mode":"free"`)
+	assert.Contains(t, found.Payload, `"new_mode":"strict"`)
+	assert.Contains(t, found.Payload, `"actor_id":"char-owner"`)
+	assert.Contains(t, found.Payload, `"scene_id":"scene-mode-change"`)
+}
+
+func TestUpdateScene_NoEmit_OnNoModeChange(t *testing.T) {
+	t.Parallel()
+	// Mask includes pose_order_mode but the value is the same as current.
+	// No-op update MUST NOT emit a spurious notice.
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:        "scene-mode-noop",
+		OwnerID:   "char-owner",
+		State:     string(SceneStateActive),
+		Visibility: string(SceneVisibilityOpen),
+		PoseOrder: string(PoseOrderModeFree),
+	}))
+	sink := &recordingEventSink{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(sink)
+
+	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
+		SceneId:       "scene-mode-noop",
+		CharacterId:   "char-owner",
+		UpdateMask:    &fieldmaskpb.FieldMask{Paths: []string{"pose_order_mode"}},
+		PoseOrderMode: "free", // same as current — no-op
+	})
+	require.NoError(t, err)
+
+	count := 0
+	for _, it := range sink.intents {
+		if it.Type == "scene_pose_order_changed_ic" {
+			count++
+		}
+	}
+	assert.Equal(t, 0, count, "no-op mode update MUST NOT emit scene_pose_order_changed_ic")
+}
+
+func TestUpdateScene_NoEmit_OnNonModeUpdate(t *testing.T) {
+	t.Parallel()
+	// Mask does NOT include pose_order_mode (only updates title).
+	// MUST NOT emit scene_pose_order_changed_ic.
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:        "scene-other-update",
+		OwnerID:   "char-owner",
+		State:     string(SceneStateActive),
+		Visibility: string(SceneVisibilityOpen),
+		PoseOrder: string(PoseOrderModeFree),
+	}))
+	sink := &recordingEventSink{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(sink)
+
+	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
+		SceneId:     "scene-other-update",
+		CharacterId: "char-owner",
+		UpdateMask:  &fieldmaskpb.FieldMask{Paths: []string{"title"}},
+		Title:       "New Title",
+	})
+	require.NoError(t, err)
+
+	count := 0
+	for _, it := range sink.intents {
+		if it.Type == "scene_pose_order_changed_ic" {
+			count++
+		}
+	}
+	assert.Equal(t, 0, count, "non-mode update MUST NOT emit scene_pose_order_changed_ic")
+}

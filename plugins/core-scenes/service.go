@@ -397,6 +397,25 @@ func (s *SceneServiceImpl) UpdateScene(ctx context.Context, req *scenev1.UpdateS
 		return nil, err // already a gRPC status error
 	}
 
+	// Best-effort pre-update read: only needed when pose_order_mode is in the
+	// mask, to detect whether the mode actually changed so we can emit
+	// scene_pose_order_changed_ic. We capture the string value (not the
+	// pointer) so that an in-place store mutation cannot alias the pre-value.
+	// Read failure is non-fatal — we just won't emit the notice.
+	var (
+		preMode    string
+		hasPre     bool
+	)
+	if update.PoseOrder != nil {
+		if r, readErr := s.store.Get(ctx, req.GetSceneId()); readErr == nil {
+			preMode = r.PoseOrder
+			hasPre = true
+		} else {
+			slog.WarnContext(ctx, "scene.service.update_scene pre-read for pose_order_changed_ic failed",
+				"scene_id", req.GetSceneId(), "error", readErr)
+		}
+	}
+
 	row, err := s.store.Update(ctx, req.GetSceneId(), update)
 	if err != nil {
 		recordError(span, err)
@@ -410,6 +429,12 @@ func (s *SceneServiceImpl) UpdateScene(ctx context.Context, req *scenev1.UpdateS
 			"error", err,
 		)
 		return nil, status.Errorf(codes.Internal, "failed to update scene: %v", err)
+	}
+
+	// Auto-emit scene_pose_order_changed_ic when pose_order_mode actually
+	// changed. No-op updates (mask present but value unchanged) MUST NOT emit.
+	if hasPre && preMode != row.PoseOrder {
+		s.emitScenePoseOrderChangedIC(ctx, req.GetSceneId(), req.GetCharacterId(), preMode, row.PoseOrder)
 	}
 
 	slog.InfoContext(
@@ -606,6 +631,43 @@ func (s *SceneServiceImpl) emitSceneLeaveIC(ctx context.Context, sceneID, actorI
 		slog.WarnContext(ctx, "scene.service.leave_scene scene_leave_ic emit failed",
 			"scene_id", sceneID, "actor_id", actorID, "reason", reason, "error", err)
 		// Non-fatal: membership is removed; the notice is best-effort.
+	}
+}
+
+// emitScenePoseOrderChangedIC emits a scene_pose_order_changed_ic notice
+// event when the pose order mode actually changes. sensitivity:never per
+// spec §2 — payload carries actor_id, scene_id, and mode strings only, no
+// RP content. Non-fatal emit failure (the mode change is already committed).
+// actor_name omitted (no nameResolver wired; same convention as T17/T18).
+func (s *SceneServiceImpl) emitScenePoseOrderChangedIC(ctx context.Context, sceneID, actorID, oldMode, newMode string) {
+	if s.eventSink == nil {
+		slog.WarnContext(ctx, "scene.service.update_scene scene_pose_order_changed_ic emit skipped: event sink nil",
+			"scene_id", sceneID, "actor_id", actorID)
+		return
+	}
+
+	payload, err := json.Marshal(map[string]string{
+		"actor_id": actorID,
+		"scene_id": sceneID,
+		"old_mode": oldMode,
+		"new_mode": newMode,
+	})
+	if err != nil {
+		slog.WarnContext(ctx, "scene.service.update_scene scene_pose_order_changed_ic payload marshal failed",
+			"scene_id", sceneID, "actor_id", actorID, "error", err)
+		return
+	}
+
+	intent := pluginsdk.EmitIntent{
+		Subject:   dotStyleSceneSubjectIC(s.gameID, sceneID),
+		Type:      "scene_pose_order_changed_ic",
+		Payload:   string(payload),
+		Sensitive: false, // sensitivity:never per crypto.emits manifest
+	}
+	if err := s.eventSink.Emit(ctx, intent); err != nil {
+		slog.WarnContext(ctx, "scene.service.update_scene scene_pose_order_changed_ic emit failed",
+			"scene_id", sceneID, "actor_id", actorID, "error", err)
+		// Non-fatal: mode change is committed; the notice is best-effort.
 	}
 }
 
