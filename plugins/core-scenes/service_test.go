@@ -1087,3 +1087,92 @@ func TestSceneServiceKickFromSceneReturnsNotFoundForNonParticipant(t *testing.T)
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.NotFound, st.Code())
 }
+
+// findIntentByType returns the first EmitIntent with the given Type, or nil.
+func findIntentByType(intents []pluginsdk.EmitIntent, eventType string) *pluginsdk.EmitIntent {
+	for i := range intents {
+		if string(intents[i].Type) == eventType {
+			return &intents[i]
+		}
+	}
+	return nil
+}
+
+func TestJoinScene_EmitsSceneJoinIC_OnInsert(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-join-emit", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	sink := &recordingEventSink{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(sink)
+
+	_, err := svc.JoinScene(context.Background(), &scenev1.JoinSceneRequest{
+		SceneId:     "scene-join-emit",
+		CharacterId: "char-bob",
+	})
+	require.NoError(t, err)
+
+	found := findIntentByType(sink.intents, "scene_join_ic")
+	require.NotNil(t, found, "JoinScene MUST auto-emit scene_join_ic on OpInserted")
+	assert.Equal(t, dotStyleSceneSubjectIC("main", "scene-join-emit"), found.Subject)
+	assert.False(t, found.Sensitive, "scene_join_ic is sensitivity:never")
+	assert.Contains(t, found.Payload, `"actor_id":"char-bob"`)
+	assert.Contains(t, found.Payload, `"scene_id":"scene-join-emit"`)
+	assert.Contains(t, found.Payload, `"from_role":"none"`)
+}
+
+func TestJoinScene_EmitsSceneJoinIC_OnPromote(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-join-promote", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityPrivate),
+	}))
+	// Pre-seed char-bob as invited so AddParticipant returns OpPromoted.
+	store.participants["scene-join-promote"]["char-bob"] = "invited"
+	sink := &recordingEventSink{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(sink)
+
+	_, err := svc.JoinScene(context.Background(), &scenev1.JoinSceneRequest{
+		SceneId:     "scene-join-promote",
+		CharacterId: "char-bob",
+	})
+	require.NoError(t, err)
+
+	found := findIntentByType(sink.intents, "scene_join_ic")
+	require.NotNil(t, found, "JoinScene MUST auto-emit scene_join_ic on OpPromoted")
+	assert.Contains(t, found.Payload, `"from_role":"invited"`)
+}
+
+func TestJoinScene_NoEmit_OnNoChange(t *testing.T) {
+	t.Parallel()
+	// Idempotent retry: already-member join returns OpNoChange and MUST NOT
+	// emit a duplicate scene_join_ic.
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-join-idempotent", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	// char-alice is already owner (inserted by CreateWithOwner).
+	sink := &recordingEventSink{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(sink)
+
+	_, err := svc.JoinScene(context.Background(), &scenev1.JoinSceneRequest{
+		SceneId:     "scene-join-idempotent",
+		CharacterId: "char-alice", // already owner → OpNoChange
+	})
+	require.NoError(t, err)
+
+	joinCount := 0
+	for _, it := range sink.intents {
+		if string(it.Type) == "scene_join_ic" {
+			joinCount++
+		}
+	}
+	assert.Equal(t, 0, joinCount, "idempotent join MUST NOT emit scene_join_ic")
+}

@@ -487,7 +487,7 @@ func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinScene
 	)
 	defer span.End()
 
-	_, _, err := s.store.AddParticipant(ctx, req.GetSceneId(), req.GetCharacterId())
+	_, result, err := s.store.AddParticipant(ctx, req.GetSceneId(), req.GetCharacterId())
 	if err != nil {
 		recordError(span, err)
 		var oe oops.OopsError
@@ -512,6 +512,13 @@ func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinScene
 		return nil, status.Errorf(codes.Internal, "failed to join scene: %v", err)
 	}
 
+	// Auto-emit scene_join_ic notice event when this is a NEW membership
+	// (OpInserted = fresh row; OpPromoted = invited→member). Skipped on
+	// OpNoChange per Phase 3 D5 retry-idempotency.
+	if result == OpInserted || result == OpPromoted {
+		s.emitSceneJoinIC(ctx, req.GetSceneId(), req.GetCharacterId(), result)
+	}
+
 	slog.InfoContext(
 		ctx, "scene.service.join_scene ok",
 		"subject_id", req.GetCharacterId(),
@@ -519,6 +526,46 @@ func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinScene
 	)
 
 	return &scenev1.JoinSceneResponse{}, nil
+}
+
+// emitSceneJoinIC emits a scene_join_ic notice event to the scene's IC
+// stream. sensitivity:never per crypto.emits §2 (notice events carry metadata
+// only — actor_id + from_role + scene_id, no RP content). Emit failure is
+// non-fatal — membership is already committed; we log and continue.
+func (s *SceneServiceImpl) emitSceneJoinIC(ctx context.Context, sceneID, actorID string, result ParticipantOpResult) {
+	if s.eventSink == nil {
+		slog.WarnContext(ctx, "scene.service.join_scene scene_join_ic emit skipped: event sink nil",
+			"scene_id", sceneID, "actor_id", actorID)
+		return
+	}
+
+	fromRole := "none"
+	if result == OpPromoted {
+		fromRole = "invited"
+	}
+
+	payload, err := json.Marshal(map[string]string{
+		"actor_id":  actorID,
+		"scene_id":  sceneID,
+		"from_role": fromRole,
+	})
+	if err != nil {
+		slog.WarnContext(ctx, "scene.service.join_scene scene_join_ic payload marshal failed",
+			"scene_id", sceneID, "actor_id", actorID, "error", err)
+		return
+	}
+
+	intent := pluginsdk.EmitIntent{
+		Subject:   dotStyleSceneSubjectIC(s.gameID, sceneID),
+		Type:      "scene_join_ic",
+		Payload:   string(payload),
+		Sensitive: false, // sensitivity:never per crypto.emits manifest
+	}
+	if err := s.eventSink.Emit(ctx, intent); err != nil {
+		slog.WarnContext(ctx, "scene.service.join_scene scene_join_ic emit failed",
+			"scene_id", sceneID, "actor_id", actorID, "error", err)
+		// Non-fatal: membership is committed; the notice is best-effort.
+	}
 }
 
 // LeaveScene removes the calling character from a scene. Per design decision
