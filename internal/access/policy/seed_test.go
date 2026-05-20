@@ -13,8 +13,8 @@ import (
 
 func TestSeedPoliciesCount(t *testing.T) {
 	seeds := SeedPolicies()
-	// 26 permit + 9 forbid = 35 total (18 base − 2 removed command policies + 5 gap-fill from T22b + 1 phase-2 command + 2 system bootstrap + 1 location-stream read + 2 phase-3b audit deny + 2 phase-5 sub-epic A events.*.system.crypto_totp.* deny seeds + 2 phase-5 sub-epic D events.*.system.crypto_policy.* deny seeds + 2 phase-5 sub-epic E events.*.system.* broad deny seeds + 1 phase-5 iwzt staff-read-unrestricted-history)
-	assert.Len(t, seeds, 35, "expected 35 seed policies (26 permit, 9 forbid)")
+	// 27 permit + 9 forbid = 36 total (18 base − 2 removed command policies + 5 gap-fill from T22b + 1 phase-2 command + 2 system bootstrap + 1 location-stream read + 2 phase-3b audit deny + 2 phase-5 sub-epic A events.*.system.crypto_totp.* deny seeds + 2 phase-5 sub-epic D events.*.system.crypto_policy.* deny seeds + 2 phase-5 sub-epic E events.*.system.* broad deny seeds + 1 phase-5 iwzt staff-read-unrestricted-history + 1 presence list_presence_same_location)
+	assert.Len(t, seeds, 36, "expected 36 seed policies (27 permit, 9 forbid)")
 }
 
 func TestSeedPoliciesAllNamesHaveSeedPrefix(t *testing.T) {
@@ -71,7 +71,7 @@ func TestSeedPoliciesEffectDistribution(t *testing.T) {
 			forbidCount++
 		}
 	}
-	assert.Equal(t, 26, permitCount, "expected 26 permit policies")
+	assert.Equal(t, 27, permitCount, "expected 27 permit policies")
 	assert.Equal(t, 9, forbidCount, "expected 9 forbid policies (+2 phase-5 sub-epic A events.*.system.crypto_totp.* denies + 2 phase-5 sub-epic D events.*.system.crypto_policy.* denies + 2 phase-5 sub-epic E events.*.system.* broad denies)")
 }
 
@@ -102,6 +102,7 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 		"seed:player-location-list-characters", // G3
 		"seed:player-scene-participant",        // G4
 		"seed:player-scene-read",               // G4
+		"seed:player-location-list-presence",   // G5
 		// Phase-2 command policies
 		"seed:player-teleport", // all players can execute home and teleport
 		// System bootstrap policies

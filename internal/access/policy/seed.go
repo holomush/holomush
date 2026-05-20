@@ -11,8 +11,8 @@ type SeedPolicy struct {
 	SeedVersion int
 }
 
-// SeedPolicies returns the complete set of 35 seed policies (26 permit, 9 forbid).
-// The initial 18 (T22) minus 2 removed command policies, plus 5 gap-fill policies (T22b: G1-G4),
+// SeedPolicies returns the complete set of 36 seed policies (27 permit, 9 forbid).
+// The initial 18 (T22) minus 2 removed command policies, plus 5 gap-fill policies (T22b: G1-G5),
 // 1 phase-2 command policy, and 2 system bootstrap policies.
 // Default deny behavior is provided by EffectDefaultDeny (no matching policy = denied).
 // See ADR 087 for rationale on default-deny instead of explicit forbid for system properties.
@@ -163,6 +163,13 @@ func SeedPolicies() []SeedPolicy {
 			Description: "Characters can list other characters in their current location",
 			DSLText:     `permit(principal is character, action in ["list_characters"], resource is location) when { resource.location.id == principal.character.location };`,
 			SeedVersion: 2,
+		},
+		// G5: Players can query presence at their current location.
+		{
+			Name:        "seed:player-location-list-presence",
+			Description: "Allow characters to query presence at their current location",
+			DSLText:     `permit(principal is character, action in ["list_presence"], resource is location) when { resource.location.id == principal.character.location };`,
+			SeedVersion: 6,
 		},
 		// G4: Scene participant access (target matching only; scene provider is a stub).
 		{
