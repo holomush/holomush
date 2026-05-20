@@ -568,6 +568,47 @@ func (s *SceneServiceImpl) emitSceneJoinIC(ctx context.Context, sceneID, actorID
 	}
 }
 
+// emitSceneLeaveIC emits a scene_leave_ic notice event. reason discriminates
+// voluntary ("left") vs involuntary ("kicked"). removedBy is the kicker's
+// character_id for kicks; empty string for voluntary leaves.
+// sensitivity:never per spec §2. Non-fatal emit failure (membership already
+// removed; notice is best-effort).
+func (s *SceneServiceImpl) emitSceneLeaveIC(ctx context.Context, sceneID, actorID, reason, removedBy string) {
+	if s.eventSink == nil {
+		slog.WarnContext(ctx, "scene.service.leave_scene scene_leave_ic emit skipped: event sink nil",
+			"scene_id", sceneID, "actor_id", actorID, "reason", reason)
+		return
+	}
+
+	fields := map[string]string{
+		"actor_id": actorID,
+		"scene_id": sceneID,
+		"reason":   reason,
+	}
+	if removedBy != "" {
+		fields["removed_by"] = removedBy
+	}
+
+	payload, err := json.Marshal(fields)
+	if err != nil {
+		slog.WarnContext(ctx, "scene.service.leave_scene scene_leave_ic payload marshal failed",
+			"scene_id", sceneID, "actor_id", actorID, "error", err)
+		return
+	}
+
+	intent := pluginsdk.EmitIntent{
+		Subject:   dotStyleSceneSubjectIC(s.gameID, sceneID),
+		Type:      "scene_leave_ic",
+		Payload:   string(payload),
+		Sensitive: false, // sensitivity:never per crypto.emits manifest
+	}
+	if err := s.eventSink.Emit(ctx, intent); err != nil {
+		slog.WarnContext(ctx, "scene.service.leave_scene scene_leave_ic emit failed",
+			"scene_id", sceneID, "actor_id", actorID, "reason", reason, "error", err)
+		// Non-fatal: membership is removed; the notice is best-effort.
+	}
+}
+
 // LeaveScene removes the calling character from a scene. Per design decision
 // P3.D7, scene owners cannot leave their own scene — they must use scene end
 // or transfer ownership first. The service-layer pre-check returns
@@ -625,6 +666,10 @@ func (s *SceneServiceImpl) LeaveScene(ctx context.Context, req *scenev1.LeaveSce
 		)
 		return nil, status.Errorf(codes.Internal, "failed to leave scene: %v", err)
 	}
+
+	// Auto-emit scene_leave_ic notice event. Non-fatal: membership is already
+	// removed; the notice is best-effort.
+	s.emitSceneLeaveIC(ctx, req.GetSceneId(), req.GetCharacterId(), "left", "")
 
 	slog.InfoContext(
 		ctx, "scene.service.leave_scene ok",
@@ -704,6 +749,10 @@ func (s *SceneServiceImpl) KickFromScene(ctx context.Context, req *scenev1.KickF
 		)
 		return nil, status.Errorf(codes.Internal, "failed to kick: %v", err)
 	}
+
+	// Auto-emit scene_leave_ic notice event (reason=kicked). Non-fatal:
+	// membership is already removed; the notice is best-effort.
+	s.emitSceneLeaveIC(ctx, req.GetSceneId(), req.GetTargetCharacterId(), "kicked", req.GetCharacterId())
 
 	slog.InfoContext(
 		ctx, "scene.service.kick_from_scene ok",

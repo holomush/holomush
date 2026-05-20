@@ -1176,3 +1176,62 @@ func TestJoinScene_NoEmit_OnNoChange(t *testing.T) {
 	}
 	assert.Equal(t, 0, joinCount, "idempotent join MUST NOT emit scene_join_ic")
 }
+
+func TestLeaveScene_EmitsSceneLeaveIC_ReasonLeft(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-leave-emit", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	// Pre-seed char-bob as a member so RemoveParticipant succeeds.
+	store.participants["scene-leave-emit"]["char-bob"] = "member"
+	sink := &recordingEventSink{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(sink)
+
+	_, err := svc.LeaveScene(context.Background(), &scenev1.LeaveSceneRequest{
+		SceneId:     "scene-leave-emit",
+		CharacterId: "char-bob",
+	})
+	require.NoError(t, err)
+
+	found := findIntentByType(sink.intents, "scene_leave_ic")
+	require.NotNil(t, found, "LeaveScene MUST auto-emit scene_leave_ic")
+	assert.Equal(t, dotStyleSceneSubjectIC("main", "scene-leave-emit"), found.Subject)
+	assert.False(t, found.Sensitive, "scene_leave_ic is sensitivity:never")
+	assert.Contains(t, found.Payload, `"actor_id":"char-bob"`)
+	assert.Contains(t, found.Payload, `"scene_id":"scene-leave-emit"`)
+	assert.Contains(t, found.Payload, `"reason":"left"`)
+	assert.NotContains(t, found.Payload, `"removed_by"`, "voluntary leave MUST NOT include removed_by")
+}
+
+func TestKickFromScene_EmitsSceneLeaveIC_ReasonKicked(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-kick-emit", OwnerID: "char-owner",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	// Pre-seed char-target as a member so KickParticipant succeeds.
+	store.participants["scene-kick-emit"]["char-target"] = "member"
+	sink := &recordingEventSink{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(sink)
+
+	_, err := svc.KickFromScene(context.Background(), &scenev1.KickFromSceneRequest{
+		SceneId:           "scene-kick-emit",
+		CharacterId:       "char-owner",  // kicker
+		TargetCharacterId: "char-target", // who gets kicked
+	})
+	require.NoError(t, err)
+
+	found := findIntentByType(sink.intents, "scene_leave_ic")
+	require.NotNil(t, found, "KickFromScene MUST auto-emit scene_leave_ic")
+	assert.Equal(t, dotStyleSceneSubjectIC("main", "scene-kick-emit"), found.Subject)
+	assert.False(t, found.Sensitive, "scene_leave_ic is sensitivity:never")
+	assert.Contains(t, found.Payload, `"actor_id":"char-target"`, "actor_id is the TARGET of the kick")
+	assert.Contains(t, found.Payload, `"scene_id":"scene-kick-emit"`)
+	assert.Contains(t, found.Payload, `"reason":"kicked"`)
+	assert.Contains(t, found.Payload, `"removed_by":"char-owner"`)
+}
