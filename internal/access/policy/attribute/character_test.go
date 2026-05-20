@@ -65,6 +65,10 @@ func (m *mockCharacterRepository) IsOwnedByPlayer(_ context.Context, _, _ ulid.U
 	return false, errors.New("not implemented")
 }
 
+func (m *mockCharacterRepository) GetNamesByIDs(_ context.Context, _ []ulid.ULID) (map[ulid.ULID]string, error) {
+	return nil, errors.New("not implemented")
+}
+
 func TestCharacterProviderContract(t *testing.T) {
 	assertProviderContract(t, NewCharacterProvider(&mockCharacterRepository{}, nil))
 }

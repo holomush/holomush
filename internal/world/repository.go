@@ -163,4 +163,9 @@ type CharacterRepository interface {
 	// IsOwnedByPlayer checks if a character is owned by a specific player.
 	// Returns false (not an error) if the character does not exist.
 	IsOwnedByPlayer(ctx context.Context, characterID, playerID ulid.ULID) (bool, error)
+
+	// GetNamesByIDs returns a map[characterID]name for the given IDs.
+	// Missing IDs are omitted from the result map (not an error).
+	// Returns empty map (not nil error) for an empty input slice.
+	GetNamesByIDs(ctx context.Context, ids []ulid.ULID) (map[ulid.ULID]string, error)
 }

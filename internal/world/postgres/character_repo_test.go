@@ -443,6 +443,57 @@ func TestCharacterRepository_IsOwnedByPlayer(t *testing.T) {
 	})
 }
 
+func TestCharacterRepository_GetNamesByIDs(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewCharacterRepository(testPool)
+
+	playerID := createTestPlayer(ctx, t)
+
+	char1 := &world.Character{
+		ID:        ulid.Make(),
+		PlayerID:  playerID,
+		Name:      "alice",
+		CreatedAt: time.Now().UTC().Truncate(time.Microsecond),
+	}
+	char2 := &world.Character{
+		ID:        ulid.Make(),
+		PlayerID:  playerID,
+		Name:      "bob",
+		CreatedAt: time.Now().UTC().Truncate(time.Microsecond),
+	}
+	require.NoError(t, repo.Create(ctx, char1))
+	require.NoError(t, repo.Create(ctx, char2))
+
+	t.Cleanup(func() {
+		_ = repo.Delete(ctx, char1.ID)
+		_ = repo.Delete(ctx, char2.ID)
+	})
+
+	t.Run("returns names for present IDs, omits missing IDs", func(t *testing.T) {
+		missingID := ulid.Make()
+		names, err := repo.GetNamesByIDs(ctx, []ulid.ULID{char1.ID, char2.ID, missingID})
+		require.NoError(t, err)
+		assert.Equal(t, "alice", names[char1.ID])
+		assert.Equal(t, "bob", names[char2.ID])
+		_, present := names[missingID]
+		assert.False(t, present, "missing id MUST NOT be in result map")
+	})
+
+	t.Run("returns empty map for nil input", func(t *testing.T) {
+		empty, err := repo.GetNamesByIDs(ctx, nil)
+		require.NoError(t, err)
+		assert.NotNil(t, empty, "empty input MUST return non-nil empty map, not nil")
+		assert.Empty(t, empty)
+	})
+
+	t.Run("returns empty map for empty slice", func(t *testing.T) {
+		empty, err := repo.GetNamesByIDs(ctx, []ulid.ULID{})
+		require.NoError(t, err)
+		assert.NotNil(t, empty, "empty input MUST return non-nil empty map, not nil")
+		assert.Empty(t, empty)
+	})
+}
+
 func TestCharacterRepository_UpdateLocation(t *testing.T) {
 	ctx := context.Background()
 	repo := postgres.NewCharacterRepository(testPool)

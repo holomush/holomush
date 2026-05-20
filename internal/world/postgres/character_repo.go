@@ -206,5 +206,40 @@ func scanCharacters(rows pgx.Rows) ([]*world.Character, error) {
 	return characters, nil
 }
 
+// GetNamesByIDs returns a map[id]name for the given character IDs.
+// Missing IDs are absent from the result (not an error).
+func (r *CharacterRepository) GetNamesByIDs(ctx context.Context, ids []ulid.ULID) (map[ulid.ULID]string, error) {
+	if len(ids) == 0 {
+		return map[ulid.ULID]string{}, nil
+	}
+	strs := make([]string, len(ids))
+	for i, id := range ids {
+		strs[i] = id.String()
+	}
+	rows, err := r.pool.Query(ctx, `SELECT id, name FROM characters WHERE id = ANY($1)`, strs)
+	if err != nil {
+		return nil, oops.With("operation", "get_names_by_ids").
+			With("count", len(ids)).Wrap(err)
+	}
+	defer rows.Close()
+
+	out := make(map[ulid.ULID]string, len(ids))
+	for rows.Next() {
+		var idStr, name string
+		if err := rows.Scan(&idStr, &name); err != nil {
+			return nil, oops.With("operation", "scan_get_names").Wrap(err)
+		}
+		id, perr := ulid.Parse(idStr)
+		if perr != nil {
+			return nil, oops.With("operation", "parse_ulid").With("id_str", idStr).Wrap(perr)
+		}
+		out[id] = name
+	}
+	if err := rows.Err(); err != nil {
+		return nil, oops.With("operation", "rows_err_get_names").Wrap(err)
+	}
+	return out, nil
+}
+
 // Compile-time interface check.
 var _ world.CharacterRepository = (*CharacterRepository)(nil)
