@@ -162,6 +162,10 @@ type CoreServer struct {
 	// Nil if ABAC is not configured (public stream reads will be denied).
 	accessEngine accessTypes.AccessPolicyEngine
 
+	// characterNameResolver resolves character display names by ID for
+	// ListFocusPresence and other current-state RPCs (5b2j).
+	characterNameResolver characterNameResolver
+
 	// subscriber opens per-session durable consumers against the JetStream
 	// event bus. Post-F3 Subscribe delegates its live loop to subscribe
 	// streams; nil subscriber causes Subscribe to error early. Wired via
@@ -254,6 +258,11 @@ func WithIdentityRegistry(reg plugins.IdentityRegistry) CoreServerOption {
 // WithAccessEngine sets the ABAC policy engine for stream read authorization.
 func WithAccessEngine(engine accessTypes.AccessPolicyEngine) CoreServerOption {
 	return func(s *CoreServer) { s.accessEngine = engine }
+}
+
+// WithCharacterNameResolver sets the character name resolver for ListFocusPresence (5b2j).
+func WithCharacterNameResolver(r characterNameResolver) CoreServerOption {
+	return func(s *CoreServer) { s.characterNameResolver = r }
 }
 
 // WithSubscriber wires the JetStream EventBus subscriber into the Subscribe

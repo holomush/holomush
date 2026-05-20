@@ -445,7 +445,11 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	if focusErr != nil {
 		return oops.Code("FOCUS_COORDINATOR_FAILED").Wrap(focusErr)
 	}
-	coreServerOpts = append(coreServerOpts, holoGRPC.WithFocusCoordinator(focusCoord))
+	// 5b2j: inject the character-name resolver used by ListFocusPresence to
+	// batch-resolve names for the presence snapshot.
+	coreServerOpts = append(coreServerOpts,
+		holoGRPC.WithFocusCoordinator(focusCoord),
+		holoGRPC.WithCharacterNameResolver(holoGRPC.NewRepoCharacterNameResolver(charRepo)))
 
 	// 8b. Inject focus coordinator + history reader into plugin hosts (late-binding).
 	// The plugin subsystem started before gRPC, so these deps were not available
