@@ -844,6 +844,71 @@ func TestSeedSmokeCharacterDeniedEventsSystemRekeyStream(t *testing.T) {
 		decision.Effect(), decision.Reason())
 }
 
+func TestSeedSmokePlayerLocationListPresence(t *testing.T) {
+	locID := "01LOC000PPPPPPPPPPPPPPPPP"
+
+	engine := createSeedEngine(t, []attribute.AttributeProvider{
+		characterProvider(
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": locID},
+			nil,
+		),
+		locationProvider(map[string]any{"id": locID, "name": "Plaza"}),
+	})
+
+	// list_presence on current location → permit (list_presence_same_location)
+	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject:  "character:01CHAR01",
+		Action:   "list_presence",
+		Resource: "location:" + locID,
+	})
+	require.NoError(t, err)
+	assert.True(t, decision.IsAllowed(), "player should list presence at current location; got: %s — %s", decision.Effect(), decision.Reason())
+}
+
+func TestSeedSmokePlayerDeniedListPresenceNonCurrentLocation(t *testing.T) {
+	currentLocID := "01LOC000QQQQQQQQQQQQQQQQQ"
+	otherLocID := "01LOC000RRRRRRRRRRRRRRRRR"
+
+	engine := createSeedEngine(t, []attribute.AttributeProvider{
+		characterProvider(
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": currentLocID},
+			nil,
+		),
+		locationProvider(map[string]any{"id": otherLocID, "name": "Other Room"}),
+	})
+
+	// Player at currentLocID should NOT list_presence at otherLocID.
+	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject:  "character:01CHAR01",
+		Action:   "list_presence",
+		Resource: "location:" + otherLocID,
+	})
+	require.NoError(t, err)
+	assert.False(t, decision.IsAllowed(), "player should NOT list presence at non-current location; got: %s — %s", decision.Effect(), decision.Reason())
+}
+
+func TestSeedSmokeAdminRemoteListPresence(t *testing.T) {
+	adminLocID := "01LOC000SSSSSSSSSSSSSSSSS"
+	remoteLocID := "01LOC000TTTTTTTTTTTTTTTTT"
+
+	engine := createSeedEngine(t, []attribute.AttributeProvider{
+		characterProvider(
+			map[string]any{"id": "01ADMIN1", "roles": []string{"admin"}, "location": adminLocID},
+			nil,
+		),
+		locationProvider(map[string]any{"id": remoteLocID, "name": "Remote Room"}),
+	})
+
+	// Admin at a different location → permit via seed:admin-full-access super-rule
+	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject:  "character:01ADMIN1",
+		Action:   "list_presence",
+		Resource: "location:" + remoteLocID,
+	})
+	require.NoError(t, err)
+	assert.True(t, decision.IsAllowed(), "admin should list presence at remote location via super-rule; got: %s — %s", decision.Effect(), decision.Reason())
+}
+
 func TestSeedSmokePluginDeniedEventsSystemRekeyStream(t *testing.T) {
 	// A plugin principal must NOT read the rekey audit stream.
 	// The broad seed:deny-events-system-read-plugin forbid must fire.
