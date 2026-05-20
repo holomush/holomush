@@ -240,6 +240,65 @@ func (_c *MockCharacterRepository_GetByLocation_Call) RunAndReturn(run func(cont
 	return _c
 }
 
+// GetNamesByIDs provides a mock function with given fields: ctx, ids
+func (_m *MockCharacterRepository) GetNamesByIDs(ctx context.Context, ids []ulid.ULID) (map[ulid.ULID]string, error) {
+	ret := _m.Called(ctx, ids)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetNamesByIDs")
+	}
+
+	var r0 map[ulid.ULID]string
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, []ulid.ULID) (map[ulid.ULID]string, error)); ok {
+		return rf(ctx, ids)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, []ulid.ULID) map[ulid.ULID]string); ok {
+		r0 = rf(ctx, ids)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[ulid.ULID]string)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, []ulid.ULID) error); ok {
+		r1 = rf(ctx, ids)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockCharacterRepository_GetNamesByIDs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetNamesByIDs'
+type MockCharacterRepository_GetNamesByIDs_Call struct {
+	*mock.Call
+}
+
+// GetNamesByIDs is a helper method to define mock.On call
+//   - ctx context.Context
+//   - ids []ulid.ULID
+func (_e *MockCharacterRepository_Expecter) GetNamesByIDs(ctx interface{}, ids interface{}) *MockCharacterRepository_GetNamesByIDs_Call {
+	return &MockCharacterRepository_GetNamesByIDs_Call{Call: _e.mock.On("GetNamesByIDs", ctx, ids)}
+}
+
+func (_c *MockCharacterRepository_GetNamesByIDs_Call) Run(run func(ctx context.Context, ids []ulid.ULID)) *MockCharacterRepository_GetNamesByIDs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].([]ulid.ULID))
+	})
+	return _c
+}
+
+func (_c *MockCharacterRepository_GetNamesByIDs_Call) Return(_a0 map[ulid.ULID]string, _a1 error) *MockCharacterRepository_GetNamesByIDs_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockCharacterRepository_GetNamesByIDs_Call) RunAndReturn(run func(context.Context, []ulid.ULID) (map[ulid.ULID]string, error)) *MockCharacterRepository_GetNamesByIDs_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // IsOwnedByPlayer provides a mock function with given fields: ctx, characterID, playerID
 func (_m *MockCharacterRepository) IsOwnedByPlayer(ctx context.Context, characterID ulid.ULID, playerID ulid.ULID) (bool, error) {
 	ret := _m.Called(ctx, characterID, playerID)
