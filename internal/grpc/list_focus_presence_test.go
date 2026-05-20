@@ -63,19 +63,19 @@ func TestListFocusPresenceReturnsSessionNotFoundOnUnknownSession(t *testing.T) {
 
 func TestListFocusPresenceCollapsesOwnershipMismatchToNotFound(t *testing.T) {
 	// Caller's player_session_token resolves to a player session with a
-	// different ID than the target session's PlayerSessionID — ownership
+	// different PlayerID than the target session's PlayerID — ownership
 	// mismatch MUST collapse to SESSION_NOT_FOUND (enumeration-safe).
 	future := time.Now().Add(time.Hour)
 	foreignSess := &session.Info{
-		ID:              "foreign-sess",
-		PlayerSessionID: ulid.MustParse("01HYXPLAYER000000000000XYZ"),
-		ExpiresAt:       &future,
+		ID:        "foreign-sess",
+		PlayerID:  ulid.MustParse("01HYXPLAYER000000000000XYZ"),
+		ExpiresAt: &future,
 	}
 	s := &CoreServer{
 		sessionStore: newTestSessionStore(t,
 			map[string]*session.Info{"foreign-sess": foreignSess}),
 		// newFakePlayerSessionRepo binds testPlayerSessionToken to the given
-		// player_session_id; passing a DIFFERENT ID below forces mismatch.
+		// player_id; passing a DIFFERENT ID below forces mismatch.
 		playerSessionRepo: newFakePlayerSessionRepo(
 			ulid.MustParse("01HYXPLAYER111111111111ABC"),
 		),
@@ -89,4 +89,84 @@ func TestListFocusPresenceCollapsesOwnershipMismatchToNotFound(t *testing.T) {
 	o, ok := oops.AsOops(err)
 	require.True(t, ok)
 	assert.Equal(t, "SESSION_NOT_FOUND", o.Code())
+}
+
+// ownedPlayerID is the player ID that newFakePlayerSessionRepo will return
+// when called with this value, and the session.Info.PlayerID that mkOwnedSession
+// seeds — ensuring ownership validation succeeds.
+var ownedPlayerID = ulid.MustParse("01HYXOWN0000000000000000PS")
+
+// mkOwnedSession returns a session.Info whose PlayerID matches ownedPlayerID,
+// so that newFakePlayerSessionRepo(ownedPlayerID) passes ownership validation.
+func mkOwnedSession(id string, opts ...func(*session.Info)) *session.Info {
+	future := time.Now().Add(time.Hour)
+	s := &session.Info{
+		ID:        id,
+		Status:    session.StatusActive,
+		ExpiresAt: &future,
+		PlayerID:  ownedPlayerID,
+	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+func TestListFocusPresenceReturnsSessionExpiredForExpiredSession(t *testing.T) {
+	past := time.Now().Add(-time.Hour)
+	sess := mkOwnedSession("sess-expired")
+	sess.ExpiresAt = &past
+	s := &CoreServer{
+		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"sess-expired": sess}),
+		playerSessionRepo: newFakePlayerSessionRepo(ownedPlayerID),
+	}
+	_, err := s.ListFocusPresence(context.Background(), &corev1.ListFocusPresenceRequest{
+		SessionId:          "sess-expired",
+		PlayerSessionToken: testPlayerSessionToken,
+	})
+	require.Error(t, err)
+	o, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, "SESSION_EXPIRED", o.Code())
+}
+
+func TestListFocusPresenceReturnsUnimplementedForSceneFocus(t *testing.T) {
+	sess := mkOwnedSession("sess-1", func(s *session.Info) {
+		s.CharacterID = ulid.MustParse("01HYXCHAR0000000000000000C")
+		s.LocationID = ulid.MustParse("01HYXLOC00000000000000000L")
+		s.FocusMemberships = []session.FocusMembership{
+			{Kind: session.FocusKindScene, TargetID: ulid.MustParse("01HYXSCENE0000000000000000")},
+		}
+	})
+	s := &CoreServer{
+		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"sess-1": sess}),
+		playerSessionRepo: newFakePlayerSessionRepo(ownedPlayerID),
+	}
+	_, err := s.ListFocusPresence(context.Background(), &corev1.ListFocusPresenceRequest{
+		SessionId:          "sess-1",
+		PlayerSessionToken: testPlayerSessionToken,
+	})
+	require.Error(t, err)
+	o, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, "UNIMPLEMENTED", o.Code())
+}
+
+func TestListFocusPresenceReturnsEmptyEntriesWhenLocationUnset(t *testing.T) {
+	sess := mkOwnedSession("sess-1", func(s *session.Info) {
+		s.CharacterID = ulid.MustParse("01HYXCHAR0000000000000000C")
+		// LocationID intentionally zero
+	})
+	s := &CoreServer{
+		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"sess-1": sess}),
+		playerSessionRepo: newFakePlayerSessionRepo(ownedPlayerID),
+	}
+	resp, err := s.ListFocusPresence(context.Background(), &corev1.ListFocusPresenceRequest{
+		SessionId:          "sess-1",
+		PlayerSessionToken: testPlayerSessionToken,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, corev1.PresenceContext_PRESENCE_CONTEXT_LOCATION, resp.Context)
+	assert.Equal(t, "", resp.ContextId)
+	assert.Empty(t, resp.Entries)
 }

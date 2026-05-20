@@ -53,7 +53,41 @@ func (s *CoreServer) ListFocusPresence(ctx context.Context, req *corev1.ListFocu
 			Errorf("session not found")
 	}
 
-	// TODO(holomush-5b2j): T6 adds expired/empty-location/focus dispatch;
-	// T7 adds ABAC gate + store query + name resolution + response.
-	return nil, oops.Code("UNIMPLEMENTED").Errorf("not implemented")
+	// Re-Get the session info (ValidateSessionOwnership returned the player
+	// session, not the user session). Mirrors ListSessionStreams pattern.
+	info, err := s.sessionStore.Get(ctx, req.SessionId)
+	if err != nil {
+		if oopsErr, ok := oops.AsOops(err); ok && oopsErr.Code() == "SESSION_NOT_FOUND" {
+			return nil, oops.Code("SESSION_NOT_FOUND").
+				With("session_id", req.SessionId).Errorf("session not found")
+		}
+		return nil, oops.Code("INTERNAL").Wrap(err)
+	}
+	if info.IsExpired() {
+		return nil, oops.Code("SESSION_EXPIRED").
+			With("session_id", req.SessionId).Errorf("session expired")
+	}
+
+	// Scene-focused sessions are out of 5b2j scope (spec D-2). Return
+	// UNIMPLEMENTED so the gap is loud, not silently degraded to a
+	// location-list fallback.
+	if len(info.FocusMemberships) > 0 {
+		return nil, oops.Code("UNIMPLEMENTED").
+			With("session_id", req.SessionId).
+			With("focus_memberships", len(info.FocusMemberships)).
+			Errorf("scene-focused presence not yet implemented")
+	}
+
+	// Session has no location yet (e.g., between create and SelectCharacter).
+	// Not an error — return an empty list under LOCATION context.
+	if info.LocationID.IsZero() {
+		return &corev1.ListFocusPresenceResponse{
+			Meta:    responseMeta(requestID),
+			Context: corev1.PresenceContext_PRESENCE_CONTEXT_LOCATION,
+			Entries: []*corev1.PresenceEntry{},
+		}, nil
+	}
+
+	// TODO(holomush-5b2j): T7 (5b2j.10) adds ABAC gate + store query + name resolution.
+	return nil, oops.Code("UNIMPLEMENTED").Errorf("ABAC + resolver not yet wired")
 }
