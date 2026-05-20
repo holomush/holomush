@@ -132,11 +132,38 @@ func (s *SceneAuditStore) Insert(
 	dekRef *int64,
 	dekVersion *int32,
 ) error {
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		return s.insertSceneLogTx(ctx, tx, id, subject, eventType, timestamp,
+			actorKind, actorID, payload, schemaVer, codec, dekRef, dekVersion)
+	})
+}
+
+// insertSceneLogTx executes the scene_log INSERT within a caller-provided
+// transaction. Task 7 (InsertScenePose) calls this directly so the scene_log
+// INSERT and pose-metadata UPDATEs can share one transaction without
+// duplicating SQL.
+//
+// ON CONFLICT (id) DO NOTHING preserves idempotent redelivery semantics
+// (INV-P7 plugin SDK contract) regardless of which caller opens the tx.
+func (s *SceneAuditStore) insertSceneLogTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	id []byte,
+	subject, eventType string,
+	timestamp *timestamppb.Timestamp,
+	actorKind string,
+	actorID []byte,
+	payload []byte,
+	schemaVer int,
+	codec string,
+	dekRef *int64,
+	dekVersion *int32,
+) error {
 	var ts any
 	if timestamp != nil {
 		ts = timestamp.AsTime()
 	}
-	_, err := s.pool.Exec(
+	_, err := tx.Exec(
 		ctx, `
 		INSERT INTO scene_log (
 			id, subject, type, timestamp, actor_kind, actor_id,
