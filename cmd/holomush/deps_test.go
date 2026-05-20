@@ -170,6 +170,10 @@ func (m *mockGRPCClient) RevokeOtherPlayerSessions(_ context.Context, _ *corev1.
 	return nil, nil
 }
 
+func (m *mockGRPCClient) ListFocusPresence(_ context.Context, _ *corev1.ListFocusPresenceRequest) (*corev1.ListFocusPresenceResponse, error) {
+	return nil, nil
+}
+
 func (m *mockGRPCClient) GetContent(_ context.Context, _ *contentv1.GetContentRequest) (*contentv1.GetContentResponse, error) {
 	return nil, nil
 }

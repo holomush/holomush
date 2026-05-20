@@ -102,6 +102,10 @@ func (c *coreClientShim) RevokeOtherPlayerSessions(ctx context.Context, req *cor
 	return c.s.RevokeOtherPlayerSessions(ctx, req)
 }
 
+func (c *coreClientShim) ListFocusPresence(ctx context.Context, req *corev1.ListFocusPresenceRequest) (*corev1.ListFocusPresenceResponse, error) {
+	return c.s.ListFocusPresence(ctx, req)
+}
+
 // Compile-time check that coreClientShim satisfies the interface. If
 // web.CoreClient gains a method, this fails to build until the shim is updated.
 var _ web.CoreClient = (*coreClientShim)(nil)

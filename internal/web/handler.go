@@ -54,6 +54,8 @@ type CoreClient interface {
 	ListPlayerSessions(ctx context.Context, req *corev1.ListPlayerSessionsRequest) (*corev1.ListPlayerSessionsResponse, error)
 	RevokePlayerSession(ctx context.Context, req *corev1.RevokePlayerSessionRequest) (*corev1.RevokePlayerSessionResponse, error)
 	RevokeOtherPlayerSessions(ctx context.Context, req *corev1.RevokeOtherPlayerSessionsRequest) (*corev1.RevokeOtherPlayerSessionsResponse, error)
+	// Presence RPCs
+	ListFocusPresence(ctx context.Context, req *corev1.ListFocusPresenceRequest) (*corev1.ListFocusPresenceResponse, error)
 }
 
 // ContentClient is the gRPC interface used by Handler to communicate with the
@@ -463,12 +465,76 @@ func (h *Handler) WebListSessionStreams(ctx context.Context, req *connect.Reques
 	}), nil
 }
 
-// WebListFocusPresence is the gateway proxy for CoreService.ListFocusPresence.
-// The real forwarder lands in holomush-5b2j.12 (T9); this stub keeps *Handler
-// satisfying webv1connect.WebServiceHandler so the proto addition can land
-// independently of the gateway implementation.
-func (h *Handler) WebListFocusPresence(_ context.Context, _ *connect.Request[webv1.WebListFocusPresenceRequest]) (*connect.Response[webv1.WebListFocusPresenceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("WebListFocusPresence pending — see holomush-5b2j.12"))
+// WebListFocusPresence forwards to CoreService.ListFocusPresence. The
+// player_session_token is read from the request header (not the wire
+// request body); core enforces ownership.
+func (h *Handler) WebListFocusPresence(ctx context.Context, req *connect.Request[webv1.WebListFocusPresenceRequest]) (*connect.Response[webv1.WebListFocusPresenceResponse], error) {
+	slog.DebugContext(ctx, "web: WebListFocusPresence",
+		"session_id", req.Msg.GetSessionId())
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	coreResp, err := h.client.ListFocusPresence(rpcCtx, &corev1.ListFocusPresenceRequest{
+		SessionId:          req.Msg.GetSessionId(),
+		PlayerSessionToken: token,
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "web: list focus presence RPC failed",
+			"session_id", req.Msg.GetSessionId(), "error", err)
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through so clients can distinguish PERMISSION_DENIED / UNIMPLEMENTED / SESSION_NOT_FOUND.
+	}
+
+	return connect.NewResponse(&webv1.WebListFocusPresenceResponse{
+		Context:   translatePresenceContext(coreResp.GetContext()),
+		ContextId: coreResp.GetContextId(),
+		Entries:   translatePresenceEntries(coreResp.GetEntries()),
+	}), nil
+}
+
+func translatePresenceContext(c corev1.PresenceContext) webv1.WebPresenceContext {
+	switch c {
+	case corev1.PresenceContext_PRESENCE_CONTEXT_LOCATION:
+		return webv1.WebPresenceContext_WEB_PRESENCE_CONTEXT_LOCATION
+	case corev1.PresenceContext_PRESENCE_CONTEXT_SCENE:
+		return webv1.WebPresenceContext_WEB_PRESENCE_CONTEXT_SCENE
+	default:
+		return webv1.WebPresenceContext_WEB_PRESENCE_CONTEXT_UNSPECIFIED
+	}
+}
+
+func translatePresenceState(s corev1.PresenceState) webv1.WebPresenceState {
+	switch s {
+	case corev1.PresenceState_PRESENCE_STATE_ACTIVE:
+		return webv1.WebPresenceState_WEB_PRESENCE_STATE_ACTIVE
+	case corev1.PresenceState_PRESENCE_STATE_DETACHED:
+		return webv1.WebPresenceState_WEB_PRESENCE_STATE_DETACHED
+	case corev1.PresenceState_PRESENCE_STATE_INACTIVE:
+		return webv1.WebPresenceState_WEB_PRESENCE_STATE_INACTIVE
+	default:
+		return webv1.WebPresenceState_WEB_PRESENCE_STATE_UNSPECIFIED
+	}
+}
+
+func translatePresenceEntries(in []*corev1.PresenceEntry) []*webv1.WebPresenceEntry {
+	out := make([]*webv1.WebPresenceEntry, 0, len(in))
+	for _, e := range in {
+		// Defense: skip nil entries. Protobuf Get* methods are nil-safe (would
+		// return zero values), so this only prevents emitting an entry with
+		// empty character_id / character_name to clients. Core never sends
+		// nil entries today; this is belt-and-suspenders against future drift.
+		if e == nil {
+			continue
+		}
+		out = append(out, &webv1.WebPresenceEntry{
+			CharacterId:   e.GetCharacterId(),
+			CharacterName: e.GetCharacterName(),
+			State:         translatePresenceState(e.GetState()),
+		})
+	}
+	return out
 }
 
 // WebListContent returns content items matching a key prefix.
