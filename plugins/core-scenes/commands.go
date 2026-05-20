@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -38,7 +39,7 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 	span.SetAttributes(attribute.String("subcommand", sub))
 
 	if sub == "" {
-		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, end, info, invite, join, kick, leave, pause, resume, set, switch, transfer"), nil
+		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, emit, end, info, invite, join, kick, leave, ooc, order, pause, pose, resume, say, set, switch, transfer"), nil
 	}
 
 	switch sub {
@@ -66,8 +67,21 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 		return p.handleTransfer(ctx, req, rest)
 	case "switch":
 		return p.handleSwitch(ctx, req, rest)
+	case "pose":
+		return p.handleEmit(ctx, req, rest, "scene_pose", false)
+	case "say":
+		return p.handleEmit(ctx, req, rest, "scene_say", false)
+	case "emit":
+		return p.handleEmit(ctx, req, rest, "scene_emit", false)
+	case "ooc":
+		return p.handleEmit(ctx, req, rest, "scene_ooc", true)
+	case "order":
+		// Task 21 will implement the pose-order renderer. Stub here so the
+		// dispatcher knows the subcommand exists and returns a clear message
+		// (better than the generic "unknown subcommand" path).
+		return pluginsdk.Errorf("scene order: not yet implemented (Task 21)"), nil
 	default:
-		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, end, info, invite, join, kick, leave, pause, resume, set, switch, transfer.", sub), nil
+		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, emit, end, info, invite, join, kick, leave, ooc, order, pause, pose, resume, say, set, switch, transfer.", sub), nil
 	}
 }
 
@@ -562,4 +576,148 @@ func (p *scenePlugin) handleSwitch(ctx context.Context, req pluginsdk.CommandReq
 		Status: pluginsdk.CommandOK,
 		Output: fmt.Sprintf("Switched to scene %s.", sceneID),
 	}, nil
+}
+
+// handleEmit is the shared emit-subcommand handler for the four content
+// verbs (pose / say / emit / ooc). The eventType determines the emitted
+// type; the ooc flag determines the subject facet (.ic vs .ooc). All
+// four emit with Sensitive: true to match the crypto.emits manifest's
+// sensitivity:always declaration (INV-P4-3).
+//
+// Target scene resolution uses single-membership inference (Phase 4
+// only); Phase 5 will replace this with focus-aware routing that
+// consults the character's focus context.
+//
+// Defense-in-depth: the Layer-1 ABAC execute-scene-commands policy
+// fires at the command-execute layer before this handler runs in
+// production; the IsParticipant check here is belt + suspenders so a
+// hypothetical mis-route of a non-participant cannot leak into the IC
+// stream.
+func (p *scenePlugin) handleEmit(
+	ctx context.Context,
+	req pluginsdk.CommandRequest,
+	args string,
+	eventType string,
+	ooc bool,
+) (*pluginsdk.CommandResponse, error) {
+	verb := strings.TrimPrefix(eventType, "scene_")
+	ctx, span := startSpan(
+		ctx, "scene.command.emit",
+		attribute.String("subject_id", req.CharacterID),
+		attribute.String("event_type", eventType),
+	)
+	defer span.End()
+
+	text := strings.TrimSpace(args)
+	if text == "" {
+		return pluginsdk.Errorf("Usage: scene %s <text>", verb), nil
+	}
+
+	// Resolve target scene via single-membership inference. Phase 5 will
+	// replace this with focus-aware routing that consults the character's
+	// focus context.
+	sceneID, userErr, internalErr := p.resolveSingleSceneMembership(ctx, req.CharacterID)
+	if internalErr != nil {
+		recordError(span, internalErr)
+		slog.WarnContext(
+			ctx, "scene.command.emit membership lookup failed",
+			"subject_id", req.CharacterID,
+			"event_type", eventType,
+			"error", internalErr,
+		)
+		return nil, internalErr
+	}
+	if userErr != "" {
+		return pluginsdk.Errorf("%s", userErr), nil
+	}
+	span.SetAttributes(attribute.String("scene_id", sceneID))
+
+	// Defense-in-depth participant check. Layer-1 ABAC already gated
+	// command-execute; this re-verifies on the plugin side per
+	// INV-P4-11 (TestSceneSubcommand_NonParticipant_PermissionDenied).
+	isPart, err := p.service.store.IsParticipant(ctx, sceneID, req.CharacterID)
+	if err != nil {
+		err = oops.Code("SCENE_EMIT_MEMBERSHIP_LOOKUP_FAILED").
+			With("scene_id", sceneID).
+			With("character_id", req.CharacterID).
+			With("event_type", eventType).Wrap(err)
+		recordError(span, err)
+		return nil, err
+	}
+	if !isPart {
+		return pluginsdk.Errorf("You are not a participant of scene %s.", sceneID), nil
+	}
+
+	// Build subject + payload.
+	subject := dotStyleSceneSubjectIC(p.service.gameID, sceneID)
+	if ooc {
+		subject = dotStyleSceneSubjectOOC(p.service.gameID, sceneID)
+	}
+
+	payload, err := json.Marshal(map[string]string{
+		"actor_id": req.CharacterID,
+		"scene_id": sceneID,
+		"text":     text,
+	})
+	if err != nil {
+		err = oops.Code("SCENE_EMIT_PAYLOAD_MARSHAL_FAILED").
+			With("event_type", eventType).
+			With("scene_id", sceneID).Wrap(err)
+		recordError(span, err)
+		return nil, err
+	}
+
+	if p.service.eventSink == nil {
+		err := oops.Code("SCENE_EVENT_SINK_NOT_CONFIGURED").
+			With("event_type", eventType).
+			With("scene_id", sceneID).
+			New("scene event sink is not configured")
+		recordError(span, err)
+		return nil, err
+	}
+
+	intent := pluginsdk.EmitIntent{
+		Subject:   subject,
+		Type:      pluginsdk.EventType(eventType),
+		Payload:   string(payload),
+		Sensitive: true, // sensitivity:always per crypto.emits manifest §2 / INV-P4-3
+	}
+	if err := p.service.eventSink.Emit(ctx, intent); err != nil {
+		err = oops.Code("SCENE_EMIT_FAILED").
+			With("event_type", eventType).
+			With("scene_id", sceneID).Wrap(err)
+		recordError(span, err)
+		return nil, err
+	}
+
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("You %s: %s", verb, text),
+	}, nil
+}
+
+// resolveSingleSceneMembership returns the scene_id this character is
+// currently a participant of, if exactly one. Returns a user-facing
+// message in userErr when membership count is ambiguous (zero or >1);
+// returns internalErr for genuine lookup failures.
+//
+// Phase 5 will replace this with focus-aware routing that consults the
+// character's focus context.
+func (p *scenePlugin) resolveSingleSceneMembership(ctx context.Context, characterID string) (sceneID, userErr string, internalErr error) {
+	scenes, err := p.service.store.ListScenesForCharacter(ctx, characterID)
+	if err != nil {
+		return "", "", oops.Code("SCENE_EMIT_MEMBERSHIP_LIST_FAILED").
+			With("character_id", characterID).Wrap(err)
+	}
+	switch len(scenes) {
+	case 0:
+		return "", "You are not currently in any scene. Join one with `scene join <scene-id>` first.", nil
+	case 1:
+		return scenes[0], "", nil
+	default:
+		return "", fmt.Sprintf(
+			"You are in %d scenes. Phase 5 will add focus-aware routing; for now, explicit scene targeting is not yet supported.",
+			len(scenes),
+		), nil
+	}
 }

@@ -68,7 +68,8 @@ crypto:
       description: "Notice that the scene owner changed the pose-order mode; mode strings + actor, no content."
     - event_type: scene_idle_nudge
       sensitivity: never
-      description: "Notice that the next-up character has been idle past the configured threshold; name + duration, no content. Trigger implementation deferred to follow-up bead holomush-fux3."
+      description: "Notice that the next-up character has been idle past the configured threshold; name + duration, no content.
+        Trigger implementation deferred to follow-up bead holomush-fux3."
 
 binary-plugin:
   executable: core-scenes

@@ -25,12 +25,13 @@ import (
 // supports configurable error injection so tests can exercise the error
 // branches of the service layer.
 type fakeStore struct {
-	scenes             map[string]*SceneRow
-	participants       map[string]map[string]string // sceneID → characterID → role
-	createErr          error
-	createWithOwnerErr error
-	getErr             error
-	addParticipantErr  error
+	scenes                    map[string]*SceneRow
+	participants              map[string]map[string]string // sceneID → characterID → role
+	createErr                 error
+	createWithOwnerErr        error
+	getErr                    error
+	addParticipantErr         error
+	listScenesForCharacterErr error
 }
 
 type recordingEventSink struct {
@@ -241,6 +242,36 @@ func (f *fakeStore) ListParticipantsWithPoseMeta(_ context.Context, sceneID stri
 		}
 	}
 	return result, nil
+}
+
+// ListScenesForCharacter mirrors the production query's role + state
+// filter: only owner/member rows in active/paused scenes count. Failure
+// can be injected via fakeStore.listScenesForCharacterErr.
+func (f *fakeStore) ListScenesForCharacter(_ context.Context, characterID string) ([]string, error) {
+	if f.listScenesForCharacterErr != nil {
+		return nil, f.listScenesForCharacterErr
+	}
+	var ids []string
+	for sceneID, members := range f.participants {
+		role, ok := members[characterID]
+		if !ok {
+			continue
+		}
+		if role != "owner" && role != "member" {
+			continue
+		}
+		// Mirror the production query's state filter: only active or paused
+		// scenes count toward single-membership inference.
+		scene, sceneOK := f.scenes[sceneID]
+		if !sceneOK {
+			continue
+		}
+		if scene.State != string(SceneStateActive) && scene.State != string(SceneStatePaused) {
+			continue
+		}
+		ids = append(ids, sceneID)
+	}
+	return ids, nil
 }
 
 func (f *fakeStore) End(_ context.Context, id string) (*SceneRow, error) {
@@ -1242,11 +1273,11 @@ func TestUpdateScene_EmitsPoseOrderChangedIC_OnModeChange(t *testing.T) {
 	// owner updates it to "strict". Expect scene_pose_order_changed_ic.
 	store := newFakeStore()
 	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
-		ID:        "scene-mode-change",
-		OwnerID:   "char-owner",
-		State:     string(SceneStateActive),
+		ID:         "scene-mode-change",
+		OwnerID:    "char-owner",
+		State:      string(SceneStateActive),
 		Visibility: string(SceneVisibilityOpen),
-		PoseOrder: string(PoseOrderModeFree),
+		PoseOrder:  string(PoseOrderModeFree),
 	}))
 	sink := &recordingEventSink{}
 	svc := NewSceneServiceImpl(store)
@@ -1276,11 +1307,11 @@ func TestUpdateScene_NoEmit_OnNoModeChange(t *testing.T) {
 	// No-op update MUST NOT emit a spurious notice.
 	store := newFakeStore()
 	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
-		ID:        "scene-mode-noop",
-		OwnerID:   "char-owner",
-		State:     string(SceneStateActive),
+		ID:         "scene-mode-noop",
+		OwnerID:    "char-owner",
+		State:      string(SceneStateActive),
 		Visibility: string(SceneVisibilityOpen),
-		PoseOrder: string(PoseOrderModeFree),
+		PoseOrder:  string(PoseOrderModeFree),
 	}))
 	sink := &recordingEventSink{}
 	svc := NewSceneServiceImpl(store)
@@ -1309,11 +1340,11 @@ func TestUpdateScene_NoEmit_OnNonModeUpdate(t *testing.T) {
 	// MUST NOT emit scene_pose_order_changed_ic.
 	store := newFakeStore()
 	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
-		ID:        "scene-other-update",
-		OwnerID:   "char-owner",
-		State:     string(SceneStateActive),
+		ID:         "scene-other-update",
+		OwnerID:    "char-owner",
+		State:      string(SceneStateActive),
 		Visibility: string(SceneVisibilityOpen),
-		PoseOrder: string(PoseOrderModeFree),
+		PoseOrder:  string(PoseOrderModeFree),
 	}))
 	sink := &recordingEventSink{}
 	svc := NewSceneServiceImpl(store)

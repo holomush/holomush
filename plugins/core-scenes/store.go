@@ -1272,6 +1272,55 @@ func (s *SceneStore) IsParticipant(ctx context.Context, sceneID, characterID str
 	return ok, nil
 }
 
+// ListScenesForCharacter returns active (non-archived) scene IDs for the
+// character's owner/member memberships. Excludes invited rows. Filters to
+// scenes in state IN ('active', 'paused') so ended/archived memberships
+// don't pollute single-membership inference at handleEmit.
+//
+// Pinned by spec §5.2 single-membership inference (Phase 5 will replace
+// with focus-aware routing).
+func (s *SceneStore) ListScenesForCharacter(ctx context.Context, characterID string) ([]string, error) {
+	ctx, span := startSpan(
+		ctx, "scene.store.list_scenes_for_character",
+		attribute.String("character_id", characterID),
+	)
+	defer span.End()
+
+	const q = `
+		SELECT p.scene_id
+		FROM scene_participants p
+		JOIN scenes s ON s.id = p.scene_id
+		WHERE p.character_id = $1
+		  AND p.role IN ('owner', 'member')
+		  AND s.state IN ('active', 'paused')
+		ORDER BY p.joined_at ASC
+	`
+	rows, err := s.pool.Query(ctx, q, characterID)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LIST_FOR_CHARACTER_FAILED").
+			With("character_id", characterID).Wrap(err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			recordError(span, err)
+			return nil, oops.Code("SCENE_LIST_FOR_CHARACTER_SCAN_FAILED").
+				With("character_id", characterID).Wrap(err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LIST_FOR_CHARACTER_ITER_FAILED").
+			With("character_id", characterID).Wrap(err)
+	}
+	return ids, nil
+}
+
 // ListParticipantsWithPoseMeta is a single SELECT joining scenes +
 // scene_participants and returning the participants (owner+member, NOT
 // invited) with their pose metadata. Pinned by spec §6.1 / INV-P4-7.

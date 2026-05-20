@@ -60,6 +60,12 @@ type sceneStorer interface {
 	// INV-S9 pose-order-only-for-participants discipline. Pinned by spec
 	// §6.1 / INV-P4-7. See ADR holomush-r4th (denormalize pose-order metadata).
 	ListParticipantsWithPoseMeta(ctx context.Context, sceneID string) (ParticipantsWithPoseMeta, error)
+	// ListScenesForCharacter returns the scene IDs the character is
+	// currently a participant of (role IN ('owner', 'member'), excluding
+	// 'invited') for scenes in state IN ('active', 'paused'). Used by
+	// handleEmit's single-membership inference per spec §5.2 (Phase 5 will
+	// replace with focus-aware routing).
+	ListScenesForCharacter(ctx context.Context, characterID string) ([]string, error)
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.
@@ -403,8 +409,8 @@ func (s *SceneServiceImpl) UpdateScene(ctx context.Context, req *scenev1.UpdateS
 	// pointer) so that an in-place store mutation cannot alias the pre-value.
 	// Read failure is non-fatal — we just won't emit the notice.
 	var (
-		preMode    string
-		hasPre     bool
+		preMode string
+		hasPre  bool
 	)
 	if update.PoseOrder != nil {
 		if r, readErr := s.store.Get(ctx, req.GetSceneId()); readErr == nil {

@@ -1763,12 +1763,14 @@ var _ = Describe("SceneStore", func() {
 			// Simulate what SceneAuditStore would do: write pose metadata directly.
 			poseTime := time.Now().UTC().Truncate(time.Millisecond)
 			poseSeq := int32(3)
-			_, err = store.pool.Exec(ctx,
+			_, err = store.pool.Exec(
+				ctx,
 				`UPDATE scenes SET total_pose_count = 3 WHERE id = $1`,
 				sceneID,
 			)
 			Expect(err).NotTo(HaveOccurred())
-			_, err = store.pool.Exec(ctx,
+			_, err = store.pool.Exec(
+				ctx,
 				`UPDATE scene_participants SET last_pose_at = $1, last_pose_seq = $2
 				 WHERE scene_id = $3 AND character_id = $4`,
 				poseTime, poseSeq, sceneID, member,
