@@ -16,6 +16,11 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Denormalize Pose-Order Metadata Against scene_log Source of Truth](holomush-r4th-denormalize-pose-order-metadata.md) | 2026-05-19 | Accepted | `holomush-r4th` |
+| [Migrate Scene Subjects to NATS Dot-Style Atomically With Plugin Emit Code](holomush-s9nu-scene-subject-atomic-migration.md) | 2026-05-19 | Accepted | `holomush-s9nu` |
+| [Classify All Scene Content Events as sensitivity:always, Including OOC](holomush-sb3n-scene-content-sensitivity-always.md) | 2026-05-19 | Accepted | `holomush-sb3n` |
+| [Generalize Plugin-Code Participant Gate from Scene-Log to All Participant-Only Scene RPCs](holomush-nt2d-participant-gate-pattern-generalized.md) | 2026-05-19 | Accepted (supersedes `holomush-c8a9`) | `holomush-nt2d` |
+| [Extend sceneAuditLogStore With Operation-Specific InsertScenePose for Transactional Atomicity](holomush-1ang-audit-interface-operation-specific-tx.md) | 2026-05-19 | Accepted | `holomush-1ang` |
 | [Snapshot RPC as Source of Truth for Current-State Presence](holomush-da2q-snapshot-rpc-source-of-truth-presence.md) | 2026-05-19 | Accepted | `holomush-da2q` |
 | [Current-State Presence Snapshot Exempt from I-PRIV-1 Temporal Floor](holomush-o46k-presence-snapshot-exempt-from-priv-floor.md) | 2026-05-19 | Accepted | `holomush-o46k` |
 | [Introduce list_presence ABAC Action with Default-Deny and Same-Location Seed](holomush-lp65-list-presence-abac-action.md) | 2026-05-19 | Accepted | `holomush-lp65` |
@@ -30,7 +35,7 @@ edge and the file's `**Status:**` reflects the supersession.
 | [Require N=2 Consumer Validation Before SDK Primitive Extraction](holomush-lrt3-n2-consumer-validation-sdk-extraction.md) | 2026-05-16 | Accepted | `holomush-lrt3` |
 | [Strict Plugin-Boundary: Plugins Must Not Modify internal/](holomush-z1e7-strict-plugin-boundary.md) | 2026-05-16 | Accepted | `holomush-z1e7` |
 | [Startup-Time Set-Equality Validation of crypto.emits Declarations](holomush-3vsb-manifest-emit-type-startup-validation.md) | 2026-05-16 | Accepted | `holomush-3vsb` |
-| [Enforce Scene Privacy at Plugin Code, Not ABAC Engine](holomush-c8a9-scene-privacy-plugin-code-enforcement.md) | 2026-05-16 | Accepted | `holomush-c8a9` |
+| [Enforce Scene Privacy at Plugin Code, Not ABAC Engine](holomush-c8a9-scene-privacy-plugin-code-enforcement.md) | 2026-05-16 | Superseded by `holomush-nt2d` | `holomush-c8a9` |
 | [Use suiteT Capture Pattern Instead of GinkgoT() for testing.TB](holomush-1f1w-suitet-capture-pattern-ginkgo-testing-tb.md) | 2026-05-16 | Accepted | `holomush-1f1w` |
 | [Remap INV-Pinned Test\* Functions to Ginkgo Suite Entries on Migration](holomush-iv7l-remap-inv-pinned-tests-ginkgo-suite-entries.md) | 2026-05-16 | Accepted | `holomush-iv7l` |
 | [AdminReadStream Bypasses HistoryReader/Dispatcher](holomush-8f2x-adminreadstream-bypasses-historyreaderdispatcher.md) | 2026-05-12 | Accepted | `holomush-8f2x` |

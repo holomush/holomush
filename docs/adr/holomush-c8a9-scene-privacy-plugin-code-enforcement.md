@@ -4,7 +4,7 @@
 # Enforce Scene Privacy at Plugin Code, Not ABAC Engine
 
 **Date:** 2026-05-16
-**Status:** Accepted
+**Status:** Superseded by [`holomush-nt2d`](holomush-nt2d-participant-gate-pattern-generalized.md) (broadens scope from scene-log reads to all participant-only scene RPCs)
 **Decision:** holomush-c8a9
 **Deciders:** HoloMUSH Contributors
 
