@@ -54,6 +54,12 @@ type sceneStorer interface {
 	// Returns (false, nil) if the character is not a participant — no
 	// distinction from "not found"; the gate's contract is binary.
 	IsParticipant(ctx context.Context, sceneID, characterID string) (bool, error)
+	// ListParticipantsWithPoseMeta fetches scenes.total_pose_count and the
+	// per-participant pose metadata (last_pose_at, last_pose_seq) for all
+	// owner+member rows in a single SELECT. Excludes invited role per
+	// INV-S9 pose-order-only-for-participants discipline. Pinned by spec
+	// §6.1 / INV-P4-7. See ADR holomush-r4th (denormalize pose-order metadata).
+	ListParticipantsWithPoseMeta(ctx context.Context, sceneID string) (ParticipantsWithPoseMeta, error)
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.

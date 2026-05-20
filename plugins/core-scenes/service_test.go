@@ -231,6 +231,18 @@ func (f *fakeStore) IsParticipant(_ context.Context, sceneID, characterID string
 	return role == "owner" || role == "member", nil
 }
 
+func (f *fakeStore) ListParticipantsWithPoseMeta(_ context.Context, sceneID string) (ParticipantsWithPoseMeta, error) {
+	var result ParticipantsWithPoseMeta
+	for cid, role := range f.participants[sceneID] {
+		if role == "owner" || role == "member" {
+			result.Participants = append(result.Participants, ParticipantWithPoseMeta{
+				CharacterID: cid,
+			})
+		}
+	}
+	return result, nil
+}
+
 func (f *fakeStore) End(_ context.Context, id string) (*SceneRow, error) {
 	row, ok := f.scenes[id]
 	if !ok {

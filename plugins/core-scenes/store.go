@@ -1272,6 +1272,58 @@ func (s *SceneStore) IsParticipant(ctx context.Context, sceneID, characterID str
 	return ok, nil
 }
 
+// ListParticipantsWithPoseMeta is a single SELECT joining scenes +
+// scene_participants and returning the participants (owner+member, NOT
+// invited) with their pose metadata. Pinned by spec §6.1 / INV-P4-7.
+// See ADR holomush-r4th (denormalize pose-order metadata).
+func (s *SceneStore) ListParticipantsWithPoseMeta(ctx context.Context, sceneID string) (ParticipantsWithPoseMeta, error) {
+	ctx, span := startSpan(
+		ctx, "scene.store.list_participants_with_pose_meta",
+		attribute.String("scene_id", sceneID),
+	)
+	defer span.End()
+
+	const q = `
+		SELECT
+		    s.total_pose_count,
+		    p.character_id,
+		    p.joined_at,
+		    p.last_pose_at,
+		    p.last_pose_seq
+		FROM scenes s
+		JOIN scene_participants p ON p.scene_id = s.id
+		WHERE s.id = $1
+		  AND p.role IN ('owner', 'member')
+		ORDER BY p.joined_at ASC
+	`
+	rows, err := s.pool.Query(ctx, q, sceneID)
+	if err != nil {
+		recordError(span, err)
+		return ParticipantsWithPoseMeta{}, oops.Code("SCENE_POSE_META_LOOKUP_FAILED").
+			With("scene_id", sceneID).Wrap(err)
+	}
+	defer rows.Close()
+
+	var result ParticipantsWithPoseMeta
+	for rows.Next() {
+		var p ParticipantWithPoseMeta
+		var totalPoseCount int32
+		if err := rows.Scan(&totalPoseCount, &p.CharacterID, &p.JoinedAt, &p.LastPoseAt, &p.LastPoseSeq); err != nil {
+			recordError(span, err)
+			return ParticipantsWithPoseMeta{}, oops.Code("SCENE_POSE_META_SCAN_FAILED").
+				With("scene_id", sceneID).Wrap(err)
+		}
+		result.TotalPoseCount = uint32(totalPoseCount)
+		result.Participants = append(result.Participants, p)
+	}
+	if err := rows.Err(); err != nil {
+		recordError(span, err)
+		return ParticipantsWithPoseMeta{}, oops.Code("SCENE_POSE_META_ITER_FAILED").
+			With("scene_id", sceneID).Wrap(err)
+	}
+	return result, nil
+}
+
 // classifyJoinMiss issues one diagnostic SELECT to figure out which
 // precondition failed when AddParticipant's RETURNING was empty. Pays the
 // extra round trip ONLY in the error path; the happy path is single-statement.
