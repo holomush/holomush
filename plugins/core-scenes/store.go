@@ -1239,6 +1239,39 @@ func (s *SceneStore) GetParticipant(ctx context.Context, sceneID, characterID st
 	return p, nil
 }
 
+// IsParticipant reports whether the character is a participant (owner or
+// member, NOT invited) of the scene. The invited-role exclusion is
+// load-bearing: INV-S9's gate at GetPoseOrder MUST NOT treat pending
+// invites as participants. Pinned by spec INV-P4-4 / INV-P4-11.
+//
+// Returns (false, nil) for both "not found" and "invited" — the binary
+// contract hides those distinctions intentionally (info-hiding per ADR
+// holomush-nt2d, which supersedes holomush-c8a9).
+func (s *SceneStore) IsParticipant(ctx context.Context, sceneID, characterID string) (bool, error) {
+	ctx, span := startSpan(
+		ctx, "scene.store.is_participant",
+		attribute.String("scene_id", sceneID),
+		attribute.String("character_id", characterID),
+	)
+	defer span.End()
+
+	const q = `
+		SELECT EXISTS (
+			SELECT 1 FROM scene_participants
+			WHERE scene_id = $1
+			  AND character_id = $2
+			  AND role IN ('owner', 'member')
+		)
+	`
+	var ok bool
+	if err := s.pool.QueryRow(ctx, q, sceneID, characterID).Scan(&ok); err != nil {
+		recordError(span, err)
+		return false, oops.Code("SCENE_PARTICIPANT_LOOKUP_FAILED").
+			With("scene_id", sceneID).With("character_id", characterID).Wrap(err)
+	}
+	return ok, nil
+}
+
 // classifyJoinMiss issues one diagnostic SELECT to figure out which
 // precondition failed when AddParticipant's RETURNING was empty. Pays the
 // extra round trip ONLY in the error path; the happy path is single-statement.

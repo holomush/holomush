@@ -1608,6 +1608,76 @@ var _ = Describe("SceneStore", func() {
 		})
 	})
 
+	Describe("IsParticipant", func() {
+		It("returns true for owner", func() {
+			store := newTestStore()
+			ctx := context.Background()
+			row := &SceneRow{
+				ID: "scene-ip-owner", OwnerID: "char-owner-1", Title: "T",
+				State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+				Visibility:      string(SceneVisibilityOpen),
+				ContentWarnings: []string{}, Tags: []string{},
+			}
+			Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+
+			ok, err := store.IsParticipant(ctx, row.ID, "char-owner-1")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue(), "owner MUST pass the INV-S9 gate")
+		})
+
+		It("returns true for member", func() {
+			store := newTestStore()
+			ctx := context.Background()
+			row := &SceneRow{
+				ID: "scene-ip-member", OwnerID: "char-owner-2", Title: "T",
+				State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+				Visibility:      string(SceneVisibilityOpen),
+				ContentWarnings: []string{}, Tags: []string{},
+			}
+			Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+			_, _, err := store.AddParticipant(ctx, row.ID, "char-member-2")
+			Expect(err).NotTo(HaveOccurred())
+
+			ok, err := store.IsParticipant(ctx, row.ID, "char-member-2")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue(), "member MUST pass the INV-S9 gate")
+		})
+
+		It("returns false for invited role (NOT a participant for INV-S9 gate)", func() {
+			store := newTestStore()
+			ctx := context.Background()
+			row := &SceneRow{
+				ID: "scene-ip-invited", OwnerID: "char-owner-3", Title: "T",
+				State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+				Visibility:      string(SceneVisibilityPrivate),
+				ContentWarnings: []string{}, Tags: []string{},
+			}
+			Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+			_, err := store.InviteParticipant(ctx, row.ID, "char-owner-3", "char-invitee-3")
+			Expect(err).NotTo(HaveOccurred())
+
+			ok, err := store.IsParticipant(ctx, row.ID, "char-invitee-3")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeFalse(), "invited role MUST NOT count as participant for INV-S9 gate")
+		})
+
+		It("returns false for character not in scene", func() {
+			store := newTestStore()
+			ctx := context.Background()
+			row := &SceneRow{
+				ID: "scene-ip-outsider", OwnerID: "char-owner-4", Title: "T",
+				State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+				Visibility:      string(SceneVisibilityOpen),
+				ContentWarnings: []string{}, Tags: []string{},
+			}
+			Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+
+			ok, err := store.IsParticipant(ctx, row.ID, "char-outsider-4")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeFalse(), "non-participant MUST return false with nil error")
+		})
+	})
+
 	Describe("IsMember", func() {
 		DescribeTable(
 			"returns expected result by role and scene state",

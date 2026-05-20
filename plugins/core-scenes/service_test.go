@@ -223,6 +223,14 @@ func (f *fakeStore) GetParticipant(_ context.Context, sceneID, characterID strin
 	return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: role}, nil
 }
 
+func (f *fakeStore) IsParticipant(_ context.Context, sceneID, characterID string) (bool, error) {
+	role, ok := f.participants[sceneID][characterID]
+	if !ok {
+		return false, nil
+	}
+	return role == "owner" || role == "member", nil
+}
+
 func (f *fakeStore) End(_ context.Context, id string) (*SceneRow, error) {
 	row, ok := f.scenes[id]
 	if !ok {

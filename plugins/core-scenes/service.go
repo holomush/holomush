@@ -48,6 +48,12 @@ type sceneStorer interface {
 	TransferOwnership(ctx context.Context, sceneID, currentOwnerID, newOwnerID string) error
 	ListParticipants(ctx context.Context, sceneID string) ([]ParticipantRow, error)
 	GetParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, error)
+	// IsParticipant returns true if the character is a current participant
+	// of the scene with role "owner" or "member" (NOT "invited"). Used by
+	// the INV-S9 plugin-code gate at GetPoseOrder per ADR holomush-nt2d.
+	// Returns (false, nil) if the character is not a participant — no
+	// distinction from "not found"; the gate's contract is binary.
+	IsParticipant(ctx context.Context, sceneID, characterID string) (bool, error)
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.
