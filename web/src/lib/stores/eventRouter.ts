@@ -4,7 +4,7 @@
 import { exits } from './sidebarStore';
 import type { RoomExit } from './sidebarStore';
 import { appendLine, replayActive } from './terminalStore';
-import { applyLocationState, addPresence, removePresence } from './sidebarStore';
+import { applyLocationState } from './sidebarStore';
 import type { GameEvent } from '$lib/connect/holomush/web/v1/web_pb';
 
 // DisplayTarget values from the GameEvent proto (renamed from EventChannel).
@@ -35,15 +35,13 @@ export function routeEvent(event: GameEvent, replayed: boolean) {
 function routeToSidebar(event: GameEvent, replayed: boolean) {
   const data = metadataToPlain(event.metadata);
   const category = (event as Record<string, unknown>).category as string | undefined;
-  const actor = (event as Record<string, unknown>).actor as string | undefined;
 
   switch (category) {
     case 'state':
       routeStateEvent(event.type, data, replayed);
       break;
-    case 'movement':
-      routeMovementEvent(event.type, actor, replayed);
-      break;
+    // 'movement': no-op here — mirrorMovementPresence in +page.svelte is the
+    // sole writer for live movement events to the PresenceStore (T12, holomush-5b2j.14).
   }
 }
 
@@ -61,18 +59,6 @@ function routeStateEvent(type: string, data: Record<string, unknown> | null, rep
       if (!replayed && data?.exits) {
         exits.set(data.exits as RoomExit[]);
       }
-      break;
-  }
-}
-
-function routeMovementEvent(type: string, actor: string | undefined, replayed: boolean) {
-  if (replayed || !actor) return;
-  switch (type) {
-    case 'arrive':
-      addPresence(actor);
-      break;
-    case 'leave':
-      removePresence(actor);
       break;
   }
 }

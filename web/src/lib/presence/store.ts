@@ -50,3 +50,10 @@ export function createPresenceStore(): PresenceStore {
     map: m,
   };
 }
+
+/**
+ * Module-level singleton presence store consumed by the terminal sidebar.
+ * Tests should use `createPresenceStore()` for isolation; production code
+ * imports this singleton.
+ */
+export const presenceStore: PresenceStore = createPresenceStore();
