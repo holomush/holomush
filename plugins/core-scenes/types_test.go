@@ -73,6 +73,8 @@ func TestParticipantWithPoseMeta_NeverPosed_NilFields(t *testing.T) {
 		CharacterID: "char-alice",
 		JoinedAt:    time.Now(),
 	}
+	assert.Equal(t, "char-alice", p.CharacterID)
+	assert.False(t, p.JoinedAt.IsZero())
 	assert.Nil(t, p.LastPoseAt)
 	assert.Nil(t, p.LastPoseSeq)
 }

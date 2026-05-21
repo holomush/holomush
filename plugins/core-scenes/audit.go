@@ -163,10 +163,13 @@ func (s *SceneAuditStore) Insert(
 	dekRef *int64,
 	dekVersion *int32,
 ) error {
-	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	if err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		return s.insertSceneLogTx(ctx, tx, id, subject, eventType, timestamp,
 			actorKind, actorID, payload, schemaVer, codec, dekRef, dekVersion)
-	})
+	}); err != nil {
+		return oops.Code("SCENE_AUDIT_INSERT_FAILED").Wrap(err)
+	}
+	return nil
 }
 
 // InsertScenePose runs the scene_log INSERT + scenes.total_pose_count
@@ -386,7 +389,7 @@ func (s *SceneAuditServer) AuditEvent(ctx context.Context, req *pluginv1.AuditEv
 		if err != nil {
 			// parseSceneSubject already wraps with SCENE_AUDIT_SUBJECT_INVALID
 			// and includes the subject in context — propagate as-is.
-			return nil, err //nolint:wrapcheck // already wrapped by parseSceneSubject with SCENE_AUDIT_SUBJECT_INVALID
+			return nil, err
 		}
 		var posedCharULID ulid.ULID
 		copy(posedCharULID[:], actorID)

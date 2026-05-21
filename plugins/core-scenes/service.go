@@ -926,7 +926,7 @@ func (s *SceneServiceImpl) GetPoseOrder(ctx context.Context, req *scenev1.GetPos
 		return nil, status.Errorf(codes.Internal, "failed to check participant: %v", err)
 	}
 	if !ok {
-		return nil, status.Error(codes.PermissionDenied, "not a participant of scene")
+		return nil, status.Error(codes.PermissionDenied, "not a participant of scene") //nolint:wrapcheck // gRPC status errors pass through as-is
 	}
 
 	// Load scene row for pose_order mode. ListParticipantsWithPoseMeta

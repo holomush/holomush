@@ -1362,7 +1362,7 @@ func (s *SceneStore) ListParticipantsWithPoseMeta(ctx context.Context, sceneID s
 			return ParticipantsWithPoseMeta{}, oops.Code("SCENE_POSE_META_SCAN_FAILED").
 				With("scene_id", sceneID).Wrap(err)
 		}
-		result.TotalPoseCount = uint32(totalPoseCount)
+		result.TotalPoseCount = uint32(totalPoseCount) //nolint:gosec // scenes.total_pose_count is a monotonic counter UPDATEd only by InsertScenePose — never negative
 		result.Participants = append(result.Participants, p)
 	}
 	if err := rows.Err(); err != nil {

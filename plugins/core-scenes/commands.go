@@ -697,8 +697,6 @@ func (p *scenePlugin) handleEmit(
 
 // handleOrder is the scene/order subcommand handler — renders the current
 // pose order for the caller's scene per spec §8.
-//
-//nolint:unparam // plugin SDK contract requires (*CommandResponse, error); errors flow via pluginsdk.Errorf
 func (p *scenePlugin) handleOrder(ctx context.Context, req pluginsdk.CommandRequest, _ string) (*pluginsdk.CommandResponse, error) {
 	sceneID, userErr, internalErr := p.resolveSingleSceneMembership(ctx, req.CharacterID)
 	if internalErr != nil {
