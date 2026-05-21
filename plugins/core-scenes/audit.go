@@ -373,23 +373,60 @@ func (s *SceneAuditServer) AuditEvent(ctx context.Context, req *pluginv1.AuditEv
 		dekVersion = &v
 	}
 
-	if err := s.store.Insert(
-		ctx,
-		row.GetId(),
-		subject,
-		eventType,
-		row.GetTimestamp(),
-		actorKind,
-		actorID,
-		row.GetPayload(),
-		schemaVer,
-		codec,
-		dekRef,
-		dekVersion,
-	); err != nil {
-		// SceneAuditStore.Insert already wraps with SCENE_AUDIT_INSERT_FAILED
-		// and the same subject/type context — propagate as-is.
-		return nil, err //nolint:wrapcheck // already wrapped by Insert with SCENE_AUDIT_INSERT_FAILED
+	// Dispatch on event type per spec §9.4: scene_pose routes through
+	// InsertScenePose (which composes the scene_log INSERT +
+	// scenes.total_pose_count UPDATE + scene_participants metadata UPDATE
+	// transactionally per T7/INV-P4-10); all other event types route
+	// through plain Insert (existing behaviour).
+	if eventType == "scene_pose" {
+		sceneID, err := parseSceneSubject(subject)
+		if err != nil {
+			// parseSceneSubject already wraps with SCENE_AUDIT_SUBJECT_INVALID
+			// and includes the subject in context — propagate as-is.
+			return nil, err //nolint:wrapcheck // already wrapped by parseSceneSubject with SCENE_AUDIT_SUBJECT_INVALID
+		}
+		var posedCharULID ulid.ULID
+		copy(posedCharULID[:], actorID)
+		posedCharID := posedCharULID.String()
+
+		if err := s.store.InsertScenePose(
+			ctx,
+			row.GetId(),
+			subject,
+			eventType,
+			row.GetTimestamp(),
+			actorKind,
+			actorID,
+			row.GetPayload(),
+			schemaVer,
+			codec,
+			dekRef,
+			dekVersion,
+			sceneID,
+			posedCharID,
+		); err != nil {
+			// InsertScenePose already wraps with SCENE_AUDIT_TX_FAILED.
+			return nil, err //nolint:wrapcheck // already wrapped by InsertScenePose with SCENE_AUDIT_TX_FAILED
+		}
+	} else {
+		if err := s.store.Insert(
+			ctx,
+			row.GetId(),
+			subject,
+			eventType,
+			row.GetTimestamp(),
+			actorKind,
+			actorID,
+			row.GetPayload(),
+			schemaVer,
+			codec,
+			dekRef,
+			dekVersion,
+		); err != nil {
+			// SceneAuditStore.Insert already wraps with SCENE_AUDIT_INSERT_FAILED
+			// and the same subject/type context — propagate as-is.
+			return nil, err //nolint:wrapcheck // already wrapped by Insert with SCENE_AUDIT_INSERT_FAILED
+		}
 	}
 
 	return &pluginv1.AuditEventResponse{}, nil

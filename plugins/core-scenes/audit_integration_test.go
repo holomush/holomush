@@ -15,6 +15,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/pkg/errutil"
+	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
 // newPoseULID returns a fresh 16-byte ULID for use as scene_log.id in
@@ -184,5 +186,156 @@ var _ = Describe("SceneAuditStore.InsertScenePose", func() {
 		).Scan(&lastAt, &lastSeq)).NotTo(HaveOccurred())
 		Expect(lastAt).To(BeNil(), "non-actor participant's last_pose_at MUST be untouched")
 		Expect(lastSeq).To(BeNil(), "non-actor participant's last_pose_seq MUST be untouched")
+	})
+})
+
+// makeAuditRow builds a minimal AuditEventRequest for dispatcher tests.
+func makeAuditRow(
+	id []byte,
+	subject, eventType string,
+	ts *timestamppb.Timestamp,
+	actorID []byte,
+) *pluginv1.AuditEventRequest {
+	return &pluginv1.AuditEventRequest{
+		Row: &pluginv1.AuditRow{
+			Id:        id,
+			Subject:   subject,
+			Type:      eventType,
+			Timestamp: ts,
+			Actor: &eventbusv1.Actor{
+				Kind: eventbusv1.ActorKind_ACTOR_KIND_CHARACTER,
+				Id:   actorID,
+			},
+			Payload:   []byte(`{}`),
+			SchemaVer: 1,
+			Codec:     "identity",
+		},
+	}
+}
+
+var _ = Describe("SceneAuditServer.AuditEvent dispatcher", func() {
+	// Per spec §9.4: AuditEvent MUST route scene_pose events through
+	// InsertScenePose (transactional path) and all other types through
+	// Insert (plain path).
+
+	It("routes scene_pose to InsertScenePose: scene_log + total_pose_count + last_pose_at all commit", func() {
+		// Setup: create a real scene. The owner's character_id is set to
+		// a ULID string so the dispatcher's posedCharID conversion matches
+		// and the participant UPDATE is a real hit (not a 0-row no-op).
+		store := newTestStore()
+		audit := NewSceneAuditStore(store.Pool())
+		srv := &SceneAuditServer{store: audit}
+		ctx := context.Background()
+
+		// ownerULID is the character ID we'll use as both the scene owner
+		// and the actorID bytes in the audit row. AuditEvent does
+		// copy(posedCharULID[:], actorID) → posedCharULID.String()
+		// which must equal ownerCharID for the participant UPDATE to hit.
+		ownerULID := ulid.Make()
+		ownerCharID := ownerULID.String()
+		ownerBytes := ownerULID.Bytes()
+
+		sceneID := "scene-disp-pose"
+		row := &SceneRow{
+			ID: sceneID, Title: "T", OwnerID: ownerCharID,
+			State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+			Visibility:      string(SceneVisibilityOpen),
+			ContentWarnings: []string{}, Tags: []string{},
+		}
+		Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+
+		eventTime := time.Now().UTC().Add(-3 * time.Minute).Truncate(time.Millisecond)
+		eventID := newPoseULID()
+		subject := "events.main.scene." + sceneID + ".ic"
+
+		req := makeAuditRow(eventID, subject, "scene_pose", timestamppb.New(eventTime), ownerBytes[:])
+		_, err := srv.AuditEvent(ctx, req)
+		Expect(err).NotTo(HaveOccurred())
+
+		// 1. scene_log row landed.
+		var logCount int
+		Expect(store.Pool().QueryRow(ctx,
+			`SELECT COUNT(*) FROM scene_log WHERE id = $1`, eventID,
+		).Scan(&logCount)).NotTo(HaveOccurred())
+		Expect(logCount).To(Equal(1), "scene_log INSERT MUST commit via dispatcher scene_pose path")
+
+		// 2. total_pose_count bumped to 1.
+		var total int
+		Expect(store.Pool().QueryRow(ctx,
+			`SELECT total_pose_count FROM scenes WHERE id = $1`, sceneID,
+		).Scan(&total)).NotTo(HaveOccurred())
+		Expect(total).To(Equal(1), "total_pose_count MUST bump when routed through InsertScenePose")
+
+		// 3. scene_participants.last_pose_at stamped with the canonical event ts.
+		var lastAt *time.Time
+		Expect(store.Pool().QueryRow(ctx,
+			`SELECT last_pose_at FROM scene_participants
+			 WHERE scene_id = $1 AND character_id = $2`,
+			sceneID, ownerCharID,
+		).Scan(&lastAt)).NotTo(HaveOccurred())
+		Expect(lastAt).NotTo(BeNil(),
+			"last_pose_at MUST be set when scene_pose routes through InsertScenePose")
+		Expect(lastAt.UTC().Truncate(time.Millisecond)).To(Equal(eventTime),
+			"last_pose_at MUST use the canonical event timestamp, not wall clock")
+	})
+
+	It("routes non-scene_pose to Insert: only scene_log lands, total_pose_count unchanged", func() {
+		store := newTestStore()
+		audit := NewSceneAuditStore(store.Pool())
+		srv := &SceneAuditServer{store: audit}
+		ctx := context.Background()
+
+		ownerULID := ulid.Make()
+		ownerCharID := ownerULID.String()
+
+		sceneID := "scene-disp-join"
+		row := &SceneRow{
+			ID: sceneID, Title: "T", OwnerID: ownerCharID,
+			State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+			Visibility:      string(SceneVisibilityOpen),
+			ContentWarnings: []string{}, Tags: []string{},
+		}
+		Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+
+		eventID := newPoseULID()
+		subject := "events.main.scene." + sceneID + ".ic"
+		actorBytes := newPoseULID() // arbitrary 16-byte actor; type is scene_join_ic not scene_pose
+
+		req := makeAuditRow(eventID, subject, "scene_join_ic", timestamppb.Now(), actorBytes)
+		_, err := srv.AuditEvent(ctx, req)
+		Expect(err).NotTo(HaveOccurred())
+
+		// 1. scene_log row landed.
+		var logCount int
+		Expect(store.Pool().QueryRow(ctx,
+			`SELECT COUNT(*) FROM scene_log WHERE id = $1`, eventID,
+		).Scan(&logCount)).NotTo(HaveOccurred())
+		Expect(logCount).To(Equal(1), "scene_log INSERT MUST commit for non-pose events via Insert path")
+
+		// 2. total_pose_count MUST remain 0 — the Insert path does NOT touch scenes.
+		var total int
+		Expect(store.Pool().QueryRow(ctx,
+			`SELECT total_pose_count FROM scenes WHERE id = $1`, sceneID,
+		).Scan(&total)).NotTo(HaveOccurred())
+		Expect(total).To(Equal(0),
+			"total_pose_count MUST NOT be bumped by non-scene_pose events (plain Insert path)")
+	})
+
+	It("returns SCENE_POSE_SUBJECT_PARSE_FAILED on malformed subject for scene_pose", func() {
+		store := newTestStore()
+		audit := NewSceneAuditStore(store.Pool())
+		srv := &SceneAuditServer{store: audit}
+		ctx := context.Background()
+
+		eventID := newPoseULID()
+		// Subject missing the required scene segment — parseSceneSubject rejects it.
+		req := makeAuditRow(eventID, "events.main.bad", "scene_pose", timestamppb.Now(), newPoseULID())
+		_, err := srv.AuditEvent(ctx, req)
+		Expect(err).To(HaveOccurred())
+		// AssertErrorCode returns the DEEPEST oops code. parseSceneSubject
+		// wraps with SCENE_AUDIT_SUBJECT_INVALID; AuditEvent's outer
+		// SCENE_POSE_SUBJECT_PARSE_FAILED is a shallower wrapper and is
+		// not the code errutil.AssertErrorCode observes.
+		errutil.AssertErrorCode(suiteT, err, "SCENE_AUDIT_SUBJECT_INVALID")
 	})
 })
