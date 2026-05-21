@@ -1,4 +1,4 @@
 # yaml-language-server: $schema=https://storage.googleapis.com/coderabbit_public_assets/schema.v2.json
 reviews:
   auto_review:
-    auto_pause_after_reviewed_commits: 0
+    auto_pause_after_reviewed_commits: 10
