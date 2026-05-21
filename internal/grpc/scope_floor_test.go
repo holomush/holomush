@@ -42,10 +42,10 @@ func TestStreamScopeFloor(t *testing.T) {
 			"location:" + locID.String(), guestCreated,
 		},
 		{
-			"scene member — non-guest, uses JoinedAt",
+			"scene member — non-guest, uses JoinedAt (dot-style IC subject)",
 			&session.Info{CharacterID: charID, FocusMemberships: []session.FocusMembership{
 				{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: sceneJoin},
-			}}, "scene:" + sceneID.String() + ":ic", sceneJoin,
+			}}, dotStyleSceneIC(sceneID.String()), sceneJoin,
 		},
 		{"character own stream — no floor", &session.Info{CharacterID: charID}, "character:" + charID.String(), time.Time{}},
 	}
@@ -59,9 +59,9 @@ func TestStreamScopeFloor(t *testing.T) {
 
 // TestMaxStreamScopeFloor covers the Subscribe-path MAX aggregation used by
 // CoreServer.Subscribe to compute the minFloor it forwards to OpenSession.
-// The helper takes legacy stream-name format ("location:X", "scene:Y:ic",
-// "character:Z"); production callers pass NATS subjects today, so these tests
-// exercise the function as designed independent of that pending format-gap.
+// Scene subjects use NATS dot-style per Phase 4 / INV-P4-1 / ADR holomush-s9nu;
+// location streams retain the legacy colon-style format (tracked separately
+// by holomush-rops for migration).
 func TestMaxStreamScopeFloor(t *testing.T) {
 	locID := ulid.MustParse("01H000000000000000000000A1")
 	sceneID := ulid.MustParse("01H000000000000000000000S1")
@@ -78,7 +78,7 @@ func TestMaxStreamScopeFloor(t *testing.T) {
 		},
 	}
 	locStream := "location:" + locID.String()
-	sceneStream := "scene:" + sceneID.String() + ":ic"
+	sceneStream := dotStyleSceneIC(sceneID.String())
 	charStream := "character:" + charID.String()
 
 	cases := []struct {
@@ -112,4 +112,66 @@ func TestIsLocationStream(t *testing.T) {
 	assert.False(t, isLocationStream("scene:01H000000000000000000000S1:ic"))
 	assert.False(t, isLocationStream("character:01H000000000000000000000C1"))
 	assert.False(t, isLocationStream("global"))
+}
+
+// TestStreamScopeFloor_SceneSubjects_INV_P4_9 pins the bug-fix moment for
+// the scope_floor.go format mismatch (spec §3.3). Pre-Phase-4, the scene
+// branch matched the colon-style "scene:<id>:ic" form, but production
+// callers pass NATS dot-style ("events.<gid>.scene.<id>.{ic,ooc}"), so
+// streamScopeFloor returned time.Time{} for every real-world scene subject
+// and the iwzt §6.1 temporal floor for scene streams was silently inactive.
+//
+// Phase 4 / T13 migrated the scene branch to dot-style. Post-migration:
+//   - legacy colon-style is no longer recognized (returns time.Time{} via the
+//     default branch — same fail-closed semantics as any unknown subject)
+//   - dot-style IC and OOC subjects floor to FocusMembership.JoinedAt
+//
+// The diff between this test and the previous TestStreamScopeFloor scene
+// fixture IS the audit artifact for INV-P4-9 per spec §3.3.
+func TestStreamScopeFloor_SceneSubjects_INV_P4_9(t *testing.T) {
+	t.Parallel()
+	sceneID := ulid.Make()
+	joinedAt := time.Now().UTC().Truncate(time.Microsecond)
+
+	info := &session.Info{
+		FocusMemberships: []session.FocusMembership{{
+			Kind:     session.FocusKindScene,
+			TargetID: sceneID,
+			JoinedAt: joinedAt,
+		}},
+	}
+
+	cases := []struct {
+		name      string
+		stream    string
+		wantFloor time.Time
+		rationale string
+	}{
+		{
+			name:      "legacy colon-style (no longer matched after migration)",
+			stream:    "scene:" + sceneID.String() + ":ic",
+			wantFloor: time.Time{},
+			rationale: "Phase 4 removed the colon-style scene branch — legacy form falls to time.Time{} default.",
+		},
+		{
+			name:      "NATS dot-style IC (newly matched after migration)",
+			stream:    dotStyleSceneIC(sceneID.String()),
+			wantFloor: joinedAt,
+			rationale: "Phase 4 added the dot-style scene branch — production-shape subjects now floor to FocusMembership.JoinedAt.",
+		},
+		{
+			name:      "NATS dot-style OOC facet",
+			stream:    dotStyleSceneOOC(sceneID.String()),
+			wantFloor: joinedAt,
+			rationale: "OOC facet floors to same JoinedAt as IC.",
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := streamScopeFloor(info, tc.stream)
+			assert.Equal(t, tc.wantFloor.UTC(), got.UTC(), tc.rationale)
+		})
+	}
 }

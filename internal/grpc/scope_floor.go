@@ -17,15 +17,6 @@ import (
 // Per holomush-iwzt §6.2 Tier 1: MAX (not MIN) yields the smallest set that
 // includes events visible to at least one subject; iwzt.15 then drops events
 // below the per-subject floor at delivery time.
-//
-// NOTE: streamScopeFloor currently inspects legacy stream-name prefixes
-// ("location:", "scene:"), but production callers pass NATS subjects
-// ("events.<gid>.location.X"), so the loop returns time.Time{} for every
-// real-world subject today. Until that format mismatch is closed (tracked
-// as a separate follow-up bead), the aggregate floor is effectively zero —
-// preserving the pre-iwzt DeliverAllPolicy behavior. The helper exists so
-// the MAX-semantics are testable in isolation and the wiring is in place
-// when the format gap is closed.
 func maxStreamScopeFloor(info *session.Info, filters []string) time.Time {
 	var minFloor time.Time
 	for _, subj := range filters {
@@ -44,7 +35,7 @@ func streamScopeFloor(info *session.Info, stream string) time.Time {
 	switch {
 	case isLocationStream(stream):
 		base = info.LocationArrivedAt
-	case strings.HasPrefix(stream, "scene:"):
+	case isSceneStream(stream):
 		sceneID, ok := extractSceneID(stream)
 		if !ok {
 			return time.Time{}
@@ -109,14 +100,4 @@ func staffOverride(ctx context.Context, info *session.Info, engine accessTypes.A
 	}
 	decision, evalErr := engine.Evaluate(ctx, accessReq)
 	return evalErr == nil && decision.IsAllowed()
-}
-
-// extractSceneID returns the scene ULID from a scene:<id>:ic or scene:<id>:ooc subject.
-func extractSceneID(stream string) (string, bool) {
-	rest := strings.TrimPrefix(stream, "scene:")
-	parts := strings.SplitN(rest, ":", 2)
-	if len(parts) != 2 {
-		return "", false
-	}
-	return parts[0], true
 }

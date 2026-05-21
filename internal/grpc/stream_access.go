@@ -27,11 +27,14 @@ func isSceneStream(stream string) bool {
 	return facet == "ic" || facet == "ooc"
 }
 
-// extractDotSceneID returns the scene ULID from a dot-style scene subject.
-// Caller MUST check isSceneStream first; undefined behavior otherwise.
-// Named extractDotSceneID to avoid collision with scope_floor.go's colon-style
-// extractSceneID (which migrates in T13 / holomush-5rh.13.13).
-func extractDotSceneID(stream string) (string, bool) {
+// extractSceneID returns the scene ULID from a dot-style scene subject
+// (events.<gameID>.scene.<sceneID>.{ic,ooc}). Caller MUST check
+// isSceneStream first; undefined behavior otherwise.
+//
+// Phase 4: this is the sole scene-ID extractor in the package. The
+// colon-style extractor was removed when scope_floor.go's scene branch
+// migrated to dot-style subjects (T13 / holomush-5rh.13.13).
+func extractSceneID(stream string) (string, bool) {
 	parts := strings.Split(stream, ".")
 	if len(parts) < 5 || parts[0] != "events" || parts[2] != "scene" {
 		return "", false
@@ -111,7 +114,7 @@ func streamToFocusKey(stream string) (*session.FocusKey, error) {
 	}
 
 	// "events.<gameID>.scene.<sceneULID>.<facet>" — sceneID is parts[3]
-	sceneIDStr, ok := extractDotSceneID(stream)
+	sceneIDStr, ok := extractSceneID(stream)
 	if !ok {
 		return nil, oops.Code("INVALID_ARGUMENT").
 			With("stream", stream).
