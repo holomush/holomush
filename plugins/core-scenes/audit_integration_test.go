@@ -333,7 +333,7 @@ var _ = Describe("SceneAuditServer.AuditEvent dispatcher", func() {
 			"total_pose_count MUST NOT be bumped by non-scene_pose events (plain Insert path)")
 	})
 
-	It("returns SCENE_POSE_SUBJECT_PARSE_FAILED on malformed subject for scene_pose", func() {
+	It("rejects scene_pose with malformed subject as SCENE_AUDIT_SUBJECT_INVALID", func() {
 		store := newTestStore()
 		audit := NewSceneAuditStore(store.Pool())
 		srv := &SceneAuditServer{store: audit}
@@ -344,10 +344,92 @@ var _ = Describe("SceneAuditServer.AuditEvent dispatcher", func() {
 		req := makeAuditRow(eventID, "events.main.bad", "scene_pose", timestamppb.Now(), newPoseULID())
 		_, err := srv.AuditEvent(ctx, req)
 		Expect(err).To(HaveOccurred())
-		// AssertErrorCode returns the DEEPEST oops code. parseSceneSubject
-		// wraps with SCENE_AUDIT_SUBJECT_INVALID; AuditEvent's outer
-		// SCENE_POSE_SUBJECT_PARSE_FAILED is a shallower wrapper and is
-		// not the code errutil.AssertErrorCode observes.
+		// parseSceneSubject is the sole oops wrapper on this path; the
+		// dispatcher returns the parser's error as-is so the deepest
+		// (and only) code is the one we assert.
 		errutil.AssertErrorCode(suiteT, err, "SCENE_AUDIT_SUBJECT_INVALID")
+	})
+
+	It("rejects scene_pose with a non-character actor as SCENE_AUDIT_INVALID_ACTOR_KIND", func() {
+		store := newTestStore()
+		audit := NewSceneAuditStore(store.Pool())
+		srv := &SceneAuditServer{store: audit}
+		ctx := context.Background()
+
+		sceneID := "scene-disp-bad-actor-kind"
+		row := &SceneRow{
+			ID: sceneID, Title: "T", OwnerID: ulid.Make().String(),
+			State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+			Visibility:      string(SceneVisibilityOpen),
+			ContentWarnings: []string{}, Tags: []string{},
+		}
+		Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+
+		eventID := newPoseULID()
+		subject := "events.main.scene." + sceneID + ".ic"
+		actorID := newPoseULID()
+
+		req := &pluginv1.AuditEventRequest{
+			Row: &pluginv1.AuditRow{
+				Id:        eventID,
+				Subject:   subject,
+				Type:      "scene_pose",
+				Timestamp: timestamppb.Now(),
+				Actor: &eventbusv1.Actor{
+					Kind: eventbusv1.ActorKind_ACTOR_KIND_PLUGIN,
+					Id:   actorID,
+				},
+				Payload:   []byte(`{}`),
+				SchemaVer: 1,
+				Codec:     "identity",
+			},
+		}
+		_, err := srv.AuditEvent(ctx, req)
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "SCENE_AUDIT_INVALID_ACTOR_KIND")
+
+		// Defense-in-depth: total_pose_count MUST remain at 0 because
+		// the rejected row never reached InsertScenePose.
+		var total int
+		Expect(store.Pool().QueryRow(
+			ctx,
+			`SELECT total_pose_count FROM scenes WHERE id = $1`, sceneID,
+		).Scan(&total)).NotTo(HaveOccurred())
+		Expect(total).To(Equal(0),
+			"total_pose_count MUST stay 0 when scene_pose is rejected for non-character actor")
+	})
+
+	It("rejects scene_pose with a malformed actor ID length as SCENE_AUDIT_INVALID_ACTOR_ID", func() {
+		store := newTestStore()
+		audit := NewSceneAuditStore(store.Pool())
+		srv := &SceneAuditServer{store: audit}
+		ctx := context.Background()
+
+		sceneID := "scene-disp-bad-actor-id"
+		row := &SceneRow{
+			ID: sceneID, Title: "T", OwnerID: ulid.Make().String(),
+			State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+			Visibility:      string(SceneVisibilityOpen),
+			ContentWarnings: []string{}, Tags: []string{},
+		}
+		Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+
+		eventID := newPoseULID()
+		subject := "events.main.scene." + sceneID + ".ic"
+		shortActor := []byte{0x01, 0x02, 0x03} // not 16 bytes
+
+		req := makeAuditRow(eventID, subject, "scene_pose", timestamppb.Now(), shortActor)
+		_, err := srv.AuditEvent(ctx, req)
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "SCENE_AUDIT_INVALID_ACTOR_ID")
+
+		// Defense-in-depth: total_pose_count MUST remain at 0.
+		var total int
+		Expect(store.Pool().QueryRow(
+			ctx,
+			`SELECT total_pose_count FROM scenes WHERE id = $1`, sceneID,
+		).Scan(&total)).NotTo(HaveOccurred())
+		Expect(total).To(Equal(0),
+			"total_pose_count MUST stay 0 when scene_pose is rejected for malformed actor ID")
 	})
 })

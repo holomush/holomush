@@ -923,7 +923,10 @@ func (s *SceneServiceImpl) GetPoseOrder(ctx context.Context, req *scenev1.GetPos
 			"scene_id", req.GetSceneId(),
 			"error", err,
 		)
-		return nil, status.Errorf(codes.Internal, "failed to check participant: %v", err)
+		// Do not surface the underlying pgx/wrap text to the client —
+		// it can leak schema/connection detail across the gRPC boundary.
+		// The server-side log above carries the diagnostic.
+		return nil, status.Error(codes.Internal, "participant check failed") //nolint:wrapcheck // gRPC status errors pass through as-is
 	}
 	if !ok {
 		return nil, status.Error(codes.PermissionDenied, "not a participant of scene") //nolint:wrapcheck // gRPC status errors pass through as-is
@@ -948,7 +951,7 @@ func (s *SceneServiceImpl) GetPoseOrder(ctx context.Context, req *scenev1.GetPos
 			"scene_id", req.GetSceneId(),
 			"error", err,
 		)
-		return nil, status.Errorf(codes.Internal, "failed to load scene: %v", err)
+		return nil, status.Error(codes.Internal, "scene lookup failed") //nolint:wrapcheck // gRPC status errors pass through as-is
 	}
 
 	poseMeta, err := s.store.ListParticipantsWithPoseMeta(ctx, req.GetSceneId())
@@ -960,7 +963,7 @@ func (s *SceneServiceImpl) GetPoseOrder(ctx context.Context, req *scenev1.GetPos
 			"scene_id", req.GetSceneId(),
 			"error", err,
 		)
-		return nil, status.Errorf(codes.Internal, "failed to load pose metadata: %v", err)
+		return nil, status.Error(codes.Internal, "pose metadata lookup failed") //nolint:wrapcheck // gRPC status errors pass through as-is
 	}
 
 	// Compute pose order. Names map is nil for Phase 4; Compute

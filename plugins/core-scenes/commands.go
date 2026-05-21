@@ -787,7 +787,13 @@ func renderPoseOrder(sceneID string, resp *scenev1.GetPoseOrderResponse) string 
 				if e.PosesSinceLast != nil {
 					psl = *e.PosesSinceLast
 				}
-				needs := threshold - psl
+				// Guard against future Compute changes that could push
+				// psl >= threshold while still surfacing the entry in
+				// the cooldown bucket; without this, uint32 wraps.
+				var needs uint32
+				if psl < threshold {
+					needs = threshold - psl
+				}
 				fmt.Fprintf(&b, "    %s (needs %d more)\n", poseOrderDisplayName(e), needs)
 			}
 		}

@@ -397,6 +397,26 @@ func (s *SceneAuditServer) AuditEvent(ctx context.Context, req *pluginv1.AuditEv
 	// transactionally per T7/INV-P4-10); all other event types route
 	// through plain Insert (existing behaviour).
 	if eventType == "scene_pose" {
+		// scene_pose MUST come from a character actor carrying a full
+		// 16-byte ULID. Earlier code copied actorID into a fixed array
+		// with `copy(posedCharULID[:], actorID)`, which silently zero-
+		// pads short payloads (or truncates long ones); the participant
+		// UPDATE then no-ops by design while total_pose_count still
+		// committed. Reject malformed inputs at ingest so the audit row
+		// never lands in scene_log.
+		if actorKind != eventbusv1.ActorKind_ACTOR_KIND_CHARACTER.String() {
+			return nil, oops.Code("SCENE_AUDIT_INVALID_ACTOR_KIND").
+				With("event_type", eventType).
+				With("actor_kind", actorKind).
+				Errorf("scene_pose requires character actor")
+		}
+		if len(actorID) != 16 {
+			return nil, oops.Code("SCENE_AUDIT_INVALID_ACTOR_ID").
+				With("event_type", eventType).
+				With("actor_id_len", len(actorID)).
+				Errorf("scene_pose requires 16-byte character ULID")
+		}
+
 		sceneID, err := parseSceneSubject(subject)
 		if err != nil {
 			// parseSceneSubject already wraps with SCENE_AUDIT_SUBJECT_INVALID
