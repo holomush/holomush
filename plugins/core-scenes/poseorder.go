@@ -147,14 +147,17 @@ func eligibleByThreshold(totalPoseCount uint32, lastPoseSeq *int32, threshold ui
 	if lastPoseSeq == nil {
 		return true
 	}
-	// Guard against negative or unexpectedly-large seq values. The
-	// schema (migration 000006) constrains last_pose_seq <=
-	// total_pose_count, so this branch is defensive.
+	// Guard against negative or unexpectedly-large seq values.
+	// InsertScenePose writes last_pose_seq from the RETURNING value of
+	// the same total_pose_count UPDATE that just bumped the counter,
+	// so the (last_pose_seq <= total_pose_count) relationship holds
+	// at commit time. This branch is defense-in-depth for operator
+	// drift or future writers that don't share that transaction.
 	if *lastPoseSeq < 0 {
 		return true
 	}
 	// Safe conversion: the *lastPoseSeq < 0 guard above ensures the
-	// value fits in uint32 (schema CHECK constraint reinforces this).
+	// value fits in uint32.
 	seq := uint32(*lastPoseSeq)
 	if seq > totalPoseCount {
 		// Logically impossible per schema; treat as never-posed-equivalent.
@@ -174,7 +177,7 @@ func posesSinceLast(totalPoseCount uint32, lastPoseSeq *int32) uint32 {
 		return totalPoseCount
 	}
 	// Safe conversion: the *lastPoseSeq < 0 guard above ensures the
-	// value fits in uint32 (schema CHECK constraint reinforces this).
+	// value fits in uint32.
 	seq := uint32(*lastPoseSeq)
 	if seq > totalPoseCount {
 		return 0
