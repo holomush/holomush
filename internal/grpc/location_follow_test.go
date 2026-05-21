@@ -244,6 +244,9 @@ func TestLocationFollower_BuildLocationState(t *testing.T) {
 	assert.Len(t, payload.Exits, 1)
 	assert.Len(t, payload.Present, 1)
 	assert.Equal(t, "Alice", payload.Present[0].Name)
+	// holomush-e4qo: emit site MUST populate CharacterID (ULID) so the web
+	// PresenceStore can key entries by ULID rather than display name.
+	assert.Equal(t, charID.String(), payload.Present[0].CharacterID)
 }
 
 // recordingUpdater captures add/remove stream calls so tests can assert

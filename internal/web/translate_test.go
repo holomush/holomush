@@ -240,8 +240,11 @@ func TestTranslateEvent_LocationState(t *testing.T) {
 			{Direction: "east", Name: "Library", Locked: true},
 		},
 		Present: []core.LocationStateChar{
-			{Name: "Alice", Idle: false},
-			{Name: "Bob", Idle: true},
+			// CharacterID is opaque to translate.go (no parsing), so test
+			// fixtures use clearly-fake strings consistent with the surrounding
+			// "loc-123" convention rather than fake-ULID strings.
+			{CharacterID: "char-alice", Name: "Alice", Idle: false},
+			{CharacterID: "char-bob", Name: "Bob", Idle: true},
 		},
 	}
 
