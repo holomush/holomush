@@ -48,6 +48,24 @@ type sceneStorer interface {
 	TransferOwnership(ctx context.Context, sceneID, currentOwnerID, newOwnerID string) error
 	ListParticipants(ctx context.Context, sceneID string) ([]ParticipantRow, error)
 	GetParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, error)
+	// IsParticipant returns true if the character is a current participant
+	// of the scene with role "owner" or "member" (NOT "invited"). Used by
+	// the INV-S9 plugin-code gate at GetPoseOrder per ADR holomush-nt2d.
+	// Returns (false, nil) if the character is not a participant — no
+	// distinction from "not found"; the gate's contract is binary.
+	IsParticipant(ctx context.Context, sceneID, characterID string) (bool, error)
+	// ListParticipantsWithPoseMeta fetches scenes.total_pose_count and the
+	// per-participant pose metadata (last_pose_at, last_pose_seq) for all
+	// owner+member rows in a single SELECT. Excludes invited role per
+	// INV-S9 pose-order-only-for-participants discipline. Pinned by spec
+	// §6.1 / INV-P4-7. See ADR holomush-r4th (denormalize pose-order metadata).
+	ListParticipantsWithPoseMeta(ctx context.Context, sceneID string) (ParticipantsWithPoseMeta, error)
+	// ListScenesForCharacter returns the scene IDs the character is
+	// currently a participant of (role IN ('owner', 'member'), excluding
+	// 'invited') for scenes in state IN ('active', 'paused'). Used by
+	// handleEmit's single-membership inference per spec §5.2 (Phase 5 will
+	// replace with focus-aware routing).
+	ListScenesForCharacter(ctx context.Context, characterID string) ([]string, error)
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.
@@ -60,13 +78,15 @@ type SceneServiceImpl struct {
 	scenev1.UnimplementedSceneServiceServer
 	store     sceneStorer
 	eventSink pluginsdk.EventSink
+	gameID    string // per substrate INV-S4. Defaults to "main"; wired in Init.
 }
 
 // NewSceneServiceImpl returns a service backed by the given store.
 // Used by tests; main() constructs the service directly with a nil store
-// and assigns it after Init.
+// and assigns it after Init. The gameID defaults to "main" matching the
+// substrate default (see internal/grpc/server.go:181).
 func NewSceneServiceImpl(store sceneStorer) *SceneServiceImpl {
-	return &SceneServiceImpl{store: store}
+	return &SceneServiceImpl{store: store, gameID: "main"}
 }
 
 // SetEventSink installs the host callback event sink used for service-owned
@@ -208,7 +228,7 @@ func (s *SceneServiceImpl) sceneCreatedIntent(row *SceneRow) (pluginsdk.EmitInte
 	}
 
 	return pluginsdk.EmitIntent{
-		Subject: "scene:" + row.ID,
+		Subject: dotStyleSceneSubject(s.gameID, row.ID),
 		Type:    pluginsdk.HostEventTypeSystem,
 		Payload: string(payload),
 	}, nil
@@ -383,6 +403,25 @@ func (s *SceneServiceImpl) UpdateScene(ctx context.Context, req *scenev1.UpdateS
 		return nil, err // already a gRPC status error
 	}
 
+	// Best-effort pre-update read: only needed when pose_order_mode is in the
+	// mask, to detect whether the mode actually changed so we can emit
+	// scene_pose_order_changed_ic. We capture the string value (not the
+	// pointer) so that an in-place store mutation cannot alias the pre-value.
+	// Read failure is non-fatal — we just won't emit the notice.
+	var (
+		preMode string
+		hasPre  bool
+	)
+	if update.PoseOrder != nil {
+		if r, readErr := s.store.Get(ctx, req.GetSceneId()); readErr == nil {
+			preMode = r.PoseOrder
+			hasPre = true
+		} else {
+			slog.WarnContext(ctx, "scene.service.update_scene pre-read for pose_order_changed_ic failed",
+				"scene_id", req.GetSceneId(), "error", readErr)
+		}
+	}
+
 	row, err := s.store.Update(ctx, req.GetSceneId(), update)
 	if err != nil {
 		recordError(span, err)
@@ -396,6 +435,12 @@ func (s *SceneServiceImpl) UpdateScene(ctx context.Context, req *scenev1.UpdateS
 			"error", err,
 		)
 		return nil, status.Errorf(codes.Internal, "failed to update scene: %v", err)
+	}
+
+	// Auto-emit scene_pose_order_changed_ic when pose_order_mode actually
+	// changed. No-op updates (mask present but value unchanged) MUST NOT emit.
+	if hasPre && preMode != row.PoseOrder {
+		s.emitScenePoseOrderChangedIC(ctx, req.GetSceneId(), req.GetCharacterId(), preMode, row.PoseOrder)
 	}
 
 	slog.InfoContext(
@@ -473,7 +518,7 @@ func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinScene
 	)
 	defer span.End()
 
-	_, _, err := s.store.AddParticipant(ctx, req.GetSceneId(), req.GetCharacterId())
+	_, result, err := s.store.AddParticipant(ctx, req.GetSceneId(), req.GetCharacterId())
 	if err != nil {
 		recordError(span, err)
 		var oe oops.OopsError
@@ -498,6 +543,13 @@ func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinScene
 		return nil, status.Errorf(codes.Internal, "failed to join scene: %v", err)
 	}
 
+	// Auto-emit scene_join_ic notice event when this is a NEW membership
+	// (OpInserted = fresh row; OpPromoted = invited→member). Skipped on
+	// OpNoChange per Phase 3 D5 retry-idempotency.
+	if result == OpInserted || result == OpPromoted {
+		s.emitSceneJoinIC(ctx, req.GetSceneId(), req.GetCharacterId(), result)
+	}
+
 	slog.InfoContext(
 		ctx, "scene.service.join_scene ok",
 		"subject_id", req.GetCharacterId(),
@@ -505,6 +557,124 @@ func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinScene
 	)
 
 	return &scenev1.JoinSceneResponse{}, nil
+}
+
+// emitSceneJoinIC emits a scene_join_ic notice event to the scene's IC
+// stream. sensitivity:never per crypto.emits §2 (notice events carry metadata
+// only — actor_id + from_role + scene_id, no RP content). Emit failure is
+// non-fatal — membership is already committed; we log and continue.
+func (s *SceneServiceImpl) emitSceneJoinIC(ctx context.Context, sceneID, actorID string, result ParticipantOpResult) {
+	if s.eventSink == nil {
+		slog.WarnContext(ctx, "scene.service.join_scene scene_join_ic emit skipped: event sink nil",
+			"scene_id", sceneID, "actor_id", actorID)
+		return
+	}
+
+	fromRole := "none"
+	if result == OpPromoted {
+		fromRole = "invited"
+	}
+
+	payload, err := json.Marshal(map[string]string{
+		"actor_id":  actorID,
+		"scene_id":  sceneID,
+		"from_role": fromRole,
+	})
+	if err != nil {
+		slog.WarnContext(ctx, "scene.service.join_scene scene_join_ic payload marshal failed",
+			"scene_id", sceneID, "actor_id", actorID, "error", err)
+		return
+	}
+
+	intent := pluginsdk.EmitIntent{
+		Subject:   dotStyleSceneSubjectIC(s.gameID, sceneID),
+		Type:      "scene_join_ic",
+		Payload:   string(payload),
+		Sensitive: false, // sensitivity:never per crypto.emits manifest
+	}
+	if err := s.eventSink.Emit(ctx, intent); err != nil {
+		slog.WarnContext(ctx, "scene.service.join_scene scene_join_ic emit failed",
+			"scene_id", sceneID, "actor_id", actorID, "error", err)
+		// Non-fatal: membership is committed; the notice is best-effort.
+	}
+}
+
+// emitSceneLeaveIC emits a scene_leave_ic notice event. reason discriminates
+// voluntary ("left") vs involuntary ("kicked"). removedBy is the kicker's
+// character_id for kicks; empty string for voluntary leaves.
+// sensitivity:never per spec §2. Non-fatal emit failure (membership already
+// removed; notice is best-effort).
+func (s *SceneServiceImpl) emitSceneLeaveIC(ctx context.Context, sceneID, actorID, reason, removedBy string) {
+	if s.eventSink == nil {
+		slog.WarnContext(ctx, "scene.service.leave_scene scene_leave_ic emit skipped: event sink nil",
+			"scene_id", sceneID, "actor_id", actorID, "reason", reason)
+		return
+	}
+
+	fields := map[string]string{
+		"actor_id": actorID,
+		"scene_id": sceneID,
+		"reason":   reason,
+	}
+	if removedBy != "" {
+		fields["removed_by"] = removedBy
+	}
+
+	payload, err := json.Marshal(fields)
+	if err != nil {
+		slog.WarnContext(ctx, "scene.service.leave_scene scene_leave_ic payload marshal failed",
+			"scene_id", sceneID, "actor_id", actorID, "error", err)
+		return
+	}
+
+	intent := pluginsdk.EmitIntent{
+		Subject:   dotStyleSceneSubjectIC(s.gameID, sceneID),
+		Type:      "scene_leave_ic",
+		Payload:   string(payload),
+		Sensitive: false, // sensitivity:never per crypto.emits manifest
+	}
+	if err := s.eventSink.Emit(ctx, intent); err != nil {
+		slog.WarnContext(ctx, "scene.service.leave_scene scene_leave_ic emit failed",
+			"scene_id", sceneID, "actor_id", actorID, "reason", reason, "error", err)
+		// Non-fatal: membership is removed; the notice is best-effort.
+	}
+}
+
+// emitScenePoseOrderChangedIC emits a scene_pose_order_changed_ic notice
+// event when the pose order mode actually changes. sensitivity:never per
+// spec §2 — payload carries actor_id, scene_id, and mode strings only, no
+// RP content. Non-fatal emit failure (the mode change is already committed).
+// actor_name omitted (no nameResolver wired; same convention as T17/T18).
+func (s *SceneServiceImpl) emitScenePoseOrderChangedIC(ctx context.Context, sceneID, actorID, oldMode, newMode string) {
+	if s.eventSink == nil {
+		slog.WarnContext(ctx, "scene.service.update_scene scene_pose_order_changed_ic emit skipped: event sink nil",
+			"scene_id", sceneID, "actor_id", actorID)
+		return
+	}
+
+	payload, err := json.Marshal(map[string]string{
+		"actor_id": actorID,
+		"scene_id": sceneID,
+		"old_mode": oldMode,
+		"new_mode": newMode,
+	})
+	if err != nil {
+		slog.WarnContext(ctx, "scene.service.update_scene scene_pose_order_changed_ic payload marshal failed",
+			"scene_id", sceneID, "actor_id", actorID, "error", err)
+		return
+	}
+
+	intent := pluginsdk.EmitIntent{
+		Subject:   dotStyleSceneSubjectIC(s.gameID, sceneID),
+		Type:      "scene_pose_order_changed_ic",
+		Payload:   string(payload),
+		Sensitive: false, // sensitivity:never per crypto.emits manifest
+	}
+	if err := s.eventSink.Emit(ctx, intent); err != nil {
+		slog.WarnContext(ctx, "scene.service.update_scene scene_pose_order_changed_ic emit failed",
+			"scene_id", sceneID, "actor_id", actorID, "error", err)
+		// Non-fatal: mode change is committed; the notice is best-effort.
+	}
 }
 
 // LeaveScene removes the calling character from a scene. Per design decision
@@ -564,6 +734,10 @@ func (s *SceneServiceImpl) LeaveScene(ctx context.Context, req *scenev1.LeaveSce
 		)
 		return nil, status.Errorf(codes.Internal, "failed to leave scene: %v", err)
 	}
+
+	// Auto-emit scene_leave_ic notice event. Non-fatal: membership is already
+	// removed; the notice is best-effort.
+	s.emitSceneLeaveIC(ctx, req.GetSceneId(), req.GetCharacterId(), "left", "")
 
 	slog.InfoContext(
 		ctx, "scene.service.leave_scene ok",
@@ -644,6 +818,10 @@ func (s *SceneServiceImpl) KickFromScene(ctx context.Context, req *scenev1.KickF
 		return nil, status.Errorf(codes.Internal, "failed to kick: %v", err)
 	}
 
+	// Auto-emit scene_leave_ic notice event (reason=kicked). Non-fatal:
+	// membership is already removed; the notice is best-effort.
+	s.emitSceneLeaveIC(ctx, req.GetSceneId(), req.GetTargetCharacterId(), "kicked", req.GetCharacterId())
+
 	slog.InfoContext(
 		ctx, "scene.service.kick_from_scene ok",
 		"subject_id", req.GetCharacterId(),
@@ -701,6 +879,127 @@ func (s *SceneServiceImpl) TransferOwnership(ctx context.Context, req *scenev1.T
 		"new_owner", req.GetNewOwnerCharacterId(),
 	)
 	return &scenev1.TransferOwnershipResponse{}, nil
+}
+
+// GetPoseOrder returns the current pose-order entries for a scene.
+//
+// INV-S9 plugin-code gate: the caller MUST be a current participant
+// of the scene (owner or member, NOT invited). The ABAC engine is
+// NEVER consulted from this handler; INV-P4-4 (T23 meta-test, future
+// bead) enforces this by rg-asserting that no engine.Evaluate /
+// engine.CanPerformAction call appears in this function body.
+//
+// The PermissionDenied gate fires before any scene-existence check —
+// non-participants MUST NOT be able to distinguish "scene does not
+// exist" from "scene exists but you are not a member" via the error
+// code. The store's IsParticipant returns (false, nil) for both cases,
+// which is the desired flattening.
+//
+// Composition: IsParticipant (T4) → Get + ListParticipantsWithPoseMeta
+// (T5) → Compute (T9) → proto wire form.
+//
+// Names map is empty for Phase 4 (no nameResolver wired in this
+// plugin yet); Compute renders missing names as the character_id —
+// safe fallback per poseorder.go::resolveName.
+//
+// Per spec §7.4.
+func (s *SceneServiceImpl) GetPoseOrder(ctx context.Context, req *scenev1.GetPoseOrderRequest) (*scenev1.GetPoseOrderResponse, error) {
+	ctx, span := startSpan(
+		ctx, "scene.service.get_pose_order",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("scene_id", req.GetSceneId()),
+	)
+	defer span.End()
+
+	// INV-S9 gate: direct plugin-code participant check, NO ABAC.
+	// Fires before scene-existence check to avoid leaking the
+	// existence of a scene to non-participants.
+	ok, err := s.store.IsParticipant(ctx, req.GetSceneId(), req.GetCharacterId())
+	if err != nil {
+		recordError(span, err)
+		slog.WarnContext(
+			ctx, "scene.service.get_pose_order participant check error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to check participant: %v", err)
+	}
+	if !ok {
+		return nil, status.Error(codes.PermissionDenied, "not a participant of scene") //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	// Load scene row for pose_order mode. ListParticipantsWithPoseMeta
+	// (T5) carries TotalPoseCount + per-participant pose metadata but
+	// not the scene's mode, so a separate Get is required.
+	sceneRow, err := s.store.Get(ctx, req.GetSceneId())
+	if err != nil {
+		recordError(span, err)
+		var oe oops.OopsError
+		if errors.As(err, &oe) && oe.Code() == "SCENE_NOT_FOUND" {
+			// Defense-in-depth: IsParticipant returned true above, so
+			// the scene existed moments ago. A race deleted it; surface
+			// NotFound rather than masquerading as a permission error.
+			return nil, status.Errorf(codes.NotFound, "scene not found: %s", req.GetSceneId())
+		}
+		slog.WarnContext(
+			ctx, "scene.service.get_pose_order get scene error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to load scene: %v", err)
+	}
+
+	poseMeta, err := s.store.ListParticipantsWithPoseMeta(ctx, req.GetSceneId())
+	if err != nil {
+		recordError(span, err)
+		slog.WarnContext(
+			ctx, "scene.service.get_pose_order list pose meta error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to load pose metadata: %v", err)
+	}
+
+	// Compute pose order. Names map is nil for Phase 4; Compute
+	// renders missing names as the character_id per resolveName's
+	// best-effort contract. Future nameResolver integration can
+	// populate this map.
+	entries := Compute(sceneRow.PoseOrder, poseMeta.TotalPoseCount, poseMeta.Participants, nil)
+
+	// Map to proto wire form.
+	protoEntries := make([]*scenev1.PoseOrderEntry, 0, len(entries))
+	for _, e := range entries {
+		pe := &scenev1.PoseOrderEntry{
+			CharacterId:   e.CharacterID,
+			CharacterName: e.CharacterName,
+			Eligible:      e.Eligible,
+		}
+		if e.LastPosedAt != nil {
+			pe.LastPosedAt = timestamppb.New(*e.LastPosedAt)
+		}
+		if e.PosesSinceLast != nil {
+			gap := *e.PosesSinceLast
+			pe.PosesSinceLast = &gap
+		}
+		protoEntries = append(protoEntries, pe)
+	}
+
+	slog.InfoContext(
+		ctx, "scene.service.get_pose_order ok",
+		"subject_id", req.GetCharacterId(),
+		"scene_id", req.GetSceneId(),
+		"mode", sceneRow.PoseOrder,
+		"entry_count", len(protoEntries),
+	)
+
+	return &scenev1.GetPoseOrderResponse{
+		Mode:           sceneRow.PoseOrder,
+		TotalPoseCount: poseMeta.TotalPoseCount,
+		Entries:        protoEntries,
+	}, nil
 }
 
 // mapTransitionError translates store-layer transition errors into gRPC

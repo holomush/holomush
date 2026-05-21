@@ -1239,6 +1239,140 @@ func (s *SceneStore) GetParticipant(ctx context.Context, sceneID, characterID st
 	return p, nil
 }
 
+// IsParticipant reports whether the character is a participant (owner or
+// member, NOT invited) of the scene. The invited-role exclusion is
+// load-bearing: INV-S9's gate at GetPoseOrder MUST NOT treat pending
+// invites as participants. Pinned by spec INV-P4-4 / INV-P4-11.
+//
+// Returns (false, nil) for both "not found" and "invited" — the binary
+// contract hides those distinctions intentionally (info-hiding per ADR
+// holomush-nt2d, which supersedes holomush-c8a9).
+func (s *SceneStore) IsParticipant(ctx context.Context, sceneID, characterID string) (bool, error) {
+	ctx, span := startSpan(
+		ctx, "scene.store.is_participant",
+		attribute.String("scene_id", sceneID),
+		attribute.String("character_id", characterID),
+	)
+	defer span.End()
+
+	const q = `
+		SELECT EXISTS (
+			SELECT 1 FROM scene_participants
+			WHERE scene_id = $1
+			  AND character_id = $2
+			  AND role IN ('owner', 'member')
+		)
+	`
+	var ok bool
+	if err := s.pool.QueryRow(ctx, q, sceneID, characterID).Scan(&ok); err != nil {
+		recordError(span, err)
+		return false, oops.Code("SCENE_PARTICIPANT_LOOKUP_FAILED").
+			With("scene_id", sceneID).With("character_id", characterID).Wrap(err)
+	}
+	return ok, nil
+}
+
+// ListScenesForCharacter returns active (non-archived) scene IDs for the
+// character's owner/member memberships. Excludes invited rows. Filters to
+// scenes in state IN ('active', 'paused') so ended/archived memberships
+// don't pollute single-membership inference at handleEmit.
+//
+// Pinned by spec §5.2 single-membership inference (Phase 5 will replace
+// with focus-aware routing).
+func (s *SceneStore) ListScenesForCharacter(ctx context.Context, characterID string) ([]string, error) {
+	ctx, span := startSpan(
+		ctx, "scene.store.list_scenes_for_character",
+		attribute.String("character_id", characterID),
+	)
+	defer span.End()
+
+	const q = `
+		SELECT p.scene_id
+		FROM scene_participants p
+		JOIN scenes s ON s.id = p.scene_id
+		WHERE p.character_id = $1
+		  AND p.role IN ('owner', 'member')
+		  AND s.state IN ('active', 'paused')
+		ORDER BY p.joined_at ASC
+	`
+	rows, err := s.pool.Query(ctx, q, characterID)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LIST_FOR_CHARACTER_FAILED").
+			With("character_id", characterID).Wrap(err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			recordError(span, err)
+			return nil, oops.Code("SCENE_LIST_FOR_CHARACTER_SCAN_FAILED").
+				With("character_id", characterID).Wrap(err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LIST_FOR_CHARACTER_ITER_FAILED").
+			With("character_id", characterID).Wrap(err)
+	}
+	return ids, nil
+}
+
+// ListParticipantsWithPoseMeta is a single SELECT joining scenes +
+// scene_participants and returning the participants (owner+member, NOT
+// invited) with their pose metadata. Pinned by spec §6.1 / INV-P4-7.
+// See ADR holomush-r4th (denormalize pose-order metadata).
+func (s *SceneStore) ListParticipantsWithPoseMeta(ctx context.Context, sceneID string) (ParticipantsWithPoseMeta, error) {
+	ctx, span := startSpan(
+		ctx, "scene.store.list_participants_with_pose_meta",
+		attribute.String("scene_id", sceneID),
+	)
+	defer span.End()
+
+	const q = `
+		SELECT
+		    s.total_pose_count,
+		    p.character_id,
+		    p.joined_at,
+		    p.last_pose_at,
+		    p.last_pose_seq
+		FROM scenes s
+		JOIN scene_participants p ON p.scene_id = s.id
+		WHERE s.id = $1
+		  AND p.role IN ('owner', 'member')
+		ORDER BY p.joined_at ASC
+	`
+	rows, err := s.pool.Query(ctx, q, sceneID)
+	if err != nil {
+		recordError(span, err)
+		return ParticipantsWithPoseMeta{}, oops.Code("SCENE_POSE_META_LOOKUP_FAILED").
+			With("scene_id", sceneID).Wrap(err)
+	}
+	defer rows.Close()
+
+	var result ParticipantsWithPoseMeta
+	for rows.Next() {
+		var p ParticipantWithPoseMeta
+		var totalPoseCount int32
+		if err := rows.Scan(&totalPoseCount, &p.CharacterID, &p.JoinedAt, &p.LastPoseAt, &p.LastPoseSeq); err != nil {
+			recordError(span, err)
+			return ParticipantsWithPoseMeta{}, oops.Code("SCENE_POSE_META_SCAN_FAILED").
+				With("scene_id", sceneID).Wrap(err)
+		}
+		result.TotalPoseCount = uint32(totalPoseCount) //nolint:gosec // scenes.total_pose_count is a monotonic counter UPDATEd only by InsertScenePose — never negative
+		result.Participants = append(result.Participants, p)
+	}
+	if err := rows.Err(); err != nil {
+		recordError(span, err)
+		return ParticipantsWithPoseMeta{}, oops.Code("SCENE_POSE_META_ITER_FAILED").
+			With("scene_id", sceneID).Wrap(err)
+	}
+	return result, nil
+}
+
 // classifyJoinMiss issues one diagnostic SELECT to figure out which
 // precondition failed when AddParticipant's RETURNING was empty. Pays the
 // extra round trip ONLY in the error path; the happy path is single-statement.
@@ -1324,4 +1458,24 @@ func (s *SceneStore) classifyTransitionMiss(ctx context.Context, id string, span
 		With("op", op).
 		With("current_state", currentState).
 		Errorf("scene in state %q cannot be %sed", currentState, op)
+}
+
+// dotStyleSceneSubject returns the NATS dot-style entity-level subject
+// for a scene per substrate INV-S4: events.<gameID>.scene.<sceneID>.
+// Used for lifecycle/system events that target the scene itself, not
+// a facet. ADR holomush-s9nu.
+func dotStyleSceneSubject(gameID, sceneID string) string {
+	return "events." + gameID + ".scene." + sceneID
+}
+
+// dotStyleSceneSubjectIC returns the NATS dot-style IC-facet subject:
+// events.<gameID>.scene.<sceneID>.ic.
+func dotStyleSceneSubjectIC(gameID, sceneID string) string {
+	return dotStyleSceneSubject(gameID, sceneID) + ".ic"
+}
+
+// dotStyleSceneSubjectOOC returns the NATS dot-style OOC-facet subject:
+// events.<gameID>.scene.<sceneID>.ooc.
+func dotStyleSceneSubjectOOC(gameID, sceneID string) string {
+	return dotStyleSceneSubject(gameID, sceneID) + ".ooc"
 }

@@ -37,11 +37,39 @@ audit:
 storage: postgres
 
 crypto:
-  # core-scenes emits only the host-owned "system" event today
-  # (pluginsdk.HostEventTypeSystem). Plugin-owned scene-event types
-  # (scene_ic, scene_join, etc.) land in a future phase coupled with
-  # runtime work to actually emit them on the bus.
-  emits: []
+  emits:
+    # Content events (sensitivity: always) — participant-only IC/OOC RP
+    # content. Privacy boundary is the participant list per INV-S9, NOT
+    # the location. Analog to whisper/page in core-communication, not
+    # to say/pose (which are location-bounded). See ADR holomush-sb3n.
+    - event_type: scene_pose
+      sensitivity: always
+      description: "IC pose by a scene participant; visible to all participants in the scene's IC stream."
+    - event_type: scene_say
+      sensitivity: always
+      description: "IC speech by a scene participant; visible to all participants in the scene's IC stream."
+    - event_type: scene_emit
+      sensitivity: always
+      description: "IC generic emit by a scene participant; visible to all participants in the scene's IC stream."
+    - event_type: scene_ooc
+      sensitivity: always
+      description: "OOC chatter in scene context; participant-only despite never being archived in the published scene log."
+
+    # Notice events (sensitivity: never) — operational metadata, no RP
+    # content. Visible to scene participants but plaintext at rest.
+    - event_type: scene_join_ic
+      sensitivity: never
+      description: "Notice that a character joined the scene; name only, no content."
+    - event_type: scene_leave_ic
+      sensitivity: never
+      description: "Notice that a character left or was kicked from the scene; name + reason discriminator, no content."
+    - event_type: scene_pose_order_changed_ic
+      sensitivity: never
+      description: "Notice that the scene owner changed the pose-order mode; mode strings + actor, no content."
+    - event_type: scene_idle_nudge
+      sensitivity: never
+      description: "Notice that the next-up character has been idle past the configured threshold; name + duration, no content.
+        Trigger implementation deferred to follow-up bead holomush-fux3."
 
 binary-plugin:
   executable: core-scenes

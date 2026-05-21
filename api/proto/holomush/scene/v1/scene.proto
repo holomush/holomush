@@ -233,11 +233,15 @@ message GetPoseOrderRequest {
 message PoseOrderEntry {
   string character_id = 1;
   string character_name = 2;
-  google.protobuf.Timestamp last_posed_at = 3;
-  bool is_eligible = 4;
+  bool eligible = 3;
+  google.protobuf.Timestamp last_posed_at = 4;
+  // Count of poses by other characters since this participant's last pose
+  // (or since scene start if never posed). Meaningful for 3pr/5pr modes.
+  optional uint32 poses_since_last = 5;
 }
 
 message GetPoseOrderResponse {
-  string mode = 1;
-  repeated PoseOrderEntry entries = 2;
+  string mode = 1; // strict | 3pr | 5pr | free
+  uint32 total_pose_count = 2;
+  repeated PoseOrderEntry entries = 3;
 }

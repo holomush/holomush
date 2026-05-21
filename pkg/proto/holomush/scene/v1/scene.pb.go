@@ -1657,10 +1657,13 @@ type PoseOrderEntry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
 	CharacterName string                 `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
-	LastPosedAt   *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_posed_at,json=lastPosedAt,proto3" json:"last_posed_at,omitempty"`
-	IsEligible    bool                   `protobuf:"varint,4,opt,name=is_eligible,json=isEligible,proto3" json:"is_eligible,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Eligible      bool                   `protobuf:"varint,3,opt,name=eligible,proto3" json:"eligible,omitempty"`
+	LastPosedAt   *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_posed_at,json=lastPosedAt,proto3" json:"last_posed_at,omitempty"`
+	// Count of poses by other characters since this participant's last pose
+	// (or since scene start if never posed). Meaningful for 3pr/5pr modes.
+	PosesSinceLast *uint32 `protobuf:"varint,5,opt,name=poses_since_last,json=posesSinceLast,proto3,oneof" json:"poses_since_last,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *PoseOrderEntry) Reset() {
@@ -1707,6 +1710,13 @@ func (x *PoseOrderEntry) GetCharacterName() string {
 	return ""
 }
 
+func (x *PoseOrderEntry) GetEligible() bool {
+	if x != nil {
+		return x.Eligible
+	}
+	return false
+}
+
 func (x *PoseOrderEntry) GetLastPosedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.LastPosedAt
@@ -1714,19 +1724,20 @@ func (x *PoseOrderEntry) GetLastPosedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *PoseOrderEntry) GetIsEligible() bool {
-	if x != nil {
-		return x.IsEligible
+func (x *PoseOrderEntry) GetPosesSinceLast() uint32 {
+	if x != nil && x.PosesSinceLast != nil {
+		return *x.PosesSinceLast
 	}
-	return false
+	return 0
 }
 
 type GetPoseOrderResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Mode          string                 `protobuf:"bytes,1,opt,name=mode,proto3" json:"mode,omitempty"`
-	Entries       []*PoseOrderEntry      `protobuf:"bytes,2,rep,name=entries,proto3" json:"entries,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Mode           string                 `protobuf:"bytes,1,opt,name=mode,proto3" json:"mode,omitempty"` // strict | 3pr | 5pr | free
+	TotalPoseCount uint32                 `protobuf:"varint,2,opt,name=total_pose_count,json=totalPoseCount,proto3" json:"total_pose_count,omitempty"`
+	Entries        []*PoseOrderEntry      `protobuf:"bytes,3,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GetPoseOrderResponse) Reset() {
@@ -1764,6 +1775,13 @@ func (x *GetPoseOrderResponse) GetMode() string {
 		return x.Mode
 	}
 	return ""
+}
+
+func (x *GetPoseOrderResponse) GetTotalPoseCount() uint32 {
+	if x != nil {
+		return x.TotalPoseCount
+	}
+	return 0
 }
 
 func (x *GetPoseOrderResponse) GetEntries() []*PoseOrderEntry {
@@ -1891,16 +1909,18 @@ const file_holomush_scene_v1_scene_proto_rawDesc = "" +
 	"\x17CastPublishVoteResponse\"e\n" +
 	"\x13GetPoseOrderRequest\x12*\n" +
 	"\fcharacter_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcharacterId\x12\"\n" +
-	"\bscene_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\asceneId\"\xbb\x01\n" +
+	"\bscene_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\asceneId\"\xfa\x01\n" +
 	"\x0ePoseOrderEntry\x12!\n" +
 	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12%\n" +
-	"\x0echaracter_name\x18\x02 \x01(\tR\rcharacterName\x12>\n" +
-	"\rlast_posed_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vlastPosedAt\x12\x1f\n" +
-	"\vis_eligible\x18\x04 \x01(\bR\n" +
-	"isEligible\"g\n" +
+	"\x0echaracter_name\x18\x02 \x01(\tR\rcharacterName\x12\x1a\n" +
+	"\beligible\x18\x03 \x01(\bR\beligible\x12>\n" +
+	"\rlast_posed_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\vlastPosedAt\x12-\n" +
+	"\x10poses_since_last\x18\x05 \x01(\rH\x00R\x0eposesSinceLast\x88\x01\x01B\x13\n" +
+	"\x11_poses_since_last\"\x91\x01\n" +
 	"\x14GetPoseOrderResponse\x12\x12\n" +
-	"\x04mode\x18\x01 \x01(\tR\x04mode\x12;\n" +
-	"\aentries\x18\x02 \x03(\v2!.holomush.scene.v1.PoseOrderEntryR\aentries2\xbe\n" +
+	"\x04mode\x18\x01 \x01(\tR\x04mode\x12(\n" +
+	"\x10total_pose_count\x18\x02 \x01(\rR\x0etotalPoseCount\x12;\n" +
+	"\aentries\x18\x03 \x03(\v2!.holomush.scene.v1.PoseOrderEntryR\aentries2\xbe\n" +
 	"\n" +
 	"\fSceneService\x12Y\n" +
 	"\n" +
@@ -2026,6 +2046,7 @@ func file_holomush_scene_v1_scene_proto_init() {
 	if File_holomush_scene_v1_scene_proto != nil {
 		return
 	}
+	file_holomush_scene_v1_scene_proto_msgTypes[29].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

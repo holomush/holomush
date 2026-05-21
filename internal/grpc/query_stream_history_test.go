@@ -67,12 +67,13 @@ func (f *fakeHistoryStream) Next(_ context.Context) (eventbus.Event, error) {
 
 func (f *fakeHistoryStream) Close() error { return nil }
 
-// sceneFocusKey returns a FocusMembership-aligned scene stream name and the
+// sceneFocusMembership returns a FocusMembership-aligned scene stream name and the
 // matching FocusMembership the session needs to pass the I-17 gate.
+// Stream is dot-style per INV-P4-1 / ADR holomush-s9nu.
 func sceneFocusMembership(t *testing.T) (string, session.FocusMembership) {
 	t.Helper()
 	sceneID := ulid.MustParse("01HYXSCENE00000000000000CC")
-	return "scene:" + sceneID.String() + ":ic", session.FocusMembership{
+	return dotStyleSceneIC(sceneID.String()), session.FocusMembership{
 		Kind:     session.FocusKindScene,
 		TargetID: sceneID,
 	}
@@ -195,7 +196,7 @@ func TestQueryStreamHistoryRejectsMalformedSceneStream(t *testing.T) {
 	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, sess)
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "scene:not-a-ulid:ic",
+		Stream:    dotStyleSceneIC("not-a-ulid"),
 	})
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "INVALID_ARGUMENT")

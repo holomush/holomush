@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -36,8 +35,8 @@ const (
 // QueryStreamHistory implements CoreServiceServer.QueryStreamHistory.
 //
 // Two-layer authorization:
-//   - Private streams (character:*, scene:*:ic, scene:*:ooc): membership gate
-//     via sessionHasMembership (invariant I-17). This is a HARD GATE, not a
+//   - Private streams (character:*, events.<gid>.scene.<id>.{ic,ooc}): membership
+//     gate via sessionHasMembership (invariant I-17). This is a HARD GATE, not a
 //     policy — the ABAC engine is NEVER consulted for private streams, and
 //     there is no admin override.
 //   - Public streams (location:*, global, etc.): ABAC engine.Evaluate.
@@ -154,14 +153,15 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	}
 
 	// Step 5: Authorization — three-way classifier.
-	//   1. Private streams (character:*, scene:*:ic, scene:*:ooc): membership gate (I-17).
+	//   1. Private streams (character:*, events.<gid>.scene.<id>.{ic,ooc}): membership gate (I-17).
 	//   2. Location streams (location:<id>): hard-gate via session.LocationID (I-PRIV-1).
 	//   3. Other public streams (global, system, …): ABAC engine.Evaluate.
 	switch {
 	case isPrivateStream(req.Stream):
 		// Validate scene stream format up-front so malformed scene streams
-		// surface as INVALID_ARGUMENT rather than STREAM_ACCESS_DENIED.
-		if strings.HasPrefix(req.Stream, "scene:") {
+		// (e.g. invalid ULID in the sceneID segment) surface as INVALID_ARGUMENT
+		// rather than STREAM_ACCESS_DENIED. Dot-style per INV-P4-1 / ADR holomush-s9nu.
+		if isSceneStream(req.Stream) {
 			if _, keyErr := streamToFocusKey(req.Stream); keyErr != nil {
 				return nil, keyErr
 			}

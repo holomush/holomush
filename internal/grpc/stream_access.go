@@ -12,17 +12,63 @@ import (
 	"github.com/holomush/holomush/internal/session"
 )
 
+// isSceneStream reports whether a stream is a scene IC or OOC subject
+// in NATS dot-style: events.<gameID>.scene.<sceneID>.{ic,ooc}.
+// Used by isPrivateStream, the I-17 gate, and scope_floor.
+//
+// Enforces the exact 5-segment canonical shape: extra trailing segments,
+// empty gameID, or empty sceneID are rejected so a malformed subject like
+// events.X.scene.<sceneID>.extra.ic cannot inherit scene authorization.
+func isSceneStream(stream string) bool {
+	parts := strings.Split(stream, ".")
+	if len(parts) != 5 {
+		return false
+	}
+	if parts[0] != "events" || parts[1] == "" || parts[2] != "scene" || parts[3] == "" {
+		return false
+	}
+	switch parts[4] {
+	case "ic", "ooc":
+		return true
+	default:
+		return false
+	}
+}
+
+// extractSceneID returns the scene ULID from a dot-style scene subject
+// (events.<gameID>.scene.<sceneID>.{ic,ooc}). Caller MUST check
+// isSceneStream first; undefined behavior otherwise.
+//
+// Phase 4: this is the sole scene-ID extractor in the package. The
+// colon-style extractor was removed when scope_floor.go's scene branch
+// migrated to dot-style subjects (T13 / holomush-5rh.13.13).
+func extractSceneID(stream string) (string, bool) {
+	parts := strings.Split(stream, ".")
+	if len(parts) != 5 || parts[0] != "events" || parts[1] == "" || parts[2] != "scene" || parts[3] == "" {
+		return "", false
+	}
+	switch parts[4] {
+	case "ic", "ooc":
+		return parts[3], true
+	default:
+		return "", false
+	}
+}
+
 // isPrivateStream returns true if the stream requires membership to read.
 // This is the gate for invariant I-17: private streams are readable only by
 // members, with no policy override. Private stream types:
-//   - character:<ulid>  — personal stream (only the owning character)
-//   - scene:<ulid>:ic   — scene IC stream (only scene members)
-//   - scene:<ulid>:ooc  — scene OOC stream (only scene members)
+//   - character:<ulid>             — personal stream (only the owning character)
+//   - events.<gid>.scene.<id>.ic  — scene IC stream (only scene members)
+//   - events.<gid>.scene.<id>.ooc — scene OOC stream (only scene members)
+//
+// Phase 4: scene subjects use NATS dot-style per INV-P4-1 / ADR holomush-s9nu.
+// character: prefix is unchanged (tracked separately by holomush-rops).
 //
 // Public streams (location:*, global, etc.) are gated by ABAC policy, not
 // by this function.
 func isPrivateStream(stream string) bool {
-	return strings.HasPrefix(stream, "character:") || strings.HasPrefix(stream, "scene:")
+	return strings.HasPrefix(stream, "character:") || isSceneStream(stream)
 }
 
 // sessionHasMembership checks if the session has membership entitling it to
@@ -49,7 +95,7 @@ func sessionHasMembership(info *session.Info, stream string) bool {
 		return info.CharacterID.String() == charID
 	}
 
-	if strings.HasPrefix(stream, "scene:") {
+	if isSceneStream(stream) {
 		fk, err := streamToFocusKey(stream)
 		if err != nil {
 			return false
@@ -68,34 +114,27 @@ func sessionHasMembership(info *session.Info, stream string) bool {
 	return false
 }
 
-// streamToFocusKey parses a scene stream name into a FocusKey. Returns
+// streamToFocusKey parses a dot-style scene subject into a FocusKey. Returns
 // an error with INVALID_ARGUMENT code if the stream is not a scene stream,
 // if the ULID is malformed, or if the stream format is incomplete.
 //
-// Expected format: "scene:<ulid>:ic" or "scene:<ulid>:ooc".
+// Expected format: "events.<gameID>.scene.<sceneULID>.{ic,ooc}".
 func streamToFocusKey(stream string) (*session.FocusKey, error) {
-	if !strings.HasPrefix(stream, "scene:") {
+	if !isSceneStream(stream) {
 		return nil, oops.Code("INVALID_ARGUMENT").
 			With("stream", stream).
 			Errorf("not a scene stream")
 	}
 
-	// "scene:<ulid>:<suffix>" → parts = ["scene", "<ulid>", "<suffix>"]
-	parts := strings.SplitN(stream, ":", 3)
-	if len(parts) < 3 {
+	// "events.<gameID>.scene.<sceneULID>.<facet>" — sceneID is parts[3]
+	sceneIDStr, ok := extractSceneID(stream)
+	if !ok {
 		return nil, oops.Code("INVALID_ARGUMENT").
 			With("stream", stream).
-			Errorf("malformed scene stream: expected scene:<ulid>:<suffix>")
+			Errorf("malformed scene stream: could not extract scene ID")
 	}
 
-	if parts[2] != "ic" && parts[2] != "ooc" {
-		return nil, oops.Code("INVALID_ARGUMENT").
-			With("stream", stream).
-			With("suffix", parts[2]).
-			Errorf("unknown scene stream suffix: expected ic or ooc")
-	}
-
-	targetID, err := ulid.Parse(parts[1])
+	targetID, err := ulid.Parse(sceneIDStr)
 	if err != nil {
 		return nil, oops.Code("INVALID_ARGUMENT").
 			With("stream", stream).

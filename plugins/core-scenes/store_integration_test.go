@@ -1608,6 +1608,195 @@ var _ = Describe("SceneStore", func() {
 		})
 	})
 
+	Describe("IsParticipant", func() {
+		It("returns true for owner", func() {
+			store := newTestStore()
+			ctx := context.Background()
+			row := &SceneRow{
+				ID: "scene-ip-owner", OwnerID: "char-owner-1", Title: "T",
+				State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+				Visibility:      string(SceneVisibilityOpen),
+				ContentWarnings: []string{}, Tags: []string{},
+			}
+			Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+
+			ok, err := store.IsParticipant(ctx, row.ID, "char-owner-1")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue(), "owner MUST pass the INV-S9 gate")
+		})
+
+		It("returns true for member", func() {
+			store := newTestStore()
+			ctx := context.Background()
+			row := &SceneRow{
+				ID: "scene-ip-member", OwnerID: "char-owner-2", Title: "T",
+				State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+				Visibility:      string(SceneVisibilityOpen),
+				ContentWarnings: []string{}, Tags: []string{},
+			}
+			Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+			_, _, err := store.AddParticipant(ctx, row.ID, "char-member-2")
+			Expect(err).NotTo(HaveOccurred())
+
+			ok, err := store.IsParticipant(ctx, row.ID, "char-member-2")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue(), "member MUST pass the INV-S9 gate")
+		})
+
+		It("returns false for invited role (NOT a participant for INV-S9 gate)", func() {
+			store := newTestStore()
+			ctx := context.Background()
+			row := &SceneRow{
+				ID: "scene-ip-invited", OwnerID: "char-owner-3", Title: "T",
+				State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+				Visibility:      string(SceneVisibilityPrivate),
+				ContentWarnings: []string{}, Tags: []string{},
+			}
+			Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+			_, err := store.InviteParticipant(ctx, row.ID, "char-owner-3", "char-invitee-3")
+			Expect(err).NotTo(HaveOccurred())
+
+			ok, err := store.IsParticipant(ctx, row.ID, "char-invitee-3")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeFalse(), "invited role MUST NOT count as participant for INV-S9 gate")
+		})
+
+		It("returns false for character not in scene", func() {
+			store := newTestStore()
+			ctx := context.Background()
+			row := &SceneRow{
+				ID: "scene-ip-outsider", OwnerID: "char-owner-4", Title: "T",
+				State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+				Visibility:      string(SceneVisibilityOpen),
+				ContentWarnings: []string{}, Tags: []string{},
+			}
+			Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+
+			ok, err := store.IsParticipant(ctx, row.ID, "char-outsider-4")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeFalse(), "non-participant MUST return false with nil error")
+		})
+	})
+
+	Describe("ListParticipantsWithPoseMeta", func() {
+		It("returns zero TotalPoseCount and nil pose fields when no poses have been recorded", func() {
+			store := newTestStore()
+			ctx := context.Background()
+
+			owner := "char-lpm-owner-1"
+			member := "char-lpm-member-1"
+			sceneID := "scene-lpm-no-poses"
+			row := &SceneRow{
+				ID: sceneID, OwnerID: owner, Title: "T",
+				State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+				Visibility:      string(SceneVisibilityOpen),
+				ContentWarnings: []string{}, Tags: []string{},
+			}
+			Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+			_, _, err := store.AddParticipant(ctx, sceneID, member)
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err := store.ListParticipantsWithPoseMeta(ctx, sceneID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.TotalPoseCount).To(BeZero(), "total_pose_count MUST be 0 when no poses recorded")
+			Expect(result.Participants).To(HaveLen(2))
+
+			for _, p := range result.Participants {
+				Expect(p.LastPoseAt).To(BeNil(), "LastPoseAt MUST be nil when participant has never posed")
+				Expect(p.LastPoseSeq).To(BeNil(), "LastPoseSeq MUST be nil when participant has never posed")
+			}
+		})
+
+		It("excludes invited role from result", func() {
+			store := newTestStore()
+			ctx := context.Background()
+
+			owner := "char-lpm-owner-2"
+			member := "char-lpm-member-2"
+			invitee := "char-lpm-invitee-2"
+			sceneID := "scene-lpm-excludes-invited"
+			row := &SceneRow{
+				ID: sceneID, OwnerID: owner, Title: "T",
+				State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+				Visibility:      string(SceneVisibilityPrivate),
+				ContentWarnings: []string{}, Tags: []string{},
+			}
+			Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+			// Private scene: invite member first so AddParticipant can promote.
+			_, err := store.InviteParticipant(ctx, sceneID, owner, member)
+			Expect(err).NotTo(HaveOccurred())
+			_, _, err = store.AddParticipant(ctx, sceneID, member)
+			Expect(err).NotTo(HaveOccurred())
+			// invitee stays in invited role (never promoted).
+			_, err = store.InviteParticipant(ctx, sceneID, owner, invitee)
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err := store.ListParticipantsWithPoseMeta(ctx, sceneID)
+			Expect(err).NotTo(HaveOccurred())
+			// Only owner + member — invited MUST be excluded per INV-S9.
+			Expect(result.Participants).To(HaveLen(2))
+			charIDs := make([]string, 0, 2)
+			for _, p := range result.Participants {
+				charIDs = append(charIDs, p.CharacterID)
+			}
+			Expect(charIDs).To(ConsistOf(owner, member))
+			Expect(charIDs).NotTo(ContainElement(invitee), "invited role MUST be excluded per INV-S9")
+		})
+
+		It("reflects updated pose metadata after direct column write", func() {
+			store := newTestStore()
+			ctx := context.Background()
+
+			owner := "char-lpm-owner-3"
+			member := "char-lpm-member-3"
+			sceneID := "scene-lpm-pose-meta"
+			row := &SceneRow{
+				ID: sceneID, OwnerID: owner, Title: "T",
+				State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+				Visibility:      string(SceneVisibilityOpen),
+				ContentWarnings: []string{}, Tags: []string{},
+			}
+			Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+			_, _, err := store.AddParticipant(ctx, sceneID, member)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Simulate what SceneAuditStore would do: write pose metadata directly.
+			poseTime := time.Now().UTC().Truncate(time.Millisecond)
+			poseSeq := int32(3)
+			_, err = store.pool.Exec(
+				ctx,
+				`UPDATE scenes SET total_pose_count = 3 WHERE id = $1`,
+				sceneID,
+			)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = store.pool.Exec(
+				ctx,
+				`UPDATE scene_participants SET last_pose_at = $1, last_pose_seq = $2
+				 WHERE scene_id = $3 AND character_id = $4`,
+				poseTime, poseSeq, sceneID, member,
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err := store.ListParticipantsWithPoseMeta(ctx, sceneID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.TotalPoseCount).To(Equal(uint32(3)), "TotalPoseCount MUST reflect updated total_pose_count")
+
+			// Find the member in the result.
+			var memberMeta *ParticipantWithPoseMeta
+			for i := range result.Participants {
+				if result.Participants[i].CharacterID == member {
+					memberMeta = &result.Participants[i]
+					break
+				}
+			}
+			Expect(memberMeta).NotTo(BeNil(), "member MUST appear in result")
+			Expect(memberMeta.LastPoseAt).NotTo(BeNil(), "LastPoseAt MUST be set after pose write")
+			Expect(memberMeta.LastPoseAt.UTC().Truncate(time.Millisecond)).To(Equal(poseTime))
+			Expect(memberMeta.LastPoseSeq).NotTo(BeNil(), "LastPoseSeq MUST be set after pose write")
+			Expect(*memberMeta.LastPoseSeq).To(Equal(poseSeq))
+		})
+	})
+
 	Describe("IsMember", func() {
 		DescribeTable(
 			"returns expected result by role and scene state",

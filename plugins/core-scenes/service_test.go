@@ -25,12 +25,13 @@ import (
 // supports configurable error injection so tests can exercise the error
 // branches of the service layer.
 type fakeStore struct {
-	scenes             map[string]*SceneRow
-	participants       map[string]map[string]string // sceneID → characterID → role
-	createErr          error
-	createWithOwnerErr error
-	getErr             error
-	addParticipantErr  error
+	scenes                    map[string]*SceneRow
+	participants              map[string]map[string]string // sceneID → characterID → role
+	createErr                 error
+	createWithOwnerErr        error
+	getErr                    error
+	addParticipantErr         error
+	listScenesForCharacterErr error
 }
 
 type recordingEventSink struct {
@@ -221,6 +222,56 @@ func (f *fakeStore) GetParticipant(_ context.Context, sceneID, characterID strin
 			With("scene_id", sceneID).With("character_id", characterID).Errorf("not found")
 	}
 	return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: role}, nil
+}
+
+func (f *fakeStore) IsParticipant(_ context.Context, sceneID, characterID string) (bool, error) {
+	role, ok := f.participants[sceneID][characterID]
+	if !ok {
+		return false, nil
+	}
+	return role == "owner" || role == "member", nil
+}
+
+func (f *fakeStore) ListParticipantsWithPoseMeta(_ context.Context, sceneID string) (ParticipantsWithPoseMeta, error) {
+	var result ParticipantsWithPoseMeta
+	for cid, role := range f.participants[sceneID] {
+		if role == "owner" || role == "member" {
+			result.Participants = append(result.Participants, ParticipantWithPoseMeta{
+				CharacterID: cid,
+			})
+		}
+	}
+	return result, nil
+}
+
+// ListScenesForCharacter mirrors the production query's role + state
+// filter: only owner/member rows in active/paused scenes count. Failure
+// can be injected via fakeStore.listScenesForCharacterErr.
+func (f *fakeStore) ListScenesForCharacter(_ context.Context, characterID string) ([]string, error) {
+	if f.listScenesForCharacterErr != nil {
+		return nil, f.listScenesForCharacterErr
+	}
+	var ids []string
+	for sceneID, members := range f.participants {
+		role, ok := members[characterID]
+		if !ok {
+			continue
+		}
+		if role != "owner" && role != "member" {
+			continue
+		}
+		// Mirror the production query's state filter: only active or paused
+		// scenes count toward single-membership inference.
+		scene, sceneOK := f.scenes[sceneID]
+		if !sceneOK {
+			continue
+		}
+		if scene.State != string(SceneStateActive) && scene.State != string(SceneStatePaused) {
+			continue
+		}
+		ids = append(ids, sceneID)
+	}
+	return ids, nil
 }
 
 func (f *fakeStore) End(_ context.Context, id string) (*SceneRow, error) {
@@ -423,7 +474,7 @@ func TestSceneServiceCreateSceneEmitsLifecycleEventWhenEventSinkConfigured(t *te
 	require.NotNil(t, resp.GetScene())
 
 	require.Len(t, sink.intents, 1)
-	assert.Equal(t, "scene:"+resp.GetScene().GetId(), sink.intents[0].Subject)
+	assert.Equal(t, dotStyleSceneSubject("main", resp.GetScene().GetId()), sink.intents[0].Subject)
 	assert.Equal(t, pluginsdk.HostEventTypeSystem, sink.intents[0].Type)
 	assert.Contains(t, sink.intents[0].Payload, `"kind":"scene.lifecycle.created"`)
 	assert.Contains(t, sink.intents[0].Payload, `"scene_id":"`+resp.GetScene().GetId()+`"`)
@@ -478,7 +529,7 @@ func TestSceneServiceSceneCreatedIntentBuildsLifecyclePayload(t *testing.T) {
 		Title:   "Tea",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "scene:scene-123", intent.Subject)
+	assert.Equal(t, dotStyleSceneSubject("main", "scene-123"), intent.Subject)
 	assert.Equal(t, pluginsdk.HostEventTypeSystem, intent.Type)
 	assert.Contains(t, intent.Payload, `"kind":"scene.lifecycle.created"`)
 	assert.Contains(t, intent.Payload, `"scene_id":"scene-123"`)
@@ -1066,4 +1117,409 @@ func TestSceneServiceKickFromSceneReturnsNotFoundForNonParticipant(t *testing.T)
 	require.Error(t, err)
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.NotFound, st.Code())
+}
+
+// findIntentByType returns the first EmitIntent with the given Type, or nil.
+func findIntentByType(intents []pluginsdk.EmitIntent, eventType string) *pluginsdk.EmitIntent {
+	for i := range intents {
+		if string(intents[i].Type) == eventType {
+			return &intents[i]
+		}
+	}
+	return nil
+}
+
+func TestJoinScene_EmitsSceneJoinIC_OnInsert(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-join-emit", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	sink := &recordingEventSink{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(sink)
+
+	_, err := svc.JoinScene(context.Background(), &scenev1.JoinSceneRequest{
+		SceneId:     "scene-join-emit",
+		CharacterId: "char-bob",
+	})
+	require.NoError(t, err)
+
+	found := findIntentByType(sink.intents, "scene_join_ic")
+	require.NotNil(t, found, "JoinScene MUST auto-emit scene_join_ic on OpInserted")
+	assert.Equal(t, dotStyleSceneSubjectIC("main", "scene-join-emit"), found.Subject)
+	assert.False(t, found.Sensitive, "scene_join_ic is sensitivity:never")
+	assert.Contains(t, found.Payload, `"actor_id":"char-bob"`)
+	assert.Contains(t, found.Payload, `"scene_id":"scene-join-emit"`)
+	assert.Contains(t, found.Payload, `"from_role":"none"`)
+}
+
+func TestJoinScene_EmitsSceneJoinIC_OnPromote(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-join-promote", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityPrivate),
+	}))
+	// Pre-seed char-bob as invited so AddParticipant returns OpPromoted.
+	store.participants["scene-join-promote"]["char-bob"] = "invited"
+	sink := &recordingEventSink{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(sink)
+
+	_, err := svc.JoinScene(context.Background(), &scenev1.JoinSceneRequest{
+		SceneId:     "scene-join-promote",
+		CharacterId: "char-bob",
+	})
+	require.NoError(t, err)
+
+	found := findIntentByType(sink.intents, "scene_join_ic")
+	require.NotNil(t, found, "JoinScene MUST auto-emit scene_join_ic on OpPromoted")
+	assert.Contains(t, found.Payload, `"from_role":"invited"`)
+}
+
+func TestJoinScene_NoEmit_OnNoChange(t *testing.T) {
+	t.Parallel()
+	// Idempotent retry: already-member join returns OpNoChange and MUST NOT
+	// emit a duplicate scene_join_ic.
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-join-idempotent", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	// char-alice is already owner (inserted by CreateWithOwner).
+	sink := &recordingEventSink{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(sink)
+
+	_, err := svc.JoinScene(context.Background(), &scenev1.JoinSceneRequest{
+		SceneId:     "scene-join-idempotent",
+		CharacterId: "char-alice", // already owner → OpNoChange
+	})
+	require.NoError(t, err)
+
+	joinCount := 0
+	for _, it := range sink.intents {
+		if string(it.Type) == "scene_join_ic" {
+			joinCount++
+		}
+	}
+	assert.Equal(t, 0, joinCount, "idempotent join MUST NOT emit scene_join_ic")
+}
+
+func TestLeaveScene_EmitsSceneLeaveIC_ReasonLeft(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-leave-emit", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	// Pre-seed char-bob as a member so RemoveParticipant succeeds.
+	store.participants["scene-leave-emit"]["char-bob"] = "member"
+	sink := &recordingEventSink{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(sink)
+
+	_, err := svc.LeaveScene(context.Background(), &scenev1.LeaveSceneRequest{
+		SceneId:     "scene-leave-emit",
+		CharacterId: "char-bob",
+	})
+	require.NoError(t, err)
+
+	found := findIntentByType(sink.intents, "scene_leave_ic")
+	require.NotNil(t, found, "LeaveScene MUST auto-emit scene_leave_ic")
+	assert.Equal(t, dotStyleSceneSubjectIC("main", "scene-leave-emit"), found.Subject)
+	assert.False(t, found.Sensitive, "scene_leave_ic is sensitivity:never")
+	assert.Contains(t, found.Payload, `"actor_id":"char-bob"`)
+	assert.Contains(t, found.Payload, `"scene_id":"scene-leave-emit"`)
+	assert.Contains(t, found.Payload, `"reason":"left"`)
+	assert.NotContains(t, found.Payload, `"removed_by"`, "voluntary leave MUST NOT include removed_by")
+}
+
+func TestKickFromScene_EmitsSceneLeaveIC_ReasonKicked(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-kick-emit", OwnerID: "char-owner",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	// Pre-seed char-target as a member so KickParticipant succeeds.
+	store.participants["scene-kick-emit"]["char-target"] = "member"
+	sink := &recordingEventSink{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(sink)
+
+	_, err := svc.KickFromScene(context.Background(), &scenev1.KickFromSceneRequest{
+		SceneId:           "scene-kick-emit",
+		CharacterId:       "char-owner",  // kicker
+		TargetCharacterId: "char-target", // who gets kicked
+	})
+	require.NoError(t, err)
+
+	found := findIntentByType(sink.intents, "scene_leave_ic")
+	require.NotNil(t, found, "KickFromScene MUST auto-emit scene_leave_ic")
+	assert.Equal(t, dotStyleSceneSubjectIC("main", "scene-kick-emit"), found.Subject)
+	assert.False(t, found.Sensitive, "scene_leave_ic is sensitivity:never")
+	assert.Contains(t, found.Payload, `"actor_id":"char-target"`, "actor_id is the TARGET of the kick")
+	assert.Contains(t, found.Payload, `"scene_id":"scene-kick-emit"`)
+	assert.Contains(t, found.Payload, `"reason":"kicked"`)
+	assert.Contains(t, found.Payload, `"removed_by":"char-owner"`)
+}
+
+func TestUpdateScene_EmitsPoseOrderChangedIC_OnModeChange(t *testing.T) {
+	t.Parallel()
+	// Scene starts with pose_order_mode = "free" (CreateScene default);
+	// owner updates it to "strict". Expect scene_pose_order_changed_ic.
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-mode-change",
+		OwnerID:    "char-owner",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityOpen),
+		PoseOrder:  string(PoseOrderModeFree),
+	}))
+	sink := &recordingEventSink{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(sink)
+
+	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
+		SceneId:       "scene-mode-change",
+		CharacterId:   "char-owner",
+		UpdateMask:    &fieldmaskpb.FieldMask{Paths: []string{"pose_order_mode"}},
+		PoseOrderMode: "strict",
+	})
+	require.NoError(t, err)
+
+	found := findIntentByType(sink.intents, "scene_pose_order_changed_ic")
+	require.NotNil(t, found, "UpdateScene MUST auto-emit scene_pose_order_changed_ic on mode change")
+	assert.Equal(t, dotStyleSceneSubjectIC("main", "scene-mode-change"), found.Subject)
+	assert.False(t, found.Sensitive, "scene_pose_order_changed_ic is sensitivity:never")
+	assert.Contains(t, found.Payload, `"old_mode":"free"`)
+	assert.Contains(t, found.Payload, `"new_mode":"strict"`)
+	assert.Contains(t, found.Payload, `"actor_id":"char-owner"`)
+	assert.Contains(t, found.Payload, `"scene_id":"scene-mode-change"`)
+}
+
+func TestUpdateScene_NoEmit_OnNoModeChange(t *testing.T) {
+	t.Parallel()
+	// Mask includes pose_order_mode but the value is the same as current.
+	// No-op update MUST NOT emit a spurious notice.
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-mode-noop",
+		OwnerID:    "char-owner",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityOpen),
+		PoseOrder:  string(PoseOrderModeFree),
+	}))
+	sink := &recordingEventSink{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(sink)
+
+	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
+		SceneId:       "scene-mode-noop",
+		CharacterId:   "char-owner",
+		UpdateMask:    &fieldmaskpb.FieldMask{Paths: []string{"pose_order_mode"}},
+		PoseOrderMode: "free", // same as current — no-op
+	})
+	require.NoError(t, err)
+
+	count := 0
+	for _, it := range sink.intents {
+		if it.Type == "scene_pose_order_changed_ic" {
+			count++
+		}
+	}
+	assert.Equal(t, 0, count, "no-op mode update MUST NOT emit scene_pose_order_changed_ic")
+}
+
+func TestUpdateScene_NoEmit_OnNonModeUpdate(t *testing.T) {
+	t.Parallel()
+	// Mask does NOT include pose_order_mode (only updates title).
+	// MUST NOT emit scene_pose_order_changed_ic.
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-other-update",
+		OwnerID:    "char-owner",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityOpen),
+		PoseOrder:  string(PoseOrderModeFree),
+	}))
+	sink := &recordingEventSink{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(sink)
+
+	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
+		SceneId:     "scene-other-update",
+		CharacterId: "char-owner",
+		UpdateMask:  &fieldmaskpb.FieldMask{Paths: []string{"title"}},
+		Title:       "New Title",
+	})
+	require.NoError(t, err)
+
+	count := 0
+	for _, it := range sink.intents {
+		if it.Type == "scene_pose_order_changed_ic" {
+			count++
+		}
+	}
+	assert.Equal(t, 0, count, "non-mode update MUST NOT emit scene_pose_order_changed_ic")
+}
+
+// TestGetPoseOrder_NotParticipant_PermissionDenied pins the INV-S9
+// plugin-code gate: a caller who is NOT a current participant of the
+// scene MUST receive PermissionDenied, NOT NotFound. The gate fires
+// before any scene-existence check so the error path does not leak
+// scene existence to non-members.
+func TestGetPoseOrder_NotParticipant_PermissionDenied(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-gpo-perm",
+		OwnerID:    "char-owner",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityOpen),
+		PoseOrder:  string(PoseOrderModeFree),
+	}))
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(&recordingEventSink{})
+
+	_, err := svc.GetPoseOrder(context.Background(), &scenev1.GetPoseOrderRequest{
+		SceneId:     "scene-gpo-perm",
+		CharacterId: "char-bob", // not in participants map
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.PermissionDenied, st.Code(),
+		"non-participant MUST receive PermissionDenied (INV-S9 gate)")
+}
+
+// TestGetPoseOrder_InvitedRole_PermissionDenied pins INV-S9's
+// "invited" exclusion: an invited (but not yet accepted) character
+// is NOT a member of the scene for pose-order purposes and MUST be
+// rejected by the gate. fakeStore.IsParticipant treats invited as
+// non-member, matching the production store's role filter
+// (sceneStorer.IsParticipant docstring).
+func TestGetPoseOrder_InvitedRole_PermissionDenied(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-gpo-invited",
+		OwnerID:    "char-owner",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityPrivate),
+		PoseOrder:  string(PoseOrderModeStrict),
+	}))
+	// Mark char-bob as invited (not member).
+	_, err := store.InviteParticipant(context.Background(), "scene-gpo-invited", "char-owner", "char-bob")
+	require.NoError(t, err)
+
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(&recordingEventSink{})
+
+	_, err = svc.GetPoseOrder(context.Background(), &scenev1.GetPoseOrderRequest{
+		SceneId:     "scene-gpo-invited",
+		CharacterId: "char-bob",
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.PermissionDenied, st.Code(),
+		"invited-but-not-member MUST receive PermissionDenied (INV-S9 gate excludes invited role)")
+}
+
+// TestGetPoseOrder_NoScene_PermissionDenied pins the
+// scene-existence-non-disclosure aspect of INV-S9: a request for a
+// non-existent scene from a non-participant returns PermissionDenied
+// (not NotFound). The IsParticipant gate runs before Get, so the
+// response collapses both "scene does not exist" and "you are not a
+// member" into the same security-aware error code.
+func TestGetPoseOrder_NoScene_PermissionDenied(t *testing.T) {
+	t.Parallel()
+	svc := NewSceneServiceImpl(newFakeStore())
+	svc.SetEventSink(&recordingEventSink{})
+
+	_, err := svc.GetPoseOrder(context.Background(), &scenev1.GetPoseOrderRequest{
+		SceneId:     "scene-nonexistent",
+		CharacterId: "any-character",
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.PermissionDenied, st.Code(),
+		"non-existent scene MUST be indistinguishable from non-membership (INV-S9)")
+}
+
+// TestGetPoseOrder_HappyPath_FreeMode verifies the composition:
+// IsParticipant (T4) → Get + ListParticipantsWithPoseMeta (T5) →
+// Compute (T9) → proto wire form. A fresh scene has total_pose_count
+// of zero; in free mode every participant is eligible.
+func TestGetPoseOrder_HappyPath_FreeMode(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-gpo-happy",
+		OwnerID:    "char-alice",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityOpen),
+		PoseOrder:  string(PoseOrderModeFree),
+	}))
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(&recordingEventSink{})
+
+	resp, err := svc.GetPoseOrder(context.Background(), &scenev1.GetPoseOrderRequest{
+		SceneId:     "scene-gpo-happy",
+		CharacterId: "char-alice",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, string(PoseOrderModeFree), resp.GetMode())
+	assert.Equal(t, uint32(0), resp.GetTotalPoseCount(),
+		"fresh scene has zero total_pose_count")
+	require.Len(t, resp.GetEntries(), 1, "owner is the sole participant")
+	entry := resp.GetEntries()[0]
+	assert.Equal(t, "char-alice", entry.GetCharacterId())
+	// Names map is empty for Phase 4 → Compute renders missing names
+	// as the character_id (poseorder.go::resolveName).
+	assert.Equal(t, "char-alice", entry.GetCharacterName(),
+		"empty names map yields character_id fallback")
+	assert.True(t, entry.GetEligible(), "free mode: every participant is eligible")
+	assert.Nil(t, entry.GetLastPosedAt(), "never-posed: last_posed_at is nil")
+}
+
+// TestGetPoseOrder_StoreError_Internal verifies that an unexpected
+// store error from the participant check is surfaced as Internal,
+// not silently mapped to PermissionDenied.
+func TestGetPoseOrder_StoreError_Internal(t *testing.T) {
+	t.Parallel()
+	store := &erroringIsParticipantStore{
+		fakeStore: newFakeStore(),
+		err:       errors.New("db down"),
+	}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(&recordingEventSink{})
+
+	_, err := svc.GetPoseOrder(context.Background(), &scenev1.GetPoseOrderRequest{
+		SceneId:     "scene-gpo-storeerr",
+		CharacterId: "char-alice",
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Internal, st.Code(),
+		"store failure on IsParticipant MUST map to Internal, not PermissionDenied")
+}
+
+// erroringIsParticipantStore wraps fakeStore so a single test can
+// inject an IsParticipant error without polluting the shared
+// fakeStore type.
+type erroringIsParticipantStore struct {
+	*fakeStore
+	err error
+}
+
+func (e *erroringIsParticipantStore) IsParticipant(_ context.Context, _, _ string) (bool, error) {
+	return false, e.err
 }

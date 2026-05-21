@@ -29,11 +29,12 @@ import (
 // runs before Init) has valid receivers. Init wires the store into both
 // after NewSceneStore returns.
 type scenePlugin struct {
-	store       *SceneStore
-	service     *SceneServiceImpl
-	resolver    *SceneResolver
-	auditSrv    *SceneAuditServer
-	focusClient pluginsdk.FocusClient
+	store        *SceneStore
+	service      *SceneServiceImpl
+	resolver     *SceneResolver
+	auditSrv     *SceneAuditServer
+	focusClient  pluginsdk.FocusClient
+	emitRegistry *pluginsdk.EmitRegistry
 }
 
 // HandleEvent is a no-op for Phase 1. The scene plugin does not subscribe
@@ -84,6 +85,30 @@ func (p *scenePlugin) SetEventSink(sink pluginsdk.EventSink) {
 	}
 }
 
+// EmitRegistry implements pluginsdk.EmitTypeRegistrar. The substrate
+// INV-S5 validator reads this set via the binary-plugin Init RPC and
+// validates set-equality against manifest crypto.emits.
+func (p *scenePlugin) EmitRegistry() *pluginsdk.EmitRegistry {
+	return p.emitRegistry
+}
+
+// phase4EmitTypes returns the 8 plugin-owned scene event types declared
+// in crypto.emits. Exposed at package level so the manifest-vs-registry
+// test in main_test.go can build the same set without duplicating the
+// list.
+func phase4EmitTypes() []string {
+	return []string{
+		"scene_pose",
+		"scene_say",
+		"scene_emit",
+		"scene_ooc",
+		"scene_join_ic",
+		"scene_leave_ic",
+		"scene_pose_order_changed_ic",
+		"scene_idle_nudge",
+	}
+}
+
 // Init is called by the host after the gRPC connection is established and
 // the Postgres schema/role have been provisioned. It opens the connection
 // pool, runs the embedded migrations, and wires the resulting store into
@@ -108,6 +133,13 @@ func (p *scenePlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig) 
 	p.auditSrv.store = NewSceneAuditStore(store.Pool())
 	p.auditSrv.memberLookup = store // *SceneStore satisfies sceneMembershipLookup
 
+	// Set the game ID for NATS dot-style emit subjects. Substrate uses
+	// "main" as the default game_id when unset (see internal/grpc/server.go:181).
+	// ServiceConfig does not currently carry a game_id field; this hardcode
+	// is the documented expedient until multi-tenant deployment is real
+	// (tracked as a post-Phase-4 follow-up).
+	p.service.gameID = "main"
+
 	slog.InfoContext(
 		ctx, "core-scenes plugin initialised",
 		"storage", "postgres",
@@ -116,10 +148,14 @@ func (p *scenePlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig) 
 }
 
 func main() {
+	reg := pluginsdk.NewEmitRegistry()
+	reg.RegisterEmitTypes(phase4EmitTypes())
+
 	plugin := &scenePlugin{
-		service:  &SceneServiceImpl{},
-		resolver: &SceneResolver{},
-		auditSrv: &SceneAuditServer{},
+		service:      &SceneServiceImpl{},
+		resolver:     &SceneResolver{},
+		auditSrv:     &SceneAuditServer{},
+		emitRegistry: reg,
 	}
 
 	pluginsdk.ServeWithServices(
