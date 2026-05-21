@@ -1050,6 +1050,66 @@ func (s *CoreServer) dispatchDelivery(
 		return nil
 	}
 
+	// Per-subject filter-at-delivery — load-bearing privacy gate per
+	// holomush-iwzt §6.2 Tier 2. The OpenSession-time minFloor (Tier 1) is
+	// silently zero in production today because streamScopeFloor inspects
+	// legacy stream prefixes while OpenSession passes NATS subjects
+	// (holomush-ofpi); here we feed it `legacyStream` which is already
+	// translated, so the floor is computed correctly.
+	//
+	// Re-read SessionInfo per event so the filter picks up post-reattach /
+	// post-move floor changes without subscriber restart. A follow-up bead
+	// (holomush-hfb3) covers caching this in a per-Subscribe goroutine
+	// local when latency profiling shows the per-event sessionStore.Get
+	// matters.
+	//
+	// On lookup failure, fall back to the cached `info` parameter rather
+	// than dropping: the only realistic Get failure in production is
+	// "session not found" because the session was just deleted by quit /
+	// evict (internal/grpc/server.go: EndSession → sessionStore.Delete).
+	// The in-flight session_ended event in that case is the very event the
+	// client needs to receive so it can close the stream gracefully —
+	// fail-closed-by-drop would orphan the client on /terminal forever.
+	// The cached `info` carries Subscribe-open LocationArrivedAt, which is
+	// privacy-correct (never weaker than current state for legitimate
+	// transitions: reattach within TTL preserves it; move only advances
+	// it; delete is the only path that loses it and that path is the one
+	// we want to forward through).
+	//
+	// Drop paths MUST ack the delivery — JetStream redelivers any unacked
+	// event indefinitely on consumer reconnect.
+	currentInfo, getErr := s.sessionStore.Get(ctx, info.ID)
+	if getErr != nil {
+		slog.DebugContext(ctx, "subscribe: filter-at-delivery using cached session info — store lookup failed",
+			"session_id", info.ID, "event_id", event.ID.String(), "error", getErr)
+		currentInfo = info
+	}
+	// Truncate the floor to microsecond precision to match the event timestamp
+	// resolution. eventbus/publisher.go::Publish truncates event.Timestamp to
+	// microseconds (the canonical system-wide event timestamp resolution; see
+	// INV-P7-16 / holomush-1r0v.3). LocationArrivedAt / GuestCharacterCreatedAt
+	// / FocusMembership.JoinedAt are populated via time.Now() and retain
+	// nanosecond precision. Without this truncation, an event published within
+	// the same microsecond as session creation has a truncated timestamp that
+	// is strictly LESS than the un-truncated floor — and the filter would drop
+	// the session's own arrive event (and any other event emitted in the same
+	// µs as session-create / move / focus-join). Truncating the floor to the
+	// event's resolution closes that off-by-precision gap while preserving the
+	// privacy invariant at µs granularity, which is the canonical event time
+	// resolution.
+	floor := streamScopeFloor(currentInfo, legacyStream).Truncate(time.Microsecond)
+	if !floor.IsZero() && event.Timestamp.Before(floor) {
+		slog.DebugContext(ctx, "subscribe: filter-at-delivery dropped event below scope floor",
+			"session_id", info.ID, "event_id", event.ID.String(),
+			"stream", legacyStream,
+			"event_ts", event.Timestamp, "floor", floor)
+		if ackErr := delivery.Ack(); ackErr != nil {
+			slog.WarnContext(ctx, "subscribe: ack failed on filter-drop (below-floor) path; will redeliver",
+				"session_id", info.ID, "event_id", event.ID.String(), "error", ackErr)
+		}
+		return nil
+	}
+
 	// locationFollower consumes move events on character streams and
 	// replies with a synthetic location_state — in that case the raw
 	// event is dropped (ack'd) rather than forwarded.

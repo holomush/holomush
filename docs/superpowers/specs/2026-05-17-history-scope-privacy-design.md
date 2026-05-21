@@ -251,12 +251,14 @@ This is idempotent and fail-closed: first call creates the consumer with `minFlo
 The Subscribe broadcaster (`internal/grpc/server.go` event dispatch loop) MUST apply, for every event delivered by JetStream:
 
 ```text
-if event.Timestamp < streamScopeFloor(currentSessionInfo, event.Subject) {
+if event.Timestamp < streamScopeFloor(currentSessionInfo, event.Subject).Truncate(µs) {
     drop event  // do not forward to client
 }
 ```
 
 `currentSessionInfo` is the **post-reattach, post-move** snapshot — re-read from the session store at delivery time or cached and invalidated on lifecycle transitions (plan-stage choice). This is the load-bearing privacy gate.
+
+**Precision contract.** The comparison MUST be performed at microsecond granularity. Event timestamps are truncated to microseconds at publish time (canonical event-time resolution per INV-P7-16 / crypto AAD invariant; `internal/eventbus/publisher.go::Publish`), while floor inputs (`LocationArrivedAt`, `GuestCharacterCreatedAt`, `FocusMembership.JoinedAt`) are populated via `time.Now()` and retain nanosecond precision. Without µs-truncating the floor, an event emitted within the same microsecond as session-create / move / focus-join has a truncated timestamp strictly less than the un-truncated floor — and the filter drops the session's own arrival event (and any other in-µs-window event). Truncating to µs preserves the privacy invariant at the canonical event-time resolution and matches the publisher's behavior.
 
 **Cost analysis:**
 
@@ -383,3 +385,4 @@ Phase 1 is privacy-leak-neutral but is NOT semantically inert: the §5.1 session
   - **N-R5.3:** Fourth unit test added to §8 I-PRIV-8 (paired with B-R5.1 fix).
 
 See bead `holomush-iwzt` notes for full round-by-round audit trail.
+<!-- adr-capture: sha256=3e4d189e14c7fb62; session=cli; ts=2026-05-21T12:24:10Z; adrs= -->
