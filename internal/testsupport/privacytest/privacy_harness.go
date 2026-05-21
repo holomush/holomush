@@ -253,6 +253,21 @@ func (s *Server) ExpireSession(ctx context.Context, sessionID string) {
 		"privacytest.Server.ExpireSession: expected 1 row affected, got %d (sessionID=%s)", tag.RowsAffected(), sessionID)
 }
 
+// SetLocationArrivedAt directly mutates a session's location_arrived_at column
+// in Postgres. Used by 5b2j tests to exercise floor-bypass semantics
+// (I-PRES-2): the snapshot RPC reads sessionStore directly and is exempt from
+// the I-PRIV-1 temporal floor, so manipulating this column should NOT affect
+// ListFocusPresence's behavior.
+func (s *Server) SetLocationArrivedAt(ctx context.Context, sessionID string, t time.Time) {
+	s.t.Helper()
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE sessions SET location_arrived_at = $1, updated_at = $1 WHERE id = $2`,
+		t.UTC(), sessionID)
+	require.NoError(s.t, err, "privacytest.Server.SetLocationArrivedAt")
+	require.Equalf(s.t, int64(1), tag.RowsAffected(),
+		"privacytest.Server.SetLocationArrivedAt: expected 1 row affected, got %d (sessionID=%s)", tag.RowsAffected(), sessionID)
+}
+
 // ConnectGuest creates a guest player+character and opens a game session.
 // The returned Session is ready for SendCommand / DrainEvents / Logout calls.
 func (s *Server) ConnectGuest(ctx context.Context) *Session {
