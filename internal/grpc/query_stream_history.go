@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -160,8 +159,9 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	switch {
 	case isPrivateStream(req.Stream):
 		// Validate scene stream format up-front so malformed scene streams
-		// surface as INVALID_ARGUMENT rather than STREAM_ACCESS_DENIED.
-		if strings.HasPrefix(req.Stream, "scene:") {
+		// (e.g. invalid ULID in the sceneID segment) surface as INVALID_ARGUMENT
+		// rather than STREAM_ACCESS_DENIED. Dot-style per INV-P4-1 / ADR holomush-s9nu.
+		if isSceneStream(req.Stream) {
 			if _, keyErr := streamToFocusKey(req.Stream); keyErr != nil {
 				return nil, keyErr
 			}
