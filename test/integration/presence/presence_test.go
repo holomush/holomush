@@ -22,6 +22,8 @@ import (
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
+// Verifies: I-PRES-1
+// Verifies: I-PRES-6
 // AC4: A connects, B then connects to the same location, B's ListFocusPresence
 // MUST include A within 1s of session open. Proves the snapshot RPC populates
 // presence independent of event replay — the architectural pattern that
@@ -103,6 +105,7 @@ var _ = Describe("AC4: joiner sees prior presence", func() {
 // upgrade this scenario to also exercise an active filter (e.g., via a
 // WithTier2FilterActive harness option). Until then, the future-floor
 // write + architectural assertion is the strongest available shape.
+// Verifies: I-PRES-2
 var _ = Describe("AC3 / I-PRES-2: snapshot bypasses I-PRIV-1 temporal floor", func() {
 	var (
 		ts    *privacytest.Server

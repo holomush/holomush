@@ -88,6 +88,7 @@ func TestListFocusPresenceReturnsInvalidArgumentOnEmptySessionID(t *testing.T) {
 	assert.Equal(t, "INVALID_ARGUMENT", o.Code())
 }
 
+// Verifies: I-PRES-3
 func TestListFocusPresenceReturnsSessionNotFoundOnUnknownSession(t *testing.T) {
 	s := &CoreServer{
 		sessionStore:      newTestSessionStore(t, nil),
@@ -104,6 +105,7 @@ func TestListFocusPresenceReturnsSessionNotFoundOnUnknownSession(t *testing.T) {
 	assert.Equal(t, "SESSION_NOT_FOUND", o.Code())
 }
 
+// Verifies: I-PRES-3
 func TestListFocusPresenceCollapsesOwnershipMismatchToNotFound(t *testing.T) {
 	// Caller's player_session_token resolves to a player session with a
 	// different PlayerID than the target session's PlayerID — ownership
@@ -173,6 +175,7 @@ func TestListFocusPresenceReturnsSessionExpiredForExpiredSession(t *testing.T) {
 	assert.Equal(t, "SESSION_EXPIRED", o.Code())
 }
 
+// Verifies: I-PRES-5
 func TestListFocusPresenceReturnsUnimplementedForSceneFocus(t *testing.T) {
 	sess := mkOwnedSession("sess-1", func(s *session.Info) {
 		s.CharacterID = ulid.MustParse("01HYXCHAR0000000000000000C")
@@ -216,7 +219,7 @@ func TestListFocusPresenceReturnsEmptyEntriesWhenLocationUnset(t *testing.T) {
 
 // ---------- T7 tests ----------
 
-// I-PRES-4: ABAC denial → PERMISSION_DENIED.
+// Verifies: I-PRES-4
 func TestListFocusPresenceReturnsPermissionDeniedWhenABACDenies(t *testing.T) {
 	char := ulid.MustParse("01HYXCHARALICE0000000000AA")
 	loc := ulid.MustParse("01HYXLOCATION0000000000001")
@@ -236,8 +239,9 @@ func TestListFocusPresenceReturnsPermissionDeniedWhenABACDenies(t *testing.T) {
 	assert.Equal(t, "PERMISSION_DENIED", o.Code())
 }
 
-// I-PRES-1 + I-PRES-6: two Active sessions at same location, both returned
-// with state=ACTIVE; caller is included in the result.
+// Verifies: I-PRES-1
+// Verifies: I-PRES-4
+// Verifies: I-PRES-6
 func TestListFocusPresenceReturnsCallerAndOtherSessions(t *testing.T) {
 	char1 := ulid.MustParse("01HYXCHARALICE0000000000AA")
 	char2 := ulid.MustParse("01HYXCHARBOB000000000000BB")
@@ -297,8 +301,7 @@ func TestListFocusPresenceSkipsEntryWhenNameUnresolved(t *testing.T) {
 	assert.Equal(t, "alice", resp.Entries[0].CharacterName)
 }
 
-// I-PRES-9: defense-in-depth dedup — two sessions for the same character_id
-// must collapse to a single presence entry.
+// Verifies: I-PRES-9
 func TestListFocusPresenceDeduplicatesByCharacterID(t *testing.T) {
 	char := ulid.MustParse("01HYXCHARALICE0000000000AA")
 	loc := ulid.MustParse("01HYXLOCATION0000000000001")
@@ -322,8 +325,7 @@ func TestListFocusPresenceDeduplicatesByCharacterID(t *testing.T) {
 	assert.Len(t, resp.Entries, 1, "duplicate character_id must collapse to single entry")
 }
 
-// I-PRES-1 cross-location: the handler trusts ListActiveByLocation to filter;
-// sessions at a different location must not appear in the response.
+// Verifies: I-PRES-1
 func TestListFocusPresenceDoesNotLeakSessionsFromOtherLocations(t *testing.T) {
 	char1 := ulid.MustParse("01HYXCHARALICE0000000000AA")
 	char2 := ulid.MustParse("01HYXCHARBOB000000000000BB")
@@ -369,6 +371,25 @@ func TestListFocusPresenceReturnsPermissionDeniedWhenAccessEngineIsNil(t *testin
 	o, ok := oops.AsOops(err)
 	require.True(t, ok)
 	assert.Equal(t, "PERMISSION_DENIED", o.Code())
+}
+
+// Verifies: I-PRES-7
+// PresenceEntry wire shape must contain exactly 3 fields: character_id,
+// character_name, state. No timestamps or duration-of-presence fields.
+// Uses proto reflection to assert field count stays exactly 3 — any
+// proto addition that would leak timing data fails this test.
+func TestPresenceEntryHasExactlyThreeFields(t *testing.T) {
+	entry := &corev1.PresenceEntry{}
+	fields := entry.ProtoReflect().Descriptor().Fields()
+	const wantFields = 3
+	if fields.Len() != wantFields {
+		names := make([]string, fields.Len())
+		for i := range fields.Len() {
+			names[i] = string(fields.Get(i).Name())
+		}
+		t.Errorf("I-PRES-7: PresenceEntry MUST have exactly %d fields (character_id, character_name, state); got %d: %v",
+			wantFields, fields.Len(), names)
+	}
 }
 
 // Missing characterNameResolver → INTERNAL (misconfiguration; not a security
