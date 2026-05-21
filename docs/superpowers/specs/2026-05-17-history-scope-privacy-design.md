@@ -322,6 +322,11 @@ Phase 1 is privacy-leak-neutral but is NOT semantically inert: the §5.1 session
 ## 9. Invariants (RFC2119)
 
 - **I-PRIV-1 (MUST):** A session SHALL NOT be able to read any event from any stream that occurred outside the time interval during which the **requesting session row itself** has existed for that stream's scope (in any of `StatusActive`, `StatusIdle`, or `StatusDetached`-within-TTL). The session row's lifetime — from `SelectCharacter` creation through quit/logout/boot/reaper-deletion — is the unit of session-level continuity; transport-level detach within TTL does NOT bound the window because the row persists and the durable consumer continues to receive events. Per-session enforcement, no cross-session aggregation; other concurrent sessions for the same character maintain independent floors. Exception: an explicit ABAC override grants `read_unrestricted_history` subject to the limited bypass defined in §6.1 (hard-gate location-match only; temporal floor still applies).
+  Current presence (snapshot) is exempt from this floor — see
+  `docs/superpowers/specs/2026-05-19-presence-snapshot-design.md` (I-PRES-2)
+  for the carve-out rationale. The snapshot is a current-state fact, not a
+  historical event, and is privacy-bounded by minimal-field exposure
+  (no `arrived_at_ms`).
 - **I-PRIV-2 (MUST):** Guest sessions SHALL have a temporal floor of `MAX(scope_floor, guest_character.CreatedAt)` applied to all stream history reads.
 - **I-PRIV-3 (MUST):** `Subscribe.ReattachCAS` (transport reattach) AND `SelectCharacter` reattach SHALL leave the session's `LocationArrivedAt` UNCHANGED. The session row's continuity across the disconnect window (Detached → Active within TTL) is the unit of session-level identity; the floor is set at session-create (§5 row 1) and only advances on character-move (§5 row 5). `Subscribe.ReattachCAS` MUST NOT change `DeliverPolicy`, `OptStartTime`, or `OptStartSeq` on the existing durable consumer; `FilterSubjects` MAY change. Privacy enforcement on reattach is performed by the per-subject filter-at-delivery (§6.2 Tier 2) against the unchanged `LocationArrivedAt`.
 - **I-PRIV-4 (MUST NOT):** Idle status change SHALL NOT advance `LocationArrivedAt`. Other active sessions for the same character SHALL NOT be affected by any one session's reattach.
