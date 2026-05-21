@@ -1,0 +1,9 @@
+.coderabbit.yaml
+  ai_agent 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "c60089ebb6afebad8fa28d700b4b8701f8aca5f8",
+  "prompts": {}
+}
