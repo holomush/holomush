@@ -66,6 +66,17 @@ see the boundary; the cursor is always a ULID.
 
 ---
 
+## Current-state queries
+
+Some UX surfaces need a "snapshot of who/what is here right now" rather
+than a stream of historical events. These bypass `HistoryReader` entirely:
+they hit the relevant store (e.g., session store for presence) and return
+a current-state list. See `CoreService.ListFocusPresence` (`holomush-5b2j`)
+as the canonical example. Snapshots are NOT subject to the I-PRIV-1
+temporal floor — by design they reflect current state, not history.
+
+---
+
 ## Subject naming convention
 
 Subjects follow NATS dot-delimited conventions (spec §1c):

@@ -48,6 +48,20 @@ type EventBus interface {
 - `docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md` — full design (§3 publish, §4 subscribe, §5 history, §6 PostgreSQL role)
 - `site/docs/contributing/event-store.md` — contributor examples (plugin emit, manifest audit declarations, embedded vs cluster NATS)
 
+## Current-state RPCs
+
+Some UX flows need "snapshot of current state" rather than event replay.
+These bypass the EventBus entirely and read the relevant store directly:
+
+| Surface     | RPC                              | Source                               |
+| ----------- | -------------------------------- | ------------------------------------ |
+| Presence    | `CoreService.ListFocusPresence`  | `session.Store.ListActiveByLocation` |
+
+Adding a new current-state surface follows the same shape: a CoreServer
+RPC + an ABAC action on the relevant resource + a narrow store query.
+Do NOT reach for `HistoryReader.QueryHistory` when the requirement is
+"what's the current state" — `HistoryReader` is for historical events.
+
 ## ServiceRegistry (`internal/plugin`)
 
 Maps proto service names (e.g., `holomush.scene.v1.SceneService`) to registered service implementations. Used by the plugin loader to wire up service dependencies between plugins.

@@ -20,7 +20,7 @@ Consistent terminology prevents confusion. Use these terms exactly.
 | **player**       | user, account         | The human behind one or more characters. |
 | **session**      | connection            | Server-side state for a character's ongoing presence. |
 | **connection**   | socket, client        | A single client attachment to a session (terminal/telnet/etc). |
-| **presence**     | who's here, occupants | Active sessions at a location. Derived from session store. |
+| **presence**     | who's here, occupants | Active sessions at a location. Derived from session store. Queryable via `CoreService.ListFocusPresence`. |
 | **grid present** | online, visible       | Character is visible on the grid (has terminal/telnet conn). |
 | **scene**        | RP scene              | A structured roleplay encounter with participants. |
 
