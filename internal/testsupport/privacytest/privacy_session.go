@@ -174,6 +174,17 @@ func (s *Session) QueryStreamHistory(ctx context.Context, stream string) ([]*cor
 	return resp.GetEvents(), nil
 }
 
+// ListFocusPresence calls the snapshot RPC for the session's current focus
+// (location-scoped) and returns the response. The caller is responsible for
+// asserting on response.Entries / response.Context / response.ContextId.
+// Access denials propagate as test failures via the returned error.
+func (s *Session) ListFocusPresence(ctx context.Context) (*corev1.ListFocusPresenceResponse, error) {
+	return s.server.coreServer.ListFocusPresence(ctx, &corev1.ListFocusPresenceRequest{
+		SessionId:          s.SessionID,
+		PlayerSessionToken: s.playerSessionToken,
+	})
+}
+
 // AuthedPlayer represents a named player (with hashed password) that can
 // open multiple concurrent game sessions for the same character, used by
 // multi-session continuity tests (iwzt.9+).
