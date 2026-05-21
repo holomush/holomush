@@ -115,7 +115,8 @@ func Start(t *testing.T) *Server {
 	authService, err := auth.NewAuthService(playerRepo, playerSessionStore, hasher)
 	require.NoError(t, err, "privacytest.Start: create auth service")
 
-	charRepo := &authCharRepoAdapter{pool: pool, charRepo: worldpg.NewCharacterRepository(pool)}
+	worldCharRepo := worldpg.NewCharacterRepository(pool)
+	charRepo := &authCharRepoAdapter{pool: pool, charRepo: worldCharRepo}
 	sessionStoreInst := store.NewPostgresSessionStore(pool)
 	locRepo := worldpg.NewLocationRepository(pool)
 
@@ -175,6 +176,7 @@ func Start(t *testing.T) *Server {
 		holoGRPC.WithPlayerSessionRepo(playerSessionStore),
 		holoGRPC.WithPlayerRepo(playerRepo),
 		holoGRPC.WithCharacterRepo(charRepo),
+		holoGRPC.WithCharacterNameResolver(holoGRPC.NewRepoCharacterNameResolver(worldCharRepo)),
 		holoGRPC.WithSessionStore(sessionStoreInst),
 		holoGRPC.WithGuestService(guestSvc),
 		// Wire embedded bus subscriber so Subscribe calls succeed for
