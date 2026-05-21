@@ -164,8 +164,9 @@ func (s *SceneAuditStore) Insert(
 	dekVersion *int32,
 ) error {
 	if err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		return s.insertSceneLogTx(ctx, tx, id, subject, eventType, timestamp,
+		_, err := s.insertSceneLogTx(ctx, tx, id, subject, eventType, timestamp,
 			actorKind, actorID, payload, schemaVer, codec, dekRef, dekVersion)
+		return err
 	}); err != nil {
 		return oops.Code("SCENE_AUDIT_INSERT_FAILED").Wrap(err)
 	}
@@ -205,14 +206,21 @@ func (s *SceneAuditStore) InsertScenePose(
 	posedCharID string,
 ) error {
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		// Step 1: INSERT into scene_log (reuses the T6 helper).
-		if err := s.insertSceneLogTx(
+		// Step 1: INSERT into scene_log (reuses the T6 helper). Returns
+		// inserted=false when ON CONFLICT fired (redelivery); in that
+		// case skip steps 2-3 so total_pose_count / last_pose_seq stay
+		// a function of distinct scene_log rows (INV-P4-10).
+		inserted, err := s.insertSceneLogTx(
 			ctx, tx,
 			id, subject, eventType, timestamp,
 			actorKind, actorID, payload, schemaVer, codec,
 			dekRef, dekVersion,
-		); err != nil {
+		)
+		if err != nil {
 			return err
+		}
+		if !inserted {
+			return nil
 		}
 
 		// Step 2: Bump per-scene total_pose_count and capture the new
@@ -269,6 +277,10 @@ func (s *SceneAuditStore) InsertScenePose(
 //
 // ON CONFLICT (id) DO NOTHING preserves idempotent redelivery semantics
 // (INV-P7 plugin SDK contract) regardless of which caller opens the tx.
+// Returns (inserted, err) where inserted is true when a row was actually
+// written; false when the ON CONFLICT branch fired. Callers that maintain
+// downstream counters (e.g. InsertScenePose) MUST gate those UPDATEs behind
+// inserted so redelivery does not over-count (INV-P4-10).
 func (s *SceneAuditStore) insertSceneLogTx(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -282,12 +294,12 @@ func (s *SceneAuditStore) insertSceneLogTx(
 	codec string,
 	dekRef *int64,
 	dekVersion *int32,
-) error {
+) (bool, error) {
 	var ts any
 	if timestamp != nil {
 		ts = timestamp.AsTime()
 	}
-	_, err := tx.Exec(
+	cmd, err := tx.Exec(
 		ctx, `
 		INSERT INTO scene_log (
 			id, subject, type, timestamp, actor_kind, actor_id,
@@ -297,12 +309,12 @@ func (s *SceneAuditStore) insertSceneLogTx(
 		id, subject, eventType, ts, actorKind, actorID, payload, schemaVer, codec, dekRef, dekVersion,
 	)
 	if err != nil {
-		return oops.Code("SCENE_AUDIT_INSERT_FAILED").
+		return false, oops.Code("SCENE_AUDIT_INSERT_FAILED").
 			With("subject", subject).
 			With("type", eventType).
 			Wrap(err)
 	}
-	return nil
+	return cmd.RowsAffected() == 1, nil
 }
 
 // AuditEvent is the per-message ingestion RPC. The host per-plugin consumer

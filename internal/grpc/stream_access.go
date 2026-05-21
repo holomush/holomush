@@ -15,16 +15,24 @@ import (
 // isSceneStream reports whether a stream is a scene IC or OOC subject
 // in NATS dot-style: events.<gameID>.scene.<sceneID>.{ic,ooc}.
 // Used by isPrivateStream, the I-17 gate, and scope_floor.
+//
+// Enforces the exact 5-segment canonical shape: extra trailing segments,
+// empty gameID, or empty sceneID are rejected so a malformed subject like
+// events.X.scene.<sceneID>.extra.ic cannot inherit scene authorization.
 func isSceneStream(stream string) bool {
 	parts := strings.Split(stream, ".")
-	if len(parts) < 5 {
+	if len(parts) != 5 {
 		return false
 	}
-	if parts[0] != "events" || parts[2] != "scene" {
+	if parts[0] != "events" || parts[1] == "" || parts[2] != "scene" || parts[3] == "" {
 		return false
 	}
-	facet := parts[len(parts)-1]
-	return facet == "ic" || facet == "ooc"
+	switch parts[4] {
+	case "ic", "ooc":
+		return true
+	default:
+		return false
+	}
 }
 
 // extractSceneID returns the scene ULID from a dot-style scene subject
@@ -36,10 +44,15 @@ func isSceneStream(stream string) bool {
 // migrated to dot-style subjects (T13 / holomush-5rh.13.13).
 func extractSceneID(stream string) (string, bool) {
 	parts := strings.Split(stream, ".")
-	if len(parts) < 5 || parts[0] != "events" || parts[2] != "scene" {
+	if len(parts) != 5 || parts[0] != "events" || parts[1] == "" || parts[2] != "scene" || parts[3] == "" {
 		return "", false
 	}
-	return parts[3], true
+	switch parts[4] {
+	case "ic", "ooc":
+		return parts[3], true
+	default:
+		return "", false
+	}
 }
 
 // isPrivateStream returns true if the stream requires membership to read.

@@ -224,8 +224,8 @@ Grid locations continue using `location:<id>` as today.
 When a connection sends input, the dispatcher checks that connection's focus:
 
 - Focused on grid: route to `location:<character_location_id>`
-- Focused on scene: route to `scene:<id>:ic` (or `scene:<id>:ooc` for
-  `ooc` command)
+- Focused on scene: route to `events.<game_id>.scene.<scene_id>.ic`
+  (or `events.<game_id>.scene.<scene_id>.ooc` for the `ooc` command)
 
 ### 3.3 Output Delivery
 
@@ -239,8 +239,8 @@ IC stream when the scene has members not currently focused on it.
 
 When a connection focuses on a scene:
 
-1. Subscribe to `scene:<id>:ic` (primary output)
-2. Subscribe to `scene:<id>:ooc` (OOC output)
+1. Subscribe to `events.<game_id>.scene.<scene_id>.ic` (primary output)
+2. Subscribe to `events.<game_id>.scene.<scene_id>.ooc` (OOC output)
 3. Unsubscribe from previous focus stream
 4. Replay unseen IC events
 
@@ -271,9 +271,9 @@ Pose order is tracked per-scene, unenforced, and configurable.
 ### 4.2 Implementation
 
 Pose order is derived from the IC event stream — no separate state table.
-The plugin reads recent events from `scene:<id>:ic`, extracts who posed
-and when, and computes who is next/eligible based on the mode. Derivation
-lives in `plugins/core-scenes/poseorder.go`.
+The plugin reads recent events from `events.<game_id>.scene.<scene_id>.ic`,
+extracts who posed and when, and computes who is next/eligible based on
+the mode. Derivation lives in `plugins/core-scenes/poseorder.go`.
 
 ### 4.3 Display
 

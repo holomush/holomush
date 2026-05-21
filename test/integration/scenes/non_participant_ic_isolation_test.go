@@ -8,6 +8,7 @@ package scenes_test
 import (
 	"context"
 	crand "crypto/rand"
+	"errors"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -146,9 +147,11 @@ var _ = Describe("INV-P4-6: non-participant scene IC isolation", func() {
 					string(leak.Event().Subject) + " type " + string(leak.Event().Type) +
 					" — non-participants MUST NOT see scene IC events")
 			}
-			// Expected path: context deadline → no leak.
-			Expect(leakErr).To(HaveOccurred(),
-				"probe %d: non-participant Bob received an extra event (expected timeout)", i+1)
+			// Expected path: context deadline → no leak. Assert the
+			// timeout shape explicitly so a real subscription/stream
+			// fault doesn't masquerade as a successful absence probe.
+			Expect(errors.Is(leakErr, context.DeadlineExceeded)).To(BeTrue(),
+				"probe %d: expected context.DeadlineExceeded (no leak), got %v", i+1, leakErr)
 		}
 	})
 })
