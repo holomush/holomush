@@ -1366,3 +1366,160 @@ func TestUpdateScene_NoEmit_OnNonModeUpdate(t *testing.T) {
 	}
 	assert.Equal(t, 0, count, "non-mode update MUST NOT emit scene_pose_order_changed_ic")
 }
+
+// TestGetPoseOrder_NotParticipant_PermissionDenied pins the INV-S9
+// plugin-code gate: a caller who is NOT a current participant of the
+// scene MUST receive PermissionDenied, NOT NotFound. The gate fires
+// before any scene-existence check so the error path does not leak
+// scene existence to non-members.
+func TestGetPoseOrder_NotParticipant_PermissionDenied(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-gpo-perm",
+		OwnerID:    "char-owner",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityOpen),
+		PoseOrder:  string(PoseOrderModeFree),
+	}))
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(&recordingEventSink{})
+
+	_, err := svc.GetPoseOrder(context.Background(), &scenev1.GetPoseOrderRequest{
+		SceneId:     "scene-gpo-perm",
+		CharacterId: "char-bob", // not in participants map
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.PermissionDenied, st.Code(),
+		"non-participant MUST receive PermissionDenied (INV-S9 gate)")
+}
+
+// TestGetPoseOrder_InvitedRole_PermissionDenied pins INV-S9's
+// "invited" exclusion: an invited (but not yet accepted) character
+// is NOT a member of the scene for pose-order purposes and MUST be
+// rejected by the gate. fakeStore.IsParticipant treats invited as
+// non-member, matching the production store's role filter
+// (sceneStorer.IsParticipant docstring).
+func TestGetPoseOrder_InvitedRole_PermissionDenied(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-gpo-invited",
+		OwnerID:    "char-owner",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityPrivate),
+		PoseOrder:  string(PoseOrderModeStrict),
+	}))
+	// Mark char-bob as invited (not member).
+	_, err := store.InviteParticipant(context.Background(), "scene-gpo-invited", "char-owner", "char-bob")
+	require.NoError(t, err)
+
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(&recordingEventSink{})
+
+	_, err = svc.GetPoseOrder(context.Background(), &scenev1.GetPoseOrderRequest{
+		SceneId:     "scene-gpo-invited",
+		CharacterId: "char-bob",
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.PermissionDenied, st.Code(),
+		"invited-but-not-member MUST receive PermissionDenied (INV-S9 gate excludes invited role)")
+}
+
+// TestGetPoseOrder_NoScene_PermissionDenied pins the
+// scene-existence-non-disclosure aspect of INV-S9: a request for a
+// non-existent scene from a non-participant returns PermissionDenied
+// (not NotFound). The IsParticipant gate runs before Get, so the
+// response collapses both "scene does not exist" and "you are not a
+// member" into the same security-aware error code.
+func TestGetPoseOrder_NoScene_PermissionDenied(t *testing.T) {
+	t.Parallel()
+	svc := NewSceneServiceImpl(newFakeStore())
+	svc.SetEventSink(&recordingEventSink{})
+
+	_, err := svc.GetPoseOrder(context.Background(), &scenev1.GetPoseOrderRequest{
+		SceneId:     "scene-nonexistent",
+		CharacterId: "any-character",
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.PermissionDenied, st.Code(),
+		"non-existent scene MUST be indistinguishable from non-membership (INV-S9)")
+}
+
+// TestGetPoseOrder_HappyPath_FreeMode verifies the composition:
+// IsParticipant (T4) → Get + ListParticipantsWithPoseMeta (T5) →
+// Compute (T9) → proto wire form. A fresh scene has total_pose_count
+// of zero; in free mode every participant is eligible.
+func TestGetPoseOrder_HappyPath_FreeMode(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-gpo-happy",
+		OwnerID:    "char-alice",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityOpen),
+		PoseOrder:  string(PoseOrderModeFree),
+	}))
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(&recordingEventSink{})
+
+	resp, err := svc.GetPoseOrder(context.Background(), &scenev1.GetPoseOrderRequest{
+		SceneId:     "scene-gpo-happy",
+		CharacterId: "char-alice",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, string(PoseOrderModeFree), resp.GetMode())
+	assert.Equal(t, uint32(0), resp.GetTotalPoseCount(),
+		"fresh scene has zero total_pose_count")
+	require.Len(t, resp.GetEntries(), 1, "owner is the sole participant")
+	entry := resp.GetEntries()[0]
+	assert.Equal(t, "char-alice", entry.GetCharacterId())
+	// Names map is empty for Phase 4 → Compute renders missing names
+	// as the character_id (poseorder.go::resolveName).
+	assert.Equal(t, "char-alice", entry.GetCharacterName(),
+		"empty names map yields character_id fallback")
+	assert.True(t, entry.GetEligible(), "free mode: every participant is eligible")
+	assert.Nil(t, entry.GetLastPosedAt(), "never-posed: last_posed_at is nil")
+}
+
+// TestGetPoseOrder_StoreError_Internal verifies that an unexpected
+// store error from the participant check is surfaced as Internal,
+// not silently mapped to PermissionDenied.
+func TestGetPoseOrder_StoreError_Internal(t *testing.T) {
+	t.Parallel()
+	store := &erroringIsParticipantStore{
+		fakeStore: newFakeStore(),
+		err:       errors.New("db down"),
+	}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(&recordingEventSink{})
+
+	_, err := svc.GetPoseOrder(context.Background(), &scenev1.GetPoseOrderRequest{
+		SceneId:     "scene-gpo-storeerr",
+		CharacterId: "char-alice",
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Internal, st.Code(),
+		"store failure on IsParticipant MUST map to Internal, not PermissionDenied")
+}
+
+// erroringIsParticipantStore wraps fakeStore so a single test can
+// inject an IsParticipant error without polluting the shared
+// fakeStore type.
+type erroringIsParticipantStore struct {
+	*fakeStore
+	err error
+}
+
+func (e *erroringIsParticipantStore) IsParticipant(_ context.Context, _, _ string) (bool, error) {
+	return false, e.err
+}

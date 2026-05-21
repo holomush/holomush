@@ -881,6 +881,127 @@ func (s *SceneServiceImpl) TransferOwnership(ctx context.Context, req *scenev1.T
 	return &scenev1.TransferOwnershipResponse{}, nil
 }
 
+// GetPoseOrder returns the current pose-order entries for a scene.
+//
+// INV-S9 plugin-code gate: the caller MUST be a current participant
+// of the scene (owner or member, NOT invited). The ABAC engine is
+// NEVER consulted from this handler; INV-P4-4 (T23 meta-test, future
+// bead) enforces this by rg-asserting that no engine.Evaluate /
+// engine.CanPerformAction call appears in this function body.
+//
+// The PermissionDenied gate fires before any scene-existence check —
+// non-participants MUST NOT be able to distinguish "scene does not
+// exist" from "scene exists but you are not a member" via the error
+// code. The store's IsParticipant returns (false, nil) for both cases,
+// which is the desired flattening.
+//
+// Composition: IsParticipant (T4) → Get + ListParticipantsWithPoseMeta
+// (T5) → Compute (T9) → proto wire form.
+//
+// Names map is empty for Phase 4 (no nameResolver wired in this
+// plugin yet); Compute renders missing names as the character_id —
+// safe fallback per poseorder.go::resolveName.
+//
+// Per spec §7.4.
+func (s *SceneServiceImpl) GetPoseOrder(ctx context.Context, req *scenev1.GetPoseOrderRequest) (*scenev1.GetPoseOrderResponse, error) {
+	ctx, span := startSpan(
+		ctx, "scene.service.get_pose_order",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("scene_id", req.GetSceneId()),
+	)
+	defer span.End()
+
+	// INV-S9 gate: direct plugin-code participant check, NO ABAC.
+	// Fires before scene-existence check to avoid leaking the
+	// existence of a scene to non-participants.
+	ok, err := s.store.IsParticipant(ctx, req.GetSceneId(), req.GetCharacterId())
+	if err != nil {
+		recordError(span, err)
+		slog.WarnContext(
+			ctx, "scene.service.get_pose_order participant check error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to check participant: %v", err)
+	}
+	if !ok {
+		return nil, status.Error(codes.PermissionDenied, "not a participant of scene")
+	}
+
+	// Load scene row for pose_order mode. ListParticipantsWithPoseMeta
+	// (T5) carries TotalPoseCount + per-participant pose metadata but
+	// not the scene's mode, so a separate Get is required.
+	sceneRow, err := s.store.Get(ctx, req.GetSceneId())
+	if err != nil {
+		recordError(span, err)
+		var oe oops.OopsError
+		if errors.As(err, &oe) && oe.Code() == "SCENE_NOT_FOUND" {
+			// Defense-in-depth: IsParticipant returned true above, so
+			// the scene existed moments ago. A race deleted it; surface
+			// NotFound rather than masquerading as a permission error.
+			return nil, status.Errorf(codes.NotFound, "scene not found: %s", req.GetSceneId())
+		}
+		slog.WarnContext(
+			ctx, "scene.service.get_pose_order get scene error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to load scene: %v", err)
+	}
+
+	poseMeta, err := s.store.ListParticipantsWithPoseMeta(ctx, req.GetSceneId())
+	if err != nil {
+		recordError(span, err)
+		slog.WarnContext(
+			ctx, "scene.service.get_pose_order list pose meta error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to load pose metadata: %v", err)
+	}
+
+	// Compute pose order. Names map is nil for Phase 4; Compute
+	// renders missing names as the character_id per resolveName's
+	// best-effort contract. Future nameResolver integration can
+	// populate this map.
+	entries := Compute(sceneRow.PoseOrder, poseMeta.TotalPoseCount, poseMeta.Participants, nil)
+
+	// Map to proto wire form.
+	protoEntries := make([]*scenev1.PoseOrderEntry, 0, len(entries))
+	for _, e := range entries {
+		pe := &scenev1.PoseOrderEntry{
+			CharacterId:   e.CharacterID,
+			CharacterName: e.CharacterName,
+			Eligible:      e.Eligible,
+		}
+		if e.LastPosedAt != nil {
+			pe.LastPosedAt = timestamppb.New(*e.LastPosedAt)
+		}
+		if e.PosesSinceLast != nil {
+			gap := *e.PosesSinceLast
+			pe.PosesSinceLast = &gap
+		}
+		protoEntries = append(protoEntries, pe)
+	}
+
+	slog.InfoContext(
+		ctx, "scene.service.get_pose_order ok",
+		"subject_id", req.GetCharacterId(),
+		"scene_id", req.GetSceneId(),
+		"mode", sceneRow.PoseOrder,
+		"entry_count", len(protoEntries),
+	)
+
+	return &scenev1.GetPoseOrderResponse{
+		Mode:           sceneRow.PoseOrder,
+		TotalPoseCount: poseMeta.TotalPoseCount,
+		Entries:        protoEntries,
+	}, nil
+}
+
 // mapTransitionError translates store-layer transition errors into gRPC
 // status errors. Returns nil if the error is not a transition error
 // (caller should fall through to a generic Internal status).
