@@ -88,9 +88,15 @@ type LocationStateExit struct {
 }
 
 // LocationStateChar describes a character present in the current location.
+//
+// CharacterID is the ULID identifying the character; it MUST be populated by
+// the emit site (internal/grpc/location_follow.go) so client-side stores can
+// key by stable identity rather than display name. The wire-format gap that
+// pre-dated this field is documented in bead holomush-e4qo.
 type LocationStateChar struct {
-	Name string `json:"name"`
-	Idle bool   `json:"idle"`
+	CharacterID string `json:"character_id"`
+	Name        string `json:"name"`
+	Idle        bool   `json:"idle"`
 }
 
 // ExitUpdatePayload is the JSON payload for exit_update events, providing a

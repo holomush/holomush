@@ -209,8 +209,9 @@ func (lf *locationFollower) buildLocationState(ctx context.Context, locationID u
 			present = make([]core.LocationStateChar, 0, len(sessions))
 			for _, sess := range sessions {
 				present = append(present, core.LocationStateChar{
-					Name: sess.CharacterName,
-					Idle: false,
+					CharacterID: sess.CharacterID.String(),
+					Name:        sess.CharacterName,
+					Idle:        false,
 				})
 			}
 		}
