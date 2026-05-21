@@ -203,7 +203,8 @@ func (s *SceneAuditStore) InsertScenePose(
 ) error {
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		// Step 1: INSERT into scene_log (reuses the T6 helper).
-		if err := s.insertSceneLogTx(ctx, tx,
+		if err := s.insertSceneLogTx(
+			ctx, tx,
 			id, subject, eventType, timestamp,
 			actorKind, actorID, payload, schemaVer, codec,
 			dekRef, dekVersion,
@@ -216,7 +217,8 @@ func (s *SceneAuditStore) InsertScenePose(
 		// if a concurrent pose on the same scene also runs (Postgres
 		// serialises the row-level UPDATE).
 		var newSeq int
-		if err := tx.QueryRow(ctx,
+		if err := tx.QueryRow(
+			ctx,
 			`UPDATE scenes SET total_pose_count = total_pose_count + 1
 			 WHERE id = $1 RETURNING total_pose_count`,
 			sceneID,
@@ -233,7 +235,8 @@ func (s *SceneAuditStore) InsertScenePose(
 		if timestamp != nil {
 			ts = timestamp.AsTime()
 		}
-		if _, err := tx.Exec(ctx,
+		if _, err := tx.Exec(
+			ctx,
 			`UPDATE scene_participants
 			 SET last_pose_at = $1, last_pose_seq = $2
 			 WHERE scene_id = $3 AND character_id = $4`,

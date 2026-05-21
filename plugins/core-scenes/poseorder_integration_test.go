@@ -27,7 +27,8 @@ type poseMeta struct {
 func readTotalPoseCount(ctx context.Context, pool *pgxpool.Pool, sceneID string) int {
 	GinkgoHelper()
 	var count int
-	Expect(pool.QueryRow(ctx,
+	Expect(pool.QueryRow(
+		ctx,
 		`SELECT total_pose_count FROM scenes WHERE id = $1`, sceneID,
 	).Scan(&count)).NotTo(HaveOccurred())
 	return count
@@ -37,7 +38,8 @@ func readTotalPoseCount(ctx context.Context, pool *pgxpool.Pool, sceneID string)
 func readParticipantMeta(ctx context.Context, pool *pgxpool.Pool, sceneID, characterID string) poseMeta {
 	GinkgoHelper()
 	var m poseMeta
-	Expect(pool.QueryRow(ctx,
+	Expect(pool.QueryRow(
+		ctx,
 		`SELECT last_pose_at, last_pose_seq FROM scene_participants
 		 WHERE scene_id = $1 AND character_id = $2`,
 		sceneID, characterID,
@@ -105,7 +107,8 @@ func rebuildMetadataFromSceneLog(ctx context.Context, pool *pgxpool.Pool, sceneI
 	Expect(rows.Err()).NotTo(HaveOccurred())
 
 	// Update scenes.total_pose_count.
-	_, err = pool.Exec(ctx,
+	_, err = pool.Exec(
+		ctx,
 		`UPDATE scenes SET total_pose_count = $1 WHERE id = $2`,
 		totalCount, sceneID,
 	)
@@ -113,7 +116,8 @@ func rebuildMetadataFromSceneLog(ctx context.Context, pool *pgxpool.Pool, sceneI
 
 	// Update scene_participants for each actor observed in scene_log.
 	for charID, last := range lastByActor {
-		_, err = pool.Exec(ctx,
+		_, err = pool.Exec(
+			ctx,
 			`UPDATE scene_participants
 			 SET last_pose_seq = $1, last_pose_at = $2
 			 WHERE scene_id = $3 AND character_id = $4`,
@@ -264,9 +268,11 @@ var _ = Describe("INV-P4-8: pose-order metadata is a function of scene_log", fun
 			"INV-P4-8: rebuilt char2.last_pose_at MUST be set")
 		Expect(gotChar1.lastPoseAt.Truncate(time.Microsecond)).To(
 			BeTemporally("~", wantChar1.lastPoseAt.Truncate(time.Microsecond), time.Microsecond),
-			"INV-P4-8: rebuilt char1.last_pose_at MUST match maintained value (±1µs)")
+			"INV-P4-8: rebuilt char1.last_pose_at MUST match maintained value (±1µs)",
+		)
 		Expect(gotChar2.lastPoseAt.Truncate(time.Microsecond)).To(
 			BeTemporally("~", wantChar2.lastPoseAt.Truncate(time.Microsecond), time.Microsecond),
-			"INV-P4-8: rebuilt char2.last_pose_at MUST match maintained value (±1µs)")
+			"INV-P4-8: rebuilt char2.last_pose_at MUST match maintained value (±1µs)",
+		)
 	})
 })

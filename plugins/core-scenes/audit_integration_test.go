@@ -70,14 +70,16 @@ var _ = Describe("SceneAuditStore.InsertScenePose", func() {
 
 		// 1. scene_log row landed.
 		var logCount int
-		Expect(store.Pool().QueryRow(ctx,
+		Expect(store.Pool().QueryRow(
+			ctx,
 			`SELECT COUNT(*) FROM scene_log WHERE id = $1`, eventID,
 		).Scan(&logCount)).NotTo(HaveOccurred())
 		Expect(logCount).To(Equal(1), "scene_log INSERT MUST commit on happy path")
 
 		// 2. scenes.total_pose_count = 1.
 		var total int
-		Expect(store.Pool().QueryRow(ctx,
+		Expect(store.Pool().QueryRow(
+			ctx,
 			`SELECT total_pose_count FROM scenes WHERE id = $1`, sceneID,
 		).Scan(&total)).NotTo(HaveOccurred())
 		Expect(total).To(Equal(1), "total_pose_count MUST bump by 1")
@@ -87,7 +89,8 @@ var _ = Describe("SceneAuditStore.InsertScenePose", func() {
 			lastAt  *time.Time
 			lastSeq *int32
 		)
-		Expect(store.Pool().QueryRow(ctx,
+		Expect(store.Pool().QueryRow(
+			ctx,
 			`SELECT last_pose_at, last_pose_seq FROM scene_participants
 			 WHERE scene_id = $1 AND character_id = $2`,
 			sceneID, owner,
@@ -122,7 +125,8 @@ var _ = Describe("SceneAuditStore.InsertScenePose", func() {
 
 		// scene_log row MUST NOT exist — the INSERT must have rolled back.
 		var logCount int
-		Expect(store.Pool().QueryRow(ctx,
+		Expect(store.Pool().QueryRow(
+			ctx,
 			`SELECT COUNT(*) FROM scene_log WHERE id = $1`, eventID,
 		).Scan(&logCount)).NotTo(HaveOccurred())
 		Expect(logCount).To(Equal(0),
@@ -161,14 +165,16 @@ var _ = Describe("SceneAuditStore.InsertScenePose", func() {
 
 		// scene_log row MUST be committed.
 		var logCount int
-		Expect(store.Pool().QueryRow(ctx,
+		Expect(store.Pool().QueryRow(
+			ctx,
 			`SELECT COUNT(*) FROM scene_log WHERE id = $1`, eventID,
 		).Scan(&logCount)).NotTo(HaveOccurred())
 		Expect(logCount).To(Equal(1), "scene_log INSERT MUST commit even when participant UPDATE is 0-row")
 
 		// total_pose_count MUST be bumped.
 		var total int
-		Expect(store.Pool().QueryRow(ctx,
+		Expect(store.Pool().QueryRow(
+			ctx,
 			`SELECT total_pose_count FROM scenes WHERE id = $1`, sceneID,
 		).Scan(&total)).NotTo(HaveOccurred())
 		Expect(total).To(Equal(1),
@@ -179,7 +185,8 @@ var _ = Describe("SceneAuditStore.InsertScenePose", func() {
 			lastAt  *time.Time
 			lastSeq *int32
 		)
-		Expect(store.Pool().QueryRow(ctx,
+		Expect(store.Pool().QueryRow(
+			ctx,
 			`SELECT last_pose_at, last_pose_seq FROM scene_participants
 			 WHERE scene_id = $1 AND character_id = $2`,
 			sceneID, owner,
@@ -254,21 +261,24 @@ var _ = Describe("SceneAuditServer.AuditEvent dispatcher", func() {
 
 		// 1. scene_log row landed.
 		var logCount int
-		Expect(store.Pool().QueryRow(ctx,
+		Expect(store.Pool().QueryRow(
+			ctx,
 			`SELECT COUNT(*) FROM scene_log WHERE id = $1`, eventID,
 		).Scan(&logCount)).NotTo(HaveOccurred())
 		Expect(logCount).To(Equal(1), "scene_log INSERT MUST commit via dispatcher scene_pose path")
 
 		// 2. total_pose_count bumped to 1.
 		var total int
-		Expect(store.Pool().QueryRow(ctx,
+		Expect(store.Pool().QueryRow(
+			ctx,
 			`SELECT total_pose_count FROM scenes WHERE id = $1`, sceneID,
 		).Scan(&total)).NotTo(HaveOccurred())
 		Expect(total).To(Equal(1), "total_pose_count MUST bump when routed through InsertScenePose")
 
 		// 3. scene_participants.last_pose_at stamped with the canonical event ts.
 		var lastAt *time.Time
-		Expect(store.Pool().QueryRow(ctx,
+		Expect(store.Pool().QueryRow(
+			ctx,
 			`SELECT last_pose_at FROM scene_participants
 			 WHERE scene_id = $1 AND character_id = $2`,
 			sceneID, ownerCharID,
@@ -307,14 +317,16 @@ var _ = Describe("SceneAuditServer.AuditEvent dispatcher", func() {
 
 		// 1. scene_log row landed.
 		var logCount int
-		Expect(store.Pool().QueryRow(ctx,
+		Expect(store.Pool().QueryRow(
+			ctx,
 			`SELECT COUNT(*) FROM scene_log WHERE id = $1`, eventID,
 		).Scan(&logCount)).NotTo(HaveOccurred())
 		Expect(logCount).To(Equal(1), "scene_log INSERT MUST commit for non-pose events via Insert path")
 
 		// 2. total_pose_count MUST remain 0 — the Insert path does NOT touch scenes.
 		var total int
-		Expect(store.Pool().QueryRow(ctx,
+		Expect(store.Pool().QueryRow(
+			ctx,
 			`SELECT total_pose_count FROM scenes WHERE id = $1`, sceneID,
 		).Scan(&total)).NotTo(HaveOccurred())
 		Expect(total).To(Equal(0),
