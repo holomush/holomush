@@ -79,6 +79,7 @@ func (s *ABACSubsystem) Start(ctx context.Context) error {
 	stack, err := BuildABACStack(ctx, ABACConfig{
 		Pool:            pool,
 		CharacterRepo:   postgres.NewCharacterRepository(pool),
+		LocationRepo:    postgres.NewLocationRepository(pool),
 		RoleStore:       roleStore,
 		AuditMode:       s.cfg.AuditMode,
 		CryptoOperators: s.cfg.CryptoOperators,

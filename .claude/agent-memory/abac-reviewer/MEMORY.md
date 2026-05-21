@@ -38,3 +38,28 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   `final_missing_members` in the audit *payload* (chain row), not only in slog.
   Phase 5 sub-epic E correctly captures both in `RekeyAuditPayload.ForceDestroy` /
   `Phases.Phase5FinalMissingMembers` (`internal/eventbus/crypto/dek/rekey_phase7.go:158,161`).
+- **Missing-provider class bug (holomush-g776, 2026-05-21)**: `BuildABACStack`
+  in `internal/access/setup/setup.go` registers providers explicitly per
+  namespace. If a seed's `when` clause references `resource.<ns>.<attr>` and
+  no provider is registered for `<ns>`, the seed silently default-denies in
+  production. Smoke tests at `internal/access/policy/seed_smoke_test.go`
+  use hand-rolled mock providers (`locationProvider`, `streamProvider`)
+  and pass despite the gap — they catch DSL/seed bugs, not wiring bugs.
+  **Always audit `BuildABACStack` provider registrations vs every namespace
+  referenced in `internal/access/policy/seed.go`'s `when` clauses.** Current
+  known gaps after g776 fix: PropertyProvider is NOT registered (6 seeds
+  depend at `seed.go:108-141`; production caller at
+  `internal/world/service.go:1068` silently default-denies). ExitProvider
+  and SceneProvider are also unregistered but happen to be NoOp because
+  their seeds are target-only (no `when` clause).
+- **Wildcard resource IDs (`type:*`) bypass per-instance attrs**:
+  `service.CreateLocation` / `service.FindLocationByName` /
+  `service.CreateExit` / `service.CreateObject` all call `checkAccess`
+  with `access.LocationResource("*")` etc. (`service.go:209,319,449,1033`).
+  Engine matches these against seeds via `target.ResourceType`
+  (`engine.go:401-405`, `parseEntityType("location:*") == "location"`), NOT
+  via `when`-clause pattern matching. Providers MUST tolerate non-ULID IDs
+  by returning `(nil, nil)` for wildcards — raising a parse error
+  fail-closes the entire bootstrap chain. See
+  `internal/access/policy/attribute/location.go:54-62` for the canonical
+  shape (line-scoped `//nolint:nilerr` with rationale).

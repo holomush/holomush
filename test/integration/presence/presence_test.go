@@ -157,6 +157,90 @@ var _ = Describe("AC3 / I-PRES-2: snapshot bypasses I-PRIV-1 temporal floor", fu
 	})
 })
 
+// holomush-g776: snapshot scale coverage. Creates N prior guest sessions at
+// the spawn location, then a fresh session, and asserts the snapshot returns
+// ALL N+1 entries. Locks dedup behavior, name resolution at scale, and
+// ListActiveByLocation completeness as the active-session count grows.
+//
+// NOTE: this test runs against `privacytest.allowAllPolicyEngine` (the harness
+// default), so it does NOT exercise the real ABAC stack. The g776 root cause
+// (LocationProvider missing from production wiring in
+// internal/access/setup/setup.go) is regression-locked by the un-fixme'd e2e
+// test at web/e2e/terminal.spec.ts:136, which runs against the real
+// BuildABACStack via the docker-compose stack. The narrow gap — "no
+// integration test exercises BuildABACStack end-to-end for snapshot" —
+// remains an open follow-up; see g776 close notes.
+var _ = Describe("AC4 scale: snapshot returns all active sessions under accumulated state", func() {
+	var (
+		ts        *privacytest.Server
+		ctx       context.Context
+		priorSess []*privacytest.Session
+		fresh     *privacytest.Session
+	)
+
+	const priorCount = 20
+
+	BeforeEach(func() {
+		ctx, _ = context.WithTimeout(context.Background(), 120*time.Second) //nolint:govet // cancel unused in test lifecycle
+		ts = privacytest.Start(suiteT)
+		priorSess = make([]*privacytest.Session, 0, priorCount)
+		// Build up prior sessions sequentially so they land at the same spawn
+		// location with monotonically advancing LocationArrivedAt values —
+		// matches what accumulates across the e2e suite.
+		for i := 0; i < priorCount; i++ {
+			s := ts.ConnectGuest(ctx)
+			priorSess = append(priorSess, s)
+		}
+		// Fresh session joins LAST — its snapshot must surface all priorSess
+		// plus self.
+		fresh = ts.ConnectGuest(ctx)
+	})
+
+	AfterEach(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if fresh != nil {
+			fresh.Logout(cleanupCtx)
+		}
+		for _, s := range priorSess {
+			if s != nil {
+				s.Logout(cleanupCtx)
+			}
+		}
+		if ts != nil {
+			ts.Stop()
+		}
+	})
+
+	It("fresh.ListFocusPresence surfaces all priorCount+1 active sessions", func() {
+		// Sanity: all priors share fresh's location.
+		for i, p := range priorSess {
+			Expect(p.LocationID).To(Equal(fresh.LocationID),
+				"precondition: prior session %d MUST share fresh's location", i)
+		}
+
+		Eventually(func(g Gomega) {
+			resp, err := fresh.ListFocusPresence(ctx)
+			g.Expect(err).NotTo(HaveOccurred(),
+				"ListFocusPresence MUST succeed for fresh session")
+			g.Expect(resp).NotTo(BeNil())
+			g.Expect(resp.GetEntries()).To(HaveLen(priorCount+1),
+				"snapshot MUST include all %d prior sessions PLUS fresh (g776 repro)", priorCount)
+
+			// Fresh session's own character MUST be present (I-PRES-6).
+			names := entryNames(resp.GetEntries())
+			g.Expect(names).To(ContainElement(fresh.CharacterName),
+				"I-PRES-6: caller's own session MUST be in the response")
+
+			// Each prior MUST be present too — no silent drops.
+			for i, p := range priorSess {
+				g.Expect(names).To(ContainElement(p.CharacterName),
+					"prior session %d (%s) MUST appear in fresh's snapshot", i, p.CharacterName)
+			}
+		}, time.Second, 50*time.Millisecond).Should(Succeed())
+	})
+})
+
 // entryNames extracts character names from PresenceEntry slice for ConsistOf
 // matching. Mirrors the plan template's entryNames helper.
 func entryNames(entries []*corev1.PresenceEntry) []string {

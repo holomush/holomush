@@ -15,6 +15,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/setup"
+	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	"github.com/holomush/holomush/test/testutil"
 )
 
@@ -33,6 +34,12 @@ func freshABACStack(t *testing.T, operators []string) (*setup.ABACStack, func())
 	stack, err := setup.BuildABACStack(ctx, setup.ABACConfig{
 		Pool:            pool,
 		CharacterRepo:   nil, // optional per setup.go
+		// LocationRepo wired so the build does NOT emit the missing-provider
+		// WARN (holomush-g776). The PlayerProvider tests don't exercise the
+		// location seeds, but the production wiring always supplies the
+		// repo — mirror it here to keep test logs clean and to model the
+		// production shape that catches future g776-class regressions.
+		LocationRepo:    worldpostgres.NewLocationRepository(pool),
 		RoleStore:       nil,
 		CryptoOperators: operators,
 	})
