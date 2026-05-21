@@ -45,15 +45,6 @@ Keep under 200 lines. Curate — don't hoard.
   affected sites; `internal/eventbus/crypto/dek/manager_integration_test.go`
   and `internal/eventbus/crypto/kek/none_integration_test.go` were missed.
 
-- **`BasicWaitStrategies()` semantics (testcontainers-go v0.41.0)**: it
-  uses `WithAdditionalWaitStrategy` (additive), but `postgres.Run` does
-  NOT install a default `WaitingFor`, so `req.WaitingFor == nil` and the
-  net behavior is identical to `WithWaitStrategy` for first invocation.
-  Default deadline is 60s (longer than the typical 30s
-  `WithStartupTimeout` callsites used). Source:
-  `testcontainers-go@v0.41.0/options.go:365-399` and
-  `modules/postgres@v0.41.0/postgres.go:146-168`.
-
 - **Stale-base diff illusion**: When reviewing a stack pre-push, always check
   `jj log -r 'main@origin'` head against the branch's fork point. A bare
   `jj diff main@origin..@` will conflate the branch's actual changes with
@@ -130,14 +121,9 @@ Keep under 200 lines. Curate — don't hoard.
   in Phase 3d (`Crypto.Enabled` flip).
 
 - **Shared-helper TDD coverage gap.** When an autofix swaps multiple call
-  sites to a new shared helper (e.g., `IsDEKMaterialArg` shared across 6
-  dekmaterialno* analyzers), implementers often add bypass test cases to
-  only one or two analyzer testdata sets and rely on the helper's own
-  coverage for the rest. Verify by `rg`-ing for the new helper across all
-  `testdata/` dirs — if a sink-list analyzer received the helper swap but
-  has no per-analyzer bypass test, the per-analyzer red→green coupling
-  isn't independently demonstrable. Acceptable when the helper is
-  end-to-end covered elsewhere; flag as non-blocking documentation gap.
+  sites to a new shared helper, check all `testdata/` dirs for per-analyzer
+  bypass test cases — not just the one the implementer touched. Acceptable
+  when the helper is end-to-end covered elsewhere; flag as non-blocking gap.
 
 ## Invariants worth remembering
 
@@ -220,25 +206,28 @@ Keep under 200 lines. Curate — don't hoard.
   block CI. Run `task lint` after any plan file edit.
 
 - **Discarded-value "production adapter resolves it" smell.** When a handler
-  validates a field then blank-assigns it with a comment like
-  "consumed by the production X adapter," verify the adapter signature.
-  Pattern: handler does `var rid [N]byte; copy(rid[:], req.GetX()); ... _ = rid`
-  and constructs a downstream request struct *without* a field for `rid`.
-  The "production adapter" claim is unfalsifiable from the handler file
-  alone — must be cross-checked against the adapter's actual signature
-  (rg the adapter type + `func.*Run.*<RequestType>`). Encountered in
-  Phase 5 sub-epic E review (2026-05-11): `RekeyResume` handler drops
-  `request_id` because `socket.RekeyRunRequest` has no `RequestID` field
-  and the production adapter cannot synthesize one. Unit tests with
-  fake runners and E2E tests that exercise only the *auto-resume* path
-  (`Rekey` RPC, not `RekeyResume`) both miss the defect. Search heuristic:
-  `rg "_ = [a-zA-Z]+ // (consumed|used|resolved) by"` to surface candidates.
+  validates a field then blank-assigns with `_ = val // consumed by X adapter`,
+  verify the adapter signature. The claim is unfalsifiable without cross-checking
+  the adapter's actual type (`rg` the adapter type + `func.*Run.*<RequestType>`).
+  Search heuristic: `rg "_ = [a-zA-Z]+ // (consumed|used|resolved) by"`.
+  Encountered: Phase 5 sub-epic E review (2026-05-11), `RekeyResume` handler drops
+  `request_id` — `socket.RekeyRunRequest` has no `RequestID` field.
 
-- **`task test:int` explicit package list excludes `cmd/holomush/`**: `Taskfile.yaml:119-120`
+- **`task test:int` explicit package list excludes `cmd/holomush/`**: `Taskfile.yaml:145`
   enumerates packages that contain `//go:build integration` files; `cmd/holomush/` is
-  intentionally absent (see comment at line 107-111 about `./...` compilation failures).
-  Integration tests written in `cmd/holomush/*_integration_test.go` are never run by
-  `task test:int` or `task pr-prep`. When a task adds integration tests to that package,
-  adding `./cmd/holomush/` to the list is a required companion change. Verify by running
-  `task test:int` and grepping the output for the test name — absence means the package
-  is not covered. Encountered: T19 review (holomush-w9ml.17, 2026-05-04).
+  intentionally absent (compilation failures). Integration tests written in
+  `cmd/holomush/*_integration_test.go` are never run by `task test:int`.
+  When a task adds integration tests to that package, adding `./cmd/holomush/` to the
+  list is a required companion change. Encountered: T19 review (holomush-w9ml.17, 2026-05-04).
+
+- **Ginkgo regression-guard assertions may be vacuously true.** When a test asserts
+  "all returned events satisfy invariant X" over a result slice that should be empty
+  under correct behavior, the assertion trivially passes whether or not the query
+  mechanism itself is functional. This is the intended design for regression guards
+  (if the gate breaks, events surface and the assertion fails), but it means the test
+  does NOT prove the query path runs. Always verify: (a) the test actually runs — `rg`
+  for the Ginkgo `Describe` label in source, not just in plan docs; (b) the Ginkgo
+  filter is `-ginkgo.focus=`, not `-run` (which matches Go test functions, not Ginkgo
+  descriptions); (c) a seed event is planted before the floor so a breakage is
+  detectable. Encountered: iwzt.9 review (2026-05-21), I-PRIV-1 test in
+  `test/integration/privacy/privacy_test.go:150-156`.

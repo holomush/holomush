@@ -93,3 +93,66 @@ var _ = Describe("I-PRIV-6 (gate-bypass arm): staff override bypasses the locati
 			"locB has no events; response should be empty")
 	})
 })
+
+// I-PRIV-1: a fresh guest connecting to a location MUST NOT see any event
+// whose timestamp predates their session's SessionCreatedAt. This is the
+// regression guard for the Phase 2 QueryStreamHistory restructure (hard-gate
+// + scope floor) landed via holomush-iwzt.8.
+var _ = Describe("I-PRIV-1: new guest sees no pre-arrival location history", func() {
+	var (
+		ts     *privacytest.Server
+		ctx    context.Context
+		guestA *privacytest.Session
+		guestB *privacytest.Session
+	)
+
+	BeforeEach(func() {
+		ctx, _ = context.WithTimeout(context.Background(), 90*time.Second) //nolint:govet // cancel unused in test lifecycle
+		ts = privacytest.Start(suiteT)
+	})
+
+	AfterEach(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if guestB != nil {
+			guestB.Logout(cleanupCtx)
+		}
+		// guestA already logged out as part of the scenario.
+		if ts != nil {
+			ts.Stop()
+		}
+	})
+
+	It("returns only events emitted after guest B's session created_at", func() {
+		// Guest A connects, emits a pose into the location stream, disconnects.
+		guestA = ts.ConnectGuest(ctx)
+		locStream := "location:" + guestA.LocationID.String()
+		payload := []byte(`{"character_name":"` + guestA.CharacterName + `","action":"waves a greeting."}`)
+		Expect(guestA.EmitDirectEvent(ctx, locStream, "core-communication:pose", payload)).
+			To(Succeed(), "harness emit MUST succeed for the seed event")
+		guestA.Logout(ctx)
+
+		// Brief gap so guest B's SessionCreatedAt is strictly later than
+		// guest A's emit timestamp. The embedded bus publish is synchronous,
+		// but the wall-clock advance ensures unambiguous ordering when
+		// sub-millisecond co-occurrence could tie timestamps.
+		time.Sleep(50 * time.Millisecond)
+
+		// Guest B connects (fresh) into the same location.
+		guestB = ts.ConnectGuest(ctx)
+		Expect(guestB.LocationID).To(Equal(guestA.LocationID),
+			"preconditions: both guests must land at the shared guest start location")
+
+		events, err := guestB.QueryStreamHistory(ctx, locStream)
+		Expect(err).NotTo(HaveOccurred(),
+			"I-PRIV-1: same-location query MUST succeed for guest B (no hard-gate denial)")
+
+		for _, ev := range events {
+			// Floor is at guestB.SessionCreatedAt — events with earlier
+			// timestamps are I-PRIV-1 leaks.
+			Expect(ev.GetTimestamp().AsTime()).To(BeTemporally(">=", guestB.SessionCreatedAt),
+				"event %q at %s leaked before guest B SessionCreatedAt %s",
+				ev.GetType(), ev.GetTimestamp().AsTime(), guestB.SessionCreatedAt)
+		}
+	})
+})
