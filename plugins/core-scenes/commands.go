@@ -13,6 +13,8 @@ import (
 
 	"github.com/samber/oops"
 	"go.opentelemetry.io/otel/attribute"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -76,10 +78,7 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 	case "ooc":
 		return p.handleEmit(ctx, req, rest, "scene_ooc", true)
 	case "order":
-		// Task 21 will implement the pose-order renderer. Stub here so the
-		// dispatcher knows the subcommand exists and returns a clear message
-		// (better than the generic "unknown subcommand" path).
-		return pluginsdk.Errorf("scene order: not yet implemented (Task 21)"), nil
+		return p.handleOrder(ctx, req, rest)
 	default:
 		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, emit, end, info, invite, join, kick, leave, ooc, order, pause, pose, resume, say, set, switch, transfer.", sub), nil
 	}
@@ -694,6 +693,125 @@ func (p *scenePlugin) handleEmit(
 		Status: pluginsdk.CommandOK,
 		Output: fmt.Sprintf("You %s: %s", verb, text),
 	}, nil
+}
+
+// handleOrder is the scene/order subcommand handler — renders the current
+// pose order for the caller's scene per spec §8.
+//
+//nolint:unparam // plugin SDK contract requires (*CommandResponse, error); errors flow via pluginsdk.Errorf
+func (p *scenePlugin) handleOrder(ctx context.Context, req pluginsdk.CommandRequest, _ string) (*pluginsdk.CommandResponse, error) {
+	sceneID, userErr, internalErr := p.resolveSingleSceneMembership(ctx, req.CharacterID)
+	if internalErr != nil {
+		return nil, internalErr
+	}
+	if userErr != "" {
+		return pluginsdk.Errorf("%s", userErr), nil
+	}
+
+	resp, err := p.service.GetPoseOrder(ctx, &scenev1.GetPoseOrderRequest{
+		SceneId:     sceneID,
+		CharacterId: req.CharacterID,
+	})
+	if err != nil {
+		st, _ := status.FromError(err)
+		if st != nil && st.Code() == codes.PermissionDenied {
+			return pluginsdk.Errorf("You are not a participant of scene %s.", sceneID), nil
+		}
+		return nil, oops.Code("SCENE_ORDER_GETPOSEORDER_FAILED").
+			With("scene_id", sceneID).Wrap(err)
+	}
+
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: renderPoseOrder(sceneID, resp),
+	}, nil
+}
+
+// renderPoseOrder formats a GetPoseOrderResponse as plain text per spec §8.
+// Pure function — testable without a service mock.
+func renderPoseOrder(sceneID string, resp *scenev1.GetPoseOrderResponse) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Scene %s — pose order: %s (%d total poses)\n",
+		sceneID, resp.GetMode(), resp.GetTotalPoseCount())
+
+	entries := resp.GetEntries()
+	if len(entries) == 0 {
+		b.WriteString("  (no participants)\n")
+		return b.String()
+	}
+
+	switch resp.GetMode() {
+	case "strict":
+		var head *scenev1.PoseOrderEntry
+		var rest []*scenev1.PoseOrderEntry
+		for _, e := range entries {
+			if e.GetEligible() && head == nil {
+				head = e
+			} else {
+				rest = append(rest, e)
+			}
+		}
+		if head != nil {
+			fmt.Fprintf(&b, "  → Next to pose: %s\n", poseOrderDisplayName(head))
+		}
+		if len(rest) > 0 {
+			b.WriteString("  Then:\n")
+			for _, e := range rest {
+				fmt.Fprintf(&b, "    %s\n", poseOrderDisplayName(e))
+			}
+		}
+
+	case "3pr", "5pr":
+		var threshold uint32
+		if resp.GetMode() == "3pr" {
+			threshold = 3
+		} else {
+			threshold = 5
+		}
+		var eligible, cooldown []*scenev1.PoseOrderEntry
+		for _, e := range entries {
+			if e.GetEligible() {
+				eligible = append(eligible, e)
+			} else {
+				cooldown = append(cooldown, e)
+			}
+		}
+		if len(eligible) > 0 {
+			fmt.Fprintf(&b, "  Eligible to pose (poses_since_last ≥ %d):\n", threshold)
+			for _, e := range eligible {
+				fmt.Fprintf(&b, "    %s\n", poseOrderDisplayName(e))
+			}
+		}
+		if len(cooldown) > 0 {
+			b.WriteString("  Cooldown (needs more poses to elapse):\n")
+			for _, e := range cooldown {
+				psl := uint32(0)
+				if e.PosesSinceLast != nil {
+					psl = *e.PosesSinceLast
+				}
+				needs := threshold - psl
+				fmt.Fprintf(&b, "    %s (needs %d more)\n", poseOrderDisplayName(e), needs)
+			}
+		}
+
+	default: // "free" and any unrecognised mode
+		b.WriteString("  Participants:\n")
+		for _, e := range entries {
+			fmt.Fprintf(&b, "    %s\n", poseOrderDisplayName(e))
+		}
+	}
+
+	return b.String()
+}
+
+// poseOrderDisplayName returns the character's display name, falling back to
+// character_id when name is empty (Phase 4 default; nameResolver wiring is a
+// future bead).
+func poseOrderDisplayName(e *scenev1.PoseOrderEntry) string {
+	if e.GetCharacterName() != "" {
+		return e.GetCharacterName()
+	}
+	return e.GetCharacterId()
 }
 
 // resolveSingleSceneMembership returns the scene_id this character is

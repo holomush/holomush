@@ -274,19 +274,37 @@ func TestSceneSubcommand_EmptyArgs_UsageHint(t *testing.T) {
 	assert.Empty(t, sink.intents, "empty-args path MUST NOT emit")
 }
 
-func TestSceneSubcommand_Order_NotYetImplemented(t *testing.T) {
+// TestSceneSubcommand_Order_NoScene verifies the user-friendly error when
+// the caller is not in any scene.
+func TestSceneSubcommand_Order_NoScene(t *testing.T) {
 	t.Parallel()
-	// Task 21 implements scene order. The dispatcher case is a stub so
-	// users get a clear "not yet" message instead of "unknown subcommand".
-	p := newTestPlugin()
+	p := newTestPlugin() // empty store — char-alice has no scenes
 
 	resp, err := p.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:     "scene",
-		Args:        "order scene-x",
+		Args:        "order",
 		CharacterID: "char-alice",
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	assert.Equal(t, pluginsdk.CommandError, resp.Status)
-	assert.Contains(t, resp.Output, "Task 21")
+	assert.Contains(t, resp.Output, "not currently in any scene")
+}
+
+// TestSceneSubcommand_Order_FreeMode verifies the dispatcher wires handleOrder
+// and the free-mode renderer returns a participant list.
+func TestSceneSubcommand_Order_FreeMode(t *testing.T) {
+	t.Parallel()
+	p, _ := newTestPluginWithMember(t, "scene-order-free")
+
+	resp, err := p.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "order",
+		CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "Participants:")
+	assert.Contains(t, resp.Output, "char-alice")
 }
