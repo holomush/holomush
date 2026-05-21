@@ -3,7 +3,10 @@
   Copyright 2026 HoloMUSH Contributors
 -->
 <script lang="ts">
-  import { presence } from '$lib/stores/sidebarStore';
+  import { presenceStore } from '$lib/presence/store';
+
+  // idle/lastMode fields are not carried by PresenceEntry — future enhancement
+  // tracked in holomush-uhiz.
 
   function initials(name: string): string {
     const parts = name.split(/\s+/).filter(Boolean);
@@ -12,17 +15,17 @@
   }
 </script>
 
-{#if $presence.length > 0}
+{#if presenceStore.map.size > 0}
   <section class="card presence-list" data-testid="presence-card">
     <header class="card-head">
       <h3>Present</h3>
-      <span class="count">{$presence.length}</span>
+      <span class="count">{presenceStore.map.size}</span>
     </header>
     <ul class="rows">
-      {#each $presence as char}
-        <li class="pres-row" class:is-idle={char.isIdle ?? char.idle}>
-          <span class="avatar {char.lastMode ?? 'sys'}" aria-hidden="true">{initials(char.name)}</span>
-          <span class="name">{char.name}</span>
+      {#each [...presenceStore.map.values()] as char (char.characterId)}
+        <li class="pres-row">
+          <span class="avatar sys" aria-hidden="true">{initials(char.name || char.characterId)}</span>
+          <span class="name">{char.name || char.characterId}</span>
           <span class="status-dot" aria-hidden="true"></span>
         </li>
       {/each}

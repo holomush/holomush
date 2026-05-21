@@ -10,9 +10,8 @@
   import { ControlSignal } from '$lib/connect/holomush/web/v1/web_pb';
   import { routeEvent } from '$lib/stores/eventRouter';
   import { appendLine, clearLines, replayActive } from '$lib/stores/terminalStore';
-  import { createPresenceStore, type PresenceState } from '$lib/presence/store';
+  import { presenceStore as presence, type PresenceState } from '$lib/presence/store';
   import { mirrorMovementPresence as mirrorMovementPresenceFn } from '$lib/presence/mirror';
-  import { addPresence, removePresence } from '$lib/stores/sidebarStore';
   import { WebPresenceState, type WebPresenceEntry } from '$lib/connect/holomush/web/v1/web_pb';
   import { themePreferences, terminalBlackOverrideVars } from '$lib/stores/themeStore';
   import { setConnectionStatus } from '$lib/stores/connectionStore';
@@ -39,10 +38,6 @@
 
   const client = createClient(WebService, transport);
 
-  // Presence store — keyed by characterId (ULID from snapshot; name as fallback
-  // for live arrive/leave events that don't carry the character ULID on the web wire).
-  const presence = createPresenceStore();
-
   function presenceStateFromProto(s: WebPresenceState): PresenceState {
     switch (s) {
       case WebPresenceState.ACTIVE: return 'ACTIVE';
@@ -52,12 +47,11 @@
     }
   }
 
-  // Bind the testable mirrorMovementPresence helper to the local presence
-  // store and the legacy sidebar functions. The pure function lives in
-  // $lib/presence/mirror and is covered by mirror.test.ts. T12 drops the
-  // legacy parameter once PresenceList.svelte migrates its binding.
+  // Bind the testable mirrorMovementPresence helper to the singleton presence
+  // store. Legacy dual-write removed: PresenceList.svelte now reads from
+  // presenceStore directly (T12, holomush-5b2j.14).
   function mirrorMovementPresence(ev: GameEvent) {
-    mirrorMovementPresenceFn(ev, presence, { add: addPresence, remove: removePresence });
+    mirrorMovementPresenceFn(ev, presence);
   }
 
   async function handleStaleSession() {
@@ -227,6 +221,13 @@
   async function hydrateAndStream() {
     abortController?.abort();
     abortController = new AbortController();
+    // Clear the module-level singleton presence store at the start of every
+    // hydrate so a reconnect / new-session does not render stale entries from
+    // a prior session. snapshot.seed() also clears internally as its first
+    // step, but it can be seconds away (backfill in parallel + RPC roundtrip
+    // + the 3s timeout fallback). Clearing here closes that visible-stale
+    // window.
+    presence.clear();
     // Snapshot the controller to a local so handlers resolving after a
     // concurrent re-invocation replaced the shared `abortController` do
     // not read a stale/foreign signal. Side-effect writes below are also
@@ -452,19 +453,13 @@
         replayActive.set(false);
         // Drain Subscribe events that arrived during backfill, deduping.
         for (const ev of liveBuffer) {
-          // Mirror every movement event to BOTH presence stores. The
-          // routeEvent path below also calls addPresence/removePresence via
-          // eventRouter for non-replayed events — that's idempotent on the
-          // OLD store (set-based, no name dupes) and only fires for the
-          // non-dedup branch. The mirror call here covers the dedup branch
-          // (where routeEvent is skipped) and ensures the NEW PresenceStore
-          // sees every movement regardless of branch.
+          // Mirror movement events to the PresenceStore. The mirror call
+          // covers the dedup branch (where routeEvent is skipped) and
+          // ensures the PresenceStore sees every movement regardless of branch.
           mirrorMovementPresence(ev);
           if (ev.eventId && seenEventIds.has(ev.eventId)) {
             // Terminal dedup: suppress duplicate output. Presence sidebar
             // update already happened via mirrorMovementPresence above.
-            // TODO(holomush-1tvn.15): once backfill excludes events published
-            // after subscribe started, this whole branch can be removed.
             continue;
           }
           if (ev.eventId) seenEventIds.add(ev.eventId);
