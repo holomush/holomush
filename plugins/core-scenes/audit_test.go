@@ -78,6 +78,27 @@ func (s *fakeAuditStore) Insert(
 	return nil
 }
 
+// InsertScenePose is a no-op for tests that exercise QueryHistory; the
+// interface requires it for T8's AuditEvent dispatch but the transactional
+// path is exercised by integration tests against a real database.
+func (s *fakeAuditStore) InsertScenePose(
+	_ context.Context,
+	_ []byte,
+	_, _ string,
+	_ *timestamppb.Timestamp,
+	_ string,
+	_ []byte,
+	_ []byte,
+	_ int,
+	_ string,
+	_ *int64,
+	_ *int32,
+	_ string,
+	_ string,
+) error {
+	return nil
+}
+
 // queryLog matches *SceneAuditStore.queryLog verbatim.
 func (s *fakeAuditStore) queryLog(
 	_ context.Context,

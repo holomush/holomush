@@ -64,6 +64,37 @@ type sceneAuditLogStore interface {
 		dekRef *int64,
 		dekVersion *int32,
 	) error
+	// InsertScenePose composes a scene_log INSERT (for scene_pose event
+	// type) with maintained metadata UPDATEs in a single transaction,
+	// per spec §9.4:
+	//
+	//   1. INSERT into scene_log (via insertSceneLogTx).
+	//   2. UPDATE scenes SET total_pose_count = total_pose_count + 1
+	//      WHERE id = sceneID; RETURNING total_pose_count.
+	//   3. UPDATE scene_participants
+	//      SET last_pose_at = <event-timestamp>, last_pose_seq = <new-total>
+	//      WHERE scene_id = sceneID AND character_id = posedCharID.
+	//
+	// Either all three operations commit, or none do. Pins INV-P4-10
+	// (transactional consistency).
+	//
+	// sceneID and posedCharID are caller-extracted from the audit
+	// subject and actor_id; this method does no parsing.
+	InsertScenePose(
+		ctx context.Context,
+		id []byte,
+		subject, eventType string,
+		timestamp *timestamppb.Timestamp,
+		actorKind string,
+		actorID []byte,
+		payload []byte,
+		schemaVer int,
+		codec string,
+		dekRef *int64,
+		dekVersion *int32,
+		sceneID string,
+		posedCharID string,
+	) error
 	queryLog(
 		ctx context.Context,
 		subject string,
@@ -136,6 +167,93 @@ func (s *SceneAuditStore) Insert(
 		return s.insertSceneLogTx(ctx, tx, id, subject, eventType, timestamp,
 			actorKind, actorID, payload, schemaVer, codec, dekRef, dekVersion)
 	})
+}
+
+// InsertScenePose runs the scene_log INSERT + scenes.total_pose_count
+// increment + scene_participants.last_pose_at/last_pose_seq UPDATE in
+// a single transaction. Per spec §9.4. Pins INV-P4-10 (transactional
+// consistency): either all three rows commit, or none do.
+//
+// The event timestamp (not wall clock) is stamped onto
+// scene_participants.last_pose_at — this matches JetStream redelivery
+// semantics where the audit row may arrive minutes after the publish
+// time.
+//
+// Actor-not-participant edge case: if posedCharID isn't currently a
+// row in scene_participants (e.g. their participation was removed
+// between event publish and audit consumption), the participant
+// UPDATE is a 0-row no-op. That is intentionally non-fatal — the
+// scene_log INSERT and total_pose_count increment still commit, and
+// per-participant metadata catches up on the next reconciliation /
+// next pose by an actual participant.
+func (s *SceneAuditStore) InsertScenePose(
+	ctx context.Context,
+	id []byte,
+	subject, eventType string,
+	timestamp *timestamppb.Timestamp,
+	actorKind string,
+	actorID []byte,
+	payload []byte,
+	schemaVer int,
+	codec string,
+	dekRef *int64,
+	dekVersion *int32,
+	sceneID string,
+	posedCharID string,
+) error {
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		// Step 1: INSERT into scene_log (reuses the T6 helper).
+		if err := s.insertSceneLogTx(ctx, tx,
+			id, subject, eventType, timestamp,
+			actorKind, actorID, payload, schemaVer, codec,
+			dekRef, dekVersion,
+		); err != nil {
+			return err
+		}
+
+		// Step 2: Bump per-scene total_pose_count and capture the new
+		// value. RETURNING ensures we observe a deterministic seq even
+		// if a concurrent pose on the same scene also runs (Postgres
+		// serialises the row-level UPDATE).
+		var newSeq int
+		if err := tx.QueryRow(ctx,
+			`UPDATE scenes SET total_pose_count = total_pose_count + 1
+			 WHERE id = $1 RETURNING total_pose_count`,
+			sceneID,
+		).Scan(&newSeq); err != nil {
+			return oops.Code("SCENE_TOTAL_POSE_COUNT_UPDATE_FAILED").
+				With("scene_id", sceneID).Wrap(err)
+		}
+
+		// Step 3: Stamp per-participant last_pose_at + last_pose_seq.
+		// Use the canonical event timestamp (not wall clock) — this
+		// matches JetStream redelivery semantics. Zero-row UPDATE is
+		// intentionally non-fatal (see method doc).
+		var ts any
+		if timestamp != nil {
+			ts = timestamp.AsTime()
+		}
+		if _, err := tx.Exec(ctx,
+			`UPDATE scene_participants
+			 SET last_pose_at = $1, last_pose_seq = $2
+			 WHERE scene_id = $3 AND character_id = $4`,
+			ts, newSeq, sceneID, posedCharID,
+		); err != nil {
+			return oops.Code("SCENE_PARTICIPANT_POSE_UPDATE_FAILED").
+				With("scene_id", sceneID).
+				With("character_id", posedCharID).Wrap(err)
+		}
+		return nil
+	})
+	if err != nil {
+		// Inner closure errors are already wrapped with oops codes
+		// (SCENE_AUDIT_INSERT_FAILED, SCENE_TOTAL_POSE_COUNT_UPDATE_FAILED,
+		// or SCENE_PARTICIPANT_POSE_UPDATE_FAILED). pgx.BeginFunc only
+		// adds a Begin/Commit error of its own if those phases fail.
+		return oops.Code("SCENE_AUDIT_TX_FAILED").
+			With("scene_id", sceneID).Wrap(err)
+	}
+	return nil
 }
 
 // insertSceneLogTx executes the scene_log INSERT within a caller-provided
