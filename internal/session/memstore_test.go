@@ -14,6 +14,8 @@ import (
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/holomush/holomush/internal/idgen"
 )
 
 func TestMemStore_GetSet(t *testing.T) {
@@ -787,4 +789,68 @@ func TestMemStoreBumpLocationArrivedAt_NotFound(t *testing.T) {
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok)
 	assert.Equal(t, "SESSION_NOT_FOUND", oopsErr.Code())
+}
+
+// Verifies: I-PRES-1
+// MemStore S-1: ListActiveByLocation returns only Status=Active sessions;
+// Detached and Expired are excluded by the Status filter.
+func TestMemStoreListActiveByLocationReturnsActiveSessionsOnly(t *testing.T) {
+	m := NewMemStore()
+	ctx := context.Background()
+	loc := idgen.New()
+	future := time.Now().Add(time.Hour)
+	past := time.Now().Add(-time.Hour)
+
+	activeA := &Info{ID: "a", Status: StatusActive, LocationID: loc, ExpiresAt: &future, CharacterID: idgen.New()}
+	activeB := &Info{ID: "b", Status: StatusActive, LocationID: loc, ExpiresAt: &future, CharacterID: idgen.New()}
+	detached := &Info{ID: "c", Status: StatusDetached, LocationID: loc, ExpiresAt: &future, CharacterID: idgen.New()}
+	// Expired status: in production the reaper transitions expired sessions
+	// to StatusExpired. ListActiveByLocation filters on Status only (not
+	// ExpiresAt) — expiry-at-handler is enforced separately by info.IsExpired().
+	expiredStatus := &Info{ID: "d", Status: StatusExpired, LocationID: loc, ExpiresAt: &past, CharacterID: idgen.New()}
+
+	for _, s := range []*Info{activeA, activeB, detached, expiredStatus} {
+		require.NoError(t, m.Set(ctx, s.ID, s))
+	}
+
+	got, err := m.ListActiveByLocation(ctx, loc)
+	require.NoError(t, err)
+	ids := make([]string, 0, len(got))
+	for _, s := range got {
+		ids = append(ids, s.ID)
+	}
+	assert.ElementsMatch(t, []string{"a", "b"}, ids, "Detached and Expired must be excluded by Status filter")
+}
+
+// Verifies: I-PRES-1
+// ListActiveByLocation returns no matching sessions for a location with no
+// active sessions, and reports no error. The Go-level return value MAY be
+// nil OR an empty slice — both are zero-length and acceptable; the wire-
+// level entries=[] contract (handler-side U-2) is locked separately by
+// internal/grpc/list_focus_presence_test.go via the proto response shape.
+func TestMemStoreListActiveByLocationReturnsNoSessionsForEmptyLocation(t *testing.T) {
+	m := NewMemStore()
+	got, err := m.ListActiveByLocation(context.Background(), idgen.New())
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+// Verifies: I-PRES-1
+// MemStore S-3: ListActiveByLocation filters by LocationID — sessions at
+// other locations MUST be excluded (cross-location isolation).
+func TestMemStoreListActiveByLocationFiltersByLocation(t *testing.T) {
+	m := NewMemStore()
+	ctx := context.Background()
+	loc1 := idgen.New()
+	loc2 := idgen.New()
+	future := time.Now().Add(time.Hour)
+	s1 := &Info{ID: "1", Status: StatusActive, LocationID: loc1, ExpiresAt: &future, CharacterID: idgen.New()}
+	s2 := &Info{ID: "2", Status: StatusActive, LocationID: loc2, ExpiresAt: &future, CharacterID: idgen.New()}
+	require.NoError(t, m.Set(ctx, s1.ID, s1))
+	require.NoError(t, m.Set(ctx, s2.ID, s2))
+
+	got, err := m.ListActiveByLocation(ctx, loc1)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "1", got[0].ID)
 }
