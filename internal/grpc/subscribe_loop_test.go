@@ -379,7 +379,7 @@ func TestDispatchDeliveryDropsBelowScopeFloor(t *testing.T) {
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 
 	// Event timestamp one hour BEFORE LocationArrivedAt → below floor.
-	d := makeLocationDelivery(t, locID.String(),arrivedAt.Add(-time.Hour))
+	d := makeLocationDelivery(t, locID.String(), arrivedAt.Add(-time.Hour))
 
 	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
 	require.NoError(t, err)
@@ -407,7 +407,7 @@ func TestDispatchDeliveryForwardsAtOrAboveScopeFloor(t *testing.T) {
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 
 	// Event timestamp one minute AFTER LocationArrivedAt → above floor.
-	d := makeLocationDelivery(t, locID.String(),arrivedAt.Add(time.Minute))
+	d := makeLocationDelivery(t, locID.String(), arrivedAt.Add(time.Minute))
 
 	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
 	require.NoError(t, err)
@@ -441,7 +441,7 @@ func TestDispatchDeliveryFallsBackToCachedInfoOnLookupFailure(t *testing.T) {
 
 	// Event timestamp AFTER cached LocationArrivedAt → above cached floor.
 	// With fallback to cached info, the event passes through.
-	d := makeLocationDelivery(t, locID.String(),arrivedAt.Add(time.Minute))
+	d := makeLocationDelivery(t, locID.String(), arrivedAt.Add(time.Minute))
 
 	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
 	require.NoError(t, err,
@@ -470,7 +470,7 @@ func TestDispatchDeliveryUsesCachedFloorOnLookupFailure(t *testing.T) {
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 
 	// Event timestamp BEFORE cached LocationArrivedAt → still dropped.
-	d := makeLocationDelivery(t, locID.String(),arrivedAt.Add(-time.Hour))
+	d := makeLocationDelivery(t, locID.String(), arrivedAt.Add(-time.Hour))
 
 	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
 	require.NoError(t, err)

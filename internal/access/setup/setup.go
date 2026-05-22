@@ -65,8 +65,16 @@ type ABACConfig struct {
 	// is not registered, no provider populates `resource.location.*`, and
 	// every such seed silently default-denies. Per holomush-g776.
 	LocationRepo world.LocationRepository
-	RoleStore    store.RoleStore
-	AuditMode    audit.Mode
+	// ObjectRepo is required for any seed that compares
+	// `resource.object.X` (e.g., seed:player-object-colocation). Without
+	// it the ObjectProvider is not registered, no provider populates
+	// `resource.object.*`, and every such seed silently default-denies —
+	// the same fingerprint as the original holomush-g776 bug. The provider
+	// also needs CharacterRepo to resolve transitive locations for objects
+	// held by characters. Per holomush-k3ud.
+	ObjectRepo world.ObjectRepository
+	RoleStore  store.RoleStore
+	AuditMode  audit.Mode
 	// CryptoOperators is the list of player IDs (ULIDs) holding the
 	// crypto.operator capability. Passed to PlayerAttributeProvider at
 	// construction. Empty / nil → no operators (break-glass disabled).
@@ -140,6 +148,33 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 			"ABAC setup: LocationRepo not provided — seeds referencing resource.location.* will silently default-deny",
 			"affected_seeds", "seed:player-location-read, seed:player-location-list-characters, seed:player-location-list-presence",
 			"reference", "holomush-g776")
+	}
+
+	// 8c. Object provider (optional in signature, required in practice for
+	// any seed referencing resource.object.*). Without this,
+	// seed:player-object-colocation silently default-denies and every
+	// object read/write/move/delete via internal/world/service.go (six
+	// production call sites at GetObject, CreateObject, UpdateObject,
+	// DeleteObject, MoveObject, plus the look-into-object check in the
+	// command pipeline at service.go:940) returns "no policies satisfied".
+	// Mirrors LocationProvider/CharacterProvider wildcard tolerance —
+	// CreateObject emits access.ObjectResource("*") at service.go:449.
+	//
+	// Production wiring at internal/access/setup/subsystem.go ALWAYS
+	// supplies both ObjectRepo and CharacterRepo. Loud WARN when missing
+	// so any future caller that drops the repo gets a recurrence signal;
+	// the original g776 bug was silent at startup and only manifested via
+	// e2e symptoms. Per holomush-k3ud.
+	if cfg.ObjectRepo != nil {
+		objProvider := attribute.NewObjectProvider(cfg.ObjectRepo, cfg.CharacterRepo)
+		if err := resolver.RegisterProvider(objProvider); err != nil {
+			return nil, eb.Wrapf(err, "register object provider")
+		}
+	} else {
+		slog.WarnContext(ctx,
+			"ABAC setup: ObjectRepo not provided — seeds referencing resource.object.* will silently default-deny",
+			"affected_seeds", "seed:player-object-colocation",
+			"reference", "holomush-k3ud")
 	}
 
 	// 8a. Player provider (subject namespace; resolves player.id and

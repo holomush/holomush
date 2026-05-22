@@ -62,6 +62,20 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   `PolicyInstaller.InstallPluginPolicies`) are NOT scanned — same silent-deny
   class can recur for plugin-declared namespaces. Symmetric stale-entry
   direction IS asserted at `seed_coverage_test.go:154-160`.
+- **Co-location seed empty-string equality (2026-05-21)**: all three
+  co-location seeds (`seed:player-character-colocation`,
+  `seed:player-object-colocation`, `seed:player-location-stream-read`)
+  compare `resource.<ns>.location == principal.character.location` as raw
+  strings. Providers emit `attrs["location"] = ""` (NOT absent) when the
+  entity is un-locatable. DSL `evalComparison` treats `"" == ""` as TRUE
+  because both values are present strings; only *missing* attributes
+  short-circuit to false (`internal/access/policy/dsl/evaluator.go:128`).
+  Net: a character with `LocationID == nil` reading any un-locatable
+  resource gets permit. Not a new defect (predates k3ud); not yet fixed.
+  Two viable patches: (a) DSL gate `&& principal.character.has_location
+  && resource.<ns>.has_location` per seed (`has_location` is already in
+  every schema), or (b) providers omit the `location` key entirely when
+  un-locatable. Worth flagging on any co-location-seed work.
 - **Wildcard resource IDs (`type:*`) bypass per-instance attrs**:
   `service.CreateLocation` / `service.FindLocationByName` /
   `service.CreateExit` / `service.CreateObject` all call `checkAccess`
