@@ -168,6 +168,18 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 		return nil, eb.Wrapf(err, "register plugin provider")
 	}
 
+	// 10a. Seed-coverage validator (holomush-xxel). After all providers are
+	// registered, walk the seed corpus and WARN per namespace referenced by
+	// any seed but not registered. Catches the holomush-g776 / xxel bug
+	// class at construction time: a missing provider means every seed
+	// gating on `resource.<ns>.*` silently default-denies, with no startup
+	// signal. The validator is non-fatal by design — production resilience
+	// over fail-closed-at-boot for an issue that was historically silent
+	// anyway. Specific provider-nil branches above (CharacterRepo,
+	// LocationRepo) already WARN at their own grain; this is the corpus-
+	// level sweep that catches a missing provider regardless of cause.
+	warnOnMissingSeedCoverage(ctx, resolver.RegisteredNamespaces(), policy.SeedPolicies())
+
 	// 10-11. SQL bridge for audit writer
 	sqlDB := stdlib.OpenDBFromPool(cfg.Pool)
 	if err := sqlDB.PingContext(ctx); err != nil {
