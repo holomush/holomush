@@ -312,22 +312,14 @@ func (e *erroringSessionStore) Get(_ context.Context, _ string) (*session.Info, 
 	return nil, e.getErr
 }
 
-// TestDispatchDeliveryForwardsEventTruncatedWithinSameMicrosecondAsFloor
-// pins the off-by-precision semantic: events are published with timestamps
-// truncated to microseconds (eventbus/publisher.go::Publish), while session
-// floors (LocationArrivedAt etc.) retain time.Now() nanosecond precision.
-// An event emitted within the same microsecond as session creation has a
-// truncated timestamp strictly LESS than the floor — but it is NOT a
-// privacy violation to forward it. The filter MUST truncate the floor to
-// µs before comparing, otherwise a session's own arrive event (and any
-// other event in the same µs window as session-create / move / focus-join)
-// gets dropped. Regression caught by web/e2e/terminal.spec.ts:136 (presence
-// list) — the symptom was page2's panel missing its own self-arrival.
-func TestDispatchDeliveryForwardsEventTruncatedWithinSameMicrosecondAsFloor(t *testing.T) {
+// TestDispatchDeliveryDropsEventEmittedInSameNanosecondAsArrival gates
+// INV-TS-6. The floor comparison MUST operate at nanosecond resolution.
+// An event whose Timestamp is one nanosecond BELOW the floor
+// (LocationArrivedAt) MUST be filtered out by dispatchDelivery.
+func TestDispatchDeliveryDropsEventEmittedInSameNanosecondAsArrival(t *testing.T) {
 	t.Parallel()
 	locID := core.NewULID()
-	// LocationArrivedAt with nanosecond precision (mirrors time.Now()).
-	arrivedAt := time.Date(2026, 5, 21, 12, 0, 0, 300_123_456, time.UTC)
+	arrivedAt := time.Date(2026, 5, 22, 12, 0, 0, 123456789, time.UTC)
 	info := &session.Info{
 		ID:                "s1",
 		CharacterID:       core.NewULID(),
@@ -338,24 +330,43 @@ func TestDispatchDeliveryForwardsEventTruncatedWithinSameMicrosecondAsFloor(t *t
 	s := &CoreServer{sessionStore: store}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 
-	// Event timestamp emitted 333ns AFTER LocationArrivedAt, then truncated
-	// to µs by the publisher → 300_123_000 ns, which is strictly LESS than
-	// the un-truncated floor (300_123_456). Without the µs-truncated floor
-	// comparison this would be dropped — a false positive.
-	emittedAt := arrivedAt.Add(333 * time.Nanosecond)
-	publishedAt := emittedAt.Truncate(time.Microsecond)
-	require.True(t, publishedAt.Before(arrivedAt),
-		"sanity: truncated event ts must be strictly before un-truncated floor for this test to be meaningful")
-
-	d := makeLocationDelivery(t, locID.String(), publishedAt)
+	// Event timestamp one ns BELOW the floor.
+	evTs := arrivedAt.Add(-1 * time.Nanosecond)
+	d := makeLocationDelivery(t, locID.String(), evTs)
 
 	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
 	require.NoError(t, err)
-	assert.Equal(t, 1, d.acks())
-	assert.Equal(t, 0, d.nacks())
+	require.Len(t, stream.sent, 0,
+		"INV-TS-6: event one ns below floor MUST be filtered at dispatchDelivery")
+	assert.Equal(t, 1, d.acks(),
+		"filtered event is ack'd (consumed, not forwarded)")
+}
+
+// TestDispatchDeliveryIncludesEventAtExactFloorNanosecond gates INV-TS-7.
+// The floor MUST use >= semantics: an event whose Timestamp exactly equals
+// LocationArrivedAt MUST be INCLUDED in the visible window.
+func TestDispatchDeliveryIncludesEventAtExactFloorNanosecond(t *testing.T) {
+	t.Parallel()
+	locID := core.NewULID()
+	arrivedAt := time.Date(2026, 5, 22, 12, 0, 0, 123456789, time.UTC)
+	info := &session.Info{
+		ID:                "s1",
+		CharacterID:       core.NewULID(),
+		LocationID:        locID,
+		LocationArrivedAt: arrivedAt,
+	}
+	store := newTestSessionStore(t, map[string]*session.Info{"s1": info})
+	s := &CoreServer{sessionStore: store}
+	stream := &fakeSubscribeStream{ctx: context.Background()}
+
+	// Event timestamp exactly equal to the floor.
+	d := makeLocationDelivery(t, locID.String(), arrivedAt)
+
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	require.NoError(t, err)
 	require.Len(t, stream.sent, 1,
-		"event emitted in same µs as session-create must reach client; "+
-			"the filter compares against a µs-truncated floor, matching publisher precision")
+		"INV-TS-7: event at exact floor ns MUST be included (>= semantics)")
+	assert.Equal(t, 1, d.acks())
 }
 
 // TestDispatchDeliveryDropsBelowScopeFloor is the unit-level regression lock
