@@ -22,6 +22,8 @@ import (
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 )
 
+// Verifies: I-PRIV-7
+//
 // I-PRIV-7 placeholder: no plugin currently declares history_scope: custom.
 // The full scenario will exercise a plugin whose history_scope semantics
 // diverge from grid/scene; until that plugin lands, the test is skipped
@@ -33,6 +35,8 @@ var _ = Describe("I-PRIV-7: plugin-owned history_scope semantics", func() {
 	})
 })
 
+// Verifies: I-PRIV-6
+//
 // I-PRIV-6 gate-bypass arm only: a character granted
 // read_unrestricted_history MUST bypass the I-PRIV-1 location hard-gate.
 //
@@ -96,6 +100,8 @@ var _ = Describe("I-PRIV-6 (gate-bypass arm): staff override bypasses the locati
 	})
 })
 
+// Verifies: I-PRIV-3
+//
 // I-PRIV-3 (Subscribe-replay path): when a session's transport drops and later
 // reattaches within TTL, events emitted during the detach window MUST be
 // DELIVERED via the live Subscribe stream's durable replay (NOT dropped by
@@ -199,6 +205,9 @@ var _ = Describe("I-PRIV-3: ReattachCAS preserves durable; Subscribe replay deli
 	})
 })
 
+// Verifies: I-PRIV-3
+// Verifies: I-PRIV-4
+//
 // I-PRIV-3 / I-PRIV-4 / spec §2 "transport-continuity worked example":
 // the session row is the unit of continuity, not the transport connection.
 // When a session detaches (transport drop) and later reattaches within TTL,
@@ -373,6 +382,8 @@ var _ = Describe("I-PRIV-3 / I-PRIV-4: detach/reattach preserves session floor a
 	})
 })
 
+// Verifies: I-PRIV-1
+//
 // I-PRIV-1: a fresh guest connecting to a location MUST NOT see any event
 // whose timestamp predates their session's SessionCreatedAt. This is the
 // regression guard for the Phase 2 QueryStreamHistory restructure (hard-gate
@@ -436,6 +447,8 @@ var _ = Describe("I-PRIV-1: new guest sees no pre-arrival location history", fun
 	})
 })
 
+// Verifies: I-PRIV-2
+//
 // I-PRIV-2 (guest identity overlay): when a guest's display name happens to
 // collide with a previous guest's name (random-namer collisions are possible
 // within 20×20 = 400 names — see internal/naming/gemstone.go), the new guest
@@ -542,6 +555,8 @@ var _ = Describe("I-PRIV-2: guest name reuse does not leak prior holder's events
 	})
 })
 
+// Verifies: I-PRIV-2
+//
 // I-PRIV-2 (scene-join floor): when a character joins a scene at time T, the
 // I-PRIV-2 scene branch of streamScopeFloor MUST floor the joiner's view of
 // the scene at FocusMembership.JoinedAt. Events emitted to the scene BEFORE
@@ -636,6 +651,8 @@ var _ = Describe("I-PRIV-2 (scene): scene events before join are invisible", fun
 	})
 })
 
+// Verifies: I-PRIV-1
+//
 // I-PRIV-1 (character move): when a character moves from locA to locB, the
 // floor MUST reset to the new location's arrival time and the hard-gate
 // MUST deny queries against the prior location. This is the location-
@@ -725,6 +742,8 @@ var _ = Describe("I-PRIV-1: character move resets location floor", func() {
 	})
 })
 
+// Verifies: I-PRIV-5
+//
 // I-PRIV-5: every denial path on QueryStreamHistory MUST return the same
 // wire-level code STREAM_ACCESS_DENIED. The internal denial_reason
 // (wrong_location, not_member, policy_denied, expired_session,
