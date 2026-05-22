@@ -21,6 +21,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
 	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/pkg/errutil"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
@@ -219,10 +220,10 @@ func (s *phase3TestSetup) InsertEncryptedRow(plaintext []byte) ulid.ULID {
         INSERT INTO events_audit
           (id, subject, type, timestamp, actor_kind, envelope, schema_ver,
            codec, js_seq, rendering, dek_ref, dek_version)
-        VALUES ($1, 'events.g1.system.scene.01PH3', 'test.event', now(),
-                'system', $2, 1, $3, $4, '{}'::jsonb, $5, $6)
-    `, id[:], envelopeBytes, string(s.codecName),
-		int64(time.Now().UnixNano()),   // js_seq monotonic placeholder
+        VALUES ($1, 'events.g1.system.scene.01PH3', 'test.event', $2,
+                'system', $3, 1, $4, $5, '{}'::jsonb, $6, $7)
+    `, id[:], pgnanos.From(time.Now()), envelopeBytes, string(s.codecName),
+		int64(time.Now().UnixNano()),    // js_seq monotonic placeholder
 		s.oldDEKID, int32(s.oldDEKVer)) //nolint:gosec // G115: oldDEKVer is uint32 < 2^31
 	Expect(err).NotTo(HaveOccurred())
 

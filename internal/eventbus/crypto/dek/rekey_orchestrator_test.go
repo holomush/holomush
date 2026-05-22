@@ -19,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/audit/chain"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/pkg/errutil"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
@@ -59,8 +60,8 @@ func seedPolicySetHeadForOrch(t *testing.T, pool *pgxpool.Pool, gameID, policyNa
 	_, err = pool.Exec(context.Background(),
 		`INSERT INTO events_audit
 		   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
-		 VALUES ($1, $2, 'crypto.policy_set', now(), 'system', $3, 1, 'identity', $4, '{}'::jsonb)`,
-		[]byte("01JX00000000000000000000001"), subject, envelope, int64(1))
+		 VALUES ($1, $2, 'crypto.policy_set', $3, 'system', $4, 1, 'identity', $5, '{}'::jsonb)`,
+		[]byte("01JX00000000000000000000001"), subject, pgnanos.From(time.Now()), envelope, int64(1))
 	require.NoError(t, err)
 }
 
@@ -232,9 +233,9 @@ func seedActiveDEKWithParticipants(t *testing.T, pool *pgxpool.Pool, ctxType, ct
 	err = pool.QueryRow(context.Background(), `
         INSERT INTO crypto_keys
             (context_type, context_id, version, wrapped_dek, wrap_provider, wrap_key_id, participants, created_at)
-        VALUES ($1, $2, $3, '\xdeadbeef', 'test', 'test-key-id', $4::jsonb, now())
+        VALUES ($1, $2, $3, '\xdeadbeef', 'test', 'test-key-id', $4::jsonb, $5)
         RETURNING id
-    `, ctxType, ctxID, version, participantsJSON).Scan(&id)
+    `, ctxType, ctxID, version, participantsJSON, pgnanos.From(time.Now())).Scan(&id)
 	require.NoError(t, err)
 	return id
 }
