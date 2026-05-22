@@ -149,14 +149,16 @@ func TestCharacterProvider_ResolveSubject(t *testing.T) {
 					}, nil
 				}
 			},
+			// Per ADR holomush-ti1b: location and location_id keys are
+			// OMITTED from the bag when has_location=false. The DSL
+			// evaluator's missing-attr-→-false semantics preserve
+			// default-deny on colocation seeds.
 			expectAttrs: map[string]any{
 				"id":           charID.String(),
 				"player_id":    playerID.String(),
 				"name":         "NoLocChar",
 				"description":  "",
 				"roles":        []string{"player"},
-				"location_id":  "",
-				"location":     "",
 				"has_location": false,
 			},
 		},

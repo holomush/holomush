@@ -234,6 +234,8 @@ func TestPropertyProvider_ResolveResource(t *testing.T) {
 				Visibility: "public",
 			},
 			resolverResult: nil,
+			// Per ADR holomush-ti1b: parent_location key OMITTED when
+			// has_parent_location=false (un-locatable parent).
 			expectedAttrs: map[string]any{
 				"id":                  propID.String(),
 				"parent_type":         "character",
@@ -244,7 +246,6 @@ func TestPropertyProvider_ResolveResource(t *testing.T) {
 				"owner":               "owner:01ABC",
 				"has_owner":           true,
 				"visibility":          "public",
-				"parent_location":     "",
 				"has_parent_location": false,
 			},
 			expectResolverCall: true,
@@ -262,6 +263,9 @@ func TestPropertyProvider_ResolveResource(t *testing.T) {
 				Visibility: "public",
 			},
 			resolverErr: errors.New("resolver error"),
+			// Per ADR holomush-ti1b: parent_location key OMITTED when
+			// has_parent_location=false (resolver error treated as
+			// un-locatable parent).
 			expectedAttrs: map[string]any{
 				"id":                  propID.String(),
 				"parent_type":         "character",
@@ -272,7 +276,6 @@ func TestPropertyProvider_ResolveResource(t *testing.T) {
 				"owner":               "owner:01ABC",
 				"has_owner":           true,
 				"visibility":          "public",
-				"parent_location":     "",
 				"has_parent_location": false,
 			},
 			expectResolverCall: true,
@@ -399,7 +402,9 @@ func TestPropertyProviderResolveResourceTimeout(t *testing.T) {
 	attrs, err := provider.ResolveResource(context.Background(), "property:"+propID.String())
 
 	require.NoError(t, err)
-	assert.Equal(t, "", attrs["parent_location"], "parent_location should be empty on timeout")
+	_, present := attrs["parent_location"]
+	assert.False(t, present,
+		"ADR holomush-ti1b: parent_location key MUST be absent on timeout (un-locatable parent)")
 	assert.Equal(t, false, attrs["has_parent_location"], "has_parent_location should be false on timeout")
 }
 

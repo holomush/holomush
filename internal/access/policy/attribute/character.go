@@ -103,15 +103,21 @@ func (p *CharacterProvider) resolve(ctx context.Context, entityID string) (map[s
 		"roles":       roles,
 	}
 
-	// Handle optional location — expose as both "location_id" (raw) and "location" (for seed policies)
+	// Handle optional location — expose as both "location_id" (raw) and "location" (for seed policies).
+	//
+	// Per ADR holomush-ti1b (motivating bug holomush-9gtl): when has_location=false the `location` and
+	// `location_id` keys MUST be OMITTED from the bag (not emitted as
+	// empty-string sentinels). This leverages the DSL evaluator's
+	// missing-attr-→-false semantics (ADR holomush-iv43 / 0010) to
+	// preserve default-deny on colocation seeds when either side is
+	// un-locatable. Emitting "" would satisfy `"" == ""` and create a
+	// fail-open match (the original 9gtl reproducer).
 	if char.LocationID != nil {
 		locStr := char.LocationID.String()
 		attrs["location_id"] = locStr
 		attrs["location"] = locStr
 		attrs["has_location"] = true
 	} else {
-		attrs["location_id"] = ""
-		attrs["location"] = ""
 		attrs["has_location"] = false
 	}
 
