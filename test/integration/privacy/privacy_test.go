@@ -422,11 +422,8 @@ var _ = Describe("I-PRIV-1: new guest sees no pre-arrival location history", fun
 			To(Succeed(), "harness emit MUST succeed for the seed event")
 		guestA.Logout(ctx)
 
-		// Brief gap so guest B's SessionCreatedAt is strictly later than
-		// guest A's emit timestamp. The embedded bus publish is synchronous,
-		// but the wall-clock advance ensures unambiguous ordering when
-		// sub-millisecond co-occurrence could tie timestamps.
-		time.Sleep(50 * time.Millisecond)
+		// INV-TS-6/INV-TS-7 (gfo6): ns-resolution timestamps + >= floor semantics
+		// make the prior µs tie-prevention gap unnecessary.
 
 		// Guest B connects (fresh) into the same location.
 		guestB = ts.ConnectGuest(ctx)
@@ -596,11 +593,8 @@ var _ = Describe("I-PRIV-2 (scene): scene events before join are invisible", fun
 		Expect(owner.EmitDirectEvent(ctx, sceneStream, "core-scenes:pose", prePayload)).
 			To(Succeed(), "pre-join seed event MUST publish")
 
-		// Brief gap so the joiner's JoinedAt is strictly later than the
-		// pre-join emit. Mirrors the I-PRIV-1 fresh-guest pattern above —
-		// the embedded bus publish is synchronous, but the wall-clock gap
-		// makes timestamp ordering unambiguous.
-		time.Sleep(50 * time.Millisecond)
+		// INV-TS-6/INV-TS-7 (gfo6): ns-resolution timestamps + >= floor semantics
+		// make the prior µs tie-prevention gap unnecessary.
 
 		// Joiner connects and joins the scene. JoinScene stamps the
 		// session's FocusMemberships with JoinedAt = time.Now() and returns
