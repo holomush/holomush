@@ -575,3 +575,5 @@ INV-P5-5 pins the validation + fallback behavior; the follow-up bead pins the ev
 - No web client focus UI (Phase 9).
 - No channel focus (`0sc.12` rework).
 - No in-band signal on reconnect-fallback (deferred to `holomush-3d9o`; structured warning log only in Phase 5).
+
+<!-- adr-capture: sha256=d4fa1522e9865a9a; ts=2026-05-22T01:38:33Z; adrs=holomush-kuf8,holomush-x0ph,holomush-nki4,holomush-8new -->
