@@ -97,10 +97,17 @@ if char.LocationID != nil {
 
 ### Companion `has_X` boolean witness
 
-A provider MAY (and is encouraged to) emit a `has_X` boolean witness alongside the
-optional attribute. The witness is for seeds that need to explicitly check existence via
-DSL `has` or `principal.X.has_Y &&` conjunctions. The witness MUST always be present;
-omission applies only to the value attribute.
+A provider SHOULD emit a `has_X` boolean witness alongside every optional attribute. The
+witness lets seeds explicitly check existence via DSL `has` or
+`principal.X.has_Y &&` conjunctions without relying on a sentinel value. When emitted,
+the witness MUST always be present (true or false on every code path) — omission applies
+only to the value attribute, never to the witness.
+
+A provider MAY skip the witness only when no seed could plausibly want to disambiguate
+"absent" from "present-but-empty" for that attribute (e.g., enum-typed attrs whose
+absence has a distinct defined value rather than an absent-data signal). In practice
+every current provider in `internal/access/policy/attribute/` carries the witness, and
+any new optional attribute SHOULD ship with its witness on day one.
 
 ## Scope
 

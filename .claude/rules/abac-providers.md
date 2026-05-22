@@ -39,7 +39,9 @@ if char.LocationID != nil {
 
 ### `has_X` witness convention
 
-A provider MAY (and is encouraged to) emit a `has_X` boolean witness alongside the optional attribute. The witness MUST always be present (even when false). Omission applies only to the value attribute, not the witness — seeds that need to explicitly check existence via DSL `has` use the witness.
+A provider SHOULD emit a `has_X` boolean witness alongside every optional attribute. When emitted, the witness MUST always be present (true or false on every code path) — omission applies only to the value attribute, never to the witness. Seeds that need to explicitly check existence via DSL `has` use the witness.
+
+A provider MAY skip the witness only when no seed could plausibly want to disambiguate "absent" from "present-but-empty" for that attribute (e.g., enum-typed attrs with a defined absent value). Every current provider in this directory carries the witness; new optional attrs SHOULD ship with theirs on day one.
 
 ## When you see this pattern
 
@@ -47,4 +49,4 @@ If you encounter `attrs["X"] = ""` followed by `attrs["has_X"] = false` (or any 
 
 ## Reference example
 
-`StreamProvider` at `internal/access/policy/attribute/stream.go:46-48` is the canonical reference: `attrs["location"]` is set ONLY when the stream name has the `location:` prefix. For non-location streams, the key is absent and DSL comparisons short-circuit to false.
+`StreamProvider` at `internal/access/policy/attribute/stream.go:40-48` is the canonical reference. The returned bag is initialized with only `type` and `name`; `attrs["location"]` is added ONLY inside the `if strings.HasPrefix(id, "location:")` block. For non-location streams the `location` key is simply absent — the DSL evaluator's missing-attr semantics ([ADR holomush-iv43](../../docs/adr/holomush-iv43-cedar-aligned-fail-safe-type-semantics.md)) handle the rest.
