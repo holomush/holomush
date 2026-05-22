@@ -214,22 +214,23 @@ Keep under 200 lines. Curate — don't hoard.
   `request_id` — `socket.RekeyRunRequest` has no `RequestID` field.
 
 - **`task test:int` explicit package list excludes `cmd/holomush/`**: `Taskfile.yaml:145`
-  enumerates packages that contain `//go:build integration` files; `cmd/holomush/` is
-  intentionally absent (compilation failures). Integration tests written in
-  `cmd/holomush/*_integration_test.go` are never run by `task test:int`.
-  When a task adds integration tests to that package, adding `./cmd/holomush/` to the
-  list is a required companion change. Encountered: T19 review (holomush-w9ml.17, 2026-05-04).
+  enumerates packages with `//go:build integration`; `cmd/holomush/` absent (compilation
+  failures). Tests in `cmd/holomush/*_integration_test.go` never run. Adding integration
+  tests there requires adding `./cmd/holomush/` to the list. Encountered: T19 review.
 
-- **Ginkgo regression-guard assertions may be vacuously true.** When a test asserts
-  "all returned events satisfy invariant X" over a result slice that should be empty
-  under correct behavior, the assertion trivially passes whether or not the query
-  mechanism itself is functional. This is the intended design for regression guards
-  (if the gate breaks, events surface and the assertion fails), but it means the test
-  does NOT prove the query path runs. Always verify: (a) the test actually runs — `rg`
-  for the Ginkgo `Describe` label in source, not just in plan docs; (b) the Ginkgo
-  filter is `-ginkgo.focus=`, not `-run` (which matches Go test functions, not Ginkgo
-  descriptions); (c) a seed event is planted before the floor so a breakage is
-  detectable. Encountered: iwzt.9 (2026-05-21, `privacy_test.go:150-156`) and iwzt.10
-  (2026-05-21, `privacy_test.go:331-349` — second `It` in move-floor test plants a post-move
-  event via `EmitDirectEvent` but omits `Expect(events).NotTo(BeEmpty())`. `EmitDirectEvent`
-  returns post-JetStream-ack so the race is slim but the vacuity gap persists).
+- **Ginkgo regression-guard vacuity + colon-style scene stream trap.**
+  *Documented recurring pattern — both arms were caught by code-reviewer
+  before push during iwzt.9-11 and fixed in the same PRs (e.g., iwzt.11
+  PR #4164 dot-style fix at `test/integration/privacy/privacy_test.go:404`
+  via `Server.GameID()` + `"events.<gid>.scene.<id>.ic"` construction).
+  Re-surface this on any future iwzt/scene-stream test review.*
+  (a) Assertions "all returned events satisfy X" over an empty result
+  slice are vacuously true; require a seed event so a breakage is
+  detectable. (b) `"scene:<ulid>:ic"` (colon-style) is NOT a private
+  stream — `isSceneStream` requires dot-style
+  `events.<gid>.scene.<id>.ic`. Using colon-style in a "not_member" test
+  entry silently exercises the ABAC path instead of the I-17 membership
+  gate. Always verify stream format matches the classifier the test claims
+  to exercise. `stream_access_test.go:39` explicitly documents the
+  rejection: `{"returns false for old colon-style scene stream",
+  "scene:01ABC:ic", false}`. Encountered: iwzt.9-11 (2026-05-21).
