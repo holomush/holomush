@@ -175,11 +175,27 @@ func TestCharacterProvider_ResolveSubject(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:           "invalid ULID format",
-			subjectID:      "character:not-a-ulid",
-			setupMock:      func(_ *mockCharacterRepository) {},
-			expectError:    true,
-			errorSubstring: "invalid character ID",
+			// Per holomush-xxel: non-ULID character refs (canonical case is
+			// "character:*" wildcard) MUST be skipped gracefully — symmetric
+			// with LocationProvider's tolerance from g776. Returning the
+			// parse error here would fail-closed the engine for any future
+			// capability check that emits the wildcard form.
+			name:        "invalid ULID format — bypass (holomush-xxel)",
+			subjectID:   "character:not-a-ulid",
+			setupMock:   func(_ *mockCharacterRepository) {},
+			expectNil:   true,
+			expectError: false,
+		},
+		{
+			// Companion to the case above — literal wildcard form a future
+			// capability-grant check would emit. Same expectation: provider
+			// politely declines, engine handles the pattern at the target
+			// layer.
+			name:        "wildcard ID — bypass (holomush-xxel)",
+			subjectID:   "character:*",
+			setupMock:   func(_ *mockCharacterRepository) {},
+			expectNil:   true,
+			expectError: false,
 		},
 		{
 			name:           "missing colon separator",

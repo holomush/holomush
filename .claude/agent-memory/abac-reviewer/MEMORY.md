@@ -52,6 +52,16 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   `internal/world/service.go:1068` silently default-denies). ExitProvider
   and SceneProvider are also unregistered but happen to be NoOp because
   their seeds are target-only (no `when` clause).
+- **xxel coverage-validator scope (2026-05-21)**: `warnOnMissingSeedCoverage`
+  (`internal/access/setup/seed_coverage.go`) regex-scans `policy.SeedPolicies()`
+  for `(principal|resource).<ns>.<attr>` and WARNs per unregistered namespace.
+  Two structural gaps to remember on future reviews: (1) `productionRegistered`
+  in `seed_coverage_test.go:132` is a hardcoded mirror, not live introspection
+  of `BuildABACStack` — a refactor dropping a provider passes the test but
+  fires the runtime WARN; (2) plugin-installed policies (via
+  `PolicyInstaller.InstallPluginPolicies`) are NOT scanned — same silent-deny
+  class can recur for plugin-declared namespaces. Symmetric stale-entry
+  direction IS asserted at `seed_coverage_test.go:154-160`.
 - **Wildcard resource IDs (`type:*`) bypass per-instance attrs**:
   `service.CreateLocation` / `service.FindLocationByName` /
   `service.CreateExit` / `service.CreateObject` all call `checkAccess`

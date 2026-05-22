@@ -81,14 +81,16 @@ func (p *CharacterProvider) resolve(ctx context.Context, entityID string) (map[s
 		return nil, nil
 	}
 
-	// Parse ULID
+	// Parse ULID. Non-ULID IDs are the canonical wildcard form (e.g.,
+	// "character:*") used by capability-grant checks; return (nil, nil) so
+	// the resolver does not fail-closed the engine — symmetric with
+	// LocationProvider's tolerance from holomush-g776. No production call
+	// emits "character:*" today (dormant); this is defense-in-depth so a
+	// future capability check that mirrors CreateLocation's wildcard
+	// pattern doesn't re-introduce the same fail-closed bug.
 	id, err := ulid.Parse(idStr)
 	if err != nil {
-		return nil, oops.
-			Code("INVALID_CHARACTER_ID").
-			With("entity_id", entityID).
-			With("id_part", idStr).
-			Wrapf(err, "invalid character ID")
+		return nil, nil //nolint:nilerr // wildcard refs intentionally bypass provider; documented above (holomush-xxel)
 	}
 
 	// Fetch character from repository

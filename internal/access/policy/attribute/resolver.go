@@ -117,6 +117,21 @@ func (r *Resolver) UnregisterProvider(namespace string) bool {
 	return true
 }
 
+// RegisteredNamespaces returns the namespaces registered by RegisterProvider,
+// in registration order. The returned slice is a defensive copy — caller may
+// modify it freely. Environment-provider namespaces are NOT included; use
+// RegisteredEnvironmentNamespaces for those.
+//
+// Used by internal/access/setup.warnOnMissingSeedCoverage (holomush-xxel) to
+// validate that every namespace referenced by seed-policy DSL has a
+// registered provider — without this introspection seam, a typo or missed
+// wire silently default-denies every check against the affected seeds.
+func (r *Resolver) RegisteredNamespaces() []string {
+	out := make([]string, len(r.providerOrder))
+	copy(out, r.providerOrder)
+	return out
+}
+
 // RegisterEnvironmentProvider registers an environment provider
 func (r *Resolver) RegisterEnvironmentProvider(provider EnvironmentProvider) error {
 	namespace := provider.Namespace()
