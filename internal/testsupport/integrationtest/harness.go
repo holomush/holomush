@@ -292,10 +292,25 @@ func (s *Server) NewLocation(ctx context.Context) ulid.ULID {
 
 // NewSceneWithoutMember creates a scene with no members and returns its ULID.
 //
-// TODO(iwzt-9): implement via FocusCoordinator once scene RPCs are wired.
+// Scenes are referenced by ULID alone for I-17 / scope-floor purposes — the
+// session's FocusMemberships JSONB carries the per-session membership state,
+// so no backing row is required to make a scene "exist" from the test's
+// perspective. Production scenes are created by the core-scenes plugin via
+// CreateScene RPC; that path is out of scope for privacy-floor tests, which
+// only need a well-formed scene ULID to construct dot-style subjects and
+// FocusMembership entries.
+//
+// Callers add a session as a scene member via Session.JoinScene.
 func (s *Server) NewSceneWithoutMember(_ context.Context) ulid.ULID {
-	s.t.Fatalf("integrationtest.Server.NewSceneWithoutMember: TODO iwzt-9 — scene RPCs not yet wired")
-	return ulid.ULID{}
+	s.t.Helper()
+	return idgen.New()
+}
+
+// GameID returns the embedded NATS JetStream game identifier, used by tests
+// that need to construct dot-style stream subjects of the form
+// `events.<gameID>.scene.<sceneID>.{ic,ooc}` (per INV-P4-1 / ADR holomush-s9nu).
+func (s *Server) GameID() string {
+	return s.bus.Bus.GameID()
 }
 
 // ExpireSession directly marks a session row as expired in Postgres.

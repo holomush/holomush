@@ -15,6 +15,7 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
+	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -172,11 +173,38 @@ func (s *Session) CreateScene(_ context.Context) ulid.ULID {
 	return ulid.ULID{}
 }
 
-// JoinScene joins the character to an existing scene.
+// JoinScene adds a FocusMembership{Kind: Scene, TargetID: sceneID} to the
+// session's focus_memberships JSONB, stamped with JoinedAt = time.Now().UTC().
+// Returns the canonical JoinedAt so tests can assert against the exact floor
+// that streamScopeFloor reads — avoids wall-clock skew between the mutator's
+// internal time.Now() and a caller-side snapshot.
 //
-// TODO(iwzt-9): invoke FocusCoordinator.JoinScene once wired.
-func (s *Session) JoinScene(_ context.Context, _ ulid.ULID) {
-	s.server.t.Fatalf("integrationtest.Session.JoinScene: TODO iwzt-9 — scene join RPC not yet wired")
+// Bypasses the production FocusCoordinator path
+// (internal/grpc/focus/join.go::defaultCoordinator.JoinFocus): the
+// coordinator additionally runs the scene policy (OnJoin returns join
+// streams) and notifies the streamSender of the new subscription. JoinFocus
+// itself does NOT consult the ABAC engine — scene-stream reads in
+// QueryStreamHistory are gated purely by the I-17 membership check
+// (sessionHasMembership) and the temporal scope floor (streamScopeFloor),
+// both of which read directly from session.FocusMemberships. The
+// privacy-floor tests care about the floor, not the subscription wiring,
+// so the direct store update is observationally equivalent for the
+// authorization paths under test.
+func (s *Session) JoinScene(ctx context.Context, sceneID ulid.ULID) time.Time {
+	s.server.t.Helper()
+	now := time.Now().UTC()
+	err := s.server.sessionStore.UpdateFocusMemberships(ctx, s.SessionID, session.NewFocusMutator(
+		func(current []session.FocusMembership, presenting *session.FocusKey) ([]session.FocusMembership, *session.FocusKey, error) {
+			current = append(current, session.FocusMembership{
+				Kind:     session.FocusKindScene,
+				TargetID: sceneID,
+				JoinedAt: now,
+			})
+			return current, presenting, nil
+		},
+	))
+	require.NoError(s.server.t, err, "integrationtest.Session.JoinScene: update focus memberships")
+	return now
 }
 
 // QueryStreamHistory fetches the event history for the given stream subject.
