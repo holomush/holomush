@@ -224,6 +224,13 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	// tests the bare JS+Postgres tier is sufficient.
 	historyReader := history.NewReader(bus.JS, pool, 30*24*time.Hour, time.Now)
 
+	// VerbRegistry — required by the locationFollower's synthetic
+	// location_state emit path so RenderingMetadata is stamped on the
+	// EventFrame (gateway drops nil-Rendering events per INV-GW-5,
+	// holomush-4wdu). Production also wires this in cmd/holomush/sub_grpc.go.
+	verbRegistry, err := core.BootstrapVerbRegistry("test")
+	require.NoError(t, err, "integrationtest.Start: BootstrapVerbRegistry")
+
 	// CoreServer wired with all required subsystems.
 	coreServer := holoGRPC.NewCoreServer(
 		engine,
@@ -249,6 +256,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		// allowAllPolicyEngine so override semantics are exercised
 		// without the operational complexity of seeded ABAC policies.
 		holoGRPC.WithAccessEngine(pe),
+		holoGRPC.WithVerbRegistry(verbRegistry),
 	)
 
 	return &Server{

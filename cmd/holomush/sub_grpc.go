@@ -418,6 +418,11 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		holoGRPC.WithHistoryReader(historyReader),
 		holoGRPC.WithGameID(s.cfg.EventBus.GameID),
 		holoGRPC.WithIdentityRegistry(pluginManager),
+		// VerbRegistry feeds the synthetic-location_state emit path's
+		// RenderingMetadata stamp. Without it, the locationFollower's
+		// fallback EventFrame has nil Rendering and the gateway drops
+		// every synthetic event per INV-GW-5 (holomush-4wdu).
+		holoGRPC.WithVerbRegistry(s.cfg.VerbRegistry),
 	}
 	if s.cfg.StreamRegistry != nil {
 		coreServerOpts = append(coreServerOpts, holoGRPC.WithStreamRegistry(s.cfg.StreamRegistry))

@@ -906,6 +906,7 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		sessionStore:  s.sessionStore,
 		locStreamName: locStreamName,
 		updateFilters: s.makeFilterUpdater(busStream, filterSet),
+		verbRegistry:  s.verbRegistry,
 	}
 	if sendErr := lf.sendSynthetic(ctx, stream); sendErr != nil {
 		return oops.Code("SEND_FAILED").With("session_id", req.SessionId).Wrap(sendErr)
