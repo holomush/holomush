@@ -387,6 +387,27 @@ func (s *Session) teardownTransport() {
 			s.server.t.Logf("integrationtest.Session.teardownTransport: Subscribe goroutine did not exit within %s for session %s", transportDetachExitTimeout, s.SessionID)
 		}
 	}
+
+	// Surface any silent overflow drops (holomush-2p6o). subscribeStream.Send
+	// is non-blocking on a full events channel — events that arrive while the
+	// buffer is full are silently dropped with an overflow-counter increment.
+	// Without this assertion a test that emits more events than the buffer
+	// holds AND doesn't drain via WaitForEvent would lose events undetectably.
+	// Use t.Errorf (non-fatal) rather than t.Fatalf so any in-progress test
+	// assertion completes — Logout is the cleanup path, NOT the assertion
+	// path; failing fatally here would mask whatever the test was trying to
+	// verify. Tests intentionally exceeding the buffer should size up via a
+	// future ConnectOption (filed in 2p6o follow-up scope if needed).
+	if stream != nil {
+		if n := stream.overflowCount(); n > 0 {
+			s.server.t.Errorf(
+				"integrationtest.Session.teardownTransport: %d Subscribe events dropped due to full buffer (size=%d) for session %s — "+
+					"tests asserting on durable replay may have silently lost events. "+
+					"Either drain via WaitForEvent more aggressively or surface a buffer-size opt-in.",
+				n, defaultEventBufferSize, s.SessionID,
+			)
+		}
+	}
 }
 
 // transportActive returns true if a Subscribe goroutine is currently running
