@@ -62,20 +62,28 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   `PolicyInstaller.InstallPluginPolicies`) are NOT scanned — same silent-deny
   class can recur for plugin-declared namespaces. Symmetric stale-entry
   direction IS asserted at `seed_coverage_test.go:154-160`.
-- **Co-location seed empty-string equality (2026-05-21)**: all three
-  co-location seeds (`seed:player-character-colocation`,
-  `seed:player-object-colocation`, `seed:player-location-stream-read`)
-  compare `resource.<ns>.location == principal.character.location` as raw
-  strings. Providers emit `attrs["location"] = ""` (NOT absent) when the
-  entity is un-locatable. DSL `evalComparison` treats `"" == ""` as TRUE
-  because both values are present strings; only *missing* attributes
-  short-circuit to false (`internal/access/policy/dsl/evaluator.go:128`).
-  Net: a character with `LocationID == nil` reading any un-locatable
-  resource gets permit. Not a new defect (predates k3ud); not yet fixed.
-  Two viable patches: (a) DSL gate `&& principal.character.has_location
-  && resource.<ns>.has_location` per seed (`has_location` is already in
-  every schema), or (b) providers omit the `location` key entirely when
-  un-locatable. Worth flagging on any co-location-seed work.
+- **Co-location seed empty-string equality — FIXED (holomush-9gtl / ADR ti1b, 2026-05-22)**:
+  three co-location seeds (`seed:player-character-colocation`,
+  `seed:player-object-colocation`, `seed:property-public-read`) compared
+  `resource.<ns>.location == principal.character.location` as raw strings.
+  Pre-fix, Character/Object/Property providers emitted `""` sentinels for
+  unresolved optional location attrs, and DSL `evalComparison` treats
+  `"" == ""` as TRUE (only *missing* keys short-circuit to false per
+  `evaluator.go:128`). Fix landed via option (b): providers OMIT the
+  `location` / `parent_location` key when unresolved. The `has_X` boolean
+  witness stays present. ADR `holomush-ti1b` codifies the invariant
+  ("AttributeProviders MUST omit optional attrs, never emit empty-string
+  sentinels"); rule file `.claude/rules/abac-providers.md` auto-loads on
+  `internal/access/policy/attribute/**`. Follow-up `holomush-awb3` (P3)
+  sweeps the remaining optional attrs (`owner_id`, `held_by_character_id`,
+  `contained_in_object_id`, property `value` / `owner`) — those still emit
+  `""` but are safe against the current seed set because the LHS in those
+  comparisons (e.g. `principal.character.id`) is always a non-empty ULID.
+  Regression locked at `test/integration/access/seed_policies_test.go:239-333`
+  via real-engine fingerprints (NULL `location_id`, containment cycle
+  constructed via raw SQL UPDATE that bypasses `ObjectRepository.Move`'s
+  guard). When reviewing future AttributeProvider edits, flag any
+  `attrs["X"] = ""` followed by `attrs["has_X"] = false` as a fail-open bug.
 - **Wildcard resource IDs (`type:*`) bypass per-instance attrs**:
   `service.CreateLocation` / `service.FindLocationByName` /
   `service.CreateExit` / `service.CreateObject` all call `checkAccess`

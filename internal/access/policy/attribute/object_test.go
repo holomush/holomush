@@ -152,6 +152,12 @@ func TestObjectProviderResolveResource(t *testing.T) {
 		// Only a subset of attrs are asserted via expectSubset; this keeps
 		// table cases focused on what each case is actually verifying.
 		expectSubset map[string]any
+		// expectAbsent lists keys that MUST NOT be present in attrs.
+		// Per ADR holomush-ti1b: providers omit optional attrs when
+		// unresolved (e.g., `location` when has_location=false), so the
+		// DSL evaluator's missing-attr-→-false semantics preserve
+		// default-deny on colocation seeds.
+		expectAbsent []string
 		expectNil    bool
 		expectErr    bool
 		errSubstring string
@@ -247,11 +253,11 @@ func TestObjectProviderResolveResource(t *testing.T) {
 				}
 			},
 			expectSubset: map[string]any{
-				"location":             "",
 				"has_location":         false,
 				"held_by_character_id": charID.String(),
 				"is_held":              true,
 			},
+			expectAbsent: []string{"location"},
 		},
 		{
 			name:       "object inside a container — walks one level to find location",
@@ -346,9 +352,9 @@ func TestObjectProviderResolveResource(t *testing.T) {
 				"id":                     objID.String(),
 				"contained_in_object_id": containerID.String(),
 				"is_contained":           true,
-				"location":               "",
 				"has_location":           false,
 			},
+			expectAbsent: []string{"location"},
 		},
 		{
 			name:       "character holder lookup fails → has_location=false but other attrs populated",
@@ -367,9 +373,9 @@ func TestObjectProviderResolveResource(t *testing.T) {
 				"id":                   objID.String(),
 				"held_by_character_id": charID.String(),
 				"is_held":              true,
-				"location":             "",
 				"has_location":         false,
 			},
+			expectAbsent: []string{"location"},
 		},
 		{
 			name:       "circular containment → bounded by visited-set, has_location=false",
@@ -389,8 +395,8 @@ func TestObjectProviderResolveResource(t *testing.T) {
 			},
 			expectSubset: map[string]any{
 				"has_location": false,
-				"location":     "",
 			},
+			expectAbsent: []string{"location"},
 		},
 		{
 			name:         "wrong entity type (location)",
@@ -476,6 +482,11 @@ func TestObjectProviderResolveResource(t *testing.T) {
 			for k, want := range tt.expectSubset {
 				assert.Equal(t, want, attrs[k], "attribute %q", k)
 			}
+			for _, k := range tt.expectAbsent {
+				_, present := attrs[k]
+				assert.False(t, present,
+					"attribute %q MUST be absent per ADR holomush-ti1b (un-locatable → omit, not empty-string sentinel)", k)
+			}
 		})
 	}
 }
@@ -502,7 +513,8 @@ func TestObjectProviderResolveResource_NilCharacterRepoIsTolerated(t *testing.T)
 	require.NoError(t, err)
 	require.NotNil(t, attrs)
 	assert.Equal(t, false, attrs["has_location"])
-	assert.Equal(t, "", attrs["location"])
+	_, present := attrs["location"]
+	assert.False(t, present, "ADR holomush-ti1b: un-locatable → omit 'location' key")
 	assert.Equal(t, charID.String(), attrs["held_by_character_id"])
 }
 
@@ -549,7 +561,8 @@ func TestObjectProviderResolveResource_NilRepoReturnsAreGuarded(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, attrs)
 		assert.Equal(t, false, attrs["has_location"])
-		assert.Equal(t, "", attrs["location"])
+		_, present := attrs["location"]
+		assert.False(t, present, "ADR holomush-ti1b: un-locatable → omit 'location' key")
 	})
 
 	t.Run("parent container Get returns (nil, nil) → un-locatable, no panic", func(t *testing.T) {
@@ -567,6 +580,7 @@ func TestObjectProviderResolveResource_NilRepoReturnsAreGuarded(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, attrs)
 		assert.Equal(t, false, attrs["has_location"])
-		assert.Equal(t, "", attrs["location"])
+		_, present := attrs["location"]
+		assert.False(t, present, "ADR holomush-ti1b: un-locatable → omit 'location' key")
 	})
 }

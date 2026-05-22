@@ -112,7 +112,15 @@ func (p *PropertyProvider) ResolveResource(ctx context.Context, resourceID strin
 // resolveParentLocation resolves the parent_location attribute.
 // For location parents, parent_location = parent_id.
 // For character/object parents, uses the ParentLocationResolver.
-// Sets parent_location="" and has_parent_location=false on timeout or error.
+//
+// Per ADR holomush-ti1b (motivating bug holomush-9gtl): when the parent location cannot be resolved
+// (timeout, error, character without location, etc.), the
+// `parent_location` key MUST be OMITTED from the bag — NOT emitted as
+// an empty-string sentinel. This leverages the DSL evaluator's
+// missing-attr-→-false semantics (ADR holomush-iv43 / 0010) to preserve
+// default-deny on seed:property-public-read when either side is
+// un-locatable. has_parent_location stays as a boolean witness so the
+// DSL can still check existence via `has` if a future seed needs it.
 func (p *PropertyProvider) resolveParentLocation(ctx context.Context, prop *world.EntityProperty, attrs map[string]any) {
 	// If parent is a location, parent_location = parent_id
 	if prop.ParentType == "location" {
@@ -127,20 +135,18 @@ func (p *PropertyProvider) resolveParentLocation(ctx context.Context, prop *worl
 
 	locationID, err := p.resolver.ResolveParentLocation(resolveCtx, prop.ParentType, prop.ParentID)
 	if err != nil {
-		// Log warning and set parent_location as unresolvable
+		// Log warning and omit parent_location key (un-locatable parent)
 		slog.WarnContext(ctx, "failed to resolve parent location",
 			"property_id", prop.ID.String(),
 			"parent_type", prop.ParentType,
 			"parent_id", prop.ParentID.String(),
 			"error", err)
-		attrs["parent_location"] = ""
 		attrs["has_parent_location"] = false
 		return
 	}
 
 	if locationID == nil {
 		// Unresolvable (e.g., character not in a location)
-		attrs["parent_location"] = ""
 		attrs["has_parent_location"] = false
 		return
 	}

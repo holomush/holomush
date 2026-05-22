@@ -134,9 +134,19 @@ func (p *ObjectProvider) ResolveResource(ctx context.Context, resourceID string)
 		attrs["is_contained"] = false
 	}
 
-	locStr, ok := p.resolveEffectiveLocation(ctx, obj)
-	attrs["location"] = locStr
-	attrs["has_location"] = ok
+	// Per ADR holomush-ti1b (motivating bug holomush-9gtl): when the containment chain cannot be
+	// resolved (cycle, max-depth, broken parent, holder character
+	// missing, charRepo nil, etc.), the `location` key MUST be OMITTED
+	// from the bag — NOT emitted as an empty-string sentinel. This
+	// leverages the DSL evaluator's missing-attr-→-false semantics
+	// (ADR holomush-iv43 / 0010) to preserve default-deny on
+	// seed:player-object-colocation when either side is un-locatable.
+	if locStr, ok := p.resolveEffectiveLocation(ctx, obj); ok {
+		attrs["location"] = locStr
+		attrs["has_location"] = true
+	} else {
+		attrs["has_location"] = false
+	}
 
 	return attrs, nil
 }
