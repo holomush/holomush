@@ -115,9 +115,7 @@ func TestValidateSeedProviderCoverage_TopLevelIDsNotFlagged(t *testing.T) {
 // (hardcoded mirror of "what BuildABACStack registers") suffers silent
 // drift if a future refactor drops a registration. Per abac-reviewer
 // finding on holomush-xxel.
-var AcknowledgedMissingSeedNamespaces = map[string]string{
-	"property": "holomush-72ou", // PropertyProvider design pass: resource format mismatch
-}
+var AcknowledgedMissingSeedNamespaces = map[string]string{}
 
 // TestValidateSeedProviderCoverage_ProductionCorpusIsCovered is the
 // load-bearing regression lock at the UNIT level: it verifies the validator
@@ -139,7 +137,7 @@ func TestValidateSeedProviderCoverage_ProductionCorpusIsCovered(t *testing.T) {
 	// productionRegistered MUST stay in sync with BuildABACStack's actual
 	// registrations. The integration test asserts no drift.
 	productionRegistered := []string{
-		"character", "location", "object", "player", "command", "stream", "plugin",
+		"character", "location", "object", "property", "player", "command", "stream", "plugin",
 	}
 
 	missing := validateSeedProviderCoverage(productionRegistered, policy.SeedPolicies())

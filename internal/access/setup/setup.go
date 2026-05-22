@@ -73,8 +73,21 @@ type ABACConfig struct {
 	// also needs CharacterRepo to resolve transitive locations for objects
 	// held by characters. Per holomush-k3ud.
 	ObjectRepo world.ObjectRepository
-	RoleStore  store.RoleStore
-	AuditMode  audit.Mode
+	// PropertyRepo is required for any seed that gates on resource.property.*
+	// (e.g., seed:property-public-read, seed:property-private-read,
+	// seed:property-restricted-visible-to). Without it the PropertyProvider
+	// is not registered, no provider populates resource.property.*, and
+	// every such seed silently default-denies — the same fingerprint as
+	// the original holomush-g776 bug. Per holomush-72ou.
+	PropertyRepo world.PropertyRepository
+	// ParentLocationResolver resolves a property's parent entity's
+	// effective location at evaluation time. Required alongside PropertyRepo
+	// for PropertyProvider registration. The production wiring at
+	// internal/access/setup/subsystem.go passes
+	// postgres.NewParentLocationResolver(pool). Per holomush-72ou.
+	ParentLocationResolver attribute.ParentLocationResolver
+	RoleStore              store.RoleStore
+	AuditMode              audit.Mode
 	// CryptoOperators is the list of player IDs (ULIDs) holding the
 	// crypto.operator capability. Passed to PlayerAttributeProvider at
 	// construction. Empty / nil → no operators (break-glass disabled).
@@ -175,6 +188,32 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 			"ABAC setup: ObjectRepo not provided — seeds referencing resource.object.* will silently default-deny",
 			"affected_seeds", "seed:player-object-colocation",
 			"reference", "holomush-k3ud")
+	}
+
+	// 8d. Property provider (optional in signature; required in practice for
+	// any seed gating on resource.property.*). Without this, all six
+	// property visibility seeds silently default-deny:
+	// seed:property-public-read, seed:property-private-read,
+	// seed:property-admin-read, seed:property-owner-write,
+	// seed:property-restricted-visible-to, seed:property-restricted-excluded
+	// — same fingerprint as holomush-g776 (location) and holomush-k3ud (object).
+	//
+	// Production wiring at internal/access/setup/subsystem.go ALWAYS
+	// supplies both PropertyRepo and ParentLocationResolver. Loud WARN when
+	// either is missing so any future caller that drops the dependency
+	// gets a recurrence signal. Per holomush-72ou.
+	if cfg.PropertyRepo != nil && cfg.ParentLocationResolver != nil {
+		propProvider := attribute.NewPropertyProvider(cfg.PropertyRepo, cfg.ParentLocationResolver)
+		if err := resolver.RegisterProvider(propProvider); err != nil {
+			return nil, eb.Wrapf(err, "register property provider")
+		}
+	} else {
+		slog.WarnContext(ctx,
+			"ABAC setup: PropertyRepo or ParentLocationResolver not provided — seeds referencing resource.property.* will silently default-deny",
+			"property_repo_set", cfg.PropertyRepo != nil,
+			"parent_location_resolver_set", cfg.ParentLocationResolver != nil,
+			"affected_seeds", "seed:property-public-read, seed:property-private-read, seed:property-admin-read, seed:property-owner-write, seed:property-restricted-visible-to, seed:property-restricted-excluded",
+			"reference", "holomush-72ou")
 	}
 
 	// 8a. Player provider (subject namespace; resolves player.id and

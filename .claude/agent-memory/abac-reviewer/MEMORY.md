@@ -95,3 +95,28 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   fail-closes the entire bootstrap chain. See
   `internal/access/policy/attribute/location.go:54-62` for the canonical
   shape (line-scoped `//nolint:nilerr` with rationale).
+- **WARN-when-missing wiring pattern (g776 → k3ud → 72ou, 2026-05-22)**:
+  three serial applications now in `setup.go` (`8b. Location`, `8c. Object`,
+  `8d. Property`). The pattern: ABACConfig field for repo(+ optional helper);
+  `if cfg.X != nil { register } else { slog.WarnContext(...) }`; production
+  wiring always passes the dep; the WARN names affected seeds + bead ID;
+  unit test mirrors the namespace into `productionRegistered`; integration
+  drift-detector at `buildabacstack_seed_coverage_integ_test.go` exercises
+  the REAL stack and asserts the actual-missing set equals
+  `AcknowledgedMissingSeedNamespaces`. Property block (72ou) adds
+  `property_repo_set` / `parent_location_resolver_set` boolean structured
+  fields in the WARN — improvement over prior precedent for two-dep
+  providers. When auditing future provider-wiring PRs, check that the WARN
+  test EXISTS (precedent `setup_warn_integ_test.go`) and exercises the
+  else-branch by INTENTIONALLY omitting deps. Note: drift-detector only
+  catches if it's actually invoked with the production-shape config —
+  verify the integration test passes BOTH new deps, not just the new
+  ABACConfig field with nil values.
+- **Property wiring (72ou) does NOT fix `service.go:1068` shape bug**:
+  `Service.ListPropertiesByParent` emits `access.PropertyResource(parentType + ":" + parentID.String())`
+  — a 3-segment composite (`property:location:01HXXX`) where the ID is
+  non-ULID. PropertyProvider correctly returns `(nil, nil)` for non-ULID IDs
+  (wildcard tolerance precedent at `location.go:54-62`), so the seeds still
+  default-deny for that caller. Task 3 (`rmsi.3` / future) fixes the
+  caller's resource shape. No fail-open risk; behavior is identical
+  before/after this PR for that call site.
