@@ -14,9 +14,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/samber/oops"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
+	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/testsupport/privacytest"

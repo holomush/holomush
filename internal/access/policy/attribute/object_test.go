@@ -505,3 +505,68 @@ func TestObjectProviderResolveResource_NilCharacterRepoIsTolerated(t *testing.T)
 	assert.Equal(t, "", attrs["location"])
 	assert.Equal(t, charID.String(), attrs["held_by_character_id"])
 }
+
+// TestObjectProviderResolveResource_NilRepoReturnsAreGuarded pins the
+// CodeRabbit #3 defensive guards (PR #4163): when a repository violates
+// the (obj|nil, err|nil) contract by returning (nil, nil), the provider
+// must fail-closed (top-level Get) or treat as un-locatable (chain walk)
+// instead of panicking on a nil-pointer dereference. The production
+// repo impls at internal/world/postgres/{object,character}_repo.go
+// never return (nil, nil); these tests lock the defensive guards.
+func TestObjectProviderResolveResource_NilRepoReturnsAreGuarded(t *testing.T) {
+	objID := ulid.Make()
+	charID := ulid.Make()
+	containerID := ulid.Make()
+
+	t.Run("top-level Get returns (nil, nil) → fail-closed with OBJECT_FETCH_FAILED", func(t *testing.T) {
+		objRepo := &mockObjectRepository{
+			getFunc: func(_ context.Context, _ ulid.ULID) (*world.Object, error) {
+				return nil, nil //nolint:nilnil // intentional contract violation under test
+			},
+		}
+		provider := NewObjectProvider(objRepo, &mockCharacterRepository{})
+
+		attrs, err := provider.ResolveResource(context.Background(), "object:"+objID.String())
+		require.Error(t, err)
+		assert.Nil(t, attrs)
+		assert.Contains(t, err.Error(), "object repository returned nil")
+	})
+
+	t.Run("holder character Get returns (nil, nil) → un-locatable, no panic", func(t *testing.T) {
+		objRepo := &mockObjectRepository{
+			getFunc: func(_ context.Context, _ ulid.ULID) (*world.Object, error) {
+				return newObjectHeldByCharacter(t, objID, charID, "Item"), nil
+			},
+		}
+		charRepo := &mockCharacterRepository{
+			getFunc: func(_ context.Context, _ ulid.ULID) (*world.Character, error) {
+				return nil, nil //nolint:nilnil // intentional contract violation under test
+			},
+		}
+		provider := NewObjectProvider(objRepo, charRepo)
+
+		attrs, err := provider.ResolveResource(context.Background(), "object:"+objID.String())
+		require.NoError(t, err)
+		require.NotNil(t, attrs)
+		assert.Equal(t, false, attrs["has_location"])
+		assert.Equal(t, "", attrs["location"])
+	})
+
+	t.Run("parent container Get returns (nil, nil) → un-locatable, no panic", func(t *testing.T) {
+		objRepo := &mockObjectRepository{
+			getFunc: func(_ context.Context, id ulid.ULID) (*world.Object, error) {
+				if id == objID {
+					return newObjectContainedIn(t, objID, containerID, "Coin"), nil
+				}
+				return nil, nil //nolint:nilnil // intentional contract violation under test
+			},
+		}
+		provider := NewObjectProvider(objRepo, &mockCharacterRepository{})
+
+		attrs, err := provider.ResolveResource(context.Background(), "object:"+objID.String())
+		require.NoError(t, err)
+		require.NotNil(t, attrs)
+		assert.Equal(t, false, attrs["has_location"])
+		assert.Equal(t, "", attrs["location"])
+	})
+}

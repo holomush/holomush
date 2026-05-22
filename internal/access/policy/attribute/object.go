@@ -5,7 +5,6 @@ package attribute
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 )
 
 // maxObjectChainDepth bounds the containment-chain walk inside
@@ -76,7 +76,9 @@ func (p *ObjectProvider) ResolveSubject(_ context.Context, _ string) (map[string
 func (p *ObjectProvider) ResolveResource(ctx context.Context, resourceID string) (map[string]any, error) {
 	parts := strings.SplitN(resourceID, ":", 2)
 	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid resource ID format: expected 'type:id'")
+		return nil, oops.Code("INVALID_RESOURCE_ID").
+			With("resource_id", resourceID).
+			Errorf("invalid resource ID format: expected 'type:id'")
 	}
 
 	entityType, idStr := parts[0], parts[1]
@@ -92,12 +94,32 @@ func (p *ObjectProvider) ResolveResource(ctx context.Context, resourceID string)
 		// without per-instance attrs. Returning the parse error here
 		// would fail-closed every CreateObject call. Mirrors
 		// LocationProvider holomush-g776.
-		return nil, nil //nolint:nilerr // wildcard refs intentionally bypass provider; documented above
+		return nil, nil
 	}
 
-	obj, err := p.repo.Get(ctx, id)
+	// CodeRabbit #2 (PR #4163): bound the top-level Get with the same
+	// 250ms budget as the chain walk. Previously only the chain walk
+	// (resolveEffectiveLocation) was time-bounded, so a slow DB on the
+	// initial lookup could stall ABAC eval beyond the chain's budget.
+	getCtx, cancel := context.WithTimeout(ctx, objectChainTimeout)
+	defer cancel()
+
+	obj, err := p.repo.Get(getCtx, id)
 	if err != nil {
-		return nil, fmt.Errorf("fetch object %s: %w", id, err)
+		return nil, oops.Code("OBJECT_FETCH_FAILED").
+			With("object_id", id.String()).
+			Wrapf(err, "fetch object %s", id)
+	}
+	// CodeRabbit #3 (PR #4163): defensive guard against the repository
+	// contract violation case `(nil, nil)`. The postgres impl at
+	// internal/world/postgres/object_repo.go:46-51 returns `(nil, err)`
+	// or `(obj, nil)` and never `(nil, nil)`, but the interface contract
+	// does not enforce non-nil-on-nil-err. Fail fast with a clear code
+	// instead of panicking on the obj.ID dereference below.
+	if obj == nil {
+		return nil, oops.Code("OBJECT_FETCH_FAILED").
+			With("object_id", id.String()).
+			Errorf("object repository returned nil with no error")
 	}
 
 	attrs := map[string]any{
@@ -179,6 +201,18 @@ func (p *ObjectProvider) resolveEffectiveLocation(ctx context.Context, obj *worl
 					"error", err)
 				return "", false
 			}
+			// CodeRabbit #3 (PR #4163): defensive guard for the
+			// `(nil, nil)` repo contract violation case. The postgres
+			// CharacterRepository.Get never returns this, but the
+			// interface does not enforce it — fail-closed instead of
+			// panicking on char.LocationID below.
+			if char == nil {
+				slog.WarnContext(ctx,
+					"object provider: holder character lookup returned nil",
+					"object_id", obj.ID.String(),
+					"character_id", cur.HeldByCharacterID().String())
+				return "", false
+			}
 			if char.LocationID == nil {
 				return "", false
 			}
@@ -201,6 +235,16 @@ func (p *ObjectProvider) resolveEffectiveLocation(ctx context.Context, obj *worl
 					"object_id", obj.ID.String(),
 					"parent_id", parentID.String(),
 					"error", err)
+				return "", false
+			}
+			// CodeRabbit #3 (PR #4163): defensive guard for the
+			// `(nil, nil)` repo contract violation case. Parallel to
+			// the holder-character guard above.
+			if parent == nil {
+				slog.WarnContext(ctx,
+					"object provider: parent container lookup returned nil",
+					"object_id", obj.ID.String(),
+					"parent_id", parentID.String())
 				return "", false
 			}
 			cur = parent
