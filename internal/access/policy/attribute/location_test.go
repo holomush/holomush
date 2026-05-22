@@ -203,11 +203,30 @@ func TestLocationProvider_ResolveResource(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:           "invalid ULID format",
-			resourceID:     "location:not-a-ulid",
-			setupMock:      func(_ *mockLocationRepository) {},
-			expectError:    true,
-			errorSubstring: "invalid location ID",
+			// Per holomush-g776: non-ULID location refs (the canonical
+			// case is "location:*" wildcard from bootstrap permission
+			// grants) MUST be skipped gracefully — returning the parse
+			// error here would fail-closed the bootstrap chain because
+			// the resolver propagates the error and the engine evaluates
+			// fail-closed. The wildcard pattern matching is handled at
+			// the engine layer without per-instance attributes, so the
+			// provider's job is to politely decline.
+			name:        "invalid ULID format — bypass (holomush-g776)",
+			resourceID:  "location:not-a-ulid",
+			setupMock:   func(_ *mockLocationRepository) {},
+			expectNil:   true,
+			expectError: false,
+		},
+		{
+			// Companion to the case above — the literal wildcard form
+			// the bootstrap actually emits when granting "write any
+			// location" capability. Same expectation: provider declines,
+			// engine handles the pattern.
+			name:        "wildcard ID — bypass (holomush-g776)",
+			resourceID:  "location:*",
+			setupMock:   func(_ *mockLocationRepository) {},
+			expectNil:   true,
+			expectError: false,
 		},
 		{
 			name:           "missing colon separator",

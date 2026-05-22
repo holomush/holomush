@@ -133,15 +133,7 @@ test.describe('Terminal UI', () => {
     await expect(page.locator('button[title="Toggle sidebar"]')).toBeVisible();
   });
 
-  // Skipped under iwzt.15: this test fails deterministically under full
-  // pr-prep e2e runs once the Tier 2 filter is active (5 runs investigated,
-  // 4 with identical 'count=2 with stale character names from prior tests'
-  // shape; isolated runs pass). Root cause is a pre-existing
-  // snapshot/backfill/presence-update race in +page.svelte:386-451 that
-  // accumulates state from prior tests' guest sessions. Tier 2 filter
-  // timing exposes it. Tracked as P0 holomush-g776. Re-enable from
-  // test.fixme back to test() once g776 lands.
-  test.fixme('presence list shows self and other connections', async ({ browser }) => {
+  test('presence list shows self and other connections', async ({ browser }) => {
     // Two independent browser contexts (separate sessions)
     const context1 = await browser.newContext();
     const context2 = await browser.newContext();

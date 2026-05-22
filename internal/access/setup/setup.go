@@ -59,8 +59,14 @@ func (s *ABACStack) Close() error {
 type ABACConfig struct {
 	Pool          *pgxpool.Pool
 	CharacterRepo world.CharacterRepository
-	RoleStore     store.RoleStore
-	AuditMode     audit.Mode
+	// LocationRepo is required for any seed that compares
+	// `resource.location.X` (e.g., seed:player-location-list-presence,
+	// seed:player-location-read). Without it the LocationProvider
+	// is not registered, no provider populates `resource.location.*`, and
+	// every such seed silently default-denies. Per holomush-g776.
+	LocationRepo world.LocationRepository
+	RoleStore    store.RoleStore
+	AuditMode    audit.Mode
 	// CryptoOperators is the list of player IDs (ULIDs) holding the
 	// crypto.operator capability. Passed to PlayerAttributeProvider at
 	// construction. Empty / nil → no operators (break-glass disabled).
@@ -107,6 +113,33 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 		if err := resolver.RegisterProvider(charProvider); err != nil {
 			return nil, eb.Wrapf(err, "register character provider")
 		}
+	}
+
+	// 8b. Location provider (optional in signature, but required in practice
+	// for any seed referencing resource.location.*). Holds the
+	// LocationRepository the provider uses to fetch loc.ID/Name/Type/... for
+	// ABAC evaluation. Without this, three seeds silently default-deny:
+	// seed:player-location-read, seed:player-location-list-characters,
+	// seed:player-location-list-presence — because `resource.location.id` is
+	// never populated in the resource bag (only the un-namespaced `id`
+	// injected by the resolver). Per holomush-g776.
+	//
+	// The optional shape is preserved for tests and alternate entrypoints
+	// that don't need location-resource policies. Production wiring at
+	// internal/access/setup/subsystem.go ALWAYS supplies the repo. Emit a
+	// loud WARN at construction time when it's missing so any future
+	// caller that drops the repo gets a recurrence signal — the original
+	// g776 bug was silent at startup and only manifested via e2e symptoms.
+	if cfg.LocationRepo != nil {
+		locProvider := attribute.NewLocationProvider(cfg.LocationRepo)
+		if err := resolver.RegisterProvider(locProvider); err != nil {
+			return nil, eb.Wrapf(err, "register location provider")
+		}
+	} else {
+		slog.WarnContext(ctx,
+			"ABAC setup: LocationRepo not provided — seeds referencing resource.location.* will silently default-deny",
+			"affected_seeds", "seed:player-location-read, seed:player-location-list-characters, seed:player-location-list-presence",
+			"reference", "holomush-g776")
 	}
 
 	// 8a. Player provider (subject namespace; resolves player.id and
