@@ -1059,19 +1059,46 @@ func (s *Service) GetObjectsByLocation(ctx context.Context, subjectID string, lo
 	return objs, nil
 }
 
-// ListPropertiesByParent returns all properties for the given parent entity
-// after checking read authorization on the parent.
+// ListPropertiesByParent returns the subset of properties on the given
+// parent that the principal is permitted to read. Implements per-property
+// ABAC filtering: fetches all properties from the repository, then
+// invokes the access engine once per property with a property-shaped
+// resource. Outcomes per property:
+//
+//   - permit → property included in the returned slice
+//   - ErrPermissionDenied (deny decision) → property filtered out SILENTLY
+//     (normal case — most properties on another principal default-deny)
+//   - ErrAccessEvaluationFailed (engine error, resolver timeout, etc.)
+//     → propagate wrapped error, abort the call
+//
+// Infra failures MUST be visible to callers; silently masking them as
+// "no visible properties" would create ghost-data scenarios. Per
+// holomush-72ou design spec INV-2 + INV-2b.
 func (s *Service) ListPropertiesByParent(ctx context.Context, subjectID, parentType string, parentID ulid.ULID) ([]*EntityProperty, error) {
 	if s.propertyRepo == nil {
 		return nil, oops.Code("PROPERTY_QUERY_FAILED").Errorf("property repository not configured")
 	}
-	resource := access.PropertyResource(parentType + ":" + parentID.String())
-	if err := s.checkAccess(ctx, subjectID, "read", resource, prefixProperty); err != nil {
-		return nil, err
-	}
-	props, err := s.propertyRepo.ListByParent(ctx, parentType, parentID)
+	all, err := s.propertyRepo.ListByParent(ctx, parentType, parentID)
 	if err != nil {
 		return nil, oops.Code("PROPERTY_QUERY_FAILED").Wrapf(err, "list properties for %s %s", parentType, parentID)
 	}
-	return props, nil
+	visible := make([]*EntityProperty, 0, len(all))
+	for _, prop := range all {
+		resource := access.PropertyResource(prop.ID.String())
+		checkErr := s.checkAccess(ctx, subjectID, "read", resource, prefixProperty)
+		switch {
+		case checkErr == nil:
+			visible = append(visible, prop)
+		case errors.Is(checkErr, ErrPermissionDenied):
+			// Normal default-deny — filter silently. Continue.
+		case errors.Is(checkErr, ErrAccessEvaluationFailed):
+			// Infra failure — abort the call. INV-2b: no ghost-data.
+			return nil, checkErr
+		default:
+			// Defensive: unrecognized error from checkAccess. Treat as
+			// infra failure (fail-closed) and propagate.
+			return nil, checkErr
+		}
+	}
+	return visible, nil
 }

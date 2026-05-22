@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -7640,4 +7641,158 @@ func TestWorldService_GetLocation_AllowWithInfraPrefix(t *testing.T) {
 	loc, err := svc.GetLocation(ctx, subjectID, locID)
 	require.NoError(t, err, "allow decision must succeed even with infra: prefix policyID")
 	assert.Equal(t, expectedLoc, loc)
+}
+
+func TestService_ListPropertiesByParent(t *testing.T) {
+	parentType := "character"
+	parentID := ulid.Make()
+	p1ID, p2ID, p3ID := ulid.Make(), ulid.Make(), ulid.Make()
+	p1 := &world.EntityProperty{ID: p1ID, ParentType: parentType, ParentID: parentID, Name: "name1", Visibility: "public"}
+	p2 := &world.EntityProperty{ID: p2ID, ParentType: parentType, ParentID: parentID, Name: "name2", Visibility: "private"}
+	p3 := &world.EntityProperty{ID: p3ID, ParentType: parentType, ParentID: parentID, Name: "name3", Visibility: "public"}
+
+	tests := []struct {
+		name           string
+		repoProps      []*world.EntityProperty
+		repoErr        error
+		engineDecide   func(resourceID string) (types.Decision, error)
+		expectIDs      []ulid.ULID
+		expectErr      bool
+		expectErrCode  string
+		expectErrIsAny []error
+	}{
+		{
+			name:         "empty parent → empty list, nil error",
+			repoProps:    nil,
+			engineDecide: alwaysAllow,
+			expectIDs:    nil,
+		},
+		{
+			name:         "all-permit → full list, nil error",
+			repoProps:    []*world.EntityProperty{p1, p2, p3},
+			engineDecide: alwaysAllow,
+			expectIDs:    []ulid.ULID{p1ID, p2ID, p3ID},
+		},
+		{
+			name:         "all-deny → empty list, nil error",
+			repoProps:    []*world.EntityProperty{p1, p2, p3},
+			engineDecide: alwaysDeny,
+			expectIDs:    nil,
+		},
+		{
+			name:      "mixed permit/deny → filtered subset, nil error",
+			repoProps: []*world.EntityProperty{p1, p2, p3},
+			engineDecide: func(rid string) (types.Decision, error) {
+				if strings.Contains(rid, p2ID.String()) {
+					return types.NewDecision(types.EffectDefaultDeny, "private", "seed:test"), nil
+				}
+				return types.NewDecision(types.EffectAllow, "permit", "seed:test"), nil
+			},
+			expectIDs: []ulid.ULID{p1ID, p3ID},
+		},
+		{
+			name:          "repo error → wrapped PROPERTY_QUERY_FAILED",
+			repoProps:     nil,
+			repoErr:       errors.New("db down"),
+			engineDecide:  alwaysAllow,
+			expectErr:     true,
+			expectErrCode: "PROPERTY_QUERY_FAILED",
+		},
+		{
+			name:      "engine returns Evaluate error on one prop → wrapped ErrAccessEvaluationFailed",
+			repoProps: []*world.EntityProperty{p1, p2, p3},
+			engineDecide: func(rid string) (types.Decision, error) {
+				if strings.Contains(rid, p2ID.String()) {
+					return types.Decision{}, errors.New("engine boom")
+				}
+				return types.NewDecision(types.EffectAllow, "permit", "seed:test"), nil
+			},
+			expectErr:      true,
+			expectErrCode:  "PROPERTY_ACCESS_EVALUATION_FAILED",
+			expectErrIsAny: []error{world.ErrAccessEvaluationFailed},
+		},
+		{
+			// IsInfraFailure() is detected via PolicyID prefix "infra:"
+			// (see internal/access/policy/types/types.go). Construct an
+			// infra-failure Decision by passing an "infra:" PolicyID with
+			// EffectDefaultDeny — checkAccess in service.go then takes
+			// the IsInfraFailure() branch.
+			name:      "engine returns InfraFailure decision on one prop → wrapped ErrAccessEvaluationFailed",
+			repoProps: []*world.EntityProperty{p1, p2, p3},
+			engineDecide: func(rid string) (types.Decision, error) {
+				if strings.Contains(rid, p2ID.String()) {
+					return types.NewDecision(types.EffectDefaultDeny, "resolver down", "infra:session"), nil
+				}
+				return types.NewDecision(types.EffectAllow, "permit", "seed:test"), nil
+			},
+			expectErr:      true,
+			expectErrCode:  "PROPERTY_ACCESS_EVALUATION_FAILED",
+			expectErrIsAny: []error{world.ErrAccessEvaluationFailed},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockProp := worldtest.NewMockPropertyRepository(t)
+			mockEng := policytest.NewMockAccessPolicyEngine(t)
+			mockProp.EXPECT().ListByParent(mock.Anything, parentType, parentID).Return(tt.repoProps, tt.repoErr).Once()
+
+			// Observed resource strings — used to pin INV-1 (per-property
+			// shape, not parent-shaped). Collected per-call inside the
+			// engineDecide closure.
+			var observedResources []string
+			if tt.repoErr == nil {
+				for range tt.repoProps {
+					// .Maybe() allows the expectation to be UNCONSUMED:
+					// abort cases (engine-error / infra-failure) short-
+					// circuit the loop after the failing property, so
+					// the remaining expectations would otherwise fail
+					// AssertExpectations in cleanup.
+					mockEng.EXPECT().Evaluate(mock.Anything, mock.Anything).
+						RunAndReturn(func(_ context.Context, req types.AccessRequest) (types.Decision, error) {
+							observedResources = append(observedResources, req.Resource)
+							return tt.engineDecide(req.Resource)
+						}).Maybe()
+				}
+			}
+			svc := world.NewService(world.ServiceConfig{
+				PropertyRepo: mockProp, Engine: mockEng,
+			})
+
+			got, err := svc.ListPropertiesByParent(context.Background(), "character:"+ulid.Make().String(), parentType, parentID)
+
+			// INV-1 pin: every resource passed to engine.Evaluate MUST
+			// be exactly "property:<ulid>" — not a parent-shaped composite
+			// like "property:character:<ulid>".
+			for _, rid := range observedResources {
+				assert.Regexp(t, `^property:[0-9A-Z]{26}$`, rid,
+					"INV-1: per-property resource shape MUST be property:<ulid>, not parent-shaped")
+			}
+
+			if tt.expectErr {
+				require.Error(t, err)
+				if tt.expectErrCode != "" {
+					errutil.AssertErrorCode(t, err, tt.expectErrCode)
+				}
+				for _, target := range tt.expectErrIsAny {
+					assert.ErrorIs(t, err, target)
+				}
+				return
+			}
+			require.NoError(t, err)
+			var gotIDs []ulid.ULID
+			for _, p := range got {
+				gotIDs = append(gotIDs, p.ID)
+			}
+			assert.Equal(t, tt.expectIDs, gotIDs)
+		})
+	}
+}
+
+func alwaysAllow(_ string) (types.Decision, error) {
+	return types.NewDecision(types.EffectAllow, "permit", "seed:test"), nil
+}
+
+func alwaysDeny(_ string) (types.Decision, error) {
+	return types.NewDecision(types.EffectDefaultDeny, "default deny", "seed:test"), nil
 }
