@@ -1,0 +1,31 @@
+formula = "formula-drain"
+version = 1
+description = """
+Single bead-iteration run driven by /goal. See dev-flow/skills/draining-beads/.
+
+Note conventions on the resulting drain bead:
+  "lesson: <text>"           — observation worth carrying to next iteration
+  "rejection: <id> N=<n>"    — accumulating rejection count (>=3 triggers halt)
+  "halt: <reason>"           — orchestrator-driven early termination
+  "result: <summary>"        — final state on /goal termination
+"""
+
+[vars.mode]
+description = "Drain mode"
+required = true
+enum = ["epic", "set", "cascade"]
+
+[vars.scope]
+description = "Scope identifier (epic id, or space-separated bead ids)"
+required = true
+
+[vars.started_at]
+description = "ISO8601 timestamp of drain start"
+required = true
+
+[[steps]]
+id = "drain-root"
+type = "drain"
+title = "Drain: {{mode}} {{scope}}"
+description = "Audit-trail root for the {{mode}}-mode drain over {{scope}} started {{started_at}}."
+labels = ["drain:{{mode}}", "phase:run"]
