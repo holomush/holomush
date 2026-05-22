@@ -6,7 +6,6 @@ package attribute
 import (
 	"context"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
@@ -64,36 +63,18 @@ func (p *ObjectProvider) ResolveSubject(_ context.Context, _ string) (map[string
 }
 
 // ResolveResource resolves object attributes for a resource.
-// Returns (nil, nil) for non-object entity types AND for non-ULID IDs.
-//
-// The canonical non-ULID case is "object:*" — the literal wildcard the
-// CreateObject capability check emits at service.go:449. Mirroring the
-// LocationProvider tolerance from holomush-g776, returning the parse
-// error here would fail-closed every CreateObject call. The bootstrap-
-// chain seed selects via DSL `resource is object` target-type match,
-// not a `when`-clause pattern, so per-instance attributes are not
-// needed for those checks.
+// Returns (nil, nil) for non-object entity types AND for non-ULID IDs
+// (notably "object:*" — the wildcard CreateObject emits at
+// internal/world/service.go:449). See [parseEntityResource] for the
+// three-branch grammar; the wildcard bypass exists because the engine
+// evaluates target-type seed matches without per-instance attributes
+// (holomush-g776).
 func (p *ObjectProvider) ResolveResource(ctx context.Context, resourceID string) (map[string]any, error) {
-	parts := strings.SplitN(resourceID, ":", 2)
-	if len(parts) != 2 {
-		return nil, oops.Code("INVALID_RESOURCE_ID").
-			With("resource_id", resourceID).
-			Errorf("invalid resource ID format: expected 'type:id'")
-	}
-
-	entityType, idStr := parts[0], parts[1]
-	if entityType != "object" {
-		return nil, nil
-	}
-
-	id, err := ulid.Parse(idStr)
+	id, ok, err := parseEntityResource(resourceID, "object")
 	if err != nil {
-		// Non-ULID object reference (e.g., "object:*" wildcard from
-		// CreateObject capability grants at service.go:449). Skip
-		// attribute resolution; the engine evaluates wildcard patterns
-		// without per-instance attrs. Returning the parse error here
-		// would fail-closed every CreateObject call. Mirrors
-		// LocationProvider holomush-g776.
+		return nil, err
+	}
+	if !ok {
 		return nil, nil
 	}
 

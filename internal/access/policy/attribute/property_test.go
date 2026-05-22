@@ -288,14 +288,28 @@ func TestPropertyProvider_ResolveResource(t *testing.T) {
 			expectedAttrs: nil,
 		},
 		{
-			name:        "invalid ULID",
-			resourceID:  "property:invalid",
-			expectedErr: "INVALID_PROPERTY_ID",
+			// holomush-o8g6 BEHAVIOR CHANGE: was INVALID_PROPERTY_ID.
+			// Now wildcard-tolerant — matches Location/Character/Object
+			// peer behavior via parseEntityResource. The engine evaluates
+			// target-type seed matches without per-instance attrs (see
+			// holomush-g776). No production caller emits "property:<non-ulid>"
+			// today; the new behavior is uniformly safer for future
+			// wildcard-emitting capability checks.
+			name:          "invalid ULID — wildcard-tolerant (holomush-o8g6)",
+			resourceID:    "property:invalid",
+			expectedAttrs: nil,
 		},
 		{
-			name:          "missing colon separator",
-			resourceID:    "propertyinvalid",
-			expectedAttrs: nil, // parseEntityID returns nil, nil for non-matching types
+			// holomush-o8g6 BEHAVIOR CHANGE: was (nil, nil) via the old
+			// parseEntityID prefix check (silent "wrong type"). The unified
+			// parseEntityResource treats a missing colon as a malformed
+			// grammar error — distinct from peer-type or wildcard cases.
+			// A caller emitting "propertyinvalid" with no colon is buggy
+			// (access.PropertyResource always emits "property:<id>") and
+			// the error makes that explicit instead of masking it.
+			name:        "missing colon separator — grammar error (holomush-o8g6)",
+			resourceID:  "propertyinvalid",
+			expectedErr: "INVALID_RESOURCE_ID",
 		},
 		{
 			name:        "repository error",

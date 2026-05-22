@@ -202,7 +202,7 @@ func TestCharacterProvider_ResolveSubject(t *testing.T) {
 			subjectID:      "character" + charID.String(),
 			setupMock:      func(_ *mockCharacterRepository) {},
 			expectError:    true,
-			errorSubstring: "invalid subject ID format",
+			errorSubstring: "invalid entity ID format",
 		},
 		{
 			name:      "repository error",

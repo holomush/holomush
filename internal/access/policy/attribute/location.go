@@ -5,11 +5,9 @@ package attribute
 
 import (
 	"context"
-	"strings"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/world"
-	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 )
 
@@ -34,42 +32,21 @@ func (p *LocationProvider) ResolveSubject(_ context.Context, _ string) (map[stri
 }
 
 // ResolveResource resolves location attributes for a resource.
-// Returns (nil, nil) for non-location entity types AND for non-ULID IDs.
-//
-// The canonical non-ULID case is "location:*" — the literal wildcard the
-// bootstrap chain emits for type-level capability checks (CreateLocation,
-// FindLocationByName). Such checks select seeds via DSL `resource is
-// location` (target-type match in engine.findApplicablePolicies, NOT a
-// `when`-clause pattern), so they do NOT need per-instance attributes.
-// Returning the parse error here would fail-closed the entire bootstrap
-// chain (observed in holomush-g776 once this provider was first wired).
-//
-// CAVEAT: if a future seed adds a `when` clause that compares
-// `resource.location.X` and is expected to match the wildcard path, the
-// provider MUST populate sentinel values for X (or the seed MUST narrow
-// its target via `resource ==`). The bypass below is a target-type-match
-// concession, not a generic wildcard facility.
+// Returns (nil, nil) for non-location entity types AND for non-ULID IDs
+// (notably "location:*" wildcard from bootstrap permission grants).
+// See [parseEntityResource] for the three-branch grammar; the wildcard
+// bypass exists because the engine evaluates target-type seed matches
+// without per-instance attributes (holomush-g776). If a future seed adds
+// a `when` clause comparing `resource.location.X` and is expected to
+// match the wildcard path, the provider MUST populate sentinel values
+// for X (or the seed MUST narrow its target via `resource ==`).
 func (p *LocationProvider) ResolveResource(ctx context.Context, resourceID string) (map[string]any, error) {
-	parts := strings.SplitN(resourceID, ":", 2)
-	if len(parts) != 2 {
-		return nil, oops.Code("INVALID_RESOURCE_ID").
-			With("resource_id", resourceID).
-			Errorf("invalid resource ID format: expected 'type:id'")
-	}
-
-	entityType, idStr := parts[0], parts[1]
-	if entityType != "location" {
-		return nil, nil
-	}
-
-	id, err := ulid.Parse(idStr)
+	id, ok, err := parseEntityResource(resourceID, "location")
 	if err != nil {
-		// Non-ULID location reference (e.g., "location:*" wildcard from
-		// bootstrap permission grants). Skip attribute resolution; the
-		// engine evaluates wildcard patterns without per-instance attrs.
-		// Returning the parse error here would fail-closed the entire
-		// bootstrap chain (observed in holomush-g776).
-		return nil, nil //nolint:nilerr // wildcard refs intentionally bypass provider; documented above
+		return nil, err
+	}
+	if !ok {
+		return nil, nil
 	}
 
 	loc, err := p.repo.Get(ctx, id)
