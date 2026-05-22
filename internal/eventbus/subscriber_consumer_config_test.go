@@ -73,6 +73,8 @@ func TestBuildConsumerConfig_FreshOpenSession_ZeroMinFloor_UsesDeliverAll(t *tes
 	assert.Nil(t, cfg.OptStartTime, "DeliverAllPolicy MUST NOT set OptStartTime")
 }
 
+// Verifies: I-PRIV-8
+//
 // TestBuildConsumerConfig_ExistingConsumer_PreservesStartPolicy verifies that
 // when a durable consumer already exists, the builder copies DeliverPolicy and
 // OptStartTime verbatim from the existing config and does NOT use the fresh
