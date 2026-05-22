@@ -19,7 +19,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
-	"github.com/holomush/holomush/internal/testsupport/privacytest"
+	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 )
 
 // I-PRIV-7 placeholder: no plugin currently declares history_scope: custom.
@@ -40,7 +40,7 @@ var _ = Describe("I-PRIV-7: plugin-owned history_scope semantics", func() {
 // location they're not in still sees only events from their own
 // LocationArrivedAt forward. That arm requires emitting events with
 // controlled timestamps across the staff session's LocationArrivedAt
-// boundary; today's privacytest harness can't do that (the dispatcher
+// boundary; today's integrationtest harness can't do that (the dispatcher
 // is wired with an empty command registry, so SendCommand("say ...")
 // has nothing to invoke, and direct emit helpers that bypass the
 // command layer don't yet exist). The gate-bypass half is exercised
@@ -51,15 +51,15 @@ var _ = Describe("I-PRIV-7: plugin-owned history_scope semantics", func() {
 // staffOverride → gate-bypass code path end-to-end.
 var _ = Describe("I-PRIV-6 (gate-bypass arm): staff override bypasses the location hard-gate", func() {
 	var (
-		ts    *privacytest.Server
+		ts    *integrationtest.Server
 		ctx   context.Context
-		staff *privacytest.Session
+		staff *integrationtest.Session
 		locB  string
 	)
 
 	BeforeEach(func() {
 		ctx, _ = context.WithTimeout(context.Background(), 90*time.Second) //nolint:govet // cancel unused in test lifecycle
-		ts = privacytest.Start(suiteT)
+		ts = integrationtest.Start(suiteT)
 
 		// Create a second location (not the staff member's location).
 		locBID := ts.NewLocation(ctx)
@@ -102,15 +102,15 @@ var _ = Describe("I-PRIV-6 (gate-bypass arm): staff override bypasses the locati
 // + scope floor) landed via holomush-iwzt.8.
 var _ = Describe("I-PRIV-1: new guest sees no pre-arrival location history", func() {
 	var (
-		ts     *privacytest.Server
+		ts     *integrationtest.Server
 		ctx    context.Context
-		guestA *privacytest.Session
-		guestB *privacytest.Session
+		guestA *integrationtest.Session
+		guestB *integrationtest.Session
 	)
 
 	BeforeEach(func() {
 		ctx, _ = context.WithTimeout(context.Background(), 90*time.Second) //nolint:govet // cancel unused in test lifecycle
-		ts = privacytest.Start(suiteT)
+		ts = integrationtest.Start(suiteT)
 	})
 
 	AfterEach(func() {
@@ -175,11 +175,11 @@ var _ = Describe("I-PRIV-1: new guest sees no pre-arrival location history", fun
 // unbound.
 var _ = Describe("I-PRIV-2: guest name reuse does not leak prior holder's events", func() {
 	var (
-		ts          *privacytest.Server
+		ts          *integrationtest.Server
 		ctx         context.Context
 		firstName   string
 		locStream   string
-		reusedGuest *privacytest.Session
+		reusedGuest *integrationtest.Session
 		priorEmit   time.Time
 	)
 
@@ -187,7 +187,7 @@ var _ = Describe("I-PRIV-2: guest name reuse does not leak prior holder's events
 
 	BeforeEach(func() {
 		ctx, _ = context.WithTimeout(context.Background(), 90*time.Second) //nolint:govet // cancel unused in test lifecycle
-		ts = privacytest.Start(suiteT)
+		ts = integrationtest.Start(suiteT)
 
 		// First guest: connect, emit, logout. Record name + emit timestamp.
 		guestA := ts.ConnectGuest(ctx)
@@ -278,9 +278,9 @@ var _ = Describe("I-PRIV-2: guest name reuse does not leak prior holder's events
 // query_stream_history.go hard-gate branch).
 var _ = Describe("I-PRIV-1: character move resets location floor", func() {
 	var (
-		ts       *privacytest.Server
+		ts       *integrationtest.Server
 		ctx      context.Context
-		mover    *privacytest.Session
+		mover    *integrationtest.Session
 		startLoc string
 		destLoc  string
 	)
@@ -289,7 +289,7 @@ var _ = Describe("I-PRIV-1: character move resets location floor", func() {
 		ctx, _ = context.WithTimeout(context.Background(), 90*time.Second) //nolint:govet // cancel unused in test lifecycle
 		// DenyAll engine: staffOverride returns false → hard-gate fires when
 		// session.LocationID != requested stream's location.
-		ts = privacytest.Start(suiteT, privacytest.WithPolicyEngine(policytest.DenyAllEngine()))
+		ts = integrationtest.Start(suiteT, integrationtest.WithPolicyEngine(policytest.DenyAllEngine()))
 
 		mover = ts.ConnectAuthed(ctx, "Mover")
 		startLoc = "location:" + mover.LocationID.String()

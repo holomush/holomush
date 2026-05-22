@@ -229,6 +229,18 @@ Detail in `.claude/rules/testing.md` (auto-loads when editing test files): cover
 | **MUST** run `task test:int` on refactors | `task test` does NOT compile integration files — refactors of shared types break silently otherwise |
 | **MUST NOT** use `eventbustest` in E2E | Embedded NATS harness is unit/bus-integration only; E2E uses full stack    |
 
+### Integration test harness (`internal/testsupport/integrationtest`)
+
+`internal/testsupport/integrationtest/` is the canonical integration-test harness — a real in-process holomush stack (Postgres testcontainer + embedded NATS JetStream + production `CoreServer`) used by privacy/presence/scene/session integration tests. Build-tag-gated (`//go:build integration`); never linked into production binaries. See the package doc-comment in `harness.go` for the full helper catalog and the [integration-tests contributor guide](site/docs/contributing/integration-tests.md).
+
+| When to use                                | When NOT to use                                                 |
+| ------------------------------------------ | --------------------------------------------------------------- |
+| Integration tests asserting wire behavior  | Unit tests — use `mockery`-generated mocks                      |
+| Privacy / presence / floor invariants      | Bus-only tests — use `eventbustest.Embedded` directly           |
+| Tests needing real `CoreServer` RPC paths  | Tests that only need a `CoreServer` field stubbed (use struct literal) |
+
+Default ABAC engine is allow-all. Tests needing denial-path coverage pass `WithPolicyEngine(policytest.DenyAllEngine())` — see `test/integration/privacy/privacy_test.go` for examples.
+
 ## Commands
 
 ### Task Commands (Required)

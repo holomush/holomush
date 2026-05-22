@@ -142,7 +142,7 @@ var _ = Describe("Seed Policy Behavior", func() {
 	// registered, both 'allows reading a co-located object' AND 'allows
 	// reading an object held by a co-located character' would silently
 	// default-deny — the same default-deny shape as the original g776
-	// bug. The privacytest harness uses allowAllPolicyEngine and cannot
+	// bug. The integrationtest harness uses allowAllPolicyEngine and cannot
 	// catch this class of regression.
 	Describe("Object co-location (holomush-k3ud)", func() {
 		var (

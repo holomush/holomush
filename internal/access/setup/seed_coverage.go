@@ -79,7 +79,7 @@ func validateSeedProviderCoverage(registered []string, seeds []policy.SeedPolicy
 // because the gap was silent at startup; this surfaces it loudly while keeping
 // production resilient if a build accidentally omits a provider. A future
 // hardening pass MAY upgrade to fail-closed once the seed corpus is stable and
-// the test gap (privacytest harness bypasses real ABAC) is closed.
+// the test gap (integrationtest harness bypasses real ABAC) is closed.
 func warnOnMissingSeedCoverage(ctx context.Context, registered []string, seeds []policy.SeedPolicy) {
 	missing := validateSeedProviderCoverage(registered, seeds)
 	for _, namespace := range sortedKeys(missing) {

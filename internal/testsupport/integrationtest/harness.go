@@ -3,21 +3,55 @@
 
 //go:build integration
 
-// Package privacytest provides the integration-test harness for holomush-iwzt
-// history-scope privacy tests. It wraps a real in-process holomush stack
-// (Postgres + NATS JetStream + CoreServer) so downstream integration tests
-// (Tasks 9–22) can express privacy invariants against live RPCs.
+// Package integrationtest provides a general-purpose integration-test
+// harness that wraps a real in-process holomush stack — Postgres
+// (testcontainers), embedded NATS JetStream, and the production CoreServer —
+// so test files can express invariants against live gRPC handlers without
+// mocking the access-control/event-delivery surface.
+//
+// Originally built for the holomush-iwzt history-scope privacy epic
+// (formerly named "privacytest"); now also serves the holomush-5b2j presence
+// snapshot tests, the holomush-e4qo location_state wire-format test, and
+// future privacy/session/scene integration suites. Renamed to
+// "integrationtest" to reflect this broader scope.
+//
+// Test packages that currently import this harness:
+//
+//   - test/integration/privacy/   (iwzt history-scope privacy invariants)
+//   - test/integration/presence/  (5b2j presence snapshot semantics)
+//
+// Stack composition:
+//
+//   - Shared Postgres testcontainer with migrations applied + per-test DB
+//   - Embedded NATS JetStream (in-memory, per-test isolation)
+//   - Production CoreServer wired to the above via real options
+//
+// Default ABAC engine is allow-all (privacy tests focus on session/history
+// gates, not role enforcement). Tests that need denial-path coverage pass
+// WithPolicyEngine(policytest.DenyAllEngine()) — see iwzt.10 / iwzt.11 for
+// usage.
+//
+// Helper categories:
+//
+//   - Real-path drivers (e.g., EmitDirectEvent, ConnectGuest, ConnectAuthed):
+//     exercise actual production code paths.
+//   - Test-only escape hatches (e.g., MoveTo, DeleteCharacter, DeleteSession,
+//     ExpireSession, SetLocationArrivedAt): direct SQL mutations used to
+//     produce state shapes that production paths can't easily generate from
+//     a test (e.g., expired sessions, future-dated LocationArrivedAt, guest
+//     character cleanup that production logout doesn't perform). Each helper
+//     documents what it bypasses and why.
 //
 // Usage:
 //
-//	ts := privacytest.Start(t)
+//	ts := integrationtest.Start(t)
 //	defer ts.Stop()
 //	sess := ts.ConnectGuest(ctx)
 //	sess.SendCommand(ctx, "look")
 //	sess.Logout(ctx)
 //
 // Build tag: integration. This package is never imported by production code.
-package privacytest
+package integrationtest
 
 import (
 	"context"
@@ -122,7 +156,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	connStr := testutil.FreshDatabase(t, shared)
 
 	evStore, err := store.NewPostgresEventStore(ctx, connStr)
-	require.NoError(t, err, "privacytest.Start: open event store")
+	require.NoError(t, err, "integrationtest.Start: open event store")
 	t.Cleanup(evStore.Close)
 
 	pool := evStore.Pool()
@@ -133,7 +167,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	hasher := auth.NewArgon2idHasher()
 
 	authService, err := auth.NewAuthService(playerRepo, playerSessionStore, hasher)
-	require.NoError(t, err, "privacytest.Start: create auth service")
+	require.NoError(t, err, "integrationtest.Start: create auth service")
 
 	worldCharRepo := worldpg.NewCharacterRepository(pool)
 	charRepo := &authCharRepoAdapter{pool: pool, charRepo: worldCharRepo}
@@ -150,7 +184,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
 	}
 	err = locRepo.Create(ctx, guestLoc)
-	require.NoError(t, err, "privacytest.Start: create guest start location")
+	require.NoError(t, err, "integrationtest.Start: create guest start location")
 
 	// GuestService wiring.
 	guestNamer := naming.NewGemstoneElementTheme()
@@ -161,7 +195,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		playerRepo, charRepo, playerSessionStore,
 		guestTransactor, guestBindingRepo,
 	)
-	require.NoError(t, err, "privacytest.Start: create guest service")
+	require.NoError(t, err, "integrationtest.Start: create guest service")
 
 	// Embedded NATS bus (in-memory, cleaned up via t.Cleanup).
 	bus := eventbustest.New(t)
@@ -177,7 +211,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 
 	// Command dispatcher (minimal: no commands registered).
 	dispatcher, err := command.NewDispatcher(command.NewRegistry(), pe)
-	require.NoError(t, err, "privacytest.Start: create command dispatcher")
+	require.NoError(t, err, "integrationtest.Start: create command dispatcher")
 	cmdServices := command.NewTestServices(command.ServicesConfig{Engine: pe})
 
 	// Core engine with a no-op event appender.
@@ -252,7 +286,7 @@ func (s *Server) NewLocation(ctx context.Context) ulid.ULID {
 		ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
 	}
 	err := s.locRepo.Create(ctx, loc)
-	require.NoError(s.t, err, "privacytest.Server.NewLocation: create location")
+	require.NoError(s.t, err, "integrationtest.Server.NewLocation: create location")
 	return loc.ID
 }
 
@@ -260,7 +294,7 @@ func (s *Server) NewLocation(ctx context.Context) ulid.ULID {
 //
 // TODO(iwzt-9): implement via FocusCoordinator once scene RPCs are wired.
 func (s *Server) NewSceneWithoutMember(_ context.Context) ulid.ULID {
-	s.t.Fatalf("privacytest.Server.NewSceneWithoutMember: TODO iwzt-9 — scene RPCs not yet wired")
+	s.t.Fatalf("integrationtest.Server.NewSceneWithoutMember: TODO iwzt-9 — scene RPCs not yet wired")
 	return ulid.ULID{}
 }
 
@@ -272,9 +306,9 @@ func (s *Server) ExpireSession(ctx context.Context, sessionID string) {
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE sessions SET status = $1, expires_at = $2, updated_at = $2 WHERE id = $3`,
 		string(session.StatusExpired), now, sessionID)
-	require.NoError(s.t, err, "privacytest.Server.ExpireSession")
+	require.NoError(s.t, err, "integrationtest.Server.ExpireSession")
 	require.Equalf(s.t, int64(1), tag.RowsAffected(),
-		"privacytest.Server.ExpireSession: expected 1 row affected, got %d (sessionID=%s)", tag.RowsAffected(), sessionID)
+		"integrationtest.Server.ExpireSession: expected 1 row affected, got %d (sessionID=%s)", tag.RowsAffected(), sessionID)
 }
 
 // SetLocationArrivedAt directly mutates a session's location_arrived_at column
@@ -287,9 +321,9 @@ func (s *Server) SetLocationArrivedAt(ctx context.Context, sessionID string, t t
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE sessions SET location_arrived_at = $1, updated_at = $1 WHERE id = $2`,
 		t.UTC(), sessionID)
-	require.NoError(s.t, err, "privacytest.Server.SetLocationArrivedAt")
+	require.NoError(s.t, err, "integrationtest.Server.SetLocationArrivedAt")
 	require.Equalf(s.t, int64(1), tag.RowsAffected(),
-		"privacytest.Server.SetLocationArrivedAt: expected 1 row affected, got %d (sessionID=%s)", tag.RowsAffected(), sessionID)
+		"integrationtest.Server.SetLocationArrivedAt: expected 1 row affected, got %d (sessionID=%s)", tag.RowsAffected(), sessionID)
 }
 
 // DeleteCharacter removes a character row + its FK-dependent rows from
@@ -320,13 +354,13 @@ func (s *Server) DeleteCharacter(ctx context.Context, charID ulid.ULID) {
 		{"objects", "owner_id"},
 	} {
 		_, err := s.pool.Exec(ctx, "DELETE FROM "+child.table+" WHERE "+child.col+" = $1", charIDStr)
-		require.NoError(s.t, err, "privacytest.Server.DeleteCharacter: clean %s", child.table)
+		require.NoError(s.t, err, "integrationtest.Server.DeleteCharacter: clean %s", child.table)
 	}
 
 	tag, err := s.pool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, charIDStr)
-	require.NoError(s.t, err, "privacytest.Server.DeleteCharacter: delete characters")
+	require.NoError(s.t, err, "integrationtest.Server.DeleteCharacter: delete characters")
 	require.Equalf(s.t, int64(1), tag.RowsAffected(),
-		"privacytest.Server.DeleteCharacter: expected 1 row affected, got %d (charID=%s)",
+		"integrationtest.Server.DeleteCharacter: expected 1 row affected, got %d (charID=%s)",
 		tag.RowsAffected(), charIDStr)
 }
 
@@ -336,25 +370,25 @@ func (s *Server) ConnectGuest(ctx context.Context) *Session {
 	s.t.Helper()
 
 	resp, err := s.coreServer.CreateGuest(ctx, &corev1.CreateGuestRequest{})
-	require.NoError(s.t, err, "privacytest.ConnectGuest: CreateGuest RPC")
-	require.True(s.t, resp.GetSuccess(), "privacytest.ConnectGuest: CreateGuest failed: %s", resp.GetErrorMessage())
+	require.NoError(s.t, err, "integrationtest.ConnectGuest: CreateGuest RPC")
+	require.True(s.t, resp.GetSuccess(), "integrationtest.ConnectGuest: CreateGuest failed: %s", resp.GetErrorMessage())
 
 	rawToken := resp.GetPlayerSessionToken()
 	charID, parseErr := ulid.Parse(resp.GetDefaultCharacterId())
-	require.NoError(s.t, parseErr, "privacytest.ConnectGuest: parse character ID")
+	require.NoError(s.t, parseErr, "integrationtest.ConnectGuest: parse character ID")
 
 	selResp, err := s.coreServer.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
 		PlayerSessionToken: rawToken,
 		CharacterId:        charID.String(),
 	})
-	require.NoError(s.t, err, "privacytest.ConnectGuest: SelectCharacter RPC")
+	require.NoError(s.t, err, "integrationtest.ConnectGuest: SelectCharacter RPC")
 	require.True(s.t, selResp.GetSuccess(),
-		"privacytest.ConnectGuest: SelectCharacter failed: %s", selResp.GetErrorMessage())
+		"integrationtest.ConnectGuest: SelectCharacter failed: %s", selResp.GetErrorMessage())
 
 	// Hydrate session timestamps from the persisted row, NOT from time.Now() —
 	// see the parallel block in ConnectAuthedWithRoles for the rationale.
 	persisted, getErr := s.sessionStore.Get(ctx, selResp.GetSessionId())
-	require.NoError(s.t, getErr, "privacytest.ConnectGuest: read persisted session")
+	require.NoError(s.t, getErr, "integrationtest.ConnectGuest: read persisted session")
 
 	return &Session{
 		server:             s,
@@ -389,27 +423,27 @@ func (s *Server) ConnectAuthedWithRoles(ctx context.Context, charName string, ro
 
 	// Register the player account.
 	player, playerSession, rawToken, err := s.authService.CreatePlayer(ctx, username, password, "")
-	require.NoError(s.t, err, "privacytest.ConnectAuthedWithRoles: CreatePlayer")
+	require.NoError(s.t, err, "integrationtest.ConnectAuthedWithRoles: CreatePlayer")
 
 	// Persist the player session so SelectCharacter can resolve the token.
 	require.NoError(s.t, s.playerSessionStore.Create(ctx, playerSession),
-		"privacytest.ConnectAuthedWithRoles: persist player session")
+		"integrationtest.ConnectAuthedWithRoles: persist player session")
 
 	// Create the character directly (bypasses characterService wiring).
 	startLocID := s.guestStartLocationID
 	char, err := world.NewCharacter(player.ID, charName)
-	require.NoError(s.t, err, "privacytest.ConnectAuthedWithRoles: NewCharacter")
+	require.NoError(s.t, err, "integrationtest.ConnectAuthedWithRoles: NewCharacter")
 	char.LocationID = &startLocID
 	// authCharRepoAdapter.Create delegates to worldpg.CharacterRepository.Create.
 	require.NoError(s.t, s.charRepo.Create(ctx, char),
-		"privacytest.ConnectAuthedWithRoles: persist character")
+		"integrationtest.ConnectAuthedWithRoles: persist character")
 
 	// Stamp roles into character_roles.
 	for _, role := range roles {
 		_, roleErr := s.pool.Exec(ctx,
 			`INSERT INTO character_roles (character_id, role) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
 			char.ID.String(), role)
-		require.NoError(s.t, roleErr, "privacytest.ConnectAuthedWithRoles: insert role %q", role)
+		require.NoError(s.t, roleErr, "integrationtest.ConnectAuthedWithRoles: insert role %q", role)
 	}
 
 	// Open a game session by selecting the character.
@@ -417,16 +451,16 @@ func (s *Server) ConnectAuthedWithRoles(ctx context.Context, charName string, ro
 		PlayerSessionToken: rawToken,
 		CharacterId:        char.ID.String(),
 	})
-	require.NoError(s.t, err, "privacytest.ConnectAuthedWithRoles: SelectCharacter RPC")
+	require.NoError(s.t, err, "integrationtest.ConnectAuthedWithRoles: SelectCharacter RPC")
 	require.True(s.t, selResp.GetSuccess(),
-		"privacytest.ConnectAuthedWithRoles: SelectCharacter failed: %s", selResp.GetErrorMessage())
+		"integrationtest.ConnectAuthedWithRoles: SelectCharacter failed: %s", selResp.GetErrorMessage())
 
 	// Hydrate session timestamps from the persisted session row, NOT from
 	// time.Now() — the server-side LocationArrivedAt drives the I-PRIV-1 /
 	// I-PRIV-6 floor in QueryStreamHistory, so tests that assert against
 	// it MUST see the canonical value (per CodeRabbit thread on PR #4048).
 	persisted, getErr := s.sessionStore.Get(ctx, selResp.GetSessionId())
-	require.NoError(s.t, getErr, "privacytest.ConnectAuthedWithRoles: read persisted session")
+	require.NoError(s.t, getErr, "integrationtest.ConnectAuthedWithRoles: read persisted session")
 
 	return &Session{
 		server:             s,
@@ -446,7 +480,7 @@ func (s *Server) ConnectAuthedWithRoles(ctx context.Context, charName string, ro
 //
 // TODO(iwzt-9): implement authed player creation.
 func (s *Server) AuthedPlayer(_ context.Context, _ string) *AuthedPlayer {
-	s.t.Fatalf("privacytest.Server.AuthedPlayer: TODO iwzt-9 — authed player creation not yet wired")
+	s.t.Fatalf("integrationtest.Server.AuthedPlayer: TODO iwzt-9 — authed player creation not yet wired")
 	return nil
 }
 
