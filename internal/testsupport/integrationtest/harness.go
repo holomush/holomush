@@ -432,7 +432,6 @@ func (s *Server) ConnectGuest(ctx context.Context) *Session {
 		OriginalLocationID: s.guestStartLocationID,
 		LocationArrivedAt:  persisted.LocationArrivedAt,
 		SessionCreatedAt:   persisted.CreatedAt,
-		LastReattachAt:     time.Time{},
 		playerSessionToken: rawToken,
 	}
 }
@@ -504,7 +503,6 @@ func (s *Server) ConnectAuthedWithRoles(ctx context.Context, charName string, ro
 		OriginalLocationID: s.guestStartLocationID,
 		LocationArrivedAt:  persisted.LocationArrivedAt,
 		SessionCreatedAt:   persisted.CreatedAt,
-		LastReattachAt:     time.Time{},
 		playerSessionToken: rawToken,
 	}
 }

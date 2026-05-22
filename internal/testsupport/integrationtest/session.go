@@ -42,9 +42,6 @@ type Session struct {
 	LocationArrivedAt time.Time
 	// SessionCreatedAt is the time the game session was created.
 	SessionCreatedAt time.Time
-	// LastReattachAt is the time of the most recent DetachTransport+ReattachTransport
-	// cycle (zero if none has occurred).
-	LastReattachAt time.Time
 
 	// Reattached is true when the SessionID was returned by SelectCharacter's
 	// reattach branch (i.e. an existing active/detached session row matched
@@ -158,18 +155,25 @@ func (s *Session) MoveTo(ctx context.Context, newLocationID ulid.ULID) {
 // stream (e.g., client closed the connection). The session remains in
 // StatusDetached in Postgres.
 //
-// TODO(iwzt-9): wire subscribe goroutine cancel.
+// TODO(iwzt-16-precursor): wire subscribe goroutine cancel.
 func (s *Session) DetachTransport(_ context.Context) {
-	s.server.t.Fatalf("integrationtest.Session.DetachTransport: TODO iwzt-9 — Subscribe goroutine not yet wired")
+	s.server.t.Fatalf("integrationtest.Session.DetachTransport: TODO iwzt-16-precursor — Subscribe goroutine not yet wired")
 }
 
-// ReattachTransport reopens the Subscribe stream after a DetachTransport,
-// recording LastReattachAt. Mirrors the client's reconnection flow.
+// ReattachTransport reopens the Subscribe stream after a DetachTransport.
+// Mirrors the client's reconnection flow.
 //
-// TODO(iwzt-9): wire subscribe goroutine restart.
+// Per spec I-PRIV-3 (Round 3 amendment), reattach MUST NOT change the
+// session's LocationArrivedAt — the durable JetStream consumer's
+// OptStartTime is immutable post-creation (NATS error 10012) and the
+// filter-at-delivery in dispatchDelivery enforces the original floor.
+// There is therefore NO post-reattach floor for tests to assert against;
+// any pre-Round-3 wording referring to a "LastReattachAt" timestamp does
+// not match production semantics.
+//
+// TODO(iwzt-16-precursor): wire subscribe goroutine restart.
 func (s *Session) ReattachTransport(_ context.Context) {
-	s.LastReattachAt = time.Now()
-	s.server.t.Fatalf("integrationtest.Session.ReattachTransport: TODO iwzt-9 — Subscribe goroutine not yet wired")
+	s.server.t.Fatalf("integrationtest.Session.ReattachTransport: TODO iwzt-16-precursor — Subscribe goroutine not yet wired")
 }
 
 // CreateScene creates a new scene (focus session) and returns its ULID.
@@ -328,7 +332,6 @@ func (p *AuthedPlayer) OpenWebSession(ctx context.Context) *Session {
 		OriginalLocationID: persisted.LocationID,
 		LocationArrivedAt:  persisted.LocationArrivedAt,
 		SessionCreatedAt:   persisted.CreatedAt,
-		LastReattachAt:     time.Time{},
 		Reattached:         selResp.GetReattached(),
 		playerSessionToken: p.rawToken,
 	}
