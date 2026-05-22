@@ -96,6 +96,109 @@ var _ = Describe("I-PRIV-6 (gate-bypass arm): staff override bypasses the locati
 	})
 })
 
+// I-PRIV-3 (Subscribe-replay path): when a session's transport drops and later
+// reattaches within TTL, events emitted during the detach window MUST be
+// DELIVERED via the live Subscribe stream's durable replay (NOT dropped by
+// the filter-at-delivery). The durable consumer's OptStartTime is immutable
+// per NATS error 10012 (I-PRIV-8) and LocationArrivedAt is unchanged across
+// reattach (I-PRIV-3); detach-window event timestamps are therefore at-or-after
+// the unchanged filter floor and pass through.
+//
+// Companion to the QueryStreamHistory-path version asserted by the
+// "I-PRIV-3 / I-PRIV-4: detach/reattach preserves session floor and replays
+// events" block below. Both share the same LocationArrivedAt floor invariant
+// but exercise different production code paths:
+//
+//   - This test: dispatchDelivery filter-at-delivery → live Subscribe stream
+//     (internal/grpc/server.go:1053 filter + the broadcaster's stream.Send)
+//   - Below: HistoryReader-bounded query (internal/grpc/query_stream_history.go)
+//
+// Per spec §8 reattach-durability test: open A at T0 (durable created with
+// OptStartTime=T0), third party emits at T1, A detaches at T2, third party
+// emits at T3 (during detach window), A reattaches at T4 — A's Subscribe
+// replay MUST deliver both T1 and T3 events.
+var _ = Describe("I-PRIV-3: ReattachCAS preserves durable; Subscribe replay delivers detach-window events", func() {
+	// Unique event type for the during-detach emit so WaitForEvent matches
+	// exactly the seeded event (not any later same-typed event). Mirrors the
+	// pattern in the I-PRIV-3 QueryStreamHistory test below.
+	const detachWindowType = "iwzt16-test:during-detach-marker"
+
+	var (
+		ts    *integrationtest.Server
+		ctx   context.Context
+		felix *integrationtest.Session
+		gemma *integrationtest.Session
+	)
+
+	BeforeEach(func() {
+		ctx, _ = context.WithTimeout(context.Background(), 90*time.Second) //nolint:govet // cancel unused in test lifecycle
+		ts = integrationtest.Start(suiteT)
+
+		felix = ts.ConnectAuthed(ctx, "Felix")
+		gemma = ts.ConnectAuthed(ctx, "Gemma")
+		Expect(felix.LocationID).To(Equal(gemma.LocationID),
+			"precondition: both characters at the guest start location so Gemma's emits land in Felix's location stream")
+	})
+
+	AfterEach(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if gemma != nil {
+			gemma.Logout(cleanupCtx)
+		}
+		if felix != nil {
+			felix.Logout(cleanupCtx)
+		}
+		if ts != nil {
+			ts.Stop()
+		}
+	})
+
+	It("delivers events emitted during transport detach when transport reattaches", func() {
+		// Capture LocationArrivedAt before any state-changing op so we can
+		// assert it's UNCHANGED after reattach (the load-bearing I-PRIV-3
+		// claim — together with iwzt.17's QueryStreamHistory assertion,
+		// this proves the floor is preserved on BOTH code paths).
+		preDetachFloor := felix.LocationArrivedAt
+
+		felix.DetachTransport(ctx)
+
+		// Gemma emits during Felix's detach window. The event lands in
+		// Felix's durable JetStream consumer (per-session durable, immutable
+		// OptStartTime); reattach replay below MUST deliver it.
+		Expect(gemma.EmitDirectEvent(ctx,
+			"location:"+gemma.LocationID.String(),
+			detachWindowType,
+			[]byte(`{"character_name":"Gemma","action":"speaks while Felix is detached."}`))).
+			To(Succeed(), "during-detach emit MUST publish into Felix's durable consumer")
+
+		felix.ReattachTransport(ctx)
+
+		// WaitForEvent reads from the post-reattach live Subscribe stream
+		// until the marker arrives (or waitCtx cancels / transport exits).
+		// The production filter-at-delivery (internal/grpc/server.go:1053)
+		// uses streamScopeFloor → LocationArrivedAt (unchanged) as the
+		// per-event floor; the marker's JetStream-stamped timestamp is
+		// strictly after that floor, so it passes through.
+		waitCtx, waitCancel := context.WithTimeout(ctx, 10*time.Second)
+		defer waitCancel()
+		ev := felix.WaitForEvent(waitCtx, detachWindowType)
+		Expect(ev).NotTo(BeNil(),
+			"I-PRIV-3 (Subscribe replay): durable replay MUST deliver the during-detach event to the reattached transport")
+		Expect(ev.GetType()).To(Equal(detachWindowType),
+			"delivered event type must match the seeded marker")
+		Expect(ev.GetTimestamp().AsTime()).To(BeTemporally(">=", preDetachFloor),
+			"I-PRIV-3 floor preservation: delivered event timestamp must be at-or-after the unchanged LocationArrivedAt — "+
+				"if production accidentally advanced the floor on reattach (e.g. by re-running auth_handlers.go:331's "+
+				"session-create logic in the reattach branch), the marker's pre-reattach timestamp would be below the "+
+				"advanced floor and dispatchDelivery's filter at internal/grpc/server.go:1053 would have dropped it. "+
+				"That the marker reached WaitForEvent at all is the load-bearing assertion. "+
+				"(A direct re-read of sessions.location_arrived_at post-reattach would harden this further; tracked as a "+
+				"future Session.RefreshFromPersisted helper. Asserting felix.LocationArrivedAt against preDetachFloor "+
+				"would be tautological — that field is set once at ConnectAuthed and is never mutated by the harness.)")
+	})
+})
+
 // I-PRIV-3 / I-PRIV-4 / spec §2 "transport-continuity worked example":
 // the session row is the unit of continuity, not the transport connection.
 // When a session detaches (transport drop) and later reattaches within TTL,
