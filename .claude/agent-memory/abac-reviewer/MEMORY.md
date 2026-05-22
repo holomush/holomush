@@ -120,3 +120,23 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   default-deny for that caller. Task 3 (`rmsi.3` / future) fixes the
   caller's resource shape. No fail-open risk; behavior is identical
   before/after this PR for that call site.
+- **rmsi.3 per-property filter shape (2026-05-22)**: `ListPropertiesByParent`
+  (`internal/world/service.go:1077-1104`) now fetches all properties then
+  loops, issuing one `checkAccess(ctx, subject, "read", access.PropertyResource(prop.ID.String()), prefixProperty)`
+  per property. INV-1 (per-property ULID resource shape, NOT parent-shaped
+  composite) is pinned by the unit-test "mixed permit/deny" case at
+  `service_test.go:7684-7693` via `strings.Contains(rid, p2ID.String())`.
+  INV-2 (silent default-deny filter) implemented via
+  `errors.Is(checkErr, ErrPermissionDenied)` no-op branch. INV-2b (infra
+  failure propagation) implemented via `errors.Is(checkErr,
+  ErrAccessEvaluationFailed)` early-return; defensive default case ALSO
+  fail-closes on unrecognized errors (good belt-and-suspenders).
+  `checkAccess` distinguishes infra-vs-deny via `decision.IsInfraFailure()`
+  (PolicyID prefix "infra:") at `service.go:164`. Test covers both
+  Evaluate-returns-error AND Evaluate-returns-InfraFailure-decision paths.
+  Information-leak about property count: caller who can't read any
+  property still triggers `propertyRepo.ListByParent`; trade-off is
+  documented in spec §2 and is acceptable because pre-fix already
+  default-denied uniformly (no info leak DELTA). Caller surface
+  unchanged: `internal/command/types.go:71` & `internal/plugin/hostfunc/cap_property.go:28`
+  return shape unchanged.
