@@ -5,6 +5,11 @@
 **Authors:** Sean Brandt with Claude (brainstorming session)
 **Triggered by:** New guest "Onyx Radium" observed seeing prior in-character conversation between Emerald and Pearl Radium on 2026-05-17 in the dev environment.
 
+> **Update 2026-05-22 (`holomush-gfo6`):** Floor precision contract upgraded
+> from microsecond to nanosecond. See
+> [`2026-05-22-nanosecond-timestamps-design.md`](2026-05-22-nanosecond-timestamps-design.md)
+> §5 INV-TS-6 / INV-TS-7.
+
 ## 1. Problem
 
 Two web-terminal flows leak event history that the requesting character should not be able to see:
@@ -251,14 +256,15 @@ This is idempotent and fail-closed: first call creates the consumer with `minFlo
 The Subscribe broadcaster (`internal/grpc/server.go` event dispatch loop) MUST apply, for every event delivered by JetStream:
 
 ```text
-if event.Timestamp < streamScopeFloor(currentSessionInfo, event.Subject).Truncate(µs) {
-    drop event  // do not forward to client
+if event.Timestamp < streamScopeFloor(currentSessionInfo, event.Subject) {
+    drop event  // do not forward to client (INV-TS-6: strict-less than floor)
 }
+// events with event.Timestamp == floor are included (INV-TS-7: >= semantics)
 ```
 
 `currentSessionInfo` is the **post-reattach, post-move** snapshot — re-read from the session store at delivery time or cached and invalidated on lifecycle transitions (plan-stage choice). This is the load-bearing privacy gate.
 
-**Precision contract.** The comparison MUST be performed at microsecond granularity. Event timestamps are truncated to microseconds at publish time (canonical event-time resolution per INV-P7-16 / crypto AAD invariant; `internal/eventbus/publisher.go::Publish`), while floor inputs (`LocationArrivedAt`, `GuestCharacterCreatedAt`, `FocusMembership.JoinedAt`) are populated via `time.Now()` and retain nanosecond precision. Without µs-truncating the floor, an event emitted within the same microsecond as session-create / move / focus-join has a truncated timestamp strictly less than the un-truncated floor — and the filter drops the session's own arrival event (and any other in-µs-window event). Truncating to µs preserves the privacy invariant at the canonical event-time resolution and matches the publisher's behavior.
+**Precision contract.** The comparison MUST be performed at nanosecond granularity (post-`holomush-gfo6`). Event timestamps preserve full nanosecond precision at publish time per INV-TS-4 (`internal/eventbus/publisher.go::Publish` no longer truncates). Floor inputs (`LocationArrivedAt`, `GuestCharacterCreatedAt`, `FocusMembership.JoinedAt`) preserve nanosecond precision per INV-TS-1 (BIGINT epoch-ns columns via the `pgnanos.Time` seam). Comparison uses `>=` semantics so an event at the exact floor ns is INCLUDED (INV-TS-7); strictly-below-floor events are dropped (INV-TS-6). The former µs-granularity contract is superseded by ADRs `holomush-absb` (BIGINT over timestamp9), `holomush-rbw6` (pgnanos.Time named-type seam), and `holomush-f5h0` (AAD byte-equality structural guarantee, supersedes INV-P7-16).
 
 **Cost analysis:**
 
