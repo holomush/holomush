@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
-	. "github.com/onsi/ginkgo/v2"         //nolint:revive // ginkgo convention
-	. "github.com/onsi/gomega"            //nolint:revive // gomega convention
-	. "github.com/onsi/gomega/gstruct"    //nolint:revive // gstruct matchers convention
+	. "github.com/onsi/ginkgo/v2"      //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"         //nolint:revive // gomega convention
+	. "github.com/onsi/gomega/gstruct" //nolint:revive // gstruct matchers convention
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
@@ -469,7 +469,7 @@ var _ = Describe("Seed Policy Behavior", func() {
 			// slug — name-level binding would require an extra store lookup.
 			Eventually(func() []audit.Event {
 				return env.auditWriter.Entries()
-			}).WithTimeout(2 * time.Second).WithPolling(10 * time.Millisecond).
+			}).WithTimeout(2*time.Second).WithPolling(10*time.Millisecond).
 				ShouldNot(BeEmpty(), "deny audit entry MUST be recorded")
 			Expect(env.auditWriter.Entries()).To(ContainElement(MatchFields(IgnoreExtras, Fields{
 				"Effect": Equal(types.EffectDeny),

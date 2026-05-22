@@ -66,6 +66,45 @@ var _ = Describe("Integration harness basic connect/command/logout", func() {
 	})
 })
 
+// holomush-q2qt: Session.RefreshFromPersisted re-reads the mutable Session
+// fields (LocationID, LocationArrivedAt) from the persisted sessions row.
+//
+// The smoke uses Server.SetLocationArrivedAt to mutate the DB row WITHOUT
+// touching the harness-side struct (Server.MoveTo updates both, so it's
+// tautological as a refresh trigger). After SetLocationArrivedAt the
+// struct is stale; after RefreshFromPersisted it MUST reflect the DB.
+var _ = Describe("Integration harness Session.RefreshFromPersisted", func() {
+	It("re-reads LocationArrivedAt from the persisted sessions row", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second) //nolint:govet // cancel called below; deferred via defer
+		defer cancel()
+
+		ts := integrationtest.Start(suiteT)
+		defer ts.Stop()
+
+		sess := ts.ConnectAuthed(ctx, "Quinn")
+		originalArrivedAt := sess.LocationArrivedAt
+		originalLocation := sess.LocationID
+
+		// Mutate the DB row out-of-band. Direct SQL bypasses the harness's
+		// struct update, so without a refresh the harness-side field stays
+		// stale.
+		futureArrivedAt := originalArrivedAt.Add(42 * time.Second)
+		ts.SetLocationArrivedAt(ctx, sess.SessionID, futureArrivedAt)
+
+		Expect(sess.LocationArrivedAt).To(BeTemporally("==", originalArrivedAt),
+			"precondition: SetLocationArrivedAt MUST NOT touch the harness-side struct")
+
+		sess.RefreshFromPersisted(ctx)
+
+		Expect(sess.LocationArrivedAt).To(BeTemporally("==", futureArrivedAt),
+			"RefreshFromPersisted MUST surface the DB-side LocationArrivedAt")
+		Expect(sess.LocationID).To(Equal(originalLocation),
+			"RefreshFromPersisted MUST NOT mutate LocationID when the DB row's location is unchanged")
+
+		sess.Logout(ctx)
+	})
+})
+
 // holomush-m5nj precursor to iwzt.16: ConnectAuthed auto-attaches a live
 // Subscribe stream; DetachTransport tears it down and transitions the
 // session to Detached; ReattachTransport rebuilds the stream against the
