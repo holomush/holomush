@@ -68,7 +68,7 @@ var _ = Describe("Plugin role cannot write host tables (INV-P7-13)", func() {
 		// The Postgres '\x...' bytea literal makes the value explicit.
 		_, err = pluginPool.Exec(ctx, `
 			INSERT INTO public.events_audit (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec)
-			VALUES ('\x0123456789ABCDEF0123456789ABCDEF', 'events.test.x', 'y', now(), 'system', '\x', 1, 'identity')`)
+			VALUES ('\x0123456789ABCDEF0123456789ABCDEF', 'events.test.x', 'y', 0, 'system', '\x', 1, 'identity')`)
 		Expect(err).To(HaveOccurred(), "INV-P7-13: plugin role MUST be denied INSERT on host-owned events_audit")
 
 		// The substrate revokes USAGE on schema public from the plugin role

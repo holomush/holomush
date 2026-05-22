@@ -21,6 +21,7 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/codec"
+	"github.com/holomush/holomush/internal/pgnanos"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	"github.com/holomush/holomush/test/testutil"
 )
@@ -82,7 +83,7 @@ func insertIntegrationAuditRowAt(pool *pgxpool.Pool, id ulid.ULID, subject event
 			id, subject, type, timestamp, actor_kind, actor_id,
 			envelope, schema_ver, codec, js_seq, rendering
 		) VALUES ($1, $2, 'test.event', $4, 'system', NULL, $5, 1, 'identity', $3, '{}'::jsonb)
-	`, id[:], string(subject), int64(seq), ts, envelopeBytes)
+	`, id[:], string(subject), int64(seq), pgnanos.From(ts), envelopeBytes)
 	Expect(err).NotTo(HaveOccurred())
 }
 
@@ -104,8 +105,8 @@ func insertIntegrationColdRowWithDEK(pool *pgxpool.Pool, id ulid.ULID, subject, 
 			id, subject, type, timestamp, actor_kind, actor_id,
 			envelope, schema_ver, codec, js_seq, rendering,
 			dek_ref, dek_version
-		) VALUES ($1, $2, $3, now(), 'system', NULL, $4, 1, 'xchacha20v1', 1, '{}'::jsonb, $5, $6)
-	`, id[:], subject, evType, envelopeBytes, dekRef, dekVersion)
+		) VALUES ($1, $2, $3, $7, 'system', NULL, $4, 1, 'xchacha20v1', 1, '{}'::jsonb, $5, $6)
+	`, id[:], subject, evType, envelopeBytes, dekRef, dekVersion, pgnanos.From(time.Now()))
 	Expect(err).NotTo(HaveOccurred())
 }
 

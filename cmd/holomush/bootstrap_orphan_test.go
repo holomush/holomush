@@ -8,11 +8,13 @@ package main
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/pkg/errutil"
 )
@@ -55,8 +57,8 @@ func TestBootstrapFailsWithSyntheticOrphan(t *testing.T) {
 	_, execErr := pool.Exec(context.Background(), `
 		INSERT INTO events_audit (id, subject, type, timestamp, actor_kind,
 		                         actor_id, envelope, schema_ver, codec, js_seq, rendering)
-		VALUES ($1, 'test', 'test', now(), $2, NULL, '\x00', 1, 'identity', 1, '{}'::jsonb)
-	`, []byte("0123456789abcdef"), eventbus.ActorKindPlugin.String())
+		VALUES ($1, 'test', 'test', $3, $2, NULL, '\x00', 1, 'identity', 1, '{}'::jsonb)
+	`, []byte("0123456789abcdef"), eventbus.ActorKindPlugin.String(), pgnanos.From(time.Now()))
 	require.NoError(t, execErr)
 
 	err = runBootstrapOrphanCheck(context.Background(), pool)

@@ -14,6 +14,7 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/eventbus/audit/chain"
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/test/testutil"
 )
 
@@ -44,9 +45,9 @@ func insertAuditEntry(pool *pgxpool.Pool, jsSeq int64, subject, payloadJSON stri
 			(id, subject, type, timestamp, actor_kind, actor_id,
 			 envelope, schema_ver, codec, js_seq, rendering)
 		VALUES
-			($1, $2, 'test.chain.event', now(), 'system', NULL,
+			($1, $2, 'test.chain.event', $5, 'system', NULL,
 			 $3, 1, 'identity', $4, '{}'::jsonb)
-	`, fakeID, subject, []byte(payloadJSON), jsSeq)
+	`, fakeID, subject, []byte(payloadJSON), jsSeq, pgnanos.From(time.Now()))
 	Expect(err).NotTo(HaveOccurred())
 }
 
