@@ -59,34 +59,105 @@ type projection struct {
 	workerCtx context.Context //nolint:containedctx // lifecycle ctx, not request ctx
 }
 
+// consumerCreateBackoffs is the retry schedule for CreateOrUpdateConsumer.
+// Sized to absorb JetStream's brief warmup window where the meta-leader
+// is elected and the events stream is queryable but the consumer-create
+// RPC can still return "no responders" or context-deadline errors under
+// load (observed flake holomush-l015 — admin/policy_chain BeforeEach
+// surfaced AUDIT_CONSUMER_CREATE_FAILED once across ~3 task test:int
+// runs while the host was at 1.5x normal wall time). Total worst-case
+// wait before giving up: ~350ms — long enough to outlast typical warmup
+// jitter, short enough that a real permanent failure (config mismatch,
+// stream missing) still fails fast within the surrounding test timeout.
+//
+// Declared `var` (not `const`) so projection_unit_test.go's
+// withShortBackoffs(t) can swap it to a microsecond schedule for the
+// retry tests. Tests in this package MUST NOT call t.Parallel() while
+// the retry tests are present — concurrent t.Cleanup restores would
+// race on the shared slice. The race detector would catch a violation,
+// but the failure mode is non-obvious; prefer the comment as a guard.
+var consumerCreateBackoffs = []time.Duration{
+	100 * time.Millisecond,
+	250 * time.Millisecond,
+}
+
 // newProjection creates or updates the durable consumer on the EVENTS
 // stream. Durable consumers resume from the last-acked seq on restart,
 // which is what makes this crash-safe.
+//
+// The CreateOrUpdateConsumer call is wrapped in a bounded retry to absorb
+// transient JetStream warmup races (see consumerCreateBackoffs). On
+// terminal failure the wrap surfaces the underlying NATS error as a
+// structured `nats_err` field so callers (oops.Code() consumers,
+// Gomega's Succeed() matcher) see the root cause and not just the
+// AUDIT_CONSUMER_CREATE_FAILED code.
 func newProjection(ctx context.Context, js jetstream.JetStream, pool *pgxpool.Pool, cfg Config) (*projection, error) {
-	cons, err := js.CreateOrUpdateConsumer(ctx, eventbus.StreamName, jetstream.ConsumerConfig{
-		Durable:       cfg.ConsumerName,
-		Name:          cfg.ConsumerName,
-		FilterSubject: eventbus.SubjectFilter,
-		AckPolicy:     jetstream.AckExplicitPolicy,
-		AckWait:       cfg.AckWait,
-		MaxAckPending: cfg.MaxAckPending,
-		// MaxDeliver caps redelivery attempts. Without it, a permanent
-		// persist failure (AUDIT_MISSING_HEADER, AUDIT_BAD_SCHEMA_VERSION,
-		// AUDIT_BAD_MSG_ID, BYTEA-incompatible DB row) would redeliver
-		// forever and permanently consume a MaxAckPending slot — a
-		// handful of poison messages could stall the projection.
-		// Phase A TODO: wire a DLQ (e.g., stream 'EVENTS_AUDIT_DLQ') so
-		// messages that exhaust MaxDeliver are preserved for operator
-		// inspection rather than dropped on max-deliver expiry.
-		MaxDeliver: cfg.MaxDeliver,
+	cons, err := createConsumerWithRetry(ctx, func(ctx context.Context) (jetstream.Consumer, error) {
+		return js.CreateOrUpdateConsumer(ctx, eventbus.StreamName, jetstream.ConsumerConfig{
+			Durable:       cfg.ConsumerName,
+			Name:          cfg.ConsumerName,
+			FilterSubject: eventbus.SubjectFilter,
+			AckPolicy:     jetstream.AckExplicitPolicy,
+			AckWait:       cfg.AckWait,
+			MaxAckPending: cfg.MaxAckPending,
+			// MaxDeliver caps redelivery attempts. Without it, a permanent
+			// persist failure (AUDIT_MISSING_HEADER, AUDIT_BAD_SCHEMA_VERSION,
+			// AUDIT_BAD_MSG_ID, BYTEA-incompatible DB row) would redeliver
+			// forever and permanently consume a MaxAckPending slot — a
+			// handful of poison messages could stall the projection.
+			// Phase A TODO: wire a DLQ (e.g., stream 'EVENTS_AUDIT_DLQ') so
+			// messages that exhaust MaxDeliver are preserved for operator
+			// inspection rather than dropped on max-deliver expiry.
+			MaxDeliver: cfg.MaxDeliver,
+		})
 	})
 	if err != nil {
-		return nil, oops.Code("AUDIT_CONSUMER_CREATE_FAILED").
-			With("stream", eventbus.StreamName).
-			With("consumer", cfg.ConsumerName).
-			Wrap(err)
+		return nil, wrapConsumerCreateError(err, eventbus.StreamName, cfg.ConsumerName)
 	}
 	return &projection{consumer: cons, js: js, pool: pool, cfg: cfg, owners: cfg.Owners}, nil
+}
+
+// wrapConsumerCreateError applies the canonical AUDIT_CONSUMER_CREATE_FAILED
+// wrap. Surfaces the underlying NATS error as a structured `nats_err`
+// field so callers that read oops Code() / fields (Gomega's Succeed()
+// matcher, the Ginkgo failure summary, errutil.AssertErrorContext) see
+// the root cause and not just the holomush error code.
+func wrapConsumerCreateError(err error, stream, consumer string) error {
+	return oops.Code("AUDIT_CONSUMER_CREATE_FAILED").
+		With("stream", stream).
+		With("consumer", consumer).
+		With("nats_err", err.Error()).
+		Wrap(err)
+}
+
+// createConsumerWithRetry invokes create with bounded retries from
+// consumerCreateBackoffs. Returns the first success, the last error
+// after the budget is exhausted, or the last error if ctx is cancelled
+// mid-backoff. Retries on any non-nil error — the cost of retrying a
+// truly permanent error (config mismatch, missing stream) is bounded by
+// the total backoff (~350ms) and the diagnostic cost of differentiating
+// transient vs permanent error classes exceeds the savings.
+func createConsumerWithRetry(ctx context.Context, create func(context.Context) (jetstream.Consumer, error)) (jetstream.Consumer, error) {
+	var lastErr error
+	for attempt := 0; attempt <= len(consumerCreateBackoffs); attempt++ {
+		cons, err := create(ctx)
+		if err == nil {
+			return cons, nil
+		}
+		lastErr = err
+		if attempt == len(consumerCreateBackoffs) {
+			break
+		}
+		if ctx.Err() != nil {
+			return nil, lastErr
+		}
+		select {
+		case <-time.After(consumerCreateBackoffs[attempt]):
+		case <-ctx.Done():
+			return nil, lastErr
+		}
+	}
+	return nil, lastErr
 }
 
 // start attaches the Consume callback synchronously so Subsystem.Start
