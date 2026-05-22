@@ -77,13 +77,15 @@ func (s *ABACSubsystem) Start(ctx context.Context) error {
 
 	roleStore := store.NewPostgresRoleStore(pool)
 	stack, err := BuildABACStack(ctx, ABACConfig{
-		Pool:            pool,
-		CharacterRepo:   postgres.NewCharacterRepository(pool),
-		LocationRepo:    postgres.NewLocationRepository(pool),
-		ObjectRepo:      postgres.NewObjectRepository(pool),
-		RoleStore:       roleStore,
-		AuditMode:       s.cfg.AuditMode,
-		CryptoOperators: s.cfg.CryptoOperators,
+		Pool:                   pool,
+		CharacterRepo:          postgres.NewCharacterRepository(pool),
+		LocationRepo:           postgres.NewLocationRepository(pool),
+		ObjectRepo:             postgres.NewObjectRepository(pool),
+		PropertyRepo:           postgres.NewPropertyRepository(pool),
+		ParentLocationResolver: postgres.NewParentLocationResolver(pool),
+		RoleStore:              roleStore,
+		AuditMode:              s.cfg.AuditMode,
+		CryptoOperators:        s.cfg.CryptoOperators,
 	})
 	if err != nil {
 		return oops.Code("ABAC_SETUP_FAILED").Wrap(err)

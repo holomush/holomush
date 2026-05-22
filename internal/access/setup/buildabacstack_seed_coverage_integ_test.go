@@ -45,10 +45,12 @@ func TestBuildABACStack_SeedCoverageMatchesAcknowledged(t *testing.T) {
 	t.Cleanup(pool.Close)
 
 	stack, err := BuildABACStack(ctx, ABACConfig{
-		Pool:          pool,
-		CharacterRepo: worldpostgres.NewCharacterRepository(pool),
-		LocationRepo:  worldpostgres.NewLocationRepository(pool),
-		ObjectRepo:    worldpostgres.NewObjectRepository(pool),
+		Pool:                   pool,
+		CharacterRepo:          worldpostgres.NewCharacterRepository(pool),
+		LocationRepo:           worldpostgres.NewLocationRepository(pool),
+		ObjectRepo:             worldpostgres.NewObjectRepository(pool),
+		PropertyRepo:           worldpostgres.NewPropertyRepository(pool),
+		ParentLocationResolver: worldpostgres.NewParentLocationResolver(pool),
 		// RoleStore intentionally nil; CryptoOperators intentionally empty —
 		// production wiring at subsystem.go always passes these too, but the
 		// presence/absence does not affect provider registration coverage.
