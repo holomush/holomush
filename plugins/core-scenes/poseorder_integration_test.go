@@ -262,19 +262,14 @@ var _ = Describe("INV-P4-8: pose-order metadata is a function of scene_log", fun
 		Expect(*gotChar2.lastPoseSeq).To(Equal(*wantChar2.lastPoseSeq),
 			"INV-P4-8: rebuilt char2.last_pose_seq MUST equal maintained value")
 
-		// Timestamps: Postgres TIMESTAMPTZ has microsecond resolution;
-		// allow ±1µs to absorb any nanosecond truncation during round-trip.
+		// last_pose_at is BIGINT-ns; round-trip is bit-exact (INV-TS-1, INV-TS-2).
 		Expect(gotChar1.lastPoseAt).NotTo(BeNil(),
 			"INV-P4-8: rebuilt char1.last_pose_at MUST be set")
 		Expect(gotChar2.lastPoseAt).NotTo(BeNil(),
 			"INV-P4-8: rebuilt char2.last_pose_at MUST be set")
-		Expect(gotChar1.lastPoseAt.Time().Truncate(time.Microsecond)).To(
-			BeTemporally("~", wantChar1.lastPoseAt.Time().Truncate(time.Microsecond), time.Microsecond),
-			"INV-P4-8: rebuilt char1.last_pose_at MUST match maintained value (±1µs)",
-		)
-		Expect(gotChar2.lastPoseAt.Time().Truncate(time.Microsecond)).To(
-			BeTemporally("~", wantChar2.lastPoseAt.Time().Truncate(time.Microsecond), time.Microsecond),
-			"INV-P4-8: rebuilt char2.last_pose_at MUST match maintained value (±1µs)",
-		)
+		Expect(gotChar1.lastPoseAt.Time().Equal(wantChar1.lastPoseAt.Time())).To(BeTrue(),
+			"INV-P4-8: rebuilt char1.last_pose_at MUST equal maintained value at ns precision")
+		Expect(gotChar2.lastPoseAt.Time().Equal(wantChar2.lastPoseAt.Time())).To(BeTrue(),
+			"INV-P4-8: rebuilt char2.last_pose_at MUST equal maintained value at ns precision")
 	})
 })

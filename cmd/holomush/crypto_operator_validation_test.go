@@ -47,7 +47,7 @@ func seedPlayer(t *testing.T, ctx context.Context, pool *pgxpool.Pool) string {
 	_, err := pool.Exec(ctx,
 		`INSERT INTO players (id, username, password_hash, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $4)`,
-		id, "test_player_"+id, "hash", time.Now().UTC().Truncate(time.Microsecond))
+		id, "test_player_"+id, "hash", time.Now().UTC())
 	require.NoError(t, err)
 	return id
 }

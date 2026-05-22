@@ -250,8 +250,8 @@ var _ = Describe("Manager", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		initial := []dek.Participant{
-			{PlayerID: "01ABC", CharacterID: "01XYZ", BindingID: "01DEF", JoinedAt: time.Now().UTC().Truncate(time.Microsecond)},
-			{PlayerID: "01GHI", CharacterID: "01JKL", BindingID: "01MNO", JoinedAt: time.Now().UTC().Truncate(time.Microsecond)},
+			{PlayerID: "01ABC", CharacterID: "01XYZ", BindingID: "01DEF", JoinedAt: time.Now().UTC()},
+			{PlayerID: "01GHI", CharacterID: "01JKL", BindingID: "01MNO", JoinedAt: time.Now().UTC()},
 		}
 		key, err := mgr.GetOrCreate(ctx, dek.ContextID{Type: "scene", ID: "01HXX"}, initial)
 		Expect(err).NotTo(HaveOccurred())
