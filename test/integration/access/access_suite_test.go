@@ -7,12 +7,14 @@ package access_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
@@ -23,8 +25,11 @@ import (
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/audit"
+	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/world"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
 	"github.com/holomush/holomush/test/testutil"
+	"github.com/oklog/ulid/v2"
 )
 
 var suiteT *testing.T
@@ -36,16 +41,24 @@ func TestAccessIntegration(t *testing.T) {
 }
 
 type accessTestEnv struct {
-	ctx         context.Context
-	pool        *pgxpool.Pool
-	engine      *policy.Engine
-	pStore      policystore.PolicyStore
-	cache       *policy.Cache
-	charRepo    *worldpg.CharacterRepository
-	locRepo     *worldpg.LocationRepository
-	objRepo     *worldpg.ObjectRepository
-	auditWriter *testAuditWriter
-	auditLogger *audit.Logger
+	ctx               context.Context
+	pool              *pgxpool.Pool
+	engine            *policy.Engine
+	pStore            policystore.PolicyStore
+	cache             *policy.Cache
+	charRepo          *worldpg.CharacterRepository
+	locRepo           *worldpg.LocationRepository
+	objRepo           *worldpg.ObjectRepository
+	auditWriter       *testAuditWriter
+	auditLogger       *audit.Logger
+	propRepo          *worldpg.PropertyRepository
+	parentLocResolver *worldpg.ParentLocationResolver
+	propProvider      *attribute.PropertyProvider
+	worldService      *world.Service
+	// roleResolver is exposed so tests can assign roles to subjects
+	// (e.g. env.roleResolver.roles[access.CharacterSubject(adminID)] = []string{"admin"})
+	// for tests that exercise admin-visibility property seeds.
+	roleResolver *staticRoleResolver
 }
 
 type testAuditWriter struct {
@@ -161,6 +174,18 @@ func setupAccessTestEnv() (*accessTestEnv, error) {
 		return nil, err
 	}
 
+	// holomush-72ou: PropertyProvider needs a postgres-layer ParentLocationResolver
+	// so property visibility seeds (public-read / private-read / admin-read /
+	// owner-write / restricted-visible-to / restricted-excluded) evaluate against
+	// real attributes via the REAL ABAC engine. Mirrors the k3ud/g776 pattern.
+	propRepo := worldpg.NewPropertyRepository(pool)
+	parentLocResolver := worldpg.NewParentLocationResolver(pool)
+	propProvider := attribute.NewPropertyProvider(propRepo, parentLocResolver)
+	if err := resolver.RegisterProvider(propProvider); err != nil {
+		pool.Close()
+		return nil, err
+	}
+
 	compiler := policy.NewCompiler(registry.Schema())
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
@@ -181,17 +206,30 @@ func setupAccessTestEnv() (*accessTestEnv, error) {
 
 	engine := policy.NewEngine(resolver, cache, &noopSessionResolver{}, auditLogger)
 
+	// Build world.Service with only PropertyRepo + Engine wired — sufficient
+	// for ListPropertiesByParent integration tests (F1-F5). No EventEmitter
+	// or Transactor needed since we only exercise the read-filter path.
+	worldService := world.NewService(world.ServiceConfig{
+		PropertyRepo: propRepo,
+		Engine:       engine,
+	})
+
 	return &accessTestEnv{
-		ctx:         ctx,
-		pool:        pool,
-		engine:      engine,
-		pStore:      pStore,
-		cache:       cache,
-		charRepo:    charRepo,
-		locRepo:     locRepo,
-		objRepo:     objRepo,
-		auditWriter: testWriter,
-		auditLogger: auditLogger,
+		ctx:               ctx,
+		pool:              pool,
+		engine:            engine,
+		pStore:            pStore,
+		cache:             cache,
+		charRepo:          charRepo,
+		locRepo:           locRepo,
+		objRepo:           objRepo,
+		auditWriter:       testWriter,
+		auditLogger:       auditLogger,
+		propRepo:          propRepo,
+		parentLocResolver: parentLocResolver,
+		propProvider:      propProvider,
+		worldService:      worldService,
+		roleResolver:      roleResolver,
 	}, nil
 }
 
@@ -213,4 +251,76 @@ func evalAccess(subject, action, resource string) types.Decision {
 	decision, err := env.engine.Evaluate(env.ctx, req)
 	Expect(err).NotTo(HaveOccurred())
 	return decision
+}
+
+// insertProperty inserts an entity_properties row via raw SQL for test setup.
+// Reads the package-global env (set in BeforeSuite). Mirrors the production
+// PropertyRepository.Create JSON encoding for visible_to / excluded_from
+// (JSONB columns, not text[]).
+//
+// DB constraint visibility_restricted_requires_lists: when visibility='restricted',
+// BOTH visible_to AND excluded_from must be non-NULL. This helper emits an empty
+// JSON array [] (not SQL NULL) for each omitted list when visibility='restricted'.
+func insertProperty(parentType string, parentID ulid.ULID, name, value, visibility string, owner *ulid.ULID, visibleTo, excludedFrom []ulid.ULID) ulid.ULID {
+	id := core.NewULID()
+	var ownerStr *string
+	if owner != nil {
+		s := owner.String()
+		ownerStr = &s
+	}
+	stringify := func(in []ulid.ULID) []string {
+		if len(in) == 0 {
+			return nil
+		}
+		out := make([]string, len(in))
+		for i, u := range in {
+			out[i] = u.String()
+		}
+		return out
+	}
+
+	vtStrs := stringify(visibleTo)
+	efStrs := stringify(excludedFrom)
+
+	// For restricted visibility the visibility_restricted_requires_lists CHECK
+	// constraint (migration 000001) requires both lists non-NULL. Use an empty
+	// JSON array [] (not SQL NULL) when the caller passed nil.
+	var visibleToJSON, excludedFromJSON []byte
+	var err error
+	if visibility == "restricted" {
+		if vtStrs == nil {
+			vtStrs = []string{}
+		}
+		if efStrs == nil {
+			efStrs = []string{}
+		}
+		visibleToJSON, err = json.Marshal(vtStrs)
+		Expect(err).NotTo(HaveOccurred())
+		excludedFromJSON, err = json.Marshal(efStrs)
+		Expect(err).NotTo(HaveOccurred())
+	} else {
+		visibleToJSON, err = jsonNullableStringSlice(vtStrs)
+		Expect(err).NotTo(HaveOccurred())
+		excludedFromJSON, err = jsonNullableStringSlice(efStrs)
+		Expect(err).NotTo(HaveOccurred())
+	}
+
+	now := time.Now().UTC()
+	_, err = env.pool.Exec(env.ctx, `
+		INSERT INTO entity_properties (id, parent_type, parent_id, name, value, owner, visibility, flags, visible_to, excluded_from, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+		id.String(), parentType, parentID.String(), name, value, ownerStr, visibility,
+		[]byte("[]"), visibleToJSON, excludedFromJSON, now, now)
+	Expect(err).NotTo(HaveOccurred())
+	return id
+}
+
+// jsonNullableStringSlice mirrors production marshalNullableStringSlice:
+// nil/empty input → SQL NULL (returned as nil []byte), non-empty →
+// JSON-encoded array.
+func jsonNullableStringSlice(s []string) ([]byte, error) {
+	if len(s) == 0 {
+		return nil, nil
+	}
+	return json.Marshal(s)
 }

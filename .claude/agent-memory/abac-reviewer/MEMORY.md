@@ -140,3 +140,22 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   default-denied uniformly (no info leak DELTA). Caller surface
   unchanged: `internal/command/types.go:71` & `internal/plugin/hostfunc/cap_property.go:28`
   return shape unchanged.
+- **visible_to/excluded_from provider activation (rmsi.5, 2026-05-22)**:
+  `seed:property-restricted-visible-to` and `seed:property-restricted-excluded` were dead
+  code until this fix — PropertyProvider never emitted those attributes. Fix: emit ONLY
+  when `len(prop.VisibleTo) > 0` / `len(prop.ExcludedFrom) > 0` (omit-when-empty, ti1b
+  pattern). Schema correctly declares `AttrTypeStringList`. No default-deny integrity
+  risk: the PERMIT seed only fires for listed principals, and the FORBID seed only fires
+  for excluded ones. When reviewing future StringList provider additions, verify the `has`
+  guard path: if the provider emits an empty list (`[]any{}`) rather than omitting the
+  key, `resource has X` returns TRUE even when the list is logically absent — same
+  fail-open shape as the empty-string sentinel bug (ti1b). The correct shape is:
+  omit the key entirely, not emit an empty list.
+- **Audit assertion gap in integration property specs (rmsi.5 Low NIT)**:
+  `seed_policies_test.go` S1-S13 reset `auditWriter` in BeforeEach but no spec in the
+  property block reads back `env.auditWriter.Entries()` to verify the decision was
+  recorded. Engine-level audit contract is covered by `evaluation_test.go:68-70` (via
+  `Eventually`), but per-property-seed audit assertion is absent. When reviewing future
+  integration suites that add new seed coverage blocks, check whether the block includes
+  at least one audit-trail assertion — especially for FORBID seeds where audit capture
+  is the primary defense against undetected denials.
