@@ -27,8 +27,9 @@ import (
 // A regression in this function would manifest as EVERY sensitive
 // plugin-stored event failing AEAD tag-check on decrypt, because the
 // reconstructed AAD would no longer be byte-equal to the encrypt-side
-// AAD computed at publish time. The C.2 integration test
-// (TestRoundTripProducesByteEqualAAD) is the load-bearing guard.
+// AAD computed at publish time. The integration test
+// TestRoundTripPreservesAADWithSubMicrosecondNanos (INV-TS-5, formerly
+// INV-P7-16 per ADR holomush-f5h0) is the load-bearing guard.
 func AuditRowToEvent(row *pluginauditpb.AuditRow) *eventbusv1.Event {
 	if row == nil {
 		return nil
