@@ -13,6 +13,8 @@ import (
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -172,6 +174,35 @@ func (s *Session) QueryStreamHistory(ctx context.Context, stream string) ([]*cor
 		return nil, err
 	}
 	return resp.GetEvents(), nil
+}
+
+// EmitDirectEvent publishes an event to the embedded bus, bypassing the
+// command dispatcher (which the harness wires with an empty registry). Tests
+// use this to inject events into a stream so downstream QueryStreamHistory
+// reads have material to operate on. The event is published via the same
+// production path callers use — eventbus.Subsystem.Publisher.Publish — so
+// JetStream-side persistence and audit semantics match production.
+//
+// stream is the legacy colon-style stream name (e.g., "location:01ABC"); the
+// helper translates it to the JetStream-native subject. Returns once the
+// underlying Publish completes — JetStream's ack guarantees the event is
+// queryable on return.
+func (s *Session) EmitDirectEvent(ctx context.Context, stream, evType string, payload []byte) error {
+	natsSubject, err := subjectxlate.Legacy(stream, s.server.bus.Bus.GameID())
+	if err != nil {
+		return oops.With("stream", stream).Wrap(err)
+	}
+	event := eventbus.NewEvent(
+		eventbus.Subject(natsSubject),
+		eventbus.Type(evType),
+		eventbus.Actor{Kind: eventbus.ActorKindCharacter, ID: s.CharacterID},
+		payload,
+	)
+	pub := s.server.bus.Bus.Publisher()
+	if pub == nil {
+		return oops.Errorf("privacytest.Session.EmitDirectEvent: bus has no publisher (JS not ready)")
+	}
+	return pub.Publish(ctx, event) //nolint:wrapcheck // test helper: callers see bus errors directly
 }
 
 // ListFocusPresence calls the snapshot RPC for the session's current focus
