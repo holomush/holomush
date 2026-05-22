@@ -23,6 +23,7 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/codec"
+	"github.com/holomush/holomush/internal/pgnanos"
 )
 
 // ColdQuery describes a single AdminReadStream batch query against events_audit.
@@ -105,7 +106,8 @@ func (c *ColdReader) Read(ctx context.Context, q ColdQuery) ([]ColdRow, error) {
 			idBytes      []byte
 			subjectStr   string
 			eventType    string
-			ts           time.Time
+			// events_audit.timestamp is BIGINT-ns post-gfo6 (INV-TS-1).
+			ts           pgnanos.Time
 			actorKindStr string
 			actorIDBytes []byte
 			envelope     []byte
@@ -169,7 +171,7 @@ func (c *ColdReader) Read(ctx context.Context, q ColdQuery) ([]ColdRow, error) {
 			ID:         id,
 			Subject:    eventbus.Subject(subjectStr),
 			Type:       eventbus.Type(eventType),
-			Timestamp:  ts,
+			Timestamp:  ts.Time(),
 			Actor:      eventbus.Actor{Kind: actorKindFromString(actorKindStr), ID: actorID},
 			Envelope:   envelope,
 			Codec:      codec.Name(codecStr),
@@ -219,11 +221,11 @@ func (c *ColdReader) buildSQL(q ColdQuery) (string, []any, error) { //nolint:goc
 	sb.WriteString(" AND dek_ref IS NOT NULL")
 
 	if !q.Since.IsZero() {
-		args = append(args, q.Since)
+		args = append(args, pgnanos.From(q.Since))
 		fmt.Fprintf(&sb, " AND timestamp >= $%d", len(args))
 	}
 	if !q.Until.IsZero() {
-		args = append(args, q.Until)
+		args = append(args, pgnanos.From(q.Until))
 		fmt.Fprintf(&sb, " AND timestamp <= $%d", len(args))
 	}
 

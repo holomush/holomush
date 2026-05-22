@@ -19,6 +19,7 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/pkg/errutil"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	"github.com/holomush/holomush/test/testutil"
@@ -63,6 +64,7 @@ func insertEncryptedAuditRow(
 	})
 	Expect(err).NotTo(HaveOccurred())
 
+	// timestamp is BIGINT-ns post-gfo6 (INV-TS-1).
 	_, err = pool.Exec(context.Background(), `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
@@ -71,7 +73,7 @@ func insertEncryptedAuditRow(
 		) VALUES ($1, $2, 'test.encrypted', $3, 'system', NULL,
 		          $4, 1, 'aes256-gcm', $5,
 		          42, 1)
-	`, id[:], string(subject), ts, envelopeBytes, int64(seq))
+	`, id[:], string(subject), pgnanos.From(ts), envelopeBytes, int64(seq))
 	Expect(err).NotTo(HaveOccurred())
 }
 
@@ -94,13 +96,14 @@ func insertIdentityAuditRow(
 	})
 	Expect(err).NotTo(HaveOccurred())
 
+	// timestamp is BIGINT-ns post-gfo6 (INV-TS-1).
 	_, err = pool.Exec(context.Background(), `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
 			envelope, schema_ver, codec, js_seq
 		) VALUES ($1, $2, 'test.cleartext', $3, 'system', NULL,
 		          $4, 1, 'identity', $5)
-	`, id[:], string(subject), ts, envelopeBytes, int64(seq))
+	`, id[:], string(subject), pgnanos.From(ts), envelopeBytes, int64(seq))
 	Expect(err).NotTo(HaveOccurred())
 }
 

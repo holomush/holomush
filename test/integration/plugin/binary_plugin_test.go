@@ -7,7 +7,6 @@ package plugin_test
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -33,6 +32,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
+	"github.com/holomush/holomush/internal/pgnanos"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/goplugin"
 	"github.com/holomush/holomush/internal/plugin/plugintest"
@@ -608,8 +608,9 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			return scenev1.NewSceneServiceClient(conn)
 		}
 
-		// Helper for direct DB state read
-		readSceneState := func(id string) (state string, endedAt sql.NullTime) {
+		// Helper for direct DB state read. ended_at is BIGINT-ns post-gfo6
+		// (INV-TS-1); nullable column → *pgnanos.Time pointer pattern.
+		readSceneState := func(id string) (state string, endedAt *pgnanos.Time) {
 			err := lifecyclepool.QueryRow(
 				lifecyclectx,
 				`SELECT state, ended_at FROM plugin_core_scenes.scenes WHERE id = $1`,
@@ -629,7 +630,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 				state, endedAt := readSceneState(lifecyclesceneID)
 				Expect(state).To(Equal("ended"))
-				Expect(endedAt.Valid).To(BeTrue(), "ended_at should be set")
+				Expect(endedAt).NotTo(BeNil(), "ended_at should be set")
 			})
 
 			It("returns FailedPrecondition for an already-ended scene", func() {
@@ -700,7 +701,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 				state, endedAt := readSceneState(lifecyclesceneID)
 				Expect(state).To(Equal("ended"))
-				Expect(endedAt.Valid).To(BeTrue())
+				Expect(endedAt).NotTo(BeNil())
 			})
 		})
 
