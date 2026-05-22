@@ -268,6 +268,44 @@ func (s *Server) SetLocationArrivedAt(ctx context.Context, sessionID string, t t
 		"privacytest.Server.SetLocationArrivedAt: expected 1 row affected, got %d (sessionID=%s)", tag.RowsAffected(), sessionID)
 }
 
+// DeleteCharacter removes a character row + its FK-dependent rows from
+// Postgres in dependency-safe order. Used by iwzt.21 (I-PRIV-2 guest
+// name-reuse) to simulate guest-character cleanup that production logout
+// does NOT currently perform — without this, the unique-name constraint on
+// `characters.LOWER(name)` blocks any subsequent guest from drawing the
+// same display name, defeating the name-reuse scenario.
+//
+// Production guest service relies on ExistsByName to retry-on-collision;
+// this helper is test-only and MUST NOT be invoked from production paths.
+func (s *Server) DeleteCharacter(ctx context.Context, charID ulid.ULID) {
+	s.t.Helper()
+	charIDStr := charID.String()
+
+	// FK-safe order: dependent rows first (sessions, bindings, roles, owned
+	// objects), then the character row. sessions for this character must be
+	// gone before the character can be deleted; the test contract is that
+	// Logout has already removed them, but DELETE is idempotent so we cover
+	// that case too. objects.owner_id REFERENCES characters(id) defaults to
+	// ON DELETE RESTRICT (per migrations/000001_baseline.up.sql), so any
+	// character-owned objects would block the character DELETE without an
+	// explicit pre-clean.
+	for _, child := range []struct{ table, col string }{
+		{"sessions", "character_id"},
+		{"player_character_bindings", "character_id"},
+		{"character_roles", "character_id"},
+		{"objects", "owner_id"},
+	} {
+		_, err := s.pool.Exec(ctx, "DELETE FROM "+child.table+" WHERE "+child.col+" = $1", charIDStr)
+		require.NoError(s.t, err, "privacytest.Server.DeleteCharacter: clean %s", child.table)
+	}
+
+	tag, err := s.pool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, charIDStr)
+	require.NoError(s.t, err, "privacytest.Server.DeleteCharacter: delete characters")
+	require.Equalf(s.t, int64(1), tag.RowsAffected(),
+		"privacytest.Server.DeleteCharacter: expected 1 row affected, got %d (charID=%s)",
+		tag.RowsAffected(), charIDStr)
+}
+
 // ConnectGuest creates a guest player+character and opens a game session.
 // The returned Session is ready for SendCommand / DrainEvents / Logout calls.
 func (s *Server) ConnectGuest(ctx context.Context) *Session {
