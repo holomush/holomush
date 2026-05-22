@@ -111,7 +111,11 @@ func TestQueryStreamHistoryRejectsMissingSessionID(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "INVALID_ARGUMENT")
 }
 
-func TestQueryStreamHistoryReturnsSessionNotFound(t *testing.T) {
+// I-PRIV-5 wire opacity: missing-session denial MUST collapse to
+// STREAM_ACCESS_DENIED on the wire (denial_reason=session_not_found goes to
+// slog only). Top-level oops code is asserted per .claude/rules/grpc-errors.md
+// to avoid double-wrap chain-walk false positives.
+func TestQueryStreamHistoryReturnsStreamAccessDeniedOnUnknownSession(t *testing.T) {
 	t.Parallel()
 	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, newTestSessionStore(t, nil))
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
@@ -119,10 +123,16 @@ func TestQueryStreamHistoryReturnsSessionNotFound(t *testing.T) {
 		Stream:    "location:01HYXYZ0C0000000000000000C",
 	})
 	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "SESSION_NOT_FOUND")
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "denial must surface as an oops error")
+	assert.Equal(t, "STREAM_ACCESS_DENIED", oopsErr.Code(),
+		"I-PRIV-5: missing-session denial must NOT leak SESSION_NOT_FOUND to the wire")
 }
 
-func TestQueryStreamHistoryReturnsSessionExpired(t *testing.T) {
+// I-PRIV-5 wire opacity: expired-session denial MUST collapse to
+// STREAM_ACCESS_DENIED on the wire (denial_reason=expired_session goes to
+// slog only).
+func TestQueryStreamHistoryReturnsStreamAccessDeniedOnExpiredSession(t *testing.T) {
 	t.Parallel()
 	past := time.Now().Add(-time.Hour)
 	sess := newTestSessionStore(t, map[string]*session.Info{
@@ -134,7 +144,10 @@ func TestQueryStreamHistoryReturnsSessionExpired(t *testing.T) {
 		Stream:    "location:01HYXYZ0C0000000000000000C",
 	})
 	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "SESSION_EXPIRED")
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "denial must surface as an oops error")
+	assert.Equal(t, "STREAM_ACCESS_DENIED", oopsErr.Code(),
+		"I-PRIV-5: expired-session denial must NOT leak SESSION_EXPIRED to the wire")
 }
 
 func TestQueryStreamHistoryRejectsEmptyStream(t *testing.T) {

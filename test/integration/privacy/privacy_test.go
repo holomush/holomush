@@ -447,3 +447,93 @@ var _ = Describe("I-PRIV-1: character move resets location floor", func() {
 		}
 	})
 })
+
+// I-PRIV-5: every denial path on QueryStreamHistory MUST return the same
+// wire-level code STREAM_ACCESS_DENIED. The internal denial_reason
+// (wrong_location, not_member, policy_denied, expired_session,
+// session_not_found) goes to slog only — it MUST NOT cross the wire as a
+// distinct error code, because doing so leaks information that lets a
+// caller probe the denial taxonomy.
+//
+// Harness contract: uses WithPolicyEngine(DenyAllEngine) so staffOverride
+// returns false (otherwise the hard-gate is bypassed for staff). The
+// policy-denied entry queries an unseeded stream ("admin:audit") which
+// DenyAll rejects regardless.
+var _ = Describe("I-PRIV-5: denial wire opacity", func() {
+	var (
+		ts  *integrationtest.Server
+		ctx context.Context
+	)
+
+	BeforeEach(func() {
+		ctx, _ = context.WithTimeout(context.Background(), 90*time.Second) //nolint:govet // cancel unused in test lifecycle
+		ts = integrationtest.Start(suiteT, integrationtest.WithPolicyEngine(policytest.DenyAllEngine()))
+	})
+
+	AfterEach(func() {
+		if ts != nil {
+			ts.Stop()
+		}
+	})
+
+	expectStreamAccessDenied := func(err error, denialReason string) {
+		Expect(err).To(HaveOccurred(),
+			"I-PRIV-5: %s denial MUST surface as an error", denialReason)
+		oopsErr, ok := oops.AsOops(err)
+		Expect(ok).To(BeTrue(), "denial must surface as an oops error")
+		Expect(oopsErr.Code()).To(Equal("STREAM_ACCESS_DENIED"),
+			"I-PRIV-5: %s denial MUST collapse to STREAM_ACCESS_DENIED on the wire (internal denial_reason goes to slog only)",
+			denialReason)
+	}
+
+	It("wrong location (hard-gate) returns STREAM_ACCESS_DENIED", func() {
+		sess := ts.ConnectAuthed(ctx, "Alpha")
+		defer sess.Logout(ctx)
+		// Pre-create a different location; sess is at the guest start location.
+		otherLoc := ts.NewLocation(ctx)
+		_, err := sess.QueryStreamHistory(ctx, "location:"+otherLoc.String())
+		expectStreamAccessDenied(err, "wrong_location")
+	})
+
+	It("not member (I-17 scene private stream) returns STREAM_ACCESS_DENIED", func() {
+		sess := ts.ConnectAuthed(ctx, "Beta")
+		defer sess.Logout(ctx)
+		// Scene where Beta is NOT a participant (no scene_participants row).
+		// Use dot-style stream subject so isSceneStream recognises it as a
+		// private stream and routes through the I-17 membership gate
+		// (sessionHasMembership). Colon-style "scene:<id>:ic" falls through
+		// to the ABAC default branch and would duplicate the policy_denied
+		// entry below.
+		scene := ts.NewSceneWithoutMember(ctx)
+		stream := "events." + ts.GameID() + ".scene." + scene.String() + ".ic"
+		_, err := sess.QueryStreamHistory(ctx, stream)
+		expectStreamAccessDenied(err, "not_member")
+	})
+
+	It("ABAC policy denied (public stream, no grant) returns STREAM_ACCESS_DENIED", func() {
+		sess := ts.ConnectAuthed(ctx, "Gamma")
+		defer sess.Logout(ctx)
+		// "admin:audit" is a stream pattern with no seed grant; DenyAll
+		// engine rejects every Evaluate call → ABAC denial path.
+		_, err := sess.QueryStreamHistory(ctx, "admin:audit")
+		expectStreamAccessDenied(err, "policy_denied")
+	})
+
+	It("expired session returns STREAM_ACCESS_DENIED", func() {
+		sess := ts.ConnectAuthed(ctx, "Delta")
+		// No defer Logout — the session row is force-expired below; the
+		// production logout RPC against an expired session may behave
+		// differently than this test cares about.
+		ts.ExpireSession(ctx, sess.SessionID)
+		_, err := sess.QueryStreamHistory(ctx, "location:"+sess.LocationID.String())
+		expectStreamAccessDenied(err, "expired_session")
+	})
+
+	It("session not found (deleted) returns STREAM_ACCESS_DENIED", func() {
+		sess := ts.ConnectAuthed(ctx, "Epsilon")
+		// No defer Logout — the session row is deleted below.
+		ts.DeleteSession(ctx, sess.SessionID)
+		_, err := sess.QueryStreamHistory(ctx, "location:"+sess.LocationID.String())
+		expectStreamAccessDenied(err, "session_not_found")
+	})
+})

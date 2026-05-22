@@ -67,16 +67,29 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	info, err := s.sessionStore.Get(ctx, req.SessionId)
 	if err != nil {
 		if oopsErr, ok := oops.AsOops(err); ok && oopsErr.Code() == "SESSION_NOT_FOUND" {
-			return nil, oops.Code("SESSION_NOT_FOUND").
-				With("session_id", req.SessionId).
-				Errorf("session not found")
+			// I-PRIV-5 wire opacity: missing-session denial collapses to
+			// STREAM_ACCESS_DENIED on the wire. denial_reason goes to slog
+			// only; internal SESSION_NOT_FOUND must not leak to the client.
+			slog.InfoContext(ctx, "stream access denied: session not found",
+				"session_id", req.SessionId,
+				"stream", req.Stream,
+				"denial_reason", "session_not_found")
+			return nil, oops.Code("STREAM_ACCESS_DENIED").
+				With("session_id", req.SessionId).With("stream", req.Stream).
+				Errorf("not authorized to read stream")
 		}
 		return nil, oops.Code("INTERNAL").Wrap(err)
 	}
 	if info.IsExpired() {
-		return nil, oops.Code("SESSION_EXPIRED").
-			With("session_id", req.SessionId).
-			Errorf("session expired")
+		// I-PRIV-5 wire opacity: expired-session denial collapses to
+		// STREAM_ACCESS_DENIED on the wire. denial_reason goes to slog only.
+		slog.InfoContext(ctx, "stream access denied: session expired",
+			"session_id", req.SessionId,
+			"stream", req.Stream,
+			"denial_reason", "expired_session")
+		return nil, oops.Code("STREAM_ACCESS_DENIED").
+			With("session_id", req.SessionId).With("stream", req.Stream).
+			Errorf("not authorized to read stream")
 	}
 
 	// Step 2: Validate stream.

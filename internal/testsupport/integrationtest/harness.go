@@ -313,6 +313,24 @@ func (s *Server) GameID() string {
 	return s.bus.Bus.GameID()
 }
 
+// DeleteSession directly deletes a session row from Postgres. Used by
+// iwzt.11 wire-opacity tests to exercise the missing-session denial
+// branch of I-PRIV-5: a client holding a session_id that no longer
+// resolves in sessionStore.Get MUST receive STREAM_ACCESS_DENIED on the
+// wire (denial_reason=session_not_found is slog-only).
+//
+// FK side-effect: cascades to session_connections (ON DELETE CASCADE
+// per migration 000001_baseline.up.sql). Any future FK added to
+// sessions without ON DELETE CASCADE would need explicit pre-cleanup.
+func (s *Server) DeleteSession(ctx context.Context, sessionID string) {
+	s.t.Helper()
+	tag, err := s.pool.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, sessionID)
+	require.NoError(s.t, err, "integrationtest.Server.DeleteSession")
+	require.Equalf(s.t, int64(1), tag.RowsAffected(),
+		"integrationtest.Server.DeleteSession: expected 1 row affected, got %d (sessionID=%s)",
+		tag.RowsAffected(), sessionID)
+}
+
 // ExpireSession directly marks a session row as expired in Postgres.
 // Used by iwzt tests to force session-expiry scenarios.
 func (s *Server) ExpireSession(ctx context.Context, sessionID string) {
