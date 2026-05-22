@@ -116,6 +116,27 @@ func NewPluginConsumerManager(js jetstream.JetStream, opts ...PluginConsumerMana
 	return m
 }
 
+// wrapPluginConsumerCreateError applies the canonical
+// AUDIT_PLUGIN_CONSUMER_CREATE_FAILED wrap. Mirrors
+// wrapConsumerCreateError (host-projection variant in projection.go),
+// surfacing the underlying NATS error as a structured `nats_err`
+// field so oops Code() / field readers (Gomega's Succeed() matcher,
+// Ginkgo failure summary, errutil.AssertErrorContext) see the root
+// cause and not just the holomush error code.
+//
+// Includes the implicit `stream` field for symmetry with the host
+// wrap — both surfaces target eventbus.StreamName ("EVENTS") on the
+// same JetStream, so log-search and dashboard panels can filter by a
+// single `stream` field across both audit-consumer-create call sites.
+func wrapPluginConsumerCreateError(err error, pluginName, consumer string) error {
+	return oops.Code("AUDIT_PLUGIN_CONSUMER_CREATE_FAILED").
+		With("stream", eventbus.StreamName).
+		With("plugin", pluginName).
+		With("consumer", consumer).
+		With("nats_err", err.Error()).
+		Wrap(err)
+}
+
 // Add creates (or updates) a durable consumer for the given plugin block
 // and registers its dispatcher. MUST be called before Start.
 func (m *PluginConsumerManager) Add(ctx context.Context, cfg PluginConsumerConfig) error {
@@ -160,20 +181,29 @@ func (m *PluginConsumerManager) Add(ctx context.Context, cfg PluginConsumerConfi
 	}
 
 	name := pluginDurableName(cfg.PluginName)
-	cons, err := m.js.CreateOrUpdateConsumer(ctx, eventbus.StreamName, jetstream.ConsumerConfig{
-		Durable:        name,
-		Name:           name,
-		FilterSubjects: cfg.Subjects,
-		AckPolicy:      jetstream.AckExplicitPolicy,
-		AckWait:        ackWait,
-		MaxAckPending:  maxAckPending,
-		MaxDeliver:     maxDeliver,
+	// Route through createConsumerWithRetry so plugin Add() shares the
+	// JetStream-warmup retry behavior newProjection guards against —
+	// same RPC, same js, same EVENTS stream. Prophylactic: no flake has
+	// been observed on the plugin path (l015's empirical observation
+	// was on the host projection), but the failure surface is
+	// structurally identical, so the retry preserves symmetry rather
+	// than papering over a tracked regression. Plugin Add() runs after
+	// the host projection's consumer create in production wiring, so
+	// warmup is typically already absorbed by the time we get here
+	// (holomush-ghg1 follow-up to l015).
+	cons, err := createConsumerWithRetry(ctx, func(ctx context.Context) (jetstream.Consumer, error) {
+		return m.js.CreateOrUpdateConsumer(ctx, eventbus.StreamName, jetstream.ConsumerConfig{
+			Durable:        name,
+			Name:           name,
+			FilterSubjects: cfg.Subjects,
+			AckPolicy:      jetstream.AckExplicitPolicy,
+			AckWait:        ackWait,
+			MaxAckPending:  maxAckPending,
+			MaxDeliver:     maxDeliver,
+		})
 	})
 	if err != nil {
-		return oops.Code("AUDIT_PLUGIN_CONSUMER_CREATE_FAILED").
-			With("plugin", cfg.PluginName).
-			With("consumer", name).
-			Wrap(err)
+		return wrapPluginConsumerCreateError(err, cfg.PluginName, name)
 	}
 
 	pc := &pluginConsumer{cfg: cfg, consumer: cons}
