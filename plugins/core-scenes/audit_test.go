@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/pkg/errutil"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -201,7 +202,7 @@ func TestQueryHistoryAllowsMemberAndReturnsRows(t *testing.T) {
 				id:        ulidStringBytes(t, "01EVENT0000000000000000000"),
 				subject:   "events.main.scene." + sceneID + ".ic",
 				eventType: "scene.pose.posted",
-				timestamp: time.Unix(100, 0),
+				timestamp: pgnanos.From(time.Unix(100, 0)),
 			},
 		},
 	}
@@ -261,7 +262,7 @@ func TestQueryHistoryReChecksMembershipAcrossPaginations(t *testing.T) {
 			id:        ulidStringBytes(t, "01EVENT0000000000000000000"),
 			subject:   "events.main.scene." + sceneID + ".ic",
 			eventType: "scene.pose.posted",
-			timestamp: time.Unix(100, 0),
+			timestamp: pgnanos.From(time.Unix(100, 0)),
 		}},
 	}
 	memberStore := &fakeAuditStore{
@@ -516,7 +517,7 @@ func TestQueryHistoryPreservesPlayerActorKind(t *testing.T) {
 				id:        ulidStringBytes(t, "01EVENT0000000000000000000"),
 				subject:   "events.main.scene." + sceneID + ".ic",
 				eventType: "scene.pose.posted",
-				timestamp: time.Unix(100, 0),
+				timestamp: pgnanos.From(time.Unix(100, 0)),
 				actorKind: eventbusv1.ActorKind_ACTOR_KIND_PLAYER.String(),
 				actorID:   playerID,
 			},
