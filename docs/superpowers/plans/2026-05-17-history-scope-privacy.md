@@ -740,7 +740,6 @@ type Session struct {
     OriginalLocationID ulid.ULID    // set at connect; not mutated by MoveTo
     LocationArrivedAt time.Time
     SessionCreatedAt  time.Time
-    LastReattachAt    time.Time
     Client            corev1.CoreServiceClient
     subscribeCancel   context.CancelFunc
 }
@@ -842,7 +841,7 @@ For each helper, implement against the real `CoreServiceClient`:
 - `SendCommand` → `client.SendCommand(...)`
 - `MoveTo` → invoke `MoveCharacter` via the client (find the appropriate RPC; may need `WorldService` client)
 - `DetachTransport` → close the Subscribe stream and clear `subscribeCancel`
-- `ReattachTransport` → open a new Subscribe stream; record `LastReattachAt = time.Now()`
+- `ReattachTransport` → open a new Subscribe stream (per I-PRIV-3 Round 3 amendment, no `LocationArrivedAt`-derived floor advances on reattach; durable consumer's `OptStartTime` is immutable; filter-at-delivery enforces the original floor)
 - `QueryStreamHistory` → `client.QueryStreamHistory(...)` returns events
 - `Logout` → `client.Logout(...)` or equivalent
 - `JoinScene` → `client.JoinScene(...)` or `FocusCoordinator.JoinScene(...)`
@@ -1886,38 +1885,62 @@ Commit message: `feat(grpc): per-subject filter-at-delivery in Subscribe broadca
 
 ---
 
-### Task 15: Integration test — reconnect-after-detach filter drop (I-PRIV-3)
+### Task 15: Integration test — reconnect-after-detach durable replay (I-PRIV-3)
+
+> **Round 3 spec amendment (2026-05-17):** the original "filter drop" framing
+> for this task was rejected by the design-reviewer when NATS JetStream
+> consumer-immutability constraints (error 10012) made the "advance the
+> consumer's `OptStartTime` on reattach" mechanism impossible. Per the §I-PRIV-3
+> amendment, `Subscribe.ReattachCAS` MUST NOT change the durable consumer's
+> `DeliverPolicy`/`OptStartTime`/`OptStartSeq`, and `LocationArrivedAt` is
+> UNCHANGED across reattach. Events emitted during the detach window have
+> timestamp ≥ `LocationArrivedAt` and therefore PASS the per-event
+> filter-at-delivery — they MUST be delivered to the reattached session via
+> JetStream resume from last-acked-seq. There is no `LastReattachAt` floor
+> in production; the pre-Round-3 wording referring to one was removed from
+> the harness in PR iwzt-16-plan-fix.
 
 **Files:**
 
 - Modify: `test/integration/privacy/privacy_test.go`
+- Dependencies: requires the harness's live Subscribe stream wiring
+  (`Session.DetachTransport`, `Session.ReattachTransport`, `Session.WaitForEvent`)
+  — tracked as precursor bead `holomush-m5nj` so the harness work can land
+  independently of this test.
 
 - [ ] **Step 1: Add the reattach-durability scenario**
 
 ```go
-var _ = Describe("I-PRIV-3: ReattachCAS preserves durable; filter enforces new floor", func() {
-    var ts *privacytest.Server
-    BeforeEach(func() { ts = privacytest.Start(GinkgoT()) })
+var _ = Describe("I-PRIV-3: ReattachCAS preserves durable; Subscribe replay delivers detach-window events", func() {
+    var ts *integrationtest.Server
+    BeforeEach(func() { ts = integrationtest.Start(GinkgoT()) })
     AfterEach(func() { ts.Stop() })
 
-    It("drops events emitted during detach via filter-at-delivery on reattach", func() {
+    It("delivers events emitted during transport detach when transport reattaches", func() {
         ctx := context.Background()
         sessA := ts.ConnectAuthed(ctx, "Felix")
         other := ts.ConnectAuthed(ctx, "Gemma")  // same location
         Expect(sessA.LocationID).To(Equal(other.LocationID))
 
         sessA.DetachTransport(ctx)
-        // While detached, other emits.
-        other.SendCommand(ctx, "say while-felix-detached")
-        other.WaitForEvent(ctx, "core-communication:say")
+        // While Felix's transport is detached, Gemma emits.
+        const detachWindowType = "iwzt16-test:during-detach-marker"
+        Expect(other.EmitDirectEvent(ctx,
+            "location:"+other.LocationID.String(),
+            detachWindowType,
+            []byte(`{"character_name":"Gemma","action":"speaks while Felix is detached."}`))).
+            To(Succeed())
 
         sessA.ReattachTransport(ctx)
-        events := sessA.DrainEvents(ctx, 1*time.Second)
-        for _, ev := range events {
-            Expect(ev.GetTimestamp().AsTime()).To(BeTemporally(">=", sessA.LastReattachAt),
-                "event %q at %s leaked across detach window — I-PRIV-3 broken",
-                ev.GetType(), ev.GetTimestamp().AsTime())
-        }
+        // Subscribe replay MUST deliver the detach-window event via durable
+        // resume — per spec §I-PRIV-3 (Round 3) the filter-at-delivery floor
+        // remains LocationArrivedAt, which is unchanged across reattach;
+        // the detach-window event is at-or-after that floor so it passes.
+        ev := sessA.WaitForEvent(ctx, detachWindowType)
+        Expect(ev).NotTo(BeNil(),
+            "reattach Subscribe replay MUST deliver the detach-window event (I-PRIV-3)")
+        Expect(ev.GetTimestamp().AsTime()).To(BeTemporally(">=", sessA.LocationArrivedAt),
+            "delivered event must be at-or-after the unchanged LocationArrivedAt")
     })
 })
 ```
@@ -1925,7 +1948,7 @@ var _ = Describe("I-PRIV-3: ReattachCAS preserves durable; filter enforces new f
 - [ ] **Step 2: Run + Commit**
 
 `task test:int -- ./test/integration/privacy/`
-Commit message: `test(privacy): I-PRIV-3 reattach durability with filter-at-delivery`.
+Commit message: `test(privacy): I-PRIV-3 reattach durable replay (events delivered across detach window)`.
 
 ---
 
