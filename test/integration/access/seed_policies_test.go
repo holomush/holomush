@@ -30,6 +30,12 @@ var _ = Describe("Seed Policy Behavior", func() {
 
 		_, err := env.pool.Exec(ctx, "DELETE FROM player_character_bindings")
 		Expect(err).NotTo(HaveOccurred())
+		// Must precede characters/locations: held_by_character_id and
+		// location_id FKs are ON DELETE SET NULL, which would clear all
+		// three containment fields on any leftover object and violate
+		// chk_exactly_one_containment. Per holomush-k3ud regression test.
+		_, err = env.pool.Exec(ctx, "DELETE FROM objects")
+		Expect(err).NotTo(HaveOccurred())
 		_, err = env.pool.Exec(ctx, "DELETE FROM characters")
 		Expect(err).NotTo(HaveOccurred())
 		_, err = env.pool.Exec(ctx, "DELETE FROM players")
@@ -126,6 +132,90 @@ var _ = Describe("Seed Policy Behavior", func() {
 	Describe("Default deny", func() {
 		It("denies when no policies match", func() {
 			decision := evalAccess("character:"+charID1.String(), "admin_nuke", "location:"+locID1.String())
+			Expect(decision.Effect()).To(Equal(types.EffectDefaultDeny))
+		})
+	})
+
+	// holomush-k3ud: regression lock for seed:player-object-colocation,
+	// exercised through the REAL ObjectProvider (transitive location walk
+	// included). Pins the bug fingerprint: without ObjectProvider
+	// registered, both 'allows reading a co-located object' AND 'allows
+	// reading an object held by a co-located character' would silently
+	// default-deny — the same default-deny shape as the original g776
+	// bug. The privacytest harness uses allowAllPolicyEngine and cannot
+	// catch this class of regression.
+	Describe("Object co-location (holomush-k3ud)", func() {
+		var (
+			objIDDirect ulid.ULID
+			objIDHeld   ulid.ULID
+			objIDNested ulid.ULID
+			containerID ulid.ULID
+		)
+
+		BeforeEach(func() {
+			ctx := context.Background()
+			_, err := env.pool.Exec(ctx, "DELETE FROM objects")
+			Expect(err).NotTo(HaveOccurred())
+
+			// 1. Object directly in locID1 (same as charID1's location).
+			objIDDirect = core.NewULID()
+			_, err = env.pool.Exec(ctx, `
+				INSERT INTO objects (id, name, description, location_id, is_container)
+				VALUES ($1, 'Lantern', 'A brass lantern.', $2, false)`,
+				objIDDirect.String(), locID1.String())
+			Expect(err).NotTo(HaveOccurred())
+
+			// 2. Object held by charID2 (who is at locID1, same as charID1).
+			objIDHeld = core.NewULID()
+			_, err = env.pool.Exec(ctx, `
+				INSERT INTO objects (id, name, description, held_by_character_id, is_container)
+				VALUES ($1, 'Note', 'A folded note.', $2, false)`,
+				objIDHeld.String(), charID2.String())
+			Expect(err).NotTo(HaveOccurred())
+
+			// 3. Object inside a container at locID1 — exercises the
+			//    container-chain walk (a nested case the LocationProvider
+			//    fix did not cover).
+			containerID = core.NewULID()
+			_, err = env.pool.Exec(ctx, `
+				INSERT INTO objects (id, name, description, location_id, is_container)
+				VALUES ($1, 'Chest', 'A wooden chest.', $2, true)`,
+				containerID.String(), locID1.String())
+			Expect(err).NotTo(HaveOccurred())
+
+			objIDNested = core.NewULID()
+			_, err = env.pool.Exec(ctx, `
+				INSERT INTO objects (id, name, description, contained_in_object_id, is_container)
+				VALUES ($1, 'Coin', 'A gold coin.', $2, false)`,
+				objIDNested.String(), containerID.String())
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("allows reading a co-located object", func() {
+			decision := evalAccess("character:"+charID1.String(), "read", "object:"+objIDDirect.String())
+			Expect(decision.Effect()).To(Equal(types.EffectAllow))
+		})
+
+		It("allows reading an object held by a co-located character", func() {
+			decision := evalAccess("character:"+charID1.String(), "read", "object:"+objIDHeld.String())
+			Expect(decision.Effect()).To(Equal(types.EffectAllow))
+		})
+
+		It("allows reading an object inside a co-located container (container-chain walk)", func() {
+			decision := evalAccess("character:"+charID1.String(), "read", "object:"+objIDNested.String())
+			Expect(decision.Effect()).To(Equal(types.EffectAllow))
+		})
+
+		It("denies reading an object in a different location", func() {
+			ctx := context.Background()
+			otherObj := core.NewULID()
+			_, err := env.pool.Exec(ctx, `
+				INSERT INTO objects (id, name, description, location_id, is_container)
+				VALUES ($1, 'Distant rock', '', $2, false)`,
+				otherObj.String(), locID2.String())
+			Expect(err).NotTo(HaveOccurred())
+
+			decision := evalAccess("character:"+charID1.String(), "read", "object:"+otherObj.String())
 			Expect(decision.Effect()).To(Equal(types.EffectDefaultDeny))
 		})
 	})

@@ -5,12 +5,12 @@ package attribute
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 )
 
 // LocationProvider resolves attributes for location entities.
@@ -52,7 +52,9 @@ func (p *LocationProvider) ResolveSubject(_ context.Context, _ string) (map[stri
 func (p *LocationProvider) ResolveResource(ctx context.Context, resourceID string) (map[string]any, error) {
 	parts := strings.SplitN(resourceID, ":", 2)
 	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid resource ID format: expected 'type:id'")
+		return nil, oops.Code("INVALID_RESOURCE_ID").
+			With("resource_id", resourceID).
+			Errorf("invalid resource ID format: expected 'type:id'")
 	}
 
 	entityType, idStr := parts[0], parts[1]
@@ -72,7 +74,9 @@ func (p *LocationProvider) ResolveResource(ctx context.Context, resourceID strin
 
 	loc, err := p.repo.Get(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("fetch location %s: %w", id, err)
+		return nil, oops.Code("LOCATION_FETCH_FAILED").
+			With("location_id", id.String()).
+			Wrapf(err, "fetch location %s", id)
 	}
 
 	attrs := map[string]any{

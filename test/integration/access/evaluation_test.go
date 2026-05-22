@@ -25,6 +25,12 @@ var _ = Describe("ABAC Full Evaluation Path (Canary)", func() {
 
 		_, err := env.pool.Exec(ctx, "DELETE FROM player_character_bindings")
 		Expect(err).NotTo(HaveOccurred())
+		// Must precede characters/locations: held_by_character_id and
+		// location_id FKs are ON DELETE SET NULL, which would clear all
+		// three containment fields on any leftover object and violate
+		// chk_exactly_one_containment. Per holomush-k3ud regression test.
+		_, err = env.pool.Exec(ctx, "DELETE FROM objects")
+		Expect(err).NotTo(HaveOccurred())
 		_, err = env.pool.Exec(ctx, "DELETE FROM characters")
 		Expect(err).NotTo(HaveOccurred())
 		_, err = env.pool.Exec(ctx, "DELETE FROM players")

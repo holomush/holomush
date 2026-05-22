@@ -33,7 +33,8 @@ var _ = Describe("PostgresSessionStore.ListActiveByLocation (I-PRES-1)", func() 
 	// table. Only the columns that have no DEFAULT or are required for the
 	// test assertions are supplied; the rest rely on column DEFAULTs.
 	seedSession := func(id string, charID ulid.ULID, locID ulid.ULID, status string) {
-		_, err := env.pool.Exec(env.ctx,
+		_, err := env.pool.Exec(
+			env.ctx,
 			`INSERT INTO sessions (id, character_id, character_name, location_id, status)
 			 VALUES ($1, $2, $3, $4, $5)`,
 			id, charID.String(), "TestChar-"+id, locID.String(), status,
@@ -104,14 +105,16 @@ var _ = Describe("PostgresSessionStore.ListActiveByLocation (I-PRES-1)", func() 
 		charID := idgen.New()
 		futureExpiry := time.Now().Add(time.Hour)
 
-		_, err := env.pool.Exec(env.ctx,
+		_, err := env.pool.Exec(
+			env.ctx,
 			`INSERT INTO sessions (id, character_id, character_name, location_id, status, expires_at)
 			 VALUES ($1, $2, $3, $4, 'active', $5)`,
 			"dup-1", charID.String(), "DupChar", loc.String(), futureExpiry,
 		)
 		Expect(err).NotTo(HaveOccurred(), "first insert must succeed")
 
-		_, err = env.pool.Exec(env.ctx,
+		_, err = env.pool.Exec(
+			env.ctx,
 			`INSERT INTO sessions (id, character_id, character_name, location_id, status, expires_at)
 			 VALUES ($1, $2, $3, $4, 'active', $5)`,
 			"dup-2", charID.String(), "DupChar", loc.String(), futureExpiry,

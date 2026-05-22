@@ -32,8 +32,8 @@ func freshABACStack(t *testing.T, operators []string) (*setup.ABACStack, func())
 	require.NoError(t, err)
 
 	stack, err := setup.BuildABACStack(ctx, setup.ABACConfig{
-		Pool:            pool,
-		CharacterRepo:   nil, // optional per setup.go
+		Pool:          pool,
+		CharacterRepo: nil, // optional per setup.go
 		// LocationRepo wired so the build does NOT emit the missing-provider
 		// WARN (holomush-g776). The PlayerProvider tests don't exercise the
 		// location seeds, but the production wiring always supplies the

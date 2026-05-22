@@ -80,6 +80,7 @@ func (s *ABACSubsystem) Start(ctx context.Context) error {
 		Pool:            pool,
 		CharacterRepo:   postgres.NewCharacterRepository(pool),
 		LocationRepo:    postgres.NewLocationRepository(pool),
+		ObjectRepo:      postgres.NewObjectRepository(pool),
 		RoleStore:       roleStore,
 		AuditMode:       s.cfg.AuditMode,
 		CryptoOperators: s.cfg.CryptoOperators,

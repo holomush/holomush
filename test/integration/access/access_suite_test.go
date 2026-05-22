@@ -43,6 +43,7 @@ type accessTestEnv struct {
 	cache       *policy.Cache
 	charRepo    *worldpg.CharacterRepository
 	locRepo     *worldpg.LocationRepository
+	objRepo     *worldpg.ObjectRepository
 	auditWriter *testAuditWriter
 	auditLogger *audit.Logger
 }
@@ -133,6 +134,7 @@ func setupAccessTestEnv() (*accessTestEnv, error) {
 
 	charRepo := worldpg.NewCharacterRepository(pool)
 	locRepo := worldpg.NewLocationRepository(pool)
+	objRepo := worldpg.NewObjectRepository(pool)
 
 	roleResolver := &staticRoleResolver{roles: make(map[string][]string)}
 
@@ -144,6 +146,17 @@ func setupAccessTestEnv() (*accessTestEnv, error) {
 
 	locProvider := attribute.NewLocationProvider(locRepo)
 	if err := resolver.RegisterProvider(locProvider); err != nil {
+		pool.Close()
+		return nil, err
+	}
+
+	// holomush-k3ud: ObjectProvider needs charRepo to walk held-by-character
+	// chains. Registered here so seed:player-object-colocation evaluates via
+	// the REAL provider stack (privacytest harness uses allowAllPolicyEngine
+	// and would silently pass even with the provider missing — exactly the
+	// blind spot that hid the g776/xxel/k3ud bugs for weeks).
+	objProvider := attribute.NewObjectProvider(objRepo, charRepo)
+	if err := resolver.RegisterProvider(objProvider); err != nil {
 		pool.Close()
 		return nil, err
 	}
@@ -176,6 +189,7 @@ func setupAccessTestEnv() (*accessTestEnv, error) {
 		cache:       cache,
 		charRepo:    charRepo,
 		locRepo:     locRepo,
+		objRepo:     objRepo,
 		auditWriter: testWriter,
 		auditLogger: auditLogger,
 	}, nil
