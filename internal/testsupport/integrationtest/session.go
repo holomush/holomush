@@ -214,6 +214,43 @@ func (s *Session) MoveTo(ctx context.Context, newLocationID ulid.ULID) {
 	s.LocationArrivedAt = now
 }
 
+// RefreshFromPersisted re-reads the harness's mutable Session fields
+// (LocationID, LocationArrivedAt) from the persisted sessions row.
+//
+// Connect-time hydration is asymmetric: LocationArrivedAt is sourced
+// from the persisted row by all three connect paths
+// (ConnectAuthedWithRoles, ConnectGuest, AuthedPlayer.OpenWebSession),
+// but LocationID is sourced from the persisted row only by
+// OpenWebSession — ConnectAuthed* and ConnectGuest seed it from
+// Server.guestStartLocationID, which equals persisted.LocationID
+// immediately post-connect but diverges as soon as the DB row's
+// location_id is mutated out-of-band. RefreshFromPersisted surfaces
+// the DB-side value uniformly.
+//
+// Used by tests asserting on harness-side state after any path that
+// may have mutated the session row out-of-band: Server.MoveTo (which
+// does update the struct in-place, so a refresh is a no-op) or the
+// direct-SQL helpers Server.SetLocationArrivedAt / Server.ExpireSession
+// (which do NOT update the struct).
+//
+// Scope: only LocationID and LocationArrivedAt are refreshed.
+// Identity-bound fields — SessionID, CharacterID, CharacterName,
+// OriginalLocationID, SessionCreatedAt, Reattached — are NOT mutated.
+// The transport-state fields under transportMu are out of scope; cycle
+// DetachTransport/ReattachTransport to manage those.
+//
+// On lookup failure (session deleted, store error) the call fails the
+// test via require.NoError — there is no "soft" path. Tests that
+// expect the session row to be gone should assert that condition
+// directly rather than calling RefreshFromPersisted.
+func (s *Session) RefreshFromPersisted(ctx context.Context) {
+	s.server.t.Helper()
+	persisted, err := s.server.sessionStore.Get(ctx, s.SessionID)
+	require.NoError(s.server.t, err, "integrationtest.Session.RefreshFromPersisted: sessionStore.Get(%s)", s.SessionID)
+	s.LocationID = persisted.LocationID
+	s.LocationArrivedAt = persisted.LocationArrivedAt
+}
+
 // DetachTransport simulates a client disconnect: cancels the in-flight
 // Subscribe RPC's stream context (production's Subscribe defer removes the
 // session_connections row), waits for the goroutine to exit, then calls the
