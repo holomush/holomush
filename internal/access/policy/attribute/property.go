@@ -45,24 +45,26 @@ func (p *PropertyProvider) ResolveSubject(_ context.Context, _ string) (map[stri
 }
 
 // ResolveResource resolves property attributes for a resource.
-// Returns nil, nil if the resource is not a property type.
-// Resource ID format: "property:01ABC..."
+// Returns nil, nil for non-property entity types AND for non-ULID IDs
+// (wildcard tolerance — see [parseEntityResource]). The wildcard
+// tolerance is dormant defense-in-depth for PropertyProvider today:
+// production callers always emit a fully-qualified ULID. The unified
+// helper extends the same fail-open behavior here as Location, Character,
+// and Object — see holomush-o8g6.
+//
+// BEHAVIOR CHANGE (holomush-o8g6): previously a property resource ID
+// with a non-ULID ID part (e.g. "property:not-a-ulid") returned an
+// oops.Code("INVALID_PROPERTY_ID") error. After the helper unification
+// it returns (nil, nil) — consistent with the three peer providers and
+// with the holomush-g776 wildcard-tolerance pattern. No production
+// caller depends on the old error code (verified via rg).
 func (p *PropertyProvider) ResolveResource(ctx context.Context, resourceID string) (map[string]any, error) {
-	// Parse entity ID using helper from helpers.go
-	idStr, ok := parseEntityID(resourceID, "property")
-	if !ok {
-		// Not a property resource
-		return nil, nil
-	}
-
-	// Parse ULID
-	id, err := ulid.Parse(idStr)
+	id, ok, err := parseEntityResource(resourceID, "property")
 	if err != nil {
-		return nil, oops.
-			Code("INVALID_PROPERTY_ID").
-			With("entity_id", resourceID).
-			With("id_part", idStr).
-			Wrapf(err, "invalid property ID")
+		return nil, err
+	}
+	if !ok {
+		return nil, nil
 	}
 
 	// Fetch property from repository

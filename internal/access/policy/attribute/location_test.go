@@ -233,7 +233,7 @@ func TestLocationProvider_ResolveResource(t *testing.T) {
 			resourceID:     "location" + locID.String(),
 			setupMock:      func(_ *mockLocationRepository) {},
 			expectError:    true,
-			errorSubstring: "invalid resource ID format",
+			errorSubstring: "invalid entity ID format",
 		},
 		{
 			name:       "repository error",

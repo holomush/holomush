@@ -427,7 +427,7 @@ func TestObjectProviderResolveResource(t *testing.T) {
 			resourceID:   "object" + objID.String(),
 			setupObjRepo: func(_ *mockObjectRepository) {},
 			expectErr:    true,
-			errSubstring: "invalid resource ID format",
+			errSubstring: "invalid entity ID format",
 		},
 		{
 			name:       "repository error on top-level Get",

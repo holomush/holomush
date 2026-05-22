@@ -5,12 +5,10 @@ package attribute
 
 import (
 	"context"
-	"strings"
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/world"
-	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 )
 
@@ -64,33 +62,17 @@ func (p *CharacterProvider) ResolveResource(ctx context.Context, resourceID stri
 }
 
 // resolve is the shared implementation for both subject and resource resolution.
+//
+// Wildcard tolerance ("character:*") is dormant defense-in-depth (no production
+// call emits it today, per holomush-xxel) and is supplied uniformly by
+// [parseEntityResource].
 func (p *CharacterProvider) resolve(ctx context.Context, entityID string) (map[string]any, error) {
-	// Parse entity type and ID
-	parts := strings.SplitN(entityID, ":", 2)
-	if len(parts) != 2 {
-		return nil, oops.
-			Code("INVALID_ENTITY_ID").
-			With("entity_id", entityID).
-			Errorf("invalid subject ID format: expected 'type:id'")
-	}
-
-	entityType, idStr := parts[0], parts[1]
-
-	// Return nil for non-character types
-	if entityType != "character" {
-		return nil, nil
-	}
-
-	// Parse ULID. Non-ULID IDs are the canonical wildcard form (e.g.,
-	// "character:*") used by capability-grant checks; return (nil, nil) so
-	// the resolver does not fail-closed the engine — symmetric with
-	// LocationProvider's tolerance from holomush-g776. No production call
-	// emits "character:*" today (dormant); this is defense-in-depth so a
-	// future capability check that mirrors CreateLocation's wildcard
-	// pattern doesn't re-introduce the same fail-closed bug.
-	id, err := ulid.Parse(idStr)
+	id, ok, err := parseEntityResource(entityID, "character")
 	if err != nil {
-		return nil, nil //nolint:nilerr // wildcard refs intentionally bypass provider; documented above (holomush-xxel)
+		return nil, err
+	}
+	if !ok {
+		return nil, nil
 	}
 
 	// Fetch character from repository
