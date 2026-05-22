@@ -28,7 +28,7 @@ All persistent timestamps MUST be stored as `BIGINT` representing `time.Time.Uni
 
 This decision sets a permanent schema-type convention across all 54 current and all future persistent-timestamp columns. New migrations adding `TIMESTAMPTZ` or `TIMESTAMP` columns are rejected by `task lint:no-timestamptz` (INV-TS-1); the escape hatch is the inline comment `-- pgnanos-exempt: <reason>`.
 
-## Options considered
+## Alternatives Considered
 
 ### A — `timestamp9` extension
 

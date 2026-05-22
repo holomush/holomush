@@ -423,7 +423,7 @@ func (s *Server) ConnectGuest(ctx context.Context) *Session {
 	persisted, getErr := s.sessionStore.Get(ctx, selResp.GetSessionId())
 	require.NoError(s.t, getErr, "integrationtest.ConnectGuest: read persisted session")
 
-	return &Session{
+	sess := &Session{
 		server:             s,
 		SessionID:          selResp.GetSessionId(),
 		CharacterID:        charID,
@@ -434,6 +434,8 @@ func (s *Server) ConnectGuest(ctx context.Context) *Session {
 		SessionCreatedAt:   persisted.CreatedAt,
 		playerSessionToken: rawToken,
 	}
+	sess.attach(ctx)
+	return sess
 }
 
 // ConnectAuthed creates a named player+character and opens a game session.
@@ -494,7 +496,7 @@ func (s *Server) ConnectAuthedWithRoles(ctx context.Context, charName string, ro
 	persisted, getErr := s.sessionStore.Get(ctx, selResp.GetSessionId())
 	require.NoError(s.t, getErr, "integrationtest.ConnectAuthedWithRoles: read persisted session")
 
-	return &Session{
+	sess := &Session{
 		server:             s,
 		SessionID:          selResp.GetSessionId(),
 		CharacterID:        char.ID,
@@ -505,6 +507,8 @@ func (s *Server) ConnectAuthedWithRoles(ctx context.Context, charName string, ro
 		SessionCreatedAt:   persisted.CreatedAt,
 		playerSessionToken: rawToken,
 	}
+	sess.attach(ctx)
+	return sess
 }
 
 // AuthedPlayer creates a named player + character + persisted player session

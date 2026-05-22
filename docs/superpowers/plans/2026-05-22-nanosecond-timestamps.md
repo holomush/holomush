@@ -210,7 +210,7 @@ Expected: no violations in `internal/pgnanos/`.
 
 Commit using VCS-appropriate commands per `references/vcs-preamble.md`. Suggested message:
 
-```
+```text
 feat(pgnanos): add internal/pgnanos helper for BIGINT-ns ↔ time.Time
 
 Precursor to nanosecond-timestamps migration (gfo6). Phase 0/5.
@@ -312,7 +312,7 @@ Expected: PASS. The store-migration integration tests apply all migrations end-t
 
 Suggested message:
 
-```
+```text
 feat(store): migrate events_audit + crypto_keys timestamps to BIGINT-ns
 
 Phase 1.1 of nanosecond-timestamps (gfo6). Down migration is
@@ -911,6 +911,7 @@ Expected: multiple matches across the listed files.
 Follow the same pattern as Tasks 6-8: `pgnanos.From(t)` on writes, `pgnanos.Time` on scans, `.Time()` at consumers.
 
 The columns to handle (per the spec's Section 2 inventory):
+
 - `scenes.created_at`, `scenes.ended_at`, `scenes.archived_at`, `scenes.last_pose_at`
 - `scene_participants.joined_at`
 - `ops_events.occurred_at`
@@ -2306,14 +2307,16 @@ Expected: shows the migration-writing guide.
 
 - [ ] **Step 2: Add a new section "Timestamp columns: BIGINT epoch nanoseconds"**
 
-Append to the doc:
+Append a new section to the doc with the following structure (avoid nested
+fenced code blocks per `docs/CLAUDE.md` — describe inline rather than
+quoting the whole section):
 
-```markdown
-## Timestamp columns: BIGINT epoch nanoseconds
-
-Per [`gfo6`](../../../docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md) (INV-TS-1), all new migrations MUST use `BIGINT` for persistent time values, storing nanoseconds since UNIX epoch (UTC). `TIMESTAMPTZ` and `TIMESTAMP` are prohibited.
-
-**Schema pattern:**
+- Heading: `## Timestamp columns: BIGINT epoch nanoseconds`
+- Opening paragraph citing `gfo6` (INV-TS-1) and stating that all new
+  migrations MUST use `BIGINT` for persistent time values, storing
+  nanoseconds since UNIX epoch (UTC); `TIMESTAMPTZ` and `TIMESTAMP` are
+  prohibited.
+- A `**Schema pattern:**` sub-heading followed by a SQL code block:
 
 ```sql
 CREATE TABLE thing (
@@ -2323,7 +2326,7 @@ CREATE TABLE thing (
 );
 ```
 
-**Application code pattern:**
+- An `**Application code pattern:**` sub-heading followed by a Go code block:
 
 ```go
 import "github.com/holomush/holomush/internal/pgnanos"
@@ -2338,10 +2341,14 @@ err := row.Scan(&id, &createdAt)
 t := createdAt.Time()
 ```
 
-**Why BIGINT instead of `TIMESTAMPTZ`:** structural byte-equal AAD reconstruction (INV-TS-5), no `Truncate(time.Microsecond)` discipline, deterministic ordering at nanosecond resolution. See the spec for the full rationale and the rejected alternative (`timestamp9` PG extension).
-
-**Enforcement:** `task lint:no-timestamptz` rejects new `TIMESTAMPTZ`/`TIMESTAMP` columns. Escape hatch: `-- pgnanos-exempt: <reason>` on the same line.
-```
+- A **Why BIGINT instead of `TIMESTAMPTZ`:** paragraph covering: structural
+  byte-equal AAD reconstruction (INV-TS-5), no `Truncate(time.Microsecond)`
+  discipline, deterministic ordering at nanosecond resolution. Point to the
+  spec for the full rationale and the rejected alternative (`timestamp9`
+  PG extension).
+- An `**Enforcement:**` paragraph: `task lint:no-timestamptz` rejects new
+  `TIMESTAMPTZ`/`TIMESTAMP` columns. Escape hatch: `-- pgnanos-exempt: <reason>`
+  on the same line.
 
 - [ ] **Step 3: Run docs lint**
 
