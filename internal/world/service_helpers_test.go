@@ -120,6 +120,7 @@ func TestCheckAccess(t *testing.T) {
 			{prefixObject, "OBJECT_ACCESS_DENIED"},
 			{prefixCharacter, "CHARACTER_ACCESS_DENIED"},
 			{prefixScene, "SCENE_ACCESS_DENIED"},
+			{prefixProperty, "PROPERTY_ACCESS_DENIED"}, // holomush-rmsi.4
 		}
 
 		for _, tt := range prefixes {
@@ -233,6 +234,7 @@ func TestCheckAccess(t *testing.T) {
 			{prefixObject, "OBJECT_ACCESS_EVALUATION_FAILED"},
 			{prefixExit, "EXIT_ACCESS_EVALUATION_FAILED"},
 			{prefixScene, "SCENE_ACCESS_EVALUATION_FAILED"},
+			{prefixProperty, "PROPERTY_ACCESS_EVALUATION_FAILED"}, // holomush-rmsi.4
 		}
 		infraDecision := types.NewDecision(types.EffectDefaultDeny, "session store unavailable", "infra:session-store-error")
 
