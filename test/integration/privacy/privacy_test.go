@@ -96,6 +96,180 @@ var _ = Describe("I-PRIV-6 (gate-bypass arm): staff override bypasses the locati
 	})
 })
 
+// I-PRIV-3 / I-PRIV-4 / spec §2 "transport-continuity worked example":
+// the session row is the unit of continuity, not the transport connection.
+// When a session detaches (transport drop) and later reattaches within TTL,
+// LocationArrivedAt MUST be preserved and the durable consumer's events
+// emitted during the detach window MUST remain queryable.
+//
+// Schema model: one game session per character (idx_sessions_active_character
+// at internal/store/migrations/000001_baseline.up.sql:221-222); multiple
+// transports attach via session_connections. The spec §2 worked example uses
+// "session A and session B" loosely to mean "transport connection A and B" —
+// the schema-faithful reading is one session, two transports.
+//
+// Test exercises the production reattach path (sessionStore.ReattachCAS at
+// internal/store/session_store.go:421-429, which is what Subscribe runs at
+// internal/grpc/server.go:778) end-to-end against a real session row.
+//
+// Default allow-all engine is sufficient: location streams pass the hard-gate
+// because the session stays at its original location across detach/reattach.
+var _ = Describe("I-PRIV-3 / I-PRIV-4: detach/reattach preserves session floor and replays events", func() {
+	// Unique event type for the during-detach emit so the post-reattach
+	// assertion can match it exactly rather than relying solely on a
+	// timestamp window (a future regression adding an unrelated emit whose
+	// timestamp landed in the same window would otherwise silently pass).
+	const duringDetachType = "iwzt17-test:during-detach-marker"
+
+	var (
+		ts              *integrationtest.Server
+		ctx             context.Context
+		hugo            *integrationtest.AuthedPlayer
+		firstSess       *integrationtest.Session
+		reattachedSess  *integrationtest.Session
+		other           *integrationtest.Session
+		locStream       string
+		preDetachEmitAt time.Time
+		duringDetachAt  time.Time
+	)
+
+	BeforeEach(func() {
+		ctx, _ = context.WithTimeout(context.Background(), 90*time.Second) //nolint:govet // cancel unused in test lifecycle
+		ts = integrationtest.Start(suiteT)
+
+		// Hugo's first OpenWebSession creates the session row at T0;
+		// LocationArrivedAt is captured from the persisted row (canonical).
+		hugo = ts.AuthedPlayer(ctx, "Hugo")
+		firstSess = hugo.OpenWebSession(ctx)
+		locStream = "location:" + firstSess.LocationID.String()
+
+		// A different character at the same location emits a pre-detach event.
+		// Using a separate session avoids hijacking hugo's session for the
+		// emit-while-detached step below.
+		other = ts.ConnectAuthed(ctx, "Iris")
+
+		// Pre-detach emit: this event should be visible after reattach (it's
+		// after firstSess.LocationArrivedAt and before the detach window).
+		preDetachEmitAt = time.Now().UTC()
+		preDetachPayload := []byte(`{"character_name":"Iris","action":"speaks before Hugo drops."}`)
+		Expect(other.EmitDirectEvent(ctx, locStream, "core-communication:pose", preDetachPayload)).
+			To(Succeed(), "pre-detach emit MUST publish")
+
+		// Detach Hugo's session — mirrors production's non-guest transport
+		// drop (status=Detached, detached_at=now, expires_at=now+TTL). The
+		// session row + JetStream durable both stay alive.
+		ts.DetachSession(ctx, firstSess.SessionID)
+
+		// During-detach emit: this is the key event the test asserts on —
+		// the spec's "events emitted during transport disconnect" claim
+		// (§2 worked example + I-PRIV-1's session-row-lifetime clause).
+		// Tagged with duringDetachType (declared at Describe scope) so the
+		// post-reattach assertion can match the exact seeded event rather
+		// than any event in a timestamp window.
+		duringDetachAt = time.Now().UTC()
+		duringPayload := []byte(`{"character_name":"Iris","action":"speaks while Hugo is detached."}`)
+		Expect(other.EmitDirectEvent(ctx, locStream, duringDetachType, duringPayload)).
+			To(Succeed(), "during-detach emit MUST publish into the still-live JetStream subject")
+
+		// Reattach Hugo's session — production ReattachCAS path (the same
+		// CAS Subscribe runs on its Detached branch). Asserting the CAS
+		// succeeded here guards against silent loss-of-race producing a
+		// misleading query result downstream.
+		ts.ReattachSession(ctx, firstSess.SessionID)
+
+		// A second OpenWebSession after reattach exercises the production
+		// SelectCharacter reattach branch (spec §5 row 2) — it MUST return
+		// the same SessionID with LocationArrivedAt unchanged. This is the
+		// I-PRIV-3 invariant in code form.
+		reattachedSess = hugo.OpenWebSession(ctx)
+	})
+
+	AfterEach(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if reattachedSess != nil {
+			reattachedSess.Logout(cleanupCtx)
+		}
+		if other != nil {
+			other.Logout(cleanupCtx)
+		}
+		if ts != nil {
+			ts.Stop()
+		}
+	})
+
+	It("returns the same SessionID on reattach", func() {
+		Expect(reattachedSess.SessionID).To(Equal(firstSess.SessionID),
+			"SelectCharacter reattach MUST return the same SessionID (one-session-per-character invariant)")
+		// The Reattached flag is the production handler's positive signal
+		// that the reattach branch (auth_handlers.go:319-356) ran, not the
+		// fresh-create branch. Asserting it catches a regression where the
+		// handler silently re-created a row (which would also surface as a
+		// unique-index DB error, but this assertion is cheaper and clearer).
+		Expect(reattachedSess.Reattached).To(BeTrue(),
+			"second OpenWebSession MUST take SelectCharacter's reattach branch (Reattached=true)")
+		// And the first call MUST have created the row, not reattached.
+		Expect(firstSess.Reattached).To(BeFalse(),
+			"first OpenWebSession MUST take the fresh-create branch")
+	})
+
+	It("preserves LocationArrivedAt across detach/reattach (I-PRIV-3)", func() {
+		Expect(reattachedSess.LocationArrivedAt).To(BeTemporally("==", firstSess.LocationArrivedAt),
+			"I-PRIV-3: LocationArrivedAt MUST be unchanged across detach/reattach within TTL")
+	})
+
+	It("returns events emitted during the detach window after reattach", func() {
+		// QueryStreamHistory uses session.LocationArrivedAt (unchanged) as
+		// the floor; the durable consumer held both events during the detach
+		// window. Both events MUST appear in the response.
+		events, err := reattachedSess.QueryStreamHistory(ctx, locStream)
+		Expect(err).NotTo(HaveOccurred(),
+			"post-reattach query MUST succeed (session is Active, hard-gate passes — same location)")
+		// Vacuous-pass guard: a regression that over-filtered every event
+		// would return an empty slice and let the timestamp loop trivially
+		// pass. Require at least the two we just seeded.
+		Expect(len(events)).To(BeNumerically(">=", 2),
+			"both pre-detach and during-detach emits MUST be visible (vacuous-pass guard)")
+
+		// Every returned event MUST be at-or-after firstSess.LocationArrivedAt:
+		// reattach did not advance the floor; the prior floor still applies.
+		for _, ev := range events {
+			Expect(ev.GetTimestamp().AsTime()).To(BeTemporally(">=", firstSess.LocationArrivedAt),
+				"event %q at %s leaked before firstSess.LocationArrivedAt %s",
+				ev.GetType(), ev.GetTimestamp().AsTime(), firstSess.LocationArrivedAt)
+		}
+
+		// Affirmatively assert the during-detach event is in the result —
+		// not just "no leak" but "the spec-claimed event is present".
+		// Match by the unique duringDetachType the seed planted (precise),
+		// with timestamp guards kept as a belt-and-suspenders sanity check
+		// (catches a hypothetical regression that double-publishes events
+		// with the same type at unrelated timestamps).
+		//
+		// Truncate seed wall-clocks to microsecond precision before
+		// comparing: a future path that routes event timestamps through
+		// a µs-precision layer (Postgres TIMESTAMPTZ or otherwise) would
+		// otherwise flip the boundary `!evTS.Before(seedTime)` check from
+		// true to false on identical underlying times. Today the embedded
+		// bus preserves nanoseconds end-to-end, but the test shouldn't
+		// bake that assumption in.
+		preDetachFloor := preDetachEmitAt.Truncate(time.Microsecond)
+		duringDetachFloor := duringDetachAt.Truncate(time.Microsecond)
+		var sawDuringDetach bool
+		for _, ev := range events {
+			evTS := ev.GetTimestamp().AsTime()
+			if ev.GetType() == duringDetachType &&
+				!evTS.Before(preDetachFloor) &&
+				!evTS.Before(duringDetachFloor) {
+				sawDuringDetach = true
+				break
+			}
+		}
+		Expect(sawDuringDetach).To(BeTrue(),
+			"during-detach event MUST be present in post-reattach history (the spec §2 worked example's key claim)")
+	})
+})
+
 // I-PRIV-1: a fresh guest connecting to a location MUST NOT see any event
 // whose timestamp predates their session's SessionCreatedAt. This is the
 // regression guard for the Phase 2 QueryStreamHistory restructure (hard-gate

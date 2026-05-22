@@ -491,12 +491,100 @@ func (s *Server) ConnectAuthedWithRoles(ctx context.Context, charName string, ro
 	}
 }
 
-// AuthedPlayer returns an AuthedPlayer handle for multi-session continuity tests.
+// AuthedPlayer creates a named player + character + persisted player session
+// and returns a handle for opening game sessions independently of the
+// player/character bootstrap. Unlike ConnectAuthed (which combines player
+// creation with a single SelectCharacter call), AuthedPlayer defers
+// SelectCharacter to OpenWebSession so tests can exercise
+// detach/reattach scenarios where a second OpenWebSession call reattaches
+// to an existing session row (per spec §5 row 2 + I-PRIV-3).
 //
-// TODO(iwzt-9): implement authed player creation.
-func (s *Server) AuthedPlayer(_ context.Context, _ string) *AuthedPlayer {
-	s.t.Fatalf("integrationtest.Server.AuthedPlayer: TODO iwzt-9 — authed player creation not yet wired")
-	return nil
+// The returned handle carries the player_session bearer token for use
+// across subsequent OpenWebSession calls.
+func (s *Server) AuthedPlayer(ctx context.Context, charName string) *AuthedPlayer {
+	s.t.Helper()
+
+	// Unique username per character name to avoid collisions across tests.
+	username := charName + "_" + idgen.New().String()[:8]
+	password := "TestPassword1!"
+
+	player, playerSession, rawToken, err := s.authService.CreatePlayer(ctx, username, password, "")
+	require.NoError(s.t, err, "integrationtest.Server.AuthedPlayer: CreatePlayer")
+	require.NoError(s.t, s.playerSessionStore.Create(ctx, playerSession),
+		"integrationtest.Server.AuthedPlayer: persist player session")
+
+	startLocID := s.guestStartLocationID
+	char, err := world.NewCharacter(player.ID, charName)
+	require.NoError(s.t, err, "integrationtest.Server.AuthedPlayer: NewCharacter")
+	char.LocationID = &startLocID
+	require.NoError(s.t, s.charRepo.Create(ctx, char),
+		"integrationtest.Server.AuthedPlayer: persist character")
+
+	return &AuthedPlayer{
+		PlayerID:    player.ID,
+		CharacterID: char.ID,
+		LocationID:  startLocID,
+		server:      s,
+		rawToken:    rawToken,
+	}
+}
+
+// DetachSession transitions a session row to StatusDetached with the same
+// (detached_at, expires_at) writes that production Disconnect performs at
+// internal/grpc/server.go:1376-1389. Mirrors a non-guest transport drop:
+// the session row is held open for the TTL window so a later reattach (via
+// SelectCharacter or Subscribe.ReattachCAS) can resume the same session.
+//
+// Used by iwzt.17 (I-PRIV-3 / transport-continuity) to simulate the
+// transport-drop side of detach/reattach without tearing down a live
+// Subscribe stream (iwzt.16's separate concern). LocationArrivedAt is
+// NOT touched here — verifying the floor's preservation across this
+// transition is the test's central assertion.
+//
+// Bypasses the production session-ownership guard
+// (auth.ValidateSessionOwnership at internal/grpc/server.go:1253-1259) that
+// Disconnect performs before reaching this UpdateStatus call. The guard is
+// IDOR-class (token vs. session matching), not ABAC, and is out of scope
+// for the privacy-floor tests this helper supports. Production callers
+// MUST go through Disconnect, never this helper.
+func (s *Server) DetachSession(ctx context.Context, sessionID string) {
+	s.t.Helper()
+	info, err := s.sessionStore.Get(ctx, sessionID)
+	require.NoError(s.t, err, "integrationtest.Server.DetachSession: read session")
+
+	now := time.Now().UTC()
+	ttlSeconds := info.TTLSeconds
+	if ttlSeconds <= 0 {
+		ttlSeconds = 1800
+	}
+	expiresAt := now.Add(time.Duration(ttlSeconds) * time.Second)
+	require.NoError(s.t,
+		s.sessionStore.UpdateStatus(ctx, sessionID, session.StatusDetached, &now, &expiresAt),
+		"integrationtest.Server.DetachSession: update status to detached")
+}
+
+// ReattachSession transitions a Detached session row back to Active via
+// the production ReattachCAS path (internal/store/session_store.go:421-429
+// — the same path internal/grpc/server.go:778 takes when Subscribe arrives
+// on a Detached session). Asserts the CAS succeeded (returns true) so a
+// silent loss-of-race fails the test rather than producing a misleading
+// QueryStreamHistory result against a stale status.
+//
+// LocationArrivedAt is preserved by ReattachCAS (the UPDATE writes only
+// status/detached_at/expires_at/updated_at) — this is what I-PRIV-3 codifies
+// and what iwzt.17 verifies end-to-end.
+//
+// Bypasses the production session-ownership guard
+// (auth.ValidateSessionOwnership at internal/grpc/server.go:718-731) that
+// Subscribe performs before reaching this ReattachCAS call. Same rationale
+// as DetachSession above — IDOR-class, not ABAC. Production callers MUST
+// go through Subscribe, never this helper.
+func (s *Server) ReattachSession(ctx context.Context, sessionID string) {
+	s.t.Helper()
+	ok, err := s.sessionStore.ReattachCAS(ctx, sessionID)
+	require.NoError(s.t, err, "integrationtest.Server.ReattachSession: ReattachCAS")
+	require.Truef(s.t, ok,
+		"integrationtest.Server.ReattachSession: CAS lost — session %s was not in Detached status", sessionID)
 }
 
 // --- internal helpers ---
