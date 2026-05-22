@@ -41,6 +41,12 @@ type locationFollower struct {
 	sessionStore  session.Store
 	locStreamName string
 	updateFilters locationFilterUpdater
+	// verbRegistry is the source of rendering metadata for the synthetic
+	// location_state events this follower emits. Required: events emitted
+	// without RenderingMetadata are dropped by the gateway per INV-GW-5
+	// (internal/web/translate.go:42-60), so a nil registry guarantees every
+	// synthetic emit silently disappears at the gateway boundary.
+	verbRegistry *core.VerbRegistry
 }
 
 // handleEvent checks if the event is a character move for the tracked character.
@@ -153,7 +159,10 @@ func (lf *locationFollower) switchLocationSubscription(ctx context.Context, newL
 }
 
 // sendSynthetic sends the initial synthetic location_state for the current
-// location. Best-effort: errors are logged and swallowed.
+// location. Best-effort at the RPC level (a build failure won't abort the
+// Subscribe RPC), but builds are NOT silent: errors are logged so a
+// registry-misconfiguration regression doesn't reproduce the
+// holomush-4wdu silent-drop symptom this method's fix targets.
 func (lf *locationFollower) sendSynthetic(
 	ctx context.Context,
 	stream grpc.ServerStreamingServer[corev1.SubscribeResponse],
@@ -163,7 +172,17 @@ func (lf *locationFollower) sendSynthetic(
 	}
 	locState, err := lf.buildLocationState(ctx, lf.currentLocID)
 	if err != nil {
-		return nil //nolint:nilerr // best-effort: synthetic location_state failure is non-fatal
+		// Surface the failure so a verbRegistry misconfiguration in
+		// production doesn't silently drop every initial-attach
+		// location_state event (holomush-4wdu: the original bug had no
+		// log at all; fail-closed surfacing was added in this fix, so
+		// it MUST actually log).
+		slog.WarnContext(
+			ctx, "location_state: synthetic emit failed at initial attach",
+			"location_id", lf.currentLocID.String(),
+			"error", err,
+		)
+		return nil
 	}
 	return oops.Wrap(stream.Send(locState))
 }
@@ -228,6 +247,16 @@ func (lf *locationFollower) buildLocationState(ctx context.Context, locationID u
 		return nil, oops.Wrapf(err, "marshal location_state")
 	}
 
+	// Stamp RenderingMetadata from the verb registry so the gateway's INV-GW-5
+	// guard (internal/web/translate.go:42-60) doesn't drop this synthetic
+	// event. This path bypasses the bus (and therefore RenderingPublisher),
+	// so we must do the same lookup here that RenderingPublisher.Publish
+	// would do at internal/eventbus/rendering_publisher.go:58-73.
+	rendering, err := buildLocationStateRendering(lf.verbRegistry)
+	if err != nil {
+		return nil, err
+	}
+
 	return &corev1.SubscribeResponse{
 		Frame: &corev1.SubscribeResponse_Event{
 			Event: &corev1.EventFrame{
@@ -238,8 +267,38 @@ func (lf *locationFollower) buildLocationState(ctx context.Context, locationID u
 				ActorType: core.ActorSystem.String(),
 				ActorId:   "system",
 				Payload:   payloadJSON,
+				Rendering: rendering,
 			},
 		},
+	}, nil
+}
+
+// buildLocationStateRendering looks up the location_state verb registration
+// and constructs the RenderingMetadata proto. Mirrors what RenderingPublisher
+// does for bus-routed events (internal/eventbus/rendering_publisher.go:58-73).
+//
+// Fails closed when the registry is nil or the verb is unregistered — a
+// missing registration means the synthetic event would be dropped at the
+// gateway anyway, so an explicit error at emit time surfaces the bug instead
+// of silently losing every location_state event in production.
+func buildLocationStateRendering(registry *core.VerbRegistry) (*corev1.RenderingMetadata, error) {
+	if registry == nil {
+		return nil, oops.Code("LOCATION_STATE_NO_REGISTRY").
+			Errorf("verb registry not configured; synthetic location_state would fail INV-GW-5 at gateway")
+	}
+	reg, ok := registry.Lookup(string(core.EventTypeLocationState))
+	if !ok {
+		return nil, oops.Code("LOCATION_STATE_UNREGISTERED").
+			With("event_type", string(core.EventTypeLocationState)).
+			Errorf("location_state verb not registered; synthetic emit would fail INV-GW-5 at gateway")
+	}
+	return &corev1.RenderingMetadata{
+		Category:            reg.Category,
+		Format:              reg.Format,
+		Label:               reg.Label,
+		DisplayTarget:       reg.DisplayTarget,
+		SourcePlugin:        reg.Source,
+		SourcePluginVersion: registry.SourceVersion(reg.Source),
 	}, nil
 }
 

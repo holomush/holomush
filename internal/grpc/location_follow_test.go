@@ -18,12 +18,24 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/pkg/errutil"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	corecomm "github.com/holomush/holomush/plugins/core-communication"
 )
 
 // Compile-time check that *world.Service satisfies WorldQuerier.
 var _ WorldQuerier = (*world.Service)(nil)
+
+// testVerbRegistry returns a freshly-bootstrapped registry with the builtin
+// verbs (including location_state) registered. Used by the locationFollower
+// tests since buildLocationState now requires a non-nil registry to stamp
+// RenderingMetadata on synthetic events (per INV-GW-5 at internal/web/translate.go:42-60).
+func testVerbRegistry(t *testing.T) *core.VerbRegistry {
+	t.Helper()
+	r, err := core.BootstrapVerbRegistry("test")
+	require.NoError(t, err)
+	return r
+}
 
 // mockWorldQuerier implements WorldQuerier for tests.
 type mockWorldQuerier struct {
@@ -81,6 +93,7 @@ func TestLocationFollower_HandleEvent_DetectsCharacterMove(t *testing.T) {
 		characterID:  charID,
 		currentLocID: oldLocID,
 		worldQuerier: wq,
+		verbRegistry: testVerbRegistry(t),
 	}
 
 	movePayload, err := json.Marshal(world.MovePayload{
@@ -228,7 +241,7 @@ func TestLocationFollower_BuildLocationState(t *testing.T) {
 		Status:        session.StatusActive,
 	})
 
-	lf := &locationFollower{worldQuerier: wq, sessionStore: ss}
+	lf := &locationFollower{worldQuerier: wq, sessionStore: ss, verbRegistry: testVerbRegistry(t)}
 	ev, err := lf.buildLocationState(context.Background(), locID)
 	require.NoError(t, err)
 	require.NotNil(t, ev)
@@ -237,6 +250,15 @@ func TestLocationFollower_BuildLocationState(t *testing.T) {
 	assert.Equal(t, string(core.EventTypeLocationState), ef.GetType())
 	assert.Equal(t, "system", ef.GetActorType())
 	assert.Equal(t, world.LocationStream(locID), ef.GetStream())
+
+	// holomush-4wdu: RenderingMetadata MUST be stamped on synthetic
+	// location_state events so the gateway's INV-GW-5 guard doesn't drop them.
+	rendering := ef.GetRendering()
+	require.NotNil(t, rendering, "synthetic location_state MUST carry RenderingMetadata (INV-GW-5)")
+	assert.Equal(t, "state", rendering.GetCategory())
+	assert.Equal(t, "snapshot", rendering.GetFormat())
+	assert.Equal(t, corev1.EventChannel_EVENT_CHANNEL_STATE, rendering.GetDisplayTarget())
+	assert.Equal(t, "builtin", rendering.GetSourcePlugin())
 
 	var payload core.LocationStatePayload
 	require.NoError(t, json.Unmarshal(ef.GetPayload(), &payload))
@@ -315,6 +337,7 @@ func TestSendSyntheticSendsLocationStateForCurrentLocation(t *testing.T) {
 		currentLocID: locID,
 		worldQuerier: wq,
 		sessionStore: session.NewMemStore(),
+		verbRegistry: testVerbRegistry(t),
 	}
 
 	stream := &capturingStream{ctx: context.Background()}
@@ -323,6 +346,32 @@ func TestSendSyntheticSendsLocationStateForCurrentLocation(t *testing.T) {
 
 	require.Len(t, stream.sent, 1)
 	assert.Equal(t, string(core.EventTypeLocationState), stream.sent[0].GetEvent().GetType())
+	// holomush-4wdu: synthetic location_state MUST carry RenderingMetadata
+	// (gateway drops nil-Rendering events per INV-GW-5).
+	require.NotNil(t, stream.sent[0].GetEvent().GetRendering(),
+		"synthetic location_state MUST carry RenderingMetadata (INV-GW-5)")
+}
+
+// TestBuildLocationStateRendering_NilRegistryFailsClosed asserts the
+// fail-closed branch when verbRegistry is unset. Locks in the
+// LOCATION_STATE_NO_REGISTRY error code so external log monitoring can key
+// alerts off it. Per holomush-4wdu: the original silent-drop symptom MUST
+// be surfaced loudly, not silently dropped a second way.
+func TestBuildLocationStateRendering_NilRegistryFailsClosed(t *testing.T) {
+	_, err := buildLocationStateRendering(nil)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "LOCATION_STATE_NO_REGISTRY")
+}
+
+// TestBuildLocationStateRendering_UnregisteredVerbFailsClosed asserts the
+// fail-closed branch when the location_state verb is missing from an
+// otherwise-valid registry. Locks in LOCATION_STATE_UNREGISTERED.
+func TestBuildLocationStateRendering_UnregisteredVerbFailsClosed(t *testing.T) {
+	// Empty registry — no builtins registered.
+	r := core.NewVerbRegistry()
+	_, err := buildLocationStateRendering(r)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "LOCATION_STATE_UNREGISTERED")
 }
 
 func TestSendSyntheticReturnsNilWhenWorldQuerierNil(t *testing.T) {
