@@ -46,6 +46,13 @@ type Session struct {
 	// cycle (zero if none has occurred).
 	LastReattachAt time.Time
 
+	// Reattached is true when the SessionID was returned by SelectCharacter's
+	// reattach branch (i.e. an existing active/detached session row matched
+	// FindByCharacter — see internal/grpc/auth_handlers.go:319-356). False on
+	// fresh session creation. Allows tests to assert the production-side
+	// reattach path was actually taken on a second OpenWebSession call.
+	Reattached bool
+
 	// playerSessionToken is the raw bearer token for player-session auth.
 	// Kept internal; used by SendCommand / Logout.
 	playerSessionToken string
@@ -279,18 +286,64 @@ type AuthedPlayer struct {
 	rawToken string
 }
 
-// OpenWebSession opens a new game session simulating a web (ConnectRPC) client.
+// OpenWebSession opens a game session for this AuthedPlayer via the
+// production SelectCharacter handler. On the first call, SelectCharacter
+// creates a fresh sessions row with LocationArrivedAt = now. On
+// subsequent calls (with the existing active/detached session matched by
+// FindByCharacter at internal/store/session_store.go:340-354), the
+// handler reattaches and returns the SAME SessionID — per spec §5 row 2
+// and the schema-enforced one-session-per-character invariant
+// (idx_sessions_active_character). LocationArrivedAt is preserved across
+// reattach per I-PRIV-3.
 //
-// TODO(iwzt-9): implement multi-session open path.
-func (p *AuthedPlayer) OpenWebSession(_ context.Context) *Session {
-	p.server.t.Fatalf("integrationtest.AuthedPlayer.OpenWebSession: TODO iwzt-9 — authed multi-session not yet wired")
-	return nil
+// Returns a Session hydrated from the persisted row so the harness-side
+// LocationArrivedAt / SessionCreatedAt fields reflect the canonical
+// server-side values — the same hydration pattern ConnectAuthedWithRoles
+// uses for the same reason (per CodeRabbit thread on PR #4048).
+func (p *AuthedPlayer) OpenWebSession(ctx context.Context) *Session {
+	p.server.t.Helper()
+	selResp, err := p.server.coreServer.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+		PlayerSessionToken: p.rawToken,
+		CharacterId:        p.CharacterID.String(),
+	})
+	require.NoError(p.server.t, err, "integrationtest.AuthedPlayer.OpenWebSession: SelectCharacter RPC")
+	require.True(p.server.t, selResp.GetSuccess(),
+		"integrationtest.AuthedPlayer.OpenWebSession: SelectCharacter failed: %s", selResp.GetErrorMessage())
+
+	persisted, getErr := p.server.sessionStore.Get(ctx, selResp.GetSessionId())
+	require.NoError(p.server.t, getErr, "integrationtest.AuthedPlayer.OpenWebSession: read persisted session")
+
+	// Source LocationID from the persisted session row, NOT from
+	// AuthedPlayer.LocationID (set once at AuthedPlayer construction).
+	// A future test that calls Session.MoveTo between OpenWebSession calls
+	// would otherwise return a Session with stale LocationID but fresh
+	// LocationArrivedAt — inconsistent. The persisted row is the canonical
+	// source for both.
+	return &Session{
+		server:             p.server,
+		SessionID:          selResp.GetSessionId(),
+		CharacterID:        p.CharacterID,
+		CharacterName:      selResp.GetCharacterName(),
+		LocationID:         persisted.LocationID,
+		OriginalLocationID: persisted.LocationID,
+		LocationArrivedAt:  persisted.LocationArrivedAt,
+		SessionCreatedAt:   persisted.CreatedAt,
+		LastReattachAt:     time.Time{},
+		Reattached:         selResp.GetReattached(),
+		playerSessionToken: p.rawToken,
+	}
 }
 
-// OpenTelnetSession opens a new game session simulating a telnet client.
+// OpenTelnetSession opens a game session simulating a telnet client.
 //
-// TODO(iwzt-9): implement multi-session open path.
+// Production note: web and telnet share the same underlying SelectCharacter
+// path; the only meaningful difference is the client_type recorded on the
+// session_connections row by Subscribe (internal/grpc/server.go:749-756).
+// Since iwzt.17's QueryStreamHistory assertions don't observe
+// session_connections, this helper is currently TODO-fatal — callers wanting
+// to exercise the live-Subscribe transport differentiation belong to iwzt.16's
+// scope (Subscribe goroutine fan-out + per-connection DetachTransport).
 func (p *AuthedPlayer) OpenTelnetSession(_ context.Context) *Session {
-	p.server.t.Fatalf("integrationtest.AuthedPlayer.OpenTelnetSession: TODO iwzt-9 — authed multi-session not yet wired")
+	p.server.t.Fatalf("integrationtest.AuthedPlayer.OpenTelnetSession: TODO iwzt-16 — telnet transport differentiation requires Subscribe goroutine wiring")
 	return nil
 }
