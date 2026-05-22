@@ -7,6 +7,7 @@ package integrationtest
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -15,8 +16,16 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
+	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+)
+
+// Tunable timeouts for the Subscribe-stream transport lifecycle. Set high
+// enough to absorb CI latency variance while still failing fast on hangs.
+const (
+	transportAttachReplayTimeout = 10 * time.Second
+	transportDetachExitTimeout   = 5 * time.Second
 )
 
 // Session wraps an authenticated or guest game session for privacy integration
@@ -53,6 +62,18 @@ type Session struct {
 	// playerSessionToken is the raw bearer token for player-session auth.
 	// Kept internal; used by SendCommand / Logout.
 	playerSessionToken string
+
+	// Transport state — auto-managed by ConnectAuthed/ConnectGuest/
+	// OpenWebSession (via s.attach), cycled by DetachTransport/
+	// ReattachTransport. Mutex protects all four fields so the
+	// detach-during-reattach race is well-defined.
+	transportMu     sync.Mutex
+	transportStream *subscribeStream
+	transportCancel context.CancelFunc
+	// transportDone is closed when the in-flight Subscribe goroutine returns;
+	// the error it received (if any) is stored on transportErr.
+	transportDone chan struct{}
+	transportErr  error
 }
 
 // SendCommand dispatches a text command via HandleCommand. Returns the RPC
@@ -79,18 +100,57 @@ func (s *Session) SendCommand(ctx context.Context, cmd string) error {
 }
 
 // WaitForEvent blocks until an event matching eventType is received on the
-// session's event stream, or the context is cancelled. Returns the first
-// matching event.
+// session's live event stream, the session's transport is detached, or ctx
+// is cancelled. Events whose Type does NOT match eventType are skipped (they
+// remain consumed from the stream — WaitForEvent advances the cursor).
 //
-// The underlying Subscribe stream is opened lazily on the first WaitForEvent
-// call and shared across calls on the same Session.
+// Returns the first matching event. On ctx cancellation or transport detach,
+// the test fails via t.Fatalf rather than returning a nil sentinel; callers
+// should ALWAYS treat a non-nil return as the desired event.
 //
-// TODO(iwzt-9): wire the Subscribe goroutine and fan-out channel. For now
-// this panics — downstream tests that need WaitForEvent must implement this
-// body once iwzt-9 lands.
-func (s *Session) WaitForEvent(_ context.Context, _ string) *corev1.EventFrame {
-	s.server.t.Fatalf("integrationtest.Session.WaitForEvent: TODO iwzt-9 — Subscribe goroutine not yet wired")
-	return nil
+// The Subscribe stream is wired automatically by ConnectAuthed / ConnectGuest
+// / AuthedPlayer.OpenWebSession (and re-wired on ReattachTransport). Tests
+// MUST NOT call WaitForEvent on a session whose transport is currently
+// detached — DetachTransport blocks new sends; ReattachTransport spins up a
+// fresh goroutine that resumes from the durable consumer's last-acked-seq.
+func (s *Session) WaitForEvent(ctx context.Context, eventType string) *corev1.EventFrame {
+	s.server.t.Helper()
+	s.transportMu.Lock()
+	stream := s.transportStream
+	done := s.transportDone
+	s.transportMu.Unlock()
+	if stream == nil {
+		s.server.t.Fatalf("integrationtest.Session.WaitForEvent: no active transport (call AttachTransport / ReattachTransport first)")
+		return nil
+	}
+
+	for {
+		select {
+		case ev := <-stream.events:
+			if ev == nil {
+				continue
+			}
+			if ev.GetType() == eventType {
+				return ev
+			}
+			// Type mismatch — keep waiting for the right event.
+		case <-done:
+			// Subscribe goroutine exited (Detach or error). Surface the
+			// stored error if any; otherwise fail with a generic message.
+			s.transportMu.Lock()
+			err := s.transportErr
+			s.transportMu.Unlock()
+			if err != nil {
+				s.server.t.Fatalf("integrationtest.Session.WaitForEvent: transport exited before matching event %q (err=%v)", eventType, err)
+			} else {
+				s.server.t.Fatalf("integrationtest.Session.WaitForEvent: transport detached before matching event %q", eventType)
+			}
+			return nil
+		case <-ctx.Done():
+			s.server.t.Fatalf("integrationtest.Session.WaitForEvent: ctx cancelled before matching event %q (overflow=%d)", eventType, stream.overflowCount())
+			return nil
+		}
+	}
 }
 
 // DrainEvents returns all events received within timeout. If no events arrive
@@ -113,9 +173,12 @@ func (s *Session) DrainEvents(ctx context.Context, timeout time.Duration) []*cor
 }
 
 // Logout logs out the player session, invalidating the bearer token and
-// deleting the game session.
+// deleting the game session. Tears down the Subscribe transport first so
+// the in-flight goroutine doesn't race against the session-delete and emit
+// confusing "session not found" errors into the test log.
 func (s *Session) Logout(ctx context.Context) {
 	s.server.t.Helper()
+	s.teardownTransport()
 	_, err := s.server.coreServer.Logout(ctx, &corev1.LogoutRequest{
 		PlayerSessionToken: s.playerSessionToken,
 	})
@@ -151,13 +214,55 @@ func (s *Session) MoveTo(ctx context.Context, newLocationID ulid.ULID) {
 	s.LocationArrivedAt = now
 }
 
-// DetachTransport simulates a client disconnect by cancelling the Subscribe
-// stream (e.g., client closed the connection). The session remains in
-// StatusDetached in Postgres.
+// DetachTransport simulates a client disconnect: cancels the in-flight
+// Subscribe RPC's stream context (production's Subscribe defer removes the
+// session_connections row), waits for the goroutine to exit, then calls the
+// production Disconnect RPC to transition the session row to StatusDetached.
 //
-// TODO(iwzt-16-precursor): wire subscribe goroutine cancel.
-func (s *Session) DetachTransport(_ context.Context) {
-	s.server.t.Fatalf("integrationtest.Session.DetachTransport: TODO iwzt-16-precursor — Subscribe goroutine not yet wired")
+// Together these mirror what production does when ALL transport connections
+// for a session drop — the session row enters its TTL window awaiting either
+// a reattach (transport returns within TTL → ReattachCAS flips back to Active)
+// or expiry (reaper deletes the row → fresh session on next SelectCharacter).
+//
+// Idempotent: calling DetachTransport on a session whose transport is already
+// detached is a no-op.
+func (s *Session) DetachTransport(ctx context.Context) {
+	s.server.t.Helper()
+	s.transportMu.Lock()
+	cancel := s.transportCancel
+	done := s.transportDone
+	s.transportMu.Unlock()
+	if cancel == nil {
+		return // already detached
+	}
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(transportDetachExitTimeout):
+		s.server.t.Fatalf("integrationtest.Session.DetachTransport: Subscribe goroutine did not exit within %s", transportDetachExitTimeout)
+	}
+
+	s.transportMu.Lock()
+	// Nil-guard: between this method's first unlock (above) and the relock
+	// here, a concurrent teardownTransport (e.g. via Logout) may have
+	// already cleared transportStream. Idempotency would otherwise panic
+	// dereferencing nil. transportDone is left in place so a concurrent
+	// WaitForEvent can read the close. transportErr is preserved.
+	if s.transportStream != nil {
+		s.transportStream.close()
+	}
+	s.transportStream = nil
+	s.transportCancel = nil
+	s.transportMu.Unlock()
+
+	// Transition the session row to StatusDetached via the production
+	// Disconnect RPC — mirrors what happens when the last transport drops.
+	_, err := s.server.coreServer.Disconnect(ctx, &corev1.DisconnectRequest{
+		SessionId:          s.SessionID,
+		PlayerSessionToken: s.playerSessionToken,
+	})
+	require.NoError(s.server.t, err, "integrationtest.Session.DetachTransport: Disconnect RPC")
 }
 
 // ReattachTransport reopens the Subscribe stream after a DetachTransport.
@@ -171,9 +276,125 @@ func (s *Session) DetachTransport(_ context.Context) {
 // any pre-Round-3 wording referring to a "LastReattachAt" timestamp does
 // not match production semantics.
 //
-// TODO(iwzt-16-precursor): wire subscribe goroutine restart.
-func (s *Session) ReattachTransport(_ context.Context) {
-	s.server.t.Fatalf("integrationtest.Session.ReattachTransport: TODO iwzt-16-precursor — Subscribe goroutine not yet wired")
+// Production's Subscribe handler runs ReattachCAS automatically when the
+// session row is in StatusDetached, transitioning it back to Active.
+func (s *Session) ReattachTransport(ctx context.Context) {
+	s.server.t.Helper()
+	s.attach(ctx)
+}
+
+// attach starts a Subscribe RPC against the in-process CoreServer in a
+// background goroutine, blocking until the production handler has emitted
+// CONTROL_SIGNAL_REPLAY_COMPLETE (signalling the durable consumer is fully
+// wired and ready to receive live events). Without that wait, an event
+// published immediately after attach could be missed if the durable
+// consumer's OpenSession hasn't completed yet.
+//
+// Each attach uses a fresh connection_id ULID so production's
+// session_connections row tracks per-attach lifetime correctly. The
+// client_type is "terminal" — the canonical value the web frontend uses
+// (internal/web/handler.go:188). The session_store validates against
+// {"terminal", "comms_hub", "telnet"} so any other choice is rejected.
+func (s *Session) attach(ctx context.Context) {
+	s.server.t.Helper()
+	s.transportMu.Lock()
+	if s.transportCancel != nil {
+		s.transportMu.Unlock()
+		s.server.t.Fatalf("integrationtest.Session.attach: session %s already has an active transport (call DetachTransport first)", s.SessionID)
+		return
+	}
+
+	streamCtx, cancel := context.WithCancel(context.Background())
+	stream := newSubscribeStream(streamCtx, 0)
+	done := make(chan struct{})
+	s.transportStream = stream
+	s.transportCancel = cancel
+	s.transportDone = done
+	s.transportErr = nil
+	s.transportMu.Unlock()
+
+	connID := idgen.New()
+	req := &corev1.SubscribeRequest{
+		SessionId:          s.SessionID,
+		PlayerSessionToken: s.playerSessionToken,
+		ConnectionId:       connID.String(),
+		ClientType:         "terminal",
+	}
+
+	go func() {
+		err := s.server.coreServer.Subscribe(req, stream)
+		s.transportMu.Lock()
+		s.transportErr = err
+		s.transportMu.Unlock()
+		close(done)
+	}()
+
+	// Block until REPLAY_COMPLETE arrives or the goroutine fails fast.
+	select {
+	case <-stream.replayDone:
+		// Durable consumer wired; safe to return to caller.
+	case <-done:
+		// Subscribe goroutine returned before REPLAY_COMPLETE — production
+		// hit a setup failure. Surface the stored error.
+		s.transportMu.Lock()
+		err := s.transportErr
+		s.transportMu.Unlock()
+		s.server.t.Fatalf("integrationtest.Session.attach: Subscribe goroutine exited before REPLAY_COMPLETE (err=%v)", err)
+	case <-time.After(transportAttachReplayTimeout):
+		cancel()
+		s.server.t.Fatalf("integrationtest.Session.attach: REPLAY_COMPLETE not received within %s for session %s", transportAttachReplayTimeout, s.SessionID)
+	case <-ctx.Done():
+		cancel()
+		s.server.t.Fatalf("integrationtest.Session.attach: caller ctx cancelled before REPLAY_COMPLETE for session %s: %v", s.SessionID, ctx.Err())
+	}
+}
+
+// teardownTransport cancels any active Subscribe goroutine without calling
+// Disconnect. Used by Logout (which deletes the session row outright) and
+// by Stop-equivalent paths where the session_connections cleanup is implicit
+// via CASCADE.
+//
+// Idempotent: returns immediately if no transport is active.
+//
+// Asymmetry vs DetachTransport: a wedged goroutine here is logged
+// non-fatally and teardownTransport returns anyway. DetachTransport
+// Fatalfs on the same condition because it's part of the test's
+// observable sequence (the test's next assertion depends on the session
+// being Detached), whereas Logout is the cleanup path — failing here
+// would mask whatever real assertion the test was trying to make. The
+// testcontainer + embedded NATS teardown handles leaked goroutines at
+// process exit.
+func (s *Session) teardownTransport() {
+	s.transportMu.Lock()
+	cancel := s.transportCancel
+	done := s.transportDone
+	stream := s.transportStream
+	s.transportStream = nil
+	s.transportCancel = nil
+	s.transportMu.Unlock()
+	if cancel == nil {
+		return
+	}
+	cancel()
+	if stream != nil {
+		stream.close()
+	}
+	if done != nil {
+		select {
+		case <-done:
+		case <-time.After(transportDetachExitTimeout):
+			// Goroutine wedged — log but don't fail; Logout still needs to run.
+			s.server.t.Logf("integrationtest.Session.teardownTransport: Subscribe goroutine did not exit within %s for session %s", transportDetachExitTimeout, s.SessionID)
+		}
+	}
+}
+
+// transportActive returns true if a Subscribe goroutine is currently running
+// for this session. Test helper for assertions.
+func (s *Session) transportActive() bool {
+	s.transportMu.Lock()
+	defer s.transportMu.Unlock()
+	return s.transportCancel != nil
 }
 
 // CreateScene creates a new scene (focus session) and returns its ULID.
@@ -323,7 +544,7 @@ func (p *AuthedPlayer) OpenWebSession(ctx context.Context) *Session {
 	// would otherwise return a Session with stale LocationID but fresh
 	// LocationArrivedAt — inconsistent. The persisted row is the canonical
 	// source for both.
-	return &Session{
+	sess := &Session{
 		server:             p.server,
 		SessionID:          selResp.GetSessionId(),
 		CharacterID:        p.CharacterID,
@@ -335,6 +556,8 @@ func (p *AuthedPlayer) OpenWebSession(ctx context.Context) *Session {
 		Reattached:         selResp.GetReattached(),
 		playerSessionToken: p.rawToken,
 	}
+	sess.attach(ctx)
+	return sess
 }
 
 // OpenTelnetSession opens a game session simulating a telnet client.

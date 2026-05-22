@@ -37,6 +37,20 @@ The mechanism is structural, not disciplined:
 
 INV-P7-16's original wording is retained in the Phase 7 spec for historical continuity. Future contributors reading either spec see INV-TS-5 as the live form via the forward reference.
 
+## Alternatives Considered
+
+### A — Keep INV-P7-16's "truncate-at-publisher" discipline (rejected)
+
+Status quo: publisher calls `event.Timestamp.Truncate(time.Microsecond)` before AAD construction so the ns precision matches the `TIMESTAMPTZ` µs-precision audit column on the round-trip. Rejected because (a) the contract is invisible to static checks (any path forgetting the truncate produces silent AAD tag mismatches surfaced only at decrypt time, far from the offending commit), and (b) the truncation has to be replicated everywhere a new event-producing path is added — multiplying the burden as the codebase grows.
+
+### B — Add a runtime AAD-byte-equality assertion in audit-read (rejected)
+
+Wrap `internal/eventbus/audit/projection.go` decrypt with an explicit "AAD constructed at decrypt matches AAD stored at encrypt" tripwire, escalating to a fatal log if they diverge. Rejected because the assertion fires AFTER the regression has shipped — useful as a backstop but does nothing to prevent the bug from reaching production. Structural enforcement at the column layer (INV-TS-1) eliminates the divergence at its source, making the runtime tripwire unnecessary.
+
+### C — Chosen: column-layer enforcement via BIGINT epoch nanoseconds (INV-TS-1)
+
+`events_audit.timestamp` (and all other persistent-time columns) become `BIGINT` storing ns since epoch. The publisher emits ns-precision events; the column stores ns-precision; the AAD reconstruction reads ns-precision. Byte-equality is mechanical, not disciplined. See `holomush-absb` for the BIGINT-over-`timestamp9` choice that made this option viable.
+
 ## Rationale
 
 1. **Discipline is fragile.** The truncation contract had to be internalized by every contributor writing an event-producing path. There was no static check; violation was silent until audit-read decryption surfaced a tag mismatch — far from the offending commit. The cost of catching such a regression in production is disproportionate to the cost of structural enforcement.

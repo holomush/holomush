@@ -27,7 +27,7 @@ Adopt a named type `pgnanos.Time` (a `time.Time` wrapper) in a new package `inte
 
 Direct `int64` ↔ `time.Time` arithmetic in repository code outside the `pgnanos` package is prohibited (INV-TS-2). The lint `task lint:no-unixnano-in-repos` enforces this over production paths; the escape hatch is `// pgnanos-exempt: <reason>` on the same line.
 
-## Options considered
+## Alternatives Considered
 
 ### A — Named type `pgnanos.Time` (chosen)
 
