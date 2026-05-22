@@ -117,15 +117,33 @@ func (s *Session) Logout(ctx context.Context) {
 	require.NoError(s.server.t, err, "privacytest.Session.Logout")
 }
 
-// MoveTo moves the character to a new location. Updates LocationID.
-// OriginalLocationID is never mutated.
+// MoveTo simulates a character move by updating the session row's
+// location_id + location_arrived_at columns directly in Postgres. Mirrors
+// the post-MovementHook state (per holomush-iwzt.4) that production would
+// produce without invoking the full world.Service.MoveCharacter pipeline,
+// which is out of scope for privacy-floor tests.
 //
-// TODO(iwzt-9): invoke MoveCharacter RPC once the world movement path is
-// wired into the test harness.
-func (s *Session) MoveTo(_ context.Context, newLocationID ulid.ULID) {
-	// Update the harness-side LocationID so tests can assert on it.
+// Scope: only the `sessions` row is updated. `characters.location_id` is
+// NOT changed. Tests that query the world repo (e.g.,
+// GetCharactersByLocation) will see stale character placement; tests that
+// read via the session store (QueryStreamHistory's hard-gate, presence
+// snapshot) see the updated value.
+//
+// Updates the harness-side Session.LocationID + LocationArrivedAt so test
+// assertions read the same values the server-side session row carries.
+// OriginalLocationID is never mutated — tests can compare before/after.
+func (s *Session) MoveTo(ctx context.Context, newLocationID ulid.ULID) {
+	s.server.t.Helper()
+	now := time.Now().UTC()
+	tag, err := s.server.pool.Exec(ctx,
+		`UPDATE sessions SET location_id = $1, location_arrived_at = $2, updated_at = $2 WHERE id = $3`,
+		newLocationID.String(), now, s.SessionID)
+	require.NoError(s.server.t, err, "privacytest.Session.MoveTo")
+	require.Equalf(s.server.t, int64(1), tag.RowsAffected(),
+		"privacytest.Session.MoveTo: expected 1 row affected, got %d (sessionID=%s)",
+		tag.RowsAffected(), s.SessionID)
 	s.LocationID = newLocationID
-	s.server.t.Fatalf("privacytest.Session.MoveTo: TODO iwzt-9 — MoveCharacter RPC not yet wired")
+	s.LocationArrivedAt = now
 }
 
 // DetachTransport simulates a client disconnect by cancelling the Subscribe

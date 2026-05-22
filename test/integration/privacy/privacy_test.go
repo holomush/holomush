@@ -14,9 +14,11 @@ import (
 	"context"
 	"time"
 
+	"github.com/samber/oops"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/testsupport/privacytest"
 )
 
@@ -259,6 +261,95 @@ var _ = Describe("I-PRIV-2: guest name reuse does not leak prior holder's events
 			Expect(ev.GetTimestamp().AsTime()).To(BeTemporally(">=", reusedGuest.SessionCreatedAt),
 				"event %q at %s leaked from prior holder of name %q (floor=%s)",
 				ev.GetType(), ev.GetTimestamp().AsTime(), firstName, reusedGuest.SessionCreatedAt)
+		}
+	})
+})
+
+// I-PRIV-1 (character move): when a character moves from locA to locB, the
+// floor MUST reset to the new location's arrival time and the hard-gate
+// MUST deny queries against the prior location. This is the location-
+// switching arm of I-PRIV-1.
+//
+// Harness contract: this test uses WithPolicyEngine(DenyAllEngine) so the
+// staffOverride bypass in QueryStreamHistory returns false — without that
+// override, the harness's default allowAll engine grants
+// read_unrestricted_history and the hard-gate denial path can't be
+// exercised (see internal/grpc/scope_floor.go::staffOverride +
+// query_stream_history.go hard-gate branch).
+var _ = Describe("I-PRIV-1: character move resets location floor", func() {
+	var (
+		ts       *privacytest.Server
+		ctx      context.Context
+		mover    *privacytest.Session
+		startLoc string
+		destLoc  string
+	)
+
+	BeforeEach(func() {
+		ctx, _ = context.WithTimeout(context.Background(), 90*time.Second) //nolint:govet // cancel unused in test lifecycle
+		// DenyAll engine: staffOverride returns false → hard-gate fires when
+		// session.LocationID != requested stream's location.
+		ts = privacytest.Start(suiteT, privacytest.WithPolicyEngine(policytest.DenyAllEngine()))
+
+		mover = ts.ConnectAuthed(ctx, "Mover")
+		startLoc = "location:" + mover.LocationID.String()
+
+		// Pre-move: emit a seed event at locA so we can verify the post-move
+		// hard-gate denial is content-independent (denial fires before any
+		// query reads the underlying stream).
+		Expect(mover.EmitDirectEvent(ctx, startLoc, "core-communication:pose",
+			[]byte(`{"character_name":"Mover","action":"pauses before leaving."}`))).
+			To(Succeed(), "pre-move seed event MUST publish")
+
+		// Move to a fresh location.
+		destLocID := ts.NewLocation(ctx)
+		destLoc = "location:" + destLocID.String()
+		mover.MoveTo(ctx, destLocID)
+	})
+
+	AfterEach(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if mover != nil {
+			mover.Logout(cleanupCtx)
+		}
+		if ts != nil {
+			ts.Stop()
+		}
+	})
+
+	It("denies queries against the prior location (hard-gate)", func() {
+		_, err := mover.QueryStreamHistory(ctx, startLoc)
+		Expect(err).To(HaveOccurred(),
+			"I-PRIV-1 hard-gate: query against prior location MUST fail after move")
+		oopsErr, ok := oops.AsOops(err)
+		Expect(ok).To(BeTrue(), "denial must surface as an oops error")
+		Expect(oopsErr.Code()).To(Equal("STREAM_ACCESS_DENIED"),
+			"denial MUST collapse to STREAM_ACCESS_DENIED — denial reason 'wrong_location'")
+	})
+
+	It("floors queries against the new location at arrival time", func() {
+		// Emit a post-move event at the destination. It MUST appear in the
+		// query result (timestamp is strictly >= mover.LocationArrivedAt).
+		postPayload := []byte(`{"character_name":"Mover","action":"arrives and looks around."}`)
+		Expect(mover.EmitDirectEvent(ctx, destLoc, "core-communication:pose", postPayload)).
+			To(Succeed(), "post-move emit MUST publish")
+
+		events, err := mover.QueryStreamHistory(ctx, destLoc)
+		Expect(err).NotTo(HaveOccurred(),
+			"I-PRIV-1: same-location query at the destination MUST succeed")
+		// Guard against vacuous pass: the post-move event must be visible.
+		// Without this assertion, a regression that over-filters everything
+		// to nil would silently pass the floor loop below.
+		Expect(events).NotTo(BeEmpty(),
+			"post-move emit must be visible in history (vacuous-pass guard)")
+
+		// Floor at the new location is LocationArrivedAt (updated by MoveTo).
+		// Any returned event with timestamp before that is an I-PRIV-1 leak.
+		for _, ev := range events {
+			Expect(ev.GetTimestamp().AsTime()).To(BeTemporally(">=", mover.LocationArrivedAt),
+				"event %q at %s leaked before mover.LocationArrivedAt %s after move",
+				ev.GetType(), ev.GetTimestamp().AsTime(), mover.LocationArrivedAt)
 		}
 	})
 })
