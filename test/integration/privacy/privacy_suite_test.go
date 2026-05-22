@@ -13,7 +13,7 @@ import (
 )
 
 // suiteT exposes the *testing.T from TestPrivacy so Ginkgo Describe blocks
-// can pass it to privacytest.Start (which requires *testing.T — Ginkgo's
+// can pass it to integrationtest.Start (which requires *testing.T — Ginkgo's
 // GinkgoT() does not satisfy that interface directly).
 var suiteT *testing.T
 

@@ -3,7 +3,7 @@
 
 //go:build integration
 
-package privacytest
+package integrationtest
 
 import (
 	"context"
@@ -84,7 +84,7 @@ func (s *Session) SendCommand(ctx context.Context, cmd string) error {
 // this panics — downstream tests that need WaitForEvent must implement this
 // body once iwzt-9 lands.
 func (s *Session) WaitForEvent(_ context.Context, _ string) *corev1.EventFrame {
-	s.server.t.Fatalf("privacytest.Session.WaitForEvent: TODO iwzt-9 — Subscribe goroutine not yet wired")
+	s.server.t.Fatalf("integrationtest.Session.WaitForEvent: TODO iwzt-9 — Subscribe goroutine not yet wired")
 	return nil
 }
 
@@ -114,7 +114,7 @@ func (s *Session) Logout(ctx context.Context) {
 	_, err := s.server.coreServer.Logout(ctx, &corev1.LogoutRequest{
 		PlayerSessionToken: s.playerSessionToken,
 	})
-	require.NoError(s.server.t, err, "privacytest.Session.Logout")
+	require.NoError(s.server.t, err, "integrationtest.Session.Logout")
 }
 
 // MoveTo simulates a character move by updating the session row's
@@ -138,9 +138,9 @@ func (s *Session) MoveTo(ctx context.Context, newLocationID ulid.ULID) {
 	tag, err := s.server.pool.Exec(ctx,
 		`UPDATE sessions SET location_id = $1, location_arrived_at = $2, updated_at = $2 WHERE id = $3`,
 		newLocationID.String(), now, s.SessionID)
-	require.NoError(s.server.t, err, "privacytest.Session.MoveTo")
+	require.NoError(s.server.t, err, "integrationtest.Session.MoveTo")
 	require.Equalf(s.server.t, int64(1), tag.RowsAffected(),
-		"privacytest.Session.MoveTo: expected 1 row affected, got %d (sessionID=%s)",
+		"integrationtest.Session.MoveTo: expected 1 row affected, got %d (sessionID=%s)",
 		tag.RowsAffected(), s.SessionID)
 	s.LocationID = newLocationID
 	s.LocationArrivedAt = now
@@ -152,7 +152,7 @@ func (s *Session) MoveTo(ctx context.Context, newLocationID ulid.ULID) {
 //
 // TODO(iwzt-9): wire subscribe goroutine cancel.
 func (s *Session) DetachTransport(_ context.Context) {
-	s.server.t.Fatalf("privacytest.Session.DetachTransport: TODO iwzt-9 — Subscribe goroutine not yet wired")
+	s.server.t.Fatalf("integrationtest.Session.DetachTransport: TODO iwzt-9 — Subscribe goroutine not yet wired")
 }
 
 // ReattachTransport reopens the Subscribe stream after a DetachTransport,
@@ -161,14 +161,14 @@ func (s *Session) DetachTransport(_ context.Context) {
 // TODO(iwzt-9): wire subscribe goroutine restart.
 func (s *Session) ReattachTransport(_ context.Context) {
 	s.LastReattachAt = time.Now()
-	s.server.t.Fatalf("privacytest.Session.ReattachTransport: TODO iwzt-9 — Subscribe goroutine not yet wired")
+	s.server.t.Fatalf("integrationtest.Session.ReattachTransport: TODO iwzt-9 — Subscribe goroutine not yet wired")
 }
 
 // CreateScene creates a new scene (focus session) and returns its ULID.
 //
 // TODO(iwzt-9): invoke FocusCoordinator.CreateScene once wired.
 func (s *Session) CreateScene(_ context.Context) ulid.ULID {
-	s.server.t.Fatalf("privacytest.Session.CreateScene: TODO iwzt-9 — scene creation RPC not yet wired")
+	s.server.t.Fatalf("integrationtest.Session.CreateScene: TODO iwzt-9 — scene creation RPC not yet wired")
 	return ulid.ULID{}
 }
 
@@ -176,7 +176,7 @@ func (s *Session) CreateScene(_ context.Context) ulid.ULID {
 //
 // TODO(iwzt-9): invoke FocusCoordinator.JoinScene once wired.
 func (s *Session) JoinScene(_ context.Context, _ ulid.ULID) {
-	s.server.t.Fatalf("privacytest.Session.JoinScene: TODO iwzt-9 — scene join RPC not yet wired")
+	s.server.t.Fatalf("integrationtest.Session.JoinScene: TODO iwzt-9 — scene join RPC not yet wired")
 }
 
 // QueryStreamHistory fetches the event history for the given stream subject.
@@ -218,7 +218,7 @@ func (s *Session) EmitDirectEvent(ctx context.Context, stream, evType string, pa
 	)
 	pub := s.server.bus.Bus.Publisher()
 	if pub == nil {
-		return oops.Errorf("privacytest.Session.EmitDirectEvent: bus has no publisher (JS not ready)")
+		return oops.Errorf("integrationtest.Session.EmitDirectEvent: bus has no publisher (JS not ready)")
 	}
 	return pub.Publish(ctx, event) //nolint:wrapcheck // test helper: callers see bus errors directly
 }
@@ -255,7 +255,7 @@ type AuthedPlayer struct {
 //
 // TODO(iwzt-9): implement multi-session open path.
 func (p *AuthedPlayer) OpenWebSession(_ context.Context) *Session {
-	p.server.t.Fatalf("privacytest.AuthedPlayer.OpenWebSession: TODO iwzt-9 — authed multi-session not yet wired")
+	p.server.t.Fatalf("integrationtest.AuthedPlayer.OpenWebSession: TODO iwzt-9 — authed multi-session not yet wired")
 	return nil
 }
 
@@ -263,6 +263,6 @@ func (p *AuthedPlayer) OpenWebSession(_ context.Context) *Session {
 //
 // TODO(iwzt-9): implement multi-session open path.
 func (p *AuthedPlayer) OpenTelnetSession(_ context.Context) *Session {
-	p.server.t.Fatalf("privacytest.AuthedPlayer.OpenTelnetSession: TODO iwzt-9 — authed multi-session not yet wired")
+	p.server.t.Fatalf("integrationtest.AuthedPlayer.OpenTelnetSession: TODO iwzt-9 — authed multi-session not yet wired")
 	return nil
 }

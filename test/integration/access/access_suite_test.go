@@ -152,7 +152,7 @@ func setupAccessTestEnv() (*accessTestEnv, error) {
 
 	// holomush-k3ud: ObjectProvider needs charRepo to walk held-by-character
 	// chains. Registered here so seed:player-object-colocation evaluates via
-	// the REAL provider stack (privacytest harness uses allowAllPolicyEngine
+	// the REAL provider stack (the integrationtest harness uses allowAllPolicyEngine
 	// and would silently pass even with the provider missing — exactly the
 	// blind spot that hid the g776/xxel/k3ud bugs for weeks).
 	objProvider := attribute.NewObjectProvider(objRepo, charRepo)

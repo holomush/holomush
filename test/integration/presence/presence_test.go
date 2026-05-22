@@ -18,7 +18,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
-	"github.com/holomush/holomush/internal/testsupport/privacytest"
+	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -30,15 +30,15 @@ import (
 // unblocks iwzt.15 (Tier 2 history-scope filter).
 var _ = Describe("AC4: joiner sees prior presence", func() {
 	var (
-		ts    *privacytest.Server
+		ts    *integrationtest.Server
 		ctx   context.Context
-		alice *privacytest.Session
-		bob   *privacytest.Session
+		alice *integrationtest.Session
+		bob   *integrationtest.Session
 	)
 
 	BeforeEach(func() {
 		ctx, _ = context.WithTimeout(context.Background(), 90*time.Second) //nolint:govet // cancel unused in test lifecycle
-		ts = privacytest.Start(suiteT)
+		ts = integrationtest.Start(suiteT)
 		alice = ts.ConnectAuthed(ctx, "Alice")
 		// Let alice's connect settle before bob joins. The snapshot RPC reads
 		// session state directly so does NOT depend on this delay for
@@ -51,7 +51,7 @@ var _ = Describe("AC4: joiner sees prior presence", func() {
 	AfterEach(func() {
 		// Use a fresh cleanup context independent of the BeforeEach ctx (which
 		// could in principle be expired by AfterEach time) and nil-check ts in
-		// case privacytest.Start panicked before assigning. Ginkgo runs
+		// case integrationtest.Start panicked before assigning. Ginkgo runs
 		// AfterEach even when BeforeEach failed.
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -108,15 +108,15 @@ var _ = Describe("AC4: joiner sees prior presence", func() {
 // Verifies: I-PRES-2
 var _ = Describe("AC3 / I-PRES-2: snapshot bypasses I-PRIV-1 temporal floor", func() {
 	var (
-		ts    *privacytest.Server
+		ts    *integrationtest.Server
 		ctx   context.Context
-		alice *privacytest.Session
-		bob   *privacytest.Session
+		alice *integrationtest.Session
+		bob   *integrationtest.Session
 	)
 
 	BeforeEach(func() {
 		ctx, _ = context.WithTimeout(context.Background(), 90*time.Second) //nolint:govet // cancel unused in test lifecycle
-		ts = privacytest.Start(suiteT)
+		ts = integrationtest.Start(suiteT)
 		alice = ts.ConnectAuthed(ctx, "Alice")
 		bob = ts.ConnectAuthed(ctx, "Bob")
 		// Push bob's LocationArrivedAt 1 hour into the future. Any temporal-
@@ -162,7 +162,7 @@ var _ = Describe("AC3 / I-PRES-2: snapshot bypasses I-PRIV-1 temporal floor", fu
 // ALL N+1 entries. Locks dedup behavior, name resolution at scale, and
 // ListActiveByLocation completeness as the active-session count grows.
 //
-// NOTE: this test runs against `privacytest.allowAllPolicyEngine` (the harness
+// NOTE: this test runs against `integrationtest.allowAllPolicyEngine` (the harness
 // default), so it does NOT exercise the real ABAC stack. The g776 root cause
 // (LocationProvider missing from production wiring in
 // internal/access/setup/setup.go) is regression-locked by the un-fixme'd e2e
@@ -172,18 +172,18 @@ var _ = Describe("AC3 / I-PRES-2: snapshot bypasses I-PRIV-1 temporal floor", fu
 // remains an open follow-up; see g776 close notes.
 var _ = Describe("AC4 scale: snapshot returns all active sessions under accumulated state", func() {
 	var (
-		ts        *privacytest.Server
+		ts        *integrationtest.Server
 		ctx       context.Context
-		priorSess []*privacytest.Session
-		fresh     *privacytest.Session
+		priorSess []*integrationtest.Session
+		fresh     *integrationtest.Session
 	)
 
 	const priorCount = 20
 
 	BeforeEach(func() {
 		ctx, _ = context.WithTimeout(context.Background(), 120*time.Second) //nolint:govet // cancel unused in test lifecycle
-		ts = privacytest.Start(suiteT)
-		priorSess = make([]*privacytest.Session, 0, priorCount)
+		ts = integrationtest.Start(suiteT)
+		priorSess = make([]*integrationtest.Session, 0, priorCount)
 		// Build up prior sessions sequentially so they land at the same spawn
 		// location with monotonically advancing LocationArrivedAt values —
 		// matches what accumulates across the e2e suite.

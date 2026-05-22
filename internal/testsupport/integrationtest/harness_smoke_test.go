@@ -3,7 +3,7 @@
 
 //go:build integration
 
-package privacytest_test
+package integrationtest_test
 
 import (
 	"context"
@@ -12,16 +12,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/testsupport/privacytest"
+	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 )
 
-// TestPrivacyHarnessSmoke exercises the ConnectGuest → SendCommand →
+// TestIntegrationHarnessSmoke exercises the ConnectGuest → SendCommand →
 // DrainEvents → Logout path end-to-end to verify the harness wiring is
 // correct. It does NOT test privacy invariants (those live in iwzt.9+).
 //
-// Acceptance criterion for holomush-iwzt.6:
-// task test:int -- -run TestPrivacyHarnessSmoke ./internal/testsupport/privacytest/
-func TestPrivacyHarnessSmoke(t *testing.T) {
+// Originally landed for holomush-iwzt.6 as TestPrivacyHarnessSmoke when this
+// package was named privacytest; renamed alongside the package generalization
+// (privacytest → integrationtest) to reflect that the harness now serves
+// privacy + presence + session-store integration tests across the codebase.
+func TestIntegrationHarnessSmoke(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration")
 	}
@@ -29,7 +31,7 @@ func TestPrivacyHarnessSmoke(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	ts := privacytest.Start(t)
+	ts := integrationtest.Start(t)
 	defer ts.Stop()
 
 	sess := ts.ConnectGuest(ctx)

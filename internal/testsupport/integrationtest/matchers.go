@@ -3,7 +3,7 @@
 
 //go:build integration
 
-package privacytest
+package integrationtest
 
 import (
 	"fmt"
@@ -15,7 +15,7 @@ import (
 // MatchOopsCode returns a Gomega matcher that succeeds when the actual error
 // is an oops error whose Code() matches expected. Use:
 //
-//	Expect(err).To(privacytest.MatchOopsCode("STREAM_ACCESS_DENIED"))
+//	Expect(err).To(integrationtest.MatchOopsCode("STREAM_ACCESS_DENIED"))
 func MatchOopsCode(expected string) types.GomegaMatcher {
 	return &oopsCodeMatcher{expected: expected}
 }
