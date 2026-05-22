@@ -265,6 +265,100 @@ var _ = Describe("I-PRIV-2: guest name reuse does not leak prior holder's events
 	})
 })
 
+// I-PRIV-2 (scene-join floor): when a character joins a scene at time T, the
+// I-PRIV-2 scene branch of streamScopeFloor MUST floor the joiner's view of
+// the scene at FocusMembership.JoinedAt. Events emitted to the scene BEFORE
+// the joiner's join time are invisible; events at or after the join time are
+// visible.
+//
+// Harness contract: scene streams use the NATS-native dot-style subject
+// `events.<gameID>.scene.<sceneID>.ic` (per INV-P4-1 / ADR holomush-s9nu) —
+// the legacy colon-style `scene:<id>:ic` falls through to the ABAC default
+// branch and would defeat the I-17 / scope-floor codepaths. The harness's
+// default allow-all engine is sufficient here: scene streams are
+// membership-gated (I-17), not ABAC-gated, so the policy engine is never
+// consulted on the visible-events path.
+var _ = Describe("I-PRIV-2 (scene): scene events before join are invisible", func() {
+	var (
+		ts          *integrationtest.Server
+		ctx         context.Context
+		owner       *integrationtest.Session
+		joiner      *integrationtest.Session
+		sceneStream string
+		joinedAt    time.Time
+	)
+
+	BeforeEach(func() {
+		ctx, _ = context.WithTimeout(context.Background(), 90*time.Second) //nolint:govet // cancel unused in test lifecycle
+		ts = integrationtest.Start(suiteT)
+
+		// Owner connects and emits a pre-join event into the scene stream.
+		// The owner doesn't need to be a scene member to publish — the bus
+		// publisher is unrestricted; only the read side (I-17 gate) requires
+		// membership. This keeps the test focused on the join-time floor.
+		owner = ts.ConnectAuthed(ctx, "Jamie")
+		sceneID := ts.NewSceneWithoutMember(ctx)
+		sceneStream = "events." + ts.GameID() + ".scene." + sceneID.String() + ".ic"
+
+		prePayload := []byte(`{"character_name":"Jamie","action":"speaks before Kai arrives."}`)
+		Expect(owner.EmitDirectEvent(ctx, sceneStream, "core-scenes:pose", prePayload)).
+			To(Succeed(), "pre-join seed event MUST publish")
+
+		// Brief gap so the joiner's JoinedAt is strictly later than the
+		// pre-join emit. Mirrors the I-PRIV-1 fresh-guest pattern above —
+		// the embedded bus publish is synchronous, but the wall-clock gap
+		// makes timestamp ordering unambiguous.
+		time.Sleep(50 * time.Millisecond)
+
+		// Joiner connects and joins the scene. JoinScene stamps the
+		// session's FocusMemberships with JoinedAt = time.Now() and returns
+		// that exact timestamp so the test can assert against the canonical
+		// floor (avoids wall-clock skew between mutator-internal and
+		// caller-side time.Now() snapshots).
+		joiner = ts.ConnectAuthed(ctx, "Kai")
+		joinedAt = joiner.JoinScene(ctx, sceneID)
+
+		// Owner emits a post-join event. This MUST be visible to the
+		// joiner (guard against vacuous-pass via Expect(events).NotTo(BeEmpty)
+		// below — without it, a regression that filtered every event would
+		// silently pass the floor loop).
+		postPayload := []byte(`{"character_name":"Jamie","action":"speaks after Kai arrives."}`)
+		Expect(owner.EmitDirectEvent(ctx, sceneStream, "core-scenes:pose", postPayload)).
+			To(Succeed(), "post-join emit MUST publish")
+	})
+
+	AfterEach(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if joiner != nil {
+			joiner.Logout(cleanupCtx)
+		}
+		if owner != nil {
+			owner.Logout(cleanupCtx)
+		}
+		if ts != nil {
+			ts.Stop()
+		}
+	})
+
+	It("floors scene history at FocusMembership.JoinedAt", func() {
+		events, err := joiner.QueryStreamHistory(ctx, sceneStream)
+		Expect(err).NotTo(HaveOccurred(),
+			"I-PRIV-2 (scene): joiner with FocusMembership MUST pass the I-17 gate")
+		// Vacuous-pass guard — the post-join emit must be visible. Without
+		// this, a regression that floored every scene event to time.Now()
+		// would return an empty slice and the loop below would pass.
+		Expect(events).NotTo(BeEmpty(),
+			"post-join scene emit must be visible (vacuous-pass guard)")
+
+		for _, ev := range events {
+			Expect(ev.GetTimestamp().AsTime()).To(BeTemporally(">=", joinedAt),
+				"event %q at %s leaked before joiner's JoinedAt %s",
+				ev.GetType(), ev.GetTimestamp().AsTime(), joinedAt)
+		}
+	})
+})
+
 // I-PRIV-1 (character move): when a character moves from locA to locB, the
 // floor MUST reset to the new location's arrival time and the hard-gate
 // MUST deny queries against the prior location. This is the location-
