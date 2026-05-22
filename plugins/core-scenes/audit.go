@@ -244,7 +244,7 @@ func (s *SceneAuditStore) InsertScenePose(
 		// intentionally non-fatal (see method doc).
 		var ts any
 		if timestamp != nil {
-			ts = timestamp.AsTime()
+			ts = pgnanos.From(timestamp.AsTime())
 		}
 		if _, err := tx.Exec(
 			ctx,

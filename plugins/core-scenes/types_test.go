@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/holomush/holomush/internal/pgnanos"
 )
 
 func TestSceneStateIsValidReturnsTrueForKnownStates(t *testing.T) {
@@ -71,7 +73,7 @@ func TestParticipantWithPoseMeta_NeverPosed_NilFields(t *testing.T) {
 	t.Parallel()
 	p := ParticipantWithPoseMeta{
 		CharacterID: "char-alice",
-		JoinedAt:    time.Now(),
+		JoinedAt:    pgnanos.From(time.Now()),
 	}
 	assert.Equal(t, "char-alice", p.CharacterID)
 	assert.False(t, p.JoinedAt.IsZero())

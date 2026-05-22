@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/holomush/holomush/internal/pgnanos"
 )
 
 // TestCompute pins INV-P4-7 (spec §6.2). Table-driven across all 4 modes,
@@ -25,8 +27,8 @@ func TestCompute(t *testing.T) {
 
 	// Helper for *int32 seq values.
 	seq := func(v int32) *int32 { return &v }
-	// Helper for *time.Time pose-at values.
-	pAt := func(v time.Time) *time.Time { return &v }
+	// Helper for *pgnanos.Time pose-at values.
+	pAt := func(v time.Time) *pgnanos.Time { n := pgnanos.From(v); return &n }
 
 	names := map[string]string{
 		"alice-id": "Alice",
@@ -69,7 +71,7 @@ func TestCompute(t *testing.T) {
 			mode:           "strict",
 			totalPoseCount: 0,
 			participants: []ParticipantWithPoseMeta{
-				{CharacterID: "alice-id", JoinedAt: t1},
+				{CharacterID: "alice-id", JoinedAt: pgnanos.From(t1)},
 			},
 			want: []want{
 				{characterID: "alice-id", characterName: "Alice", eligible: true},
@@ -80,7 +82,7 @@ func TestCompute(t *testing.T) {
 			mode:           "free",
 			totalPoseCount: 0,
 			participants: []ParticipantWithPoseMeta{
-				{CharacterID: "alice-id", JoinedAt: t1},
+				{CharacterID: "alice-id", JoinedAt: pgnanos.From(t1)},
 			},
 			want: []want{
 				{characterID: "alice-id", characterName: "Alice", eligible: true},
@@ -91,7 +93,7 @@ func TestCompute(t *testing.T) {
 			mode:           "3pr",
 			totalPoseCount: 0,
 			participants: []ParticipantWithPoseMeta{
-				{CharacterID: "alice-id", JoinedAt: t1},
+				{CharacterID: "alice-id", JoinedAt: pgnanos.From(t1)},
 			},
 			want: []want{
 				{characterID: "alice-id", characterName: "Alice", eligible: true, hasPosesSince: true, posesSinceLast: 0},
@@ -105,9 +107,9 @@ func TestCompute(t *testing.T) {
 			totalPoseCount: 0,
 			participants: []ParticipantWithPoseMeta{
 				// Deliberately out-of-order input — Compute should not mutate caller's slice.
-				{CharacterID: "carol-id", JoinedAt: t3},
-				{CharacterID: "alice-id", JoinedAt: t1},
-				{CharacterID: "bob-id", JoinedAt: t2},
+				{CharacterID: "carol-id", JoinedAt: pgnanos.From(t3)},
+				{CharacterID: "alice-id", JoinedAt: pgnanos.From(t1)},
+				{CharacterID: "bob-id", JoinedAt: pgnanos.From(t2)},
 			},
 			// Strict: NULLS FIRST tiebreaks on JoinedAt ASC → alice, bob, carol.
 			// Head (alice) eligible; rest not.
@@ -122,9 +124,9 @@ func TestCompute(t *testing.T) {
 			mode:           "free",
 			totalPoseCount: 0,
 			participants: []ParticipantWithPoseMeta{
-				{CharacterID: "carol-id", JoinedAt: t3},
-				{CharacterID: "alice-id", JoinedAt: t1},
-				{CharacterID: "bob-id", JoinedAt: t2},
+				{CharacterID: "carol-id", JoinedAt: pgnanos.From(t3)},
+				{CharacterID: "alice-id", JoinedAt: pgnanos.From(t1)},
+				{CharacterID: "bob-id", JoinedAt: pgnanos.From(t2)},
 			},
 			want: []want{
 				{characterID: "alice-id", characterName: "Alice", eligible: true},
@@ -137,9 +139,9 @@ func TestCompute(t *testing.T) {
 			mode:           "5pr",
 			totalPoseCount: 0,
 			participants: []ParticipantWithPoseMeta{
-				{CharacterID: "alice-id", JoinedAt: t1},
-				{CharacterID: "bob-id", JoinedAt: t2},
-				{CharacterID: "carol-id", JoinedAt: t3},
+				{CharacterID: "alice-id", JoinedAt: pgnanos.From(t1)},
+				{CharacterID: "bob-id", JoinedAt: pgnanos.From(t2)},
+				{CharacterID: "carol-id", JoinedAt: pgnanos.From(t3)},
 			},
 			want: []want{
 				{characterID: "alice-id", characterName: "Alice", eligible: true, hasPosesSince: true, posesSinceLast: 0},
@@ -155,11 +157,11 @@ func TestCompute(t *testing.T) {
 			totalPoseCount: 3,
 			participants: []ParticipantWithPoseMeta{
 				// alice: posed most recently (seq 3 at t1+10m)
-				{CharacterID: "alice-id", JoinedAt: t1, LastPoseAt: pAt(t1.Add(10 * time.Minute)), LastPoseSeq: seq(3)},
+				{CharacterID: "alice-id", JoinedAt: pgnanos.From(t1), LastPoseAt: pAt(t1.Add(10 * time.Minute)), LastPoseSeq: seq(3)},
 				// bob: posed earliest (seq 1 at t2+1m) — should be ahead of alice
-				{CharacterID: "bob-id", JoinedAt: t2, LastPoseAt: pAt(t2.Add(1 * time.Minute)), LastPoseSeq: seq(1)},
+				{CharacterID: "bob-id", JoinedAt: pgnanos.From(t2), LastPoseAt: pAt(t2.Add(1 * time.Minute)), LastPoseSeq: seq(1)},
 				// carol: never posed — should be at head
-				{CharacterID: "carol-id", JoinedAt: t3},
+				{CharacterID: "carol-id", JoinedAt: pgnanos.From(t3)},
 			},
 			// Expected queue: carol (never posed, NULLS FIRST) → bob (earliest) → alice (latest).
 			want: []want{
@@ -174,11 +176,11 @@ func TestCompute(t *testing.T) {
 			totalPoseCount: 5,
 			participants: []ParticipantWithPoseMeta{
 				// alice: posed at seq 5 — gap = 0, NOT eligible
-				{CharacterID: "alice-id", JoinedAt: t1, LastPoseAt: pAt(t1.Add(5 * time.Minute)), LastPoseSeq: seq(5)},
+				{CharacterID: "alice-id", JoinedAt: pgnanos.From(t1), LastPoseAt: pAt(t1.Add(5 * time.Minute)), LastPoseSeq: seq(5)},
 				// bob: posed at seq 2 — gap = 3, eligible (>=3)
-				{CharacterID: "bob-id", JoinedAt: t2, LastPoseAt: pAt(t2.Add(1 * time.Minute)), LastPoseSeq: seq(2)},
+				{CharacterID: "bob-id", JoinedAt: pgnanos.From(t2), LastPoseAt: pAt(t2.Add(1 * time.Minute)), LastPoseSeq: seq(2)},
 				// carol: never posed — eligible
-				{CharacterID: "carol-id", JoinedAt: t3},
+				{CharacterID: "carol-id", JoinedAt: pgnanos.From(t3)},
 			},
 			// Display order = strict ordering (NULLS FIRST, LastPoseAt ASC).
 			want: []want{
@@ -195,7 +197,7 @@ func TestCompute(t *testing.T) {
 			totalPoseCount: 4,
 			participants: []ParticipantWithPoseMeta{
 				// alice: posed at seq 1 — gap = 3, eligible (==threshold)
-				{CharacterID: "alice-id", JoinedAt: t1, LastPoseAt: pAt(t1.Add(1 * time.Minute)), LastPoseSeq: seq(1)},
+				{CharacterID: "alice-id", JoinedAt: pgnanos.From(t1), LastPoseAt: pAt(t1.Add(1 * time.Minute)), LastPoseSeq: seq(1)},
 			},
 			want: []want{
 				{characterID: "alice-id", characterName: "Alice", eligible: true, hasPosesSince: true, posesSinceLast: 3},
@@ -207,7 +209,7 @@ func TestCompute(t *testing.T) {
 			totalPoseCount: 3,
 			participants: []ParticipantWithPoseMeta{
 				// alice: posed at seq 1 — gap = 2, NOT eligible (<threshold)
-				{CharacterID: "alice-id", JoinedAt: t1, LastPoseAt: pAt(t1.Add(1 * time.Minute)), LastPoseSeq: seq(1)},
+				{CharacterID: "alice-id", JoinedAt: pgnanos.From(t1), LastPoseAt: pAt(t1.Add(1 * time.Minute)), LastPoseSeq: seq(1)},
 			},
 			want: []want{
 				{characterID: "alice-id", characterName: "Alice", eligible: false, hasPosesSince: true, posesSinceLast: 2},
@@ -221,9 +223,9 @@ func TestCompute(t *testing.T) {
 			totalPoseCount: 6,
 			participants: []ParticipantWithPoseMeta{
 				// alice: posed at seq 1 — gap = 5, eligible
-				{CharacterID: "alice-id", JoinedAt: t1, LastPoseAt: pAt(t1.Add(1 * time.Minute)), LastPoseSeq: seq(1)},
+				{CharacterID: "alice-id", JoinedAt: pgnanos.From(t1), LastPoseAt: pAt(t1.Add(1 * time.Minute)), LastPoseSeq: seq(1)},
 				// bob: posed at seq 2 — gap = 4, NOT eligible
-				{CharacterID: "bob-id", JoinedAt: t2, LastPoseAt: pAt(t2.Add(1 * time.Minute)), LastPoseSeq: seq(2)},
+				{CharacterID: "bob-id", JoinedAt: pgnanos.From(t2), LastPoseAt: pAt(t2.Add(1 * time.Minute)), LastPoseSeq: seq(2)},
 			},
 			want: []want{
 				{characterID: "alice-id", characterName: "Alice", eligible: true, hasPosesSince: true, posesSinceLast: 5},
@@ -237,7 +239,7 @@ func TestCompute(t *testing.T) {
 			mode:           "free",
 			totalPoseCount: 0,
 			participants: []ParticipantWithPoseMeta{
-				{CharacterID: "unknown-id", JoinedAt: t1},
+				{CharacterID: "unknown-id", JoinedAt: pgnanos.From(t1)},
 			},
 			want: []want{
 				{characterID: "unknown-id", characterName: "unknown-id", eligible: true},
@@ -277,9 +279,9 @@ func TestCompute_StableOrdering_FreeMode(t *testing.T) {
 
 	base := time.Date(2026, 5, 19, 12, 0, 0, 0, time.UTC)
 	participants := []ParticipantWithPoseMeta{
-		{CharacterID: "carol-id", JoinedAt: base.Add(3 * time.Minute)},
-		{CharacterID: "alice-id", JoinedAt: base.Add(1 * time.Minute)},
-		{CharacterID: "bob-id", JoinedAt: base.Add(2 * time.Minute)},
+		{CharacterID: "carol-id", JoinedAt: pgnanos.From(base.Add(3 * time.Minute))},
+		{CharacterID: "alice-id", JoinedAt: pgnanos.From(base.Add(1 * time.Minute))},
+		{CharacterID: "bob-id", JoinedAt: pgnanos.From(base.Add(2 * time.Minute))},
 	}
 	names := map[string]string{
 		"alice-id": "Alice",
@@ -302,9 +304,9 @@ func TestCompute_DoesNotMutateInput(t *testing.T) {
 
 	base := time.Date(2026, 5, 19, 12, 0, 0, 0, time.UTC)
 	participants := []ParticipantWithPoseMeta{
-		{CharacterID: "carol-id", JoinedAt: base.Add(3 * time.Minute)},
-		{CharacterID: "alice-id", JoinedAt: base.Add(1 * time.Minute)},
-		{CharacterID: "bob-id", JoinedAt: base.Add(2 * time.Minute)},
+		{CharacterID: "carol-id", JoinedAt: pgnanos.From(base.Add(3 * time.Minute))},
+		{CharacterID: "alice-id", JoinedAt: pgnanos.From(base.Add(1 * time.Minute))},
+		{CharacterID: "bob-id", JoinedAt: pgnanos.From(base.Add(2 * time.Minute))},
 	}
 	// Snapshot original order.
 	original := make([]ParticipantWithPoseMeta, len(participants))
@@ -324,8 +326,8 @@ func TestCompute_UnrecognizedModeFallsBackToFree(t *testing.T) {
 
 	base := time.Date(2026, 5, 19, 12, 0, 0, 0, time.UTC)
 	participants := []ParticipantWithPoseMeta{
-		{CharacterID: "alice-id", JoinedAt: base.Add(1 * time.Minute)},
-		{CharacterID: "bob-id", JoinedAt: base.Add(2 * time.Minute)},
+		{CharacterID: "alice-id", JoinedAt: pgnanos.From(base.Add(1 * time.Minute))},
+		{CharacterID: "bob-id", JoinedAt: pgnanos.From(base.Add(2 * time.Minute))},
 	}
 
 	got := Compute("bogus-mode", 5, participants, nil)

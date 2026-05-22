@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/pkg/plugin/storage"
 )
 
@@ -68,9 +69,9 @@ type SceneRow struct {
 	TemplateID      *string
 	ContentWarnings []string
 	Tags            []string
-	CreatedAt       time.Time
-	EndedAt         *time.Time
-	ArchivedAt      *time.Time
+	CreatedAt       pgnanos.Time
+	EndedAt         *pgnanos.Time
+	ArchivedAt      *pgnanos.Time
 }
 
 // SceneStore provides PostgreSQL persistence for scenes.
@@ -199,8 +200,8 @@ func (s *SceneStore) CreateWithOwner(ctx context.Context, row *SceneRow) error {
 	_, err = tx.Exec(
 		ctx, `
 		INSERT INTO scene_participants (scene_id, character_id, role, joined_at)
-		VALUES ($1, $2, 'owner', NOW())`,
-		row.ID, row.OwnerID,
+		VALUES ($1, $2, 'owner', $3)`,
+		row.ID, row.OwnerID, pgnanos.From(time.Now()),
 	)
 	if err != nil {
 		recordError(span, err)
@@ -357,8 +358,9 @@ func (s *SceneStore) IsMember(ctx context.Context, sceneID, characterID string) 
 // the WHERE clause enforces this at the database level so concurrent
 // transitions cannot corrupt the state machine.
 //
-// Sets `state = 'ended'` and `ended_at = NOW()` atomically and returns the
-// resulting row via Postgres RETURNING. Returns SCENE_NOT_FOUND if no row
+// Sets `state = 'ended'` and `ended_at = $2` (app-supplied `pgnanos.From(time.Now())`,
+// per INV-TS-1 BIGINT-ns seam) atomically and returns the resulting row via
+// Postgres RETURNING. Returns SCENE_NOT_FOUND if no row
 // matches the ID at all, or SCENE_TRANSITION_FORBIDDEN if the row exists
 // but is in a state that cannot be ended.
 func (s *SceneStore) End(ctx context.Context, id string) (*SceneRow, error) {
@@ -387,10 +389,10 @@ func (s *SceneStore) End(ctx context.Context, id string) (*SceneRow, error) {
             SELECT state FROM scenes WHERE id = $1
         )
         UPDATE scenes
-        SET state = 'ended', ended_at = NOW()
+        SET state = 'ended', ended_at = $2
         WHERE id = $1 AND state IN ('active', 'paused')
         RETURNING `+sceneSelectColumns+`, (SELECT state FROM prior)`,
-		id,
+		id, pgnanos.From(time.Now()),
 	).Scan(
 		&row.ID, &row.Title, &row.Description, &row.LocationID, &row.OwnerID,
 		&row.State, &row.PoseOrder, &row.Visibility, &row.IdleTimeoutSecs,
@@ -705,7 +707,7 @@ func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID st
 	err = tx.QueryRow(
 		ctx, `
 		INSERT INTO scene_participants (scene_id, character_id, role, joined_at)
-		SELECT $1, $2, 'member', NOW()
+		SELECT $1, $2, 'member', (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT
 		FROM scenes
 		WHERE id = $1
 		  AND state IN ('active', 'paused')
@@ -718,7 +720,7 @@ func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID st
 		  )
 		ON CONFLICT (scene_id, character_id) DO UPDATE
 		  SET role = CASE WHEN scene_participants.role = 'invited' THEN 'member' ELSE scene_participants.role END,
-		      joined_at = CASE WHEN scene_participants.role = 'invited' THEN NOW() ELSE scene_participants.joined_at END
+		      joined_at = CASE WHEN scene_participants.role = 'invited' THEN (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT ELSE scene_participants.joined_at END
 		RETURNING scene_id, character_id, role, joined_at, (xmax = 0) AS was_inserted`,
 		sceneID, characterID,
 	).Scan(&row.SceneID, &row.CharacterID, &row.Role, &row.JoinedAt, &wasInserted)
@@ -753,7 +755,7 @@ func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID st
 		var promoted bool
 		err = tx.QueryRow(
 			ctx, `
-			SELECT joined_at >= transaction_timestamp()
+			SELECT joined_at >= (EXTRACT(EPOCH FROM transaction_timestamp()) * 1e9)::BIGINT
 			FROM scene_participants
 			WHERE scene_id = $1 AND character_id = $2`,
 			sceneID, characterID,
@@ -932,9 +934,9 @@ func (s *SceneStore) InviteParticipant(ctx context.Context, sceneID, inviterID, 
 	err = tx.QueryRow(
 		ctx, `
 		INSERT INTO scene_participants (scene_id, character_id, role, joined_at)
-		VALUES ($1, $2, 'invited', NOW())
+		VALUES ($1, $2, 'invited', $3)
 		RETURNING scene_id, character_id, role, joined_at`,
-		sceneID, targetID,
+		sceneID, targetID, pgnanos.From(time.Now()),
 	).Scan(&row.SceneID, &row.CharacterID, &row.Role, &row.JoinedAt)
 	if err != nil {
 		recordError(span, err)

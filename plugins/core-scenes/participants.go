@@ -3,7 +3,7 @@
 
 package main
 
-import "time"
+import "github.com/holomush/holomush/internal/pgnanos"
 
 // ParticipantRole represents a character's relationship to a scene.
 //
@@ -35,7 +35,7 @@ type ParticipantRow struct {
 	SceneID     string
 	CharacterID string
 	Role        string
-	JoinedAt    time.Time
+	JoinedAt    pgnanos.Time
 }
 
 // ParticipantOpResult captures the outcome of an AddParticipant call. The

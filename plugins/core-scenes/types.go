@@ -3,7 +3,9 @@
 
 package main
 
-import "time"
+import (
+	"github.com/holomush/holomush/internal/pgnanos"
+)
 
 // SceneState represents the lifecycle state of a scene.
 //
@@ -92,7 +94,7 @@ type ParticipantsWithPoseMeta struct {
 // when the participant has never posed in this scene.
 type ParticipantWithPoseMeta struct {
 	CharacterID string
-	JoinedAt    time.Time
-	LastPoseAt  *time.Time
+	JoinedAt    pgnanos.Time
+	LastPoseAt  *pgnanos.Time
 	LastPoseSeq *int32
 }

@@ -14,12 +14,14 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/holomush/holomush/internal/pgnanos"
 )
 
 // poseMeta holds the per-participant pose-order metadata captured from
 // scene_participants for comparison across tamper + rebuild phases.
 type poseMeta struct {
-	lastPoseAt  *time.Time
+	lastPoseAt  *pgnanos.Time
 	lastPoseSeq *int32
 }
 
@@ -83,7 +85,7 @@ func rebuildMetadataFromSceneLog(ctx context.Context, pool *pgxpool.Pool, sceneI
 
 	type actorLast struct {
 		seq int32
-		ts  time.Time
+		ts  pgnanos.Time
 	}
 	totalCount := int32(0)
 	lastByActor := map[string]actorLast{}
@@ -91,7 +93,7 @@ func rebuildMetadataFromSceneLog(ctx context.Context, pool *pgxpool.Pool, sceneI
 	for rows.Next() {
 		totalCount++
 		var actorIDBytes []byte
-		var ts time.Time
+		var ts pgnanos.Time
 		Expect(rows.Scan(&actorIDBytes, &ts)).NotTo(HaveOccurred())
 
 		// Convert ULID bytes (16 bytes) to the string form stored in
@@ -266,12 +268,12 @@ var _ = Describe("INV-P4-8: pose-order metadata is a function of scene_log", fun
 			"INV-P4-8: rebuilt char1.last_pose_at MUST be set")
 		Expect(gotChar2.lastPoseAt).NotTo(BeNil(),
 			"INV-P4-8: rebuilt char2.last_pose_at MUST be set")
-		Expect(gotChar1.lastPoseAt.Truncate(time.Microsecond)).To(
-			BeTemporally("~", wantChar1.lastPoseAt.Truncate(time.Microsecond), time.Microsecond),
+		Expect(gotChar1.lastPoseAt.Time().Truncate(time.Microsecond)).To(
+			BeTemporally("~", wantChar1.lastPoseAt.Time().Truncate(time.Microsecond), time.Microsecond),
 			"INV-P4-8: rebuilt char1.last_pose_at MUST match maintained value (±1µs)",
 		)
-		Expect(gotChar2.lastPoseAt.Truncate(time.Microsecond)).To(
-			BeTemporally("~", wantChar2.lastPoseAt.Truncate(time.Microsecond), time.Microsecond),
+		Expect(gotChar2.lastPoseAt.Time().Truncate(time.Microsecond)).To(
+			BeTemporally("~", wantChar2.lastPoseAt.Time().Truncate(time.Microsecond), time.Microsecond),
 			"INV-P4-8: rebuilt char2.last_pose_at MUST match maintained value (±1µs)",
 		)
 	})

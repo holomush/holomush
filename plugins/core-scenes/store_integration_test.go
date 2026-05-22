@@ -18,6 +18,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/pkg/errutil"
 	"github.com/holomush/holomush/test/testutil"
 )
@@ -1773,7 +1774,7 @@ var _ = Describe("SceneStore", func() {
 				ctx,
 				`UPDATE scene_participants SET last_pose_at = $1, last_pose_seq = $2
 				 WHERE scene_id = $3 AND character_id = $4`,
-				poseTime, poseSeq, sceneID, member,
+				pgnanos.From(poseTime), poseSeq, sceneID, member,
 			)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -1791,7 +1792,7 @@ var _ = Describe("SceneStore", func() {
 			}
 			Expect(memberMeta).NotTo(BeNil(), "member MUST appear in result")
 			Expect(memberMeta.LastPoseAt).NotTo(BeNil(), "LastPoseAt MUST be set after pose write")
-			Expect(memberMeta.LastPoseAt.UTC().Truncate(time.Millisecond)).To(Equal(poseTime))
+			Expect(memberMeta.LastPoseAt.Time().UTC().Truncate(time.Millisecond)).To(Equal(poseTime))
 			Expect(memberMeta.LastPoseSeq).NotTo(BeNil(), "LastPoseSeq MUST be set after pose write")
 			Expect(*memberMeta.LastPoseSeq).To(Equal(poseSeq))
 		})
