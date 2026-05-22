@@ -149,9 +149,9 @@ Location: `test/integration/access/seed_policies_test.go`. Extends existing patt
 | S5 | `denies non-owner reading a private property` | char1@loc1, char2.props.private-note (owner=char2) | `EffectDefaultDeny` |
 | S6 | `allows admin to read an admin-visibility property` | admin-char, target.props.admin-secret | `EffectAllow` (via `seed:admin-full-access` or `seed:property-admin-read`) |
 | S7 | `denies non-admin reading an admin-visibility property` | player-char, target.props.admin-secret | `EffectDefaultDeny` |
-| S8 | `denies even admins reading a system-visibility property` | admin-char, target.props.system-internal | `EffectDefaultDeny` (no seed permits system) |
+| S8 | `admins can read system-visibility properties via blanket admin grant` | admin-char, target.props.system-internal | `EffectAllow` (via `seed:admin-full-access`; ADR 087 removed `seed:property-system-forbid` — admins have unconditional access) |
 | S9 | `allows visible-to-listed character to read a restricted property` | char1 NOT co-located, char2.props.restricted with `visible_to=[char1.id]` | `EffectAllow` |
-| S10 | `excluded_from beats visible_to (deny-overrides)` | char1 in BOTH visible_to and excluded_from for the same prop | `EffectDefaultDeny` (`seed:property-restricted-excluded` forbid wins) |
+| S10 | `excluded_from beats visible_to (deny-overrides)` | char1 in BOTH visible_to and excluded_from for the same prop | `EffectDeny` (explicit forbid via `seed:property-restricted-excluded`; deny-overrides on a matching forbid policy returns `EffectDeny`, not `EffectDefaultDeny`) |
 | S11 | `allows owner to write their own property` | char1.props (owner=char1) | `EffectAllow` |
 | S12 | `denies non-owner writing a property` | char2.props (owner=char2), principal=char1 | `EffectDefaultDeny` |
 | S13 | `denies reading on an un-locatable property (ti1b reinforcement)` | prop.parent=object with broken-chain | `EffectDefaultDeny` |

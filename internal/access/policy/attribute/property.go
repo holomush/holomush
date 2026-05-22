@@ -103,6 +103,29 @@ func (p *PropertyProvider) ResolveResource(ctx context.Context, resourceID strin
 		attrs["has_owner"] = false
 	}
 
+	// Emit visible_to and excluded_from for restricted-visibility seeds.
+	// seed:property-restricted-visible-to gates on `resource has property.visible_to`
+	// and seed:property-restricted-excluded gates on `resource has property.excluded_from`.
+	// Without these entries in the attribute bag, both seeds silently skip (the `has`
+	// check short-circuits to false) regardless of the stored lists.
+	// Only emit when non-nil/non-empty — the `resource has property.visible_to` DSL
+	// expression mirrors the ti1b pattern: omit the key entirely when the list is
+	// absent so the `has` guard evaluates to false (default-deny preserving).
+	if len(prop.VisibleTo) > 0 {
+		vt := make([]any, len(prop.VisibleTo))
+		for i, s := range prop.VisibleTo {
+			vt[i] = s
+		}
+		attrs["visible_to"] = vt
+	}
+	if len(prop.ExcludedFrom) > 0 {
+		ef := make([]any, len(prop.ExcludedFrom))
+		for i, s := range prop.ExcludedFrom {
+			ef[i] = s
+		}
+		attrs["excluded_from"] = ef
+	}
+
 	// Resolve parent_location
 	p.resolveParentLocation(ctx, prop, attrs)
 
@@ -171,6 +194,13 @@ func (p *PropertyProvider) Schema() *types.NamespaceSchema {
 			"visibility":          types.AttrTypeString,
 			"parent_location":     types.AttrTypeString,
 			"has_parent_location": types.AttrTypeBool,
+			// visible_to and excluded_from are populated for restricted-visibility
+			// properties and used by seed:property-restricted-visible-to and
+			// seed:property-restricted-excluded. Omitted from the bag (and thus
+			// from `resource has property.visible_to`) when the lists are empty,
+			// matching the ti1b omit-when-unresolvable pattern.
+			"visible_to":    types.AttrTypeStringList,
+			"excluded_from": types.AttrTypeStringList,
 		},
 	}
 }

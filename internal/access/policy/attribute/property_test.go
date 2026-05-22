@@ -425,5 +425,9 @@ func TestPropertyProviderSchema(t *testing.T) {
 		"visibility":          types.AttrTypeString,
 		"parent_location":     types.AttrTypeString,
 		"has_parent_location": types.AttrTypeBool,
+		// Registered for restricted-visibility seeds (visible_to/excluded_from
+		// are populated into the bag when non-empty; omitted otherwise per ti1b).
+		"visible_to":    types.AttrTypeStringList,
+		"excluded_from": types.AttrTypeStringList,
 	}, schema.Attributes)
 }
