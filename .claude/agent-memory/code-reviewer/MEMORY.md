@@ -229,5 +229,7 @@ Keep under 200 lines. Curate — don't hoard.
   for the Ginkgo `Describe` label in source, not just in plan docs; (b) the Ginkgo
   filter is `-ginkgo.focus=`, not `-run` (which matches Go test functions, not Ginkgo
   descriptions); (c) a seed event is planted before the floor so a breakage is
-  detectable. Encountered: iwzt.9 review (2026-05-21), I-PRIV-1 test in
-  `test/integration/privacy/privacy_test.go:150-156`.
+  detectable. Encountered: iwzt.9 (2026-05-21, `privacy_test.go:150-156`) and iwzt.10
+  (2026-05-21, `privacy_test.go:331-349` — second `It` in move-floor test plants a post-move
+  event via `EmitDirectEvent` but omits `Expect(events).NotTo(BeEmpty())`. `EmitDirectEvent`
+  returns post-JetStream-ack so the race is slim but the vacuity gap persists).

@@ -83,6 +83,24 @@ type Server struct {
 	guestStartLocationID ulid.ULID
 }
 
+// StartOption tunes Start construction. Tests pass options to override
+// harness defaults (e.g., the ABAC policy engine).
+type StartOption func(*startConfig)
+
+// startConfig holds resolved Start options.
+type startConfig struct {
+	accessEngine types.AccessPolicyEngine
+}
+
+// WithPolicyEngine overrides the harness's default allow-all ABAC engine.
+// Tests that need to exercise denial paths — e.g., the I-PRIV-1 hard-gate
+// (iwzt.10) or the I-PRIV-5 wire-opacity meta-test (iwzt.11) — pass a
+// stricter engine such as policytest.DenyAllEngine so staffOverride
+// returns false and the hard-gate is exercised end-to-end.
+func WithPolicyEngine(eng types.AccessPolicyEngine) StartOption {
+	return func(c *startConfig) { c.accessEngine = eng }
+}
+
 // Start bootstraps a full in-process holomush stack and returns a Server.
 // The caller MUST call Stop() (typically via defer) to release resources.
 //
@@ -91,8 +109,10 @@ type Server struct {
 //   - An embedded NATS JetStream server (in-memory, per-test isolation)
 //   - An in-process CoreServer wired to the above
 //
-// AllowAll ABAC engine: tests focus on privacy gates, not role enforcement.
-func Start(t *testing.T) *Server {
+// AllowAll ABAC engine is the default — privacy tests focus on session/
+// history gates, not role enforcement. Pass WithPolicyEngine to override
+// for tests that need denial-path coverage.
+func Start(t *testing.T, opts ...StartOption) *Server {
 	t.Helper()
 
 	ctx := context.Background()
@@ -146,10 +166,14 @@ func Start(t *testing.T) *Server {
 	// Embedded NATS bus (in-memory, cleaned up via t.Cleanup).
 	bus := eventbustest.New(t)
 
-	// AllowAll ABAC engine — privacy tests focus on session/history gates,
-	// not role enforcement. We use a local implementation to avoid importing
-	// the policytest helper package from non-_test.go code.
-	pe := &allowAllPolicyEngine{}
+	// Resolve options. Default ABAC engine is allowAll (privacy tests focus
+	// on session/history gates, not role enforcement). Tests that need
+	// denial-path coverage override via WithPolicyEngine.
+	cfg := &startConfig{accessEngine: &allowAllPolicyEngine{}}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+	pe := cfg.accessEngine
 
 	// Command dispatcher (minimal: no commands registered).
 	dispatcher, err := command.NewDispatcher(command.NewRegistry(), pe)
