@@ -34,7 +34,7 @@ func seedBindingTestData(ctx context.Context, t *testing.T) (playerID, character
 
 	_, err = testPool.Exec(ctx, `
 		INSERT INTO characters (id, player_id, name, created_at)
-		VALUES ($1, $2, $3, NOW())
+		VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, characterID, playerID, "BindingTestChar"+charULID.String()[:6])
 	require.NoError(t, err)
 

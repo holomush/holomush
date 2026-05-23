@@ -5,7 +5,6 @@ package postgres
 
 import (
 	"context"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
@@ -40,9 +39,9 @@ func (r *SceneRepository) AddParticipant(ctx context.Context, sceneID, character
 
 	_, err = r.pool.Exec(ctx, `
 		INSERT INTO scene_participants (scene_id, character_id, role, joined_at)
-		VALUES ($1, $2, $3, $4)
+		VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 		ON CONFLICT (scene_id, character_id) DO UPDATE SET role = $3
-	`, sceneID.String(), characterID.String(), role.String(), time.Now())
+	`, sceneID.String(), characterID.String(), role.String())
 	if err != nil {
 		return oops.
 			With("operation", "add participant").

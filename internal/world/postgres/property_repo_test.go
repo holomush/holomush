@@ -29,8 +29,8 @@ func newTestProperty(parentType string, parentID ulid.ULID) *world.EntityPropert
 		Owner:      strPtr("system"),
 		Visibility: "public",
 		Flags:      []string{"no-reset"},
-		CreatedAt:  time.Now().UTC().Truncate(time.Microsecond),
-		UpdatedAt:  time.Now().UTC().Truncate(time.Microsecond),
+		CreatedAt:  time.Now().UTC(),
+		UpdatedAt:  time.Now().UTC(),
 	}
 }
 

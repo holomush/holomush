@@ -42,7 +42,7 @@ func createTestLocation(ctx context.Context, t *testing.T) ulid.ULID {
 	locationID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
-		VALUES ($1, 'Test Loc', 'Test', 'persistent', 'last:0', NOW())
+		VALUES ($1, 'Test Loc', 'Test', 'persistent', 'last:0', (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, locationID.String())
 	require.NoError(t, err)
 
@@ -74,7 +74,7 @@ func TestCharacterRepository_Get(t *testing.T) {
 			Name:        "TestHero",
 			Description: "A test hero.",
 			LocationID:  &locationID,
-			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:   time.Now().UTC(),
 		}
 
 		err := repo.Create(ctx, char)
@@ -103,7 +103,7 @@ func TestCharacterRepository_Get(t *testing.T) {
 			Name:        "NowhereMan",
 			Description: "A character without a location.",
 			LocationID:  nil,
-			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:   time.Now().UTC(),
 		}
 
 		err := repo.Create(ctx, char)
@@ -139,7 +139,7 @@ func TestCharacterRepository_GetByLocation(t *testing.T) {
 			Name:        "Alice",
 			Description: "First character.",
 			LocationID:  &locationID,
-			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:   time.Now().UTC(),
 		}
 		char2 := &world.Character{
 			ID:          ulid.Make(),
@@ -147,7 +147,7 @@ func TestCharacterRepository_GetByLocation(t *testing.T) {
 			Name:        "Bob",
 			Description: "Second character.",
 			LocationID:  &locationID,
-			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:   time.Now().UTC(),
 		}
 
 		require.NoError(t, repo.Create(ctx, char1))
@@ -190,7 +190,7 @@ func TestCharacterRepository_GetByLocation_Pagination(t *testing.T) {
 			Name:        name,
 			Description: name + " description",
 			LocationID:  &locationID,
-			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:   time.Now().UTC(),
 		}
 		require.NoError(t, repo.Create(ctx, char))
 	}
@@ -261,7 +261,7 @@ func TestCharacterRepository_Create(t *testing.T) {
 			Name:        "NewCharacter",
 			Description: "A new character.",
 			LocationID:  &locationID,
-			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:   time.Now().UTC(),
 		}
 
 		err := repo.Create(ctx, char)
@@ -286,7 +286,7 @@ func TestCharacterRepository_Create(t *testing.T) {
 			Name:        "Homeless",
 			Description: "No home yet.",
 			LocationID:  nil,
-			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:   time.Now().UTC(),
 		}
 
 		err := repo.Create(ctx, char)
@@ -316,7 +316,7 @@ func TestCharacterRepository_Update(t *testing.T) {
 			Name:        "OriginalName",
 			Description: "Original description.",
 			LocationID:  &locationID,
-			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:   time.Now().UTC(),
 		}
 
 		require.NoError(t, repo.Create(ctx, char))
@@ -365,7 +365,7 @@ func TestCharacterRepository_Delete(t *testing.T) {
 			Name:        "ToDelete",
 			Description: "Will be deleted.",
 			LocationID:  nil,
-			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:   time.Now().UTC(),
 		}
 
 		require.NoError(t, repo.Create(ctx, char))
@@ -397,7 +397,7 @@ func TestCharacterRepository_IsOwnedByPlayer(t *testing.T) {
 			Name:        "OwnedChar",
 			Description: "Owned by player.",
 			LocationID:  nil,
-			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:   time.Now().UTC(),
 		}
 
 		require.NoError(t, repo.Create(ctx, char))
@@ -420,7 +420,7 @@ func TestCharacterRepository_IsOwnedByPlayer(t *testing.T) {
 			Name:        "NotYourChar",
 			Description: "Owned by another player.",
 			LocationID:  nil,
-			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:   time.Now().UTC(),
 		}
 
 		require.NoError(t, repo.Create(ctx, char))
@@ -453,13 +453,13 @@ func TestCharacterRepository_GetNamesByIDs(t *testing.T) {
 		ID:        ulid.Make(),
 		PlayerID:  playerID,
 		Name:      "alice",
-		CreatedAt: time.Now().UTC().Truncate(time.Microsecond),
+		CreatedAt: time.Now().UTC(),
 	}
 	char2 := &world.Character{
 		ID:        ulid.Make(),
 		PlayerID:  playerID,
 		Name:      "bob",
-		CreatedAt: time.Now().UTC().Truncate(time.Microsecond),
+		CreatedAt: time.Now().UTC(),
 	}
 	require.NoError(t, repo.Create(ctx, char1))
 	require.NoError(t, repo.Create(ctx, char2))
@@ -509,7 +509,7 @@ func TestCharacterRepository_UpdateLocation(t *testing.T) {
 			Name:        "Traveler",
 			Description: "On the move.",
 			LocationID:  &loc1,
-			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:   time.Now().UTC(),
 		}
 
 		require.NoError(t, repo.Create(ctx, char))
@@ -537,7 +537,7 @@ func TestCharacterRepository_UpdateLocation(t *testing.T) {
 			Name:        "Vanisher",
 			Description: "Going away.",
 			LocationID:  &locationID,
-			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:   time.Now().UTC(),
 		}
 
 		require.NoError(t, repo.Create(ctx, char))

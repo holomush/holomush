@@ -27,7 +27,7 @@ func createTestSceneForSceneRepo(ctx context.Context, t *testing.T, repo *postgr
 		Name:         name,
 		Description:  "A test scene",
 		ReplayPolicy: "last:-1",
-		CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+		CreatedAt:    time.Now().UTC(),
 	}
 	err := repo.Create(ctx, scene)
 	require.NoError(t, err)
@@ -50,7 +50,7 @@ func createTestCharacterForSceneRepo(ctx context.Context, t *testing.T, name str
 	locationID := ulid.Make()
 	_, err = testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
-		VALUES ($1, 'Test Loc', 'Test location', 'persistent', 'last:0', NOW())
+		VALUES ($1, 'Test Loc', 'Test location', 'persistent', 'last:0', (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, locationID.String())
 	require.NoError(t, err)
 
@@ -58,7 +58,7 @@ func createTestCharacterForSceneRepo(ctx context.Context, t *testing.T, name str
 	charID := ulid.Make()
 	_, err = testPool.Exec(ctx, `
 		INSERT INTO characters (id, player_id, name, location_id, created_at)
-		VALUES ($1, $2, $3, $4, NOW())
+		VALUES ($1, $2, $3, $4, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, charID.String(), playerID.String(), name, locationID.String())
 	require.NoError(t, err)
 

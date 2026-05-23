@@ -24,6 +24,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/naming"
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telnet"
 	"github.com/holomush/holomush/internal/web"
@@ -315,9 +316,11 @@ func (a *authCharRepoAdapter) ListByPlayer(ctx context.Context, playerID ulid.UL
 		var c world.Character
 		var idStr, pidStr string
 		var locStr *string
-		if scanErr := rows.Scan(&idStr, &pidStr, &c.Name, &c.Description, &locStr, &c.CreatedAt); scanErr != nil {
+		var createdAt pgnanos.Time
+		if scanErr := rows.Scan(&idStr, &pidStr, &c.Name, &c.Description, &locStr, &createdAt); scanErr != nil {
 			return nil, oops.Code("CHARACTER_SCAN_FAILED").Wrap(scanErr)
 		}
+		c.CreatedAt = createdAt.Time()
 		var parseErr error
 		c.ID, parseErr = ulid.Parse(idStr)
 		if parseErr != nil {

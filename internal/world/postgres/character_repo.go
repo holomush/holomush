@@ -12,6 +12,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -49,7 +50,7 @@ func (r *CharacterRepository) Create(ctx context.Context, char *world.Character)
 		INSERT INTO characters (id, player_id, name, description, location_id, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`, char.ID.String(), char.PlayerID.String(), char.Name, char.Description,
-		ulidToStringPtr(char.LocationID), char.CreatedAt)
+		ulidToStringPtr(char.LocationID), pgnanos.From(char.CreatedAt))
 	if err != nil {
 		return oops.Code("CHARACTER_CREATE_FAILED").With("id", char.ID.String()).Wrap(err)
 	}
@@ -139,6 +140,7 @@ type characterScanFields struct {
 	idStr         string
 	playerIDStr   string
 	locationIDStr *string
+	createdAt     pgnanos.Time
 }
 
 // scanCharacterRow scans a single character from a row.
@@ -148,7 +150,7 @@ func scanCharacterRow(row pgx.Row) (*world.Character, error) {
 
 	err := row.Scan(
 		&f.idStr, &f.playerIDStr, &char.Name, &char.Description,
-		&f.locationIDStr, &char.CreatedAt,
+		&f.locationIDStr, &f.createdAt,
 	)
 	if err != nil {
 		return nil, oops.Code("CHARACTER_SCAN_FAILED").Wrap(err)
@@ -176,6 +178,7 @@ func parseCharacterFromFields(f *characterScanFields, char *world.Character) err
 	if err != nil {
 		return err
 	}
+	char.CreatedAt = f.createdAt.Time()
 	return nil
 }
 
@@ -187,7 +190,7 @@ func scanCharacters(rows pgx.Rows) ([]*world.Character, error) {
 
 		if err := rows.Scan(
 			&f.idStr, &f.playerIDStr, &char.Name, &char.Description,
-			&f.locationIDStr, &char.CreatedAt,
+			&f.locationIDStr, &f.createdAt,
 		); err != nil {
 			return nil, oops.Code("CHARACTER_SCAN_FAILED").Wrap(err)
 		}
