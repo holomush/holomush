@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.6](https://github.com/holomush/holomush/compare/v0.1.5...v0.1.6) (2026-05-23)
+
+
+### Bug Fixes
+
+* **release:** attest digest via imagetools json dump (.20 redux) ([#4218](https://github.com/holomush/holomush/issues/4218)) ([e7a18c2](https://github.com/holomush/holomush/commit/e7a18c287a09e8af5e4cfb090c923736c39e9c17))
+
 ## [0.1.5](https://github.com/holomush/holomush/compare/v0.1.4...v0.1.5) (2026-05-23)
 
 
