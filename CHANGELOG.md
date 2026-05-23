@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/holomush/holomush/compare/v0.1.2...v0.1.3) (2026-05-23)
+
+
+### Bug Fixes
+
+* **release:** build plugins + add to docker build context (holomush-hryj.16) ([#4209](https://github.com/holomush/holomush/issues/4209)) ([c5c3394](https://github.com/holomush/holomush/commit/c5c33948ff5b00260064705e202b8f7908068810))
+
 ## [0.1.2](https://github.com/holomush/holomush/compare/v0.1.1...v0.1.2) (2026-05-23)
 
 
