@@ -34,7 +34,8 @@ jobs:
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         id: release
         with:
-          release-type: go
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
 
   goreleaser:
     name: Build, Sign, and Release
@@ -308,7 +309,7 @@ jobs:
     # verify-release are skipped on dispatch and the image already exists in
     # GHCR. `always()` lets this job start regardless of upstream skip state.
     if: |
-      always() && (
+      always() && vars.SANDBOX_DEPLOY_ENABLED == 'true' && (
         (startsWith(github.ref, 'refs/tags/') && needs.verify-release.result == 'success') ||
         github.event_name == 'workflow_dispatch'
       )
