@@ -564,7 +564,7 @@ tasks:
   fmt:markdown:
     desc: Format Markdown files
     cmds:
-      - rumdl fmt --exclude 'site,.git,.beads,.serena,.claude' .
+      - rumdl fmt --exclude 'site,.git,.beads,.serena,.claude,CHANGELOG.md' .
       - rumdl fmt --config site/.rumdl.toml site/
 
   fmt:yaml:
@@ -581,7 +581,7 @@ tasks:
     desc: Check formatting without modifying
     cmds:
       - dprint check
-      - rumdl fmt --check --exclude 'site,.git,.beads,.serena,.claude' .
+      - rumdl fmt --check --exclude 'site,.git,.beads,.serena,.claude,CHANGELOG.md' .
       - rumdl fmt --check --config site/.rumdl.toml site/
 
   # ──────────────────────────────────────────
