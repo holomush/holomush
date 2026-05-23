@@ -70,6 +70,10 @@ type projection struct {
 // jitter, short enough that a real permanent failure (config mismatch,
 // stream missing) still fails fast within the surrounding test timeout.
 //
+// Shared by newProjection (host audit) and PluginConsumerManager.Add
+// (per-plugin consumers) — both invoke the same RPC against the same
+// stream and so face the same warmup race.
+//
 // Declared `var` (not `const`) so projection_unit_test.go's
 // withShortBackoffs(t) can swap it to a microsecond schedule for the
 // retry tests. Tests in this package MUST NOT call t.Parallel() while
@@ -137,6 +141,12 @@ func wrapConsumerCreateError(err error, stream, consumer string) error {
 // truly permanent error (config mismatch, missing stream) is bounded by
 // the total backoff (~350ms) and the diagnostic cost of differentiating
 // transient vs permanent error classes exceeds the savings.
+//
+// Shared by newProjection and PluginConsumerManager.Add. Both callers
+// wrap the returned error with their own oops Code (the host wraps with
+// AUDIT_CONSUMER_CREATE_FAILED via wrapConsumerCreateError; the plugin
+// path wraps with AUDIT_PLUGIN_CONSUMER_CREATE_FAILED via
+// wrapPluginConsumerCreateError in plugin_consumer.go).
 func createConsumerWithRetry(ctx context.Context, create func(context.Context) (jetstream.Consumer, error)) (jetstream.Consumer, error) {
 	var lastErr error
 	for attempt := 0; attempt <= len(consumerCreateBackoffs); attempt++ {

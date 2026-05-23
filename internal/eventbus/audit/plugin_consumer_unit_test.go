@@ -331,3 +331,28 @@ func TestAddRejectsNilClient(t *testing.T) {
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "AUDIT_PLUGIN_CONSUMER_INVALID_CONFIG")
 }
+
+// TestWrapPluginConsumerCreateErrorSurfacesUnderlyingNATSError pins the
+// observability contract for plugin Add(): when CreateOrUpdateConsumer
+// ultimately fails, the wrapped error MUST surface the underlying NATS
+// error message via a structured `nats_err` field. Without this, oops
+// Code() / structured-field consumers (Ginkgo's failure summary,
+// errutil.AssertErrorContext) see only AUDIT_PLUGIN_CONSUMER_CREATE_FAILED
+// and cannot diagnose root cause — the same defect that blocked l015
+// diagnosis on the host-projection side, now closed on the plugin side
+// (holomush-ghg1 follow-up).
+func TestWrapPluginConsumerCreateErrorSurfacesUnderlyingNATSError(t *testing.T) {
+	t.Parallel()
+	natsErr := errors.New("nats: no stream matches subject")
+	wrapped := wrapPluginConsumerCreateError(natsErr, "core-scenes", "plugin_audit_core-scenes")
+
+	errutil.AssertErrorCode(t, wrapped, "AUDIT_PLUGIN_CONSUMER_CREATE_FAILED")
+	require.ErrorIs(t, wrapped, natsErr,
+		"chain MUST preserve the underlying NATS error for errors.Is/As consumers")
+	require.ErrorContains(t, wrapped, "no stream matches subject",
+		"wrapped error chain MUST contain the underlying NATS message")
+	errutil.AssertErrorContext(t, wrapped, "stream", eventbus.StreamName)
+	errutil.AssertErrorContext(t, wrapped, "plugin", "core-scenes")
+	errutil.AssertErrorContext(t, wrapped, "consumer", "plugin_audit_core-scenes")
+	errutil.AssertErrorContext(t, wrapped, "nats_err", natsErr.Error())
+}
