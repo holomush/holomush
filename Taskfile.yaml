@@ -52,9 +52,20 @@ tasks:
       - docker compose down -v
 
   dev:obs:
-    desc: Start dev environment with observability stack (Grafana, Tempo, Prometheus, Dozzle)
+    desc: Start dev environment with observability stack (Grafana, Jaeger, Prometheus, Dozzle)
     cmds:
       - task: docker:build
+      # Surface the UIs up front so traces from the server-side spans
+      # (e.g. holomush-87qu's Subscribe phase breakdown) are discoverable.
+      # Web-side traces require `task web:dev:obs` in a separate shell —
+      # the SvelteKit tracer is conditional on PUBLIC_OTEL_ENDPOINT.
+      - |
+        echo "▸ Observability UIs (start after services are up):"
+        echo "    Jaeger    http://localhost:16686"
+        echo "    Grafana   http://localhost:3001"
+        echo "    Dozzle    http://localhost:8888"
+        echo "    Prom      http://localhost:9090  (internal to backend; expose via grafana)"
+        echo "▸ Web-side traces: run 'task web:dev:obs' in another shell"
       - COMPOSE_PROFILES=observability docker compose up --force-recreate --remove-orphans
 
   test:
@@ -412,6 +423,20 @@ tasks:
     deps: ['web:install', 'web:generate']
     cmds:
       - pnpm dev
+
+  web:dev:obs:
+    desc: Run SvelteKit dev server with OTel tracing enabled (pairs with `task dev:obs`)
+    dir: web
+    deps: ['web:install', 'web:generate']
+    cmds:
+      # PUBLIC_OTEL_ENDPOINT is the conditional-init switch for the web
+      # tracer (web/src/lib/telemetry.ts:33) — without it set, the SDK
+      # returns early and no spans are emitted. The browser POSTs to the
+      # OTel collector's HTTP receiver (compose.yaml exposes 4318 on
+      # localhost; collector config allows CORS from http://localhost:*).
+      # Use the HTTP endpoint, NOT 4317 (that's gRPC, browser can't use it).
+      # Pair with `task dev:obs` to start the otel-collector + Jaeger.
+      - PUBLIC_OTEL_ENDPOINT=http://localhost:4318 pnpm dev
 
   # ──────────────────────────────────────────
   # Linters (called by `task lint`)
