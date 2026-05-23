@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.8](https://github.com/holomush/holomush/compare/v0.1.7...v0.1.8) (2026-05-23)
+
+
+### Bug Fixes
+
+* **sandbox:** bootstrap tolerates cloud-init degraded-done (recoverable errors) (.24) ([#4222](https://github.com/holomush/holomush/issues/4222)) ([998f9a0](https://github.com/holomush/holomush/commit/998f9a03cd8c2d47594788f1423ceeaeb7b92fc7))
+
 ## [0.1.7](https://github.com/holomush/holomush/compare/v0.1.6...v0.1.7) (2026-05-23)
 
 
