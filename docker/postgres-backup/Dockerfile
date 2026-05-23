@@ -15,7 +15,7 @@ FROM alpine:3.23@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a50
 # pull it in the build step. Pin the version here and bump deliberately.
 ARG KOPIA_VERSION=0.18.0
 
-RUN apk add --no-cache bash ca-certificates curl supercronic postgresql18-client coreutils tzdata \
+RUN apk add --no-cache bash ca-certificates curl su-exec supercronic postgresql18-client coreutils tzdata \
     && adduser -D -g '' backup \
     && arch="$(uname -m)"; \
        case "${arch}" in \
@@ -50,7 +50,8 @@ RUN printf '%s\n' '0 3 * * * . /etc/backup.env && /usr/local/bin/backup.sh' \
     && touch /etc/backup.env \
     && chown backup:backup /etc/backup.env
 
-USER backup
-
+# NOTE: no `USER backup` here. The entrypoint starts as root so it can fix
+# ownership of the kopia cache (a root-owned Docker named volume) before
+# dropping to the unprivileged `backup` user via su-exec. See entrypoint.sh.
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["cron"]
