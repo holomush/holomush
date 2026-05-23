@@ -47,13 +47,14 @@ func TestMigration_000030_BootstrapMetadataReplacement(t *testing.T) {
 	require.Equal(t, 0, count, "fresh table after DROP+CREATE replacement")
 
 	// Verify primary key enforces unique (chain_name, scope_key) by attempting duplicate insert.
+	// Note: initialized_at is still TIMESTAMPTZ at migration 30; migration 000043 converts it to BIGINT.
 	_, err = pool.Exec(ctx,
-		`INSERT INTO bootstrap_metadata(chain_name, scope_key, initialized_at)
-		 VALUES ('test.chain', 'scope1', now())`)
+		`INSERT INTO bootstrap_metadata(chain_name, scope_key)
+		 VALUES ('test.chain', 'scope1')`)
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx,
-		`INSERT INTO bootstrap_metadata(chain_name, scope_key, initialized_at)
-		 VALUES ('test.chain', 'scope1', now())`)
+		`INSERT INTO bootstrap_metadata(chain_name, scope_key)
+		 VALUES ('test.chain', 'scope1')`)
 	require.Error(t, err, "duplicate (chain_name, scope_key) must be rejected by primary key")
 
 	// Migrate down to 20: D's schema returns (key TEXT PRIMARY KEY).
@@ -117,6 +118,7 @@ func TestMigration_000031_CryptoRekeyCheckpoints(t *testing.T) {
 	require.Contains(t, err.Error(), "crypto_rekey_checkpoints_one_active_per_context")
 
 	// Mark first complete; second insert now succeeds.
+	// Note: completed_at is still TIMESTAMPTZ at migration 31; migration 000043 converts it to BIGINT.
 	_, err = pool.Exec(ctx,
 		`UPDATE crypto_rekey_checkpoints SET status='complete', completed_at=now() WHERE request_id=$1`,
 		reqID)
@@ -177,6 +179,7 @@ func TestMigration_000032_CreateSettingBootstrapState(t *testing.T) {
 	require.Equal(t, "crossroads", value)
 
 	// Upsert via ON CONFLICT updates the value.
+	// Note: updated_at is still TIMESTAMPTZ at migration 32; migration 000043 converts it to BIGINT.
 	_, err = pool.Exec(ctx,
 		`INSERT INTO setting_bootstrap_state(key, value, updated_at) VALUES ('active_setting', 'tavern', NOW())
 		 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`)

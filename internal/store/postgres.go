@@ -85,7 +85,7 @@ func (s *PostgresEventStore) GetSystemInfo(ctx context.Context, key string) (str
 func (s *PostgresEventStore) SetSystemInfo(ctx context.Context, key, value string) error {
 	_, err := s.pool.Exec(ctx,
 		`INSERT INTO holomush_system_info (key, value) VALUES ($1, $2)
-		 ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+		 ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT`,
 		key, value)
 	if err != nil {
 		return oops.With("operation", "set system info").With("key", key).Wrap(err)
