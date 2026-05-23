@@ -49,6 +49,22 @@ func (f *fakeFocusCoordinator) PresentFocus(_ context.Context, _ string, _ sessi
 	panic("unused in list_session_streams_test")
 }
 
+func (f *fakeFocusCoordinator) IsAnyConnFocused(_ context.Context, _, _ ulid.ULID) (bool, error) {
+	panic("unused in list_session_streams_test")
+}
+
+func (f *fakeFocusCoordinator) RestoreConnectionFocus(_ context.Context, _ string, _ ulid.ULID) error {
+	panic("unused in list_session_streams_test")
+}
+
+func (f *fakeFocusCoordinator) SetConnectionFocus(_ context.Context, _ ulid.ULID, _ *session.FocusKey, _ bool) (focus.SetConnectionFocusResult, error) {
+	panic("unused in list_session_streams_test")
+}
+
+func (f *fakeFocusCoordinator) AutoFocusOnJoin(_ context.Context, _, _ ulid.ULID) (focus.AutoFocusOnJoinResponse, error) {
+	panic("unused in list_session_streams_test")
+}
+
 // fakeStreamContributor is a minimal SessionStreamContributor implementation
 // that returns a canned stream list.
 type fakeStreamContributor struct {

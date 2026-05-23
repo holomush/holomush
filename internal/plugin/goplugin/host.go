@@ -138,6 +138,12 @@ func WithFocusCoordinator(fc focus.Coordinator) HostOption {
 	return func(h *Host) { h.focusCoordinator = fc }
 }
 
+// WithConnectionSender configures the host with a per-Connection stream sender
+// for Phase 5 SetConnectionFocus / AutoFocusOnJoin subscription delta delivery.
+func WithConnectionSender(cs focus.ConnectionSender) HostOption {
+	return func(h *Host) { h.connectionSender = cs }
+}
+
 // WithHistoryReader configures the host with a history reader for
 // QueryStreamHistory RPCs.
 func WithHistoryReader(hr plugins.HistoryReader) HostOption {
@@ -162,9 +168,10 @@ type Host struct {
 	gameID            string
 	hostBrokerCert    *tlscerts.ServerCert
 	hostClientCert    *tlscerts.ClientCert
-	eventEmitter      plugins.PluginIntentEmitter
-	focusCoordinator  focus.Coordinator
-	historyReader     plugins.HistoryReader
+	eventEmitter       plugins.PluginIntentEmitter
+	focusCoordinator   focus.Coordinator
+	connectionSender   focus.ConnectionSender
+	historyReader      plugins.HistoryReader
 	identityRegistry  plugins.IdentityRegistry
 	plugins           map[string]*loadedPlugin
 	mu                sync.RWMutex
@@ -268,6 +275,22 @@ func (h *Host) FocusCoordinator() focus.Coordinator {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.focusCoordinator
+}
+
+// SetConnectionSender injects the per-Connection stream sender after construction.
+// Same late-binding rationale as SetFocusCoordinator. Used for Phase 5
+// SetConnectionFocus / AutoFocusOnJoin subscription delta delivery.
+func (h *Host) SetConnectionSender(cs focus.ConnectionSender) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.connectionSender = cs
+}
+
+// ConnectionSender returns the current per-Connection stream sender, or nil if not set.
+func (h *Host) ConnectionSender() focus.ConnectionSender {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.connectionSender
 }
 
 // SetHistoryReader injects the history reader after construction.
@@ -707,6 +730,7 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 			LocationId:    cmd.LocationID,
 			SessionId:     cmd.SessionID,
 			PlayerId:      cmd.PlayerID,
+			ConnectionId:  cmd.ConnectionID, // Phase 5 (holomush-5rh.14 T19 follow-up)
 		},
 	}
 

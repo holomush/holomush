@@ -6,7 +6,9 @@ package grpc
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -181,4 +183,107 @@ func TestSendCarriesReplayMode(t *testing.T) {
 	assert.Equal(t, "scene:abc:ic", update.stream)
 	assert.True(t, update.add)
 	assert.Equal(t, focus.ReplayModeBoundedTail, update.replayMode)
+}
+
+func TestSendToConnection_TargetsOneConnectionOnly(t *testing.T) {
+	t.Parallel()
+	// INV-P5-10: SendToConnection delivers update to EXACTLY the named
+	// connection's channel; other connections in the same session do
+	// NOT receive the update via this path.
+	r := NewSessionStreamRegistry()
+	sessionID := "sess-stc"
+	connA := ulid.Make()
+	connB := ulid.Make()
+	chA := make(chan sessionStreamUpdate, 1)
+	chB := make(chan sessionStreamUpdate, 1)
+
+	r.RegisterConnection(sessionID, connA, chA)
+	r.RegisterConnection(sessionID, connB, chB)
+
+	err := r.SendToConnection(sessionID, connA, sessionStreamUpdate{stream: "events.main.scene.X.ic", add: true})
+	require.NoError(t, err)
+
+	select {
+	case upd := <-chA:
+		assert.Equal(t, "events.main.scene.X.ic", upd.stream)
+		assert.True(t, upd.add)
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("expected delivery to connA's channel")
+	}
+
+	select {
+	case upd := <-chB:
+		t.Fatalf("INV-P5-10 violated: connB received SendToConnection meant for connA: %+v", upd)
+	case <-time.After(50 * time.Millisecond):
+		// good — connB did NOT receive
+	}
+}
+
+func TestSendToConnection_ReturnsConnectionNotRegistered(t *testing.T) {
+	t.Parallel()
+	r := NewSessionStreamRegistry()
+	err := r.SendToConnection("sess-x", ulid.Make(), sessionStreamUpdate{stream: "s", add: true})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "CONNECTION_NOT_REGISTERED")
+}
+
+func TestSend_StillBroadcastsForSessionWideCallers(t *testing.T) {
+	t.Parallel()
+	// Regression: existing Send (session-wide broadcast) MUST be
+	// unchanged by Phase 5 additions.
+	r := NewSessionStreamRegistry()
+	sessionID := "sess-broadcast"
+	ch1 := make(chan sessionStreamUpdate, 1)
+	ch2 := make(chan sessionStreamUpdate, 1)
+	r.Register(sessionID, ch1)
+	r.Register(sessionID, ch2)
+
+	require.NoError(t, r.Send(sessionID, sessionStreamUpdate{stream: "ambient", add: true}))
+
+	for _, ch := range []chan sessionStreamUpdate{ch1, ch2} {
+		select {
+		case upd := <-ch:
+			assert.Equal(t, "ambient", upd.stream)
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("Send broadcast regression: subscriber missed the update")
+		}
+	}
+}
+
+// TestSessionStreamRegistryDeregisterConnectionGuardsByChannelIdentity
+// pins the reconnect-race fix from CodeRabbit PR #4191 round 6: if a
+// reconnect re-registers the same (sessionID, connectionID) key before
+// the old goroutine's deferred DeregisterConnection fires, the stale
+// defer MUST NOT clobber the new mapping — or the live SendToConnection
+// would surface CONNECTION_NOT_REGISTERED on the active stream.
+func TestSessionStreamRegistryDeregisterConnectionGuardsByChannelIdentity(t *testing.T) {
+	r := NewSessionStreamRegistry()
+	sessionID := "sess-reconnect-race"
+	connID := ulid.Make()
+
+	oldCh := make(chan sessionStreamUpdate, 1)
+	newCh := make(chan sessionStreamUpdate, 1)
+
+	// Initial registration.
+	r.RegisterConnection(sessionID, connID, oldCh)
+	// Reconnect: same key, new channel.
+	r.RegisterConnection(sessionID, connID, newCh)
+	// Stale defer fires now (carries oldCh). It MUST NOT delete newCh's mapping.
+	r.DeregisterConnection(sessionID, connID, oldCh)
+
+	// SendToConnection should still reach newCh — proves the mapping survives.
+	require.NoError(t, r.SendToConnection(sessionID, connID, sessionStreamUpdate{stream: "live", add: true}))
+
+	select {
+	case upd := <-newCh:
+		assert.Equal(t, "live", upd.stream)
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("stale DeregisterConnection clobbered the live mapping")
+	}
+
+	// Now the new owner properly deregisters with its own channel.
+	r.DeregisterConnection(sessionID, connID, newCh)
+	err := r.SendToConnection(sessionID, connID, sessionStreamUpdate{stream: "ghost", add: true})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "CONNECTION_NOT_REGISTERED")
 }

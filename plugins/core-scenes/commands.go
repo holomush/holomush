@@ -41,7 +41,7 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 	span.SetAttributes(attribute.String("subcommand", sub))
 
 	if sub == "" {
-		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, emit, end, info, invite, join, kick, leave, ooc, order, pause, pose, resume, say, set, switch, transfer"), nil
+		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, emit, end, focus, grid, info, invite, join, kick, leave, list, ooc, order, pause, pose, resume, say, set, switch, transfer"), nil
 	}
 
 	switch sub {
@@ -69,6 +69,21 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 		return p.handleTransfer(ctx, req, rest)
 	case "switch":
 		return p.handleSwitch(ctx, req, rest)
+	case "focus":
+		// Reject anything past the expected `#<scene-id>` arg. Without
+		// this, "scene focus #id extra" silently flows into the
+		// substrate as a malformed scene ID. (CodeRabbit PR #4191)
+		if fields := strings.Fields(rest); len(fields) > 1 {
+			return pluginsdk.Errorf("Usage: scene focus #<scene id>"), nil
+		}
+		return p.handleSceneFocus(ctx, req, rest)
+	case "grid":
+		// `scene grid` takes no arguments. Reject `scene grid extra`
+		// instead of silently ignoring trailing tokens. (CodeRabbit PR #4191)
+		if strings.TrimSpace(rest) != "" {
+			return pluginsdk.Errorf("Usage: scene grid"), nil
+		}
+		return p.handleSceneGrid(ctx, req)
 	case "pose":
 		return p.handleEmit(ctx, req, rest, "scene_pose", false)
 	case "say":
@@ -79,8 +94,10 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 		return p.handleEmit(ctx, req, rest, "scene_ooc", true)
 	case "order":
 		return p.handleOrder(ctx, req, rest)
+	case "list":
+		return p.handleSceneList(ctx, req)
 	default:
-		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, emit, end, info, invite, join, kick, leave, ooc, order, pause, pose, resume, say, set, switch, transfer.", sub), nil
+		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, emit, end, focus, grid, info, invite, join, kick, leave, list, ooc, order, pause, pose, resume, say, set, switch, transfer.", sub), nil
 	}
 }
 
@@ -378,34 +395,86 @@ func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandReque
 		), nil
 	}
 
-	err := p.focusClient.JoinFocus(ctx, req.SessionID, pluginsdk.FocusKey{
+	if joinErr := p.focusClient.JoinFocus(ctx, req.SessionID, pluginsdk.FocusKey{
 		Kind:     pluginsdk.FocusKindScene,
 		TargetID: sceneID,
-	})
-	if err != nil {
+	}); joinErr != nil {
 		var oe oops.OopsError
-		if errors.As(err, &oe) && oe.Code() == "FOCUS_ALREADY_MEMBER" {
-			return &pluginsdk.CommandResponse{
-				Status: pluginsdk.CommandOK,
-				Output: fmt.Sprintf("Joined scene %s.", sceneID),
-			}, nil
+		if !errors.As(joinErr, &oe) || oe.Code() != "FOCUS_ALREADY_MEMBER" {
+			// Only surface the error for non-idempotent failures. FOCUS_ALREADY_MEMBER
+			// falls through to AutoFocusOnJoin: the session is already a focus member
+			// but per-connection focus state may still need updating.
+			slog.WarnContext(
+				ctx, "scene.command.join focus join failed",
+				"subject_id", req.CharacterID,
+				"session_id", req.SessionID,
+				"scene_id", sceneID,
+				"error", joinErr,
+			)
+			return pluginsdk.Errorf(
+				"Joined scene in database, but your session could not subscribe (%v). "+
+					"Please retry `scene join %s`.", joinErr, sceneID,
+			), nil
 		}
+	}
+
+	// Step 3: AutoFocusOnJoin — fan-out to all terminal/telnet connections.
+	// This is a best-effort call: errors are non-fatal because the character
+	// is already in the scene (DB write + FocusMembership both committed).
+	// The pre-condition (JoinFocus completed) is satisfied by the step above.
+	afResult, afErr := p.focusClient.AutoFocusOnJoin(ctx, req.CharacterID, sceneID)
+	if afErr != nil {
 		slog.WarnContext(
-			ctx, "scene.command.join focus join failed",
+			ctx, "scene.command.join auto-focus-on-join failed (non-fatal)",
 			"subject_id", req.CharacterID,
 			"session_id", req.SessionID,
 			"scene_id", sceneID,
-			"error", err,
+			"error", afErr,
 		)
-		return pluginsdk.Errorf(
-			"Joined scene in database, but your session could not subscribe (%v). "+
-				"Please retry `scene join %s`.", err, sceneID,
-		), nil
+		// Detailed error is already logged; user-facing message stays
+		// fixed so players don't see transport/internal-error details.
+		// (CodeRabbit PR #4191 round 6)
+		return &pluginsdk.CommandResponse{
+			Status: pluginsdk.CommandOK,
+			Output: fmt.Sprintf("Joined scene #%s. (Auto-focus is unavailable; use 'scene focus #%s' to focus manually.)", sceneID, sceneID),
+		}, nil
 	}
 
+	if len(afResult.FailedConnectionIDs) > 0 {
+		slog.WarnContext(
+			ctx, "scene.command.join auto-focus partial failure",
+			"subject_id", req.CharacterID,
+			"session_id", req.SessionID,
+			"scene_id", sceneID,
+			"failed_count", len(afResult.FailedConnectionIDs),
+		)
+	}
+
+	// 5-branch render based on substrate outcome. Failure check runs FIRST
+	// so per-connection auto-focus failures aren't hidden under success or
+	// skipped messaging (CodeRabbit PR #4191).
+	// TODO(Phase 6 §7.4): add mixed-render branch when both focused and skipped are non-empty.
+	var msg string
+	switch {
+	case len(afResult.FailedConnectionIDs) > 0:
+		// Any failure (alone or alongside success/skip): surface warning.
+		msg = fmt.Sprintf("Joined scene #%s but auto-focus failed for %d connection(s).", sceneID, len(afResult.FailedConnectionIDs))
+	case len(afResult.FocusedConnectionIDs) > 0 && len(afResult.SkippedConnectionIDs) == 0:
+		// Terminal-focused: one or more terminal/telnet connections were auto-focused.
+		msg = fmt.Sprintf("Joined scene #%s and focused your terminal connection(s) on it.", sceneID)
+	case len(afResult.SkippedConnectionIDs) > 0 && len(afResult.FocusedConnectionIDs) == 0:
+		// Explicitly-focused-elsewhere: terminal stays on its current focus (INV-P5-11).
+		msg = fmt.Sprintf("Joined scene #%s. Your terminal stays on its current focus; use 'scene focus #%s' to switch.", sceneID, sceneID)
+	case afResult.TotalConnectionCount > 0 && len(afResult.FocusedConnectionIDs) == 0 && len(afResult.SkippedConnectionIDs) == 0:
+		// Comms-hub-only: only non-terminal connections exist (INV-P5-4 filtered them out).
+		msg = fmt.Sprintf("Joined scene #%s. Use 'scene focus #%s' to enter.", sceneID, sceneID)
+	default:
+		// TotalConnectionCount == 0: no live connections (admin / scripted join).
+		msg = fmt.Sprintf("Joined scene #%s.", sceneID)
+	}
 	return &pluginsdk.CommandResponse{
 		Status: pluginsdk.CommandOK,
-		Output: fmt.Sprintf("Joined scene %s.", sceneID),
+		Output: msg,
 	}, nil
 }
 
@@ -575,6 +644,147 @@ func (p *scenePlugin) handleSwitch(ctx context.Context, req pluginsdk.CommandReq
 		Status: pluginsdk.CommandOK,
 		Output: fmt.Sprintf("Switched to scene %s.", sceneID),
 	}, nil
+}
+
+// handleSceneGrid implements `scene grid`. Clears the per-connection focus
+// pointer back to grid (nil FocusKey) without touching Info.PresentingFocus.
+//
+// D10 + INV-P5-13: the substrate skips the PresentingFocus write when
+// isSceneGrid=true, so the player's focus context (e.g., the scene they
+// were last presenting) survives the grid pivot and is restored on reconnect.
+// The plugin is only responsible for issuing the RPC with the correct args;
+// substrate enforcement is tested in internal/grpc/focus tests (T14).
+func (p *scenePlugin) handleSceneGrid(ctx context.Context, req pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+	if p.focusClient == nil {
+		slog.WarnContext(
+			ctx, "scene.command.grid focus client not configured",
+			"connection_id", req.ConnectionID,
+		)
+		return pluginsdk.Errorf("Failed to switch to grid: focus client not configured"), nil
+	}
+	// req.ConnectionID is allowed to be empty on server-side dispatch paths
+	// (scripted / admin invocations). Calling SetConnectionFocus with "" would
+	// surface as a wrapped INVALID_ULID — fail fast with a clear user-facing
+	// message instead. (CodeRabbit PR #4191)
+	if req.ConnectionID == "" {
+		return pluginsdk.Errorf("`scene grid` requires a live connection."), nil
+	}
+
+	// D10: isSceneGrid=true so substrate skips PresentingFocus write.
+	if err := p.focusClient.SetConnectionFocus(ctx, req.ConnectionID, nil /* focus_key */, true /* isSceneGrid */); err != nil {
+		return nil, oops.Code("SCENE_GRID_SET_FAILED").
+			With("connection_id", req.ConnectionID).
+			Wrap(err)
+	}
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: "Focused on the grid.",
+	}, nil
+}
+
+// handleSceneFocus implements `scene focus #<id>`. Parses a scene reference
+// (ULID prefixed with `#`), validates it is syntactically valid, then calls
+// SetConnectionFocus on the current connection. The substrate is the canonical
+// authority for membership (INV-P5-1): FOCUS_WITHOUT_MEMBERSHIP from the
+// substrate produces a user-facing denial; other substrate errors surface as
+// SCENE_FOCUS_FAILED internal errors.
+//
+// The plugin does NOT pre-check membership; substrate enforcement via T14 is
+// sufficient per plan Task 19 ("let substrate be the authority").
+func (p *scenePlugin) handleSceneFocus(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	arg := strings.TrimSpace(args)
+	if arg == "" {
+		return pluginsdk.Errorf("Usage: scene focus #<scene id>"), nil
+	}
+
+	// Require the '#' prefix per the command syntax; strip it to get the
+	// bare scene ID. The substrate validates membership and scene existence;
+	// the plugin's responsibility is parse + dispatch + render only.
+	if !strings.HasPrefix(arg, "#") {
+		return pluginsdk.Errorf("Usage: scene focus #<scene id>"), nil
+	}
+	sceneID := strings.TrimPrefix(arg, "#")
+	if sceneID == "" {
+		return pluginsdk.Errorf("Usage: scene focus #<scene id>"), nil
+	}
+
+	if p.focusClient == nil {
+		slog.WarnContext(
+			ctx, "scene.command.focus focus client not configured",
+			"connection_id", req.ConnectionID,
+			"scene_id", sceneID,
+		)
+		return pluginsdk.Errorf("Failed to focus scene: focus client not configured"), nil
+	}
+	// req.ConnectionID is allowed to be empty on server-side dispatch paths
+	// (scripted / admin invocations). Calling SetConnectionFocus with "" would
+	// surface as a wrapped INVALID_ULID — fail fast with a clear user-facing
+	// message instead. (CodeRabbit PR #4191)
+	if req.ConnectionID == "" {
+		return pluginsdk.Errorf("`scene focus` requires a live connection."), nil
+	}
+
+	fk := pluginsdk.FocusKey{Kind: pluginsdk.FocusKindScene, TargetID: sceneID}
+	if err := p.focusClient.SetConnectionFocus(ctx, req.ConnectionID, &fk, false /* isSceneGrid */); err != nil {
+		var oe oops.OopsError
+		if errors.As(err, &oe) && oe.Code() == "FOCUS_WITHOUT_MEMBERSHIP" {
+			return pluginsdk.Errorf("You're not in Scene %s.", sceneID), nil
+		}
+		return nil, oops.Code("SCENE_FOCUS_FAILED").
+			With("connection_id", req.ConnectionID).
+			With("scene_id", sceneID).
+			Wrap(err)
+	}
+
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("You're now focused on Scene %s.", sceneID),
+	}, nil
+}
+
+// handleSceneList implements `scene list`. Reads the character's scene
+// memberships from the store (scene-kind only — channels and other focus
+// kinds are not stored here), then calls IsAnyConnFocused per scene to
+// determine the [focused] / [background] marker.
+//
+// Returns "You're not in any scenes." when the character has no memberships.
+// RPC errors from IsAnyConnFocused surface as SCENE_LIST_FAILED.
+func (p *scenePlugin) handleSceneList(ctx context.Context, req pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+	sceneIDs, err := p.service.store.ListScenesForCharacter(ctx, req.CharacterID)
+	if err != nil {
+		return nil, oops.Code("SCENE_LIST_FAILED").
+			With("character_id", req.CharacterID).
+			Wrap(err)
+	}
+	if len(sceneIDs) == 0 {
+		return pluginsdk.OK("You're not in any scenes."), nil
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Your scenes (%d):\n", len(sceneIDs))
+	for _, sceneID := range sceneIDs {
+		// Only render a focus marker when we actually consulted the
+		// substrate. Without focusClient, "unknown" must not masquerade
+		// as "[background]" — that would falsely tell the user no
+		// connection is focused. (CodeRabbit PR #4191 round 6)
+		marker := ""
+		if p.focusClient != nil {
+			focused, err := p.focusClient.IsAnyConnFocused(ctx, req.CharacterID, sceneID)
+			if err != nil {
+				return nil, oops.Code("SCENE_LIST_FAILED").
+					With("character_id", req.CharacterID).
+					With("scene_id", sceneID).
+					Wrap(err)
+			}
+			if focused {
+				marker = " [focused]"
+			} else {
+				marker = " [background]"
+			}
+		}
+		fmt.Fprintf(&b, "  %s%s\n", sceneID, marker)
+	}
+	return pluginsdk.OK(b.String()), nil
 }
 
 // handleEmit is the shared emit-subcommand handler for the four content

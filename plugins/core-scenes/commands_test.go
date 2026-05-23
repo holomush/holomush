@@ -270,7 +270,7 @@ func TestSceneCommandJoinForwardsToServiceWithCorrectSceneID(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
-	assert.Contains(t, resp.Output, "Joined scene scene-cmd-j")
+	assert.Contains(t, resp.Output, "scene-cmd-j")
 	require.Len(t, fc.joinCalls, 1)
 	assert.Equal(t, "scene-cmd-j", fc.joinCalls[0].target.TargetID)
 }
@@ -451,17 +451,38 @@ type focusCall struct {
 	target    pluginsdk.FocusKey
 }
 
+type setConnFocusCall struct {
+	connectionID string
+	focusKey     *pluginsdk.FocusKey
+	isSceneGrid  bool
+}
+
 type fakeFocusClient struct {
-	joinCalls          []focusCall
-	leaveCalls         []focusCall
-	leaveByTargetCalls []pluginsdk.FocusKey
-	presentCalls       []focusCall
+	joinCalls           []focusCall
+	leaveCalls          []focusCall
+	leaveByTargetCalls  []pluginsdk.FocusKey
+	presentCalls        []focusCall
+	setConnFocusCalls   []setConnFocusCall
+	autoFocusOnJoinCalls []autoFocusOnJoinCall
 
 	joinErr             error
 	leaveErr            error
 	leaveByTargetErr    error
 	leaveByTargetResult pluginsdk.LeaveByTargetResult
 	presentErr          error
+	setConnFocusErr     error
+	autoFocusOnJoinResult pluginsdk.AutoFocusOnJoinResult
+	autoFocusOnJoinErr    error
+
+	// isAnyConnFocusedResult maps sceneID → focused bool for per-scene control.
+	// If the scene is not in the map, the default is false.
+	isAnyConnFocusedResult map[string]bool
+	isAnyConnFocusedErr    error
+}
+
+type autoFocusOnJoinCall struct {
+	characterID string
+	sceneID     string
 }
 
 func (f *fakeFocusClient) JoinFocus(_ context.Context, sid string, t pluginsdk.FocusKey) error {
@@ -482,6 +503,23 @@ func (f *fakeFocusClient) LeaveFocusByTarget(_ context.Context, t pluginsdk.Focu
 func (f *fakeFocusClient) PresentFocus(_ context.Context, sid string, t pluginsdk.FocusKey) error {
 	f.presentCalls = append(f.presentCalls, focusCall{sessionID: sid, target: t})
 	return f.presentErr
+}
+
+func (f *fakeFocusClient) SetConnectionFocus(_ context.Context, connID string, fk *pluginsdk.FocusKey, isSceneGrid bool) error {
+	f.setConnFocusCalls = append(f.setConnFocusCalls, setConnFocusCall{connectionID: connID, focusKey: fk, isSceneGrid: isSceneGrid})
+	return f.setConnFocusErr
+}
+
+func (f *fakeFocusClient) AutoFocusOnJoin(_ context.Context, characterID, sceneID string) (pluginsdk.AutoFocusOnJoinResult, error) {
+	f.autoFocusOnJoinCalls = append(f.autoFocusOnJoinCalls, autoFocusOnJoinCall{characterID: characterID, sceneID: sceneID})
+	return f.autoFocusOnJoinResult, f.autoFocusOnJoinErr
+}
+
+func (f *fakeFocusClient) IsAnyConnFocused(_ context.Context, _ string, sceneID string) (bool, error) {
+	if f.isAnyConnFocusedErr != nil {
+		return false, f.isAnyConnFocusedErr
+	}
+	return f.isAnyConnFocusedResult[sceneID], nil
 }
 
 func (f *fakeFocusClient) QueryStreamHistory(_ context.Context, _ pluginsdk.QueryStreamHistoryRequest) (pluginsdk.QueryStreamHistoryResponse, error) {

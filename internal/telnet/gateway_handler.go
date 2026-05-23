@@ -594,6 +594,7 @@ func (h *GatewayHandler) handleSay(ctx context.Context, message string) {
 		SessionId:          h.sessionID,
 		Command:            "say " + message,
 		PlayerSessionToken: h.playerSessionToken,
+		ConnectionId:       h.connectionID,
 	})
 	if err != nil {
 		slog.Error("gateway: say command failed", "session_id", h.sessionID, "error", err)
@@ -634,6 +635,7 @@ func (h *GatewayHandler) handlePose(ctx context.Context, action string) {
 		SessionId:          h.sessionID,
 		Command:            "pose " + action,
 		PlayerSessionToken: h.playerSessionToken,
+		ConnectionId:       h.connectionID,
 	})
 	if err != nil {
 		slog.Error("gateway: pose command failed", "session_id", h.sessionID, "error", err)
@@ -680,6 +682,7 @@ func (h *GatewayHandler) handleGenericCommand(ctx context.Context, cmd, arg stri
 		SessionId:          h.sessionID,
 		Command:            fullCmd,
 		PlayerSessionToken: h.playerSessionToken,
+		ConnectionId:       h.connectionID,
 	}); err != nil {
 		slog.Error("gateway: command failed", "session_id", h.sessionID, "command", cmd, "error", err)
 		h.send("Error processing command.")
@@ -741,6 +744,7 @@ func (h *GatewayHandler) handleQuit(ctx context.Context) {
 			SessionId:          h.sessionID,
 			Command:            "quit",
 			PlayerSessionToken: h.playerSessionToken,
+			ConnectionId:       h.connectionID,
 		}); err != nil {
 			slog.Warn("gateway: quit command failed", "session_id", h.sessionID, "error", err)
 		}

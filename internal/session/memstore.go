@@ -237,10 +237,11 @@ func (m *MemStore) AddConnection(_ context.Context, conn *Connection) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	cp := *conn
-	cp.Streams = make([]string, len(conn.Streams))
-	copy(cp.Streams, conn.Streams)
-	m.connections[conn.ID] = &cp
+	// Deep-copy on ingress: caller-owned Streams slice + FocusKey pointer
+	// must not alias the store, or external mutation outside m.mu can
+	// corrupt internal state. Mirrors the egress copy via GetConnection /
+	// ListConnectionsBySession. (CodeRabbit PR #4191)
+	m.connections[conn.ID] = copyConnection(conn)
 	return nil
 }
 
@@ -279,6 +280,29 @@ func (m *MemStore) CountConnectionsByType(_ context.Context, sessionID, clientTy
 		}
 	}
 	return count, nil
+}
+
+// ListConnectionsBySession returns a snapshot of all active Connections
+// for a session. Used by AutoFocusOnJoin's fan-out enumeration.
+func (m *MemStore) ListConnectionsBySession(_ context.Context, sessionID string) ([]*Connection, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if _, ok := m.sessions[sessionID]; !ok {
+		return nil, oops.Code("SESSION_NOT_FOUND").
+			With("session_id", sessionID).
+			Errorf("session not found")
+	}
+
+	out := make([]*Connection, 0)
+	for _, conn := range m.connections {
+		if conn.SessionID == sessionID {
+			// Deep-copy: shallow struct copy leaves Streams + FocusKey
+			// aliasing the store's underlying memory.
+			out = append(out, copyConnection(conn))
+		}
+	}
+	return out, nil
 }
 
 // UpdateGridPresent sets the grid_present flag on a session.
@@ -455,6 +479,110 @@ func (m *MemStore) UpdateFocusMemberships(_ context.Context, sessionID string, m
 	info.FocusMemberships = nextMemberships
 	info.PresentingFocus = nextPresenting
 	info.UpdatedAt = time.Now()
+	return nil
+}
+
+// GetConnection looks up a single Connection by ID. O(1) via the
+// store's existing connections map.
+func (m *MemStore) GetConnection(_ context.Context, connectionID ulid.ULID) (*Connection, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	conn, ok := m.connections[connectionID]
+	if !ok {
+		return nil, oops.Code("CONNECTION_NOT_FOUND").
+			With("connection_id", connectionID.String()).
+			Errorf("connection not found")
+	}
+	return copyConnection(conn), nil
+}
+
+// copyConnection returns a deep copy of a Connection: new Streams slice and
+// a freshly-allocated FocusKey pointer. Without this, callers holding the
+// returned pointer could mutate the store's underlying state outside m.mu.
+func copyConnection(c *Connection) *Connection {
+	out := *c
+	if c.Streams != nil {
+		out.Streams = make([]string, len(c.Streams))
+		copy(out.Streams, c.Streams)
+	}
+	if c.FocusKey != nil {
+		fk := *c.FocusKey
+		out.FocusKey = &fk
+	}
+	return &out
+}
+
+// (copyInfo is defined below at line ~680 and pre-existing; reused here for
+// defensive deep-copy on mutator entry per CodeRabbit PR #4191.)
+
+// UpdateSessionConnection runs the mutator under the store-wide m.mu
+// lock. Both Info and Connection writes commit atomically. INV-P5-7:
+// external observers cannot see one field updated while the other lags.
+func (m *MemStore) UpdateSessionConnection(
+	_ context.Context,
+	sessionID string,
+	connectionID ulid.ULID,
+	mut SessionConnectionMutator,
+) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	info, ok := m.sessions[sessionID]
+	if !ok {
+		return oops.Code("SESSION_NOT_FOUND").
+			With("session_id", sessionID).
+			Errorf("session not found")
+	}
+
+	conn, ok := m.connections[connectionID]
+	if !ok || conn.SessionID != sessionID {
+		return oops.Code("CONNECTION_NOT_FOUND").
+			With("session_id", sessionID).
+			With("connection_id", connectionID.String()).
+			Errorf("connection not found in session")
+	}
+
+	// Nil-Mutate guard before invocation: a zero-value
+	// SessionConnectionMutator{} or a keyed-literal bypass with no
+	// Mutate field would otherwise panic here. (CodeRabbit PR #4191)
+	if nerr := mut.NilSafe(); nerr != nil {
+		return nerr
+	}
+
+	// Deep-copy before handing to the mutator: even though the mutator
+	// receives value copies of the structs, slice and pointer fields
+	// (CommandHistory, FocusMemberships, PresentingFocus, Streams,
+	// FocusKey) still alias the store's underlying memory. A buggy
+	// mutator could mutate those in place. Defensive copy on entry
+	// matches the defensive copy on exit at line 545 below.
+	infoIn := copyInfo(info)
+	connIn := copyConnection(conn)
+	nextInfo, nextConn, err := mut.Mutate(*infoIn, *connIn)
+	if err != nil {
+		return err
+	}
+
+	// Narrow assignment for parity with the Postgres impl (T6) which
+	// only UPDATEs focus_key + presenting_focus. Mutator changes to any
+	// other Info/Connection field are silently dropped on both backends.
+	// CONTRACT: Phase 5's mutator only writes these two fields.
+	//
+	// Defensive-copy the pointers: the mutator received value copies but
+	// may have written pointers to its own allocations. We MUST NOT let
+	// the caller retain mutability of store state via the returned
+	// pointer. (Postgres impl is inherently isolated by the txn boundary.)
+	if nextInfo.PresentingFocus != nil {
+		fk := *nextInfo.PresentingFocus
+		info.PresentingFocus = &fk
+	} else {
+		info.PresentingFocus = nil
+	}
+	if nextConn.FocusKey != nil {
+		fk := *nextConn.FocusKey
+		conn.FocusKey = &fk
+	} else {
+		conn.FocusKey = nil
+	}
 	return nil
 }
 

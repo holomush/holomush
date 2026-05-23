@@ -87,6 +87,15 @@ const (
 	// PluginHostServiceRequestEmitTokenProcedure is the fully-qualified name of the PluginHostService's
 	// RequestEmitToken RPC.
 	PluginHostServiceRequestEmitTokenProcedure = "/holomush.plugin.v1.PluginHostService/RequestEmitToken"
+	// PluginHostServiceSetConnectionFocusProcedure is the fully-qualified name of the
+	// PluginHostService's SetConnectionFocus RPC.
+	PluginHostServiceSetConnectionFocusProcedure = "/holomush.plugin.v1.PluginHostService/SetConnectionFocus"
+	// PluginHostServiceAutoFocusOnJoinProcedure is the fully-qualified name of the PluginHostService's
+	// AutoFocusOnJoin RPC.
+	PluginHostServiceAutoFocusOnJoinProcedure = "/holomush.plugin.v1.PluginHostService/AutoFocusOnJoin"
+	// PluginHostServiceIsAnyConnFocusedProcedure is the fully-qualified name of the PluginHostService's
+	// IsAnyConnFocused RPC.
+	PluginHostServiceIsAnyConnFocusedProcedure = "/holomush.plugin.v1.PluginHostService/IsAnyConnFocused"
 )
 
 // PluginServiceClient is a client for the holomush.plugin.v1.PluginService service.
@@ -296,6 +305,19 @@ type PluginHostServiceClient interface {
 	// plugin cannot impersonate another actor through this RPC.
 	// (Spec §3.3.5 / §5.4 self-token pattern.)
 	RequestEmitToken(context.Context, *connect.Request[v1.PluginHostServiceRequestEmitTokenRequest]) (*connect.Response[v1.PluginHostServiceRequestEmitTokenResponse], error)
+	// SetConnectionFocus — Phase 5 explicit focus mutation for one
+	// Connection. Substrate validates membership against FocusMemberships
+	// (D4); writes Connection.FocusKey + (D9-gated) Info.PresentingFocus
+	// atomically under one Store-lock acquisition (D7).
+	SetConnectionFocus(context.Context, *connect.Request[v1.PluginHostServiceSetConnectionFocusRequest]) (*connect.Response[v1.PluginHostServiceSetConnectionFocusResponse], error)
+	// AutoFocusOnJoin — Phase 5 fan-out: focuses all terminal/telnet
+	// connections of the character on the given scene. Skips conns
+	// already explicitly focused elsewhere (D8). Caller must have
+	// completed JoinFocus before invocation.
+	AutoFocusOnJoin(context.Context, *connect.Request[v1.PluginHostServiceAutoFocusOnJoinRequest]) (*connect.Response[v1.PluginHostServiceAutoFocusOnJoinResponse], error)
+	// IsAnyConnFocused — Phase 5 notification-emission helper: true iff
+	// any of the character's connections has FocusKey == {scene, scene_id}.
+	IsAnyConnFocused(context.Context, *connect.Request[v1.PluginHostServiceIsAnyConnFocusedRequest]) (*connect.Response[v1.PluginHostServiceIsAnyConnFocusedResponse], error)
 }
 
 // NewPluginHostServiceClient constructs a client for the holomush.plugin.v1.PluginHostService
@@ -387,6 +409,24 @@ func NewPluginHostServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(pluginHostServiceMethods.ByName("RequestEmitToken")),
 			connect.WithClientOptions(opts...),
 		),
+		setConnectionFocus: connect.NewClient[v1.PluginHostServiceSetConnectionFocusRequest, v1.PluginHostServiceSetConnectionFocusResponse](
+			httpClient,
+			baseURL+PluginHostServiceSetConnectionFocusProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("SetConnectionFocus")),
+			connect.WithClientOptions(opts...),
+		),
+		autoFocusOnJoin: connect.NewClient[v1.PluginHostServiceAutoFocusOnJoinRequest, v1.PluginHostServiceAutoFocusOnJoinResponse](
+			httpClient,
+			baseURL+PluginHostServiceAutoFocusOnJoinProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("AutoFocusOnJoin")),
+			connect.WithClientOptions(opts...),
+		),
+		isAnyConnFocused: connect.NewClient[v1.PluginHostServiceIsAnyConnFocusedRequest, v1.PluginHostServiceIsAnyConnFocusedResponse](
+			httpClient,
+			baseURL+PluginHostServiceIsAnyConnFocusedProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("IsAnyConnFocused")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -405,6 +445,9 @@ type pluginHostServiceClient struct {
 	presentFocus        *connect.Client[v1.PluginHostServicePresentFocusRequest, v1.PluginHostServicePresentFocusResponse]
 	queryStreamHistory  *connect.Client[v1.PluginHostServiceQueryStreamHistoryRequest, v1.PluginHostServiceQueryStreamHistoryResponse]
 	requestEmitToken    *connect.Client[v1.PluginHostServiceRequestEmitTokenRequest, v1.PluginHostServiceRequestEmitTokenResponse]
+	setConnectionFocus  *connect.Client[v1.PluginHostServiceSetConnectionFocusRequest, v1.PluginHostServiceSetConnectionFocusResponse]
+	autoFocusOnJoin     *connect.Client[v1.PluginHostServiceAutoFocusOnJoinRequest, v1.PluginHostServiceAutoFocusOnJoinResponse]
+	isAnyConnFocused    *connect.Client[v1.PluginHostServiceIsAnyConnFocusedRequest, v1.PluginHostServiceIsAnyConnFocusedResponse]
 }
 
 // EmitEvent calls holomush.plugin.v1.PluginHostService.EmitEvent.
@@ -472,6 +515,21 @@ func (c *pluginHostServiceClient) RequestEmitToken(ctx context.Context, req *con
 	return c.requestEmitToken.CallUnary(ctx, req)
 }
 
+// SetConnectionFocus calls holomush.plugin.v1.PluginHostService.SetConnectionFocus.
+func (c *pluginHostServiceClient) SetConnectionFocus(ctx context.Context, req *connect.Request[v1.PluginHostServiceSetConnectionFocusRequest]) (*connect.Response[v1.PluginHostServiceSetConnectionFocusResponse], error) {
+	return c.setConnectionFocus.CallUnary(ctx, req)
+}
+
+// AutoFocusOnJoin calls holomush.plugin.v1.PluginHostService.AutoFocusOnJoin.
+func (c *pluginHostServiceClient) AutoFocusOnJoin(ctx context.Context, req *connect.Request[v1.PluginHostServiceAutoFocusOnJoinRequest]) (*connect.Response[v1.PluginHostServiceAutoFocusOnJoinResponse], error) {
+	return c.autoFocusOnJoin.CallUnary(ctx, req)
+}
+
+// IsAnyConnFocused calls holomush.plugin.v1.PluginHostService.IsAnyConnFocused.
+func (c *pluginHostServiceClient) IsAnyConnFocused(ctx context.Context, req *connect.Request[v1.PluginHostServiceIsAnyConnFocusedRequest]) (*connect.Response[v1.PluginHostServiceIsAnyConnFocusedResponse], error) {
+	return c.isAnyConnFocused.CallUnary(ctx, req)
+}
+
 // PluginHostServiceHandler is an implementation of the holomush.plugin.v1.PluginHostService
 // service.
 type PluginHostServiceHandler interface {
@@ -516,6 +574,19 @@ type PluginHostServiceHandler interface {
 	// plugin cannot impersonate another actor through this RPC.
 	// (Spec §3.3.5 / §5.4 self-token pattern.)
 	RequestEmitToken(context.Context, *connect.Request[v1.PluginHostServiceRequestEmitTokenRequest]) (*connect.Response[v1.PluginHostServiceRequestEmitTokenResponse], error)
+	// SetConnectionFocus — Phase 5 explicit focus mutation for one
+	// Connection. Substrate validates membership against FocusMemberships
+	// (D4); writes Connection.FocusKey + (D9-gated) Info.PresentingFocus
+	// atomically under one Store-lock acquisition (D7).
+	SetConnectionFocus(context.Context, *connect.Request[v1.PluginHostServiceSetConnectionFocusRequest]) (*connect.Response[v1.PluginHostServiceSetConnectionFocusResponse], error)
+	// AutoFocusOnJoin — Phase 5 fan-out: focuses all terminal/telnet
+	// connections of the character on the given scene. Skips conns
+	// already explicitly focused elsewhere (D8). Caller must have
+	// completed JoinFocus before invocation.
+	AutoFocusOnJoin(context.Context, *connect.Request[v1.PluginHostServiceAutoFocusOnJoinRequest]) (*connect.Response[v1.PluginHostServiceAutoFocusOnJoinResponse], error)
+	// IsAnyConnFocused — Phase 5 notification-emission helper: true iff
+	// any of the character's connections has FocusKey == {scene, scene_id}.
+	IsAnyConnFocused(context.Context, *connect.Request[v1.PluginHostServiceIsAnyConnFocusedRequest]) (*connect.Response[v1.PluginHostServiceIsAnyConnFocusedResponse], error)
 }
 
 // NewPluginHostServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -603,6 +674,24 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 		connect.WithSchema(pluginHostServiceMethods.ByName("RequestEmitToken")),
 		connect.WithHandlerOptions(opts...),
 	)
+	pluginHostServiceSetConnectionFocusHandler := connect.NewUnaryHandler(
+		PluginHostServiceSetConnectionFocusProcedure,
+		svc.SetConnectionFocus,
+		connect.WithSchema(pluginHostServiceMethods.ByName("SetConnectionFocus")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pluginHostServiceAutoFocusOnJoinHandler := connect.NewUnaryHandler(
+		PluginHostServiceAutoFocusOnJoinProcedure,
+		svc.AutoFocusOnJoin,
+		connect.WithSchema(pluginHostServiceMethods.ByName("AutoFocusOnJoin")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pluginHostServiceIsAnyConnFocusedHandler := connect.NewUnaryHandler(
+		PluginHostServiceIsAnyConnFocusedProcedure,
+		svc.IsAnyConnFocused,
+		connect.WithSchema(pluginHostServiceMethods.ByName("IsAnyConnFocused")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.plugin.v1.PluginHostService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PluginHostServiceEmitEventProcedure:
@@ -631,6 +720,12 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 			pluginHostServiceQueryStreamHistoryHandler.ServeHTTP(w, r)
 		case PluginHostServiceRequestEmitTokenProcedure:
 			pluginHostServiceRequestEmitTokenHandler.ServeHTTP(w, r)
+		case PluginHostServiceSetConnectionFocusProcedure:
+			pluginHostServiceSetConnectionFocusHandler.ServeHTTP(w, r)
+		case PluginHostServiceAutoFocusOnJoinProcedure:
+			pluginHostServiceAutoFocusOnJoinHandler.ServeHTTP(w, r)
+		case PluginHostServiceIsAnyConnFocusedProcedure:
+			pluginHostServiceIsAnyConnFocusedHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -690,4 +785,16 @@ func (UnimplementedPluginHostServiceHandler) QueryStreamHistory(context.Context,
 
 func (UnimplementedPluginHostServiceHandler) RequestEmitToken(context.Context, *connect.Request[v1.PluginHostServiceRequestEmitTokenRequest]) (*connect.Response[v1.PluginHostServiceRequestEmitTokenResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.RequestEmitToken is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) SetConnectionFocus(context.Context, *connect.Request[v1.PluginHostServiceSetConnectionFocusRequest]) (*connect.Response[v1.PluginHostServiceSetConnectionFocusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.SetConnectionFocus is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) AutoFocusOnJoin(context.Context, *connect.Request[v1.PluginHostServiceAutoFocusOnJoinRequest]) (*connect.Response[v1.PluginHostServiceAutoFocusOnJoinResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.AutoFocusOnJoin is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) IsAnyConnFocused(context.Context, *connect.Request[v1.PluginHostServiceIsAnyConnFocusedRequest]) (*connect.Response[v1.PluginHostServiceIsAnyConnFocusedResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.IsAnyConnFocused is not implemented"))
 }

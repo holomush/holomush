@@ -106,6 +106,12 @@ message HandleCommandRequest {
   // for all post-auth RPCs. Must match the player_id of session_id
   // or the request is rejected with SESSION_NOT_FOUND.
   string player_session_token = 4;
+
+  // connection_id is the ULID of the originating gateway connection (Phase 5).
+  // Populated by telnet and web gateways; empty for non-gateway callers.
+  // The server uses this to route scene-focus autofocus to the correct
+  // connection (T20-T23). Empty string is accepted (zero value).
+  string connection_id = 5;
 }
 
 message HandleCommandResponse {

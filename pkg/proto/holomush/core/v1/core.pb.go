@@ -442,8 +442,13 @@ type HandleCommandRequest struct {
 	// for all post-auth RPCs. Must match the player_id of session_id
 	// or the request is rejected with SESSION_NOT_FOUND.
 	PlayerSessionToken string `protobuf:"bytes,4,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// connection_id is the ULID of the originating gateway connection (Phase 5).
+	// Populated by telnet and web gateways; empty for non-gateway callers.
+	// The server uses this to route scene-focus autofocus to the correct
+	// connection (T20-T23). Empty string is accepted (zero value).
+	ConnectionId  string `protobuf:"bytes,5,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *HandleCommandRequest) Reset() {
@@ -500,6 +505,13 @@ func (x *HandleCommandRequest) GetCommand() string {
 func (x *HandleCommandRequest) GetPlayerSessionToken() string {
 	if x != nil {
 		return x.PlayerSessionToken
+	}
+	return ""
+}
+
+func (x *HandleCommandRequest) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
 	}
 	return ""
 }
@@ -3353,13 +3365,14 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\fResponseMeta\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x128\n" +
-	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\xb4\x01\n" +
+	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\xd9\x01\n" +
 	"\x14HandleCommandRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x18\n" +
 	"\acommand\x18\x03 \x01(\tR\acommand\x120\n" +
-	"\x14player_session_token\x18\x04 \x01(\tR\x12playerSessionToken\"\x81\x01\n" +
+	"\x14player_session_token\x18\x04 \x01(\tR\x12playerSessionToken\x12#\n" +
+	"\rconnection_id\x18\x05 \x01(\tR\fconnectionId\"\x81\x01\n" +
 	"\x15HandleCommandResponse\x122\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x14\n" +

@@ -7,6 +7,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/grpc/focus"
@@ -35,12 +36,17 @@ type sessionStreamUpdate struct {
 type SessionStreamRegistry struct {
 	mu       sync.Mutex
 	channels map[string]map[chan<- sessionStreamUpdate]struct{}
+	// connections maps (sessionID → connectionID → channel) for the
+	// Phase 5 per-Connection routing path (D5). Co-exists with channels;
+	// session-wide Send still broadcasts via channels.
+	connections map[string]map[ulid.ULID]chan<- sessionStreamUpdate
 }
 
 // NewSessionStreamRegistry creates an empty registry.
 func NewSessionStreamRegistry() *SessionStreamRegistry {
 	return &SessionStreamRegistry{
-		channels: make(map[string]map[chan<- sessionStreamUpdate]struct{}),
+		channels:    make(map[string]map[chan<- sessionStreamUpdate]struct{}),
+		connections: make(map[string]map[ulid.ULID]chan<- sessionStreamUpdate),
 	}
 }
 
@@ -69,6 +75,81 @@ func (r *SessionStreamRegistry) Deregister(sessionID string, ch chan<- sessionSt
 	delete(subs, ch)
 	if len(subs) == 0 {
 		delete(r.channels, sessionID)
+	}
+}
+
+// RegisterConnection associates a (sessionID, connectionID) pair with
+// its control channel. Used by CoreServer.Subscribe at stream setup
+// time when the request carries an explicit ConnectionId.
+func (r *SessionStreamRegistry) RegisterConnection(
+	sessionID string, connectionID ulid.ULID, ch chan<- sessionStreamUpdate,
+) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	conns, ok := r.connections[sessionID]
+	if !ok {
+		conns = make(map[ulid.ULID]chan<- sessionStreamUpdate)
+		r.connections[sessionID] = conns
+	}
+	conns[connectionID] = ch
+}
+
+// DeregisterConnection removes the (sessionID, connectionID) entry
+// from the per-Connection routing map ONLY if the currently-mapped
+// channel matches ch. If a reconnect re-registered the same key
+// before the old goroutine's defer fires, the stale defer must NOT
+// clobber the new mapping or future SendToConnection calls would
+// surface CONNECTION_NOT_REGISTERED on the live stream.
+// (CodeRabbit PR #4191 round 6)
+func (r *SessionStreamRegistry) DeregisterConnection(sessionID string, connectionID ulid.ULID, ch chan<- sessionStreamUpdate) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	conns, ok := r.connections[sessionID]
+	if !ok {
+		return
+	}
+	if cur, ok := conns[connectionID]; !ok || cur != ch {
+		// Different channel registered — a reconnect won the race.
+		// Leave the new mapping intact.
+		return
+	}
+	delete(conns, connectionID)
+	if len(conns) == 0 {
+		delete(r.connections, sessionID)
+	}
+}
+
+// SendToConnection delivers update to EXACTLY the named connection's
+// channel. INV-P5-10.
+// Returns CONNECTION_NOT_REGISTERED if the conn isn't registered;
+// CONTROL_CHANNEL_FULL if the buffer is exhausted.
+func (r *SessionStreamRegistry) SendToConnection(
+	sessionID string, connectionID ulid.ULID, update sessionStreamUpdate,
+) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	conns, ok := r.connections[sessionID]
+	if !ok {
+		return oops.Code("CONNECTION_NOT_REGISTERED").
+			With("session_id", sessionID).
+			With("connection_id", connectionID.String()).
+			Errorf("no connection registered for session")
+	}
+	ch, ok := conns[connectionID]
+	if !ok {
+		return oops.Code("CONNECTION_NOT_REGISTERED").
+			With("session_id", sessionID).
+			With("connection_id", connectionID.String()).
+			Errorf("connection not registered for session")
+	}
+	select {
+	case ch <- update:
+		return nil
+	default:
+		return oops.Code("CONTROL_CHANNEL_FULL").
+			With("session_id", sessionID).
+			With("connection_id", connectionID.String()).
+			Errorf("control channel full")
 	}
 }
 
@@ -122,6 +203,20 @@ func (r *SessionStreamRegistry) RemoveStream(_ context.Context, sessionID, strea
 	return r.Send(sessionID, sessionStreamUpdate{stream: stream, add: false})
 }
 
+// HasConnection reports whether (sessionID, connectionID) is currently
+// registered in the per-Connection routing map.
+// Intended for use by tests only.
+func (r *SessionStreamRegistry) HasConnection(sessionID string, connectionID ulid.ULID) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	conns, ok := r.connections[sessionID]
+	if !ok {
+		return false
+	}
+	_, found := conns[connectionID]
+	return found
+}
+
 // StreamSenderAdapter wraps SessionStreamRegistry to satisfy focus.StreamSender.
 // It calls Send directly (not AddStream) to pass explicit ReplayMode values.
 type StreamSenderAdapter struct {
@@ -150,5 +245,29 @@ func (a *StreamSenderAdapter) Send(sessionID, stream string, add bool, mode focu
 		stream:     stream,
 		add:        add,
 		replayMode: mode,
+	})
+}
+
+// ConnectionSenderAdapter wraps SessionStreamRegistry to satisfy focus.ConnectionSender.
+// Used by Phase 5 RPC handlers (SetConnectionFocus, AutoFocusOnJoin) to deliver
+// per-Connection stream subscription deltas without importing internal/grpc directly.
+type ConnectionSenderAdapter struct {
+	registry *SessionStreamRegistry
+}
+
+// NewConnectionSenderAdapter creates a ConnectionSenderAdapter.
+func NewConnectionSenderAdapter(r *SessionStreamRegistry) *ConnectionSenderAdapter {
+	return &ConnectionSenderAdapter{registry: r}
+}
+
+// SendToConnection implements focus.ConnectionSender.
+// Wraps SessionStreamRegistry.SendToConnection, translating the stream+add pair
+// into a sessionStreamUpdate. Returns CONNECTION_NOT_REGISTERED when the
+// connection has no active Subscribe goroutine — best-effort; callers log and continue.
+func (a *ConnectionSenderAdapter) SendToConnection(sessionID string, connectionID ulid.ULID, stream string, add bool) error {
+	return a.registry.SendToConnection(sessionID, connectionID, sessionStreamUpdate{
+		stream:     stream,
+		add:        add,
+		replayMode: focus.ReplayModeFromCursor,
 	})
 }

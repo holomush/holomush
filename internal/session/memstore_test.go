@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 func TestMemStore_GetSet(t *testing.T) {
@@ -853,4 +854,205 @@ func TestMemStoreListActiveByLocationFiltersByLocation(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "1", got[0].ID)
+}
+
+func TestListConnectionsBySession_Empty(t *testing.T) {
+	t.Parallel()
+	s := NewMemStore()
+	ctx := context.Background()
+	require.NoError(t, s.Set(ctx, "sess-list-empty", &Info{ID: "sess-list-empty", Status: StatusActive}))
+
+	conns, err := s.ListConnectionsBySession(ctx, "sess-list-empty")
+	require.NoError(t, err)
+	assert.Empty(t, conns)
+}
+
+func TestListConnectionsBySession_Multi(t *testing.T) {
+	t.Parallel()
+	s := NewMemStore()
+	ctx := context.Background()
+	sessionID := "sess-list-multi"
+	require.NoError(t, s.Set(ctx, sessionID, &Info{ID: sessionID, Status: StatusActive}))
+
+	for _, ct := range []string{"terminal", "telnet", "comms_hub"} {
+		require.NoError(t, s.AddConnection(ctx, &Connection{ID: ulid.Make(), SessionID: sessionID, ClientType: ct}))
+	}
+
+	conns, err := s.ListConnectionsBySession(ctx, sessionID)
+	require.NoError(t, err)
+	assert.Len(t, conns, 3)
+
+	seen := map[string]bool{}
+	for _, c := range conns {
+		seen[c.ClientType] = true
+	}
+	assert.True(t, seen["terminal"])
+	assert.True(t, seen["telnet"])
+	assert.True(t, seen["comms_hub"])
+}
+
+func TestListConnectionsBySession_SessionNotFound(t *testing.T) {
+	t.Parallel()
+	s := NewMemStore()
+	_, err := s.ListConnectionsBySession(context.Background(), "nope")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SESSION_NOT_FOUND")
+}
+
+func TestUpdateSessionConnection_HappyPath(t *testing.T) {
+	t.Parallel()
+	s := NewMemStore()
+	ctx := context.Background()
+
+	sessionID := "sess-uc-happy"
+	require.NoError(t, s.Set(ctx, sessionID, &Info{ID: sessionID, Status: StatusActive}))
+
+	connID := ulid.Make()
+	require.NoError(t, s.AddConnection(ctx, &Connection{
+		ID: connID, SessionID: sessionID, ClientType: "terminal",
+	}))
+
+	sceneID := ulid.Make()
+	target := &FocusKey{Kind: FocusKindScene, TargetID: sceneID}
+
+	m := NewSessionConnectionMutator(func(info Info, conn Connection) (Info, Connection, error) {
+		conn.FocusKey = target
+		info.PresentingFocus = target
+		return info, conn, nil
+	})
+
+	require.NoError(t, s.UpdateSessionConnection(ctx, sessionID, connID, m))
+
+	// Verify Connection.FocusKey written.
+	conn, err := s.GetConnection(ctx, connID)
+	require.NoError(t, err)
+	require.NotNil(t, conn.FocusKey)
+	assert.Equal(t, target.TargetID, conn.FocusKey.TargetID)
+
+	// Verify Info.PresentingFocus written.
+	info, err := s.Get(ctx, sessionID)
+	require.NoError(t, err)
+	require.NotNil(t, info.PresentingFocus)
+	assert.Equal(t, target.TargetID, info.PresentingFocus.TargetID)
+}
+
+func TestUpdateSessionConnection_ConnectionNotFound(t *testing.T) {
+	t.Parallel()
+	s := NewMemStore()
+	ctx := context.Background()
+
+	require.NoError(t, s.Set(ctx, "sess-uc-404", &Info{ID: "sess-uc-404", Status: StatusActive}))
+
+	m := NewSessionConnectionMutator(func(info Info, conn Connection) (Info, Connection, error) {
+		return info, conn, nil
+	})
+	err := s.UpdateSessionConnection(ctx, "sess-uc-404", ulid.Make(), m)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "CONNECTION_NOT_FOUND")
+}
+
+func TestUpdateSessionConnection_MutatorErrorPropagates(t *testing.T) {
+	t.Parallel()
+	s := NewMemStore()
+	ctx := context.Background()
+
+	sessionID := "sess-uc-err"
+	require.NoError(t, s.Set(ctx, sessionID, &Info{ID: sessionID, Status: StatusActive}))
+	connID := ulid.Make()
+	require.NoError(t, s.AddConnection(ctx, &Connection{ID: connID, SessionID: sessionID, ClientType: "telnet"}))
+
+	sentinel := oops.Code("FOCUS_WITHOUT_MEMBERSHIP").Errorf("test")
+	m := NewSessionConnectionMutator(func(info Info, conn Connection) (Info, Connection, error) {
+		return info, conn, sentinel
+	})
+	err := s.UpdateSessionConnection(context.Background(), sessionID, connID, m)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "FOCUS_WITHOUT_MEMBERSHIP")
+
+	// Verify NO write happened despite mutator returning (info, conn, err).
+	info, err2 := s.Get(ctx, sessionID)
+	require.NoError(t, err2)
+	assert.Nil(t, info.PresentingFocus, "mutator error MUST abort the write")
+}
+
+func TestUpdateSessionConnection_AtomicCommit(t *testing.T) {
+	t.Parallel()
+	// INV-P5-7: an external observer between the mutator call and
+	// its commit cannot see one field updated while the other lags.
+	// MemStore implements this by holding m.mu.Lock() for the whole
+	// mutator callback, so any concurrent Get() blocks until commit.
+	s := NewMemStore()
+	ctx := context.Background()
+
+	sessionID := "sess-uc-atomic"
+	require.NoError(t, s.Set(ctx, sessionID, &Info{ID: sessionID, Status: StatusActive}))
+	connID := ulid.Make()
+	require.NoError(t, s.AddConnection(ctx, &Connection{ID: connID, SessionID: sessionID, ClientType: "terminal"}))
+
+	target := &FocusKey{Kind: FocusKindScene, TargetID: ulid.Make()}
+
+	// Launch the mutation, blocking the mutator mid-flight via a channel.
+	blockCh := make(chan struct{})
+	enteredCh := make(chan struct{}) // signal the mutator has acquired the lock
+	doneCh := make(chan error)
+	go func() {
+		m := NewSessionConnectionMutator(func(info Info, conn Connection) (Info, Connection, error) {
+			close(enteredCh) // lock acquired; reader is now guaranteed to block
+			<-blockCh        // hold the lock until released
+			conn.FocusKey = target
+			info.PresentingFocus = target
+			return info, conn, nil
+		})
+		doneCh <- s.UpdateSessionConnection(ctx, sessionID, connID, m)
+	}()
+
+	// Wait deterministically for the mutator to be holding the lock,
+	// instead of a sleep-based timing race.
+	<-enteredCh
+
+	// External read attempted in a goroutine; should observe POST-commit
+	// state once we unblock. require.NoError is unsafe from a goroutine
+	// (it calls t.FailNow which is only safe in the test goroutine), so
+	// errors get bubbled back via readErrCh for the main goroutine to
+	// assert. readStarted gates the "reader is blocked" timeout check —
+	// without it, the 20ms could false-pass if the reader goroutine
+	// hadn't reached s.Get yet (scheduler lag, not blocking-behavior).
+	// (CodeRabbit PR #4191 — round 5)
+	readDone := make(chan struct{})
+	readStarted := make(chan struct{})
+	readErrCh := make(chan error, 2)
+	var info *Info
+	var conn *Connection
+	go func() {
+		defer close(readDone)
+		close(readStarted) // I'm about to call s.Get; the next line will block on m.mu.
+		var err error
+		info, err = s.Get(ctx, sessionID)
+		readErrCh <- err
+		conn, err = s.GetConnection(ctx, connID)
+		readErrCh <- err
+	}()
+	<-readStarted // confirm reader reached the call boundary before timing.
+
+	// Verify the reader is blocked while mutator holds the lock.
+	select {
+	case <-readDone:
+		t.Fatal("INV-P5-7 violated: external read returned before mutator committed (torn state observable)")
+	case <-time.After(20 * time.Millisecond):
+		// good — reader is blocked
+	}
+
+	// Release the mutator; commit happens; reader unblocks.
+	close(blockCh)
+	require.NoError(t, <-doneCh)
+	<-readDone
+	// Now safe to assert any goroutine-side errors from the test goroutine.
+	require.NoError(t, <-readErrCh, "s.Get from reader goroutine")
+	require.NoError(t, <-readErrCh, "s.GetConnection from reader goroutine")
+
+	// Both fields MUST be observed post-commit (no torn state).
+	require.NotNil(t, info.PresentingFocus, "PresentingFocus visible post-commit")
+	require.NotNil(t, conn.FocusKey, "FocusKey visible post-commit")
+	assert.Equal(t, target.TargetID, info.PresentingFocus.TargetID)
+	assert.Equal(t, target.TargetID, conn.FocusKey.TargetID)
 }

@@ -832,4 +832,4 @@ focused design pass before implementation. Carried forward from v1.
 | Notification preferences | None | Per-scene mute, digest vs real-time, notification channels |
 | Published log presentation | Epic 8 | Public URL routing, SEO, share links |
 | Forum view detailed UX | Forum epic | Out of scope here; will be designed when forum epic starts |
-| **Plugin → server focus model integration** | Phase 5 | Connection focus state lives in the server. The plugin needs to know which connections are focused on a given scene (for stream routing) and to influence focus (when `scene join` auto-focuses on terminal). The contract for this is undefined and needs design before Phase 5. |
+| **Plugin → server focus model integration** | Phase 5 | Closed by holomush-5rh.14 (Phase 5 design + impl). Connection focus state lives in the server; plugins query (via PluginHostService.IsAnyConnFocused) and influence (via SetConnectionFocus / AutoFocusOnJoin) focus through 3 host RPCs added in Phase 5. |

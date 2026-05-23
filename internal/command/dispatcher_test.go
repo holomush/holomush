@@ -2507,6 +2507,38 @@ func (c *capturingDeliverer) EmitPluginEvent(ctx context.Context, _ string, _ pl
 	return nil
 }
 
+func TestDispatcher_PassesConnectionIDToPluginCommand(t *testing.T) {
+	t.Parallel()
+	// Verifies that CommandExecution.ConnectionID() flows into
+	// pluginsdk.CommandRequest.ConnectionID at dispatch time. Phase 5
+	// plugin commands (scene focus / scene grid) require this.
+	// INV-P5 precursor: dispatcher MUST propagate ConnectionID to plugin CommandRequest.
+
+	connID := ulid.Make()
+
+	var capturedCmd pluginsdk.CommandRequest
+	deliverer := &fakePluginDeliverer{
+		onDeliver: func(_ context.Context, _ string, cmd pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+			capturedCmd = cmd
+			return &pluginsdk.CommandResponse{Status: pluginsdk.CommandOK}, nil
+		},
+	}
+
+	dispatcher := newTestDispatcherWithPlugin(t, deliverer)
+
+	var buf bytes.Buffer
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID:  ulid.Make(),
+		ConnectionID: connID,
+		Output:       &buf,
+		Services:     stubServices(),
+	})
+
+	require.NoError(t, dispatcher.Dispatch(context.Background(), "plugintest", exec))
+	assert.Equal(t, connID.String(), capturedCmd.ConnectionID,
+		"INV-P5 precursor: dispatcher MUST propagate ConnectionID to plugin CommandRequest")
+}
+
 // TestDispatcherStampsCharacterActorBeforeDeliverCommand asserts the
 // dispatcher populates core.ActorFromContext(ctx) BEFORE calling
 // pluginDeliverer.DeliverCommand, per spec G7. Uses the existing

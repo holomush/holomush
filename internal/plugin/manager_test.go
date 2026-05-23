@@ -1887,6 +1887,22 @@ func (s *stubFocusCoordinator) RestoreFocus(_ context.Context, _ string) (focus.
 	return focus.RestorePlan{}, nil
 }
 
+func (s *stubFocusCoordinator) IsAnyConnFocused(_ context.Context, _, _ ulid.ULID) (bool, error) {
+	return false, nil
+}
+
+func (s *stubFocusCoordinator) RestoreConnectionFocus(_ context.Context, _ string, _ ulid.ULID) error {
+	return nil
+}
+
+func (s *stubFocusCoordinator) SetConnectionFocus(_ context.Context, _ ulid.ULID, _ *session.FocusKey, _ bool) (focus.SetConnectionFocusResult, error) {
+	return focus.SetConnectionFocusResult{}, nil
+}
+
+func (s *stubFocusCoordinator) AutoFocusOnJoin(_ context.Context, _, _ ulid.ULID) (focus.AutoFocusOnJoinResponse, error) {
+	return focus.AutoFocusOnJoinResponse{}, nil
+}
+
 var _ focus.Coordinator = (*stubFocusCoordinator)(nil)
 
 func TestConfigureFocusDepsInjectsCoordinatorIntoLuaHost(t *testing.T) {

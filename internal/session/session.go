@@ -131,6 +131,72 @@ func NewFocusMutator(fn func(
 	return FocusMutator{Mutate: fn}
 }
 
+// sessionConnectionMutatorSentinel is an unexported type that prevents
+// construction of SessionConnectionMutator from outside the
+// internal/grpc/focus package — same compile-time enforcement as
+// focusMutatorSentinel at :91-93. Phase 5 (INV-P5-7) requires that
+// per-Connection focus mutations route through the Coordinator alone.
+type sessionConnectionMutatorSentinel struct{}
+
+// SessionConnectionMutator atomically mutates BOTH Info (PresentingFocus
+// + future session-scoped fields) AND a single Connection (FocusKey)
+// under one Store-lock acquisition. Phase 5 introduced this in place
+// of the separate FocusMutator + ConnectionMutator two-call pattern
+// the round-2 reviewer flagged: that pattern admitted a torn-state
+// observer window between the two locked sections. This single mutator
+// closes that window (INV-P5-7).
+//
+// FocusMutator (above) retains its existing role for FocusMemberships /
+// PresentingFocus-only mutations (LeaveFocus, JoinFocus). The two
+// mutator types co-exist and have non-overlapping use cases.
+type SessionConnectionMutator struct { //nolint:revive // session.SessionConnectionMutator stutters by design: mirrors FocusMutator naming convention and is referenced by name in plan, ADR, and spec invariants
+	_      sessionConnectionMutatorSentinel
+	Mutate func(info Info, conn Connection) (nextInfo Info, nextConn Connection, err error)
+}
+
+// NewSessionConnectionMutator parallels NewFocusMutator. Callable from
+// any package; the sentinel field's unexported type blocks direct struct
+// literal construction outside session for the *non-keyed* form, but Go
+// does allow keyed literals like `SessionConnectionMutator{Mutate: fn}`
+// from any package (the unexported sentinel field stays at zero). The
+// "only grpc/focus is the legitimate caller" rule is enforced via a
+// lint rule + compile-fail documentation test (see
+// internal/grpc/focus/session_connection_mutator_doctest.go). Defense
+// against a nil Mutate panic — whether from a bypassed constructor or
+// a zero-value literal — lives at the Store call sites via NilSafe (see below).
+func NewSessionConnectionMutator(
+	fn func(info Info, conn Connection) (nextInfo Info, nextConn Connection, err error),
+) SessionConnectionMutator {
+	if fn == nil {
+		// Caller bug: NewSessionConnectionMutator(nil) cannot do useful
+		// work and would panic later inside Store.UpdateSessionConnection.
+		// Fail loudly here at construction time.
+		panic("session.NewSessionConnectionMutator: nil Mutate function")
+	}
+	return SessionConnectionMutator{Mutate: fn}
+}
+
+// NilSafe returns ErrNilMutator if Mutate is nil (e.g., from a zero-value
+// SessionConnectionMutator{} or a bypassed constructor); otherwise nil. Store
+// implementations MUST call this before invoking mut.Mutate to avoid panics
+// across the trust boundary. (CodeRabbit PR #4191)
+func (m SessionConnectionMutator) NilSafe() error {
+	if m.Mutate == nil {
+		return ErrNilMutator
+	}
+	return nil
+}
+
+// ErrNilMutator surfaces when a SessionConnectionMutator with nil Mutate
+// is passed to a Store. Sentinel for errors.Is comparison.
+var ErrNilMutator = &nilMutatorError{}
+
+type nilMutatorError struct{}
+
+func (*nilMutatorError) Error() string {
+	return "session: SessionConnectionMutator.Mutate is nil — construct via NewSessionConnectionMutator"
+}
+
 // Info contains all state for a persistent game session.
 type Info struct {
 	ID          string
@@ -197,6 +263,11 @@ type Connection struct {
 	SessionID   string
 	ClientType  string   // "terminal", "comms_hub", "telnet"
 	Streams     []string // event streams this connection subscribes to
+	// FocusKey is the per-connection focus pointer (Phase 5, INV-P5-2).
+	// nil = grid focus (default for new connections); non-nil = focused
+	// on the named context. Mutated only via the Coordinator-invoked
+	// SessionConnectionMutator (I-6 server-authoritative; INV-P5-7).
+	FocusKey    *FocusKey
 	ConnectedAt time.Time
 }
 
@@ -349,4 +420,31 @@ type Store interface {
 	// include the given target. Used by FocusCoordinator.LeaveFocusByTarget
 	// to drive cross-session fan-out (e.g., scene-end).
 	ListByFocus(ctx context.Context, target FocusKey) ([]*Info, error)
+
+	// GetConnection looks up a single Connection by ID. The lookup is
+	// O(1) (single map index in MemStore; primary-key SELECT in
+	// Postgres). Returns CONNECTION_NOT_FOUND if absent.
+	GetConnection(ctx context.Context, connectionID ulid.ULID) (*Connection, error)
+
+	// UpdateSessionConnection atomically runs the mutator callback
+	// against the named (session, connection) pair under one Store-lock
+	// acquisition. Both Info AND Connection writes commit together.
+	// MemStore impl: acquires the store-wide m.mu sync.RWMutex
+	// (memstore.go:18) for the callback duration. Postgres impl: single
+	// transaction, FOR UPDATE on sessions row FIRST then session_connections
+	// row (D11 canonical lock order).
+	// Returns CONNECTION_NOT_FOUND if the connection isn't registered.
+	UpdateSessionConnection(
+		ctx context.Context,
+		sessionID string,
+		connectionID ulid.ULID,
+		m SessionConnectionMutator,
+	) error
+
+	// ListConnectionsBySession returns a snapshot of all active
+	// Connections for a session. Used by AutoFocusOnJoin's fan-out
+	// enumeration. Returns an empty slice (nil error) if the session
+	// has no connections; returns SESSION_NOT_FOUND if the session
+	// itself doesn't exist.
+	ListConnectionsBySession(ctx context.Context, sessionID string) ([]*Connection, error)
 }
