@@ -364,6 +364,10 @@ jobs:
             secrets.DO_SPACES_ACCESS_KEY }}
           BACKUP_S3_SECRET_KEY_VAL: ${{ steps.spaces_key.outputs.secret_key != '' && steps.spaces_key.outputs.secret_key ||
             secrets.DO_SPACES_SECRET_KEY }}
+          # Backend Sentry DSN (core + gateway). Optional — empty disables
+          # Sentry. ENVIRONMENT/RELEASE/SAMPLE_RATE default in cloud-init.sh
+          # (prod / image tag / 0.1).
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
           set -euo pipefail
 
@@ -371,6 +375,7 @@ jobs:
           echo "::add-mask::${PG_PASSWORD}"
           echo "::add-mask::${KOPIA_PASSWORD}"
           echo "::add-mask::${BACKUP_S3_SECRET_KEY_VAL}"
+          [ -n "${SENTRY_DSN}" ] && echo "::add-mask::${SENTRY_DSN}" || true
 
           # HOLOMUSH_REF and HOLOMUSH_VERSION arrive from the `image` step's
           # outputs, where they were also probed against GHCR before any paid
@@ -387,6 +392,7 @@ jobs:
             "${KOPIA_PASSWORD}" \
             "${BACKUP_S3_ACCESS_KEY_VAL}" \
             "${BACKUP_S3_SECRET_KEY_VAL}" \
+            "${SENTRY_DSN}" \
             <<'PYEOF'
           import sys
 
@@ -400,6 +406,7 @@ jobs:
           kopia_pwd      = sys.argv[8]
           s3_access_key  = sys.argv[9]
           s3_secret_key  = sys.argv[10]
+          sentry_dsn     = sys.argv[11]
 
           cloud_config = """\
           #cloud-config
@@ -435,6 +442,7 @@ jobs:
           export BACKUP_KEEP_DAILY="7"
           export BACKUP_KEEP_WEEKLY="4"
           export BACKUP_KEEP_MONTHLY="6"
+          export SENTRY_DSN="{sentry_dsn}"
 
           """
 
