@@ -294,3 +294,50 @@ func TestReaderRejectsInvalidDirection(t *testing.T) {
 	})
 	errutil.AssertErrorCode(t, err, "EVENTBUS_HISTORY_INVALID_DIRECTION")
 }
+
+// TestHotTierEmptySubjectShortCircuitsInsteadOfWaitingFetchTimeout pins
+// the holomush-87qu fix: querying a subject with zero matching messages
+// MUST return immediately via GetLastMsgForSubject's ErrMsgNotFound
+// short-circuit, NOT pay the full hotFetchTimeout (5s). The connect-
+// latency dominator on fresh-guest sessions was 2 ambient stream
+// backfills each waiting 5s; this regression lock asserts the
+// per-subject wait is now ~10ms typical, definitely <500ms.
+//
+// Budget: 500ms (well below hotFetchTimeout = 5s but generous enough
+// to absorb embedded-NATS startup variance + GetLastMsgForSubject
+// round-trip on CI testcontainers). A regression that reverted to the
+// pre-fix Fetch-on-empty path would fail by an order of magnitude.
+func TestHotTierEmptySubjectShortCircuitsInsteadOfWaitingFetchTimeout(t *testing.T) {
+	embedded := eventbustest.New(t)
+	reader := history.NewReader(
+		embedded.JS, nil,
+		24*time.Hour, func() time.Time { return time.Now() },
+	)
+
+	// A subject that has never been published to — GetLastMsgForSubject
+	// must return ErrMsgNotFound and Read must short-circuit.
+	emptySubject := eventbus.Subject("events.main.never-published.subject")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	stream, err := reader.QueryHistory(ctx, eventbus.HistoryQuery{
+		Subject:   emptySubject,
+		Direction: eventbus.DirectionForward,
+		PageSize:  10,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = stream.Close() })
+
+	nextCtx, nextCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer nextCancel()
+	_, nextErr := stream.Next(nextCtx)
+	elapsed := time.Since(start)
+
+	require.ErrorIs(t, nextErr, io.EOF, "empty subject query must reach EOF, not error or block indefinitely")
+	require.Less(t, elapsed, 500*time.Millisecond,
+		"empty-subject hot read MUST short-circuit via GetLastMsgForSubject (~10ms typical); "+
+			"took %s. Regression of holomush-87qu — the pre-fix path would have waited the "+
+			"full hotFetchTimeout (5s) on cons.Fetch.", elapsed)
+}
