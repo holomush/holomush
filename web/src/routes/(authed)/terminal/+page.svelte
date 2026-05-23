@@ -285,6 +285,12 @@
     const maybeMarkReady = () => {
       if (!replayComplete || !backfillDone) return;
       if (generation !== streamGeneration || localController.signal.aborted) return;
+      // holomush-87qu: phase-transition events on the stream.lifecycle
+      // span so Tempo / Grafana show which leg dominates the 8-10s
+      // 'syncing' window observed in the field. The two callers
+      // (REPLAY_COMPLETE handler + backfill finally block) each emit
+      // their own subscribe.* / backfill.* events before calling here.
+      localSpan.addEvent('stream.ready');
       resolveStreamReady(generation);
       setConnectionStatus('connected');
     };
@@ -300,6 +306,10 @@
           if (response.frame.case === 'control') {
             const ctrl = response.frame.value;
             if (ctrl.signal === ControlSignal.REPLAY_COMPLETE) {
+              // 87qu: time-from-hydrate-start to this event is the
+              // server-side Subscribe-phase wall time as observed by
+              // the client. Pairs with backfill.done below.
+              localSpan.addEvent('subscribe.replay_complete');
               replayComplete = true;
               maybeMarkReady();
             } else if (ctrl.signal === ControlSignal.STREAM_CLOSED) {
@@ -379,6 +389,15 @@
     // Failures are swallowed — empty presence is the safe fallback.
     const snapshotFetchPromise = client
       .webListFocusPresence({ sessionId }, { signal: localController.signal })
+      .then((resp) => {
+        // 87qu: distinguish snapshot-arm wins from timeout-arm wins in
+        // the race below. If the connect-latency dominator is a hung
+        // webListFocusPresence call, the timeout arm will fire after
+        // SNAPSHOT_TIMEOUT_MS and Tempo will show snapshot.timeout
+        // instead of snapshot.received.
+        localSpan.addEvent('snapshot.received');
+        return resp;
+      })
       .catch((err: unknown) => {
         if (isUnimplementedError(err)) {
           console.debug('[presence] snapshot unavailable (scene focus not implemented)');
@@ -400,6 +419,10 @@
       snapshotFetchPromise,
       new Promise((resolve) => {
         const timer = window.setTimeout(() => {
+          // 87qu: paired with snapshot.received above to disambiguate
+          // race-arm winners. Seeing this event in a trace means
+          // webListFocusPresence took >SNAPSHOT_TIMEOUT_MS to respond.
+          localSpan.addEvent('snapshot.timeout');
           console.warn('[presence] snapshot timed out; seeding empty');
           resolve({ entries: [] });
         }, SNAPSHOT_TIMEOUT_MS);
@@ -408,6 +431,13 @@
         void snapshotFetchPromise.finally(() => window.clearTimeout(timer));
       }),
     ]);
+
+    // 87qu: time-from-hydrate-start to this event is "how long did
+    // initial JS-side setup take before any backfill RPC dispatched".
+    // The two backfill HTTP RPCs that follow are auto-spanned by
+    // FetchInstrumentation, so the gap between this event and the
+    // next webListSessionStreams span is pure JS wall time.
+    localSpan.addEvent('backfill.start');
 
     // Backfill: enumerate streams via WebListSessionStreams, fan-out
     // WebQueryStreamHistory per stream, render as replayed=true. Failures
@@ -474,6 +504,11 @@
         );
       }
 
+      // 87qu: time-from-hydrate-start to this event tells us how long
+      // the WebListSessionStreams + WebQueryStreamHistory fan-out took
+      // (the individual RPCs are auto-spanned by FetchInstrumentation;
+      // this aggregate is the JS-side completion signal).
+      localSpan.addEvent('backfill.done');
       backfillDone = true;
       maybeMarkReady();
       if (generation === streamGeneration && !localController.signal.aborted) {
