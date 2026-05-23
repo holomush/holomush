@@ -260,12 +260,16 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${{ needs.goreleaser.outputs.version }}"
+          # goreleaser's version output is un-prefixed (matches the image tag
+          # ghcr.io/...:0.1.6), but the GitHub release/tag is v-prefixed
+          # (v0.1.6). Use the v-prefixed tag for gh release lookups.
+          RELEASE_TAG="v${VERSION}"
 
-          echo "Verifying release ${VERSION}..."
+          echo "Verifying release ${RELEASE_TAG}..."
 
           # Wait for release to be available (handles propagation delay)
           for i in {1..5}; do
-            if gh release view "${VERSION}" -R holomush/holomush > /dev/null 2>&1; then
+            if gh release view "${RELEASE_TAG}" -R holomush/holomush > /dev/null 2>&1; then
               break
             fi
             echo "Release not yet available, waiting... (attempt $i/5)"
@@ -274,11 +278,11 @@ jobs:
 
           # Download checksums and the cosign v3 sigstore bundle.
           mkdir -p dist
-          if ! gh release download "${VERSION}" -R holomush/holomush -D dist \
+          if ! gh release download "${RELEASE_TAG}" -R holomush/holomush -D dist \
             -p 'checksums.txt' -p 'checksums.txt.sigstore.json'; then
             echo "ERROR: Failed to download release artifacts"
             echo "This may indicate the release was not published or signing failed"
-            gh release view "${VERSION}" -R holomush/holomush --json assets || true
+            gh release view "${RELEASE_TAG}" -R holomush/holomush --json assets || true
             exit 1
           fi
 
