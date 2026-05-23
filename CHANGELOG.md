@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/holomush/holomush/compare/v0.1.1...v0.1.2) (2026-05-23)
+
+
+### Bug Fixes
+
+* **release:** migrate cosign signing to v3 bundle format (holomush-hryj.15) ([#4207](https://github.com/holomush/holomush/issues/4207)) ([eecead4](https://github.com/holomush/holomush/commit/eecead4d37add4b9d4a1a0f0aff54d98cf5b7c54))
+
 ## [0.1.1](https://github.com/holomush/holomush/compare/v0.1.0...v0.1.1) (2026-05-23)
 
 
