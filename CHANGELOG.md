@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/holomush/holomush/compare/v0.1.6...v0.1.7) (2026-05-23)
+
+
+### Bug Fixes
+
+* **release:** verify-release uses v-prefixed tag for gh release download (.20) ([#4220](https://github.com/holomush/holomush/issues/4220)) ([55f4140](https://github.com/holomush/holomush/commit/55f41408cd2143ca5d906bd9d13d11c5fce022d5))
+
 ## [0.1.6](https://github.com/holomush/holomush/compare/v0.1.5...v0.1.6) (2026-05-23)
 
 
