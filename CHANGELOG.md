@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.5](https://github.com/holomush/holomush/compare/v0.1.4...v0.1.5) (2026-05-23)
+
+
+### Features
+
+* **sandbox:** wire backend Sentry (core+gateway) end-to-end (holomush-hryj) ([#4216](https://github.com/holomush/holomush/issues/4216)) ([f666acf](https://github.com/holomush/holomush/commit/f666acf1c75595df2685147307a5f341efcbbab0))
+
+
+### Bug Fixes
+
+* **sandbox:** cloud-init holomush host user uid 1000 + keep postgres data uid 70 (.21) ([#4214](https://github.com/holomush/holomush/issues/4214)) ([b0b29c5](https://github.com/holomush/holomush/commit/b0b29c5f744fa6c35f037ffc14229b7f4ec3b733))
+
 ## [0.1.4](https://github.com/holomush/holomush/compare/v0.1.3...v0.1.4) (2026-05-23)
 
 
