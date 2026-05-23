@@ -14,41 +14,89 @@ import (
 	"github.com/holomush/holomush/internal/pgnanos"
 )
 
-func TestScanInt64ReturnsTimeAtNanosecondPrecision(t *testing.T) {
-	var got pgnanos.Time
-	require.NoError(t, got.Scan(int64(1700000000123456789)))
-	assert.Equal(t, time.Unix(1700000000, 123456789).UTC(), got.Time())
+// TestScan exercises the sql.Scanner implementation across happy-path,
+// nil, and wrong-type inputs in table-driven form per repo convention.
+func TestScan(t *testing.T) {
+	cases := []struct {
+		name        string
+		src         any
+		wantTime    time.Time
+		wantIsZero  bool
+		wantErr     bool
+		errContains []string
+	}{
+		{
+			name:     "int64 decodes as time at nanosecond precision",
+			src:      int64(1700000000123456789),
+			wantTime: time.Unix(1700000000, 123456789).UTC(),
+		},
+		{
+			name:       "nil decodes as zero pgnanos.Time",
+			src:        nil,
+			wantIsZero: true,
+		},
+		{
+			name:        "wrong type returns error mentioning the type and pgnanos.Time",
+			src:         "not-an-int64",
+			wantErr:     true,
+			errContains: []string{"string", "pgnanos.Time"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var got pgnanos.Time
+			err := got.Scan(tc.src)
+			if tc.wantErr {
+				require.Error(t, err)
+				for _, sub := range tc.errContains {
+					assert.Contains(t, err.Error(), sub)
+				}
+				return
+			}
+			require.NoError(t, err)
+			if tc.wantIsZero {
+				assert.True(t, got.IsZero())
+				return
+			}
+			assert.Equal(t, tc.wantTime, got.Time())
+		})
+	}
 }
 
-func TestScanNilReturnsZeroTime(t *testing.T) {
-	var got pgnanos.Time
-	require.NoError(t, got.Scan(nil))
-	assert.True(t, got.IsZero())
+// TestValue exercises the driver.Valuer implementation across the
+// zero-time and a specific-nanosecond instant.
+func TestValue(t *testing.T) {
+	cases := []struct {
+		name  string
+		input pgnanos.Time
+		want  int64
+	}{
+		{
+			name:  "zero pgnanos.Time emits int64(0)",
+			input: pgnanos.Time{},
+			want:  0,
+		},
+		{
+			name:  "specific time emits expected UnixNano",
+			input: pgnanos.From(time.Unix(0, 1700000000123456789)),
+			want:  1700000000123456789,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v, err := tc.input.Value()
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, v)
+		})
+	}
 }
 
-func TestScanWrongTypeReturnsErrorWithType(t *testing.T) {
-	var got pgnanos.Time
-	err := got.Scan("not-an-int64")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "string")
-	assert.Contains(t, err.Error(), "pgnanos.Time")
-}
-
-func TestValueZeroTimeReturnsZero(t *testing.T) {
-	var zero pgnanos.Time
-	v, err := zero.Value()
-	require.NoError(t, err)
-	assert.Equal(t, int64(0), v)
-}
-
-func TestValueSpecificTimeReturnsExpectedNanoseconds(t *testing.T) {
-	const wantNanos = int64(1700000000123456789)
-	in := pgnanos.From(time.Unix(0, wantNanos))
-	v, err := in.Value()
-	require.NoError(t, err)
-	assert.Equal(t, wantNanos, v)
-}
-
+// TestRoundTripPreservesSubMicrosecondNanoseconds pins INV-TS-2 (see
+// internal/store/spec_meta_test.go cases slice). MUST remain a top-level
+// Test* function — the meta-test walks the AST for top-level decls,
+// not for t.Run subtests. Do not collapse into a table.
 func TestRoundTripPreservesSubMicrosecondNanoseconds(t *testing.T) {
 	orig := time.Date(2026, 5, 22, 12, 34, 56, 123456789, time.UTC)
 	in := pgnanos.From(orig)
@@ -62,6 +110,9 @@ func TestRoundTripPreservesSubMicrosecondNanoseconds(t *testing.T) {
 		"sub-µs ns component MUST survive Value+Scan round-trip")
 }
 
+// TestFromConvertsToUTC documents that From() normalizes location.
+// Kept as a standalone test (single case, distinct semantic concern from
+// the Scan/Value tables).
 func TestFromConvertsToUTC(t *testing.T) {
 	loc, err := time.LoadLocation("America/New_York")
 	require.NoError(t, err)
@@ -71,6 +122,15 @@ func TestFromConvertsToUTC(t *testing.T) {
 	assert.True(t, in.Equal(got), "From MUST preserve instant")
 }
 
+// TestZeroAndEpochAliasInValueButScanZeroDecodesAsEpoch documents a
+// reviewer-discovered subtle alias: both Go-zero time and Unix epoch
+// serialize to int64(0) via Value(), but Scan(0) decodes as epoch (not
+// Go-zero). Callers MUST distinguish "unset" via column nullability
+// (Scan(nil)), not via the in-band zero sentinel.
+//
+// Filed as bd issue gfo6.25 (reviewer-found during gfo6.1 review);
+// pinned as a top-level Test* function because its name IS the
+// documentation of the corner case.
 func TestZeroAndEpochAliasInValueButScanZeroDecodesAsEpoch(t *testing.T) {
 	// Both the Go zero time and time.Unix(0,0) serialize to int64(0) via Value().
 	var zeroVal pgnanos.Time
@@ -93,6 +153,10 @@ func TestZeroAndEpochAliasInValueButScanZeroDecodesAsEpoch(t *testing.T) {
 	assert.False(t, scanned.IsZero(), "Scan(0) result MUST NOT report IsZero() — use NULL for unset columns")
 }
 
+// TestNilPointerConvertsToNilDriverValueForNullableColumns pins spec §6
+// row 7 ("nullable column path"). Filed as bd issue gfo6.26 by reviewer
+// during gfo6.1; kept as top-level because the spec explicitly cites
+// this behavior.
 func TestNilPointerConvertsToNilDriverValueForNullableColumns(t *testing.T) {
 	var p *pgnanos.Time
 	v, err := driver.DefaultParameterConverter.ConvertValue(p)
