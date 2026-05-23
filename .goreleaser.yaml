@@ -11,6 +11,12 @@ project_name: holomush
 before:
   hooks:
     - go mod tidy
+    # Compile the binary plugins (host + linux amd64/arm64) into build/plugins/.
+    # The Dockerfile COPYs build/plugins/ (see dockers.extra_files below); the
+    # plugin loader resolves the right per-arch binary at runtime. Running it as
+    # a goreleaser before-hook means `task release:snapshot` and the real
+    # release both produce the plugins identically.
+    - task plugin:build-all
 
 builds:
   - id: holomush
@@ -125,6 +131,13 @@ dockers:
     dockerfile: Dockerfile
     goos: linux
     goarch: amd64
+    # The Dockerfile COPYs plugins/ (Lua + manifests) and build/plugins/
+    # (compiled binary plugins, all arches). goreleaser's docker build context
+    # is a temp dir containing only the binary + Dockerfile, so these must be
+    # listed as extra_files to land in the context.
+    extra_files:
+      - plugins
+      - build/plugins
 
   - image_templates:
       - "ghcr.io/holomush/holomush:{{ .Version }}-arm64"
@@ -138,6 +151,9 @@ dockers:
     dockerfile: Dockerfile
     goos: linux
     goarch: arm64
+    extra_files:
+      - plugins
+      - build/plugins
 
 docker_manifests:
   - name_template: "ghcr.io/holomush/holomush:{{ .Version }}"
