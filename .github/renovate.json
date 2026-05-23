@@ -7,6 +7,12 @@
   "timezone": "America/New_York",
   "labels": ["dependencies", "renovate-bot"],
   "platformAutomerge": true,
+  "gomod": {
+    "managerFilePatterns": [
+      "/(^|/)go\\.mod$/",
+      "/(^|/)go\\.tool(-lint)?\\.mod$/"
+    ]
+  },
   "packageRules": [
     {
       "description": "Auto-merge minor/patch Go deps",

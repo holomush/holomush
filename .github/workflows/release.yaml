@@ -93,12 +93,7 @@ jobs:
         run: corepack enable && corepack prepare pnpm@11.0.3 --activate
 
       - name: Install Task
-        # Direct install via taskfile.dev's install.sh; sha256-verified
-        # tarball download, no GITHUB_TOKEN required. Replaces
-        # arduino/setup-task@v2 (holomush-06vz).
-        run: |
-          curl -fsSL https://taskfile.dev/install.sh | sudo sh -s -- -b /usr/local/bin
-          task --version
+        uses: ./.github/actions/install-task
 
       - name: Build web bundle into internal/web/dist/
         run: task web:embed
