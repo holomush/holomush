@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.4](https://github.com/holomush/holomush/compare/v0.1.3...v0.1.4) (2026-05-23)
+
+
+### Bug Fixes
+
+* **release+sandbox:** version resolution + Kopia cache perms + non-fatal backup init (.17/.19) ([#4213](https://github.com/holomush/holomush/issues/4213)) ([b44c118](https://github.com/holomush/holomush/commit/b44c118be2ee67dcc4a1e27390f67fb564ec3196))
+* **scripts:** seed-secrets SSH key — strip bracketed-paste escapes (holomush-9s4wv) ([#4211](https://github.com/holomush/holomush/issues/4211)) ([84a595b](https://github.com/holomush/holomush/commit/84a595bce42d7f819682cef4df9e83e219ed4777))
+
 ## [0.1.3](https://github.com/holomush/holomush/compare/v0.1.2...v0.1.3) (2026-05-23)
 
 
