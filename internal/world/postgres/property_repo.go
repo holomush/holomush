@@ -53,11 +53,15 @@ func (r *PropertyRepository) Create(ctx context.Context, p *world.EntityProperty
 		return oops.Code("PROPERTY_CREATE_FAILED").With("id", p.ID.String()).Wrap(err)
 	}
 
+	// updated_at uses SQL-side NOW() to stay in the same clock domain as
+	// Update (property_repo.go:135) — app-side time.Now() vs PG's NOW() can
+	// drift, breaking any reader that ORDERs BY updated_at across rows
+	// touched by both methods (holomush-gfo6.32 follow-up to gfo6.28 pattern).
 	_, err = r.pool.Exec(ctx, `
 		INSERT INTO entity_properties (id, parent_type, parent_id, name, value, owner, visibility, flags, visible_to, excluded_from, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, p.ID.String(), p.ParentType, p.ParentID.String(), p.Name, p.Value, p.Owner,
-		p.Visibility, flagsJSON, visibleToJSON, excludedFromJSON, pgnanos.From(p.CreatedAt), pgnanos.From(p.UpdatedAt))
+		p.Visibility, flagsJSON, visibleToJSON, excludedFromJSON, pgnanos.From(p.CreatedAt))
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.ConstraintName == "entity_properties_parent_name_unique" {
