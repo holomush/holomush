@@ -8,11 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/pgnanos"
 )
 
 // PostgresStore implements Store using PostgreSQL.
@@ -40,23 +41,23 @@ func (s *PostgresStore) Put(ctx context.Context, item *Item) error {
 	if isSearchable(item.ContentType) {
 		query = `
 INSERT INTO content_items (key, content_type, body, metadata, search_vector, updated_at)
-VALUES ($1, $2, $3, $4, to_tsvector('english', convert_from($3, 'UTF8')), NOW())
+VALUES ($1, $2, $3, $4, to_tsvector('english', convert_from($3, 'UTF8')), (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 ON CONFLICT (key) DO UPDATE SET
     content_type   = EXCLUDED.content_type,
     body           = EXCLUDED.body,
     metadata       = EXCLUDED.metadata,
     search_vector  = EXCLUDED.search_vector,
-    updated_at     = NOW()`
+    updated_at     = (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT`
 	} else {
 		query = `
 INSERT INTO content_items (key, content_type, body, metadata, search_vector, updated_at)
-VALUES ($1, $2, $3, $4, NULL, NOW())
+VALUES ($1, $2, $3, $4, NULL, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 ON CONFLICT (key) DO UPDATE SET
     content_type   = EXCLUDED.content_type,
     body           = EXCLUDED.body,
     metadata       = EXCLUDED.metadata,
     search_vector  = NULL,
-    updated_at     = NOW()`
+    updated_at     = (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT`
 	}
 
 	_, err = s.pool.Exec(ctx, query, item.Key, item.ContentType, item.Body, meta)
@@ -168,7 +169,7 @@ func scanItem(s scanner) (*Item, error) {
 		contentType string
 		body        []byte
 		metaRaw     []byte
-		updatedAt   time.Time
+		updatedAt   pgnanos.Time
 	)
 
 	err := s.Scan(&key, &contentType, &body, &metaRaw, &updatedAt)
@@ -191,7 +192,7 @@ func scanItem(s scanner) (*Item, error) {
 		ContentType: contentType,
 		Body:        body,
 		Metadata:    meta,
-		UpdatedAt:   updatedAt,
+		UpdatedAt:   updatedAt.Time(),
 	}, nil
 }
 

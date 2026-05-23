@@ -72,7 +72,7 @@ func (w *PostgresWriter) WriteSync(ctx context.Context, event Event) error {
 		event.Component,
 		attributesJSON,
 		event.DurationUS,
-		event.Timestamp,
+		event.Timestamp.UnixNano(), // pgnanos-exempt: SQL-cast boundary for BIGINT timestamp column
 	)
 	if err != nil {
 		return oops.With("subject", event.Subject).
@@ -198,7 +198,7 @@ func (w *PostgresWriter) writeBatch(ctx context.Context, events []Event) error {
 			event.Component,
 			attributesJSON,
 			event.DurationUS,
-			event.Timestamp,
+			event.Timestamp.UnixNano(), // pgnanos-exempt: SQL-cast boundary for BIGINT timestamp column
 		)
 		if err != nil {
 			slog.Error("failed to insert audit event", "error", err, "event", event)

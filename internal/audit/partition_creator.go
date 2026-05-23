@@ -32,18 +32,20 @@ func (c *PostgresPartitionCreator) EnsurePartitions(ctx context.Context, months 
 		t := now.AddDate(0, i, 0)
 		name, start, end := partitionRange(t)
 
+		// access_audit_log.timestamp is BIGINT epoch-ns (post-gfo6 Phase 4).
+		// Partition bounds are int64 ns; range_end is exclusive.
 		query := fmt.Sprintf(
-			`CREATE TABLE IF NOT EXISTS %s PARTITION OF access_audit_log FOR VALUES FROM ('%s') TO ('%s')`,
+			`CREATE TABLE IF NOT EXISTS %s PARTITION OF access_audit_log FOR VALUES FROM (%d) TO (%d)`,
 			name,
-			start.Format("2006-01-02"),
-			end.Format("2006-01-02"),
+			start.UnixNano(),
+			end.UnixNano(),
 		)
 
 		if _, err := c.pool.Exec(ctx, query); err != nil {
 			return oops.
 				With("partition", name).
-				With("range_start", start.Format("2006-01-02")).
-				With("range_end", end.Format("2006-01-02")).
+				With("range_start_ns", start.UnixNano()).
+				With("range_end_ns", end.UnixNano()).
 				Errorf("creating partition: %w", err)
 		}
 	}

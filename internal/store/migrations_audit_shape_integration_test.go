@@ -216,10 +216,17 @@ var _ = Describe("Migration 000005 audit source/component", func() {
 		`)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Now apply 000005.
+		// Apply only 000005 (one step from version 4 → 5). We must NOT run
+		// to latest here: post-gfo6 migration 000042 recreates access_audit_log
+		// from scratch to migrate the partition-key column from TIMESTAMPTZ to
+		// BIGINT (PG forbids ALTER COLUMN TYPE on a partition-key column), so
+		// the seed-test-id row inserted above would be lost. This test's
+		// assertion is specifically about migration 000005's backfill behavior
+		// — stopping at version 5 keeps the assertion meaningful without
+		// pulling in unrelated downstream migrations.
 		migratorFinal, err := store.NewMigrator(connStr)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(migratorFinal.Up()).To(Succeed())
+		Expect(migratorFinal.Steps(1)).To(Succeed())
 		Expect(migratorFinal.Close()).To(Succeed())
 
 		// Query the existing row through the new column names — it should

@@ -21,7 +21,7 @@ func TestPluginRepoUpsertInsertsNewRow(t *testing.T) {
 	ctx := context.Background()
 	pool, cleanup := newTestPool(t)
 	defer cleanup()
-	require.NoError(t, runMigrations(ctx, pool, 18))
+	require.NoError(t, runMigrations(ctx, pool, 43))
 
 	repo := store.NewPostgresPluginRepo(pool)
 	id, drift, err := repo.Upsert(ctx, store.PluginUpsertInput{
@@ -38,7 +38,7 @@ func TestPluginRepoUpsertUpdatesLastSeenWithoutDrift(t *testing.T) {
 	ctx := context.Background()
 	pool, cleanup := newTestPool(t)
 	defer cleanup()
-	require.NoError(t, runMigrations(ctx, pool, 18))
+	require.NoError(t, runMigrations(ctx, pool, 43))
 	repo := store.NewPostgresPluginRepo(pool)
 
 	in := store.PluginUpsertInput{
@@ -57,7 +57,7 @@ func TestPluginRepoUpsertReportsDriftOnHashChange(t *testing.T) {
 	ctx := context.Background()
 	pool, cleanup := newTestPool(t)
 	defer cleanup()
-	require.NoError(t, runMigrations(ctx, pool, 18))
+	require.NoError(t, runMigrations(ctx, pool, 43))
 	repo := store.NewPostgresPluginRepo(pool)
 
 	in1 := store.PluginUpsertInput{
@@ -84,7 +84,7 @@ func TestPluginRepoListAllReturnsActiveAndDeactivated(t *testing.T) {
 	ctx := context.Background()
 	pool, cleanup := newTestPool(t)
 	defer cleanup()
-	require.NoError(t, runMigrations(ctx, pool, 18))
+	require.NoError(t, runMigrations(ctx, pool, 43))
 	repo := store.NewPostgresPluginRepo(pool)
 
 	_, _, err := repo.Upsert(ctx, store.PluginUpsertInput{Name: "active", DisplayName: "A", Version: "1", ManifestHash: []byte{0x01}})
@@ -92,7 +92,7 @@ func TestPluginRepoListAllReturnsActiveAndDeactivated(t *testing.T) {
 	_, _, err = repo.Upsert(ctx, store.PluginUpsertInput{Name: "stale", DisplayName: "S", Version: "1", ManifestHash: []byte{0x02}})
 	require.NoError(t, err)
 
-	_, err = pool.Exec(ctx, `UPDATE plugins SET last_seen_at = now() - interval '99 days' WHERE name = 'stale'`)
+	_, err = pool.Exec(ctx, `UPDATE plugins SET last_seen_at = (EXTRACT(EPOCH FROM now() - interval '99 days') * 1e9)::BIGINT WHERE name = 'stale'`)
 	require.NoError(t, err)
 	_, err = repo.SweepInactive(ctx, 1)
 	require.NoError(t, err)
@@ -116,14 +116,14 @@ func TestPluginRepoSweepInactiveDeactivatesStaleRowsOnly(t *testing.T) {
 	ctx := context.Background()
 	pool, cleanup := newTestPool(t)
 	defer cleanup()
-	require.NoError(t, runMigrations(ctx, pool, 18))
+	require.NoError(t, runMigrations(ctx, pool, 43))
 	repo := store.NewPostgresPluginRepo(pool)
 
 	_, _, err := repo.Upsert(ctx, store.PluginUpsertInput{Name: "fresh", DisplayName: "F", Version: "1", ManifestHash: []byte{0x01}})
 	require.NoError(t, err)
 	_, _, err = repo.Upsert(ctx, store.PluginUpsertInput{Name: "stale", DisplayName: "S", Version: "1", ManifestHash: []byte{0x02}})
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `UPDATE plugins SET last_seen_at = now() - interval '5 days' WHERE name = 'stale'`)
+	_, err = pool.Exec(ctx, `UPDATE plugins SET last_seen_at = (EXTRACT(EPOCH FROM now() - interval '5 days') * 1e9)::BIGINT WHERE name = 'stale'`)
 	require.NoError(t, err)
 
 	swept, err := repo.SweepInactive(ctx, 3)
@@ -136,12 +136,12 @@ func TestPluginRepoSweepNeverDeletesRows(t *testing.T) {
 	ctx := context.Background()
 	pool, cleanup := newTestPool(t)
 	defer cleanup()
-	require.NoError(t, runMigrations(ctx, pool, 18))
+	require.NoError(t, runMigrations(ctx, pool, 43))
 	repo := store.NewPostgresPluginRepo(pool)
 
 	_, _, err := repo.Upsert(ctx, store.PluginUpsertInput{Name: "p", DisplayName: "P", Version: "1", ManifestHash: []byte{0x01}})
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `UPDATE plugins SET last_seen_at = now() - interval '99 days'`)
+	_, err = pool.Exec(ctx, `UPDATE plugins SET last_seen_at = (EXTRACT(EPOCH FROM now() - interval '99 days') * 1e9)::BIGINT`)
 	require.NoError(t, err)
 	_, err = repo.SweepInactive(ctx, 1)
 	require.NoError(t, err)
@@ -159,7 +159,7 @@ func TestPluginRepoOperationsFailGracefullyOnDroppedTable(t *testing.T) {
 	ctx := context.Background()
 	pool, cleanup := newTestPool(t)
 	defer cleanup()
-	require.NoError(t, runMigrations(ctx, pool, 18))
+	require.NoError(t, runMigrations(ctx, pool, 43))
 	repo := store.NewPostgresPluginRepo(pool)
 
 	// Drop the plugins table to force every PluginRepo method into its

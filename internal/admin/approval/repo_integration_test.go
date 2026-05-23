@@ -81,7 +81,7 @@ var _ = Describe("Approval Repo", func() {
 
 			// Force expiry server-side.
 			tag, err := testPool.Exec(context.Background(),
-				`UPDATE admin_approvals SET expires_at = now() - interval '1 minute' WHERE request_id = $1`,
+				`UPDATE admin_approvals SET expires_at = (EXTRACT(EPOCH FROM now() - interval '1 minute') * 1e9)::BIGINT WHERE request_id = $1`,
 				id[:])
 			Expect(err).NotTo(HaveOccurred())
 			Expect(tag.RowsAffected()).To(Equal(int64(1)), "expected exactly one approval row to be force-expired")
@@ -145,7 +145,7 @@ var _ = Describe("Approval Repo", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			tag, err := testPool.Exec(context.Background(),
-				`UPDATE admin_approvals SET expires_at = now() - interval '1 minute' WHERE request_id = $1`,
+				`UPDATE admin_approvals SET expires_at = (EXTRACT(EPOCH FROM now() - interval '1 minute') * 1e9)::BIGINT WHERE request_id = $1`,
 				id[:])
 			Expect(err).NotTo(HaveOccurred())
 			Expect(tag.RowsAffected()).To(Equal(int64(1)), "expected exactly one approval row to be force-expired")
@@ -272,7 +272,7 @@ var _ = Describe("Approval Repo", func() {
 
 			// Force-expire the row so the next poll observes expires_at < now().
 			tag, err := testPool.Exec(context.Background(),
-				`UPDATE admin_approvals SET expires_at = now() - interval '1 minute' WHERE request_id = $1`,
+				`UPDATE admin_approvals SET expires_at = (EXTRACT(EPOCH FROM now() - interval '1 minute') * 1e9)::BIGINT WHERE request_id = $1`,
 				id[:])
 			Expect(err).NotTo(HaveOccurred())
 			Expect(tag.RowsAffected()).To(Equal(int64(1)), "expected exactly one approval row to be force-expired")
@@ -337,7 +337,7 @@ var _ = Describe("Approval Repo", func() {
 
 			// Force-expire the row.
 			_, err := testPool.Exec(context.Background(),
-				`UPDATE admin_approvals SET expires_at = now() - interval '1 minute' WHERE request_id = $1`,
+				`UPDATE admin_approvals SET expires_at = (EXTRACT(EPOCH FROM now() - interval '1 minute') * 1e9)::BIGINT WHERE request_id = $1`,
 				a.RequestID[:])
 			Expect(err).NotTo(HaveOccurred())
 
@@ -402,7 +402,7 @@ var _ = Describe("Approval Repo", func() {
 
 			// Force a1.approved_at to be clearly earlier so the ORDER BY is deterministic.
 			_, err := testPool.Exec(context.Background(),
-				`UPDATE admin_approvals SET approved_at = now() - interval '10 minutes' WHERE request_id = $1`,
+				`UPDATE admin_approvals SET approved_at = (EXTRACT(EPOCH FROM now() - interval '10 minutes') * 1e9)::BIGINT WHERE request_id = $1`,
 				a1.RequestID[:])
 			Expect(err).NotTo(HaveOccurred())
 

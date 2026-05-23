@@ -14,6 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/pgnanos"
 )
 
 // Repo is the storage interface for admin_approvals rows.
@@ -55,7 +57,7 @@ func (r *PostgresRepo) Open(ctx context.Context, req OpenRequest) (RequestID, er
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO admin_approvals
 			(request_id, primary_player_id, op_kind, op_args_hash, expires_at)
-		VALUES ($1, $2, $3, $4, now() + interval '5 minutes')
+		VALUES ($1, $2, $3, $4, (EXTRACT(EPOCH FROM now() + interval '5 minutes') * 1e9)::BIGINT)
 	`, id[:], req.PrimaryPlayerID, req.OpKind, req.OpArgsHash)
 	if err != nil {
 		return RequestID{}, oops.Code("APPROVAL_OPEN_FAILED").
@@ -73,13 +75,15 @@ func (r *PostgresRepo) Get(ctx context.Context, id RequestID) (Approval, error) 
 		       created_at
 		  FROM admin_approvals
 		 WHERE request_id = $1
-		   AND expires_at >= now()
+		   AND expires_at >= (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
 	`, id[:])
 	var a Approval
 	var ridBytes []byte
-	var approvedAt *time.Time
+	var expiresAt pgnanos.Time
+	var approvedAt *pgnanos.Time
+	var createdAt pgnanos.Time
 	if err := row.Scan(&ridBytes, &a.PrimaryPlayerID, &a.OpKind, &a.OpArgsHash,
-		&a.ExpiresAt, &approvedAt, &a.ApprovedByPlayerID, &a.CreatedAt); err != nil {
+		&expiresAt, &approvedAt, &a.ApprovedByPlayerID, &createdAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Approval{}, oops.Code("APPROVAL_NOT_FOUND").
 				With("request_id", id.String()).
@@ -89,7 +93,12 @@ func (r *PostgresRepo) Get(ctx context.Context, id RequestID) (Approval, error) 
 			With("request_id", id.String()).Wrap(err)
 	}
 	copy(a.RequestID[:], ridBytes)
-	a.ApprovedAt = approvedAt
+	a.ExpiresAt = expiresAt.Time()
+	if approvedAt != nil {
+		t := approvedAt.Time()
+		a.ApprovedAt = &t
+	}
+	a.CreatedAt = createdAt.Time()
 	return a, nil
 }
 
@@ -107,9 +116,11 @@ func (r *PostgresRepo) getRaw(ctx context.Context, id RequestID) (Approval, erro
 	`, id[:])
 	var a Approval
 	var ridBytes []byte
-	var approvedAt *time.Time
+	var expiresAt pgnanos.Time
+	var approvedAt *pgnanos.Time
+	var createdAt pgnanos.Time
 	if err := row.Scan(&ridBytes, &a.PrimaryPlayerID, &a.OpKind, &a.OpArgsHash,
-		&a.ExpiresAt, &approvedAt, &a.ApprovedByPlayerID, &a.CreatedAt); err != nil {
+		&expiresAt, &approvedAt, &a.ApprovedByPlayerID, &createdAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Approval{}, oops.Code("APPROVAL_NOT_FOUND").
 				With("request_id", id.String()).
@@ -119,7 +130,12 @@ func (r *PostgresRepo) getRaw(ctx context.Context, id RequestID) (Approval, erro
 			With("request_id", id.String()).Wrap(err)
 	}
 	copy(a.RequestID[:], ridBytes)
-	a.ApprovedAt = approvedAt
+	a.ExpiresAt = expiresAt.Time()
+	if approvedAt != nil {
+		t := approvedAt.Time()
+		a.ApprovedAt = &t
+	}
+	a.CreatedAt = createdAt.Time()
 	return a, nil
 }
 
@@ -142,7 +158,7 @@ func (r *PostgresRepo) GetByOpArgsHash(ctx context.Context, opKind string, opArg
 		  FROM admin_approvals
 		 WHERE op_kind = $1
 		   AND op_args_hash = $2
-		   AND expires_at > now()
+		   AND expires_at > (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
 		   AND approved_at IS NOT NULL
 		   AND primary_player_id != $3
 		 ORDER BY approved_at DESC
@@ -150,9 +166,11 @@ func (r *PostgresRepo) GetByOpArgsHash(ctx context.Context, opKind string, opArg
 	`, opKind, opArgsHash, excludePlayerID)
 	var a Approval
 	var ridBytes []byte
-	var approvedAt *time.Time
+	var expiresAt pgnanos.Time
+	var approvedAt *pgnanos.Time
+	var createdAt pgnanos.Time
 	if err := row.Scan(&ridBytes, &a.PrimaryPlayerID, &a.OpKind, &a.OpArgsHash,
-		&a.ExpiresAt, &approvedAt, &a.ApprovedByPlayerID, &a.CreatedAt); err != nil {
+		&expiresAt, &approvedAt, &a.ApprovedByPlayerID, &createdAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Approval{}, oops.Code("APPROVAL_NOT_FOUND").
 				With("op_kind", opKind).
@@ -162,7 +180,12 @@ func (r *PostgresRepo) GetByOpArgsHash(ctx context.Context, opKind string, opArg
 			With("op_kind", opKind).Wrap(err)
 	}
 	copy(a.RequestID[:], ridBytes)
-	a.ApprovedAt = approvedAt
+	a.ExpiresAt = expiresAt.Time()
+	if approvedAt != nil {
+		t := approvedAt.Time()
+		a.ApprovedAt = &t
+	}
+	a.CreatedAt = createdAt.Time()
 	return a, nil
 }
 
@@ -172,10 +195,10 @@ func (r *PostgresRepo) GetByOpArgsHash(ctx context.Context, opKind string, opArg
 func (r *PostgresRepo) MarkApproved(ctx context.Context, id RequestID, secondOpPlayerID string) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE admin_approvals
-		   SET approved_at = now(), approved_by_player_id = $2
+		   SET approved_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, approved_by_player_id = $2
 		 WHERE request_id = $1
 		   AND approved_at IS NULL
-		   AND expires_at >= now()
+		   AND expires_at >= (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
 		   AND primary_player_id != $2
 	`, id[:], secondOpPlayerID)
 	if err != nil {
@@ -192,8 +215,8 @@ func (r *PostgresRepo) MarkApproved(ctx context.Context, id RequestID, secondOpP
 		 WHERE request_id = $1
 	`, id[:])
 	var primary string
-	var approvedAt *time.Time
-	var expiresAt time.Time
+	var approvedAt *pgnanos.Time
+	var expiresAt pgnanos.Time
 	if err := row.Scan(&primary, &approvedAt, &expiresAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.Code("DENY_APPROVAL_NOT_FOUND").
@@ -203,6 +226,7 @@ func (r *PostgresRepo) MarkApproved(ctx context.Context, id RequestID, secondOpP
 		return oops.Code("APPROVAL_DIFFERENTIATE_FAILED").
 			With("request_id", id.String()).Wrap(err)
 	}
+	expiresAtTime := expiresAt.Time()
 	switch {
 	case primary == secondOpPlayerID:
 		return oops.Code("DENY_DUAL_CONTROL_SELF").
@@ -213,10 +237,10 @@ func (r *PostgresRepo) MarkApproved(ctx context.Context, id RequestID, secondOpP
 		return oops.Code("DENY_APPROVAL_ALREADY_APPROVED").
 			With("request_id", id.String()).
 			Errorf("approval already granted")
-	case !expiresAt.After(r.clock.Now()):
+	case !expiresAtTime.After(r.clock.Now()):
 		return oops.Code("DENY_APPROVAL_EXPIRED").
 			With("request_id", id.String()).
-			With("expires_at", expiresAt).
+			With("expires_at", expiresAtTime).
 			Errorf("approval window expired")
 	default:
 		// Race-window fallback: between the UPDATE and the SELECT another

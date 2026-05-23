@@ -310,8 +310,9 @@ func TestRepoLoadEnrollmentReturnsErrNotEnrolledOnNoRows(t *testing.T) {
 
 func TestRepoIncrementFailedAttemptsWrapsDriverError(t *testing.T) {
 	r, mock := newMockedRepo(t)
+	// $3 = now.UnixNano() (BIGINT epoch-ns); $4 = lockoutDuration.Nanoseconds()
 	mock.ExpectQuery(`UPDATE player_totp\s+SET failed_attempts`).
-		WithArgs("01HZ", 5, pgxmock.AnyArg(), int64(15*60*1_000_000)).
+		WithArgs("01HZ", 5, pgxmock.AnyArg(), (15*time.Minute).Nanoseconds()).
 		WillReturnError(errors.New("update failed"))
 
 	_, err := r.IncrementFailedAttempts(context.Background(), "01HZ", 5, 15*time.Minute, time.Now())
@@ -325,7 +326,7 @@ func TestRepoIncrementFailedAttemptsHappyPath(t *testing.T) {
 	now := time.Now()
 	rows := pgxmock.NewRows([]string{
 		"wrapped_secret", "wrap_key_id", "last_used_step", "failed_attempts", "locked_until",
-	}).AddRow([]byte("w"), "kek-v1", (*int64)(nil), 3, (*time.Time)(nil))
+	}).AddRow([]byte("w"), "kek-v1", (*int64)(nil), 3, nil)
 	mock.ExpectQuery(`UPDATE player_totp\s+SET failed_attempts`).
 		WithArgs("01HZ", 5, pgxmock.AnyArg(), pgxmock.AnyArg()).
 		WillReturnRows(rows)
@@ -343,7 +344,7 @@ func TestRepoLoadEnrollmentHappyPath(t *testing.T) {
 	step := int64(42)
 	rows := pgxmock.NewRows([]string{
 		"wrapped_secret", "wrap_key_id", "last_used_step", "failed_attempts", "locked_until",
-	}).AddRow([]byte("w"), "kek-v1", &step, 0, (*time.Time)(nil))
+	}).AddRow([]byte("w"), "kek-v1", &step, 0, nil)
 	mock.ExpectQuery(`SELECT wrapped_secret, wrap_key_id, last_used_step, failed_attempts, locked_until`).
 		WithArgs("01HZ").
 		WillReturnRows(rows)

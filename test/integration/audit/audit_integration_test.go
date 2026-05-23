@@ -249,12 +249,12 @@ func ensureAuditPartitionForMonth(ctx context.Context, db *sql.DB, t time.Time) 
 	start := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
 	end := start.AddDate(0, 1, 0)
 	name := fmt.Sprintf("access_audit_log_%04d_%02d", t.Year(), t.Month())
-	startStr := start.Format("2006-01-02")
-	endStr := end.Format("2006-01-02")
-	// nosemgrep: go.lang.security.audit.database.string-formatted-query.string-formatted-query -- name and date strings are derived from time.Time, never from external input
+	// access_audit_log.timestamp is BIGINT epoch-ns (post-gfo6 Phase 4).
+	// Partition bounds are int64 ns; range_end is exclusive.
+	// nosemgrep: go.lang.security.audit.database.string-formatted-query.string-formatted-query -- name and int values are derived from time.Time, never from external input
 	stmt := fmt.Sprintf(
-		`CREATE TABLE IF NOT EXISTS %s PARTITION OF access_audit_log FOR VALUES FROM ('%s') TO ('%s')`,
-		name, startStr, endStr,
+		`CREATE TABLE IF NOT EXISTS %s PARTITION OF access_audit_log FOR VALUES FROM (%d) TO (%d)`,
+		name, start.UnixNano(), end.UnixNano(),
 	)
 	if _, err := db.ExecContext(ctx, stmt); err != nil {
 		return fmt.Errorf("create audit partition %s: %w", name, err)
