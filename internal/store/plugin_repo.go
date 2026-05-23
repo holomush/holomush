@@ -186,7 +186,15 @@ func (r *PostgresPluginRepo) ListAll(ctx context.Context) ([]PluginRow, error) {
 // SweepInactive marks plugins inactive (sets gc_at) whose last_seen_at is
 // older than retentionDays. It never DELETEs rows (INV-W9ML-9). Returns the
 // swept rows so the caller can log or act on them.
+//
+// retentionDays MUST be non-negative. A negative value would push the cutoff
+// into the future and mass-mark active plugins as GC candidates.
 func (r *PostgresPluginRepo) SweepInactive(ctx context.Context, retentionDays int) ([]PluginRow, error) {
+	if retentionDays < 0 {
+		return nil, oops.Code("PLUGIN_REPO_SWEEP_INVALID_RETENTION").
+			With("retention_days", retentionDays).
+			Errorf("retentionDays must be non-negative")
+	}
 	rows, err := r.pool.Query(ctx, `
 		UPDATE plugins
 		   SET gc_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT

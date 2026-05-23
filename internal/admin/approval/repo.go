@@ -75,7 +75,7 @@ func (r *PostgresRepo) Get(ctx context.Context, id RequestID) (Approval, error) 
 		       created_at
 		  FROM admin_approvals
 		 WHERE request_id = $1
-		   AND expires_at >= (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
+		   AND expires_at > (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
 	`, id[:])
 	var a Approval
 	var ridBytes []byte
@@ -198,7 +198,7 @@ func (r *PostgresRepo) MarkApproved(ctx context.Context, id RequestID, secondOpP
 		   SET approved_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, approved_by_player_id = $2
 		 WHERE request_id = $1
 		   AND approved_at IS NULL
-		   AND expires_at >= (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
+		   AND expires_at > (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
 		   AND primary_player_id != $2
 	`, id[:], secondOpPlayerID)
 	if err != nil {

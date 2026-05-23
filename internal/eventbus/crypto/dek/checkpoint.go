@@ -329,6 +329,11 @@ func (r *CheckpointRepo) FindNonTerminalByContext(ctx context.Context, ctxType, 
 // last_heartbeat_at is older than ttl ago. Called by the sweep subsystem
 // (INV-E18).
 func (r *CheckpointRepo) ListExpired(ctx context.Context, ttl time.Duration) ([]Checkpoint, error) {
+	// Bind ttl.Nanoseconds() directly against the BIGINT-ns last_heartbeat_at
+	// column. The prior int64(ttl.Seconds()) truncated sub-second durations
+	// (e.g. 500ms → 0), which made every in-flight checkpoint look expired
+	// immediately. After the gfo6 BIGINT-ns migration, ns-precision is the
+	// canonical resolution for time arithmetic in this table.
 	rows, err := r.pool.Query(ctx, `
         SELECT request_id, context_type, context_id, op_args_hash, policy_hash,
                primary_player_id, justification, status, last_processed_event_id, new_dek_id,
@@ -337,8 +342,8 @@ func (r *CheckpointRepo) ListExpired(ctx context.Context, ttl time.Duration) ([]
                aborted_at, aborted_reason
           FROM crypto_rekey_checkpoints
          WHERE status NOT IN ('complete', 'aborted')
-           AND last_heartbeat_at < (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT - $1::BIGINT * 1000000000
-    `, int64(ttl.Seconds()))
+           AND last_heartbeat_at < (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT - $1::BIGINT
+    `, ttl.Nanoseconds())
 	if err != nil {
 		return nil, oops.Code("DEK_REKEY_LIST_EXPIRED_FAILED").Wrap(err)
 	}

@@ -4,97 +4,94 @@
 -- Revert world-domain timestamp columns from BIGINT (epoch nanoseconds) back
 -- to TIMESTAMPTZ. PRECISION LOSS: sub-microsecond nanoseconds are discarded
 -- by to_timestamp(col::double precision / 1e9).
+--
+-- Idempotent: guarded on data_type = 'bigint' so re-running is safe.
 
--- player_character_bindings
+DO $$
+BEGIN
+  -- player_character_bindings.ended_at
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'player_character_bindings'
+               AND column_name = 'ended_at' AND data_type = 'bigint') THEN
+    EXECUTE 'ALTER TABLE player_character_bindings ALTER COLUMN ended_at TYPE TIMESTAMPTZ USING to_timestamp(ended_at::double precision / 1e9)';
+  END IF;
 
-ALTER TABLE player_character_bindings
-    ALTER COLUMN ended_at
-        TYPE TIMESTAMPTZ USING to_timestamp(ended_at::double precision / 1e9);
+  -- player_character_bindings.created_at
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'player_character_bindings'
+               AND column_name = 'created_at' AND data_type = 'bigint') THEN
+    EXECUTE 'ALTER TABLE player_character_bindings ALTER COLUMN created_at DROP DEFAULT';
+    EXECUTE 'ALTER TABLE player_character_bindings ALTER COLUMN created_at TYPE TIMESTAMPTZ USING to_timestamp(created_at::double precision / 1e9)';
+    EXECUTE 'ALTER TABLE player_character_bindings ALTER COLUMN created_at SET DEFAULT now()';
+  END IF;
 
-ALTER TABLE player_character_bindings
-    ALTER COLUMN created_at DROP DEFAULT;
-ALTER TABLE player_character_bindings
-    ALTER COLUMN created_at
-        TYPE TIMESTAMPTZ USING to_timestamp(created_at::double precision / 1e9);
-ALTER TABLE player_character_bindings
-    ALTER COLUMN created_at
-        SET DEFAULT now();
+  -- scene_participants.joined_at
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'scene_participants'
+               AND column_name = 'joined_at' AND data_type = 'bigint') THEN
+    EXECUTE 'ALTER TABLE scene_participants ALTER COLUMN joined_at DROP DEFAULT';
+    EXECUTE 'ALTER TABLE scene_participants ALTER COLUMN joined_at TYPE TIMESTAMPTZ USING to_timestamp(joined_at::double precision / 1e9)';
+    EXECUTE 'ALTER TABLE scene_participants ALTER COLUMN joined_at SET DEFAULT NOW()';
+  END IF;
 
--- scene_participants
+  -- entity_properties.updated_at
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'entity_properties'
+               AND column_name = 'updated_at' AND data_type = 'bigint') THEN
+    EXECUTE 'ALTER TABLE entity_properties ALTER COLUMN updated_at DROP DEFAULT';
+    EXECUTE 'ALTER TABLE entity_properties ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING to_timestamp(updated_at::double precision / 1e9)';
+    EXECUTE 'ALTER TABLE entity_properties ALTER COLUMN updated_at SET DEFAULT now()';
+  END IF;
 
-ALTER TABLE scene_participants
-    ALTER COLUMN joined_at DROP DEFAULT;
-ALTER TABLE scene_participants
-    ALTER COLUMN joined_at
-        TYPE TIMESTAMPTZ USING to_timestamp(joined_at::double precision / 1e9);
-ALTER TABLE scene_participants
-    ALTER COLUMN joined_at
-        SET DEFAULT NOW();
+  -- entity_properties.created_at
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'entity_properties'
+               AND column_name = 'created_at' AND data_type = 'bigint') THEN
+    EXECUTE 'ALTER TABLE entity_properties ALTER COLUMN created_at DROP DEFAULT';
+    EXECUTE 'ALTER TABLE entity_properties ALTER COLUMN created_at TYPE TIMESTAMPTZ USING to_timestamp(created_at::double precision / 1e9)';
+    EXECUTE 'ALTER TABLE entity_properties ALTER COLUMN created_at SET DEFAULT now()';
+  END IF;
 
--- entity_properties
+  -- objects.created_at
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'objects'
+               AND column_name = 'created_at' AND data_type = 'bigint') THEN
+    EXECUTE 'ALTER TABLE objects ALTER COLUMN created_at DROP DEFAULT';
+    EXECUTE 'ALTER TABLE objects ALTER COLUMN created_at TYPE TIMESTAMPTZ USING to_timestamp(created_at::double precision / 1e9)';
+    EXECUTE 'ALTER TABLE objects ALTER COLUMN created_at SET DEFAULT NOW()';
+  END IF;
 
-ALTER TABLE entity_properties
-    ALTER COLUMN updated_at DROP DEFAULT;
-ALTER TABLE entity_properties
-    ALTER COLUMN updated_at
-        TYPE TIMESTAMPTZ USING to_timestamp(updated_at::double precision / 1e9);
-ALTER TABLE entity_properties
-    ALTER COLUMN updated_at
-        SET DEFAULT now();
+  -- exits.created_at
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'exits'
+               AND column_name = 'created_at' AND data_type = 'bigint') THEN
+    EXECUTE 'ALTER TABLE exits ALTER COLUMN created_at DROP DEFAULT';
+    EXECUTE 'ALTER TABLE exits ALTER COLUMN created_at TYPE TIMESTAMPTZ USING to_timestamp(created_at::double precision / 1e9)';
+    EXECUTE 'ALTER TABLE exits ALTER COLUMN created_at SET DEFAULT NOW()';
+  END IF;
 
-ALTER TABLE entity_properties
-    ALTER COLUMN created_at DROP DEFAULT;
-ALTER TABLE entity_properties
-    ALTER COLUMN created_at
-        TYPE TIMESTAMPTZ USING to_timestamp(created_at::double precision / 1e9);
-ALTER TABLE entity_properties
-    ALTER COLUMN created_at
-        SET DEFAULT now();
+  -- locations.archived_at
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'locations'
+               AND column_name = 'archived_at' AND data_type = 'bigint') THEN
+    EXECUTE 'ALTER TABLE locations ALTER COLUMN archived_at TYPE TIMESTAMPTZ USING to_timestamp(archived_at::double precision / 1e9)';
+  END IF;
 
--- objects
+  -- locations.created_at
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'locations'
+               AND column_name = 'created_at' AND data_type = 'bigint') THEN
+    EXECUTE 'ALTER TABLE locations ALTER COLUMN created_at DROP DEFAULT';
+    EXECUTE 'ALTER TABLE locations ALTER COLUMN created_at TYPE TIMESTAMPTZ USING to_timestamp(created_at::double precision / 1e9)';
+    EXECUTE 'ALTER TABLE locations ALTER COLUMN created_at SET DEFAULT NOW()';
+  END IF;
 
-ALTER TABLE objects
-    ALTER COLUMN created_at DROP DEFAULT;
-ALTER TABLE objects
-    ALTER COLUMN created_at
-        TYPE TIMESTAMPTZ USING to_timestamp(created_at::double precision / 1e9);
-ALTER TABLE objects
-    ALTER COLUMN created_at
-        SET DEFAULT NOW();
-
--- exits
-
-ALTER TABLE exits
-    ALTER COLUMN created_at DROP DEFAULT;
-ALTER TABLE exits
-    ALTER COLUMN created_at
-        TYPE TIMESTAMPTZ USING to_timestamp(created_at::double precision / 1e9);
-ALTER TABLE exits
-    ALTER COLUMN created_at
-        SET DEFAULT NOW();
-
--- locations
-
-ALTER TABLE locations
-    ALTER COLUMN archived_at
-        TYPE TIMESTAMPTZ USING to_timestamp(archived_at::double precision / 1e9);
-
-ALTER TABLE locations
-    ALTER COLUMN created_at DROP DEFAULT;
-ALTER TABLE locations
-    ALTER COLUMN created_at
-        TYPE TIMESTAMPTZ USING to_timestamp(created_at::double precision / 1e9);
-ALTER TABLE locations
-    ALTER COLUMN created_at
-        SET DEFAULT NOW();
-
--- characters
-
-ALTER TABLE characters
-    ALTER COLUMN created_at DROP DEFAULT;
-ALTER TABLE characters
-    ALTER COLUMN created_at
-        TYPE TIMESTAMPTZ USING to_timestamp(created_at::double precision / 1e9);
-ALTER TABLE characters
-    ALTER COLUMN created_at
-        SET DEFAULT NOW();
+  -- characters.created_at
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'characters'
+               AND column_name = 'created_at' AND data_type = 'bigint') THEN
+    EXECUTE 'ALTER TABLE characters ALTER COLUMN created_at DROP DEFAULT';
+    EXECUTE 'ALTER TABLE characters ALTER COLUMN created_at TYPE TIMESTAMPTZ USING to_timestamp(created_at::double precision / 1e9)';
+    EXECUTE 'ALTER TABLE characters ALTER COLUMN created_at SET DEFAULT NOW()';
+  END IF;
+END $$;

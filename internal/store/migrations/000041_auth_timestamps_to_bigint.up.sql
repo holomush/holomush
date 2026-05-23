@@ -3,135 +3,147 @@
 
 -- Convert auth-domain timestamp columns from TIMESTAMPTZ to BIGINT
 -- (epoch nanoseconds, UTC). INV-TS-1.
+--
+-- Idempotent: each ALTER COLUMN ... TYPE step is wrapped in a DO block that
+-- guards on information_schema.columns.data_type, so re-running this migration
+-- (recovery replays, partial-apply retries) is safe. Pattern mirrors
+-- 000038_eventbus_crypto_timestamps_to_bigint.up.sql.
 
--- players: locked_until is nullable with no DEFAULT; drop/restore not needed.
--- created_at and updated_at have DEFAULT NOW() and must have their default dropped
--- before the TYPE change (no implicit TIMESTAMPTZ→BIGINT cast in PostgreSQL).
+DO $$
+BEGIN
+  -- players.locked_until → BIGINT (nullable, no DEFAULT)
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'players'
+               AND column_name = 'locked_until' AND data_type = 'timestamp with time zone') THEN
+    EXECUTE 'ALTER TABLE players ALTER COLUMN locked_until TYPE BIGINT USING (EXTRACT(EPOCH FROM locked_until) * 1e9)::BIGINT';
+  END IF;
 
-ALTER TABLE players
-    ALTER COLUMN locked_until
-        TYPE BIGINT USING (EXTRACT(EPOCH FROM locked_until) * 1e9)::BIGINT;
+  -- players.created_at: DROP DEFAULT, TYPE, SET DEFAULT
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'players'
+               AND column_name = 'created_at' AND data_type = 'timestamp with time zone') THEN
+    EXECUTE 'ALTER TABLE players ALTER COLUMN created_at DROP DEFAULT';
+    EXECUTE 'ALTER TABLE players ALTER COLUMN created_at TYPE BIGINT USING (EXTRACT(EPOCH FROM created_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE players ALTER COLUMN created_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
+  END IF;
 
-ALTER TABLE players
-    ALTER COLUMN created_at DROP DEFAULT;
-ALTER TABLE players
-    ALTER COLUMN created_at
-        TYPE BIGINT USING (EXTRACT(EPOCH FROM created_at) * 1e9)::BIGINT;
-ALTER TABLE players
-    ALTER COLUMN created_at
-        SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT;
+  -- players.updated_at: DROP DEFAULT, TYPE, SET DEFAULT
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'players'
+               AND column_name = 'updated_at' AND data_type = 'timestamp with time zone') THEN
+    EXECUTE 'ALTER TABLE players ALTER COLUMN updated_at DROP DEFAULT';
+    EXECUTE 'ALTER TABLE players ALTER COLUMN updated_at TYPE BIGINT USING (EXTRACT(EPOCH FROM updated_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE players ALTER COLUMN updated_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
+  END IF;
 
-ALTER TABLE players
-    ALTER COLUMN updated_at DROP DEFAULT;
-ALTER TABLE players
-    ALTER COLUMN updated_at
-        TYPE BIGINT USING (EXTRACT(EPOCH FROM updated_at) * 1e9)::BIGINT;
-ALTER TABLE players
-    ALTER COLUMN updated_at
-        SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT;
+  -- password_resets.expires_at → BIGINT (nullable, no DEFAULT)
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'password_resets'
+               AND column_name = 'expires_at' AND data_type = 'timestamp with time zone') THEN
+    EXECUTE 'ALTER TABLE password_resets ALTER COLUMN expires_at TYPE BIGINT USING (EXTRACT(EPOCH FROM expires_at) * 1e9)::BIGINT';
+  END IF;
 
--- password_resets: expires_at and used_at are nullable with no DEFAULT.
--- created_at has DEFAULT NOW() and must have its default dropped first.
+  -- password_resets.used_at → BIGINT (nullable, no DEFAULT)
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'password_resets'
+               AND column_name = 'used_at' AND data_type = 'timestamp with time zone') THEN
+    EXECUTE 'ALTER TABLE password_resets ALTER COLUMN used_at TYPE BIGINT USING (EXTRACT(EPOCH FROM used_at) * 1e9)::BIGINT';
+  END IF;
 
-ALTER TABLE password_resets
-    ALTER COLUMN expires_at
-        TYPE BIGINT USING (EXTRACT(EPOCH FROM expires_at) * 1e9)::BIGINT,
-    ALTER COLUMN used_at
-        TYPE BIGINT USING (EXTRACT(EPOCH FROM used_at) * 1e9)::BIGINT;
+  -- password_resets.created_at: DROP DEFAULT, TYPE, SET DEFAULT
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'password_resets'
+               AND column_name = 'created_at' AND data_type = 'timestamp with time zone') THEN
+    EXECUTE 'ALTER TABLE password_resets ALTER COLUMN created_at DROP DEFAULT';
+    EXECUTE 'ALTER TABLE password_resets ALTER COLUMN created_at TYPE BIGINT USING (EXTRACT(EPOCH FROM created_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE password_resets ALTER COLUMN created_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
+  END IF;
 
-ALTER TABLE password_resets
-    ALTER COLUMN created_at DROP DEFAULT;
-ALTER TABLE password_resets
-    ALTER COLUMN created_at
-        TYPE BIGINT USING (EXTRACT(EPOCH FROM created_at) * 1e9)::BIGINT;
-ALTER TABLE password_resets
-    ALTER COLUMN created_at
-        SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT;
+  -- sessions.expires_at → BIGINT (nullable, no DEFAULT)
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'sessions'
+               AND column_name = 'expires_at' AND data_type = 'timestamp with time zone') THEN
+    EXECUTE 'ALTER TABLE sessions ALTER COLUMN expires_at TYPE BIGINT USING (EXTRACT(EPOCH FROM expires_at) * 1e9)::BIGINT';
+  END IF;
 
--- sessions: expires_at and detached_at are nullable with no DEFAULT.
--- created_at and updated_at have DEFAULT now() and must have defaults dropped first.
+  -- sessions.detached_at → BIGINT (nullable, no DEFAULT)
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'sessions'
+               AND column_name = 'detached_at' AND data_type = 'timestamp with time zone') THEN
+    EXECUTE 'ALTER TABLE sessions ALTER COLUMN detached_at TYPE BIGINT USING (EXTRACT(EPOCH FROM detached_at) * 1e9)::BIGINT';
+  END IF;
 
-ALTER TABLE sessions
-    ALTER COLUMN expires_at
-        TYPE BIGINT USING (EXTRACT(EPOCH FROM expires_at) * 1e9)::BIGINT,
-    ALTER COLUMN detached_at
-        TYPE BIGINT USING (EXTRACT(EPOCH FROM detached_at) * 1e9)::BIGINT;
+  -- sessions.created_at: DROP DEFAULT, TYPE, SET DEFAULT
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'sessions'
+               AND column_name = 'created_at' AND data_type = 'timestamp with time zone') THEN
+    EXECUTE 'ALTER TABLE sessions ALTER COLUMN created_at DROP DEFAULT';
+    EXECUTE 'ALTER TABLE sessions ALTER COLUMN created_at TYPE BIGINT USING (EXTRACT(EPOCH FROM created_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE sessions ALTER COLUMN created_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
+  END IF;
 
-ALTER TABLE sessions
-    ALTER COLUMN created_at DROP DEFAULT;
-ALTER TABLE sessions
-    ALTER COLUMN created_at
-        TYPE BIGINT USING (EXTRACT(EPOCH FROM created_at) * 1e9)::BIGINT;
-ALTER TABLE sessions
-    ALTER COLUMN created_at
-        SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT;
+  -- sessions.updated_at: DROP DEFAULT, TYPE, SET DEFAULT
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'sessions'
+               AND column_name = 'updated_at' AND data_type = 'timestamp with time zone') THEN
+    EXECUTE 'ALTER TABLE sessions ALTER COLUMN updated_at DROP DEFAULT';
+    EXECUTE 'ALTER TABLE sessions ALTER COLUMN updated_at TYPE BIGINT USING (EXTRACT(EPOCH FROM updated_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE sessions ALTER COLUMN updated_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
+  END IF;
 
-ALTER TABLE sessions
-    ALTER COLUMN updated_at DROP DEFAULT;
-ALTER TABLE sessions
-    ALTER COLUMN updated_at
-        TYPE BIGINT USING (EXTRACT(EPOCH FROM updated_at) * 1e9)::BIGINT;
-ALTER TABLE sessions
-    ALTER COLUMN updated_at
-        SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT;
+  -- session_connections.connected_at: DROP DEFAULT, TYPE, SET DEFAULT
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'session_connections'
+               AND column_name = 'connected_at' AND data_type = 'timestamp with time zone') THEN
+    EXECUTE 'ALTER TABLE session_connections ALTER COLUMN connected_at DROP DEFAULT';
+    EXECUTE 'ALTER TABLE session_connections ALTER COLUMN connected_at TYPE BIGINT USING (EXTRACT(EPOCH FROM connected_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE session_connections ALTER COLUMN connected_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
+  END IF;
 
--- session_connections: connected_at has DEFAULT now() and must have default dropped first.
+  -- player_sessions.expires_at → BIGINT (NOT NULL, no DEFAULT)
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'player_sessions'
+               AND column_name = 'expires_at' AND data_type = 'timestamp with time zone') THEN
+    EXECUTE 'ALTER TABLE player_sessions ALTER COLUMN expires_at TYPE BIGINT USING (EXTRACT(EPOCH FROM expires_at) * 1e9)::BIGINT';
+  END IF;
 
-ALTER TABLE session_connections
-    ALTER COLUMN connected_at DROP DEFAULT;
-ALTER TABLE session_connections
-    ALTER COLUMN connected_at
-        TYPE BIGINT USING (EXTRACT(EPOCH FROM connected_at) * 1e9)::BIGINT;
-ALTER TABLE session_connections
-    ALTER COLUMN connected_at
-        SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT;
+  -- player_sessions.created_at: DROP DEFAULT, TYPE, SET DEFAULT
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'player_sessions'
+               AND column_name = 'created_at' AND data_type = 'timestamp with time zone') THEN
+    EXECUTE 'ALTER TABLE player_sessions ALTER COLUMN created_at DROP DEFAULT';
+    EXECUTE 'ALTER TABLE player_sessions ALTER COLUMN created_at TYPE BIGINT USING (EXTRACT(EPOCH FROM created_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE player_sessions ALTER COLUMN created_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
+  END IF;
 
--- player_sessions: expires_at is NOT NULL with no DEFAULT.
--- created_at and updated_at have DEFAULT now() and must have defaults dropped first.
--- Note: player_sessions has no detached_at column; plan SQL is corrected here.
+  -- player_sessions.updated_at: DROP DEFAULT, TYPE, SET DEFAULT
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'player_sessions'
+               AND column_name = 'updated_at' AND data_type = 'timestamp with time zone') THEN
+    EXECUTE 'ALTER TABLE player_sessions ALTER COLUMN updated_at DROP DEFAULT';
+    EXECUTE 'ALTER TABLE player_sessions ALTER COLUMN updated_at TYPE BIGINT USING (EXTRACT(EPOCH FROM updated_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE player_sessions ALTER COLUMN updated_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
+  END IF;
 
-ALTER TABLE player_sessions
-    ALTER COLUMN expires_at
-        TYPE BIGINT USING (EXTRACT(EPOCH FROM expires_at) * 1e9)::BIGINT;
+  -- Session history floor columns (added in migration 000037; pre-existed at
+  -- gfo6 time and migrated atomically here so session_store.go::Set() does not
+  -- face mixed types).
+  --
+  -- sessions.location_arrived_at: DEFAULT NOW() → BIGINT default
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'sessions'
+               AND column_name = 'location_arrived_at' AND data_type = 'timestamp with time zone') THEN
+    EXECUTE 'ALTER TABLE sessions ALTER COLUMN location_arrived_at DROP DEFAULT';
+    EXECUTE 'ALTER TABLE sessions ALTER COLUMN location_arrived_at TYPE BIGINT USING (EXTRACT(EPOCH FROM location_arrived_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE sessions ALTER COLUMN location_arrived_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
+  END IF;
 
-ALTER TABLE player_sessions
-    ALTER COLUMN created_at DROP DEFAULT;
-ALTER TABLE player_sessions
-    ALTER COLUMN created_at
-        TYPE BIGINT USING (EXTRACT(EPOCH FROM created_at) * 1e9)::BIGINT;
-ALTER TABLE player_sessions
-    ALTER COLUMN created_at
-        SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT;
-
-ALTER TABLE player_sessions
-    ALTER COLUMN updated_at DROP DEFAULT;
-ALTER TABLE player_sessions
-    ALTER COLUMN updated_at
-        TYPE BIGINT USING (EXTRACT(EPOCH FROM updated_at) * 1e9)::BIGINT;
-ALTER TABLE player_sessions
-    ALTER COLUMN updated_at
-        SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT;
-
--- Session history floor columns (added in migration 000037). Migrated here
--- alongside the rest of the sessions table so the table converts atomically
--- and session_store.go::Set() does not have to handle a mixed-type interim state.
--- location_arrived_at has DEFAULT NOW() from migration 000037.
--- guest_character_created_at has DEFAULT 'epoch' from migration 000037.
-
-ALTER TABLE sessions
-    ALTER COLUMN location_arrived_at DROP DEFAULT;
-ALTER TABLE sessions
-    ALTER COLUMN location_arrived_at
-        TYPE BIGINT USING (EXTRACT(EPOCH FROM location_arrived_at) * 1e9)::BIGINT;
-ALTER TABLE sessions
-    ALTER COLUMN location_arrived_at
-        SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT;
-
-ALTER TABLE sessions
-    ALTER COLUMN guest_character_created_at DROP DEFAULT;
-ALTER TABLE sessions
-    ALTER COLUMN guest_character_created_at
-        TYPE BIGINT USING (EXTRACT(EPOCH FROM guest_character_created_at) * 1e9)::BIGINT;
-ALTER TABLE sessions
-    ALTER COLUMN guest_character_created_at
-        SET DEFAULT 0;
+  -- sessions.guest_character_created_at: DEFAULT 'epoch' → BIGINT 0 (epoch in ns)
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'sessions'
+               AND column_name = 'guest_character_created_at' AND data_type = 'timestamp with time zone') THEN
+    EXECUTE 'ALTER TABLE sessions ALTER COLUMN guest_character_created_at DROP DEFAULT';
+    EXECUTE 'ALTER TABLE sessions ALTER COLUMN guest_character_created_at TYPE BIGINT USING (EXTRACT(EPOCH FROM guest_character_created_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE sessions ALTER COLUMN guest_character_created_at SET DEFAULT 0';
+  END IF;
+END $$;
