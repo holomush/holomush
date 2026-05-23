@@ -407,3 +407,34 @@ def test_main_exits_1_when_validation_fails(monkeypatch):
     rc = bss.main([])
     assert rc == 1
     assert write_called["n"] == 0
+
+
+# ---------------------------------------------------------------------------
+# _ANSI_CSI — bracketed-paste / CSI escape stripping (holomush-9s4wv)
+# ---------------------------------------------------------------------------
+
+
+def test_ansi_csi_strips_bracketed_paste_start_marker():
+    # Terminals prefix the first pasted line with ESC[200~.
+    assert (
+        bss._ANSI_CSI.sub("", "\x1b[200~-----BEGIN OPENSSH PRIVATE KEY-----")
+        == "-----BEGIN OPENSSH PRIVATE KEY-----"
+    )
+
+
+def test_ansi_csi_strips_bracketed_paste_end_marker():
+    # Terminals suffix the last pasted line with ESC[201~.
+    assert (
+        bss._ANSI_CSI.sub("", "-----END OPENSSH PRIVATE KEY-----\x1b[201~")
+        == "-----END OPENSSH PRIVATE KEY-----"
+    )
+
+
+def test_ansi_csi_leaves_clean_sentinel_intact():
+    # A "." terminator wrapped in paste markers must reduce to "." so the
+    # multi-line reader still detects end-of-input.
+    assert bss._ANSI_CSI.sub("", "\x1b[200~.\x1b[201~") == "."
+
+
+def test_ansi_csi_leaves_plain_text_untouched():
+    assert bss._ANSI_CSI.sub("", "ssh-ed25519 AAAAC3Nz") == "ssh-ed25519 AAAAC3Nz"

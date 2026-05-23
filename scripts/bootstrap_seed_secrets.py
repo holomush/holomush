@@ -38,6 +38,7 @@ import argparse  # noqa: E402 — imports below require Python 3.12
 import getpass  # noqa: E402
 import json  # noqa: E402
 import os  # noqa: E402
+import re  # noqa: E402
 import subprocess  # noqa: E402
 import tempfile  # noqa: E402
 import urllib.error  # noqa: E402
@@ -146,6 +147,13 @@ def prompt_yes_no(prompt: str) -> bool:
     return ans == "y"
 
 
+# Matches ANSI CSI escape sequences, including the bracketed-paste markers
+# (ESC[200~ / ESC[201~) that terminals inject around pasted text. input()
+# captures these into the first/last pasted lines and corrupts multi-line
+# secrets such as a pasted private key, so strip them defensively.
+_ANSI_CSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+
+
 def collect_with_confirm(
     prompt: str,
     *,
@@ -166,6 +174,10 @@ def collect_with_confirm(
                     line = input()
                 except EOFError:
                     break
+                # Strip bracketed-paste / CSI escapes the terminal injects
+                # around pasted text before the sentinel check, so the closing
+                # ESC[201~ doesn't hide the terminating ".".
+                line = _ANSI_CSI.sub("", line)
                 if line == ".":
                     break
                 lines.append(line)
@@ -370,7 +382,10 @@ def validate_do_ssh_key_id(token: str, key_id: str) -> tuple[ValidationResult, s
 def validate_do_ssh_private_key(private_key: str, expected_fingerprint: str) -> ValidationResult:
     name = "DIGITALOCEAN_SSH_PRIVATE_KEY"
     with tempfile.NamedTemporaryFile(mode="w", suffix=".key", delete=False, encoding="utf-8") as tf:
-        tf.write(private_key)
+        # OpenSSH/PEM private keys must end with exactly one trailing newline;
+        # the collected value may have it stripped (file read .strip() or paste
+        # join). Normalize so ssh-keygen always sees a well-formed key file.
+        tf.write(private_key.rstrip("\n") + "\n")
         keyfile = tf.name
     try:
         os.chmod(keyfile, 0o600)
