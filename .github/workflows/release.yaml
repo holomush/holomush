@@ -95,6 +95,14 @@ jobs:
       - name: Install Task
         uses: ./.github/actions/install-task
 
+      # web:embed → web:build → web:generate runs `buf generate` to produce
+      # the ConnectRPC TS clients before the SvelteKit build. buf is not a
+      # `go tool` binary, so it needs its own install here (mirrors ci.yaml).
+      - name: Install buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build web bundle into internal/web/dist/
         run: task web:embed
 
