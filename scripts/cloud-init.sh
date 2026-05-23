@@ -64,6 +64,14 @@ CLOUDFLARE_TUNNEL_TOKEN="${CLOUDFLARE_TUNNEL_TOKEN:-}"
 # Caddy-mode only.
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
 
+# Sentry error/trace reporting (backend: core + gateway). Empty DSN disables
+# Sentry entirely. Defaults: environment "prod", release tracks the image tag,
+# 10% trace sampling.
+SENTRY_DSN="${SENTRY_DSN:-}"
+SENTRY_ENVIRONMENT="${SENTRY_ENVIRONMENT:-prod}"
+SENTRY_RELEASE="${SENTRY_RELEASE:-${HOLOMUSH_VERSION}}"
+SENTRY_TRACES_SAMPLE_RATE="${SENTRY_TRACES_SAMPLE_RATE:-0.1}"
+
 # When set, the script auto-starts compose after .env is written.
 HOLOMUSH_DOMAIN="${HOLOMUSH_DOMAIN:-}"
 
@@ -206,6 +214,17 @@ elif [ -n "${BACKUP_S3_BUCKET}" ] \
   || [ -n "${BACKUP_S3_ACCESS_KEY}" ] \
   || [ -n "${BACKUP_S3_SECRET_KEY}" ]; then
   echo "WARNING: backups require BACKUP_S3_BUCKET, KOPIA_PASSWORD, BACKUP_S3_ACCESS_KEY, and BACKUP_S3_SECRET_KEY — backups disabled" >&2
+fi
+
+if [ -n "${SENTRY_DSN}" ]; then
+  cat >> "${HOLOMUSH_DIR}/.env" <<EOF
+
+# Sentry error/trace reporting (core + gateway). Empty DSN disables it.
+SENTRY_DSN=${SENTRY_DSN}
+SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT}
+SENTRY_RELEASE=${SENTRY_RELEASE}
+SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE}
+EOF
 fi
 
 # Data paths (commented defaults for reference)

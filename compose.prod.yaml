@@ -62,6 +62,12 @@ services:
     environment:
       DATABASE_URL: postgres://holomush:${POSTGRES_PASSWORD}@postgres:5432/holomush?sslmode=require
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}
+      # Error/trace reporting. Empty SENTRY_DSN disables Sentry (no-op), so
+      # self-hosters without Sentry are unaffected.
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-}
     volumes:
       - ${CONFIG_DIR:-/opt/holomush/config}/certs:/home/holomush/.config/holomush/certs
     networks:
@@ -87,6 +93,11 @@ services:
       - --log-format=json
     environment:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}
+      # Gateway reads SENTRY_DSN (cmd/holomush/gateway.go); empty = disabled.
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-}
     volumes:
       - ${CONFIG_DIR:-/opt/holomush/config}/certs:/home/holomush/.config/holomush/certs:ro
     networks:
