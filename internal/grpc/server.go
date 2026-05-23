@@ -996,10 +996,10 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	// This is the latency-budget boundary for holomush-87qu: time from
 	// Subscribe RPC entry to this Send is what the user perceives as the
 	// 'syncing' window on the server side.
-	subscribeSpan.AddEvent("subscribe.replay_complete_sent")
 	if err := stream.Send(replayCompleteFrame()); err != nil {
 		return oops.With("session_id", req.SessionId).Wrap(err)
 	}
+	subscribeSpan.AddEvent("subscribe.replay_complete_sent")
 
 	return s.runSubscribeLoop(ctx, info, busStream, filterSet, stream, lf, ctrlCh)
 }

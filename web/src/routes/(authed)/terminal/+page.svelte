@@ -387,6 +387,13 @@
 
     // Fetch presence snapshot in parallel with backfill (T11 of holomush-5b2j).
     // Failures are swallowed — empty presence is the safe fallback.
+    //
+    // snapshotWinner gates the race-arm event emission so only the
+    // arm that fires first records its event on the span. Without
+    // this, a timeout-then-late-fetch sequence would emit both
+    // `snapshot.timeout` and `snapshot.received`, making winner
+    // disambiguation impossible in Tempo (87qu code-review finding).
+    let snapshotWinner: 'received' | 'timeout' | null = null;
     const snapshotFetchPromise = client
       .webListFocusPresence({ sessionId }, { signal: localController.signal })
       .then((resp) => {
@@ -395,7 +402,10 @@
         // webListFocusPresence call, the timeout arm will fire after
         // SNAPSHOT_TIMEOUT_MS and Tempo will show snapshot.timeout
         // instead of snapshot.received.
-        localSpan.addEvent('snapshot.received');
+        if (snapshotWinner === null) {
+          snapshotWinner = 'received';
+          localSpan.addEvent('snapshot.received');
+        }
         return resp;
       })
       .catch((err: unknown) => {
@@ -422,7 +432,10 @@
           // 87qu: paired with snapshot.received above to disambiguate
           // race-arm winners. Seeing this event in a trace means
           // webListFocusPresence took >SNAPSHOT_TIMEOUT_MS to respond.
-          localSpan.addEvent('snapshot.timeout');
+          if (snapshotWinner === null) {
+            snapshotWinner = 'timeout';
+            localSpan.addEvent('snapshot.timeout');
+          }
           console.warn('[presence] snapshot timed out; seeding empty');
           resolve({ entries: [] });
         }, SNAPSHOT_TIMEOUT_MS);
@@ -507,8 +520,13 @@
       // 87qu: time-from-hydrate-start to this event tells us how long
       // the WebListSessionStreams + WebQueryStreamHistory fan-out took
       // (the individual RPCs are auto-spanned by FetchInstrumentation;
-      // this aggregate is the JS-side completion signal).
-      localSpan.addEvent('backfill.done');
+      // this aggregate is the JS-side completion signal). Guarded by
+      // the same stale-generation check that gates the surrounding
+      // presence.seed and liveBuffer drain — a stale invocation's
+      // backfill.done would skew the live trace's latency baseline.
+      if (generation === streamGeneration && !localController.signal.aborted) {
+        localSpan.addEvent('backfill.done');
+      }
       backfillDone = true;
       maybeMarkReady();
       if (generation === streamGeneration && !localController.signal.aborted) {
