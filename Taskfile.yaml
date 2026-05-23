@@ -108,6 +108,9 @@ tasks:
       - task: lint:docs-symmetry
       - task: lint:docs-paths-sync
       - task: lint:adr
+      - task: lint:no-timestamptz
+      - task: lint:no-microsecond-truncate
+      - task: lint:no-unixnano-in-repos
 
   lint:adr:
     desc: "Run docs/adr/ health check (adr-doctor.sh)"
