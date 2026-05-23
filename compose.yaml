@@ -33,6 +33,13 @@ services:
       # Set unconditionally — when the observability profile is inactive, the OTel SDK
       # retries silently with a no-op error handler (see internal/telemetry/provider.go).
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      # Sentry trial integration (holomush-0wun). Disabled by default; set
+      # SENTRY_DSN in repo-root `.env` (gitignored — compose auto-reads) to
+      # enable. See site/docs/operating/sentry.md.
+      SENTRY_DSN: ${SENTRY_DSN-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT-dev-local}
+      SENTRY_RELEASE: ${SENTRY_RELEASE-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE-1.0}
     volumes:
       - certs:/home/holomush/.config/holomush/certs
     networks:
@@ -53,6 +60,10 @@ services:
     command: ["gateway", "--log-format", "text", "--core-addr", "core:9000", "--metrics-addr", "0.0.0.0:9101"]
     environment:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      SENTRY_DSN: ${SENTRY_DSN-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT-dev-local}
+      SENTRY_RELEASE: ${SENTRY_RELEASE-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE-1.0}
     volumes:
       - certs:/home/holomush/.config/holomush/certs:ro
     networks:

@@ -436,6 +436,10 @@ tasks:
       # localhost; collector config allows CORS from http://localhost:*).
       # Use the HTTP endpoint, NOT 4317 (that's gRPC, browser can't use it).
       # Pair with `task dev:obs` to start the otel-collector + Jaeger.
+      #
+      # PUBLIC_SENTRY_DSN passes through from the shell when set (holomush-0wun).
+      # Sentry's browser SDK is dynamic-imported behind that gate, so unset =
+      # zero bundle cost. See site/docs/operating/sentry.md.
       - PUBLIC_OTEL_ENDPOINT=http://localhost:4318 pnpm dev
 
   # ──────────────────────────────────────────

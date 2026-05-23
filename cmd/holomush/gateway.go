@@ -122,6 +122,10 @@ from telnet and web clients, forwarding commands to the core process.`,
 // runGatewayWithDeps starts the gateway process with injectable dependencies.
 // If deps is nil, default implementations are used.
 func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command, deps *GatewayDeps) error {
+	// Stamp the bootstrap start for the process.startup span emitted at
+	// the ready point below.
+	bootStart := time.Now()
+
 	if deps == nil {
 		deps = &GatewayDeps{}
 	}
@@ -292,6 +296,10 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		Handler:     webHandler,
 		WebDir:      cfg.WebDir,
 		CORSOrigins: cfg.CORSOrigins,
+		// Forward the configured DSN so the web server can register the
+		// /api/sentry-relay tunnel endpoint. Empty = no relay (and no
+		// open-proxy risk).
+		SentryDSN: os.Getenv("SENTRY_DSN"),
 	})
 	if err != nil {
 		return oops.With("operation", "create web server").Wrap(err)
@@ -333,6 +341,8 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		PreAuthTimeout:  cfg.TelnetPreAuthTimeout,
 	}
 	go runTelnetAcceptLoop(ctx, telnetListener, grpcClient, cancel, slots, limits)
+
+	telemetry.EmitStartupSpan(ctx, "holomush-gateway", version, bootStart)
 
 	cmd.Println("Gateway process started")
 	slog.Info(
