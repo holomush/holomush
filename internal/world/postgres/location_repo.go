@@ -100,8 +100,8 @@ func (r *LocationRepository) Delete(ctx context.Context, id ulid.ULID) error {
 func (r *LocationRepository) ListByType(ctx context.Context, locType world.LocationType) ([]*world.Location, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, type, shadows_id, name, description, owner_id, replay_policy, created_at, archived_at
-		FROM locations WHERE type = $1 ORDER BY created_at DESC
-	`, string(locType))
+		FROM locations WHERE type = $1 ORDER BY created_at DESC, id DESC
+	`, string(locType)) // tiebreaker for sub-ns insert collisions across dual-clock writers (holomush-gfo6.33)
 	if err != nil {
 		return nil, oops.With("operation", "list locations by type").With("type", string(locType)).Wrap(err)
 	}
@@ -114,8 +114,8 @@ func (r *LocationRepository) ListByType(ctx context.Context, locType world.Locat
 func (r *LocationRepository) GetShadowedBy(ctx context.Context, id ulid.ULID) ([]*world.Location, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, type, shadows_id, name, description, owner_id, replay_policy, created_at, archived_at
-		FROM locations WHERE shadows_id = $1 ORDER BY created_at DESC
-	`, id.String())
+		FROM locations WHERE shadows_id = $1 ORDER BY created_at DESC, id DESC
+	`, id.String()) // tiebreaker for sub-ns insert collisions across dual-clock writers (holomush-gfo6.33)
 	if err != nil {
 		return nil, oops.With("operation", "get shadowed by").With("id", id.String()).Wrap(err)
 	}
