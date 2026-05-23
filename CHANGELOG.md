@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.9](https://github.com/holomush/holomush/compare/v0.1.8...v0.1.9) (2026-05-23)
+
+
+### Bug Fixes
+
+* **sandbox:** DNS payload via printf — Python dict NameError on proxied:true (.25) ([#4224](https://github.com/holomush/holomush/issues/4224)) ([8937c9e](https://github.com/holomush/holomush/commit/8937c9e2a3de393a85fc00bc51d36b763f308385))
+
 ## [0.1.8](https://github.com/holomush/holomush/compare/v0.1.7...v0.1.8) (2026-05-23)
 
 
