@@ -375,7 +375,7 @@ jobs:
           echo "::add-mask::${PG_PASSWORD}"
           echo "::add-mask::${KOPIA_PASSWORD}"
           echo "::add-mask::${BACKUP_S3_SECRET_KEY_VAL}"
-          [ -n "${SENTRY_DSN}" ] && echo "::add-mask::${SENTRY_DSN}" || true
+          if [ -n "${SENTRY_DSN}" ]; then echo "::add-mask::${SENTRY_DSN}"; fi
 
           # HOLOMUSH_REF and HOLOMUSH_VERSION arrive from the `image` step's
           # outputs, where they were also probed against GHCR before any paid
@@ -599,13 +599,20 @@ jobs:
           ssh-keyscan -H "${DROPLET_IP}" >> ~/.ssh/known_hosts 2>/dev/null
 
           echo "Waiting for cloud-init to complete..."
-          if ! ssh -o StrictHostKeyChecking=no "root@${DROPLET_IP}" \
-                 "cloud-init status --wait --long"; then
-            # On failure, surface the *user-data script* output (where part-002
-            # errors actually live) plus modern systemd unit logs. The legacy
-            # unit names cloud-init-local/cloud-init don't exist on Ubuntu 24.04;
-            # use the ".target" form so journalctl picks up cloud-config,
-            # cloud-final, etc., regardless of which one logged the error.
+          # `cloud-init status --wait` exit codes: 0 = done, 2 = done WITH
+          # recoverable errors (e.g. benign cloud-config schema nits → status
+          # "degraded done"), 1 = genuine error/not-run. Treat 0 and 2 as
+          # success — the user-data script (part-002) completing is what matters;
+          # a degraded status from a harmless schema warning must not fail the
+          # whole bootstrap (and skip DNS + reachability).
+          set +e
+          ssh -o StrictHostKeyChecking=no "root@${DROPLET_IP}" \
+            "cloud-init status --wait --long"
+          ci_rc=$?
+          set -e
+          if [ "${ci_rc}" -ne 0 ] && [ "${ci_rc}" -ne 2 ]; then
+            # On genuine failure, surface the *user-data script* output (where
+            # part-002 errors actually live) plus modern systemd unit logs.
             echo "::group::cloud-init-output.log (last 200 lines)"
             ssh -o StrictHostKeyChecking=no "root@${DROPLET_IP}" \
               "tail -n 200 /var/log/cloud-init-output.log || true"
@@ -621,7 +628,10 @@ jobs:
             ssh -o StrictHostKeyChecking=no "root@${DROPLET_IP}" "cloud-init status --long || true"
             exit 1
           fi
-          echo "::notice::cloud-init completed successfully"
+          if [ "${ci_rc}" -eq 2 ]; then
+            echo "::warning::cloud-init finished with recoverable errors (degraded done) — continuing; the user-data script completed."
+          fi
+          echo "::notice::cloud-init completed successfully (status: done)"
 
       # Step 16: Create Cloudflare DNS records
       - name: Create Cloudflare DNS records
