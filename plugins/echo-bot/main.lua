@@ -36,7 +36,7 @@ function on_event(event)
     -- Return echo event
     return {
         {
-            stream = event.stream,
+            subject = event.stream,
             type = "core-communication:say",
             payload = '{"message":"Echo: ' .. msg .. '"}'
         }

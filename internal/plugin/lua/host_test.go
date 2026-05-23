@@ -75,7 +75,7 @@ function on_event(event)
     if event.type == "say" then
         return {
             {
-                stream = event.stream,
+                subject = event.stream,
                 type = "say",
                 payload = '{"message":"Echo: ' .. event.payload .. '"}'
             }
@@ -143,7 +143,7 @@ func TestLuaHostDeliverEventReadsSensitiveFromReturnedTable(t *testing.T) {
 function on_event(event)
     return {
         {
-            stream = event.stream,
+            subject = event.stream,
             type = "core-test:secret",
             payload = '{"msg":"private"}',
             sensitive = true
@@ -195,7 +195,7 @@ func TestLuaHostDeliverEventDefaultsSensitiveFalseFromReturnedTable(t *testing.T
 function on_event(event)
     return {
         {
-            stream = event.stream,
+            subject = event.stream,
             type = "core-test:public",
             payload = '{"msg":"public"}'
         }
@@ -254,7 +254,7 @@ func TestLuaHostDeliverEventRejectsNonBoolSensitive(t *testing.T) {
 function on_event(event)
     return {
         {
-            stream = event.stream,
+            subject = event.stream,
             type = "core-test:misshapen",
             payload = '{}',
             sensitive = "true"
@@ -502,7 +502,7 @@ func TestLuaHost_DeliverEvent_ActorKinds(t *testing.T) {
 function on_event(event)
     return {
         {
-            stream = "test:1",
+            subject = "test:1",
             type = "echo",
             payload = event.actor_kind
         }
@@ -658,14 +658,14 @@ func TestLuaHostDeliverEventMalformedEmitEvents(t *testing.T) {
 function on_event(event)
     return {
         {
-            stream = "valid:1",
+            subject = "valid:1",
             type = "test",
             payload = "valid"
         },
         "not a table",  -- Should be skipped
         123,            -- Should be skipped
         {
-            stream = "valid:2",
+            subject = "valid:2",
             type = "test",
             payload = "also valid"
         }
@@ -730,7 +730,7 @@ func TestLuaHostDeliverEventAllFields(t *testing.T) {
 function on_event(event)
     return {
         {
-            stream = "test:1",
+            subject = "test:1",
             type = "echo",
             payload = event.id .. "|" .. event.stream .. "|" .. event.type .. "|" ..
                       tostring(event.timestamp) .. "|" .. event.actor_kind .. "|" .. event.actor_id
@@ -778,7 +778,7 @@ function on_event(event)
     local id = holomush.new_request_id()
     holomush.log("info", "Got event: " .. event.type)
     return {{
-        stream = event.stream,
+        subject = event.stream,
         type = "say",
         payload = '{"request_id":"' .. id .. '"}'
     }}
@@ -837,7 +837,7 @@ func TestLuaHostDeliverEventOnCommandCommandEvent(t *testing.T) {
 function on_command(ctx)
     return {
         {
-            stream = "location:" .. ctx.location_id,
+            subject = "location:" .. ctx.location_id,
             type = "echo",
             payload = ctx.command .. "|" .. ctx.args .. "|" .. ctx.invoked_as .. "|" ..
                       ctx.character_name .. "|" .. ctx.character_id .. "|" ..
@@ -890,7 +890,7 @@ function on_event(event)
     if event.type == "command" then
         return {
             {
-                stream = "fallback:1",
+                subject = "fallback:1",
                 type = "echo",
                 payload = "fell_back_to_on_event"
             }
@@ -936,7 +936,7 @@ func TestLuaHostDeliverEventOnCommandNonCommandEventUsesOnEvent(t *testing.T) {
 function on_command(ctx)
     return {
         {
-            stream = "on_command:1",
+            subject = "on_command:1",
             type = "echo",
             payload = "on_command_called"
         }
@@ -946,7 +946,7 @@ end
 function on_event(event)
     return {
         {
-            stream = "on_event:1",
+            subject = "on_event:1",
             type = "echo",
             payload = "on_event_called"
         }
@@ -992,7 +992,7 @@ function on_command(ctx)
     end
     return {
         {
-            stream = "test:1",
+            subject = "test:1",
             type = "echo",
             payload = "args=" .. args_value
         }
@@ -1034,7 +1034,7 @@ function on_command(ctx)
     -- Even with invalid payload, ctx should have empty strings
     return {
         {
-            stream = "test:1",
+            subject = "test:1",
             type = "echo",
             payload = "name=" .. (ctx.command or "nil")
         }
@@ -1079,7 +1079,7 @@ function on_event(event)
         "string entry",
         123,
         {
-            stream = "valid:1",
+            subject = "valid:1",
             type = "test",
             payload = "valid"
         }
@@ -1188,11 +1188,11 @@ func TestLuaHostDeliverEventMalformedEmitEventsWarnsOnMissingType(t *testing.T) 
 function on_event(event)
     return {
         {
-            stream = "test:1",
+            subject = "test:1",
             payload = "missing type"
         },
         {
-            stream = "valid:1",
+            subject = "valid:1",
             type = "test",
             payload = "valid"
         }
@@ -1249,12 +1249,12 @@ function on_event(event)
             payload = "missing stream"
         },
         {
-            stream = "valid:1",
+            subject = "valid:1",
             type = "test",
             payload = "valid"
         },
         {
-            stream = "test:2",
+            subject = "test:2",
             -- missing type
             payload = "missing type"
         }
@@ -1349,7 +1349,7 @@ function on_command(ctx)
         output = "You say: " .. ctx.args,
         events = {
             {
-                stream = "location:" .. ctx.location_id,
+                subject = "location:" .. ctx.location_id,
                 type = "say",
                 payload = ctx.args,
             },
