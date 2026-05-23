@@ -90,7 +90,7 @@ know they exist; neither has code yet.
 
 | Use          | Epic           | Frontier bead                                                | State                                    |
 | ------------ | -------------- | ------------------------------------------------------------ | ---------------------------------------- |
-| **Scenes**   | `holomush-5rh` | `5rh.13` Phase 4 (IC/OOC event emission + pose order)        | Active frontier — immediately actionable |
+| **Scenes**   | `holomush-5rh` | `5rh.15` Phase 6 (Logs + vote + hard privacy boundary)       | Active frontier — Phases 4 + 5 shipped   |
 | **Channels** | `holomush-0sc` | `0sc.12` Channel plugin rework on plugin ABAC                | In progress                              |
 | **Forums**   | `holomush-djj` | (undesigned)                                                 | Needs brainstorm + spec                  |
 | **Discord**  | `holomush-aqq` | `aqq.5` Discord OAuth linking (`dwk.7` overlap closed today) | Blocked on Channels + OAuth substrate    |
@@ -101,6 +101,12 @@ know they exist; neither has code yet.
    implementation; getting IC emission + pose order + vote machine right
    exercises every substrate layer end-to-end. Channels and Forums will
    re-use the patterns. Doing scenes first reduces redesign risk later.
+   **Phase 4 shipped** (`5rh.13`, PR #4153, 2026-05-21) — IC/OOC event
+   emission + pose order + crypto.emits adoption. **Phase 5 shipped**
+   (`5rh.14`, PR #4191, 2026-05-23) — per-connection focus model + multi-
+   connection visibility + PluginHostService extension (3 new RPCs:
+   `SetConnectionFocus`, `AutoFocusOnJoin`, `IsAnyConnFocused`). Phase 6
+   (`5rh.15`) is now the frontier.
 2. **Channels in parallel where unblocked** (`0sc.12`). The channel plugin
    rework is already in-flight on the plugin ABAC substrate — keep that
    going. Channel-specific features that depend on scenes patterns (e.g.,
@@ -126,10 +132,11 @@ know they exist; neither has code yet.
 
 #### Risks
 
-- **Phase 4 emission is the riskiest piece.** `crypto.emits: []` becomes
-  `[scene_ic, scene_ooc]` — must go through `crypto-reviewer` gate. Wrong
-  sensitivity classification at this step has compounding consequences
-  (see `mjy3`).
+- **Phase 4 emission is the riskiest piece.** ~~`crypto.emits: []` becomes
+  `[scene_ic, scene_ooc]` — must go through `crypto-reviewer` gate.~~
+  **Resolved**: Phase 4 shipped (`5rh.13`, PR #4153) with crypto-reviewer
+  READY; sensitivity classification correct. The `mjy3` follow-up remains
+  open for `object_examine` overlap rendering.
 - **Forums has no design yet.** If we let Channels ship before Forums is
   designed, the channel API may not anticipate forum needs. Mitigation:
   start the Forums brainstorm in parallel even if we don't execute it
@@ -137,6 +144,12 @@ know they exist; neither has code yet.
 - **Web portal scope creep**: each social surface wants a web view; left
   unchecked this becomes a multi-month frontend project. Sequence web
   views _after_ the backend surface stabilizes per use.
+- **Phase 5 multi-tab routing depends on web-client cooperation**: the
+  `STREAM_OPENED` ControlFrame + `SendCommandRequest.connection_id`
+  protocol added in `5rh.14` only routes per-connection commands
+  correctly when the client passes the connection_id back. The SvelteKit
+  terminal does this; future clients must too. Documented in
+  `site/docs/extending/binary-plugins.md`.
 
 ## Completed themes
 
