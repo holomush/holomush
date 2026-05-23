@@ -15,6 +15,7 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
@@ -23,8 +24,8 @@ func seedDEKRow(t *testing.T, pool *pgxpool.Pool, id int64, ctxType, ctxID strin
 	t.Helper()
 	_, err := pool.Exec(context.Background(),
 		`INSERT INTO crypto_keys (id, context_type, context_id, version, wrapped_dek, wrap_provider, wrap_key_id, participants, created_at)
-         VALUES ($1, $2, $3, $4, '\x00', 'test', 'test', '[]'::jsonb, now())`,
-		id, ctxType, ctxID, version)
+         VALUES ($1, $2, $3, $4, '\x00', 'test', 'test', '[]'::jsonb, $5)`,
+		id, ctxType, ctxID, version, pgnanos.From(time.Now()))
 	Expect(err).NotTo(HaveOccurred())
 }
 

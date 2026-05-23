@@ -41,6 +41,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/aad"
 	"github.com/holomush/holomush/internal/eventbus/history/source"
 	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/internal/pgnanos"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
 
@@ -60,7 +61,11 @@ func (d *directColdLookup) LookupByID(ctx context.Context, id eventbus.EventID) 
 		codecName  string
 		dekRef     *int64
 		dekVersion *uint32
-		ts         time.Time
+		// events_audit.timestamp is BIGINT-ns post-gfo6 (INV-TS-1);
+		// scan target must be pgnanos.Time. ts is unused downstream
+		// (env is built from envelope bytes), so this is a position
+		// placeholder for Scan's column-count alignment.
+		ts pgnanos.Time
 	)
 	err := d.pool.QueryRow(
 		ctx,
@@ -131,11 +136,13 @@ func insertEncryptedAuditRow(
 		return ulid.ULID{}, err
 	}
 
+	// timestamp is BIGINT-ns post-gfo6 (INV-TS-1).
 	_, execErr := pool.Exec(ctx, `
 		INSERT INTO events_audit
 		  (id, subject, type, timestamp, actor_kind, envelope, schema_ver,
 		   codec, js_seq, rendering, dek_ref, dek_version)
-		VALUES ($1, 'events.g1.scene.01ABC.sensitive', 'test.sensitive', now(),
+		VALUES ($1, 'events.g1.scene.01ABC.sensitive', 'test.sensitive',
+		        (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT,
 		        'system', $2, 1, $3, $4, '{}'::jsonb, $5, $6)
 	`, id[:], envelopeBytes, string(codec.NameXChaCha20v1),
 		int64(time.Now().UnixNano()),

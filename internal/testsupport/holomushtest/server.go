@@ -550,10 +550,12 @@ func (p *testAuditPublisher) PublishAudit(
 	payload []byte,
 ) (ulid.ULID, error) {
 	id := ulid.Make()
+	// events_audit.timestamp is BIGINT-ns post-gfo6 (INV-TS-1); use the SQL-side
+	// BIGINT-ns expression rather than TIMESTAMPTZ now().
 	_, err := p.pool.Exec(ctx,
 		`INSERT INTO events_audit
 		   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
-		 VALUES ($1, $2, $3, now(), 'system', $4, 1, 'identity', 0, '{}'::jsonb)
+		 VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, 'system', $4, 1, 'identity', 0, '{}'::jsonb)
 		 ON CONFLICT (id) DO NOTHING`,
 		id[:], subject, evType, payload)
 	return id, err
@@ -767,10 +769,12 @@ func (p *directSQLPublisher) Publish(ctx context.Context, ev eventbus.Event) err
 	// Store ev.Payload (raw JSON body) directly as the envelope column.
 	// The policy chain verifier's decodePolicyPayloadJSON falls back to raw JSON
 	// when proto.Unmarshal fails, so this path is correct for test usage.
+	// events_audit.timestamp is BIGINT-ns post-gfo6 (INV-TS-1); SQL-side
+	// expression mirrors the migration's DEFAULT.
 	_, err := p.pool.Exec(ctx,
 		`INSERT INTO events_audit
 		   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
-		 VALUES (gen_random_bytes(16), $1, $2, now(), 'system', $3, 1, 'identity',
+		 VALUES (gen_random_bytes(16), $1, $2, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, 'system', $3, 1, 'identity',
 		         (SELECT COALESCE(MAX(js_seq), 0) + 1 FROM events_audit), '{}'::jsonb)`,
 		string(ev.Subject), string(ev.Type), ev.Payload)
 	return err

@@ -102,7 +102,11 @@ func TestPhase7InvariantsHaveNamedTests(t *testing.T) {
 		// that file for invariant traceability.
 		{"INV-P7-13", "TestBinaryPlugin"},
 		{"INV-P7-15", "TestFenceRefusesUnknownDekRef"},
-		{"INV-P7-16", "TestRoundTripProducesByteEqualAAD"},
+		// INV-P7-16 was superseded by INV-TS-5 (ADR holomush-f5h0); the
+		// carrier test was renamed from TestRoundTripProducesByteEqualAAD
+		// to TestRoundTripPreservesAADWithSubMicrosecondNanos as part of
+		// gfo6 Phase 1 (ns-precise timestamps).
+		{"INV-P7-16", "TestRoundTripPreservesAADWithSubMicrosecondNanos"},
 	}
 
 	repoRoot := findRepoRoot(t)

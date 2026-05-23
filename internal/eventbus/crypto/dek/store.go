@@ -15,6 +15,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/eventbus/codec"
+	"github.com/holomush/holomush/internal/pgnanos"
 )
 
 // ContextID names a DEK's social unit (scene, DM, channel, character,
@@ -55,8 +56,8 @@ type row struct {
 	WrapProvider string
 	WrapKeyID    string
 	Participants []Participant
-	CreatedAt    time.Time
-	RotatedAt    *time.Time
+	CreatedAt    pgnanos.Time
+	RotatedAt    *pgnanos.Time
 }
 
 // Store persists wrapped DEKs in the crypto_keys table. The provider
@@ -282,10 +283,10 @@ func (s *Store) markRotated(ctx context.Context, keyID codec.KeyID, version uint
 	tag, err := s.pool.Exec(
 		ctx, `
 		UPDATE crypto_keys
-		   SET rotated_at = NOW(), superseded_by = $3
+		   SET rotated_at = $4, superseded_by = $3
 		 WHERE id = $1 AND version = $2 AND rotated_at IS NULL AND destroyed_at IS NULL`,
 		//nolint:gosec // G115: keyID is a DB BIGSERIAL value; positive serial ids fit in int64
-		int64(keyID), version, supersededBy,
+		int64(keyID), version, supersededBy, pgnanos.From(time.Now()),
 	)
 	if err != nil {
 		return oops.Code("DEK_MARK_ROTATED_FAILED").
@@ -307,10 +308,10 @@ func (s *Store) markDestroyed(ctx context.Context, keyID codec.KeyID, version ui
 	_, err := s.pool.Exec(
 		ctx, `
 		UPDATE crypto_keys
-		   SET destroyed_at = NOW()
+		   SET destroyed_at = $3
 		 WHERE id = $1 AND version = $2 AND destroyed_at IS NULL`,
 		//nolint:gosec // G115: keyID is a DB BIGSERIAL value; positive serial ids fit in int64
-		int64(keyID), version,
+		int64(keyID), version, pgnanos.From(time.Now()),
 	)
 	if err != nil {
 		return oops.Code("DEK_MARK_DESTROYED_FAILED").
@@ -328,9 +329,9 @@ func (s *Store) markDestroyedByPK(ctx context.Context, dekID int64) error {
 	_, err := s.pool.Exec(
 		ctx, `
 		UPDATE crypto_keys
-		   SET destroyed_at = NOW()
+		   SET destroyed_at = $2
 		 WHERE id = $1 AND destroyed_at IS NULL`,
-		dekID,
+		dekID, pgnanos.From(time.Now()),
 	)
 	if err != nil {
 		return oops.Code("DEK_MARK_DESTROYED_FAILED").
@@ -427,10 +428,10 @@ func (s *Store) insertRekeyed(ctx context.Context, old row, wrapped []byte, wrap
 	err = s.pool.QueryRow(ctx, `
         INSERT INTO crypto_keys (context_type, context_id, version, wrapped_dek,
                                   wrap_provider, wrap_key_id, participants, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, now())
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
         RETURNING id
     `, old.ContextType, old.ContextID, old.Version+1, wrapped,
-		old.WrapProvider /* same provider */, wrapKeyID, participantsJSON).Scan(&id)
+		old.WrapProvider /* same provider */, wrapKeyID, participantsJSON, pgnanos.From(time.Now())).Scan(&id)
 	if err != nil {
 		return 0, oops.Code("DEK_REKEY_INSERT_NEW_ROW_FAILED").Wrap(err)
 	}
@@ -472,7 +473,7 @@ func (s *Store) ResolveIntegrity(ctx context.Context) error {
 		_, err := s.pool.Exec(
 			ctx, `
 			UPDATE crypto_keys
-			   SET rotated_at = NOW()
+			   SET rotated_at = $3
 			 WHERE context_type = $1 AND context_id = $2
 			   AND rotated_at IS NULL AND destroyed_at IS NULL
 			   AND version < (
@@ -480,7 +481,7 @@ func (s *Store) ResolveIntegrity(ctx context.Context) error {
 			        WHERE context_type = $1 AND context_id = $2
 			          AND rotated_at IS NULL AND destroyed_at IS NULL
 			   )`,
-			ck.ctxType, ck.ctxID,
+			ck.ctxType, ck.ctxID, pgnanos.From(time.Now()),
 		)
 		if err != nil {
 			return oops.Code("DEK_INTEGRITY_RESOLVE_FAILED").
@@ -524,7 +525,7 @@ type Row struct {
 func (s *Store) SelectAnyByID(ctx context.Context, keyID codec.KeyID, version uint32) (Row, error) {
 	var r row
 	var participantsJSON []byte
-	var destroyedAt *time.Time
+	var destroyedAt *pgnanos.Time
 	err := s.pool.QueryRow(ctx, `
         SELECT id, context_type, context_id, version, wrapped_dek,
                wrap_provider, wrap_key_id, participants, created_at, rotated_at, destroyed_at
@@ -542,6 +543,16 @@ func (s *Store) SelectAnyByID(ctx context.Context, keyID codec.KeyID, version ui
 	if err := json.Unmarshal(participantsJSON, &r.Participants); err != nil {
 		return Row{}, oops.Code("DEK_PARTICIPANTS_UNMARSHAL_FAILED").Wrap(err)
 	}
+	var rotatedAt *time.Time
+	if r.RotatedAt != nil {
+		t := r.RotatedAt.Time()
+		rotatedAt = &t
+	}
+	var destroyedAtTime *time.Time
+	if destroyedAt != nil {
+		t := destroyedAt.Time()
+		destroyedAtTime = &t
+	}
 	return Row{
 		ID:           r.ID,
 		ContextType:  r.ContextType,
@@ -551,9 +562,9 @@ func (s *Store) SelectAnyByID(ctx context.Context, keyID codec.KeyID, version ui
 		WrapProvider: r.WrapProvider,
 		WrapKeyID:    r.WrapKeyID,
 		Participants: r.Participants,
-		CreatedAt:    r.CreatedAt,
-		RotatedAt:    r.RotatedAt,
-		DestroyedAt:  destroyedAt,
+		CreatedAt:    r.CreatedAt.Time(),
+		RotatedAt:    rotatedAt,
+		DestroyedAt:  destroyedAtTime,
 	}, nil
 }
 

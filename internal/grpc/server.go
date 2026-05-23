@@ -1085,20 +1085,10 @@ func (s *CoreServer) dispatchDelivery(
 			"session_id", info.ID, "event_id", event.ID.String(), "error", getErr)
 		currentInfo = info
 	}
-	// Truncate the floor to microsecond precision to match the event timestamp
-	// resolution. eventbus/publisher.go::Publish truncates event.Timestamp to
-	// microseconds (the canonical system-wide event timestamp resolution; see
-	// INV-P7-16 / holomush-1r0v.3). LocationArrivedAt / GuestCharacterCreatedAt
-	// / FocusMembership.JoinedAt are populated via time.Now() and retain
-	// nanosecond precision. Without this truncation, an event published within
-	// the same microsecond as session creation has a truncated timestamp that
-	// is strictly LESS than the un-truncated floor — and the filter would drop
-	// the session's own arrive event (and any other event emitted in the same
-	// µs as session-create / move / focus-join). Truncating the floor to the
-	// event's resolution closes that off-by-precision gap while preserving the
-	// privacy invariant at µs granularity, which is the canonical event time
-	// resolution.
-	floor := streamScopeFloor(currentInfo, legacyStream).Truncate(time.Microsecond)
+	// Floor uses ns precision and >= semantics (INV-TS-6 / INV-TS-7,
+	// gfo6 epic): publisher no longer truncates timestamps, so the
+	// scope-floor comparison runs at full time.Now() resolution.
+	floor := streamScopeFloor(currentInfo, legacyStream)
 	if !floor.IsZero() && event.Timestamp.Before(floor) {
 		slog.DebugContext(ctx, "subscribe: filter-at-delivery dropped event below scope floor",
 			"session_id", info.ID, "event_id", event.ID.String(),

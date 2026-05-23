@@ -66,11 +66,16 @@ func Compute(
 
 	entries := make([]PoseOrderEntry, len(sorted))
 	for i, p := range sorted {
+		var lastPosedAt *time.Time
+		if p.LastPoseAt != nil {
+			t := p.LastPoseAt.Time()
+			lastPosedAt = &t
+		}
 		entries[i] = PoseOrderEntry{
 			CharacterID:   p.CharacterID,
 			CharacterName: resolveName(p.CharacterID, names),
 			Eligible:      eligibility(mode, totalPoseCount, p, i),
-			LastPosedAt:   p.LastPoseAt,
+			LastPosedAt:   lastPosedAt,
 		}
 		// PosesSinceLast is only populated for cooldown modes.
 		if PoseOrderMode(mode) == PoseOrderMode3PR || PoseOrderMode(mode) == PoseOrderMode5PR {
@@ -98,15 +103,15 @@ func sortStrictQueue(ps []ParticipantWithPoseMeta) {
 		}
 		if aNever && bNever {
 			// Both never posed: tiebreak by JoinedAt ASC.
-			return a.JoinedAt.Before(b.JoinedAt)
+			return a.JoinedAt.Time().Before(b.JoinedAt.Time())
 		}
 
 		// Both have posed: oldest LastPoseAt first.
-		if a.LastPoseAt != nil && b.LastPoseAt != nil && !a.LastPoseAt.Equal(*b.LastPoseAt) {
-			return a.LastPoseAt.Before(*b.LastPoseAt)
+		if a.LastPoseAt != nil && b.LastPoseAt != nil && !a.LastPoseAt.Time().Equal(b.LastPoseAt.Time()) {
+			return a.LastPoseAt.Time().Before(b.LastPoseAt.Time())
 		}
 		// Identical (or unexpectedly-nil) LastPoseAt: tiebreak by JoinedAt ASC.
-		return a.JoinedAt.Before(b.JoinedAt)
+		return a.JoinedAt.Time().Before(b.JoinedAt.Time())
 	})
 }
 
@@ -114,7 +119,7 @@ func sortStrictQueue(ps []ParticipantWithPoseMeta) {
 // and as the natural display order for any non-queue mode.
 func sortByJoinedAt(ps []ParticipantWithPoseMeta) {
 	sort.SliceStable(ps, func(i, j int) bool {
-		return ps[i].JoinedAt.Before(ps[j].JoinedAt)
+		return ps[i].JoinedAt.Time().Before(ps[j].JoinedAt.Time())
 	})
 }
 

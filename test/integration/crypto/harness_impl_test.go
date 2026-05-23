@@ -183,9 +183,10 @@ func (h *Harness) seedDEKAndEvents(t *testing.T, cfg HarnessConfig) {
 	// (`{"type":"test","seq":N}`, N starting at 0); E2E specs exercise Phase 3
 	// cold re-encryption which transforms these rows. js_seq is 1-indexed.
 	//
-	// Note: now() evaluates once per statement, so all seeded rows share one
-	// timestamp. Specs that need a deterministic order over the seed rows
-	// MUST order by js_seq, not timestamp.
+	// Note: timestamp column is BIGINT-ns post-gfo6 (INV-TS-1); the SQL-side
+	// (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT expression evaluates once per
+	// statement, so all seeded rows share one timestamp. Specs that need a
+	// deterministic order over the seed rows MUST order by js_seq, not timestamp.
 	_, err := h.DB.Exec(ctx, `
 		INSERT INTO events_audit
 		    (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
@@ -193,7 +194,7 @@ func (h *Harness) seedDEKAndEvents(t *testing.T, cfg HarnessConfig) {
 		    gen_random_bytes(16),
 		    $1,
 		    'test.event',
-		    now(),
+		    (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT,
 		    'system',
 		    convert_to('{"type":"test","seq":' || (g.i - 1)::text || '}', 'UTF8'),
 		    1,
@@ -371,11 +372,13 @@ func (h *Harness) SeedCompletedCheckpoint(ctxType, ctxID string) {
 	// Compute a synthetic DEK id that is unlikely to collide: hash the key string
 	// into a large int64 using a stable deterministic formula.
 	dekID := seedDEKID(77770000, ctxType, ctxID)
+	// crypto_keys.created_at is BIGINT-ns post-gfo6 (INV-TS-1).
 	_, _ = h.DB.Exec(ctx,
 		`INSERT INTO crypto_keys
 		   (id, context_type, context_id, version, wrapped_dek, wrap_provider,
 		    wrap_key_id, participants, created_at)
-		 VALUES ($1, $2, $3, 99, '\x00', 'seed-complete', 'seed-complete', '[]'::jsonb, now())
+		 VALUES ($1, $2, $3, 99, '\x00', 'seed-complete', 'seed-complete', '[]'::jsonb,
+		         (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 		 ON CONFLICT (id) DO NOTHING`,
 		dekID, ctxType, ctxID)
 	// Verify the row exists (handles both "just inserted" and "already existed" cases).
@@ -404,11 +407,13 @@ func (h *Harness) SeedActiveCheckpoint(ctxType, ctxID string) {
 	defer cancel()
 
 	dekID := seedDEKID(88890000, ctxType, ctxID)
+	// crypto_keys.created_at is BIGINT-ns post-gfo6 (INV-TS-1).
 	_, _ = h.DB.Exec(ctx,
 		`INSERT INTO crypto_keys
 		   (id, context_type, context_id, version, wrapped_dek, wrap_provider,
 		    wrap_key_id, participants, created_at)
-		 VALUES ($1, $2, $3, 98, '\x00', 'seed-active', 'seed-active', '[]'::jsonb, now())
+		 VALUES ($1, $2, $3, 98, '\x00', 'seed-active', 'seed-active', '[]'::jsonb,
+		         (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 		 ON CONFLICT (id) DO NOTHING`,
 		dekID, ctxType, ctxID)
 	var actualDEKID int64

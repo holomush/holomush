@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/admin/policy"
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/store"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	"github.com/holomush/holomush/test/testutil"
@@ -99,8 +100,8 @@ func insertChainRow(t *testing.T, subject string, jsSeq int64, p policy.PolicySe
 	_, err = testPool.Exec(context.Background(),
 		`INSERT INTO events_audit
 		   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
-		 VALUES ($1, $2, $3, now(), 'system', $4, 1, 'identity', $5, '{}'::jsonb)`,
-		idBytes, subject, "crypto.policy_set", envelope, jsSeq)
+		 VALUES ($1, $2, $3, $6, 'system', $4, 1, 'identity', $5, '{}'::jsonb)`,
+		idBytes, subject, "crypto.policy_set", envelope, jsSeq, pgnanos.From(time.Now()))
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
@@ -129,8 +130,8 @@ func insertChainRowGinkgo(subject string, jsSeq int64, p policy.PolicySetPayload
 	_, err = testPool.Exec(context.Background(),
 		`INSERT INTO events_audit
 		   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
-		 VALUES ($1, $2, $3, now(), 'system', $4, 1, 'identity', $5, '{}'::jsonb)`,
-		idBytes, subject, "crypto.policy_set", envelope, jsSeq)
+		 VALUES ($1, $2, $3, $6, 'system', $4, 1, 'identity', $5, '{}'::jsonb)`,
+		idBytes, subject, "crypto.policy_set", envelope, jsSeq, pgnanos.From(time.Now()))
 	Expect(err).NotTo(HaveOccurred())
 
 	DeferCleanup(func() {

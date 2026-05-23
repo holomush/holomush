@@ -21,6 +21,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/test/testutil"
 )
 
@@ -149,7 +150,7 @@ func TestProjectionDrainsPublishedMessageToAuditTable(t *testing.T) {
 		schemaVer                            int16
 		jsSeq                                int64
 		envelope                             []byte
-		timestamp                            time.Time
+		timestamp                            pgnanos.Time
 		idBytes                              []byte
 	)
 	err := pool.QueryRow(t.Context(), `

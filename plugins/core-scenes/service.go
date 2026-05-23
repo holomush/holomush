@@ -268,7 +268,7 @@ func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRe
 	)
 
 	return &scenev1.GetSceneResponse{
-		Scene: rowToProto(row, row.CreatedAt),
+		Scene: rowToProto(row, row.CreatedAt.Time()),
 	}, nil
 }
 
@@ -308,7 +308,7 @@ func (s *SceneServiceImpl) EndScene(ctx context.Context, req *scenev1.EndSceneRe
 		"scene_id", row.ID,
 	)
 
-	return &scenev1.EndSceneResponse{Scene: rowToProto(row, row.CreatedAt)}, nil
+	return &scenev1.EndSceneResponse{Scene: rowToProto(row, row.CreatedAt.Time())}, nil
 }
 
 // PauseScene transitions an active scene to paused. Owner-only.
@@ -342,7 +342,7 @@ func (s *SceneServiceImpl) PauseScene(ctx context.Context, req *scenev1.PauseSce
 		"scene_id", row.ID,
 	)
 
-	return &scenev1.PauseSceneResponse{Scene: rowToProto(row, row.CreatedAt)}, nil
+	return &scenev1.PauseSceneResponse{Scene: rowToProto(row, row.CreatedAt.Time())}, nil
 }
 
 // ResumeScene transitions a paused scene to active. Phase 2 is owner-only;
@@ -377,7 +377,7 @@ func (s *SceneServiceImpl) ResumeScene(ctx context.Context, req *scenev1.ResumeS
 		"scene_id", row.ID,
 	)
 
-	return &scenev1.ResumeSceneResponse{Scene: rowToProto(row, row.CreatedAt)}, nil
+	return &scenev1.ResumeSceneResponse{Scene: rowToProto(row, row.CreatedAt.Time())}, nil
 }
 
 // UpdateScene applies a partial update to mutable scene metadata. Owner-only.
@@ -449,7 +449,7 @@ func (s *SceneServiceImpl) UpdateScene(ctx context.Context, req *scenev1.UpdateS
 		"scene_id", row.ID,
 	)
 
-	return &scenev1.UpdateSceneResponse{Scene: rowToProto(row, row.CreatedAt)}, nil
+	return &scenev1.UpdateSceneResponse{Scene: rowToProto(row, row.CreatedAt.Time())}, nil
 }
 
 // buildSceneUpdate iterates the request's FieldMask and constructs a store

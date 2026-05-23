@@ -15,6 +15,7 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
@@ -71,8 +72,8 @@ var _ = Describe("Store soft-delete behaviour (Phase 3c Decision 4 / INV-39)", f
 		// the cached material.
 		_, err = pool.Exec(
 			ctx,
-			`UPDATE crypto_keys SET destroyed_at = NOW() WHERE id = $1`,
-			int64(key.ID), //nolint:gosec // G115: codec.KeyID values are positive BIGSERIAL ids.
+			`UPDATE crypto_keys SET destroyed_at = $2 WHERE id = $1`,
+			int64(key.ID), pgnanos.From(time.Now()), //nolint:gosec // G115: codec.KeyID values are positive BIGSERIAL ids.
 		)
 		Expect(err).NotTo(HaveOccurred())
 		cache.Invalidate(dek.CacheKey{KeyID: key.ID, Version: 1})
@@ -128,8 +129,8 @@ var _ = Describe("Store soft-delete behaviour (Phase 3c Decision 4 / INV-39)", f
 		// Soft-delete the row.
 		_, err = pool.Exec(
 			ctx,
-			`UPDATE crypto_keys SET destroyed_at = NOW() WHERE id = $1`,
-			int64(key.ID), //nolint:gosec // G115: codec.KeyID values are positive BIGSERIAL ids.
+			`UPDATE crypto_keys SET destroyed_at = $2 WHERE id = $1`,
+			int64(key.ID), pgnanos.From(time.Now()), //nolint:gosec // G115: codec.KeyID values are positive BIGSERIAL ids.
 		)
 		Expect(err).NotTo(HaveOccurred())
 

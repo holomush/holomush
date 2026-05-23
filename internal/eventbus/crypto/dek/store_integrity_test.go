@@ -1,7 +1,7 @@
-//go:build integration
-
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
+
+//go:build integration
 
 package dek
 
@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/store"
 )
 
@@ -103,7 +104,7 @@ func TestStore_ResolveIntegrity_ResolvesCrashedRotate(t *testing.T) {
 	assert.Equal(t, 1, count, "post-resolution: exactly one unrotated row")
 
 	// v1 should be marked rotated.
-	var rotatedAt *time.Time
+	var rotatedAt *pgnanos.Time
 	err = pool.QueryRow(context.Background(), `
 		SELECT rotated_at FROM crypto_keys
 		 WHERE context_type = $1 AND context_id = $2 AND version = 1`,

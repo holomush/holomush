@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
+	"github.com/holomush/holomush/internal/pgnanos"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 )
@@ -287,8 +288,8 @@ func (f *fakeStore) End(_ context.Context, id string) (*SceneRow, error) {
 			Errorf("cannot end")
 	}
 	row.State = string(SceneStateEnded)
-	now := time.Now().UTC()
-	row.EndedAt = &now
+	endedAt := pgnanos.From(time.Now().UTC())
+	row.EndedAt = &endedAt
 	cp := *row
 	return &cp, nil
 }

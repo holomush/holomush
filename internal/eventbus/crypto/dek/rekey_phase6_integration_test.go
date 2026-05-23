@@ -15,6 +15,7 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
@@ -97,8 +98,8 @@ func (s *phase6TestSetupImpl) RunUpToPhase5Complete() dek.RequestID {
 
 // loadDestroyedAt reads the destroyed_at column from the crypto_keys row
 // for the given dekID. Returns nil if the row has not yet been destroyed.
-func (s *phase6TestSetupImpl) loadDestroyedAt(dekID int64) *time.Time {
-	var destroyedAt *time.Time
+func (s *phase6TestSetupImpl) loadDestroyedAt(dekID int64) *pgnanos.Time {
+	var destroyedAt *pgnanos.Time
 	err := s.pool.QueryRow(
 		context.Background(),
 		`SELECT destroyed_at FROM crypto_keys WHERE id = $1`, dekID,

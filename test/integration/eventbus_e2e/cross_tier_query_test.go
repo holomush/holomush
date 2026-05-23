@@ -24,6 +24,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	"github.com/holomush/holomush/internal/eventbus/history"
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/plugin/plugintest"
 	"github.com/holomush/holomush/pkg/errutil"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
@@ -564,7 +565,7 @@ func insertAuditRowWithSeq(ctx context.Context, t *testing.T, pool *pgxpool.Pool
 		id,
 		string(e.Subject),
 		string(e.Type),
-		e.Timestamp,
+		pgnanos.From(e.Timestamp),
 		e.Actor.Kind.String(),
 		actorID,
 		envelopeBytes,

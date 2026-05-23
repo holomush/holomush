@@ -14,6 +14,7 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/pkg/errutil"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -86,7 +87,7 @@ var _ = Describe("SceneAuditStore.InsertScenePose", func() {
 
 		// 3. scene_participants.last_pose_at + last_pose_seq for the owner.
 		var (
-			lastAt  *time.Time
+			lastAt  *pgnanos.Time
 			lastSeq *int32
 		)
 		Expect(store.Pool().QueryRow(
@@ -96,7 +97,7 @@ var _ = Describe("SceneAuditStore.InsertScenePose", func() {
 			sceneID, owner,
 		).Scan(&lastAt, &lastSeq)).NotTo(HaveOccurred())
 		Expect(lastAt).NotTo(BeNil(), "last_pose_at MUST be set")
-		Expect(lastAt.UTC().Truncate(time.Millisecond)).To(Equal(eventTime),
+		Expect(lastAt.Time().UTC().Truncate(time.Millisecond)).To(Equal(eventTime),
 			"last_pose_at MUST use the canonical event timestamp")
 		Expect(lastSeq).NotTo(BeNil(), "last_pose_seq MUST be set")
 		Expect(*lastSeq).To(Equal(int32(1)), "last_pose_seq MUST match total_pose_count")
@@ -182,7 +183,7 @@ var _ = Describe("SceneAuditStore.InsertScenePose", func() {
 
 		// Owner's metadata MUST remain pristine — no spurious UPDATE.
 		var (
-			lastAt  *time.Time
+			lastAt  *pgnanos.Time
 			lastSeq *int32
 		)
 		Expect(store.Pool().QueryRow(
@@ -276,7 +277,7 @@ var _ = Describe("SceneAuditServer.AuditEvent dispatcher", func() {
 		Expect(total).To(Equal(1), "total_pose_count MUST bump when routed through InsertScenePose")
 
 		// 3. scene_participants.last_pose_at stamped with the canonical event ts.
-		var lastAt *time.Time
+		var lastAt *pgnanos.Time
 		Expect(store.Pool().QueryRow(
 			ctx,
 			`SELECT last_pose_at FROM scene_participants
@@ -285,7 +286,7 @@ var _ = Describe("SceneAuditServer.AuditEvent dispatcher", func() {
 		).Scan(&lastAt)).NotTo(HaveOccurred())
 		Expect(lastAt).NotTo(BeNil(),
 			"last_pose_at MUST be set when scene_pose routes through InsertScenePose")
-		Expect(lastAt.UTC().Truncate(time.Millisecond)).To(Equal(eventTime),
+		Expect(lastAt.Time().UTC().Truncate(time.Millisecond)).To(Equal(eventTime),
 			"last_pose_at MUST use the canonical event timestamp, not wall clock")
 	})
 

@@ -22,6 +22,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/eventbus/history/source"
+	"github.com/holomush/holomush/internal/pgnanos"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
@@ -156,11 +157,11 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 	}
 
 	if !q.NotBefore.IsZero() {
-		args = append(args, q.NotBefore)
+		args = append(args, pgnanos.From(q.NotBefore))
 		fmt.Fprintf(&sb, " AND timestamp >= $%d", len(args))
 	}
 	if !q.NotAfter.IsZero() {
-		args = append(args, q.NotAfter)
+		args = append(args, pgnanos.From(q.NotAfter))
 		fmt.Fprintf(&sb, " AND timestamp <= $%d", len(args))
 	}
 
@@ -168,7 +169,7 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 	// BOTH js_seq and id — preventing a drift twin from bypassing the
 	// edge filter). Non-cursor rows subject to edge filter.
 	if !edge.IsZero() {
-		args = append(args, edge)
+		args = append(args, pgnanos.From(edge))
 		edgeIdx := len(args)
 		if hasCursor {
 			args = append(args, int64(cursorSeq)) //nolint:gosec // G115: js_seq is always a positive JetStream sequence number; fits safely in int64
@@ -211,7 +212,10 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 			idBytes        []byte
 			subjectStr     string
 			eventType      string
-			ts             time.Time
+			// ts is scanned for column-position alignment with the SELECT list
+			// only; Event.Timestamp is recovered from envelopeBytes via
+			// decodeColdRow's proto.Unmarshal (INV-TS-5 AAD byte-equality).
+			ts             pgnanos.Time
 			actorKindStr   string
 			actorIDBytes   []byte
 			envelopeBytes  []byte // was: payload (post-rename)
@@ -488,7 +492,7 @@ func (c *postgresColdTier) LookupByID(ctx context.Context, id eventbus.EventID) 
 		codecName  string
 		dekRef     *int64
 		dekVersion *uint32
-		ts         time.Time
+		ts         pgnanos.Time
 	)
 	err := c.pool.QueryRow(ctx, `
 		SELECT id, subject, type, envelope, codec, dek_ref, dek_version, timestamp
@@ -510,7 +514,7 @@ func (c *postgresColdTier) LookupByID(ctx context.Context, id eventbus.EventID) 
 		Codec:      codecName,
 		KeyID:      derefKeyID(dekRef),
 		KeyVersion: derefUint32(dekVersion),
-		Timestamp:  ts,
+		Timestamp:  ts.Time(),
 	})
 	return env, true, nil
 }

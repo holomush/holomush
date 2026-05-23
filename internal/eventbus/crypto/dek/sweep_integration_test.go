@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/audit/chain"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/internal/pgnanos"
 )
 
 // rekeyTestSetup is the sweep subsystem integration test harness.
@@ -60,9 +61,9 @@ func (s *rekeyTestSetup) OpenStaleCheckpoint(ctxType, ctxID string, age time.Dur
 	const dekID int64 = 999
 	_, _ = s.pool.Exec(context.Background(),
 		`INSERT INTO crypto_keys (id, context_type, context_id, version, wrapped_dek, wrap_provider, wrap_key_id, participants, created_at)
-         VALUES ($1, $2, $3, 1, '\x00', 'test', 'test', '[]'::jsonb, now())
+         VALUES ($1, $2, $3, 1, '\x00', 'test', 'test', '[]'::jsonb, $4)
          ON CONFLICT (id) DO NOTHING`,
-		dekID, ctxType, ctxID)
+		dekID, ctxType, ctxID, pgnanos.From(time.Now()))
 
 	rid := dek.RequestID(idgen.New())
 	_, err := s.pool.Exec(context.Background(), `

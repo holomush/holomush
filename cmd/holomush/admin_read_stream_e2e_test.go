@@ -139,6 +139,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/aad"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
+	"github.com/holomush/holomush/internal/pgnanos"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	adminv1 "github.com/holomush/holomush/pkg/proto/holomush/admin/v1"
 	"github.com/holomush/holomush/pkg/proto/holomush/admin/v1/adminv1connect"
@@ -489,7 +490,7 @@ func (e *adminAuthEnv) seedAdminReadStreamData(
 				VALUES ($1, $2, 'test.encrypted', $3, 'system', NULL,
 				        $4, 1, $5, $6, '{}'::jsonb,
 				        $7, $8)
-			`, id[:], subject, ts, envelopeBytes, codecName,
+			`, id[:], subject, pgnanos.From(ts), envelopeBytes, codecName,
 				int64(time.Now().UnixNano())+int64(ctxIdx*1_000_000+i),
 				dekRef, dekVersion)
 			Expect(err).NotTo(HaveOccurred(), "seedAdminReadStreamData: INSERT events_audit")
@@ -526,7 +527,7 @@ func (e *adminAuthEnv) seedPlainAuditRow(subject string, ts time.Time) ulid.ULID
 		   envelope, schema_ver, codec, js_seq, rendering)
 		VALUES ($1, $2, 'test.cleartext', $3, 'system', NULL,
 		        $4, 1, 'identity', $5, '{}'::jsonb)
-	`, id[:], subject, ts, envelopeBytes, int64(time.Now().UnixNano()))
+	`, id[:], subject, pgnanos.From(ts), envelopeBytes, int64(time.Now().UnixNano()))
 	Expect(err).NotTo(HaveOccurred(), "seedPlainAuditRow: INSERT events_audit")
 	return id
 }
@@ -573,7 +574,7 @@ func (e *adminAuthEnv) seedOrphanDEKAuditRow(
 		VALUES ($1, $2, 'test.orphan', $3, 'system', NULL,
 		        $4, 1, $5, $6, '{}'::jsonb,
 		        $7, 1)
-	`, id[:], subject, ts, envelopeBytes,
+	`, id[:], subject, pgnanos.From(ts), envelopeBytes,
 		string(codec.NameXChaCha20v1),
 		int64(time.Now().UnixNano()),
 		orphanDEKRef)

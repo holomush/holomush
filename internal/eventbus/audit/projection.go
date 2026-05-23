@@ -15,6 +15,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/pgnanos"
 )
 
 // Header names copied from the spec (§5). Keep in sync with the publisher
@@ -337,7 +338,7 @@ func (p *projection) persist(msg jetstream.Msg) error {
 		idBytes,
 		msg.Subject(),
 		eventType,
-		meta.Timestamp,
+		pgnanos.From(meta.Timestamp),
 		actorKind,
 		actorID,
 		msg.Data(),

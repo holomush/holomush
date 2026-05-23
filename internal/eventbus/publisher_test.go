@@ -302,22 +302,20 @@ func TestPublisherStampsAllRequiredHeaders(t *testing.T) {
 	require.NoError(t, d.Ack())
 }
 
-// TestPublisherTruncatesTimestampToMicrosecond gates INV-P7-16. The
-// publisher MUST truncate the event timestamp to microsecond precision
-// before marshaling, so AAD reconstruction at read time (which sees the
-// PG-TIMESTAMPTZ-truncated value) is byte-equal to encrypt-side AAD.
+// TestPublisherPreservesNanoseconds gates INV-TS-4. The publisher MUST
+// NOT truncate the event timestamp before AAD construction or envelope
+// marshal. After the BIGINT-ns migration, AAD reconstruction at read
+// time receives the full-precision timestamp from PG, so byte-equal AAD
+// is structurally guaranteed.
 //
-// Other tests (plugin_aad_reconstruction_test.go) mirror the truncation
-// locally because they exercise aad.Build directly. This test drives the
-// full publisher and inspects the on-wire envelope, so a future change
-// that removes the truncation at publisher.go fails HERE — the AAD tests
-// would still pass because they pre-truncate their input.
-func TestPublisherTruncatesTimestampToMicrosecond(t *testing.T) {
+// This test inverts the prior TestPublisherTruncatesTimestampToMicrosecond:
+// it asserts that sub-µs nanos SURVIVE the publish path.
+func TestPublisherPreservesNanoseconds(t *testing.T) {
 	embedded := eventbustest.New(t)
 	pub := embedded.Bus.Publisher()
 	sub := embedded.Bus.Subscriber()
 
-	subject := eventbus.Subject("events.main.pub.truncate")
+	subject := eventbus.Subject("events.test.publisher.preserves.ns")
 	sessID := freshSessionID()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -326,11 +324,8 @@ func TestPublisherTruncatesTimestampToMicrosecond(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 
-	// Build an event whose nanosecond component carries sub-µs digits
-	// (the trailing "789"). The publisher MUST drop these; without the
-	// fix at publisher.go:202 the body envelope retains them and the
-	// assertion below fails.
 	ev := goodEvent(subject)
+	// Sub-µs nanosecond component on purpose.
 	ev.Timestamp = time.Date(2026, 5, 14, 12, 34, 56, 123456789, time.UTC)
 	require.Equal(t, 789, ev.Timestamp.Nanosecond()%1000,
 		"test fixture sanity: pre-publish timestamp MUST carry sub-µs nanos")
@@ -342,13 +337,10 @@ func TestPublisherTruncatesTimestampToMicrosecond(t *testing.T) {
 	got := d.Event()
 	require.NoError(t, d.Ack())
 
-	// The actual gate: on-wire timestamp's nanosecond component is a
-	// multiple of 1000 (= no sub-µs precision). The full µs portion
-	// (123456 µs) is preserved.
-	assert.Zero(t, got.Timestamp.Nanosecond()%1000,
-		"INV-P7-16: publisher MUST truncate timestamp to microsecond precision before marshaling — sub-µs nanos leak otherwise")
-	assert.Equal(t, ev.Timestamp.Truncate(time.Microsecond), got.Timestamp.UTC(),
-		"publisher truncation MUST preserve the µs portion exactly, only dropping sub-µs digits")
+	assert.Equal(t, 789, got.Timestamp.Nanosecond()%1000,
+		"INV-TS-4: publisher MUST preserve sub-µs nanoseconds; sub-µs digits MUST survive")
+	assert.Equal(t, ev.Timestamp, got.Timestamp.UTC(),
+		"INV-TS-4: published timestamp MUST equal source timestamp at full precision")
 }
 
 func TestActorKindStringCoversAllVariants(t *testing.T) {

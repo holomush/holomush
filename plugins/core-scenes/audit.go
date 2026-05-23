@@ -8,7 +8,6 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,6 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/internal/pgnanos"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -244,7 +244,7 @@ func (s *SceneAuditStore) InsertScenePose(
 		// intentionally non-fatal (see method doc).
 		var ts any
 		if timestamp != nil {
-			ts = timestamp.AsTime()
+			ts = pgnanos.From(timestamp.AsTime())
 		}
 		if _, err := tx.Exec(
 			ctx,
@@ -297,7 +297,7 @@ func (s *SceneAuditStore) insertSceneLogTx(
 ) (bool, error) {
 	var ts any
 	if timestamp != nil {
-		ts = timestamp.AsTime()
+		ts = pgnanos.From(timestamp.AsTime())
 	}
 	cmd, err := tx.Exec(
 		ctx, `
@@ -603,7 +603,7 @@ func (s *SceneAuditServer) QueryHistory(req *pluginv1.QueryHistoryRequest, strea
 				Id:         r.id,
 				Subject:    r.subject,
 				Type:       r.eventType,
-				Timestamp:  timestamppb.New(r.timestamp),
+				Timestamp:  timestamppb.New(r.timestamp.Time()),
 				Actor:      actorProtoFromRow(r.actorKind, r.actorID),
 				Codec:      r.codec,
 				Payload:    r.payload,
@@ -656,7 +656,7 @@ type logRow struct {
 	id         []byte
 	subject    string
 	eventType  string
-	timestamp  time.Time
+	timestamp  pgnanos.Time
 	actorKind  string
 	actorID    []byte
 	payload    []byte
@@ -698,12 +698,12 @@ func (s *SceneAuditStore) queryLog(
 	}
 	if notBefore != nil {
 		conds = append(conds, "timestamp >= $"+itoa(idx))
-		args = append(args, notBefore.AsTime())
+		args = append(args, pgnanos.From(notBefore.AsTime()))
 		idx++
 	}
 	if notAfter != nil {
 		conds = append(conds, "timestamp <= $"+itoa(idx))
-		args = append(args, notAfter.AsTime())
+		args = append(args, pgnanos.From(notAfter.AsTime()))
 		idx++
 	}
 
