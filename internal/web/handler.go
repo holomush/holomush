@@ -116,10 +116,17 @@ func (h *Handler) SendCommand(ctx context.Context, req *connect.Request[webv1.Se
 	cmdCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
+	// Client supplies its own connection_id per request (Phase 5; see
+	// the STREAM_OPENED ControlFrame the server emits on StreamEvents
+	// open). Empty when the caller isn't routing per-connection (e.g.,
+	// scripted/admin paths). Server gracefully handles zero ULID.
+	connIDStr := req.Msg.GetConnectionId()
+
 	resp, err := h.client.HandleCommand(cmdCtx, &corev1.HandleCommandRequest{
 		SessionId:          req.Msg.GetSessionId(),
 		Command:            req.Msg.GetText(),
 		PlayerSessionToken: token,
+		ConnectionId:       connIDStr,
 	})
 	if err != nil {
 		slog.Error("web: handle command RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
@@ -190,6 +197,22 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 	if err != nil {
 		return connect.NewError(connect.CodeInternal,
 			oops.With("session_id", sessionID).Wrap(err))
+	}
+
+	// Emit a STREAM_OPENED ControlFrame carrying the per-stream
+	// connection_id so the client can include it in subsequent
+	// SendCommand requests. This is the routing identity for Phase 5
+	// per-connection commands (scene focus / grid autofocus).
+	if sendErr := stream.Send(&webv1.StreamEventsResponse{
+		Frame: &webv1.StreamEventsResponse_Control{
+			Control: &webv1.ControlFrame{
+				Signal:       webv1.ControlSignal_CONTROL_SIGNAL_STREAM_OPENED,
+				ConnectionId: connID.String(),
+			},
+		},
+	}); sendErr != nil {
+		return connect.NewError(connect.CodeInternal,
+			oops.With("session_id", sessionID).Wrap(sendErr))
 	}
 
 	// Pump upstream events in a goroutine. The main loop selects on the

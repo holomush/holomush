@@ -428,20 +428,22 @@ func TestQueryStreamHistoryRequestNotBeforeIsPassedThrough(t *testing.T) {
 
 type focusTestServer struct {
 	pluginv1.UnimplementedPluginHostServiceServer
-	mu                sync.Mutex
-	joinReqs          []*pluginv1.PluginHostServiceJoinFocusRequest
-	leaveReqs         []*pluginv1.PluginHostServiceLeaveFocusRequest
-	leaveByTargetReqs []*pluginv1.PluginHostServiceLeaveFocusByTargetRequest
-	presentReqs       []*pluginv1.PluginHostServicePresentFocusRequest
-	historyReqs       []*pluginv1.PluginHostServiceQueryStreamHistoryRequest
+	mu                    sync.Mutex
+	joinReqs              []*pluginv1.PluginHostServiceJoinFocusRequest
+	leaveReqs             []*pluginv1.PluginHostServiceLeaveFocusRequest
+	leaveByTargetReqs     []*pluginv1.PluginHostServiceLeaveFocusByTargetRequest
+	presentReqs           []*pluginv1.PluginHostServicePresentFocusRequest
+	historyReqs           []*pluginv1.PluginHostServiceQueryStreamHistoryRequest
+	setConnFocusReqs      []*pluginv1.PluginHostServiceSetConnectionFocusRequest
 
-	joinErr           error
-	leaveErr          error
-	leaveByTargetErr  error
-	leaveByTargetResp *pluginv1.PluginHostServiceLeaveFocusByTargetResponse
-	presentErr        error
-	historyResp       *pluginv1.PluginHostServiceQueryStreamHistoryResponse
-	historyErr        error
+	joinErr               error
+	leaveErr              error
+	leaveByTargetErr      error
+	leaveByTargetResp     *pluginv1.PluginHostServiceLeaveFocusByTargetResponse
+	presentErr            error
+	historyResp           *pluginv1.PluginHostServiceQueryStreamHistoryResponse
+	historyErr            error
+	setConnFocusErr       error
 }
 
 func (s *focusTestServer) JoinFocus(_ context.Context, req *pluginv1.PluginHostServiceJoinFocusRequest) (*pluginv1.PluginHostServiceJoinFocusResponse, error) {
@@ -498,4 +500,80 @@ func (s *focusTestServer) QueryStreamHistory(_ context.Context, req *pluginv1.Pl
 		return s.historyResp, nil
 	}
 	return &pluginv1.PluginHostServiceQueryStreamHistoryResponse{}, nil
+}
+
+func (s *focusTestServer) SetConnectionFocus(_ context.Context, req *pluginv1.PluginHostServiceSetConnectionFocusRequest) (*pluginv1.PluginHostServiceSetConnectionFocusResponse, error) {
+	s.mu.Lock()
+	s.setConnFocusReqs = append(s.setConnFocusReqs, req)
+	s.mu.Unlock()
+	if s.setConnFocusErr != nil {
+		return nil, s.setConnFocusErr
+	}
+	return &pluginv1.PluginHostServiceSetConnectionFocusResponse{}, nil
+}
+
+// --- SetConnectionFocus wire-level error mapping tests ---
+
+// TestSetConnectionFocus_PreservesFocusWithoutMembershipCode asserts that when
+// the gRPC server returns a status.Error whose message starts with
+// "FOCUS_WITHOUT_MEMBERSHIP" (the oops code that crossed the wire), the client
+// re-emits an OopsError with that exact code — so the plugin consumer's
+// `oe.Code() == "FOCUS_WITHOUT_MEMBERSHIP"` branch is reachable in production.
+func TestSetConnectionFocus_PreservesFocusWithoutMembershipCode(t *testing.T) {
+	srv := &focusTestServer{
+		setConnFocusErr: status.Errorf(codes.Unknown, "FOCUS_WITHOUT_MEMBERSHIP: focus target not in session FocusMemberships"),
+	}
+	conn := startPluginHostServiceTestServer(t, srv)
+	client := &pluginHostFocusClient{client: pluginv1.NewPluginHostServiceClient(conn)}
+
+	// Use a valid 16-byte ULID so the client doesn't fail on ULID parse before hitting gRPC.
+	validConnID := "01HNSMF4QK8XP2000000000000"
+	fk := FocusKey{Kind: FocusKindScene, TargetID: "scene-1"}
+	err := client.SetConnectionFocus(context.Background(), validConnID, &fk, false /* isSceneGrid */)
+
+	require.Error(t, err)
+	var oe oops.OopsError
+	require.ErrorAs(t, err, &oe, "error must be an OopsError")
+	assert.Equal(t, "FOCUS_WITHOUT_MEMBERSHIP", oe.Code(),
+		"FOCUS_WITHOUT_MEMBERSHIP must survive the gRPC wire round-trip so handleSceneFocus can branch on it")
+}
+
+// TestSetConnectionFocus_NonGridUsesSceneFocusErrCode asserts that a generic
+// error on a non-grid (isSceneGrid=false) SetConnectionFocus call is wrapped
+// with SCENE_FOCUS_SET_FAILED, not SCENE_GRID_SET_FAILED — telemetry accuracy.
+func TestSetConnectionFocus_NonGridUsesSceneFocusErrCode(t *testing.T) {
+	srv := &focusTestServer{
+		setConnFocusErr: status.Errorf(codes.Internal, "storage failure"),
+	}
+	conn := startPluginHostServiceTestServer(t, srv)
+	client := &pluginHostFocusClient{client: pluginv1.NewPluginHostServiceClient(conn)}
+
+	validConnID := "01HNSMF4QK8XP2000000000000"
+	err := client.SetConnectionFocus(context.Background(), validConnID, nil, false /* isSceneGrid */)
+
+	require.Error(t, err)
+	var oe oops.OopsError
+	require.ErrorAs(t, err, &oe)
+	assert.Equal(t, "SCENE_FOCUS_SET_FAILED", oe.Code(),
+		"non-grid errors must use SCENE_FOCUS_SET_FAILED, not SCENE_GRID_SET_FAILED")
+}
+
+// TestSetConnectionFocus_GridUsesSceneGridErrCode asserts that a generic error
+// on a grid (isSceneGrid=true) SetConnectionFocus call is wrapped with
+// SCENE_GRID_SET_FAILED — preserving the original error code for grid paths.
+func TestSetConnectionFocus_GridUsesSceneGridErrCode(t *testing.T) {
+	srv := &focusTestServer{
+		setConnFocusErr: status.Errorf(codes.Internal, "storage failure"),
+	}
+	conn := startPluginHostServiceTestServer(t, srv)
+	client := &pluginHostFocusClient{client: pluginv1.NewPluginHostServiceClient(conn)}
+
+	validConnID := "01HNSMF4QK8XP2000000000000"
+	err := client.SetConnectionFocus(context.Background(), validConnID, nil, true /* isSceneGrid */)
+
+	require.Error(t, err)
+	var oe oops.OopsError
+	require.ErrorAs(t, err, &oe)
+	assert.Equal(t, "SCENE_GRID_SET_FAILED", oe.Code(),
+		"grid errors must use SCENE_GRID_SET_FAILED")
 }

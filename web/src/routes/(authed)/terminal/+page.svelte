@@ -80,6 +80,11 @@
     | null = null;
 
   let sessionId = $state('');
+  // connectionId is set when the StreamEvents subscription opens via a
+  // STREAM_OPENED ControlFrame. Passed back to SendCommand so the
+  // gateway can route per-connection commands (Phase 5 scene-focus
+  // autofocus) to THIS tab's stream rather than racing with other tabs.
+  let connectionId = $state('');
   let connected = $state(false);
   let error = $state('');
   let abortController: AbortController | null = null;
@@ -250,6 +255,10 @@
     const seenEventIds = new Set<string>();
     let backfillDone = false;
     let replayComplete = false;
+    // Reset connectionId so a stale value from a prior stream doesn't
+    // leak into SendCommand requests during the brief window before
+    // the new stream's STREAM_OPENED ControlFrame arrives.
+    connectionId = '';
 
     // Subscribe runs in parallel with backfill. Subscribe events arriving
     // before backfill completes are buffered and drained afterward.
@@ -305,7 +314,18 @@
         )) {
           if (response.frame.case === 'control') {
             const ctrl = response.frame.value;
-            if (ctrl.signal === ControlSignal.REPLAY_COMPLETE) {
+            if (ctrl.signal === ControlSignal.STREAM_OPENED) {
+              // Capture per-stream connection_id for SendCommand routing.
+              // Set BEFORE replayComplete so the first command can route
+              // correctly even before REPLAY_COMPLETE has fired.
+              // Generation guard: a stale frame from a superseded stream
+              // MUST NOT clobber the active stream's connectionId — same
+              // pattern as REPLAY_COMPLETE / STREAM_CLOSED downstream.
+              if (generation !== streamGeneration || localController.signal.aborted) {
+                continue;
+              }
+              connectionId = ctrl.connectionId;
+            } else if (ctrl.signal === ControlSignal.REPLAY_COMPLETE) {
               // 87qu: time-from-hydrate-start to this event is the
               // server-side Subscribe-phase wall time as observed by
               // the client. Pairs with backfill.done below.
@@ -564,7 +584,7 @@
 
     try {
       await waitForStreamReady();
-      const resp = await client.sendCommand({ sessionId, text: command });
+      const resp = await client.sendCommand({ sessionId, text: command, connectionId });
       if (!resp.success) {
         error = resp.errorMessage || 'Command failed';
         pendingCommandSpan?.setStatus({ code: 2, message: error });

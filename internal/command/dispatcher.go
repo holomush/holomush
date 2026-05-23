@@ -293,6 +293,16 @@ func (d *Dispatcher) dispatchToPlugin(ctx context.Context, entry *CommandEntry, 
 			Errorf("command is plugin-backed but no PluginCommandDeliverer configured")
 	}
 
+	// Phase 5 (5rh.14 T19): only propagate ConnectionID when set. A zero-value
+	// ulid.ULID stringifies to 26 zeros, which downstream consumers (focus
+	// client, plugin handlers) cannot distinguish from a real connection;
+	// pass an empty string to mean "no connection context" (CodeRabbit PR
+	// #4191).
+	connectionIDStr := ""
+	if cid := exec.ConnectionID(); cid != (ulid.ULID{}) {
+		connectionIDStr = cid.String()
+	}
+
 	cmd := pluginsdk.CommandRequest{
 		Command:       entry.Name,
 		Args:          exec.Args,
@@ -302,6 +312,7 @@ func (d *Dispatcher) dispatchToPlugin(ctx context.Context, entry *CommandEntry, 
 		SessionID:     exec.SessionID().String(),
 		PlayerID:      exec.PlayerID().String(),
 		InvokedAs:     invokedAs,
+		ConnectionID:  connectionIDStr,
 	}
 
 	span.SetAttributes(

@@ -412,8 +412,18 @@ func TestStreamEvents_ForwardsControlFrame(t *testing.T) {
 	require.NoError(t, err)
 	defer stream.Close()
 
+	// First frame is the STREAM_OPENED ControlFrame with connection_id
+	// (added in PR #4191 round 5 to fix multi-tab routing).
 	ok := stream.Receive()
-	require.True(t, ok, "expected to receive a response")
+	require.True(t, ok, "expected to receive STREAM_OPENED frame")
+	openCtrl := stream.Msg().GetControl()
+	require.NotNil(t, openCtrl, "first frame MUST be a ControlFrame")
+	assert.Equal(t, webv1.ControlSignal_CONTROL_SIGNAL_STREAM_OPENED, openCtrl.GetSignal())
+	assert.NotEmpty(t, openCtrl.GetConnectionId(), "STREAM_OPENED MUST include connection_id")
+
+	// Second frame is the forwarded REPLAY_COMPLETE from the fixture.
+	ok = stream.Receive()
+	require.True(t, ok, "expected to receive forwarded REPLAY_COMPLETE frame")
 
 	msg := stream.Msg()
 	require.NotNil(t, msg)
@@ -445,8 +455,15 @@ func TestStreamEvents_StreamClosedEndsStream(t *testing.T) {
 	require.NoError(t, err)
 	defer stream.Close()
 
-	// First receive: the STREAM_CLOSED control frame.
+	// First frame is the STREAM_OPENED ControlFrame (PR #4191 round 5).
 	ok := stream.Receive()
+	require.True(t, ok, "expected to receive STREAM_OPENED frame")
+	openCtrl := stream.Msg().GetControl()
+	require.NotNil(t, openCtrl)
+	assert.Equal(t, webv1.ControlSignal_CONTROL_SIGNAL_STREAM_OPENED, openCtrl.GetSignal())
+
+	// Second frame: the STREAM_CLOSED control frame from the fixture.
+	ok = stream.Receive()
 	require.True(t, ok, "expected to receive STREAM_CLOSED frame")
 	ctrl := stream.Msg().GetControl()
 	require.NotNil(t, ctrl)

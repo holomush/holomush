@@ -25,11 +25,22 @@ enum ControlSignal {
   CONTROL_SIGNAL_UNSPECIFIED = 0;
   CONTROL_SIGNAL_REPLAY_COMPLETE = 1;
   CONTROL_SIGNAL_STREAM_CLOSED = 2;
+  // STREAM_OPENED is emitted as the first frame after a successful
+  // StreamEvents subscription. The accompanying ControlFrame.connection_id
+  // is the per-stream ULID — clients SHOULD store it and pass it back via
+  // SendCommandRequest.connection_id so the gateway routes per-connection
+  // commands (Phase 5 scene-focus autofocus) correctly under multi-tab.
+  CONTROL_SIGNAL_STREAM_OPENED = 3;
 }
 
 message ControlFrame {
   ControlSignal signal = 1;
   string message = 2;
+  // connection_id is populated on the first ControlFrame after a successful
+  // StreamEvents open so the client can include it in subsequent
+  // SendCommand requests. Per-stream identity for multi-tab routing
+  // (Phase 5 scene-focus autofocus). Empty on non-open frames.
+  string connection_id = 3;
 }
 
 service WebService {
@@ -90,6 +101,12 @@ service WebService {
 message SendCommandRequest {
   string session_id = 1;
   string text = 2;
+  // connection_id identifies the originating StreamEvents stream for
+  // per-connection command routing (Phase 5 scene-focus autofocus).
+  // Clients set this from the connection_id they receive in the
+  // STREAM_OPENED ControlFrame after StreamEvents opens. Empty means
+  // "no specific connection origin" (scripted / admin paths).
+  string connection_id = 3;
 }
 
 message SendCommandResponse {

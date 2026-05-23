@@ -754,6 +754,253 @@ func (s *PostgresSessionStore) UpdateFocusMemberships(ctx context.Context, sessi
 	return nil
 }
 
+// GetConnection reads one session_connections row by PK. O(1) PK lookup.
+// ULID columns are TEXT in the schema (migrations/000001_baseline.up.sql:227);
+// mirror parseSessionRow pattern at session_store.go:51-83 — scan TEXT into
+// string then ulid.Parse (pgx cannot scan TEXT directly into ulid.ULID).
+// player_session_id is omitted from the SELECT — session.Connection has no
+// PlayerSessionID field; the column persists via AddConnection's insert
+// path (session_store.go:466-483) unchanged.
+//
+// Returns CONNECTION_NOT_FOUND when the row is absent.
+func (s *PostgresSessionStore) GetConnection(ctx context.Context, connectionID ulid.ULID) (*session.Connection, error) {
+	var (
+		idStr        string
+		sessionID    string
+		clientType   string
+		streams      []string
+		focusKeyJSON []byte
+		connectedAt  time.Time
+	)
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, session_id, client_type, streams, focus_key, connected_at
+		FROM session_connections WHERE id = $1
+	`, connectionID.String()).Scan(
+		&idStr, &sessionID, &clientType, &streams, &focusKeyJSON, &connectedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.Code("CONNECTION_NOT_FOUND").
+			With("connection_id", connectionID.String()).
+			Errorf("connection not found")
+	}
+	if err != nil {
+		return nil, oops.With("operation", "get connection").Wrap(err)
+	}
+	id, err := ulid.Parse(idStr)
+	if err != nil {
+		return nil, oops.With("operation", "parse connection id").Wrap(err)
+	}
+	var fk *session.FocusKey
+	if len(focusKeyJSON) > 0 {
+		var k session.FocusKey
+		if uerr := json.Unmarshal(focusKeyJSON, &k); uerr != nil {
+			return nil, oops.With("operation", "unmarshal focus_key").Wrap(uerr)
+		}
+		fk = &k
+	}
+	return &session.Connection{
+		ID:          id,
+		SessionID:   sessionID,
+		ClientType:  clientType,
+		Streams:     streams,
+		FocusKey:    fk,
+		ConnectedAt: connectedAt,
+	}, nil
+}
+
+// UpdateSessionConnection runs the mutator under a single transaction.
+// Lock-acquisition order is canonical per D11 / INV-P5-14: sessions row
+// FOR UPDATE FIRST, then session_connections row FOR UPDATE. Two
+// concurrent calls on the same session for different connections
+// therefore cannot deadlock — both serialize on the shared sessions
+// row before contending for their respective connection rows.
+//
+// The narrow UPDATE writes only `presenting_focus` on sessions and
+// `focus_key` on session_connections. By contract (Postgres-parity
+// with MemStore's T5 impl) the mutator MUST NOT modify Connection.Streams
+// or any other field; mutator changes to other fields are silently
+// dropped. Phase 5's only legitimate caller (the coordinator) honors
+// this contract.
+//
+// Returns:
+//
+//	SESSION_NOT_FOUND     — sessionID missing.
+//	SESSION_EXPIRED       — status is "expired".
+//	CONNECTION_NOT_FOUND  — connectionID missing under that session.
+//	(mutator errors)      — passed through unwrapped.
+func (s *PostgresSessionStore) UpdateSessionConnection(
+	ctx context.Context,
+	sessionID string,
+	connectionID ulid.ULID,
+	mut session.SessionConnectionMutator,
+) error {
+	// Nil-Mutate guard before any DB work: a zero-value mutator or a
+	// keyed-literal bypass would otherwise panic inside the locked
+	// section after consuming a transaction. (CodeRabbit PR #4191)
+	if nerr := mut.NilSafe(); nerr != nil {
+		return nerr //nolint:wrapcheck // session.ErrNilMutator is a sentinel; callers errors.Is against it directly
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return oops.With("operation", "begin tx for update session connection").Wrap(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
+
+	// D11 canonical lock order: sessions row FIRST. Mirror
+	// UpdateFocusMemberships' narrow-column SELECT pattern at :676-691.
+	// The mutator only needs FocusMemberships + PresentingFocus to make
+	// decisions; we also read character_id + location_id for context.
+	// ULIDs are TEXT in the schema (parseSessionRow pattern :51-83) —
+	// scan into strings, then ulid.Parse.
+	var statusStr string
+	var focusMembershipsJSON, presentingFocusJSON []byte
+	var characterIDStr, locationIDStr string
+	err = tx.QueryRow(ctx, `
+		SELECT status, focus_memberships, presenting_focus, character_id, location_id
+		FROM sessions WHERE id = $1 FOR UPDATE
+	`, sessionID).Scan(&statusStr, &focusMembershipsJSON, &presentingFocusJSON, &characterIDStr, &locationIDStr)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oops.Code("SESSION_NOT_FOUND").
+			With("session_id", sessionID).
+			Errorf("session not found")
+	}
+	if err != nil {
+		return oops.With("operation", "read session for connection mutation").
+			With("session_id", sessionID).Wrap(err)
+	}
+	if statusStr == string(session.StatusExpired) {
+		return oops.Code("SESSION_EXPIRED").
+			With("session_id", sessionID).
+			Errorf("cannot mutate connection on expired session")
+	}
+
+	// Unmarshal session fields the mutator may inspect.
+	var fms []session.FocusMembership
+	if len(focusMembershipsJSON) > 0 {
+		if uerr := json.Unmarshal(focusMembershipsJSON, &fms); uerr != nil {
+			return oops.With("operation", "unmarshal focus_memberships").Wrap(uerr)
+		}
+	}
+	var pf *session.FocusKey
+	if len(presentingFocusJSON) > 0 {
+		var k session.FocusKey
+		if uerr := json.Unmarshal(presentingFocusJSON, &k); uerr != nil {
+			return oops.With("operation", "unmarshal presenting_focus").Wrap(uerr)
+		}
+		pf = &k
+	}
+	characterID, perr := ulid.Parse(characterIDStr)
+	if perr != nil {
+		return oops.With("operation", "parse session character_id").Wrap(perr)
+	}
+	locationID, perr := ulid.Parse(locationIDStr)
+	if perr != nil {
+		return oops.With("operation", "parse session location_id").Wrap(perr)
+	}
+	info := session.Info{
+		ID:               sessionID,
+		Status:           session.Status(statusStr),
+		CharacterID:      characterID,
+		LocationID:       locationID,
+		FocusMemberships: fms,
+		PresentingFocus:  pf,
+	}
+
+	// Then session_connections row FOR UPDATE (D11 second-lock). ULIDs
+	// scanned as TEXT then ulid.Parse (CRIT-A fix from plan-review r2).
+	// player_session_id omitted — session.Connection has no PlayerSessionID
+	// field (CRIT-B); the column still persists via AddConnection's insert
+	// path (session_store.go:466-483) unchanged.
+	var (
+		cIDStr        string
+		cSessionID    string
+		cClientType   string
+		cStreams      []string
+		cFocusKeyJSON []byte
+		cConnectedAt  time.Time
+	)
+	err = tx.QueryRow(ctx, `
+		SELECT id, session_id, client_type, streams, focus_key, connected_at
+		FROM session_connections WHERE id = $1 AND session_id = $2 FOR UPDATE
+	`, connectionID.String(), sessionID).Scan(
+		&cIDStr, &cSessionID, &cClientType, &cStreams, &cFocusKeyJSON, &cConnectedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oops.Code("CONNECTION_NOT_FOUND").
+			With("session_id", sessionID).
+			With("connection_id", connectionID.String()).
+			Errorf("connection not found in session")
+	}
+	if err != nil {
+		return oops.With("operation", "read connection for mutation").Wrap(err)
+	}
+	cID, perr := ulid.Parse(cIDStr)
+	if perr != nil {
+		return oops.With("operation", "parse connection id").Wrap(perr)
+	}
+	var cFK *session.FocusKey
+	if len(cFocusKeyJSON) > 0 {
+		var k session.FocusKey
+		if uerr := json.Unmarshal(cFocusKeyJSON, &k); uerr != nil {
+			return oops.With("operation", "unmarshal connection focus_key").Wrap(uerr)
+		}
+		cFK = &k
+	}
+	conn := session.Connection{
+		ID: cID, SessionID: cSessionID, ClientType: cClientType,
+		Streams: cStreams, FocusKey: cFK, ConnectedAt: cConnectedAt,
+	}
+
+	// Call the mutator with coherent snapshots of both Info and Connection.
+	// CONTRACT: the mutator MUST NOT modify Connection.Streams.
+	// Streams is owned by SessionStreamRegistry (via subscription_router
+	// SendToConnection calls), not by this Store path. The UPDATE below
+	// writes only focus_key + presenting_focus; any Streams change in
+	// the mutator callback is silently dropped. This is by design —
+	// Phase 5's mutator only writes the two focus fields.
+	nextInfo, nextConn, merr := mut.Mutate(info, conn)
+	if merr != nil {
+		return merr //nolint:wrapcheck // mutator error codes pass through
+	}
+
+	// Marshal and write back. Per D9/D10 the mutator may or may not
+	// change PresentingFocus; write whatever it returned (nil → NULL).
+	var nextPresentingJSON []byte
+	if nextInfo.PresentingFocus != nil {
+		nextPresentingJSON, err = json.Marshal(nextInfo.PresentingFocus)
+		if err != nil {
+			return oops.With("operation", "marshal next presenting_focus").Wrap(err)
+		}
+	}
+	if _, execErr := tx.Exec(ctx, `
+		UPDATE sessions SET presenting_focus = $1::jsonb, updated_at = now() WHERE id = $2
+	`, nextPresentingJSON, sessionID); execErr != nil {
+		return oops.With("operation", "write presenting_focus").
+			With("session_id", sessionID).Wrap(execErr)
+	}
+
+	var nextFocusKeyJSON []byte
+	if nextConn.FocusKey != nil {
+		nextFocusKeyJSON, err = json.Marshal(nextConn.FocusKey)
+		if err != nil {
+			return oops.With("operation", "marshal next focus_key").Wrap(err)
+		}
+	}
+	if _, execErr := tx.Exec(ctx, `
+		UPDATE session_connections SET focus_key = $1::jsonb WHERE id = $2
+	`, nextFocusKeyJSON, connectionID.String()); execErr != nil {
+		return oops.With("operation", "write connection focus_key").
+			With("connection_id", connectionID.String()).Wrap(execErr)
+	}
+
+	if cerr := tx.Commit(ctx); cerr != nil {
+		return oops.With("operation", "commit session connection update").
+			With("session_id", sessionID).
+			With("connection_id", connectionID.String()).Wrap(cerr)
+	}
+	return nil
+}
+
 // UpdateLocationOnMove atomically updates location_id and location_arrived_at
 // for all Active sessions belonging to characterID.
 // Detached and Expired sessions are not touched.
@@ -808,4 +1055,68 @@ func (s *PostgresSessionStore) BumpLocationArrivedAt(ctx context.Context, sessio
 		return oops.Code("SESSION_NOT_FOUND").With("session_id", sessionID).Errorf("session not found")
 	}
 	return nil
+}
+
+// ListConnectionsBySession returns a snapshot of all active Connections
+// for a session. No lock — callers must tolerate the racy snapshot
+// (each per-conn UpdateSessionConnection re-validates atomically).
+func (s *PostgresSessionStore) ListConnectionsBySession(ctx context.Context, sessionID string) ([]*session.Connection, error) {
+	// Verify session exists first.
+	var exists bool
+	if err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM sessions WHERE id = $1)`, sessionID).Scan(&exists); err != nil {
+		return nil, oops.Code("SESSION_GET_FAILED").Wrap(err)
+	}
+	if !exists {
+		return nil, oops.Code("SESSION_NOT_FOUND").
+			With("session_id", sessionID).
+			Errorf("session not found")
+	}
+
+	// ULIDs scanned as TEXT then ulid.Parse (CRIT-A); player_session_id
+	// omitted (CRIT-B — Connection has no PlayerSessionID field).
+	rows, err := s.pool.Query(ctx, `
+        SELECT id, session_id, client_type, streams, focus_key, connected_at
+        FROM session_connections
+        WHERE session_id = $1
+    `, sessionID)
+	if err != nil {
+		return nil, oops.Code("CONNECTION_LIST_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+
+	out := make([]*session.Connection, 0)
+	for rows.Next() {
+		var (
+			idStr       string
+			sid         string
+			ct          string
+			streams     []string
+			fkJSON      []byte
+			connectedAt time.Time
+		)
+		if err := rows.Scan(&idStr, &sid, &ct, &streams, &fkJSON, &connectedAt); err != nil {
+			return nil, oops.Code("CONNECTION_SCAN_FAILED").Wrap(err)
+		}
+		id, perr := ulid.Parse(idStr)
+		if perr != nil {
+			return nil, oops.With("operation", "parse connection id").Wrap(perr)
+		}
+		var fk *session.FocusKey
+		if len(fkJSON) > 0 {
+			var k session.FocusKey
+			if uerr := json.Unmarshal(fkJSON, &k); uerr != nil {
+				return nil, oops.With("operation", "unmarshal connection focus_key").Wrap(uerr)
+			}
+			fk = &k
+		}
+		conn := session.Connection{
+			ID: id, SessionID: sid, ClientType: ct,
+			Streams: streams, FocusKey: fk, ConnectedAt: connectedAt,
+		}
+		out = append(out, &conn)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, oops.Code("CONNECTION_ITER_FAILED").Wrap(err)
+	}
+	return out, nil
 }

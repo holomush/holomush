@@ -23,15 +23,25 @@ import (
 )
 
 type mockFocusOps struct {
-	joinCalls           []focusOpCall
-	leaveCalls          []focusOpCall
-	leaveByTargetCalls  []session.FocusKey
-	leaveByTargetResult session.LeaveByTargetResult
-	leaveByTargetErr    error
-	presentCalls        []focusOpCall
-	joinErr             error
-	leaveErr            error
-	presentErr          error
+	joinCalls            []focusOpCall
+	leaveCalls           []focusOpCall
+	leaveByTargetCalls   []session.FocusKey
+	leaveByTargetResult  session.LeaveByTargetResult
+	leaveByTargetErr     error
+	presentCalls         []focusOpCall
+	setConnFocusCalls    []setConnFocusCall
+	joinErr              error
+	leaveErr             error
+	presentErr           error
+}
+
+// setConnFocusCall captures inputs to SetConnectionFocus so tests
+// can assert the Lua hostfunc parsed and forwarded them correctly.
+// (CodeRabbit PR #4191 round 6)
+type setConnFocusCall struct {
+	connectionID ulid.ULID
+	focusKey     *session.FocusKey
+	isSceneGrid  bool
 }
 
 type focusOpCall struct {
@@ -57,6 +67,19 @@ func (m *mockFocusOps) LeaveFocusByTarget(_ context.Context, key session.FocusKe
 func (m *mockFocusOps) PresentFocus(_ context.Context, sid string, key session.FocusKey) error {
 	m.presentCalls = append(m.presentCalls, focusOpCall{sid, key})
 	return m.presentErr
+}
+
+func (m *mockFocusOps) SetConnectionFocus(_ context.Context, connID ulid.ULID, focusKey *session.FocusKey, isSceneGrid bool) error {
+	m.setConnFocusCalls = append(m.setConnFocusCalls, setConnFocusCall{connID, focusKey, isSceneGrid})
+	return nil
+}
+
+func (m *mockFocusOps) AutoFocusOnJoin(_ context.Context, _, _ ulid.ULID) ([]ulid.ULID, []ulid.ULID, []hostfunc.FocusFailure, uint32, error) {
+	return nil, nil, nil, 0, nil
+}
+
+func (m *mockFocusOps) IsAnyConnFocused(_ context.Context, _, _ ulid.ULID) (bool, error) {
+	return false, nil
 }
 
 type mockHistoryReader struct {
@@ -556,4 +579,43 @@ assert(errmsg ~= nil, "expected error message")
 `)
 	require.NoError(t, err)
 	assert.Empty(t, fo.presentCalls)
+}
+
+func TestFocusHostfunc_PhaseFive_LuaParity(t *testing.T) {
+	t.Parallel()
+	// INV-P5-6: the 3 new RPCs ship Go SDK + Lua hostfunc together.
+	// Test that each is registered in the holomush module table.
+	ls := lua.NewState()
+	defer ls.Close()
+	mod := ls.NewTable()
+	hostfunc.RegisterFocusFuncs(ls, mod, /* mocks */ nil, nil)
+
+	for _, name := range []string{"set_connection_focus", "auto_focus_on_join", "is_any_conn_focused"} {
+		fn := ls.GetField(mod, name)
+		require.NotEqual(t, lua.LNil, fn, "hostfunc %q MUST be registered for INV-P5-6 parity", name)
+	}
+}
+
+func TestFocusHostfunc_ULIDRoundTrip(t *testing.T) {
+	t.Parallel()
+	// INV-P5-9: Lua hostfunc accepts 26-char base32 string ULIDs; proto
+	// wire takes bytes; the boundary converts. This MUST drive the
+	// hostfunc end-to-end (Lua → Go binding → FocusOps mock) rather
+	// than only calling ulid.Parse in Go — otherwise a regression in
+	// the Lua binding's parser would still pass. (CodeRabbit PR #4191 round 6)
+	connID := ulid.Make()
+	sceneID := ulid.Make()
+	fo := &mockFocusOps{}
+	L := newFocusTestState(t, fo, nil)
+
+	err := L.DoString(`holomush.set_connection_focus("` + connID.String() + `", { kind = "scene", target_id = "` + sceneID.String() + `" }, false)`)
+	require.NoError(t, err)
+
+	require.Len(t, fo.setConnFocusCalls, 1, "Lua hostfunc MUST forward to FocusOps.SetConnectionFocus")
+	call := fo.setConnFocusCalls[0]
+	assert.Equal(t, connID, call.connectionID, "connection_id MUST round-trip Lua string → ulid.ULID")
+	require.NotNil(t, call.focusKey)
+	assert.Equal(t, sceneID, call.focusKey.TargetID, "target_id MUST round-trip Lua string → ulid.ULID")
+	assert.Equal(t, session.FocusKindScene, call.focusKey.Kind)
+	assert.False(t, call.isSceneGrid)
 }

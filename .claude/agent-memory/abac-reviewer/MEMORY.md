@@ -84,6 +84,21 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   constructed via raw SQL UPDATE that bypasses `ObjectRepository.Move`'s
   guard). When reviewing future AttributeProvider edits, flag any
   `attrs["X"] = ""` followed by `attrs["has_X"] = false` as a fail-open bug.
+- **Substrate-side authorization (D4 / ADR x0ph) is a valid ABAC alternative**:
+  Phase 5 scenes intentionally uses FocusMemberships (list maintained
+  via JoinFocus/LeaveFocus) as the authorization gate, NOT
+  `access.PolicyEngine.Evaluate`. The check fires inside the same
+  store-lock acquisition as the write (`set_connection_focus.go:75-81`,
+  `auto_focus_on_join.go:122-128`) — no TOCTOU window. When a branch
+  touches focus/scene state and `internal/access/` is untouched, that's
+  by design; do NOT flag missing engine calls. Verify the spec
+  explicitly disclaims ABAC (Phase 5 spec has zero `ABAC|engine.Evaluate`
+  hits) before accepting this pattern. The asymmetric gap: focus RPCs
+  (SetConnectionFocus, AutoFocusOnJoin, JoinFocus, etc.) at
+  `internal/plugin/goplugin/host_service.go` skip the
+  `x-holomush-emit-token` check that EmitEvent uses — this is consistent
+  across the entire focus-RPC family and bounded by substrate-membership
+  gates, but worth a documentation comment citing ADR x0ph.
 - **Wildcard resource IDs (`type:*`) bypass per-instance attrs**:
   `service.CreateLocation` / `service.FindLocationByName` /
   `service.CreateExit` / `service.CreateObject` all call `checkAccess`

@@ -667,3 +667,70 @@ func TestAdminBootRetainsSessionWhenEndSessionFails(t *testing.T) {
 	// Disconnect hook must still fire so in-process cleanup proceeds.
 	assert.True(t, hookCalled, "disconnect hook should fire even when EndSession fails")
 }
+
+// TestHandleCommand_ConnectionIDThreadedToExecution verifies that
+// HandleCommandRequest.connection_id is threaded through the gRPC server-side
+// handler into CommandExecutionConfig.ConnectionID so that T20-T23 scene-focus
+// autofocus commands can identify the originating connection.
+// This is the wire-level companion to TestDispatcher_PassesConnectionIDToPluginCommand
+// (which verifies the Go-side dispatcher round-trip).
+func TestHandleCommand_ConnectionIDThreadedToExecution(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	connID := core.NewULID()
+
+	var capturedConnID ulid.ULID
+
+	store := &mockEventStore{}
+	engine := core.NewEngine(store)
+	sessStore := session.NewMemStore()
+
+	reg := command.NewRegistry()
+	// Register a probe command that captures exec.ConnectionID().
+	entry, err := command.NewCommandEntry(command.CommandEntryConfig{
+		Name: "probeconnid",
+		Handler: func(_ context.Context, exec *command.CommandExecution) error {
+			capturedConnID = exec.ConnectionID()
+			return nil
+		},
+	})
+	require.NoError(t, err)
+	require.NoError(t, reg.Register(*entry))
+
+	policyEngine := policytest.AllowAllEngine()
+	svc := command.NewTestServices(command.ServicesConfig{
+		World:   nil,
+		Session: sessStore,
+		Engine:  policyEngine,
+		Events:  store,
+	})
+	dispatcher, err := command.NewDispatcher(reg, policyEngine)
+	require.NoError(t, err)
+
+	server := NewCoreServer(engine, sessStore, dispatcher, svc,
+		WithEventStore(store),
+		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
+	)
+
+	ctx := context.Background()
+	require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{
+		ID:          sessionID.String(),
+		CharacterID: charID,
+		LocationID:  locationID,
+		Status:      session.StatusActive,
+	}))
+
+	resp, err := server.HandleCommand(ctx, &corev1.HandleCommandRequest{
+		Meta:               &corev1.RequestMeta{RequestId: "connid-test"},
+		SessionId:          sessionID.String(),
+		Command:            "probeconnid",
+		PlayerSessionToken: testPlayerSessionToken,
+		ConnectionId:       connID.String(),
+	})
+	require.NoError(t, err)
+	assert.True(t, resp.Success, "probeconnid should succeed: %s", resp.Error)
+
+	assert.Equal(t, connID, capturedConnID,
+		"HandleCommandRequest.connection_id must reach CommandExecution.ConnectionID()")
+}

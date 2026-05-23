@@ -38,6 +38,14 @@ To move, type the name of an exit (or its alias). For example, if `look` shows a
 | create | `create CharName` | Create a new character on your account |
 | quit | `quit` | Disconnect from the game |
 
+## Scenes
+
+| Command | Usage | Description |
+|---------|-------|-------------|
+| scene focus | `scene focus #<id>` | Focus your current connection on a specific scene; output from that scene appears in your terminal |
+| scene grid | `scene grid` | Return your current connection to the grid (default view); clears any scene focus |
+| scene list | `scene list` | List the scenes you are in. `[focused]` means at least one of your active connections is focused on that scene; `[background]` means no connection is. |
+
 ## Aliases
 
 A few common commands have shorthand aliases so you can type faster:

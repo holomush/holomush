@@ -630,6 +630,65 @@ func (_c *MockStore_GetCommandHistory_Call) RunAndReturn(run func(context.Contex
 	return _c
 }
 
+// GetConnection provides a mock function with given fields: ctx, connectionID
+func (_m *MockStore) GetConnection(ctx context.Context, connectionID ulid.ULID) (*session.Connection, error) {
+	ret := _m.Called(ctx, connectionID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetConnection")
+	}
+
+	var r0 *session.Connection
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) (*session.Connection, error)); ok {
+		return rf(ctx, connectionID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) *session.Connection); ok {
+		r0 = rf(ctx, connectionID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*session.Connection)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID) error); ok {
+		r1 = rf(ctx, connectionID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockStore_GetConnection_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetConnection'
+type MockStore_GetConnection_Call struct {
+	*mock.Call
+}
+
+// GetConnection is a helper method to define mock.On call
+//   - ctx context.Context
+//   - connectionID ulid.ULID
+func (_e *MockStore_Expecter) GetConnection(ctx interface{}, connectionID interface{}) *MockStore_GetConnection_Call {
+	return &MockStore_GetConnection_Call{Call: _e.mock.On("GetConnection", ctx, connectionID)}
+}
+
+func (_c *MockStore_GetConnection_Call) Run(run func(ctx context.Context, connectionID ulid.ULID)) *MockStore_GetConnection_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(ulid.ULID))
+	})
+	return _c
+}
+
+func (_c *MockStore_GetConnection_Call) Return(_a0 *session.Connection, _a1 error) *MockStore_GetConnection_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockStore_GetConnection_Call) RunAndReturn(run func(context.Context, ulid.ULID) (*session.Connection, error)) *MockStore_GetConnection_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ListActive provides a mock function with given fields: ctx
 func (_m *MockStore) ListActive(ctx context.Context) ([]*session.Info, error) {
 	ret := _m.Called(ctx)
@@ -920,6 +979,65 @@ func (_c *MockStore_ListByPlayerSession_Call) Return(_a0 []*session.Info, _a1 er
 }
 
 func (_c *MockStore_ListByPlayerSession_Call) RunAndReturn(run func(context.Context, []ulid.ULID) ([]*session.Info, error)) *MockStore_ListByPlayerSession_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListConnectionsBySession provides a mock function with given fields: ctx, sessionID
+func (_m *MockStore) ListConnectionsBySession(ctx context.Context, sessionID string) ([]*session.Connection, error) {
+	ret := _m.Called(ctx, sessionID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListConnectionsBySession")
+	}
+
+	var r0 []*session.Connection
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) ([]*session.Connection, error)); ok {
+		return rf(ctx, sessionID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string) []*session.Connection); ok {
+		r0 = rf(ctx, sessionID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*session.Connection)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, sessionID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockStore_ListConnectionsBySession_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListConnectionsBySession'
+type MockStore_ListConnectionsBySession_Call struct {
+	*mock.Call
+}
+
+// ListConnectionsBySession is a helper method to define mock.On call
+//   - ctx context.Context
+//   - sessionID string
+func (_e *MockStore_Expecter) ListConnectionsBySession(ctx interface{}, sessionID interface{}) *MockStore_ListConnectionsBySession_Call {
+	return &MockStore_ListConnectionsBySession_Call{Call: _e.mock.On("ListConnectionsBySession", ctx, sessionID)}
+}
+
+func (_c *MockStore_ListConnectionsBySession_Call) Run(run func(ctx context.Context, sessionID string)) *MockStore_ListConnectionsBySession_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *MockStore_ListConnectionsBySession_Call) Return(_a0 []*session.Connection, _a1 error) *MockStore_ListConnectionsBySession_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockStore_ListConnectionsBySession_Call) RunAndReturn(run func(context.Context, string) ([]*session.Connection, error)) *MockStore_ListConnectionsBySession_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1418,6 +1536,55 @@ func (_c *MockStore_UpdateLocationOnMove_Call) Return(_a0 error) *MockStore_Upda
 }
 
 func (_c *MockStore_UpdateLocationOnMove_Call) RunAndReturn(run func(context.Context, ulid.ULID, ulid.ULID, time.Time) error) *MockStore_UpdateLocationOnMove_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateSessionConnection provides a mock function with given fields: ctx, sessionID, connectionID, m
+func (_m *MockStore) UpdateSessionConnection(ctx context.Context, sessionID string, connectionID ulid.ULID, m session.SessionConnectionMutator) error {
+	ret := _m.Called(ctx, sessionID, connectionID, m)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateSessionConnection")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, ulid.ULID, session.SessionConnectionMutator) error); ok {
+		r0 = rf(ctx, sessionID, connectionID, m)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockStore_UpdateSessionConnection_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateSessionConnection'
+type MockStore_UpdateSessionConnection_Call struct {
+	*mock.Call
+}
+
+// UpdateSessionConnection is a helper method to define mock.On call
+//   - ctx context.Context
+//   - sessionID string
+//   - connectionID ulid.ULID
+//   - m session.SessionConnectionMutator
+func (_e *MockStore_Expecter) UpdateSessionConnection(ctx interface{}, sessionID interface{}, connectionID interface{}, m interface{}) *MockStore_UpdateSessionConnection_Call {
+	return &MockStore_UpdateSessionConnection_Call{Call: _e.mock.On("UpdateSessionConnection", ctx, sessionID, connectionID, m)}
+}
+
+func (_c *MockStore_UpdateSessionConnection_Call) Run(run func(ctx context.Context, sessionID string, connectionID ulid.ULID, m session.SessionConnectionMutator)) *MockStore_UpdateSessionConnection_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(ulid.ULID), args[3].(session.SessionConnectionMutator))
+	})
+	return _c
+}
+
+func (_c *MockStore_UpdateSessionConnection_Call) Return(_a0 error) *MockStore_UpdateSessionConnection_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockStore_UpdateSessionConnection_Call) RunAndReturn(run func(context.Context, string, ulid.ULID, session.SessionConnectionMutator) error) *MockStore_UpdateSessionConnection_Call {
 	_c.Call.Return(run)
 	return _c
 }

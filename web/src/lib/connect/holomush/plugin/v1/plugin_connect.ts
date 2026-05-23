@@ -8,7 +8,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceAddSessionStreamRequest, PluginHostServiceAddSessionStreamResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceJoinFocusRequest, PluginHostServiceJoinFocusResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLeaveFocusByTargetRequest, PluginHostServiceLeaveFocusByTargetResponse, PluginHostServiceLeaveFocusRequest, PluginHostServiceLeaveFocusResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServicePresentFocusRequest, PluginHostServicePresentFocusResponse, PluginHostServiceQueryStreamHistoryRequest, PluginHostServiceQueryStreamHistoryResponse, PluginHostServiceRemoveSessionStreamRequest, PluginHostServiceRemoveSessionStreamResponse, PluginHostServiceRequestEmitTokenRequest, PluginHostServiceRequestEmitTokenResponse, QuerySessionStreamsRequest, QuerySessionStreamsResponse } from "./plugin_pb.js";
+import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceAddSessionStreamRequest, PluginHostServiceAddSessionStreamResponse, PluginHostServiceAutoFocusOnJoinRequest, PluginHostServiceAutoFocusOnJoinResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceIsAnyConnFocusedRequest, PluginHostServiceIsAnyConnFocusedResponse, PluginHostServiceJoinFocusRequest, PluginHostServiceJoinFocusResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLeaveFocusByTargetRequest, PluginHostServiceLeaveFocusByTargetResponse, PluginHostServiceLeaveFocusRequest, PluginHostServiceLeaveFocusResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServicePresentFocusRequest, PluginHostServicePresentFocusResponse, PluginHostServiceQueryStreamHistoryRequest, PluginHostServiceQueryStreamHistoryResponse, PluginHostServiceRemoveSessionStreamRequest, PluginHostServiceRemoveSessionStreamResponse, PluginHostServiceRequestEmitTokenRequest, PluginHostServiceRequestEmitTokenResponse, PluginHostServiceSetConnectionFocusRequest, PluginHostServiceSetConnectionFocusResponse, QuerySessionStreamsRequest, QuerySessionStreamsResponse } from "./plugin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -236,6 +236,46 @@ export const PluginHostService = {
       name: "RequestEmitToken",
       I: PluginHostServiceRequestEmitTokenRequest,
       O: PluginHostServiceRequestEmitTokenResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * SetConnectionFocus — Phase 5 explicit focus mutation for one
+     * Connection. Substrate validates membership against FocusMemberships
+     * (D4); writes Connection.FocusKey + (D9-gated) Info.PresentingFocus
+     * atomically under one Store-lock acquisition (D7).
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.SetConnectionFocus
+     */
+    setConnectionFocus: {
+      name: "SetConnectionFocus",
+      I: PluginHostServiceSetConnectionFocusRequest,
+      O: PluginHostServiceSetConnectionFocusResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * AutoFocusOnJoin — Phase 5 fan-out: focuses all terminal/telnet
+     * connections of the character on the given scene. Skips conns
+     * already explicitly focused elsewhere (D8). Caller must have
+     * completed JoinFocus before invocation.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.AutoFocusOnJoin
+     */
+    autoFocusOnJoin: {
+      name: "AutoFocusOnJoin",
+      I: PluginHostServiceAutoFocusOnJoinRequest,
+      O: PluginHostServiceAutoFocusOnJoinResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * IsAnyConnFocused — Phase 5 notification-emission helper: true iff
+     * any of the character's connections has FocusKey == {scene, scene_id}.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.IsAnyConnFocused
+     */
+    isAnyConnFocused: {
+      name: "IsAnyConnFocused",
+      I: PluginHostServiceIsAnyConnFocusedRequest,
+      O: PluginHostServiceIsAnyConnFocusedResponse,
       kind: MethodKind.Unary,
     },
   }

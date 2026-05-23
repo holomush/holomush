@@ -16,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus/cursor"
+	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/session"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -199,6 +200,241 @@ func clampCountToInt32(n int) int32 {
 		return math.MaxInt32
 	default:
 		return int32(n)
+	}
+}
+
+func (s *pluginHostServiceServer) SetConnectionFocus(ctx context.Context, req *pluginv1.PluginHostServiceSetConnectionFocusRequest) (*pluginv1.PluginHostServiceSetConnectionFocusResponse, error) {
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+	fc := s.host.FocusCoordinator()
+	if fc == nil {
+		return nil, oops.With("plugin", s.pluginName).New("focus coordinator not configured")
+	}
+
+	// Decode connection_id bytes → ULID (16-byte wire format, INV-P5-9).
+	connID, err := bytesToULID(req.GetConnectionId())
+	if err != nil {
+		return nil, oops.Code("INVALID_ULID").
+			With("plugin", s.pluginName).
+			With("field", "connection_id").
+			Wrap(err)
+	}
+
+	// Decode optional focus_key (nil = grid pivot).
+	var focusKey *session.FocusKey
+	if pk := req.GetFocusKey(); pk != nil {
+		fk, parseErr := protoToFocusKey(pk)
+		if parseErr != nil {
+			return nil, oops.With("plugin", s.pluginName).Wrap(parseErr)
+		}
+		focusKey = &fk
+	}
+
+	// Reject contradictory input: is_scene_grid=true means "pivot to grid"
+	// which requires focus_key to be nil. Without this gate the substrate
+	// could persist focus_key while the live connection's stream-delta
+	// computation below also routes scene streams — divergent state.
+	// (CodeRabbit PR #4191)
+	if focusKey != nil && req.GetIsSceneGrid() {
+		return nil, oops.Code("INVALID_ARGUMENT").
+			With("plugin", s.pluginName).
+			Errorf("is_scene_grid=true is incompatible with a non-nil focus_key; supply one or the other")
+	}
+
+	result, err := fc.SetConnectionFocus(ctx, connID, focusKey, req.GetIsSceneGrid())
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).
+			With("connection_id", connID.String()).
+			Wrap(err)
+	}
+
+	// Drive subscription deltas via ConnectionSender if wired (T18, INV-P5-10).
+	// Best-effort: CONNECTION_NOT_REGISTERED means no live Subscribe goroutine.
+	cs := s.host.ConnectionSender()
+	if cs != nil {
+		gameID := s.host.gameID
+		if gameID == "" {
+			gameID = "main"
+		}
+		oldStreams := focus.ComputeFocusManagedStreams(result.OldFocusKey, result.CharLocationID, gameID)
+		newStreams := focus.ComputeFocusManagedStreams(focusKey, result.CharLocationID, gameID)
+		adds, removes := focus.StreamDeltas(oldStreams, newStreams)
+		for _, stream := range adds {
+			_ = cs.SendToConnection(result.SessionID, connID, stream, true) //nolint:errcheck // best-effort
+		}
+		for _, stream := range removes {
+			_ = cs.SendToConnection(result.SessionID, connID, stream, false) //nolint:errcheck // best-effort
+		}
+	}
+
+	// Echo back the new FocusKey (nil = grid).
+	resp := &pluginv1.PluginHostServiceSetConnectionFocusResponse{}
+	if focusKey != nil {
+		resp.FocusKey = focusKeyToProto(*focusKey)
+	}
+	return resp, nil
+}
+
+func (s *pluginHostServiceServer) AutoFocusOnJoin(ctx context.Context, req *pluginv1.PluginHostServiceAutoFocusOnJoinRequest) (*pluginv1.PluginHostServiceAutoFocusOnJoinResponse, error) {
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+	fc := s.host.FocusCoordinator()
+	if fc == nil {
+		return nil, oops.With("plugin", s.pluginName).New("focus coordinator not configured")
+	}
+
+	charID, err := bytesToULID(req.GetCharacterId())
+	if err != nil {
+		return nil, oops.Code("INVALID_ULID").
+			With("plugin", s.pluginName).
+			With("field", "character_id").
+			Wrap(err)
+	}
+	sceneID, err := bytesToULID(req.GetSceneId())
+	if err != nil {
+		return nil, oops.Code("INVALID_ULID").
+			With("plugin", s.pluginName).
+			With("field", "scene_id").
+			Wrap(err)
+	}
+
+	r, err := fc.AutoFocusOnJoin(ctx, charID, sceneID)
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).
+			With("character_id", charID.String()).
+			With("scene_id", sceneID.String()).
+			Wrap(err)
+	}
+
+	// Drive subscription deltas for each successfully focused connection.
+	// Focused connections were previously on grid (nil FocusKey — D8 ensures
+	// already-focused conns are skipped), so old streams = grid streams.
+	cs := s.host.ConnectionSender()
+	if cs != nil && len(r.FocusedConnectionIDs) > 0 && r.SessionID != "" {
+		gameID := s.host.gameID
+		if gameID == "" {
+			gameID = "main"
+		}
+		sceneFk := &session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneID}
+		// Old streams for grid-focused connections are location streams.
+		oldStreams := focus.ComputeFocusManagedStreams(nil, r.CharLocationID, gameID)
+		newStreams := focus.ComputeFocusManagedStreams(sceneFk, r.CharLocationID, gameID)
+		adds, removes := focus.StreamDeltas(oldStreams, newStreams)
+		for _, cid := range r.FocusedConnectionIDs {
+			connIDCopy := cid // loop var safety
+			for _, stream := range adds {
+				_ = cs.SendToConnection(r.SessionID, connIDCopy, stream, true) //nolint:errcheck // best-effort
+			}
+			for _, stream := range removes {
+				_ = cs.SendToConnection(r.SessionID, connIDCopy, stream, false) //nolint:errcheck // best-effort
+			}
+		}
+	}
+
+	resp := &pluginv1.PluginHostServiceAutoFocusOnJoinResponse{
+		TotalConnectionCount: r.TotalConnectionCount,
+	}
+	if len(r.FocusedConnectionIDs) > 0 {
+		resp.FocusedConnectionIds = make([][]byte, len(r.FocusedConnectionIDs))
+		for i, id := range r.FocusedConnectionIDs {
+			resp.FocusedConnectionIds[i] = id.Bytes()
+		}
+	}
+	if len(r.SkippedConnectionIDs) > 0 {
+		resp.SkippedConnectionIds = make([][]byte, len(r.SkippedConnectionIDs))
+		for i, id := range r.SkippedConnectionIDs {
+			resp.SkippedConnectionIds[i] = id.Bytes()
+		}
+	}
+	if len(r.FailedConnectionIDs) > 0 {
+		resp.FailedConnectionIds = make([]*pluginv1.FocusFailure, len(r.FailedConnectionIDs))
+		for i, f := range r.FailedConnectionIDs {
+			resp.FailedConnectionIds[i] = &pluginv1.FocusFailure{
+				ConnectionId: f.ConnectionID.Bytes(),
+				Reason:       autoFocusFailureReasonToProto(f.Reason),
+			}
+		}
+	}
+	return resp, nil
+}
+
+func (s *pluginHostServiceServer) IsAnyConnFocused(ctx context.Context, req *pluginv1.PluginHostServiceIsAnyConnFocusedRequest) (*pluginv1.PluginHostServiceIsAnyConnFocusedResponse, error) {
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+	fc := s.host.FocusCoordinator()
+	if fc == nil {
+		return nil, oops.With("plugin", s.pluginName).New("focus coordinator not configured")
+	}
+
+	charID, err := bytesToULID(req.GetCharacterId())
+	if err != nil {
+		return nil, oops.Code("INVALID_ULID").
+			With("plugin", s.pluginName).
+			With("field", "character_id").
+			Wrap(err)
+	}
+	sceneID, err := bytesToULID(req.GetSceneId())
+	if err != nil {
+		return nil, oops.Code("INVALID_ULID").
+			With("plugin", s.pluginName).
+			With("field", "scene_id").
+			Wrap(err)
+	}
+
+	focused, err := fc.IsAnyConnFocused(ctx, charID, sceneID)
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).
+			With("character_id", charID.String()).
+			With("scene_id", sceneID.String()).
+			Wrap(err)
+	}
+	return &pluginv1.PluginHostServiceIsAnyConnFocusedResponse{Focused: focused}, nil
+}
+
+// focusKeyToProto converts a session.FocusKey to the proto FocusKey type.
+func focusKeyToProto(fk session.FocusKey) *pluginv1.FocusKey {
+	return &pluginv1.FocusKey{
+		Kind:     focusKindToProto(fk.Kind),
+		TargetId: fk.TargetID.String(),
+	}
+}
+
+// focusKindToProto maps session.FocusKind to proto FocusKind.
+func focusKindToProto(k session.FocusKind) pluginv1.FocusKind {
+	switch k {
+	case session.FocusKindScene:
+		return pluginv1.FocusKind_FOCUS_KIND_SCENE
+	default:
+		return pluginv1.FocusKind_FOCUS_KIND_UNSPECIFIED
+	}
+}
+
+// bytesToULID converts a 16-byte proto bytes field to ulid.ULID.
+// Returns INVALID_ULID error on wrong length (proto3 bytes ULID fields
+// carry the 16-byte binary form, not the 26-char string encoding).
+func bytesToULID(b []byte) (ulid.ULID, error) {
+	if len(b) != 16 {
+		return ulid.ULID{}, oops.Code("INVALID_ULID").
+			Errorf("expected 16-byte ULID, got %d bytes", len(b))
+	}
+	var id ulid.ULID
+	copy(id[:], b)
+	return id, nil
+}
+
+// autoFocusFailureReasonToProto maps the string reason from AutoFocusOnJoin
+// to the proto FocusFailureReason enum.
+func autoFocusFailureReasonToProto(reason string) pluginv1.FocusFailureReason {
+	switch reason {
+	case "membership_absent":
+		return pluginv1.FocusFailureReason_FOCUS_FAILURE_REASON_MEMBERSHIP_ABSENT
+	case "connection_not_found":
+		return pluginv1.FocusFailureReason_FOCUS_FAILURE_REASON_CONNECTION_NOT_FOUND
+	default:
+		return pluginv1.FocusFailureReason_FOCUS_FAILURE_REASON_UNSPECIFIED
 	}
 }
 

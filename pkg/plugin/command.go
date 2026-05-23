@@ -32,6 +32,13 @@ type CommandRequest struct {
 	SessionID     string // active session ULID
 	PlayerID      string // player account ULID
 	InvokedAs     string // what the player actually typed (alias support)
+	// ConnectionID is the ULID of the originating Connection. Added
+	// for Phase 5 (holomush-5rh.14): per-Connection focus commands
+	// (scene focus / scene grid) need to know which connection issued
+	// the command. Always populated for plugin-routed commands;
+	// empty string only for internal/test fixtures predating this
+	// field.
+	ConnectionID string
 }
 
 // AuditEffect is the effect a plugin handler decided for a given audit hint.

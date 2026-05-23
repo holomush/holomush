@@ -23,12 +23,22 @@ const (
 	historyReaderKey = "__holo_history_reader"
 )
 
+// FocusFailure mirrors the proto FocusFailure shape for Lua serialization.
+type FocusFailure struct {
+	ConnectionID ulid.ULID
+	Reason       string // "membership_absent" | "connection_not_found"
+}
+
 // FocusOps is a narrow interface for focus coordinator operations exposed to Lua plugins.
 type FocusOps interface {
 	JoinFocus(ctx context.Context, sessionID string, target session.FocusKey) error
 	LeaveFocus(ctx context.Context, sessionID string, target session.FocusKey) error
 	LeaveFocusByTarget(ctx context.Context, target session.FocusKey) (session.LeaveByTargetResult, error)
 	PresentFocus(ctx context.Context, sessionID string, target session.FocusKey) error
+	// Phase 5 additions (INV-P5-6, D6):
+	SetConnectionFocus(ctx context.Context, connectionID ulid.ULID, focusKey *session.FocusKey, isSceneGrid bool) error
+	AutoFocusOnJoin(ctx context.Context, characterID, sceneID ulid.ULID) (focused, skipped []ulid.ULID, failed []FocusFailure, totalConnCount uint32, err error)
+	IsAnyConnFocused(ctx context.Context, characterID, sceneID ulid.ULID) (bool, error)
 }
 
 // HistoryReader provides read-only event history access for Lua plugins.
@@ -55,6 +65,10 @@ func RegisterFocusFuncs(ls *lua.LState, mod *lua.LTable, fo FocusOps, hr History
 	ls.SetField(mod, "leave_focus_by_target", ls.NewFunction(leaveFocusByTargetFn))
 	ls.SetField(mod, "present_focus", ls.NewFunction(presentFocusFn))
 	ls.SetField(mod, "query_stream_history", ls.NewFunction(queryStreamHistoryFn))
+	// Phase 5 additions:
+	ls.SetField(mod, "set_connection_focus", ls.NewFunction(setConnectionFocusFn))
+	ls.SetField(mod, "auto_focus_on_join", ls.NewFunction(autoFocusOnJoinFn))
+	ls.SetField(mod, "is_any_conn_focused", ls.NewFunction(isAnyConnFocusedFn))
 }
 
 func getFocusOps(ls *lua.LState) FocusOps {
@@ -430,5 +444,156 @@ func queryStreamHistoryFn(ls *lua.LState) int {
 		}
 	}
 	ls.Push(result)
+	return 1
+}
+
+// setConnectionFocusFn implements holomush.set_connection_focus(connection_id_str, {kind, target_id}|nil, is_scene_grid_bool).
+// Returns true on success; returns (nil, error_string) on failure.
+func setConnectionFocusFn(ls *lua.LState) int {
+	fo := getFocusOps(ls)
+	if fo == nil {
+		ls.Push(lua.LNil)
+		ls.Push(lua.LString("focus_ops not registered"))
+		return 2
+	}
+	connIDStr := ls.CheckString(1)
+	connID, err := ulid.Parse(connIDStr)
+	if err != nil {
+		ls.Push(lua.LNil)
+		ls.Push(lua.LString("INVALID_ULID: " + err.Error()))
+		return 2
+	}
+	var fk *session.FocusKey
+	if ls.Get(2) != lua.LNil {
+		// Lua table {kind="scene", target_id="..."}
+		tbl := ls.CheckTable(2)
+		kind := tbl.RawGetString("kind").String()
+		targetIDStr := tbl.RawGetString("target_id").String()
+		targetID, parseErr := ulid.Parse(targetIDStr)
+		if parseErr != nil {
+			ls.Push(lua.LNil)
+			ls.Push(lua.LString("INVALID_ULID: " + parseErr.Error()))
+			return 2
+		}
+		fk = &session.FocusKey{Kind: session.FocusKind(kind), TargetID: targetID}
+	}
+	isSceneGrid := ls.OptBool(3, false)
+	ctx := ls.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, defaultPluginQueryTimeout)
+	defer cancel()
+	if err := fo.SetConnectionFocus(ctx, connID, fk, isSceneGrid); err != nil {
+		ls.Push(lua.LNil)
+		ls.Push(lua.LString(err.Error()))
+		return 2
+	}
+	ls.Push(lua.LTrue)
+	return 1
+}
+
+// autoFocusOnJoinFn implements holomush.auto_focus_on_join(character_id_str, scene_id_str).
+// Returns a Lua table {focused_connection_ids, skipped_connection_ids, failed_connection_ids, total_connection_count}.
+// Returns (nil, error_string) on failure.
+func autoFocusOnJoinFn(ls *lua.LState) int {
+	fo := getFocusOps(ls)
+	if fo == nil {
+		ls.Push(lua.LNil)
+		ls.Push(lua.LString("focus_ops not registered"))
+		return 2
+	}
+	charIDStr := ls.CheckString(1)
+	sceneIDStr := ls.CheckString(2)
+	charID, err := ulid.Parse(charIDStr)
+	if err != nil {
+		ls.Push(lua.LNil)
+		ls.Push(lua.LString("INVALID_ULID: " + err.Error()))
+		return 2
+	}
+	sceneID, err := ulid.Parse(sceneIDStr)
+	if err != nil {
+		ls.Push(lua.LNil)
+		ls.Push(lua.LString("INVALID_ULID: " + err.Error()))
+		return 2
+	}
+	ctx := ls.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, defaultPluginQueryTimeout)
+	defer cancel()
+	focused, skipped, failed, total, err := fo.AutoFocusOnJoin(ctx, charID, sceneID)
+	if err != nil {
+		ls.Push(lua.LNil)
+		ls.Push(lua.LString(err.Error()))
+		return 2
+	}
+	// Return a Lua table mirroring the proto response shape so plugin
+	// authors can render the 4 branches in §7.4.
+	resp := ls.NewTable()
+	focusedTbl := ls.NewTable()
+	for i, id := range focused {
+		focusedTbl.RawSetInt(i+1, lua.LString(id.String()))
+	}
+	resp.RawSetString("focused_connection_ids", focusedTbl)
+
+	skippedTbl := ls.NewTable()
+	for i, id := range skipped {
+		skippedTbl.RawSetInt(i+1, lua.LString(id.String()))
+	}
+	resp.RawSetString("skipped_connection_ids", skippedTbl)
+
+	failedTbl := ls.NewTable()
+	for i, f := range failed {
+		entry := ls.NewTable()
+		entry.RawSetString("connection_id", lua.LString(f.ConnectionID.String()))
+		entry.RawSetString("reason", lua.LString(f.Reason))
+		failedTbl.RawSetInt(i+1, entry)
+	}
+	resp.RawSetString("failed_connection_ids", failedTbl)
+
+	resp.RawSetString("total_connection_count", lua.LNumber(total))
+
+	ls.Push(resp)
+	return 1
+}
+
+// isAnyConnFocusedFn implements holomush.is_any_conn_focused(character_id_str, scene_id_str).
+// Returns bool on success; returns (nil, error_string) on failure.
+func isAnyConnFocusedFn(ls *lua.LState) int {
+	fo := getFocusOps(ls)
+	if fo == nil {
+		ls.Push(lua.LNil)
+		ls.Push(lua.LString("focus_ops not registered"))
+		return 2
+	}
+	charIDStr := ls.CheckString(1)
+	sceneIDStr := ls.CheckString(2)
+	charID, err := ulid.Parse(charIDStr)
+	if err != nil {
+		ls.Push(lua.LNil)
+		ls.Push(lua.LString("INVALID_ULID: " + err.Error()))
+		return 2
+	}
+	sceneID, err := ulid.Parse(sceneIDStr)
+	if err != nil {
+		ls.Push(lua.LNil)
+		ls.Push(lua.LString("INVALID_ULID: " + err.Error()))
+		return 2
+	}
+	ctx := ls.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, defaultPluginQueryTimeout)
+	defer cancel()
+	isFocused, err := fo.IsAnyConnFocused(ctx, charID, sceneID)
+	if err != nil {
+		ls.Push(lua.LNil)
+		ls.Push(lua.LString(err.Error()))
+		return 2
+	}
+	ls.Push(lua.LBool(isFocused))
 	return 1
 }

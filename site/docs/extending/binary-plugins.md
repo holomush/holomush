@@ -549,6 +549,9 @@ mutating session state directly. All calls cross the plugin broker
 | `LeaveFocus(ctx, sessionID, target)` | Remove a focus membership. Idempotent on non-member. Clears `PresentingFocus` if it pointed at the removed target. |
 | `PresentFocus(ctx, sessionID, target)` | Update the session's presenting-focus pointer. The target MUST already be a member; non-members get `FOCUS_NOT_MEMBER`. No replay or subscription change — pure bookkeeping. |
 | `QueryStreamHistory(ctx, req)` | Read the tail of a stream for plugin-side display (e.g., last 20 messages on join). Read-only — does not mutate cursors. The host clamps `Count` at 500. |
+| `SetConnectionFocus(ctx, connectionID, focusKey, isSceneGrid)` | Set per-connection focus (Phase 5). The substrate enforces INV-P5-1: `focusKey` MUST refer to a scene the character is already a member of; the call is rejected otherwise. Pass `isSceneGrid=true` to clear focus without removing membership. |
+| `AutoFocusOnJoin(ctx, characterID, sceneID)` | Fan-out focus to all terminal and telnet connections of `characterID` when the character joins `sceneID` (Phase 5). Returns a summary `{focused, skipped, failed, total_connection_count}`. Comms-hub connections are never auto-focused (INV-P5-4). |
+| `IsAnyConnFocused(ctx, characterID, sceneID)` | Returns `true` if at least one of `characterID`'s connections currently has `FocusKey` pointing at `sceneID` (Phase 5). Read-only. |
 
 #### Declaring FocusClientAware
 

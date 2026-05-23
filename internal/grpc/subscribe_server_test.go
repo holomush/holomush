@@ -254,6 +254,63 @@ func TestSubscribeRejectsConnectionIDWithoutClientType(t *testing.T) {
 
 var _ eventbus.Subscriber = (*fakeSubscriber)(nil)
 
+// concurrentFakeSubscriber is a thread-safe eventbus.Subscriber for tests
+// that fire multiple concurrent Subscribe RPCs through the same CoreServer.
+type concurrentFakeSubscriber struct {
+	mu      sync.Mutex
+	opens   int
+	openErr error
+}
+
+func (c *concurrentFakeSubscriber) OpenSession(_ context.Context, _ string, _ eventbus.SessionIdentity, _ []eventbus.Subject, _ time.Time) (eventbus.SessionStream, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.opens++
+	if c.openErr != nil {
+		return nil, c.openErr
+	}
+	// Return a fresh fake stream per OpenSession call so concurrent
+	// Subscribe invocations don't share Next/ack state through one stream.
+	return newFakeSessionStream(), nil
+}
+
+var _ eventbus.Subscriber = (*concurrentFakeSubscriber)(nil)
+
+// setupSubscribeTestServer creates a CoreServer backed by a real
+// SessionStreamRegistry, pre-seeded with a single session entry. Returns
+// both so tests can inspect registry state after Subscribe calls.
+func setupSubscribeTestServer(t *testing.T) (*CoreServer, *SessionStreamRegistry) {
+	t.Helper()
+	future := time.Now().Add(time.Hour)
+	registry := NewSessionStreamRegistry()
+	sub := &concurrentFakeSubscriber{}
+	s := &CoreServer{
+		subscriber: sub,
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			"sess-rbcid": {
+				ID:          "sess-rbcid",
+				ExpiresAt:   &future,
+				Status:      session.StatusActive,
+				CharacterID: core.NewULID(),
+			},
+		}),
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
+		streamRegistry:    registry,
+	}
+	return s, registry
+}
+
+// waitForRegistrations polls until at least n ConnectionIDs are registered
+// for sessionID in registry, or the test deadline is reached.
+func waitForRegistrations(t *testing.T, registry *SessionStreamRegistry, sessionID string, n int) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		registry.mu.Lock()
+		defer registry.mu.Unlock()
+		return len(registry.connections[sessionID]) >= n
+	}, 5*time.Second, 10*time.Millisecond, "timed out waiting for %d connection registrations", n)
+}
+
 // fakeBindingRepo implements BindingRepo for testing. Create panics (not used
 // in Subscribe path); Current returns the canned bindingID or error.
 type fakeBindingRepo struct {
@@ -428,4 +485,56 @@ func TestSubscribeReattachCAS_PreservesLocationArrivedAt(t *testing.T) {
 		stored.LocationArrivedAt, originalArrival)
 	assert.Equal(t, session.StatusActive, stored.Status,
 		"ReattachCAS MUST flip status back to Active")
+}
+
+// TestSubscribe_RegistersByConnectionID verifies INV-P5-11: when Subscribe
+// is called with a ConnectionId, the SessionStreamRegistry MUST register
+// the connection via RegisterConnection (per-connection routing), not just
+// the session-wide Register path. Two concurrent subscribers on the same
+// session with distinct ConnectionIds both appear in registry.connections.
+func TestSubscribe_RegistersByConnectionID(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	srv, registry := setupSubscribeTestServer(t)
+
+	sessionID := "sess-rbcid"
+	connA := ulid.Make()
+	connB := ulid.Make()
+
+	// Fire two Subscribe RPCs in goroutines (Subscribe is a streaming
+	// RPC; we let it register, then cancel ctx to deregister cleanly).
+	subA, cancelA := context.WithCancel(ctx)
+	subB, cancelB := context.WithCancel(ctx)
+	defer cancelA()
+	defer cancelB()
+
+	go func() {
+		_ = srv.Subscribe(&corev1.SubscribeRequest{
+			SessionId:          sessionID,
+			PlayerSessionToken: testPlayerSessionToken,
+			ConnectionId:       connA.String(),
+			ClientType:         "terminal",
+		}, &fakeSubscribeStream{ctx: subA})
+	}()
+	go func() {
+		_ = srv.Subscribe(&corev1.SubscribeRequest{
+			SessionId:          sessionID,
+			PlayerSessionToken: testPlayerSessionToken,
+			ConnectionId:       connB.String(),
+			ClientType:         "comms_hub",
+		}, &fakeSubscribeStream{ctx: subB})
+	}()
+
+	// Wait until both registrations have landed.
+	waitForRegistrations(t, registry, sessionID, 2)
+
+	// INV-P5-11: the registry tracks both connections as distinct
+	// (sessionID, connectionID) keys in the per-connection routing map.
+	assert.True(t, registry.HasConnection(sessionID, connA),
+		"Subscribe MUST register connA via RegisterConnection")
+	assert.True(t, registry.HasConnection(sessionID, connB),
+		"Subscribe MUST register connB via RegisterConnection")
 }

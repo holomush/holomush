@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -58,6 +59,35 @@ type FocusClient interface {
 	// PresentFocus updates the session's presenting-focus pointer. Target
 	// MUST already exist in the session's FocusMemberships.
 	PresentFocus(ctx context.Context, sessionID string, target FocusKey) error
+
+	// SetConnectionFocus sets the per-connection focus pointer for the given
+	// connection. focusKey nil = grid focus (D10: isSceneGrid=true skips
+	// PresentingFocus write on the substrate side; INV-P5-13).
+	// connectionID is the 26-char base32 ULID string from CommandRequest.ConnectionID.
+	SetConnectionFocus(ctx context.Context, connectionID string, focusKey *FocusKey, isSceneGrid bool) error
+
+	// AutoFocusOnJoin fans out to all terminal/telnet connections for the
+	// character and sets their per-connection FocusKey to {scene, sceneID}.
+	// Connections that are already explicitly focused on a different scene
+	// are skipped (INV-P5-11). Connections whose client type is comms_hub
+	// are excluded (INV-P5-4). Callers MUST have completed JoinFocus for
+	// the session before invoking this RPC; the host validates membership
+	// (INV-P5-1).
+	//
+	// characterID and sceneID are 26-char base32 ULID strings. Returns a
+	// zero-value result and nil error when the character has no active
+	// session (SESSION_NOT_FOUND) — callers treat this as the no-session
+	// signal without surfacing an error.
+	AutoFocusOnJoin(ctx context.Context, characterID, sceneID string) (AutoFocusOnJoinResult, error)
+
+	// IsAnyConnFocused reports whether any of the character's connections has
+	// FocusKey == {scene, sceneID}. Read-only: does not mutate any state.
+	// characterID and sceneID are 26-char base32 ULID strings.
+	//
+	// Returns (false, nil) when the character has no active session (i.e.,
+	// SESSION_NOT_FOUND from the host) — plugin callers use false as the
+	// no-session signal without surfacing an error.
+	IsAnyConnFocused(ctx context.Context, characterID, sceneID string) (bool, error)
 
 	// QueryStreamHistory reads the tail of a stream for plugin-side display.
 	// Read-only (I-13): does not mutate cursors, subscriptions, or session
@@ -138,6 +168,37 @@ type QueryStreamHistoryResponse struct {
 	// backward. Empty when no more pages are available (the query reached
 	// the beginning of the stream).
 	NextCursor []byte
+}
+
+// AutoFocusOnJoinResult carries the per-connection outcome of an
+// AutoFocusOnJoin call. Callers inspect the fields to choose the
+// appropriate user-facing message.
+//
+// Distinguishing outcomes:
+//   - len(FocusedConnectionIDs) > 0 && len(SkippedConnectionIDs) == 0 && len(FailedConnectionIDs) == 0 → terminal-focused
+//   - len(SkippedConnectionIDs) > 0 && len(FocusedConnectionIDs) == 0 → all terminal conns explicitly focused elsewhere (INV-P5-11)
+//   - TotalConnectionCount > 0 && len(FocusedConnectionIDs) == 0 && len(SkippedConnectionIDs) == 0 → comms_hub-only conns (INV-P5-4)
+//   - TotalConnectionCount == 0 → no live connections (admin / scripted join)
+//   - len(FailedConnectionIDs) > 0 → at least one per-conn focus failed (non-fatal; log detail only)
+type AutoFocusOnJoinResult struct {
+	// FocusedConnectionIDs lists connections that were successfully auto-focused.
+	FocusedConnectionIDs []ulid.ULID
+	// SkippedConnectionIDs lists terminal/telnet connections that were skipped
+	// because they were already explicitly focused on a different scene (INV-P5-11).
+	SkippedConnectionIDs []ulid.ULID
+	// FailedConnectionIDs lists connections for which the focus mutation failed.
+	// These are non-fatal: the join already succeeded; per-conn errors are advisory.
+	FailedConnectionIDs []AutoFocusFailure
+	// TotalConnectionCount is the total number of connections the host considered
+	// (including comms_hub connections which are excluded from focusing per INV-P5-4).
+	TotalConnectionCount uint32
+}
+
+// AutoFocusFailure identifies one connection that failed during AutoFocusOnJoin.
+// Reason is the host-side failure code (e.g., "MEMBERSHIP_ABSENT").
+type AutoFocusFailure struct {
+	ConnectionID ulid.ULID
+	Reason       string
 }
 
 // FocusClientAware is the optional interface service providers implement to
@@ -230,6 +291,155 @@ func (c *pluginHostFocusClient) PresentFocus(ctx context.Context, sessionID stri
 		Target:    toProtoFocusKey(target),
 	})
 	return wrapFocusError(err, "PresentFocus", sessionID, target)
+}
+
+func (c *pluginHostFocusClient) SetConnectionFocus(ctx context.Context, connectionID string, focusKey *FocusKey, isSceneGrid bool) error {
+	if c.client == nil {
+		return oops.New("plugin host focus client is not configured")
+	}
+	connID, err := ulid.Parse(connectionID)
+	if err != nil {
+		return oops.Code("INVALID_ULID").With("connection_id", connectionID).Wrap(err)
+	}
+	req := &pluginv1.PluginHostServiceSetConnectionFocusRequest{
+		ConnectionId: connID.Bytes(),
+		IsSceneGrid:  isSceneGrid,
+	}
+	if focusKey != nil {
+		req.FocusKey = toProtoFocusKey(*focusKey)
+	}
+	_, err = c.client.SetConnectionFocus(ctx, req)
+	if err != nil {
+		// Inspect the gRPC status message to recover oops codes that were lost
+		// when the server's OopsError crossed the wire as status.Error(Unknown,
+		// msg). The host-side FOCUS_WITHOUT_MEMBERSHIP code is the only one the
+		// plugin consumer (handleSceneFocus) branches on; re-emit it faithfully
+		// so the user-facing "You're not in Scene X" path is reachable.
+		if st, ok := status.FromError(err); ok && strings.HasPrefix(st.Message(), "FOCUS_WITHOUT_MEMBERSHIP") {
+			return oops.Code("FOCUS_WITHOUT_MEMBERSHIP").
+				With("connection_id", connectionID).
+				With("is_scene_grid", isSceneGrid).
+				Errorf("%s", st.Message())
+		}
+		// Distinguish grid-pivot errors from explicit scene-focus errors for
+		// telemetry accuracy (Finding #2).
+		outerCode := "SCENE_FOCUS_SET_FAILED"
+		if isSceneGrid {
+			outerCode = "SCENE_GRID_SET_FAILED"
+		}
+		return oops.Code(outerCode).
+			With("connection_id", connectionID).
+			With("is_scene_grid", isSceneGrid).
+			Wrap(err)
+	}
+	return nil
+}
+
+func (c *pluginHostFocusClient) IsAnyConnFocused(ctx context.Context, characterID, sceneID string) (bool, error) {
+	if c.client == nil {
+		return false, oops.New("plugin host focus client is not configured")
+	}
+	charULID, err := ulid.Parse(characterID)
+	if err != nil {
+		return false, oops.Code("INVALID_ULID").With("character_id", characterID).Wrap(err)
+	}
+	sceneULID, err := ulid.Parse(sceneID)
+	if err != nil {
+		return false, oops.Code("INVALID_ULID").With("scene_id", sceneID).Wrap(err)
+	}
+	resp, err := c.client.IsAnyConnFocused(ctx, &pluginv1.PluginHostServiceIsAnyConnFocusedRequest{
+		CharacterId: charULID.Bytes(),
+		SceneId:     sceneULID.Bytes(),
+	})
+	if err != nil {
+		// Translate SESSION_NOT_FOUND → (false, nil) per interface contract.
+		if st, ok := status.FromError(err); ok && (st.Code() == codes.NotFound || strings.HasPrefix(st.Message(), "SESSION_NOT_FOUND")) {
+			return false, nil
+		}
+		return false, oops.With("character_id", characterID).With("scene_id", sceneID).Wrap(err)
+	}
+	return resp.GetFocused(), nil
+}
+
+func (c *pluginHostFocusClient) AutoFocusOnJoin(ctx context.Context, characterID, sceneID string) (AutoFocusOnJoinResult, error) {
+	if c.client == nil {
+		return AutoFocusOnJoinResult{}, oops.New("plugin host focus client is not configured")
+	}
+	charULID, err := ulid.Parse(characterID)
+	if err != nil {
+		return AutoFocusOnJoinResult{}, oops.Code("INVALID_ULID").With("character_id", characterID).Wrap(err)
+	}
+	sceneULID, err := ulid.Parse(sceneID)
+	if err != nil {
+		return AutoFocusOnJoinResult{}, oops.Code("INVALID_ULID").With("scene_id", sceneID).Wrap(err)
+	}
+	resp, err := c.client.AutoFocusOnJoin(ctx, &pluginv1.PluginHostServiceAutoFocusOnJoinRequest{
+		CharacterId: charULID.Bytes(),
+		SceneId:     sceneULID.Bytes(),
+	})
+	if err != nil {
+		// Translate SESSION_NOT_FOUND → zero result, nil error per interface contract.
+		if st, ok := status.FromError(err); ok && (st.Code() == codes.NotFound || strings.HasPrefix(st.Message(), "SESSION_NOT_FOUND")) {
+			return AutoFocusOnJoinResult{}, nil
+		}
+		return AutoFocusOnJoinResult{}, oops.With("character_id", characterID).With("scene_id", sceneID).Wrap(err)
+	}
+	// Malformed connection_id bytes indicate a host/proto contract break
+	// — silently dropping them would let the autofocus UI render a wrong
+	// outcome (e.g., "focused 2/3 connections" when one ID was malformed)
+	// while hiding the breach. Fail fast. (CodeRabbit PR #4191 round 6)
+	result := AutoFocusOnJoinResult{
+		TotalConnectionCount: resp.GetTotalConnectionCount(),
+	}
+	for _, raw := range resp.GetFocusedConnectionIds() {
+		id, ok := bytesToULID(raw)
+		if !ok {
+			return AutoFocusOnJoinResult{}, oops.Code("INVALID_ULID").
+				With("character_id", characterID).
+				With("scene_id", sceneID).
+				With("field", "focused_connection_ids").
+				Errorf("host returned malformed connection_id bytes (len=%d, expected 16)", len(raw))
+		}
+		result.FocusedConnectionIDs = append(result.FocusedConnectionIDs, id)
+	}
+	for _, raw := range resp.GetSkippedConnectionIds() {
+		id, ok := bytesToULID(raw)
+		if !ok {
+			return AutoFocusOnJoinResult{}, oops.Code("INVALID_ULID").
+				With("character_id", characterID).
+				With("scene_id", sceneID).
+				With("field", "skipped_connection_ids").
+				Errorf("host returned malformed connection_id bytes (len=%d, expected 16)", len(raw))
+		}
+		result.SkippedConnectionIDs = append(result.SkippedConnectionIDs, id)
+	}
+	for _, ff := range resp.GetFailedConnectionIds() {
+		raw := ff.GetConnectionId()
+		id, ok := bytesToULID(raw)
+		if !ok {
+			return AutoFocusOnJoinResult{}, oops.Code("INVALID_ULID").
+				With("character_id", characterID).
+				With("scene_id", sceneID).
+				With("field", "failed_connection_ids").
+				Errorf("host returned malformed connection_id bytes (len=%d, expected 16)", len(raw))
+		}
+		result.FailedConnectionIDs = append(result.FailedConnectionIDs, AutoFocusFailure{
+			ConnectionID: id,
+			Reason:       ff.GetReason().String(),
+		})
+	}
+	return result, nil
+}
+
+// bytesToULID converts a raw 16-byte slice to a ulid.ULID. Returns (zero, false)
+// if raw is not exactly 16 bytes.
+func bytesToULID(raw []byte) (ulid.ULID, bool) {
+	if len(raw) != 16 {
+		return ulid.ULID{}, false
+	}
+	var id ulid.ULID
+	copy(id[:], raw)
+	return id, true
 }
 
 // queryStreamHistoryCountConversionMax is only a defensive int32 conversion

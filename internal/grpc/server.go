@@ -388,7 +388,7 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.HandleComman
 	}
 
 	// Parse and execute command
-	if err := s.executeCommand(ctx, info, req.Command); err != nil {
+	if err := s.executeCommand(ctx, info, req.Command, req.GetConnectionId()); err != nil {
 		slog.WarnContext(
 			ctx, "command execution failed",
 			"request_id", requestID,
@@ -412,14 +412,16 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.HandleComman
 // executeCommand parses and executes a command via the unified dispatcher.
 // Output is delivered via command_response events emitted to the character's
 // personal stream.
-func (s *CoreServer) executeCommand(ctx context.Context, info *session.Info, input string) error {
-	return s.executeViaDispatcher(ctx, info, input)
+func (s *CoreServer) executeCommand(ctx context.Context, info *session.Info, input, connectionIDStr string) error {
+	return s.executeViaDispatcher(ctx, info, input, connectionIDStr)
 }
 
 // executeViaDispatcher uses the unified command.Dispatcher for command
 // execution. Handler output written to the CommandExecution's io.Writer is
 // captured in a buffer and emitted as a command_response event afterward.
-func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Info, input string) error {
+// connectionIDStr is the originating gateway connection ULID string (Phase 5);
+// empty string is accepted for non-gateway callers (parsed as zero ULID).
+func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Info, input, connectionIDStr string) error {
 	char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
 
 	sessionID, parseErr := ulid.Parse(info.ID)
@@ -429,6 +431,23 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 			Wrap(parseErr)
 	}
 
+	// Parse connectionIDStr to ULID. Empty is allowed (legacy non-gateway
+	// callers omit connection_id), but a NON-EMPTY value that fails to
+	// parse is an explicit error from the caller — failing silently with
+	// a zero ULID would silently bypass per-connection command semantics.
+	// (CodeRabbit PR #4191)
+	var connectionID ulid.ULID
+	if connectionIDStr != "" {
+		parsed, connParseErr := ulid.Parse(connectionIDStr)
+		if connParseErr != nil {
+			return oops.Code("INVALID_CONNECTION_ID").
+				With("session_id", info.ID).
+				With("connection_id", connectionIDStr).
+				Wrap(connParseErr)
+		}
+		connectionID = parsed
+	}
+
 	var buf bytes.Buffer
 	exec, err := command.NewCommandExecution(command.CommandExecutionConfig{
 		CharacterID:   info.CharacterID,
@@ -436,6 +455,7 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 		LocationID:    info.LocationID,
 		CharacterName: info.CharacterName,
 		SessionID:     sessionID,
+		ConnectionID:  connectionID, // Phase 5 (holomush-5rh.14 T19 follow-up)
 		Output:        &buf,
 		Services:      s.cmdServices,
 	})
@@ -780,6 +800,19 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	}
 	getSpan.End()
 
+	// Control channel + stream-registry registration MUST happen before
+	// RestoreFocus / OpenSession (CodeRabbit PR #4191): a focus-change RPC
+	// firing in that ~130-line window would persist successfully but its
+	// SendToConnection would fail with CONNECTION_NOT_REGISTERED, leaving
+	// the new subscriber on stale filters. The ctrlCh buffer (16) absorbs
+	// any inbound updates until runSubscribeLoop drains them after
+	// OpenSession completes.
+	ctrlCh := make(chan sessionStreamUpdate, 16)
+	if s.streamRegistry != nil {
+		s.streamRegistry.Register(info.ID, ctrlCh)
+		defer s.streamRegistry.Deregister(info.ID, ctrlCh)
+	}
+
 	// Connection registration (bd-j2xj). Only fires when the caller supplies
 	// a connection_id + client_type. Gate removal uses a fresh context so
 	// stream context cancellation does not abort cleanup.
@@ -820,6 +853,14 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 				)
 			}
 		}()
+		// Per-Connection routing (INV-P5-11): register in the per-Connection
+		// map immediately after AddConnection so T14-T18 coordinators can
+		// route to exactly one connection. The session-wide Register above
+		// has already armed ctrlCh.
+		if s.streamRegistry != nil {
+			s.streamRegistry.RegisterConnection(info.ID, connID, ctrlCh)
+			defer s.streamRegistry.DeregisterConnection(info.ID, connID, ctrlCh)
+		}
 	}
 
 	// Reattach if detached.
@@ -983,12 +1024,8 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	}
 	syntheticSpan.End()
 
-	// Control channel for mid-session stream updates (plugin add/remove).
-	ctrlCh := make(chan sessionStreamUpdate, 16)
-	if s.streamRegistry != nil {
-		s.streamRegistry.Register(info.ID, ctrlCh)
-		defer s.streamRegistry.Deregister(info.ID, ctrlCh)
-	}
+	// (ctrlCh + Register/RegisterConnection were hoisted above to close
+	// the focus-snapshot race window per CodeRabbit PR #4191 review.)
 
 	// REPLAY_COMPLETE is emitted immediately — the bus handles replay
 	// transparently by redelivering from the durable's acked-seq. Clients

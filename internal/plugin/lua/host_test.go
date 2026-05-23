@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1858,6 +1859,22 @@ func (s *stubLuaTestCoordinator) PresentFocus(_ context.Context, _ string, _ ses
 
 func (s *stubLuaTestCoordinator) RestoreFocus(_ context.Context, _ string) (focus.RestorePlan, error) {
 	return focus.RestorePlan{}, nil
+}
+
+func (s *stubLuaTestCoordinator) IsAnyConnFocused(_ context.Context, _, _ ulid.ULID) (bool, error) {
+	return false, nil
+}
+
+func (s *stubLuaTestCoordinator) RestoreConnectionFocus(_ context.Context, _ string, _ ulid.ULID) error {
+	return nil
+}
+
+func (s *stubLuaTestCoordinator) SetConnectionFocus(_ context.Context, _ ulid.ULID, _ *session.FocusKey, _ bool) (focus.SetConnectionFocusResult, error) {
+	return focus.SetConnectionFocusResult{}, nil
+}
+
+func (s *stubLuaTestCoordinator) AutoFocusOnJoin(_ context.Context, _, _ ulid.ULID) (focus.AutoFocusOnJoinResponse, error) {
+	return focus.AutoFocusOnJoinResponse{}, nil
 }
 
 var _ focus.Coordinator = (*stubLuaTestCoordinator)(nil)

@@ -80,6 +80,22 @@ service PluginHostService {
   // plugin cannot impersonate another actor through this RPC.
   // (Spec §3.3.5 / §5.4 self-token pattern.)
   rpc RequestEmitToken(PluginHostServiceRequestEmitTokenRequest) returns (PluginHostServiceRequestEmitTokenResponse);
+
+  // SetConnectionFocus — Phase 5 explicit focus mutation for one
+  // Connection. Substrate validates membership against FocusMemberships
+  // (D4); writes Connection.FocusKey + (D9-gated) Info.PresentingFocus
+  // atomically under one Store-lock acquisition (D7).
+  rpc SetConnectionFocus(PluginHostServiceSetConnectionFocusRequest) returns (PluginHostServiceSetConnectionFocusResponse);
+
+  // AutoFocusOnJoin — Phase 5 fan-out: focuses all terminal/telnet
+  // connections of the character on the given scene. Skips conns
+  // already explicitly focused elsewhere (D8). Caller must have
+  // completed JoinFocus before invocation.
+  rpc AutoFocusOnJoin(PluginHostServiceAutoFocusOnJoinRequest) returns (PluginHostServiceAutoFocusOnJoinResponse);
+
+  // IsAnyConnFocused — Phase 5 notification-emission helper: true iff
+  // any of the character's connections has FocusKey == {scene, scene_id}.
+  rpc IsAnyConnFocused(PluginHostServiceIsAnyConnFocusedRequest) returns (PluginHostServiceIsAnyConnFocusedResponse);
 }
 
 // ServiceConfig carries initialization data from the host to the plugin.
@@ -174,6 +190,9 @@ message CommandRequest {
   string session_id = 7 [(buf.validate.field).string.min_len = 1];
   // Player account ULID.
   string player_id = 8 [(buf.validate.field).string.min_len = 1];
+  // Originating connection ULID (Phase 5). Empty for server-side dispatch paths
+  // that do not have a specific connection (e.g., non-gateway callers).
+  string connection_id = 9;
 }
 
 // CommandStatus maps to pkg/plugin.CommandStatus values.
@@ -445,4 +464,49 @@ message PluginHostServiceRequestEmitTokenResponse {
   // emitTokenStore can interpret it. The token is bound to ActorPlugin +
   // the calling plugin's name and is single-use-friendly (TTL-revoked).
   string token = 1;
+}
+
+message PluginHostServiceSetConnectionFocusRequest {
+  bytes connection_id = 1; // ULID
+  optional FocusKey focus_key = 2;
+  // is_scene_grid signals that this call originated from a `scene grid`
+  // command — substrate skips the D9 PresentingFocus write per D10.
+  bool is_scene_grid = 3;
+}
+
+message PluginHostServiceSetConnectionFocusResponse {
+  optional FocusKey focus_key = 1;
+}
+
+message PluginHostServiceAutoFocusOnJoinRequest {
+  bytes character_id = 1; // ULID
+  bytes scene_id = 2; // ULID
+}
+
+message PluginHostServiceAutoFocusOnJoinResponse {
+  repeated bytes focused_connection_ids = 1;
+  uint32 total_connection_count = 2;
+  repeated bytes skipped_connection_ids = 3;
+  repeated FocusFailure failed_connection_ids = 4;
+}
+
+// FocusFailure carries the connection_id and reason for an AutoFocusOnJoin failure.
+message FocusFailure {
+  bytes connection_id = 1;
+  FocusFailureReason reason = 2;
+}
+
+enum FocusFailureReason {
+  FOCUS_FAILURE_REASON_UNSPECIFIED = 0;
+  FOCUS_FAILURE_REASON_MEMBERSHIP_ABSENT = 1;
+  FOCUS_FAILURE_REASON_CONNECTION_NOT_FOUND = 2;
+}
+
+message PluginHostServiceIsAnyConnFocusedRequest {
+  bytes character_id = 1; // ULID
+  bytes scene_id = 2; // ULID
+}
+
+message PluginHostServiceIsAnyConnFocusedResponse {
+  bool focused = 1;
 }

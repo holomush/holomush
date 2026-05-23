@@ -90,6 +90,12 @@ const (
 	ControlSignal_CONTROL_SIGNAL_UNSPECIFIED     ControlSignal = 0
 	ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE ControlSignal = 1
 	ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED   ControlSignal = 2
+	// STREAM_OPENED is emitted as the first frame after a successful
+	// StreamEvents subscription. The accompanying ControlFrame.connection_id
+	// is the per-stream ULID — clients SHOULD store it and pass it back via
+	// SendCommandRequest.connection_id so the gateway routes per-connection
+	// commands (Phase 5 scene-focus autofocus) correctly under multi-tab.
+	ControlSignal_CONTROL_SIGNAL_STREAM_OPENED ControlSignal = 3
 )
 
 // Enum value maps for ControlSignal.
@@ -98,11 +104,13 @@ var (
 		0: "CONTROL_SIGNAL_UNSPECIFIED",
 		1: "CONTROL_SIGNAL_REPLAY_COMPLETE",
 		2: "CONTROL_SIGNAL_STREAM_CLOSED",
+		3: "CONTROL_SIGNAL_STREAM_OPENED",
 	}
 	ControlSignal_value = map[string]int32{
 		"CONTROL_SIGNAL_UNSPECIFIED":     0,
 		"CONTROL_SIGNAL_REPLAY_COMPLETE": 1,
 		"CONTROL_SIGNAL_STREAM_CLOSED":   2,
+		"CONTROL_SIGNAL_STREAM_OPENED":   3,
 	}
 )
 
@@ -235,9 +243,14 @@ func (WebPresenceState) EnumDescriptor() ([]byte, []int) {
 }
 
 type ControlFrame struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Signal        ControlSignal          `protobuf:"varint,1,opt,name=signal,proto3,enum=holomush.web.v1.ControlSignal" json:"signal,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Signal  ControlSignal          `protobuf:"varint,1,opt,name=signal,proto3,enum=holomush.web.v1.ControlSignal" json:"signal,omitempty"`
+	Message string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	// connection_id is populated on the first ControlFrame after a successful
+	// StreamEvents open so the client can include it in subsequent
+	// SendCommand requests. Per-stream identity for multi-tab routing
+	// (Phase 5 scene-focus autofocus). Empty on non-open frames.
+	ConnectionId  string `protobuf:"bytes,3,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -286,10 +299,23 @@ func (x *ControlFrame) GetMessage() string {
 	return ""
 }
 
+func (x *ControlFrame) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
 type SendCommandRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Text      string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	// connection_id identifies the originating StreamEvents stream for
+	// per-connection command routing (Phase 5 scene-focus autofocus).
+	// Clients set this from the connection_id they receive in the
+	// STREAM_OPENED ControlFrame after StreamEvents opens. Empty means
+	// "no specific connection origin" (scripted / admin paths).
+	ConnectionId  string `protobuf:"bytes,3,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -334,6 +360,13 @@ func (x *SendCommandRequest) GetSessionId() string {
 func (x *SendCommandRequest) GetText() string {
 	if x != nil {
 		return x.Text
+	}
+	return ""
+}
+
+func (x *SendCommandRequest) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
 	}
 	return ""
 }
@@ -3013,14 +3046,16 @@ var File_holomush_web_v1_web_proto protoreflect.FileDescriptor
 
 const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\n" +
-	"\x19holomush/web/v1/web.proto\x12\x0fholomush.web.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"`\n" +
+	"\x19holomush/web/v1/web.proto\x12\x0fholomush.web.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x85\x01\n" +
 	"\fControlFrame\x126\n" +
 	"\x06signal\x18\x01 \x01(\x0e2\x1e.holomush.web.v1.ControlSignalR\x06signal\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"G\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12#\n" +
+	"\rconnection_id\x18\x03 \x01(\tR\fconnectionId\"l\n" +
 	"\x12SendCommandRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x12\n" +
-	"\x04text\x18\x02 \x01(\tR\x04text\"l\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\x12#\n" +
+	"\rconnection_id\x18\x03 \x01(\tR\fconnectionId\"l\n" +
 	"\x13SendCommandResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
 	"\x06output\x18\x02 \x01(\tR\x06output\x12#\n" +
@@ -3222,11 +3257,12 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x16EVENT_CHANNEL_TERMINAL\x10\x01\x12\x17\n" +
 	"\x13EVENT_CHANNEL_STATE\x10\x02\x12\x16\n" +
 	"\x12EVENT_CHANNEL_BOTH\x10\x03\x12\x1c\n" +
-	"\x18EVENT_CHANNEL_AUDIT_ONLY\x10\x04*u\n" +
+	"\x18EVENT_CHANNEL_AUDIT_ONLY\x10\x04*\x97\x01\n" +
 	"\rControlSignal\x12\x1e\n" +
 	"\x1aCONTROL_SIGNAL_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eCONTROL_SIGNAL_REPLAY_COMPLETE\x10\x01\x12 \n" +
-	"\x1cCONTROL_SIGNAL_STREAM_CLOSED\x10\x02*}\n" +
+	"\x1cCONTROL_SIGNAL_STREAM_CLOSED\x10\x02\x12 \n" +
+	"\x1cCONTROL_SIGNAL_STREAM_OPENED\x10\x03*}\n" +
 	"\x12WebPresenceContext\x12$\n" +
 	" WEB_PRESENCE_CONTEXT_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dWEB_PRESENCE_CONTEXT_LOCATION\x10\x01\x12\x1e\n" +

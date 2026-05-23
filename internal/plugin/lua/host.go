@@ -94,11 +94,21 @@ func NewHostWithFunctions(hf *hostfunc.Functions, opts ...HostOption) *Host {
 }
 
 // SetFocusCoordinator injects the focus coordinator into the underlying
-// hostfunc bridge. The coordinator satisfies hostfunc.FocusOps.
+// hostfunc bridge via a coordinatorFocusOpsAdapter that satisfies hostfunc.FocusOps.
+// Phase 5 methods (SetConnectionFocus, AutoFocusOnJoin, IsAnyConnFocused) are
+// stubbed here until T14-T16 add real implementations to the Coordinator.
+//
+// A nil fc clears the FocusOps binding rather than wrapping nil — every
+// adapter method would otherwise NPE on its first call.
 func (h *Host) SetFocusCoordinator(fc focus.Coordinator) {
-	if h.hostFuncs != nil {
-		h.hostFuncs.SetFocusOps(fc)
+	if h.hostFuncs == nil {
+		return
 	}
+	if fc == nil {
+		h.hostFuncs.SetFocusOps(nil)
+		return
+	}
+	h.hostFuncs.SetFocusOps(&coordinatorFocusOpsAdapter{c: fc})
 }
 
 // SetHistoryReader injects the history reader into the underlying hostfunc bridge.
@@ -647,6 +657,10 @@ func (h *Host) buildCommandRequestTable(state *lua.LState, cmd pluginsdk.Command
 	state.SetField(t, "session_id", lua.LString(cmd.SessionID))
 	state.SetField(t, "player_id", lua.LString(cmd.PlayerID))
 	state.SetField(t, "invoked_as", lua.LString(cmd.InvokedAs))
+	// Phase 5 (5rh.14 T19) + CodeRabbit PR #4191 round 6: expose
+	// connection_id so Lua command handlers can route per-connection
+	// (e.g., scene focus / grid). Empty string for non-connection paths.
+	state.SetField(t, "connection_id", lua.LString(cmd.ConnectionID))
 	return t
 }
 

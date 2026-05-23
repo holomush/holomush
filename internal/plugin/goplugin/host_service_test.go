@@ -38,6 +38,14 @@ type stubCoordinator struct {
 	joinErr             error
 	leaveErr            error
 	presentErr          error
+
+	// Phase 5 RPC stubs.
+	setConnFocusResult focus.SetConnectionFocusResult
+	setConnFocusErr    error
+	autoFocusResult    focus.AutoFocusOnJoinResponse
+	autoFocusErr       error
+	isAnyFocusedResult bool
+	isAnyFocusedErr    error
 }
 
 type focusCall struct {
@@ -67,6 +75,22 @@ func (s *stubCoordinator) PresentFocus(_ context.Context, sid string, target ses
 
 func (s *stubCoordinator) RestoreFocus(_ context.Context, _ string) (focus.RestorePlan, error) {
 	return focus.RestorePlan{}, nil
+}
+
+func (s *stubCoordinator) IsAnyConnFocused(_ context.Context, _, _ ulid.ULID) (bool, error) {
+	return s.isAnyFocusedResult, s.isAnyFocusedErr
+}
+
+func (s *stubCoordinator) RestoreConnectionFocus(_ context.Context, _ string, _ ulid.ULID) error {
+	return nil
+}
+
+func (s *stubCoordinator) SetConnectionFocus(_ context.Context, _ ulid.ULID, _ *session.FocusKey, _ bool) (focus.SetConnectionFocusResult, error) {
+	return s.setConnFocusResult, s.setConnFocusErr
+}
+
+func (s *stubCoordinator) AutoFocusOnJoin(_ context.Context, _, _ ulid.ULID) (focus.AutoFocusOnJoinResponse, error) {
+	return s.autoFocusResult, s.autoFocusErr
 }
 
 var _ focus.Coordinator = (*stubCoordinator)(nil)
@@ -985,3 +1009,257 @@ func (failingReader) Read(_ []byte) (int, error) {
 }
 
 var errFailingReader = oops.Errorf("simulated rand exhaustion")
+
+// stubConnectionSender records SendToConnection calls for assertion.
+type stubConnectionSender struct {
+	calls []connSendCall
+}
+
+type connSendCall struct {
+	sessionID    string
+	connectionID ulid.ULID
+	stream       string
+	add          bool
+}
+
+func (s *stubConnectionSender) SendToConnection(sessionID string, connectionID ulid.ULID, stream string, add bool) error {
+	s.calls = append(s.calls, connSendCall{sessionID, connectionID, stream, add})
+	return nil
+}
+
+// newTestServerWithConnSender creates a server with a ConnectionSender wired.
+func newTestServerWithConnSender(fc focus.Coordinator, cs *stubConnectionSender) *pluginHostServiceServer {
+	h := &Host{
+		plugins:          make(map[string]*loadedPlugin),
+		focusCoordinator: fc,
+		connectionSender: cs,
+		gameID:           "main",
+	}
+	return &pluginHostServiceServer{
+		host:       h,
+		pluginName: "test-plugin",
+	}
+}
+
+// TestSetConnectionFocus_DrivesSubscriptionDeltas verifies that a successful
+// SetConnectionFocus RPC call drives SendToConnection with the correct stream
+// adds and removes. Focus change from grid (nil) → scene → subscription_router
+// must remove the grid location stream and add the two scene IC/OOC streams.
+func TestSetConnectionFocus_DrivesSubscriptionDeltas(t *testing.T) {
+	t.Parallel()
+
+	connID := ulid.Make()
+	sceneID := ulid.Make()
+	locID := ulid.Make()
+	sessionID := "sess-delta"
+
+	fc := &stubCoordinator{
+		setConnFocusResult: focus.SetConnectionFocusResult{
+			OldFocusKey:    nil, // grid → scene transition
+			SessionID:      sessionID,
+			CharLocationID: locID,
+		},
+	}
+	cs := &stubConnectionSender{}
+	srv := newTestServerWithConnSender(fc, cs)
+
+	connIDBuf := connID.Bytes()
+	_, err := srv.SetConnectionFocus(context.Background(), &pluginv1.PluginHostServiceSetConnectionFocusRequest{
+		ConnectionId: connIDBuf[:],
+		FocusKey: &pluginv1.FocusKey{
+			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+			TargetId: sceneID.String(),
+		},
+		IsSceneGrid: false,
+	})
+	require.NoError(t, err)
+
+	// Grid → scene: location stream removed, scene IC+OOC added.
+	require.NotEmpty(t, cs.calls, "SendToConnection MUST be called on focus change")
+
+	// Collect adds and removes.
+	var adds, removes []string
+	for _, c := range cs.calls {
+		assert.Equal(t, sessionID, c.sessionID)
+		assert.Equal(t, connID, c.connectionID)
+		if c.add {
+			adds = append(adds, c.stream)
+		} else {
+			removes = append(removes, c.stream)
+		}
+	}
+
+	assert.ElementsMatch(t, []string{
+		"events.main.scene." + sceneID.String() + ".ic",
+		"events.main.scene." + sceneID.String() + ".ooc",
+	}, adds, "scene IC+OOC streams MUST be added")
+	assert.ElementsMatch(t, []string{
+		"location:" + locID.String(),
+	}, removes, "grid location stream MUST be removed")
+}
+
+// TestAutoFocusOnJoin_DrivesSubscriptionDeltas verifies that a successful
+// AutoFocusOnJoin RPC drives SendToConnection for each focused connection.
+// The delta is grid → scene: location removed, scene IC+OOC added.
+func TestAutoFocusOnJoin_DrivesSubscriptionDeltas(t *testing.T) {
+	t.Parallel()
+
+	connID := ulid.Make()
+	sceneID := ulid.Make()
+	locID := ulid.Make()
+	sessionID := "sess-autofocus"
+
+	fc := &stubCoordinator{
+		autoFocusResult: focus.AutoFocusOnJoinResponse{
+			SessionID:            sessionID,
+			CharLocationID:       locID,
+			FocusedConnectionIDs: []ulid.ULID{connID},
+			TotalConnectionCount: 1,
+		},
+	}
+	cs := &stubConnectionSender{}
+	srv := newTestServerWithConnSender(fc, cs)
+
+	charID := ulid.Make()
+	charIDBuf := charID.Bytes()
+	sceneIDBuf := sceneID.Bytes()
+	resp, err := srv.AutoFocusOnJoin(context.Background(), &pluginv1.PluginHostServiceAutoFocusOnJoinRequest{
+		CharacterId: charIDBuf[:],
+		SceneId:     sceneIDBuf[:],
+	})
+	require.NoError(t, err)
+	assert.Equal(t, uint32(1), resp.GetTotalConnectionCount())
+	require.Len(t, resp.GetFocusedConnectionIds(), 1)
+
+	// Verify subscription deltas.
+	require.NotEmpty(t, cs.calls, "SendToConnection MUST be called for focused connections")
+
+	var adds, removes []string
+	for _, c := range cs.calls {
+		assert.Equal(t, sessionID, c.sessionID)
+		assert.Equal(t, connID, c.connectionID)
+		if c.add {
+			adds = append(adds, c.stream)
+		} else {
+			removes = append(removes, c.stream)
+		}
+	}
+	assert.ElementsMatch(t, []string{
+		"events.main.scene." + sceneID.String() + ".ic",
+		"events.main.scene." + sceneID.String() + ".ooc",
+	}, adds, "scene IC+OOC streams MUST be added")
+	assert.ElementsMatch(t, []string{
+		"location:" + locID.String(),
+	}, removes, "grid location stream MUST be removed on grid→scene transition")
+}
+
+// TestIsAnyConnFocused_PassthroughBool verifies the simple bool passthrough
+// for IsAnyConnFocused: the RPC returns the coordinator's bool result.
+func TestIsAnyConnFocused_PassthroughBool(t *testing.T) {
+	t.Parallel()
+
+	charID := ulid.Make()
+	sceneID := ulid.Make()
+
+	for _, tc := range []struct {
+		name   string
+		result bool
+	}{
+		{"true_when_focused", true},
+		{"false_when_not_focused", false},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fc := &stubCoordinator{isAnyFocusedResult: tc.result}
+			srv := newTestServer(fc, nil)
+
+			charIDBuf := charID.Bytes()
+			sceneIDBuf := sceneID.Bytes()
+			resp, err := srv.IsAnyConnFocused(context.Background(), &pluginv1.PluginHostServiceIsAnyConnFocusedRequest{
+				CharacterId: charIDBuf[:],
+				SceneId:     sceneIDBuf[:],
+			})
+			require.NoError(t, err)
+			assert.Equal(t, tc.result, resp.GetFocused())
+		})
+	}
+}
+
+// TestSetConnectionFocus_InvalidULID verifies INVALID_ULID error on bad connection_id.
+func TestSetConnectionFocus_InvalidULID(t *testing.T) {
+	t.Parallel()
+	fc := &stubCoordinator{}
+	srv := newTestServer(fc, nil)
+
+	_, err := srv.SetConnectionFocus(context.Background(), &pluginv1.PluginHostServiceSetConnectionFocusRequest{
+		ConnectionId: []byte("not-16-bytes"),
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "INVALID_ULID")
+}
+
+// TestAutoFocusOnJoin_InvalidULID verifies INVALID_ULID error on bad character_id.
+func TestAutoFocusOnJoin_InvalidULID(t *testing.T) {
+	t.Parallel()
+	fc := &stubCoordinator{}
+	srv := newTestServer(fc, nil)
+
+	_, err := srv.AutoFocusOnJoin(context.Background(), &pluginv1.PluginHostServiceAutoFocusOnJoinRequest{
+		CharacterId: []byte("bad"),
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "INVALID_ULID")
+}
+
+// TestIsAnyConnFocused_InvalidULID verifies INVALID_ULID error on bad character_id.
+func TestIsAnyConnFocused_InvalidULID(t *testing.T) {
+	t.Parallel()
+	fc := &stubCoordinator{}
+	srv := newTestServer(fc, nil)
+
+	_, err := srv.IsAnyConnFocused(context.Background(), &pluginv1.PluginHostServiceIsAnyConnFocusedRequest{
+		CharacterId: []byte("bad"),
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "INVALID_ULID")
+}
+
+// TestAutoFocusOnJoin_ReturnsResponseShape verifies focused/skipped/failed/total
+// are all populated in the proto response.
+func TestAutoFocusOnJoin_ReturnsResponseShape(t *testing.T) {
+	t.Parallel()
+
+	focusedID := ulid.Make()
+	skippedID := ulid.Make()
+	failedID := ulid.Make()
+	charID := ulid.Make()
+	sceneID := ulid.Make()
+
+	fc := &stubCoordinator{
+		autoFocusResult: focus.AutoFocusOnJoinResponse{
+			SessionID:            "sess-shape",
+			TotalConnectionCount: 3,
+			FocusedConnectionIDs: []ulid.ULID{focusedID},
+			SkippedConnectionIDs: []ulid.ULID{skippedID},
+			FailedConnectionIDs: []focus.AutoFocusFailure{
+				{ConnectionID: failedID, Reason: "membership_absent"},
+			},
+		},
+	}
+	srv := newTestServer(fc, nil) // no ConnectionSender — best-effort skip
+
+	charIDBuf := charID.Bytes()
+	sceneIDBuf := sceneID.Bytes()
+	resp, err := srv.AutoFocusOnJoin(context.Background(), &pluginv1.PluginHostServiceAutoFocusOnJoinRequest{
+		CharacterId: charIDBuf[:],
+		SceneId:     sceneIDBuf[:],
+	})
+	require.NoError(t, err)
+	assert.Equal(t, uint32(3), resp.GetTotalConnectionCount())
+	require.Len(t, resp.GetFocusedConnectionIds(), 1)
+	require.Len(t, resp.GetSkippedConnectionIds(), 1)
+	require.Len(t, resp.GetFailedConnectionIds(), 1)
+	assert.Equal(t, pluginv1.FocusFailureReason_FOCUS_FAILURE_REASON_MEMBERSHIP_ABSENT,
+		resp.GetFailedConnectionIds()[0].GetReason())
+}

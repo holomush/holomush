@@ -275,6 +275,9 @@ const (
 	PluginHostService_PresentFocus_FullMethodName        = "/holomush.plugin.v1.PluginHostService/PresentFocus"
 	PluginHostService_QueryStreamHistory_FullMethodName  = "/holomush.plugin.v1.PluginHostService/QueryStreamHistory"
 	PluginHostService_RequestEmitToken_FullMethodName    = "/holomush.plugin.v1.PluginHostService/RequestEmitToken"
+	PluginHostService_SetConnectionFocus_FullMethodName  = "/holomush.plugin.v1.PluginHostService/SetConnectionFocus"
+	PluginHostService_AutoFocusOnJoin_FullMethodName     = "/holomush.plugin.v1.PluginHostService/AutoFocusOnJoin"
+	PluginHostService_IsAnyConnFocused_FullMethodName    = "/holomush.plugin.v1.PluginHostService/IsAnyConnFocused"
 )
 
 // PluginHostServiceClient is the client API for PluginHostService service.
@@ -325,6 +328,19 @@ type PluginHostServiceClient interface {
 	// plugin cannot impersonate another actor through this RPC.
 	// (Spec §3.3.5 / §5.4 self-token pattern.)
 	RequestEmitToken(ctx context.Context, in *PluginHostServiceRequestEmitTokenRequest, opts ...grpc.CallOption) (*PluginHostServiceRequestEmitTokenResponse, error)
+	// SetConnectionFocus — Phase 5 explicit focus mutation for one
+	// Connection. Substrate validates membership against FocusMemberships
+	// (D4); writes Connection.FocusKey + (D9-gated) Info.PresentingFocus
+	// atomically under one Store-lock acquisition (D7).
+	SetConnectionFocus(ctx context.Context, in *PluginHostServiceSetConnectionFocusRequest, opts ...grpc.CallOption) (*PluginHostServiceSetConnectionFocusResponse, error)
+	// AutoFocusOnJoin — Phase 5 fan-out: focuses all terminal/telnet
+	// connections of the character on the given scene. Skips conns
+	// already explicitly focused elsewhere (D8). Caller must have
+	// completed JoinFocus before invocation.
+	AutoFocusOnJoin(ctx context.Context, in *PluginHostServiceAutoFocusOnJoinRequest, opts ...grpc.CallOption) (*PluginHostServiceAutoFocusOnJoinResponse, error)
+	// IsAnyConnFocused — Phase 5 notification-emission helper: true iff
+	// any of the character's connections has FocusKey == {scene, scene_id}.
+	IsAnyConnFocused(ctx context.Context, in *PluginHostServiceIsAnyConnFocusedRequest, opts ...grpc.CallOption) (*PluginHostServiceIsAnyConnFocusedResponse, error)
 }
 
 type pluginHostServiceClient struct {
@@ -465,6 +481,36 @@ func (c *pluginHostServiceClient) RequestEmitToken(ctx context.Context, in *Plug
 	return out, nil
 }
 
+func (c *pluginHostServiceClient) SetConnectionFocus(ctx context.Context, in *PluginHostServiceSetConnectionFocusRequest, opts ...grpc.CallOption) (*PluginHostServiceSetConnectionFocusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceSetConnectionFocusResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_SetConnectionFocus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginHostServiceClient) AutoFocusOnJoin(ctx context.Context, in *PluginHostServiceAutoFocusOnJoinRequest, opts ...grpc.CallOption) (*PluginHostServiceAutoFocusOnJoinResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceAutoFocusOnJoinResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_AutoFocusOnJoin_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginHostServiceClient) IsAnyConnFocused(ctx context.Context, in *PluginHostServiceIsAnyConnFocusedRequest, opts ...grpc.CallOption) (*PluginHostServiceIsAnyConnFocusedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceIsAnyConnFocusedResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_IsAnyConnFocused_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginHostServiceServer is the server API for PluginHostService service.
 // All implementations must embed UnimplementedPluginHostServiceServer
 // for forward compatibility.
@@ -513,6 +559,19 @@ type PluginHostServiceServer interface {
 	// plugin cannot impersonate another actor through this RPC.
 	// (Spec §3.3.5 / §5.4 self-token pattern.)
 	RequestEmitToken(context.Context, *PluginHostServiceRequestEmitTokenRequest) (*PluginHostServiceRequestEmitTokenResponse, error)
+	// SetConnectionFocus — Phase 5 explicit focus mutation for one
+	// Connection. Substrate validates membership against FocusMemberships
+	// (D4); writes Connection.FocusKey + (D9-gated) Info.PresentingFocus
+	// atomically under one Store-lock acquisition (D7).
+	SetConnectionFocus(context.Context, *PluginHostServiceSetConnectionFocusRequest) (*PluginHostServiceSetConnectionFocusResponse, error)
+	// AutoFocusOnJoin — Phase 5 fan-out: focuses all terminal/telnet
+	// connections of the character on the given scene. Skips conns
+	// already explicitly focused elsewhere (D8). Caller must have
+	// completed JoinFocus before invocation.
+	AutoFocusOnJoin(context.Context, *PluginHostServiceAutoFocusOnJoinRequest) (*PluginHostServiceAutoFocusOnJoinResponse, error)
+	// IsAnyConnFocused — Phase 5 notification-emission helper: true iff
+	// any of the character's connections has FocusKey == {scene, scene_id}.
+	IsAnyConnFocused(context.Context, *PluginHostServiceIsAnyConnFocusedRequest) (*PluginHostServiceIsAnyConnFocusedResponse, error)
 	mustEmbedUnimplementedPluginHostServiceServer()
 }
 
@@ -561,6 +620,15 @@ func (UnimplementedPluginHostServiceServer) QueryStreamHistory(context.Context, 
 }
 func (UnimplementedPluginHostServiceServer) RequestEmitToken(context.Context, *PluginHostServiceRequestEmitTokenRequest) (*PluginHostServiceRequestEmitTokenResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RequestEmitToken not implemented")
+}
+func (UnimplementedPluginHostServiceServer) SetConnectionFocus(context.Context, *PluginHostServiceSetConnectionFocusRequest) (*PluginHostServiceSetConnectionFocusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetConnectionFocus not implemented")
+}
+func (UnimplementedPluginHostServiceServer) AutoFocusOnJoin(context.Context, *PluginHostServiceAutoFocusOnJoinRequest) (*PluginHostServiceAutoFocusOnJoinResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AutoFocusOnJoin not implemented")
+}
+func (UnimplementedPluginHostServiceServer) IsAnyConnFocused(context.Context, *PluginHostServiceIsAnyConnFocusedRequest) (*PluginHostServiceIsAnyConnFocusedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method IsAnyConnFocused not implemented")
 }
 func (UnimplementedPluginHostServiceServer) mustEmbedUnimplementedPluginHostServiceServer() {}
 func (UnimplementedPluginHostServiceServer) testEmbeddedByValue()                           {}
@@ -817,6 +885,60 @@ func _PluginHostService_RequestEmitToken_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginHostService_SetConnectionFocus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceSetConnectionFocusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).SetConnectionFocus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_SetConnectionFocus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).SetConnectionFocus(ctx, req.(*PluginHostServiceSetConnectionFocusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginHostService_AutoFocusOnJoin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceAutoFocusOnJoinRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).AutoFocusOnJoin(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_AutoFocusOnJoin_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).AutoFocusOnJoin(ctx, req.(*PluginHostServiceAutoFocusOnJoinRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginHostService_IsAnyConnFocused_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceIsAnyConnFocusedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).IsAnyConnFocused(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_IsAnyConnFocused_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).IsAnyConnFocused(ctx, req.(*PluginHostServiceIsAnyConnFocusedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginHostService_ServiceDesc is the grpc.ServiceDesc for PluginHostService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -875,6 +997,18 @@ var PluginHostService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RequestEmitToken",
 			Handler:    _PluginHostService_RequestEmitToken_Handler,
+		},
+		{
+			MethodName: "SetConnectionFocus",
+			Handler:    _PluginHostService_SetConnectionFocus_Handler,
+		},
+		{
+			MethodName: "AutoFocusOnJoin",
+			Handler:    _PluginHostService_AutoFocusOnJoin_Handler,
+		},
+		{
+			MethodName: "IsAnyConnFocused",
+			Handler:    _PluginHostService_IsAnyConnFocused_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

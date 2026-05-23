@@ -356,10 +356,15 @@ type CommandExecutionConfig struct {
 	CharacterName string    // optional
 	PlayerID      ulid.ULID // optional
 	SessionID     ulid.ULID // optional
-	Args          string    // optional
-	Output        io.Writer // REQUIRED: must be non-nil
-	Services      *Services // REQUIRED: must be non-nil
-	InvokedAs     string    // optional
+	// ConnectionID is the ULID of the originating Connection. Phase 5
+	// (holomush-5rh.14): scene focus / scene grid commands need to know
+	// which connection issued the command. Zero value is accepted for
+	// server-side dispatch paths that do not have a specific connection.
+	ConnectionID ulid.ULID // optional
+	Args         string    // optional
+	Output       io.Writer // REQUIRED: must be non-nil
+	Services     *Services // REQUIRED: must be non-nil
+	InvokedAs    string    // optional
 }
 
 // BootedSession records a session that was forcibly terminated by a boot command.
@@ -393,8 +398,12 @@ type CommandExecution struct {
 	characterName string
 	playerID      ulid.ULID
 	sessionID     ulid.ULID
-	output        io.Writer
-	services      *Services
+	// connectionID is the originating Connection. Zero for server-side
+	// dispatch paths that don't have a specific connection (e.g. gRPC
+	// server HandleCommand). Phase 5 (holomush-5rh.14).
+	connectionID ulid.ULID
+	output       io.Writer
+	services     *Services
 
 	// bootedSessions tracks sessions forcibly ended by admin boot.
 	// After dispatch, the server layer processes these for leave events and hooks.
@@ -434,6 +443,10 @@ func (e *CommandExecution) PlayerID() ulid.ULID { return e.playerID }
 
 // SessionID returns the session ID for the current connection.
 func (e *CommandExecution) SessionID() ulid.ULID { return e.sessionID }
+
+// ConnectionID returns the originating connection ID. Zero value for
+// server-side dispatch paths that don't have a specific connection.
+func (e *CommandExecution) ConnectionID() ulid.ULID { return e.connectionID }
 
 // Output returns the writer for command output. MUST be non-nil.
 func (e *CommandExecution) Output() io.Writer { return e.output }
@@ -489,6 +502,7 @@ func NewCommandExecution(cfg CommandExecutionConfig) (*CommandExecution, error) 
 		characterName: cfg.CharacterName,
 		playerID:      cfg.PlayerID,
 		sessionID:     cfg.SessionID,
+		connectionID:  cfg.ConnectionID,
 		Args:          cfg.Args,
 		output:        cfg.Output,
 		services:      cfg.Services,
@@ -677,6 +691,7 @@ func NewTestExecution(cfg CommandExecutionConfig) *CommandExecution {
 		characterName: cfg.CharacterName,
 		playerID:      cfg.PlayerID,
 		sessionID:     cfg.SessionID,
+		connectionID:  cfg.ConnectionID,
 		Args:          cfg.Args,
 		output:        cfg.Output,
 		services:      cfg.Services,
