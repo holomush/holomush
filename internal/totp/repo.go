@@ -212,11 +212,11 @@ func (r *repo) IncrementFailedAttempts(
 ) (VerifyState, error) {
 	// $3::BIGINT and $4::BIGINT casts are load-bearing.
 	//
-	// $3 carries the floor (now.UnixNano()) and $4 carries the lockout
-	// duration in nanoseconds. Both are int64; without the explicit BIGINT
-	// casts pgx may infer text encoding and the addition resolves to text
-	// concatenation. The CASE branches MUST both resolve to BIGINT so the
-	// final assignment to locked_until (BIGINT column) type-checks.
+	// $3 carries the floor (now as int64 epoch ns) and $4 carries the
+	// lockout duration in nanoseconds. Both are int64; without the explicit
+	// BIGINT casts pgx may infer text encoding and the addition resolves to
+	// text concatenation. The CASE branches MUST both resolve to BIGINT so
+	// the final assignment to locked_until (BIGINT column) type-checks.
 	//
 	// The previous TIMESTAMPTZ + INTERVAL formulation was tied to the
 	// pre-gfo6 column type; with locked_until as BIGINT-ns the math is

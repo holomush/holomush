@@ -561,6 +561,26 @@ tasks:
         fi
         echo "AGENTS.md → CLAUDE.md symlink intact."
 
+  lint:no-unixnano-in-repos:
+    desc: "Reject UnixNano() / time.Unix(0, ...) in repo packages outside pgnanos (INV-TS-2)"
+    cmds:
+      - |
+        set -euo pipefail
+        # Repo packages MUST route timestamps through internal/pgnanos.Time
+        # as the scan/insert seam (ADR holomush-rbw6). Raw UnixNano() or
+        # time.Unix(0, ns) bypasses the seam and risks inconsistency.
+        # Escape hatch: '// pgnanos-exempt: <reason>' on the same line.
+        if rg -n "UnixNano\(\)|time\.Unix\(0," \
+             internal/auth/postgres/ internal/world/postgres/ internal/totp/ \
+             internal/eventbus/history/ plugins/*/ \
+             --type=go \
+             -g '!*_test.go' -g '!internal/pgnanos/**' \
+             | rg -v "pgnanos-exempt:" ; then
+          echo "FAIL: raw UnixNano() / time.Unix(0, ...) in repo code. Use internal/pgnanos.Time as the scan/insert seam."
+          echo "If unavoidable, annotate with '// pgnanos-exempt: <reason>' on the same line."
+          exit 1
+        fi
+
   lint:no-microsecond-truncate:
     desc: "Reject .Truncate(time.Microsecond) in Go code (INV-TS-3)"
     cmds:
