@@ -13,6 +13,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/auth"
+	"github.com/holomush/holomush/internal/pgnanos"
 )
 
 // PostgresPlayerSessionStore implements auth.PlayerSessionRepository using PostgreSQL.
@@ -38,9 +39,9 @@ func (s *PostgresPlayerSessionStore) Create(ctx context.Context, session *auth.P
 		session.TokenHash,
 		session.UserAgent,
 		session.IPAddress,
-		session.ExpiresAt,
-		session.CreatedAt,
-		session.UpdatedAt,
+		pgnanos.From(session.ExpiresAt),
+		pgnanos.From(session.CreatedAt),
+		pgnanos.From(session.UpdatedAt),
 	)
 	if err != nil {
 		return oops.With("operation", "create player session").With("player_id", session.PlayerID.String()).Wrap(err)
@@ -88,9 +89,9 @@ func (s *PostgresPlayerSessionStore) CreateWithCap(ctx context.Context, session 
 		session.TokenHash,
 		session.UserAgent,
 		session.IPAddress,
-		session.ExpiresAt,
-		session.CreatedAt,
-		session.UpdatedAt,
+		pgnanos.From(session.ExpiresAt),
+		pgnanos.From(session.CreatedAt),
+		pgnanos.From(session.UpdatedAt),
 	); err != nil {
 		return nil, oops.Code("PLAYER_SESSION_CREATE_FAILED").
 			With("player_id", session.PlayerID.String()).Wrap(err)
@@ -102,7 +103,7 @@ func (s *PostgresPlayerSessionStore) CreateWithCap(ctx context.Context, session 
 			DELETE FROM player_sessions
 			WHERE id IN (
 				SELECT id FROM player_sessions
-				WHERE player_id = $1 AND id != $2 AND expires_at > now()
+				WHERE player_id = $1 AND id != $2 AND expires_at > (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
 				ORDER BY created_at DESC
 				OFFSET $3
 			)
@@ -144,12 +145,16 @@ func (s *PostgresPlayerSessionStore) CreateWithCap(ctx context.Context, session 
 func (s *PostgresPlayerSessionStore) GetByTokenHash(ctx context.Context, tokenHash string) (*auth.PlayerSession, error) {
 	var ps auth.PlayerSession
 	var idStr, playerIDStr string
+	var expiresAt, createdAt, updatedAt pgnanos.Time
 
 	err := s.pool.QueryRow(
 		ctx,
 		`SELECT id, player_id, token_hash, user_agent, ip_address, expires_at, created_at, updated_at FROM player_sessions WHERE token_hash = $1`,
 		tokenHash,
-	).Scan(&idStr, &playerIDStr, &ps.TokenHash, &ps.UserAgent, &ps.IPAddress, &ps.ExpiresAt, &ps.CreatedAt, &ps.UpdatedAt)
+	).Scan(&idStr, &playerIDStr, &ps.TokenHash, &ps.UserAgent, &ps.IPAddress, &expiresAt, &createdAt, &updatedAt)
+	ps.ExpiresAt = expiresAt.Time()
+	ps.CreatedAt = createdAt.Time()
+	ps.UpdatedAt = updatedAt.Time()
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.Code("PLAYER_SESSION_NOT_FOUND").With("token_hash_prefix", safePrefix(tokenHash)).Wrap(auth.ErrNotFound)
@@ -173,7 +178,7 @@ func (s *PostgresPlayerSessionStore) GetByTokenHash(ctx context.Context, tokenHa
 	if ps.IsExpired() {
 		// Clean up the expired session and signal expiry to caller.
 		// The conditional WHERE guards against deleting a session that was refreshed by a concurrent request.
-		_, _ = s.pool.Exec(ctx, `DELETE FROM player_sessions WHERE id = $1 AND expires_at < now()`, ps.ID.String()) //nolint:errcheck // best-effort cleanup; session already expired
+		_, _ = s.pool.Exec(ctx, `DELETE FROM player_sessions WHERE id = $1 AND expires_at < (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT`, ps.ID.String()) //nolint:errcheck // best-effort cleanup; session already expired
 		return nil, oops.Code("PLAYER_SESSION_EXPIRED").With("session_id", ps.ID.String()).Wrap(auth.ErrNotFound)
 	}
 
@@ -185,12 +190,16 @@ func (s *PostgresPlayerSessionStore) GetByTokenHash(ctx context.Context, tokenHa
 func (s *PostgresPlayerSessionStore) GetByID(ctx context.Context, id ulid.ULID) (*auth.PlayerSession, error) {
 	var ps auth.PlayerSession
 	var idStr, playerIDStr string
+	var expiresAt2, createdAt2, updatedAt2 pgnanos.Time
 
 	err := s.pool.QueryRow(
 		ctx,
 		`SELECT id, player_id, token_hash, user_agent, ip_address, expires_at, created_at, updated_at FROM player_sessions WHERE id = $1`,
 		id.String(),
-	).Scan(&idStr, &playerIDStr, &ps.TokenHash, &ps.UserAgent, &ps.IPAddress, &ps.ExpiresAt, &ps.CreatedAt, &ps.UpdatedAt)
+	).Scan(&idStr, &playerIDStr, &ps.TokenHash, &ps.UserAgent, &ps.IPAddress, &expiresAt2, &createdAt2, &updatedAt2)
+	ps.ExpiresAt = expiresAt2.Time()
+	ps.CreatedAt = createdAt2.Time()
+	ps.UpdatedAt = updatedAt2.Time()
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.Code("PLAYER_SESSION_NOT_FOUND").With("session_id", id.String()).Wrap(auth.ErrNotFound)
@@ -219,7 +228,7 @@ func (s *PostgresPlayerSessionStore) CountActiveByPlayer(ctx context.Context, pl
 	var n int
 	err := s.pool.QueryRow(
 		ctx,
-		`SELECT COUNT(*) FROM player_sessions WHERE player_id = $1 AND expires_at > now()`,
+		`SELECT COUNT(*) FROM player_sessions WHERE player_id = $1 AND expires_at > (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT`,
 		playerID.String(),
 	).Scan(&n)
 	if err != nil {
@@ -234,7 +243,7 @@ func (s *PostgresPlayerSessionStore) ListByPlayer(ctx context.Context, playerID 
 		ctx,
 		`SELECT id, player_id, token_hash, user_agent, ip_address, expires_at, created_at, updated_at
 		 FROM player_sessions
-		 WHERE player_id = $1 AND expires_at > now()
+		 WHERE player_id = $1 AND expires_at > (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
 		 ORDER BY created_at DESC`,
 		playerID.String(),
 	)
@@ -247,12 +256,16 @@ func (s *PostgresPlayerSessionStore) ListByPlayer(ctx context.Context, playerID 
 	for rows.Next() {
 		var ps auth.PlayerSession
 		var idStr, playerIDStr string
+		var listExpiresAt, listCreatedAt, listUpdatedAt pgnanos.Time
 		if scanErr := rows.Scan(
 			&idStr, &playerIDStr, &ps.TokenHash, &ps.UserAgent, &ps.IPAddress,
-			&ps.ExpiresAt, &ps.CreatedAt, &ps.UpdatedAt,
+			&listExpiresAt, &listCreatedAt, &listUpdatedAt,
 		); scanErr != nil {
 			return nil, oops.Code("PLAYER_SESSION_LIST_SCAN_FAILED").With("player_id", playerID.String()).Wrap(scanErr)
 		}
+		ps.ExpiresAt = listExpiresAt.Time()
+		ps.CreatedAt = listCreatedAt.Time()
+		ps.UpdatedAt = listUpdatedAt.Time()
 		parsedID, parseErr := ulid.Parse(idStr)
 		if parseErr != nil {
 			return nil, oops.With("operation", "parse session id").With("raw_id", idStr).Wrap(parseErr)
@@ -299,7 +312,7 @@ func (s *PostgresPlayerSessionStore) DeleteOldestForPlayer(ctx context.Context, 
 		DELETE FROM player_sessions
 		WHERE id = (
 			SELECT id FROM player_sessions
-			WHERE player_id = $1 AND expires_at > now()
+			WHERE player_id = $1 AND expires_at > (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
 			ORDER BY created_at ASC
 			LIMIT 1
 		)
@@ -321,7 +334,7 @@ func (s *PostgresPlayerSessionStore) DeleteOldestForPlayer(ctx context.Context, 
 // DeleteExpired removes all sessions whose expiry time has passed and returns
 // the number of rows deleted.
 func (s *PostgresPlayerSessionStore) DeleteExpired(ctx context.Context) (int64, error) {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM player_sessions WHERE expires_at < now()`)
+	tag, err := s.pool.Exec(ctx, `DELETE FROM player_sessions WHERE expires_at < (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT`)
 	if err != nil {
 		return 0, oops.With("operation", "delete expired player sessions").Wrap(err)
 	}
@@ -340,8 +353,8 @@ func (s *PostgresPlayerSessionStore) RefreshTTL(ctx context.Context, id ulid.ULI
 	_, err := s.pool.Exec(
 		ctx,
 		`UPDATE player_sessions SET expires_at = $1, updated_at = $2 WHERE id = $3`,
-		now.Add(ttl),
-		now,
+		pgnanos.From(now.Add(ttl)),
+		pgnanos.From(now),
 		id.String(),
 	)
 	if err != nil {

@@ -92,8 +92,8 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		charID := ulid.Make()
 		playerID := ulid.Make()
 		_, err := testPool.Exec(ctx, `
-			INSERT INTO players (id, username, password_hash, created_at)
-			VALUES ($1, $2, 'testhash', NOW())
+			INSERT INTO players (id, username, password_hash, created_at, updated_at)
+			VALUES ($1, $2, 'testhash', (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 		`, playerID.String(), "player_update_"+playerID.String())
 		require.NoError(t, err)
 		_, err = testPool.Exec(ctx, `
@@ -132,8 +132,8 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		charID := ulid.Make()
 		playerID := ulid.Make()
 		_, err := testPool.Exec(ctx, `
-			INSERT INTO players (id, username, password_hash, created_at)
-			VALUES ($1, $2, 'testhash', NOW())
+			INSERT INTO players (id, username, password_hash, created_at, updated_at)
+			VALUES ($1, $2, 'testhash', (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 		`, playerID.String(), "player_held_"+playerID.String())
 		require.NoError(t, err)
 		_, err = testPool.Exec(ctx, `
@@ -338,8 +338,8 @@ func TestObjectRepository_ListHeldBy(t *testing.T) {
 	// Create a test player first with unique username
 	playerID := ulid.Make()
 	_, err = testPool.Exec(ctx, `
-		INSERT INTO players (id, username, password_hash, created_at)
-		VALUES ($1, $2, 'testhash', NOW())
+		INSERT INTO players (id, username, password_hash, created_at, updated_at)
+		VALUES ($1, $2, 'testhash', (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 	`, playerID.String(), "player_"+playerID.String())
 	require.NoError(t, err)
 	defer func() {
@@ -392,8 +392,8 @@ func TestObjectRepository_ListHeldBy_OrderingWithMultipleObjects(t *testing.T) {
 	// Create a test player
 	playerID := ulid.Make()
 	_, err = testPool.Exec(ctx, `
-		INSERT INTO players (id, username, password_hash, created_at)
-		VALUES ($1, $2, 'testhash', NOW())
+		INSERT INTO players (id, username, password_hash, created_at, updated_at)
+		VALUES ($1, $2, 'testhash', (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 	`, playerID.String(), "player_order_"+playerID.String())
 	require.NoError(t, err)
 	defer func() {
@@ -632,8 +632,8 @@ func TestObjectRepository_Move(t *testing.T) {
 		// Create a test player first
 		playerID := ulid.Make()
 		_, err := testPool.Exec(ctx, `
-			INSERT INTO players (id, username, password_hash, created_at)
-			VALUES ($1, $2, 'testhash', NOW())
+			INSERT INTO players (id, username, password_hash, created_at, updated_at)
+			VALUES ($1, $2, 'testhash', (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 		`, playerID.String(), "player_move_"+playerID.String())
 		require.NoError(t, err)
 		defer func() {
@@ -817,8 +817,8 @@ func TestObjectRepository_Move(t *testing.T) {
 		charID := ulid.Make()
 		playerID := ulid.Make()
 		_, err := testPool.Exec(ctx, `
-			INSERT INTO players (id, username, password_hash, created_at)
-			VALUES ($1, $2, 'testhash', NOW())
+			INSERT INTO players (id, username, password_hash, created_at, updated_at)
+			VALUES ($1, $2, 'testhash', (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 		`, playerID.String(), "player_multi_"+playerID.String())
 		require.NoError(t, err)
 		_, err = testPool.Exec(ctx, `

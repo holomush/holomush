@@ -187,7 +187,7 @@ func (c *AdminClient) SeedAdminPlayer(playerID, username, password string) Playe
 
 	_, err := c.pool.Exec(ctx,
 		`INSERT INTO players (id, username, password_hash, created_at, updated_at)
-		 VALUES ($1, $2, 'harness-hash-not-used', now(), now())
+		 VALUES ($1, $2, 'harness-hash-not-used', (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 		 ON CONFLICT (id) DO NOTHING`,
 		playerID, username)
 	require.NoError(c.t, err, "SeedAdminPlayer: insert player %s", username)

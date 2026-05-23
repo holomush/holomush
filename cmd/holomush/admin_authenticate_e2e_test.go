@@ -301,7 +301,7 @@ func setupAdminAuthEnv(t *testing.T) *adminAuthEnv {
 	} {
 		_, err = seedPool.Exec(seedCtx, `
 			INSERT INTO players (id, username, password_hash, created_at, updated_at)
-			VALUES ($1, $2, $3, now(), now())`,
+			VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)`,
 			row.id, row.username, row.hash)
 		Expect(err).NotTo(HaveOccurred(), "INSERT players %s", row.username)
 	}

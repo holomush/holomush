@@ -15,6 +15,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/auth"
+	"github.com/holomush/holomush/internal/pgnanos"
 )
 
 // PasswordResetRepository implements auth.PasswordResetRepository using PostgreSQL.
@@ -32,7 +33,7 @@ func (r *PasswordResetRepository) Create(ctx context.Context, reset *auth.Passwo
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO password_resets (id, player_id, token_hash, expires_at, created_at)
 		VALUES ($1, $2, $3, $4, $5)
-	`, reset.ID.String(), reset.PlayerID.String(), reset.TokenHash, reset.ExpiresAt, reset.CreatedAt)
+	`, reset.ID.String(), reset.PlayerID.String(), reset.TokenHash, pgnanos.From(reset.ExpiresAt), pgnanos.From(reset.CreatedAt))
 	if err != nil {
 		return oops.Code("RESET_CREATE_FAILED").
 			With("operation", "insert password_reset").
@@ -146,7 +147,7 @@ func (r *PasswordResetRepository) DeleteByPlayer(ctx context.Context, playerID u
 func (r *PasswordResetRepository) DeleteExpired(ctx context.Context) (int64, error) {
 	result, err := r.pool.Exec(ctx, `
 		DELETE FROM password_resets WHERE expires_at < $1
-	`, time.Now())
+	`, pgnanos.From(time.Now()))
 	if err != nil {
 		return 0, oops.Code("RESET_DELETE_EXPIRED_FAILED").
 			With("operation", "delete expired password_resets").
@@ -162,8 +163,8 @@ func (r *PasswordResetRepository) scanReset(row pgx.Row) (*auth.PasswordReset, e
 		idStr       string
 		playerIDStr string
 		tokenHash   string
-		expiresAt   time.Time
-		createdAt   time.Time
+		expiresAt   pgnanos.Time
+		createdAt   pgnanos.Time
 	)
 
 	err := row.Scan(&idStr, &playerIDStr, &tokenHash, &expiresAt, &createdAt)
@@ -197,8 +198,8 @@ func (r *PasswordResetRepository) scanReset(row pgx.Row) (*auth.PasswordReset, e
 		ID:        id,
 		PlayerID:  playerID,
 		TokenHash: tokenHash,
-		ExpiresAt: expiresAt,
-		CreatedAt: createdAt,
+		ExpiresAt: expiresAt.Time(),
+		CreatedAt: createdAt.Time(),
 	}, nil
 }
 

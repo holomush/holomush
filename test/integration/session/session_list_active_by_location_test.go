@@ -103,7 +103,7 @@ var _ = Describe("PostgresSessionStore.ListActiveByLocation (I-PRES-1)", func() 
 	It("rejects a second active session for the same character (unique partial index)", func() {
 		loc := idgen.New()
 		charID := idgen.New()
-		futureExpiry := time.Now().Add(time.Hour)
+		futureExpiry := time.Now().Add(time.Hour).UnixNano()
 
 		_, err := env.pool.Exec(
 			env.ctx,

@@ -205,7 +205,7 @@ func (s *Session) MoveTo(ctx context.Context, newLocationID ulid.ULID) {
 	now := time.Now().UTC()
 	tag, err := s.server.pool.Exec(ctx,
 		`UPDATE sessions SET location_id = $1, location_arrived_at = $2, updated_at = $2 WHERE id = $3`,
-		newLocationID.String(), now, s.SessionID)
+		newLocationID.String(), now.UnixNano(), s.SessionID)
 	require.NoError(s.server.t, err, "integrationtest.Session.MoveTo")
 	require.Equalf(s.server.t, int64(1), tag.RowsAffected(),
 		"integrationtest.Session.MoveTo: expected 1 row affected, got %d (sessionID=%s)",

@@ -346,7 +346,7 @@ func (s *Server) ExpireSession(ctx context.Context, sessionID string) {
 	now := time.Now().UTC()
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE sessions SET status = $1, expires_at = $2, updated_at = $2 WHERE id = $3`,
-		string(session.StatusExpired), now, sessionID)
+		string(session.StatusExpired), now.UnixNano(), sessionID)
 	require.NoError(s.t, err, "integrationtest.Server.ExpireSession")
 	require.Equalf(s.t, int64(1), tag.RowsAffected(),
 		"integrationtest.Server.ExpireSession: expected 1 row affected, got %d (sessionID=%s)", tag.RowsAffected(), sessionID)
@@ -361,7 +361,7 @@ func (s *Server) SetLocationArrivedAt(ctx context.Context, sessionID string, t t
 	s.t.Helper()
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE sessions SET location_arrived_at = $1, updated_at = $1 WHERE id = $2`,
-		t.UTC(), sessionID)
+		t.UTC().UnixNano(), sessionID)
 	require.NoError(s.t, err, "integrationtest.Server.SetLocationArrivedAt")
 	require.Equalf(s.t, int64(1), tag.RowsAffected(),
 		"integrationtest.Server.SetLocationArrivedAt: expected 1 row affected, got %d (sessionID=%s)", tag.RowsAffected(), sessionID)

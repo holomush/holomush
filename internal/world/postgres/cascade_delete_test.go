@@ -45,8 +45,8 @@ func createCascadeTestCharacter(ctx context.Context, t *testing.T, locationID ul
 	t.Helper()
 	playerID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
-		INSERT INTO players (id, username, password_hash, created_at)
-		VALUES ($1, $2, 'testhash', NOW())
+		INSERT INTO players (id, username, password_hash, created_at, updated_at)
+		VALUES ($1, $2, 'testhash', (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 	`, playerID.String(), "cascade_player_"+playerID.String())
 	require.NoError(t, err)
 
