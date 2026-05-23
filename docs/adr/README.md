@@ -16,6 +16,7 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Drop in-memory session.Store fake; test against real Postgres](holomush-bozv-drop-session-memstore-test-against-postgres.md) | 2026-05-23 | Accepted | `holomush-bozv` |
 | [Denormalize Pose-Order Metadata Against scene_log Source of Truth](holomush-r4th-denormalize-pose-order-metadata.md) | 2026-05-19 | Accepted | `holomush-r4th` |
 | [Migrate Scene Subjects to NATS Dot-Style Atomically With Plugin Emit Code](holomush-s9nu-scene-subject-atomic-migration.md) | 2026-05-19 | Accepted | `holomush-s9nu` |
 | [Classify All Scene Content Events as sensitivity:always, Including OOC](holomush-sb3n-scene-content-sensitivity-always.md) | 2026-05-19 | Accepted | `holomush-sb3n` |
