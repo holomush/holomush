@@ -25,7 +25,11 @@ Each iteration of this Stop-hook prompt runs ONE bead. Execute these steps in or
 7. Dispatch implementer subagent — per dev-flow:subagent-driven-development:
    subagent_type from bead's skills[] (heuristic; general-purpose fallback)
    model       from bead's model:* label (default sonnet per Rule 5)
-   prompt      = bead description + acceptance criteria + spec excerpts + $LESSONS
+   prompt      = bead description + acceptance criteria + spec excerpts + $LESSONS + $BEAD_NOTES
+
+   $BEAD_NOTES: include the bead's own non-"lesson:"-prefixed notes (forwarding comments, audit instructions, dependency rationale, priority-bump reasons, follow-up flags). These are bead-specific directives that don't generalize the way $LESSONS do. Fetch via:
+     bd show <id> --json | jq -r '.[0].notes // .notes // [] | .[] | select(.body | startswith("lesson:") | not) | .body'
+   Many beads have empty $BEAD_NOTES — fine, append a blank section. Example: gfo6.31 carries a dual-clock-domain audit instruction that MUST reach the implementer or the fix will be incomplete (per drain bead iter-18 lesson — the ORDER BY mirror is necessary but insufficient without writer harmonization).
 
    CRITICAL briefings for this drain (include verbatim in EVERY subagent prompt):
    - WORKSPACE: cd /Volumes/Code/github.com/holomush/.worktrees/drain-gfo6 before any file edit or jj command. Verify pwd before each Write/Edit; do NOT operate from /Volumes/Code/github.com/holomush/holomush (the shared default workspace).

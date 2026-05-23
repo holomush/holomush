@@ -91,8 +91,8 @@ func (r *SceneRepository) ListParticipants(ctx context.Context, sceneID ulid.ULI
 		SELECT character_id, role
 		FROM scene_participants
 		WHERE scene_id = $1
-		ORDER BY joined_at
-	`, sceneID.String())
+		ORDER BY joined_at ASC, character_id ASC
+	`, sceneID.String()) // tiebreaker for sub-ns insert collisions (holomush-gfo6.28)
 	if err != nil {
 		return nil, oops.
 			With("operation", "list participants").
