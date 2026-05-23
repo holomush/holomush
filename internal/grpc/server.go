@@ -19,6 +19,10 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -75,6 +79,23 @@ type SessionDefaults struct {
 // session reattach CAS) that must run on a fresh context so client disconnect
 // does not abort cleanup.
 const cleanupTimeout = 1 * time.Second
+
+// tracer is the package-level OTel tracer for gRPC handler instrumentation.
+// Sibling spans created here attach as children of the otelgrpc-installed
+// server interceptor span, so each Subscribe RPC produces a full phase
+// breakdown in Tempo / Grafana without a separate parent (holomush-87qu).
+var tracer = otel.Tracer("holomush/internal/grpc")
+
+// recordSpanError pairs RecordError with SetStatus(codes.Error, ...) so
+// Tempo / Grafana queries that filter for `status.code=ERROR` surface
+// the failing leg of a slow trace. RecordError alone leaves the span's
+// status column as Unset; the exception event is attached but the span
+// is not filterable. Mirrors plugins/core-scenes/observability.go's
+// recordError pattern.
+func recordSpanError(span trace.Span, err error) {
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
+}
 
 // replayCompleteFrame returns a SubscribeResponse containing the
 // REPLAY_COMPLETE control signal.
@@ -703,6 +724,21 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		requestID = req.Meta.RequestId
 	}
 
+	// Phase-level spans on the Subscribe handler (holomush-87qu). The
+	// otelgrpc interceptor's RPC span is the parent; each phase below
+	// is a sibling child span scoped to a single piece of pre-replay
+	// work. The dominator of the 8-10s "syncing" window observed in
+	// holomush-87qu is unknown by code reading alone — these spans let
+	// Tempo / Grafana show which phase carries the time.
+	subscribeSpan := trace.SpanFromContext(ctx)
+	subscribeSpan.SetAttributes(attribute.String("subscribe.session_id", req.SessionId))
+	if requestID != "" {
+		// Skip emitting the attribute on Meta-less requests so a Tempo
+		// search by `subscribe.request_id=""` doesn't match every empty
+		// caller.
+		subscribeSpan.SetAttributes(attribute.String("subscribe.request_id", requestID))
+	}
+
 	slog.DebugContext(
 		ctx, "subscribe request",
 		"request_id", requestID,
@@ -715,13 +751,16 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 
 	// Validate session ownership before any other work. Enumeration-safe:
 	// every failure mode collapses to the same SESSION_NOT_FOUND error.
+	validateCtx, validateSpan := tracer.Start(ctx, "subscribe.validate_ownership")
 	if _, err := auth.ValidateSessionOwnership(
-		ctx,
+		validateCtx,
 		s.playerSessionRepo,
 		s.sessionStore,
 		req.GetPlayerSessionToken(),
 		req.GetSessionId(),
 	); err != nil {
+		recordSpanError(validateSpan, err)
+		validateSpan.End()
 		slog.DebugContext(
 			ctx, "subscribe session ownership validation failed",
 			"request_id", requestID,
@@ -730,11 +769,16 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		)
 		return oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
 	}
+	validateSpan.End()
 
-	info, err := s.sessionStore.Get(ctx, req.SessionId)
+	getCtx, getSpan := tracer.Start(ctx, "subscribe.session_get")
+	info, err := s.sessionStore.Get(getCtx, req.SessionId)
 	if err != nil {
+		recordSpanError(getSpan, err)
+		getSpan.End()
 		return oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
 	}
+	getSpan.End()
 
 	// Connection registration (bd-j2xj). Only fires when the caller supplies
 	// a connection_id + client_type. Gate removal uses a fresh context so
@@ -753,12 +797,17 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 			Streams:     []string{},
 			ConnectedAt: time.Now(),
 		}
-		if addErr := s.sessionStore.AddConnection(ctx, conn); addErr != nil {
+		addCtx, addSpan := tracer.Start(ctx, "subscribe.add_connection",
+			trace.WithAttributes(attribute.String("connection.id", connID.String())))
+		if addErr := s.sessionStore.AddConnection(addCtx, conn); addErr != nil {
+			recordSpanError(addSpan, addErr)
+			addSpan.End()
 			return oops.Code("SUBSCRIBE_ADD_CONNECTION_FAILED").
 				With("session_id", req.GetSessionId()).
 				With("connection_id", req.GetConnectionId()).
 				Wrap(addErr)
 		}
+		addSpan.End()
 		defer func() {
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 			defer cancel()
@@ -775,10 +824,15 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 
 	// Reattach if detached.
 	if info.Status == session.StatusDetached {
-		ok, casErr := s.sessionStore.ReattachCAS(ctx, req.SessionId)
+		reattachCtx, reattachSpan := tracer.Start(ctx, "subscribe.reattach_cas")
+		ok, casErr := s.sessionStore.ReattachCAS(reattachCtx, req.SessionId)
 		if casErr != nil {
+			recordSpanError(reattachSpan, casErr)
+			reattachSpan.End()
 			return oops.Code("SESSION_REATTACH_FAILED").With("session_id", req.SessionId).Wrap(casErr)
 		}
+		reattachSpan.SetAttributes(attribute.Bool("reattach.won_cas", ok))
+		reattachSpan.End()
 		if !ok {
 			return oops.Code("SESSION_REATTACH_LOST").
 				With("session_id", req.SessionId).
@@ -795,11 +849,15 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	// RestoreFocus — produces the full stream list and replay modes.
 	var plan focus.RestorePlan
 	if s.focusCoordinator != nil {
-		p, planErr := s.focusCoordinator.RestoreFocus(ctx, req.SessionId)
+		restoreCtx, restoreSpan := tracer.Start(ctx, "subscribe.restore_focus")
+		p, planErr := s.focusCoordinator.RestoreFocus(restoreCtx, req.SessionId)
 		if planErr != nil {
+			recordSpanError(restoreSpan, planErr)
 			slog.WarnContext(ctx, "RestoreFocus failed, falling back to empty plan",
 				"session_id", req.SessionId, "error", planErr)
 		}
+		restoreSpan.SetAttributes(attribute.Int("restore.stream_count", len(p.Streams)))
+		restoreSpan.End()
 		plan = p
 	}
 
@@ -875,11 +933,20 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 
 	// Open the bus session. JS preserves the durable consumer's cursor
 	// across reconnect, so events not acked last time get redelivered
-	// automatically; there is no explicit replay phase.
-	busStream, subErr := s.subscriber.OpenSession(ctx, req.SessionId, sessionIdentity, filters, minFloor)
+	// automatically; there is no explicit replay phase. This span covers
+	// the JetStream LookupConsumer + CreateOrUpdateConsumer round trips
+	// — known to be a non-trivial chunk of connect latency under load
+	// (see holomush-l015 for the warmup-race surface on the audit-side
+	// counterpart).
+	openCtx, openSpan := tracer.Start(ctx, "subscribe.bus_open_session",
+		trace.WithAttributes(attribute.Int("filters.count", len(filters))))
+	busStream, subErr := s.subscriber.OpenSession(openCtx, req.SessionId, sessionIdentity, filters, minFloor)
 	if subErr != nil {
+		recordSpanError(openSpan, subErr)
+		openSpan.End()
 		return oops.Code("SUBSCRIBE_FAILED").With("session_id", req.SessionId).Wrap(subErr)
 	}
+	openSpan.End()
 	defer func() {
 		if closeErr := busStream.Close(); closeErr != nil {
 			slog.WarnContext(ctx, "bus stream close failed", "session_id", req.SessionId, "error", closeErr)
@@ -908,9 +975,13 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		updateFilters: s.makeFilterUpdater(busStream, filterSet),
 		verbRegistry:  s.verbRegistry,
 	}
-	if sendErr := lf.sendSynthetic(ctx, stream); sendErr != nil {
+	syntheticCtx, syntheticSpan := tracer.Start(ctx, "subscribe.send_synthetic")
+	if sendErr := lf.sendSynthetic(syntheticCtx, stream); sendErr != nil {
+		recordSpanError(syntheticSpan, sendErr)
+		syntheticSpan.End()
 		return oops.Code("SEND_FAILED").With("session_id", req.SessionId).Wrap(sendErr)
 	}
+	syntheticSpan.End()
 
 	// Control channel for mid-session stream updates (plugin add/remove).
 	ctrlCh := make(chan sessionStreamUpdate, 16)
@@ -922,9 +993,13 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	// REPLAY_COMPLETE is emitted immediately — the bus handles replay
 	// transparently by redelivering from the durable's acked-seq. Clients
 	// that gate UI on this signal still see it at the expected point.
+	// This is the latency-budget boundary for holomush-87qu: time from
+	// Subscribe RPC entry to this Send is what the user perceives as the
+	// 'syncing' window on the server side.
 	if err := stream.Send(replayCompleteFrame()); err != nil {
 		return oops.With("session_id", req.SessionId).Wrap(err)
 	}
+	subscribeSpan.AddEvent("subscribe.replay_complete_sent")
 
 	return s.runSubscribeLoop(ctx, info, busStream, filterSet, stream, lf, ctrlCh)
 }

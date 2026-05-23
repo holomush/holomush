@@ -153,3 +153,60 @@ var _ = Describe("Integration harness Subscribe transport lifecycle", func() {
 		felix.Logout(ctx)
 	})
 })
+
+// holomush-87qu: Subscribe → REPLAY_COMPLETE budget regression lock.
+//
+// The bead's TDD acceptance asks for a server-side assertion that
+// "empty-history Subscribe emits REPLAY_COMPLETE in < 200ms". The
+// production observation was 8-10s wall time for the user-perceived
+// 'syncing' window; this test fails-fast if a regression of that
+// magnitude (or even one order smaller) reappears.
+//
+// Budget: 1 second — generous enough to absorb macOS testcontainers
+// + embedded NATS startup variance under CI load (where bus.Start
+// is hot but the SQL roundtrips through the testcontainer have
+// >100ms tail-latency spikes), tight enough that the 8-10s field
+// observation would fail by an order of magnitude. The bead's
+// stricter 200ms target lives as an aspirational comment; tightening
+// to 200ms requires deflaking the testcontainers latency floor
+// first, which is out of scope for the instrumentation PR.
+//
+// Test shape: ConnectAuthed (warm-up: covers SelectCharacter +
+// initial Subscribe), DetachTransport (drops the live stream),
+// then measure ReattachTransport (a clean Subscribe → REPLAY_COMPLETE
+// round-trip with no SelectCharacter overhead). Reattach is the
+// pure Subscribe-handler measurement target.
+var _ = Describe("Integration harness Subscribe budget (holomush-87qu)", func() {
+	It("reattach completes Subscribe → REPLAY_COMPLETE within budget", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second) //nolint:govet // cancel called below; deferred via defer
+		defer cancel()
+
+		ts := integrationtest.Start(suiteT)
+		defer ts.Stop()
+
+		sess := ts.ConnectAuthed(ctx, "Budget")
+
+		// Drop the transport so the next attach exercises only the
+		// Subscribe handler — no SelectCharacter, no character create.
+		sess.DetachTransport(ctx)
+
+		// Aspirational target per the bead: <200ms. CI budget: 1s.
+		// Tighten over time as the testcontainers latency floor
+		// improves (or as the bead's perf fix lands).
+		const budget = 1 * time.Second
+
+		start := time.Now()
+		sess.ReattachTransport(ctx)
+		elapsed := time.Since(start)
+
+		Expect(elapsed).To(BeNumerically("<", budget),
+			"Subscribe → REPLAY_COMPLETE budget exceeded — took %s, budget %s. "+
+				"Server-side OTel spans on the Subscribe handler (subscribe.validate_ownership, "+
+				"subscribe.session_get, subscribe.add_connection, subscribe.reattach_cas, "+
+				"subscribe.restore_focus, subscribe.bus_open_session, subscribe.send_synthetic) "+
+				"will reveal which phase dominates; aspirational target is <200ms (holomush-87qu).",
+			elapsed, budget)
+
+		sess.Logout(ctx)
+	})
+})
