@@ -45,6 +45,49 @@ test.describe('Terminal UI', () => {
     await expect(page.locator('[data-testid="event"]').first()).toBeVisible({ timeout: 10000 });
   });
 
+  // holomush-fujt: connect-time race where a command sent in the window
+  // between Subscribe REPLAY_COMPLETE and backfill completion would have
+  // its server-emitted event picked up by the still-running backfill and
+  // rendered as dimmed/replayed scrollback (above the LIVE marker)
+  // instead of live (below it). Fix A gates streamReadyGate on BOTH
+  // REPLAY_COMPLETE AND backfillDone, so the textarea is held until
+  // backfill is done — any post-connect command's event arrives via
+  // Subscribe only and renders live by construction.
+  //
+  // Invariant under test: a command sent immediately after connect MUST
+  // produce a live (non-dimmed) event. Pre-fix this could be dimmed
+  // when the backfill query was slow enough to overlap the command;
+  // post-fix the gate guarantees backfill is done first.
+  test('command sent immediately after connect renders live, not dimmed (holomush-fujt)', async ({
+    page,
+  }) => {
+    await connectAsGuest(page);
+    const token = Date.now();
+    const input = page.locator('textarea');
+
+    // Fire immediately. After Fix A, the textarea may briefly be
+    // disabled while backfill finishes; the fill+press still works
+    // (Playwright auto-waits for actionability), but by the time the
+    // command actually dispatches, backfill is done and the resulting
+    // event flows only through Subscribe — never via backfill.
+    await input.fill(`say live-${token}`);
+    await input.press('Enter');
+
+    const event = page
+      .locator('[data-testid="event"]')
+      .filter({ hasText: `live-${token}` });
+    await expect(event).toBeVisible({ timeout: 10000 });
+
+    // CRITICAL: the event MUST NOT be in the dimmed section. A
+    // regression of fujt (gate resolves at REPLAY_COMPLETE only)
+    // would put this event in the dimmed scrollback under load.
+    const dimmedCount = await page
+      .locator('.dimmed [data-testid="event"]')
+      .filter({ hasText: `live-${token}` })
+      .count();
+    expect(dimmedCount).toBe(0);
+  });
+
   // F5 (holomush-1tvn.12) rewrite: asserts against events_audit instead of
   // the now-empty events table. Say events are published to the host-owned
   // `events.<game>.location.<id>` subject and persist in the host audit
