@@ -598,9 +598,15 @@ func actorKindToProto(k eventbus.ActorKind) eventbusv1.ActorKind {
 
 // drainStream pulls every event from stream until io.EOF, failing on any
 // other error.
+//
+// Uses context.Background() rather than t.Context() because callers pass
+// suiteT (the Ginkgo suite-level testing.T); if a background goroutine
+// invokes drainStream after the suite finishes, t.Context() panics in
+// Go 1.21+. The bounded 20s timeout still gives deterministic completion
+// (holomush-gfo6.30).
 func drainStream(t *testing.T, stream eventbus.HistoryStream) []eventbus.Event {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	var out []eventbus.Event
 	for {
