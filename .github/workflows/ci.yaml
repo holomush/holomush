@@ -49,10 +49,14 @@ jobs:
           cache: go
 
       - name: Install Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        # Direct install via taskfile.dev's install.sh; the script downloads
+        # the official release tarball + its sha256 checksum from GitHub and
+        # verifies before installing. No GITHUB_TOKEN required — replaces
+        # arduino/setup-task@v2 which hit recurring 401 "Bad credentials"
+        # against the Namespace runner token proxy (holomush-06vz).
+        run: |
+          curl -fsSL https://taskfile.dev/install.sh | sudo sh -s -- -b /usr/local/bin
+          task --version
 
       - name: Install golangci-lint v2
         run: |
@@ -142,10 +146,14 @@ jobs:
           cache: go
 
       - name: Install Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        # Direct install via taskfile.dev's install.sh; the script downloads
+        # the official release tarball + its sha256 checksum from GitHub and
+        # verifies before installing. No GITHUB_TOKEN required — replaces
+        # arduino/setup-task@v2 which hit recurring 401 "Bad credentials"
+        # against the Namespace runner token proxy (holomush-06vz).
+        run: |
+          curl -fsSL https://taskfile.dev/install.sh | sudo sh -s -- -b /usr/local/bin
+          task --version
 
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@v1.13.0
@@ -186,10 +194,14 @@ jobs:
           cache: go
 
       - name: Install Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        # Direct install via taskfile.dev's install.sh; the script downloads
+        # the official release tarball + its sha256 checksum from GitHub and
+        # verifies before installing. No GITHUB_TOKEN required — replaces
+        # arduino/setup-task@v2 which hit recurring 401 "Bad credentials"
+        # against the Namespace runner token proxy (holomush-06vz).
+        run: |
+          curl -fsSL https://taskfile.dev/install.sh | sudo sh -s -- -b /usr/local/bin
+          task --version
 
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@v1.13.0
@@ -242,10 +254,14 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        # Direct install via taskfile.dev's install.sh; the script downloads
+        # the official release tarball + its sha256 checksum from GitHub and
+        # verifies before installing. No GITHUB_TOKEN required — replaces
+        # arduino/setup-task@v2 which hit recurring 401 "Bad credentials"
+        # against the Namespace runner token proxy (holomush-06vz).
+        run: |
+          curl -fsSL https://taskfile.dev/install.sh | sudo sh -s -- -b /usr/local/bin
+          task --version
 
       - name: Run E2E tests with coverage
         run: task test:e2e:cover
@@ -294,10 +310,14 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        # Direct install via taskfile.dev's install.sh; the script downloads
+        # the official release tarball + its sha256 checksum from GitHub and
+        # verifies before installing. No GITHUB_TOKEN required — replaces
+        # arduino/setup-task@v2 which hit recurring 401 "Bad credentials"
+        # against the Namespace runner token proxy (holomush-06vz).
+        run: |
+          curl -fsSL https://taskfile.dev/install.sh | sudo sh -s -- -b /usr/local/bin
+          task --version
 
       - name: Build
         run: task build
