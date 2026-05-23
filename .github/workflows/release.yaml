@@ -125,21 +125,16 @@ jobs:
           set -euo pipefail
           echo "Verifying signing artifacts..."
 
-          # Check that checksums signature and certificate exist
-          if [[ ! -f dist/checksums.txt.sig ]]; then
-            echo "ERROR: checksums.txt.sig not found - signing may have failed"
-            ls -la dist/
-            exit 1
-          fi
-
-          if [[ ! -f dist/checksums.txt.sig.cert ]]; then
-            echo "ERROR: checksums.txt.sig.cert not found - signing may have failed"
+          # cosign v3 emits a single sigstore bundle (.sigstore.json) instead of
+          # the separate .sig + .sig.cert files. See https://goreleaser.com/blog/cosign-v3.
+          if [[ ! -f dist/checksums.txt.sigstore.json ]]; then
+            echo "ERROR: checksums.txt.sigstore.json not found - signing may have failed"
             ls -la dist/
             exit 1
           fi
 
           echo "✓ Signing artifacts verified:"
-          ls -la dist/checksums.txt.sig*
+          ls -la dist/checksums.txt.sigstore.json
 
       # Upload artifacts for provenance attestation
       - name: Upload release artifacts
@@ -263,20 +258,21 @@ jobs:
             sleep 10
           done
 
-          # Download checksums and signature
+          # Download checksums and the cosign v3 sigstore bundle.
           mkdir -p dist
           if ! gh release download "${VERSION}" -R holomush/holomush -D dist \
-            -p 'checksums.txt' -p 'checksums.txt.sig' -p 'checksums.txt.sig.cert'; then
+            -p 'checksums.txt' -p 'checksums.txt.sigstore.json'; then
             echo "ERROR: Failed to download release artifacts"
             echo "This may indicate the release was not published or signing failed"
             gh release view "${VERSION}" -R holomush/holomush --json assets || true
             exit 1
           fi
 
-          # Verify signature
+          # Verify signature against the bundle (cosign v3). The bundle carries
+          # both the signature and the signing certificate, so no separate
+          # --certificate / --signature flags are needed.
           cosign verify-blob \
-            --certificate dist/checksums.txt.sig.cert \
-            --signature dist/checksums.txt.sig \
+            --bundle dist/checksums.txt.sigstore.json \
             --certificate-identity-regexp "https://github.com/holomush/holomush/.*" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             dist/checksums.txt

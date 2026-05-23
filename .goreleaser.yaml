@@ -81,10 +81,14 @@ signs:
   - cmd: cosign
     artifacts: checksum
     output: true
+    # cosign v3 consolidates the separate signature + certificate files into a
+    # single sigstore bundle (.sigstore.json) via --bundle. See
+    # https://goreleaser.com/blog/cosign-v3. The verify-release job consumes
+    # this bundle with `cosign verify-blob --bundle`.
+    signature: "${artifact}.sigstore.json"
     args:
       - "sign-blob"
-      - "--output-signature=${signature}"
-      - "--output-certificate=${signature}.cert"
+      - "--bundle=${signature}"
       - "${artifact}"
       - "--yes"
 
