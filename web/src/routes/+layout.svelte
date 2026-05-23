@@ -6,6 +6,7 @@
   import '../app.css';
   import TopBar from '$lib/components/TopBar.svelte';
   import { initTelemetry, startNavigationSpan, endNavigationSpan } from '$lib/telemetry';
+  import { initSentry } from '$lib/sentry';
   import { restoreSession } from '$lib/stores/authStore';
   import { activeTheme, themeToCssVars } from '$lib/stores/themeStore';
   import {
@@ -80,6 +81,7 @@
 
   onMount(() => {
     initTelemetry();
+    initSentry();
     restoreSession();
     hydrateUiPrefs();
     window.addEventListener('keydown', handleGlobalKey, { capture: true });

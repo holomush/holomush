@@ -52,6 +52,7 @@ Operating = [
   "operating/ca-rotation.md",
   "operating/crypto-setup.md",
   "operating/operations.md",
+  "operating/sentry.md",
   "operating/verifying-releases.md",
 ]
 

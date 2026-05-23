@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/net/http2"
 
+	"github.com/holomush/holomush/pkg/errutil"
 	"github.com/holomush/holomush/pkg/proto/holomush/web/v1/webv1connect"
 )
 
@@ -25,6 +26,11 @@ type Config struct {
 	WebDir      string
 	CORSOrigins []string
 	Secure      bool // controls cookie Secure flag and SameSite policy
+	// SentryDSN, when non-empty, enables the /api/sentry-relay endpoint
+	// that browser SDK envelopes can POST to as an ad-blocker bypass. The
+	// DSN value is used to validate inbound envelopes — the relay only
+	// forwards traffic destined for the configured project.
+	SentryDSN string
 }
 
 // Server is the web HTTP server hosting ConnectRPC and static files.
@@ -54,6 +60,24 @@ func NewServer(cfg Config) (*Server, error) {
 	// Register ConnectRPC handler
 	path, connectHandler := webv1connect.NewWebServiceHandler(cfg.Handler)
 	mux.Handle(path, connectHandler)
+
+	// Register Sentry envelope relay if SENTRY_DSN is configured. The
+	// relay accepts browser SDK envelopes at /api/sentry-relay and
+	// forwards them to Sentry's ingest, bypassing ad-blockers that
+	// block direct *.ingest.sentry.io requests. A failed parse of the
+	// configured DSN is treated as a configuration error: the relay
+	// stays unregistered (so an open endpoint never ships by accident),
+	// and the failure is logged so operators notice.
+	if cfg.SentryDSN != "" {
+		relayHandler, relayErr := NewSentryRelayHandler(cfg.SentryDSN)
+		if relayErr != nil {
+			errutil.LogError(slog.Default(),
+				"web: sentry relay not registered due to DSN parse error", relayErr)
+		} else {
+			mux.Handle("/api/sentry-relay", relayHandler)
+			slog.Info("web: sentry relay registered at /api/sentry-relay")
+		}
+	}
 
 	// Register static file server as fallback
 	mux.Handle("/", FileServer(cfg.WebDir))

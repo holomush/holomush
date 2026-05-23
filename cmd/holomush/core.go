@@ -165,6 +165,11 @@ manages plugins, and handles game state.`,
 // waits for readiness, handles OS signals and context cancellation, and performs a graceful shutdown.
 // codecov:ignore — tested by integration and E2E tests
 func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.GameConfig, authConfig config.AuthConfig, eventBusConfig eventbus.Config, cryptoConfig config.CryptoConfig, cmd *cobra.Command, deps *CoreDeps) error {
+	// Stamp the bootstrap start as early as possible — anything after this
+	// (config validation, migrations, subsystem starts) shows up as part of
+	// the "process.startup" span's duration when emitted at the ready point.
+	bootStart := time.Now()
+
 	if deps == nil {
 		deps = &CoreDeps{}
 	}
@@ -1019,6 +1024,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigChan)
+
+	telemetry.EmitStartupSpan(ctx, "holomush-core", version, bootStart)
 
 	cmd.Println("Core process started")
 	slog.Info(
