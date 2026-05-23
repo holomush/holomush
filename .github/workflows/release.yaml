@@ -219,14 +219,14 @@ jobs:
           VERSION="${{ needs.goreleaser.outputs.version }}"
           IMAGE="ghcr.io/holomush/holomush:${VERSION}"
 
-          # Resolve the multi-arch image INDEX digest. `docker manifest
-          # inspect --verbose` returns a JSON *array* for a manifest list
-          # (one entry per platform), which broke the old `.Descriptor.digest`
-          # jq. `buildx imagetools inspect --format '{{.Manifest.Digest}}'`
-          # returns the index digest directly and is the correct attestation
-          # subject for a multi-arch image (works for single-arch too).
+          # Resolve the multi-arch image INDEX digest — the correct attestation
+          # subject for a manifest list. The Go-template form
+          # (`--format '{{.Manifest.Digest}}'`) silently prints the default
+          # human output in this buildx version, so use the structured JSON
+          # dump (`--format '{{json .}}'`) and pull `.manifest.digest` with jq.
+          # Validated against ghcr.io/holomush/holomush:0.1.5.
           echo "Fetching index digest for ${IMAGE}"
-          DIGEST=$(docker buildx imagetools inspect "${IMAGE}" --format '{{.Manifest.Digest}}')
+          DIGEST=$(docker buildx imagetools inspect "${IMAGE}" --format '{{json .}}' | jq -r '.manifest.digest')
 
           if [[ "${DIGEST}" != sha256:* ]]; then
             echo "ERROR: Could not resolve index digest for ${IMAGE} (got: '${DIGEST}')"
