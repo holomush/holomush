@@ -43,15 +43,7 @@ jobs:
           cache: go
 
       - name: Install Task
-        # Direct install via taskfile.dev's install.sh; sha256-verified
-        # tarball download, no GITHUB_TOKEN required. Replaces
-        # arduino/setup-task@v2 (holomush-06vz).
-        run: |
-          curl -fsSL https://taskfile.dev/install.sh | sudo sh -s -- -b /usr/local/bin
-          task --version
-
-      - name: Install gotestsum
-        run: go install gotest.tools/gotestsum@v1.13.0
+        uses: ./.github/actions/install-task
 
       - name: Run eventbus soak suite
         run: task soak:eventbus

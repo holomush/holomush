@@ -1,0 +1,27 @@
+name: Install Task
+# Build the pinned `task` binary from the isolated go.tool.mod module and put
+# it on PATH. Sources from the Go module proxy (cached by the Go module/build
+# cache) rather than GitHub Releases — removes the CDN-flake class that broke
+# arduino/setup-task@v2 and the taskfile.dev/install.sh shim
+# (holomush-06vz / holomush-ar31b). Requires Go to be set up before this action
+# runs (actions/setup-go) and the repo checked out (go.tool.mod must be present).
+description: Build the pinned task binary from go.tool.mod and add it to PATH.
+
+runs:
+  using: composite
+  steps:
+    - name: Build Task from go.tool.mod
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "$HOME/.local/bin"
+        # GOWORK=off: go.work enables workspace mode, which is incompatible
+        # with -modfile.
+        GOWORK=off go build -modfile=go.tool.mod \
+          -o "$HOME/.local/bin/task" \
+          github.com/go-task/task/v3/cmd/task
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Verify Task
+      shell: bash
+      run: task --version

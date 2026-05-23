@@ -9,6 +9,15 @@ vars:
   MAIN_PKG: ./cmd/holomush
   MIGRATIONS_DIR: internal/store/migrations
   LICENSE_DIRS: api cmd internal pkg plugins scripts
+  # Build/test/lint tooling is pinned in isolated `go tool` modules
+  # (go.tool.mod, go.tool-lint.mod) and run from the Go module proxy rather
+  # than installed from GitHub Releases — this removes the CDN-flake class
+  # that broke arduino/setup-task and the install.sh shim (holomush-ar31b).
+  # GOWORK=off is required: go.work enables workspace mode, which rejects
+  # -modfile. The two modules are split because the linters' dependency
+  # closures conflict with task's (charmbracelet/go-yaml versions).
+  GO_TOOL: GOWORK=off go tool -modfile=go.tool.mod
+  GO_TOOL_LINT: GOWORK=off go tool -modfile=go.tool-lint.mod
   # Canonical docs-only path globs. MUST stay byte-identical with
   # .github/workflows/ci.yaml's paths-ignore: blocks and
   # .github/workflows/ci-docs-skip.yaml's paths: blocks.
@@ -72,7 +81,7 @@ tasks:
     desc: Run unit tests (parent module + gorules analyzer module; pass package/test args after --)
     cmds:
       - task: test:gorules
-      - gotestsum --format pkgname -- -race -count=1 {{.CLI_ARGS | default "./..."}}
+      - "{{.GO_TOOL}} gotestsum --format pkgname -- -race -count=1 {{.CLI_ARGS | default \"./...\"}}"
 
   test:gorules:
     desc: Run analysistest unit tests for the gorules analyzer module
@@ -83,7 +92,7 @@ tasks:
   test:verbose:
     desc: Run unit tests with full verbose output
     cmds:
-      - gotestsum --format standard-verbose -- -race -count=1 {{.CLI_ARGS | default "./..."}}
+      - "{{.GO_TOOL}} gotestsum --format standard-verbose -- -race -count=1 {{.CLI_ARGS | default \"./...\"}}"
 
   lint:
     desc: Run all linters
@@ -130,7 +139,7 @@ tasks:
       # Go's default only counts coverage for the package currently being
       # tested, which hides cross-package exercise (e.g., integration tests
       # that drive multiple packages via an end-to-end flow).
-      - gotestsum --format pkgname -- -race -coverprofile=coverage.out -covermode=atomic -coverpkg=./... ./...
+      - "{{.GO_TOOL}} gotestsum --format pkgname -- -race -coverprofile=coverage.out -covermode=atomic -coverpkg=./... ./..."
       # HTML generation can fail with "inconsistent NumStmt" when packages
       # use build tags (e.g., store_memory.go with //go:build !integration)
       # that change statement structure across compilation contexts. The
@@ -152,18 +161,18 @@ tasks:
       # the test. Without this, files like internal/audit/postgres.go reported
       # 0% despite being fully exercised by test/integration/audit/ and the
       # store migration tests. See .codecov.yml for Codecov's merge behavior.
-      - gotestsum --format pkgname -- -race -tags=integration -count=1 -coverprofile=coverage-int.out -covermode=atomic -coverpkg=./...
-        ./cmd/holomush/ ./internal/access/setup/ ./internal/admin/approval/ ./internal/admin/socket/ ./internal/auth/postgres/
+      - "{{.GO_TOOL}} gotestsum --format pkgname -- -race -tags=integration -count=1 -coverprofile=coverage-int.out -covermode=atomic
+        -coverpkg=./... ./cmd/holomush/ ./internal/access/setup/ ./internal/admin/approval/ ./internal/admin/socket/ ./internal/auth/postgres/
         ./internal/content/ ./internal/eventbus/audit/ ./internal/eventbus/audit/chain/ ./internal/admin/policy/ ./internal/eventbus/crypto/dek/
         ./internal/eventbus/crypto/kek/ ./internal/eventbus/history/ ./internal/store/ ./plugins/core-scenes/ ./test/testutil/
-        ./internal/testsupport/integrationtest/ ./internal/world/postgres/ ./test/integration/...
+        ./internal/testsupport/integrationtest/ ./internal/world/postgres/ ./test/integration/..."
 
   test:int:focus:
     desc: Run focused integration tests with Ginkgo focus filter (pass -ginkgo.focus="..." after --)
     cmds:
       - task: plugin:build-all
-      - gotestsum --format pkgname -- -race -tags=integration -count=1 -timeout 8m github.com/holomush/holomush/test/integration/plugin
-        {{.CLI_ARGS}}
+      - "{{.GO_TOOL}} gotestsum --format pkgname -- -race -tags=integration -count=1 -timeout 8m github.com/holomush/holomush/test/integration/plugin
+        {{.CLI_ARGS}}"
 
   soak:eventbus:
     desc: Run the eventbus chaos + soak matrix (nightly CI; 5min sustained load per spec §8)
@@ -172,7 +181,7 @@ tasks:
       # test/integration/eventbus_e2e/ without firing regular integration
       # tests again. 20m total timeout absorbs the 5m sustained run plus
       # projection drain + teardown.
-      - gotestsum --format standard-verbose -- -race -tags='integration,soak' -count=1 -timeout=20m -v ./test/integration/eventbus_e2e/...
+      - "{{.GO_TOOL}} gotestsum --format standard-verbose -- -race -tags='integration,soak' -count=1 -timeout=20m -v ./test/integration/eventbus_e2e/..."
 
   test:e2e:
     desc: Run Playwright E2E tests in Docker
@@ -465,7 +474,7 @@ tasks:
     generates:
       - ./bin/custom-gcl
     cmds:
-      - golangci-lint custom
+      - "{{.GO_TOOL_LINT}} golangci-lint custom"
 
   lint:proto:
     desc: Lint protobuf definitions (matches CI's Buf Lint check)
@@ -482,12 +491,12 @@ tasks:
   lint:yaml:
     desc: Check YAML formatting
     cmds:
-      - yamlfmt -lint .
+      - "{{.GO_TOOL_LINT}} yamlfmt -lint ."
 
   lint:actions:
     desc: Lint GitHub Actions workflows
     cmds:
-      - actionlint -config-file .github/actionlint.yaml .github/workflows/*
+      - "{{.GO_TOOL_LINT}} actionlint -config-file .github/actionlint.yaml .github/workflows/*"
 
   lint:access-migration:
     desc: Verify no legacy AccessControl.Check() calls remain
@@ -570,7 +579,7 @@ tasks:
   fmt:yaml:
     desc: Format YAML files
     cmds:
-      - yamlfmt .
+      - "{{.GO_TOOL_LINT}} yamlfmt ."
 
   fmt:dprint:
     desc: Format with dprint
@@ -736,8 +745,10 @@ tasks:
   setup:
     desc: Install all dev tools and git hooks
     cmds:
-      - brew install golangci-lint gofumpt lefthook actionlint goreleaser dprint cocogitto rumdl yamlfmt binaryen gotestsum
-        flock bats-core yq
+      # golangci-lint, actionlint, yamlfmt, gotestsum are pinned in the
+      # go.tool*.mod modules and run via `go tool` (see GO_TOOL vars) — no
+      # brew install needed. yq stays: shell scripts call it on PATH directly.
+      - brew install go-task gofumpt lefthook goreleaser dprint cocogitto rumdl binaryen flock bats-core yq
       - brew install steveyegge/beads/bd
       - go install github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc@latest
       - go install github.com/google/addlicense@latest
