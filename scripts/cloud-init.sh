@@ -110,8 +110,14 @@ fi
 # user (instead of as root) to run docker compose. DO's --ssh-keys flag
 # populates root's authorized_keys, so we clone those keys to the holomush
 # user so the same DigitalOcean SSH key works for both accounts.
+# Create the host user with a FIXED uid/gid 1000 to match the holomush user
+# baked into the container image (ghcr.io/holomush/holomush runs as uid 1000).
+# A --system user lands in the 100-999 range, so bind-mounted dirs under
+# /opt/holomush (e.g. config/certs) would be owned by a uid the containerized
+# core/gateway can't write to → "permission denied" generating mTLS certs.
 if ! id "${HOLOMUSH_USER}" &>/dev/null; then
-  useradd --system --create-home --shell /bin/bash "${HOLOMUSH_USER}"
+  groupadd --gid 1000 "${HOLOMUSH_USER}"
+  useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash "${HOLOMUSH_USER}"
   usermod -aG docker "${HOLOMUSH_USER}"
 fi
 
@@ -214,6 +220,12 @@ chmod 600 "${HOLOMUSH_DIR}/.env"
 
 # --- Set ownership ---
 chown -R "${HOLOMUSH_USER}:${HOLOMUSH_USER}" "${HOLOMUSH_DIR}"
+
+# The postgres container runs as uid/gid 70 (postgres:18-alpine), not the
+# holomush host user. Its data dir is bind-mounted at /var/lib/postgresql, so
+# it must be owned by 70 — otherwise (on volume reuse) the chown -R above would
+# hand postgres' own data to uid 1000 and postgres would fail to read it.
+chown -R 70:70 "${HOLOMUSH_DIR}/data/postgres"
 
 # --- Configure firewall ---
 if command -v ufw &>/dev/null; then
