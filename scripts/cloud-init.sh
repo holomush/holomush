@@ -276,7 +276,10 @@ case "${HOLOMUSH_DOMAIN}" in
       # into the command string. sudo -u with explicit env= args prevents
       # shell metacharacters in secrets from breaking or hijacking the command.
       # shellcheck disable=SC2016
-      sudo -u "${HOLOMUSH_USER}" \
+      # Backups are an OPTIONAL profile — a repo-init failure here MUST NOT
+      # abort the core stack bringup. Wrap the whole init so a non-zero exit
+      # only logs a warning; the script (set -e) continues to `compose up`.
+      if ! sudo -u "${HOLOMUSH_USER}" \
         env \
           HOLOMUSH_DIR="${HOLOMUSH_DIR}" \
           PROFILES="${profiles}" \
@@ -302,7 +305,10 @@ case "${HOLOMUSH_DOMAIN}" in
               $ENDPOINT_ARGS \
               --access-key="$BACKUP_S3_ACCESS_KEY" \
               --secret-access-key="$BACKUP_S3_SECRET_KEY"
-        '
+        '; then
+        echo "WARNING: Kopia repository init failed — nightly backups will be" \
+             "unavailable until fixed. Continuing with the core stack bringup." >&2
+      fi
     fi
 
     su - "${HOLOMUSH_USER}" -s /bin/sh -c "

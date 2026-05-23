@@ -51,9 +51,19 @@ jobs:
 
       - name: Get version
         id: version
+        env:
+          # On the release-please path the workflow is triggered by a push to
+          # main, so GITHUB_REF_NAME is "main" — the real tag comes from the
+          # release-please job output. On a direct tag push, release-please is
+          # skipped (RP_TAG empty) and GITHUB_REF_NAME is the tag.
+          RP_TAG: ${{ needs.release-please.outputs.tag_name }}
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME}"
+          if [ -n "${RP_TAG}" ]; then
+            VERSION="${RP_TAG#v}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Building version: ${VERSION}"
 
