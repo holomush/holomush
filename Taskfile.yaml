@@ -561,6 +561,22 @@ tasks:
         fi
         echo "AGENTS.md → CLAUDE.md symlink intact."
 
+  lint:no-microsecond-truncate:
+    desc: "Reject .Truncate(time.Microsecond) in Go code (INV-TS-3)"
+    cmds:
+      - |
+        set -euo pipefail
+        # Persistent timestamps are BIGINT-ns post-gfo6; .Truncate(time.Microsecond)
+        # is no longer needed. Escape hatch: '// pgnanos-exempt: <reason>' on the
+        # same line for external systems that legitimately require microsecond
+        # granularity (none currently expected).
+        if rg -n "Truncate\(time\.Microsecond\)" --type=go \
+             | rg -v "pgnanos-exempt:" ; then
+          echo "FAIL: .Truncate(time.Microsecond) found. Persistent timestamps are BIGINT-ns; truncation is no longer needed."
+          echo "If you have a non-PG external system that requires µs, annotate with '// pgnanos-exempt: <reason>' on the same line."
+          exit 1
+        fi
+
   lint:no-timestamptz:
     desc: "Reject new TIMESTAMPTZ/TIMESTAMP columns in post-gfo6 migrations (INV-TS-1)"
     cmds:

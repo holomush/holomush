@@ -131,7 +131,8 @@ func TestIsLocationStream(t *testing.T) {
 func TestStreamScopeFloor_SceneSubjects_INV_P4_9(t *testing.T) {
 	t.Parallel()
 	sceneID := ulid.Make()
-	joinedAt := time.Now().UTC().Truncate(time.Microsecond)
+	// Post-gfo6: pgnanos preserves nanosecond precision end-to-end; no truncation needed.
+	joinedAt := time.Now().UTC()
 
 	info := &session.Info{
 		FocusMemberships: []session.FocusMembership{{

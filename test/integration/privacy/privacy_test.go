@@ -358,15 +358,13 @@ var _ = Describe("I-PRIV-3 / I-PRIV-4: detach/reattach preserves session floor a
 		// (catches a hypothetical regression that double-publishes events
 		// with the same type at unrelated timestamps).
 		//
-		// Truncate seed wall-clocks to microsecond precision before
-		// comparing: a future path that routes event timestamps through
-		// a µs-precision layer (Postgres TIMESTAMPTZ or otherwise) would
-		// otherwise flip the boundary `!evTS.Before(seedTime)` check from
-		// true to false on identical underlying times. Today the embedded
-		// bus preserves nanoseconds end-to-end, but the test shouldn't
-		// bake that assumption in.
-		preDetachFloor := preDetachEmitAt.Truncate(time.Microsecond)
-		duringDetachFloor := duringDetachAt.Truncate(time.Microsecond)
+		// Post-holomush-gfo6 the entire pipeline preserves nanosecond precision
+		// end-to-end (INV-TS-1 BIGINT-ns columns + INV-TS-4 publisher does not
+		// truncate). The prior defensive microsecond floor-truncate is no
+		// longer needed — wall-clock floors compare against equal-precision
+		// event timestamps.
+		preDetachFloor := preDetachEmitAt
+		duringDetachFloor := duringDetachAt
 		var sawDuringDetach bool
 		for _, ev := range events {
 			evTS := ev.GetTimestamp().AsTime()

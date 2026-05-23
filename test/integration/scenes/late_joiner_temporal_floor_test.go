@@ -109,7 +109,8 @@ var _ = Describe("INV-P4-9: late-joiner temporal floor", func() {
 		// the assertions: the in-process `matchesQuery` filter (hot_jetstream.go:353)
 		// still discriminates by `event.Timestamp`, which is the path
 		// `streamScopeFloor` actually feeds.
-		base := time.Now().UTC().Add(-5 * time.Hour).Truncate(time.Microsecond)
+		// Post-gfo6: pgnanos preserves ns end-to-end; no truncation needed.
+		base := time.Now().UTC().Add(-5 * time.Hour)
 		t0 := base
 		t1 := base.Add(1 * time.Hour)
 		t2 := base.Add(2 * time.Hour)
