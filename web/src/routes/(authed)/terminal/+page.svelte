@@ -249,19 +249,45 @@
     const liveBuffer: GameEvent[] = [];
     const seenEventIds = new Set<string>();
     let backfillDone = false;
+    let replayComplete = false;
 
     // Subscribe runs in parallel with backfill. Subscribe events arriving
     // before backfill completes are buffered and drained afterward.
     // Subscribe's replay-phase events are events the user MISSED while detached,
     // so they render as replayed=false after draining (NOT dimmed).
     //
-    // streamReadyGate resolves on REPLAY_COMPLETE (not backfill). Commands
-    // sent during backfill get a response via Subscribe which is buffered
-    // and drains as live after the dimmed scrollback.
+    // streamReadyGate resolves only when BOTH Subscribe REPLAY_COMPLETE AND
+    // backfill have finished — see maybeMarkReady. This closes the
+    // holomush-fujt race where a command sent post-REPLAY_COMPLETE but
+    // pre-backfill-done would have its server-emitted event picked up by
+    // the still-running backfill query and rendered as dimmed/replayed
+    // scrollback. By gating the gate on both, the command input is held
+    // until backfill is done, so any user-emitted event arrives via
+    // Subscribe only and renders live by construction. The structurally-
+    // correct fix (cursor-bounded backfill — holomush-iu8j) will let
+    // this gate relax back to REPLAY_COMPLETE-only once backfill returns
+    // events strictly older than the Subscribe attach moment.
     //
     // Generation gating: resolveStreamReady / rejectStreamReady are already
     // generation-scoped (they no-op if streamReadyGate.generation !== generation),
     // so a stale Subscribe from a prior invocation cannot poison a fresh gate.
+
+    // maybeMarkReady resolves the gate and flips connection status to
+    // 'connected' once both flags are set. Idempotent: resolveStreamReady
+    // no-ops if the gate is already resolved (or stale-generation). The
+    // explicit generation check mirrors the symmetry of other gating
+    // sites in this function (see backfill drain block) and prevents a
+    // stale invocation from clobbering a newer generation's connection
+    // status — the flags themselves are closure-local so a stale
+    // generation cannot reach this helper today, but the guard makes
+    // the invariant local to the helper rather than relying on the
+    // caller's closure scope.
+    const maybeMarkReady = () => {
+      if (!replayComplete || !backfillDone) return;
+      if (generation !== streamGeneration || localController.signal.aborted) return;
+      resolveStreamReady(generation);
+      setConnectionStatus('connected');
+    };
     const subscribePromise = (async () => {
       try {
         // NOTE: replayFromCursor field was removed from SubscribeRequest
@@ -274,8 +300,8 @@
           if (response.frame.case === 'control') {
             const ctrl = response.frame.value;
             if (ctrl.signal === ControlSignal.REPLAY_COMPLETE) {
-              resolveStreamReady(generation);
-              setConnectionStatus('connected');
+              replayComplete = true;
+              maybeMarkReady();
             } else if (ctrl.signal === ControlSignal.STREAM_CLOSED) {
               // Stale-generation guard: if a later hydrate has started,
               // skip mutating shared state (connected, sessionId) and just
@@ -449,6 +475,7 @@
       }
 
       backfillDone = true;
+      maybeMarkReady();
       if (generation === streamGeneration && !localController.signal.aborted) {
         replayActive.set(false);
         // Drain Subscribe events that arrived during backfill, deduping.
