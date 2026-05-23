@@ -665,11 +665,14 @@ jobs:
           print(res[0]['id'] if res else '')
           " 2>/dev/null || echo "")
 
+            # Build the JSON payload directly: proxied is already a valid JSON
+            # boolean (true/false), so emit it unquoted via %s. The previous
+            # python dict-literal form tripped on `'proxied':true` —
+            # Python has True/False, not true/false (NameError). type/name/
+            # content are CF-controlled hostnames/IDs with no JSON-special chars.
             local payload
-            payload=$(python3 -c "
-          import json,sys
-          print(json.dumps({'type':'${type}','name':'${name}','content':'${content}','proxied':${proxied},'ttl':1}))
-          ")
+            payload=$(printf '{"type":"%s","name":"%s","content":"%s","proxied":%s,"ttl":1}' \
+              "${type}" "${name}" "${content}" "${proxied}")
 
             if [ -n "${RECORD_ID}" ]; then
               curl -fsSL \
