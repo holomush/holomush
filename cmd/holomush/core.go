@@ -174,7 +174,7 @@ func registerLogSinkFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("log-otel", true, "enable OTLP-collector log sink")
 	cmd.Flags().String("log-otel-level", "", "collector log level override (default: global)")
 	cmd.Flags().Bool("log-sentry", true, "enable Sentry log sink")
-	cmd.Flags().String("log-sentry-level", "", "Sentry log level override (default: global)")
+	cmd.Flags().String("log-sentry-level", "", "Sentry log level override (default: warn)")
 }
 
 // applyLogSinkFlags overlays explicitly-set --log-* flags onto lc, giving CLI

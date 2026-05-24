@@ -149,7 +149,7 @@ configurable sinks.
 | `logging.otel.enabled`   | `--log-otel`          | `true`      | Toggle OTLP collector sink           |
 | `logging.otel.level`     | `--log-otel-level`    | (global)    | Per-sink level override              |
 | `logging.sentry.enabled` | `--log-sentry`        | `true`      | Toggle Sentry sink                   |
-| `logging.sentry.level`   | `--log-sentry-level`  | (global)    | Per-sink level override              |
+| `logging.sentry.level`   | `--log-sentry-level`  | `warn`      | Per-sink level override              |
 
 **Toggle + endpoint rule:** a non-stderr sink is active only when its toggle
 is on *and* its endpoint is configured — `OTEL_EXPORTER_OTLP_ENDPOINT` for
@@ -157,10 +157,12 @@ the collector, `SENTRY_DSN` for Sentry. If the endpoint is absent the sink
 is skipped regardless of the toggle.
 
 **Per-sink level overrides:** each sink can filter independently of the
-global `LOG_LEVEL` / `--log-level`. The most common reason to set
-`--log-sentry-level warn` is cost control: Sentry Logs is volume-priced, so
-routing only WARN+ to Sentry while keeping stderr at DEBUG avoids paying for
-every debug trace.
+global `LOG_LEVEL` / `--log-level`. The Sentry sink defaults to `warn`
+(unlike stderr and the collector, which inherit the global level) as cost
+control: Sentry Logs is volume-priced, so routing only WARN+ to Sentry while
+keeping stderr at DEBUG avoids paying for every debug trace. Lower it with
+`--log-sentry-level info` (or `debug`) if you need richer logs in Sentry
+temporarily.
 
 ### Trace correlation
 
