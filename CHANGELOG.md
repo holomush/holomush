@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.11](https://github.com/holomush/holomush/compare/v0.1.10...v0.1.11) (2026-05-24)
+
+
+### Bug Fixes
+
+* **store:** clamp out-of-range/infinity timestamps in gfo6 ns-migrations (holomush-0b3ec) ([#4238](https://github.com/holomush/holomush/issues/4238)) ([97e6c9c](https://github.com/holomush/holomush/commit/97e6c9c57366962a731060f7f4bc45e22aab92fe))
+
 ## [0.1.10](https://github.com/holomush/holomush/compare/v0.1.9...v0.1.10) (2026-05-24)
 
 
