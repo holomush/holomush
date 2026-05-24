@@ -1181,6 +1181,76 @@ end
 	assert.Contains(t, logOutput, "warn-missing-subject", "expected plugin name in warning")
 }
 
+// After holomush-zxmo removes the F1 deprecation alias, an emit table that
+// supplies only the legacy `stream =` key (and no `subject =`) MUST be
+// rejected by parseEmitEvents with the same "missing required 'subject'
+// field" validation error that an entry with neither key gets. The clean
+// break removes any silent rewriting that might let stale out-of-tree code
+// limp along; rejection is the correct loud failure mode after the
+// in-tree producer migration in holomush-fz9h closed all in-tree consumers
+// of the alias.
+func TestLuaHostDeliverEventRejectsLegacyStreamKeyEntryAsMissingSubject(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin returns an entry with only the legacy `stream =` key (no
+	// `subject =`) and a control entry using canonical `subject =`. The
+	// legacy entry MUST be rejected; the canonical entry MUST pass through.
+	mainLua := `
+function on_event(event)
+    return {
+        {
+            stream = "legacy:1",
+            type = "test",
+            payload = "legacy-stream-key-only"
+        },
+        {
+            subject = "valid:1",
+            type = "test",
+            payload = "canonical"
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	var logBuf bytes.Buffer
+	handler := slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(oldLogger)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "reject-legacy-stream",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginsdk.Event{ID: "01ABC", Type: "say"}
+	emits, err := host.DeliverEvent(context.Background(), "reject-legacy-stream", event)
+	require.NoError(t, err)
+
+	// Only the canonical entry MUST pass; the legacy entry MUST be dropped.
+	require.Len(t, emits, 1,
+		"legacy `stream =` key alone MUST be rejected once the F1 deprecation alias is removed (holomush-zxmo)")
+	assert.Equal(t, "valid:1", emits[0].Stream,
+		"surviving entry MUST be the one that used canonical `subject =`")
+
+	// Validation error MUST surface via slog as a missing-subject error,
+	// matching the shape produced when neither key is set.
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "missing required 'subject' field",
+		"validation log MUST cite the missing-subject error code for the legacy-stream-key entry")
+	assert.Contains(t, logOutput, "reject-legacy-stream",
+		"validation log MUST include the plugin name")
+}
+
 func TestLuaHostDeliverEventMalformedEmitEventsWarnsOnMissingType(t *testing.T) {
 	dir := t.TempDir()
 

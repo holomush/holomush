@@ -549,20 +549,7 @@ func (h *Host) parseEmitEvents(ret lua.LValue) (emits []pluginsdk.EmitEvent, val
 			return
 		}
 
-		// F1: `subject` is the canonical key; `stream` is accepted for one
-		// release as a deprecation alias so existing Lua plugins keep working
-		// during the cutover. When both are set, subject wins.
 		subject := emitTableString(eventTable, "subject")
-		if subject == "" {
-			if legacy := emitTableString(eventTable, "stream"); legacy != "" {
-				slog.Warn(
-					"plugin emit uses deprecated 'stream' key; migrate to 'subject'",
-					"key", "stream",
-					"index", index,
-				)
-				subject = legacy
-			}
-		}
 		eventType := emitTableString(eventTable, "type")
 		payload := emitTableString(eventTable, "payload")
 
