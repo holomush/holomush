@@ -34,8 +34,6 @@ func sentryLogsTarget(dsn string) (url, authHeader string, err error) {
 
 // newCollectorLogExporter builds the OTLP-gRPC log exporter targeting the
 // shared collector endpoint (OTEL_EXPORTER_OTLP_ENDPOINT, env-driven).
-//
-//nolint:unused // wired by Task 7 (provider construction)
 func newCollectorLogExporter(ctx context.Context) (sdklog.Exporter, error) {
 	exp, err := otlploggrpc.New(ctx)
 	if err != nil {
@@ -48,8 +46,6 @@ func newCollectorLogExporter(ctx context.Context) (sdklog.Exporter, error) {
 // Reuses the OTEL_EXPORTER_OTLP_ENDPOINT unset guard from initSentry so the
 // otlploghttp transport stays on HTTPS (INV-L8): the SDK forces Insecure=true
 // when that env var carries an http:// scheme.
-//
-//nolint:unused // wired by Task 7 (provider construction)
 func newSentryLogExporter(ctx context.Context, dsn string) (sdklog.Exporter, error) {
 	url, authHeader, err := sentryLogsTarget(dsn)
 	if err != nil {
