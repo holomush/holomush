@@ -321,9 +321,12 @@ jobs:
     name: Deploy Sandbox
     runs-on: namespace-profile-linux-amd64-2x4
     # Joins the `prod` GitHub Environment: gives deployment tracking/history in
-    # the Environments UI, surfaces the live URL, scopes the SANDBOX_DEPLOY_ENABLED
-    # gate variable, and is the hook for adding a required-reviewer approval rule
-    # later without touching this workflow.
+    # the Environments UI, surfaces the live URL, and is the hook for adding a
+    # required-reviewer approval rule later without touching this workflow.
+    # NOTE: the SANDBOX_DEPLOY_ENABLED gate below is a *repository* variable, not
+    # an environment-scoped one — environment variables are not resolvable in a
+    # job-level `if:` (the environment activates only after the gate is
+    # evaluated, so an env-scoped var reads as empty and the job silently skips).
     environment:
       name: prod
       url: https://game.holomush.dev
@@ -422,7 +425,12 @@ jobs:
             rm -rf /tmp/holomush-release
 
             cd /opt/holomush
-            sed -i "s/^HOLOMUSH_VERSION=.*/HOLOMUSH_VERSION=${VERSION}/" .env
+            # The git tag is v-prefixed (v0.1.9), but goreleaser publishes the
+            # container image as bare {{ .Version }} (0.1.9). git clone above
+            # needs the tag; HOLOMUSH_VERSION / docker pull need the bare
+            # version, so strip a single leading "v" here.
+            IMAGE_VERSION="${VERSION#v}"
+            sed -i "s/^HOLOMUSH_VERSION=.*/HOLOMUSH_VERSION=${IMAGE_VERSION}/" .env
             docker compose --profile tunnel --profile backups pull core gateway cloudflared
             docker compose --profile tunnel --profile backups build backup
             docker compose --profile tunnel --profile backups up -d --no-recreate postgres
