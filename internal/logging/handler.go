@@ -95,3 +95,81 @@ func SetDefault(service, version, format string, level slog.Level) {
 	logger := Setup(service, version, format, nil, level)
 	slog.SetDefault(logger)
 }
+
+// fanoutHandler dispatches each record to every child handler. Enabled is
+// the OR of children, so a record is processed if any sink wants it; each
+// child then applies its own level/filtering. Used to tee stderr logging
+// and the OTel bridge from one slog.Logger (INV-L2).
+type fanoutHandler struct{ children []slog.Handler }
+
+// NewFanout returns a handler that tees to all children. With a single child
+// it is transparent (degenerate case, INV-L7): no panic, behaviour identical
+// to using that child directly.
+func NewFanout(children ...slog.Handler) slog.Handler {
+	return &fanoutHandler{children: children}
+}
+
+func (h *fanoutHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	for _, c := range h.children {
+		if c.Enabled(ctx, level) {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *fanoutHandler) Handle(ctx context.Context, r slog.Record) error {
+	for _, c := range h.children {
+		if !c.Enabled(ctx, r.Level) {
+			continue
+		}
+		if err := c.Handle(ctx, r.Clone()); err != nil {
+			return err //nolint:wrapcheck // slog.Handler contract: pass child error through
+		}
+	}
+	return nil
+}
+
+func (h *fanoutHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	next := make([]slog.Handler, len(h.children))
+	for i, c := range h.children {
+		next[i] = c.WithAttrs(attrs)
+	}
+	return &fanoutHandler{children: next}
+}
+
+func (h *fanoutHandler) WithGroup(name string) slog.Handler {
+	next := make([]slog.Handler, len(h.children))
+	for i, c := range h.children {
+		next[i] = c.WithGroup(name)
+	}
+	return &fanoutHandler{children: next}
+}
+
+// levelGate wraps a handler with a minimum level, giving a per-sink floor
+// (INV-L4) independent of the global logger level.
+type levelGate struct {
+	min     slog.Level
+	handler slog.Handler
+}
+
+// NewLevelGate returns a handler that only passes records at or above min to h.
+func NewLevelGate(min slog.Level, h slog.Handler) slog.Handler {
+	return &levelGate{min: min, handler: h}
+}
+
+func (g *levelGate) Enabled(ctx context.Context, level slog.Level) bool {
+	return level >= g.min && g.handler.Enabled(ctx, level)
+}
+
+func (g *levelGate) Handle(ctx context.Context, r slog.Record) error {
+	return g.handler.Handle(ctx, r) //nolint:wrapcheck // slog.Handler contract: pass child error through
+}
+
+func (g *levelGate) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &levelGate{min: g.min, handler: g.handler.WithAttrs(attrs)}
+}
+
+func (g *levelGate) WithGroup(name string) slog.Handler {
+	return &levelGate{min: g.min, handler: g.handler.WithGroup(name)}
+}
