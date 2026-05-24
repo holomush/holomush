@@ -202,6 +202,16 @@ Use `oops` for structured errors: `oops.With(k, v).Wrap(err)`, `oops.Errorf(...)
 
 **Method-value gotcha:** when using accessor methods (e.g., `decision.Reason()`), always include `()`. Without parens, Go creates a method value (func pointer) that compiles silently when passed to `...any` parameters (`oops.With`, `slog`).
 
+### Structured Logging
+
+| Requirement | Description |
+| ----------- | ----------- |
+| **MUST** use context-carrying variants | `slog.InfoContext(ctx, …)` / `WarnContext` / `ErrorContext` / `DebugContext` and `errutil.LogErrorContext(ctx, …)` — **never** bare `slog.Info(…)` / `logger.Warn(…)` / `errutil.LogError(…)` — whenever a `context.Context` is in scope |
+| **MUST NOT** drop the context | If a `ctx` is reachable (parameter, struct field, or derivable), it MUST be threaded into the log call |
+| **MAY** use bare variants | Only when no `ctx` exists *and* one cannot reasonably be plumbed (init/`main`, bare goroutines, pure helpers with no caller context) — this is the "absolutely impossible" carve-out |
+
+**Why:** trace context (`trace_id`/`span_id`) lives on the `context.Context`. Only the `*Context` variants propagate it into the OpenTelemetry log pipeline, so bare calls produce orphaned log lines that can't be correlated with the trace/span they belong to in Loki, Grafana, or Sentry. See [logging.md](.claude/rules/logging.md) for the full rationale and the planned `sloglint` enforcement.
+
 ### Database Migrations
 
 `internal/store/migrations/`, embedded at compile time. Sequential numbering, paired `.up.sql` + `.down.sql`, idempotent (`IF NOT EXISTS`), no triggers/functions (all logic in Go). Full guide: [database-migrations.md](site/docs/contributing/database-migrations.md).
