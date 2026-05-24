@@ -558,7 +558,7 @@ func TestCreatePlayer_ErrorPaths(t *testing.T) {
 	}{
 		{
 			name: "service not configured returns success=false with not configured message",
-			setupServer: func(_ *testing.T) *CoreServer {
+			setupServer: func(t *testing.T) *CoreServer {
 				return &CoreServer{
 					engine:       core.NewEngine(core.NewMemoryEventStore()),
 					sessionStore: sessiontest.NewStore(t),
@@ -1361,7 +1361,7 @@ func TestCheckPlayerSession(t *testing.T) {
 		},
 		{
 			name: "session repo not configured",
-			setup: func(_ *testing.T) (*CoreServer, *corev1.CheckPlayerSessionRequest) {
+			setup: func(t *testing.T) (*CoreServer, *corev1.CheckPlayerSessionRequest) {
 				server := &CoreServer{
 					engine:       core.NewEngine(core.NewMemoryEventStore()),
 					sessionStore: sessiontest.NewStore(t),
@@ -1479,7 +1479,7 @@ func TestCheckPlayerSession_ErrorTranslation(t *testing.T) {
 		},
 		{
 			name: "infrastructure failure is not translated to Unauthenticated and carries NOT_CONFIGURED oops code",
-			setupServer: func(_ *testing.T) *CoreServer {
+			setupServer: func(t *testing.T) *CoreServer {
 				// playerSessionRepo unset → resolvePlayerSession returns NOT_CONFIGURED.
 				return &CoreServer{
 					engine:       core.NewEngine(core.NewMemoryEventStore()),

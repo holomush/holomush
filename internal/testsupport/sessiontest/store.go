@@ -71,6 +71,7 @@ func NewStoreWithPool(t *testing.T) (session.Store, *pgxpool.Pool) {
 // player is re-used — the INSERT is ON CONFLICT DO NOTHING for players).
 func SeedPlayerSession(t *testing.T, pool *pgxpool.Pool, ps *auth.PlayerSession) {
 	t.Helper()
+	require.NotNil(t, ps, "sessiontest.SeedPlayerSession: ps must not be nil")
 	ctx := context.Background()
 
 	// Insert the player row. ON CONFLICT DO NOTHING so the same player can be
