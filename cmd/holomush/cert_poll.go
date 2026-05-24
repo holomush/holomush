@@ -85,7 +85,7 @@ func waitForTLSCerts(ctx context.Context, deps *GatewayDeps, certsDir, component
 	}
 
 	// Certs not found — poll until available or timeout.
-	slog.Info("waiting for TLS certificates", "certs_dir", certsDir, "timeout", timeout)
+	slog.InfoContext(ctx, "waiting for TLS certificates", "certs_dir", certsDir, "timeout", timeout)
 
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
@@ -106,13 +106,13 @@ func waitForTLSCerts(ctx context.Context, deps *GatewayDeps, certsDir, component
 		case <-ticker.C:
 			result, err = tryLoadCerts(deps, certsDir, component)
 			if err == nil {
-				slog.Info("TLS certificates loaded", "certs_dir", certsDir)
+				slog.InfoContext(ctx, "TLS certificates loaded", "certs_dir", certsDir)
 				return result, nil
 			}
 			if !isTransientCertError(err) {
 				return nil, err
 			}
-			slog.Debug("still waiting for TLS certificates", "certs_dir", certsDir, "error", err)
+			slog.DebugContext(ctx, "still waiting for TLS certificates", "certs_dir", certsDir, "error", err)
 		}
 	}
 }

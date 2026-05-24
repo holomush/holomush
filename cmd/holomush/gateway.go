@@ -198,7 +198,8 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, logConfig confi
 		}
 	}()
 
-	slog.Info(
+	slog.InfoContext(
+		ctx,
 		"starting gateway process",
 		"telnet_addr", cfg.TelnetAddr,
 		"core_addr", cfg.CoreAddr,
@@ -220,7 +221,7 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, logConfig confi
 		return err
 	}
 
-	slog.Info("TLS certificates loaded", "certs_dir", certsDir)
+	slog.InfoContext(ctx, "TLS certificates loaded", "certs_dir", certsDir)
 
 	// Create gRPC client with mTLS
 	grpcClient, err := deps.GRPCClientFactory(ctx, holoGRPC.ClientConfig{
@@ -232,11 +233,11 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, logConfig confi
 	}
 	defer func() {
 		if closeErr := grpcClient.Close(); closeErr != nil {
-			slog.Warn("error closing gRPC client", "error", closeErr)
+			slog.WarnContext(ctx, "error closing gRPC client", "error", closeErr)
 		}
 	}()
 
-	slog.Info("gRPC client created", "core_addr", cfg.CoreAddr)
+	slog.InfoContext(ctx, "gRPC client created", "core_addr", cfg.CoreAddr)
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -252,7 +253,7 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, logConfig confi
 	// Monitor control server errors in background - triggers shutdown on error
 	go monitorServerErrors(ctx, cancel, controlErrChan, "control-grpc")
 
-	slog.Info("control gRPC server started", "addr", cfg.ControlAddr)
+	slog.InfoContext(ctx, "control gRPC server started", "addr", cfg.ControlAddr)
 
 	// TODO(grpc-telnet): Replace placeholder telnet handler with gRPC-based implementation.
 	// The current telnet server requires direct core components, which aren't available
@@ -263,12 +264,12 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, logConfig confi
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
 		if stopErr := controlGRPCServer.Stop(shutdownCtx); stopErr != nil {
-			slog.Warn("failed to stop control gRPC server during cleanup", "error", stopErr)
+			slog.WarnContext(shutdownCtx, "failed to stop control gRPC server during cleanup", "error", stopErr)
 		}
 		return oops.Code("LISTEN_FAILED").With("operation", "listen").With("addr", cfg.TelnetAddr).Wrap(err)
 	}
 
-	slog.Info("telnet server listening", "addr", telnetListener.Addr())
+	slog.InfoContext(ctx, "telnet server listening", "addr", telnetListener.Addr())
 
 	// Start observability server if configured
 	var obsServer ObservabilityServer
@@ -286,18 +287,18 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, logConfig confi
 		obsErrChan, err = obsServer.Start()
 		if err != nil {
 			if closeErr := telnetListener.Close(); closeErr != nil {
-				slog.Warn("failed to close telnet listener during cleanup", "error", closeErr)
+				slog.WarnContext(ctx, "failed to close telnet listener during cleanup", "error", closeErr)
 			}
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer shutdownCancel()
 			if stopErr := controlGRPCServer.Stop(shutdownCtx); stopErr != nil {
-				slog.Warn("failed to stop control gRPC server during cleanup", "error", stopErr)
+				slog.WarnContext(shutdownCtx, "failed to stop control gRPC server during cleanup", "error", stopErr)
 			}
 			return oops.Code("OBSERVABILITY_START_FAILED").With("operation", "start observability server").With("addr", cfg.MetricsAddr).Wrap(err)
 		}
 		// Monitor observability server errors in background - triggers shutdown on error
 		go monitorServerErrors(ctx, cancel, obsErrChan, "observability")
-		slog.Info("observability server started", "addr", obsServer.Addr())
+		slog.InfoContext(ctx, "observability server started", "addr", obsServer.Addr())
 	}
 
 	// Start web HTTP server. The gateway is a protocol-translation layer
@@ -326,16 +327,16 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, logConfig confi
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer shutdownCancel()
 			if stopErr := obsServer.Stop(shutdownCtx); stopErr != nil {
-				slog.Warn("failed to stop observability server during cleanup", "error", stopErr)
+				slog.WarnContext(shutdownCtx, "failed to stop observability server during cleanup", "error", stopErr)
 			}
 		}
 		if closeErr := telnetListener.Close(); closeErr != nil {
-			slog.Warn("failed to close telnet listener during cleanup", "error", closeErr)
+			slog.WarnContext(ctx, "failed to close telnet listener during cleanup", "error", closeErr)
 		}
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
 		if stopErr := controlGRPCServer.Stop(shutdownCtx); stopErr != nil {
-			slog.Warn("failed to stop control gRPC server during cleanup", "error", stopErr)
+			slog.WarnContext(shutdownCtx, "failed to stop control gRPC server during cleanup", "error", stopErr)
 		}
 		return oops.Code("WEB_SERVER_START_FAILED").With("operation", "start web HTTP server").With("addr", cfg.WebAddr).Wrap(err)
 	}
@@ -360,7 +361,8 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, logConfig confi
 	telemetry.EmitStartupSpan(ctx, "holomush-gateway", version, bootStart)
 
 	cmd.Println("Gateway process started")
-	slog.Info(
+	slog.InfoContext(
+		ctx,
 		"gateway process ready",
 		"telnet_addr", telnetListener.Addr().String(),
 		"core_addr", cfg.CoreAddr,
@@ -370,17 +372,17 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, logConfig confi
 	// Wait for shutdown signal
 	select {
 	case sig := <-sigChan:
-		slog.Info("received shutdown signal", "signal", sig)
+		slog.InfoContext(ctx, "received shutdown signal", "signal", sig)
 	case <-ctx.Done():
-		slog.Info("context cancelled, shutting down")
+		slog.InfoContext(ctx, "context cancelled, shutting down")
 	}
 
 	// Graceful shutdown
-	slog.Info("shutting down...")
+	slog.InfoContext(ctx, "shutting down...")
 
 	// Close telnet listener
 	if err := telnetListener.Close(); err != nil {
-		slog.Warn("error closing telnet listener", "error", err)
+		slog.WarnContext(ctx, "error closing telnet listener", "error", err)
 	}
 
 	// Stop servers
@@ -389,21 +391,21 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, logConfig confi
 
 	// Stop web HTTP server
 	if err := webServer.Stop(shutdownCtx); err != nil {
-		slog.Warn("error stopping web HTTP server", "error", err)
+		slog.WarnContext(shutdownCtx, "error stopping web HTTP server", "error", err)
 	}
 
 	if obsServer != nil {
 		if err := obsServer.Stop(shutdownCtx); err != nil {
-			slog.Warn("error stopping observability server", "error", err)
+			slog.WarnContext(shutdownCtx, "error stopping observability server", "error", err)
 		}
 	}
 
 	// Stop control gRPC server
 	if err := controlGRPCServer.Stop(shutdownCtx); err != nil {
-		slog.Warn("error stopping control gRPC server", "error", err)
+		slog.WarnContext(shutdownCtx, "error stopping control gRPC server", "error", err)
 	}
 
-	slog.Info("shutdown complete")
+	slog.InfoContext(ctx, "shutdown complete")
 	return nil
 }
 
@@ -488,7 +490,8 @@ func runTelnetAcceptLoop(
 
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error(
+			slog.ErrorContext(
+				ctx,
 				"panic in telnet accept loop, triggering shutdown",
 				"panic", r,
 			)
@@ -507,7 +510,8 @@ func runTelnetAcceptLoop(
 			default:
 				backoff.failure()
 				waitDuration := backoff.wait()
-				slog.Error(
+				slog.ErrorContext(
+					ctx,
 					"telnet accept failed, backing off",
 					"error", acceptErr,
 					"backoff", waitDuration,

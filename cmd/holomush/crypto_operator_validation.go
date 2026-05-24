@@ -72,7 +72,7 @@ func validateCryptoOperators(
 		// startup, or a closed pool in tests) MUST NOT gate startup.
 		// Surface the diagnostic but proceed with the full configured
 		// slice — operators can fix the underlying issue without bouncing.
-		logger.Warn("crypto.operator validation skipped: database query failed; will re-check at next startup",
+		logger.WarnContext(ctx, "crypto.operator validation skipped: database query failed; will re-check at next startup",
 			"error", err,
 			"configured_count", len(deduped))
 		return deduped, nil
@@ -84,7 +84,7 @@ func validateCryptoOperators(
 	}
 	for _, id := range deduped {
 		if _, ok := foundSet[id]; !ok {
-			logger.Warn("crypto.operator references unknown player", "player_id", id)
+			logger.WarnContext(ctx, "crypto.operator references unknown player", "player_id", id)
 		}
 	}
 	return deduped, nil

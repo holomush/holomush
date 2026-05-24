@@ -355,7 +355,7 @@ func (a *productionRekeyAbortRunner) RunAbort(ctx context.Context, req socket.Re
 	if emitErr != nil {
 		// Non-fatal: abort is committed; audit emit is best-effort.
 		// Log loudly so an operator can investigate.
-		slog.Error("rekey abort audit emit failed", "request_id", rid.String(), "error", emitErr.Error())
+		slog.ErrorContext(ctx, "rekey abort audit emit failed", "request_id", rid.String(), "error", emitErr.Error())
 		auditID = ulid.ULID{}
 	}
 	return socket.RekeyAbortOutcome{
