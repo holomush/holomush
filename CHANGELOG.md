@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.14](https://github.com/holomush/holomush/compare/v0.1.13...v0.1.14) (2026-05-24)
+
+
+### Features
+
+* **telemetry:** default Sentry log sink to WARN ([#4245](https://github.com/holomush/holomush/issues/4245)) ([87e2115](https://github.com/holomush/holomush/commit/87e211551edd9f828d292fdde74479ce53f260ed))
+
 ## [0.1.13](https://github.com/holomush/holomush/compare/v0.1.12...v0.1.13) (2026-05-24)
 
 
