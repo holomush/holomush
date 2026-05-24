@@ -182,6 +182,45 @@ func DefaultCryptoConfig() CryptoConfig {
 	}
 }
 
+// LoggingSink configures one log destination. Level is a slog level name
+// ("debug"|"info"|"warn"|"error"); empty inherits the global level.
+type LoggingSink struct {
+	Enabled bool   `koanf:"enabled"`
+	Level   string `koanf:"level"`
+}
+
+// EffectiveLevel returns the sink's level, falling back to global when the
+// per-sink level is unset or unparseable (spec INV-L4).
+func (s LoggingSink) EffectiveLevel(global slog.Level) slog.Level {
+	if s.Level == "" {
+		return global
+	}
+	var l slog.Level
+	if err := l.UnmarshalText([]byte(s.Level)); err != nil {
+		return global
+	}
+	return l
+}
+
+// LoggingConfig configures the three log sinks. Endpoints/secrets remain
+// env-driven (SENTRY_DSN, OTEL_EXPORTER_OTLP_ENDPOINT); these toggles gate
+// behaviour. Effective enablement of a non-stderr sink = Enabled AND its
+// endpoint present (spec INV-L3), enforced at telemetry.Init.
+type LoggingConfig struct {
+	Stderr LoggingSink `koanf:"stderr"`
+	OTel   LoggingSink `koanf:"otel"`
+	Sentry LoggingSink `koanf:"sentry"`
+}
+
+// DefaultLoggingConfig enables all three sinks with global-inherited levels.
+func DefaultLoggingConfig() LoggingConfig {
+	return LoggingConfig{
+		Stderr: LoggingSink{Enabled: true},
+		OTel:   LoggingSink{Enabled: true},
+		Sentry: LoggingSink{Enabled: true},
+	}
+}
+
 // Load reads configuration from a YAML file and overlays explicitly-set CLI flags.
 //
 // Precedence (lowest to highest): YAML config file -> CLI flags.
