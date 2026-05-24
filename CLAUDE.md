@@ -239,6 +239,17 @@ Detail in `.claude/rules/testing.md` (auto-loads when editing test files): cover
 | **MUST** run `task test:int` on refactors | `task test` does NOT compile integration files — refactors of shared types break silently otherwise |
 | **MUST NOT** use `eventbustest` in E2E | Embedded NATS harness is unit/bus-integration only; E2E uses full stack    |
 
+### Session-store testing (Docker required)
+
+Tests in `internal/grpc/`, `internal/grpc/focus/`, `internal/command/handlers/`, and `internal/session/` that exercise `session.Store`-touching logic require Docker even under `task test` — they use the `internal/testsupport/sessiontest.NewStore(t)` helper, which is backed by a fresh database on the shared Postgres testcontainer. This is the **deliberate exception** to the "SharedPostgres tests MUST be `//go:build integration`" convention (`session.Store` has exactly one implementation — `store.PostgresSessionStore` — so there is no in-memory fake to test against). See [docs/superpowers/specs/2026-05-23-remove-session-memstore-design.md](docs/superpowers/specs/2026-05-23-remove-session-memstore-design.md) for the rationale.
+
+| Requirement                                | Description                                                                                              |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| **MUST** use `sessiontest.NewStore(t)`     | For any test needing a `session.Store` — never construct one ad hoc.                                     |
+| **MUST** seed FK parents when needed       | Sessions Set with a non-zero `PlayerSessionID` need `sessiontest.NewStoreWithPool(t)` + `SeedPlayerSession(t, pool, ps)` (the `sessions.player_session_id` FK is enforced). |
+| **MUST NOT** add `//go:build integration`  | The `sessiontest` package is the deliberate exception; Ginkgo suites pass their captured `suiteT`.       |
+| **MUST** have Docker running               | Absence surfaces as testcontainers container-start errors at test runtime, not compile failures.         |
+
 ### Integration test harness (`internal/testsupport/integrationtest`)
 
 `internal/testsupport/integrationtest/` is the canonical integration-test harness — a real in-process holomush stack (Postgres testcontainer + embedded NATS JetStream + production `CoreServer`) used by privacy/presence/scene/session integration tests. Build-tag-gated (`//go:build integration`); never linked into production binaries. See the package doc-comment in `harness.go` for the full helper catalog and the [integration-tests contributor guide](site/docs/contributing/integration-tests.md).

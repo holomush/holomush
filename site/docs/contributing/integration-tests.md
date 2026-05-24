@@ -10,6 +10,21 @@ rather than a mocked surface.
 **Build tag**: `//go:build integration` — the harness is NEVER linked into
 production binaries.
 
+> **Unit tests use a lighter helper, not this harness.** If a test only needs
+> a `session.Store` — not the whole stack — reach for
+> `internal/testsupport/sessiontest.NewStore(t)`. It returns a store backed by
+> a fresh database on the shared Postgres testcontainer and deliberately skips
+> the `//go:build integration` tag, which makes it the one sanctioned exception
+> to "anything using `SharedPostgres` is integration-tagged." Because `task
+> test` runs these tests, the packages that use them — `internal/grpc/`,
+> `internal/grpc/focus/`, `internal/command/handlers/`, and `internal/session/`
+> — need Docker running locally. (`session.Store` has a single implementation,
+> `store.PostgresSessionStore`, so there is no in-memory fake to test against.)
+> For a session that carries a `PlayerSessionID`, seed its foreign-key parents
+> with `sessiontest.NewStoreWithPool(t)` + `SeedPlayerSession`. The full
+> rationale is in the design spec at
+> `docs/superpowers/specs/2026-05-23-remove-session-memstore-design.md`.
+
 ---
 
 ## When to use
