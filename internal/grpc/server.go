@@ -904,7 +904,7 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		p, planErr := s.focusCoordinator.RestoreFocus(restoreCtx, req.SessionId)
 		if planErr != nil {
 			recordSpanError(restoreSpan, planErr)
-			slog.WarnContext(ctx, "RestoreFocus failed, falling back to empty plan",
+			slog.WarnContext(ctx, "restoreFocus failed, falling back to empty plan",
 				"session_id", req.SessionId, "error", planErr)
 		}
 		restoreSpan.SetAttributes(attribute.Int("restore.stream_count", len(p.Streams)))

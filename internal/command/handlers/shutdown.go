@@ -42,7 +42,8 @@ func ShutdownHandler(ctx context.Context, exec *command.CommandExecution) error 
 	exec.Services().BroadcastSystemMessage(ctx, "system", message)
 
 	// Log admin action
-	slog.Info(
+	slog.InfoContext(
+		ctx,
 		"admin shutdown",
 		"admin_id", exec.CharacterID().String(),
 		"admin_name", exec.CharacterName(),

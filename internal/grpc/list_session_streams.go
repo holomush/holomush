@@ -80,7 +80,7 @@ func (s *CoreServer) ListSessionStreams(ctx context.Context, req *corev1.ListSes
 		var planErr error
 		plan, planErr = s.focusCoordinator.RestoreFocus(ctx, req.SessionId)
 		if planErr != nil {
-			slog.WarnContext(ctx, "RestoreFocus failed, falling back to empty plan",
+			slog.WarnContext(ctx, "restoreFocus failed, falling back to empty plan",
 				"session_id", req.SessionId, "error", planErr)
 		}
 	}
