@@ -286,12 +286,16 @@ func (f *Functions) logFn(pluginName string) lua.LGFunction {
 		logger := slog.Default().With("plugin", pluginName)
 		switch level {
 		case "debug":
+			//nolint:sloglint // plugin-supplied log message, dynamic by design
 			logger.Debug(message)
 		case "info":
+			//nolint:sloglint // plugin-supplied log message, dynamic by design
 			logger.Info(message)
 		case "warn":
+			//nolint:sloglint // plugin-supplied log message, dynamic by design
 			logger.Warn(message)
 		case "error":
+			//nolint:sloglint // plugin-supplied log message, dynamic by design
 			logger.Error(message)
 		default:
 			slog.Warn("invalid log level from plugin",
@@ -334,14 +338,14 @@ func (f *Functions) checkKVAccess(L *lua.LState, pluginName, action, key string)
 
 	req, err := types.NewAccessRequest(subject, action, resource, nil)
 	if err != nil {
-		slog.Error("failed to create KV access request",
+		slog.ErrorContext(ctx, "failed to create KV access request",
 			"plugin", pluginName, "action", action, "key", key, "error", err)
 		return "access check failed"
 	}
 
 	decision, err := f.engine.Evaluate(ctx, req)
 	if err != nil {
-		slog.Error("KV access check engine error",
+		slog.ErrorContext(ctx, "KV access check engine error",
 			"plugin", pluginName, "action", action, "key", key, "error", err)
 		return "access check failed"
 	}
