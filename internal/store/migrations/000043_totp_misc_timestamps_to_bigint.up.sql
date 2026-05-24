@@ -9,6 +9,14 @@
 -- guards on information_schema.columns.data_type, so re-running this migration
 -- (recovery replays, partial-apply retries) is safe. Pattern mirrors
 -- 000038_eventbus_crypto_timestamps_to_bigint.up.sql.
+--
+-- Overflow-safe (INV-TS-9): each TYPE USING clause converts in numeric and
+-- clamps with GREATEST/LEAST to the int64-ns range, so pre-existing values
+-- beyond ~[1678, 2262] or ±infinity saturate to the int64 bounds instead of
+-- raising "bigint out of range" (SQLSTATE 22003). NULL is guarded explicitly
+-- (LEAST/GREATEST ignore NULL inputs). SET DEFAULT keeps now()*1e9 — now()
+-- cannot overflow. Backfills the gap that wedged the sandbox deploy
+-- (holomush-0b3ec).
 
 DO $$
 BEGIN
@@ -18,7 +26,7 @@ BEGIN
              WHERE table_schema = 'public' AND table_name = 'player_totp'
                AND column_name = 'enrolled_at' AND data_type = 'timestamp with time zone') THEN
     EXECUTE 'ALTER TABLE player_totp ALTER COLUMN enrolled_at DROP DEFAULT';
-    EXECUTE 'ALTER TABLE player_totp ALTER COLUMN enrolled_at TYPE BIGINT USING (EXTRACT(EPOCH FROM enrolled_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE player_totp ALTER COLUMN enrolled_at TYPE BIGINT USING CASE WHEN enrolled_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM enrolled_at) * 1000000000))::bigint END';
     EXECUTE 'ALTER TABLE player_totp ALTER COLUMN enrolled_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
   END IF;
 
@@ -26,14 +34,14 @@ BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.columns
              WHERE table_schema = 'public' AND table_name = 'player_totp'
                AND column_name = 'last_verified_at' AND data_type = 'timestamp with time zone') THEN
-    EXECUTE 'ALTER TABLE player_totp ALTER COLUMN last_verified_at TYPE BIGINT USING (EXTRACT(EPOCH FROM last_verified_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE player_totp ALTER COLUMN last_verified_at TYPE BIGINT USING CASE WHEN last_verified_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM last_verified_at) * 1000000000))::bigint END';
   END IF;
 
   -- player_totp.locked_until → BIGINT (nullable, no DEFAULT)
   IF EXISTS (SELECT 1 FROM information_schema.columns
              WHERE table_schema = 'public' AND table_name = 'player_totp'
                AND column_name = 'locked_until' AND data_type = 'timestamp with time zone') THEN
-    EXECUTE 'ALTER TABLE player_totp ALTER COLUMN locked_until TYPE BIGINT USING (EXTRACT(EPOCH FROM locked_until) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE player_totp ALTER COLUMN locked_until TYPE BIGINT USING CASE WHEN locked_until IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM locked_until) * 1000000000))::bigint END';
   END IF;
 
   -- ═══ player_totp_recovery_codes ═══
@@ -42,7 +50,7 @@ BEGIN
              WHERE table_schema = 'public' AND table_name = 'player_totp_recovery_codes'
                AND column_name = 'created_at' AND data_type = 'timestamp with time zone') THEN
     EXECUTE 'ALTER TABLE player_totp_recovery_codes ALTER COLUMN created_at DROP DEFAULT';
-    EXECUTE 'ALTER TABLE player_totp_recovery_codes ALTER COLUMN created_at TYPE BIGINT USING (EXTRACT(EPOCH FROM created_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE player_totp_recovery_codes ALTER COLUMN created_at TYPE BIGINT USING CASE WHEN created_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM created_at) * 1000000000))::bigint END';
     EXECUTE 'ALTER TABLE player_totp_recovery_codes ALTER COLUMN created_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
   END IF;
 
@@ -50,7 +58,7 @@ BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.columns
              WHERE table_schema = 'public' AND table_name = 'player_totp_recovery_codes'
                AND column_name = 'consumed_at' AND data_type = 'timestamp with time zone') THEN
-    EXECUTE 'ALTER TABLE player_totp_recovery_codes ALTER COLUMN consumed_at TYPE BIGINT USING (EXTRACT(EPOCH FROM consumed_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE player_totp_recovery_codes ALTER COLUMN consumed_at TYPE BIGINT USING CASE WHEN consumed_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM consumed_at) * 1000000000))::bigint END';
   END IF;
 
   -- ═══ crypto_bootstrap_state ═══
@@ -58,7 +66,7 @@ BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.columns
              WHERE table_schema = 'public' AND table_name = 'crypto_bootstrap_state'
                AND column_name = 'consumed_at' AND data_type = 'timestamp with time zone') THEN
-    EXECUTE 'ALTER TABLE crypto_bootstrap_state ALTER COLUMN consumed_at TYPE BIGINT USING (EXTRACT(EPOCH FROM consumed_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE crypto_bootstrap_state ALTER COLUMN consumed_at TYPE BIGINT USING CASE WHEN consumed_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM consumed_at) * 1000000000))::bigint END';
   END IF;
 
   -- ═══ admin_approvals ═══
@@ -66,14 +74,14 @@ BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.columns
              WHERE table_schema = 'public' AND table_name = 'admin_approvals'
                AND column_name = 'expires_at' AND data_type = 'timestamp with time zone') THEN
-    EXECUTE 'ALTER TABLE admin_approvals ALTER COLUMN expires_at TYPE BIGINT USING (EXTRACT(EPOCH FROM expires_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE admin_approvals ALTER COLUMN expires_at TYPE BIGINT USING CASE WHEN expires_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM expires_at) * 1000000000))::bigint END';
   END IF;
 
   -- admin_approvals.approved_at → BIGINT (nullable, no DEFAULT)
   IF EXISTS (SELECT 1 FROM information_schema.columns
              WHERE table_schema = 'public' AND table_name = 'admin_approvals'
                AND column_name = 'approved_at' AND data_type = 'timestamp with time zone') THEN
-    EXECUTE 'ALTER TABLE admin_approvals ALTER COLUMN approved_at TYPE BIGINT USING (EXTRACT(EPOCH FROM approved_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE admin_approvals ALTER COLUMN approved_at TYPE BIGINT USING CASE WHEN approved_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM approved_at) * 1000000000))::bigint END';
   END IF;
 
   -- admin_approvals.created_at: DROP DEFAULT, TYPE, SET DEFAULT
@@ -81,7 +89,7 @@ BEGIN
              WHERE table_schema = 'public' AND table_name = 'admin_approvals'
                AND column_name = 'created_at' AND data_type = 'timestamp with time zone') THEN
     EXECUTE 'ALTER TABLE admin_approvals ALTER COLUMN created_at DROP DEFAULT';
-    EXECUTE 'ALTER TABLE admin_approvals ALTER COLUMN created_at TYPE BIGINT USING (EXTRACT(EPOCH FROM created_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE admin_approvals ALTER COLUMN created_at TYPE BIGINT USING CASE WHEN created_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM created_at) * 1000000000))::bigint END';
     EXECUTE 'ALTER TABLE admin_approvals ALTER COLUMN created_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
   END IF;
 
@@ -91,7 +99,7 @@ BEGIN
              WHERE table_schema = 'public' AND table_name = 'plugins'
                AND column_name = 'first_seen_at' AND data_type = 'timestamp with time zone') THEN
     EXECUTE 'ALTER TABLE plugins ALTER COLUMN first_seen_at DROP DEFAULT';
-    EXECUTE 'ALTER TABLE plugins ALTER COLUMN first_seen_at TYPE BIGINT USING (EXTRACT(EPOCH FROM first_seen_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE plugins ALTER COLUMN first_seen_at TYPE BIGINT USING CASE WHEN first_seen_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM first_seen_at) * 1000000000))::bigint END';
     EXECUTE 'ALTER TABLE plugins ALTER COLUMN first_seen_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
   END IF;
 
@@ -100,7 +108,7 @@ BEGIN
              WHERE table_schema = 'public' AND table_name = 'plugins'
                AND column_name = 'last_seen_at' AND data_type = 'timestamp with time zone') THEN
     EXECUTE 'ALTER TABLE plugins ALTER COLUMN last_seen_at DROP DEFAULT';
-    EXECUTE 'ALTER TABLE plugins ALTER COLUMN last_seen_at TYPE BIGINT USING (EXTRACT(EPOCH FROM last_seen_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE plugins ALTER COLUMN last_seen_at TYPE BIGINT USING CASE WHEN last_seen_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM last_seen_at) * 1000000000))::bigint END';
     EXECUTE 'ALTER TABLE plugins ALTER COLUMN last_seen_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
   END IF;
 
@@ -108,7 +116,7 @@ BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.columns
              WHERE table_schema = 'public' AND table_name = 'plugins'
                AND column_name = 'gc_at' AND data_type = 'timestamp with time zone') THEN
-    EXECUTE 'ALTER TABLE plugins ALTER COLUMN gc_at TYPE BIGINT USING (EXTRACT(EPOCH FROM gc_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE plugins ALTER COLUMN gc_at TYPE BIGINT USING CASE WHEN gc_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM gc_at) * 1000000000))::bigint END';
   END IF;
 
   -- ═══ content_items ═══
@@ -117,7 +125,7 @@ BEGIN
              WHERE table_schema = 'public' AND table_name = 'content_items'
                AND column_name = 'updated_at' AND data_type = 'timestamp with time zone') THEN
     EXECUTE 'ALTER TABLE content_items ALTER COLUMN updated_at DROP DEFAULT';
-    EXECUTE 'ALTER TABLE content_items ALTER COLUMN updated_at TYPE BIGINT USING (EXTRACT(EPOCH FROM updated_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE content_items ALTER COLUMN updated_at TYPE BIGINT USING CASE WHEN updated_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM updated_at) * 1000000000))::bigint END';
     EXECUTE 'ALTER TABLE content_items ALTER COLUMN updated_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
   END IF;
 
@@ -127,7 +135,7 @@ BEGIN
              WHERE table_schema = 'public' AND table_name = 'system_aliases'
                AND column_name = 'created_at' AND data_type = 'timestamp with time zone') THEN
     EXECUTE 'ALTER TABLE system_aliases ALTER COLUMN created_at DROP DEFAULT';
-    EXECUTE 'ALTER TABLE system_aliases ALTER COLUMN created_at TYPE BIGINT USING (EXTRACT(EPOCH FROM created_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE system_aliases ALTER COLUMN created_at TYPE BIGINT USING CASE WHEN created_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM created_at) * 1000000000))::bigint END';
     EXECUTE 'ALTER TABLE system_aliases ALTER COLUMN created_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
   END IF;
 
@@ -137,7 +145,7 @@ BEGIN
              WHERE table_schema = 'public' AND table_name = 'player_aliases'
                AND column_name = 'created_at' AND data_type = 'timestamp with time zone') THEN
     EXECUTE 'ALTER TABLE player_aliases ALTER COLUMN created_at DROP DEFAULT';
-    EXECUTE 'ALTER TABLE player_aliases ALTER COLUMN created_at TYPE BIGINT USING (EXTRACT(EPOCH FROM created_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE player_aliases ALTER COLUMN created_at TYPE BIGINT USING CASE WHEN created_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM created_at) * 1000000000))::bigint END';
     EXECUTE 'ALTER TABLE player_aliases ALTER COLUMN created_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
   END IF;
 
@@ -147,7 +155,7 @@ BEGIN
              WHERE table_schema = 'public' AND table_name = 'access_policies'
                AND column_name = 'created_at' AND data_type = 'timestamp with time zone') THEN
     EXECUTE 'ALTER TABLE access_policies ALTER COLUMN created_at DROP DEFAULT';
-    EXECUTE 'ALTER TABLE access_policies ALTER COLUMN created_at TYPE BIGINT USING (EXTRACT(EPOCH FROM created_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE access_policies ALTER COLUMN created_at TYPE BIGINT USING CASE WHEN created_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM created_at) * 1000000000))::bigint END';
     EXECUTE 'ALTER TABLE access_policies ALTER COLUMN created_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
   END IF;
 
@@ -156,7 +164,7 @@ BEGIN
              WHERE table_schema = 'public' AND table_name = 'access_policies'
                AND column_name = 'updated_at' AND data_type = 'timestamp with time zone') THEN
     EXECUTE 'ALTER TABLE access_policies ALTER COLUMN updated_at DROP DEFAULT';
-    EXECUTE 'ALTER TABLE access_policies ALTER COLUMN updated_at TYPE BIGINT USING (EXTRACT(EPOCH FROM updated_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE access_policies ALTER COLUMN updated_at TYPE BIGINT USING CASE WHEN updated_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM updated_at) * 1000000000))::bigint END';
     EXECUTE 'ALTER TABLE access_policies ALTER COLUMN updated_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
   END IF;
 
@@ -166,7 +174,7 @@ BEGIN
              WHERE table_schema = 'public' AND table_name = 'access_policy_versions'
                AND column_name = 'changed_at' AND data_type = 'timestamp with time zone') THEN
     EXECUTE 'ALTER TABLE access_policy_versions ALTER COLUMN changed_at DROP DEFAULT';
-    EXECUTE 'ALTER TABLE access_policy_versions ALTER COLUMN changed_at TYPE BIGINT USING (EXTRACT(EPOCH FROM changed_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE access_policy_versions ALTER COLUMN changed_at TYPE BIGINT USING CASE WHEN changed_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM changed_at) * 1000000000))::bigint END';
     EXECUTE 'ALTER TABLE access_policy_versions ALTER COLUMN changed_at SET DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT';
   END IF;
 END $$;
