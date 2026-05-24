@@ -214,7 +214,7 @@ func (pi *PolicyInstaller) ReplacePluginPolicies(ctx context.Context, pluginName
 	}
 
 	if err := pi.store.ReplaceBySource(ctx, "plugin", "plugin:"+pluginName+":", compiled); err != nil {
-		slog.Error("atomic policy replace failed",
+		slog.ErrorContext(ctx, "atomic policy replace failed",
 			"plugin", pluginName, "error", err)
 		return oops.With("plugin", pluginName).Wrapf(err, "replacing plugin policies")
 	}
@@ -231,7 +231,7 @@ func (pi *PolicyInstaller) ReplacePluginPoliciesWithManifest(ctx context.Context
 	}
 
 	if err := pi.store.ReplaceBySource(ctx, "plugin", "plugin:"+manifest.Name+":", compiled); err != nil {
-		slog.Error("atomic policy replace failed",
+		slog.ErrorContext(ctx, "atomic policy replace failed",
 			"plugin", manifest.Name, "error", err)
 		return oops.With("plugin", manifest.Name).Wrapf(err, "replacing plugin policies")
 	}
