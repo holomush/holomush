@@ -249,9 +249,14 @@ var _ = Describe("Manager", func() {
 		mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache, noopInvalidator, &stubBindingResolver{})
 		Expect(err).NotTo(HaveOccurred())
 
+		// INV-TS-1: deterministic ns-precision fixture so the JoinedAt round-trip
+		// assertion below is load-bearing — sub-microsecond bits are preserved
+		// through pgnanos.Time scan/insert paths.
+		joinedAt1 := time.Date(2026, 5, 22, 12, 0, 0, 123456789, time.UTC)
+		joinedAt2 := time.Date(2026, 5, 22, 12, 0, 0, 987654321, time.UTC)
 		initial := []dek.Participant{
-			{PlayerID: "01ABC", CharacterID: "01XYZ", BindingID: "01DEF", JoinedAt: time.Now().UTC()},
-			{PlayerID: "01GHI", CharacterID: "01JKL", BindingID: "01MNO", JoinedAt: time.Now().UTC()},
+			{PlayerID: "01ABC", CharacterID: "01XYZ", BindingID: "01DEF", JoinedAt: joinedAt1},
+			{PlayerID: "01GHI", CharacterID: "01JKL", BindingID: "01MNO", JoinedAt: joinedAt2},
 		}
 		key, err := mgr.GetOrCreate(ctx, dek.ContextID{Type: "scene", ID: "01HXX"}, initial)
 		Expect(err).NotTo(HaveOccurred())
@@ -262,9 +267,13 @@ var _ = Describe("Manager", func() {
 		Expect(parts[0].PlayerID).To(Equal("01ABC"))
 		Expect(parts[0].CharacterID).To(Equal("01XYZ"))
 		Expect(parts[0].BindingID).To(Equal("01DEF"))
+		Expect(parts[0].JoinedAt.UnixNano()).To(Equal(joinedAt1.UnixNano()),
+			"INV-TS-1: JoinedAt ns precision MUST survive round-trip")
 		Expect(parts[1].PlayerID).To(Equal("01GHI"))
 		Expect(parts[1].CharacterID).To(Equal("01JKL"))
 		Expect(parts[1].BindingID).To(Equal("01MNO"))
+		Expect(parts[1].JoinedAt.UnixNano()).To(Equal(joinedAt2.UnixNano()),
+			"INV-TS-1: JoinedAt ns precision MUST survive round-trip")
 	})
 
 	It("Participants not found returns DEK_NOT_FOUND", func() {
