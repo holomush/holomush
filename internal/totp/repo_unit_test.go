@@ -312,7 +312,7 @@ func TestRepoIncrementFailedAttemptsWrapsDriverError(t *testing.T) {
 	r, mock := newMockedRepo(t)
 	// $3 = now.UnixNano() (BIGINT epoch-ns); $4 = lockoutDuration.Nanoseconds()
 	mock.ExpectQuery(`UPDATE player_totp\s+SET failed_attempts`).
-		WithArgs("01HZ", 5, pgxmock.AnyArg(), (15*time.Minute).Nanoseconds()).
+		WithArgs("01HZ", 5, pgxmock.AnyArg(), (15 * time.Minute).Nanoseconds()).
 		WillReturnError(errors.New("update failed"))
 
 	_, err := r.IncrementFailedAttempts(context.Background(), "01HZ", 5, 15*time.Minute, time.Now())
