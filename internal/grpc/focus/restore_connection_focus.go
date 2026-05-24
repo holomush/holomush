@@ -46,7 +46,8 @@ func (c *defaultCoordinator) RestoreConnectionFocus(
 			if !hasMembership(info.FocusMemberships, pf.Kind, pf.TargetID) {
 				// Membership revoked while disconnected; log warning, fall
 				// back to grid. In-band UX signal deferred to holomush-3d9o.
-				slog.WarnContext(ctx, "scene.focus.restore_fallback_to_grid",
+				slog.WarnContext(
+					ctx, "scene.focus.restore_fallback_to_grid",
 					"session_id", sessionID,
 					"character_id", info.CharacterID.String(),
 					"prior_presenting_focus", pf,

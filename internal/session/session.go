@@ -259,10 +259,10 @@ func (i *Info) IsExpired() bool {
 
 // Connection represents a single client attached to a session.
 type Connection struct {
-	ID          ulid.ULID
-	SessionID   string
-	ClientType  string   // "terminal", "comms_hub", "telnet"
-	Streams     []string // event streams this connection subscribes to
+	ID         ulid.ULID
+	SessionID  string
+	ClientType string   // "terminal", "comms_hub", "telnet"
+	Streams    []string // event streams this connection subscribes to
 	// FocusKey is the per-connection focus pointer (Phase 5, INV-P5-2).
 	// nil = grid focus (default for new connections); non-nil = focused
 	// on the named context. Mutated only via the Coordinator-invoked

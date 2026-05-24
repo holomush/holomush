@@ -223,7 +223,7 @@ func (s *phase3TestSetup) InsertEncryptedRow(plaintext []byte) ulid.ULID {
         VALUES ($1, 'events.g1.system.scene.01PH3', 'test.event', $2,
                 'system', $3, 1, $4, $5, '{}'::jsonb, $6, $7)
     `, id[:], pgnanos.From(time.Now()), envelopeBytes, string(s.codecName),
-		int64(time.Now().UnixNano()),    // js_seq monotonic placeholder
+		int64(time.Now().UnixNano()),   // js_seq monotonic placeholder
 		s.oldDEKID, int32(s.oldDEKVer)) //nolint:gosec // G115: oldDEKVer is uint32 < 2^31
 	Expect(err).NotTo(HaveOccurred())
 

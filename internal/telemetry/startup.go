@@ -33,7 +33,8 @@ var sentryActive atomic.Bool
 func EmitStartupSpan(ctx context.Context, serviceName, serviceVersion string, bootStart time.Time) {
 	tracer := otel.Tracer(serviceName)
 	now := time.Now()
-	_, span := tracer.Start(ctx, "process.startup",
+	_, span := tracer.Start(
+		ctx, "process.startup",
 		trace.WithTimestamp(bootStart),
 		trace.WithAttributes(
 			attribute.String("service.name", serviceName),

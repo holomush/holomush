@@ -168,10 +168,10 @@ type Host struct {
 	gameID            string
 	hostBrokerCert    *tlscerts.ServerCert
 	hostClientCert    *tlscerts.ClientCert
-	eventEmitter       plugins.PluginIntentEmitter
-	focusCoordinator   focus.Coordinator
-	connectionSender   focus.ConnectionSender
-	historyReader      plugins.HistoryReader
+	eventEmitter      plugins.PluginIntentEmitter
+	focusCoordinator  focus.Coordinator
+	connectionSender  focus.ConnectionSender
+	historyReader     plugins.HistoryReader
 	identityRegistry  plugins.IdentityRegistry
 	plugins           map[string]*loadedPlugin
 	mu                sync.RWMutex

@@ -108,7 +108,8 @@ func initSentry(ctx context.Context, cfg sentryEnv, serviceName, serviceVersion 
 	// Gzip the OTLP payload — Sentry's reference collector config recommends
 	// this, and span batches compress well. Trades a small CPU cost for much
 	// less network traffic.
-	exporter, err := sentryotlp.NewTraceExporter(ctx, cfg.DSN,
+	exporter, err := sentryotlp.NewTraceExporter(
+		ctx, cfg.DSN,
 		sentryotlp.WithCompression(otlptracehttp.GzipCompression),
 	)
 	if err != nil {

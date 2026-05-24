@@ -24,6 +24,7 @@ tool (
 	github.com/go-task/task/v3/cmd/task
 	github.com/mikefarah/yq/v4
 	gotest.tools/gotestsum
+	mvdan.cc/gofumpt
 )
 
 require (
@@ -178,6 +179,7 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools/gotestsum v1.13.0 // indirect
+	mvdan.cc/gofumpt v0.10.0 // indirect
 	mvdan.cc/sh/moreinterp v0.0.0-20260120230322-19def062a997 // indirect
 	mvdan.cc/sh/v3 v3.13.2-0.20260510185049-f5c6e2779117 // indirect
 )
