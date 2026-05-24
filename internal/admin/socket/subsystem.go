@@ -70,9 +70,9 @@ func (s *AdminSocketSubsystem) DependsOn() []lifecycle.SubsystemID {
 // startup), Start is a no-op: the admin socket is disabled but the server
 // continues serving normally.
 // codecov:ignore — tested by integration and E2E tests
-func (s *AdminSocketSubsystem) Start(_ context.Context) error {
+func (s *AdminSocketSubsystem) Start(ctx context.Context) error {
 	if s.cfg.SocketPath == "" {
-		slog.Warn("admin socket subsystem: disabled — no socket path configured; break-glass unavailable")
+		slog.WarnContext(ctx, "admin socket subsystem: disabled — no socket path configured; break-glass unavailable")
 		return nil
 	}
 	srv := NewServer(Config{

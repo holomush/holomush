@@ -50,9 +50,9 @@ func (s *SessionSubsystem) DependsOn() []lifecycle.SubsystemID {
 
 // Start creates the PostgresSessionStore from the database pool.
 // codecov:ignore — tested by integration and E2E tests
-func (s *SessionSubsystem) Start(_ context.Context) error {
+func (s *SessionSubsystem) Start(ctx context.Context) error {
 	s.sessionStore = store.NewPostgresSessionStore(s.cfg.DB.Pool())
-	slog.Info("session subsystem started")
+	slog.InfoContext(ctx, "session subsystem started")
 	return nil
 }
 

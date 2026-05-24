@@ -76,7 +76,7 @@ func (r *FallbackResolver) Resolve(ctx context.Context, hot eventbus.Envelope) (
 	}
 	if !found {
 		r.Metrics.ColdDEKMiss.Inc()
-		r.Logger.Warn("event indecipherable: hot DEK destroyed, no cold-tier row",
+		r.Logger.WarnContext(ctx, "event indecipherable: hot DEK destroyed, no cold-tier row",
 			"event_id", hot.EventID().String(),
 			"hot_dek_ref", uint64(hot.KeyID()))
 		return ResolvedSource{}, ErrMetadataOnly

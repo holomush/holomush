@@ -66,7 +66,7 @@ func (c *coordinator) timeoutFor(action Action) time.Duration {
 // Start subscribes to the cache_invalidate.dek.> wildcard and runs the
 // receive loop. Receive-side handler body lives in T10 (this commit
 // stubs the handler and lets Start succeed).
-func (c *coordinator) Start(_ context.Context) error {
+func (c *coordinator) Start(ctx context.Context) error {
 	if c.sub != nil {
 		return nil
 	}
@@ -75,7 +75,7 @@ func (c *coordinator) Start(_ context.Context) error {
 		return oops.Code("INVALIDATION_SUBSCRIBE_FAILED").Wrap(err)
 	}
 	c.sub = sub
-	c.deps.Logger.Info("invalidation.Coordinator started", "cluster_id", c.cfg.ClusterID)
+	c.deps.Logger.InfoContext(ctx, "invalidation.Coordinator started", "cluster_id", c.cfg.ClusterID)
 	return nil
 }
 
@@ -148,7 +148,7 @@ func (c *coordinator) RequestInvalidation(
 	}
 	if len(selfFiltered) == 0 && len(missing) > 0 {
 		// Only self was missing → SELF_TIMEOUT
-		c.deps.Logger.Warn(
+		c.deps.Logger.WarnContext(ctx,
 			"invalidation: only Self() missing from acks; not pilling self",
 			"self", string(self),
 			"action", string(action),
@@ -287,7 +287,7 @@ func (c *coordinator) publishAndCollect(
 		}
 		reply, perr := UnmarshalReply(msg.Data)
 		if perr != nil {
-			c.deps.Logger.Warn("invalidation: parse reply failed", "err", perr.Error())
+			c.deps.Logger.WarnContext(ctx, "invalidation: parse reply failed", "err", perr.Error())
 			continue
 		}
 		if reply.Ack {

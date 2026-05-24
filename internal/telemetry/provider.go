@@ -170,7 +170,7 @@ func Init(ctx context.Context, serviceName, serviceVersion string, logCfg config
 		bridgeLevel, _ = enabledLogFloor(logCfg, global, endpoint, sentryEnabled)
 	}
 
-	slog.Info( //nolint:gosec // G706: values from env vars / caller-controlled constants, not untrusted user input
+	slog.InfoContext(ctx,
 		"telemetry initialized",
 		"service", serviceName,
 		"otel_endpoint", endpoint,
