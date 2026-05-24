@@ -11,11 +11,6 @@ import (
 	otellog "go.opentelemetry.io/otel/log"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
-
-	// Pin exporter modules in go.mod so they survive go mod tidy.
-	// Tasks 2/3 will promote these to real usage.
-	_ "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
-	_ "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 )
 
 // TestLogSDKSurface pins the experimental v0.x API shapes this epic relies
