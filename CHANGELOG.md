@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.13](https://github.com/holomush/holomush/compare/v0.1.12...v0.1.13) (2026-05-24)
+
+
+### Bug Fixes
+
+* **web:** split CSP so SvelteKit inline bootstrap is hash-allowed (holomush-11ape) ([#4242](https://github.com/holomush/holomush/issues/4242)) ([d04030d](https://github.com/holomush/holomush/commit/d04030d9aea9e6913df63448e1a8ee41934efe28))
+
 ## [0.1.12](https://github.com/holomush/holomush/compare/v0.1.11...v0.1.12) (2026-05-24)
 
 
