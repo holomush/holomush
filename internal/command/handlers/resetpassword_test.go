@@ -168,7 +168,7 @@ func TestResetPassword(t *testing.T) {
 
 		// Pre-populate sessions for both characters.
 		// Status must be active/detached so DeleteByCharacter (WHERE status IN
-		// ('active','detached')) can find and delete them — MemStore accepted
+		// ('active','detached')) can find and delete them — the former in-memory store accepted
 		// any status including "", Postgres does not.
 		require.NoError(t, s.sessionMgr.Set(ctx, "sess-1", &session.Info{
 			ID: "sess-1", CharacterID: char1ID, CharacterName: "Char1", Status: session.StatusActive,

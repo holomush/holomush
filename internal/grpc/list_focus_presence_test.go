@@ -304,7 +304,7 @@ func TestListFocusPresenceSkipsEntryWhenNameUnresolved(t *testing.T) {
 }
 
 // Verifies: I-PRES-9 (expired-exclusion half)
-// Drift fix (holomush-9mxr Task 10): MemStore allowed two active sessions for the
+// Drift fix (holomush-9mxr Task 10): The former in-memory store allowed two active sessions for the
 // same character; PostgresSessionStore enforces idx_sessions_active_character (a
 // partial unique index on character_id WHERE status IN ('active','detached')).
 // This means it is impossible in production to store two active/detached sessions

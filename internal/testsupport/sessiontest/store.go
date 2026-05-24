@@ -7,7 +7,7 @@
 // unit tests in internal/grpc/, internal/grpc/focus/,
 // internal/command/handlers/, and internal/auth/ exercise session-touching
 // handler logic and require a real session.Store. Per the holomush-9mxr
-// design spec, this package replaces the deleted internal/session.MemStore.
+// design spec, this package replaces the deleted in-memory session store.
 //
 // Docker is required at test runtime. Developers without Docker will see
 // testcontainers container-start errors, not compile failures — the

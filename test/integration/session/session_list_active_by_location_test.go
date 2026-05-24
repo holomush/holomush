@@ -17,7 +17,7 @@ import (
 
 // Verifies: I-PRES-1
 // Postgres S-1/S-2/S-3: PostgresSessionStore.ListActiveByLocation enforces
-// the same filtering semantics as MemStore — Active-only, LocationID-strict,
+// the same filtering semantics as the original session store — Active-only, LocationID-strict,
 // empty result for empty location. This locks the SQL predicate at
 // internal/store/session_store.go (WHERE location_id = $1 AND status = 'active').
 //

@@ -101,7 +101,7 @@ func (f *fakePlayerSessionRepo) RefreshTTL(_ context.Context, _ ulid.ULID, _ tim
 var _ auth.PlayerSessionRepository = (*fakePlayerSessionRepo)(nil)
 
 // newTestSessionStore creates a Postgres-backed session.Store pre-populated with the given sessions.
-// Drift fix (holomush-9mxr Task 10): MemStore accepted any session.Info regardless of Status;
+// Drift fix (holomush-9mxr Task 10): The former in-memory store accepted any session.Info regardless of Status;
 // PostgresSessionStore requires a valid Status on read-back (IsValid() rejects "").
 // Sessions with no Status set default to StatusActive so callers that only care about
 // the session existing don't need to specify it.
@@ -125,7 +125,7 @@ func newTestSessionStore(t *testing.T, sessions map[string]*session.Info) sessio
 // dispatcher. Tests that call HandleCommand MUST use this helper.
 //
 // The store is used for both Engine and dispatcher Services.Events.
-// Pass a custom sessStore to pre-populate sessions; nil uses a fresh MemStore.
+// Pass a custom sessStore to pre-populate sessions; nil uses a fresh Postgres-backed store.
 func newHandleCommandServer(t *testing.T, store core.EventAppender, sessStore session.Store, opts ...CoreServerOption) *CoreServer {
 	t.Helper()
 	engine := core.NewEngine(store)

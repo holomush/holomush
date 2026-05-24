@@ -2317,7 +2317,7 @@ func TestLogoutFanoutContinuesAfterIndividualSessionErrors(t *testing.T) {
 	locID := ulid.Make()
 
 	// Make EndSession fail for first session by using a failing event store for it.
-	// We'll use MemStore which pre-populates both sessions; EndSession goes via
+	// We'll use a Postgres-backed store pre-populated with both sessions; EndSession goes via
 	// the engine. Use a mockEventStore that rejects Append for session_ended.
 	// Track per-type append counts so we can assert the fanout attempted
 	// EndSession for BOTH children (not just the first one before giving up).

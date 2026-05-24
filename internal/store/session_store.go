@@ -537,7 +537,7 @@ func (s *PostgresSessionStore) AddConnection(ctx context.Context, conn *session.
 		streams = []string{}
 	}
 
-	// DRIFT FIX (holomush-9mxr Task 9): MemStore.AddConnection stored the
+	// DRIFT FIX (holomush-9mxr Task 9): The former in-memory store's AddConnection stored the
 	// full Connection including FocusKey. PostgresSessionStore silently
 	// dropped the initial FocusKey, causing tests that seed a connection
 	// with a pre-existing FocusKey (e.g. TestSetConnectionFocus_HappyPath_
@@ -901,7 +901,7 @@ func (s *PostgresSessionStore) GetConnection(ctx context.Context, connectionID u
 //
 // The narrow UPDATE writes only `presenting_focus` on sessions and
 // `focus_key` on session_connections. By contract (Postgres-parity
-// with MemStore's T5 impl) the mutator MUST NOT modify Connection.Streams
+// with the former in-memory store's T5 impl) the mutator MUST NOT modify Connection.Streams
 // or any other field; mutator changes to other fields are silently
 // dropped. Phase 5's only legitimate caller (the coordinator) honors
 // this contract.
