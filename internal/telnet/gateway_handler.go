@@ -330,7 +330,7 @@ func (h *GatewayHandler) handleConnectGuest(ctx context.Context) <-chan *corev1.
 
 	resp, err := h.client.CreateGuest(createCtx, &corev1.CreateGuestRequest{})
 	if err != nil {
-		slog.Error("gateway: create guest RPC failed", "error", err)
+		slog.ErrorContext(ctx, "gateway: create guest RPC failed", "error", err)
 		h.send("Guest login error. Please try again.")
 		return nil
 	}
@@ -348,7 +348,7 @@ func (h *GatewayHandler) handleConnectGuest(ctx context.Context) <-chan *corev1.
 	}
 
 	// Should not happen for guests — CreateGuest always returns one character.
-	slog.Error("gateway: CreateGuest returned no characters")
+	slog.ErrorContext(ctx, "gateway: CreateGuest returned no characters")
 	h.send("Guest login failed. Please try again.")
 	return nil
 }
@@ -368,7 +368,7 @@ func (h *GatewayHandler) handleConnectPlayer(ctx context.Context, username, pass
 		Password: password,
 	})
 	if err != nil {
-		slog.Error("gateway: authenticate player RPC failed", "error", err)
+		slog.ErrorContext(ctx, "gateway: authenticate player RPC failed", "error", err)
 		h.send("Authentication error. Please try again.")
 		return nil
 	}
@@ -440,7 +440,7 @@ func (h *GatewayHandler) handleCreate(ctx context.Context, name string) <-chan *
 		CharacterName:      name,
 	})
 	if err != nil {
-		slog.Error("gateway: create character RPC failed", "error", err)
+		slog.ErrorContext(ctx, "gateway: create character RPC failed", "error", err)
 		h.send("Character creation error. Please try again.")
 		return nil
 	}
@@ -487,7 +487,7 @@ func (h *GatewayHandler) selectCharacter(ctx context.Context, ch *corev1.Charact
 		CharacterId:        ch.GetCharacterId(),
 	})
 	if err != nil {
-		slog.Error("gateway: select character RPC failed", "error", err)
+		slog.ErrorContext(ctx, "gateway: select character RPC failed", "error", err)
 		h.send("Character selection error. Please try again.")
 		return nil
 	}
@@ -530,11 +530,11 @@ func (h *GatewayHandler) subscribeAndEnter(ctx context.Context) <-chan *corev1.S
 		ClientType:         "telnet",
 	})
 	if err != nil {
-		slog.Warn("gateway: subscribe RPC failed — no live events", "session_id", h.sessionID, "error", err)
+		slog.WarnContext(ctx, "gateway: subscribe RPC failed — no live events", "session_id", h.sessionID, "error", err)
 		return nil
 	}
 	if stream == nil {
-		slog.Warn("gateway: subscribe returned nil stream", "session_id", h.sessionID)
+		slog.WarnContext(ctx, "gateway: subscribe returned nil stream", "session_id", h.sessionID)
 		return nil
 	}
 
@@ -597,7 +597,7 @@ func (h *GatewayHandler) handleSay(ctx context.Context, message string) {
 		ConnectionId:       h.connectionID,
 	})
 	if err != nil {
-		slog.Error("gateway: say command failed", "session_id", h.sessionID, "error", err)
+		slog.ErrorContext(ctx, "gateway: say command failed", "session_id", h.sessionID, "error", err)
 		h.send("Error: Your message could not be sent. Please try again.")
 		return
 	}
@@ -638,7 +638,7 @@ func (h *GatewayHandler) handlePose(ctx context.Context, action string) {
 		ConnectionId:       h.connectionID,
 	})
 	if err != nil {
-		slog.Error("gateway: pose command failed", "session_id", h.sessionID, "error", err)
+		slog.ErrorContext(ctx, "gateway: pose command failed", "session_id", h.sessionID, "error", err)
 		h.send("Error: Your action could not be sent. Please try again.")
 		return
 	}
@@ -684,7 +684,7 @@ func (h *GatewayHandler) handleGenericCommand(ctx context.Context, cmd, arg stri
 		PlayerSessionToken: h.playerSessionToken,
 		ConnectionId:       h.connectionID,
 	}); err != nil {
-		slog.Error("gateway: command failed", "session_id", h.sessionID, "command", cmd, "error", err)
+		slog.ErrorContext(ctx, "gateway: command failed", "session_id", h.sessionID, "command", cmd, "error", err)
 		h.send("Error processing command.")
 	}
 	// Output (or error) comes via command_response event on the character stream.
@@ -746,7 +746,7 @@ func (h *GatewayHandler) handleQuit(ctx context.Context) {
 			PlayerSessionToken: h.playerSessionToken,
 			ConnectionId:       h.connectionID,
 		}); err != nil {
-			slog.Warn("gateway: quit command failed", "session_id", h.sessionID, "error", err)
+			slog.WarnContext(spanCtx, "gateway: quit command failed", "session_id", h.sessionID, "error", err)
 		}
 	}
 	h.quitting = true
@@ -764,7 +764,7 @@ func (h *GatewayHandler) handleLogout(ctx context.Context) {
 		if _, err := h.client.Logout(logoutCtx, &corev1.LogoutRequest{
 			PlayerSessionToken: h.playerSessionToken,
 		}); err != nil {
-			slog.Warn("gateway: logout RPC failed", "error", err)
+			slog.WarnContext(ctx, "gateway: logout RPC failed", "error", err)
 		}
 	}
 	if !h.authed {
