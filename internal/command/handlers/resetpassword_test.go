@@ -20,6 +20,7 @@ import (
 	authmocks "github.com/holomush/holomush/internal/auth/mocks"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -41,7 +42,7 @@ type resetTestSetup struct {
 	playerSessions *authmocks.MockPlayerSessionRepository
 	resetRepo      *authmocks.MockPasswordResetRepository
 	charLister     *mockCharLister
-	sessionMgr     *session.MemStore
+	sessionMgr     session.Store
 	buf            *bytes.Buffer
 	charID         ulid.ULID
 	playerID       ulid.ULID
@@ -56,7 +57,7 @@ func newResetTestSetup(t *testing.T) *resetTestSetup {
 		playerSessions: authmocks.NewMockPlayerSessionRepository(t),
 		resetRepo:      authmocks.NewMockPasswordResetRepository(t),
 		charLister:     &mockCharLister{},
-		sessionMgr:     session.NewMemStore(),
+		sessionMgr:     sessiontest.NewStore(t),
 		buf:            &bytes.Buffer{},
 		charID:         ulid.Make(),
 		playerID:       ulid.Make(),
@@ -166,11 +167,14 @@ func TestResetPassword(t *testing.T) {
 		char2ID := ulid.Make()
 
 		// Pre-populate sessions for both characters.
+		// Status must be active/detached so DeleteByCharacter (WHERE status IN
+		// ('active','detached')) can find and delete them — MemStore accepted
+		// any status including "", Postgres does not.
 		require.NoError(t, s.sessionMgr.Set(ctx, "sess-1", &session.Info{
-			ID: "sess-1", CharacterID: char1ID, CharacterName: "Char1",
+			ID: "sess-1", CharacterID: char1ID, CharacterName: "Char1", Status: session.StatusActive,
 		}))
 		require.NoError(t, s.sessionMgr.Set(ctx, "sess-2", &session.Info{
-			ID: "sess-2", CharacterID: char2ID, CharacterName: "Char2",
+			ID: "sess-2", CharacterID: char2ID, CharacterName: "Char2", Status: session.StatusActive,
 		}))
 
 		s.playerRepo.EXPECT().GetByUsername(ctx, "targetuser").Return(player, nil)
@@ -207,8 +211,9 @@ func TestResetPassword(t *testing.T) {
 		char1ID := ulid.Make()
 
 		// Pre-populate session for the character.
+		// Status must be active/detached so DeleteByCharacter can find it.
 		require.NoError(t, s.sessionMgr.Set(ctx, "sess-1", &session.Info{
-			ID: "sess-1", CharacterID: char1ID, CharacterName: "Char1",
+			ID: "sess-1", CharacterID: char1ID, CharacterName: "Char1", Status: session.StatusActive,
 		}))
 
 		s.playerRepo.EXPECT().GetByUsername(ctx, "targetuser").Return(player, nil)

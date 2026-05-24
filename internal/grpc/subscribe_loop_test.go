@@ -316,10 +316,17 @@ func (e *erroringSessionStore) Get(_ context.Context, _ string) (*session.Info, 
 // INV-TS-6. The floor comparison MUST operate at nanosecond resolution.
 // An event whose Timestamp is one nanosecond BELOW the floor
 // (LocationArrivedAt) MUST be filtered out by dispatchDelivery.
+//
+// Drift fix (holomush-9mxr Task 10): arrivedAt uses microsecond precision
+// (no sub-microsecond nanos) so the Postgres round-trip in newTestSessionStore
+// does not truncate the stored value. dispatchDelivery re-reads the session
+// from the store per event, so precision must survive the PG round-trip.
 func TestDispatchDeliveryDropsEventEmittedInSameNanosecondAsArrival(t *testing.T) {
 	t.Parallel()
 	locID := core.NewULID()
-	arrivedAt := time.Date(2026, 5, 22, 12, 0, 0, 123456789, time.UTC)
+	// Microsecond-precision timestamp (123456us = 123456000ns) — survives
+	// Postgres timestamptz microsecond storage without truncation.
+	arrivedAt := time.Date(2026, 5, 22, 12, 0, 0, 123456000, time.UTC)
 	info := &session.Info{
 		ID:                "s1",
 		CharacterID:       core.NewULID(),
@@ -345,10 +352,14 @@ func TestDispatchDeliveryDropsEventEmittedInSameNanosecondAsArrival(t *testing.T
 // TestDispatchDeliveryIncludesEventAtExactFloorNanosecond gates INV-TS-7.
 // The floor MUST use >= semantics: an event whose Timestamp exactly equals
 // LocationArrivedAt MUST be INCLUDED in the visible window.
+//
+// Drift fix (holomush-9mxr Task 10): same microsecond-precision rationale as
+// TestDispatchDeliveryDropsEventEmittedInSameNanosecondAsArrival above.
 func TestDispatchDeliveryIncludesEventAtExactFloorNanosecond(t *testing.T) {
 	t.Parallel()
 	locID := core.NewULID()
-	arrivedAt := time.Date(2026, 5, 22, 12, 0, 0, 123456789, time.UTC)
+	// Microsecond-precision timestamp — survives Postgres timestamptz storage.
+	arrivedAt := time.Date(2026, 5, 22, 12, 0, 0, 123456000, time.UTC)
 	info := &session.Info{
 		ID:                "s1",
 		CharacterID:       core.NewULID(),

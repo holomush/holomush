@@ -16,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 )
 
 // INV-P5-4 + INV-P5-11 (AutoFocusOnJoin filter + skip rules):
@@ -29,10 +30,10 @@ import (
 // focused on a different target (D8 skip-rule). Such connections land in
 // SkippedConnectionIDs, not FocusedConnectionIDs.
 //
-// These specs exercise AutoFocusOnJoin against a live Coordinator wired with
-// session.NewMemStore() — the same in-process store the production Coordinator
-// uses. No JetStream bus is required: the invariants live entirely in the
-// session-store mutation path, not in the eventbus.
+// These specs exercise AutoFocusOnJoin against a live Coordinator wired with a
+// Postgres-backed session store (sessiontest.NewStore). No JetStream bus is
+// required: the invariants live entirely in the session-store mutation path,
+// not in the eventbus.
 //
 // Harness pattern follows focus_without_membership_blocked_test.go (T24).
 //
@@ -40,16 +41,16 @@ import (
 // Bead: holomush-5rh.14.25.
 var _ = Describe("INV-P5-4 + INV-P5-11: AutoFocusOnJoin terminal filter and skip rules", func() {
 	// -----------------------------------------------------------------------
-	// Shared harness builder — wires a Coordinator + MemStore with a
+	// Shared harness builder — wires a Coordinator + Postgres-backed store with a
 	// NullPolicy for FocusKindScene, then returns a helper to seed sessions.
 	// -----------------------------------------------------------------------
 	type harness struct {
-		store *session.MemStore
+		store session.Store
 		coord focus.Coordinator
 	}
 
 	newHarness := func() harness {
-		store := session.NewMemStore()
+		store := sessiontest.NewStore(suiteT)
 		coord, err := focus.NewCoordinator(
 			focus.WithSessionStore(store),
 			focus.WithKindPolicy(focus.NewNullPolicy(session.FocusKindScene)),
@@ -114,7 +115,7 @@ var _ = Describe("INV-P5-4 + INV-P5-11: AutoFocusOnJoin terminal filter and skip
 		Expect(err).NotTo(HaveOccurred(), "AutoFocusOnJoin must not return a store-level error")
 
 		// INV-P5-4: only the terminal connection must be focused.
-		// Use HaveLen + ContainElement to be order-agnostic (MemStore map iteration is non-deterministic).
+		// Use HaveLen + ContainElement to be order-agnostic (ordering is not guaranteed).
 		Expect(resp.FocusedConnectionIDs).To(HaveLen(1),
 			"INV-P5-4: FocusedConnectionIDs MUST have exactly one entry")
 		Expect(resp.FocusedConnectionIDs).To(ContainElement(terminalConnID),
@@ -191,7 +192,7 @@ var _ = Describe("INV-P5-4 + INV-P5-11: AutoFocusOnJoin terminal filter and skip
 		Expect(err).NotTo(HaveOccurred(), "AutoFocusOnJoin must not return a store-level error")
 
 		// INV-P5-11: conn2 (unfocused) gets focused; conn1 (already elsewhere) skipped.
-		// Use HaveLen + ContainElement to be order-agnostic (MemStore map iteration is non-deterministic).
+		// Use HaveLen + ContainElement to be order-agnostic (ordering is not guaranteed).
 		Expect(resp.FocusedConnectionIDs).To(HaveLen(1),
 			"INV-P5-11: FocusedConnectionIDs MUST have exactly one entry")
 		Expect(resp.FocusedConnectionIDs).To(ContainElement(conn2ID),

@@ -464,8 +464,12 @@ func TestQueryStreamHistoryNotBeforeMsForwardsToBus(t *testing.T) {
 	t.Parallel()
 	future := time.Now().Add(time.Hour)
 	locID := ulid.MustParse("01HYXYZ0C0000000000000000C")
+	// Drift fix (holomush-9mxr Task 10): Postgres COALESCEs a zero LocationArrivedAt
+	// to now() on INSERT, making scopeFloor = now() for location streams. Set an
+	// explicit LocationArrivedAt well before notBefore so the floor does not override it.
+	arrivedAt := time.Now().Add(-3 * time.Hour)
 	sess := newTestSessionStore(t, map[string]*session.Info{
-		"s1": {ID: "s1", ExpiresAt: &future, LocationID: locID},
+		"s1": {ID: "s1", ExpiresAt: &future, LocationID: locID, LocationArrivedAt: arrivedAt},
 	})
 	notBefore := time.Now().Add(-2 * time.Hour).UnixMilli()
 	reader := &fakeHistoryReader{}

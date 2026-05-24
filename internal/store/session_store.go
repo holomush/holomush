@@ -527,10 +527,36 @@ func (s *PostgresSessionStore) AddConnection(ctx context.Context, conn *session.
 			Errorf("invalid client_type %q: must be one of terminal, comms_hub, telnet", conn.ClientType)
 	}
 
+	// DRIFT FIX (holomush-9mxr Task 9): nil []string and []string{} are
+	// semantically equivalent ("no streams subscribed"), but the column is
+	// TEXT[] NOT NULL so nil is rejected by Postgres. Coerce nil to an
+	// empty slice so callers need not distinguish the two zero values.
+	streams := conn.Streams
+	if streams == nil {
+		streams = []string{}
+	}
+
+	// DRIFT FIX (holomush-9mxr Task 9): MemStore.AddConnection stored the
+	// full Connection including FocusKey. PostgresSessionStore silently
+	// dropped the initial FocusKey, causing tests that seed a connection
+	// with a pre-existing FocusKey (e.g. TestSetConnectionFocus_HappyPath_
+	// ReturnsOldFocusKey) to see nil instead of the seeded value. Marshal
+	// focus_key as JSONB on insert, matching the shape used by
+	// UpdateConnectionFocusKey.
+	var focusKeyJSON []byte
+	if conn.FocusKey != nil {
+		var merr error
+		focusKeyJSON, merr = json.Marshal(conn.FocusKey)
+		if merr != nil {
+			return oops.With("operation", "marshal initial focus_key").
+				With("connection_id", conn.ID.String()).Wrap(merr)
+		}
+	}
+
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO session_connections (id, session_id, client_type, streams, connected_at)
-		 VALUES ($1, $2, $3, $4, $5)`,
-		conn.ID.String(), conn.SessionID, conn.ClientType, conn.Streams, pgnanos.From(conn.ConnectedAt))
+		`INSERT INTO session_connections (id, session_id, client_type, streams, focus_key, connected_at)
+		 VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
+		conn.ID.String(), conn.SessionID, conn.ClientType, streams, focusKeyJSON, pgnanos.From(conn.ConnectedAt))
 	if err != nil {
 		return oops.With("operation", "add connection").
 			With("connection_id", conn.ID.String()).

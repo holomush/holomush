@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 )
 
 func TestLeaveFocusByTargetSweepsAllMatchingSessions(t *testing.T) {
@@ -32,20 +33,23 @@ func TestLeaveFocusByTargetSweepsAllMatchingSessions(t *testing.T) {
 		t,
 		map[string]*session.Info{
 			"sess-a": {
-				Status: session.StatusActive,
+				CharacterID: ulid.Make(), // distinct: idx_sessions_active_character covers active+detached
+				Status:      session.StatusActive,
 				FocusMemberships: []session.FocusMembership{
 					{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: time.Now()},
 				},
 			},
 			"sess-b": {
-				Status: session.StatusDetached,
+				CharacterID: ulid.Make(),
+				Status:      session.StatusDetached,
 				FocusMemberships: []session.FocusMembership{
 					{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: time.Now()},
 					{Kind: session.FocusKindScene, TargetID: otherSceneID, JoinedAt: time.Now()},
 				},
 			},
 			"sess-other": {
-				Status: session.StatusActive,
+				CharacterID: ulid.Make(),
+				Status:      session.StatusActive,
 				FocusMemberships: []session.FocusMembership{
 					{Kind: session.FocusKindScene, TargetID: otherSceneID, JoinedAt: time.Now()},
 				},
@@ -141,13 +145,14 @@ func TestLeaveFocusByTargetCarriesPerSessionFailuresInResult(t *testing.T) {
 	sceneID := ulid.Make()
 	target := session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneID}
 
-	// Wrap the memstore so UpdateFocusMemberships fails for one specific session.
-	memStore := session.NewMemStore()
+	// Wrap the store so UpdateFocusMemberships fails for one specific session.
+	memStore := sessiontest.NewStore(t)
 	ctx := context.Background()
 	for _, id := range []string{"sess-ok", "sess-fail"} {
 		require.NoError(t, memStore.Set(ctx, id, &session.Info{
-			ID:     id,
-			Status: session.StatusActive,
+			ID:          id,
+			CharacterID: ulid.Make(), // distinct: idx_sessions_active_character covers active+detached
+			Status:      session.StatusActive,
 			FocusMemberships: []session.FocusMembership{
 				{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: time.Now()},
 			},
@@ -179,7 +184,7 @@ func TestLeaveFocusByTargetCarriesPerSessionFailuresInResult(t *testing.T) {
 
 func TestLeaveFocusByTargetRejectsUnregisteredKind(t *testing.T) {
 	// No policies registered → every kind is unregistered.
-	store := session.NewMemStore()
+	store := sessiontest.NewStore(t)
 	coord, err := NewCoordinator(WithSessionStore(store))
 	require.NoError(t, err)
 
@@ -198,7 +203,7 @@ func TestLeaveFocusByTargetReturnsEnumerationErrorOnListFailure(t *testing.T) {
 	sceneID := ulid.Make()
 	target := session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneID}
 
-	store := &listFailingStore{Store: session.NewMemStore()}
+	store := &listFailingStore{Store: sessiontest.NewStore(t)}
 	coord, err := NewCoordinator(
 		WithSessionStore(store),
 		WithKindPolicy(NewNullPolicy(session.FocusKindScene)),

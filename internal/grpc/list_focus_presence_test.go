@@ -11,11 +11,13 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/session"
+	sessionmocks "github.com/holomush/holomush/internal/session/mocks"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -301,18 +303,29 @@ func TestListFocusPresenceSkipsEntryWhenNameUnresolved(t *testing.T) {
 	assert.Equal(t, "alice", resp.Entries[0].CharacterName)
 }
 
-// Verifies: I-PRES-9
-func TestListFocusPresenceDeduplicatesByCharacterID(t *testing.T) {
+// Verifies: I-PRES-9 (expired-exclusion half)
+// Drift fix (holomush-9mxr Task 10): MemStore allowed two active sessions for the
+// same character; PostgresSessionStore enforces idx_sessions_active_character (a
+// partial unique index on character_id WHERE status IN ('active','detached')).
+// This means it is impossible in production to store two active/detached sessions
+// for the same character. This test verifies that ListActiveByLocation excludes
+// expired sessions — seeding one active + one expired row for the same character
+// and asserting exactly one presence entry is returned.
+func TestListFocusPresenceExcludesExpiredSessions(t *testing.T) {
 	char := ulid.MustParse("01HYXCHARALICE0000000000AA")
 	loc := ulid.MustParse("01HYXLOCATION0000000000001")
 	caller := mkActiveAt("sess-1", char, loc)
-	dup := mkActiveAt("sess-2", char, loc)
+	// Expired status — excluded from idx_sessions_active_character so both rows
+	// can coexist for the same character. ListActiveByLocation returns status=active
+	// only, so this does not appear in the presence result.
+	expired := mkActiveAt("sess-2", char, loc)
+	expired.Status = session.StatusExpired
 	grant := policytest.NewGrantEngine()
 	grant.Grant(access.CharacterSubject(char.String()), "list_presence", access.LocationResource(loc.String()))
 
 	s := &CoreServer{
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
-			"sess-1": caller, "sess-2": dup,
+			"sess-1": caller, "sess-2": expired,
 		}),
 		playerSessionRepo:     newFakePlayerSessionRepo(ownedPlayerID),
 		accessEngine:          grant,
@@ -322,7 +335,59 @@ func TestListFocusPresenceDeduplicatesByCharacterID(t *testing.T) {
 		SessionId: "sess-1", PlayerSessionToken: testPlayerSessionToken,
 	})
 	require.NoError(t, err)
-	assert.Len(t, resp.Entries, 1, "duplicate character_id must collapse to single entry")
+	assert.Len(t, resp.Entries, 1, "expired session must be excluded from presence list")
+}
+
+// Verifies: I-PRES-9 (dedup-guard half)
+// The Postgres unique index idx_sessions_active_character makes it impossible for
+// the real store to return two active/detached sessions for the same character.
+// This test drives the defensive dedup guard in list_focus_presence.go directly
+// via a mock store whose ListActiveByLocation returns two active *session.Info
+// with identical CharacterIDs — the precondition the real store's index forbids.
+// Asserts the handler collapses them to a single presence entry.
+func TestListFocusPresenceDeduplicatesByCharacterID(t *testing.T) {
+	char := ulid.MustParse("01HYXCHARALICE0000000000AA")
+	loc := ulid.MustParse("01HYXLOCATION0000000000001")
+
+	// Two active sessions with the same CharacterID — impossible in production
+	// due to the partial unique index, but the mock injects this precondition
+	// to exercise the dedup guard at list_focus_presence.go:147-156.
+	future := time.Now().Add(time.Hour)
+	dupA := &session.Info{
+		ID: "sess-dup-a", Status: session.StatusActive, ExpiresAt: &future,
+		CharacterID: char, LocationID: loc, PlayerID: ownedPlayerID,
+	}
+	dupB := &session.Info{
+		ID: "sess-dup-b", Status: session.StatusActive, ExpiresAt: &future,
+		CharacterID: char, LocationID: loc, PlayerID: ownedPlayerID,
+	}
+
+	// Caller session — needed for ownership validation and session lookup.
+	caller := mkActiveAt("sess-caller", char, loc)
+
+	grant := policytest.NewGrantEngine()
+	grant.Grant(access.CharacterSubject(char.String()), "list_presence", access.LocationResource(loc.String()))
+
+	mockSessStore := sessionmocks.NewMockStore(t)
+	// Get is called twice: once for ownership validation (ValidateSessionOwnership)
+	// and once for the session re-fetch in the handler body.
+	mockSessStore.EXPECT().Get(mock.Anything, "sess-caller").Return(caller, nil).Times(2)
+	// ListActiveByLocation returns two active sessions with the same CharacterID.
+	mockSessStore.EXPECT().ListActiveByLocation(mock.Anything, loc).
+		Return([]*session.Info{dupA, dupB}, nil).Once()
+
+	s := &CoreServer{
+		sessionStore:          mockSessStore,
+		playerSessionRepo:     newFakePlayerSessionRepo(ownedPlayerID),
+		accessEngine:          grant,
+		characterNameResolver: &stubNameResolver{names: map[ulid.ULID]string{char: "alice"}},
+	}
+	resp, err := s.ListFocusPresence(context.Background(), &corev1.ListFocusPresenceRequest{
+		SessionId: "sess-caller", PlayerSessionToken: testPlayerSessionToken,
+	})
+	require.NoError(t, err)
+	assert.Len(t, resp.Entries, 1, "duplicate character_id must collapse to single presence entry")
+	assert.Equal(t, "alice", resp.Entries[0].CharacterName)
 }
 
 // Verifies: I-PRES-1

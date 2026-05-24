@@ -24,6 +24,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	sessionmocks "github.com/holomush/holomush/internal/session/mocks"
+	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 	"github.com/holomush/holomush/internal/world"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
@@ -82,7 +83,7 @@ func TestAuthenticatePlayer_Success(t *testing.T) {
 			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
 		}, nil)
 
-	sessionStore := session.NewMemStore()
+	sessionStore := sessiontest.NewStore(t)
 
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
@@ -160,7 +161,7 @@ func TestAuthenticatePlayer_ErrorPaths(t *testing.T) {
 
 			server := &CoreServer{
 				engine:       core.NewEngine(core.NewMemoryEventStore()),
-				sessionStore: session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+				sessionStore: sessiontest.NewStore(t),
 			}
 
 			if !tt.authSvcNil {
@@ -210,7 +211,8 @@ func TestSelectCharacter_Success(t *testing.T) {
 			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
 		}, nil)
 
-	sessionStore := session.NewMemStore()
+	sessionStore, pool := sessiontest.NewStoreWithPool(t)
+	sessiontest.SeedPlayerSession(t, pool, ps)
 
 	server := &CoreServer{
 		engine:            core.NewEngine(core.NewMemoryEventStore()),
@@ -243,7 +245,7 @@ func TestSelectCharacter_InvalidSession(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		sessionStore:      session.NewMemStore(),
+		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 	}
 
@@ -275,7 +277,7 @@ func TestSelectCharacter_InvalidCharacter(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		sessionStore:      session.NewMemStore(),
+		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 		charRepo:          charRepo,
 	}
@@ -306,7 +308,7 @@ func TestSelectCharacter_Reattach(t *testing.T) {
 			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
 		}, nil)
 
-	sessionStore := session.NewMemStore()
+	sessionStore := sessiontest.NewStore(t)
 	// Pre-populate a detached session for this character.
 	require.NoError(t, sessionStore.Set(ctx, existingSessionID, &session.Info{
 		ID:            existingSessionID,
@@ -359,7 +361,8 @@ func TestSelectCharacter_SameTokenTwice(t *testing.T) {
 			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
 		}, nil).Times(2)
 
-	sessionStore := session.NewMemStore()
+	sessionStore, pool := sessiontest.NewStoreWithPool(t)
+	sessiontest.SeedPlayerSession(t, pool, ps)
 	callCount := 0
 	server := &CoreServer{
 		engine:            core.NewEngine(core.NewMemoryEventStore()),
@@ -410,7 +413,8 @@ func TestSelectCharacter_FreshSession_SetsLocationArrivedAt(t *testing.T) {
 			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
 		}, nil)
 
-	sessionStore := session.NewMemStore()
+	sessionStore, pool := sessiontest.NewStoreWithPool(t)
+	sessiontest.SeedPlayerSession(t, pool, ps)
 
 	before := time.Now()
 	server := &CoreServer{
@@ -460,7 +464,7 @@ func TestSelectCharacter_Reattach_PreservesLocationArrivedAt(t *testing.T) {
 		}, nil)
 
 	originalArrival := time.Now().Add(-2 * time.Hour)
-	sessionStore := session.NewMemStore()
+	sessionStore := sessiontest.NewStore(t)
 	require.NoError(t, sessionStore.Set(ctx, existingSessionID, &session.Info{
 		ID:                existingSessionID,
 		CharacterID:       charID,
@@ -521,7 +525,7 @@ func TestCreatePlayer_Success(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		sessionStore:      session.NewMemStore(),
+		sessionStore:      sessiontest.NewStore(t),
 		authService:       authSvc,
 		playerSessionRepo: playerSessionRepo,
 	}
@@ -557,7 +561,7 @@ func TestCreatePlayer_ErrorPaths(t *testing.T) {
 			setupServer: func(_ *testing.T) *CoreServer {
 				return &CoreServer{
 					engine:       core.NewEngine(core.NewMemoryEventStore()),
-					sessionStore: session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					sessionStore: sessiontest.NewStore(t),
 				}
 			},
 			wantMsgContains: "not configured",
@@ -571,7 +575,7 @@ func TestCreatePlayer_ErrorPaths(t *testing.T) {
 				}
 				return &CoreServer{
 					engine:       core.NewEngine(core.NewMemoryEventStore()),
-					sessionStore: session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					sessionStore: sessiontest.NewStore(t),
 					authService:  authSvc,
 				}
 			},
@@ -587,7 +591,7 @@ func TestCreatePlayer_ErrorPaths(t *testing.T) {
 				}
 				return &CoreServer{
 					engine:            core.NewEngine(core.NewMemoryEventStore()),
-					sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					sessionStore:      sessiontest.NewStore(t),
 					authService:       authSvc,
 					playerSessionRepo: authmocks.NewMockPlayerSessionRepository(t),
 				}
@@ -606,7 +610,7 @@ func TestCreatePlayer_ErrorPaths(t *testing.T) {
 				}
 				return &CoreServer{
 					engine:            core.NewEngine(core.NewMemoryEventStore()),
-					sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					sessionStore:      sessiontest.NewStore(t),
 					authService:       authSvc,
 					playerSessionRepo: authmocks.NewMockPlayerSessionRepository(t),
 				}
@@ -663,7 +667,7 @@ func TestCreateCharacter_Success(t *testing.T) {
 
 	server := &CoreServer{
 		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
+		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 		characterService:  charSvc,
 	}
@@ -734,7 +738,7 @@ func TestCreateCharacter_ErrorPaths(t *testing.T) {
 				}
 				return &CoreServer{
 					engine:            core.NewEngine(core.NewMemoryEventStore()),
-					sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 					characterService:  charSvc,
 				}
@@ -835,7 +839,7 @@ func TestListCharacters_Success(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		sessionStore:      session.NewMemStore(),
+		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 		charRepo:          charRepo,
 	}
@@ -901,7 +905,7 @@ func TestListCharacters_LocationDerivation(t *testing.T) {
 
 			server := &CoreServer{
 				engine:            core.NewEngine(core.NewMemoryEventStore()),
-				sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+				sessionStore:      sessiontest.NewStore(t),
 				playerSessionRepo: sessionRepo,
 				charRepo:          charRepo,
 				worldQuerier:      tt.setupWorldQuerier(locID),
@@ -935,7 +939,7 @@ func TestRequestPasswordReset_AlwaysSuccess(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		sessionStore: session.NewMemStore(),
+		sessionStore: sessiontest.NewStore(t),
 		resetService: resetSvc,
 	}
 
@@ -953,7 +957,7 @@ func TestRequestPasswordReset_NotConfigured(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		sessionStore: session.NewMemStore(),
+		sessionStore: sessiontest.NewStore(t),
 	}
 
 	resp, err := server.RequestPasswordReset(ctx, &corev1.RequestPasswordResetRequest{
@@ -980,7 +984,7 @@ func TestConfirmPasswordReset_Success(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		sessionStore: session.NewMemStore(),
+		sessionStore: sessiontest.NewStore(t),
 		resetService: resetSvc,
 	}
 
@@ -1032,7 +1036,7 @@ func TestConfirmPasswordReset_InvalidTokenPaths(t *testing.T) {
 
 			server := &CoreServer{
 				engine:       core.NewEngine(core.NewMemoryEventStore()),
-				sessionStore: session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+				sessionStore: sessiontest.NewStore(t),
 				resetService: resetSvc,
 			}
 
@@ -1088,7 +1092,8 @@ func TestLogoutEmitsSessionEndedForEachChildGameSession(t *testing.T) {
 	locID := ulid.Make()
 
 	store := core.NewMemoryEventStore()
-	sessStore := session.NewMemStore()
+	sessStore, pool := sessiontest.NewStoreWithPool(t)
+	sessiontest.SeedPlayerSession(t, pool, ps)
 	require.NoError(t, sessStore.Set(ctx, sess1ID.String(), &session.Info{
 		ID:              sess1ID.String(),
 		CharacterID:     char1ID,
@@ -1195,7 +1200,7 @@ func TestLogout_Success(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		sessionStore: session.NewMemStore(),
+		sessionStore: sessiontest.NewStore(t),
 		authService:  authSvc,
 	}
 
@@ -1227,7 +1232,7 @@ func TestLogout_ErrorPaths(t *testing.T) {
 				}
 				return &CoreServer{
 					engine:       core.NewEngine(core.NewMemoryEventStore()),
-					sessionStore: session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					sessionStore: sessiontest.NewStore(t),
 					authService:  authSvc,
 				}
 			},
@@ -1239,7 +1244,7 @@ func TestLogout_ErrorPaths(t *testing.T) {
 				t.Helper()
 				return &CoreServer{
 					engine:       core.NewEngine(core.NewMemoryEventStore()),
-					sessionStore: session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					sessionStore: sessiontest.NewStore(t),
 				}
 			},
 			token: "some-token",
@@ -1260,7 +1265,7 @@ func TestLogout_ErrorPaths(t *testing.T) {
 func TestResolvePlayerSession_RepoNotConfigured(t *testing.T) {
 	server := &CoreServer{
 		engine:       core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore: session.NewMemStore(),
+		sessionStore: sessiontest.NewStore(t),
 		// playerSessionRepo is nil
 	}
 
@@ -1278,7 +1283,7 @@ func TestResolvePlayerSession_TokenNotFound(t *testing.T) {
 
 	server := &CoreServer{
 		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
+		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 	}
 
@@ -1299,7 +1304,7 @@ func TestResolvePlayerSession_RefreshTTLError_StillReturnsSession(t *testing.T) 
 
 	server := &CoreServer{
 		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
+		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 	}
 
@@ -1330,7 +1335,7 @@ func TestCheckPlayerSession(t *testing.T) {
 					Return(&auth.Player{ID: playerID, Username: "alice"}, nil)
 				server := &CoreServer{
 					engine:            core.NewEngine(core.NewMemoryEventStore()),
-					sessionStore:      session.NewMemStore(),
+					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 					playerRepo:        playerRepo,
 				}
@@ -1347,7 +1352,7 @@ func TestCheckPlayerSession(t *testing.T) {
 					Return(nil, auth.ErrNotFound)
 				server := &CoreServer{
 					engine:            core.NewEngine(core.NewMemoryEventStore()),
-					sessionStore:      session.NewMemStore(),
+					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 				}
 				return server, &corev1.CheckPlayerSessionRequest{PlayerSessionToken: "bad-token"}
@@ -1359,7 +1364,7 @@ func TestCheckPlayerSession(t *testing.T) {
 			setup: func(_ *testing.T) (*CoreServer, *corev1.CheckPlayerSessionRequest) {
 				server := &CoreServer{
 					engine:       core.NewEngine(core.NewMemoryEventStore()),
-					sessionStore: session.NewMemStore(),
+					sessionStore: sessiontest.NewStore(t),
 				}
 				return server, &corev1.CheckPlayerSessionRequest{PlayerSessionToken: validToken}
 			},
@@ -1374,7 +1379,7 @@ func TestCheckPlayerSession(t *testing.T) {
 				sessionRepo := setupSessionRepo(t, ps)
 				server := &CoreServer{
 					engine:            core.NewEngine(core.NewMemoryEventStore()),
-					sessionStore:      session.NewMemStore(),
+					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 				}
 				return server, &corev1.CheckPlayerSessionRequest{PlayerSessionToken: validToken}
@@ -1420,7 +1425,7 @@ func TestCheckPlayerSessionPopulatesPlayerIDIsGuestAndCharactersOnSuccess(t *tes
 
 	server := &CoreServer{
 		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
+		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 		playerRepo:        playerRepo,
 		charRepo:          charRepo,
@@ -1466,7 +1471,7 @@ func TestCheckPlayerSession_ErrorTranslation(t *testing.T) {
 					Return(nil, samberOops.Code("PLAYER_SESSION_NOT_FOUND").Errorf("unknown token"))
 				return &CoreServer{
 					engine:            core.NewEngine(core.NewMemoryEventStore()),
-					sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 				}
 			},
@@ -1478,7 +1483,7 @@ func TestCheckPlayerSession_ErrorTranslation(t *testing.T) {
 				// playerSessionRepo unset → resolvePlayerSession returns NOT_CONFIGURED.
 				return &CoreServer{
 					engine:       core.NewEngine(core.NewMemoryEventStore()),
-					sessionStore: session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					sessionStore: sessiontest.NewStore(t),
 				}
 			},
 			wantNotUnauthenticated: true,
@@ -1495,7 +1500,7 @@ func TestCheckPlayerSession_ErrorTranslation(t *testing.T) {
 					Return(nil, errors.New("connection refused"))
 				return &CoreServer{
 					engine:            core.NewEngine(core.NewMemoryEventStore()),
-					sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 					playerRepo:        playerRepo,
 				}
@@ -1516,7 +1521,7 @@ func TestCheckPlayerSession_ErrorTranslation(t *testing.T) {
 					Return(nil, errors.New("char repo down"))
 				return &CoreServer{
 					engine:            core.NewEngine(core.NewMemoryEventStore()),
-					sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 					playerRepo:        playerRepo,
 					charRepo:          charRepo,
@@ -1754,7 +1759,7 @@ func TestListPlayerSessionsReturnsCallersOwnSessionsWithIsCurrentFlag(t *testing
 
 	server := &CoreServer{
 		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
+		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 	}
 
@@ -1825,7 +1830,7 @@ func TestListPlayerSessions_ReturnsEmptyPaths(t *testing.T) {
 
 			server := &CoreServer{
 				engine:            core.NewEngine(core.NewMemoryEventStore()),
-				sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+				sessionStore:      sessiontest.NewStore(t),
 				playerSessionRepo: sessionRepo,
 			}
 
@@ -1871,7 +1876,7 @@ func TestRevokePlayerSessionRevokesOwnOtherSession(t *testing.T) {
 
 	server := &CoreServer{
 		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
+		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 	}
 
@@ -1923,7 +1928,7 @@ func TestRevokePlayerSession_RejectsPaths(t *testing.T) {
 				// if an unexpected call were made.
 				server := &CoreServer{
 					engine:            core.NewEngine(core.NewMemoryEventStore()),
-					sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 				}
 				return server, &corev1.RevokePlayerSessionRequest{
@@ -1941,7 +1946,7 @@ func TestRevokePlayerSession_RejectsPaths(t *testing.T) {
 					Return(nil, auth.ErrNotFound)
 				server := &CoreServer{
 					engine:            core.NewEngine(core.NewMemoryEventStore()),
-					sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 				}
 				return server, &corev1.RevokePlayerSessionRequest{
@@ -1969,7 +1974,7 @@ func TestRevokePlayerSession_RejectsPaths(t *testing.T) {
 				// No GetByID expectation — "not-a-ulid" fails parse first.
 				server := &CoreServer{
 					engine:            core.NewEngine(core.NewMemoryEventStore()),
-					sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 				}
 				return server, &corev1.RevokePlayerSessionRequest{
@@ -2035,7 +2040,7 @@ func TestRevokeOtherPlayerSessionsKeepsCallerDeletesRest(t *testing.T) {
 
 	server := &CoreServer{
 		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
+		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 	}
 
@@ -2056,7 +2061,7 @@ func TestRevokeOtherPlayerSessionsRejectsInvalidToken(t *testing.T) {
 
 	server := &CoreServer{
 		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
+		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 	}
 
@@ -2088,7 +2093,7 @@ func TestRevokeOtherPlayerSessionsSucceedsWithNoOtherSessions(t *testing.T) {
 
 	server := &CoreServer{
 		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
+		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 	}
 
@@ -2129,7 +2134,7 @@ func TestSessionManagementRPCsRefreshCallerTTL(t *testing.T) {
 		repo.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*auth.PlayerSession{caller}, nil)
 
 		server := &CoreServer{
-			engine: core.NewEngine(core.NewMemoryEventStore()), sessionStore: session.NewMemStore(),
+			engine: core.NewEngine(core.NewMemoryEventStore()), sessionStore: sessiontest.NewStore(t),
 			playerSessionRepo: repo,
 		}
 		_, err := server.ListPlayerSessions(ctx, &corev1.ListPlayerSessionsRequest{PlayerSessionToken: validToken})
@@ -2146,7 +2151,7 @@ func TestSessionManagementRPCsRefreshCallerTTL(t *testing.T) {
 		repo.EXPECT().Delete(mock.Anything, target.ID).Return(nil)
 
 		server := &CoreServer{
-			engine: core.NewEngine(core.NewMemoryEventStore()), sessionStore: session.NewMemStore(),
+			engine: core.NewEngine(core.NewMemoryEventStore()), sessionStore: sessiontest.NewStore(t),
 			playerSessionRepo: repo,
 		}
 		_, err := server.RevokePlayerSession(ctx, &corev1.RevokePlayerSessionRequest{
@@ -2163,7 +2168,7 @@ func TestSessionManagementRPCsRefreshCallerTTL(t *testing.T) {
 		repo.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*auth.PlayerSession{caller}, nil)
 
 		server := &CoreServer{
-			engine: core.NewEngine(core.NewMemoryEventStore()), sessionStore: session.NewMemStore(),
+			engine: core.NewEngine(core.NewMemoryEventStore()), sessionStore: sessiontest.NewStore(t),
 			playerSessionRepo: repo,
 		}
 		_, err := server.RevokeOtherPlayerSessions(ctx, &corev1.RevokeOtherPlayerSessionsRequest{PlayerSessionToken: validToken})
@@ -2179,7 +2184,7 @@ func TestSessionManagementRPCsRefreshCallerTTL(t *testing.T) {
 		repo.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*auth.PlayerSession{caller}, nil)
 
 		server := &CoreServer{
-			engine: core.NewEngine(core.NewMemoryEventStore()), sessionStore: session.NewMemStore(),
+			engine: core.NewEngine(core.NewMemoryEventStore()), sessionStore: sessiontest.NewStore(t),
 			playerSessionRepo: repo,
 		}
 		resp, err := server.ListPlayerSessions(ctx, &corev1.ListPlayerSessionsRequest{PlayerSessionToken: validToken})
@@ -2224,7 +2229,7 @@ func TestLogoutProceedsWithoutFanoutWhenGetByTokenHashFails(t *testing.T) {
 
 	server := &CoreServer{
 		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
+		sessionStore:      sessiontest.NewStore(t),
 		eventStore:        core.NewMemoryEventStore(),
 		authService:       authSvc,
 		playerSessionRepo: sessionRepo,
@@ -2332,7 +2337,8 @@ func TestLogoutFanoutContinuesAfterIndividualSessionErrors(t *testing.T) {
 		},
 	}
 
-	sessStore := session.NewMemStore()
+	sessStore, pool2 := sessiontest.NewStoreWithPool(t)
+	sessiontest.SeedPlayerSession(t, pool2, ps)
 	require.NoError(t, sessStore.Set(ctx, sess1ID, &session.Info{
 		ID:              sess1ID,
 		CharacterID:     char1ID,
@@ -2424,7 +2430,8 @@ func TestGuestSessionCarriesCharacterCreatedAt(t *testing.T) {
 			IsGuest: true,
 		}, nil)
 
-	sessionStore := session.NewMemStore()
+	sessionStore, pool := sessiontest.NewStoreWithPool(t)
+	sessiontest.SeedPlayerSession(t, pool, ps)
 	sessionID := core.NewULID()
 
 	server := &CoreServer{
