@@ -137,7 +137,12 @@ manages plugins, and handles game state.`,
 			if err := config.Load(configFile, cmd, &cryptoConfig, "crypto"); err != nil {
 				return err
 			}
-			return runCoreWithDeps(cmd.Context(), cfg, gameConfig, authConfig, eventBusConfig, cryptoConfig, cmd, nil)
+			logConfig := config.DefaultLoggingConfig()
+			if err := config.Load(configFile, cmd, &logConfig, "logging"); err != nil {
+				return err
+			}
+			applyLogSinkFlags(cmd, &logConfig)
+			return runCoreWithDeps(cmd.Context(), cfg, gameConfig, authConfig, eventBusConfig, cryptoConfig, logConfig, cmd, nil)
 		},
 	}
 
@@ -155,8 +160,46 @@ manages plugins, and handles game state.`,
 	cmd.Flags().BoolVar(&cfg.ResetSetting, "reset-setting", false, "force re-bootstrap from setting plugin")
 	cmd.Flags().DurationVar(&cfg.LuaTimeout, "plugin-lua-timeout", defaultPluginLuaTimeout, "per-invocation CPU deadline for Lua plugins")
 	cmd.Flags().IntVar(&cfg.LuaRegistryMaxSize, "plugin-lua-registry-max", defaultPluginLuaRegistryMax, "max Lua registry size per plugin state")
+	registerLogSinkFlags(cmd)
 
 	return cmd
+}
+
+// registerLogSinkFlags registers the six per-sink logging flags shared by the
+// core and gateway commands. The flags are bound into config.LoggingConfig via
+// the "logging" config section in each command's RunE.
+func registerLogSinkFlags(cmd *cobra.Command) {
+	cmd.Flags().Bool("log-stderr", true, "enable stderr log sink")
+	cmd.Flags().String("log-stderr-level", "", "stderr log level override (default: global)")
+	cmd.Flags().Bool("log-otel", true, "enable OTLP-collector log sink")
+	cmd.Flags().String("log-otel-level", "", "collector log level override (default: global)")
+	cmd.Flags().Bool("log-sentry", true, "enable Sentry log sink")
+	cmd.Flags().String("log-sentry-level", "", "Sentry log level override (default: global)")
+}
+
+// applyLogSinkFlags overlays explicitly-set --log-* flags onto lc, giving CLI
+// flags precedence over the YAML `logging` section (spec §5). The flat flag
+// names don't map to LoggingConfig's nested koanf keys via posflag, so bind
+// them here explicitly.
+func applyLogSinkFlags(cmd *cobra.Command, lc *config.LoggingConfig) {
+	if cmd.Flags().Changed("log-stderr") {
+		lc.Stderr.Enabled, _ = cmd.Flags().GetBool("log-stderr") //nolint:errcheck // flag type is known/registered
+	}
+	if cmd.Flags().Changed("log-stderr-level") {
+		lc.Stderr.Level, _ = cmd.Flags().GetString("log-stderr-level") //nolint:errcheck // flag type is known/registered
+	}
+	if cmd.Flags().Changed("log-otel") {
+		lc.OTel.Enabled, _ = cmd.Flags().GetBool("log-otel") //nolint:errcheck // flag type is known/registered
+	}
+	if cmd.Flags().Changed("log-otel-level") {
+		lc.OTel.Level, _ = cmd.Flags().GetString("log-otel-level") //nolint:errcheck // flag type is known/registered
+	}
+	if cmd.Flags().Changed("log-sentry") {
+		lc.Sentry.Enabled, _ = cmd.Flags().GetBool("log-sentry") //nolint:errcheck // flag type is known/registered
+	}
+	if cmd.Flags().Changed("log-sentry-level") {
+		lc.Sentry.Level, _ = cmd.Flags().GetString("log-sentry-level") //nolint:errcheck // flag type is known/registered
+	}
 }
 
 // runCoreWithDeps starts and runs the core process using the provided configuration and injectable dependencies.
@@ -164,7 +207,7 @@ manages plugins, and handles game state.`,
 // constructs and starts subsystems under an orchestrator, optionally starts observability, launches the control gRPC server,
 // waits for readiness, handles OS signals and context cancellation, and performs a graceful shutdown.
 // codecov:ignore — tested by integration and E2E tests
-func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.GameConfig, authConfig config.AuthConfig, eventBusConfig eventbus.Config, cryptoConfig config.CryptoConfig, cmd *cobra.Command, deps *CoreDeps) error {
+func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.GameConfig, authConfig config.AuthConfig, eventBusConfig eventbus.Config, cryptoConfig config.CryptoConfig, logConfig config.LoggingConfig, cmd *cobra.Command, deps *CoreDeps) error {
 	// Stamp the bootstrap start as early as possible — anything after this
 	// (config validation, migrations, subsystem starts) shows up as part of
 	// the "process.startup" span's duration when emitted at the ready point.
@@ -181,22 +224,27 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		return oops.Code("CONFIG_INVALID").With("operation", "validate configuration").Wrap(err)
 	}
 
-	// --- 1. Logging + telemetry ---
+	// --- 1. Logging (phase 1: stderr-only) + telemetry ---
 	level, err := resolveLogLevel(cmd)
 	if err != nil {
 		return err
 	}
-	logging.SetDefault("holomush-core", version, cfg.LogFormat, level)
+	stderrLevel := logConfig.Stderr.EffectiveLevel(level)
+	logging.SetDefaultWithBridge("holomush-core", version, cfg.LogFormat, logConfig.Stderr.Enabled, stderrLevel, nil, level)
 
-	telemetryShutdown, telErr := telemetry.Init(ctx, "holomush-core", version)
+	res, telErr := telemetry.Init(ctx, "holomush-core", version, logConfig, level)
 	if telErr != nil {
 		return oops.Code("TELEMETRY_INIT_FAILED").Wrap(telErr)
+	}
+	// Phase 2: re-seat the default logger with the OTel bridge when present.
+	if res.LogHandler != nil {
+		logging.SetDefaultWithBridge("holomush-core", version, cfg.LogFormat, logConfig.Stderr.Enabled, stderrLevel, res.LogHandler, res.LogBridgeLevel)
 	}
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if shutdownErr := telemetryShutdown(shutdownCtx); shutdownErr != nil {
-			slog.Warn("telemetry shutdown error", "error", shutdownErr)
+		if shutdownErr := res.Shutdown(shutdownCtx); shutdownErr != nil {
+			slog.WarnContext(shutdownCtx, "telemetry shutdown error", "error", shutdownErr)
 		}
 	}()
 

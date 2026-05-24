@@ -125,6 +125,43 @@ Keep under 200 lines. Curate — don't hoard.
   bypass test cases — not just the one the implementer touched. Acceptable
   when the helper is end-to-end covered elsewhere; flag as non-blocking gap.
 
+- **Flat CLI flag can't reach a NESTED koanf struct.** `config.Load`
+  (`internal/config/config.go:254-258`) maps every pflag to
+  `section + "." + ReplaceAll(f.Name, "-", "_")` — hyphens→underscores, NO
+  dots. So flag `--log-stderr` becomes key `<section>.log_stderr`, which can
+  ONLY bind a flat field. A nested struct like `LoggingConfig{Stderr
+  LoggingSink koanf:"stderr"{Enabled koanf:"enabled"}}` needs key
+  `logging.stderr.enabled` and is UNREACHABLE from any flag name (you can't
+  emit a dot). All existing working flags (`log-format`→`core.log_format`) are
+  flat fields — that's why the pattern looked fine. YAML binding to the nested
+  struct works (koanf parses YAML nesting natively), so the bug is invisible if
+  you only test YAML. Detection: any new CLI flag targeting a nested koanf
+  struct is dead unless bound explicitly (`cmd.Flags().GetX` + assign in RunE)
+  or via a custom name→key table in the posflag callback. A `--help`-text test
+  (`TestCoreCommand_LogSinkFlags`) does NOT catch this — require a parse-then-
+  assert-config test. Encountered: otel-logs-zgtqo (2026-05-23), all 6 `--log-*`
+  flags inert.
+
+- **Per-sink-floor gate hardwired to global level drops downward overrides.**
+  When a fanout/bridge handler is wrapped in a coarse `levelGate(globalLevel,
+  bridge)` and the real per-sink filtering happens DOWNSTREAM (inside a
+  LoggerProvider's per-sink `Processor`), any per-sink level set BELOW the
+  global level is unreachable — the coarse gate drops the record before the
+  fine filter can pass it. The gate floor must be `min(enabled sink levels)`,
+  not the global level. Symptom: per-sink "raise the floor" works but "lower
+  the floor below global" silently does nothing. Encountered: otel-logs-zgtqo
+  bridge `bridgeLevel=level` at `cmd/holomush/core.go:215` vs spec diagram
+  `floor: min(enabled OTel sinks)` (INV-L4 downward).
+
+- **`packages.Load` p.Imports is DIRECT-only.** An import-guard test iterating
+  `for imp := range p.Imports` (even with `NeedDeps`) sees only the package's
+  DIRECT imports, not transitive ones — `NeedDeps` populates each child
+  `*Package`'s own `.Imports` but the test must recurse to walk them. A guard
+  claiming to catch "transitive" imports of a forbidden package while only
+  ranging `p.Imports` is direct-only. Fine for catching direct SDK use (the
+  usual threat); flag the comment if it overclaims. Encountered: INV-L1 guard
+  in `internal/logging/import_guard_test.go` (2026-05-23).
+
 ## Invariants worth remembering
 
 - **Top-level oops Code() is the wire-visible code**: client-side error

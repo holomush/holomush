@@ -8,7 +8,7 @@ require (
 	connectrpc.com/connect v1.19.2
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/alecthomas/participle/v2 v2.1.4
-	github.com/docker/go-connections v0.7.0
+	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/exaring/otelpgx v0.10.0
 	github.com/gobwas/glob v0.2.3
 	github.com/golang-migrate/migrate/v4 v4.19.1
@@ -68,6 +68,17 @@ require (
 require github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 
 require (
+	github.com/getsentry/sentry-go v0.46.2
+	github.com/getsentry/sentry-go/otel/otlp v0.46.2
+	go.opentelemetry.io/contrib/bridges/otelslog v0.18.0
+	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.19.0
+	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.19.0
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0
+	go.opentelemetry.io/otel/log v0.19.0
+	go.opentelemetry.io/otel/sdk/log v0.19.0
+)
+
+require (
 	cel.dev/expr v0.25.1 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
@@ -94,8 +105,6 @@ require (
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
-	github.com/getsentry/sentry-go v0.46.2 // indirect
-	github.com/getsentry/sentry-go/otel/otlp v0.46.2 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
@@ -155,7 +164,6 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect

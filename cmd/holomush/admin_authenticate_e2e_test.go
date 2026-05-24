@@ -423,7 +423,7 @@ func setupAdminAuthEnv(t *testing.T) *adminAuthEnv {
 
 	serverDone := make(chan error, 1)
 	go func() {
-		serverDone <- runCoreWithDeps(ctx, cfg, gameConfig, authConfig, eventBusConfig, cryptoConfig, cmd, nil)
+		serverDone <- runCoreWithDeps(ctx, cfg, gameConfig, authConfig, eventBusConfig, cryptoConfig, config.DefaultLoggingConfig(), cmd, nil)
 	}()
 
 	socketPath := filepath.Join(xdgRuntime, "holomush", "admin.sock")

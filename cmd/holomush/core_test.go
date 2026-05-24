@@ -50,6 +50,17 @@ func TestCoreCommand_Flags(t *testing.T) {
 	}
 }
 
+func TestCoreCommand_LogSinkFlags(t *testing.T) {
+	cmd := NewCoreCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"--help"})
+	require.NoError(t, cmd.Execute())
+	for _, f := range []string{"--log-sentry", "--log-sentry-level", "--log-otel", "--log-otel-level", "--log-stderr", "--log-stderr-level"} {
+		require.Contains(t, buf.String(), f)
+	}
+}
+
 func TestCoreCommand_DefaultValues(t *testing.T) {
 	cmd := NewCoreCmd()
 
@@ -901,6 +912,22 @@ func TestCoreCommand_GameConfigFallback(t *testing.T) {
 	id, err := ulid.Parse(defaultNexusULID)
 	require.NoError(t, err, "hardcoded default Nexus ULID must be parseable")
 	assert.NotZero(t, id, "parsed ULID should not be zero value")
+}
+
+// TestCoreCommand_LogSinkFlagsBind verifies that explicitly-set --log-* flags
+// overlay onto LoggingConfig (spec §5: CLI > config > default), and that
+// untouched flags leave the config defaults intact.
+func TestCoreCommand_LogSinkFlagsBind(t *testing.T) {
+	cmd := NewCoreCmd()
+	require.NoError(t, cmd.Flags().Parse([]string{
+		"--log-stderr=false", "--log-sentry-level=warn", "--log-otel=false",
+	}))
+	lc := config.DefaultLoggingConfig()
+	applyLogSinkFlags(cmd, &lc)
+	require.False(t, lc.Stderr.Enabled)
+	require.False(t, lc.OTel.Enabled)
+	require.Equal(t, "warn", lc.Sentry.Level)
+	require.True(t, lc.Sentry.Enabled) // untouched flag keeps default
 }
 
 // TestSignalHandling_ChannelSetup verifies that signal handling sets up channels correctly.

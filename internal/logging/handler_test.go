@@ -108,6 +108,53 @@ func TestSetDefaultSetsGlobalLogger(t *testing.T) {
 	assert.NotEqual(t, original, slog.Default(), "SetDefault did not change the default logger")
 }
 
+// captureHandler is a minimal slog.Handler test double.
+type captureHandler struct{ onHandle func(slog.Record) }
+
+func (c captureHandler) Enabled(context.Context, slog.Level) bool { return true }
+func (c captureHandler) Handle(_ context.Context, r slog.Record) error {
+	c.onHandle(r)
+	return nil
+}
+func (c captureHandler) WithAttrs([]slog.Attr) slog.Handler { return c }
+func (c captureHandler) WithGroup(string) slog.Handler      { return c }
+
+func TestSetupWithBridge_TeesToBridge(t *testing.T) {
+	var stderr bytes.Buffer
+	var bridged []string
+	bridge := captureHandler{onHandle: func(r slog.Record) { bridged = append(bridged, r.Message) }}
+
+	logger := SetupWithBridge("svc", "v1", "json", &stderr, true, slog.LevelInfo, bridge, slog.LevelInfo)
+	logger.Info("both")
+
+	require.Contains(t, stderr.String(), "both")
+	require.Equal(t, []string{"both"}, bridged)
+}
+
+func TestSetupWithBridge_NilBridgeStderrOnly(t *testing.T) {
+	var stderr bytes.Buffer
+	logger := SetupWithBridge("svc", "v1", "json", &stderr, true, slog.LevelInfo, nil, slog.LevelInfo)
+	logger.Info("only-stderr")
+	require.Contains(t, stderr.String(), "only-stderr")
+}
+
+func TestSetupWithBridge_StderrDisabledBridgeOnly(t *testing.T) { // INV-L2
+	var stderr bytes.Buffer
+	var bridged []string
+	bridge := captureHandler{onHandle: func(r slog.Record) { bridged = append(bridged, r.Message) }}
+	logger := SetupWithBridge("svc", "v1", "json", &stderr, false, slog.LevelInfo, bridge, slog.LevelInfo)
+	logger.Info("bridge-only")
+	require.Empty(t, stderr.String()) // stderr disabled → nothing written
+	require.Equal(t, []string{"bridge-only"}, bridged)
+}
+
+func TestSetupWithBridge_AllDisabledDiscards(t *testing.T) { // INV-L2
+	var stderr bytes.Buffer
+	logger := SetupWithBridge("svc", "v1", "json", &stderr, false, slog.LevelInfo, nil, slog.LevelInfo)
+	logger.Info("nowhere")
+	require.Empty(t, stderr.String())
+}
+
 func TestSetup_LevelFiltering(t *testing.T) {
 	tests := []struct {
 		name      string

@@ -100,7 +100,12 @@ from telnet and web clients, forwarding commands to the core process.`,
 			if err := config.Load(configFile, cmd, cfg, "gateway"); err != nil {
 				return err
 			}
-			return runGatewayWithDeps(cmd.Context(), cfg, cmd, nil)
+			logConfig := config.DefaultLoggingConfig()
+			if err := config.Load(configFile, cmd, &logConfig, "logging"); err != nil {
+				return err
+			}
+			applyLogSinkFlags(cmd, &logConfig)
+			return runGatewayWithDeps(cmd.Context(), cfg, logConfig, cmd, nil)
 		},
 	}
 
@@ -117,13 +122,14 @@ from telnet and web clients, forwarding commands to the core process.`,
 	cmd.Flags().DurationVar(&cfg.TelnetIdleTimeout, "telnet-idle-timeout", defaultTelnetIdleTimeout, "per-connection idle read timeout")
 	cmd.Flags().DurationVar(&cfg.TelnetWriteTimeout, "telnet-write-timeout", defaultTelnetWriteTimeout, "per-send write deadline")
 	cmd.Flags().DurationVar(&cfg.TelnetPreAuthTimeout, "telnet-pre-auth-timeout", defaultTelnetPreAuthTimeout, "disconnect unauthenticated clients after this duration")
+	registerLogSinkFlags(cmd)
 
 	return cmd
 }
 
 // runGatewayWithDeps starts the gateway process with injectable dependencies.
 // If deps is nil, default implementations are used.
-func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command, deps *GatewayDeps) error {
+func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, logConfig config.LoggingConfig, cmd *cobra.Command, deps *GatewayDeps) error {
 	// Stamp the bootstrap start for the process.startup span emitted at
 	// the ready point below.
 	bootStart := time.Now()
@@ -168,21 +174,27 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		return oops.Code("CONFIG_INVALID").With("operation", "validate configuration").Wrap(err)
 	}
 
+	// --- Logging (phase 1: stderr-only) + telemetry ---
 	level, err := resolveLogLevel(cmd)
 	if err != nil {
 		return err
 	}
-	logging.SetDefault("holomush-gateway", version, cfg.LogFormat, level)
+	stderrLevel := logConfig.Stderr.EffectiveLevel(level)
+	logging.SetDefaultWithBridge("holomush-gateway", version, cfg.LogFormat, logConfig.Stderr.Enabled, stderrLevel, nil, level)
 
-	telemetryShutdown, telErr := telemetry.Init(ctx, "holomush-gateway", version)
+	res, telErr := telemetry.Init(ctx, "holomush-gateway", version, logConfig, level)
 	if telErr != nil {
 		return oops.Code("TELEMETRY_INIT_FAILED").Wrap(telErr)
+	}
+	// Phase 2: re-seat the default logger with the OTel bridge when present.
+	if res.LogHandler != nil {
+		logging.SetDefaultWithBridge("holomush-gateway", version, cfg.LogFormat, logConfig.Stderr.Enabled, stderrLevel, res.LogHandler, res.LogBridgeLevel)
 	}
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if shutdownErr := telemetryShutdown(shutdownCtx); shutdownErr != nil {
-			slog.Warn("telemetry shutdown error", "error", shutdownErr)
+		if shutdownErr := res.Shutdown(shutdownCtx); shutdownErr != nil {
+			slog.WarnContext(shutdownCtx, "telemetry shutdown error", "error", shutdownErr)
 		}
 	}()
 

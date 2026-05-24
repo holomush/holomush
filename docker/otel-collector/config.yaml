@@ -17,6 +17,12 @@ exporters:
     endpoint: jaeger:4317
     tls:
       insecure: true
+  # Dev-only sink for OTLP logs: renders records to the collector's stdout
+  # (visible via `docker logs` / Dozzle). Jaeger ingests traces only, so the
+  # logs pipeline needs its own exporter. Production routes logs to a real
+  # backend (see the operator-deployment collector config).
+  debug:
+    verbosity: detailed
 
 processors:
   batch:
@@ -27,3 +33,7 @@ service:
       receivers: [otlp]
       processors: [batch]
       exporters: [otlp/jaeger]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]

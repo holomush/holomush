@@ -5,6 +5,7 @@ package telemetry_test
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -12,22 +13,23 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 
+	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/telemetry"
 )
 
 func TestInitReturnsNoopProviderWhenEndpointIsEmpty(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
-	shutdown, err := telemetry.Init(context.Background(), "test-svc", "1.0.0")
+	res, err := telemetry.Init(context.Background(), "test-svc", "1.0.0", config.DefaultLoggingConfig(), slog.LevelInfo)
 	require.NoError(t, err)
-	require.NotNil(t, shutdown)
-	require.NoError(t, shutdown(context.Background()))
+	require.NotNil(t, res.Shutdown)
+	require.NoError(t, res.Shutdown(context.Background()))
 }
 
 func TestInitReturnsOTLPProviderWhenEndpointIsSet(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://192.0.2.1:4317")
-	shutdown, err := telemetry.Init(context.Background(), "test-svc", "1.0.0")
+	res, err := telemetry.Init(context.Background(), "test-svc", "1.0.0", config.DefaultLoggingConfig(), slog.LevelInfo)
 	require.NoError(t, err)
-	require.NotNil(t, shutdown)
+	require.NotNil(t, res.Shutdown)
 
 	tp := otel.GetTracerProvider()
 	tracer := tp.Tracer("test")
@@ -37,5 +39,8 @@ func TestInitReturnsOTLPProviderWhenEndpointIsSet(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	_ = shutdown(ctx)
+	// The endpoint is deliberately unreachable, so Shutdown may return a
+	// flush/deadline error — assert it completes without panicking rather than
+	// requiring NoError (which would be flaky against an unreachable collector).
+	require.NotPanics(t, func() { _ = res.Shutdown(ctx) })
 }
