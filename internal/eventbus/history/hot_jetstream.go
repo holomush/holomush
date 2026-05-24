@@ -25,6 +25,14 @@ import (
 // query surfaces quickly.
 const hotFetchTimeout = 5 * time.Second
 
+// hotPrecheckTimeout bounds the subject-emptiness precheck. Short
+// because GetLastMsgForSubject is a metadata lookup that returns in
+// milliseconds in the steady state; a missed deadline here falls
+// through to the existing Fetch path so the worst case is no slower
+// than today (we just pay the full hotFetchTimeout if the precheck
+// itself stalls).
+const hotPrecheckTimeout = 1 * time.Second
+
 // HotTierOption tunes jetStreamHotTier construction.
 type HotTierOption func(*jetStreamHotTier)
 
@@ -93,16 +101,54 @@ func newJetStreamHotTier(js jetstream.JetStream, selector codec.KeySelector, now
 	return h
 }
 
-// Read satisfies HotTier. Builds an OrderedConsumer rooted at the earliest
-// start position implied by q, fetches up to pageSize messages, decodes
-// each, and filters in-process for the Before/After/NotAfter bounds the JS
-// consumer cannot express directly.
+// subjectIsEmpty returns true when GetLastMsgForSubject confirms no
+// message has ever matched subj on eventbus.StreamName. Returns false
+// on success (a message exists), on any lookup error (graceful
+// fallthrough — caller proceeds with the existing Fetch path), and on
+// ctx cancellation (caller's Fetch will also short-circuit on the same
+// ctx). Bounded by hotPrecheckTimeout independently of the caller's
+// ctx so a slow precheck cannot consume the caller's full latency
+// budget.
+func (h *jetStreamHotTier) subjectIsEmpty(ctx context.Context, subj eventbus.Subject) bool {
+	preCtx, cancel := context.WithTimeout(ctx, hotPrecheckTimeout)
+	defer cancel()
+	stream, err := h.js.Stream(preCtx, eventbus.StreamName)
+	if err != nil {
+		return false
+	}
+	if _, lastErr := stream.GetLastMsgForSubject(preCtx, string(subj)); errors.Is(lastErr, jetstream.ErrMsgNotFound) {
+		return true
+	}
+	return false
+}
+
 // Read fetches a page of events from JetStream. The *StreamStateSnapshot
 // parameter is intentionally ignored: the hot tier always derives its own
 // stream state from the query parameters and (for tail reads) a fresh
 // stream.Info() call — see the backward uncursored branch below.
 func (h *jetStreamHotTier) Read(ctx context.Context, q eventbus.HistoryQuery, edge time.Time, pageSize int, _ *StreamStateSnapshot) ([]eventbus.Event, error) {
 	if pageSize <= 0 {
+		return nil, nil
+	}
+	// Subject-emptiness precheck (holomush-87qu connect-latency fix):
+	// GetLastMsgForSubject is a cheap metadata lookup that returns
+	// jetstream.ErrMsgNotFound when no message has ever matched the
+	// subject filter. Without this, cons.Fetch below blocks for the
+	// full hotFetchTimeout (5s) on truly-empty subjects — the
+	// dominant component of fresh-guest connect latency (two ambient
+	// streams × 5s wait = ~10s "syncing" window).
+	//
+	// The NATS-recommended primitive for this use case (per
+	// nats-io/nats.go docs + Stream Management wiki) is exactly
+	// GetLastMsgForSubject + ErrMsgNotFound sentinel. Alternatives
+	// (Stream.Info aggregates, ConsumerInfo.NumPending) require
+	// heavier ops; this is the lightest available probe.
+	//
+	// Failure modes are graceful: if the Stream lookup or precheck
+	// itself errors (e.g. transient ctx deadline, NATS connection
+	// hiccup), we fall through to the existing Fetch path and pay
+	// the same worst-case wait as before — no regression.
+	if h.subjectIsEmpty(ctx, q.Subject) {
 		return nil, nil
 	}
 	// Determine the fetch size (how many messages to request from the JS
