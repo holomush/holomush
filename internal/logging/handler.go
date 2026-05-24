@@ -64,30 +64,37 @@ func (h *traceHandler) WithGroup(name string) slog.Handler {
 	}
 }
 
-// Setup creates a configured slog.Logger.
+// Setup creates a stderr-only logger (unchanged public behaviour).
 // format: "json" or "text" (defaults to "json" if empty)
 // If w is nil, writes to os.Stderr.
 func Setup(service, version, format string, w io.Writer, level slog.Level) *slog.Logger {
+	return SetupWithBridge(service, version, format, w, level, nil, level)
+}
+
+// SetupWithBridge creates a logger that tees stderr (gated at stderrLevel)
+// and, when bridge != nil, an OTel bridge handler (gated at bridgeLevel).
+// When bridge is nil the result is the stderr-only logger (INV-L7).
+func SetupWithBridge(
+	service, version, format string, w io.Writer, stderrLevel slog.Level,
+	bridge slog.Handler, bridgeLevel slog.Level,
+) *slog.Logger {
 	if w == nil {
 		w = os.Stderr
 	}
-
-	var baseHandler slog.Handler
-	opts := &slog.HandlerOptions{Level: level}
-
+	var base slog.Handler
+	opts := &slog.HandlerOptions{Level: stderrLevel}
 	if format == "text" {
-		baseHandler = slog.NewTextHandler(w, opts)
+		base = slog.NewTextHandler(w, opts)
 	} else {
-		baseHandler = slog.NewJSONHandler(w, opts)
+		base = slog.NewJSONHandler(w, opts)
 	}
+	stderrHandler := &traceHandler{handler: base, service: service, version: version}
 
-	handler := &traceHandler{
-		handler: baseHandler,
-		service: service,
-		version: version,
+	if bridge == nil {
+		return slog.New(stderrHandler)
 	}
-
-	return slog.New(handler)
+	gatedBridge := NewLevelGate(bridgeLevel, bridge)
+	return slog.New(NewFanout(stderrHandler, gatedBridge))
 }
 
 // SetDefault sets up and configures the default logger.
