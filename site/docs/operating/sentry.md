@@ -129,9 +129,52 @@ processes / rebuild the web bundle. No code changes required.
 | ----------------------- | --------------------------------------------- | ------------------------------- |
 | Distributed traces      | All spans (OTLP HTTP via Sentry exporter)     | Browser fetch spans + nav spans |
 | Unhandled errors        | Yes, via `sentry.CaptureException` (follow-up wiring required for full coverage; see `holomush-0wun` follow-ups) | Yes, browser SDK auto-captures  |
-| Application logs        | Enabled (`EnableLogs: true`); call `sentry.Logger.Info(...)` to emit | Enabled (`enableLogs: true`); `console.error` + `console.warn` auto-forwarded via `consoleLoggingIntegration` |
+| Application logs        | OTel-native: `log/slog` → OTel `LoggerProvider` → Sentry OTLP-HTTP (`…/integration/otlp/v1/logs`); gated by `logging.sentry.enabled` + `SENTRY_DSN`. No `sentry.Logger` calls in app code. | Enabled (`enableLogs: true`); `console.error` + `console.warn` auto-forwarded via `consoleLoggingIntegration` |
 | Metrics                 | Not wired (no OTel metrics pipeline today)    | Default-enabled (`enableMetrics: true` is the SDK default in 10.x) |
 | Session replay / RUM    | n/a                                           | Not enabled in trial            |
+
+## Application logs (OTel-native)
+
+HoloMUSH's log pipeline is built entirely on OpenTelemetry. All `log/slog`
+calls flow through a single OTel `LoggerProvider` (via the
+`contrib/bridges/otelslog` bridge) and fan out to up to three independently
+configurable sinks.
+
+### Sinks and configuration
+
+| koanf key                | CLI flag              | Default     | Purpose                              |
+| ------------------------ | --------------------- | ----------- | ------------------------------------ |
+| `logging.stderr.enabled` | `--log-stderr`        | `true`      | Toggle stderr output                 |
+| `logging.stderr.level`   | `--log-stderr-level`  | (global)    | Per-sink level override              |
+| `logging.otel.enabled`   | `--log-otel`          | `true`      | Toggle OTLP collector sink           |
+| `logging.otel.level`     | `--log-otel-level`    | (global)    | Per-sink level override              |
+| `logging.sentry.enabled` | `--log-sentry`        | `true`      | Toggle Sentry sink                   |
+| `logging.sentry.level`   | `--log-sentry-level`  | (global)    | Per-sink level override              |
+
+**Toggle + endpoint rule:** a non-stderr sink is active only when its toggle
+is on *and* its endpoint is configured — `OTEL_EXPORTER_OTLP_ENDPOINT` for
+the collector, `SENTRY_DSN` for Sentry. If the endpoint is absent the sink
+is skipped regardless of the toggle.
+
+**Per-sink level overrides:** each sink can filter independently of the
+global `LOG_LEVEL` / `--log-level`. The most common reason to set
+`--log-sentry-level warn` is cost control: Sentry Logs is volume-priced, so
+routing only WARN+ to Sentry while keeping stderr at DEBUG avoids paying for
+every debug trace.
+
+### Trace correlation
+
+Logs carry `trace_id` and `span_id` only when emitted via the
+context-aware slog functions (`slog.InfoContext`, `slog.WarnContext`, etc.).
+Bare `slog.Info(…)` calls produce uncorrelated log records. See
+`.claude/rules/logging.md` for the project MUST on context propagation.
+
+### ERROR logs vs. Sentry Issues
+
+ERROR-level records arrive in the Sentry **Logs** stream as individual
+entries. They do **not** become grouped, deduplicated, alertable Sentry
+**Issues** — that requires `sentry.CaptureException`, which is deferred to a
+follow-up behind a `pkg/errutil` wrapper (ADR `holomush-1wbzn`).
 
 ## Browser tunnel (ad-blocker bypass)
 
@@ -174,9 +217,11 @@ sharing widely.
 
 ## Open follow-ups
 
-This is a foundation PR. Tracked as follow-ups under `holomush-0wun`:
+Tracked as follow-ups under `holomush-0wun`:
 
-- slog handler bridge that fans WARN+ events to `sentry.CaptureException`
-- Connect server interceptor that captures non-OK responses
+- `CaptureException` → Sentry Issues: ERROR-level records currently land in
+  Sentry Logs only. Grouped, deduplicated Issues require a `pkg/errutil`
+  wrapper calling `sentry.CaptureException` — deferred to ADR `holomush-1wbzn`.
+- Connect server interceptor that captures non-OK responses as Issues
 - Plugin runner panic capture
 - Session Replay / RUM browser features (opt-in)
