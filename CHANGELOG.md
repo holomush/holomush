@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.12](https://github.com/holomush/holomush/compare/v0.1.11...v0.1.12) (2026-05-24)
+
+
+### Features
+
+* **observability:** OTel-native application-log surfacing (holomush-zgtqo) ([#4239](https://github.com/holomush/holomush/issues/4239)) ([94da97e](https://github.com/holomush/holomush/commit/94da97e2fe85cd6bac95100884d2ae99b86cb4fc))
+
 ## [0.1.11](https://github.com/holomush/holomush/compare/v0.1.10...v0.1.11) (2026-05-24)
 
 
