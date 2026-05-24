@@ -131,15 +131,17 @@ Two surfaces, by nature of the value:
 | `logging.otel.enabled` | `--log-otel` | `true` | Toggle collector sink |
 | `logging.otel.level` | `--log-otel-level` | global | Per-sink floor |
 | `logging.sentry.enabled` | `--log-sentry` | `true` | Toggle Sentry sink |
-| `logging.sentry.level` | `--log-sentry-level` | global | Per-sink floor |
+| `logging.sentry.level` | `--log-sentry-level` | `warn` | Per-sink floor (cost control; Sentry Logs is volume-priced) |
 
 - **Effective enablement** of a sink = `config.enabled` **AND** its
   endpoint is present (stderr has no endpoint, so it depends only on the
   toggle). This lets an operator with `SENTRY_DSN` set send traces to
   Sentry while keeping `logging.sentry.enabled: false`.
 - **Level precedence** per sink: explicit per-sink level > global
-  `LOG_LEVEL` / `--log-level`. Per-sink level defaults to the global
-  level when unset.
+  `LOG_LEVEL` / `--log-level`. The stderr and collector sinks default to the
+  global level when unset; the Sentry sink defaults to `warn`
+  (`config.SentryLogLevelDefault`) so info/debug never reach the volume-priced
+  Sentry Logs view regardless of the global level.
 - Flag/config/env precedence follows the existing `config.Load` order
   (CLI flag > config file > built-in default), matching `log_format`.
 

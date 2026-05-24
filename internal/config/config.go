@@ -212,12 +212,21 @@ type LoggingConfig struct {
 	Sentry LoggingSink `koanf:"sentry"`
 }
 
-// DefaultLoggingConfig enables all three sinks with global-inherited levels.
+// SentryLogLevelDefault is the built-in floor for the Sentry log sink. Sentry's
+// Logs view is for actionable signal, not a debug firehose: info/debug records
+// carry no incident value there and would dominate the project's log quota, so
+// the Sentry sink defaults to WARN independent of the (typically lower) global
+// level. Stderr and the collector still inherit the global level. Operators can
+// override via logging.sentry.level / --log-sentry-level.
+const SentryLogLevelDefault = "warn"
+
+// DefaultLoggingConfig enables all three sinks. Stderr and the collector inherit
+// the global level; the Sentry sink defaults to SentryLogLevelDefault (WARN).
 func DefaultLoggingConfig() LoggingConfig {
 	return LoggingConfig{
 		Stderr: LoggingSink{Enabled: true},
 		OTel:   LoggingSink{Enabled: true},
-		Sentry: LoggingSink{Enabled: true},
+		Sentry: LoggingSink{Enabled: true, Level: SentryLogLevelDefault},
 	}
 }
 

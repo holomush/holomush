@@ -15,6 +15,17 @@ func TestLoggingConfig_Defaults(t *testing.T) {
 	require.True(t, c.Stderr.Enabled)
 	require.True(t, c.OTel.Enabled)
 	require.True(t, c.Sentry.Enabled)
+
+	// Stderr and the collector inherit the global level (empty per-sink
+	// level); the Sentry sink defaults to WARN so info/debug never reach
+	// the Sentry Logs view regardless of the global level.
+	require.Empty(t, c.Stderr.Level)
+	require.Empty(t, c.OTel.Level)
+	require.Equal(t, SentryLogLevelDefault, c.Sentry.Level)
+
+	// The default Sentry level must actually resolve to WARN, and must hold
+	// that floor even when the global level is lower (debug).
+	require.Equal(t, slog.LevelWarn, c.Sentry.EffectiveLevel(slog.LevelDebug))
 }
 
 func TestLoggingSink_EffectiveLevel(t *testing.T) { // INV-L4
