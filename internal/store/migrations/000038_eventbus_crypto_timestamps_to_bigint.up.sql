@@ -10,6 +10,14 @@
 -- guards on information_schema.columns.data_type, so re-running this migration
 -- (recovery replays, partial-apply retries) is safe. Pattern mirrors
 -- 000017_events_audit_envelope_rename.up.sql.
+--
+-- Overflow-safe (INV-TS-9): each TYPE USING clause converts in numeric and
+-- clamps with GREATEST/LEAST to the int64-ns range, so pre-existing values
+-- beyond ~[1678, 2262] or ±infinity saturate to the int64 bounds instead of
+-- raising "bigint out of range" (SQLSTATE 22003). NULL is guarded explicitly
+-- (LEAST/GREATEST ignore NULL inputs). SET DEFAULT keeps now()*1e9 — now()
+-- cannot overflow. Backfills the gap that wedged the sandbox deploy
+-- (holomush-0b3ec).
 
 DO $$
 BEGIN
@@ -32,7 +40,7 @@ BEGIN
       AND column_name = 'timestamp'
       AND data_type = 'timestamp with time zone'
   ) THEN
-    EXECUTE 'ALTER TABLE events_audit ALTER COLUMN timestamp TYPE BIGINT USING (EXTRACT(EPOCH FROM timestamp) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE events_audit ALTER COLUMN timestamp TYPE BIGINT USING CASE WHEN timestamp IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM timestamp) * 1000000000))::bigint END';
   END IF;
 
   -- events_audit.inserted_at → BIGINT
@@ -43,7 +51,7 @@ BEGIN
       AND column_name = 'inserted_at'
       AND data_type = 'timestamp with time zone'
   ) THEN
-    EXECUTE 'ALTER TABLE events_audit ALTER COLUMN inserted_at TYPE BIGINT USING (EXTRACT(EPOCH FROM inserted_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE events_audit ALTER COLUMN inserted_at TYPE BIGINT USING CASE WHEN inserted_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM inserted_at) * 1000000000))::bigint END';
   END IF;
 
   -- events_audit.inserted_at — new BIGINT default; only set if no default present
@@ -75,7 +83,7 @@ BEGIN
       AND column_name = 'created_at'
       AND data_type = 'timestamp with time zone'
   ) THEN
-    EXECUTE 'ALTER TABLE crypto_keys ALTER COLUMN created_at TYPE BIGINT USING (EXTRACT(EPOCH FROM created_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE crypto_keys ALTER COLUMN created_at TYPE BIGINT USING CASE WHEN created_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM created_at) * 1000000000))::bigint END';
   END IF;
 
   -- crypto_keys.rotated_at → BIGINT (nullable, no default)
@@ -86,7 +94,7 @@ BEGIN
       AND column_name = 'rotated_at'
       AND data_type = 'timestamp with time zone'
   ) THEN
-    EXECUTE 'ALTER TABLE crypto_keys ALTER COLUMN rotated_at TYPE BIGINT USING (EXTRACT(EPOCH FROM rotated_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE crypto_keys ALTER COLUMN rotated_at TYPE BIGINT USING CASE WHEN rotated_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM rotated_at) * 1000000000))::bigint END';
   END IF;
 
   -- crypto_keys.destroyed_at → BIGINT (nullable, no default)
@@ -97,7 +105,7 @@ BEGIN
       AND column_name = 'destroyed_at'
       AND data_type = 'timestamp with time zone'
   ) THEN
-    EXECUTE 'ALTER TABLE crypto_keys ALTER COLUMN destroyed_at TYPE BIGINT USING (EXTRACT(EPOCH FROM destroyed_at) * 1e9)::BIGINT';
+    EXECUTE 'ALTER TABLE crypto_keys ALTER COLUMN destroyed_at TYPE BIGINT USING CASE WHEN destroyed_at IS NULL THEN NULL ELSE GREATEST((-9223372036854775808)::numeric, LEAST(9223372036854775807::numeric, EXTRACT(EPOCH FROM destroyed_at) * 1000000000))::bigint END';
   END IF;
 
   -- crypto_keys.created_at — new BIGINT default

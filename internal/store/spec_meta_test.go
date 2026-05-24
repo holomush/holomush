@@ -18,8 +18,9 @@ import (
 // TestNanosecondTimestampsInvariantsHaveNamedTests is the drift detector
 // for the invariants table in
 // docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md §5.
-// For each INV-TS-N (1..7), the test verifies the named test that pins
-// the invariant exists somewhere in the repo's *_test.go corpus.
+// For each INV-TS-N (1..7 and 9; INV-TS-8 was dropped — see the §7
+// future-work table), the test verifies the named test that pins the
+// invariant exists somewhere in the repo's *_test.go corpus.
 //
 // "Named test" matches against two surfaces collected from the source AST:
 //   - Top-level `func Test*(t *testing.T)` declarations (idiomatic
@@ -64,6 +65,12 @@ func TestNanosecondTimestampsInvariantsHaveNamedTests(t *testing.T) {
 		{"INV-TS-6", "TestDispatchDeliveryDropsEventEmittedInSameNanosecondAsArrival"},
 		// INV-TS-7: floor includes exact-floor-ns events
 		{"INV-TS-7", "TestDispatchDeliveryIncludesEventAtExactFloorNanosecond"},
+		// INV-TS-9: conversion migrations saturate out-of-range/infinity to
+		// int64-ns bounds, preserve NULL (Describe string is the pinned
+		// identifier — suite-registered under TestStore). INV-TS-8 was dropped
+		// (former wire-format invariant; see §7 future-work table), so the
+		// number is intentionally skipped.
+		{"INV-TS-9", "INV-TS-9: TIMESTAMPTZ→BIGINT conversion saturates out-of-range and infinity to int64-ns bounds and preserves NULL"},
 	}
 
 	repoRoot := findRepoRoot(t)
