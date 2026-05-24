@@ -201,6 +201,19 @@ Keep under 200 lines. Curate — don't hoard.
   or snapshot inside RLock. Check this pattern whenever a new late-bound field
   is added to Host.
 
+- **FK cascade fix over-reach contradicts crypto soft-delete spec**: a bug fix
+  that adds `ON DELETE CASCADE` to fix one FK (e.g. guest reaper needs only
+  `player_character_bindings.player_id` cascade) must NOT also cascade
+  `character_id`. The crypto design spec
+  (`docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md:732-734`)
+  mandates character deletion SOFT-deletes bindings (`ended_at`/`ended_reason`)
+  and explicitly "do NOT cascade-delete them" — historical `binding_id` is
+  forensic-retention substrate in `crypto_keys.participants[]`. `Service.DeleteCharacter`
+  (`internal/world/service.go:602` → `character_repo.go:77 DELETE FROM characters`)
+  is a live method (no prod caller yet, Phase-4-deferred). Always scope a cascade
+  fix to the exact FK the bug needs and check the touched table against any
+  soft-delete lifecycle spec before widening. Encountered 2026-05-23 (21bd9).
+
 - **Plan-file markdown breaks lint gate**: `task lint` includes `rumdl` markdown
   lint over `docs/`. A stray bare ` ``` ` fence will fail `lint:markdown` and
   block CI. Run `task lint` after any plan file edit.

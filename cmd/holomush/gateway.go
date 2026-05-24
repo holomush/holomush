@@ -37,6 +37,7 @@ type gatewayConfig struct {
 	WebAddr              string        `koanf:"web_addr"`
 	WebDir               string        `koanf:"web_dir"`
 	CORSOrigins          []string      `koanf:"cors_origins"`
+	SecureCookies        bool          `koanf:"secure_cookies"`
 	TelnetMaxConns       int           `koanf:"telnet_max_conns"`
 	TelnetIdleTimeout    time.Duration `koanf:"telnet_idle_timeout"`
 	TelnetWriteTimeout   time.Duration `koanf:"telnet_write_timeout"`
@@ -111,6 +112,7 @@ from telnet and web clients, forwarding commands to the core process.`,
 	cmd.Flags().StringVar(&cfg.WebAddr, "web-addr", defaultWebAddr, "web HTTP listen address")
 	cmd.Flags().StringVar(&cfg.WebDir, "web-dir", "", "override embedded static files with directory path")
 	cmd.Flags().StringSliceVar(&cfg.CORSOrigins, "cors-origins", nil, "allowed CORS origins (e.g., http://localhost:5173)")
+	cmd.Flags().BoolVar(&cfg.SecureCookies, "secure-cookies", false, "set the Secure flag + SameSite=Strict on session cookies (MUST be true for any TLS-served deployment; default false for local plain-HTTP dev)")
 	cmd.Flags().IntVar(&cfg.TelnetMaxConns, "telnet-max-conns", defaultTelnetMaxConns, "max concurrent telnet connections")
 	cmd.Flags().DurationVar(&cfg.TelnetIdleTimeout, "telnet-idle-timeout", defaultTelnetIdleTimeout, "per-connection idle read timeout")
 	cmd.Flags().DurationVar(&cfg.TelnetWriteTimeout, "telnet-write-timeout", defaultTelnetWriteTimeout, "per-send write deadline")
@@ -296,6 +298,7 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		Handler:     webHandler,
 		WebDir:      cfg.WebDir,
 		CORSOrigins: cfg.CORSOrigins,
+		Secure:      cfg.SecureCookies,
 		// Forward the configured DSN so the web server can register the
 		// /api/sentry-relay tunnel endpoint. Empty = no relay (and no
 		// open-proxy risk).

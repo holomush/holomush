@@ -517,6 +517,53 @@ func TestPlayerRepository_DefaultCharacterID(t *testing.T) {
 	})
 }
 
+// TestPlayerRepository_DeleteGuestPlayer_CascadesBindings is the regression
+// lock for holomush-21bd9: before migration 000040 the
+// player_character_bindings.player_id FK had no ON DELETE CASCADE, so reaping a
+// guest that had a character binding failed with SQLSTATE 23503 and the
+// GuestReaper logged a WARN every interval forever. This reproduces that exact
+// shape (guest player + character + active binding) and asserts the delete now
+// succeeds and cascades.
+func TestPlayerRepository_DeleteGuestPlayer_CascadesBindings(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewPlayerRepository(testPool)
+
+	guestID := ulid.Make()
+	charID := ulid.Make()
+	bindingID := ulid.Make()
+
+	_, err := testPool.Exec(ctx,
+		`INSERT INTO players (id, username, password_hash, is_guest) VALUES ($1, $2, '', true)`,
+		guestID.String(), "guest_cascade_"+guestID.String())
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(ctx, `DELETE FROM players WHERE id = $1`, guestID.String())
+	})
+
+	_, err = testPool.Exec(ctx,
+		`INSERT INTO characters (id, player_id, name) VALUES ($1, $2, $3)`,
+		charID.String(), guestID.String(), "Guest Char")
+	require.NoError(t, err)
+
+	_, err = testPool.Exec(ctx,
+		`INSERT INTO player_character_bindings (id, player_id, character_id) VALUES ($1, $2, $3)`,
+		bindingID.String(), guestID.String(), charID.String())
+	require.NoError(t, err)
+
+	err = repo.DeleteGuestPlayer(ctx, guestID)
+	require.NoError(t, err, "deleting a guest with a character binding must not violate the FK")
+
+	var bindings int
+	require.NoError(t, testPool.QueryRow(ctx,
+		`SELECT count(*) FROM player_character_bindings WHERE player_id = $1`, guestID.String()).Scan(&bindings))
+	assert.Zero(t, bindings, "binding should cascade-delete with the guest player")
+
+	var chars int
+	require.NoError(t, testPool.QueryRow(ctx,
+		`SELECT count(*) FROM characters WHERE id = $1`, charID.String()).Scan(&chars))
+	assert.Zero(t, chars, "character should cascade-delete with the guest player")
+}
+
 // Compile-time interface check.
 var _ auth.PlayerRepository = (*postgres.PlayerRepository)(nil)
 
