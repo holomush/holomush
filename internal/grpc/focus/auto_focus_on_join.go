@@ -61,12 +61,12 @@ func isTerminalLike(clientType string) bool {
 //  4. For each filtered connection, call UpdateSessionConnection under one
 //     Store-lock acquisition. The mutator applies:
 //     - D8 skip-rule (INV-P5-11): conn.FocusKey != nil && *FocusKey != target →
-//       return unchanged + record in SkippedConnectionIDs.
+//     return unchanged + record in SkippedConnectionIDs.
 //     - INV-P5-1 membership gate: FocusMemberships lacks target → return
-//       FOCUS_WITHOUT_MEMBERSHIP error → record in FailedConnectionIDs with
-//       reason "membership_absent".
+//     FOCUS_WITHOUT_MEMBERSHIP error → record in FailedConnectionIDs with
+//     reason "membership_absent".
 //     - Apply: conn.FocusKey = &target; terminal→ info.PresentingFocus = &target (D9);
-//       record in FocusedConnectionIDs.
+//     record in FocusedConnectionIDs.
 //  5. CONNECTION_NOT_FOUND from UpdateSessionConnection (rare race): record in
 //     FailedConnectionIDs with reason "connection_not_found".
 func (c *defaultCoordinator) AutoFocusOnJoin(

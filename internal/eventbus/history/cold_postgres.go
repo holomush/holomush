@@ -209,9 +209,9 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 	first := true
 	for rows.Next() {
 		var (
-			idBytes        []byte
-			subjectStr     string
-			eventType      string
+			idBytes    []byte
+			subjectStr string
+			eventType  string
 			// ts is scanned for column-position alignment with the SELECT list
 			// only; Event.Timestamp is recovered from envelopeBytes via
 			// decodeColdRow's proto.Unmarshal (INV-TS-5 AAD byte-equality).

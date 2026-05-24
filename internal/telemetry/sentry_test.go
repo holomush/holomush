@@ -11,13 +11,13 @@ import (
 
 func TestReadSentryEnv(t *testing.T) {
 	tests := []struct {
-		name             string
-		env              map[string]string
-		wantOK           bool
-		wantDSN          string
-		wantEnvironment  string
-		wantRelease      string
-		wantSampleRate   float64
+		name            string
+		env             map[string]string
+		wantOK          bool
+		wantDSN         string
+		wantEnvironment string
+		wantRelease     string
+		wantSampleRate  float64
 	}{
 		{
 			name:   "disabled when DSN unset",
@@ -63,8 +63,8 @@ func TestReadSentryEnv(t *testing.T) {
 				"SENTRY_DSN":                "https://key@o0.ingest.sentry.io/0",
 				"SENTRY_TRACES_SAMPLE_RATE": "2.5",
 			},
-			wantOK:         true,
-			wantDSN:        "https://key@o0.ingest.sentry.io/0",
+			wantOK:  true,
+			wantDSN: "https://key@o0.ingest.sentry.io/0",
 			// Out-of-range values fall back to the 1.0 default; explicit
 			// clamping would mask operator typos that should be visible
 			// at startup.

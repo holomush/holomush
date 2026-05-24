@@ -89,7 +89,8 @@ func TestNanosecondTimestampsInvariantsHaveNamedTests(t *testing.T) {
 					"phase-5-deferred guard fires for %s test %q (which now exists). "+
 						"Remove the entry from phaseFiveDeferred (plan Task 22 Step 6) "+
 						"to restore drift detection. This failure is the cleanup obligation.",
-					tc.inv, tc.testName)
+					tc.inv, tc.testName,
+				)
 				return
 			}
 			if _, ok := testNames[tc.testName]; !ok {

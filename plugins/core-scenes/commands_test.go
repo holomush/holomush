@@ -458,19 +458,19 @@ type setConnFocusCall struct {
 }
 
 type fakeFocusClient struct {
-	joinCalls           []focusCall
-	leaveCalls          []focusCall
-	leaveByTargetCalls  []pluginsdk.FocusKey
-	presentCalls        []focusCall
-	setConnFocusCalls   []setConnFocusCall
+	joinCalls            []focusCall
+	leaveCalls           []focusCall
+	leaveByTargetCalls   []pluginsdk.FocusKey
+	presentCalls         []focusCall
+	setConnFocusCalls    []setConnFocusCall
 	autoFocusOnJoinCalls []autoFocusOnJoinCall
 
-	joinErr             error
-	leaveErr            error
-	leaveByTargetErr    error
-	leaveByTargetResult pluginsdk.LeaveByTargetResult
-	presentErr          error
-	setConnFocusErr     error
+	joinErr               error
+	leaveErr              error
+	leaveByTargetErr      error
+	leaveByTargetResult   pluginsdk.LeaveByTargetResult
+	presentErr            error
+	setConnFocusErr       error
 	autoFocusOnJoinResult pluginsdk.AutoFocusOnJoinResult
 	autoFocusOnJoinErr    error
 

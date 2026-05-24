@@ -708,7 +708,8 @@ func TestHandleCommand_ConnectionIDThreadedToExecution(t *testing.T) {
 	dispatcher, err := command.NewDispatcher(reg, policyEngine)
 	require.NoError(t, err)
 
-	server := NewCoreServer(engine, sessStore, dispatcher, svc,
+	server := NewCoreServer(
+		engine, sessStore, dispatcher, svc,
 		WithEventStore(store),
 		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
 	)

@@ -23,16 +23,16 @@ import (
 )
 
 type mockFocusOps struct {
-	joinCalls            []focusOpCall
-	leaveCalls           []focusOpCall
-	leaveByTargetCalls   []session.FocusKey
-	leaveByTargetResult  session.LeaveByTargetResult
-	leaveByTargetErr     error
-	presentCalls         []focusOpCall
-	setConnFocusCalls    []setConnFocusCall
-	joinErr              error
-	leaveErr             error
-	presentErr           error
+	joinCalls           []focusOpCall
+	leaveCalls          []focusOpCall
+	leaveByTargetCalls  []session.FocusKey
+	leaveByTargetResult session.LeaveByTargetResult
+	leaveByTargetErr    error
+	presentCalls        []focusOpCall
+	setConnFocusCalls   []setConnFocusCall
+	joinErr             error
+	leaveErr            error
+	presentErr          error
 }
 
 // setConnFocusCall captures inputs to SetConnectionFocus so tests
@@ -588,7 +588,7 @@ func TestFocusHostfunc_PhaseFive_LuaParity(t *testing.T) {
 	ls := lua.NewState()
 	defer ls.Close()
 	mod := ls.NewTable()
-	hostfunc.RegisterFocusFuncs(ls, mod, /* mocks */ nil, nil)
+	hostfunc.RegisterFocusFuncs(ls, mod /* mocks */, nil, nil)
 
 	for _, name := range []string{"set_connection_focus", "auto_focus_on_join", "is_any_conn_focused"} {
 		fn := ls.GetField(mod, name)

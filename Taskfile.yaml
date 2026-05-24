@@ -568,7 +568,7 @@ tasks:
   fmt:go:
     desc: Format Go code
     cmds:
-      - gofumpt -w .
+      - "{{.GO_TOOL}} gofumpt -w ."
 
   fmt:markdown:
     desc: Format Markdown files
@@ -592,6 +592,17 @@ tasks:
       - dprint check
       - rumdl fmt --check --exclude 'site,.git,.beads,.serena,.claude,CHANGELOG.md' .
       - rumdl fmt --check --config site/.rumdl.toml site/
+      # gofumpt is run via the same pinned go-tool version as fmt:go, so this
+      # gate can never disagree with `task fmt` (no local-vs-CI skew). Lists
+      # offending files and fails; `task fmt` fixes them.
+      - |
+        drift=$({{.GO_TOOL}} gofumpt -l .)
+        if [ -n "$drift" ]; then
+          echo "gofumpt formatting drift in:" >&2
+          echo "$drift" >&2
+          echo "Run 'task fmt' to fix." >&2
+          exit 1
+        fi
 
   # ──────────────────────────────────────────
   # License headers
@@ -745,10 +756,10 @@ tasks:
   setup:
     desc: Install all dev tools and git hooks
     cmds:
-      # golangci-lint, actionlint, yamlfmt, gotestsum are pinned in the
-      # go.tool*.mod modules and run via `go tool` (see GO_TOOL vars) — no
+      # golangci-lint, actionlint, yamlfmt, gotestsum, gofumpt are pinned in
+      # the go.tool*.mod modules and run via `go tool` (see GO_TOOL vars) — no
       # brew install needed. yq stays: shell scripts call it on PATH directly.
-      - brew install go-task gofumpt lefthook goreleaser dprint cocogitto rumdl binaryen flock bats-core yq
+      - brew install go-task lefthook goreleaser dprint cocogitto rumdl binaryen flock bats-core yq
       - brew install steveyegge/beads/bd
       - go install github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc@latest
       - go install github.com/google/addlicense@latest

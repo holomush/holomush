@@ -110,4 +110,3 @@ func repoRoot(t *testing.T) string {
 	t.Fatalf("could not locate go.mod above %s", cwd)
 	return ""
 }
-
