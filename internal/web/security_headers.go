@@ -24,24 +24,35 @@ const (
 	// avoid trapping dev-mode plain-HTTP clients into HTTPS-only for a year.
 	hdrHSTSValue = "max-age=31536000; includeSubDomains"
 
-	// hdrCSPValue — conservative CSP for the SvelteKit SPA in production:
-	//   - default-src 'self'              all fetches default to same-origin
-	//   - connect-src 'self' ws: wss:     allow WebSocket + ConnectRPC to origin
-	//   - img-src 'self' data:            allow inline data-URI images (icons)
-	//   - style-src 'self' 'unsafe-inline' Svelte component styles need inline
-	//   - script-src 'self'               no inline scripts in prod builds
-	//   - frame-ancestors 'none'          modern clickjacking protection
+	// hdrCSPValue — the header half of the SPA's Content-Security-Policy.
 	//
-	// Only emitted when Secure=true because Vite dev-mode injects inline
-	// <script> tags that violate script-src 'self'. If this breaks the SPA
-	// even in production, promote to a Config option (opt-in) rather than
-	// relaxing the policy for all deployments.
-	hdrCSPValue = "default-src 'self'; " +
-		"connect-src 'self' ws: wss:; " +
-		"img-src 'self' data:; " +
-		"style-src 'self' 'unsafe-inline'; " +
-		"script-src 'self'; " +
-		"frame-ancestors 'none'"
+	// CSP for this SPA is deliberately split across two policies:
+	//
+	//   1. This response header carries only the directives that *cannot* be
+	//      expressed in a <meta> tag or that benefit from header-level enforcement:
+	//        - frame-ancestors 'none'  clickjacking protection (browsers IGNORE
+	//                                  frame-ancestors when set via <meta>, so it
+	//                                  MUST live on the header)
+	//        - base-uri 'self'         block <base> tag injection
+	//        - object-src 'none'       no plugins/embeds
+	//
+	//   2. SvelteKit emits a <meta http-equiv="content-security-policy"> tag in the
+	//      prerendered HTML (configured via `csp: { mode: 'hash' }` in
+	//      web/svelte.config.js) carrying default-src/script-src/style-src/img-src/
+	//      connect-src, where script-src includes the per-build sha256 hashes of
+	//      SvelteKit's inline hydration bootstrap.
+	//
+	// The split is load-bearing: two CSPs are enforced independently and a resource
+	// must satisfy ALL of them. If this header also set `script-src 'self'` (or a
+	// `default-src 'self'` that scripts fall back to), it would block SvelteKit's
+	// hashed inline bootstrap — the adapter-static build mounts the app from an
+	// inline <script>, and a static (frozen) document cannot use a per-request
+	// nonce, so the hash in the meta tag is the only way to allow it. Setting the
+	// document's script policy here would re-introduce the blank-page regression
+	// (holomush-11ape).
+	hdrCSPValue = "frame-ancestors 'none'; " +
+		"base-uri 'self'; " +
+		"object-src 'none'"
 )
 
 // SecurityHeadersMiddleware wraps next with a standard set of HTTP security
@@ -54,7 +65,9 @@ const (
 //
 // Secure-only headers (set only when secure=true, which tracks TLS deployment):
 //   - Strict-Transport-Security: max-age=31536000; includeSubDomains
-//   - Content-Security-Policy: conservative SPA policy (see hdrCSPValue)
+//   - Content-Security-Policy: header half of the split SPA policy (see
+//     hdrCSPValue); the script/style/connect half ships as a <meta> tag in the
+//     SvelteKit build
 //
 // Headers are set before delegating to next, so they appear on any response
 // the inner handler emits — including errors, redirects, and streaming frames.

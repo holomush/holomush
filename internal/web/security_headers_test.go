@@ -53,20 +53,39 @@ func TestSecurityHeadersSetsHSTSInSecureMode(t *testing.T) {
 		rec.Header().Get("Strict-Transport-Security"))
 }
 
-func TestSecurityHeadersSetsCSPInSecureMode(t *testing.T) {
+func TestSecurityHeadersSetsHeaderHalfOfSplitCSPInSecureMode(t *testing.T) {
 	handler := SecurityHeadersMiddleware(true, okHandler())
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
 
+	// The header carries only the directives that cannot live in a <meta> tag.
+	// frame-ancestors in particular is ignored by browsers when set via <meta>,
+	// so it MUST be enforced here.
 	csp := rec.Header().Get("Content-Security-Policy")
-	assert.Contains(t, csp, "default-src 'self'")
-	assert.Contains(t, csp, "connect-src 'self' ws: wss:")
-	assert.Contains(t, csp, "img-src 'self' data:")
-	assert.Contains(t, csp, "style-src 'self' 'unsafe-inline'")
-	assert.Contains(t, csp, "script-src 'self'")
 	assert.Contains(t, csp, "frame-ancestors 'none'")
+	assert.Contains(t, csp, "base-uri 'self'")
+	assert.Contains(t, csp, "object-src 'none'")
+}
+
+func TestSecurityHeadersOmitsDocumentScriptPolicyFromHeaderInSecureMode(t *testing.T) {
+	handler := SecurityHeadersMiddleware(true, okHandler())
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	// script-src/default-src MUST NOT appear on the header: they are owned by the
+	// SvelteKit <meta> CSP (hash mode), which carries the sha256 of the inline
+	// hydration bootstrap. A same-origin script-src here would be enforced
+	// alongside the meta policy and block that bootstrap — the blank-page
+	// regression (holomush-11ape).
+	csp := rec.Header().Get("Content-Security-Policy")
+	assert.NotContains(t, csp, "script-src",
+		"document script policy must come from the SvelteKit meta CSP, not the header")
+	assert.NotContains(t, csp, "default-src",
+		"a default-src here would act as a script-src fallback and block the inline bootstrap")
 }
 
 func TestSecurityHeadersSetsAlwaysOnHeadersInSecureMode(t *testing.T) {
