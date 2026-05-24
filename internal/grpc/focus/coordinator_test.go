@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 )
 
 // stubPolicy is a test KindPolicy that returns configurable streams.
@@ -49,7 +50,7 @@ func (s *capturingSender) Send(sessionID, stream string, add bool, mode ReplayMo
 
 func newTestCoordinator(t *testing.T, sessions map[string]*session.Info, policies ...KindPolicy) (*defaultCoordinator, *capturingSender) {
 	t.Helper()
-	store := session.NewMemStore()
+	store := sessiontest.NewStore(t)
 	ctx := context.Background()
 	for id, info := range sessions {
 		if info.ID == "" {
@@ -69,7 +70,7 @@ func newTestCoordinator(t *testing.T, sessions map[string]*session.Info, policie
 }
 
 func TestNewCoordinatorSucceedsWithRequiredDeps(t *testing.T) {
-	store := session.NewMemStore()
+	store := sessiontest.NewStore(t)
 	coord, err := NewCoordinator(WithSessionStore(store))
 	require.NoError(t, err)
 	assert.NotNil(t, coord)
@@ -82,7 +83,7 @@ func TestNewCoordinatorFailsWithoutSessionStore(t *testing.T) {
 }
 
 func TestNewCoordinatorAcceptsAllOptions(t *testing.T) {
-	store := session.NewMemStore()
+	store := sessiontest.NewStore(t)
 	sender := &capturingSender{}
 	coord, err := NewCoordinator(
 		WithSessionStore(store),
@@ -98,7 +99,7 @@ func TestNewCoordinatorAcceptsAllOptions(t *testing.T) {
 }
 
 func TestNewCoordinatorRegistersKindPolicy(t *testing.T) {
-	store := session.NewMemStore()
+	store := sessiontest.NewStore(t)
 	null := NewNullPolicy(session.FocusKindScene)
 	coord, err := NewCoordinator(WithSessionStore(store), WithKindPolicy(null))
 	require.NoError(t, err)

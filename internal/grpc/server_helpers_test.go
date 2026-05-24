@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -248,7 +249,7 @@ func TestServerOptionClosuresAssignFields(t *testing.T) {
 	// each closure set its corresponding field.
 	gameIDFn := func() string { return "g1" }
 	opts := []CoreServerOption{
-		WithSessionStore(session.NewMemStore()),
+		WithSessionStore(sessiontest.NewStore(t)),
 		WithSessionDefaults(SessionDefaults{TTL: time.Minute, MaxHistory: 10, MaxReplay: 5}),
 		WithEventStore(&mockEventStore{}),
 		WithWorldQuerier(nil),

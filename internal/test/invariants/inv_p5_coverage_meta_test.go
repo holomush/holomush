@@ -94,15 +94,19 @@ func TestINV_P5_Coverage_Meta(t *testing.T) {
 		},
 		// INV-P5-7: Phase 5 multi-field focus mutations MUST be applied via a single
 		// SessionConnectionMutator invocation under one Store-lock acquisition (D7).
-		// Pinned by the atomic-commit test in memstore_test.go.
-		// Note: spec §10 also cites TestSetConnectionFocus_RoutesViaCoordinator and
-		// TestSessionConnectionMutator_OnlyConstructibleInGrpcFocus but the
-		// corresponding test is TestUpdateSessionConnection_AtomicCommit (truth = current code
-		// per plan table; RoutesViaCoordinator was not implemented in coordinator_test.go).
+		// Originally pinned by the atomic-commit test in the deleted in-memory store
+		// (memstore_test.go). Now pinned by TestPostgresUpdateSessionConnection_HappyPath
+		// which verifies both Connection.FocusKey and Info.PresentingFocus commit
+		// atomically in a single Postgres transaction (session_store_integration_test.go).
+		// Accepted coverage shift: the in-memory version needed explicit goroutine
+		// coordination to prove its mutex protected against torn reads; the Postgres
+		// impl gets all-or-nothing atomicity and rollback-on-error structurally from
+		// transaction semantics (single UPDATE inside a tx with defer Rollback), so a
+		// dedicated rollback/torn-state test is not required to uphold INV-P5-7.
 		{
 			inv:      "INV-P5-7",
-			testName: "TestUpdateSessionConnection_AtomicCommit",
-			note:     "atomicity pin in memstore_test.go; spec §10 also cited RoutesViaCoordinator (not present in corpus)",
+			testName: "TestPostgresUpdateSessionConnection_HappyPath",
+			note:     "atomicity pin migrated to Postgres integration test after in-memory store deletion (holomush-9mxr Task 16)",
 		},
 		// INV-P5-9: ULID encoding boundary — proto wire = bytes (16-byte); Lua hostfunc
 		// accepts 26-char base32 strings; malformed → INVALID_ULID.

@@ -422,17 +422,15 @@ type Store interface {
 	ListByFocus(ctx context.Context, target FocusKey) ([]*Info, error)
 
 	// GetConnection looks up a single Connection by ID. The lookup is
-	// O(1) (single map index in MemStore; primary-key SELECT in
-	// Postgres). Returns CONNECTION_NOT_FOUND if absent.
+	// O(1) (primary-key SELECT in Postgres). Returns CONNECTION_NOT_FOUND
+	// if absent.
 	GetConnection(ctx context.Context, connectionID ulid.ULID) (*Connection, error)
 
 	// UpdateSessionConnection atomically runs the mutator callback
 	// against the named (session, connection) pair under one Store-lock
 	// acquisition. Both Info AND Connection writes commit together.
-	// MemStore impl: acquires the store-wide m.mu sync.RWMutex
-	// (memstore.go:18) for the callback duration. Postgres impl: single
-	// transaction, FOR UPDATE on sessions row FIRST then session_connections
-	// row (D11 canonical lock order).
+	// Postgres impl: single transaction, FOR UPDATE on sessions row FIRST
+	// then session_connections row (D11 canonical lock order).
 	// Returns CONNECTION_NOT_FOUND if the connection isn't registered.
 	UpdateSessionConnection(
 		ctx context.Context,

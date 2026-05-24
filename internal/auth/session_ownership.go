@@ -89,8 +89,8 @@ func ValidateSessionOwnership(
 }
 
 // isSessionNotFound reports whether err is a "session not found" error
-// returned by session.Store implementations. Both MemStore and
-// PostgresSessionStore tag the error with oops.Code("SESSION_NOT_FOUND"),
+// returned by session.Store implementations. All Store implementations
+// tag the error with oops.Code("SESSION_NOT_FOUND"),
 // so we detect that rather than comparing to a sentinel.
 func isSessionNotFound(err error) bool {
 	oopsErr, ok := oops.AsOops(err)

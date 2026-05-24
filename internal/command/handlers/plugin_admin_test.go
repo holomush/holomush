@@ -16,7 +16,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	plugins "github.com/holomush/holomush/internal/plugin"
-	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
@@ -65,7 +65,7 @@ func (s *pluginTestSetup) makeExec(t *testing.T, args string) *command.CommandEx
 	engine.GrantCommandExecution(subject, "plugin")
 	svc := command.NewTestServices(command.ServicesConfig{
 		Engine:  engine,
-		Session: session.NewMemStore(),
+		Session: sessiontest.NewStore(t),
 	})
 	return command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   s.charID,

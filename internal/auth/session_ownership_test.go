@@ -35,7 +35,7 @@ var (
 )
 
 // newSessionNotFoundErr mirrors the error shape returned by
-// session.MemStore/PostgresSessionStore for a missing session.
+// session.Store implementations for a missing session.
 func newSessionNotFoundErr(id string) error {
 	return oops.Code("SESSION_NOT_FOUND").
 		With("session_id", id).

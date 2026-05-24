@@ -16,6 +16,7 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 )
 
 // testPlayerSessionToken is the canonical token unit tests pass in
@@ -99,14 +100,21 @@ func (f *fakePlayerSessionRepo) RefreshTTL(_ context.Context, _ ulid.ULID, _ tim
 // Compile-time interface check.
 var _ auth.PlayerSessionRepository = (*fakePlayerSessionRepo)(nil)
 
-// newTestSessionStore creates a session.MemStore pre-populated with the given sessions.
+// newTestSessionStore creates a Postgres-backed session.Store pre-populated with the given sessions.
+// Drift fix (holomush-9mxr Task 10): The former in-memory store accepted any session.Info regardless of Status;
+// PostgresSessionStore requires a valid Status on read-back (IsValid() rejects "").
+// Sessions with no Status set default to StatusActive so callers that only care about
+// the session existing don't need to specify it.
 func newTestSessionStore(t *testing.T, sessions map[string]*session.Info) session.Store {
 	t.Helper()
-	store := session.NewMemStore()
+	store := sessiontest.NewStore(t)
 	ctx := context.Background()
 	for id, info := range sessions {
 		if info.ID == "" {
 			info.ID = id
+		}
+		if info.Status == "" {
+			info.Status = session.StatusActive
 		}
 		require.NoError(t, store.Set(ctx, id, info))
 	}
@@ -117,12 +125,12 @@ func newTestSessionStore(t *testing.T, sessions map[string]*session.Info) sessio
 // dispatcher. Tests that call HandleCommand MUST use this helper.
 //
 // The store is used for both Engine and dispatcher Services.Events.
-// Pass a custom sessStore to pre-populate sessions; nil uses a fresh MemStore.
+// Pass a custom sessStore to pre-populate sessions; nil uses a fresh Postgres-backed store.
 func newHandleCommandServer(t *testing.T, store core.EventAppender, sessStore session.Store, opts ...CoreServerOption) *CoreServer {
 	t.Helper()
 	engine := core.NewEngine(store)
 	if sessStore == nil {
-		sessStore = session.NewMemStore()
+		sessStore = sessiontest.NewStore(t)
 	}
 
 	reg := command.NewRegistry()

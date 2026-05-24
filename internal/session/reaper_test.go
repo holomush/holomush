@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-package session
+package session_test
 
 import (
 	"context"
@@ -11,27 +11,30 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 )
 
 func TestReaper_ReapsExpiredSessions(t *testing.T) {
-	store := NewMemStore()
+	store := sessiontest.NewStore(t)
 	ctx := context.Background()
 
 	past := time.Now().Add(-1 * time.Hour)
-	info := &Info{
+	info := &session.Info{
 		ID:            "expired-session",
 		CharacterID:   ulid.Make(),
 		CharacterName: "Ghost",
-		Status:        StatusDetached,
+		Status:        session.StatusDetached,
 		ExpiresAt:     &past,
 		IsGuest:       false,
 	}
 	require.NoError(t, store.Set(ctx, "expired-session", info))
 
-	var reaped []Info
-	reaper := NewReaper(store, ReaperConfig{
+	var reaped []session.Info
+	reaper := session.NewReaper(store, session.ReaperConfig{
 		Interval:  50 * time.Millisecond,
-		OnExpired: func(info *Info) { reaped = append(reaped, *info) },
+		OnExpired: func(info *session.Info) { reaped = append(reaped, *info) },
 	})
 
 	reaperCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -47,24 +50,26 @@ func TestReaper_ReapsExpiredSessions(t *testing.T) {
 }
 
 func TestReaper_SkipsActiveAndFutureSessions(t *testing.T) {
-	store := NewMemStore()
+	store := sessiontest.NewStore(t)
 	ctx := context.Background()
 
 	future := time.Now().Add(1 * time.Hour)
-	require.NoError(t, store.Set(ctx, "active", &Info{
-		ID:     "active",
-		Status: StatusActive,
+	require.NoError(t, store.Set(ctx, "active", &session.Info{
+		ID:          "active",
+		CharacterID: ulid.Make(),
+		Status:      session.StatusActive,
 	}))
-	require.NoError(t, store.Set(ctx, "future", &Info{
-		ID:        "future",
-		Status:    StatusDetached,
-		ExpiresAt: &future,
+	require.NoError(t, store.Set(ctx, "future", &session.Info{
+		ID:          "future",
+		CharacterID: ulid.Make(),
+		Status:      session.StatusDetached,
+		ExpiresAt:   &future,
 	}))
 
-	var reaped []Info
-	reaper := NewReaper(store, ReaperConfig{
+	var reaped []session.Info
+	reaper := session.NewReaper(store, session.ReaperConfig{
 		Interval:  50 * time.Millisecond,
-		OnExpired: func(info *Info) { reaped = append(reaped, *info) },
+		OnExpired: func(info *session.Info) { reaped = append(reaped, *info) },
 	})
 
 	reaperCtx, cancel := context.WithTimeout(ctx, 2*time.Second)

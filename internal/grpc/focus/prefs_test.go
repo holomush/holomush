@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 )
 
 // stubPlayerPrefs is a test PlayerPreferencesReader.
@@ -37,7 +38,7 @@ func TestBuildPolicyContextUsesSubstrateDefaultWhenNoSettings(t *testing.T) {
 
 func TestBuildPolicyContextUsesPlayerPreferenceWhenSet(t *testing.T) {
 	tail := 7
-	store := session.NewMemStore()
+	store := sessiontest.NewStore(t)
 	ctx := context.Background()
 	playerID := ulid.Make()
 	require.NoError(t, store.Set(ctx, "sess-1", &session.Info{
@@ -59,7 +60,7 @@ func TestBuildPolicyContextUsesPlayerPreferenceWhenSet(t *testing.T) {
 
 func TestBuildPolicyContextClampsPlayerPreference(t *testing.T) {
 	tail := 50
-	store := session.NewMemStore()
+	store := sessiontest.NewStore(t)
 	ctx := context.Background()
 	require.NoError(t, store.Set(ctx, "sess-1", &session.Info{
 		ID: "sess-1", CharacterID: ulid.Make(), PlayerID: ulid.Make(), Status: session.StatusActive,

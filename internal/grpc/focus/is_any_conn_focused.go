@@ -24,8 +24,8 @@ func (c *defaultCoordinator) IsAnyConnFocused(
 	info, err := c.sessionStore.FindByCharacter(ctx, characterID)
 	if err != nil {
 		// "Character has no active session" surfaces as SESSION_NOT_FOUND
-		// from both MemStore (memstore.go:82-84) and Postgres
-		// (session_store.go:347-349). Translate to (false, nil) so the
+		// from the session store (session_store.go:347-349). Translate to
+		// (false, nil) so the
 		// plugin's notification-emission decision short-circuits cleanly
 		// (spec §6.3: "if false → emit a notification").
 		var oe oops.OopsError

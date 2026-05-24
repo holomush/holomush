@@ -19,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	corecomm "github.com/holomush/holomush/plugins/core-communication"
 )
@@ -102,7 +103,7 @@ func newDispatcherTestServer(t *testing.T, store core.EventAppender, opts ...Cor
 func newDispatcherTestServerWithAliases(t *testing.T, store core.EventAppender, opts ...CoreServerOption) *CoreServer {
 	t.Helper()
 	engine := core.NewEngine(store)
-	sessStore := session.NewMemStore()
+	sessStore := sessiontest.NewStore(t)
 
 	reg := command.NewRegistry()
 	registerTestCommands(t, reg)
@@ -481,7 +482,7 @@ func TestAdminBootEmitsSessionEndedWithKickedCause(t *testing.T) {
 	// session as booted. Server teardown logic then emits the session_ended
 	// event, runs disconnect hooks, and deletes the session.
 	engine := core.NewEngine(store)
-	sessStore := session.NewMemStore()
+	sessStore := sessiontest.NewStore(t)
 	reg := command.NewRegistry()
 	registerTestCommands(t, reg)
 
@@ -594,7 +595,7 @@ func TestAdminBootRetainsSessionWhenEndSessionFails(t *testing.T) {
 	}
 
 	engine := core.NewEngine(store)
-	sessStore := session.NewMemStore()
+	sessStore := sessiontest.NewStore(t)
 	reg := command.NewRegistry()
 	registerTestCommands(t, reg)
 
@@ -684,7 +685,7 @@ func TestHandleCommand_ConnectionIDThreadedToExecution(t *testing.T) {
 
 	store := &mockEventStore{}
 	engine := core.NewEngine(store)
-	sessStore := session.NewMemStore()
+	sessStore := sessiontest.NewStore(t)
 
 	reg := command.NewRegistry()
 	// Register a probe command that captures exec.ConnectionID().

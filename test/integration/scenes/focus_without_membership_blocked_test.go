@@ -16,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
@@ -40,10 +41,10 @@ import (
 // atomically via UpdateFocusMemberships. Once it commits, the guard above
 // passes on the retry.
 //
-// This spec exercises both halves against a live Coordinator wired with
-// session.NewMemStore() — the same in-process store the production Coordinator
-// uses. No JetStream bus is required: the invariant lives entirely in the
-// session-store mutation path, not in the eventbus.
+// This spec exercises both halves against a live Coordinator wired with a
+// Postgres-backed session store (sessiontest.NewStore). No JetStream bus is
+// required: the invariant lives entirely in the session-store mutation path,
+// not in the eventbus.
 //
 // Spec: docs/superpowers/specs/2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md §10, INV-P5-1.
 // Bead: holomush-5rh.14.24.
@@ -53,14 +54,14 @@ var _ = Describe("INV-P5-1: focus without membership blocked", func() {
 		DeferCleanup(cancel)
 
 		// ----------------------------------------------------------------
-		// Step 1: wire a Coordinator with a live MemStore.
+		// Step 1: wire a Coordinator with a Postgres-backed store.
 		//
 		// NullPolicy satisfies the KindPolicy interface for FocusKindScene
 		// without emitting streams — sufficient for the JoinFocus call to
 		// add the membership record.  No StreamSender is needed: we assert
 		// the membership-gate error, not stream delivery.
 		// ----------------------------------------------------------------
-		store := session.NewMemStore()
+		store := sessiontest.NewStore(suiteT)
 		coord, err := focus.NewCoordinator(
 			focus.WithSessionStore(store),
 			focus.WithKindPolicy(focus.NewNullPolicy(session.FocusKindScene)),

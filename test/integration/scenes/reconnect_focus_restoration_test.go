@@ -17,6 +17,7 @@ import (
 
 	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 )
 
 // INV-P5-5 + INV-P5-12 + INV-P5-13 (reconnect focus restoration):
@@ -39,23 +40,23 @@ import (
 //
 // Harness pattern follows focus_without_membership_blocked_test.go (T24) and
 // auto_focus_on_join_terminal_only_test.go (T25): minimal Coordinator +
-// session.NewMemStore(), NullPolicy for FocusKindScene, no JetStream bus.
+// Postgres-backed sessiontest.NewStore, NullPolicy for FocusKindScene, no JetStream bus.
 //
 // Spec: docs/superpowers/specs/2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md
 // §7 (INV-P5-5, INV-P5-12), §8 (INV-P5-13).
 // Bead: holomush-5rh.14.26.
 var _ = Describe("INV-P5-5 + INV-P5-12 + INV-P5-13: reconnect focus restoration", func() {
 	// -----------------------------------------------------------------------
-	// Shared harness builder — wires a Coordinator + MemStore with a
+	// Shared harness builder — wires a Coordinator + Postgres-backed store with a
 	// NullPolicy for FocusKindScene, then returns helpers to seed sessions.
 	// -----------------------------------------------------------------------
 	type harness struct {
-		store *session.MemStore
+		store session.Store
 		coord focus.Coordinator
 	}
 
 	newHarness := func() harness {
-		store := session.NewMemStore()
+		store := sessiontest.NewStore(suiteT)
 		coord, err := focus.NewCoordinator(
 			focus.WithSessionStore(store),
 			focus.WithKindPolicy(focus.NewNullPolicy(session.FocusKindScene)),

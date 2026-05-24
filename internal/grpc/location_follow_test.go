@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
@@ -232,7 +233,7 @@ func TestLocationFollower_BuildLocationState(t *testing.T) {
 	}
 
 	// Presence comes from active sessions at the location, not character repo.
-	ss := session.NewMemStore()
+	ss := sessiontest.NewStore(t)
 	_ = ss.Set(context.Background(), "s1", &session.Info{
 		ID:            "s1",
 		CharacterID:   charID,
@@ -336,7 +337,7 @@ func TestSendSyntheticSendsLocationStateForCurrentLocation(t *testing.T) {
 	lf := &locationFollower{
 		currentLocID: locID,
 		worldQuerier: wq,
-		sessionStore: session.NewMemStore(),
+		sessionStore: sessiontest.NewStore(t),
 		verbRegistry: testVerbRegistry(t),
 	}
 

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
@@ -124,7 +125,7 @@ func TestRestoreFocusDeduplicatesAmbientStreamsAgainstPolicyStreams(t *testing.T
 	// Plugin also returns the character stream — should be deduplicated.
 	contributor := &stubContributor{streams: []string{charStream, "plugin:extra"}}
 
-	store := session.NewMemStore()
+	store := sessiontest.NewStore(t)
 	ctx := context.Background()
 	info := &session.Info{
 		ID:          "sess-dedup",

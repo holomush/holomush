@@ -57,6 +57,7 @@ type testEnv struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
 	store         *store.PostgresEventStore
+	sessionStore  session.Store
 	certsDir      string
 	runtimeDir    string
 	gameID        string
@@ -105,6 +106,10 @@ func setupTestEnv() (*testEnv, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Create session store backed by the same Postgres DB as the event store.
+	// Pool() returns the *pgxpool.Pool from the event store connection pool.
+	env.sessionStore = store.NewPostgresSessionStore(env.store.Pool())
 
 	return env, nil
 }
@@ -259,7 +264,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 
 			// Create gRPC server with mTLS
 			disp, cmdSvc := newMinimalDispatcher()
-			coreServer := grpcpkg.NewCoreServer(engine, session.NewMemStore(), disp, cmdSvc,
+			coreServer := grpcpkg.NewCoreServer(engine, env.sessionStore, disp, cmdSvc,
 				grpcpkg.WithEventStore(eventStore))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
@@ -331,7 +336,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 
 			// Create gRPC server with mTLS
 			disp, cmdSvc := newMinimalDispatcher()
-			coreServer := grpcpkg.NewCoreServer(engine, session.NewMemStore(), disp, cmdSvc,
+			coreServer := grpcpkg.NewCoreServer(engine, env.sessionStore, disp, cmdSvc,
 				grpcpkg.WithEventStore(eventStore))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
@@ -494,7 +499,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			engine := core.NewEngine(eventStore)
 
 			disp, cmdSvc := newMinimalDispatcher()
-			coreServer := grpcpkg.NewCoreServer(engine, session.NewMemStore(), disp, cmdSvc,
+			coreServer := grpcpkg.NewCoreServer(engine, env.sessionStore, disp, cmdSvc,
 				grpcpkg.WithEventStore(eventStore))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
