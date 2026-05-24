@@ -413,7 +413,7 @@ type DiscoveredPlugin struct {
 
 // Discover finds all valid plugins in the plugins directory.
 // Invalid plugins are logged and skipped.
-func (m *Manager) Discover(_ context.Context) ([]*DiscoveredPlugin, error) {
+func (m *Manager) Discover(ctx context.Context) ([]*DiscoveredPlugin, error) {
 	entries, err := os.ReadDir(m.pluginsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -433,7 +433,7 @@ func (m *Manager) Discover(_ context.Context) ([]*DiscoveredPlugin, error) {
 
 		data, err := os.ReadFile(filepath.Clean(manifestPath))
 		if err != nil {
-			slog.Warn("skipping plugin without manifest",
+			slog.WarnContext(ctx, "skipping plugin without manifest",
 				"dir", entry.Name(),
 				"error", err)
 			continue
@@ -441,7 +441,7 @@ func (m *Manager) Discover(_ context.Context) ([]*DiscoveredPlugin, error) {
 
 		manifest, err := ParseManifest(data)
 		if err != nil {
-			slog.Warn("skipping plugin with invalid manifest",
+			slog.WarnContext(ctx, "skipping plugin with invalid manifest",
 				"dir", entry.Name(),
 				"error", err)
 			continue
@@ -451,7 +451,7 @@ func (m *Manager) Discover(_ context.Context) ([]*DiscoveredPlugin, error) {
 		// internally malformed (unknown sensitivity, duplicate emit, etc.)
 		// and we skip the plugin entirely, mirroring the ParseManifest path.
 		if err := ValidateCrypto(manifest); err != nil {
-			slog.Warn("skipping plugin with invalid crypto section",
+			slog.WarnContext(ctx, "skipping plugin with invalid crypto section",
 				"dir", entry.Name(),
 				"plugin", manifest.Name,
 				"error", err)
@@ -479,7 +479,7 @@ func (m *Manager) Discover(_ context.Context) ([]*DiscoveredPlugin, error) {
 		next := resolved[:0]
 		for _, dp := range resolved {
 			if err := ResolveCryptoRefs(dp.Manifest, emitRegistry); err != nil {
-				slog.Warn("skipping plugin with unresolvable crypto refs",
+				slog.WarnContext(ctx, "skipping plugin with unresolvable crypto refs",
 					"plugin", dp.Manifest.Name,
 					"dir", dp.Dir,
 					"error", err)
@@ -564,7 +564,7 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 	var loadErrors []error
 	for _, dp := range ordered {
 		if err := m.loadPlugin(ctx, dp, knownResourceTypes, knownActions); err != nil {
-			slog.Error("failed to load plugin",
+			slog.ErrorContext(ctx, "failed to load plugin",
 				"plugin", dp.Manifest.Name,
 				"priority", dp.Manifest.EffectivePriority(),
 				"error", err)
@@ -575,7 +575,7 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 
 	if len(loadErrors) > 0 {
 		if m.gracefulDegradation {
-			slog.Warn("plugin loading completed with errors (graceful degradation enabled)",
+			slog.WarnContext(ctx, "plugin loading completed with errors (graceful degradation enabled)",
 				"failed_count", len(loadErrors))
 			return nil
 		}
@@ -587,7 +587,7 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 	// Seed aliases from loaded plugin manifests.
 	if m.aliasSeeder != nil && m.aliasCache != nil {
 		if err := m.seedAliases(ctx); err != nil {
-			slog.Error("failed to seed plugin aliases", "error", err)
+			slog.ErrorContext(ctx, "failed to seed plugin aliases", "error", err)
 		}
 	}
 
@@ -606,7 +606,8 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 			delete(m.activeByName, row.Name)
 			// nameByID intentionally retained for historical resolution.
 			m.mu.Unlock()
-			slog.Info(
+			slog.InfoContext(
+				ctx,
 				"plugin.gc",
 				"name", row.Name,
 				"id", row.ID.String(),
@@ -859,19 +860,19 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 			host = m.luaHost // backward compatibility
 		}
 		if host == nil {
-			slog.Warn("no Lua host configured, skipping Lua plugin",
+			slog.WarnContext(ctx, "no Lua host configured, skipping Lua plugin",
 				"plugin", dp.Manifest.Name)
 			return nil
 		}
 	case TypeBinary:
 		host = m.hosts[TypeBinary]
 		if host == nil {
-			slog.Warn("binary plugins not yet supported, skipping",
+			slog.WarnContext(ctx, "binary plugins not yet supported, skipping",
 				"plugin", dp.Manifest.Name)
 			return nil
 		}
 	default:
-		slog.Warn("unknown plugin type, skipping",
+		slog.WarnContext(ctx, "unknown plugin type, skipping",
 			"plugin", dp.Manifest.Name,
 			"type", dp.Manifest.Type)
 		return nil
@@ -895,7 +896,7 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 					With("command", cmd.Name).Wrap(err)
 			}
 			if !coreActions[cap.Action] && !ownActions[cap.Action] {
-				slog.Warn("capability uses action not declared by this plugin",
+				slog.WarnContext(ctx, "capability uses action not declared by this plugin",
 					"plugin", dp.Manifest.Name,
 					"command", cmd.Name,
 					"action", cap.Action)
@@ -974,7 +975,8 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 
 	// Drift logging (no decision logic — log and continue per spec).
 	if drift != nil {
-		slog.Info(
+		slog.InfoContext(
+			ctx,
 			"plugin.drift",
 			"name", dp.Manifest.Name,
 			"old_manifest_hash", hex.EncodeToString(drift.OldManifestHash),
@@ -999,7 +1001,7 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 			// table (and any live subprocess / gRPC client for binary
 			// plugins) does not leak after fail-closed rejection.
 			if unloadErr := host.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
-				slog.Error("failed to rollback plugin load after PluginEmitRegistry not-found",
+				slog.ErrorContext(ctx, "failed to rollback plugin load after PluginEmitRegistry not-found",
 					"plugin", dp.Manifest.Name, "error", unloadErr)
 			}
 			return oops.Code("PLUGIN_EMIT_REGISTRY_UNAVAILABLE").
@@ -1013,7 +1015,7 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 			// table (and any live subprocess / gRPC client for binary
 			// plugins) does not leak after fail-closed rejection.
 			if unloadErr := host.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
-				slog.Error("failed to rollback plugin load after INV-S5 mismatch",
+				slog.ErrorContext(ctx, "failed to rollback plugin load after INV-S5 mismatch",
 					"plugin", dp.Manifest.Name, "error", unloadErr)
 			}
 			return oops.Code("EVENT_TYPE_REGISTRY_MISMATCH").
@@ -1046,7 +1048,7 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 		// dangling references to a plugin that never finished loading.
 		m.unregisterPluginProviders(dp.Manifest.Name, dp.Manifest.ResourceTypes, len(dp.Manifest.ResourceTypes))
 		if unloadErr := host.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
-			slog.Error("failed to rollback plugin load after schema validation failure",
+			slog.ErrorContext(ctx, "failed to rollback plugin load after schema validation failure",
 				"plugin", dp.Manifest.Name, "error", unloadErr)
 		}
 		return oops.In("manager").With("plugin", dp.Manifest.Name).
@@ -1062,7 +1064,7 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 			// — same rationale as the schema-validation branch above.
 			m.unregisterPluginProviders(dp.Manifest.Name, dp.Manifest.ResourceTypes, len(dp.Manifest.ResourceTypes))
 			if unloadErr := host.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
-				slog.Error("failed to rollback plugin load after policy install failure",
+				slog.ErrorContext(ctx, "failed to rollback plugin load after policy install failure",
 					"plugin", dp.Manifest.Name, "error", unloadErr)
 			}
 			return oops.In("manager").With("plugin", dp.Manifest.Name).Wrapf(installErr, "install plugin policies")
@@ -1072,7 +1074,7 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 	// Check for manifest warnings (non-fatal policy coverage gaps).
 	if warnings := CheckManifestWarnings(dp.Manifest); len(warnings) > 0 {
 		for _, w := range warnings {
-			slog.Info(w, "plugin", dp.Manifest.Name)
+			slog.InfoContext(ctx, "manifest warning", "plugin", dp.Manifest.Name, "warning", w)
 		}
 	}
 
@@ -1091,7 +1093,7 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 			m.verbRegistry.UnregisterBySource(dp.Manifest.Name)
 			m.unregisterPluginProviders(dp.Manifest.Name, dp.Manifest.ResourceTypes, len(dp.Manifest.ResourceTypes))
 			if unloadErr := host.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
-				slog.Error("failed to rollback plugin load after verb registration failure",
+				slog.ErrorContext(ctx, "failed to rollback plugin load after verb registration failure",
 					"plugin", dp.Manifest.Name, "error", unloadErr)
 			}
 			return oops.In("manager").With("plugin", dp.Manifest.Name).
@@ -1151,7 +1153,7 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 	m.pluginHosts[dp.Manifest.Name] = host
 	m.mu.Unlock()
 
-	slog.Info("loaded plugin",
+	slog.InfoContext(ctx, "loaded plugin",
 		"plugin", dp.Manifest.Name,
 		"type", dp.Manifest.Type,
 		"version", dp.Manifest.Version)
@@ -1186,7 +1188,7 @@ func (m *Manager) discoverAndRegisterAttributes(ctx context.Context, host Host, 
 	schemaResp, schemaErr := arClient.GetSchema(ctx, &pluginv1.GetSchemaRequest{})
 	if schemaErr != nil {
 		if unloadErr := host.Unload(ctx, pluginName); unloadErr != nil {
-			slog.Error("failed to rollback plugin load after schema discovery failure",
+			slog.ErrorContext(ctx, "failed to rollback plugin load after schema discovery failure",
 				"plugin", pluginName, "error", unloadErr)
 		}
 		return nil, oops.In("manager").With("plugin", pluginName).
@@ -1197,7 +1199,7 @@ func (m *Manager) discoverAndRegisterAttributes(ctx context.Context, host Host, 
 	for _, rt := range dp.Manifest.ResourceTypes {
 		if _, ok := schemas[rt]; !ok {
 			if unloadErr := host.Unload(ctx, pluginName); unloadErr != nil {
-				slog.Error("failed to rollback plugin after schema validation failure",
+				slog.ErrorContext(ctx, "failed to rollback plugin after schema validation failure",
 					"plugin", pluginName, "error", unloadErr)
 			}
 			return nil, oops.In("manager").With("plugin", pluginName).
@@ -1221,7 +1223,7 @@ func (m *Manager) discoverAndRegisterAttributes(ctx context.Context, host Host, 
 				// previous iterations of this loop before returning.
 				m.unregisterPluginProviders(pluginName, dp.Manifest.ResourceTypes, i)
 				if unloadErr := host.Unload(ctx, pluginName); unloadErr != nil {
-					slog.Error("failed to rollback plugin after attribute provider registration failure",
+					slog.ErrorContext(ctx, "failed to rollback plugin after attribute provider registration failure",
 						"plugin", pluginName, "error", unloadErr)
 				}
 				return nil, oops.In("manager").
@@ -1371,7 +1373,7 @@ func (m *Manager) Close(ctx context.Context) error {
 	if m.policyInstaller != nil {
 		for name := range m.loaded {
 			if err := m.policyInstaller.RemovePluginPolicies(ctx, name); err != nil {
-				slog.Error("failed to remove plugin policies", "plugin", name, "error", err)
+				slog.ErrorContext(ctx, "failed to remove plugin policies", "plugin", name, "error", err)
 			}
 		}
 	}
@@ -1380,7 +1382,7 @@ func (m *Manager) Close(ctx context.Context) error {
 	// still reference loaded state during shutdown.
 	for hostType, host := range m.hosts {
 		if err := host.Close(ctx); err != nil {
-			slog.Error("failed to close host", "type", hostType, "error", err)
+			slog.ErrorContext(ctx, "failed to close host", "type", hostType, "error", err)
 		}
 	}
 

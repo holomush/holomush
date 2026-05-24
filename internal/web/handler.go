@@ -129,7 +129,7 @@ func (h *Handler) SendCommand(ctx context.Context, req *connect.Request[webv1.Se
 		ConnectionId:       connIDStr,
 	})
 	if err != nil {
-		slog.Error("web: handle command RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
+		slog.ErrorContext(ctx, "web: handle command RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
 		return connect.NewResponse(&webv1.SendCommandResponse{
 			Success:      false,
 			ErrorMessage: "command error",
@@ -176,7 +176,8 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 			ConnectionId:       connID.String(),
 			PlayerSessionToken: token,
 		}); disconnErr != nil {
-			slog.Warn(
+			slog.WarnContext(
+				ctx,
 				"web: disconnect RPC failed on stream close",
 				"session_id", sessionID,
 				"connection_id", connID.String(),
@@ -346,7 +347,7 @@ func (h *Handler) Disconnect(ctx context.Context, req *connect.Request[webv1.Dis
 		SessionId:          req.Msg.GetSessionId(),
 		PlayerSessionToken: token,
 	}); err != nil {
-		slog.Error("web: disconnect RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
+		slog.ErrorContext(ctx, "web: disconnect RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
 	}
 
 	return connect.NewResponse(&webv1.DisconnectResponse{}), nil
@@ -373,7 +374,7 @@ func (h *Handler) GetCommandHistory(ctx context.Context, req *connect.Request[we
 		PlayerSessionToken: token,
 	})
 	if err != nil {
-		slog.Error("web: get command history RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
+		slog.ErrorContext(ctx, "web: get command history RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
 		return connect.NewResponse(&webv1.GetCommandHistoryResponse{}), nil
 	}
 

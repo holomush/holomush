@@ -701,7 +701,7 @@ func (s *CoreServer) CreateGuest(ctx context.Context, _ *corev1.CreateGuestReque
 
 	result, err := s.guestService.CreateGuest(ctx)
 	if err != nil {
-		slog.Error("grpc: guest creation failed", "error", err)
+		slog.ErrorContext(ctx, "grpc: guest creation failed", "error", err)
 		return &corev1.CreateGuestResponse{
 			Success:      false,
 			ErrorMessage: "guest creation failed",

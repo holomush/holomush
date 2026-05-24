@@ -40,7 +40,7 @@ func Bootstrap(
 	if err := partitions.EnsurePartitions(ctx, 3); err != nil {
 		return oops.Errorf("bootstrap: failed to create audit log partitions: %w", err)
 	}
-	logger.Info("audit log partitions ensured", "months", 3)
+	logger.InfoContext(ctx, "audit log partitions ensured", "months", 3)
 
 	// Step 2: Seed policies.
 	seeds := SeedPolicies()
@@ -52,7 +52,7 @@ func Bootstrap(
 		}
 	}
 
-	logger.Info("bootstrap complete", "seeds_total", len(seeds))
+	logger.InfoContext(ctx, "bootstrap complete", "seeds_total", len(seeds))
 	return nil
 }
 
@@ -78,7 +78,8 @@ func bootstrapSeed(
 
 	// Policy exists with different source — admin collision, skip with warning.
 	if existing.Source != "seed" {
-		logger.Warn(
+		logger.WarnContext(
+			ctx,
 			"seed policy name collision with non-seed policy, skipping",
 			"name", seed.Name,
 			"existing_source", existing.Source,
@@ -91,7 +92,8 @@ func bootstrapSeed(
 		return upgradeSeedPolicy(ctx, policyStore, compiler, logger, seed, existing)
 	}
 
-	logger.Info(
+	logger.InfoContext(
+		ctx,
 		"seed policy already current, skipping",
 		"name", seed.Name,
 		"version", seed.SeedVersion,
@@ -134,7 +136,7 @@ func createSeedPolicy(
 		return fmt.Errorf("creating seed policy %q: %w", seed.Name, err)
 	}
 
-	logger.Info("seed policy created", "name", seed.Name, "version", seed.SeedVersion)
+	logger.InfoContext(ctx, "seed policy created", "name", seed.Name, "version", seed.SeedVersion)
 	return nil
 }
 
@@ -174,7 +176,8 @@ func upgradeSeedPolicy(
 		return fmt.Errorf("upgrading seed policy %q: %w", seed.Name, err)
 	}
 
-	logger.Info(
+	logger.InfoContext(
+		ctx,
 		"seed policy upgraded",
 		"name", seed.Name,
 		"from_version", oldVersion,
@@ -213,7 +216,8 @@ func UpdateSeed(
 
 	// Compare-and-swap: skip with warning if admin customized.
 	if existing.DSLText != oldDSL {
-		logger.Warn(
+		logger.WarnContext(
+			ctx,
 			"seed policy customized by admin, skipping migration update",
 			"name", name,
 			"expected_dsl_prefix", truncate(oldDSL, 60),
@@ -242,7 +246,7 @@ func UpdateSeed(
 		return fmt.Errorf("UpdateSeed: updating %q: %w", name, err)
 	}
 
-	logger.Info("seed policy updated via migration", "name", name, "change_note", changeNote)
+	logger.InfoContext(ctx, "seed policy updated via migration", "name", name, "change_note", changeNote)
 	return nil
 }
 

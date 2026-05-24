@@ -82,7 +82,7 @@ func (s *VerifierSubsystem) Start(ctx context.Context) error {
 		}
 	}
 	for _, h := range s.cfg.Handlers {
-		s.cfg.Logger.Info("verifying audit chain", "chain", h.Chain.SubjectPrefix)
+		s.cfg.Logger.InfoContext(ctx, "verifying audit chain", "chain", h.Chain.SubjectPrefix)
 		if err := s.verifier.VerifyAll(ctx, h); err != nil {
 			return err //nolint:wrapcheck // AUDIT_CHAIN_* oops codes pass through from Verifier as-is
 		}

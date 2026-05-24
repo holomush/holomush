@@ -44,7 +44,8 @@ func CheckCommandExecution(ctx context.Context, engine types.AccessPolicyEngine,
 
 	if !decision.IsAllowed() {
 		if decision.IsInfraFailure() {
-			slog.ErrorContext(ctx, cmdName+" command access infra failure",
+			slog.ErrorContext(ctx, "command access infra failure",
+				"command", cmdName,
 				"subject", subject,
 				"reason", decision.Reason(),
 				"policy_id", decision.PolicyID())
@@ -55,7 +56,8 @@ func CheckCommandExecution(ctx context.Context, engine types.AccessPolicyEngine,
 				With("policy_id", decision.PolicyID()).
 				Wrap(ErrCapabilityCheckFailed)
 		}
-		slog.DebugContext(ctx, cmdName+" command execution denied",
+		slog.DebugContext(ctx, "command execution denied",
+			"command", cmdName,
 			"subject", subject,
 			"reason", decision.Reason(),
 			"policy_id", decision.PolicyID())
@@ -78,7 +80,8 @@ func CheckCapabilityPreFlight(ctx context.Context, engine types.AccessPolicyEngi
 				Wrap(err)
 		}
 		if !allowed {
-			slog.DebugContext(ctx, cmdName+" capability pre-flight denied",
+			slog.DebugContext(ctx, "capability pre-flight denied",
+				"command", cmdName,
 				"subject", subject,
 				"action", capability.Action,
 				"resource", capability.Resource,

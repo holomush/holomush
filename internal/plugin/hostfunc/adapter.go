@@ -80,7 +80,7 @@ func (a *WorldQuerierAdapter) GetLocation(ctx context.Context, id ulid.ULID) (*w
 			Wrapf(err, "get location")
 	}
 	if loc == nil {
-		slog.Warn("service returned nil without error, treating as not found",
+		slog.WarnContext(ctx, "service returned nil without error, treating as not found",
 			"plugin", a.pluginName,
 			"entity_type", "location",
 			"entity_id", id.String())
@@ -104,7 +104,7 @@ func (a *WorldQuerierAdapter) GetCharacter(ctx context.Context, id ulid.ULID) (*
 			Wrapf(err, "get character")
 	}
 	if char == nil {
-		slog.Warn("service returned nil without error, treating as not found",
+		slog.WarnContext(ctx, "service returned nil without error, treating as not found",
 			"plugin", a.pluginName,
 			"entity_type", "character",
 			"entity_id", id.String())
@@ -131,7 +131,7 @@ func (a *WorldQuerierAdapter) GetCharactersByLocation(ctx context.Context, locat
 	// Unlike single-entity methods, nil is technically valid for slices,
 	// but we normalize for consistency and to detect potential service issues.
 	if chars == nil {
-		slog.Debug("service returned nil slice, normalizing to empty",
+		slog.DebugContext(ctx, "service returned nil slice, normalizing to empty",
 			"plugin", a.pluginName,
 			"location_id", locationID.String())
 		return []*world.Character{}, nil
@@ -151,7 +151,7 @@ func (a *WorldQuerierAdapter) GetObject(ctx context.Context, id ulid.ULID) (*wor
 			Wrapf(err, "get object")
 	}
 	if obj == nil {
-		slog.Warn("service returned nil without error, treating as not found",
+		slog.WarnContext(ctx, "service returned nil without error, treating as not found",
 			"plugin", a.pluginName,
 			"entity_type", "object",
 			"entity_id", id.String())

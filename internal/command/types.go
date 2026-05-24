@@ -621,7 +621,7 @@ func NewServices(cfg ServicesConfig) (*Services, error) {
 // If the event store is nil, this method logs a debug message and returns.
 func (s *Services) BroadcastSystemMessage(ctx context.Context, stream, message string) {
 	if s.events == nil {
-		slog.Debug("BroadcastSystemMessage: event store not configured")
+		slog.DebugContext(ctx, "broadcastSystemMessage: event store not configured")
 		return
 	}
 
@@ -636,7 +636,7 @@ func (s *Services) BroadcastSystemMessage(ctx context.Context, stream, message s
 	}, payload)
 
 	if err := s.events.Append(ctx, event); err != nil {
-		slog.WarnContext(ctx, "BroadcastSystemMessage: failed to append event",
+		slog.WarnContext(ctx, "broadcastSystemMessage: failed to append event",
 			"stream", stream, "error", err)
 	}
 }

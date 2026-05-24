@@ -103,7 +103,7 @@ func (s *ABACSubsystem) Start(ctx context.Context) error {
 	s.pollerCancel = pollerCancel
 	go stack.Poller.Run(pollerCtx)
 
-	slog.Info("ABAC subsystem started")
+	slog.InfoContext(ctx, "ABAC subsystem started")
 	return nil
 }
 

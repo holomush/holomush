@@ -160,7 +160,7 @@ func (s *grpcSubsystem) DependsOn() []lifecycle.SubsystemID {
 // Start wires all dependencies and starts the gRPC server.
 // Start is idempotent: if the gRPC server is already running, it returns nil.
 // codecov:ignore — tested by integration and E2E tests
-func (s *grpcSubsystem) Start(_ context.Context) error {
+func (s *grpcSubsystem) Start(ctx context.Context) error {
 	if s.grpcServer != nil {
 		return nil // already started
 	}
@@ -282,9 +282,9 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	// 6. Remove disabled commands from registry.
 	for _, name := range s.cfg.GameConfig.DisabledCommands {
 		if unregErr := cmdRegistry.Unregister(name); unregErr != nil {
-			slog.Warn("disabled command not found in registry", "command", name)
+			slog.WarnContext(ctx, "disabled command not found in registry", "command", name)
 		} else {
-			slog.Warn("disabled built-in command", "command", name)
+			slog.WarnContext(ctx, "disabled built-in command", "command", name)
 		}
 	}
 
@@ -347,19 +347,19 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		auditEm, auditErr := authguardaudit.NewQueuedEmitter(publisher,
 			authguardaudit.WithGameID(s.cfg.EventBus.GameID()))
 		if auditErr != nil {
-			slog.Warn("history auth guard: audit emitter construction failed — INV-39 fallback disabled",
+			slog.WarnContext(ctx, "history auth guard: audit emitter construction failed — INV-39 fallback disabled",
 				"error", auditErr)
 		} else {
 			sessionBridgeEm, bridgeErr := authguardaudit.NewSessionBridgeEmitter(auditEm)
 			if bridgeErr != nil {
-				slog.Warn("history auth guard: session bridge emitter construction failed — INV-39 fallback disabled",
+				slog.WarnContext(ctx, "history auth guard: session bridge emitter construction failed — INV-39 fallback disabled",
 					"error", bridgeErr)
 			} else {
 				participantLookup := authguard.NewDEKParticipantLookup(s.cfg.RekeyManager)
 				manifestLookup := authguard.NewPluginManifestLookup(pluginManager)
 				guard, guardErr := authguard.New(participantLookup, manifestLookup, policyEngine, auditEm)
 				if guardErr != nil {
-					slog.Warn("history auth guard: guard construction failed — INV-39 fallback disabled",
+					slog.WarnContext(ctx, "history auth guard: guard construction failed — INV-39 fallback disabled",
 						"error", guardErr)
 				} else {
 					historyAuthGuard = authguard.NewSessionBridgeGuard(guard)
@@ -486,7 +486,8 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 				ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID,
 			}
 			if dcErr := engine.HandleDisconnect(reaperCtx, char, "session expired"); dcErr != nil {
-				slog.Warn(
+				slog.WarnContext(
+					reaperCtx,
 					"reaper: leave event failed",
 					"session_id", info.ID,
 					"error", dcErr,
@@ -495,7 +496,7 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 			if endErr := engine.EndSession(reaperCtx, char, info.ID,
 				core.SessionEndedCauseReaped,
 				"Session expired due to inactivity."); endErr != nil {
-				slog.Warn("reaper: session_ended event failed",
+				slog.WarnContext(reaperCtx, "reaper: session_ended event failed",
 					"session_id", info.ID, "error", endErr)
 			}
 			if info.IsGuest {
@@ -520,10 +521,10 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	}
 
 	// 13. Start grpcServer.Serve() in goroutine.
-	slog.Info("gRPC server listening", "addr", s.cfg.GRPCAddr)
+	slog.InfoContext(ctx, "gRPC server listening", "addr", s.cfg.GRPCAddr)
 	go func() {
 		if serveErr := s.grpcServer.Serve(s.listener); serveErr != nil {
-			slog.Error("gRPC server stopped", "error", serveErr)
+			slog.ErrorContext(ctx, "gRPC server stopped", "error", serveErr)
 		}
 	}()
 
@@ -544,7 +545,7 @@ func (s *grpcSubsystem) Stop(ctx context.Context) error {
 		case <-done:
 			// graceful shutdown completed
 		case <-ctx.Done():
-			slog.Warn("gRPC graceful shutdown timed out, forcing stop")
+			slog.WarnContext(ctx, "gRPC graceful shutdown timed out, forcing stop")
 			s.grpcServer.Stop()
 		}
 	}
@@ -553,7 +554,7 @@ func (s *grpcSubsystem) Stop(ctx context.Context) error {
 	}
 	if s.listener != nil {
 		if err := s.listener.Close(); err != nil {
-			slog.Debug("error closing gRPC listener", "error", err)
+			slog.DebugContext(ctx, "error closing gRPC listener", "error", err)
 		}
 	}
 	return nil

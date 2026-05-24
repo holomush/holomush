@@ -121,7 +121,7 @@ func (s *CheckpointSweepSubsystem) loop(ctx context.Context) {
 			return
 		case <-t.C:
 			if err := s.sweepOnce(ctx); err != nil {
-				s.cfg.Logger.Error("rekey checkpoint sweep iteration failed", "err", err)
+				s.cfg.Logger.ErrorContext(ctx, "rekey checkpoint sweep iteration failed", "err", err)
 			}
 		}
 	}
@@ -137,7 +137,7 @@ func (s *CheckpointSweepSubsystem) sweepOnce(ctx context.Context) error {
 	}
 	for i := range expired {
 		if aerr := s.abortAndAudit(ctx, expired[i], "ttl_expired"); aerr != nil {
-			s.cfg.Logger.Error("rekey checkpoint sweep abort failed",
+			s.cfg.Logger.ErrorContext(ctx, "rekey checkpoint sweep abort failed",
 				"request_id", expired[i].RequestID.String(), "err", aerr)
 		}
 	}

@@ -76,7 +76,7 @@ func emitWithRetry(ctx context.Context, emitter EventEmitter, stream, eventType,
 	if err := retry.Do(ctx, backoff, func(ctx context.Context) error {
 		attempt++
 		if err := emitter.Emit(ctx, stream, eventType, data); err != nil {
-			slog.Debug("event emission failed, will retry",
+			slog.DebugContext(ctx, "event emission failed, will retry",
 				"stream", stream,
 				"event_type", eventType,
 				"entity_type", entityType,
@@ -90,7 +90,7 @@ func emitWithRetry(ctx context.Context, emitter EventEmitter, stream, eventType,
 	}); err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			// Log at WARN level for context cancellation (expected during shutdown)
-			slog.Warn("event emission cancelled",
+			slog.WarnContext(ctx, "event emission cancelled",
 				"stream", stream,
 				"event_type", eventType,
 				"entity_type", entityType,
@@ -99,7 +99,7 @@ func emitWithRetry(ctx context.Context, emitter EventEmitter, stream, eventType,
 				"reason", err)
 		} else {
 			// Log at ERROR level when all retries are exhausted for production visibility
-			slog.Error("event emission failed after all retries",
+			slog.ErrorContext(ctx, "event emission failed after all retries",
 				"stream", stream,
 				"event_type", eventType,
 				"entity_type", entityType,

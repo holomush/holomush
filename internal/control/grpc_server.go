@@ -119,8 +119,9 @@ func (s *GRPCServer) Stop(_ context.Context) error {
 }
 
 // Shutdown implements the Control.Shutdown RPC.
-func (s *GRPCServer) Shutdown(_ context.Context, req *controlv1.ShutdownRequest) (*controlv1.ShutdownResponse, error) {
-	slog.Info(
+func (s *GRPCServer) Shutdown(ctx context.Context, req *controlv1.ShutdownRequest) (*controlv1.ShutdownResponse, error) {
+	slog.InfoContext(
+		ctx,
 		"shutdown requested via gRPC",
 		"component", s.component,
 		"graceful", req.Graceful,

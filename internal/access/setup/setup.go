@@ -267,7 +267,7 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 
 	// 14. Replay WAL (non-fatal)
 	if err := auditLogger.ReplayWAL(ctx); err != nil {
-		slog.Warn("audit WAL replay failed (non-fatal)", "error", err)
+		slog.WarnContext(ctx, "audit WAL replay failed (non-fatal)", "error", err)
 	}
 
 	// 15. Session resolver (no-op — fails closed)
@@ -297,11 +297,11 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 
 	// 18. Wire store → cache invalidation (fast path).
 	// Use a detached context so invalidation isn't cancelled if the request context expires.
-	ps.SetOnMutate(func(_ context.Context) {
+	ps.SetOnMutate(func(ctx context.Context) {
 		invalidateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := cache.Invalidate(invalidateCtx); err != nil {
-			slog.Error("cache invalidation after store mutation failed",
+			slog.ErrorContext(ctx, "cache invalidation after store mutation failed",
 				"error", err)
 			healthTracker.RecordFailure("invalidation failed: " + err.Error())
 		} else {

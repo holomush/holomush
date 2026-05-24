@@ -248,7 +248,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		}
 	}()
 
-	slog.Info(
+	slog.InfoContext(
+		ctx,
 		"starting core process",
 		"grpc_addr", cfg.GRPCAddr,
 		"log_format", cfg.LogFormat,
@@ -288,7 +289,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	if gameID == "" {
 		gameID = dbSub.GameID()
 	}
-	slog.Info("game ID initialized", "game_id", gameID)
+	slog.InfoContext(ctx, "game ID initialized", "game_id", gameID)
 
 	// --- 4. TLS certificates ---
 	certsDir, err := deps.CertsDirGetter()
@@ -300,7 +301,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	if err != nil {
 		return oops.Code("TLS_SETUP_FAILED").With("operation", "set up TLS").With("certs_dir", certsDir).Wrap(err)
 	}
-	slog.Info("TLS certificates ready", "certs_dir", certsDir)
+	slog.InfoContext(ctx, "TLS certificates ready", "certs_dir", certsDir)
 
 	// Derive admin socket paths from XDG runtime dir. Non-fatal: if the
 	// runtime dir is unavailable, the admin socket is disabled (break-glass
@@ -308,10 +309,10 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// is a no-op when SocketPath is empty.
 	var adminSocketPath, adminLockPath string
 	if runtimeDir, rdErr := xdg.RuntimeDir(); rdErr != nil {
-		slog.Warn("admin socket disabled: cannot determine XDG runtime dir; break-glass unavailable",
+		slog.WarnContext(ctx, "admin socket disabled: cannot determine XDG runtime dir; break-glass unavailable",
 			"error", rdErr)
 	} else if ensureErr := xdg.EnsureDir(runtimeDir); ensureErr != nil {
-		slog.Warn("admin socket disabled: cannot create XDG runtime dir; break-glass unavailable",
+		slog.WarnContext(ctx, "admin socket disabled: cannot create XDG runtime dir; break-glass unavailable",
 			"path", runtimeDir, "error", ensureErr)
 	} else {
 		adminSocketPath = filepath.Join(runtimeDir, "admin.sock")
@@ -339,12 +340,12 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		if obsErr != nil {
 			return oops.Code("OBSERVABILITY_START_FAILED").With("addr", cfg.MetricsAddr).Wrap(obsErr)
 		}
-		slog.Info("observability server started", "addr", obsServer.Addr())
+		slog.InfoContext(ctx, "observability server started", "addr", obsServer.Addr())
 		defer func() {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			if stopErr := obsServer.Stop(shutdownCtx); stopErr != nil {
-				slog.Warn("error stopping observability server", "error", stopErr)
+				slog.WarnContext(shutdownCtx, "error stopping observability server", "error", stopErr)
 			}
 		}()
 		// Monitor in background — will be cancelled when context ends.
@@ -463,7 +464,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer stopCancel()
 			if stopErr := eventBusSub.Stop(stopCtx); stopErr != nil {
-				slog.Warn("event bus cleanup failed on early-return path",
+				slog.WarnContext(stopCtx, "event bus cleanup failed on early-return path",
 					"err", stopErr.Error())
 			}
 		}
@@ -736,7 +737,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// server continues to start (handler construction itself is always successful).
 	kekProvider, kekErr := buildKEKProviderFromConfig(ctx, dbSub.Pool())
 	if kekErr != nil {
-		slog.Warn("admin handlers: KEK provider unavailable — TOTP-gated admin RPCs will fail at runtime",
+		slog.WarnContext(ctx, "admin handlers: KEK provider unavailable — TOTP-gated admin RPCs will fail at runtime",
 			"error", kekErr)
 		kekProvider = nil
 	}
@@ -752,7 +753,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			authSub.Hasher(),
 		)
 		if totpErr != nil {
-			slog.Warn("admin handlers: TOTP service construction failed — admin TOTP RPCs will be unavailable at runtime",
+			slog.WarnContext(ctx, "admin handlers: TOTP service construction failed — admin TOTP RPCs will be unavailable at runtime",
 				"error", totpErr)
 		} else {
 			adminTOTPSvc = builtTOTP
@@ -772,7 +773,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			slog.Default(),
 		)
 		if auditErr != nil {
-			slog.Warn("admin handlers: TOTP audit service construction failed", "error", auditErr)
+			slog.WarnContext(ctx, "admin handlers: TOTP audit service construction failed", "error", auditErr)
 		} else {
 			totpAuditSvc = builtAudit
 		}
@@ -793,7 +794,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			adminRoleStore,
 		)
 		if provErr != nil {
-			slog.Warn("admin handlers: InGameCredentialsProvider construction failed — Authenticate will be unavailable",
+			slog.WarnContext(ctx, "admin handlers: InGameCredentialsProvider construction failed — Authenticate will be unavailable",
 				"error", provErr)
 		} else {
 			approvalRepo := approval.NewPostgresRepo(dbSub.Pool(), nil)
@@ -802,7 +803,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			resetTOTPHandler = adminauth.NewResetTOTPHandler(adminSessionStore, abacSub.Resolver(), adminRoleStore, totpAuditSvc)
 		}
 	} else {
-		slog.Warn("admin handlers: TOTP audit service unavailable — all three admin RPCs (Authenticate/Approve/ResetTOTP) will return errors")
+		slog.WarnContext(ctx, "admin handlers: TOTP audit service unavailable — all three admin RPCs (Authenticate/Approve/ResetTOTP) will return errors")
 	}
 
 	// --- Phase 5 sub-epic E T44: production dek.Manager + rekey RPC wiring ---
@@ -860,7 +861,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		return rekeyWErr
 	}
 	if rekeyW.RekeyHandler == nil {
-		slog.Warn("rekey wiring incomplete — Rekey admin RPCs will return Unimplemented",
+		slog.WarnContext(ctx, "rekey wiring incomplete — Rekey admin RPCs will return Unimplemented",
 			"kek_available", kekProvider != nil)
 	}
 	// Thread the production dek.Manager into the gRPC subsystem so Start()
@@ -895,10 +896,10 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			Metrics:   invMetrics,
 		})
 		if invErr != nil {
-			slog.Warn("invalidation.Coordinator construction failed — cluster fan-out unavailable; Rekey will surface INVALIDATION_NO_LIVE_MEMBERS",
+			slog.WarnContext(ctx, "invalidation.Coordinator construction failed — cluster fan-out unavailable; Rekey will surface INVALIDATION_NO_LIVE_MEMBERS",
 				"error", invErr)
 		} else if startErr := c.Start(ctx); startErr != nil {
-			slog.Warn("invalidation.Coordinator start failed — cluster fan-out unavailable",
+			slog.WarnContext(ctx, "invalidation.Coordinator start failed — cluster fan-out unavailable",
 				"error", startErr)
 		} else {
 			coordHolderPtr.coord = c
@@ -907,7 +908,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 				stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				if stopErr := c.Stop(stopCtx); stopErr != nil {
-					slog.Warn("invalidation.Coordinator stop error", "error", stopErr)
+					slog.WarnContext(stopCtx, "invalidation.Coordinator stop error", "error", stopErr)
 				}
 			}()
 		}
@@ -929,7 +930,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// the architectural decision and the wrappers it deliberately omits.
 	const operatorReadMaxWindowWarnThreshold = 90 * 24 * time.Hour
 	if cryptoCfg.OperatorReadMaxWindow > operatorReadMaxWindowWarnThreshold {
-		slog.Warn("admin readstream: OperatorReadMaxWindow > 90d — oversized windows greatly inflate cold-tier read row-count and memory pressure",
+		slog.WarnContext(ctx, "admin readstream: OperatorReadMaxWindow > 90d — oversized windows greatly inflate cold-tier read row-count and memory pressure",
 			"configured", cryptoCfg.OperatorReadMaxWindow,
 			"threshold", operatorReadMaxWindowWarnThreshold)
 	}
@@ -956,7 +957,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		return readStreamWErr
 	}
 	if readStreamW.Handler == nil {
-		slog.Warn("admin readstream wiring incomplete — AdminReadStream RPC will return Unimplemented",
+		slog.WarnContext(ctx, "admin readstream wiring incomplete — AdminReadStream RPC will return Unimplemented",
 			"dek_manager_available", rekeyW.Manager != nil)
 	}
 
@@ -1032,7 +1033,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	if readyErr := registry.WaitReady(readinessCtx); readyErr != nil {
 		for id, status := range registry.Status() {
 			if !status.Tier.IsReady() {
-				slog.Error(
+				slog.ErrorContext(
+					ctx,
 					"subsystem not ready",
 					"subsystem", id.String(),
 					"tier", status.Tier.String(),
@@ -1066,7 +1068,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		return oops.Code("CONTROL_SERVER_START_FAILED").With("addr", cfg.ControlAddr).Wrap(err)
 	}
 	go monitorServerErrors(ctx, cancel, controlErrChan, "control-grpc")
-	slog.Info("control gRPC server started", "addr", cfg.ControlAddr)
+	slog.InfoContext(ctx, "control gRPC server started", "addr", cfg.ControlAddr)
 
 	// --- 11. Signal handling ---
 	sigChan := make(chan os.Signal, 1)
@@ -1076,7 +1078,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	telemetry.EmitStartupSpan(ctx, "holomush-core", version, bootStart)
 
 	cmd.Println("Core process started")
-	slog.Info(
+	slog.InfoContext(
+		ctx,
 		"core process ready",
 		"game_id", gameID,
 		"grpc_addr", cfg.GRPCAddr,
@@ -1084,24 +1087,24 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 
 	select {
 	case sig := <-sigChan:
-		slog.Info("received shutdown signal", "signal", sig)
+		slog.InfoContext(ctx, "received shutdown signal", "signal", sig)
 	case <-ctx.Done():
-		slog.Info("context cancelled, shutting down")
+		slog.InfoContext(ctx, "context cancelled, shutting down")
 	}
 
 	// --- 12. Graceful shutdown ---
-	slog.Info("shutting down...")
+	slog.InfoContext(ctx, "shutting down...")
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 
 	if err := controlGRPCServer.Stop(shutdownCtx); err != nil {
-		slog.Warn("error stopping control gRPC server", "error", err)
+		slog.WarnContext(shutdownCtx, "error stopping control gRPC server", "error", err)
 	}
 
 	// Subsystem shutdown handled by deferred orch.StopAll above.
 
-	slog.Info("shutdown complete")
+	slog.InfoContext(ctx, "shutdown complete")
 	return nil
 }
 
@@ -1280,7 +1283,8 @@ func monitorServerErrors(ctx context.Context, cancel context.CancelFunc, errCh <
 			return
 		}
 		if err != nil {
-			slog.Error(
+			slog.ErrorContext(
+				ctx,
 				"server error, triggering shutdown",
 				"server", serverName,
 				"error", err,

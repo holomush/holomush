@@ -103,7 +103,7 @@ func (r *PostgresAliasRepository) DeleteSystemAlias(ctx context.Context, alias s
 		return oops.With("operation", "delete system alias").With("alias", alias).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
-		slog.Debug("delete system alias: no rows affected", "alias", alias)
+		slog.DebugContext(ctx, "delete system alias: no rows affected", "alias", alias)
 	}
 	return nil
 }
@@ -162,7 +162,7 @@ func (r *PostgresAliasRepository) DeletePlayerAlias(ctx context.Context, playerI
 			Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
-		slog.Debug("delete player alias: no rows affected",
+		slog.DebugContext(ctx, "delete player alias: no rows affected",
 			"player_id", playerID.String(),
 			"alias", alias)
 	}

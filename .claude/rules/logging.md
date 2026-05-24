@@ -61,12 +61,21 @@ func main() {
 }
 ```
 
-## Enforcement (planned)
+## Enforcement
 
-This rule will be enforced mechanically by the `sloglint` linter with
-`context: scope` — that setting flags a bare log call **only when a
-`context.Context` is in scope**, which is exactly the "unless absolutely
-impossible" carve-out above. Enabling it is a large mechanical migration
-(~600 call sites today) tracked as `holomush-xrdjw`; until it lands, the
-rule is enforced by review. Do not introduce new bare-variant call sites that
-have a ctx available.
+This rule is enforced mechanically by the `sloglint` linter (golangci-lint v2,
+`bin/custom-gcl`, `task lint:go`) with the Tier C policy:
+
+| Check | Effect |
+| ----- | ------ |
+| `context: scope` | A bare `slog.*`/`logger.*` call is flagged **only** when a `context.Context` is in scope — the "unless absolutely impossible" carve-out is the linter's own semantics. |
+| `no-mixed-args` | Forbids mixing `slog.Attr` values and loose `"k", v` pairs in one call. |
+| `static-msg` | The message MUST be a string literal/constant — dynamic data goes in attributes. |
+| `msg-style: lowercased` | Messages start lowercase. |
+| `key-naming-case: snake` | Attribute keys are snake_case. |
+| `forbidden-keys` | `time`/`level`/`msg`/`source` are banned (collide with slog's reserved fields). |
+
+Rejected checks and why: `no-global` (would forbid the package-level `slog.*` calls
+that are the codebase's established shape), `attr-only`/`no-raw-keys` (high-ceremony
+typed-attr/const-key rewrites). `//nolint:sloglint` MUST be line-scoped with an
+explanation; do not widen `.golangci.yaml` to suppress findings.

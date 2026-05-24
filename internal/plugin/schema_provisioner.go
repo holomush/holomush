@@ -75,7 +75,7 @@ func (sp *SchemaProvisioner) Init(ctx context.Context) error {
 				currentUser, currentUser)
 	}
 
-	slog.Info("schema provisioner initialized", "role", currentUser, "createrole", true)
+	slog.InfoContext(ctx, "schema provisioner initialized", "role", currentUser, "createrole", true)
 
 	sp.pool = pool
 	return nil
@@ -124,7 +124,7 @@ func (sp *SchemaProvisioner) ProvisionSchema(ctx context.Context, pluginName str
 		return "", err
 	}
 
-	slog.Info("provisioned plugin schema with isolated role",
+	slog.InfoContext(ctx, "provisioned plugin schema with isolated role",
 		"plugin", pluginName, "schema", schemaName, "role", roleName)
 
 	connStr, err := pluginConnString(sp.baseConnString, schemaName, roleName, password)
@@ -189,7 +189,7 @@ func (sp *SchemaProvisioner) PurgeSchema(ctx context.Context, pluginName string)
 			With("role", roleName).Wrap(err)
 	}
 
-	slog.Info("purged plugin schema and role", "plugin", pluginName, "role", roleName)
+	slog.InfoContext(ctx, "purged plugin schema and role", "plugin", pluginName, "role", roleName)
 	return nil
 }
 

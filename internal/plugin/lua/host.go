@@ -272,7 +272,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 	// Check if on_event exists
 	onEvent := L.GetGlobal("on_event")
 	if onEvent.Type() == lua.LTNil {
-		slog.Debug("plugin has no handler defined",
+		slog.DebugContext(ctx, "plugin has no handler defined",
 			"plugin", name,
 			"event_type", event.Type)
 		return nil, nil
@@ -296,7 +296,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 
 	emits, validationErrs := h.parseEmitEvents(ret)
 	if len(validationErrs) > 0 {
-		slog.Warn("plugin emit validation errors",
+		slog.WarnContext(ctx, "plugin emit validation errors",
 			"plugin", name,
 			"error_count", len(validationErrs),
 			"errors", validationErrs)
@@ -340,7 +340,7 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 
 	onCommand := L.GetGlobal("on_command")
 	if onCommand.Type() == lua.LTNil {
-		slog.Debug("plugin has no on_command handler",
+		slog.DebugContext(ctx, "plugin has no on_command handler",
 			"plugin", name,
 			"command", cmd.Command)
 		return pluginsdk.OK(""), nil
@@ -492,7 +492,7 @@ func (h *Host) callOnCommand(ctx context.Context, state *lua.LState, name string
 
 	emits, validationErrs := h.parseEmitEvents(ret)
 	if len(validationErrs) > 0 {
-		slog.Warn("plugin emit validation errors",
+		slog.WarnContext(ctx, "plugin emit validation errors",
 			"plugin", name,
 			"error_count", len(validationErrs),
 			"errors", validationErrs)

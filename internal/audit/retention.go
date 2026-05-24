@@ -66,35 +66,35 @@ func (w *RetentionWorker) RunOnce(ctx context.Context) error {
 
 	// Ensure partitions exist for the next 3 months
 	if err := w.manager.EnsurePartitions(ctx, 3); err != nil {
-		w.logger.Error("ensure partitions failed", "error", err)
+		w.logger.ErrorContext(ctx, "ensure partitions failed", "error", err)
 		errs = append(errs, err)
 	}
 
 	// Purge expired allow records
 	purged, err := w.manager.PurgeExpiredAllows(ctx, now.Add(-w.cfg.RetainAllows))
 	if err != nil {
-		w.logger.Error("purge expired allows failed", "error", err)
+		w.logger.ErrorContext(ctx, "purge expired allows failed", "error", err)
 		errs = append(errs, err)
 	} else if purged > 0 {
-		w.logger.Info("purged expired allow records", "count", purged)
+		w.logger.InfoContext(ctx, "purged expired allow records", "count", purged)
 	}
 
 	// Detach expired partitions
 	detached, err := w.manager.DetachExpiredPartitions(ctx, now.Add(-w.cfg.RetainDenials))
 	if err != nil {
-		w.logger.Error("detach expired partitions failed", "error", err)
+		w.logger.ErrorContext(ctx, "detach expired partitions failed", "error", err)
 		errs = append(errs, err)
 	} else if len(detached) > 0 {
-		w.logger.Info("detached expired partitions", "partitions", detached)
+		w.logger.InfoContext(ctx, "detached expired partitions", "partitions", detached)
 	}
 
 	// Drop detached partitions after grace period
 	dropped, err := w.manager.DropDetachedPartitions(ctx, 7*24*time.Hour)
 	if err != nil {
-		w.logger.Error("drop detached partitions failed", "error", err)
+		w.logger.ErrorContext(ctx, "drop detached partitions failed", "error", err)
 		errs = append(errs, err)
 	} else if len(dropped) > 0 {
-		w.logger.Info("dropped detached partitions", "partitions", dropped)
+		w.logger.InfoContext(ctx, "dropped detached partitions", "partitions", dropped)
 	}
 
 	return errors.Join(errs...)
@@ -132,7 +132,7 @@ func (w *RetentionWorker) run(ctx context.Context) {
 
 	// Run once immediately
 	if err := w.RunOnce(ctx); err != nil {
-		w.logger.Error("retention cycle failed", "error", err)
+		w.logger.ErrorContext(ctx, "retention cycle failed", "error", err)
 	}
 
 	for {
@@ -141,7 +141,7 @@ func (w *RetentionWorker) run(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if err := w.RunOnce(ctx); err != nil {
-				w.logger.Error("retention cycle failed", "error", err)
+				w.logger.ErrorContext(ctx, "retention cycle failed", "error", err)
 			}
 		}
 	}

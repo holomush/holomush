@@ -235,10 +235,10 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	if s.cfg.CertsDir != "" {
 		ca, caErr := tlscerts.LoadCA(s.cfg.CertsDir)
 		if caErr != nil {
-			slog.Warn("plugin mTLS disabled: could not load CA", "error", caErr)
+			slog.WarnContext(ctx, "plugin mTLS disabled: could not load CA", "error", caErr)
 		} else {
 			hostOpts = append(hostOpts, goplugin.WithCA(ca, s.cfg.GameID))
-			slog.Info("plugin mTLS enabled", "certs_dir", s.cfg.CertsDir)
+			slog.InfoContext(ctx, "plugin mTLS enabled", "certs_dir", s.cfg.CertsDir)
 		}
 	}
 
@@ -296,7 +296,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	// errors fail fast and visibly. Use plugins.WithGracefulDegradation() in
 	// the manager options (intended for local dev only) to log and continue.
 	if loadErr := s.manager.LoadAll(ctx); loadErr != nil {
-		slog.Error("failed to load plugins", "error", loadErr)
+		slog.ErrorContext(ctx, "failed to load plugins", "error", loadErr)
 		return oops.In("plugin-subsystem").Wrapf(loadErr, "loading plugins")
 	}
 
@@ -324,7 +324,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	// Register plugin-provided commands.
 	s.manager.RegisterPluginCommands(s.cmdRegistry)
 
-	slog.Info("plugin subsystem started", "plugins_dir", pluginsDir)
+	slog.InfoContext(ctx, "plugin subsystem started", "plugins_dir", pluginsDir)
 	return nil
 }
 
@@ -337,11 +337,11 @@ func (s *PluginSubsystem) Stop(_ context.Context) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	if err := s.manager.Close(shutdownCtx); err != nil {
-		slog.Warn("error closing plugin manager", "error", err)
+		slog.WarnContext(shutdownCtx, "error closing plugin manager", "error", err)
 	}
 	if s.worldConn != nil {
 		if err := s.worldConn.Close(); err != nil {
-			slog.Warn("error closing world in-process connection", "error", err)
+			slog.WarnContext(shutdownCtx, "error closing world in-process connection", "error", err)
 		}
 	}
 	if s.schemaProvisioner != nil {

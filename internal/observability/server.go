@@ -259,7 +259,7 @@ func (s *Server) Stop(ctx context.Context) error {
 		}
 	}
 
-	slog.Info("observability server stopped")
+	slog.InfoContext(ctx, "observability server stopped")
 	return nil
 }
 

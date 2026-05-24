@@ -37,7 +37,8 @@ func pushSuccess(L *lua.LState, value lua.LValue) int {
 // pushServiceUnavailable logs and returns a standard error when the world service
 // is not configured. This consolidates the nil check boilerplate.
 func (f *Functions) pushServiceUnavailable(L *lua.LState, funcName, pluginName string) int {
-	slog.Error(funcName+" called but world service unavailable",
+	slog.Error("host function called but world service unavailable",
+		"func", funcName,
 		"plugin", pluginName,
 		"hint", "use WithWorldService option when creating hostfunc.Functions")
 	return pushError(L, "world service not configured - contact server administrator")
@@ -46,7 +47,8 @@ func (f *Functions) pushServiceUnavailable(L *lua.LState, funcName, pluginName s
 // pushMutatorUnavailable logs and returns a standard error when the world service
 // does not support mutations.
 func pushMutatorUnavailable(L *lua.LState, funcName, pluginName string) int {
-	slog.Warn(funcName+" called but world service does not support mutations",
+	slog.Warn("host function called but world service does not support mutations",
+		"func", funcName,
 		"plugin", pluginName)
 	return pushError(L, "world service does not support mutations")
 }
@@ -57,9 +59,11 @@ func pushMutatorUnavailable(L *lua.LState, funcName, pluginName string) int {
 func parseULID(L *lua.LState, idStr, pluginName, funcName, paramName string) (ulid.ULID, bool) {
 	id, err := ulid.Parse(idStr)
 	if err != nil {
-		slog.Debug(funcName+": invalid "+paramName+" format",
+		slog.Debug("invalid ULID format in host function argument",
+			"func", funcName,
 			"plugin", pluginName,
-			paramName, idStr,
+			"param", paramName,
+			"value", idStr,
 			"error", err)
 		pushError(L, fmt.Sprintf("invalid %s: %s", paramName, err.Error()))
 		return ulid.ULID{}, false

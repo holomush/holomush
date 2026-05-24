@@ -66,7 +66,7 @@ func (s *AuthSubsystem) DependsOn() []lifecycle.SubsystemID {
 // boot when admin handler construction needs Hasher() / AuthService()
 // before the orchestrator drives StartAll. Mirrors store.DatabaseSubsystem.Start.
 // codecov:ignore — tested by integration and E2E tests
-func (s *AuthSubsystem) Start(_ context.Context) error {
+func (s *AuthSubsystem) Start(ctx context.Context) error {
 	// Idempotency guard: only short-circuit if BOTH services are constructed.
 	// If a previous Start partially failed (e.g., resetSvc construction
 	// errored after authSvc was assigned), s.authService would be non-nil
@@ -103,7 +103,7 @@ func (s *AuthSubsystem) Start(_ context.Context) error {
 	s.authService = authSvc
 	s.resetService = resetSvc
 
-	slog.Info("auth subsystem started")
+	slog.InfoContext(ctx, "auth subsystem started")
 	return nil
 }
 

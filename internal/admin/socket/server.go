@@ -124,7 +124,7 @@ func (s *Server) Stop(ctx context.Context) error {
 		s.httpServer = nil
 	}
 	if rmErr := os.Remove(s.cfg.SocketPath); rmErr != nil && !os.IsNotExist(rmErr) {
-		slog.Warn("admin: failed to remove admin.sock", "path", s.cfg.SocketPath, "error", rmErr)
+		slog.WarnContext(ctx, "admin: failed to remove admin.sock", "path", s.cfg.SocketPath, "error", rmErr)
 	}
 	if s.lockFile != nil {
 		_ = s.lockFile.Close() //nolint:errcheck // best-effort release; flock is dropped when fd closes
