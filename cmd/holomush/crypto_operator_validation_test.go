@@ -44,10 +44,13 @@ func seedPlayer(t *testing.T, ctx context.Context, pool *pgxpool.Pool) string {
 	// Username uses the full ULID for uniqueness — ULIDs created in the
 	// same millisecond share their timestamp prefix, so a short prefix
 	// is not collision-safe.
+	// INV-TS-1: players.created_at is BIGINT-ns; deterministic fixture so the
+	// seed value survives the round-trip unambiguously and the test is reproducible.
+	createdAt := time.Date(2026, 5, 22, 12, 0, 0, 123456789, time.UTC).UnixNano()
 	_, err := pool.Exec(ctx,
 		`INSERT INTO players (id, username, password_hash, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $4)`,
-		id, "test_player_"+id, "hash", time.Now().UTC().UnixNano())
+		id, "test_player_"+id, "hash", createdAt)
 	require.NoError(t, err)
 	return id
 }
