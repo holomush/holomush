@@ -164,7 +164,8 @@ func (l *Logger) Log(ctx context.Context, event Event) error {
 			// Fallback to WAL
 			if walErr := l.writeToWAL(event); walErr != nil {
 				// Both failed - log error and return it to the caller
-				slog.Error(
+				slog.ErrorContext(
+					ctx,
 					"audit write failed: both DB and WAL failed",
 					"db_error", err,
 					"wal_error", walErr,
@@ -183,7 +184,8 @@ func (l *Logger) Log(ctx context.Context, event Event) error {
 					Errorf("audit write failed: both DB and WAL failed")
 			}
 			// WAL succeeded but primary DB failed — log degraded state
-			slog.Warn(
+			slog.WarnContext(
+				ctx,
 				"audit DB write failed, fell back to WAL",
 				"db_error", err,
 				"subject", event.Subject,
@@ -214,7 +216,8 @@ func (l *Logger) Log(ctx context.Context, event Event) error {
 		// Channel full - drop event, increment metric, and return error so
 		// engine callers can track audit loss via RecordEngineAuditFailure.
 		channelFullCounter.Inc()
-		slog.Warn(
+		slog.WarnContext(
+			ctx,
 			"audit channel full: dropping async event",
 			"subject", event.Subject,
 			"action", event.Action,
@@ -282,7 +285,7 @@ func (l *Logger) asyncConsumer() {
 					"error", err,
 					"subject", event.Subject,
 					"action", event.Action,
-					"source", event.Source,
+					"event_source", event.Source,
 					"component", event.Component,
 				)
 				failuresCounter.WithLabelValues("async_write_failed").Inc()
@@ -396,7 +399,7 @@ func (l *Logger) ReplayWAL(ctx context.Context) error {
 
 		var event Event
 		if err := json.Unmarshal([]byte(line), &event); err != nil {
-			slog.Error("failed to unmarshal WAL event", "error", err, "line", line)
+			slog.ErrorContext(ctx, "failed to unmarshal WAL event", "error", err, "line", line)
 			failuresCounter.WithLabelValues("wal_unmarshal_failed").Inc()
 			// Keep the raw line so it is preserved for manual inspection.
 			failedLines = append(failedLines, line)
@@ -404,7 +407,7 @@ func (l *Logger) ReplayWAL(ctx context.Context) error {
 		}
 
 		if err := l.writer.WriteSync(ctx, event); err != nil {
-			slog.Error("failed to replay WAL event", "error", err, "event", event)
+			slog.ErrorContext(ctx, "failed to replay WAL event", "error", err, "event", event)
 			failuresCounter.WithLabelValues("wal_replay_failed").Inc()
 			// Re-marshal so the event is preserved in the WAL for retry.
 			if raw, merr := json.Marshal(event); merr == nil {
@@ -432,7 +435,7 @@ func (l *Logger) ReplayWAL(ctx context.Context) error {
 			return oops.With("path", l.walPath).Wrap(rerr)
 		}
 		walEntriesGauge.Set(float64(len(failedLines)))
-		slog.Warn("partially replayed WAL entries; WAL rewritten with failed entries",
+		slog.WarnContext(ctx, "partially replayed WAL entries; WAL rewritten with failed entries",
 			"replayed", replayed, "failed", len(failedLines))
 		return &PartialReplayError{FailedCount: len(failedLines), TotalCount: replayed + len(failedLines), ReplayedCount: replayed}
 	}
@@ -443,7 +446,7 @@ func (l *Logger) ReplayWAL(ctx context.Context) error {
 	}
 
 	walEntriesGauge.Set(0)
-	slog.Info("replayed WAL entries", "count", replayed)
+	slog.InfoContext(ctx, "replayed WAL entries", "count", replayed)
 	return nil
 }
 

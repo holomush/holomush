@@ -66,26 +66,26 @@ func NewAuditingService(
 func (a *AuditingService) emit(ctx context.Context, subjectStr, eventTypeStr string, payload any) {
 	body, err := json.Marshal(payload)
 	if err != nil {
-		a.logger.Warn("totp_audit: payload marshal failed; emit skipped",
+		a.logger.WarnContext(ctx, "totp_audit: payload marshal failed; emit skipped",
 			"event_type", eventTypeStr, "subject", subjectStr, "error", err)
 		return
 	}
 	subj, err := eventbus.NewSubject(subjectStr)
 	if err != nil {
-		a.logger.Warn("totp_audit: invalid subject; emit skipped",
+		a.logger.WarnContext(ctx, "totp_audit: invalid subject; emit skipped",
 			"subject", subjectStr, "error", err)
 		return
 	}
 	evtType, err := eventbus.NewType(eventTypeStr)
 	if err != nil {
-		a.logger.Warn("totp_audit: invalid event type; emit skipped",
+		a.logger.WarnContext(ctx, "totp_audit: invalid event type; emit skipped",
 			"event_type", eventTypeStr, "error", err)
 		return
 	}
 	ev := eventbus.NewEvent(subj, evtType, eventbus.Actor{Kind: eventbus.ActorKindSystem}, body)
 	ev.Timestamp = a.clock.Now() // honour the injected clock rather than time.Now() inside NewEvent
 	if err := a.pub.Publish(ctx, ev); err != nil {
-		a.logger.Warn("totp_audit: Publish failed; audit event lost (informational, INV-D14)",
+		a.logger.WarnContext(ctx, "totp_audit: Publish failed; audit event lost (informational, INV-D14)",
 			"event_type", eventTypeStr, "subject", subjectStr, "publish_error", err)
 	}
 }

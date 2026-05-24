@@ -114,7 +114,7 @@ func (w *PostgresWriter) batchConsumer() {
 		defer cancel()
 
 		if err := w.writeBatch(ctx, batch); err != nil {
-			slog.Error("failed to write audit batch", "error", err, "count", len(batch))
+			slog.ErrorContext(ctx, "failed to write audit batch", "error", err, "count", len(batch))
 			failuresCounter.WithLabelValues("batch_write_failed").Inc()
 		}
 
@@ -180,7 +180,7 @@ func (w *PostgresWriter) writeBatch(ctx context.Context, events []Event) error {
 		event := &events[i]
 		attributesJSON, err := json.Marshal(event.Attributes)
 		if err != nil {
-			slog.Error("failed to marshal attributes", "error", err, "event", event)
+			slog.ErrorContext(ctx, "failed to marshal attributes", "error", err, "event", event)
 			continue
 		}
 
@@ -201,7 +201,7 @@ func (w *PostgresWriter) writeBatch(ctx context.Context, events []Event) error {
 			event.Timestamp.UnixNano(), // pgnanos-exempt: SQL-cast boundary for BIGINT timestamp column
 		)
 		if err != nil {
-			slog.Error("failed to insert audit event", "error", err, "event", event)
+			slog.ErrorContext(ctx, "failed to insert audit event", "error", err, "event", event)
 			// Continue with other events
 		}
 	}
