@@ -14,6 +14,7 @@ import (
 // For oops errors, it extracts and logs the message, code, context, and stacktrace.
 // For standard errors, it logs the error string.
 func LogError(logger *slog.Logger, msg string, err error) {
+	//nolint:sloglint // log wrapper: msg is forwarded from the caller (see holomush-lhx5w)
 	logger.Error(msg, oopsAttrs(err)...)
 }
 
@@ -23,6 +24,7 @@ func LogError(logger *slog.Logger, msg string, err error) {
 func LogErrorContext(ctx context.Context, msg string, err error, extraAttrs ...any) {
 	attrs := oopsAttrs(err)
 	attrs = append(attrs, extraAttrs...)
+	//nolint:sloglint // log wrapper: msg is forwarded from the caller (see holomush-lhx5w)
 	slog.ErrorContext(ctx, msg, attrs...)
 }
 

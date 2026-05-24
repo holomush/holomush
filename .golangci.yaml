@@ -32,6 +32,11 @@ linters:
     - gocritic
     - nolintlint
 
+    # Logging correctness — enforce trace-context propagation + structured-log
+    # discipline (see CLAUDE.md "Structured Logging" + .claude/rules/logging.md,
+    # spec docs/superpowers/specs/2026-05-24-logging-discipline-policy-design.md).
+    - sloglint
+
     # Custom bans
     - forbidigo
 
@@ -130,6 +135,20 @@ linters:
     errcheck:
       check-type-assertions: true
       check-blank: true
+
+    sloglint:
+      # *Context variant required only when a context.Context is in scope
+      # (leaves main/init/bare-goroutine sites untouched).
+      context: scope
+      no-mixed-args: true
+      static-msg: true
+      msg-style: lowercased
+      key-naming-case: snake
+      forbidden-keys:
+        - time
+        - level
+        - msg
+        - source
 
     govet:
       enable-all: true
