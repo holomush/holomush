@@ -17,7 +17,7 @@ func TestLoggingConfig_Defaults(t *testing.T) {
 	require.True(t, c.Sentry.Enabled)
 }
 
-func TestLoggingSink_EffectiveLevel(t *testing.T) {
+func TestLoggingSink_EffectiveLevel(t *testing.T) { // INV-L4
 	global := slog.LevelInfo
 	require.Equal(t, slog.LevelWarn, LoggingSink{Level: "warn"}.EffectiveLevel(global))
 	require.Equal(t, global, LoggingSink{}.EffectiveLevel(global)) // unset → global

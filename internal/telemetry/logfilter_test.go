@@ -26,7 +26,7 @@ func (r *recordingProcessor) Enabled(_ context.Context, _ sdklog.EnabledParamete
 func (r *recordingProcessor) Shutdown(context.Context) error   { return nil }
 func (r *recordingProcessor) ForceFlush(context.Context) error { return nil }
 
-func TestLevelFilter_DropsBelowThreshold(t *testing.T) {
+func TestLevelFilter_DropsBelowThreshold(t *testing.T) { // INV-L4
 	sink := &recordingProcessor{}
 	f := newLevelFilter(sink, otellog.SeverityWarn)
 

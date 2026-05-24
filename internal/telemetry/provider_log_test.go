@@ -14,7 +14,7 @@ import (
 	"github.com/holomush/holomush/internal/telemetry"
 )
 
-func TestINV_L7_NoLogSinks_NilHandler(t *testing.T) {
+func TestINV_L7_NoLogSinks_NilHandler(t *testing.T) { // INV-L7
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 	t.Setenv("SENTRY_DSN", "")
 	res, err := telemetry.Init(context.Background(), "svc", "v1", config.DefaultLoggingConfig(), slog.LevelInfo)

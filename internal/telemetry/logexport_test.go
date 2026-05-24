@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSentryLogsTarget(t *testing.T) {
+func TestSentryLogsTarget(t *testing.T) { // INV-L8
 	dsn := "https://abc123@o4509.ingest.us.sentry.io/4510"
 	url, header, err := sentryLogsTarget(dsn)
 	require.NoError(t, err)

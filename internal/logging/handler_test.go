@@ -138,7 +138,7 @@ func TestSetupWithBridge_NilBridgeStderrOnly(t *testing.T) {
 	require.Contains(t, stderr.String(), "only-stderr")
 }
 
-func TestSetupWithBridge_StderrDisabledBridgeOnly(t *testing.T) {
+func TestSetupWithBridge_StderrDisabledBridgeOnly(t *testing.T) { // INV-L2
 	var stderr bytes.Buffer
 	var bridged []string
 	bridge := captureHandler{onHandle: func(r slog.Record) { bridged = append(bridged, r.Message) }}
@@ -148,7 +148,7 @@ func TestSetupWithBridge_StderrDisabledBridgeOnly(t *testing.T) {
 	require.Equal(t, []string{"bridge-only"}, bridged)
 }
 
-func TestSetupWithBridge_AllDisabledDiscards(t *testing.T) {
+func TestSetupWithBridge_AllDisabledDiscards(t *testing.T) { // INV-L2
 	var stderr bytes.Buffer
 	logger := SetupWithBridge("svc", "v1", "json", &stderr, false, slog.LevelInfo, nil, slog.LevelInfo)
 	logger.Info("nowhere")
