@@ -143,7 +143,7 @@ func NewSentryRelayHandler(dsn string) (http.Handler, error) {
 		}
 		defer func() {
 			if closeErr := resp.Body.Close(); closeErr != nil {
-				slog.Debug("sentry relay: close upstream body", "error", closeErr.Error())
+				slog.DebugContext(r.Context(), "sentry relay: close upstream body", "error", closeErr.Error())
 			}
 		}()
 
