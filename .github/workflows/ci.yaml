@@ -51,8 +51,15 @@ jobs:
       - name: Install Task
         uses: ./.github/actions/install-task
 
+      - name: Install ripgrep
+        # gfo6 Phase 5 lint tasks (lint:no-timestamptz, lint:no-microsecond-truncate,
+        # lint:no-unixnano-in-repos) use rg per the project's 'always use rg'
+        # convention. The ubuntu-latest runner does not include ripgrep by default.
+        run: sudo apt-get install -y --no-install-recommends ripgrep
+
       # golangci-lint, actionlint, and yamlfmt are pinned in go.tool-lint.mod
       # and built on demand by the Taskfile (`go tool`) — no separate install.
+
       - name: Install tools
         run: |
           RUMDL_VERSION="v0.1.62"
