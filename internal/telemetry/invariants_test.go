@@ -48,6 +48,17 @@ func TestINV_L3_L5_BuildLogProcessors_GatesAndSkips(t *testing.T) { // INV-L3 IN
 	})
 }
 
+// TestINV_L4_BridgeFloorIsMinEnabledSink asserts that the bridge gate floor is
+// the minimum effective level across the enabled OTel sinks, so a per-sink level
+// set below the global level still reaches its sink's filter (INV-L4).
+func TestINV_L4_BridgeFloorIsMinEnabledSink(t *testing.T) { // INV-L4
+	cfg := config.DefaultLoggingConfig()
+	cfg.Sentry.Level = "debug" // below global info
+	floor, anyEnabled := enabledLogFloor(cfg, slog.LevelInfo, "collector:4317", true)
+	require.True(t, anyEnabled)
+	require.Equal(t, slog.LevelDebug, floor) // min(info collector, debug sentry) = debug
+}
+
 // TestINV_L6_ShutdownRunsCleanly asserts that Result.Shutdown flushes log
 // batches before exit without panicking, even when the collector endpoint is
 // unreachable. The shutdown path exercises lp.Shutdown → tp.Shutdown → Sentry

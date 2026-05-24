@@ -50,6 +50,12 @@ import (
 type Result struct {
 	Shutdown   func(context.Context) error
 	LogHandler slog.Handler
+	// LogBridgeLevel is the floor for the OTel bridge handler = the minimum
+	// effective level across the enabled OTel log sinks (spec §3). Only
+	// meaningful when LogHandler != nil. The caller passes it as the bridge
+	// gate level so a per-sink level below the global level still reaches its
+	// sink's filter (INV-L4).
+	LogBridgeLevel slog.Level
 }
 
 // Init initializes the OpenTelemetry SDK.
@@ -146,8 +152,9 @@ func Init(ctx context.Context, serviceName, serviceVersion string, logCfg config
 	// active, lp stays nil and LogHandler is nil (INV-L7) — the caller keeps
 	// its stderr-only logger.
 	var (
-		lp         *sdklog.LoggerProvider
-		logHandler slog.Handler
+		lp          *sdklog.LoggerProvider
+		logHandler  slog.Handler
+		bridgeLevel slog.Level
 	)
 	if procs := buildLogProcessors(ctx, logCfg, global, endpoint, sentryCfg.DSN, sentryEnabled); len(procs) > 0 {
 		lpOpts := []sdklog.LoggerProviderOption{sdklog.WithResource(res)}
@@ -157,6 +164,10 @@ func Init(ctx context.Context, serviceName, serviceVersion string, logCfg config
 		lp = sdklog.NewLoggerProvider(lpOpts...)
 		logglobal.SetLoggerProvider(lp)
 		logHandler = otelslog.NewHandler(serviceName, otelslog.WithLoggerProvider(lp))
+		// The bridge gate floor = min effective level across the enabled OTel
+		// sinks (spec §3), so a per-sink level below global still reaches its
+		// sink's filter (INV-L4).
+		bridgeLevel, _ = enabledLogFloor(logCfg, global, endpoint, sentryEnabled)
 	}
 
 	slog.Info( //nolint:gosec // G706: values from env vars / caller-controlled constants, not untrusted user input
@@ -168,7 +179,8 @@ func Init(ctx context.Context, serviceName, serviceVersion string, logCfg config
 	)
 
 	return Result{
-		LogHandler: logHandler,
+		LogHandler:     logHandler,
+		LogBridgeLevel: bridgeLevel,
 		Shutdown: func(shutdownCtx context.Context) error {
 			// INV-L6 shutdown order: drain the LoggerProvider first so log
 			// batches flush over their transports (collector / Sentry OTLP),
@@ -202,6 +214,30 @@ func slogToOTel(l slog.Level) otellog.Severity {
 	default:
 		return otellog.SeverityError
 	}
+}
+
+// enabledLogFloor returns the minimum effective slog level across the
+// enabled OTel log sinks and whether any sink is enabled. Gating MUST match
+// buildLogProcessors (INV-L3): collector on endpoint!=""&&cfg.OTel.Enabled,
+// Sentry on sentryEnabled&&cfg.Sentry.Enabled.
+func enabledLogFloor(cfg config.LoggingConfig, global slog.Level, endpoint string, sentryEnabled bool) (slog.Level, bool) {
+	floor := global
+	anyEnabled := false
+	if endpoint != "" && cfg.OTel.Enabled {
+		l := cfg.OTel.EffectiveLevel(global)
+		if !anyEnabled || l < floor {
+			floor = l
+		}
+		anyEnabled = true
+	}
+	if sentryEnabled && cfg.Sentry.Enabled {
+		l := cfg.Sentry.EffectiveLevel(global)
+		if !anyEnabled || l < floor {
+			floor = l
+		}
+		anyEnabled = true
+	}
+	return floor, anyEnabled
 }
 
 // buildLogProcessors returns the gated log processors for the enabled OTel

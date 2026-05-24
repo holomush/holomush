@@ -181,8 +181,8 @@ type levelGate struct {
 }
 
 // NewLevelGate returns a handler that only passes records at or above min to h.
-func NewLevelGate(min slog.Level, h slog.Handler) slog.Handler {
-	return &levelGate{min: min, handler: h}
+func NewLevelGate(minLevel slog.Level, h slog.Handler) slog.Handler {
+	return &levelGate{min: minLevel, handler: h}
 }
 
 func (g *levelGate) Enabled(ctx context.Context, level slog.Level) bool {

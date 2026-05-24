@@ -51,6 +51,9 @@ func newSentryLogExporter(ctx context.Context, dsn string) (sdklog.Exporter, err
 	if err != nil {
 		return nil, err
 	}
+	// NOTE: this mutates process-global env (unset + deferred restore). It
+	// assumes telemetry.Init runs once at startup, mirroring sentry.go's
+	// trace-path precedent; concurrent callers would race the env var.
 	prev, had := os.LookupEnv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	if had {
 		if uerr := os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT"); uerr != nil {

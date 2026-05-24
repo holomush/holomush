@@ -104,6 +104,7 @@ from telnet and web clients, forwarding commands to the core process.`,
 			if err := config.Load(configFile, cmd, &logConfig, "logging"); err != nil {
 				return err
 			}
+			applyLogSinkFlags(cmd, &logConfig)
 			return runGatewayWithDeps(cmd.Context(), cfg, logConfig, cmd, nil)
 		},
 	}
@@ -187,7 +188,7 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, logConfig confi
 	}
 	// Phase 2: re-seat the default logger with the OTel bridge when present.
 	if res.LogHandler != nil {
-		logging.SetDefaultWithBridge("holomush-gateway", version, cfg.LogFormat, logConfig.Stderr.Enabled, stderrLevel, res.LogHandler, level)
+		logging.SetDefaultWithBridge("holomush-gateway", version, cfg.LogFormat, logConfig.Stderr.Enabled, stderrLevel, res.LogHandler, res.LogBridgeLevel)
 	}
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

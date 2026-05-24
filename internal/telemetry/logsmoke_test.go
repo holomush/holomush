@@ -5,6 +5,7 @@ package telemetry
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -23,5 +24,7 @@ func TestLogSDKSurface(t *testing.T) {
 	h := otelslog.NewHandler("holomush-test", otelslog.WithLoggerProvider(lp))
 	require.NotNil(t, h)
 
-	require.Equal(t, otellog.SeverityWarn, otellog.SeverityWarn)
+	// Pin the slog→OTel severity offset alignment: our banding must map
+	// slog.LevelWarn to OTel's SeverityWarn (locks against otelslog offset drift).
+	require.Equal(t, otellog.SeverityWarn, slogToOTel(slog.LevelWarn))
 }

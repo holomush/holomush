@@ -141,6 +141,7 @@ manages plugins, and handles game state.`,
 			if err := config.Load(configFile, cmd, &logConfig, "logging"); err != nil {
 				return err
 			}
+			applyLogSinkFlags(cmd, &logConfig)
 			return runCoreWithDeps(cmd.Context(), cfg, gameConfig, authConfig, eventBusConfig, cryptoConfig, logConfig, cmd, nil)
 		},
 	}
@@ -174,6 +175,31 @@ func registerLogSinkFlags(cmd *cobra.Command) {
 	cmd.Flags().String("log-otel-level", "", "collector log level override (default: global)")
 	cmd.Flags().Bool("log-sentry", true, "enable Sentry log sink")
 	cmd.Flags().String("log-sentry-level", "", "Sentry log level override (default: global)")
+}
+
+// applyLogSinkFlags overlays explicitly-set --log-* flags onto lc, giving CLI
+// flags precedence over the YAML `logging` section (spec §5). The flat flag
+// names don't map to LoggingConfig's nested koanf keys via posflag, so bind
+// them here explicitly.
+func applyLogSinkFlags(cmd *cobra.Command, lc *config.LoggingConfig) {
+	if cmd.Flags().Changed("log-stderr") {
+		lc.Stderr.Enabled, _ = cmd.Flags().GetBool("log-stderr") //nolint:errcheck // flag type is known/registered
+	}
+	if cmd.Flags().Changed("log-stderr-level") {
+		lc.Stderr.Level, _ = cmd.Flags().GetString("log-stderr-level") //nolint:errcheck // flag type is known/registered
+	}
+	if cmd.Flags().Changed("log-otel") {
+		lc.OTel.Enabled, _ = cmd.Flags().GetBool("log-otel") //nolint:errcheck // flag type is known/registered
+	}
+	if cmd.Flags().Changed("log-otel-level") {
+		lc.OTel.Level, _ = cmd.Flags().GetString("log-otel-level") //nolint:errcheck // flag type is known/registered
+	}
+	if cmd.Flags().Changed("log-sentry") {
+		lc.Sentry.Enabled, _ = cmd.Flags().GetBool("log-sentry") //nolint:errcheck // flag type is known/registered
+	}
+	if cmd.Flags().Changed("log-sentry-level") {
+		lc.Sentry.Level, _ = cmd.Flags().GetString("log-sentry-level") //nolint:errcheck // flag type is known/registered
+	}
 }
 
 // runCoreWithDeps starts and runs the core process using the provided configuration and injectable dependencies.
@@ -212,7 +238,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	}
 	// Phase 2: re-seat the default logger with the OTel bridge when present.
 	if res.LogHandler != nil {
-		logging.SetDefaultWithBridge("holomush-core", version, cfg.LogFormat, logConfig.Stderr.Enabled, stderrLevel, res.LogHandler, level)
+		logging.SetDefaultWithBridge("holomush-core", version, cfg.LogFormat, logConfig.Stderr.Enabled, stderrLevel, res.LogHandler, res.LogBridgeLevel)
 	}
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

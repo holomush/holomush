@@ -914,6 +914,22 @@ func TestCoreCommand_GameConfigFallback(t *testing.T) {
 	assert.NotZero(t, id, "parsed ULID should not be zero value")
 }
 
+// TestCoreCommand_LogSinkFlagsBind verifies that explicitly-set --log-* flags
+// overlay onto LoggingConfig (spec §5: CLI > config > default), and that
+// untouched flags leave the config defaults intact.
+func TestCoreCommand_LogSinkFlagsBind(t *testing.T) {
+	cmd := NewCoreCmd()
+	require.NoError(t, cmd.Flags().Parse([]string{
+		"--log-stderr=false", "--log-sentry-level=warn", "--log-otel=false",
+	}))
+	lc := config.DefaultLoggingConfig()
+	applyLogSinkFlags(cmd, &lc)
+	require.False(t, lc.Stderr.Enabled)
+	require.False(t, lc.OTel.Enabled)
+	require.Equal(t, "warn", lc.Sentry.Level)
+	require.True(t, lc.Sentry.Enabled) // untouched flag keeps default
+}
+
 // TestSignalHandling_ChannelSetup verifies that signal handling sets up channels correctly.
 // This tests the signal.Notify behavior and ensures proper channel configuration.
 func TestSignalHandling_ChannelSetup(t *testing.T) {

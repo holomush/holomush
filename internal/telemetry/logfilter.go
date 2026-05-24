@@ -19,15 +19,15 @@ type levelFilter struct {
 	min  otellog.Severity
 }
 
-func newLevelFilter(next sdklog.Processor, min otellog.Severity) *levelFilter {
-	return &levelFilter{next: next, min: min}
+func newLevelFilter(next sdklog.Processor, minSeverity otellog.Severity) *levelFilter {
+	return &levelFilter{next: next, min: minSeverity}
 }
 
 func (f *levelFilter) OnEmit(ctx context.Context, rec *sdklog.Record) error {
 	if rec.Severity() < f.min {
 		return nil
 	}
-	return f.next.OnEmit(ctx, rec)
+	return f.next.OnEmit(ctx, rec) //nolint:wrapcheck // delegating passthrough to wrapped sdklog.Processor
 }
 
 // Enabled delegates to the wrapped processor. Severity filtering is applied at
@@ -36,5 +36,10 @@ func (f *levelFilter) Enabled(ctx context.Context, param sdklog.EnabledParameter
 	return f.next.Enabled(ctx, param)
 }
 
-func (f *levelFilter) Shutdown(ctx context.Context) error   { return f.next.Shutdown(ctx) }
-func (f *levelFilter) ForceFlush(ctx context.Context) error { return f.next.ForceFlush(ctx) }
+func (f *levelFilter) Shutdown(ctx context.Context) error {
+	return f.next.Shutdown(ctx) //nolint:wrapcheck // delegating passthrough to wrapped sdklog.Processor
+}
+
+func (f *levelFilter) ForceFlush(ctx context.Context) error {
+	return f.next.ForceFlush(ctx) //nolint:wrapcheck // delegating passthrough to wrapped sdklog.Processor
+}
