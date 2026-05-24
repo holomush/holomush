@@ -61,7 +61,13 @@ services:
       - --log-format=json
     environment:
       DATABASE_URL: postgres://holomush:${POSTGRES_PASSWORD}@postgres:5432/holomush?sslmode=require
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}
+      # Empty by default: with no OTLP endpoint the telemetry SDK no-ops
+      # (internal/telemetry/provider.go). A localhost:4317 default made the
+      # service spam "telemetry SDK error: connection refused" on deployments
+      # without a collector. Operators wanting tracing set this explicitly
+      # (e.g. OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317) and run the
+      # observability profile.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       # Error/trace reporting. Empty SENTRY_DSN disables Sentry (no-op), so
       # self-hosters without Sentry are unaffected.
       SENTRY_DSN: ${SENTRY_DSN:-}
@@ -91,8 +97,12 @@ services:
       - --core-addr=core:9000
       - --metrics-addr=0.0.0.0:9101
       - --log-format=json
+      # Served over TLS (Cloudflare edge -> tunnel -> gateway), so session
+      # cookies MUST carry the Secure flag + SameSite=Strict.
+      - --secure-cookies
     environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}
+      # Empty by default — see the core service note above (no-op without a collector).
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       # Gateway reads SENTRY_DSN (cmd/holomush/gateway.go); empty = disabled.
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
@@ -157,8 +167,8 @@ services:
     restart: unless-stopped
     profiles: [observability]
     environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
-      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
     volumes:
       - ${CONFIG_DIR:-/opt/holomush/config}/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
     networks:

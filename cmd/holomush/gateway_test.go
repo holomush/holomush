@@ -539,6 +539,25 @@ func TestGatewayCommand_WebDefaults(t *testing.T) {
 	corsOrigins, err := cmd.Flags().GetStringSlice("cors-origins")
 	require.NoError(t, err)
 	assert.Empty(t, corsOrigins)
+
+	// secure-cookies defaults false so local plain-HTTP dev keeps working;
+	// TLS deployments (the sandbox) MUST pass --secure-cookies (holomush-w8ywo).
+	secureCookies, err := cmd.Flags().GetBool("secure-cookies")
+	require.NoError(t, err)
+	assert.False(t, secureCookies)
+}
+
+// TestGatewayCommand_SecureCookiesFlag verifies --secure-cookies binds to the
+// gateway config so the gateway can set web.Config.Secure on TLS deployments
+// (holomush-w8ywo regression lock).
+func TestGatewayCommand_SecureCookiesFlag(t *testing.T) {
+	cmd := NewGatewayCmd()
+	err := cmd.Flags().Parse([]string{"--secure-cookies"})
+	require.NoError(t, err)
+
+	secureCookies, err := cmd.Flags().GetBool("secure-cookies")
+	require.NoError(t, err)
+	assert.True(t, secureCookies)
 }
 
 // TestControlServerError_TriggersShutdown verifies that when the control gRPC server

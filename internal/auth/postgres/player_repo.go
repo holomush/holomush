@@ -311,8 +311,10 @@ func (r *PlayerRepository) ListIdleGuests(ctx context.Context, idleSince time.Ti
 }
 
 // DeleteGuestPlayer removes a guest player. The is_guest=true guard prevents
-// accidental deletion of registered players. FK cascades delete characters
-// and player sessions.
+// accidental deletion of registered players. FK cascades delete characters,
+// player sessions, and player_character_bindings (the bindings cascade was
+// added in migration 000040; without it the reaper failed with a 23503 FK
+// violation for any guest that had a character binding).
 func (r *PlayerRepository) DeleteGuestPlayer(ctx context.Context, playerID ulid.ULID) error {
 	result, err := r.pool.Exec(ctx, `
 		DELETE FROM players WHERE id = $1 AND is_guest = true
