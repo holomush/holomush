@@ -30,7 +30,7 @@ func (r *PostgresRoleResolver) GetRoles(ctx context.Context, subject string) []s
 	charID := strings.TrimPrefix(subject, "character:")
 	roles, err := r.store.GetRoles(ctx, charID)
 	if err != nil {
-		slog.Error("role resolution failed", "subject", subject, "error", err)
+		slog.ErrorContext(ctx, "role resolution failed", "subject", subject, "error", err)
 		return nil
 	}
 	return roles

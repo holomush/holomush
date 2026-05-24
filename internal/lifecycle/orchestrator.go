@@ -52,7 +52,7 @@ func (o *Orchestrator) StartAll(ctx context.Context) error {
 
 	for _, id := range order {
 		sub := o.subsystems[id]
-		slog.Info("starting subsystem", "subsystem", id.String())
+		slog.InfoContext(ctx, "starting subsystem", "subsystem", id.String())
 		start := time.Now()
 
 		if startErr := sub.Start(ctx); startErr != nil {
@@ -66,7 +66,7 @@ func (o *Orchestrator) StartAll(ctx context.Context) error {
 
 		o.startOrder = append(o.startOrder, id)
 
-		slog.Info(
+		slog.InfoContext(ctx,
 			"subsystem started",
 			"subsystem", id.String(),
 			"duration", time.Since(start).String(),
@@ -81,10 +81,10 @@ func (o *Orchestrator) StopAll(ctx context.Context) {
 	for i := len(o.startOrder) - 1; i >= 0; i-- {
 		id := o.startOrder[i]
 		sub := o.subsystems[id]
-		slog.Info("stopping subsystem", "subsystem", id.String())
+		slog.InfoContext(ctx, "stopping subsystem", "subsystem", id.String())
 
 		if err := sub.Stop(ctx); err != nil {
-			slog.Error(
+			slog.ErrorContext(ctx,
 				"subsystem stop error",
 				"subsystem", id.String(),
 				"error", err,

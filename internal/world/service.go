@@ -383,13 +383,13 @@ func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID
 			// Log cleanup issues at appropriate level
 			if cleanupResult.IsSevere() {
 				// Severe: operation was rolled back, primary delete did NOT complete
-				slog.Error("bidirectional exit delete rolled back",
+				slog.ErrorContext(ctx, "bidirectional exit delete rolled back",
 					"exit_id", cleanupResult.ExitID.String(),
 					"error", cleanupResult.Error())
 				return oops.Code("EXIT_DELETE_FAILED").Wrapf(err, "delete exit %s", id)
 			}
 			// Non-severe: primary delete succeeded, return exit was just not found
-			slog.Info("bidirectional exit cleanup notice: return exit already deleted",
+			slog.InfoContext(ctx, "bidirectional exit cleanup notice: return exit already deleted",
 				"exit_id", cleanupResult.ExitID.String(),
 				"to_location_id", cleanupResult.ToLocationID.String(),
 				"return_name", cleanupResult.ReturnName)

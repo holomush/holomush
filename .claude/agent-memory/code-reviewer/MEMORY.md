@@ -8,6 +8,33 @@ Keep under 200 lines. Curate — don't hoard.
 
 ## Anti-patterns
 
+- **sloglint `context:scope` (v0.11.1, golangci-lint v2.11.4) does NOT flag bare
+  `slog.X` inside a closure** even when the enclosing FuncDecl has a `ctx`
+  first param. Standalone `sloglint@v0.11.1 -context-only=scope` DOES flag that
+  shape (`isContextInScope` walks FuncDecl only, finds enclosing ctx → reports),
+  but the golangci-lint-integrated path returns 0 issues — an integration quirk.
+  Consequence for sloglint Tier-C migration beads (holomush-ow4ix.*): bare calls
+  inside closures are NOT in the "findings" set the orchestrator migrates, so
+  sibling calls in the same function can legitimately diverge (one bare, others
+  `*Context`). Live example: `internal/world/events.go:79` (`slog.Debug` in the
+  `retry.Do` closure) stays bare while lines 93/102 in the same `emitWithRetry`
+  became `*Context`. Not a regression (predates the change); flag as non-blocking
+  consistency note, not a blocker. Encountered: holomush-ow4ix.12 (2026-05-24).
+
+- **G706 (log-injection) is excluded BY CONFIG for most internal pkgs, NOT all.**
+  `.golangci.yaml:117-123` excludes gosec G706 for a path regex covering
+  `internal/(access|command|core|grpc|logging|observability|plugin|store|telnet|tls|web|world|xdg)|cmd|pkg`.
+  `internal/bootstrap` and `internal/lifecycle` are NOT in that list, so those
+  pkgs need inline `//nolint:gosec // G706` directives. gosec slog G706 sinks are
+  `Info/Warn/Error/Debug` with `CheckArgs:[0]` (message only — attribute KV pairs
+  are auto-escaped, never flagged; per securego/gosec PR #1623). When a bare
+  `slog.Info(...) //nolint:gosec // G706` migrates to `slog.InfoContext(ctx, ...)`,
+  dropping the directive is correct IF the message arg is a static literal (it
+  always is under `static-msg:true`) — and nolintlint `require-explanation`+
+  `require-specific` would FAIL on the now-unused directive if kept. Verify by
+  running full-config `custom-gcl run ./<pkg>/...` → 0 issues. Encountered:
+  holomush-ow4ix.12 admin.go:111 (2026-05-24).
+
 - **`AGENTS.md` and `CLAUDE.md` are paired SSoTs**: at main they are
   byte-identical. `Taskfile.yaml`
   `lint:docs-symmetry` enforces only the `<!-- BEGIN: plugin-runtime-symmetry -->`

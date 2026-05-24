@@ -73,7 +73,7 @@ func (s *DatabaseSubsystem) Start(ctx context.Context) error {
 	}
 	s.gameID = gameID
 
-	slog.Info("database subsystem started", "game_id", gameID)
+	slog.InfoContext(ctx, "database subsystem started", "game_id", gameID)
 	return nil
 }
 

@@ -57,7 +57,7 @@ func (s *WorldSubsystem) DependsOn() []lifecycle.SubsystemID {
 
 // Start creates all world repositories, transactor, and WorldService.
 // codecov:ignore — tested by integration and E2E tests
-func (s *WorldSubsystem) Start(_ context.Context) error {
+func (s *WorldSubsystem) Start(ctx context.Context) error {
 	pool := s.cfg.DB.Pool()
 	engine := s.cfg.ABAC.Engine()
 
@@ -75,7 +75,7 @@ func (s *WorldSubsystem) Start(_ context.Context) error {
 	})
 	s.transactor = transactor
 
-	slog.Info("world subsystem started")
+	slog.InfoContext(ctx, "world subsystem started")
 	return nil
 }
 

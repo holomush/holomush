@@ -50,7 +50,7 @@ func SeedAdmin(ctx context.Context, deps SeedAdminDeps) error {
 		return oops.Code("ADMIN_BOOTSTRAP_FAILED").Wrap(err)
 	}
 	if count > 0 {
-		slog.Debug("admin bootstrap skipped: players already exist", "count", count)
+		slog.DebugContext(ctx, "admin bootstrap skipped: players already exist", "count", count)
 		return nil
 	}
 
@@ -108,7 +108,7 @@ func SeedAdmin(ctx context.Context, deps SeedAdminDeps) error {
 		}
 	}
 
-	slog.Info( //nolint:gosec // G706: values from env vars or generated, not untrusted user input
+	slog.InfoContext(ctx,
 		"admin account created",
 		slog.String("username", username),
 		slog.String("character", charName),

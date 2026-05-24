@@ -217,11 +217,11 @@ func (s *BootstrapSubsystem) Start(ctx context.Context) error {
 			return oops.Code("START_LOCATION_INVALID").With("value", locIDStr).Wrap(parseErr)
 		}
 		s.startLocationID = parsed
-		slog.Info("resolved starting location from bootstrap metadata", "id", locIDStr)
+		slog.InfoContext(ctx, "resolved starting location from bootstrap metadata", "id", locIDStr)
 	}
 
 	s.started = true
-	slog.Info("bootstrap subsystem started")
+	slog.InfoContext(ctx, "bootstrap subsystem started")
 	return nil
 }
 
@@ -248,7 +248,7 @@ func (s *BootstrapSubsystem) registerSettingBootstrapper(ctx context.Context, ru
 	mgr := s.cfg.Plugins.Manager()
 	discovered, err := mgr.Discover(ctx)
 	if err != nil {
-		slog.Warn("failed to discover setting plugins", "error", err)
+		slog.WarnContext(ctx, "failed to discover setting plugins", "error", err)
 		return nil
 	}
 
@@ -274,7 +274,7 @@ func (s *BootstrapSubsystem) registerSettingBootstrapper(ctx context.Context, ru
 				With("setting", s.cfg.Setting).
 				New("setting plugin not found and no active_setting recorded; cannot bootstrap world on first boot")
 		}
-		slog.Warn("setting plugin not found, skipping setting bootstrap (world already seeded)", "setting", s.cfg.Setting)
+		slog.WarnContext(ctx, "setting plugin not found, skipping setting bootstrap (world already seeded)", "setting", s.cfg.Setting)
 		return nil
 	}
 
@@ -290,7 +290,7 @@ func (s *BootstrapSubsystem) registerSettingBootstrapper(ctx context.Context, ru
 		PluginDir:     settingPlugin.Dir,
 		Logger:        slog.Default(),
 	}))
-	slog.Info("setting bootstrapper registered", "setting", s.cfg.Setting)
+	slog.InfoContext(ctx, "setting bootstrapper registered", "setting", s.cfg.Setting)
 
 	return nil
 }
