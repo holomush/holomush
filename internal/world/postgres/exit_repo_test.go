@@ -8,7 +8,6 @@ package postgres_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -28,14 +27,14 @@ func createTestLocations(ctx context.Context, t *testing.T) (ulid.ULID, ulid.ULI
 
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, loc1ID.String(), "Test Room 1", "First test room", "persistent", "last:0", time.Now())
+		VALUES ($1, $2, $3, $4, $5, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
+	`, loc1ID.String(), "Test Room 1", "First test room", "persistent", "last:0")
 	require.NoError(t, err)
 
 	_, err = testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, loc2ID.String(), "Test Room 2", "Second test room", "persistent", "last:0", time.Now())
+		VALUES ($1, $2, $3, $4, $5, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
+	`, loc2ID.String(), "Test Room 2", "Second test room", "persistent", "last:0")
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
@@ -656,8 +655,8 @@ func createTestLocationWithOwner(ctx context.Context, t *testing.T, name string,
 
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, owner_id, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, locID.String(), name, "Test location", "persistent", "last:0", ownerStr, time.Now())
+		VALUES ($1, $2, $3, $4, $5, $6, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
+	`, locID.String(), name, "Test location", "persistent", "last:0", ownerStr)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
@@ -799,8 +798,8 @@ func TestExitRepository_ListVisibleExits_UnknownVisibility(t *testing.T) {
 	exitID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO exits (id, from_location_id, to_location_id, name, visibility, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, exitID.String(), loc1ID.String(), loc2ID.String(), "mystery-door", "unknown", time.Now())
+		VALUES ($1, $2, $3, $4, $5, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
+	`, exitID.String(), loc1ID.String(), loc2ID.String(), "mystery-door", "unknown")
 	require.NoError(t, err)
 
 	// Unknown visibility should not be visible (fail-closed)

@@ -24,8 +24,8 @@ func createTestPlayer(ctx context.Context, t *testing.T, username string) ulid.U
 	t.Helper()
 	playerID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
-		INSERT INTO players (id, username, password_hash, created_at)
-		VALUES ($1, $2, 'testhash', NOW())
+		INSERT INTO players (id, username, password_hash, created_at, updated_at)
+		VALUES ($1, $2, 'testhash', (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 	`, playerID.String(), username)
 	require.NoError(t, err)
 
@@ -46,8 +46,8 @@ func TestPasswordResetRepository_Create(t *testing.T) {
 			ID:        ulid.Make(),
 			PlayerID:  playerID,
 			TokenHash: "testhash123",
-			ExpiresAt: time.Now().Add(time.Hour).UTC().Truncate(time.Microsecond),
-			CreatedAt: time.Now().UTC().Truncate(time.Microsecond),
+			ExpiresAt: time.Now().Add(time.Hour).UTC(),
+			CreatedAt: time.Now().UTC(),
 		}
 
 		err := repo.Create(ctx, reset)
@@ -106,8 +106,8 @@ func TestPasswordResetRepository_GetByPlayer(t *testing.T) {
 			ID:        ulid.Make(),
 			PlayerID:  playerID,
 			TokenHash: "older_hash",
-			ExpiresAt: time.Now().Add(time.Hour).UTC().Truncate(time.Microsecond),
-			CreatedAt: time.Now().Add(-time.Hour).UTC().Truncate(time.Microsecond),
+			ExpiresAt: time.Now().Add(time.Hour).UTC(),
+			CreatedAt: time.Now().Add(-time.Hour).UTC(),
 		}
 		err := repo.Create(ctx, older)
 		require.NoError(t, err)
@@ -116,8 +116,8 @@ func TestPasswordResetRepository_GetByPlayer(t *testing.T) {
 			ID:        ulid.Make(),
 			PlayerID:  playerID,
 			TokenHash: "newer_hash",
-			ExpiresAt: time.Now().Add(time.Hour).UTC().Truncate(time.Microsecond),
-			CreatedAt: time.Now().UTC().Truncate(time.Microsecond),
+			ExpiresAt: time.Now().Add(time.Hour).UTC(),
+			CreatedAt: time.Now().UTC(),
 		}
 		err = repo.Create(ctx, newer)
 		require.NoError(t, err)
@@ -151,8 +151,8 @@ func TestPasswordResetRepository_GetByTokenHash(t *testing.T) {
 			ID:        ulid.Make(),
 			PlayerID:  playerID,
 			TokenHash: "unique_test_hash",
-			ExpiresAt: time.Now().Add(time.Hour).UTC().Truncate(time.Microsecond),
-			CreatedAt: time.Now().UTC().Truncate(time.Microsecond),
+			ExpiresAt: time.Now().Add(time.Hour).UTC(),
+			CreatedAt: time.Now().UTC(),
 		}
 		err := repo.Create(ctx, reset)
 		require.NoError(t, err)

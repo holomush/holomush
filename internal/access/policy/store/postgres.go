@@ -17,6 +17,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/internal/pgnanos"
 )
 
 // PostgresStore implements PolicyStore using PostgreSQL.
@@ -45,10 +46,12 @@ func scanPolicy(row pgx.Row) (*StoredPolicy, error) {
 	var p StoredPolicy
 	var effect string
 	var ast []byte
+	var createdAt pgnanos.Time
+	var updatedAt pgnanos.Time
 	err := row.Scan(
 		&p.ID, &p.Name, &p.Description, &effect, &p.Source,
 		&p.DSLText, &ast, &p.Enabled, &p.SeedVersion,
-		&p.CreatedBy, &p.Version, &p.CreatedAt, &p.UpdatedAt,
+		&p.CreatedBy, &p.Version, &createdAt, &updatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scanning policy row: %w", err)
@@ -59,6 +62,8 @@ func scanPolicy(row pgx.Row) (*StoredPolicy, error) {
 	}
 	p.Effect = parsedEffect
 	p.CompiledAST = json.RawMessage(ast)
+	p.CreatedAt = createdAt.Time()
+	p.UpdatedAt = updatedAt.Time()
 	return &p, nil
 }
 
@@ -70,10 +75,12 @@ func scanPolicies(rows pgx.Rows) ([]*StoredPolicy, error) {
 		var p StoredPolicy
 		var effect string
 		var ast []byte
+		var createdAt pgnanos.Time
+		var updatedAt pgnanos.Time
 		err := rows.Scan(
 			&p.ID, &p.Name, &p.Description, &effect, &p.Source,
 			&p.DSLText, &ast, &p.Enabled, &p.SeedVersion,
-			&p.CreatedBy, &p.Version, &p.CreatedAt, &p.UpdatedAt,
+			&p.CreatedBy, &p.Version, &createdAt, &updatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scanning policy row: %w", err)
@@ -84,6 +91,8 @@ func scanPolicies(rows pgx.Rows) ([]*StoredPolicy, error) {
 		}
 		p.Effect = parsedEffect
 		p.CompiledAST = json.RawMessage(ast)
+		p.CreatedAt = createdAt.Time()
+		p.UpdatedAt = updatedAt.Time()
 		policies = append(policies, &p)
 	}
 	if err := rows.Err(); err != nil {
@@ -232,7 +241,8 @@ func (s *PostgresStore) Update(ctx context.Context, p *StoredPolicy) error {
 	result, err := tx.Exec(ctx, `
 		UPDATE access_policies
 		SET description = $2, effect = $3, source = $4, dsl_text = $5,
-		    compiled_ast = $6, enabled = $7, seed_version = $8, version = $9, updated_at = now()
+		    compiled_ast = $6, enabled = $7, seed_version = $8, version = $9,
+		    updated_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
 		WHERE name = $1
 	`, p.Name, p.Description, string(p.Effect), p.Source,
 		p.DSLText, []byte(p.CompiledAST), p.Enabled, p.SeedVersion, newVersion)
@@ -448,7 +458,7 @@ func (s *PostgresStore) List(ctx context.Context, opts ListOptions) ([]*StoredPo
 // (which may not change MAX(updated_at)).
 // Returns zero time and count 0 if no policies exist.
 func (s *PostgresStore) LatestPolicyVersion(ctx context.Context) (time.Time, int64, error) {
-	var ts *time.Time
+	var ts *pgnanos.Time
 	var count int64
 	err := s.pool.QueryRow(ctx, `SELECT MAX(updated_at), COUNT(*) FROM access_policies`).Scan(&ts, &count)
 	if err != nil {
@@ -457,5 +467,5 @@ func (s *PostgresStore) LatestPolicyVersion(ctx context.Context) (time.Time, int
 	if ts == nil {
 		return time.Time{}, count, nil
 	}
-	return *ts, count, nil
+	return ts.Time(), count, nil
 }

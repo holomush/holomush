@@ -11,6 +11,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/auth"
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/world"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 )
@@ -87,10 +88,12 @@ func (a *CharRepoAdapter) ListByPlayer(ctx context.Context, playerID ulid.ULID) 
 		var c world.Character
 		var idStr, playerIDStr string
 		var locIDStr *string
-		scanErr := rows.Scan(&idStr, &playerIDStr, &c.Name, &c.Description, &locIDStr, &c.CreatedAt)
+		var createdAt pgnanos.Time
+		scanErr := rows.Scan(&idStr, &playerIDStr, &c.Name, &c.Description, &locIDStr, &createdAt)
 		if scanErr != nil {
 			return nil, oops.Code("CHARACTER_SCAN_FAILED").Wrap(scanErr)
 		}
+		c.CreatedAt = createdAt.Time()
 		var parseErr error
 		c.ID, parseErr = ulid.Parse(idStr)
 		if parseErr != nil {

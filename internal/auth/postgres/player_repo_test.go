@@ -27,8 +27,8 @@ func TestPlayerRepository_Create(t *testing.T) {
 			ID:           ulid.Make(),
 			Username:     "create_test_user",
 			PasswordHash: "hash123",
-			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
-			UpdatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:    time.Now().UTC(),
+			UpdatedAt:    time.Now().UTC(),
 		}
 
 		err := repo.Create(ctx, player)
@@ -53,8 +53,8 @@ func TestPlayerRepository_Create(t *testing.T) {
 			Username:     "create_email_user",
 			PasswordHash: "hash123",
 			Email:        &email,
-			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
-			UpdatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:    time.Now().UTC(),
+			UpdatedAt:    time.Now().UTC(),
 		}
 
 		err := repo.Create(ctx, player)
@@ -80,8 +80,8 @@ func TestPlayerRepository_Create(t *testing.T) {
 				MaxCharacters: 10,
 				Theme:         "dark",
 			},
-			CreatedAt: time.Now().UTC().Truncate(time.Microsecond),
-			UpdatedAt: time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
 		}
 
 		err := repo.Create(ctx, player)
@@ -164,8 +164,8 @@ func TestPlayerRepository_GetByID(t *testing.T) {
 			Username:      "getbyid_user",
 			PasswordHash:  "hash123",
 			EmailVerified: true,
-			CreatedAt:     time.Now().UTC().Truncate(time.Microsecond),
-			UpdatedAt:     time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:     time.Now().UTC(),
+			UpdatedAt:     time.Now().UTC(),
 		}
 		err := repo.Create(ctx, player)
 		require.NoError(t, err)
@@ -199,8 +199,8 @@ func TestPlayerRepository_GetByUsername(t *testing.T) {
 			ID:           ulid.Make(),
 			Username:     "getbyusername_user",
 			PasswordHash: "hash123",
-			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
-			UpdatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:    time.Now().UTC(),
+			UpdatedAt:    time.Now().UTC(),
 		}
 		err := repo.Create(ctx, player)
 		require.NoError(t, err)
@@ -220,8 +220,8 @@ func TestPlayerRepository_GetByUsername(t *testing.T) {
 			ID:           ulid.Make(),
 			Username:     "CaseSensitiveUser",
 			PasswordHash: "hash123",
-			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
-			UpdatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:    time.Now().UTC(),
+			UpdatedAt:    time.Now().UTC(),
 		}
 		err := repo.Create(ctx, player)
 		require.NoError(t, err)
@@ -258,8 +258,8 @@ func TestPlayerRepository_GetByEmail(t *testing.T) {
 			Username:     "getbyemail_user",
 			PasswordHash: "hash123",
 			Email:        &email,
-			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
-			UpdatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:    time.Now().UTC(),
+			UpdatedAt:    time.Now().UTC(),
 		}
 		err := repo.Create(ctx, player)
 		require.NoError(t, err)
@@ -282,8 +282,8 @@ func TestPlayerRepository_GetByEmail(t *testing.T) {
 			Username:     "caseemail_user",
 			PasswordHash: "hash123",
 			Email:        &email,
-			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
-			UpdatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:    time.Now().UTC(),
+			UpdatedAt:    time.Now().UTC(),
 		}
 		err := repo.Create(ctx, player)
 		require.NoError(t, err)
@@ -318,8 +318,8 @@ func TestPlayerRepository_Update(t *testing.T) {
 			ID:           ulid.Make(),
 			Username:     "update_user",
 			PasswordHash: "hash123",
-			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
-			UpdatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:    time.Now().UTC(),
+			UpdatedAt:    time.Now().UTC(),
 		}
 		err := repo.Create(ctx, player)
 		require.NoError(t, err)
@@ -333,14 +333,14 @@ func TestPlayerRepository_Update(t *testing.T) {
 		player.Email = &email
 		player.EmailVerified = true
 		player.FailedAttempts = 3
-		lockTime := time.Now().Add(time.Hour).UTC().Truncate(time.Microsecond)
+		lockTime := time.Now().Add(time.Hour).UTC()
 		player.LockedUntil = &lockTime
 		player.Preferences = auth.PlayerPreferences{
 			AutoLogin:     true,
 			MaxCharacters: 15,
 			Theme:         "light",
 		}
-		player.UpdatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		player.UpdatedAt = time.Now().UTC()
 
 		err = repo.Update(ctx, player)
 		require.NoError(t, err)
@@ -380,8 +380,8 @@ func TestPlayerRepository_UpdatePassword(t *testing.T) {
 			ID:           ulid.Make(),
 			Username:     "updatepw_user",
 			PasswordHash: "original_hash",
-			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
-			UpdatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:    time.Now().UTC(),
+			UpdatedAt:    time.Now().UTC(),
 		}
 		err := repo.Create(ctx, player)
 		require.NoError(t, err)
@@ -444,14 +444,14 @@ func TestPlayerRepository_LockedUntil(t *testing.T) {
 	repo := postgres.NewPlayerRepository(testPool)
 
 	t.Run("stores and retrieves locked_until correctly", func(t *testing.T) {
-		lockTime := time.Now().Add(time.Hour).UTC().Truncate(time.Microsecond)
+		lockTime := time.Now().Add(time.Hour).UTC()
 		player := &auth.Player{
 			ID:           ulid.Make(),
 			Username:     "locked_user",
 			PasswordHash: "hash123",
 			LockedUntil:  &lockTime,
-			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
-			UpdatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:    time.Now().UTC(),
+			UpdatedAt:    time.Now().UTC(),
 		}
 
 		err := repo.Create(ctx, player)
@@ -473,8 +473,8 @@ func TestPlayerRepository_LockedUntil(t *testing.T) {
 			Username:     "unlocked_user",
 			PasswordHash: "hash123",
 			LockedUntil:  nil,
-			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
-			UpdatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:    time.Now().UTC(),
+			UpdatedAt:    time.Now().UTC(),
 		}
 
 		err := repo.Create(ctx, player)
@@ -500,8 +500,8 @@ func TestPlayerRepository_DefaultCharacterID(t *testing.T) {
 			Username:           "no_default_char",
 			PasswordHash:       "hash123",
 			DefaultCharacterID: nil,
-			CreatedAt:          time.Now().UTC().Truncate(time.Microsecond),
-			UpdatedAt:          time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:          time.Now().UTC(),
+			UpdatedAt:          time.Now().UTC(),
 		}
 
 		err := repo.Create(ctx, player)
@@ -575,15 +575,15 @@ func TestPlayerRepository_ExistingIDs(t *testing.T) {
 		ID:           ulid.Make(),
 		Username:     "existing_ids_user_1",
 		PasswordHash: "hash",
-		CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
-		UpdatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
 	}
 	p2 := &auth.Player{
 		ID:           ulid.Make(),
 		Username:     "existing_ids_user_2",
 		PasswordHash: "hash",
-		CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
-		UpdatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
 	}
 	require.NoError(t, repo.Create(ctx, p1))
 	require.NoError(t, repo.Create(ctx, p2))

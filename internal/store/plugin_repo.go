@@ -15,6 +15,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/internal/pgnanos"
 )
 
 // PluginUpsertInput is the row data for Upsert. ContentHash MAY be nil
@@ -80,9 +81,9 @@ func (r *PostgresPluginRepo) Upsert(ctx context.Context, in PluginUpsertInput) (
 		version      string
 		manifestHash []byte
 		contentHash  []byte
-		firstSeenAt  time.Time
-		lastSeenAt   time.Time
-		gcAt         *time.Time
+		firstSeenAt  pgnanos.Time
+		lastSeenAt   pgnanos.Time
+		gcAt         *pgnanos.Time
 	)
 	scanErr := r.pool.QueryRow(ctx, `
 		SELECT id, name, display_name, version, manifest_hash, content_hash,
@@ -133,7 +134,7 @@ func (r *PostgresPluginRepo) Upsert(ctx context.Context, in PluginUpsertInput) (
 	_, updateErr := r.pool.Exec(ctx, `
 		UPDATE plugins
 		   SET manifest_hash = $1, content_hash = $2, version = $3,
-		       last_seen_at = now()
+		       last_seen_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
 		 WHERE id = $4
 	`, in.ManifestHash, in.ContentHash, in.Version, existingID[:])
 	if updateErr != nil {
@@ -159,12 +160,21 @@ func (r *PostgresPluginRepo) ListAll(ctx context.Context) ([]PluginRow, error) {
 	for rows.Next() {
 		var p PluginRow
 		var idBytes []byte
+		var firstSeenAt pgnanos.Time
+		var lastSeenAt pgnanos.Time
+		var gcAt *pgnanos.Time
 		if err := rows.Scan(&idBytes, &p.Name, &p.DisplayName, &p.Version,
 			&p.ManifestHash, &p.ContentHash,
-			&p.FirstSeenAt, &p.LastSeenAt, &p.GcAt); err != nil {
+			&firstSeenAt, &lastSeenAt, &gcAt); err != nil {
 			return nil, oops.Code("PLUGIN_REPO_LIST_ALL_SCAN").Wrap(err)
 		}
 		copy(p.ID[:], idBytes)
+		p.FirstSeenAt = firstSeenAt.Time()
+		p.LastSeenAt = lastSeenAt.Time()
+		if gcAt != nil {
+			t := gcAt.Time()
+			p.GcAt = &t
+		}
 		out = append(out, p)
 	}
 	if err := rows.Err(); err != nil {
@@ -176,12 +186,20 @@ func (r *PostgresPluginRepo) ListAll(ctx context.Context) ([]PluginRow, error) {
 // SweepInactive marks plugins inactive (sets gc_at) whose last_seen_at is
 // older than retentionDays. It never DELETEs rows (INV-W9ML-9). Returns the
 // swept rows so the caller can log or act on them.
+//
+// retentionDays MUST be non-negative. A negative value would push the cutoff
+// into the future and mass-mark active plugins as GC candidates.
 func (r *PostgresPluginRepo) SweepInactive(ctx context.Context, retentionDays int) ([]PluginRow, error) {
+	if retentionDays < 0 {
+		return nil, oops.Code("PLUGIN_REPO_SWEEP_INVALID_RETENTION").
+			With("retention_days", retentionDays).
+			Errorf("retentionDays must be non-negative")
+	}
 	rows, err := r.pool.Query(ctx, `
 		UPDATE plugins
-		   SET gc_at = now()
+		   SET gc_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
 		 WHERE gc_at IS NULL
-		   AND last_seen_at < now() - make_interval(days => $1)
+		   AND last_seen_at < (EXTRACT(EPOCH FROM now() - make_interval(days => $1)) * 1e9)::BIGINT
 		 RETURNING id, name, display_name, version, manifest_hash,
 		           content_hash, first_seen_at, last_seen_at, gc_at
 	`, retentionDays)
@@ -195,12 +213,21 @@ func (r *PostgresPluginRepo) SweepInactive(ctx context.Context, retentionDays in
 	for rows.Next() {
 		var p PluginRow
 		var idBytes []byte
+		var firstSeenAt pgnanos.Time
+		var lastSeenAt pgnanos.Time
+		var gcAt *pgnanos.Time
 		if err := rows.Scan(&idBytes, &p.Name, &p.DisplayName, &p.Version,
 			&p.ManifestHash, &p.ContentHash,
-			&p.FirstSeenAt, &p.LastSeenAt, &p.GcAt); err != nil {
+			&firstSeenAt, &lastSeenAt, &gcAt); err != nil {
 			return nil, oops.Code("PLUGIN_REPO_SWEEP_SCAN").Wrap(err)
 		}
 		copy(p.ID[:], idBytes)
+		p.FirstSeenAt = firstSeenAt.Time()
+		p.LastSeenAt = lastSeenAt.Time()
+		if gcAt != nil {
+			t := gcAt.Time()
+			p.GcAt = &t
+		}
 		out = append(out, p)
 	}
 	if err := rows.Err(); err != nil {

@@ -27,14 +27,14 @@ func seedBindingTestData(ctx context.Context, t *testing.T) (playerID, character
 	characterID = charULID.String()
 
 	_, err := testPool.Exec(ctx, `
-		INSERT INTO players (id, username, password_hash, created_at)
-		VALUES ($1, $2, 'stub-hash', NOW())
+		INSERT INTO players (id, username, password_hash, created_at, updated_at)
+		VALUES ($1, $2, 'stub-hash', (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 	`, playerID, "binding_test_user_"+playerID)
 	require.NoError(t, err)
 
 	_, err = testPool.Exec(ctx, `
 		INSERT INTO characters (id, player_id, name, created_at)
-		VALUES ($1, $2, $3, NOW())
+		VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, characterID, playerID, "BindingTestChar"+charULID.String()[:6])
 	require.NoError(t, err)
 

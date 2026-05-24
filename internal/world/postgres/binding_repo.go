@@ -104,7 +104,7 @@ func (s *BindingRepository) End(ctx context.Context, bindingID, reason string) e
 	cmdTag, err := db.Exec(
 		ctx,
 		`UPDATE player_character_bindings
-		 SET ended_at = now(), ended_reason = $2
+		 SET ended_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, ended_reason = $2
 		 WHERE id = $1 AND ended_at IS NULL`,
 		bindingID, reason,
 	)

@@ -79,3 +79,64 @@ The `access_audit_log` table is partitioned by timestamp range. The migration
 creates the parent table definition but does not create partitions. The server
 creates partitions at bootstrap time. If you add a partitioned table, follow the
 same pattern: define the table in the migration, create partitions in Go.
+
+## Timestamp columns: BIGINT epoch nanoseconds
+
+Per `holomush-gfo6` (INV-TS-1), all new migrations MUST use `BIGINT` for
+persistent time values, storing nanoseconds since the UNIX epoch in UTC.
+`TIMESTAMPTZ` and `TIMESTAMP WITH TIME ZONE` (and bare `TIMESTAMP`) are
+prohibited in new schemas.
+
+**Schema pattern:**
+
+```sql
+CREATE TABLE thing (
+    id          TEXT PRIMARY KEY,
+    created_at  BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT,
+    updated_at  BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
+);
+```
+
+For columns with a pre-existing `DEFAULT` that need to be migrated from
+`TIMESTAMPTZ` to `BIGINT`, emit `ALTER COLUMN ... DROP DEFAULT` BEFORE
+`ALTER COLUMN ... TYPE` (PostgreSQL has no implicit cast from `TIMESTAMPTZ`
+to `BIGINT`), then `SET DEFAULT` with the new BIGINT expression.
+
+**Application code pattern:**
+
+Route every write and scan through the `pgnanos.Time` seam (ADR
+`holomush-rbw6`). The seam keeps caller-visible types as `time.Time` while
+satisfying pgx's binary protocol on the `BIGINT` column.
+
+```go
+import "github.com/holomush/holomush/internal/pgnanos"
+
+// Insert
+_, err := pool.Exec(ctx, `INSERT INTO thing (id, created_at) VALUES ($1, $2)`,
+    id, pgnanos.From(t))
+
+// Scan
+var createdAt pgnanos.Time
+err := row.Scan(&id, &createdAt)
+t := createdAt.Time()
+```
+
+When two writers touch the same column with different time sources, harmonize
+them to a single clock domain — typically SQL-side
+`(EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT` — to avoid drift between Go's
+clock and PostgreSQL's clock that can invert chronological ordering.
+
+**Why BIGINT instead of `TIMESTAMPTZ`:** preserves full nanosecond precision
+end-to-end so the audit AAD canonical encoding (INV-TS-5) reconstructs
+byte-equal without a microsecond truncate discipline, eliminates the
+~140 `.Truncate(time.Microsecond)` sites the prior pattern required, and
+gives deterministic ordering at nanosecond resolution. The rejected
+alternative (`timestamp9` PG extension) is discussed in
+`docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md`.
+
+**Enforcement:** `task lint:no-timestamptz` rejects new `TIMESTAMPTZ`/
+`TIMESTAMP` columns in post-cutoff migrations. `task lint:no-microsecond-truncate`
+rejects new `.Truncate(time.Microsecond)` calls. `task lint:no-unixnano-in-repos`
+rejects raw `UnixNano()` / `time.Unix(0, ...)` in repo packages.
+Escape hatch on any of the three: `-- pgnanos-exempt: <reason>` (SQL) or
+`// pgnanos-exempt: <reason>` (Go) on the same line.

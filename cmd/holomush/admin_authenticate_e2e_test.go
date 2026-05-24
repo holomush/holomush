@@ -32,6 +32,7 @@ import (
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/totp"
 	adminv1 "github.com/holomush/holomush/pkg/proto/holomush/admin/v1"
@@ -301,7 +302,7 @@ func setupAdminAuthEnv(t *testing.T) *adminAuthEnv {
 	} {
 		_, err = seedPool.Exec(seedCtx, `
 			INSERT INTO players (id, username, password_hash, created_at, updated_at)
-			VALUES ($1, $2, $3, now(), now())`,
+			VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)`,
 			row.id, row.username, row.hash)
 		Expect(err).NotTo(HaveOccurred(), "INSERT players %s", row.username)
 	}
@@ -570,7 +571,8 @@ var _ = Describe("Admin Authenticate Lifecycle (full-stack E2E)", func() {
 		// audit-projection roundtrip — separates "lockout never fired" from
 		// "lockout fired but projection lagged" in the failure mode.
 		Eventually(func() bool {
-			var lockedUntil *time.Time
+			// player_totp.locked_until is BIGINT epoch-ns (post-gfo6 Phase 4).
+			var lockedUntil *pgnanos.Time
 			err := env.queryPool.QueryRow(env.ctx,
 				`SELECT locked_until FROM player_totp WHERE player_id = $1`,
 				env.playerA.String()).Scan(&lockedUntil)

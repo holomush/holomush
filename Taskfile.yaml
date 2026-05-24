@@ -108,6 +108,9 @@ tasks:
       - task: lint:docs-symmetry
       - task: lint:docs-paths-sync
       - task: lint:adr
+      - task: lint:no-timestamptz
+      - task: lint:no-microsecond-truncate
+      - task: lint:no-unixnano-in-repos
 
   lint:adr:
     desc: "Run docs/adr/ health check (adr-doctor.sh)"
@@ -560,6 +563,79 @@ tasks:
           exit 1
         fi
         echo "AGENTS.md → CLAUDE.md symlink intact."
+
+  lint:no-unixnano-in-repos:
+    desc: "Reject UnixNano() / time.Unix(0, ...) in repo packages outside pgnanos (INV-TS-2)"
+    cmds:
+      - |
+        set -euo pipefail
+        # Repo packages MUST route timestamps through internal/pgnanos.Time
+        # as the scan/insert seam (ADR holomush-rbw6). Raw UnixNano() or
+        # time.Unix(0, ns) bypasses the seam and risks inconsistency.
+        # Escape hatch: '// pgnanos-exempt: <reason>' on the same line.
+        if rg -n "UnixNano\(\)|time\.Unix\(0," \
+             internal/auth/postgres/ internal/world/postgres/ internal/totp/ \
+             internal/eventbus/history/ plugins/*/ \
+             --type=go \
+             -g '!*_test.go' -g '!internal/pgnanos/**' \
+             | rg -v "pgnanos-exempt:" ; then
+          echo "FAIL: raw UnixNano() / time.Unix(0, ...) in repo code. Use internal/pgnanos.Time as the scan/insert seam."
+          echo "If unavoidable, annotate with '// pgnanos-exempt: <reason>' on the same line."
+          exit 1
+        fi
+
+  lint:no-microsecond-truncate:
+    desc: "Reject .Truncate(time.Microsecond) in Go code (INV-TS-3)"
+    cmds:
+      - |
+        set -euo pipefail
+        # Persistent timestamps are BIGINT-ns post-gfo6; .Truncate(time.Microsecond)
+        # is no longer needed. Escape hatch: '// pgnanos-exempt: <reason>' on the
+        # same line for external systems that legitimately require microsecond
+        # granularity (none currently expected).
+        if rg -n "Truncate\(time\.Microsecond\)" --type=go \
+             | rg -v "pgnanos-exempt:" ; then
+          echo "FAIL: .Truncate(time.Microsecond) found. Persistent timestamps are BIGINT-ns; truncation is no longer needed."
+          echo "If you have a non-PG external system that requires µs, annotate with '// pgnanos-exempt: <reason>' on the same line."
+          exit 1
+        fi
+
+  lint:no-timestamptz:
+    desc: "Reject new TIMESTAMPTZ/TIMESTAMP columns in post-gfo6 migrations (INV-TS-1)"
+    cmds:
+      - |
+        set -euo pipefail
+        # Historic migrations (those landing before holomush-gfo6) legitimately
+        # contain TIMESTAMPTZ literals — both the pre-conversion baseline and
+        # each Phase N ALTER COLUMN ... TYPE BIGINT USING ... migration. Only
+        # catch NEW migrations adding TIMESTAMPTZ columns post-cutoff.
+        # Escape hatch: append "-- pgnanos-exempt: <reason>" on the same line.
+        host_cutoff=$(cat internal/store/migrations/.gfo6-cutoff 2>/dev/null || echo "000000")
+
+        violations=0
+        for f in internal/store/migrations/*.up.sql; do
+          num=$(basename "$f" | rg -o "^[0-9]+")
+          if [[ "$num" > "$host_cutoff" ]]; then
+            if rg -n "TIMESTAMPTZ|TIMESTAMP WITH TIME ZONE|\bTIMESTAMP\b" "$f" | rg -v "pgnanos-exempt:" ; then
+              violations=$((violations + 1))
+            fi
+          fi
+        done
+        for f in plugins/*/migrations/*.up.sql; do
+          num=$(basename "$f" | rg -o "^[0-9]+")
+          dir=$(dirname "$f")
+          this_cutoff=$(cat "$dir/.gfo6-cutoff" 2>/dev/null || echo "000000")
+          if [[ "$num" > "$this_cutoff" ]]; then
+            if rg -n "TIMESTAMPTZ|TIMESTAMP WITH TIME ZONE|\bTIMESTAMP\b" "$f" | rg -v "pgnanos-exempt:" ; then
+              violations=$((violations + 1))
+            fi
+          fi
+        done
+        if [[ "$violations" -gt 0 ]]; then
+          echo "FAIL: $violations TIMESTAMPTZ/TIMESTAMP violations in post-gfo6 migrations. Use BIGINT (epoch ns)."
+          echo "If unavoidable, annotate with '-- pgnanos-exempt: <reason>' on the same line."
+          exit 1
+        fi
 
   # ──────────────────────────────────────────
   # Formatters (called by `task fmt`)

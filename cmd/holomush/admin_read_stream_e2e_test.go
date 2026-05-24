@@ -1685,12 +1685,13 @@ func waitForCarolApproval(env *adminAuthEnv) approval.RequestID {
 	Eventually(func() bool {
 		row := env.queryPool.QueryRow(
 			env.ctx,
+			// admin_approvals timestamps are BIGINT epoch-ns (post-gfo6 Phase 4).
 			`SELECT request_id
 			   FROM admin_approvals
 			  WHERE primary_player_id = $1
 			    AND op_kind = 'readstream'
 			    AND approved_at IS NULL
-			    AND expires_at > now()
+			    AND expires_at > (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
 			  ORDER BY created_at DESC
 			  LIMIT 1`,
 			env.playerC.String(),
@@ -1851,11 +1852,12 @@ func pendingApprovalCount(env *adminAuthEnv, primaryPlayer ulid.ULID, opKind str
 	var n int
 	err := env.queryPool.QueryRow(
 		env.ctx,
+		// admin_approvals.expires_at is BIGINT epoch-ns (post-gfo6 Phase 4).
 		`SELECT COUNT(*) FROM admin_approvals
 		  WHERE primary_player_id = $1
 		    AND op_kind = $2
 		    AND approved_at IS NULL
-		    AND expires_at > now()`,
+		    AND expires_at > (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT`,
 		primaryPlayer.String(), opKind,
 	).Scan(&n)
 	Expect(err).NotTo(HaveOccurred(), "pendingApprovalCount: COUNT(*) query")

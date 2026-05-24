@@ -15,6 +15,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/totp"
 	"github.com/holomush/holomush/pkg/errutil"
 	"github.com/holomush/holomush/test/testutil"
@@ -210,7 +211,7 @@ var _ = Describe("TOTPRepository", func() {
 			pid := ulid.Make().String()
 			insertTOTPPlayer(pool, pid, "uins"+pid)
 
-			now := time.Now().UTC().Truncate(time.Microsecond)
+			now := time.Now().UTC()
 			rec := totp.EnrollmentRecord{
 				PlayerID:      pid,
 				WrappedSecret: []byte("mysecret"),
@@ -270,7 +271,7 @@ var _ = Describe("TOTPRepository", func() {
 			pid := ulid.Make().String()
 			insertTOTPPlayer(pool, pid, "umv"+pid)
 
-			now := time.Now().UTC().Truncate(time.Microsecond)
+			now := time.Now().UTC()
 			rec := totp.EnrollmentRecord{
 				PlayerID:      pid,
 				WrappedSecret: []byte("s"),
@@ -283,7 +284,7 @@ var _ = Describe("TOTPRepository", func() {
 			_, err := pool.Exec(
 				ctx,
 				`UPDATE player_totp SET failed_attempts = 5, locked_until = $1 WHERE player_id = $2`,
-				now.Add(15*time.Minute), pid,
+				pgnanos.From(now.Add(15*time.Minute)), pid,
 			)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -304,6 +305,57 @@ var _ = Describe("TOTPRepository", func() {
 		})
 	})
 
+	Describe("IncrementFailedAttempts lockout arithmetic (gfo6.18 Step 5)", func() {
+		It("fires the $3::BIGINT + $4::BIGINT branch when threshold is crossed", func() {
+			pool := newTOTPPool()
+			repo := totp.NewRepository(pool)
+			ctx := context.Background()
+
+			pid := ulid.Make().String()
+			insertTOTPPlayer(pool, pid, "ifa"+pid)
+
+			now := time.Now().UTC()
+			Expect(repo.InsertEnrollment(ctx, totp.EnrollmentRecord{
+				PlayerID: pid, WrappedSecret: []byte("s"), WrapKeyID: "k", EnrolledAt: now,
+			})).NotTo(HaveOccurred())
+
+			// Seed failed_attempts to threshold-1 so the next increment fires
+			// the arithmetic branch (failed_attempts + 1 >= 5).
+			_, err := pool.Exec(ctx,
+				`UPDATE player_totp SET failed_attempts = 4 WHERE player_id = $1`, pid)
+			Expect(err).NotTo(HaveOccurred())
+
+			lockoutDuration := 15 * time.Minute
+			state, err := repo.IncrementFailedAttempts(ctx, pid, 5, lockoutDuration, now)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(state.FailedAttempts).To(Equal(5))
+			Expect(state.LockedUntil).NotTo(BeNil(), "lockout arithmetic must populate locked_until")
+
+			// The plain integer-add must produce now + lockoutDuration in ns.
+			expectedUntil := now.Add(lockoutDuration)
+			Expect(state.LockedUntil.Equal(expectedUntil)).To(BeTrue(),
+				"locked_until=%v should equal expected=%v (delta=%v)",
+				state.LockedUntil, expectedUntil, state.LockedUntil.Sub(expectedUntil))
+		})
+
+		It("does NOT fire the arithmetic branch when below threshold", func() {
+			pool := newTOTPPool()
+			repo := totp.NewRepository(pool)
+			ctx := context.Background()
+
+			pid := ulid.Make().String()
+			insertTOTPPlayer(pool, pid, "ifb"+pid)
+			Expect(repo.InsertEnrollment(ctx, totp.EnrollmentRecord{
+				PlayerID: pid, WrappedSecret: []byte("s"), WrapKeyID: "k", EnrolledAt: time.Now().UTC(),
+			})).NotTo(HaveOccurred())
+
+			state, err := repo.IncrementFailedAttempts(ctx, pid, 5, 15*time.Minute, time.Now().UTC())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(state.FailedAttempts).To(Equal(1))
+			Expect(state.LockedUntil).To(BeNil(), "below threshold: locked_until must stay NULL")
+		})
+	})
+
 	Describe("ConsumeRecoveryCode single-use", func() {
 		It("recovery code can only be consumed once; second attempt returns TOTP_INVALID_RECOVERY_CODE", func() {
 			pool := newTOTPPool()
@@ -313,7 +365,7 @@ var _ = Describe("TOTPRepository", func() {
 			pid := ulid.Make().String()
 			insertTOTPPlayer(pool, pid, "ucrc"+pid)
 
-			now := time.Now().UTC().Truncate(time.Microsecond)
+			now := time.Now().UTC()
 			rawCode := "test-recovery-code"
 			codeID := ulid.Make()
 			rec := totp.EnrollmentRecord{
@@ -350,7 +402,7 @@ var _ = Describe("TOTPRepository", func() {
 			// Enrolled player.
 			pid := ulid.Make().String()
 			insertTOTPPlayer(pool, pid, "uclea"+pid)
-			now := time.Now().UTC().Truncate(time.Microsecond)
+			now := time.Now().UTC()
 			Expect(repo.InsertEnrollment(ctx, totp.EnrollmentRecord{
 				PlayerID:      pid,
 				WrappedSecret: []byte("s"),

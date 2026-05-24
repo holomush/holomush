@@ -164,9 +164,9 @@ var _ = Describe("CheckpointRepo", func() {
 		repo := dek.NewCheckpointRepo(pool)
 		rid := mustOpenCheckpoint(suiteT, repo, "01ABC", 100)
 
-		// Backdate heartbeat by 25h.
+		// Backdate heartbeat by 25h (BIGINT-ns: subtract 25*3600*10^9 = 90000*10^9).
 		_, err := pool.Exec(context.Background(),
-			`UPDATE crypto_rekey_checkpoints SET last_heartbeat_at = now() - interval '25 hours' WHERE request_id = $1`,
+			`UPDATE crypto_rekey_checkpoints SET last_heartbeat_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT - 90000::BIGINT * 1000000000 WHERE request_id = $1`,
 			rid[:])
 		Expect(err).NotTo(HaveOccurred())
 

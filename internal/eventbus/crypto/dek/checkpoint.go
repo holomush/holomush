@@ -18,6 +18,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/internal/pgnanos"
 )
 
 // RequestID is owned by holomush-jxo8.7.18 (rekey.go). The dek package's
@@ -246,7 +247,7 @@ func (r *CheckpointRepo) UpdateStatus(ctx context.Context, rid RequestID, from, 
 	}
 	tag, err := r.pool.Exec(ctx, `
         UPDATE crypto_rekey_checkpoints
-           SET status = $2, last_heartbeat_at = now()
+           SET status = $2, last_heartbeat_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
          WHERE request_id = $1 AND status = $3
     `, rid[:], to, from)
 	if err != nil {
@@ -266,7 +267,7 @@ func (r *CheckpointRepo) UpdateStatus(ctx context.Context, rid RequestID, from, 
 // expiry clock.
 func (r *CheckpointRepo) Heartbeat(ctx context.Context, rid RequestID) error {
 	_, err := r.pool.Exec(ctx,
-		`UPDATE crypto_rekey_checkpoints SET last_heartbeat_at = now() WHERE request_id = $1`,
+		`UPDATE crypto_rekey_checkpoints SET last_heartbeat_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT WHERE request_id = $1`,
 		rid[:])
 	if err != nil {
 		return oops.Code("DEK_REKEY_HEARTBEAT_FAILED").Wrap(err)
@@ -328,6 +329,11 @@ func (r *CheckpointRepo) FindNonTerminalByContext(ctx context.Context, ctxType, 
 // last_heartbeat_at is older than ttl ago. Called by the sweep subsystem
 // (INV-E18).
 func (r *CheckpointRepo) ListExpired(ctx context.Context, ttl time.Duration) ([]Checkpoint, error) {
+	// Bind ttl.Nanoseconds() directly against the BIGINT-ns last_heartbeat_at
+	// column. The prior int64(ttl.Seconds()) truncated sub-second durations
+	// (e.g. 500ms → 0), which made every in-flight checkpoint look expired
+	// immediately. After the gfo6 BIGINT-ns migration, ns-precision is the
+	// canonical resolution for time arithmetic in this table.
 	rows, err := r.pool.Query(ctx, `
         SELECT request_id, context_type, context_id, op_args_hash, policy_hash,
                primary_player_id, justification, status, last_processed_event_id, new_dek_id,
@@ -336,8 +342,8 @@ func (r *CheckpointRepo) ListExpired(ctx context.Context, ttl time.Duration) ([]
                aborted_at, aborted_reason
           FROM crypto_rekey_checkpoints
          WHERE status NOT IN ('complete', 'aborted')
-           AND last_heartbeat_at < now() - make_interval(secs => $1)
-    `, int64(ttl.Seconds()))
+           AND last_heartbeat_at < (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT - $1::BIGINT
+    `, ttl.Nanoseconds())
 	if err != nil {
 		return nil, oops.Code("DEK_REKEY_LIST_EXPIRED_FAILED").Wrap(err)
 	}
@@ -362,7 +368,7 @@ func (r *CheckpointRepo) ListExpired(ctx context.Context, ttl time.Duration) ([]
 func (r *CheckpointRepo) MarkAborted(ctx context.Context, rid RequestID, reason string) error {
 	tag, err := r.pool.Exec(ctx, `
         UPDATE crypto_rekey_checkpoints
-           SET status = 'aborted', aborted_at = now(), aborted_reason = $2
+           SET status = 'aborted', aborted_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, aborted_reason = $2
          WHERE request_id = $1 AND status NOT IN ('complete', 'aborted')
     `, rid[:], reason)
 	if err != nil {
@@ -382,7 +388,7 @@ func (r *CheckpointRepo) MarkAborted(ctx context.Context, rid RequestID, reason 
 func (r *CheckpointRepo) MarkComplete(ctx context.Context, rid RequestID) error {
 	tag, err := r.pool.Exec(ctx, `
         UPDATE crypto_rekey_checkpoints
-           SET status = 'complete', completed_at = now()
+           SET status = 'complete', completed_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
          WHERE request_id = $1 AND status = 'phase7_audit'
     `, rid[:])
 	if err != nil {
@@ -418,7 +424,7 @@ func (r *CheckpointRepo) UpdateStatusForceDestroy(ctx context.Context, rid Reque
 	}
 	tag, err := r.pool.Exec(ctx, `
         UPDATE crypto_rekey_checkpoints
-           SET status = 'phase6_destroy_old', last_heartbeat_at = now()
+           SET status = 'phase6_destroy_old', last_heartbeat_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
          WHERE request_id = $1 AND status = 'phase5_invalidate' AND force_destroy = true
     `, rid[:])
 	if err != nil {
@@ -446,7 +452,7 @@ func (r *CheckpointRepo) IncrementPhase3Count(ctx context.Context, tx pgx.Tx, ri
 	tag, err := tx.Exec(ctx, `
         UPDATE crypto_rekey_checkpoints
            SET phase3_rows_rewritten = phase3_rows_rewritten + $2,
-               last_heartbeat_at = now()
+               last_heartbeat_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
          WHERE request_id = $1 AND status = 'phase3_reencrypt_cold'
     `, rid[:], delta)
 	if err != nil {
@@ -471,7 +477,7 @@ func (r *CheckpointRepo) IncrementPhase3Count(ctx context.Context, tx pgx.Tx, ri
 func (r *CheckpointRepo) AdvanceCursor(ctx context.Context, tx pgx.Tx, rid RequestID, eventID []byte) error {
 	tag, err := tx.Exec(ctx, `
         UPDATE crypto_rekey_checkpoints
-           SET last_processed_event_id = $2, last_heartbeat_at = now()
+           SET last_processed_event_id = $2, last_heartbeat_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
          WHERE request_id = $1 AND status = 'phase3_reencrypt_cold'
     `, rid[:], eventID)
 	if err != nil {
@@ -490,7 +496,7 @@ func (r *CheckpointRepo) AdvanceCursor(ctx context.Context, tx pgx.Tx, rid Reque
 func (r *CheckpointRepo) SetNewDEKAndAdvance(ctx context.Context, rid RequestID, newDEKID int64) error {
 	tag, err := r.pool.Exec(ctx, `
         UPDATE crypto_rekey_checkpoints
-           SET new_dek_id = $2, status = 'phase2_mint_dek', last_heartbeat_at = now()
+           SET new_dek_id = $2, status = 'phase2_mint_dek', last_heartbeat_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
          WHERE request_id = $1 AND status = 'phase1_auth'
     `, rid[:], newDEKID)
 	if err != nil {
@@ -508,7 +514,7 @@ func (r *CheckpointRepo) SetNewDEKAndAdvance(ctx context.Context, rid RequestID,
 func (r *CheckpointRepo) IncrementPhase5Attempt(ctx context.Context, rid RequestID) error {
 	_, err := r.pool.Exec(ctx,
 		`UPDATE crypto_rekey_checkpoints
-            SET phase5_attempt_count = phase5_attempt_count + 1, last_heartbeat_at = now()
+            SET phase5_attempt_count = phase5_attempt_count + 1, last_heartbeat_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
           WHERE request_id = $1 AND status IN ('phase3_reencrypt_cold', 'phase5_invalidate')`,
 		rid[:])
 	if err != nil {
@@ -522,7 +528,7 @@ func (r *CheckpointRepo) IncrementPhase5Attempt(ctx context.Context, rid Request
 func (r *CheckpointRepo) RecordPhase5Timeout(ctx context.Context, rid RequestID, missingJSON []byte) error {
 	tag, err := r.pool.Exec(ctx,
 		`UPDATE crypto_rekey_checkpoints
-            SET status = 'phase5_invalidate', phase5_missing_members = $2::jsonb, last_heartbeat_at = now()
+            SET status = 'phase5_invalidate', phase5_missing_members = $2::jsonb, last_heartbeat_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
           WHERE request_id = $1 AND status IN ('phase3_reencrypt_cold', 'phase5_invalidate')`,
 		rid[:], missingJSON)
 	if err != nil {
@@ -539,7 +545,7 @@ func (r *CheckpointRepo) RecordPhase5Timeout(ctx context.Context, rid RequestID,
 func (r *CheckpointRepo) RecordPhase5Success(ctx context.Context, rid RequestID) error {
 	tag, err := r.pool.Exec(ctx,
 		`UPDATE crypto_rekey_checkpoints
-            SET status = 'phase5_invalidate', phase5_missing_members = NULL, last_heartbeat_at = now()
+            SET status = 'phase5_invalidate', phase5_missing_members = NULL, last_heartbeat_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
           WHERE request_id = $1 AND status IN ('phase3_reencrypt_cold', 'phase5_invalidate')`,
 		rid[:])
 	if err != nil {
@@ -576,7 +582,7 @@ func (r *CheckpointRepo) ListFiltered(ctx context.Context, f CheckpointListFilte
 		where = append(where, fmt.Sprintf("context_id LIKE $%d", len(args)))
 	}
 	if f.Since != nil {
-		args = append(args, *f.Since)
+		args = append(args, pgnanos.From(*f.Since))
 		where = append(where, fmt.Sprintf("started_at >= $%d", len(args)))
 	}
 	limit := f.Limit
@@ -620,12 +626,14 @@ func (r *CheckpointRepo) ListFiltered(ctx context.Context, f CheckpointListFilte
 func scanCheckpoint(s checkpointScanner) (Checkpoint, error) {
 	var c Checkpoint
 	var rid []byte
+	var startedAt, lastHeartbeatAt pgnanos.Time
+	var completedAt, abortedAt *pgnanos.Time
 	err := s.Scan(
 		&rid, &c.ContextType, &c.ContextID, &c.opArgsHash, &c.policyHash,
 		&c.PrimaryPlayerID, &c.Justification, &c.Status, &c.lastProcessedEventID, &c.NewDEKID,
 		&c.OldDEKID, &c.Phase3RowsRewritten, &c.Phase5AttemptCount, &c.phase5MissingMembers,
-		&c.ForceDestroy, &c.StartedAt, &c.LastHeartbeatAt, &c.CompletedAt,
-		&c.AbortedAt, &c.AbortedReason,
+		&c.ForceDestroy, &startedAt, &lastHeartbeatAt, &completedAt,
+		&abortedAt, &c.AbortedReason,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -634,6 +642,16 @@ func scanCheckpoint(s checkpointScanner) (Checkpoint, error) {
 		return Checkpoint{}, oops.Code("DEK_REKEY_CHECKPOINT_SCAN_FAILED").Wrap(err)
 	}
 	copy(c.RequestID[:], rid)
+	c.StartedAt = startedAt.Time()
+	c.LastHeartbeatAt = lastHeartbeatAt.Time()
+	if completedAt != nil {
+		t := completedAt.Time()
+		c.CompletedAt = &t
+	}
+	if abortedAt != nil {
+		t := abortedAt.Time()
+		c.AbortedAt = &t
+	}
 	return c, nil
 }
 

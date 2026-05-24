@@ -309,7 +309,7 @@ func (h *Harness) SeedStaleCheckpoint(ctxType, ctxID string, age time.Duration) 
 		`INSERT INTO crypto_keys
 		   (id, context_type, context_id, version, wrapped_dek, wrap_provider,
 		    wrap_key_id, participants, created_at)
-		 VALUES ($1, $2, $3, 99, '\x00', 'stale-test', 'stale-test', '[]'::jsonb, now())
+		 VALUES ($1, $2, $3, 99, '\x00', 'stale-test', 'stale-test', '[]'::jsonb, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 		 ON CONFLICT (id) DO NOTHING`,
 		syntheticDEKID, ctxType, ctxID)
 
@@ -318,11 +318,11 @@ func (h *Harness) SeedStaleCheckpoint(ctxType, ctxID string, age time.Duration) 
 		INSERT INTO crypto_rekey_checkpoints
 		  (request_id, context_type, context_id, op_args_hash, policy_hash,
 		   primary_player_id, status, old_dek_id, last_heartbeat_at)
-		VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, now() - $8::interval)
+		VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT - $8::BIGINT)
 	`, rid[:], ctxType, ctxID,
 		make([]byte, 32), make([]byte, 32),
 		h.AdminPlayer.PlayerID, syntheticDEKID,
-		age.String())
+		age.Nanoseconds())
 	Expect(err).NotTo(HaveOccurred(), "SeedStaleCheckpoint: INSERT failed")
 	return rid
 }
@@ -392,7 +392,9 @@ func (h *Harness) SeedCompletedCheckpoint(ctxType, ctxID string) {
 		INSERT INTO crypto_rekey_checkpoints
 		  (request_id, context_type, context_id, op_args_hash, policy_hash,
 		   primary_player_id, status, old_dek_id, completed_at, last_heartbeat_at)
-		VALUES ($1, $2, $3, $4, $5, $6, 'complete', $7, now(), now())
+		VALUES ($1, $2, $3, $4, $5, $6, 'complete', $7,
+		        (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT,
+		        (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 	`, rid[:], ctxType, ctxID,
 		make([]byte, 32), make([]byte, 32),
 		h.AdminPlayer.PlayerID, actualDEKID)
@@ -426,7 +428,8 @@ func (h *Harness) SeedActiveCheckpoint(ctxType, ctxID string) {
 		INSERT INTO crypto_rekey_checkpoints
 		  (request_id, context_type, context_id, op_args_hash, policy_hash,
 		   primary_player_id, status, old_dek_id, last_heartbeat_at)
-		VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, now())
+		VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7,
+		        (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 	`, rid[:], ctxType, ctxID,
 		make([]byte, 32), make([]byte, 32),
 		h.AdminPlayer.PlayerID, actualDEKID)

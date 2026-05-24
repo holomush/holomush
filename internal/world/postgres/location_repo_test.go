@@ -26,8 +26,8 @@ func createTestCharacter(ctx context.Context, t *testing.T, name string) ulid.UL
 	// First create a test player
 	playerID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
-		INSERT INTO players (id, username, password_hash, created_at)
-		VALUES ($1, $2, 'testhash', NOW())
+		INSERT INTO players (id, username, password_hash, created_at, updated_at)
+		VALUES ($1, $2, 'testhash', (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 	`, playerID.String(), "player_"+playerID.String())
 	require.NoError(t, err)
 
@@ -35,14 +35,14 @@ func createTestCharacter(ctx context.Context, t *testing.T, name string) ulid.UL
 	locationID := ulid.Make()
 	_, err = testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
-		VALUES ($1, 'Test Loc', 'Test', 'persistent', 'last:0', NOW())
+		VALUES ($1, 'Test Loc', 'Test', 'persistent', 'last:0', (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, locationID.String())
 	require.NoError(t, err)
 
 	// Create the character
 	_, err = testPool.Exec(ctx, `
 		INSERT INTO characters (id, player_id, name, location_id, created_at)
-		VALUES ($1, $2, $3, $4, NOW())
+		VALUES ($1, $2, $3, $4, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, charID.String(), playerID.String(), name, locationID.String())
 	require.NoError(t, err)
 
@@ -66,7 +66,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 			Name:         "Test Room",
 			Description:  "A test room for testing.",
 			ReplayPolicy: "last:0",
-			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:    time.Now().UTC(),
 		}
 
 		err := repo.Create(ctx, loc)
@@ -93,7 +93,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 			Description:  "A private scene.",
 			OwnerID:      &ownerID,
 			ReplayPolicy: "last:-1",
-			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:    time.Now().UTC(),
 		}
 
 		err := repo.Create(ctx, loc)
@@ -115,7 +115,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 			Name:         "Original Name",
 			Description:  "Original description.",
 			ReplayPolicy: "last:0",
-			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:    time.Now().UTC(),
 		}
 
 		err := repo.Create(ctx, loc)
@@ -143,7 +143,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 			Name:         "Parent Location",
 			Description:  "The parent.",
 			ReplayPolicy: "last:0",
-			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:    time.Now().UTC(),
 		}
 		err := repo.Create(ctx, parent)
 		require.NoError(t, err)
@@ -155,7 +155,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 			Name:         "Scene Without Shadow",
 			Description:  "A scene.",
 			ReplayPolicy: "last:-1",
-			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:    time.Now().UTC(),
 		}
 		err = repo.Create(ctx, scene)
 		require.NoError(t, err)
@@ -185,7 +185,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 			Name:         "Scene Without Owner",
 			Description:  "A scene.",
 			ReplayPolicy: "last:-1",
-			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:    time.Now().UTC(),
 		}
 		err := repo.Create(ctx, loc)
 		require.NoError(t, err)
@@ -211,7 +211,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 			Name:         "To Delete",
 			Description:  "Will be deleted.",
 			ReplayPolicy: "last:0",
-			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+			CreatedAt:    time.Now().UTC(),
 		}
 
 		err := repo.Create(ctx, loc)
@@ -268,7 +268,7 @@ func TestLocationRepository_ListByType(t *testing.T) {
 		Name:         "Persistent Room",
 		Description:  "A persistent room.",
 		ReplayPolicy: "last:0",
-		CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+		CreatedAt:    time.Now().UTC(),
 	}
 
 	scene := &world.Location{
@@ -277,7 +277,7 @@ func TestLocationRepository_ListByType(t *testing.T) {
 		Name:         "Test Scene",
 		Description:  "A scene.",
 		ReplayPolicy: "last:-1",
-		CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+		CreatedAt:    time.Now().UTC(),
 	}
 
 	require.NoError(t, repo.Create(ctx, persistent))
@@ -337,7 +337,7 @@ func TestLocationRepository_GetShadowedBy(t *testing.T) {
 		Name:         "Parent Room",
 		Description:  "A parent room.",
 		ReplayPolicy: "last:0",
-		CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+		CreatedAt:    time.Now().UTC(),
 	}
 	require.NoError(t, repo.Create(ctx, parent))
 
@@ -349,7 +349,7 @@ func TestLocationRepository_GetShadowedBy(t *testing.T) {
 		Name:         "Shadow Scene",
 		Description:  "A scene that shadows parent.",
 		ReplayPolicy: "last:-1",
-		CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+		CreatedAt:    time.Now().UTC(),
 	}
 	require.NoError(t, repo.Create(ctx, scene))
 
@@ -393,7 +393,7 @@ func TestLocationRepository_FindByName(t *testing.T) {
 		Description:  "A location with a unique name.",
 		Type:         world.LocationTypePersistent,
 		ReplayPolicy: "last:-1",
-		CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+		CreatedAt:    time.Now().UTC(),
 	}
 	require.NoError(t, repo.Create(ctx, loc))
 

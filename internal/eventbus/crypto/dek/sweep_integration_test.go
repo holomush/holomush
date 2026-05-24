@@ -70,11 +70,11 @@ func (s *rekeyTestSetup) OpenStaleCheckpoint(ctxType, ctxID string, age time.Dur
         INSERT INTO crypto_rekey_checkpoints
           (request_id, context_type, context_id, op_args_hash, policy_hash,
            primary_player_id, status, old_dek_id, last_heartbeat_at)
-        VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, now() - $8::interval)
+        VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT - $8::BIGINT)
     `, rid[:], ctxType, ctxID,
 		make([]byte, 32), make([]byte, 32),
 		"01PLAYER", dekID,
-		age.String())
+		age.Nanoseconds())
 	Expect(err).NotTo(HaveOccurred())
 	return rid
 }

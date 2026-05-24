@@ -13,6 +13,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -64,7 +65,7 @@ func (r *ObjectRepository) Create(ctx context.Context, obj *world.Object) error 
 		ulidToStringPtr(obj.ContainedInObjectID()),
 		obj.IsContainer,
 		ulidToStringPtr(obj.OwnerID),
-		obj.CreatedAt)
+		pgnanos.From(obj.CreatedAt))
 	if err != nil {
 		return oops.With("operation", "create object").With("id", obj.ID.String()).Wrap(err)
 	}
@@ -111,8 +112,8 @@ func (r *ObjectRepository) ListAtLocation(ctx context.Context, locationID ulid.U
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, name, description, location_id, held_by_character_id,
 		       contained_in_object_id, is_container, owner_id, created_at
-		FROM objects WHERE location_id = $1 ORDER BY created_at DESC
-	`, locationID.String())
+		FROM objects WHERE location_id = $1 ORDER BY created_at DESC, id DESC
+	`, locationID.String()) // tiebreaker for sub-ns insert collisions across dual-clock writers (holomush-gfo6.33)
 	if err != nil {
 		return nil, oops.With("operation", "list objects at location").With("location_id", locationID.String()).Wrap(err)
 	}
@@ -126,8 +127,8 @@ func (r *ObjectRepository) ListHeldBy(ctx context.Context, characterID ulid.ULID
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, name, description, location_id, held_by_character_id,
 		       contained_in_object_id, is_container, owner_id, created_at
-		FROM objects WHERE held_by_character_id = $1 ORDER BY created_at DESC
-	`, characterID.String())
+		FROM objects WHERE held_by_character_id = $1 ORDER BY created_at DESC, id DESC
+	`, characterID.String()) // tiebreaker for sub-ns insert collisions across dual-clock writers (holomush-gfo6.33)
 	if err != nil {
 		return nil, oops.With("operation", "list objects held by").With("character_id", characterID.String()).Wrap(err)
 	}
@@ -141,8 +142,8 @@ func (r *ObjectRepository) ListContainedIn(ctx context.Context, objectID ulid.UL
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, name, description, location_id, held_by_character_id,
 		       contained_in_object_id, is_container, owner_id, created_at
-		FROM objects WHERE contained_in_object_id = $1 ORDER BY created_at DESC
-	`, objectID.String())
+		FROM objects WHERE contained_in_object_id = $1 ORDER BY created_at DESC, id DESC
+	`, objectID.String()) // tiebreaker for sub-ns insert collisions across dual-clock writers (holomush-gfo6.33)
 	if err != nil {
 		return nil, oops.With("operation", "list objects contained in").With("object_id", objectID.String()).Wrap(err)
 	}
@@ -359,6 +360,7 @@ type objectScanFields struct {
 	heldByStr     *string
 	containedIn   *string
 	ownerIDStr    *string
+	createdAt     pgnanos.Time
 }
 
 // scanObjectRow scans a single object from a row.
@@ -368,7 +370,7 @@ func scanObjectRow(row pgx.Row) (*world.Object, error) {
 
 	err := row.Scan(
 		&f.idStr, &obj.Name, &obj.Description, &f.locationIDStr, &f.heldByStr,
-		&f.containedIn, &obj.IsContainer, &f.ownerIDStr, &obj.CreatedAt,
+		&f.containedIn, &obj.IsContainer, &f.ownerIDStr, &f.createdAt,
 	)
 	if err != nil {
 		return nil, oops.With("operation", "scan object").Wrap(err)
@@ -421,6 +423,7 @@ func parseObjectFromFields(f *objectScanFields, obj *world.Object) error {
 	if err != nil {
 		return err
 	}
+	obj.CreatedAt = f.createdAt.Time()
 	return nil
 }
 
@@ -432,7 +435,7 @@ func scanObjects(rows pgx.Rows) ([]*world.Object, error) {
 
 		if err := rows.Scan(
 			&f.idStr, &obj.Name, &obj.Description, &f.locationIDStr, &f.heldByStr,
-			&f.containedIn, &obj.IsContainer, &f.ownerIDStr, &obj.CreatedAt,
+			&f.containedIn, &obj.IsContainer, &f.ownerIDStr, &f.createdAt,
 		); err != nil {
 			return nil, oops.With("operation", "scan object").Wrap(err)
 		}

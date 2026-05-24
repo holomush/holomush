@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
@@ -305,12 +304,11 @@ func insertProperty(parentType string, parentID ulid.ULID, name, value, visibili
 		Expect(err).NotTo(HaveOccurred())
 	}
 
-	now := time.Now().UTC()
 	_, err = env.pool.Exec(env.ctx, `
 		INSERT INTO entity_properties (id, parent_type, parent_id, name, value, owner, visibility, flags, visible_to, excluded_from, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)`,
 		id.String(), parentType, parentID.String(), name, value, ownerStr, visibility,
-		[]byte("[]"), visibleToJSON, excludedFromJSON, now, now)
+		[]byte("[]"), visibleToJSON, excludedFromJSON)
 	Expect(err).NotTo(HaveOccurred())
 	return id
 }

@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/pgnanos"
 )
 
 // txKey is the context key for an active pgx.Tx stored by InTransaction.
@@ -87,7 +89,7 @@ func (r *repo) BootstrapClaim(ctx context.Context, key, playerID string, at time
 	const q = `INSERT INTO crypto_bootstrap_state (key, consumed_at, consumed_by_player_id)
 	           VALUES ($1, $2, $3) ON CONFLICT (key) DO NOTHING RETURNING key`
 	var got string
-	err := dbFromCtx(ctx, r.pool).QueryRow(ctx, q, key, at, playerID).Scan(&got)
+	err := dbFromCtx(ctx, r.pool).QueryRow(ctx, q, key, pgnanos.From(at), playerID).Scan(&got)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
@@ -163,14 +165,14 @@ func (r *repo) InsertEnrollment(ctx context.Context, e EnrollmentRecord) error {
 		ctx,
 		`INSERT INTO player_totp (player_id, wrapped_secret, wrap_key_id, enrolled_at)
 		 VALUES ($1, $2, $3, $4)`,
-		e.PlayerID, e.WrappedSecret, e.WrapKeyID, e.EnrolledAt,
+		e.PlayerID, e.WrappedSecret, e.WrapKeyID, pgnanos.From(e.EnrolledAt),
 	); err != nil {
 		return oops.Code("TOTP_REPO_INSERT_TOTP").Wrap(err)
 	}
 	const insCode = `INSERT INTO player_totp_recovery_codes (id, player_id, code_hash, created_at)
 	                 VALUES ($1, $2, $3, $4)`
 	for _, c := range e.RecoveryCodes {
-		if _, err := db.Exec(ctx, insCode, c.ID.String(), e.PlayerID, c.CodeHash, c.CreatedAt); err != nil {
+		if _, err := db.Exec(ctx, insCode, c.ID.String(), e.PlayerID, c.CodeHash, pgnanos.From(c.CreatedAt)); err != nil {
 			return oops.Code("TOTP_REPO_INSERT_RECOVERY_CODE").Wrap(err)
 		}
 	}
@@ -183,16 +185,21 @@ func (r *repo) InsertEnrollment(ctx context.Context, e EnrollmentRecord) error {
 func (r *repo) LoadEnrollment(ctx context.Context, playerID string) (VerifyState, error) {
 	var s VerifyState
 	s.PlayerID = playerID
+	var lockedUntil *pgnanos.Time
 	err := dbFromCtx(ctx, r.pool).QueryRow(
 		ctx,
 		`SELECT wrapped_secret, wrap_key_id, last_used_step, failed_attempts, locked_until
 		 FROM player_totp WHERE player_id = $1 FOR UPDATE`, playerID,
-	).Scan(&s.WrappedSecret, &s.WrapKeyID, &s.LastUsedStep, &s.FailedAttempts, &s.LockedUntil)
+	).Scan(&s.WrappedSecret, &s.WrapKeyID, &s.LastUsedStep, &s.FailedAttempts, &lockedUntil)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return VerifyState{}, ErrNotEnrolled
 	}
 	if err != nil {
 		return VerifyState{}, oops.Code("TOTP_REPO_LOAD_ENROLLMENT").Wrap(err)
+	}
+	if lockedUntil != nil {
+		t := lockedUntil.Time()
+		s.LockedUntil = &t
 	}
 	return s, nil
 }
@@ -203,45 +210,39 @@ func (r *repo) IncrementFailedAttempts(
 	ctx context.Context, playerID string,
 	threshold int, lockoutDuration time.Duration, now time.Time,
 ) (VerifyState, error) {
-	// $3::TIMESTAMPTZ and $4::BIGINT casts are load-bearing.
+	// $3::BIGINT and $4::BIGINT casts are load-bearing.
 	//
-	// Without $3::TIMESTAMPTZ, pgx infers $3 as text (the param's wire format),
-	// and `text + interval` makes the THEN branch resolve to `interval`, which
-	// mismatches the ELSE branch's `timestamptz` (locked_until column). PG then
-	// rejects the statement at execute time with
+	// $3 carries the floor (now as int64 epoch ns) and $4 carries the
+	// lockout duration in nanoseconds. Both are int64; without the explicit
+	// BIGINT casts pgx may infer text encoding and the addition resolves to
+	// text concatenation. The CASE branches MUST both resolve to BIGINT so
+	// the final assignment to locked_until (BIGINT column) type-checks.
 	//
-	//   CASE types timestamp with time zone and interval cannot be matched
-	//   (SQLSTATE 42804)
-	//
-	// Without $4::BIGINT, pgx infers $4 as text (because of the `||` operator)
-	// and rejects the int64 argument with
-	//
-	//   unable to encode <N> into text format for text (OID 25): cannot find
-	//   encode plan
-	//
-	// Either error path means lockout NEVER fires in production. The mock-based
-	// unit tests in repo_unit_test.go don't catch either (pgxmock doesn't
-	// validate types or wire-format encoding); only a real PG round-trip does.
-	// Surfaced by Phase 5 sub-epic D's full-stack E2E (holomush-jxo8.6.23 / T25);
-	// regression-locked by that test plus the crypto.totp_locked persistence
-	// assertion in this same path.
+	// The previous TIMESTAMPTZ + INTERVAL formulation was tied to the
+	// pre-gfo6 column type; with locked_until as BIGINT-ns the math is
+	// plain integer addition.
 	const q = `
 		UPDATE player_totp
 		SET failed_attempts = failed_attempts + 1,
 		    locked_until    = CASE
-		      WHEN failed_attempts + 1 >= $2 THEN $3::TIMESTAMPTZ + ($4::BIGINT || ' microseconds')::INTERVAL
+		      WHEN failed_attempts + 1 >= $2 THEN $3::BIGINT + $4::BIGINT
 		      ELSE locked_until
 		    END
 		WHERE player_id = $1
 		RETURNING wrapped_secret, wrap_key_id, last_used_step, failed_attempts, locked_until`
 	var s VerifyState
 	s.PlayerID = playerID
+	var lockedUntil *pgnanos.Time
 	err := dbFromCtx(ctx, r.pool).QueryRow(
 		ctx, q,
-		playerID, threshold, now, lockoutDuration.Microseconds(),
-	).Scan(&s.WrappedSecret, &s.WrapKeyID, &s.LastUsedStep, &s.FailedAttempts, &s.LockedUntil)
+		playerID, threshold, now.UnixNano(), lockoutDuration.Nanoseconds(), // pgnanos-exempt: SQL-cast boundary for BIGINT arithmetic
+	).Scan(&s.WrappedSecret, &s.WrapKeyID, &s.LastUsedStep, &s.FailedAttempts, &lockedUntil)
 	if err != nil {
 		return VerifyState{}, oops.Code("TOTP_REPO_INCREMENT_FAILED").Wrap(err)
+	}
+	if lockedUntil != nil {
+		t := lockedUntil.Time()
+		s.LockedUntil = &t
 	}
 	return s, nil
 }
@@ -253,7 +254,7 @@ func (r *repo) MarkVerified(ctx context.Context, playerID string, step int64, at
 		ctx,
 		`UPDATE player_totp SET last_used_step = $2, last_verified_at = $3,
 		   failed_attempts = 0, locked_until = NULL
-		 WHERE player_id = $1`, playerID, step, at,
+		 WHERE player_id = $1`, playerID, step, pgnanos.From(at),
 	)
 	if err != nil {
 		return oops.Code("TOTP_REPO_MARK_VERIFIED").Wrap(err)
@@ -319,7 +320,7 @@ func (r *repo) consumeRecoveryCodeInTx(
 		}
 		if _, err := dbFromCtx(txCtx, r.pool).Exec(txCtx,
 			`UPDATE player_totp_recovery_codes SET consumed_at = $2 WHERE id = $1`,
-			c.id, at); err != nil {
+			c.id, pgnanos.From(at)); err != nil {
 			return ulid.ULID{}, oops.Code("TOTP_REPO_RECOVERY_CONSUME").Wrap(err)
 		}
 		parsed, perr := ulid.Parse(c.id)

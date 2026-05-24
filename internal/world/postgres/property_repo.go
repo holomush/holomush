@@ -14,6 +14,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -52,11 +53,15 @@ func (r *PropertyRepository) Create(ctx context.Context, p *world.EntityProperty
 		return oops.Code("PROPERTY_CREATE_FAILED").With("id", p.ID.String()).Wrap(err)
 	}
 
+	// updated_at uses SQL-side NOW() to stay in the same clock domain as
+	// Update (property_repo.go:135) — app-side time.Now() vs PG's NOW() can
+	// drift, breaking any reader that ORDERs BY updated_at across rows
+	// touched by both methods (holomush-gfo6.32 follow-up to gfo6.28 pattern).
 	_, err = r.pool.Exec(ctx, `
 		INSERT INTO entity_properties (id, parent_type, parent_id, name, value, owner, visibility, flags, visible_to, excluded_from, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, p.ID.String(), p.ParentType, p.ParentID.String(), p.Name, p.Value, p.Owner,
-		p.Visibility, flagsJSON, visibleToJSON, excludedFromJSON, p.CreatedAt, p.UpdatedAt)
+		p.Visibility, flagsJSON, visibleToJSON, excludedFromJSON, pgnanos.From(p.CreatedAt))
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.ConstraintName == "entity_properties_parent_name_unique" {
@@ -131,7 +136,7 @@ func (r *PropertyRepository) Update(ctx context.Context, p *world.EntityProperty
 	result, err := r.pool.Exec(ctx, `
 		UPDATE entity_properties
 		SET name = $2, value = $3, owner = $4, visibility = $5, flags = $6,
-		    visible_to = $7, excluded_from = $8, updated_at = now()
+		    visible_to = $7, excluded_from = $8, updated_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
 		WHERE id = $1
 	`, p.ID.String(), p.Name, p.Value, p.Owner, p.Visibility,
 		flagsJSON, visibleToJSON, excludedFromJSON)
@@ -241,6 +246,8 @@ type propertyScanFields struct {
 	flagsJSON   []byte
 	visibleTo   []byte
 	excludedFr  []byte
+	createdAt   pgnanos.Time
+	updatedAt   pgnanos.Time
 }
 
 // scanPropertyRow scans a single property from a row.
@@ -250,7 +257,7 @@ func scanPropertyRow(row pgx.Row) (*world.EntityProperty, error) {
 
 	err := row.Scan(
 		&f.idStr, &prop.ParentType, &f.parentIDStr, &prop.Name, &prop.Value, &prop.Owner,
-		&prop.Visibility, &f.flagsJSON, &f.visibleTo, &f.excludedFr, &prop.CreatedAt, &prop.UpdatedAt,
+		&prop.Visibility, &f.flagsJSON, &f.visibleTo, &f.excludedFr, &f.createdAt, &f.updatedAt,
 	)
 	if err != nil {
 		return nil, oops.Code("PROPERTY_SCAN_FAILED").Wrap(err)
@@ -287,6 +294,8 @@ func parsePropertyFromFields(f *propertyScanFields, prop *world.EntityProperty) 
 	if err != nil {
 		return oops.Code("PROPERTY_PARSE_FAILED").With("field", "excluded_from").Wrap(err)
 	}
+	prop.CreatedAt = f.createdAt.Time()
+	prop.UpdatedAt = f.updatedAt.Time()
 
 	return nil
 }
@@ -299,7 +308,7 @@ func scanProperties(rows pgx.Rows) ([]*world.EntityProperty, error) {
 
 		if err := rows.Scan(
 			&f.idStr, &prop.ParentType, &f.parentIDStr, &prop.Name, &prop.Value, &prop.Owner,
-			&prop.Visibility, &f.flagsJSON, &f.visibleTo, &f.excludedFr, &prop.CreatedAt, &prop.UpdatedAt,
+			&prop.Visibility, &f.flagsJSON, &f.visibleTo, &f.excludedFr, &f.createdAt, &f.updatedAt,
 		); err != nil {
 			return nil, oops.Code("PROPERTY_SCAN_FAILED").Wrap(err)
 		}

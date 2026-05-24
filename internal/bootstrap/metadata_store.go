@@ -55,8 +55,8 @@ func (s *PostgresMetadataStore) Get(ctx context.Context, key string) (value stri
 // Set stores a key-value pair. If the key already exists, it is updated.
 func (s *PostgresMetadataStore) Set(ctx context.Context, key, value string) error {
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO setting_bootstrap_state (key, value, updated_at) VALUES ($1, $2, NOW())
-		 ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`, key, value)
+		`INSERT INTO setting_bootstrap_state (key, value, updated_at) VALUES ($1, $2, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
+		 ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT`, key, value)
 	if err != nil {
 		return oops.With("key", key).Wrap(err)
 	}

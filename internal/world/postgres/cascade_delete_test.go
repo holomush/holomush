@@ -24,7 +24,7 @@ func createCascadeTestLocation(ctx context.Context, t *testing.T) ulid.ULID {
 	locID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
-		VALUES ($1, 'Cascade Test Loc', 'Test', 'persistent', 'last:0', NOW())
+		VALUES ($1, 'Cascade Test Loc', 'Test', 'persistent', 'last:0', (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, locID.String())
 	require.NoError(t, err)
 	return locID
@@ -35,7 +35,7 @@ func createCascadeTestObject(ctx context.Context, t *testing.T, locationID ulid.
 	objID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO objects (id, location_id, name, description, created_at)
-		VALUES ($1, $2, 'Cascade Test Object', 'A test object', NOW())
+		VALUES ($1, $2, 'Cascade Test Object', 'A test object', (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, objID.String(), locationID.String())
 	require.NoError(t, err)
 	return objID
@@ -45,15 +45,15 @@ func createCascadeTestCharacter(ctx context.Context, t *testing.T, locationID ul
 	t.Helper()
 	playerID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
-		INSERT INTO players (id, username, password_hash, created_at)
-		VALUES ($1, $2, 'testhash', NOW())
+		INSERT INTO players (id, username, password_hash, created_at, updated_at)
+		VALUES ($1, $2, 'testhash', (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 	`, playerID.String(), "cascade_player_"+playerID.String())
 	require.NoError(t, err)
 
 	charID := ulid.Make()
 	_, err = testPool.Exec(ctx, `
 		INSERT INTO characters (id, player_id, name, location_id, created_at)
-		VALUES ($1, $2, 'Cascade Test Char', $3, NOW())
+		VALUES ($1, $2, 'Cascade Test Char', $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, charID.String(), playerID.String(), locationID.String())
 	require.NoError(t, err)
 	return charID
@@ -64,7 +64,7 @@ func createCascadeTestProperty(ctx context.Context, t *testing.T, parentType str
 	propID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO entity_properties (id, parent_type, parent_id, name, value, owner, visibility, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, 'public', NOW(), NOW())
+		VALUES ($1, $2, $3, $4, $5, $6, 'public', (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, propID.String(), parentType, parentID.String(), "test_prop", "test_value", "system")
 	require.NoError(t, err)
 	return propID

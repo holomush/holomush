@@ -12,6 +12,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -44,11 +45,16 @@ func (r *LocationRepository) Get(ctx context.Context, id ulid.ULID) (*world.Loca
 // Create persists a new location.
 // Callers must validate the location before calling this method.
 func (r *LocationRepository) Create(ctx context.Context, loc *world.Location) error {
+	var archivedAt *pgnanos.Time
+	if loc.ArchivedAt != nil {
+		t := pgnanos.From(*loc.ArchivedAt)
+		archivedAt = &t
+	}
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO locations (id, type, shadows_id, name, description, owner_id, replay_policy, created_at, archived_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`, loc.ID.String(), loc.Type, ulidToStringPtr(loc.ShadowsID), loc.Name, loc.Description,
-		ulidToStringPtr(loc.OwnerID), loc.ReplayPolicy, loc.CreatedAt, loc.ArchivedAt)
+		ulidToStringPtr(loc.OwnerID), loc.ReplayPolicy, pgnanos.From(loc.CreatedAt), archivedAt)
 	if err != nil {
 		return oops.With("operation", "create location").With("id", loc.ID.String()).Wrap(err)
 	}
@@ -58,12 +64,17 @@ func (r *LocationRepository) Create(ctx context.Context, loc *world.Location) er
 // Update modifies an existing location.
 // Callers must validate the location before calling this method.
 func (r *LocationRepository) Update(ctx context.Context, loc *world.Location) error {
+	var archivedAt *pgnanos.Time
+	if loc.ArchivedAt != nil {
+		t := pgnanos.From(*loc.ArchivedAt)
+		archivedAt = &t
+	}
 	result, err := r.pool.Exec(ctx, `
 		UPDATE locations SET type = $2, shadows_id = $3, name = $4, description = $5,
 		owner_id = $6, replay_policy = $7, archived_at = $8
 		WHERE id = $1
 	`, loc.ID.String(), loc.Type, ulidToStringPtr(loc.ShadowsID), loc.Name, loc.Description,
-		ulidToStringPtr(loc.OwnerID), loc.ReplayPolicy, loc.ArchivedAt)
+		ulidToStringPtr(loc.OwnerID), loc.ReplayPolicy, archivedAt)
 	if err != nil {
 		return oops.With("operation", "update location").With("id", loc.ID.String()).Wrap(err)
 	}
@@ -89,8 +100,8 @@ func (r *LocationRepository) Delete(ctx context.Context, id ulid.ULID) error {
 func (r *LocationRepository) ListByType(ctx context.Context, locType world.LocationType) ([]*world.Location, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, type, shadows_id, name, description, owner_id, replay_policy, created_at, archived_at
-		FROM locations WHERE type = $1 ORDER BY created_at DESC
-	`, string(locType))
+		FROM locations WHERE type = $1 ORDER BY created_at DESC, id DESC
+	`, string(locType)) // tiebreaker for sub-ns insert collisions across dual-clock writers (holomush-gfo6.33)
 	if err != nil {
 		return nil, oops.With("operation", "list locations by type").With("type", string(locType)).Wrap(err)
 	}
@@ -103,8 +114,8 @@ func (r *LocationRepository) ListByType(ctx context.Context, locType world.Locat
 func (r *LocationRepository) GetShadowedBy(ctx context.Context, id ulid.ULID) ([]*world.Location, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, type, shadows_id, name, description, owner_id, replay_policy, created_at, archived_at
-		FROM locations WHERE shadows_id = $1 ORDER BY created_at DESC
-	`, id.String())
+		FROM locations WHERE shadows_id = $1 ORDER BY created_at DESC, id DESC
+	`, id.String()) // tiebreaker for sub-ns insert collisions across dual-clock writers (holomush-gfo6.33)
 	if err != nil {
 		return nil, oops.With("operation", "get shadowed by").With("id", id.String()).Wrap(err)
 	}
@@ -135,6 +146,8 @@ type locationScanFields struct {
 	idStr        string
 	shadowsIDStr *string
 	ownerIDStr   *string
+	createdAt    pgnanos.Time
+	archivedAt   *pgnanos.Time
 }
 
 // scanLocationRow scans a single location from a row.
@@ -144,7 +157,7 @@ func scanLocationRow(row pgx.Row) (*world.Location, error) {
 
 	err := row.Scan(
 		&f.idStr, &loc.Type, &f.shadowsIDStr, &loc.Name, &loc.Description,
-		&f.ownerIDStr, &loc.ReplayPolicy, &loc.CreatedAt, &loc.ArchivedAt,
+		&f.ownerIDStr, &loc.ReplayPolicy, &f.createdAt, &f.archivedAt,
 	)
 	if err != nil {
 		return nil, oops.With("operation", "scan location").Wrap(err)
@@ -172,6 +185,11 @@ func parseLocationFromFields(f *locationScanFields, loc *world.Location) error {
 	if err != nil {
 		return err
 	}
+	loc.CreatedAt = f.createdAt.Time()
+	if f.archivedAt != nil {
+		t := f.archivedAt.Time()
+		loc.ArchivedAt = &t
+	}
 	return nil
 }
 
@@ -183,7 +201,7 @@ func scanLocations(rows pgx.Rows) ([]*world.Location, error) {
 
 		if err := rows.Scan(
 			&f.idStr, &loc.Type, &f.shadowsIDStr, &loc.Name, &loc.Description,
-			&f.ownerIDStr, &loc.ReplayPolicy, &loc.CreatedAt, &loc.ArchivedAt,
+			&f.ownerIDStr, &loc.ReplayPolicy, &f.createdAt, &f.archivedAt,
 		); err != nil {
 			return nil, oops.With("operation", "scan location").Wrap(err)
 		}

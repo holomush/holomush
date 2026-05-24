@@ -15,6 +15,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/auth"
+	"github.com/holomush/holomush/internal/pgnanos"
 )
 
 // PlayerRepository implements auth.PlayerRepository using PostgreSQL.
@@ -42,6 +43,12 @@ func (r *PlayerRepository) Create(ctx context.Context, player *auth.Player) erro
 		defaultCharID = &s
 	}
 
+	var lockedUntilArg *pgnanos.Time
+	if player.LockedUntil != nil {
+		t := pgnanos.From(*player.LockedUntil)
+		lockedUntilArg = &t
+	}
+
 	_, err = r.pool.Exec(
 		ctx, `
 		INSERT INTO players (
@@ -56,12 +63,12 @@ func (r *PlayerRepository) Create(ctx context.Context, player *auth.Player) erro
 		player.Email,
 		player.EmailVerified,
 		player.FailedAttempts,
-		player.LockedUntil,
+		lockedUntilArg,
 		defaultCharID,
 		prefsJSON,
 		player.IsGuest,
-		player.CreatedAt,
-		player.UpdatedAt,
+		pgnanos.From(player.CreatedAt),
+		pgnanos.From(player.UpdatedAt),
 	)
 	if err != nil {
 		return oops.Code("PLAYER_CREATE_FAILED").
@@ -172,6 +179,12 @@ func (r *PlayerRepository) Update(ctx context.Context, player *auth.Player) erro
 		defaultCharID = &s
 	}
 
+	var updateLockedUntilArg *pgnanos.Time
+	if player.LockedUntil != nil {
+		t := pgnanos.From(*player.LockedUntil)
+		updateLockedUntilArg = &t
+	}
+
 	result, err := r.pool.Exec(
 		ctx, `
 		UPDATE players SET
@@ -193,11 +206,11 @@ func (r *PlayerRepository) Update(ctx context.Context, player *auth.Player) erro
 		player.Email,
 		player.EmailVerified,
 		player.FailedAttempts,
-		player.LockedUntil,
+		updateLockedUntilArg,
 		defaultCharID,
 		prefsJSON,
 		player.IsGuest,
-		player.UpdatedAt,
+		pgnanos.From(player.UpdatedAt),
 	)
 	if err != nil {
 		return oops.Code("PLAYER_UPDATE_FAILED").
@@ -218,7 +231,7 @@ func (r *PlayerRepository) UpdatePassword(ctx context.Context, id ulid.ULID, pas
 	result, err := r.pool.Exec(ctx, `
 		UPDATE players SET password_hash = $2, updated_at = $3
 		WHERE id = $1
-	`, id.String(), passwordHash, time.Now())
+	`, id.String(), passwordHash, pgnanos.From(time.Now()))
 	if err != nil {
 		return oops.Code("PLAYER_UPDATE_PASSWORD_FAILED").
 			With("operation", "update password").
@@ -239,7 +252,7 @@ func (r *PlayerRepository) UpdatePasswordAndClearLockout(ctx context.Context, id
 	result, err := r.pool.Exec(ctx, `
 		UPDATE players SET password_hash = $2, failed_attempts = 0, locked_until = NULL, updated_at = $3
 		WHERE id = $1
-	`, id.String(), passwordHash, time.Now())
+	`, id.String(), passwordHash, pgnanos.From(time.Now()))
 	if err != nil {
 		return oops.Code("PLAYER_UPDATE_PASSWORD_FAILED").
 			With("operation", "update password and clear lockout").
@@ -289,7 +302,7 @@ func (r *PlayerRepository) ListIdleGuests(ctx context.Context, idleSince time.Ti
 		    WHERE c.player_id = p.id
 		      AND s.status IN ('active', 'detached')
 		  )
-	`, idleSince)
+	`, pgnanos.From(idleSince))
 	if err != nil {
 		return nil, oops.Code("GUEST_LIST_FAILED").Wrap(err)
 	}
@@ -380,12 +393,12 @@ func (r *PlayerRepository) scanPlayer(row pgx.Row) (*auth.Player, error) {
 		email            *string
 		emailVerified    bool
 		failedAttempts   int
-		lockedUntil      *time.Time
+		lockedUntil      *pgnanos.Time
 		defaultCharIDStr *string
 		prefsJSON        []byte
 		isGuest          bool
-		createdAt        time.Time
-		updatedAt        time.Time
+		createdAt        pgnanos.Time
+		updatedAt        pgnanos.Time
 	)
 
 	err := row.Scan(
@@ -441,6 +454,12 @@ func (r *PlayerRepository) scanPlayer(row pgx.Row) (*auth.Player, error) {
 		}
 	}
 
+	var lockedUntilTime *time.Time
+	if lockedUntil != nil {
+		t := lockedUntil.Time()
+		lockedUntilTime = &t
+	}
+
 	return &auth.Player{
 		ID:                 id,
 		Username:           username,
@@ -448,12 +467,12 @@ func (r *PlayerRepository) scanPlayer(row pgx.Row) (*auth.Player, error) {
 		Email:              email,
 		EmailVerified:      emailVerified,
 		FailedAttempts:     failedAttempts,
-		LockedUntil:        lockedUntil,
+		LockedUntil:        lockedUntilTime,
 		DefaultCharacterID: defaultCharID,
 		Preferences:        prefs,
 		IsGuest:            isGuest,
-		CreatedAt:          createdAt,
-		UpdatedAt:          updatedAt,
+		CreatedAt:          createdAt.Time(),
+		UpdatedAt:          updatedAt.Time(),
 	}, nil
 }
 

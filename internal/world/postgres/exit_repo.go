@@ -15,6 +15,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -119,7 +120,7 @@ func (r *ExitRepository) insertExitTx(ctx context.Context, tx pgx.Tx, exit *worl
 		exit.Locked,
 		nullableLockType(exit.LockType),
 		lockDataJSON,
-		exit.CreatedAt,
+		pgnanos.From(exit.CreatedAt),
 	)
 	if err != nil {
 		return oops.With("operation", "create exit").With("id", exit.ID.String()).Wrap(err)
@@ -396,6 +397,7 @@ type exitScanFields struct {
 	visibleToStrs               []string
 	lockType                    *string
 	lockDataJSON                []byte
+	createdAt                   pgnanos.Time
 }
 
 // parseExitFromFields converts scanned fields into a world.Exit.
@@ -429,6 +431,7 @@ func parseExitFromFields(f *exitScanFields, exit *world.Exit) error {
 	if err != nil {
 		return err
 	}
+	exit.CreatedAt = f.createdAt.Time()
 	return nil
 }
 
@@ -451,7 +454,7 @@ func scanExitRow(row pgx.Row) (*world.Exit, error) {
 
 	err := row.Scan(
 		&f.idStr, &f.fromLocStr, &f.toLocStr, &exit.Name, &f.aliases, &exit.Bidirectional,
-		&f.returnName, &f.visibilityStr, &f.visibleToStrs, &exit.Locked, &f.lockType, &f.lockDataJSON, &exit.CreatedAt,
+		&f.returnName, &f.visibilityStr, &f.visibleToStrs, &exit.Locked, &f.lockType, &f.lockDataJSON, &f.createdAt,
 	)
 	if err != nil {
 		return nil, oops.With("operation", "scan exit").Wrap(err)
@@ -473,7 +476,7 @@ func (r *ExitRepository) scanExits(rows pgx.Rows) ([]*world.Exit, error) {
 
 		if err := rows.Scan(
 			&f.idStr, &f.fromLocStr, &f.toLocStr, &exit.Name, &f.aliases, &exit.Bidirectional,
-			&f.returnName, &f.visibilityStr, &f.visibleToStrs, &exit.Locked, &f.lockType, &f.lockDataJSON, &exit.CreatedAt,
+			&f.returnName, &f.visibilityStr, &f.visibleToStrs, &exit.Locked, &f.lockType, &f.lockDataJSON, &f.createdAt,
 		); err != nil {
 			return nil, oops.With("operation", "scan exit").Wrap(err)
 		}

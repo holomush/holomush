@@ -27,7 +27,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 	locationID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
-		VALUES ($1, 'Test Location', 'A test location', 'persistent', 'last:0', NOW())
+		VALUES ($1, 'Test Location', 'A test location', 'persistent', 'last:0', (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, locationID.String())
 	require.NoError(t, err)
 	defer func() {
@@ -39,7 +39,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		require.NoError(t, err)
 		obj.Description = "A shiny test sword."
 		obj.IsContainer = false
-		obj.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		obj.CreatedAt = time.Now().UTC()
 
 		err = repo.Create(ctx, obj)
 		require.NoError(t, err)
@@ -66,7 +66,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		require.NoError(t, err)
 		obj.Description = "Original description."
 		obj.IsContainer = false
-		obj.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		obj.CreatedAt = time.Now().UTC()
 
 		err = repo.Create(ctx, obj)
 		require.NoError(t, err)
@@ -92,13 +92,13 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		charID := ulid.Make()
 		playerID := ulid.Make()
 		_, err := testPool.Exec(ctx, `
-			INSERT INTO players (id, username, password_hash, created_at)
-			VALUES ($1, $2, 'testhash', NOW())
+			INSERT INTO players (id, username, password_hash, created_at, updated_at)
+			VALUES ($1, $2, 'testhash', (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 		`, playerID.String(), "player_update_"+playerID.String())
 		require.NoError(t, err)
 		_, err = testPool.Exec(ctx, `
 			INSERT INTO characters (id, player_id, name, location_id, created_at)
-			VALUES ($1, $2, 'UpdateOwnerChar', $3, NOW())
+			VALUES ($1, $2, 'UpdateOwnerChar', $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 		`, charID.String(), playerID.String(), locationID.String())
 		require.NoError(t, err)
 
@@ -106,7 +106,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		require.NoError(t, err)
 		obj.Description = "An object."
 		obj.IsContainer = false
-		obj.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		obj.CreatedAt = time.Now().UTC()
 
 		err = repo.Create(ctx, obj)
 		require.NoError(t, err)
@@ -132,13 +132,13 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		charID := ulid.Make()
 		playerID := ulid.Make()
 		_, err := testPool.Exec(ctx, `
-			INSERT INTO players (id, username, password_hash, created_at)
-			VALUES ($1, $2, 'testhash', NOW())
+			INSERT INTO players (id, username, password_hash, created_at, updated_at)
+			VALUES ($1, $2, 'testhash', (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 		`, playerID.String(), "player_held_"+playerID.String())
 		require.NoError(t, err)
 		_, err = testPool.Exec(ctx, `
 			INSERT INTO characters (id, player_id, name, location_id, created_at)
-			VALUES ($1, $2, 'HolderChar', $3, NOW())
+			VALUES ($1, $2, 'HolderChar', $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 		`, charID.String(), playerID.String(), locationID.String())
 		require.NoError(t, err)
 
@@ -146,7 +146,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		require.NoError(t, err)
 		obj.Description = "An object."
 		obj.IsContainer = false
-		obj.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		obj.CreatedAt = time.Now().UTC()
 
 		err = repo.Create(ctx, obj)
 		require.NoError(t, err)
@@ -175,7 +175,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		require.NoError(t, err)
 		container.Description = "A container."
 		container.IsContainer = true
-		container.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		container.CreatedAt = time.Now().UTC()
 		err = repo.Create(ctx, container)
 		require.NoError(t, err)
 
@@ -184,7 +184,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		require.NoError(t, err)
 		obj.Description = "An object."
 		obj.IsContainer = false
-		obj.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		obj.CreatedAt = time.Now().UTC()
 		err = repo.Create(ctx, obj)
 		require.NoError(t, err)
 
@@ -209,7 +209,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		obj, err := world.NewObjectWithID(ulid.Make(), "To Delete", world.InLocation(locationID))
 		require.NoError(t, err)
 		obj.Description = "Will be deleted."
-		obj.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		obj.CreatedAt = time.Now().UTC()
 
 		err = repo.Create(ctx, obj)
 		require.NoError(t, err)
@@ -232,7 +232,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		obj, err := world.NewObjectWithID(ulid.Make(), "Nonexistent", world.InLocation(locationID))
 		require.NoError(t, err)
 		obj.Description = "Does not exist."
-		obj.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		obj.CreatedAt = time.Now().UTC()
 		err = repo.Update(ctx, obj)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
@@ -261,7 +261,7 @@ func TestObjectRepository_ListAtLocation(t *testing.T) {
 	locationID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
-		VALUES ($1, 'Test Location 2', 'Another test location', 'persistent', 'last:0', NOW())
+		VALUES ($1, 'Test Location 2', 'Another test location', 'persistent', 'last:0', (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, locationID.String())
 	require.NoError(t, err)
 	defer func() {
@@ -272,11 +272,11 @@ func TestObjectRepository_ListAtLocation(t *testing.T) {
 	obj1, err := world.NewObjectWithID(ulid.Make(), "Object 1", world.InLocation(locationID))
 	require.NoError(t, err)
 	obj1.Description = "First object."
-	obj1.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+	obj1.CreatedAt = time.Now().UTC()
 	obj2, err := world.NewObjectWithID(ulid.Make(), "Object 2", world.InLocation(locationID))
 	require.NoError(t, err)
 	obj2.Description = "Second object."
-	obj2.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+	obj2.CreatedAt = time.Now().UTC()
 
 	require.NoError(t, repo.Create(ctx, obj1))
 	require.NoError(t, repo.Create(ctx, obj2))
@@ -306,7 +306,7 @@ func TestObjectRepository_ListAtLocation_Empty(t *testing.T) {
 	emptyLocationID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
-		VALUES ($1, 'Empty Location', 'No objects here', 'persistent', 'last:0', NOW())
+		VALUES ($1, 'Empty Location', 'No objects here', 'persistent', 'last:0', (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, emptyLocationID.String())
 	require.NoError(t, err)
 	defer func() {
@@ -328,7 +328,7 @@ func TestObjectRepository_ListHeldBy(t *testing.T) {
 	locationID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
-		VALUES ($1, 'Char Location', 'Location for character', 'persistent', 'last:0', NOW())
+		VALUES ($1, 'Char Location', 'Location for character', 'persistent', 'last:0', (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, locationID.String())
 	require.NoError(t, err)
 	defer func() {
@@ -338,8 +338,8 @@ func TestObjectRepository_ListHeldBy(t *testing.T) {
 	// Create a test player first with unique username
 	playerID := ulid.Make()
 	_, err = testPool.Exec(ctx, `
-		INSERT INTO players (id, username, password_hash, created_at)
-		VALUES ($1, $2, 'testhash', NOW())
+		INSERT INTO players (id, username, password_hash, created_at, updated_at)
+		VALUES ($1, $2, 'testhash', (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 	`, playerID.String(), "player_"+playerID.String())
 	require.NoError(t, err)
 	defer func() {
@@ -350,7 +350,7 @@ func TestObjectRepository_ListHeldBy(t *testing.T) {
 	characterID := ulid.Make()
 	_, err = testPool.Exec(ctx, `
 		INSERT INTO characters (id, player_id, name, location_id, created_at)
-		VALUES ($1, $2, 'Test Character', $3, NOW())
+		VALUES ($1, $2, 'Test Character', $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, characterID.String(), playerID.String(), locationID.String())
 	require.NoError(t, err)
 	defer func() {
@@ -361,7 +361,7 @@ func TestObjectRepository_ListHeldBy(t *testing.T) {
 	obj, err := world.NewObjectWithID(ulid.Make(), "Held Object", world.HeldBy(characterID))
 	require.NoError(t, err)
 	obj.Description = "Object held by character."
-	obj.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+	obj.CreatedAt = time.Now().UTC()
 
 	require.NoError(t, repo.Create(ctx, obj))
 	defer func() {
@@ -382,7 +382,7 @@ func TestObjectRepository_ListHeldBy_OrderingWithMultipleObjects(t *testing.T) {
 	locationID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
-		VALUES ($1, 'Inventory Test Location', 'Location for inventory ordering test', 'persistent', 'last:0', NOW())
+		VALUES ($1, 'Inventory Test Location', 'Location for inventory ordering test', 'persistent', 'last:0', (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, locationID.String())
 	require.NoError(t, err)
 	defer func() {
@@ -392,8 +392,8 @@ func TestObjectRepository_ListHeldBy_OrderingWithMultipleObjects(t *testing.T) {
 	// Create a test player
 	playerID := ulid.Make()
 	_, err = testPool.Exec(ctx, `
-		INSERT INTO players (id, username, password_hash, created_at)
-		VALUES ($1, $2, 'testhash', NOW())
+		INSERT INTO players (id, username, password_hash, created_at, updated_at)
+		VALUES ($1, $2, 'testhash', (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 	`, playerID.String(), "player_order_"+playerID.String())
 	require.NoError(t, err)
 	defer func() {
@@ -404,7 +404,7 @@ func TestObjectRepository_ListHeldBy_OrderingWithMultipleObjects(t *testing.T) {
 	characterID := ulid.Make()
 	_, err = testPool.Exec(ctx, `
 		INSERT INTO characters (id, player_id, name, location_id, created_at)
-		VALUES ($1, $2, 'Inventory Test Character', $3, NOW())
+		VALUES ($1, $2, 'Inventory Test Character', $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, characterID.String(), playerID.String(), locationID.String())
 	require.NoError(t, err)
 	defer func() {
@@ -413,7 +413,7 @@ func TestObjectRepository_ListHeldBy_OrderingWithMultipleObjects(t *testing.T) {
 
 	// Create 3 objects with distinct creation times to verify ordering.
 	// Objects are ordered by created_at DESC (newest first).
-	baseTime := time.Now().UTC().Truncate(time.Microsecond)
+	baseTime := time.Now().UTC()
 
 	obj1, err := world.NewObjectWithID(ulid.Make(), "First Object (oldest)", world.HeldBy(characterID))
 	require.NoError(t, err)
@@ -464,7 +464,7 @@ func TestObjectRepository_ListContainedIn(t *testing.T) {
 	locationID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
-		VALUES ($1, 'Container Location', 'Location for container test', 'persistent', 'last:0', NOW())
+		VALUES ($1, 'Container Location', 'Location for container test', 'persistent', 'last:0', (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, locationID.String())
 	require.NoError(t, err)
 	defer func() {
@@ -476,7 +476,7 @@ func TestObjectRepository_ListContainedIn(t *testing.T) {
 	require.NoError(t, err)
 	container.Description = "A wooden chest."
 	container.IsContainer = true
-	container.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+	container.CreatedAt = time.Now().UTC()
 	require.NoError(t, repo.Create(ctx, container))
 	defer func() {
 		_ = repo.Delete(ctx, container.ID)
@@ -486,7 +486,7 @@ func TestObjectRepository_ListContainedIn(t *testing.T) {
 	item, err := world.NewObjectWithID(ulid.Make(), "Gold Coin", world.InContainer(container.ID))
 	require.NoError(t, err)
 	item.Description = "A shiny gold coin."
-	item.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+	item.CreatedAt = time.Now().UTC()
 	require.NoError(t, repo.Create(ctx, item))
 	defer func() {
 		_ = repo.Delete(ctx, item.ID)
@@ -507,8 +507,8 @@ func TestObjectRepository_Move(t *testing.T) {
 	loc2ID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
-		VALUES ($1, 'Location 1', 'First location', 'persistent', 'last:0', NOW()),
-		       ($2, 'Location 2', 'Second location', 'persistent', 'last:0', NOW())
+		VALUES ($1, 'Location 1', 'First location', 'persistent', 'last:0', (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT),
+		       ($2, 'Location 2', 'Second location', 'persistent', 'last:0', (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, loc1ID.String(), loc2ID.String())
 	require.NoError(t, err)
 	defer func() {
@@ -519,7 +519,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		obj, err := world.NewObjectWithID(ulid.Make(), "Movable Object", world.InLocation(loc1ID))
 		require.NoError(t, err)
 		obj.Description = "Can be moved."
-		obj.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		obj.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, obj))
 		defer func() {
 			_ = repo.Delete(ctx, obj.ID)
@@ -542,7 +542,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		require.NoError(t, err)
 		container.Description = "A box."
 		container.IsContainer = true
-		container.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		container.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, container))
 		defer func() {
 			_ = repo.Delete(ctx, container.ID)
@@ -551,7 +551,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		item, err := world.NewObjectWithID(ulid.Make(), "Key", world.InLocation(loc1ID))
 		require.NoError(t, err)
 		item.Description = "A small key."
-		item.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		item.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, item))
 		defer func() {
 			_ = repo.Delete(ctx, item.ID)
@@ -574,7 +574,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		require.NoError(t, err)
 		nonContainer.Description = "A rock."
 		nonContainer.IsContainer = false
-		nonContainer.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		nonContainer.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, nonContainer))
 		defer func() {
 			_ = repo.Delete(ctx, nonContainer.ID)
@@ -583,7 +583,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		item, err := world.NewObjectWithID(ulid.Make(), "Pebble", world.InLocation(loc1ID))
 		require.NoError(t, err)
 		item.Description = "A small pebble."
-		item.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		item.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, item))
 		defer func() {
 			_ = repo.Delete(ctx, item.ID)
@@ -599,7 +599,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		obj, err := world.NewObjectWithID(ulid.Make(), "Test Object", world.InLocation(loc1ID))
 		require.NoError(t, err)
 		obj.Description = "Test."
-		obj.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		obj.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, obj))
 		defer func() {
 			_ = repo.Delete(ctx, obj.ID)
@@ -614,7 +614,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		item, err := world.NewObjectWithID(ulid.Make(), "Lost Item", world.InLocation(loc1ID))
 		require.NoError(t, err)
 		item.Description = "Item looking for container."
-		item.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		item.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, item))
 		defer func() {
 			_ = repo.Delete(ctx, item.ID)
@@ -632,8 +632,8 @@ func TestObjectRepository_Move(t *testing.T) {
 		// Create a test player first
 		playerID := ulid.Make()
 		_, err := testPool.Exec(ctx, `
-			INSERT INTO players (id, username, password_hash, created_at)
-			VALUES ($1, $2, 'testhash', NOW())
+			INSERT INTO players (id, username, password_hash, created_at, updated_at)
+			VALUES ($1, $2, 'testhash', (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 		`, playerID.String(), "player_move_"+playerID.String())
 		require.NoError(t, err)
 		defer func() {
@@ -644,7 +644,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		characterID := ulid.Make()
 		_, err = testPool.Exec(ctx, `
 			INSERT INTO characters (id, player_id, name, location_id, created_at)
-			VALUES ($1, $2, 'Move Test Character', $3, NOW())
+			VALUES ($1, $2, 'Move Test Character', $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 		`, characterID.String(), playerID.String(), loc1ID.String())
 		require.NoError(t, err)
 		defer func() {
@@ -654,7 +654,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		item, err := world.NewObjectWithID(ulid.Make(), "Portable Item", world.InLocation(loc1ID))
 		require.NoError(t, err)
 		item.Description = "Can be picked up."
-		item.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		item.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, item))
 		defer func() {
 			_ = repo.Delete(ctx, item.ID)
@@ -680,7 +680,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		require.NoError(t, err)
 		level1.Description = "Top level container."
 		level1.IsContainer = true
-		level1.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		level1.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, level1))
 		defer func() { _ = repo.Delete(ctx, level1.ID) }()
 
@@ -688,7 +688,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		require.NoError(t, err)
 		level2.Description = "Second level container."
 		level2.IsContainer = true
-		level2.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		level2.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, level2))
 		defer func() { _ = repo.Delete(ctx, level2.ID) }()
 
@@ -696,7 +696,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		require.NoError(t, err)
 		level3.Description = "Third level container."
 		level3.IsContainer = true
-		level3.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		level3.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, level3))
 		defer func() { _ = repo.Delete(ctx, level3.ID) }()
 
@@ -704,7 +704,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		item, err := world.NewObjectWithID(ulid.Make(), "Deep Item", world.InLocation(loc1ID))
 		require.NoError(t, err)
 		item.Description = "Too deep."
-		item.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		item.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, item))
 		defer func() { _ = repo.Delete(ctx, item.ID) }()
 
@@ -727,14 +727,14 @@ func TestObjectRepository_Move(t *testing.T) {
 		require.NoError(t, err)
 		containerA.Description = "Has an item inside."
 		containerA.IsContainer = true
-		containerA.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		containerA.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, containerA))
 		defer func() { _ = repo.Delete(ctx, containerA.ID) }()
 
 		itemA, err := world.NewObjectWithID(ulid.Make(), "Item in Container A", world.InContainer(containerA.ID))
 		require.NoError(t, err)
 		itemA.Description = "Nested item."
-		itemA.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		itemA.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, itemA))
 		defer func() { _ = repo.Delete(ctx, itemA.ID) }()
 
@@ -743,7 +743,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		require.NoError(t, err)
 		containerB.Description = "Top level."
 		containerB.IsContainer = true
-		containerB.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		containerB.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, containerB))
 		defer func() { _ = repo.Delete(ctx, containerB.ID) }()
 
@@ -751,7 +751,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		require.NoError(t, err)
 		containerC.Description = "Inside B."
 		containerC.IsContainer = true
-		containerC.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		containerC.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, containerC))
 		defer func() { _ = repo.Delete(ctx, containerC.ID) }()
 
@@ -769,7 +769,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		require.NoError(t, err)
 		containerA.Description = "First container."
 		containerA.IsContainer = true
-		containerA.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		containerA.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, containerA))
 		defer func() { _ = repo.Delete(ctx, containerA.ID) }()
 
@@ -777,7 +777,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		require.NoError(t, err)
 		containerB.Description = "Second container inside A."
 		containerB.IsContainer = true
-		containerB.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		containerB.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, containerB))
 		defer func() { _ = repo.Delete(ctx, containerB.ID) }()
 
@@ -793,7 +793,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		require.NoError(t, err)
 		container.Description = "Cannot contain itself."
 		container.IsContainer = true
-		container.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		container.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, container))
 		defer func() { _ = repo.Delete(ctx, container.ID) }()
 
@@ -817,13 +817,13 @@ func TestObjectRepository_Move(t *testing.T) {
 		charID := ulid.Make()
 		playerID := ulid.Make()
 		_, err := testPool.Exec(ctx, `
-			INSERT INTO players (id, username, password_hash, created_at)
-			VALUES ($1, $2, 'testhash', NOW())
+			INSERT INTO players (id, username, password_hash, created_at, updated_at)
+			VALUES ($1, $2, 'testhash', (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 		`, playerID.String(), "player_multi_"+playerID.String())
 		require.NoError(t, err)
 		_, err = testPool.Exec(ctx, `
 			INSERT INTO characters (id, player_id, name, location_id, created_at)
-			VALUES ($1, $2, 'MultiTestChar', $3, NOW())
+			VALUES ($1, $2, 'MultiTestChar', $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 		`, charID.String(), playerID.String(), loc1ID.String())
 		require.NoError(t, err)
 		defer func() {
@@ -834,7 +834,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		item, err := world.NewObjectWithID(ulid.Make(), "Multi Containment Item", world.InLocation(loc1ID))
 		require.NoError(t, err)
 		item.Description = "Item for testing invalid containment."
-		item.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		item.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, item))
 		defer func() { _ = repo.Delete(ctx, item.ID) }()
 
@@ -855,14 +855,14 @@ func TestObjectRepository_Move(t *testing.T) {
 		require.NoError(t, err)
 		container.Description = "Container for concurrent test."
 		container.IsContainer = true
-		container.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		container.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, container))
 		defer func() { _ = repo.Delete(ctx, container.ID) }()
 
 		item, err := world.NewObjectWithID(ulid.Make(), "Concurrent Test Item", world.InLocation(loc1ID))
 		require.NoError(t, err)
 		item.Description = "Item for concurrent test."
-		item.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		item.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, item))
 		defer func() { _ = repo.Delete(ctx, item.ID) }()
 
@@ -905,7 +905,7 @@ func TestObjectRepository_CustomMaxNestingDepth(t *testing.T) {
 	locID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
-		VALUES ($1, 'Depth Test Location', 'For depth testing', 'persistent', 'last:0', NOW())
+		VALUES ($1, 'Depth Test Location', 'For depth testing', 'persistent', 'last:0', (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, locID.String())
 	require.NoError(t, err)
 	defer func() {
@@ -921,7 +921,7 @@ func TestObjectRepository_CustomMaxNestingDepth(t *testing.T) {
 		require.NoError(t, err)
 		level1.Description = "Level 1"
 		level1.IsContainer = true
-		level1.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		level1.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, level1))
 		defer func() { _ = repo.Delete(ctx, level1.ID) }()
 
@@ -929,7 +929,7 @@ func TestObjectRepository_CustomMaxNestingDepth(t *testing.T) {
 		require.NoError(t, err)
 		level2.Description = "Level 2"
 		level2.IsContainer = true
-		level2.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		level2.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, level2))
 		defer func() { _ = repo.Delete(ctx, level2.ID) }()
 
@@ -937,7 +937,7 @@ func TestObjectRepository_CustomMaxNestingDepth(t *testing.T) {
 		require.NoError(t, err)
 		level3.Description = "Level 3"
 		level3.IsContainer = true
-		level3.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		level3.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, level3))
 		defer func() { _ = repo.Delete(ctx, level3.ID) }()
 
@@ -945,7 +945,7 @@ func TestObjectRepository_CustomMaxNestingDepth(t *testing.T) {
 		require.NoError(t, err)
 		level4.Description = "Level 4"
 		level4.IsContainer = true
-		level4.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		level4.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, level4))
 		defer func() { _ = repo.Delete(ctx, level4.ID) }()
 
@@ -953,7 +953,7 @@ func TestObjectRepository_CustomMaxNestingDepth(t *testing.T) {
 		item, err := world.NewObjectWithID(ulid.Make(), "Deep Item", world.InLocation(locID))
 		require.NoError(t, err)
 		item.Description = "At depth 5"
-		item.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		item.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, item))
 		defer func() { _ = repo.Delete(ctx, item.ID) }()
 
@@ -975,14 +975,14 @@ func TestObjectRepository_CustomMaxNestingDepth(t *testing.T) {
 		require.NoError(t, err)
 		container.Description = "Top level only"
 		container.IsContainer = true
-		container.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		container.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, container))
 		defer func() { _ = repo.Delete(ctx, container.ID) }()
 
 		item, err := world.NewObjectWithID(ulid.Make(), "Item", world.InLocation(locID))
 		require.NoError(t, err)
 		item.Description = "Goes in container"
-		item.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		item.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, item))
 		defer func() { _ = repo.Delete(ctx, item.ID) }()
 
@@ -995,14 +995,14 @@ func TestObjectRepository_CustomMaxNestingDepth(t *testing.T) {
 		require.NoError(t, err)
 		container2.Description = "Should fail to nest"
 		container2.IsContainer = true
-		container2.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		container2.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, container2))
 		defer func() { _ = repo.Delete(ctx, container2.ID) }()
 
 		anotherItem, err := world.NewObjectWithID(ulid.Make(), "Nested Item", world.InContainer(container2.ID))
 		require.NoError(t, err)
 		anotherItem.Description = "In container2"
-		anotherItem.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		anotherItem.CreatedAt = time.Now().UTC()
 		require.NoError(t, repo.Create(ctx, anotherItem))
 		defer func() { _ = repo.Delete(ctx, anotherItem.ID) }()
 

@@ -226,7 +226,9 @@ var _ = Describe("Orchestrator_Run_ResumeFromAborted_TerminalError", func() {
            primary_player_id, status, old_dek_id,
            started_at, aborted_at, aborted_reason)
         VALUES ($1, $2, $3, $4, $5, '01PRIM', 'aborted', $6,
-                now(), now(), 'test abort')
+                (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT,
+                (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT,
+                'test abort')
     `, rid[:], setup.contextType, setup.contextID,
 			opArgsHashForReq(req), make([]byte, 32), setup.oldDEKID)
 		Expect(err).NotTo(HaveOccurred())

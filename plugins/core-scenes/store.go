@@ -197,11 +197,15 @@ func (s *SceneStore) CreateWithOwner(ctx context.Context, row *SceneRow) error {
 	}
 
 	// 2. Insert the owner participant row.
+	// joined_at uses SQL-side NOW() to stay in the same clock domain as
+	// AddParticipant's INSERT (store.go:710) — app-side time.Now() vs PG's
+	// NOW() can invert under clock drift, breaking ListParticipants ordering
+	// (holomush-gfo6.28; tiebreaker alone only catches ties, not inversions).
 	_, err = tx.Exec(
 		ctx, `
 		INSERT INTO scene_participants (scene_id, character_id, role, joined_at)
-		VALUES ($1, $2, 'owner', $3)`,
-		row.ID, row.OwnerID, pgnanos.From(time.Now()),
+		VALUES ($1, $2, 'owner', (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)`,
+		row.ID, row.OwnerID,
 	)
 	if err != nil {
 		recordError(span, err)
@@ -1184,7 +1188,7 @@ func (s *SceneStore) ListParticipants(ctx context.Context, sceneID string) ([]Pa
 		SELECT scene_id, character_id, role, joined_at
 		FROM scene_participants
 		WHERE scene_id = $1
-		ORDER BY joined_at ASC`,
+		ORDER BY joined_at ASC, character_id ASC`, // tiebreaker for sub-ns insert collisions (holomush-gfo6.28)
 		sceneID,
 	)
 	if err != nil {
@@ -1295,8 +1299,8 @@ func (s *SceneStore) ListScenesForCharacter(ctx context.Context, characterID str
 		WHERE p.character_id = $1
 		  AND p.role IN ('owner', 'member')
 		  AND s.state IN ('active', 'paused')
-		ORDER BY p.joined_at ASC
-	`
+		ORDER BY p.joined_at ASC, p.scene_id ASC
+	` // tiebreaker for sub-ns insert collisions (holomush-gfo6.28)
 	rows, err := s.pool.Query(ctx, q, characterID)
 	if err != nil {
 		recordError(span, err)
@@ -1345,8 +1349,8 @@ func (s *SceneStore) ListParticipantsWithPoseMeta(ctx context.Context, sceneID s
 		JOIN scene_participants p ON p.scene_id = s.id
 		WHERE s.id = $1
 		  AND p.role IN ('owner', 'member')
-		ORDER BY p.joined_at ASC
-	`
+		ORDER BY p.joined_at ASC, p.character_id ASC
+	` // tiebreaker for sub-ns insert collisions (holomush-gfo6.28)
 	rows, err := s.pool.Query(ctx, q, sceneID)
 	if err != nil {
 		recordError(span, err)

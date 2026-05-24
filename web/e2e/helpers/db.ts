@@ -58,12 +58,16 @@ export interface DbPlayerSession {
   id: string;
   player_id: string;
   token_hash: string;
-  expires_at: Date;
+  // BIGINT epoch-ns column (post-gfo6.16 Phase 2 migration). pg's node driver
+  // returns BIGINT as string by default; tests that compare must parse.
+  expires_at: string;
 }
 
 export async function getPlayerSessions(playerId: string): Promise<DbPlayerSession[]> {
   const { rows } = await getPool().query<DbPlayerSession>(
-    'SELECT id, player_id, token_hash, expires_at FROM player_sessions WHERE player_id = $1 AND expires_at > now()',
+    // expires_at is BIGINT epoch-ns; compare against SQL-side ns-now to stay in the same type domain.
+    `SELECT id, player_id, token_hash, expires_at FROM player_sessions
+     WHERE player_id = $1 AND expires_at > (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT`,
     [playerId],
   );
   return rows;

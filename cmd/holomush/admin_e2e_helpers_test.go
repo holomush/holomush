@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/gomega" //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/admin/approval"
+	"github.com/holomush/holomush/internal/pgnanos"
 	adminv1 "github.com/holomush/holomush/pkg/proto/holomush/admin/v1"
 )
 
@@ -55,13 +56,19 @@ func (e *adminAuthEnv) approve(sessionToken string, id approval.RequestID) error
 // approvalRow returns approved_at + approved_by_player_id from the DB for a
 // given request_id. Used to assert MarkApproved actually fired (or didn't).
 func (e *adminAuthEnv) approvalRow(id approval.RequestID) (approvedAt *time.Time, approvedByPlayerID string) {
+	// admin_approvals.approved_at is BIGINT epoch-ns (post-gfo6 Phase 4).
+	var approvedAtNs *pgnanos.Time
 	err := e.queryPool.QueryRow(
 		e.ctx,
 		`SELECT approved_at, COALESCE(approved_by_player_id, '')
 		   FROM admin_approvals WHERE request_id = $1`,
 		id[:],
-	).Scan(&approvedAt, &approvedByPlayerID)
+	).Scan(&approvedAtNs, &approvedByPlayerID)
 	Expect(err).NotTo(HaveOccurred(), "SELECT admin_approvals row")
+	if approvedAtNs != nil {
+		t := approvedAtNs.Time()
+		approvedAt = &t
+	}
 	return approvedAt, approvedByPlayerID
 }
 
@@ -70,7 +77,7 @@ func (e *adminAuthEnv) approvalRow(id approval.RequestID) (approvedAt *time.Time
 // approval/repo_integration_test uses for INV-D5 coverage.
 func (e *adminAuthEnv) forceExpireApproval(id approval.RequestID) {
 	tag, err := e.queryPool.Exec(e.ctx,
-		`UPDATE admin_approvals SET expires_at = now() - interval '1 minute' WHERE request_id = $1`,
+		`UPDATE admin_approvals SET expires_at = (EXTRACT(EPOCH FROM now() - interval '1 minute') * 1e9)::BIGINT WHERE request_id = $1`,
 		id[:])
 	Expect(err).NotTo(HaveOccurred(), "force-expire admin_approvals row")
 	Expect(tag.RowsAffected()).To(Equal(int64(1)), "force-expire must touch exactly one row")

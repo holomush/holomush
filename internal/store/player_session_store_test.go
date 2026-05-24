@@ -22,7 +22,7 @@ import (
 
 // testPlayerSession builds a non-expired PlayerSession for use in tests.
 func testPlayerSession() *auth.PlayerSession {
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := time.Now().UTC()
 	return &auth.PlayerSession{
 		ID:        core.NewULID(),
 		PlayerID:  core.NewULID(),
@@ -41,8 +41,10 @@ func playerSessionColumns() []string {
 }
 
 // playerSessionRow creates a pgxmock row from a PlayerSession.
+// Timestamp columns are BIGINT-ns after migration 000040; emit int64 nanoseconds
+// to match what pgx will scan from the database.
 func playerSessionRow(s *auth.PlayerSession) []any {
-	return []any{s.ID.String(), s.PlayerID.String(), s.TokenHash, s.UserAgent, s.IPAddress, s.ExpiresAt, s.CreatedAt, s.UpdatedAt}
+	return []any{s.ID.String(), s.PlayerID.String(), s.TokenHash, s.UserAgent, s.IPAddress, s.ExpiresAt.UnixNano(), s.CreatedAt.UnixNano(), s.UpdatedAt.UnixNano()}
 }
 
 func TestPostgresPlayerSessionStore_CompileTimeCheck(_ *testing.T) {
@@ -65,7 +67,7 @@ func TestPostgresPlayerSessionStore_Create(t *testing.T) {
 			session: ps,
 			setupMock: func(mock pgxmock.PgxPoolIface) {
 				mock.ExpectExec(`INSERT INTO player_sessions`).
-					WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, ps.ExpiresAt, ps.CreatedAt, ps.UpdatedAt).
+					WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 					WillReturnResult(pgxmock.NewResult("INSERT", 1))
 			},
 		},
@@ -74,7 +76,7 @@ func TestPostgresPlayerSessionStore_Create(t *testing.T) {
 			session: ps,
 			setupMock: func(mock pgxmock.PgxPoolIface) {
 				mock.ExpectExec(`INSERT INTO player_sessions`).
-					WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, ps.ExpiresAt, ps.CreatedAt, ps.UpdatedAt).
+					WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 					WillReturnError(errors.New("connection lost"))
 			},
 			wantErr: true,
@@ -117,9 +119,9 @@ func TestPostgresPlayerSessionStore_GetByTokenHash(t *testing.T) {
 		TokenHash: "expiredhash",
 		UserAgent: "test-agent",
 		IPAddress: "127.0.0.1",
-		ExpiresAt: time.Now().UTC().Add(-1 * time.Hour).Truncate(time.Microsecond),
-		CreatedAt: time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Microsecond),
-		UpdatedAt: time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Microsecond),
+		ExpiresAt: time.Now().UTC().Add(-1 * time.Hour),
+		CreatedAt: time.Now().UTC().Add(-2 * time.Hour),
+		UpdatedAt: time.Now().UTC().Add(-2 * time.Hour),
 	}
 
 	tests := []struct {
@@ -169,7 +171,7 @@ func TestPostgresPlayerSessionStore_GetByTokenHash(t *testing.T) {
 					WithArgs(expiredPS.TokenHash).
 					WillReturnRows(rows)
 				// Expect the conditional cleanup DELETE after detecting expiry.
-				mock.ExpectExec(`DELETE FROM player_sessions WHERE id = \$1 AND expires_at < now\(\)`).
+				mock.ExpectExec(`DELETE FROM player_sessions WHERE id = \$1 AND expires_at < .+`).
 					WithArgs(expiredPS.ID.String()).
 					WillReturnResult(pgxmock.NewResult("DELETE", 1))
 			},
@@ -228,7 +230,7 @@ func TestPostgresPlayerSessionStore_GetByTokenHash_InvalidIDFormat(t *testing.T)
 	// Return a row where the "id" column is not a valid ULID.
 	rows := pgxmock.NewRows(playerSessionColumns()).
 		AddRow("not-a-ulid", core.NewULID().String(), "somehash", "agent", "127.0.0.1",
-			time.Now().UTC().Add(time.Hour), time.Now().UTC(), time.Now().UTC())
+			time.Now().UTC().Add(time.Hour).UnixNano(), time.Now().UTC().UnixNano(), time.Now().UTC().UnixNano())
 	mock.ExpectQuery(`SELECT .+ FROM player_sessions WHERE token_hash = \$1`).
 		WithArgs("somehash").
 		WillReturnRows(rows)
@@ -249,7 +251,7 @@ func TestPostgresPlayerSessionStore_GetByTokenHash_InvalidPlayerIDFormat(t *test
 	// Return a row where the "player_id" column is not a valid ULID.
 	rows := pgxmock.NewRows(playerSessionColumns()).
 		AddRow(core.NewULID().String(), "not-a-ulid", "somehash", "agent", "127.0.0.1",
-			time.Now().UTC().Add(time.Hour), time.Now().UTC(), time.Now().UTC())
+			time.Now().UTC().Add(time.Hour).UnixNano(), time.Now().UTC().UnixNano(), time.Now().UTC().UnixNano())
 	mock.ExpectQuery(`SELECT .+ FROM player_sessions WHERE token_hash = \$1`).
 		WithArgs("somehash").
 		WillReturnRows(rows)
@@ -383,7 +385,7 @@ func TestPostgresPlayerSessionStore_DeleteExpired(t *testing.T) {
 		{
 			name: "deletes 3 rows",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
-				mock.ExpectExec(`DELETE FROM player_sessions WHERE expires_at < now\(\)`).
+				mock.ExpectExec(`DELETE FROM player_sessions WHERE expires_at < .+`).
 					WillReturnResult(pgxmock.NewResult("DELETE", 3))
 			},
 			wantCount: 3,
@@ -391,7 +393,7 @@ func TestPostgresPlayerSessionStore_DeleteExpired(t *testing.T) {
 		{
 			name: "deletes 0 rows",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
-				mock.ExpectExec(`DELETE FROM player_sessions WHERE expires_at < now\(\)`).
+				mock.ExpectExec(`DELETE FROM player_sessions WHERE expires_at < .+`).
 					WillReturnResult(pgxmock.NewResult("DELETE", 0))
 			},
 			wantCount: 0,
@@ -399,7 +401,7 @@ func TestPostgresPlayerSessionStore_DeleteExpired(t *testing.T) {
 		{
 			name: "database error",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
-				mock.ExpectExec(`DELETE FROM player_sessions WHERE expires_at < now\(\)`).
+				mock.ExpectExec(`DELETE FROM player_sessions WHERE expires_at < .+`).
 					WillReturnError(errors.New("connection lost"))
 			},
 			wantErr: true,
@@ -529,7 +531,7 @@ func TestPostgresPlayerSessionStore_CountActiveByPlayer(t *testing.T) {
 			name: "returns active session count",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
 				rows := pgxmock.NewRows([]string{"count"}).AddRow(3)
-				mock.ExpectQuery(`SELECT COUNT\(\*\) FROM player_sessions WHERE player_id = \$1 AND expires_at > now\(\)`).
+				mock.ExpectQuery(`SELECT COUNT\(\*\) FROM player_sessions WHERE player_id = \$1 AND expires_at > .+`).
 					WithArgs(playerID.String()).
 					WillReturnRows(rows)
 			},
@@ -539,7 +541,7 @@ func TestPostgresPlayerSessionStore_CountActiveByPlayer(t *testing.T) {
 			name: "returns zero for no sessions",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
 				rows := pgxmock.NewRows([]string{"count"}).AddRow(0)
-				mock.ExpectQuery(`SELECT COUNT\(\*\) FROM player_sessions WHERE player_id = \$1 AND expires_at > now\(\)`).
+				mock.ExpectQuery(`SELECT COUNT\(\*\) FROM player_sessions WHERE player_id = \$1 AND expires_at > .+`).
 					WithArgs(playerID.String()).
 					WillReturnRows(rows)
 			},
@@ -548,7 +550,7 @@ func TestPostgresPlayerSessionStore_CountActiveByPlayer(t *testing.T) {
 		{
 			name: "database error",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
-				mock.ExpectQuery(`SELECT COUNT\(\*\) FROM player_sessions WHERE player_id = \$1 AND expires_at > now\(\)`).
+				mock.ExpectQuery(`SELECT COUNT\(\*\) FROM player_sessions WHERE player_id = \$1 AND expires_at > .+`).
 					WithArgs(playerID.String()).
 					WillReturnError(errors.New("connection lost"))
 			},
@@ -585,7 +587,7 @@ func TestPostgresPlayerSessionStore_CountActiveByPlayer(t *testing.T) {
 
 func TestPostgresPlayerSessionStore_ListByPlayer(t *testing.T) {
 	playerID := core.NewULID()
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := time.Now().UTC()
 
 	newer := &auth.PlayerSession{
 		ID: core.NewULID(), PlayerID: playerID, TokenHash: "hash-new",
@@ -612,7 +614,7 @@ func TestPostgresPlayerSessionStore_ListByPlayer(t *testing.T) {
 				rows := pgxmock.NewRows(playerSessionColumns()).
 					AddRow(playerSessionRow(newer)...).
 					AddRow(playerSessionRow(older)...)
-				mock.ExpectQuery(`SELECT .+ FROM player_sessions\s+WHERE player_id = \$1 AND expires_at > now\(\)\s+ORDER BY created_at DESC`).
+				mock.ExpectQuery(`SELECT .+ FROM player_sessions\s+WHERE player_id = \$1 AND expires_at > .+\s+ORDER BY created_at DESC`).
 					WithArgs(playerID.String()).
 					WillReturnRows(rows)
 			},
@@ -690,7 +692,7 @@ func TestPostgresPlayerSessionStore_DeleteOldestForPlayer(t *testing.T) {
 			name: "deletes and returns oldest session",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
 				rows := pgxmock.NewRows([]string{"id"}).AddRow(sessionID.String())
-				mock.ExpectQuery(`DELETE FROM player_sessions\s+WHERE id = \(\s+SELECT id FROM player_sessions\s+WHERE player_id = \$1 AND expires_at > now\(\)\s+ORDER BY created_at ASC\s+LIMIT 1\s+\)\s+RETURNING id`).
+				mock.ExpectQuery(`DELETE FROM player_sessions\s+WHERE id = \(\s+SELECT id FROM player_sessions\s+WHERE player_id = \$1 AND expires_at > .+\s+ORDER BY created_at ASC\s+LIMIT 1\s+\)\s+RETURNING id`).
 					WithArgs(playerID.String()).
 					WillReturnRows(rows)
 			},
@@ -848,7 +850,7 @@ func TestPostgresPlayerSessionStore_CreateWithCap(t *testing.T) {
 			WithArgs(ps.PlayerID.String()).
 			WillReturnResult(pgxmock.NewResult("SELECT", 1))
 		mock.ExpectExec(`INSERT INTO player_sessions`).
-			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, ps.ExpiresAt, ps.CreatedAt, ps.UpdatedAt).
+			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 			WillReturnResult(pgxmock.NewResult("INSERT", 1))
 		mock.ExpectQuery(`DELETE FROM player_sessions`).
 			WithArgs(ps.PlayerID.String(), ps.ID.String(), capN-1).
@@ -877,7 +879,7 @@ func TestPostgresPlayerSessionStore_CreateWithCap(t *testing.T) {
 			WithArgs(ps.PlayerID.String()).
 			WillReturnResult(pgxmock.NewResult("SELECT", 1))
 		mock.ExpectExec(`INSERT INTO player_sessions`).
-			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, ps.ExpiresAt, ps.CreatedAt, ps.UpdatedAt).
+			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 			WillReturnResult(pgxmock.NewResult("INSERT", 1))
 		// No DELETE expected when cap <= 0.
 		mock.ExpectCommit()
@@ -900,7 +902,7 @@ func TestPostgresPlayerSessionStore_CreateWithCap(t *testing.T) {
 			WithArgs(ps.PlayerID.String()).
 			WillReturnResult(pgxmock.NewResult("SELECT", 1))
 		mock.ExpectExec(`INSERT INTO player_sessions`).
-			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, ps.ExpiresAt, ps.CreatedAt, ps.UpdatedAt).
+			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 			WillReturnError(errors.New("insert failed"))
 		mock.ExpectRollback()
 
@@ -922,7 +924,7 @@ func TestPostgresPlayerSessionStore_CreateWithCap(t *testing.T) {
 			WithArgs(ps.PlayerID.String()).
 			WillReturnResult(pgxmock.NewResult("SELECT", 1))
 		mock.ExpectExec(`INSERT INTO player_sessions`).
-			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, ps.ExpiresAt, ps.CreatedAt, ps.UpdatedAt).
+			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 			WillReturnResult(pgxmock.NewResult("INSERT", 1))
 		mock.ExpectQuery(`DELETE FROM player_sessions`).
 			WithArgs(ps.PlayerID.String(), ps.ID.String(), 2).
@@ -962,7 +964,7 @@ func TestPostgresPlayerSessionStore_CreateWithCap(t *testing.T) {
 			WithArgs(ps.PlayerID.String()).
 			WillReturnResult(pgxmock.NewResult("SELECT", 1))
 		mock.ExpectExec(`INSERT INTO player_sessions`).
-			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, ps.ExpiresAt, ps.CreatedAt, ps.UpdatedAt).
+			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 			WillReturnResult(pgxmock.NewResult("INSERT", 1))
 		mock.ExpectQuery(`DELETE FROM player_sessions`).
 			WithArgs(ps.PlayerID.String(), ps.ID.String(), 2).
@@ -989,7 +991,7 @@ func TestPostgresPlayerSessionStore_CreateWithCap(t *testing.T) {
 			WithArgs(ps.PlayerID.String()).
 			WillReturnResult(pgxmock.NewResult("SELECT", 1))
 		mock.ExpectExec(`INSERT INTO player_sessions`).
-			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, ps.ExpiresAt, ps.CreatedAt, ps.UpdatedAt).
+			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 			WillReturnResult(pgxmock.NewResult("INSERT", 1))
 		// Row contains an invalid ULID string.
 		mock.ExpectQuery(`DELETE FROM player_sessions`).

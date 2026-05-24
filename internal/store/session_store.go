@@ -13,6 +13,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/session"
 )
 
@@ -37,8 +38,8 @@ var (
 const sessionSelectColumns = `id, character_id, player_id,
 	COALESCE(player_session_id, '') AS player_session_id,
 	character_name, location_id,
-	COALESCE(location_arrived_at, '0001-01-01 00:00:00Z') AS location_arrived_at,
-	COALESCE(guest_character_created_at, '0001-01-01 00:00:00Z') AS guest_character_created_at,
+	location_arrived_at,
+	guest_character_created_at,
 	is_guest, status, grid_present,
 	command_history, ttl_seconds, max_history,
 	detached_at, expires_at, created_at, updated_at,
@@ -112,6 +113,10 @@ func scanSession(row pgx.Row) (*session.Info, error) {
 	var info session.Info
 	var charIDStr, playerIDStr, playerSessionIDStr, locIDStr, statusStr string
 	var focusMembershipsJSON, presentingFocusJSON []byte
+	var (
+		createdAt, updatedAt, arrived, guestCreated pgnanos.Time
+		detachedAt, expiresAt                       *pgnanos.Time
+	)
 
 	err := row.Scan(
 		&info.ID,
@@ -120,18 +125,18 @@ func scanSession(row pgx.Row) (*session.Info, error) {
 		&playerSessionIDStr,
 		&info.CharacterName,
 		&locIDStr,
-		&info.LocationArrivedAt,
-		&info.GuestCharacterCreatedAt,
+		&arrived,
+		&guestCreated,
 		&info.IsGuest,
 		&statusStr,
 		&info.GridPresent,
 		&info.CommandHistory,
 		&info.TTLSeconds,
 		&info.MaxHistory,
-		&info.DetachedAt,
-		&info.ExpiresAt,
-		&info.CreatedAt,
-		&info.UpdatedAt,
+		&detachedAt,
+		&expiresAt,
+		&createdAt,
+		&updatedAt,
 		&info.LastPaged,
 		&info.LastWhispered,
 		&focusMembershipsJSON,
@@ -140,6 +145,19 @@ func scanSession(row pgx.Row) (*session.Info, error) {
 	if err != nil {
 		return nil, oops.With("operation", "scan session row").Wrap(err)
 	}
+
+	info.CreatedAt = createdAt.Time()
+	info.UpdatedAt = updatedAt.Time()
+	if detachedAt != nil {
+		t := detachedAt.Time()
+		info.DetachedAt = &t
+	}
+	if expiresAt != nil {
+		t := expiresAt.Time()
+		info.ExpiresAt = &t
+	}
+	info.LocationArrivedAt = arrived.Time()
+	info.GuestCharacterCreatedAt = guestCreated.Time()
 
 	if err := parseSessionRow(&info, charIDStr, playerIDStr, playerSessionIDStr, locIDStr, statusStr, focusMembershipsJSON, presentingFocusJSON); err != nil {
 		return nil, err
@@ -156,6 +174,10 @@ func scanSessions(rows pgx.Rows) ([]*session.Info, error) {
 		var info session.Info
 		var charIDStr, playerIDStr, playerSessionIDStr, locIDStr, statusStr string
 		var focusMembershipsJSON, presentingFocusJSON []byte
+		var (
+			createdAt, updatedAt, arrived, guestCreated pgnanos.Time
+			detachedAt, expiresAt                       *pgnanos.Time
+		)
 
 		err := rows.Scan(
 			&info.ID,
@@ -164,18 +186,18 @@ func scanSessions(rows pgx.Rows) ([]*session.Info, error) {
 			&playerSessionIDStr,
 			&info.CharacterName,
 			&locIDStr,
-			&info.LocationArrivedAt,
-			&info.GuestCharacterCreatedAt,
+			&arrived,
+			&guestCreated,
 			&info.IsGuest,
 			&statusStr,
 			&info.GridPresent,
 			&info.CommandHistory,
 			&info.TTLSeconds,
 			&info.MaxHistory,
-			&info.DetachedAt,
-			&info.ExpiresAt,
-			&info.CreatedAt,
-			&info.UpdatedAt,
+			&detachedAt,
+			&expiresAt,
+			&createdAt,
+			&updatedAt,
 			&info.LastPaged,
 			&info.LastWhispered,
 			&focusMembershipsJSON,
@@ -184,6 +206,19 @@ func scanSessions(rows pgx.Rows) ([]*session.Info, error) {
 		if err != nil {
 			return nil, oops.With("operation", "scan session row").Wrap(err)
 		}
+
+		info.CreatedAt = createdAt.Time()
+		info.UpdatedAt = updatedAt.Time()
+		if detachedAt != nil {
+			t := detachedAt.Time()
+			info.DetachedAt = &t
+		}
+		if expiresAt != nil {
+			t := expiresAt.Time()
+			info.ExpiresAt = &t
+		}
+		info.LocationArrivedAt = arrived.Time()
+		info.GuestCharacterCreatedAt = guestCreated.Time()
 
 		if err := parseSessionRow(&info, charIDStr, playerIDStr, playerSessionIDStr, locIDStr, statusStr, focusMembershipsJSON, presentingFocusJSON); err != nil {
 			return nil, err
@@ -245,11 +280,11 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 	}
 
 	// location_arrived_at and guest_character_created_at are NOT NULL
-	// (migration 037: DEFAULT NOW() and DEFAULT 'epoch'). Pass NULL from
-	// Go when the in-memory Info carries a zero-time and let SQL handle
+	// (migration 040: DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT and DEFAULT 0).
+	// Pass NULL from Go when the in-memory Info carries a zero-time and let SQL handle
 	// it in two distinct ways:
 	//
-	//   - On INSERT: COALESCE(NULL, NOW()/epoch) → migration default fires.
+	//   - On INSERT: COALESCE(NULL, SQL-default) → migration default fires.
 	//   - On ON CONFLICT UPDATE: COALESCE(NULL, sessions.X) → existing
 	//     stored value is preserved, so a Set() that does not own the
 	//     timestamp (e.g., a pre-iwzt-T3 caller) does NOT clobber it.
@@ -257,13 +292,26 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 	// The ON CONFLICT clause references the raw $7/$8 parameters rather
 	// than EXCLUDED.X so it can see "input was zero" (NULL) instead of
 	// the COALESCEd VALUES result.
-	var locationArrivedAtArg any
+	var locationArrivedAtArg *pgnanos.Time
 	if !info.LocationArrivedAt.IsZero() {
-		locationArrivedAtArg = info.LocationArrivedAt
+		t := pgnanos.From(info.LocationArrivedAt)
+		locationArrivedAtArg = &t
 	}
-	var guestCharacterCreatedAtArg any
+	var guestCharacterCreatedAtArg *pgnanos.Time
 	if !info.GuestCharacterCreatedAt.IsZero() {
-		guestCharacterCreatedAtArg = info.GuestCharacterCreatedAt
+		t := pgnanos.From(info.GuestCharacterCreatedAt)
+		guestCharacterCreatedAtArg = &t
+	}
+
+	var detachedAtArg *pgnanos.Time
+	if info.DetachedAt != nil {
+		t := pgnanos.From(*info.DetachedAt)
+		detachedAtArg = &t
+	}
+	var expiresAtArg *pgnanos.Time
+	if info.ExpiresAt != nil {
+		t := pgnanos.From(*info.ExpiresAt)
+		expiresAtArg = &t
 	}
 
 	_, err = s.pool.Exec(
@@ -276,8 +324,8 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 			last_paged, last_whispered,
 			focus_memberships, presenting_focus)
 		 VALUES ($1, $2, $3, $4, $5, $6,
-			COALESCE($7::timestamptz, now()),
-			COALESCE($8::timestamptz, 'epoch'::timestamptz),
+			COALESCE($7::BIGINT, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT),
+			COALESCE($8::BIGINT, 0::BIGINT),
 			$9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb, $21::jsonb)
 		 ON CONFLICT (id) DO UPDATE SET
 			character_id = EXCLUDED.character_id,
@@ -285,8 +333,8 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 			player_session_id = EXCLUDED.player_session_id,
 			character_name = EXCLUDED.character_name,
 			location_id = EXCLUDED.location_id,
-			location_arrived_at = COALESCE($7::timestamptz, sessions.location_arrived_at),
-			guest_character_created_at = COALESCE($8::timestamptz, sessions.guest_character_created_at),
+			location_arrived_at = COALESCE($7::BIGINT, sessions.location_arrived_at),
+			guest_character_created_at = COALESCE($8::BIGINT, sessions.guest_character_created_at),
 			is_guest = EXCLUDED.is_guest,
 			status = EXCLUDED.status,
 			grid_present = EXCLUDED.grid_present,
@@ -299,7 +347,7 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 			last_whispered = EXCLUDED.last_whispered,
 			focus_memberships = EXCLUDED.focus_memberships,
 			presenting_focus = EXCLUDED.presenting_focus,
-			updated_at = now()`,
+			updated_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT`,
 		id,
 		info.CharacterID.String(),
 		info.PlayerID.String(),
@@ -314,9 +362,9 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 		cmdHistory,
 		info.TTLSeconds,
 		info.MaxHistory,
-		info.DetachedAt,
-		info.ExpiresAt,
-		info.CreatedAt,
+		detachedAtArg,
+		expiresAtArg,
+		pgnanos.From(info.CreatedAt),
 		info.LastPaged,
 		info.LastWhispered,
 		focusMembershipsJSON,
@@ -396,7 +444,7 @@ func (s *PostgresSessionStore) ListByPlayerSession(
 // ListExpired returns all sessions past their expiry time.
 func (s *PostgresSessionStore) ListExpired(ctx context.Context) ([]*session.Info, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT `+sessionSelectColumns+` FROM sessions WHERE status = 'detached' AND expires_at < now()`)
+		`SELECT `+sessionSelectColumns+` FROM sessions WHERE status = 'detached' AND expires_at < (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT`)
 	if err != nil {
 		return nil, oops.With("operation", "list expired sessions").Wrap(err)
 	}
@@ -407,9 +455,18 @@ func (s *PostgresSessionStore) ListExpired(ctx context.Context) ([]*session.Info
 func (s *PostgresSessionStore) UpdateStatus(ctx context.Context, id string, status session.Status,
 	detachedAt *time.Time, expiresAt *time.Time,
 ) error {
+	var detachedNanos, expiresNanos *pgnanos.Time
+	if detachedAt != nil {
+		t := pgnanos.From(*detachedAt)
+		detachedNanos = &t
+	}
+	if expiresAt != nil {
+		t := pgnanos.From(*expiresAt)
+		expiresNanos = &t
+	}
 	_, err := s.pool.Exec(ctx,
-		`UPDATE sessions SET status = $1, detached_at = $2, expires_at = $3, updated_at = now() WHERE id = $4`,
-		string(status), detachedAt, expiresAt, id)
+		`UPDATE sessions SET status = $1, detached_at = $2, expires_at = $3, updated_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT WHERE id = $4`,
+		string(status), detachedNanos, expiresNanos, id)
 	if err != nil {
 		return oops.With("operation", "update session status").With("session_id", id).With("status", string(status)).Wrap(err)
 	}
@@ -420,7 +477,7 @@ func (s *PostgresSessionStore) UpdateStatus(ctx context.Context, id string, stat
 // Returns true if the row was updated, false if another client won the race.
 func (s *PostgresSessionStore) ReattachCAS(ctx context.Context, id string) (bool, error) {
 	tag, err := s.pool.Exec(ctx,
-		`UPDATE sessions SET status = 'active', detached_at = NULL, expires_at = NULL, updated_at = now() WHERE id = $1 AND status = 'detached'`,
+		`UPDATE sessions SET status = 'active', detached_at = NULL, expires_at = NULL, updated_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT WHERE id = $1 AND status = 'detached'`,
 		id)
 	if err != nil {
 		return false, oops.With("operation", "reattach session").With("session_id", id).Wrap(err)
@@ -433,7 +490,7 @@ func (s *PostgresSessionStore) AppendCommand(ctx context.Context, id, command st
 	_, err := s.pool.Exec(ctx,
 		`UPDATE sessions SET command_history = (command_history || ARRAY[$1::text])[
 			GREATEST(1, array_length(command_history || ARRAY[$1::text], 1) - $2 + 1) :
-		], updated_at = now() WHERE id = $3`,
+		], updated_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT WHERE id = $3`,
 		command, maxHistory, id)
 	if err != nil {
 		return oops.With("operation", "append command").With("session_id", id).Wrap(err)
@@ -473,7 +530,7 @@ func (s *PostgresSessionStore) AddConnection(ctx context.Context, conn *session.
 	_, err := s.pool.Exec(ctx,
 		`INSERT INTO session_connections (id, session_id, client_type, streams, connected_at)
 		 VALUES ($1, $2, $3, $4, $5)`,
-		conn.ID.String(), conn.SessionID, conn.ClientType, conn.Streams, conn.ConnectedAt)
+		conn.ID.String(), conn.SessionID, conn.ClientType, conn.Streams, pgnanos.From(conn.ConnectedAt))
 	if err != nil {
 		return oops.With("operation", "add connection").
 			With("connection_id", conn.ID.String()).
@@ -521,7 +578,7 @@ func (s *PostgresSessionStore) CountConnectionsByType(ctx context.Context, sessi
 // UpdateGridPresent sets the grid_present flag on a session.
 func (s *PostgresSessionStore) UpdateGridPresent(ctx context.Context, id string, present bool) error {
 	_, err := s.pool.Exec(ctx,
-		`UPDATE sessions SET grid_present = $2, updated_at = NOW() WHERE id = $1`,
+		`UPDATE sessions SET grid_present = $2, updated_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT WHERE id = $1`,
 		id, present)
 	if err != nil {
 		return oops.With("operation", "update grid present").
@@ -613,7 +670,7 @@ func (s *PostgresSessionStore) DeleteByCharacter(ctx context.Context, characterI
 // UpdateActivity bumps the updated_at timestamp for a session.
 func (s *PostgresSessionStore) UpdateActivity(ctx context.Context, id string) error {
 	_, err := s.pool.Exec(ctx,
-		`UPDATE sessions SET updated_at = now() WHERE id = $1`, id)
+		`UPDATE sessions SET updated_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT WHERE id = $1`, id)
 	if err != nil {
 		return oops.With("operation", "update activity").With("session_id", id).Wrap(err)
 	}
@@ -638,7 +695,7 @@ func (s *PostgresSessionStore) FindByCharacterName(ctx context.Context, name str
 // UpdateLastPaged records the name of the character most recently paged.
 func (s *PostgresSessionStore) UpdateLastPaged(ctx context.Context, sessionID, name string) error {
 	tag, err := s.pool.Exec(ctx,
-		`UPDATE sessions SET last_paged = $1, updated_at = now() WHERE id = $2`, name, sessionID)
+		`UPDATE sessions SET last_paged = $1, updated_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT WHERE id = $2`, name, sessionID)
 	if err != nil {
 		return oops.With("operation", "update last paged").With("session_id", sessionID).Wrap(err)
 	}
@@ -651,7 +708,7 @@ func (s *PostgresSessionStore) UpdateLastPaged(ctx context.Context, sessionID, n
 // UpdateLastWhispered records the name of the character most recently whispered to.
 func (s *PostgresSessionStore) UpdateLastWhispered(ctx context.Context, sessionID, name string) error {
 	tag, err := s.pool.Exec(ctx,
-		`UPDATE sessions SET last_whispered = $1, updated_at = now() WHERE id = $2`, name, sessionID)
+		`UPDATE sessions SET last_whispered = $1, updated_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT WHERE id = $2`, name, sessionID)
 	if err != nil {
 		return oops.With("operation", "update last whispered").With("session_id", sessionID).Wrap(err)
 	}
@@ -740,7 +797,7 @@ func (s *PostgresSessionStore) UpdateFocusMemberships(ctx context.Context, sessi
 
 	// Write back.
 	_, err = tx.Exec(ctx,
-		`UPDATE sessions SET focus_memberships = $1::jsonb, presenting_focus = $2::jsonb, updated_at = now() WHERE id = $3`,
+		`UPDATE sessions SET focus_memberships = $1::jsonb, presenting_focus = $2::jsonb, updated_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT WHERE id = $3`,
 		nextMembershipsJSON, nextPresentingJSON, sessionID)
 	if err != nil {
 		return oops.With("operation", "write focus memberships").
@@ -770,7 +827,7 @@ func (s *PostgresSessionStore) GetConnection(ctx context.Context, connectionID u
 		clientType   string
 		streams      []string
 		focusKeyJSON []byte
-		connectedAt  time.Time
+		connectedAt  pgnanos.Time
 	)
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, session_id, client_type, streams, focus_key, connected_at
@@ -804,7 +861,7 @@ func (s *PostgresSessionStore) GetConnection(ctx context.Context, connectionID u
 		ClientType:  clientType,
 		Streams:     streams,
 		FocusKey:    fk,
-		ConnectedAt: connectedAt,
+		ConnectedAt: connectedAt.Time(),
 	}, nil
 }
 
@@ -917,7 +974,7 @@ func (s *PostgresSessionStore) UpdateSessionConnection(
 		cClientType   string
 		cStreams      []string
 		cFocusKeyJSON []byte
-		cConnectedAt  time.Time
+		cConnectedAt  pgnanos.Time
 	)
 	err = tx.QueryRow(ctx, `
 		SELECT id, session_id, client_type, streams, focus_key, connected_at
@@ -948,7 +1005,7 @@ func (s *PostgresSessionStore) UpdateSessionConnection(
 	}
 	conn := session.Connection{
 		ID: cID, SessionID: cSessionID, ClientType: cClientType,
-		Streams: cStreams, FocusKey: cFK, ConnectedAt: cConnectedAt,
+		Streams: cStreams, FocusKey: cFK, ConnectedAt: cConnectedAt.Time(),
 	}
 
 	// Call the mutator with coherent snapshots of both Info and Connection.
@@ -973,7 +1030,7 @@ func (s *PostgresSessionStore) UpdateSessionConnection(
 		}
 	}
 	if _, execErr := tx.Exec(ctx, `
-		UPDATE sessions SET presenting_focus = $1::jsonb, updated_at = now() WHERE id = $2
+		UPDATE sessions SET presenting_focus = $1::jsonb, updated_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT WHERE id = $2
 	`, nextPresentingJSON, sessionID); execErr != nil {
 		return oops.With("operation", "write presenting_focus").
 			With("session_id", sessionID).Wrap(execErr)
@@ -1017,7 +1074,7 @@ func (s *PostgresSessionStore) UpdateLocationOnMove(ctx context.Context, charact
 	query := `UPDATE sessions
 	          SET location_id = $1, location_arrived_at = $2, updated_at = $2
 	          WHERE character_id = $3 AND status = 'active'`
-	_, err := s.pool.Exec(ctx, query, newLocationID.String(), arrivedAt, characterID.String())
+	_, err := s.pool.Exec(ctx, query, newLocationID.String(), pgnanos.From(arrivedAt), characterID.String())
 	if err != nil {
 		return oops.With("operation", "update_location_on_move").
 			With("character_id", characterID.String()).Wrap(err)
@@ -1045,7 +1102,7 @@ func (s *PostgresSessionStore) BumpLocationArrivedAt(ctx context.Context, sessio
 	query := `UPDATE sessions
 	          SET location_arrived_at = $1, updated_at = $1
 	          WHERE id = $2`
-	res, err := s.pool.Exec(ctx, query, arrivedAt, sessionID)
+	res, err := s.pool.Exec(ctx, query, pgnanos.From(arrivedAt), sessionID)
 	if err != nil {
 		return oops.With("operation", "bump_location_arrived_at").
 			With("session_id", sessionID).Wrap(err)
@@ -1092,7 +1149,7 @@ func (s *PostgresSessionStore) ListConnectionsBySession(ctx context.Context, ses
 			ct          string
 			streams     []string
 			fkJSON      []byte
-			connectedAt time.Time
+			connectedAt pgnanos.Time
 		)
 		if err := rows.Scan(&idStr, &sid, &ct, &streams, &fkJSON, &connectedAt); err != nil {
 			return nil, oops.Code("CONNECTION_SCAN_FAILED").Wrap(err)
@@ -1111,7 +1168,7 @@ func (s *PostgresSessionStore) ListConnectionsBySession(ctx context.Context, ses
 		}
 		conn := session.Connection{
 			ID: id, SessionID: sid, ClientType: ct,
-			Streams: streams, FocusKey: fk, ConnectedAt: connectedAt,
+			Streams: streams, FocusKey: fk, ConnectedAt: connectedAt.Time(),
 		}
 		out = append(out, &conn)
 	}
