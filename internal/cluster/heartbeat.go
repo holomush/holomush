@@ -19,7 +19,7 @@ import (
 // Lock discipline: Start mutates the lifecycle state-machine fields
 // (subAlive/subBye/subProbe/subPoison/hbTicker/hbDone/evTicker/evDone)
 // under r.mu. Concurrent Stop() observes a consistent state.
-func (r *registry) Start(_ context.Context) error {
+func (r *registry) Start(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -86,7 +86,7 @@ func (r *registry) Start(_ context.Context) error {
 	r.wg.Add(1)
 	go r.runEvictionSweeper(r.evTicker, r.evDone)
 
-	r.deps.Logger.Info(
+	r.deps.Logger.InfoContext(ctx,
 		"cluster.Registry started",
 		"self", string(r.self),
 		"cluster_id", r.cfg.ClusterID,
@@ -106,7 +106,7 @@ func (r *registry) Start(_ context.Context) error {
 // progress (sweeper takes Lock; ticker's publishHeartbeatNow takes
 // RLock), so holding mu across Wait would deadlock. Phase 3 drains
 // subscriptions on the local copies (no shared-state access).
-func (r *registry) Stop(_ context.Context) error {
+func (r *registry) Stop(ctx context.Context) error {
 	// Phase 1 (locked): capture and clear lifecycle state.
 	r.mu.Lock()
 	if r.subAlive == nil {
@@ -166,7 +166,7 @@ func (r *registry) Stop(_ context.Context) error {
 		}
 	}
 
-	r.deps.Logger.Info("cluster.Registry stopped", "self", string(r.self))
+	r.deps.Logger.InfoContext(ctx, "cluster.Registry stopped", "self", string(r.self))
 	return nil
 }
 

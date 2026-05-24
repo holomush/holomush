@@ -153,7 +153,7 @@ func (s *GuestService) CreateGuest(ctx context.Context) (*GuestResult, error) {
 	// This is non-critical — guests can still log in even if this update fails.
 	player.DefaultCharacterID = &char.ID
 	if err = s.players.Update(ctx, player); err != nil {
-		slog.Warn(
+		slog.WarnContext(ctx,
 			"guest_service: failed to set default character on guest player",
 			"player_id", player.ID.String(),
 			"character_id", char.ID.String(),
@@ -193,7 +193,7 @@ func (s *GuestService) CreateGuest(ctx context.Context) (*GuestResult, error) {
 // cascaded dependents (characters, player_sessions via FK CASCADE).
 func (s *GuestService) cleanupGuestPlayer(ctx context.Context, playerID ulid.ULID) {
 	if err := s.players.Delete(ctx, playerID); err != nil {
-		slog.Warn("guest_service: failed to clean up orphaned guest player",
+		slog.WarnContext(ctx, "guest_service: failed to clean up orphaned guest player",
 			"player_id", playerID.String(), "error", err)
 	}
 }

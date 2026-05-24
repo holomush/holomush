@@ -87,7 +87,7 @@ func (s *Service) ValidateCredentials(ctx context.Context, username, password st
 		if playerExists {
 			player.RecordFailure()
 			if err := s.players.Update(ctx, player); err != nil {
-				s.logger.Warn(
+				s.logger.WarnContext(ctx,
 					"best-effort player update failed",
 					"event", "player_update_failed",
 					"player_id", player.ID.String(),
@@ -110,7 +110,7 @@ func (s *Service) ValidateCredentials(ctx context.Context, username, password st
 	player.RecordSuccess()
 
 	if err := s.players.Update(ctx, player); err != nil {
-		s.logger.Warn(
+		s.logger.WarnContext(ctx,
 			"best-effort player update failed",
 			"event", "player_update_failed",
 			"player_id", player.ID.String(),

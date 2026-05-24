@@ -61,8 +61,8 @@ func NewProductionPill(self MemberID, logger *slog.Logger, metrics *PillMetrics)
 	}
 }
 
-func (p *productionPill) Trigger(_ context.Context, reason PillReason, sourceID MemberID) {
-	p.logger.Error(
+func (p *productionPill) Trigger(ctx context.Context, reason PillReason, sourceID MemberID) {
+	p.logger.ErrorContext(ctx,
 		"pill received; terminating",
 		"self", string(p.self),
 		"reason", string(reason),
@@ -112,8 +112,8 @@ func NewDevPill(self MemberID, logger *slog.Logger) Pill {
 	return &devPill{self: self, logger: logger}
 }
 
-func (p *devPill) Trigger(_ context.Context, reason PillReason, sourceID MemberID) {
-	p.logger.Error(
+func (p *devPill) Trigger(ctx context.Context, reason PillReason, sourceID MemberID) {
+	p.logger.ErrorContext(ctx,
 		"dev pill received",
 		"self", string(p.self),
 		"reason", string(reason),

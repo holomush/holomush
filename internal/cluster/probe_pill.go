@@ -59,7 +59,7 @@ func (r *registry) probeAndPill(ctx context.Context, id MemberID, reason PillRea
 	// to ProbeAndPill". The Warn log below is sufficient for
 	// fire-as-bug alerting.
 	if id == r.self {
-		r.deps.Logger.Warn(
+		r.deps.Logger.WarnContext(ctx,
 			"cluster.ProbeAndPill self-pill refused (INV-60)",
 			"self", string(r.self),
 			"reason", string(reason),
@@ -103,7 +103,7 @@ func (r *registry) probeAndPill(ctx context.Context, id MemberID, reason PillRea
 		if reply, perr := UnmarshalProbeReply(msg.Data); perr == nil {
 			r.updateMemberFromProbeReply(id, reply)
 		} else {
-			r.deps.Logger.Warn(
+			r.deps.Logger.WarnContext(ctx,
 				"probe reply parse failed",
 				"target", string(id),
 				"err", perr.Error(),
@@ -148,14 +148,14 @@ func (r *registry) updateMemberFromProbeReply(id MemberID, reply ProbeReplyPaylo
 }
 
 // issuePill publishes the poison pill, evicts synchronously, and
-// notifies LeaveReasonPilled subscribers. The ctx parameter is
-// currently unused — pill publish is fire-and-forget per Decision 2 in
-// the Phase 3c grounding doc, and the rate-limit timestamp was already
-// claimed in probeAndPill. Honoring ctx for the publish would require
-// switching from Conn.Publish (fire-and-forget) to a flush-with-context
-// idiom; deferred until a caller demonstrably needs cancellation
-// during the publish itself.
-func (r *registry) issuePill(_ context.Context, id MemberID, reason PillReason) error {
+// notifies LeaveReasonPilled subscribers. The ctx parameter carries
+// trace context for the log call only — the pill publish itself remains
+// fire-and-forget per Decision 2 in the Phase 3c grounding doc, and the
+// rate-limit timestamp was already claimed in probeAndPill. Honoring ctx
+// for the publish would require switching from Conn.Publish
+// (fire-and-forget) to a flush-with-context idiom; deferred until a
+// caller demonstrably needs cancellation during the publish itself.
+func (r *registry) issuePill(ctx context.Context, id MemberID, reason PillReason) error {
 	p := PoisonPayload{
 		ClusterID:           r.cfg.ClusterID,
 		CoordinatorMemberID: r.self,
@@ -179,7 +179,7 @@ func (r *registry) issuePill(_ context.Context, id MemberID, reason PillReason) 
 	r.mu.Unlock()
 	r.notifyLeft(id, LeaveReasonPilled)
 
-	r.deps.Logger.Warn(
+	r.deps.Logger.WarnContext(ctx,
 		"cluster pill issued",
 		"self", string(r.self),
 		"target", string(id),
