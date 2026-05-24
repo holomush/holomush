@@ -369,6 +369,14 @@ jobs:
           # (prod / image tag / 0.1).
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
+          # shellcheck disable=SC2015
+          # BACKUP_S3_ACCESS_KEY_VAL and BACKUP_S3_SECRET_KEY_VAL env values
+          # use the GitHub Actions ternary pattern (a != empty AND a OR b).
+          # When actionlint inlines those values for shellcheck analysis, the
+          # pattern triggers SC2015 (A && B || C is not if-then-else). The GH
+          # Actions expression has correct short-circuit semantics (b equals
+          # a when truthy, so the c-fallback only fires when a is empty);
+          # SC2015 is a cross-language false positive here.
           set -euo pipefail
 
           echo "::add-mask::${TUNNEL_TOKEN}"
