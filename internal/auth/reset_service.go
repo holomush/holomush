@@ -214,7 +214,8 @@ func (s *PasswordResetService) ResetPassword(ctx context.Context, token, newPass
 	// Tradeoff: failing here would leave the password updated but old sessions valid,
 	// which is arguably better than rolling back a successful password change.
 	if err := s.sessions.DeleteByPlayer(ctx, playerID); err != nil {
-		s.logger.WarnContext(ctx,
+		s.logger.WarnContext(
+			ctx,
 			"best-effort session invalidation failed",
 			"event", "session_invalidation_failed",
 			"player_id", playerID.String(),
@@ -227,7 +228,8 @@ func (s *PasswordResetService) ResetPassword(ctx context.Context, token, newPass
 	// already gone). Best-effort cleanup — failure here does not fail the
 	// reset, since the token actually used has been atomically consumed.
 	if err := s.resetRepo.DeleteByPlayer(ctx, playerID); err != nil {
-		s.logger.WarnContext(ctx,
+		s.logger.WarnContext(
+			ctx,
 			"best-effort token cleanup failed",
 			"event", "token_cleanup_failed",
 			"player_id", playerID.String(),

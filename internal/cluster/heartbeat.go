@@ -86,7 +86,8 @@ func (r *registry) Start(ctx context.Context) error {
 	r.wg.Add(1)
 	go r.runEvictionSweeper(r.evTicker, r.evDone)
 
-	r.deps.Logger.InfoContext(ctx,
+	r.deps.Logger.InfoContext(
+		ctx,
 		"cluster.Registry started",
 		"self", string(r.self),
 		"cluster_id", r.cfg.ClusterID,

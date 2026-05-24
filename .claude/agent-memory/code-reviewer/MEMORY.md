@@ -35,16 +35,14 @@ Keep under 200 lines. Curate — don't hoard.
   running full-config `custom-gcl run ./<pkg>/...` → 0 issues. Encountered:
   holomush-ow4ix.12 admin.go:111 (2026-05-24).
 
-- **`AGENTS.md` and `CLAUDE.md` are paired SSoTs**: at main they are
-  byte-identical. `Taskfile.yaml`
-  `lint:docs-symmetry` enforces only the `<!-- BEGIN: plugin-runtime-symmetry -->`
-  anchored subsection byte-identical, but the surrounding convention is
-  whole-file twinning (initial setup, two later "chore: fix agents md" syncs).
-  Any edit to one MUST be mirrored in the other (or AGENTS.md replaced with a
-  one-line stub pointing at CLAUDE.md and `lint:docs-symmetry` updated). When
-  reviewing CLAUDE.md changes, ALWAYS `diff CLAUDE.md AGENTS.md` and grep both
-  for the same anchor names; treat divergence beyond the symmetry-block as
-  a blocking finding.
+- **`AGENTS.md` is now a relative symlink → `CLAUDE.md`** (verified 2026-05-24,
+  sloglint worktree: `readlink AGENTS.md` = `CLAUDE.md`). `task lint:docs-symmetry`
+  enforces the symlink integrity (holomush-f7t2). Any CLAUDE.md edit propagates to
+  AGENTS.md automatically — NO manual mirror needed, and no symmetry-divergence
+  finding is possible. (HISTORICAL: an earlier era kept them as byte-identical
+  twin files; that convention is superseded by the symlink. Do NOT flag a missing
+  AGENTS.md edit when CLAUDE.md changes — confirm the symlink first with
+  `readlink AGENTS.md`.)
 
 - **`task test:int -- -run X` does NOT filter to test X.** The Taskfile's `--`
   pass-through composes args into the gotestsum command but does not isolate the

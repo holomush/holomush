@@ -606,7 +606,8 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 			delete(m.activeByName, row.Name)
 			// nameByID intentionally retained for historical resolution.
 			m.mu.Unlock()
-			slog.InfoContext(ctx,
+			slog.InfoContext(
+				ctx,
 				"plugin.gc",
 				"name", row.Name,
 				"id", row.ID.String(),
@@ -974,7 +975,8 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 
 	// Drift logging (no decision logic — log and continue per spec).
 	if drift != nil {
-		slog.InfoContext(ctx,
+		slog.InfoContext(
+			ctx,
 			"plugin.drift",
 			"name", dp.Manifest.Name,
 			"old_manifest_hash", hex.EncodeToString(drift.OldManifestHash),

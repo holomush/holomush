@@ -59,7 +59,8 @@ func (r *registry) probeAndPill(ctx context.Context, id MemberID, reason PillRea
 	// to ProbeAndPill". The Warn log below is sufficient for
 	// fire-as-bug alerting.
 	if id == r.self {
-		r.deps.Logger.WarnContext(ctx,
+		r.deps.Logger.WarnContext(
+			ctx,
 			"cluster.ProbeAndPill self-pill refused (INV-60)",
 			"self", string(r.self),
 			"reason", string(reason),
@@ -103,7 +104,8 @@ func (r *registry) probeAndPill(ctx context.Context, id MemberID, reason PillRea
 		if reply, perr := UnmarshalProbeReply(msg.Data); perr == nil {
 			r.updateMemberFromProbeReply(id, reply)
 		} else {
-			r.deps.Logger.WarnContext(ctx,
+			r.deps.Logger.WarnContext(
+				ctx,
 				"probe reply parse failed",
 				"target", string(id),
 				"err", perr.Error(),
@@ -179,7 +181,8 @@ func (r *registry) issuePill(ctx context.Context, id MemberID, reason PillReason
 	r.mu.Unlock()
 	r.notifyLeft(id, LeaveReasonPilled)
 
-	r.deps.Logger.WarnContext(ctx,
+	r.deps.Logger.WarnContext(
+		ctx,
 		"cluster pill issued",
 		"self", string(r.self),
 		"target", string(id),

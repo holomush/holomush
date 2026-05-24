@@ -210,7 +210,7 @@ Use `oops` for structured errors: `oops.With(k, v).Wrap(err)`, `oops.Errorf(...)
 | **MUST NOT** drop the context | If a `ctx` is reachable (parameter, struct field, or derivable), it MUST be threaded into the log call |
 | **MAY** use bare variants | Only when no `ctx` exists *and* one cannot reasonably be plumbed (init/`main`, bare goroutines, pure helpers with no caller context) — this is the "absolutely impossible" carve-out |
 
-**Why:** trace context (`trace_id`/`span_id`) lives on the `context.Context`. Only the `*Context` variants propagate it into the OpenTelemetry log pipeline, so bare calls produce orphaned log lines that can't be correlated with the trace/span they belong to in Loki, Grafana, or Sentry. See [logging.md](.claude/rules/logging.md) for the full rationale and the planned `sloglint` enforcement.
+**Why:** trace context (`trace_id`/`span_id`) lives on the `context.Context`. Only the `*Context` variants propagate it into the OpenTelemetry log pipeline, so bare calls produce orphaned log lines that can't be correlated with the trace/span they belong to in Loki, Grafana, or Sentry. See [logging.md](.claude/rules/logging.md) for the full rationale and the `sloglint` `context: scope` enforcement (now active).
 
 ### Database Migrations
 

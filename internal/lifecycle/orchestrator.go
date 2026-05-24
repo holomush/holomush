@@ -66,7 +66,8 @@ func (o *Orchestrator) StartAll(ctx context.Context) error {
 
 		o.startOrder = append(o.startOrder, id)
 
-		slog.InfoContext(ctx,
+		slog.InfoContext(
+			ctx,
 			"subsystem started",
 			"subsystem", id.String(),
 			"duration", time.Since(start).String(),
@@ -84,7 +85,8 @@ func (o *Orchestrator) StopAll(ctx context.Context) {
 		slog.InfoContext(ctx, "stopping subsystem", "subsystem", id.String())
 
 		if err := sub.Stop(ctx); err != nil {
-			slog.ErrorContext(ctx,
+			slog.ErrorContext(
+				ctx,
 				"subsystem stop error",
 				"subsystem", id.String(),
 				"error", err,

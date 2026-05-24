@@ -108,7 +108,8 @@ func SeedAdmin(ctx context.Context, deps SeedAdminDeps) error {
 		}
 	}
 
-	slog.InfoContext(ctx,
+	slog.InfoContext(
+		ctx,
 		"admin account created",
 		slog.String("username", username),
 		slog.String("character", charName),
