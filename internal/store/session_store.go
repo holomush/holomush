@@ -524,6 +524,7 @@ func (s *PostgresSessionStore) AddConnection(ctx context.Context, conn *session.
 	if !validClientTypes[conn.ClientType] {
 		return oops.With("operation", "add connection").
 			With("client_type", conn.ClientType).
+			Code("INVALID_CLIENT_TYPE").
 			Errorf("invalid client_type %q: must be one of terminal, comms_hub, telnet", conn.ClientType)
 	}
 
