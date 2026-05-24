@@ -107,32 +107,53 @@ test.describe('Terminal UI', () => {
   }) => {
     const token = Date.now();
 
-    // Stall WebQueryStreamHistory for 3s after the SECOND request
-    // completes. The first request fires before REPLAY_COMPLETE; the
-    // second is the per-stream backfill that we want to stall. This
-    // creates an unambiguous window between REPLAY_COMPLETE (which
-    // unblocks the command input) and backfill-done.
+    // Manually-controlled stall via a Promise so backfill stays
+    // BLOCKED until after the command is dispatched. Without this
+    // explicit handshake, a time-based stall (e.g. 3s setTimeout)
+    // would let a pre-iu8j client pass the test by simply waiting
+    // out the stall — gate-on-both behavior would still eventually
+    // unlock the textarea and the command would dispatch with backfill
+    // already complete, masking the regression (CodeRabbit finding on
+    // PR #4234).
     let backfillCount = 0;
+    let releaseBackfill: (() => void) | undefined;
+    const backfillBlocked = new Promise<void>((resolve) => {
+      releaseBackfill = resolve;
+    });
     await page.route('**/WebQueryStreamHistory', async (route) => {
       backfillCount++;
-      // Stall for 3s on each backfill request to force the race window
-      // open. A pre-fix client (gate-on-both, no not_after_ms) would
-      // hold the textarea for 3s+; a post-fix client unlocks at
-      // REPLAY_COMPLETE and the command's event MUST flow through
-      // Subscribe only.
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await backfillBlocked;
       await route.continue();
     });
 
     await connectAsGuest(page);
     const input = page.locator('textarea');
 
-    // Fire DURING the 3s backfill stall. Pre-iu8j: textarea was held
-    // for 3s by Fix A's gate-on-both (slow but correct). Post-iu8j:
-    // gate releases at REPLAY_COMPLETE; command dispatches inside the
-    // backfill window; event flows through Subscribe; renders LIVE.
+    // Verify backfill is actually in-flight before dispatching the
+    // command (otherwise the test is vacuous: a regression that
+    // skipped backfill entirely would also pass).
+    await expect.poll(() => backfillCount).toBeGreaterThan(0);
+
+    // Verify the input is editable WHILE backfill is still blocked.
+    // This is the load-bearing iu8j behavior assertion: pre-iu8j's
+    // gate-on-both would hold the textarea disabled until backfill
+    // completes, so a pre-iu8j build would fail this expect.toBeEditable
+    // — the editable check is what makes the test catch regressions
+    // that a time-based stall would silently pass.
+    await expect(input).toBeEditable({ timeout: 1500 });
+
+    // Dispatch the command DURING the active backfill window.
+    // Post-iu8j: gate already released at REPLAY_COMPLETE; command
+    // dispatches now; event flows through Subscribe; renders LIVE.
+    // Backfill is still blocked, so the test confirms the race
+    // surface is structurally closed (no race-window dependence).
     await input.fill(`say live-${token}`);
     await input.press('Enter');
+
+    // Now let backfill complete so the rest of the connect flow
+    // resolves (snapshot seed + liveBuffer drain) and the event
+    // renders.
+    releaseBackfill?.();
 
     const event = page
       .locator('[data-testid="event"]')
@@ -140,19 +161,17 @@ test.describe('Terminal UI', () => {
     await expect(event).toBeVisible({ timeout: 10000 });
 
     // The load-bearing assertion: the event MUST be in the live
-    // section, NOT the dimmed scrollback — even with backfill stalled
-    // for 3s. If this fails, the cursor-bounded backfill is leaking
-    // post-attach events into backfill (likely: attach_moment_ms not
-    // forwarded, or notAfterMs not propagated client-side, or the
-    // server-side notAfterMs filter isn't applied).
+    // section, NOT the dimmed scrollback — even with backfill held
+    // open across the command dispatch. If this fails, the cursor-
+    // bounded backfill is leaking post-attach events into backfill
+    // (likely: attach_moment_ms not forwarded, or notAfterMs not
+    // propagated client-side, or the server-side notAfterMs filter
+    // isn't applied).
     const dimmedCount = await page
       .locator('.dimmed [data-testid="event"]')
       .filter({ hasText: `live-${token}` })
       .count();
     expect(dimmedCount).toBe(0);
-
-    // Confirm the stall actually fired (otherwise the test is vacuous).
-    expect(backfillCount).toBeGreaterThan(0);
   });
 
   // F5 (holomush-1tvn.12) rewrite: asserts against events_audit instead of

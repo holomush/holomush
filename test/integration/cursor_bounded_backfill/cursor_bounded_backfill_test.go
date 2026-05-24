@@ -120,9 +120,11 @@ var _ = Describe("Cursor-bounded backfill (holomush-iu8j)", func() {
 		// consistency drift as well as the immediate case.
 		Consistently(func() bool {
 			events, err := alice.QueryStreamHistoryBounded(ctx, locStream, attachMs)
-			if err != nil {
-				return false
-			}
+			// Fail fast on RPC errors rather than masking them as
+			// "no marker found" — a broken QueryStreamHistoryBounded
+			// would otherwise silently let this spec pass (CodeRabbit
+			// finding on PR #4234).
+			Expect(err).NotTo(HaveOccurred())
 			for _, ev := range events {
 				if ev.GetType() == postAttachMarker {
 					return true
