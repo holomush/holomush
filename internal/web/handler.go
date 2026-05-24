@@ -307,8 +307,9 @@ func (h *Handler) forwardFrame(
 		if sendErr := stream.Send(&webv1.StreamEventsResponse{
 			Frame: &webv1.StreamEventsResponse_Control{
 				Control: &webv1.ControlFrame{
-					Signal:  webv1.ControlSignal(frame.Control.GetSignal()),
-					Message: frame.Control.GetMessage(),
+					Signal:         webv1.ControlSignal(frame.Control.GetSignal()),
+					Message:        frame.Control.GetMessage(),
+					AttachMomentMs: frame.Control.GetAttachMomentMs(),
 				},
 			},
 		}); sendErr != nil {
@@ -433,6 +434,7 @@ func (h *Handler) WebQueryStreamHistory(ctx context.Context, req *connect.Reques
 		Count:       req.Msg.GetCount(),
 		NotBeforeMs: req.Msg.GetNotBeforeMs(),
 		Cursor:      req.Msg.GetCursor(),
+		NotAfterMs:  req.Msg.GetNotAfterMs(),
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "web: query stream history RPC failed",

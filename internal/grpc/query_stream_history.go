@@ -256,6 +256,16 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		notBefore = scopeFloor
 	}
 
+	// Step 6b: NotAfter — cursor-bounded backfill (holomush-iu8j / fujt
+	// Fix B). The web client sends Subscribe attach_moment_ms here so
+	// backfill returns only events that existed before the live stream
+	// attached, eliminating the connect-time replay/backfill race.
+	// 0 = no upper bound (back-compat with legacy clients).
+	var notAfter time.Time
+	if req.NotAfterMs > 0 {
+		notAfter = time.UnixMilli(req.NotAfterMs).UTC()
+	}
+
 	// Step 7: Fetch count+1 to detect has_more.
 	// Delegate to the JetStream/PostgreSQL tier crossover reader (F4+).
 	// Both paths produce ascending (oldest→newest) slices of count+1 events maximum.
@@ -296,7 +306,7 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 
 	frames, fetchErr := fetchHistoryFramesFromBus(
 		ctx, s.historyReader, s.identityRegistry, s.currentGameID(), req.Stream, count,
-		notBefore, beforeSeq, beforeID, caller, historyIdentity,
+		notBefore, notAfter, beforeSeq, beforeID, caller, historyIdentity,
 	)
 	if fetchErr != nil {
 		return nil, mapHistoryError(
@@ -406,6 +416,7 @@ func fetchHistoryFramesFromBus(
 	gameID, legacyStream string,
 	count int,
 	notBefore time.Time,
+	notAfter time.Time,
 	beforeSeq uint64,
 	beforeID ulid.ULID,
 	caller eventbus.Actor,
@@ -425,6 +436,7 @@ func fetchHistoryFramesFromBus(
 		Direction: eventbus.DirectionBackward,
 		PageSize:  count + 1,
 		NotBefore: notBefore,
+		NotAfter:  notAfter,
 		Caller:    caller,
 		Identity:  identity,
 	}

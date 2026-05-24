@@ -41,6 +41,18 @@ message ControlFrame {
   // SendCommand requests. Per-stream identity for multi-tab routing
   // (Phase 5 scene-focus autofocus). Empty on non-open frames.
   string connection_id = 3;
+  // attach_moment_ms is the server's wall-clock epoch-ms at the moment
+  // the Subscribe handler attached its durable consumer. Carried ONLY
+  // on CONTROL_SIGNAL_REPLAY_COMPLETE; clients reading other signals
+  // MUST ignore this field. The client passes this value as
+  // not_after_ms on subsequent backfill (WebQueryStreamHistory) calls
+  // so backfill returns ONLY events with timestamp <= attach_moment_ms
+  // — eliminating the connect-time replay/backfill race where a
+  // post-attach event could appear both as a dimmed backfill row and
+  // a live Subscribe delivery (holomush-iu8j; fujt Fix B). 0 on
+  // legacy/pre-iu8j servers; clients MUST treat 0 as "no upper bound"
+  // (back-compat).
+  int64 attach_moment_ms = 4;
 }
 
 service WebService {
@@ -326,6 +338,13 @@ message WebQueryStreamHistoryRequest {
   // cursor is the opaque pagination cursor from a previous WebQueryStreamHistoryResponse.
   // Events older than the cursor position are returned. Empty = start from latest.
   bytes cursor = 5;
+  // not_after_ms is the epoch-ms time ceiling. 0 = no upper bound (back-compat).
+  // INCLUSIVE: events with timestamp == not_after_ms are returned. Set by the
+  // web client to the Subscribe attach_moment_ms (carried on the REPLAY_COMPLETE
+  // ControlFrame) so backfill returns only events that existed before the live
+  // stream attached — eliminating the connect-time replay/backfill race
+  // (holomush-iu8j; holomush-fujt Fix B).
+  int64 not_after_ms = 6;
 }
 
 message WebQueryStreamHistoryResponse {

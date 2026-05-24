@@ -255,6 +255,27 @@
     const seenEventIds = new Set<string>();
     let backfillDone = false;
     let replayComplete = false;
+    // attachMomentMs is captured from the REPLAY_COMPLETE ControlFrame
+    // (holomush-iu8j cursor-bounded backfill). Passed as notAfterMs on
+    // subsequent backfill calls so backfill returns ONLY events that
+    // existed before the live Subscribe stream attached — eliminating
+    // the connect-time race fujt Fix A worked around. 0n is the
+    // back-compat sentinel: a legacy server (or pre-iu8j build) sends
+    // 0 → client treats as "no upper bound" and falls back to fujt
+    // Fix A's gate-on-both behavior (still correct, just slower UX).
+    let attachMomentMs = 0n;
+    // attachMomentReady resolves when REPLAY_COMPLETE arrives (so
+    // attachMomentMs has been captured), or rejects if the Subscribe
+    // stream terminates without ever emitting REPLAY_COMPLETE. The
+    // backfill flow awaits this so its notAfterMs reflects the actual
+    // server-side attach moment. On rejection, backfill falls through
+    // to its existing error handling.
+    let attachMomentResolve!: () => void;
+    let attachMomentReject!: (reason?: unknown) => void;
+    const attachMomentReady = new Promise<void>((resolve, reject) => {
+      attachMomentResolve = resolve;
+      attachMomentReject = reject;
+    });
     // Reset connectionId so a stale value from a prior stream doesn't
     // leak into SendCommand requests during the brief window before
     // the new stream's STREAM_OPENED ControlFrame arrives.
@@ -265,40 +286,38 @@
     // Subscribe's replay-phase events are events the user MISSED while detached,
     // so they render as replayed=false after draining (NOT dimmed).
     //
-    // streamReadyGate resolves only when BOTH Subscribe REPLAY_COMPLETE AND
-    // backfill have finished — see maybeMarkReady. This closes the
-    // holomush-fujt race where a command sent post-REPLAY_COMPLETE but
-    // pre-backfill-done would have its server-emitted event picked up by
-    // the still-running backfill query and rendered as dimmed/replayed
-    // scrollback. By gating the gate on both, the command input is held
-    // until backfill is done, so any user-emitted event arrives via
-    // Subscribe only and renders live by construction. The structurally-
-    // correct fix (cursor-bounded backfill — holomush-iu8j) will let
-    // this gate relax back to REPLAY_COMPLETE-only once backfill returns
-    // events strictly older than the Subscribe attach moment.
+    // streamReadyGate resolves on Subscribe REPLAY_COMPLETE — backfillDone
+    // is NOT required because cursor-bounded backfill (holomush-iu8j)
+    // closes the race that fujt Fix A worked around: backfill carries
+    // notAfterMs = attach_moment_ms so it can ONLY return events older
+    // than the live stream's attach moment. A user command sent during
+    // the connect window goes through Subscribe (live), is buffered
+    // until backfill drains, and renders LIVE — backfill can never see
+    // it because its timestamp is > attachMomentMs.
+    //
+    // backfillDone is kept as a closure-local flag (NOT a gate input)
+    // because the `if (!backfillDone) liveBuffer.push(ev)` Subscribe
+    // path below still needs it: events arriving DURING backfill are
+    // buffered so they render AFTER the dimmed scrollback (preserves
+    // the LIVE-separator-then-live ordering invariant). The race
+    // protection is now structural, not behavioral.
     //
     // Generation gating: resolveStreamReady / rejectStreamReady are already
     // generation-scoped (they no-op if streamReadyGate.generation !== generation),
     // so a stale Subscribe from a prior invocation cannot poison a fresh gate.
 
     // maybeMarkReady resolves the gate and flips connection status to
-    // 'connected' once both flags are set. Idempotent: resolveStreamReady
+    // 'connected' once replayComplete is set. Idempotent: resolveStreamReady
     // no-ops if the gate is already resolved (or stale-generation). The
-    // explicit generation check mirrors the symmetry of other gating
-    // sites in this function (see backfill drain block) and prevents a
-    // stale invocation from clobbering a newer generation's connection
-    // status — the flags themselves are closure-local so a stale
-    // generation cannot reach this helper today, but the guard makes
-    // the invariant local to the helper rather than relying on the
-    // caller's closure scope.
+    // explicit generation+abort check mirrors the surrounding hydrateAndStream
+    // gating sites.
     const maybeMarkReady = () => {
-      if (!replayComplete || !backfillDone) return;
+      if (!replayComplete) return;
       if (generation !== streamGeneration || localController.signal.aborted) return;
-      // holomush-87qu: phase-transition events on the stream.lifecycle
-      // span so Tempo / Grafana show which leg dominates the 8-10s
-      // 'syncing' window observed in the field. The two callers
-      // (REPLAY_COMPLETE handler + backfill finally block) each emit
-      // their own subscribe.* / backfill.* events before calling here.
+      // holomush-87qu: phase-transition event on the stream.lifecycle
+      // span so Tempo / Grafana show when the stream-ready transition
+      // fires. iu8j makes this fire at REPLAY_COMPLETE rather than the
+      // later replay+backfill-done point, restoring fast connect UX.
       localSpan.addEvent('stream.ready');
       resolveStreamReady(generation);
       setConnectionStatus('connected');
@@ -330,6 +349,12 @@
               // server-side Subscribe-phase wall time as observed by
               // the client. Pairs with backfill.done below.
               localSpan.addEvent('subscribe.replay_complete');
+              // iu8j: capture the server-side attach moment so the
+              // bounded backfill below can scope its query. Production
+              // servers stamp this; legacy/iu8j-pre servers send 0
+              // which the client treats as "no upper bound".
+              attachMomentMs = ctrl.attachMomentMs;
+              attachMomentResolve();
               replayComplete = true;
               maybeMarkReady();
             } else if (ctrl.signal === ControlSignal.STREAM_CLOSED) {
@@ -396,6 +421,13 @@
         if (streamReadyGate?.generation === generation) {
           rejectStreamReady(generation, new Error('Event stream ended before replay completed'));
         }
+        // iu8j: if Subscribe terminated before REPLAY_COMPLETE, signal
+        // the same to the backfill flow so it doesn't hang awaiting an
+        // attach moment that will never arrive. The backfill flow
+        // catches this rejection and proceeds with notAfterMs=0n
+        // (legacy unbounded behavior; the gate-rejection above will
+        // surface the connect failure to the user anyway).
+        attachMomentReject(new Error('Subscribe ended before REPLAY_COMPLETE'));
         // Only null out the shared streamSpan if it is still OUR span; a
         // stale invocation must not clobber a newer span the caller owns.
         if (streamSpan === localSpan) {
@@ -494,9 +526,22 @@
           console.warn('[backfill] stream enumeration failed', e);
         }
       }
+      // iu8j: wait for the Subscribe attach moment so we can scope
+      // backfill to events <= attachMomentMs. If the Subscribe stream
+      // terminated before REPLAY_COMPLETE, attachMomentReady rejects;
+      // we proceed with notAfterMs=0n (legacy unbounded) and let the
+      // gate-rejection from the subscribePromise surface the connect
+      // failure to the user.
+      try {
+        await attachMomentReady;
+      } catch {
+        // attachMomentMs stays at its default 0n — backfill runs
+        // unbounded, matching pre-iu8j behavior.
+      }
       try {
         const { events, failedStreams } = await backfillStreams(client, sessionId, streams, {
           signal: localController.signal,
+          notAfterMs: attachMomentMs,
         });
         if (failedStreams.length > 0) {
           console.warn('[backfill] streams failed', { failedStreams });
@@ -548,7 +593,10 @@
         localSpan.addEvent('backfill.done');
       }
       backfillDone = true;
-      maybeMarkReady();
+      // iu8j: no maybeMarkReady() call here. backfillDone is no longer
+      // a gate input — streamReadyGate resolves at REPLAY_COMPLETE on
+      // its own. Keeping backfillDone as a closure-local flag is still
+      // needed below for liveBuffer drain coordination.
       if (generation === streamGeneration && !localController.signal.aborted) {
         replayActive.set(false);
         // Drain Subscribe events that arrived during backfill, deduping.

@@ -512,6 +512,49 @@ func (s *Session) QueryStreamHistory(ctx context.Context, stream string) ([]*cor
 	return resp.GetEvents(), nil
 }
 
+// QueryStreamHistoryBounded fetches event history with a NotAfterMs
+// ceiling (holomush-iu8j cursor-bounded backfill). Mirrors the
+// production client's connect-time backfill call where notAfterMs is
+// the Subscribe attach moment received on the REPLAY_COMPLETE
+// ControlFrame. Passing 0 is equivalent to QueryStreamHistory (no
+// upper bound, back-compat with legacy clients).
+func (s *Session) QueryStreamHistoryBounded(ctx context.Context, stream string, notAfterMs int64) ([]*corev1.EventFrame, error) {
+	resp, err := s.server.coreServer.QueryStreamHistory(ctx, &corev1.QueryStreamHistoryRequest{
+		SessionId:  s.SessionID,
+		Stream:     stream,
+		NotAfterMs: notAfterMs,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetEvents(), nil
+}
+
+// AttachMomentMs returns the server-side attach moment captured from
+// the most recent REPLAY_COMPLETE ControlFrame on the session's
+// Subscribe transport (holomush-iu8j). Returns 0 if no transport has
+// attached yet, or if the server sent 0 (legacy back-compat sentinel).
+//
+// Production clients pass this value as not_after_ms on backfill
+// (WebQueryStreamHistory) calls so backfill returns only events that
+// existed before the live Subscribe stream attached — closing the
+// connect-time replay/backfill race.
+//
+// Synchronization: ConnectAuthed / ConnectGuest / OpenWebSession
+// (via Session.attach) block until REPLAY_COMPLETE arrives, so a
+// post-Connect caller is guaranteed to see the stamped value. Tests
+// that call AttachMomentMs after DetachTransport followed by
+// ReattachTransport see the value from the LATEST reattach.
+func (s *Session) AttachMomentMs() int64 {
+	s.transportMu.Lock()
+	stream := s.transportStream
+	s.transportMu.Unlock()
+	if stream == nil {
+		return 0
+	}
+	return stream.getAttachMomentMs()
+}
+
 // EmitDirectEvent publishes an event to the embedded bus, bypassing the
 // command dispatcher (which the harness wires with an empty registry). Tests
 // use this to inject events into a stream so downstream QueryStreamHistory

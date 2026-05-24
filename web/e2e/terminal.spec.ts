@@ -88,6 +88,73 @@ test.describe('Terminal UI', () => {
     expect(dimmedCount).toBe(0);
   });
 
+  // holomush-iu8j: deterministic regression test for the cursor-bounded
+  // backfill (fujt Fix B). Uses Playwright's request interception to
+  // STALL the WebQueryStreamHistory call, opening a window between
+  // REPLAY_COMPLETE and backfill-done that the race would have
+  // exploited. If the cursor-bounded backfill is wired correctly
+  // (gateway forwards attach_moment_ms, client sends it as
+  // not_after_ms), the user-emitted command's event MUST render LIVE
+  // because backfill can never observe it by construction (its
+  // timestamp > attachMomentMs).
+  //
+  // The Fix A test above is probabilistic — race window is small
+  // unless backfill is slow. This test makes it deterministic by
+  // forcing a multi-second backfill stall so the race window is
+  // unambiguously open.
+  test('cursor-bounded backfill: stalled backfill cannot dim post-attach commands (holomush-iu8j)', async ({
+    page,
+  }) => {
+    const token = Date.now();
+
+    // Stall WebQueryStreamHistory for 3s after the SECOND request
+    // completes. The first request fires before REPLAY_COMPLETE; the
+    // second is the per-stream backfill that we want to stall. This
+    // creates an unambiguous window between REPLAY_COMPLETE (which
+    // unblocks the command input) and backfill-done.
+    let backfillCount = 0;
+    await page.route('**/WebQueryStreamHistory', async (route) => {
+      backfillCount++;
+      // Stall for 3s on each backfill request to force the race window
+      // open. A pre-fix client (gate-on-both, no not_after_ms) would
+      // hold the textarea for 3s+; a post-fix client unlocks at
+      // REPLAY_COMPLETE and the command's event MUST flow through
+      // Subscribe only.
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await route.continue();
+    });
+
+    await connectAsGuest(page);
+    const input = page.locator('textarea');
+
+    // Fire DURING the 3s backfill stall. Pre-iu8j: textarea was held
+    // for 3s by Fix A's gate-on-both (slow but correct). Post-iu8j:
+    // gate releases at REPLAY_COMPLETE; command dispatches inside the
+    // backfill window; event flows through Subscribe; renders LIVE.
+    await input.fill(`say live-${token}`);
+    await input.press('Enter');
+
+    const event = page
+      .locator('[data-testid="event"]')
+      .filter({ hasText: `live-${token}` });
+    await expect(event).toBeVisible({ timeout: 10000 });
+
+    // The load-bearing assertion: the event MUST be in the live
+    // section, NOT the dimmed scrollback — even with backfill stalled
+    // for 3s. If this fails, the cursor-bounded backfill is leaking
+    // post-attach events into backfill (likely: attach_moment_ms not
+    // forwarded, or notAfterMs not propagated client-side, or the
+    // server-side notAfterMs filter isn't applied).
+    const dimmedCount = await page
+      .locator('.dimmed [data-testid="event"]')
+      .filter({ hasText: `live-${token}` })
+      .count();
+    expect(dimmedCount).toBe(0);
+
+    // Confirm the stall actually fired (otherwise the test is vacuous).
+    expect(backfillCount).toBeGreaterThan(0);
+  });
+
   // F5 (holomush-1tvn.12) rewrite: asserts against events_audit instead of
   // the now-empty events table. Say events are published to the host-owned
   // `events.<game>.location.<id>` subject and persist in the host audit

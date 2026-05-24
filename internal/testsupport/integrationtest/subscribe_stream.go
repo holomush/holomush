@@ -44,10 +44,11 @@ type subscribeStream struct {
 	events     chan *corev1.EventFrame
 	replayDone chan struct{}
 
-	mu         sync.Mutex
-	closed     bool
-	overflowed int  // number of Event frames dropped due to full events channel
-	replayed   bool // guards single-close of replayDone
+	mu             sync.Mutex
+	closed         bool
+	overflowed     int   // number of Event frames dropped due to full events channel
+	replayed       bool  // guards single-close of replayDone
+	attachMomentMs int64 // captured from REPLAY_COMPLETE ControlFrame (holomush-iu8j)
 }
 
 // newSubscribeStream constructs a stream with the given parent context.
@@ -86,6 +87,12 @@ func (s *subscribeStream) Send(r *corev1.SubscribeResponse) error {
 	}
 	if ctrl := r.GetControl(); ctrl != nil &&
 		ctrl.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE {
+		// Capture attach_moment_ms BEFORE signaling so a racing
+		// AttachMomentMs() reader who wakes on replayDone observes the
+		// stamped value, not the zero default.
+		s.mu.Lock()
+		s.attachMomentMs = ctrl.GetAttachMomentMs()
+		s.mu.Unlock()
 		s.signalReplayComplete()
 	}
 	// Other control frames: drop silently.
@@ -144,4 +151,16 @@ func (s *subscribeStream) overflowCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.overflowed
+}
+
+// getAttachMomentMs returns the attach_moment_ms captured from the
+// REPLAY_COMPLETE ControlFrame (holomush-iu8j). Returns 0 if
+// REPLAY_COMPLETE has not yet arrived or if the server sent 0
+// (legacy/back-compat signal). Callers MUST sync on replayDone
+// before reading this; otherwise the value may still be the
+// pre-capture zero.
+func (s *subscribeStream) getAttachMomentMs() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.attachMomentMs
 }
