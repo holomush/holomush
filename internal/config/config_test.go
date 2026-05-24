@@ -235,6 +235,34 @@ func TestDefaultCryptoConfigIsEmpty(t *testing.T) {
 	assert.Empty(t, cfg.Operators)
 }
 
+func TestCryptoConfig_Defaults_PopulatesZeroFields(t *testing.T) {
+	// A zero-value CryptoConfig must get all default durations applied.
+	cfg := CryptoConfig{}.Defaults()
+	assert.Equal(t, DefaultRekeyCheckpointTTL, cfg.RekeyCheckpointTTL)
+	assert.Equal(t, DefaultRekeyCheckpointSweepInterval, cfg.RekeyCheckpointSweepInterval)
+	assert.Equal(t, DefaultOperatorReadDefaultWindow, cfg.OperatorReadDefaultWindow)
+	assert.Equal(t, DefaultOperatorReadMaxWindow, cfg.OperatorReadMaxWindow)
+	assert.Equal(t, DefaultOperatorReadWriteDeadline, cfg.OperatorReadWriteDeadline)
+	assert.Equal(t, DefaultOperatorReadApprovalTTL, cfg.OperatorReadApprovalTTL)
+	assert.NotNil(t, cfg.Operators)
+}
+
+func TestCryptoConfig_Defaults_DoesNotOverrideExplicitValues(t *testing.T) {
+	// Non-zero values must be preserved (Defaults is idempotent, not clobber).
+	cfg := CryptoConfig{
+		Operators:                    []string{"op1"},
+		RekeyCheckpointTTL:           48 * 60 * 60 * 1000000000, // 48h
+		RekeyCheckpointSweepInterval: 2 * 60 * 60 * 1000000000,  // 2h
+		OperatorReadDefaultWindow:    2 * 60 * 60 * 1000000000,  // 2h
+		OperatorReadMaxWindow:        60 * 24 * 60 * 60 * 1000000000,
+		OperatorReadWriteDeadline:    60 * 1000000000,
+		OperatorReadApprovalTTL:      10 * 60 * 1000000000,
+	}.Defaults()
+	assert.Equal(t, []string{"op1"}, cfg.Operators)
+	// All durations were non-zero so they must survive unchanged.
+	assert.NotEqual(t, DefaultRekeyCheckpointTTL, cfg.RekeyCheckpointTTL)
+}
+
 func TestLoadParsesCryptoOperators(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")

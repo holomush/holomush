@@ -23,4 +23,6 @@ func TestLoggingSink_EffectiveLevel(t *testing.T) { // INV-L4
 	require.Equal(t, global, LoggingSink{}.EffectiveLevel(global)) // unset → global
 	require.Equal(t, slog.LevelError, LoggingSink{Level: "error"}.EffectiveLevel(global))
 	require.Equal(t, global, LoggingSink{Level: "bogus"}.EffectiveLevel(global)) // unparseable → global
+	require.Equal(t, slog.LevelDebug, LoggingSink{Level: "debug"}.EffectiveLevel(global))
+	require.Equal(t, slog.LevelInfo, LoggingSink{Level: "info"}.EffectiveLevel(global))
 }

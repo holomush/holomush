@@ -6,6 +6,7 @@ package logging
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -146,15 +147,18 @@ func (h *fanoutHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (h *fanoutHandler) Handle(ctx context.Context, r slog.Record) error {
+	// Write to every enabled child even if one fails — a failing stderr sink
+	// must not suppress the OTel/Sentry sink (or vice versa). Aggregate errors.
+	var errs error
 	for _, c := range h.children {
 		if !c.Enabled(ctx, r.Level) {
 			continue
 		}
 		if err := c.Handle(ctx, r.Clone()); err != nil {
-			return err //nolint:wrapcheck // slog.Handler contract: pass child error through
+			errs = errors.Join(errs, err)
 		}
 	}
-	return nil
+	return errs
 }
 
 func (h *fanoutHandler) WithAttrs(attrs []slog.Attr) slog.Handler {

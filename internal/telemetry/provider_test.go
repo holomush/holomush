@@ -39,5 +39,8 @@ func TestInitReturnsOTLPProviderWhenEndpointIsSet(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	_ = res.Shutdown(ctx)
+	// The endpoint is deliberately unreachable, so Shutdown may return a
+	// flush/deadline error — assert it completes without panicking rather than
+	// requiring NoError (which would be flaky against an unreachable collector).
+	require.NotPanics(t, func() { _ = res.Shutdown(ctx) })
 }

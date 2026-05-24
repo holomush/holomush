@@ -19,6 +19,9 @@ func TestINV_L1_LoggingHasNoSentryImport(t *testing.T) { // INV-L1
 	pkgs, err := packages.Load(cfg, "github.com/holomush/holomush/internal/logging")
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
+	// A load/type error would leave the dependency graph incomplete, letting a
+	// missing sentry-go edge slip past the walk below. Fail loudly instead.
+	require.Equal(t, 0, packages.PrintErrors(pkgs), "go/packages reported load errors; the dependency walk would be unreliable")
 
 	// Walk the full transitive dependency graph. NeedDeps populates each
 	// imported *Package's own Imports, so BFS from the root reaches every
