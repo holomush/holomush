@@ -51,6 +51,7 @@ describe('backfillStreams', () => {
 				count: 150,
 				cursor: new Uint8Array(),
 				notBeforeMs: 0n,
+				notAfterMs: 0n,
 			},
 			expect.anything(),
 		);
@@ -172,6 +173,50 @@ describe('backfillStreams', () => {
 			'location:l1',
 		]);
 		expect(result.events.map((e) => e.eventId)).toEqual(['dup']);
+	});
+
+	// holomush-iu8j: backfillStreams MUST forward opts.notAfterMs to the
+	// per-stream RPC so backfill is scoped to the Subscribe attach moment.
+	// Without this, the cursor-bounded backfill fix has no effect on the
+	// client side — backfill calls would land at the gateway with
+	// notAfterMs=0 and the server would treat the query as unbounded,
+	// re-opening the holomush-fujt connect-time replay/backfill race.
+	it('forwards opts.notAfterMs to the per-stream RPC (iu8j)', async () => {
+		const client = makeClient();
+		client.webQueryStreamHistory.mockResolvedValueOnce({
+			events: [],
+			hasMore: false,
+			nextCursor: new Uint8Array(),
+		});
+
+		const attachMoment = 1700000999999n; // arbitrary epoch-ms
+		await backfillStreams(client as never, 'sess-1', ['location:l1'], {
+			notAfterMs: attachMoment,
+		});
+
+		expect(client.webQueryStreamHistory).toHaveBeenCalledWith(
+			expect.objectContaining({ notAfterMs: attachMoment }),
+			expect.anything(),
+		);
+	});
+
+	// Boundary: opts.notAfterMs omitted MUST behave as "no upper bound"
+	// (preserves back-compat with callers that don't yet pass the
+	// attach moment).
+	it('omits notAfterMs → defaults to 0n (no upper bound, back-compat)', async () => {
+		const client = makeClient();
+		client.webQueryStreamHistory.mockResolvedValueOnce({
+			events: [],
+			hasMore: false,
+			nextCursor: new Uint8Array(),
+		});
+
+		await backfillStreams(client as never, 'sess-1', ['location:l1']);
+
+		expect(client.webQueryStreamHistory).toHaveBeenCalledWith(
+			expect.objectContaining({ notAfterMs: 0n }),
+			expect.anything(),
+		);
 	});
 
 	it('rejects with abort reason when AbortSignal is triggered mid-flight', async () => {

@@ -49,6 +49,16 @@ export interface BackfillResult {
 export interface BackfillOpts {
 	count?: number;
 	signal?: AbortSignal;
+	/**
+	 * notAfterMs is the epoch-ms ceiling forwarded to webQueryStreamHistory.
+	 * Set by the terminal hydrate flow to the Subscribe attach moment
+	 * (received on the REPLAY_COMPLETE ControlFrame) so backfill returns
+	 * ONLY events that existed before the live stream attached —
+	 * eliminating the connect-time replay/backfill race (holomush-iu8j;
+	 * fujt Fix B). Omit (or pass 0n) to mean "no upper bound" (back-compat
+	 * with callers that don't pass an attach moment).
+	 */
+	notAfterMs?: bigint;
 }
 
 // ---------------------------------------------------------------------------
@@ -159,8 +169,9 @@ export async function backfillStreams(
 	}
 	const count = opts.count ?? DEFAULT_COUNT;
 
+	const notAfterMs = opts.notAfterMs ?? 0n;
 	const results = await Promise.all(
-		streams.map((stream) => fetchOneStream(client, sessionId, stream, count, opts.signal)),
+		streams.map((stream) => fetchOneStream(client, sessionId, stream, count, notAfterMs, opts.signal)),
 	);
 
 	if (opts.signal?.aborted) {
@@ -232,6 +243,7 @@ async function fetchOneStream(
 	sessionId: string,
 	stream: string,
 	count: number,
+	notAfterMs: bigint,
 	signal?: AbortSignal,
 ): Promise<FetchResult> {
 	for (let attempt = 0; ; attempt++) {
@@ -243,6 +255,7 @@ async function fetchOneStream(
 					count,
 					cursor: new Uint8Array(),
 					notBeforeMs: 0n,
+					notAfterMs,
 				},
 				{ signal },
 			);

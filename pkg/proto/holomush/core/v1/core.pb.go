@@ -1088,11 +1088,21 @@ func (x *RenderingMetadata) GetSourcePluginVersion() string {
 }
 
 type ControlFrame struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Signal        ControlSignal          `protobuf:"varint,1,opt,name=signal,proto3,enum=holomush.core.v1.ControlSignal" json:"signal,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Signal  ControlSignal          `protobuf:"varint,1,opt,name=signal,proto3,enum=holomush.core.v1.ControlSignal" json:"signal,omitempty"`
+	Message string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	// attach_moment_ms is the server's wall-clock epoch-ms at the moment the
+	// Subscribe handler attached its durable consumer. Carried ONLY on
+	// CONTROL_SIGNAL_REPLAY_COMPLETE; clients reading other signals MUST
+	// ignore this field. The client passes this value as not_after_ms on
+	// subsequent backfill (WebQueryStreamHistory) calls so backfill returns
+	// ONLY events with timestamp <= attach_moment_ms — eliminating the
+	// race where a post-attach event could appear both as a dimmed backfill
+	// row and a live Subscribe delivery (holomush-iu8j; fujt Fix B). 0 on
+	// legacy servers; clients MUST treat 0 as "no upper bound" (back-compat).
+	AttachMomentMs int64 `protobuf:"varint,3,opt,name=attach_moment_ms,json=attachMomentMs,proto3" json:"attach_moment_ms,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ControlFrame) Reset() {
@@ -1137,6 +1147,13 @@ func (x *ControlFrame) GetMessage() string {
 		return x.Message
 	}
 	return ""
+}
+
+func (x *ControlFrame) GetAttachMomentMs() int64 {
+	if x != nil {
+		return x.AttachMomentMs
+	}
+	return 0
 }
 
 type SubscribeResponse struct {
@@ -3095,7 +3112,14 @@ type QueryStreamHistoryRequest struct {
 	NotBeforeMs int64                  `protobuf:"varint,5,opt,name=not_before_ms,json=notBeforeMs,proto3" json:"not_before_ms,omitempty"` // epoch ms time floor; 0 = no lower bound
 	// cursor is the opaque pagination cursor from a previous QueryStreamHistoryResponse.
 	// Events older than the cursor position are returned. Empty = start from latest.
-	Cursor        []byte `protobuf:"bytes,6,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	Cursor []byte `protobuf:"bytes,6,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	// not_after_ms is the epoch-ms time ceiling. 0 = no upper bound (back-compat).
+	// INCLUSIVE: events with timestamp == not_after_ms are returned. Used by the
+	// web client's connect-time backfill to bound history to events that existed
+	// before the Subscribe stream attached, eliminating the connect-time race
+	// where a user-emitted event could appear both as a dimmed backfill row and
+	// a live Subscribe delivery (holomush-iu8j; holomush-fujt Fix B).
+	NotAfterMs    int64 `protobuf:"varint,7,opt,name=not_after_ms,json=notAfterMs,proto3" json:"not_after_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3170,6 +3194,13 @@ func (x *QueryStreamHistoryRequest) GetCursor() []byte {
 		return x.Cursor
 	}
 	return nil
+}
+
+func (x *QueryStreamHistoryRequest) GetNotAfterMs() int64 {
+	if x != nil {
+		return x.NotAfterMs
+	}
+	return 0
 }
 
 type QueryStreamHistoryResponse struct {
@@ -3423,10 +3454,11 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\rdisplayTarget\x12,\n" +
 	"\rsource_plugin\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\fsourcePlugin\x12;\n" +
 	"\x15source_plugin_version\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x13sourcePluginVersion:\x8d\x01\xbaH\x89\x01\x1a\x86\x01\n" +
-	",rendering_metadata.label_required_for_speech\x12)label must be set when format is 'speech'\x1a+this.format != 'speech' || this.label != ''\"a\n" +
+	",rendering_metadata.label_required_for_speech\x12)label must be set when format is 'speech'\x1a+this.format != 'speech' || this.label != ''\"\x8b\x01\n" +
 	"\fControlFrame\x127\n" +
 	"\x06signal\x18\x01 \x01(\x0e2\x1f.holomush.core.v1.ControlSignalR\x06signal\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\x8e\x01\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12(\n" +
+	"\x10attach_moment_ms\x18\x03 \x01(\x03R\x0eattachMomentMs\"\x8e\x01\n" +
 	"\x11SubscribeResponse\x124\n" +
 	"\x05event\x18\x01 \x01(\v2\x1c.holomush.core.v1.EventFrameH\x00R\x05event\x12:\n" +
 	"\acontrol\x18\x02 \x01(\v2\x1e.holomush.core.v1.ControlFrameH\x00R\acontrolB\a\n" +
@@ -3570,7 +3602,7 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\x14player_session_token\x18\x01 \x01(\tR\x12playerSessionToken\"b\n" +
 	"!RevokeOtherPlayerSessionsResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
-	"\rrevoked_count\x18\x02 \x01(\x05R\frevokedCount\"\xd7\x01\n" +
+	"\rrevoked_count\x18\x02 \x01(\x05R\frevokedCount\"\xf9\x01\n" +
 	"\x19QueryStreamHistoryRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1d\n" +
 	"\n" +
@@ -3578,7 +3610,9 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\x06stream\x18\x03 \x01(\tR\x06stream\x12\x14\n" +
 	"\x05count\x18\x04 \x01(\x05R\x05count\x12\"\n" +
 	"\rnot_before_ms\x18\x05 \x01(\x03R\vnotBeforeMs\x12\x16\n" +
-	"\x06cursor\x18\x06 \x01(\fR\x06cursor\"\xc2\x01\n" +
+	"\x06cursor\x18\x06 \x01(\fR\x06cursor\x12 \n" +
+	"\fnot_after_ms\x18\a \x01(\x03R\n" +
+	"notAfterMs\"\xc2\x01\n" +
 	"\x1aQueryStreamHistoryResponse\x122\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta\x124\n" +
 	"\x06events\x18\x02 \x03(\v2\x1c.holomush.core.v1.EventFrameR\x06events\x12\x19\n" +

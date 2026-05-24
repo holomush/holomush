@@ -207,6 +207,44 @@ func TestMatchesQueryBoundaryBranchesEachFilter(t *testing.T) {
 			want: false,
 		},
 		{
+			// Boundary lock (I-IU8J-3): event timestamp EXACTLY at
+			// NotAfter MUST be included. Inclusive boundary semantics
+			// are load-bearing for cursor-bounded backfill — without
+			// this, a backfill scoped to Subscribe-attach-moment could
+			// silently exclude an event whose timestamp matches the
+			// attach moment to ms precision, producing a perceptible
+			// "missing event" UX bug on the connect path.
+			name: "not_after INCLUDES event whose timestamp equals NotAfter (boundary inclusive — iu8j)",
+			ev:   evSeq(now, 21),
+			q:    eventbus.HistoryQuery{NotAfter: now},
+			tier: TierJetStream,
+			want: true,
+		},
+		{
+			// Combined bound: NotBefore AND NotAfter both honored.
+			// Event inside the window MUST be included.
+			name: "not_before+not_after window includes event inside the window (iu8j)",
+			ev:   evSeq(now.Add(-30*time.Minute), 22),
+			q: eventbus.HistoryQuery{
+				NotBefore: now.Add(-1 * time.Hour),
+				NotAfter:  now,
+			},
+			tier: TierJetStream,
+			want: true,
+		},
+		{
+			// Combined bound boundary: event AT the NotBefore side AND
+			// AT the NotAfter side (degenerate single-point window).
+			name: "not_before==not_after==event.timestamp includes the singleton window (iu8j)",
+			ev:   evSeq(now, 23),
+			q: eventbus.HistoryQuery{
+				NotBefore: now,
+				NotAfter:  now,
+			},
+			tier: TierJetStream,
+			want: true,
+		},
+		{
 			name: "cold tier accepts pre-edge without tier-boundary reject",
 			ev:   evSeq(edge.Add(-10*time.Hour), 1),
 			q:    eventbus.HistoryQuery{},

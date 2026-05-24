@@ -390,13 +390,21 @@ func TestStreamEventsPassesConnectionIDAndClientTypeOnSubscribe(t *testing.T) {
 }
 
 func TestStreamEvents_ForwardsControlFrame(t *testing.T) {
+	// holomush-iu8j: the gateway MUST forward attach_moment_ms from
+	// core's ControlFrame to the web ControlFrame on REPLAY_COMPLETE
+	// so the browser receives the attach moment and can scope its
+	// backfill (notAfterMs) correctly. Without this, attach_moment_ms
+	// is silently dropped at the gateway and the client falls back to
+	// the legacy unbounded-backfill behavior — re-opening the fujt race.
+	const attachMomentMs int64 = 1700000999999
 	sub := &mockSubscribeStream{
 		responses: []*corev1.SubscribeResponse{
 			{
 				Frame: &corev1.SubscribeResponse_Control{
 					Control: &corev1.ControlFrame{
-						Signal:  corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE,
-						Message: "replay done",
+						Signal:         corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE,
+						Message:        "replay done",
+						AttachMomentMs: attachMomentMs,
 					},
 				},
 			},
@@ -431,6 +439,8 @@ func TestStreamEvents_ForwardsControlFrame(t *testing.T) {
 	require.NotNil(t, ctrl, "expected a ControlFrame, got: %v", msg)
 	assert.Equal(t, webv1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE, ctrl.GetSignal())
 	assert.Equal(t, "replay done", ctrl.GetMessage())
+	assert.Equal(t, attachMomentMs, ctrl.GetAttachMomentMs(),
+		"gateway MUST forward attach_moment_ms on REPLAY_COMPLETE (iu8j cursor-bounded backfill)")
 }
 
 func TestStreamEvents_StreamClosedEndsStream(t *testing.T) {
@@ -598,6 +608,7 @@ func TestWebQueryStreamHistoryPropagatesRequestFields(t *testing.T) {
 		Count:       50,
 		NotBeforeMs: 1700000000000,
 		Cursor:      cursorBytes,
+		NotAfterMs:  1700000999999, // holomush-iu8j: Subscribe attach-moment ceiling
 	}))
 	require.NoError(t, err)
 
@@ -608,6 +619,8 @@ func TestWebQueryStreamHistoryPropagatesRequestFields(t *testing.T) {
 	assert.Equal(t, int32(50), req.GetCount())
 	assert.Equal(t, int64(1700000000000), req.GetNotBeforeMs())
 	assert.Equal(t, cursorBytes, req.GetCursor())
+	assert.Equal(t, int64(1700000999999), req.GetNotAfterMs(),
+		"gateway MUST forward not_after_ms to core (iu8j cursor-bounded backfill)")
 }
 
 // Post-auth RPC token forwarding (bd-jv7z, Task 7).

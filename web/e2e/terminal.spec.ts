@@ -88,6 +88,92 @@ test.describe('Terminal UI', () => {
     expect(dimmedCount).toBe(0);
   });
 
+  // holomush-iu8j: deterministic regression test for the cursor-bounded
+  // backfill (fujt Fix B). Uses Playwright's request interception to
+  // STALL the WebQueryStreamHistory call, opening a window between
+  // REPLAY_COMPLETE and backfill-done that the race would have
+  // exploited. If the cursor-bounded backfill is wired correctly
+  // (gateway forwards attach_moment_ms, client sends it as
+  // not_after_ms), the user-emitted command's event MUST render LIVE
+  // because backfill can never observe it by construction (its
+  // timestamp > attachMomentMs).
+  //
+  // The Fix A test above is probabilistic — race window is small
+  // unless backfill is slow. This test makes it deterministic by
+  // forcing a multi-second backfill stall so the race window is
+  // unambiguously open.
+  test('cursor-bounded backfill: stalled backfill cannot dim post-attach commands (holomush-iu8j)', async ({
+    page,
+  }) => {
+    const token = Date.now();
+
+    // Manually-controlled stall via a Promise so backfill stays
+    // BLOCKED until after the command is dispatched. Without this
+    // explicit handshake, a time-based stall (e.g. 3s setTimeout)
+    // would let a pre-iu8j client pass the test by simply waiting
+    // out the stall — gate-on-both behavior would still eventually
+    // unlock the textarea and the command would dispatch with backfill
+    // already complete, masking the regression (CodeRabbit finding on
+    // PR #4234).
+    let backfillCount = 0;
+    let releaseBackfill: (() => void) | undefined;
+    const backfillBlocked = new Promise<void>((resolve) => {
+      releaseBackfill = resolve;
+    });
+    await page.route('**/WebQueryStreamHistory', async (route) => {
+      backfillCount++;
+      await backfillBlocked;
+      await route.continue();
+    });
+
+    await connectAsGuest(page);
+    const input = page.locator('textarea');
+
+    // Verify backfill is actually in-flight before dispatching the
+    // command (otherwise the test is vacuous: a regression that
+    // skipped backfill entirely would also pass).
+    await expect.poll(() => backfillCount).toBeGreaterThan(0);
+
+    // Verify the input is editable WHILE backfill is still blocked.
+    // This is the load-bearing iu8j behavior assertion: pre-iu8j's
+    // gate-on-both would hold the textarea disabled until backfill
+    // completes, so a pre-iu8j build would fail this expect.toBeEditable
+    // — the editable check is what makes the test catch regressions
+    // that a time-based stall would silently pass.
+    await expect(input).toBeEditable({ timeout: 1500 });
+
+    // Dispatch the command DURING the active backfill window.
+    // Post-iu8j: gate already released at REPLAY_COMPLETE; command
+    // dispatches now; event flows through Subscribe; renders LIVE.
+    // Backfill is still blocked, so the test confirms the race
+    // surface is structurally closed (no race-window dependence).
+    await input.fill(`say live-${token}`);
+    await input.press('Enter');
+
+    // Now let backfill complete so the rest of the connect flow
+    // resolves (snapshot seed + liveBuffer drain) and the event
+    // renders.
+    releaseBackfill?.();
+
+    const event = page
+      .locator('[data-testid="event"]')
+      .filter({ hasText: `live-${token}` });
+    await expect(event).toBeVisible({ timeout: 10000 });
+
+    // The load-bearing assertion: the event MUST be in the live
+    // section, NOT the dimmed scrollback — even with backfill held
+    // open across the command dispatch. If this fails, the cursor-
+    // bounded backfill is leaking post-attach events into backfill
+    // (likely: attach_moment_ms not forwarded, or notAfterMs not
+    // propagated client-side, or the server-side notAfterMs filter
+    // isn't applied).
+    const dimmedCount = await page
+      .locator('.dimmed [data-testid="event"]')
+      .filter({ hasText: `live-${token}` })
+      .count();
+    expect(dimmedCount).toBe(0);
+  });
+
   // F5 (holomush-1tvn.12) rewrite: asserts against events_audit instead of
   // the now-empty events table. Say events are published to the host-owned
   // `events.<game>.location.<id>` subject and persist in the host audit

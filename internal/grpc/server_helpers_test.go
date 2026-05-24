@@ -24,11 +24,30 @@ import (
 // TestReplayCompleteFrame verifies the REPLAY_COMPLETE control signal shape.
 func TestReplayCompleteFrame(t *testing.T) {
 	t.Parallel()
-	f := replayCompleteFrame()
+	f := replayCompleteFrame(0)
 	require.NotNil(t, f)
 	ctrl := f.GetControl()
 	require.NotNil(t, ctrl)
 	assert.Equal(t, corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE, ctrl.GetSignal())
+	assert.Equal(t, int64(0), ctrl.GetAttachMomentMs(),
+		"replayCompleteFrame(0) MUST emit attach_moment_ms=0 (back-compat sentinel — client treats 0 as 'no upper bound')")
+}
+
+// TestReplayCompleteFrameCarriesAttachMomentMs pins the wire contract for
+// holomush-iu8j: the REPLAY_COMPLETE ControlFrame MUST carry the
+// server's attach-moment epoch-ms so the client can pass it back as
+// not_after_ms on subsequent backfill calls. Invariant I-IU8J-4.
+func TestReplayCompleteFrameCarriesAttachMomentMs(t *testing.T) {
+	t.Parallel()
+	// Pick a deterministic non-zero attach moment.
+	attachMomentMs := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC).UnixMilli()
+	f := replayCompleteFrame(attachMomentMs)
+	require.NotNil(t, f)
+	ctrl := f.GetControl()
+	require.NotNil(t, ctrl)
+	assert.Equal(t, corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE, ctrl.GetSignal())
+	assert.Equal(t, attachMomentMs, ctrl.GetAttachMomentMs(),
+		"REPLAY_COMPLETE ControlFrame MUST carry attach_moment_ms verbatim (I-IU8J-4)")
 }
 
 func TestStreamClosedFrameIncludesReason(t *testing.T) {

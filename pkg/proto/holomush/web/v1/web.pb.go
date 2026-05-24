@@ -250,9 +250,21 @@ type ControlFrame struct {
 	// StreamEvents open so the client can include it in subsequent
 	// SendCommand requests. Per-stream identity for multi-tab routing
 	// (Phase 5 scene-focus autofocus). Empty on non-open frames.
-	ConnectionId  string `protobuf:"bytes,3,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ConnectionId string `protobuf:"bytes,3,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// attach_moment_ms is the server's wall-clock epoch-ms at the moment
+	// the Subscribe handler attached its durable consumer. Carried ONLY
+	// on CONTROL_SIGNAL_REPLAY_COMPLETE; clients reading other signals
+	// MUST ignore this field. The client passes this value as
+	// not_after_ms on subsequent backfill (WebQueryStreamHistory) calls
+	// so backfill returns ONLY events with timestamp <= attach_moment_ms
+	// — eliminating the connect-time replay/backfill race where a
+	// post-attach event could appear both as a dimmed backfill row and
+	// a live Subscribe delivery (holomush-iu8j; fujt Fix B). 0 on
+	// legacy/pre-iu8j servers; clients MUST treat 0 as "no upper bound"
+	// (back-compat).
+	AttachMomentMs int64 `protobuf:"varint,4,opt,name=attach_moment_ms,json=attachMomentMs,proto3" json:"attach_moment_ms,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ControlFrame) Reset() {
@@ -304,6 +316,13 @@ func (x *ControlFrame) GetConnectionId() string {
 		return x.ConnectionId
 	}
 	return ""
+}
+
+func (x *ControlFrame) GetAttachMomentMs() int64 {
+	if x != nil {
+		return x.AttachMomentMs
+	}
+	return 0
 }
 
 type SendCommandRequest struct {
@@ -2307,7 +2326,14 @@ type WebQueryStreamHistoryRequest struct {
 	NotBeforeMs int64                  `protobuf:"varint,4,opt,name=not_before_ms,json=notBeforeMs,proto3" json:"not_before_ms,omitempty"` // epoch ms time floor; 0 = no lower bound
 	// cursor is the opaque pagination cursor from a previous WebQueryStreamHistoryResponse.
 	// Events older than the cursor position are returned. Empty = start from latest.
-	Cursor        []byte `protobuf:"bytes,5,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	Cursor []byte `protobuf:"bytes,5,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	// not_after_ms is the epoch-ms time ceiling. 0 = no upper bound (back-compat).
+	// INCLUSIVE: events with timestamp == not_after_ms are returned. Set by the
+	// web client to the Subscribe attach_moment_ms (carried on the REPLAY_COMPLETE
+	// ControlFrame) so backfill returns only events that existed before the live
+	// stream attached — eliminating the connect-time replay/backfill race
+	// (holomush-iu8j; holomush-fujt Fix B).
+	NotAfterMs    int64 `protobuf:"varint,6,opt,name=not_after_ms,json=notAfterMs,proto3" json:"not_after_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2375,6 +2401,13 @@ func (x *WebQueryStreamHistoryRequest) GetCursor() []byte {
 		return x.Cursor
 	}
 	return nil
+}
+
+func (x *WebQueryStreamHistoryRequest) GetNotAfterMs() int64 {
+	if x != nil {
+		return x.NotAfterMs
+	}
+	return 0
 }
 
 type WebQueryStreamHistoryResponse struct {
@@ -3046,11 +3079,12 @@ var File_holomush_web_v1_web_proto protoreflect.FileDescriptor
 
 const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\n" +
-	"\x19holomush/web/v1/web.proto\x12\x0fholomush.web.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x85\x01\n" +
+	"\x19holomush/web/v1/web.proto\x12\x0fholomush.web.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xaf\x01\n" +
 	"\fControlFrame\x126\n" +
 	"\x06signal\x18\x01 \x01(\x0e2\x1e.holomush.web.v1.ControlSignalR\x06signal\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12#\n" +
-	"\rconnection_id\x18\x03 \x01(\tR\fconnectionId\"l\n" +
+	"\rconnection_id\x18\x03 \x01(\tR\fconnectionId\x12(\n" +
+	"\x10attach_moment_ms\x18\x04 \x01(\x03R\x0eattachMomentMs\"l\n" +
 	"\x12SendCommandRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x12\n" +
@@ -3198,14 +3232,16 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\bmetadata\x18\x04 \x03(\v2-.holomush.web.v1.WebContentItem.MetadataEntryR\bmetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa7\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc9\x01\n" +
 	"\x1cWebQueryStreamHistoryRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x16\n" +
 	"\x06stream\x18\x02 \x01(\tR\x06stream\x12\x14\n" +
 	"\x05count\x18\x03 \x01(\x05R\x05count\x12\"\n" +
 	"\rnot_before_ms\x18\x04 \x01(\x03R\vnotBeforeMs\x12\x16\n" +
-	"\x06cursor\x18\x05 \x01(\fR\x06cursor\"\x8f\x01\n" +
+	"\x06cursor\x18\x05 \x01(\fR\x06cursor\x12 \n" +
+	"\fnot_after_ms\x18\x06 \x01(\x03R\n" +
+	"notAfterMs\"\x8f\x01\n" +
 	"\x1dWebQueryStreamHistoryResponse\x122\n" +
 	"\x06events\x18\x01 \x03(\v2\x1a.holomush.web.v1.GameEventR\x06events\x12\x19\n" +
 	"\bhas_more\x18\x02 \x01(\bR\ahasMore\x12\x1f\n" +

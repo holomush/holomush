@@ -359,4 +359,52 @@ var _ = Describe("PostgresColdTier", func() {
 			Expect(found).To(BeFalse())
 		})
 	})
+
+	// holomush-iu8j: cross-tier boundary consistency. Hot tier
+	// (matchesQuery via ev.Timestamp.After(NotAfter)) treats the boundary
+	// as INCLUSIVE — events with timestamp == NotAfter are returned. Cold
+	// tier MUST match (uses SQL `timestamp <= $N` at cold_postgres.go).
+	// This Describe pins the cold-tier semantics so a future SQL refactor
+	// can't accidentally make NotAfter exclusive without surfacing as a
+	// test failure (would manifest in production as a perceptible
+	// "missing event" UX on the connect-time backfill path).
+	Describe("NotAfter boundary inclusivity (cross-tier consistency, iu8j)", func() {
+		It("includes event whose timestamp equals NotAfter (inclusive boundary)", func() {
+			pool := newIntegrationPool()
+			ctx := context.Background()
+			subject := eventbus.Subject("events.main.location.01HXIU8JBNDRY00000000000A")
+
+			// Insert two events: one AT the boundary timestamp (must
+			// be included) and one strictly after (must be excluded).
+			boundary := time.Now().UTC().Truncate(time.Microsecond)
+			atID := integrationULID(uint64(boundary.UnixMilli()))
+			afterID := integrationULID(uint64(boundary.Add(1 * time.Second).UnixMilli()))
+			insertIntegrationAuditRowAt(pool, atID, subject, 1, boundary)
+			insertIntegrationAuditRowAt(pool, afterID, subject, 2, boundary.Add(1*time.Second))
+
+			tier := newPostgresColdTier(pool)
+			events, err := tier.Read(
+				ctx,
+				eventbus.HistoryQuery{
+					Subject:   subject,
+					Direction: eventbus.DirectionForward,
+					NotAfter:  boundary,
+				},
+				time.Time{}, // edge unused for cold reads
+				10,
+				nil,
+			)
+			Expect(err).NotTo(HaveOccurred())
+			gotIDs := make([]string, 0, len(events))
+			for _, ev := range events {
+				gotIDs = append(gotIDs, ev.ID.String())
+			}
+			Expect(gotIDs).To(ContainElement(atID.String()),
+				"event with timestamp == NotAfter MUST be included (inclusive boundary — iu8j); "+
+					"if missing, the cold tier's `timestamp <= $N` clause has drifted to `<` and "+
+					"will silently drop events at the connect-time attach moment")
+			Expect(gotIDs).NotTo(ContainElement(afterID.String()),
+				"event with timestamp > NotAfter MUST be excluded")
+		})
+	})
 })

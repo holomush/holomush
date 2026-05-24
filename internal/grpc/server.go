@@ -98,12 +98,22 @@ func recordSpanError(span trace.Span, err error) {
 }
 
 // replayCompleteFrame returns a SubscribeResponse containing the
-// REPLAY_COMPLETE control signal.
-func replayCompleteFrame() *corev1.SubscribeResponse {
+// REPLAY_COMPLETE control signal and the server's Subscribe-attach
+// moment as epoch-ms (holomush-iu8j). The client passes this value
+// back as not_after_ms on subsequent WebQueryStreamHistory backfill
+// calls so backfill returns only events that existed before the live
+// stream attached — eliminating the connect-time replay/backfill race
+// (fujt Fix B).
+//
+// attachMomentMs=0 is the legacy/no-op sentinel: clients reading 0
+// MUST treat it as "no upper bound", preserving back-compat with
+// servers that don't compute the attach moment.
+func replayCompleteFrame(attachMomentMs int64) *corev1.SubscribeResponse {
 	return &corev1.SubscribeResponse{
 		Frame: &corev1.SubscribeResponse_Control{
 			Control: &corev1.ControlFrame{
-				Signal: corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE,
+				Signal:         corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE,
+				AttachMomentMs: attachMomentMs,
 			},
 		},
 	}
@@ -988,6 +998,21 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		return oops.Code("SUBSCRIBE_FAILED").With("session_id", req.SessionId).Wrap(subErr)
 	}
 	openSpan.End()
+
+	// Capture the Subscribe-attach moment IMMEDIATELY after OpenSession
+	// returns (holomush-iu8j). This is the latest server timestamp that
+	// bounds what backfill MIGHT need to deliver: events with a
+	// timestamp later than attachMoment are guaranteed to go through
+	// the live Subscribe stream (the durable consumer is now wired and
+	// receiving), so backfill never has to cover them. The client
+	// passes this value back on WebQueryStreamHistory as not_after_ms
+	// to eliminate the connect-time replay/backfill race (fujt Fix B).
+	//
+	// Server-side time source: avoids the clock-skew risk a
+	// client-computed value would introduce. Both publish-side
+	// timestamps and this attach moment come from the same process
+	// clock.
+	attachMomentMs := time.Now().UTC().UnixMilli()
 	defer func() {
 		if closeErr := busStream.Close(); closeErr != nil {
 			slog.WarnContext(ctx, "bus stream close failed", "session_id", req.SessionId, "error", closeErr)
@@ -1033,7 +1058,7 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	// This is the latency-budget boundary for holomush-87qu: time from
 	// Subscribe RPC entry to this Send is what the user perceives as the
 	// 'syncing' window on the server side.
-	if err := stream.Send(replayCompleteFrame()); err != nil {
+	if err := stream.Send(replayCompleteFrame(attachMomentMs)); err != nil {
 		return oops.With("session_id", req.SessionId).Wrap(err)
 	}
 	subscribeSpan.AddEvent("subscribe.replay_complete_sent")

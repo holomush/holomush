@@ -1222,3 +1222,80 @@ func TestQueryStreamHistory_StaffOverride_BypassesHardGate(t *testing.T) {
 	})
 	require.NoError(t, err, "staff role must bypass location hard-gate (I-PRIV-6)")
 }
+
+// TestQueryStreamHistoryNotAfterMsPlumbing pins the wire contract for
+// holomush-iu8j (cursor-bounded backfill). The handler MUST plumb
+// req.NotAfterMs into HistoryQuery.NotAfter (UTC, ms precision) so
+// the tier reads honor the Subscribe-attach-moment bound the client
+// sends; req.NotAfterMs=0 MUST stay zero on the HistoryQuery
+// (back-compat with legacy clients that don't know about the new
+// field).
+//
+// Invariants pinned: I-IU8J-1 (NotAfter is forwarded with ms-precision
+// UTC semantics), I-IU8J-2 (zero-as-unbounded). Tier-level filtering
+// coverage lives in internal/eventbus/history/*_test.go.
+func TestQueryStreamHistoryNotAfterMsPlumbing(t *testing.T) {
+	t.Parallel()
+
+	// Pick a deterministic attach moment outside any subtest so all
+	// cases share the same expected non-zero value.
+	attachMoment := time.Now().UTC().Add(-1 * time.Minute).Truncate(time.Millisecond)
+
+	tests := []struct {
+		name        string
+		notAfterMs  int64
+		wantNotZero bool      // when true, want NotAfter.Equal(attachMoment); when false, want NotAfter.IsZero()
+		want        time.Time // only consulted when wantNotZero == true
+	}{
+		{
+			name:        "non-zero ms forwards as UTC time at ms precision (I-IU8J-1)",
+			notAfterMs:  attachMoment.UnixMilli(),
+			wantNotZero: true,
+			want:        attachMoment,
+		},
+		{
+			name:        "zero stays zero on HistoryQuery — back-compat with legacy clients (I-IU8J-2)",
+			notAfterMs:  0,
+			wantNotZero: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Fresh session + reader per case so reader.gotQ captures
+			// THIS case's request and parallel subtests don't share state.
+			future := time.Now().Add(time.Hour)
+			locA := ulid.MustParse("01HYXLOCA0000000000000000A")
+			charID := ulid.MustParse("01HYXCHAR00000000000000001")
+			sess := newTestSessionStore(t, map[string]*session.Info{
+				"sess-1": {
+					ID:          "sess-1",
+					CharacterID: charID,
+					LocationID:  locA,
+					ExpiresAt:   &future,
+				},
+			})
+			reader := &fakeHistoryReader{events: nil}
+			s := newQueryStreamHistoryServer(t, reader, sess)
+
+			_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+				SessionId:  "sess-1",
+				Stream:     "location:" + locA.String(),
+				NotAfterMs: tc.notAfterMs,
+			})
+			require.NoError(t, err, "request setup should succeed")
+
+			if tc.wantNotZero {
+				require.True(t, reader.gotQ.NotAfter.Equal(tc.want),
+					"HistoryQuery.NotAfter MUST equal time.UnixMilli(req.NotAfterMs).UTC(); got %s want %s",
+					reader.gotQ.NotAfter, tc.want)
+			} else {
+				require.True(t, reader.gotQ.NotAfter.IsZero(),
+					"HistoryQuery.NotAfter MUST be zero when req.NotAfterMs == 0 (back-compat with legacy clients); got %s",
+					reader.gotQ.NotAfter)
+			}
+		})
+	}
+}
