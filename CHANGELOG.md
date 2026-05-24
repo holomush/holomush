@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.10](https://github.com/holomush/holomush/compare/v0.1.9...v0.1.10) (2026-05-24)
+
+
+### Features
+
+* **eventbus,web:** cursor-bounded backfill (iu8j, fujt Fix B) ([#4234](https://github.com/holomush/holomush/issues/4234)) ([46760ce](https://github.com/holomush/holomush/commit/46760ceab63e63208cd1965989a332473c2ee127))
+
+
+### Bug Fixes
+
+* **sandbox:** deploy-sandbox v-prefix image tag + repo-level deploy gate ([#4228](https://github.com/holomush/holomush/issues/4228)) ([d395f80](https://github.com/holomush/holomush/commit/d395f80f63384476728e4e870074bde2e3a9d41d))
+* **sandbox:** guest-reaper FK cascade, Secure cookies, OTel opt-in (live-log findings) ([#4233](https://github.com/holomush/holomush/issues/4233)) ([d4f8f11](https://github.com/holomush/holomush/commit/d4f8f1176960960e3e886d465d621cbc4d257d1d))
+* **workflows:** silence false-positive shellcheck SC2015 in bootstrap-sandbox ([#4231](https://github.com/holomush/holomush/issues/4231)) ([d4f4fcb](https://github.com/holomush/holomush/commit/d4f4fcba1d52b08a402c543ed1dcb21b0cec5aa9))
+
 ## [0.1.9](https://github.com/holomush/holomush/compare/v0.1.8...v0.1.9) (2026-05-23)
 
 
