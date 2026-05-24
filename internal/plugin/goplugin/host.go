@@ -520,7 +520,8 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 			go grpcPlugin.broker.AcceptAndServe(brokerID, proxyFactory)
 
 			requiredServices[svcName] = fmt.Sprintf("broker:%d", brokerID)
-			slog.Info(
+			slog.InfoContext(
+				ctx,
 				"started broker proxy for required service",
 				"plugin", manifest.Name,
 				"service", svcName,
@@ -642,7 +643,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 	// Log warning for unrecognized actor kinds (useful for debugging)
 	actorKind := event.ActorKind.String()
 	if actorKind == "unknown" {
-		slog.Warn("unrecognized actor kind, using 'unknown'",
+		slog.WarnContext(ctx, "unrecognized actor kind, using 'unknown'",
 			"kind", int(event.ActorKind))
 	}
 
