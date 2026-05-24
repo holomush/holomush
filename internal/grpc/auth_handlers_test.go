@@ -107,73 +107,89 @@ func TestAuthenticatePlayer_Success(t *testing.T) {
 	assert.Equal(t, charID.String(), resp.DefaultCharacterId)
 }
 
-func TestAuthenticatePlayer_InvalidCredentials(t *testing.T) {
-	ctx := context.Background()
-
-	authSvc := newMockAuthService(t)
-	authSvc.authenticatePlayerFunc = func(_ context.Context, _, _, _, _ string) (string, *auth.Player, error) {
-		return "", nil, auth.ErrNotFound
+// replaces: TestAuthenticatePlayer_InvalidCredentials,
+//
+//	TestAuthenticatePlayer_ServiceNotConfigured,
+//	TestAuthenticatePlayer_SessionRepoNotConfigured,
+//	TestAuthenticatePlayer_SessionRepoCreateFails
+func TestAuthenticatePlayer_ErrorPaths(t *testing.T) {
+	tests := []struct {
+		name            string
+		authSvcNil      bool
+		setupAuthSvc    func(*mockAuthServiceForHandlers)
+		sessionRepoNil  bool
+		wantMsgContains string
+		wantNotEmptyMsg bool
+	}{
+		{
+			name: "invalid credentials returns success=false",
+			setupAuthSvc: func(svc *mockAuthServiceForHandlers) {
+				svc.authenticatePlayerFunc = func(_ context.Context, _, _, _, _ string) (string, *auth.Player, error) {
+					return "", nil, auth.ErrNotFound
+				}
+			},
+			sessionRepoNil:  false,
+			wantNotEmptyMsg: true,
+		},
+		{
+			name:            "auth service not configured returns success=false with not configured message",
+			authSvcNil:      true,
+			sessionRepoNil:  true,
+			wantMsgContains: "not configured",
+		},
+		{
+			name:            "session repo not configured returns success=false with not configured message",
+			sessionRepoNil:  true,
+			wantMsgContains: "not configured",
+		},
+		{
+			name: "auth service error returns success=false",
+			setupAuthSvc: func(svc *mockAuthServiceForHandlers) {
+				svc.authenticatePlayerFunc = func(_ context.Context, _, _, _, _ string) (string, *auth.Player, error) {
+					return "", nil, errors.New("connection refused")
+				}
+			},
+			sessionRepoNil:  false,
+			wantNotEmptyMsg: true,
+		},
 	}
 
-	server := &CoreServer{
-		engine: core.NewEngine(core.NewMemoryEventStore()),
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
 
-		sessionStore:      session.NewMemStore(),
-		authService:       authSvc,
-		playerSessionRepo: authmocks.NewMockPlayerSessionRepository(t),
+			server := &CoreServer{
+				engine:       core.NewEngine(core.NewMemoryEventStore()),
+				sessionStore: session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+			}
+
+			if !tt.authSvcNil {
+				authSvc := newMockAuthService(t)
+				if tt.setupAuthSvc != nil {
+					tt.setupAuthSvc(authSvc)
+				}
+				server.authService = authSvc
+			}
+
+			if !tt.sessionRepoNil {
+				server.playerSessionRepo = authmocks.NewMockPlayerSessionRepository(t)
+			}
+
+			resp, err := server.AuthenticatePlayer(ctx, &corev1.AuthenticatePlayerRequest{
+				Username: "alice",
+				Password: "password123",
+			})
+			require.NoError(t, err)
+			assert.False(t, resp.Success)
+
+			if tt.wantMsgContains != "" {
+				assert.Contains(t, resp.ErrorMessage, tt.wantMsgContains)
+			}
+			if tt.wantNotEmptyMsg {
+				assert.NotEmpty(t, resp.ErrorMessage)
+			}
+		})
 	}
-
-	resp, err := server.AuthenticatePlayer(ctx, &corev1.AuthenticatePlayerRequest{
-		Username: "baduser",
-		Password: "badpass",
-	})
-	require.NoError(t, err)
-
-	assert.False(t, resp.Success)
-	assert.NotEmpty(t, resp.ErrorMessage)
-}
-
-func TestAuthenticatePlayer_ServiceNotConfigured(t *testing.T) {
-	ctx := context.Background()
-
-	server := &CoreServer{
-		engine: core.NewEngine(core.NewMemoryEventStore()),
-
-		sessionStore: session.NewMemStore(),
-		// authService is nil
-	}
-
-	resp, err := server.AuthenticatePlayer(ctx, &corev1.AuthenticatePlayerRequest{
-		Username: "alice",
-		Password: "password123",
-	})
-	require.NoError(t, err)
-
-	assert.False(t, resp.Success)
-	assert.Contains(t, resp.ErrorMessage, "not configured")
-}
-
-func TestAuthenticatePlayer_SessionRepoNotConfigured(t *testing.T) {
-	ctx := context.Background()
-
-	authSvc := newMockAuthService(t)
-
-	server := &CoreServer{
-		engine: core.NewEngine(core.NewMemoryEventStore()),
-
-		sessionStore: session.NewMemStore(),
-		authService:  authSvc,
-		// playerSessionRepo is nil
-	}
-
-	resp, err := server.AuthenticatePlayer(ctx, &corev1.AuthenticatePlayerRequest{
-		Username: "alice",
-		Password: "password123",
-	})
-	require.NoError(t, err)
-
-	assert.False(t, resp.Success)
-	assert.Contains(t, resp.ErrorMessage, "not configured")
 }
 
 // --- SelectCharacter ---
@@ -522,48 +538,110 @@ func TestCreatePlayer_Success(t *testing.T) {
 	assert.Empty(t, resp.Characters)
 }
 
-func TestCreatePlayer_UsernameTaken(t *testing.T) {
-	ctx := context.Background()
-
-	authSvc := newMockAuthService(t)
-	authSvc.createPlayerFunc = func(_ context.Context, _, _, _ string) (*auth.Player, *auth.PlayerSession, string, error) {
-		return nil, nil, "", auth.ErrNotFound // simulates username taken via oops
+// replaces: TestCreatePlayer_ServiceNotConfigured,
+//
+//	TestCreatePlayer_UsernameTaken,
+//	TestCreatePlayerReturnsGenericMessageForUnknownError,
+//	TestCreatePlayerReturnsSanitizedMessageForUsernameTaken
+func TestCreatePlayer_ErrorPaths(t *testing.T) {
+	tests := []struct {
+		name               string
+		setupServer        func(t *testing.T) *CoreServer
+		wantMsgContains    string
+		wantNotEmptyMsg    bool
+		wantMsgEquals      string
+		wantMsgNotContains []string
+	}{
+		{
+			name: "service not configured returns success=false with not configured message",
+			setupServer: func(_ *testing.T) *CoreServer {
+				return &CoreServer{
+					engine:       core.NewEngine(core.NewMemoryEventStore()),
+					sessionStore: session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+				}
+			},
+			wantMsgContains: "not configured",
+		},
+		{
+			name: "username taken returns success=false with non-empty error message",
+			setupServer: func(t *testing.T) *CoreServer {
+				authSvc := newMockAuthService(t)
+				authSvc.createPlayerFunc = func(_ context.Context, _, _, _ string) (*auth.Player, *auth.PlayerSession, string, error) {
+					return nil, nil, "", auth.ErrNotFound // simulates username taken via oops
+				}
+				return &CoreServer{
+					engine:       core.NewEngine(core.NewMemoryEventStore()),
+					sessionStore: session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					authService:  authSvc,
+				}
+			},
+			wantNotEmptyMsg: true,
+		},
+		{
+			name: "unknown error returns generic message without leaking internal details",
+			setupServer: func(t *testing.T) *CoreServer {
+				authSvc := newMockAuthService(t)
+				authSvc.createPlayerFunc = func(_ context.Context, _, _, _ string) (*auth.Player, *auth.PlayerSession, string, error) {
+					// Plain error — no oops code. Client MUST NOT see the raw message.
+					return nil, nil, "", errors.New("pq: relation \"players_private_v3\" does not exist")
+				}
+				return &CoreServer{
+					engine:            core.NewEngine(core.NewMemoryEventStore()),
+					sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					authService:       authSvc,
+					playerSessionRepo: authmocks.NewMockPlayerSessionRepository(t),
+				}
+			},
+			wantMsgEquals:      msgGenericRequestFailed,
+			wantMsgNotContains: []string{"players_private_v3", "pq:"},
+		},
+		{
+			name: "oops username taken code returns sanitized message without leaking schema details",
+			setupServer: func(t *testing.T) *CoreServer {
+				authSvc := newMockAuthService(t)
+				authSvc.createPlayerFunc = func(_ context.Context, _, _, _ string) (*auth.Player, *auth.PlayerSession, string, error) {
+					return nil, nil, "", oopsCoded("REGISTER_USERNAME_TAKEN",
+						"username \"alice\" is already taken in schema auth_v3",
+						"operation", "check username availability")
+				}
+				return &CoreServer{
+					engine:            core.NewEngine(core.NewMemoryEventStore()),
+					sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					authService:       authSvc,
+					playerSessionRepo: authmocks.NewMockPlayerSessionRepository(t),
+				}
+			},
+			wantMsgEquals:      msgRegisterUsernameTaken,
+			wantMsgNotContains: []string{"schema", "operation"},
+		},
 	}
 
-	server := &CoreServer{
-		engine: core.NewEngine(core.NewMemoryEventStore()),
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			server := tt.setupServer(t)
 
-		sessionStore: session.NewMemStore(),
-		authService:  authSvc,
+			resp, err := server.CreatePlayer(ctx, &corev1.CreatePlayerRequest{
+				Username: "alice",
+				Password: "strongpass1",
+			})
+			require.NoError(t, err)
+			assert.False(t, resp.Success)
+
+			if tt.wantMsgContains != "" {
+				assert.Contains(t, resp.ErrorMessage, tt.wantMsgContains)
+			}
+			if tt.wantNotEmptyMsg {
+				assert.NotEmpty(t, resp.ErrorMessage)
+			}
+			if tt.wantMsgEquals != "" {
+				assert.Equal(t, tt.wantMsgEquals, resp.ErrorMessage)
+			}
+			for _, notContains := range tt.wantMsgNotContains {
+				assert.NotContains(t, resp.ErrorMessage, notContains)
+			}
+		})
 	}
-
-	resp, err := server.CreatePlayer(ctx, &corev1.CreatePlayerRequest{
-		Username: "taken",
-		Password: "strongpass1",
-	})
-	require.NoError(t, err)
-
-	assert.False(t, resp.Success)
-	assert.NotEmpty(t, resp.ErrorMessage)
-}
-
-func TestCreatePlayer_ServiceNotConfigured(t *testing.T) {
-	ctx := context.Background()
-
-	server := &CoreServer{
-		engine: core.NewEngine(core.NewMemoryEventStore()),
-
-		sessionStore: session.NewMemStore(),
-	}
-
-	resp, err := server.CreatePlayer(ctx, &corev1.CreatePlayerRequest{
-		Username: "alice",
-		Password: "password123",
-	})
-	require.NoError(t, err)
-
-	assert.False(t, resp.Success)
-	assert.Contains(t, resp.ErrorMessage, "not configured")
 }
 
 // --- CreateCharacter ---
@@ -601,67 +679,142 @@ func TestCreateCharacter_Success(t *testing.T) {
 	assert.Equal(t, "New Hero", resp.CharacterName)
 }
 
-func TestCreateCharacter_NotConfigured(t *testing.T) {
-	server := &CoreServer{
-		engine: core.NewEngine(core.NewMemoryEventStore()),
-		// playerSessionRepo is nil — resolvePlayerSession returns error
+// replaces: TestCreateCharacter_InvalidSession,
+//
+//	TestCreateCharacter_NotConfigured,
+//	TestCreateCharacterReturnsSanitizedMessageForNameTaken
+func TestCreateCharacter_ErrorPaths(t *testing.T) {
+	tests := []struct {
+		name               string
+		token              string
+		setupServer        func(t *testing.T) *CoreServer
+		wantMsgContains    string
+		wantMsgEquals      string
+		wantMsgNotContains []string
+	}{
+		{
+			name:  "invalid session token returns success=false with invalid or expired message",
+			token: "bad-token",
+			setupServer: func(t *testing.T) *CoreServer {
+				sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+				tokenHash := auth.HashSessionToken("bad-token")
+				sessionRepo.EXPECT().GetByTokenHash(mock.Anything, tokenHash).
+					Return(nil, auth.ErrNotFound)
+				return &CoreServer{
+					engine:            core.NewEngine(core.NewMemoryEventStore()),
+					playerSessionRepo: sessionRepo,
+					characterService:  newMockCharacterService(t),
+				}
+			},
+			wantMsgContains: "invalid or expired",
+		},
+		{
+			name:  "player session repo not configured returns success=false with invalid or expired message",
+			token: "some-token",
+			setupServer: func(_ *testing.T) *CoreServer {
+				// playerSessionRepo is nil — resolvePlayerSession returns error
+				return &CoreServer{
+					engine: core.NewEngine(core.NewMemoryEventStore()),
+				}
+			},
+			wantMsgContains: "invalid or expired",
+		},
+		{
+			name:  "oops character name taken code returns sanitized message without leaking shard details",
+			token: validToken,
+			setupServer: func(t *testing.T) *CoreServer {
+				playerID := ulid.Make()
+				ps := makePlayerSession(playerID)
+				sessionRepo := setupSessionRepo(t, ps)
+				charSvc := newMockCharacterService(t)
+				charSvc.createFunc = func(_ context.Context, _ ulid.ULID, _ string) (*world.Character, error) {
+					return nil, oopsCoded("CHARACTER_NAME_TAKEN",
+						"character \"Hero\" is already taken in shard char_shard_3",
+						"shard", "char_shard_3")
+				}
+				return &CoreServer{
+					engine:            core.NewEngine(core.NewMemoryEventStore()),
+					sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					playerSessionRepo: sessionRepo,
+					characterService:  charSvc,
+				}
+			},
+			wantMsgEquals:      msgCharacterNameTaken,
+			wantMsgNotContains: []string{"char_shard_3", "shard"},
+		},
 	}
-	resp, err := server.CreateCharacter(context.Background(), &corev1.CreateCharacterRequest{
-		PlayerSessionToken: "some-token",
-		CharacterName:      "Hero",
-	})
-	require.NoError(t, err)
-	assert.False(t, resp.Success)
-	assert.Contains(t, resp.ErrorMessage, "invalid or expired")
-}
 
-func TestCreateCharacter_InvalidSession(t *testing.T) {
-	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
-	tokenHash := auth.HashSessionToken("bad-token")
-	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, tokenHash).
-		Return(nil, auth.ErrNotFound)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := tt.setupServer(t)
 
-	server := &CoreServer{
-		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		playerSessionRepo: sessionRepo,
-		characterService:  newMockCharacterService(t),
+			resp, err := server.CreateCharacter(context.Background(), &corev1.CreateCharacterRequest{
+				PlayerSessionToken: tt.token,
+				CharacterName:      "Hero",
+			})
+			require.NoError(t, err)
+			assert.False(t, resp.Success)
+
+			if tt.wantMsgContains != "" {
+				assert.Contains(t, resp.ErrorMessage, tt.wantMsgContains)
+			}
+			if tt.wantMsgEquals != "" {
+				assert.Equal(t, tt.wantMsgEquals, resp.ErrorMessage)
+			}
+			for _, notContains := range tt.wantMsgNotContains {
+				assert.NotContains(t, resp.ErrorMessage, notContains)
+			}
+		})
 	}
-	resp, err := server.CreateCharacter(context.Background(), &corev1.CreateCharacterRequest{
-		PlayerSessionToken: "bad-token",
-		CharacterName:      "Hero",
-	})
-	require.NoError(t, err)
-	assert.False(t, resp.Success)
-	assert.Contains(t, resp.ErrorMessage, "invalid or expired")
 }
 
 // --- ListCharacters ---
 
-func TestListCharacters_InvalidSession_ReturnsError(t *testing.T) {
-	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
-	tokenHash := auth.HashSessionToken("bad-token")
-	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, tokenHash).
-		Return(nil, auth.ErrNotFound)
-
-	server := &CoreServer{
-		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		playerSessionRepo: sessionRepo,
+// replaces: TestListCharacters_InvalidSession_ReturnsError,
+//
+//	TestListCharacters_NotConfigured_ReturnsError
+func TestListCharacters_ErrorPaths(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupServer func(t *testing.T) *CoreServer
+		token       string
+	}{
+		{
+			name: "invalid session token returns error",
+			setupServer: func(t *testing.T) *CoreServer {
+				t.Helper()
+				sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+				sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken("bad-token")).
+					Return(nil, auth.ErrNotFound)
+				return &CoreServer{
+					engine:            core.NewEngine(core.NewMemoryEventStore()),
+					playerSessionRepo: sessionRepo,
+				}
+			},
+			token: "bad-token",
+		},
+		{
+			name: "session repo not configured returns error",
+			setupServer: func(t *testing.T) *CoreServer {
+				t.Helper()
+				return &CoreServer{
+					engine: core.NewEngine(core.NewMemoryEventStore()),
+					// playerSessionRepo is nil
+				}
+			},
+			token: "some-token",
+		},
 	}
-	_, err := server.ListCharacters(context.Background(), &corev1.ListCharactersRequest{
-		PlayerSessionToken: "bad-token",
-	})
-	assert.Error(t, err, "ListCharacters should return error for invalid session")
-}
 
-func TestListCharacters_NotConfigured_ReturnsError(t *testing.T) {
-	server := &CoreServer{
-		engine: core.NewEngine(core.NewMemoryEventStore()),
-		// playerSessionRepo is nil
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := tt.setupServer(t)
+			_, err := server.ListCharacters(context.Background(), &corev1.ListCharactersRequest{
+				PlayerSessionToken: tt.token,
+			})
+			assert.Error(t, err)
+		})
 	}
-	_, err := server.ListCharacters(context.Background(), &corev1.ListCharactersRequest{
-		PlayerSessionToken: "some-token",
-	})
-	assert.Error(t, err, "ListCharacters should return error when session repo not configured")
 }
 
 func TestListCharacters_Success(t *testing.T) {
@@ -698,72 +851,75 @@ func TestListCharacters_Success(t *testing.T) {
 	assert.Empty(t, resp.Characters[0].LastLocation, "no worldQuerier = no location name, never expose raw IDs")
 }
 
-func TestListCharacters_ResolvesLocationName(t *testing.T) {
-	ctx := context.Background()
-	playerID := ulid.Make()
-	charID := ulid.Make()
-	locID := ulid.Make()
-
-	ps := makePlayerSession(playerID)
-	sessionRepo := setupSessionRepo(t, ps)
-
-	charRepo := authmocks.NewMockCharacterRepository(t)
-	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
-		Return([]*world.Character{
-			{ID: charID, PlayerID: playerID, Name: "Bob", LocationID: &locID},
-		}, nil)
-
-	server := &CoreServer{
-		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
-		playerSessionRepo: sessionRepo,
-		charRepo:          charRepo,
-		worldQuerier: &mockWorldQuerier{
-			location: &world.Location{ID: locID, Name: "The Nexus"},
+// replaces: TestListCharacters_ResolvesLocationName,
+//
+//	TestListCharacters_LocationLookupFailure_OmitsLocation
+func TestListCharacters_LocationDerivation(t *testing.T) {
+	tests := []struct {
+		name              string
+		charName          string
+		setupWorldQuerier func(locID ulid.ULID) WorldQuerier
+		wantLastLocation  string
+	}{
+		{
+			name:     "resolves location name when world querier succeeds",
+			charName: "Bob",
+			setupWorldQuerier: func(locID ulid.ULID) WorldQuerier {
+				return &mockWorldQuerier{
+					location: &world.Location{ID: locID, Name: "The Nexus"},
+				}
+			},
+			wantLastLocation: "The Nexus",
+		},
+		{
+			name:     "location lookup failure omits last location field",
+			charName: "Carol",
+			setupWorldQuerier: func(_ ulid.ULID) WorldQuerier {
+				return &mockWorldQuerier{
+					locErr: errors.New("db connection failed"),
+				}
+			},
+			wantLastLocation: "",
 		},
 	}
 
-	resp, err := server.ListCharacters(ctx, &corev1.ListCharactersRequest{
-		PlayerSessionToken: validToken,
-	})
-	require.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			playerID := ulid.Make()
+			charID := ulid.Make()
+			locID := ulid.Make()
 
-	require.Len(t, resp.Characters, 1)
-	assert.Equal(t, "The Nexus", resp.Characters[0].LastLocation, "should resolve location ID to name")
-}
+			ps := makePlayerSession(playerID)
+			sessionRepo := setupSessionRepo(t, ps)
 
-func TestListCharacters_LocationLookupFailure_OmitsLocation(t *testing.T) {
-	ctx := context.Background()
-	playerID := ulid.Make()
-	charID := ulid.Make()
-	locID := ulid.Make()
+			charRepo := authmocks.NewMockCharacterRepository(t)
+			charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+				Return([]*world.Character{
+					{ID: charID, PlayerID: playerID, Name: tt.charName, LocationID: &locID},
+				}, nil)
 
-	ps := makePlayerSession(playerID)
-	sessionRepo := setupSessionRepo(t, ps)
+			server := &CoreServer{
+				engine:            core.NewEngine(core.NewMemoryEventStore()),
+				sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+				playerSessionRepo: sessionRepo,
+				charRepo:          charRepo,
+				worldQuerier:      tt.setupWorldQuerier(locID),
+			}
 
-	charRepo := authmocks.NewMockCharacterRepository(t)
-	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
-		Return([]*world.Character{
-			{ID: charID, PlayerID: playerID, Name: "Carol", LocationID: &locID},
-		}, nil)
+			resp, err := server.ListCharacters(ctx, &corev1.ListCharactersRequest{
+				PlayerSessionToken: validToken,
+			})
+			require.NoError(t, err)
+			require.Len(t, resp.Characters, 1)
 
-	server := &CoreServer{
-		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
-		playerSessionRepo: sessionRepo,
-		charRepo:          charRepo,
-		worldQuerier: &mockWorldQuerier{
-			locErr: errors.New("db connection failed"),
-		},
+			if tt.wantLastLocation != "" {
+				assert.Equal(t, tt.wantLastLocation, resp.Characters[0].LastLocation)
+			} else {
+				assert.Empty(t, resp.Characters[0].LastLocation)
+			}
+		})
 	}
-
-	resp, err := server.ListCharacters(ctx, &corev1.ListCharactersRequest{
-		PlayerSessionToken: validToken,
-	})
-	require.NoError(t, err)
-
-	require.Len(t, resp.Characters, 1)
-	assert.Empty(t, resp.Characters[0].LastLocation, "should not expose ULID when lookup fails")
 }
 
 // --- RequestPasswordReset ---
@@ -837,29 +993,67 @@ func TestConfirmPasswordReset_Success(t *testing.T) {
 	assert.True(t, resp.Success)
 }
 
-func TestConfirmPasswordReset_InvalidToken(t *testing.T) {
-	ctx := context.Background()
-
-	resetSvc := newMockResetService(t)
-	resetSvc.resetPasswordFunc = func(_ context.Context, _, _ string) error {
-		return auth.ErrNotFound
+// replaces: TestConfirmPasswordReset_InvalidToken,
+//
+//	TestConfirmPasswordResetReturnsSanitizedMessageForInvalidToken
+func TestConfirmPasswordReset_InvalidTokenPaths(t *testing.T) {
+	tests := []struct {
+		name               string
+		resetPasswordFunc  func(context.Context, string, string) error
+		wantNotEmptyMsg    bool
+		wantMsgEquals      string
+		wantMsgNotContains []string
+	}{
+		{
+			name: "invalid token returns success=false with non-empty error message",
+			resetPasswordFunc: func(_ context.Context, _, _ string) error {
+				return auth.ErrNotFound
+			},
+			wantNotEmptyMsg: true,
+		},
+		{
+			name: "sanitized message hides internal details for coded reset token error",
+			resetPasswordFunc: func(_ context.Context, _, _ string) error {
+				return oopsCoded("RESET_TOKEN_INVALID",
+					"reset token not found in table password_resets on host db.internal.svc:5432",
+					"host", "db.internal.svc:5432")
+			},
+			wantMsgEquals:      msgResetTokenInvalid,
+			wantMsgNotContains: []string{"db.internal.svc", "password_resets"},
+		},
 	}
 
-	server := &CoreServer{
-		engine: core.NewEngine(core.NewMemoryEventStore()),
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
 
-		sessionStore: session.NewMemStore(),
-		resetService: resetSvc,
+			resetSvc := newMockResetService(t)
+			resetSvc.resetPasswordFunc = tt.resetPasswordFunc
+
+			server := &CoreServer{
+				engine:       core.NewEngine(core.NewMemoryEventStore()),
+				sessionStore: session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+				resetService: resetSvc,
+			}
+
+			resp, err := server.ConfirmPasswordReset(ctx, &corev1.ConfirmPasswordResetRequest{
+				Token:       "bad-token",
+				NewPassword: "newstrongpass",
+			})
+			require.NoError(t, err)
+			assert.False(t, resp.Success)
+
+			if tt.wantNotEmptyMsg {
+				assert.NotEmpty(t, resp.ErrorMessage)
+			}
+			if tt.wantMsgEquals != "" {
+				assert.Equal(t, tt.wantMsgEquals, resp.ErrorMessage)
+			}
+			for _, notContains := range tt.wantMsgNotContains {
+				assert.NotContains(t, resp.ErrorMessage, notContains)
+			}
+		})
 	}
-
-	resp, err := server.ConfirmPasswordReset(ctx, &corev1.ConfirmPasswordResetRequest{
-		Token:       "bad-token",
-		NewPassword: "newstrongpass",
-	})
-	require.NoError(t, err)
-
-	assert.False(t, resp.Success)
-	assert.NotEmpty(t, resp.ErrorMessage)
 }
 
 // --- Logout ---
@@ -1012,40 +1206,53 @@ func TestLogout_Success(t *testing.T) {
 	assert.NotNil(t, resp)
 }
 
-func TestLogout_SessionNotFound(t *testing.T) {
+// replaces: TestLogout_SessionNotFound,
+//
+//	TestLogout_NotConfigured
+func TestLogout_ErrorPaths(t *testing.T) {
 	ctx := context.Background()
 
-	authSvc := newMockAuthService(t)
-	authSvc.logoutFunc = func(_ context.Context, _ string) (ulid.ULID, error) {
-		return ulid.ULID{}, auth.ErrNotFound
+	tests := []struct {
+		name        string
+		setupServer func(t *testing.T) *CoreServer
+		token       string
+	}{
+		{
+			name: "session not found returns error",
+			setupServer: func(t *testing.T) *CoreServer {
+				t.Helper()
+				authSvc := newMockAuthService(t)
+				authSvc.logoutFunc = func(_ context.Context, _ string) (ulid.ULID, error) {
+					return ulid.ULID{}, auth.ErrNotFound
+				}
+				return &CoreServer{
+					engine:       core.NewEngine(core.NewMemoryEventStore()),
+					sessionStore: session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					authService:  authSvc,
+				}
+			},
+			token: "some-token",
+		},
+		{
+			name: "not configured returns error",
+			setupServer: func(t *testing.T) *CoreServer {
+				t.Helper()
+				return &CoreServer{
+					engine:       core.NewEngine(core.NewMemoryEventStore()),
+					sessionStore: session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+				}
+			},
+			token: "some-token",
+		},
 	}
 
-	server := &CoreServer{
-		engine: core.NewEngine(core.NewMemoryEventStore()),
-
-		sessionStore: session.NewMemStore(),
-		authService:  authSvc,
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := tt.setupServer(t)
+			_, err := server.Logout(ctx, &corev1.LogoutRequest{PlayerSessionToken: tt.token})
+			assert.Error(t, err)
+		})
 	}
-
-	_, err := server.Logout(ctx, &corev1.LogoutRequest{
-		PlayerSessionToken: "some-token",
-	})
-	assert.Error(t, err)
-}
-
-func TestLogout_NotConfigured(t *testing.T) {
-	ctx := context.Background()
-
-	server := &CoreServer{
-		engine: core.NewEngine(core.NewMemoryEventStore()),
-
-		sessionStore: session.NewMemStore(),
-	}
-
-	_, err := server.Logout(ctx, &corev1.LogoutRequest{
-		PlayerSessionToken: "some-token",
-	})
-	assert.Error(t, err)
 }
 
 // --- resolvePlayerSession ---
@@ -1232,67 +1439,131 @@ func TestCheckPlayerSessionPopulatesPlayerIDIsGuestAndCharactersOnSuccess(t *tes
 	assert.Equal(t, charID.String(), resp.GetCharacters()[0].GetCharacterId())
 }
 
-// TestCheckPlayerSessionAuthFailureTranslatesToCodesUnauthenticated asserts
-// the server-side contract evolved by Task 6.5: known auth-failure oops codes
-// from the player session repo (PLAYER_SESSION_NOT_FOUND, PLAYER_SESSION_EXPIRED,
-// SESSION_NOT_FOUND) are translated to codes.Unauthenticated so the gRPC client
-// wrapper can re-inject an oops auth-failure code on the far side. Without
-// this translation the client wraps every error as RPC_FAILED and the
-// gateway's cookie-collision gate predicate cannot distinguish auth failure
-// from transport failure.
-func TestCheckPlayerSessionAuthFailureTranslatesToCodesUnauthenticated(t *testing.T) {
-	ctx := context.Background()
-
-	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
-	tokenHash := auth.HashSessionToken("bad-token")
-	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, tokenHash).
-		Return(nil, samberOops.Code("PLAYER_SESSION_NOT_FOUND").Errorf("unknown token"))
-
-	server := &CoreServer{
-		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
-		playerSessionRepo: sessionRepo,
+// TestCheckPlayerSession_ErrorTranslation consolidates the four error-path
+// tests for CheckPlayerSession into a single table-driven test.
+//
+// replaces: TestCheckPlayerSessionAuthFailureTranslatesToCodesUnauthenticated,
+//
+//	TestCheckPlayerSessionInfraFailureNotTranslated,
+//	TestCheckPlayerSessionWrapsPlayerLookupFailureAsPlayerLookupFailed,
+//	TestCheckPlayerSessionWrapsCharacterLookupFailureAsCharacterLookupFailed
+func TestCheckPlayerSession_ErrorTranslation(t *testing.T) {
+	tests := []struct {
+		name                   string
+		token                  string
+		setupServer            func(t *testing.T) *CoreServer
+		wantStatusCode         codes.Code // assert gRPC status code == this when non-zero
+		wantNotUnauthenticated bool       // assert status code (if present) != Unauthenticated
+		wantOopsCode           string     // assert top-level oops code via ErrorAs when non-empty
+	}{
+		{
+			name:  "known auth-failure oops code is translated to codes.Unauthenticated",
+			token: "bad-token",
+			setupServer: func(t *testing.T) *CoreServer {
+				sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+				tokenHash := auth.HashSessionToken("bad-token")
+				sessionRepo.EXPECT().GetByTokenHash(mock.Anything, tokenHash).
+					Return(nil, samberOops.Code("PLAYER_SESSION_NOT_FOUND").Errorf("unknown token"))
+				return &CoreServer{
+					engine:            core.NewEngine(core.NewMemoryEventStore()),
+					sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					playerSessionRepo: sessionRepo,
+				}
+			},
+			wantStatusCode: codes.Unauthenticated,
+		},
+		{
+			name: "infrastructure failure is not translated to Unauthenticated and carries NOT_CONFIGURED oops code",
+			setupServer: func(_ *testing.T) *CoreServer {
+				// playerSessionRepo unset → resolvePlayerSession returns NOT_CONFIGURED.
+				return &CoreServer{
+					engine:       core.NewEngine(core.NewMemoryEventStore()),
+					sessionStore: session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+				}
+			},
+			wantNotUnauthenticated: true,
+			wantOopsCode:           "NOT_CONFIGURED",
+		},
+		{
+			name: "player repo error is wrapped as PLAYER_LOOKUP_FAILED oops code",
+			setupServer: func(t *testing.T) *CoreServer {
+				playerID := ulid.Make()
+				ps := makePlayerSession(playerID)
+				sessionRepo := setupSessionRepo(t, ps)
+				playerRepo := authmocks.NewMockPlayerRepository(t)
+				playerRepo.EXPECT().GetByID(mock.Anything, playerID).
+					Return(nil, errors.New("connection refused"))
+				return &CoreServer{
+					engine:            core.NewEngine(core.NewMemoryEventStore()),
+					sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					playerSessionRepo: sessionRepo,
+					playerRepo:        playerRepo,
+				}
+			},
+			wantOopsCode: "PLAYER_LOOKUP_FAILED",
+		},
+		{
+			name: "character repo error is wrapped as CHARACTER_LOOKUP_FAILED oops code",
+			setupServer: func(t *testing.T) *CoreServer {
+				playerID := ulid.Make()
+				ps := makePlayerSession(playerID)
+				sessionRepo := setupSessionRepo(t, ps)
+				playerRepo := authmocks.NewMockPlayerRepository(t)
+				playerRepo.EXPECT().GetByID(mock.Anything, playerID).
+					Return(&auth.Player{ID: playerID, Username: "alice"}, nil)
+				charRepo := authmocks.NewMockCharacterRepository(t)
+				charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+					Return(nil, errors.New("char repo down"))
+				return &CoreServer{
+					engine:            core.NewEngine(core.NewMemoryEventStore()),
+					sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					playerSessionRepo: sessionRepo,
+					playerRepo:        playerRepo,
+					charRepo:          charRepo,
+				}
+			},
+			wantOopsCode: "CHARACTER_LOOKUP_FAILED",
+		},
 	}
 
-	resp, err := server.CheckPlayerSession(ctx, &corev1.CheckPlayerSessionRequest{
-		PlayerSessionToken: "bad-token",
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			server := tt.setupServer(t)
 
-	assert.Nil(t, resp, "failure path returns nil response")
-	require.Error(t, err)
-	statusErr, ok := status.FromError(err)
-	require.True(t, ok, "auth failure must be a gRPC status error")
-	assert.Equal(t, codes.Unauthenticated, statusErr.Code())
-}
+			token := tt.token
+			if token == "" {
+				token = validToken
+			}
 
-// TestCheckPlayerSessionInfraFailureNotTranslated asserts that infrastructure
-// failure paths (NOT_CONFIGURED, PLAYER_LOOKUP_FAILED, CHARACTER_LOOKUP_FAILED)
-// are NOT translated to codes.Unauthenticated — they remain as raw oops errors
-// (gRPC will surface them as codes.Unknown) so they're not mistaken for
-// legitimate auth failures by the client wrapper.
-func TestCheckPlayerSessionInfraFailureNotTranslated(t *testing.T) {
-	ctx := context.Background()
+			resp, err := server.CheckPlayerSession(ctx, &corev1.CheckPlayerSessionRequest{
+				PlayerSessionToken: token,
+			})
 
-	// playerSessionRepo unset → resolvePlayerSession returns NOT_CONFIGURED.
-	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore: session.NewMemStore(),
+			assert.Nil(t, resp)
+			require.Error(t, err)
+
+			if tt.wantStatusCode != 0 {
+				statusErr, ok := status.FromError(err)
+				require.True(t, ok, "auth failure must be a gRPC status error")
+				assert.Equal(t, tt.wantStatusCode, statusErr.Code())
+			}
+
+			if tt.wantNotUnauthenticated {
+				statusErr, ok := status.FromError(err)
+				if ok {
+					assert.NotEqual(t, codes.Unauthenticated, statusErr.Code(),
+						"infra failures must not be translated to Unauthenticated")
+				}
+			}
+
+			if tt.wantOopsCode != "" {
+				var oopsErr samberOops.OopsError
+				require.ErrorAs(t, err, &oopsErr)
+				assert.Equal(t, tt.wantOopsCode, oopsErr.Code())
+			}
+		})
 	}
-
-	resp, err := server.CheckPlayerSession(ctx, &corev1.CheckPlayerSessionRequest{
-		PlayerSessionToken: validToken,
-	})
-
-	assert.Nil(t, resp)
-	require.Error(t, err)
-	statusErr, ok := status.FromError(err)
-	if ok {
-		assert.NotEqual(t, codes.Unauthenticated, statusErr.Code(),
-			"infra failures must not be translated to Unauthenticated")
-	}
-	var oopsErr samberOops.OopsError
-	require.ErrorAs(t, err, &oopsErr)
-	assert.Equal(t, "NOT_CONFIGURED", oopsErr.Code())
 }
 
 // TestIsPlayerSessionAuthError covers the predicate's branches that the
@@ -1345,104 +1616,6 @@ func TestIsPlayerSessionAuthError(t *testing.T) {
 			assert.Equal(t, tt.want, isPlayerSessionAuthError(tt.err))
 		})
 	}
-}
-
-// TestCheckPlayerSessionWrapsPlayerLookupFailureAsPlayerLookupFailed pins the
-// failure-shape contract for the multi-tab session isolation work: when the
-// player session resolves but the underlying player record lookup fails (e.g.,
-// pg connection error), the handler MUST surface a PLAYER_LOOKUP_FAILED oops
-// code rather than leaking the raw repository error.
-func TestCheckPlayerSessionWrapsPlayerLookupFailureAsPlayerLookupFailed(t *testing.T) {
-	ctx := context.Background()
-	playerID := ulid.Make()
-	ps := makePlayerSession(playerID)
-	sessionRepo := setupSessionRepo(t, ps)
-
-	playerRepo := authmocks.NewMockPlayerRepository(t)
-	playerRepo.EXPECT().GetByID(mock.Anything, playerID).
-		Return(nil, errors.New("connection refused"))
-
-	server := &CoreServer{
-		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
-		playerSessionRepo: sessionRepo,
-		playerRepo:        playerRepo,
-	}
-
-	resp, err := server.CheckPlayerSession(ctx, &corev1.CheckPlayerSessionRequest{
-		PlayerSessionToken: validToken,
-	})
-
-	assert.Nil(t, resp)
-	require.Error(t, err)
-	var oopsErr samberOops.OopsError
-	require.ErrorAs(t, err, &oopsErr)
-	assert.Equal(t, "PLAYER_LOOKUP_FAILED", oopsErr.Code())
-}
-
-// TestCheckPlayerSessionWrapsCharacterLookupFailureAsCharacterLookupFailed pins
-// the failure-shape contract when player resolution succeeds but the character
-// summary build (charRepo.ListByPlayer) fails. The handler MUST surface a
-// CHARACTER_LOOKUP_FAILED oops code so the client can distinguish auth
-// failures from infrastructure failures in this code path.
-func TestCheckPlayerSessionWrapsCharacterLookupFailureAsCharacterLookupFailed(t *testing.T) {
-	ctx := context.Background()
-	playerID := ulid.Make()
-	ps := makePlayerSession(playerID)
-	sessionRepo := setupSessionRepo(t, ps)
-
-	playerRepo := authmocks.NewMockPlayerRepository(t)
-	playerRepo.EXPECT().GetByID(mock.Anything, playerID).
-		Return(&auth.Player{ID: playerID, Username: "alice"}, nil)
-
-	charRepo := authmocks.NewMockCharacterRepository(t)
-	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
-		Return(nil, errors.New("char repo down"))
-
-	server := &CoreServer{
-		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
-		playerSessionRepo: sessionRepo,
-		playerRepo:        playerRepo,
-		charRepo:          charRepo,
-	}
-
-	resp, err := server.CheckPlayerSession(ctx, &corev1.CheckPlayerSessionRequest{
-		PlayerSessionToken: validToken,
-	})
-
-	assert.Nil(t, resp)
-	require.Error(t, err)
-	var oopsErr samberOops.OopsError
-	require.ErrorAs(t, err, &oopsErr)
-	assert.Equal(t, "CHARACTER_LOOKUP_FAILED", oopsErr.Code())
-}
-
-// --- AuthenticatePlayer additional paths ---
-
-func TestAuthenticatePlayer_SessionRepoCreateFails(t *testing.T) {
-	ctx := context.Background()
-
-	authSvc := newMockAuthService(t)
-	authSvc.authenticatePlayerFunc = func(_ context.Context, _, _, _, _ string) (string, *auth.Player, error) {
-		return "", nil, errors.New("connection refused")
-	}
-
-	server := &CoreServer{
-		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
-		authService:       authSvc,
-		playerSessionRepo: authmocks.NewMockPlayerSessionRepository(t),
-	}
-
-	// The service wraps store errors in user-facing response messages — the
-	// handler surfaces them as Success:false rather than returning an error.
-	resp, err := server.AuthenticatePlayer(ctx, &corev1.AuthenticatePlayerRequest{
-		Username: "alice",
-		Password: "password123",
-	})
-	require.NoError(t, err)
-	assert.False(t, resp.Success)
 }
 
 // --- Test helper mocks (lightweight, function-based) ---
@@ -1540,132 +1713,10 @@ func (m *mockResetServiceForHandlers) ResetPassword(ctx context.Context, token, 
 
 // --- Sanitized error-message tests (bd-nscu) ---
 //
-// These tests assert that the three handlers previously leaking raw
-// err.Error() strings now return only a fixed, user-facing message derived
-// from the oops error code. The raw error remains available server-side via
-// slog but MUST NOT reach the client.
-
-func TestCreatePlayerReturnsSanitizedMessageForUsernameTaken(t *testing.T) {
-	ctx := context.Background()
-
-	authSvc := newMockAuthService(t)
-	authSvc.createPlayerFunc = func(_ context.Context, _, _, _ string) (*auth.Player, *auth.PlayerSession, string, error) {
-		return nil, nil, "", oopsCoded("REGISTER_USERNAME_TAKEN",
-			"username \"alice\" is already taken in schema auth_v3",
-			"operation", "check username availability")
-	}
-
-	playerSessionRepo := authmocks.NewMockPlayerSessionRepository(t)
-
-	server := &CoreServer{
-		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
-		authService:       authSvc,
-		playerSessionRepo: playerSessionRepo,
-	}
-
-	resp, err := server.CreatePlayer(ctx, &corev1.CreatePlayerRequest{
-		Username: "alice",
-		Password: "strongpass1",
-	})
-	require.NoError(t, err)
-
-	assert.False(t, resp.Success)
-	assert.Equal(t, msgRegisterUsernameTaken, resp.ErrorMessage)
-	assert.NotContains(t, resp.ErrorMessage, "schema")
-	assert.NotContains(t, resp.ErrorMessage, "operation")
-}
-
-func TestCreatePlayerReturnsGenericMessageForUnknownError(t *testing.T) {
-	ctx := context.Background()
-
-	authSvc := newMockAuthService(t)
-	authSvc.createPlayerFunc = func(_ context.Context, _, _, _ string) (*auth.Player, *auth.PlayerSession, string, error) {
-		// Plain error — no oops code. Client MUST NOT see the raw message.
-		return nil, nil, "", errors.New("pq: relation \"players_private_v3\" does not exist")
-	}
-
-	playerSessionRepo := authmocks.NewMockPlayerSessionRepository(t)
-
-	server := &CoreServer{
-		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
-		authService:       authSvc,
-		playerSessionRepo: playerSessionRepo,
-	}
-
-	resp, err := server.CreatePlayer(ctx, &corev1.CreatePlayerRequest{
-		Username: "alice",
-		Password: "strongpass1",
-	})
-	require.NoError(t, err)
-
-	assert.False(t, resp.Success)
-	assert.Equal(t, msgGenericRequestFailed, resp.ErrorMessage)
-	assert.NotContains(t, resp.ErrorMessage, "players_private_v3")
-	assert.NotContains(t, resp.ErrorMessage, "pq:")
-}
-
-func TestCreateCharacterReturnsSanitizedMessageForNameTaken(t *testing.T) {
-	ctx := context.Background()
-	playerID := ulid.Make()
-
-	ps := makePlayerSession(playerID)
-	sessionRepo := setupSessionRepo(t, ps)
-
-	charSvc := newMockCharacterService(t)
-	charSvc.createFunc = func(_ context.Context, _ ulid.ULID, _ string) (*world.Character, error) {
-		return nil, oopsCoded("CHARACTER_NAME_TAKEN",
-			"character \"Hero\" is already taken in shard char_shard_3",
-			"shard", "char_shard_3")
-	}
-
-	server := &CoreServer{
-		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
-		playerSessionRepo: sessionRepo,
-		characterService:  charSvc,
-	}
-
-	resp, err := server.CreateCharacter(ctx, &corev1.CreateCharacterRequest{
-		PlayerSessionToken: validToken,
-		CharacterName:      "Hero",
-	})
-	require.NoError(t, err)
-
-	assert.False(t, resp.Success)
-	assert.Equal(t, msgCharacterNameTaken, resp.ErrorMessage)
-	assert.NotContains(t, resp.ErrorMessage, "char_shard_3")
-	assert.NotContains(t, resp.ErrorMessage, "shard")
-}
-
-func TestConfirmPasswordResetReturnsSanitizedMessageForInvalidToken(t *testing.T) {
-	ctx := context.Background()
-
-	resetSvc := newMockResetService(t)
-	resetSvc.resetPasswordFunc = func(_ context.Context, _, _ string) error {
-		return oopsCoded("RESET_TOKEN_INVALID",
-			"reset token not found in table password_resets on host db.internal.svc:5432",
-			"host", "db.internal.svc:5432")
-	}
-
-	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore: session.NewMemStore(),
-		resetService: resetSvc,
-	}
-
-	resp, err := server.ConfirmPasswordReset(ctx, &corev1.ConfirmPasswordResetRequest{
-		Token:       "bad-token",
-		NewPassword: "newstrongpass",
-	})
-	require.NoError(t, err)
-
-	assert.False(t, resp.Success)
-	assert.Equal(t, msgResetTokenInvalid, resp.ErrorMessage)
-	assert.NotContains(t, resp.ErrorMessage, "db.internal.svc")
-	assert.NotContains(t, resp.ErrorMessage, "password_resets")
-}
+// CreatePlayer and CreateCharacter sanitized-message cases are covered by
+// TestCreatePlayer_ErrorPaths and TestCreateCharacter_ErrorPaths above.
+// ConfirmPasswordReset sanitized-message case is covered by
+// TestConfirmPasswordReset_InvalidTokenPaths above.
 
 // --- ListPlayerSessions ---
 
@@ -1725,55 +1776,66 @@ func TestListPlayerSessionsReturnsCallersOwnSessionsWithIsCurrentFlag(t *testing
 	assert.Equal(t, ps1.ID.String(), currentID, "current session must match the caller's PlayerSession ID")
 }
 
-func TestListPlayerSessionsReturnsEmptyForInvalidToken(t *testing.T) {
-	ctx := context.Background()
-
-	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
-	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken("tok-not-valid")).
-		Return(nil, auth.ErrNotFound)
-
-	server := &CoreServer{
-		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
-		playerSessionRepo: sessionRepo,
+// replaces: TestListPlayerSessionsReturnsEmptyForInvalidToken,
+//
+//	TestListPlayerSessionsReturnsEmptyForExpiredSession
+func TestListPlayerSessions_ReturnsEmptyPaths(t *testing.T) {
+	tests := []struct {
+		name      string
+		token     string
+		setupRepo func(t *testing.T) *authmocks.MockPlayerSessionRepository
+	}{
+		{
+			name:  "invalid token returns empty session list",
+			token: "tok-not-valid",
+			setupRepo: func(t *testing.T) *authmocks.MockPlayerSessionRepository {
+				t.Helper()
+				sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+				sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken("tok-not-valid")).
+					Return(nil, auth.ErrNotFound)
+				return sessionRepo
+			},
+		},
+		{
+			name:  "expired session returns empty session list",
+			token: validToken,
+			setupRepo: func(t *testing.T) *authmocks.MockPlayerSessionRepository {
+				t.Helper()
+				playerID := ulid.Make()
+				expiredPS := &auth.PlayerSession{
+					ID:        ulid.Make(),
+					PlayerID:  playerID,
+					TokenHash: auth.HashSessionToken(validToken),
+					ExpiresAt: time.Now().Add(-time.Hour),
+					CreatedAt: time.Now().Add(-2 * time.Hour),
+					UpdatedAt: time.Now().Add(-time.Hour),
+				}
+				sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+				sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken(validToken)).
+					Return(expiredPS, nil)
+				return sessionRepo
+			},
+		},
 	}
 
-	resp, err := server.ListPlayerSessions(ctx, &corev1.ListPlayerSessionsRequest{
-		PlayerSessionToken: "tok-not-valid",
-	})
-	require.NoError(t, err)
-	// Empty list on auth failure - enumeration-safe (no "token invalid" signal).
-	assert.Empty(t, resp.Sessions)
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			sessionRepo := tt.setupRepo(t)
 
-func TestListPlayerSessionsReturnsEmptyForExpiredSession(t *testing.T) {
-	ctx := context.Background()
-	playerID := ulid.Make()
+			server := &CoreServer{
+				engine:            core.NewEngine(core.NewMemoryEventStore()),
+				sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+				playerSessionRepo: sessionRepo,
+			}
 
-	expiredPS := &auth.PlayerSession{
-		ID:        ulid.Make(),
-		PlayerID:  playerID,
-		TokenHash: auth.HashSessionToken(validToken),
-		ExpiresAt: time.Now().Add(-time.Hour), // expired
-		CreatedAt: time.Now().Add(-2 * time.Hour),
-		UpdatedAt: time.Now().Add(-time.Hour),
+			resp, err := server.ListPlayerSessions(ctx, &corev1.ListPlayerSessionsRequest{
+				PlayerSessionToken: tt.token,
+			})
+			require.NoError(t, err)
+			assert.Empty(t, resp.Sessions)
+		})
 	}
-
-	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
-	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken(validToken)).
-		Return(expiredPS, nil)
-
-	server := &CoreServer{
-		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
-		playerSessionRepo: sessionRepo,
-	}
-
-	resp, err := server.ListPlayerSessions(ctx, &corev1.ListPlayerSessionsRequest{
-		PlayerSessionToken: validToken,
-	})
-	require.NoError(t, err)
-	assert.Empty(t, resp.Sessions)
 }
 
 // --- RevokePlayerSession ---
@@ -1821,103 +1883,112 @@ func TestRevokePlayerSessionRevokesOwnOtherSession(t *testing.T) {
 	assert.True(t, resp.Success)
 }
 
-func TestRevokePlayerSessionRejectsForeignSession(t *testing.T) {
-	ctx := context.Background()
-	playerA := ulid.Make()
-	playerB := ulid.Make()
-
-	callerPS := &auth.PlayerSession{
-		ID:        ulid.Make(),
-		PlayerID:  playerA,
-		TokenHash: auth.HashSessionToken(validToken),
-		ExpiresAt: time.Now().Add(auth.PlayerSessionTTL),
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-	// Session owned by a different player - caller must not be able to revoke it.
-	bPS := &auth.PlayerSession{
-		ID:        ulid.Make(),
-		PlayerID:  playerB,
-		TokenHash: "bs-hash",
-		ExpiresAt: time.Now().Add(auth.PlayerSessionTTL),
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-
-	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
-	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken(validToken)).Return(callerPS, nil)
-	sessionRepo.EXPECT().RefreshTTL(mock.Anything, callerPS.ID, auth.PlayerSessionTTL).Return(nil)
-	sessionRepo.EXPECT().GetByID(mock.Anything, bPS.ID).Return(bPS, nil)
-	// Delete MUST NOT be called for a foreign session - the mock would fail the test
-	// if an unexpected call were made.
-
-	server := &CoreServer{
-		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
-		playerSessionRepo: sessionRepo,
-	}
-
-	resp, err := server.RevokePlayerSession(ctx, &corev1.RevokePlayerSessionRequest{
-		PlayerSessionToken: validToken,
-		TargetSessionId:    bPS.ID.String(),
-	})
-	require.NoError(t, err)
-	assert.False(t, resp.Success)
-	assert.Contains(t, resp.ErrorMessage, "session not found")
-}
-
-func TestRevokePlayerSessionRejectsInvalidToken(t *testing.T) {
+// replaces: TestRevokePlayerSessionRejectsForeignSession,
+//
+//	TestRevokePlayerSessionRejectsInvalidToken,
+//	TestRevokePlayerSessionRejectsInvalidTargetID
+func TestRevokePlayerSession_RejectsPaths(t *testing.T) {
 	ctx := context.Background()
 
-	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
-	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken("invalid")).
-		Return(nil, auth.ErrNotFound)
-
-	server := &CoreServer{
-		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
-		playerSessionRepo: sessionRepo,
+	tests := []struct {
+		name  string
+		setup func(t *testing.T) (*CoreServer, *corev1.RevokePlayerSessionRequest)
+	}{
+		{
+			name: "rejects foreign session owned by different player",
+			setup: func(t *testing.T) (*CoreServer, *corev1.RevokePlayerSessionRequest) {
+				t.Helper()
+				playerA, playerB := ulid.Make(), ulid.Make()
+				callerPS := &auth.PlayerSession{
+					ID:        ulid.Make(),
+					PlayerID:  playerA,
+					TokenHash: auth.HashSessionToken(validToken),
+					ExpiresAt: time.Now().Add(auth.PlayerSessionTTL),
+					CreatedAt: time.Now(),
+					UpdatedAt: time.Now(),
+				}
+				bPS := &auth.PlayerSession{
+					ID:        ulid.Make(),
+					PlayerID:  playerB,
+					TokenHash: "bs-hash",
+					ExpiresAt: time.Now().Add(auth.PlayerSessionTTL),
+					CreatedAt: time.Now(),
+					UpdatedAt: time.Now(),
+				}
+				sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+				sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken(validToken)).Return(callerPS, nil)
+				sessionRepo.EXPECT().RefreshTTL(mock.Anything, callerPS.ID, auth.PlayerSessionTTL).Return(nil)
+				sessionRepo.EXPECT().GetByID(mock.Anything, bPS.ID).Return(bPS, nil)
+				// Delete MUST NOT be called for a foreign session - the mock would fail the test
+				// if an unexpected call were made.
+				server := &CoreServer{
+					engine:            core.NewEngine(core.NewMemoryEventStore()),
+					sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					playerSessionRepo: sessionRepo,
+				}
+				return server, &corev1.RevokePlayerSessionRequest{
+					PlayerSessionToken: validToken,
+					TargetSessionId:    bPS.ID.String(),
+				}
+			},
+		},
+		{
+			name: "rejects invalid token when caller session not found",
+			setup: func(t *testing.T) (*CoreServer, *corev1.RevokePlayerSessionRequest) {
+				t.Helper()
+				sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+				sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken("invalid")).
+					Return(nil, auth.ErrNotFound)
+				server := &CoreServer{
+					engine:            core.NewEngine(core.NewMemoryEventStore()),
+					sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					playerSessionRepo: sessionRepo,
+				}
+				return server, &corev1.RevokePlayerSessionRequest{
+					PlayerSessionToken: "invalid",
+					TargetSessionId:    ulid.Make().String(),
+				}
+			},
+		},
+		{
+			name: "rejects invalid target ID that fails ULID parse",
+			setup: func(t *testing.T) (*CoreServer, *corev1.RevokePlayerSessionRequest) {
+				t.Helper()
+				playerID := ulid.Make()
+				callerPS := &auth.PlayerSession{
+					ID:        ulid.Make(),
+					PlayerID:  playerID,
+					TokenHash: auth.HashSessionToken(validToken),
+					ExpiresAt: time.Now().Add(auth.PlayerSessionTTL),
+					CreatedAt: time.Now(),
+					UpdatedAt: time.Now(),
+				}
+				sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+				sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken(validToken)).Return(callerPS, nil)
+				sessionRepo.EXPECT().RefreshTTL(mock.Anything, callerPS.ID, auth.PlayerSessionTTL).Return(nil)
+				// No GetByID expectation — "not-a-ulid" fails parse first.
+				server := &CoreServer{
+					engine:            core.NewEngine(core.NewMemoryEventStore()),
+					sessionStore:      session.NewMemStore(), // converted to sessiontest.NewStore(t) in Phase 3
+					playerSessionRepo: sessionRepo,
+				}
+				return server, &corev1.RevokePlayerSessionRequest{
+					PlayerSessionToken: validToken,
+					TargetSessionId:    "not-a-ulid",
+				}
+			},
+		},
 	}
 
-	resp, err := server.RevokePlayerSession(ctx, &corev1.RevokePlayerSessionRequest{
-		PlayerSessionToken: "invalid",
-		TargetSessionId:    ulid.Make().String(),
-	})
-	require.NoError(t, err)
-	assert.False(t, resp.Success)
-	assert.Contains(t, resp.ErrorMessage, "session not found")
-}
-
-func TestRevokePlayerSessionRejectsInvalidTargetID(t *testing.T) {
-	ctx := context.Background()
-	playerID := ulid.Make()
-
-	callerPS := &auth.PlayerSession{
-		ID:        ulid.Make(),
-		PlayerID:  playerID,
-		TokenHash: auth.HashSessionToken(validToken),
-		ExpiresAt: time.Now().Add(auth.PlayerSessionTTL),
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server, req := tt.setup(t)
+			resp, err := server.RevokePlayerSession(ctx, req)
+			require.NoError(t, err)
+			assert.False(t, resp.Success)
+			assert.Contains(t, resp.ErrorMessage, "session not found")
+		})
 	}
-
-	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
-	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken(validToken)).Return(callerPS, nil)
-	sessionRepo.EXPECT().RefreshTTL(mock.Anything, callerPS.ID, auth.PlayerSessionTTL).Return(nil)
-
-	server := &CoreServer{
-		engine:            core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore:      session.NewMemStore(),
-		playerSessionRepo: sessionRepo,
-	}
-
-	resp, err := server.RevokePlayerSession(ctx, &corev1.RevokePlayerSessionRequest{
-		PlayerSessionToken: validToken,
-		TargetSessionId:    "not-a-ulid",
-	})
-	require.NoError(t, err)
-	assert.False(t, resp.Success)
-	assert.Contains(t, resp.ErrorMessage, "session not found")
 }
 
 // --- RevokeOtherPlayerSessions ---
