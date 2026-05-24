@@ -68,38 +68,58 @@ func (h *traceHandler) WithGroup(name string) slog.Handler {
 // format: "json" or "text" (defaults to "json" if empty)
 // If w is nil, writes to os.Stderr.
 func Setup(service, version, format string, w io.Writer, level slog.Level) *slog.Logger {
-	return SetupWithBridge(service, version, format, w, level, nil, level)
+	return SetupWithBridge(service, version, format, w, true, level, nil, level)
 }
 
-// SetupWithBridge creates a logger that tees stderr (gated at stderrLevel)
-// and, when bridge != nil, an OTel bridge handler (gated at bridgeLevel).
-// When bridge is nil the result is the stderr-only logger (INV-L7).
+// SetupWithBridge creates a logger that tees to up to two sinks: stderr
+// (when stderrEnabled) and an OTel bridge handler (when bridge != nil),
+// both independently gate-able (INV-L2). When all sinks are disabled the
+// returned logger discards all records. When bridge is nil and stderrEnabled
+// the result is the stderr-only logger (INV-L7).
 func SetupWithBridge(
-	service, version, format string, w io.Writer, stderrLevel slog.Level,
+	service, version, format string, w io.Writer,
+	stderrEnabled bool, stderrLevel slog.Level,
 	bridge slog.Handler, bridgeLevel slog.Level,
 ) *slog.Logger {
-	if w == nil {
-		w = os.Stderr
+	var handlers []slog.Handler
+	if stderrEnabled {
+		if w == nil {
+			w = os.Stderr
+		}
+		opts := &slog.HandlerOptions{Level: stderrLevel}
+		var base slog.Handler
+		if format == "text" {
+			base = slog.NewTextHandler(w, opts)
+		} else {
+			base = slog.NewJSONHandler(w, opts)
+		}
+		handlers = append(handlers, &traceHandler{handler: base, service: service, version: version})
 	}
-	var base slog.Handler
-	opts := &slog.HandlerOptions{Level: stderrLevel}
-	if format == "text" {
-		base = slog.NewTextHandler(w, opts)
-	} else {
-		base = slog.NewJSONHandler(w, opts)
+	if bridge != nil {
+		handlers = append(handlers, NewLevelGate(bridgeLevel, bridge))
 	}
-	stderrHandler := &traceHandler{handler: base, service: service, version: version}
-
-	if bridge == nil {
-		return slog.New(stderrHandler)
+	switch len(handlers) {
+	case 0:
+		// All sinks disabled — discard. Unusual but a valid operator choice.
+		return slog.New(slog.DiscardHandler)
+	case 1:
+		return slog.New(handlers[0])
+	default:
+		return slog.New(NewFanout(handlers...))
 	}
-	gatedBridge := NewLevelGate(bridgeLevel, bridge)
-	return slog.New(NewFanout(stderrHandler, gatedBridge))
 }
 
 // SetDefault sets up and configures the default logger.
 func SetDefault(service, version, format string, level slog.Level) {
 	logger := Setup(service, version, format, nil, level)
+	slog.SetDefault(logger)
+}
+
+// SetDefaultWithBridge configures the default logger to tee stderr and,
+// when bridge != nil, an OTel bridge handler. Mirrors SetDefault.
+// stderrEnabled controls whether the stderr sink is active (INV-L2).
+func SetDefaultWithBridge(service, version, format string, stderrEnabled bool, stderrLevel slog.Level, bridge slog.Handler, bridgeLevel slog.Level) {
+	logger := SetupWithBridge(service, version, format, nil, stderrEnabled, stderrLevel, bridge, bridgeLevel)
 	slog.SetDefault(logger)
 }
 

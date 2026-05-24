@@ -206,7 +206,7 @@ func TestGatewayCommand_MissingCertificates(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runGatewayWithDeps(context.Background(), cfg, cmd, deps)
+	err := runGatewayWithDeps(context.Background(), cfg, config.DefaultLoggingConfig(), cmd, deps)
 	require.Error(t, err, "Expected error when certificates are missing")
 
 	// Error should mention TLS or certificates
@@ -304,7 +304,7 @@ func TestGatewayCommand_TLSLoadFails(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err = runGatewayWithDeps(context.Background(), cfg, cmd, deps)
+	err = runGatewayWithDeps(context.Background(), cfg, config.DefaultLoggingConfig(), cmd, deps)
 	require.Error(t, err, "Expected error when TLS certificates are incomplete")
 
 	// Error should mention TLS or certificate

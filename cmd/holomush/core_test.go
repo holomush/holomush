@@ -50,6 +50,17 @@ func TestCoreCommand_Flags(t *testing.T) {
 	}
 }
 
+func TestCoreCommand_LogSinkFlags(t *testing.T) {
+	cmd := NewCoreCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"--help"})
+	require.NoError(t, cmd.Execute())
+	for _, f := range []string{"--log-sentry", "--log-sentry-level", "--log-otel", "--log-otel-level", "--log-stderr", "--log-stderr-level"} {
+		require.Contains(t, buf.String(), f)
+	}
+}
+
 func TestCoreCommand_DefaultValues(t *testing.T) {
 	cmd := NewCoreCmd()
 

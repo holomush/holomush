@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/contrib/bridges/otelslog"
 	otellog "go.opentelemetry.io/otel/log"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
-	"go.opentelemetry.io/contrib/bridges/otelslog"
 )
 
 // TestLogSDKSurface pins the experimental v0.x API shapes this epic relies

@@ -124,7 +124,7 @@ func TestSetupWithBridge_TeesToBridge(t *testing.T) {
 	var bridged []string
 	bridge := captureHandler{onHandle: func(r slog.Record) { bridged = append(bridged, r.Message) }}
 
-	logger := SetupWithBridge("svc", "v1", "json", &stderr, slog.LevelInfo, bridge, slog.LevelInfo)
+	logger := SetupWithBridge("svc", "v1", "json", &stderr, true, slog.LevelInfo, bridge, slog.LevelInfo)
 	logger.Info("both")
 
 	require.Contains(t, stderr.String(), "both")
@@ -133,9 +133,26 @@ func TestSetupWithBridge_TeesToBridge(t *testing.T) {
 
 func TestSetupWithBridge_NilBridgeStderrOnly(t *testing.T) {
 	var stderr bytes.Buffer
-	logger := SetupWithBridge("svc", "v1", "json", &stderr, slog.LevelInfo, nil, slog.LevelInfo)
+	logger := SetupWithBridge("svc", "v1", "json", &stderr, true, slog.LevelInfo, nil, slog.LevelInfo)
 	logger.Info("only-stderr")
 	require.Contains(t, stderr.String(), "only-stderr")
+}
+
+func TestSetupWithBridge_StderrDisabledBridgeOnly(t *testing.T) {
+	var stderr bytes.Buffer
+	var bridged []string
+	bridge := captureHandler{onHandle: func(r slog.Record) { bridged = append(bridged, r.Message) }}
+	logger := SetupWithBridge("svc", "v1", "json", &stderr, false, slog.LevelInfo, bridge, slog.LevelInfo)
+	logger.Info("bridge-only")
+	require.Empty(t, stderr.String()) // stderr disabled → nothing written
+	require.Equal(t, []string{"bridge-only"}, bridged)
+}
+
+func TestSetupWithBridge_AllDisabledDiscards(t *testing.T) {
+	var stderr bytes.Buffer
+	logger := SetupWithBridge("svc", "v1", "json", &stderr, false, slog.LevelInfo, nil, slog.LevelInfo)
+	logger.Info("nowhere")
+	require.Empty(t, stderr.String())
 }
 
 func TestSetup_LevelFiltering(t *testing.T) {

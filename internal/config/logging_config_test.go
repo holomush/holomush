@@ -20,7 +20,7 @@ func TestLoggingConfig_Defaults(t *testing.T) {
 func TestLoggingSink_EffectiveLevel(t *testing.T) {
 	global := slog.LevelInfo
 	require.Equal(t, slog.LevelWarn, LoggingSink{Level: "warn"}.EffectiveLevel(global))
-	require.Equal(t, global, LoggingSink{}.EffectiveLevel(global))             // unset → global
+	require.Equal(t, global, LoggingSink{}.EffectiveLevel(global)) // unset → global
 	require.Equal(t, slog.LevelError, LoggingSink{Level: "error"}.EffectiveLevel(global))
 	require.Equal(t, global, LoggingSink{Level: "bogus"}.EffectiveLevel(global)) // unparseable → global
 }

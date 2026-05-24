@@ -19,6 +19,7 @@ func (r *recordingProcessor) OnEmit(_ context.Context, rec *sdklog.Record) error
 	r.severities = append(r.severities, rec.Severity())
 	return nil
 }
+
 func (r *recordingProcessor) Enabled(_ context.Context, _ sdklog.EnabledParameters) bool {
 	return true
 }

@@ -269,7 +269,7 @@ func TestRunCoreWithDeps_ValidationError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), eventbus.Config{StoreDir: t.TempDir()}, config.DefaultCryptoConfig(), cmd, nil)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), eventbus.Config{StoreDir: t.TempDir()}, config.DefaultCryptoConfig(), config.DefaultLoggingConfig(), cmd, nil)
 	require.Error(t, err, "expected validation error")
 	assert.Contains(t, err.Error(), "grpc-addr")
 }
@@ -292,7 +292,7 @@ func TestRunCoreWithDeps_DatabaseURLMissing(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), eventbus.Config{StoreDir: t.TempDir()}, config.DefaultCryptoConfig(), cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), eventbus.Config{StoreDir: t.TempDir()}, config.DefaultCryptoConfig(), config.DefaultLoggingConfig(), cmd, deps)
 	require.Error(t, err, "expected DATABASE_URL error")
 	assert.Contains(t, err.Error(), "DATABASE_URL")
 }
@@ -362,7 +362,7 @@ func TestRunGatewayWithDeps_HappyPath(t *testing.T) {
 	// Run in goroutine and cancel after a short delay
 	errChan := make(chan error, 1)
 	go func() {
-		errChan <- runGatewayWithDeps(ctx, cfg, cmd, deps)
+		errChan <- runGatewayWithDeps(ctx, cfg, config.DefaultLoggingConfig(), cmd, deps)
 	}()
 
 	// Let it start, then cancel
@@ -392,7 +392,7 @@ func TestRunGatewayWithDeps_ValidationError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runGatewayWithDeps(ctx, cfg, cmd, nil)
+	err := runGatewayWithDeps(ctx, cfg, config.DefaultLoggingConfig(), cmd, nil)
 	require.Error(t, err, "expected validation error")
 	assert.Contains(t, err.Error(), "telnet-addr")
 }
@@ -420,7 +420,7 @@ func TestRunGatewayWithDeps_CertsDirError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
+	err := runGatewayWithDeps(ctx, cfg, config.DefaultLoggingConfig(), cmd, deps)
 	require.Error(t, err, "expected certs dir error")
 	assert.Contains(t, err.Error(), "certs directory")
 }
@@ -451,7 +451,7 @@ func TestRunGatewayWithDeps_GameIDExtractorError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
+	err := runGatewayWithDeps(ctx, cfg, config.DefaultLoggingConfig(), cmd, deps)
 	require.Error(t, err, "expected game ID error")
 	assert.Contains(t, err.Error(), "game_id")
 }
@@ -485,7 +485,7 @@ func TestRunGatewayWithDeps_ClientTLSLoaderError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
+	err := runGatewayWithDeps(ctx, cfg, config.DefaultLoggingConfig(), cmd, deps)
 	require.Error(t, err, "expected TLS error")
 	assert.Contains(t, err.Error(), "TLS")
 }
@@ -525,7 +525,7 @@ func TestRunGatewayWithDeps_GRPCClientFactoryError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
+	err := runGatewayWithDeps(ctx, cfg, config.DefaultLoggingConfig(), cmd, deps)
 	require.Error(t, err, "expected gRPC client error")
 	assert.Contains(t, err.Error(), "connection refused")
 }
@@ -565,7 +565,7 @@ func TestRunGatewayWithDeps_ControlTLSLoadError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
+	err := runGatewayWithDeps(ctx, cfg, config.DefaultLoggingConfig(), cmd, deps)
 	require.Error(t, err, "expected control TLS error")
 	assert.Contains(t, err.Error(), "control TLS")
 }
@@ -608,7 +608,7 @@ func TestRunGatewayWithDeps_ControlServerFactoryError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
+	err := runGatewayWithDeps(ctx, cfg, config.DefaultLoggingConfig(), cmd, deps)
 	require.Error(t, err, "expected control server error")
 	assert.Contains(t, err.Error(), "failed to create control server")
 }
@@ -655,7 +655,7 @@ func TestRunGatewayWithDeps_ControlServerStartError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
+	err := runGatewayWithDeps(ctx, cfg, config.DefaultLoggingConfig(), cmd, deps)
 	require.Error(t, err, "expected control server start error")
 	assert.Contains(t, err.Error(), "address already in use")
 }
@@ -706,7 +706,7 @@ func TestRunGatewayWithDeps_ListenerFactoryError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
+	err := runGatewayWithDeps(ctx, cfg, config.DefaultLoggingConfig(), cmd, deps)
 	require.Error(t, err, "expected listener error")
 	assert.Contains(t, err.Error(), "address already in use")
 }
@@ -767,7 +767,7 @@ func TestRunGatewayWithDeps_ObservabilityServerStartError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
+	err := runGatewayWithDeps(ctx, cfg, config.DefaultLoggingConfig(), cmd, deps)
 	require.Error(t, err, "expected observability server start error")
 	assert.Contains(t, err.Error(), "address already in use")
 }
@@ -833,7 +833,7 @@ func TestRunGatewayWithDeps_WithObservability(t *testing.T) {
 
 	errChan := make(chan error, 1)
 	go func() {
-		errChan <- runGatewayWithDeps(ctx, cfg, cmd, deps)
+		errChan <- runGatewayWithDeps(ctx, cfg, config.DefaultLoggingConfig(), cmd, deps)
 	}()
 
 	time.Sleep(100 * time.Millisecond)

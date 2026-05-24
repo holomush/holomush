@@ -58,7 +58,8 @@ func newSentryLogExporter(ctx context.Context, dsn string) (sdklog.Exporter, err
 		}
 		defer func() { _ = os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", prev) }() //nolint:errcheck // best-effort restore; failure is non-fatal
 	}
-	exp, err := otlploghttp.New(ctx,
+	exp, err := otlploghttp.New(
+		ctx,
 		otlploghttp.WithEndpointURL(url),
 		otlploghttp.WithHeaders(map[string]string{"x-sentry-auth": authHeader}),
 		otlploghttp.WithCompression(otlploghttp.GzipCompression),
