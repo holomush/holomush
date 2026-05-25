@@ -50,6 +50,11 @@ type CheckRequest struct {
 	KeyVersion uint32
 	EventType  string
 	EventID    ulid.ULID
+	// ReadBack selects the read-back authorization path (manifest
+	// crypto.emits[].readback) over the live-delivery path
+	// (crypto.consumes.requests_decryption). Only meaningful for
+	// IdentityKindPlugin. See plugin-readback-decrypt-design §4.
+	ReadBack bool
 }
 
 // DecisionCode is the typed outcome of a Guard.Check call.
@@ -69,6 +74,8 @@ const (
 	DenyOperatorUseAdminRPC
 	DenyAuditBackpressure
 	DenyUnknownIdentityKind
+	PermitPluginReadbackGrant
+	DenyReadbackManifestMissing
 )
 
 // Decision is the result of a Guard.Check call.

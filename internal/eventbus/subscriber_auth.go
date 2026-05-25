@@ -56,6 +56,10 @@ type SessionCheckRequest struct {
 	KeyVersion uint32
 	EventType  string
 	EventID    ulid.ULID
+	// ReadBack selects the read-back authorization path (manifest
+	// crypto.emits[].readback) over the live-delivery path. Only meaningful
+	// for IdentityKindPlugin. Mirrors authguard.CheckRequest.ReadBack.
+	ReadBack bool
 }
 
 // SessionAuthGuard evaluates whether a principal may receive a sensitive event.
