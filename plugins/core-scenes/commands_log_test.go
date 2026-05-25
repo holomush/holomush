@@ -7,10 +7,24 @@ import (
 	"context"
 	"testing"
 
+	"github.com/oklog/ulid/v2"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// newSceneLogFixture wires a scenePlugin where `caller` is a participant of
+// "scene-x" and the focus client returns the given history events. Used by the
+// scene-log export (E4) tests.
+func newSceneLogFixture(t *testing.T, events ...pluginsdk.Event) (p *scenePlugin, sceneID, caller string) {
+	t.Helper()
+	sceneID = "scene-x"
+	caller = ulid.Make().String()
+	store := newFakeStore()
+	store.installRoster(sceneID, caller)
+	fc := &fakeFocusClient{queryHistoryEvents: events}
+	return &scenePlugin{service: NewSceneServiceImpl(store), focusClient: fc}, sceneID, caller
+}
 
 // TestDecodeReplayEntries verifies the IC content kinds (pose/say/emit) are
 // decoded from their {actor_id, text} payloads and non-content events are
@@ -78,4 +92,60 @@ func TestHandleLogRendersForParticipant(t *testing.T) {
 	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
 	assert.Contains(t, resp.Output, `owner-char says, "Hello."`)
 	assert.Contains(t, resp.Output, "owner-char waves.")
+}
+
+// TestHandleLogExportMarkdown — "scene log export markdown #<id>" renders the
+// history with the Markdown renderer (C1).
+func TestHandleLogExportMarkdown(t *testing.T) {
+	t.Parallel()
+	p, sceneID, caller := newSceneLogFixture(t,
+		pluginsdk.Event{ID: "1", Type: pluginsdk.EventType("scene_say"), Payload: `{"actor_id":"Alice","text":"Hi."}`})
+
+	resp, err := p.handleLog(context.Background(),
+		pluginsdk.CommandRequest{CharacterID: caller}, "export markdown #"+sceneID)
+
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, `**Alice** says, "Hi."`)
+}
+
+// TestHandleLogExportJSONL — "export jsonl" renders with the JSONL renderer (C3).
+func TestHandleLogExportJSONL(t *testing.T) {
+	t.Parallel()
+	p, sceneID, caller := newSceneLogFixture(t,
+		pluginsdk.Event{ID: "1", Type: pluginsdk.EventType("scene_say"), Payload: `{"actor_id":"Alice","text":"Hi."}`})
+
+	resp, err := p.handleLog(context.Background(),
+		pluginsdk.CommandRequest{CharacterID: caller}, "export jsonl #"+sceneID)
+
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, `{"speaker":"Alice","kind":"say","content":"Hi."}`)
+}
+
+// TestHandleLogExportRejectsBadFormat — an unsupported format is rejected before
+// any history read.
+func TestHandleLogExportRejectsBadFormat(t *testing.T) {
+	t.Parallel()
+	p, sceneID, caller := newSceneLogFixture(t)
+
+	resp, err := p.handleLog(context.Background(),
+		pluginsdk.CommandRequest{CharacterID: caller}, "export pdf #"+sceneID)
+
+	require.NoError(t, err)
+	assert.NotEqual(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "Unsupported export format")
+}
+
+// TestHandleLogExportRequiresFormat — "export" with no format is a usage error.
+func TestHandleLogExportRequiresFormat(t *testing.T) {
+	t.Parallel()
+	p, _, caller := newSceneLogFixture(t)
+
+	resp, err := p.handleLog(context.Background(),
+		pluginsdk.CommandRequest{CharacterID: caller}, "export")
+
+	require.NoError(t, err)
+	assert.NotEqual(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "Usage: scene log export")
 }

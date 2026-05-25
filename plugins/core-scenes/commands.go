@@ -106,49 +106,82 @@ func decodeReplayEntries(events []pluginsdk.Event) ([]PublishedSceneEntry, error
 	return out, nil
 }
 
-// handleLog replays a scene's IC content history (pose/say/emit) to a
-// participant (spec §6.1; folds in holomush-cb4x). Participant-gated (INV-S9,
-// plugin-code, NO ABAC): a non-participant is denied BEFORE any history read.
-// Content is fetched via the host's QueryStreamHistory — which decrypts
-// sensitivity:always payloads host-side and is itself membership-gated — NOT
-// the plugin's own audit QueryHistory, which serves ciphertext. Rendered with
-// the plain-text renderer. Speaker is the actor's character id; display-name
-// resolution is a follow-up.
-//
-//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
+// handleLog dispatches the "scene log" sub-commands (spec §6.1; folds in
+// holomush-cb4x): the bare form replays the IC content history as plain text;
+// "export <format>" (E4) renders it to markdown / plain_text / jsonl. Both are
+// participant-gated (INV-S9, plugin-code) and read DECRYPTED content via the
+// host's QueryStreamHistory — NOT the plugin's own audit QueryHistory, which
+// serves ciphertext. Speaker is the actor character id; name resolution is a
+// follow-up.
 func (p *scenePlugin) handleLog(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
-	sceneID, err := resolveSceneRef(ctx, p.service.store, req.CharacterID, args)
-	if err != nil {
-		return pluginsdk.Errorf("%v", err), nil
+	if sub, rest := splitSubcommand(args); sub == "export" {
+		return p.handleLogExport(ctx, req, rest)
 	}
+	entries, errResp := p.fetchSceneLogEntries(ctx, req, args)
+	if errResp != nil {
+		return errResp, nil
+	}
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: renderPlainText(entries),
+	}, nil
+}
 
-	// INV-S9 participant gate (plugin-code) before any history read.
+// handleLogExport renders a scene's IC content history to the requested format
+// ("scene log export <markdown|plain_text|jsonl> [#<id>]"). Same participant-
+// gated read as the bare replay; the format dispatches to the shared renderers
+// via renderPublishedScene (C1/C2/C3).
+func (p *scenePlugin) handleLogExport(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	format, ref := splitSubcommand(args)
+	if format == "" {
+		return pluginsdk.Errorf("Usage: scene log export <markdown|plain_text|jsonl> [#<scene id>]"), nil
+	}
+	if _, ok := publishRenderMime[format]; !ok {
+		return pluginsdk.Errorf("Unsupported export format %q. Use markdown, plain_text, or jsonl.", format), nil
+	}
+	entries, errResp := p.fetchSceneLogEntries(ctx, req, ref)
+	if errResp != nil {
+		return errResp, nil
+	}
+	content, err := renderPublishedScene(format, entries)
+	if err != nil {
+		return pluginsdk.Errorf("Could not export scene log: %v", err), nil
+	}
+	return &pluginsdk.CommandResponse{Status: pluginsdk.CommandOK, Output: string(content)}, nil
+}
+
+// fetchSceneLogEntries resolves the scene, runs the INV-S9 participant gate
+// (plugin-code, before any history read), and returns the decoded IC content
+// entries via the host's QueryStreamHistory (decrypted host-side, membership-
+// gated). On any failure it returns a non-nil error CommandResponse for the
+// caller to return directly. Shared by the replay and export forms of scene log.
+func (p *scenePlugin) fetchSceneLogEntries(ctx context.Context, req pluginsdk.CommandRequest, ref string) ([]PublishedSceneEntry, *pluginsdk.CommandResponse) {
+	sceneID, err := resolveSceneRef(ctx, p.service.store, req.CharacterID, ref)
+	if err != nil {
+		return nil, pluginsdk.Errorf("%v", err)
+	}
 	ok, err := p.service.store.IsParticipant(ctx, sceneID, req.CharacterID)
 	if err != nil {
-		return pluginsdk.Errorf("Could not verify scene membership: %v", err), nil
+		return nil, pluginsdk.Errorf("Could not verify scene membership: %v", err)
 	}
 	if !ok {
-		return pluginsdk.Errorf("You are not a participant in that scene."), nil
+		return nil, pluginsdk.Errorf("You are not a participant in that scene.")
 	}
-
 	if p.focusClient == nil {
-		return pluginsdk.Errorf("Scene log is unavailable."), nil
+		return nil, pluginsdk.Errorf("Scene log is unavailable.")
 	}
 	resp, err := p.focusClient.QueryStreamHistory(ctx, pluginsdk.QueryStreamHistoryRequest{
 		Stream: dotStyleSceneSubjectIC(p.service.gameID, sceneID),
 		Count:  sceneLogReplayLimit,
 	})
 	if err != nil {
-		return pluginsdk.Errorf("Could not read scene log: %v", err), nil
+		return nil, pluginsdk.Errorf("Could not read scene log: %v", err)
 	}
 	entries, err := decodeReplayEntries(resp.Events)
 	if err != nil {
-		return pluginsdk.Errorf("Could not render scene log: %v", err), nil
+		return nil, pluginsdk.Errorf("Could not render scene log: %v", err)
 	}
-	return &pluginsdk.CommandResponse{
-		Status: pluginsdk.CommandOK,
-		Output: renderPlainText(entries),
-	}, nil
+	return entries, nil
 }
 
 // handlePublish dispatches the "scene publish" sub-commands (spec §6.1). The
