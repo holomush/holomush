@@ -117,6 +117,22 @@ func phase4EmitTypes() []string {
 	}
 }
 
+// phase6EmitTypes returns the 6 Phase 6 publication notice event types
+// declared in crypto.emits (all sensitivity:never). These MUST be
+// registered alongside phase4EmitTypes so the EmitTypeRegistrar set equals
+// the manifest crypto.emits set (INV-S5 / INV-P4-2); the host fails plugin
+// load otherwise. The matching emitter wiring lands in Phase D2.
+func phase6EmitTypes() []string {
+	return []string{
+		"scene_publish_started",
+		"scene_publish_vote_cast",
+		"scene_publish_cooloff_started",
+		"scene_publish_resolved",
+		"scene_publish_withdrawn",
+		"scene_publish_vote_attempts_extended",
+	}
+}
+
 // Init is called by the host after the gRPC connection is established and
 // the Postgres schema/role have been provisioned. It opens the connection
 // pool, runs the embedded migrations, and wires the resulting store into
@@ -158,6 +174,7 @@ func (p *scenePlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig) 
 func main() {
 	reg := pluginsdk.NewEmitRegistry()
 	reg.RegisterEmitTypes(phase4EmitTypes())
+	reg.RegisterEmitTypes(phase6EmitTypes())
 
 	plugin := &scenePlugin{
 		service:      &SceneServiceImpl{},

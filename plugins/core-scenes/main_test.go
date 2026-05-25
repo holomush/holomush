@@ -15,9 +15,9 @@ import (
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
-// TestPlugin_CryptoEmitsMatchesRegistry pins INV-P4-2: the 8 scene
-// event types in crypto.emits MUST equal the set registered via
-// EmitTypeRegistrar.
+// TestPlugin_CryptoEmitsMatchesRegistry pins INV-P4-2 / INV-S5: the scene
+// event types in crypto.emits (8 Phase 4 + 6 Phase 6 publication notices)
+// MUST equal the set registered via EmitTypeRegistrar.
 func TestPlugin_CryptoEmitsMatchesRegistry(t *testing.T) {
 	t.Parallel()
 	data, err := os.ReadFile("plugin.yaml")
@@ -41,6 +41,7 @@ func TestPlugin_CryptoEmitsMatchesRegistry(t *testing.T) {
 
 	reg := pluginsdk.NewEmitRegistry()
 	reg.RegisterEmitTypes(phase4EmitTypes())
+	reg.RegisterEmitTypes(phase6EmitTypes())
 	registrySet := reg.RegisteredEmitTypes()
 	sort.Strings(registrySet)
 
@@ -110,14 +111,20 @@ func TestPlugin_SensitivityMatrix(t *testing.T) {
 	require.NoError(t, yaml.Unmarshal(data, &m))
 
 	want := map[string]string{
-		"scene_pose":                  "always",
-		"scene_say":                   "always",
-		"scene_emit":                  "always",
-		"scene_ooc":                   "always",
-		"scene_join_ic":               "never",
-		"scene_leave_ic":              "never",
-		"scene_pose_order_changed_ic": "never",
-		"scene_idle_nudge":            "never",
+		"scene_pose":                           "always",
+		"scene_say":                            "always",
+		"scene_emit":                           "always",
+		"scene_ooc":                            "always",
+		"scene_join_ic":                        "never",
+		"scene_leave_ic":                       "never",
+		"scene_pose_order_changed_ic":          "never",
+		"scene_idle_nudge":                     "never",
+		"scene_publish_started":                "never",
+		"scene_publish_vote_cast":              "never",
+		"scene_publish_cooloff_started":        "never",
+		"scene_publish_resolved":               "never",
+		"scene_publish_withdrawn":              "never",
+		"scene_publish_vote_attempts_extended": "never",
 	}
 	got := make(map[string]string)
 	for _, e := range m.Crypto.Emits {

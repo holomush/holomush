@@ -77,6 +77,29 @@ crypto:
       description: "Notice that the next-up character has been idle past the configured threshold; name + duration, no content.
         Trigger implementation deferred to follow-up bead holomush-fux3."
 
+    # Publish-vote notice events (sensitivity: never) — Phase 6 operational
+    # metadata for the publication state machine; no IC content. See spec §7.
+    - event_type: scene_publish_started
+      sensitivity: never
+      description: "Notice that a scene publish-vote attempt has started; emit time + roster, no content."
+    - event_type: scene_publish_vote_cast
+      sensitivity: never
+      description: "Notice that a roster member cast or changed a vote; character + vote + is_change, no content."
+    - event_type: scene_publish_cooloff_started
+      sensitivity: never
+      description: "Notice that all roster members have voted yes and the cool-off window has begun; ends_at timestamp, no
+        content."
+    - event_type: scene_publish_resolved
+      sensitivity: never
+      description: "Notice of terminal transition (PUBLISHED or ATTEMPT_FAILED) with outcome + reason + tally summary, no
+        IC content."
+    - event_type: scene_publish_withdrawn
+      sensitivity: never
+      description: "Notice that the scene owner withdrew the active publish attempt; emitted alongside scene_publish_resolved."
+    - event_type: scene_publish_vote_attempts_extended
+      sensitivity: never
+      description: "Notice that an admin extended the per-scene publish-attempts budget; new_max + admin_id, no content."
+
 binary-plugin:
   executable: core-scenes
 
