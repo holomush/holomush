@@ -64,9 +64,9 @@ A `PublishedScene` represents one publication attempt for a scene. Multiple `Pub
 | VoteWindow | time.Duration | Yes | Frozen at attempt start; default 7 days, configurable |
 | CoolOffWindow | time.Duration | Yes | Frozen at attempt start; default 30 minutes, configurable |
 | MaxAttemptsSnapshot | int | Yes | Frozen at attempt start for audit clarity |
-| ContentEntries | \*\[\]Entry | No | Set ONLY on PUBLISHED transition. Each entry: `{speaker, kind, content}` where `kind ∈ {pose, say, emit}` |
+| ContentEntries | \[\]Entry | No | Set ONLY on PUBLISHED transition (nil otherwise). Each entry: `{speaker, kind, content}` where `kind ∈ {pose, say, emit}` |
 | TitleSnapshot | \*string | No | Set on PUBLISHED; snapshot of `scenes.title` at publish time |
-| ParticipantsSnapshot | \*\[\]Participant | No | Set on PUBLISHED; frozen list of character names visible to public |
+| ParticipantsSnapshot | \[\]string | No | Set on PUBLISHED (nil otherwise); frozen list of character **names** visible to public. Names only — the public archive MUST NOT expose character IDs (matches proto `repeated string participants_snapshot`) |
 | PublishedAt | \*time.Time | No | Set on PUBLISHED only |
 | FailureReason | \*PublishFailureReason | No | Set on ATTEMPT_FAILED only. One of: `ANY_NO`, `TIMEOUT`, `WITHDRAWN`, `SNAPSHOT_DECRYPT_FAILED`, `SNAPSHOT_RENDER_FAILED`, `COOLOFF_INVARIANT_BROKEN` |
 
@@ -83,6 +83,12 @@ One row per eligible voter, per attempt. Roster is frozen at attempt creation.
 | LastChangedAt | \*time.Time | No | Updated on every cast (including no-op same-value re-cast) |
 
 Composite primary key `(PublishedSceneID, CharacterID)`.
+
+**Go realization note.** The §3.1/§3.2 type column gives the conceptual shape; the implemented Go types (`plugins/core-scenes/publish_types.go`) realize it as follows:
+
+- **Timestamps** (`InitiatedAt`, `CoolOffStartedAt`, `ResolvedAt`, `PublishedAt`, `VotedAt`, `LastChangedAt`) use `pgnanos.Time` / `*pgnanos.Time` — BIGINT epoch-nanoseconds per INV-TS-1 (the persistence substrate since migration 000007), not `time.Time`.
+- **Slice-valued fields** (`ContentEntries`, `ParticipantsSnapshot`) use a nil slice to signal "unset", idiomatic Go in preference to a pointer-to-slice.
+- **`ParticipantsSnapshot`** is `[]string` of character names; the public archive surface (`GetPublicSceneArchiveResponse`, proto `repeated string`) exposes names only and never character IDs.
 
 ### 3.3 Migration
 
