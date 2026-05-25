@@ -104,6 +104,10 @@ pre-commit:
         fi
       stage_fixed: true
 
+# Best-effort local feedback only. jj does NOT fire lefthook reliably, and
+# squash-merge composes the landing commit subject from the PR title at merge
+# time (never seen by this hook). The authoritative conventional-commit gate is
+# .github/workflows/commit-lint.yaml (validates the PR title in CI).
 commit-msg:
   commands:
     conventional-commit:
