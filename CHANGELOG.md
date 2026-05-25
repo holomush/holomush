@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.15](https://github.com/holomush/holomush/compare/v0.1.14...v0.1.15) (2026-05-25)
+
+
+### Features
+
+* **lint:** enable sloglint Tier C logging-discipline policy (holomush-ow4ix) ([#4248](https://github.com/holomush/holomush/issues/4248)) ([3407116](https://github.com/holomush/holomush/commit/340711629aff244511508b500cf2a454706846eb))
+* **skills:** add drain-pane — detached cmux drain worker + stall-watchdog (holomush-ztzk7) ([#4250](https://github.com/holomush/holomush/issues/4250)) ([2f00a6f](https://github.com/holomush/holomush/commit/2f00a6f80245bbf0abc828114311e2879c291ab5))
+
 ## [0.1.14](https://github.com/holomush/holomush/compare/v0.1.13...v0.1.14) (2026-05-24)
 
 
