@@ -125,6 +125,13 @@ policies:
       && resource.scene.state == "paused" };
 
   # ─── Membership operations (Phase 3 new) ──────────────────────────────
+  # NOTE: join-open-scene and join-private-scene-as-invitee document the
+  # intended join semantics but are NOT consulted by the current command path.
+  # Join authorization is enforced substrate-side: classifyJoinMiss in the
+  # store layer checks scene state, visibility, and invitation status before
+  # admitting a joiner. An engine gate cannot express open-scene admission
+  # (which admits non-members by definition). These policies are kept for
+  # documentation and future reference if join is ever moved through the engine.
   - name: join-open-scene
     dsl: >-
       permit(principal is character, action in ["join"], resource is scene) when { resource.scene.visibility == "open" &&
@@ -153,5 +160,5 @@ policies:
   # ─── Admin-only operations ────────────────────────────────────────────
   - name: admin-extend-publish-attempts
     dsl: >-
-      permit(principal is character, action in ["extend_publish_attempts"],
-      resource is scene) when { "admin" in principal.character.roles };
+      permit(principal is character, action in ["extend_publish_attempts"], resource is scene) when { "admin" in principal.character.roles
+      };

@@ -30,7 +30,8 @@ func newTestPluginWithMember(t *testing.T, sceneID string) (*scenePlugin, *recor
 	sink := &recordingEventSink{}
 	svc := NewSceneServiceImpl(store)
 	svc.SetEventSink(sink)
-	return &scenePlugin{service: svc}, sink
+	// allowEvaluator: emit gate requires an evaluator; use allow-all so tests assert business logic.
+	return &scenePlugin{service: svc, evaluator: allowEvaluator{}}, sink
 }
 
 func TestSceneSubcommand_Pose_EmitsSceneEventOnICFacet(t *testing.T) {
@@ -139,32 +140,15 @@ func TestSceneSubcommand_NonParticipant_PermissionDenied(t *testing.T) {
 	assert.Contains(t, resp.Output, "not currently in any scene")
 }
 
-func TestSceneSubcommand_NonParticipant_DefenseInDepth(t *testing.T) {
+func TestSceneSubcommand_InvitedOnly_TreatedAsNonMember(t *testing.T) {
 	t.Parallel()
-	// Construct a state where ListScenesForCharacter returns a scene ID but
-	// IsParticipant returns false. This can't happen in production (both
-	// queries hit the same scene_participants table), but it exercises the
-	// defense-in-depth IsParticipant check independently of the single-
-	// membership resolver. We do this by hand-tampering the fakeStore: the
-	// scene exists with char-bob in the participants map as "invited", and
-	// IsParticipant correctly returns false for invited rows — but our
-	// ListScenesForCharacter mirror only returns owner/member, so we have
-	// to add bob as an invited row manually AND override the list method.
-	//
-	// Simpler: set up a scene where char-bob is invited (not member). The
-	// resolver's fake reads from the participant map filtered to owner+member,
-	// returning empty. So we'd hit the "not in any scene" path again.
-	//
-	// To genuinely exercise the IsParticipant gate, we need the resolver to
-	// return a scene where bob is NOT owner/member. We construct this by
-	// adding bob as member to scene A, then having the resolver return A,
-	// then DELETING bob's membership before the IsParticipant call. The
-	// fakeStore can't do this between calls; the integration test covers
-	// the production race. For unit coverage we trust the gate is exercised
-	// at the path level (line-coverage tools will confirm).
-	//
-	// Marking as covered-by-integration-test; this test asserts the simpler
-	// invariant that an invited-only character is treated as a non-participant.
+	// Exercises resolveSingleSceneMembership returning empty for an invited-only
+	// character. The resolver filters to owner+member rows; invited-only rows are
+	// excluded, so the character appears as "not in any scene" to the emit path.
+	// This is the correct outcome: invitation grants join rights, not write rights
+	// (spec §5.4). The test confirms the user-facing error and that no emit intent
+	// is recorded — both are consequences of the resolver returning empty before
+	// the evaluator check is reached.
 	store := newFakeStore()
 	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
 		ID: "scene-invited-only", OwnerID: "char-owner",
@@ -180,6 +164,8 @@ func TestSceneSubcommand_NonParticipant_DefenseInDepth(t *testing.T) {
 	sink := &recordingEventSink{}
 	svc := NewSceneServiceImpl(store)
 	svc.SetEventSink(sink)
+	// No evaluator needed: bob is invited-only, membership resolution returns
+	// empty and the "not in any scene" error fires before the evaluator check.
 	p := &scenePlugin{service: svc}
 
 	resp, err := p.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
