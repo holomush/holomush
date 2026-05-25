@@ -171,3 +171,16 @@ func (s *ABACSubsystem) Resolver() access.SubjectResolver {
 	}
 	return s.stack.Resolver
 }
+
+// AttributeResolver returns the concrete *attribute.Resolver so that wiring
+// layers (e.g. the plugin subsystem) can register plugin-declared attribute
+// providers via RegisterProvider/UnregisterProvider callbacks. This is the
+// same resolver instance passed to policy.NewEngine during BuildABACStack, so
+// registrations take effect immediately on the live engine. Panics if called
+// before Start().
+func (s *ABACSubsystem) AttributeResolver() *attribute.Resolver {
+	if s.stack == nil {
+		panic("setup: AttributeResolver() called before Start()")
+	}
+	return s.stack.Resolver
+}

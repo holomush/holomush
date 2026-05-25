@@ -37,9 +37,16 @@ import (
 // shutdownTimeout is the maximum time to wait for plugin manager shutdown.
 const shutdownTimeout = 10 * time.Second
 
-// EngineProvider provides an ABAC policy engine.
+// EngineProvider provides an ABAC policy engine and the concrete attribute
+// resolver that backs it. AttributeResolver is used by the plugin subsystem
+// to register plugin-declared attribute providers so that per-action resource
+// policies (e.g. resource.scene.*) resolve at evaluation time.
 type EngineProvider interface {
 	Engine() types.AccessPolicyEngine
+	// AttributeResolver returns the *attribute.Resolver that was passed to
+	// policy.NewEngine during ABAC stack construction. Registering a provider
+	// on this resolver immediately makes its attributes visible to the engine.
+	AttributeResolver() *attribute.Resolver
 }
 
 // PolicyInstallerProvider provides a plugin policy installer.
@@ -230,6 +237,15 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		hostOpts,
 		goplugin.WithSchemaProvisioner(schemaProvisioner),
 		goplugin.WithServiceRegistry(s.registry),
+		// Wire the ABAC engine so PluginHostService.Evaluate resolves (holomush-8kkv5.18).
+		// This MUST use the same engine instance as s.cfg.ABAC.Engine() above — the Lua
+		// hostfunc bridge (hostfunc.WithEngine) is wired from the same call, and the
+		// attribute resolver registered on it is the same one returned by
+		// s.cfg.ABAC.AttributeResolver() below. One engine+resolver pair for both surfaces.
+		goplugin.WithEngine(s.cfg.ABAC.Engine()),
+		// WithAuditLogger: the Lua surface does not wire an auditor via hostfunc.WithAuditLogger
+		// either (absent from hostFuncOpts above). Both surfaces leave audit logging unset for now;
+		// wiring an auditor to both Evaluate surfaces is a follow-up task.
 	)
 
 	if s.cfg.CertsDir != "" {
@@ -270,12 +286,25 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	// Removing entries from PluginTrustAllowlist must take effect on the
 	// next start, not require a restart of the installer instance.
 	policyInstaller.SetTrustAllowlist(s.cfg.TrustAllowlist)
+	// Wire attribute-provider registrar/unregistrar so plugin-declared
+	// resource_types (e.g. core-scenes' "scene" namespace) register on the
+	// live ABAC resolver during plugin load. Without this callback the
+	// manager's discoverAndRegisterAttributes guard skips registration
+	// and resource.scene.* resolves to empty — causing per-action owner
+	// policies (pause-own-scene, update-own-scene, etc.) to default-deny.
+	resolver := s.cfg.ABAC.AttributeResolver()
 	managerOpts := []plugins.ManagerOption{
 		plugins.WithLuaHost(instrumentedLuaHost),
 		plugins.WithPolicyInstaller(policyInstaller),
 		plugins.WithTrustAllowlist(s.cfg.TrustAllowlist),
 		plugins.WithServiceRegistry(s.registry),
 		plugins.WithVerbRegistry(s.cfg.VerbRegistry),
+		plugins.WithAttributeProviderRegistrar(func(p *plugins.PluginAttributeProvider) error {
+			return resolver.RegisterProvider(p)
+		}),
+		plugins.WithAttributeProviderUnregistrar(func(namespace string) bool {
+			return resolver.UnregisterProvider(namespace)
+		}),
 	}
 	if s.aliasRepo != nil && s.aliasCache != nil {
 		managerOpts = append(managerOpts, plugins.WithAliasSeeder(s.aliasRepo, s.aliasCache))

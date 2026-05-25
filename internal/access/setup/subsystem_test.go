@@ -31,3 +31,8 @@ func TestABACSubsystemImplementsSubsystem(_ *testing.T) {
 	sub := setup.NewABACSubsystem(setup.ABACSubsystemConfig{})
 	var _ lifecycle.Subsystem = sub
 }
+
+func TestABACSubsystemAttributeResolverPanicsBeforeStart(t *testing.T) {
+	sub := setup.NewABACSubsystem(setup.ABACSubsystemConfig{})
+	assert.Panics(t, func() { sub.AttributeResolver() })
+}
