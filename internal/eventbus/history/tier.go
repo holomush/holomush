@@ -128,6 +128,26 @@ func WithPluginDowngradeFence(
 	lookup CryptoKeysLookup,
 	emitter ViolationEmitter,
 ) Option {
+	return WithPluginDowngradeFenceReadback(alwaysSensitive, lookup, emitter, nil, nil, nil)
+}
+
+// WithPluginDowngradeFenceReadback is WithPluginDowngradeFence plus the
+// read-back crypto capabilities (guard / dek / audit) that let the fence
+// DECRYPT a clean plugin-owned row for an authorized routed participant
+// (INV-RB-7). A nil guard preserves the pre-T8 ciphertext-passthrough
+// behaviour on clean rows (Crypto.Enabled=false deployments).
+//
+// The caller's CHARACTER identity is forwarded on HistoryQuery.Identity, so
+// the fence's clean-row decrypt routes to the checkCharacter DEK-membership
+// branch (ReadBack=false) rather than the plugin-readback path.
+func WithPluginDowngradeFenceReadback(
+	alwaysSensitive map[string]struct{},
+	lookup CryptoKeysLookup,
+	emitter ViolationEmitter,
+	guard eventbus.SessionAuthGuard,
+	dek eventbus.SessionDEKManager,
+	auditEm eventbus.SessionAuditEmitter,
+) Option {
 	// Copy at capture-time so post-NewReader mutation by the caller cannot
 	// alter the fence's refusal surface (INV-P7-8 "built once at boot"
 	// applies even though fence construction is lazy in fencedRouter).
@@ -140,6 +160,7 @@ func WithPluginDowngradeFence(
 			WithAlwaysSensitiveTypes(copied),
 			WithCryptoKeysLookup(lookup),
 			WithViolationEmitter(emitter),
+			WithFenceReadbackCrypto(guard, dek, auditEm),
 		}
 	}
 }

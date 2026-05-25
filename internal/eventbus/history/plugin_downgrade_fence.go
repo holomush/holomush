@@ -86,6 +86,29 @@ func WithFenceLogger(log *slog.Logger) PluginDowngradeFenceOption {
 	}
 }
 
+// WithFenceReadbackCrypto wires the host-side crypto capabilities the fence
+// needs to DECRYPT a clean plugin-owned row for an authorized routed reader
+// (INV-RB-7). Without these the fence cannot decrypt and falls back to the
+// pre-T8 ciphertext-passthrough behaviour on the clean-row path.
+//
+// The guard authorizes the reader: for a CHARACTER caller it routes to the
+// participant DEK-membership branch (checkCharacter); the fence never sets
+// ReadBack=true (that is the plugin-readback path, distinct from the routed
+// participant read). The dek manager resolves DEK key material. The audit
+// emitter records the INV-19 plugin-decrypt event — only consulted for plugin
+// principals (a character routed read does NOT emit a plugin-decrypt record).
+func WithFenceReadbackCrypto(
+	guard eventbus.SessionAuthGuard,
+	dek eventbus.SessionDEKManager,
+	auditEm eventbus.SessionAuditEmitter,
+) PluginDowngradeFenceOption {
+	return func(f *PluginDowngradeFence) {
+		f.guard = guard
+		f.dek = dek
+		f.audit = auditEm
+	}
+}
+
 // violationEmitTimeout bounds the synchronous emit at INV-P7-7 so a
 // backpressured `audit.<game>.system.*` cannot block the read stream
 // indefinitely. 100ms is the spec-pinned ceiling (Phase C plan §3
@@ -116,6 +139,26 @@ type PluginDowngradeFence struct {
 	cryptoKeysLookup CryptoKeysLookup
 	emitter          ViolationEmitter
 	log              *slog.Logger
+
+	// guard / dek / audit are the read-back decrypt capabilities used by
+	// the clean-row path (INV-RB-7). When guard is nil the fence cannot
+	// decrypt and falls back to ciphertext passthrough on clean rows.
+	guard eventbus.SessionAuthGuard
+	dek   eventbus.SessionDEKManager
+	audit eventbus.SessionAuditEmitter
+}
+
+// readbackDeps assembles the per-call read-back dependency bundle from the
+// fence's captured crypto capabilities. Returned by value (decryptPluginRow
+// takes readbackDeps by value).
+func (f *PluginDowngradeFence) readbackDeps() readbackDeps {
+	return readbackDeps{
+		alwaysSensitive: f.alwaysSensitive,
+		cryptoKeys:      f.cryptoKeysLookup,
+		guard:           f.guard,
+		dek:             f.dek,
+		audit:           f.audit,
+	}
 }
 
 // NewPluginDowngradeFence builds the fence. The set passed via
@@ -151,6 +194,11 @@ func (f *PluginDowngradeFence) QueryHistory(
 		fence:      f,
 		inner:      inner,
 		pluginName: pluginName,
+		// Caller identity drives the clean-row decrypt authorization
+		// (INV-RB-7). For a routed participant read this is a CHARACTER
+		// identity, so decryptPluginRow routes to checkCharacter
+		// DEK-membership (ReadBack=false), NOT the plugin-readback path.
+		caller: q.Identity,
 	}, nil
 }
 
@@ -246,6 +294,10 @@ type fencedStream struct {
 	fence      *PluginDowngradeFence
 	inner      eventbus.HistoryStream
 	pluginName string
+	// caller is the principal on whose behalf the read happens. A routed
+	// participant read carries a CHARACTER identity; clean rows decrypt for
+	// it via the checkCharacter DEK-membership branch (INV-RB-7).
+	caller eventbus.SessionIdentity
 }
 
 // Next applies the Phase 7 layer (1) checks per the spec contract.
@@ -278,14 +330,58 @@ func (s *fencedStream) Next(ctx context.Context) (eventbus.Event, error) {
 
 	switch verdict {
 	case fenceRefuseDowngrade:
+		// INV-P7-7 still refuses BEFORE any decrypt. Emit the violation
+		// audit then surface the metadata-only row.
 		s.fence.emitViolationBounded(ctx, s.pluginName, row)
 		return refuseEvent(ev, eventbus.NoPlaintextReasonDowngradeRefused), nil
 	case fenceRefuseDEKMissing:
+		// INV-P7-15 still refuses BEFORE any decrypt.
 		return refuseEvent(ev, eventbus.NoPlaintextReasonDEKMissing), nil
 	case fenceRefuseInternal:
 		return refuseEvent(ev, eventbus.NoPlaintextReasonInternal), nil
 	default: // fenceClean
-		// Clean row — pass through.
+		return s.decryptClean(ctx, ev, row)
+	}
+}
+
+// decryptClean handles a row that passed the layer-(1) fence (INV-RB-7).
+// When the fence has read-back crypto wired, the clean row is decrypted for
+// the routed caller via the shared decryptPluginRow primitive using the
+// caller's CHARACTER identity — so decryptPluginRow routes to the
+// checkCharacter DEK-membership authorization branch (ReadBack=false), NOT
+// the plugin-readback path. An authorized participant receives plaintext; a
+// non-member receives a metadata-only refusal (NoPlaintextReasonAuthGuardDeny).
+//
+// Production wiring (cmd/holomush/sub_grpc.go:newHistoryReader, via
+// WithPluginDowngradeFenceReadback) ALWAYS supplies the guard/dek/audit when
+// crypto is active, so guard != nil is the normal path. The guard == nil
+// branch is reached ONLY in the Crypto.Enabled=false fallback (and in unit
+// tests that deliberately omit read-back crypto): the fence cannot decrypt and
+// passes the clean row through with pre-T8 ciphertext-passthrough behaviour.
+func (s *fencedStream) decryptClean(
+	ctx context.Context,
+	ev eventbus.Event,
+	row *pluginauditpb.AuditRow,
+) (eventbus.Event, error) {
+	if s.fence.guard == nil {
+		// No read-back crypto wired — pass the row through unchanged
+		// (ciphertext for non-identity codecs; plaintext for identity).
+		return ev, nil
+	}
+
+	res := decryptPluginRow(ctx, s.caller, row, s.fence.readbackDeps())
+	switch {
+	case res.Err != nil:
+		// decryptPluginRow already codes infra failures (oops); forward verbatim.
+		return ev, res.Err
+	case !res.OK():
+		// Refused (e.g. non-member → AuthGuardDeny, stale DEK). Surface a
+		// metadata-only row with the typed reason; NEVER leak plaintext.
+		return refuseEvent(ev, res.Reason), nil
+	default:
+		// Authorized participant — replace the (cipher)payload with the
+		// decrypted plaintext.
+		ev.Payload = res.Plaintext
 		return ev, nil
 	}
 }

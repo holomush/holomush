@@ -841,11 +841,20 @@ func newHistoryReader(
 	// plugin-routed history. Both lookup and emitter may be nil in
 	// degraded deployments; the fence's internal nil-handling preserves
 	// the per-row refusal semantics.
+	//
+	// T8 (INV-RB-7): wire the fence's read-back crypto (guard/dek/audit) so a
+	// clean plugin-owned row can be DECRYPTED for an authorized routed
+	// participant. These are the SAME guard/dekMgr/auditEm forwarded below to
+	// the tier auth; when crypto is disabled (Crypto.Enabled=false) all three
+	// are nil and the fence falls back to ciphertext-passthrough on clean rows.
 	if len(alwaysSensitive) > 0 || cryptoKeysLookup != nil || violationEmitter != nil {
-		opts = append(opts, history.WithPluginDowngradeFence(
+		opts = append(opts, history.WithPluginDowngradeFenceReadback(
 			alwaysSensitive,
 			cryptoKeysLookup,
 			violationEmitter,
+			guard,
+			dekMgr,
+			auditEm,
 		))
 	}
 	if guard != nil && dekMgr != nil && auditEm != nil {
