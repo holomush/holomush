@@ -2339,3 +2339,42 @@ var _ = Describe("Publish store — status reads + transitions", func() {
 		Expect(counts.Active).To(Equal(0), "a PUBLISHED attempt is no longer active")
 	})
 })
+
+var _ = Describe("Publish store — ReadSceneLogForSnapshot", func() {
+	It("returns only pose/say/emit IC content in chronological order, excluding OOC, ops, and other scenes", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		subject := "events.main.scene.scene-snaplog-1.ic"
+
+		// scene_log.timestamp is BIGINT epoch-nanos (INV-TS-1, migration 000007).
+		// ulid.Make() is monotonic, so insertion order == ORDER BY id ASC.
+		insertLog := func(subj, eventType string) {
+			id := ulid.Make()
+			_, err := store.pool.Exec(ctx, `
+				INSERT INTO scene_log (id, subject, type, timestamp, actor_kind, payload, schema_ver, codec)
+				VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, 'character', $4, 1, 'identity')`,
+				id.Bytes(), subj, eventType, []byte(eventType))
+			Expect(err).NotTo(HaveOccurred())
+		}
+		insertLog(subject, "scene_pose")
+		insertLog(subject, "scene_ooc")          // OOC — excluded
+		insertLog(subject, "scene_say")
+		insertLog(subject, "scene_leave_ic")      // ops/notice — excluded
+		insertLog(subject, "scene_emit")
+		insertLog("events.main.scene.other.ic", "scene_pose") // different scene — excluded by subject
+
+		tx, err := store.pool.Begin(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		defer func() { _ = tx.Rollback(ctx) }()
+
+		logs, err := store.ReadSceneLogForSnapshot(ctx, tx, subject)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(logs).To(HaveLen(3), "only pose/say/emit for this subject; OOC + ops + other-scene excluded")
+		Expect(logs[0].Type).To(Equal("scene_pose"))
+		Expect(logs[1].Type).To(Equal("scene_say"))
+		Expect(logs[2].Type).To(Equal("scene_emit"), "chronological order preserved via ULID id ASC")
+		Expect(logs[0].Codec).To(Equal("identity"))
+		Expect(logs[0].DEKRef).To(BeNil(), "identity-codec rows have NULL dek_ref")
+	})
+})

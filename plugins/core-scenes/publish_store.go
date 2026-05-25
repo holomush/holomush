@@ -480,3 +480,58 @@ func (s *SceneStore) GetSceneMaxPublishAttempts(ctx context.Context, sceneID str
 	}
 	return maxAttempts, nil
 }
+
+// LogRow is a minimal scene_log row for the publication snapshot pipeline
+// (C7). It carries the event type (to discriminate pose/say/emit), the acting
+// character (actor_id — the speaker), and the payload + codec/DEK fields the
+// pipeline needs to decrypt the IC content. ID is the ULID bytes, used for
+// chronological ordering.
+type LogRow struct {
+	ID         []byte
+	Type       string
+	ActorID    []byte
+	Payload    []byte
+	SchemaVer  int16
+	Codec      string
+	DEKRef     *int64 // nil for identity-codec rows
+	DEKVersion *int32 // nil for identity-codec rows
+}
+
+// ReadSceneLogForSnapshot reads a scene's IC content rows from scene_log for
+// the publication snapshot pipeline (C7), filtered to the three publishable
+// content kinds (scene_pose / scene_say / scene_emit) and ordered by ULID id
+// (chronological). OOC, ops, and system events are excluded by the type filter
+// (spec §11.1, §12). This is a DIRECT in-transaction DB read — NOT the gRPC
+// QueryHistory path. The caller passes the full IC subject
+// (events.<game_id>.scene.<scene_id>.ic); the store has no game_id of its own.
+func (s *SceneStore) ReadSceneLogForSnapshot(ctx context.Context, tx pgx.Tx, subject string) ([]LogRow, error) {
+	ctx, span := startSpan(ctx, "scene.store.read_scene_log_for_snapshot",
+		attribute.String("subject", subject))
+	defer span.End()
+
+	rows, err := tx.Query(ctx, `
+		SELECT id, type, actor_id, payload, schema_ver, codec, dek_ref, dek_version
+		FROM scene_log
+		WHERE subject = $1 AND type IN ('scene_pose', 'scene_say', 'scene_emit')
+		ORDER BY id ASC
+	`, subject)
+	if err != nil {
+		return nil, oops.Code("SCENE_PUBLISH_LOG_READ_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+
+	var out []LogRow
+	for rows.Next() {
+		var r LogRow
+		if err := rows.Scan(
+			&r.ID, &r.Type, &r.ActorID, &r.Payload, &r.SchemaVer, &r.Codec, &r.DEKRef, &r.DEKVersion,
+		); err != nil {
+			return nil, oops.Code("SCENE_PUBLISH_LOG_SCAN_FAILED").Wrap(err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, oops.Code("SCENE_PUBLISH_LOG_ITER_FAILED").Wrap(err)
+	}
+	return out, nil
+}
