@@ -63,3 +63,22 @@ setup() {
   run cog verify "just some words with no type"
   [ "$status" -ne 0 ]
 }
+
+@test "deps: type is accepted (Renovate commitMessagePrefix, PR #4253 regression)" {
+  run cog verify "deps: Pin dependency @sentry/svelte to 10.53.1"
+  [ "$status" -eq 0 ]
+}
+
+@test "deps commits don't break cog bump and don't bump the version on their own" {
+  git commit -q --allow-empty -m "deps: bump some/dependency to 1.2.3"
+  run cog bump --auto --disable-bump-commit
+  # A lone deps commit is non-bumping: cog reports nothing to bump (non-zero),
+  # but it must NOT fail with a parse/allow-list error, and must leave the tag at v0.1.0.
+  [ "$(git describe --tags --abbrev=0)" = "v0.1.0" ]
+}
+
+@test "adding deps did not disable cog's default commit types" {
+  run cog verify "feat: a feature"; [ "$status" -eq 0 ]
+  run cog verify "fix: a fix"; [ "$status" -eq 0 ]
+  run cog verify "chore: a chore"; [ "$status" -eq 0 ]
+}
