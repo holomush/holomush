@@ -16,6 +16,7 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Separate authorization (WHO) from business-state validity (WHEN) in scene policies](holomush-sqpnv-authz-who-vs-business-state-when-scene-policies.md) | 2026-05-25 | Accepted | `holomush-sqpnv` |
 | [Add host Evaluate RPC for per-action plugin authorization](holomush-dttdj-host-evaluate-rpc-per-action-plugin-authz.md) | 2026-05-25 | Accepted | `holomush-dttdj` |
 | [Derive Evaluate subject host-side; no subject field on wire](holomush-qeypl-host-derived-evaluate-subject.md) | 2026-05-25 | Accepted | `holomush-qeypl` |
 | [Scope plugin Evaluate entitlement to owned resource types](holomush-61rdl-evaluate-entitlement-owned-resource-types.md) | 2026-05-25 | Accepted | `holomush-61rdl` |
