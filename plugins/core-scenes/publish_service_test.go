@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -24,6 +25,12 @@ import (
 type recordingPublishEventer struct {
 	noopPublishEventer
 	extended []extendedCall
+	// Per-event-type call counters for the D3 transition-wiring test.
+	voteCastCount  int
+	coolOffCount   int
+	resolvedCount  int
+	withdrawnCount int
+	lastResolved   PublishedSceneStatus
 }
 
 type extendedCall struct {
@@ -33,6 +40,27 @@ type extendedCall struct {
 
 func (r *recordingPublishEventer) emitAttemptsExtended(_ context.Context, sceneID, adminID string, additional, newMax int) error {
 	r.extended = append(r.extended, extendedCall{sceneID, adminID, additional, newMax})
+	return nil
+}
+
+func (r *recordingPublishEventer) emitVoteCast(_ context.Context, _, _ string, _ *CastVoteResult) error {
+	r.voteCastCount++
+	return nil
+}
+
+func (r *recordingPublishEventer) emitCoolOffStarted(_ context.Context, _ string, _ time.Duration) error {
+	r.coolOffCount++
+	return nil
+}
+
+func (r *recordingPublishEventer) emitResolved(_ context.Context, _ string, finalStatus PublishedSceneStatus, _ *PublishFailureReason, _ *VoteTally) error {
+	r.resolvedCount++
+	r.lastResolved = finalStatus
+	return nil
+}
+
+func (r *recordingPublishEventer) emitWithdrawn(_ context.Context, _, _ string) error {
+	r.withdrawnCount++
 	return nil
 }
 
@@ -463,4 +491,77 @@ func TestPluginManifestDeclaresWithdrawPublishAsOwnerPolicy(t *testing.T) {
 	assert.Contains(t, manifest, "principal is character", "policy principal must be a character")
 	assert.Contains(t, manifest, "resource is scene", "policy must target scene resources")
 	assert.Contains(t, manifest, "resource.scene.owner == principal.id", "policy must be owner-only")
+}
+
+// TestPublishVoteTransitionsEmitLifecycleEvents pins D3's wiring: each vote cast
+// emits scene_publish_vote_cast, an all-yes resolution emits
+// scene_publish_cooloff_started (the COLLECTING→COOLOFF transition), and a
+// subsequent flip-to-no terminal emits scene_publish_resolved — all driven
+// through the real publishEventer set on the service.
+func TestPublishVoteTransitionsEmitLifecycleEvents(t *testing.T) {
+	t.Parallel()
+	v1, v2 := ulid.Make().String(), ulid.Make().String()
+	store := newFakeStore()
+	store.installPublishedAttempt("pub-em", "scene-em", StatusCollecting)
+	store.installVoters("pub-em", v1, v2)
+	rec := &recordingPublishEventer{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetPublishEventer(rec)
+
+	castVote(t, svc, v1, "pub-em", true)
+	castVote(t, svc, v2, "pub-em", true) // all-yes → COOLOFF
+
+	assert.Equal(t, 2, rec.voteCastCount, "each cast emits scene_publish_vote_cast")
+	assert.Equal(t, 1, rec.coolOffCount, "the all-yes COLLECTING→COOLOFF transition emits cooloff_started")
+	assert.Zero(t, rec.resolvedCount, "no terminal transition yet")
+
+	// A no during COOLOFF flips back to COLLECTING (no terminal, no resolved).
+	castVote(t, svc, v1, "pub-em", false)
+	require.Equal(t, StatusCollecting, store.publishedScenes["pub-em"].Status)
+	assert.Zero(t, rec.resolvedCount, "a flip-back is not a terminal resolution")
+}
+
+// TestPublishTerminalTransitionEmitsResolved pins that a terminal transition
+// (any-no after all voted) emits scene_publish_resolved with the terminal status.
+func TestPublishTerminalTransitionEmitsResolved(t *testing.T) {
+	t.Parallel()
+	v1, v2 := ulid.Make().String(), ulid.Make().String()
+	store := newFakeStore()
+	store.installPublishedAttempt("pub-em2", "scene-em2", StatusCollecting)
+	store.installVoters("pub-em2", v1, v2)
+	rec := &recordingPublishEventer{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetPublishEventer(rec)
+
+	castVote(t, svc, v1, "pub-em2", true)
+	castVote(t, svc, v2, "pub-em2", false) // any-no → ATTEMPT_FAILED
+
+	assert.Equal(t, 1, rec.resolvedCount, "the terminal transition emits scene_publish_resolved")
+	assert.Equal(t, StatusAttemptFailed, rec.lastResolved)
+	assert.Zero(t, rec.coolOffCount, "no cool-off on a failed attempt")
+}
+
+// TestWithdrawEmitsWithdrawnAndResolved pins B4's emit wiring through the real
+// emitter: a withdraw fires BOTH scene_publish_withdrawn and the
+// scene_publish_resolved that the terminal transition produces, so renderers
+// can distinguish a withdrawal from a vote failure (spec §7 event table).
+func TestWithdrawEmitsWithdrawnAndResolved(t *testing.T) {
+	t.Parallel()
+	owner := ulid.Make().String()
+	store := newFakeStore()
+	store.installPublishedAttempt("pub-em3", "scene-em3", StatusCollecting)
+	store.scenes["scene-em3"] = &SceneRow{ID: "scene-em3", OwnerID: owner, State: string(SceneStateEnded)}
+	rec := &recordingPublishEventer{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetPublishEventer(rec)
+
+	_, err := svc.WithdrawScenePublish(context.Background(), &scenev1.WithdrawScenePublishRequest{
+		CallerCharacterId: owner,
+		PublishedSceneId:  "pub-em3",
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, rec.withdrawnCount, "withdraw emits scene_publish_withdrawn")
+	assert.Equal(t, 1, rec.resolvedCount, "withdraw's terminal transition emits scene_publish_resolved")
+	assert.Equal(t, StatusAttemptFailed, rec.lastResolved)
 }
