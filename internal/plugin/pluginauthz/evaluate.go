@@ -9,7 +9,9 @@ package pluginauthz
 
 import (
 	"context"
+	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/samber/oops"
@@ -25,17 +27,20 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
-// otelInstruments holds the OTel tracer and evaluation counter.
-// Initialized on first use via the global OTel provider; safe for concurrent
-// access because otel.Tracer/otel.Meter are goroutine-safe.
+// otelInstruments holds the OTel evaluation counter acquired lazily on first
+// call to Evaluate. Acquiring at init() time binds the instrument to the
+// no-op default provider because package init runs before main configures the
+// global SDK. sync.Once defers acquisition until after SDK setup.
 var (
-	// evaluationsCounter is the per-evaluation counter. Labeled by plugin,
-	// effect (allow / deny / error), and subject_kind. Initialized lazily.
-	evaluationsCounter metric.Int64Counter
+	counterOnce        sync.Once
+	evaluationsCounter metric.Int64Counter // nil until first Evaluate call
 )
 
-func init() {
-	// Use the global meter (same scope as otel_middleware.go's "holomush.plugin").
+// initCounter acquires the evaluations counter from the global MeterProvider.
+// Called once via counterOnce on the first Evaluate invocation, by which time
+// main has configured the global OTel SDK. Evaluation proceeds even if counter
+// creation fails (observability failure MUST NOT block authz).
+func initCounter() {
 	meter := otel.GetMeterProvider().Meter("holomush.plugin")
 	var err error
 	evaluationsCounter, err = meter.Int64Counter(
@@ -43,10 +48,9 @@ func init() {
 		metric.WithDescription("Total plugin authorization evaluations by pluginauthz.Evaluate"),
 	)
 	if err != nil {
-		// Counter creation errors from the SDK should not crash the process.
-		// If the global provider is the no-op default, this never errors.
-		// If it errors (misconfigured SDK), fall through with a nil counter
-		// and record calls below are guarded.
+		// No context available at this call site; use bare slog (MAY carve-out).
+		slog.Warn("pluginauthz: failed to create evaluations counter; metric will not be recorded",
+			"error", err)
 		evaluationsCounter = nil
 	}
 }
@@ -104,10 +108,15 @@ const commandResourceType = "command"
 // accompanies a non-allowing Decision.
 //
 // OTel instrumentation: a span ("pluginauthz.evaluate") and a counter
-// ("holomush_pluginauthz_evaluations_total") are recorded per call. Both use
-// the global provider (same scope as otel_middleware.go); the global SDK is
-// initialized before any plugin call in production, so providers are always set.
+// ("holomush_pluginauthz_evaluations_total") are recorded per call. The
+// counter is acquired lazily on first call (via counterOnce) so it binds to
+// the real SDK provider after main configures it — not the no-op default that
+// exists during package init. The tracer is acquired per call (always fine).
 func Evaluate(ctx context.Context, in Input) (Decision, error) {
+	// Lazily acquire the counter on first call so it binds to the real SDK
+	// provider (configured in main) rather than the no-op default.
+	counterOnce.Do(initCounter)
+
 	// Start OTel span — use the global tracer provider (matches otel_middleware.go scope).
 	tracer := otel.GetTracerProvider().Tracer("holomush.plugin")
 	subjectKind := subjectKindFromSubject(in.Subject)
