@@ -62,6 +62,34 @@ killall task
 
 After all fd holders die, the kernel releases the lock within microseconds. Run `task pr-prep` again — it should acquire cleanly.
 
+## Reading the result (for automation)
+
+If you script around `task pr-prep` — a retry loop, a babysitter, an agent — read the **exit code** and the **result file**, not the terminal text. Two things make stdout the wrong signal:
+
+- go-task collapses every non-zero exit to `201`, so the exit code alone can't tell a lock collision apart from a real gate failure.
+- pr-prep's own `pr-prep-lock.bats` self-test prints the string `another pr-prep is running` on healthy runs. A loop that greps for that string to detect contention treats every passing run as a collision and re-runs forever. This happened in May 2026.
+
+Every run writes a result file and prints a line prefixed with `▸ pr-prep result:` (match this prefix to find the path — don't assume a fixed line number, since wrappers may prepend output):
+
+```text
+▸ pr-prep result: /var/folders/.../T/holomush-pr-prep/runs/20260525T120000Z-12345.result
+```
+
+The file holds `key=value` lines:
+
+```text
+status=pass
+lane=full
+exit=0
+finished_at=2026-05-25T12:14:03Z
+```
+
+Branch on `status`, which is `pass`, `fail`, or `contention`:
+
+- `contention` — another run holds the lock. Wait, then retry. (It also returned in ~2s having run nothing.)
+- `fail` — a real check failed. Read the log and fix it; do not retry.
+- `pass` — you are clear to push.
+
 ## How the lock works
 
 `flock(1)` opens a file under `${TMPDIR:-/tmp}/holomush-pr-prep/lock` and holds it for the duration of the inner CI body. The kernel automatically releases the lock when the holding processes' file descriptors close — including when they die for any reason. There is no stale-lock-cleanup procedure to worry about, BUT note (per "Killing a wedged holder" above) that descriptor inheritance through child processes means the holder process tree must die for the lock to release.

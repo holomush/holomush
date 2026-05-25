@@ -56,6 +56,13 @@ holder_pid_from_info() {
   awk -F= '/^pid=/{print $2}' "$INFO_FILE" 2>/dev/null
 }
 
+# Path to the most-recently-written result file in this test's run dir, or
+# empty string if none exist. Each pr-prep invocation writes one result file
+# under $LOCK_DIR/runs/ (I-11); a single-invocation test has exactly one.
+latest_result_file() {
+  ls -t "${LOCK_DIR_OVERRIDE}/runs"/*.result 2>/dev/null | head -1
+}
+
 # Run the fixture pr-prep in the foreground, capturing exit status, stdout,
 # stderr in $status, $output (combined). Mirrors bats run behavior.
 fixture_pr_prep() {

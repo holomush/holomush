@@ -726,9 +726,27 @@ tasks:
           set -euo pipefail
 
           # ─────────────────────────────────────────────────────────────
+          # Result artifact (spec I-11). go-task collapses every non-zero
+          # exit to 201, so callers cannot tell lock-contention from a real
+          # gate failure by exit code — each run writes a machine-readable
+          # result file and prints its path; automation reads that instead
+          # of grepping stdout (which trips on pr-prep-lock.bats' own
+          # "another pr-prep is running" assertion string).
+          # ─────────────────────────────────────────────────────────────
+          LOCK_DIR="${TMPDIR:-/tmp}/holomush-pr-prep"
+          RUN_DIR="$LOCK_DIR/runs"
+          mkdir -p "$RUN_DIR"
+          RESULT="$RUN_DIR/$(date -u +%Y%m%dT%H%M%SZ)-$$.result"
+          printf '▸ pr-prep result: %s\n' "$RESULT"
+          write_result() {
+            printf 'status=%s\nlane=%s\nexit=%s\nfinished_at=%s\n' \
+              "$1" "$2" "$3" "$(date -u +%FT%TZ)" > "$RESULT"
+          }
+
+          # ─────────────────────────────────────────────────────────────
           # Docs-only detection. MUST live in this same `- cmd:` block as
           # the flock body below — go-task spawns each `- cmd:` in its own
-          # subshell, so `exec` only short-circuits within the same shell.
+          # subshell, so the `exit` short-circuit only works within this shell.
           # Spec §4.3.1.
           # ─────────────────────────────────────────────────────────────
           if [ "${HOLOMUSH_PR_PREP_FORCE_FULL:-}" != "1" ]; then
@@ -738,13 +756,14 @@ tasks:
               DOCS_REGEX=$(bash scripts/docs-paths-regex.sh)
               if ! printf '%s\n' "$CHANGED" | grep -vE "$DOCS_REGEX" >/dev/null; then
                 echo "▸ docs-only diff detected; running pr-prep:docs"
-                exec task pr-prep:docs
+                drc=0
+                task pr-prep:docs || drc=$?
+                if [ "$drc" -eq 0 ]; then write_result pass docs 0; else write_result fail docs "$drc"; fi
+                exit "$drc"
               fi
             fi
           fi
 
-          LOCK_DIR="${TMPDIR:-/tmp}/holomush-pr-prep"
-          mkdir -p "$LOCK_DIR"
           LOCK="$LOCK_DIR/lock"
           INFO="$LOCK_DIR/info"
           rc=0
@@ -765,12 +784,19 @@ tasks:
               echo "  Lock file: $LOCK"
               echo "  Wait for it to finish, or kill the holder PID if wedged."
             } >&2
+            write_result contention full 75
             exit 1
           fi
           if [ "$rc" -ne 0 ]; then
-            echo "ERROR: lock acquire failed unexpectedly (rc=$rc); see flock(1) output above." >&2
+            # rc is non-zero and not 75: on a successful lock acquire flock
+            # returns the inner lane's exit code, so this is usually a real
+            # gate failure (go-task wraps it to 201); it can also be a flock
+            # error such as EACCES on the lockfile. Either way: status=fail.
+            write_result fail full "$rc"
+            echo "ERROR: pr-prep failed (rc=$rc) — a check failed (see output above) or the lock could not be acquired (e.g. flock EACCES)." >&2
             exit "$rc"
           fi
+          write_result pass full 0
 
   pr-prep:run:
     cmds:

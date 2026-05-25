@@ -215,9 +215,49 @@ setup() {
   # (the harness's flock -E 75), not propagated to the user.
 }
 
+# I-11: every invocation writes a machine-readable result file under
+# $LOCK_DIR/runs/ recording status=pass|fail|contention. go-task collapses
+# every non-zero exit to 201 (see I-6), so contention and a real gate failure
+# are indistinguishable by exit code; the result file is the machine-readable
+# signal that lets automation disambiguate WITHOUT grepping stdout (which
+# trips on this suite's own "another pr-prep is running" assertion string).
+@test "result_file_records_status: idle pass records status=pass" {
+  STUB_SLEEP=0 STUB_MARKER="${BATS_TEST_TMPDIR}/marker" \
+    run task -t "$(fixture_taskfile)" pr-prep
+  [ "$status" -eq 0 ]
+  local rf
+  rf="$(latest_result_file)"
+  [ -n "$rf" ]
+  grep -q '^status=pass$' "$rf"
+  grep -q '^lane=full$' "$rf"
+  # The path is announced on stdout so callers can find it.
+  [[ "$output" == *"pr-prep result:"* ]]
+}
+
+@test "result_file_records_status (failure): inner failure records status=fail" {
+  STUB_EXIT=42 STUB_SLEEP=0 STUB_MARKER="${BATS_TEST_TMPDIR}/marker" \
+    run task -t "$(fixture_taskfile)" pr-prep
+  [ "$status" -ne 0 ]
+  local rf
+  rf="$(latest_result_file)"
+  [ -n "$rf" ]
+  grep -q '^status=fail$' "$rf"
+}
+
+@test "result_file_records_status (contention): collision records status=contention" {
+  start_collision
+  run fixture_pr_prep
+  [ "$status" -ne 0 ]
+  # The colliding invocation writes status=contention; the holder is still
+  # sleeping and has not written its own result yet.
+  run grep -rl '^status=contention$' "${LOCK_DIR_OVERRIDE}/runs"
+  [ "$status" -eq 0 ]
+  end_collision
+}
+
 # Meta-test: every numbered invariant in the spec MUST have a named bats
 # test. Catches drift between the spec and the suite.
-@test "all_invariants_have_tests: I-1 through I-10 each map to a named test" {
+@test "all_invariants_have_tests: I-1 through I-11 each map to a named test" {
   local spec="docs/superpowers/specs/2026-04-26-pr-prep-concurrency-safety-design.md"
   local bats_file="scripts/tests/pr-prep-lock.bats"
 
@@ -236,6 +276,7 @@ setup() {
     [I-8]="non_blocking_acquire"
     [I-9]="bypass_guard_blocks"
     [I-10]="pr_prep_run_hidden_from_list"
+    [I-11]="result_file_records_status"
   )
 
   # Each invariant ID must appear in the spec's invariant table.

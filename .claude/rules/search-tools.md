@@ -22,6 +22,19 @@ the native Read/Glob tools.
 | **SHOULD** reach for `ast-grep` | For structural matches and codemods — see patterns below. |
 | **MUST** brief sub-agents on this ladder | Sub-agents default to `rg`/full-file `Read` without an explicit reminder. |
 
+## Searching files ≠ deciding whether a command succeeded
+
+The ladder above is for finding text *in files*. Deciding whether a **command
+run** passed, failed, or should be retried is a different question — and
+`grep`/`rg` over its output is the wrong tool for it.
+
+| Requirement | Rule |
+| --- | --- |
+| **MUST** use the exit code | To decide pass/fail of a command, check `$?` — never grep its stdout/stderr for a "success"/"error" string. |
+| **MUST NOT** branch on a matched output string | A command's output can echo test fixtures, expected-value assertions, or your own input, so a status substring may appear on a **passing** run. Real example: `task pr-prep`'s `pr-prep-lock.bats` self-test surfaces `another pr-prep is running` on healthy runs — an agent's retry loop grepped for that string, mistook every pass for lock contention, and re-ran the full lane forever (May 2026). |
+| **MUST** read the exit code, not the log tail, for background runs | With `run_in_background`, get pass/fail from the run's reported exit code (or a result artifact the command writes), not by grepping the captured log. Piping through `tee`/`tail`/a trailing `echo` masks the real exit code unless `set -o pipefail` is on. |
+| **MAY** grep output as a *secondary* confirmation | After the exit code says pass, matching a known terminal line (e.g. `✓ All PR checks passed.`) is fine as a sanity check — never as the primary signal. |
+
 ## ast-grep for HoloMUSH (Go)
 
 `ast-grep` (`sg`) matches parsed syntax (whitespace/var-name independent) and can
