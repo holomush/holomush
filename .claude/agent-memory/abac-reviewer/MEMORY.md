@@ -187,20 +187,16 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   fix: hoist the ctx derivation above the nil-engine guard so `slog.WarnContext` can
   be used). The sloglint `context: scope` linter won't catch these because ctx is
   technically not yet in scope at the Warn call site.
-- **GatedSubcommand SDK gate (8kkv5.6, 2026-05-25)**: `pkg/plugin.GatedSubcommand.Run`
+- **GatedSubcommand SDK gate (8kkv5.6-7, 2026-05-25)**: `pkg/plugin.GatedSubcommand.Run`
   enforces structural ABAC: ResourceRef → Evaluate → Handler, three distinct early-return
-  paths, no fallthrough to Handler without `Allowed:true`. `HostEvaluator` takes only
-  action+resource; subject is host-derived at the RPC layer. Deny-reason leakage is
-  acceptable (host controls `Reason` content). Recurring Low gap: engine-error path
-  (`evalErr != nil → CommandFailure`) had no test; `fakeEvaluator` only returned nil
-  error. When reviewing SDK gate code, always check that the test suite includes a case
-  where the evaluator returns a non-nil error and asserts both `CommandFailure` status
-  AND `handlerRan == false`.
-- **Audit assertion gap in integration property specs (rmsi.5 Low NIT)**:
-  `seed_policies_test.go` S1-S13 reset `auditWriter` in BeforeEach but no spec in the
-  property block reads back `env.auditWriter.Entries()` to verify the decision was
-  recorded. Engine-level audit contract is covered by `evaluation_test.go:68-70` (via
-  `Eventually`), but per-property-seed audit assertion is absent. When reviewing future
-  integration suites that add new seed coverage blocks, check whether the block includes
-  at least one audit-trail assertion — especially for FORBID seeds where audit capture
-  is the primary defense against undetected denials.
+  paths, no fallthrough to Handler without `Allowed:true`. Confirmed confirmed in 8kkv5.7:
+  `handleExtend` has exactly ONE call site (as `Handler` field of `GatedSubcommand{}`);
+  nil-evaluator guard fails closed to `CommandError`; action string in DSL matches code exactly.
+  Recurring Low gap pattern for GatedSubcommand consumers: nil-evaluator branch and
+  engine-error path often lack dedicated tests. When reviewing plugin subcommand
+  code, always check: (1) test for nil evaluator → `CommandError`; (2) test for
+  engine error → `CommandFailure`, `handlerRan == false`; (3) `rg "handleX"` across
+  the repo to confirm no ungated call site exists.
+- **Audit assertion gap (Low NIT, rmsi.5)**: `seed_policies_test.go` FORBID seeds lack
+  audit-trail assertions in integration suites. Engine-level contract covered by
+  `evaluation_test.go:68-70`. Flag in future integration suite reviews.
