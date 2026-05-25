@@ -8,7 +8,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceAddSessionStreamRequest, PluginHostServiceAddSessionStreamResponse, PluginHostServiceAutoFocusOnJoinRequest, PluginHostServiceAutoFocusOnJoinResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceIsAnyConnFocusedRequest, PluginHostServiceIsAnyConnFocusedResponse, PluginHostServiceJoinFocusRequest, PluginHostServiceJoinFocusResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLeaveFocusByTargetRequest, PluginHostServiceLeaveFocusByTargetResponse, PluginHostServiceLeaveFocusRequest, PluginHostServiceLeaveFocusResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServicePresentFocusRequest, PluginHostServicePresentFocusResponse, PluginHostServiceQueryStreamHistoryRequest, PluginHostServiceQueryStreamHistoryResponse, PluginHostServiceRemoveSessionStreamRequest, PluginHostServiceRemoveSessionStreamResponse, PluginHostServiceRequestEmitTokenRequest, PluginHostServiceRequestEmitTokenResponse, PluginHostServiceSetConnectionFocusRequest, PluginHostServiceSetConnectionFocusResponse, QuerySessionStreamsRequest, QuerySessionStreamsResponse } from "./plugin_pb.js";
+import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceAddSessionStreamRequest, PluginHostServiceAddSessionStreamResponse, PluginHostServiceAutoFocusOnJoinRequest, PluginHostServiceAutoFocusOnJoinResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceEvaluateRequest, PluginHostServiceEvaluateResponse, PluginHostServiceIsAnyConnFocusedRequest, PluginHostServiceIsAnyConnFocusedResponse, PluginHostServiceJoinFocusRequest, PluginHostServiceJoinFocusResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLeaveFocusByTargetRequest, PluginHostServiceLeaveFocusByTargetResponse, PluginHostServiceLeaveFocusRequest, PluginHostServiceLeaveFocusResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServicePresentFocusRequest, PluginHostServicePresentFocusResponse, PluginHostServiceQueryStreamHistoryRequest, PluginHostServiceQueryStreamHistoryResponse, PluginHostServiceRemoveSessionStreamRequest, PluginHostServiceRemoveSessionStreamResponse, PluginHostServiceRequestEmitTokenRequest, PluginHostServiceRequestEmitTokenResponse, PluginHostServiceSetConnectionFocusRequest, PluginHostServiceSetConnectionFocusResponse, QuerySessionStreamsRequest, QuerySessionStreamsResponse } from "./plugin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -276,6 +276,20 @@ export const PluginHostService = {
       name: "IsAnyConnFocused",
       I: PluginHostServiceIsAnyConnFocusedRequest,
       O: PluginHostServiceIsAnyConnFocusedResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Evaluate runs the host ABAC engine for a single action against a single
+     * resource instance owned by the calling plugin. The subject is derived
+     * host-side from the dispatch token (see EmitEvent) — there is no subject
+     * field on the wire (spec §2, INV-1).
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.Evaluate
+     */
+    evaluate: {
+      name: "Evaluate",
+      I: PluginHostServiceEvaluateRequest,
+      O: PluginHostServiceEvaluateResponse,
       kind: MethodKind.Unary,
     },
   }

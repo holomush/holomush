@@ -278,6 +278,7 @@ const (
 	PluginHostService_SetConnectionFocus_FullMethodName  = "/holomush.plugin.v1.PluginHostService/SetConnectionFocus"
 	PluginHostService_AutoFocusOnJoin_FullMethodName     = "/holomush.plugin.v1.PluginHostService/AutoFocusOnJoin"
 	PluginHostService_IsAnyConnFocused_FullMethodName    = "/holomush.plugin.v1.PluginHostService/IsAnyConnFocused"
+	PluginHostService_Evaluate_FullMethodName            = "/holomush.plugin.v1.PluginHostService/Evaluate"
 )
 
 // PluginHostServiceClient is the client API for PluginHostService service.
@@ -341,6 +342,11 @@ type PluginHostServiceClient interface {
 	// IsAnyConnFocused — Phase 5 notification-emission helper: true iff
 	// any of the character's connections has FocusKey == {scene, scene_id}.
 	IsAnyConnFocused(ctx context.Context, in *PluginHostServiceIsAnyConnFocusedRequest, opts ...grpc.CallOption) (*PluginHostServiceIsAnyConnFocusedResponse, error)
+	// Evaluate runs the host ABAC engine for a single action against a single
+	// resource instance owned by the calling plugin. The subject is derived
+	// host-side from the dispatch token (see EmitEvent) — there is no subject
+	// field on the wire (spec §2, INV-1).
+	Evaluate(ctx context.Context, in *PluginHostServiceEvaluateRequest, opts ...grpc.CallOption) (*PluginHostServiceEvaluateResponse, error)
 }
 
 type pluginHostServiceClient struct {
@@ -511,6 +517,16 @@ func (c *pluginHostServiceClient) IsAnyConnFocused(ctx context.Context, in *Plug
 	return out, nil
 }
 
+func (c *pluginHostServiceClient) Evaluate(ctx context.Context, in *PluginHostServiceEvaluateRequest, opts ...grpc.CallOption) (*PluginHostServiceEvaluateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceEvaluateResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_Evaluate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginHostServiceServer is the server API for PluginHostService service.
 // All implementations must embed UnimplementedPluginHostServiceServer
 // for forward compatibility.
@@ -572,6 +588,11 @@ type PluginHostServiceServer interface {
 	// IsAnyConnFocused — Phase 5 notification-emission helper: true iff
 	// any of the character's connections has FocusKey == {scene, scene_id}.
 	IsAnyConnFocused(context.Context, *PluginHostServiceIsAnyConnFocusedRequest) (*PluginHostServiceIsAnyConnFocusedResponse, error)
+	// Evaluate runs the host ABAC engine for a single action against a single
+	// resource instance owned by the calling plugin. The subject is derived
+	// host-side from the dispatch token (see EmitEvent) — there is no subject
+	// field on the wire (spec §2, INV-1).
+	Evaluate(context.Context, *PluginHostServiceEvaluateRequest) (*PluginHostServiceEvaluateResponse, error)
 	mustEmbedUnimplementedPluginHostServiceServer()
 }
 
@@ -629,6 +650,9 @@ func (UnimplementedPluginHostServiceServer) AutoFocusOnJoin(context.Context, *Pl
 }
 func (UnimplementedPluginHostServiceServer) IsAnyConnFocused(context.Context, *PluginHostServiceIsAnyConnFocusedRequest) (*PluginHostServiceIsAnyConnFocusedResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method IsAnyConnFocused not implemented")
+}
+func (UnimplementedPluginHostServiceServer) Evaluate(context.Context, *PluginHostServiceEvaluateRequest) (*PluginHostServiceEvaluateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Evaluate not implemented")
 }
 func (UnimplementedPluginHostServiceServer) mustEmbedUnimplementedPluginHostServiceServer() {}
 func (UnimplementedPluginHostServiceServer) testEmbeddedByValue()                           {}
@@ -939,6 +963,24 @@ func _PluginHostService_IsAnyConnFocused_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginHostService_Evaluate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceEvaluateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).Evaluate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_Evaluate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).Evaluate(ctx, req.(*PluginHostServiceEvaluateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginHostService_ServiceDesc is the grpc.ServiceDesc for PluginHostService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1009,6 +1051,10 @@ var PluginHostService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "IsAnyConnFocused",
 			Handler:    _PluginHostService_IsAnyConnFocused_Handler,
+		},
+		{
+			MethodName: "Evaluate",
+			Handler:    _PluginHostService_Evaluate_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
