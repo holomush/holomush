@@ -166,6 +166,18 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   key, `resource has X` returns TRUE even when the list is logically absent — same
   fail-open shape as the empty-string sentinel bug (ti1b). The correct shape is:
   omit the key entirely, not emit an empty list.
+- **pluginauthz shared core (8kkv5, 2026-05-25)**: `internal/plugin/pluginauthz/evaluate.go`
+  is the runtime-neutral INV-5 single-source-of-truth for plugin per-action authorization.
+  Key invariants confirmed: empty subject/action/resource each fail closed before engine;
+  unentitled resource type fails closed before engine; engine error fails closed; zero-value
+  `Decision{}` is `allowed=false` (`types.go` test line 198-203). Three recurring Low patterns
+  to check in future pluginauthz edits: (1) `ActorSystem` collapses all system actors to bare
+  `"system"` (drops `.ID`) — non-invertible, but safe because system actors don't enter
+  plugin-eval paths in practice; flag if a new sentinel is added; (2) `splitResourceRef` takes
+  the FIRST colon, so `"a:b:c"` parses as type=`a` id=`b:c` — not fail-open but test coverage
+  gap (no multi-colon case in `TestEvaluate_MalformedResourceRejected`); (3) nil `Engine` panics
+  instead of fail-closing — nil auditor IS guarded (line 119), nil engine is not (line 104);
+  low production risk but should be fixed for consistency.
 - **Audit assertion gap in integration property specs (rmsi.5 Low NIT)**:
   `seed_policies_test.go` S1-S13 reset `auditWriter` in BeforeEach but no spec in the
   property block reads back `env.auditWriter.Entries()` to verify the decision was
