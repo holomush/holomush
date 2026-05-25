@@ -98,6 +98,11 @@ message DecryptOwnAuditRowsResponse {
 // "not_owner", "downgrade_refused", "dek_missing", "internal").
 message RowResult {
   bytes id = 1; // echoes AuditRow.id for correlation
-  bytes plaintext = 2; // set iff decrypted
-  string no_plaintext_reason = 3; // set iff refused
+  // Exactly one outcome arm is set: plaintext iff the row decrypted,
+  // no_plaintext_reason iff it was refused. The oneof makes both-set /
+  // neither-set unrepresentable and distinguishes decrypted-to-empty from refused.
+  oneof outcome {
+    bytes plaintext = 2; // set iff decrypted
+    string no_plaintext_reason = 3; // set iff refused
+  }
 }

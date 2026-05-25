@@ -80,7 +80,7 @@ func TestDecryptOwnAuditRowsHostfuncReturnsPlaintextFromDecryptor(t *testing.T) 
 		result: func(_ string, rows []*pluginv1.AuditRow) (*pluginv1.DecryptOwnAuditRowsResponse, error) {
 			return &pluginv1.DecryptOwnAuditRowsResponse{
 				Results: []*pluginv1.RowResult{
-					{Id: rows[0].GetId(), Plaintext: []byte("hello world")},
+					{Id: rows[0].GetId(), Outcome: &pluginv1.RowResult_Plaintext{Plaintext: []byte("hello world")}},
 				},
 			}, nil
 		},
@@ -107,7 +107,7 @@ func TestDecryptOwnAuditRowsHostfuncReturnsRefusalReason(t *testing.T) {
 		result: func(_ string, rows []*pluginv1.AuditRow) (*pluginv1.DecryptOwnAuditRowsResponse, error) {
 			return &pluginv1.DecryptOwnAuditRowsResponse{
 				Results: []*pluginv1.RowResult{
-					{Id: rows[0].GetId(), NoPlaintextReason: "not_owner"},
+					{Id: rows[0].GetId(), Outcome: &pluginv1.RowResult_NoPlaintextReason{NoPlaintextReason: "not_owner"}},
 				},
 			}, nil
 		},

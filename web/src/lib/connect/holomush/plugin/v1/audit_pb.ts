@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/plugin/v1/audit.proto.
  */
 export const file_holomush_plugin_v1_audit: GenFile = /*@__PURE__*/
-  fileDesc("Ch5ob2xvbXVzaC9wbHVnaW4vdjEvYXVkaXQucHJvdG8SEmhvbG9tdXNoLnBsdWdpbi52MSKQAgoIQXVkaXRSb3cSCgoCaWQYASABKAwSDwoHc3ViamVjdBgCIAEoCRIMCgR0eXBlGAMgASgJEi0KCXRpbWVzdGFtcBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKgoFYWN0b3IYBSABKAsyGy5ob2xvbXVzaC5ldmVudGJ1cy52MS5BY3RvchINCgVjb2RlYxgGIAEoCRIPCgdwYXlsb2FkGAcgASgMEhQKB2Rla19yZWYYCCABKARIAIgBARIYCgtkZWtfdmVyc2lvbhgJIAEoDUgBiAEBEhIKCnNjaGVtYV92ZXIYCiABKAVCCgoIX2Rla19yZWZCDgoMX2Rla192ZXJzaW9uIj4KEUF1ZGl0RXZlbnRSZXF1ZXN0EikKA3JvdxgBIAEoCzIcLmhvbG9tdXNoLnBsdWdpbi52MS5BdWRpdFJvdyIUChJBdWRpdEV2ZW50UmVzcG9uc2Ui9wEKE1F1ZXJ5SGlzdG9yeVJlcXVlc3QSDwoHc3ViamVjdBgBIAEoCRINCgVhZnRlchgCIAEoDBIOCgZiZWZvcmUYAyABKAwSEQoJcGFnZV9zaXplGAQgASgFEhEKCWRpcmVjdGlvbhgFIAEoBRIuCgpub3RfYmVmb3JlGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBItCglub3RfYWZ0ZXIYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKBmNhbGxlchgIIAEoCzIbLmhvbG9tdXNoLmV2ZW50YnVzLnYxLkFjdG9yIkEKFFF1ZXJ5SGlzdG9yeVJlc3BvbnNlEikKA3JvdxgBIAEoCzIcLmhvbG9tdXNoLnBsdWdpbi52MS5BdWRpdFJvdyJIChpEZWNyeXB0T3duQXVkaXRSb3dzUmVxdWVzdBIqCgRyb3dzGAEgAygLMhwuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0Um93Ik0KG0RlY3J5cHRPd25BdWRpdFJvd3NSZXNwb25zZRIuCgdyZXN1bHRzGAEgAygLMh0uaG9sb211c2gucGx1Z2luLnYxLlJvd1Jlc3VsdCJHCglSb3dSZXN1bHQSCgoCaWQYASABKAwSEQoJcGxhaW50ZXh0GAIgASgMEhsKE25vX3BsYWludGV4dF9yZWFzb24YAyABKAky1gEKElBsdWdpbkF1ZGl0U2VydmljZRJbCgpBdWRpdEV2ZW50EiUuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0RXZlbnRSZXF1ZXN0GiYuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0RXZlbnRSZXNwb25zZRJjCgxRdWVyeUhpc3RvcnkSJy5ob2xvbXVzaC5wbHVnaW4udjEuUXVlcnlIaXN0b3J5UmVxdWVzdBooLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeUhpc3RvcnlSZXNwb25zZTABQkRaQmdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL3BsdWdpbi92MTtwbHVnaW52MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_holomush_eventbus_v1_eventbus]);
+  fileDesc("Ch5ob2xvbXVzaC9wbHVnaW4vdjEvYXVkaXQucHJvdG8SEmhvbG9tdXNoLnBsdWdpbi52MSKQAgoIQXVkaXRSb3cSCgoCaWQYASABKAwSDwoHc3ViamVjdBgCIAEoCRIMCgR0eXBlGAMgASgJEi0KCXRpbWVzdGFtcBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKgoFYWN0b3IYBSABKAsyGy5ob2xvbXVzaC5ldmVudGJ1cy52MS5BY3RvchINCgVjb2RlYxgGIAEoCRIPCgdwYXlsb2FkGAcgASgMEhQKB2Rla19yZWYYCCABKARIAIgBARIYCgtkZWtfdmVyc2lvbhgJIAEoDUgBiAEBEhIKCnNjaGVtYV92ZXIYCiABKAVCCgoIX2Rla19yZWZCDgoMX2Rla192ZXJzaW9uIj4KEUF1ZGl0RXZlbnRSZXF1ZXN0EikKA3JvdxgBIAEoCzIcLmhvbG9tdXNoLnBsdWdpbi52MS5BdWRpdFJvdyIUChJBdWRpdEV2ZW50UmVzcG9uc2Ui9wEKE1F1ZXJ5SGlzdG9yeVJlcXVlc3QSDwoHc3ViamVjdBgBIAEoCRINCgVhZnRlchgCIAEoDBIOCgZiZWZvcmUYAyABKAwSEQoJcGFnZV9zaXplGAQgASgFEhEKCWRpcmVjdGlvbhgFIAEoBRIuCgpub3RfYmVmb3JlGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBItCglub3RfYWZ0ZXIYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKBmNhbGxlchgIIAEoCzIbLmhvbG9tdXNoLmV2ZW50YnVzLnYxLkFjdG9yIkEKFFF1ZXJ5SGlzdG9yeVJlc3BvbnNlEikKA3JvdxgBIAEoCzIcLmhvbG9tdXNoLnBsdWdpbi52MS5BdWRpdFJvdyJIChpEZWNyeXB0T3duQXVkaXRSb3dzUmVxdWVzdBIqCgRyb3dzGAEgAygLMhwuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0Um93Ik0KG0RlY3J5cHRPd25BdWRpdFJvd3NSZXNwb25zZRIuCgdyZXN1bHRzGAEgAygLMh0uaG9sb211c2gucGx1Z2luLnYxLlJvd1Jlc3VsdCJWCglSb3dSZXN1bHQSCgoCaWQYASABKAwSEwoJcGxhaW50ZXh0GAIgASgMSAASHQoTbm9fcGxhaW50ZXh0X3JlYXNvbhgDIAEoCUgAQgkKB291dGNvbWUy1gEKElBsdWdpbkF1ZGl0U2VydmljZRJbCgpBdWRpdEV2ZW50EiUuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0RXZlbnRSZXF1ZXN0GiYuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0RXZlbnRSZXNwb25zZRJjCgxRdWVyeUhpc3RvcnkSJy5ob2xvbXVzaC5wbHVnaW4udjEuUXVlcnlIaXN0b3J5UmVxdWVzdBooLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeUhpc3RvcnlSZXNwb25zZTABQkRaQmdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL3BsdWdpbi92MTtwbHVnaW52MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_holomush_eventbus_v1_eventbus]);
 
 /**
  * AuditRow is the canonical wire shape for plugin-owned audit rows.
@@ -277,18 +277,29 @@ export type RowResult = Message<"holomush.plugin.v1.RowResult"> & {
   id: Uint8Array;
 
   /**
-   * set iff decrypted
+   * Exactly one outcome arm is set: plaintext iff the row decrypted,
+   * no_plaintext_reason iff it was refused. The oneof makes both-set /
+   * neither-set unrepresentable and distinguishes decrypted-to-empty from refused.
    *
-   * @generated from field: bytes plaintext = 2;
+   * @generated from oneof holomush.plugin.v1.RowResult.outcome
    */
-  plaintext: Uint8Array;
-
-  /**
-   * set iff refused
-   *
-   * @generated from field: string no_plaintext_reason = 3;
-   */
-  noPlaintextReason: string;
+  outcome: {
+    /**
+     * set iff decrypted
+     *
+     * @generated from field: bytes plaintext = 2;
+     */
+    value: Uint8Array;
+    case: "plaintext";
+  } | {
+    /**
+     * set iff refused
+     *
+     * @generated from field: string no_plaintext_reason = 3;
+     */
+    value: string;
+    case: "noPlaintextReason";
+  } | { case: undefined; value?: undefined };
 };
 
 /**

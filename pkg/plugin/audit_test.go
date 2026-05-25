@@ -458,7 +458,7 @@ func TestDecryptOwnAuditRowsSDKReturnsPerRowPlaintext(t *testing.T) {
 		fn: func(req *pluginv1.DecryptOwnAuditRowsRequest) (*pluginv1.DecryptOwnAuditRowsResponse, error) {
 			return &pluginv1.DecryptOwnAuditRowsResponse{
 				Results: []*pluginv1.RowResult{
-					{Id: req.GetRows()[0].GetId(), Plaintext: []byte("hello")},
+					{Id: req.GetRows()[0].GetId(), Outcome: &pluginv1.RowResult_Plaintext{Plaintext: []byte("hello")}},
 				},
 			}, nil
 		},
@@ -481,7 +481,7 @@ func TestDecryptOwnAuditRowsSDKReturnsRefusalReason(t *testing.T) {
 		fn: func(req *pluginv1.DecryptOwnAuditRowsRequest) (*pluginv1.DecryptOwnAuditRowsResponse, error) {
 			return &pluginv1.DecryptOwnAuditRowsResponse{
 				Results: []*pluginv1.RowResult{
-					{Id: req.GetRows()[0].GetId(), NoPlaintextReason: "not_owner"},
+					{Id: req.GetRows()[0].GetId(), Outcome: &pluginv1.RowResult_NoPlaintextReason{NoPlaintextReason: "not_owner"}},
 				},
 			}, nil
 		},

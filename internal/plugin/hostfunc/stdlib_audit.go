@@ -12,11 +12,6 @@ import (
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
-const (
-	auditDecryptorKey  = "__holo_audit_decryptor"
-	auditPluginNameKey = "__holo_audit_plugin_name"
-)
-
 // AuditDecryptor is the narrow interface the decrypt_own_audit_rows Lua
 // hostfunc calls to reach the host-side read-back decrypt primitive.
 // Satisfied by *history.ReadbackDecryptor in production and by test
@@ -31,39 +26,20 @@ type AuditDecryptor interface {
 
 // RegisterAuditFuncs adds holomush.decrypt_own_audit_rows to an existing
 // holomush module table. dec may be nil; calls will be no-ops in that case.
-// pluginName is stored in the Lua state so the Lua function can pass it to
-// the decryptor for the OwnerMap g1 gate.
+// pluginName and dec are captured in the registered function's Go closure —
+// never stored in mutable Lua state — so plugin code cannot overwrite the
+// identity the host uses for the OwnerMap g1 gate. This matches the
+// host-stamped closure pattern used by the other hostfunc capabilities
+// (see cap_audit.go / cap_alias.go).
 func RegisterAuditFuncs(ls *lua.LState, mod *lua.LTable, pluginName string, dec AuditDecryptor) {
-	if dec != nil {
-		ud := ls.NewUserData()
-		ud.Value = dec
-		ls.SetGlobal(auditDecryptorKey, ud)
-	}
-	ls.SetGlobal(auditPluginNameKey, lua.LString(pluginName))
-	ls.SetField(mod, "decrypt_own_audit_rows", ls.NewFunction(decryptOwnAuditRowsFn))
+	ls.SetField(mod, "decrypt_own_audit_rows", ls.NewFunction(func(l *lua.LState) int {
+		return decryptOwnAuditRowsImpl(l, pluginName, dec)
+	}))
 }
 
-func getAuditDecryptor(ls *lua.LState) AuditDecryptor {
-	ud := ls.GetGlobal(auditDecryptorKey)
-	if ud.Type() == lua.LTUserData {
-		if userData, ok := ud.(*lua.LUserData); ok {
-			if dec, ok := userData.Value.(AuditDecryptor); ok {
-				return dec
-			}
-		}
-	}
-	return nil
-}
-
-func getAuditPluginName(ls *lua.LState) string {
-	v := ls.GetGlobal(auditPluginNameKey)
-	if s, ok := v.(lua.LString); ok {
-		return string(s)
-	}
-	return ""
-}
-
-// decryptOwnAuditRowsFn implements holomush.decrypt_own_audit_rows(rows).
+// decryptOwnAuditRowsImpl implements holomush.decrypt_own_audit_rows(rows).
+// pluginName and dec are captured by RegisterAuditFuncs's closure (host-
+// authoritative identity; never read from mutable Lua state).
 //
 // rows is a Lua array of tables, each with fields:
 //
@@ -81,10 +57,13 @@ func getAuditPluginName(ls *lua.LState) string {
 //
 // On error returns (nil, error_string). If the decryptor is not configured,
 // returns no values (no-op, same as other unconfigured hostfuncs).
-func decryptOwnAuditRowsFn(ls *lua.LState) int {
-	dec := getAuditDecryptor(ls)
+func decryptOwnAuditRowsImpl(ls *lua.LState, pluginName string, dec AuditDecryptor) int {
+	ctx := ls.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if dec == nil {
-		slog.Warn("holomush.decrypt_own_audit_rows: audit decryptor not initialized")
+		slog.WarnContext(ctx, "holomush.decrypt_own_audit_rows: audit decryptor not initialized")
 		return 0
 	}
 
@@ -129,12 +108,6 @@ func decryptOwnAuditRowsFn(ls *lua.LState) int {
 		return 2
 	}
 
-	pluginName := getAuditPluginName(ls)
-
-	ctx := ls.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	ctx, cancel := context.WithTimeout(ctx, defaultPluginQueryTimeout)
 	defer cancel()
 

@@ -398,12 +398,13 @@ func TestCheckPluginReadbackFalseUsesLiveDeliveryGate(t *testing.T) {
 
 	id, err := authguard.NewPluginIdentity("core-scenes", "01INST")
 	require.NoError(t, err)
-	dec, _ := g.Check(t.Context(), authguard.CheckRequest{
+	dec, err := g.Check(t.Context(), authguard.CheckRequest{
 		Identity:  id,
 		EventType: "scene_pose",
 		ReadBack:  false,
 		KeyID:     codec.KeyID(7), KeyVersion: 1,
 	})
+	require.NoError(t, err)
 	assert.False(t, dec.Permit, "live-delivery gate denies without requests_decryption")
 	assert.Equal(t, authguard.DenyManifestDeclarationMissing, dec.Code)
 }

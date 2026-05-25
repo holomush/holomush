@@ -209,10 +209,18 @@ func NewReadbackDecryptor(
 	dek eventbus.SessionDEKManager,
 	auditEm eventbus.SessionAuditEmitter,
 ) *ReadbackDecryptor {
+	// Copy to insulate the read-back fence from caller-side mutation. The
+	// manifest set is shared by reference with the fence dispatcher at the boot
+	// seam (cmd/holomush/sub_grpc.go), which copies it for the same reason
+	// (see plugin_downgrade_fence.go and tier.go).
+	copied := make(map[string]struct{}, len(alwaysSensitive))
+	for k := range alwaysSensitive {
+		copied[k] = struct{}{}
+	}
 	return &ReadbackDecryptor{
 		owners: owners,
 		deps: readbackDeps{
-			alwaysSensitive: alwaysSensitive,
+			alwaysSensitive: copied,
 			cryptoKeys:      cryptoKeys,
 			guard:           guard,
 			dek:             dek,
@@ -244,8 +252,8 @@ func (d *ReadbackDecryptor) DecryptOwnRow(
 	owner := d.owners.Resolve(row.GetSubject())
 	if owner.PluginName != pluginName {
 		return &pluginauditpb.RowResult{
-			Id:                row.GetId(),
-			NoPlaintextReason: noPlaintextReasonNotOwner,
+			Id:      row.GetId(),
+			Outcome: &pluginauditpb.RowResult_NoPlaintextReason{NoPlaintextReason: noPlaintextReasonNotOwner},
 		}
 	}
 
@@ -261,18 +269,18 @@ func (d *ReadbackDecryptor) DecryptOwnRow(
 		// Infrastructure / fail-closed (incl. INV-RB-3 nil-audit-emitter).
 		// Surface a generic refusal — NEVER plaintext.
 		return &pluginauditpb.RowResult{
-			Id:                row.GetId(),
-			NoPlaintextReason: noPlaintextReasonInternal,
+			Id:      row.GetId(),
+			Outcome: &pluginauditpb.RowResult_NoPlaintextReason{NoPlaintextReason: noPlaintextReasonInternal},
 		}
 	case !res.OK():
 		return &pluginauditpb.RowResult{
-			Id:                row.GetId(),
-			NoPlaintextReason: reasonToWire(res.Reason),
+			Id:      row.GetId(),
+			Outcome: &pluginauditpb.RowResult_NoPlaintextReason{NoPlaintextReason: reasonToWire(res.Reason)},
 		}
 	default:
 		return &pluginauditpb.RowResult{
-			Id:        row.GetId(),
-			Plaintext: res.Plaintext,
+			Id:      row.GetId(),
+			Outcome: &pluginauditpb.RowResult_Plaintext{Plaintext: res.Plaintext},
 		}
 	}
 }

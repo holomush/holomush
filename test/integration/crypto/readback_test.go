@@ -622,8 +622,8 @@ func TestReadbackWithoutReadbackFlagDenied(t *testing.T) {
 	// INV-RB-2 (g2): readback:false → auth_guard_deny or downgrade_refused.
 	// The g2 check fires after the g1 owner check passes; the manifest check
 	// inside checkPluginReadback denies because PluginCanReadBack returns false.
-	reason := results[0].GetNoPlaintextReason()
-	assert.NotEmpty(t, reason, "INV-RB-2: plugin without readback flag must receive a refusal reason")
+	assert.Equal(t, "auth_guard_deny", results[0].GetNoPlaintextReason(),
+		"INV-RB-2: plugin without readback flag must be denied by the g2 readback gate (auth_guard_deny)")
 	assert.Nil(t, results[0].GetPlaintext(),
 		"INV-RB-2: plugin without readback flag must not receive plaintext")
 	assert.Equal(t, row.GetId(), results[0].GetId(), "INV-RB-11: id echoes on refusal")

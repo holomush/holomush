@@ -483,12 +483,19 @@ func (x *DecryptOwnAuditRowsResponse) GetResults() []*RowResult {
 // decrypted; no_plaintext_reason is set iff the row was refused (e.g.
 // "not_owner", "downgrade_refused", "dek_missing", "internal").
 type RowResult struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Id                []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                                                          // echoes AuditRow.id for correlation
-	Plaintext         []byte                 `protobuf:"bytes,2,opt,name=plaintext,proto3" json:"plaintext,omitempty"`                                            // set iff decrypted
-	NoPlaintextReason string                 `protobuf:"bytes,3,opt,name=no_plaintext_reason,json=noPlaintextReason,proto3" json:"no_plaintext_reason,omitempty"` // set iff refused
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"` // echoes AuditRow.id for correlation
+	// Exactly one outcome arm is set: plaintext iff the row decrypted,
+	// no_plaintext_reason iff it was refused. The oneof makes both-set /
+	// neither-set unrepresentable and distinguishes decrypted-to-empty from refused.
+	//
+	// Types that are valid to be assigned to Outcome:
+	//
+	//	*RowResult_Plaintext
+	//	*RowResult_NoPlaintextReason
+	Outcome       isRowResult_Outcome `protobuf_oneof:"outcome"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RowResult) Reset() {
@@ -528,19 +535,46 @@ func (x *RowResult) GetId() []byte {
 	return nil
 }
 
+func (x *RowResult) GetOutcome() isRowResult_Outcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return nil
+}
+
 func (x *RowResult) GetPlaintext() []byte {
 	if x != nil {
-		return x.Plaintext
+		if x, ok := x.Outcome.(*RowResult_Plaintext); ok {
+			return x.Plaintext
+		}
 	}
 	return nil
 }
 
 func (x *RowResult) GetNoPlaintextReason() string {
 	if x != nil {
-		return x.NoPlaintextReason
+		if x, ok := x.Outcome.(*RowResult_NoPlaintextReason); ok {
+			return x.NoPlaintextReason
+		}
 	}
 	return ""
 }
+
+type isRowResult_Outcome interface {
+	isRowResult_Outcome()
+}
+
+type RowResult_Plaintext struct {
+	Plaintext []byte `protobuf:"bytes,2,opt,name=plaintext,proto3,oneof"` // set iff decrypted
+}
+
+type RowResult_NoPlaintextReason struct {
+	NoPlaintextReason string `protobuf:"bytes,3,opt,name=no_plaintext_reason,json=noPlaintextReason,proto3,oneof"` // set iff refused
+}
+
+func (*RowResult_Plaintext) isRowResult_Outcome() {}
+
+func (*RowResult_NoPlaintextReason) isRowResult_Outcome() {}
 
 var File_holomush_plugin_v1_audit_proto protoreflect.FileDescriptor
 
@@ -582,11 +616,12 @@ const file_holomush_plugin_v1_audit_proto_rawDesc = "" +
 	"\x1aDecryptOwnAuditRowsRequest\x120\n" +
 	"\x04rows\x18\x01 \x03(\v2\x1c.holomush.plugin.v1.AuditRowR\x04rows\"V\n" +
 	"\x1bDecryptOwnAuditRowsResponse\x127\n" +
-	"\aresults\x18\x01 \x03(\v2\x1d.holomush.plugin.v1.RowResultR\aresults\"i\n" +
+	"\aresults\x18\x01 \x03(\v2\x1d.holomush.plugin.v1.RowResultR\aresults\"x\n" +
 	"\tRowResult\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\fR\x02id\x12\x1c\n" +
-	"\tplaintext\x18\x02 \x01(\fR\tplaintext\x12.\n" +
-	"\x13no_plaintext_reason\x18\x03 \x01(\tR\x11noPlaintextReason2\xd6\x01\n" +
+	"\x02id\x18\x01 \x01(\fR\x02id\x12\x1e\n" +
+	"\tplaintext\x18\x02 \x01(\fH\x00R\tplaintext\x120\n" +
+	"\x13no_plaintext_reason\x18\x03 \x01(\tH\x00R\x11noPlaintextReasonB\t\n" +
+	"\aoutcome2\xd6\x01\n" +
 	"\x12PluginAuditService\x12[\n" +
 	"\n" +
 	"AuditEvent\x12%.holomush.plugin.v1.AuditEventRequest\x1a&.holomush.plugin.v1.AuditEventResponse\x12c\n" +
@@ -646,6 +681,10 @@ func file_holomush_plugin_v1_audit_proto_init() {
 		return
 	}
 	file_holomush_plugin_v1_audit_proto_msgTypes[0].OneofWrappers = []any{}
+	file_holomush_plugin_v1_audit_proto_msgTypes[7].OneofWrappers = []any{
+		(*RowResult_Plaintext)(nil),
+		(*RowResult_NoPlaintextReason)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

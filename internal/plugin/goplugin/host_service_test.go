@@ -1537,7 +1537,7 @@ func TestDecryptOwnAuditRowsRejectsForeignSubject(t *testing.T) {
 		result: func(row *pluginv1.AuditRow) *pluginv1.RowResult {
 			// core-scenes asks to decrypt a row whose subject is owned by a
 			// DIFFERENT plugin → not_owner, no plaintext.
-			return &pluginv1.RowResult{Id: row.GetId(), NoPlaintextReason: "not_owner"}
+			return &pluginv1.RowResult{Id: row.GetId(), Outcome: &pluginv1.RowResult_NoPlaintextReason{NoPlaintextReason: "not_owner"}}
 		},
 	}
 	srv := newDecryptTestServer("core-scenes", dec)
