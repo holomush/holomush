@@ -172,3 +172,10 @@ release:
     name: holomush
   draft: false
   prerelease: auto
+  # The release workflow creates the v* tag LOCALLY (cog bump --disable-bump-commit)
+  # and does NOT push it before running goreleaser. target_commitish tells the
+  # GitHub Releases API which commit to create the tag from, so goreleaser creates
+  # the remote tag as part of publishing the Release — atomically. Without this,
+  # `goreleaser release` against a local-only tag fails at the API call. See spec
+  # INV-8 and https://goreleaser.com/customization/release/.
+  target_commitish: "{{ .Commit }}"

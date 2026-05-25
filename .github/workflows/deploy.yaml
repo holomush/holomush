@@ -1,0 +1,109 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: Deploy Sandbox
+
+# Dispatch-only: deploy is a separate human gate from cutting a release
+# (spec INV-4). A release (v* tag + GHCR image + GH Release) must already exist
+# for the chosen tag.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to deploy (e.g. v0.2.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-sandbox:
+    name: Deploy Sandbox
+    runs-on: namespace-profile-linux-amd64-2x4
+    # The `prod` GitHub Environment is deliberate (not a sandbox/prod mismatch):
+    # game.holomush.dev is the live deployment target, and joining `prod` gives
+    # deployment tracking/history in the Environments UI and is the hook for a
+    # required-reviewer approval rule. Deploy secrets are bound to this environment.
+    environment:
+      name: prod
+      url: https://game.holomush.dev
+    if: vars.SANDBOX_DEPLOY_ENABLED == 'true'
+    concurrency:
+      group: deploy-sandbox
+      cancel-in-progress: false
+    steps:
+      - name: Install doctl
+        uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2.5.2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DIGITALOCEAN_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$(doctl compute droplet get holomush-sandbox-game --format PublicIPv4 --no-header)" >> ~/.ssh/known_hosts
+
+      - name: Resolve droplet IP
+        id: droplet
+        run: |
+          IP=$(doctl compute droplet get holomush-sandbox-game --format PublicIPv4 --no-header)
+          echo "ip=${IP}" >> "$GITHUB_OUTPUT"
+
+      - name: Pre-deploy Postgres safety snapshot
+        env:
+          DROPLET_IP: ${{ steps.droplet.outputs.ip }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+        run: |
+          VERSION="$DISPATCH_TAG"
+          ssh -o StrictHostKeyChecking=yes "holomush@${DROPLET_IP}" \
+            bash -s -- "${VERSION}" <<'EOF'
+            set -euo pipefail
+            VERSION="$1"
+            cd /opt/holomush
+            docker compose --profile tunnel --profile backups exec -T backup \
+              /usr/local/bin/backup.sh --tag="pre-deploy:${VERSION}"
+          EOF
+
+      - name: Pull + migrate + restart
+        env:
+          DROPLET_IP: ${{ steps.droplet.outputs.ip }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+        run: |
+          VERSION="$DISPATCH_TAG"
+          ssh -o StrictHostKeyChecking=yes "holomush@${DROPLET_IP}" bash -s -- "${VERSION}" <<'EOF'
+            set -euo pipefail
+            VERSION="$1"
+            if ! command -v git >/dev/null 2>&1; then
+              sudo apt-get update -qq
+              sudo apt-get install -y -qq git
+            fi
+            rm -rf /tmp/holomush-release
+            git clone --depth 1 --branch "${VERSION}" \
+              https://github.com/holomush/holomush.git /tmp/holomush-release
+            cp /tmp/holomush-release/compose.prod.yaml /opt/holomush/compose.yaml
+            rm -rf /opt/holomush/docker /opt/holomush/deploy
+            cp -r /tmp/holomush-release/docker /opt/holomush/docker
+            cp -r /tmp/holomush-release/deploy /opt/holomush/deploy
+            rm -rf /tmp/holomush-release
+
+            cd /opt/holomush
+            IMAGE_VERSION="${VERSION#v}"
+            sed -i "s/^HOLOMUSH_VERSION=.*/HOLOMUSH_VERSION=${IMAGE_VERSION}/" .env
+            docker compose --profile tunnel --profile backups pull core gateway cloudflared
+            docker compose --profile tunnel --profile backups build backup
+            docker compose --profile tunnel --profile backups up -d --no-recreate postgres
+            docker compose --profile tunnel --profile backups run --rm core migrate
+            docker compose --profile tunnel --profile backups up -d
+          EOF
+
+      - name: Health probe
+        env:
+          DROPLET_IP: ${{ steps.droplet.outputs.ip }}
+        run: |-
+          ssh -o StrictHostKeyChecking=yes "holomush@${DROPLET_IP}" \
+            "docker compose -f /opt/holomush/compose.yaml exec -T gateway \
+               wget -q --spider http://localhost:9101/healthz/readiness"

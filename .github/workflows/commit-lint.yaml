@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: Commit Lint
+
+# No paths-ignore: every PR's title is validated, because squash-merge uses the
+# PR title as the commit subject on main (squash_merge_commit_title=PR_TITLE),
+# which cog bump parses for version derivation. A malformed title on ANY PR
+# (including docs-only) would break release version derivation.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  commit-lint:
+    name: Conventional Commit (PR title)
+    runs-on: namespace-profile-linux-amd64-2x4
+    steps:
+      # Check out the PR branch so the local composite action resolves against
+      # it. The owner/repo@main form cannot be used: install-cog is introduced
+      # in this same change, so @main predates it until this PR merges.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Install cog
+        uses: ./.github/actions/install-cog
+
+      - name: Verify PR title is a conventional commit
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |-
+          set -euo pipefail
+          # cog verify reads the git committer identity from the checked-out
+          # repo; a fresh checkout has none configured and the pinned cog binary
+          # aborts ("config value 'user.name' was not found"). Set a throwaway
+          # identity — no commit is made, this only satisfies cog's config read.
+          git config user.name "holomush-ci"
+          git config user.email "ci@holomush.dev"
+          echo "Validating PR title: ${PR_TITLE}"
+          cog verify "${PR_TITLE}"

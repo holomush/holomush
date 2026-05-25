@@ -488,7 +488,7 @@ tasks:
   lint:markdown:
     desc: Lint Markdown files
     cmds:
-      - rumdl check --exclude 'site,.git,.beads,.serena,.claude,CHANGELOG.md' .
+      - rumdl check --exclude 'site,.git,.beads,.serena,.claude' .
       - rumdl check --config site/.rumdl.toml site/
 
   lint:yaml:
@@ -649,7 +649,7 @@ tasks:
   fmt:markdown:
     desc: Format Markdown files
     cmds:
-      - rumdl fmt --exclude 'site,.git,.beads,.serena,.claude,CHANGELOG.md' .
+      - rumdl fmt --exclude 'site,.git,.beads,.serena,.claude' .
       - rumdl fmt --config site/.rumdl.toml site/
 
   fmt:yaml:
@@ -666,7 +666,7 @@ tasks:
     desc: Check formatting without modifying
     cmds:
       - dprint check
-      - rumdl fmt --check --exclude 'site,.git,.beads,.serena,.claude,CHANGELOG.md' .
+      - rumdl fmt --check --exclude 'site,.git,.beads,.serena,.claude' .
       - rumdl fmt --check --config site/.rumdl.toml site/
       # gofumpt is run via the same pinned go-tool version as fmt:go, so this
       # gate can never disagree with `task fmt` (no local-vs-CI skew). Lists
@@ -951,6 +951,19 @@ tasks:
     desc: Build snapshot locally (no publish)
     cmds:
       - goreleaser build --snapshot --clean --single-target
+
+  release:cut:
+    desc: "Cut a release via GitHub Actions (cog derives version + tag). Args: increment=auto|major|minor|patch"
+    cmds:
+      - gh workflow run release.yaml -f expected_increment={{.increment | default "auto"}}
+
+  release:deploy:
+    desc: "Deploy a released tag to the sandbox. Required: tag=vX.Y.Z"
+    preconditions:
+      - sh: 'printf "%s" "{{.tag}}" | grep -qE "^v[0-9]+\.[0-9]+\.[0-9]+$"'
+        msg: "tag must be a v-prefixed semver, e.g. task release:deploy tag=v0.2.0"
+    cmds:
+      - gh workflow run deploy.yaml -f tag={{.tag}}
 
   # ──────────────────────────────────────────
   # Documentation site
