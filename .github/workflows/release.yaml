@@ -5,43 +5,35 @@ name: Release
 
 on:
   push:
-    branches: [main]
     tags:
       - "v*"
   workflow_dispatch:
     inputs:
-      tag:
-        description: "Release tag to deploy (e.g. v0.2.0)"
-        required: true
-        type: string
+      expected_increment:
+        description: "Guard: fail if cog computes a different bump (auto = no guard)"
+        required: false
+        default: "auto"
+        type: choice
+        options:
+          - auto
+          - major
+          - minor
+          - patch
 
+# pull-requests:write dropped: the old release-PR tool is gone (no release PR anymore).
 permissions:
   contents: write
   packages: write
-  pull-requests: write
   id-token: write # Required for Cosign keyless signing
   attestations: write # Required for provenance attestations
 
 jobs:
-  release-please:
-    name: Release Please
-    runs-on: namespace-profile-linux-amd64-2x4
-    if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-    steps:
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
-        id: release
-        with:
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-
   goreleaser:
     name: Build, Sign, and Release
     runs-on: namespace-profile-linux-amd64-8x16
-    needs: release-please
-    if: needs.release-please.outputs.release_created || startsWith(github.ref, 'refs/tags/')
+    # Runs on a manual release dispatch OR a human-pushed v* tag (fallback).
+    # The old release-PR tool is gone; the v* tag is the only contract.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -49,23 +41,70 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get version
-        id: version
+      # ── Release dispatch path: derive version + create the v* tag inline ──
+      # (skipped on the tag-push fallback path, where the tag already exists)
+      - name: Mint GitHub App token
+        if: github.event_name == 'workflow_dispatch'
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Install cog
+        if: github.event_name == 'workflow_dispatch'
+        uses: ./.github/actions/install-cog
+
+      - name: Configure git identity for tagging
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "holomush-release[bot]"
+          git config user.email "holomush-release[bot]@users.noreply.github.com"
+
+      - name: Preview + guard version bump
+        if: github.event_name == 'workflow_dispatch'
         env:
-          # On the release-please path the workflow is triggered by a push to
-          # main, so GITHUB_REF_NAME is "main" — the real tag comes from the
-          # release-please job output. On a direct tag push, release-please is
-          # skipped (RP_TAG empty) and GITHUB_REF_NAME is the tag.
-          RP_TAG: ${{ needs.release-please.outputs.tag_name }}
+          EXPECTED: ${{ inputs.expected_increment }}
         run: |
           set -euo pipefail
-          if [ -n "${RP_TAG}" ]; then
-            VERSION="${RP_TAG#v}"
-          else
-            VERSION="${GITHUB_REF_NAME#v}"
+          echo "Computed next version (dry-run):"
+          cog bump --auto --dry-run
+          if [ "${EXPECTED}" != "auto" ]; then
+            CURRENT="$(git describe --tags --abbrev=0 | sed 's/^v//')"
+            TARGET="$(cog bump --auto --dry-run 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -n1)"
+            IFS=. read -r cmaj cmin cpat <<< "${CURRENT}"
+            IFS=. read -r tmaj tmin tpat <<< "${TARGET}"
+            if   [ "${tmaj}" -gt "${cmaj}" ]; then KIND="major"
+            elif [ "${tmin}" -gt "${cmin}" ]; then KIND="minor"
+            elif [ "${tpat}" -gt "${cpat}" ]; then KIND="patch"
+            else KIND="none"; fi
+            if [ "${KIND}" != "${EXPECTED}" ]; then
+              echo "::error::expected ${EXPECTED} bump but cog computed ${KIND} (${CURRENT} -> ${TARGET})"
+              exit 1
+            fi
           fi
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Building version: ${VERSION}"
+
+      - name: Cut tag (cog bump, tag-only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          # Creates a LOCAL v* tag from conventional commits. No bump commit
+          # (--disable-bump-commit) and no CHANGELOG.md (disable_changelog in
+          # cog.toml). The remote tag is created by goreleaser via target_commitish.
+          cog bump --auto --disable-bump-commit
+          git describe --tags --abbrev=0
+
+      - name: Get version
+        id: version
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            TAG="$(git describe --tags --abbrev=0)"   # the cog-created local tag
+          else
+            TAG="${GITHUB_REF_NAME}"                  # the human-pushed tag
+          fi
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "Building version: ${TAG#v}"
 
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
@@ -135,7 +174,10 @@ jobs:
           version: "~> v2"
           args: release --clean
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # App token on the dispatch path (creates the remote tag via
+          # target_commitish + bypasses any v* tag-protection); GITHUB_TOKEN on
+          # the human-pushed-tag fallback path.
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       # Verify signing artifacts were created (defense-in-depth)
       - name: Verify signing artifacts exist
@@ -316,132 +358,3 @@ jobs:
           echo "  - Container images: signed with Cosign"
           echo "  - Binary provenance: attested"
           echo "  - Container provenance: attested"
-
-  deploy-sandbox:
-    name: Deploy Sandbox
-    runs-on: namespace-profile-linux-amd64-2x4
-    # Joins the `prod` GitHub Environment: gives deployment tracking/history in
-    # the Environments UI, surfaces the live URL, and is the hook for adding a
-    # required-reviewer approval rule later without touching this workflow.
-    # NOTE: the SANDBOX_DEPLOY_ENABLED gate below is a *repository* variable, not
-    # an environment-scoped one — environment variables are not resolvable in a
-    # job-level `if:` (the environment activates only after the gate is
-    # evaluated, so an env-scoped var reads as empty and the job silently skips).
-    environment:
-      name: prod
-      url: https://game.holomush.dev
-    needs: [verify-release]
-    # On tag push: wait for verify-release to succeed. On workflow_dispatch
-    # (redeploy an existing release): run independently since goreleaser +
-    # verify-release are skipped on dispatch and the image already exists in
-    # GHCR. `always()` lets this job start regardless of upstream skip state.
-    if: |
-      always() && vars.SANDBOX_DEPLOY_ENABLED == 'true' && (
-        (startsWith(github.ref, 'refs/tags/') && needs.verify-release.result == 'success') ||
-        github.event_name == 'workflow_dispatch'
-      )
-    concurrency:
-      group: deploy-sandbox
-      cancel-in-progress: false
-    steps:
-      - name: Install doctl
-        uses: digitalocean/action-doctl@v2
-        with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-
-      - name: Configure SSH
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.DIGITALOCEAN_SSH_PRIVATE_KEY }}
-        run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "$(doctl compute droplet get holomush-sandbox-game --format PublicIPv4 --no-header)" >> ~/.ssh/known_hosts
-
-      - name: Resolve droplet IP
-        id: droplet
-        run: |
-          IP=$(doctl compute droplet get holomush-sandbox-game --format PublicIPv4 --no-header)
-          echo "ip=${IP}" >> "$GITHUB_OUTPUT"
-
-      - name: Pre-deploy Postgres safety snapshot
-        env:
-          DROPLET_IP: ${{ steps.droplet.outputs.ip }}
-          DISPATCH_TAG: ${{ inputs.tag }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            VERSION="$DISPATCH_TAG"
-          else
-            VERSION="${GITHUB_REF_NAME}"
-          fi
-          # Pass VERSION through an SSH positional arg + single-quoted heredoc
-          # so workflow_dispatch's user-supplied `tag` input cannot inject
-          # shell commands into the remote execution (CodeRabbit review).
-          ssh -o StrictHostKeyChecking=yes "holomush@${DROPLET_IP}" \
-            bash -s -- "${VERSION}" <<'EOF'
-            set -euo pipefail
-            VERSION="$1"
-            cd /opt/holomush
-            # Run the backup service's script with --tag=pre-deploy:<version>.
-            # The --tag triggers pin mode in backup.sh so the retention policy
-            # never expires this snapshot.
-            docker compose --profile tunnel --profile backups exec -T backup \
-              /usr/local/bin/backup.sh --tag="pre-deploy:${VERSION}"
-          EOF
-
-      - name: Pull + migrate + restart
-        env:
-          DROPLET_IP: ${{ steps.droplet.outputs.ip }}
-          DISPATCH_TAG: ${{ inputs.tag }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            VERSION="$DISPATCH_TAG"
-          else
-            VERSION="${GITHUB_REF_NAME}"
-          fi
-          ssh "holomush@${DROPLET_IP}" bash -s -- "${VERSION}" <<'EOF'
-            set -euo pipefail
-            VERSION="$1"
-
-            # Sync release assets from the tag into /opt/holomush so compose
-            # changes (new services, profiles, env wiring) and the
-            # postgres-backup build context are up-to-date with this release.
-            # Without this step, cloud-init-era files persist forever and
-            # release changes to compose / Dockerfiles / scripts never reach
-            # the running sandbox.
-            if ! command -v git >/dev/null 2>&1; then
-              sudo apt-get update -qq
-              sudo apt-get install -y -qq git
-            fi
-            rm -rf /tmp/holomush-release
-            git clone --depth 1 --branch "${VERSION}" \
-              https://github.com/holomush/holomush.git /tmp/holomush-release
-            cp /tmp/holomush-release/compose.prod.yaml /opt/holomush/compose.yaml
-            rm -rf /opt/holomush/docker /opt/holomush/deploy
-            cp -r /tmp/holomush-release/docker /opt/holomush/docker
-            cp -r /tmp/holomush-release/deploy /opt/holomush/deploy
-            rm -rf /tmp/holomush-release
-
-            cd /opt/holomush
-            # The git tag is v-prefixed (v0.1.9), but goreleaser publishes the
-            # container image as bare {{ .Version }} (0.1.9). git clone above
-            # needs the tag; HOLOMUSH_VERSION / docker pull need the bare
-            # version, so strip a single leading "v" here.
-            IMAGE_VERSION="${VERSION#v}"
-            sed -i "s/^HOLOMUSH_VERSION=.*/HOLOMUSH_VERSION=${IMAGE_VERSION}/" .env
-            docker compose --profile tunnel --profile backups pull core gateway cloudflared
-            docker compose --profile tunnel --profile backups build backup
-            docker compose --profile tunnel --profile backups up -d --no-recreate postgres
-            docker compose --profile tunnel --profile backups run --rm core migrate
-            docker compose --profile tunnel --profile backups up -d
-          EOF
-
-      - name: Health probe
-        env:
-          DROPLET_IP: ${{ steps.droplet.outputs.ip }}
-        run: |-
-          ssh "holomush@${DROPLET_IP}" \
-            "docker compose -f /opt/holomush/compose.yaml exec -T gateway \
-               wget -q --spider http://localhost:9101/healthz/readiness"
