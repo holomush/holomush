@@ -960,8 +960,8 @@ tasks:
   release:deploy:
     desc: "Deploy a released tag to the sandbox. Required: tag=vX.Y.Z"
     preconditions:
-      - sh: '[ -n "{{.tag}}" ]'
-        msg: "tag is required, e.g. task release:deploy tag=v0.2.0"
+      - sh: 'printf "%s" "{{.tag}}" | grep -qE "^v[0-9]+\.[0-9]+\.[0-9]+$"'
+        msg: "tag must be a v-prefixed semver, e.g. task release:deploy tag=v0.2.0"
     cmds:
       - gh workflow run deploy.yaml -f tag={{.tag}}
 

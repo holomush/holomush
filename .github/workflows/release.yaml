@@ -57,6 +57,11 @@ jobs:
         with:
           app-id: ${{ secrets.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # Scope the minted token to only what GoReleaser uses it for (creating
+          # the Release + remote tag, and GHCR package ops) rather than inheriting
+          # the App installation's full permission set.
+          permission-contents: write
+          permission-packages: write
 
       - name: Install cog
         if: github.event_name == 'workflow_dispatch'

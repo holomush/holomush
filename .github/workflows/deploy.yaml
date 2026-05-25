@@ -21,6 +21,10 @@ jobs:
   deploy-sandbox:
     name: Deploy Sandbox
     runs-on: namespace-profile-linux-amd64-2x4
+    # The `prod` GitHub Environment is deliberate (not a sandbox/prod mismatch):
+    # game.holomush.dev is the live deployment target, and joining `prod` gives
+    # deployment tracking/history in the Environments UI and is the hook for a
+    # required-reviewer approval rule. Deploy secrets are bound to this environment.
     environment:
       name: prod
       url: https://game.holomush.dev
@@ -30,7 +34,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Install doctl
-        uses: digitalocean/action-doctl@v2
+        uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2.5.2
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
