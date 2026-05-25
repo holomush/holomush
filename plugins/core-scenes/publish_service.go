@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/samber/oops"
@@ -214,4 +215,89 @@ func (s *SceneServiceImpl) StartScenePublish(ctx context.Context, req *scenev1.S
 		PublishedSceneId: pub.ID,
 		AttemptNumber:    int32(pub.AttemptNumber), //nolint:gosec // attempt_number bounded by max_publish_attempts; never overflows int32
 	}, nil
+}
+
+// publishRenderMime maps a download format to its MIME type. The key set is
+// the authoritative supported-format list; a format absent here yields
+// SCENE_PUBLISH_FORMAT_UNSUPPORTED.
+var publishRenderMime = map[string]string{
+	"markdown":   "text/markdown",
+	"plain_text": "text/plain",
+	"jsonl":      "application/jsonl",
+}
+
+// DownloadPublishedScene returns a published scene rendered in the requested
+// format to a participant. It uses the SAME load-bearing INV-S9 / INV-P6-5
+// ordering as GetPublishedScene: caller validation → format validation →
+// header read (no content) → IsParticipant gate (NO ABAC) → PUBLISHED check →
+// content read only on gate pass → render. A non-participant is denied with
+// SCENE_PRIVACY_BOUNDARY_BLOCK (triple-signal) before any content read. Only
+// PUBLISHED attempts are downloadable (spec §5). See spec §9.1, §10.
+func (s *SceneServiceImpl) DownloadPublishedScene(ctx context.Context, req *scenev1.DownloadPublishedSceneRequest) (*scenev1.DownloadPublishedSceneResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.download_published_scene",
+		attribute.String("published_scene_id", req.GetPublishedSceneId()),
+		attribute.String("format", req.GetFormat()))
+	defer span.End()
+
+	callerID, err := parseCallerCharacterID(req.GetCallerCharacterId())
+	if err != nil {
+		return nil, mapStoreErr(ctx, err)
+	}
+
+	// Format is a resource-independent client error — validate it before any
+	// resource read. (Returning FORMAT_UNSUPPORTED here leaks nothing about
+	// the publication's existence to a non-participant.)
+	mime, ok := publishRenderMime[req.GetFormat()]
+	if !ok {
+		return nil, mapStoreErr(ctx, oops.Code("SCENE_PUBLISH_FORMAT_UNSUPPORTED").
+			With("format", req.GetFormat()).Errorf("unsupported download format"))
+	}
+
+	pub, err := s.store.GetPublishedSceneHeader(ctx, req.GetPublishedSceneId())
+	if err != nil {
+		return nil, mapStoreErr(ctx, err)
+	}
+	if pub == nil {
+		return nil, mapStoreErr(ctx, oops.Code("SCENE_PUBLISH_NOT_FOUND").
+			Errorf("publication not found"))
+	}
+
+	// INV-S9 plugin-code participant gate (NO ABAC); deny BEFORE any content
+	// read (INV-P6-5).
+	isParticipant, err := s.store.IsParticipant(ctx, pub.SceneID, callerID)
+	if err != nil {
+		return nil, internalErr(ctx, err)
+	}
+	if !isParticipant {
+		s.emitPrivacyBoundaryBlock(ctx, "DownloadPublishedScene", pub.SceneID, callerID, "not_participant")
+		return nil, mapStoreErr(ctx, oops.Code("SCENE_PRIVACY_BOUNDARY_BLOCK").
+			Errorf("scene not accessible"))
+	}
+
+	// Only a PUBLISHED attempt has downloadable content.
+	if pub.Status != StatusPublished {
+		return nil, mapStoreErr(ctx, oops.Code("SCENE_PUBLISH_INVALID_STATE").
+			With("status", string(pub.Status)).
+			Errorf("only a published scene can be downloaded"))
+	}
+
+	entries, err := s.store.GetPublishedSceneContent(ctx, req.GetPublishedSceneId())
+	if err != nil {
+		return nil, internalErr(ctx, err)
+	}
+
+	return &scenev1.DownloadPublishedSceneResponse{
+		Content:  renderPublishedScene(req.GetFormat(), entries),
+		MimeType: mime,
+	}, nil
+}
+
+// renderPublishedScene renders content entries to bytes for the given format.
+// PLACEHOLDER: the real per-format renderers land in Phase C (C1 markdown, C2
+// plain_text, C3 jsonl) and replace this body inline. The format MUST already
+// be validated against publishRenderMime by the caller. The placeholder is
+// deterministic and non-empty so the download path is exercisable end-to-end
+// before Phase C.
+func renderPublishedScene(format string, entries []PublishedSceneEntry) []byte {
+	return []byte(fmt.Sprintf("scene publication: %d entries (%s rendering pending — Phase C)", len(entries), format))
 }

@@ -1082,9 +1082,7 @@ func (s *SceneServiceImpl) WithdrawScenePublish(_ context.Context, _ *scenev1.Wi
 
 // GetPublishedScene is implemented in publish_service.go (Task B5).
 
-func (s *SceneServiceImpl) DownloadPublishedScene(_ context.Context, _ *scenev1.DownloadPublishedSceneRequest) (*scenev1.DownloadPublishedSceneResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
-}
+// DownloadPublishedScene is implemented in publish_service.go (Task B6).
 
 func (s *SceneServiceImpl) ListScenePublishAttempts(_ context.Context, _ *scenev1.ListScenePublishAttemptsRequest) (*scenev1.ListScenePublishAttemptsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is

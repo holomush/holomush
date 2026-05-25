@@ -154,3 +154,101 @@ func TestPublicationServiceTypeHasNoABACEngineField(t *testing.T) {
 			"INV-P6-6 violation: SceneServiceImpl.%s carries ABAC engine type %s", field.Name, field.Type.String())
 	}
 }
+
+// TestDownloadPublishedSceneDeniesNonParticipantWithoutReadingContent applies
+// the B5 INV-P6-5 tripwire to the download path: a non-participant is denied
+// before any content read.
+func TestDownloadPublishedSceneDeniesNonParticipantWithoutReadingContent(t *testing.T) {
+	t.Parallel()
+	base := newFakeStore()
+	owner := ulid.Make().String()
+	outsider := ulid.Make().String()
+	base.installPublishedAttempt("pub-d1", "scene-d1", StatusPublished)
+	base.installRoster("scene-d1", owner)
+	store := &contentTripwireStore{fakeStore: base}
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.DownloadPublishedScene(context.Background(), &scenev1.DownloadPublishedSceneRequest{
+		CallerCharacterId: outsider,
+		PublishedSceneId:  "pub-d1",
+		Format:            "markdown",
+	})
+
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.Equal(t, "SCENE_PRIVACY_BOUNDARY_BLOCK", status.Convert(err).Message())
+	require.Equal(t, int32(0), store.contentReadCalls.Load(),
+		"INV-P6-5 violation: content read before the participant gate denied")
+}
+
+// TestDownloadPublishedSceneRendersForParticipant covers the allow path: a
+// participant on a PUBLISHED attempt gets non-empty rendered bytes + the
+// format's MIME type, after exactly one content read.
+func TestDownloadPublishedSceneRendersForParticipant(t *testing.T) {
+	t.Parallel()
+	base := newFakeStore()
+	owner := ulid.Make().String()
+	base.installPublishedAttempt("pub-d2", "scene-d2", StatusPublished)
+	base.installRoster("scene-d2", owner)
+	store := &contentTripwireStore{fakeStore: base}
+	svc := NewSceneServiceImpl(store)
+
+	resp, err := svc.DownloadPublishedScene(context.Background(), &scenev1.DownloadPublishedSceneRequest{
+		CallerCharacterId: owner,
+		PublishedSceneId:  "pub-d2",
+		Format:            "jsonl",
+	})
+
+	require.NoError(t, err)
+	require.NotEmpty(t, resp.GetContent())
+	require.Equal(t, "application/jsonl", resp.GetMimeType())
+	require.Equal(t, int32(1), store.contentReadCalls.Load())
+}
+
+// TestDownloadPublishedSceneRejectsUnsupportedFormat: an unknown format is an
+// InvalidArgument client error, rejected before any content read.
+func TestDownloadPublishedSceneRejectsUnsupportedFormat(t *testing.T) {
+	t.Parallel()
+	base := newFakeStore()
+	owner := ulid.Make().String()
+	base.installPublishedAttempt("pub-d3", "scene-d3", StatusPublished)
+	base.installRoster("scene-d3", owner)
+	store := &contentTripwireStore{fakeStore: base}
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.DownloadPublishedScene(context.Background(), &scenev1.DownloadPublishedSceneRequest{
+		CallerCharacterId: owner,
+		PublishedSceneId:  "pub-d3",
+		Format:            "pdf",
+	})
+
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Equal(t, "SCENE_PUBLISH_FORMAT_UNSUPPORTED", status.Convert(err).Message())
+	require.Equal(t, int32(0), store.contentReadCalls.Load(),
+		"format is validated before any content read")
+}
+
+// TestDownloadPublishedSceneRejectsNonPublishedAttempt: only PUBLISHED
+// attempts are downloadable; a COLLECTING attempt yields INVALID_STATE.
+func TestDownloadPublishedSceneRejectsNonPublishedAttempt(t *testing.T) {
+	t.Parallel()
+	base := newFakeStore()
+	owner := ulid.Make().String()
+	base.installPublishedAttempt("pub-d4", "scene-d4", StatusCollecting)
+	base.installRoster("scene-d4", owner)
+	store := &contentTripwireStore{fakeStore: base}
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.DownloadPublishedScene(context.Background(), &scenev1.DownloadPublishedSceneRequest{
+		CallerCharacterId: owner,
+		PublishedSceneId:  "pub-d4",
+		Format:            "markdown",
+	})
+
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.Equal(t, "SCENE_PUBLISH_INVALID_STATE", status.Convert(err).Message())
+	require.Equal(t, int32(0), store.contentReadCalls.Load(),
+		"a non-published attempt must not reach the content read")
+}
