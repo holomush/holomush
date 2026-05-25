@@ -12,8 +12,10 @@ import (
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
-const auditDecryptorKey = "__holo_audit_decryptor"
-const auditPluginNameKey = "__holo_audit_plugin_name"
+const (
+	auditDecryptorKey  = "__holo_audit_decryptor"
+	auditPluginNameKey = "__holo_audit_plugin_name"
+)
 
 // AuditDecryptor is the narrow interface the decrypt_own_audit_rows Lua
 // hostfunc calls to reach the host-side read-back decrypt primitive.

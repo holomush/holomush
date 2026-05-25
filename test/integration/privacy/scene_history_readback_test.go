@@ -153,7 +153,8 @@ func (r *pgPluginHistoryRouter) QueryHistory(
 	_ string, // pluginName — unused; we query by subject
 	q eventbus.HistoryQuery,
 ) (eventbus.HistoryStream, error) {
-	rows, err := r.pool.Query(ctx,
+	rows, err := r.pool.Query(
+		ctx,
 		`SELECT id, subject, type, codec, envelope, schema_ver, dek_ref, dek_version
 		   FROM events_audit
 		  WHERE subject = $1
@@ -357,7 +358,7 @@ func buildFencedReaderEnv(ctx context.Context, pluginName string) *fencedReaderE
 		history.WithPluginDowngradeFenceReadback(
 			alwaysSensitive,
 			&rbPrivacyAlwaysTrueCryptoKeysLookup{},
-			nil,          // violationEmitter: nil is safe — downgrade refusals still surface as metadata_only
+			nil, // violationEmitter: nil is safe — downgrade refusals still surface as metadata_only
 			sessionGuard,
 			dekMgr,
 			nil, // auditEm: nil is safe — CHARACTER callers skip the INV-19 audit record (dispatcher.go:349)

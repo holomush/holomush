@@ -25,8 +25,8 @@ import (
 
 // Compile-time interface checks.
 var (
-	_ plugins.Host                  = (*Host)(nil)
-	_ plugins.FocusDepsConfigurer   = (*Host)(nil)
+	_ plugins.Host                   = (*Host)(nil)
+	_ plugins.FocusDepsConfigurer    = (*Host)(nil)
 	_ plugins.ReadbackDepsConfigurer = (*Host)(nil)
 )
 

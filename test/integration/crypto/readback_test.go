@@ -314,7 +314,8 @@ func loadFirstAuditRowAsPluginRow(ctx context.Context, t *testing.T, pool *pgxpo
 		dekVersion sql.NullInt32
 	)
 
-	err := pool.QueryRow(ctx,
+	err := pool.QueryRow(
+		ctx,
 		`SELECT id, type, codec, envelope, schema_ver, dek_ref, dek_version
 		   FROM events_audit
 		  WHERE subject = $1
