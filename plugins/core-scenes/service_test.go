@@ -28,6 +28,7 @@ import (
 type fakeStore struct {
 	scenes                    map[string]*SceneRow
 	participants              map[string]map[string]string // sceneID → characterID → role
+	publishedScenes           map[string]*PublishedScene   // Phase 6: published_scene_id → attempt
 	createErr                 error
 	createWithOwnerErr        error
 	getErr                    error
@@ -42,9 +43,52 @@ type recordingEventSink struct {
 
 func newFakeStore() *fakeStore {
 	return &fakeStore{
-		scenes:       make(map[string]*SceneRow),
-		participants: make(map[string]map[string]string),
+		scenes:          make(map[string]*SceneRow),
+		participants:    make(map[string]map[string]string),
+		publishedScenes: make(map[string]*PublishedScene),
 	}
+}
+
+// installRoster seeds a scene's participant roster: ownerID as "owner" and
+// each memberID as "member". Used by Phase 6 gate tests.
+func (f *fakeStore) installRoster(sceneID, ownerID string, memberIDs ...string) {
+	roster := map[string]string{ownerID: "owner"}
+	for _, m := range memberIDs {
+		roster[m] = "member"
+	}
+	f.participants[sceneID] = roster
+}
+
+// installPublishedAttempt seeds a published_scenes row in the given status.
+func (f *fakeStore) installPublishedAttempt(id, sceneID string, status PublishedSceneStatus) {
+	f.publishedScenes[id] = &PublishedScene{
+		ID:                  id,
+		SceneID:             sceneID,
+		AttemptNumber:       1,
+		Status:              status,
+		InitiatedBy:         "system",
+		InitiatedAt:         pgnanos.From(time.Now()),
+		VoteWindow:          7 * 24 * time.Hour,
+		CoolOffWindow:       30 * time.Minute,
+		MaxAttemptsSnapshot: 3,
+	}
+}
+
+// GetPublishedSceneHeader returns the installed attempt (nil, nil when
+// absent — mirroring the production not-found contract).
+func (f *fakeStore) GetPublishedSceneHeader(_ context.Context, id string) (*PublishedScene, error) {
+	return f.publishedScenes[id], nil
+}
+
+// GetPublishedSceneContent returns no entries by default. The INV-P6-5
+// tripwire test overrides this on an embedding type to count calls.
+func (f *fakeStore) GetPublishedSceneContent(_ context.Context, _ string) ([]PublishedSceneEntry, error) {
+	return nil, nil
+}
+
+// TallyVotes returns a zero tally by default.
+func (f *fakeStore) TallyVotes(_ context.Context, _ string) (*VoteTally, error) {
+	return &VoteTally{}, nil
 }
 
 func (s *recordingEventSink) Emit(_ context.Context, intent pluginsdk.EmitIntent) error {

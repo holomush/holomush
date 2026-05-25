@@ -66,6 +66,13 @@ type sceneStorer interface {
 	// handleEmit's single-membership inference per spec §5.2 (Phase 5 will
 	// replace with focus-aware routing).
 	ListScenesForCharacter(ctx context.Context, characterID string) ([]string, error)
+	// Phase 6 publication reads used by the publish-vote handlers. The
+	// header read deliberately EXCLUDES content_entries so the INV-S9
+	// participant gate runs between the header read and the content read
+	// (INV-P6-5). Implemented by *SceneStore in publish_store.go.
+	GetPublishedSceneHeader(ctx context.Context, id string) (*PublishedScene, error)
+	GetPublishedSceneContent(ctx context.Context, id string) ([]PublishedSceneEntry, error)
+	TallyVotes(ctx context.Context, publishedSceneID string) (*VoteTally, error)
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.
@@ -79,20 +86,37 @@ type SceneServiceImpl struct {
 	store     sceneStorer
 	eventSink pluginsdk.EventSink
 	gameID    string // per substrate INV-S4. Defaults to "main"; wired in Init.
+	// Phase 6 publish-vote machinery.
+	cfg    SceneServiceConfig // game-wide vote/cool-off defaults.
+	events publishEventer     // scene_publish_* notice emitter; noop until Phase D wires the real one.
 }
 
 // NewSceneServiceImpl returns a service backed by the given store.
 // Used by tests; main() constructs the service directly with a nil store
 // and assigns it after Init. The gameID defaults to "main" matching the
-// substrate default (see internal/grpc/server.go:181).
+// substrate default (see internal/grpc/server.go:181). Phase 6 defaults
+// (7-day vote window, 30-minute cool-off) and a no-op publish eventer are
+// seeded so Phase B handlers have working dependencies before Phase D.
 func NewSceneServiceImpl(store sceneStorer) *SceneServiceImpl {
-	return &SceneServiceImpl{store: store, gameID: "main"}
+	return &SceneServiceImpl{
+		store:  store,
+		gameID: "main",
+		cfg:    DefaultSceneServiceConfig(),
+		events: noopPublishEventer{},
+	}
 }
 
 // SetEventSink installs the host callback event sink used for service-owned
 // emissions from the binary plugin.
 func (s *SceneServiceImpl) SetEventSink(sink pluginsdk.EventSink) {
 	s.eventSink = sink
+}
+
+// SetPublishEventer installs the Phase 6 scene_publish_* notice emitter.
+// Phase D (Task D2) calls this with the real publishEventEmitter; until then
+// the constructor's noopPublishEventer absorbs every emit.
+func (s *SceneServiceImpl) SetPublishEventer(e publishEventer) {
+	s.events = e
 }
 
 // CreateScene generates a new scene ID, persists the scene, and returns it.
@@ -1050,9 +1074,7 @@ func (s *SceneServiceImpl) WithdrawScenePublish(_ context.Context, _ *scenev1.Wi
 	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
 }
 
-func (s *SceneServiceImpl) GetPublishedScene(_ context.Context, _ *scenev1.GetPublishedSceneRequest) (*scenev1.GetPublishedSceneResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
-}
+// GetPublishedScene is implemented in publish_service.go (Task B5).
 
 func (s *SceneServiceImpl) DownloadPublishedScene(_ context.Context, _ *scenev1.DownloadPublishedSceneRequest) (*scenev1.DownloadPublishedSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is

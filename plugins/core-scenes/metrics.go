@@ -119,3 +119,13 @@ func metricSceneOwnershipTransferred(visibility string) {
 func metricSceneOpsEventRecorded(kind string) {
 	_ = kind
 }
+
+// metricScenePublishPrivacyBlock counts INV-S9 hard-privacy-boundary denials
+// — a participant-gated publication read rejected for a non-participant.
+// Part of the spec §10 triple-signal (slog WARN + this metric + span error).
+// Metric: scene_publish_privacy_block_total{operation, reason}. No-op stub
+// per the metrics.go header until the binary-plugin metrics pipeline lands.
+func metricScenePublishPrivacyBlock(operation, reason string) {
+	_ = operation
+	_ = reason
+}
