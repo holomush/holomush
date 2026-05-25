@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
@@ -64,6 +65,20 @@ func mustCreateScene(store *SceneStore, sceneID, ownerID, visibility string) *Sc
 	}
 	Expect(store.Create(context.Background(), row)).NotTo(HaveOccurred())
 	return row
+}
+
+// mustAddParticipant inserts a scene_participants row with the given role.
+// joined_at uses SQL-side NOW() in epoch-nanoseconds to match the clock
+// domain of the production INSERT paths (store.go). mustCreateScene uses
+// the minimal Create (no owner participant), so callers needing an owner in
+// the roster MUST add it explicitly via this helper.
+func mustAddParticipant(store *SceneStore, sceneID, characterID, role string) {
+	GinkgoHelper()
+	_, err := store.pool.Exec(context.Background(), `
+		INSERT INTO scene_participants (scene_id, character_id, role, joined_at)
+		VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)`,
+		sceneID, characterID, role)
+	Expect(err).NotTo(HaveOccurred())
 }
 
 // assertParticipantRowExists asserts that a row exists in scene_participants
@@ -1922,5 +1937,96 @@ var _ = Describe("SceneStore", func() {
 			).Scan(&count)).NotTo(HaveOccurred())
 			Expect(count).To(Equal(0))
 		})
+	})
+})
+
+var _ = Describe("Publish store — attempt + roster lifecycle", func() {
+	It("creates a published_scenes row with COLLECTING status and frozen roster", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		sceneID := ulid.Make().String()
+		ownerID := ulid.Make().String()
+		memberID := ulid.Make().String()
+		invitedID := ulid.Make().String()
+		mustCreateScene(store, sceneID, ownerID, string(SceneVisibilityOpen))
+		// mustCreateScene uses the minimal Create (no owner participant), so
+		// add owner explicitly alongside member + invited.
+		mustAddParticipant(store, sceneID, ownerID, "owner")
+		mustAddParticipant(store, sceneID, memberID, "member")
+		mustAddParticipant(store, sceneID, invitedID, "invited")
+
+		pub, err := store.CreatePublishAttempt(ctx, CreatePublishAttemptInput{
+			SceneID:       sceneID,
+			AttemptNumber: 1,
+			InitiatedBy:   ownerID,
+			VoteWindow:    7 * 24 * time.Hour,
+			CoolOffWindow: 30 * time.Minute,
+			MaxAttempts:   3,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(pub.Status).To(Equal(StatusCollecting))
+		Expect(pub.AttemptNumber).To(Equal(1))
+
+		voters, err := store.ListPublishVoters(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(voters).To(HaveLen(2), "roster must include owner+member, NOT invited (INV-P6-1)")
+		voterIDs := make(map[string]bool, len(voters))
+		for _, v := range voters {
+			voterIDs[v.CharacterID] = true
+			Expect(v.Vote).To(BeNil(), "fresh roster row MUST start with vote=nil (pending)")
+		}
+		Expect(voterIDs[ownerID]).To(BeTrue())
+		Expect(voterIDs[memberID]).To(BeTrue())
+		Expect(voterIDs[invitedID]).To(BeFalse(), "invited role MUST be excluded — INV-P6-1")
+	})
+
+	It("rejects a duplicate active attempt for the same scene", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		sceneID := ulid.Make().String()
+		ownerID := ulid.Make().String()
+		mustCreateScene(store, sceneID, ownerID, string(SceneVisibilityOpen))
+		mustAddParticipant(store, sceneID, ownerID, "owner")
+
+		_, err := store.CreatePublishAttempt(ctx, CreatePublishAttemptInput{
+			SceneID: sceneID, AttemptNumber: 1, InitiatedBy: ownerID,
+			VoteWindow: 7 * 24 * time.Hour, CoolOffWindow: 30 * time.Minute, MaxAttempts: 3,
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = store.CreatePublishAttempt(ctx, CreatePublishAttemptInput{
+			SceneID: sceneID, AttemptNumber: 2, InitiatedBy: ownerID,
+			VoteWindow: 7 * 24 * time.Hour, CoolOffWindow: 30 * time.Minute, MaxAttempts: 3,
+		})
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "SCENE_PUBLISH_ALREADY_ACTIVE")
+	})
+
+	It("fails closed when the scene has no eligible (owner/member) voters", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		sceneID := ulid.Make().String()
+		ownerID := ulid.Make().String()
+		invitedID := ulid.Make().String()
+		mustCreateScene(store, sceneID, ownerID, string(SceneVisibilityOpen))
+		// Only an invited participant — no owner/member to seed the roster.
+		mustAddParticipant(store, sceneID, invitedID, "invited")
+
+		_, err := store.CreatePublishAttempt(ctx, CreatePublishAttemptInput{
+			SceneID: sceneID, AttemptNumber: 1, InitiatedBy: ownerID,
+			VoteWindow: 7 * 24 * time.Hour, CoolOffWindow: 30 * time.Minute, MaxAttempts: 3,
+		})
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "SCENE_PUBLISH_NO_ELIGIBLE_VOTERS")
+
+		// The failed attempt's row must not survive (transaction rolled back).
+		var n int
+		Expect(store.pool.QueryRow(ctx,
+			`SELECT count(*) FROM published_scenes WHERE scene_id = $1`, sceneID,
+		).Scan(&n)).NotTo(HaveOccurred())
+		Expect(n).To(Equal(0), "rolled-back attempt MUST leave no published_scenes row")
 	})
 })
