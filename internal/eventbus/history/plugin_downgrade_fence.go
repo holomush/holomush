@@ -154,6 +154,93 @@ func (f *PluginDowngradeFence) QueryHistory(
 	}, nil
 }
 
+// fenceVerdict is the result of fenceCheckRow — the per-row check that
+// enforces INV-P7-7 (downgrade heuristic) and INV-P7-15 (DEK existence).
+// Shared in-package so the snapshot read-back path (T5 / INV-RB-5) can
+// reuse the check without going through the full fencedStream pipeline.
+type fenceVerdict int
+
+const (
+	// fenceClean means the row passed both checks and may proceed to decryption.
+	fenceClean fenceVerdict = iota
+	// fenceRefuseDowngrade means INV-P7-7 fired: identity codec for an
+	// always-sensitive type. Caller MUST emit a plugin_integrity_violation
+	// audit event (emitViolationBounded) before refusing.
+	fenceRefuseDowngrade
+	// fenceRefuseDEKMissing means INV-P7-15 fired: non-identity codec with
+	// absent or lookup-miss dek_ref. Indistinguishable from legitimate
+	// Rekey-destroyed case; no violation emit.
+	fenceRefuseDEKMissing
+	// fenceRefuseInternal means INV-P7-15 fail-closed: cryptoKeysLookup is
+	// nil (configuration failure). Distinct from fenceRefuseDEKMissing so
+	// callers can surface the right NoPlaintextReason.
+	fenceRefuseInternal
+)
+
+// fenceCheckRow applies INV-P7-7 (downgrade) + INV-P7-15 (DEK existence)
+// to one plugin audit row. Pure except for the cryptoKeys existence lookup.
+// Shared by fencedStream.Next (routed reads, T4) and the snapshot direct
+// entry (T5) so INV-RB-5 holds on both paths.
+//
+// The caller is responsible for mapping the returned fenceVerdict to the
+// appropriate refusal reason and emitting the violation audit on
+// fenceRefuseDowngrade.
+func fenceCheckRow(
+	ctx context.Context,
+	row *pluginauditpb.AuditRow,
+	alwaysSensitive map[string]struct{},
+	lookup CryptoKeysLookup,
+) (fenceVerdict, error) {
+	codec := row.GetCodec()
+
+	// INV-P7-7 — manifest-set heuristic.
+	if codec == "identity" {
+		if _, sensitive := alwaysSensitive[row.GetType()]; sensitive {
+			return fenceRefuseDowngrade, nil
+		}
+		// identity + non-sensitive: pass through.
+		return fenceClean, nil
+	}
+
+	// INV-P7-15 — DEK existence pre-check for non-identity codec.
+	if row.DekRef == nil {
+		// Absent dek_ref for non-identity codec is unrecoverable. No
+		// violation emit — indistinguishable from legitimate
+		// Rekey-destroyed row. NoPlaintextReasonDEKMissing per the
+		// "looks like destroyed-DEK metadata-only" contract; using
+		// DowngradeRefused here would mis-attribute a normal Rekey-aged
+		// row as a malicious downgrade.
+		return fenceRefuseDEKMissing, nil
+	}
+	if lookup == nil {
+		// Without a configured lookup the fence cannot validate. Treat
+		// as refusal (fail-closed) — production wiring at E.3 always
+		// supplies a non-nil lookup; only test fakes hit this branch
+		// when they intentionally omit it. Reason is Internal to
+		// distinguish from the legitimate DEK-gone case.
+		return fenceRefuseInternal, nil
+	}
+	exists, lookupErr := lookup.Exists(ctx, *row.DekRef)
+	if lookupErr != nil {
+		// Infrastructure failure — stream-fatal. Wrap with the
+		// AUDIT_ROW_DEK_LOOKUP_FAILED code so callers can distinguish
+		// infrastructure failure from the legitimate DEK-gone case.
+		return fenceClean, oops.Code("AUDIT_ROW_DEK_LOOKUP_FAILED").
+			With("dek_ref", *row.DekRef).
+			Wrap(lookupErr)
+	}
+	if !exists {
+		// DEK existed at publish time but is now absent (legitimate
+		// Rekey-destroyed) or never existed (malformed publisher). Both
+		// surface as fenceRefuseDEKMissing — the read-side cannot
+		// distinguish them, and the operator UX should match the
+		// legitimate destroyed-DEK case.
+		return fenceRefuseDEKMissing, nil
+	}
+
+	return fenceClean, nil
+}
+
 // fencedStream is the wrapped HistoryStream applied by the fence.
 type fencedStream struct {
 	fence      *PluginDowngradeFence
@@ -179,57 +266,28 @@ func (s *fencedStream) Next(ctx context.Context) (eventbus.Event, error) {
 		return ev, nil
 	}
 
-	codec := row.GetCodec()
-
-	// INV-P7-7 — manifest-set heuristic.
-	if codec == "identity" {
-		if _, sensitive := s.fence.alwaysSensitive[row.GetType()]; sensitive {
-			s.fence.emitViolationBounded(ctx, s.pluginName, row)
-			return refuseEvent(ev, eventbus.NoPlaintextReasonDowngradeRefused), nil
-		}
-		// identity + non-sensitive: pass through.
-		return ev, nil
-	}
-
-	// INV-P7-15 — DEK existence pre-check for non-identity codec.
-	if row.DekRef == nil {
-		// Absent dek_ref for non-identity codec is unrecoverable. No
-		// violation emit — indistinguishable from legitimate
-		// Rekey-destroyed row. NoPlaintextReasonDEKMissing per the
-		// "looks like destroyed-DEK metadata-only" contract; using
-		// DowngradeRefused here would mis-attribute a normal Rekey-aged
-		// row as a malicious downgrade.
-		return refuseEvent(ev, eventbus.NoPlaintextReasonDEKMissing), nil
-	}
-	if s.fence.cryptoKeysLookup == nil {
-		// Without a configured lookup the fence cannot validate. Treat
-		// as refusal (fail-closed) — production wiring at E.3 always
-		// supplies a non-nil lookup; only test fakes hit this branch
-		// when they intentionally omit it. Reason is Internal to
-		// distinguish from the legitimate DEK-gone case.
-		return refuseEvent(ev, eventbus.NoPlaintextReasonInternal), nil
-	}
-	exists, lookupErr := s.fence.cryptoKeysLookup.Exists(ctx, *row.DekRef)
-	if lookupErr != nil {
-		// Infrastructure failure — stream-fatal. The original event is
-		// returned alongside the error for diagnostic context, but
-		// callers MUST treat this as terminal.
+	verdict, fenceErr := fenceCheckRow(ctx, row, s.fence.alwaysSensitive, s.fence.cryptoKeysLookup)
+	if fenceErr != nil {
+		// Infrastructure failure — stream-fatal. Re-wrap with plugin
+		// context so callers can identify which plugin's row triggered
+		// the failure. Callers MUST treat this as terminal.
 		return ev, oops.Code("AUDIT_ROW_DEK_LOOKUP_FAILED").
 			With("plugin", s.pluginName).
-			With("dek_ref", *row.DekRef).
-			Wrap(lookupErr)
-	}
-	if !exists {
-		// DEK existed at publish time but is now absent (legitimate
-		// Rekey-destroyed) or never existed (malformed publisher). Both
-		// surface as NoPlaintextReasonDEKMissing — the read-side cannot
-		// distinguish them, and the operator UX should match the
-		// legitimate destroyed-DEK case.
-		return refuseEvent(ev, eventbus.NoPlaintextReasonDEKMissing), nil
+			Wrap(fenceErr)
 	}
 
-	// Clean row — pass through.
-	return ev, nil
+	switch verdict {
+	case fenceRefuseDowngrade:
+		s.fence.emitViolationBounded(ctx, s.pluginName, row)
+		return refuseEvent(ev, eventbus.NoPlaintextReasonDowngradeRefused), nil
+	case fenceRefuseDEKMissing:
+		return refuseEvent(ev, eventbus.NoPlaintextReasonDEKMissing), nil
+	case fenceRefuseInternal:
+		return refuseEvent(ev, eventbus.NoPlaintextReasonInternal), nil
+	default: // fenceClean
+		// Clean row — pass through.
+		return ev, nil
+	}
 }
 
 // Close forwards to the inner stream.
