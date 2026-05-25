@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/samber/oops"
 	"go.opentelemetry.io/otel/attribute"
@@ -508,4 +509,154 @@ func (s *SceneServiceImpl) ExtendScenePublishVoteAttempts(ctx context.Context, r
 	return &scenev1.ExtendScenePublishVoteAttemptsResponse{
 		NewMax: int32(newMax), //nolint:gosec // max_publish_attempts is a small budget; never overflows int32
 	}, nil
+}
+
+// CastPublishSceneVote records a roster member's vote on an active publication
+// attempt and runs the §4.3 resolution check, which may transition the attempt
+// (COLLECTING→COOLOFF on all-yes, COLLECTING→ATTEMPT_FAILED on
+// any-no-after-all-voted, or COOLOFF→COLLECTING on a flip to no). A vote on a
+// terminal attempt is rejected. The vote is the durable effect; a failed
+// resolution check or emit is logged but does NOT fail the cast — the next cast
+// or scheduler tick re-evaluates.
+func (s *SceneServiceImpl) CastPublishSceneVote(ctx context.Context, req *scenev1.CastPublishSceneVoteRequest) (*scenev1.CastPublishSceneVoteResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.cast_publish_scene_vote",
+		attribute.String("published_scene_id", req.GetPublishedSceneId()))
+	defer span.End()
+
+	callerID, err := parseCallerCharacterID(req.GetCallerCharacterId())
+	if err != nil {
+		return nil, mapStoreErr(ctx, err)
+	}
+
+	pub, err := s.store.GetPublishedSceneHeader(ctx, req.GetPublishedSceneId())
+	if err != nil {
+		return nil, mapStoreErr(ctx, err)
+	}
+	if pub == nil {
+		return nil, mapStoreErr(ctx, oops.Code("SCENE_PUBLISH_NOT_FOUND").
+			Errorf("publication attempt not found"))
+	}
+	if pub.Status.IsTerminal() {
+		return nil, mapStoreErr(ctx, oops.Code("SCENE_PUBLISH_INVALID_STATE").
+			With("status", string(pub.Status)).
+			Errorf("vote on a terminal publication attempt is rejected"))
+	}
+
+	result, err := s.store.CastVote(ctx, pub.ID, callerID, req.GetVote())
+	if err != nil {
+		return nil, mapStoreErr(ctx, err)
+	}
+
+	// §4.3 resolution check. A failure here does NOT fail the vote — the vote is
+	// already durable; the next cast or scheduler tick re-evaluates.
+	if resErr := s.applyResolution(ctx, pub); resErr != nil {
+		slog.WarnContext(ctx, "publish-vote resolution check failed",
+			"err", resErr.Error(), "attempt_id", pub.ID)
+	}
+
+	metricScenePublishVoteCast(boolLabel(result.Vote), boolLabel(result.IsChange))
+	if emitErr := s.events.emitVoteCast(ctx, pub.ID, callerID, result); emitErr != nil {
+		slog.WarnContext(ctx, "vote-cast emit failed", "err", emitErr.Error(), "attempt_id", pub.ID)
+	}
+
+	return &scenev1.CastPublishSceneVoteResponse{IsChange: result.IsChange}, nil
+}
+
+// applyResolution evaluates the post-cast tally and applies any resulting
+// transition (spec §4.3). pub carries the pre-cast status (the vote itself does
+// not change status). From COLLECTING, ResolveFromTally decides; from COOLOFF a
+// single no flips back to COLLECTING. COOLOFF→PUBLISHED is the snapshot
+// pipeline's (C7), never triggered by a vote.
+func (s *SceneServiceImpl) applyResolution(ctx context.Context, pub *PublishedScene) error {
+	tally, err := s.store.TallyVotes(ctx, pub.ID)
+	if err != nil {
+		return err //nolint:wrapcheck // internal helper; the caller (CastPublishSceneVote) logs this best-effort error, never returns it across the gRPC boundary
+	}
+	switch pub.Status {
+	case StatusCollecting:
+		trig, ok := ResolveFromTally(*tally)
+		if !ok {
+			return nil
+		}
+		return s.applyTrigger(ctx, pub.ID, trig)
+	case StatusCoolOff:
+		if tally.No > 0 {
+			return s.applyTrigger(ctx, pub.ID, TriggerFlipNo)
+		}
+	}
+	return nil
+}
+
+// applyTrigger drives the DB state transition for an attempt: re-read the row,
+// compute the next status via the pure NextStatus helper, and apply the side
+// effects (TransitionStatus + metric + best-effort emit). Snapshot and
+// cool-off-invariant triggers are NOT applicable here — they carry no
+// trigger-derivable failure_reason and are applied by the snapshot pipeline
+// (C7) directly.
+func (s *SceneServiceImpl) applyTrigger(ctx context.Context, attemptID string, t PublishTrigger) error {
+	pub, err := s.store.GetPublishedSceneHeader(ctx, attemptID)
+	if err != nil {
+		return err //nolint:wrapcheck // internal helper; the caller logs this best-effort error, never returns it across the gRPC boundary
+	}
+	if pub == nil {
+		return oops.Code("SCENE_PUBLISH_NOT_FOUND").With("attempt_id", attemptID).
+			Errorf("attempt vanished before transition")
+	}
+	next, ok := NextStatus(pub.Status, t)
+	if !ok {
+		return oops.Code("SCENE_PUBLISH_INVALID_TRANSITION").
+			With("from", string(pub.Status)).With("trigger", string(t)).
+			Errorf("illegal transition")
+	}
+
+	in := TransitionInput{To: next, Resolved: next.IsTerminal()}
+	switch next {
+	case StatusAttemptFailed:
+		reason, hasReason := FailureReasonForTrigger(t)
+		if !hasReason {
+			return oops.Code("SCENE_PUBLISH_INVALID_TRANSITION").
+				With("trigger", string(t)).
+				Errorf("trigger carries no failure_reason; not applicable to applyTrigger")
+		}
+		in.FailureReason = &reason
+	case StatusCoolOff:
+		now := time.Now()
+		in.SetCoolOffAt = &now
+	case StatusCollecting:
+		if pub.Status == StatusCoolOff {
+			in.ClearCoolOff = true
+		}
+	}
+
+	if err := s.store.TransitionStatus(ctx, attemptID, in); err != nil {
+		return err //nolint:wrapcheck // internal helper; the caller logs this best-effort error, never returns it across the gRPC boundary
+	}
+
+	// Observability — best-effort; an emit failure logs but never rolls back
+	// the committed transition (the DB is the source of truth).
+	if next.IsTerminal() {
+		reasonLabel := ""
+		if in.FailureReason != nil {
+			reasonLabel = string(*in.FailureReason)
+		}
+		metricScenePublishAttemptResolved(string(next), reasonLabel)
+	}
+	if next == StatusCoolOff {
+		if emitErr := s.events.emitCoolOffStarted(ctx, attemptID, pub.CoolOffWindow); emitErr != nil {
+			slog.WarnContext(ctx, "cooloff-started emit failed",
+				"err", emitErr.Error(), "attempt_id", attemptID)
+		}
+	}
+	if next.IsTerminal() {
+		tally, tErr := s.store.TallyVotes(ctx, attemptID)
+		if tErr != nil {
+			slog.WarnContext(ctx, "tally for resolved emit failed",
+				"err", tErr.Error(), "attempt_id", attemptID)
+		}
+		if emitErr := s.events.emitResolved(ctx, attemptID, next, in.FailureReason, tally); emitErr != nil {
+			slog.WarnContext(ctx, "resolved emit failed",
+				"err", emitErr.Error(), "attempt_id", attemptID)
+		}
+	}
+	return nil
 }

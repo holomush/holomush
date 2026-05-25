@@ -250,3 +250,120 @@ func TestPluginManifestDeclaresAdminExtendPublishAttemptsPolicy(t *testing.T) {
 	assert.Contains(t, manifest, "resource is scene", "policy must target scene resources")
 	assert.Contains(t, manifest, `"admin" in principal.character.roles`, "policy must be admin-role-only")
 }
+
+// newVoteFixture seeds a COLLECTING attempt with the given voter roster and
+// returns the store + service for the B3 vote-cast tests.
+func newVoteFixture(t *testing.T, attemptID, sceneID string, voters ...string) (*fakeStore, *SceneServiceImpl) {
+	t.Helper()
+	store := newFakeStore()
+	store.installPublishedAttempt(attemptID, sceneID, StatusCollecting)
+	store.installVoters(attemptID, voters...)
+	return store, NewSceneServiceImpl(store)
+}
+
+func castVote(t *testing.T, svc *SceneServiceImpl, caller, attemptID string, vote bool) *scenev1.CastPublishSceneVoteResponse {
+	t.Helper()
+	resp, err := svc.CastPublishSceneVote(context.Background(), &scenev1.CastPublishSceneVoteRequest{
+		CallerCharacterId: caller,
+		PublishedSceneId:  attemptID,
+		Vote:              vote,
+	})
+	require.NoError(t, err)
+	return resp
+}
+
+// TestCastPublishSceneVoteFirstYesIsNotAChange — a roster member's first cast
+// is recorded but is not a vote change.
+func TestCastPublishSceneVoteFirstYesIsNotAChange(t *testing.T) {
+	t.Parallel()
+	v1, v2 := ulid.Make().String(), ulid.Make().String()
+	_, svc := newVoteFixture(t, "pub-v1", "scene-v1", v1, v2)
+
+	resp := castVote(t, svc, v1, "pub-v1", true)
+
+	assert.False(t, resp.GetIsChange(), "a first cast is not a change")
+}
+
+// TestCastPublishSceneVoteFlipYesToNoIsAChange — re-casting a different vote
+// reports is_change.
+func TestCastPublishSceneVoteFlipYesToNoIsAChange(t *testing.T) {
+	t.Parallel()
+	v1, v2 := ulid.Make().String(), ulid.Make().String()
+	_, svc := newVoteFixture(t, "pub-v2", "scene-v2", v1, v2)
+
+	castVote(t, svc, v1, "pub-v2", true)
+	resp := castVote(t, svc, v1, "pub-v2", false)
+
+	assert.True(t, resp.GetIsChange(), "flipping yes→no is a change")
+}
+
+// TestCastPublishSceneVoteRejectsNonRosterMember — INV-P6-1: a character not on
+// the frozen roster cannot vote (PermissionDenied / SCENE_PUBLISH_NOT_A_VOTER).
+func TestCastPublishSceneVoteRejectsNonRosterMember(t *testing.T) {
+	t.Parallel()
+	v1 := ulid.Make().String()
+	outsider := ulid.Make().String()
+	_, svc := newVoteFixture(t, "pub-v3", "scene-v3", v1)
+
+	_, err := svc.CastPublishSceneVote(context.Background(), &scenev1.CastPublishSceneVoteRequest{
+		CallerCharacterId: outsider,
+		PublishedSceneId:  "pub-v3",
+		Vote:              true,
+	})
+
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	assert.Equal(t, "SCENE_PUBLISH_NOT_A_VOTER", status.Convert(err).Message())
+}
+
+// TestCastPublishSceneVoteTriggersCoolOffOnAllYes — unanimous yes (all voted)
+// transitions COLLECTING→COOLOFF and stamps the cool-off marker; a partial
+// tally does not transition.
+func TestCastPublishSceneVoteTriggersCoolOffOnAllYes(t *testing.T) {
+	t.Parallel()
+	v1, v2 := ulid.Make().String(), ulid.Make().String()
+	store, svc := newVoteFixture(t, "pub-v4", "scene-v4", v1, v2)
+
+	castVote(t, svc, v1, "pub-v4", true)
+	assert.Equal(t, StatusCollecting, store.publishedScenes["pub-v4"].Status,
+		"one of two voters is not yet a resolution")
+
+	castVote(t, svc, v2, "pub-v4", true)
+	assert.Equal(t, StatusCoolOff, store.publishedScenes["pub-v4"].Status,
+		"unanimous yes enters cool-off")
+	assert.NotNil(t, store.publishedScenes["pub-v4"].CoolOffStartedAt, "cool-off marker is stamped")
+}
+
+// TestCastPublishSceneVoteTriggersAttemptFailedOnAnyNo — once all have voted, a
+// single no fails the attempt with failure_reason ANY_NO.
+func TestCastPublishSceneVoteTriggersAttemptFailedOnAnyNo(t *testing.T) {
+	t.Parallel()
+	v1, v2 := ulid.Make().String(), ulid.Make().String()
+	store, svc := newVoteFixture(t, "pub-v5", "scene-v5", v1, v2)
+
+	castVote(t, svc, v1, "pub-v5", true)
+	castVote(t, svc, v2, "pub-v5", false)
+
+	assert.Equal(t, StatusAttemptFailed, store.publishedScenes["pub-v5"].Status)
+	require.NotNil(t, store.publishedScenes["pub-v5"].FailureReason)
+	assert.Equal(t, FailureAnyNo, *store.publishedScenes["pub-v5"].FailureReason)
+}
+
+// TestCastPublishSceneVoteFlipToNoDuringCoolOffReturnsToCollecting — a no cast
+// during COOLOFF flips the attempt back to COLLECTING and clears the cool-off
+// marker (spec §4.1).
+func TestCastPublishSceneVoteFlipToNoDuringCoolOffReturnsToCollecting(t *testing.T) {
+	t.Parallel()
+	v1, v2 := ulid.Make().String(), ulid.Make().String()
+	store, svc := newVoteFixture(t, "pub-v6", "scene-v6", v1, v2)
+
+	castVote(t, svc, v1, "pub-v6", true)
+	castVote(t, svc, v2, "pub-v6", true)
+	require.Equal(t, StatusCoolOff, store.publishedScenes["pub-v6"].Status, "precondition: in cool-off")
+
+	castVote(t, svc, v1, "pub-v6", false)
+
+	assert.Equal(t, StatusCollecting, store.publishedScenes["pub-v6"].Status,
+		"a flip-to-no during cool-off reopens COLLECTING")
+	assert.Nil(t, store.publishedScenes["pub-v6"].CoolOffStartedAt, "cool-off marker cleared on flip-back")
+}

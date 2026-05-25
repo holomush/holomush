@@ -73,6 +73,11 @@ type sceneStorer interface {
 	GetPublishedSceneHeader(ctx context.Context, id string) (*PublishedScene, error)
 	GetPublishedSceneContent(ctx context.Context, id string) ([]PublishedSceneEntry, error)
 	TallyVotes(ctx context.Context, publishedSceneID string) (*VoteTally, error)
+	// CastVote upserts a roster member's vote (is_change tracking) and
+	// TransitionStatus applies a state-machine transition with its side-effect
+	// fields. Both back CastPublishSceneVote + applyTrigger (B3).
+	CastVote(ctx context.Context, publishedSceneID, characterID string, vote bool) (*CastVoteResult, error)
+	TransitionStatus(ctx context.Context, id string, in TransitionInput) error
 	// StartScenePublish preconditions: attempt budget + one-and-done checks
 	// (CountAttempts), the per-scene max-attempts read
 	// (GetSceneMaxPublishAttempts), and the transactional attempt+roster
@@ -1084,9 +1089,7 @@ func newSceneID() (string, error) {
 // override the embedded defaults with the same Unimplemented status.
 // StartScenePublish is implemented in publish_service.go (Task B2).
 
-func (s *SceneServiceImpl) CastPublishSceneVote(_ context.Context, _ *scenev1.CastPublishSceneVoteRequest) (*scenev1.CastPublishSceneVoteResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
-}
+// CastPublishSceneVote is implemented in publish_service.go (Task B3).
 
 func (s *SceneServiceImpl) WithdrawScenePublish(_ context.Context, _ *scenev1.WithdrawScenePublishRequest) (*scenev1.WithdrawScenePublishResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is

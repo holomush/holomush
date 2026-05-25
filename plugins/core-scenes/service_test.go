@@ -129,9 +129,64 @@ func (f *fakeStore) ListSceneAttempts(_ context.Context, sceneID string) ([]Publ
 	return out, nil
 }
 
-// TallyVotes returns a zero tally by default.
-func (f *fakeStore) TallyVotes(_ context.Context, _ string) (*VoteTally, error) {
-	return &VoteTally{}, nil
+// TallyVotes counts the seeded roster rows: nil vote → Pending, *true → Yes,
+// *false → No. Stateful so the B3 state-machine tests can drive resolution.
+func (f *fakeStore) TallyVotes(_ context.Context, publishedSceneID string) (*VoteTally, error) {
+	var t VoteTally
+	for _, v := range f.publishedVoters[publishedSceneID] {
+		switch {
+		case v.Vote == nil:
+			t.Pending++
+		case *v.Vote:
+			t.Yes++
+		default:
+			t.No++
+		}
+	}
+	return &t, nil
+}
+
+// CastVote upserts a roster member's vote on the in-memory roster, mirroring
+// the store's is_change semantics. A non-roster character is rejected with
+// SCENE_PUBLISH_NOT_A_VOTER.
+func (f *fakeStore) CastVote(_ context.Context, publishedSceneID, characterID string, vote bool) (*CastVoteResult, error) {
+	rows := f.publishedVoters[publishedSceneID]
+	for i := range rows {
+		if rows[i].CharacterID == characterID {
+			isChange := rows[i].Vote != nil && *rows[i].Vote != vote
+			v := vote
+			rows[i].Vote = &v
+			return &CastVoteResult{Vote: vote, IsChange: isChange}, nil
+		}
+	}
+	return nil, oops.Code("SCENE_PUBLISH_NOT_A_VOTER").
+		With("character_id", characterID).Errorf("character is not on the voter roster")
+}
+
+// TransitionStatus applies a state-machine transition to the in-memory attempt,
+// setting the side-effect fields. Legality is enforced by applyTrigger's
+// NextStatus check before this is called, so the fake applies unconditionally.
+func (f *fakeStore) TransitionStatus(_ context.Context, id string, in TransitionInput) error {
+	pub, ok := f.publishedScenes[id]
+	if !ok {
+		return oops.Code("SCENE_PUBLISH_NOT_FOUND").With("id", id).Errorf("attempt not found")
+	}
+	pub.Status = in.To
+	if in.FailureReason != nil {
+		pub.FailureReason = in.FailureReason
+	}
+	if in.SetCoolOffAt != nil {
+		ts := pgnanos.From(*in.SetCoolOffAt)
+		pub.CoolOffStartedAt = &ts
+	}
+	if in.ClearCoolOff {
+		pub.CoolOffStartedAt = nil
+	}
+	if in.Resolved {
+		now := pgnanos.From(time.Now())
+		pub.ResolvedAt = &now
+	}
+	return nil
 }
 
 // CountAttempts returns the configured per-scene attempt counts (zero value

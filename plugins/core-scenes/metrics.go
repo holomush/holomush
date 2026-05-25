@@ -139,3 +139,19 @@ func metricScenePublishAttemptResolved(outcome, reason string) {
 	_ = outcome
 	_ = reason
 }
+
+// metricScenePublishVoteCast counts publish-vote casts (spec §13.1), labeled by
+// the vote value and whether it changed a prior vote. Metric:
+// scene_publish_votes_total{vote, is_change}. No-op stub.
+func metricScenePublishVoteCast(vote, isChange string) {
+	_ = vote
+	_ = isChange
+}
+
+// boolLabel renders a bool as a stable Prometheus label value ("true"/"false").
+func boolLabel(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
