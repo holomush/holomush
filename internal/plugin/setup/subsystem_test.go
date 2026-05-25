@@ -95,6 +95,7 @@ type fakeEngineProvider struct {
 func (f *fakeEngineProvider) Engine() types.AccessPolicyEngine {
 	return policytest.AllowAllEngine()
 }
+
 func (f *fakeEngineProvider) AttributeResolver() *attribute.Resolver {
 	return f.resolver
 }

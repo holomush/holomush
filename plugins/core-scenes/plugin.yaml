@@ -96,35 +96,51 @@ policies:
       permit(principal is character, action in ["execute"], resource is command) when { resource.command.name in ["scene",
       "scenes"] };
 
-  # ─── Owner-only operations (unchanged from Phase 2) ───────────────────
+  # ─── Per-action authorization gates ───────────────────────────────────
+  # These policies gate WHO (ownership / participation). Scene STATE validity
+  # is enforced by the store/service layer with specific business errors
+  # (e.g. ending an already-ended scene yields "Failed to end scene: scene
+  # transition forbidden", not a generic authz denial). Keeping state checks
+  # out of ABAC policies prevents the gate from intercepting invalid-state
+  # operations before the handler can surface a clear message to the player.
+  #
+  # EXCEPTION: invite-to-scene and kick-from-scene retain their state clauses
+  # because the real InviteParticipant / KickParticipant store methods do NOT
+  # enforce scene state independently — removing the state clause would allow
+  # inviting/kicking on ended/archived scenes with no handler rejection.
+
+  # ─── Owner-only lifecycle operations ──────────────────────────────────
   - name: end-own-scene
     dsl: >-
-      permit(principal is character, action in ["end"], resource is scene) when { resource.scene.owner == principal.id &&
-      resource.scene.state in ["active", "paused"] };
+      permit(principal is character, action in ["end"], resource is scene) when { resource.scene.owner == principal.id };
   - name: pause-own-scene
     dsl: >-
-      permit(principal is character, action in ["pause"], resource is scene) when { resource.scene.owner == principal.id &&
-      resource.scene.state == "active" };
+      permit(principal is character, action in ["pause"], resource is scene) when { resource.scene.owner == principal.id };
   - name: update-own-scene
     dsl: >-
       permit(principal is character, action in ["update"], resource is scene) when { resource.scene.owner == principal.id
-      && resource.scene.state in ["active", "paused"] };
+      };
 
-  # ─── Member-based read/write/resume (Phase 3 replacement) ─────────────
+  # ─── Member-based read/write/resume ───────────────────────────────────
   - name: read-scene-as-participant
     dsl: >-
       permit(principal is character, action in ["read"], resource is scene) when { principal.id in resource.scene.participants
       };
+  # State validity for write is enforced implicitly by handleEmit's
+  # resolveSingleSceneMembership → ListScenesForCharacter, which filters
+  # `state IN ('active','paused')` (ended scenes are invisible to membership
+  # inference). If that filter is ever relaxed, re-add a `resource.scene.state`
+  # clause here to keep write fail-closed on state.
   - name: write-scene-as-participant
     dsl: >-
       permit(principal is character, action in ["write"], resource is scene) when { principal.id in resource.scene.participants
-      && resource.scene.state in ["active", "paused"] };
+      };
   - name: resume-scene-as-participant
     dsl: >-
       permit(principal is character, action in ["resume"], resource is scene) when { principal.id in resource.scene.participants
-      && resource.scene.state == "paused" };
+      };
 
-  # ─── Membership operations (Phase 3 new) ──────────────────────────────
+  # ─── Membership operations ────────────────────────────────────────────
   # NOTE: join-open-scene and join-private-scene-as-invitee document the
   # intended join semantics but are NOT consulted by the current command path.
   # Join authorization is enforced substrate-side: classifyJoinMiss in the
@@ -155,7 +171,7 @@ policies:
   - name: transfer-ownership
     dsl: >-
       permit(principal is character, action in ["transfer-ownership"], resource is scene) when { resource.scene.owner == principal.id
-      && resource.scene.state in ["active", "paused"] };
+      };
 
   # ─── Admin-only operations ────────────────────────────────────────────
   - name: admin-extend-publish-attempts

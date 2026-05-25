@@ -111,7 +111,8 @@ func Evaluate(ctx context.Context, in Input) (Decision, error) {
 	// Start OTel span — use the global tracer provider (matches otel_middleware.go scope).
 	tracer := otel.GetTracerProvider().Tracer("holomush.plugin")
 	subjectKind := subjectKindFromSubject(in.Subject)
-	ctx, span := tracer.Start(ctx, "pluginauthz.evaluate",
+	ctx, span := tracer.Start(
+		ctx, "pluginauthz.evaluate",
 		trace.WithAttributes(
 			attribute.String("plugin.name", in.PluginName),
 			attribute.String("evaluate.action", in.Action),
