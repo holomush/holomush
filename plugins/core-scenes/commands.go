@@ -21,6 +21,54 @@ import (
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 )
 
+// membershipLookup is the minimal store dependency resolveSceneRef needs.
+// The real *SceneStore satisfies it via ListScenesForCharacter (store.go);
+// tests use a small fake.
+type membershipLookup interface {
+	ListScenesForCharacter(ctx context.Context, characterID string) ([]string, error)
+}
+
+// resolveSceneRef returns the scene ID a "scene publish *" / "scene log *"
+// command targets (spec §6.1). An explicit "#<id>" arg names the scene
+// directly; the strict form has no space after the '#'. With no arg, the
+// helper uses single-membership inference (mirroring handleEmit/handleOrder's
+// resolveSingleSceneMembership): exactly one active membership resolves to that
+// scene; zero or multiple returns SCENE_PUBLISH_NO_FOCUSED_SCENE prompting the
+// player to pass "#<id>". Whitespace-only args are treated as no-arg.
+//
+// The plugin SDK exposes no per-connection "focused scene" query
+// (pluginsdk.FocusClient has no GetConnectionFocus), so single-membership
+// inference is the established pattern, reused here rather than inventing a new
+// abstraction.
+func resolveSceneRef(ctx context.Context, look membershipLookup, characterID, args string) (string, error) {
+	args = strings.TrimSpace(args)
+	if strings.HasPrefix(args, "#") {
+		// Strict "#<id>": no inner trim, so a space after '#' (or an embedded
+		// space/newline/'#') is a malformed reference rather than a silent fixup.
+		id := args[1:]
+		if id == "" || strings.ContainsAny(id, " \t\n#") {
+			return "", oops.Code("SCENE_PUBLISH_REF_INVALID").
+				With("arg", args).Errorf("malformed scene reference; use '#<scene_id>'")
+		}
+		return id, nil
+	}
+	if args != "" {
+		return "", oops.Code("SCENE_PUBLISH_REF_INVALID").
+			With("arg", args).Errorf("scene reference must use the '#<scene_id>' form")
+	}
+
+	scenes, err := look.ListScenesForCharacter(ctx, characterID)
+	if err != nil {
+		return "", oops.Code("SCENE_PUBLISH_REF_LOOKUP_FAILED").Wrap(err)
+	}
+	if len(scenes) != 1 {
+		return "", oops.Code("SCENE_PUBLISH_NO_FOCUSED_SCENE").
+			With("matching_scenes", len(scenes)).
+			Errorf("command requires a '#<scene_id>' argument (caller is in %d active scenes)", len(scenes))
+	}
+	return scenes[0], nil
+}
+
 // dispatchCommand handles the "scene" top-level command. Phase 2 supports
 // the create, info, end, pause, resume, and set subcommands; later phases
 // will plug additional handlers in here without changing the dispatcher
