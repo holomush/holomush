@@ -11,10 +11,10 @@
 # cog 7.x note: these settings are top-level keys, NOT nested under a
 # [settings] table (cog 7 rejects an unknown `settings` section). The commit
 # type allow-list is cog's built-in default (feat, fix, docs, style, refactor,
-# perf, test, build, ci, chore, revert) — `cog verify` rejects any other type.
-# We do NOT redefine it via [commit_types]: an empty `feat = {}` override makes
-# `cog bump --auto` fail with "Commit type `feat` not allowed", which only
-# surfaces on the bump/release path (latent until cog became the release engine).
+# perf, test, build, ci, chore, revert) PLUS any type ADDED in [commit_types]
+# below. Footgun: an EMPTY entry (`feat = {}`) DISABLES that type — `cog verify`
+# then rejects it and `cog bump --auto` fails with "Commit type `feat` not
+# allowed". So to ADD a type, give it a NON-EMPTY table; never use `{}`.
 
 # v-prefixed tags (v1.2.3) to match GoReleaser and the existing tag history.
 tag_prefix = "v"
@@ -27,3 +27,10 @@ disable_changelog = true
 branch_whitelist = ["main"]
 
 ignore_merge_commits = true
+
+# Add `deps` as an allowed type so Renovate's `deps:` prefix
+# (.github/renovate.json `commitMessagePrefix`) passes the commit-lint PR-title
+# gate. Non-empty table (NOT `{}`) so it ADDS the type without disabling it; no
+# bump_* keys so dependency bumps never trigger a release on their own.
+[commit_types]
+deps = { omit_from_changelog = true }

@@ -149,6 +149,13 @@ branch_whitelist = ["main"]
 
 ignore_merge_commits = true
 
+# SUPERSEDED DURING IMPLEMENTATION — do NOT copy this block verbatim.
+# In cog 7.x an empty `X = {}` entry DISABLES that type (cog then rejects it in
+# `cog verify` and fails `cog bump` with "Commit type X not allowed"). The block
+# below would therefore disable all of cog's built-in defaults. The shipped
+# cog.toml omits `[commit_types]` entirely and relies on cog's default allow-list
+# (feat/fix/docs/style/refactor/perf/test/build/ci/chore/revert); new types are
+# ADDED only via NON-empty tables (e.g. `deps = { omit_from_changelog = true }`).
 # Allowed commit types for `cog verify` (PR-title gate) and bump inference.
 [commit_types]
 feat = {}
