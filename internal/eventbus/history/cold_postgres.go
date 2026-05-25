@@ -450,7 +450,7 @@ func decodeColdRow(
 	}
 	return decodeAuthorizeAndDispatch(
 		ctx, &pbEnvelope, codecName, keyID, keyVersion,
-		identity, guard, dekMgr, auditEm,
+		identity, guard, dekMgr, auditEm, false,
 	)
 }
 

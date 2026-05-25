@@ -249,6 +249,12 @@ func (d *dispatcher) DispatchFor(
 // branch in its caller (decodeFromEnvelope), but the cold path calls
 // this dispatcher uniformly for all codecs, so the early return lives
 // here.
+//
+// readBack selects the read-back authorization path on the AuthGuard
+// (manifest crypto.emits[].readback) over the live-delivery path. It is
+// only meaningful for IdentityKindPlugin; the live hot/cold tier callers
+// pass false. The read-back primitive (decryptPluginRow, INV-RB-1) passes
+// true for plugin principals.
 func decodeAuthorizeAndDispatch(
 	ctx context.Context,
 	envelope *eventbusv1.Event,
@@ -259,6 +265,7 @@ func decodeAuthorizeAndDispatch(
 	guard eventbus.SessionAuthGuard,
 	dekMgr eventbus.SessionDEKManager,
 	auditEm eventbus.SessionAuditEmitter,
+	readBack bool,
 ) (eventbus.Event, bool, error) {
 	// Recover event ULID from the pre-stamped bytes.
 	var eventID ulid.ULID
@@ -290,6 +297,7 @@ func decodeAuthorizeAndDispatch(
 		KeyVersion: keyVersion,
 		EventType:  envelope.GetType(),
 		EventID:    eventID,
+		ReadBack:   readBack,
 	}
 
 	decision, err := guard.Check(ctx, req)
