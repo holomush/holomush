@@ -93,10 +93,11 @@ type ParticipantLookup interface {
 	Participants(ctx context.Context, keyID codec.KeyID, version uint32) ([]dek.Participant, error)
 }
 
-// ManifestLookup checks whether a plugin has declared requests_decryption
-// for a given event type in its manifest.
+// ManifestLookup checks plugin manifest declarations for decrypt and
+// read-back authorization.
 type ManifestLookup interface {
 	PluginRequestsDecryption(pluginName, eventType string) bool
+	PluginCanReadBack(pluginName, eventType string) bool
 }
 
 // ABACEngine is the narrow ABAC interface AuthGuard requires.

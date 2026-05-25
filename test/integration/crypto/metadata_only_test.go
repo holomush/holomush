@@ -43,6 +43,7 @@ func (noopBackpressure) ShouldThrottle(_ string) bool { return false }
 type alwaysDenyManifest struct{}
 
 func (alwaysDenyManifest) PluginRequestsDecryption(_, _ string) bool { return false }
+func (alwaysDenyManifest) PluginCanReadBack(_, _ string) bool        { return false }
 
 // subscribeHarness holds all components needed for the subscriber-side tests.
 type subscribeHarness struct {

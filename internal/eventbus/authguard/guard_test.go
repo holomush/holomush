@@ -35,6 +35,8 @@ func (f *fakeManifest) PluginRequestsDecryption(plugin, eventType string) bool {
 	return false
 }
 
+func (f *fakeManifest) PluginCanReadBack(_, _ string) bool { return false }
+
 type fakeBackpressure struct{ throttle bool }
 
 func (f *fakeBackpressure) ShouldThrottle(_ string) bool { return f.throttle }

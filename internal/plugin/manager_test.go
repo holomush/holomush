@@ -1852,6 +1852,23 @@ lua-plugin:
 	assert.Equal(t, "builtin", conflict.Source)
 }
 
+// TestPluginCanReadBack verifies Manager.PluginCanReadBack against the
+// crypto.emits[].readback field (INV-RB-2).
+func TestPluginCanReadBack(t *testing.T) {
+	t.Parallel()
+	m := newTestManagerWithManifest(t, &plugins.Manifest{
+		Name: "core-scenes",
+		Crypto: &plugins.CryptoSection{Emits: []plugins.CryptoEmit{
+			{EventType: "scene_pose", Sensitivity: plugins.SensitivityAlways, Readback: true},
+			{EventType: "scene_join_ic", Sensitivity: plugins.SensitivityNever},
+		}},
+	})
+	assert.True(t, m.PluginCanReadBack("core-scenes", "scene_pose"))
+	assert.False(t, m.PluginCanReadBack("core-scenes", "scene_join_ic"), "readback not set")
+	assert.False(t, m.PluginCanReadBack("core-scenes", "unknown"), "type not emitted")
+	assert.False(t, m.PluginCanReadBack("other", "scene_pose"), "wrong plugin")
+}
+
 // TestNewManagerRequiresVerbRegistry pins INV-GW-10: every plugin manager
 // MUST be constructed with a non-nil VerbRegistry. Omitting the option
 // returns ErrMissingVerbRegistry rather than silently skipping verb

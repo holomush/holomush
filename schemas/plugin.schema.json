@@ -274,6 +274,9 @@
               },
               "description": {
                 "type": "string"
+              },
+              "readback": {
+                "type": "boolean"
               }
             },
             "additionalProperties": false,

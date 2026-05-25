@@ -20,3 +20,10 @@ func (a *manifestAdapter) PluginRequestsDecryption(pluginName, eventType string)
 	}
 	return a.mgr.PluginRequestsDecryption(pluginName, eventType)
 }
+
+func (a *manifestAdapter) PluginCanReadBack(pluginName, eventType string) bool {
+	if a == nil || a.mgr == nil {
+		return false
+	}
+	return a.mgr.PluginCanReadBack(pluginName, eventType)
+}

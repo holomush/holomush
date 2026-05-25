@@ -1516,6 +1516,23 @@ func (m *Manager) PluginRequestsDecryption(pluginName, eventType string) bool {
 	return false
 }
 
+// PluginCanReadBack returns true iff pluginName's manifest declares
+// crypto.emits[].readback=true for eventType. Read-back authorization
+// gate g2 (plugin-readback-decrypt-design §4). Distinct from
+// PluginRequestsDecryption, which reads crypto.consumes.
+func (m *Manager) PluginCanReadBack(pluginName, eventType string) bool {
+	manifest := m.lookupManifest(pluginName)
+	if manifest == nil || manifest.Crypto == nil {
+		return false
+	}
+	for _, e := range manifest.Crypto.Emits {
+		if e.EventType == eventType {
+			return e.Readback
+		}
+	}
+	return false
+}
+
 func actorFromContext(ctx context.Context, _ string) (core.Actor, error) {
 	actor, ok := core.ActorFromContext(ctx)
 	if !ok {

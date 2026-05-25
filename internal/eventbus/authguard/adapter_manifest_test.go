@@ -43,3 +43,33 @@ func TestPluginManifestLookupAdapterReturnsTrueForDeclaredEventType(t *testing.T
 	assert.True(t, lookup.PluginRequestsDecryption("mod-filter", "core-comm:whisper"))
 	assert.False(t, lookup.PluginRequestsDecryption("mod-filter", "core-comm:other"))
 }
+
+func TestPluginManifestLookupAdapterPluginCanReadBackReturnsTrueWhenDeclared(t *testing.T) {
+	mgr, err := plugins.NewManager("", plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, err)
+	mgr.TestLoadPlugin("core-scenes", &plugins.Manifest{
+		Name:         "core-scenes",
+		Version:      "1.0.0",
+		Type:         plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{Executable: "core-scenes"},
+		Crypto: &plugins.CryptoSection{
+			Emits: []plugins.CryptoEmit{
+				{EventType: "scene_pose", Sensitivity: plugins.SensitivityAlways, Readback: true},
+				{EventType: "scene_join_ic", Sensitivity: plugins.SensitivityNever},
+			},
+		},
+	})
+
+	lookup := authguard.NewPluginManifestLookup(mgr)
+	assert.True(t, lookup.PluginCanReadBack("core-scenes", "scene_pose"))
+	assert.False(t, lookup.PluginCanReadBack("core-scenes", "scene_join_ic"))
+	assert.False(t, lookup.PluginCanReadBack("core-scenes", "unknown"))
+}
+
+func TestPluginManifestLookupAdapterPluginCanReadBackReturnsFalseOnNilManager(t *testing.T) {
+	lookup := authguard.NewPluginManifestLookup(nil)
+	require.NotPanics(t, func() {
+		result := lookup.PluginCanReadBack("any-plugin", "any-event")
+		assert.False(t, result, "nil manager must return false (fail-closed)")
+	})
+}
