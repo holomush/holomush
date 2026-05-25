@@ -153,22 +153,13 @@ tasks:
     desc: Run integration tests (needs Docker for testcontainers)
     cmds:
       - task: plugin:build-all
-      # The explicit package list is load-bearing: `./...` under `-tags=integration`
-      # tries to compile packages like `internal/grpc/` whose unit tests depend on
-      # `core.NewMemoryEventStore` (a file with `//go:build !integration`), causing
-      # compilation failures. The list below enumerates the packages that actually
-      # contain `//go:build integration` test files.
-      #
+      # No package enumeration: the only //go:build !integration helper
+      # (the in-memory event store) was extracted to internal/core/coretest
+      # (holomush-1eps2), so ./... compiles cleanly under -tags=integration.
       # -coverpkg=./... makes integration tests contribute coverage to every
-      # production package they exercise, not just the package that contains
-      # the test. Without this, files like internal/audit/postgres.go reported
-      # 0% despite being fully exercised by test/integration/audit/ and the
-      # store migration tests. See .codecov.yml for Codecov's merge behavior.
+      # production package they exercise (see .codecov.yml).
       - "{{.GO_TOOL}} gotestsum --format pkgname -- -race -tags=integration -count=1 -coverprofile=coverage-int.out -covermode=atomic
-        -coverpkg=./... ./cmd/holomush/ ./internal/access/setup/ ./internal/admin/approval/ ./internal/admin/socket/ ./internal/auth/postgres/
-        ./internal/content/ ./internal/eventbus/audit/ ./internal/eventbus/audit/chain/ ./internal/admin/policy/ ./internal/eventbus/crypto/dek/
-        ./internal/admin/readstream/ ./internal/eventbus/crypto/kek/ ./internal/eventbus/history/ ./internal/plugin/ ./internal/store/
-        ./plugins/core-scenes/ ./test/testutil/ ./internal/testsupport/integrationtest/ ./internal/world/postgres/ ./test/integration/..."
+        -coverpkg=./... {{.CLI_ARGS | default \"./...\"}}"
 
   test:int:focus:
     desc: Run focused integration tests with Ginkgo focus filter (pass -ginkgo.focus="..." after --)
