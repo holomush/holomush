@@ -1,0 +1,31 @@
+name: Install Cocogitto
+# Download the pinned cocogitto (`cog`) release binary, verify its SHA256, and
+# put it on PATH. Pins by checksum (same pattern as ci.yaml rumdl/dprint/buf)
+# rather than `cargo install` (slow) or a third-party action. x86_64 musl build
+# runs on the namespace-profile-linux-amd64 runners.
+description: Install the pinned cog binary and add it to PATH.
+
+runs:
+  using: composite
+  steps:
+    - name: Install cocogitto
+      shell: bash
+      run: |
+        set -euo pipefail
+        COG_VERSION="7.0.0"
+        COG_TARBALL="cocogitto-${COG_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+        COG_URL="https://github.com/cocogitto/cocogitto/releases/download/${COG_VERSION}/${COG_TARBALL}"
+        COG_SHA256="e03938ff2c4c86d71c00c0f3284dbbe95c5ca76fe34a51f33e945c23010d59bb"
+        curl -LsSfO "${COG_URL}"
+        echo "${COG_SHA256}  ${COG_TARBALL}" | sha256sum -c -
+        # The 7.0.0 musl tarball nests the binary under a
+        # x86_64-unknown-linux-musl/ directory (verified: `cog` is NOT at the
+        # archive root), so select that member and strip the leading component
+        # to land /usr/local/bin/cog.
+        sudo tar xzf "${COG_TARBALL}" --overwrite --strip-components=1 \
+          -C /usr/local/bin x86_64-unknown-linux-musl/cog
+        rm "${COG_TARBALL}"
+
+    - name: Verify cog
+      shell: bash
+      run: cog --version
