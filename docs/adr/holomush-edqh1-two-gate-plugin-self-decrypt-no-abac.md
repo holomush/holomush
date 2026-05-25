@@ -21,7 +21,11 @@ Plugin self-decrypt is authorized by **exactly two gates**, each evaluated once 
 
 There is **no ABAC `decrypt`-action gate**. Wiring one is deferred to a follow-up bead (it would also fix the latent live-delivery always-deny).
 
-## Options Considered
+## Rationale
+
+The ABAC `decrypt` action always-denies in production today — no `dek` resource type and no permit policy satisfy it (the only grant is a test helper) — and `requests_decryption` (INV-45) is live-delivery-only and structurally inapplicable to read-back. A 3-gate or ABAC-only model would couple this work to absent crypto-ABAC plumbing for no security gain over OwnerMap subject-ownership + the manifest `readback` opt-in + the mandatory INV-19 audit. Two concrete, default-deny, runtime-symmetric gates unblock C7 now; wiring the ABAC action (which also fixes the latent live-delivery always-deny) is a documented follow-up.
+
+## Alternatives Considered
 
 - **Reuse `requests_decryption` / relax the self-ref validator.** *Rejected:* conflates live-delivery with read-back; stretches INV-45 dependency semantics.
 - **ABAC-only seeded grant, or a 3-gate model (manifest + ABAC + ownership).** *Rejected:* both depend on production ABAC plumbing — a `dek` resource type + a `decrypt` permit policy — that does not exist; coupling this work to absent infrastructure for no security gain over gates 1–2 + INV-19 audit.
