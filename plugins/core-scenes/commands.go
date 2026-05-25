@@ -159,11 +159,135 @@ func (p *scenePlugin) handlePublish(ctx context.Context, req pluginsdk.CommandRe
 	switch sub {
 	case "vote":
 		return p.handleVote(ctx, req, rest)
+	case "withdraw":
+		return p.handleWithdraw(ctx, req, rest)
+	case "status":
+		return p.handleStatus(ctx, req, rest)
+	case "download":
+		return p.handleDownload(ctx, req, rest)
 	default:
 		// Bare "scene publish [#<id>]" → start an attempt. args carries the
 		// optional scene ref (empty → single-membership inference).
 		return p.handlePublishStart(ctx, req, args)
 	}
+}
+
+// latestAttemptID returns the most recent attempt's id (ListSceneAttempts is
+// ordered by attempt_number ASC, so the last element is newest), or ("", false)
+// if the scene has no attempts.
+func latestAttemptID(attempts []PublishedScene) (string, bool) {
+	if len(attempts) == 0 {
+		return "", false
+	}
+	return attempts[len(attempts)-1].ID, true
+}
+
+// publishedAttemptID returns the scene's PUBLISHED attempt id (one-and-done, so
+// at most one), or ("", false) if the scene was never published.
+func publishedAttemptID(attempts []PublishedScene) (string, bool) {
+	for i := range attempts {
+		if attempts[i].Status == StatusPublished {
+			return attempts[i].ID, true
+		}
+	}
+	return "", false
+}
+
+// handleWithdraw withdraws a scene's active publish attempt (spec §6.1). Owner-
+// only: WithdrawScenePublish (B4) enforces the owner check
+// (SCENE_PUBLISH_NOT_OWNER → PermissionDenied), so no in-handler gate is needed.
+func (p *scenePlugin) handleWithdraw(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	sceneID, err := resolveSceneRef(ctx, p.service.store, req.CharacterID, args)
+	if err != nil {
+		return pluginsdk.Errorf("%v", err), nil
+	}
+	attempts, err := p.service.store.ListSceneAttempts(ctx, sceneID)
+	if err != nil {
+		return pluginsdk.Errorf("Could not look up the publish attempt: %v", err), nil
+	}
+	attemptID, ok := activeAttemptID(attempts)
+	if !ok {
+		return pluginsdk.Errorf("There is no active publish attempt to withdraw for that scene."), nil
+	}
+	if _, err := p.service.WithdrawScenePublish(ctx, &scenev1.WithdrawScenePublishRequest{
+		CallerCharacterId: req.CharacterID,
+		PublishedSceneId:  attemptID,
+	}); err != nil {
+		return pluginsdk.Errorf("Could not withdraw publish attempt: %v", err), nil
+	}
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: "The publish attempt has been withdrawn.",
+	}, nil
+}
+
+// handleStatus shows the latest publish attempt's state for a scene (spec §6.1).
+// Participant-gated: GetPublishedScene (B5) enforces the INV-S9 participant gate.
+func (p *scenePlugin) handleStatus(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	sceneID, err := resolveSceneRef(ctx, p.service.store, req.CharacterID, args)
+	if err != nil {
+		return pluginsdk.Errorf("%v", err), nil
+	}
+	attempts, err := p.service.store.ListSceneAttempts(ctx, sceneID)
+	if err != nil {
+		return pluginsdk.Errorf("Could not look up publish attempts: %v", err), nil
+	}
+	attemptID, ok := latestAttemptID(attempts)
+	if !ok {
+		return pluginsdk.Errorf("There are no publish attempts for that scene."), nil
+	}
+	resp, err := p.service.GetPublishedScene(ctx, &scenev1.GetPublishedSceneRequest{
+		CallerCharacterId: req.CharacterID,
+		PublishedSceneId:  attemptID,
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Could not read publish status: %v", err), nil
+	}
+	out := fmt.Sprintf("Publish attempt #%d: %s", resp.GetAttemptNumber(), resp.GetStatus())
+	if t := resp.GetTally(); t != nil {
+		out += fmt.Sprintf(" (votes: %d yes, %d no, %d pending)", t.GetYes(), t.GetNo(), t.GetPending())
+	}
+	if fr := resp.GetFailureReason(); fr != "" {
+		out += fmt.Sprintf(" — failed: %s", fr)
+	}
+	return &pluginsdk.CommandResponse{Status: pluginsdk.CommandOK, Output: out}, nil
+}
+
+// handleDownload renders a scene's PUBLISHED archive to the requested format
+// (spec §6.1). Arg form: "scene publish download [<format>] [#<id>]" — a
+// "#"-prefixed token is the scene ref, any other token is the format (default
+// markdown). Participant-gated + format-validated by DownloadPublishedScene (B6).
+func (p *scenePlugin) handleDownload(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	format := "markdown"
+	var ref string
+	for _, tok := range strings.Fields(args) {
+		if strings.HasPrefix(tok, "#") {
+			ref = tok
+		} else {
+			format = tok
+		}
+	}
+	sceneID, err := resolveSceneRef(ctx, p.service.store, req.CharacterID, ref)
+	if err != nil {
+		return pluginsdk.Errorf("%v", err), nil
+	}
+	attempts, err := p.service.store.ListSceneAttempts(ctx, sceneID)
+	if err != nil {
+		return pluginsdk.Errorf("Could not look up the published scene: %v", err), nil
+	}
+	attemptID, ok := publishedAttemptID(attempts)
+	if !ok {
+		return pluginsdk.Errorf("That scene has not been published."), nil
+	}
+	resp, err := p.service.DownloadPublishedScene(ctx, &scenev1.DownloadPublishedSceneRequest{
+		CallerCharacterId: req.CharacterID,
+		PublishedSceneId:  attemptID,
+		Format:            format,
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Could not download scene: %v", err), nil
+	}
+	return &pluginsdk.CommandResponse{Status: pluginsdk.CommandOK, Output: string(resp.GetContent())}, nil
 }
 
 // handleVote casts (or changes) a publish vote for the focused or explicit

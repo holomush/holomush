@@ -7,8 +7,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/oklog/ulid/v2"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -177,4 +177,146 @@ func TestHandleVoteRejectsBadDirection(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, pluginsdk.CommandOK, resp.Status)
 	assert.Contains(t, resp.Output, "Usage: scene publish vote")
+}
+
+// newPublishOpFixture wires a scenePlugin with a scene (owned by `caller`,
+// `caller` a participant) and one attempt in the given status + `caller` on its
+// vote roster — enough for withdraw/status/download. Returns store + attemptID
+// so tests can seed content.
+func newPublishOpFixture(t *testing.T, status PublishedSceneStatus) (p *scenePlugin, store *fakeStore, sceneID, caller, attemptID string) {
+	t.Helper()
+	sceneID = ulid.Make().String()
+	attemptID = ulid.Make().String()
+	caller = ulid.Make().String()
+	store = newFakeStore()
+	store.scenes[sceneID] = &SceneRow{ID: sceneID, OwnerID: caller, State: string(SceneStateEnded)}
+	store.installRoster(sceneID, caller)
+	store.installPublishedAttempt(attemptID, sceneID, status)
+	store.installVoters(attemptID, caller)
+	return &scenePlugin{service: NewSceneServiceImpl(store)}, store, sceneID, caller, attemptID
+}
+
+// TestHandleWithdrawWithdrawsActiveAttempt — the owner withdraws the scene's
+// active attempt.
+func TestHandleWithdrawWithdrawsActiveAttempt(t *testing.T) {
+	t.Parallel()
+	p, _, sceneID, caller, _ := newPublishOpFixture(t, StatusCollecting)
+
+	resp, err := p.handlePublish(context.Background(),
+		pluginsdk.CommandRequest{CharacterID: caller}, "withdraw #"+sceneID)
+
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "withdrawn")
+}
+
+// TestHandleWithdrawRejectsNonOwner — a non-owner cannot withdraw
+// (WithdrawScenePublish → SCENE_PUBLISH_NOT_OWNER).
+func TestHandleWithdrawRejectsNonOwner(t *testing.T) {
+	t.Parallel()
+	p, _, sceneID, _, _ := newPublishOpFixture(t, StatusCollecting)
+	outsider := ulid.Make().String()
+
+	resp, err := p.handlePublish(context.Background(),
+		pluginsdk.CommandRequest{CharacterID: outsider}, "withdraw #"+sceneID)
+
+	require.NoError(t, err)
+	assert.NotEqual(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "Could not withdraw")
+}
+
+// TestHandleStatusShowsAttemptState — a participant sees the latest attempt's
+// status and tally.
+func TestHandleStatusShowsAttemptState(t *testing.T) {
+	t.Parallel()
+	p, _, sceneID, caller, _ := newPublishOpFixture(t, StatusCollecting)
+
+	resp, err := p.handlePublish(context.Background(),
+		pluginsdk.CommandRequest{CharacterID: caller}, "status #"+sceneID)
+
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "COLLECTING")
+	assert.Contains(t, resp.Output, "votes:")
+}
+
+// TestHandleStatusDeniesNonParticipant — a non-participant is denied
+// (GetPublishedScene INV-S9 gate).
+func TestHandleStatusDeniesNonParticipant(t *testing.T) {
+	t.Parallel()
+	p, _, sceneID, _, _ := newPublishOpFixture(t, StatusCollecting)
+	outsider := ulid.Make().String()
+
+	resp, err := p.handlePublish(context.Background(),
+		pluginsdk.CommandRequest{CharacterID: outsider}, "status #"+sceneID)
+
+	require.NoError(t, err)
+	assert.NotEqual(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "Could not read publish status")
+}
+
+// TestHandleDownloadRendersPublished — a participant downloads a PUBLISHED
+// scene rendered to the (default markdown) format.
+func TestHandleDownloadRendersPublished(t *testing.T) {
+	t.Parallel()
+	p, store, sceneID, caller, attemptID := newPublishOpFixture(t, StatusPublished)
+	store.publishedContent[attemptID] = []PublishedSceneEntry{
+		{Speaker: "Alice", Kind: EntryKindSay, Content: "Hello."},
+	}
+
+	resp, err := p.handlePublish(context.Background(),
+		pluginsdk.CommandRequest{CharacterID: caller}, "download #"+sceneID)
+
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, `**Alice** says, "Hello."`)
+}
+
+// TestHandleDownloadRejectsUnpublished — downloading a scene with no PUBLISHED
+// attempt is a command error.
+func TestHandleDownloadRejectsUnpublished(t *testing.T) {
+	t.Parallel()
+	p, _, sceneID, caller, _ := newPublishOpFixture(t, StatusCollecting)
+
+	resp, err := p.handlePublish(context.Background(),
+		pluginsdk.CommandRequest{CharacterID: caller}, "download #"+sceneID)
+
+	require.NoError(t, err)
+	assert.NotEqual(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "has not been published")
+}
+
+// TestHandleStatusShowsFailedAttempt — status on a scene whose latest attempt
+// failed reports the failure + reason (not "no active attempt"); this is the
+// recorded §2 divergence (status shows the latest, not only the active).
+func TestHandleStatusShowsFailedAttempt(t *testing.T) {
+	t.Parallel()
+	p, store, sceneID, caller, attemptID := newPublishOpFixture(t, StatusAttemptFailed)
+	reason := FailureAnyNo
+	store.publishedScenes[attemptID].FailureReason = &reason
+
+	resp, err := p.handlePublish(context.Background(),
+		pluginsdk.CommandRequest{CharacterID: caller}, "status #"+sceneID)
+
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "ATTEMPT_FAILED")
+	assert.Contains(t, resp.Output, "ANY_NO")
+}
+
+// TestHandleDownloadAcceptsExplicitFormat — an explicit format token selects
+// the renderer (here jsonl), exercising the format branch of the arg parser.
+func TestHandleDownloadAcceptsExplicitFormat(t *testing.T) {
+	t.Parallel()
+	p, store, sceneID, caller, attemptID := newPublishOpFixture(t, StatusPublished)
+	store.publishedContent[attemptID] = []PublishedSceneEntry{
+		{Speaker: "Alice", Kind: EntryKindSay, Content: "Hello."},
+	}
+
+	resp, err := p.handlePublish(context.Background(),
+		pluginsdk.CommandRequest{CharacterID: caller}, "download jsonl #"+sceneID)
+
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, `{"speaker":"Alice","kind":"say","content":"Hello."}`)
 }
