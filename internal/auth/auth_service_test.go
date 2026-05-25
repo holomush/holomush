@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/auth/mocks"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/core/coretest"
 	"github.com/holomush/holomush/internal/session"
 	sessionmocks "github.com/holomush/holomush/internal/session/mocks"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -307,7 +308,7 @@ func TestWithGameSessionFanoutIgnoresNilGameStore(t *testing.T) {
 	playerRepo := mocks.NewMockPlayerRepository(t)
 	playerSessionRepo := mocks.NewMockPlayerSessionRepository(t)
 	hasher := mocks.NewMockPasswordHasher(t)
-	engine := core.NewEngine(core.NewMemoryEventStore())
+	engine := core.NewEngine(coretest.NewMemoryEventStore())
 
 	// nil gameSessions — fanout must be silently ignored.
 	svc, err := auth.NewAuthService(
@@ -331,7 +332,7 @@ func TestConfigureGameSessionFanoutIgnoresNilArgs(t *testing.T) {
 	svc.ConfigureGameSessionFanout(nil, gameStore)
 
 	// nil gameSessions — no-op.
-	engine := core.NewEngine(core.NewMemoryEventStore())
+	engine := core.NewEngine(coretest.NewMemoryEventStore())
 	svc.ConfigureGameSessionFanout(engine, nil)
 
 	// All three calls must be no-ops: the service should work normally.
@@ -348,7 +349,7 @@ func TestAuthenticatePlayerEmitsSessionEndedForEvictedSessionChildren(t *testing
 	const capN = 2
 
 	// --- set up in-memory event store + engine ---
-	eventStore := core.NewMemoryEventStore()
+	eventStore := coretest.NewMemoryEventStore()
 	engine := core.NewEngine(eventStore)
 
 	// --- set up session mock ---
@@ -433,7 +434,7 @@ func TestAuthenticatePlayerSkipsChildSessionsNotInTrimmedSet(t *testing.T) {
 	ctx := context.Background()
 	const capN = 2
 
-	eventStore := core.NewMemoryEventStore()
+	eventStore := coretest.NewMemoryEventStore()
 	engine := core.NewEngine(eventStore)
 	gameStore := sessionmocks.NewMockStore(t)
 

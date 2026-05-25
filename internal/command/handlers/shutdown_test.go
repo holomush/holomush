@@ -17,6 +17,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/core/coretest"
 )
 
 // Note: Capability checks are performed by the dispatcher, not the handler.
@@ -43,7 +44,7 @@ func newShutdownExec(t *testing.T, args string, store core.EventAppender) (*comm
 
 func TestShutdownHandlerImmediateShutdown(t *testing.T) {
 	ctx := context.Background()
-	store := core.NewMemoryEventStore()
+	store := coretest.NewMemoryEventStore()
 	exec, buf := newShutdownExec(t, "", store)
 
 	err := ShutdownHandler(ctx, exec)
@@ -62,7 +63,7 @@ func TestShutdownHandlerImmediateShutdown(t *testing.T) {
 
 func TestShutdownHandlerDelayedShutdown(t *testing.T) {
 	ctx := context.Background()
-	store := core.NewMemoryEventStore()
+	store := coretest.NewMemoryEventStore()
 	exec, buf := newShutdownExec(t, "60", store)
 
 	err := ShutdownHandler(ctx, exec)
@@ -106,7 +107,7 @@ func TestShutdownHandler_InvalidDelay(t *testing.T) {
 
 func TestShutdownHandlerBroadcastsToSystemStream(t *testing.T) {
 	ctx := context.Background()
-	store := core.NewMemoryEventStore()
+	store := coretest.NewMemoryEventStore()
 	exec, _ := newShutdownExec(t, "", store)
 
 	err := ShutdownHandler(ctx, exec)

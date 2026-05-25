@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/core/coretest"
 	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	corecomm "github.com/holomush/holomush/plugins/core-communication"
@@ -32,7 +33,7 @@ func TestPipelineRendering(t *testing.T) {
 		sessionID := core.NewULID()
 		locationID := core.NewULID()
 
-		store := core.NewMemoryEventStore()
+		store := coretest.NewMemoryEventStore()
 		server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID:   charID,
@@ -81,7 +82,7 @@ func TestPipelineRendering(t *testing.T) {
 		sessionID := core.NewULID()
 		locationID := core.NewULID()
 
-		store := core.NewMemoryEventStore()
+		store := coretest.NewMemoryEventStore()
 		server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID:   charID,
@@ -127,7 +128,7 @@ func TestPipelineRendering(t *testing.T) {
 		sessionID := core.NewULID()
 		locationID := core.NewULID()
 
-		store := core.NewMemoryEventStore()
+		store := coretest.NewMemoryEventStore()
 		server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID:   charID,
@@ -175,7 +176,7 @@ func TestPipelineRendering(t *testing.T) {
 		sessionID := core.NewULID()
 		locationID := core.NewULID()
 
-		store := core.NewMemoryEventStore()
+		store := coretest.NewMemoryEventStore()
 		server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID:   charID,
@@ -222,7 +223,7 @@ func TestPipelineRendering(t *testing.T) {
 		sessionID := core.NewULID()
 		locationID := core.NewULID()
 
-		store := core.NewMemoryEventStore()
+		store := coretest.NewMemoryEventStore()
 		server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID:   charID,

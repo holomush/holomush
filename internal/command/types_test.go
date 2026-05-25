@@ -16,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/core/coretest"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -754,7 +755,7 @@ func TestNewCommandEntryPluginNameWithCapabilities(t *testing.T) {
 
 func TestServicesBroadcastSystemMessageCreatesCorrectEvent(t *testing.T) {
 	ctx := context.Background()
-	store := core.NewMemoryEventStore()
+	store := coretest.NewMemoryEventStore()
 	stream := "test-stream"
 	testMessage := "Server is shutting down"
 
