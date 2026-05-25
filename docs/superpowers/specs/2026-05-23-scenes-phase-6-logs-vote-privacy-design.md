@@ -92,6 +92,8 @@ New migration `000008_scene_publication.up.sql`:
 -- SPDX-License-Identifier: Apache-2.0
 -- Copyright 2026 HoloMUSH Contributors
 
+-- Timestamps are BIGINT epoch-nanoseconds (INV-TS-1).
+
 CREATE TABLE IF NOT EXISTS published_scenes (
     id                     TEXT        PRIMARY KEY,
     scene_id               TEXT        NOT NULL,
@@ -99,16 +101,16 @@ CREATE TABLE IF NOT EXISTS published_scenes (
     status                 TEXT        NOT NULL CHECK (status IN
                               ('COLLECTING','COOLOFF','PUBLISHED','ATTEMPT_FAILED')),
     initiated_by           TEXT        NOT NULL,
-    initiated_at           TIMESTAMPTZ NOT NULL,
-    cooloff_started_at     TIMESTAMPTZ,
-    resolved_at            TIMESTAMPTZ,
+    initiated_at           BIGINT      NOT NULL,
+    cooloff_started_at     BIGINT,
+    resolved_at            BIGINT,
     vote_window            INTERVAL    NOT NULL,
     cooloff_window         INTERVAL    NOT NULL,
     max_attempts_snapshot  INTEGER     NOT NULL,
     content_entries        JSONB,
     title_snapshot         TEXT,
     participants_snapshot  JSONB,
-    published_at           TIMESTAMPTZ,
+    published_at           BIGINT,
     failure_reason         TEXT        CHECK (failure_reason IS NULL OR failure_reason IN
                               ('ANY_NO','TIMEOUT','WITHDRAWN',
                                'SNAPSHOT_DECRYPT_FAILED','SNAPSHOT_RENDER_FAILED',
@@ -125,11 +127,11 @@ CREATE INDEX IF NOT EXISTS published_scenes_scene_status
     ON published_scenes(scene_id, status);
 
 CREATE TABLE IF NOT EXISTS published_scene_votes (
-    published_scene_id  TEXT        NOT NULL,
+    published_scene_id  TEXT        NOT NULL REFERENCES published_scenes(id) ON DELETE CASCADE,
     character_id        TEXT        NOT NULL,
     vote                BOOLEAN,
-    voted_at            TIMESTAMPTZ,
-    last_changed_at     TIMESTAMPTZ,
+    voted_at            BIGINT,
+    last_changed_at     BIGINT,
     PRIMARY KEY (published_scene_id, character_id)
 );
 
@@ -137,7 +139,9 @@ CREATE INDEX IF NOT EXISTS published_scene_votes_pending
     ON published_scene_votes(published_scene_id) WHERE vote IS NULL;
 ```
 
-No foreign-key constraints. Referential integrity for `scene_id`, `initiated_by`, `published_scene_id`, and `character_id` is enforced in the Go service layer. This matches the project convention for new tables (per user direction 2026-05-23); the existing `scene_participants → scenes` FK is an outlier.
+Exactly one intra-schema FK exists: `published_scene_votes.published_scene_id → published_scenes(id) ON DELETE CASCADE`. This is defense-in-depth — inert today (no attempt-deletion or GC path exists yet) but structurally correct for when one lands. It ensures vote rows can never outlive their parent attempt row without an explicit application-layer sweep.
+
+Cross-schema FKs to `public.characters` and `public.players` are impossible under plugin role isolation: the plugin database role cannot reference tables in the host schema, so `initiated_by` and `character_id` integrity is enforced in the Go service layer. The `published_scenes.scene_id` reference to `scenes` is intentionally omitted — publications are designed to outlive the scene they record, so a cascading FK would be incorrect.
 
 A paired `000008_scene_publication.down.sql` drops both tables and their indexes. Migrations follow the discipline at `site/docs/contributing/database-migrations.md` (idempotent, logic-free, plain SQL).
 

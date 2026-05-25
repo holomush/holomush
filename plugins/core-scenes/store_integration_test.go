@@ -1865,4 +1865,62 @@ var _ = Describe("SceneStore", func() {
 			),
 		)
 	})
+
+	Describe("published_scenes / published_scene_votes FK cascade", func() {
+		It("cascades vote deletion when the parent published_scene is deleted", func() {
+			store := newTestStore()
+			ctx := context.Background()
+
+			pubID := "ps-cascade-test-01"
+			sceneID := "scene-cascade-test-01"
+
+			// Insert a published_scenes row with all NOT NULL columns.
+			// initiated_at is BIGINT epoch-nanoseconds (INV-TS-1).
+			_, err := store.pool.Exec(
+				ctx, `
+				INSERT INTO published_scenes
+					(id, scene_id, attempt_number, status, initiated_by, initiated_at,
+					 vote_window, cooloff_window, max_attempts_snapshot)
+				VALUES
+					($1, $2, 1, 'COLLECTING', 'char-initiator',
+					 (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT,
+					 '7 days'::interval, '30 minutes'::interval, 3)`,
+				pubID, sceneID,
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Insert two vote rows referencing the published_scene.
+			_, err = store.pool.Exec(
+				ctx, `
+				INSERT INTO published_scene_votes (published_scene_id, character_id)
+				VALUES ($1, 'char-voter-a'), ($1, 'char-voter-b')`,
+				pubID,
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Confirm both votes exist.
+			var count int
+			Expect(store.pool.QueryRow(
+				ctx,
+				`SELECT COUNT(*) FROM published_scene_votes WHERE published_scene_id = $1`,
+				pubID,
+			).Scan(&count)).NotTo(HaveOccurred())
+			Expect(count).To(Equal(2))
+
+			// Delete the parent published_scene row.
+			_, err = store.pool.Exec(
+				ctx,
+				`DELETE FROM published_scenes WHERE id = $1`, pubID,
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Assert the cascade fired: no vote rows remain.
+			Expect(store.pool.QueryRow(
+				ctx,
+				`SELECT COUNT(*) FROM published_scene_votes WHERE published_scene_id = $1`,
+				pubID,
+			).Scan(&count)).NotTo(HaveOccurred())
+			Expect(count).To(Equal(0))
+		})
+	})
 })
