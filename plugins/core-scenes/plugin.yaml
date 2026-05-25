@@ -34,6 +34,9 @@ audit:
 # with any other plugin (e.g. test-abac-widget) that also provides it,
 # because the registry treats service names as singletons.
 
+actions:
+  - extend_publish_attempts
+
 storage: postgres
 
 crypto:
@@ -146,3 +149,9 @@ policies:
     dsl: >-
       permit(principal is character, action in ["transfer-ownership"], resource is scene) when { resource.scene.owner == principal.id
       && resource.scene.state in ["active", "paused"] };
+
+  # ─── Admin-only operations ────────────────────────────────────────────
+  - name: admin-extend-publish-attempts
+    dsl: >-
+      permit(principal is character, action in ["extend_publish_attempts"],
+      resource is scene) when { "admin" in principal.character.roles };

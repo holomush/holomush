@@ -34,6 +34,7 @@ type scenePlugin struct {
 	resolver     *SceneResolver
 	auditSrv     *SceneAuditServer
 	focusClient  pluginsdk.FocusClient
+	evaluator    pluginsdk.HostEvaluator
 	emitRegistry *pluginsdk.EmitRegistry
 }
 
@@ -75,6 +76,13 @@ func (p *scenePlugin) RegisterAttributeResolver(registrar grpc.ServiceRegistrar)
 // PresentFocus}.
 func (p *scenePlugin) SetFocusClient(client pluginsdk.FocusClient) {
 	p.focusClient = client
+}
+
+// SetHostEvaluator is called by the SDK adapter during Init when the plugin
+// declares HostEvaluatorAware. The evaluator is used by admin-gated command
+// handlers (e.g., handleExtend) to perform host ABAC checks.
+func (p *scenePlugin) SetHostEvaluator(ev pluginsdk.HostEvaluator) {
+	p.evaluator = ev
 }
 
 // SetEventSink forwards the SDK-injected event sink to the scene service so

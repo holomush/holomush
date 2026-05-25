@@ -32,6 +32,14 @@ type HostEvaluator interface {
 	Evaluate(ctx context.Context, action, resource string) (EvaluateDecision, error)
 }
 
+// HostEvaluatorAware is the optional interface service providers implement to
+// receive a HostEvaluator during Init, parallel to FocusClientAware and
+// EventSinkAware. Implement this on the plugin struct to get the host ABAC
+// evaluator injected before Init is called.
+type HostEvaluatorAware interface {
+	SetHostEvaluator(HostEvaluator)
+}
+
 // hostEvaluateClient is the concrete HostEvaluator used by binary plugins.
 // It wraps the generated PluginHostServiceClient and forwards Evaluate calls.
 type hostEvaluateClient struct {

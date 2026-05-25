@@ -41,7 +41,7 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 	span.SetAttributes(attribute.String("subcommand", sub))
 
 	if sub == "" {
-		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, emit, end, focus, grid, info, invite, join, kick, leave, list, ooc, order, pause, pose, resume, say, set, switch, transfer"), nil
+		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, emit, end, extend, focus, grid, info, invite, join, kick, leave, list, ooc, order, pause, pose, resume, say, set, switch, transfer"), nil
 	}
 
 	switch sub {
@@ -65,6 +65,18 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 		return p.handleInvite(ctx, req, rest)
 	case "kick":
 		return p.handleKick(ctx, req, rest)
+	case "extend":
+		if p.evaluator == nil {
+			slog.WarnContext(ctx, "scene.command.extend evaluator not configured",
+				"subject_id", req.CharacterID)
+			return pluginsdk.Errorf("Permission check unavailable: evaluator not configured."), nil
+		}
+		return pluginsdk.GatedSubcommand{ //nolint:wrapcheck // GatedSubcommand.Run returns pluginsdk errors; no external wrapping needed
+			Name:        "extend",
+			Action:      "extend_publish_attempts",
+			ResourceRef: sceneResourceRef,
+			Handler:     p.handleExtend,
+		}.Run(ctx, p.evaluator, req, rest)
 	case "transfer":
 		return p.handleTransfer(ctx, req, rest)
 	case "switch":
@@ -97,7 +109,7 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 	case "list":
 		return p.handleSceneList(ctx, req)
 	default:
-		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, emit, end, focus, grid, info, invite, join, kick, leave, list, ooc, order, pause, pose, resume, say, set, switch, transfer.", sub), nil
+		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, emit, end, extend, focus, grid, info, invite, join, kick, leave, list, ooc, order, pause, pose, resume, say, set, switch, transfer.", sub), nil
 	}
 }
 
@@ -1052,4 +1064,25 @@ func (p *scenePlugin) resolveSingleSceneMembership(ctx context.Context, characte
 			len(scenes),
 		), nil
 	}
+}
+
+// sceneResourceRef derives the ABAC resource string for a scene subcommand
+// from the subcommand args. Returns "scene:<id>" on success, error if args
+// are empty after trimming. Used as the ResourceRef in GatedSubcommand.
+func sceneResourceRef(args string) (string, error) {
+	id := strings.TrimSpace(args)
+	if id == "" {
+		return "", fmt.Errorf("scene id is required")
+	}
+	return "scene:" + id, nil
+}
+
+// handleExtend is the stub handler for `scene extend <scene-id>`. The ABAC
+// gate (admin-extend-publish-attempts policy) is enforced by GatedSubcommand
+// before this function is called, so only admins can reach this point.
+//
+// TODO(holomush-5rh.20.35): perform the actual publish-attempts bump.
+func (p *scenePlugin) handleExtend(_ context.Context, _ pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	sceneID := strings.TrimSpace(args)
+	return pluginsdk.OK(fmt.Sprintf("Scene %s: publish-attempt extension granted (not yet implemented).", sceneID)), nil
 }

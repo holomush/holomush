@@ -237,8 +237,6 @@ func TestHandleCommandSetRejectsMissingEqualsSeparator(t *testing.T) {
 
 // createSceneInTest is a helper that creates a scene via the command path
 // and returns its ID. Used by Phase 2 tests that need a scene to operate on.
-//
-//nolint:unparam // characterID is parameterised for clarity at call sites even though every current caller passes "char-alice"; future tests with multi-character setups will need this without changing the signature
 func createSceneInTest(t *testing.T, p *scenePlugin, characterID, title string) string {
 	t.Helper()
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -893,4 +891,64 @@ func TestSceneEndReturnsOKWhenFocusClientNotConfigured(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
 	assert.Contains(t, resp.Output, "ended")
+}
+
+// --- scene extend ABAC gate tests ---
+
+// denyEvaluator is a test HostEvaluator that always denies.
+type denyEvaluator struct{}
+
+func (denyEvaluator) Evaluate(_ context.Context, _, _ string) (pluginsdk.EvaluateDecision, error) {
+	return pluginsdk.EvaluateDecision{Allowed: false, Reason: "not permitted"}, nil
+}
+
+// allowEvaluator is a test HostEvaluator that always allows.
+type allowEvaluator struct{}
+
+func (allowEvaluator) Evaluate(_ context.Context, _, _ string) (pluginsdk.EvaluateDecision, error) {
+	return pluginsdk.EvaluateDecision{Allowed: true}, nil
+}
+
+// newScenePluginWithEvaluator builds a minimal scenePlugin wired with the
+// given HostEvaluator, ready for extend gate tests.
+func newScenePluginWithEvaluator(t *testing.T, ev pluginsdk.HostEvaluator) *scenePlugin {
+	t.Helper()
+	store := newFakeStore()
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(&recordingEventSink{})
+	return &scenePlugin{
+		service:   svc,
+		evaluator: ev,
+	}
+}
+
+func TestSceneExtendDeniedForNonAdmin(t *testing.T) {
+	p := newScenePluginWithEvaluator(t, denyEvaluator{})
+	sceneID := createSceneInTest(t, p, "char-alice", "Extendable")
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "extend " + sceneID, CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Contains(t, resp.Output, "permitted")
+}
+
+func TestSceneExtendAllowedForAdmin(t *testing.T) {
+	p := newScenePluginWithEvaluator(t, allowEvaluator{})
+	sceneID := createSceneInTest(t, p, "char-admin", "Extendable")
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "extend " + sceneID, CharacterID: "char-admin",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+}
+
+func TestSceneExtendNilEvaluatorFailsClosed(t *testing.T) {
+	p := newScenePluginWithEvaluator(t, nil) // no HostEvaluator injected
+	sceneID := createSceneInTest(t, p, "char-alice", "Extendable")
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "extend " + sceneID, CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status, "a missing evaluator MUST fail closed, never run the handler ungated")
 }
