@@ -85,6 +85,10 @@ type sceneStorer interface {
 	// the Phase D event emitter to build the roster snapshot for
 	// scene_publish_started. Implemented by *SceneStore in publish_store.go.
 	ListPublishVoters(ctx context.Context, publishedSceneID string) ([]PublishedSceneVote, error)
+	// ListSceneAttempts returns all publish attempts for a scene (header only,
+	// no content_entries), ordered by attempt_number. Used by the
+	// participant-gated ListScenePublishAttempts audit list (B7).
+	ListSceneAttempts(ctx context.Context, sceneID string) ([]PublishedScene, error)
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.
@@ -1088,9 +1092,7 @@ func (s *SceneServiceImpl) WithdrawScenePublish(_ context.Context, _ *scenev1.Wi
 
 // DownloadPublishedScene is implemented in publish_service.go (Task B6).
 
-func (s *SceneServiceImpl) ListScenePublishAttempts(_ context.Context, _ *scenev1.ListScenePublishAttemptsRequest) (*scenev1.ListScenePublishAttemptsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
-}
+// ListScenePublishAttempts is implemented in publish_service.go (Task B7).
 
 // GetPublicSceneArchive is implemented in publish_service.go (Task C4).
 

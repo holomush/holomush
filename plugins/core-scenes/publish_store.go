@@ -535,3 +535,34 @@ func (s *SceneStore) ReadSceneLogForSnapshot(ctx context.Context, tx pgx.Tx, sub
 	}
 	return out, nil
 }
+
+// ListSceneAttempts returns all publish attempts for a scene, header only (no
+// content_entries — same column set as GetPublishedSceneHeader), ordered by
+// attempt_number. Backs the participant-gated ListScenePublishAttempts audit
+// list (B7).
+func (s *SceneStore) ListSceneAttempts(ctx context.Context, sceneID string) ([]PublishedScene, error) {
+	ctx, span := startSpan(ctx, "scene.store.list_scene_attempts",
+		attribute.String("scene_id", sceneID))
+	defer span.End()
+
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+publishedSceneHeaderColumns+` FROM published_scenes WHERE scene_id = $1 ORDER BY attempt_number ASC`,
+		sceneID)
+	if err != nil {
+		return nil, oops.Code("SCENE_PUBLISH_LIST_ATTEMPTS_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+
+	var out []PublishedScene
+	for rows.Next() {
+		pub, scanErr := scanPublishedSceneHeader(rows)
+		if scanErr != nil {
+			return nil, oops.Code("SCENE_PUBLISH_LIST_ATTEMPTS_SCAN_FAILED").Wrap(scanErr)
+		}
+		out = append(out, *pub)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, oops.Code("SCENE_PUBLISH_LIST_ATTEMPTS_ITER_FAILED").Wrap(err)
+	}
+	return out, nil
+}

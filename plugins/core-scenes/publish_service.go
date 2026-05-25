@@ -359,3 +359,57 @@ func assemblePublicResponse(pub *PublishedScene, entries []PublishedSceneEntry) 
 	}
 	return resp
 }
+
+// ListScenePublishAttempts returns the audit list of a scene's publish
+// attempts to a participant. Participant-gated (INV-S9, plugin-code, NO ABAC):
+// caller validation → IsParticipant gate on the scene → list. The summaries
+// carry NO content_entries (header only), so there is no content-read step;
+// the gate still runs first so a non-participant cannot enumerate the attempts
+// (SCENE_PRIVACY_BOUNDARY_BLOCK + triple-signal). See spec §5, §9.1.
+func (s *SceneServiceImpl) ListScenePublishAttempts(ctx context.Context, req *scenev1.ListScenePublishAttemptsRequest) (*scenev1.ListScenePublishAttemptsResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.list_scene_publish_attempts",
+		attribute.String("scene_id", req.GetSceneId()))
+	defer span.End()
+
+	callerID, err := parseCallerCharacterID(req.GetCallerCharacterId())
+	if err != nil {
+		return nil, mapStoreErr(ctx, err)
+	}
+
+	ok, err := s.store.IsParticipant(ctx, req.GetSceneId(), callerID)
+	if err != nil {
+		return nil, internalErr(ctx, err)
+	}
+	if !ok {
+		s.emitPrivacyBoundaryBlock(ctx, "ListScenePublishAttempts", req.GetSceneId(), callerID, "not_participant")
+		return nil, mapStoreErr(ctx, oops.Code("SCENE_PRIVACY_BOUNDARY_BLOCK").
+			Errorf("scene not accessible"))
+	}
+
+	attempts, err := s.store.ListSceneAttempts(ctx, req.GetSceneId())
+	if err != nil {
+		return nil, mapStoreErr(ctx, err)
+	}
+	return assembleAttemptsResponse(attempts), nil
+}
+
+// assembleAttemptsResponse maps attempt headers to the summary list. Summaries
+// carry no content (id / attempt_number / status / failure_reason / timestamps).
+func assembleAttemptsResponse(attempts []PublishedScene) *scenev1.ListScenePublishAttemptsResponse {
+	resp := &scenev1.ListScenePublishAttemptsResponse{}
+	for i := range attempts {
+		a := &attempts[i]
+		summary := &scenev1.PublishedSceneSummary{
+			Id:                a.ID,
+			AttemptNumber:     int32(a.AttemptNumber), //nolint:gosec // attempt_number bounded by max_publish_attempts; never overflows int32
+			Status:            string(a.Status),
+			InitiatedAtUnixNs: a.InitiatedAt.Time().UnixNano(), // pgnanos-exempt: proto int64 *_unix_ns wire field; serializing a pgnanos.Time, not a DB scan/insert seam (INV-TS-2 targets the DB seam)
+			ResolvedAtUnixNs:  unixNanoOrZero(a.ResolvedAt),
+		}
+		if a.FailureReason != nil {
+			summary.FailureReason = string(*a.FailureReason)
+		}
+		resp.Attempts = append(resp.Attempts, summary)
+	}
+	return resp
+}

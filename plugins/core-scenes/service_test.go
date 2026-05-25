@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -113,6 +114,19 @@ func (f *fakeStore) installVoters(publishedSceneID string, characterIDs ...strin
 // ListPublishVoters returns the seeded voter rows for an attempt.
 func (f *fakeStore) ListPublishVoters(_ context.Context, publishedSceneID string) ([]PublishedSceneVote, error) {
 	return f.publishedVoters[publishedSceneID], nil
+}
+
+// ListSceneAttempts returns all installed attempts for a scene, ordered by
+// attempt_number (mirroring the store's ORDER BY).
+func (f *fakeStore) ListSceneAttempts(_ context.Context, sceneID string) ([]PublishedScene, error) {
+	var out []PublishedScene
+	for _, pub := range f.publishedScenes {
+		if pub.SceneID == sceneID {
+			out = append(out, *pub)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].AttemptNumber < out[j].AttemptNumber })
+	return out, nil
 }
 
 // TallyVotes returns a zero tally by default.

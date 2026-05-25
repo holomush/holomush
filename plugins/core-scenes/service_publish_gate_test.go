@@ -252,3 +252,59 @@ func TestDownloadPublishedSceneRejectsNonPublishedAttempt(t *testing.T) {
 	require.Equal(t, int32(0), store.contentReadCalls.Load(),
 		"a non-published attempt must not reach the content read")
 }
+
+// TestListScenePublishAttemptsDeniesNonParticipant is the INV-S9 gate on the
+// audit list: a non-participant cannot enumerate a scene's publish attempts
+// (the list itself is participant-only, even though summaries carry no content).
+func TestListScenePublishAttemptsDeniesNonParticipant(t *testing.T) {
+	t.Parallel()
+	base := newFakeStore()
+	owner := ulid.Make().String()
+	outsider := ulid.Make().String()
+	base.installPublishedAttempt("pub-l1", "scene-l1", StatusPublished)
+	base.installRoster("scene-l1", owner)
+	svc := NewSceneServiceImpl(base)
+
+	_, err := svc.ListScenePublishAttempts(context.Background(), &scenev1.ListScenePublishAttemptsRequest{
+		CallerCharacterId: outsider,
+		SceneId:           "scene-l1",
+	})
+
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err),
+		"a non-participant must not be able to enumerate publish attempts")
+	require.Equal(t, "SCENE_PRIVACY_BOUNDARY_BLOCK", status.Convert(err).Message())
+}
+
+// TestListScenePublishAttemptsReturnsSummariesForParticipant is the allow path:
+// a participant receives every attempt as a content-free summary, ordered by
+// attempt_number, with failure_reason populated only on a failed attempt.
+func TestListScenePublishAttemptsReturnsSummariesForParticipant(t *testing.T) {
+	t.Parallel()
+	base := newFakeStore()
+	owner := ulid.Make().String()
+	base.installPublishedAttempt("pub-l2a", "scene-l2", StatusAttemptFailed)
+	base.installPublishedAttempt("pub-l2b", "scene-l2", StatusPublished)
+	base.installRoster("scene-l2", owner)
+	// Distinguish the two attempts: #1 failed (ANY_NO), #2 published.
+	reason := FailureAnyNo
+	base.publishedScenes["pub-l2a"].AttemptNumber = 1
+	base.publishedScenes["pub-l2a"].FailureReason = &reason
+	base.publishedScenes["pub-l2b"].AttemptNumber = 2
+
+	svc := NewSceneServiceImpl(base)
+	resp, err := svc.ListScenePublishAttempts(context.Background(), &scenev1.ListScenePublishAttemptsRequest{
+		CallerCharacterId: owner,
+		SceneId:           "scene-l2",
+	})
+
+	require.NoError(t, err)
+	require.Len(t, resp.GetAttempts(), 2)
+	first, second := resp.GetAttempts()[0], resp.GetAttempts()[1]
+	assert.Equal(t, int32(1), first.GetAttemptNumber())
+	assert.Equal(t, string(StatusAttemptFailed), first.GetStatus())
+	assert.Equal(t, string(FailureAnyNo), first.GetFailureReason())
+	assert.Equal(t, int32(2), second.GetAttemptNumber())
+	assert.Equal(t, string(StatusPublished), second.GetStatus())
+	assert.Empty(t, second.GetFailureReason(), "a published attempt has no failure_reason")
+}
