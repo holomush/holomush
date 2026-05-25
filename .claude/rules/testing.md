@@ -136,15 +136,26 @@ mockAccess.Grant(subject, "emit", "stream")              // Layer 2 / capability
 
 Other test engines: `AllowAllEngine()`, `DenyAllEngine()`, `NewErrorEngine(err)`, `NewInfraFailureEngine(t, reason, policyID)`.
 
-## EventBus Test Harness
+## Test Tiers
 
-`internal/eventbus/eventbustest.New(t)` provides an in-process embedded NATS server with `MemoryStorage` for unit and bus-integration tests.
+| Tier | Dependencies | Runner | Build tag |
+| --- | --- | --- | --- |
+| unit | none | `task test` | (none) |
+| bus-integration | embedded NATS (`eventbustest`) | `task test:int` | `//go:build integration` |
+| audit-integration | embedded NATS + Postgres testcontainer | `task test:int` | `//go:build integration` |
+| full-stack integration | embedded NATS + Postgres + `CoreServer` (+ optional in-tree plugins) | `task test:int` | `//go:build integration` |
+| **E2E** | full Docker stack driven through a real client (browser) | `task test:e2e` | (Playwright) |
 
-| Aspect | Description |
-| ------ | ----------- |
-| **Intended use** | Unit tests and bus-integration tests (tests that exercise the bus itself) |
-| **Scoping mechanism** | The `test:int` target in `Taskfile.yaml` runs an **explicit package list**, not `./...` — it enumerates only the packages that carry `//go:build integration` test files. There is **no** `//go:build !integration` tag on `eventbustest/embedded.go`. The list exists to *exclude* packages whose **unit** tests import `!integration`-tagged helpers (e.g. `internal/grpc/`) so they don't fail to compile under `-tags=integration` — it does not stop the harness itself from running in integration packages that legitimately use it. (The same `//go:build !integration` trick *is* used on `core.NewMemoryEventStore` in `internal/core/store_memory.go`, which works only because nothing integration-tagged imports it — not the case for the bus harness, which bus-integration tests legitimately import.) |
-| **Current E2E reality** | Embedded NATS is also used today by the full-stack E2E harnesses (`internal/testsupport/holomushtest`, `internal/testsupport/integrationtest`), both `//go:build integration`. Whether full-stack E2E *should* be forbidden from embedded NATS — and how to distinguish bus-integration from E2E in the build system — is an open design question tracked in **holomush-1eps2**. Until that lands, this section describes the harness's actual reach rather than asserting an unenforced rule. |
+"E2E" means the Playwright browser suite — a test that crosses the real user
+boundary. The Ginkgo `test:int` suite is **integration** (it calls Go/gRPC APIs
+in-process), regardless of how much of the stack it stands up. Use "E2E" only
+for the Playwright suite; Go Ginkgo suites are "integration".
+
+`eventbustest` provides the in-process embedded NATS server (`MemoryStorage`)
+used at every non-unit tier. This matches production, which also runs embedded
+NATS (`internal/eventbus/subsystem.go`); external/clustered NATS is unimplemented
+(tracked in holomush-s5ts). Production code MUST NOT import `eventbustest` or
+`internal/core/coretest` — enforced by the depguard rule in `.golangci.yaml`.
 
 ## Plugin Tests (`internal/plugin`)
 

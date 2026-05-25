@@ -1059,7 +1059,7 @@ interface boundary; the migration is the work.
 | Unit | Pure logic | None | < 10ms |
 | Bus integration | EventBus contract | Embedded NATS, MemoryStorage | < 100ms |
 | Audit integration | Host + plugin projections | Embedded NATS + PG testcontainer | < 500ms |
-| E2E | Full server, multi-protocol | Embedded NATS + PG + clients | seconds |
+| Full-stack integration | Full server, multi-protocol | Embedded NATS + PG + clients | seconds |
 
 #### Controllable test seams (no hidden waits)
 
