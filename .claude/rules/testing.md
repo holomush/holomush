@@ -140,10 +140,11 @@ Other test engines: `AllowAllEngine()`, `DenyAllEngine()`, `NewErrorEngine(err)`
 
 `internal/eventbus/eventbustest.New(t)` provides an in-process embedded NATS server with `MemoryStorage` for unit and bus-integration tests.
 
-| Requirement | Description |
-| ----------- | ----------- |
-| **MUST NOT** use in E2E tests | E2E tests use the full server stack with a real PG testcontainer |
-| **Compile-time enforcement** | The `//go:build !integration` tag on the harness file enforces this |
+| Aspect | Description |
+| ------ | ----------- |
+| **Intended use** | Unit tests and bus-integration tests (tests that exercise the bus itself) |
+| **Scoping mechanism** | The `test:int` target in `Taskfile.yaml` runs an **explicit package list**, not `./...` — it enumerates only the packages that carry `//go:build integration` test files. There is **no** `//go:build !integration` tag on `eventbustest/embedded.go`. The list exists to *exclude* packages whose **unit** tests import `!integration`-tagged helpers (e.g. `internal/grpc/`) so they don't fail to compile under `-tags=integration` — it does not stop the harness itself from running in integration packages that legitimately use it. (The same `//go:build !integration` trick *is* used on `core.NewMemoryEventStore` in `internal/core/store_memory.go`, which works only because nothing integration-tagged imports it — not the case for the bus harness, which bus-integration tests legitimately import.) |
+| **Current E2E reality** | Embedded NATS is also used today by the full-stack E2E harnesses (`internal/testsupport/holomushtest`, `internal/testsupport/integrationtest`), both `//go:build integration`. Whether full-stack E2E *should* be forbidden from embedded NATS — and how to distinguish bus-integration from E2E in the build system — is an open design question tracked in **holomush-1eps2**. Until that lands, this section describes the harness's actual reach rather than asserting an unenforced rule. |
 
 ## Plugin Tests (`internal/plugin`)
 
