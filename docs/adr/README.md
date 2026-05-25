@@ -16,6 +16,10 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Add host Evaluate RPC for per-action plugin authorization](holomush-dttdj-host-evaluate-rpc-per-action-plugin-authz.md) | 2026-05-25 | Accepted | `holomush-dttdj` |
+| [Derive Evaluate subject host-side; no subject field on wire](holomush-qeypl-host-derived-evaluate-subject.md) | 2026-05-25 | Accepted | `holomush-qeypl` |
+| [Scope plugin Evaluate entitlement to owned resource types](holomush-61rdl-evaluate-entitlement-owned-resource-types.md) | 2026-05-25 | Accepted | `holomush-61rdl` |
+| [Make plugin authorization gates structural via gated subcommand dispatcher](holomush-9l9pu-structural-gated-subcommand-dispatcher.md) | 2026-05-25 | Accepted | `holomush-9l9pu` |
 | [Drop in-memory session.Store fake; test against real Postgres](holomush-bozv-drop-session-memstore-test-against-postgres.md) | 2026-05-23 | Accepted | `holomush-bozv` |
 | [Denormalize Pose-Order Metadata Against scene_log Source of Truth](holomush-r4th-denormalize-pose-order-metadata.md) | 2026-05-19 | Accepted | `holomush-r4th` |
 | [Migrate Scene Subjects to NATS Dot-Style Atomically With Plugin Emit Code](holomush-s9nu-scene-subject-atomic-migration.md) | 2026-05-19 | Accepted | `holomush-s9nu` |
