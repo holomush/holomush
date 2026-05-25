@@ -219,6 +219,17 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   invokes action `publish` actually lands (5rh.20.44 wires commands.go publish/log
   dispatch; pre-.44 only scene/scenes commands were declared), else the permit is dead
   code and the handler's preconditions are the only gate.
+- **Admin-extend staged rollout (5rh.20.34 / Phase 6, 2026-05-25)**: `admin-extend-publish-attempts`
+  policy (`plugin.yaml`) and `ExtendScenePublishVoteAttempts` handler (`publish_service.go`)
+  ship in E1 without the `scene publish vote extend` command wiring (that lands in E2).
+  During the E1→E2 window, direct gRPC callers can invoke the RPC without hitting
+  the ABAC gate (handler has no in-plugin check by design). This is an accepted staged-rollout
+  gap, NOT a blocking finding, provided E2 exists as a dependent bead. The pattern is
+  identical to the 5rh.20.11 `start-publish-as-participant` gap above. When reviewing
+  future Phase 6 plugin policy PRs: verify spec §6.1 command table against
+  `commands.go` dispatch switch; flag missing command wiring as Low (not blocking) when
+  the wiring bead is documented in the spec. Pin test at `publish_service_test.go:218`
+  does not assert `resource is scene` — Low NIT for future reviewers to add.
 - **Audit assertion gap in integration property specs (rmsi.5 Low NIT)**:
    `seed_policies_test.go` S1-S13 reset `auditWriter` in BeforeEach but no spec in the
    property block reads back `env.auditWriter.Entries()` to verify the decision was

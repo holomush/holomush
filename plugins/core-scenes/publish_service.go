@@ -85,9 +85,10 @@ func (s *SceneServiceImpl) GetPublishedScene(ctx context.Context, req *scenev1.G
 // deliberately emits NO IC event — a denial must not surface on any scene
 // stream that could leak the attempt's existence to a non-participant.
 //
-//nolint:unparam // reason is the §10 denial-reason taxonomy (a labeled metric
 // dimension, scene_publish_privacy_block_total{reason}); only "not_participant"
 // exists today, but future gate failures pass other reasons — keep it variable.
+//
+//nolint:unparam // reason is the §10 denial-reason taxonomy (a labeled metric
 func (s *SceneServiceImpl) emitPrivacyBoundaryBlock(ctx context.Context, operation, sceneID, callerID, reason string) {
 	slog.WarnContext(ctx, "scene privacy boundary block",
 		"operation", operation,
@@ -468,4 +469,43 @@ func assembleAttemptsResponse(attempts []PublishedScene) *scenev1.ListScenePubli
 		resp.Attempts = append(resp.Attempts, summary)
 	}
 	return resp
+}
+
+// ExtendScenePublishVoteAttempts bumps a scene's max_publish_attempts budget by
+// the requested amount and emits scene_publish_vote_attempts_extended. It is
+// admin-only, but that is enforced by the host's ABAC `admin-extend-publish-
+// attempts` policy at command dispatch (spec §8, "ABAC-gated, not name-gated").
+// Like every other scene RPC, this handler trusts the host's authorization and
+// performs NO in-plugin role check — admin is ABAC-gated, never a plugin-code
+// gate (the inverse of INV-S9's hard privacy boundary, which is plugin-code by
+// design). Adding an in-handler role check here would create a runtime
+// privilege gradient and duplicate the policy engine.
+func (s *SceneServiceImpl) ExtendScenePublishVoteAttempts(ctx context.Context, req *scenev1.ExtendScenePublishVoteAttemptsRequest) (*scenev1.ExtendScenePublishVoteAttemptsResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.extend_scene_publish_vote_attempts",
+		attribute.String("scene_id", req.GetSceneId()))
+	defer span.End()
+
+	additional := int(req.GetAdditional())
+	if additional <= 0 {
+		// A non-positive extension is a client error: it would decrement or
+		// no-op the budget. Reject before any write.
+		return nil, mapStoreErr(ctx, oops.Code("SCENE_PUBLISH_EXTEND_INVALID").
+			With("additional", additional).Errorf("extension count must be positive"))
+	}
+
+	newMax, err := s.store.ExtendMaxPublishAttempts(ctx, req.GetSceneId(), additional)
+	if err != nil {
+		return nil, mapStoreErr(ctx, err)
+	}
+
+	// The budget bump is committed; the notice event is best-effort. Treating an
+	// emit failure as fatal here would be worse than warn-and-continue: the
+	// caller would retry a non-idempotent mutation and double-bump. Mirror
+	// StartScenePublish's warn-and-continue.
+	if emitErr := s.events.emitAttemptsExtended(ctx, req.GetSceneId(), req.GetCallerCharacterId(), additional, newMax); emitErr != nil {
+		slog.WarnContext(ctx, "publish-vote-attempts-extended emit failed", "err", emitErr.Error())
+	}
+	return &scenev1.ExtendScenePublishVoteAttemptsResponse{
+		NewMax: int32(newMax), //nolint:gosec // max_publish_attempts is a small budget; never overflows int32
+	}, nil
 }

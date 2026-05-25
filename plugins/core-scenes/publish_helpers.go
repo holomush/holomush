@@ -69,6 +69,7 @@ func mapStoreErr(ctx context.Context, err error) error {
 				"SCENE_PUBLISH_CALLER_MALFORMED",
 				"SCENE_PUBLISH_FORMAT_UNSUPPORTED",
 				"SCENE_PUBLISH_REF_INVALID",
+				"SCENE_PUBLISH_EXTEND_INVALID",
 				"SCENE_PUBLISH_NO_FOCUSED_SCENE":
 				return status.Error(codes.InvalidArgument, code) //nolint:wrapcheck // gRPC status is the wire contract; oops would shadow the code
 			case "SCENE_PUBLISH_NOT_FOUND", "SCENE_NOT_FOUND":

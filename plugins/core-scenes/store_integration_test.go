@@ -2358,9 +2358,9 @@ var _ = Describe("Publish store — ReadSceneLogForSnapshot", func() {
 			Expect(err).NotTo(HaveOccurred())
 		}
 		insertLog(subject, "scene_pose")
-		insertLog(subject, "scene_ooc")          // OOC — excluded
+		insertLog(subject, "scene_ooc") // OOC — excluded
 		insertLog(subject, "scene_say")
-		insertLog(subject, "scene_leave_ic")      // ops/notice — excluded
+		insertLog(subject, "scene_leave_ic") // ops/notice — excluded
 		insertLog(subject, "scene_emit")
 		insertLog("events.main.scene.other.ic", "scene_pose") // different scene — excluded by subject
 

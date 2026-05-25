@@ -89,6 +89,10 @@ type sceneStorer interface {
 	// no content_entries), ordered by attempt_number. Used by the
 	// participant-gated ListScenePublishAttempts audit list (B7).
 	ListSceneAttempts(ctx context.Context, sceneID string) ([]PublishedScene, error)
+	// ExtendMaxPublishAttempts bumps a scene's max_publish_attempts by
+	// `additional` and returns the new budget. Backs the admin-only
+	// ExtendScenePublishVoteAttempts RPC (E1).
+	ExtendMaxPublishAttempts(ctx context.Context, sceneID string, additional int) (int, error)
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.
@@ -1096,10 +1100,7 @@ func (s *SceneServiceImpl) WithdrawScenePublish(_ context.Context, _ *scenev1.Wi
 
 // GetPublicSceneArchive is implemented in publish_service.go (Task C4).
 // DownloadPublicSceneArchive is implemented in publish_service.go (Task C5).
-
-func (s *SceneServiceImpl) ExtendScenePublishVoteAttempts(_ context.Context, _ *scenev1.ExtendScenePublishVoteAttemptsRequest) (*scenev1.ExtendScenePublishVoteAttemptsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
-}
+// ExtendScenePublishVoteAttempts is implemented in publish_service.go (Task E1).
 
 // rowToProto converts a SceneRow to the proto representation.
 //

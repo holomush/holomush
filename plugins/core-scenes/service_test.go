@@ -28,13 +28,13 @@ import (
 // branches of the service layer.
 type fakeStore struct {
 	scenes                    map[string]*SceneRow
-	participants              map[string]map[string]string // sceneID → characterID → role
-	publishedScenes           map[string]*PublishedScene           // Phase 6: published_scene_id → attempt
-	publishedContent          map[string][]PublishedSceneEntry     // Phase 6: published_scene_id → content entries
-	publishedVoters           map[string][]PublishedSceneVote      // Phase 6: published_scene_id → voter rows
-	attemptCounts             map[string]AttemptCounts             // Phase 6: sceneID → attempt counts
-	maxPublishAttempts        map[string]int                       // Phase 6: sceneID → budget
-	createdAttempts           []*PublishedScene                    // Phase 6: records CreatePublishAttempt calls
+	participants              map[string]map[string]string     // sceneID → characterID → role
+	publishedScenes           map[string]*PublishedScene       // Phase 6: published_scene_id → attempt
+	publishedContent          map[string][]PublishedSceneEntry // Phase 6: published_scene_id → content entries
+	publishedVoters           map[string][]PublishedSceneVote  // Phase 6: published_scene_id → voter rows
+	attemptCounts             map[string]AttemptCounts         // Phase 6: sceneID → attempt counts
+	maxPublishAttempts        map[string]int                   // Phase 6: sceneID → budget
+	createdAttempts           []*PublishedScene                // Phase 6: records CreatePublishAttempt calls
 	createErr                 error
 	createWithOwnerErr        error
 	getErr                    error
@@ -142,6 +142,12 @@ func (f *fakeStore) CountAttempts(_ context.Context, sceneID string) (AttemptCou
 
 // GetSceneMaxPublishAttempts returns the configured budget (zero when unset).
 func (f *fakeStore) GetSceneMaxPublishAttempts(_ context.Context, sceneID string) (int, error) {
+	return f.maxPublishAttempts[sceneID], nil
+}
+
+// ExtendMaxPublishAttempts bumps the configured budget and returns the new value.
+func (f *fakeStore) ExtendMaxPublishAttempts(_ context.Context, sceneID string, additional int) (int, error) {
+	f.maxPublishAttempts[sceneID] += additional
 	return f.maxPublishAttempts[sceneID], nil
 }
 

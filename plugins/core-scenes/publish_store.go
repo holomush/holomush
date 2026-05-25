@@ -481,6 +481,28 @@ func (s *SceneStore) GetSceneMaxPublishAttempts(ctx context.Context, sceneID str
 	return maxAttempts, nil
 }
 
+// ExtendMaxPublishAttempts atomically bumps a scene's max_publish_attempts by
+// `additional` and returns the new budget. Backs ExtendScenePublishVoteAttempts
+// (E1, admin-only via ABAC). A missing scene returns SCENE_PUBLISH_NOT_FOUND.
+func (s *SceneStore) ExtendMaxPublishAttempts(ctx context.Context, sceneID string, additional int) (int, error) {
+	ctx, span := startSpan(ctx, "scene.store.extend_max_publish_attempts",
+		attribute.String("scene_id", sceneID), attribute.Int("additional", additional))
+	defer span.End()
+
+	var newMax int
+	if err := s.pool.QueryRow(
+		ctx,
+		`UPDATE scenes SET max_publish_attempts = max_publish_attempts + $2 WHERE id = $1 RETURNING max_publish_attempts`,
+		sceneID, additional,
+	).Scan(&newMax); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, oops.Code("SCENE_PUBLISH_NOT_FOUND").With("scene_id", sceneID).Wrap(err)
+		}
+		return 0, oops.Code("SCENE_PUBLISH_EXTEND_FAILED").Wrap(err)
+	}
+	return newMax, nil
+}
+
 // LogRow is a minimal scene_log row for the publication snapshot pipeline
 // (C7). It carries the event type (to discriminate pose/say/emit), the acting
 // character (actor_id — the speaker), and the payload + codec/DEK fields the
