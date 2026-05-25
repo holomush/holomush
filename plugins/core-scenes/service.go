@@ -81,6 +81,10 @@ type sceneStorer interface {
 	CountAttempts(ctx context.Context, sceneID string) (AttemptCounts, error)
 	CreatePublishAttempt(ctx context.Context, in CreatePublishAttemptInput) (*PublishedScene, error)
 	GetSceneMaxPublishAttempts(ctx context.Context, sceneID string) (int, error)
+	// ListPublishVoters returns all voter rows for a publish attempt. Used by
+	// the Phase D event emitter to build the roster snapshot for
+	// scene_publish_started. Implemented by *SceneStore in publish_store.go.
+	ListPublishVoters(ctx context.Context, publishedSceneID string) ([]PublishedSceneVote, error)
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.

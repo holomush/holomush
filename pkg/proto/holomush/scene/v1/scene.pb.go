@@ -3019,6 +3019,414 @@ func (x *ExtendScenePublishVoteAttemptsResponse) GetNewMax() int32 {
 	return 0
 }
 
+type ScenePublishStartedEvent struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	AttemptId            string                 `protobuf:"bytes,1,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	AttemptNumber        int32                  `protobuf:"varint,2,opt,name=attempt_number,json=attemptNumber,proto3" json:"attempt_number,omitempty"`
+	InitiatedBy          string                 `protobuf:"bytes,3,opt,name=initiated_by,json=initiatedBy,proto3" json:"initiated_by,omitempty"`
+	VoteWindowSeconds    int64                  `protobuf:"varint,4,opt,name=vote_window_seconds,json=voteWindowSeconds,proto3" json:"vote_window_seconds,omitempty"`
+	CooloffWindowSeconds int64                  `protobuf:"varint,5,opt,name=cooloff_window_seconds,json=cooloffWindowSeconds,proto3" json:"cooloff_window_seconds,omitempty"`
+	RosterCharacterIds   []string               `protobuf:"bytes,6,rep,name=roster_character_ids,json=rosterCharacterIds,proto3" json:"roster_character_ids,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *ScenePublishStartedEvent) Reset() {
+	*x = ScenePublishStartedEvent{}
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScenePublishStartedEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScenePublishStartedEvent) ProtoMessage() {}
+
+func (x *ScenePublishStartedEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScenePublishStartedEvent.ProtoReflect.Descriptor instead.
+func (*ScenePublishStartedEvent) Descriptor() ([]byte, []int) {
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *ScenePublishStartedEvent) GetAttemptId() string {
+	if x != nil {
+		return x.AttemptId
+	}
+	return ""
+}
+
+func (x *ScenePublishStartedEvent) GetAttemptNumber() int32 {
+	if x != nil {
+		return x.AttemptNumber
+	}
+	return 0
+}
+
+func (x *ScenePublishStartedEvent) GetInitiatedBy() string {
+	if x != nil {
+		return x.InitiatedBy
+	}
+	return ""
+}
+
+func (x *ScenePublishStartedEvent) GetVoteWindowSeconds() int64 {
+	if x != nil {
+		return x.VoteWindowSeconds
+	}
+	return 0
+}
+
+func (x *ScenePublishStartedEvent) GetCooloffWindowSeconds() int64 {
+	if x != nil {
+		return x.CooloffWindowSeconds
+	}
+	return 0
+}
+
+func (x *ScenePublishStartedEvent) GetRosterCharacterIds() []string {
+	if x != nil {
+		return x.RosterCharacterIds
+	}
+	return nil
+}
+
+type ScenePublishVoteCastEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AttemptId     string                 `protobuf:"bytes,1,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	CharacterId   string                 `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	Vote          bool                   `protobuf:"varint,3,opt,name=vote,proto3" json:"vote,omitempty"`
+	IsChange      bool                   `protobuf:"varint,4,opt,name=is_change,json=isChange,proto3" json:"is_change,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ScenePublishVoteCastEvent) Reset() {
+	*x = ScenePublishVoteCastEvent{}
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScenePublishVoteCastEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScenePublishVoteCastEvent) ProtoMessage() {}
+
+func (x *ScenePublishVoteCastEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScenePublishVoteCastEvent.ProtoReflect.Descriptor instead.
+func (*ScenePublishVoteCastEvent) Descriptor() ([]byte, []int) {
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *ScenePublishVoteCastEvent) GetAttemptId() string {
+	if x != nil {
+		return x.AttemptId
+	}
+	return ""
+}
+
+func (x *ScenePublishVoteCastEvent) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
+	}
+	return ""
+}
+
+func (x *ScenePublishVoteCastEvent) GetVote() bool {
+	if x != nil {
+		return x.Vote
+	}
+	return false
+}
+
+func (x *ScenePublishVoteCastEvent) GetIsChange() bool {
+	if x != nil {
+		return x.IsChange
+	}
+	return false
+}
+
+type ScenePublishCoolOffStartedEvent struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	AttemptId           string                 `protobuf:"bytes,1,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	CooloffEndsAtUnixNs int64                  `protobuf:"varint,2,opt,name=cooloff_ends_at_unix_ns,json=cooloffEndsAtUnixNs,proto3" json:"cooloff_ends_at_unix_ns,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *ScenePublishCoolOffStartedEvent) Reset() {
+	*x = ScenePublishCoolOffStartedEvent{}
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScenePublishCoolOffStartedEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScenePublishCoolOffStartedEvent) ProtoMessage() {}
+
+func (x *ScenePublishCoolOffStartedEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScenePublishCoolOffStartedEvent.ProtoReflect.Descriptor instead.
+func (*ScenePublishCoolOffStartedEvent) Descriptor() ([]byte, []int) {
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *ScenePublishCoolOffStartedEvent) GetAttemptId() string {
+	if x != nil {
+		return x.AttemptId
+	}
+	return ""
+}
+
+func (x *ScenePublishCoolOffStartedEvent) GetCooloffEndsAtUnixNs() int64 {
+	if x != nil {
+		return x.CooloffEndsAtUnixNs
+	}
+	return 0
+}
+
+type ScenePublishResolvedEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AttemptId     string                 `protobuf:"bytes,1,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	Outcome       string                 `protobuf:"bytes,2,opt,name=outcome,proto3" json:"outcome,omitempty"`                                  // "PUBLISHED" | "ATTEMPT_FAILED"
+	FailureReason string                 `protobuf:"bytes,3,opt,name=failure_reason,json=failureReason,proto3" json:"failure_reason,omitempty"` // empty unless ATTEMPT_FAILED
+	TallyYes      int32                  `protobuf:"varint,4,opt,name=tally_yes,json=tallyYes,proto3" json:"tally_yes,omitempty"`
+	TallyNo       int32                  `protobuf:"varint,5,opt,name=tally_no,json=tallyNo,proto3" json:"tally_no,omitempty"`
+	TallyPending  int32                  `protobuf:"varint,6,opt,name=tally_pending,json=tallyPending,proto3" json:"tally_pending,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ScenePublishResolvedEvent) Reset() {
+	*x = ScenePublishResolvedEvent{}
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScenePublishResolvedEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScenePublishResolvedEvent) ProtoMessage() {}
+
+func (x *ScenePublishResolvedEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScenePublishResolvedEvent.ProtoReflect.Descriptor instead.
+func (*ScenePublishResolvedEvent) Descriptor() ([]byte, []int) {
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *ScenePublishResolvedEvent) GetAttemptId() string {
+	if x != nil {
+		return x.AttemptId
+	}
+	return ""
+}
+
+func (x *ScenePublishResolvedEvent) GetOutcome() string {
+	if x != nil {
+		return x.Outcome
+	}
+	return ""
+}
+
+func (x *ScenePublishResolvedEvent) GetFailureReason() string {
+	if x != nil {
+		return x.FailureReason
+	}
+	return ""
+}
+
+func (x *ScenePublishResolvedEvent) GetTallyYes() int32 {
+	if x != nil {
+		return x.TallyYes
+	}
+	return 0
+}
+
+func (x *ScenePublishResolvedEvent) GetTallyNo() int32 {
+	if x != nil {
+		return x.TallyNo
+	}
+	return 0
+}
+
+func (x *ScenePublishResolvedEvent) GetTallyPending() int32 {
+	if x != nil {
+		return x.TallyPending
+	}
+	return 0
+}
+
+type ScenePublishWithdrawnEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AttemptId     string                 `protobuf:"bytes,1,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	WithdrawnBy   string                 `protobuf:"bytes,2,opt,name=withdrawn_by,json=withdrawnBy,proto3" json:"withdrawn_by,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ScenePublishWithdrawnEvent) Reset() {
+	*x = ScenePublishWithdrawnEvent{}
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScenePublishWithdrawnEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScenePublishWithdrawnEvent) ProtoMessage() {}
+
+func (x *ScenePublishWithdrawnEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScenePublishWithdrawnEvent.ProtoReflect.Descriptor instead.
+func (*ScenePublishWithdrawnEvent) Descriptor() ([]byte, []int) {
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *ScenePublishWithdrawnEvent) GetAttemptId() string {
+	if x != nil {
+		return x.AttemptId
+	}
+	return ""
+}
+
+func (x *ScenePublishWithdrawnEvent) GetWithdrawnBy() string {
+	if x != nil {
+		return x.WithdrawnBy
+	}
+	return ""
+}
+
+type ScenePublishVoteAttemptsExtendedEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SceneId       string                 `protobuf:"bytes,1,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	Additional    int32                  `protobuf:"varint,2,opt,name=additional,proto3" json:"additional,omitempty"`
+	NewMax        int32                  `protobuf:"varint,3,opt,name=new_max,json=newMax,proto3" json:"new_max,omitempty"`
+	AdminId       string                 `protobuf:"bytes,4,opt,name=admin_id,json=adminId,proto3" json:"admin_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ScenePublishVoteAttemptsExtendedEvent) Reset() {
+	*x = ScenePublishVoteAttemptsExtendedEvent{}
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScenePublishVoteAttemptsExtendedEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScenePublishVoteAttemptsExtendedEvent) ProtoMessage() {}
+
+func (x *ScenePublishVoteAttemptsExtendedEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScenePublishVoteAttemptsExtendedEvent.ProtoReflect.Descriptor instead.
+func (*ScenePublishVoteAttemptsExtendedEvent) Descriptor() ([]byte, []int) {
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *ScenePublishVoteAttemptsExtendedEvent) GetSceneId() string {
+	if x != nil {
+		return x.SceneId
+	}
+	return ""
+}
+
+func (x *ScenePublishVoteAttemptsExtendedEvent) GetAdditional() int32 {
+	if x != nil {
+		return x.Additional
+	}
+	return 0
+}
+
+func (x *ScenePublishVoteAttemptsExtendedEvent) GetNewMax() int32 {
+	if x != nil {
+		return x.NewMax
+	}
+	return 0
+}
+
+func (x *ScenePublishVoteAttemptsExtendedEvent) GetAdminId() string {
+	if x != nil {
+		return x.AdminId
+	}
+	return ""
+}
+
 var File_holomush_scene_v1_scene_proto protoreflect.FileDescriptor
 
 const file_holomush_scene_v1_scene_proto_rawDesc = "" +
@@ -3231,7 +3639,44 @@ const file_holomush_scene_v1_scene_proto_rawDesc = "" +
 	"additional\x18\x03 \x01(\x05R\n" +
 	"additional\"A\n" +
 	"&ExtendScenePublishVoteAttemptsResponse\x12\x17\n" +
-	"\anew_max\x18\x01 \x01(\x05R\x06newMax2\xb5\x13\n" +
+	"\anew_max\x18\x01 \x01(\x05R\x06newMax\"\x9b\x02\n" +
+	"\x18ScenePublishStartedEvent\x12\x1d\n" +
+	"\n" +
+	"attempt_id\x18\x01 \x01(\tR\tattemptId\x12%\n" +
+	"\x0eattempt_number\x18\x02 \x01(\x05R\rattemptNumber\x12!\n" +
+	"\finitiated_by\x18\x03 \x01(\tR\vinitiatedBy\x12.\n" +
+	"\x13vote_window_seconds\x18\x04 \x01(\x03R\x11voteWindowSeconds\x124\n" +
+	"\x16cooloff_window_seconds\x18\x05 \x01(\x03R\x14cooloffWindowSeconds\x120\n" +
+	"\x14roster_character_ids\x18\x06 \x03(\tR\x12rosterCharacterIds\"\x8e\x01\n" +
+	"\x19ScenePublishVoteCastEvent\x12\x1d\n" +
+	"\n" +
+	"attempt_id\x18\x01 \x01(\tR\tattemptId\x12!\n" +
+	"\fcharacter_id\x18\x02 \x01(\tR\vcharacterId\x12\x12\n" +
+	"\x04vote\x18\x03 \x01(\bR\x04vote\x12\x1b\n" +
+	"\tis_change\x18\x04 \x01(\bR\bisChange\"v\n" +
+	"\x1fScenePublishCoolOffStartedEvent\x12\x1d\n" +
+	"\n" +
+	"attempt_id\x18\x01 \x01(\tR\tattemptId\x124\n" +
+	"\x17cooloff_ends_at_unix_ns\x18\x02 \x01(\x03R\x13cooloffEndsAtUnixNs\"\xd8\x01\n" +
+	"\x19ScenePublishResolvedEvent\x12\x1d\n" +
+	"\n" +
+	"attempt_id\x18\x01 \x01(\tR\tattemptId\x12\x18\n" +
+	"\aoutcome\x18\x02 \x01(\tR\aoutcome\x12%\n" +
+	"\x0efailure_reason\x18\x03 \x01(\tR\rfailureReason\x12\x1b\n" +
+	"\ttally_yes\x18\x04 \x01(\x05R\btallyYes\x12\x19\n" +
+	"\btally_no\x18\x05 \x01(\x05R\atallyNo\x12#\n" +
+	"\rtally_pending\x18\x06 \x01(\x05R\ftallyPending\"^\n" +
+	"\x1aScenePublishWithdrawnEvent\x12\x1d\n" +
+	"\n" +
+	"attempt_id\x18\x01 \x01(\tR\tattemptId\x12!\n" +
+	"\fwithdrawn_by\x18\x02 \x01(\tR\vwithdrawnBy\"\x96\x01\n" +
+	"%ScenePublishVoteAttemptsExtendedEvent\x12\x19\n" +
+	"\bscene_id\x18\x01 \x01(\tR\asceneId\x12\x1e\n" +
+	"\n" +
+	"additional\x18\x02 \x01(\x05R\n" +
+	"additional\x12\x17\n" +
+	"\anew_max\x18\x03 \x01(\x05R\x06newMax\x12\x19\n" +
+	"\badmin_id\x18\x04 \x01(\tR\aadminId2\xb5\x13\n" +
 	"\fSceneService\x12Y\n" +
 	"\n" +
 	"ListScenes\x12$.holomush.scene.v1.ListScenesRequest\x1a%.holomush.scene.v1.ListScenesResponse\x12S\n" +
@@ -3274,7 +3719,7 @@ func file_holomush_scene_v1_scene_proto_rawDescGZIP() []byte {
 	return file_holomush_scene_v1_scene_proto_rawDescData
 }
 
-var file_holomush_scene_v1_scene_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
+var file_holomush_scene_v1_scene_proto_msgTypes = make([]protoimpl.MessageInfo, 58)
 var file_holomush_scene_v1_scene_proto_goTypes = []any{
 	(*SceneInfo)(nil),                              // 0: holomush.scene.v1.SceneInfo
 	(*ParticipantInfo)(nil),                        // 1: holomush.scene.v1.ParticipantInfo
@@ -3328,23 +3773,29 @@ var file_holomush_scene_v1_scene_proto_goTypes = []any{
 	(*DownloadPublicSceneArchiveResponse)(nil),     // 49: holomush.scene.v1.DownloadPublicSceneArchiveResponse
 	(*ExtendScenePublishVoteAttemptsRequest)(nil),  // 50: holomush.scene.v1.ExtendScenePublishVoteAttemptsRequest
 	(*ExtendScenePublishVoteAttemptsResponse)(nil), // 51: holomush.scene.v1.ExtendScenePublishVoteAttemptsResponse
-	(*timestamppb.Timestamp)(nil),                  // 52: google.protobuf.Timestamp
-	(*fieldmaskpb.FieldMask)(nil),                  // 53: google.protobuf.FieldMask
+	(*ScenePublishStartedEvent)(nil),               // 52: holomush.scene.v1.ScenePublishStartedEvent
+	(*ScenePublishVoteCastEvent)(nil),              // 53: holomush.scene.v1.ScenePublishVoteCastEvent
+	(*ScenePublishCoolOffStartedEvent)(nil),        // 54: holomush.scene.v1.ScenePublishCoolOffStartedEvent
+	(*ScenePublishResolvedEvent)(nil),              // 55: holomush.scene.v1.ScenePublishResolvedEvent
+	(*ScenePublishWithdrawnEvent)(nil),             // 56: holomush.scene.v1.ScenePublishWithdrawnEvent
+	(*ScenePublishVoteAttemptsExtendedEvent)(nil),  // 57: holomush.scene.v1.ScenePublishVoteAttemptsExtendedEvent
+	(*timestamppb.Timestamp)(nil),                  // 58: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil),                  // 59: google.protobuf.FieldMask
 }
 var file_holomush_scene_v1_scene_proto_depIdxs = []int32{
-	52, // 0: holomush.scene.v1.SceneInfo.created_at:type_name -> google.protobuf.Timestamp
-	52, // 1: holomush.scene.v1.SceneInfo.ended_at:type_name -> google.protobuf.Timestamp
+	58, // 0: holomush.scene.v1.SceneInfo.created_at:type_name -> google.protobuf.Timestamp
+	58, // 1: holomush.scene.v1.SceneInfo.ended_at:type_name -> google.protobuf.Timestamp
 	1,  // 2: holomush.scene.v1.SceneInfo.participants:type_name -> holomush.scene.v1.ParticipantInfo
-	52, // 3: holomush.scene.v1.ParticipantInfo.joined_at:type_name -> google.protobuf.Timestamp
+	58, // 3: holomush.scene.v1.ParticipantInfo.joined_at:type_name -> google.protobuf.Timestamp
 	0,  // 4: holomush.scene.v1.ListScenesResponse.scenes:type_name -> holomush.scene.v1.SceneInfo
 	0,  // 5: holomush.scene.v1.GetSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
 	0,  // 6: holomush.scene.v1.CreateSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
 	0,  // 7: holomush.scene.v1.EndSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
 	0,  // 8: holomush.scene.v1.PauseSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
 	0,  // 9: holomush.scene.v1.ResumeSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	53, // 10: holomush.scene.v1.UpdateSceneRequest.update_mask:type_name -> google.protobuf.FieldMask
+	59, // 10: holomush.scene.v1.UpdateSceneRequest.update_mask:type_name -> google.protobuf.FieldMask
 	0,  // 11: holomush.scene.v1.UpdateSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	52, // 12: holomush.scene.v1.PoseOrderEntry.last_posed_at:type_name -> google.protobuf.Timestamp
+	58, // 12: holomush.scene.v1.PoseOrderEntry.last_posed_at:type_name -> google.protobuf.Timestamp
 	29, // 13: holomush.scene.v1.GetPoseOrderResponse.entries:type_name -> holomush.scene.v1.PoseOrderEntry
 	38, // 14: holomush.scene.v1.GetPublishedSceneResponse.tally:type_name -> holomush.scene.v1.PublishedSceneVoteSummary
 	37, // 15: holomush.scene.v1.GetPublishedSceneResponse.content_entries:type_name -> holomush.scene.v1.PublishedSceneEntry
@@ -3415,7 +3866,7 @@ func file_holomush_scene_v1_scene_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_scene_v1_scene_proto_rawDesc), len(file_holomush_scene_v1_scene_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   52,
+			NumMessages:   58,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -368,3 +368,48 @@ message ExtendScenePublishVoteAttemptsRequest {
 message ExtendScenePublishVoteAttemptsResponse {
   int32 new_max = 1;
 }
+
+// IC notice event messages for Phase 6 scene publication state transitions.
+// All carry sensitivity:never per crypto.emits manifest.
+
+message ScenePublishStartedEvent {
+  string attempt_id = 1;
+  int32 attempt_number = 2;
+  string initiated_by = 3;
+  int64 vote_window_seconds = 4;
+  int64 cooloff_window_seconds = 5;
+  repeated string roster_character_ids = 6;
+}
+
+message ScenePublishVoteCastEvent {
+  string attempt_id = 1;
+  string character_id = 2;
+  bool vote = 3;
+  bool is_change = 4;
+}
+
+message ScenePublishCoolOffStartedEvent {
+  string attempt_id = 1;
+  int64 cooloff_ends_at_unix_ns = 2;
+}
+
+message ScenePublishResolvedEvent {
+  string attempt_id = 1;
+  string outcome = 2; // "PUBLISHED" | "ATTEMPT_FAILED"
+  string failure_reason = 3; // empty unless ATTEMPT_FAILED
+  int32 tally_yes = 4;
+  int32 tally_no = 5;
+  int32 tally_pending = 6;
+}
+
+message ScenePublishWithdrawnEvent {
+  string attempt_id = 1;
+  string withdrawn_by = 2;
+}
+
+message ScenePublishVoteAttemptsExtendedEvent {
+  string scene_id = 1;
+  int32 additional = 2;
+  int32 new_max = 3;
+  string admin_id = 4;
+}

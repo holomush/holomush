@@ -164,6 +164,17 @@ func (p *scenePlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig) 
 	// (tracked as a post-Phase-4 follow-up).
 	p.service.gameID = "main"
 
+	// Wire the real publish eventer now that sink, store, and gameID are all
+	// set. SetEventSink runs before Init in the SDK lifecycle, so
+	// p.service.eventSink is already populated by the time we reach here.
+	// Guard against a nil sink (e.g. in test harnesses that call Init directly
+	// without going through the full SDK lifecycle).
+	if p.service.eventSink != nil {
+		p.service.SetPublishEventer(newPublishEventEmitter(p.service.eventSink, p.service.store, p.service.gameID))
+	} else {
+		slog.WarnContext(ctx, "core-scenes: event sink nil at Init; publish eventer left as noop")
+	}
+
 	slog.InfoContext(
 		ctx, "core-scenes plugin initialised",
 		"storage", "postgres",

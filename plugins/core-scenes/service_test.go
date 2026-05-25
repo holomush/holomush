@@ -28,11 +28,12 @@ import (
 type fakeStore struct {
 	scenes                    map[string]*SceneRow
 	participants              map[string]map[string]string // sceneID → characterID → role
-	publishedScenes           map[string]*PublishedScene       // Phase 6: published_scene_id → attempt
-	publishedContent          map[string][]PublishedSceneEntry // Phase 6: published_scene_id → content entries
-	attemptCounts             map[string]AttemptCounts         // Phase 6: sceneID → attempt counts
-	maxPublishAttempts        map[string]int                   // Phase 6: sceneID → budget
-	createdAttempts           []*PublishedScene                // Phase 6: records CreatePublishAttempt calls
+	publishedScenes           map[string]*PublishedScene           // Phase 6: published_scene_id → attempt
+	publishedContent          map[string][]PublishedSceneEntry     // Phase 6: published_scene_id → content entries
+	publishedVoters           map[string][]PublishedSceneVote      // Phase 6: published_scene_id → voter rows
+	attemptCounts             map[string]AttemptCounts             // Phase 6: sceneID → attempt counts
+	maxPublishAttempts        map[string]int                       // Phase 6: sceneID → budget
+	createdAttempts           []*PublishedScene                    // Phase 6: records CreatePublishAttempt calls
 	createErr                 error
 	createWithOwnerErr        error
 	getErr                    error
@@ -51,6 +52,7 @@ func newFakeStore() *fakeStore {
 		participants:       make(map[string]map[string]string),
 		publishedScenes:    make(map[string]*PublishedScene),
 		publishedContent:   make(map[string][]PublishedSceneEntry),
+		publishedVoters:    make(map[string][]PublishedSceneVote),
 		attemptCounts:      make(map[string]AttemptCounts),
 		maxPublishAttempts: make(map[string]int),
 	}
@@ -92,6 +94,25 @@ func (f *fakeStore) GetPublishedSceneHeader(_ context.Context, id string) (*Publ
 // embedding type to count calls.
 func (f *fakeStore) GetPublishedSceneContent(_ context.Context, id string) ([]PublishedSceneEntry, error) {
 	return f.publishedContent[id], nil
+}
+
+// installVoters seeds the voter roster for a published attempt. Used by
+// Phase D event-emitter tests that need emitPublishStarted to return a
+// non-empty roster.
+func (f *fakeStore) installVoters(publishedSceneID string, characterIDs ...string) {
+	voters := make([]PublishedSceneVote, 0, len(characterIDs))
+	for _, cid := range characterIDs {
+		voters = append(voters, PublishedSceneVote{
+			PublishedSceneID: publishedSceneID,
+			CharacterID:      cid,
+		})
+	}
+	f.publishedVoters[publishedSceneID] = voters
+}
+
+// ListPublishVoters returns the seeded voter rows for an attempt.
+func (f *fakeStore) ListPublishVoters(_ context.Context, publishedSceneID string) ([]PublishedSceneVote, error) {
+	return f.publishedVoters[publishedSceneID], nil
 }
 
 // TallyVotes returns a zero tally by default.
