@@ -479,6 +479,10 @@ type fakeFocusClient struct {
 	// If the scene is not in the map, the default is false.
 	isAnyConnFocusedResult map[string]bool
 	isAnyConnFocusedErr    error
+
+	// queryHistoryEvents / queryHistoryErr drive QueryStreamHistory (scene log).
+	queryHistoryEvents []pluginsdk.Event
+	queryHistoryErr    error
 }
 
 type autoFocusOnJoinCall struct {
@@ -524,7 +528,10 @@ func (f *fakeFocusClient) IsAnyConnFocused(_ context.Context, _ string, sceneID 
 }
 
 func (f *fakeFocusClient) QueryStreamHistory(_ context.Context, _ pluginsdk.QueryStreamHistoryRequest) (pluginsdk.QueryStreamHistoryResponse, error) {
-	return pluginsdk.QueryStreamHistoryResponse{}, nil
+	if f.queryHistoryErr != nil {
+		return pluginsdk.QueryStreamHistoryResponse{}, f.queryHistoryErr
+	}
+	return pluginsdk.QueryStreamHistoryResponse{Events: f.queryHistoryEvents}, nil
 }
 
 // newTestPluginWithFocus returns a scenePlugin wired with a fakeFocusClient

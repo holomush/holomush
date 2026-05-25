@@ -69,6 +69,88 @@ func resolveSceneRef(ctx context.Context, look membershipLookup, characterID, ar
 	return scenes[0], nil
 }
 
+// sceneLogReplayLimit bounds a single "scene log" page (most-recent N events).
+const sceneLogReplayLimit = 50
+
+// replayEventKinds maps the IC content event types to their render kind. Only
+// these three are replayed by "scene log"; joins, ops, OOC, and publish-
+// lifecycle notices are skipped.
+var replayEventKinds = map[string]EntryKind{
+	"scene_pose": EntryKindPose,
+	"scene_say":  EntryKindSay,
+	"scene_emit": EntryKindEmit,
+}
+
+// decodeReplayEntries converts QueryStreamHistory events (oldest→newest) into
+// renderable content entries, keeping only the IC content kinds and decoding
+// each event's {actor_id, text} payload (the shape handleEmit writes). A
+// payload that won't decode fails the whole replay rather than silently
+// dropping a line.
+func decodeReplayEntries(events []pluginsdk.Event) ([]PublishedSceneEntry, error) {
+	out := make([]PublishedSceneEntry, 0, len(events))
+	for i := range events {
+		kind, ok := replayEventKinds[string(events[i].Type)]
+		if !ok {
+			continue
+		}
+		var pl struct {
+			ActorID string `json:"actor_id"`
+			Text    string `json:"text"`
+		}
+		if err := json.Unmarshal([]byte(events[i].Payload), &pl); err != nil {
+			return nil, oops.Code("SCENE_LOG_DECODE_FAILED").
+				With("event_id", events[i].ID).Wrap(err)
+		}
+		out = append(out, PublishedSceneEntry{Speaker: pl.ActorID, Kind: kind, Content: pl.Text})
+	}
+	return out, nil
+}
+
+// handleLog replays a scene's IC content history (pose/say/emit) to a
+// participant (spec §6.1; folds in holomush-cb4x). Participant-gated (INV-S9,
+// plugin-code, NO ABAC): a non-participant is denied BEFORE any history read.
+// Content is fetched via the host's QueryStreamHistory — which decrypts
+// sensitivity:always payloads host-side and is itself membership-gated — NOT
+// the plugin's own audit QueryHistory, which serves ciphertext. Rendered with
+// the plain-text renderer. Speaker is the actor's character id; display-name
+// resolution is a follow-up.
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
+func (p *scenePlugin) handleLog(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	sceneID, err := resolveSceneRef(ctx, p.service.store, req.CharacterID, args)
+	if err != nil {
+		return pluginsdk.Errorf("%v", err), nil
+	}
+
+	// INV-S9 participant gate (plugin-code) before any history read.
+	ok, err := p.service.store.IsParticipant(ctx, sceneID, req.CharacterID)
+	if err != nil {
+		return pluginsdk.Errorf("Could not verify scene membership: %v", err), nil
+	}
+	if !ok {
+		return pluginsdk.Errorf("You are not a participant in that scene."), nil
+	}
+
+	if p.focusClient == nil {
+		return pluginsdk.Errorf("Scene log is unavailable."), nil
+	}
+	resp, err := p.focusClient.QueryStreamHistory(ctx, pluginsdk.QueryStreamHistoryRequest{
+		Stream: dotStyleSceneSubjectIC(p.service.gameID, sceneID),
+		Count:  sceneLogReplayLimit,
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Could not read scene log: %v", err), nil
+	}
+	entries, err := decodeReplayEntries(resp.Events)
+	if err != nil {
+		return pluginsdk.Errorf("Could not render scene log: %v", err), nil
+	}
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: renderPlainText(entries),
+	}, nil
+}
+
 // dispatchCommand handles the "scene" top-level command. Phase 2 supports
 // the create, info, end, pause, resume, and set subcommands; later phases
 // will plug additional handlers in here without changing the dispatcher
@@ -89,7 +171,7 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 	span.SetAttributes(attribute.String("subcommand", sub))
 
 	if sub == "" {
-		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, emit, end, extend, focus, grid, info, invite, join, kick, leave, list, ooc, order, pause, pose, resume, say, set, switch, transfer"), nil
+		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, emit, end, extend, focus, grid, info, invite, join, kick, leave, list, log, ooc, order, pause, pose, resume, say, set, switch, transfer"), nil
 	}
 
 	// gated dispatches through the ABAC evaluator; fails closed when evaluator is nil.
@@ -160,10 +242,12 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 		return p.handleEmit(ctx, req, rest, "scene_ooc", true)
 	case "order":
 		return p.handleOrder(ctx, req, rest)
+	case "log":
+		return p.handleLog(ctx, req, rest)
 	case "list":
 		return p.handleSceneList(ctx, req)
 	default:
-		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, emit, end, extend, focus, grid, info, invite, join, kick, leave, list, ooc, order, pause, pose, resume, say, set, switch, transfer.", sub), nil
+		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, emit, end, extend, focus, grid, info, invite, join, kick, leave, list, log, ooc, order, pause, pose, resume, say, set, switch, transfer.", sub), nil
 	}
 }
 

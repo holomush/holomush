@@ -44,6 +44,7 @@ Phase 6 intentionally departs from several specifics in the v2 design and the `h
 | v2 §1.3 `PublishVote *bool` on Participant | Moved to `published_scene_votes` table | Q3. Clean roster snapshot at attempt start; doesn't pollute participant rows with vote-window state |
 | v2 §1.5 "Scene Log (Published)" naming | Renamed to `PublishedScene` / `published_scenes` everywhere | Q2. `scene_log` is taken by the audit history table (PR #267); the publication artifact needs an unambiguous name |
 | Bead "scene_logs table (migration 000003)" | Migration `000008_scene_publication.up.sql` (next available number; `scene_log` already exists at 000004) | Plan reflects shipped state; the audit table predates this design |
+| §6.1 "`scene log` → (existing audit `QueryHistory`)" | `scene log` replays via the host's `QueryStreamHistory` (focus client), not the plugin's own `PluginAuditService.QueryHistory` | The plugin's audit `QueryHistory` serves `sensitivity:always` **ciphertext** (the plugin holds no DEK — same constraint as the C7 snapshot, `holomush-m7pxs`). The host's `QueryStreamHistory` decrypts host-side and is itself membership-gated, so it is the correct realization of a participant content read. The §6.1 table phrasing names the intent ("participant read of audit history"), not the literal in-process call. |
 
 ## 3. Domain Model
 
