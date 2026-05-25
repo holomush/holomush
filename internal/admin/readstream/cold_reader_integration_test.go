@@ -68,10 +68,10 @@ func insertEncryptedAuditRow(
 	_, err = pool.Exec(context.Background(), `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
-			envelope, schema_ver, codec, js_seq,
+			envelope, schema_ver, codec, js_seq, rendering,
 			dek_ref, dek_version
 		) VALUES ($1, $2, 'test.encrypted', $3, 'system', NULL,
-		          $4, 1, 'aes256-gcm', $5,
+		          $4, 1, 'aes256-gcm', $5, '{}',
 		          42, 1)
 	`, id[:], string(subject), pgnanos.From(ts), envelopeBytes, int64(seq))
 	Expect(err).NotTo(HaveOccurred())
@@ -100,9 +100,9 @@ func insertIdentityAuditRow(
 	_, err = pool.Exec(context.Background(), `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
-			envelope, schema_ver, codec, js_seq
+			envelope, schema_ver, codec, js_seq, rendering
 		) VALUES ($1, $2, 'test.cleartext', $3, 'system', NULL,
-		          $4, 1, 'identity', $5)
+		          $4, 1, 'identity', $5, '{}')
 	`, id[:], string(subject), pgnanos.From(ts), envelopeBytes, int64(seq))
 	Expect(err).NotTo(HaveOccurred())
 }
@@ -248,12 +248,12 @@ var _ = Describe("ColdReader", func() {
 			_, err = pool.Exec(context.Background(), `
 				INSERT INTO events_audit (
 					id, subject, type, timestamp, actor_kind, actor_id,
-					envelope, schema_ver, codec, js_seq,
+					envelope, schema_ver, codec, js_seq, rendering,
 					dek_ref, dek_version
 				) VALUES ($1, $2, 'test.encrypted', $3, 'system', NULL,
-				          $4, 1, 'xchacha20poly1305-v1', $5,
+				          $4, 1, 'xchacha20poly1305-v1', $5, '{}',
 				          42, NULL)
-			`, id[:], string(subject), now, envelopeBytes, int64(9001))
+			`, id[:], string(subject), pgnanos.From(now), envelopeBytes, int64(9001))
 			Expect(err).NotTo(HaveOccurred())
 
 			cr := NewColdReader(pool)
