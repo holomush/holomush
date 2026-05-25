@@ -9,8 +9,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"slices"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
@@ -108,15 +106,22 @@ var _ = Describe("Communication Plugin Integration", func() {
 			Expect(fixture.Plugin.Manifest.Version).To(Equal("1.0.0"))
 		})
 
-		It("subscribes to command events", func() {
-			Expect(slices.Contains(fixture.Plugin.Manifest.Events, "command")).To(BeTrue())
+		It("handles commands via on_command (no event subscriptions)", func() {
+			// core-communication uses on_command for dispatch; it does not
+			// subscribe to any event stream (events: field is absent in manifest).
+			Expect(fixture.Plugin.Manifest.Events).To(BeEmpty())
 		})
 
-		It("declares no top-level policies by default", func() {
-			Expect(fixture.Plugin.Manifest.Policies).To(BeEmpty())
+		It("declares execute-communication and execute-pemit policies", func() {
+			// The manifest ships two ABAC policies.
+			policyNames := make([]string, len(fixture.Plugin.Manifest.Policies))
+			for i, p := range fixture.Plugin.Manifest.Policies {
+				policyNames[i] = p.Name
+			}
+			Expect(policyNames).To(ContainElements("execute-communication", "execute-pemit"))
 		})
 
-		It("declares say command with comms.say capability", func() {
+		It("declares say command with emit capability", func() {
 			var sayCmd *plugins.CommandSpec
 			for i := range fixture.Plugin.Manifest.Commands {
 				if fixture.Plugin.Manifest.Commands[i].Name == "say" {
@@ -126,11 +131,12 @@ var _ = Describe("Communication Plugin Integration", func() {
 			}
 			Expect(sayCmd).NotTo(BeNil())
 			Expect(sayCmd.Capabilities).To(ContainElement(command.Capability{Action: "emit", Resource: "stream", Scope: command.ScopeLocal}))
-			Expect(sayCmd.Help).To(Equal("Send a message to the room"))
+			// Help text matches plugin.yaml as of current manifest.
+			Expect(sayCmd.Help).To(Equal("Say something to the location"))
 			Expect(sayCmd.Usage).To(Equal("say <message>"))
 		})
 
-		It("declares pose command with comms.pose capability", func() {
+		It("declares pose command with emit capability", func() {
 			var poseCmd *plugins.CommandSpec
 			for i := range fixture.Plugin.Manifest.Commands {
 				if fixture.Plugin.Manifest.Commands[i].Name == "pose" {
@@ -140,10 +146,11 @@ var _ = Describe("Communication Plugin Integration", func() {
 			}
 			Expect(poseCmd).NotTo(BeNil())
 			Expect(poseCmd.Capabilities).To(ContainElement(command.Capability{Action: "emit", Resource: "stream", Scope: command.ScopeLocal}))
-			Expect(poseCmd.Help).To(Equal("Perform an action in the room"))
+			// Help text matches plugin.yaml as of current manifest.
+			Expect(poseCmd.Help).To(Equal("Perform an action"))
 		})
 
-		It("declares emit command with comms.emit capability", func() {
+		It("declares emit command with emit capability", func() {
 			var emitCmd *plugins.CommandSpec
 			for i := range fixture.Plugin.Manifest.Commands {
 				if fixture.Plugin.Manifest.Commands[i].Name == "emit" {
@@ -153,284 +160,244 @@ var _ = Describe("Communication Plugin Integration", func() {
 			}
 			Expect(emitCmd).NotTo(BeNil())
 			Expect(emitCmd.Capabilities).To(ContainElement(command.Capability{Action: "emit", Resource: "stream", Scope: command.ScopeLocal}))
-			Expect(emitCmd.Help).To(Equal("Emit raw text to the room (privileged)"))
+			// Help text matches plugin.yaml as of current manifest.
+			Expect(emitCmd.Help).To(Equal("Emit a message to the location"))
 		})
 	})
 
-	Describe("Say Command Event Handling", func() {
-		Context("when receiving say command event", func() {
-			It("emits say event to location stream with double quotes by default", func() {
-				ctx := context.Background()
-				event := pluginsdk.Event{
-					ID:        "01ABC",
-					Stream:    "character:char123",
-					Type:      pluginsdk.EventType("command"),
-					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginsdk.ActorCharacter,
-					ActorID:   "char123",
-					Payload:   `{"name":"say","args":"Hello everyone!","character_name":"Alice","location_id":"loc456"}`,
-				}
+	// All command tests use DeliverCommand, which correctly parses the
+	// {status, output, events} wrapper table that on_command returns.
+	// DeliverEvent+callOnCommand feeds the wrapper directly to parseEmitEvents
+	// (wrong path); DeliverCommand goes through parseCommandResponse (correct path).
 
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
+	Describe("Say Command Handling", func() {
+		Context("when say command is invoked with a message", func() {
+			It("emits say event to location stream", func() {
+				ctx := context.Background()
+				resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-communication", pluginsdk.CommandRequest{
+					Command:       "say",
+					Args:          "Hello everyone!",
+					CharacterName: "Alice",
+					LocationID:    "loc456",
+				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(emits).To(HaveLen(1))
-				Expect(emits[0].Stream).To(Equal("location:loc456"))
-				Expect(emits[0].Type).To(Equal(pluginsdk.EventType(corecomm.EventTypeSay)))
-				Expect(emits[0].Payload).To(ContainSubstring(`Alice says, \"Hello everyone!\"`))
-				Expect(emits[0].Payload).To(ContainSubstring(`"speaker":"Alice"`))
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
+				Expect(resp.Events).To(HaveLen(1))
+				Expect(resp.Events[0].Stream).To(Equal("location:loc456"))
+				Expect(resp.Events[0].Type).To(Equal(pluginsdk.EventType(corecomm.EventTypeSay)))
+				Expect(resp.Events[0].Payload).To(ContainSubstring(`"character_name":"Alice"`))
+				Expect(resp.Events[0].Payload).To(ContainSubstring(`Hello everyone!`))
 			})
 		})
 
 		Context("when say command has empty message", func() {
-			It("returns error message to character", func() {
+			It("returns error status with prompt", func() {
 				ctx := context.Background()
-				event := pluginsdk.Event{
-					ID:        "01DEF",
-					Stream:    "character:char123",
-					Type:      pluginsdk.EventType("command"),
-					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginsdk.ActorCharacter,
-					ActorID:   "char123",
-					Payload:   `{"name":"say","args":"","character_name":"Alice","location_id":"loc456","character_id":"char123"}`,
-				}
-
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
+				resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-communication", pluginsdk.CommandRequest{
+					Command:       "say",
+					Args:          "",
+					CharacterName: "Alice",
+					LocationID:    "loc456",
+					CharacterID:   "char123",
+				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(emits).To(HaveLen(1))
-				Expect(emits[0].Stream).To(Equal("character:char123"))
-				Expect(string(emits[0].Type)).To(Equal("error"))
-				Expect(emits[0].Payload).To(ContainSubstring("What do you want to say?"))
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Status).To(Equal(pluginsdk.CommandError))
+				Expect(resp.Output).To(ContainSubstring("What do you want to say?"))
 			})
 		})
 	})
 
-	Describe("Pose Command Event Handling", func() {
-		Context("when receiving pose command event", func() {
-			It("emits pose event with character name and space prepended", func() {
+	Describe("Pose Command Handling", func() {
+		Context("when pose command is invoked with an action", func() {
+			It("emits pose event with structured payload", func() {
 				ctx := context.Background()
-				event := pluginsdk.Event{
-					ID:        "01GHI",
-					Stream:    "character:char123",
-					Type:      pluginsdk.EventType("command"),
-					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginsdk.ActorCharacter,
-					ActorID:   "char123",
-					Payload:   `{"name":"pose","args":"waves hello.","character_name":"Bob","location_id":"loc456"}`,
-				}
-
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
+				resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-communication", pluginsdk.CommandRequest{
+					Command:       "pose",
+					Args:          "waves hello.",
+					CharacterName: "Bob",
+					LocationID:    "loc456",
+				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(emits).To(HaveLen(1))
-				Expect(emits[0].Stream).To(Equal("location:loc456"))
-				Expect(emits[0].Type).To(Equal(pluginsdk.EventType(corecomm.EventTypePose)))
-				Expect(emits[0].Payload).To(ContainSubstring(`Bob waves hello.`))
-				Expect(emits[0].Payload).To(ContainSubstring(`"actor":"Bob"`))
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
+				Expect(resp.Events).To(HaveLen(1))
+				Expect(resp.Events[0].Stream).To(Equal("location:loc456"))
+				Expect(resp.Events[0].Type).To(Equal(pluginsdk.EventType(corecomm.EventTypePose)))
+				// Payload is structured JSON: {character_name, action}; rendering happens at display layer
+				Expect(resp.Events[0].Payload).To(ContainSubstring(`"character_name":"Bob"`))
+				Expect(resp.Events[0].Payload).To(ContainSubstring(`"action":"waves hello."`))
 			})
 		})
 
-		Context("when pose command uses : variant", func() {
-			It("includes space before action (same as regular pose)", func() {
+		Context("when pose command uses : variant in args", func() {
+			It("strips : prefix and emits action without no_space flag", func() {
 				ctx := context.Background()
-				event := pluginsdk.Event{
-					ID:        "01GHI1",
-					Stream:    "character:char123",
-					Type:      pluginsdk.EventType("command"),
-					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginsdk.ActorCharacter,
-					ActorID:   "char123",
-					Payload:   `{"name":"pose","args":":smiles warmly.","character_name":"Bob","location_id":"loc456"}`,
-				}
-
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
+				resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-communication", pluginsdk.CommandRequest{
+					Command:       "pose",
+					Args:          ":smiles warmly.",
+					CharacterName: "Bob",
+					LocationID:    "loc456",
+				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(emits).To(HaveLen(1))
-				// : variant should still include space (same as regular pose)
-				Expect(emits[0].Payload).To(ContainSubstring(`Bob smiles warmly.`))
+				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
+				Expect(resp.Events).To(HaveLen(1))
+				// : prefix stripped; action is "smiles warmly." with no no_space flag
+				Expect(resp.Events[0].Payload).To(ContainSubstring(`"action":"smiles warmly."`))
+				Expect(resp.Events[0].Payload).NotTo(ContainSubstring(`"no_space"`))
 			})
 		})
 
-		Context("when pose command uses ; variant (no-space/possessive)", func() {
-			It("omits space before action for possessives", func() {
+		Context("when pose command uses ; variant in args (no-space/possessive)", func() {
+			It("strips ; prefix and sets no_space flag in payload", func() {
 				ctx := context.Background()
-				event := pluginsdk.Event{
-					ID:        "01GHI2A",
-					Stream:    "character:char123",
-					Type:      pluginsdk.EventType("command"),
-					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginsdk.ActorCharacter,
-					ActorID:   "char123",
-					Payload:   `{"name":"pose","args":";'s eyes widen.","character_name":"Bob","location_id":"loc456"}`,
-				}
-
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
+				resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-communication", pluginsdk.CommandRequest{
+					Command:       "pose",
+					Args:          ";'s eyes widen.",
+					CharacterName: "Bob",
+					LocationID:    "loc456",
+				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(emits).To(HaveLen(1))
-				// ; variant should NOT include space (for possessives like 's)
-				Expect(emits[0].Payload).To(ContainSubstring(`Bob's eyes widen.`))
+				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
+				Expect(resp.Events).To(HaveLen(1))
+				// ; prefix stripped; action includes the possessive and no_space=true is set
+				Expect(resp.Events[0].Payload).To(ContainSubstring(`"action":"'s eyes widen."`))
+				Expect(resp.Events[0].Payload).To(ContainSubstring(`"no_space":true`))
 			})
 		})
 
 		Context("when pose uses invoked_as field from prefix alias", func() {
-			It("uses invoked_as=; for no-space variant", func() {
+			It("uses invoked_as=; for no-space variant (sets no_space flag)", func() {
 				ctx := context.Background()
-				// Tests primary path: prefix alias sets invoked_as, args has no prefix marker
-				event := pluginsdk.Event{
-					ID:        "01GHI3",
-					Stream:    "character:char123",
-					Type:      pluginsdk.EventType("command"),
-					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginsdk.ActorCharacter,
-					ActorID:   "char123",
-					Payload:   `{"name":"pose","args":"'s sword gleams.","character_name":"Conan","location_id":"loc456","invoked_as":";"}`,
-				}
-
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
+				resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-communication", pluginsdk.CommandRequest{
+					Command:       "pose",
+					Args:          "'s sword gleams.",
+					CharacterName: "Conan",
+					LocationID:    "loc456",
+					InvokedAs:     ";",
+				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(emits).To(HaveLen(1))
-				// ; prefix alias means no space between name and action
-				Expect(emits[0].Payload).To(ContainSubstring(`Conan's sword gleams.`))
+				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
+				Expect(resp.Events).To(HaveLen(1))
+				// invoked_as=; sets no_space=true in payload
+				Expect(resp.Events[0].Payload).To(ContainSubstring(`"action":"'s sword gleams."`))
+				Expect(resp.Events[0].Payload).To(ContainSubstring(`"no_space":true`))
 			})
 
-			It("uses invoked_as=: for space variant", func() {
+			It("uses invoked_as=: for space variant (no no_space flag)", func() {
 				ctx := context.Background()
-				event := pluginsdk.Event{
-					ID:        "01GHI4",
-					Stream:    "character:char123",
-					Type:      pluginsdk.EventType("command"),
-					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginsdk.ActorCharacter,
-					ActorID:   "char123",
-					Payload:   `{"name":"pose","args":"draws their blade.","character_name":"Conan","location_id":"loc456","invoked_as":":"}`,
-				}
-
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
+				resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-communication", pluginsdk.CommandRequest{
+					Command:       "pose",
+					Args:          "draws their blade.",
+					CharacterName: "Conan",
+					LocationID:    "loc456",
+					InvokedAs:     ":",
+				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(emits).To(HaveLen(1))
-				// : prefix alias means space between name and action
-				Expect(emits[0].Payload).To(ContainSubstring(`Conan draws their blade.`))
+				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
+				Expect(resp.Events).To(HaveLen(1))
+				// invoked_as=: does not set no_space flag
+				Expect(resp.Events[0].Payload).To(ContainSubstring(`"action":"draws their blade."`))
+				Expect(resp.Events[0].Payload).NotTo(ContainSubstring(`"no_space"`))
 			})
 		})
 
 		Context("when pose command has empty action", func() {
-			It("returns error message to character", func() {
+			It("returns error status with pose-specific prompt", func() {
 				ctx := context.Background()
-				event := pluginsdk.Event{
-					ID:        "01GHI2",
-					Stream:    "character:char123",
-					Type:      pluginsdk.EventType("command"),
-					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginsdk.ActorCharacter,
-					ActorID:   "char123",
-					Payload:   `{"name":"pose","args":"","character_name":"Bob","location_id":"loc456","character_id":"char123"}`,
-				}
-
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
+				resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-communication", pluginsdk.CommandRequest{
+					Command:       "pose",
+					Args:          "",
+					CharacterName: "Bob",
+					LocationID:    "loc456",
+					CharacterID:   "char123",
+				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(emits).To(HaveLen(1))
-				Expect(emits[0].Stream).To(Equal("character:char123"))
-				Expect(string(emits[0].Type)).To(Equal("error"))
-				Expect(emits[0].Payload).To(ContainSubstring("What do you want to do?"))
+				Expect(resp.Status).To(Equal(pluginsdk.CommandError))
+				Expect(resp.Output).To(ContainSubstring("What do you want to pose?"))
 			})
 		})
 
 		Context("when pose uses prefix marker with no action after it", func() {
-			It("returns error message when only : is provided in args", func() {
+			It("returns error when only : is provided in args", func() {
 				ctx := context.Background()
-				event := pluginsdk.Event{
-					ID:        "01GHI5",
-					Stream:    "character:char123",
-					Type:      pluginsdk.EventType("command"),
-					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginsdk.ActorCharacter,
-					ActorID:   "char123",
-					Payload:   `{"name":"pose","args":":","character_name":"Bob","location_id":"loc456","character_id":"char123"}`,
-				}
-
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
+				resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-communication", pluginsdk.CommandRequest{
+					Command:       "pose",
+					Args:          ":",
+					CharacterName: "Bob",
+					LocationID:    "loc456",
+					CharacterID:   "char123",
+				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(emits).To(HaveLen(1))
-				Expect(emits[0].Stream).To(Equal("character:char123"))
-				Expect(string(emits[0].Type)).To(Equal("error"))
-				Expect(emits[0].Payload).To(ContainSubstring("What do you want to do?"))
+				Expect(resp.Status).To(Equal(pluginsdk.CommandError))
+				Expect(resp.Output).To(ContainSubstring("What do you want to pose?"))
 			})
 
-			It("returns error message when only ; is provided in args", func() {
+			It("returns error when only ; is provided in args", func() {
 				ctx := context.Background()
-				event := pluginsdk.Event{
-					ID:        "01GHI6",
-					Stream:    "character:char123",
-					Type:      pluginsdk.EventType("command"),
-					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginsdk.ActorCharacter,
-					ActorID:   "char123",
-					Payload:   `{"name":"pose","args":";","character_name":"Bob","location_id":"loc456","character_id":"char123"}`,
-				}
-
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
+				resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-communication", pluginsdk.CommandRequest{
+					Command:       "pose",
+					Args:          ";",
+					CharacterName: "Bob",
+					LocationID:    "loc456",
+					CharacterID:   "char123",
+				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(emits).To(HaveLen(1))
-				Expect(emits[0].Stream).To(Equal("character:char123"))
-				Expect(string(emits[0].Type)).To(Equal("error"))
-				Expect(emits[0].Payload).To(ContainSubstring("What do you want to do?"))
+				Expect(resp.Status).To(Equal(pluginsdk.CommandError))
+				Expect(resp.Output).To(ContainSubstring("What do you want to pose?"))
 			})
 		})
 	})
 
-	Describe("Emit Command Event Handling", func() {
-		Context("when receiving emit command event", func() {
-			It("emits raw text without prefix", func() {
+	Describe("Emit Command Handling", func() {
+		Context("when emit command is invoked with text", func() {
+			It("emits raw text to the location stream", func() {
 				ctx := context.Background()
-				event := pluginsdk.Event{
-					ID:        "01JKL",
-					Stream:    "character:char123",
-					Type:      pluginsdk.EventType("command"),
-					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginsdk.ActorCharacter,
-					ActorID:   "char123",
-					Payload:   `{"name":"emit","args":"The room shakes!","character_name":"Admin","location_id":"loc456"}`,
-				}
-
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
+				resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-communication", pluginsdk.CommandRequest{
+					Command:       "emit",
+					Args:          "The room shakes!",
+					CharacterName: "Admin",
+					LocationID:    "loc456",
+				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(emits).To(HaveLen(1))
-				Expect(emits[0].Stream).To(Equal("location:loc456"))
-				Expect(string(emits[0].Type)).To(Equal("emit"))
-				Expect(emits[0].Payload).To(ContainSubstring(`The room shakes!`))
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
+				Expect(resp.Events).To(HaveLen(1))
+				Expect(resp.Events[0].Stream).To(Equal("location:loc456"))
+				// The Lua emit handler returns type = "emit" (unqualified); the host
+				// namespace-qualifies emitted types only when going through PluginEventEmitter.Emit,
+				// not on the direct DeliverCommand path.
+				Expect(string(resp.Events[0].Type)).To(Equal("emit"))
+				Expect(resp.Events[0].Payload).To(ContainSubstring(`The room shakes!`))
 			})
 		})
 
 		Context("when emit command has empty text", func() {
-			It("returns error message to character", func() {
+			It("returns error status with prompt", func() {
 				ctx := context.Background()
-				event := pluginsdk.Event{
-					ID:        "01JKL2",
-					Stream:    "character:char123",
-					Type:      pluginsdk.EventType("command"),
-					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginsdk.ActorCharacter,
-					ActorID:   "char123",
-					Payload:   `{"name":"emit","args":"","character_name":"Admin","location_id":"loc456","character_id":"char123"}`,
-				}
-
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
+				resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-communication", pluginsdk.CommandRequest{
+					Command:       "emit",
+					Args:          "",
+					CharacterName: "Admin",
+					LocationID:    "loc456",
+					CharacterID:   "char123",
+				})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(emits).To(HaveLen(1))
-				Expect(emits[0].Stream).To(Equal("character:char123"))
-				Expect(string(emits[0].Type)).To(Equal("error"))
-				Expect(emits[0].Payload).To(ContainSubstring("What do you want to emit?"))
+				Expect(resp.Status).To(Equal(pluginsdk.CommandError))
+				Expect(resp.Output).To(ContainSubstring("What do you want to emit?"))
 			})
 		})
 	})
 
 	Describe("Non-Command Event Handling", func() {
 		Context("when receiving non-command events", func() {
-			It("ignores them", func() {
+			It("ignores them (no on_event handler)", func() {
 				ctx := context.Background()
 				event := pluginsdk.Event{
 					ID:        "01MNO",
 					Stream:    "location:123",
 					Type:      pluginsdk.EventType(corecomm.EventTypeSay),
-					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char_1",
 					Payload:   `{"message":"Hello"}`,

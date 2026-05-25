@@ -200,6 +200,27 @@ Keep under 200 lines. Curate — don't hoard.
   usual threat); flag the comment if it overclaims. Encountered: INV-L1 guard
   in `internal/logging/import_guard_test.go` (2026-05-23).
 
+- **Command-style Lua plugins MUST be driven via `DeliverCommand`, not `DeliverEvent`.**
+  `on_command` returns plain string (→ `CommandOK`) or `{status, output, events}`
+  table; `DeliverCommand` (`internal/plugin/lua/host.go:310`) routes through
+  `parseCommandResponse` (host.go:656-695) which parses that shape. `DeliverEvent`
+  feeds the wrapper to `parseEmitEvents` (wrong path) → nil emits. A test driving a
+  command plugin via `DeliverEvent` and asserting `[]EmitEvent` is testing the wrong
+  entry point. SDK status: `CommandOK=0, CommandError=1, CommandFailure=2`
+  (`pkg/plugin/command.go:13-19`). Lua `{status=2}` → fail-closed (e.g. core-help
+  logs the engine error + returns "temporarily unavailable", main.lua:24-28/110-114
+  — genuine fail-closed, not error-swallow). Encountered: holomush-gria3 (2026-05-25).
+
+- **Subscriber emit path is NOT the capability gate; `dispatch` filters on qualified
+  event type.** `internal/plugin/subscriber.go:88-102` dispatch → deliverAsync →
+  the *test's own* mock emitter, never `event_emitter.go::Emit`. So an echo-bot
+  "emit-count==0" failure is a SUBSCRIBE-FILTER mismatch, not capability gating:
+  `dispatch` matches `string(event.Type)` against `sub.eventTypes`, and
+  `corecomm.EventTypeSay == "core-communication:say"` (qualified,
+  `plugins/core-communication/events.go:24`) — subscribing with `Manifest.Events`
+  short-form `"say"` never matches. Don't trust a bead's "gated on capability"
+  hypothesis without tracing the actual path. Encountered: holomush-gria3.
+
 ## Invariants worth remembering
 
 - **Top-level oops Code() is the wire-visible code**: client-side error

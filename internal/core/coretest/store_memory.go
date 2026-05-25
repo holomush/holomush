@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-//go:build !integration
-
-package core
+// Package coretest provides test-only implementations of internal/core
+// interfaces. Production code MUST NOT import this package; the prohibition
+// is enforced by the depguard rule in .golangci.yaml (see holomush-1eps2).
+package coretest
 
 import (
 	"context"
@@ -11,30 +12,30 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
+
+	"github.com/holomush/holomush/internal/core"
 )
 
 // MemoryEventStore is an in-memory event store for unit testing.
-// It implements EventAppender and provides Replay/ReplayTail/LastEventID
-// as test-inspection helpers. Subscribe and SubscribeSession were removed
-// in F7 (those paths now go through the JetStream bus; tests that need
-// live-subscription behavior use integration tests with NATS).
+// It implements core.EventAppender and provides Replay/ReplayTail/LastEventID
+// as test-inspection helpers.
 type MemoryEventStore struct {
 	mu      sync.RWMutex
-	streams map[string][]Event
+	streams map[string][]core.Event
 }
 
 // NewMemoryEventStore creates a new in-memory event store.
 func NewMemoryEventStore() *MemoryEventStore {
 	return &MemoryEventStore{
-		streams: make(map[string][]Event),
+		streams: make(map[string][]core.Event),
 	}
 }
 
-// Compile-time check: MemoryEventStore satisfies EventAppender.
-var _ EventAppender = (*MemoryEventStore)(nil)
+// Compile-time check: MemoryEventStore satisfies core.EventAppender.
+var _ core.EventAppender = (*MemoryEventStore)(nil)
 
 // Append persists an event to the in-memory store.
-func (s *MemoryEventStore) Append(_ context.Context, event Event) error {
+func (s *MemoryEventStore) Append(_ context.Context, event core.Event) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.streams[event.Stream] = append(s.streams[event.Stream], event)
@@ -43,7 +44,7 @@ func (s *MemoryEventStore) Append(_ context.Context, event Event) error {
 
 // Replay returns events from a stream starting after the given ID.
 // Test-inspection helper; not part of any production interface.
-func (s *MemoryEventStore) Replay(_ context.Context, stream string, afterID ulid.ULID, limit int) ([]Event, error) {
+func (s *MemoryEventStore) Replay(_ context.Context, stream string, afterID ulid.ULID, limit int) ([]core.Event, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -52,7 +53,6 @@ func (s *MemoryEventStore) Replay(_ context.Context, stream string, afterID ulid
 		return nil, nil
 	}
 
-	// Find start index
 	startIdx := 0
 	if afterID.Compare(ulid.ULID{}) != 0 {
 		found := false
@@ -68,10 +68,9 @@ func (s *MemoryEventStore) Replay(_ context.Context, stream string, afterID ulid
 		}
 	}
 
-	// Slice with limit
 	endIdx := min(startIdx+limit, len(events))
 
-	result := make([]Event, endIdx-startIdx)
+	result := make([]core.Event, endIdx-startIdx)
 	copy(result, events[startIdx:endIdx])
 	return result, nil
 }
@@ -84,7 +83,7 @@ func (s *MemoryEventStore) LastEventID(_ context.Context, stream string) (ulid.U
 
 	events := s.streams[stream]
 	if len(events) == 0 {
-		return ulid.ULID{}, ErrStreamEmpty
+		return ulid.ULID{}, core.ErrStreamEmpty
 	}
 	return events[len(events)-1].ID, nil
 }
@@ -96,7 +95,7 @@ const maxReplayTailCount = 501
 // Events with timestamps before notBefore are excluded. If beforeID is non-zero,
 // events with ID >= beforeID are excluded. Count is capped at maxReplayTailCount.
 // Test-inspection helper; not part of any production interface.
-func (s *MemoryEventStore) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]Event, error) {
+func (s *MemoryEventStore) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -112,8 +111,7 @@ func (s *MemoryEventStore) ReplayTail(_ context.Context, stream string, count in
 		return nil, nil
 	}
 
-	// Scan from the end, applying both filters, collecting up to count events.
-	var eligible []Event
+	var eligible []core.Event
 	for i := len(events) - 1; i >= 0 && len(eligible) < count; i-- {
 		e := events[i]
 		if !beforeID.IsZero() && e.ID.Compare(beforeID) >= 0 {
@@ -125,7 +123,6 @@ func (s *MemoryEventStore) ReplayTail(_ context.Context, stream string, count in
 		eligible = append(eligible, e)
 	}
 
-	// Reverse eligible to get ascending order.
 	for i, j := 0, len(eligible)-1; i < j; i, j = i+1, j-1 {
 		eligible[i], eligible[j] = eligible[j], eligible[i]
 	}

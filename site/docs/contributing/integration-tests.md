@@ -1,9 +1,14 @@
 # Integration Test Harness
 
 This page describes the `internal/testsupport/integrationtest` package — the
-canonical harness for HoloMUSH integration tests that need a real in-process
-holomush stack (Postgres + embedded NATS JetStream + production CoreServer)
-rather than a mocked surface.
+canonical harness for HoloMUSH **full-stack integration** tests that need a real
+in-process holomush stack (Postgres + embedded NATS JetStream + production
+CoreServer) rather than a mocked surface.
+
+> **Tier vocabulary:** "E2E" is reserved for the Playwright browser suite
+> (`task test:e2e`). Ginkgo suites run via `task test:int` are **integration**
+> tests — including this harness, which is "full-stack integration". See the
+> canonical tier table in `.claude/rules/testing.md`.
 
 **Package**: `github.com/holomush/holomush/internal/testsupport/integrationtest`
 

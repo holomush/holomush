@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/core/coretest"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -257,7 +258,7 @@ func TestDispatcher_HandleCommand_UnknownCommand(t *testing.T) {
 	charID := core.NewULID()
 	sessionID := core.NewULID()
 	locationID := core.NewULID()
-	store := core.NewMemoryEventStore()
+	store := coretest.NewMemoryEventStore()
 
 	server := newDispatcherTestServer(t, store)
 
@@ -293,7 +294,7 @@ func TestDispatcher_HandleCommand_Quit(t *testing.T) {
 	charID := core.NewULID()
 	sessionID := core.NewULID()
 	locationID := core.NewULID()
-	store := core.NewMemoryEventStore()
+	store := coretest.NewMemoryEventStore()
 
 	var hookCalled bool
 	server := newDispatcherTestServer(
@@ -355,7 +356,7 @@ func TestQuitPathAppendsSessionEndedOnCharacterStream(t *testing.T) {
 	charID := core.NewULID()
 	sessionID := core.NewULID()
 	locationID := core.NewULID()
-	store := core.NewMemoryEventStore()
+	store := coretest.NewMemoryEventStore()
 
 	server := newDispatcherTestServer(t, store)
 
@@ -414,7 +415,7 @@ func TestGuestDisconnectEmitsSessionEndedOnCharacterStream(t *testing.T) {
 	charID := core.NewULID()
 	sessionID := core.NewULID()
 	locationID := core.NewULID()
-	store := core.NewMemoryEventStore()
+	store := coretest.NewMemoryEventStore()
 
 	server := newDispatcherTestServer(t, store)
 
@@ -476,7 +477,7 @@ func TestAdminBootEmitsSessionEndedWithKickedCause(t *testing.T) {
 	targetSessionID := core.NewULID()
 	targetLocationID := core.NewULID()
 
-	store := core.NewMemoryEventStore()
+	store := coretest.NewMemoryEventStore()
 
 	// Build a server with a "testboot" command that records the target
 	// session as booted. Server teardown logic then emits the session_ended

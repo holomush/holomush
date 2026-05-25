@@ -5,6 +5,7 @@ package core
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,24 +14,51 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// inMemAppender is a minimal in-memory core.EventAppender for the white-box
+// ctx-decoupling tests below. These tests stay in package core to reach the
+// unexported sessionTerminalCommitTimeout, so they cannot import
+// internal/core/coretest (that would create an import cycle: coretest imports
+// core). Only Append + Replay are needed here.
+type inMemAppender struct {
+	mu      sync.Mutex
+	streams map[string][]Event
+}
+
+func newInMemAppender() *inMemAppender {
+	return &inMemAppender{streams: make(map[string][]Event)}
+}
+
+func (s *inMemAppender) Append(_ context.Context, e Event) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.streams[e.Stream] = append(s.streams[e.Stream], e)
+	return nil
+}
+
+func (s *inMemAppender) Replay(_ context.Context, stream string, _ ulid.ULID, _ int) ([]Event, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]Event(nil), s.streams[stream]...), nil
+}
+
 // ctxRecordingStore records the context passed to Append so tests can verify
 // the append ctx is decoupled from the caller's ctx.
 type ctxRecordingStore struct {
-	*MemoryEventStore
+	*inMemAppender
 	appendCtx context.Context //nolint:containedctx // test seam
 }
 
 func (s *ctxRecordingStore) Append(ctx context.Context, event Event) error {
 	s.appendCtx = ctx
-	return s.MemoryEventStore.Append(ctx, event)
+	return s.inMemAppender.Append(ctx, event)
 }
 
 // TestEndSessionDecouplesAppendCtxFromCallerCtx verifies the decoupled-ctx
 // discipline: the context passed to store.Append is NOT the caller's ctx,
 // so caller-ctx cancel does not prevent the audit-critical append.
 func TestEndSessionDecouplesAppendCtxFromCallerCtx(t *testing.T) {
-	inner := NewMemoryEventStore()
-	store := &ctxRecordingStore{MemoryEventStore: inner}
+	inner := newInMemAppender()
+	store := &ctxRecordingStore{inMemAppender: inner}
 	engine := NewEngine(store)
 
 	callerCtx, cancel := context.WithCancel(context.Background())
@@ -67,18 +95,18 @@ func TestEndSessionDecouplesAppendCtxFromCallerCtx(t *testing.T) {
 // performs the append. This simulates a client hangup that races with the
 // quit path: if EndSession used caller ctx for Append, the event would drop.
 type cancellingStore struct {
-	*MemoryEventStore
+	*inMemAppender
 	cancel context.CancelFunc
 }
 
 func (s *cancellingStore) Append(ctx context.Context, event Event) error {
 	// Cancel the caller ctx mid-append. If EndSession mistakenly plumbed
 	// callerCtx into Append, this would cause store-side ctx-aware
-	// implementations to drop the write. MemoryEventStore ignores ctx so
+	// implementations to drop the write. inMemAppender ignores ctx so
 	// we additionally check ctx.Err() of the passed-in ctx to confirm
 	// the decoupling regardless of store behavior.
 	s.cancel()
-	return s.MemoryEventStore.Append(ctx, event)
+	return s.inMemAppender.Append(ctx, event)
 }
 
 // TestEndSessionAppendCtxNotCancelledWhenCallerCtxCancelsMidAppend verifies
@@ -88,8 +116,8 @@ func TestEndSessionAppendCtxNotCancelledWhenCallerCtxCancelsMidAppend(t *testing
 	callerCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	inner := NewMemoryEventStore()
-	store := &cancellingStore{MemoryEventStore: inner, cancel: cancel}
+	inner := newInMemAppender()
+	store := &cancellingStore{inMemAppender: inner, cancel: cancel}
 	engine := NewEngine(store)
 
 	charID := NewULID()
@@ -110,7 +138,7 @@ func TestEndSessionAppendCtxNotCancelledWhenCallerCtxCancelsMidAppend(t *testing
 // cause the terminal session_ended event to be skipped — the append uses a
 // fresh background context bounded by sessionTerminalCommitTimeout.
 func TestEndSessionPersistsEventEvenWhenCallerCtxAlreadyCancelled(t *testing.T) {
-	store := NewMemoryEventStore()
+	store := newInMemAppender()
 	engine := NewEngine(store)
 
 	ctx, cancel := context.WithCancel(context.Background())

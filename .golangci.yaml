@@ -31,6 +31,7 @@ linters:
     - unparam
     - gocritic
     - nolintlint
+    - depguard
 
     # Logging correctness — enforce trace-context propagation + structured-log
     # discipline (see CLAUDE.md "Structured Logging" + .claude/rules/logging.md,
@@ -132,6 +133,24 @@ linters:
           - forbidigo
 
   settings:
+    depguard:
+      rules:
+        no-test-only-constructs-in-production:
+          # Apply only to production files: not *_test.go, and not the
+          # test-support packages that legitimately wire harnesses in
+          # non-_test.go files. A rule whose `files` are all negations
+          # applies to every file except those excluded.
+          files:
+            - "!$test"
+            - "!**/internal/testsupport/**"
+            - "!**/internal/cluster/clustertest/**"
+            - "!**/test/testutil/**"
+          deny:
+            - pkg: github.com/holomush/holomush/internal/eventbus/eventbustest
+              desc: "embedded NATS test harness; production code MUST NOT import it (holomush-1eps2)"
+            - pkg: github.com/holomush/holomush/internal/core/coretest
+              desc: "in-memory test event store; production code MUST NOT import it (holomush-1eps2)"
+
     errcheck:
       check-type-assertions: true
       check-blank: true

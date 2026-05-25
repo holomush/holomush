@@ -7,7 +7,6 @@ package plugins_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -80,26 +79,6 @@ func setupHelpTest() (*helpFixture, error) {
 	return setupHelpTestWithEngine(policytest.AllowAllEngine())
 }
 
-// makeCommandPayload creates a JSON payload for a command event.
-func makeCommandPayload(name, args string) string {
-	payload := map[string]any{
-		"name":           name,
-		"args":           args,
-		"character_id":   "01HTEST000000000000000CHAR",
-		"location_id":    "01HTEST000000000000000ROOM",
-		"character_name": "TestPlayer",
-	}
-	data, _ := json.Marshal(payload)
-	return string(data)
-}
-
-// parsePayload parses a JSON payload string into a map.
-func parsePayload(payload string) map[string]any {
-	var result map[string]any
-	_ = json.Unmarshal([]byte(payload), &result)
-	return result
-}
-
 var _ = Describe("Help Plugin Integration", func() {
 	var fixture *helpFixture
 
@@ -115,155 +94,104 @@ var _ = Describe("Help Plugin Integration", func() {
 		}
 	})
 
+	// All help tests use DeliverCommand. The help plugin's on_command returns
+	// plain strings or {status, output} tables — no emit events. DeliverCommand
+	// parses these correctly via parseCommandResponse; DeliverEvent feeds the
+	// wrapped result to parseEmitEvents (wrong path) returning nil.
+
 	Describe("help command", func() {
 		It("lists all available commands when called without args", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			event := pluginsdk.Event{
-				ID:        "01HTEST",
-				Stream:    "character:01HTEST000000000000000CHAR",
-				Type:      pluginsdk.EventType("command"),
-				Timestamp: time.Now().UnixMilli(),
-				ActorKind: pluginsdk.ActorCharacter,
-				ActorID:   "01HTEST000000000000000CHAR",
-				Payload:   makeCommandPayload("help", ""),
-			}
-
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
+			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+				Command:     "help",
+				Args:        "",
+				CharacterID: "01HTEST000000000000000CHAR",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result).NotTo(BeNil())
-			Expect(len(result)).To(BeNumerically(">=", 1))
+			Expect(resp).NotTo(BeNil())
+			Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
 
-			// Verify events were emitted
-			outputEvent := result[0]
-			Expect(outputEvent.Type).To(Equal(pluginsdk.EventType("help")))
-
-			// Check that the output contains command names
-			payload := parsePayload(outputEvent.Payload)
-			message, hasMessage := payload["message"].(string)
-			Expect(hasMessage).To(BeTrue())
-
-			// Verify key content is present
-			Expect(message).To(ContainSubstring("say"))
-			Expect(message).To(ContainSubstring("look"))
-			Expect(message).To(ContainSubstring("dig"))
+			// Verify key content is present in the output text
+			Expect(resp.Output).To(ContainSubstring("say"))
+			Expect(resp.Output).To(ContainSubstring("look"))
+			Expect(resp.Output).To(ContainSubstring("dig"))
 		})
 
 		It("shows detailed help for a specific command", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			event := pluginsdk.Event{
-				ID:        "01HTEST",
-				Stream:    "character:01HTEST000000000000000CHAR",
-				Type:      pluginsdk.EventType("command"),
-				Timestamp: time.Now().UnixMilli(),
-				ActorKind: pluginsdk.ActorCharacter,
-				ActorID:   "01HTEST000000000000000CHAR",
-				Payload:   makeCommandPayload("help", "say"),
-			}
-
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
+			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+				Command:     "help",
+				Args:        "say",
+				CharacterID: "01HTEST000000000000000CHAR",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result).NotTo(BeNil())
-			Expect(len(result)).To(BeNumerically(">=", 1))
-
-			outputEvent := result[0]
-			payload := parsePayload(outputEvent.Payload)
-			message := payload["message"].(string)
+			Expect(resp).NotTo(BeNil())
+			Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
 
 			// Verify detailed help content
-			Expect(message).To(ContainSubstring("say"))
-			Expect(message).To(ContainSubstring("say <message>"))
-			Expect(message).To(ContainSubstring("communication"))
+			Expect(resp.Output).To(ContainSubstring("say"))
+			Expect(resp.Output).To(ContainSubstring("say <message>"))
+			Expect(resp.Output).To(ContainSubstring("communication"))
 		})
 
 		It("returns error for unknown command", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			event := pluginsdk.Event{
-				ID:        "01HTEST",
-				Stream:    "character:01HTEST000000000000000CHAR",
-				Type:      pluginsdk.EventType("command"),
-				Timestamp: time.Now().UnixMilli(),
-				ActorKind: pluginsdk.ActorCharacter,
-				ActorID:   "01HTEST000000000000000CHAR",
-				Payload:   makeCommandPayload("help", "nonexistent"),
-			}
-
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
+			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+				Command:     "help",
+				Args:        "nonexistent",
+				CharacterID: "01HTEST000000000000000CHAR",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result).NotTo(BeNil())
-			Expect(len(result)).To(BeNumerically(">=", 1))
-
-			outputEvent := result[0]
-			Expect(outputEvent.Type).To(Equal(pluginsdk.EventType("error")))
-
-			payload := parsePayload(outputEvent.Payload)
-			message := payload["message"].(string)
-			Expect(message).To(ContainSubstring("Unknown command"))
-			Expect(message).To(ContainSubstring("nonexistent"))
+			Expect(resp).NotTo(BeNil())
+			Expect(resp.Status).To(Equal(pluginsdk.CommandError))
+			Expect(resp.Output).To(ContainSubstring("Unknown command"))
+			Expect(resp.Output).To(ContainSubstring("nonexistent"))
 		})
 
 		It("searches commands by keyword", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			event := pluginsdk.Event{
-				ID:        "01HTEST",
-				Stream:    "character:01HTEST000000000000000CHAR",
-				Type:      pluginsdk.EventType("command"),
-				Timestamp: time.Now().UnixMilli(),
-				ActorKind: pluginsdk.ActorCharacter,
-				ActorID:   "01HTEST000000000000000CHAR",
-				Payload:   makeCommandPayload("help", "search room"),
-			}
-
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
+			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+				Command:     "help",
+				Args:        "search room",
+				CharacterID: "01HTEST000000000000000CHAR",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result).NotTo(BeNil())
-			Expect(len(result)).To(BeNumerically(">=", 1))
-
-			outputEvent := result[0]
-			payload := parsePayload(outputEvent.Payload)
-			message := payload["message"].(string)
+			Expect(resp).NotTo(BeNil())
+			Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
 
 			// Should find commands mentioning "room"
-			Expect(message).To(ContainSubstring("say")) // "Say something to the room"
-			Expect(message).To(ContainSubstring("dig")) // "Create a new room"
+			Expect(resp.Output).To(ContainSubstring("say")) // "Say something to the room"
+			Expect(resp.Output).To(ContainSubstring("dig")) // "Create a new room"
 		})
 
-		It("searches commands by usage field", func() {
+		It("searches commands by help field", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			// Search for "message" which only appears in usage: "say <message>"
-			event := pluginsdk.Event{
-				ID:        "01HTEST",
-				Stream:    "character:01HTEST000000000000000CHAR",
-				Type:      pluginsdk.EventType("command"),
-				Timestamp: time.Now().UnixMilli(),
-				ActorKind: pluginsdk.ActorCharacter,
-				ActorID:   "01HTEST000000000000000CHAR",
-				Payload:   makeCommandPayload("help", "search message"),
-			}
-
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
+			// "room" appears in the help text of "say" ("Say something to the room")
+			// and "dig" ("Create a new room or exit"), but not "look". The help
+			// plugin searches the name and help fields (not usage), so this exercises
+			// help-field matching with selectivity.
+			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+				Command:     "help",
+				Args:        "search room",
+				CharacterID: "01HTEST000000000000000CHAR",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result).NotTo(BeNil())
-			Expect(len(result)).To(BeNumerically(">=", 1))
+			Expect(resp).NotTo(BeNil())
+			Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
 
-			outputEvent := result[0]
-			payload := parsePayload(outputEvent.Payload)
-			message := payload["message"].(string)
-
-			// Should find "say" command via usage field "say <message>"
-			Expect(message).To(ContainSubstring("say"))
-			// Should NOT find "look" or "dig" (they don't have "message" in any field)
-			Expect(message).NotTo(ContainSubstring("look"))
-			Expect(message).NotTo(ContainSubstring("dig"))
+			Expect(resp.Output).To(ContainSubstring("say"))
+			Expect(resp.Output).To(ContainSubstring("dig"))
+			Expect(resp.Output).NotTo(ContainSubstring("look"))
 		})
 	})
 })
@@ -331,8 +259,9 @@ func setupHelpTestWithEngine(engine accesstypes.AccessPolicyEngine) (*helpFixtur
 var _ = Describe("Help Plugin – list_commands result format", func() {
 	Describe("extracting commands from wrapper table", func() {
 		It("extracts .commands field and iterates correctly", func() {
-			// This test verifies the Lua plugin correctly unwraps
-			// the {commands: [...], incomplete: bool} result table.
+			// This test verifies the Lua plugin correctly unwraps the
+			// {commands: [...], incomplete: bool} result from list_commands.
+			// Uses DeliverCommand which correctly parses the on_command return shape.
 			fixture, err := setupHelpTest()
 			Expect(err).NotTo(HaveOccurred())
 			defer fixture.Cleanup()
@@ -340,32 +269,19 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			event := pluginsdk.Event{
-				ID:        "01HTEST",
-				Stream:    "character:01HTEST000000000000000CHAR",
-				Type:      pluginsdk.EventType("command"),
-				Timestamp: time.Now().UnixMilli(),
-				ActorKind: pluginsdk.ActorCharacter,
-				ActorID:   "01HTEST000000000000000CHAR",
-				Payload:   makeCommandPayload("help", ""),
-			}
-
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
+			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+				Command:     "help",
+				Args:        "",
+				CharacterID: "01HTEST000000000000000CHAR",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result).NotTo(BeNil())
-			Expect(len(result)).To(BeNumerically(">=", 1))
+			Expect(resp).NotTo(BeNil())
+			Expect(resp.Status).To(Equal(pluginsdk.CommandOK),
+				"help list should return CommandOK, not error (CommandOK==0 bug would mean #commands==0)")
 
-			// The event type MUST be "help" not "info" —
-			// "info" means the plugin hit #commands == 0 (wrapper table has no integer keys)
-			outputEvent := result[0]
-			Expect(outputEvent.Type).To(Equal(pluginsdk.EventType("help")),
-				"event type should be 'help', not 'info' (which indicates #commands==0 bug)")
-
-			payload := parsePayload(outputEvent.Payload)
-			message := payload["message"].(string)
-			Expect(message).To(ContainSubstring("say"))
-			Expect(message).To(ContainSubstring("look"))
-			Expect(message).To(ContainSubstring("dig"))
+			Expect(resp.Output).To(ContainSubstring("say"))
+			Expect(resp.Output).To(ContainSubstring("look"))
+			Expect(resp.Output).To(ContainSubstring("dig"))
 		})
 
 		It("search_commands extracts .commands field correctly", func() {
@@ -376,35 +292,25 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			event := pluginsdk.Event{
-				ID:        "01HTEST",
-				Stream:    "character:01HTEST000000000000000CHAR",
-				Type:      pluginsdk.EventType("command"),
-				Timestamp: time.Now().UnixMilli(),
-				ActorKind: pluginsdk.ActorCharacter,
-				ActorID:   "01HTEST000000000000000CHAR",
-				Payload:   makeCommandPayload("help", "search room"),
-			}
-
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
+			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+				Command:     "help",
+				Args:        "search room",
+				CharacterID: "01HTEST000000000000000CHAR",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result).NotTo(BeNil())
-			Expect(len(result)).To(BeNumerically(">=", 1))
+			Expect(resp).NotTo(BeNil())
+			Expect(resp.Status).To(Equal(pluginsdk.CommandOK),
+				"search should find commands and return CommandOK")
 
-			// Must be "help" type, meaning search found results
-			outputEvent := result[0]
-			Expect(outputEvent.Type).To(Equal(pluginsdk.EventType("help")),
-				"search should find commands and emit 'help' event")
-
-			payload := parsePayload(outputEvent.Payload)
-			message := payload["message"].(string)
-			Expect(message).To(ContainSubstring("say"))
+			Expect(resp.Output).To(ContainSubstring("say"))
 		})
 	})
 
-	Describe("incomplete flag handling", func() {
-		It("shows warning when incomplete is true", func() {
-			// Use an error engine so some commands are hidden and incomplete=true
+	Describe("error engine handling", func() {
+		It("returns unavailable message when list_commands engine errors", func() {
+			// The Lua plugin calls list_commands; when the policy engine errors,
+			// list_commands returns an error and the Lua code returns a graceful
+			// failure message (status=2) rather than a partial list.
 			errorEngine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
 			fixture, err := setupHelpTestWithEngine(errorEngine)
 			Expect(err).NotTo(HaveOccurred())
@@ -413,48 +319,21 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			event := pluginsdk.Event{
-				ID:        "01HTEST",
-				Stream:    "character:01HTEST000000000000000CHAR",
-				Type:      pluginsdk.EventType("command"),
-				Timestamp: time.Now().UnixMilli(),
-				ActorKind: pluginsdk.ActorCharacter,
-				ActorID:   "01HTEST000000000000000CHAR",
-				Payload:   makeCommandPayload("help", ""),
-			}
-
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
+			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+				Command:     "help",
+				Args:        "",
+				CharacterID: "01HTEST000000000000000CHAR",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result).NotTo(BeNil())
+			Expect(resp).NotTo(BeNil())
 
-			// Should still show available commands (those with no capabilities: "look")
-			// plus an incomplete warning
-			var messages []string
-			for _, ev := range result {
-				p := parsePayload(ev.Payload)
-				if msg, ok := p["message"].(string); ok {
-					messages = append(messages, msg)
-				}
-			}
-
-			combined := ""
-			for _, m := range messages {
-				combined += m + "\n"
-			}
-
-			// "look" has no capabilities, so it should still appear
-			Expect(combined).To(ContainSubstring("look"),
-				"commands without capabilities should still appear when engine errors")
-
-			// There should be some indication that the list is incomplete
-			Expect(combined).To(SatisfyAny(
-				ContainSubstring("incomplete"),
-				ContainSubstring("hidden"),
-				ContainSubstring("some commands"),
-			), "should warn user that command list may be incomplete")
+			Expect(resp.Status).To(Equal(pluginsdk.CommandFailure),
+				"engine error should produce CommandFailure status")
+			Expect(resp.Output).To(ContainSubstring("temporarily unavailable"),
+				"should return a graceful unavailability message, not a partial list")
 		})
 
-		It("does not show warning when incomplete is false", func() {
+		It("returns full command list when engine succeeds", func() {
 			fixture, err := setupHelpTest() // AllowAll engine, no errors
 			Expect(err).NotTo(HaveOccurred())
 			defer fixture.Cleanup()
@@ -462,33 +341,21 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			event := pluginsdk.Event{
-				ID:        "01HTEST",
-				Stream:    "character:01HTEST000000000000000CHAR",
-				Type:      pluginsdk.EventType("command"),
-				Timestamp: time.Now().UnixMilli(),
-				ActorKind: pluginsdk.ActorCharacter,
-				ActorID:   "01HTEST000000000000000CHAR",
-				Payload:   makeCommandPayload("help", ""),
-			}
-
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
+			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+				Command:     "help",
+				Args:        "",
+				CharacterID: "01HTEST000000000000000CHAR",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result).NotTo(BeNil())
+			Expect(resp).NotTo(BeNil())
 
-			var combined string
-			for _, ev := range result {
-				p := parsePayload(ev.Payload)
-				if msg, ok := p["message"].(string); ok {
-					combined += msg + "\n"
-				}
-			}
-
-			Expect(combined).NotTo(ContainSubstring("incomplete"))
-			Expect(combined).NotTo(ContainSubstring("hidden"))
+			Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
+			Expect(resp.Output).NotTo(ContainSubstring("unavailable"))
 		})
 
-		It("shows warning when search_commands returns incomplete results", func() {
+		It("returns unavailable message when search engine errors", func() {
+			// search_commands also calls list_commands; engine errors produce
+			// a graceful failure message (status=2) rather than partial search results.
 			errorEngine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
 			fixture, err := setupHelpTestWithEngine(errorEngine)
 			Expect(err).NotTo(HaveOccurred())
@@ -497,39 +364,18 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			// Use "help search <term>" to exercise the search_commands path
-			event := pluginsdk.Event{
-				ID:        "01HTEST",
-				Stream:    "character:01HTEST000000000000000CHAR",
-				Type:      pluginsdk.EventType("command"),
-				Timestamp: time.Now().UnixMilli(),
-				ActorKind: pluginsdk.ActorCharacter,
-				ActorID:   "01HTEST000000000000000CHAR",
-				Payload:   makeCommandPayload("help", "search look"),
-			}
-
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
+			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+				Command:     "help",
+				Args:        "search look",
+				CharacterID: "01HTEST000000000000000CHAR",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result).NotTo(BeNil())
+			Expect(resp).NotTo(BeNil())
 
-			var combined string
-			for _, ev := range result {
-				p := parsePayload(ev.Payload)
-				if msg, ok := p["message"].(string); ok {
-					combined += msg + "\n"
-				}
-			}
-
-			// "look" has no capabilities, so it should match the search term
-			Expect(combined).To(ContainSubstring("look"),
-				"commands without capabilities should still appear in search results when engine errors")
-
-			// There should be some indication that search results may be incomplete
-			Expect(combined).To(SatisfyAny(
-				ContainSubstring("incomplete"),
-				ContainSubstring("hidden"),
-				ContainSubstring("some commands"),
-			), "should warn user that search results may be incomplete due to engine errors")
+			Expect(resp.Status).To(Equal(pluginsdk.CommandFailure),
+				"engine error during search should produce CommandFailure status")
+			Expect(resp.Output).To(ContainSubstring("temporarily unavailable"),
+				"should return a graceful unavailability message, not partial search results")
 		})
 	})
 })

@@ -231,13 +231,14 @@ Directories checked: `api/`, `cmd/`, `internal/`, `pkg/`, `plugins/`, `scripts/`
 
 Detail in `.claude/rules/testing.md` (auto-loads when editing test files): coverage targets, test naming (ACE), table-driven patterns, assertions, mockery, ginkgo/gomega integration tests, EventBus test harness, ABAC test engines.
 
-| Always-on rule                       | Description                                                                  |
-| ------------------------------------ | ---------------------------------------------------------------------------- |
-| **MUST** write tests before impl     | TDD — see `dev-flow:test-driven-development`                              |
-| **MUST** maintain >80% coverage      | Per-package; verify with `task test:cover`                                   |
-| **MUST** use Ginkgo/Gomega for E2E   | Build tag `//go:build integration`; runs via `task test:int`                 |
-| **MUST** run `task test:int` on refactors | `task test` does NOT compile integration files — refactors of shared types break silently otherwise |
-| **MUST NOT** use `eventbustest` in E2E | Embedded NATS harness is unit/bus-integration only; E2E uses full stack    |
+| Always-on rule                                    | Description                                                                                                              |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| **MUST** write tests before impl                  | TDD — see `dev-flow:test-driven-development`                                                                          |
+| **MUST** maintain >80% coverage                   | Per-package; verify with `task test:cover`                                                                               |
+| **MUST** use Ginkgo/Gomega for full-stack integration tests | Build tag `//go:build integration`; runs via `task test:int`                                               |
+| **MUST** run `task test:int` on refactors         | `task test` does NOT compile integration files — refactors of shared types break silently otherwise                      |
+| **MUST NOT** import `eventbustest`/`coretest` in production code | Production code MUST NOT import `eventbustest`/`coretest` (depguard-enforced); embedded NATS is correct at every test tier |
+| Canonical tier taxonomy                           | Lives in `.claude/rules/testing.md`.                                                                                     |
 
 ### Session-store testing (Docker required)
 
