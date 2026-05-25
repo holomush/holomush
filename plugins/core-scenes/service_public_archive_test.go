@@ -91,3 +91,95 @@ func TestGetPublicSceneArchiveReturnsContentForPublishedScene(t *testing.T) {
 	assert.Equal(t, "Alice", resp.GetContentEntries()[0].GetSpeaker())
 	assert.Equal(t, "say", resp.GetContentEntries()[0].GetKind())
 }
+
+// TestDownloadPublicSceneArchiveReturnsOpaqueNotFoundForNonReadableStates pins
+// INV-P6-8 for the DOWNLOAD path: identical opacity to the GET path — a
+// nonexistent id and every non-PUBLISHED status return the same opaque
+// NOT_FOUND (code + message), regardless of the requested format.
+func TestDownloadPublicSceneArchiveReturnsOpaqueNotFoundForNonReadableStates(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name  string
+		setup func(*fakeStore)
+		argID string
+	}{
+		{"returns NotFound for a nonexistent id", func(*fakeStore) {}, "missing-id"},
+		{"returns NotFound for a COLLECTING attempt", installAttempt("dl-c1", StatusCollecting), "dl-c1"},
+		{"returns NotFound for a COOLOFF attempt", installAttempt("dl-c2", StatusCoolOff), "dl-c2"},
+		{"returns NotFound for an ATTEMPT_FAILED attempt", installAttempt("dl-c3", StatusAttemptFailed), "dl-c3"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			store := newFakeStore()
+			tc.setup(store)
+			svc := NewSceneServiceImpl(store)
+
+			_, err := svc.DownloadPublicSceneArchive(context.Background(), &scenev1.DownloadPublicSceneArchiveRequest{
+				PublishedSceneId: tc.argID,
+				Format:           "markdown",
+			})
+
+			require.Error(t, err)
+			assert.Equal(t, codes.NotFound, status.Code(err),
+				"INV-P6-8: opaque NOT_FOUND for all non-PUBLISHED states")
+			assert.Equal(t, "scene archive not found", status.Convert(err).Message(),
+				"INV-P6-8: identical wire message across non-PUBLISHED states")
+		})
+	}
+}
+
+// TestDownloadPublicSceneArchiveRendersByFormat covers the readable case across
+// all three formats: a PUBLISHED attempt renders to the format-appropriate
+// bytes + MIME type, sharing the renderer code path with the participant
+// download (spec §12).
+func TestDownloadPublicSceneArchiveRendersByFormat(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name        string
+		format      string
+		wantMime    string
+		wantContent string
+	}{
+		{"markdown", "markdown", "text/markdown", "**Alice** says, \"Hello.\"\n\n"},
+		{"plain_text", "plain_text", "text/plain", "Alice says, \"Hello.\"\n"},
+		{"jsonl", "jsonl", "application/jsonl", `{"speaker":"Alice","kind":"say","content":"Hello."}` + "\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			store := newFakeStoreWithPublishedScene("dl-pub", "scene-dl", []PublishedSceneEntry{
+				{Speaker: "Alice", Kind: EntryKindSay, Content: "Hello."},
+			})
+			svc := NewSceneServiceImpl(store)
+
+			resp, err := svc.DownloadPublicSceneArchive(context.Background(), &scenev1.DownloadPublicSceneArchiveRequest{
+				PublishedSceneId: "dl-pub",
+				Format:           tc.format,
+			})
+
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantMime, resp.GetMimeType())
+			assert.Equal(t, tc.wantContent, string(resp.GetContent()))
+		})
+	}
+}
+
+// TestDownloadPublicSceneArchiveRejectsUnsupportedFormat verifies an unknown
+// format is an InvalidArgument client error (validated before any read, so it
+// leaks nothing about the publication's existence).
+func TestDownloadPublicSceneArchiveRejectsUnsupportedFormat(t *testing.T) {
+	t.Parallel()
+	store := newFakeStoreWithPublishedScene("dl-fmt", "scene-fmt", []PublishedSceneEntry{
+		{Speaker: "Alice", Kind: EntryKindSay, Content: "Hello."},
+	})
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.DownloadPublicSceneArchive(context.Background(), &scenev1.DownloadPublicSceneArchiveRequest{
+		PublishedSceneId: "dl-fmt",
+		Format:           "pdf",
+	})
+
+	require.Error(t, err)
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}

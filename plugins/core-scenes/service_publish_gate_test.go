@@ -33,9 +33,11 @@ type contentTripwireStore struct {
 	contentReadCalls atomic.Int32
 }
 
-func (s *contentTripwireStore) GetPublishedSceneContent(_ context.Context, _ string) ([]PublishedSceneEntry, error) {
+func (s *contentTripwireStore) GetPublishedSceneContent(ctx context.Context, id string) ([]PublishedSceneEntry, error) {
 	s.contentReadCalls.Add(1)
-	return nil, nil
+	// Delegate to the embedded fake so seeded content flows through (the
+	// counter still records the read for the INV-P6-5 gate-ordering tests).
+	return s.fakeStore.GetPublishedSceneContent(ctx, id)
 }
 
 // TestGetPublishedSceneDeniesNonParticipantWithoutReadingContent is the
@@ -189,6 +191,9 @@ func TestDownloadPublishedSceneRendersForParticipant(t *testing.T) {
 	base := newFakeStore()
 	owner := ulid.Make().String()
 	base.installPublishedAttempt("pub-d2", "scene-d2", StatusPublished)
+	base.publishedContent["pub-d2"] = []PublishedSceneEntry{
+		{Speaker: "Alice", Kind: EntryKindSay, Content: "Hello."},
+	}
 	base.installRoster("scene-d2", owner)
 	store := &contentTripwireStore{fakeStore: base}
 	svc := NewSceneServiceImpl(store)
@@ -200,7 +205,8 @@ func TestDownloadPublishedSceneRendersForParticipant(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	require.NotEmpty(t, resp.GetContent())
+	require.Equal(t, `{"speaker":"Alice","kind":"say","content":"Hello."}`+"\n", string(resp.GetContent()),
+		"jsonl download renders the seeded content (was a placeholder before C5 wired the renderer)")
 	require.Equal(t, "application/jsonl", resp.GetMimeType())
 	require.Equal(t, int32(1), store.contentReadCalls.Load())
 }

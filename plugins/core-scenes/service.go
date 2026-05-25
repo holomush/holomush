@@ -1095,10 +1095,7 @@ func (s *SceneServiceImpl) WithdrawScenePublish(_ context.Context, _ *scenev1.Wi
 // ListScenePublishAttempts is implemented in publish_service.go (Task B7).
 
 // GetPublicSceneArchive is implemented in publish_service.go (Task C4).
-
-func (s *SceneServiceImpl) DownloadPublicSceneArchive(_ context.Context, _ *scenev1.DownloadPublicSceneArchiveRequest) (*scenev1.DownloadPublicSceneArchiveResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
-}
+// DownloadPublicSceneArchive is implemented in publish_service.go (Task C5).
 
 func (s *SceneServiceImpl) ExtendScenePublishVoteAttempts(_ context.Context, _ *scenev1.ExtendScenePublishVoteAttemptsRequest) (*scenev1.ExtendScenePublishVoteAttemptsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is

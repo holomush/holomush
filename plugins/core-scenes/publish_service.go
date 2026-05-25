@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/samber/oops"
@@ -290,25 +289,32 @@ func (s *SceneServiceImpl) DownloadPublishedScene(ctx context.Context, req *scen
 		return nil, internalErr(ctx, err)
 	}
 
+	content, err := renderPublishedScene(req.GetFormat(), entries)
+	if err != nil {
+		return nil, internalErr(ctx, err)
+	}
 	return &scenev1.DownloadPublishedSceneResponse{
-		Content:  renderPublishedScene(req.GetFormat(), entries),
+		Content:  content,
 		MimeType: mime,
 	}, nil
 }
 
-// renderPublishedScene renders content entries to bytes for the given format.
-// The format MUST already be validated against publishRenderMime by the caller.
-// Markdown (C1) and plain_text (C2) are implemented; jsonl (C3) still uses the
-// deterministic placeholder until its renderer lands, so the download path
-// stays exercisable end-to-end for that format meanwhile.
-func renderPublishedScene(format string, entries []PublishedSceneEntry) []byte {
+// renderPublishedScene renders content entries to bytes for the given format
+// (markdown C1, plain_text C2, jsonl C3 — spec §12). The format MUST already be
+// validated against publishRenderMime by the caller; the default case is a
+// defensive guard for that contract. Only jsonl can error (json.Marshal), and
+// that error is propagated rather than swallowed.
+func renderPublishedScene(format string, entries []PublishedSceneEntry) ([]byte, error) {
 	switch format {
 	case "markdown":
-		return []byte(renderMarkdown(entries))
+		return []byte(renderMarkdown(entries)), nil
 	case "plain_text":
-		return []byte(renderPlainText(entries))
+		return []byte(renderPlainText(entries)), nil
+	case "jsonl":
+		return renderJSONL(entries)
 	default:
-		return []byte(fmt.Sprintf("scene publication: %d entries (%s rendering pending — Phase C)", len(entries), format))
+		return nil, oops.Code("SCENE_PUBLISH_FORMAT_UNSUPPORTED").
+			With("format", format).Errorf("unsupported download format")
 	}
 }
 
@@ -364,6 +370,50 @@ func assemblePublicResponse(pub *PublishedScene, entries []PublishedSceneEntry) 
 		})
 	}
 	return resp
+}
+
+// DownloadPublicSceneArchive is the PUBLIC, unauthenticated download of a
+// published scene rendered to the requested format (markdown / plain_text /
+// jsonl). Same status-gate + opacity contract as GetPublicSceneArchive
+// (INV-P6-8): no caller validation, no participant gate, no ABAC; the only gate
+// is status==PUBLISHED, and a missing id or any non-PUBLISHED attempt returns
+// the single opaque NOT_FOUND. Shares the renderer code path with
+// DownloadPublishedScene (spec §12). Format is validated first (a
+// resource-independent client error that leaks nothing about existence).
+func (s *SceneServiceImpl) DownloadPublicSceneArchive(ctx context.Context, req *scenev1.DownloadPublicSceneArchiveRequest) (*scenev1.DownloadPublicSceneArchiveResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.download_public_scene_archive",
+		attribute.String("published_scene_id", req.GetPublishedSceneId()))
+	defer span.End()
+
+	mime, ok := publishRenderMime[req.GetFormat()]
+	if !ok {
+		return nil, mapStoreErr(ctx, oops.Code("SCENE_PUBLISH_FORMAT_UNSUPPORTED").
+			With("format", req.GetFormat()).Errorf("unsupported download format"))
+	}
+
+	pub, err := s.store.GetPublishedSceneHeader(ctx, req.GetPublishedSceneId())
+	if err != nil {
+		return nil, internalErr(ctx, err)
+	}
+	// Public opacity (INV-P6-8): missing OR any non-PUBLISHED status → uniform
+	// NOT_FOUND, identical to GetPublicSceneArchive.
+	if pub == nil || pub.Status != StatusPublished {
+		return nil, publicArchiveNotFound()
+	}
+
+	entries, err := s.store.GetPublishedSceneContent(ctx, req.GetPublishedSceneId())
+	if err != nil {
+		return nil, internalErr(ctx, err)
+	}
+
+	content, err := renderPublishedScene(req.GetFormat(), entries)
+	if err != nil {
+		return nil, internalErr(ctx, err)
+	}
+	return &scenev1.DownloadPublicSceneArchiveResponse{
+		Content:  content,
+		MimeType: mime,
+	}, nil
 }
 
 // ListScenePublishAttempts returns the audit list of a scene's publish
