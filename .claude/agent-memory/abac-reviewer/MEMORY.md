@@ -178,6 +178,15 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   gap (no multi-colon case in `TestEvaluate_MalformedResourceRejected`); (3) nil `Engine` panics
   instead of fail-closing — nil auditor IS guarded (line 119), nil engine is not (line 104);
   low production risk but should be fixed for consistency.
+- **Lua hostfunc nil-LState-context pattern (8kkv5.4, 2026-05-25)**: `evaluateFn`
+  (and `listCommandsFn`, `getCommandHelpFn`, `checkKVAccess`, etc.) all follow the
+  same pattern: `ctx := L.Context(); if ctx == nil { ctx = context.Background() }`.
+  This is safe for auth (no-actor → fail-closed), but the nil branch is untested in
+  every case. When reviewing future Lua hostfuncs, flag missing test coverage for the
+  nil-LState-context path AND flag any bare `slog.Warn` before ctx is derived (the
+  fix: hoist the ctx derivation above the nil-engine guard so `slog.WarnContext` can
+  be used). The sloglint `context: scope` linter won't catch these because ctx is
+  technically not yet in scope at the Warn call site.
 - **Audit assertion gap in integration property specs (rmsi.5 Low NIT)**:
   `seed_policies_test.go` S1-S13 reset `auditWriter` in BeforeEach but no spec in the
   property block reads back `env.auditWriter.Entries()` to verify the decision was
