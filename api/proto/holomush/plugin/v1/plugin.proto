@@ -7,6 +7,9 @@ syntax = "proto3";
 package holomush.plugin.v1;
 
 import "buf/validate/validate.proto";
+// DecryptOwnAuditRows request/response and RowResult live in audit.proto
+// (same package) because they belong to the AuditRow domain.
+import "holomush/plugin/v1/audit.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1;pluginv1";
 
@@ -71,6 +74,13 @@ service PluginHostService {
   // Read-only: does not advance cursors or affect session state.
   // Count capped at 500 server-side.
   rpc QueryStreamHistory(PluginHostServiceQueryStreamHistoryRequest) returns (PluginHostServiceQueryStreamHistoryResponse);
+
+  // DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN audit rows
+  // host-side. The plugin never holds a DEK. Per-row result envelope (INV-RB-12).
+  // Batch capped at 500 server-side (REJECT, not clamp). Authorization: OwnerMap
+  // subject ownership (g1) + crypto.emits[].readback manifest flag (g2) (INV-RB-2).
+  // Request / response message shapes live in audit.proto (AuditRow domain).
+  rpc DecryptOwnAuditRows(DecryptOwnAuditRowsRequest) returns (DecryptOwnAuditRowsResponse);
 
   // RequestEmitToken issues a self-token bound to the calling plugin's
   // identity (ActorPlugin + pluginName), so plugin-served gRPC handlers

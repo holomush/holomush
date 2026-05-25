@@ -641,6 +641,47 @@ func (s *pluginHostServiceServer) Evaluate(ctx context.Context, req *pluginv1.Pl
 	}, nil
 }
 
+// maxDecryptBatch is the per-call REJECT cap for DecryptOwnAuditRows. Unlike
+// maxQueryStreamHistoryCount (which CLAMPS), an over-cap decrypt batch is
+// rejected outright — silently truncating a decrypt request would hide rows
+// from the caller and is the wrong failure mode for a read-back surface.
+const maxDecryptBatch = 500
+
+// DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN audit rows
+// host-side (the plugin never holds a DEK). Each row is gated by the OwnerMap
+// g1 ownership check inside the ReadbackDecryptor; rows owned by a different
+// plugin are refused with no_plaintext_reason="not_owner" before any decrypt
+// (INV-RB-2). Results are returned 1:1 in request order (INV-RB-12). A batch
+// larger than maxDecryptBatch is REJECTED (not clamped) with
+// DECRYPT_BATCH_TOO_LARGE.
+func (s *pluginHostServiceServer) DecryptOwnAuditRows(ctx context.Context, req *pluginv1.DecryptOwnAuditRowsRequest) (*pluginv1.DecryptOwnAuditRowsResponse, error) {
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+	if len(req.GetRows()) > maxDecryptBatch {
+		return nil, oops.Code("DECRYPT_BATCH_TOO_LARGE").
+			With("plugin", s.pluginName).
+			With("count", len(req.GetRows())).
+			Errorf("decrypt batch exceeds cap %d", maxDecryptBatch)
+	}
+	dec := s.host.ReadbackDecryptor()
+	if dec == nil {
+		return nil, oops.With("plugin", s.pluginName).New("read-back decryptor not configured")
+	}
+
+	// The instance ID is not bound to the host-service struct; the plugin
+	// name is the identity that matters for g1 ownership and the ReadBack
+	// AuthGuard branch. Empty instance is informational only on the audit
+	// record.
+	const instanceID = ""
+
+	results := make([]*pluginv1.RowResult, 0, len(req.GetRows()))
+	for _, row := range req.GetRows() {
+		results = append(results, dec.DecryptOwnRow(ctx, s.pluginName, instanceID, row))
+	}
+	return &pluginv1.DecryptOwnAuditRowsResponse{Results: results}, nil
+}
+
 // RequestEmitToken issues a self-token bound to {ActorPlugin, pluginName}.
 //
 // Self-tokens cover the gap left by dispatch-token authentication when a

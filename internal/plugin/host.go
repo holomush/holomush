@@ -126,6 +126,23 @@ type FocusDepsConfigurer interface {
 	SetHistoryReader(hr HistoryReader)
 }
 
+// ReadbackDecryptor decrypts one of a plugin's OWN audit rows host-side for
+// the DecryptOwnAuditRows RPC. Satisfied by *history.ReadbackDecryptor, which
+// enforces the OwnerMap g1 ownership gate before delegating to the unexported
+// read-back decrypt primitive. The id field of the returned RowResult always
+// echoes row.GetId() for positional correlation (INV-RB-12).
+type ReadbackDecryptor interface {
+	DecryptOwnRow(ctx context.Context, pluginName, instanceID string, row *pluginv1.AuditRow) *pluginv1.RowResult
+}
+
+// ReadbackDepsConfigurer is an optional interface for hosts that need the
+// read-back decryptor injected after construction. Same late-binding rationale
+// as FocusDepsConfigurer: the OwnerMap + crypto deps the decryptor wraps are
+// assembled during gRPC subsystem Start, after plugin loading.
+type ReadbackDepsConfigurer interface {
+	SetReadbackDecryptor(d ReadbackDecryptor)
+}
+
 // IdentityRegistryConfigurer is implemented by hosts that need an
 // IdentityRegistry late-bound after construction. The registry is the
 // Manager itself, but Hosts are constructed before Manager.RegisterHost

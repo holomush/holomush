@@ -468,6 +468,21 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	}
 	pluginManager.ConfigureFocusDeps(focusCoord, pluginHistoryReader)
 
+	// Wire the read-back decryptor for the DecryptOwnAuditRows host RPC
+	// (holomush-m7pxs INV-RB-2/6/12). It reuses the SAME OwnerMap (g1
+	// ownership gate) and crypto deps (fence set, DEK-existence lookup,
+	// AuthGuard, DEKManager, audit emitter) assembled above for the history
+	// reader, so the snapshot read-back path is authorization-symmetric with
+	// the routed read path.
+	pluginManager.ConfigureReadbackDecryptor(history.NewReadbackDecryptor(
+		owners,
+		alwaysSensitive,
+		cryptoKeysLookupForFence,
+		historyAuthGuard,
+		historyDEKMgr,
+		historyAuditEm,
+	))
+
 	coreServer := holoGRPC.NewCoreServer(engine, sessionStore, cmdDispatcher, cmdServices, coreServerOpts...)
 	corev1.RegisterCoreServiceServer(s.grpcServer, coreServer)
 

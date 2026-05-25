@@ -1949,6 +1949,40 @@ func TestConfigureFocusDepsWithNilLuaHostDoesNotPanic(t *testing.T) {
 	})
 }
 
+// stubReadbackDecryptor satisfies plugins.ReadbackDecryptor for the
+// ConfigureReadbackDecryptor injection tests.
+type stubReadbackDecryptor struct{}
+
+func (s *stubReadbackDecryptor) DecryptOwnRow(_ context.Context, _, _ string, _ *pluginv1.AuditRow) *pluginv1.RowResult {
+	return &pluginv1.RowResult{}
+}
+
+var _ plugins.ReadbackDecryptor = (*stubReadbackDecryptor)(nil)
+
+func TestConfigureReadbackDecryptorInjectsDecryptorIntoLuaHost(t *testing.T) {
+	hf := hostfunc.New(nil)
+	luaHost := pluginlua.NewHostWithFunctions(hf)
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	mgr, mgrErr := plugins.NewManager(t.TempDir(), plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
+
+	// Must not panic; calls SetReadbackDecryptor on all ReadbackDepsConfigurer
+	// hosts registered in the manager.
+	require.NotPanics(t, func() {
+		mgr.ConfigureReadbackDecryptor(&stubReadbackDecryptor{})
+	})
+}
+
+func TestConfigureReadbackDecryptorWithNilLuaHostDoesNotPanic(t *testing.T) {
+	// Manager without a Lua host — ConfigureReadbackDecryptor must handle nil luaHost.
+	mgr, mgrErr := plugins.NewManager(t.TempDir(), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
+	require.NotPanics(t, func() {
+		mgr.ConfigureReadbackDecryptor(nil)
+	})
+}
+
 // TestEmitPluginEventPropagatesSensitive asserts that the Manager's
 // EmitPluginEvent boundary copies EmitEvent.Sensitive into the
 // constructed EmitIntent.Sensitive — closing the full chain from

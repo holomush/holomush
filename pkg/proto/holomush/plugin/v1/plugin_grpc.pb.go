@@ -274,6 +274,7 @@ const (
 	PluginHostService_LeaveFocusByTarget_FullMethodName  = "/holomush.plugin.v1.PluginHostService/LeaveFocusByTarget"
 	PluginHostService_PresentFocus_FullMethodName        = "/holomush.plugin.v1.PluginHostService/PresentFocus"
 	PluginHostService_QueryStreamHistory_FullMethodName  = "/holomush.plugin.v1.PluginHostService/QueryStreamHistory"
+	PluginHostService_DecryptOwnAuditRows_FullMethodName = "/holomush.plugin.v1.PluginHostService/DecryptOwnAuditRows"
 	PluginHostService_RequestEmitToken_FullMethodName    = "/holomush.plugin.v1.PluginHostService/RequestEmitToken"
 	PluginHostService_SetConnectionFocus_FullMethodName  = "/holomush.plugin.v1.PluginHostService/SetConnectionFocus"
 	PluginHostService_AutoFocusOnJoin_FullMethodName     = "/holomush.plugin.v1.PluginHostService/AutoFocusOnJoin"
@@ -321,6 +322,12 @@ type PluginHostServiceClient interface {
 	// Read-only: does not advance cursors or affect session state.
 	// Count capped at 500 server-side.
 	QueryStreamHistory(ctx context.Context, in *PluginHostServiceQueryStreamHistoryRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryStreamHistoryResponse, error)
+	// DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN audit rows
+	// host-side. The plugin never holds a DEK. Per-row result envelope (INV-RB-12).
+	// Batch capped at 500 server-side (REJECT, not clamp). Authorization: OwnerMap
+	// subject ownership (g1) + crypto.emits[].readback manifest flag (g2) (INV-RB-2).
+	// Request / response message shapes live in audit.proto (AuditRow domain).
+	DecryptOwnAuditRows(ctx context.Context, in *DecryptOwnAuditRowsRequest, opts ...grpc.CallOption) (*DecryptOwnAuditRowsResponse, error)
 	// RequestEmitToken issues a self-token bound to the calling plugin's
 	// identity (ActorPlugin + pluginName), so plugin-served gRPC handlers
 	// (which are not invoked via DeliverEvent / DeliverCommand) can still
@@ -477,6 +484,16 @@ func (c *pluginHostServiceClient) QueryStreamHistory(ctx context.Context, in *Pl
 	return out, nil
 }
 
+func (c *pluginHostServiceClient) DecryptOwnAuditRows(ctx context.Context, in *DecryptOwnAuditRowsRequest, opts ...grpc.CallOption) (*DecryptOwnAuditRowsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DecryptOwnAuditRowsResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_DecryptOwnAuditRows_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *pluginHostServiceClient) RequestEmitToken(ctx context.Context, in *PluginHostServiceRequestEmitTokenRequest, opts ...grpc.CallOption) (*PluginHostServiceRequestEmitTokenResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PluginHostServiceRequestEmitTokenResponse)
@@ -567,6 +584,12 @@ type PluginHostServiceServer interface {
 	// Read-only: does not advance cursors or affect session state.
 	// Count capped at 500 server-side.
 	QueryStreamHistory(context.Context, *PluginHostServiceQueryStreamHistoryRequest) (*PluginHostServiceQueryStreamHistoryResponse, error)
+	// DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN audit rows
+	// host-side. The plugin never holds a DEK. Per-row result envelope (INV-RB-12).
+	// Batch capped at 500 server-side (REJECT, not clamp). Authorization: OwnerMap
+	// subject ownership (g1) + crypto.emits[].readback manifest flag (g2) (INV-RB-2).
+	// Request / response message shapes live in audit.proto (AuditRow domain).
+	DecryptOwnAuditRows(context.Context, *DecryptOwnAuditRowsRequest) (*DecryptOwnAuditRowsResponse, error)
 	// RequestEmitToken issues a self-token bound to the calling plugin's
 	// identity (ActorPlugin + pluginName), so plugin-served gRPC handlers
 	// (which are not invoked via DeliverEvent / DeliverCommand) can still
@@ -638,6 +661,9 @@ func (UnimplementedPluginHostServiceServer) PresentFocus(context.Context, *Plugi
 }
 func (UnimplementedPluginHostServiceServer) QueryStreamHistory(context.Context, *PluginHostServiceQueryStreamHistoryRequest) (*PluginHostServiceQueryStreamHistoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method QueryStreamHistory not implemented")
+}
+func (UnimplementedPluginHostServiceServer) DecryptOwnAuditRows(context.Context, *DecryptOwnAuditRowsRequest) (*DecryptOwnAuditRowsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DecryptOwnAuditRows not implemented")
 }
 func (UnimplementedPluginHostServiceServer) RequestEmitToken(context.Context, *PluginHostServiceRequestEmitTokenRequest) (*PluginHostServiceRequestEmitTokenResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RequestEmitToken not implemented")
@@ -891,6 +917,24 @@ func _PluginHostService_QueryStreamHistory_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginHostService_DecryptOwnAuditRows_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DecryptOwnAuditRowsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).DecryptOwnAuditRows(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_DecryptOwnAuditRows_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).DecryptOwnAuditRows(ctx, req.(*DecryptOwnAuditRowsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _PluginHostService_RequestEmitToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PluginHostServiceRequestEmitTokenRequest)
 	if err := dec(in); err != nil {
@@ -1035,6 +1079,10 @@ var PluginHostService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "QueryStreamHistory",
 			Handler:    _PluginHostService_QueryStreamHistory_Handler,
+		},
+		{
+			MethodName: "DecryptOwnAuditRows",
+			Handler:    _PluginHostService_DecryptOwnAuditRows_Handler,
 		},
 		{
 			MethodName: "RequestEmitToken",

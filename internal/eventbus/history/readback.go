@@ -27,6 +27,7 @@ import (
 	"context"
 
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/codec"
 	pluginauditpb "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -129,4 +130,138 @@ func decryptPluginRow(
 		return RowResult{Reason: ev.NoPlaintextReason}
 	}
 	return RowResult{Plaintext: ev.Payload}
+}
+
+// Stable snake_case no_plaintext_reason strings surfaced over the wire by
+// DecryptOwnAuditRows. These are an API contract: SDKs and clients switch on
+// them, so the values MUST NOT drift. They are deliberately decoupled from the
+// internal eventbus.NoPlaintextReason enum numbering.
+const (
+	noPlaintextReasonNotOwner         = "not_owner"
+	noPlaintextReasonDowngradeRefused = "downgrade_refused"
+	noPlaintextReasonDEKMissing       = "dek_missing"
+	noPlaintextReasonAuthGuardDeny    = "auth_guard_deny"
+	noPlaintextReasonStaleDEK         = "stale_dek"
+	noPlaintextReasonAuditQueueFull   = "audit_queue_full"
+	noPlaintextReasonInternal         = "internal"
+)
+
+// reasonToWire maps an internal refusal reason to its stable wire string.
+// Unspecified (the OK sentinel) MUST never reach this function — callers gate
+// on RowResult.OK() first — so an unexpected zero maps to "internal" as a
+// fail-safe rather than an empty string that a client would read as "OK".
+func reasonToWire(r eventbus.NoPlaintextReason) string {
+	switch r {
+	case eventbus.NoPlaintextReasonDowngradeRefused:
+		return noPlaintextReasonDowngradeRefused
+	case eventbus.NoPlaintextReasonDEKMissing:
+		return noPlaintextReasonDEKMissing
+	case eventbus.NoPlaintextReasonAuthGuardDeny:
+		return noPlaintextReasonAuthGuardDeny
+	case eventbus.NoPlaintextReasonStaleDEK:
+		return noPlaintextReasonStaleDEK
+	case eventbus.NoPlaintextReasonAuditQueueFull:
+		return noPlaintextReasonAuditQueueFull
+	case eventbus.NoPlaintextReasonDEKBadColumns, eventbus.NoPlaintextReasonInternal,
+		eventbus.NoPlaintextReasonUnspecified:
+		return noPlaintextReasonInternal
+	default:
+		return noPlaintextReasonInternal
+	}
+}
+
+// ReadbackDecryptor is the host-side RPC entry to the read-back decrypt
+// primitive (decryptPluginRow), gated by OwnerMap subject ownership (g1). It is
+// the single seam between the snapshot's PluginHostService.DecryptOwnAuditRows
+// handler (package goplugin) and the unexported primitive in this package — the
+// host never touches decryptPluginRow directly, and the primitive stays
+// unexported (INV-RB-1).
+//
+// g1 (this type) refuses any row whose subject the OwnerMap attributes to a
+// different plugin BEFORE any decrypt; g2 (the manifest crypto.emits[].readback
+// flag, INV-RB-2) is enforced inside decryptPluginRow's AuthGuard check via the
+// ReadBack=true discriminator.
+type ReadbackDecryptor struct {
+	owners *audit.OwnerMap
+	deps   readbackDeps
+}
+
+// NewReadbackDecryptor builds the read-back decryptor from the OwnerMap (g1
+// gate) and the host-side crypto capabilities. owners MAY be nil — a nil
+// OwnerMap attributes every subject to the host, so EVERY plugin row resolves
+// to not_owner (fail-closed: no plugin owns anything without a declared map).
+func NewReadbackDecryptor(
+	owners *audit.OwnerMap,
+	alwaysSensitive map[string]struct{},
+	cryptoKeys CryptoKeysLookup,
+	guard eventbus.SessionAuthGuard,
+	dek eventbus.SessionDEKManager,
+	auditEm eventbus.SessionAuditEmitter,
+) *ReadbackDecryptor {
+	return &ReadbackDecryptor{
+		owners: owners,
+		deps: readbackDeps{
+			alwaysSensitive: alwaysSensitive,
+			cryptoKeys:      cryptoKeys,
+			guard:           guard,
+			dek:             dek,
+			audit:           auditEm,
+		},
+	}
+}
+
+// DecryptOwnRow decrypts one of pluginName's OWN audit rows, returning the
+// per-row proto envelope the host streams back (INV-RB-12: id always echoes
+// AuditRow.id for positional correlation).
+//
+// g1 ownership gate runs FIRST: if the OwnerMap attributes row.Subject to a
+// plugin other than pluginName (or to the host), the row is refused with
+// no_plaintext_reason="not_owner" and decryptPluginRow is NEVER called — no
+// decrypt, no DEK touch, no audit emission. Otherwise the row flows through the
+// shared primitive, which runs the downgrade/DEK fence (INV-RB-5), the
+// ReadBack=true AuthGuard branch (g2 / INV-RB-2), and the INV-19 audit
+// (INV-RB-3). Clean rows yield plaintext; refused rows map their reason to the
+// stable wire string; infrastructure errors map to "internal" and NEVER leak
+// plaintext (INV-RB-4 fail-closed).
+func (d *ReadbackDecryptor) DecryptOwnRow(
+	ctx context.Context,
+	pluginName, instanceID string,
+	row *pluginauditpb.AuditRow,
+) *pluginauditpb.RowResult {
+	// g1: OwnerMap subject ownership. A nil OwnerMap resolves to the host
+	// owner (empty PluginName), so plugin rows fail closed as not_owner.
+	owner := d.owners.Resolve(row.GetSubject())
+	if owner.PluginName != pluginName {
+		return &pluginauditpb.RowResult{
+			Id:                row.GetId(),
+			NoPlaintextReason: noPlaintextReasonNotOwner,
+		}
+	}
+
+	identity := eventbus.SessionIdentity{
+		Kind:       eventbus.IdentityKindPlugin,
+		PluginName: pluginName,
+		InstanceID: instanceID,
+	}
+
+	res := decryptPluginRow(ctx, identity, row, d.deps)
+	switch {
+	case res.Err != nil:
+		// Infrastructure / fail-closed (incl. INV-RB-3 nil-audit-emitter).
+		// Surface a generic refusal — NEVER plaintext.
+		return &pluginauditpb.RowResult{
+			Id:                row.GetId(),
+			NoPlaintextReason: noPlaintextReasonInternal,
+		}
+	case !res.OK():
+		return &pluginauditpb.RowResult{
+			Id:                row.GetId(),
+			NoPlaintextReason: reasonToWire(res.Reason),
+		}
+	default:
+		return &pluginauditpb.RowResult{
+			Id:        row.GetId(),
+			Plaintext: res.Plaintext,
+		}
+	}
 }
