@@ -1111,7 +1111,6 @@ func sceneResourceRefFirstField(args string) (string, error) {
 // before this function is called, so only admins can reach this point.
 //
 // TODO(holomush-5rh.20.35): perform the actual publish-attempts bump.
-func (p *scenePlugin) handleExtend(_ context.Context, _ pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
-	sceneID := strings.TrimSpace(args)
-	return pluginsdk.OK(fmt.Sprintf("Scene %s: publish-attempt extension granted (not yet implemented).", sceneID)), nil
+func (p *scenePlugin) handleExtend(_ context.Context, _ pluginsdk.CommandRequest, _ string) (*pluginsdk.CommandResponse, error) {
+	return pluginsdk.Errorf("scene extend: not yet implemented (tracked in holomush-5rh.20.35)."), nil
 }

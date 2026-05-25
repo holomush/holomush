@@ -936,6 +936,9 @@ func TestSceneExtendDeniedForNonAdmin(t *testing.T) {
 	assert.Contains(t, resp.Output, "permitted")
 }
 
+// TestSceneExtendAllowedForAdmin verifies the ABAC gate passes for admin
+// subjects. The handler body is a not-yet-implemented stub (holomush-5rh.20.35),
+// so the response is CommandError — not CommandOK — even when the gate allows.
 func TestSceneExtendAllowedForAdmin(t *testing.T) {
 	p := newScenePluginWithEvaluator(t, allowEvaluator{})
 	sceneID := createSceneInTest(t, p, "char-admin", "Extendable")
@@ -943,7 +946,9 @@ func TestSceneExtendAllowedForAdmin(t *testing.T) {
 		Command: "scene", Args: "extend " + sceneID, CharacterID: "char-admin",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	// Gate passes (admin allowed), but the handler is a stub: CommandError, not OK.
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Contains(t, resp.Output, "not yet implemented")
 }
 
 func TestSceneExtendNilEvaluatorFailsClosed(t *testing.T) {

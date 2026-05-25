@@ -185,8 +185,14 @@ action and the `GatedSubcommand.Action` in sync.
 
 ## Worked Example: an Admin-Only Subcommand
 
-core-scenes' `scene extend` (bumping a scene's publish-attempt limit) is
-admin-only. The plugin declares the action and an admin policy in its manifest:
+core-scenes' `scene extend` (intended to bump a scene's publish-attempt limit)
+is admin-only. The **authorization gate** is fully implemented and used as the
+canonical example here. The business logic behind the gate (the actual
+publish-attempt bump) is not yet implemented and is tracked in
+holomush-5rh.20.35; until that bead ships, the command returns a
+"not yet implemented" error to all callers, including admins.
+
+The plugin declares the action and an admin policy in its manifest:
 
 ```yaml
 actions:
@@ -201,9 +207,9 @@ policies:
 
 The handler is wired through `GatedSubcommand` (above). Because the policy is
 `permit`-only and the engine defaults to deny, a non-admin matches no policy and
-is denied; an admin matches the policy and is allowed. The plugin contains no Go
-or Lua check for `"admin"` — that decision lives entirely in the policy the
-plugin ships, evaluated by the host engine.
+is denied; an admin matches the policy and is allowed past the gate. The plugin
+contains no Go or Lua check for `"admin"` — that decision lives entirely in the
+policy the plugin ships, evaluated by the host engine.
 
 ## Checklist
 
