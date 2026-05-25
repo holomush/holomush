@@ -238,3 +238,12 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
    integration suites that add new seed coverage blocks, check whether the block includes
    at least one audit-trail assertion — especially for FORBID seeds where audit capture
    is the primary defense against undetected denials.
+- **In-handler owner check acceptable when predicate = ABAC policy (5rh.20.13 / B4, 2026-05-25)**:
+  `WithdrawScenePublish` adds `scene.OwnerID != callerID → SCENE_PUBLISH_NOT_OWNER` in-handler
+  alongside the `withdraw-publish-as-owner` ABAC policy. This is CORRECT and DIFFERENT from
+  the E1 admin-extend pattern (which has NO in-handler check). Acceptable when ALL of: (1) the
+  spec explicitly documents the error code for that handler (spec §5.2 line 275 mandates
+  `SCENE_PUBLISH_NOT_OWNER → PermissionDenied` for `WithdrawScenePublish`); (2) the plugin holds
+  the owning-entity record at that code point (after `store.Get`); (3) the in-handler predicate
+  is structurally identical to the ABAC `when`-clause. Closes direct-gRPC gap that E1 accepted.
+  Missing `case "publish"` in `commands.go` is a Low staged-rollout gap (same as E1), not blocking.

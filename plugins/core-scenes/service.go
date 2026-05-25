@@ -1090,10 +1090,7 @@ func newSceneID() (string, error) {
 // StartScenePublish is implemented in publish_service.go (Task B2).
 
 // CastPublishSceneVote is implemented in publish_service.go (Task B3).
-
-func (s *SceneServiceImpl) WithdrawScenePublish(_ context.Context, _ *scenev1.WithdrawScenePublishRequest) (*scenev1.WithdrawScenePublishResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
-}
+// WithdrawScenePublish is implemented in publish_service.go (Task B4).
 
 // GetPublishedScene is implemented in publish_service.go (Task B5).
 

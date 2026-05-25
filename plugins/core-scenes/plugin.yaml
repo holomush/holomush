@@ -210,3 +210,9 @@ policies:
     dsl: >-
       permit(principal is character, action in ["extend_publish_attempts"], resource is scene) when { "admin" in principal.character.roles
       };
+
+  # ─── Phase 6: owner withdraws publication attempt (Task B4) ───────────
+  - name: withdraw-publish-as-owner
+    dsl: >-
+      permit(principal is character, action in ["withdraw_publish"], resource is scene) when { resource.scene.owner == principal.id
+      };

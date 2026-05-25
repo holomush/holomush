@@ -660,3 +660,61 @@ func (s *SceneServiceImpl) applyTrigger(ctx context.Context, attemptID string, t
 	}
 	return nil
 }
+
+// WithdrawScenePublish lets the scene owner abandon an active publication
+// attempt (COLLECTING or COOLOFF), transitioning it to ATTEMPT_FAILED with
+// failure_reason WITHDRAWN (spec §4.1, §5). Owner-gated by the
+// withdraw-publish-as-owner ABAC policy at command dispatch (spec §8). The
+// handler ALSO performs a defense-in-depth owner check and returns
+// SCENE_PUBLISH_NOT_OWNER (PermissionDenied) for a non-owner: unlike the
+// admin-extend case (E1), the plugin holds the scene's owner attribute, so the
+// check is feasible AND closes the direct-RPC gap (spec §5 documents
+// SCENE_PUBLISH_NOT_OWNER for exactly this; the predicate is identical to the
+// policy, so there is no drift). Emits scene_publish_withdrawn (carrying
+// withdrawn_by) alongside the scene_publish_resolved that applyTrigger fires,
+// so renderers can distinguish a withdrawal from a vote failure (spec §7).
+func (s *SceneServiceImpl) WithdrawScenePublish(ctx context.Context, req *scenev1.WithdrawScenePublishRequest) (*scenev1.WithdrawScenePublishResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.withdraw_scene_publish",
+		attribute.String("published_scene_id", req.GetPublishedSceneId()))
+	defer span.End()
+
+	callerID, err := parseCallerCharacterID(req.GetCallerCharacterId())
+	if err != nil {
+		return nil, mapStoreErr(ctx, err)
+	}
+
+	pub, err := s.store.GetPublishedSceneHeader(ctx, req.GetPublishedSceneId())
+	if err != nil {
+		return nil, mapStoreErr(ctx, err)
+	}
+	if pub == nil {
+		return nil, mapStoreErr(ctx, oops.Code("SCENE_PUBLISH_NOT_FOUND").
+			Errorf("publication attempt not found"))
+	}
+	if pub.Status.IsTerminal() {
+		return nil, mapStoreErr(ctx, oops.Code("SCENE_PUBLISH_INVALID_STATE").
+			With("status", string(pub.Status)).
+			Errorf("publication attempt is already terminal"))
+	}
+
+	scene, err := s.store.Get(ctx, pub.SceneID)
+	if err != nil {
+		return nil, mapStoreErr(ctx, err)
+	}
+	if scene.OwnerID != callerID {
+		return nil, mapStoreErr(ctx, oops.Code("SCENE_PUBLISH_NOT_OWNER").
+			With("scene_id", pub.SceneID).
+			Errorf("only the scene owner may withdraw a publication attempt"))
+	}
+
+	if err := s.applyTrigger(ctx, pub.ID, TriggerWithdraw); err != nil {
+		return nil, mapStoreErr(ctx, err)
+	}
+
+	if emitErr := s.events.emitWithdrawn(ctx, pub.ID, callerID); emitErr != nil {
+		slog.WarnContext(ctx, "publish-withdrawn emit failed",
+			"err", emitErr.Error(), "attempt_id", pub.ID)
+	}
+
+	return &scenev1.WithdrawScenePublishResponse{}, nil
+}

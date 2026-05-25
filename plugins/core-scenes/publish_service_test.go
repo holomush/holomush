@@ -247,6 +247,7 @@ func TestPluginManifestDeclaresAdminExtendPublishAttemptsPolicy(t *testing.T) {
 
 	assert.Contains(t, manifest, "admin-extend-publish-attempts", "the E1 ABAC policy must be declared")
 	assert.Contains(t, manifest, `action in ["extend_publish_attempts"]`, "policy must gate the extend_publish_attempts action")
+	assert.Contains(t, manifest, "principal is character", "policy principal must be a character")
 	assert.Contains(t, manifest, "resource is scene", "policy must target scene resources")
 	assert.Contains(t, manifest, `"admin" in principal.character.roles`, "policy must be admin-role-only")
 }
@@ -366,4 +367,100 @@ func TestCastPublishSceneVoteFlipToNoDuringCoolOffReturnsToCollecting(t *testing
 	assert.Equal(t, StatusCollecting, store.publishedScenes["pub-v6"].Status,
 		"a flip-to-no during cool-off reopens COLLECTING")
 	assert.Nil(t, store.publishedScenes["pub-v6"].CoolOffStartedAt, "cool-off marker cleared on flip-back")
+}
+
+// newWithdrawFixture seeds an attempt in the given status plus a scene owned by
+// `owner`, for the B4 withdraw tests.
+func newWithdrawFixture(t *testing.T, attemptID, sceneID, owner string, status PublishedSceneStatus) (*fakeStore, *SceneServiceImpl) {
+	t.Helper()
+	store := newFakeStore()
+	store.installPublishedAttempt(attemptID, sceneID, status)
+	store.scenes[sceneID] = &SceneRow{ID: sceneID, OwnerID: owner, State: string(SceneStateEnded)}
+	return store, NewSceneServiceImpl(store)
+}
+
+// TestWithdrawScenePublishByOwnerFailsAttempt — the owner withdraws an active
+// attempt, transitioning it to ATTEMPT_FAILED with failure_reason WITHDRAWN.
+func TestWithdrawScenePublishByOwnerFailsAttempt(t *testing.T) {
+	t.Parallel()
+	owner := ulid.Make().String()
+	store, svc := newWithdrawFixture(t, "pub-w1", "scene-w1", owner, StatusCollecting)
+
+	_, err := svc.WithdrawScenePublish(context.Background(), &scenev1.WithdrawScenePublishRequest{
+		CallerCharacterId: owner,
+		PublishedSceneId:  "pub-w1",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, StatusAttemptFailed, store.publishedScenes["pub-w1"].Status)
+	require.NotNil(t, store.publishedScenes["pub-w1"].FailureReason)
+	assert.Equal(t, FailureWithdrawn, *store.publishedScenes["pub-w1"].FailureReason)
+}
+
+// TestWithdrawScenePublishRejectsNonOwner — a non-owner is denied with
+// SCENE_PUBLISH_NOT_OWNER (PermissionDenied) and the attempt is unchanged.
+func TestWithdrawScenePublishRejectsNonOwner(t *testing.T) {
+	t.Parallel()
+	owner := ulid.Make().String()
+	outsider := ulid.Make().String()
+	store, svc := newWithdrawFixture(t, "pub-w2", "scene-w2", owner, StatusCollecting)
+
+	_, err := svc.WithdrawScenePublish(context.Background(), &scenev1.WithdrawScenePublishRequest{
+		CallerCharacterId: outsider,
+		PublishedSceneId:  "pub-w2",
+	})
+
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	assert.Equal(t, "SCENE_PUBLISH_NOT_OWNER", status.Convert(err).Message())
+	assert.Equal(t, StatusCollecting, store.publishedScenes["pub-w2"].Status, "a denied withdraw must not change state")
+}
+
+// TestWithdrawScenePublishRejectsTerminalAttempt — withdrawing an already-
+// terminal attempt is a FailedPrecondition (SCENE_PUBLISH_INVALID_STATE).
+func TestWithdrawScenePublishRejectsTerminalAttempt(t *testing.T) {
+	t.Parallel()
+	owner := ulid.Make().String()
+	_, svc := newWithdrawFixture(t, "pub-w3", "scene-w3", owner, StatusPublished)
+
+	_, err := svc.WithdrawScenePublish(context.Background(), &scenev1.WithdrawScenePublishRequest{
+		CallerCharacterId: owner,
+		PublishedSceneId:  "pub-w3",
+	})
+
+	require.Error(t, err)
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+	assert.Equal(t, "SCENE_PUBLISH_INVALID_STATE", status.Convert(err).Message())
+}
+
+// TestWithdrawScenePublishRejectsUnknownAttempt covers the nil-header branch: a
+// nonexistent attempt id surfaces as NotFound (SCENE_PUBLISH_NOT_FOUND).
+func TestWithdrawScenePublishRejectsUnknownAttempt(t *testing.T) {
+	t.Parallel()
+	svc := NewSceneServiceImpl(newFakeStore())
+
+	_, err := svc.WithdrawScenePublish(context.Background(), &scenev1.WithdrawScenePublishRequest{
+		CallerCharacterId: ulid.Make().String(),
+		PublishedSceneId:  "nonexistent",
+	})
+
+	require.Error(t, err)
+	assert.Equal(t, codes.NotFound, status.Code(err))
+	assert.Equal(t, "SCENE_PUBLISH_NOT_FOUND", status.Convert(err).Message())
+}
+
+// TestPluginManifestDeclaresWithdrawPublishAsOwnerPolicy pins the B4 ABAC
+// policy: owner-only via resource.scene.owner == principal.id on the
+// withdraw_publish action (spec §8).
+func TestPluginManifestDeclaresWithdrawPublishAsOwnerPolicy(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile("plugin.yaml")
+	require.NoError(t, err)
+	manifest := string(data)
+
+	assert.Contains(t, manifest, "withdraw-publish-as-owner", "the B4 ABAC policy must be declared")
+	assert.Contains(t, manifest, `action in ["withdraw_publish"]`, "policy must gate the withdraw_publish action")
+	assert.Contains(t, manifest, "principal is character", "policy principal must be a character")
+	assert.Contains(t, manifest, "resource is scene", "policy must target scene resources")
+	assert.Contains(t, manifest, "resource.scene.owner == principal.id", "policy must be owner-only")
 }
