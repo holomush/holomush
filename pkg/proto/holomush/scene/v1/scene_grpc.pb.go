@@ -22,20 +22,29 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SceneService_ListScenes_FullMethodName        = "/holomush.scene.v1.SceneService/ListScenes"
-	SceneService_GetScene_FullMethodName          = "/holomush.scene.v1.SceneService/GetScene"
-	SceneService_CreateScene_FullMethodName       = "/holomush.scene.v1.SceneService/CreateScene"
-	SceneService_EndScene_FullMethodName          = "/holomush.scene.v1.SceneService/EndScene"
-	SceneService_PauseScene_FullMethodName        = "/holomush.scene.v1.SceneService/PauseScene"
-	SceneService_ResumeScene_FullMethodName       = "/holomush.scene.v1.SceneService/ResumeScene"
-	SceneService_UpdateScene_FullMethodName       = "/holomush.scene.v1.SceneService/UpdateScene"
-	SceneService_JoinScene_FullMethodName         = "/holomush.scene.v1.SceneService/JoinScene"
-	SceneService_LeaveScene_FullMethodName        = "/holomush.scene.v1.SceneService/LeaveScene"
-	SceneService_InviteToScene_FullMethodName     = "/holomush.scene.v1.SceneService/InviteToScene"
-	SceneService_KickFromScene_FullMethodName     = "/holomush.scene.v1.SceneService/KickFromScene"
-	SceneService_TransferOwnership_FullMethodName = "/holomush.scene.v1.SceneService/TransferOwnership"
-	SceneService_CastPublishVote_FullMethodName   = "/holomush.scene.v1.SceneService/CastPublishVote"
-	SceneService_GetPoseOrder_FullMethodName      = "/holomush.scene.v1.SceneService/GetPoseOrder"
+	SceneService_ListScenes_FullMethodName                     = "/holomush.scene.v1.SceneService/ListScenes"
+	SceneService_GetScene_FullMethodName                       = "/holomush.scene.v1.SceneService/GetScene"
+	SceneService_CreateScene_FullMethodName                    = "/holomush.scene.v1.SceneService/CreateScene"
+	SceneService_EndScene_FullMethodName                       = "/holomush.scene.v1.SceneService/EndScene"
+	SceneService_PauseScene_FullMethodName                     = "/holomush.scene.v1.SceneService/PauseScene"
+	SceneService_ResumeScene_FullMethodName                    = "/holomush.scene.v1.SceneService/ResumeScene"
+	SceneService_UpdateScene_FullMethodName                    = "/holomush.scene.v1.SceneService/UpdateScene"
+	SceneService_JoinScene_FullMethodName                      = "/holomush.scene.v1.SceneService/JoinScene"
+	SceneService_LeaveScene_FullMethodName                     = "/holomush.scene.v1.SceneService/LeaveScene"
+	SceneService_InviteToScene_FullMethodName                  = "/holomush.scene.v1.SceneService/InviteToScene"
+	SceneService_KickFromScene_FullMethodName                  = "/holomush.scene.v1.SceneService/KickFromScene"
+	SceneService_TransferOwnership_FullMethodName              = "/holomush.scene.v1.SceneService/TransferOwnership"
+	SceneService_CastPublishVote_FullMethodName                = "/holomush.scene.v1.SceneService/CastPublishVote"
+	SceneService_GetPoseOrder_FullMethodName                   = "/holomush.scene.v1.SceneService/GetPoseOrder"
+	SceneService_StartScenePublish_FullMethodName              = "/holomush.scene.v1.SceneService/StartScenePublish"
+	SceneService_CastPublishSceneVote_FullMethodName           = "/holomush.scene.v1.SceneService/CastPublishSceneVote"
+	SceneService_WithdrawScenePublish_FullMethodName           = "/holomush.scene.v1.SceneService/WithdrawScenePublish"
+	SceneService_GetPublishedScene_FullMethodName              = "/holomush.scene.v1.SceneService/GetPublishedScene"
+	SceneService_DownloadPublishedScene_FullMethodName         = "/holomush.scene.v1.SceneService/DownloadPublishedScene"
+	SceneService_ListScenePublishAttempts_FullMethodName       = "/holomush.scene.v1.SceneService/ListScenePublishAttempts"
+	SceneService_GetPublicSceneArchive_FullMethodName          = "/holomush.scene.v1.SceneService/GetPublicSceneArchive"
+	SceneService_DownloadPublicSceneArchive_FullMethodName     = "/holomush.scene.v1.SceneService/DownloadPublicSceneArchive"
+	SceneService_ExtendScenePublishVoteAttempts_FullMethodName = "/holomush.scene.v1.SceneService/ExtendScenePublishVoteAttempts"
 )
 
 // SceneServiceClient is the client API for SceneService service.
@@ -56,6 +65,16 @@ type SceneServiceClient interface {
 	TransferOwnership(ctx context.Context, in *TransferOwnershipRequest, opts ...grpc.CallOption) (*TransferOwnershipResponse, error)
 	CastPublishVote(ctx context.Context, in *CastPublishVoteRequest, opts ...grpc.CallOption) (*CastPublishVoteResponse, error)
 	GetPoseOrder(ctx context.Context, in *GetPoseOrderRequest, opts ...grpc.CallOption) (*GetPoseOrderResponse, error)
+	// Phase 6 publication RPCs. See spec section 5.
+	StartScenePublish(ctx context.Context, in *StartScenePublishRequest, opts ...grpc.CallOption) (*StartScenePublishResponse, error)
+	CastPublishSceneVote(ctx context.Context, in *CastPublishSceneVoteRequest, opts ...grpc.CallOption) (*CastPublishSceneVoteResponse, error)
+	WithdrawScenePublish(ctx context.Context, in *WithdrawScenePublishRequest, opts ...grpc.CallOption) (*WithdrawScenePublishResponse, error)
+	GetPublishedScene(ctx context.Context, in *GetPublishedSceneRequest, opts ...grpc.CallOption) (*GetPublishedSceneResponse, error)
+	DownloadPublishedScene(ctx context.Context, in *DownloadPublishedSceneRequest, opts ...grpc.CallOption) (*DownloadPublishedSceneResponse, error)
+	ListScenePublishAttempts(ctx context.Context, in *ListScenePublishAttemptsRequest, opts ...grpc.CallOption) (*ListScenePublishAttemptsResponse, error)
+	GetPublicSceneArchive(ctx context.Context, in *GetPublicSceneArchiveRequest, opts ...grpc.CallOption) (*GetPublicSceneArchiveResponse, error)
+	DownloadPublicSceneArchive(ctx context.Context, in *DownloadPublicSceneArchiveRequest, opts ...grpc.CallOption) (*DownloadPublicSceneArchiveResponse, error)
+	ExtendScenePublishVoteAttempts(ctx context.Context, in *ExtendScenePublishVoteAttemptsRequest, opts ...grpc.CallOption) (*ExtendScenePublishVoteAttemptsResponse, error)
 }
 
 type sceneServiceClient struct {
@@ -206,6 +225,96 @@ func (c *sceneServiceClient) GetPoseOrder(ctx context.Context, in *GetPoseOrderR
 	return out, nil
 }
 
+func (c *sceneServiceClient) StartScenePublish(ctx context.Context, in *StartScenePublishRequest, opts ...grpc.CallOption) (*StartScenePublishResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StartScenePublishResponse)
+	err := c.cc.Invoke(ctx, SceneService_StartScenePublish_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) CastPublishSceneVote(ctx context.Context, in *CastPublishSceneVoteRequest, opts ...grpc.CallOption) (*CastPublishSceneVoteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CastPublishSceneVoteResponse)
+	err := c.cc.Invoke(ctx, SceneService_CastPublishSceneVote_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) WithdrawScenePublish(ctx context.Context, in *WithdrawScenePublishRequest, opts ...grpc.CallOption) (*WithdrawScenePublishResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WithdrawScenePublishResponse)
+	err := c.cc.Invoke(ctx, SceneService_WithdrawScenePublish_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) GetPublishedScene(ctx context.Context, in *GetPublishedSceneRequest, opts ...grpc.CallOption) (*GetPublishedSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPublishedSceneResponse)
+	err := c.cc.Invoke(ctx, SceneService_GetPublishedScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) DownloadPublishedScene(ctx context.Context, in *DownloadPublishedSceneRequest, opts ...grpc.CallOption) (*DownloadPublishedSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DownloadPublishedSceneResponse)
+	err := c.cc.Invoke(ctx, SceneService_DownloadPublishedScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) ListScenePublishAttempts(ctx context.Context, in *ListScenePublishAttemptsRequest, opts ...grpc.CallOption) (*ListScenePublishAttemptsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListScenePublishAttemptsResponse)
+	err := c.cc.Invoke(ctx, SceneService_ListScenePublishAttempts_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) GetPublicSceneArchive(ctx context.Context, in *GetPublicSceneArchiveRequest, opts ...grpc.CallOption) (*GetPublicSceneArchiveResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPublicSceneArchiveResponse)
+	err := c.cc.Invoke(ctx, SceneService_GetPublicSceneArchive_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) DownloadPublicSceneArchive(ctx context.Context, in *DownloadPublicSceneArchiveRequest, opts ...grpc.CallOption) (*DownloadPublicSceneArchiveResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DownloadPublicSceneArchiveResponse)
+	err := c.cc.Invoke(ctx, SceneService_DownloadPublicSceneArchive_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) ExtendScenePublishVoteAttempts(ctx context.Context, in *ExtendScenePublishVoteAttemptsRequest, opts ...grpc.CallOption) (*ExtendScenePublishVoteAttemptsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExtendScenePublishVoteAttemptsResponse)
+	err := c.cc.Invoke(ctx, SceneService_ExtendScenePublishVoteAttempts_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SceneServiceServer is the server API for SceneService service.
 // All implementations must embed UnimplementedSceneServiceServer
 // for forward compatibility.
@@ -224,6 +333,16 @@ type SceneServiceServer interface {
 	TransferOwnership(context.Context, *TransferOwnershipRequest) (*TransferOwnershipResponse, error)
 	CastPublishVote(context.Context, *CastPublishVoteRequest) (*CastPublishVoteResponse, error)
 	GetPoseOrder(context.Context, *GetPoseOrderRequest) (*GetPoseOrderResponse, error)
+	// Phase 6 publication RPCs. See spec section 5.
+	StartScenePublish(context.Context, *StartScenePublishRequest) (*StartScenePublishResponse, error)
+	CastPublishSceneVote(context.Context, *CastPublishSceneVoteRequest) (*CastPublishSceneVoteResponse, error)
+	WithdrawScenePublish(context.Context, *WithdrawScenePublishRequest) (*WithdrawScenePublishResponse, error)
+	GetPublishedScene(context.Context, *GetPublishedSceneRequest) (*GetPublishedSceneResponse, error)
+	DownloadPublishedScene(context.Context, *DownloadPublishedSceneRequest) (*DownloadPublishedSceneResponse, error)
+	ListScenePublishAttempts(context.Context, *ListScenePublishAttemptsRequest) (*ListScenePublishAttemptsResponse, error)
+	GetPublicSceneArchive(context.Context, *GetPublicSceneArchiveRequest) (*GetPublicSceneArchiveResponse, error)
+	DownloadPublicSceneArchive(context.Context, *DownloadPublicSceneArchiveRequest) (*DownloadPublicSceneArchiveResponse, error)
+	ExtendScenePublishVoteAttempts(context.Context, *ExtendScenePublishVoteAttemptsRequest) (*ExtendScenePublishVoteAttemptsResponse, error)
 	mustEmbedUnimplementedSceneServiceServer()
 }
 
@@ -275,6 +394,33 @@ func (UnimplementedSceneServiceServer) CastPublishVote(context.Context, *CastPub
 }
 func (UnimplementedSceneServiceServer) GetPoseOrder(context.Context, *GetPoseOrderRequest) (*GetPoseOrderResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetPoseOrder not implemented")
+}
+func (UnimplementedSceneServiceServer) StartScenePublish(context.Context, *StartScenePublishRequest) (*StartScenePublishResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StartScenePublish not implemented")
+}
+func (UnimplementedSceneServiceServer) CastPublishSceneVote(context.Context, *CastPublishSceneVoteRequest) (*CastPublishSceneVoteResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CastPublishSceneVote not implemented")
+}
+func (UnimplementedSceneServiceServer) WithdrawScenePublish(context.Context, *WithdrawScenePublishRequest) (*WithdrawScenePublishResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WithdrawScenePublish not implemented")
+}
+func (UnimplementedSceneServiceServer) GetPublishedScene(context.Context, *GetPublishedSceneRequest) (*GetPublishedSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPublishedScene not implemented")
+}
+func (UnimplementedSceneServiceServer) DownloadPublishedScene(context.Context, *DownloadPublishedSceneRequest) (*DownloadPublishedSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DownloadPublishedScene not implemented")
+}
+func (UnimplementedSceneServiceServer) ListScenePublishAttempts(context.Context, *ListScenePublishAttemptsRequest) (*ListScenePublishAttemptsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListScenePublishAttempts not implemented")
+}
+func (UnimplementedSceneServiceServer) GetPublicSceneArchive(context.Context, *GetPublicSceneArchiveRequest) (*GetPublicSceneArchiveResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPublicSceneArchive not implemented")
+}
+func (UnimplementedSceneServiceServer) DownloadPublicSceneArchive(context.Context, *DownloadPublicSceneArchiveRequest) (*DownloadPublicSceneArchiveResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DownloadPublicSceneArchive not implemented")
+}
+func (UnimplementedSceneServiceServer) ExtendScenePublishVoteAttempts(context.Context, *ExtendScenePublishVoteAttemptsRequest) (*ExtendScenePublishVoteAttemptsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ExtendScenePublishVoteAttempts not implemented")
 }
 func (UnimplementedSceneServiceServer) mustEmbedUnimplementedSceneServiceServer() {}
 func (UnimplementedSceneServiceServer) testEmbeddedByValue()                      {}
@@ -549,6 +695,168 @@ func _SceneService_GetPoseOrder_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SceneService_StartScenePublish_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartScenePublishRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).StartScenePublish(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_StartScenePublish_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).StartScenePublish(ctx, req.(*StartScenePublishRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_CastPublishSceneVote_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CastPublishSceneVoteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).CastPublishSceneVote(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_CastPublishSceneVote_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).CastPublishSceneVote(ctx, req.(*CastPublishSceneVoteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_WithdrawScenePublish_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WithdrawScenePublishRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).WithdrawScenePublish(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_WithdrawScenePublish_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).WithdrawScenePublish(ctx, req.(*WithdrawScenePublishRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_GetPublishedScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPublishedSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).GetPublishedScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_GetPublishedScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).GetPublishedScene(ctx, req.(*GetPublishedSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_DownloadPublishedScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DownloadPublishedSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).DownloadPublishedScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_DownloadPublishedScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).DownloadPublishedScene(ctx, req.(*DownloadPublishedSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_ListScenePublishAttempts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListScenePublishAttemptsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).ListScenePublishAttempts(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_ListScenePublishAttempts_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).ListScenePublishAttempts(ctx, req.(*ListScenePublishAttemptsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_GetPublicSceneArchive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPublicSceneArchiveRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).GetPublicSceneArchive(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_GetPublicSceneArchive_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).GetPublicSceneArchive(ctx, req.(*GetPublicSceneArchiveRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_DownloadPublicSceneArchive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DownloadPublicSceneArchiveRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).DownloadPublicSceneArchive(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_DownloadPublicSceneArchive_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).DownloadPublicSceneArchive(ctx, req.(*DownloadPublicSceneArchiveRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_ExtendScenePublishVoteAttempts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExtendScenePublishVoteAttemptsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).ExtendScenePublishVoteAttempts(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_ExtendScenePublishVoteAttempts_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).ExtendScenePublishVoteAttempts(ctx, req.(*ExtendScenePublishVoteAttemptsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SceneService_ServiceDesc is the grpc.ServiceDesc for SceneService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -611,6 +919,42 @@ var SceneService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetPoseOrder",
 			Handler:    _SceneService_GetPoseOrder_Handler,
+		},
+		{
+			MethodName: "StartScenePublish",
+			Handler:    _SceneService_StartScenePublish_Handler,
+		},
+		{
+			MethodName: "CastPublishSceneVote",
+			Handler:    _SceneService_CastPublishSceneVote_Handler,
+		},
+		{
+			MethodName: "WithdrawScenePublish",
+			Handler:    _SceneService_WithdrawScenePublish_Handler,
+		},
+		{
+			MethodName: "GetPublishedScene",
+			Handler:    _SceneService_GetPublishedScene_Handler,
+		},
+		{
+			MethodName: "DownloadPublishedScene",
+			Handler:    _SceneService_DownloadPublishedScene_Handler,
+		},
+		{
+			MethodName: "ListScenePublishAttempts",
+			Handler:    _SceneService_ListScenePublishAttempts_Handler,
+		},
+		{
+			MethodName: "GetPublicSceneArchive",
+			Handler:    _SceneService_GetPublicSceneArchive_Handler,
+		},
+		{
+			MethodName: "DownloadPublicSceneArchive",
+			Handler:    _SceneService_DownloadPublicSceneArchive_Handler,
+		},
+		{
+			MethodName: "ExtendScenePublishVoteAttempts",
+			Handler:    _SceneService_ExtendScenePublishVoteAttempts_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -72,6 +72,33 @@ const (
 	// SceneServiceGetPoseOrderProcedure is the fully-qualified name of the SceneService's GetPoseOrder
 	// RPC.
 	SceneServiceGetPoseOrderProcedure = "/holomush.scene.v1.SceneService/GetPoseOrder"
+	// SceneServiceStartScenePublishProcedure is the fully-qualified name of the SceneService's
+	// StartScenePublish RPC.
+	SceneServiceStartScenePublishProcedure = "/holomush.scene.v1.SceneService/StartScenePublish"
+	// SceneServiceCastPublishSceneVoteProcedure is the fully-qualified name of the SceneService's
+	// CastPublishSceneVote RPC.
+	SceneServiceCastPublishSceneVoteProcedure = "/holomush.scene.v1.SceneService/CastPublishSceneVote"
+	// SceneServiceWithdrawScenePublishProcedure is the fully-qualified name of the SceneService's
+	// WithdrawScenePublish RPC.
+	SceneServiceWithdrawScenePublishProcedure = "/holomush.scene.v1.SceneService/WithdrawScenePublish"
+	// SceneServiceGetPublishedSceneProcedure is the fully-qualified name of the SceneService's
+	// GetPublishedScene RPC.
+	SceneServiceGetPublishedSceneProcedure = "/holomush.scene.v1.SceneService/GetPublishedScene"
+	// SceneServiceDownloadPublishedSceneProcedure is the fully-qualified name of the SceneService's
+	// DownloadPublishedScene RPC.
+	SceneServiceDownloadPublishedSceneProcedure = "/holomush.scene.v1.SceneService/DownloadPublishedScene"
+	// SceneServiceListScenePublishAttemptsProcedure is the fully-qualified name of the SceneService's
+	// ListScenePublishAttempts RPC.
+	SceneServiceListScenePublishAttemptsProcedure = "/holomush.scene.v1.SceneService/ListScenePublishAttempts"
+	// SceneServiceGetPublicSceneArchiveProcedure is the fully-qualified name of the SceneService's
+	// GetPublicSceneArchive RPC.
+	SceneServiceGetPublicSceneArchiveProcedure = "/holomush.scene.v1.SceneService/GetPublicSceneArchive"
+	// SceneServiceDownloadPublicSceneArchiveProcedure is the fully-qualified name of the SceneService's
+	// DownloadPublicSceneArchive RPC.
+	SceneServiceDownloadPublicSceneArchiveProcedure = "/holomush.scene.v1.SceneService/DownloadPublicSceneArchive"
+	// SceneServiceExtendScenePublishVoteAttemptsProcedure is the fully-qualified name of the
+	// SceneService's ExtendScenePublishVoteAttempts RPC.
+	SceneServiceExtendScenePublishVoteAttemptsProcedure = "/holomush.scene.v1.SceneService/ExtendScenePublishVoteAttempts"
 )
 
 // SceneServiceClient is a client for the holomush.scene.v1.SceneService service.
@@ -90,6 +117,16 @@ type SceneServiceClient interface {
 	TransferOwnership(context.Context, *connect.Request[v1.TransferOwnershipRequest]) (*connect.Response[v1.TransferOwnershipResponse], error)
 	CastPublishVote(context.Context, *connect.Request[v1.CastPublishVoteRequest]) (*connect.Response[v1.CastPublishVoteResponse], error)
 	GetPoseOrder(context.Context, *connect.Request[v1.GetPoseOrderRequest]) (*connect.Response[v1.GetPoseOrderResponse], error)
+	// Phase 6 publication RPCs. See spec section 5.
+	StartScenePublish(context.Context, *connect.Request[v1.StartScenePublishRequest]) (*connect.Response[v1.StartScenePublishResponse], error)
+	CastPublishSceneVote(context.Context, *connect.Request[v1.CastPublishSceneVoteRequest]) (*connect.Response[v1.CastPublishSceneVoteResponse], error)
+	WithdrawScenePublish(context.Context, *connect.Request[v1.WithdrawScenePublishRequest]) (*connect.Response[v1.WithdrawScenePublishResponse], error)
+	GetPublishedScene(context.Context, *connect.Request[v1.GetPublishedSceneRequest]) (*connect.Response[v1.GetPublishedSceneResponse], error)
+	DownloadPublishedScene(context.Context, *connect.Request[v1.DownloadPublishedSceneRequest]) (*connect.Response[v1.DownloadPublishedSceneResponse], error)
+	ListScenePublishAttempts(context.Context, *connect.Request[v1.ListScenePublishAttemptsRequest]) (*connect.Response[v1.ListScenePublishAttemptsResponse], error)
+	GetPublicSceneArchive(context.Context, *connect.Request[v1.GetPublicSceneArchiveRequest]) (*connect.Response[v1.GetPublicSceneArchiveResponse], error)
+	DownloadPublicSceneArchive(context.Context, *connect.Request[v1.DownloadPublicSceneArchiveRequest]) (*connect.Response[v1.DownloadPublicSceneArchiveResponse], error)
+	ExtendScenePublishVoteAttempts(context.Context, *connect.Request[v1.ExtendScenePublishVoteAttemptsRequest]) (*connect.Response[v1.ExtendScenePublishVoteAttemptsResponse], error)
 }
 
 // NewSceneServiceClient constructs a client for the holomush.scene.v1.SceneService service. By
@@ -187,25 +224,88 @@ func NewSceneServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(sceneServiceMethods.ByName("GetPoseOrder")),
 			connect.WithClientOptions(opts...),
 		),
+		startScenePublish: connect.NewClient[v1.StartScenePublishRequest, v1.StartScenePublishResponse](
+			httpClient,
+			baseURL+SceneServiceStartScenePublishProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("StartScenePublish")),
+			connect.WithClientOptions(opts...),
+		),
+		castPublishSceneVote: connect.NewClient[v1.CastPublishSceneVoteRequest, v1.CastPublishSceneVoteResponse](
+			httpClient,
+			baseURL+SceneServiceCastPublishSceneVoteProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("CastPublishSceneVote")),
+			connect.WithClientOptions(opts...),
+		),
+		withdrawScenePublish: connect.NewClient[v1.WithdrawScenePublishRequest, v1.WithdrawScenePublishResponse](
+			httpClient,
+			baseURL+SceneServiceWithdrawScenePublishProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("WithdrawScenePublish")),
+			connect.WithClientOptions(opts...),
+		),
+		getPublishedScene: connect.NewClient[v1.GetPublishedSceneRequest, v1.GetPublishedSceneResponse](
+			httpClient,
+			baseURL+SceneServiceGetPublishedSceneProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("GetPublishedScene")),
+			connect.WithClientOptions(opts...),
+		),
+		downloadPublishedScene: connect.NewClient[v1.DownloadPublishedSceneRequest, v1.DownloadPublishedSceneResponse](
+			httpClient,
+			baseURL+SceneServiceDownloadPublishedSceneProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("DownloadPublishedScene")),
+			connect.WithClientOptions(opts...),
+		),
+		listScenePublishAttempts: connect.NewClient[v1.ListScenePublishAttemptsRequest, v1.ListScenePublishAttemptsResponse](
+			httpClient,
+			baseURL+SceneServiceListScenePublishAttemptsProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("ListScenePublishAttempts")),
+			connect.WithClientOptions(opts...),
+		),
+		getPublicSceneArchive: connect.NewClient[v1.GetPublicSceneArchiveRequest, v1.GetPublicSceneArchiveResponse](
+			httpClient,
+			baseURL+SceneServiceGetPublicSceneArchiveProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("GetPublicSceneArchive")),
+			connect.WithClientOptions(opts...),
+		),
+		downloadPublicSceneArchive: connect.NewClient[v1.DownloadPublicSceneArchiveRequest, v1.DownloadPublicSceneArchiveResponse](
+			httpClient,
+			baseURL+SceneServiceDownloadPublicSceneArchiveProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("DownloadPublicSceneArchive")),
+			connect.WithClientOptions(opts...),
+		),
+		extendScenePublishVoteAttempts: connect.NewClient[v1.ExtendScenePublishVoteAttemptsRequest, v1.ExtendScenePublishVoteAttemptsResponse](
+			httpClient,
+			baseURL+SceneServiceExtendScenePublishVoteAttemptsProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("ExtendScenePublishVoteAttempts")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // sceneServiceClient implements SceneServiceClient.
 type sceneServiceClient struct {
-	listScenes        *connect.Client[v1.ListScenesRequest, v1.ListScenesResponse]
-	getScene          *connect.Client[v1.GetSceneRequest, v1.GetSceneResponse]
-	createScene       *connect.Client[v1.CreateSceneRequest, v1.CreateSceneResponse]
-	endScene          *connect.Client[v1.EndSceneRequest, v1.EndSceneResponse]
-	pauseScene        *connect.Client[v1.PauseSceneRequest, v1.PauseSceneResponse]
-	resumeScene       *connect.Client[v1.ResumeSceneRequest, v1.ResumeSceneResponse]
-	updateScene       *connect.Client[v1.UpdateSceneRequest, v1.UpdateSceneResponse]
-	joinScene         *connect.Client[v1.JoinSceneRequest, v1.JoinSceneResponse]
-	leaveScene        *connect.Client[v1.LeaveSceneRequest, v1.LeaveSceneResponse]
-	inviteToScene     *connect.Client[v1.InviteToSceneRequest, v1.InviteToSceneResponse]
-	kickFromScene     *connect.Client[v1.KickFromSceneRequest, v1.KickFromSceneResponse]
-	transferOwnership *connect.Client[v1.TransferOwnershipRequest, v1.TransferOwnershipResponse]
-	castPublishVote   *connect.Client[v1.CastPublishVoteRequest, v1.CastPublishVoteResponse]
-	getPoseOrder      *connect.Client[v1.GetPoseOrderRequest, v1.GetPoseOrderResponse]
+	listScenes                     *connect.Client[v1.ListScenesRequest, v1.ListScenesResponse]
+	getScene                       *connect.Client[v1.GetSceneRequest, v1.GetSceneResponse]
+	createScene                    *connect.Client[v1.CreateSceneRequest, v1.CreateSceneResponse]
+	endScene                       *connect.Client[v1.EndSceneRequest, v1.EndSceneResponse]
+	pauseScene                     *connect.Client[v1.PauseSceneRequest, v1.PauseSceneResponse]
+	resumeScene                    *connect.Client[v1.ResumeSceneRequest, v1.ResumeSceneResponse]
+	updateScene                    *connect.Client[v1.UpdateSceneRequest, v1.UpdateSceneResponse]
+	joinScene                      *connect.Client[v1.JoinSceneRequest, v1.JoinSceneResponse]
+	leaveScene                     *connect.Client[v1.LeaveSceneRequest, v1.LeaveSceneResponse]
+	inviteToScene                  *connect.Client[v1.InviteToSceneRequest, v1.InviteToSceneResponse]
+	kickFromScene                  *connect.Client[v1.KickFromSceneRequest, v1.KickFromSceneResponse]
+	transferOwnership              *connect.Client[v1.TransferOwnershipRequest, v1.TransferOwnershipResponse]
+	castPublishVote                *connect.Client[v1.CastPublishVoteRequest, v1.CastPublishVoteResponse]
+	getPoseOrder                   *connect.Client[v1.GetPoseOrderRequest, v1.GetPoseOrderResponse]
+	startScenePublish              *connect.Client[v1.StartScenePublishRequest, v1.StartScenePublishResponse]
+	castPublishSceneVote           *connect.Client[v1.CastPublishSceneVoteRequest, v1.CastPublishSceneVoteResponse]
+	withdrawScenePublish           *connect.Client[v1.WithdrawScenePublishRequest, v1.WithdrawScenePublishResponse]
+	getPublishedScene              *connect.Client[v1.GetPublishedSceneRequest, v1.GetPublishedSceneResponse]
+	downloadPublishedScene         *connect.Client[v1.DownloadPublishedSceneRequest, v1.DownloadPublishedSceneResponse]
+	listScenePublishAttempts       *connect.Client[v1.ListScenePublishAttemptsRequest, v1.ListScenePublishAttemptsResponse]
+	getPublicSceneArchive          *connect.Client[v1.GetPublicSceneArchiveRequest, v1.GetPublicSceneArchiveResponse]
+	downloadPublicSceneArchive     *connect.Client[v1.DownloadPublicSceneArchiveRequest, v1.DownloadPublicSceneArchiveResponse]
+	extendScenePublishVoteAttempts *connect.Client[v1.ExtendScenePublishVoteAttemptsRequest, v1.ExtendScenePublishVoteAttemptsResponse]
 }
 
 // ListScenes calls holomush.scene.v1.SceneService.ListScenes.
@@ -278,6 +378,52 @@ func (c *sceneServiceClient) GetPoseOrder(ctx context.Context, req *connect.Requ
 	return c.getPoseOrder.CallUnary(ctx, req)
 }
 
+// StartScenePublish calls holomush.scene.v1.SceneService.StartScenePublish.
+func (c *sceneServiceClient) StartScenePublish(ctx context.Context, req *connect.Request[v1.StartScenePublishRequest]) (*connect.Response[v1.StartScenePublishResponse], error) {
+	return c.startScenePublish.CallUnary(ctx, req)
+}
+
+// CastPublishSceneVote calls holomush.scene.v1.SceneService.CastPublishSceneVote.
+func (c *sceneServiceClient) CastPublishSceneVote(ctx context.Context, req *connect.Request[v1.CastPublishSceneVoteRequest]) (*connect.Response[v1.CastPublishSceneVoteResponse], error) {
+	return c.castPublishSceneVote.CallUnary(ctx, req)
+}
+
+// WithdrawScenePublish calls holomush.scene.v1.SceneService.WithdrawScenePublish.
+func (c *sceneServiceClient) WithdrawScenePublish(ctx context.Context, req *connect.Request[v1.WithdrawScenePublishRequest]) (*connect.Response[v1.WithdrawScenePublishResponse], error) {
+	return c.withdrawScenePublish.CallUnary(ctx, req)
+}
+
+// GetPublishedScene calls holomush.scene.v1.SceneService.GetPublishedScene.
+func (c *sceneServiceClient) GetPublishedScene(ctx context.Context, req *connect.Request[v1.GetPublishedSceneRequest]) (*connect.Response[v1.GetPublishedSceneResponse], error) {
+	return c.getPublishedScene.CallUnary(ctx, req)
+}
+
+// DownloadPublishedScene calls holomush.scene.v1.SceneService.DownloadPublishedScene.
+func (c *sceneServiceClient) DownloadPublishedScene(ctx context.Context, req *connect.Request[v1.DownloadPublishedSceneRequest]) (*connect.Response[v1.DownloadPublishedSceneResponse], error) {
+	return c.downloadPublishedScene.CallUnary(ctx, req)
+}
+
+// ListScenePublishAttempts calls holomush.scene.v1.SceneService.ListScenePublishAttempts.
+func (c *sceneServiceClient) ListScenePublishAttempts(ctx context.Context, req *connect.Request[v1.ListScenePublishAttemptsRequest]) (*connect.Response[v1.ListScenePublishAttemptsResponse], error) {
+	return c.listScenePublishAttempts.CallUnary(ctx, req)
+}
+
+// GetPublicSceneArchive calls holomush.scene.v1.SceneService.GetPublicSceneArchive.
+func (c *sceneServiceClient) GetPublicSceneArchive(ctx context.Context, req *connect.Request[v1.GetPublicSceneArchiveRequest]) (*connect.Response[v1.GetPublicSceneArchiveResponse], error) {
+	return c.getPublicSceneArchive.CallUnary(ctx, req)
+}
+
+// DownloadPublicSceneArchive calls holomush.scene.v1.SceneService.DownloadPublicSceneArchive.
+func (c *sceneServiceClient) DownloadPublicSceneArchive(ctx context.Context, req *connect.Request[v1.DownloadPublicSceneArchiveRequest]) (*connect.Response[v1.DownloadPublicSceneArchiveResponse], error) {
+	return c.downloadPublicSceneArchive.CallUnary(ctx, req)
+}
+
+// ExtendScenePublishVoteAttempts calls
+// holomush.scene.v1.SceneService.ExtendScenePublishVoteAttempts.
+func (c *sceneServiceClient) ExtendScenePublishVoteAttempts(ctx context.Context, req *connect.Request[v1.ExtendScenePublishVoteAttemptsRequest]) (*connect.Response[v1.ExtendScenePublishVoteAttemptsResponse], error) {
+	return c.extendScenePublishVoteAttempts.CallUnary(ctx, req)
+}
+
 // SceneServiceHandler is an implementation of the holomush.scene.v1.SceneService service.
 type SceneServiceHandler interface {
 	ListScenes(context.Context, *connect.Request[v1.ListScenesRequest]) (*connect.Response[v1.ListScenesResponse], error)
@@ -294,6 +440,16 @@ type SceneServiceHandler interface {
 	TransferOwnership(context.Context, *connect.Request[v1.TransferOwnershipRequest]) (*connect.Response[v1.TransferOwnershipResponse], error)
 	CastPublishVote(context.Context, *connect.Request[v1.CastPublishVoteRequest]) (*connect.Response[v1.CastPublishVoteResponse], error)
 	GetPoseOrder(context.Context, *connect.Request[v1.GetPoseOrderRequest]) (*connect.Response[v1.GetPoseOrderResponse], error)
+	// Phase 6 publication RPCs. See spec section 5.
+	StartScenePublish(context.Context, *connect.Request[v1.StartScenePublishRequest]) (*connect.Response[v1.StartScenePublishResponse], error)
+	CastPublishSceneVote(context.Context, *connect.Request[v1.CastPublishSceneVoteRequest]) (*connect.Response[v1.CastPublishSceneVoteResponse], error)
+	WithdrawScenePublish(context.Context, *connect.Request[v1.WithdrawScenePublishRequest]) (*connect.Response[v1.WithdrawScenePublishResponse], error)
+	GetPublishedScene(context.Context, *connect.Request[v1.GetPublishedSceneRequest]) (*connect.Response[v1.GetPublishedSceneResponse], error)
+	DownloadPublishedScene(context.Context, *connect.Request[v1.DownloadPublishedSceneRequest]) (*connect.Response[v1.DownloadPublishedSceneResponse], error)
+	ListScenePublishAttempts(context.Context, *connect.Request[v1.ListScenePublishAttemptsRequest]) (*connect.Response[v1.ListScenePublishAttemptsResponse], error)
+	GetPublicSceneArchive(context.Context, *connect.Request[v1.GetPublicSceneArchiveRequest]) (*connect.Response[v1.GetPublicSceneArchiveResponse], error)
+	DownloadPublicSceneArchive(context.Context, *connect.Request[v1.DownloadPublicSceneArchiveRequest]) (*connect.Response[v1.DownloadPublicSceneArchiveResponse], error)
+	ExtendScenePublishVoteAttempts(context.Context, *connect.Request[v1.ExtendScenePublishVoteAttemptsRequest]) (*connect.Response[v1.ExtendScenePublishVoteAttemptsResponse], error)
 }
 
 // NewSceneServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -387,6 +543,60 @@ func NewSceneServiceHandler(svc SceneServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(sceneServiceMethods.ByName("GetPoseOrder")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sceneServiceStartScenePublishHandler := connect.NewUnaryHandler(
+		SceneServiceStartScenePublishProcedure,
+		svc.StartScenePublish,
+		connect.WithSchema(sceneServiceMethods.ByName("StartScenePublish")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServiceCastPublishSceneVoteHandler := connect.NewUnaryHandler(
+		SceneServiceCastPublishSceneVoteProcedure,
+		svc.CastPublishSceneVote,
+		connect.WithSchema(sceneServiceMethods.ByName("CastPublishSceneVote")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServiceWithdrawScenePublishHandler := connect.NewUnaryHandler(
+		SceneServiceWithdrawScenePublishProcedure,
+		svc.WithdrawScenePublish,
+		connect.WithSchema(sceneServiceMethods.ByName("WithdrawScenePublish")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServiceGetPublishedSceneHandler := connect.NewUnaryHandler(
+		SceneServiceGetPublishedSceneProcedure,
+		svc.GetPublishedScene,
+		connect.WithSchema(sceneServiceMethods.ByName("GetPublishedScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServiceDownloadPublishedSceneHandler := connect.NewUnaryHandler(
+		SceneServiceDownloadPublishedSceneProcedure,
+		svc.DownloadPublishedScene,
+		connect.WithSchema(sceneServiceMethods.ByName("DownloadPublishedScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServiceListScenePublishAttemptsHandler := connect.NewUnaryHandler(
+		SceneServiceListScenePublishAttemptsProcedure,
+		svc.ListScenePublishAttempts,
+		connect.WithSchema(sceneServiceMethods.ByName("ListScenePublishAttempts")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServiceGetPublicSceneArchiveHandler := connect.NewUnaryHandler(
+		SceneServiceGetPublicSceneArchiveProcedure,
+		svc.GetPublicSceneArchive,
+		connect.WithSchema(sceneServiceMethods.ByName("GetPublicSceneArchive")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServiceDownloadPublicSceneArchiveHandler := connect.NewUnaryHandler(
+		SceneServiceDownloadPublicSceneArchiveProcedure,
+		svc.DownloadPublicSceneArchive,
+		connect.WithSchema(sceneServiceMethods.ByName("DownloadPublicSceneArchive")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServiceExtendScenePublishVoteAttemptsHandler := connect.NewUnaryHandler(
+		SceneServiceExtendScenePublishVoteAttemptsProcedure,
+		svc.ExtendScenePublishVoteAttempts,
+		connect.WithSchema(sceneServiceMethods.ByName("ExtendScenePublishVoteAttempts")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.scene.v1.SceneService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SceneServiceListScenesProcedure:
@@ -417,6 +627,24 @@ func NewSceneServiceHandler(svc SceneServiceHandler, opts ...connect.HandlerOpti
 			sceneServiceCastPublishVoteHandler.ServeHTTP(w, r)
 		case SceneServiceGetPoseOrderProcedure:
 			sceneServiceGetPoseOrderHandler.ServeHTTP(w, r)
+		case SceneServiceStartScenePublishProcedure:
+			sceneServiceStartScenePublishHandler.ServeHTTP(w, r)
+		case SceneServiceCastPublishSceneVoteProcedure:
+			sceneServiceCastPublishSceneVoteHandler.ServeHTTP(w, r)
+		case SceneServiceWithdrawScenePublishProcedure:
+			sceneServiceWithdrawScenePublishHandler.ServeHTTP(w, r)
+		case SceneServiceGetPublishedSceneProcedure:
+			sceneServiceGetPublishedSceneHandler.ServeHTTP(w, r)
+		case SceneServiceDownloadPublishedSceneProcedure:
+			sceneServiceDownloadPublishedSceneHandler.ServeHTTP(w, r)
+		case SceneServiceListScenePublishAttemptsProcedure:
+			sceneServiceListScenePublishAttemptsHandler.ServeHTTP(w, r)
+		case SceneServiceGetPublicSceneArchiveProcedure:
+			sceneServiceGetPublicSceneArchiveHandler.ServeHTTP(w, r)
+		case SceneServiceDownloadPublicSceneArchiveProcedure:
+			sceneServiceDownloadPublicSceneArchiveHandler.ServeHTTP(w, r)
+		case SceneServiceExtendScenePublishVoteAttemptsProcedure:
+			sceneServiceExtendScenePublishVoteAttemptsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -480,4 +708,40 @@ func (UnimplementedSceneServiceHandler) CastPublishVote(context.Context, *connec
 
 func (UnimplementedSceneServiceHandler) GetPoseOrder(context.Context, *connect.Request[v1.GetPoseOrderRequest]) (*connect.Response[v1.GetPoseOrderResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.GetPoseOrder is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) StartScenePublish(context.Context, *connect.Request[v1.StartScenePublishRequest]) (*connect.Response[v1.StartScenePublishResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.StartScenePublish is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) CastPublishSceneVote(context.Context, *connect.Request[v1.CastPublishSceneVoteRequest]) (*connect.Response[v1.CastPublishSceneVoteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.CastPublishSceneVote is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) WithdrawScenePublish(context.Context, *connect.Request[v1.WithdrawScenePublishRequest]) (*connect.Response[v1.WithdrawScenePublishResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.WithdrawScenePublish is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) GetPublishedScene(context.Context, *connect.Request[v1.GetPublishedSceneRequest]) (*connect.Response[v1.GetPublishedSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.GetPublishedScene is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) DownloadPublishedScene(context.Context, *connect.Request[v1.DownloadPublishedSceneRequest]) (*connect.Response[v1.DownloadPublishedSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.DownloadPublishedScene is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) ListScenePublishAttempts(context.Context, *connect.Request[v1.ListScenePublishAttemptsRequest]) (*connect.Response[v1.ListScenePublishAttemptsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.ListScenePublishAttempts is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) GetPublicSceneArchive(context.Context, *connect.Request[v1.GetPublicSceneArchiveRequest]) (*connect.Response[v1.GetPublicSceneArchiveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.GetPublicSceneArchive is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) DownloadPublicSceneArchive(context.Context, *connect.Request[v1.DownloadPublicSceneArchiveRequest]) (*connect.Response[v1.DownloadPublicSceneArchiveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.DownloadPublicSceneArchive is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) ExtendScenePublishVoteAttempts(context.Context, *connect.Request[v1.ExtendScenePublishVoteAttemptsRequest]) (*connect.Response[v1.ExtendScenePublishVoteAttemptsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.ExtendScenePublishVoteAttempts is not implemented"))
 }

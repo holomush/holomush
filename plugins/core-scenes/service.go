@@ -1034,6 +1034,46 @@ func newSceneID() (string, error) {
 	return "scene-" + id.String(), nil
 }
 
+// Phase 6 publication RPC stubs — present per plan A3 Step 5 so the Phase 6
+// surface is explicit. Real handlers land in Phase B (publish_service.go),
+// which replaces these. UnimplementedSceneServiceServer is embedded, so these
+// override the embedded defaults with the same Unimplemented status.
+func (s *SceneServiceImpl) StartScenePublish(_ context.Context, _ *scenev1.StartScenePublishRequest) (*scenev1.StartScenePublishResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
+}
+
+func (s *SceneServiceImpl) CastPublishSceneVote(_ context.Context, _ *scenev1.CastPublishSceneVoteRequest) (*scenev1.CastPublishSceneVoteResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
+}
+
+func (s *SceneServiceImpl) WithdrawScenePublish(_ context.Context, _ *scenev1.WithdrawScenePublishRequest) (*scenev1.WithdrawScenePublishResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
+}
+
+func (s *SceneServiceImpl) GetPublishedScene(_ context.Context, _ *scenev1.GetPublishedSceneRequest) (*scenev1.GetPublishedSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
+}
+
+func (s *SceneServiceImpl) DownloadPublishedScene(_ context.Context, _ *scenev1.DownloadPublishedSceneRequest) (*scenev1.DownloadPublishedSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
+}
+
+func (s *SceneServiceImpl) ListScenePublishAttempts(_ context.Context, _ *scenev1.ListScenePublishAttemptsRequest) (*scenev1.ListScenePublishAttemptsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
+}
+
+func (s *SceneServiceImpl) GetPublicSceneArchive(_ context.Context, _ *scenev1.GetPublicSceneArchiveRequest) (*scenev1.GetPublicSceneArchiveResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
+}
+
+func (s *SceneServiceImpl) DownloadPublicSceneArchive(_ context.Context, _ *scenev1.DownloadPublicSceneArchiveRequest) (*scenev1.DownloadPublicSceneArchiveResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
+}
+
+func (s *SceneServiceImpl) ExtendScenePublishVoteAttempts(_ context.Context, _ *scenev1.ExtendScenePublishVoteAttemptsRequest) (*scenev1.ExtendScenePublishVoteAttemptsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
+}
+
 // rowToProto converts a SceneRow to the proto representation.
 //
 // createdAt is passed in to allow CreateScene (which has not re-fetched
