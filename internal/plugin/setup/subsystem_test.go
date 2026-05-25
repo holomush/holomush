@@ -4,6 +4,7 @@
 package setup_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,9 +13,12 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/lifecycle"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/goplugin"
+	"github.com/holomush/holomush/internal/plugin/hostfunc"
+	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/plugin/setup"
 )
 
@@ -76,16 +80,17 @@ func TestPluginSubsystemHealthStatusReportsDeadBeforeStart(t *testing.T) {
 	assert.Equal(t, "not started", status.Reason)
 }
 
-// TestEngineProviderInterfaceRequiresAttributeResolver is a compile-time guard
-// for holomush-8kkv5.18. The EngineProvider interface used by PluginSubsystem
-// MUST include AttributeResolver() so the manager wiring in Start() can
-// register plugin-declared attribute providers on the live ABAC resolver.
-// If AttributeResolver() is ever removed from the interface, this line fails
-// to compile — catching the regression before it reaches E2E.
+// TestEngineProviderInterfaceRequiresAttributeResolverAndAuditLogger is a
+// compile-time guard. The EngineProvider interface used by PluginSubsystem MUST
+// include AttributeResolver() (holomush-8kkv5.18) and AuditLogger() (INV-4 /
+// holomush-p1tq2.5) so that Start() can wire both surfaces. If either method is
+// removed from the interface this line fails to compile — catching the regression
+// before it reaches E2E.
 var _ setup.EngineProvider = (*fakeEngineProvider)(nil)
 
 type fakeEngineProvider struct {
 	resolver *attribute.Resolver
+	auditor  pluginauthz.Auditor
 }
 
 // Engine returns a non-nil engine so that tests exercising binary host
@@ -98,6 +103,10 @@ func (f *fakeEngineProvider) Engine() types.AccessPolicyEngine {
 
 func (f *fakeEngineProvider) AttributeResolver() *attribute.Resolver {
 	return f.resolver
+}
+
+func (f *fakeEngineProvider) AuditLogger() pluginauthz.Auditor {
+	return f.auditor
 }
 
 // TestRegistrarCallbackRegistersProviderOnResolver verifies that the registrar
@@ -181,4 +190,64 @@ func TestBinaryHostOptionAcceptsEngineFromEngineProvider(t *testing.T) {
 	// Deep engine introspection (assert.Same) is done in
 	// goplugin/host_engine_wiring_test.go which has access to Host internals
 	// via the package-level export_test.go accessor.
+}
+
+// recordingAuditor records the most recent audit.Event passed to Log.
+// Used as the pluginauthz.Auditor stub in wiring-guard tests.
+type recordingAuditor struct {
+	logged []audit.Event
+}
+
+func (r *recordingAuditor) Log(_ context.Context, event audit.Event) error {
+	r.logged = append(r.logged, event)
+	return nil
+}
+
+// TestBinaryHostReceivesAuditorFromEngineProvider is a wiring-guard for
+// holomush-p1tq2.5 / INV-4. It verifies that goplugin.WithAuditLogger(a) can
+// be applied to a binary host constructed by goplugin.NewHost — replicating
+// the option construction added to Start():
+//
+//	hostOpts = append(hostOpts, goplugin.WithAuditLogger(s.cfg.ABAC.AuditLogger()))
+//	binaryHost := goplugin.NewHost(hostOpts...)
+//
+// Without this wiring, PluginHostService.Evaluate never emits an audit event
+// regardless of the decision, violating spec §5 / INV-4.
+//
+// Deep introspection (assert.Same on the internal auditor field) is deferred to
+// goplugin/host_audit_test.go which has package-internal access via export_test.go.
+func TestBinaryHostReceivesAuditorFromEngineProvider(t *testing.T) {
+	auditor := &recordingAuditor{}
+	fp := &fakeEngineProvider{auditor: auditor}
+
+	a := fp.AuditLogger()
+	require.NotNil(t, a, "fakeEngineProvider.AuditLogger() must return non-nil for this guard to be meaningful")
+
+	// Replicate the option construction from Start(). If goplugin.WithAuditLogger
+	// is ever removed from the goplugin API, this call fails to compile.
+	host := goplugin.NewHost(goplugin.WithAuditLogger(a))
+	require.NotNil(t, host, "host must be constructable with WithAuditLogger applied")
+}
+
+// TestLuaFunctionsReceivesAuditorFromEngineProvider is a wiring-guard for
+// holomush-p1tq2.5 / INV-4 on the Lua surface. It verifies that
+// hostfunc.WithAuditLogger(a) can be applied to hostfunc.New — replicating
+// the option construction added to Start():
+//
+//	hostFuncOpts = append(hostFuncOpts, hostfunc.WithAuditLogger(s.cfg.ABAC.AuditLogger()))
+//	hostFuncs := hostfunc.New(nil, hostFuncOpts...)
+//
+// Without this wiring, holomush.evaluate Lua calls never emit an audit event,
+// violating spec §5 / INV-4.
+func TestLuaFunctionsReceivesAuditorFromEngineProvider(t *testing.T) {
+	auditor := &recordingAuditor{}
+	fp := &fakeEngineProvider{auditor: auditor}
+
+	a := fp.AuditLogger()
+	require.NotNil(t, a, "fakeEngineProvider.AuditLogger() must return non-nil for this guard to be meaningful")
+
+	// Replicate the option construction from Start(). If hostfunc.WithAuditLogger
+	// is ever removed from the hostfunc API, this call fails to compile.
+	funcs := hostfunc.New(nil, hostfunc.WithAuditLogger(a))
+	require.NotNil(t, funcs, "hostfunc.New must return a non-nil Functions with WithAuditLogger applied")
 }

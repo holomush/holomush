@@ -36,3 +36,8 @@ func TestABACSubsystemAttributeResolverPanicsBeforeStart(t *testing.T) {
 	sub := setup.NewABACSubsystem(setup.ABACSubsystemConfig{})
 	assert.Panics(t, func() { sub.AttributeResolver() })
 }
+
+func TestABACSubsystemAuditLoggerPanicsBeforeStart(t *testing.T) {
+	sub := setup.NewABACSubsystem(setup.ABACSubsystemConfig{})
+	assert.Panics(t, func() { sub.AuditLogger() })
+}

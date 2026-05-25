@@ -27,6 +27,7 @@ import (
 	"github.com/holomush/holomush/internal/plugin/goplugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
+	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/store"
 	tlscerts "github.com/holomush/holomush/internal/tls"
@@ -37,16 +38,25 @@ import (
 // shutdownTimeout is the maximum time to wait for plugin manager shutdown.
 const shutdownTimeout = 10 * time.Second
 
-// EngineProvider provides an ABAC policy engine and the concrete attribute
-// resolver that backs it. AttributeResolver is used by the plugin subsystem
-// to register plugin-declared attribute providers so that per-action resource
-// policies (e.g. resource.scene.*) resolve at evaluation time.
+// EngineProvider provides an ABAC policy engine, the concrete attribute
+// resolver that backs it, and the audit logger for recording authorization
+// decisions. AttributeResolver is used by the plugin subsystem to register
+// plugin-declared attribute providers so that per-action resource policies
+// (e.g. resource.scene.*) resolve at evaluation time. AuditLogger satisfies
+// pluginauthz.Auditor and is wired to both Evaluate surfaces (binary and Lua)
+// so that spec §5 / INV-4 ("exactly one host-stamped audit event per
+// plugin per-action decision") is satisfied in production.
 type EngineProvider interface {
 	Engine() types.AccessPolicyEngine
 	// AttributeResolver returns the *attribute.Resolver that was passed to
 	// policy.NewEngine during ABAC stack construction. Registering a provider
 	// on this resolver immediately makes its attributes visible to the engine.
 	AttributeResolver() *attribute.Resolver
+	// AuditLogger returns the audit.Logger from the ABAC stack. It satisfies
+	// pluginauthz.Auditor and is passed to goplugin.WithAuditLogger and
+	// hostfunc.WithAuditLogger so both Evaluate surfaces emit audit events
+	// (INV-4). May return nil when audit logging is disabled.
+	AuditLogger() pluginauthz.Auditor
 }
 
 // PolicyInstallerProvider provides a plugin policy installer.
@@ -152,8 +162,13 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	capRegistry.Register("holomush.plugin.v1.AuditService", hostfunc.NewAuditCapability())
 
 	// Create hostfunc bridge.
+	// Wire the audit logger so holomush.evaluate Lua calls emit INV-4 host-stamped
+	// audit events. The logger satisfies pluginauthz.Auditor; nil is safe (audit
+	// is skipped) but should not occur in production since ABACSubsystem always
+	// constructs an audit.Logger during Start().
 	hostFuncOpts := []hostfunc.Option{
 		hostfunc.WithEngine(s.cfg.ABAC.Engine()),
+		hostfunc.WithAuditLogger(s.cfg.ABAC.AuditLogger()),
 		hostfunc.WithWorldService(s.cfg.World.Service()),
 		hostfunc.WithSessionAccess(sessionStore),
 		hostfunc.WithCapabilities(capRegistry),
@@ -243,9 +258,10 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		// attribute resolver registered on it is the same one returned by
 		// s.cfg.ABAC.AttributeResolver() below. One engine+resolver pair for both surfaces.
 		goplugin.WithEngine(s.cfg.ABAC.Engine()),
-		// WithAuditLogger: the Lua surface does not wire an auditor via hostfunc.WithAuditLogger
-		// either (absent from hostFuncOpts above). Both surfaces leave audit logging unset for now;
-		// wiring an auditor to both Evaluate surfaces is a follow-up task.
+		// Wire the audit logger so PluginHostService.Evaluate emits INV-4 host-stamped
+		// audit events for binary plugins. Same logger instance as the Lua surface above
+		// (both call s.cfg.ABAC.AuditLogger()), satisfying spec §5 / INV-4.
+		goplugin.WithAuditLogger(s.cfg.ABAC.AuditLogger()),
 	)
 
 	if s.cfg.CertsDir != "" {
