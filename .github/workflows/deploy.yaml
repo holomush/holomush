@@ -96,14 +96,51 @@ jobs:
             docker compose --profile tunnel --profile backups pull core gateway cloudflared
             docker compose --profile tunnel --profile backups build backup
             docker compose --profile tunnel --profile backups up -d --no-recreate postgres
-            docker compose --profile tunnel --profile backups run --rm core migrate
+            # -T is load-bearing: this script is fed to `ssh ... bash -s <<EOF`, so
+            # stdin IS the heredoc. Without -T, `compose run` attaches stdin and
+            # consumes the remaining heredoc lines (the `up -d` below) as the
+            # container's stdin — so the recreate never runs and core/gateway stay
+            # on the old image while the deploy still "succeeds" (holomush-aocap).
+            docker compose --profile tunnel --profile backups run --rm -T core migrate
             docker compose --profile tunnel --profile backups up -d
           EOF
 
-      - name: Health probe
+      - name: Verify deployed version + health
         env:
           DROPLET_IP: ${{ steps.droplet.outputs.ip }}
+          DISPATCH_TAG: ${{ inputs.tag }}
         run: |-
-          ssh -o StrictHostKeyChecking=yes "holomush@${DROPLET_IP}" \
-            "docker compose -f /opt/holomush/compose.yaml exec -T gateway \
-               wget -q --spider http://localhost:9101/healthz/readiness"
+          VERSION="$DISPATCH_TAG"
+          IMAGE_VERSION="${VERSION#v}"
+          ssh -o StrictHostKeyChecking=yes "holomush@${DROPLET_IP}" bash -s -- "${IMAGE_VERSION}" <<'EOF'
+            set -euo pipefail
+            IMAGE_VERSION="$1"
+            EXPECTED="ghcr.io/holomush/holomush:${IMAGE_VERSION}"
+            cd /opt/holomush
+            # Assert core+gateway actually run the deployed image. A recreate
+            # failure leaves a stale container that still passes readiness, so
+            # readiness alone masks a bad deploy (holomush-aocap). All
+            # `compose run/exec` here use -T (stdin = this heredoc).
+            for svc in core gateway; do
+              running="$(docker compose -f compose.yaml ps --format '{{.Image}}' "$svc")"
+              if [ "$running" != "$EXPECTED" ]; then
+                echo "::error::$svc is running '$running' but expected '$EXPECTED' — deploy did not recreate to the target version"
+                exit 1
+              fi
+            done
+            echo "✓ core + gateway on ${EXPECTED}"
+            # core/gateway are freshly recreated each deploy, so poll readiness
+            # rather than racing the first probe against container startup
+            # (a single immediate probe can hit a still-starting container).
+            for attempt in $(seq 1 30); do
+              if docker compose -f compose.yaml exec -T gateway \
+                   wget -q --spider http://localhost:9101/healthz/readiness; then
+                echo "✓ gateway ready"
+                exit 0
+              fi
+              echo "gateway not ready (attempt ${attempt}/30); retrying in 5s..."
+              sleep 5
+            done
+            echo "::error::gateway did not become ready within ~150s"
+            exit 1
+          EOF
