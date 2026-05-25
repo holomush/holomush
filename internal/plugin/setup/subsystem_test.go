@@ -214,8 +214,9 @@ func (r *recordingAuditor) Log(_ context.Context, event audit.Event) error {
 // Without this wiring, PluginHostService.Evaluate never emits an audit event
 // regardless of the decision, violating spec §5 / INV-4.
 //
-// Deep introspection (assert.Same on the internal auditor field) is deferred to
-// goplugin/host_audit_test.go which has package-internal access via export_test.go.
+// The behavioral proof that the auditor field is populated (assert.Same via
+// AuditorForTest) lives in goplugin/host_engine_wiring_test.go, which has
+// access to host internals via the package-level export_test.go accessor.
 func TestBinaryHostReceivesAuditorFromEngineProvider(t *testing.T) {
 	auditor := &recordingAuditor{}
 	fp := &fakeEngineProvider{auditor: auditor}
