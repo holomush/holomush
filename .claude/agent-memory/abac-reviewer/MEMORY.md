@@ -187,6 +187,15 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   fix: hoist the ctx derivation above the nil-engine guard so `slog.WarnContext` can
   be used). The sloglint `context: scope` linter won't catch these because ctx is
   technically not yet in scope at the Warn call site.
+- **GatedSubcommand SDK gate (8kkv5.6, 2026-05-25)**: `pkg/plugin.GatedSubcommand.Run`
+  enforces structural ABAC: ResourceRef → Evaluate → Handler, three distinct early-return
+  paths, no fallthrough to Handler without `Allowed:true`. `HostEvaluator` takes only
+  action+resource; subject is host-derived at the RPC layer. Deny-reason leakage is
+  acceptable (host controls `Reason` content). Recurring Low gap: engine-error path
+  (`evalErr != nil → CommandFailure`) had no test; `fakeEvaluator` only returned nil
+  error. When reviewing SDK gate code, always check that the test suite includes a case
+  where the evaluator returns a non-nil error and asserts both `CommandFailure` status
+  AND `handlerRan == false`.
 - **Audit assertion gap in integration property specs (rmsi.5 Low NIT)**:
   `seed_policies_test.go` S1-S13 reset `auditWriter` in BeforeEach but no spec in the
   property block reads back `env.auditWriter.Entries()` to verify the decision was
