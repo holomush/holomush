@@ -20,11 +20,11 @@ import (
 // participant. It is the canonical INV-S9 participant-gated read, and its
 // step ordering is LOAD-BEARING (INV-P6-5):
 //
-//	1. validate the caller_character_id;
-//	2. read the header ONLY (no content_entries);
-//	3. run the plugin-code IsParticipant gate — NO ABAC engine is consulted
-//	   (INV-P6-6: SceneServiceImpl has no policy engine to call);
-//	4. read content ONLY after the gate passes, and only for PUBLISHED rows.
+//  1. validate the caller_character_id;
+//  2. read the header ONLY (no content_entries);
+//  3. run the plugin-code IsParticipant gate — NO ABAC engine is consulted
+//     (INV-P6-6: SceneServiceImpl has no policy engine to call);
+//  4. read content ONLY after the gate passes, and only for PUBLISHED rows.
 //
 // A non-participant is rejected with SCENE_PRIVACY_BOUNDARY_BLOCK BEFORE any
 // content is read, and the triple-signal (slog WARN + metric + span error,
@@ -141,4 +141,77 @@ func unixNanoOrZero(t *pgnanos.Time) int64 {
 		return 0
 	}
 	return t.Time().UnixNano() // pgnanos-exempt: proto int64 *_unix_ns wire field; serializing a pgnanos.Time, not a DB scan/insert seam (INV-TS-2 targets the DB seam)
+}
+
+// StartScenePublish opens a publication attempt for an ended scene. The
+// precondition ladder (spec §5) runs before any write: the scene must exist
+// and be in the 'ended' state, must not already have a published archive
+// (one-and-done) nor an active attempt, and must not have exhausted its
+// publish-attempt budget. CreatePublishAttempt then seeds the COLLECTING row
+// and frozen vote roster transactionally. Errors route through mapStoreErr so
+// known oops codes map to their semantic gRPC status and unmapped errors
+// funnel to internalErr (.claude/rules/grpc-errors.md).
+func (s *SceneServiceImpl) StartScenePublish(ctx context.Context, req *scenev1.StartScenePublishRequest) (*scenev1.StartScenePublishResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.start_scene_publish",
+		attribute.String("scene_id", req.GetSceneId()))
+	defer span.End()
+
+	callerID, err := parseCallerCharacterID(req.GetCallerCharacterId())
+	if err != nil {
+		return nil, mapStoreErr(ctx, err)
+	}
+
+	// store.Get returns a SCENE_NOT_FOUND oops error on miss (never nil,nil),
+	// which mapStoreErr maps to codes.NotFound.
+	scene, err := s.store.Get(ctx, req.GetSceneId())
+	if err != nil {
+		return nil, mapStoreErr(ctx, err)
+	}
+	if scene.State != string(SceneStateEnded) {
+		return nil, mapStoreErr(ctx, oops.Code("SCENE_PUBLISH_INVALID_STATE").
+			With("scene_id", req.GetSceneId()).With("current_state", scene.State).
+			Errorf("scene must be in 'ended' state to publish"))
+	}
+
+	counts, err := s.store.CountAttempts(ctx, req.GetSceneId())
+	if err != nil {
+		return nil, mapStoreErr(ctx, err)
+	}
+	if counts.Published > 0 {
+		return nil, mapStoreErr(ctx, oops.Code("SCENE_PUBLISH_ALREADY_PUBLISHED").With("scene_id", req.GetSceneId()).Errorf("scene already has a published archive"))
+	}
+	if counts.Active > 0 {
+		return nil, mapStoreErr(ctx, oops.Code("SCENE_PUBLISH_ALREADY_ACTIVE").With("scene_id", req.GetSceneId()).Errorf("scene already has an active attempt"))
+	}
+	maxAttempts, err := s.store.GetSceneMaxPublishAttempts(ctx, req.GetSceneId())
+	if err != nil {
+		return nil, mapStoreErr(ctx, err)
+	}
+	if counts.Total >= maxAttempts {
+		return nil, mapStoreErr(ctx, oops.Code("SCENE_PUBLISH_ATTEMPTS_EXHAUSTED").
+			With("scene_id", req.GetSceneId()).With("max_attempts", maxAttempts).
+			Errorf("scene has exhausted its publish-attempt budget"))
+	}
+
+	pub, err := s.store.CreatePublishAttempt(ctx, CreatePublishAttemptInput{
+		SceneID:       req.GetSceneId(),
+		AttemptNumber: counts.Total + 1,
+		InitiatedBy:   callerID,
+		VoteWindow:    s.cfg.DefaultVoteWindow,
+		CoolOffWindow: s.cfg.DefaultCoolOffWindow,
+		MaxAttempts:   maxAttempts,
+	})
+	if err != nil {
+		return nil, mapStoreErr(ctx, err)
+	}
+
+	metricScenePublishAttemptResolved("started", "")
+	if emitErr := s.events.emitPublishStarted(ctx, pub); emitErr != nil {
+		slog.WarnContext(ctx, "publish-started emit failed", "err", emitErr.Error())
+	}
+
+	return &scenev1.StartScenePublishResponse{
+		PublishedSceneId: pub.ID,
+		AttemptNumber:    int32(pub.AttemptNumber), //nolint:gosec // attempt_number bounded by max_publish_attempts; never overflows int32
+	}, nil
 }

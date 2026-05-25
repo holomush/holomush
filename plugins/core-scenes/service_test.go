@@ -29,6 +29,9 @@ type fakeStore struct {
 	scenes                    map[string]*SceneRow
 	participants              map[string]map[string]string // sceneID → characterID → role
 	publishedScenes           map[string]*PublishedScene   // Phase 6: published_scene_id → attempt
+	attemptCounts             map[string]AttemptCounts     // Phase 6: sceneID → attempt counts
+	maxPublishAttempts        map[string]int               // Phase 6: sceneID → budget
+	createdAttempts           []*PublishedScene            // Phase 6: records CreatePublishAttempt calls
 	createErr                 error
 	createWithOwnerErr        error
 	getErr                    error
@@ -43,9 +46,11 @@ type recordingEventSink struct {
 
 func newFakeStore() *fakeStore {
 	return &fakeStore{
-		scenes:          make(map[string]*SceneRow),
-		participants:    make(map[string]map[string]string),
-		publishedScenes: make(map[string]*PublishedScene),
+		scenes:             make(map[string]*SceneRow),
+		participants:       make(map[string]map[string]string),
+		publishedScenes:    make(map[string]*PublishedScene),
+		attemptCounts:      make(map[string]AttemptCounts),
+		maxPublishAttempts: make(map[string]int),
 	}
 }
 
@@ -89,6 +94,32 @@ func (f *fakeStore) GetPublishedSceneContent(_ context.Context, _ string) ([]Pub
 // TallyVotes returns a zero tally by default.
 func (f *fakeStore) TallyVotes(_ context.Context, _ string) (*VoteTally, error) {
 	return &VoteTally{}, nil
+}
+
+// CountAttempts returns the configured per-scene attempt counts (zero value
+// when unset — i.e. no prior attempts).
+func (f *fakeStore) CountAttempts(_ context.Context, sceneID string) (AttemptCounts, error) {
+	return f.attemptCounts[sceneID], nil
+}
+
+// GetSceneMaxPublishAttempts returns the configured budget (zero when unset).
+func (f *fakeStore) GetSceneMaxPublishAttempts(_ context.Context, sceneID string) (int, error) {
+	return f.maxPublishAttempts[sceneID], nil
+}
+
+// CreatePublishAttempt records the call and returns a synthetic COLLECTING
+// attempt — the handler-unit-test concern is precondition logic, not roster
+// seeding (A5 integration-tests cover that).
+func (f *fakeStore) CreatePublishAttempt(_ context.Context, in CreatePublishAttemptInput) (*PublishedScene, error) {
+	pub := &PublishedScene{
+		ID:            "pub-" + in.SceneID,
+		SceneID:       in.SceneID,
+		AttemptNumber: in.AttemptNumber,
+		Status:        StatusCollecting,
+		InitiatedBy:   in.InitiatedBy,
+	}
+	f.createdAttempts = append(f.createdAttempts, pub)
+	return pub, nil
 }
 
 func (s *recordingEventSink) Emit(_ context.Context, intent pluginsdk.EmitIntent) error {

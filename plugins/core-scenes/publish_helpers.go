@@ -71,7 +71,7 @@ func mapStoreErr(ctx context.Context, err error) error {
 				"SCENE_PUBLISH_REF_INVALID",
 				"SCENE_PUBLISH_NO_FOCUSED_SCENE":
 				return status.Error(codes.InvalidArgument, code) //nolint:wrapcheck // gRPC status is the wire contract; oops would shadow the code
-			case "SCENE_PUBLISH_NOT_FOUND":
+			case "SCENE_PUBLISH_NOT_FOUND", "SCENE_NOT_FOUND":
 				return status.Error(codes.NotFound, code) //nolint:wrapcheck // gRPC status is the wire contract; oops would shadow the code
 			}
 		}
@@ -130,13 +130,17 @@ func (noopPublishEventer) emitPublishStarted(context.Context, *PublishedScene) e
 func (noopPublishEventer) emitVoteCast(context.Context, string, string, *CastVoteResult) error {
 	return nil
 }
+
 func (noopPublishEventer) emitCoolOffStarted(context.Context, string, time.Duration) error {
 	return nil
 }
+
 func (noopPublishEventer) emitResolved(context.Context, string, PublishedSceneStatus, *PublishFailureReason, *VoteTally) error {
 	return nil
 }
-func (noopPublishEventer) emitWithdrawn(context.Context, string, string) error          { return nil }
+
+func (noopPublishEventer) emitWithdrawn(context.Context, string, string) error { return nil }
+
 func (noopPublishEventer) emitAttemptsExtended(context.Context, string, string, int, int) error {
 	return nil
 }

@@ -73,6 +73,14 @@ type sceneStorer interface {
 	GetPublishedSceneHeader(ctx context.Context, id string) (*PublishedScene, error)
 	GetPublishedSceneContent(ctx context.Context, id string) ([]PublishedSceneEntry, error)
 	TallyVotes(ctx context.Context, publishedSceneID string) (*VoteTally, error)
+	// StartScenePublish preconditions: attempt budget + one-and-done checks
+	// (CountAttempts), the per-scene max-attempts read
+	// (GetSceneMaxPublishAttempts), and the transactional attempt+roster
+	// create (CreatePublishAttempt). Implemented by *SceneStore in
+	// publish_store.go.
+	CountAttempts(ctx context.Context, sceneID string) (AttemptCounts, error)
+	CreatePublishAttempt(ctx context.Context, in CreatePublishAttemptInput) (*PublishedScene, error)
+	GetSceneMaxPublishAttempts(ctx context.Context, sceneID string) (int, error)
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.
@@ -1062,9 +1070,7 @@ func newSceneID() (string, error) {
 // surface is explicit. Real handlers land in Phase B (publish_service.go),
 // which replaces these. UnimplementedSceneServiceServer is embedded, so these
 // override the embedded defaults with the same Unimplemented status.
-func (s *SceneServiceImpl) StartScenePublish(_ context.Context, _ *scenev1.StartScenePublishRequest) (*scenev1.StartScenePublishResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
-}
+// StartScenePublish is implemented in publish_service.go (Task B2).
 
 func (s *SceneServiceImpl) CastPublishSceneVote(_ context.Context, _ *scenev1.CastPublishSceneVoteRequest) (*scenev1.CastPublishSceneVoteResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is

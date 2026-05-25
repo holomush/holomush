@@ -323,7 +323,8 @@ func (s *SceneStore) GetPublishedSceneHeader(ctx context.Context, id string) (*P
 // has approved the caller for a participant-gated RPC (INV-P6-5).
 func (s *SceneStore) GetPublishedSceneContent(ctx context.Context, id string) ([]PublishedSceneEntry, error) {
 	var raw []byte
-	if err := s.pool.QueryRow(ctx,
+	if err := s.pool.QueryRow(
+		ctx,
 		`SELECT content_entries FROM published_scenes WHERE id = $1`, id,
 	).Scan(&raw); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -463,4 +464,19 @@ func (s *SceneStore) CountAttempts(ctx context.Context, sceneID string) (Attempt
 		return c, oops.Code("SCENE_PUBLISH_COUNT_FAILED").Wrap(err)
 	}
 	return c, nil
+}
+
+// GetSceneMaxPublishAttempts returns scenes.max_publish_attempts for a scene.
+func (s *SceneStore) GetSceneMaxPublishAttempts(ctx context.Context, sceneID string) (int, error) {
+	var maxAttempts int
+	if err := s.pool.QueryRow(
+		ctx,
+		`SELECT max_publish_attempts FROM scenes WHERE id = $1`, sceneID,
+	).Scan(&maxAttempts); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, oops.Code("SCENE_PUBLISH_NOT_FOUND").With("scene_id", sceneID).Wrap(err)
+		}
+		return 0, oops.Code("SCENE_PUBLISH_MAX_ATTEMPTS_READ_FAILED").Wrap(err)
+	}
+	return maxAttempts, nil
 }

@@ -2024,7 +2024,8 @@ var _ = Describe("Publish store — attempt + roster lifecycle", func() {
 
 		// The failed attempt's row must not survive (transaction rolled back).
 		var n int
-		Expect(store.pool.QueryRow(ctx,
+		Expect(store.pool.QueryRow(
+			ctx,
 			`SELECT count(*) FROM published_scenes WHERE scene_id = $1`, sceneID,
 		).Scan(&n)).NotTo(HaveOccurred())
 		Expect(n).To(Equal(0), "rolled-back attempt MUST leave no published_scenes row")
@@ -2179,7 +2180,7 @@ var _ = Describe("Publish store — status reads + transitions", func() {
 		Expect(got.Status).To(Equal(StatusCollecting))
 		Expect(got.InitiatedBy).To(Equal(ownerID))
 		Expect(got.AttemptNumber).To(Equal(1))
-		Expect(got.VoteWindow).To(Equal(7 * 24 * time.Hour), "INTERVAL must round-trip to the original duration")
+		Expect(got.VoteWindow).To(Equal(7*24*time.Hour), "INTERVAL must round-trip to the original duration")
 		Expect(got.CoolOffWindow).To(Equal(30 * time.Minute))
 		Expect(got.MaxAttemptsSnapshot).To(Equal(3))
 		Expect(got.CoolOffStartedAt).To(BeNil())

@@ -129,3 +129,10 @@ func metricScenePublishPrivacyBlock(operation, reason string) {
 	_ = operation
 	_ = reason
 }
+
+// metricScenePublishAttemptResolved counts publish-attempt outcomes (spec §13.1).
+// Metric: scene_publish_attempts_total{outcome, reason}. No-op stub.
+func metricScenePublishAttemptResolved(outcome, reason string) {
+	_ = outcome
+	_ = reason
+}

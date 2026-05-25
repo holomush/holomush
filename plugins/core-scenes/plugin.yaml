@@ -199,6 +199,12 @@ policies:
       permit(principal is character, action in ["transfer-ownership"], resource is scene) when { resource.scene.owner == principal.id
       };
 
+  # ─── Phase 6: publication (Task B2) ───────────────────────────────────
+  - name: start-publish-as-participant
+    dsl: >-
+      permit(principal is character, action in ["publish"], resource is scene) when { principal.id in resource.scene.participants
+      && resource.scene.state == "ended" };
+
   # ─── Admin-only operations ────────────────────────────────────────────
   - name: admin-extend-publish-attempts
     dsl: >-
