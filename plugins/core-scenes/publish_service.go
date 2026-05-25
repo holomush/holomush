@@ -297,13 +297,17 @@ func (s *SceneServiceImpl) DownloadPublishedScene(ctx context.Context, req *scen
 }
 
 // renderPublishedScene renders content entries to bytes for the given format.
-// PLACEHOLDER: the real per-format renderers land in Phase C (C1 markdown, C2
-// plain_text, C3 jsonl) and replace this body inline. The format MUST already
-// be validated against publishRenderMime by the caller. The placeholder is
-// deterministic and non-empty so the download path is exercisable end-to-end
-// before Phase C.
+// The format MUST already be validated against publishRenderMime by the caller.
+// Markdown is implemented (C1); plain_text (C2) and jsonl (C3) still use the
+// deterministic placeholder until their renderers land, so the download path
+// stays exercisable end-to-end for those formats meanwhile.
 func renderPublishedScene(format string, entries []PublishedSceneEntry) []byte {
-	return []byte(fmt.Sprintf("scene publication: %d entries (%s rendering pending — Phase C)", len(entries), format))
+	switch format {
+	case "markdown":
+		return []byte(renderMarkdown(entries))
+	default:
+		return []byte(fmt.Sprintf("scene publication: %d entries (%s rendering pending — Phase C)", len(entries), format))
+	}
 }
 
 // GetPublicSceneArchive is the PUBLIC, unauthenticated read of a published
