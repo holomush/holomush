@@ -17,6 +17,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus/cursor"
 	"github.com/holomush/holomush/internal/grpc/focus"
+	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/session"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -558,6 +559,85 @@ func (s *pluginHostServiceServer) QueryStreamHistory(ctx context.Context, req *p
 	return &pluginv1.PluginHostServiceQueryStreamHistoryResponse{
 		Events:     protoEvents,
 		NextCursor: nextCursor,
+	}, nil
+}
+
+// Evaluate implements PluginHostService.Evaluate for binary plugins.
+//
+// Security invariant: the acting subject is ALWAYS derived from the
+// host-issued dispatch token, never from plugin-supplied fields. This
+// mirrors EmitEvent's token→actor recovery exactly (spec §3.3.5 / §5.4).
+//
+// Fail-closed on: nil host, nil engine, nil tokenStore, missing token,
+// rejected token, empty actor subject, and foreign resource types.
+func (s *pluginHostServiceServer) Evaluate(ctx context.Context, req *pluginv1.PluginHostServiceEvaluateRequest) (*pluginv1.PluginHostServiceEvaluateResponse, error) {
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+
+	// Snapshot engine, auditor, and tokenStore under a single RLock, then release
+	// before delegating — avoids holding the lock across the engine call.
+	s.host.mu.RLock()
+	eng := s.host.engine
+	auditor := s.host.auditor
+	tokenStore := s.host.tokenStore
+	s.host.mu.RUnlock()
+
+	if eng == nil {
+		return nil, oops.Code("EVALUATE_ENGINE_UNCONFIGURED").
+			With("plugin", s.pluginName).
+			Errorf("access policy engine is not configured")
+	}
+
+	// Token-based authentication — mirrors EmitEvent §3.3.5 exactly:
+	// read the host-issued dispatch token from the incoming metadata header;
+	// look up the stored actor; never trust plugin-supplied identity claims.
+	md, _ := metadata.FromIncomingContext(ctx)
+	tokens := md.Get("x-holomush-emit-token")
+	if len(tokens) == 0 || tokens[0] == "" {
+		return nil, oops.Code("EMIT_TOKEN_MISSING").
+			With("plugin", s.pluginName).
+			Errorf("plugin evaluated without a host-issued dispatch token")
+	}
+
+	if tokenStore == nil {
+		return nil, oops.Code("EMIT_TOKEN_STORE_UNCONFIGURED").
+			With("plugin", s.pluginName).
+			Errorf("plugin token store is not configured")
+	}
+
+	storedActor, ok := tokenStore.Lookup(s.pluginName, tokens[0])
+	if !ok {
+		slog.WarnContext(
+			ctx, "evaluate rejected: token not valid for this plugin",
+			"plugin", s.pluginName,
+			"code", "EMIT_TOKEN_REJECTED",
+		)
+		return nil, oops.Code("EMIT_TOKEN_REJECTED").
+			With("plugin", s.pluginName).
+			Errorf("dispatch token is not valid for this plugin")
+	}
+
+	subject := pluginauthz.ActorSubject(storedActor)
+	ownedTypes := s.host.ownedResourceTypes(s.pluginName)
+
+	dec, err := pluginauthz.Evaluate(ctx, pluginauthz.Input{
+		Engine:     eng,
+		Auditor:    auditor,
+		PluginName: s.pluginName,
+		OwnedTypes: ownedTypes,
+		Subject:    subject,
+		Action:     req.GetAction(),
+		Resource:   req.GetResource(),
+	})
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
+	}
+
+	return &pluginv1.PluginHostServiceEvaluateResponse{
+		Allowed:       dec.Allowed,
+		Reason:        dec.Reason,
+		MatchedPolicy: dec.MatchedPolicy,
 	}, nil
 }
 
