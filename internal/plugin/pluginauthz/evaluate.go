@@ -13,12 +13,43 @@ import (
 	"time"
 
 	"github.com/samber/oops"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/pkg/errutil"
 )
+
+// otelInstruments holds the OTel tracer and evaluation counter.
+// Initialized on first use via the global OTel provider; safe for concurrent
+// access because otel.Tracer/otel.Meter are goroutine-safe.
+var (
+	// evaluationsCounter is the per-evaluation counter. Labeled by plugin,
+	// effect (allow / deny / error), and subject_kind. Initialized lazily.
+	evaluationsCounter metric.Int64Counter
+)
+
+func init() {
+	// Use the global meter (same scope as otel_middleware.go's "holomush.plugin").
+	meter := otel.GetMeterProvider().Meter("holomush.plugin")
+	var err error
+	evaluationsCounter, err = meter.Int64Counter(
+		"holomush_pluginauthz_evaluations_total",
+		metric.WithDescription("Total plugin authorization evaluations by pluginauthz.Evaluate"),
+	)
+	if err != nil {
+		// Counter creation errors from the SDK should not crash the process.
+		// If the global provider is the no-op default, this never errors.
+		// If it errors (misconfigured SDK), fall through with a nil counter
+		// and record calls below are guarded.
+		evaluationsCounter = nil
+	}
+}
 
 // ActorSubject maps a host-stamped Actor to its ABAC subject string. It is
 // the single mapping shared by the binary and Lua surfaces (INV-5) so the
@@ -71,40 +102,87 @@ const commandResourceType = "command"
 // Evaluate runs entitlement → engine → audit and returns a runtime-neutral
 // Decision. It fails closed on every error path: a non-nil error always
 // accompanies a non-allowing Decision.
+//
+// OTel instrumentation: a span ("pluginauthz.evaluate") and a counter
+// ("holomush_pluginauthz_evaluations_total") are recorded per call. Both use
+// the global provider (same scope as otel_middleware.go); the global SDK is
+// initialized before any plugin call in production, so providers are always set.
 func Evaluate(ctx context.Context, in Input) (Decision, error) {
+	// Start OTel span — use the global tracer provider (matches otel_middleware.go scope).
+	tracer := otel.GetTracerProvider().Tracer("holomush.plugin")
+	subjectKind := subjectKindFromSubject(in.Subject)
+	ctx, span := tracer.Start(ctx, "pluginauthz.evaluate",
+		trace.WithAttributes(
+			attribute.String("plugin.name", in.PluginName),
+			attribute.String("evaluate.action", in.Action),
+			attribute.String("evaluate.resource", in.Resource),
+			attribute.String("evaluate.subject_kind", subjectKind),
+		),
+	)
+	defer span.End()
+
+	// recordEffect is a helper that emits the counter and sets evaluate.effect on the span.
+	recordEffect := func(effect string) {
+		span.SetAttributes(attribute.String("evaluate.effect", effect))
+		if evaluationsCounter != nil {
+			evaluationsCounter.Add(ctx, 1, metric.WithAttributes(
+				attribute.String("plugin", in.PluginName),
+				attribute.String("effect", effect),
+				attribute.String("subject_kind", subjectKind),
+			))
+		}
+	}
+	recordError := func(err error) {
+		span.SetStatus(codes.Error, err.Error())
+		span.RecordError(err)
+		recordEffect("error")
+	}
+
 	if in.Engine == nil {
-		return Decision{}, oops.Code("EVALUATE_NO_ENGINE").
+		err := oops.Code("EVALUATE_NO_ENGINE").
 			With("plugin", in.PluginName).Errorf("evaluate called with nil engine")
+		recordError(err)
+		return Decision{}, err
 	}
 	if in.Subject == "" {
 		// No authenticated actor bound to the call (INV-2).
-		return Decision{}, oops.Code("EVALUATE_NO_SUBJECT").
+		err := oops.Code("EVALUATE_NO_SUBJECT").
 			With("plugin", in.PluginName).
 			Errorf("evaluate called without an authenticated subject")
+		recordError(err)
+		return Decision{}, err
 	}
 	if in.Action == "" {
-		return Decision{}, oops.Code("EVALUATE_EMPTY_ACTION").
+		err := oops.Code("EVALUATE_EMPTY_ACTION").
 			With("plugin", in.PluginName).Errorf("action must not be empty")
+		recordError(err)
+		return Decision{}, err
 	}
 
 	resType, resID, ok := splitResourceRef(in.Resource)
 	if !ok {
-		return Decision{}, oops.Code("EVALUATE_BAD_RESOURCE").
+		err := oops.Code("EVALUATE_BAD_RESOURCE").
 			With("plugin", in.PluginName).With("resource", in.Resource).
 			Errorf("resource must be of the form type:id")
+		recordError(err)
+		return Decision{}, err
 	}
 
 	// Entitlement (INV-3): plugin-owned type or the command carve-out.
 	if resType != commandResourceType && !in.OwnedTypes[resType] {
-		return Decision{}, oops.Code("EVALUATE_UNENTITLED_TYPE").
+		err := oops.Code("EVALUATE_UNENTITLED_TYPE").
 			With("plugin", in.PluginName).With("resource_type", resType).
 			Errorf("plugin may not evaluate resource type %q", resType)
+		recordError(err)
+		return Decision{}, err
 	}
 	_ = resID // present-and-non-empty already validated by splitResourceRef
 
 	req, reqErr := types.NewAccessRequest(in.Subject, in.Action, in.Resource, nil)
 	if reqErr != nil {
-		return Decision{}, oops.With("plugin", in.PluginName).Wrap(reqErr)
+		err := oops.With("plugin", in.PluginName).Wrap(reqErr)
+		recordError(err)
+		return Decision{}, err
 	}
 
 	dec, evalErr := in.Engine.Evaluate(ctx, req)
@@ -112,7 +190,9 @@ func Evaluate(ctx context.Context, in Input) (Decision, error) {
 		errutil.LogErrorContext(ctx, "plugin evaluate engine error", evalErr,
 			"plugin", in.PluginName, "action", in.Action, "resource", in.Resource)
 		// Fail closed: error accompanies a non-allowing decision.
-		return Decision{}, oops.With("plugin", in.PluginName).Wrap(evalErr)
+		err := oops.With("plugin", in.PluginName).Wrap(evalErr)
+		recordError(err)
+		return Decision{}, err
 	}
 
 	result := Decision{
@@ -120,12 +200,19 @@ func Evaluate(ctx context.Context, in Input) (Decision, error) {
 		Reason:        dec.Reason(),
 		MatchedPolicy: dec.PolicyID(),
 	}
+	span.SetAttributes(attribute.String("evaluate.matched_policy", result.MatchedPolicy))
+
+	effect := "deny"
+	if result.Allowed {
+		effect = "allow"
+	}
+	recordEffect(effect)
 
 	// Audit (INV-4): exactly one host-stamped event per evaluation.
 	if in.Auditor != nil {
-		effect := types.EffectDeny
+		auditEffect := types.EffectDeny
 		if dec.IsAllowed() {
-			effect = types.EffectAllow
+			auditEffect = types.EffectAllow
 		}
 		if logErr := in.Auditor.Log(ctx, audit.Event{
 			Name:      "plugin.evaluate",
@@ -134,7 +221,7 @@ func Evaluate(ctx context.Context, in Input) (Decision, error) {
 			Subject:   in.Subject,
 			Action:    in.Action,
 			Resource:  in.Resource,
-			Effect:    effect,
+			Effect:    auditEffect,
 			Timestamp: time.Now(),
 		}); logErr != nil {
 			errutil.LogErrorContext(ctx, "plugin evaluate audit log failed", logErr,
@@ -144,6 +231,22 @@ func Evaluate(ctx context.Context, in Input) (Decision, error) {
 	}
 
 	return result, nil
+}
+
+// subjectKindFromSubject extracts the kind prefix from an ABAC subject string
+// (e.g. "character:01ABC" → "character", "plugin:core-scenes" → "plugin",
+// "system" → "system", "" → "unknown"). Used as a non-PII span attribute.
+func subjectKindFromSubject(subject string) string {
+	if subject == "" {
+		return "unknown"
+	}
+	if subject == "system" {
+		return "system"
+	}
+	if i := strings.IndexByte(subject, ':'); i > 0 {
+		return subject[:i]
+	}
+	return "unknown"
 }
 
 // splitResourceRef parses "type:id" and requires both halves non-empty.

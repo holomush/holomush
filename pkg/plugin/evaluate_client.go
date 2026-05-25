@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/samber/oops"
+	"google.golang.org/grpc/metadata"
 
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -52,7 +53,28 @@ func (c *hostEvaluateClient) Evaluate(ctx context.Context, action, resource stri
 		return EvaluateDecision{}, oops.New("host evaluate client is not configured")
 	}
 
-	resp, err := c.client.Evaluate(ctx, &pluginv1.PluginHostServiceEvaluateRequest{
+	// Ferry the host-issued per-dispatch token from the incoming command
+	// context to the outgoing Evaluate RPC so the host can recover the acting
+	// subject server-side — the identical mechanism EmitEvent uses (see
+	// emitTokenHeader in event_sink.go). Without this the host rejects the call
+	// with EMIT_TOKEN_MISSING ("plugin evaluated without a host-issued dispatch
+	// token"). Evaluate is always command-gated, so the token is present on the
+	// incoming context; the self-token fallback used by plugin-initiated
+	// EmitEvent is not needed here.
+	callCtx := ctx
+	hasOutgoingToken := false
+	if existing, ok := metadata.FromOutgoingContext(callCtx); ok && len(existing.Get(emitTokenHeader)) > 0 {
+		hasOutgoingToken = true
+	}
+	if !hasOutgoingToken {
+		if incoming, ok := metadata.FromIncomingContext(ctx); ok {
+			if tokens := incoming.Get(emitTokenHeader); len(tokens) > 0 && tokens[0] != "" {
+				callCtx = metadata.AppendToOutgoingContext(callCtx, emitTokenHeader, tokens[0])
+			}
+		}
+	}
+
+	resp, err := c.client.Evaluate(callCtx, &pluginv1.PluginHostServiceEvaluateRequest{
 		Action:   action,
 		Resource: resource,
 	})
