@@ -298,13 +298,15 @@ func (s *SceneServiceImpl) DownloadPublishedScene(ctx context.Context, req *scen
 
 // renderPublishedScene renders content entries to bytes for the given format.
 // The format MUST already be validated against publishRenderMime by the caller.
-// Markdown is implemented (C1); plain_text (C2) and jsonl (C3) still use the
-// deterministic placeholder until their renderers land, so the download path
-// stays exercisable end-to-end for those formats meanwhile.
+// Markdown (C1) and plain_text (C2) are implemented; jsonl (C3) still uses the
+// deterministic placeholder until its renderer lands, so the download path
+// stays exercisable end-to-end for that format meanwhile.
 func renderPublishedScene(format string, entries []PublishedSceneEntry) []byte {
 	switch format {
 	case "markdown":
 		return []byte(renderMarkdown(entries))
+	case "plain_text":
+		return []byte(renderPlainText(entries))
 	default:
 		return []byte(fmt.Sprintf("scene publication: %d entries (%s rendering pending — Phase C)", len(entries), format))
 	}
