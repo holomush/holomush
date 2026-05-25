@@ -90,6 +90,16 @@ func internalErr(ctx context.Context, err error) error {
 	return status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status is the wire contract; opaque Internal per grpc-errors.md
 }
 
+// publicArchiveNotFound is the single opaque NOT_FOUND returned by the PUBLIC
+// archive RPCs (GetPublicSceneArchive / DownloadPublicSceneArchive) for every
+// non-readable case: a nonexistent id AND any non-PUBLISHED attempt
+// (COLLECTING / COOLOFF / ATTEMPT_FAILED). The uniform code+message is
+// load-bearing for INV-P6-8: a non-participant MUST NOT be able to infer that
+// an attempt exists or is in progress from the error shape.
+func publicArchiveNotFound() error {
+	return status.Error(codes.NotFound, "scene archive not found") //nolint:wrapcheck // gRPC status is the wire contract; uniform opaque NOT_FOUND per INV-P6-8
+}
+
 // SceneServiceConfig carries Phase 6 game-wide defaults, set at plugin init
 // (main.go). Per-scene overrides are read from the scene row at
 // StartScenePublish time and take precedence over these defaults.

@@ -1088,9 +1088,7 @@ func (s *SceneServiceImpl) ListScenePublishAttempts(_ context.Context, _ *scenev
 	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
 }
 
-func (s *SceneServiceImpl) GetPublicSceneArchive(_ context.Context, _ *scenev1.GetPublicSceneArchiveRequest) (*scenev1.GetPublicSceneArchiveResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
-}
+// GetPublicSceneArchive is implemented in publish_service.go (Task C4).
 
 func (s *SceneServiceImpl) DownloadPublicSceneArchive(_ context.Context, _ *scenev1.DownloadPublicSceneArchiveRequest) (*scenev1.DownloadPublicSceneArchiveResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "not yet implemented") //nolint:wrapcheck // gRPC status errors pass through as-is

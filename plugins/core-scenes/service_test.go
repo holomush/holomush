@@ -28,10 +28,11 @@ import (
 type fakeStore struct {
 	scenes                    map[string]*SceneRow
 	participants              map[string]map[string]string // sceneID → characterID → role
-	publishedScenes           map[string]*PublishedScene   // Phase 6: published_scene_id → attempt
-	attemptCounts             map[string]AttemptCounts     // Phase 6: sceneID → attempt counts
-	maxPublishAttempts        map[string]int               // Phase 6: sceneID → budget
-	createdAttempts           []*PublishedScene            // Phase 6: records CreatePublishAttempt calls
+	publishedScenes           map[string]*PublishedScene       // Phase 6: published_scene_id → attempt
+	publishedContent          map[string][]PublishedSceneEntry // Phase 6: published_scene_id → content entries
+	attemptCounts             map[string]AttemptCounts         // Phase 6: sceneID → attempt counts
+	maxPublishAttempts        map[string]int                   // Phase 6: sceneID → budget
+	createdAttempts           []*PublishedScene                // Phase 6: records CreatePublishAttempt calls
 	createErr                 error
 	createWithOwnerErr        error
 	getErr                    error
@@ -49,6 +50,7 @@ func newFakeStore() *fakeStore {
 		scenes:             make(map[string]*SceneRow),
 		participants:       make(map[string]map[string]string),
 		publishedScenes:    make(map[string]*PublishedScene),
+		publishedContent:   make(map[string][]PublishedSceneEntry),
 		attemptCounts:      make(map[string]AttemptCounts),
 		maxPublishAttempts: make(map[string]int),
 	}
@@ -85,10 +87,11 @@ func (f *fakeStore) GetPublishedSceneHeader(_ context.Context, id string) (*Publ
 	return f.publishedScenes[id], nil
 }
 
-// GetPublishedSceneContent returns no entries by default. The INV-P6-5
-// tripwire test overrides this on an embedding type to count calls.
-func (f *fakeStore) GetPublishedSceneContent(_ context.Context, _ string) ([]PublishedSceneEntry, error) {
-	return nil, nil
+// GetPublishedSceneContent returns the installed content entries for an
+// attempt (nil when none). The INV-P6-5 tripwire test overrides this on an
+// embedding type to count calls.
+func (f *fakeStore) GetPublishedSceneContent(_ context.Context, id string) ([]PublishedSceneEntry, error) {
+	return f.publishedContent[id], nil
 }
 
 // TallyVotes returns a zero tally by default.

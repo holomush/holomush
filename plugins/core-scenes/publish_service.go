@@ -301,3 +301,57 @@ func (s *SceneServiceImpl) DownloadPublishedScene(ctx context.Context, req *scen
 func renderPublishedScene(format string, entries []PublishedSceneEntry) []byte {
 	return []byte(fmt.Sprintf("scene publication: %d entries (%s rendering pending — Phase C)", len(entries), format))
 }
+
+// GetPublicSceneArchive is the PUBLIC, unauthenticated read of a published
+// scene. It is structurally separate from GetPublishedScene and shares no code
+// path with it (ADR holomush-qd3r5): there is NO caller validation, NO
+// participant gate, and NO ABAC. The only gate is status==PUBLISHED; every
+// other case — a nonexistent id and any non-PUBLISHED attempt (COLLECTING /
+// COOLOFF / ATTEMPT_FAILED) — returns the single opaque NOT_FOUND so a caller
+// cannot infer that an attempt exists or is in progress (INV-P6-8). The public
+// response carries only the published artifact (title, participant names,
+// content, published_at) — never vote state or per-voter data (spec §5.1).
+func (s *SceneServiceImpl) GetPublicSceneArchive(ctx context.Context, req *scenev1.GetPublicSceneArchiveRequest) (*scenev1.GetPublicSceneArchiveResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.get_public_scene_archive",
+		attribute.String("published_scene_id", req.GetPublishedSceneId()))
+	defer span.End()
+
+	pub, err := s.store.GetPublishedSceneHeader(ctx, req.GetPublishedSceneId())
+	if err != nil {
+		return nil, internalErr(ctx, err)
+	}
+	// pub == nil is "missing" (GetPublishedSceneHeader returns nil,nil on miss);
+	// any non-PUBLISHED status is treated identically. Both → opaque NOT_FOUND.
+	if pub == nil || pub.Status != StatusPublished {
+		return nil, publicArchiveNotFound()
+	}
+
+	entries, err := s.store.GetPublishedSceneContent(ctx, req.GetPublishedSceneId())
+	if err != nil {
+		return nil, internalErr(ctx, err)
+	}
+
+	return assemblePublicResponse(pub, entries), nil
+}
+
+// assemblePublicResponse maps a PUBLISHED scene to the public archive response.
+// It includes ONLY public-safe fields — no tally, no per-voter data, no
+// failure_reason — per the §5.1 two-pair separation.
+func assemblePublicResponse(pub *PublishedScene, entries []PublishedSceneEntry) *scenev1.GetPublicSceneArchiveResponse {
+	resp := &scenev1.GetPublicSceneArchiveResponse{
+		Id:                   pub.ID,
+		ParticipantsSnapshot: pub.ParticipantsSnapshot,
+		PublishedAtUnixNs:    unixNanoOrZero(pub.PublishedAt),
+	}
+	if pub.TitleSnapshot != nil {
+		resp.TitleSnapshot = *pub.TitleSnapshot
+	}
+	for _, e := range entries {
+		resp.ContentEntries = append(resp.ContentEntries, &scenev1.PublishedSceneEntry{
+			Speaker: e.Speaker,
+			Kind:    string(e.Kind),
+			Content: e.Content,
+		})
+	}
+	return resp
+}
