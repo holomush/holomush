@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -237,4 +238,229 @@ func (s *SceneStore) TallyVotes(ctx context.Context, publishedSceneID string) (*
 		return nil, oops.Code("SCENE_PUBLISH_TALLY_FAILED").Wrap(err)
 	}
 	return &t, nil
+}
+
+// publishedSceneHeaderColumns is the column list for a header read — every
+// published_scenes column EXCEPT content_entries. The deliberate omission of
+// content_entries is load-bearing for INV-P6-5: the participant gate runs
+// between GetPublishedSceneHeader and GetPublishedSceneContent, so the header
+// read MUST NOT carry IC content.
+const publishedSceneHeaderColumns = `
+	id, scene_id, attempt_number, status, initiated_by, initiated_at,
+	cooloff_started_at, resolved_at, vote_window, cooloff_window,
+	max_attempts_snapshot, title_snapshot, participants_snapshot,
+	published_at, failure_reason`
+
+// scanPublishedSceneHeader scans a row selected with publishedSceneHeaderColumns
+// into a PublishedScene (ContentEntries left nil). Returns the raw scan error
+// (so callers can test pgx.ErrNoRows) except for decode failures, which are
+// wrapped with an oops code.
+func scanPublishedSceneHeader(row pgx.Row) (*PublishedScene, error) {
+	var (
+		pub        PublishedScene
+		statusStr  string
+		voteIv     pgtype.Interval
+		coolIv     pgtype.Interval
+		titleSnap  *string
+		partsRaw   []byte
+		failureStr *string
+	)
+	if err := row.Scan(
+		&pub.ID, &pub.SceneID, &pub.AttemptNumber, &statusStr, &pub.InitiatedBy,
+		&pub.InitiatedAt, &pub.CoolOffStartedAt, &pub.ResolvedAt,
+		&voteIv, &coolIv, &pub.MaxAttemptsSnapshot, &titleSnap, &partsRaw,
+		&pub.PublishedAt, &failureStr,
+	); err != nil {
+		return nil, err //nolint:wrapcheck // raw scan error preserved so callers can test pgx.ErrNoRows
+	}
+	pub.Status = PublishedSceneStatus(statusStr)
+	pub.VoteWindow = intervalToDuration(voteIv)
+	pub.CoolOffWindow = intervalToDuration(coolIv)
+	pub.TitleSnapshot = titleSnap
+	if len(partsRaw) > 0 {
+		if err := json.Unmarshal(partsRaw, &pub.ParticipantsSnapshot); err != nil {
+			return nil, oops.Code("SCENE_PUBLISH_PARTICIPANTS_DECODE_FAILED").Wrap(err)
+		}
+	}
+	if failureStr != nil {
+		fr := PublishFailureReason(*failureStr)
+		pub.FailureReason = &fr
+	}
+	return &pub, nil
+}
+
+// intervalToDuration decodes a pgtype.Interval to a Go duration. It mirrors
+// durationToInterval (which encodes Microseconds only); Days is included
+// defensively, Months ignored (never written, and month→duration is
+// calendar-ambiguous).
+func intervalToDuration(iv pgtype.Interval) time.Duration {
+	return time.Duration(iv.Microseconds)*time.Microsecond +
+		time.Duration(iv.Days)*24*time.Hour
+}
+
+// GetPublishedSceneHeader returns the attempt row WITHOUT content_entries, or
+// (nil, nil) when no row exists. Callers needing content call
+// GetPublishedSceneContent separately, after the participant gate (INV-P6-5).
+func (s *SceneStore) GetPublishedSceneHeader(ctx context.Context, id string) (*PublishedScene, error) {
+	ctx, span := startSpan(ctx, "scene.store.get_publish_header",
+		attribute.String("published_scene_id", id))
+	defer span.End()
+
+	pub, err := scanPublishedSceneHeader(s.pool.QueryRow(ctx,
+		`SELECT `+publishedSceneHeaderColumns+` FROM published_scenes WHERE id = $1`, id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, oops.Code("SCENE_PUBLISH_HEADER_READ_FAILED").Wrap(err)
+	}
+	return pub, nil
+}
+
+// GetPublishedSceneContent returns the frozen content entries for an attempt,
+// or nil when the row does not exist or has no content (non-PUBLISHED rows
+// have NULL content_entries). MUST only be called after the participant gate
+// has approved the caller for a participant-gated RPC (INV-P6-5).
+func (s *SceneStore) GetPublishedSceneContent(ctx context.Context, id string) ([]PublishedSceneEntry, error) {
+	var raw []byte
+	if err := s.pool.QueryRow(ctx,
+		`SELECT content_entries FROM published_scenes WHERE id = $1`, id,
+	).Scan(&raw); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, oops.Code("SCENE_PUBLISH_CONTENT_READ_FAILED").Wrap(err)
+	}
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var entries []PublishedSceneEntry
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		return nil, oops.Code("SCENE_PUBLISH_CONTENT_DECODE_FAILED").Wrap(err)
+	}
+	return entries, nil
+}
+
+// TransitionInput describes a status transition and its side effects.
+type TransitionInput struct {
+	To            PublishedSceneStatus
+	FailureReason *PublishFailureReason // set when To == ATTEMPT_FAILED
+	SetCoolOffAt  *time.Time            // set when entering COOLOFF
+	ClearCoolOff  bool                  // true when leaving COOLOFF (flip-back)
+	Resolved      bool                  // sets resolved_at (terminal transitions)
+}
+
+// legalFromStatuses returns the source statuses from which a transition to
+// `to` is legal, per the spec §4.1 state machine. An empty result means `to`
+// is not a legal transition target.
+func legalFromStatuses(to PublishedSceneStatus) []string {
+	switch to {
+	case StatusCoolOff:
+		return []string{string(StatusCollecting)}
+	case StatusCollecting:
+		return []string{string(StatusCoolOff)}
+	case StatusPublished:
+		return []string{string(StatusCoolOff)}
+	case StatusAttemptFailed:
+		return []string{string(StatusCollecting), string(StatusCoolOff)}
+	default:
+		return nil
+	}
+}
+
+// TransitionStatus applies a status transition with its side effects in a
+// single UPDATE. Legality is enforced by a precondition WHERE clause: the row
+// is updated only when its current status is a legal source for the target.
+// Zero rows updated → SCENE_PUBLISH_INVALID_TRANSITION (the row is missing or
+// not in a legal source status). See spec §4.1.
+func (s *SceneStore) TransitionStatus(ctx context.Context, id string, in TransitionInput) error {
+	ctx, span := startSpan(ctx, "scene.store.transition_status",
+		attribute.String("published_scene_id", id),
+		attribute.String("to", string(in.To)))
+	defer span.End()
+
+	legalFrom := legalFromStatuses(in.To)
+	if len(legalFrom) == 0 {
+		return oops.Code("SCENE_PUBLISH_INVALID_TRANSITION").
+			With("to", string(in.To)).Errorf("unknown transition target status")
+	}
+
+	now := pgnanos.From(time.Now())
+	var coolOffAt *pgnanos.Time
+	if in.SetCoolOffAt != nil {
+		t := pgnanos.From(*in.SetCoolOffAt)
+		coolOffAt = &t
+	}
+	var failure *string
+	if in.FailureReason != nil {
+		fr := string(*in.FailureReason)
+		failure = &fr
+	}
+
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE published_scenes
+		SET status = $2,
+		    cooloff_started_at = CASE
+		        WHEN $3::boolean THEN $4
+		        WHEN $5::boolean THEN NULL
+		        ELSE cooloff_started_at END,
+		    resolved_at  = CASE WHEN $6::boolean THEN $7 ELSE resolved_at END,
+		    published_at = CASE WHEN $2 = 'PUBLISHED' THEN $7 ELSE published_at END,
+		    failure_reason = COALESCE($8, failure_reason)
+		WHERE id = $1 AND status = ANY($9::text[])
+	`, id, string(in.To), in.SetCoolOffAt != nil, coolOffAt, in.ClearCoolOff,
+		in.Resolved, now, failure, legalFrom)
+	if err != nil {
+		return oops.Code("SCENE_PUBLISH_TRANSITION_FAILED").Wrap(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return oops.Code("SCENE_PUBLISH_INVALID_TRANSITION").
+			With("id", id).With("to", string(in.To)).
+			Errorf("row missing or not in a legal source status for this transition")
+	}
+	return nil
+}
+
+// LockForSnapshot SELECTs the attempt row FOR UPDATE within the caller's
+// transaction and re-validates that the status is COOLOFF. The row lock is
+// held until the caller's transaction commits/rolls back, serializing the
+// snapshot pipeline against concurrent transitions (spec §11.3).
+func (s *SceneStore) LockForSnapshot(ctx context.Context, tx pgx.Tx, id string) (*PublishedScene, error) {
+	pub, err := scanPublishedSceneHeader(tx.QueryRow(ctx,
+		`SELECT `+publishedSceneHeaderColumns+` FROM published_scenes WHERE id = $1 FOR UPDATE`, id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.Code("SCENE_PUBLISH_NOT_FOUND").With("id", id).Wrap(err)
+		}
+		return nil, oops.Code("SCENE_PUBLISH_LOCK_FAILED").Wrap(err)
+	}
+	if pub.Status != StatusCoolOff {
+		return nil, oops.Code("SCENE_PUBLISH_INVALID_STATE").
+			With("id", id).With("status", string(pub.Status)).
+			Errorf("snapshot requires COOLOFF status")
+	}
+	return pub, nil
+}
+
+// AttemptCounts is the per-scene attempt breakdown used by StartScenePublish
+// preconditions (attempt budget + one-and-done checks).
+type AttemptCounts struct {
+	Total     int
+	Active    int // status IN (COLLECTING, COOLOFF)
+	Published int // status == PUBLISHED
+}
+
+// CountAttempts returns total / active / published attempt counts for a scene
+// in a single query.
+func (s *SceneStore) CountAttempts(ctx context.Context, sceneID string) (AttemptCounts, error) {
+	var c AttemptCounts
+	if err := s.pool.QueryRow(ctx, `
+		SELECT count(*) AS total,
+		       count(*) FILTER (WHERE status IN ('COLLECTING','COOLOFF')) AS active,
+		       count(*) FILTER (WHERE status = 'PUBLISHED') AS published
+		FROM published_scenes WHERE scene_id = $1
+	`, sceneID).Scan(&c.Total, &c.Active, &c.Published); err != nil {
+		return c, oops.Code("SCENE_PUBLISH_COUNT_FAILED").Wrap(err)
+	}
+	return c, nil
 }

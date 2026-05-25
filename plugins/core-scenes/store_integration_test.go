@@ -2163,3 +2163,178 @@ var _ = Describe("Publish store — vote operations", func() {
 		Expect(tally.Pending).To(Equal(1))
 	})
 })
+
+var _ = Describe("Publish store — status reads + transitions", func() {
+	It("GetPublishedSceneHeader returns the attempt without content entries", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, ownerID := setupAttemptWithOneVoter(ctx, store)
+
+		got, err := store.GetPublishedSceneHeader(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got).NotTo(BeNil())
+		Expect(got.ID).To(Equal(pub.ID))
+		Expect(got.SceneID).To(Equal(pub.SceneID))
+		Expect(got.Status).To(Equal(StatusCollecting))
+		Expect(got.InitiatedBy).To(Equal(ownerID))
+		Expect(got.AttemptNumber).To(Equal(1))
+		Expect(got.VoteWindow).To(Equal(7 * 24 * time.Hour), "INTERVAL must round-trip to the original duration")
+		Expect(got.CoolOffWindow).To(Equal(30 * time.Minute))
+		Expect(got.MaxAttemptsSnapshot).To(Equal(3))
+		Expect(got.CoolOffStartedAt).To(BeNil())
+		Expect(got.ContentEntries).To(BeNil(), "header read MUST NOT carry content (INV-P6-5)")
+	})
+
+	It("GetPublishedSceneHeader returns nil for a nonexistent id", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		got, err := store.GetPublishedSceneHeader(ctx, ulid.Make().String())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got).To(BeNil())
+	})
+
+	It("GetPublishedSceneContent returns nil for a non-PUBLISHED attempt", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, _ := setupAttemptWithOneVoter(ctx, store)
+
+		entries, err := store.GetPublishedSceneContent(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(entries).To(BeNil(), "COLLECTING attempt has no content_entries yet")
+	})
+
+	It("TransitionStatus COLLECTING→COOLOFF sets cooloff_started_at", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, _ := setupAttemptWithOneVoter(ctx, store)
+
+		now := time.Now()
+		Expect(store.TransitionStatus(ctx, pub.ID, TransitionInput{
+			To: StatusCoolOff, SetCoolOffAt: &now,
+		})).NotTo(HaveOccurred())
+
+		got, err := store.GetPublishedSceneHeader(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Status).To(Equal(StatusCoolOff))
+		Expect(got.CoolOffStartedAt).NotTo(BeNil())
+	})
+
+	It("TransitionStatus COOLOFF→COLLECTING clears cooloff_started_at", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, _ := setupAttemptWithOneVoter(ctx, store)
+		now := time.Now()
+		Expect(store.TransitionStatus(ctx, pub.ID, TransitionInput{To: StatusCoolOff, SetCoolOffAt: &now})).NotTo(HaveOccurred())
+
+		Expect(store.TransitionStatus(ctx, pub.ID, TransitionInput{
+			To: StatusCollecting, ClearCoolOff: true,
+		})).NotTo(HaveOccurred())
+
+		got, err := store.GetPublishedSceneHeader(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Status).To(Equal(StatusCollecting))
+		Expect(got.CoolOffStartedAt).To(BeNil(), "flip-back MUST clear cooloff_started_at")
+	})
+
+	It("TransitionStatus to ATTEMPT_FAILED sets resolved_at and failure_reason", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, _ := setupAttemptWithOneVoter(ctx, store)
+
+		reason := FailureAnyNo
+		Expect(store.TransitionStatus(ctx, pub.ID, TransitionInput{
+			To: StatusAttemptFailed, Resolved: true, FailureReason: &reason,
+		})).NotTo(HaveOccurred())
+
+		got, err := store.GetPublishedSceneHeader(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Status).To(Equal(StatusAttemptFailed))
+		Expect(got.ResolvedAt).NotTo(BeNil())
+		Expect(got.FailureReason).NotTo(BeNil())
+		Expect(*got.FailureReason).To(Equal(FailureAnyNo))
+	})
+
+	It("TransitionStatus rejects an illegal transition with SCENE_PUBLISH_INVALID_TRANSITION", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, _ := setupAttemptWithOneVoter(ctx, store)
+
+		// COLLECTING → PUBLISHED is illegal (PUBLISHED is reachable only from COOLOFF).
+		err := store.TransitionStatus(ctx, pub.ID, TransitionInput{To: StatusPublished, Resolved: true})
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "SCENE_PUBLISH_INVALID_TRANSITION")
+
+		// Status is unchanged.
+		got, err := store.GetPublishedSceneHeader(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Status).To(Equal(StatusCollecting))
+	})
+
+	It("LockForSnapshot returns a COOLOFF row under FOR UPDATE and rejects non-COOLOFF", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, _ := setupAttemptWithOneVoter(ctx, store)
+
+		// COLLECTING attempt: lock must reject with INVALID_STATE.
+		tx1, err := store.pool.Begin(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		_, err = store.LockForSnapshot(ctx, tx1, pub.ID)
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "SCENE_PUBLISH_INVALID_STATE")
+		Expect(tx1.Rollback(ctx)).NotTo(HaveOccurred())
+
+		// Move to COOLOFF, then lock succeeds and returns the row.
+		now := time.Now()
+		Expect(store.TransitionStatus(ctx, pub.ID, TransitionInput{To: StatusCoolOff, SetCoolOffAt: &now})).NotTo(HaveOccurred())
+		tx2, err := store.pool.Begin(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		locked, err := store.LockForSnapshot(ctx, tx2, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(locked.ID).To(Equal(pub.ID))
+		Expect(locked.Status).To(Equal(StatusCoolOff))
+		Expect(tx2.Rollback(ctx)).NotTo(HaveOccurred())
+	})
+
+	It("CountAttempts returns total / active / published counts per scene", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, _ := setupAttemptWithOneVoter(ctx, store)
+
+		counts, err := store.CountAttempts(ctx, pub.SceneID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(counts.Total).To(Equal(1))
+		Expect(counts.Active).To(Equal(1), "a COLLECTING attempt is active")
+		Expect(counts.Published).To(Equal(0))
+	})
+
+	It("TransitionStatus COOLOFF→PUBLISHED sets published_at and resolved_at, and counts as published", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, _ := setupAttemptWithOneVoter(ctx, store)
+
+		now := time.Now()
+		Expect(store.TransitionStatus(ctx, pub.ID, TransitionInput{To: StatusCoolOff, SetCoolOffAt: &now})).NotTo(HaveOccurred())
+		Expect(store.TransitionStatus(ctx, pub.ID, TransitionInput{To: StatusPublished, Resolved: true})).NotTo(HaveOccurred())
+
+		got, err := store.GetPublishedSceneHeader(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Status).To(Equal(StatusPublished))
+		Expect(got.PublishedAt).NotTo(BeNil(), "PUBLISHED transition MUST set published_at")
+		Expect(got.ResolvedAt).NotTo(BeNil(), "PUBLISHED is terminal — resolved_at MUST be set")
+
+		counts, err := store.CountAttempts(ctx, pub.SceneID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(counts.Published).To(Equal(1))
+		Expect(counts.Active).To(Equal(0), "a PUBLISHED attempt is no longer active")
+	})
+})
