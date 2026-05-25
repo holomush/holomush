@@ -196,6 +196,28 @@ The exit-code wrapping in scenarios 2 and 5 is go-task's documented behavior (ev
 
 The POC is preserved at `/tmp/flock-poc-v3/Taskfile.yaml` for the duration of design review. The earlier rev-1 and rev-2 POCs (`/tmp/flock-poc/`, `/tmp/flock-poc-rev2/`) are kept for regression reference but **do not exercise the production layout** and MUST NOT be used as evidence for any future revision. The implementation plan MUST include equivalent automated tests using the bats fixture described in §"Test Plan".
 
+### Result artifact (rev-5)
+
+The original design accepted that "the literal exit code is informational only"
+(see I-6) because go-task collapses every non-zero exit to 201. In practice this
+left **automation** with no machine-readable way to tell lock-contention from a
+real gate failure, so a retry loop resorted to grepping stdout for the collision
+string `another pr-prep is running` — which this very suite's `error_includes_metadata`
+test surfaces on **healthy** runs. The result: every passing run looked like a
+collision and the loop re-ran the full serialized lane indefinitely (May 2026
+incident, `holomush-qj5v1`).
+
+rev-5 closes the gap with invariant **I-11**: every invocation writes a
+machine-readable result file under `${LOCK_DIR}/runs/<utc-ts>-<pid>.result` and
+prints its path. Callers branch on `status=` (`pass`/`fail`/`contention`) read
+from that file — never on a substring of stdout. The artifact is the only signal
+that survives go-task's exit-code collapse. Both lanes write it: the docs lane
+records `lane=docs` (the harness now captures `pr-prep:docs`'s exit instead of
+`exec`-ing into it, so it can write the result before exiting); the full lane
+records `lane=full` at all three terminal points (contention, lock-error, pass).
+The contention path's user-facing behavior (stderr message, ~2s non-blocking
+exit, exit non-zero) is unchanged — I-2, I-3, and I-8 still hold.
+
 ### Setup Change
 
 The `setup` task's `brew install` line gains `flock`:
@@ -218,7 +240,7 @@ These updates are PR-blocking acceptance criteria. The implementation plan MUST 
 
 ## Numbered Invariants
 
-Each invariant is enforced by a named test in the bats suite (see "Test Plan" below). The meta-test `all_invariants_have_tests` (a named `@test` block inside `scripts/tests/pr-prep-lock.bats`) MUST verify that every invariant ID (`I-1` … `I-10`) appears in a test name in `pr-prep-lock.bats`.
+Each invariant is enforced by a named test in the bats suite (see "Test Plan" below). The meta-test `all_invariants_have_tests` (a named `@test` block inside `scripts/tests/pr-prep-lock.bats`) MUST verify that every invariant ID (`I-1` … `I-11`) appears in a test name in `pr-prep-lock.bats`.
 
 | #    | Invariant                                                                                                                                                        | Enforcing test            |
 | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
@@ -232,6 +254,7 @@ Each invariant is enforced by a named test in the bats suite (see "Test Plan" be
 | I-8  | The lock acquire MUST be non-blocking (`flock -n`); the colliding invocation MUST exit within 2 seconds regardless of how long the holder still has to run.     | `non_blocking_acquire`    |
 | I-9  | `task pr-prep:run` invoked directly without `HOLOMUSH_PR_PREP_BYPASS_LOCK=1` MUST refuse to run, exit non-zero, and print a message naming the bypass env var.  | `bypass_guard_blocks`     |
 | I-10 | `pr-prep:run` MUST NOT appear in `task --list` (default operator view). It MAY appear in `task --list-all`. The Taskfile MUST NOT mark it `internal: true` (which would break the harness's `exec task pr-prep:run`). The contract is enforced primarily at the YAML level via `yq` (robust against go-task version drift); the `task --list` check is a supplementary observed-behavior assertion. | `pr_prep_run_hidden_from_list` |
+| I-11 | Every invocation that reaches the harness body (i.e., past the `flock(1)` precondition of I-7) MUST write a machine-readable result file under `${LOCK_DIR}/runs/<utc-ts>-<pid>.result` (key=value lines: `status=pass\|fail\|contention`, `lane=full\|docs`, `exit=<internal rc>`, `finished_at=<utc>`) and MUST print its path to stdout (`▸ pr-prep result: <path>`). Because go-task collapses every non-zero exit to 201 (I-6), the exit code alone cannot distinguish lock-contention from a real gate failure; the result file is the machine-readable disambiguation so automation never has to grep stdout (where this suite's own `another pr-prep is running` assertion string would cause false positives). | `result_file_records_status` |
 
 ## Test Plan
 
@@ -314,7 +337,7 @@ The 2s budget is empirically generous; the actual kernel cleanup is sub-millisec
 
 The implementation PR is mergeable when:
 
-1. All 10 invariant tests pass under the bats runner integrated by the implementation plan.
+1. All 11 invariant tests pass under the bats runner integrated by the implementation plan.
 2. The meta-test `all_invariants_have_tests` (in `scripts/tests/pr-prep-lock.bats`) passes.
 3. The implementer smoke-tests `task pr-prep` end-to-end on the maintainer's macOS workstation: (a) one full successful run; (b) one deliberate collision run — start a holder in another terminal, invoke `task pr-prep` in this terminal while the holder is still running, verify the COLLIDED stderr message and non-zero exit; (c) one post-success retry — after the holder from (a) completes, invoke `task pr-prep` again in the same workspace and verify it acquires the lock without error. This is operator attestation, not a CI gate; the bats suite enforces all numbered invariants.
 4. CI passes. The CI workflow MUST set `HOLOMUSH_PR_PREP_BYPASS_LOCK=1` if it invokes `pr-prep:run` directly (or invoke `task pr-prep` and rely on the lock being uncontended on a fresh runner). Either form is acceptable; the implementation plan picks one.

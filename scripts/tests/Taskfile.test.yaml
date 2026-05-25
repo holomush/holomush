@@ -24,6 +24,17 @@ tasks:
       - cmd: |
           set -euo pipefail
 
+          # Result artifact (mirrors production pr-prep; spec I-11).
+          LOCK_DIR="{{.LOCK_DIR}}"
+          RUN_DIR="$LOCK_DIR/runs"
+          mkdir -p "$RUN_DIR"
+          RESULT="$RUN_DIR/$(date -u +%Y%m%dT%H%M%SZ)-$$.result"
+          printf '▸ pr-prep result: %s\n' "$RESULT"
+          write_result() {
+            printf 'status=%s\nlane=%s\nexit=%s\nfinished_at=%s\n' \
+              "$1" "$2" "$3" "$(date -u +%FT%TZ)" > "$RESULT"
+          }
+
           # ─────────────────────────────────────────────────────────────
           # Docs-only detection (mirrors production pr-prep at
           # Taskfile.yaml:534-563). Same subshell as flock body below.
@@ -36,13 +47,14 @@ tasks:
               DOCS_REGEX=$(bash "$(dirname "{{.TASKFILE}}")/../../scripts/docs-paths-regex.sh")
               if ! printf '%s\n' "$CHANGED" | grep -vE "$DOCS_REGEX" >/dev/null; then
                 echo "▸ docs-only diff detected; running pr-prep:docs"
-                exec task -t "{{.TASKFILE}}" pr-prep:docs
+                drc=0
+                task -t "{{.TASKFILE}}" pr-prep:docs || drc=$?
+                if [ "$drc" -eq 0 ]; then write_result pass docs 0; else write_result fail docs "$drc"; fi
+                exit "$drc"
               fi
             fi
           fi
 
-          LOCK_DIR="{{.LOCK_DIR}}"
-          mkdir -p "$LOCK_DIR"
           LOCK="$LOCK_DIR/lock"
           INFO="$LOCK_DIR/info"
           rc=0
@@ -70,12 +82,15 @@ tasks:
               echo "  Lock file: $LOCK"
               echo "  Wait for it to finish, or kill the holder PID if wedged."
             } >&2
+            write_result contention full 75
             exit 1
           fi
           if [ "$rc" -ne 0 ]; then
-            echo "ERROR: lock acquire failed unexpectedly (rc=$rc); see flock(1) output above." >&2
+            write_result fail full "$rc"
+            echo "ERROR: pr-prep failed (rc=$rc) — a check failed (see output above) or the lock could not be acquired (e.g. flock EACCES)." >&2
             exit "$rc"
           fi
+          write_result pass full 0
 
   pr-prep:run:
     cmds:

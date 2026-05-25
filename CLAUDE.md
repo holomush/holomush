@@ -310,6 +310,25 @@ first if you've made edits since the last `jj` command. See
 [pr-prep](site/docs/contributing/pr-prep.md) for collision behavior and
 the docs lane.
 
+**Reading the pr-prep result — exit code first, then disambiguate; never
+grep the lock string.** Run it as the SOLE command (`task pr-prep` — no
+`| tee` / `| tail` / trailing `echo`, which mask `$?`). Exit `0` = pass.
+Non-zero = something stopped it, but **go-task collapses every non-zero exit
+to `201`**, so the exit code alone canNOT tell lock contention apart from a
+real gate failure. Distinguish them by behavior, not by a status substring:
+**contention** returns in ~2s, runs no lane steps, and prints `ERROR: another
+pr-prep is running` to stderr (retry-able — wait, then re-run); a **real
+failure** runs lane steps (minutes) and fails a named check (`fmt:check`,
+`lint:*`, a test) — do NOT retry, fix it. **MUST NOT** drive a retry loop off
+the string `another pr-prep is running`: pr-prep's own `pr-prep-lock.bats`
+self-test surfaces that exact string on **healthy** runs, so matching it loops
+forever re-running the full serialized lane (May 2026 incident). The
+final-line `✓ All PR checks passed.` confirms a pass; it is not a substitute
+for the exit code. Each run also prints a line `▸ pr-prep result: <path>` and
+writes that file with a `status=` line (`pass`/`fail`/`contention`) — match the
+`▸ pr-prep result:` prefix (don't assume a line number) and read the file for
+the authoritative verdict; the behavioral cues above are the fallback.
+
 ### Session isolation
 
 This repo is developed primarily by concurrent AI agent sessions. Because jj snapshots the working copy on every command, two sessions sharing the same jj workspace will collide on uncommitted edits.
