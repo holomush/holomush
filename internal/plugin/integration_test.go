@@ -145,8 +145,9 @@ var _ = Describe("Echo Bot Integration", func() {
 			Expect(slices.Contains(fixture.Plugin.Manifest.Events, "say")).To(BeTrue())
 		})
 
-		It("declares no top-level policies by default", func() {
-			Expect(fixture.Plugin.Manifest.Policies).To(BeEmpty())
+		It("declares emit-events policy", func() {
+			Expect(fixture.Plugin.Manifest.Policies).To(HaveLen(1))
+			Expect(fixture.Plugin.Manifest.Policies[0].Name).To(Equal("emit-events"))
 		})
 	})
 
@@ -292,9 +293,12 @@ var _ = Describe("Echo Bot Integration", func() {
 				},
 			)
 
-			// Create subscriber
+			// Create subscriber. The manifest declares events: [say] (short form) but
+			// dispatched events use the fully qualified type "core-communication:say".
+			// Subscribe with the qualified type so the Subscriber's exact-match filter
+			// routes the event to echo-bot.
 			subscriber := plugins.NewSubscriber(fixture.LuaHost, emitter)
-			subscriber.Subscribe("echo-bot", "location:123", fixture.Plugin.Manifest.Events)
+			subscriber.Subscribe("echo-bot", "location:123", []string{string(corecomm.EventTypeSay)})
 
 			// Start subscriber with event channel
 			ctx, cancel := context.WithCancel(context.Background())

@@ -167,8 +167,8 @@ tasks:
       - "{{.GO_TOOL}} gotestsum --format pkgname -- -race -tags=integration -count=1 -coverprofile=coverage-int.out -covermode=atomic
         -coverpkg=./... ./cmd/holomush/ ./internal/access/setup/ ./internal/admin/approval/ ./internal/admin/socket/ ./internal/auth/postgres/
         ./internal/content/ ./internal/eventbus/audit/ ./internal/eventbus/audit/chain/ ./internal/admin/policy/ ./internal/eventbus/crypto/dek/
-        ./internal/eventbus/crypto/kek/ ./internal/eventbus/history/ ./internal/store/ ./plugins/core-scenes/ ./test/testutil/
-        ./internal/testsupport/integrationtest/ ./internal/world/postgres/ ./test/integration/..."
+        ./internal/eventbus/crypto/kek/ ./internal/eventbus/history/ ./internal/plugin/ ./internal/store/ ./plugins/core-scenes/
+        ./test/testutil/ ./internal/testsupport/integrationtest/ ./internal/world/postgres/ ./test/integration/..."
 
   test:int:focus:
     desc: Run focused integration tests with Ginkgo focus filter (pass -ginkgo.focus="..." after --)
