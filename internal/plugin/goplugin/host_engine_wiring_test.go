@@ -33,6 +33,7 @@ import (
 //  2. The engine stored in the host is the identical instance that was passed in
 //     (identity guard — ensures the engine+resolver pair from BuildABACStack is
 //     shared between the Lua hostfunc bridge and the binary host).
+//
 // stubAuditorForGoplugin is a minimal pluginauthz.Auditor implementation used
 // by wiring-guard tests. It records nothing — its purpose is to provide a
 // non-nil, identifiable Auditor instance for assert.Same checks.
