@@ -73,7 +73,7 @@ importers:
         specifier: 1.60.0
         version: 1.60.0
       '@sentry/svelte':
-        specifier: ^10.53.1
+        specifier: 10.53.1
         version: 10.53.1(svelte@5.55.8)
       '@sveltejs/adapter-static':
         specifier: 3.0.10
