@@ -197,6 +197,4 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   code, always check: (1) test for nil evaluator → `CommandError`; (2) test for
   engine error → `CommandFailure`, `handlerRan == false`; (3) `rg "handleX"` across
   the repo to confirm no ungated call site exists.
-- **Audit assertion gap (Low NIT, rmsi.5)**: `seed_policies_test.go` FORBID seeds lack
-  audit-trail assertions in integration suites. Engine-level contract covered by
-  `evaluation_test.go:68-70`. Flag in future integration suite reviews.
+- **Audit assertion gap / service-layer INV-S9 authz coexistence (rmsi.5 + 8kkv5.8)**: Two patterns to check when reviewing plugin subcommand consolidation: (1) `seed_policies_test.go` FORBID seeds lack audit-trail assertions — flag in integration suite reviews; (2) `GetPoseOrder` uses a direct `IsParticipant` store check (INV-S9, fail-closed) that is NOT replaced by the engine — this is intentional per spec and predates ABAC. When a commit claims "engine is sole gate," verify `handleOrder`/`GetPoseOrder` and similar service-layer participant checks are explicitly acknowledged. Dead policies in plugin.yaml (e.g., `join-open-scene` / `join-private-scene-as-invitee` not consulted from command surface) are a Low documentation risk — no fail-open, but confusing to future reviewers.
