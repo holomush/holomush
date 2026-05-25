@@ -151,6 +151,51 @@ func (p *scenePlugin) handleLog(ctx context.Context, req pluginsdk.CommandReques
 	}, nil
 }
 
+// handlePublish starts a publish-vote attempt for a scene (spec §6.1, the bare
+// "scene publish [#<id>]" form). Resolves the target scene via resolveSceneRef,
+// gates on participation, then calls StartScenePublish (which enforces the
+// ended-state + one-and-done + budget + eligible-voters preconditions). The
+// vote / withdraw / status / download sub-commands under "scene publish" land
+// in B9-B10.
+//
+// Participant gate: the host's command-dispatch ABAC checks the scene command's
+// declared 'write' capability, NOT the 'publish' action, so the
+// start-publish-as-participant policy is inert at dispatch (a 'publish'
+// capability declaration is a follow-up). This explicit IsParticipant check is
+// therefore the effective participant gate at the command layer — it mirrors
+// the policy's predicate (principal.id in resource.scene.participants) so there
+// is no drift, and surfaces spec §6.1's not-a-participant rejection. Defence-in-
+// depth like handleLog (E3) / WithdrawScenePublish's owner check (B4).
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
+func (p *scenePlugin) handlePublish(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	sceneID, err := resolveSceneRef(ctx, p.service.store, req.CharacterID, args)
+	if err != nil {
+		return pluginsdk.Errorf("%v", err), nil
+	}
+
+	ok, err := p.service.store.IsParticipant(ctx, sceneID, req.CharacterID)
+	if err != nil {
+		return pluginsdk.Errorf("Could not verify scene membership: %v", err), nil
+	}
+	if !ok {
+		return pluginsdk.Errorf("You are not a participant in that scene."), nil
+	}
+
+	resp, err := p.service.StartScenePublish(ctx, &scenev1.StartScenePublishRequest{
+		SceneId:           sceneID,
+		CallerCharacterId: req.CharacterID,
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Could not start publish vote: %v", err), nil
+	}
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("Publish-vote attempt #%d started for scene %s. Participants will be notified.",
+			resp.GetAttemptNumber(), sceneID),
+	}, nil
+}
+
 // dispatchCommand handles the "scene" top-level command. Phase 2 supports
 // the create, info, end, pause, resume, and set subcommands; later phases
 // will plug additional handlers in here without changing the dispatcher
@@ -171,7 +216,7 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 	span.SetAttributes(attribute.String("subcommand", sub))
 
 	if sub == "" {
-		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, emit, end, extend, focus, grid, info, invite, join, kick, leave, list, log, ooc, order, pause, pose, resume, say, set, switch, transfer"), nil
+		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, emit, end, extend, focus, grid, info, invite, join, kick, leave, list, log, ooc, order, pause, pose, publish, resume, say, set, switch, transfer"), nil
 	}
 
 	// gated dispatches through the ABAC evaluator; fails closed when evaluator is nil.
@@ -242,12 +287,14 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 		return p.handleEmit(ctx, req, rest, "scene_ooc", true)
 	case "order":
 		return p.handleOrder(ctx, req, rest)
+	case "publish":
+		return p.handlePublish(ctx, req, rest)
 	case "log":
 		return p.handleLog(ctx, req, rest)
 	case "list":
 		return p.handleSceneList(ctx, req)
 	default:
-		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, emit, end, extend, focus, grid, info, invite, join, kick, leave, list, log, ooc, order, pause, pose, resume, say, set, switch, transfer.", sub), nil
+		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, emit, end, extend, focus, grid, info, invite, join, kick, leave, list, log, ooc, order, pause, pose, publish, resume, say, set, switch, transfer.", sub), nil
 	}
 }
 
