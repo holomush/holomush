@@ -2030,3 +2030,136 @@ var _ = Describe("Publish store — attempt + roster lifecycle", func() {
 		Expect(n).To(Equal(0), "rolled-back attempt MUST leave no published_scenes row")
 	})
 })
+
+// setupAttemptWithOneVoter creates a scene with a single owner participant
+// and one COLLECTING publish attempt; the roster therefore has exactly one
+// voter (the owner). Returns the attempt and the owner/voter character ID.
+func setupAttemptWithOneVoter(ctx context.Context, store *SceneStore) (*PublishedScene, string) {
+	GinkgoHelper()
+	sceneID := ulid.Make().String()
+	ownerID := ulid.Make().String()
+	mustCreateScene(store, sceneID, ownerID, string(SceneVisibilityOpen))
+	mustAddParticipant(store, sceneID, ownerID, "owner")
+	pub, err := store.CreatePublishAttempt(ctx, CreatePublishAttemptInput{
+		SceneID: sceneID, AttemptNumber: 1, InitiatedBy: ownerID,
+		VoteWindow: 7 * 24 * time.Hour, CoolOffWindow: 30 * time.Minute, MaxAttempts: 3,
+	})
+	Expect(err).NotTo(HaveOccurred())
+	return pub, ownerID
+}
+
+// setupAttemptWith3Voters creates a scene with owner + two members and one
+// COLLECTING attempt; the roster therefore has exactly three voters.
+func setupAttemptWith3Voters(ctx context.Context, store *SceneStore) *PublishedScene {
+	GinkgoHelper()
+	sceneID := ulid.Make().String()
+	ownerID := ulid.Make().String()
+	mustCreateScene(store, sceneID, ownerID, string(SceneVisibilityOpen))
+	mustAddParticipant(store, sceneID, ownerID, "owner")
+	mustAddParticipant(store, sceneID, ulid.Make().String(), "member")
+	mustAddParticipant(store, sceneID, ulid.Make().String(), "member")
+	pub, err := store.CreatePublishAttempt(ctx, CreatePublishAttemptInput{
+		SceneID: sceneID, AttemptNumber: 1, InitiatedBy: ownerID,
+		VoteWindow: 7 * 24 * time.Hour, CoolOffWindow: 30 * time.Minute, MaxAttempts: 3,
+	})
+	Expect(err).NotTo(HaveOccurred())
+	return pub
+}
+
+var _ = Describe("Publish store — vote operations", func() {
+	It("returns is_change=false on first cast", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, voter := setupAttemptWithOneVoter(ctx, store)
+
+		result, err := store.CastVote(ctx, pub.ID, voter, true)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.IsChange).To(BeFalse(), "first cast is not a change")
+		Expect(result.Vote).To(BeTrue())
+	})
+
+	It("returns is_change=true when a vote is flipped", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, voter := setupAttemptWithOneVoter(ctx, store)
+
+		_, err := store.CastVote(ctx, pub.ID, voter, true)
+		Expect(err).NotTo(HaveOccurred())
+		result, err := store.CastVote(ctx, pub.ID, voter, false)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.IsChange).To(BeTrue())
+		Expect(result.Vote).To(BeFalse())
+	})
+
+	It("returns is_change=false when re-affirming the same value", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, voter := setupAttemptWithOneVoter(ctx, store)
+
+		_, err := store.CastVote(ctx, pub.ID, voter, true)
+		Expect(err).NotTo(HaveOccurred())
+		result, err := store.CastVote(ctx, pub.ID, voter, true)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.IsChange).To(BeFalse())
+	})
+
+	It("preserves voted_at on first cast but advances last_changed_at on a later cast", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, voter := setupAttemptWithOneVoter(ctx, store)
+
+		_, err := store.CastVote(ctx, pub.ID, voter, true)
+		Expect(err).NotTo(HaveOccurred())
+		first, err := store.ListPublishVoters(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(first).To(HaveLen(1))
+		Expect(first[0].VotedAt).NotTo(BeNil())
+		Expect(first[0].LastChangedAt).NotTo(BeNil())
+		votedAt := first[0].VotedAt.Time()
+
+		time.Sleep(2 * time.Millisecond)
+		_, err = store.CastVote(ctx, pub.ID, voter, false)
+		Expect(err).NotTo(HaveOccurred())
+		second, err := store.ListPublishVoters(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(second[0].VotedAt.Time()).To(BeTemporally("==", votedAt), "voted_at MUST be preserved across casts")
+		Expect(second[0].LastChangedAt.Time()).To(BeTemporally(">", votedAt), "last_changed_at MUST advance")
+	})
+
+	It("rejects a vote from a non-roster character", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, _ := setupAttemptWithOneVoter(ctx, store)
+
+		_, err := store.CastVote(ctx, pub.ID, ulid.Make().String(), true)
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "SCENE_PUBLISH_NOT_A_VOTER")
+	})
+
+	It("tallies correct yes/no/pending counts", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub := setupAttemptWith3Voters(ctx, store)
+		voters, err := store.ListPublishVoters(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(voters).To(HaveLen(3))
+
+		_, err = store.CastVote(ctx, pub.ID, voters[0].CharacterID, true)
+		Expect(err).NotTo(HaveOccurred())
+		_, err = store.CastVote(ctx, pub.ID, voters[1].CharacterID, false)
+		Expect(err).NotTo(HaveOccurred())
+		// voters[2] left pending.
+
+		tally, err := store.TallyVotes(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(tally.Yes).To(Equal(1))
+		Expect(tally.No).To(Equal(1))
+		Expect(tally.Pending).To(Equal(1))
+	})
+})

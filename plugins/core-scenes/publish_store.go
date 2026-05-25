@@ -163,3 +163,78 @@ func isUniqueViolation(err error, constraintName string) bool {
 	}
 	return pgErr.Code == "23505" && pgErr.ConstraintName == constraintName
 }
+
+// CastVoteResult reports the outcome of a CastVote upsert.
+type CastVoteResult struct {
+	Vote     bool
+	IsChange bool
+}
+
+// CastVote upserts a voter's vote onto the frozen roster. The voter MUST
+// already be on the roster (a published_scene_votes row exists); a caller
+// not on the roster is rejected with SCENE_PUBLISH_NOT_A_VOTER. The roster
+// is immutable after attempt creation, so the prior-vote lookup reliably
+// distinguishes non-voters from pending voters.
+//
+// IsChange is true ONLY when a prior NON-NULL vote existed and differs from
+// the new value — i.e. a genuine flip. The first cast (pending → value) and
+// a re-affirmation (same value) both report IsChange=false. voted_at is set
+// once (first cast) via COALESCE; last_changed_at advances on every cast.
+// See spec §4.2, §4.3.
+func (s *SceneStore) CastVote(ctx context.Context, publishedSceneID, characterID string, vote bool) (*CastVoteResult, error) {
+	ctx, span := startSpan(ctx, "scene.store.cast_vote",
+		attribute.String("published_scene_id", publishedSceneID),
+		attribute.String("character_id", characterID))
+	defer span.End()
+
+	var prior *bool
+	if err := s.pool.QueryRow(ctx,
+		`SELECT vote FROM published_scene_votes
+		 WHERE published_scene_id = $1 AND character_id = $2`,
+		publishedSceneID, characterID).Scan(&prior); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.Code("SCENE_PUBLISH_NOT_A_VOTER").
+				With("published_scene_id", publishedSceneID).
+				With("character_id", characterID).Wrap(err)
+		}
+		return nil, oops.Code("SCENE_PUBLISH_CAST_LOOKUP_FAILED").Wrap(err)
+	}
+
+	// A change is a flip of an existing vote — not the first cast.
+	isChange := prior != nil && *prior != vote
+
+	if _, err := s.pool.Exec(ctx, `
+		UPDATE published_scene_votes
+		SET vote = $1,
+		    voted_at = COALESCE(voted_at, $2),
+		    last_changed_at = $2
+		WHERE published_scene_id = $3 AND character_id = $4
+	`, vote, pgnanos.From(time.Now()), publishedSceneID, characterID); err != nil {
+		return nil, oops.Code("SCENE_PUBLISH_CAST_UPDATE_FAILED").Wrap(err)
+	}
+
+	return &CastVoteResult{Vote: vote, IsChange: isChange}, nil
+}
+
+// VoteTally is the yes/no/pending breakdown across an attempt's roster.
+type VoteTally struct {
+	Yes     int
+	No      int
+	Pending int
+}
+
+// TallyVotes counts yes/no/pending across all voters for an attempt in a
+// single query. Pending = roster rows whose vote is still NULL.
+func (s *SceneStore) TallyVotes(ctx context.Context, publishedSceneID string) (*VoteTally, error) {
+	var t VoteTally
+	if err := s.pool.QueryRow(ctx, `
+		SELECT
+			count(*) FILTER (WHERE vote = true)  AS yes,
+			count(*) FILTER (WHERE vote = false) AS no,
+			count(*) FILTER (WHERE vote IS NULL) AS pending
+		FROM published_scene_votes WHERE published_scene_id = $1
+	`, publishedSceneID).Scan(&t.Yes, &t.No, &t.Pending); err != nil {
+		return nil, oops.Code("SCENE_PUBLISH_TALLY_FAILED").Wrap(err)
+	}
+	return &t, nil
+}
