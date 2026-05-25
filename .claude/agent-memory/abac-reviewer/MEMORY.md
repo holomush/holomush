@@ -173,11 +173,14 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   `Decision{}` is `allowed=false` (`types.go` test line 198-203). Three recurring Low patterns
   to check in future pluginauthz edits: (1) `ActorSystem` collapses all system actors to bare
   `"system"` (drops `.ID`) — non-invertible, but safe because system actors don't enter
-  plugin-eval paths in practice; flag if a new sentinel is added; (2) `splitResourceRef` takes
-  the FIRST colon, so `"a:b:c"` parses as type=`a` id=`b:c` — not fail-open but test coverage
-  gap (no multi-colon case in `TestEvaluate_MalformedResourceRejected`); (3) nil `Engine` panics
-  instead of fail-closing — nil auditor IS guarded (line 119), nil engine is not (line 104);
-  low production risk but should be fixed for consistency.
+  plugin-eval paths in practice; flag if a new sentinel is added. NOTE (corrected
+  2026-05-25 PR#4266 review): two earlier claims in this bullet were STALE/WRONG vs
+  shipped code — (a) `splitResourceRef` (`evaluate.go:256-266`) REJECTS any id half
+  containing a colon, so `"a:b:c"`/`"type:id:extra"` are rejected, NOT parsed; this IS
+  tested (`evaluate_test.go:109` includes both); (b) nil `Engine` IS guarded and
+  fails closed (`evaluate.go:142-147`, test `TestEvaluate_NilEngineFailsClosed:153`),
+  it does NOT panic. nil auditor also guarded (line 213). The shared core fails closed
+  on EVERY edge path with a non-nil error accompanying every non-allowing Decision.
 - **Lua hostfunc nil-LState-context pattern (8kkv5.4, 2026-05-25)**: `evaluateFn`
   (and `listCommandsFn`, `getCommandHelpFn`, `checkKVAccess`, etc.) all follow the
   same pattern: `ctx := L.Context(); if ctx == nil { ctx = context.Background() }`.
