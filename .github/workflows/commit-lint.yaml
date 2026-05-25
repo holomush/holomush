@@ -23,6 +23,8 @@ jobs:
       # it. The owner/repo@main form cannot be used: install-cog is introduced
       # in this same change, so @main predates it until this PR merges.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Install cog
         uses: ./.github/actions/install-cog

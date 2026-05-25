@@ -69,6 +69,12 @@ jobs:
       - name: Install Task
         uses: ./.github/actions/install-task
 
+      - name: Install cog
+        # scripts/tests/cog-release.bats invokes `cog`; without it those tests
+        # fail with status 127 (command not found). Reuses the same pinned
+        # composite action as the release + commit-lint workflows.
+        uses: ./.github/actions/install-cog
+
       - name: Run bats
         # Plumb the bats-action install path into BATS_LIB_PATH so
         # `bats_load_library bats-support` / `bats-assert` resolve.
