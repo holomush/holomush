@@ -112,8 +112,8 @@ type EventEmitterConfigurer interface {
 }
 
 // HistoryReader provides read-only replay access for host functions (e.g.
-// query_stream_history in Lua plugins). Satisfied by MemoryEventStore in
-// unit tests and by a JetStream-backed reader in production.
+// query_stream_history in Lua plugins). Satisfied by coretest.MemoryEventStore
+// in tests and by a JetStream-backed reader in production.
 type HistoryReader interface {
 	ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error)
 }

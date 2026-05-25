@@ -39,7 +39,7 @@ type Engine struct {
 // Panics when store is nil so the misconfiguration surfaces at construction
 // time rather than deferring to the first Handle* call (which would panic on
 // a nil-receiver dereference of e.store). Detects both untyped nil and
-// typed-nil interface values (e.g. (*MemoryEventStore)(nil)) so callers
+// typed-nil interface values (e.g. a typed-nil concrete pointer) so callers
 // truly fail fast at construction.
 func NewEngine(store EventAppender) *Engine {
 	if store == nil || isNilEventAppender(store) {
