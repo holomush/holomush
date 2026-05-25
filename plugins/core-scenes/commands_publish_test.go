@@ -87,3 +87,94 @@ func TestHandlePublishSurfacesStartError(t *testing.T) {
 	assert.NotEqual(t, pluginsdk.CommandOK, resp.Status)
 	assert.Contains(t, resp.Output, "Could not start publish vote")
 }
+
+// newVoteCmdFixture wires a scenePlugin with a COLLECTING attempt for a scene
+// and `voter` on its roster, so handleVote's CastPublishSceneVote path
+// succeeds. Returns the plugin, scene id, and the on-roster voter id.
+func newVoteCmdFixture(t *testing.T) (*scenePlugin, string, string) {
+	t.Helper()
+	sceneID := ulid.Make().String()
+	attemptID := ulid.Make().String()
+	voter := ulid.Make().String()
+	store := newFakeStore()
+	store.installPublishedAttempt(attemptID, sceneID, StatusCollecting)
+	store.installVoters(attemptID, voter)
+	return &scenePlugin{service: NewSceneServiceImpl(store)}, sceneID, voter
+}
+
+// TestHandleVoteYesRecordsVote — "scene publish vote yes #<id>" casts a yes vote
+// on the scene's active attempt (routed through handlePublish).
+func TestHandleVoteYesRecordsVote(t *testing.T) {
+	t.Parallel()
+	p, sceneID, voter := newVoteCmdFixture(t)
+
+	resp, err := p.handlePublish(context.Background(),
+		pluginsdk.CommandRequest{CharacterID: voter}, "vote yes #"+sceneID)
+
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "recorded")
+	assert.Contains(t, resp.Output, "yes")
+}
+
+// TestHandleVoteChangeReportsChanged — re-casting a different vote reports the
+// change.
+func TestHandleVoteChangeReportsChanged(t *testing.T) {
+	t.Parallel()
+	p, sceneID, voter := newVoteCmdFixture(t)
+	req := pluginsdk.CommandRequest{CharacterID: voter}
+
+	_, err := p.handlePublish(context.Background(), req, "vote yes #"+sceneID)
+	require.NoError(t, err)
+	resp, err := p.handlePublish(context.Background(), req, "vote no #"+sceneID)
+
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "changed")
+	assert.Contains(t, resp.Output, "no")
+}
+
+// TestHandleVoteRejectsNonVoter — a character not on the frozen roster cannot
+// vote (CastVote → SCENE_PUBLISH_NOT_A_VOTER).
+func TestHandleVoteRejectsNonVoter(t *testing.T) {
+	t.Parallel()
+	p, sceneID, _ := newVoteCmdFixture(t)
+	outsider := ulid.Make().String()
+
+	resp, err := p.handlePublish(context.Background(),
+		pluginsdk.CommandRequest{CharacterID: outsider}, "vote yes #"+sceneID)
+
+	require.NoError(t, err)
+	assert.NotEqual(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "Could not cast vote")
+}
+
+// TestHandleVoteNoActiveAttempt — voting on a scene with no active attempt is a
+// command error.
+func TestHandleVoteNoActiveAttempt(t *testing.T) {
+	t.Parallel()
+	sceneID := ulid.Make().String()
+	voter := ulid.Make().String()
+	p := &scenePlugin{service: NewSceneServiceImpl(newFakeStore())}
+
+	resp, err := p.handlePublish(context.Background(),
+		pluginsdk.CommandRequest{CharacterID: voter}, "vote yes #"+sceneID)
+
+	require.NoError(t, err)
+	assert.NotEqual(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "no active publish vote")
+}
+
+// TestHandleVoteRejectsBadDirection — a vote direction other than yes|no is a
+// usage error.
+func TestHandleVoteRejectsBadDirection(t *testing.T) {
+	t.Parallel()
+	p, sceneID, voter := newVoteCmdFixture(t)
+
+	resp, err := p.handlePublish(context.Background(),
+		pluginsdk.CommandRequest{CharacterID: voter}, "vote maybe #"+sceneID)
+
+	require.NoError(t, err)
+	assert.NotEqual(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "Usage: scene publish vote")
+}

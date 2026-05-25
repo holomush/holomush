@@ -151,12 +151,92 @@ func (p *scenePlugin) handleLog(ctx context.Context, req pluginsdk.CommandReques
 	}, nil
 }
 
-// handlePublish starts a publish-vote attempt for a scene (spec §6.1, the bare
-// "scene publish [#<id>]" form). Resolves the target scene via resolveSceneRef,
-// gates on participation, then calls StartScenePublish (which enforces the
-// ended-state + one-and-done + budget + eligible-voters preconditions). The
-// vote / withdraw / status / download sub-commands under "scene publish" land
-// in B9-B10.
+// handlePublish dispatches the "scene publish" sub-commands (spec §6.1). The
+// bare form ("scene publish [#<id>]") starts an attempt; "vote yes|no" casts a
+// vote (B9). withdraw / status / download land in B10.
+func (p *scenePlugin) handlePublish(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	sub, rest := splitSubcommand(args)
+	switch sub {
+	case "vote":
+		return p.handleVote(ctx, req, rest)
+	default:
+		// Bare "scene publish [#<id>]" → start an attempt. args carries the
+		// optional scene ref (empty → single-membership inference).
+		return p.handlePublishStart(ctx, req, args)
+	}
+}
+
+// handleVote casts (or changes) a publish vote for the focused or explicit
+// scene's ACTIVE attempt (spec §6.1). It resolves the scene, finds its single
+// non-terminal attempt, and calls CastPublishSceneVote. Roster membership is
+// enforced by CastVote (SCENE_PUBLISH_NOT_A_VOTER → PermissionDenied), so no
+// separate participant gate is needed here.
+func (p *scenePlugin) handleVote(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	dir, rest := splitSubcommand(args)
+	var vote bool
+	switch dir {
+	case "yes":
+		vote = true
+	case "no":
+		vote = false
+	default:
+		return pluginsdk.Errorf("Usage: scene publish vote <yes|no> [#<scene id>]"), nil
+	}
+
+	sceneID, err := resolveSceneRef(ctx, p.service.store, req.CharacterID, rest)
+	if err != nil {
+		return pluginsdk.Errorf("%v", err), nil
+	}
+
+	attempts, err := p.service.store.ListSceneAttempts(ctx, sceneID)
+	if err != nil {
+		return pluginsdk.Errorf("Could not look up the publish vote: %v", err), nil
+	}
+	attemptID, ok := activeAttemptID(attempts)
+	if !ok {
+		return pluginsdk.Errorf("There is no active publish vote for that scene."), nil
+	}
+
+	resp, err := p.service.CastPublishSceneVote(ctx, &scenev1.CastPublishSceneVoteRequest{
+		CallerCharacterId: req.CharacterID,
+		PublishedSceneId:  attemptID,
+		Vote:              vote,
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Could not cast vote: %v", err), nil
+	}
+
+	word := "no"
+	if vote {
+		word = "yes"
+	}
+	action := "recorded"
+	if resp.GetIsChange() {
+		action = "changed to"
+	}
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("Your publish vote was %s %q.", action, word),
+	}, nil
+}
+
+// activeAttemptID returns the id of the single non-terminal (COLLECTING or
+// COOLOFF) attempt in the list, or ("", false) if none is active. At most one
+// attempt is active per scene (StartScenePublish's no-active-attempt
+// precondition), so the first non-terminal match is authoritative.
+func activeAttemptID(attempts []PublishedScene) (string, bool) {
+	for i := range attempts {
+		if !attempts[i].Status.IsTerminal() {
+			return attempts[i].ID, true
+		}
+	}
+	return "", false
+}
+
+// handlePublishStart starts a publish-vote attempt for a scene (spec §6.1, the
+// bare "scene publish [#<id>]" form). Resolves the target scene, gates on
+// participation, then calls StartScenePublish (which enforces the ended-state +
+// one-and-done + budget + eligible-voters preconditions).
 //
 // Participant gate: the host's command-dispatch ABAC checks the scene command's
 // declared 'write' capability, NOT the 'publish' action, so the
@@ -166,9 +246,7 @@ func (p *scenePlugin) handleLog(ctx context.Context, req pluginsdk.CommandReques
 // the policy's predicate (principal.id in resource.scene.participants) so there
 // is no drift, and surfaces spec §6.1's not-a-participant rejection. Defence-in-
 // depth like handleLog (E3) / WithdrawScenePublish's owner check (B4).
-//
-//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
-func (p *scenePlugin) handlePublish(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+func (p *scenePlugin) handlePublishStart(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID, err := resolveSceneRef(ctx, p.service.store, req.CharacterID, args)
 	if err != nil {
 		return pluginsdk.Errorf("%v", err), nil
