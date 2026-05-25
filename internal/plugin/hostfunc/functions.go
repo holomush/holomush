@@ -20,6 +20,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/idgen"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/session"
 )
@@ -42,6 +43,7 @@ type Functions struct {
 	worldMutator     WorldMutator
 	commandRegistry  CommandRegistry
 	engine           types.AccessPolicyEngine
+	auditor          pluginauthz.Auditor
 	propertyRegistry *property.Registry
 	sessionAccess    session.Access
 	capabilities     *CapabilityRegistry
@@ -100,6 +102,13 @@ func WithFocusOps(fo FocusOps) Option {
 // WithHistoryReader sets the event store reader for query_stream_history host function.
 func WithHistoryReader(hr HistoryReader) Option {
 	return func(f *Functions) { f.historyReader = hr }
+}
+
+// WithAuditLogger sets the audit sink for holomush.evaluate calls.
+// When set, each authorization decision is logged via pluginauthz.Auditor.
+// The *audit.Logger type satisfies this interface.
+func WithAuditLogger(a pluginauthz.Auditor) Option {
+	return func(f *Functions) { f.auditor = a }
 }
 
 // SetFocusOps sets the focus coordinator for join/leave/present focus host
@@ -178,6 +187,9 @@ func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...stri
 	// Command registry functions
 	ls.SetField(mod, "list_commands", ls.NewFunction(f.listCommandsFn(pluginName)))
 	ls.SetField(mod, "get_command_help", ls.NewFunction(f.getCommandHelpFn(pluginName)))
+
+	// Authorization query
+	ls.SetField(mod, "evaluate", ls.NewFunction(f.evaluateFn(pluginName)))
 
 	// Register stream management functions (always; guard against nil registry inside).
 	RegisterStreamFuncs(ls, mod, f.streamRegistry)
@@ -264,6 +276,7 @@ func (f *Functions) RegisteredFunctionsForAudit() []AuditEntry {
 		{Name: "holomush.get_property"},
 		{Name: "holomush.list_commands"},
 		{Name: "holomush.get_command_help"},
+		{Name: "holomush.evaluate"},
 		// Unconditionally registered by RegisterStreamFuncs.
 		{Name: "holomush.add_session_stream"},
 		{Name: "holomush.remove_session_stream"},
