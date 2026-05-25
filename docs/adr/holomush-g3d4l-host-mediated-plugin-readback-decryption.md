@@ -16,7 +16,11 @@ Plugin-owned `sensitivity:always` events (scene IC `scene_pose`/`scene_say`/`sce
 
 All plugin read-back decryption is **host-mediated** via a single shared primitive (`fenceCheckRow` → `AuditRowToEvent` → `decodeAuthorizeAndDispatch`). The plugin passes ciphertext rows and receives only plaintext (or typed refusals); a DEK never crosses the plugin boundary. The **snapshot** uses a direct `PluginHostService.DecryptOwnAuditRows` RPC (it already holds its rows); **participant routed reads** use the same primitive wired into the `PluginDowngradeFence` clean-row path.
 
-## Options Considered
+## Rationale
+
+Plugins never holding a DEK is a core trust-boundary invariant (INV-RB-1), which rules out granting the plugin local DEK access for its own events. Routing the snapshot through the host `QueryHistory` read path would create an incoherent `plugin→host→plugin→host→plugin` self-loop, since the plugin already holds its `scene_log` rows from an in-tx read. A single host-side decrypt primitive consumed via a direct entry gives one hop with no self-loop and serves both consumers (snapshot + participant routed reads) identically, so decrypt logic cannot diverge (AAD parity INV-RB-4, fence parity INV-RB-5).
+
+## Alternatives Considered
 
 - **Route the snapshot through host `QueryHistory` (bead Option A).** Reuses the existing read path, no new RPC. *Rejected:* creates a `plugin→host→plugin→host→plugin` self-loop — the plugin already holds its rows from the in-tx read, making the round-trip incoherent.
 - **Grant the plugin DEK access for its own events (bead Option C).** Plugin decrypts locally. *Rejected:* violates the role-isolation invariant that defines the plugin trust boundary (plugins never hold DEKs); conflicts with INV-P7-7/INV-P7-15.

@@ -16,7 +16,11 @@ A plugin with the `readback` capability can, in principle, decrypt **all** of it
 
 The security posture for plugin bulk historical self-decrypt is **detect, not prevent**. Bulk access is **bounded** (OwnerMap subject-scope confines it to data the plugin authored; a 500-row `maxDecryptBatch` cap per call; the operator's rekey/DEK-destruction lever revokes unconditionally via INV-P7-15) and **made loud** (a mandatory INV-19 `plugin_decrypt` audit event per decrypt, on a subject the plugin cannot subscribe to; the primitive fails closed if the audit emitter is absent). It is **not prevented** via contextual domain-state conditioning.
 
-## Options Considered
+## Rationale
+
+The only property encryption-at-rest buys against the *owning* plugin is forward-secrecy-under-compromise (temporal) — a low-probability concern, since the plugin already sees plaintext at emit time. Genuine prevention would couple scene-domain state (publish/vote state) into the trusted ABAC layer, disproportionate complexity for that marginal gain. Bounding the access (OwnerMap subject-scope, a 500-row batch cap, the operator's unconditional DEK-destruction lever) plus a mandatory INV-19 audit on a subject the plugin cannot subscribe to recovers most of the protection at far lower complexity — so a detect-not-prevent posture is proportionate.
+
+## Alternatives Considered
 
 - **Prevent — contextual/consent-gated ABAC** (decrypt permitted only under publish-state attributes). *Rejected:* forces scene-domain state (publish state, vote state) into the trusted ABAC gate — disproportionate complexity for a low-probability concern, given the plugin already sees plaintext at emit time.
 - **Detect — subject-scoping + mandatory INV-19 audit + batch cap + DEK-destroy lever — chosen.** Loud, scoped, reversible.

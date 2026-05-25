@@ -3,8 +3,10 @@
 # Copyright 2026 HoloMUSH Contributors
 #
 # PreToolUse hook: enforce task runner and dedicated tools
-# Blocks direct go/lint commands and shell search utilities, suggesting
-# the proper task commands or native Claude Code tools.
+# Blocks direct go/lint commands (go test/build, golangci-lint, gofmt) and
+# the cat/head/tail/find file utilities, suggesting the proper task commands
+# or native Claude Code tools. grep is a soft nudge (not a block) toward the
+# modern search ladder — see the grep case for why.
 # Error strategy: enforcement hook — fails open on jq/parse errors
 # (command proceeds unchecked), but reliably blocks known bad patterns
 # when parsing succeeds.
@@ -94,6 +96,28 @@ STRIPPED=$(printf '%s' "$COMMAND" | perl -0777 -pe "s/'[^']*'//g; s/\"[^\"]*\"//
 # pipe split below never misidentifies || as two separate pipe characters.
 SEGMENTS=$(printf '%s' "$STRIPPED" | awk '{gsub(/ *&& */, "\n"); gsub(/ *; */, "\n"); gsub(/ *\|\| */, "\n"); print}')
 
+# Compound control-flow scripts (for/while/until/if/case … do/then … done/fi)
+# legitimately compose cat/head/tail/grep/find inside their BODIES. The splitter
+# above can't distinguish a loop-body statement (`tail $f` inside `do…done`,
+# split off by the loop's own `;`) from a standalone file read — the bulk of
+# this hook's false positives. Track control-flow nesting depth and keep only
+# TOP-LEVEL segments (depth 0): commands before the block AND after `done`/`fi`
+# are still inspected (a trailing `; go test` does NOT escape), but body
+# statements are exempt. Detection is segment-LEADING, so a control keyword used
+# as an argument (`rg then foo.go`) doesn't trigger it. No-op when there's no
+# control flow — every segment is depth 0, so SEGMENTS is unchanged.
+top_level=""
+depth=0
+while IFS= read -r cf_seg; do
+  [[ -z "$cf_seg" ]] && continue
+  [[ "$depth" -eq 0 ]] && top_level+="$cf_seg"$'\n'
+  case "$(first_cmd_word "${cf_seg%%|*}")" in
+    for|while|until|if|case) depth=$((depth + 1)) ;;
+    done|fi|'esac')          [[ "$depth" -gt 0 ]] && depth=$((depth - 1)) ;;
+  esac
+done <<< "$SEGMENTS"
+SEGMENTS="$top_level"
+
 while IFS= read -r segment; do
   [[ -z "$segment" ]] && continue
 
@@ -132,8 +156,12 @@ while IFS= read -r segment; do
       exit 2
       ;;
     grep|egrep|fgrep)
-      echo "Use the Grep tool instead of $word" >&2
-      exit 2
+      # Soft nudge, NOT a block (no exit 2): the built-in Grep tool the old
+      # message pointed at isn't always provisioned in the deferred-tool /
+      # ToolSearch session model, so a hard block could dead-end. rg is always
+      # available in Bash; probe MCP returns whole AST blocks for Go symbol
+      # reads; ast-grep matches by code structure for patterns/codemods.
+      echo "Nudge: prefer 'rg' over $word (faster, .gitignore-aware). For Go symbol/AST reads use mcp__probe__search_code; for structural patterns or codemods use ast-grep. ($word still runs.)" >&2
       ;;
     cat)
       # Allow heredocs (with or without space/flags): cat <<EOF, cat<<EOF, cat -s <<EOF

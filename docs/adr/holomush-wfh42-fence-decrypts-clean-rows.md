@@ -16,7 +16,11 @@ The Phase-7 `PluginDowngradeFence` gated plugin-owned history reads (INV-P7-7 do
 
 The fence's clean-row path now **decrypts** via the shared `decryptPluginRow` primitive instead of passing ciphertext through. The reading principal is the character, authorized by the existing **DEK participant-set membership** check (`guard.go:64`). INV-P7-7/INV-P7-15 gate behavior is preserved by extracting the per-row check into a shared `fenceCheckRow` function used by both the fence and the snapshot direct entry.
 
-## Options Considered
+## Rationale
+
+The gate-only fence was a half-built contract: it enforced INV-P7-7/INV-P7-15 but passed ciphertext through, silently breaking participant scene-IC scrollback and comms `whisper`/`page` history — a gap masked by `fakeHistoryReader` tests that never exercise the codec/DEK stack, and *armed* because scene-IC enters the backfill set on reconnect. A separate decrypt tier would duplicate routing logic and still miss the path participants already use. Completing the fence so clean rows decrypt via the same shared primitive as the snapshot keeps decrypt logic from diverging (fence parity INV-RB-5) and fixes the armed read path directly.
+
+## Alternatives Considered
 
 - **Keep the fence gate-only; add a separate decrypt tier.** *Rejected:* duplicates routing logic and still fails to deliver plaintext on the path participants already use.
 - **Complete the fence — clean rows decrypt via the shared primitive — chosen.** A single primitive serves both the snapshot direct entry and the routed fence, so decrypt logic cannot diverge; fence parity (INV-RB-5) holds by construction.

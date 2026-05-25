@@ -8,6 +8,19 @@ Keep under 200 lines. Curate — don't hoard.
 
 ## Anti-patterns
 
+- **ast-grep (`sg` 0.42.3) CANNOT match package-qualified Go CALL patterns.**
+  `sg -p 'slog.Info($$$ARGS)' -l go` (and `slog.InfoContext($CTX, $$$ARGS)`,
+  `fmt.Println(...)`, any `pkg.Fn(...)`) parses at statement top-level as a
+  `type_conversion_expression` with an `ERROR` node, NOT a `call_expression`, so
+  it matches ZERO real call sites — confirm with `--debug-query=ast`. Known open
+  upstream limitation (ast-grep/ast-grep #646, discussion #2220). COMPOSITE
+  LITERALS are fine: `sg -p 'core.Event{$$$FIELDS}' -l go` parses to
+  `composite_literal` and matches correctly. Trap: a doc/audit that uses a broken
+  call pattern and reads "zero matches confirms the invariant holds" is FALSE
+  reassurance — it returns zero even in a codebase full of the violation. Flag any
+  ast-grep qualified-call example as non-functional. Encountered: search-tooling
+  review of `.claude/rules/search-tools.md:34-44` (2026-05-25).
+
 - **sloglint `context:scope` (v0.11.1, golangci-lint v2.11.4) does NOT flag bare
   `slog.X` inside a closure** even when the enclosing FuncDecl has a `ctx`
   first param. Standalone `sloglint@v0.11.1 -context-only=scope` DOES flag that
