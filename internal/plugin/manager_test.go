@@ -1957,6 +1957,10 @@ func (s *stubReadbackDecryptor) DecryptOwnRow(_ context.Context, _, _ string, _ 
 	return &pluginv1.RowResult{}
 }
 
+func (s *stubReadbackDecryptor) DecryptOwnRows(_ context.Context, _, _ string, rows []*pluginv1.AuditRow) ([]*pluginv1.RowResult, error) {
+	return make([]*pluginv1.RowResult, len(rows)), nil
+}
+
 var _ plugins.ReadbackDecryptor = (*stubReadbackDecryptor)(nil)
 
 func TestConfigureReadbackDecryptorInjectsDecryptorIntoLuaHost(t *testing.T) {

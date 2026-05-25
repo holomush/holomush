@@ -1497,6 +1497,28 @@ func (s *stubReadbackDecryptor) DecryptOwnRow(_ context.Context, pluginName, ins
 	return &pluginv1.RowResult{Id: row.GetId()}
 }
 
+// DecryptOwnRows mirrors *history.ReadbackDecryptor.DecryptOwnRows: it enforces
+// the same maxDecryptBatch REJECT cap on the common path so the handler test
+// (TestDecryptOwnAuditRowsCapsBatchAt500) exercises the real cap behavior — an
+// over-cap batch is rejected with DECRYPT_BATCH_TOO_LARGE before any row is
+// decrypted. The cap value is duplicated here only because this stub stands in
+// for the production common-path decryptor in a different package.
+const stubMaxDecryptBatch = 500
+
+func (s *stubReadbackDecryptor) DecryptOwnRows(ctx context.Context, pluginName, instanceID string, rows []*pluginv1.AuditRow) ([]*pluginv1.RowResult, error) {
+	if len(rows) > stubMaxDecryptBatch {
+		return nil, oops.Code("DECRYPT_BATCH_TOO_LARGE").
+			With("plugin", pluginName).
+			With("count", len(rows)).
+			Errorf("decrypt batch exceeds cap %d", stubMaxDecryptBatch)
+	}
+	results := make([]*pluginv1.RowResult, 0, len(rows))
+	for _, row := range rows {
+		results = append(results, s.DecryptOwnRow(ctx, pluginName, instanceID, row))
+	}
+	return results, nil
+}
+
 func newDecryptTestServer(pluginName string, dec plugins.ReadbackDecryptor) *pluginHostServiceServer {
 	h := &Host{
 		plugins:           make(map[string]*loadedPlugin),
@@ -1544,7 +1566,7 @@ func TestDecryptOwnAuditRowsCapsBatchAt500(t *testing.T) {
 	dec := &stubReadbackDecryptor{}
 	srv := newDecryptTestServer("core-scenes", dec)
 
-	rows := make([]*pluginv1.AuditRow, maxDecryptBatch+1)
+	rows := make([]*pluginv1.AuditRow, stubMaxDecryptBatch+1)
 	for i := range rows {
 		rows[i] = &pluginv1.AuditRow{Id: []byte(strconv.Itoa(i)), Subject: "events.main.scene.01ABC.ic"}
 	}

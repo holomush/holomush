@@ -26,11 +26,22 @@ package history
 import (
 	"context"
 
+	"github.com/samber/oops"
+
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/codec"
 	pluginauditpb "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
+
+// maxDecryptBatch is the per-call REJECT cap for DecryptOwnRows, enforced ONCE
+// on the common read-back path so both plugin runtimes (binary gRPC and Lua
+// hostfunc) inherit the identical bound — the plugin-runtime-symmetry invariant
+// (a cap the binary path enforces but Lua bypasses would be a privilege
+// gradient). Unlike a clamp, an over-cap batch is REJECTED outright with
+// DECRYPT_BATCH_TOO_LARGE: silently truncating a decrypt request would hide
+// rows from the caller, the wrong failure mode for a read-back surface.
+const maxDecryptBatch = 500
 
 // RowResult is the outcome of decryptPluginRow. Exactly one of the three
 // observable states holds:
@@ -264,4 +275,28 @@ func (d *ReadbackDecryptor) DecryptOwnRow(
 			Plaintext: res.Plaintext,
 		}
 	}
+}
+
+// DecryptOwnRows decrypts a batch of pluginName's OWN audit rows, enforcing the
+// maxDecryptBatch cap ONCE on this common read-back path so both plugin
+// runtimes (binary gRPC + Lua hostfunc) inherit the identical bound. A batch
+// larger than maxDecryptBatch is REJECTED (not clamped) with
+// DECRYPT_BATCH_TOO_LARGE and NO row is decrypted. Otherwise each row flows
+// through DecryptOwnRow; results are returned 1:1 in request order (INV-RB-12).
+func (d *ReadbackDecryptor) DecryptOwnRows(
+	ctx context.Context,
+	pluginName, instanceID string,
+	rows []*pluginauditpb.AuditRow,
+) ([]*pluginauditpb.RowResult, error) {
+	if len(rows) > maxDecryptBatch {
+		return nil, oops.Code("DECRYPT_BATCH_TOO_LARGE").
+			With("plugin", pluginName).
+			With("count", len(rows)).
+			Errorf("decrypt batch exceeds cap %d", maxDecryptBatch)
+	}
+	results := make([]*pluginauditpb.RowResult, 0, len(rows))
+	for _, row := range rows {
+		results = append(results, d.DecryptOwnRow(ctx, pluginName, instanceID, row))
+	}
+	return results, nil
 }

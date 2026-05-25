@@ -28,7 +28,7 @@ import (
 	// MUST NOT follow this precedent — internal/ is host-only.
 	"github.com/holomush/holomush/internal/eventbus/audit/auditheader"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
-	pluginauditpb "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
 // AuditAttrs is a convenience alias for plugin-provided audit attribute maps.
@@ -169,7 +169,7 @@ func (r *contextRecorder) record(id, message string, effect AuditEffect, attrs A
 // pluginsdk.AuditRow is the projection-only-plus-crypto-envelope shape
 // plugins store in their audit tables (e.g. plugin_core_scenes.scene_log)
 // and return on PluginAuditService.QueryHistory. It mirrors
-// pluginauditpb.AuditRow 1:1 (INV-P7-4) and is consumed via the two
+// pluginv1.AuditRow 1:1 (INV-P7-4) and is consumed via the two
 // helpers below.
 //
 // Plugin authors typically don't construct AuditRow manually — they use
@@ -183,7 +183,7 @@ func (r *contextRecorder) record(id, message string, effect AuditEffect, attrs A
 // authors; the host's threat model does not rely on Layer 2 correctness
 // (INV-P7-6 and INV-P7-7 are enforced host-side).
 
-// AuditRow is the Go-side mirror of pluginauditpb.AuditRow. Field
+// AuditRow is the Go-side mirror of pluginv1.AuditRow. Field
 // ordering matches the proto field-numbering for stability across
 // proto regenerations.
 type AuditRow struct {
@@ -262,7 +262,7 @@ func StoreFromMessage(msg jetstream.Msg) (AuditRow, error) {
 // by PluginAuditService.QueryHistory. Round-trip stable with
 // StoreFromMessage (INV-P7-5).
 //
-// Per-field copy from AuditRow to *pluginauditpb.AuditRow:
+// Per-field copy from AuditRow to *pluginv1.AuditRow:
 //   - EventID → Id (raw 16-byte ULID via row.EventID[:])
 //   - Subject, Type, Codec, Payload, SchemaVer → same-named proto fields verbatim
 //   - Timestamp → timestamppb.New(row.Timestamp)
@@ -273,8 +273,8 @@ func StoreFromMessage(msg jetstream.Msg) (AuditRow, error) {
 // validation (e.g. enforce codec=identity ⇔ DEKRef==nil). Defer the
 // agreement check to host-side code per spec §4.5 (host owns the
 // envelope semantics).
-func LoadForQuery(row AuditRow) (*pluginauditpb.AuditRow, error) {
-	out := &pluginauditpb.AuditRow{
+func LoadForQuery(row AuditRow) (*pluginv1.AuditRow, error) {
+	out := &pluginv1.AuditRow{
 		Id:        row.EventID[:],
 		Subject:   row.Subject,
 		Type:      row.Type,
@@ -291,4 +291,24 @@ func LoadForQuery(row AuditRow) (*pluginauditpb.AuditRow, error) {
 		out.DekVersion = row.DEKVersion
 	}
 	return out, nil
+}
+
+// DecryptOwnAuditRows sends a batch of AuditRows to the host's
+// PluginHostService.DecryptOwnAuditRows RPC and returns the per-row
+// RowResult slice (one result per input row, echoing row.Id for
+// positional correlation per INV-RB-12).
+//
+// The host owns all crypto decisions; this function is client transport
+// only — it MUST NOT log or cache the returned plaintext bytes. Callers
+// MUST discard plaintext once they have finished using it.
+//
+// gRPC status errors pass through as-is; the host stamps reject codes
+// as gRPC status messages. Callers that branch on specific codes use
+// google.golang.org/grpc/status.FromError to extract them.
+func DecryptOwnAuditRows(ctx context.Context, client pluginv1.PluginHostServiceClient, rows []*pluginv1.AuditRow) ([]*pluginv1.RowResult, error) {
+	resp, err := client.DecryptOwnAuditRows(ctx, &pluginv1.DecryptOwnAuditRowsRequest{Rows: rows})
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is (host stamps codes; callers use status.FromError)
+	}
+	return resp.GetResults(), nil
 }
