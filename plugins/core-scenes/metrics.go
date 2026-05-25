@@ -125,7 +125,10 @@ func metricSceneOpsEventRecorded(kind string) {
 // Part of the spec §10 triple-signal (slog WARN + this metric + span error).
 // Metric: scene_publish_privacy_block_total{operation, reason}. No-op stub
 // per the metrics.go header until the binary-plugin metrics pipeline lands.
-func metricScenePublishPrivacyBlock(operation, reason string) {
+//
+// Declared as a package var (not a plain func) so the INV-P6-9 triple-signal
+// test (service_privacy_block_test.go) can shim it to assert the call fires.
+var metricScenePublishPrivacyBlock = func(operation, reason string) {
 	_ = operation
 	_ = reason
 }

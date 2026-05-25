@@ -85,6 +85,10 @@ func (s *SceneServiceImpl) GetPublishedScene(ctx context.Context, req *scenev1.G
 // hard-privacy-boundary denial: a WARN log, a metric, and a span error. It
 // deliberately emits NO IC event — a denial must not surface on any scene
 // stream that could leak the attempt's existence to a non-participant.
+//
+//nolint:unparam // reason is the §10 denial-reason taxonomy (a labeled metric
+// dimension, scene_publish_privacy_block_total{reason}); only "not_participant"
+// exists today, but future gate failures pass other reasons — keep it variable.
 func (s *SceneServiceImpl) emitPrivacyBoundaryBlock(ctx context.Context, operation, sceneID, callerID, reason string) {
 	slog.WarnContext(ctx, "scene privacy boundary block",
 		"operation", operation,
