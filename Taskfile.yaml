@@ -593,7 +593,17 @@ tasks:
         # is no longer needed. Escape hatch: '// pgnanos-exempt: <reason>' on the
         # same line for external systems that legitimately require microsecond
         # granularity (none currently expected).
-        if rg -n "Truncate\(time\.Microsecond\)" --type=go \
+        #
+        # The explicit {{.ROOT_DIR}} path is load-bearing: rg defaults to
+        # scanning cwd ONLY when stdin is a TTY. Under a non-TTY stdin (CI
+        # wires run-steps to /dev/null; agents may attach an idle pipe) a
+        # path-less rg reads stdin instead — matching nothing in CI
+        # (false-clean no-op) or blocking forever on a pipe. An explicit
+        # path forces a repo walk regardless of stdin. {{.ROOT_DIR}} (the
+        # root Taskfile's dir) is used over '.' so the scan stays anchored
+        # to the repo root even if this task ever gains a `dir:` override
+        # (holomush-vpvu5).
+        if rg -n "Truncate\(time\.Microsecond\)" --type=go {{.ROOT_DIR}} \
              | rg -v "pgnanos-exempt:" ; then
           echo "FAIL: .Truncate(time.Microsecond) found. Persistent timestamps are BIGINT-ns; truncation is no longer needed."
           echo "If you have a non-PG external system that requires µs, annotate with '// pgnanos-exempt: <reason>' on the same line."
