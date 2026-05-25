@@ -59,6 +59,24 @@ func TestEvaluateNoActorFailsClosed(t *testing.T) {
 	assert.NotEqual(t, lua.LNil, L.GetGlobal("err"))
 }
 
+func TestEvaluateNilEngineFailsClosed(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	charID := core.NewULID()
+	L.SetContext(core.WithActor(context.Background(),
+		core.Actor{Kind: core.ActorCharacter, ID: charID.String()}))
+
+	// No engine configured — WithEngine is intentionally omitted.
+	hf := hostfunc.New(nil)
+	hf.Register(L, "lua-plug")
+
+	require.NoError(t, L.DoString(`allowed, err = holomush.evaluate("execute", "command:greet")`))
+	assert.False(t, bool(L.GetGlobal("allowed").(lua.LBool)),
+		"nil engine MUST deny (fail closed)")
+	assert.NotEqual(t, lua.LNil, L.GetGlobal("err"),
+		"nil engine MUST return a non-nil error string")
+}
+
 func TestEvaluateNilLStateContextFailsClosed(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()

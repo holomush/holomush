@@ -35,6 +35,13 @@ func (g GatedSubcommand) Run(
 	req CommandRequest,
 	args string,
 ) (*CommandResponse, error) {
+	// Nil guards — misconfigured GatedSubcommand fails closed instead of panicking.
+	if ev == nil || g.ResourceRef == nil || g.Handler == nil {
+		slog.ErrorContext(ctx, "gated subcommand misconfigured: nil evaluator, ResourceRef, or Handler",
+			"subcommand", g.Name)
+		return Failuref("gated subcommand %q misconfigured", g.Name), nil
+	}
+
 	// Step 1: resolve resource reference.
 	resource, refErr := g.ResourceRef(args)
 	if refErr != nil {

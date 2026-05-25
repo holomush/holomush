@@ -97,4 +97,56 @@ func TestGatedSubcommand_EngineErrorReturnsFailure(t *testing.T) {
 	assert.False(t, handlerRan, "handler MUST NOT run when the engine errors")
 }
 
+func TestGatedSubcommand_NilEvaluatorFailsClosed(t *testing.T) {
+	handlerRan := false
+	gs := GatedSubcommand{
+		Name:        "extend",
+		Action:      "extend_publish_attempts",
+		ResourceRef: func(args string) (string, error) { return "scene:" + args, nil },
+		Handler: func(context.Context, CommandRequest, string) (*CommandResponse, error) {
+			handlerRan = true
+			return OK(""), nil
+		},
+	}
+
+	resp, err := gs.Run(context.Background(), nil, CommandRequest{}, "01SCENE")
+	require.NoError(t, err)
+	assert.Equal(t, CommandFailure, resp.Status, "nil evaluator MUST return CommandFailure")
+	assert.False(t, handlerRan, "handler MUST NOT run when evaluator is nil")
+}
+
+func TestGatedSubcommand_NilResourceRefFailsClosed(t *testing.T) {
+	ev := &fakeEvaluator{allow: true}
+	handlerRan := false
+	gs := GatedSubcommand{
+		Name:        "extend",
+		Action:      "extend_publish_attempts",
+		ResourceRef: nil,
+		Handler: func(context.Context, CommandRequest, string) (*CommandResponse, error) {
+			handlerRan = true
+			return OK(""), nil
+		},
+	}
+
+	resp, err := gs.Run(context.Background(), ev, CommandRequest{}, "01SCENE")
+	require.NoError(t, err)
+	assert.Equal(t, CommandFailure, resp.Status, "nil ResourceRef MUST return CommandFailure")
+	assert.False(t, handlerRan, "handler MUST NOT run when ResourceRef is nil")
+	assert.Equal(t, 0, ev.calls, "evaluator MUST NOT be called when ResourceRef is nil")
+}
+
+func TestGatedSubcommand_NilHandlerFailsClosed(t *testing.T) {
+	ev := &fakeEvaluator{allow: true}
+	gs := GatedSubcommand{
+		Name:        "extend",
+		Action:      "extend_publish_attempts",
+		ResourceRef: func(args string) (string, error) { return "scene:" + args, nil },
+		Handler:     nil,
+	}
+
+	resp, err := gs.Run(context.Background(), ev, CommandRequest{}, "01SCENE")
+	require.NoError(t, err)
+	assert.Equal(t, CommandFailure, resp.Status, "nil Handler MUST return CommandFailure")
+}
+
 func assertRefErr() error { return context.Canceled }

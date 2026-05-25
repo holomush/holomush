@@ -1396,3 +1396,81 @@ func TestEvaluateEngineUnconfiguredFailsClosed(t *testing.T) {
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVALUATE_ENGINE_UNCONFIGURED")
 }
+
+// TestEvaluateNilHostFailsClosed verifies that Evaluate fails closed when the
+// pluginHostServiceServer has no host (mirrors the nil-host tests for EmitEvent,
+// JoinFocus, etc.).
+func TestEvaluateNilHostFailsClosed(t *testing.T) {
+	t.Parallel()
+	srv := &pluginHostServiceServer{host: nil, pluginName: "core-scenes"}
+
+	_, err := srv.Evaluate(context.Background(), &pluginv1.PluginHostServiceEvaluateRequest{
+		Action:   "read",
+		Resource: "scene:01SCENE0000000000000000000",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "plugin host service is not configured")
+}
+
+// TestEvaluateNilTokenStoreFailsClosed verifies that Evaluate returns
+// EMIT_TOKEN_STORE_UNCONFIGURED when the host's tokenStore is nil.
+// This fires when a host is constructed and the token store is cleared.
+func TestEvaluateNilTokenStoreFailsClosed(t *testing.T) {
+	t.Parallel()
+	manifest := &plugins.Manifest{
+		Name:          "core-scenes",
+		Type:          plugins.TypeBinary,
+		ResourceTypes: []string{"scene"},
+	}
+	h := newTestHostWithEngine(t, "core-scenes", manifest, policytest.AllowAllEngine())
+
+	// Inject a token into metadata manually (bypassing Issue so we don't need the store).
+	md := metadata.New(map[string]string{"x-holomush-emit-token": "any-token"})
+	ctx := metadata.NewIncomingContext(context.Background(), md)
+
+	// Clear the tokenStore after constructing the host. Stop the sweeper goroutine
+	// first so h.Close() doesn't race with the nil write, then skip calling Close
+	// (tokenStore is nil and h.Close calls tokenStore.Close which would panic).
+	h.tokenStoreCancel()
+	h.mu.Lock()
+	h.tokenStore = nil
+	h.mu.Unlock()
+
+	srv := &pluginHostServiceServer{host: h, pluginName: "core-scenes"}
+	_, err := srv.Evaluate(ctx, &pluginv1.PluginHostServiceEvaluateRequest{
+		Action:   "read",
+		Resource: "scene:01SCENE0000000000000000000",
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EMIT_TOKEN_STORE_UNCONFIGURED")
+}
+
+// TestEvaluateRejectedTokenFailsClosed verifies that Evaluate returns
+// EMIT_TOKEN_REJECTED when the dispatch token was issued for a different plugin.
+// Mirrors TestEmitEventCrossPluginTokenLeakFails for the Evaluate surface.
+func TestEvaluateRejectedTokenFailsClosed(t *testing.T) {
+	t.Parallel()
+	manifest := &plugins.Manifest{
+		Name:          "core-scenes",
+		Type:          plugins.TypeBinary,
+		ResourceTypes: []string{"scene"},
+	}
+	h := newTestHostWithEngine(t, "core-scenes", manifest, policytest.AllowAllEngine())
+	defer func() { _ = h.Close(context.Background()) }()
+
+	// Issue a token for plug-A; present it to plug-B's server.
+	tok, err := h.tokenStore.Issue("plug-A", core.Actor{Kind: core.ActorCharacter, ID: core.NewULID().String()})
+	require.NoError(t, err)
+	defer h.tokenStore.Revoke(tok)
+
+	srvB := &pluginHostServiceServer{host: h, pluginName: "core-scenes"}
+	md := metadata.New(map[string]string{"x-holomush-emit-token": tok})
+	ctx := metadata.NewIncomingContext(context.Background(), md)
+
+	_, err = srvB.Evaluate(ctx, &pluginv1.PluginHostServiceEvaluateRequest{
+		Action:   "read",
+		Resource: "scene:01SCENE0000000000000000000",
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EMIT_TOKEN_REJECTED")
+}
