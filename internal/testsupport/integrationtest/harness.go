@@ -74,6 +74,7 @@ import (
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/pgnanos"
+	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/store"
@@ -303,10 +304,40 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	}
 }
 
-// Stop tears down the in-process stack. Idempotent.
-// Postgres and NATS cleanup are handled by t.Cleanup() registered in Start.
+// Stop tears down the in-process stack. Idempotent. Postgres and NATS cleanup
+// are handled by t.Cleanup handlers registered in Start; the plugin subsystem
+// (if started) is stopped here and is also t.Cleanup-registered as a safety net.
 func (s *Server) Stop() {
-	// Resources cleaned up by t.Cleanup handlers registered in Start.
+	if s.pluginSub != nil {
+		_ = s.pluginSub.Stop(context.Background())
+	}
+}
+
+// PluginManager returns the loaded plugin Manager. Panics if WithInTreePlugins
+// was not passed to Start.
+func (s *Server) PluginManager() *plugins.Manager {
+	s.requirePlugins("PluginManager")
+	return s.pluginSub.Manager()
+}
+
+// CommandRegistry returns the plugin-populated command registry (builtins +
+// admin + plugin commands). Panics if WithInTreePlugins was not passed.
+func (s *Server) CommandRegistry() *command.Registry {
+	s.requirePlugins("CommandRegistry")
+	return s.pluginSub.CommandRegistry()
+}
+
+// ServiceRegistry returns the plugin service registry. Panics if
+// WithInTreePlugins was not passed.
+func (s *Server) ServiceRegistry() *plugins.ServiceRegistry {
+	s.requirePlugins("ServiceRegistry")
+	return s.pluginSub.ServiceRegistry()
+}
+
+func (s *Server) requirePlugins(method string) {
+	if s.pluginSub == nil {
+		panic("integrationtest: " + method + "() requires Start(t, WithInTreePlugins())")
+	}
 }
 
 // NewLocation creates a fresh persistent location in the world and returns
