@@ -14,6 +14,14 @@ import (
 	"runtime"
 
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/access/policy/attribute"
+	policytypes "github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/command/handlers"
+	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/pluginauthz"
+	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/world"
 )
 
 // assemblePluginsDir builds a unified plugins directory under dst by copying
@@ -91,6 +99,36 @@ func binaryArtifactsPresent(buildDir string) bool {
 	info, err := os.Stat(exe)
 	return err == nil && !info.IsDir()
 }
+
+type engineProvider struct {
+	eng      policytypes.AccessPolicyEngine
+	resolver *attribute.Resolver
+	auditor  pluginauthz.Auditor
+}
+
+func (p engineProvider) Engine() policytypes.AccessPolicyEngine { return p.eng }
+func (p engineProvider) AttributeResolver() *attribute.Resolver { return p.resolver }
+func (p engineProvider) AuditLogger() pluginauthz.Auditor       { return p.auditor }
+
+type sessionProvider struct{ store session.Access }
+
+func (p sessionProvider) SessionStore() session.Access { return p.store }
+
+type worldProvider struct{ svc *world.Service }
+
+func (p worldProvider) Service() *world.Service { return p.svc }
+
+type adminDepsProvider struct{ deps handlers.AdminDeps }
+
+func (p adminDepsProvider) AdminDeps() handlers.AdminDeps { return p.deps }
+
+type policyInstallerProvider struct{ inst *plugins.PolicyInstaller }
+
+func (p policyInstallerProvider) PolicyInstaller() *plugins.PolicyInstaller { return p.inst }
+
+type pluginProviderSetter struct{ pp *attribute.PluginProvider }
+
+func (p pluginProviderSetter) PluginProvider() *attribute.PluginProvider { return p.pp }
 
 func copyFile(src, dst string, mode os.FileMode) error {
 	in, err := os.Open(src)

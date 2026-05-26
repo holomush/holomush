@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
 )
 
 func TestAssemblePluginsDirOverlaysSourceAndBuild(t *testing.T) {
@@ -52,4 +54,18 @@ func TestBinaryArtifactsPresentDetectsCoreScenes(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(build, "core-scenes", platform), 0o755))                                //nolint:gosec // test-only
 	require.NoError(t, os.WriteFile(filepath.Join(build, "core-scenes", platform, "core-scenes"), []byte("ELF"), 0o755)) //nolint:gosec // test-only
 	require.True(t, binaryArtifactsPresent(build))
+}
+
+func TestPluginProvidersSatisfyInterfaces(t *testing.T) {
+	// Compile-time interface satisfaction is the real assertion; this test
+	// exists so the file fails to build if an adapter drifts from its iface.
+	var (
+		_ pluginsetup.EngineProvider          = engineProvider{}
+		_ pluginsetup.SessionProvider         = sessionProvider{}
+		_ pluginsetup.WorldServiceProvider    = worldProvider{}
+		_ pluginsetup.AdminDepsProvider       = adminDepsProvider{}
+		_ pluginsetup.PolicyInstallerProvider = policyInstallerProvider{}
+		_ pluginsetup.PluginProviderSetter    = pluginProviderSetter{}
+	)
+	require.NotNil(t, &engineProvider{})
 }
