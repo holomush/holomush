@@ -1,0 +1,11 @@
+# Quarantine registry — known-flaky integration/E2E specs.
+#
+# Each entry MUST reference an open/in-progress bead and have a matching
+# in-code marker (quarantinetest.Skip / Ginkgo Skip / Playwright @quarantine
+# tag). The bijection meta-test (test/meta/quarantine_registry_test.go)
+# fails the build if a marker lacks a row or a row lacks a marker.
+# `task quarantine:audit` (run where bd is reachable) flags rows whose bead
+# is closed. See docs/superpowers/specs/2026-05-25-tier-split-quality-gates-design.md.
+#
+# entries: list of { id, kind (go|ginkgo|playwright), bead, since, reason }
+entries: []
