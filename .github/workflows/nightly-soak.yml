@@ -47,3 +47,36 @@ jobs:
 
       - name: Run eventbus soak suite
         run: task soak:eventbus
+
+  quarantine:
+    name: Quarantine Health
+    runs-on: namespace-profile-linux-amd64-4x8
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Setup Testcontainers Cloud Client
+        uses: atomicjar/testcontainers-cloud-setup-action@7d1bab3fdfe0027c91936deca6b924d8a8a7a04d # v1
+        with:
+          token: ${{ secrets.TC_CLOUD_TOKEN }}
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@15799a6b54e5765f85b2aac25b3f0df43ed571c0 # v1
+        with:
+          cache: go
+      - name: Install Task
+        uses: ./.github/actions/install-task
+      # Run the quarantined Go specs (health signal only; never gates merge).
+      # continue-on-error: known-flaky by definition — a red here is expected
+      # and must not fail the nightly workflow.
+      - name: Run quarantined integration specs
+        continue-on-error: true
+        env:
+          HOLOMUSH_RUN_QUARANTINED: "1"
+        run: task test:int
+      - name: Run quarantined E2E specs
+        continue-on-error: true
+        run: task test:e2e:cover -- --grep @quarantine
