@@ -157,6 +157,26 @@ NATS (`internal/eventbus/subsystem.go`); external/clustered NATS is unimplemente
 (tracked in holomush-s5ts). Production code MUST NOT import `eventbustest` or
 `internal/core/coretest` — enforced by the depguard rule in `.golangci.yaml`.
 
+### Quarantine
+
+Known-flaky integration and E2E specs are quarantined so they self-skip in gating CI and in `task pr-prep:full`, running only nightly or locally with `HOLOMUSH_RUN_QUARANTINED=1`. Quarantine is for **flakiness with an open bead** — never for a real failure.
+
+**Three marker idioms:**
+
+| Stack | Marker |
+| --- | --- |
+| Go unit/integration | `quarantinetest.Skip(t, "holomush-xxxx")` (helper at `internal/testsupport/quarantinetest`) |
+| Ginkgo | `if !quarantinetest.Enabled() { Skip("quarantined: holomush-xxxx") }` |
+| Playwright | `{ tag: ['@quarantine', '@holomush-xxxx'] }` |
+
+Every marker MUST have a corresponding row in `test/quarantine.yaml` citing an open bead (enforced by the bijection meta-test INV-2 at `test/meta/quarantine_registry_test.go`). `task quarantine:audit` flags rows whose cited bead is closed.
+
+Production code MUST NOT import `quarantinetest` — enforced by depguard.
+
+To un-quarantine: fix the flake, remove the marker and the `test/quarantine.yaml` row, then verify `task quarantine:audit` is clean.
+
+See [site/docs/contributing/quarantine.md](../../site/docs/contributing/quarantine.md) for the full contributor guide.
+
 ## Plugin Tests (`internal/plugin`)
 
 Lua plugins use gopher-lua which creates fresh VM state per event delivery. Binary plugins use hashicorp/go-plugin and communicate via gRPC.

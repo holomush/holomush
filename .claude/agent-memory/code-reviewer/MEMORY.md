@@ -343,3 +343,27 @@ Keep under 200 lines. Curate — don't hoard.
   to exercise. `stream_access_test.go:39` explicitly documents the
   rejection: `{"returns false for old colon-style scene stream",
   "scene:01ABC:ic", false}`. Encountered: iwzt.9-11 (2026-05-21).
+
+- **Contributor-guide example YAML/JSON MUST match the validator's regex/schema,
+  not just "look plausible."** When a how-to doc shows a copy-paste registry/config
+  example that a meta-test validates, run the doc's literal example through the
+  validator's extraction regex before trusting it. Real miss: quarantine.md
+  Step-2 example used `- id: holomush-xxxx` (bead under `id:`) but the bijection
+  meta-test's `registryBeadRE = ^\s*bead:\s*(holomush-...)`
+  (`test/meta/quarantine_registry_test.go:24`) and `test/quarantine.yaml:10`
+  schema `{ id, kind, bead, since, reason }` require a `bead:` key — the example
+  registers ZERO beads, so a contributor copying it breaks INV-2. The doc lint
+  (`task lint:markdown`) passes because the YAML is well-formed; only schema/regex
+  cross-check catches it. Verify: `printf '<example>' | rg '<validator-regex>'`.
+  Encountered: holomush-b4myw.10 (2026-05-25).
+
+- **Tier-split docs intentionally LEAD not-yet-landed tooling — verify the bead
+  graph before flagging "command doesn't exist."** In the tier-split-quality-gates
+  epic (holomush-b4myw), Task 10 docs reference `task quarantine:audit` (Task 5,
+  OPEN) and nightly `HOLOMUSH_RUN_QUARANTINED=1` wiring in nightly-soak.yml (Task 6,
+  OPEN — currently only runs `task soak:eventbus`). The plan explicitly instructs
+  the doc to mention them (plan lines 1085/1089), same lead-the-promotion pattern
+  as the Task 11 ruleset flip. So a doc citing a not-yet-existing `task X` is
+  Medium/non-blocking IF a sibling bead owns it; check `bd list` for the owning
+  task before calling it a blocker. (Distinct from finding #1 above, which is a
+  doc that breaks an ALREADY-LANDED validator.) Encountered: holomush-b4myw.10.

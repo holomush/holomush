@@ -297,18 +297,26 @@ task test:int                                    # Integration tests (needs Dock
 | **MUST NOT** disable lint/format rules | Without explicit user confirmation                 |
 | **SHOULD** run `task fmt`              | Before committing to ensure consistent formatting  |
 
-**MUST** run `task pr-prep` before creating a PR or pushing to a PR branch.
-It auto-detects docs-only diffs (per `Taskfile.yaml` `vars.DOCS_ONLY_PATHS`)
-and runs the `pr-prep:docs` fast lane in that case; for any non-docs path,
-it runs the full pipeline mirroring all CI jobs (lint, format, schema,
-license, unit, integration, E2E) and MUST pass with zero failures. Use
-`HOLOMUSH_PR_PREP_FORCE_FULL=1 task pr-prep` to force the full lane.
-Docker is always available — never skip E2E tests on the full lane. The
-full lane is serialized per user — only one runs at a time on a given
-machine. Note: docs detection relies on jj's snapshot of `@`; run `jj st`
-first if you've made edits since the last `jj` command. See
-[pr-prep](site/docs/contributing/pr-prep.md) for collision behavior and
-the docs lane.
+**MUST** run `task pr-prep` (the **fast lane**) before creating a PR or
+pushing to a PR branch. The fast lane runs bats → schema-check →
+license:check → plugin:build-all → lint → fmt:check → unit tests → build.
+It requires no Docker and holds no flock, so it is always safe to run
+without coordination. On docs-only diffs it auto-delegates to
+`task pr-prep:docs` (markdown lint, YAML lint, docs-symmetry check, fmt,
+license). Note: docs detection relies on jj's snapshot of `@`; run `jj st`
+first if you've made edits since the last `jj` command.
+
+`task pr-prep:full` runs the flock-serialized **full lane** (everything
+fast does, plus integration tests and E2E in Docker). It is opt-in —
+recommended when your diff touches int/E2E surface (Ginkgo suites, Playwright
+specs, or their shared helpers). The full lane is serialized machine-globally
+per user. Use `HOLOMUSH_PR_PREP_FORCE_FULL=1 task pr-prep` to trigger it
+from the auto-detecting entry point.
+
+**`Integration Test` and `E2E Test` are required CI checks protecting `main`.**
+They run on Namespace runners with Testcontainers Cloud in CI — not in the
+mandatory local fast lane. See [pr-prep](site/docs/contributing/pr-prep.md)
+for the full lanes reference and lock/contention behavior.
 
 **Reading the pr-prep result — exit code first, then disambiguate; never
 grep the lock string.** Run it as the SOLE command (`task pr-prep` — no
