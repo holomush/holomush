@@ -221,6 +221,26 @@ Keep under 200 lines. Curate — don't hoard.
   short-form `"say"` never matches. Don't trust a bead's "gated on capability"
   hypothesis without tracing the actual path. Encountered: holomush-gria3.
 
+- **`location:<id>` stream reads bypass `engine.Evaluate` — gated by the location
+  hard-gate, not ABAC Layer 3.** `QueryStreamHistory`
+  (`internal/grpc/query_stream_history.go:196-211`) routes `isLocationStream`
+  streams to a hard-gate: `if !staffOverride(...) { if info.LocationID != extractLocationID(stream) { DENY } }`.
+  `staffOverride` (`scope_floor.go:88-103`) is the ONLY ABAC consult for location
+  streams — it evaluates `read_unrestricted_history` on `stream:*`. A **co-located**
+  location read (`info.LocationID == requested`) is permitted by the hard-gate
+  WITHOUT ever consulting ABAC for the `stream:` resource, so
+  `seed:player-location-stream-read` is effectively dead for this handler. Consequence
+  for harness-real-ABAC test review: a "colocated permit succeeds only because the
+  stream provider is registered" sentinel does NOT work through `QueryStreamHistory`
+  (the hard-gate permits regardless of provider registration). The valid g776
+  sentinel is the ADMIN/non-colocated path: admin role → `"admin" in
+  principal.character.roles` (CharacterProvider + RoleResolver, needs RoleStore wired)
+  → `seed:admin-full-access`/`seed:staff-read-unrestricted-history` permits
+  `read_unrestricted_history` → staffOverride true → bypass hard-gate. An unregistered
+  roles provider flips admin to denied. Only ABAC Layer 3 (`global`, `system`, …
+  non-location public streams) hits `engine.Evaluate` directly. Encountered:
+  holomush-f5t07 (2026-05-26).
+
 ## Invariants worth remembering
 
 - **Top-level oops Code() is the wire-visible code**: client-side error

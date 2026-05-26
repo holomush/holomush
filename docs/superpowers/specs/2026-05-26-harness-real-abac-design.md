@@ -169,19 +169,29 @@ package).
 | **Invariants** | one test per INV-RA-1…6. |
 | **Integration** | `task test:int` green; ≥1 real privacy/presence-style test under `WithRealABAC`. |
 
-**Meta-test (INV-RA-5, the regression demonstration).** Realized as a
-**colocated-permit sentinel**: under `WithRealABAC`, a `resource.*` seed permit
-(e.g. `seed:player-location-stream-read` — a co-located stream read) succeeds
-**only because** the namespace's attribute provider is registered. An
-unregistered provider — the exact g776/xxel fingerprint — would silently
-default-deny and flip this permit to `STREAM_ACCESS_DENIED`, failing the test;
-under the allow-all default the same permit passes regardless, masking the
-regression. This is the acceptance criterion's "regression that allow-all would
-have passed," and it stays in f5t07 (it *is* the acceptance gate). INV-RA-3 and
-INV-RA-5 share this sentinel test. (A synthetic provider-withholding variant is
-not used: the harness option always wires the full repo set via
-`NewABACSubsystem`, so withholding is reachable only by bypassing the public
-API.)
+**Meta-test (INV-RA-5, the regression demonstration).** Realized as an
+**admin-role permit sentinel** (`TestRealABAC_AdminPermittedNonColocatedRead_g776Sentinel`):
+under `WithRealABAC`, an admin-role character is permitted a *different-location*
+stream read via `seed:admin-full-access`, which the `staffOverride` path
+(`internal/grpc/scope_floor.go`) resolves through
+`engine.Evaluate("read_unrestricted_history", …)`. This permit succeeds **only
+because** the provider populating `principal.character.roles` is registered — an
+unregistered provider (the exact g776/xxel fingerprint) silently default-denies,
+flipping the permit to `STREAM_ACCESS_DENIED` and failing the test. Under the
+allow-all default the same read passes via the staff bypass regardless
+(INV-RA-2), masking the regression. This is the acceptance criterion's
+"regression that allow-all would have passed," and it stays in f5t07 (it *is* the
+acceptance gate). INV-RA-3 and INV-RA-5 share this sentinel test.
+
+A *co-located* location-stream read is **not** a usable engine sentinel: it is
+permitted by the location hard-gate (`internal/grpc/query_stream_history.go`,
+`info.LocationID == extractLocationID(stream)`), which never reaches
+`engine.Evaluate` for the `stream:` resource — so `seed:player-location-stream-read`
+is dead for that case in this handler. The ABAC-gated path is the
+different-location read via `staffOverride`, hence the admin-role mechanism above.
+(A synthetic provider-withholding variant is not used: the harness option always
+wires the full repo set via `NewABACSubsystem`, so withholding is reachable only
+by bypassing the public API.)
 
 ## 7. Documentation (PR-blocking)
 
