@@ -17,6 +17,7 @@ import (
 	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/lifecycle"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/world/postgres"
 )
@@ -170,4 +171,34 @@ func (s *ABACSubsystem) Resolver() access.SubjectResolver {
 		panic("setup: Resolver() called before Start()")
 	}
 	return s.stack.Resolver
+}
+
+// AttributeResolver returns the concrete *attribute.Resolver so that wiring
+// layers (e.g. the plugin subsystem) can register plugin-declared attribute
+// providers via RegisterProvider/UnregisterProvider callbacks. This is the
+// same resolver instance passed to policy.NewEngine during BuildABACStack, so
+// registrations take effect immediately on the live engine. Panics if called
+// before Start().
+func (s *ABACSubsystem) AttributeResolver() *attribute.Resolver {
+	if s.stack == nil {
+		panic("setup: AttributeResolver() called before Start()")
+	}
+	return s.stack.Resolver
+}
+
+// AuditLogger returns the audit logger from the ABAC stack as a
+// pluginauthz.Auditor. The concrete type is *audit.Logger; callers may pass
+// the return value directly to goplugin.WithAuditLogger or
+// hostfunc.WithAuditLogger to satisfy spec §5 / INV-4. Returns nil when
+// AuditLogger is nil (audit logging disabled), giving callers a clean nil
+// interface value rather than an interface wrapping a nil pointer.
+// Panics if called before Start().
+func (s *ABACSubsystem) AuditLogger() pluginauthz.Auditor {
+	if s.stack == nil {
+		panic("setup: AuditLogger() called before Start()")
+	}
+	if s.stack.AuditLogger == nil {
+		return nil
+	}
+	return s.stack.AuditLogger
 }

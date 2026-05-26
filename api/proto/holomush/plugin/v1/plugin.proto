@@ -96,6 +96,12 @@ service PluginHostService {
   // IsAnyConnFocused — Phase 5 notification-emission helper: true iff
   // any of the character's connections has FocusKey == {scene, scene_id}.
   rpc IsAnyConnFocused(PluginHostServiceIsAnyConnFocusedRequest) returns (PluginHostServiceIsAnyConnFocusedResponse);
+
+  // Evaluate runs the host ABAC engine for a single action against a single
+  // resource instance owned by the calling plugin. The subject is derived
+  // host-side from the dispatch token (see EmitEvent) — there is no subject
+  // field on the wire (spec §2, INV-1).
+  rpc Evaluate(PluginHostServiceEvaluateRequest) returns (PluginHostServiceEvaluateResponse);
 }
 
 // ServiceConfig carries initialization data from the host to the plugin.
@@ -509,4 +515,16 @@ message PluginHostServiceIsAnyConnFocusedRequest {
 
 message PluginHostServiceIsAnyConnFocusedResponse {
   bool focused = 1;
+}
+
+message PluginHostServiceEvaluateRequest {
+  string action = 1 [(buf.validate.field).string.min_len = 1];
+  // resource is a typed instance ref: "scene:01ABC...".
+  string resource = 2 [(buf.validate.field).string.min_len = 3];
+}
+
+message PluginHostServiceEvaluateResponse {
+  bool allowed = 1;
+  string reason = 2;
+  string matched_policy = 3;
 }

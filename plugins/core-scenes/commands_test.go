@@ -21,8 +21,9 @@ func newTestPlugin() *scenePlugin {
 	svc := NewSceneServiceImpl(store)
 	svc.SetEventSink(&recordingEventSink{})
 	return &scenePlugin{
-		store:   nil, // not used by command handlers
-		service: svc,
+		store:     nil, // not used by command handlers
+		service:   svc,
+		evaluator: allowEvaluator{}, // allow all by default; use newScenePluginWithEvaluator for deny/nil tests
 	}
 }
 
@@ -237,8 +238,6 @@ func TestHandleCommandSetRejectsMissingEqualsSeparator(t *testing.T) {
 
 // createSceneInTest is a helper that creates a scene via the command path
 // and returns its ID. Used by Phase 2 tests that need a scene to operate on.
-//
-//nolint:unparam // characterID is parameterised for clarity at call sites even though every current caller passes "char-alice"; future tests with multi-character setups will need this without changing the signature
 func createSceneInTest(t *testing.T, p *scenePlugin, characterID, title string) string {
 	t.Helper()
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -260,7 +259,7 @@ func TestSceneCommandJoinForwardsToServiceWithCorrectSceneID(t *testing.T) {
 		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
 	}))
 	fc := &fakeFocusClient{}
-	plugin := &scenePlugin{service: NewSceneServiceImpl(store), focusClient: fc}
+	plugin := &scenePlugin{service: NewSceneServiceImpl(store), focusClient: fc, evaluator: allowEvaluator{}}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:     "scene",
@@ -276,14 +275,15 @@ func TestSceneCommandJoinForwardsToServiceWithCorrectSceneID(t *testing.T) {
 }
 
 func TestSceneCommandLeaveRejectsMissingSceneID(t *testing.T) {
-	plugin := &scenePlugin{service: NewSceneServiceImpl(newFakeStore())}
+	// Gate resource-ref fails fast (before handler) when scene id is missing.
+	plugin := &scenePlugin{service: NewSceneServiceImpl(newFakeStore()), evaluator: allowEvaluator{}}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "leave", CharacterID: "char-bob",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, pluginsdk.CommandError, resp.Status)
-	assert.Contains(t, resp.Output, "Usage: scene leave")
+	assert.Contains(t, resp.Output, "scene id is required")
 }
 
 func TestSceneCommandInviteParsesSceneIDAndTarget(t *testing.T) {
@@ -292,7 +292,7 @@ func TestSceneCommandInviteParsesSceneIDAndTarget(t *testing.T) {
 		ID: "scene-cmd-i", OwnerID: "char-alice",
 		State: string(SceneStateActive), Visibility: string(SceneVisibilityPrivate),
 	}))
-	plugin := &scenePlugin{service: NewSceneServiceImpl(store)}
+	plugin := &scenePlugin{service: NewSceneServiceImpl(store), evaluator: allowEvaluator{}}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "invite scene-cmd-i char-bob", CharacterID: "char-alice",
@@ -303,7 +303,7 @@ func TestSceneCommandInviteParsesSceneIDAndTarget(t *testing.T) {
 }
 
 func TestSceneCommandTransferRejectsMissingTarget(t *testing.T) {
-	plugin := &scenePlugin{service: NewSceneServiceImpl(newFakeStore())}
+	plugin := &scenePlugin{service: NewSceneServiceImpl(newFakeStore()), evaluator: allowEvaluator{}}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "transfer scene-x", CharacterID: "char-alice",
@@ -321,7 +321,7 @@ func TestSceneCommandLeaveForwardsToServiceWithCorrectSceneID(t *testing.T) {
 	}))
 	_, _, err := store.AddParticipant(context.Background(), "scene-cmd-l", "char-bob")
 	require.NoError(t, err)
-	plugin := &scenePlugin{service: NewSceneServiceImpl(store)}
+	plugin := &scenePlugin{service: NewSceneServiceImpl(store), evaluator: allowEvaluator{}}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "leave scene-cmd-l", CharacterID: "char-bob",
@@ -339,7 +339,7 @@ func TestSceneCommandKickRemovesTargetFromScene(t *testing.T) {
 	}))
 	_, _, err := store.AddParticipant(context.Background(), "scene-cmd-k", "char-bob")
 	require.NoError(t, err)
-	plugin := &scenePlugin{service: NewSceneServiceImpl(store)}
+	plugin := &scenePlugin{service: NewSceneServiceImpl(store), evaluator: allowEvaluator{}}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "kick scene-cmd-k char-bob", CharacterID: "char-alice",
@@ -357,7 +357,7 @@ func TestSceneCommandTransferChangesOwnership(t *testing.T) {
 	}))
 	_, _, err := store.AddParticipant(context.Background(), "scene-cmd-t", "char-bob")
 	require.NoError(t, err)
-	plugin := &scenePlugin{service: NewSceneServiceImpl(store)}
+	plugin := &scenePlugin{service: NewSceneServiceImpl(store), evaluator: allowEvaluator{}}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "transfer scene-cmd-t char-bob", CharacterID: "char-alice",
@@ -428,7 +428,8 @@ func TestMembershipCommandsRejectExtraPositionalTokens(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plugin := &scenePlugin{service: NewSceneServiceImpl(newFakeStore())}
+			// allowEvaluator lets the gate pass so the handler's arity guard fires.
+			plugin := &scenePlugin{service: NewSceneServiceImpl(newFakeStore()), evaluator: allowEvaluator{}}
 
 			resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 				Command:     "scene",
@@ -893,4 +894,198 @@ func TestSceneEndReturnsOKWhenFocusClientNotConfigured(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
 	assert.Contains(t, resp.Output, "ended")
+}
+
+// --- scene extend ABAC gate tests ---
+
+// denyEvaluator is a test HostEvaluator that always denies.
+type denyEvaluator struct{}
+
+func (denyEvaluator) Evaluate(_ context.Context, _, _ string) (pluginsdk.EvaluateDecision, error) {
+	return pluginsdk.EvaluateDecision{Allowed: false, Reason: "not permitted"}, nil
+}
+
+// allowEvaluator is a test HostEvaluator that always allows.
+type allowEvaluator struct{}
+
+func (allowEvaluator) Evaluate(_ context.Context, _, _ string) (pluginsdk.EvaluateDecision, error) {
+	return pluginsdk.EvaluateDecision{Allowed: true}, nil
+}
+
+// newScenePluginWithEvaluator builds a minimal scenePlugin wired with the
+// given HostEvaluator, ready for extend gate tests.
+func newScenePluginWithEvaluator(t *testing.T, ev pluginsdk.HostEvaluator) *scenePlugin {
+	t.Helper()
+	store := newFakeStore()
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(&recordingEventSink{})
+	return &scenePlugin{
+		service:   svc,
+		evaluator: ev,
+	}
+}
+
+func TestSceneExtendDeniedForNonAdmin(t *testing.T) {
+	p := newScenePluginWithEvaluator(t, denyEvaluator{})
+	sceneID := createSceneInTest(t, p, "char-alice", "Extendable")
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "extend " + sceneID, CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Contains(t, resp.Output, "permitted")
+}
+
+// TestSceneExtendAllowedForAdmin verifies the ABAC gate passes for admin
+// subjects. The handler body is a not-yet-implemented stub (holomush-5rh.20.35),
+// so the response is CommandError — not CommandOK — even when the gate allows.
+func TestSceneExtendAllowedForAdmin(t *testing.T) {
+	p := newScenePluginWithEvaluator(t, allowEvaluator{})
+	sceneID := createSceneInTest(t, p, "char-admin", "Extendable")
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "extend " + sceneID, CharacterID: "char-admin",
+	})
+	require.NoError(t, err)
+	// Gate passes (admin allowed), but the handler is a stub: CommandError, not OK.
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Contains(t, resp.Output, "not yet implemented")
+}
+
+func TestSceneExtendNilEvaluatorFailsClosed(t *testing.T) {
+	p := newScenePluginWithEvaluator(t, nil) // no HostEvaluator injected
+	sceneID := createSceneInTest(t, p, "char-alice", "Extendable")
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "extend " + sceneID, CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status, "a missing evaluator MUST fail closed, never run the handler ungated")
+}
+
+// TestSceneGatedSubcommands_DenyWhenPolicyDenies is the INV-7 backstop: every
+// subcommand that carries an action gate MUST deny via the evaluator, not via
+// a Go-level owner/participant check that bypasses the policy engine.
+// Each row uses args that are structurally valid (so arity guards pass) and
+// a denyEvaluator that always returns Allowed=false. The expected result is
+// CommandError produced by the engine gate.
+func TestSceneGatedSubcommands_DenyWhenPolicyDenies(t *testing.T) {
+	cases := []struct {
+		sub    string
+		action string
+		// args is the arg string after the subcommand name. For invite/kick/transfer
+		// the scene ID must be the FIRST token, second token is target character.
+		makeArgs func(sceneID string) string
+	}{
+		{"end", "end", func(id string) string { return id }},
+		{"pause", "pause", func(id string) string { return id }},
+		{"resume", "resume", func(id string) string { return id }},
+		{"set", "update", func(id string) string { return id + " title=Foo" }},
+		{"invite", "invite", func(id string) string { return id + " char-target" }},
+		{"kick", "kick", func(id string) string { return id + " char-target" }},
+		{"transfer", "transfer-ownership", func(id string) string { return id + " char-target" }},
+		{"leave", "leave", func(id string) string { return id }},
+		{"info", "read", func(id string) string { return id }},
+		{"extend", "extend_publish_attempts", func(id string) string { return id }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.sub, func(t *testing.T) {
+			p := newScenePluginWithEvaluator(t, denyEvaluator{})
+			sceneID := createSceneInTest(t, p, "char-alice", "T")
+			resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+				Command:     "scene",
+				Args:        tc.sub + " " + tc.makeArgs(sceneID),
+				CharacterID: "char-bob",
+			})
+			require.NoError(t, err)
+			assert.Equal(t, pluginsdk.CommandError, resp.Status,
+				"subcommand %q with action %q must deny via engine gate", tc.sub, tc.action)
+		})
+	}
+}
+
+// TestSceneResourceRefTokenizesFirstField verifies that sceneResourceRef extracts
+// only the first whitespace-separated token, so multi-token input like
+// "scene-x extra" produces "scene:scene-x" rather than "scene:scene-x extra".
+// A mis-parsed multi-token resource ref would cause a spurious ABAC gate
+// denial before the handler's arity validation fires.
+func TestSceneResourceRefTokenizesFirstField(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    string
+		wantRef string
+		wantErr bool
+	}{
+		{
+			name:    "single token produces scene:<id>",
+			args:    "scene-abc",
+			wantRef: "scene:scene-abc",
+		},
+		{
+			name:    "multi-token uses first token only",
+			args:    "scene-abc extra",
+			wantRef: "scene:scene-abc",
+		},
+		{
+			name:    "leading whitespace is ignored",
+			args:    "  scene-abc",
+			wantRef: "scene:scene-abc",
+		},
+		{
+			name:    "empty args returns error",
+			args:    "",
+			wantErr: true,
+		},
+		{
+			name:    "whitespace-only args returns error",
+			args:    "   ",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := sceneResourceRef(tt.args)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Empty(t, got)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantRef, got)
+		})
+	}
+}
+
+// TestSceneGatedSubcommands_NilEvaluatorFailsClosed verifies that every newly
+// gated subcommand fails closed (CommandError) when no evaluator is wired,
+// rather than running the handler ungated.
+func TestSceneGatedSubcommands_NilEvaluatorFailsClosed(t *testing.T) {
+	cases := []struct {
+		sub      string
+		makeArgs func(sceneID string) string
+	}{
+		{"end", func(id string) string { return id }},
+		{"pause", func(id string) string { return id }},
+		{"resume", func(id string) string { return id }},
+		{"set", func(id string) string { return id + " title=Foo" }},
+		{"invite", func(id string) string { return id + " char-target" }},
+		{"kick", func(id string) string { return id + " char-target" }},
+		{"transfer", func(id string) string { return id + " char-target" }},
+		{"leave", func(id string) string { return id }},
+		{"info", func(id string) string { return id }},
+		{"extend", func(id string) string { return id }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.sub, func(t *testing.T) {
+			p := newScenePluginWithEvaluator(t, nil)
+			sceneID := createSceneInTest(t, p, "char-alice", "T")
+			resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+				Command:     "scene",
+				Args:        tc.sub + " " + tc.makeArgs(sceneID),
+				CharacterID: "char-alice",
+			})
+			require.NoError(t, err)
+			assert.Equal(t, pluginsdk.CommandError, resp.Status,
+				"nil evaluator MUST fail closed for subcommand %q", tc.sub)
+		})
+	}
 }

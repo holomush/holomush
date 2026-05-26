@@ -25,9 +25,11 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -159,6 +161,20 @@ func WithIdentityRegistry(reg plugins.IdentityRegistry) HostOption {
 	return func(h *Host) { h.identityRegistry = reg }
 }
 
+// WithEngine configures the host with an ABAC policy engine for
+// PluginHostService.Evaluate calls. Without this option Evaluate fails closed
+// with EVALUATE_ENGINE_UNCONFIGURED.
+func WithEngine(eng types.AccessPolicyEngine) HostOption {
+	return func(h *Host) { h.engine = eng }
+}
+
+// WithAuditLogger configures the host with an audit logger for
+// PluginHostService.Evaluate calls. Optional — omitting it skips audit
+// logging without affecting authorization decisions.
+func WithAuditLogger(a pluginauthz.Auditor) HostOption {
+	return func(h *Host) { h.auditor = a }
+}
+
 // Host manages binary plugins via HashiCorp go-plugins.
 type Host struct {
 	clientFactory     ClientFactory
@@ -173,6 +189,8 @@ type Host struct {
 	connectionSender  focus.ConnectionSender
 	historyReader     plugins.HistoryReader
 	identityRegistry  plugins.IdentityRegistry
+	engine            types.AccessPolicyEngine
+	auditor           pluginauthz.Auditor
 	plugins           map[string]*loadedPlugin
 	mu                sync.RWMutex
 	closed            bool
@@ -328,6 +346,23 @@ func (h *Host) identityRegistrySnapshot() plugins.IdentityRegistry {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.identityRegistry
+}
+
+// ownedResourceTypes returns a map of resource type names owned by the named
+// plugin (from its manifest's ResourceTypes field), guarded by RLock. Returns
+// nil when the plugin is not loaded. Used by Evaluate's entitlement check.
+func (h *Host) ownedResourceTypes(pluginName string) map[string]bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	lp, ok := h.plugins[pluginName]
+	if !ok || lp.manifest == nil {
+		return nil
+	}
+	m := make(map[string]bool, len(lp.manifest.ResourceTypes))
+	for _, rt := range lp.manifest.ResourceTypes {
+		m[rt] = true
+	}
+	return m
 }
 
 // Load initializes a plugin from its manifest.

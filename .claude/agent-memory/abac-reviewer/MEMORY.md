@@ -166,11 +166,41 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   key, `resource has X` returns TRUE even when the list is logically absent — same
   fail-open shape as the empty-string sentinel bug (ti1b). The correct shape is:
   omit the key entirely, not emit an empty list.
-- **Audit assertion gap in integration property specs (rmsi.5 Low NIT)**:
-  `seed_policies_test.go` S1-S13 reset `auditWriter` in BeforeEach but no spec in the
-  property block reads back `env.auditWriter.Entries()` to verify the decision was
-  recorded. Engine-level audit contract is covered by `evaluation_test.go:68-70` (via
-  `Eventually`), but per-property-seed audit assertion is absent. When reviewing future
-  integration suites that add new seed coverage blocks, check whether the block includes
-  at least one audit-trail assertion — especially for FORBID seeds where audit capture
-  is the primary defense against undetected denials.
+- **pluginauthz shared core (8kkv5, 2026-05-25)**: `internal/plugin/pluginauthz/evaluate.go`
+  is the runtime-neutral INV-5 single-source-of-truth for plugin per-action authorization.
+  Key invariants confirmed: empty subject/action/resource each fail closed before engine;
+  unentitled resource type fails closed before engine; engine error fails closed; zero-value
+  `Decision{}` is `allowed=false` (`types.go` test line 198-203). Three recurring Low patterns
+  to check in future pluginauthz edits: (1) `ActorSystem` collapses all system actors to bare
+  `"system"` (drops `.ID`) — non-invertible, but safe because system actors don't enter
+  plugin-eval paths in practice; flag if a new sentinel is added. NOTE (corrected
+  2026-05-25 PR#4266 review): two earlier claims in this bullet were STALE/WRONG vs
+  shipped code — (a) `splitResourceRef` (`evaluate.go:256-266`) REJECTS any id half
+  containing a colon, so `"a:b:c"`/`"type:id:extra"` are rejected, NOT parsed; this IS
+  tested (`evaluate_test.go:109` includes both); (b) nil `Engine` IS guarded and
+  fails closed (`evaluate.go:142-147`, test `TestEvaluate_NilEngineFailsClosed:153`),
+  it does NOT panic. nil auditor also guarded (line 213). The shared core fails closed
+  on EVERY edge path with a non-nil error accompanying every non-allowing Decision.
+- **Lua hostfunc nil-LState-context pattern (8kkv5.4, 2026-05-25)**: `evaluateFn`
+  (and `listCommandsFn`, `getCommandHelpFn`, `checkKVAccess`, etc.) all follow the
+  same pattern: `ctx := L.Context(); if ctx == nil { ctx = context.Background() }`.
+  This is safe for auth (no-actor → fail-closed), but the nil branch is untested in
+  every case. When reviewing future Lua hostfuncs, flag missing test coverage for the
+  nil-LState-context path AND flag any bare `slog.Warn` before ctx is derived (the
+  fix: hoist the ctx derivation above the nil-engine guard so `slog.WarnContext` can
+  be used). The sloglint `context: scope` linter won't catch these because ctx is
+  technically not yet in scope at the Warn call site.
+- **GatedSubcommand SDK gate (8kkv5.6-7, 2026-05-25)**: `pkg/plugin.GatedSubcommand.Run`
+  enforces structural ABAC: ResourceRef → Evaluate → Handler, three distinct early-return
+  paths, no fallthrough to Handler without `Allowed:true`. Confirmed confirmed in 8kkv5.7:
+  `handleExtend` has exactly ONE call site (as `Handler` field of `GatedSubcommand{}`);
+  nil-evaluator guard fails closed to `CommandError`; action string in DSL matches code exactly.
+  Recurring Low gap pattern for GatedSubcommand consumers: nil-evaluator branch and
+  engine-error path often lack dedicated tests. When reviewing plugin subcommand
+  code, always check: (1) test for nil evaluator → `CommandError`; (2) test for
+  engine error → `CommandFailure`, `handlerRan == false`; (3) `rg "handleX"` across
+  the repo to confirm no ungated call site exists.
+- **Audit assertion gap / service-layer INV-S9 authz coexistence (rmsi.5 + 8kkv5.8)**: (1) `seed_policies_test.go` FORBID seeds lack audit-trail assertions — flag in integration suite reviews; (2) `GetPoseOrder` uses a direct `IsParticipant` store check (INV-S9, fail-closed) that is NOT replaced by the engine — intentional per spec. Dead policies in plugin.yaml (e.g., `join-open-scene`) are a Low doc risk — no fail-open.
+- **Authz/business-state separation pattern (yznw, 2026-05-25)**: Removing `resource.scene.state` from ABAC `when` clauses is safe IFF the store layer enforces state via SQL `WHERE state IN (...)` + `classifyTransitionMiss`. Verified pattern for core-scenes: end/pause/resume/update/transfer all enforce via SQL; write-scene is safe because `ListScenesForCharacter` filters to active/paused (indirect, document the coupling). `InviteParticipant` and `KickParticipant` do NOT enforce state in SQL — their ABAC state clauses are the ONLY gate; retaining them is mandatory. When reviewing policy `when`-clause removals: (1) cite the store SQL guard; (2) flag if the only enforcement is indirect (membership filter, not explicit WHERE); (3) check real store, not fakeStore — fakes may omit state guards their real counterparts also omit.
+- **Token-ferry pattern for PluginHostService clients (vqxkowlz, 2026-05-25)**: `hostEvaluateClient.Evaluate` and `pluginHostEventSink.Emit` both ferry the `x-holomush-emit-token` from `metadata.FromIncomingContext` → `metadata.AppendToOutgoingContext`. The ferry is safe: plugin cannot forge the incoming metadata; host validates via `tokenStore.Lookup(pluginName, token)`. Evaluate intentionally omits the self-token fallback (always command-gated). When reviewing future PluginHostService client methods, check: (1) outgoing-already-set guard present; (2) incoming→outgoing copy present; (3) self-token fallback absent (Evaluate) or present (EmitEvent) per spec; (4) missing-token path ends in `EMIT_TOKEN_MISSING`, not allow.
+- **Plugin resolver wiring pattern (8kkv5.18, 2026-05-25)**: `ABACSubsystem.AttributeResolver()` returns `stack.Resolver` — the same `*attribute.Resolver` instance passed to `policy.NewEngine`. `PluginSubsystem.Start()` captures it via `resolver := s.cfg.ABAC.AttributeResolver()` (line 286) and closes over it in `WithAttributeProviderRegistrar`/`WithAttributeProviderUnregistrar` callbacks (lines 293-298). Registration happens synchronously inside `LoadAll` (line 318), before health registration (line 333) and before gRPC traffic — no TOCTOU window. Future reviewers: (1) confirm same-instance by tracing `BuildABACStack` → `ABACStack.Resolver` → `AttributeResolver()` return; (2) `Resolver` struct has NO mutex — concurrent `Evaluate` + `RegisterProvider` would data-race; safe under current single-threaded boot order but flag if startup concurrency changes; (3) plugin namespace collision fails closed (load aborts, rollback unregisters), not open; (4) `EngineProvider` interface widening is guarded by compile-time `var _ setup.EngineProvider = (*fakeEngineProvider)(nil)` in subsystem_test.go.

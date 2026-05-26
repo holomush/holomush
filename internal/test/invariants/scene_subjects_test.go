@@ -43,12 +43,20 @@ func TestINV_P4_1_NoColonStyleSceneSubjects(t *testing.T) {
 
 	// ABAC policy-DSL context markers — a containing line that
 	// includes one of these substrings is a false-positive (ABAC
-	// resource ID, not a topic).
+	// resource ID of the form "type:id", not a pub/sub topic).
+	//
+	// The host Evaluate feature (holomush-8kkv5) added two new ABAC
+	// resource-construction sites in core-scenes: the per-action gate call
+	// `evaluator.Evaluate(ctx, action, "scene:"+id)` (matched by "Evaluate(")
+	// and the GatedSubcommand ResourceRef helpers, whose return lines carry
+	// an explicit "ABAC resource ref" comment.
 	abacContextMarkers := []string{
 		"NewAccessRequest",
 		".Grant(",
 		"resource:",
 		"Resource:",
+		"Evaluate(",
+		"ABAC resource ref",
 	}
 
 	for _, path := range targets {

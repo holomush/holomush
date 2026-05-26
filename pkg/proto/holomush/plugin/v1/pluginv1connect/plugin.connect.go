@@ -96,6 +96,9 @@ const (
 	// PluginHostServiceIsAnyConnFocusedProcedure is the fully-qualified name of the PluginHostService's
 	// IsAnyConnFocused RPC.
 	PluginHostServiceIsAnyConnFocusedProcedure = "/holomush.plugin.v1.PluginHostService/IsAnyConnFocused"
+	// PluginHostServiceEvaluateProcedure is the fully-qualified name of the PluginHostService's
+	// Evaluate RPC.
+	PluginHostServiceEvaluateProcedure = "/holomush.plugin.v1.PluginHostService/Evaluate"
 )
 
 // PluginServiceClient is a client for the holomush.plugin.v1.PluginService service.
@@ -318,6 +321,11 @@ type PluginHostServiceClient interface {
 	// IsAnyConnFocused — Phase 5 notification-emission helper: true iff
 	// any of the character's connections has FocusKey == {scene, scene_id}.
 	IsAnyConnFocused(context.Context, *connect.Request[v1.PluginHostServiceIsAnyConnFocusedRequest]) (*connect.Response[v1.PluginHostServiceIsAnyConnFocusedResponse], error)
+	// Evaluate runs the host ABAC engine for a single action against a single
+	// resource instance owned by the calling plugin. The subject is derived
+	// host-side from the dispatch token (see EmitEvent) — there is no subject
+	// field on the wire (spec §2, INV-1).
+	Evaluate(context.Context, *connect.Request[v1.PluginHostServiceEvaluateRequest]) (*connect.Response[v1.PluginHostServiceEvaluateResponse], error)
 }
 
 // NewPluginHostServiceClient constructs a client for the holomush.plugin.v1.PluginHostService
@@ -427,6 +435,12 @@ func NewPluginHostServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(pluginHostServiceMethods.ByName("IsAnyConnFocused")),
 			connect.WithClientOptions(opts...),
 		),
+		evaluate: connect.NewClient[v1.PluginHostServiceEvaluateRequest, v1.PluginHostServiceEvaluateResponse](
+			httpClient,
+			baseURL+PluginHostServiceEvaluateProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("Evaluate")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -448,6 +462,7 @@ type pluginHostServiceClient struct {
 	setConnectionFocus  *connect.Client[v1.PluginHostServiceSetConnectionFocusRequest, v1.PluginHostServiceSetConnectionFocusResponse]
 	autoFocusOnJoin     *connect.Client[v1.PluginHostServiceAutoFocusOnJoinRequest, v1.PluginHostServiceAutoFocusOnJoinResponse]
 	isAnyConnFocused    *connect.Client[v1.PluginHostServiceIsAnyConnFocusedRequest, v1.PluginHostServiceIsAnyConnFocusedResponse]
+	evaluate            *connect.Client[v1.PluginHostServiceEvaluateRequest, v1.PluginHostServiceEvaluateResponse]
 }
 
 // EmitEvent calls holomush.plugin.v1.PluginHostService.EmitEvent.
@@ -530,6 +545,11 @@ func (c *pluginHostServiceClient) IsAnyConnFocused(ctx context.Context, req *con
 	return c.isAnyConnFocused.CallUnary(ctx, req)
 }
 
+// Evaluate calls holomush.plugin.v1.PluginHostService.Evaluate.
+func (c *pluginHostServiceClient) Evaluate(ctx context.Context, req *connect.Request[v1.PluginHostServiceEvaluateRequest]) (*connect.Response[v1.PluginHostServiceEvaluateResponse], error) {
+	return c.evaluate.CallUnary(ctx, req)
+}
+
 // PluginHostServiceHandler is an implementation of the holomush.plugin.v1.PluginHostService
 // service.
 type PluginHostServiceHandler interface {
@@ -587,6 +607,11 @@ type PluginHostServiceHandler interface {
 	// IsAnyConnFocused — Phase 5 notification-emission helper: true iff
 	// any of the character's connections has FocusKey == {scene, scene_id}.
 	IsAnyConnFocused(context.Context, *connect.Request[v1.PluginHostServiceIsAnyConnFocusedRequest]) (*connect.Response[v1.PluginHostServiceIsAnyConnFocusedResponse], error)
+	// Evaluate runs the host ABAC engine for a single action against a single
+	// resource instance owned by the calling plugin. The subject is derived
+	// host-side from the dispatch token (see EmitEvent) — there is no subject
+	// field on the wire (spec §2, INV-1).
+	Evaluate(context.Context, *connect.Request[v1.PluginHostServiceEvaluateRequest]) (*connect.Response[v1.PluginHostServiceEvaluateResponse], error)
 }
 
 // NewPluginHostServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -692,6 +717,12 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 		connect.WithSchema(pluginHostServiceMethods.ByName("IsAnyConnFocused")),
 		connect.WithHandlerOptions(opts...),
 	)
+	pluginHostServiceEvaluateHandler := connect.NewUnaryHandler(
+		PluginHostServiceEvaluateProcedure,
+		svc.Evaluate,
+		connect.WithSchema(pluginHostServiceMethods.ByName("Evaluate")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.plugin.v1.PluginHostService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PluginHostServiceEmitEventProcedure:
@@ -726,6 +757,8 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 			pluginHostServiceAutoFocusOnJoinHandler.ServeHTTP(w, r)
 		case PluginHostServiceIsAnyConnFocusedProcedure:
 			pluginHostServiceIsAnyConnFocusedHandler.ServeHTTP(w, r)
+		case PluginHostServiceEvaluateProcedure:
+			pluginHostServiceEvaluateHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -797,4 +830,8 @@ func (UnimplementedPluginHostServiceHandler) AutoFocusOnJoin(context.Context, *c
 
 func (UnimplementedPluginHostServiceHandler) IsAnyConnFocused(context.Context, *connect.Request[v1.PluginHostServiceIsAnyConnFocusedRequest]) (*connect.Response[v1.PluginHostServiceIsAnyConnFocusedResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.IsAnyConnFocused is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) Evaluate(context.Context, *connect.Request[v1.PluginHostServiceEvaluateRequest]) (*connect.Response[v1.PluginHostServiceEvaluateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.Evaluate is not implemented"))
 }

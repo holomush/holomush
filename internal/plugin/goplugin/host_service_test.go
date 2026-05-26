@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
@@ -1262,4 +1264,213 @@ func TestAutoFocusOnJoin_ReturnsResponseShape(t *testing.T) {
 	require.Len(t, resp.GetFailedConnectionIds(), 1)
 	assert.Equal(t, pluginv1.FocusFailureReason_FOCUS_FAILURE_REASON_MEMBERSHIP_ABSENT,
 		resp.GetFailedConnectionIds()[0].GetReason())
+}
+
+// recordingEngine satisfies types.AccessPolicyEngine, records the AccessRequest
+// it receives, and returns an allow decision. Used to assert that Evaluate
+// derives the subject from the dispatch token rather than from plugin-supplied
+// fields.
+type recordingEngine struct {
+	gotReq types.AccessRequest
+	called bool
+}
+
+func (e *recordingEngine) Evaluate(_ context.Context, req types.AccessRequest) (types.Decision, error) {
+	e.called = true
+	e.gotReq = req
+	return types.NewDecision(types.EffectAllow, "ok", "p"), nil
+}
+
+func (e *recordingEngine) CanPerformAction(context.Context, string, string, string, string) (bool, error) {
+	return false, nil
+}
+
+var _ types.AccessPolicyEngine = (*recordingEngine)(nil)
+
+// newTestHostWithEngine constructs a Host with the given engine and a loadedPlugin
+// entry for pluginName so ownedResourceTypes can look it up.
+func newTestHostWithEngine(t *testing.T, pluginName string, m *plugins.Manifest, eng types.AccessPolicyEngine) *Host {
+	t.Helper()
+	h := NewHost(WithEngine(eng))
+	h.mu.Lock()
+	h.plugins[pluginName] = &loadedPlugin{manifest: m}
+	h.mu.Unlock()
+	return h
+}
+
+// TestEvaluateDerivesSubjectFromToken verifies that Evaluate recovers the
+// actor from the dispatch token and passes the derived subject to the engine,
+// not any plugin-supplied value (security invariant: subject from token only).
+func TestEvaluateDerivesSubjectFromToken(t *testing.T) {
+	t.Parallel()
+	eng := &recordingEngine{}
+	manifest := &plugins.Manifest{
+		Name:          "core-scenes",
+		Type:          plugins.TypeBinary,
+		ResourceTypes: []string{"scene"},
+	}
+	h := newTestHostWithEngine(t, "core-scenes", manifest, eng)
+	defer func() { _ = h.Close(context.Background()) }()
+	srv := &pluginHostServiceServer{host: h, pluginName: "core-scenes"}
+
+	charID := core.NewULID()
+	ctx, token := contextWithValidToken(t, srv, core.Actor{Kind: core.ActorCharacter, ID: charID.String()})
+	defer h.tokenStore.Revoke(token)
+
+	resp, err := srv.Evaluate(ctx, &pluginv1.PluginHostServiceEvaluateRequest{
+		Action:   "extend_publish_attempts",
+		Resource: "scene:01SCENE0000000000000000000",
+	})
+	require.NoError(t, err)
+	assert.True(t, resp.GetAllowed())
+	assert.True(t, eng.called)
+	assert.Equal(t, "character:"+charID.String(), eng.gotReq.Subject)
+	assert.Equal(t, "extend_publish_attempts", eng.gotReq.Action)
+	assert.Equal(t, "scene:01SCENE0000000000000000000", eng.gotReq.Resource)
+}
+
+// TestEvaluateMissingTokenFailsClosed verifies that Evaluate fails closed
+// when no dispatch token is present in the incoming metadata.
+func TestEvaluateMissingTokenFailsClosed(t *testing.T) {
+	t.Parallel()
+	manifest := &plugins.Manifest{
+		Name:          "core-scenes",
+		Type:          plugins.TypeBinary,
+		ResourceTypes: []string{"scene"},
+	}
+	h := newTestHostWithEngine(t, "core-scenes", manifest, policytest.AllowAllEngine())
+	defer func() { _ = h.Close(context.Background()) }()
+	srv := &pluginHostServiceServer{host: h, pluginName: "core-scenes"}
+
+	_, err := srv.Evaluate(context.Background(), &pluginv1.PluginHostServiceEvaluateRequest{
+		Action:   "read",
+		Resource: "scene:01SCENE0000000000000000000",
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EMIT_TOKEN_MISSING")
+}
+
+// TestEvaluateForeignResourceTypeRejected verifies that Evaluate rejects
+// requests for resource types the plugin does not own.
+func TestEvaluateForeignResourceTypeRejected(t *testing.T) {
+	t.Parallel()
+	manifest := &plugins.Manifest{
+		Name:          "core-scenes",
+		Type:          plugins.TypeBinary,
+		ResourceTypes: []string{"scene"},
+	}
+	h := newTestHostWithEngine(t, "core-scenes", manifest, policytest.AllowAllEngine())
+	defer func() { _ = h.Close(context.Background()) }()
+	srv := &pluginHostServiceServer{host: h, pluginName: "core-scenes"}
+	ctx, token := contextWithValidToken(t, srv, core.Actor{Kind: core.ActorCharacter, ID: core.NewULID().String()})
+	defer h.tokenStore.Revoke(token)
+
+	_, err := srv.Evaluate(ctx, &pluginv1.PluginHostServiceEvaluateRequest{
+		Action:   "read",
+		Resource: "server:global",
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVALUATE_UNENTITLED_TYPE")
+}
+
+// TestEvaluateEngineUnconfiguredFailsClosed verifies that Evaluate fails closed
+// when no access policy engine has been configured on the host.
+func TestEvaluateEngineUnconfiguredFailsClosed(t *testing.T) {
+	t.Parallel()
+	// Build a host with no engine (WithEngine never called → engine is nil).
+	h := NewHost()
+	h.mu.Lock()
+	h.plugins["core-scenes"] = &loadedPlugin{manifest: &plugins.Manifest{
+		Name: "core-scenes", Type: plugins.TypeBinary, ResourceTypes: []string{"scene"},
+	}}
+	h.mu.Unlock()
+	defer func() { _ = h.Close(context.Background()) }()
+	srv := &pluginHostServiceServer{host: h, pluginName: "core-scenes"}
+
+	ctx, _ := contextWithValidToken(t, srv, core.Actor{Kind: core.ActorCharacter, ID: core.NewULID().String()})
+
+	_, err := srv.Evaluate(ctx, &pluginv1.PluginHostServiceEvaluateRequest{
+		Action:   "read",
+		Resource: "scene:01SCENE0000000000000000000",
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVALUATE_ENGINE_UNCONFIGURED")
+}
+
+// TestEvaluateNilHostFailsClosed verifies that Evaluate fails closed when the
+// pluginHostServiceServer has no host (mirrors the nil-host tests for EmitEvent,
+// JoinFocus, etc.).
+func TestEvaluateNilHostFailsClosed(t *testing.T) {
+	t.Parallel()
+	srv := &pluginHostServiceServer{host: nil, pluginName: "core-scenes"}
+
+	_, err := srv.Evaluate(context.Background(), &pluginv1.PluginHostServiceEvaluateRequest{
+		Action:   "read",
+		Resource: "scene:01SCENE0000000000000000000",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "plugin host service is not configured")
+}
+
+// TestEvaluateNilTokenStoreFailsClosed verifies that Evaluate returns
+// EMIT_TOKEN_STORE_UNCONFIGURED when the host's tokenStore is nil.
+// This fires when a host is constructed and the token store is cleared.
+func TestEvaluateNilTokenStoreFailsClosed(t *testing.T) {
+	t.Parallel()
+	manifest := &plugins.Manifest{
+		Name:          "core-scenes",
+		Type:          plugins.TypeBinary,
+		ResourceTypes: []string{"scene"},
+	}
+	h := newTestHostWithEngine(t, "core-scenes", manifest, policytest.AllowAllEngine())
+
+	// Inject a token into metadata manually (bypassing Issue so we don't need the store).
+	md := metadata.New(map[string]string{"x-holomush-emit-token": "any-token"})
+	ctx := metadata.NewIncomingContext(context.Background(), md)
+
+	// Clear the tokenStore after constructing the host. Stop the sweeper goroutine
+	// first so h.Close() doesn't race with the nil write, then skip calling Close
+	// (tokenStore is nil and h.Close calls tokenStore.Close which would panic).
+	h.tokenStoreCancel()
+	h.mu.Lock()
+	h.tokenStore = nil
+	h.mu.Unlock()
+
+	srv := &pluginHostServiceServer{host: h, pluginName: "core-scenes"}
+	_, err := srv.Evaluate(ctx, &pluginv1.PluginHostServiceEvaluateRequest{
+		Action:   "read",
+		Resource: "scene:01SCENE0000000000000000000",
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EMIT_TOKEN_STORE_UNCONFIGURED")
+}
+
+// TestEvaluateRejectedTokenFailsClosed verifies that Evaluate returns
+// EMIT_TOKEN_REJECTED when the dispatch token was issued for a different plugin.
+// Mirrors TestEmitEventCrossPluginTokenLeakFails for the Evaluate surface.
+func TestEvaluateRejectedTokenFailsClosed(t *testing.T) {
+	t.Parallel()
+	manifest := &plugins.Manifest{
+		Name:          "core-scenes",
+		Type:          plugins.TypeBinary,
+		ResourceTypes: []string{"scene"},
+	}
+	h := newTestHostWithEngine(t, "core-scenes", manifest, policytest.AllowAllEngine())
+	defer func() { _ = h.Close(context.Background()) }()
+
+	// Issue a token for plug-A; present it to plug-B's server.
+	tok, err := h.tokenStore.Issue("plug-A", core.Actor{Kind: core.ActorCharacter, ID: core.NewULID().String()})
+	require.NoError(t, err)
+	defer h.tokenStore.Revoke(tok)
+
+	srvB := &pluginHostServiceServer{host: h, pluginName: "core-scenes"}
+	md := metadata.New(map[string]string{"x-holomush-emit-token": tok})
+	ctx := metadata.NewIncomingContext(context.Background(), md)
+
+	_, err = srvB.Evaluate(ctx, &pluginv1.PluginHostServiceEvaluateRequest{
+		Action:   "read",
+		Resource: "scene:01SCENE0000000000000000000",
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EMIT_TOKEN_REJECTED")
 }

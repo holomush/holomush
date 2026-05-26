@@ -41,32 +41,50 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 	span.SetAttributes(attribute.String("subcommand", sub))
 
 	if sub == "" {
-		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, emit, end, focus, grid, info, invite, join, kick, leave, list, ooc, order, pause, pose, resume, say, set, switch, transfer"), nil
+		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, emit, end, extend, focus, grid, info, invite, join, kick, leave, list, ooc, order, pause, pose, resume, say, set, switch, transfer"), nil
+	}
+
+	// gated dispatches through the ABAC evaluator; fails closed when evaluator is nil.
+	gated := func(name, action string, resourceRef func(string) (string, error), handler func(context.Context, pluginsdk.CommandRequest, string) (*pluginsdk.CommandResponse, error)) (*pluginsdk.CommandResponse, error) {
+		if p.evaluator == nil {
+			slog.WarnContext(ctx, "scene.command evaluator not configured",
+				"subcommand", name,
+				"subject_id", req.CharacterID)
+			return pluginsdk.Errorf("Permission check unavailable: evaluator not configured."), nil
+		}
+		return pluginsdk.GatedSubcommand{
+			Name:        name,
+			Action:      action,
+			ResourceRef: resourceRef,
+			Handler:     handler,
+		}.Run(ctx, p.evaluator, req, rest)
 	}
 
 	switch sub {
 	case "create":
 		return p.handleCreate(ctx, req, rest)
 	case "info":
-		return p.handleInfo(ctx, req, rest)
+		return gated("info", "read", sceneResourceRef, p.handleInfo)
 	case "end":
-		return p.handleEnd(ctx, req, rest)
+		return gated("end", "end", sceneResourceRef, p.handleEnd)
 	case "pause":
-		return p.handlePause(ctx, req, rest)
+		return gated("pause", "pause", sceneResourceRef, p.handlePause)
 	case "resume":
-		return p.handleResume(ctx, req, rest)
+		return gated("resume", "resume", sceneResourceRef, p.handleResume)
 	case "set":
-		return p.handleSet(ctx, req, rest)
+		return gated("set", "update", sceneResourceRefFirstField, p.handleSet)
 	case "join":
 		return p.handleJoin(ctx, req, rest)
 	case "leave":
-		return p.handleLeave(ctx, req, rest)
+		return gated("leave", "leave", sceneResourceRef, p.handleLeave)
 	case "invite":
-		return p.handleInvite(ctx, req, rest)
+		return gated("invite", "invite", sceneResourceRefFirstField, p.handleInvite)
 	case "kick":
-		return p.handleKick(ctx, req, rest)
+		return gated("kick", "kick", sceneResourceRefFirstField, p.handleKick)
+	case "extend":
+		return gated("extend", "extend_publish_attempts", sceneResourceRef, p.handleExtend)
 	case "transfer":
-		return p.handleTransfer(ctx, req, rest)
+		return gated("transfer", "transfer-ownership", sceneResourceRefFirstField, p.handleTransfer)
 	case "switch":
 		return p.handleSwitch(ctx, req, rest)
 	case "focus":
@@ -97,7 +115,7 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 	case "list":
 		return p.handleSceneList(ctx, req)
 	default:
-		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, emit, end, focus, grid, info, invite, join, kick, leave, list, ooc, order, pause, pose, resume, say, set, switch, transfer.", sub), nil
+		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, emit, end, extend, focus, grid, info, invite, join, kick, leave, list, ooc, order, pause, pose, resume, say, set, switch, transfer.", sub), nil
 	}
 }
 
@@ -126,12 +144,9 @@ func (p *scenePlugin) handleCreate(ctx context.Context, req pluginsdk.CommandReq
 	}, nil
 }
 
-// handleInfo shows scene metadata for the given scene ID. Per the read-own-scene
-// policy, the host's ABAC engine has already verified the caller is the owner
-// before this code runs (when invoked via the dispatcher's full ABAC pipeline);
-// in unit tests, ABAC is bypassed and the service is called directly.
-//
-//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
+// handleInfo shows scene metadata for the given scene ID. Authorization is
+// enforced via the host ABAC evaluator (read-scene-as-participant policy)
+// before this handler is called.
 func (p *scenePlugin) handleInfo(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID := strings.TrimSpace(args)
 	if sceneID == "" {
@@ -165,17 +180,13 @@ func (p *scenePlugin) handleInfo(ctx context.Context, req pluginsdk.CommandReque
 	}, nil
 }
 
-// handleEnd ends the specified scene. Owner ABAC enforcement is gateway-side
-// (the host's ABAC engine evaluates end-own-scene before this code runs in
-// production); in unit tests, ABAC is bypassed so the test must use the
-// scene owner's character ID.
+// handleEnd ends the specified scene. Authorization is enforced via the host
+// ABAC evaluator (end-own-scene policy) before this handler is called.
 //
 // After the DB write commits, focusClient.LeaveFocusByTarget fans the leave
 // out to every session that holds the scene's FocusMembership — owner and
 // non-owner participants alike. The sweep is best-effort: DB state is
 // authoritative, and focus-side errors are logged, not surfaced to the user.
-//
-//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleEnd(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID := strings.TrimSpace(args)
 	if sceneID == "" {
@@ -234,8 +245,6 @@ func (p *scenePlugin) handleEnd(ctx context.Context, req pluginsdk.CommandReques
 }
 
 // handlePause transitions an active scene to the paused state. Owner-only.
-//
-//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handlePause(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID := strings.TrimSpace(args)
 	if sceneID == "" {
@@ -258,8 +267,6 @@ func (p *scenePlugin) handlePause(ctx context.Context, req pluginsdk.CommandRequ
 
 // handleResume transitions a paused scene back to active. Owner-only in
 // Phase 2; Phase 3 widens to any member per spec D6.
-//
-//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleResume(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID := strings.TrimSpace(args)
 	if sceneID == "" {
@@ -290,8 +297,6 @@ func (p *scenePlugin) handleResume(ctx context.Context, req pluginsdk.CommandReq
 // the single field path being set. The service handler then applies it via
 // the standard mask-iteration path, getting the same per-field validation
 // any other UpdateScene call would.
-//
-//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleSet(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	args = strings.TrimSpace(args)
 	if args == "" {
@@ -362,6 +367,14 @@ func splitSubcommand(args string) (sub, rest string) {
 
 // handleJoin parses "scene join <scene-id>", calls JoinScene, then calls
 // focusClient.JoinFocus to register the session as a subscriber.
+//
+// Authorization note: handleJoin is intentionally NOT engine-gated. Join
+// authorization is enforced substrate-side by classifyJoinMiss in the store
+// layer, which checks scene state (active/paused), visibility (open vs
+// private), and invitation status before admitting a joiner. An engine gate
+// cannot express the open-scene case because it would require a principal/owner
+// check that admits non-members by definition — exactly the condition the
+// engine cannot evaluate without an existing participant row.
 //
 //nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
@@ -481,8 +494,6 @@ func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandReque
 // handleLeave parses "scene leave <scene-id>", calls LeaveScene, then calls
 // focusClient.LeaveFocus. Focus errors are logged but do not fail the command
 // since the DB is the source of truth for scene membership.
-//
-//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleLeave(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	fields := strings.Fields(args)
 	if len(fields) != 1 {
@@ -519,8 +530,6 @@ func (p *scenePlugin) handleLeave(ctx context.Context, req pluginsdk.CommandRequ
 }
 
 // handleInvite parses "scene invite <scene-id> <character>".
-//
-//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleInvite(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	// Strict arity: reject anything other than exactly 2 tokens — see handleJoin.
 	fields := strings.Fields(args)
@@ -545,8 +554,6 @@ func (p *scenePlugin) handleInvite(ctx context.Context, req pluginsdk.CommandReq
 }
 
 // handleKick parses "scene kick <scene-id> <character>".
-//
-//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleKick(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	// Strict arity: reject anything other than exactly 2 tokens — see handleJoin.
 	fields := strings.Fields(args)
@@ -571,8 +578,6 @@ func (p *scenePlugin) handleKick(ctx context.Context, req pluginsdk.CommandReque
 }
 
 // handleTransfer parses "scene transfer <scene-id> <character>".
-//
-//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleTransfer(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	// Strict arity: reject anything other than exactly 2 tokens — see handleJoin.
 	fields := strings.Fields(args)
@@ -797,11 +802,10 @@ func (p *scenePlugin) handleSceneList(ctx context.Context, req pluginsdk.Command
 // only); Phase 5 will replace this with focus-aware routing that
 // consults the character's focus context.
 //
-// Defense-in-depth: the Layer-1 ABAC execute-scene-commands policy
-// fires at the command-execute layer before this handler runs in
-// production; the IsParticipant check here is belt + suspenders so a
-// hypothetical mis-route of a non-participant cannot leak into the IC
-// stream.
+// Authorization is enforced via the host ABAC evaluator using the
+// write-scene-as-participant policy (action "write", resource "scene:<id>").
+// The evaluator is called after scene-ID resolution, using the resolved
+// scene ID as the resource ref.
 func (p *scenePlugin) handleEmit(
 	ctx context.Context,
 	req pluginsdk.CommandRequest,
@@ -841,20 +845,35 @@ func (p *scenePlugin) handleEmit(
 	}
 	span.SetAttributes(attribute.String("scene_id", sceneID))
 
-	// Defense-in-depth participant check. Layer-1 ABAC already gated
-	// command-execute; this re-verifies on the plugin side per
-	// INV-P4-11 (TestSceneSubcommand_NonParticipant_PermissionDenied).
-	isPart, err := p.service.store.IsParticipant(ctx, sceneID, req.CharacterID)
-	if err != nil {
-		err = oops.Code("SCENE_EMIT_MEMBERSHIP_LOOKUP_FAILED").
-			With("scene_id", sceneID).
-			With("character_id", req.CharacterID).
-			With("event_type", eventType).Wrap(err)
-		recordError(span, err)
-		return nil, err
+	// Evaluate the write-scene-as-participant policy via the host ABAC engine.
+	// Fails closed when evaluator is not configured.
+	if p.evaluator == nil {
+		slog.WarnContext(
+			ctx, "scene.command.emit evaluator not configured",
+			"subject_id", req.CharacterID,
+			"event_type", eventType,
+			"scene_id", sceneID,
+		)
+		return pluginsdk.Errorf("Permission check unavailable: evaluator not configured."), nil
 	}
-	if !isPart {
-		return pluginsdk.Errorf("You are not a participant of scene %s.", sceneID), nil
+	dec, evalErr := p.evaluator.Evaluate(ctx, "write", "scene:"+sceneID)
+	if evalErr != nil {
+		evalErr = oops.Code("SCENE_EMIT_EVALUATE_FAILED").
+			With("character_id", req.CharacterID).
+			With("scene_id", sceneID).
+			With("event_type", eventType).Wrap(evalErr)
+		recordError(span, evalErr)
+		slog.ErrorContext(
+			ctx, "scene.command.emit permission check failed",
+			"subject_id", req.CharacterID,
+			"scene_id", sceneID,
+			"event_type", eventType,
+			"error", evalErr,
+		)
+		return pluginsdk.Failuref("permission check failed: %v", evalErr), nil
+	}
+	if !dec.Allowed {
+		return pluginsdk.Errorf("You are not permitted to write to scene %s.", sceneID), nil
 	}
 
 	// Build subject + payload.
@@ -907,6 +926,14 @@ func (p *scenePlugin) handleEmit(
 
 // handleOrder is the scene/order subcommand handler — renders the current
 // pose order for the caller's scene per spec §8.
+//
+// Authorization note: handleOrder is intentionally NOT engine-gated. Pose-order
+// read authorization is enforced at the service layer via store.IsParticipant
+// (INV-S9), which is fail-closed: non-members and invited-only characters both
+// receive PermissionDenied before any scene data is returned. This is the one
+// read path that was deliberately kept as a substrate-level check rather than
+// consolidated into the engine, because the check is already precise, atomic
+// with the DB query, and covered by TestGetPoseOrder_NotParticipant_PermissionDenied.
 func (p *scenePlugin) handleOrder(ctx context.Context, req pluginsdk.CommandRequest, _ string) (*pluginsdk.CommandResponse, error) {
 	sceneID, userErr, internalErr := p.resolveSingleSceneMembership(ctx, req.CharacterID)
 	if internalErr != nil {
@@ -1052,4 +1079,38 @@ func (p *scenePlugin) resolveSingleSceneMembership(ctx context.Context, characte
 			len(scenes),
 		), nil
 	}
+}
+
+// sceneResourceRef derives the ABAC resource string for a scene subcommand
+// from the subcommand args. Returns "scene:<id>" on success, error if args
+// are empty after trimming. Used as the ResourceRef in GatedSubcommand for
+// subcommands where the scene ID is the entire remaining args (end, pause,
+// resume, leave, info — whole remainder is the scene ID).
+func sceneResourceRef(args string) (string, error) {
+	fields := strings.Fields(args)
+	if len(fields) == 0 {
+		return "", fmt.Errorf("scene id is required")
+	}
+	return "scene:" + fields[0], nil // ABAC resource ref (type:id), not a pub/sub subject (INV-P4-1)
+}
+
+// sceneResourceRefFirstField derives the ABAC resource string for subcommands
+// where the scene ID is the FIRST whitespace-separated token and additional
+// tokens follow (set, invite, kick, transfer). Returns "scene:<id>" on success,
+// error if args are empty.
+func sceneResourceRefFirstField(args string) (string, error) {
+	fields := strings.Fields(args)
+	if len(fields) == 0 {
+		return "", oops.Errorf("scene id is required")
+	}
+	return "scene:" + fields[0], nil // ABAC resource ref (type:id), not a pub/sub subject (INV-P4-1)
+}
+
+// handleExtend is the stub handler for `scene extend <scene-id>`. The ABAC
+// gate (admin-extend-publish-attempts policy) is enforced by GatedSubcommand
+// before this function is called, so only admins can reach this point.
+//
+// TODO(holomush-5rh.20.35): perform the actual publish-attempts bump.
+func (p *scenePlugin) handleExtend(_ context.Context, _ pluginsdk.CommandRequest, _ string) (*pluginsdk.CommandResponse, error) {
+	return pluginsdk.Errorf("scene extend: not yet implemented (tracked in holomush-5rh.20.35)."), nil
 }
