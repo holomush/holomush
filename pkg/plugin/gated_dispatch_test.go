@@ -30,9 +30,9 @@ func TestGatedSubcommand_Run(t *testing.T) {
 	type tc struct {
 		name string
 		// evaluator configuration — if nilEval is true, nil is passed as ev.
-		nilEval     bool
-		evalAllow   bool
-		evalErr     error
+		nilEval   bool
+		evalAllow bool
+		evalErr   error
 		// GatedSubcommand field overrides — nil means use the default real func.
 		nilResourceRef bool
 		resourceRefErr error

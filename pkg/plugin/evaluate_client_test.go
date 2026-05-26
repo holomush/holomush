@@ -44,12 +44,12 @@ func TestHostEvaluateClient(t *testing.T) {
 		// wantErr asserts that Evaluate returns an error.
 		wantErr bool
 		// wantAllowed is only consulted when wantErr is false.
-		wantAllowed   bool
-		wantReason    string
-		wantPolicy    string
-		wantAction    string
-		wantResource  string
-		wantToken     string
+		wantAllowed  bool
+		wantReason   string
+		wantPolicy   string
+		wantAction   string
+		wantResource string
+		wantToken    string
 	}
 
 	tests := []tc{
