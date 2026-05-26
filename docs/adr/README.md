@@ -16,6 +16,8 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [integration/E2E are CI-authoritative-and-required, local-optional](holomush-5k6au-integration-e2e-are-ci-authoritative-and-required-local-opti.md) | 2026-05-26 | Accepted | `holomush-5k6au` |
+| [quarantine flaky specs via governed registry, not deletion](holomush-5eqiv-quarantine-flaky-specs-via-governed-registry-not-deletion.md) | 2026-05-26 | Accepted | `holomush-5eqiv` |
 | [Separate authorization (WHO) from business-state validity (WHEN) in scene policies](holomush-sqpnv-authz-who-vs-business-state-when-scene-policies.md) | 2026-05-25 | Accepted | `holomush-sqpnv` |
 | [Add host Evaluate RPC for per-action plugin authorization](holomush-dttdj-host-evaluate-rpc-per-action-plugin-authz.md) | 2026-05-25 | Accepted | `holomush-dttdj` |
 | [Derive Evaluate subject host-side; no subject field on wire](holomush-qeypl-host-derived-evaluate-subject.md) | 2026-05-25 | Accepted | `holomush-qeypl` |
