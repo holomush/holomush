@@ -24,13 +24,11 @@ import (
 // read-back design §3.2), so the snapshot MUST chunk to support scenes of any
 // length. Kept at the host cap so each call is maximally efficient while still
 // bounding per-call memory + blast radius.
-//nolint:unused // snapshot-pipeline support, exercised by publish_snapshot_integration_test.go; reachable in production once E5 wires runSnapshot into the scheduler ticker (out of scope for C7). The unused linter does not compile integration-tagged tests.
 const snapshotDecryptBatch = 500
 
 // snapshotEventKinds maps the three publishable IC event types to their
 // PublishedSceneEntry kind. scene_ooc and all notice/ops events are excluded by
 // ReadSceneLogForSnapshot's type filter, so any other type here is unreachable.
-//nolint:unused // snapshot-pipeline support; see snapshotDecryptBatch (E5 wires runSnapshot into the ticker).
 var snapshotEventKinds = map[string]EntryKind{
 	"scene_pose": EntryKindPose,
 	"scene_say":  EntryKindSay,
@@ -65,7 +63,6 @@ type snapshotDecryptor interface {
 // The fullICSubject is events.<game_id>.scene.<scene_id>.ic — the snapshot's
 // authoritative subject for the in-tx SQL read and the AAD subject (the store
 // has no game_id of its own, so the caller passes the full subject).
-//nolint:unused // runSnapshot is the C7 callable wired into the scheduler ticker by E5 (out of scope for this bead); exercised by publish_snapshot_integration_test.go. The unused linter does not compile the integration-tagged test, so it cannot see that consumer.
 func (s *SceneServiceImpl) runSnapshot(ctx context.Context, attemptID, sceneID, fullICSubject string) error {
 	ctx, span := startSpan(ctx, "scene.publish.snapshot",
 		attribute.String("attempt_id", attemptID),
@@ -198,7 +195,6 @@ func (s *SceneServiceImpl) runSnapshot(ctx context.Context, attemptID, sceneID, 
 // readSceneLogTx opens a short read-tx and reads the full filtered IC row set
 // (a consistent snapshot of scene_log). The tx is closed before decrypt/render,
 // so no lock is held during the host round-trips.
-//nolint:unused // snapshot-pipeline support; see snapshotDecryptBatch (E5 wires runSnapshot into the ticker).
 func (s *SceneServiceImpl) readSceneLogTx(ctx context.Context, fullICSubject string) ([]LogRow, error) {
 	pool := s.store.SnapshotPool()
 	tx, err := pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
@@ -230,7 +226,6 @@ func (s *SceneServiceImpl) readSceneLogTx(ctx context.Context, fullICSubject str
 // fails closed rather than retrying forever). The (failReason) shape lets the
 // caller perform the ATTEMPT_FAILED transition inside the write-tx, under the
 // published_scenes lock.
-//nolint:unused // snapshot-pipeline support; see snapshotDecryptBatch (E5 wires runSnapshot into the ticker).
 func (s *SceneServiceImpl) decryptAndRender(ctx context.Context, attemptID, fullICSubject string, logRows []LogRow) ([]PublishedSceneEntry, PublishFailureReason) {
 	entries := make([]PublishedSceneEntry, 0, len(logRows))
 
@@ -298,7 +293,6 @@ func (s *SceneServiceImpl) decryptAndRender(ctx context.Context, attemptID, full
 // failSnapshotTx applies the ATTEMPT_FAILED transition with the given reason
 // inside the write-tx and commits, then records the outcome metric label. A
 // failed transition (e.g. status flipped) bubbles up as an error.
-//nolint:unused // snapshot-pipeline support; see snapshotDecryptBatch (E5 wires runSnapshot into the ticker).
 func (s *SceneServiceImpl) failSnapshotTx(ctx context.Context, tx pgx.Tx, attemptID string, reason PublishFailureReason, outcome *string) error {
 	if err := s.store.FailAttemptTx(ctx, tx, attemptID, reason); err != nil {
 		*outcome = "error"
@@ -329,7 +323,6 @@ func (s *SceneServiceImpl) failSnapshotTx(ctx context.Context, tx pgx.Tx, attemp
 // (the store passes the same value to the WHERE clause). DEK ref/version are
 // widened to the proto's unsigned optional fields only when present (identity
 // rows leave them nil).
-//nolint:unused // snapshot-pipeline support; see snapshotDecryptBatch (E5 wires runSnapshot into the ticker).
 func logRowToAuditRow(subject string, r LogRow) *pluginv1.AuditRow {
 	out := &pluginv1.AuditRow{
 		Id:        r.ID,
@@ -355,7 +348,6 @@ func logRowToAuditRow(subject string, r LogRow) *pluginv1.AuditRow {
 // decryptedPlaintext extracts the plaintext OR the refusal reason from a
 // per-row RowResult. Exactly one arm is set (the proto oneof guarantees it):
 // a non-empty refusal string means the row was NOT decrypted.
-//nolint:unused // snapshot-pipeline support; see snapshotDecryptBatch (E5 wires runSnapshot into the ticker).
 func decryptedPlaintext(res *pluginv1.RowResult) (plaintext []byte, refusal string) {
 	if reason := res.GetNoPlaintextReason(); reason != "" {
 		return nil, reason
@@ -367,7 +359,6 @@ func decryptedPlaintext(res *pluginv1.RowResult) (plaintext []byte, refusal stri
 // shape emitted by handleEmit / consumed by decodeReplayEntries) into a
 // PublishedSceneEntry. Returns ok=false for an event type with no entry-kind
 // mapping (unreachable past the SQL filter; never silently dropped).
-//nolint:unused // snapshot-pipeline support; see snapshotDecryptBatch (E5 wires runSnapshot into the ticker).
 func decodeSnapshotEntry(eventType string, plaintext []byte) (PublishedSceneEntry, bool, error) {
 	kind, ok := snapshotEventKinds[eventType]
 	if !ok {

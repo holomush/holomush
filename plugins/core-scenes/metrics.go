@@ -172,7 +172,6 @@ func metricScenePublishCoolOffWindowDuration(outcome string, durationSeconds flo
 // pipeline latency (spec §13.1). Metric:
 // scene_publish_snapshot_duration_seconds{result}. No-op stub.
 //
-//nolint:unused // stub for the future binary-plugin metrics infrastructure (spec §11 substrate gap; metric defined §13.1); retained so call sites wire in cheaply once the infra lands
 func metricScenePublishSnapshotDuration(result string, durationSeconds float64) {
 	_ = result
 	_ = durationSeconds

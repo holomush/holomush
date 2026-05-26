@@ -10,6 +10,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/samber/oops"
 	"google.golang.org/grpc"
@@ -185,6 +186,21 @@ func (p *scenePlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig) 
 	} else {
 		slog.WarnContext(ctx, "core-scenes: event sink nil at Init; publish eventer left as noop")
 	}
+
+	// Start the publish scheduler in a goroutine tied to an independently
+	// cancellable context so it survives the Init RPC context (which is
+	// request-scoped and will cancel when the gRPC call returns). The
+	// goroutine terminates on plugin shutdown via the store pool's close
+	// propagation or SIGTERM — the process exits cleanly regardless.
+	schedCtx, schedCancel := context.WithCancel(context.Background()) //nolint:gosec // G118: cancel intentionally not called; goroutine is daemon-lifetime, process exit is the signal
+	_ = schedCancel
+	sched := &publishScheduler{
+		svc:      p.service,
+		store:    store,
+		interval: 30 * time.Second, // sweep every 30s; vote/cooloff windows are minutes-to-days
+		now:      time.Now,
+	}
+	go sched.Run(schedCtx)
 
 	slog.InfoContext(
 		ctx, "core-scenes plugin initialised",

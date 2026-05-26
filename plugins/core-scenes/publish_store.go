@@ -712,6 +712,80 @@ func (s *SceneStore) MarkPublished(ctx context.Context, tx pgx.Tx, id string, in
 	return nil
 }
 
+// ListExpiredCollecting returns COLLECTING attempts whose vote window has
+// elapsed: initiated_at + vote_window (in nanoseconds) ≤ nowNs.
+//
+// nowNs is supplied by the Go-clock caller as epoch nanoseconds
+// rather than using SQL now() so the comparison is always against the same Go
+// clock used to write initiated_at (INV-TS-1, noremoteclockcompare gorule).
+//
+// vote_window is an INTERVAL stored as microseconds; it is converted to
+// nanoseconds inline: EXTRACT(EPOCH FROM vote_window)::BIGINT * 1000000000.
+func (s *SceneStore) ListExpiredCollecting(ctx context.Context, nowNs int64) ([]scheduledAttempt, error) {
+	ctx, span := startSpan(ctx, "scene.store.list_expired_collecting")
+	defer span.End()
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, scene_id
+		FROM published_scenes
+		WHERE status = 'COLLECTING'
+		  AND initiated_at + EXTRACT(EPOCH FROM vote_window)::BIGINT * 1000000000 <= $1
+	`, nowNs)
+	if err != nil {
+		return nil, oops.Code("SCENE_SCHEDULER_LIST_EXPIRED_COLLECTING_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+
+	var out []scheduledAttempt
+	for rows.Next() {
+		var a scheduledAttempt
+		if err := rows.Scan(&a.ID, &a.SceneID); err != nil {
+			return nil, oops.Code("SCENE_SCHEDULER_LIST_EXPIRED_COLLECTING_SCAN_FAILED").Wrap(err)
+		}
+		out = append(out, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, oops.Code("SCENE_SCHEDULER_LIST_EXPIRED_COLLECTING_ITER_FAILED").Wrap(err)
+	}
+	return out, nil
+}
+
+// ListExpiredCoolOff returns COOLOFF attempts whose cool-off window has
+// elapsed: cooloff_started_at + cooloff_window (in nanoseconds) ≤ nowNs.
+//
+// cooloff_started_at is always set for COOLOFF rows (TransitionStatus sets it
+// when entering COOLOFF); the IS NOT NULL guard is belt-and-suspenders. See
+// ListExpiredCollecting for the clock-domain and unit-conversion rationale.
+func (s *SceneStore) ListExpiredCoolOff(ctx context.Context, nowNs int64) ([]scheduledAttempt, error) {
+	ctx, span := startSpan(ctx, "scene.store.list_expired_cooloff")
+	defer span.End()
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, scene_id
+		FROM published_scenes
+		WHERE status = 'COOLOFF'
+		  AND cooloff_started_at IS NOT NULL
+		  AND cooloff_started_at + EXTRACT(EPOCH FROM cooloff_window)::BIGINT * 1000000000 <= $1
+	`, nowNs)
+	if err != nil {
+		return nil, oops.Code("SCENE_SCHEDULER_LIST_EXPIRED_COOLOFF_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+
+	var out []scheduledAttempt
+	for rows.Next() {
+		var a scheduledAttempt
+		if err := rows.Scan(&a.ID, &a.SceneID); err != nil {
+			return nil, oops.Code("SCENE_SCHEDULER_LIST_EXPIRED_COOLOFF_SCAN_FAILED").Wrap(err)
+		}
+		out = append(out, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, oops.Code("SCENE_SCHEDULER_LIST_EXPIRED_COOLOFF_ITER_FAILED").Wrap(err)
+	}
+	return out, nil
+}
+
 // ArchiveSceneStateForPublish sets scenes.state = 'archived' for the published
 // scene inside the caller's transaction and reports whether a row was affected.
 //
