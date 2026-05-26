@@ -8,20 +8,34 @@
 package integrationtest
 
 import (
+	"context"
 	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/oops"
+	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/access/policy/attribute"
+	policystore "github.com/holomush/holomush/internal/access/policy/store"
 	policytypes "github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/auth"
+	authpostgres "github.com/holomush/holomush/internal/auth/postgres"
+	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
 	"github.com/holomush/holomush/internal/command/handlers"
+	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/lifecycle"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
+	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
+	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 )
 
 // assemblePluginsDir builds a unified plugins directory under dst by copying
@@ -65,7 +79,7 @@ func copyTree(src, dst string) error {
 
 // requirePluginsEnv, when truthy, turns a missing binary-plugin artifact into a
 // hard failure instead of a skip (INV-WS-3). The CI integration job sets it.
-const requirePluginsEnv = "HOLOMUSH_REQUIRE_PLUGINS" //nolint:unused // wired by WithInTreePlugins in Task 4 (holomush-0f0f4.4)
+const requirePluginsEnv = "HOLOMUSH_REQUIRE_PLUGINS"
 
 // goPlatformDir is the per-platform subdir name build-plugins.sh emits
 // (e.g. "darwin-arm64", "linux-amd64").
@@ -74,7 +88,7 @@ func goPlatformDir() string { return runtime.GOOS + "-" + runtime.GOARCH }
 // repoBuildPluginsDir resolves the build/plugins directory the same way
 // test/integration/plugin/binary_plugin_test.go does: PLUGIN_BINARY_DIR if set,
 // else <repoRoot>/build/plugins resolved from this source file's location.
-func repoBuildPluginsDir() string { //nolint:unused // wired by WithInTreePlugins in Task 4 (holomush-0f0f4.4)
+func repoBuildPluginsDir() string {
 	if dir := os.Getenv("PLUGIN_BINARY_DIR"); dir != "" {
 		return dir
 	}
@@ -85,7 +99,7 @@ func repoBuildPluginsDir() string { //nolint:unused // wired by WithInTreePlugin
 }
 
 // repoPluginsSrcDir resolves the source plugins/ tree from this file's location.
-func repoPluginsSrcDir() string { //nolint:unused // wired by WithInTreePlugins in Task 4 (holomush-0f0f4.4)
+func repoPluginsSrcDir() string {
 	_, thisFile, _, _ := runtime.Caller(0)
 	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
 	return filepath.Join(repoRoot, "plugins")
@@ -129,6 +143,119 @@ func (p policyInstallerProvider) PolicyInstaller() *plugins.PolicyInstaller { re
 type pluginProviderSetter struct{ pp *attribute.PluginProvider }
 
 func (p pluginProviderSetter) PluginProvider() *attribute.PluginProvider { return p.pp }
+
+// WithInTreePlugins boots the real in-tree plugin layer inside the harness
+// CoreServer by reusing production's setup.PluginSubsystem (which calls
+// Manager.LoadAll). It is engine-agnostic — compose it with WithPolicyEngine
+// for cross-plugin-ABAC coverage. If the binary-plugin artifacts are missing,
+// the harness skips the test (run `task plugin:build-all`), unless
+// HOLOMUSH_REQUIRE_PLUGINS is set, in which case it fails (INV-WS-3).
+//
+// Event EMISSION is deliberately NOT wired: startPlugins does not call
+// Manager.ConfigureEventEmitter, and the WorldService is built without an
+// EventEmitter. The whole-system census suite (holomush-0f0f4.8) reads plugin
+// load state and the command registry only, so emit paths are out of scope —
+// a test that drives a plugin command/handler which emits events will fail with
+// "plugin event emitter is not configured". Wiring the emitter is deferred until
+// a suite needs it.
+func WithInTreePlugins() StartOption {
+	return func(c *startConfig) { c.withPlugins = true }
+}
+
+// pluginDeps is the minimal set of already-built harness objects startPlugins
+// needs. Start passes these in so this helper stays decoupled from the Server.
+type pluginDeps struct {
+	pool         *pgxpool.Pool
+	connStr      string
+	engine       policytypes.AccessPolicyEngine
+	sessionStore session.Access
+	verbReg      *core.VerbRegistry
+	playerRepo   auth.PlayerRepository
+	hasher       auth.PasswordHasher
+	playerSess   auth.PlayerSessionRepository // *store.PostgresPlayerSessionStore satisfies this (player_session_store.go:30)
+}
+
+// startPlugins constructs and starts a PluginSubsystem mirroring production
+// (cmd/holomush/sub_grpc.go + internal/plugin/setup). It returns the started
+// subsystem; callers register Stop via t.Cleanup and read CommandRegistry()
+// for the dispatcher. It calls t.Skip/t.Fatal on a missing binary gate.
+func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.PluginSubsystem {
+	t.Helper()
+
+	buildDir := repoBuildPluginsDir()
+	if !binaryArtifactsPresent(buildDir) {
+		msg := "in-tree binary plugins not built; run `task plugin:build-all`"
+		if isTruthy(os.Getenv(requirePluginsEnv)) {
+			t.Fatalf("%s (HOLOMUSH_REQUIRE_PLUGINS set)", msg)
+		}
+		t.Skip(msg)
+	}
+
+	// Assemble the unified plugins dir under a per-test temp DataDir.
+	dataDir := t.TempDir()
+	pluginsDst := filepath.Join(dataDir, "plugins")
+	require.NoError(t,
+		assemblePluginsDir(pluginsDst, repoPluginsSrcDir(), buildDir),
+		"startPlugins: assemble plugins dir")
+
+	// WorldService — mirror internal/world/setup/subsystem.go. EventEmitter is
+	// intentionally omitted (production world/setup omits it too); world.NewService
+	// logs a benign slog.Warn. The census suite reads load state + registry only,
+	// so emit paths aren't exercised.
+	worldSvc := world.NewService(world.ServiceConfig{
+		LocationRepo:  worldpostgres.NewLocationRepository(d.pool),
+		ExitRepo:      worldpostgres.NewExitRepository(d.pool),
+		ObjectRepo:    worldpostgres.NewObjectRepository(d.pool),
+		SceneRepo:     worldpostgres.NewSceneRepository(d.pool),
+		CharacterRepo: worldpostgres.NewCharacterRepository(d.pool),
+		PropertyRepo:  worldpostgres.NewPropertyRepository(d.pool),
+		Engine:        d.engine,
+		Transactor:    worldpostgres.NewTransactor(d.pool),
+	})
+
+	// AdminDeps — all 5 caller-supplied fields required (handlers.RegisterAdmin
+	// panics on nil; subsystem.go calls it unconditionally). PluginLister is set
+	// by the subsystem itself.
+	adminDeps := handlers.AdminDeps{
+		PlayerRepo:     d.playerRepo,
+		Hasher:         d.hasher,
+		PlayerSessions: d.playerSess,
+		ResetRepo:      authpostgres.NewPasswordResetRepository(d.pool),
+		CharLister:     bootstrapsetup.NewCharRepoAdapter(d.pool, worldpostgres.NewCharacterRepository(d.pool)),
+	}
+
+	// PolicyInstaller over a real policystore so manifest policies install.
+	policyInst := plugins.NewPolicyInstaller(policystore.NewPostgresStore(d.pool))
+
+	cfg := pluginsetup.PluginSubsystemConfig{
+		DataDir:            dataDir,
+		DatabaseConnStr:    d.connStr,
+		ABAC:               engineProvider{eng: d.engine},
+		PolicyInst:         policyInstallerProvider{inst: policyInst},
+		PluginProv:         pluginProviderSetter{pp: attribute.NewPluginProvider(nil)},
+		World:              worldProvider{svc: worldSvc},
+		Sessions:           sessionProvider{store: d.sessionStore},
+		AdminDeps:          adminDepsProvider{deps: adminDeps},
+		Registry:           lifecycle.NewReadinessRegistry(),
+		VerbRegistry:       d.verbReg,
+		LuaTimeout:         5 * time.Second,
+		LuaRegistryMaxSize: 1024 * 1024,
+	}
+
+	ps := pluginsetup.NewPluginSubsystem(cfg)
+	t.Cleanup(func() { _ = ps.Stop(context.Background()) })
+	require.NoError(t, ps.Start(ctx), "startPlugins: PluginSubsystem.Start (LoadAll)")
+	return ps
+}
+
+// isTruthy treats "1", "true", "yes" (case-insensitive) as true.
+func isTruthy(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes":
+		return true
+	}
+	return false
+}
 
 func copyFile(src, dst string, mode os.FileMode) error {
 	in, err := os.Open(src)

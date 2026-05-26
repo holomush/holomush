@@ -74,6 +74,7 @@ import (
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/pgnanos"
+	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telnet"
@@ -114,6 +115,10 @@ type Server struct {
 	// coreServer is the in-process CoreServer (no network transport).
 	coreServer *holoGRPC.CoreServer
 
+	// pluginSub is the started plugin subsystem when WithInTreePlugins was
+	// passed; nil otherwise. Stopped via t.Cleanup registered in startPlugins.
+	pluginSub *pluginsetup.PluginSubsystem
+
 	// guestStartLocationID is the location all guests are placed into.
 	guestStartLocationID ulid.ULID
 }
@@ -125,6 +130,7 @@ type StartOption func(*startConfig)
 // startConfig holds resolved Start options.
 type startConfig struct {
 	accessEngine types.AccessPolicyEngine
+	withPlugins  bool
 }
 
 // WithPolicyEngine overrides the harness's default allow-all ABAC engine.
@@ -210,8 +216,35 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	}
 	pe := cfg.accessEngine
 
-	// Command dispatcher (minimal: no commands registered).
-	dispatcher, err := command.NewDispatcher(command.NewRegistry(), pe)
+	// VerbRegistry must exist before plugins load (they register verbs). It is
+	// also required by the locationFollower's synthetic location_state emit path
+	// so RenderingMetadata is stamped on the EventFrame (gateway drops
+	// nil-Rendering events per INV-GW-5, holomush-4wdu). Production wires this in
+	// cmd/holomush/sub_grpc.go.
+	verbRegistry, err := core.BootstrapVerbRegistry("test")
+	require.NoError(t, err, "integrationtest.Start: BootstrapVerbRegistry")
+
+	// Command dispatcher. When WithInTreePlugins is set, the dispatcher is fed
+	// the plugin subsystem's command registry so plugin commands are
+	// dispatchable (mirrors cmd/holomush/sub_grpc.go); otherwise it gets an
+	// empty registry (no commands registered).
+	var pluginSub *pluginsetup.PluginSubsystem
+	cmdRegistry := command.NewRegistry()
+	if cfg.withPlugins {
+		pluginSub = startPlugins(t, ctx, pluginDeps{
+			pool:         pool,
+			connStr:      connStr,
+			engine:       pe,
+			sessionStore: sessionStoreInst,
+			verbReg:      verbRegistry,
+			playerRepo:   playerRepo,
+			hasher:       hasher,
+			playerSess:   playerSessionStore,
+		})
+		cmdRegistry = pluginSub.CommandRegistry()
+	}
+
+	dispatcher, err := command.NewDispatcher(cmdRegistry, pe)
 	require.NoError(t, err, "integrationtest.Start: create command dispatcher")
 	cmdServices := command.NewTestServices(command.ServicesConfig{Engine: pe})
 
@@ -224,13 +257,6 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	// cmd/holomush/sub_grpc.go layers those on, but for privacy-invariant
 	// tests the bare JS+Postgres tier is sufficient.
 	historyReader := history.NewReader(bus.JS, pool, 30*24*time.Hour, time.Now)
-
-	// VerbRegistry — required by the locationFollower's synthetic
-	// location_state emit path so RenderingMetadata is stamped on the
-	// EventFrame (gateway drops nil-Rendering events per INV-GW-5,
-	// holomush-4wdu). Production also wires this in cmd/holomush/sub_grpc.go.
-	verbRegistry, err := core.BootstrapVerbRegistry("test")
-	require.NoError(t, err, "integrationtest.Start: BootstrapVerbRegistry")
 
 	// CoreServer wired with all required subsystems.
 	coreServer := holoGRPC.NewCoreServer(
@@ -272,6 +298,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		guestSvc:             guestSvc,
 		bus:                  bus,
 		coreServer:           coreServer,
+		pluginSub:            pluginSub,
 		guestStartLocationID: guestLocID,
 	}
 }
