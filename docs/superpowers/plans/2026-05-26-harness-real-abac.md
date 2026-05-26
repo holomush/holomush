@@ -259,7 +259,7 @@ Expected: no findings. (Use line-scoped `//nolint:<rule> // reason` only if a sp
 
 - [ ] **Step 7: Commit**
 
-```
+```text
 jj commit -m "feat(integrationtest): WithRealABAC() boots real seeded ABAC engine (holomush-f5t07)
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
@@ -461,7 +461,7 @@ Expected: PASS. `TestRealABAC_OptionOrderIndependent` runs (not skipped) once bi
 
 Run: `task lint:go` (expect clean), then:
 
-```
+```text
 jj commit -m "feat(integrationtest): thread real resolver/provider/auditor into plugin layer (holomush-f5t07)
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
@@ -520,7 +520,7 @@ Expected: PASS (markdown formatting clean).
 
 - [ ] **Step 4: Commit**
 
-```
+```text
 jj commit -m "docs(integrationtest): document WithRealABAC opt-in and role semantics (holomush-f5t07)
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"

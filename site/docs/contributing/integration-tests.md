@@ -303,6 +303,35 @@ table and to the main "Test packages currently using the harness" table above.
 
 ---
 
+## Real ABAC (`WithRealABAC`)
+
+By default the harness wires an allow-all ABAC engine — most integration tests
+assert session/history floors, which are ABAC-independent. To exercise the
+**real seeded ABAC engine** (production's `abacsetup.NewABACSubsystem` path),
+opt in:
+
+```go
+ts := integrationtest.Start(t, integrationtest.WithRealABAC())
+```
+
+This seeds the production `seed:*` policy set (`policy.Bootstrap`) and boots the
+real engine. Compose with `WithInTreePlugins()` for cross-plugin ABAC coverage —
+the plugin subsystem registers its attribute providers on the engine's own
+resolver:
+
+```go
+ts := integrationtest.Start(t, integrationtest.WithInTreePlugins(), integrationtest.WithRealABAC())
+```
+
+**Live role semantics.** Under `WithRealABAC`, `character_roles` are evaluated by
+the engine. `ConnectAuthedWithRoles(ctx, name, []string{"admin"})` grants
+role-based permits (e.g. `seed:admin-full-access`); a roleless `ConnectAuthed`
+receives only what `seed:*` grants a roleless character. Tests that pass under
+allow-all may see denials under `WithRealABAC` until they seed the roles their
+actions require.
+
+---
+
 ## Related
 
 - `internal/eventbus/eventbustest/` — bus-only harness for unit tests that

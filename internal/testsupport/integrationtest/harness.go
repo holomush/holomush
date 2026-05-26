@@ -29,7 +29,10 @@
 // Default ABAC engine is allow-all (privacy tests focus on session/history
 // gates, not role enforcement). Tests that need denial-path coverage pass
 // WithPolicyEngine(policytest.DenyAllEngine()) — see iwzt.10 / iwzt.11 for
-// usage.
+// usage. WithRealABAC opts into the real seeded ABAC engine (production's
+// abacsetup.NewABACSubsystem path), making character_roles load-bearing:
+// ConnectAuthedWithRoles grants role-based seed:* permits while a roleless
+// ConnectAuthed receives only what seed:* grants a roleless character.
 //
 // Helper categories:
 //
