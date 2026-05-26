@@ -726,6 +726,12 @@ tasks:
     cmds:
       - cmd: |
           set -euo pipefail
+          # Delegate to the full lane BEFORE any fast-lane result-path setup,
+          # so a force-full run never prints a stale 'pr-prep result:' path
+          # that the fast lane won't write (the full lane emits its own).
+          if [ "${HOLOMUSH_PR_PREP_FORCE_FULL:-}" = "1" ]; then
+            exec task pr-prep:full
+          fi
           LOCK_DIR="${TMPDIR:-/tmp}/holomush-pr-prep"
           RUN_DIR="$LOCK_DIR/runs"
           mkdir -p "$RUN_DIR"
@@ -735,10 +741,6 @@ tasks:
             printf 'status=%s\nlane=%s\nexit=%s\nfinished_at=%s\n' \
               "$1" "$2" "$3" "$(date -u +%FT%TZ)" > "$RESULT"
           }
-          # Docs-only diffs still delegate to the docs lane.
-          if [ "${HOLOMUSH_PR_PREP_FORCE_FULL:-}" = "1" ]; then
-            exec task pr-prep:full
-          fi
           timeout 5 git fetch -q origin main 2>/dev/null || true
           CHANGED=$(timeout 5 git diff --name-only origin/main...HEAD 2>/dev/null || true)
           if [ -n "$CHANGED" ]; then
