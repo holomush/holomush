@@ -176,6 +176,13 @@ type pluginDeps struct {
 	resolver       *attribute.Resolver
 	pluginProvider *attribute.PluginProvider
 	auditor        pluginauthz.Auditor
+	// policyInstaller routes manifest-policy installs through the engine's OWN
+	// cache-wired PolicyInstaller when WithRealABAC is active, so each install
+	// fires the store→cache invalidation (setup.go SetOnMutate) and plugin
+	// policies become live on the engine the harness evaluates against. nil under
+	// the allow-all default → startPlugins builds a fresh standalone installer
+	// (there is no engine cache to invalidate). (holomush-0f0f4.9, INV-WS-2)
+	policyInstaller *plugins.PolicyInstaller
 }
 
 // startPlugins constructs and starts a PluginSubsystem mirroring production
@@ -227,8 +234,18 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 		CharLister:     bootstrapsetup.NewCharRepoAdapter(d.pool, worldpostgres.NewCharacterRepository(d.pool)),
 	}
 
-	// PolicyInstaller over a real policystore so manifest policies install.
-	policyInst := plugins.NewPolicyInstaller(policystore.NewPostgresStore(d.pool))
+	// PolicyInstaller: under WithRealABAC, reuse the engine's OWN installer (over
+	// the cache-wired store) so each manifest-policy install trips the engine's
+	// store→cache invalidation (setup.go SetOnMutate → cache.Invalidate, which
+	// reloads inline unless a reload is already in flight; the engine's poller
+	// backstops). Installs run sequentially during LoadAll, before Start returns,
+	// so plugin policies are live by the time tests evaluate. Otherwise (allow-all
+	// default) a fresh installer over the pool suffices — no engine cache to
+	// invalidate.
+	policyInst := d.policyInstaller
+	if policyInst == nil {
+		policyInst = plugins.NewPolicyInstaller(policystore.NewPostgresStore(d.pool))
+	}
 
 	// Resolver / plugin provider are caller-supplied (pluginAttrSources): with a
 	// real ABAC subsystem they are the engine's OWN instances so plugin-declared

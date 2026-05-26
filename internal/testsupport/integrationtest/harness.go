@@ -124,6 +124,15 @@ type Server struct {
 	// passed; nil otherwise. Stopped via t.Cleanup registered in startPlugins.
 	pluginSub *pluginsetup.PluginSubsystem
 
+	// accessEngine is the ABAC policy engine the stack evaluates against: the
+	// allow-all default, a WithPolicyEngine override, or — under WithRealABAC —
+	// the real seeded engine (abacSub.Engine()). Exposed via AccessEngine() so
+	// whole-system tests can evaluate plugin-installed manifest policies (e.g.
+	// test-abac-widget's widget-read-normal / widget-forbid-restricted) directly
+	// against the same engine the harness wired the plugin attribute resolvers
+	// onto (holomush-0f0f4.9, INV-WS-2).
+	accessEngine types.AccessPolicyEngine
+
 	// guestStartLocationID is the location all guests are placed into.
 	guestStartLocationID ulid.ULID
 }
@@ -258,18 +267,27 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	cmdRegistry := command.NewRegistry()
 	if cfg.withPlugins {
 		res, pp, aud := pluginAttrSources(abacSub)
+		// Under WithRealABAC, route plugin manifest-policy installs through the
+		// engine's own cache-wired installer so they go live on the real engine
+		// (mirrors INV-RA-4's resolver/provider routing). nil → startPlugins uses
+		// a fresh standalone installer for the allow-all default.
+		var policyInst *plugins.PolicyInstaller
+		if abacSub != nil {
+			policyInst = abacSub.PolicyInstaller()
+		}
 		pluginSub = startPlugins(t, ctx, pluginDeps{
-			pool:           pool,
-			connStr:        connStr,
-			engine:         pe,
-			sessionStore:   sessionStoreInst,
-			verbReg:        verbRegistry,
-			playerRepo:     playerRepo,
-			hasher:         hasher,
-			playerSess:     playerSessionStore,
-			resolver:       res,
-			pluginProvider: pp,
-			auditor:        aud,
+			pool:            pool,
+			connStr:         connStr,
+			engine:          pe,
+			sessionStore:    sessionStoreInst,
+			verbReg:         verbRegistry,
+			playerRepo:      playerRepo,
+			hasher:          hasher,
+			playerSess:      playerSessionStore,
+			resolver:        res,
+			pluginProvider:  pp,
+			auditor:         aud,
+			policyInstaller: policyInst,
 		})
 		cmdRegistry = pluginSub.CommandRegistry()
 	}
@@ -329,6 +347,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		bus:                  bus,
 		coreServer:           coreServer,
 		pluginSub:            pluginSub,
+		accessEngine:         pe,
 		guestStartLocationID: guestLocID,
 	}
 }
@@ -361,6 +380,16 @@ func (s *Server) CommandRegistry() *command.Registry {
 func (s *Server) ServiceRegistry() *plugins.ServiceRegistry {
 	s.requirePlugins("ServiceRegistry")
 	return s.pluginSub.ServiceRegistry()
+}
+
+// AccessEngine returns the ABAC policy engine the stack evaluates against.
+// Under WithRealABAC it is the real seeded engine (abacSub.Engine()); composed
+// with WithInTreePlugins, plugin-declared attribute resolvers are registered on
+// that engine's resolver, so callers can evaluate plugin-installed manifest
+// policies against it directly (holomush-0f0f4.9, INV-WS-2). Without
+// WithRealABAC it is the allow-all default (or a WithPolicyEngine override).
+func (s *Server) AccessEngine() types.AccessPolicyEngine {
+	return s.accessEngine
 }
 
 func (s *Server) requirePlugins(method string) {
