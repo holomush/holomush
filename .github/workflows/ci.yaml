@@ -232,7 +232,7 @@ jobs:
         uses: ./.github/actions/install-task
 
       - name: Run E2E tests with coverage
-        run: task test:e2e:cover
+        run: task test:e2e:cover -- --grep-invert @quarantine
 
       - name: Upload E2E coverage
         uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6

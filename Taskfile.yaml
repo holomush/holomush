@@ -219,6 +219,11 @@ tasks:
           ./scripts/e2e-summary.sh
           exit $E2E_EXIT
 
+  quarantine:audit:
+    desc: Fail if any quarantined spec's bead is closed (needs bd; run locally / pre-bd-close). INV-3.
+    cmds:
+      - bash scripts/quarantine-audit.sh
+
   test:bats:
     desc: Run bats shell tests under scripts/tests/
     cmds:
@@ -716,7 +721,8 @@ tasks:
   # ──────────────────────────────────────────
 
   pr-prep:
-    desc: Fast pre-push gate (schema/license/lint/fmt/unit/build/bats; no Docker, no concurrency lock). Mandatory before push. Use 'pr-prep:full' for int+e2e.
+    desc: Fast pre-push gate (schema/license/lint/fmt/unit/build/bats; no Docker, no concurrency lock). Mandatory before push.
+      Use 'pr-prep:full' for int+e2e.
     cmds:
       - cmd: |
           set -euo pipefail

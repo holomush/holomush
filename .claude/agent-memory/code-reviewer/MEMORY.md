@@ -357,6 +357,18 @@ Keep under 200 lines. Curate — don't hoard.
   cross-check catches it. Verify: `printf '<example>' | rg '<validator-regex>'`.
   Encountered: holomush-b4myw.10 (2026-05-25).
 
+- **`jq '.[0].status // "unknown"'` fallback fires on `[]`, NOT on empty stdin.**
+  In quarantine-audit.sh (holomush-b4myw.5), `bd show <missing-bead> --json` emits
+  NOTHING; jq over empty input outputs an empty string, so the `// "unknown"`
+  default never fires (verified: `echo "" | jq -r '.[0].status // "unknown"'` →
+  empty; `echo "[]" | jq ...` → `unknown`). Net effect: a registry row citing a
+  renamed/deleted bead fails OPEN (status="" ≠ "closed" → audit passes). Acceptable
+  for INV-3 (contract is "is the cited bead closed", and INV-2 bijection meta-test
+  is the existence guard) — flag non-blocking. Also: `grep -oE 'bead:[[:space:]]*holomush-...'
+  | awk '{print $2}'` returns empty if a row uses no-space `bead:holomush-x` (whole
+  match is one field) — latent, today's registry + bijection RE both use the space
+  form. Encountered: holomush-b4myw.5 (2026-05-25).
+
 - **Tier-split docs intentionally LEAD not-yet-landed tooling — verify the bead
   graph before flagging "command doesn't exist."** In the tier-split-quality-gates
   epic (holomush-b4myw), Task 10 docs reference `task quarantine:audit` (Task 5,
