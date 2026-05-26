@@ -202,6 +202,107 @@ so JetStream ack + audit semantics match.
 
 ---
 
+## Whole-system plugin tier (`WithInTreePlugins`)
+
+The harness supports an opt-in **whole-system** mode that loads all in-tree
+plugins, exercising the same production plugin wiring path. This is the top
+Go-fidelity integration tier (see canonical tier table in
+`.claude/rules/testing.md`).
+
+### Opt-in
+
+```go
+srv := integrationtest.Start(t, integrationtest.WithInTreePlugins())
+```
+
+Omitting `WithInTreePlugins` leaves the plugin subsystem nil — existing
+targeted suites (`privacy`, `presence`) are unaffected (INV-WS-4).
+
+### How it works
+
+`WithInTreePlugins()` reuses production's `setup.PluginSubsystem` (which calls
+`Manager.LoadAll`) — it does NOT construct `plugins.NewManager` directly in the
+harness (INV-WS-1). The harness assembles a temporary `plugins/` overlay (the
+source tree's `plugins/` directory + compiled artifacts from `build/plugins/`),
+then calls `PluginSubsystem.Start(ctx)`, which DAG-resolves and loads all
+in-tree plugins.
+
+**What loads:** discover-all finds 8 runtime plugins — 5 core Lua plugins
+(`core-aliases`, `core-building`, `core-communication`, `core-help`,
+`core-objects`), 1 additional Lua plugin (`echo-bot`), and 2 binary plugins
+(`core-scenes`, `test-abac-widget`). The 2 setting plugins
+(`setting-crossroads` / `setting-skeleton`, manifest names `crossroads` /
+`skeleton`) are configuration-only: they fall through to `loadPlugin`'s
+`default` branch, which logs a warning and skips them, so they are not
+registered in the Manager's loaded set.
+
+**Event emission is NOT wired.** `WithInTreePlugins` does not call
+`Manager.ConfigureEventEmitter`. The whole-system census reads plugin load
+state and the command registry only. A plugin command that emits events will
+fail with "plugin event emitter is not configured" until a future suite wires
+it explicitly.
+
+**Accessors panic without the option.** `PluginManager()`,
+`CommandRegistry()`, and `ServiceRegistry()` are only valid when
+`WithInTreePlugins` was passed; calling them otherwise panics with a clear
+message.
+
+### Prerequisite: build the binary plugins
+
+Binary plugins (`core-scenes`, `test-abac-widget`) must be compiled before
+running the whole-system suite:
+
+```bash
+task plugin:build-all   # compile all binary plugins for linux/amd64
+```
+
+`task test:int` runs `plugin:build-all` automatically, so CI always has fresh
+artifacts. If you run integration tests outside `task test:int` without prior
+builds, the harness skips (INV-WS-3): locally it calls `t.Skip`; when
+`HOLOMUSH_REQUIRE_PLUGINS=1` is set (as in CI), it calls `t.Fatalf` so CI
+never silently green-skips past missing binaries.
+
+### Sequence
+
+```mermaid
+sequenceDiagram
+    participant S as Suite (Ginkgo)
+    participant H as integrationtest.Start
+    participant PS as PluginSubsystem
+    participant M as plugin.Manager
+    participant SRV as integrationtest.Server
+    S->>H: Start(t, WithInTreePlugins())
+    H->>H: binary-gate check (skip or fatal if artifacts absent)
+    H->>H: assemblePluginsDir (overlay plugins/ + build/plugins/)
+    H->>PS: setup.NewPluginSubsystem(cfg).Start(ctx)
+    PS->>M: LoadAll(ctx) [strict, DAG-resolved]
+    M-->>PS: 8 runtime plugins loaded; commands/verbs/aliases registered
+    PS-->>H: Manager, CommandRegistry, ServiceRegistry
+    H-->>S: *Server (srv)
+    S->>SRV: PluginManager().ListPlugins() — census assertion
+    S->>SRV: CommandRegistry().Get("help") — command registration assertion
+```
+
+### Suite and test packages
+
+| Package                                 | Bead epic | What it asserts                                              |
+| --------------------------------------- | --------- | ------------------------------------------------------------ |
+| `test/integration/wholesystem/`         | 0f0f4     | INV-5: all in-tree plugins load; `help` command registered   |
+
+When you add a test package that uses `WithInTreePlugins`, append it to this
+table and to the main "Test packages currently using the harness" table above.
+
+### Invariants
+
+| # | Invariant | Enforcement |
+| --- | --- | --- |
+| INV-5 | The whole-system suite MUST load all in-tree plugins via `Manager.LoadAll` | Routing through `PluginSubsystem.Start`; census asserts full plugin set |
+| INV-WS-1 | `WithInTreePlugins` MUST reuse `setup.PluginSubsystem`, not fork `plugins.NewManager` directly | Meta-test `TestWithInTreePluginsReusesSubsystem` source-scans `integrationtest/` |
+| INV-WS-3 | Whole-system suite MUST NOT be silently skipped in CI | `HOLOMUSH_REQUIRE_PLUGINS=1` converts the missing-artifact skip to `t.Fatalf`; CI's `task test:int` runs `plugin:build-all` first and globs `./...`, so the suite always runs |
+| INV-WS-4 | `WithInTreePlugins` MUST be opt-in; omitting it leaves harness plugin-free | Existing targeted suites pass with no edits; harness test asserts no plugin subsystem starts by default |
+
+---
+
 ## Related
 
 - `internal/eventbus/eventbustest/` — bus-only harness for unit tests that
