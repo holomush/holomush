@@ -29,7 +29,10 @@
 // Default ABAC engine is allow-all (privacy tests focus on session/history
 // gates, not role enforcement). Tests that need denial-path coverage pass
 // WithPolicyEngine(policytest.DenyAllEngine()) — see iwzt.10 / iwzt.11 for
-// usage.
+// usage. WithRealABAC opts into the real seeded ABAC engine (production's
+// abacsetup.NewABACSubsystem path), making character_roles load-bearing:
+// ConnectAuthedWithRoles grants role-based seed:* permits while a roleless
+// ConnectAuthed receives only what seed:* grants a roleless character.
 //
 // Helper categories:
 //
@@ -64,6 +67,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
+	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/auth"
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
 	"github.com/holomush/holomush/internal/command"
@@ -132,6 +136,7 @@ type StartOption func(*startConfig)
 type startConfig struct {
 	accessEngine types.AccessPolicyEngine
 	withPlugins  bool
+	withRealABAC bool
 }
 
 // WithPolicyEngine overrides the harness's default allow-all ABAC engine.
@@ -141,6 +146,18 @@ type startConfig struct {
 // returns false and the hard-gate is exercised end-to-end.
 func WithPolicyEngine(eng types.AccessPolicyEngine) StartOption {
 	return func(c *startConfig) { c.accessEngine = eng }
+}
+
+// WithRealABAC boots the real seeded ABAC engine inside the harness via
+// production's abacsetup.NewABACSubsystem (which calls setup.BuildABACStack),
+// seeding the seed:* policy set first. Opt-in; the default stays allow-all.
+// Compose with WithInTreePlugins for cross-plugin ABAC coverage.
+//
+// Under WithRealABAC, character_roles become load-bearing: ConnectAuthedWithRoles
+// grants role-based permits, while a roleless ConnectAuthed receives only what
+// seed:* grants a roleless character.
+func WithRealABAC() StartOption {
+	return func(c *startConfig) { c.withRealABAC = true }
 }
 
 // Start bootstraps a full in-process holomush stack and returns a Server.
@@ -217,6 +234,14 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	}
 	pe := cfg.accessEngine
 
+	// Real seeded ABAC engine (opt-in). Overrides the allow-all default and is
+	// retained for the plugin layer's resolver/pluginProvider threading below.
+	var abacSub *abacsetup.ABACSubsystem
+	if cfg.withRealABAC {
+		abacSub = startRealABAC(t, ctx, pool)
+		pe = abacSub.Engine()
+	}
+
 	// VerbRegistry must exist before plugins load (they register verbs). It is
 	// also required by the locationFollower's synthetic location_state emit path
 	// so RenderingMetadata is stamped on the EventFrame (gateway drops
@@ -232,15 +257,19 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	var pluginSub *pluginsetup.PluginSubsystem
 	cmdRegistry := command.NewRegistry()
 	if cfg.withPlugins {
+		res, pp, aud := pluginAttrSources(abacSub)
 		pluginSub = startPlugins(t, ctx, pluginDeps{
-			pool:         pool,
-			connStr:      connStr,
-			engine:       pe,
-			sessionStore: sessionStoreInst,
-			verbReg:      verbRegistry,
-			playerRepo:   playerRepo,
-			hasher:       hasher,
-			playerSess:   playerSessionStore,
+			pool:           pool,
+			connStr:        connStr,
+			engine:         pe,
+			sessionStore:   sessionStoreInst,
+			verbReg:        verbRegistry,
+			playerRepo:     playerRepo,
+			hasher:         hasher,
+			playerSess:     playerSessionStore,
+			resolver:       res,
+			pluginProvider: pp,
+			auditor:        aud,
 		})
 		cmdRegistry = pluginSub.CommandRegistry()
 	}
