@@ -12,6 +12,9 @@ import (
 
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/require"
+
+	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/test/testutil"
 )
 
 // movedAwayPlayer connects charName, records its start location, then moves it
@@ -77,4 +80,63 @@ func TestRealABAC_AdminPermittedNonColocatedRead_g776Sentinel(t *testing.T) {
 	require.NoError(t, err,
 		"INV-RA-3/RA-5: seed:admin-full-access MUST permit an admin's non-colocated read; "+
 			"a failure here means seeds weren't installed or the roles provider is unregistered")
+}
+
+// INV-RA-4: when a real ABAC subsystem is present, pluginAttrSources MUST route
+// the plugin layer to the subsystem's OWN resolver and plugin provider (pointer
+// identity) — not freshly-allocated standalone instances — so plugin-declared
+// attribute providers register on the resolver the engine evaluates against.
+func TestRealABAC_PluginAttrSourcesUsesEngineInstances(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	shared := testutil.SharedPostgres(t)
+	connStr := testutil.FreshDatabase(t, shared)
+	evStore, err := store.NewPostgresEventStore(ctx, connStr)
+	require.NoError(t, err)
+	t.Cleanup(evStore.Close)
+
+	abacSub := startRealABAC(t, ctx, evStore.Pool())
+	res, pp, aud := pluginAttrSources(abacSub)
+
+	require.Same(t, abacSub.AttributeResolver(), res,
+		"INV-RA-4: plugin resolver MUST be the engine's resolver instance")
+	require.Same(t, abacSub.PluginProvider(), pp,
+		"INV-RA-4: plugin provider MUST be the engine's plugin-provider instance")
+	require.Equal(t, abacSub.AuditLogger(), aud,
+		"INV-RA-4: plugin auditor MUST be the engine's auditor")
+
+	// nil subsystem → fresh standalone instances (the allow-all default path).
+	resStd, ppStd, audStd := pluginAttrSources(nil)
+	require.NotNil(t, resStd, "standalone resolver must be non-nil")
+	require.NotNil(t, ppStd, "standalone plugin provider must be non-nil")
+	require.Nil(t, audStd, "standalone auditor is nil")
+	require.NotSame(t, abacSub.AttributeResolver(), resStd,
+		"standalone resolver must differ from the engine's")
+}
+
+// INV-RA-6: option order MUST NOT affect the resulting stack. Both orderings
+// must produce the same real-ABAC deny for a regular non-colocated read.
+// Plugin-gated: skipped when binary plugins are unbuilt (HOLOMUSH_REQUIRE_PLUGINS
+// forces failure instead — see plugins.go).
+func TestRealABAC_OptionOrderIndependent(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		opts []StartOption
+	}{
+		{"plugins-then-abac", []StartOption{WithInTreePlugins(), WithRealABAC()}},
+		{"abac-then-plugins", []StartOption{WithRealABAC(), WithInTreePlugins()}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+			defer cancel()
+			ts := Start(t, tc.opts...) // skips here if binary plugins unbuilt
+			mover, priorStream := movedAwayPlayer(t, ctx, ts, "Mover", nil)
+
+			_, err := mover.QueryStreamHistory(ctx, priorStream)
+			require.Error(t, err, "INV-RA-6: composed real engine MUST deny regardless of option order")
+			oopsErr, ok := oops.AsOops(err)
+			require.True(t, ok)
+			require.Equal(t, "STREAM_ACCESS_DENIED", oopsErr.Code())
+		})
+	}
 }

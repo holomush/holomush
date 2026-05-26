@@ -254,15 +254,19 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	var pluginSub *pluginsetup.PluginSubsystem
 	cmdRegistry := command.NewRegistry()
 	if cfg.withPlugins {
+		res, pp, aud := pluginAttrSources(abacSub)
 		pluginSub = startPlugins(t, ctx, pluginDeps{
-			pool:         pool,
-			connStr:      connStr,
-			engine:       pe,
-			sessionStore: sessionStoreInst,
-			verbReg:      verbRegistry,
-			playerRepo:   playerRepo,
-			hasher:       hasher,
-			playerSess:   playerSessionStore,
+			pool:           pool,
+			connStr:        connStr,
+			engine:         pe,
+			sessionStore:   sessionStoreInst,
+			verbReg:        verbRegistry,
+			playerRepo:     playerRepo,
+			hasher:         hasher,
+			playerSess:     playerSessionStore,
+			resolver:       res,
+			pluginProvider: pp,
+			auditor:        aud,
 		})
 		cmdRegistry = pluginSub.CommandRegistry()
 	}

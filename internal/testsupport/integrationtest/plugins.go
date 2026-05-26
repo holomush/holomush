@@ -165,14 +165,17 @@ func WithInTreePlugins() StartOption {
 // pluginDeps is the minimal set of already-built harness objects startPlugins
 // needs. Start passes these in so this helper stays decoupled from the Server.
 type pluginDeps struct {
-	pool         *pgxpool.Pool
-	connStr      string
-	engine       policytypes.AccessPolicyEngine
-	sessionStore session.Access
-	verbReg      *core.VerbRegistry
-	playerRepo   auth.PlayerRepository
-	hasher       auth.PasswordHasher
-	playerSess   auth.PlayerSessionRepository // *store.PostgresPlayerSessionStore satisfies this (player_session_store.go:30)
+	pool           *pgxpool.Pool
+	connStr        string
+	engine         policytypes.AccessPolicyEngine
+	sessionStore   session.Access
+	verbReg        *core.VerbRegistry
+	playerRepo     auth.PlayerRepository
+	hasher         auth.PasswordHasher
+	playerSess     auth.PlayerSessionRepository // *store.PostgresPlayerSessionStore satisfies this (player_session_store.go:30)
+	resolver       *attribute.Resolver
+	pluginProvider *attribute.PluginProvider
+	auditor        pluginauthz.Auditor
 }
 
 // startPlugins constructs and starts a PluginSubsystem mirroring production
@@ -227,20 +230,19 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 	// PolicyInstaller over a real policystore so manifest policies install.
 	policyInst := plugins.NewPolicyInstaller(policystore.NewPostgresStore(d.pool))
 
-	// Resolver must be non-nil: PluginSubsystem.Start calls
-	// resolver.RegisterProvider per plugin that declares resource_types
-	// (e.g. core-scenes' "scene" namespace). A nil resolver panics at
-	// subsystem.go:319. A fresh SchemaRegistry + Resolver is sufficient for
-	// the census suite, which reads load state and the command registry only.
-	schemaReg := attribute.NewSchemaRegistry()
-	resolver := attribute.NewResolver(schemaReg)
-
+	// Resolver / plugin provider are caller-supplied (pluginAttrSources): with a
+	// real ABAC subsystem they are the engine's OWN instances so plugin-declared
+	// providers (e.g. core-scenes' "scene" namespace) register on the resolver the
+	// engine evaluates against (INV-RA-4); with allow-all they are fresh standalone
+	// instances. Both are non-nil — PluginSubsystem.Start calls
+	// resolver.RegisterProvider per plugin that declares resource_types and panics
+	// on a nil resolver (subsystem.go:319).
 	cfg := pluginsetup.PluginSubsystemConfig{
 		DataDir:            dataDir,
 		DatabaseConnStr:    d.connStr,
-		ABAC:               engineProvider{eng: d.engine, resolver: resolver},
+		ABAC:               engineProvider{eng: d.engine, resolver: d.resolver, auditor: d.auditor},
 		PolicyInst:         policyInstallerProvider{inst: policyInst},
-		PluginProv:         pluginProviderSetter{pp: attribute.NewPluginProvider(nil)},
+		PluginProv:         pluginProviderSetter{pp: d.pluginProvider},
 		World:              worldProvider{svc: worldSvc},
 		Sessions:           sessionProvider{store: d.sessionStore},
 		AdminDeps:          adminDepsProvider{deps: adminDeps},

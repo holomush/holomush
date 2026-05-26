@@ -14,11 +14,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/access/policy"
+	"github.com/holomush/holomush/internal/access/policy/attribute"
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
 	policytypes "github.com/holomush/holomush/internal/access/policy/types"
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/lifecycle"
+	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 )
 
 // poolProvider adapts a *pgxpool.Pool to abacsetup.PoolProvider so the harness
@@ -58,4 +60,17 @@ func startRealABAC(t *testing.T, ctx context.Context, pool *pgxpool.Pool) *abacs
 	require.NoError(t, abacSub.Start(ctx), "startRealABAC: ABAC subsystem start")
 	t.Cleanup(func() { _ = abacSub.Stop(context.Background()) })
 	return abacSub
+}
+
+// pluginAttrSources returns the attribute resolver, plugin provider, and auditor
+// the plugin subsystem should register against. With a real ABAC subsystem, these
+// are the subsystem's OWN instances so plugin-declared providers (e.g. core-scenes'
+// "scene" namespace) register on the resolver the engine evaluates against
+// (INV-RA-4). With no real engine (allow-all default), fresh standalone instances
+// are correct — allow-all ignores attributes, so the #4275 behavior is preserved.
+func pluginAttrSources(abacSub *abacsetup.ABACSubsystem) (*attribute.Resolver, *attribute.PluginProvider, pluginauthz.Auditor) {
+	if abacSub != nil {
+		return abacSub.AttributeResolver(), abacSub.PluginProvider(), abacSub.AuditLogger()
+	}
+	return attribute.NewResolver(attribute.NewSchemaRegistry()), attribute.NewPluginProvider(nil), nil
 }
