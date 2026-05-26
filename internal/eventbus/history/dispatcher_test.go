@@ -45,6 +45,7 @@ func TestDecodeAuthorizeAndDispatchIdentityCodecPasses(t *testing.T) {
 		nil,                        // guard (not consulted on identity codec)
 		nil,                        // dekMgr (not consulted on identity codec)
 		nil,                        // auditEm (not consulted on identity codec)
+		false,                      // readBack (not consulted on identity codec)
 	)
 	require.NoError(t, err)
 	assert.False(t, metaOnly, "identity codec must not be metadata-only")

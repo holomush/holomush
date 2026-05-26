@@ -34,6 +34,11 @@ type CryptoEmit struct {
 	EventType   string      `yaml:"event_type" json:"event_type"`
 	Sensitivity Sensitivity `yaml:"sensitivity" json:"sensitivity"`
 	Description string      `yaml:"description,omitempty" json:"description,omitempty"`
+	// Readback declares that this plugin may read back and decrypt its own
+	// historical events of this type via the host (the plugin never holds a
+	// DEK). Default false (default-deny). MUST NOT be true for a
+	// SensitivityNever type. See plugin-readback-decrypt-design INV-RB-2.
+	Readback bool `yaml:"readback,omitempty" json:"readback,omitempty"`
 }
 
 // CryptoConsume declares a set of subjects the plugin subscribes to and,

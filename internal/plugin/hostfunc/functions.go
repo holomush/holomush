@@ -50,6 +50,7 @@ type Functions struct {
 	streamRegistry   plugins.StreamRegistry
 	focusOps         FocusOps
 	historyReader    HistoryReader
+	auditDecryptor   AuditDecryptor
 }
 
 // Option configures Functions.
@@ -109,6 +110,19 @@ func WithHistoryReader(hr HistoryReader) Option {
 // The *audit.Logger type satisfies this interface.
 func WithAuditLogger(a pluginauthz.Auditor) Option {
 	return func(f *Functions) { f.auditor = a }
+}
+
+// WithAuditDecryptor sets the audit read-back decryptor for the
+// decrypt_own_audit_rows host function.
+func WithAuditDecryptor(d AuditDecryptor) Option {
+	return func(f *Functions) { f.auditDecryptor = d }
+}
+
+// SetAuditDecryptor injects the audit read-back decryptor after construction.
+// Same late-binding rationale as SetHistoryReader: the decryptor's OwnerMap +
+// crypto deps are assembled during gRPC subsystem Start, after plugin loading.
+func (f *Functions) SetAuditDecryptor(d AuditDecryptor) {
+	f.auditDecryptor = d
 }
 
 // SetFocusOps sets the focus coordinator for join/leave/present focus host
@@ -196,6 +210,9 @@ func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...stri
 
 	// Register focus management functions.
 	RegisterFocusFuncs(ls, mod, f.focusOps, f.historyReader)
+
+	// Register audit read-back decrypt functions.
+	RegisterAuditFuncs(ls, mod, pluginName, f.auditDecryptor)
 
 	// INV-S5: install a no-op register_emit_type in the per-delivery
 	// hostfunc surface. Lua plugins call register_emit_type at top level
@@ -285,6 +302,8 @@ func (f *Functions) RegisteredFunctionsForAudit() []AuditEntry {
 		{Name: "holomush.leave_focus"},
 		{Name: "holomush.present_focus"},
 		{Name: "holomush.query_stream_history"},
+		// Unconditionally registered by RegisterAuditFuncs.
+		{Name: "holomush.decrypt_own_audit_rows"},
 		// INV-S5 (jg9b.3): per-delivery no-op; Load-pass capturing variant
 		// is installed by RegisterWithEmitCapture.
 		{Name: "holomush.register_emit_type"},

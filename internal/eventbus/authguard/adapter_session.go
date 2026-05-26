@@ -41,6 +41,7 @@ func (b *SessionBridgeGuard) Check(ctx context.Context, req eventbus.SessionChec
 		KeyVersion: req.KeyVersion,
 		EventType:  req.EventType,
 		EventID:    req.EventID,
+		ReadBack:   req.ReadBack,
 	}
 	dec, err := b.g.Check(ctx, inner)
 	if err != nil {

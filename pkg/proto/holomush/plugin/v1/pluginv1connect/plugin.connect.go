@@ -84,6 +84,9 @@ const (
 	// PluginHostServiceQueryStreamHistoryProcedure is the fully-qualified name of the
 	// PluginHostService's QueryStreamHistory RPC.
 	PluginHostServiceQueryStreamHistoryProcedure = "/holomush.plugin.v1.PluginHostService/QueryStreamHistory"
+	// PluginHostServiceDecryptOwnAuditRowsProcedure is the fully-qualified name of the
+	// PluginHostService's DecryptOwnAuditRows RPC.
+	PluginHostServiceDecryptOwnAuditRowsProcedure = "/holomush.plugin.v1.PluginHostService/DecryptOwnAuditRows"
 	// PluginHostServiceRequestEmitTokenProcedure is the fully-qualified name of the PluginHostService's
 	// RequestEmitToken RPC.
 	PluginHostServiceRequestEmitTokenProcedure = "/holomush.plugin.v1.PluginHostService/RequestEmitToken"
@@ -300,6 +303,12 @@ type PluginHostServiceClient interface {
 	// Read-only: does not advance cursors or affect session state.
 	// Count capped at 500 server-side.
 	QueryStreamHistory(context.Context, *connect.Request[v1.PluginHostServiceQueryStreamHistoryRequest]) (*connect.Response[v1.PluginHostServiceQueryStreamHistoryResponse], error)
+	// DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN audit rows
+	// host-side. The plugin never holds a DEK. Per-row result envelope (INV-RB-12).
+	// Batch capped at 500 server-side (REJECT, not clamp). Authorization: OwnerMap
+	// subject ownership (g1) + crypto.emits[].readback manifest flag (g2) (INV-RB-2).
+	// Request / response message shapes live in audit.proto (AuditRow domain).
+	DecryptOwnAuditRows(context.Context, *connect.Request[v1.DecryptOwnAuditRowsRequest]) (*connect.Response[v1.DecryptOwnAuditRowsResponse], error)
 	// RequestEmitToken issues a self-token bound to the calling plugin's
 	// identity (ActorPlugin + pluginName), so plugin-served gRPC handlers
 	// (which are not invoked via DeliverEvent / DeliverCommand) can still
@@ -411,6 +420,12 @@ func NewPluginHostServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(pluginHostServiceMethods.ByName("QueryStreamHistory")),
 			connect.WithClientOptions(opts...),
 		),
+		decryptOwnAuditRows: connect.NewClient[v1.DecryptOwnAuditRowsRequest, v1.DecryptOwnAuditRowsResponse](
+			httpClient,
+			baseURL+PluginHostServiceDecryptOwnAuditRowsProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("DecryptOwnAuditRows")),
+			connect.WithClientOptions(opts...),
+		),
 		requestEmitToken: connect.NewClient[v1.PluginHostServiceRequestEmitTokenRequest, v1.PluginHostServiceRequestEmitTokenResponse](
 			httpClient,
 			baseURL+PluginHostServiceRequestEmitTokenProcedure,
@@ -458,6 +473,7 @@ type pluginHostServiceClient struct {
 	leaveFocusByTarget  *connect.Client[v1.PluginHostServiceLeaveFocusByTargetRequest, v1.PluginHostServiceLeaveFocusByTargetResponse]
 	presentFocus        *connect.Client[v1.PluginHostServicePresentFocusRequest, v1.PluginHostServicePresentFocusResponse]
 	queryStreamHistory  *connect.Client[v1.PluginHostServiceQueryStreamHistoryRequest, v1.PluginHostServiceQueryStreamHistoryResponse]
+	decryptOwnAuditRows *connect.Client[v1.DecryptOwnAuditRowsRequest, v1.DecryptOwnAuditRowsResponse]
 	requestEmitToken    *connect.Client[v1.PluginHostServiceRequestEmitTokenRequest, v1.PluginHostServiceRequestEmitTokenResponse]
 	setConnectionFocus  *connect.Client[v1.PluginHostServiceSetConnectionFocusRequest, v1.PluginHostServiceSetConnectionFocusResponse]
 	autoFocusOnJoin     *connect.Client[v1.PluginHostServiceAutoFocusOnJoinRequest, v1.PluginHostServiceAutoFocusOnJoinResponse]
@@ -525,6 +541,11 @@ func (c *pluginHostServiceClient) QueryStreamHistory(ctx context.Context, req *c
 	return c.queryStreamHistory.CallUnary(ctx, req)
 }
 
+// DecryptOwnAuditRows calls holomush.plugin.v1.PluginHostService.DecryptOwnAuditRows.
+func (c *pluginHostServiceClient) DecryptOwnAuditRows(ctx context.Context, req *connect.Request[v1.DecryptOwnAuditRowsRequest]) (*connect.Response[v1.DecryptOwnAuditRowsResponse], error) {
+	return c.decryptOwnAuditRows.CallUnary(ctx, req)
+}
+
 // RequestEmitToken calls holomush.plugin.v1.PluginHostService.RequestEmitToken.
 func (c *pluginHostServiceClient) RequestEmitToken(ctx context.Context, req *connect.Request[v1.PluginHostServiceRequestEmitTokenRequest]) (*connect.Response[v1.PluginHostServiceRequestEmitTokenResponse], error) {
 	return c.requestEmitToken.CallUnary(ctx, req)
@@ -586,6 +607,12 @@ type PluginHostServiceHandler interface {
 	// Read-only: does not advance cursors or affect session state.
 	// Count capped at 500 server-side.
 	QueryStreamHistory(context.Context, *connect.Request[v1.PluginHostServiceQueryStreamHistoryRequest]) (*connect.Response[v1.PluginHostServiceQueryStreamHistoryResponse], error)
+	// DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN audit rows
+	// host-side. The plugin never holds a DEK. Per-row result envelope (INV-RB-12).
+	// Batch capped at 500 server-side (REJECT, not clamp). Authorization: OwnerMap
+	// subject ownership (g1) + crypto.emits[].readback manifest flag (g2) (INV-RB-2).
+	// Request / response message shapes live in audit.proto (AuditRow domain).
+	DecryptOwnAuditRows(context.Context, *connect.Request[v1.DecryptOwnAuditRowsRequest]) (*connect.Response[v1.DecryptOwnAuditRowsResponse], error)
 	// RequestEmitToken issues a self-token bound to the calling plugin's
 	// identity (ActorPlugin + pluginName), so plugin-served gRPC handlers
 	// (which are not invoked via DeliverEvent / DeliverCommand) can still
@@ -693,6 +720,12 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 		connect.WithSchema(pluginHostServiceMethods.ByName("QueryStreamHistory")),
 		connect.WithHandlerOptions(opts...),
 	)
+	pluginHostServiceDecryptOwnAuditRowsHandler := connect.NewUnaryHandler(
+		PluginHostServiceDecryptOwnAuditRowsProcedure,
+		svc.DecryptOwnAuditRows,
+		connect.WithSchema(pluginHostServiceMethods.ByName("DecryptOwnAuditRows")),
+		connect.WithHandlerOptions(opts...),
+	)
 	pluginHostServiceRequestEmitTokenHandler := connect.NewUnaryHandler(
 		PluginHostServiceRequestEmitTokenProcedure,
 		svc.RequestEmitToken,
@@ -749,6 +782,8 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 			pluginHostServicePresentFocusHandler.ServeHTTP(w, r)
 		case PluginHostServiceQueryStreamHistoryProcedure:
 			pluginHostServiceQueryStreamHistoryHandler.ServeHTTP(w, r)
+		case PluginHostServiceDecryptOwnAuditRowsProcedure:
+			pluginHostServiceDecryptOwnAuditRowsHandler.ServeHTTP(w, r)
 		case PluginHostServiceRequestEmitTokenProcedure:
 			pluginHostServiceRequestEmitTokenHandler.ServeHTTP(w, r)
 		case PluginHostServiceSetConnectionFocusProcedure:
@@ -814,6 +849,10 @@ func (UnimplementedPluginHostServiceHandler) PresentFocus(context.Context, *conn
 
 func (UnimplementedPluginHostServiceHandler) QueryStreamHistory(context.Context, *connect.Request[v1.PluginHostServiceQueryStreamHistoryRequest]) (*connect.Response[v1.PluginHostServiceQueryStreamHistoryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.QueryStreamHistory is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) DecryptOwnAuditRows(context.Context, *connect.Request[v1.DecryptOwnAuditRowsRequest]) (*connect.Response[v1.DecryptOwnAuditRowsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.DecryptOwnAuditRows is not implemented"))
 }
 
 func (UnimplementedPluginHostServiceHandler) RequestEmitToken(context.Context, *connect.Request[v1.PluginHostServiceRequestEmitTokenRequest]) (*connect.Response[v1.PluginHostServiceRequestEmitTokenResponse], error) {

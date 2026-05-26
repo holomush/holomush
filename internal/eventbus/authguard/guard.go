@@ -45,6 +45,9 @@ func (g *Guard) Check(ctx context.Context, req CheckRequest) (Decision, error) {
 	case IdentityKindPlayer:
 		return g.checkPlayer(ctx, req)
 	case IdentityKindPlugin:
+		if req.ReadBack {
+			return g.checkPluginReadback(ctx, req)
+		}
 		return g.checkPlugin(ctx, req)
 	case IdentityKindOperator:
 		return Decision{
@@ -149,6 +152,21 @@ func (g *Guard) checkPlugin(ctx context.Context, req CheckRequest) (Decision, er
 		GrantID:      mustParseULID(abacDec.PolicyID()),
 		ABACDecision: &abacDec,
 	}, nil
+}
+
+// checkPluginReadback — read-back path: backpressure pre-check → readback
+// manifest declaration → permit. INV-RB-2 gate g2 (manifest); gate g1
+// (OwnerMap subject ownership) is enforced upstream at the primitive entry.
+// NO ABAC gate — gate 3 was dropped (that plumbing is unbuilt; spec §7.5).
+// ctx is unused (kept for signature parity with checkPlugin / future ABAC).
+func (g *Guard) checkPluginReadback(_ context.Context, req CheckRequest) (Decision, error) {
+	if g.bp.ShouldThrottle(req.Identity.PluginName) {
+		return Decision{Permit: false, Code: DenyAuditBackpressure, Reason: "audit-emit queue throttled"}, nil
+	}
+	if !g.manifest.PluginCanReadBack(req.Identity.PluginName, req.EventType) {
+		return Decision{Permit: false, Code: DenyReadbackManifestMissing, Reason: "manifest does not declare crypto.emits[].readback"}, nil
+	}
+	return Decision{Permit: true, Code: PermitPluginReadbackGrant}, nil
 }
 
 // mustParseULID parses a ULID-format string into ulid.ULID. Falls back

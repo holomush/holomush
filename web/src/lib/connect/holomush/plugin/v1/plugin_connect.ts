@@ -10,6 +10,7 @@
 
 import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceAddSessionStreamRequest, PluginHostServiceAddSessionStreamResponse, PluginHostServiceAutoFocusOnJoinRequest, PluginHostServiceAutoFocusOnJoinResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceEvaluateRequest, PluginHostServiceEvaluateResponse, PluginHostServiceIsAnyConnFocusedRequest, PluginHostServiceIsAnyConnFocusedResponse, PluginHostServiceJoinFocusRequest, PluginHostServiceJoinFocusResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLeaveFocusByTargetRequest, PluginHostServiceLeaveFocusByTargetResponse, PluginHostServiceLeaveFocusRequest, PluginHostServiceLeaveFocusResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServicePresentFocusRequest, PluginHostServicePresentFocusResponse, PluginHostServiceQueryStreamHistoryRequest, PluginHostServiceQueryStreamHistoryResponse, PluginHostServiceRemoveSessionStreamRequest, PluginHostServiceRemoveSessionStreamResponse, PluginHostServiceRequestEmitTokenRequest, PluginHostServiceRequestEmitTokenResponse, PluginHostServiceSetConnectionFocusRequest, PluginHostServiceSetConnectionFocusResponse, QuerySessionStreamsRequest, QuerySessionStreamsResponse } from "./plugin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
+import { DecryptOwnAuditRowsRequest, DecryptOwnAuditRowsResponse } from "./audit_pb.js";
 
 /**
  * PluginService is called by the go-plugin host to send events and commands to binary plugins.
@@ -219,6 +220,21 @@ export const PluginHostService = {
       name: "QueryStreamHistory",
       I: PluginHostServiceQueryStreamHistoryRequest,
       O: PluginHostServiceQueryStreamHistoryResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN audit rows
+     * host-side. The plugin never holds a DEK. Per-row result envelope (INV-RB-12).
+     * Batch capped at 500 server-side (REJECT, not clamp). Authorization: OwnerMap
+     * subject ownership (g1) + crypto.emits[].readback manifest flag (g2) (INV-RB-2).
+     * Request / response message shapes live in audit.proto (AuditRow domain).
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.DecryptOwnAuditRows
+     */
+    decryptOwnAuditRows: {
+      name: "DecryptOwnAuditRows",
+      I: DecryptOwnAuditRowsRequest,
+      O: DecryptOwnAuditRowsResponse,
       kind: MethodKind.Unary,
     },
     /**

@@ -1852,6 +1852,23 @@ lua-plugin:
 	assert.Equal(t, "builtin", conflict.Source)
 }
 
+// TestPluginCanReadBack verifies Manager.PluginCanReadBack against the
+// crypto.emits[].readback field (INV-RB-2).
+func TestPluginCanReadBack(t *testing.T) {
+	t.Parallel()
+	m := newTestManagerWithManifest(t, &plugins.Manifest{
+		Name: "core-scenes",
+		Crypto: &plugins.CryptoSection{Emits: []plugins.CryptoEmit{
+			{EventType: "scene_pose", Sensitivity: plugins.SensitivityAlways, Readback: true},
+			{EventType: "scene_join_ic", Sensitivity: plugins.SensitivityNever},
+		}},
+	})
+	assert.True(t, m.PluginCanReadBack("core-scenes", "scene_pose"))
+	assert.False(t, m.PluginCanReadBack("core-scenes", "scene_join_ic"), "readback not set")
+	assert.False(t, m.PluginCanReadBack("core-scenes", "unknown"), "type not emitted")
+	assert.False(t, m.PluginCanReadBack("other", "scene_pose"), "wrong plugin")
+}
+
 // TestNewManagerRequiresVerbRegistry pins INV-GW-10: every plugin manager
 // MUST be constructed with a non-nil VerbRegistry. Omitting the option
 // returns ErrMissingVerbRegistry rather than silently skipping verb
@@ -1929,6 +1946,44 @@ func TestConfigureFocusDepsWithNilLuaHostDoesNotPanic(t *testing.T) {
 	require.NoError(t, mgrErr)
 	require.NotPanics(t, func() {
 		mgr.ConfigureFocusDeps(nil, nil)
+	})
+}
+
+// stubReadbackDecryptor satisfies plugins.ReadbackDecryptor for the
+// ConfigureReadbackDecryptor injection tests.
+type stubReadbackDecryptor struct{}
+
+func (s *stubReadbackDecryptor) DecryptOwnRow(_ context.Context, _, _ string, _ *pluginv1.AuditRow) *pluginv1.RowResult {
+	return &pluginv1.RowResult{}
+}
+
+func (s *stubReadbackDecryptor) DecryptOwnRows(_ context.Context, _, _ string, rows []*pluginv1.AuditRow) ([]*pluginv1.RowResult, error) {
+	return make([]*pluginv1.RowResult, len(rows)), nil
+}
+
+var _ plugins.ReadbackDecryptor = (*stubReadbackDecryptor)(nil)
+
+func TestConfigureReadbackDecryptorInjectsDecryptorIntoLuaHost(t *testing.T) {
+	hf := hostfunc.New(nil)
+	luaHost := pluginlua.NewHostWithFunctions(hf)
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	mgr, mgrErr := plugins.NewManager(t.TempDir(), plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
+
+	// Must not panic; calls SetReadbackDecryptor on all ReadbackDepsConfigurer
+	// hosts registered in the manager.
+	require.NotPanics(t, func() {
+		mgr.ConfigureReadbackDecryptor(&stubReadbackDecryptor{})
+	})
+}
+
+func TestConfigureReadbackDecryptorWithNilLuaHostDoesNotPanic(t *testing.T) {
+	// Manager without a Lua host — ConfigureReadbackDecryptor must handle nil luaHost.
+	mgr, mgrErr := plugins.NewManager(t.TempDir(), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
+	require.NotPanics(t, func() {
+		mgr.ConfigureReadbackDecryptor(nil)
 	})
 }
 

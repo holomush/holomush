@@ -366,6 +366,26 @@ func (m *Manager) ConfigureFocusDeps(fc focus.Coordinator, hr HistoryReader) {
 	}
 }
 
+// ConfigureReadbackDecryptor injects the read-back decryptor into all
+// registered hosts that implement ReadbackDepsConfigurer. Production startup
+// MUST call this before plugins issue DecryptOwnAuditRows RPCs. Called from the
+// gRPC subsystem's Start after the history reader (and thus the OwnerMap +
+// crypto deps) is built.
+func (m *Manager) ConfigureReadbackDecryptor(d ReadbackDecryptor) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, host := range m.hosts {
+		if configurer := findOptional[ReadbackDepsConfigurer](host); configurer != nil {
+			configurer.SetReadbackDecryptor(d)
+		}
+	}
+	if m.luaHost != nil {
+		if configurer := findOptional[ReadbackDepsConfigurer](m.luaHost); configurer != nil {
+			configurer.SetReadbackDecryptor(d)
+		}
+	}
+}
+
 // DeliverEvent routes an event to the correct host for the named plugin.
 func (m *Manager) DeliverEvent(ctx context.Context, pluginName string, event pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
 	m.mu.RLock()
@@ -1511,6 +1531,23 @@ func (m *Manager) PluginRequestsDecryption(pluginName, eventType string) bool {
 			if ref == eventType {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// PluginCanReadBack returns true iff pluginName's manifest declares
+// crypto.emits[].readback=true for eventType. Read-back authorization
+// gate g2 (plugin-readback-decrypt-design §4). Distinct from
+// PluginRequestsDecryption, which reads crypto.consumes.
+func (m *Manager) PluginCanReadBack(pluginName, eventType string) bool {
+	manifest := m.lookupManifest(pluginName)
+	if manifest == nil || manifest.Crypto == nil {
+		return false
+	}
+	for _, e := range manifest.Crypto.Emits {
+		if e.EventType == eventType {
+			return e.Readback
 		}
 	}
 	return false

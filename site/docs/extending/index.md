@@ -42,6 +42,18 @@ For binary plugins that declare custom resource types. Documents the host
 contract for `GetSchema` and `ResolveResource`, load-time policy/schema
 validation, and common anti-patterns.
 
+### [Declaring Event Sensitivity](event-sensitivity.md)
+
+Sensitivity contracts (`always`, `may`, `never`), the `crypto.emits` block,
+and how to request decryption of sensitive events from another plugin.
+
+### [Reading Back Encrypted History](plugin-crypto-readback.md)
+
+How to decrypt your plugin's own `sensitivity:always` audit rows. Covers the
+manifest `readback` flag, the `DecryptOwnAuditRows` host RPC (Go SDK and Lua
+hostfunc), the two authorization gates, batch limits, and the per-row result
+envelope.
+
 ### [Substrate Contract](substrate-contract.md)
 
 The rules governing what plugins can rely on from the substrate and what they

@@ -75,3 +75,34 @@ message QueryHistoryRequest {
 message QueryHistoryResponse {
   AuditRow row = 1;
 }
+
+// DecryptOwnAuditRowsRequest carries the calling plugin's OWN audit rows for
+// host-side read-back decryption (PluginHostService.DecryptOwnAuditRows).
+// The host enforces OwnerMap subject ownership (g1) per row; rows whose
+// subject is owned by a different plugin are refused with not_owner and never
+// decrypted. The batch is REJECTED (not clamped) when it exceeds the
+// server-side cap of 500.
+message DecryptOwnAuditRowsRequest {
+  repeated AuditRow rows = 1;
+}
+
+// DecryptOwnAuditRowsResponse returns one RowResult per request row, in the
+// same order (1:1 positional correspondence, INV-RB-12).
+message DecryptOwnAuditRowsResponse {
+  repeated RowResult results = 1;
+}
+
+// RowResult is the per-row outcome of DecryptOwnAuditRows. Exactly one of
+// plaintext / no_plaintext_reason is populated: plaintext is set iff the row
+// decrypted; no_plaintext_reason is set iff the row was refused (e.g.
+// "not_owner", "downgrade_refused", "dek_missing", "internal").
+message RowResult {
+  bytes id = 1; // echoes AuditRow.id for correlation
+  // Exactly one outcome arm is set: plaintext iff the row decrypted,
+  // no_plaintext_reason iff it was refused. The oneof makes both-set /
+  // neither-set unrepresentable and distinguishes decrypted-to-empty from refused.
+  oneof outcome {
+    bytes plaintext = 2; // set iff decrypted
+    string no_plaintext_reason = 3; // set iff refused
+  }
+}

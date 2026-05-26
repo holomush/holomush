@@ -50,6 +50,11 @@ type CheckRequest struct {
 	KeyVersion uint32
 	EventType  string
 	EventID    ulid.ULID
+	// ReadBack selects the read-back authorization path (manifest
+	// crypto.emits[].readback) over the live-delivery path
+	// (crypto.consumes.requests_decryption). Only meaningful for
+	// IdentityKindPlugin. See plugin-readback-decrypt-design §4.
+	ReadBack bool
 }
 
 // DecisionCode is the typed outcome of a Guard.Check call.
@@ -69,6 +74,8 @@ const (
 	DenyOperatorUseAdminRPC
 	DenyAuditBackpressure
 	DenyUnknownIdentityKind
+	PermitPluginReadbackGrant
+	DenyReadbackManifestMissing
 )
 
 // Decision is the result of a Guard.Check call.
@@ -93,10 +100,11 @@ type ParticipantLookup interface {
 	Participants(ctx context.Context, keyID codec.KeyID, version uint32) ([]dek.Participant, error)
 }
 
-// ManifestLookup checks whether a plugin has declared requests_decryption
-// for a given event type in its manifest.
+// ManifestLookup checks plugin manifest declarations for decrypt and
+// read-back authorization.
 type ManifestLookup interface {
 	PluginRequestsDecryption(pluginName, eventType string) bool
+	PluginCanReadBack(pluginName, eventType string) bool
 }
 
 // ABACEngine is the narrow ABAC interface AuthGuard requires.

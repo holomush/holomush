@@ -70,6 +70,38 @@ After a plugin reload with a changed verb, old events keep their original
 rendering; new events carry the new version. See
 `site/docs/operating/plugin-reloads.md`.
 
+## Plugin-owned history read-back
+
+Plugin-owned event subjects with `sensitivity:always` are stored as ciphertext
+in the plugin's audit table. The `PluginDowngradeFence` (`internal/eventbus/history/plugin_downgrade_fence.go`)
+gates every routed history read: rows that fail INV-P7-7 (downgrade detected)
+or INV-P7-15 (DEK missing) are refused with a metadata-only frame.
+
+**Fence-contract change (read-back decrypt):** Clean rows that pass both
+INV-P7-7 and INV-P7-15 now flow through the shared `fenceCheckRow` primitive
+(`internal/eventbus/history`) and are **decrypted before delivery**, not passed
+through as ciphertext. The same `fenceCheckRow` primitive is also the entry
+point for the snapshot direct-decrypt path (`DecryptOwnAuditRows`), so the
+per-row fence semantics are identical on both the routed fence path and the
+direct host RPC. Any change to `fenceCheckRow` must be evaluated for both
+consumers.
+
+Authorization for the direct-decrypt path requires two gates:
+
+- **g1 — OwnerMap subject ownership:** only the plugin that owns the subject
+  can request decryption of its rows.
+- **g2 — Manifest `readback` flag:** the plugin must declare
+  `crypto.emits[].readback: true` for the event type (default-deny; invalid on
+  `sensitivity:never` types).
+
+Every successful row decrypt emits an INV-19 `audit:plugin_decrypt` record.
+The primitive fails closed: a missing audit emitter returns a refusal rather
+than leaking plaintext.
+
+See `site/docs/extending/plugin-crypto-readback.md` for the plugin-author view,
+and `docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md` for
+the full design rationale and invariant table (INV-RB-1 through INV-RB-12).
+
 ## See also
 
 - Gateway boundary: `site/docs/contributing/gateway-boundary.md`

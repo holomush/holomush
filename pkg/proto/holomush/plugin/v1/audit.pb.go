@@ -382,6 +382,200 @@ func (x *QueryHistoryResponse) GetRow() *AuditRow {
 	return nil
 }
 
+// DecryptOwnAuditRowsRequest carries the calling plugin's OWN audit rows for
+// host-side read-back decryption (PluginHostService.DecryptOwnAuditRows).
+// The host enforces OwnerMap subject ownership (g1) per row; rows whose
+// subject is owned by a different plugin are refused with not_owner and never
+// decrypted. The batch is REJECTED (not clamped) when it exceeds the
+// server-side cap of 500.
+type DecryptOwnAuditRowsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Rows          []*AuditRow            `protobuf:"bytes,1,rep,name=rows,proto3" json:"rows,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DecryptOwnAuditRowsRequest) Reset() {
+	*x = DecryptOwnAuditRowsRequest{}
+	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DecryptOwnAuditRowsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DecryptOwnAuditRowsRequest) ProtoMessage() {}
+
+func (x *DecryptOwnAuditRowsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DecryptOwnAuditRowsRequest.ProtoReflect.Descriptor instead.
+func (*DecryptOwnAuditRowsRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_audit_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *DecryptOwnAuditRowsRequest) GetRows() []*AuditRow {
+	if x != nil {
+		return x.Rows
+	}
+	return nil
+}
+
+// DecryptOwnAuditRowsResponse returns one RowResult per request row, in the
+// same order (1:1 positional correspondence, INV-RB-12).
+type DecryptOwnAuditRowsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Results       []*RowResult           `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DecryptOwnAuditRowsResponse) Reset() {
+	*x = DecryptOwnAuditRowsResponse{}
+	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DecryptOwnAuditRowsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DecryptOwnAuditRowsResponse) ProtoMessage() {}
+
+func (x *DecryptOwnAuditRowsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DecryptOwnAuditRowsResponse.ProtoReflect.Descriptor instead.
+func (*DecryptOwnAuditRowsResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_audit_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *DecryptOwnAuditRowsResponse) GetResults() []*RowResult {
+	if x != nil {
+		return x.Results
+	}
+	return nil
+}
+
+// RowResult is the per-row outcome of DecryptOwnAuditRows. Exactly one of
+// plaintext / no_plaintext_reason is populated: plaintext is set iff the row
+// decrypted; no_plaintext_reason is set iff the row was refused (e.g.
+// "not_owner", "downgrade_refused", "dek_missing", "internal").
+type RowResult struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"` // echoes AuditRow.id for correlation
+	// Exactly one outcome arm is set: plaintext iff the row decrypted,
+	// no_plaintext_reason iff it was refused. The oneof makes both-set /
+	// neither-set unrepresentable and distinguishes decrypted-to-empty from refused.
+	//
+	// Types that are valid to be assigned to Outcome:
+	//
+	//	*RowResult_Plaintext
+	//	*RowResult_NoPlaintextReason
+	Outcome       isRowResult_Outcome `protobuf_oneof:"outcome"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RowResult) Reset() {
+	*x = RowResult{}
+	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RowResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RowResult) ProtoMessage() {}
+
+func (x *RowResult) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_audit_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RowResult.ProtoReflect.Descriptor instead.
+func (*RowResult) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_audit_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *RowResult) GetId() []byte {
+	if x != nil {
+		return x.Id
+	}
+	return nil
+}
+
+func (x *RowResult) GetOutcome() isRowResult_Outcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return nil
+}
+
+func (x *RowResult) GetPlaintext() []byte {
+	if x != nil {
+		if x, ok := x.Outcome.(*RowResult_Plaintext); ok {
+			return x.Plaintext
+		}
+	}
+	return nil
+}
+
+func (x *RowResult) GetNoPlaintextReason() string {
+	if x != nil {
+		if x, ok := x.Outcome.(*RowResult_NoPlaintextReason); ok {
+			return x.NoPlaintextReason
+		}
+	}
+	return ""
+}
+
+type isRowResult_Outcome interface {
+	isRowResult_Outcome()
+}
+
+type RowResult_Plaintext struct {
+	Plaintext []byte `protobuf:"bytes,2,opt,name=plaintext,proto3,oneof"` // set iff decrypted
+}
+
+type RowResult_NoPlaintextReason struct {
+	NoPlaintextReason string `protobuf:"bytes,3,opt,name=no_plaintext_reason,json=noPlaintextReason,proto3,oneof"` // set iff refused
+}
+
+func (*RowResult_Plaintext) isRowResult_Outcome() {}
+
+func (*RowResult_NoPlaintextReason) isRowResult_Outcome() {}
+
 var File_holomush_plugin_v1_audit_proto protoreflect.FileDescriptor
 
 const file_holomush_plugin_v1_audit_proto_rawDesc = "" +
@@ -418,7 +612,16 @@ const file_holomush_plugin_v1_audit_proto_rawDesc = "" +
 	"\tnot_after\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\bnotAfter\x123\n" +
 	"\x06caller\x18\b \x01(\v2\x1b.holomush.eventbus.v1.ActorR\x06caller\"F\n" +
 	"\x14QueryHistoryResponse\x12.\n" +
-	"\x03row\x18\x01 \x01(\v2\x1c.holomush.plugin.v1.AuditRowR\x03row2\xd6\x01\n" +
+	"\x03row\x18\x01 \x01(\v2\x1c.holomush.plugin.v1.AuditRowR\x03row\"N\n" +
+	"\x1aDecryptOwnAuditRowsRequest\x120\n" +
+	"\x04rows\x18\x01 \x03(\v2\x1c.holomush.plugin.v1.AuditRowR\x04rows\"V\n" +
+	"\x1bDecryptOwnAuditRowsResponse\x127\n" +
+	"\aresults\x18\x01 \x03(\v2\x1d.holomush.plugin.v1.RowResultR\aresults\"x\n" +
+	"\tRowResult\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\fR\x02id\x12\x1e\n" +
+	"\tplaintext\x18\x02 \x01(\fH\x00R\tplaintext\x120\n" +
+	"\x13no_plaintext_reason\x18\x03 \x01(\tH\x00R\x11noPlaintextReasonB\t\n" +
+	"\aoutcome2\xd6\x01\n" +
 	"\x12PluginAuditService\x12[\n" +
 	"\n" +
 	"AuditEvent\x12%.holomush.plugin.v1.AuditEventRequest\x1a&.holomush.plugin.v1.AuditEventResponse\x12c\n" +
@@ -438,33 +641,38 @@ func file_holomush_plugin_v1_audit_proto_rawDescGZIP() []byte {
 	return file_holomush_plugin_v1_audit_proto_rawDescData
 }
 
-var file_holomush_plugin_v1_audit_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_holomush_plugin_v1_audit_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_holomush_plugin_v1_audit_proto_goTypes = []any{
-	(*AuditRow)(nil),              // 0: holomush.plugin.v1.AuditRow
-	(*AuditEventRequest)(nil),     // 1: holomush.plugin.v1.AuditEventRequest
-	(*AuditEventResponse)(nil),    // 2: holomush.plugin.v1.AuditEventResponse
-	(*QueryHistoryRequest)(nil),   // 3: holomush.plugin.v1.QueryHistoryRequest
-	(*QueryHistoryResponse)(nil),  // 4: holomush.plugin.v1.QueryHistoryResponse
-	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
-	(*v1.Actor)(nil),              // 6: holomush.eventbus.v1.Actor
+	(*AuditRow)(nil),                    // 0: holomush.plugin.v1.AuditRow
+	(*AuditEventRequest)(nil),           // 1: holomush.plugin.v1.AuditEventRequest
+	(*AuditEventResponse)(nil),          // 2: holomush.plugin.v1.AuditEventResponse
+	(*QueryHistoryRequest)(nil),         // 3: holomush.plugin.v1.QueryHistoryRequest
+	(*QueryHistoryResponse)(nil),        // 4: holomush.plugin.v1.QueryHistoryResponse
+	(*DecryptOwnAuditRowsRequest)(nil),  // 5: holomush.plugin.v1.DecryptOwnAuditRowsRequest
+	(*DecryptOwnAuditRowsResponse)(nil), // 6: holomush.plugin.v1.DecryptOwnAuditRowsResponse
+	(*RowResult)(nil),                   // 7: holomush.plugin.v1.RowResult
+	(*timestamppb.Timestamp)(nil),       // 8: google.protobuf.Timestamp
+	(*v1.Actor)(nil),                    // 9: holomush.eventbus.v1.Actor
 }
 var file_holomush_plugin_v1_audit_proto_depIdxs = []int32{
-	5, // 0: holomush.plugin.v1.AuditRow.timestamp:type_name -> google.protobuf.Timestamp
-	6, // 1: holomush.plugin.v1.AuditRow.actor:type_name -> holomush.eventbus.v1.Actor
-	0, // 2: holomush.plugin.v1.AuditEventRequest.row:type_name -> holomush.plugin.v1.AuditRow
-	5, // 3: holomush.plugin.v1.QueryHistoryRequest.not_before:type_name -> google.protobuf.Timestamp
-	5, // 4: holomush.plugin.v1.QueryHistoryRequest.not_after:type_name -> google.protobuf.Timestamp
-	6, // 5: holomush.plugin.v1.QueryHistoryRequest.caller:type_name -> holomush.eventbus.v1.Actor
-	0, // 6: holomush.plugin.v1.QueryHistoryResponse.row:type_name -> holomush.plugin.v1.AuditRow
-	1, // 7: holomush.plugin.v1.PluginAuditService.AuditEvent:input_type -> holomush.plugin.v1.AuditEventRequest
-	3, // 8: holomush.plugin.v1.PluginAuditService.QueryHistory:input_type -> holomush.plugin.v1.QueryHistoryRequest
-	2, // 9: holomush.plugin.v1.PluginAuditService.AuditEvent:output_type -> holomush.plugin.v1.AuditEventResponse
-	4, // 10: holomush.plugin.v1.PluginAuditService.QueryHistory:output_type -> holomush.plugin.v1.QueryHistoryResponse
-	9, // [9:11] is the sub-list for method output_type
-	7, // [7:9] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	8,  // 0: holomush.plugin.v1.AuditRow.timestamp:type_name -> google.protobuf.Timestamp
+	9,  // 1: holomush.plugin.v1.AuditRow.actor:type_name -> holomush.eventbus.v1.Actor
+	0,  // 2: holomush.plugin.v1.AuditEventRequest.row:type_name -> holomush.plugin.v1.AuditRow
+	8,  // 3: holomush.plugin.v1.QueryHistoryRequest.not_before:type_name -> google.protobuf.Timestamp
+	8,  // 4: holomush.plugin.v1.QueryHistoryRequest.not_after:type_name -> google.protobuf.Timestamp
+	9,  // 5: holomush.plugin.v1.QueryHistoryRequest.caller:type_name -> holomush.eventbus.v1.Actor
+	0,  // 6: holomush.plugin.v1.QueryHistoryResponse.row:type_name -> holomush.plugin.v1.AuditRow
+	0,  // 7: holomush.plugin.v1.DecryptOwnAuditRowsRequest.rows:type_name -> holomush.plugin.v1.AuditRow
+	7,  // 8: holomush.plugin.v1.DecryptOwnAuditRowsResponse.results:type_name -> holomush.plugin.v1.RowResult
+	1,  // 9: holomush.plugin.v1.PluginAuditService.AuditEvent:input_type -> holomush.plugin.v1.AuditEventRequest
+	3,  // 10: holomush.plugin.v1.PluginAuditService.QueryHistory:input_type -> holomush.plugin.v1.QueryHistoryRequest
+	2,  // 11: holomush.plugin.v1.PluginAuditService.AuditEvent:output_type -> holomush.plugin.v1.AuditEventResponse
+	4,  // 12: holomush.plugin.v1.PluginAuditService.QueryHistory:output_type -> holomush.plugin.v1.QueryHistoryResponse
+	11, // [11:13] is the sub-list for method output_type
+	9,  // [9:11] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_holomush_plugin_v1_audit_proto_init() }
@@ -473,13 +681,17 @@ func file_holomush_plugin_v1_audit_proto_init() {
 		return
 	}
 	file_holomush_plugin_v1_audit_proto_msgTypes[0].OneofWrappers = []any{}
+	file_holomush_plugin_v1_audit_proto_msgTypes[7].OneofWrappers = []any{
+		(*RowResult_Plaintext)(nil),
+		(*RowResult_NoPlaintextReason)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_plugin_v1_audit_proto_rawDesc), len(file_holomush_plugin_v1_audit_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

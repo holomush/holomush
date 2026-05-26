@@ -47,12 +47,15 @@ crypto:
     # to say/pose (which are location-bounded). See ADR holomush-sb3n.
     - event_type: scene_pose
       sensitivity: always
+      readback: true
       description: "IC pose by a scene participant; visible to all participants in the scene's IC stream."
     - event_type: scene_say
       sensitivity: always
+      readback: true
       description: "IC speech by a scene participant; visible to all participants in the scene's IC stream."
     - event_type: scene_emit
       sensitivity: always
+      readback: true
       description: "IC generic emit by a scene participant; visible to all participants in the scene's IC stream."
     - event_type: scene_ooc
       sensitivity: always

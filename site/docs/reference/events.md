@@ -6,3 +6,4 @@ Each event type identifier is qualified with its owning plugin, e.g. `core-commu
 
 - [core-communication](events/core-communication.md)
 - [core-objects](events/core-objects.md)
+- [core-scenes](events/core-scenes.md)

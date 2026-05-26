@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/plugin/v1/audit.proto.
  */
 export const file_holomush_plugin_v1_audit: GenFile = /*@__PURE__*/
-  fileDesc("Ch5ob2xvbXVzaC9wbHVnaW4vdjEvYXVkaXQucHJvdG8SEmhvbG9tdXNoLnBsdWdpbi52MSKQAgoIQXVkaXRSb3cSCgoCaWQYASABKAwSDwoHc3ViamVjdBgCIAEoCRIMCgR0eXBlGAMgASgJEi0KCXRpbWVzdGFtcBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKgoFYWN0b3IYBSABKAsyGy5ob2xvbXVzaC5ldmVudGJ1cy52MS5BY3RvchINCgVjb2RlYxgGIAEoCRIPCgdwYXlsb2FkGAcgASgMEhQKB2Rla19yZWYYCCABKARIAIgBARIYCgtkZWtfdmVyc2lvbhgJIAEoDUgBiAEBEhIKCnNjaGVtYV92ZXIYCiABKAVCCgoIX2Rla19yZWZCDgoMX2Rla192ZXJzaW9uIj4KEUF1ZGl0RXZlbnRSZXF1ZXN0EikKA3JvdxgBIAEoCzIcLmhvbG9tdXNoLnBsdWdpbi52MS5BdWRpdFJvdyIUChJBdWRpdEV2ZW50UmVzcG9uc2Ui9wEKE1F1ZXJ5SGlzdG9yeVJlcXVlc3QSDwoHc3ViamVjdBgBIAEoCRINCgVhZnRlchgCIAEoDBIOCgZiZWZvcmUYAyABKAwSEQoJcGFnZV9zaXplGAQgASgFEhEKCWRpcmVjdGlvbhgFIAEoBRIuCgpub3RfYmVmb3JlGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBItCglub3RfYWZ0ZXIYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKBmNhbGxlchgIIAEoCzIbLmhvbG9tdXNoLmV2ZW50YnVzLnYxLkFjdG9yIkEKFFF1ZXJ5SGlzdG9yeVJlc3BvbnNlEikKA3JvdxgBIAEoCzIcLmhvbG9tdXNoLnBsdWdpbi52MS5BdWRpdFJvdzLWAQoSUGx1Z2luQXVkaXRTZXJ2aWNlElsKCkF1ZGl0RXZlbnQSJS5ob2xvbXVzaC5wbHVnaW4udjEuQXVkaXRFdmVudFJlcXVlc3QaJi5ob2xvbXVzaC5wbHVnaW4udjEuQXVkaXRFdmVudFJlc3BvbnNlEmMKDFF1ZXJ5SGlzdG9yeRInLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeUhpc3RvcnlSZXF1ZXN0GiguaG9sb211c2gucGx1Z2luLnYxLlF1ZXJ5SGlzdG9yeVJlc3BvbnNlMAFCRFpCZ2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvcGx1Z2luL3YxO3BsdWdpbnYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_holomush_eventbus_v1_eventbus]);
+  fileDesc("Ch5ob2xvbXVzaC9wbHVnaW4vdjEvYXVkaXQucHJvdG8SEmhvbG9tdXNoLnBsdWdpbi52MSKQAgoIQXVkaXRSb3cSCgoCaWQYASABKAwSDwoHc3ViamVjdBgCIAEoCRIMCgR0eXBlGAMgASgJEi0KCXRpbWVzdGFtcBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKgoFYWN0b3IYBSABKAsyGy5ob2xvbXVzaC5ldmVudGJ1cy52MS5BY3RvchINCgVjb2RlYxgGIAEoCRIPCgdwYXlsb2FkGAcgASgMEhQKB2Rla19yZWYYCCABKARIAIgBARIYCgtkZWtfdmVyc2lvbhgJIAEoDUgBiAEBEhIKCnNjaGVtYV92ZXIYCiABKAVCCgoIX2Rla19yZWZCDgoMX2Rla192ZXJzaW9uIj4KEUF1ZGl0RXZlbnRSZXF1ZXN0EikKA3JvdxgBIAEoCzIcLmhvbG9tdXNoLnBsdWdpbi52MS5BdWRpdFJvdyIUChJBdWRpdEV2ZW50UmVzcG9uc2Ui9wEKE1F1ZXJ5SGlzdG9yeVJlcXVlc3QSDwoHc3ViamVjdBgBIAEoCRINCgVhZnRlchgCIAEoDBIOCgZiZWZvcmUYAyABKAwSEQoJcGFnZV9zaXplGAQgASgFEhEKCWRpcmVjdGlvbhgFIAEoBRIuCgpub3RfYmVmb3JlGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBItCglub3RfYWZ0ZXIYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKBmNhbGxlchgIIAEoCzIbLmhvbG9tdXNoLmV2ZW50YnVzLnYxLkFjdG9yIkEKFFF1ZXJ5SGlzdG9yeVJlc3BvbnNlEikKA3JvdxgBIAEoCzIcLmhvbG9tdXNoLnBsdWdpbi52MS5BdWRpdFJvdyJIChpEZWNyeXB0T3duQXVkaXRSb3dzUmVxdWVzdBIqCgRyb3dzGAEgAygLMhwuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0Um93Ik0KG0RlY3J5cHRPd25BdWRpdFJvd3NSZXNwb25zZRIuCgdyZXN1bHRzGAEgAygLMh0uaG9sb211c2gucGx1Z2luLnYxLlJvd1Jlc3VsdCJWCglSb3dSZXN1bHQSCgoCaWQYASABKAwSEwoJcGxhaW50ZXh0GAIgASgMSAASHQoTbm9fcGxhaW50ZXh0X3JlYXNvbhgDIAEoCUgAQgkKB291dGNvbWUy1gEKElBsdWdpbkF1ZGl0U2VydmljZRJbCgpBdWRpdEV2ZW50EiUuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0RXZlbnRSZXF1ZXN0GiYuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0RXZlbnRSZXNwb25zZRJjCgxRdWVyeUhpc3RvcnkSJy5ob2xvbXVzaC5wbHVnaW4udjEuUXVlcnlIaXN0b3J5UmVxdWVzdBooLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeUhpc3RvcnlSZXNwb25zZTABQkRaQmdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL3BsdWdpbi92MTtwbHVnaW52MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_holomush_eventbus_v1_eventbus]);
 
 /**
  * AuditRow is the canonical wire shape for plugin-owned audit rows.
@@ -215,6 +215,99 @@ export type QueryHistoryResponse = Message<"holomush.plugin.v1.QueryHistoryRespo
  */
 export const QueryHistoryResponseSchema: GenMessage<QueryHistoryResponse> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_audit, 4);
+
+/**
+ * DecryptOwnAuditRowsRequest carries the calling plugin's OWN audit rows for
+ * host-side read-back decryption (PluginHostService.DecryptOwnAuditRows).
+ * The host enforces OwnerMap subject ownership (g1) per row; rows whose
+ * subject is owned by a different plugin are refused with not_owner and never
+ * decrypted. The batch is REJECTED (not clamped) when it exceeds the
+ * server-side cap of 500.
+ *
+ * @generated from message holomush.plugin.v1.DecryptOwnAuditRowsRequest
+ */
+export type DecryptOwnAuditRowsRequest = Message<"holomush.plugin.v1.DecryptOwnAuditRowsRequest"> & {
+  /**
+   * @generated from field: repeated holomush.plugin.v1.AuditRow rows = 1;
+   */
+  rows: AuditRow[];
+};
+
+/**
+ * Describes the message holomush.plugin.v1.DecryptOwnAuditRowsRequest.
+ * Use `create(DecryptOwnAuditRowsRequestSchema)` to create a new message.
+ */
+export const DecryptOwnAuditRowsRequestSchema: GenMessage<DecryptOwnAuditRowsRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_plugin_v1_audit, 5);
+
+/**
+ * DecryptOwnAuditRowsResponse returns one RowResult per request row, in the
+ * same order (1:1 positional correspondence, INV-RB-12).
+ *
+ * @generated from message holomush.plugin.v1.DecryptOwnAuditRowsResponse
+ */
+export type DecryptOwnAuditRowsResponse = Message<"holomush.plugin.v1.DecryptOwnAuditRowsResponse"> & {
+  /**
+   * @generated from field: repeated holomush.plugin.v1.RowResult results = 1;
+   */
+  results: RowResult[];
+};
+
+/**
+ * Describes the message holomush.plugin.v1.DecryptOwnAuditRowsResponse.
+ * Use `create(DecryptOwnAuditRowsResponseSchema)` to create a new message.
+ */
+export const DecryptOwnAuditRowsResponseSchema: GenMessage<DecryptOwnAuditRowsResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_plugin_v1_audit, 6);
+
+/**
+ * RowResult is the per-row outcome of DecryptOwnAuditRows. Exactly one of
+ * plaintext / no_plaintext_reason is populated: plaintext is set iff the row
+ * decrypted; no_plaintext_reason is set iff the row was refused (e.g.
+ * "not_owner", "downgrade_refused", "dek_missing", "internal").
+ *
+ * @generated from message holomush.plugin.v1.RowResult
+ */
+export type RowResult = Message<"holomush.plugin.v1.RowResult"> & {
+  /**
+   * echoes AuditRow.id for correlation
+   *
+   * @generated from field: bytes id = 1;
+   */
+  id: Uint8Array;
+
+  /**
+   * Exactly one outcome arm is set: plaintext iff the row decrypted,
+   * no_plaintext_reason iff it was refused. The oneof makes both-set /
+   * neither-set unrepresentable and distinguishes decrypted-to-empty from refused.
+   *
+   * @generated from oneof holomush.plugin.v1.RowResult.outcome
+   */
+  outcome: {
+    /**
+     * set iff decrypted
+     *
+     * @generated from field: bytes plaintext = 2;
+     */
+    value: Uint8Array;
+    case: "plaintext";
+  } | {
+    /**
+     * set iff refused
+     *
+     * @generated from field: string no_plaintext_reason = 3;
+     */
+    value: string;
+    case: "noPlaintextReason";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message holomush.plugin.v1.RowResult.
+ * Use `create(RowResultSchema)` to create a new message.
+ */
+export const RowResultSchema: GenMessage<RowResult> = /*@__PURE__*/
+  messageDesc(file_holomush_plugin_v1_audit, 7);
 
 /**
  * PluginAuditService is implemented by plugins that declare audit

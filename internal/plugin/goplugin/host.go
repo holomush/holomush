@@ -152,6 +152,13 @@ func WithHistoryReader(hr plugins.HistoryReader) HostOption {
 	return func(h *Host) { h.historyReader = hr }
 }
 
+// WithReadbackDecryptor configures the host with the read-back decryptor used
+// by the DecryptOwnAuditRows RPC. The interface lives in package plugin so the
+// Manager can late-inject it via ReadbackDepsConfigurer.
+func WithReadbackDecryptor(d plugins.ReadbackDecryptor) HostOption {
+	return func(h *Host) { h.readbackDecryptor = d }
+}
+
 // WithIdentityRegistry configures the host with an IdentityRegistry for
 // ULID-string actor stamping at DeliverEvent and DeliverCommand call sites.
 // In production this is wired via Manager.RegisterHost (findOptional pattern).
@@ -188,6 +195,7 @@ type Host struct {
 	focusCoordinator  focus.Coordinator
 	connectionSender  focus.ConnectionSender
 	historyReader     plugins.HistoryReader
+	readbackDecryptor plugins.ReadbackDecryptor
 	identityRegistry  plugins.IdentityRegistry
 	engine            types.AccessPolicyEngine
 	auditor           pluginauthz.Auditor
@@ -324,6 +332,23 @@ func (h *Host) HistoryReader() plugins.HistoryReader {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.historyReader
+}
+
+// SetReadbackDecryptor injects the read-back decryptor after construction.
+// Same late-binding rationale as SetHistoryReader: the OwnerMap and crypto
+// deps are only assembled once the plugin subsystem has started and the
+// history reader is built (cmd/holomush/sub_grpc.go).
+func (h *Host) SetReadbackDecryptor(d plugins.ReadbackDecryptor) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.readbackDecryptor = d
+}
+
+// ReadbackDecryptor returns the current read-back decryptor, or nil if not set.
+func (h *Host) ReadbackDecryptor() plugins.ReadbackDecryptor {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.readbackDecryptor
 }
 
 // SetIdentityRegistry implements plugins.IdentityRegistryConfigurer.

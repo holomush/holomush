@@ -52,6 +52,13 @@ func ValidateCrypto(m *Manifest) error {
 				Errorf("crypto.emits has duplicate event_type")
 		}
 		seenEmit[eventType] = true
+		if e.Readback && e.Sensitivity == SensitivityNever {
+			return oops.Code("PLUGIN_CRYPTO_READBACK_ON_NEVER").
+				With("plugin", m.Name).
+				With("event_type", e.EventType).
+				With("emits_index", i).
+				Errorf("readback:true is invalid on a sensitivity:never type")
+		}
 	}
 
 	// Rule 3: requests_decryption is well-formed.

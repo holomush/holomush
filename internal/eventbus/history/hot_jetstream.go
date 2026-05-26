@@ -593,7 +593,7 @@ func decodeAndAuthorizeHistory(
 
 	return decodeAuthorizeAndDispatch(
 		ctx, envelope, codecName, keyID, keyVersion,
-		identity, guard, dekMgr, auditEm,
+		identity, guard, dekMgr, auditEm, false,
 	)
 }
 

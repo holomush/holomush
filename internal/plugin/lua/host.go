@@ -25,8 +25,9 @@ import (
 
 // Compile-time interface checks.
 var (
-	_ plugins.Host                = (*Host)(nil)
-	_ plugins.FocusDepsConfigurer = (*Host)(nil)
+	_ plugins.Host                   = (*Host)(nil)
+	_ plugins.FocusDepsConfigurer    = (*Host)(nil)
+	_ plugins.ReadbackDepsConfigurer = (*Host)(nil)
 )
 
 // luaPlugin holds compiled Lua code for a plugins.
@@ -116,6 +117,20 @@ func (h *Host) SetHistoryReader(hr plugins.HistoryReader) {
 	if h.hostFuncs != nil {
 		h.hostFuncs.SetHistoryReader(hr)
 	}
+}
+
+// SetReadbackDecryptor injects the read-back decryptor into the hostfunc bridge,
+// adapting the per-row plugins.ReadbackDecryptor to the batch-oriented
+// hostfunc.AuditDecryptor so Lua plugins can call decrypt_own_audit_rows.
+func (h *Host) SetReadbackDecryptor(d plugins.ReadbackDecryptor) {
+	if h.hostFuncs == nil {
+		return
+	}
+	if d == nil {
+		h.hostFuncs.SetAuditDecryptor(nil)
+		return
+	}
+	h.hostFuncs.SetAuditDecryptor(&readbackDecryptorAdapter{d: d})
 }
 
 // Load reads and validates a Lua plugins.

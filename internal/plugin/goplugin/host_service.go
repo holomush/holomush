@@ -641,6 +641,37 @@ func (s *pluginHostServiceServer) Evaluate(ctx context.Context, req *pluginv1.Pl
 	}, nil
 }
 
+// DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN audit rows
+// host-side (the plugin never holds a DEK). Each row is gated by the OwnerMap
+// g1 ownership check inside the ReadbackDecryptor; rows owned by a different
+// plugin are refused with no_plaintext_reason="not_owner" before any decrypt
+// (INV-RB-2). Results are returned 1:1 in request order (INV-RB-12). The
+// per-call batch cap (DECRYPT_BATCH_TOO_LARGE on an over-cap batch) is enforced
+// inside the common ReadbackDecryptor.DecryptOwnRows path — the SAME bound the
+// Lua hostfunc adapter inherits, so neither runtime gets an unbounded batch the
+// other is denied (plugin-runtime-symmetry invariant).
+func (s *pluginHostServiceServer) DecryptOwnAuditRows(ctx context.Context, req *pluginv1.DecryptOwnAuditRowsRequest) (*pluginv1.DecryptOwnAuditRowsResponse, error) {
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+	dec := s.host.ReadbackDecryptor()
+	if dec == nil {
+		return nil, oops.With("plugin", s.pluginName).New("read-back decryptor not configured")
+	}
+
+	// The instance ID is not bound to the host-service struct; the plugin
+	// name is the identity that matters for g1 ownership and the ReadBack
+	// AuthGuard branch. Empty instance is informational only on the audit
+	// record.
+	const instanceID = ""
+
+	results, err := dec.DecryptOwnRows(ctx, s.pluginName, instanceID, req.GetRows())
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
+	}
+	return &pluginv1.DecryptOwnAuditRowsResponse{Results: results}, nil
+}
+
 // RequestEmitToken issues a self-token bound to {ActorPlugin, pluginName}.
 //
 // Self-tokens cover the gap left by dispatch-token authentication when a

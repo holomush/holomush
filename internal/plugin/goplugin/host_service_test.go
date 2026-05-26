@@ -1474,3 +1474,118 @@ func TestEvaluateRejectedTokenFailsClosed(t *testing.T) {
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EMIT_TOKEN_REJECTED")
 }
+
+// stubReadbackDecryptor records DecryptOwnRow calls and returns a fixed
+// per-row result keyed off the row's subject so tests can drive both the
+// not_owner refusal path and the happy path without real crypto deps.
+type stubReadbackDecryptor struct {
+	calls  []stubDecryptCall
+	result func(row *pluginv1.AuditRow) *pluginv1.RowResult
+}
+
+type stubDecryptCall struct {
+	pluginName string
+	instanceID string
+	subject    string
+}
+
+func (s *stubReadbackDecryptor) DecryptOwnRow(_ context.Context, pluginName, instanceID string, row *pluginv1.AuditRow) *pluginv1.RowResult {
+	s.calls = append(s.calls, stubDecryptCall{pluginName: pluginName, instanceID: instanceID, subject: row.GetSubject()})
+	if s.result != nil {
+		return s.result(row)
+	}
+	return &pluginv1.RowResult{Id: row.GetId()}
+}
+
+// DecryptOwnRows mirrors *history.ReadbackDecryptor.DecryptOwnRows: it enforces
+// the same maxDecryptBatch REJECT cap on the common path so the handler test
+// (TestDecryptOwnAuditRowsCapsBatchAt500) exercises the real cap behavior — an
+// over-cap batch is rejected with DECRYPT_BATCH_TOO_LARGE before any row is
+// decrypted. The cap value is duplicated here only because this stub stands in
+// for the production common-path decryptor in a different package.
+const stubMaxDecryptBatch = 500
+
+func (s *stubReadbackDecryptor) DecryptOwnRows(ctx context.Context, pluginName, instanceID string, rows []*pluginv1.AuditRow) ([]*pluginv1.RowResult, error) {
+	if len(rows) > stubMaxDecryptBatch {
+		return nil, oops.Code("DECRYPT_BATCH_TOO_LARGE").
+			With("plugin", pluginName).
+			With("count", len(rows)).
+			Errorf("decrypt batch exceeds cap %d", stubMaxDecryptBatch)
+	}
+	results := make([]*pluginv1.RowResult, 0, len(rows))
+	for _, row := range rows {
+		results = append(results, s.DecryptOwnRow(ctx, pluginName, instanceID, row))
+	}
+	return results, nil
+}
+
+func newDecryptTestServer(pluginName string, dec plugins.ReadbackDecryptor) *pluginHostServiceServer {
+	h := &Host{
+		plugins:           make(map[string]*loadedPlugin),
+		readbackDecryptor: dec,
+	}
+	return &pluginHostServiceServer{host: h, pluginName: pluginName}
+}
+
+// TestDecryptOwnAuditRowsRejectsForeignSubject asserts the handler delegates
+// each row to the decryptor and faithfully surfaces a not_owner refusal (the
+// g1 OwnerMap gate, exercised end-to-end in package history) without leaking
+// plaintext.
+func TestDecryptOwnAuditRowsRejectsForeignSubject(t *testing.T) {
+	t.Parallel()
+	dec := &stubReadbackDecryptor{
+		result: func(row *pluginv1.AuditRow) *pluginv1.RowResult {
+			// core-scenes asks to decrypt a row whose subject is owned by a
+			// DIFFERENT plugin → not_owner, no plaintext.
+			return &pluginv1.RowResult{Id: row.GetId(), Outcome: &pluginv1.RowResult_NoPlaintextReason{NoPlaintextReason: "not_owner"}}
+		},
+	}
+	srv := newDecryptTestServer("core-scenes", dec)
+
+	resp, err := srv.DecryptOwnAuditRows(context.Background(), &pluginv1.DecryptOwnAuditRowsRequest{
+		Rows: []*pluginv1.AuditRow{
+			{Id: []byte("row-1"), Subject: "events.main.channel.01ABC.msg"},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetResults(), 1)
+	assert.Equal(t, []byte("row-1"), resp.GetResults()[0].GetId())
+	assert.Equal(t, "not_owner", resp.GetResults()[0].GetNoPlaintextReason())
+	assert.Nil(t, resp.GetResults()[0].GetPlaintext(), "refused row must yield no plaintext")
+
+	require.Len(t, dec.calls, 1)
+	assert.Equal(t, "core-scenes", dec.calls[0].pluginName)
+	assert.Equal(t, "events.main.channel.01ABC.msg", dec.calls[0].subject)
+}
+
+// TestDecryptOwnAuditRowsCapsBatchAt500 asserts the server REJECTS (does not
+// clamp) a batch larger than maxDecryptBatch with DECRYPT_BATCH_TOO_LARGE and
+// never invokes the decryptor.
+func TestDecryptOwnAuditRowsCapsBatchAt500(t *testing.T) {
+	t.Parallel()
+	dec := &stubReadbackDecryptor{}
+	srv := newDecryptTestServer("core-scenes", dec)
+
+	rows := make([]*pluginv1.AuditRow, stubMaxDecryptBatch+1)
+	for i := range rows {
+		rows[i] = &pluginv1.AuditRow{Id: []byte(strconv.Itoa(i)), Subject: "events.main.scene.01ABC.ic"}
+	}
+
+	resp, err := srv.DecryptOwnAuditRows(context.Background(), &pluginv1.DecryptOwnAuditRowsRequest{Rows: rows})
+	require.Error(t, err)
+	assert.Nil(t, resp, "over-cap batch must be rejected, not partially served")
+	errutil.AssertErrorCode(t, err, "DECRYPT_BATCH_TOO_LARGE")
+	assert.Empty(t, dec.calls, "REJECT (not clamp): decryptor must not be invoked for an over-cap batch")
+}
+
+// TestDecryptOwnAuditRowsReturnsErrorWhenDecryptorNil asserts the handler
+// fails closed when no read-back decryptor is wired.
+func TestDecryptOwnAuditRowsReturnsErrorWhenDecryptorNil(t *testing.T) {
+	t.Parallel()
+	srv := newDecryptTestServer("core-scenes", nil)
+
+	_, err := srv.DecryptOwnAuditRows(context.Background(), &pluginv1.DecryptOwnAuditRowsRequest{
+		Rows: []*pluginv1.AuditRow{{Id: []byte("row-1"), Subject: "events.main.scene.01ABC.ic"}},
+	})
+	require.Error(t, err)
+}

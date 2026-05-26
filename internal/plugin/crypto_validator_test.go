@@ -164,6 +164,32 @@ func TestValidateCrypto(t *testing.T) {
 	}
 }
 
+// TestCryptoValidatorRejectsReadbackOnNeverType ensures that readback:true on a
+// sensitivity:never emit is rejected with PLUGIN_CRYPTO_READBACK_ON_NEVER.
+func TestCryptoValidatorRejectsReadbackOnNeverType(t *testing.T) {
+	t.Parallel()
+	err := plugins.ValidateCrypto(&plugins.Manifest{
+		Name: "core-scenes",
+		Crypto: &plugins.CryptoSection{Emits: []plugins.CryptoEmit{
+			{EventType: "scene_join_ic", Sensitivity: plugins.SensitivityNever, Readback: true},
+		}},
+	})
+	errutil.AssertErrorCode(t, err, "PLUGIN_CRYPTO_READBACK_ON_NEVER")
+}
+
+// TestCryptoValidatorAllowsReadbackOnAlwaysType verifies that readback:true is
+// accepted when paired with sensitivity:always.
+func TestCryptoValidatorAllowsReadbackOnAlwaysType(t *testing.T) {
+	t.Parallel()
+	err := plugins.ValidateCrypto(&plugins.Manifest{
+		Name: "core-scenes",
+		Crypto: &plugins.CryptoSection{Emits: []plugins.CryptoEmit{
+			{EventType: "scene_pose", Sensitivity: plugins.SensitivityAlways, Readback: true},
+		}},
+	})
+	require.NoError(t, err)
+}
+
 // TestValidateCryptoNormalizesEventTypeForResolveLookup pins the round-trip
 // between ValidateCrypto and ResolveCryptoRefs. ValidateCrypto MUST trim
 // stored event_type values so that a self-reference like "p:whisper" resolves

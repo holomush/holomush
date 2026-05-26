@@ -63,6 +63,8 @@ Extending = [
   "extending/plugin-guide.md",
   "extending/access-control.md",
   "extending/abac-attribute-resolver.md",
+  "extending/event-sensitivity.md",
+  "extending/plugin-crypto-readback.md",
   "extending/api-guide.md",
   "extending/events.md",
 ]
@@ -76,6 +78,7 @@ Contributing = [
   "contributing/database-migrations.md",
   "contributing/event-store.md",
   "contributing/event-delivery.md",
+  "contributing/event-emit-pipeline.md",
   "contributing/hostfunc-context-audit.md",
   "contributing/lifecycle-and-health.md",
   "contributing/pr-guide.md",

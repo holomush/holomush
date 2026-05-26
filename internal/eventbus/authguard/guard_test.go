@@ -26,7 +26,10 @@ func (f *fakeParticipants) Participants(_ context.Context, _ codec.KeyID, _ uint
 	return f.list, nil
 }
 
-type fakeManifest struct{ allowed map[string]map[string]bool }
+type fakeManifest struct {
+	allowed  map[string]map[string]bool
+	readback bool
+}
 
 func (f *fakeManifest) PluginRequestsDecryption(plugin, eventType string) bool {
 	if perPlugin := f.allowed[plugin]; perPlugin != nil {
@@ -34,6 +37,8 @@ func (f *fakeManifest) PluginRequestsDecryption(plugin, eventType string) bool {
 	}
 	return false
 }
+
+func (f *fakeManifest) PluginCanReadBack(_, _ string) bool { return f.readback }
 
 type fakeBackpressure struct{ throttle bool }
 
@@ -323,4 +328,111 @@ func TestGuardCheckPluginABACEvalErrorPropagates(t *testing.T) {
 	})
 	require.Error(t, checkErr)
 	errutil.AssertErrorCode(t, checkErr, "AUTHGUARD_ABAC_EVAL_FAILED")
+}
+
+// TestCheckPluginReadbackPermitsWithManifestFlag verifies the read-back path
+// permits on the manifest readback flag alone (gate g2). A DenyAllEngine ABAC
+// proves the read-back grant carries no ABAC dependency (spec §7.5); OwnerMap
+// (g1) is enforced upstream at the primitive entry.
+func TestCheckPluginReadbackPermitsWithManifestFlag(t *testing.T) {
+	t.Parallel()
+	g, err := authguard.New(
+		&fakeParticipants{},
+		&fakeManifest{readback: true},
+		policytest.DenyAllEngine(),
+		&fakeBackpressure{},
+	)
+	require.NoError(t, err)
+
+	id, err := authguard.NewPluginIdentity("core-scenes", "01INST")
+	require.NoError(t, err)
+	dec, err := g.Check(t.Context(), authguard.CheckRequest{
+		Identity:  id,
+		EventType: "scene_pose",
+		ReadBack:  true,
+		KeyID:     codec.KeyID(7), KeyVersion: 1,
+	})
+	require.NoError(t, err)
+	assert.True(t, dec.Permit, "permit on manifest flag alone — no ABAC dependency")
+	assert.Equal(t, authguard.PermitPluginReadbackGrant, dec.Code)
+}
+
+// TestCheckPluginReadbackDeniedWithoutManifestFlag verifies the read-back path
+// denies when the manifest does not declare crypto.emits[].readback.
+func TestCheckPluginReadbackDeniedWithoutManifestFlag(t *testing.T) {
+	t.Parallel()
+	g, err := authguard.New(
+		&fakeParticipants{},
+		&fakeManifest{readback: false},
+		policytest.DenyAllEngine(),
+		&fakeBackpressure{},
+	)
+	require.NoError(t, err)
+
+	id, err := authguard.NewPluginIdentity("core-scenes", "01INST")
+	require.NoError(t, err)
+	dec, err := g.Check(t.Context(), authguard.CheckRequest{
+		Identity:  id,
+		EventType: "scene_pose",
+		ReadBack:  true,
+		KeyID:     codec.KeyID(7), KeyVersion: 1,
+	})
+	require.NoError(t, err)
+	assert.False(t, dec.Permit)
+	assert.Equal(t, authguard.DenyReadbackManifestMissing, dec.Code)
+}
+
+// TestCheckPluginReadbackFalseUsesLiveDeliveryGate verifies ReadBack=false
+// routes to the existing live-delivery checkPlugin path, which denies when the
+// manifest does not declare requests_decryption — regardless of the readback
+// flag being set.
+func TestCheckPluginReadbackFalseUsesLiveDeliveryGate(t *testing.T) {
+	t.Parallel()
+	g, err := authguard.New(
+		&fakeParticipants{},
+		&fakeManifest{readback: true}, // allowed nil → PluginRequestsDecryption false
+		policytest.AllowAllEngine(),
+		&fakeBackpressure{},
+	)
+	require.NoError(t, err)
+
+	id, err := authguard.NewPluginIdentity("core-scenes", "01INST")
+	require.NoError(t, err)
+	dec, err := g.Check(t.Context(), authguard.CheckRequest{
+		Identity:  id,
+		EventType: "scene_pose",
+		ReadBack:  false,
+		KeyID:     codec.KeyID(7), KeyVersion: 1,
+	})
+	require.NoError(t, err)
+	assert.False(t, dec.Permit, "live-delivery gate denies without requests_decryption")
+	assert.Equal(t, authguard.DenyManifestDeclarationMissing, dec.Code)
+}
+
+// TestCheckPluginReadbackBackpressureDeniesEarly verifies the read-back path
+// short-circuits on audit backpressure BEFORE the manifest check (gate g2). A
+// fakeManifest with readback:true proves the deny comes from backpressure, not
+// a missing manifest declaration — mirroring the live-delivery precedent in
+// TestGuardBranchPluginBackpressureDeniesEarly.
+func TestCheckPluginReadbackBackpressureDeniesEarly(t *testing.T) {
+	t.Parallel()
+	g, err := authguard.New(
+		&fakeParticipants{},
+		&fakeManifest{readback: true},
+		policytest.AllowAllEngine(),
+		&fakeBackpressure{throttle: true},
+	)
+	require.NoError(t, err)
+
+	id, err := authguard.NewPluginIdentity("core-scenes", "01INST")
+	require.NoError(t, err)
+	dec, err := g.Check(t.Context(), authguard.CheckRequest{
+		Identity:  id,
+		EventType: "scene_pose",
+		ReadBack:  true,
+		KeyID:     codec.KeyID(7), KeyVersion: 1,
+	})
+	require.NoError(t, err)
+	assert.False(t, dec.Permit)
+	assert.Equal(t, authguard.DenyAuditBackpressure, dec.Code)
 }

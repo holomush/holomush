@@ -63,6 +63,19 @@ func (m mapManifestLookup) PluginRequestsDecryption(name, eventType string) bool
 	return false
 }
 
+func (m mapManifestLookup) PluginCanReadBack(name, eventType string) bool {
+	manifest, ok := m[name]
+	if !ok || manifest == nil || manifest.Crypto == nil {
+		return false
+	}
+	for _, e := range manifest.Crypto.Emits {
+		if e.EventType == eventType {
+			return e.Readback
+		}
+	}
+	return false
+}
+
 // auditPassthroughPublisher wraps an eventbus.Publisher and bypasses
 // subject validation for audit.> subjects. The JetStreamPublisher rejects
 // any subject that doesn't start with "events.", but audit events use
