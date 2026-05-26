@@ -14,6 +14,7 @@ import (
 	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // stubEngine returns a fixed decision/error and records the request.
@@ -80,6 +81,7 @@ func TestEvaluate_EntitlementRejectsForeignType(t *testing.T) {
 	})
 
 	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVALUATE_UNENTITLED_TYPE")
 	assert.False(t, dec.Allowed)
 	assert.False(t, eng.called, "engine MUST NOT be consulted for an unentitled resource type")
 }
@@ -103,6 +105,7 @@ func TestEvaluate_EmptyActionRejected(t *testing.T) {
 		Subject:    "character:01ABC", Action: "", Resource: "scene:01SCENE",
 	})
 	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVALUATE_EMPTY_ACTION")
 }
 
 func TestEvaluate_MalformedResourceRejected(t *testing.T) {
@@ -113,6 +116,7 @@ func TestEvaluate_MalformedResourceRejected(t *testing.T) {
 			Subject:    "character:01ABC", Action: "read", Resource: res,
 		})
 		require.Errorf(t, err, "resource %q must be rejected", res)
+		errutil.AssertErrorCode(t, err, "EVALUATE_BAD_RESOURCE")
 	}
 }
 
@@ -124,6 +128,7 @@ func TestEvaluate_EmptySubjectFailsClosed(t *testing.T) {
 		Subject:    "", Action: "read", Resource: "scene:01SCENE",
 	})
 	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVALUATE_NO_SUBJECT")
 	assert.False(t, dec.Allowed)
 	assert.False(t, eng.called, "no authenticated subject MUST fail closed before the engine")
 }
@@ -157,6 +162,7 @@ func TestEvaluate_NilEngineFailsClosed(t *testing.T) {
 		Subject:    "character:01ABC", Action: "read", Resource: "scene:01SCENE",
 	})
 	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVALUATE_NO_ENGINE")
 	assert.False(t, dec.Allowed)
 }
 

@@ -203,52 +203,53 @@ func (r *recordingAuditor) Log(_ context.Context, event audit.Event) error {
 	return nil
 }
 
-// TestBinaryHostReceivesAuditorFromEngineProvider is a wiring-guard for
-// holomush-p1tq2.5 / INV-4. It verifies that goplugin.WithAuditLogger(a) can
-// be applied to a binary host constructed by goplugin.NewHost — replicating
-// the option construction added to Start():
+// TestAuditWiringFromEngineProvider is a table-driven wiring-guard for
+// holomush-p1tq2.5 / INV-4. Each row asserts that:
+//  1. fakeEngineProvider.AuditLogger() returns a non-nil auditor (so the
+//     guard is meaningful).
+//  2. The corresponding host/functions constructor accepts the
+//     WithAuditLogger option without panicking and returns a non-nil result.
 //
-//	hostOpts = append(hostOpts, goplugin.WithAuditLogger(s.cfg.ABAC.AuditLogger()))
-//	binaryHost := goplugin.NewHost(hostOpts...)
-//
-// Without this wiring, PluginHostService.Evaluate never emits an audit event
-// regardless of the decision, violating spec §5 / INV-4.
-//
-// The behavioral proof that the auditor field is populated (assert.Same via
+// The behavioral proof that each auditor field is populated (assert.Same via
 // AuditorForTest) lives in goplugin/host_engine_wiring_test.go, which has
-// access to host internals via the package-level export_test.go accessor.
-func TestBinaryHostReceivesAuditorFromEngineProvider(t *testing.T) {
-	auditor := &recordingAuditor{}
-	fp := &fakeEngineProvider{auditor: auditor}
-
-	a := fp.AuditLogger()
-	require.NotNil(t, a, "fakeEngineProvider.AuditLogger() must return non-nil for this guard to be meaningful")
-
-	// Replicate the option construction from Start(). If goplugin.WithAuditLogger
-	// is ever removed from the goplugin API, this call fails to compile.
-	host := goplugin.NewHost(goplugin.WithAuditLogger(a))
-	require.NotNil(t, host, "host must be constructable with WithAuditLogger applied")
-}
-
-// TestLuaFunctionsReceivesAuditorFromEngineProvider is a wiring-guard for
-// holomush-p1tq2.5 / INV-4 on the Lua surface. It verifies that
-// hostfunc.WithAuditLogger(a) can be applied to hostfunc.New — replicating
-// the option construction added to Start():
+// package-level access to host internals via export_test.go.
 //
-//	hostFuncOpts = append(hostFuncOpts, hostfunc.WithAuditLogger(s.cfg.ABAC.AuditLogger()))
-//	hostFuncs := hostfunc.New(nil, hostFuncOpts...)
-//
-// Without this wiring, holomush.evaluate Lua calls never emit an audit event,
-// violating spec §5 / INV-4.
-func TestLuaFunctionsReceivesAuditorFromEngineProvider(t *testing.T) {
-	auditor := &recordingAuditor{}
-	fp := &fakeEngineProvider{auditor: auditor}
+// Without this wiring PluginHostService.Evaluate (binary) and holomush.evaluate
+// (Lua) never emit audit events regardless of the decision, violating spec §5 / INV-4.
+func TestAuditWiringFromEngineProvider(t *testing.T) {
+	tests := []struct {
+		name  string
+		build func(a pluginauthz.Auditor)
+	}{
+		{
+			// Replicates: hostOpts = append(hostOpts, goplugin.WithAuditLogger(s.cfg.ABAC.AuditLogger()))
+			//             binaryHost := goplugin.NewHost(hostOpts...)
+			name: "binary host receives auditor",
+			build: func(a pluginauthz.Auditor) {
+				host := goplugin.NewHost(goplugin.WithAuditLogger(a))
+				require.NotNil(t, host, "host must be constructable with WithAuditLogger applied")
+			},
+		},
+		{
+			// Replicates: hostFuncOpts = append(hostFuncOpts, hostfunc.WithAuditLogger(s.cfg.ABAC.AuditLogger()))
+			//             hostFuncs := hostfunc.New(nil, hostFuncOpts...)
+			name: "lua hostfunc receives auditor",
+			build: func(a pluginauthz.Auditor) {
+				funcs := hostfunc.New(nil, hostfunc.WithAuditLogger(a))
+				require.NotNil(t, funcs, "hostfunc.New must return a non-nil Functions with WithAuditLogger applied")
+			},
+		},
+	}
 
-	a := fp.AuditLogger()
-	require.NotNil(t, a, "fakeEngineProvider.AuditLogger() must return non-nil for this guard to be meaningful")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			auditor := &recordingAuditor{}
+			fp := &fakeEngineProvider{auditor: auditor}
 
-	// Replicate the option construction from Start(). If hostfunc.WithAuditLogger
-	// is ever removed from the hostfunc API, this call fails to compile.
-	funcs := hostfunc.New(nil, hostfunc.WithAuditLogger(a))
-	require.NotNil(t, funcs, "hostfunc.New must return a non-nil Functions with WithAuditLogger applied")
+			a := fp.AuditLogger()
+			require.NotNil(t, a, "fakeEngineProvider.AuditLogger() must return non-nil for this guard to be meaningful")
+
+			tt.build(a)
+		})
+	}
 }
