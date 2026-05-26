@@ -143,13 +143,22 @@ Other test engines: `AllowAllEngine()`, `DenyAllEngine()`, `NewErrorEngine(err)`
 | unit | none | `task test` | (none) |
 | bus-integration | embedded NATS (`eventbustest`) | `task test:int` | `//go:build integration` |
 | audit-integration | embedded NATS + Postgres testcontainer | `task test:int` | `//go:build integration` |
-| full-stack integration | embedded NATS + Postgres + `CoreServer` (+ optional in-tree plugins) | `task test:int` | `//go:build integration` |
+| full-stack integration | embedded NATS + Postgres + `CoreServer` (+ optional in-tree plugins via `WithInTreePlugins()`) | `task test:int` | `//go:build integration` |
 | **E2E** | full Docker stack driven through a real client (browser) | `task test:e2e` | (Playwright) |
 
 "E2E" means the Playwright browser suite — a test that crosses the real user
 boundary. The Ginkgo `test:int` suite is **integration** (it calls Go/gRPC APIs
 in-process), regardless of how much of the stack it stands up. Use "E2E" only
 for the Playwright suite; Go Ginkgo suites are "integration".
+
+**Whole-system plugin tier** (top Go-fidelity tier within full-stack integration):
+`integrationtest.Start(t, integrationtest.WithInTreePlugins())` loads ALL in-tree
+plugins via `setup.PluginSubsystem` → `Manager.LoadAll` (INV-5, INV-WS-1). The
+`test/integration/wholesystem/` census suite (`holomush-0f0f4`) asserts the full
+plugin set loads and the `help` command is registered. Requires binary artifacts
+(`task plugin:build-all`; automatic in `task test:int`). See
+`site/docs/contributing/integration-tests.md#whole-system-plugin-tier-withintreeplugins`
+for the full capability doc.
 
 `eventbustest` provides the in-process embedded NATS server (`MemoryStorage`)
 used at every non-unit tier. This matches production, which also runs embedded

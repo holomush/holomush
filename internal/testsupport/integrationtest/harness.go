@@ -74,6 +74,8 @@ import (
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/pgnanos"
+	plugins "github.com/holomush/holomush/internal/plugin"
+	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telnet"
@@ -114,6 +116,10 @@ type Server struct {
 	// coreServer is the in-process CoreServer (no network transport).
 	coreServer *holoGRPC.CoreServer
 
+	// pluginSub is the started plugin subsystem when WithInTreePlugins was
+	// passed; nil otherwise. Stopped via t.Cleanup registered in startPlugins.
+	pluginSub *pluginsetup.PluginSubsystem
+
 	// guestStartLocationID is the location all guests are placed into.
 	guestStartLocationID ulid.ULID
 }
@@ -125,6 +131,7 @@ type StartOption func(*startConfig)
 // startConfig holds resolved Start options.
 type startConfig struct {
 	accessEngine types.AccessPolicyEngine
+	withPlugins  bool
 }
 
 // WithPolicyEngine overrides the harness's default allow-all ABAC engine.
@@ -210,8 +217,35 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	}
 	pe := cfg.accessEngine
 
-	// Command dispatcher (minimal: no commands registered).
-	dispatcher, err := command.NewDispatcher(command.NewRegistry(), pe)
+	// VerbRegistry must exist before plugins load (they register verbs). It is
+	// also required by the locationFollower's synthetic location_state emit path
+	// so RenderingMetadata is stamped on the EventFrame (gateway drops
+	// nil-Rendering events per INV-GW-5, holomush-4wdu). Production wires this in
+	// cmd/holomush/sub_grpc.go.
+	verbRegistry, err := core.BootstrapVerbRegistry("test")
+	require.NoError(t, err, "integrationtest.Start: BootstrapVerbRegistry")
+
+	// Command dispatcher. When WithInTreePlugins is set, the dispatcher is fed
+	// the plugin subsystem's command registry so plugin commands are
+	// dispatchable (mirrors cmd/holomush/sub_grpc.go); otherwise it gets an
+	// empty registry (no commands registered).
+	var pluginSub *pluginsetup.PluginSubsystem
+	cmdRegistry := command.NewRegistry()
+	if cfg.withPlugins {
+		pluginSub = startPlugins(t, ctx, pluginDeps{
+			pool:         pool,
+			connStr:      connStr,
+			engine:       pe,
+			sessionStore: sessionStoreInst,
+			verbReg:      verbRegistry,
+			playerRepo:   playerRepo,
+			hasher:       hasher,
+			playerSess:   playerSessionStore,
+		})
+		cmdRegistry = pluginSub.CommandRegistry()
+	}
+
+	dispatcher, err := command.NewDispatcher(cmdRegistry, pe)
 	require.NoError(t, err, "integrationtest.Start: create command dispatcher")
 	cmdServices := command.NewTestServices(command.ServicesConfig{Engine: pe})
 
@@ -224,13 +258,6 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	// cmd/holomush/sub_grpc.go layers those on, but for privacy-invariant
 	// tests the bare JS+Postgres tier is sufficient.
 	historyReader := history.NewReader(bus.JS, pool, 30*24*time.Hour, time.Now)
-
-	// VerbRegistry — required by the locationFollower's synthetic
-	// location_state emit path so RenderingMetadata is stamped on the
-	// EventFrame (gateway drops nil-Rendering events per INV-GW-5,
-	// holomush-4wdu). Production also wires this in cmd/holomush/sub_grpc.go.
-	verbRegistry, err := core.BootstrapVerbRegistry("test")
-	require.NoError(t, err, "integrationtest.Start: BootstrapVerbRegistry")
 
 	// CoreServer wired with all required subsystems.
 	coreServer := holoGRPC.NewCoreServer(
@@ -272,14 +299,45 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		guestSvc:             guestSvc,
 		bus:                  bus,
 		coreServer:           coreServer,
+		pluginSub:            pluginSub,
 		guestStartLocationID: guestLocID,
 	}
 }
 
-// Stop tears down the in-process stack. Idempotent.
-// Postgres and NATS cleanup are handled by t.Cleanup() registered in Start.
+// Stop tears down the in-process stack. Idempotent. Postgres and NATS cleanup
+// are handled by t.Cleanup handlers registered in Start; the plugin subsystem
+// (if started) is stopped here and is also t.Cleanup-registered as a safety net.
 func (s *Server) Stop() {
-	// Resources cleaned up by t.Cleanup handlers registered in Start.
+	if s.pluginSub != nil {
+		_ = s.pluginSub.Stop(context.Background())
+	}
+}
+
+// PluginManager returns the loaded plugin Manager. Panics if WithInTreePlugins
+// was not passed to Start.
+func (s *Server) PluginManager() *plugins.Manager {
+	s.requirePlugins("PluginManager")
+	return s.pluginSub.Manager()
+}
+
+// CommandRegistry returns the plugin-populated command registry (builtins +
+// admin + plugin commands). Panics if WithInTreePlugins was not passed.
+func (s *Server) CommandRegistry() *command.Registry {
+	s.requirePlugins("CommandRegistry")
+	return s.pluginSub.CommandRegistry()
+}
+
+// ServiceRegistry returns the plugin service registry. Panics if
+// WithInTreePlugins was not passed.
+func (s *Server) ServiceRegistry() *plugins.ServiceRegistry {
+	s.requirePlugins("ServiceRegistry")
+	return s.pluginSub.ServiceRegistry()
+}
+
+func (s *Server) requirePlugins(method string) {
+	if s.pluginSub == nil {
+		panic("integrationtest: " + method + "() requires Start(t, WithInTreePlugins())")
+	}
 }
 
 // NewLocation creates a fresh persistent location in the world and returns

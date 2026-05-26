@@ -151,6 +151,8 @@ tasks:
 
   test:int:
     desc: Run integration tests (needs Docker for testcontainers)
+    env:
+      HOLOMUSH_REQUIRE_PLUGINS: "1"
     cmds:
       - task: plugin:build-all
       # No package enumeration: the only //go:build !integration helper
