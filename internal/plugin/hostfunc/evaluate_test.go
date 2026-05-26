@@ -89,3 +89,24 @@ func TestEvaluateNilLStateContextFailsClosed(t *testing.T) {
 	assert.False(t, bool(L.GetGlobal("allowed").(lua.LBool)))
 	assert.NotEqual(t, lua.LNil, L.GetGlobal("err"))
 }
+
+func TestEvaluateContextDeadlineExceededFailsClosed(t *testing.T) {
+	// Verifies that evaluateFn propagates the context into the engine call so
+	// that a deadline-exceeded error surfaces as a Lua-level denial. Uses
+	// policytest.NewErrorEngine to inject context.DeadlineExceeded as the
+	// engine error, exercising the error-return path of pluginauthz.Evaluate.
+	L := lua.NewState()
+	defer L.Close()
+	charID := core.NewULID()
+	L.SetContext(core.WithActor(context.Background(),
+		core.Actor{Kind: core.ActorCharacter, ID: charID.String()}))
+
+	hf := hostfunc.New(nil, hostfunc.WithEngine(policytest.NewErrorEngine(context.DeadlineExceeded)))
+	hf.Register(L, "lua-plug")
+
+	require.NoError(t, L.DoString(`allowed, err = holomush.evaluate("execute", "command:greet")`))
+	assert.False(t, bool(L.GetGlobal("allowed").(lua.LBool)),
+		"engine error MUST deny (fail closed)")
+	assert.NotEqual(t, lua.LNil, L.GetGlobal("err"),
+		"engine error MUST surface as non-nil Lua error")
+}

@@ -28,10 +28,12 @@ func (f *Functions) evaluateFn(pluginName string) lua.LGFunction {
 		action := L.CheckString(1)
 		resource := L.CheckString(2)
 
-		ctx := L.Context()
-		if ctx == nil {
-			ctx = context.Background()
+		parentCtx := L.Context()
+		if parentCtx == nil {
+			parentCtx = context.Background()
 		}
+		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
+		defer cancel()
 
 		if f.engine == nil {
 			slog.WarnContext(ctx, "holomush.evaluate called but no access engine configured",

@@ -1087,11 +1087,11 @@ func (p *scenePlugin) resolveSingleSceneMembership(ctx context.Context, characte
 // subcommands where the scene ID is the entire remaining args (end, pause,
 // resume, leave, info — whole remainder is the scene ID).
 func sceneResourceRef(args string) (string, error) {
-	id := strings.TrimSpace(args)
-	if id == "" {
+	fields := strings.Fields(args)
+	if len(fields) == 0 {
 		return "", fmt.Errorf("scene id is required")
 	}
-	return "scene:" + id, nil // ABAC resource ref (type:id), not a pub/sub subject (INV-P4-1)
+	return "scene:" + fields[0], nil // ABAC resource ref (type:id), not a pub/sub subject (INV-P4-1)
 }
 
 // sceneResourceRefFirstField derives the ABAC resource string for subcommands

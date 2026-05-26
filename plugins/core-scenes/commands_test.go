@@ -1002,6 +1002,59 @@ func TestSceneGatedSubcommands_DenyWhenPolicyDenies(t *testing.T) {
 	}
 }
 
+// TestSceneResourceRefTokenizesFirstField verifies that sceneResourceRef extracts
+// only the first whitespace-separated token, so multi-token input like
+// "scene-x extra" produces "scene:scene-x" rather than "scene:scene-x extra".
+// A mis-parsed multi-token resource ref would cause a spurious ABAC gate
+// denial before the handler's arity validation fires.
+func TestSceneResourceRefTokenizesFirstField(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    string
+		wantRef string
+		wantErr bool
+	}{
+		{
+			name:    "single token produces scene:<id>",
+			args:    "scene-abc",
+			wantRef: "scene:scene-abc",
+		},
+		{
+			name:    "multi-token uses first token only",
+			args:    "scene-abc extra",
+			wantRef: "scene:scene-abc",
+		},
+		{
+			name:    "leading whitespace is ignored",
+			args:    "  scene-abc",
+			wantRef: "scene:scene-abc",
+		},
+		{
+			name:    "empty args returns error",
+			args:    "",
+			wantErr: true,
+		},
+		{
+			name:    "whitespace-only args returns error",
+			args:    "   ",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := sceneResourceRef(tt.args)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Empty(t, got)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantRef, got)
+		})
+	}
+}
+
 // TestSceneGatedSubcommands_NilEvaluatorFailsClosed verifies that every newly
 // gated subcommand fails closed (CommandError) when no evaluator is wired,
 // rather than running the handler ungated.
