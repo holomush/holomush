@@ -41,3 +41,15 @@ func TestAssemblePluginsDirOverlaysSourceAndBuild(t *testing.T) {
 	require.True(t, info.IsDir())
 	require.Zero(t, info.Mode()&os.ModeSymlink, "plugin dir must be a real dir, not a symlink")
 }
+
+func TestBinaryArtifactsPresentDetectsCoreScenes(t *testing.T) {
+	root := t.TempDir()
+	build := filepath.Join(root, "build", "plugins")
+	// Absent → false.
+	require.False(t, binaryArtifactsPresent(build))
+	// Present (core-scenes for the current platform) → true.
+	platform := goPlatformDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(build, "core-scenes", platform), 0o755))                                //nolint:gosec // test-only
+	require.NoError(t, os.WriteFile(filepath.Join(build, "core-scenes", platform, "core-scenes"), []byte("ELF"), 0o755)) //nolint:gosec // test-only
+	require.True(t, binaryArtifactsPresent(build))
+}

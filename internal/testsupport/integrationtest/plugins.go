@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/samber/oops"
 )
@@ -52,6 +53,43 @@ func copyTree(src, dst string) error {
 		}
 		return copyFile(path, target, info.Mode())
 	})
+}
+
+// requirePluginsEnv, when truthy, turns a missing binary-plugin artifact into a
+// hard failure instead of a skip (INV-WS-3). The CI integration job sets it.
+const requirePluginsEnv = "HOLOMUSH_REQUIRE_PLUGINS" //nolint:unused // wired by WithInTreePlugins in Task 4 (holomush-0f0f4.4)
+
+// goPlatformDir is the per-platform subdir name build-plugins.sh emits
+// (e.g. "darwin-arm64", "linux-amd64").
+func goPlatformDir() string { return runtime.GOOS + "-" + runtime.GOARCH }
+
+// repoBuildPluginsDir resolves the build/plugins directory the same way
+// test/integration/plugin/binary_plugin_test.go does: PLUGIN_BINARY_DIR if set,
+// else <repoRoot>/build/plugins resolved from this source file's location.
+func repoBuildPluginsDir() string { //nolint:unused // wired by WithInTreePlugins in Task 4 (holomush-0f0f4.4)
+	if dir := os.Getenv("PLUGIN_BINARY_DIR"); dir != "" {
+		return dir
+	}
+	_, thisFile, _, _ := runtime.Caller(0)
+	// internal/testsupport/integrationtest/plugins.go → repo root is 3 dirs up.
+	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
+	return filepath.Join(repoRoot, "build", "plugins")
+}
+
+// repoPluginsSrcDir resolves the source plugins/ tree from this file's location.
+func repoPluginsSrcDir() string { //nolint:unused // wired by WithInTreePlugins in Task 4 (holomush-0f0f4.4)
+	_, thisFile, _, _ := runtime.Caller(0)
+	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
+	return filepath.Join(repoRoot, "plugins")
+}
+
+// binaryArtifactsPresent reports whether the core-scenes binary for the current
+// platform exists under buildDir. core-scenes is the canonical production binary
+// plugin; if it built, the rest did too (single build-plugins.sh pass).
+func binaryArtifactsPresent(buildDir string) bool {
+	exe := filepath.Join(buildDir, "core-scenes", goPlatformDir(), "core-scenes")
+	info, err := os.Stat(exe)
+	return err == nil && !info.IsDir()
 }
 
 func copyFile(src, dst string, mode os.FileMode) error {
