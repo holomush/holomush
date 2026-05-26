@@ -227,10 +227,18 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 	// PolicyInstaller over a real policystore so manifest policies install.
 	policyInst := plugins.NewPolicyInstaller(policystore.NewPostgresStore(d.pool))
 
+	// Resolver must be non-nil: PluginSubsystem.Start calls
+	// resolver.RegisterProvider per plugin that declares resource_types
+	// (e.g. core-scenes' "scene" namespace). A nil resolver panics at
+	// subsystem.go:319. A fresh SchemaRegistry + Resolver is sufficient for
+	// the census suite, which reads load state and the command registry only.
+	schemaReg := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(schemaReg)
+
 	cfg := pluginsetup.PluginSubsystemConfig{
 		DataDir:            dataDir,
 		DatabaseConnStr:    d.connStr,
-		ABAC:               engineProvider{eng: d.engine},
+		ABAC:               engineProvider{eng: d.engine, resolver: resolver},
 		PolicyInst:         policyInstallerProvider{inst: policyInst},
 		PluginProv:         pluginProviderSetter{pp: attribute.NewPluginProvider(nil)},
 		World:              worldProvider{svc: worldSvc},
