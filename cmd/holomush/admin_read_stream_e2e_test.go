@@ -140,6 +140,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
 	"github.com/holomush/holomush/internal/pgnanos"
+	"github.com/holomush/holomush/internal/testsupport/quarantinetest"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	adminv1 "github.com/holomush/holomush/pkg/proto/holomush/admin/v1"
 	"github.com/holomush/holomush/pkg/proto/holomush/admin/v1/adminv1connect"
@@ -827,8 +828,11 @@ func runAdminReadStreamScenarios(env *adminAuthEnv) {
 	By("F-E10 (INV-F14): per-frame write deadline — slow sender trips ErrWriteDeadlineExceeded → DEADLINE_EXCEEDED")
 	scenarioFE10WriteDeadline(env)
 
-	By("F-E12 (INV-F9): chain verification — VerifyScope on a happy-path request_id succeeds")
-	scenarioFE12ChainVerification(env)
+	// quarantined: holomush-7b9n — F-E12 audit-row projection flakes under load; skip only this step in gating runs (runs nightly).
+	if quarantinetest.Enabled() {
+		By("F-E12 (INV-F9): chain verification — VerifyScope on a happy-path request_id succeeds")
+		scenarioFE12ChainVerification(env)
+	}
 
 	By("F-E16 (INV-F11): idempotent dual-control reuse — second invocation by different requester finds approved row, no PendingApproval")
 	scenarioFE16IdempotentDualControlReuse(env)

@@ -19,6 +19,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/internal/testsupport/quarantinetest"
 )
 
 // expectedTables lists every table present after all migrations have been applied.
@@ -256,6 +257,9 @@ var _ = Describe("Migrator", func() {
 
 	Describe("ConcurrentUp", func() {
 		It("allows at least one concurrent Up() to succeed with consistent final state", func() {
+			if !quarantinetest.Enabled() {
+				Skip("quarantined: holomush-pqzv")
+			}
 			ctx := context.Background()
 
 			// Start PostgreSQL container

@@ -70,6 +70,13 @@ if [ "$handoff_intent" = "1" ] && {
   reminders+=("**Pre-hand-off ABAC gate:** Changes touch the access-control surface. \`abac-reviewer\` MUST run alongside \`code-reviewer\`. Invoke \`/review-abac\` (or \`Agent\` with \`subagent_type: abac-reviewer\`) before pushing. To skip, the user must explicitly say so (e.g. \"skip ABAC review\").")
 fi
 
+# int/e2e surface nudge: handoff intent AND the diff touches integration/E2E
+# paths. Integration+E2E are CI-required (not a local mandatory gate), but a
+# targeted local run before push catches breakage a CI round-trip slower.
+if [ "$handoff_intent" = "1" ] && printf '%s' "$changed_paths" | grep -qE '(test/integration/|web/e2e/|_integration_test\.go|\.spec\.ts)'; then
+  reminders+=("**int/e2e surface touched:** \`Integration Test\` / \`E2E Test\` are CI-required checks. A targeted local run before push (\`task test:int -- ./<domain>\` or \`task pr-prep:full\`) catches failures a CI round-trip sooner — recommended, not mandatory (CI is authoritative).")
+fi
+
 # plan-reviewer triggers: anything that implies a plan is about to be executed.
 if printf '%s' "$lower" | grep -qE '(execute[[:space:]]+(the[[:space:]]+)?plan|run[[:space:]]+(the[[:space:]]+)?plan|start[[:space:]]+implementing|begin[[:space:]]+(the[[:space:]]+)?plan|plan[[:space:]]+is[[:space:]]+ready|approve[[:space:]]+(the[[:space:]]+)?plan|\bapproved\b)'; then
   reminders+=("**Pre-execute gate:** Before \`superpowers:executing-plans\` or \`superpowers:subagent-driven-development\` consumes a plan, the \`plan-reviewer\` adversarial sub-agent MUST run on it. Invoke \`/review-plan\` now if it has not already run for the latest revision of the plan.")

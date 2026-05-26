@@ -1,10 +1,12 @@
 # Pre-Push Quality Gate (`task pr-prep`)
 
-`task pr-prep` is the project's mandatory pre-push gate. It mirrors every CI job (schema check, license check, plugin builds, lint, format, unit tests, integration tests, E2E in Docker) and MUST pass before pushing to a PR branch.
+`task pr-prep` is the project's mandatory pre-push gate. It MUST pass before pushing to a PR branch. HoloMUSH uses a two-lane design so the gate is always fast locally while the heavyweight integration and E2E checks run in CI.
 
-A full run takes 5–15 minutes and is CPU- and Docker-heavy.
+## Lanes
 
-## What it does
+### Fast lane (default, mandatory)
+
+`task pr-prep` runs the fast lane by default:
 
 1. Bats shell tests (concurrency-lock harness regression check)
 2. Schema regeneration check
@@ -13,12 +15,40 @@ A full run takes 5–15 minutes and is CPU- and Docker-heavy.
 5. Lint
 6. Format check
 7. Unit tests (Go)
+8. Build
+
+The fast lane requires no Docker and holds no flock. A typical run takes 2–5 minutes. It is always safe to run concurrently across multiple agent sessions.
+
+On docs-only diffs, `task pr-prep` auto-delegates to `task pr-prep:docs` instead (see [Docs-only fast lane](#docs-only-fast-lane) below).
+
+### Full lane (opt-in)
+
+`task pr-prep:full` adds the integration and E2E gate on top of everything the fast lane runs:
+
 8. Integration tests (Go, with PostgreSQL testcontainer)
 9. E2E tests (Playwright in Docker)
 
-## Concurrent runs
+The full lane is **flock-serialized machine-globally per user** — only one runs at a time. A typical full run takes 5–15 minutes and is CPU- and Docker-heavy.
 
-`task pr-prep` is serialized machine-globally per user. If you run `task pr-prep` on a machine where another `task pr-prep` is already in flight (typically: another agent session, or another terminal you forgot about), the second invocation exits non-zero immediately with a message like:
+Use the full lane when your diff touches integration test surface (Ginkgo suites, Playwright specs, or their shared helpers). You can also trigger it from the auto-detecting entry point:
+
+```bash
+HOLOMUSH_PR_PREP_FORCE_FULL=1 task pr-prep
+```
+
+### CI-required checks: Integration Test and E2E Test
+
+`Integration Test` and `E2E Test` are **required CI checks protecting `main`**. They run in CI on Namespace runners with Testcontainers Cloud — not in the mandatory local fast lane. A PR cannot merge until both are green in CI.
+
+Quarantined specs are excluded from both gating CI runs and from the full lane's Docker-backed suite. They run only nightly and locally with `HOLOMUSH_RUN_QUARANTINED=1`. See [quarantine.md](quarantine.md) for details.
+
+### Docs lane
+
+`task pr-prep:docs` runs automatically when every changed path is docs-only (see [Docs-only fast lane](#docs-only-fast-lane) below). It has no Docker dependency and does not acquire the flock.
+
+## Concurrent runs (full lane)
+
+`task pr-prep:full` is serialized machine-globally per user via `flock(1)`. The fast lane (`task pr-prep`) has no such restriction — concurrent fast-lane runs across agent sessions are safe. If you run `task pr-prep:full` on a machine where another full-lane run is already in flight, the second invocation exits non-zero immediately with a message like:
 
 ```text
 ERROR: another pr-prep is running on this machine.
@@ -79,10 +109,12 @@ The file holds `key=value` lines:
 
 ```text
 status=pass
-lane=full
+lane=fast
 exit=0
 finished_at=2026-05-25T12:14:03Z
 ```
+
+(A full-lane run writes `lane=full`. A contention exit writes `lane=full` with `status=contention`.)
 
 Branch on `status`, which is `pass`, `fail`, or `contention`:
 

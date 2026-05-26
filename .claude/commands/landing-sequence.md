@@ -21,7 +21,7 @@ for push; otherwise infer from the current jj workspace).
    - For each: either `bd close <id>` (if done) or `bd note <id> "<state at end of session>"` (if continuing)
 
 3. **pr-prep gate**
-   - MUST run `task pr-prep` to full completion before push, regardless of what changed. No subset, no approximation, no exceptions. Reason: `task pr-prep` bundles lint + format + schema + license + unit + `task test:int` + `task test:e2e` to mirror CI. Subset checks miss integration-only failures.
+   - MUST run the fast `task pr-prep` (schema + license + lint + fmt + unit + build) green before push. Integration + E2E are required CI checks (`Integration Test`, `E2E Test`) — they gate the PR in CI, not locally. If you touched `test/integration/**`, `web/e2e/**`, or integration-tagged packages, run targeted `task test:int -- ./<domain>` or `task pr-prep:full` first (recommended, not mandatory).
    - If pr-prep fails: STOP, surface the failure, do not push.
    - For `.claude/`-touching changes, additionally verify `task lint:docs-symmetry` passes (the docs-symmetry lint runs as part of `task lint`, which `task pr-prep` invokes — but call it out separately if a CLAUDE.md/AGENTS.md edit was the primary motivation).
 

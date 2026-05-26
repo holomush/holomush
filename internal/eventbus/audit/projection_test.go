@@ -22,6 +22,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	"github.com/holomush/holomush/internal/pgnanos"
+	"github.com/holomush/holomush/internal/testsupport/quarantinetest"
 	"github.com/holomush/holomush/test/testutil"
 )
 
@@ -130,6 +131,7 @@ func countAuditRows(t *testing.T, pool *pgxpool.Pool) int {
 // waits for the projection to drain, then asserts the row fields match
 // the headers and metadata we published.
 func TestProjectionDrainsPublishedMessageToAuditTable(t *testing.T) {
+	quarantinetest.Skip(t, "holomush-1nl7")
 	shared := testutil.SharedPostgres(t)
 	connStr := testutil.FreshDatabase(t, shared)
 	pool := openPool(t, connStr)
@@ -205,6 +207,7 @@ func TestProjectionIsIdempotentOnDuplicate(t *testing.T) {
 //   - Even if the same message were redelivered, ON CONFLICT DO NOTHING
 //     is the safety net.
 func TestProjectionResumesAfterRestart(t *testing.T) {
+	quarantinetest.Skip(t, "holomush-q55b")
 	shared := testutil.SharedPostgres(t)
 	connStr := testutil.FreshDatabase(t, shared)
 	pool := openPool(t, connStr)

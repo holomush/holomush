@@ -48,9 +48,11 @@ You are the HoloMUSH branch-readiness checker. Your one job is to inspect the cu
 - For the bead this branch implements (if any): `bd show <id>` — is it open or done? Description's TDD acceptance criteria all met?
 
 ### 4. pr-prep evidence
-- Search recent shell history / scrollback for `task pr-prep` output. If you can't find it, NOT READY — `task pr-prep` MUST run to full completion before push (no subset, no sub-agent delegation, no exceptions).
-- If pr-prep was run and failed, NOT READY.
-- For `.claude/` or doc-only changes, pr-prep is still required AND `task lint:docs-symmetry` MUST also pass when `CLAUDE.md` or `AGENTS.md` were touched.
+
+- Search recent shell history / scrollback for `task pr-prep` (the fast lane) output / result file. If you can't find evidence the fast gate ran green, NOT READY — the fast `task pr-prep` (schema/license/lint/fmt/unit/build) MUST run before push.
+- **Integration / E2E are CI-authoritative, not a local READY gate.** They run as required checks (`Integration Test`, `E2E Test`) in CI, which has not run at pre-push time. So do NOT require local `task test:int`/`task test:e2e` evidence. If the diff touches the int/e2e surface (`test/integration/**`, `web/e2e/**`, integration-tagged packages), targeted `task test:int -- ./<domain>` or `task pr-prep:full` is RECOMMENDED but not blocking.
+- If the fast pr-prep was run and failed, NOT READY.
+- For `.claude/` or doc-only changes, the docs lane runs automatically AND `task lint:docs-symmetry` MUST pass when `CLAUDE.md` or `AGENTS.md` were touched.
 
 ### 5. Code review
 - Has `code-reviewer` (or `pr-review-toolkit:review-pr`) run on this branch? Look in `.claude/agent-memory/code-reviewer/reports/` for a recent report cited against this branch's change IDs.

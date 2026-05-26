@@ -5,7 +5,7 @@ When ending a work session, work is **NOT complete until changes are pushed**. T
 ## Mandatory checklist
 
 1. **File beads for remaining work** — anything not finished gets a `bd create` so it survives the session
-2. **Run `task pr-prep`** (mirrors CI) if code changed — MUST be green before push. Run as a single command to full completion; never approximate by running individual steps. Reason: April 2026 incident where a partial check claimed pr-prep passed and pushed broken integration tests.
+2. **Run `task pr-prep`** (the **fast lane**: schema/license/lint/fmt/unit/build/bats; no Docker, no flock) if code changed — MUST be green before push. Run the chosen lane as a single command to full completion; never approximate by running individual steps. Reason: April 2026 incident where a partial check claimed pr-prep passed and pushed broken integration tests. The integration and E2E gate runs in CI as required checks (`Integration Test` + `E2E Test`); run `task pr-prep:full` locally when your diff touches int/E2E surface.
 3. **Update issue status** — `bd close` what's done; `bd update` what's still in flight
 4. **Push:**
    - `jj git fetch`

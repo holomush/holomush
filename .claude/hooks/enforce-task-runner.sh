@@ -135,7 +135,7 @@ while IFS= read -r segment; do
       case "$second_word" in
         test)
           if echo "$rest" | command grep -qE '(^|\s)-tags[= ]'; then
-            echo "Use 'task test:integration' instead of 'go test -tags=...'" >&2
+            echo "Use 'task test:int' instead of 'go test -tags=...'" >&2
           else
             echo "Use 'task test' instead of 'go test'" >&2
           fi

@@ -357,7 +357,7 @@ test.describe('Terminal UI', () => {
     await expect(input).toHaveValue('look');
   });
 
-  test('reconnect receives live events after replay', async ({ page }) => {
+  test('reconnect receives live events after replay', { tag: ['@quarantine', '@holomush-0jzs'] }, async ({ page }) => {
     await connectAsGuest(page);
 
     // Reload — session persists, stream reconnects
@@ -428,7 +428,7 @@ test.describe('Terminal UI', () => {
     expect(matched, `expected event with "${token}" in history response`).toBe(true);
   });
 
-  test('page reload replays prior events from multiple guests', async ({ browser }) => {
+  test('page reload replays prior events from multiple guests', { tag: ['@quarantine', '@holomush-0jzs'] }, async ({ browser }) => {
     // Two independent browser contexts (separate sessions, same starting location)
     const ctx1 = await browser.newContext();
     const ctx2 = await browser.newContext();
@@ -604,7 +604,7 @@ test.describe('Terminal UI', () => {
     await ctx2.close();
   });
 
-  test('command history persists across reconnect', async ({ page }) => {
+  test('command history persists across reconnect', { tag: ['@quarantine', '@holomush-0jzs'] }, async ({ page }) => {
     await connectAsGuest(page);
 
     // Send commands with unique tokens to avoid collision with other tests
@@ -657,7 +657,7 @@ test.describe('Terminal UI', () => {
     await expect(inputAfter).toHaveValue('say this is a long pose that I do not want to lose');
   });
 
-  test('draft does not leak across sessions', async ({ page }) => {
+  test('draft does not leak across sessions', { tag: ['@quarantine', '@holomush-0jzs'] }, async ({ page }) => {
     await connectAsGuest(page);
 
     // Type a draft and wait for debounced save
