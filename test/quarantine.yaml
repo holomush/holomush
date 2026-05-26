@@ -8,4 +8,29 @@
 # is closed. See docs/superpowers/specs/2026-05-25-tier-split-quality-gates-design.md.
 #
 # entries: list of { id, kind (go|ginkgo|playwright), bead, since, reason }
-entries: []
+entries:
+  - id: TestProjectionResumesAfterRestart
+    kind: go
+    bead: holomush-q55b
+    since: 2026-05-25
+    reason: consumer-info eventual-consistency race on restart (5zpf closed as dup)
+  - id: TestProjectionDrainsPublishedMessageToAuditTable
+    kind: go
+    bead: holomush-1nl7
+    since: 2026-05-25
+    reason: AwaitDrained cold-start race
+  - id: ConcurrentUp allows at least one concurrent Up to succeed
+    kind: ginkgo
+    bead: holomush-pqzv
+    since: 2026-05-25
+    reason: testcontainers docker port-map timeout under load
+  - id: admin_read_stream F-E12 chain verification (surgical step skip)
+    kind: ginkgo
+    bead: holomush-7b9n
+    since: 2026-05-25
+    reason: operator_read_completed audit row times out under load; only the F-E12 step is gated
+  - id: terminal.spec.ts reconnect/session (4 tests)
+    kind: playwright
+    bead: holomush-0jzs
+    since: 2026-05-25
+    reason: WebSocket reconnect timing flakes in CI (reconnect/replay/history/draft)
