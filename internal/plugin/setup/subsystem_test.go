@@ -219,13 +219,13 @@ func (r *recordingAuditor) Log(_ context.Context, event audit.Event) error {
 func TestAuditWiringFromEngineProvider(t *testing.T) {
 	tests := []struct {
 		name  string
-		build func(a pluginauthz.Auditor)
+		build func(t *testing.T, a pluginauthz.Auditor)
 	}{
 		{
 			// Replicates: hostOpts = append(hostOpts, goplugin.WithAuditLogger(s.cfg.ABAC.AuditLogger()))
 			//             binaryHost := goplugin.NewHost(hostOpts...)
 			name: "binary host receives auditor",
-			build: func(a pluginauthz.Auditor) {
+			build: func(t *testing.T, a pluginauthz.Auditor) {
 				host := goplugin.NewHost(goplugin.WithAuditLogger(a))
 				require.NotNil(t, host, "host must be constructable with WithAuditLogger applied")
 			},
@@ -234,7 +234,7 @@ func TestAuditWiringFromEngineProvider(t *testing.T) {
 			// Replicates: hostFuncOpts = append(hostFuncOpts, hostfunc.WithAuditLogger(s.cfg.ABAC.AuditLogger()))
 			//             hostFuncs := hostfunc.New(nil, hostFuncOpts...)
 			name: "lua hostfunc receives auditor",
-			build: func(a pluginauthz.Auditor) {
+			build: func(t *testing.T, a pluginauthz.Auditor) {
 				funcs := hostfunc.New(nil, hostfunc.WithAuditLogger(a))
 				require.NotNil(t, funcs, "hostfunc.New must return a non-nil Functions with WithAuditLogger applied")
 			},
@@ -249,7 +249,7 @@ func TestAuditWiringFromEngineProvider(t *testing.T) {
 			a := fp.AuditLogger()
 			require.NotNil(t, a, "fakeEngineProvider.AuditLogger() must return non-nil for this guard to be meaningful")
 
-			tt.build(a)
+			tt.build(t, a)
 		})
 	}
 }
