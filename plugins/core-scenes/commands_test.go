@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -903,7 +904,7 @@ func TestSceneEndReturnsOKWhenFocusClientNotConfigured(t *testing.T) {
 	assert.Contains(t, resp.Output, "ended")
 }
 
-// --- scene extend ABAC gate tests ---
+// --- scene publish vote extend ABAC gate tests (E2) ---
 
 // denyEvaluator is a test HostEvaluator that always denies.
 type denyEvaluator struct{}
@@ -919,6 +920,13 @@ func (allowEvaluator) Evaluate(_ context.Context, _, _ string) (pluginsdk.Evalua
 	return pluginsdk.EvaluateDecision{Allowed: true}, nil
 }
 
+// errorEvaluator is a test HostEvaluator that always returns an engine error.
+type errorEvaluator struct{}
+
+func (errorEvaluator) Evaluate(_ context.Context, _, _ string) (pluginsdk.EvaluateDecision, error) {
+	return pluginsdk.EvaluateDecision{}, fmt.Errorf("simulated engine failure")
+}
+
 // newScenePluginWithEvaluator builds a minimal scenePlugin wired with the
 // given HostEvaluator, ready for extend gate tests.
 func newScenePluginWithEvaluator(t *testing.T, ev pluginsdk.HostEvaluator) *scenePlugin {
@@ -932,40 +940,117 @@ func newScenePluginWithEvaluator(t *testing.T, ev pluginsdk.HostEvaluator) *scen
 	}
 }
 
-func TestSceneExtendDeniedForNonAdmin(t *testing.T) {
-	p := newScenePluginWithEvaluator(t, denyEvaluator{})
-	sceneID := createSceneInTest(t, p, "char-alice", "Extendable")
+// newVoteExtendFixture seeds a scenePlugin with a scene and an initial attempt
+// budget, ready for handleVoteExtend tests. Returns plugin, scene id, and the
+// underlying fakeStore for budget inspection.
+func newVoteExtendFixture(t *testing.T, ev pluginsdk.HostEvaluator) (*scenePlugin, string, *fakeStore) {
+	t.Helper()
+	store := newFakeStore()
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(&recordingEventSink{})
+	sceneID := createSceneInPlugin(t, &scenePlugin{service: svc, evaluator: allowEvaluator{}}, "char-admin", "Test Scene")
+	store.maxPublishAttempts[sceneID] = 3
+	return &scenePlugin{service: svc, evaluator: ev}, sceneID, store
+}
+
+// createSceneInPlugin is a helper that creates a scene via HandleCommand and
+// extracts the scene ID from the response. It uses an allow evaluator for
+// the create step regardless of the provided plugin's evaluator.
+func createSceneInPlugin(t *testing.T, p *scenePlugin, charID, title string) string {
+	t.Helper()
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
-		Command: "scene", Args: "extend " + sceneID, CharacterID: "char-alice",
+		Command: "scene", Args: "create " + title, CharacterID: charID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, pluginsdk.CommandOK, resp.Status)
+	return extractSceneID(t, resp.Output)
+}
+
+// TestVoteExtendAdminSucceedsAndBumpsBudget verifies the E2 happy path:
+// an admin caller with an allow evaluator bumps the budget and receives
+// a success response containing the new max.
+func TestVoteExtendAdminSucceedsAndBumpsBudget(t *testing.T) {
+	p, sceneID, store := newVoteExtendFixture(t, allowEvaluator{})
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "publish vote extend 2 #" + sceneID, CharacterID: "char-admin",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "5") // 3 + 2 = 5
+	assert.Equal(t, 5, store.maxPublishAttempts[sceneID], "fakeStore budget must be bumped")
+}
+
+// TestVoteExtendNonAdminDeniedAndRPCNotCalled verifies that a deny evaluator
+// prevents the service RPC from being reached: the budget is unchanged.
+func TestVoteExtendNonAdminDeniedAndRPCNotCalled(t *testing.T) {
+	p, sceneID, store := newVoteExtendFixture(t, denyEvaluator{})
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "publish vote extend 2 #" + sceneID, CharacterID: "char-nonadmin",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, pluginsdk.CommandError, resp.Status)
 	assert.Contains(t, resp.Output, "permitted")
+	assert.Equal(t, 3, store.maxPublishAttempts[sceneID], "budget MUST NOT change when gate denies")
 }
 
-// TestSceneExtendAllowedForAdmin verifies the ABAC gate passes for admin
-// subjects. The handler body is a not-yet-implemented stub (holomush-5rh.20.35),
-// so the response is CommandError — not CommandOK — even when the gate allows.
-func TestSceneExtendAllowedForAdmin(t *testing.T) {
-	p := newScenePluginWithEvaluator(t, allowEvaluator{})
-	sceneID := createSceneInTest(t, p, "char-admin", "Extendable")
+// TestVoteExtendNilEvaluatorFailsClosed verifies that a missing evaluator
+// fails closed with CommandError and does not reach the service RPC.
+func TestVoteExtendNilEvaluatorFailsClosed(t *testing.T) {
+	p, sceneID, store := newVoteExtendFixture(t, nil)
+
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
-		Command: "scene", Args: "extend " + sceneID, CharacterID: "char-admin",
+		Command: "scene", Args: "publish vote extend 2 #" + sceneID, CharacterID: "char-admin",
 	})
 	require.NoError(t, err)
-	// Gate passes (admin allowed), but the handler is a stub: CommandError, not OK.
-	assert.Equal(t, pluginsdk.CommandError, resp.Status)
-	assert.Contains(t, resp.Output, "not yet implemented")
+	assert.Equal(t, pluginsdk.CommandError, resp.Status, "nil evaluator MUST fail closed")
+	assert.Contains(t, resp.Output, "unavailable")
+	assert.Equal(t, 3, store.maxPublishAttempts[sceneID], "budget MUST NOT change when evaluator absent")
 }
 
-func TestSceneExtendNilEvaluatorFailsClosed(t *testing.T) {
-	p := newScenePluginWithEvaluator(t, nil) // no HostEvaluator injected
-	sceneID := createSceneInTest(t, p, "char-alice", "Extendable")
+// TestVoteExtendBadCountRejectsWithUsage verifies that a non-integer or
+// zero count returns a usage error before any gate or RPC.
+func TestVoteExtendBadCountRejectsWithUsage(t *testing.T) {
+	cases := []struct {
+		name string
+		args string
+	}{
+		{"missing count", ""},
+		{"non-integer", "abc"},
+		{"zero count", "0"},
+		{"negative count", "-3"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newScenePluginWithEvaluator(t, allowEvaluator{})
+			sceneID := createSceneInTest(t, p, "char-admin", "T")
+			args := "publish vote extend"
+			if tc.args != "" {
+				args += " " + tc.args + " #" + sceneID
+			}
+			resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+				Command: "scene", Args: args, CharacterID: "char-admin",
+			})
+			require.NoError(t, err)
+			assert.Equal(t, pluginsdk.CommandError, resp.Status)
+			assert.Contains(t, resp.Output, "Usage:")
+		})
+	}
+}
+
+// TestVoteExtendEngineErrorReturnsCommandFailure verifies that an evaluator
+// returning an error produces CommandFailure (not CommandError or a panic).
+func TestVoteExtendEngineErrorReturnsCommandFailure(t *testing.T) {
+	errEv := errorEvaluator{}
+	p, sceneID, store := newVoteExtendFixture(t, errEv)
+
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
-		Command: "scene", Args: "extend " + sceneID, CharacterID: "char-alice",
+		Command: "scene", Args: "publish vote extend 1 #" + sceneID, CharacterID: "char-admin",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, pluginsdk.CommandError, resp.Status, "a missing evaluator MUST fail closed, never run the handler ungated")
+	assert.Equal(t, pluginsdk.CommandFailure, resp.Status)
+	assert.Equal(t, 3, store.maxPublishAttempts[sceneID], "budget MUST NOT change on engine error")
 }
 
 // TestSceneGatedSubcommands_DenyWhenPolicyDenies is the INV-7 backstop: every
@@ -991,7 +1076,6 @@ func TestSceneGatedSubcommands_DenyWhenPolicyDenies(t *testing.T) {
 		{"transfer", "transfer-ownership", func(id string) string { return id + " char-target" }},
 		{"leave", "leave", func(id string) string { return id }},
 		{"info", "read", func(id string) string { return id }},
-		{"extend", "extend_publish_attempts", func(id string) string { return id }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.sub, func(t *testing.T) {
@@ -1079,7 +1163,6 @@ func TestSceneGatedSubcommands_NilEvaluatorFailsClosed(t *testing.T) {
 		{"transfer", func(id string) string { return id + " char-target" }},
 		{"leave", func(id string) string { return id }},
 		{"info", func(id string) string { return id }},
-		{"extend", func(id string) string { return id }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.sub, func(t *testing.T) {

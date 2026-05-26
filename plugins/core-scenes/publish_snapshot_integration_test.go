@@ -13,7 +13,7 @@
 //
 // Two decryptor seams are used:
 //   - Happy path / chunking: a REAL history.ReadbackDecryptor (full DEK manager
-//     + xchacha20poly1305 codec + OwnerMap + AuthGuard) proves end-to-end
+//   - xchacha20poly1305 codec + OwnerMap + AuthGuard) proves end-to-end
 //     ciphertext → plaintext through the production primitive (INV-RB-6
 //     consumer-side, INV-RB-8). scene_log is seeded with REAL ciphertext.
 //   - Failure modes / soft-no-op / idempotency: a fault-injecting fake
@@ -375,7 +375,8 @@ func (e *snapshotRealEnv) emitAndSeed(ctx context.Context, sceneID, eventType, p
 		dekRef     sql.NullInt64
 		dekVersion sql.NullInt32
 	)
-	err = e.cryptoPool.QueryRow(ctx, `
+	err = e.cryptoPool.QueryRow(
+		ctx, `
 		SELECT id, codec, envelope, schema_ver, dek_ref, dek_version
 		FROM events_audit WHERE subject = $1 AND type = $2 ORDER BY id DESC LIMIT 1`,
 		subject, eventType,
@@ -401,7 +402,8 @@ func (e *snapshotRealEnv) emitAndSeed(ctx context.Context, sceneID, eventType, p
 		dekVerP = &v
 	}
 
-	_, err = e.store.Pool().Exec(ctx, `
+	_, err = e.store.Pool().Exec(
+		ctx, `
 		INSERT INTO scene_log (id, subject, type, timestamp, actor_kind, actor_id, payload, schema_ver, codec, dek_ref, dek_version)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		idB, subject, eventType,
@@ -468,7 +470,8 @@ func seedScenePoseLog(ctx context.Context, store *SceneStore, sceneID, actorID, 
 	payload, err := json.Marshal(map[string]string{"actor_id": actorID, "text": text})
 	Expect(err).NotTo(HaveOccurred())
 	id := newPoseULID()
-	_, err = store.Pool().Exec(ctx, `
+	_, err = store.Pool().Exec(
+		ctx, `
 		INSERT INTO scene_log (id, subject, type, timestamp, actor_kind, actor_id, payload, schema_ver, codec)
 		VALUES ($1, $2, 'scene_pose', $3, 'character', $4, $5, 1, 'identity')`,
 		id, subject, time.Now().UnixNano(), []byte(actorID), payload,

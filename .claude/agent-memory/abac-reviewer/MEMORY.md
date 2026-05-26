@@ -247,3 +247,17 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   the owning-entity record at that code point (after `store.Get`); (3) the in-handler predicate
   is structurally identical to the ABAC `when`-clause. Closes direct-gRPC gap that E1 accepted.
   Missing `case "publish"` in `commands.go` is a Low staged-rollout gap (same as E1), not blocking.
+- **E1→E2 admin-extend gap CLOSED (5rh.20.35 / E2, 2026-05-26)**: the `admin-extend-publish-attempts`
+  staged-rollout gap (5rh.20.34 entry above) is now closed. E2 RETIRED the deviating top-level
+  `scene extend` GatedSubcommand stub (`handleExtend` fully removed) and moved the command to
+  spec §6.1's nested path `scene publish vote extend <count>` (under handlePublish→handleVote).
+  Because it's nested under direct-routed sub-dispatchers, it gates via an IN-HANDLER evaluator
+  (`handleVoteExtend` @commands.go:1563: `p.evaluator.Evaluate(ctx, "extend_publish_attempts",
+  "scene:"+sceneID)` then `!dec.Allowed` reject BEFORE `ExtendScenePublishVoteAttempts`), the
+  handleEmit/handleVote precedent — NOT the top-level GatedSubcommand. Fails closed on all three
+  edges (nil eval→CommandError, engine err→CommandFailure via zero-value `EvaluateDecision{}`
+  Allowed=false, deny→CommandError). resolve-before-gate ordering is accepted (resource ref needs
+  resolved id; no mutation before gate). When reviewing future nested publish sub-commands, the
+  in-handler gate is the correct shape and the top-level INV-7 backstop test (commands_test.go
+  TestSceneGatedSubcommands_DenyWhenPolicyDenies) does NOT cover them — each needs its own
+  dedicated deny-path + nil-eval + engine-err tests.

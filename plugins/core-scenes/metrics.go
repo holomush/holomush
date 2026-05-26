@@ -171,7 +171,6 @@ func metricScenePublishCoolOffWindowDuration(outcome string, durationSeconds flo
 // metricScenePublishSnapshotDuration records the COOLOFF→PUBLISHED snapshot
 // pipeline latency (spec §13.1). Metric:
 // scene_publish_snapshot_duration_seconds{result}. No-op stub.
-//
 func metricScenePublishSnapshotDuration(result string, durationSeconds float64) {
 	_ = result
 	_ = durationSeconds

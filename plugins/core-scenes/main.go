@@ -81,7 +81,7 @@ func (p *scenePlugin) SetFocusClient(client pluginsdk.FocusClient) {
 
 // SetHostEvaluator is called by the SDK adapter during Init when the plugin
 // declares HostEvaluatorAware. The evaluator is used by admin-gated command
-// handlers (e.g., handleExtend) to perform host ABAC checks.
+// handlers (e.g., handleVoteExtend) to perform host ABAC checks.
 func (p *scenePlugin) SetHostEvaluator(ev pluginsdk.HostEvaluator) {
 	p.evaluator = ev
 }

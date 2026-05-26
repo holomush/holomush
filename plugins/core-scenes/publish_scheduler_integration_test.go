@@ -29,10 +29,10 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"google.golang.org/protobuf/proto"
 
+	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/plugintest"
-	"github.com/holomush/holomush/internal/core"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
@@ -95,7 +95,8 @@ func emitAndSeedIC(ctx context.Context, env *snapshotRealEnv, sceneID, eventType
 		dekRef     sql.NullInt64
 		dekVersion sql.NullInt32
 	)
-	err = env.cryptoPool.QueryRow(ctx, `
+	err = env.cryptoPool.QueryRow(
+		ctx, `
 		SELECT id, codec, envelope, schema_ver, dek_ref, dek_version
 		FROM events_audit WHERE subject = $1 AND type = $2 ORDER BY id DESC LIMIT 1`,
 		icSubject, eventType,
@@ -121,7 +122,8 @@ func emitAndSeedIC(ctx context.Context, env *snapshotRealEnv, sceneID, eventType
 		dekVerP = &v
 	}
 
-	_, err = env.store.Pool().Exec(ctx, `
+	_, err = env.store.Pool().Exec(
+		ctx, `
 		INSERT INTO scene_log (id, subject, type, timestamp, actor_kind, actor_id, payload, schema_ver, codec, dek_ref, dek_version)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		idB, icSubject, eventType,

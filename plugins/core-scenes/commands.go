@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
+	"strconv"
 	"strings"
 
 	"github.com/samber/oops"
@@ -186,7 +188,8 @@ func (p *scenePlugin) fetchSceneLogEntries(ctx context.Context, req pluginsdk.Co
 
 // handlePublish dispatches the "scene publish" sub-commands (spec §6.1). The
 // bare form ("scene publish [#<id>]") starts an attempt; "vote yes|no" casts a
-// vote (B9). withdraw / status / download land in B10.
+// vote (B9); "vote extend <count>" bumps the admin-gated attempt budget (E2).
+// withdraw / status / download land in B10.
 func (p *scenePlugin) handlePublish(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sub, rest := splitSubcommand(args)
 	switch sub {
@@ -336,8 +339,10 @@ func (p *scenePlugin) handleVote(ctx context.Context, req pluginsdk.CommandReque
 		vote = true
 	case "no":
 		vote = false
+	case "extend":
+		return p.handleVoteExtend(ctx, req, rest)
 	default:
-		return pluginsdk.Errorf("Usage: scene publish vote <yes|no> [#<scene id>]"), nil
+		return pluginsdk.Errorf("Usage: scene publish vote <yes|no|extend> [#<scene id>]"), nil
 	}
 
 	sceneID, err := resolveSceneRef(ctx, p.service.store, req.CharacterID, rest)
@@ -451,7 +456,7 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 	span.SetAttributes(attribute.String("subcommand", sub))
 
 	if sub == "" {
-		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, emit, end, extend, focus, grid, info, invite, join, kick, leave, list, log, ooc, order, pause, pose, publish, resume, say, set, switch, transfer"), nil
+		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, emit, end, focus, grid, info, invite, join, kick, leave, list, log, ooc, order, pause, pose, publish, resume, say, set, switch, transfer"), nil
 	}
 
 	// gated dispatches through the ABAC evaluator; fails closed when evaluator is nil.
@@ -491,8 +496,6 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 		return gated("invite", "invite", sceneResourceRefFirstField, p.handleInvite)
 	case "kick":
 		return gated("kick", "kick", sceneResourceRefFirstField, p.handleKick)
-	case "extend":
-		return gated("extend", "extend_publish_attempts", sceneResourceRef, p.handleExtend)
 	case "transfer":
 		return gated("transfer", "transfer-ownership", sceneResourceRefFirstField, p.handleTransfer)
 	case "switch":
@@ -529,7 +532,7 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 	case "list":
 		return p.handleSceneList(ctx, req)
 	default:
-		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, emit, end, extend, focus, grid, info, invite, join, kick, leave, list, log, ooc, order, pause, pose, publish, resume, say, set, switch, transfer.", sub), nil
+		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, emit, end, focus, grid, info, invite, join, kick, leave, list, log, ooc, order, pause, pose, publish, resume, say, set, switch, transfer.", sub), nil
 	}
 }
 
@@ -1520,11 +1523,78 @@ func sceneResourceRefFirstField(args string) (string, error) {
 	return "scene:" + fields[0], nil // ABAC resource ref (type:id), not a pub/sub subject (INV-P4-1)
 }
 
-// handleExtend is the stub handler for `scene extend <scene-id>`. The ABAC
-// gate (admin-extend-publish-attempts policy) is enforced by GatedSubcommand
-// before this function is called, so only admins can reach this point.
+// handleVoteExtend implements `scene publish vote extend <count> [#<scene id>]`
+// (spec §6.1 E2). It bumps the scene's max_publish_attempts budget by <count>
+// (a positive integer). The caller must be a server admin: the admin-extend-
+// publish-attempts ABAC policy (action "extend_publish_attempts", resource
+// "scene:<id>") is evaluated in-handler BEFORE calling the service RPC, making
+// this the live security gate for that policy.
 //
-// TODO(holomush-5rh.20.35): perform the actual publish-attempts bump.
-func (p *scenePlugin) handleExtend(_ context.Context, _ pluginsdk.CommandRequest, _ string) (*pluginsdk.CommandResponse, error) {
-	return pluginsdk.Errorf("scene extend: not yet implemented (tracked in holomush-5rh.20.35)."), nil
+// Arg form: <count> [#<scene id>] — count is first, optional scene ref is last.
+// On success reports the new maximum.
+func (p *scenePlugin) handleVoteExtend(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	// Parse <count> [#<scene id>].
+	countStr, sceneRef := splitSubcommand(args)
+	if countStr == "" {
+		return pluginsdk.Errorf("Usage: scene publish vote extend <count> [#<scene id>]"), nil
+	}
+	count, atoiErr := strconv.Atoi(countStr)
+	if atoiErr != nil || count <= 0 || count > math.MaxInt32 {
+		// Non-integer, non-positive, or out-of-int32-range value — treat as usage error.
+		return pluginsdk.Errorf("Usage: scene publish vote extend <count> [#<scene id>]"), nil //nolint:nilerr // atoiErr is intentionally converted to a user-facing usage message, not propagated as a Go error
+	}
+
+	// Resolve scene via the shared resolveSceneRef helper (handles #<id> +
+	// single-membership inference, consistent with the other publish commands).
+	sceneID, err := resolveSceneRef(ctx, p.service.store, req.CharacterID, strings.TrimSpace(sceneRef))
+	if err != nil {
+		return pluginsdk.Errorf("%v", err), nil
+	}
+
+	// ABAC gate — enforce the admin-extend-publish-attempts policy. Fails closed
+	// when no evaluator is configured so a non-admin cannot bypass on a
+	// misconfigured server.
+	if p.evaluator == nil {
+		slog.WarnContext(
+			ctx, "scene.command.vote_extend evaluator not configured",
+			"subject_id", req.CharacterID,
+			"scene_id", sceneID,
+		)
+		return pluginsdk.Errorf("Permission check unavailable: evaluator not configured."), nil
+	}
+	dec, evalErr := p.evaluator.Evaluate(ctx, "extend_publish_attempts", "scene:"+sceneID)
+	if evalErr != nil {
+		evalErr = oops.Code("SCENE_VOTE_EXTEND_EVALUATE_FAILED").
+			With("character_id", req.CharacterID).
+			With("scene_id", sceneID).Wrap(evalErr)
+		slog.ErrorContext(
+			ctx, "scene.command.vote_extend permission check failed",
+			"subject_id", req.CharacterID,
+			"scene_id", sceneID,
+			"error", evalErr,
+		)
+		return pluginsdk.Failuref("permission check failed: %v", evalErr), nil
+	}
+	if !dec.Allowed {
+		reason := dec.Reason
+		if reason == "" {
+			reason = "permission denied"
+		}
+		return pluginsdk.Errorf("%s", reason), nil
+	}
+
+	// Gate passed — call the service RPC.
+	resp, err := p.service.ExtendScenePublishVoteAttempts(ctx, &scenev1.ExtendScenePublishVoteAttemptsRequest{
+		CallerCharacterId: req.CharacterID,
+		SceneId:           sceneID,
+		Additional:        int32(count), //nolint:gosec // count bounded to [1, math.MaxInt32] above
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Could not extend publish-vote budget: %v", err), nil
+	}
+
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("Publish-vote attempt budget extended; new max is %d.", resp.GetNewMax()),
+	}, nil
 }
