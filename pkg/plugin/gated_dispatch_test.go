@@ -26,127 +26,140 @@ func (f *fakeEvaluator) Evaluate(_ context.Context, action, resource string) (Ev
 	return EvaluateDecision{Allowed: f.allow, Reason: "nope"}, f.err
 }
 
-func TestGatedSubcommand_DenyShortCircuitsBeforeHandler(t *testing.T) {
-	ev := &fakeEvaluator{allow: false}
-	handlerRan := false
-	gs := GatedSubcommand{
-		Name:        "extend",
-		Action:      "extend_publish_attempts",
-		ResourceRef: func(args string) (string, error) { return "scene:" + args, nil },
-		Handler: func(context.Context, CommandRequest, string) (*CommandResponse, error) {
-			handlerRan = true
-			return OK(""), nil
+func TestGatedSubcommand_Run(t *testing.T) {
+	type tc struct {
+		name string
+		// evaluator configuration — if nilEval is true, nil is passed as ev.
+		nilEval     bool
+		evalAllow   bool
+		evalErr     error
+		// GatedSubcommand field overrides — nil means use the default real func.
+		nilResourceRef bool
+		resourceRefErr error
+		nilHandler     bool
+		// expected outcome
+		wantStatus     CommandStatus
+		wantHandlerRan bool
+		// wantEvalCalls is the expected value of ev.calls (-1 means skip the check).
+		wantEvalCalls int
+		wantAction    string
+		wantResource  string
+		wantOutput    string
+	}
+
+	tests := []tc{
+		{
+			name:           "deny short-circuits before handler",
+			evalAllow:      false,
+			wantStatus:     CommandError,
+			wantHandlerRan: false,
+			wantEvalCalls:  1,
+			wantAction:     "extend_publish_attempts",
+			wantResource:   "scene:01SCENE",
+		},
+		{
+			name:           "allow runs handler",
+			evalAllow:      true,
+			wantStatus:     CommandOK,
+			wantHandlerRan: true,
+			wantEvalCalls:  1,
+			wantOutput:     "extended",
+		},
+		{
+			name:           "resource ref error skips gate and handler",
+			evalAllow:      true,
+			resourceRefErr: assertRefErr(),
+			wantStatus:     CommandError,
+			wantHandlerRan: false,
+			wantEvalCalls:  0,
+		},
+		{
+			name:           "engine error returns CommandFailure",
+			evalErr:        errors.New("engine unavailable"),
+			wantStatus:     CommandFailure,
+			wantHandlerRan: false,
+			wantEvalCalls:  1,
+		},
+		{
+			name:           "nil evaluator fails closed",
+			nilEval:        true,
+			wantStatus:     CommandFailure,
+			wantHandlerRan: false,
+			wantEvalCalls:  -1, // no fakeEvaluator to count on
+		},
+		{
+			name:           "nil ResourceRef fails closed",
+			evalAllow:      true,
+			nilResourceRef: true,
+			wantStatus:     CommandFailure,
+			wantHandlerRan: false,
+			wantEvalCalls:  0,
+		},
+		{
+			name:           "nil Handler fails closed",
+			evalAllow:      true,
+			nilHandler:     true,
+			wantStatus:     CommandFailure,
+			wantHandlerRan: false,
+			wantEvalCalls:  -1, // guard fires before eval is called
 		},
 	}
 
-	resp, err := gs.Run(context.Background(), ev, CommandRequest{Command: "scene", Args: "extend 01SCENE"}, "01SCENE")
-	require.NoError(t, err)
-	assert.False(t, handlerRan, "handler MUST NOT run when the gate denies")
-	assert.Equal(t, CommandError, resp.Status)
-	assert.Equal(t, "extend_publish_attempts", ev.gotAction)
-	assert.Equal(t, "scene:01SCENE", ev.gotResrc)
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := &fakeEvaluator{allow: tt.evalAllow, err: tt.evalErr}
 
-func TestGatedSubcommand_AllowRunsHandler(t *testing.T) {
-	ev := &fakeEvaluator{allow: true}
-	gs := GatedSubcommand{
-		Name: "extend", Action: "extend_publish_attempts",
-		ResourceRef: func(args string) (string, error) { return "scene:" + args, nil },
-		Handler: func(context.Context, CommandRequest, string) (*CommandResponse, error) {
-			return OK("extended"), nil
-		},
+			handlerRan := false
+			handler := func(context.Context, CommandRequest, string) (*CommandResponse, error) {
+				handlerRan = true
+				return OK("extended"), nil
+			}
+			if tt.nilHandler {
+				handler = nil
+			}
+
+			resourceRef := func(args string) (string, error) {
+				if tt.resourceRefErr != nil {
+					return "", tt.resourceRefErr
+				}
+				return "scene:" + args, nil
+			}
+			var resourceRefFn func(string) (string, error)
+			if !tt.nilResourceRef {
+				resourceRefFn = resourceRef
+			}
+
+			gs := GatedSubcommand{
+				Name:        "extend",
+				Action:      "extend_publish_attempts",
+				ResourceRef: resourceRefFn,
+				Handler:     handler,
+			}
+
+			var evArg HostEvaluator = ev
+			if tt.nilEval {
+				evArg = nil
+			}
+
+			resp, err := gs.Run(context.Background(), evArg, CommandRequest{Command: "scene", Args: "extend 01SCENE"}, "01SCENE")
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, resp.Status)
+			assert.Equal(t, tt.wantHandlerRan, handlerRan)
+
+			if tt.wantEvalCalls >= 0 {
+				assert.Equal(t, tt.wantEvalCalls, ev.calls)
+			}
+			if tt.wantAction != "" {
+				assert.Equal(t, tt.wantAction, ev.gotAction)
+			}
+			if tt.wantResource != "" {
+				assert.Equal(t, tt.wantResource, ev.gotResrc)
+			}
+			if tt.wantOutput != "" {
+				assert.Equal(t, tt.wantOutput, resp.Output)
+			}
+		})
 	}
-	resp, err := gs.Run(context.Background(), ev, CommandRequest{Command: "scene", Args: "extend 01SCENE"}, "01SCENE")
-	require.NoError(t, err)
-	assert.Equal(t, CommandOK, resp.Status)
-	assert.Equal(t, "extended", resp.Output)
-}
-
-func TestGatedSubcommand_ResourceRefErrorSkipsGateAndHandler(t *testing.T) {
-	ev := &fakeEvaluator{allow: true}
-	handlerRan := false
-	gs := GatedSubcommand{
-		Name: "extend", Action: "extend_publish_attempts",
-		ResourceRef: func(string) (string, error) { return "", assertRefErr() },
-		Handler: func(context.Context, CommandRequest, string) (*CommandResponse, error) {
-			handlerRan = true
-			return OK(""), nil
-		},
-	}
-	resp, err := gs.Run(context.Background(), ev, CommandRequest{Command: "scene", Args: "extend"}, "")
-	require.NoError(t, err)
-	assert.Equal(t, CommandError, resp.Status)
-	assert.False(t, handlerRan)
-	assert.Equal(t, 0, ev.calls, "gate MUST NOT be consulted when the resource ref can't be derived")
-}
-
-func TestGatedSubcommand_EngineErrorReturnsFailure(t *testing.T) {
-	ev := &fakeEvaluator{err: errors.New("engine unavailable")}
-	handlerRan := false
-	gs := GatedSubcommand{
-		Name: "extend", Action: "extend_publish_attempts",
-		ResourceRef: func(args string) (string, error) { return "scene:" + args, nil },
-		Handler: func(context.Context, CommandRequest, string) (*CommandResponse, error) {
-			handlerRan = true
-			return OK(""), nil
-		},
-	}
-	resp, err := gs.Run(context.Background(), ev, CommandRequest{Command: "scene", Args: "extend 01SCENE"}, "01SCENE")
-	require.NoError(t, err)
-	assert.Equal(t, CommandFailure, resp.Status)
-	assert.False(t, handlerRan, "handler MUST NOT run when the engine errors")
-}
-
-func TestGatedSubcommand_NilEvaluatorFailsClosed(t *testing.T) {
-	handlerRan := false
-	gs := GatedSubcommand{
-		Name:        "extend",
-		Action:      "extend_publish_attempts",
-		ResourceRef: func(args string) (string, error) { return "scene:" + args, nil },
-		Handler: func(context.Context, CommandRequest, string) (*CommandResponse, error) {
-			handlerRan = true
-			return OK(""), nil
-		},
-	}
-
-	resp, err := gs.Run(context.Background(), nil, CommandRequest{}, "01SCENE")
-	require.NoError(t, err)
-	assert.Equal(t, CommandFailure, resp.Status, "nil evaluator MUST return CommandFailure")
-	assert.False(t, handlerRan, "handler MUST NOT run when evaluator is nil")
-}
-
-func TestGatedSubcommand_NilResourceRefFailsClosed(t *testing.T) {
-	ev := &fakeEvaluator{allow: true}
-	handlerRan := false
-	gs := GatedSubcommand{
-		Name:        "extend",
-		Action:      "extend_publish_attempts",
-		ResourceRef: nil,
-		Handler: func(context.Context, CommandRequest, string) (*CommandResponse, error) {
-			handlerRan = true
-			return OK(""), nil
-		},
-	}
-
-	resp, err := gs.Run(context.Background(), ev, CommandRequest{}, "01SCENE")
-	require.NoError(t, err)
-	assert.Equal(t, CommandFailure, resp.Status, "nil ResourceRef MUST return CommandFailure")
-	assert.False(t, handlerRan, "handler MUST NOT run when ResourceRef is nil")
-	assert.Equal(t, 0, ev.calls, "evaluator MUST NOT be called when ResourceRef is nil")
-}
-
-func TestGatedSubcommand_NilHandlerFailsClosed(t *testing.T) {
-	ev := &fakeEvaluator{allow: true}
-	gs := GatedSubcommand{
-		Name:        "extend",
-		Action:      "extend_publish_attempts",
-		ResourceRef: func(args string) (string, error) { return "scene:" + args, nil },
-		Handler:     nil,
-	}
-
-	resp, err := gs.Run(context.Background(), ev, CommandRequest{}, "01SCENE")
-	require.NoError(t, err)
-	assert.Equal(t, CommandFailure, resp.Status, "nil Handler MUST return CommandFailure")
 }
 
 func assertRefErr() error { return context.Canceled }

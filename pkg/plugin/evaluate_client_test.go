@@ -32,45 +32,106 @@ func (s *evalTestServer) Evaluate(ctx context.Context, req *pluginv1.PluginHostS
 	return &pluginv1.PluginHostServiceEvaluateResponse{Allowed: s.allow, Reason: "ok", MatchedPolicy: "p1"}, nil
 }
 
-func TestHostEvaluateForwardsAndReturnsDecision(t *testing.T) {
-	srv := &evalTestServer{allow: true}
-	conn := startPluginHostServiceTestServer(t, srv)
-	client := &hostEvaluateClient{client: pluginv1.NewPluginHostServiceClient(conn)}
+func TestHostEvaluateClient(t *testing.T) {
+	type tc struct {
+		name string
+		// buildCtx, if non-nil, wraps context.Background() before the call.
+		buildCtx  func() context.Context
+		nilClient bool
+		allow     bool
+		action    string
+		resource  string
+		// wantErr asserts that Evaluate returns an error.
+		wantErr bool
+		// wantAllowed is only consulted when wantErr is false.
+		wantAllowed   bool
+		wantReason    string
+		wantPolicy    string
+		wantAction    string
+		wantResource  string
+		wantToken     string
+	}
 
-	dec, err := client.Evaluate(context.Background(), "extend_publish_attempts", "scene:01SCENE")
-	require.NoError(t, err)
-	assert.True(t, dec.Allowed)
-	assert.Equal(t, "ok", dec.Reason)
-	assert.Equal(t, "p1", dec.MatchedPolicy)
-	assert.Equal(t, "extend_publish_attempts", srv.gotAction)
-	assert.Equal(t, "scene:01SCENE", srv.gotResource)
-}
+	tests := []tc{
+		{
+			name:         "forwards action and resource, returns decision fields",
+			allow:        true,
+			action:       "extend_publish_attempts",
+			resource:     "scene:01SCENE",
+			wantAllowed:  true,
+			wantReason:   "ok",
+			wantPolicy:   "p1",
+			wantAction:   "extend_publish_attempts",
+			wantResource: "scene:01SCENE",
+		},
+		{
+			name:      "nil client fails closed",
+			nilClient: true,
+			action:    "read",
+			resource:  "scene:01SCENE",
+			wantErr:   true,
+		},
+		{
+			name:  "ferries dispatch token from incoming command context",
+			allow: true,
+			buildCtx: func() context.Context {
+				return metadata.NewIncomingContext(
+					context.Background(),
+					metadata.Pairs(emitTokenHeader, "dispatch-token-abc"),
+				)
+			},
+			action:       "pause",
+			resource:     "scene:01SCENE",
+			wantAllowed:  true,
+			wantToken:    "dispatch-token-abc",
+			wantAction:   "pause",
+			wantResource: "scene:01SCENE",
+		},
+	}
 
-func TestHostEvaluateNilClientFailsClosed(t *testing.T) {
-	client := &hostEvaluateClient{}
-	dec, err := client.Evaluate(context.Background(), "read", "scene:01SCENE")
-	require.Error(t, err)
-	assert.False(t, dec.Allowed)
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := &evalTestServer{allow: tt.allow}
 
-// TestHostEvaluateFerriesDispatchToken asserts the client copies the host-issued
-// per-dispatch token from the incoming command context to the outgoing Evaluate
-// RPC, so the host can recover the subject (mirrors EmitEvent). Without this the
-// host rejects with EMIT_TOKEN_MISSING.
-func TestHostEvaluateFerriesDispatchToken(t *testing.T) {
-	srv := &evalTestServer{allow: true}
-	conn := startPluginHostServiceTestServer(t, srv)
-	client := &hostEvaluateClient{client: pluginv1.NewPluginHostServiceClient(conn)}
+			var client *hostEvaluateClient
+			if tt.nilClient {
+				client = &hostEvaluateClient{}
+			} else {
+				conn := startPluginHostServiceTestServer(t, srv)
+				client = &hostEvaluateClient{client: pluginv1.NewPluginHostServiceClient(conn)}
+			}
 
-	// Simulate the host-dispatched command context carrying the token.
-	ctx := metadata.NewIncomingContext(
-		context.Background(),
-		metadata.Pairs(emitTokenHeader, "dispatch-token-abc"),
-	)
+			ctx := context.Background()
+			if tt.buildCtx != nil {
+				ctx = tt.buildCtx()
+			}
 
-	dec, err := client.Evaluate(ctx, "pause", "scene:01SCENE")
-	require.NoError(t, err)
-	assert.True(t, dec.Allowed)
-	assert.Equal(t, "dispatch-token-abc", srv.gotToken,
-		"Evaluate MUST ferry the dispatch token from the incoming command context to the host")
+			dec, err := client.Evaluate(ctx, tt.action, tt.resource)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.False(t, dec.Allowed)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantAllowed, dec.Allowed)
+			if tt.wantReason != "" {
+				assert.Equal(t, tt.wantReason, dec.Reason)
+			}
+			if tt.wantPolicy != "" {
+				assert.Equal(t, tt.wantPolicy, dec.MatchedPolicy)
+			}
+			if tt.wantAction != "" {
+				assert.Equal(t, tt.wantAction, srv.gotAction)
+			}
+			if tt.wantResource != "" {
+				assert.Equal(t, tt.wantResource, srv.gotResource)
+			}
+			if tt.wantToken != "" {
+				assert.Equal(t, tt.wantToken, srv.gotToken,
+					"Evaluate MUST ferry the dispatch token from the incoming command context to the host")
+			}
+		})
+	}
 }
