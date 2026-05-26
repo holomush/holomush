@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/oops"
 	"go.opentelemetry.io/otel/attribute"
 
@@ -240,6 +241,24 @@ func (s *SceneStore) TallyVotes(ctx context.Context, publishedSceneID string) (*
 	return &t, nil
 }
 
+// TallyVotesTx is TallyVotes scoped to the caller's transaction. The snapshot
+// pipeline re-validates the all-yes invariant inside the write-tx (after the
+// SELECT FOR UPDATE serialization point) using this so a vote-flip that landed
+// before the lock is observed consistently (spec §11.3, INV-RB-8).
+func (s *SceneStore) TallyVotesTx(ctx context.Context, tx pgx.Tx, publishedSceneID string) (*VoteTally, error) {
+	var t VoteTally
+	if err := tx.QueryRow(ctx, `
+		SELECT
+			count(*) FILTER (WHERE vote = true)  AS yes,
+			count(*) FILTER (WHERE vote = false) AS no,
+			count(*) FILTER (WHERE vote IS NULL) AS pending
+		FROM published_scene_votes WHERE published_scene_id = $1
+	`, publishedSceneID).Scan(&t.Yes, &t.No, &t.Pending); err != nil {
+		return nil, oops.Code("SCENE_PUBLISH_TALLY_FAILED").Wrap(err)
+	}
+	return &t, nil
+}
+
 // publishedSceneHeaderColumns is the column list for a header read — every
 // published_scenes column EXCEPT content_entries. The deliberate omission of
 // content_entries is load-bearing for INV-P6-5: the participant gate runs
@@ -422,6 +441,37 @@ func (s *SceneStore) TransitionStatus(ctx context.Context, id string, in Transit
 	return nil
 }
 
+// FailAttemptTx transitions an attempt to ATTEMPT_FAILED with the given
+// failure_reason inside the caller's transaction. Used by the snapshot pipeline
+// for COOLOFF→ATTEMPT_FAILED on decrypt/render failure or a broken all-yes
+// invariant (spec §11.4). The precondition WHERE status='COOLOFF' makes a
+// flipped row a no-op (zero rows → SCENE_PUBLISH_INVALID_TRANSITION); resolved_at
+// is stamped because ATTEMPT_FAILED is terminal.
+func (s *SceneStore) FailAttemptTx(ctx context.Context, tx pgx.Tx, id string, reason PublishFailureReason) error {
+	ctx, span := startSpan(ctx, "scene.store.fail_attempt_tx",
+		attribute.String("published_scene_id", id),
+		attribute.String("failure_reason", string(reason)))
+	defer span.End()
+
+	now := pgnanos.From(time.Now())
+	tag, err := tx.Exec(ctx, `
+		UPDATE published_scenes
+		SET status = 'ATTEMPT_FAILED',
+		    failure_reason = $2,
+		    resolved_at = $3
+		WHERE id = $1 AND status = 'COOLOFF'
+	`, id, string(reason), now)
+	if err != nil {
+		return oops.Code("SCENE_PUBLISH_TRANSITION_FAILED").Wrap(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return oops.Code("SCENE_PUBLISH_INVALID_TRANSITION").
+			With("id", id).With("reason", string(reason)).
+			Errorf("row missing or no longer in COOLOFF for fail transition")
+	}
+	return nil
+}
+
 // LockForSnapshot SELECTs the attempt row FOR UPDATE within the caller's
 // transaction and re-validates that the status is COOLOFF. The row lock is
 // held until the caller's transaction commits/rolls back, serializing the
@@ -508,9 +558,19 @@ func (s *SceneStore) ExtendMaxPublishAttempts(ctx context.Context, sceneID strin
 // character (actor_id — the speaker), and the payload + codec/DEK fields the
 // pipeline needs to decrypt the IC content. ID is the ULID bytes, used for
 // chronological ordering.
+//
+// Timestamp and ActorKind are carried because the host read-back decrypt
+// primitive rebuilds the per-event AAD from the row's authoritative fields
+// (id/subject/type/timestamp/actor.kind/actor.id/codec/dek_ref/dek_version) via
+// AuditRowToEvent + aad.Build — the INV-TS-5 byte-equal round-trip. A LogRow
+// missing these fields would reconstruct a non-matching AAD and fail AEAD
+// tag-check on every sensitive row (read-back design INV-RB-4). Timestamp is the
+// BIGINT epoch-ns scene_log column (INV-TS-1).
 type LogRow struct {
 	ID         []byte
 	Type       string
+	Timestamp  pgnanos.Time
+	ActorKind  string
 	ActorID    []byte
 	Payload    []byte
 	SchemaVer  int16
@@ -532,7 +592,7 @@ func (s *SceneStore) ReadSceneLogForSnapshot(ctx context.Context, tx pgx.Tx, sub
 	defer span.End()
 
 	rows, err := tx.Query(ctx, `
-		SELECT id, type, actor_id, payload, schema_ver, codec, dek_ref, dek_version
+		SELECT id, type, timestamp, actor_kind, actor_id, payload, schema_ver, codec, dek_ref, dek_version
 		FROM scene_log
 		WHERE subject = $1 AND type IN ('scene_pose', 'scene_say', 'scene_emit')
 		ORDER BY id ASC
@@ -546,7 +606,7 @@ func (s *SceneStore) ReadSceneLogForSnapshot(ctx context.Context, tx pgx.Tx, sub
 	for rows.Next() {
 		var r LogRow
 		if err := rows.Scan(
-			&r.ID, &r.Type, &r.ActorID, &r.Payload, &r.SchemaVer, &r.Codec, &r.DEKRef, &r.DEKVersion,
+			&r.ID, &r.Type, &r.Timestamp, &r.ActorKind, &r.ActorID, &r.Payload, &r.SchemaVer, &r.Codec, &r.DEKRef, &r.DEKVersion,
 		); err != nil {
 			return nil, oops.Code("SCENE_PUBLISH_LOG_SCAN_FAILED").Wrap(err)
 		}
@@ -587,4 +647,143 @@ func (s *SceneStore) ListSceneAttempts(ctx context.Context, sceneID string) ([]P
 		return nil, oops.Code("SCENE_PUBLISH_LIST_ATTEMPTS_ITER_FAILED").Wrap(err)
 	}
 	return out, nil
+}
+
+// SnapshotPool exposes the underlying connection pool for the C7 snapshot
+// pipeline, which orchestrates a read-tx → decrypt(outside tx) → write-tx
+// sequence (read-back design §6). It is the same pool as Pool(); the distinct
+// name documents the snapshot-tx-orchestration use on the sceneStorer interface.
+func (s *SceneStore) SnapshotPool() *pgxpool.Pool {
+	return s.pool
+}
+
+// MarkPublishedInput carries the frozen-at-publish-time snapshot fields the
+// COOLOFF→PUBLISHED transition writes onto the published_scenes row (spec §4.1,
+// §11). All four are immutable once written.
+type MarkPublishedInput struct {
+	ContentEntries       []PublishedSceneEntry
+	TitleSnapshot        string
+	ParticipantsSnapshot []string
+	PublishedAt          time.Time
+}
+
+// MarkPublished applies the COOLOFF→PUBLISHED state write inside the caller's
+// transaction: status → PUBLISHED, content_entries / title_snapshot /
+// participants_snapshot / published_at / resolved_at set in one UPDATE. Legality
+// is enforced by a precondition WHERE clause (status = 'COOLOFF') so a row that
+// flipped out of COOLOFF between the lock and this write is NOT clobbered — zero
+// rows updated → SCENE_PUBLISH_INVALID_TRANSITION (the snapshot caller treats
+// this as the vote-flip no-op / COOLOFF_INVARIANT_BROKEN path). The lock from
+// LockForSnapshot is held for the whole tx, so in practice the precondition is a
+// belt-and-suspenders guard alongside the in-tx re-validation.
+func (s *SceneStore) MarkPublished(ctx context.Context, tx pgx.Tx, id string, in MarkPublishedInput) error {
+	ctx, span := startSpan(ctx, "scene.store.mark_published",
+		attribute.String("published_scene_id", id))
+	defer span.End()
+
+	entriesJSON, err := json.Marshal(in.ContentEntries)
+	if err != nil {
+		return oops.Code("SCENE_PUBLISH_CONTENT_ENCODE_FAILED").Wrap(err)
+	}
+	partsJSON, err := json.Marshal(in.ParticipantsSnapshot)
+	if err != nil {
+		return oops.Code("SCENE_PUBLISH_PARTICIPANTS_ENCODE_FAILED").Wrap(err)
+	}
+
+	publishedAt := pgnanos.From(in.PublishedAt)
+	tag, err := tx.Exec(ctx, `
+		UPDATE published_scenes
+		SET status                = 'PUBLISHED',
+		    content_entries       = $2,
+		    title_snapshot        = $3,
+		    participants_snapshot = $4,
+		    published_at          = $5,
+		    resolved_at           = $5
+		WHERE id = $1 AND status = 'COOLOFF'
+	`, id, entriesJSON, in.TitleSnapshot, partsJSON, publishedAt)
+	if err != nil {
+		return oops.Code("SCENE_PUBLISH_MARK_PUBLISHED_FAILED").Wrap(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return oops.Code("SCENE_PUBLISH_INVALID_TRANSITION").
+			With("id", id).
+			Errorf("published_scenes row missing or no longer in COOLOFF at publish write")
+	}
+	return nil
+}
+
+// ArchiveSceneStateForPublish sets scenes.state = 'archived' for the published
+// scene inside the caller's transaction and reports whether a row was affected.
+//
+// FK soft-no-op (read-back design / ADR holomush-jrefa): published_scenes has NO
+// foreign key to scenes(id), so the scene row may have been deleted between
+// COOLOFF entry and snapshot fire. A 0-row UPDATE is therefore NOT an error —
+// the archive intentionally outlives its source. The caller logs a warning and
+// STILL finalizes the publication to PUBLISHED. ok=false signals the soft no-op.
+func (s *SceneStore) ArchiveSceneStateForPublish(ctx context.Context, tx pgx.Tx, sceneID string) (bool, error) {
+	ctx, span := startSpan(ctx, "scene.store.archive_scene_state_for_publish",
+		attribute.String("scene_id", sceneID))
+	defer span.End()
+
+	tag, err := tx.Exec(ctx,
+		`UPDATE scenes SET state = $2 WHERE id = $1`,
+		sceneID, string(SceneStateArchived))
+	if err != nil {
+		return false, oops.Code("SCENE_PUBLISH_ARCHIVE_FAILED").Wrap(err)
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
+// SnapshotSceneMeta carries the scene metadata frozen onto the publication at
+// PUBLISHED time: the scene title and the owner+member participant character
+// IDs (invited excluded — INV-P6-1). Read inside the snapshot's write-tx for a
+// consistent snapshot. Name resolution is a follow-up; character IDs are the
+// available identity surface (see commands.go handleLog speaker note).
+type SnapshotSceneMeta struct {
+	Title        string
+	Participants []string
+}
+
+// ReadSceneMetaForSnapshot reads the scene title and the owner+member
+// participant character IDs inside the caller's transaction. A missing scene
+// (deleted mid-publication) returns (zero-meta, nil): the publication still
+// finalizes; the FK soft-no-op in ArchiveSceneStateForPublish handles the
+// scene-state side. Participant order is stable (joined_at, character_id).
+func (s *SceneStore) ReadSceneMetaForSnapshot(ctx context.Context, tx pgx.Tx, sceneID string) (SnapshotSceneMeta, error) {
+	ctx, span := startSpan(ctx, "scene.store.read_scene_meta_for_snapshot",
+		attribute.String("scene_id", sceneID))
+	defer span.End()
+
+	var meta SnapshotSceneMeta
+	err := tx.QueryRow(ctx, `SELECT title FROM scenes WHERE id = $1`, sceneID).Scan(&meta.Title)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Scene deleted mid-publication: title is empty, participants nil.
+			// The publication still finalizes (ADR holomush-jrefa).
+			return SnapshotSceneMeta{}, nil
+		}
+		return SnapshotSceneMeta{}, oops.Code("SCENE_PUBLISH_META_READ_FAILED").Wrap(err)
+	}
+
+	rows, err := tx.Query(ctx, `
+		SELECT character_id FROM scene_participants
+		WHERE scene_id = $1 AND role IN ('owner', 'member')
+		ORDER BY joined_at ASC, character_id ASC
+	`, sceneID)
+	if err != nil {
+		return SnapshotSceneMeta{}, oops.Code("SCENE_PUBLISH_META_PARTICIPANTS_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid string
+		if err := rows.Scan(&cid); err != nil {
+			return SnapshotSceneMeta{}, oops.Code("SCENE_PUBLISH_META_PARTICIPANTS_SCAN_FAILED").Wrap(err)
+		}
+		meta.Participants = append(meta.Participants, cid)
+	}
+	if err := rows.Err(); err != nil {
+		return SnapshotSceneMeta{}, oops.Code("SCENE_PUBLISH_META_PARTICIPANTS_ITER_FAILED").Wrap(err)
+	}
+	return meta, nil
 }

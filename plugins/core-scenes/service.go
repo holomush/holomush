@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"go.opentelemetry.io/otel/attribute"
@@ -98,6 +100,20 @@ type sceneStorer interface {
 	// `additional` and returns the new budget. Backs the admin-only
 	// ExtendScenePublishVoteAttempts RPC (E1).
 	ExtendMaxPublishAttempts(ctx context.Context, sceneID string, additional int) (int, error)
+
+	// ── C7 snapshot pipeline (COOLOFF→PUBLISHED) ──────────────────────────
+	// SnapshotPool exposes the connection pool so runSnapshot can orchestrate
+	// the read-tx → decrypt(outside tx) → write-tx sequence (read-back design
+	// §6). The remaining methods are tx-scoped so the lock + re-validate +
+	// MarkPublished + archive run in one write transaction (INV-RB-8).
+	SnapshotPool() *pgxpool.Pool
+	LockForSnapshot(ctx context.Context, tx pgx.Tx, id string) (*PublishedScene, error)
+	TallyVotesTx(ctx context.Context, tx pgx.Tx, publishedSceneID string) (*VoteTally, error)
+	ReadSceneLogForSnapshot(ctx context.Context, tx pgx.Tx, subject string) ([]LogRow, error)
+	ReadSceneMetaForSnapshot(ctx context.Context, tx pgx.Tx, sceneID string) (SnapshotSceneMeta, error)
+	MarkPublished(ctx context.Context, tx pgx.Tx, id string, in MarkPublishedInput) error
+	ArchiveSceneStateForPublish(ctx context.Context, tx pgx.Tx, sceneID string) (bool, error)
+	FailAttemptTx(ctx context.Context, tx pgx.Tx, id string, reason PublishFailureReason) error
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.
@@ -114,6 +130,11 @@ type SceneServiceImpl struct {
 	// Phase 6 publish-vote machinery.
 	cfg    SceneServiceConfig // game-wide vote/cool-off defaults.
 	events publishEventer     // scene_publish_* notice emitter; noop until Phase D wires the real one.
+	// decryptor is the host-mediated read-back decrypt seam used by the
+	// COOLOFF→PUBLISHED snapshot pipeline (C7). nil until SetSnapshotDecryptor
+	// wires it at Init; runSnapshot fails closed when nil. The plugin never
+	// holds a DEK — it submits ciphertext rows and receives plaintext (INV-RB-1).
+	decryptor snapshotDecryptor
 }
 
 // NewSceneServiceImpl returns a service backed by the given store.
@@ -142,6 +163,13 @@ func (s *SceneServiceImpl) SetEventSink(sink pluginsdk.EventSink) {
 // the constructor's noopPublishEventer absorbs every emit.
 func (s *SceneServiceImpl) SetPublishEventer(e publishEventer) {
 	s.events = e
+}
+
+// SetSnapshotDecryptor installs the host-mediated read-back decryptor used by
+// the COOLOFF→PUBLISHED snapshot pipeline (C7). Wired at Init from the SDK's
+// SnapshotDecryptorAware injection; tests substitute a real-stack adapter.
+func (s *SceneServiceImpl) SetSnapshotDecryptor(d snapshotDecryptor) {
+	s.decryptor = d
 }
 
 // CreateScene generates a new scene ID, persists the scene, and returns it.

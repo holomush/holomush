@@ -568,15 +568,38 @@ func (s *publishService) runSnapshot(ctx context.Context, publishedSceneID strin
             return err
         }
 
-        // Step 7: archive the scene.
-        if err := s.store.SetSceneState(ctx, tx, pub.SceneID, SceneStateArchived); err != nil {
+        // Step 7: archive the scene. FK soft-no-op (ADR holomush-jrefa):
+        // published_scenes has NO foreign key to scenes(id), so the scene row
+        // may have been deleted between COOLOFF entry and snapshot fire. The
+        // UPDATE MUST therefore check rows-affected: a 0-row result is NOT a
+        // failure — publication STILL finalizes to PUBLISHED with content; the
+        // archive intentionally outlives its source. A warning fires
+        // (code=SCENE_PUBLISH_PARENT_SCENE_GONE) and the pipeline continues. Do
+        // NOT transition to ATTEMPT_FAILED.
+        archived, err := s.store.ArchiveSceneStateForPublish(ctx, tx, pub.SceneID)
+        if err != nil {
             return err
+        }
+        if !archived {
+            slog.WarnContext(ctx,
+                "scene deleted before publication snapshot — publication completes; scene state UPDATE no-op",
+                "attempt_id", pub.ID, "scene_id", pub.SceneID,
+                "code", "SCENE_PUBLISH_PARENT_SCENE_GONE")
         }
         return nil
     })
     // Step 8 (post-tx): emit scene_publish_resolved{outcome=PUBLISHED}.
 }
 ```
+
+> **Decrypt mechanism (corrected by the read-back design).** Step 3's
+> `s.codec.DecodeBatch` sketch is superseded. The plugin holds **no DEK**: it
+> passes the rows it read from `scene_log` to the host's `DecryptOwnAuditRows`
+> entry, chunked into ≤500-row calls (the host rejects an over-cap batch with
+> `DECRYPT_BATCH_TOO_LARGE`), and gets per-row plaintext or a typed refusal back
+> (host-mediated, `2026-05-25-plugin-readback-decrypt-design.md` §3.2–§3.3,
+> INV-RB-1/6/12). ANY per-row refusal/error fails the publish closed
+> (`SNAPSHOT_DECRYPT_FAILED`, INV-RB-10).
 
 ### 11.1 Source of truth for IC events
 
@@ -586,13 +609,26 @@ The filter is `WHERE subject = events.<game_id>.scene.<scene_id>.ic AND type IN 
 
 ### 11.2 Decryption
 
-`scene_pose`, `scene_say`, `scene_emit` are `sensitivity: always` per ADR `holomush-sb3n`. Payloads are per-event-DEK encrypted with AAD bound to event ID + subject. The plugin already holds DEK access for its own events (Phase 7 crypto work). The snapshot reuses the existing decrypt path (no new crypto surface).
+`scene_pose`, `scene_say`, `scene_emit` are `sensitivity: always` per ADR `holomush-sb3n`. Payloads are per-event-DEK encrypted with AAD bound to event ID + subject (+ type + timestamp + actor + codec + dek_ref/version per master §4.2).
 
-The crypto-reviewer MUST evaluate this section for any inadvertent AAD or fence violation. Specifically, bulk-decrypt-at-snapshot reuses existing primitives but is a new caller; the reviewer should confirm:
+> **Corrected premise (read-back design `holomush-m7pxs`).** The earlier claim
+> "the plugin already holds DEK access for its own events" is **false** — the
+> plugin imports no DEK/codec/crypto and holds no key. The snapshot passes the
+> rows it read from `scene_log` to the host's `DecryptOwnAuditRows` entry; the
+> **host** rebuilds AAD (via `AuditRowToEvent` + `aad.Build`, the INV-TS-5
+> byte-equal round-trip), resolves the DEK, decrypts, audits (INV-19), and
+> returns per-row **plaintext** (the plugin still never sees a DEK). The
+> snapshot chunks the decrypt into ≤500-row calls (`maxDecryptBatch`; the host
+> rejects over-cap). See `2026-05-25-plugin-readback-decrypt-design.md`
+> §3.2–§3.3 and INV-RB-1..5 / INV-RB-6 / INV-RB-10 / INV-RB-12. The earlier "no
+> new crypto surface" framing is void — the read-back primitive + capability +
+> grant + RPC are new surface, gated by the crypto-reviewer.
 
-- AAD is constructed identically to the runtime decrypt path.
-- The downgrade fence (INV-P7-7) is unchanged — no payload-encrypted event is rendered without successful decrypt.
-- DEK access does not cross plugin boundaries (per the role-isolation invariants).
+The crypto-reviewer MUST evaluate this section for any inadvertent AAD or fence violation. Specifically, bulk-decrypt-at-snapshot is a new caller of the host primitive; the reviewer should confirm:
+
+- AAD is reconstructed host-side identically to the encrypt path (INV-RB-4): the `scene_log`→`AuditRow` conversion (`logRowToAuditRow`) carries `id`/`subject`/`type`/`timestamp`/`actor_kind`/`actor_id`/`codec`/`dek_ref`/`dek_version` so the rebuilt AAD is byte-equal.
+- The downgrade fence (INV-P7-7) and DEK-existence (INV-P7-15) still apply on the direct entry — no payload-encrypted event is rendered without successful decrypt (INV-RB-5).
+- DEK access does not cross plugin boundaries; the OwnerMap g1 gate confines the plugin to subjects it owns (INV-RB-2).
 
 ### 11.3 Atomicity
 
@@ -609,6 +645,14 @@ Steps 1–7 happen in a single Postgres transaction. The `SELECT FOR UPDATE` row
 | DB error | Bubble up; timer retries on next tick |
 
 All failure transitions emit `scene_publish_resolved` with the appropriate `outcome` and `reason`.
+
+#### Soft no-op cases
+
+Some conditions are deliberately **not** failures — the snapshot still finalizes to PUBLISHED:
+
+| Condition | Behavior |
+| --------- | -------- |
+| Parent scene deleted between COOLOFF entry and snapshot fire | The Step-7 `UPDATE scenes SET state = 'archived'` affects **0 rows** (`published_scenes` has no FK to `scenes(id)` — ADR `holomush-jrefa`). This is a **soft no-op**, NOT a failure: the publication STILL commits as PUBLISHED with `content_entries`; the archive intentionally outlives its source. The pipeline logs `slog.WarnContext(ctx, …, code="SCENE_PUBLISH_PARENT_SCENE_GONE")` with `attempt_id` + `scene_id` and continues. It MUST NOT transition to ATTEMPT_FAILED. (The Step-5 scene-metadata read is correspondingly tolerant: a missing scene yields empty title + nil participants, and publication proceeds.) |
 
 ## 12. Renderers
 

@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -548,6 +550,42 @@ func (f *fakeStore) Update(_ context.Context, id string, update *SceneUpdate) (*
 	}
 	cp := *row
 	return &cp, nil
+}
+
+// ── C7 snapshot-pipeline interface stubs ──────────────────────────────────
+// The snapshot pipeline (runSnapshot) is tx-scoped and exercised exclusively by
+// publish_snapshot_integration_test.go against a real Postgres + real read-back
+// decryptor. These fakeStore stubs exist only to satisfy the sceneStorer
+// interface for the unit suite; they are never invoked by a unit test.
+
+func (f *fakeStore) SnapshotPool() *pgxpool.Pool { return nil }
+
+func (f *fakeStore) LockForSnapshot(_ context.Context, _ pgx.Tx, id string) (*PublishedScene, error) {
+	return nil, oops.Code("SCENE_PUBLISH_NOT_FOUND").With("id", id).Errorf("fakeStore: LockForSnapshot not supported")
+}
+
+func (f *fakeStore) TallyVotesTx(ctx context.Context, _ pgx.Tx, publishedSceneID string) (*VoteTally, error) {
+	return f.TallyVotes(ctx, publishedSceneID)
+}
+
+func (f *fakeStore) ReadSceneLogForSnapshot(_ context.Context, _ pgx.Tx, _ string) ([]LogRow, error) {
+	return nil, nil
+}
+
+func (f *fakeStore) ReadSceneMetaForSnapshot(_ context.Context, _ pgx.Tx, _ string) (SnapshotSceneMeta, error) {
+	return SnapshotSceneMeta{}, nil
+}
+
+func (f *fakeStore) MarkPublished(_ context.Context, _ pgx.Tx, _ string, _ MarkPublishedInput) error {
+	return oops.Code("SCENE_PUBLISH_INVALID_TRANSITION").Errorf("fakeStore: MarkPublished not supported")
+}
+
+func (f *fakeStore) ArchiveSceneStateForPublish(_ context.Context, _ pgx.Tx, _ string) (bool, error) {
+	return false, nil
+}
+
+func (f *fakeStore) FailAttemptTx(_ context.Context, _ pgx.Tx, _ string, _ PublishFailureReason) error {
+	return oops.Code("SCENE_PUBLISH_INVALID_TRANSITION").Errorf("fakeStore: FailAttemptTx not supported")
 }
 
 func TestSceneServiceCreateScenePersistsTitleAndOwnerWhenRequestIsValid(t *testing.T) {

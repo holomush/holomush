@@ -93,6 +93,17 @@ func (p *scenePlugin) SetEventSink(sink pluginsdk.EventSink) {
 	}
 }
 
+// SetSnapshotDecryptor forwards the SDK-injected host-mediated read-back
+// decryptor to the scene service, where the COOLOFF→PUBLISHED snapshot pipeline
+// (C7) uses it to decrypt its own IC content (the plugin holds no DEK —
+// INV-RB-1). Declares scenePlugin as pluginsdk.SnapshotDecryptorAware so the SDK
+// adapter wires it before Init.
+func (p *scenePlugin) SetSnapshotDecryptor(d pluginsdk.SnapshotDecryptor) {
+	if p.service != nil {
+		p.service.SetSnapshotDecryptor(d)
+	}
+}
+
 // EmitRegistry implements pluginsdk.EmitTypeRegistrar. The substrate
 // INV-S5 validator reads this set via the binary-plugin Init RPC and
 // validates set-equality against manifest crypto.emits.
