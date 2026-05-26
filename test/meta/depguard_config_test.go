@@ -24,6 +24,7 @@ func TestDepguardTestOnlyConstructRulesPresent(t *testing.T) {
 	for _, pkg := range []string{
 		"github.com/holomush/holomush/internal/eventbus/eventbustest",
 		"github.com/holomush/holomush/internal/core/coretest",
+		"github.com/holomush/holomush/internal/testsupport/quarantinetest",
 	} {
 		require.Contains(t, cfg, pkg,
 			"depguard deny rule for %q missing from .golangci.yaml (holomush-1eps2 INV-1/INV-2)", pkg)

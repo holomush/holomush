@@ -150,6 +150,8 @@ linters:
               desc: "embedded NATS test harness; production code MUST NOT import it (holomush-1eps2)"
             - pkg: github.com/holomush/holomush/internal/core/coretest
               desc: "in-memory test event store; production code MUST NOT import it (holomush-1eps2)"
+            - pkg: github.com/holomush/holomush/internal/testsupport/quarantinetest
+              desc: "quarantine skip helper; production code MUST NOT import it (holomush-b4myw)"
 
     errcheck:
       check-type-assertions: true
