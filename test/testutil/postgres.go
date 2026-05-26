@@ -96,6 +96,15 @@ func startPostgresOnce(ctx context.Context) (*PostgresEnv, error) {
 		),
 	)
 	if err != nil {
+		// testcontainers-go returns a non-nil container handle when the
+		// wait-until-ready strategy fails (generic.go: `return c, err`).
+		// Reclaim it before returning so StartPostgres's retry does not pile
+		// a fresh container on top of a leaked half-started one — the
+		// resource pressure that causes the mapped-port timeout in the first
+		// place (holomush-tmrv).
+		if container != nil {
+			_ = container.Terminate(ctx) //nolint:errcheck // best-effort cleanup
+		}
 		return nil, fmt.Errorf("run postgres: %w", err)
 	}
 
