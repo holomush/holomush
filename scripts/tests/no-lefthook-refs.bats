@@ -24,5 +24,5 @@ setup() {
 
 @test "no lefthook references in live config/docs" {
   run rg -i -n lefthook Taskfile.yaml cog.toml docs/CLAUDE.md CLAUDE.md
-  assert_failure # rg exits 1 when there are no matches
+  assert_failure 1 # rg exits 1 (no match); exit 2+ (rg error) must NOT false-green the invariant
 }

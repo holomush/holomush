@@ -8,6 +8,10 @@ vars:
   BINARY_NAME: holomush
   MAIN_PKG: ./cmd/holomush
   MIGRATIONS_DIR: internal/store/migrations
+  # license-eye (Apache SkyWalking Eyes) pinned release. MUST stay in sync with
+  # the literal version in .github/workflows/ci.yaml's Lint "Install tools" step.
+  # (DRY composite-action refactor deferred to holomush-k6k67.)
+  LICENSE_EYE_VERSION: v0.8.0
   # Build/test/lint tooling is pinned in isolated `go tool` modules
   # (go.tool.mod, go.tool-lint.mod) and run from the Go module proxy rather
   # than installed from GitHub Releases — this removes the CDN-flake class
@@ -710,13 +714,13 @@ tasks:
   license:check:
     desc: Check SPDX license headers (code + functional markdown)
     cmds:
-      - command -v license-eye >/dev/null 2>&1 || go install github.com/apache/skywalking-eyes/cmd/license-eye@latest
+      - command -v license-eye >/dev/null 2>&1 || go install github.com/apache/skywalking-eyes/cmd/license-eye@{{.LICENSE_EYE_VERSION}}
       - license-eye header check
 
   license:add:
     desc: Add missing SPDX license headers (code + functional markdown)
     cmds:
-      - command -v license-eye >/dev/null 2>&1 || go install github.com/apache/skywalking-eyes/cmd/license-eye@latest
+      - command -v license-eye >/dev/null 2>&1 || go install github.com/apache/skywalking-eyes/cmd/license-eye@{{.LICENSE_EYE_VERSION}}
       - license-eye header fix
 
   # ──────────────────────────────────────────
@@ -940,7 +944,7 @@ tasks:
       - brew install go-task goreleaser dprint cocogitto rumdl binaryen flock bats-core yq
       - brew install steveyegge/beads/bd
       - go install github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc@latest
-      - go install github.com/apache/skywalking-eyes/cmd/license-eye@latest
+      - go install github.com/apache/skywalking-eyes/cmd/license-eye@{{.LICENSE_EYE_VERSION}}
       - bd hooks install --chain
       - echo "✓ Dev environment ready. Run 'task dev' to start."
 

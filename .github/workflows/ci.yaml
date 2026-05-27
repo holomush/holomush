@@ -87,8 +87,9 @@ jobs:
           sudo install -m 0755 /tmp/buf /usr/local/bin/buf
           rm /tmp/buf
           # license-eye (Apache SkyWalking Eyes) drives `task license:check` —
-          # a Go tool, installed from the module proxy (matches `task setup`).
-          go install github.com/apache/skywalking-eyes/cmd/license-eye@latest
+          # a Go tool, installed from the module proxy. Pinned: keep v0.8.0 in
+          # sync with Taskfile.yaml's LICENSE_EYE_VERSION var.
+          go install github.com/apache/skywalking-eyes/cmd/license-eye@v0.8.0
 
       - name: Verify schema is current
         run: |

@@ -23,7 +23,7 @@ setup() {
 
 @test "plugin content markdown stays header-free (INV-6)" {
   run rg -l '~ SPDX-License-Identifier' plugins --glob 'plugins/**/content/**/*.md'
-  assert_failure # rg exits 1 when no file matches -> no content md carries a header
+  assert_failure 1 # rg exits 1 (no match); exit 2+ (rg error) must NOT false-green the invariant
 }
 
 @test "player-facing site docs stay header-free (INV-6)" {
@@ -33,7 +33,7 @@ setup() {
   # (single-line `<!-- SPDX ... -->` form, not license-eye's), which is why this
   # guard targets the player/operator subtrees and license-eye's tilde form.
   run rg -l '~ SPDX-License-Identifier' site/docs/guide site/docs/operating site/docs/reference --glob '*.md'
-  assert_failure
+  assert_failure 1 # rg exits 1 (no match); exit 2+ (rg error) must NOT false-green the invariant
 }
 
 # INV-4: after `task fmt`, a freshly-added unheadered in-scope file passes check.
