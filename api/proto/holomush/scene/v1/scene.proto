@@ -26,6 +26,16 @@ service SceneService {
   rpc TransferOwnership(TransferOwnershipRequest) returns (TransferOwnershipResponse);
   rpc CastPublishVote(CastPublishVoteRequest) returns (CastPublishVoteResponse);
   rpc GetPoseOrder(GetPoseOrderRequest) returns (GetPoseOrderResponse);
+  // Phase 6 publication RPCs. See spec section 5.
+  rpc StartScenePublish(StartScenePublishRequest) returns (StartScenePublishResponse);
+  rpc CastPublishSceneVote(CastPublishSceneVoteRequest) returns (CastPublishSceneVoteResponse);
+  rpc WithdrawScenePublish(WithdrawScenePublishRequest) returns (WithdrawScenePublishResponse);
+  rpc GetPublishedScene(GetPublishedSceneRequest) returns (GetPublishedSceneResponse);
+  rpc DownloadPublishedScene(DownloadPublishedSceneRequest) returns (DownloadPublishedSceneResponse);
+  rpc ListScenePublishAttempts(ListScenePublishAttemptsRequest) returns (ListScenePublishAttemptsResponse);
+  rpc GetPublicSceneArchive(GetPublicSceneArchiveRequest) returns (GetPublicSceneArchiveResponse);
+  rpc DownloadPublicSceneArchive(DownloadPublicSceneArchiveRequest) returns (DownloadPublicSceneArchiveResponse);
+  rpc ExtendScenePublishVoteAttempts(ExtendScenePublishVoteAttemptsRequest) returns (ExtendScenePublishVoteAttemptsResponse);
 }
 
 message SceneInfo {
@@ -244,4 +254,162 @@ message GetPoseOrderResponse {
   string mode = 1; // strict | 3pr | 5pr | free
   uint32 total_pose_count = 2;
   repeated PoseOrderEntry entries = 3;
+}
+
+// Phase 6 publication messages. See spec section 5.
+
+message StartScenePublishRequest {
+  string caller_character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
+}
+message StartScenePublishResponse {
+  string published_scene_id = 1;
+  int32 attempt_number = 2;
+}
+
+message CastPublishSceneVoteRequest {
+  string caller_character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string published_scene_id = 2 [(buf.validate.field).string.min_len = 1];
+  bool vote = 3;
+}
+message CastPublishSceneVoteResponse {
+  bool is_change = 1;
+}
+
+message WithdrawScenePublishRequest {
+  string caller_character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string published_scene_id = 2 [(buf.validate.field).string.min_len = 1];
+}
+message WithdrawScenePublishResponse {}
+
+message PublishedSceneEntry {
+  string speaker = 1;
+  string kind = 2; // "pose" | "say" | "emit"
+  string content = 3;
+}
+
+message PublishedSceneVoteSummary {
+  int32 yes = 1;
+  int32 no = 2;
+  int32 pending = 3;
+}
+
+message GetPublishedSceneRequest {
+  string caller_character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string published_scene_id = 2 [(buf.validate.field).string.min_len = 1];
+}
+message GetPublishedSceneResponse {
+  string id = 1;
+  string scene_id = 2;
+  int32 attempt_number = 3;
+  string status = 4;
+  string failure_reason = 5; // empty unless ATTEMPT_FAILED
+  PublishedSceneVoteSummary tally = 6;
+  repeated PublishedSceneEntry content_entries = 7; // populated only when PUBLISHED
+  string title_snapshot = 8;
+  repeated string participants_snapshot = 9;
+  int64 initiated_at_unix_ns = 10;
+  int64 cooloff_started_at_unix_ns = 11;
+  int64 resolved_at_unix_ns = 12;
+  int64 published_at_unix_ns = 13;
+}
+
+message DownloadPublishedSceneRequest {
+  string caller_character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string published_scene_id = 2 [(buf.validate.field).string.min_len = 1];
+  string format = 3 [(buf.validate.field).string.min_len = 1]; // "markdown" | "plain_text" | "jsonl"
+}
+message DownloadPublishedSceneResponse {
+  bytes content = 1;
+  string mime_type = 2;
+}
+
+message ListScenePublishAttemptsRequest {
+  string caller_character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
+}
+message ListScenePublishAttemptsResponse {
+  repeated PublishedSceneSummary attempts = 1;
+}
+message PublishedSceneSummary {
+  string id = 1;
+  int32 attempt_number = 2;
+  string status = 3;
+  string failure_reason = 4;
+  int64 initiated_at_unix_ns = 5;
+  int64 resolved_at_unix_ns = 6;
+}
+
+message GetPublicSceneArchiveRequest {
+  string published_scene_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+message GetPublicSceneArchiveResponse {
+  string id = 1;
+  string title_snapshot = 2;
+  repeated string participants_snapshot = 3;
+  repeated PublishedSceneEntry content_entries = 4;
+  int64 published_at_unix_ns = 5;
+}
+
+message DownloadPublicSceneArchiveRequest {
+  string published_scene_id = 1 [(buf.validate.field).string.min_len = 1];
+  string format = 2 [(buf.validate.field).string.min_len = 1];
+}
+message DownloadPublicSceneArchiveResponse {
+  bytes content = 1;
+  string mime_type = 2;
+}
+
+message ExtendScenePublishVoteAttemptsRequest {
+  string caller_character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
+  int32 additional = 3 [(buf.validate.field).int32.gt = 0];
+}
+message ExtendScenePublishVoteAttemptsResponse {
+  int32 new_max = 1;
+}
+
+// IC notice event messages for Phase 6 scene publication state transitions.
+// All carry sensitivity:never per crypto.emits manifest.
+
+message ScenePublishStartedEvent {
+  string attempt_id = 1;
+  int32 attempt_number = 2;
+  string initiated_by = 3;
+  int64 vote_window_seconds = 4;
+  int64 cooloff_window_seconds = 5;
+  repeated string roster_character_ids = 6;
+}
+
+message ScenePublishVoteCastEvent {
+  string attempt_id = 1;
+  string character_id = 2;
+  bool vote = 3;
+  bool is_change = 4;
+}
+
+message ScenePublishCoolOffStartedEvent {
+  string attempt_id = 1;
+  int64 cooloff_ends_at_unix_ns = 2;
+}
+
+message ScenePublishResolvedEvent {
+  string attempt_id = 1;
+  string outcome = 2; // "PUBLISHED" | "ATTEMPT_FAILED"
+  string failure_reason = 3; // empty unless ATTEMPT_FAILED
+  int32 tally_yes = 4;
+  int32 tally_no = 5;
+  int32 tally_pending = 6;
+}
+
+message ScenePublishWithdrawnEvent {
+  string attempt_id = 1;
+  string withdrawn_by = 2;
+}
+
+message ScenePublishVoteAttemptsExtendedEvent {
+  string scene_id = 1;
+  int32 additional = 2;
+  int32 new_max = 3;
+  string admin_id = 4;
 }

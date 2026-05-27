@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
+	"strconv"
 	"strings"
 
 	"github.com/samber/oops"
@@ -20,6 +22,419 @@ import (
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 )
+
+// membershipLookup is the minimal store dependency resolveSceneRef needs.
+// The real *SceneStore satisfies it via ListScenesForCharacter (store.go);
+// tests use a small fake.
+type membershipLookup interface {
+	ListScenesForCharacter(ctx context.Context, characterID string) ([]string, error)
+}
+
+// resolveSceneRef returns the scene ID a "scene publish *" / "scene log *"
+// command targets (spec §6.1). An explicit "#<id>" arg names the scene
+// directly; the strict form has no space after the '#'. With no arg, the
+// helper uses single-membership inference (mirroring handleEmit/handleOrder's
+// resolveSingleSceneMembership): exactly one active membership resolves to that
+// scene; zero or multiple returns SCENE_PUBLISH_NO_FOCUSED_SCENE prompting the
+// player to pass "#<id>". Whitespace-only args are treated as no-arg.
+//
+// The plugin SDK exposes no per-connection "focused scene" query
+// (pluginsdk.FocusClient has no GetConnectionFocus), so single-membership
+// inference is the established pattern, reused here rather than inventing a new
+// abstraction.
+func resolveSceneRef(ctx context.Context, look membershipLookup, characterID, args string) (string, error) {
+	args = strings.TrimSpace(args)
+	if strings.HasPrefix(args, "#") {
+		// Strict "#<id>": no inner trim, so a space after '#' (or an embedded
+		// space/newline/'#') is a malformed reference rather than a silent fixup.
+		id := args[1:]
+		if id == "" || strings.ContainsAny(id, " \t\n#") {
+			return "", oops.Code("SCENE_PUBLISH_REF_INVALID").
+				With("arg", args).Errorf("malformed scene reference; use '#<scene_id>'")
+		}
+		return id, nil
+	}
+	if args != "" {
+		return "", oops.Code("SCENE_PUBLISH_REF_INVALID").
+			With("arg", args).Errorf("scene reference must use the '#<scene_id>' form")
+	}
+
+	scenes, err := look.ListScenesForCharacter(ctx, characterID)
+	if err != nil {
+		return "", oops.Code("SCENE_PUBLISH_REF_LOOKUP_FAILED").Wrap(err)
+	}
+	if len(scenes) != 1 {
+		return "", oops.Code("SCENE_PUBLISH_NO_FOCUSED_SCENE").
+			With("matching_scenes", len(scenes)).
+			Errorf("command requires a '#<scene_id>' argument (caller is in %d active scenes)", len(scenes))
+	}
+	return scenes[0], nil
+}
+
+// sceneLogReplayLimit bounds a single "scene log" page (most-recent N events).
+const sceneLogReplayLimit = 50
+
+// replayEventKinds maps the IC content event types to their render kind. Only
+// these three are replayed by "scene log"; joins, ops, OOC, and publish-
+// lifecycle notices are skipped.
+var replayEventKinds = map[string]EntryKind{
+	"scene_pose": EntryKindPose,
+	"scene_say":  EntryKindSay,
+	"scene_emit": EntryKindEmit,
+}
+
+// decodeReplayEntries converts QueryStreamHistory events (oldest→newest) into
+// renderable content entries, keeping only the IC content kinds and decoding
+// each event's {actor_id, text} payload (the shape handleEmit writes). A
+// payload that won't decode fails the whole replay rather than silently
+// dropping a line.
+func decodeReplayEntries(events []pluginsdk.Event) ([]PublishedSceneEntry, error) {
+	out := make([]PublishedSceneEntry, 0, len(events))
+	for i := range events {
+		kind, ok := replayEventKinds[string(events[i].Type)]
+		if !ok {
+			continue
+		}
+		var pl struct {
+			ActorID string `json:"actor_id"`
+			Text    string `json:"text"`
+		}
+		if err := json.Unmarshal([]byte(events[i].Payload), &pl); err != nil {
+			return nil, oops.Code("SCENE_LOG_DECODE_FAILED").
+				With("event_id", events[i].ID).Wrap(err)
+		}
+		out = append(out, PublishedSceneEntry{Speaker: pl.ActorID, Kind: kind, Content: pl.Text})
+	}
+	return out, nil
+}
+
+// handleLog dispatches the "scene log" sub-commands (spec §6.1; folds in
+// holomush-cb4x): the bare form replays the IC content history as plain text;
+// "export <format>" (E4) renders it to markdown / plain_text / jsonl. Both are
+// participant-gated (INV-S9, plugin-code) and read DECRYPTED content via the
+// host's QueryStreamHistory — NOT the plugin's own audit QueryHistory, which
+// serves ciphertext. Speaker is the actor character id; name resolution is a
+// follow-up.
+func (p *scenePlugin) handleLog(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	if sub, rest := splitSubcommand(args); sub == "export" {
+		return p.handleLogExport(ctx, req, rest)
+	}
+	entries, errResp := p.fetchSceneLogEntries(ctx, req, args)
+	if errResp != nil {
+		return errResp, nil
+	}
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: renderPlainText(entries),
+	}, nil
+}
+
+// handleLogExport renders a scene's IC content history to the requested format
+// ("scene log export <markdown|plain_text|jsonl> [#<id>]"). Same participant-
+// gated read as the bare replay; the format dispatches to the shared renderers
+// via renderPublishedScene (C1/C2/C3).
+func (p *scenePlugin) handleLogExport(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	format, ref := splitSubcommand(args)
+	if format == "" {
+		return pluginsdk.Errorf("Usage: scene log export <markdown|plain_text|jsonl> [#<scene id>]"), nil
+	}
+	if _, ok := publishRenderMime[format]; !ok {
+		return pluginsdk.Errorf("Unsupported export format %q. Use markdown, plain_text, or jsonl.", format), nil
+	}
+	entries, errResp := p.fetchSceneLogEntries(ctx, req, ref)
+	if errResp != nil {
+		return errResp, nil
+	}
+	content, err := renderPublishedScene(format, entries)
+	if err != nil {
+		return pluginsdk.Errorf("Could not export scene log: %v", err), nil
+	}
+	return &pluginsdk.CommandResponse{Status: pluginsdk.CommandOK, Output: string(content)}, nil
+}
+
+// fetchSceneLogEntries resolves the scene, runs the INV-S9 participant gate
+// (plugin-code, before any history read), and returns the decoded IC content
+// entries via the host's QueryStreamHistory (decrypted host-side, membership-
+// gated). On any failure it returns a non-nil error CommandResponse for the
+// caller to return directly. Shared by the replay and export forms of scene log.
+func (p *scenePlugin) fetchSceneLogEntries(ctx context.Context, req pluginsdk.CommandRequest, ref string) ([]PublishedSceneEntry, *pluginsdk.CommandResponse) {
+	sceneID, err := resolveSceneRef(ctx, p.service.store, req.CharacterID, ref)
+	if err != nil {
+		return nil, pluginsdk.Errorf("%v", err)
+	}
+	ok, err := p.service.store.IsParticipant(ctx, sceneID, req.CharacterID)
+	if err != nil {
+		return nil, pluginsdk.Errorf("Could not verify scene membership: %v", err)
+	}
+	if !ok {
+		return nil, pluginsdk.Errorf("You are not a participant in that scene.")
+	}
+	if p.focusClient == nil {
+		return nil, pluginsdk.Errorf("Scene log is unavailable.")
+	}
+	resp, err := p.focusClient.QueryStreamHistory(ctx, pluginsdk.QueryStreamHistoryRequest{
+		Stream: dotStyleSceneSubjectIC(p.service.gameID, sceneID),
+		Count:  sceneLogReplayLimit,
+	})
+	if err != nil {
+		return nil, pluginsdk.Errorf("Could not read scene log: %v", err)
+	}
+	entries, err := decodeReplayEntries(resp.Events)
+	if err != nil {
+		return nil, pluginsdk.Errorf("Could not render scene log: %v", err)
+	}
+	return entries, nil
+}
+
+// handlePublish dispatches the "scene publish" sub-commands (spec §6.1). The
+// bare form ("scene publish [#<id>]") starts an attempt; "vote yes|no" casts a
+// vote (B9); "vote extend <count>" bumps the admin-gated attempt budget (E2).
+// withdraw / status / download land in B10.
+func (p *scenePlugin) handlePublish(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	sub, rest := splitSubcommand(args)
+	switch sub {
+	case "vote":
+		return p.handleVote(ctx, req, rest)
+	case "withdraw":
+		return p.handleWithdraw(ctx, req, rest)
+	case "status":
+		return p.handleStatus(ctx, req, rest)
+	case "download":
+		return p.handleDownload(ctx, req, rest)
+	default:
+		// Bare "scene publish [#<id>]" → start an attempt. args carries the
+		// optional scene ref (empty → single-membership inference).
+		return p.handlePublishStart(ctx, req, args)
+	}
+}
+
+// latestAttemptID returns the most recent attempt's id (ListSceneAttempts is
+// ordered by attempt_number ASC, so the last element is newest), or ("", false)
+// if the scene has no attempts.
+func latestAttemptID(attempts []PublishedScene) (string, bool) {
+	if len(attempts) == 0 {
+		return "", false
+	}
+	return attempts[len(attempts)-1].ID, true
+}
+
+// publishedAttemptID returns the scene's PUBLISHED attempt id (one-and-done, so
+// at most one), or ("", false) if the scene was never published.
+func publishedAttemptID(attempts []PublishedScene) (string, bool) {
+	for i := range attempts {
+		if attempts[i].Status == StatusPublished {
+			return attempts[i].ID, true
+		}
+	}
+	return "", false
+}
+
+// handleWithdraw withdraws a scene's active publish attempt (spec §6.1). Owner-
+// only: WithdrawScenePublish (B4) enforces the owner check
+// (SCENE_PUBLISH_NOT_OWNER → PermissionDenied), so no in-handler gate is needed.
+func (p *scenePlugin) handleWithdraw(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	sceneID, err := resolveSceneRef(ctx, p.service.store, req.CharacterID, args)
+	if err != nil {
+		return pluginsdk.Errorf("%v", err), nil
+	}
+	attempts, err := p.service.store.ListSceneAttempts(ctx, sceneID)
+	if err != nil {
+		return pluginsdk.Errorf("Could not look up the publish attempt: %v", err), nil
+	}
+	attemptID, ok := activeAttemptID(attempts)
+	if !ok {
+		return pluginsdk.Errorf("There is no active publish attempt to withdraw for that scene."), nil
+	}
+	if _, err := p.service.WithdrawScenePublish(ctx, &scenev1.WithdrawScenePublishRequest{
+		CallerCharacterId: req.CharacterID,
+		PublishedSceneId:  attemptID,
+	}); err != nil {
+		return pluginsdk.Errorf("Could not withdraw publish attempt: %v", err), nil
+	}
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: "The publish attempt has been withdrawn.",
+	}, nil
+}
+
+// handleStatus shows the latest publish attempt's state for a scene (spec §6.1).
+// Participant-gated: GetPublishedScene (B5) enforces the INV-S9 participant gate.
+func (p *scenePlugin) handleStatus(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	sceneID, err := resolveSceneRef(ctx, p.service.store, req.CharacterID, args)
+	if err != nil {
+		return pluginsdk.Errorf("%v", err), nil
+	}
+	attempts, err := p.service.store.ListSceneAttempts(ctx, sceneID)
+	if err != nil {
+		return pluginsdk.Errorf("Could not look up publish attempts: %v", err), nil
+	}
+	attemptID, ok := latestAttemptID(attempts)
+	if !ok {
+		return pluginsdk.Errorf("There are no publish attempts for that scene."), nil
+	}
+	resp, err := p.service.GetPublishedScene(ctx, &scenev1.GetPublishedSceneRequest{
+		CallerCharacterId: req.CharacterID,
+		PublishedSceneId:  attemptID,
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Could not read publish status: %v", err), nil
+	}
+	out := fmt.Sprintf("Publish attempt #%d: %s", resp.GetAttemptNumber(), resp.GetStatus())
+	if t := resp.GetTally(); t != nil {
+		out += fmt.Sprintf(" (votes: %d yes, %d no, %d pending)", t.GetYes(), t.GetNo(), t.GetPending())
+	}
+	if fr := resp.GetFailureReason(); fr != "" {
+		out += fmt.Sprintf(" — failed: %s", fr)
+	}
+	return &pluginsdk.CommandResponse{Status: pluginsdk.CommandOK, Output: out}, nil
+}
+
+// handleDownload renders a scene's PUBLISHED archive to the requested format
+// (spec §6.1). Arg form: "scene publish download [<format>] [#<id>]" — a
+// "#"-prefixed token is the scene ref, any other token is the format (default
+// markdown). Participant-gated + format-validated by DownloadPublishedScene (B6).
+func (p *scenePlugin) handleDownload(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	format := "markdown"
+	var ref string
+	for _, tok := range strings.Fields(args) {
+		if strings.HasPrefix(tok, "#") {
+			ref = tok
+		} else {
+			format = tok
+		}
+	}
+	sceneID, err := resolveSceneRef(ctx, p.service.store, req.CharacterID, ref)
+	if err != nil {
+		return pluginsdk.Errorf("%v", err), nil
+	}
+	attempts, err := p.service.store.ListSceneAttempts(ctx, sceneID)
+	if err != nil {
+		return pluginsdk.Errorf("Could not look up the published scene: %v", err), nil
+	}
+	attemptID, ok := publishedAttemptID(attempts)
+	if !ok {
+		return pluginsdk.Errorf("That scene has not been published."), nil
+	}
+	resp, err := p.service.DownloadPublishedScene(ctx, &scenev1.DownloadPublishedSceneRequest{
+		CallerCharacterId: req.CharacterID,
+		PublishedSceneId:  attemptID,
+		Format:            format,
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Could not download scene: %v", err), nil
+	}
+	return &pluginsdk.CommandResponse{Status: pluginsdk.CommandOK, Output: string(resp.GetContent())}, nil
+}
+
+// handleVote casts (or changes) a publish vote for the focused or explicit
+// scene's ACTIVE attempt (spec §6.1). It resolves the scene, finds its single
+// non-terminal attempt, and calls CastPublishSceneVote. Roster membership is
+// enforced by CastVote (SCENE_PUBLISH_NOT_A_VOTER → PermissionDenied), so no
+// separate participant gate is needed here.
+func (p *scenePlugin) handleVote(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	dir, rest := splitSubcommand(args)
+	var vote bool
+	switch dir {
+	case "yes":
+		vote = true
+	case "no":
+		vote = false
+	case "extend":
+		return p.handleVoteExtend(ctx, req, rest)
+	default:
+		return pluginsdk.Errorf("Usage: scene publish vote <yes|no|extend> [#<scene id>]"), nil
+	}
+
+	sceneID, err := resolveSceneRef(ctx, p.service.store, req.CharacterID, rest)
+	if err != nil {
+		return pluginsdk.Errorf("%v", err), nil
+	}
+
+	attempts, err := p.service.store.ListSceneAttempts(ctx, sceneID)
+	if err != nil {
+		return pluginsdk.Errorf("Could not look up the publish vote: %v", err), nil
+	}
+	attemptID, ok := activeAttemptID(attempts)
+	if !ok {
+		return pluginsdk.Errorf("There is no active publish vote for that scene."), nil
+	}
+
+	resp, err := p.service.CastPublishSceneVote(ctx, &scenev1.CastPublishSceneVoteRequest{
+		CallerCharacterId: req.CharacterID,
+		PublishedSceneId:  attemptID,
+		Vote:              vote,
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Could not cast vote: %v", err), nil
+	}
+
+	word := "no"
+	if vote {
+		word = "yes"
+	}
+	action := "recorded"
+	if resp.GetIsChange() {
+		action = "changed to"
+	}
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("Your publish vote was %s %q.", action, word),
+	}, nil
+}
+
+// activeAttemptID returns the id of the single non-terminal (COLLECTING or
+// COOLOFF) attempt in the list, or ("", false) if none is active. At most one
+// attempt is active per scene (StartScenePublish's no-active-attempt
+// precondition), so the first non-terminal match is authoritative.
+func activeAttemptID(attempts []PublishedScene) (string, bool) {
+	for i := range attempts {
+		if !attempts[i].Status.IsTerminal() {
+			return attempts[i].ID, true
+		}
+	}
+	return "", false
+}
+
+// handlePublishStart starts a publish-vote attempt for a scene (spec §6.1, the
+// bare "scene publish [#<id>]" form). Resolves the target scene, gates on
+// participation, then calls StartScenePublish (which enforces the ended-state +
+// one-and-done + budget + eligible-voters preconditions).
+//
+// Participant gate: the host's command-dispatch ABAC checks the scene command's
+// declared 'write' capability, NOT the 'publish' action, so the
+// start-publish-as-participant policy is inert at dispatch (a 'publish'
+// capability declaration is a follow-up). This explicit IsParticipant check is
+// therefore the effective participant gate at the command layer — it mirrors
+// the policy's predicate (principal.id in resource.scene.participants) so there
+// is no drift, and surfaces spec §6.1's not-a-participant rejection. Defence-in-
+// depth like handleLog (E3) / WithdrawScenePublish's owner check (B4).
+func (p *scenePlugin) handlePublishStart(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	sceneID, err := resolveSceneRef(ctx, p.service.store, req.CharacterID, args)
+	if err != nil {
+		return pluginsdk.Errorf("%v", err), nil
+	}
+
+	ok, err := p.service.store.IsParticipant(ctx, sceneID, req.CharacterID)
+	if err != nil {
+		return pluginsdk.Errorf("Could not verify scene membership: %v", err), nil
+	}
+	if !ok {
+		return pluginsdk.Errorf("You are not a participant in that scene."), nil
+	}
+
+	resp, err := p.service.StartScenePublish(ctx, &scenev1.StartScenePublishRequest{
+		SceneId:           sceneID,
+		CallerCharacterId: req.CharacterID,
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Could not start publish vote: %v", err), nil
+	}
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("Publish-vote attempt #%d started for scene %s. Participants will be notified.",
+			resp.GetAttemptNumber(), sceneID),
+	}, nil
+}
 
 // dispatchCommand handles the "scene" top-level command. Phase 2 supports
 // the create, info, end, pause, resume, and set subcommands; later phases
@@ -41,7 +456,7 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 	span.SetAttributes(attribute.String("subcommand", sub))
 
 	if sub == "" {
-		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, emit, end, extend, focus, grid, info, invite, join, kick, leave, list, ooc, order, pause, pose, resume, say, set, switch, transfer"), nil
+		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, emit, end, focus, grid, info, invite, join, kick, leave, list, log, ooc, order, pause, pose, publish, resume, say, set, switch, transfer"), nil
 	}
 
 	// gated dispatches through the ABAC evaluator; fails closed when evaluator is nil.
@@ -81,8 +496,6 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 		return gated("invite", "invite", sceneResourceRefFirstField, p.handleInvite)
 	case "kick":
 		return gated("kick", "kick", sceneResourceRefFirstField, p.handleKick)
-	case "extend":
-		return gated("extend", "extend_publish_attempts", sceneResourceRef, p.handleExtend)
 	case "transfer":
 		return gated("transfer", "transfer-ownership", sceneResourceRefFirstField, p.handleTransfer)
 	case "switch":
@@ -112,10 +525,14 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 		return p.handleEmit(ctx, req, rest, "scene_ooc", true)
 	case "order":
 		return p.handleOrder(ctx, req, rest)
+	case "publish":
+		return p.handlePublish(ctx, req, rest)
+	case "log":
+		return p.handleLog(ctx, req, rest)
 	case "list":
 		return p.handleSceneList(ctx, req)
 	default:
-		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, emit, end, extend, focus, grid, info, invite, join, kick, leave, list, ooc, order, pause, pose, resume, say, set, switch, transfer.", sub), nil
+		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, emit, end, focus, grid, info, invite, join, kick, leave, list, log, ooc, order, pause, pose, publish, resume, say, set, switch, transfer.", sub), nil
 	}
 }
 
@@ -1106,11 +1523,78 @@ func sceneResourceRefFirstField(args string) (string, error) {
 	return "scene:" + fields[0], nil // ABAC resource ref (type:id), not a pub/sub subject (INV-P4-1)
 }
 
-// handleExtend is the stub handler for `scene extend <scene-id>`. The ABAC
-// gate (admin-extend-publish-attempts policy) is enforced by GatedSubcommand
-// before this function is called, so only admins can reach this point.
+// handleVoteExtend implements `scene publish vote extend <count> [#<scene id>]`
+// (spec §6.1 E2). It bumps the scene's max_publish_attempts budget by <count>
+// (a positive integer). The caller must be a server admin: the admin-extend-
+// publish-attempts ABAC policy (action "extend_publish_attempts", resource
+// "scene:<id>") is evaluated in-handler BEFORE calling the service RPC, making
+// this the live security gate for that policy.
 //
-// TODO(holomush-5rh.20.35): perform the actual publish-attempts bump.
-func (p *scenePlugin) handleExtend(_ context.Context, _ pluginsdk.CommandRequest, _ string) (*pluginsdk.CommandResponse, error) {
-	return pluginsdk.Errorf("scene extend: not yet implemented (tracked in holomush-5rh.20.35)."), nil
+// Arg form: <count> [#<scene id>] — count is first, optional scene ref is last.
+// On success reports the new maximum.
+func (p *scenePlugin) handleVoteExtend(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	// Parse <count> [#<scene id>].
+	countStr, sceneRef := splitSubcommand(args)
+	if countStr == "" {
+		return pluginsdk.Errorf("Usage: scene publish vote extend <count> [#<scene id>]"), nil
+	}
+	count, atoiErr := strconv.Atoi(countStr)
+	if atoiErr != nil || count <= 0 || count > math.MaxInt32 {
+		// Non-integer, non-positive, or out-of-int32-range value — treat as usage error.
+		return pluginsdk.Errorf("Usage: scene publish vote extend <count> [#<scene id>]"), nil //nolint:nilerr // atoiErr is intentionally converted to a user-facing usage message, not propagated as a Go error
+	}
+
+	// Resolve scene via the shared resolveSceneRef helper (handles #<id> +
+	// single-membership inference, consistent with the other publish commands).
+	sceneID, err := resolveSceneRef(ctx, p.service.store, req.CharacterID, strings.TrimSpace(sceneRef))
+	if err != nil {
+		return pluginsdk.Errorf("%v", err), nil
+	}
+
+	// ABAC gate — enforce the admin-extend-publish-attempts policy. Fails closed
+	// when no evaluator is configured so a non-admin cannot bypass on a
+	// misconfigured server.
+	if p.evaluator == nil {
+		slog.WarnContext(
+			ctx, "scene.command.vote_extend evaluator not configured",
+			"subject_id", req.CharacterID,
+			"scene_id", sceneID,
+		)
+		return pluginsdk.Errorf("Permission check unavailable: evaluator not configured."), nil
+	}
+	dec, evalErr := p.evaluator.Evaluate(ctx, "extend_publish_attempts", "scene:"+sceneID)
+	if evalErr != nil {
+		evalErr = oops.Code("SCENE_VOTE_EXTEND_EVALUATE_FAILED").
+			With("character_id", req.CharacterID).
+			With("scene_id", sceneID).Wrap(evalErr)
+		slog.ErrorContext(
+			ctx, "scene.command.vote_extend permission check failed",
+			"subject_id", req.CharacterID,
+			"scene_id", sceneID,
+			"error", evalErr,
+		)
+		return pluginsdk.Failuref("permission check failed: %v", evalErr), nil
+	}
+	if !dec.Allowed {
+		reason := dec.Reason
+		if reason == "" {
+			reason = "permission denied"
+		}
+		return pluginsdk.Errorf("%s", reason), nil
+	}
+
+	// Gate passed — call the service RPC.
+	resp, err := p.service.ExtendScenePublishVoteAttempts(ctx, &scenev1.ExtendScenePublishVoteAttemptsRequest{
+		CallerCharacterId: req.CharacterID,
+		SceneId:           sceneID,
+		Additional:        int32(count), //nolint:gosec // count bounded to [1, math.MaxInt32] above
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Could not extend publish-vote budget: %v", err), nil
+	}
+
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("Publish-vote attempt budget extended; new max is %d.", resp.GetNewMax()),
+	}, nil
 }

@@ -204,3 +204,60 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
 - **Authz/business-state separation pattern (yznw, 2026-05-25)**: Removing `resource.scene.state` from ABAC `when` clauses is safe IFF the store layer enforces state via SQL `WHERE state IN (...)` + `classifyTransitionMiss`. Verified pattern for core-scenes: end/pause/resume/update/transfer all enforce via SQL; write-scene is safe because `ListScenesForCharacter` filters to active/paused (indirect, document the coupling). `InviteParticipant` and `KickParticipant` do NOT enforce state in SQL — their ABAC state clauses are the ONLY gate; retaining them is mandatory. When reviewing policy `when`-clause removals: (1) cite the store SQL guard; (2) flag if the only enforcement is indirect (membership filter, not explicit WHERE); (3) check real store, not fakeStore — fakes may omit state guards their real counterparts also omit.
 - **Token-ferry pattern for PluginHostService clients (vqxkowlz, 2026-05-25)**: `hostEvaluateClient.Evaluate` and `pluginHostEventSink.Emit` both ferry the `x-holomush-emit-token` from `metadata.FromIncomingContext` → `metadata.AppendToOutgoingContext`. The ferry is safe: plugin cannot forge the incoming metadata; host validates via `tokenStore.Lookup(pluginName, token)`. Evaluate intentionally omits the self-token fallback (always command-gated). When reviewing future PluginHostService client methods, check: (1) outgoing-already-set guard present; (2) incoming→outgoing copy present; (3) self-token fallback absent (Evaluate) or present (EmitEvent) per spec; (4) missing-token path ends in `EMIT_TOKEN_MISSING`, not allow.
 - **Plugin resolver wiring pattern (8kkv5.18, 2026-05-25)**: `ABACSubsystem.AttributeResolver()` returns `stack.Resolver` — the same `*attribute.Resolver` instance passed to `policy.NewEngine`. `PluginSubsystem.Start()` captures it via `resolver := s.cfg.ABAC.AttributeResolver()` (line 286) and closes over it in `WithAttributeProviderRegistrar`/`WithAttributeProviderUnregistrar` callbacks (lines 293-298). Registration happens synchronously inside `LoadAll` (line 318), before health registration (line 333) and before gRPC traffic — no TOCTOU window. Future reviewers: (1) confirm same-instance by tracing `BuildABACStack` → `ABACStack.Resolver` → `AttributeResolver()` return; (2) `Resolver` struct has NO mutex — concurrent `Evaluate` + `RegisterProvider` would data-race; safe under current single-threaded boot order but flag if startup concurrency changes; (3) plugin namespace collision fails closed (load aborts, rollback unregisters), not open; (4) `EngineProvider` interface widening is guarded by compile-time `var _ setup.EngineProvider = (*fakeEngineProvider)(nil)` in subsystem_test.go.
+- **Scene publish split-gate (5rh.20.11 / Phase 6, 2026-05-24)**: `StartScenePublish`
+  (`plugins/core-scenes/publish_service.go`) follows the spec §5-row-243 split: ABAC
+  `publish` action is HOST-enforced at command dispatch; the handler does only
+  state/budget preconditions and NEVER calls the engine (INV-P6-6 — `SceneServiceImpl`
+  has no engine field; rg-asserted by `TestParticipantRPCsDoNotConsultABACEngine`).
+  Same shape as EndScene/PauseScene. The `start-publish-as-participant` permit
+  (`plugin.yaml`) is `permit(..., action in ["publish"], ...) when { principal.id in
+  resource.scene.participants && resource.scene.state == "ended" }` — additive, no
+  forbid/wildcard, default-deny preserved. `participants` = owner+member excluding
+  invited (resolver.go:110, store.go GetWithMembership SQL `role IN ('owner','member')`).
+  When reviewing a scene-write handler with no `engine.Evaluate` call, that is BY
+  DESIGN — do NOT flag missing engine calls. DO confirm the command-dispatch task that
+  invokes action `publish` actually lands (5rh.20.44 wires commands.go publish/log
+  dispatch; pre-.44 only scene/scenes commands were declared), else the permit is dead
+  code and the handler's preconditions are the only gate.
+- **Admin-extend staged rollout (5rh.20.34 / Phase 6, 2026-05-25)**: `admin-extend-publish-attempts`
+  policy (`plugin.yaml`) and `ExtendScenePublishVoteAttempts` handler (`publish_service.go`)
+  ship in E1 without the `scene publish vote extend` command wiring (that lands in E2).
+  During the E1→E2 window, direct gRPC callers can invoke the RPC without hitting
+  the ABAC gate (handler has no in-plugin check by design). This is an accepted staged-rollout
+  gap, NOT a blocking finding, provided E2 exists as a dependent bead. The pattern is
+  identical to the 5rh.20.11 `start-publish-as-participant` gap above. When reviewing
+  future Phase 6 plugin policy PRs: verify spec §6.1 command table against
+  `commands.go` dispatch switch; flag missing command wiring as Low (not blocking) when
+  the wiring bead is documented in the spec. Pin test at `publish_service_test.go:218`
+  does not assert `resource is scene` — Low NIT for future reviewers to add.
+- **Audit assertion gap in integration property specs (rmsi.5 Low NIT)**:
+   `seed_policies_test.go` S1-S13 reset `auditWriter` in BeforeEach but no spec in the
+   property block reads back `env.auditWriter.Entries()` to verify the decision was
+   recorded. Engine-level audit contract is covered by `evaluation_test.go:68-70` (via
+   `Eventually`), but per-property-seed audit assertion is absent. When reviewing future
+   integration suites that add new seed coverage blocks, check whether the block includes
+   at least one audit-trail assertion — especially for FORBID seeds where audit capture
+   is the primary defense against undetected denials.
+- **In-handler owner check acceptable when predicate = ABAC policy (5rh.20.13 / B4, 2026-05-25)**:
+  `WithdrawScenePublish` adds `scene.OwnerID != callerID → SCENE_PUBLISH_NOT_OWNER` in-handler
+  alongside the `withdraw-publish-as-owner` ABAC policy. This is CORRECT and DIFFERENT from
+  the E1 admin-extend pattern (which has NO in-handler check). Acceptable when ALL of: (1) the
+  spec explicitly documents the error code for that handler (spec §5.2 line 275 mandates
+  `SCENE_PUBLISH_NOT_OWNER → PermissionDenied` for `WithdrawScenePublish`); (2) the plugin holds
+  the owning-entity record at that code point (after `store.Get`); (3) the in-handler predicate
+  is structurally identical to the ABAC `when`-clause. Closes direct-gRPC gap that E1 accepted.
+  Missing `case "publish"` in `commands.go` is a Low staged-rollout gap (same as E1), not blocking.
+- **E1→E2 admin-extend gap CLOSED (5rh.20.35 / E2, 2026-05-26)**: the `admin-extend-publish-attempts`
+  staged-rollout gap (5rh.20.34 entry above) is now closed. E2 RETIRED the deviating top-level
+  `scene extend` GatedSubcommand stub (`handleExtend` fully removed) and moved the command to
+  spec §6.1's nested path `scene publish vote extend <count>` (under handlePublish→handleVote).
+  Because it's nested under direct-routed sub-dispatchers, it gates via an IN-HANDLER evaluator
+  (`handleVoteExtend` @commands.go:1563: `p.evaluator.Evaluate(ctx, "extend_publish_attempts",
+  "scene:"+sceneID)` then `!dec.Allowed` reject BEFORE `ExtendScenePublishVoteAttempts`), the
+  handleEmit/handleVote precedent — NOT the top-level GatedSubcommand. Fails closed on all three
+  edges (nil eval→CommandError, engine err→CommandFailure via zero-value `EvaluateDecision{}`
+  Allowed=false, deny→CommandError). resolve-before-gate ordering is accepted (resource ref needs
+  resolved id; no mutation before gate). When reviewing future nested publish sub-commands, the
+  in-handler gate is the correct shape and the top-level INV-7 backstop test (commands_test.go
+  TestSceneGatedSubcommands_DenyWhenPolicyDenies) does NOT cover them — each needs its own
+  dedicated deny-path + nil-eval + engine-err tests.

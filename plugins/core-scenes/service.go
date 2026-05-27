@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"go.opentelemetry.io/otel/attribute"
@@ -66,6 +68,52 @@ type sceneStorer interface {
 	// handleEmit's single-membership inference per spec §5.2 (Phase 5 will
 	// replace with focus-aware routing).
 	ListScenesForCharacter(ctx context.Context, characterID string) ([]string, error)
+	// Phase 6 publication reads used by the publish-vote handlers. The
+	// header read deliberately EXCLUDES content_entries so the INV-S9
+	// participant gate runs between the header read and the content read
+	// (INV-P6-5). Implemented by *SceneStore in publish_store.go.
+	GetPublishedSceneHeader(ctx context.Context, id string) (*PublishedScene, error)
+	GetPublishedSceneContent(ctx context.Context, id string) ([]PublishedSceneEntry, error)
+	TallyVotes(ctx context.Context, publishedSceneID string) (*VoteTally, error)
+	// CastVote upserts a roster member's vote (is_change tracking) and
+	// TransitionStatus applies a state-machine transition with its side-effect
+	// fields. Both back CastPublishSceneVote + applyTrigger (B3).
+	CastVote(ctx context.Context, publishedSceneID, characterID string, vote bool) (*CastVoteResult, error)
+	TransitionStatus(ctx context.Context, id string, in TransitionInput) error
+	// StartScenePublish preconditions: attempt budget + one-and-done checks
+	// (CountAttempts), the per-scene max-attempts read
+	// (GetSceneMaxPublishAttempts), and the transactional attempt+roster
+	// create (CreatePublishAttempt). Implemented by *SceneStore in
+	// publish_store.go.
+	CountAttempts(ctx context.Context, sceneID string) (AttemptCounts, error)
+	CreatePublishAttempt(ctx context.Context, in CreatePublishAttemptInput) (*PublishedScene, error)
+	GetSceneMaxPublishAttempts(ctx context.Context, sceneID string) (int, error)
+	// ListPublishVoters returns all voter rows for a publish attempt. Used by
+	// the Phase D event emitter to build the roster snapshot for
+	// scene_publish_started. Implemented by *SceneStore in publish_store.go.
+	ListPublishVoters(ctx context.Context, publishedSceneID string) ([]PublishedSceneVote, error)
+	// ListSceneAttempts returns all publish attempts for a scene (header only,
+	// no content_entries), ordered by attempt_number. Used by the
+	// participant-gated ListScenePublishAttempts audit list (B7).
+	ListSceneAttempts(ctx context.Context, sceneID string) ([]PublishedScene, error)
+	// ExtendMaxPublishAttempts bumps a scene's max_publish_attempts by
+	// `additional` and returns the new budget. Backs the admin-only
+	// ExtendScenePublishVoteAttempts RPC (E1).
+	ExtendMaxPublishAttempts(ctx context.Context, sceneID string, additional int) (int, error)
+
+	// ── C7 snapshot pipeline (COOLOFF→PUBLISHED) ──────────────────────────
+	// SnapshotPool exposes the connection pool so runSnapshot can orchestrate
+	// the read-tx → decrypt(outside tx) → write-tx sequence (read-back design
+	// §6). The remaining methods are tx-scoped so the lock + re-validate +
+	// MarkPublished + archive run in one write transaction (INV-RB-8).
+	SnapshotPool() *pgxpool.Pool
+	LockForSnapshot(ctx context.Context, tx pgx.Tx, id string) (*PublishedScene, error)
+	TallyVotesTx(ctx context.Context, tx pgx.Tx, publishedSceneID string) (*VoteTally, error)
+	ReadSceneLogForSnapshot(ctx context.Context, tx pgx.Tx, subject string) ([]LogRow, error)
+	ReadSceneMetaForSnapshot(ctx context.Context, tx pgx.Tx, sceneID string) (SnapshotSceneMeta, error)
+	MarkPublished(ctx context.Context, tx pgx.Tx, id string, in MarkPublishedInput) error
+	ArchiveSceneStateForPublish(ctx context.Context, tx pgx.Tx, sceneID string) (bool, error)
+	FailAttemptTx(ctx context.Context, tx pgx.Tx, id string, reason PublishFailureReason) error
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.
@@ -79,20 +127,49 @@ type SceneServiceImpl struct {
 	store     sceneStorer
 	eventSink pluginsdk.EventSink
 	gameID    string // per substrate INV-S4. Defaults to "main"; wired in Init.
+	// Phase 6 publish-vote machinery.
+	cfg    SceneServiceConfig // game-wide vote/cool-off defaults.
+	events publishEventer     // scene_publish_* notice emitter; noop until Phase D wires the real one.
+	// decryptor is the host-mediated read-back decrypt seam used by the
+	// COOLOFF→PUBLISHED snapshot pipeline (C7). nil until SetSnapshotDecryptor
+	// wires it at Init; runSnapshot fails closed when nil. The plugin never
+	// holds a DEK — it submits ciphertext rows and receives plaintext (INV-RB-1).
+	decryptor snapshotDecryptor
 }
 
 // NewSceneServiceImpl returns a service backed by the given store.
 // Used by tests; main() constructs the service directly with a nil store
 // and assigns it after Init. The gameID defaults to "main" matching the
-// substrate default (see internal/grpc/server.go:181).
+// substrate default (see internal/grpc/server.go:181). Phase 6 defaults
+// (7-day vote window, 30-minute cool-off) and a no-op publish eventer are
+// seeded so Phase B handlers have working dependencies before Phase D.
 func NewSceneServiceImpl(store sceneStorer) *SceneServiceImpl {
-	return &SceneServiceImpl{store: store, gameID: "main"}
+	return &SceneServiceImpl{
+		store:  store,
+		gameID: "main",
+		cfg:    DefaultSceneServiceConfig(),
+		events: noopPublishEventer{},
+	}
 }
 
 // SetEventSink installs the host callback event sink used for service-owned
 // emissions from the binary plugin.
 func (s *SceneServiceImpl) SetEventSink(sink pluginsdk.EventSink) {
 	s.eventSink = sink
+}
+
+// SetPublishEventer installs the Phase 6 scene_publish_* notice emitter.
+// Phase D (Task D2) calls this with the real publishEventEmitter; until then
+// the constructor's noopPublishEventer absorbs every emit.
+func (s *SceneServiceImpl) SetPublishEventer(e publishEventer) {
+	s.events = e
+}
+
+// SetSnapshotDecryptor installs the host-mediated read-back decryptor used by
+// the COOLOFF→PUBLISHED snapshot pipeline (C7). Wired at Init from the SDK's
+// SnapshotDecryptorAware injection; tests substitute a real-stack adapter.
+func (s *SceneServiceImpl) SetSnapshotDecryptor(d snapshotDecryptor) {
+	s.decryptor = d
 }
 
 // CreateScene generates a new scene ID, persists the scene, and returns it.
@@ -1033,6 +1110,25 @@ func newSceneID() (string, error) {
 	}
 	return "scene-" + id.String(), nil
 }
+
+// Phase 6 publication RPC stubs — present per plan A3 Step 5 so the Phase 6
+// surface is explicit. Real handlers land in Phase B (publish_service.go),
+// which replaces these. UnimplementedSceneServiceServer is embedded, so these
+// override the embedded defaults with the same Unimplemented status.
+// StartScenePublish is implemented in publish_service.go (Task B2).
+
+// CastPublishSceneVote is implemented in publish_service.go (Task B3).
+// WithdrawScenePublish is implemented in publish_service.go (Task B4).
+
+// GetPublishedScene is implemented in publish_service.go (Task B5).
+
+// DownloadPublishedScene is implemented in publish_service.go (Task B6).
+
+// ListScenePublishAttempts is implemented in publish_service.go (Task B7).
+
+// GetPublicSceneArchive is implemented in publish_service.go (Task C4).
+// DownloadPublicSceneArchive is implemented in publish_service.go (Task C5).
+// ExtendScenePublishVoteAttempts is implemented in publish_service.go (Task E1).
 
 // rowToProto converts a SceneRow to the proto representation.
 //

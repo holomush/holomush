@@ -6,10 +6,13 @@ package main
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,7 +30,13 @@ import (
 // branches of the service layer.
 type fakeStore struct {
 	scenes                    map[string]*SceneRow
-	participants              map[string]map[string]string // sceneID → characterID → role
+	participants              map[string]map[string]string     // sceneID → characterID → role
+	publishedScenes           map[string]*PublishedScene       // Phase 6: published_scene_id → attempt
+	publishedContent          map[string][]PublishedSceneEntry // Phase 6: published_scene_id → content entries
+	publishedVoters           map[string][]PublishedSceneVote  // Phase 6: published_scene_id → voter rows
+	attemptCounts             map[string]AttemptCounts         // Phase 6: sceneID → attempt counts
+	maxPublishAttempts        map[string]int                   // Phase 6: sceneID → budget
+	createdAttempts           []*PublishedScene                // Phase 6: records CreatePublishAttempt calls
 	createErr                 error
 	createWithOwnerErr        error
 	getErr                    error
@@ -42,9 +51,176 @@ type recordingEventSink struct {
 
 func newFakeStore() *fakeStore {
 	return &fakeStore{
-		scenes:       make(map[string]*SceneRow),
-		participants: make(map[string]map[string]string),
+		scenes:             make(map[string]*SceneRow),
+		participants:       make(map[string]map[string]string),
+		publishedScenes:    make(map[string]*PublishedScene),
+		publishedContent:   make(map[string][]PublishedSceneEntry),
+		publishedVoters:    make(map[string][]PublishedSceneVote),
+		attemptCounts:      make(map[string]AttemptCounts),
+		maxPublishAttempts: make(map[string]int),
 	}
+}
+
+// installRoster seeds a scene's participant roster: ownerID as "owner" and
+// each memberID as "member". Used by Phase 6 gate tests.
+func (f *fakeStore) installRoster(sceneID, ownerID string, memberIDs ...string) {
+	roster := map[string]string{ownerID: "owner"}
+	for _, m := range memberIDs {
+		roster[m] = "member"
+	}
+	f.participants[sceneID] = roster
+}
+
+// installPublishedAttempt seeds a published_scenes row in the given status.
+func (f *fakeStore) installPublishedAttempt(id, sceneID string, status PublishedSceneStatus) {
+	f.publishedScenes[id] = &PublishedScene{
+		ID:                  id,
+		SceneID:             sceneID,
+		AttemptNumber:       1,
+		Status:              status,
+		InitiatedBy:         "system",
+		InitiatedAt:         pgnanos.From(time.Now()),
+		VoteWindow:          7 * 24 * time.Hour,
+		CoolOffWindow:       30 * time.Minute,
+		MaxAttemptsSnapshot: 3,
+	}
+}
+
+// GetPublishedSceneHeader returns the installed attempt (nil, nil when
+// absent — mirroring the production not-found contract).
+func (f *fakeStore) GetPublishedSceneHeader(_ context.Context, id string) (*PublishedScene, error) {
+	return f.publishedScenes[id], nil
+}
+
+// GetPublishedSceneContent returns the installed content entries for an
+// attempt (nil when none). The INV-P6-5 tripwire test overrides this on an
+// embedding type to count calls.
+func (f *fakeStore) GetPublishedSceneContent(_ context.Context, id string) ([]PublishedSceneEntry, error) {
+	return f.publishedContent[id], nil
+}
+
+// installVoters seeds the voter roster for a published attempt. Used by
+// Phase D event-emitter tests that need emitPublishStarted to return a
+// non-empty roster.
+func (f *fakeStore) installVoters(publishedSceneID string, characterIDs ...string) {
+	voters := make([]PublishedSceneVote, 0, len(characterIDs))
+	for _, cid := range characterIDs {
+		voters = append(voters, PublishedSceneVote{
+			PublishedSceneID: publishedSceneID,
+			CharacterID:      cid,
+		})
+	}
+	f.publishedVoters[publishedSceneID] = voters
+}
+
+// ListPublishVoters returns the seeded voter rows for an attempt.
+func (f *fakeStore) ListPublishVoters(_ context.Context, publishedSceneID string) ([]PublishedSceneVote, error) {
+	return f.publishedVoters[publishedSceneID], nil
+}
+
+// ListSceneAttempts returns all installed attempts for a scene, ordered by
+// attempt_number (mirroring the store's ORDER BY).
+func (f *fakeStore) ListSceneAttempts(_ context.Context, sceneID string) ([]PublishedScene, error) {
+	var out []PublishedScene
+	for _, pub := range f.publishedScenes {
+		if pub.SceneID == sceneID {
+			out = append(out, *pub)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].AttemptNumber < out[j].AttemptNumber })
+	return out, nil
+}
+
+// TallyVotes counts the seeded roster rows: nil vote → Pending, *true → Yes,
+// *false → No. Stateful so the B3 state-machine tests can drive resolution.
+func (f *fakeStore) TallyVotes(_ context.Context, publishedSceneID string) (*VoteTally, error) {
+	var t VoteTally
+	for _, v := range f.publishedVoters[publishedSceneID] {
+		switch {
+		case v.Vote == nil:
+			t.Pending++
+		case *v.Vote:
+			t.Yes++
+		default:
+			t.No++
+		}
+	}
+	return &t, nil
+}
+
+// CastVote upserts a roster member's vote on the in-memory roster, mirroring
+// the store's is_change semantics. A non-roster character is rejected with
+// SCENE_PUBLISH_NOT_A_VOTER.
+func (f *fakeStore) CastVote(_ context.Context, publishedSceneID, characterID string, vote bool) (*CastVoteResult, error) {
+	rows := f.publishedVoters[publishedSceneID]
+	for i := range rows {
+		if rows[i].CharacterID == characterID {
+			isChange := rows[i].Vote != nil && *rows[i].Vote != vote
+			v := vote
+			rows[i].Vote = &v
+			return &CastVoteResult{Vote: vote, IsChange: isChange}, nil
+		}
+	}
+	return nil, oops.Code("SCENE_PUBLISH_NOT_A_VOTER").
+		With("character_id", characterID).Errorf("character is not on the voter roster")
+}
+
+// TransitionStatus applies a state-machine transition to the in-memory attempt,
+// setting the side-effect fields. Legality is enforced by applyTrigger's
+// NextStatus check before this is called, so the fake applies unconditionally.
+func (f *fakeStore) TransitionStatus(_ context.Context, id string, in TransitionInput) error {
+	pub, ok := f.publishedScenes[id]
+	if !ok {
+		return oops.Code("SCENE_PUBLISH_NOT_FOUND").With("id", id).Errorf("attempt not found")
+	}
+	pub.Status = in.To
+	if in.FailureReason != nil {
+		pub.FailureReason = in.FailureReason
+	}
+	if in.SetCoolOffAt != nil {
+		ts := pgnanos.From(*in.SetCoolOffAt)
+		pub.CoolOffStartedAt = &ts
+	}
+	if in.ClearCoolOff {
+		pub.CoolOffStartedAt = nil
+	}
+	if in.Resolved {
+		now := pgnanos.From(time.Now())
+		pub.ResolvedAt = &now
+	}
+	return nil
+}
+
+// CountAttempts returns the configured per-scene attempt counts (zero value
+// when unset — i.e. no prior attempts).
+func (f *fakeStore) CountAttempts(_ context.Context, sceneID string) (AttemptCounts, error) {
+	return f.attemptCounts[sceneID], nil
+}
+
+// GetSceneMaxPublishAttempts returns the configured budget (zero when unset).
+func (f *fakeStore) GetSceneMaxPublishAttempts(_ context.Context, sceneID string) (int, error) {
+	return f.maxPublishAttempts[sceneID], nil
+}
+
+// ExtendMaxPublishAttempts bumps the configured budget and returns the new value.
+func (f *fakeStore) ExtendMaxPublishAttempts(_ context.Context, sceneID string, additional int) (int, error) {
+	f.maxPublishAttempts[sceneID] += additional
+	return f.maxPublishAttempts[sceneID], nil
+}
+
+// CreatePublishAttempt records the call and returns a synthetic COLLECTING
+// attempt — the handler-unit-test concern is precondition logic, not roster
+// seeding (A5 integration-tests cover that).
+func (f *fakeStore) CreatePublishAttempt(_ context.Context, in CreatePublishAttemptInput) (*PublishedScene, error) {
+	pub := &PublishedScene{
+		ID:            "pub-" + in.SceneID,
+		SceneID:       in.SceneID,
+		AttemptNumber: in.AttemptNumber,
+		Status:        StatusCollecting,
+		InitiatedBy:   in.InitiatedBy,
+	}
+	f.createdAttempts = append(f.createdAttempts, pub)
+	return pub, nil
 }
 
 func (s *recordingEventSink) Emit(_ context.Context, intent pluginsdk.EmitIntent) error {
@@ -374,6 +550,42 @@ func (f *fakeStore) Update(_ context.Context, id string, update *SceneUpdate) (*
 	}
 	cp := *row
 	return &cp, nil
+}
+
+// ── C7 snapshot-pipeline interface stubs ──────────────────────────────────
+// The snapshot pipeline (runSnapshot) is tx-scoped and exercised exclusively by
+// publish_snapshot_integration_test.go against a real Postgres + real read-back
+// decryptor. These fakeStore stubs exist only to satisfy the sceneStorer
+// interface for the unit suite; they are never invoked by a unit test.
+
+func (f *fakeStore) SnapshotPool() *pgxpool.Pool { return nil }
+
+func (f *fakeStore) LockForSnapshot(_ context.Context, _ pgx.Tx, id string) (*PublishedScene, error) {
+	return nil, oops.Code("SCENE_PUBLISH_NOT_FOUND").With("id", id).Errorf("fakeStore: LockForSnapshot not supported")
+}
+
+func (f *fakeStore) TallyVotesTx(ctx context.Context, _ pgx.Tx, publishedSceneID string) (*VoteTally, error) {
+	return f.TallyVotes(ctx, publishedSceneID)
+}
+
+func (f *fakeStore) ReadSceneLogForSnapshot(_ context.Context, _ pgx.Tx, _ string) ([]LogRow, error) {
+	return nil, nil
+}
+
+func (f *fakeStore) ReadSceneMetaForSnapshot(_ context.Context, _ pgx.Tx, _ string) (SnapshotSceneMeta, error) {
+	return SnapshotSceneMeta{}, nil
+}
+
+func (f *fakeStore) MarkPublished(_ context.Context, _ pgx.Tx, _ string, _ MarkPublishedInput) error {
+	return oops.Code("SCENE_PUBLISH_INVALID_TRANSITION").Errorf("fakeStore: MarkPublished not supported")
+}
+
+func (f *fakeStore) ArchiveSceneStateForPublish(_ context.Context, _ pgx.Tx, _ string) (bool, error) {
+	return false, nil
+}
+
+func (f *fakeStore) FailAttemptTx(_ context.Context, _ pgx.Tx, _ string, _ PublishFailureReason) error {
+	return oops.Code("SCENE_PUBLISH_INVALID_TRANSITION").Errorf("fakeStore: FailAttemptTx not supported")
 }
 
 func TestSceneServiceCreateScenePersistsTitleAndOwnerWhenRequestIsValid(t *testing.T) {

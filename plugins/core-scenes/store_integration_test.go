@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
@@ -64,6 +65,20 @@ func mustCreateScene(store *SceneStore, sceneID, ownerID, visibility string) *Sc
 	}
 	Expect(store.Create(context.Background(), row)).NotTo(HaveOccurred())
 	return row
+}
+
+// mustAddParticipant inserts a scene_participants row with the given role.
+// joined_at uses SQL-side NOW() in epoch-nanoseconds to match the clock
+// domain of the production INSERT paths (store.go). mustCreateScene uses
+// the minimal Create (no owner participant), so callers needing an owner in
+// the roster MUST add it explicitly via this helper.
+func mustAddParticipant(store *SceneStore, sceneID, characterID, role string) {
+	GinkgoHelper()
+	_, err := store.pool.Exec(context.Background(), `
+		INSERT INTO scene_participants (scene_id, character_id, role, joined_at)
+		VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)`,
+		sceneID, characterID, role)
+	Expect(err).NotTo(HaveOccurred())
 }
 
 // assertParticipantRowExists asserts that a row exists in scene_participants
@@ -1864,5 +1879,502 @@ var _ = Describe("SceneStore", func() {
 				"char-alice", false, "missing scene MUST be nil error per spec §5.4 (info-hiding)",
 			),
 		)
+	})
+
+	Describe("published_scenes / published_scene_votes FK cascade", func() {
+		It("cascades vote deletion when the parent published_scene is deleted", func() {
+			store := newTestStore()
+			ctx := context.Background()
+
+			pubID := "ps-cascade-test-01"
+			sceneID := "scene-cascade-test-01"
+
+			// Insert a published_scenes row with all NOT NULL columns.
+			// initiated_at is BIGINT epoch-nanoseconds (INV-TS-1).
+			_, err := store.pool.Exec(
+				ctx, `
+				INSERT INTO published_scenes
+					(id, scene_id, attempt_number, status, initiated_by, initiated_at,
+					 vote_window, cooloff_window, max_attempts_snapshot)
+				VALUES
+					($1, $2, 1, 'COLLECTING', 'char-initiator',
+					 (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT,
+					 '7 days'::interval, '30 minutes'::interval, 3)`,
+				pubID, sceneID,
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Insert two vote rows referencing the published_scene.
+			_, err = store.pool.Exec(
+				ctx, `
+				INSERT INTO published_scene_votes (published_scene_id, character_id)
+				VALUES ($1, 'char-voter-a'), ($1, 'char-voter-b')`,
+				pubID,
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Confirm both votes exist.
+			var count int
+			Expect(store.pool.QueryRow(
+				ctx,
+				`SELECT COUNT(*) FROM published_scene_votes WHERE published_scene_id = $1`,
+				pubID,
+			).Scan(&count)).NotTo(HaveOccurred())
+			Expect(count).To(Equal(2))
+
+			// Delete the parent published_scene row.
+			_, err = store.pool.Exec(
+				ctx,
+				`DELETE FROM published_scenes WHERE id = $1`, pubID,
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Assert the cascade fired: no vote rows remain.
+			Expect(store.pool.QueryRow(
+				ctx,
+				`SELECT COUNT(*) FROM published_scene_votes WHERE published_scene_id = $1`,
+				pubID,
+			).Scan(&count)).NotTo(HaveOccurred())
+			Expect(count).To(Equal(0))
+		})
+	})
+})
+
+var _ = Describe("Publish store — attempt + roster lifecycle", func() {
+	It("creates a published_scenes row with COLLECTING status and frozen roster", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		sceneID := ulid.Make().String()
+		ownerID := ulid.Make().String()
+		memberID := ulid.Make().String()
+		invitedID := ulid.Make().String()
+		mustCreateScene(store, sceneID, ownerID, string(SceneVisibilityOpen))
+		// mustCreateScene uses the minimal Create (no owner participant), so
+		// add owner explicitly alongside member + invited.
+		mustAddParticipant(store, sceneID, ownerID, "owner")
+		mustAddParticipant(store, sceneID, memberID, "member")
+		mustAddParticipant(store, sceneID, invitedID, "invited")
+
+		pub, err := store.CreatePublishAttempt(ctx, CreatePublishAttemptInput{
+			SceneID:       sceneID,
+			AttemptNumber: 1,
+			InitiatedBy:   ownerID,
+			VoteWindow:    7 * 24 * time.Hour,
+			CoolOffWindow: 30 * time.Minute,
+			MaxAttempts:   3,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(pub.Status).To(Equal(StatusCollecting))
+		Expect(pub.AttemptNumber).To(Equal(1))
+
+		voters, err := store.ListPublishVoters(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(voters).To(HaveLen(2), "roster must include owner+member, NOT invited (INV-P6-1)")
+		voterIDs := make(map[string]bool, len(voters))
+		for _, v := range voters {
+			voterIDs[v.CharacterID] = true
+			Expect(v.Vote).To(BeNil(), "fresh roster row MUST start with vote=nil (pending)")
+		}
+		Expect(voterIDs[ownerID]).To(BeTrue())
+		Expect(voterIDs[memberID]).To(BeTrue())
+		Expect(voterIDs[invitedID]).To(BeFalse(), "invited role MUST be excluded — INV-P6-1")
+	})
+
+	It("rejects a duplicate active attempt for the same scene", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		sceneID := ulid.Make().String()
+		ownerID := ulid.Make().String()
+		mustCreateScene(store, sceneID, ownerID, string(SceneVisibilityOpen))
+		mustAddParticipant(store, sceneID, ownerID, "owner")
+
+		_, err := store.CreatePublishAttempt(ctx, CreatePublishAttemptInput{
+			SceneID: sceneID, AttemptNumber: 1, InitiatedBy: ownerID,
+			VoteWindow: 7 * 24 * time.Hour, CoolOffWindow: 30 * time.Minute, MaxAttempts: 3,
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = store.CreatePublishAttempt(ctx, CreatePublishAttemptInput{
+			SceneID: sceneID, AttemptNumber: 2, InitiatedBy: ownerID,
+			VoteWindow: 7 * 24 * time.Hour, CoolOffWindow: 30 * time.Minute, MaxAttempts: 3,
+		})
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "SCENE_PUBLISH_ALREADY_ACTIVE")
+	})
+
+	It("fails closed when the scene has no eligible (owner/member) voters", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		sceneID := ulid.Make().String()
+		ownerID := ulid.Make().String()
+		invitedID := ulid.Make().String()
+		mustCreateScene(store, sceneID, ownerID, string(SceneVisibilityOpen))
+		// Only an invited participant — no owner/member to seed the roster.
+		mustAddParticipant(store, sceneID, invitedID, "invited")
+
+		_, err := store.CreatePublishAttempt(ctx, CreatePublishAttemptInput{
+			SceneID: sceneID, AttemptNumber: 1, InitiatedBy: ownerID,
+			VoteWindow: 7 * 24 * time.Hour, CoolOffWindow: 30 * time.Minute, MaxAttempts: 3,
+		})
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "SCENE_PUBLISH_NO_ELIGIBLE_VOTERS")
+
+		// The failed attempt's row must not survive (transaction rolled back).
+		var n int
+		Expect(store.pool.QueryRow(
+			ctx,
+			`SELECT count(*) FROM published_scenes WHERE scene_id = $1`, sceneID,
+		).Scan(&n)).NotTo(HaveOccurred())
+		Expect(n).To(Equal(0), "rolled-back attempt MUST leave no published_scenes row")
+	})
+})
+
+// setupAttemptWithOneVoter creates a scene with a single owner participant
+// and one COLLECTING publish attempt; the roster therefore has exactly one
+// voter (the owner). Returns the attempt and the owner/voter character ID.
+func setupAttemptWithOneVoter(ctx context.Context, store *SceneStore) (*PublishedScene, string) {
+	GinkgoHelper()
+	sceneID := ulid.Make().String()
+	ownerID := ulid.Make().String()
+	mustCreateScene(store, sceneID, ownerID, string(SceneVisibilityOpen))
+	mustAddParticipant(store, sceneID, ownerID, "owner")
+	pub, err := store.CreatePublishAttempt(ctx, CreatePublishAttemptInput{
+		SceneID: sceneID, AttemptNumber: 1, InitiatedBy: ownerID,
+		VoteWindow: 7 * 24 * time.Hour, CoolOffWindow: 30 * time.Minute, MaxAttempts: 3,
+	})
+	Expect(err).NotTo(HaveOccurred())
+	return pub, ownerID
+}
+
+// setupAttemptWith3Voters creates a scene with owner + two members and one
+// COLLECTING attempt; the roster therefore has exactly three voters.
+func setupAttemptWith3Voters(ctx context.Context, store *SceneStore) *PublishedScene {
+	GinkgoHelper()
+	sceneID := ulid.Make().String()
+	ownerID := ulid.Make().String()
+	mustCreateScene(store, sceneID, ownerID, string(SceneVisibilityOpen))
+	mustAddParticipant(store, sceneID, ownerID, "owner")
+	mustAddParticipant(store, sceneID, ulid.Make().String(), "member")
+	mustAddParticipant(store, sceneID, ulid.Make().String(), "member")
+	pub, err := store.CreatePublishAttempt(ctx, CreatePublishAttemptInput{
+		SceneID: sceneID, AttemptNumber: 1, InitiatedBy: ownerID,
+		VoteWindow: 7 * 24 * time.Hour, CoolOffWindow: 30 * time.Minute, MaxAttempts: 3,
+	})
+	Expect(err).NotTo(HaveOccurred())
+	return pub
+}
+
+var _ = Describe("Publish store — vote operations", func() {
+	It("returns is_change=false on first cast", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, voter := setupAttemptWithOneVoter(ctx, store)
+
+		result, err := store.CastVote(ctx, pub.ID, voter, true)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.IsChange).To(BeFalse(), "first cast is not a change")
+		Expect(result.Vote).To(BeTrue())
+	})
+
+	It("returns is_change=true when a vote is flipped", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, voter := setupAttemptWithOneVoter(ctx, store)
+
+		_, err := store.CastVote(ctx, pub.ID, voter, true)
+		Expect(err).NotTo(HaveOccurred())
+		result, err := store.CastVote(ctx, pub.ID, voter, false)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.IsChange).To(BeTrue())
+		Expect(result.Vote).To(BeFalse())
+	})
+
+	It("returns is_change=false when re-affirming the same value", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, voter := setupAttemptWithOneVoter(ctx, store)
+
+		_, err := store.CastVote(ctx, pub.ID, voter, true)
+		Expect(err).NotTo(HaveOccurred())
+		result, err := store.CastVote(ctx, pub.ID, voter, true)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.IsChange).To(BeFalse())
+	})
+
+	It("preserves voted_at on first cast but advances last_changed_at on a later cast", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, voter := setupAttemptWithOneVoter(ctx, store)
+
+		_, err := store.CastVote(ctx, pub.ID, voter, true)
+		Expect(err).NotTo(HaveOccurred())
+		first, err := store.ListPublishVoters(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(first).To(HaveLen(1))
+		Expect(first[0].VotedAt).NotTo(BeNil())
+		Expect(first[0].LastChangedAt).NotTo(BeNil())
+		votedAt := first[0].VotedAt.Time()
+
+		time.Sleep(2 * time.Millisecond)
+		_, err = store.CastVote(ctx, pub.ID, voter, false)
+		Expect(err).NotTo(HaveOccurred())
+		second, err := store.ListPublishVoters(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(second[0].VotedAt.Time()).To(BeTemporally("==", votedAt), "voted_at MUST be preserved across casts")
+		Expect(second[0].LastChangedAt.Time()).To(BeTemporally(">", votedAt), "last_changed_at MUST advance")
+	})
+
+	It("rejects a vote from a non-roster character", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, _ := setupAttemptWithOneVoter(ctx, store)
+
+		_, err := store.CastVote(ctx, pub.ID, ulid.Make().String(), true)
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "SCENE_PUBLISH_NOT_A_VOTER")
+	})
+
+	It("tallies correct yes/no/pending counts", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub := setupAttemptWith3Voters(ctx, store)
+		voters, err := store.ListPublishVoters(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(voters).To(HaveLen(3))
+
+		_, err = store.CastVote(ctx, pub.ID, voters[0].CharacterID, true)
+		Expect(err).NotTo(HaveOccurred())
+		_, err = store.CastVote(ctx, pub.ID, voters[1].CharacterID, false)
+		Expect(err).NotTo(HaveOccurred())
+		// voters[2] left pending.
+
+		tally, err := store.TallyVotes(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(tally.Yes).To(Equal(1))
+		Expect(tally.No).To(Equal(1))
+		Expect(tally.Pending).To(Equal(1))
+	})
+})
+
+var _ = Describe("Publish store — status reads + transitions", func() {
+	It("GetPublishedSceneHeader returns the attempt without content entries", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, ownerID := setupAttemptWithOneVoter(ctx, store)
+
+		got, err := store.GetPublishedSceneHeader(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got).NotTo(BeNil())
+		Expect(got.ID).To(Equal(pub.ID))
+		Expect(got.SceneID).To(Equal(pub.SceneID))
+		Expect(got.Status).To(Equal(StatusCollecting))
+		Expect(got.InitiatedBy).To(Equal(ownerID))
+		Expect(got.AttemptNumber).To(Equal(1))
+		Expect(got.VoteWindow).To(Equal(7*24*time.Hour), "INTERVAL must round-trip to the original duration")
+		Expect(got.CoolOffWindow).To(Equal(30 * time.Minute))
+		Expect(got.MaxAttemptsSnapshot).To(Equal(3))
+		Expect(got.CoolOffStartedAt).To(BeNil())
+		Expect(got.ContentEntries).To(BeNil(), "header read MUST NOT carry content (INV-P6-5)")
+	})
+
+	It("GetPublishedSceneHeader returns nil for a nonexistent id", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		got, err := store.GetPublishedSceneHeader(ctx, ulid.Make().String())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got).To(BeNil())
+	})
+
+	It("GetPublishedSceneContent returns nil for a non-PUBLISHED attempt", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, _ := setupAttemptWithOneVoter(ctx, store)
+
+		entries, err := store.GetPublishedSceneContent(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(entries).To(BeNil(), "COLLECTING attempt has no content_entries yet")
+	})
+
+	It("TransitionStatus COLLECTING→COOLOFF sets cooloff_started_at", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, _ := setupAttemptWithOneVoter(ctx, store)
+
+		now := time.Now()
+		Expect(store.TransitionStatus(ctx, pub.ID, TransitionInput{
+			To: StatusCoolOff, SetCoolOffAt: &now,
+		})).NotTo(HaveOccurred())
+
+		got, err := store.GetPublishedSceneHeader(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Status).To(Equal(StatusCoolOff))
+		Expect(got.CoolOffStartedAt).NotTo(BeNil())
+	})
+
+	It("TransitionStatus COOLOFF→COLLECTING clears cooloff_started_at", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, _ := setupAttemptWithOneVoter(ctx, store)
+		now := time.Now()
+		Expect(store.TransitionStatus(ctx, pub.ID, TransitionInput{To: StatusCoolOff, SetCoolOffAt: &now})).NotTo(HaveOccurred())
+
+		Expect(store.TransitionStatus(ctx, pub.ID, TransitionInput{
+			To: StatusCollecting, ClearCoolOff: true,
+		})).NotTo(HaveOccurred())
+
+		got, err := store.GetPublishedSceneHeader(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Status).To(Equal(StatusCollecting))
+		Expect(got.CoolOffStartedAt).To(BeNil(), "flip-back MUST clear cooloff_started_at")
+	})
+
+	It("TransitionStatus to ATTEMPT_FAILED sets resolved_at and failure_reason", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, _ := setupAttemptWithOneVoter(ctx, store)
+
+		reason := FailureAnyNo
+		Expect(store.TransitionStatus(ctx, pub.ID, TransitionInput{
+			To: StatusAttemptFailed, Resolved: true, FailureReason: &reason,
+		})).NotTo(HaveOccurred())
+
+		got, err := store.GetPublishedSceneHeader(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Status).To(Equal(StatusAttemptFailed))
+		Expect(got.ResolvedAt).NotTo(BeNil())
+		Expect(got.FailureReason).NotTo(BeNil())
+		Expect(*got.FailureReason).To(Equal(FailureAnyNo))
+	})
+
+	It("TransitionStatus rejects an illegal transition with SCENE_PUBLISH_INVALID_TRANSITION", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, _ := setupAttemptWithOneVoter(ctx, store)
+
+		// COLLECTING → PUBLISHED is illegal (PUBLISHED is reachable only from COOLOFF).
+		err := store.TransitionStatus(ctx, pub.ID, TransitionInput{To: StatusPublished, Resolved: true})
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "SCENE_PUBLISH_INVALID_TRANSITION")
+
+		// Status is unchanged.
+		got, err := store.GetPublishedSceneHeader(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Status).To(Equal(StatusCollecting))
+	})
+
+	It("LockForSnapshot returns a COOLOFF row under FOR UPDATE and rejects non-COOLOFF", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, _ := setupAttemptWithOneVoter(ctx, store)
+
+		// COLLECTING attempt: lock must reject with INVALID_STATE.
+		tx1, err := store.pool.Begin(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		_, err = store.LockForSnapshot(ctx, tx1, pub.ID)
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "SCENE_PUBLISH_INVALID_STATE")
+		Expect(tx1.Rollback(ctx)).NotTo(HaveOccurred())
+
+		// Move to COOLOFF, then lock succeeds and returns the row.
+		now := time.Now()
+		Expect(store.TransitionStatus(ctx, pub.ID, TransitionInput{To: StatusCoolOff, SetCoolOffAt: &now})).NotTo(HaveOccurred())
+		tx2, err := store.pool.Begin(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		locked, err := store.LockForSnapshot(ctx, tx2, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(locked.ID).To(Equal(pub.ID))
+		Expect(locked.Status).To(Equal(StatusCoolOff))
+		Expect(tx2.Rollback(ctx)).NotTo(HaveOccurred())
+	})
+
+	It("CountAttempts returns total / active / published counts per scene", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, _ := setupAttemptWithOneVoter(ctx, store)
+
+		counts, err := store.CountAttempts(ctx, pub.SceneID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(counts.Total).To(Equal(1))
+		Expect(counts.Active).To(Equal(1), "a COLLECTING attempt is active")
+		Expect(counts.Published).To(Equal(0))
+	})
+
+	It("TransitionStatus COOLOFF→PUBLISHED sets published_at and resolved_at, and counts as published", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, _ := setupAttemptWithOneVoter(ctx, store)
+
+		now := time.Now()
+		Expect(store.TransitionStatus(ctx, pub.ID, TransitionInput{To: StatusCoolOff, SetCoolOffAt: &now})).NotTo(HaveOccurred())
+		Expect(store.TransitionStatus(ctx, pub.ID, TransitionInput{To: StatusPublished, Resolved: true})).NotTo(HaveOccurred())
+
+		got, err := store.GetPublishedSceneHeader(ctx, pub.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Status).To(Equal(StatusPublished))
+		Expect(got.PublishedAt).NotTo(BeNil(), "PUBLISHED transition MUST set published_at")
+		Expect(got.ResolvedAt).NotTo(BeNil(), "PUBLISHED is terminal — resolved_at MUST be set")
+
+		counts, err := store.CountAttempts(ctx, pub.SceneID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(counts.Published).To(Equal(1))
+		Expect(counts.Active).To(Equal(0), "a PUBLISHED attempt is no longer active")
+	})
+})
+
+var _ = Describe("Publish store — ReadSceneLogForSnapshot", func() {
+	It("returns only pose/say/emit IC content in chronological order, excluding OOC, ops, and other scenes", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		subject := "events.main.scene.scene-snaplog-1.ic"
+
+		// scene_log.timestamp is BIGINT epoch-nanos (INV-TS-1, migration 000007).
+		// ulid.Make() is monotonic, so insertion order == ORDER BY id ASC.
+		insertLog := func(subj, eventType string) {
+			id := ulid.Make()
+			_, err := store.pool.Exec(ctx, `
+				INSERT INTO scene_log (id, subject, type, timestamp, actor_kind, payload, schema_ver, codec)
+				VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, 'character', $4, 1, 'identity')`,
+				id.Bytes(), subj, eventType, []byte(eventType))
+			Expect(err).NotTo(HaveOccurred())
+		}
+		insertLog(subject, "scene_pose")
+		insertLog(subject, "scene_ooc") // OOC — excluded
+		insertLog(subject, "scene_say")
+		insertLog(subject, "scene_leave_ic") // ops/notice — excluded
+		insertLog(subject, "scene_emit")
+		insertLog("events.main.scene.other.ic", "scene_pose") // different scene — excluded by subject
+
+		tx, err := store.pool.Begin(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		defer func() { _ = tx.Rollback(ctx) }()
+
+		logs, err := store.ReadSceneLogForSnapshot(ctx, tx, subject)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(logs).To(HaveLen(3), "only pose/say/emit for this subject; OOC + ops + other-scene excluded")
+		Expect(logs[0].Type).To(Equal("scene_pose"))
+		Expect(logs[1].Type).To(Equal("scene_say"))
+		Expect(logs[2].Type).To(Equal("scene_emit"), "chronological order preserved via ULID id ASC")
+		Expect(logs[0].Codec).To(Equal("identity"))
+		Expect(logs[0].DEKRef).To(BeNil(), "identity-codec rows have NULL dek_ref")
 	})
 })

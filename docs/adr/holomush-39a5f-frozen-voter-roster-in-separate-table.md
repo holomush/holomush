@@ -30,6 +30,8 @@ A new `published_scene_votes` table holds vote state, one row per (attempt × vo
 
 `scene_participants` is not modified by Phase 6. Its existing schema, its membership semantics, and its access patterns are preserved.
 
+`published_scene_votes.published_scene_id` carries a FK to `published_scenes(id) ON DELETE CASCADE`. This is the only FK in the Phase 6 schema. It is defense-in-depth: inert until an attempt-deletion or GC path exists, but structurally ensures vote rows can never outlive their parent attempt row. Cross-schema FKs to `public.characters` or `public.players` are impossible under plugin role isolation.
+
 Phase 6 also adds a per-scene `max_publish_attempts` column to `scenes` (migration 000009) — this is unrelated to roster but co-located in the same Phase 6 schema work.
 
 ## Rationale

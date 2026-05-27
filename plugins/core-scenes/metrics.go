@@ -119,3 +119,76 @@ func metricSceneOwnershipTransferred(visibility string) {
 func metricSceneOpsEventRecorded(kind string) {
 	_ = kind
 }
+
+// metricScenePublishPrivacyBlock counts INV-S9 hard-privacy-boundary denials
+// — a participant-gated publication read rejected for a non-participant.
+// Part of the spec §10 triple-signal (slog WARN + this metric + span error).
+// Metric: scene_publish_privacy_block_total{operation, reason}. No-op stub
+// per the metrics.go header until the binary-plugin metrics pipeline lands.
+//
+// Declared as a package var (not a plain func) so the INV-P6-9 triple-signal
+// test (service_privacy_block_test.go) can shim it to assert the call fires.
+var metricScenePublishPrivacyBlock = func(operation, reason string) {
+	_ = operation
+	_ = reason
+}
+
+// metricScenePublishAttemptResolved counts publish-attempt outcomes (spec §13.1).
+// Metric: scene_publish_attempts_total{outcome, reason}. No-op stub.
+func metricScenePublishAttemptResolved(outcome, reason string) {
+	_ = outcome
+	_ = reason
+}
+
+// metricScenePublishVoteCast counts publish-vote casts (spec §13.1), labeled by
+// the vote value and whether it changed a prior vote. Metric:
+// scene_publish_votes_total{vote, is_change}. No-op stub.
+func metricScenePublishVoteCast(vote, isChange string) {
+	_ = vote
+	_ = isChange
+}
+
+// metricScenePublishVoteWindowDuration records how long a COLLECTING attempt
+// stayed open before resolving (spec §13.1). Metric:
+// scene_publish_vote_window_duration_seconds{outcome}. No-op stub.
+//
+//nolint:unused // stub for the future binary-plugin metrics infrastructure (spec §11 substrate gap; metric defined §13.1); retained so call sites wire in cheaply once the infra lands
+func metricScenePublishVoteWindowDuration(outcome string, durationSeconds float64) {
+	_ = outcome
+	_ = durationSeconds
+}
+
+// metricScenePublishCoolOffWindowDuration records how long an attempt stayed in
+// COOLOFF before publishing or flipping back (spec §13.1). Metric:
+// scene_publish_cooloff_window_duration_seconds{outcome}. No-op stub.
+//
+//nolint:unused // stub for the future binary-plugin metrics infrastructure (spec §11 substrate gap; metric defined §13.1); retained so call sites wire in cheaply once the infra lands
+func metricScenePublishCoolOffWindowDuration(outcome string, durationSeconds float64) {
+	_ = outcome
+	_ = durationSeconds
+}
+
+// metricScenePublishSnapshotDuration records the COOLOFF→PUBLISHED snapshot
+// pipeline latency (spec §13.1). Metric:
+// scene_publish_snapshot_duration_seconds{result}. No-op stub.
+func metricScenePublishSnapshotDuration(result string, durationSeconds float64) {
+	_ = result
+	_ = durationSeconds
+}
+
+// metricScenePublishActiveAttempts tracks the number of in-flight publish
+// attempts (spec §13.1); callers pass +1 on start and -1 on resolution. Metric:
+// scene_publish_active_attempts (gauge, no labels). No-op stub.
+//
+//nolint:unused // stub for the future binary-plugin metrics infrastructure (spec §11 substrate gap; metric defined §13.1); retained so call sites wire in cheaply once the infra lands
+func metricScenePublishActiveAttempts(delta int) {
+	_ = delta
+}
+
+// boolLabel renders a bool as a stable Prometheus label value ("true"/"false").
+func boolLabel(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}

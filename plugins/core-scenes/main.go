@@ -10,6 +10,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/samber/oops"
 	"google.golang.org/grpc"
@@ -80,7 +81,7 @@ func (p *scenePlugin) SetFocusClient(client pluginsdk.FocusClient) {
 
 // SetHostEvaluator is called by the SDK adapter during Init when the plugin
 // declares HostEvaluatorAware. The evaluator is used by admin-gated command
-// handlers (e.g., handleExtend) to perform host ABAC checks.
+// handlers (e.g., handleVoteExtend) to perform host ABAC checks.
 func (p *scenePlugin) SetHostEvaluator(ev pluginsdk.HostEvaluator) {
 	p.evaluator = ev
 }
@@ -90,6 +91,17 @@ func (p *scenePlugin) SetHostEvaluator(ev pluginsdk.HostEvaluator) {
 func (p *scenePlugin) SetEventSink(sink pluginsdk.EventSink) {
 	if p.service != nil {
 		p.service.SetEventSink(sink)
+	}
+}
+
+// SetSnapshotDecryptor forwards the SDK-injected host-mediated read-back
+// decryptor to the scene service, where the COOLOFF→PUBLISHED snapshot pipeline
+// (C7) uses it to decrypt its own IC content (the plugin holds no DEK —
+// INV-RB-1). Declares scenePlugin as pluginsdk.SnapshotDecryptorAware so the SDK
+// adapter wires it before Init.
+func (p *scenePlugin) SetSnapshotDecryptor(d pluginsdk.SnapshotDecryptor) {
+	if p.service != nil {
+		p.service.SetSnapshotDecryptor(d)
 	}
 }
 
@@ -114,6 +126,22 @@ func phase4EmitTypes() []string {
 		"scene_leave_ic",
 		"scene_pose_order_changed_ic",
 		"scene_idle_nudge",
+	}
+}
+
+// phase6EmitTypes returns the 6 Phase 6 publication notice event types
+// declared in crypto.emits (all sensitivity:never). These MUST be
+// registered alongside phase4EmitTypes so the EmitTypeRegistrar set equals
+// the manifest crypto.emits set (INV-S5 / INV-P4-2); the host fails plugin
+// load otherwise. The matching emitter wiring lands in Phase D2.
+func phase6EmitTypes() []string {
+	return []string{
+		"scene_publish_started",
+		"scene_publish_vote_cast",
+		"scene_publish_cooloff_started",
+		"scene_publish_resolved",
+		"scene_publish_withdrawn",
+		"scene_publish_vote_attempts_extended",
 	}
 }
 
@@ -148,6 +176,32 @@ func (p *scenePlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig) 
 	// (tracked as a post-Phase-4 follow-up).
 	p.service.gameID = "main"
 
+	// Wire the real publish eventer now that sink, store, and gameID are all
+	// set. SetEventSink runs before Init in the SDK lifecycle, so
+	// p.service.eventSink is already populated by the time we reach here.
+	// Guard against a nil sink (e.g. in test harnesses that call Init directly
+	// without going through the full SDK lifecycle).
+	if p.service.eventSink != nil {
+		p.service.SetPublishEventer(newPublishEventEmitter(p.service.eventSink, p.service.store, p.service.gameID))
+	} else {
+		slog.WarnContext(ctx, "core-scenes: event sink nil at Init; publish eventer left as noop")
+	}
+
+	// Start the publish scheduler in a goroutine tied to an independently
+	// cancellable context so it survives the Init RPC context (which is
+	// request-scoped and will cancel when the gRPC call returns). The
+	// goroutine terminates on plugin shutdown via the store pool's close
+	// propagation or SIGTERM — the process exits cleanly regardless.
+	schedCtx, schedCancel := context.WithCancel(context.Background()) //nolint:gosec // G118: cancel intentionally not called; goroutine is daemon-lifetime, process exit is the signal
+	_ = schedCancel
+	sched := &publishScheduler{
+		svc:      p.service,
+		store:    store,
+		interval: 30 * time.Second, // sweep every 30s; vote/cooloff windows are minutes-to-days
+		now:      time.Now,
+	}
+	go sched.Run(schedCtx)
+
 	slog.InfoContext(
 		ctx, "core-scenes plugin initialised",
 		"storage", "postgres",
@@ -158,6 +212,7 @@ func (p *scenePlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig) 
 func main() {
 	reg := pluginsdk.NewEmitRegistry()
 	reg.RegisterEmitTypes(phase4EmitTypes())
+	reg.RegisterEmitTypes(phase6EmitTypes())
 
 	plugin := &scenePlugin{
 		service:      &SceneServiceImpl{},

@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -27,6 +28,30 @@ func TestSceneResolverGetSchemaReturnsSceneAttributes(t *testing.T) {
 	assert.Equal(t, pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING, sceneSchema.GetAttributes()["owner"])
 	assert.Equal(t, pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING, sceneSchema.GetAttributes()["state"])
 	assert.Equal(t, pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING, sceneSchema.GetAttributes()["visibility"])
+}
+
+// TestResolverNeverExposesContentByForbiddenAttributeName pins INV-P6-7
+// (spec §9.3): the scene attribute resolver MUST NOT expose any attribute
+// whose name could carry IC content (pose/say/emit/ooc text, the publication
+// log, or content_entries). The hard privacy boundary (INV-S9) keeps log
+// content out of the ABAC attribute path entirely; this is the regression
+// lock. It passes today — GetSchema exposes only id/owner/state/visibility/
+// location/participants/invitees — and fails any future PR that adds a
+// content-bearing attribute to the resolver schema.
+func TestResolverNeverExposesContentByForbiddenAttributeName(t *testing.T) {
+	t.Parallel()
+	r := NewSceneResolver(newFakeStore())
+
+	resp, err := r.GetSchema(context.Background(), &pluginv1.GetSchemaRequest{})
+	require.NoError(t, err)
+	sceneSchema, ok := resp.GetResourceTypes()["scene"]
+	require.True(t, ok, "schema must include 'scene' resource type")
+
+	forbidden := regexp.MustCompile(`^(content|content_entries|poses?|says?|emits?|ooc|log|entries|publication)$`)
+	for name := range sceneSchema.GetAttributes() {
+		assert.False(t, forbidden.MatchString(name),
+			"INV-P6-7 violation: resolver exposes attribute %q matching forbidden content pattern", name)
+	}
 }
 
 func TestSceneResolverResolveResourceReturnsSceneAttributes(t *testing.T) {

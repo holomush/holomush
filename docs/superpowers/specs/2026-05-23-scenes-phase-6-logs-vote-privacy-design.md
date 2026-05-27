@@ -44,6 +44,8 @@ Phase 6 intentionally departs from several specifics in the v2 design and the `h
 | v2 §1.3 `PublishVote *bool` on Participant | Moved to `published_scene_votes` table | Q3. Clean roster snapshot at attempt start; doesn't pollute participant rows with vote-window state |
 | v2 §1.5 "Scene Log (Published)" naming | Renamed to `PublishedScene` / `published_scenes` everywhere | Q2. `scene_log` is taken by the audit history table (PR #267); the publication artifact needs an unambiguous name |
 | Bead "scene_logs table (migration 000003)" | Migration `000008_scene_publication.up.sql` (next available number; `scene_log` already exists at 000004) | Plan reflects shipped state; the audit table predates this design |
+| §6.1 "`scene log` → (existing audit `QueryHistory`)" | `scene log` replays via the host's `QueryStreamHistory` (focus client), not the plugin's own `PluginAuditService.QueryHistory` | The plugin's audit `QueryHistory` serves `sensitivity:always` **ciphertext** (the plugin holds no DEK — same constraint as the C7 snapshot, `holomush-m7pxs`). The host's `QueryStreamHistory` decrypts host-side and is itself membership-gated, so it is the correct realization of a participant content read. The §6.1 table phrasing names the intent ("participant read of audit history"), not the literal in-process call. |
+| §6.1 "`scene publish status` → focused scene's **active** attempt" | `scene publish status` shows the scene's **latest** attempt (active if in-progress, else the most recent terminal one with its outcome + failure_reason) | Showing only the active attempt hides why a just-resolved attempt failed; a user running `status` after an ATTEMPT_FAILED wants the outcome + reason. `handleStatus` selects the newest attempt and the display adapts (vote tally for active, outcome/reason for terminal). |
 
 ## 3. Domain Model
 
@@ -64,9 +66,9 @@ A `PublishedScene` represents one publication attempt for a scene. Multiple `Pub
 | VoteWindow | time.Duration | Yes | Frozen at attempt start; default 7 days, configurable |
 | CoolOffWindow | time.Duration | Yes | Frozen at attempt start; default 30 minutes, configurable |
 | MaxAttemptsSnapshot | int | Yes | Frozen at attempt start for audit clarity |
-| ContentEntries | \*\[\]Entry | No | Set ONLY on PUBLISHED transition. Each entry: `{speaker, kind, content}` where `kind ∈ {pose, say, emit}` |
+| ContentEntries | \[\]Entry | No | Set ONLY on PUBLISHED transition (nil otherwise). Each entry: `{speaker, kind, content}` where `kind ∈ {pose, say, emit}` |
 | TitleSnapshot | \*string | No | Set on PUBLISHED; snapshot of `scenes.title` at publish time |
-| ParticipantsSnapshot | \*\[\]Participant | No | Set on PUBLISHED; frozen list of character names visible to public |
+| ParticipantsSnapshot | \[\]string | No | Set on PUBLISHED (nil otherwise); frozen list of character **names** visible to public. Names only — the public archive MUST NOT expose character IDs (matches proto `repeated string participants_snapshot`) |
 | PublishedAt | \*time.Time | No | Set on PUBLISHED only |
 | FailureReason | \*PublishFailureReason | No | Set on ATTEMPT_FAILED only. One of: `ANY_NO`, `TIMEOUT`, `WITHDRAWN`, `SNAPSHOT_DECRYPT_FAILED`, `SNAPSHOT_RENDER_FAILED`, `COOLOFF_INVARIANT_BROKEN` |
 
@@ -84,6 +86,12 @@ One row per eligible voter, per attempt. Roster is frozen at attempt creation.
 
 Composite primary key `(PublishedSceneID, CharacterID)`.
 
+**Go realization note.** The §3.1/§3.2 type column gives the conceptual shape; the implemented Go types (`plugins/core-scenes/publish_types.go`) realize it as follows:
+
+- **Timestamps** (`InitiatedAt`, `CoolOffStartedAt`, `ResolvedAt`, `PublishedAt`, `VotedAt`, `LastChangedAt`) use `pgnanos.Time` / `*pgnanos.Time` — BIGINT epoch-nanoseconds per INV-TS-1 (the persistence substrate since migration 000007), not `time.Time`.
+- **Slice-valued fields** (`ContentEntries`, `ParticipantsSnapshot`) use a nil slice to signal "unset", idiomatic Go in preference to a pointer-to-slice.
+- **`ParticipantsSnapshot`** is `[]string` of character names; the public archive surface (`GetPublicSceneArchiveResponse`, proto `repeated string`) exposes names only and never character IDs.
+
 ### 3.3 Migration
 
 New migration `000008_scene_publication.up.sql`:
@@ -92,6 +100,8 @@ New migration `000008_scene_publication.up.sql`:
 -- SPDX-License-Identifier: Apache-2.0
 -- Copyright 2026 HoloMUSH Contributors
 
+-- Timestamps are BIGINT epoch-nanoseconds (INV-TS-1).
+
 CREATE TABLE IF NOT EXISTS published_scenes (
     id                     TEXT        PRIMARY KEY,
     scene_id               TEXT        NOT NULL,
@@ -99,16 +109,16 @@ CREATE TABLE IF NOT EXISTS published_scenes (
     status                 TEXT        NOT NULL CHECK (status IN
                               ('COLLECTING','COOLOFF','PUBLISHED','ATTEMPT_FAILED')),
     initiated_by           TEXT        NOT NULL,
-    initiated_at           TIMESTAMPTZ NOT NULL,
-    cooloff_started_at     TIMESTAMPTZ,
-    resolved_at            TIMESTAMPTZ,
+    initiated_at           BIGINT      NOT NULL,
+    cooloff_started_at     BIGINT,
+    resolved_at            BIGINT,
     vote_window            INTERVAL    NOT NULL,
     cooloff_window         INTERVAL    NOT NULL,
     max_attempts_snapshot  INTEGER     NOT NULL,
     content_entries        JSONB,
     title_snapshot         TEXT,
     participants_snapshot  JSONB,
-    published_at           TIMESTAMPTZ,
+    published_at           BIGINT,
     failure_reason         TEXT        CHECK (failure_reason IS NULL OR failure_reason IN
                               ('ANY_NO','TIMEOUT','WITHDRAWN',
                                'SNAPSHOT_DECRYPT_FAILED','SNAPSHOT_RENDER_FAILED',
@@ -125,11 +135,11 @@ CREATE INDEX IF NOT EXISTS published_scenes_scene_status
     ON published_scenes(scene_id, status);
 
 CREATE TABLE IF NOT EXISTS published_scene_votes (
-    published_scene_id  TEXT        NOT NULL,
+    published_scene_id  TEXT        NOT NULL REFERENCES published_scenes(id) ON DELETE CASCADE,
     character_id        TEXT        NOT NULL,
     vote                BOOLEAN,
-    voted_at            TIMESTAMPTZ,
-    last_changed_at     TIMESTAMPTZ,
+    voted_at            BIGINT,
+    last_changed_at     BIGINT,
     PRIMARY KEY (published_scene_id, character_id)
 );
 
@@ -137,7 +147,9 @@ CREATE INDEX IF NOT EXISTS published_scene_votes_pending
     ON published_scene_votes(published_scene_id) WHERE vote IS NULL;
 ```
 
-No foreign-key constraints. Referential integrity for `scene_id`, `initiated_by`, `published_scene_id`, and `character_id` is enforced in the Go service layer. This matches the project convention for new tables (per user direction 2026-05-23); the existing `scene_participants → scenes` FK is an outlier.
+Exactly one intra-schema FK exists: `published_scene_votes.published_scene_id → published_scenes(id) ON DELETE CASCADE`. This is defense-in-depth — inert today (no attempt-deletion or GC path exists yet) but structurally correct for when one lands. It ensures vote rows can never outlive their parent attempt row without an explicit application-layer sweep.
+
+Cross-schema FKs to `public.characters` and `public.players` are impossible under plugin role isolation: the plugin database role cannot reference tables in the host schema, so `initiated_by` and `character_id` integrity is enforced in the Go service layer. The `published_scenes.scene_id` reference to `scenes` is intentionally omitted — publications are designed to outlive the scene they record, so a cascading FK would be incorrect.
 
 A paired `000008_scene_publication.down.sql` drops both tables and their indexes. Migrations follow the discipline at `site/docs/contributing/database-migrations.md` (idempotent, logic-free, plain SQL).
 
@@ -556,15 +568,38 @@ func (s *publishService) runSnapshot(ctx context.Context, publishedSceneID strin
             return err
         }
 
-        // Step 7: archive the scene.
-        if err := s.store.SetSceneState(ctx, tx, pub.SceneID, SceneStateArchived); err != nil {
+        // Step 7: archive the scene. FK soft-no-op (ADR holomush-jrefa):
+        // published_scenes has NO foreign key to scenes(id), so the scene row
+        // may have been deleted between COOLOFF entry and snapshot fire. The
+        // UPDATE MUST therefore check rows-affected: a 0-row result is NOT a
+        // failure — publication STILL finalizes to PUBLISHED with content; the
+        // archive intentionally outlives its source. A warning fires
+        // (code=SCENE_PUBLISH_PARENT_SCENE_GONE) and the pipeline continues. Do
+        // NOT transition to ATTEMPT_FAILED.
+        archived, err := s.store.ArchiveSceneStateForPublish(ctx, tx, pub.SceneID)
+        if err != nil {
             return err
+        }
+        if !archived {
+            slog.WarnContext(ctx,
+                "scene deleted before publication snapshot — publication completes; scene state UPDATE no-op",
+                "attempt_id", pub.ID, "scene_id", pub.SceneID,
+                "code", "SCENE_PUBLISH_PARENT_SCENE_GONE")
         }
         return nil
     })
     // Step 8 (post-tx): emit scene_publish_resolved{outcome=PUBLISHED}.
 }
 ```
+
+> **Decrypt mechanism (corrected by the read-back design).** Step 3's
+> `s.codec.DecodeBatch` sketch is superseded. The plugin holds **no DEK**: it
+> passes the rows it read from `scene_log` to the host's `DecryptOwnAuditRows`
+> entry, chunked into ≤500-row calls (the host rejects an over-cap batch with
+> `DECRYPT_BATCH_TOO_LARGE`), and gets per-row plaintext or a typed refusal back
+> (host-mediated, `2026-05-25-plugin-readback-decrypt-design.md` §3.2–§3.3,
+> INV-RB-1/6/12). ANY per-row refusal/error fails the publish closed
+> (`SNAPSHOT_DECRYPT_FAILED`, INV-RB-10).
 
 ### 11.1 Source of truth for IC events
 
@@ -574,13 +609,26 @@ The filter is `WHERE subject = events.<game_id>.scene.<scene_id>.ic AND type IN 
 
 ### 11.2 Decryption
 
-`scene_pose`, `scene_say`, `scene_emit` are `sensitivity: always` per ADR `holomush-sb3n`. Payloads are per-event-DEK encrypted with AAD bound to event ID + subject. The plugin already holds DEK access for its own events (Phase 7 crypto work). The snapshot reuses the existing decrypt path (no new crypto surface).
+`scene_pose`, `scene_say`, `scene_emit` are `sensitivity: always` per ADR `holomush-sb3n`. Payloads are per-event-DEK encrypted with AAD bound to event ID + subject (+ type + timestamp + actor + codec + dek_ref/version per master §4.2).
 
-The crypto-reviewer MUST evaluate this section for any inadvertent AAD or fence violation. Specifically, bulk-decrypt-at-snapshot reuses existing primitives but is a new caller; the reviewer should confirm:
+> **Corrected premise (read-back design `holomush-m7pxs`).** The earlier claim
+> "the plugin already holds DEK access for its own events" is **false** — the
+> plugin imports no DEK/codec/crypto and holds no key. The snapshot passes the
+> rows it read from `scene_log` to the host's `DecryptOwnAuditRows` entry; the
+> **host** rebuilds AAD (via `AuditRowToEvent` + `aad.Build`, the INV-TS-5
+> byte-equal round-trip), resolves the DEK, decrypts, audits (INV-19), and
+> returns per-row **plaintext** (the plugin still never sees a DEK). The
+> snapshot chunks the decrypt into ≤500-row calls (`maxDecryptBatch`; the host
+> rejects over-cap). See `2026-05-25-plugin-readback-decrypt-design.md`
+> §3.2–§3.3 and INV-RB-1..5 / INV-RB-6 / INV-RB-10 / INV-RB-12. The earlier "no
+> new crypto surface" framing is void — the read-back primitive + capability +
+> grant + RPC are new surface, gated by the crypto-reviewer.
 
-- AAD is constructed identically to the runtime decrypt path.
-- The downgrade fence (INV-P7-7) is unchanged — no payload-encrypted event is rendered without successful decrypt.
-- DEK access does not cross plugin boundaries (per the role-isolation invariants).
+The crypto-reviewer MUST evaluate this section for any inadvertent AAD or fence violation. Specifically, bulk-decrypt-at-snapshot is a new caller of the host primitive; the reviewer should confirm:
+
+- AAD is reconstructed host-side identically to the encrypt path (INV-RB-4): the `scene_log`→`AuditRow` conversion (`logRowToAuditRow`) carries `id`/`subject`/`type`/`timestamp`/`actor_kind`/`actor_id`/`codec`/`dek_ref`/`dek_version` so the rebuilt AAD is byte-equal.
+- The downgrade fence (INV-P7-7) and DEK-existence (INV-P7-15) still apply on the direct entry — no payload-encrypted event is rendered without successful decrypt (INV-RB-5).
+- DEK access does not cross plugin boundaries; the OwnerMap g1 gate confines the plugin to subjects it owns (INV-RB-2).
 
 ### 11.3 Atomicity
 
@@ -597,6 +645,14 @@ Steps 1–7 happen in a single Postgres transaction. The `SELECT FOR UPDATE` row
 | DB error | Bubble up; timer retries on next tick |
 
 All failure transitions emit `scene_publish_resolved` with the appropriate `outcome` and `reason`.
+
+#### Soft no-op cases
+
+Some conditions are deliberately **not** failures — the snapshot still finalizes to PUBLISHED:
+
+| Condition | Behavior |
+| --------- | -------- |
+| Parent scene deleted between COOLOFF entry and snapshot fire | The Step-7 `UPDATE scenes SET state = 'archived'` affects **0 rows** (`published_scenes` has no FK to `scenes(id)` — ADR `holomush-jrefa`). This is a **soft no-op**, NOT a failure: the publication STILL commits as PUBLISHED with `content_entries`; the archive intentionally outlives its source. The pipeline logs `slog.WarnContext(ctx, …, code="SCENE_PUBLISH_PARENT_SCENE_GONE")` with `attempt_id` + `scene_id` and continues. It MUST NOT transition to ATTEMPT_FAILED. (The Step-5 scene-metadata read is correspondingly tolerant: a missing scene yields empty title + nil participants, and publication proceeds.) |
 
 ## 12. Renderers
 

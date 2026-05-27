@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CastPublishVoteRequest, CastPublishVoteResponse, CreateSceneRequest, CreateSceneResponse, EndSceneRequest, EndSceneResponse, GetPoseOrderRequest, GetPoseOrderResponse, GetSceneRequest, GetSceneResponse, InviteToSceneRequest, InviteToSceneResponse, JoinSceneRequest, JoinSceneResponse, KickFromSceneRequest, KickFromSceneResponse, LeaveSceneRequest, LeaveSceneResponse, ListScenesRequest, ListScenesResponse, PauseSceneRequest, PauseSceneResponse, ResumeSceneRequest, ResumeSceneResponse, TransferOwnershipRequest, TransferOwnershipResponse, UpdateSceneRequest, UpdateSceneResponse } from "./scene_pb.js";
+import { CastPublishSceneVoteRequest, CastPublishSceneVoteResponse, CastPublishVoteRequest, CastPublishVoteResponse, CreateSceneRequest, CreateSceneResponse, DownloadPublicSceneArchiveRequest, DownloadPublicSceneArchiveResponse, DownloadPublishedSceneRequest, DownloadPublishedSceneResponse, EndSceneRequest, EndSceneResponse, ExtendScenePublishVoteAttemptsRequest, ExtendScenePublishVoteAttemptsResponse, GetPoseOrderRequest, GetPoseOrderResponse, GetPublicSceneArchiveRequest, GetPublicSceneArchiveResponse, GetPublishedSceneRequest, GetPublishedSceneResponse, GetSceneRequest, GetSceneResponse, InviteToSceneRequest, InviteToSceneResponse, JoinSceneRequest, JoinSceneResponse, KickFromSceneRequest, KickFromSceneResponse, LeaveSceneRequest, LeaveSceneResponse, ListScenePublishAttemptsRequest, ListScenePublishAttemptsResponse, ListScenesRequest, ListScenesResponse, PauseSceneRequest, PauseSceneResponse, ResumeSceneRequest, ResumeSceneResponse, StartScenePublishRequest, StartScenePublishResponse, TransferOwnershipRequest, TransferOwnershipResponse, UpdateSceneRequest, UpdateSceneResponse, WithdrawScenePublishRequest, WithdrawScenePublishResponse } from "./scene_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -139,6 +139,89 @@ export const SceneService = {
       name: "GetPoseOrder",
       I: GetPoseOrderRequest,
       O: GetPoseOrderResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Phase 6 publication RPCs. See spec section 5.
+     *
+     * @generated from rpc holomush.scene.v1.SceneService.StartScenePublish
+     */
+    startScenePublish: {
+      name: "StartScenePublish",
+      I: StartScenePublishRequest,
+      O: StartScenePublishResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.scene.v1.SceneService.CastPublishSceneVote
+     */
+    castPublishSceneVote: {
+      name: "CastPublishSceneVote",
+      I: CastPublishSceneVoteRequest,
+      O: CastPublishSceneVoteResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.scene.v1.SceneService.WithdrawScenePublish
+     */
+    withdrawScenePublish: {
+      name: "WithdrawScenePublish",
+      I: WithdrawScenePublishRequest,
+      O: WithdrawScenePublishResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.scene.v1.SceneService.GetPublishedScene
+     */
+    getPublishedScene: {
+      name: "GetPublishedScene",
+      I: GetPublishedSceneRequest,
+      O: GetPublishedSceneResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.scene.v1.SceneService.DownloadPublishedScene
+     */
+    downloadPublishedScene: {
+      name: "DownloadPublishedScene",
+      I: DownloadPublishedSceneRequest,
+      O: DownloadPublishedSceneResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.scene.v1.SceneService.ListScenePublishAttempts
+     */
+    listScenePublishAttempts: {
+      name: "ListScenePublishAttempts",
+      I: ListScenePublishAttemptsRequest,
+      O: ListScenePublishAttemptsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.scene.v1.SceneService.GetPublicSceneArchive
+     */
+    getPublicSceneArchive: {
+      name: "GetPublicSceneArchive",
+      I: GetPublicSceneArchiveRequest,
+      O: GetPublicSceneArchiveResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.scene.v1.SceneService.DownloadPublicSceneArchive
+     */
+    downloadPublicSceneArchive: {
+      name: "DownloadPublicSceneArchive",
+      I: DownloadPublicSceneArchiveRequest,
+      O: DownloadPublicSceneArchiveResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.scene.v1.SceneService.ExtendScenePublishVoteAttempts
+     */
+    extendScenePublishVoteAttempts: {
+      name: "ExtendScenePublishVoteAttempts",
+      I: ExtendScenePublishVoteAttemptsRequest,
+      O: ExtendScenePublishVoteAttemptsResponse,
       kind: MethodKind.Unary,
     },
   }
