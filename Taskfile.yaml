@@ -373,6 +373,21 @@ tasks:
       - site/docs/reference/policy-dsl.ebnf
       - site/docs/reference/policy-dsl-railroad.html
 
+  generate:ebnf:check:
+    desc: Verify generated EBNF grammar + railroad diagram are current
+    cmds:
+      - |
+        set -euo pipefail
+        EBNF=site/docs/reference/policy-dsl.ebnf
+        RAIL=site/docs/reference/policy-dsl-railroad.html
+        BEFORE=$(sha256sum "$EBNF" "$RAIL" | sha256sum)
+        task --force generate:ebnf
+        AFTER=$(sha256sum "$EBNF" "$RAIL" | sha256sum)
+        if [ "$BEFORE" != "$AFTER" ]; then
+          echo "EBNF/railroad out of sync. Run 'task generate:ebnf' and commit." >&2
+          exit 1
+        fi
+
   mocks:generate:
     desc: Generate mocks with mockery
     cmds:
