@@ -57,6 +57,34 @@ func TestLuaConfigRequireIntReturnsValueAndRaisesWhenKeyAbsent(t *testing.T) {
 	`))
 }
 
+func TestLuaConfigRequireBoolReturnsValueAndRaisesWhenKeyAbsent(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	mod := L.NewTable()
+	registerConfigTable(L, mod, map[string]string{"enabled": "true"})
+	L.SetGlobal("holomush", mod)
+
+	require.NoError(t, L.DoString(`
+		assert(holomush.config.require_bool("enabled") == true)
+		local ok = pcall(function() holomush.config.require_bool("missing") end)
+		assert(ok == false)
+	`))
+}
+
+func TestLuaConfigRequireStringReturnsValueAndRaisesWhenKeyAbsent(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	mod := L.NewTable()
+	registerConfigTable(L, mod, map[string]string{"label": "hi"})
+	L.SetGlobal("holomush", mod)
+
+	require.NoError(t, L.DoString(`
+		assert(holomush.config.require_string("label") == "hi")
+		local ok = pcall(function() holomush.config.require_string("missing") end)
+		assert(ok == false)
+	`))
+}
+
 func TestLuaConfigAccessorsRaiseWhenValueDoesNotParseToType(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()

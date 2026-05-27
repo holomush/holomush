@@ -320,7 +320,13 @@
       "additionalProperties": {
         "properties": {
           "type": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "duration",
+              "int",
+              "bool",
+              "string"
+            ]
           },
           "default": {
             "type": "string"

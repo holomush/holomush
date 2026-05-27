@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -66,6 +67,63 @@ end
 	plugins := host.Plugins()
 	require.Len(t, plugins, 1, "expected 1 plugin")
 	assert.Equal(t, "test-plugin", plugins[0])
+}
+
+// TestLuaHostConfigDeliveryRaceFree pins the INV-PC config-snapshot fix
+// (holomush-4ytd5; CodeRabbit thread on PR #4284): delivery paths MUST read
+// h.mergedConfigs under h.mu, not unlocked, or a concurrent Load triggers a
+// "concurrent map read and map write" panic. Run under -race (the task test
+// default) — without the snapshot-under-RLock guard the detector fires.
+func TestLuaHostConfigDeliveryRaceFree(t *testing.T) {
+	dir := t.TempDir()
+	writeMainLua(t, dir, "function on_event(event) return nil end")
+
+	host := pluginlua.NewHostWithFunctions(hostfunc.New(nil))
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "cfg-race",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+		Config:    map[string]plugins.ConfigParam{"window": {Type: "duration", Default: "168h"}},
+	}
+	require.NoError(t, host.Load(context.Background(), manifest, dir))
+
+	event := pluginsdk.Event{
+		ID: "01ABC", Stream: "location:1", Type: "say",
+		ActorKind: pluginsdk.ActorCharacter, ActorID: "c1",
+	}
+
+	const iters = 50
+	var wg sync.WaitGroup
+	var loadErr, deliverErr error // each written by exactly one goroutine; read after wg.Wait()
+	wg.Add(2)
+	// Writer: reload repeatedly — writes h.mergedConfigs under h.mu.
+	go func() {
+		defer wg.Done()
+		for range iters {
+			if err := host.Load(context.Background(), manifest, dir); err != nil {
+				loadErr = err
+				return
+			}
+		}
+	}()
+	// Reader: deliver repeatedly — snapshots h.mergedConfigs under the RLock.
+	go func() {
+		defer wg.Done()
+		for range iters {
+			if _, err := host.DeliverEvent(context.Background(), "cfg-race", event); err != nil {
+				deliverErr = err
+				return
+			}
+		}
+	}()
+	wg.Wait()
+	// Assert in the test goroutine — require.* must not run in a spawned
+	// goroutine (FailNow → runtime.Goexit only works on the test goroutine).
+	require.NoError(t, loadErr)
+	require.NoError(t, deliverErr)
 }
 
 func TestLuaHostDeliverEventReturnsEmitEvents(t *testing.T) {

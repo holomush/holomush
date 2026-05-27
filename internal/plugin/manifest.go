@@ -191,7 +191,7 @@ var validDisplayTargets = map[string]bool{
 // what a key controls. See
 // docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md.
 type ConfigParam struct {
-	Type        string `yaml:"type" json:"type"` // duration|int|bool|string
+	Type        string `yaml:"type" json:"type" jsonschema:"enum=duration,enum=int,enum=bool,enum=string"` // duration|int|bool|string
 	Default     string `yaml:"default,omitempty" json:"default,omitempty"`
 	Required    bool   `yaml:"required,omitempty" json:"required,omitempty"`
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`

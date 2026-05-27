@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -186,7 +187,14 @@ func WithAuditLogger(a pluginauthz.Auditor) HostOption {
 // map (plugin name → key → value) into the host so it can be consulted at
 // plugin init time. Populated from PluginSubsystemConfig.PluginConfigOverrides.
 func WithConfigOverrides(overrides map[string]map[string]string) HostOption {
-	return func(h *Host) { h.configOverrides = overrides }
+	// Defensively deep-copy: the caller retains ownership of overrides, and a
+	// later mutation must not race with reads of h.configOverrides. Mirrors the
+	// Lua host's WithPluginConfigOverrides (plugin-runtime-symmetry).
+	cloned := make(map[string]map[string]string, len(overrides))
+	for name, cfg := range overrides {
+		cloned[name] = maps.Clone(cfg)
+	}
+	return func(h *Host) { h.configOverrides = cloned }
 }
 
 // Host manages binary plugins via HashiCorp go-plugins.

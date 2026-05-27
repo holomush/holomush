@@ -18,7 +18,8 @@ import (
 // Accessor behaviour:
 //   - Non-require variants (duration/int/bool/string): return nil when the key
 //     is absent (the plugin did not declare it or it has no effective value).
-//   - require_duration / require_int: raise a Lua error when the key is absent.
+//   - require_* variants (require_duration/require_int/require_bool/
+//     require_string): raise a Lua error when the key is absent.
 //
 // cfg may be nil or empty; all accessors will return nil in that case.
 func registerConfigTable(L *lua.LState, mod *lua.LTable, cfg map[string]string) { //nolint:gocritic // L is conventional gopher-lua parameter name
@@ -113,6 +114,27 @@ func registerConfigTable(L *lua.LState, mod *lua.LTable, cfg map[string]string) 
 		return 1
 	}))
 
+	// require_bool(key) → boolean; raises on absent key
+	L.SetField(tbl, "require_bool", L.NewFunction(func(ls *lua.LState) int {
+		key := ls.CheckString(1)
+		v, ok := cfg[key]
+		if !ok {
+			ls.RaiseError("holomush.config.require_bool: required key %q absent from plugin config", key)
+			return 0
+		}
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			ls.RaiseError("holomush.config.require_bool: key %q value %q is not a valid boolean: %s", key, v, err)
+			return 0
+		}
+		if b {
+			ls.Push(lua.LTrue)
+		} else {
+			ls.Push(lua.LFalse)
+		}
+		return 1
+	}))
+
 	// string(key) → string or nil
 	L.SetField(tbl, "string", L.NewFunction(func(ls *lua.LState) int {
 		key := ls.CheckString(1)
@@ -120,6 +142,18 @@ func registerConfigTable(L *lua.LState, mod *lua.LTable, cfg map[string]string) 
 		if !ok {
 			ls.Push(lua.LNil)
 			return 1
+		}
+		ls.Push(lua.LString(v))
+		return 1
+	}))
+
+	// require_string(key) → string; raises on absent key
+	L.SetField(tbl, "require_string", L.NewFunction(func(ls *lua.LState) int {
+		key := ls.CheckString(1)
+		v, ok := cfg[key]
+		if !ok {
+			ls.RaiseError("holomush.config.require_string: required key %q absent from plugin config", key)
+			return 0
 		}
 		ls.Push(lua.LString(v))
 		return 1
