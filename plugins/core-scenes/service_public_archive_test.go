@@ -55,7 +55,7 @@ func TestGetPublicSceneArchiveReturnsOpaqueNotFoundForNonReadableStates(t *testi
 			t.Parallel()
 			store := newFakeStore()
 			tc.setup(store)
-			svc := NewSceneServiceImpl(store)
+			svc := newTestService(t, store)
 
 			_, err := svc.GetPublicSceneArchive(context.Background(), &scenev1.GetPublicSceneArchiveRequest{
 				PublishedSceneId: tc.argID,
@@ -77,7 +77,7 @@ func TestGetPublicSceneArchiveReturnsContentForPublishedScene(t *testing.T) {
 	store := newFakeStoreWithPublishedScene("pub-pub", "scene-pub", []PublishedSceneEntry{
 		{Speaker: "Alice", Kind: EntryKindSay, Content: "Hello."},
 	})
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 
 	resp, err := svc.GetPublicSceneArchive(context.Background(), &scenev1.GetPublicSceneArchiveRequest{
 		PublishedSceneId: "pub-pub",
@@ -113,7 +113,7 @@ func TestDownloadPublicSceneArchiveReturnsOpaqueNotFoundForNonReadableStates(t *
 			t.Parallel()
 			store := newFakeStore()
 			tc.setup(store)
-			svc := NewSceneServiceImpl(store)
+			svc := newTestService(t, store)
 
 			_, err := svc.DownloadPublicSceneArchive(context.Background(), &scenev1.DownloadPublicSceneArchiveRequest{
 				PublishedSceneId: tc.argID,
@@ -151,7 +151,7 @@ func TestDownloadPublicSceneArchiveRendersByFormat(t *testing.T) {
 			store := newFakeStoreWithPublishedScene("dl-pub", "scene-dl", []PublishedSceneEntry{
 				{Speaker: "Alice", Kind: EntryKindSay, Content: "Hello."},
 			})
-			svc := NewSceneServiceImpl(store)
+			svc := newTestService(t, store)
 
 			resp, err := svc.DownloadPublicSceneArchive(context.Background(), &scenev1.DownloadPublicSceneArchiveRequest{
 				PublishedSceneId: "dl-pub",
@@ -173,7 +173,7 @@ func TestDownloadPublicSceneArchiveRejectsUnsupportedFormat(t *testing.T) {
 	store := newFakeStoreWithPublishedScene("dl-fmt", "scene-fmt", []PublishedSceneEntry{
 		{Speaker: "Alice", Kind: EntryKindSay, Content: "Hello."},
 	})
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 
 	_, err := svc.DownloadPublicSceneArchive(context.Background(), &scenev1.DownloadPublicSceneArchiveRequest{
 		PublishedSceneId: "dl-fmt",

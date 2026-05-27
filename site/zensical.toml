@@ -61,6 +61,7 @@ Extending = [
   "extending/index.md",
   "extending/getting-started.md",
   "extending/plugin-guide.md",
+  "extending/plugin-config.md",
   "extending/access-control.md",
   "extending/abac-attribute-resolver.md",
   "extending/event-sensitivity.md",

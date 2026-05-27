@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,12 +40,14 @@ type luaPlugin struct {
 
 // Host manages Lua plugins.
 type Host struct {
-	factory    *StateFactory
-	hostFuncs  *hostfunc.Functions
-	plugins    map[string]*luaPlugin
-	mu         sync.RWMutex
-	closed     bool
-	cpuTimeout time.Duration // per-invocation deadline applied via context.WithTimeout
+	factory         *StateFactory
+	hostFuncs       *hostfunc.Functions
+	plugins         map[string]*luaPlugin
+	mu              sync.RWMutex
+	closed          bool
+	cpuTimeout      time.Duration // per-invocation deadline applied via context.WithTimeout
+	configOverrides map[string]map[string]string
+	mergedConfigs   map[string]map[string]string
 }
 
 // HostOption customizes Host construction.
@@ -62,6 +65,21 @@ func WithCPUTimeout(d time.Duration) HostOption {
 // that need a factory with non-default options (e.g. RegistryMaxSize).
 func WithStateFactory(f *StateFactory) HostOption {
 	return func(h *Host) { h.factory = f }
+}
+
+// WithPluginConfigOverrides threads the server-provided per-plugin config
+// overrides into the Lua host (mirrors the binary host's configOverrides).
+// The overrides are merged against each plugin's manifest defaults at Load
+// time via plugins.MergePluginConfig and stashed in h.mergedConfigs, which
+// is then injected into the hostfunc bridge before each per-delivery Register.
+func WithPluginConfigOverrides(o map[string]map[string]string) HostOption {
+	// Defensively deep-copy: the caller retains ownership of o, and a later
+	// mutation must not race with Load reading h.configOverrides.
+	cloned := make(map[string]map[string]string, len(o))
+	for name, cfg := range o {
+		cloned[name] = maps.Clone(cfg)
+	}
+	return func(h *Host) { h.configOverrides = cloned }
 }
 
 // NewHost creates a new Lua plugin host without host functions.
@@ -214,6 +232,26 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		}
 	}
 
+	// INV-PC-3: compute and stash the merged config for this plugin so every
+	// per-delivery Register call injects an identical map to what the binary
+	// host delivers via ServiceConfig.PluginConfig. Fail-loud on error
+	// (same posture as goplugin/host.go:Load). Plugins with no config schema
+	// produce an empty map; the nil override case is handled by MergePluginConfig.
+	if len(manifest.Config) > 0 {
+		merged, mergeErr := plugins.MergePluginConfig(manifest.Config, h.configOverrides[manifest.Name])
+		if mergeErr != nil {
+			return oops.In("lua").With("plugin", manifest.Name).With("operation", "merge_plugin_config").Wrap(mergeErr)
+		}
+		if h.mergedConfigs == nil {
+			h.mergedConfigs = map[string]map[string]string{}
+		}
+		h.mergedConfigs[manifest.Name] = merged
+	} else if h.mergedConfigs != nil {
+		// A reload that drops the manifest config block must clear any stale
+		// merged entry, else old values get injected on later deliveries.
+		delete(h.mergedConfigs, manifest.Name)
+	}
+
 	h.plugins[manifest.Name] = &luaPlugin{
 		manifest:     manifest,
 		code:         string(code),
@@ -253,6 +291,11 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 	}
 	code := p.code
 	requires := p.manifest.Requires
+	// Snapshot the merged config under the read lock: Load mutates
+	// h.mergedConfigs under h.mu, so reading it unlocked below races
+	// (concurrent map read/write panic). Shallow clone suffices — Load
+	// replaces inner maps wholesale, never mutating one in place.
+	cfgSnapshot := maps.Clone(h.mergedConfigs)
 	h.mu.RUnlock()
 
 	// Create fresh state for this event
@@ -267,6 +310,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 
 	// Register host functions if available
 	if h.hostFuncs != nil {
+		h.hostFuncs.SetPluginConfigs(cfgSnapshot)
 		h.hostFuncs.Register(L, name, requires...)
 	}
 
@@ -335,6 +379,11 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 	}
 	code := p.code
 	requires := p.manifest.Requires
+	// Snapshot the merged config under the read lock: Load mutates
+	// h.mergedConfigs under h.mu, so reading it unlocked below races
+	// (concurrent map read/write panic). Shallow clone suffices — Load
+	// replaces inner maps wholesale, never mutating one in place.
+	cfgSnapshot := maps.Clone(h.mergedConfigs)
 	h.mu.RUnlock()
 
 	L, err := h.factory.NewState(ctx)
@@ -346,6 +395,7 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 	L.SetContext(ctx)
 
 	if h.hostFuncs != nil {
+		h.hostFuncs.SetPluginConfigs(cfgSnapshot)
 		h.hostFuncs.Register(L, name, requires...)
 	}
 
@@ -419,6 +469,11 @@ func (h *Host) QuerySessionStreams(ctx context.Context, name string, req plugins
 	}
 	code := p.code
 	requires := p.manifest.Requires
+	// Snapshot the merged config under the read lock: Load mutates
+	// h.mergedConfigs under h.mu, so reading it unlocked below races
+	// (concurrent map read/write panic). Shallow clone suffices — Load
+	// replaces inner maps wholesale, never mutating one in place.
+	cfgSnapshot := maps.Clone(h.mergedConfigs)
 	h.mu.RUnlock()
 
 	L, err := h.factory.NewState(ctx)
@@ -429,6 +484,7 @@ func (h *Host) QuerySessionStreams(ctx context.Context, name string, req plugins
 	L.SetContext(ctx)
 
 	if h.hostFuncs != nil {
+		h.hostFuncs.SetPluginConfigs(cfgSnapshot)
 		h.hostFuncs.Register(L, name, requires...)
 	}
 

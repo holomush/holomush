@@ -16,6 +16,23 @@ emits: [scene]
 history_scope: scene
 actor_kinds_claimable: [plugin, character]
 
+# Runtime config (plugin-owned, opaque to the host). The host validates the
+# generic types + merges any server override over these defaults; core-scenes
+# decodes them via pluginsdk.DecodeConfig at Init. See holomush-yzt86.
+config:
+  vote_window:
+    type: duration
+    default: 168h
+    description: "How long a publish-vote attempt collects votes before timeout."
+  cooloff_window:
+    type: duration
+    default: 30m
+    description: "Delay between unanimous-yes resolution and PUBLISHED."
+  scheduler_interval:
+    type: duration
+    default: 30s
+    description: "How often the publish scheduler sweeps for expired attempts."
+
 # Audit ownership (F5): core-scenes owns all events.*.scene.> subjects.
 # The host audit projection ack-and-skips these; deliveries are forwarded
 # to this plugin's PluginAuditService.AuditEvent RPC, which persists into

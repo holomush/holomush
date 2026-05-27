@@ -77,7 +77,7 @@ func startPublishFixture(t *testing.T, state SceneState) (*fakeStore, *SceneServ
 		OwnerID: callerID,
 		State:   string(state),
 	}
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 	return store, svc, sceneID, callerID
 }
 
@@ -169,7 +169,7 @@ func TestStartScenePublishRejectsSceneThatExhaustedItsAttemptBudget(t *testing.T
 func TestStartScenePublishReturnsNotFoundForMissingScene(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore() // no scene installed → store.Get returns SCENE_NOT_FOUND
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 
 	_, err := svc.StartScenePublish(context.Background(), &scenev1.StartScenePublishRequest{
 		SceneId:           ulid.Make().String(),
@@ -194,7 +194,7 @@ func TestExtendScenePublishVoteAttemptsBumpsBudgetAndEmits(t *testing.T) {
 	store := newFakeStore()
 	store.maxPublishAttempts["scene-e1"] = 3
 	rec := &recordingPublishEventer{}
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 	svc.SetPublishEventer(rec)
 
 	resp, err := svc.ExtendScenePublishVoteAttempts(context.Background(), &scenev1.ExtendScenePublishVoteAttemptsRequest{
@@ -217,7 +217,7 @@ func TestExtendScenePublishVoteAttemptsRejectsNonPositiveCount(t *testing.T) {
 	store := newFakeStore()
 	store.maxPublishAttempts["scene-e1"] = 3
 	rec := &recordingPublishEventer{}
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 	svc.SetPublishEventer(rec)
 
 	for _, additional := range []int32{0, -5} {
@@ -239,7 +239,7 @@ func TestExtendScenePublishVoteAttemptsPropagatesStoreNotFound(t *testing.T) {
 	t.Parallel()
 	store := &notFoundExtendStore{fakeStore: newFakeStore()}
 	rec := &recordingPublishEventer{}
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 	svc.SetPublishEventer(rec)
 
 	_, err := svc.ExtendScenePublishVoteAttempts(context.Background(), &scenev1.ExtendScenePublishVoteAttemptsRequest{
@@ -287,7 +287,7 @@ func newVoteFixture(t *testing.T, attemptID, sceneID string, voters ...string) (
 	store := newFakeStore()
 	store.installPublishedAttempt(attemptID, sceneID, StatusCollecting)
 	store.installVoters(attemptID, voters...)
-	return store, NewSceneServiceImpl(store)
+	return store, newTestService(t, store)
 }
 
 func castVote(t *testing.T, svc *SceneServiceImpl, caller, attemptID string, vote bool) *scenev1.CastPublishSceneVoteResponse {
@@ -404,7 +404,7 @@ func newWithdrawFixture(t *testing.T, attemptID, sceneID, owner string, status P
 	store := newFakeStore()
 	store.installPublishedAttempt(attemptID, sceneID, status)
 	store.scenes[sceneID] = &SceneRow{ID: sceneID, OwnerID: owner, State: string(SceneStateEnded)}
-	return store, NewSceneServiceImpl(store)
+	return store, newTestService(t, store)
 }
 
 // TestWithdrawScenePublishByOwnerFailsAttempt — the owner withdraws an active
@@ -465,7 +465,7 @@ func TestWithdrawScenePublishRejectsTerminalAttempt(t *testing.T) {
 // nonexistent attempt id surfaces as NotFound (SCENE_PUBLISH_NOT_FOUND).
 func TestWithdrawScenePublishRejectsUnknownAttempt(t *testing.T) {
 	t.Parallel()
-	svc := NewSceneServiceImpl(newFakeStore())
+	svc := newTestService(t, newFakeStore())
 
 	_, err := svc.WithdrawScenePublish(context.Background(), &scenev1.WithdrawScenePublishRequest{
 		CallerCharacterId: ulid.Make().String(),
@@ -505,7 +505,7 @@ func TestPublishVoteTransitionsEmitLifecycleEvents(t *testing.T) {
 	store.installPublishedAttempt("pub-em", "scene-em", StatusCollecting)
 	store.installVoters("pub-em", v1, v2)
 	rec := &recordingPublishEventer{}
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 	svc.SetPublishEventer(rec)
 
 	castVote(t, svc, v1, "pub-em", true)
@@ -530,7 +530,7 @@ func TestPublishTerminalTransitionEmitsResolved(t *testing.T) {
 	store.installPublishedAttempt("pub-em2", "scene-em2", StatusCollecting)
 	store.installVoters("pub-em2", v1, v2)
 	rec := &recordingPublishEventer{}
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 	svc.SetPublishEventer(rec)
 
 	castVote(t, svc, v1, "pub-em2", true)
@@ -552,7 +552,7 @@ func TestWithdrawEmitsWithdrawnAndResolved(t *testing.T) {
 	store.installPublishedAttempt("pub-em3", "scene-em3", StatusCollecting)
 	store.scenes["scene-em3"] = &SceneRow{ID: "scene-em3", OwnerID: owner, State: string(SceneStateEnded)}
 	rec := &recordingPublishEventer{}
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 	svc.SetPublishEventer(rec)
 
 	_, err := svc.WithdrawScenePublish(context.Background(), &scenev1.WithdrawScenePublishRequest{

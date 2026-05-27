@@ -153,7 +153,7 @@ var _ = Describe("E5 publishScheduler", func() {
 			ownerID = "01E5SCHED_TIMEOUTOWNER000A"
 		)
 		store := newTestStore()
-		svc := NewSceneServiceImpl(store)
+		svc := newTestService(GinkgoT(), store)
 		svc.gameID = "main"
 
 		// Create a scene + attempt with a 1-second vote window.
@@ -291,7 +291,7 @@ var _ = Describe("E5 publishScheduler", func() {
 			ownerID = "01E5SCHED_NOTYETOWNER000A"
 		)
 		store := newTestStore()
-		svc := NewSceneServiceImpl(store)
+		svc := newTestService(GinkgoT(), store)
 		svc.gameID = "main"
 
 		row := &SceneRow{
@@ -335,7 +335,7 @@ var _ = Describe("E5 publishScheduler", func() {
 	// -------------------------------------------------------------------------
 	It("completes without error when no expired attempts exist", func() {
 		store := newTestStore()
-		svc := NewSceneServiceImpl(store)
+		svc := newTestService(GinkgoT(), store)
 		svc.gameID = "main"
 
 		sched := &publishScheduler{
@@ -364,7 +364,7 @@ var _ = Describe("E5 publishScheduler", func() {
 		)
 		store := newTestStore()
 		// Service with NO decryptor → runSnapshot errors for COOLOFF attempt.
-		svc := NewSceneServiceImpl(store)
+		svc := newTestService(GinkgoT(), store)
 		svc.gameID = "main"
 		// Deliberately do NOT call svc.SetSnapshotDecryptor(...)
 

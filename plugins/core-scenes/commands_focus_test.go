@@ -23,7 +23,7 @@ import (
 // TestHandleSceneList_EmptyMemberships verifies the empty-state output when
 // the character is not in any scenes.
 func TestHandleSceneList_EmptyMemberships(t *testing.T) {
-	p, _ := newTestPluginWithFocus()
+	p, _ := newTestPluginWithFocus(t)
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:     "scene",
@@ -40,7 +40,7 @@ func TestHandleSceneList_EmptyMemberships(t *testing.T) {
 // TestHandleSceneList_RendersFocusedAndBackground verifies that two scene
 // memberships render with [focused] and [background] markers respectively.
 func TestHandleSceneList_RendersFocusedAndBackground(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	// Create two scenes and join char-alice to both.
 	createA, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -82,7 +82,7 @@ func TestHandleSceneList_RendersFocusedAndBackground(t *testing.T) {
 // The store only tracks scene participants, so a character with no scene
 // memberships sees the empty-state message even if they have other focuses.
 func TestHandleSceneList_FiltersNonSceneMemberships(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 	// No scene memberships; isAnyConnFocused configured to return true for
 	// a hypothetical non-scene target — must not appear.
 	fc.isAnyConnFocusedResult = map[string]bool{
@@ -104,7 +104,7 @@ func TestHandleSceneList_FiltersNonSceneMemberships(t *testing.T) {
 // TestHandleSceneList_RPCError verifies that an IsAnyConnFocused RPC error
 // surfaces with a SCENE_LIST_FAILED oops code.
 func TestHandleSceneList_RPCError(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 	fc.isAnyConnFocusedErr = errors.New("coordinator unavailable")
 
 	// Create a scene so the character has at least one membership to trigger
@@ -134,7 +134,7 @@ func TestHandleSceneList_RPCError(t *testing.T) {
 // The substrate skips the PresentingFocus write (D10) — the plugin's only
 // responsibility is to issue the RPC with the correct arguments.
 func TestHandleSceneGrid_PreservesPresentingFocus(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	connID := "01JW0000000000000000000001"
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -161,7 +161,7 @@ func TestHandleSceneGrid_PreservesPresentingFocus(t *testing.T) {
 // returns an error when the focus client is not configured, parallel to the
 // scene switch not-configured test.
 func TestHandleSceneGrid_ReturnsErrorWhenFocusClientNil(t *testing.T) {
-	p := newTestPlugin() // no focusClient
+	p := newTestPlugin(t) // no focusClient
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:      "scene",
@@ -180,7 +180,7 @@ func TestHandleSceneGrid_ReturnsErrorWhenFocusClientNil(t *testing.T) {
 // SetConnectionFocus surface as an internal error (nil return from handler
 // triggers host-side error logging per convention).
 func TestHandleSceneGrid_PropagatesRPCError(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 	fc.setConnFocusErr = errors.New("host unavailable")
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -203,7 +203,7 @@ func TestHandleSceneGrid_PropagatesRPCError(t *testing.T) {
 // isSceneGrid=false; the response contains the "You're now focused on Scene"
 // message.
 func TestHandleSceneFocus_HappyPath(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
@@ -239,7 +239,7 @@ func TestHandleSceneFocus_HappyPath(t *testing.T) {
 // FOCUS_WITHOUT_MEMBERSHIP, the handler renders the membership-denied message
 // without returning a Go error.
 func TestHandleSceneFocus_NotInScene(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
@@ -267,7 +267,7 @@ func TestHandleSceneFocus_NotInScene(t *testing.T) {
 // TestHandleSceneFocus_OtherSubstrateError verifies that unexpected substrate
 // errors surface as SCENE_FOCUS_FAILED internal errors.
 func TestHandleSceneFocus_OtherSubstrateError(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
@@ -294,7 +294,7 @@ func TestHandleSceneFocus_OtherSubstrateError(t *testing.T) {
 // TestHandleSceneFocus_MalformedRef verifies that a scene reference without
 // the required '#' prefix returns a usage error without calling SetConnectionFocus.
 func TestHandleSceneFocus_MalformedRef(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:      "scene",
@@ -313,7 +313,7 @@ func TestHandleSceneFocus_MalformedRef(t *testing.T) {
 // TestHandleSceneFocus_MissingArg verifies that `scene focus` with no argument
 // returns a usage error without calling SetConnectionFocus.
 func TestHandleSceneFocus_MissingArg(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:      "scene",
@@ -345,7 +345,7 @@ func mustParseULID(s string) ulid.ULID {
 // when AutoFocusOnJoin returns focused=[conn] and skipped+failed empty, the
 // response contains the "focused your terminal connection(s)" message.
 func TestHandleJoin_AutoFocus_Terminal(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	// Create a scene so JoinScene succeeds.
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -382,7 +382,7 @@ func TestHandleJoin_AutoFocus_Terminal(t *testing.T) {
 // when skipped=[conn] and focused empty, the response indicates the terminal stays on
 // its current focus (INV-P5-11 signal from substrate).
 func TestHandleJoin_AutoFocus_SkippedExplicit(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
@@ -413,7 +413,7 @@ func TestHandleJoin_AutoFocus_SkippedExplicit(t *testing.T) {
 // when TotalConnectionCount > 0 but both focused and skipped are empty, the substrate
 // filtered out all connections as comms_hub (INV-P5-4).
 func TestHandleJoin_AutoFocus_CommsHubOnly(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
@@ -442,7 +442,7 @@ func TestHandleJoin_AutoFocus_CommsHubOnly(t *testing.T) {
 // TestHandleJoin_AutoFocus_NoConnections verifies the no-connections render branch:
 // TotalConnectionCount == 0 → plain join message (admin / scripted join).
 func TestHandleJoin_AutoFocus_NoConnections(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
@@ -474,7 +474,7 @@ func TestHandleJoin_AutoFocus_NoConnections(t *testing.T) {
 // pin, a future branch-order regression that places the failure check below
 // the success branch could mask per-connection auto-focus failures.
 func TestHandleJoin_AutoFocus_FailedConnections(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "create The Hall", CharacterID: "char-owner",
@@ -511,7 +511,7 @@ func TestHandleJoin_AutoFocus_FailedConnections(t *testing.T) {
 // errors are non-fatal: the join succeeds (CommandOK), the error is included in
 // the output as a warning, and no Go error is returned to the host.
 func TestHandleJoin_AutoFocus_RPCError_NonFatal(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",

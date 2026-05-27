@@ -102,20 +102,13 @@ func publicArchiveNotFound() error {
 }
 
 // SceneServiceConfig carries Phase 6 game-wide defaults, set at plugin init
-// (main.go). Per-scene overrides are read from the scene row at
-// StartScenePublish time and take precedence over these defaults.
+// via applyConfig (main.go). Per-scene overrides are read from the scene row
+// at StartScenePublish time and take precedence over these defaults. The zero
+// value is intentionally invalid — config MUST be applied via applyConfig
+// before any publish handler runs (INV-PC-7).
 type SceneServiceConfig struct {
 	DefaultVoteWindow    time.Duration
 	DefaultCoolOffWindow time.Duration
-}
-
-// DefaultSceneServiceConfig returns the spec §4/§6 defaults: a 7-day vote
-// window and a 30-minute cool-off window.
-func DefaultSceneServiceConfig() SceneServiceConfig {
-	return SceneServiceConfig{
-		DefaultVoteWindow:    7 * 24 * time.Hour,
-		DefaultCoolOffWindow: 30 * time.Minute,
-	}
 }
 
 // publishEventer is the seam SceneServiceImpl uses to emit the six Phase 6

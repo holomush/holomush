@@ -30,7 +30,7 @@ func TestPrivacyBoundaryBlockEmitsWarnLogWithFullAttributeSet(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	svc := NewSceneServiceImpl(newFakeStore())
+	svc := newTestService(t, newFakeStore())
 	svc.emitPrivacyBoundaryBlock(context.Background(), "GetPublishedScene", "scene-x", "caller-y", "not_participant")
 
 	out := buf.String()
@@ -54,7 +54,7 @@ func TestPrivacyBoundaryBlockIncrementsMetric(t *testing.T) {
 	}
 	t.Cleanup(func() { metricScenePublishPrivacyBlock = prev })
 
-	svc := NewSceneServiceImpl(newFakeStore())
+	svc := newTestService(t, newFakeStore())
 	svc.emitPrivacyBoundaryBlock(context.Background(), "DownloadPublishedScene", "scene-x", "caller-y", "not_participant")
 
 	assert.Equal(t, 1, calls, "the privacy-block metric MUST be incremented exactly once")
@@ -70,7 +70,7 @@ func TestPrivacyBoundaryBlockIncrementsMetric(t *testing.T) {
 func TestPrivacyBoundaryBlockEmitsNoICEvent(t *testing.T) {
 	t.Parallel()
 	sink := &recordingEventSink{}
-	svc := NewSceneServiceImpl(newFakeStore())
+	svc := newTestService(t, newFakeStore())
 	svc.SetEventSink(sink)
 
 	svc.emitPrivacyBoundaryBlock(context.Background(), "GetPublishedScene", "scene-x", "caller-y", "not_participant")
@@ -87,7 +87,7 @@ func TestPrivacyBoundaryBlockSetsSpanError(t *testing.T) {
 	otel.SetTracerProvider(tp)
 	t.Cleanup(func() { otel.SetTracerProvider(prev) })
 
-	svc := NewSceneServiceImpl(newFakeStore())
+	svc := newTestService(t, newFakeStore())
 	ctx, span := startSpan(context.Background(), "test.privacy_block")
 	svc.emitPrivacyBoundaryBlock(ctx, "GetPublishedScene", "scene-x", "caller-y", "not_participant")
 	span.End()

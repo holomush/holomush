@@ -12,6 +12,7 @@ package hostfunc
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	lua "github.com/yuin/gopher-lua"
@@ -51,6 +52,13 @@ type Functions struct {
 	focusOps         FocusOps
 	historyReader    HistoryReader
 	auditDecryptor   AuditDecryptor
+	// pluginConfigs holds the merged (opaque) config per plugin, set by the
+	// Lua host before Register. nil/absent → empty holomush.config. Guarded by
+	// pluginConfigsMu because SetPluginConfigs/pluginConfigFor run per delivery
+	// and DeliverEvent/DeliverCommand/QuerySessionStreams can race on a shared
+	// *Functions; the other Set* setters are startup-only so need no lock.
+	pluginConfigsMu sync.RWMutex
+	pluginConfigs   map[string]map[string]string
 }
 
 // Option configures Functions.
@@ -137,6 +145,26 @@ func (f *Functions) SetFocusOps(fo FocusOps) {
 // function. Same late-binding rationale as SetFocusOps.
 func (f *Functions) SetHistoryReader(hr HistoryReader) {
 	f.historyReader = hr
+}
+
+// SetPluginConfigs injects the merged per-plugin config map (plugin name →
+// merged key/value pairs) into the Functions bridge. Called by the Lua host
+// before each per-delivery Register so holomush.config reflects the plugin's
+// effective config (manifest defaults overlaid by server overrides).
+func (f *Functions) SetPluginConfigs(c map[string]map[string]string) {
+	f.pluginConfigsMu.Lock()
+	defer f.pluginConfigsMu.Unlock()
+	f.pluginConfigs = c
+}
+
+// pluginConfigFor returns the merged config for the named plugin, or nil when
+// absent. nil produces an empty holomush.config table (all accessors → nil).
+// The returned inner map is stable after Load (never mutated), so Lua closures
+// may read it lock-free once Register hands it to registerConfigTable.
+func (f *Functions) pluginConfigFor(name string) map[string]string {
+	f.pluginConfigsMu.RLock()
+	defer f.pluginConfigsMu.RUnlock()
+	return f.pluginConfigs[name]
 }
 
 // New creates host functions with dependencies.
@@ -226,6 +254,10 @@ func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...stri
 		ls.Push(lua.LTrue)
 		return 1
 	}))
+
+	// Inject holomush.config typed accessors from the merged plugin config.
+	// Called last on mod so it can coexist with all other mod fields.
+	registerConfigTable(ls, mod, f.pluginConfigFor(pluginName))
 
 	ls.SetGlobal("holomush", mod)
 

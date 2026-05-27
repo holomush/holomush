@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -182,6 +183,20 @@ func WithAuditLogger(a pluginauthz.Auditor) HostOption {
 	return func(h *Host) { h.auditor = a }
 }
 
+// WithConfigOverrides threads the per-plugin server-provided config override
+// map (plugin name → key → value) into the host so it can be consulted at
+// plugin init time. Populated from PluginSubsystemConfig.PluginConfigOverrides.
+func WithConfigOverrides(overrides map[string]map[string]string) HostOption {
+	// Defensively deep-copy: the caller retains ownership of overrides, and a
+	// later mutation must not race with reads of h.configOverrides. Mirrors the
+	// Lua host's WithPluginConfigOverrides (plugin-runtime-symmetry).
+	cloned := make(map[string]map[string]string, len(overrides))
+	for name, cfg := range overrides {
+		cloned[name] = maps.Clone(cfg)
+	}
+	return func(h *Host) { h.configOverrides = cloned }
+}
+
 // Host manages binary plugins via HashiCorp go-plugins.
 type Host struct {
 	clientFactory     ClientFactory
@@ -199,9 +214,12 @@ type Host struct {
 	identityRegistry  plugins.IdentityRegistry
 	engine            types.AccessPolicyEngine
 	auditor           pluginauthz.Auditor
-	plugins           map[string]*loadedPlugin
-	mu                sync.RWMutex
-	closed            bool
+	// configOverrides is the per-plugin server-provided config override
+	// (plugin name → key → value), threaded from PluginSubsystemConfig.
+	configOverrides map[string]map[string]string
+	plugins         map[string]*loadedPlugin
+	mu              sync.RWMutex
+	closed          bool
 
 	// tokenStore authenticates per-dispatch actor claims on the binary-plugin
 	// EmitEvent boundary. The sweeper goroutine is host-owned: tokenStoreCtx
@@ -275,6 +293,24 @@ func NewHostWithFactory(factory ClientFactory, opts ...HostOption) *Host {
 		)
 	}
 	return h
+}
+
+// overrideFor returns the server-provided config override for a plugin, or nil
+// when none is configured (manifest defaults then apply).
+func (h *Host) overrideFor(pluginName string) map[string]string {
+	return h.configOverrides[pluginName]
+}
+
+// manifestNeedsInit reports whether the host must call Init on a plugin.
+// Init injects services (requires/provides), provisions storage, captures
+// crypto.emits (INV-S5), AND — INV-PC-8 — delivers plugin_config for any
+// plugin declaring a config schema.
+func manifestNeedsInit(m *plugins.Manifest) bool {
+	return len(m.Requires) > 0 ||
+		len(m.Provides) > 0 ||
+		m.Storage == plugins.StoragePostgres ||
+		(m.Crypto != nil && len(m.Crypto.Emits) > 0) ||
+		len(m.Config) > 0
 }
 
 // SetEventEmitter injects the shared plugin intent emitter used by the host
@@ -590,12 +626,10 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		}
 	}
 
-	// Call Init on plugins that need service injection (storage or requires)
-	// OR plugins that declare crypto.emits (INV-S5 needs InitResponse).
-	needsInit := len(manifest.Requires) > 0 ||
-		len(manifest.Provides) > 0 ||
-		manifest.Storage == plugins.StoragePostgres ||
-		(manifest.Crypto != nil && len(manifest.Crypto.Emits) > 0)
+	// Call Init on plugins that need service injection (storage or requires),
+	// declare crypto.emits (INV-S5 needs InitResponse), or declare a config
+	// schema (INV-PC-8: plugin_config must be delivered).
+	needsInit := manifestNeedsInit(manifest)
 	var registeredEmitTypes []string
 	if needsInit {
 		initReq := &pluginv1.InitRequest{
@@ -614,6 +648,19 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 				return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "provision_schema").Wrap(provErr)
 			}
 			initReq.Config.ConnectionString = connStr
+		}
+
+		if len(manifest.Config) > 0 {
+			merged, mergeErr := plugins.MergePluginConfig(manifest.Config, h.overrideFor(manifest.Name))
+			if mergeErr != nil {
+				client.Kill()
+				if certDir != "" {
+					_ = os.RemoveAll(certDir) //nolint:errcheck // best-effort cleanup
+				}
+				return oops.In("goplugin").With("plugin", manifest.Name).
+					With("operation", "merge_plugin_config").Wrap(mergeErr)
+			}
+			initReq.Config.PluginConfig = merged
 		}
 
 		initResp, initErr := pluginClient.Init(ctx, initReq)

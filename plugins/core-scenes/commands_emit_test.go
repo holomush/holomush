@@ -28,7 +28,7 @@ func newTestPluginWithMember(t *testing.T, sceneID string) (*scenePlugin, *recor
 	require.NoError(t, err)
 
 	sink := &recordingEventSink{}
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 	svc.SetEventSink(sink)
 	// allowEvaluator: emit gate requires an evaluator; use allow-all so tests assert business logic.
 	return &scenePlugin{service: svc, evaluator: allowEvaluator{}}, sink
@@ -162,7 +162,7 @@ func TestSceneSubcommand_InvitedOnly_TreatedAsNonMember(t *testing.T) {
 	require.False(t, isPart, "invited-only character must not be a participant")
 
 	sink := &recordingEventSink{}
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 	svc.SetEventSink(sink)
 	// No evaluator needed: bob is invited-only, membership resolution returns
 	// empty and the "not in any scene" error fires before the evaluator check.
@@ -187,7 +187,7 @@ func TestSceneSubcommand_NoScene_ActionableError(t *testing.T) {
 	// char-orphan is not a member of any scene.
 	store := newFakeStore()
 	sink := &recordingEventSink{}
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 	svc.SetEventSink(sink)
 	p := &scenePlugin{service: svc}
 
@@ -224,7 +224,7 @@ func TestSceneSubcommand_MultipleScenes_AmbiguousError(t *testing.T) {
 	require.NoError(t, err)
 
 	sink := &recordingEventSink{}
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 	svc.SetEventSink(sink)
 	p := &scenePlugin{service: svc}
 
@@ -264,7 +264,7 @@ func TestSceneSubcommand_EmptyArgs_UsageHint(t *testing.T) {
 // the caller is not in any scene.
 func TestSceneSubcommand_Order_NoScene(t *testing.T) {
 	t.Parallel()
-	p := newTestPlugin() // empty store — char-alice has no scenes
+	p := newTestPlugin(t) // empty store — char-alice has no scenes
 
 	resp, err := p.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:     "scene",

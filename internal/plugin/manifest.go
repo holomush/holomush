@@ -106,6 +106,11 @@ type Manifest struct {
 	// adds runtime enforcement.
 	Crypto *CryptoSection `yaml:"crypto,omitempty" json:"crypto,omitempty"`
 
+	// Config is the plugin's runtime config schema, keyed by config key.
+	// Opaque to host semantics (host validates generic types + merges values;
+	// plugin owns meaning). Empty for plugins with no runtime config.
+	Config map[string]ConfigParam `yaml:"config,omitempty" json:"config,omitempty"`
+
 	// Audit declares NATS subject patterns the plugin owns for JetStream
 	// audit purposes. When set, the host routes AuditEvent deliveries
 	// matching these patterns to the plugin's PluginAuditService RPC
@@ -179,6 +184,17 @@ var validVerbFormats = map[string]bool{
 
 var validDisplayTargets = map[string]bool{
 	"terminal": true, "state": true, "both": true,
+}
+
+// ConfigParam declares one plugin runtime config key. Opaque to the host:
+// type/default/required are validated generically; the host never interprets
+// what a key controls. See
+// docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md.
+type ConfigParam struct {
+	Type        string `yaml:"type" json:"type" jsonschema:"enum=duration,enum=int,enum=bool,enum=string"` // duration|int|bool|string
+	Default     string `yaml:"default,omitempty" json:"default,omitempty"`
+	Required    bool   `yaml:"required,omitempty" json:"required,omitempty"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 }
 
 // AuditBlock declares a set of NATS subject patterns the plugin owns for
@@ -617,7 +633,7 @@ func (m *Manifest) Validate() error {
 		}
 	}
 
-	return nil
+	return validateConfigSchema(m.Config)
 }
 
 // validateActorKindsClaimable applies spec §3.2 validation rules and

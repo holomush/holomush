@@ -70,6 +70,7 @@ require github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d
 require (
 	github.com/getsentry/sentry-go v0.46.2
 	github.com/getsentry/sentry-go/otel/otlp v0.46.2
+	github.com/go-viper/mapstructure/v2 v2.4.0
 	go.opentelemetry.io/contrib/bridges/otelslog v0.18.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.19.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.19.0
@@ -109,7 +110,6 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
-	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/cel-go v0.28.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect

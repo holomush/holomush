@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -79,11 +78,4 @@ func TestMapStoreErrMapsBareErrorToOpaqueInternal(t *testing.T) {
 	assert.Equal(t, codes.Internal, status.Code(mapped))
 	assert.Equal(t, "internal error", status.Convert(mapped).Message(),
 		"bare errors MUST NOT leak inner detail past the trust boundary")
-}
-
-func TestDefaultSceneServiceConfigMatchesSpecDefaults(t *testing.T) {
-	t.Parallel()
-	cfg := DefaultSceneServiceConfig()
-	assert.Equal(t, 7*24*time.Hour, cfg.DefaultVoteWindow)
-	assert.Equal(t, 30*time.Minute, cfg.DefaultCoolOffWindow)
 }
