@@ -97,9 +97,16 @@ func (e *publishEventEmitter) emitCoolOffStarted(ctx context.Context, attemptID 
 		return oops.Code("SCENE_PUBLISH_NOT_FOUND").With("attempt_id", attemptID).
 			Errorf("publish attempt not found for event emission")
 	}
+	// Compute the cool-off deadline from the persisted transition time so the
+	// emitted deadline is deterministic under retry/delay rather than recomputed
+	// from wall-clock at emit time. cooloff_started_at is always set for COOLOFF.
+	cooloffEndsAtUnixNs := time.Now().Add(window).UnixNano() // pgnanos-exempt: proto event field (cooloff_ends_at_unix_ns); computed wire time, not a DB scan/insert seam
+	if pub.CoolOffStartedAt != nil {
+		cooloffEndsAtUnixNs = pub.CoolOffStartedAt.Time().Add(window).UnixNano() // pgnanos-exempt: same proto event field, derived from the persisted pgnanos.Time
+	}
 	payload, err := protojson.Marshal(&scenev1.ScenePublishCoolOffStartedEvent{
 		AttemptId:           attemptID,
-		CooloffEndsAtUnixNs: time.Now().Add(window).UnixNano(), // pgnanos-exempt: proto event field (cooloff_ends_at_unix_ns); wire serialization of a computed time, not a DB scan/insert seam
+		CooloffEndsAtUnixNs: cooloffEndsAtUnixNs,
 	})
 	if err != nil {
 		return err //nolint:wrapcheck // protojson.Marshal error passes through; structurally impossible on well-formed messages

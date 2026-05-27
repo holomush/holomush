@@ -25,7 +25,9 @@ CREATE TABLE IF NOT EXISTS published_scenes (
     failure_reason         TEXT        CHECK (failure_reason IS NULL OR failure_reason IN
                               ('ANY_NO','TIMEOUT','WITHDRAWN',
                                'SNAPSHOT_DECRYPT_FAILED','SNAPSHOT_RENDER_FAILED',
-                               'COOLOFF_INVARIANT_BROKEN'))
+                               'COOLOFF_INVARIANT_BROKEN')),
+    -- failure_reason is present iff the attempt failed (state-model integrity).
+    CHECK ((status = 'ATTEMPT_FAILED') = (failure_reason IS NOT NULL))
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS published_scenes_one_active_per_scene

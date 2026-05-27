@@ -5,4 +5,5 @@
 -- admin can bump via ExtendScenePublishVoteAttempts RPC. See spec §3.4.
 
 ALTER TABLE scenes
-    ADD COLUMN IF NOT EXISTS max_publish_attempts INTEGER NOT NULL DEFAULT 3;
+    ADD COLUMN IF NOT EXISTS max_publish_attempts INTEGER NOT NULL DEFAULT 3
+        CHECK (max_publish_attempts > 0);

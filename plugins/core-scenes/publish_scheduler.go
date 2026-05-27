@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // scheduledAttempt is a minimal projection of a published_scenes row
@@ -64,7 +66,7 @@ func (s *publishScheduler) Run(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if err := s.sweep(ctx); err != nil {
-				slog.WarnContext(ctx, "publish scheduler sweep failed", "err", err)
+				errutil.LogErrorContext(ctx, "publish scheduler sweep failed", err)
 			}
 		}
 	}

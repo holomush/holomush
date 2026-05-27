@@ -363,7 +363,7 @@ message DownloadPublicSceneArchiveResponse {
 message ExtendScenePublishVoteAttemptsRequest {
   string caller_character_id = 1 [(buf.validate.field).string.min_len = 1];
   string scene_id = 2 [(buf.validate.field).string.min_len = 1];
-  int32 additional = 3;
+  int32 additional = 3 [(buf.validate.field).int32.gt = 0];
 }
 message ExtendScenePublishVoteAttemptsResponse {
   int32 new_max = 1;

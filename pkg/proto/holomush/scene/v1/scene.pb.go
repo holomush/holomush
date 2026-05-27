@@ -3631,12 +3631,12 @@ const file_holomush_scene_v1_scene_proto_rawDesc = "" +
 	"\x06format\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06format\"[\n" +
 	"\"DownloadPublicSceneArchiveResponse\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\fR\acontent\x12\x1b\n" +
-	"\tmime_type\x18\x02 \x01(\tR\bmimeType\"\xa4\x01\n" +
+	"\tmime_type\x18\x02 \x01(\tR\bmimeType\"\xad\x01\n" +
 	"%ExtendScenePublishVoteAttemptsRequest\x127\n" +
 	"\x13caller_character_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x11callerCharacterId\x12\"\n" +
-	"\bscene_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\asceneId\x12\x1e\n" +
+	"\bscene_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\asceneId\x12'\n" +
 	"\n" +
-	"additional\x18\x03 \x01(\x05R\n" +
+	"additional\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\n" +
 	"additional\"A\n" +
 	"&ExtendScenePublishVoteAttemptsResponse\x12\x17\n" +
 	"\anew_max\x18\x01 \x01(\x05R\x06newMax\"\x9b\x02\n" +
