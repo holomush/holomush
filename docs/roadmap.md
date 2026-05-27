@@ -38,6 +38,7 @@ and machine-readable `llms.txt`.
 | SP0 | Proto per-field doc comments + buf `COMMENTS` ratchet (platform-independent) | not yet filed |
 | SP1 | **Migrate zensical → Astro Starlight (bun) + llms.txt** | epic `holomush-cwnu0` (20 tasks); ADRs `holomush-145ko`, `holomush-qf2oo`, `holomush-xneg2` |
 | SP2 | Diátaxis IA redesign, `autogenerate` sidebar, orphan triage + superseded retirement | not yet filed |
+| SP3 | `llms.txt` / `llms-full.txt` / `llms-small.txt` generation | **folded into SP1** (`starlight-llms-txt` plugin) |
 | SP4 | Complete gRPC service coverage (all 13 services, field-level) | not yet filed |
 
 **Why now:** the live site had drifted — ~20 docs orphaned from a hand-maintained
