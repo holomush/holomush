@@ -42,6 +42,33 @@ func TestMergePluginConfig(t *testing.T) {
 	})
 }
 
+// TestMergePluginConfigProducesSingleMergedMap asserts that MergePluginConfig
+// returns one deterministic merged map — the same map both binary and Lua
+// delivery paths receive — and that calling it twice with the same inputs
+// yields equal maps.
+//
+// INV-PC-3: both delivery paths (binary gRPC, Lua return-value) receive the
+// same merged map from MergePluginConfig; there is no per-runtime fork of the
+// config computation.
+func TestMergePluginConfigProducesSingleMergedMap(t *testing.T) {
+	schema := map[string]ConfigParam{
+		"vote_window":    {Type: "duration", Default: "168h", Required: true},
+		"cooloff_window": {Type: "duration", Default: "30m"},
+	}
+	override := map[string]string{"cooloff_window": "5s"}
+
+	first, err := MergePluginConfig(schema, override)
+	require.NoError(t, err)
+
+	second, err := MergePluginConfig(schema, override)
+	require.NoError(t, err)
+
+	// Both calls must produce identical output (deterministic).
+	require.Equal(t, first, second, "MergePluginConfig must be deterministic across calls")
+	// Override wins for cooloff_window; default fills vote_window.
+	require.Equal(t, map[string]string{"vote_window": "168h", "cooloff_window": "5s"}, first)
+}
+
 func TestValidateConfigSchema(t *testing.T) {
 	tests := []struct {
 		name    string
