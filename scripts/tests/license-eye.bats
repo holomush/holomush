@@ -35,3 +35,21 @@ setup() {
   run rg -l '~ SPDX-License-Identifier' site/docs/guide site/docs/operating site/docs/reference --glob '*.md'
   assert_failure
 }
+
+# INV-4: after `task fmt`, a freshly-added unheadered in-scope file passes check.
+@test "task fmt adds license headers so license:check passes" {
+  local gof="internal/zzz_invtest_$$.go"
+  local mdf="docs/zzz_invtest_$$.md"
+  printf 'package internal\n\nfunc invtest() {}\n' >"$gof"
+  printf '# inv test\n\nbody\n' >"$mdf"
+
+  run task fmt
+  assert_success
+
+  run grep -q 'SPDX-License-Identifier' "$gof"
+  assert_success
+  run grep -q 'SPDX-License-Identifier' "$mdf"
+  assert_success
+
+  rm -f "$gof" "$mdf"
+}

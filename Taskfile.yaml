@@ -122,12 +122,13 @@ tasks:
       - python3 scripts/adr-migrate.py {{.CLI_ARGS}}
 
   fmt:
-    desc: Format all files
+    desc: Format all files and apply license headers
     cmds:
       - task: fmt:go
       - task: fmt:yaml
       - task: fmt:markdown
       - task: fmt:dprint
+      - task: license:add
 
   # ──────────────────────────────────────────
   # Extended testing
