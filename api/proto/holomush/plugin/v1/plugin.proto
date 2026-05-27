@@ -120,6 +120,10 @@ message ServiceConfig {
   string connection_string = 1;
   // Addresses of required services, keyed by service name (future use).
   map<string, string> required_services = 2;
+  // Opaque plugin-owned runtime config: the effective (manifest-default <
+  // server-override) map the host delivers at init. The host does NOT
+  // interpret keys/values; the plugin decodes them per its own schema.
+  map<string, string> plugin_config = 3;
 }
 
 // InitRequest is sent by the host after connecting to the plugin process.
