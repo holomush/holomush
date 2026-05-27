@@ -191,6 +191,10 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		pluginlua.WithStateFactory(pluginlua.NewStateFactory(
 			pluginlua.WithRegistryMaxSize(s.cfg.LuaRegistryMaxSize),
 		)),
+		// Thread per-plugin config overrides so the Lua host can compute the
+		// merged map at Load time (INV-PC-3: identical merged map for both
+		// binary and Lua runtimes via plugins.MergePluginConfig).
+		pluginlua.WithPluginConfigOverrides(s.cfg.PluginConfigOverrides),
 	)
 
 	// 4. Create service registry for proto service resolution.
