@@ -8,7 +8,10 @@ vars:
   BINARY_NAME: holomush
   MAIN_PKG: ./cmd/holomush
   MIGRATIONS_DIR: internal/store/migrations
-  LICENSE_DIRS: api cmd internal pkg plugins scripts
+  # license-eye (Apache SkyWalking Eyes) pinned release. MUST stay in sync with
+  # the literal version in .github/workflows/ci.yaml's Lint "Install tools" step.
+  # (DRY composite-action refactor deferred to holomush-k6k67.)
+  LICENSE_EYE_VERSION: v0.8.0
   # Build/test/lint tooling is pinned in isolated `go tool` modules
   # (go.tool.mod, go.tool-lint.mod) and run from the Go module proxy rather
   # than installed from GitHub Releases — this removes the CDN-flake class
@@ -123,12 +126,13 @@ tasks:
       - python3 scripts/adr-migrate.py {{.CLI_ARGS}}
 
   fmt:
-    desc: Format all files
+    desc: Format all files and apply license headers
     cmds:
       - task: fmt:go
       - task: fmt:yaml
       - task: fmt:markdown
       - task: fmt:dprint
+      - task: license:add
 
   # ──────────────────────────────────────────
   # Extended testing
@@ -372,6 +376,21 @@ tasks:
     generates:
       - site/docs/reference/policy-dsl.ebnf
       - site/docs/reference/policy-dsl-railroad.html
+
+  generate:ebnf:check:
+    desc: Verify generated EBNF grammar + railroad diagram are current
+    cmds:
+      - |
+        set -euo pipefail
+        EBNF=site/docs/reference/policy-dsl.ebnf
+        RAIL=site/docs/reference/policy-dsl-railroad.html
+        BEFORE=$(sha256sum "$EBNF" "$RAIL" | sha256sum)
+        task --force generate:ebnf
+        AFTER=$(sha256sum "$EBNF" "$RAIL" | sha256sum)
+        if [ "$BEFORE" != "$AFTER" ]; then
+          echo "EBNF/railroad out of sync. Run 'task generate:ebnf' and commit." >&2
+          exit 1
+        fi
 
   mocks:generate:
     desc: Generate mocks with mockery
@@ -693,30 +712,16 @@ tasks:
   # ──────────────────────────────────────────
 
   license:check:
-    desc: Check SPDX license headers
+    desc: Check SPDX license headers (code + functional markdown)
     cmds:
-      - task: license:run
-        vars: {MODE: -check}
+      - command -v license-eye >/dev/null 2>&1 || go install github.com/apache/skywalking-eyes/cmd/license-eye@{{.LICENSE_EYE_VERSION}}
+      - license-eye header check
 
   license:add:
-    desc: Add missing SPDX license headers
+    desc: Add missing SPDX license headers (code + functional markdown)
     cmds:
-      - task: license:run
-
-  license:run:
-    internal: true
-    cmds:
-      - |
-        set -euo pipefail
-        EXISTING_DIRS=""
-        for dir in {{.LICENSE_DIRS}}; do
-          [ -d "$dir" ] && EXISTING_DIRS="$EXISTING_DIRS $dir"
-        done
-        [ -z "$EXISTING_DIRS" ] && { echo "ERROR: No directories found"; exit 1; }
-        command -v addlicense >/dev/null 2>&1 || go install github.com/google/addlicense@latest
-        addlicense {{.MODE}} -f LICENSE_HEADER \
-          -ignore '**/*.pb.go' -ignore 'vendor/**' -ignore 'internal/web/dist/**' \
-          $EXISTING_DIRS
+      - command -v license-eye >/dev/null 2>&1 || go install github.com/apache/skywalking-eyes/cmd/license-eye@{{.LICENSE_EYE_VERSION}}
+      - license-eye header fix
 
   # ──────────────────────────────────────────
   # PR preparation (mirrors CI Lint job)
@@ -894,6 +899,8 @@ tasks:
             echo "ERROR: Schema out of sync with Go types. Run 'task generate:schema' and commit."
             exit 1
           fi
+      - echo "▸ Verifying EBNF + railroad are current..."
+      - task: generate:ebnf:check
       - echo "▸ Verifying jxo8.5 bead description (sub-epic B)..."
       - bash scripts/check-bead-jxo8-5.sh
       - echo "▸ Checking license headers..."
@@ -929,16 +936,15 @@ tasks:
   # ──────────────────────────────────────────
 
   setup:
-    desc: Install all dev tools and git hooks
+    desc: Install all dev tools
     cmds:
       # golangci-lint, actionlint, yamlfmt, gotestsum, gofumpt are pinned in
       # the go.tool*.mod modules and run via `go tool` (see GO_TOOL vars) — no
       # brew install needed. yq stays: shell scripts call it on PATH directly.
-      - brew install go-task lefthook goreleaser dprint cocogitto rumdl binaryen flock bats-core yq
+      - brew install go-task goreleaser dprint cocogitto rumdl binaryen flock bats-core yq
       - brew install steveyegge/beads/bd
       - go install github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc@latest
-      - go install github.com/google/addlicense@latest
-      - lefthook install
+      - go install github.com/apache/skywalking-eyes/cmd/license-eye@{{.LICENSE_EYE_VERSION}}
       - bd hooks install --chain
       - echo "✓ Dev environment ready. Run 'task dev' to start."
 

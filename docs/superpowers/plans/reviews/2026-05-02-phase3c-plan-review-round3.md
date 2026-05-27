@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Phase 3c Plan Review — Round 3
 
 **Plan:** `docs/superpowers/plans/2026-05-02-event-payload-crypto-phase3c-cache-invalidation.md`

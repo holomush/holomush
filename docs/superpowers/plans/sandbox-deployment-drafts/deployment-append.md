@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Deployment Doc Appendix (Draft)
 
 <!-- Two new sections to APPEND to site/docs/operating/deployment.md. -->

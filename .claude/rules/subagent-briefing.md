@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Sub-Agent Briefing Checklist
 
 When dispatching a sub-agent (via the `Agent` tool or a worktree-isolated

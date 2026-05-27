@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Event Payload Cryptography — Phase 7: Plugin SDK + Plugin-Owned Audit Crypto Integration
 
 ## Status

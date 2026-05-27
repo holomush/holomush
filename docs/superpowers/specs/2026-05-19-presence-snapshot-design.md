@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Presence snapshot — current-state RPC, not event replay
 
 | Field        | Value                                                                 |

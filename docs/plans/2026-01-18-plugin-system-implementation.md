@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Plugin System Implementation Plan
 
 > **Note:** This plan references `internal/proto` and `pkg/pluginsdk` which have been

@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+#
+# license-eye (Apache SkyWalking Eyes) config — replaces addlicense.
+# Licenses code AND functional markdown (specs/plans/ADRs/rules). User-facing
+# rendered content (plugin landing/MOTD, player-facing site docs) is excluded.
+header:
+  license:
+    content: |
+      SPDX-License-Identifier: Apache-2.0
+      Copyright 2026 HoloMUSH Contributors
+    # Recognize the pre-existing bare SPDX header (no Copyright line) some files
+    # carry, so `header fix` does NOT prepend a duplicate (INV-5: existing code
+    # headers stay byte-identical). The Copyright line is optional in the match.
+    pattern: |
+      SPDX-License-Identifier: Apache-2\.0
+  paths:
+    - "api/**"
+    - "cmd/**"
+    - "internal/**"
+    - "pkg/**"
+    - "plugins/**"
+    - "scripts/**"
+    - "docs/**"
+    - ".claude/rules/**"
+    - "*.md"
+  paths-ignore:
+    - "**/*.pb.go"
+    - "vendor/**"
+    - "internal/web/dist/**"
+    - "plugins/**/content/**"
+    - "site/docs/**"
+    - "AGENTS.md"
+    - "**/.gitkeep"
+    - "**/*.gfo6-cutoff"
+    - "**/theme.json"
+    - "**/uv.lock"
+    # Golden test snapshots (expected-output fixtures) must never carry a
+    # header — it would corrupt the comparison. license-eye v0.8.0 scans them
+    # (errors "unsupported file"); newer releases ignored them implicitly.
+    - "**/*.golden"
+  language:
+    Markdown:
+      extensions: [".md"]
+      comment_style_id: AngleBracket
+  comment: on-failure

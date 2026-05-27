@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # History pagination on JetStream stream sequence with opaque cursors
 
 **Bead:** holomush-suos

@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Use suiteT capture pattern instead of GinkgoT() for testing.TB
 
 **Date:** 2026-05-16

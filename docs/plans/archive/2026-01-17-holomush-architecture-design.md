@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # HoloMUSH Architecture Design
 
 **Status:** Archived (superseded by roadmap)

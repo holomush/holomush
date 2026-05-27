@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Phase 5 Sub-Epic D — OperatorAuthProvider + Dual-Control + `crypto.policy_set` Chain — Design
 
 ## Status

@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Centralized Blast-Radius Code-Intelligence MCP — Design
 
 - **Bead:** holomush-i9599

@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # GRPCBroker Service Injection for Binary Plugins
 
 **Bead:** holomush-z82s (F-05) | **Status:** Draft | **Date:** 2026-04-06

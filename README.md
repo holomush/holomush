@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # HoloMUSH
 
 A modern MUSH platform combining classic text-based multiplayer gameplay with contemporary technology.

@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Documentation Guidelines
 
 Guidelines for creating and maintaining documentation in the HoloMUSH project.
@@ -152,13 +157,12 @@ Content here
 | MD056: Table column count   | Ensure all rows have same number of columns |
 | MD060: Table column style   | Run `task fmt` to fix pipe alignment        |
 
-## Pre-commit Validation
+## Local quality checks
 
-The project uses lefthook for pre-commit checks. Documentation changes MUST pass:
-
-```bash
-task lint:markdown
-```
+There is no git pre-commit hook (the repo is `jj`-primary; `jj` does not fire
+git hooks reliably). Run `task fmt` to format and apply license headers, and
+`task pr-prep` to mirror the full CI gate before pushing. Documentation changes
+MUST pass `task lint:markdown`.
 
 To check a single file:
 

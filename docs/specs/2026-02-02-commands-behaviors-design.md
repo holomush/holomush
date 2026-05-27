@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Commands & Behaviors Architecture
 
 **Epic:** holomush-wr9 | **Status:** Design | **Date:** 2026-02-02

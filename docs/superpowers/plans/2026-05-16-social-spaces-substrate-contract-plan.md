@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Social Spaces Substrate Contract Implementation Plan
 
 > **⚠️ SUPERSEDED** — this plan was rejected by `plan-reviewer` round 1 (INV-S5 mechanism gap surfaced; mechanism was undefined for both Lua and binary runtimes). The corrected READY plan is at [`2026-05-17-social-spaces-substrate-contract-plan.md`](2026-05-17-social-spaces-substrate-contract-plan.md). **Do not execute this plan.**

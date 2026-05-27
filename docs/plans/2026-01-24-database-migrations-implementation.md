@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Database Migrations Implementation Plan
 
 > **Status: Implemented** - This plan was completed in PR #43. The code is the

@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Harness Threads the Engine's ABAC Resolver/PluginProvider Into the Plugin Layer
 
 **Status:** Accepted

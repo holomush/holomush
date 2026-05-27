@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Resume Multi-Tab Session Isolation Plan — Single-Paste Directive
 
 > **In a new Claude Code session, paste this entire document as your first

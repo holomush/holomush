@@ -7,7 +7,7 @@
 
 **Date:** 2026-02-10
 **Phase:** General (infrastructure)
-**Status:** Accepted
+**Status:** Superseded by holomush-gcio6 (lefthook retired; markdown formatting now via `task fmt` → rumdl, license headers via `license-eye`)
 
 ## Context
 

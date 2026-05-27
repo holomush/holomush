@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Plugin Manifest Alias Declarations with Loader Seeding
 
 **Date:** 2026-04-06

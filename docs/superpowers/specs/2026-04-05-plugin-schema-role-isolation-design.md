@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Per-Plugin PostgreSQL Role-Based Schema Isolation
 
 **Bead:** holomush-fwan (SEC-01) | **Status:** Draft | **Date:** 2026-04-05

@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Add host Evaluate RPC for per-action plugin authorization
 
 **Date:** 2026-05-25

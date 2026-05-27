@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Core Lifecycle & Policy Cache Redesign
 
 **Date:** 2026-04-04

@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Derive Evaluate subject host-side; no subject field on wire
 
 **Date:** 2026-05-25

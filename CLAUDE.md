@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # HoloMUSH Development Guide
 
 This document provides instructions for AI coding assistants working on HoloMUSH.
@@ -223,7 +228,7 @@ Use `oops` for structured errors: `oops.With(k, v).Wrap(err)`, `oops.Errorf(...)
 | **MUST** include SPDX header        | `.go`, `.sh`, `.proto` files (Apache-2.0)           |
 | **SHOULD** include SPDX header      | YAML configs where appropriate                      |
 | **MUST NOT** add to generated files | Skip `*.pb.go`                                      |
-| **Auto-applied** by lefthook        | `task license:add` runs on commit; `task license:check` verifies |
+| **Applied** by `task fmt`            | `task fmt` adds headers via `license-eye`; `task license:check` / CI verify |
 
 Directories checked: `api/`, `cmd/`, `internal/`, `pkg/`, `plugins/`, `scripts/`.
 

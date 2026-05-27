@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Extism Plugin Framework Phase 1 Implementation Plan
 
 **Status:** Archived (superseded by roadmap)

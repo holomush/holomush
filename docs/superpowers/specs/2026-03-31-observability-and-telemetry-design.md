@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Observability and Telemetry — Design
 
 Configurable log levels, distributed tracing across all system boundaries,
