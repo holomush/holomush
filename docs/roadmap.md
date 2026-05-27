@@ -26,6 +26,28 @@ sequencing.
 
 ## Active themes
 
+### `theme:docs-platform` — Docs site migration, IA, and gRPC reference
+
+A five-sub-project program to make the documentation site reflect reality and
+serve both humans and LLMs. The substrate is the doc platform itself; the uses
+are an accurate gRPC reference, a purpose-organized information architecture,
+and machine-readable `llms.txt`.
+
+| Sub-project | Scope | Tracking |
+| ----------- | ----- | -------- |
+| SP0 | Proto per-field doc comments + buf `COMMENTS` ratchet (platform-independent) | not yet filed |
+| SP1 | **Migrate zensical → Astro Starlight (bun) + llms.txt** | epic `holomush-cwnu0` (20 tasks); ADRs `holomush-145ko`, `holomush-qf2oo`, `holomush-xneg2` |
+| SP2 | Diátaxis IA redesign, `autogenerate` sidebar, orphan triage + superseded retirement | not yet filed |
+| SP4 | Complete gRPC service coverage (all 13 services, field-level) | not yet filed |
+
+**Why now:** the live site had drifted — ~20 docs orphaned from a hand-maintained
+nav, a gRPC reference covering only 5 of 13 services with empty field
+descriptions, and no `llms.txt` path. SP1 swaps the platform (the prerequisite
+substrate) as a strict lift-and-shift so SP2/SP4 can land cleanly on it; SP0 runs
+in parallel since its source of truth is the `.proto` files. Sequencing rationale
+and the lift-and-shift discipline are in
+`docs/superpowers/specs/2026-05-27-docs-starlight-migration-design.md`.
+
 ### `theme:social-spaces` — Scenes, Channels, Forums, Discord
 
 The largest in-flight thread. Four product surfaces sharing one substrate:
