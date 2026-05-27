@@ -8,9 +8,10 @@ vars:
   BINARY_NAME: holomush
   MAIN_PKG: ./cmd/holomush
   MIGRATIONS_DIR: internal/store/migrations
-  # license-eye (Apache SkyWalking Eyes) pinned release. MUST stay in sync with
-  # the literal version in .github/workflows/ci.yaml's Lint "Install tools" step.
-  # (DRY composite-action refactor deferred to holomush-k6k67.)
+  # license-eye (Apache SkyWalking Eyes) pinned release — the single version
+  # source. CI's Lint job no longer pins it separately: `task license:check`
+  # self-installs license-eye at this version via its `command -v ... || go
+  # install` guard (see license:check / license:add / setup below).
   LICENSE_EYE_VERSION: v0.8.0
   # Build/test/lint tooling is pinned in isolated `go tool` modules
   # (go.tool.mod, go.tool-lint.mod) and run from the Go module proxy rather

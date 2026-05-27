@@ -879,7 +879,7 @@ path. `DefaultSceneServiceConfig()` is removed; the ~12 test call sites migrate.
 - Modify: `plugins/core-scenes/service.go` (`NewSceneServiceImpl` `:150` — drop the `cfg: DefaultSceneServiceConfig()` seed)
 - Modify: `plugins/core-scenes/publish_helpers.go` (`:114` — delete `DefaultSceneServiceConfig()`)
 - Create: `plugins/core-scenes/testhelpers_test.go` (`//go:embed plugin.yaml` + `manifestServiceConfig` + `newTestService`)
-- Migrate (`NewSceneServiceImpl(` → `newTestService(t, `): `service_test.go`, `publish_service_test.go`, `publish_snapshot_integration_test.go`, `service_publish_gate_test.go`, `service_public_archive_test.go`, `service_privacy_block_test.go`, `commands_test.go`, `commands_publish_test.go`, `commands_log_test.go`, `commands_emit_test.go`, `publish_scheduler_integration_test.go`
+- Migrate (`NewSceneServiceImpl(` → `newTestService(t,`): `service_test.go`, `publish_service_test.go`, `publish_snapshot_integration_test.go`, `service_publish_gate_test.go`, `service_public_archive_test.go`, `service_privacy_block_test.go`, `commands_test.go`, `commands_publish_test.go`, `commands_log_test.go`, `commands_emit_test.go`, `publish_scheduler_integration_test.go`
 - Modify: `plugins/core-scenes/publish_helpers_test.go` (remove `TestDefaultSceneServiceConfigMatchesSpecDefaults` — the pinned function is gone; manifest is the sole source)
 - Test: `plugins/core-scenes/main_test.go`
 

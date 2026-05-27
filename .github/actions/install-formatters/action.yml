@@ -1,0 +1,53 @@
+name: Install Formatters
+# Install the shared markdown/config formatting + search tooling used by BOTH
+# the CI Lint job (ci.yaml) and the Bats job (scripts-tests.yaml): ripgrep,
+# rumdl, and dprint. rumdl/dprint are pinned by SHA256-verified release archive
+# (same pattern as install-cog / install-task) so both jobs install
+# byte-identical versions from a single source. Factored out of the two
+# previously-duplicated install blocks (holomush-k6k67). buf and license-eye
+# stay job-local: buf is Lint-only, and license-eye self-installs via
+# `task license:check` at Taskfile's LICENSE_EYE_VERSION.
+description: Install ripgrep, rumdl, and dprint (SHA-pinned) and add them to PATH.
+
+runs:
+  using: composite
+  steps:
+    - name: Install ripgrep
+      # gfo6 Phase 5 lint tasks (lint:no-timestamptz, lint:no-microsecond-truncate,
+      # lint:no-unixnano-in-repos) and the INV bats tests (license-eye.bats,
+      # no-lefthook-refs.bats) call `rg`. The runners do not ship ripgrep by default.
+      shell: bash
+      run: sudo apt-get install -y --no-install-recommends ripgrep
+
+    - name: Install rumdl
+      shell: bash
+      run: |
+        set -euo pipefail
+        RUMDL_VERSION="v0.1.62"
+        RUMDL_TARBALL="rumdl-${RUMDL_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+        RUMDL_URL="https://github.com/rvben/rumdl/releases/download/${RUMDL_VERSION}/${RUMDL_TARBALL}"
+        RUMDL_SHA256="a25d9bab27ac9f17589e25cde32ce580c81dfd7bcc4a21e6dbfcd65bc7c1353c"
+        curl -LsSfO "${RUMDL_URL}"
+        echo "${RUMDL_SHA256}  ${RUMDL_TARBALL}" | sha256sum -c -
+        sudo tar xzf "${RUMDL_TARBALL}" --overwrite -C /usr/local/bin
+        rm "${RUMDL_TARBALL}"
+
+    - name: Install dprint
+      shell: bash
+      run: |
+        set -euo pipefail
+        DPRINT_VERSION="0.51.1"
+        DPRINT_ZIP="dprint-x86_64-unknown-linux-gnu.zip"
+        DPRINT_URL="https://github.com/dprint/dprint/releases/download/${DPRINT_VERSION}/${DPRINT_ZIP}"
+        DPRINT_SHA256="674c1f9fcdf8a564c26cc027e080d0c4758a40a566e04a776fc83c875ad51d45"
+        curl -LsSfO "${DPRINT_URL}"
+        echo "${DPRINT_SHA256}  ${DPRINT_ZIP}" | sha256sum -c -
+        sudo unzip -oq "${DPRINT_ZIP}" -d /usr/local/bin
+        rm "${DPRINT_ZIP}"
+
+    - name: Verify formatters
+      shell: bash
+      run: |-
+        rg --version
+        rumdl --version
+        dprint --version
