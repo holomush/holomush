@@ -3,11 +3,16 @@
 
 name: CI
 
-# Same-name skip workflow for docs-only PRs. When ci.yaml is path-skipped,
-# branch-protection required checks (Build, Lint, Test) would otherwise stay
-# in 'Pending' state forever. This workflow provides no-op jobs whose names
-# are byte-identical to ci.yaml's required-check job names, so GitHub treats
-# them as the same required check and reports green.
+# Same-name companion workflow for docs-only PRs. When ci.yaml is path-skipped,
+# branch-protection required checks (Build, Lint, Test, Integration Test, E2E
+# Test) would otherwise stay 'Pending' forever. Job names here are byte-identical
+# to ci.yaml's required-check job names so GitHub treats them as the same check.
+#
+# Lint is NOT a no-op: it runs the real docs lint lane (task pr-prep:docs —
+# markdown, ADR, docs-symmetry, fmt, license, docs-paths-sync) so markdown/ADR
+# violations can no longer land on main unchecked (holomush-3zrvh — the gap that
+# let PR #4281's MD038 + missing-ADR-Rationale through). Test/Build/Integration/
+# E2E stay no-op stand-ins — docs changes don't exercise those.
 #
 # DOCS_ONLY_PATHS — must remain byte-identical with ci.yaml's paths-ignore
 # blocks and Taskfile.yaml's DOCS_ONLY_PATHS var. Enforced by
@@ -45,9 +50,40 @@ permissions:
 jobs:
   Lint:
     name: Lint
-    runs-on: ubuntu-latest
+    # Real docs lint — mirrors ci.yaml's Lint setup (the same steps already run
+    # the full task lint + fmt:check + license:check there), then runs the docs
+    # subset via task pr-prep:docs. holomush-3zrvh.
+    runs-on: namespace-profile-linux-amd64-2x4
     steps:
-      - run: echo "docs-only PR — Lint skipped (no code changes)"
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          # Docs lint reads the repo + public release/proxy downloads only; no
+          # git credentials needed post-checkout. Avoids persisting the token in
+          # .git/config (zizmor artipacked).
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@15799a6b54e5765f85b2aac25b3f0df43ed571c0 # v1
+        with:
+          cache: go
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Install formatters
+        # ripgrep + rumdl + dprint — the doc-lint lane needs rumdl (markdown),
+        # dprint (fmt:check), and rg (lint:adr / lint:no-* scans inside task lint).
+        uses: ./.github/actions/install-formatters
+
+      - name: Lint docs
+        run: task pr-prep:docs
+
   Test:
     name: Test
     runs-on: ubuntu-latest
