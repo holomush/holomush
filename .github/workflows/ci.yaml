@@ -97,6 +97,9 @@ jobs:
             exit 1
           fi
 
+      - name: Verify EBNF is current
+        run: task generate:ebnf:check
+
       - name: Check license headers
         run: task license:check
 
