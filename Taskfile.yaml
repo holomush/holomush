@@ -921,12 +921,14 @@ tasks:
       - echo "✓ All PR checks passed."
 
   pr-prep:docs:
-    desc: Docs-only fast lane (auto-selected by pr-prep on docs-only diffs).
+    desc: Docs-only fast lane (auto-selected by pr-prep on docs-only diffs; also run by ci-docs-skip.yaml's Lint job so docs
+      PRs are linted in CI — holomush-3zrvh).
     cmds:
       - echo "▸ Running docs-only fast lane"
       - task: lint:markdown
       - task: lint:yaml
       - task: lint:docs-symmetry
+      - task: lint:adr
       - task: fmt:check
       - task: license:check
       - task: lint:docs-paths-sync

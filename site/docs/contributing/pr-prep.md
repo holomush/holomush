@@ -206,10 +206,16 @@ read-only jj command) before `task pr-prep` to force a snapshot.
 On the CI side, `.github/workflows/ci.yaml` has `paths-ignore` for the
 same glob list. A separate workflow `.github/workflows/ci-docs-skip.yaml`
 runs on the inverse path filter with workflow name `CI` and jobs named
-`Lint`, `Test`, `Build` (no-op `echo`s). GitHub's check-identity rule
-treats `(workflow_name, job_name)` as the same required check across
-files, so branch-protection required checks stay green on docs-only PRs
-without invoking the full pipeline.
+`Lint`, `Test`, `Build`, `Integration Test`, `E2E Test`. GitHub's
+check-identity rule treats `(workflow_name, job_name)` as the same required
+check across files, so branch-protection required checks stay green on
+docs-only PRs without invoking the full pipeline.
+
+The `Lint` job there is **not** a no-op: it runs the real docs lane
+(`task pr-prep:docs`) so markdown and ADR violations are caught on
+docs-only PRs instead of landing on `main` unchecked (holomush-3zrvh).
+`Test`, `Build`, `Integration Test`, and `E2E Test` remain no-op `echo`
+stand-ins — docs changes don't exercise those.
 
 If you ever edit `DOCS_ONLY_PATHS`, edit all three locations
 (Taskfile.yaml + ci.yaml + ci-docs-skip.yaml) and run
