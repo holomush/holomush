@@ -35,6 +35,10 @@ header:
     - "**/*.gfo6-cutoff"
     - "**/theme.json"
     - "**/uv.lock"
+    # Golden test snapshots (expected-output fixtures) must never carry a
+    # header — it would corrupt the comparison. license-eye v0.8.0 scans them
+    # (errors "unsupported file"); newer releases ignored them implicitly.
+    - "**/*.golden"
   language:
     Markdown:
       extensions: [".md"]

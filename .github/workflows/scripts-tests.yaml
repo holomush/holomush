@@ -75,6 +75,12 @@ jobs:
         # composite action as the release + commit-lint workflows.
         uses: ./.github/actions/install-cog
 
+      - name: Install ripgrep
+        # license-eye.bats (INV-6) + no-lefthook-refs.bats (INV-3) call `rg`.
+        # The ubuntu-latest runner does not include ripgrep by default; mirrors
+        # the CI Lint job's Install ripgrep step.
+        run: sudo apt-get install -y --no-install-recommends ripgrep
+
       - name: Install rumdl + dprint
         # license-eye.bats INV-4 runs the full `task fmt`, which invokes
         # fmt:markdown (rumdl) + fmt:dprint (dprint). Pinned to match the CI
