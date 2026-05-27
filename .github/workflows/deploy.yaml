@@ -65,7 +65,7 @@ jobs:
             VERSION="$1"
             cd /opt/holomush
             docker compose --profile tunnel --profile backups exec -T backup \
-              /usr/local/bin/backup.sh --tag="pre-deploy:${VERSION}"
+              /usr/local/bin/backup.sh --tag="pre-deploy:${VERSION}" </dev/null
           EOF
 
       - name: Pull + migrate + restart
@@ -96,12 +96,15 @@ jobs:
             docker compose --profile tunnel --profile backups pull core gateway cloudflared
             docker compose --profile tunnel --profile backups build backup
             docker compose --profile tunnel --profile backups up -d --no-recreate postgres
-            # -T is load-bearing: this script is fed to `ssh ... bash -s <<EOF`, so
-            # stdin IS the heredoc. Without -T, `compose run` attaches stdin and
-            # consumes the remaining heredoc lines (the `up -d` below) as the
-            # container's stdin — so the recreate never runs and core/gateway stay
-            # on the old image while the deploy still "succeeds" (holomush-aocap).
-            docker compose --profile tunnel --profile backups run --rm -T core migrate
+            # `</dev/null` is load-bearing: this script is fed to `ssh ... bash -s
+            # <<'EOF'`, so stdin IS the heredoc. A foreground `compose run`/`exec`
+            # attaches stdin by default and drains the remaining heredoc lines
+            # (the `up -d` below) into the container as its stdin — so the recreate
+            # never runs and core/gateway stay on the old image while the deploy
+            # still "succeeds" (holomush-aocap). `-T` only disables the pseudo-TTY;
+            # it does NOT detach stdin, so the `</dev/null` redirect is the actual
+            # guard. Keep both: `-T` documents intent, `</dev/null` enforces it.
+            docker compose --profile tunnel --profile backups run --rm -T core migrate </dev/null
             docker compose --profile tunnel --profile backups up -d
           EOF
 
@@ -119,8 +122,9 @@ jobs:
             cd /opt/holomush
             # Assert core+gateway actually run the deployed image. A recreate
             # failure leaves a stale container that still passes readiness, so
-            # readiness alone masks a bad deploy (holomush-aocap). All
-            # `compose run/exec` here use -T (stdin = this heredoc).
+            # readiness alone masks a bad deploy (holomush-aocap). Foreground
+            # `compose exec` here gets `-T` (no TTY) AND `</dev/null` so it can't
+            # drain the heredoc that is this script's stdin (see deploy step).
             for svc in core gateway; do
               running="$(docker compose -f compose.yaml ps --format '{{.Image}}' "$svc")"
               if [ "$running" != "$EXPECTED" ]; then
@@ -134,7 +138,7 @@ jobs:
             # (a single immediate probe can hit a still-starting container).
             for attempt in $(seq 1 30); do
               if docker compose -f compose.yaml exec -T gateway \
-                   wget -q --spider http://localhost:9101/healthz/readiness; then
+                   wget -q --spider http://localhost:9101/healthz/readiness </dev/null; then
                 echo "✓ gateway ready"
                 exit 0
               fi
