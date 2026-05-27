@@ -2468,6 +2468,34 @@ lua-plugin:
 	assert.Nil(t, m.Crypto)
 }
 
+func TestParseManifestConfigBlock(t *testing.T) {
+	data := []byte(`
+name: demo
+version: 1.0.0
+type: binary
+binary-plugin:
+  executable: demo
+config:
+  vote_window:
+    type: duration
+    default: 168h
+    required: true
+    description: "vote collection window"
+  max_attempts:
+    type: int
+    default: "3"
+`)
+	m, err := plugins.ParseManifest(data)
+	require.NoError(t, err)
+	require.Len(t, m.Config, 2)
+	require.Equal(t, "duration", m.Config["vote_window"].Type)
+	require.Equal(t, "168h", m.Config["vote_window"].Default)
+	require.True(t, m.Config["vote_window"].Required)
+	require.Equal(t, "vote collection window", m.Config["vote_window"].Description)
+	require.Equal(t, "int", m.Config["max_attempts"].Type)
+	require.False(t, m.Config["max_attempts"].Required)
+}
+
 func TestManifest_HistoryScopeValidation(t *testing.T) {
 	tests := []struct {
 		name        string
