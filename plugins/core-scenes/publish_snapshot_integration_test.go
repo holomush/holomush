@@ -295,7 +295,7 @@ func buildSnapshotRealEnv(ctx context.Context, pluginName string) *snapshotRealE
 		sessionGuard, dekMgr, sessionAuditEmitter,
 	)
 
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(GinkgoT(), store)
 	svc.gameID = "main"
 	svc.SetSnapshotDecryptor(&realDecryptorAdapter{dec: decryptor, pluginName: pluginName})
 
@@ -424,7 +424,7 @@ func (e *snapshotRealEnv) emitAndSeed(ctx context.Context, sceneID, eventType, p
 func newSnapshotPlainEnv(dec snapshotDecryptor) (*SceneStore, *SceneServiceImpl) {
 	GinkgoHelper()
 	store := newTestStore()
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(GinkgoT(), store)
 	svc.gameID = "main"
 	svc.SetSnapshotDecryptor(dec)
 	return store, svc

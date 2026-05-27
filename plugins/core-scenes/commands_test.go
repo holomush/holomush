@@ -17,9 +17,10 @@ import (
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
-func newTestPlugin() *scenePlugin {
+func newTestPlugin(t testing.TB) *scenePlugin {
+	t.Helper()
 	store := newFakeStore()
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 	svc.SetEventSink(&recordingEventSink{})
 	return &scenePlugin{
 		store:     nil, // not used by command handlers
@@ -29,7 +30,7 @@ func newTestPlugin() *scenePlugin {
 }
 
 func TestHandleCommandReturnsUsageWhenSubcommandIsMissing(t *testing.T) {
-	p := newTestPlugin()
+	p := newTestPlugin(t)
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:     "scene",
@@ -42,7 +43,7 @@ func TestHandleCommandReturnsUsageWhenSubcommandIsMissing(t *testing.T) {
 }
 
 func TestHandleCommandRejectsUnknownSubcommand(t *testing.T) {
-	p := newTestPlugin()
+	p := newTestPlugin(t)
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:     "scene",
@@ -55,7 +56,7 @@ func TestHandleCommandRejectsUnknownSubcommand(t *testing.T) {
 }
 
 func TestHandleCommandCreateInvokesSceneServiceCreateScene(t *testing.T) {
-	p := newTestPlugin()
+	p := newTestPlugin(t)
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:     "scene",
@@ -69,7 +70,7 @@ func TestHandleCommandCreateInvokesSceneServiceCreateScene(t *testing.T) {
 }
 
 func TestHandleCommandInfoShowsCreatedScene(t *testing.T) {
-	p := newTestPlugin()
+	p := newTestPlugin(t)
 
 	// Create a scene first.
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -99,7 +100,7 @@ func TestHandleCommandInfoShowsCreatedScene(t *testing.T) {
 }
 
 func TestHandleCommandInfoReturnsErrorWhenSceneIDIsMissing(t *testing.T) {
-	p := newTestPlugin()
+	p := newTestPlugin(t)
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:     "scene",
@@ -112,7 +113,7 @@ func TestHandleCommandInfoReturnsErrorWhenSceneIDIsMissing(t *testing.T) {
 }
 
 func TestHandleCommandEndCallsEndScene(t *testing.T) {
-	p := newTestPlugin()
+	p := newTestPlugin(t)
 	// Pre-create a scene in the fake store via the service
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:     "scene",
@@ -138,7 +139,7 @@ func TestHandleCommandEndCallsEndScene(t *testing.T) {
 }
 
 func TestHandleCommandEndReturnsErrorWhenSceneIDIsMissing(t *testing.T) {
-	p := newTestPlugin()
+	p := newTestPlugin(t)
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:     "scene",
 		Args:        "end",
@@ -150,7 +151,7 @@ func TestHandleCommandEndReturnsErrorWhenSceneIDIsMissing(t *testing.T) {
 }
 
 func TestHandleCommandPauseCallsPauseScene(t *testing.T) {
-	p := newTestPlugin()
+	p := newTestPlugin(t)
 	sceneID := createSceneInTest(t, p, "char-alice", "Pausable")
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -164,7 +165,7 @@ func TestHandleCommandPauseCallsPauseScene(t *testing.T) {
 }
 
 func TestHandleCommandResumeCallsResumeScene(t *testing.T) {
-	p := newTestPlugin()
+	p := newTestPlugin(t)
 	sceneID := createSceneInTest(t, p, "char-alice", "Resumable")
 
 	// Pause first
@@ -187,7 +188,7 @@ func TestHandleCommandResumeCallsResumeScene(t *testing.T) {
 }
 
 func TestHandleCommandSetUpdatesTitle(t *testing.T) {
-	p := newTestPlugin()
+	p := newTestPlugin(t)
 	sceneID := createSceneInTest(t, p, "char-alice", "Original Title")
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -210,7 +211,7 @@ func TestHandleCommandSetUpdatesTitle(t *testing.T) {
 }
 
 func TestHandleCommandSetRejectsUnknownField(t *testing.T) {
-	p := newTestPlugin()
+	p := newTestPlugin(t)
 	sceneID := createSceneInTest(t, p, "char-alice", "T")
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -224,7 +225,7 @@ func TestHandleCommandSetRejectsUnknownField(t *testing.T) {
 }
 
 func TestHandleCommandSetRejectsMissingEqualsSeparator(t *testing.T) {
-	p := newTestPlugin()
+	p := newTestPlugin(t)
 	sceneID := createSceneInTest(t, p, "char-alice", "T")
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -260,7 +261,7 @@ func TestSceneCommandJoinForwardsToServiceWithCorrectSceneID(t *testing.T) {
 		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
 	}))
 	fc := &fakeFocusClient{}
-	plugin := &scenePlugin{service: NewSceneServiceImpl(store), focusClient: fc, evaluator: allowEvaluator{}}
+	plugin := &scenePlugin{service: newTestService(t, store), focusClient: fc, evaluator: allowEvaluator{}}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:     "scene",
@@ -277,7 +278,7 @@ func TestSceneCommandJoinForwardsToServiceWithCorrectSceneID(t *testing.T) {
 
 func TestSceneCommandLeaveRejectsMissingSceneID(t *testing.T) {
 	// Gate resource-ref fails fast (before handler) when scene id is missing.
-	plugin := &scenePlugin{service: NewSceneServiceImpl(newFakeStore()), evaluator: allowEvaluator{}}
+	plugin := &scenePlugin{service: newTestService(t, newFakeStore()), evaluator: allowEvaluator{}}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "leave", CharacterID: "char-bob",
@@ -293,7 +294,7 @@ func TestSceneCommandInviteParsesSceneIDAndTarget(t *testing.T) {
 		ID: "scene-cmd-i", OwnerID: "char-alice",
 		State: string(SceneStateActive), Visibility: string(SceneVisibilityPrivate),
 	}))
-	plugin := &scenePlugin{service: NewSceneServiceImpl(store), evaluator: allowEvaluator{}}
+	plugin := &scenePlugin{service: newTestService(t, store), evaluator: allowEvaluator{}}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "invite scene-cmd-i char-bob", CharacterID: "char-alice",
@@ -304,7 +305,7 @@ func TestSceneCommandInviteParsesSceneIDAndTarget(t *testing.T) {
 }
 
 func TestSceneCommandTransferRejectsMissingTarget(t *testing.T) {
-	plugin := &scenePlugin{service: NewSceneServiceImpl(newFakeStore()), evaluator: allowEvaluator{}}
+	plugin := &scenePlugin{service: newTestService(t, newFakeStore()), evaluator: allowEvaluator{}}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "transfer scene-x", CharacterID: "char-alice",
@@ -322,7 +323,7 @@ func TestSceneCommandLeaveForwardsToServiceWithCorrectSceneID(t *testing.T) {
 	}))
 	_, _, err := store.AddParticipant(context.Background(), "scene-cmd-l", "char-bob")
 	require.NoError(t, err)
-	plugin := &scenePlugin{service: NewSceneServiceImpl(store), evaluator: allowEvaluator{}}
+	plugin := &scenePlugin{service: newTestService(t, store), evaluator: allowEvaluator{}}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "leave scene-cmd-l", CharacterID: "char-bob",
@@ -340,7 +341,7 @@ func TestSceneCommandKickRemovesTargetFromScene(t *testing.T) {
 	}))
 	_, _, err := store.AddParticipant(context.Background(), "scene-cmd-k", "char-bob")
 	require.NoError(t, err)
-	plugin := &scenePlugin{service: NewSceneServiceImpl(store), evaluator: allowEvaluator{}}
+	plugin := &scenePlugin{service: newTestService(t, store), evaluator: allowEvaluator{}}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "kick scene-cmd-k char-bob", CharacterID: "char-alice",
@@ -358,7 +359,7 @@ func TestSceneCommandTransferChangesOwnership(t *testing.T) {
 	}))
 	_, _, err := store.AddParticipant(context.Background(), "scene-cmd-t", "char-bob")
 	require.NoError(t, err)
-	plugin := &scenePlugin{service: NewSceneServiceImpl(store), evaluator: allowEvaluator{}}
+	plugin := &scenePlugin{service: newTestService(t, store), evaluator: allowEvaluator{}}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "transfer scene-cmd-t char-bob", CharacterID: "char-alice",
@@ -430,7 +431,7 @@ func TestMembershipCommandsRejectExtraPositionalTokens(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// allowEvaluator lets the gate pass so the handler's arity guard fires.
-			plugin := &scenePlugin{service: NewSceneServiceImpl(newFakeStore()), evaluator: allowEvaluator{}}
+			plugin := &scenePlugin{service: newTestService(t, newFakeStore()), evaluator: allowEvaluator{}}
 
 			resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 				Command:     "scene",
@@ -538,8 +539,9 @@ func (f *fakeFocusClient) QueryStreamHistory(_ context.Context, _ pluginsdk.Quer
 // newTestPluginWithFocus returns a scenePlugin wired with a fakeFocusClient
 // and a fakeStore-backed SceneServiceImpl. Tests that exercise the
 // command-path focus wiring use this in place of newTestPlugin.
-func newTestPluginWithFocus() (*scenePlugin, *fakeFocusClient) {
-	p := newTestPlugin()
+func newTestPluginWithFocus(t testing.TB) (*scenePlugin, *fakeFocusClient) {
+	t.Helper()
+	p := newTestPlugin(t)
 	fc := &fakeFocusClient{}
 	p.focusClient = fc
 	return p, fc
@@ -556,7 +558,7 @@ func extractSceneID(t *testing.T, output string) string {
 // --- scene join / leave / end / switch focus-wiring tests ---
 
 func TestSceneJoinCallsFocusClientJoinFocus(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
@@ -579,7 +581,7 @@ func TestSceneJoinCallsFocusClientJoinFocus(t *testing.T) {
 }
 
 func TestSceneJoinPropagatesJoinSceneError(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:     "scene",
@@ -593,7 +595,7 @@ func TestSceneJoinPropagatesJoinSceneError(t *testing.T) {
 }
 
 func TestSceneJoinHandlesJoinFocusError(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 	fc.joinErr = oops.Code("FOCUS_POLICY_FAILED").Errorf("policy rejected")
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -614,7 +616,7 @@ func TestSceneJoinHandlesJoinFocusError(t *testing.T) {
 }
 
 func TestSceneJoinTreatsFocusAlreadyMemberAsSuccess(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 	fc.joinErr = oops.Code("FOCUS_ALREADY_MEMBER").Errorf("duplicate")
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -634,7 +636,7 @@ func TestSceneJoinTreatsFocusAlreadyMemberAsSuccess(t *testing.T) {
 }
 
 func TestSceneLeaveCallsLeaveScene(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
@@ -660,7 +662,7 @@ func TestSceneLeaveCallsLeaveScene(t *testing.T) {
 }
 
 func TestSceneLeaveRejectsOwnerBeforeFocusChange(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
@@ -677,7 +679,7 @@ func TestSceneLeaveRejectsOwnerBeforeFocusChange(t *testing.T) {
 }
 
 func TestSceneLeaveToleratesLeaveFocusError(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 	fc.leaveErr = errors.New("transient host error")
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -699,7 +701,7 @@ func TestSceneLeaveToleratesLeaveFocusError(t *testing.T) {
 }
 
 func TestSceneEndCallsLeaveFocusByTargetForFanOut(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 	fc.leaveByTargetResult = pluginsdk.LeaveByTargetResult{Succeeded: 2, TotalScanned: 2}
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -725,7 +727,7 @@ func TestSceneEndCallsLeaveFocusByTargetForFanOut(t *testing.T) {
 }
 
 func TestSceneSwitchCallsPresentFocus(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "switch scene-01", CharacterID: "char-bob", SessionID: "sess-bob",
@@ -739,7 +741,7 @@ func TestSceneSwitchCallsPresentFocus(t *testing.T) {
 }
 
 func TestSceneSwitchReturnsNotMemberError(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 	fc.presentErr = oops.Code("FOCUS_NOT_MEMBER").Errorf("not joined")
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -752,7 +754,7 @@ func TestSceneSwitchReturnsNotMemberError(t *testing.T) {
 }
 
 func TestSceneSwitchStrictArity(t *testing.T) {
-	p, _ := newTestPluginWithFocus()
+	p, _ := newTestPluginWithFocus(t)
 
 	tests := []struct {
 		name string
@@ -776,8 +778,8 @@ func TestSceneSwitchStrictArity(t *testing.T) {
 // --- Group C: focusClient-not-configured branches ---
 
 func TestSceneJoinReturnsErrorWhenFocusClientNotConfigured(t *testing.T) {
-	// newTestPlugin() has no focusClient wired in.
-	p := newTestPlugin()
+	// newTestPlugin(t) has no focusClient wired in.
+	p := newTestPlugin(t)
 
 	// Create a scene first so JoinScene succeeds before hitting the nil-client guard.
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -802,7 +804,7 @@ func TestSceneJoinReturnsErrorWhenFocusClientNotConfigured(t *testing.T) {
 }
 
 func TestSceneSwitchReturnsErrorWhenFocusClientNotConfigured(t *testing.T) {
-	p := newTestPlugin()
+	p := newTestPlugin(t)
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:     "scene",
@@ -816,7 +818,7 @@ func TestSceneSwitchReturnsErrorWhenFocusClientNotConfigured(t *testing.T) {
 }
 
 func TestSceneSwitchReturnsGenericErrorForUnknownFailure(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 	fc.presentErr = errors.New("unexpected storage error")
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -832,7 +834,7 @@ func TestSceneSwitchReturnsGenericErrorForUnknownFailure(t *testing.T) {
 }
 
 func TestSceneEndToleratesLeaveFocusByTargetEnumerationFailure(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
@@ -856,7 +858,7 @@ func TestSceneEndToleratesLeaveFocusByTargetEnumerationFailure(t *testing.T) {
 }
 
 func TestSceneEndToleratesLeaveFocusByTargetPartialFailure(t *testing.T) {
-	p, fc := newTestPluginWithFocus()
+	p, fc := newTestPluginWithFocus(t)
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
@@ -885,7 +887,7 @@ func TestSceneEndToleratesLeaveFocusByTargetPartialFailure(t *testing.T) {
 
 func TestSceneEndReturnsOKWhenFocusClientNotConfigured(t *testing.T) {
 	// handleEnd skips LeaveFocus when focusClient is nil and returns OK.
-	p := newTestPlugin()
+	p := newTestPlugin(t)
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
@@ -932,7 +934,7 @@ func (errorEvaluator) Evaluate(_ context.Context, _, _ string) (pluginsdk.Evalua
 func newScenePluginWithEvaluator(t *testing.T, ev pluginsdk.HostEvaluator) *scenePlugin {
 	t.Helper()
 	store := newFakeStore()
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 	svc.SetEventSink(&recordingEventSink{})
 	return &scenePlugin{
 		service:   svc,
@@ -946,7 +948,7 @@ func newScenePluginWithEvaluator(t *testing.T, ev pluginsdk.HostEvaluator) *scen
 func newVoteExtendFixture(t *testing.T, ev pluginsdk.HostEvaluator) (*scenePlugin, string, *fakeStore) {
 	t.Helper()
 	store := newFakeStore()
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 	svc.SetEventSink(&recordingEventSink{})
 	sceneID := createSceneInPlugin(t, &scenePlugin{service: svc, evaluator: allowEvaluator{}}, "char-admin", "Test Scene")
 	store.maxPublishAttempts[sceneID] = 3

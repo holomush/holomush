@@ -25,7 +25,7 @@ func newPublishCmdFixture(t *testing.T, state SceneState) (*scenePlugin, string,
 	store.installRoster(sceneID, callerID) // caller is the owner-participant
 	store.maxPublishAttempts[sceneID] = 3
 	store.attemptCounts[sceneID] = AttemptCounts{}
-	return &scenePlugin{service: NewSceneServiceImpl(store)}, sceneID, callerID
+	return &scenePlugin{service: newTestService(t, store)}, sceneID, callerID
 }
 
 // TestHandlePublishStartsAttempt — the bare "scene publish #<id>" form starts a
@@ -99,7 +99,7 @@ func newVoteCmdFixture(t *testing.T) (*scenePlugin, string, string) {
 	store := newFakeStore()
 	store.installPublishedAttempt(attemptID, sceneID, StatusCollecting)
 	store.installVoters(attemptID, voter)
-	return &scenePlugin{service: NewSceneServiceImpl(store)}, sceneID, voter
+	return &scenePlugin{service: newTestService(t, store)}, sceneID, voter
 }
 
 // TestHandleVoteYesRecordsVote — "scene publish vote yes #<id>" casts a yes vote
@@ -155,7 +155,7 @@ func TestHandleVoteNoActiveAttempt(t *testing.T) {
 	t.Parallel()
 	sceneID := ulid.Make().String()
 	voter := ulid.Make().String()
-	p := &scenePlugin{service: NewSceneServiceImpl(newFakeStore())}
+	p := &scenePlugin{service: newTestService(t, newFakeStore())}
 
 	resp, err := p.handlePublish(context.Background(),
 		pluginsdk.CommandRequest{CharacterID: voter}, "vote yes #"+sceneID)
@@ -193,7 +193,7 @@ func newPublishOpFixture(t *testing.T, status PublishedSceneStatus) (p *scenePlu
 	store.installRoster(sceneID, caller)
 	store.installPublishedAttempt(attemptID, sceneID, status)
 	store.installVoters(attemptID, caller)
-	return &scenePlugin{service: NewSceneServiceImpl(store)}, store, sceneID, caller, attemptID
+	return &scenePlugin{service: newTestService(t, store)}, store, sceneID, caller, attemptID
 }
 
 // TestHandleWithdrawWithdrawsActiveAttempt — the owner withdraws the scene's

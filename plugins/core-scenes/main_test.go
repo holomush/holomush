@@ -7,13 +7,43 @@ import (
 	"os"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 
+	"github.com/holomush/holomush/pkg/errutil"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
+
+// TestInitAppliesManifestConfig verifies that applyConfig decodes plugin_config
+// into service.cfg and schedInterval correctly (INV-PC-7).
+func TestInitAppliesManifestConfig(t *testing.T) {
+	t.Parallel()
+	p := &scenePlugin{service: &SceneServiceImpl{}}
+	cfg := &pluginv1.ServiceConfig{PluginConfig: map[string]string{
+		"vote_window": "168h", "cooloff_window": "30m", "scheduler_interval": "30s",
+	}}
+	require.NoError(t, p.applyConfig(cfg))
+	require.Equal(t, 168*time.Hour, p.service.cfg.DefaultVoteWindow)
+	require.Equal(t, 30*time.Minute, p.service.cfg.DefaultCoolOffWindow)
+	require.Equal(t, 30*time.Second, p.schedInterval)
+	require.NotZero(t, p.service.cfg.DefaultVoteWindow)
+}
+
+func TestApplyConfigRejectsNonPositiveSchedulerInterval(t *testing.T) {
+	t.Parallel()
+	// scheduler_interval is type-valid as a duration but 0s would panic
+	// time.NewTicker at scheduler start; applyConfig MUST reject it fail-loud.
+	p := &scenePlugin{service: &SceneServiceImpl{}}
+	cfg := &pluginv1.ServiceConfig{PluginConfig: map[string]string{
+		"vote_window": "168h", "cooloff_window": "30m", "scheduler_interval": "0s",
+	}}
+	err := p.applyConfig(cfg)
+	errutil.AssertErrorCode(t, err, "SCENE_INIT_FAILED")
+}
 
 // TestPlugin_CryptoEmitsMatchesRegistry pins INV-P4-2 / INV-S5: the scene
 // event types in crypto.emits (8 Phase 4 + 6 Phase 6 publication notices)

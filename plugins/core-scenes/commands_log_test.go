@@ -23,7 +23,7 @@ func newSceneLogFixture(t *testing.T, events ...pluginsdk.Event) (p *scenePlugin
 	store := newFakeStore()
 	store.installRoster(sceneID, caller)
 	fc := &fakeFocusClient{queryHistoryEvents: events}
-	return &scenePlugin{service: NewSceneServiceImpl(store), focusClient: fc}, sceneID, caller
+	return &scenePlugin{service: newTestService(t, store), focusClient: fc}, sceneID, caller
 }
 
 // TestDecodeReplayEntries verifies the IC content kinds (pose/say/emit) are
@@ -63,7 +63,7 @@ func TestHandleLogDeniesNonParticipant(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore()
 	store.installRoster("scene-x", "owner-char") // owner-char is the only participant
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 	p := &scenePlugin{service: svc, focusClient: &fakeFocusClient{}}
 
 	resp, err := p.handleLog(context.Background(), pluginsdk.CommandRequest{CharacterID: "outsider"}, "#scene-x")
@@ -79,7 +79,7 @@ func TestHandleLogRendersForParticipant(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore()
 	store.installRoster("scene-x", "owner-char")
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 	fc := &fakeFocusClient{queryHistoryEvents: []pluginsdk.Event{
 		{ID: "1", Type: pluginsdk.EventType("scene_say"), Payload: `{"actor_id":"owner-char","text":"Hello."}`},
 		{ID: "2", Type: pluginsdk.EventType("scene_pose"), Payload: `{"actor_id":"owner-char","text":"waves."}`},

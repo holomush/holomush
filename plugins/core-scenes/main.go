@@ -30,13 +30,48 @@ import (
 // runs before Init) has valid receivers. Init wires the store into both
 // after NewSceneStore returns.
 type scenePlugin struct {
-	store        *SceneStore
-	service      *SceneServiceImpl
-	resolver     *SceneResolver
-	auditSrv     *SceneAuditServer
-	focusClient  pluginsdk.FocusClient
-	evaluator    pluginsdk.HostEvaluator
-	emitRegistry *pluginsdk.EmitRegistry
+	store         *SceneStore
+	service       *SceneServiceImpl
+	resolver      *SceneResolver
+	auditSrv      *SceneAuditServer
+	focusClient   pluginsdk.FocusClient
+	evaluator     pluginsdk.HostEvaluator
+	emitRegistry  *pluginsdk.EmitRegistry
+	schedInterval time.Duration // decoded from manifest scheduler_interval
+}
+
+// sceneConfig is the mapstructure target for the plugin_config block declared
+// in plugin.yaml. Keys match the manifest config: section; mapstructure tags
+// map snake_case config keys to typed Go fields.
+type sceneConfig struct {
+	VoteWindow        time.Duration `mapstructure:"vote_window"`
+	CoolOffWindow     time.Duration `mapstructure:"cooloff_window"`
+	SchedulerInterval time.Duration `mapstructure:"scheduler_interval"`
+}
+
+// applyConfig decodes the host-delivered plugin_config into service.cfg and
+// schedInterval. Called from Init after the connection string check so both
+// production and tests drive config from the manifest. Errors are wrapped with
+// SCENE_INIT_FAILED so the host surfaces a clear reason for plugin load failure.
+func (p *scenePlugin) applyConfig(config *pluginv1.ServiceConfig) error {
+	decoded, err := pluginsdk.DecodeConfig[sceneConfig](config)
+	if err != nil {
+		return oops.Code("SCENE_INIT_FAILED").Wrap(err)
+	}
+	// Plugin-owned semantic validation: the host validates the generic duration
+	// type but not its meaning. A non-positive scheduler_interval would panic
+	// time.NewTicker at scheduler start, so reject it fail-loud at Init.
+	if decoded.SchedulerInterval <= 0 {
+		return oops.Code("SCENE_INIT_FAILED").
+			With("scheduler_interval", decoded.SchedulerInterval.String()).
+			Errorf("scheduler_interval must be positive")
+	}
+	p.service.cfg = SceneServiceConfig{
+		DefaultVoteWindow:    decoded.VoteWindow,
+		DefaultCoolOffWindow: decoded.CoolOffWindow,
+	}
+	p.schedInterval = decoded.SchedulerInterval
+	return nil
 }
 
 // HandleEvent is a no-op for Phase 1. The scene plugin does not subscribe
@@ -158,6 +193,10 @@ func (p *scenePlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig) 
 		return oops.Code("SCENE_INIT_FAILED").Errorf("connection_string is required")
 	}
 
+	if err := p.applyConfig(config); err != nil {
+		return err
+	}
+
 	store, err := NewSceneStore(ctx, connStr)
 	if err != nil {
 		return oops.Code("SCENE_INIT_FAILED").Wrap(err)
@@ -197,7 +236,7 @@ func (p *scenePlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig) 
 	sched := &publishScheduler{
 		svc:      p.service,
 		store:    store,
-		interval: 30 * time.Second, // sweep every 30s; vote/cooloff windows are minutes-to-days
+		interval: p.schedInterval, // decoded from manifest scheduler_interval
 		now:      time.Now,
 	}
 	go sched.Run(schedCtx)

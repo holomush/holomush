@@ -138,16 +138,18 @@ type SceneServiceImpl struct {
 }
 
 // NewSceneServiceImpl returns a service backed by the given store.
-// Used by tests; main() constructs the service directly with a nil store
-// and assigns it after Init. The gameID defaults to "main" matching the
-// substrate default (see internal/grpc/server.go:181). Phase 6 defaults
-// (7-day vote window, 30-minute cool-off) and a no-op publish eventer are
-// seeded so Phase B handlers have working dependencies before Phase D.
+// main() constructs the service directly with a nil store and assigns it
+// after Init. The gameID defaults to "main" matching the substrate default
+// (see internal/grpc/server.go:181). A no-op publish eventer is seeded so
+// Phase B handlers compile before Phase D wires the real one.
+//
+// Config (vote/cool-off windows) is NOT seeded here — applyConfig (called
+// from Init and from newTestService in tests) is the sole config source so
+// production and tests both derive windows from the manifest (INV-PC-7).
 func NewSceneServiceImpl(store sceneStorer) *SceneServiceImpl {
 	return &SceneServiceImpl{
 		store:  store,
 		gameID: "main",
-		cfg:    DefaultSceneServiceConfig(),
 		events: noopPublishEventer{},
 	}
 }

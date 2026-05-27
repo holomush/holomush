@@ -53,7 +53,7 @@ func TestGetPublishedSceneDeniesNonParticipantWithoutReadingContent(t *testing.T
 	base.installRoster("scene-1", owner, member)
 
 	store := &contentTripwireStore{fakeStore: base}
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 
 	_, err := svc.GetPublishedScene(context.Background(), &scenev1.GetPublishedSceneRequest{
 		CallerCharacterId: outsider,
@@ -78,7 +78,7 @@ func TestGetPublishedSceneAllowsParticipantToReadContent(t *testing.T) {
 	base.installRoster("scene-2", owner)
 
 	store := &contentTripwireStore{fakeStore: base}
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 
 	resp, err := svc.GetPublishedScene(context.Background(), &scenev1.GetPublishedSceneRequest{
 		CallerCharacterId: owner,
@@ -109,7 +109,7 @@ func TestGetPublishedSceneDenialEmitsPrivacyBoundaryWarn(t *testing.T) {
 	outsider := ulid.Make().String()
 	base.installPublishedAttempt("pub-3", "scene-3", StatusPublished)
 	base.installRoster("scene-3", owner)
-	svc := NewSceneServiceImpl(base)
+	svc := newTestService(t, base)
 
 	_, err := svc.GetPublishedScene(context.Background(), &scenev1.GetPublishedSceneRequest{
 		CallerCharacterId: outsider,
@@ -168,7 +168,7 @@ func TestDownloadPublishedSceneDeniesNonParticipantWithoutReadingContent(t *test
 	base.installPublishedAttempt("pub-d1", "scene-d1", StatusPublished)
 	base.installRoster("scene-d1", owner)
 	store := &contentTripwireStore{fakeStore: base}
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 
 	_, err := svc.DownloadPublishedScene(context.Background(), &scenev1.DownloadPublishedSceneRequest{
 		CallerCharacterId: outsider,
@@ -196,7 +196,7 @@ func TestDownloadPublishedSceneRendersForParticipant(t *testing.T) {
 	}
 	base.installRoster("scene-d2", owner)
 	store := &contentTripwireStore{fakeStore: base}
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 
 	resp, err := svc.DownloadPublishedScene(context.Background(), &scenev1.DownloadPublishedSceneRequest{
 		CallerCharacterId: owner,
@@ -220,7 +220,7 @@ func TestDownloadPublishedSceneRejectsUnsupportedFormat(t *testing.T) {
 	base.installPublishedAttempt("pub-d3", "scene-d3", StatusPublished)
 	base.installRoster("scene-d3", owner)
 	store := &contentTripwireStore{fakeStore: base}
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 
 	_, err := svc.DownloadPublishedScene(context.Background(), &scenev1.DownloadPublishedSceneRequest{
 		CallerCharacterId: owner,
@@ -244,7 +244,7 @@ func TestDownloadPublishedSceneRejectsNonPublishedAttempt(t *testing.T) {
 	base.installPublishedAttempt("pub-d4", "scene-d4", StatusCollecting)
 	base.installRoster("scene-d4", owner)
 	store := &contentTripwireStore{fakeStore: base}
-	svc := NewSceneServiceImpl(store)
+	svc := newTestService(t, store)
 
 	_, err := svc.DownloadPublishedScene(context.Background(), &scenev1.DownloadPublishedSceneRequest{
 		CallerCharacterId: owner,
@@ -269,7 +269,7 @@ func TestListScenePublishAttemptsDeniesNonParticipant(t *testing.T) {
 	outsider := ulid.Make().String()
 	base.installPublishedAttempt("pub-l1", "scene-l1", StatusPublished)
 	base.installRoster("scene-l1", owner)
-	svc := NewSceneServiceImpl(base)
+	svc := newTestService(t, base)
 
 	_, err := svc.ListScenePublishAttempts(context.Background(), &scenev1.ListScenePublishAttemptsRequest{
 		CallerCharacterId: outsider,
@@ -298,7 +298,7 @@ func TestListScenePublishAttemptsReturnsSummariesForParticipant(t *testing.T) {
 	base.publishedScenes["pub-l2a"].FailureReason = &reason
 	base.publishedScenes["pub-l2b"].AttemptNumber = 2
 
-	svc := NewSceneServiceImpl(base)
+	svc := newTestService(t, base)
 	resp, err := svc.ListScenePublishAttempts(context.Background(), &scenev1.ListScenePublishAttemptsRequest{
 		CallerCharacterId: owner,
 		SceneId:           "scene-l2",
