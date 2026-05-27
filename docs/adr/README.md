@@ -16,6 +16,9 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Adopt Astro Starlight as the docs site platform](holomush-145ko-adopt-astro-starlight-as-docs-site-platform.md) | 2026-05-27 | Accepted | `holomush-145ko` |
+| [Render Mermaid diagrams client-side via Starlight plugin](holomush-xneg2-render-mermaid-diagrams-client-side-via-starlight-plugin.md) | 2026-05-27 | Accepted | `holomush-xneg2` |
+| [Use bun as the docs-site package manager](holomush-qf2oo-use-bun-as-docs-site-package-manager.md) | 2026-05-27 | Accepted | `holomush-qf2oo` |
 | [integration/E2E are CI-authoritative-and-required, local-optional](holomush-5k6au-integration-e2e-are-ci-authoritative-and-required-local-opti.md) | 2026-05-26 | Accepted | `holomush-5k6au` |
 | [quarantine flaky specs via governed registry, not deletion](holomush-5eqiv-quarantine-flaky-specs-via-governed-registry-not-deletion.md) | 2026-05-26 | Accepted | `holomush-5eqiv` |
 | [Separate authorization (WHO) from business-state validity (WHEN) in scene policies](holomush-sqpnv-authz-who-vs-business-state-when-scene-policies.md) | 2026-05-25 | Accepted | `holomush-sqpnv` |
