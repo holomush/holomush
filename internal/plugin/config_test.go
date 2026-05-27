@@ -11,6 +11,37 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
+func TestMergePluginConfig(t *testing.T) {
+	schema := map[string]ConfigParam{
+		"vote_window":    {Type: "duration", Default: "168h", Required: true},
+		"cooloff_window": {Type: "duration", Default: "30m"},
+		"needs_override": {Type: "int", Required: true}, // no default
+		"optional_note":  {Type: "string"},              // optional, no default
+	}
+	t.Run("override wins per key and manifest defaults fill the rest (INV-PC-2)", func(t *testing.T) {
+		got, err := MergePluginConfig(schema, map[string]string{"cooloff_window": "5s", "needs_override": "1"})
+		require.NoError(t, err)
+		require.Equal(t, map[string]string{"vote_window": "168h", "cooloff_window": "5s", "needs_override": "1"}, got)
+	})
+	t.Run("omits an optional key with no default and no override", func(t *testing.T) {
+		got, err := MergePluginConfig(schema, map[string]string{"needs_override": "1"})
+		require.NoError(t, err)
+		require.NotContains(t, got, "optional_note")
+	})
+	t.Run("rejects a required key with no default and no override (INV-PC-4)", func(t *testing.T) {
+		_, err := MergePluginConfig(schema, map[string]string{})
+		errutil.AssertErrorCode(t, err, "PLUGIN_CONFIG_MISSING_REQUIRED")
+	})
+	t.Run("rejects an override value that fails its declared type (INV-PC-5)", func(t *testing.T) {
+		_, err := MergePluginConfig(schema, map[string]string{"vote_window": "banana", "needs_override": "1"})
+		errutil.AssertErrorCode(t, err, "PLUGIN_CONFIG_TYPE_INVALID")
+	})
+	t.Run("rejects an override key not declared in the schema (INV-PC-6)", func(t *testing.T) {
+		_, err := MergePluginConfig(schema, map[string]string{"needs_override": "1", "bogus": "x"})
+		errutil.AssertErrorCode(t, err, "PLUGIN_CONFIG_UNKNOWN_KEY")
+	})
+}
+
 func TestValidateConfigSchema(t *testing.T) {
 	tests := []struct {
 		name    string

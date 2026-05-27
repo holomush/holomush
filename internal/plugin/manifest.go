@@ -633,11 +633,7 @@ func (m *Manifest) Validate() error {
 		}
 	}
 
-	if err := validateConfigSchema(m.Config); err != nil {
-		return err
-	}
-
-	return nil
+	return validateConfigSchema(m.Config)
 }
 
 // validateActorKindsClaimable applies spec §3.2 validation rules and
