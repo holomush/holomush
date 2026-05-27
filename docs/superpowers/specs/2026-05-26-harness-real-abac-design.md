@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Design: `WithRealABAC()` — real seeded ABAC engine in the integration harness
 
 - **Bead:** holomush-f5t07

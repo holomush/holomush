@@ -710,11 +710,13 @@ tasks:
   license:check:
     desc: Check SPDX license headers (code + functional markdown)
     cmds:
+      - command -v license-eye >/dev/null 2>&1 || go install github.com/apache/skywalking-eyes/cmd/license-eye@latest
       - license-eye header check
 
   license:add:
     desc: Add missing SPDX license headers (code + functional markdown)
     cmds:
+      - command -v license-eye >/dev/null 2>&1 || go install github.com/apache/skywalking-eyes/cmd/license-eye@latest
       - license-eye header fix
 
   # ──────────────────────────────────────────

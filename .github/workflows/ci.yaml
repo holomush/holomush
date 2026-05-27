@@ -86,6 +86,9 @@ jobs:
           echo "${BUF_SHA256}  /tmp/buf" | sha256sum -c -
           sudo install -m 0755 /tmp/buf /usr/local/bin/buf
           rm /tmp/buf
+          # license-eye (Apache SkyWalking Eyes) drives `task license:check` —
+          # a Go tool, installed from the module proxy (matches `task setup`).
+          go install github.com/apache/skywalking-eyes/cmd/license-eye@latest
 
       - name: Verify schema is current
         run: |
