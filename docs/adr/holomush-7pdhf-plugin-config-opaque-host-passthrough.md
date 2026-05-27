@@ -54,6 +54,24 @@ is extended to include `len(manifest.Config) > 0`, so a plugin declaring *only*
 codified as invariant **INV-PC-8** with a regression test (rather than a separate
 ADR — it is the binary-runtime delivery mechanism for this decision).
 
+## Rationale
+
+Opaque passthrough is the only option that keeps config provisioning consistent
+with how the host already treats every other declared resource: it provisions
+the Postgres schema, host service addresses, and crypto-emit capture a plugin
+declares without *understanding* any of them. Making config the one resource the
+host interprets would single it out as a boundary violation
+([[holomush-z1e7]]) and force a host change for every new plugin config key.
+
+Plugin ownership also fixes the cfg-zero bug class by construction rather than by
+discipline: because config is loaded from the manifest on every init path —
+including the extended binary `needsInit` gate (INV-PC-8) — the zero-value struct
+literal that silently collapsed core-scenes' publish windows is unreachable in
+production. Generic-type awareness (not semantic awareness) is the minimum the
+host needs to validate structure and apply the `default < override` merge, so it
+buys load-time safety and a clean test-override seam without coupling the
+substrate to any plugin's meaning.
+
 ## Alternatives Considered
 
 - **Host-semantic config** (the core server registers and interprets known

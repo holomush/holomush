@@ -35,6 +35,24 @@ driving **both** runtimes:
 v1 supports **scalar types only** (`duration`/`int`/`bool`/`string`);
 enum/nested/list types are deferred to a future extension.
 
+## Rationale
+
+A single typed schema is what turns plugin-runtime-symmetry from a standing
+discipline burden into a property that holds by construction. With the manifest
+as the sole source of a key's type and default, binary and Lua typing are derived
+from the same declaration and cannot silently drift — directly satisfying the
+project MUST that the host treat both runtimes identically. The rejected flat
+string-map alternative re-creates two independent typing declarations, exactly the
+drift hazard the symmetry rule exists to prevent.
+
+The schema also unlocks capabilities a read-site-typing approach structurally
+cannot: because the host knows each key's declared type up front, it can fail
+fast at load time on a misauthored manifest (`PLUGIN_CONFIG_TYPE_INVALID`,
+`PLUGIN_CONFIG_MISSING_REQUIRED`) instead of surfacing zero values at runtime,
+and it can generate the config reference docs from one authoritative source. The
+cost is modest — `koanf`/`mapstructure` were already in the module graph — so the
+schema path was affordable relative to the recurring discipline it removes.
+
 ## Alternatives Considered
 
 - **Flat string map + read-site typing** (manifest carries only key→string;

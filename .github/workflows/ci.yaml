@@ -51,33 +51,18 @@ jobs:
       - name: Install Task
         uses: ./.github/actions/install-task
 
-      - name: Install ripgrep
-        # gfo6 Phase 5 lint tasks (lint:no-timestamptz, lint:no-microsecond-truncate,
-        # lint:no-unixnano-in-repos) use rg per the project's 'always use rg'
-        # convention. The ubuntu-latest runner does not include ripgrep by default.
-        run: sudo apt-get install -y --no-install-recommends ripgrep
+      - name: Install formatters
+        # ripgrep + rumdl + dprint — the tool set shared with the Bats job
+        # (scripts-tests.yaml). SHA-pinned versions live in the composite.
+        uses: ./.github/actions/install-formatters
 
       # golangci-lint, actionlint, and yamlfmt are pinned in go.tool-lint.mod
       # and built on demand by the Taskfile (`go tool`) — no separate install.
+      # license-eye self-installs via `task license:check` at Taskfile's
+      # LICENSE_EYE_VERSION (the single version source) — no pin duplicated here.
 
-      - name: Install tools
+      - name: Install buf
         run: |
-          RUMDL_VERSION="v0.1.62"
-          RUMDL_TARBALL="rumdl-${RUMDL_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
-          RUMDL_URL="https://github.com/rvben/rumdl/releases/download/${RUMDL_VERSION}/${RUMDL_TARBALL}"
-          RUMDL_SHA256="a25d9bab27ac9f17589e25cde32ce580c81dfd7bcc4a21e6dbfcd65bc7c1353c"
-          curl -LsSfO "${RUMDL_URL}"
-          echo "${RUMDL_SHA256}  ${RUMDL_TARBALL}" | sha256sum -c -
-          sudo tar xzf "${RUMDL_TARBALL}" --overwrite -C /usr/local/bin
-          rm "${RUMDL_TARBALL}"
-          DPRINT_VERSION="0.51.1"
-          DPRINT_ZIP="dprint-x86_64-unknown-linux-gnu.zip"
-          DPRINT_URL="https://github.com/dprint/dprint/releases/download/${DPRINT_VERSION}/${DPRINT_ZIP}"
-          DPRINT_SHA256="674c1f9fcdf8a564c26cc027e080d0c4758a40a566e04a776fc83c875ad51d45"
-          curl -LsSfO "${DPRINT_URL}"
-          echo "${DPRINT_SHA256}  ${DPRINT_ZIP}" | sha256sum -c -
-          sudo unzip -oq "${DPRINT_ZIP}" -d /usr/local/bin
-          rm "${DPRINT_ZIP}"
           BUF_VERSION="1.67.0"
           BUF_BIN="buf-Linux-x86_64"
           BUF_URL="https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/${BUF_BIN}"
@@ -86,10 +71,6 @@ jobs:
           echo "${BUF_SHA256}  /tmp/buf" | sha256sum -c -
           sudo install -m 0755 /tmp/buf /usr/local/bin/buf
           rm /tmp/buf
-          # license-eye (Apache SkyWalking Eyes) drives `task license:check` —
-          # a Go tool, installed from the module proxy. Pinned: keep v0.8.0 in
-          # sync with Taskfile.yaml's LICENSE_EYE_VERSION var.
-          go install github.com/apache/skywalking-eyes/cmd/license-eye@v0.8.0
 
       - name: Verify schema is current
         run: |

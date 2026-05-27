@@ -9,6 +9,10 @@ on:
       - "scripts/**"
       - "Taskfile.yaml"
       - ".github/workflows/scripts-tests.yaml"
+      # The Bats job consumes local composite actions (install-task,
+      # install-cog, install-formatters); edits to them must re-run this
+      # workflow, so trigger on the whole actions dir.
+      - ".github/actions/**"
 
 permissions:
   contents: read
@@ -75,34 +79,13 @@ jobs:
         # composite action as the release + commit-lint workflows.
         uses: ./.github/actions/install-cog
 
-      - name: Install ripgrep
-        # license-eye.bats (INV-6) + no-lefthook-refs.bats (INV-3) call `rg`.
-        # The ubuntu-latest runner does not include ripgrep by default; mirrors
-        # the CI Lint job's Install ripgrep step.
-        run: sudo apt-get install -y --no-install-recommends ripgrep
-
-      - name: Install rumdl + dprint
-        # license-eye.bats INV-4 runs the full `task fmt`, which invokes
-        # fmt:markdown (rumdl) + fmt:dprint (dprint). Pinned to match the CI
-        # Lint job's Install tools step. gofumpt/yamlfmt come via `go tool`;
-        # license-eye self-installs via the license:add guard.
-        run: |
-          RUMDL_VERSION="v0.1.62"
-          RUMDL_TARBALL="rumdl-${RUMDL_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
-          RUMDL_URL="https://github.com/rvben/rumdl/releases/download/${RUMDL_VERSION}/${RUMDL_TARBALL}"
-          RUMDL_SHA256="a25d9bab27ac9f17589e25cde32ce580c81dfd7bcc4a21e6dbfcd65bc7c1353c"
-          curl -LsSfO "${RUMDL_URL}"
-          echo "${RUMDL_SHA256}  ${RUMDL_TARBALL}" | sha256sum -c -
-          sudo tar xzf "${RUMDL_TARBALL}" --overwrite -C /usr/local/bin
-          rm "${RUMDL_TARBALL}"
-          DPRINT_VERSION="0.51.1"
-          DPRINT_ZIP="dprint-x86_64-unknown-linux-gnu.zip"
-          DPRINT_URL="https://github.com/dprint/dprint/releases/download/${DPRINT_VERSION}/${DPRINT_ZIP}"
-          DPRINT_SHA256="674c1f9fcdf8a564c26cc027e080d0c4758a40a566e04a776fc83c875ad51d45"
-          curl -LsSfO "${DPRINT_URL}"
-          echo "${DPRINT_SHA256}  ${DPRINT_ZIP}" | sha256sum -c -
-          sudo unzip -oq "${DPRINT_ZIP}" -d /usr/local/bin
-          rm "${DPRINT_ZIP}"
+      - name: Install formatters
+        # ripgrep + rumdl + dprint. license-eye.bats (INV-3/4/6) and
+        # no-lefthook-refs.bats run `rg` and the full `task fmt` (fmt:markdown
+        # via rumdl, fmt:dprint via dprint). Shared SHA-pinned versions live in
+        # the composite, mirroring the CI Lint job. gofumpt/yamlfmt come via
+        # `go tool`; license-eye self-installs via the license:add guard.
+        uses: ./.github/actions/install-formatters
 
       - name: Run bats
         # Plumb the bats-action install path into BATS_LIB_PATH so
