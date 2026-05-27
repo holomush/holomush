@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Session Consolidation Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.

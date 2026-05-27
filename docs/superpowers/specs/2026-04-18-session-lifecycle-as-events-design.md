@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Session Lifecycle as Events — Design Spec
 
 **Status:** Draft (revised after architect review 2026-04-18)

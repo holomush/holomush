@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Bootstrap Sandbox — per-step scripts
 
 Each file in this directory encapsulates one step of the

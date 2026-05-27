@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Cursor Lock — Deterministic Closure of Finding 1
 
 **Tracking:** holomush-9ues

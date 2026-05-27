@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # HoloMUSH Codebase Humanization Audit
 
 **Date:** 2026-05-13

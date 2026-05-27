@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Separate authorization (WHO) from business-state validity (WHEN) in scene policies
 
 **Date:** 2026-05-25

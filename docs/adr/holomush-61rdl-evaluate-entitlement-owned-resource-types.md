@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Scope plugin Evaluate entitlement to owned resource types
 
 **Date:** 2026-05-25

@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Code & Text Search Tooling
 
 This rule defines the search-tool precedence for HoloMUSH. It pairs with the

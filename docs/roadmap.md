@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # HoloMUSH Roadmap
 
 Strategic work clusters that span multiple epics. Complements `bd` (which

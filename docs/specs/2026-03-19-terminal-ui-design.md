@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Terminal UI Design Spec (Sub-Spec 2b)
 
 **Status:** Draft

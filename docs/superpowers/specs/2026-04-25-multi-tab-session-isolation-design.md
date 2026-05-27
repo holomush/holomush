@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Multi-Tab Session Isolation — Design Spec
 
 **Status:** Draft (v3 — addresses design-reviewer v2 findings 2026-04-25)

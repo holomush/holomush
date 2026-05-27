@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Plugin ABAC Trust Boundary & Attribute Resolution
 
 **Date:** 2026-04-06

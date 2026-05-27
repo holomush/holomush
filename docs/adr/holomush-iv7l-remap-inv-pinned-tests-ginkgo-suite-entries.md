@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Remap INV-pinned Test* functions to Ginkgo suite entries on migration
 
 **Date:** 2026-05-16

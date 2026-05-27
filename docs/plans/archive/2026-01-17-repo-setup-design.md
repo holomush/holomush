@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # HoloMUSH Repository Setup Design
 
 **Status:** Archived (superseded by roadmap)

@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Task 0 Survey — Plugin Manager Construction Sites
 
 **Plan:** Phase 1.6 gateway-verb-registry-sourcing

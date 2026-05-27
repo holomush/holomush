@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Plugin Architecture Review Findings Remediation Design
 
 **Status:** Draft | **Date:** 2026-04-05

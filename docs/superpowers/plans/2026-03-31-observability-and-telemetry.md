@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Observability and Telemetry Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development

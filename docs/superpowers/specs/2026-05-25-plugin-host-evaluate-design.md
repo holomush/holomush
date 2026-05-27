@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Plugin Host `Evaluate` — per-action ABAC for plugin commands
 
 **Date:** 2026-05-25

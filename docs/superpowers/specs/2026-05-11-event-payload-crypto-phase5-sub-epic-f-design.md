@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Phase 5 Sub-Epic F — `AdminReadStream` + Pre-Data Audit + `read-stream` CLI
 
 ## Status

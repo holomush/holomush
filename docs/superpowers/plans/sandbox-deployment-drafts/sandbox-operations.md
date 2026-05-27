@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 <!-- Draft content for site/docs/operating/sandbox-operations.md. -->
 <!-- Copied verbatim during Task 10; this draft is not itself shipped. -->
 

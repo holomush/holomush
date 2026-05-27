@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Drop in-memory session.Store fake; test against real Postgres
 
 **Date:** 2026-05-23

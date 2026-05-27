@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # HoloMUSH Development Guide
 
 This document provides instructions for AI coding assistants working on HoloMUSH.

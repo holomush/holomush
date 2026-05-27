@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Make plugin authorization gates structural via gated subcommand dispatcher
 
 **Date:** 2026-05-25

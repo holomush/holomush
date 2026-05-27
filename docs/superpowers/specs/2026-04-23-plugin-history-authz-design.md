@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Plugin history authz — membership enforcement at the plugin boundary
 
 **Bead:** `holomush-095g` (P1 bug)

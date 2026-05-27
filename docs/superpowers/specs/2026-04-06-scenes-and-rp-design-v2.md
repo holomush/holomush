@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Scenes & RP Architecture Design (v2)
 
 **Epic:** 9 (holomush-5rh) | **Status:** Draft | **Date:** 2026-04-06

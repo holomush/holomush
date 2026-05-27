@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Testify + Ginkgo Migration Completion Implementation Plan
 
 > **STATUS: SUPERSEDED — 2026-05-16.** Work complete; epic

@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Core Lifecycle & Policy Cache Implementation Plan
 
 > **Status: Phase 1 COMPLETE. Phase 2 plan is separate.**

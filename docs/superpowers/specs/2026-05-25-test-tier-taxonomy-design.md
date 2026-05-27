@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Test-Tier Taxonomy & Test-Only-Construct Isolation — Design
 
 - **Status:** Draft (pending design-reviewer)

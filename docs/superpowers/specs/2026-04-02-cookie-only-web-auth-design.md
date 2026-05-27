@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Cookie-Only Web Auth Design
 
 > Move player session tokens to HttpOnly cookie-only authentication for web RPCs.

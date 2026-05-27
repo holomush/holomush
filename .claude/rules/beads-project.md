@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Beads Issue Tracking
 
 This project uses [Beads (bd)](https://github.com/steveyegge/beads) for issue tracking.

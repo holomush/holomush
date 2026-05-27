@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # History scope privacy — design
 
 **Status:** Draft v6 (2026-05-17) — addressing design-reviewer round 5 findings

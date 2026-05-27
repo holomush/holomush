@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Scenes Phase 5 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `dev-flow:subagent-driven-development` (recommended) or `dev-flow:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Always read the verbatim spec at [`docs/superpowers/specs/2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md`](../specs/2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md) before starting any task** — the plan is the *how*, the spec is the *what*.

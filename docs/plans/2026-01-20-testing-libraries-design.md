@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Testing Libraries Adoption Design
 
 This document defines the adoption of testify and ginkgo/gomega for HoloMUSH testing.

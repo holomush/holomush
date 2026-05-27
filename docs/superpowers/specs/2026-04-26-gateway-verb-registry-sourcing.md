@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Gateway Verb Registry Sourcing — Phase 1.6 Companion Spec
 
 ## Status

@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Describe, Page & Whisper Commands — Design
 
 Three new commands for HoloMUSH v0.1: `describe` (set descriptions),

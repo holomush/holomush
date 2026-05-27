@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Architecture cleanup triage — 2026-05-13 repo audit
 
 - **Date:** 2026-05-14

@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Scenes Phase 5: Focus Model + Multi-Connection Visibility
 
 **Bead:** `holomush-5rh.14`

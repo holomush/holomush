@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Terminal Hi-Fi Revamp — Design Specification
 
 **Date:** 2026-04-18

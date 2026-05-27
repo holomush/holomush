@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Landing the Plane (Session Completion)
 
 When ending a work session, work is **NOT complete until changes are pushed**. This is a jj-colocated repo — invoke the `jj:jujutsu` skill for command details.
