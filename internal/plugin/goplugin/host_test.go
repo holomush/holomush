@@ -2124,3 +2124,16 @@ func TestHostConfigOverrideForPlugin(t *testing.T) {
 	require.Equal(t, map[string]string{"vote_window": "5s"}, h.overrideFor("demo"))
 	require.Nil(t, h.overrideFor("absent")) // no override → nil (defaults apply)
 }
+
+func TestNeedsInitIncludesConfig(t *testing.T) {
+	// INV-PC-8: a config-only plugin (no requires/provides/storage/crypto)
+	// MUST still be initialised so its plugin_config is delivered.
+	m := &plugins.Manifest{
+		Name:   "demo",
+		Config: map[string]plugins.ConfigParam{"w": {Type: "duration", Default: "5s"}},
+	}
+	require.True(t, manifestNeedsInit(m), "config-only manifest must need Init")
+
+	bare := &plugins.Manifest{Name: "bare"}
+	require.False(t, manifestNeedsInit(bare), "manifest with nothing needs no Init")
+}

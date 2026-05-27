@@ -293,6 +293,18 @@ func (h *Host) overrideFor(pluginName string) map[string]string {
 	return h.configOverrides[pluginName]
 }
 
+// manifestNeedsInit reports whether the host must call Init on a plugin.
+// Init injects services (requires/provides), provisions storage, captures
+// crypto.emits (INV-S5), AND — INV-PC-8 — delivers plugin_config for any
+// plugin declaring a config schema.
+func manifestNeedsInit(m *plugins.Manifest) bool {
+	return len(m.Requires) > 0 ||
+		len(m.Provides) > 0 ||
+		m.Storage == plugins.StoragePostgres ||
+		(m.Crypto != nil && len(m.Crypto.Emits) > 0) ||
+		len(m.Config) > 0
+}
+
 // SetEventEmitter injects the shared plugin intent emitter used by the host
 // callback service for binary plugins.
 func (h *Host) SetEventEmitter(emitter plugins.PluginIntentEmitter) {
@@ -606,12 +618,10 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		}
 	}
 
-	// Call Init on plugins that need service injection (storage or requires)
-	// OR plugins that declare crypto.emits (INV-S5 needs InitResponse).
-	needsInit := len(manifest.Requires) > 0 ||
-		len(manifest.Provides) > 0 ||
-		manifest.Storage == plugins.StoragePostgres ||
-		(manifest.Crypto != nil && len(manifest.Crypto.Emits) > 0)
+	// Call Init on plugins that need service injection (storage or requires),
+	// declare crypto.emits (INV-S5 needs InitResponse), or declare a config
+	// schema (INV-PC-8: plugin_config must be delivered).
+	needsInit := manifestNeedsInit(manifest)
 	var registeredEmitTypes []string
 	if needsInit {
 		initReq := &pluginv1.InitRequest{
@@ -630,6 +640,19 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 				return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "provision_schema").Wrap(provErr)
 			}
 			initReq.Config.ConnectionString = connStr
+		}
+
+		if len(manifest.Config) > 0 {
+			merged, mergeErr := plugins.MergePluginConfig(manifest.Config, h.overrideFor(manifest.Name))
+			if mergeErr != nil {
+				client.Kill()
+				if certDir != "" {
+					_ = os.RemoveAll(certDir) //nolint:errcheck // best-effort cleanup
+				}
+				return oops.In("goplugin").With("plugin", manifest.Name).
+					With("operation", "merge_plugin_config").Wrap(mergeErr)
+			}
+			initReq.Config.PluginConfig = merged
 		}
 
 		initResp, initErr := pluginClient.Init(ctx, initReq)
