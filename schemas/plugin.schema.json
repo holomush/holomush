@@ -316,6 +316,30 @@
       "additionalProperties": false,
       "type": "object"
     },
+    "config": {
+      "additionalProperties": {
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "default": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type"
+        ]
+      },
+      "type": "object"
+    },
     "audit": {
       "items": {
         "properties": {

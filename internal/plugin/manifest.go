@@ -633,6 +633,10 @@ func (m *Manifest) Validate() error {
 		}
 	}
 
+	if err := validateConfigSchema(m.Config); err != nil {
+		return err
+	}
+
 	return nil
 }
 
