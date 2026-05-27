@@ -182,6 +182,13 @@ func WithAuditLogger(a pluginauthz.Auditor) HostOption {
 	return func(h *Host) { h.auditor = a }
 }
 
+// WithConfigOverrides threads the per-plugin server-provided config override
+// map (plugin name → key → value) into the host so it can be consulted at
+// plugin init time. Populated from PluginSubsystemConfig.PluginConfigOverrides.
+func WithConfigOverrides(overrides map[string]map[string]string) HostOption {
+	return func(h *Host) { h.configOverrides = overrides }
+}
+
 // Host manages binary plugins via HashiCorp go-plugins.
 type Host struct {
 	clientFactory     ClientFactory
@@ -199,9 +206,12 @@ type Host struct {
 	identityRegistry  plugins.IdentityRegistry
 	engine            types.AccessPolicyEngine
 	auditor           pluginauthz.Auditor
-	plugins           map[string]*loadedPlugin
-	mu                sync.RWMutex
-	closed            bool
+	// configOverrides is the per-plugin server-provided config override
+	// (plugin name → key → value), threaded from PluginSubsystemConfig.
+	configOverrides map[string]map[string]string
+	plugins         map[string]*loadedPlugin
+	mu              sync.RWMutex
+	closed          bool
 
 	// tokenStore authenticates per-dispatch actor claims on the binary-plugin
 	// EmitEvent boundary. The sweeper goroutine is host-owned: tokenStoreCtx
@@ -275,6 +285,12 @@ func NewHostWithFactory(factory ClientFactory, opts ...HostOption) *Host {
 		)
 	}
 	return h
+}
+
+// overrideFor returns the server-provided config override for a plugin, or nil
+// when none is configured (manifest defaults then apply).
+func (h *Host) overrideFor(pluginName string) map[string]string {
+	return h.configOverrides[pluginName]
 }
 
 // SetEventEmitter injects the shared plugin intent emitter used by the host

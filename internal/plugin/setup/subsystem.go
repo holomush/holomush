@@ -106,6 +106,12 @@ type PluginSubsystemConfig struct {
 	// through so the plugin manager can call WithVerbRegistry(). Required by
 	// Task 20's nil check (INV-GW-10), but safe to thread now.
 	VerbRegistry *core.VerbRegistry
+	// PluginConfigOverrides maps plugin name → (config key → value), merged
+	// over each plugin's manifest config defaults at init (override wins).
+	// Opaque to the host. Empty in production; tests/ops populate it. Keys
+	// MUST be declared in the target plugin's manifest config schema (else
+	// PLUGIN_CONFIG_UNKNOWN_KEY at load).
+	PluginConfigOverrides map[string]map[string]string
 }
 
 // PluginSubsystem manages the plugin Manager, Lua host, core plugin
@@ -262,6 +268,9 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		// audit events for binary plugins. Same logger instance as the Lua surface above
 		// (both call s.cfg.ABAC.AuditLogger()), satisfying spec §5 / INV-4.
 		goplugin.WithAuditLogger(s.cfg.ABAC.AuditLogger()),
+		// Thread per-plugin config overrides from PluginSubsystemConfig into the
+		// binary host so overrideFor() can look them up at plugin init time.
+		goplugin.WithConfigOverrides(s.cfg.PluginConfigOverrides),
 	)
 
 	if s.cfg.CertsDir != "" {

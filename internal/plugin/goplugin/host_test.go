@@ -2116,3 +2116,11 @@ func TestBinaryHost_PluginEmitRegistry_LoadedPluginCapturesInitResponse(t *testi
 	assert.True(t, ok)
 	assert.Equal(t, []string{"a", "b"}, got)
 }
+
+func TestHostConfigOverrideForPlugin(t *testing.T) {
+	h := &Host{configOverrides: map[string]map[string]string{
+		"demo": {"vote_window": "5s"},
+	}}
+	require.Equal(t, map[string]string{"vote_window": "5s"}, h.overrideFor("demo"))
+	require.Nil(t, h.overrideFor("absent")) // no override → nil (defaults apply)
+}
