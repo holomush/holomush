@@ -8,7 +8,6 @@ vars:
   BINARY_NAME: holomush
   MAIN_PKG: ./cmd/holomush
   MIGRATIONS_DIR: internal/store/migrations
-  LICENSE_DIRS: api cmd internal pkg plugins scripts
   # Build/test/lint tooling is pinned in isolated `go tool` modules
   # (go.tool.mod, go.tool-lint.mod) and run from the Go module proxy rather
   # than installed from GitHub Releases — this removes the CDN-flake class
@@ -708,30 +707,14 @@ tasks:
   # ──────────────────────────────────────────
 
   license:check:
-    desc: Check SPDX license headers
+    desc: Check SPDX license headers (code + functional markdown)
     cmds:
-      - task: license:run
-        vars: {MODE: -check}
+      - license-eye header check
 
   license:add:
-    desc: Add missing SPDX license headers
+    desc: Add missing SPDX license headers (code + functional markdown)
     cmds:
-      - task: license:run
-
-  license:run:
-    internal: true
-    cmds:
-      - |
-        set -euo pipefail
-        EXISTING_DIRS=""
-        for dir in {{.LICENSE_DIRS}}; do
-          [ -d "$dir" ] && EXISTING_DIRS="$EXISTING_DIRS $dir"
-        done
-        [ -z "$EXISTING_DIRS" ] && { echo "ERROR: No directories found"; exit 1; }
-        command -v addlicense >/dev/null 2>&1 || go install github.com/google/addlicense@latest
-        addlicense {{.MODE}} -f LICENSE_HEADER \
-          -ignore '**/*.pb.go' -ignore 'vendor/**' -ignore 'internal/web/dist/**' \
-          $EXISTING_DIRS
+      - license-eye header fix
 
   # ──────────────────────────────────────────
   # PR preparation (mirrors CI Lint job)
@@ -954,7 +937,7 @@ tasks:
       - brew install go-task lefthook goreleaser dprint cocogitto rumdl binaryen flock bats-core yq
       - brew install steveyegge/beads/bd
       - go install github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc@latest
-      - go install github.com/google/addlicense@latest
+      - go install github.com/apache/skywalking-eyes/cmd/license-eye@latest
       - lefthook install
       - bd hooks install --chain
       - echo "✓ Dev environment ready. Run 'task dev' to start."
