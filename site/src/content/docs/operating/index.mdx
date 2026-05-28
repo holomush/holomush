@@ -1,0 +1,34 @@
+---
+title: "Operating HoloMUSH"
+sidebar:
+  order: 0
+---
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Run and maintain a HoloMUSH server — install, deploy, secure, and operate it. The server ships as a single binary with PostgreSQL as its only external dependency.
+
+## Requirements
+
+| Component  | Minimum | Recommended |
+| ---------- | ------- | ----------- |
+| CPU        | 1 core  | 2+ cores    |
+| Memory     | 256 MB  | 512 MB      |
+| PostgreSQL | 18+     | 18+         |
+| Storage    | 1 GB    | 10+ GB      |
+
+## Connection Methods
+
+HoloMUSH supports two ways for players to connect:
+
+- **Telnet** (port 4201) — Classic MU\* client compatibility
+- **WebSocket** (port 8080) — Modern web client with PWA support
+
+Both protocols connect to the same game world and share the same session system. Run one or both depending on your player base.
+
+<CardGrid>
+  <LinkCard title="How-to guides" href="/operating/how-to/deploy/installation/" description="Install, deploy, rotate keys, back up, and monitor your server." />
+  <LinkCard title="Reference" href="/operating/reference/configuration/" description="Configuration flags, environment variables, and monitoring reference." />
+  <LinkCard title="Explanation" href="/operating/explanation/authentication/" description="How authentication, session lifecycle, and plugin security work." />
+</CardGrid>
+
+**Start here → [Installing HoloMUSH](/operating/how-to/deploy/installation/)**

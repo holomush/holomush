@@ -1,0 +1,31 @@
+---
+title: "Reference"
+sidebar:
+  order: 0
+---
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Auto-generated and hand-curated reference material for HoloMUSH internals. Come here when you need exact field names, event types, API signatures, or policy DSL syntax.
+
+<CardGrid>
+  <LinkCard title="Access Control" href="/reference/access-control/" description="The ABAC policy engine: DSL specification, player capabilities, and operator guidance." />
+  <LinkCard title="Audit Subjects" href="/reference/audit-subjects/" description="Every audit subject, its schema, and how events are routed to the audit log." />
+  <LinkCard title="Event Types" href="/reference/events/" description="Every event type, payload fields, stream routing, and control signals." />
+  <LinkCard title="gRPC API" href="/reference/grpc-api/" description="Full service and message definitions, auto-generated from the proto files." />
+</CardGrid>
+
+**Start here → [Access Control Reference](/reference/access-control/)**
+
+## Regenerating Reference Docs
+
+To regenerate the API reference from proto definitions:
+
+```bash
+task docs:proto
+```
+
+To regenerate the policy DSL grammar and railroad diagrams:
+
+```bash
+task generate:ebnf
+```
