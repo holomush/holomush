@@ -75,8 +75,8 @@ assert_full_lane() {
   [ ! -f "$STUB_DOCS_MARKER" ]
 }
 
-@test "docs/single_md: site/docs/index.md -> docs lane only" {
-  export BATS_GIT_DIFF_OUT="site/docs/index.md"
+@test "docs/single_md: site/src/content/docs/index.md -> docs lane only" {
+  export BATS_GIT_DIFF_OUT="site/src/content/docs/index.md"
   run_fixture_pr_prep
   assert_docs_lane
 }
@@ -111,8 +111,8 @@ assert_full_lane() {
   assert_full_lane
 }
 
-@test "full/mixed: site/docs/index.md + internal/foo.go -> full lane" {
-  export BATS_GIT_DIFF_OUT=$'site/docs/index.md\ninternal/foo.go'
+@test "full/mixed: site/src/content/docs/index.md + internal/foo.go -> full lane" {
+  export BATS_GIT_DIFF_OUT=$'site/src/content/docs/index.md\ninternal/foo.go'
   run_fixture_pr_prep
   assert_full_lane
 }
@@ -150,7 +150,7 @@ assert_full_lane() {
 
 @test "force_full: HOLOMUSH_PR_PREP_FORCE_FULL=1 forces full lane on docs-only diff" {
   export HOLOMUSH_PR_PREP_FORCE_FULL=1
-  export BATS_GIT_DIFF_OUT="site/docs/index.md"
+  export BATS_GIT_DIFF_OUT="site/src/content/docs/index.md"
   run_fixture_pr_prep
   assert_full_lane
 }

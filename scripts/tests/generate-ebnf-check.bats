@@ -16,7 +16,7 @@ setup_file() {
 setup() {
   bats_load_library bats-support
   bats_load_library bats-assert
-  EBNF=site/docs/reference/policy-dsl.ebnf
+  EBNF=site/public/reference/policy-dsl.ebnf
   cp "$EBNF" "${BATS_TEST_TMPDIR}/orig.ebnf"
 }
 

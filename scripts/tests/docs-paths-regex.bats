@@ -18,7 +18,7 @@ run_helper() {
 
 @test "regex matches site/ paths" {
   run_helper
-  echo "site/docs/index.md" | grep -E "$REGEX"
+  echo "site/src/content/docs/index.md" | grep -E "$REGEX"
 }
 
 @test "regex matches docs/ paths" {
