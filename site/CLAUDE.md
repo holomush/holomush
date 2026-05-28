@@ -35,7 +35,7 @@ task docs:build   # Build static site (bunx astro build)
 ## Adding Pages
 
 1. Create `.md` or `.mdx` file in the appropriate audience directory under `site/src/content/docs/`
-2. Add the page to the sidebar in `site/astro.config.mjs` (navigation is explicit, not auto-generated)
+2. The page appears in the sidebar automatically — each top-level group (Guide, Operating, Extending, Contributing, Reference) autogenerates from its audience directory. Control its position within the group with the `sidebar.order` frontmatter field.
 3. Use kebab-case for filenames: `getting-started.md`
 4. Include required frontmatter: `title:` and optionally `description:`
 
@@ -44,7 +44,7 @@ task docs:build   # Build static site (bunx astro build)
 Site settings in `site/astro.config.mjs`:
 
 - `title`, `description` - Basic metadata
-- `starlight.sidebar` - Navigation structure (explicit, ordered)
+- `starlight.sidebar` - Top-level groups, each autogenerating from an audience directory; per-page order via `sidebar.order` frontmatter
 - `starlight.social` - Social links
 - Theme, search, and other Starlight options
 
