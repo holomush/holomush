@@ -44,12 +44,6 @@ lint:
       - api/proto/holomush/admin/v1/admin.proto
     RPC_RESPONSE_STANDARD_NAME:
       - api/proto/holomush/admin/v1/admin.proto
-    # SP0 ratchet (holomush-300ad): each proto below is exempt from COMMENT_*
-    # until fully documented. Document → remove this line AND its
-    # api/proto/doc-ratchet.yaml entry in the same PR. Delete this whole block
-    # when empty. Bijection enforced by test/meta/proto_doc_ratchet_test.go.
-    COMMENTS:
-      - api/proto/holomush/plugin/v1/attribute.proto
 breaking:
   use:
     - FILE
