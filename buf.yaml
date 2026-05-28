@@ -49,7 +49,6 @@ lint:
     # api/proto/doc-ratchet.yaml entry in the same PR. Delete this whole block
     # when empty. Bijection enforced by test/meta/proto_doc_ratchet_test.go.
     COMMENTS:
-      - api/proto/holomush/core/v1/core.proto
       - api/proto/holomush/plugin/v1/plugin.proto
       - api/proto/holomush/plugin/v1/attribute.proto
       - api/proto/holomush/web/v1/web.proto

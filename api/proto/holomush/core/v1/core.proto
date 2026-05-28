@@ -10,122 +10,213 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/core/v1;corev1";
 
-// RequestMeta contains metadata for request correlation and debugging.
+// RequestMeta travels on every request so the server can correlate a single
+// RPC across logs, traces, and audit. The CoreServer handlers read meta.request_id
+// into the slog "request_id" field and emit it as an OTel span attribute.
 message RequestMeta {
-  string request_id = 1; // ULID for log correlation
+  // request_id is a client-supplied ULID used only for log/trace correlation.
+  // It is not an identity or ownership token; an empty value is accepted and
+  // simply suppresses the per-request correlation attribute.
+  string request_id = 1;
+
+  // timestamp records when the client issued the request. Advisory only —
+  // the server does not gate on it.
   google.protobuf.Timestamp timestamp = 2;
 }
 
-// ResponseMeta contains metadata echoed back from requests.
+// ResponseMeta is the response-side counterpart to RequestMeta. CoreServer
+// echoes the originating request_id back via responseMeta() so a client can
+// match an asynchronous-feeling reply to the call that produced it.
 message ResponseMeta {
-  string request_id = 1; // Echoed from request
+  // request_id is the value echoed from the originating RequestMeta.request_id.
+  string request_id = 1;
+
+  // timestamp records when the server produced the response.
   google.protobuf.Timestamp timestamp = 2;
 }
 
-// CoreService is the main game service.
+// CoreService is the game-core gRPC surface served by internal/grpc.CoreServer
+// (registered in cmd/holomush/sub_grpc.go via RegisterCoreServiceServer). It is
+// the single entry point through which gateways (telnet, web) drive gameplay,
+// authentication, session management, and event streaming. The gateway is a
+// pure protocol translator (see .claude/rules/gateway-boundary.md); all game
+// state and business logic lives behind these RPCs.
 service CoreService {
-  // HandleCommand processes a game command.
+  // HandleCommand validates session ownership, records the command in session
+  // history, and dispatches it through the unified command dispatcher. Handler
+  // output is NOT returned inline — it is emitted as command_response events on
+  // the character's own stream. The RPC reply carries only success/failure.
+  // Auth: requires a player_session_token matching session_id; ownership
+  // failures collapse to a generic "session not found" in the response body.
   rpc HandleCommand(HandleCommandRequest) returns (HandleCommandResponse);
 
-  // Subscribe opens a stream of events for the session.
+  // Subscribe opens the long-lived server-streaming event feed for a session.
+  // The server (not the client) determines which streams to deliver and the
+  // replay policy via FocusCoordinator.RestoreFocus; it registers the caller's
+  // connection, replays history, then forwards live events. Ownership is
+  // validated up front and collapses to SESSION_NOT_FOUND on any failure.
   rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse);
 
-  // Disconnect ends a session.
+  // Disconnect detaches a connection (or the whole session) and is idempotent:
+  // an already-gone session returns success. It validates ownership first, then
+  // removes the named connection and tears down session state.
   rpc Disconnect(DisconnectRequest) returns (DisconnectResponse);
 
-  // GetCommandHistory retrieves command history for a session.
+  // GetCommandHistory returns the recent commands recorded for a session (the
+  // per-session ring buffer maintained by sessionStore.AppendCommand). Ownership
+  // is validated; this is distinct from event history (QueryStreamHistory).
   rpc GetCommandHistory(GetCommandHistoryRequest) returns (GetCommandHistoryResponse);
 
-  // Two-phase login: authenticate player credentials.
+  // AuthenticatePlayer is phase one of two-phase login: it verifies username and
+  // password, enforces the per-player session cap, mints a PlayerSession, and
+  // returns the bearer token plus the player's character roster. No game session
+  // exists yet — that requires a follow-up SelectCharacter call.
   rpc AuthenticatePlayer(AuthenticatePlayerRequest) returns (AuthenticatePlayerResponse);
 
-  // Two-phase login: select a character, creating or reattaching a game session.
+  // SelectCharacter is phase two of two-phase login: given a valid player session
+  // token, it reattaches an existing detached game session (preserving scrollback)
+  // or creates a fresh one for the chosen character, emitting an arrive event.
+  // The character must belong to the authenticated player.
   rpc SelectCharacter(SelectCharacterRequest) returns (SelectCharacterResponse);
 
-  // Create a new player account.
+  // CreatePlayer registers a new player account and immediately returns a player
+  // session token (the new account is logged in). The returned character roster
+  // is empty — a freshly created player has no characters until CreateCharacter.
   rpc CreatePlayer(CreatePlayerRequest) returns (CreatePlayerResponse);
 
-  // Create an ephemeral guest player and character.
+  // CreateGuest provisions an ephemeral guest player plus one starter character
+  // and returns a short-lived (guest TTL) player session token. Used by the
+  // "play as guest" entry path; no credentials are required.
   rpc CreateGuest(CreateGuestRequest) returns (CreateGuestResponse);
 
-  // Create a new character for an authenticated player.
+  // CreateCharacter adds a character to the authenticated player's roster. When
+  // a transactor and bindings service are configured, the character row and its
+  // ownership binding are created atomically in one transaction.
   rpc CreateCharacter(CreateCharacterRequest) returns (CreateCharacterResponse);
 
-  // List characters for an authenticated player.
+  // ListCharacters returns the authenticated player's character roster enriched
+  // with per-character session status and last-known location.
   rpc ListCharacters(ListCharactersRequest) returns (ListCharactersResponse);
 
-  // Request a password reset (email stubbed).
+  // RequestPasswordReset begins a password-reset flow for the given email. The
+  // reply is ALWAYS success regardless of whether the email exists — this is an
+  // intentional enumeration-prevention measure; delivery is stubbed (logged).
   rpc RequestPasswordReset(RequestPasswordResetRequest) returns (RequestPasswordResetResponse);
 
-  // Confirm a password reset with token.
+  // ConfirmPasswordReset completes the flow by validating the reset token and
+  // setting the new password. Failure messages are sanitized so token/internal
+  // detail does not leak to the client.
   rpc ConfirmPasswordReset(ConfirmPasswordResetRequest) returns (ConfirmPasswordResetResponse);
 
-  // End a player session.
+  // Logout deletes the caller's PlayerSession and, before doing so, fans out
+  // disconnect + session_ended + delete + hooks to every child game session so
+  // no Subscribe stream is left orphaned. Per-session signals complete before
+  // the PlayerSession row is deleted to avoid ownership-validation flapping.
   rpc Logout(LogoutRequest) returns (LogoutResponse);
 
-  // Validate a player session token. Used by web gateway for cookie-based auth checks.
+  // CheckPlayerSession validates a player session token and returns the player
+  // identity plus character roster. Used by the web gateway for cookie-based auth
+  // checks. The failure path returns an Unauthenticated status (not a body flag),
+  // preserving the enumeration-safety contract for unknown/expired sessions.
   rpc CheckPlayerSession(CheckPlayerSessionRequest) returns (CheckPlayerSessionResponse);
 
-  // ListPlayerSessions returns the caller's active PlayerSessions
-  // (the rows of player_sessions for the caller's player_id). Tokens
-  // are not returned — only metadata useful for user-visible session
-  // management ("you are signed in on these devices").
+  // ListPlayerSessions returns the caller's active PlayerSessions (the rows in
+  // player_sessions for the caller's player_id). Tokens are never returned —
+  // only metadata useful for user-visible session management ("you are signed
+  // in on these devices"). Any auth failure returns an empty list, so callers
+  // cannot distinguish an invalid token from a player with zero sessions.
   rpc ListPlayerSessions(ListPlayerSessionsRequest) returns (ListPlayerSessionsResponse);
 
-  // RevokePlayerSession deletes a specific PlayerSession. Ownership is
-  // verified — a player cannot revoke another player's sessions.
+  // RevokePlayerSession deletes one specific PlayerSession. Ownership is
+  // verified: a player cannot revoke another player's session, and cross-player
+  // attempts collapse to "session not found" (logged WARN for security audit).
   rpc RevokePlayerSession(RevokePlayerSessionRequest) returns (RevokePlayerSessionResponse);
 
-  // RevokeOtherPlayerSessions deletes all PlayerSessions for the caller
-  // except the current one. Convenience bulk operation equivalent to
-  // listing and calling RevokePlayerSession for each.
+  // RevokeOtherPlayerSessions deletes all of the caller's PlayerSessions except
+  // the current one. Convenience bulk operation equivalent to listing and calling
+  // RevokePlayerSession for each — useful after a suspected compromise.
   rpc RevokeOtherPlayerSessions(RevokeOtherPlayerSessionsRequest) returns (RevokeOtherPlayerSessionsResponse);
 
-  // QueryStreamHistory reads paginated event history from a stream.
-  // Two-layer authorization: membership gate (I-17) for private streams,
-  // ABAC policy evaluation for public streams.
-  // Pure read — does not mutate session cursors (invariant I-13).
+  // QueryStreamHistory reads paginated event history from a single stream. It is
+  // a pure read that does NOT mutate session cursors (invariant I-13). Two-layer
+  // authorization applies: private streams (character / scene) use a hard
+  // membership gate (I-17, no ABAC, no admin override); public streams (location,
+  // global) are evaluated by the ABAC engine. History transparently spans the
+  // recent JetStream tier and the older PostgreSQL audit tier.
   rpc QueryStreamHistory(QueryStreamHistoryRequest) returns (QueryStreamHistoryResponse);
 
-  // ListSessionStreams returns the set of streams the session is currently
-  // subscribed to, derived from focusCoordinator.RestoreFocus. Used by
-  // web clients to enumerate streams for backfill on reload. Pure read.
+  // ListSessionStreams returns the stream names the session is currently
+  // subscribed to, derived from FocusCoordinator.RestoreFocus (with the same
+  // ambient-stream fallback Subscribe uses). Web clients use it to enumerate
+  // streams for backfill on reload. Pure read; ownership-validated and
+  // enumeration-safe (failures collapse to SESSION_NOT_FOUND), closing the IDOR
+  // where one player could enumerate another's subscribed streams.
   rpc ListSessionStreams(ListSessionStreamsRequest) returns (ListSessionStreamsResponse);
 
-  // ListFocusPresence returns the presence snapshot for the session's current
-  // focus context (location or scene). Pure read — no session mutation.
+  // ListFocusPresence returns the current-state presence snapshot for the
+  // session's focus context. It reads session.Store.ListActiveByLocation
+  // directly (NOT event history — see .claude/rules/event-interfaces.md) and is
+  // gated by the ABAC list_presence action on the location resource. Scene-focus
+  // contexts currently return UNIMPLEMENTED. Pure read — no session mutation.
   rpc ListFocusPresence(ListFocusPresenceRequest) returns (ListFocusPresenceResponse);
 }
 
+// HandleCommandRequest carries one player-issued command to dispatch within the
+// caller's game session.
 message HandleCommandRequest {
+  // meta carries request correlation data (see RequestMeta).
   RequestMeta meta = 1;
+
+  // session_id names the game session in whose context the command runs.
   string session_id = 2;
+
+  // command is the raw command line as typed by the player; the dispatcher parses
+  // and routes it.
   string command = 3;
 
-  // player_session_token proves the caller owns session_id. Required
-  // for all post-auth RPCs. Must match the player_id of session_id
-  // or the request is rejected with SESSION_NOT_FOUND.
+  // player_session_token proves the caller owns session_id. Required for all
+  // post-auth RPCs. It must match the player_id of session_id or the request is
+  // rejected with SESSION_NOT_FOUND.
   string player_session_token = 4;
 
   // connection_id is the ULID of the originating gateway connection (Phase 5).
-  // Populated by telnet and web gateways; empty for non-gateway callers.
-  // The server uses this to route scene-focus autofocus to the correct
-  // connection (T20-T23). Empty string is accepted (zero value).
+  // Populated by telnet and web gateways; empty for non-gateway callers. The
+  // server uses it to route scene-focus autofocus to the correct connection
+  // (T20-T23). An empty string is accepted (parsed as the zero ULID).
   string connection_id = 5;
 }
 
+// HandleCommandResponse reports only whether dispatch succeeded. All player-
+// visible command output is delivered out of band as command_response events on
+// the character's stream, not in this reply.
 message HandleCommandResponse {
+  // meta echoes request correlation data back to the caller.
   ResponseMeta meta = 1;
+
+  // success is true when the command dispatched without a transport/ownership
+  // error. User-facing command errors are still reported via command_response
+  // events with success=true here.
   bool success = 2;
-  reserved 3; // was: string output (now delivered via command_response events)
+
+  // Field 3 was a string output field, now removed; command output is delivered
+  // via command_response events.
+  reserved 3;
+
+  // error carries a transport/ownership failure message when success is false.
   string error = 4;
 }
 
+// SubscribeRequest opens the per-session event stream. The server, not the
+// client, decides which streams to deliver and the replay policy.
 message SubscribeRequest {
+  // meta carries request correlation data.
   RequestMeta meta = 1;
+
+  // session_id names the game session whose events are streamed.
   string session_id = 2;
-  // Fields 3 (streams) and 4 (replay_from_cursor) removed in focus
-  // substrate clean break. Server determines streams and replay policy
+
+  // Fields 3 (streams) and 4 (replay_from_cursor) were removed in the focus
+  // substrate clean break. The server now determines streams and replay policy
   // via FocusCoordinator.RestoreFocus.
   reserved 3, 4;
   reserved "streams", "replay_from_cursor";
@@ -133,443 +224,786 @@ message SubscribeRequest {
   // player_session_token proves the caller owns session_id.
   string player_session_token = 5;
 
-  // connection_id identifies this specific client attachment. Gateway
-  // generates a fresh ULID per stream. Required so core can register
-  // and deregister connections atomically with the stream lifecycle.
+  // connection_id identifies this specific client attachment. The gateway
+  // generates a fresh ULID per stream. Required so core can register and
+  // deregister the connection atomically with the stream lifecycle. When set,
+  // client_type must also be set or the request is rejected.
   string connection_id = 6;
 
-  // client_type describes the connecting client for observability and
-  // routing: "terminal", "telnet", or future client types.
+  // client_type describes the connecting client for observability and routing:
+  // "terminal", "telnet", or future client types.
   string client_type = 7;
 }
 
+// EventFrame is one delivered game event. The same shape is produced by both
+// the live Subscribe path and the QueryStreamHistory backfill path.
 message EventFrame {
+  // id is the event's ULID — its identity and dedup key, NOT its ordering key.
   string id = 1;
+
+  // stream is the subject the event belongs to (e.g. a character or location stream).
   string stream = 2;
+
+  // type is the event type string (e.g. say, pose, command_response).
   string type = 3;
+
+  // timestamp is the server-stamped event time.
   google.protobuf.Timestamp timestamp = 4;
+
+  // actor_type names the kind of actor that produced the event (character, plugin, etc.).
   string actor_type = 5;
+
+  // actor_id identifies the specific actor that produced the event.
   string actor_id = 6;
+
+  // payload is the type-specific event body, opaque at this layer. Empty when
+  // metadata_only is true.
   bytes payload = 7;
-  // cursor is the opaque pagination cursor for this event. Populated by the
-  // server on QueryStreamHistory responses and Subscribe deliveries so clients
-  // can resume without re-delivering events they already processed.
+
+  // cursor is the opaque pagination cursor for this event. The server populates
+  // it on QueryStreamHistory responses and Subscribe deliveries so clients can
+  // resume without re-delivering events they already processed.
   bytes cursor = 8;
 
-  // Rendering metadata — cleartext band, populated by RenderingPublisher
-  // at emit time. MUST be present on every frame produced by this server
-  // (INV-GW-2). Gateway treats absence as a contract violation
-  // (drops + metric + log per INV-GW-5).
+  // rendering is the cleartext rendering band, populated by RenderingPublisher
+  // at emit time. It MUST be present on every frame this server produces
+  // (INV-GW-2); the gateway treats absence as a contract violation (drops +
+  // metric + log per INV-GW-5).
   RenderingMetadata rendering = 9;
 
-  // metadata_only flags a delivery whose plaintext was withheld by the
-  // host's AuthGuard (Phase 3b decrypt path). When true, payload is
-  // empty bytes and the recipient was either not in the DEK's
-  // participant set, lacked the requisite plugin manifest declaration /
-  // ABAC grant, or hit the audit-emit backpressure throttle.
-  // metadata_only=false on every legitimate delivery (including
-  // legitimately-empty-payload events like a presence event with no content).
-  //
-  // Set by the host's Subscribe / QueryStreamHistory handler at fan-out
-  // time (Phase 3b grounding doc Decision 4). NEVER set by emitters;
-  // NEVER persisted to events_audit (storage rows always carry the
-  // sender's payload, ciphertext or cleartext).
+  // metadata_only flags a delivery whose plaintext was withheld by the host's
+  // AuthGuard (Phase 3b decrypt path). When true, payload is empty bytes and the
+  // recipient was either not in the DEK's participant set, lacked the requisite
+  // plugin manifest declaration / ABAC grant, or hit the audit-emit backpressure
+  // throttle. It is false on every legitimate delivery (including legitimately
+  // empty-payload events such as a presence event with no content). Set by the
+  // Subscribe / QueryStreamHistory handler at fan-out time; NEVER set by emitters
+  // and NEVER persisted to events_audit (storage rows always carry the sender's
+  // payload, ciphertext or cleartext).
   bool metadata_only = 10;
 
-  // no_plaintext_reason classifies why metadata_only=true was stamped.
-  // UNSPECIFIED on metadata_only=false deliveries; one of the typed reasons
-  // when metadata_only=true. Added for holomush-ojw1.6.
+  // no_plaintext_reason classifies why metadata_only=true was stamped. It is
+  // UNSPECIFIED on metadata_only=false deliveries and one of the typed reasons
+  // when metadata_only=true.
   NoPlaintextReason no_plaintext_reason = 11;
 }
 
-// NoPlaintextReason enumerates causes for metadata_only=true so clients
-// can distinguish e.g. a destroyed/stale DEK from an authorization denial
-// or backpressure-driven withholding (holomush-ojw1.6).
-//
-// UNSPECIFIED is the zero value and MUST hold when metadata_only=false.
-// Clients seeing UNSPECIFIED with metadata_only=true MUST treat it as a
-// contract violation (host stamped without classifying).
+// NoPlaintextReason enumerates the causes for a metadata_only=true delivery so
+// clients can distinguish, for example, a destroyed/stale DEK from an
+// authorization denial or backpressure-driven withholding. The Go-side mirror
+// is internal/eventbus.NoPlaintextReason (a 1:1 bijection, asserted by
+// types_proto_sync_test.go); the reasons map to wire strings in the eventbus
+// history readback layer. This enum backs the EventFrame / read-stream path
+// only — the separate plugin own-audit-row decrypt path (RowResult in
+// audit.proto) uses string reasons and adds a "not_owner" value that has no
+// counterpart here.
 enum NoPlaintextReason {
+  // NO_PLAINTEXT_REASON_UNSPECIFIED is the zero value and MUST hold when
+  // metadata_only=false. A client that sees it together with metadata_only=true
+  // MUST treat the delivery as a contract violation (host stamped without
+  // classifying).
   NO_PLAINTEXT_REASON_UNSPECIFIED = 0;
-  // Recipient was not in the DEK's participant set or lacked the requisite
-  // plugin manifest declaration / ABAC grant. Phase 3b AuthGuard deny.
+
+  // NO_PLAINTEXT_REASON_AUTHGUARD_DENY means the recipient was not in the DEK's
+  // participant set or lacked the requisite plugin manifest declaration / ABAC
+  // grant. Phase 3b AuthGuard deny.
   NO_PLAINTEXT_REASON_AUTHGUARD_DENY = 1;
-  // Hot AND cold tier DEKs both indecipherable. Production-real post
-  // sub-epic E rekey + DEK destruction. INV-E21 double miss.
+
+  // NO_PLAINTEXT_REASON_STALE_DEK means both the hot and cold tier DEKs were
+  // indecipherable — a production-real outcome after a sub-epic E rekey plus DEK
+  // destruction (INV-E21 double miss).
   NO_PLAINTEXT_REASON_STALE_DEK = 2;
-  // Plugin audit emit backpressure (queue full). Host-side TOCTOU.
+
+  // NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL means a plugin audit-emit hit
+  // backpressure (queue full) — a host-side TOCTOU defense.
   NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL = 3;
-  // Cold-tier audit row has no dek_ref (DEK reference column missing or
-  // NULL). Stamped exclusively by F's operator-read classifier (INV-F16).
+
+  // NO_PLAINTEXT_REASON_DEK_MISSING means the cold-tier audit row had no dek_ref
+  // (DEK reference column missing or NULL). Stamped exclusively by sub-epic F's
+  // operator-read classifier (INV-F16).
   NO_PLAINTEXT_REASON_DEK_MISSING = 4;
-  // Cold-tier audit row references a DEK whose column set does not match
-  // the event's AAD declaration. Stamped exclusively by F's classifier.
+
+  // NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS means a cold-tier audit row references a
+  // DEK whose column set does not match the event's AAD declaration. Stamped
+  // exclusively by sub-epic F's classifier.
   NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS = 5;
-  // Catch-all for unexpected decrypt failures not covered by the
-  // specific cases above. Stamped exclusively by F's classifier.
+
+  // NO_PLAINTEXT_REASON_INTERNAL is the catch-all for unexpected decrypt failures
+  // not covered by the specific cases above. Stamped exclusively by sub-epic F's
+  // classifier.
   NO_PLAINTEXT_REASON_INTERNAL = 6;
-  // Phase 7 PluginDowngradeFence layer (1) refusal — the host's read-side
-  // fence rejected the row before decrypt either because the type is in
-  // the always-sensitive manifest set and the plugin returned identity
-  // codec (INV-P7-7), or because the dek_ref is unknown / absent for a
-  // non-identity codec (INV-P7-15). Original event_id is preserved;
-  // payload is empty per master INV-26.
+
+  // NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED is a Phase 7 PluginDowngradeFence layer
+  // (1) refusal — the host's read-side fence rejected the row before decrypt,
+  // either because the type is in the always-sensitive manifest set and the
+  // plugin returned an identity codec (INV-P7-7), or because the dek_ref is
+  // unknown / absent for a non-identity codec (INV-P7-15). The original event_id
+  // is preserved; payload is empty per master INV-26.
   NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED = 7;
 }
 
-// EventChannel identifies the destination channel for event delivery.
-// This is the canonical internal definition; webv1.EventChannel is kept
-// in lockstep for the web wire format (INV-GW-16).
+// EventChannel identifies the destination channel for event delivery. This is
+// the canonical internal definition; webv1.EventChannel is kept in lockstep for
+// the web wire format (INV-GW-16).
 enum EventChannel {
+  // EVENT_CHANNEL_UNSPECIFIED is the zero value; rendering metadata validation
+  // rejects it (display_target must be a defined non-zero channel).
   EVENT_CHANNEL_UNSPECIFIED = 0;
+
+  // EVENT_CHANNEL_TERMINAL routes the event to the scrolling text terminal surface.
   EVENT_CHANNEL_TERMINAL = 1;
+
+  // EVENT_CHANNEL_STATE routes the event to the client's structured state surface
+  // (e.g. presence / status panels) rather than the terminal.
   EVENT_CHANNEL_STATE = 2;
+
+  // EVENT_CHANNEL_BOTH routes the event to both the terminal and the state surface.
   EVENT_CHANNEL_BOTH = 3;
-  // EVENT_CHANNEL_AUDIT_ONLY tags host-emit security/audit events that MUST
-  // persist to events_audit but MUST NOT be delivered to client surfaces
-  // (telnet, web). The gRPC Subscribe handler drops these before send;
-  // the audit projection persists them like any other event. Used by
-  // crypto.totp_*, crypto.policy_set, and similar host-emitted audit types.
+
+  // EVENT_CHANNEL_AUDIT_ONLY tags host-emit security/audit events that MUST persist
+  // to events_audit but MUST NOT be delivered to client surfaces (telnet, web).
+  // The gRPC Subscribe handler drops these before send; the audit projection
+  // persists them like any other event. Used by crypto.totp_*, crypto.policy_set,
+  // and similar host-emitted audit types.
   EVENT_CHANNEL_AUDIT_ONLY = 4;
 }
 
+// PresenceContext names the kind of focus context a presence snapshot describes,
+// returned in ListFocusPresenceResponse.
 enum PresenceContext {
+  // PRESENCE_CONTEXT_UNSPECIFIED is the zero value; not returned on success.
   PRESENCE_CONTEXT_UNSPECIFIED = 0;
+
+  // PRESENCE_CONTEXT_LOCATION means the snapshot lists active sessions at a
+  // location (the only context implemented today).
   PRESENCE_CONTEXT_LOCATION = 1;
-  PRESENCE_CONTEXT_SCENE = 2; // wire-reserved; resolver in follow-up bead
+
+  // PRESENCE_CONTEXT_SCENE is wire-reserved for scene-focus presence; the
+  // resolver lands in a follow-up bead and the RPC currently returns
+  // UNIMPLEMENTED for scene-focused sessions.
+  PRESENCE_CONTEXT_SCENE = 2;
 }
 
+// PresenceState describes a character's presence status within a focus context.
 enum PresenceState {
+  // PRESENCE_STATE_UNSPECIFIED is the zero value; not emitted on success.
   PRESENCE_STATE_UNSPECIFIED = 0;
+
+  // PRESENCE_STATE_ACTIVE means the character has an active session in the
+  // context. This is the only state the location resolver emits today.
   PRESENCE_STATE_ACTIVE = 1;
-  PRESENCE_STATE_DETACHED = 2; // emitted by future scene resolver
-  PRESENCE_STATE_INACTIVE = 3; // emitted by future scene resolver
+
+  // PRESENCE_STATE_DETACHED is reserved for the future scene resolver (character
+  // present in the scene but with a detached transport).
+  PRESENCE_STATE_DETACHED = 2;
+
+  // PRESENCE_STATE_INACTIVE is reserved for the future scene resolver.
+  PRESENCE_STATE_INACTIVE = 3;
 }
 
+// PresenceEntry describes one character present in a focus context.
 message PresenceEntry {
+  // character_id is the present character's ULID.
   string character_id = 1;
+
+  // character_name is the resolved display name; entries whose name cannot be
+  // resolved are dropped rather than returned empty.
   string character_name = 2;
+
+  // state is the character's presence state (ACTIVE for the location resolver).
   PresenceState state = 3;
-  // Deliberately NO arrived_at_ms — see spec §D-4 (no duration-of-presence leak).
+
+  // Field 4 deliberately omits an arrived_at timestamp — see spec §D-4: presence
+  // must not leak how long a character has been present.
 }
 
+// ListFocusPresenceRequest asks for the current-state presence snapshot of the
+// session's focus context.
 message ListFocusPresenceRequest {
+  // meta carries request correlation data.
   RequestMeta meta = 1;
+
+  // player_session_token proves the caller owns session_id; failures collapse to
+  // SESSION_NOT_FOUND.
   string player_session_token = 2;
+
+  // session_id names the session whose focus context is queried.
   string session_id = 3;
 }
 
+// ListFocusPresenceResponse returns the presence snapshot. For a session with no
+// location yet, entries is empty under the LOCATION context rather than an error.
 message ListFocusPresenceResponse {
+  // meta echoes request correlation data.
   ResponseMeta meta = 1;
+
+  // context names the focus context the snapshot describes (LOCATION today).
   PresenceContext context = 2;
-  string context_id = 3; // LOCATION → location_id; SCENE → scene_id (future)
+
+  // context_id is the identifier of the context: a location_id for LOCATION
+  // (and a scene_id for the future SCENE context).
+  string context_id = 3;
+
+  // entries is the deduplicated set of characters present in the context.
   repeated PresenceEntry entries = 4;
 }
 
-// RenderingMetadata carries cleartext rendering instructions for an event.
-// Populated by RenderingPublisher.Publish at emit time from the verb
-// registry. See docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md.
+// RenderingMetadata carries cleartext rendering instructions for an event. It is
+// populated by RenderingPublisher.Publish at emit time from the verb registry —
+// one schema with two transports (the gRPC Subscribe EventFrame and the
+// JetStream envelope). See
+// docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md.
 message RenderingMetadata {
+  // CEL constraint: a label is required whenever format is "speech".
   option (buf.validate.message).cel = {
     id: "rendering_metadata.label_required_for_speech"
     message: "label must be set when format is 'speech'"
     expression: "this.format != 'speech' || this.label != ''"
   };
 
-  // Category drives client-side renderer routing.
+  // category drives client-side renderer routing and must be non-empty.
   string category = 1 [(buf.validate.field).string.min_len = 1];
 
-  // Format drives within-category presentation.
+  // format drives within-category presentation and must be non-empty.
   string format = 2 [(buf.validate.field).string.min_len = 1];
 
-  // Label provides type-specific display text. Required when format == "speech".
+  // label provides type-specific display text. Required when format == "speech".
   string label = 3;
 
-  // DisplayTarget routes the event to TERMINAL, STATE, or BOTH on the client.
+  // display_target routes the event to TERMINAL, STATE, or BOTH on the client.
+  // It must be a defined, non-zero EventChannel.
   EventChannel display_target = 4 [(buf.validate.field).enum = {
     defined_only: true
     not_in: [0]
   }];
 
-  // SourcePlugin names the plugin that owns this event type, or "builtin"
-  // for host-owned types. Recorded for historical/audit fidelity.
+  // source_plugin names the plugin that owns this event type, or "builtin" for
+  // host-owned types. Recorded for historical/audit fidelity.
   string source_plugin = 5 [(buf.validate.field).string.min_len = 1];
 
-  // SourcePluginVersion is the manifest's version field, or "host-<binary
+  // source_plugin_version is the manifest's version field, or "host-<binary
   // version>" for builtins. Recorded for historical/audit fidelity.
   string source_plugin_version = 6 [(buf.validate.field).string.min_len = 1];
 }
 
+// ControlSignal classifies an out-of-band control frame interleaved into the
+// Subscribe stream alongside event frames.
 enum ControlSignal {
+  // CONTROL_SIGNAL_UNSPECIFIED is the zero value; never sent.
   CONTROL_SIGNAL_UNSPECIFIED = 0;
+
+  // CONTROL_SIGNAL_REPLAY_COMPLETE marks the boundary between replayed history
+  // and live deliveries on a Subscribe stream.
   CONTROL_SIGNAL_REPLAY_COMPLETE = 1;
+
+  // CONTROL_SIGNAL_STREAM_CLOSED tells the client the server is ending the stream
+  // (e.g. the session was disconnected or booted).
   CONTROL_SIGNAL_STREAM_CLOSED = 2;
 }
 
+// ControlFrame is a non-event control message delivered on the Subscribe stream.
 message ControlFrame {
+  // signal classifies the control message.
   ControlSignal signal = 1;
+
+  // message is optional human-readable context for the signal.
   string message = 2;
+
   // attach_moment_ms is the server's wall-clock epoch-ms at the moment the
-  // Subscribe handler attached its durable consumer. Carried ONLY on
-  // CONTROL_SIGNAL_REPLAY_COMPLETE; clients reading other signals MUST
-  // ignore this field. The client passes this value as not_after_ms on
-  // subsequent backfill (WebQueryStreamHistory) calls so backfill returns
-  // ONLY events with timestamp <= attach_moment_ms — eliminating the
-  // race where a post-attach event could appear both as a dimmed backfill
-  // row and a live Subscribe delivery (holomush-iu8j; fujt Fix B). 0 on
-  // legacy servers; clients MUST treat 0 as "no upper bound" (back-compat).
+  // Subscribe handler attached its durable consumer. It is carried ONLY on
+  // CONTROL_SIGNAL_REPLAY_COMPLETE; clients reading other signals MUST ignore it.
+  // The client passes this value as not_after_ms on subsequent backfill
+  // (QueryStreamHistory) calls so backfill returns ONLY events with timestamp
+  // <= attach_moment_ms — eliminating the race where a post-attach event could
+  // appear both as a dimmed backfill row and a live Subscribe delivery. It is 0
+  // on legacy servers; clients MUST treat 0 as "no upper bound" (back-compat).
   int64 attach_moment_ms = 3;
 }
 
+// SubscribeResponse is one item on the Subscribe stream: either a game event or
+// a control frame.
 message SubscribeResponse {
+  // frame is exactly one of an event delivery or a control signal.
   oneof frame {
+    // event carries one delivered game event.
     EventFrame event = 1;
+
+    // control carries an out-of-band control signal (e.g. replay-complete).
     ControlFrame control = 2;
   }
 }
 
+// DisconnectRequest detaches a connection, or the whole session, from the game.
 message DisconnectRequest {
+  // meta carries request correlation data.
   RequestMeta meta = 1;
-  string session_id = 2;
-  string connection_id = 3; // optional: remove specific connection
 
-  // player_session_token proves the caller owns session_id. Required
-  // for all post-auth RPCs. Must match the player_id of session_id
-  // or the request is rejected with SESSION_NOT_FOUND.
+  // session_id names the session to disconnect.
+  string session_id = 2;
+
+  // connection_id, when set, removes only that specific connection; empty
+  // disconnects the session as a whole.
+  string connection_id = 3;
+
+  // player_session_token proves the caller owns session_id. Required for all
+  // post-auth RPCs. It must match the player_id of session_id or the request is
+  // rejected with SESSION_NOT_FOUND.
   string player_session_token = 4;
 }
 
+// DisconnectResponse reports the outcome. Disconnect is idempotent: a session
+// that is already gone returns success.
 message DisconnectResponse {
+  // meta echoes request correlation data.
   ResponseMeta meta = 1;
+
+  // success is true on a completed (or already-complete) disconnect.
   bool success = 2;
 }
 
+// GetCommandHistoryRequest asks for the recent command lines recorded for a
+// session (the per-session command ring buffer, not event history).
 message GetCommandHistoryRequest {
+  // meta carries request correlation data.
   RequestMeta meta = 1;
+
+  // session_id names the session whose command history is requested.
   string session_id = 2;
 
-  // player_session_token proves the caller owns session_id. Required
-  // for all post-auth RPCs. Must match the player_id of session_id
-  // or the request is rejected with SESSION_NOT_FOUND.
+  // player_session_token proves the caller owns session_id. Required for all
+  // post-auth RPCs. It must match the player_id of session_id or the request is
+  // rejected with SESSION_NOT_FOUND.
   string player_session_token = 3;
 }
 
+// GetCommandHistoryResponse returns the recorded command lines.
 message GetCommandHistoryResponse {
+  // meta echoes request correlation data.
   ResponseMeta meta = 1;
+
+  // success is true when history was retrieved.
   bool success = 2;
+
+  // commands lists the recent command lines, oldest-to-newest within the ring.
   repeated string commands = 3;
+
+  // error carries a failure message when success is false.
   string error = 4;
 }
 
 // --- Auth messages ---
 
+// CharacterSummary is the roster view of one character: enough to render a
+// character-select screen, enriched with live session status and last location.
 message CharacterSummary {
+  // character_id is the character's ULID.
   string character_id = 1;
+
+  // character_name is the character's display name.
   string character_name = 2;
+
+  // has_active_session is true when this character has a session in the Active
+  // state right now.
   bool has_active_session = 3;
+
+  // session_status is the string form of the character's current session status
+  // (e.g. "active", "detached"); empty when no session exists.
   string session_status = 4;
+
+  // last_location is the resolved name of the character's last-known location;
+  // empty when unknown or unresolvable.
   string last_location = 5;
+
+  // last_played_at is an epoch timestamp of last play (unset/zero when never
+  // played).
   int64 last_played_at = 6;
 }
 
+// AuthenticatePlayerRequest carries phase-one login credentials.
 message AuthenticatePlayerRequest {
+  // username identifies the player account.
   string username = 1;
+
+  // password is the plaintext password to verify (over the secured transport).
   string password = 2;
+
+  // captcha_token is an optional anti-automation token.
   string captcha_token = 3;
+
+  // remember_me requests a longer-lived session per the gateway's cookie policy.
   bool remember_me = 4;
 }
 
+// AuthenticatePlayerResponse returns the minted player session token and the
+// roster needed to drive phase-two character selection.
 message AuthenticatePlayerResponse {
+  // success is true when credentials verified.
   bool success = 1;
+
+  // player_session_token is the bearer token for subsequent post-auth RPCs;
+  // present only on success.
   string player_session_token = 2;
+
+  // error_message is a sanitized, generic failure message ("invalid username or
+  // password") on failure.
   string error_message = 3;
+
+  // characters is the player's roster for the character-select screen.
   repeated CharacterSummary characters = 4;
+
+  // default_character_id is the player's preferred character to pre-select, if set.
   string default_character_id = 5;
-  // Session TTL in seconds. Used by the web gateway to set cookie MaxAge so
-  // the cookie expires when the underlying session expires (prevents stale
-  // cookies outliving 2h guest sessions).
+
+  // session_ttl_seconds is the session lifetime in seconds. The web gateway uses
+  // it to set the cookie MaxAge so the cookie expires with the underlying session
+  // (preventing stale cookies outliving short guest sessions).
   int64 session_ttl_seconds = 6;
 }
 
+// SelectCharacterRequest carries phase-two character selection.
 message SelectCharacterRequest {
+  // player_session_token proves the caller's authenticated player identity.
   string player_session_token = 1;
+
+  // character_id names the character to enter the game as; it must belong to the
+  // authenticated player.
   string character_id = 2;
 }
 
+// SelectCharacterResponse returns the game session created or reattached for the
+// chosen character.
 message SelectCharacterResponse {
+  // success is true when a game session was established.
   bool success = 1;
+
+  // session_id is the game session id to use for Subscribe/HandleCommand.
   string session_id = 2;
+
+  // character_name is the selected character's display name.
   string character_name = 3;
+
+  // reattached is true when an existing detached session was resumed (preserving
+  // scrollback) rather than a new one created.
   bool reattached = 4;
+
+  // error_message is a sanitized failure message on failure.
   string error_message = 5;
 }
 
+// CreatePlayerRequest carries new-account registration details.
 message CreatePlayerRequest {
+  // username is the desired account name.
   string username = 1;
+
+  // password is the desired plaintext password.
   string password = 2;
+
+  // email is the contact email for the account (used by password reset).
   string email = 3;
+
+  // captcha_token is an optional anti-automation token.
   string captcha_token = 4;
 }
 
+// CreatePlayerResponse returns the new account's session token; the new player
+// is logged in immediately but has an empty character roster.
 message CreatePlayerResponse {
+  // success is true when the account was created.
   bool success = 1;
+
+  // player_session_token is the bearer token for the newly created, logged-in
+  // player.
   string player_session_token = 2;
+
+  // characters is always empty for a freshly created player.
   repeated CharacterSummary characters = 3;
+
+  // error_message is a sanitized failure message on failure.
   string error_message = 4;
-  // Session TTL in seconds (see AuthenticatePlayerResponse).
+
+  // session_ttl_seconds is the session lifetime in seconds (see
+  // AuthenticatePlayerResponse).
   int64 session_ttl_seconds = 5;
 }
 
+// CreateGuestRequest is empty: a guest provisioning takes no parameters.
 message CreateGuestRequest {}
 
+// CreateGuestResponse returns an ephemeral guest player session plus the starter
+// character that was provisioned alongside it.
 message CreateGuestResponse {
+  // success is true when the guest was provisioned.
   bool success = 1;
+
+  // error_message is a generic failure message on failure.
   string error_message = 2;
+
+  // player_session_token is the bearer token for the guest session.
   string player_session_token = 3;
+
+  // characters holds the single starter character provisioned for the guest.
   repeated CharacterSummary characters = 4;
+
+  // default_character_id is the starter character to pre-select.
   string default_character_id = 5;
-  // Session TTL in seconds (see AuthenticatePlayerResponse). For guest
-  // sessions this is 2h, not the 24h regular-player TTL.
+
+  // session_ttl_seconds is the session lifetime in seconds (see
+  // AuthenticatePlayerResponse). For guest sessions this is the shorter guest TTL,
+  // not the regular-player TTL.
   int64 session_ttl_seconds = 6;
 }
 
+// CreateCharacterRequest adds a character to the authenticated player's roster.
 message CreateCharacterRequest {
+  // player_session_token proves the caller's authenticated player identity.
   string player_session_token = 1;
+
+  // character_name is the desired name for the new character.
   string character_name = 2;
 }
 
+// CreateCharacterResponse returns the newly created character.
 message CreateCharacterResponse {
+  // success is true when the character was created.
   bool success = 1;
+
+  // character_id is the new character's ULID.
   string character_id = 2;
+
+  // character_name is the new character's name as stored.
   string character_name = 3;
+
+  // error_message is a sanitized failure message on failure.
   string error_message = 4;
 }
 
+// ListCharactersRequest asks for the authenticated player's character roster.
 message ListCharactersRequest {
+  // player_session_token proves the caller's authenticated player identity.
   string player_session_token = 1;
 }
 
+// ListCharactersResponse returns the player's roster with session-status enrichment.
 message ListCharactersResponse {
+  // characters is the player's roster.
   repeated CharacterSummary characters = 1;
 }
 
+// RequestPasswordResetRequest begins a password-reset flow by email.
 message RequestPasswordResetRequest {
+  // email is the account email to send the reset to.
   string email = 1;
 }
 
+// RequestPasswordResetResponse always reports success regardless of whether the
+// email exists — an intentional account-enumeration-prevention measure.
 message RequestPasswordResetResponse {
+  // success is always true (enumeration-safe; reveals nothing about whether the
+  // email is registered).
   bool success = 1;
 }
 
+// ConfirmPasswordResetRequest completes a reset using the emailed token.
 message ConfirmPasswordResetRequest {
+  // token is the single-use reset token from the reset email.
   string token = 1;
+
+  // new_password is the plaintext replacement password.
   string new_password = 2;
 }
 
+// ConfirmPasswordResetResponse reports the outcome with a sanitized error.
 message ConfirmPasswordResetResponse {
+  // success is true when the password was reset.
   bool success = 1;
+
+  // error_message is a sanitized failure message on failure (never echoes the
+  // token).
   string error_message = 2;
 }
 
+// LogoutRequest ends the player session identified by the supplied token.
 message LogoutRequest {
+  // player_session_token identifies the PlayerSession to end.
   string player_session_token = 1;
 }
 
+// LogoutResponse is empty: logout reports success solely by returning without an
+// error status.
 message LogoutResponse {}
 
+// CheckPlayerSessionRequest validates a session token, typically the value from
+// a web auth cookie.
 message CheckPlayerSessionRequest {
+  // player_session_token is the token to validate.
   string player_session_token = 1;
 }
 
+// CheckPlayerSessionResponse returns the player identity behind a valid token.
+// The failure path returns an Unauthenticated status with no body, so these
+// fields are absent for unknown/expired sessions — preserving the enumeration-
+// safety contract documented in internal/auth (session ownership).
 message CheckPlayerSessionResponse {
+  // player_name is the account username.
   string player_name = 1;
-  // NEW (additive on the success path; failure path still returns nil, err
-  // so these fields are absent on PLAYER_SESSION_NOT_FOUND / PLAYER_SESSION_EXPIRED
-  // — preserves the enumeration-safety contract documented at
-  // internal/auth/session_ownership.go:18-20).
+
+  // player_id is the player's ULID.
   string player_id = 2;
+
+  // is_guest is true when the session belongs to an ephemeral guest player.
   bool is_guest = 3;
+
+  // characters is the player's roster (enriched with session status).
   repeated CharacterSummary characters = 4;
 }
 
+// ListPlayerSessionsRequest asks for the caller's own active PlayerSessions.
 message ListPlayerSessionsRequest {
+  // player_session_token identifies the caller; the response lists that player's
+  // sessions.
   string player_session_token = 1;
 }
 
+// PlayerSessionInfo describes one of the caller's PlayerSessions for device-
+// management UX. It never carries the session token — only safe-to-display
+// metadata.
 message PlayerSessionInfo {
-  // id is the PlayerSession.id (ULID). Safe to show the user - this is
-  // a resource handle, not a secret. Used as the target_session_id
-  // argument to RevokePlayerSession.
+  // id is the PlayerSession's ULID. Safe to show the user — this is a resource
+  // handle, not a secret — and is the value passed as target_session_id to
+  // RevokePlayerSession.
   string id = 1;
+
+  // created_at is when the session was established.
   google.protobuf.Timestamp created_at = 2;
-  // last_active is sourced from player_sessions.updated_at, which is
-  // bumped whenever the session is refreshed.
+
+  // last_active is sourced from player_sessions.updated_at, bumped whenever the
+  // session is refreshed.
   google.protobuf.Timestamp last_active = 3;
+
+  // user_agent is the client user-agent recorded at session creation.
   string user_agent = 4;
+
+  // ip_address is the client IP recorded at session creation.
   string ip_address = 5;
+
   // is_current is true for exactly the PlayerSession that made the
-  // ListPlayerSessions request - supports "This device" UX.
+  // ListPlayerSessions request — supports a "this device" indicator.
   bool is_current = 6;
 }
 
+// ListPlayerSessionsResponse returns the caller's PlayerSessions. An empty list
+// is also the enumeration-safe response on any auth failure.
 message ListPlayerSessionsResponse {
+  // sessions is the caller's active PlayerSessions; never includes tokens.
   repeated PlayerSessionInfo sessions = 1;
 }
 
+// RevokePlayerSessionRequest deletes one of the caller's PlayerSessions.
 message RevokePlayerSessionRequest {
+  // player_session_token identifies the caller; only the caller's own sessions
+  // may be revoked.
   string player_session_token = 1;
-  // target_session_id is the PlayerSession.id (ULID) to revoke -
-  // NOT the game session_id. Different concept.
+
+  // target_session_id is the PlayerSession.id (ULID) to revoke — NOT the game
+  // session_id. A revoke targeting another player's session collapses to "session
+  // not found".
   string target_session_id = 2;
 }
 
+// RevokePlayerSessionResponse reports the outcome with an enumeration-safe error.
 message RevokePlayerSessionResponse {
+  // success is true when the target session was deleted.
   bool success = 1;
+
+  // error_message is "session not found" on any failure, including cross-player
+  // attempts (enumeration-safe).
   string error_message = 2;
 }
 
+// RevokeOtherPlayerSessionsRequest bulk-revokes the caller's other sessions.
 message RevokeOtherPlayerSessionsRequest {
+  // player_session_token identifies the caller; the current session is preserved
+  // and all others are revoked.
   string player_session_token = 1;
 }
 
+// RevokeOtherPlayerSessionsResponse reports how many sessions were revoked.
 message RevokeOtherPlayerSessionsResponse {
+  // success is true when the bulk revoke completed.
   bool success = 1;
+
+  // revoked_count is the number of PlayerSessions deleted (excluding the current
+  // one).
   int32 revoked_count = 2;
 }
 
+// QueryStreamHistoryRequest reads a page of event history from one stream.
 message QueryStreamHistoryRequest {
+  // meta carries request correlation data.
   RequestMeta meta = 1;
+
+  // session_id names the requesting session; its identity drives authorization.
   string session_id = 2;
+
+  // stream is the subject whose history is read.
   string stream = 3;
-  int32 count = 4; // page size; 0 = default (150), max 500, negative rejected
-  int64 not_before_ms = 5; // epoch ms time floor; 0 = no lower bound
-  // cursor is the opaque pagination cursor from a previous QueryStreamHistoryResponse.
-  // Events older than the cursor position are returned. Empty = start from latest.
+
+  // count is the requested page size. 0 selects the server default (150); the
+  // server caps it at 500; a negative value is rejected with INVALID_ARGUMENT.
+  int32 count = 4;
+
+  // not_before_ms is an epoch-ms time floor; 0 means no lower bound.
+  int64 not_before_ms = 5;
+
+  // cursor is the opaque pagination cursor from a previous response. Events older
+  // than the cursor position are returned; empty starts from the latest.
   bytes cursor = 6;
-  // not_after_ms is the epoch-ms time ceiling. 0 = no upper bound (back-compat).
-  // INCLUSIVE: events with timestamp == not_after_ms are returned. Used by the
-  // web client's connect-time backfill to bound history to events that existed
-  // before the Subscribe stream attached, eliminating the connect-time race
-  // where a user-emitted event could appear both as a dimmed backfill row and
-  // a live Subscribe delivery (holomush-iu8j; holomush-fujt Fix B).
+
+  // not_after_ms is an epoch-ms time ceiling; 0 means no upper bound (back-compat).
+  // INCLUSIVE: events with timestamp == not_after_ms are returned. The web client
+  // sets it from ControlFrame.attach_moment_ms at connect time to bound backfill
+  // to events that existed before the Subscribe stream attached, eliminating the
+  // connect-time race where a user-emitted event could appear both as a dimmed
+  // backfill row and a live Subscribe delivery.
   int64 not_after_ms = 7;
 }
 
+// QueryStreamHistoryResponse returns one page of history plus pagination state.
 message QueryStreamHistoryResponse {
+  // meta echoes request correlation data.
   ResponseMeta meta = 1;
+
+  // events is the page of history frames, newest-first within the page.
   repeated EventFrame events = 2;
+
+  // has_more is true when older events remain beyond this page.
   bool has_more = 3;
-  // next_cursor is the opaque cursor for the next page. Empty if has_more is false.
+
+  // next_cursor is the opaque cursor for the next (older) page; empty when
+  // has_more is false.
   bytes next_cursor = 4;
 }
 
+// ListSessionStreamsRequest asks which streams a session is currently subscribed
+// to.
 message ListSessionStreamsRequest {
+  // meta carries request correlation data.
   RequestMeta meta = 1;
+
+  // session_id names the session whose subscribed streams are listed.
   string session_id = 2;
+
+  // player_session_token proves the caller owns session_id; failures collapse to
+  // SESSION_NOT_FOUND (closing the stream-enumeration IDOR).
   string player_session_token = 3;
 }
 
+// ListSessionStreamsResponse returns the session's subscribed stream names.
 message ListSessionStreamsResponse {
+  // streams lists the subscribed stream names (character / location / plugin
+  // streams), matching what Subscribe would deliver.
   repeated string streams = 1;
+
+  // meta echoes request correlation data.
   ResponseMeta meta = 2;
 }
