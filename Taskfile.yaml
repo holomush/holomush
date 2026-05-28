@@ -1112,19 +1112,29 @@ tasks:
     vars:
       PROTOC_INCLUDE:
         sh: echo "$(dirname $(which protoc) 2>/dev/null)/../include" 2>/dev/null || echo "/usr/local/include"
+      PROTOVALIDATE_DIR: /tmp/holomush-protovalidate
     cmds:
+      # Export buf protovalidate so protoc can resolve buf/validate/validate.proto.
+      # Pinned to the buf.lock commit so import resolution is reproducible (no BSR-latest drift).
+      - buf export buf.build/bufbuild/protovalidate:80ab13bee0bf4272b6161a72bf7034e0 --output {{.PROTOVALIDATE_DIR}}
       - >-
-        protoc --doc_out=site/docs/reference --doc_opt=markdown,grpc-api.md --proto_path=api/proto --proto_path={{.PROTOC_INCLUDE}}
+        protoc --doc_out=site/src/content/docs/reference --doc_opt=markdown,grpc-api.md
+        --proto_path=api/proto --proto_path={{.PROTOC_INCLUDE}} --proto_path={{.PROTOVALIDATE_DIR}}
         api/proto/holomush/core/v1/core.proto api/proto/holomush/web/v1/web.proto api/proto/holomush/control/v1/control.proto
         api/proto/holomush/plugin/v1/plugin.proto api/proto/holomush/plugin/v1/hostfunc.proto
       # Fix well-known type links to point to official protobuf docs (handles any google.protobuf.* type)
       - >-
         perl -pi -e 's|\[google\.protobuf\.([A-Za-z]+)\]\(#google-protobuf-[A-Za-z]+\)|"[google.protobuf.$1](https://protobuf.dev/reference/protobuf/google.protobuf/#"
-        . lc($1) . ")"|ge' site/docs/reference/grpc-api.md
+        . lc($1) . ")"|ge' site/src/content/docs/reference/grpc-api.md
+      # Strip protoc's leading H1 and prepend Starlight frontmatter
+      - >-
+        perl -i -0pe
+        's/\A\s*#[^\n]*\n+/---\ntitle: "gRPC API Reference"\n---\n\n/'
+        site/src/content/docs/reference/grpc-api.md
     sources:
       - api/proto/holomush/*/v1/*.proto
     generates:
-      - site/docs/reference/grpc-api.md
+      - site/src/content/docs/reference/grpc-api.md
 
   # ──────────────────────────────────────────
   # Cleanup
