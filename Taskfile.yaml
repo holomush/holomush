@@ -375,16 +375,16 @@ tasks:
       - internal/access/policy/dsl/gen-ebnf/main.go
       - internal/access/policy/dsl/ast.go
     generates:
-      - site/docs/reference/policy-dsl.ebnf
-      - site/docs/reference/policy-dsl-railroad.html
+      - site/public/reference/policy-dsl.ebnf
+      - site/public/reference/policy-dsl-railroad.html
 
   generate:ebnf:check:
     desc: Verify generated EBNF grammar + railroad diagram are current
     cmds:
       - |
         set -euo pipefail
-        EBNF=site/docs/reference/policy-dsl.ebnf
-        RAIL=site/docs/reference/policy-dsl-railroad.html
+        EBNF=site/public/reference/policy-dsl.ebnf
+        RAIL=site/public/reference/policy-dsl-railroad.html
         BEFORE=$(sha256sum "$EBNF" "$RAIL" | sha256sum)
         task --force generate:ebnf
         AFTER=$(sha256sum "$EBNF" "$RAIL" | sha256sum)
