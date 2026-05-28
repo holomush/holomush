@@ -1,0 +1,69 @@
+---
+title: HoloMUSH
+description: Modern infrastructure for text-based virtual worlds.
+template: splash
+hero:
+  tagline: Modern infrastructure for text-based virtual worlds.
+  image:
+    alt: The Doors Market — portals bolted to concrete, commerce across realities
+    file: ../../assets/doors-market.jpg
+  actions:
+    - text: Get Started
+      link: /guide/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/holomush/holomush
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Build immersive games with a high-performance server, flexible plugin system, and connectivity that works the way people actually use the internet today.
+
+## Features
+
+<CardGrid>
+  <Card title="Play from anywhere" icon="laptop">
+    Web browser, telnet client, phone — your choice. Sessions survive disconnects and network hiccups. Pick up where you left off.
+  </Card>
+  <Card title="Secure by design" icon="padlock">
+    Your password is stored safely. Connections between server components are encrypted. Plugins run in a sandbox and can only access what they're allowed to. Security was part of the design from day one.
+  </Card>
+  <Card title="Extend with Lua or Go" icon="puzzle">
+    Write a quick Lua script to add a dice roller. Build a full Go plugin for a combat system. Plugins run safely in their own sandbox — they can only touch what you allow.
+  </Card>
+  <Card title="Deploy on your terms" icon="server">
+    Single binary plus PostgreSQL. Run it on a Raspberry Pi, a VPS, or a Kubernetes cluster. Docker Compose gets you running in minutes.
+  </Card>
+  <Card title="Events all the way down" icon="database">
+    Every game action is recorded as an event. Replay what happened, audit the history, debug problems. Nothing gets lost, and everything stays in order.
+  </Card>
+  <Card title="Open source, Apache-2.0" icon="heart">
+    Built in the open. Read the code, contribute improvements, fork it for your own purposes. No lock-in, no surprises.
+  </Card>
+</CardGrid>
+
+:::note[Coming Soon]
+
+- Native iOS and desktop apps (Tauri)
+- Discord and Slack integration
+- Plugin packages for popular RP systems
+
+:::
+
+## Choose Your Path
+
+<CardGrid>
+  <LinkCard title="Playing" href="/guide/" description="Learn the basics — connecting, commands, and getting around the world." />
+  <LinkCard title="Running a Server" href="/operating/" description="Deploy, configure, and run your own HoloMUSH game." />
+  <LinkCard title="Building Plugins" href="/extending/" description="Extend HoloMUSH with Lua scripts or Go extensions." />
+  <LinkCard title="Contributing" href="/contributing/" description="Help build HoloMUSH — code, docs, testing, and ideas." />
+</CardGrid>
+
+## Community
+
+HoloMUSH is built in the open. Follow development, report issues, or contribute on GitHub.
+
+<LinkCard title="GitHub" href="https://github.com/holomush/holomush" description="Source code, issue tracking, and discussions." />
