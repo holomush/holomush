@@ -20,5 +20,3 @@ pending:
     bead: holomush-300ad.7
   - path: api/proto/holomush/control/v1/control.proto
     bead: holomush-300ad.8
-  - path: api/proto/holomush/admin/v1/admin.proto
-    bead: holomush-300ad.13

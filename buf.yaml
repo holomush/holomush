@@ -57,7 +57,6 @@ lint:
       - api/proto/holomush/scene/v1/scene.proto
       - api/proto/holomush/world/v1/world.proto
       - api/proto/holomush/control/v1/control.proto
-      - api/proto/holomush/admin/v1/admin.proto
 breaking:
   use:
     - FILE
