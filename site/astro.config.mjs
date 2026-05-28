@@ -4,6 +4,7 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightLlmsTxt from 'starlight-llms-txt';
 import starlightClientMermaid from '@pasqal-io/starlight-client-mermaid';
+import starlightSidebarTopics from 'starlight-sidebar-topics';
 
 export default defineConfig({
   site: 'https://holomush.dev',
@@ -15,13 +16,44 @@ export default defineConfig({
       favicon: '/favicon.png',
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/holomush/holomush' }],
       customCss: ['./src/styles/custom.css'],
-      plugins: [starlightClientMermaid(), starlightLlmsTxt({ projectName: 'HoloMUSH' })],
-      sidebar: [
-        { label: 'Guide', items: [{ autogenerate: { directory: 'guide' } }] },
-        { label: 'Operating', items: [{ autogenerate: { directory: 'operating' } }] },
-        { label: 'Extending', items: [{ autogenerate: { directory: 'extending' } }] },
-        { label: 'Contributing', items: [{ autogenerate: { directory: 'contributing' } }] },
-        { label: 'Reference', items: [{ autogenerate: { directory: 'reference' } }] },
+      plugins: [
+        starlightClientMermaid(),
+        starlightLlmsTxt({ projectName: 'HoloMUSH' }),
+        starlightSidebarTopics(
+          [
+            {
+              label: 'Guide',
+              link: '/guide/',
+              icon: 'open-book',
+              items: [{ autogenerate: { directory: 'guide' } }],
+            },
+            {
+              label: 'Operating',
+              link: '/operating/',
+              icon: 'setting',
+              items: [{ autogenerate: { directory: 'operating' } }],
+            },
+            {
+              label: 'Extending',
+              link: '/extending/',
+              icon: 'puzzle',
+              items: [{ autogenerate: { directory: 'extending' } }],
+            },
+            {
+              label: 'Contributing',
+              link: '/contributing/',
+              icon: 'pencil',
+              items: [{ autogenerate: { directory: 'contributing' } }],
+            },
+            {
+              label: 'Reference',
+              link: '/reference/',
+              icon: 'information',
+              items: [{ autogenerate: { directory: 'reference' } }],
+            },
+          ],
+          { exclude: ['/'] },
+        ),
       ],
     }),
   ],
