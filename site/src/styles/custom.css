@@ -1,0 +1,16 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright 2026 HoloMUSH Contributors */
+
+/* Deep-orange (primary) / amber (accent) palette mapped onto Starlight tokens */
+
+:root {
+  --sl-color-accent-low: #4a1505;
+  --sl-color-accent: #ff5722;
+  --sl-color-accent-high: #ffcc80;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #ffccbc;
+  --sl-color-accent: #e64a19;
+  --sl-color-accent-high: #bf360c;
+}

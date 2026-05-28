@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
-
-// @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
-// https://astro.build/config
 export default defineConfig({
-	integrations: [
-		starlight({
-			title: 'HoloMUSH',
-			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/holomush/holomush' }],
-		}),
-	],
+  site: 'https://holomush.dev',
+  integrations: [
+    starlight({
+      title: 'HoloMUSH',
+      description: 'Modern MUSH platform with Lua & Go plugins',
+      logo: { src: './src/assets/logo.png', alt: 'HoloMUSH' },
+      favicon: '/favicon.png',
+      social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/holomush/holomush' }],
+      customCss: ['./src/styles/custom.css'],
+      // sidebar added in Task 12; plugins (mermaid, llms-txt) added in Tasks 8 & 13
+    }),
+  ],
 });
