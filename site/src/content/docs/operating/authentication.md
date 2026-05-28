@@ -95,19 +95,19 @@ or token blacklisting required.
 3. Player confirms reset with the token and a new password
 4. Existing sessions are invalidated on a best-effort basis
 
-!!! note
-    Session invalidation failures are logged rather than blocking the
-    password reset. Operators should monitor for session invalidation
-    warnings in the logs.
-
+:::note
+Session invalidation failures are logged rather than blocking the
+password reset. Operators should monitor for session invalidation
+warnings in the logs.
+:::
 ### Without Email
 
-!!! warning "Planned Feature"
+:::caution[Planned Feature]
 
-    The admin password reset command is not yet implemented. This is tracked
-    as a priority feature. In the interim, contact the development team for
-    assistance with password recovery.
-
+The admin password reset command is not yet implemented. This is tracked
+as a priority feature. In the interim, contact the development team for
+assistance with password recovery.
+:::
 ## Monitoring
 
 ### Key Log Events

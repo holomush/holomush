@@ -64,14 +64,14 @@ holomush core \
 
 The gateway process handles telnet and web client connections.
 
-!!! note "HTTP/2 Required"
-    The web gateway requires HTTP/2 for all client connections. HTTP/1.1 is
-    not supported. In non-TLS mode, the gateway uses h2c (HTTP/2 cleartext)
-    automatically. Reverse proxies placed in front of the gateway **must**
-    support HTTP/2 upstream connections. See
-    [ADR-001](https://github.com/holomush/holomush/blob/main/docs/specs/decisions/001-http2-required.md)
-    for rationale.
-
+:::note[HTTP/2 Required]
+The web gateway requires HTTP/2 for all client connections. HTTP/1.1 is
+not supported. In non-TLS mode, the gateway uses h2c (HTTP/2 cleartext)
+automatically. Reverse proxies placed in front of the gateway **must**
+support HTTP/2 upstream connections. See
+[ADR-001](https://github.com/holomush/holomush/blob/main/docs/specs/decisions/001-http2-required.md)
+for rationale.
+:::
 ```bash
 holomush gateway [flags]
 ```
@@ -173,14 +173,14 @@ HoloMUSH follows the XDG Base Directory Specification.
 | `~/.local/share/holomush/` | Persistent data                |
 | `~/.local/state/holomush/` | Runtime state, logs, PID files |
 
-!!! note "Docker and Kubernetes"
+:::note[Docker and Kubernetes]
 
-    These paths are relative to the container's `HOME` directory. In the default
-    container image, `HOME=/home/holomush`, so config lives at
-    `/home/holomush/.config/holomush/`. To persist data across container restarts,
-    mount a volume to `/home/holomush/.config/holomush` (see [Installation](/operating/installation/)
-    for compose examples). In Kubernetes, use a PersistentVolumeClaim for the same path.
-
+These paths are relative to the container's `HOME` directory. In the default
+container image, `HOME=/home/holomush`, so config lives at
+`/home/holomush/.config/holomush/`. To persist data across container restarts,
+mount a volume to `/home/holomush/.config/holomush` (see [Installation](/operating/installation/)
+for compose examples). In Kubernetes, use a PersistentVolumeClaim for the same path.
+:::
 ### Generated Files
 
 On first startup, core automatically creates:

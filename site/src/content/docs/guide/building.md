@@ -2,13 +2,13 @@
 title: "Building"
 ---
 
-!!! warning "Early Development"
+:::caution[Early Development]
 
-    HoloMUSH's building tools are actively being developed. This guide covers
-    the conceptual model — how locations, exits, and objects work — so you can
-    start thinking about your world. In-game building commands will be
-    documented here as they become available.
-
+HoloMUSH's building tools are actively being developed. This guide covers
+the conceptual model — how locations, exits, and objects work — so you can
+start thinking about your world. In-game building commands will be
+documented here as they become available.
+:::
 Building is how game designers create the world that players explore. You don't need to write code — everything here happens through in-game commands. If you want to create plugin-powered mechanics or custom systems, see the [plugin development guide](/extending/) instead.
 
 ## The World Model

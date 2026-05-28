@@ -649,18 +649,18 @@ A complete example showing both plugin types:
 
 ## Migration Guide
 
-!!! note "Scope"
+:::note[Scope]
 
-    This section is for contributors working on the host function layer, not for
-    plugin authors using the Lua or Go SDK.
-
+This section is for contributors working on the host function layer, not for
+plugin authors using the Lua or Go SDK.
+:::
 ### WithWorldQuerier to WithWorldService
 
-!!! warning "Deprecation Notice"
+:::caution[Deprecation Notice]
 
-    `WithWorldQuerier` is deprecated and will be removed in v1.0.0.
-    Migrate to `WithWorldService` before upgrading.
-
+`WithWorldQuerier` is deprecated and will be removed in v1.0.0.
+Migrate to `WithWorldService` before upgrading.
+:::
 #### Why Migrate?
 
 `WithWorldService` provides per-plugin ABAC (Attribute-Based Access Control)

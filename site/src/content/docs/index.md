@@ -55,12 +55,12 @@ Build immersive games with a high-performance server, flexible plugin system, an
 
 ---
 
-!!! tip "Coming Soon"
+:::note[Coming Soon]
 
-    - Native iOS and desktop apps (Tauri)
-    - Discord and Slack integration
-    - Plugin packages for popular RP systems
-
+- Native iOS and desktop apps (Tauri)
+- Discord and Slack integration
+- Plugin packages for popular RP systems
+:::
 ---
 
 ## Choose Your Path
