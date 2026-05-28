@@ -163,6 +163,14 @@ func WithInTreePlugins() StartOption {
 	return func(c *startConfig) { c.withPlugins = true }
 }
 
+// WithPluginConfigOverrides sets per-plugin config overrides (plugin name →
+// key → value) the harness threads into PluginSubsystemConfig.PluginConfigOverrides
+// — the same opaque channel production uses (yzt86). Reusable by any plugin's
+// harness tests. Empty/absent → manifest defaults.
+func WithPluginConfigOverrides(overrides map[string]map[string]string) StartOption {
+	return func(c *startConfig) { c.pluginConfigOverrides = overrides }
+}
+
 // pluginDeps is the minimal set of already-built harness objects startPlugins
 // needs. Start passes these in so this helper stays decoupled from the Server.
 type pluginDeps struct {
@@ -195,6 +203,9 @@ type pluginDeps struct {
 	// GameIDProvider closure so plugin emits translate legacy colon-style
 	// subjects to events.<game_id>.<ns>.<id> consistently.
 	gameID string
+	// pluginConfigOverrides is the per-plugin opaque config override
+	// (plugin name → key → value) threaded into PluginSubsystemConfig.
+	pluginConfigOverrides map[string]map[string]string
 }
 
 // startPlugins constructs and starts a PluginSubsystem mirroring production
@@ -267,18 +278,19 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 	// resolver.RegisterProvider per plugin that declares resource_types and panics
 	// on a nil resolver (subsystem.go:319).
 	cfg := pluginsetup.PluginSubsystemConfig{
-		DataDir:            dataDir,
-		DatabaseConnStr:    d.connStr,
-		ABAC:               engineProvider{eng: d.engine, resolver: d.resolver, auditor: d.auditor},
-		PolicyInst:         policyInstallerProvider{inst: policyInst},
-		PluginProv:         pluginProviderSetter{pp: d.pluginProvider},
-		World:              worldProvider{svc: worldSvc},
-		Sessions:           sessionProvider{store: d.sessionStore},
-		AdminDeps:          adminDepsProvider{deps: adminDeps},
-		Registry:           lifecycle.NewReadinessRegistry(),
-		VerbRegistry:       d.verbReg,
-		LuaTimeout:         5 * time.Second,
-		LuaRegistryMaxSize: 1024 * 1024,
+		DataDir:               dataDir,
+		DatabaseConnStr:       d.connStr,
+		ABAC:                  engineProvider{eng: d.engine, resolver: d.resolver, auditor: d.auditor},
+		PolicyInst:            policyInstallerProvider{inst: policyInst},
+		PluginProv:            pluginProviderSetter{pp: d.pluginProvider},
+		World:                 worldProvider{svc: worldSvc},
+		Sessions:              sessionProvider{store: d.sessionStore},
+		AdminDeps:             adminDepsProvider{deps: adminDeps},
+		Registry:              lifecycle.NewReadinessRegistry(),
+		VerbRegistry:          d.verbReg,
+		LuaTimeout:            5 * time.Second,
+		LuaRegistryMaxSize:    1024 * 1024,
+		PluginConfigOverrides: d.pluginConfigOverrides,
 	}
 
 	ps := pluginsetup.NewPluginSubsystem(cfg)

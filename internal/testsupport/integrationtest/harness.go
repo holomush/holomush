@@ -90,6 +90,7 @@ import (
 	"github.com/holomush/holomush/internal/world"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 	"github.com/holomush/holomush/test/testutil"
 )
 
@@ -174,6 +175,9 @@ type startConfig struct {
 	withPlugins      bool
 	withRealABAC     bool
 	withPluginCrypto bool
+	// pluginConfigOverrides is the per-plugin opaque config override
+	// (plugin name → key → value) threaded into PluginSubsystemConfig.
+	pluginConfigOverrides map[string]map[string]string
 }
 
 // WithPolicyEngine overrides the harness's default allow-all ABAC engine.
@@ -317,27 +321,40 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 			policyInst = abacSub.PolicyInstaller()
 		}
 		pluginSub = startPlugins(t, ctx, pluginDeps{
-			pool:            pool,
-			connStr:         connStr,
-			engine:          pe,
-			sessionStore:    sessionStoreInst,
-			verbReg:         verbRegistry,
-			playerRepo:      playerRepo,
-			hasher:          hasher,
-			playerSess:      playerSessionStore,
-			resolver:        res,
-			pluginProvider:  pp,
-			auditor:         aud,
-			policyInstaller: policyInst,
-			cryptoPublisher: cryptoPublisherOf(pc),
-			gameID:          bus.Bus.GameID(),
+			pool:                  pool,
+			connStr:               connStr,
+			engine:                pe,
+			sessionStore:          sessionStoreInst,
+			verbReg:               verbRegistry,
+			playerRepo:            playerRepo,
+			hasher:                hasher,
+			playerSess:            playerSessionStore,
+			resolver:              res,
+			pluginProvider:        pp,
+			auditor:               aud,
+			policyInstaller:       policyInst,
+			cryptoPublisher:       cryptoPublisherOf(pc),
+			gameID:                bus.Bus.GameID(),
+			pluginConfigOverrides: cfg.pluginConfigOverrides,
 		})
 		cmdRegistry = pluginSub.CommandRegistry()
 	}
 
-	dispatcher, err := command.NewDispatcher(cmdRegistry, pe)
+	// When plugins are loaded, route plugin-backed commands through the
+	// PluginManager deliverer (mirrors cmd/holomush/sub_grpc.go:310). Without
+	// this, SendCommand of any plugin command (e.g. "scene …") is rejected with
+	// NO_PLUGIN_DELIVERER, so command-driven plugin E2Es cannot run.
+	var dispatcherOpts []command.DispatcherOption
+	if pluginSub != nil {
+		dispatcherOpts = append(dispatcherOpts, command.WithPluginDeliverer(pluginSub.Manager()))
+	}
+	dispatcher, err := command.NewDispatcher(cmdRegistry, pe, dispatcherOpts...)
 	require.NoError(t, err, "integrationtest.Start: create command dispatcher")
-	cmdServices := command.NewTestServices(command.ServicesConfig{Engine: pe})
+	// Session service wired so plugin commands that succeed can bump session
+	// activity (dispatchToPlugin → exec.Services().Session().UpdateActivity).
+	// session.Store satisfies session.Access (mirrors cmd/holomush/sub_grpc.go:295);
+	// without it, command-driven plugin E2Es panic on the nil Session getter.
+	cmdServices := command.NewTestServices(command.ServicesConfig{Engine: pe, Session: sessionStoreInst})
 
 	// Core engine with a no-op event appender.
 	engine := core.NewEngine(&noopEventAppender{})
@@ -451,6 +468,17 @@ func (s *Server) CommandRegistry() *command.Registry {
 func (s *Server) ServiceRegistry() *plugins.ServiceRegistry {
 	s.requirePlugins("ServiceRegistry")
 	return s.pluginSub.ServiceRegistry()
+}
+
+// SceneServiceClient returns a SceneService client backed by the loaded
+// core-scenes plugin, resolved from the existing plugin ServiceRegistry.
+// Test-only; requires WithInTreePlugins (panics otherwise via requirePlugins).
+func (s *Server) SceneServiceClient() scenev1.SceneServiceClient {
+	s.requirePlugins("SceneServiceClient")
+	svc, err := s.ServiceRegistry().Resolve("holomush.scene.v1.SceneService")
+	require.NoError(s.t, err, "integrationtest.Server.SceneServiceClient: resolve SceneService")
+	require.NotNil(s.t, svc.Conn, "integrationtest.Server.SceneServiceClient: nil conn")
+	return scenev1.NewSceneServiceClient(svc.Conn)
 }
 
 // AccessEngine returns the ABAC policy engine the stack evaluates against.

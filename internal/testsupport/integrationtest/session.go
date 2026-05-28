@@ -7,6 +7,7 @@ package integrationtest
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 )
 
 // Tunable timeouts for the Subscribe-stream transport lifecycle. Set high
@@ -455,12 +457,23 @@ func (s *Session) transportActive() bool {
 	return s.transportCancel != nil
 }
 
-// CreateScene creates a new scene (focus session) and returns its ULID.
-//
-// TODO(iwzt-9): invoke FocusCoordinator.CreateScene once wired.
-func (s *Session) CreateScene(_ context.Context) ulid.ULID {
-	s.server.t.Fatalf("integrationtest.Session.CreateScene: TODO iwzt-9 — scene creation RPC not yet wired")
-	return ulid.ULID{}
+// CreateScene creates a scene owned by this session's character via the
+// loaded core-scenes SceneService and returns its ULID.
+func (s *Session) CreateScene(ctx context.Context, locationID ulid.ULID) ulid.ULID {
+	s.server.t.Helper()
+	resp, err := s.server.SceneServiceClient().CreateScene(ctx, &scenev1.CreateSceneRequest{
+		CharacterId: s.CharacterID.String(),
+		Title:       "test scene",
+		LocationId:  locationID.String(),
+		Visibility:  "open",
+	})
+	require.NoError(s.server.t, err, "integrationtest.Session.CreateScene")
+	// core-scenes stamps scene IDs as "scene-"+ULID (plugins/core-scenes/service.go:1113);
+	// strip the prefix before parsing the underlying ULID.
+	raw := strings.TrimPrefix(resp.GetScene().GetId(), "scene-")
+	id, err := ulid.Parse(raw)
+	require.NoError(s.server.t, err, "integrationtest.Session.CreateScene: parse scene id")
+	return id
 }
 
 // JoinScene adds a FocusMembership{Kind: Scene, TargetID: sceneID} to the

@@ -161,23 +161,65 @@ type EmittedEvent struct{ SubjectStr string }
 // the JetStream message by subject. Panics via requirePluginCrypto if the
 // substrate was not wired.
 func (s *Server) EmitPluginEvent(ctx context.Context, plugin, eventType, payloadJSON string, sensitive bool) EmittedEvent {
-	s.requirePluginCrypto("EmitPluginEvent")
+	// WithPluginCrypto's fixed scene is keyed by the BARE sceneID ULID (the
+	// seedScene row at crypto.go uses pc.sceneID.String() with no prefix), so
+	// the subject's scene-id token is that bare form — self-consistent with the
+	// seeded row. Preserves 5iaov's callers byte-for-byte.
+	return s.emitPluginEventForScene(ctx, plugin,
+		s.pluginCrypto.sceneID.String(), s.pluginCrypto.actorID, eventType, payloadJSON, sensitive)
+}
+
+// EmitSceneICContent emits an encrypted (Sensitive=true) scene IC event for an
+// ARBITRARY scene + actor — used to seed content into a CreateScene-created
+// scene (the command emit path can't set Sensitive; INV-7 fence, spec §3.4).
+// Requires WithPluginCrypto + WithInTreePlugins. The scene row MUST already
+// exist (via CreateScene) so core-scenes' InsertScenePose UPDATE … RETURNING
+// resolves.
+//
+// sceneID is the BARE ULID returned by Session.CreateScene; core-scenes
+// PERSISTS scene rows under the "scene-"+ULID form (newSceneID,
+// service.go:1113) and its InsertScenePose keys off that stored id via
+// parseSceneSubject(subject)[3] → UPDATE scenes WHERE id=<token> (audit.go:629,
+// :233). So the subject's scene-id token MUST be "scene-"+sceneID — NOT the
+// plan's literal sceneID.String() — for the UPDATE…RETURNING to find the row.
+// This mirrors production's own subject builder dotStyleSceneSubjectIC, which
+// is fed the stored "scene-"+ULID id (store.go:1479).
+func (s *Server) EmitSceneICContent(ctx context.Context, plugin string, sceneID, actorID ulid.ULID, eventType, payloadJSON string) EmittedEvent {
+	return s.emitPluginEventForScene(ctx, plugin,
+		"scene-"+sceneID.String(), actorID, eventType, payloadJSON, true)
+}
+
+// emitPluginEventForScene is the parameterized core extracted from
+// EmitPluginEvent. It drives a real plugin emit through the Manager's
+// EmitPluginEvent boundary (the same path core-scenes commands use), returning
+// the translated NATS subject for wire assertions.
+//
+// sceneSubjectID is the scene-id token placed verbatim into the subject's
+// <sceneID> segment (events.<game_id>.scene.<sceneSubjectID>.ic). It MUST match
+// the id stored in plugin_core_scenes.scenes for that scene, because
+// core-scenes' AuditEvent handler routes scene_pose through InsertScenePose,
+// which calls parseSceneSubject (requires the 5-token <id>.<channel> shape,
+// audit.go:629) and UPDATEs scenes WHERE id=<sceneSubjectID> … RETURNING
+// (requires the matching scene row). Callers own forming that token:
+// EmitPluginEvent passes the bare WithPluginCrypto sceneID (its self-seeded
+// row uses the bare form); EmitSceneICContent passes "scene-"+ULID (matching
+// CreateScene's stored id).
+//
+// Panics via requirePluginCrypto if the substrate was not wired.
+func (s *Server) emitPluginEventForScene(ctx context.Context, plugin, sceneSubjectID string, actorID ulid.ULID, eventType, payloadJSON string, sensitive bool) EmittedEvent {
+	s.requirePluginCrypto("emitPluginEventForScene")
 	s.t.Helper()
 
-	// Legacy colon-style subject: namespace token MUST be a namespace the
-	// plugin declares in its manifest `emits:` (the emitter rejects otherwise).
-	// core-scenes declares `emits: [scene]`, so the namespace is "scene".
+	// Namespace token MUST be a namespace the plugin declares in its manifest
+	// `emits:` (the emitter rejects otherwise). core-scenes declares
+	// `emits: [scene]`, so the namespace is "scene".
 	dp, ok := s.pluginSub.Manager().GetLoadedPlugin(plugin)
-	require.Truef(s.t, ok, "integrationtest.Server.EmitPluginEvent: plugin %q not loaded", plugin)
+	require.Truef(s.t, ok, "integrationtest.Server.emitPluginEventForScene: plugin %q not loaded", plugin)
 	require.NotEmptyf(s.t, dp.Manifest.Emits,
-		"integrationtest.Server.EmitPluginEvent: plugin %q declares no emit namespaces", plugin)
+		"integrationtest.Server.emitPluginEventForScene: plugin %q declares no emit namespaces", plugin)
 
-	// Build a well-formed scene IC subject: events.<game_id>.scene.<sceneID>.ic.
-	// core-scenes' AuditEvent handler routes scene_pose through InsertScenePose,
-	// which calls parseSceneSubject (requires the 5-token <id>.<channel> shape,
-	// audit.go:629) and UPDATEs scenes WHERE id=<sceneID> … RETURNING (requires
-	// the seeded scene row). A bare "scene:scene_pose" subject would fail both.
-	natsSubject := "events." + s.bus.Bus.GameID() + ".scene." + s.pluginCrypto.sceneID.String() + ".ic"
+	// Build a well-formed scene IC subject: events.<game_id>.scene.<sceneSubjectID>.ic.
+	natsSubject := "events." + s.bus.Bus.GameID() + ".scene." + sceneSubjectID + ".ic"
 
 	// Stamp the host event actor the emitter requires (event_emitter.go::Emit →
 	// actorFromContext). Production stamps it at the command-dispatch / host-RPC
@@ -185,8 +227,8 @@ func (s *Server) EmitPluginEvent(ctx context.Context, plugin, eventType, payload
 	// actor is in core-scenes' actor_kinds_claimable list ([plugin, character])
 	// and is what scene_pose ingest requires. The actor's (kind, id) is persisted
 	// to scene_log and rebuilt verbatim into the read-back AAD, so it MUST be
-	// stable per emit — s.pluginCrypto.actorID is allocated once per Server.
-	ctx = core.WithActor(ctx, core.Actor{Kind: core.ActorCharacter, ID: s.pluginCrypto.actorID.String()})
+	// stable per emit.
+	ctx = core.WithActor(ctx, core.Actor{Kind: core.ActorCharacter, ID: actorID.String()})
 
 	err := s.pluginSub.Manager().EmitPluginEvent(ctx, plugin, pluginsdk.EmitEvent{
 		Stream:    natsSubject, // already a dot-style events.<gid>.scene.<id>.ic subject; passed through unchanged
@@ -194,7 +236,7 @@ func (s *Server) EmitPluginEvent(ctx context.Context, plugin, eventType, payload
 		Payload:   payloadJSON,
 		Sensitive: sensitive,
 	})
-	require.NoError(s.t, err, "integrationtest.Server.EmitPluginEvent: Manager.EmitPluginEvent")
+	require.NoError(s.t, err, "integrationtest.Server.emitPluginEventForScene: Manager.EmitPluginEvent")
 
 	return EmittedEvent{SubjectStr: natsSubject}
 }

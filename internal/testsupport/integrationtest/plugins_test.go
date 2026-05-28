@@ -56,6 +56,15 @@ func TestBinaryArtifactsPresentDetectsCoreScenes(t *testing.T) {
 	require.True(t, binaryArtifactsPresent(build))
 }
 
+func TestWithPluginConfigOverridesThreads(t *testing.T) {
+	var c startConfig
+	WithPluginConfigOverrides(map[string]map[string]string{
+		"core-scenes": {"cooloff_window": "1ms", "scheduler_interval": "20ms"},
+	})(&c)
+	require.Equal(t, "1ms", c.pluginConfigOverrides["core-scenes"]["cooloff_window"])
+	require.Equal(t, "20ms", c.pluginConfigOverrides["core-scenes"]["scheduler_interval"])
+}
+
 func TestPluginProvidersSatisfyInterfaces(t *testing.T) {
 	// Compile-time interface satisfaction is the real assertion; this test
 	// exists so the file fails to build if an adapter drifts from its iface.
