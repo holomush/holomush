@@ -503,6 +503,7 @@ tasks:
     cmds:
       - buf lint
       - buf format --diff --exit-code
+      - go test ./test/meta/ -run TestProtoCommentsNoNameEcho
 
   lint:markdown:
     desc: Lint Markdown files
