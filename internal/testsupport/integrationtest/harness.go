@@ -58,6 +58,7 @@ package integrationtest
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -73,6 +74,8 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/audit"
+	authguardaudit "github.com/holomush/holomush/internal/eventbus/authguard/audit"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	"github.com/holomush/holomush/internal/eventbus/history"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
@@ -131,6 +134,22 @@ type Server struct {
 	// crypto.go require it (requirePluginCrypto panics when absent). Retained on
 	// the Server for Task 8's audit/read-back helpers.
 	pluginCrypto *pluginCrypto
+
+	// pluginConsumers is the per-plugin audit projection (link 3), wired when
+	// WithPluginCrypto was passed; nil otherwise. Stopped via t.Cleanup in Start.
+	pluginConsumers *audit.PluginConsumerManager
+
+	// readbackDecryptor is the host read-back decryptor (link 4), wired when
+	// WithPluginCrypto was passed; nil otherwise. ReadBackOwnRows drives it.
+	readbackDecryptor *history.ReadbackDecryptor
+
+	// readbackAuditCount counts read-back audit emissions on the
+	// audit.<game_id>.plugin_decrypt.<plugin> subjects (read by ReadBackAuditCount).
+	readbackAuditCount atomic.Int64
+
+	// readbackAuditEm is the read-back audit emitter (link 4); its drain
+	// goroutines are stopped via t.Cleanup in Start. nil unless WithPluginCrypto.
+	readbackAuditEm *authguardaudit.Emitter
 
 	// accessEngine is the ABAC policy engine the stack evaluates against: the
 	// allow-all default, a WithPolicyEngine override, or — under WithRealABAC —
@@ -358,7 +377,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		holoGRPC.WithVerbRegistry(verbRegistry),
 	)
 
-	return &Server{
+	srv := &Server{
 		t:                    t,
 		pool:                 pool,
 		playerSessionStore:   playerSessionStore,
@@ -375,6 +394,22 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		accessEngine:         pe,
 		guestStartLocationID: guestLocID,
 	}
+
+	// Plugin-crypto links 3+4 (Task 8): the audit projection (PluginConsumerManager
+	// forwarding plugin-owned subjects to scene_log) and the read-back decryptor
+	// (host-side DEK decrypt + INV-19 audit). Wired after startPlugins so the
+	// Manager's audit clients are resolvable. INV-P7-9: the SAME pc.selector
+	// instance feeds the consumer manager that the crypto-enabled publisher used
+	// on the emit side.
+	if cfg.withPluginCrypto {
+		srv.seedScene(ctx, pc)
+		srv.pluginConsumers = startPluginConsumers(t, ctx, bus, pluginSub.Manager(), pc.selector)
+		t.Cleanup(func() { _ = srv.pluginConsumers.Stop(context.Background()) })
+		srv.configureReadback(pc)
+		t.Cleanup(func() { _ = srv.readbackAuditEm.Shutdown(context.Background()) })
+	}
+
+	return srv
 }
 
 // cryptoPublisherOf returns pc's crypto-enabled publisher, or nil when pc is
