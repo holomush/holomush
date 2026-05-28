@@ -310,11 +310,11 @@ const (
 
 ## Event Types
 
-See [Event Reference](events.md) for event types, payload schemas, and stream
+See [Event Reference](/extending/events/) for event types, payload schemas, and stream
 patterns.
 
 The optional `crypto` block declares event-type sensitivity contracts
-and decryption opt-ins. See [Declaring event sensitivity](event-sensitivity.md).
+and decryption opt-ins. See [Declaring event sensitivity](/extending/event-sensitivity/).
 
 ## ABAC Policies
 
@@ -723,5 +723,5 @@ not need changes.
 ## Next Steps
 
 - Review the [echo-bot example](https://github.com/holomush/holomush/tree/main/plugins/echo-bot)
-- See the [Event Reference](events.md) for all event types and stream patterns
-- Read the [API Guide](api-guide.md) to understand the gRPC protocol layer
+- See the [Event Reference](/extending/events/) for all event types and stream patterns
+- Read the [API Guide](/extending/api-guide/) to understand the gRPC protocol layer

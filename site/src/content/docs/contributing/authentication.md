@@ -131,7 +131,7 @@ Sessions use opaque random tokens rather than signed JWTs. Key design choices:
 | Revocation     | Instant (delete database row)  |
 | Character bind | Mutable (update session row)   |
 
-See [ADR 0001](../../../docs/adr/0001-opaque-session-tokens.md) for the rationale behind
+See [ADR 0001](https://github.com/holomush/holomush/blob/main/docs/adr/0001-opaque-session-tokens.md) for the rationale behind
 choosing opaque tokens over signed JWTs.
 
 ## Authentication Flows
@@ -209,6 +209,6 @@ Manages reset token persistence with token hash lookups and player-based cleanup
 
 ## Related Documentation
 
-- [Design Spec](../../../docs/specs/2026-01-25-auth-identity-design.md) - Full authentication design
-- [ADR 0001](../../../docs/adr/0001-opaque-session-tokens.md) - Token design decision
-- [Operator Guide](../operating/authentication.md) - Deployment and configuration
+- [Design Spec](https://github.com/holomush/holomush/blob/main/docs/specs/2026-01-25-auth-identity-design.md) - Full authentication design
+- [ADR 0001](https://github.com/holomush/holomush/blob/main/docs/adr/0001-opaque-session-tokens.md) - Token design decision
+- [Operator Guide](/operating/authentication/) - Deployment and configuration

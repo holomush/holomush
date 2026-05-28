@@ -460,5 +460,5 @@ pooling configuration.
 
 ## Next Steps
 
-- [Configuration](configuration.md) - Adjust server settings
-- [Installation](installation.md) - Deployment options
+- [Configuration](/operating/configuration/) - Adjust server settings
+- [Installation](/operating/installation/) - Deployment options

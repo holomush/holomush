@@ -159,7 +159,7 @@ missing.
 
 ## See also
 
-- [Binary Plugin Author Guide](binary-plugins.md) — full SDK reference.
-- [Lua Plugin Author Guide](lua-plugins.md) — Lua emit conventions.
-- [Event Reference](events.md) — event shape and actor metadata.
-- [Audit Events](audit-events.md) — how plugin emits flow into the audit trail.
+- [Binary Plugin Author Guide](/extending/binary-plugins/) — full SDK reference.
+- [Lua Plugin Author Guide](/extending/lua-plugins/) — Lua emit conventions.
+- [Event Reference](/extending/events/) — event shape and actor metadata.
+- [Audit Events](/extending/audit-events/) — how plugin emits flow into the audit trail.

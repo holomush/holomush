@@ -153,6 +153,6 @@ If you're restoring from backup or setting up a fresh instance, run
 
 ## Related Pages
 
-- [Configuration](configuration.md) -- Server settings
-- [Operations](operations.md) -- Health checks, metrics, and troubleshooting
-- [Database](database.md) -- PostgreSQL setup and maintenance
+- [Configuration](/operating/configuration/) -- Server settings
+- [Operations](/operating/operations/) -- Health checks, metrics, and troubleshooting
+- [Database](/operating/database/) -- PostgreSQL setup and maintenance

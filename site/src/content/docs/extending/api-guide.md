@@ -175,4 +175,4 @@ Certificates are stored under `$XDG_CONFIG_HOME/holomush/certs/`.
 
 The proto definition is at `api/proto/holomush/core/v1/core.proto`. For
 field-level details on every request and response message, see the
-[gRPC API Reference](../reference/grpc-api.md).
+[gRPC API Reference](/reference/grpc-api/).

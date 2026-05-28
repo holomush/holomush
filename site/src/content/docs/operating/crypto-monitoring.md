@@ -150,11 +150,11 @@ level=ERROR component=auditchain_verifier  msg="chain integrity check failed; re
 ```
 
 This is a critical incident. Do not attempt to force-start the server. See
-[Audit-Chain Primer](../extending/audit-chain.md) for chain structure details
+[Audit-Chain Primer](/extending/audit-chain/) for chain structure details
 and escalate to a developer with access to the `events_audit` table.
 
 ## See also
 
-- [Crypto Runbook](crypto-runbook.md) — operator procedures for rekey operations
-- [Audit-Chain Primer](../extending/audit-chain.md) — audit-chain primitive for developers
-- [Sub-epic E design spec](../../../docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md) — §5.6 Metrics, §6.3 SweepSubsystem
+- [Crypto Runbook](/operating/crypto-runbook/) — operator procedures for rekey operations
+- [Audit-Chain Primer](/extending/audit-chain/) — audit-chain primitive for developers
+- [Sub-epic E design spec](https://github.com/holomush/holomush/blob/main/docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md) — §5.6 Metrics, §6.3 SweepSubsystem

@@ -70,5 +70,5 @@ the YAML config file.
 
 ## See also
 
-- [Master spec — Section 5.9.1](../../../docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md): canonical definition of the `crypto.operator` capability.
-- [Sub-epic B design spec](../../../docs/superpowers/specs/2026-05-08-event-payload-crypto-phase5-sub-epic-b-design.md): full design of the capability mechanism.
+- [Master spec — Section 5.9.1](https://github.com/holomush/holomush/blob/main/docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md): canonical definition of the `crypto.operator` capability.
+- [Sub-epic B design spec](https://github.com/holomush/holomush/blob/main/docs/superpowers/specs/2026-05-08-event-payload-crypto-phase5-sub-epic-b-design.md): full design of the capability mechanism.

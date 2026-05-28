@@ -51,7 +51,7 @@ holomush migrate up
 
 ### Creating New Migrations
 
-For creating new migration files, see the [Contributing Guide](../contributing/coding-standards.md).
+For creating new migration files, see the [Contributing Guide](/contributing/coding-standards/).
 
 ### Bootstrapping Existing Databases
 

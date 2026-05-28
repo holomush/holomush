@@ -27,12 +27,12 @@ Run one or both depending on your player base.
 
 ## Documentation
 
-- [Installation](installation.md) -- Docker, binaries, or build from source
-- [Deployment](deployment.md) -- Production deployment with Docker Compose
-- [Configuration](configuration.md) -- Flags, config files, and environment variables
-- [Database](database.md) -- PostgreSQL setup, migrations, and maintenance
-- [Authentication](authentication.md) -- Security properties, rate limiting, and session management
-- [Telnet Security](telnet-security.md) -- Risks of cleartext telnet logins and how to mitigate them
-- [CA Rotation](ca-rotation.md) -- When and how to rotate the internal mTLS certificate authority
-- [Operations](operations.md) -- Health checks, metrics, monitoring, and troubleshooting
-- [Verifying Releases](verifying-releases.md) -- Signature and provenance verification
+- [Installation](/operating/installation/) -- Docker, binaries, or build from source
+- [Deployment](/operating/deployment/) -- Production deployment with Docker Compose
+- [Configuration](/operating/configuration/) -- Flags, config files, and environment variables
+- [Database](/operating/database/) -- PostgreSQL setup, migrations, and maintenance
+- [Authentication](/operating/authentication/) -- Security properties, rate limiting, and session management
+- [Telnet Security](/operating/telnet-security/) -- Risks of cleartext telnet logins and how to mitigate them
+- [CA Rotation](/operating/ca-rotation/) -- When and how to rotate the internal mTLS certificate authority
+- [Operations](/operating/operations/) -- Health checks, metrics, monitoring, and troubleshooting
+- [Verifying Releases](/operating/verifying-releases/) -- Signature and provenance verification

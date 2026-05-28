@@ -6,7 +6,7 @@ Lua plugins run inside a sandboxed gopher-lua VM. They are ideal for simple
 event reactions, formatting, and game commands that do not need persistent
 storage beyond the KV store.
 
-For the full plugin system overview, see [Plugin Guide](plugin-guide.md).
+For the full plugin system overview, see [Plugin Guide](/extending/plugin-guide/).
 
 ## Project structure
 
@@ -176,7 +176,7 @@ end
 ```
 
 Common error messages: `"not found"`, `"access denied"`, `"query timed out"`,
-`"internal error (ref: XXXX...)"`. See [Plugin Guide](plugin-guide.md#error-handling)
+`"internal error (ref: XXXX...)"`. See [Plugin Guide](/extending/plugin-guide/#error-handling)
 for details on the correlation ID pattern.
 
 ## Manifest example with capabilities

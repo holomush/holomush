@@ -25,7 +25,7 @@ which mitigations you should apply in production.
 | What HoloMUSH cannot do | Encrypt the wire without breaking telnet compatibility |
 
 The server's credential handling is solid -- see
-[Authentication](authentication.md) for storage and rate limiting details --
+[Authentication](/operating/authentication/) for storage and rate limiting details --
 but no amount of server-side hardening prevents an eavesdropper from reading
 the password off the wire before it reaches the server.
 
@@ -117,7 +117,7 @@ in `.env`.
 | ------------------- | -------------------------------------------------------------------------------------------------------- |
 | Monitor telnet traffic | Unexpected spikes can indicate credential-stuffing against the cleartext port                        |
 | Log remote addresses | Failed `connect` attempts are logged with `remote_addr`; review them for sweeping attack patterns     |
-| Review rate-limit logs | The per-username lockout (see [Authentication](authentication.md)) still applies on telnet           |
+| Review rate-limit logs | The per-username lockout (see [Authentication](/operating/authentication/)) still applies on telnet           |
 | Rotate exposed credentials | If a player reports they logged in from an untrusted network, have them reset their password      |
 | Announce the risk   | Put a warning in your MOTD or server description so players can make an informed choice                  |
 

@@ -7,7 +7,7 @@ Every host function your plugin calls is checked against the policies in your
 from the simplest case to more complex scenarios.
 
 For the full DSL reference, operators guide, and capability tables, see the
-[Access Control Reference](../reference/access-control.md).
+[Access Control Reference](/reference/access-control/).
 
 ## The Simplest Plugin: No Policies Needed
 
@@ -235,6 +235,6 @@ The denial is logged server-side too, so operators can see what happened.
 
 ## Further Reading
 
-- [Access Control Reference](../reference/access-control.md) — Full DSL spec, operator guide, capability tables
-- [Plugin Guide](plugin-guide.md) — Complete plugin development guide
-- [Getting Started](getting-started.md) — Your first plugin
+- [Access Control Reference](/reference/access-control/) — Full DSL spec, operator guide, capability tables
+- [Plugin Guide](/extending/plugin-guide/) — Complete plugin development guide
+- [Getting Started](/extending/getting-started/) — Your first plugin

@@ -291,13 +291,13 @@ This means:
 - Verb labels, categories, and display targets are determined once, at emit time,
   by the publisher chain — not at delivery time by the gateway.
 
-See [Gateway Boundary](gateway-boundary.md) for the full forbidden-import list
+See [Gateway Boundary](/contributing/gateway-boundary/) for the full forbidden-import list
 and the `gateway_imports_test.go` CI tripwire.
 
 ## Further Reading
 
-- [Pull Request Guide](pr-guide.md) - Contribution workflow
-- [Coding Standards](coding-standards.md) - Code conventions
-- [Plugin Development](../extending/index.md) - Building extensions
-- [Gateway Boundary](gateway-boundary.md) - Gateway constraint enforcement
-- [Event Emit Pipeline](event-emit-pipeline.md) - Publisher chain and rendering
+- [Pull Request Guide](/contributing/pr-guide/) - Contribution workflow
+- [Coding Standards](/contributing/coding-standards/) - Code conventions
+- [Plugin Development](/extending/) - Building extensions
+- [Gateway Boundary](/contributing/gateway-boundary/) - Gateway constraint enforcement
+- [Event Emit Pipeline](/contributing/event-emit-pipeline/) - Publisher chain and rendering

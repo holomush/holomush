@@ -612,7 +612,7 @@ broker-backed client. `EventSink` and `FocusClient` share a single
 
 #### References
 
-- Plugin adoption spec: [B10 core-scenes Adoption](../../../docs/superpowers/specs/2026-04-16-b10-core-scenes-adoption-design.md)
+- Plugin adoption spec: [B10 core-scenes Adoption](https://github.com/holomush/holomush/blob/main/docs/superpowers/specs/2026-04-16-b10-core-scenes-adoption-design.md)
 - Implementation: `pkg/plugin/focus_client.go`
 
 ## Audit-row SDK helpers (Phase 7)

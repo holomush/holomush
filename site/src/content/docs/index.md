@@ -6,7 +6,7 @@ title: "HoloMUSH"
 
 Build immersive games with a high-performance server, flexible plugin system, and connectivity that works the way people actually use the internet today.
 
-[Get Started](guide/index.md){ .md-button .md-button--primary }
+[Get Started](/guide/){ .md-button .md-button--primary }
 [View on GitHub](https://github.com/holomush/holomush){ .md-button }
 
 ---
@@ -73,7 +73,7 @@ Build immersive games with a high-performance server, flexible plugin system, an
 
     Learn the basics — connecting, commands, and getting around the world.
 
-    [:octicons-arrow-right-24: Player Guide](guide/index.md)
+    [:octicons-arrow-right-24: Player Guide](/guide/)
 
 - :material-server: **Running a Server**
 
@@ -81,7 +81,7 @@ Build immersive games with a high-performance server, flexible plugin system, an
 
     Deploy, configure, and run your own HoloMUSH game.
 
-    [:octicons-arrow-right-24: Operations Guide](operating/index.md)
+    [:octicons-arrow-right-24: Operations Guide](/operating/)
 
 - :material-puzzle: **Building Plugins**
 
@@ -89,7 +89,7 @@ Build immersive games with a high-performance server, flexible plugin system, an
 
     Extend HoloMUSH with Lua scripts or Go extensions.
 
-    [:octicons-arrow-right-24: Plugin Development](extending/index.md)
+    [:octicons-arrow-right-24: Plugin Development](/extending/)
 
 - :material-account-group: **Contributing**
 
@@ -97,7 +97,7 @@ Build immersive games with a high-performance server, flexible plugin system, an
 
     Help build HoloMUSH — code, docs, testing, and ideas.
 
-    [:octicons-arrow-right-24: Contributing Guide](contributing/index.md)
+    [:octicons-arrow-right-24: Contributing Guide](/contributing/)
 
 </div>
 

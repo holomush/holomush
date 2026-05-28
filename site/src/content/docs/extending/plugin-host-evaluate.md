@@ -52,7 +52,7 @@ The engine is never even consulted for an unentitled type.
 
 If your plugin owns custom resource types, you also implement an attribute
 resolver so the engine can evaluate policies against your instances. See
-[Implementing AttributeResolverService](abac-attribute-resolver.md).
+[Implementing AttributeResolverService](/extending/abac-attribute-resolver/).
 
 ## Go: `host.Evaluate`
 
@@ -221,5 +221,5 @@ policy the plugin ships, evaluated by the host engine.
 - Prefer `GatedSubcommand` over hand-rolled `Evaluate` calls so the gate can't
   be skipped.
 - Keep the `Action` string identical to the action in your authorizing policy.
-- Declare an [attribute resolver](abac-attribute-resolver.md) for any custom
+- Declare an [attribute resolver](/extending/abac-attribute-resolver/) for any custom
   resource types your policies reference.

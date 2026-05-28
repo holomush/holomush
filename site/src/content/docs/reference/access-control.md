@@ -125,6 +125,6 @@ Key things to know:
 
 ## Further Reading
 
-- [Writing Plugin Policies](../extending/access-control.md) — Examples from simple to complex
-- **Policy DSL Grammar** — EBNF grammar and railroad diagram files live in the `reference/` directory; see [Regenerating Reference Docs](index.md#regenerating-reference-docs)
-- [Architecture](../contributing/architecture.md) — How the ABAC engine fits in the system
+- [Writing Plugin Policies](/extending/access-control/) — Examples from simple to complex
+- **Policy DSL Grammar** — EBNF grammar and railroad diagram files live in the `reference/` directory; see [Regenerating Reference Docs](/reference/#regenerating-reference-docs)
+- [Architecture](/contributing/architecture/) — How the ABAC engine fits in the system

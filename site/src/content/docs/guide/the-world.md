@@ -26,7 +26,7 @@ New characters arrive at **The Nexus** — a circular plaza beneath a sky full
 of drifting world-fragments. Doorways ring the perimeter, some stable, some
 flickering. Everything converges here.
 
-![The Nexus — mismatched doorways, impossible sky, just another evening](images/nexus.jpg)
+![The Nexus — mismatched doorways, impossible sky, just another evening](../../../assets/nexus.jpg)
 
 From the Nexus you can walk to:
 
@@ -34,14 +34,14 @@ From the Nexus you can walk to:
 for the first time. The arch is covered in graffiti in a dozen languages.
 Nobody cleans it off. It's tradition by now.
 
-![The Threshold — graffiti-covered arch between worlds](images/threshold.jpg)
+![The Threshold — graffiti-covered arch between worlds](../../../assets/threshold.jpg)
 
 **The Doors Market** — a repurposed warehouse full of freestanding doorways,
 each one a portal to a different world's bazaar. Vendors reach across
 thresholds to haggle. The fluorescent lights mix with floating lanterns and
 bioluminescent vines creeping through from somewhere tropical.
 
-![The Doors Market — portals bolted to concrete, commerce across realities](images/doors-market.jpg)
+![The Doors Market — portals bolted to concrete, commerce across realities](../../../assets/doors-market.jpg)
 
 These are just the starting locations. Builders expand the world from here — dig
 new rooms, link exits, write descriptions — all from inside the game.

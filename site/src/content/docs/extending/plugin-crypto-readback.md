@@ -222,10 +222,10 @@ check, fence, and audit fire on the same code path for both.
 
 ## See also
 
-- [Declaring event sensitivity](event-sensitivity.md) — sensitivity contracts,
+- [Declaring event sensitivity](/extending/event-sensitivity/) — sensitivity contracts,
   `crypto.emits`, and `requests_decryption`
-- [Emitting Audit Events from Plugins](audit-events.md) — the ABAC allow/deny
+- [Emitting Audit Events from Plugins](/extending/audit-events/) — the ABAC allow/deny
   audit path (separate from the crypto audit trail)
-- [Audit-Chain Primitive](audit-chain.md) — tamper-evident hash chain for
+- [Audit-Chain Primitive](/extending/audit-chain/) — tamper-evident hash chain for
   host-owned system audit events
 - Design spec: `docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md`

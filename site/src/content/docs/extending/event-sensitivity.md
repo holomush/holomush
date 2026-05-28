@@ -127,6 +127,6 @@ are correct now, they'll carry forward.
 
 ## See also
 
-- [Plugin Guide](plugin-guide.md) — manifest structure, event handlers, ABAC policies
-- [Event Reference](../reference/events.md) — event types, payload schemas, stream patterns
+- [Plugin Guide](/extending/plugin-guide/) — manifest structure, event handlers, ABAC policies
+- [Event Reference](/reference/events/) — event types, payload schemas, stream patterns
 - [Auto-generated event reference](../reference/events/) — per-plugin sensitivity tables

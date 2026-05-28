@@ -9,11 +9,11 @@ signatures.
 
 ## What's Here
 
-- **[Access Control](access-control.md)** -- The ABAC policy engine: how it
+- **[Access Control](/reference/access-control/)** -- The ABAC policy engine: how it
   works, the DSL specification, player capabilities, and operator guidance.
-- **[gRPC API Reference](grpc-api.md)** -- Full service and message
+- **[gRPC API Reference](/reference/grpc-api/)** -- Full service and message
   definitions, auto-generated from the proto files.
-- **[Event Types](events.md)** -- Every event type, its payload fields, stream
+- **[Event Types](/reference/events/)** -- Every event type, its payload fields, stream
   routing, and control signals.
 - **Policy DSL Grammar** -- EBNF grammar and railroad diagrams for the ABAC
   policy language (generated files live in this directory).

@@ -9,7 +9,7 @@ to any subject in this catalogue; operators read these via
 
 The authoritative shapes (payload fields, chain participation,
 emission triggers) live in the
-[event-payload-crypto design spec §4.6](../../../docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md).
+[event-payload-crypto design spec §4.6](https://github.com/holomush/holomush/blob/main/docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md).
 This page is the quick-lookup index.
 
 ## Host-emitted audit subjects
@@ -38,6 +38,6 @@ master spec §4.6 and INV-15.
 
 ## See also
 
-- [Event Types reference](events.md)
-- [Access Control reference](access-control.md)
-- [Audit-chain integrity](../../../docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md#46x-audit-chain-integrity)
+- [Event Types reference](/reference/events/)
+- [Access Control reference](/reference/access-control/)
+- [Audit-chain integrity](https://github.com/holomush/holomush/blob/main/docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md#46x-audit-chain-integrity)

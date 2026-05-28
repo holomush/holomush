@@ -192,5 +192,5 @@ It demonstrates three properties every resolver SHOULD have:
 - **Host proxy** — [`internal/plugin/attribute_proxy.go`](https://github.com/holomush/holomush/blob/main/internal/plugin/attribute_proxy.go) — how the host calls your resolver
 - **Resolver engine** — [`internal/access/policy/attribute/resolver.go`](https://github.com/holomush/holomush/blob/main/internal/access/policy/attribute/resolver.go) — the attribute resolver the host uses to invoke your plugin
 - **Reference plugin** — [`plugins/test-abac-widget/main.go`](https://github.com/holomush/holomush/blob/main/plugins/test-abac-widget/main.go) — canonical minimal implementation
-- **Binary Plugin Guide** — [binary-plugins.md](binary-plugins.md) — general binary plugin authoring
-- **Access Control Guide** — [access-control.md](access-control.md) — writing policies
+- **Binary Plugin Guide** — [binary-plugins.md](/extending/binary-plugins/) — general binary plugin authoring
+- **Access Control Guide** — [access-control.md](/extending/access-control/) — writing policies

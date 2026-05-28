@@ -44,13 +44,13 @@ For detailed guidance on each step, see the pages below.
 
 | Guide                                     | What it covers                                    |
 | ----------------------------------------- | ------------------------------------------------- |
-| [Architecture](architecture.md)           | System design, event model, plugin system         |
-| [Coding Standards](coding-standards.md)   | Go conventions, testing, error handling            |
-| [Authentication](authentication.md)       | Auth internals, security design, timing defenses  |
-| [Event Store & EventBus](event-store.md)  | JetStream EventBus, subjects, plugin emit, audit   |
-| [Event Delivery (superseded)](event-delivery.md) | Former LISTEN/NOTIFY architecture (historical) |
-| [Pull Request Guide](pr-guide.md)         | Branch naming, PR format, review process           |
-| [Pre-Push Quality Gate (`task pr-prep`)](pr-prep.md) | What runs, concurrent-run behavior, collision recovery |
+| [Architecture](/contributing/architecture/)           | System design, event model, plugin system         |
+| [Coding Standards](/contributing/coding-standards/)   | Go conventions, testing, error handling            |
+| [Authentication](/contributing/authentication/)       | Auth internals, security design, timing defenses  |
+| [Event Store & EventBus](/contributing/event-store/)  | JetStream EventBus, subjects, plugin emit, audit   |
+| [Event Delivery (superseded)](/contributing/event-delivery/) | Former LISTEN/NOTIFY architecture (historical) |
+| [Pull Request Guide](/contributing/pr-guide/)         | Branch naming, PR format, review process           |
+| [Pre-Push Quality Gate (`task pr-prep`)](/contributing/pr-prep/) | What runs, concurrent-run behavior, collision recovery |
 
 ## Development Workflow
 

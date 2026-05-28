@@ -178,7 +178,7 @@ HoloMUSH follows the XDG Base Directory Specification.
     These paths are relative to the container's `HOME` directory. In the default
     container image, `HOME=/home/holomush`, so config lives at
     `/home/holomush/.config/holomush/`. To persist data across container restarts,
-    mount a volume to `/home/holomush/.config/holomush` (see [Installation](installation.md)
+    mount a volume to `/home/holomush/.config/holomush` (see [Installation](/operating/installation/)
     for compose examples). In Kubernetes, use a PersistentVolumeClaim for the same path.
 
 ### Generated Files
@@ -496,5 +496,5 @@ holomush core --config /etc/holomush/base.yaml --log-format=text
 
 ## Next Steps
 
-- [Installation](installation.md) - Install HoloMUSH
-- [Operations](operations.md) - Monitor and maintain your server
+- [Installation](/operating/installation/) - Install HoloMUSH
+- [Operations](/operating/operations/) - Monitor and maintain your server

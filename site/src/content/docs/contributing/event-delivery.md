@@ -5,7 +5,7 @@ title: "Event Delivery Architecture (Superseded)"
 :::warning Superseded
 This page describes the former LISTEN/NOTIFY-based delivery architecture. It has
 been replaced by JetStream as of the F1-F7 EventBus cutover. See
-[Event Store & EventBus](./event-store.md) for current information.
+[Event Store & EventBus](/contributing/event-store/) for current information.
 :::
 
 This document describes how events flow from command execution to client delivery
@@ -177,6 +177,6 @@ selects on the merged notification channel, a merged error channel, and
 
 ## Related
 
-- **Current architecture**: [Event Store & EventBus](./event-store.md)
+- **Current architecture**: [Event Store & EventBus](/contributing/event-store/)
 - Superseded spec: `docs/specs/2026-03-20-event-delivery-redesign.md` (LISTEN/NOTIFY era)
 - JetStream design spec: `docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md`

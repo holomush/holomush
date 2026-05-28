@@ -8,7 +8,7 @@ you will have a working Lua plugin that responds to in-game speech.
 ## Prerequisites
 
 You need a running HoloMUSH server. If you have not set one up yet, follow the
-[Installation Guide](../operating/installation.md) first.
+[Installation Guide](/operating/installation/) first.
 
 You also need a text editor and a way to connect to the server (telnet or the
 web client).
@@ -127,9 +127,9 @@ Here is the flow:
 
 ## Next Steps
 
-- Read the [Plugin Guide](plugin-guide.md) for the full picture: binary plugins,
+- Read the [Plugin Guide](/extending/plugin-guide/) for the full picture: binary plugins,
   host functions, world queries, ABAC policies, and error handling.
-- See the [Event Reference](events.md) for all available event types and their
+- See the [Event Reference](/extending/events/) for all available event types and their
   payload schemas.
 - Browse the [example plugins](https://github.com/holomush/holomush/tree/main/plugins)
   for more patterns.
