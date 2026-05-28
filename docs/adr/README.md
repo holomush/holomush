@@ -16,6 +16,7 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Use topic-tab navigation over a single grouped sidebar](holomush-q924m-use-topic-tab-navigation-over-a-single-grouped-sidebar.md) | 2026-05-28 | Accepted | `holomush-q924m` |
 | [Organize docs audience-first with Diátaxis modes within](holomush-md3k4-organize-docs-audience-first-di-taxis-modes-within.md) | 2026-05-28 | Accepted | `holomush-md3k4` |
 | [Use autogenerate sidebar over explicit entries](holomush-38kmt-use-autogenerate-sidebar-over-explicit-entries.md) | 2026-05-28 | Accepted | `holomush-38kmt` |
 | [Adopt Astro Starlight as the docs site platform](holomush-145ko-adopt-astro-starlight-as-docs-site-platform.md) | 2026-05-27 | Accepted | `holomush-145ko` |

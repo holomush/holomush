@@ -40,6 +40,7 @@ and machine-readable `llms.txt`.
 | SP2 | Diátaxis IA redesign, `autogenerate` sidebar, orphan triage + superseded retirement | ✅ **landed** (#4296 re-org + #4297 mode-purity) — epic `holomush-44nxc`; ADRs `holomush-md3k4`, `holomush-38kmt`; follow-up `holomush-e6kvc` |
 | SP3 | `llms.txt` / `llms-full.txt` / `llms-small.txt` generation | **folded into SP1** (`starlight-llms-txt` plugin) |
 | SP4 | Complete gRPC service coverage (all 13 services, field-level) | stub `holomush-okm59` (P4 backlog — not yet designed) |
+| SP5 | Docs quality & cohesion — content/arrangement/communication (rubric+audit editorial pass) + topic-tab nav, page-actions, community | epic `holomush-ivwij` (15 tasks); ADR `holomush-q924m` |
 
 **Program anchor:** decision bead `holomush-rkwyb` carries the SP0–SP4 framing and sequencing rationale; query the full program with `bd list -l theme:docs-platform`.
 
