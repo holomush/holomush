@@ -2,6 +2,7 @@
 // Copyright 2026 HoloMUSH Contributors
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import starlightLlmsTxt from 'starlight-llms-txt';
 
 export default defineConfig({
   site: 'https://holomush.dev',
@@ -13,7 +14,8 @@ export default defineConfig({
       favicon: '/favicon.png',
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/holomush/holomush' }],
       customCss: ['./src/styles/custom.css'],
-      // sidebar added in Task 12; plugins (mermaid, llms-txt) added in Tasks 8 & 13
+      plugins: [starlightLlmsTxt({ projectName: 'HoloMUSH' })],
+      // sidebar (Task 12) and mermaid plugin (Task 8) land in later tasks
     }),
   ],
 });
