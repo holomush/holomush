@@ -36,8 +36,8 @@ and machine-readable `llms.txt`.
 | Sub-project | Scope | Tracking |
 | ----------- | ----- | -------- |
 | SP0 | Proto per-field doc comments + buf `COMMENTS` ratchet (platform-independent) | stub `holomush-ay6xm` (P4 backlog — not yet designed) |
-| SP1 | **Migrate zensical → Astro Starlight (bun) + llms.txt** | epic `holomush-cwnu0` (20 tasks); ADRs `holomush-145ko`, `holomush-qf2oo`, `holomush-xneg2` |
-| SP2 | Diátaxis IA redesign, `autogenerate` sidebar, orphan triage + superseded retirement | stub `holomush-44nxc` (P4 backlog — not yet designed) |
+| SP1 | **Migrate zensical → Astro Starlight (bun) + llms.txt** | ✅ **landed** — epic `holomush-cwnu0`; ADRs `holomush-145ko`, `holomush-qf2oo`, `holomush-xneg2` |
+| SP2 | Diátaxis IA redesign, `autogenerate` sidebar, orphan triage + superseded retirement | ✅ **landed** (#4296 re-org + #4297 mode-purity) — epic `holomush-44nxc`; ADRs `holomush-md3k4`, `holomush-38kmt`; follow-up `holomush-e6kvc` |
 | SP3 | `llms.txt` / `llms-full.txt` / `llms-small.txt` generation | **folded into SP1** (`starlight-llms-txt` plugin) |
 | SP4 | Complete gRPC service coverage (all 13 services, field-level) | stub `holomush-okm59` (P4 backlog — not yet designed) |
 
