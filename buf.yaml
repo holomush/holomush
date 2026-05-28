@@ -51,7 +51,6 @@ lint:
     COMMENTS:
       - api/proto/holomush/plugin/v1/plugin.proto
       - api/proto/holomush/plugin/v1/attribute.proto
-      - api/proto/holomush/web/v1/web.proto
       - api/proto/holomush/scene/v1/scene.proto
       - api/proto/holomush/world/v1/world.proto
       - api/proto/holomush/control/v1/control.proto
