@@ -27,7 +27,7 @@
 | `scripts/migration/sp2-rewrite-links.mjs` | Rewrites root-absolute internal links via the map | Create |
 | `site/astro.config.mjs` | `sidebar` → `autogenerate` per section (branding fields untouched) | Modify |
 | `site/src/content/docs/**` | Docs relocated into `<audience>/<mode>/` buckets | Move |
-| `site/src/content/docs/contributing/event-delivery.md`, `operating/legacy-id-cutover.md` | Superseded | Delete |
+| `site/src/content/docs/contributing/event-delivery.md`, `site/src/content/docs/operating/legacy-id-cutover.md` | Superseded | Delete |
 | `site/tsconfig.json` | Add `~/*` → `src/*` path alias (preserve `include`/`exclude`) | Modify |
 | `scripts/check-docs-ia.sh` + `scripts/tests/docs-ia.bats` | Parity (INV-1), one-bucket (INV-2), retired-gone (INV-3), branding (INV-5), nav≤7 (INV-6) | Create |
 | `scripts/tests/fixtures/sp2-slug-map.tsv` | Slug-map retained as fixture after move (Task 10) | Move |
