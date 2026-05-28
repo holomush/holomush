@@ -3,17 +3,19 @@ title: "Plugin Access Control"
 ---
 
 Every host function your plugin calls is checked against the policies in your
-`plugin.yaml`. No policy, no access. This page walks through writing policies
-from the simplest case to more complex scenarios.
+`plugin.yaml`. No policy, no access. This guide is a set of recipes: each
+section grants one capability. Add the policies your plugin needs and skip the
+rest.
 
-For the full DSL reference, operators guide, and capability tables, see the
+For the full DSL reference, operator guide, and capability tables, see the
 [Access Control Reference](/reference/access-control/).
 
-## The Simplest Plugin: No Policies Needed
+## React to events without any policy
 
-A plugin that only reacts to events and returns new events doesn't need any
-policies at all. The event delivery system handles subscriptions based on
-the `events` list in your manifest:
+A plugin that only reacts to events and returns new events needs no policies.
+The event delivery system handles subscriptions from the `events` list in your
+manifest; returning events from `on_event` goes through that system, not a host
+function:
 
 ```yaml
 name: echo-bot
@@ -42,16 +44,13 @@ function on_event(event)
 end
 ```
 
-This works because returning events from `on_event` goes through the event
-delivery system, not a host function. No policy needed.
+To emit events outside of a direct `on_event` response, you need an emit policy
+(next recipe).
 
-**But wait** — this plugin is emitting events by returning them. What if you
-want to emit events outside of a direct response? Then you need a policy.
+## Grant proactive event emission
 
-## Adding Event Emission
-
-If your plugin needs to emit events proactively (not just as a return value
-from `on_event`), add an emit policy:
+To emit events proactively (not just as a return value from `on_event`), add an
+emit policy:
 
 ```yaml
 name: announcer
@@ -69,16 +68,13 @@ lua-plugin:
   entry: main.lua
 ```
 
-The policy says: "The plugin named `announcer` is allowed to emit events to
-any stream." The `principal.plugin.name` condition scopes it to just this
-plugin — other plugins can't piggyback on your policy.
+The `principal.plugin.name` condition scopes the permit to just this plugin —
+other plugins can't piggyback on your policy.
 
-## Reading the World
+## Grant world reads
 
-A plugin that needs to know about the game world — checking who's in a
-location, looking up character names, examining objects — needs read policies.
-
-Here's a greeter that welcomes players by name when they arrive:
+To read game-world state — who's in a location, character names, objects — add
+a read policy scoped to the resource patterns you need:
 
 ```yaml
 name: greeter
@@ -102,10 +98,9 @@ lua-plugin:
   entry: main.lua
 ```
 
-Notice the `resource like "character:*"` pattern — this plugin can read
-character data but not locations or objects. You grant exactly what you need.
-
-If the greeter also needed to check what location someone arrived in:
+The `resource like "character:*"` pattern grants character reads but not
+locations or objects — grant exactly what you need. To also read locations,
+widen the pattern:
 
 ```yaml
   - name: "read-world"
@@ -116,10 +111,10 @@ If the greeter also needed to check what location someone arrived in:
       };
 ```
 
-## Using Key-Value Storage
+## Grant key-value storage
 
-Plugins that need to persist data between events (scores, settings, cooldowns)
-use the key-value store. Access requires its own policy:
+To persist data between events (scores, settings, cooldowns), grant access to
+the key-value store:
 
 ```yaml
 name: dice-tracker
@@ -142,16 +137,18 @@ lua-plugin:
   entry: main.lua
 ```
 
-This grants read and write but not delete. If you need all three:
+This grants read and write but not delete. To grant all three, add `"delete"`
+to the action list:
 
 ```yaml
       permit(principal is plugin, action in ["read", "write", "delete"], resource is kv) when {
 ```
 
-## A Complex Plugin: Combat System
+## Combine policies for a full plugin
 
-A full-featured plugin might need multiple policies. Here's what a combat
-system might declare:
+A full-featured plugin declares one policy per capability. A combat system that
+emits events, reads world state, stores data, and registers commands declares
+all four:
 
 ```yaml
 name: combat-system
@@ -190,20 +187,14 @@ binary-plugin:
   executable: combat-system
 ```
 
-This plugin can:
+An operator reviewing this manifest sees exactly what the plugin needs — emit to
+any stream, read characters/locations/objects, read/write/delete storage, and
+register its own commands — and decides whether to trust it.
 
-- Emit events to any stream (combat results, damage, effects)
-- Read characters, locations, and objects (check stats, range, inventory)
-- Store and retrieve data (HP, buffs, cooldowns)
-- Register its own commands (attack, defend, flee)
-
-An operator reviewing this manifest can see exactly what the combat system
-needs — and decide whether to trust it.
-
-## When Access Is Denied
+## Handle access denials
 
 If your plugin tries something without a matching policy, the host function
-returns `"access denied"`:
+returns `"access denied"`. Branch on it:
 
 ```lua
 local location, err = holomush.query_location(location_id)
@@ -221,7 +212,7 @@ end
 
 The denial is logged server-side too, so operators can see what happened.
 
-## Debugging Tips
+## Debugging tips
 
 1. **Check server logs.** Denied actions are logged with your plugin name,
    the action, and the resource.
@@ -233,7 +224,7 @@ The denial is logged server-side too, so operators can see what happened.
 4. **Start broad, narrow later.** While developing, you can use broad
    patterns like `resource like "*"`, then tighten them before release.
 
-## Further Reading
+## Further reading
 
 - [Access Control Reference](/reference/access-control/) — Full DSL spec, operator guide, capability tables
 - [Plugin Guide](/extending/tutorials/plugin-guide/) — Complete plugin development guide
