@@ -53,8 +53,8 @@ task docs:build   # Build static site
 ```
 
 For sandbox operations at `game.holomush.dev`, see
-[site/docs/operating/sandbox-operations.md](site/docs/operating/sandbox-operations.md)
-and [site/docs/operating/sandbox-restore.md](site/docs/operating/sandbox-restore.md).
+[site/src/content/docs/operating/sandbox-operations.md](site/src/content/docs/operating/sandbox-operations.md)
+and [site/src/content/docs/operating/sandbox-restore.md](site/src/content/docs/operating/sandbox-restore.md).
 
 ---
 
@@ -70,7 +70,7 @@ and [site/docs/operating/sandbox-restore.md](site/docs/operating/sandbox-restore
 | **MUST** use squash merge          | All PRs are squash merged to maintain clean history |
 | **MUST NOT** push directly to main | Branch protection enforces this                     |
 
-**See:** [Pull Request Guide](site/docs/contributing/pr-guide.md) for the complete workflow.
+**See:** [Pull Request Guide](site/src/content/docs/contributing/pr-guide.md) for the complete workflow.
 
 ---
 
@@ -122,7 +122,7 @@ Detail on each gate is in `## Pre-Push Review Gates`. Skipping requires explicit
 
 ### Code review
 
-All tasks MUST be reviewed before completion via `pr-review-toolkit:review-pr`. Workflow detail at [Pull Request Guide](site/docs/contributing/pr-guide.md).
+All tasks MUST be reviewed before completion via `pr-review-toolkit:review-pr`. Workflow detail at [Pull Request Guide](site/src/content/docs/contributing/pr-guide.md).
 
 | Requirement                                | Description                                          |
 | ------------------------------------------ | ---------------------------------------------------- |
@@ -219,7 +219,7 @@ Use `oops` for structured errors: `oops.With(k, v).Wrap(err)`, `oops.Errorf(...)
 
 ### Database Migrations
 
-`internal/store/migrations/`, embedded at compile time. Sequential numbering, paired `.up.sql` + `.down.sql`, idempotent (`IF NOT EXISTS`), no triggers/functions (all logic in Go). Full guide: [database-migrations.md](site/docs/contributing/database-migrations.md).
+`internal/store/migrations/`, embedded at compile time. Sequential numbering, paired `.up.sql` + `.down.sql`, idempotent (`IF NOT EXISTS`), no triggers/functions (all logic in Go). Full guide: [database-migrations.md](site/src/content/docs/contributing/database-migrations.md).
 
 ### License Headers
 
@@ -258,7 +258,7 @@ Tests in `internal/grpc/`, `internal/grpc/focus/`, `internal/command/handlers/`,
 
 ### Integration test harness (`internal/testsupport/integrationtest`)
 
-`internal/testsupport/integrationtest/` is the canonical integration-test harness — a real in-process holomush stack (Postgres testcontainer + embedded NATS JetStream + production `CoreServer`) used by privacy/presence/scene/session integration tests. Build-tag-gated (`//go:build integration`); never linked into production binaries. See the package doc-comment in `harness.go` for the full helper catalog and the [integration-tests contributor guide](site/docs/contributing/integration-tests.md).
+`internal/testsupport/integrationtest/` is the canonical integration-test harness — a real in-process holomush stack (Postgres testcontainer + embedded NATS JetStream + production `CoreServer`) used by privacy/presence/scene/session integration tests. Build-tag-gated (`//go:build integration`); never linked into production binaries. See the package doc-comment in `harness.go` for the full helper catalog and the [integration-tests contributor guide](site/src/content/docs/contributing/integration-tests.md).
 
 | When to use                                | When NOT to use                                                 |
 | ------------------------------------------ | --------------------------------------------------------------- |
@@ -320,7 +320,7 @@ from the auto-detecting entry point.
 
 **`Integration Test` and `E2E Test` are required CI checks protecting `main`.**
 They run on Namespace runners with Testcontainers Cloud in CI — not in the
-mandatory local fast lane. See [pr-prep](site/docs/contributing/pr-prep.md)
+mandatory local fast lane. See [pr-prep](site/src/content/docs/contributing/pr-prep.md)
 for the full lanes reference and lock/contention behavior.
 
 **Reading the pr-prep result — exit code first, then disambiguate; never
@@ -348,7 +348,7 @@ This repo is developed primarily by concurrent AI agent sessions. Because jj sna
 
 | Requirement | Description |
 |---|---|
-| **MUST** isolate per session | Agents: `task workspace:new -- <name>`, then `cd <printed-path>`. Humans: see [sessions guide](site/docs/contributing/sessions.md) for shell-function setup. |
+| **MUST** isolate per session | Agents: `task workspace:new -- <name>`, then `cd <printed-path>`. Humans: see [sessions guide](site/src/content/docs/contributing/sessions.md) for shell-function setup. |
 | **SHOULD NOT** edit files in `default` | A `SessionStart` hook warns when a session begins there. Reserved for read-only inspection. |
 | **MUST** clean up post-merge | After landing: `cd <repo-root> && jj workspace forget <name> && rm -rf <repo-parent>/.worktrees/<name>`. The `cd` matters — `../.worktrees/<name>` is unsafe from any nested cwd. |
 
@@ -360,7 +360,7 @@ This repo is developed primarily by concurrent AI agent sessions. Because jj sna
 
 ## Reference
 
-- **Directory structure**: see top-level `tree -L 2` or `ls`. Public layout overview lives in `site/docs/contributing/`.
+- **Directory structure**: see top-level `tree -L 2` or `ls`. Public layout overview lives in `site/src/content/docs/contributing/`.
 - **Key interfaces** (`EventBus`, `ServiceRegistry`, `ServiceProvider`): `.claude/rules/event-interfaces.md` (auto-loads when editing eventbus / plugin code)
 - **Gateway boundary invariant**: `.claude/rules/gateway-boundary.md` (auto-loads in `cmd/holomush/`, `internal/web/`, `internal/grpc/`)
 - **Terminology** (location vs room, character vs player, etc.): `.claude/rules/terminology.md` (auto-loads on `*.md` and domain code)
