@@ -152,6 +152,15 @@ type Server struct {
 	// goroutines are stopped via t.Cleanup in Start. nil unless WithPluginCrypto.
 	readbackAuditEm *authguardaudit.Emitter
 
+	// histCrypto bundles the shared crypto substrate (AuthGuard + session
+	// bridges + audit emitter) used by BOTH the host history reader
+	// (readerCryptoOptions, threaded into history.NewReader under
+	// WithPluginCrypto) and the read-back decryptor (configureReadback). Built
+	// once by buildHistoryCrypto so the two surfaces share one guard instance
+	// and one audit emitter (DRY — no divergent guards). nil unless
+	// WithPluginCrypto.
+	histCrypto *historyCrypto
+
 	// accessEngine is the ABAC policy engine the stack evaluates against: the
 	// allow-all default, a WithPolicyEngine override, or — under WithRealABAC —
 	// the real seeded engine (abacSub.Engine()). Exposed via AccessEngine() so
@@ -360,18 +369,27 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	engine := core.NewEngine(&noopEventAppender{})
 
 	// HistoryReader: minimal wiring against the embedded bus's JetStream
-	// and the test Postgres pool. All crypto/audit/fence options are
-	// nil-defaulted — the production newHistoryReader in
+	// and the test Postgres pool. Without WithPluginCrypto, all crypto/audit/
+	// fence options are nil-defaulted — the production newHistoryReader in
 	// cmd/holomush/sub_grpc.go layers those on, but for privacy-invariant
-	// tests the bare JS+Postgres tier is sufficient.
-	historyReader := history.NewReader(bus.JS, pool, 30*24*time.Hour, time.Now)
+	// tests the bare JS+Postgres tier is sufficient (zero blast radius).
+	//
+	// Under WithPluginCrypto, build the shared AuthGuard + DEK manager + audit
+	// emitter + codec selector and thread them into the reader (holomush-y5inx.8)
+	// so a SENSITIVE plugin-owned scene event read back via QueryStreamHistory
+	// decrypts for an authorized DEK participant. buildHistoryCrypto runs here
+	// (after startPlugins, before the reader) so configureReadback below reuses
+	// the SAME guard instance — no divergent guards.
+	var histCrypto *historyCrypto
+	historyReaderOpts := []history.Option{}
+	if cfg.withPluginCrypto {
+		histCrypto = buildHistoryCrypto(t, pc, pluginSub.Manager(), pe, bus.Bus.GameID())
+		historyReaderOpts = histCrypto.readerCryptoOptions(pc)
+	}
+	historyReader := history.NewReader(bus.JS, pool, 30*24*time.Hour, time.Now, historyReaderOpts...)
 
 	// CoreServer wired with all required subsystems.
-	coreServer := holoGRPC.NewCoreServer(
-		engine,
-		sessionStoreInst,
-		dispatcher,
-		cmdServices,
+	coreServerOpts := []holoGRPC.CoreServerOption{
 		holoGRPC.WithAuthService(authService),
 		holoGRPC.WithPlayerSessionRepo(playerSessionStore),
 		holoGRPC.WithPlayerRepo(playerRepo),
@@ -392,6 +410,26 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		// without the operational complexity of seeded ABAC policies.
 		holoGRPC.WithAccessEngine(pe),
 		holoGRPC.WithVerbRegistry(verbRegistry),
+	}
+	// Under WithPluginCrypto, enable the Phase 3b crypto identity path so
+	// QueryStreamHistory builds a typed CHARACTER SessionIdentity (binding_id
+	// resolved via the BindingRepo) and hands it to the hot-tier AuthGuard.
+	// Without these the identity is the zero value and the guard cannot match a
+	// DEK participant. Gated to crypto so non-crypto suites keep the current
+	// (binding-lookup-skipped) behavior — zero blast radius (holomush-y5inx.8).
+	if cfg.withPluginCrypto {
+		coreServerOpts = append(
+			coreServerOpts,
+			holoGRPC.WithCryptoEnabled(true),
+			holoGRPC.WithBindingRepository(worldpg.NewBindingRepository(pool)),
+		)
+	}
+	coreServer := holoGRPC.NewCoreServer(
+		engine,
+		sessionStoreInst,
+		dispatcher,
+		cmdServices,
+		coreServerOpts...,
 	)
 
 	srv := &Server{
@@ -408,6 +446,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		coreServer:           coreServer,
 		pluginSub:            pluginSub,
 		pluginCrypto:         pc,
+		histCrypto:           histCrypto,
 		accessEngine:         pe,
 		guestStartLocationID: guestLocID,
 	}
@@ -417,8 +456,10 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	// (host-side DEK decrypt + INV-19 audit). Wired after startPlugins so the
 	// Manager's audit clients are resolvable. INV-P7-9: the SAME pc.selector
 	// instance feeds the consumer manager that the crypto-enabled publisher used
-	// on the emit side.
+	// on the emit side. The read-back decryptor reuses the guard + audit emitter
+	// built by buildHistoryCrypto above (also used by the host history reader).
 	if cfg.withPluginCrypto {
+		srv.readbackAuditEm = histCrypto.auditEm
 		srv.seedScene(ctx, pc)
 		srv.pluginConsumers = startPluginConsumers(t, ctx, bus, pluginSub.Manager(), pc.selector)
 		t.Cleanup(func() { _ = srv.pluginConsumers.Stop(context.Background()) })
@@ -696,6 +737,17 @@ func (s *Server) ConnectAuthedWithRoles(ctx context.Context, charName string, ro
 	require.NoError(s.t, s.charRepo.Create(ctx, char),
 		"integrationtest.ConnectAuthedWithRoles: persist character")
 
+	// Under WithPluginCrypto the CoreServer runs with WithCryptoEnabled(true), so
+	// Subscribe / QueryStreamHistory perform a binding lookup
+	// (BindingRepository.Current) to build the typed CHARACTER identity. Create
+	// the binding row here — production characters always have one; the harness's
+	// direct charRepo.Create bypasses that path (holomush-y5inx.8).
+	if s.pluginCrypto != nil {
+		_, bindErr := worldpg.NewBindingRepository(s.pool).Create(ctx,
+			player.ID.String(), char.ID.String(), "integrationtest.ConnectAuthedWithRoles")
+		require.NoError(s.t, bindErr, "integrationtest.ConnectAuthedWithRoles: create binding")
+	}
+
 	// Stamp roles into character_roles.
 	for _, role := range roles {
 		_, roleErr := s.pool.Exec(ctx,
@@ -723,6 +775,7 @@ func (s *Server) ConnectAuthedWithRoles(ctx context.Context, charName string, ro
 	sess := &Session{
 		server:             s,
 		SessionID:          selResp.GetSessionId(),
+		PlayerID:           player.ID,
 		CharacterID:        char.ID,
 		CharacterName:      selResp.GetCharacterName(),
 		LocationID:         s.guestStartLocationID,

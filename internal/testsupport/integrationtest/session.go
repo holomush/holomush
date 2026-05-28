@@ -40,6 +40,10 @@ type Session struct {
 
 	// SessionID is the game session identifier returned by SelectCharacter.
 	SessionID string
+	// PlayerID is the ULID of the player account that owns CharacterID. Set at
+	// connect time; used by crypto helpers that need the player_id for DEK
+	// participant rows / bindings (e.g. SeedSceneDEKParticipant).
+	PlayerID ulid.ULID
 	// CharacterID is the ULID of the in-game character for this session.
 	CharacterID ulid.ULID
 	// CharacterName is the display name of the character.
