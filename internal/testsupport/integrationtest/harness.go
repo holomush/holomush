@@ -174,6 +174,9 @@ type startConfig struct {
 	withPlugins      bool
 	withRealABAC     bool
 	withPluginCrypto bool
+	// pluginConfigOverrides is the per-plugin opaque config override
+	// (plugin name → key → value) threaded into PluginSubsystemConfig.
+	pluginConfigOverrides map[string]map[string]string
 }
 
 // WithPolicyEngine overrides the harness's default allow-all ABAC engine.
@@ -317,20 +320,21 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 			policyInst = abacSub.PolicyInstaller()
 		}
 		pluginSub = startPlugins(t, ctx, pluginDeps{
-			pool:            pool,
-			connStr:         connStr,
-			engine:          pe,
-			sessionStore:    sessionStoreInst,
-			verbReg:         verbRegistry,
-			playerRepo:      playerRepo,
-			hasher:          hasher,
-			playerSess:      playerSessionStore,
-			resolver:        res,
-			pluginProvider:  pp,
-			auditor:         aud,
-			policyInstaller: policyInst,
-			cryptoPublisher: cryptoPublisherOf(pc),
-			gameID:          bus.Bus.GameID(),
+			pool:                  pool,
+			connStr:               connStr,
+			engine:                pe,
+			sessionStore:          sessionStoreInst,
+			verbReg:               verbRegistry,
+			playerRepo:            playerRepo,
+			hasher:                hasher,
+			playerSess:            playerSessionStore,
+			resolver:              res,
+			pluginProvider:        pp,
+			auditor:               aud,
+			policyInstaller:       policyInst,
+			cryptoPublisher:       cryptoPublisherOf(pc),
+			gameID:                bus.Bus.GameID(),
+			pluginConfigOverrides: cfg.pluginConfigOverrides,
 		})
 		cmdRegistry = pluginSub.CommandRegistry()
 	}
