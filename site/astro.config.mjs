@@ -3,6 +3,7 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightLlmsTxt from 'starlight-llms-txt';
+import starlightClientMermaid from '@pasqal-io/starlight-client-mermaid';
 
 export default defineConfig({
   site: 'https://holomush.dev',
@@ -14,8 +15,7 @@ export default defineConfig({
       favicon: '/favicon.png',
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/holomush/holomush' }],
       customCss: ['./src/styles/custom.css'],
-      plugins: [starlightLlmsTxt({ projectName: 'HoloMUSH' })],
-      // mermaid plugin (Task 8) lands in a later task
+      plugins: [starlightClientMermaid(), starlightLlmsTxt({ projectName: 'HoloMUSH' })],
       sidebar: [
         { label: 'Guide', items: [
           { slug: 'guide' }, { slug: 'guide/the-world' }, { slug: 'guide/connecting' },
