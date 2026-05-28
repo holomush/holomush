@@ -189,3 +189,12 @@ func TestLintProtoRunsNameEcho(t *testing.T) {
 	require.Contains(t, body, "TestProtoCommentsNoNameEcho",
 		"lint:proto must run the name-echo gate (INV-5)")
 }
+
+// INV-1: buf.yaml lint.use MUST include COMMENTS.
+func TestBufYAMLEnablesComments(t *testing.T) {
+	root := findRepoRoot(t)
+	data, err := os.ReadFile(filepath.Join(root, "buf.yaml"))
+	require.NoError(t, err, "read buf.yaml")
+	require.Contains(t, string(data), "- COMMENTS",
+		"buf.yaml lint.use must enable the COMMENTS category (INV-1)")
+}

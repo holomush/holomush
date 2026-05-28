@@ -20,13 +20,21 @@ option go_package = "github.com/holomush/holomush/internal/eventbus/cursor/curso
 // Typed enum (not free-form string) to prevent plugin-name collisions
 // with the discriminator scheme.
 enum OwnerKind {
+  // OWNER_KIND_UNSPECIFIED is the zero value; a decoded cursor never carries
+  // it, so it signals a malformed or default-constructed token.
   OWNER_KIND_UNSPECIFIED = 0;
+  // OWNER_KIND_HOST marks a cursor over a host-owned subject, whose body is a
+  // HostCursor (JetStream seq + tripwire ULID).
   OWNER_KIND_HOST = 1;
+  // OWNER_KIND_PLUGIN marks a cursor over a plugin-owned subject, whose body
+  // is the plugin's own opaque inner cursor bytes.
   OWNER_KIND_PLUGIN = 2;
 }
 
 // Owner identifies who owns the subject the cursor names.
 message Owner {
+  // kind selects which subject-ownership domain this cursor addresses and
+  // which Cursor.body variant is expected.
   OwnerKind kind = 1;
   // plugin_name is set iff kind == OWNER_KIND_PLUGIN. The canonical name
   // from the plugin manifest (internal/plugin/manifest).
@@ -35,18 +43,34 @@ message Owner {
 
 // HostCursor is the body for host-owned subject cursors.
 message HostCursor {
-  uint64 seq = 1; // JetStream stream sequence
-  bytes id = 2; // ULID, 16 bytes — tripwire for drift/rebuild detection
+  // seq is the JetStream per-stream sequence the next page resumes after;
+  // this is the authoritative ordering position for host-owned subjects.
+  uint64 seq = 1;
+  // id is the 16-byte ULID of the event at seq, retained as a tripwire so a
+  // stream rebuild or drift is detected when the resumed seq no longer maps
+  // to this identity.
+  bytes id = 2;
 }
 
 // Cursor is the on-the-wire token (proto-marshaled). Clients treat
 // these bytes as opaque.
 message Cursor {
-  uint32 version = 1; // bump on incompatible format change; today=1
-  uint64 epoch = 2; // bumps on JS rebuild; 0 today
+  // version is the cursor format version; Decode accepts ONLY CurrentVersion
+  // (today=1) and rejects any other value with EVENTBUS_CURSOR_INVALID.
+  uint32 version = 1;
+  // epoch bumps whenever the JetStream backing store is rebuilt, invalidating
+  // any cursor minted under a prior epoch; 0 in the current deployment.
+  uint64 epoch = 2;
+  // owner names whose subject this cursor addresses and selects the body
+  // variant below.
   Owner owner = 3;
+  // body carries the owner-specific resume position: a structured HostCursor
+  // for host subjects, or opaque plugin bytes for plugin subjects.
   oneof body {
+    // host is the resume position for host-owned subjects.
     HostCursor host = 4;
-    bytes plugin_inner = 5; // opaque bytes from plugin's own QueryHistory
+    // plugin_inner is the opaque cursor a plugin's own QueryHistory returned,
+    // round-tripped verbatim without host interpretation.
+    bytes plugin_inner = 5;
   }
 }

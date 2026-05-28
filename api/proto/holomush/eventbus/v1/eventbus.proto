@@ -36,7 +36,11 @@ message Actor {
   // kind classifies the entity that caused the event; drives downstream audit
   // routing (e.g. plugin_router.go selects the audit sink by kind).
   ActorKind kind = 1;
-  bytes id = 2; // ULID (16 bytes); MUST be set for every ActorKind value.
+  // id is the actor's 16-byte ULID identity, letting downstream audit attribute
+  // the event to a concrete entity. Character and plugin actors carry a real
+  // ULID; system- and unknown-origin events MAY leave it as the zero ULID, in
+  // which case the field is omitted on the wire (see coreActorToEventbusActor).
+  bytes id = 2;
   // Field 3 was `string legacy_id` (removed in holomush-w9ml).
   // T18 cutover purges all pre-w9ml envelopes; reserved markers prevent
   // accidental field-number reuse.
@@ -47,7 +51,10 @@ message Actor {
 // Event is the host-side envelope. Wire encoding is proto bytes in the
 // JetStream message data; headers carry routing/codec/version metadata.
 message Event {
-  bytes id = 1; // ULID (16 bytes)
+  // id is the event's 16-byte ULID; it is the identity and JetStream dedup
+  // key (set as Nats-Msg-Id), stable across rebuilds. Ordering is owned by
+  // the JetStream per-stream sequence, not by this ULID's lexical order.
+  bytes id = 1;
   // subject is the NATS dot-delimited routing address for this event, of the
   // form events.<game_id>.<domain>.<entity-id>[.<facet>...], validated by
   // NewSubject (must start with "events.").
@@ -61,7 +68,10 @@ message Event {
   // actor identifies the entity that caused the event; host-stamped and
   // never directly settable by plugins.
   Actor actor = 5;
-  bytes payload = 6; // codec.Encode output
+  // payload is the codec.Encode output for the event body; opaque at the
+  // envelope layer and decoded by subscribers according to the codec/version
+  // metadata carried in the JetStream message headers.
+  bytes payload = 6;
   // Rendering metadata, populated by RenderingPublisher.Publish before
   // marshaling for JetStream. Mirrors the corev1.RenderingMetadata used
   // on the gRPC Subscribe wire (one schema, two transports).
