@@ -100,6 +100,7 @@ Session invalidation failures are logged rather than blocking the
 password reset. Operators should monitor for session invalidation
 warnings in the logs.
 :::
+
 ### Without Email
 
 :::caution[Planned Feature]
@@ -108,6 +109,7 @@ The admin password reset command is not yet implemented. This is tracked
 as a priority feature. In the interim, contact the development team for
 assistance with password recovery.
 :::
+
 ## Monitoring
 
 ### Key Log Events

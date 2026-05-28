@@ -5,7 +5,6 @@ title: "Emitting Audit Events from Plugins"
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-
 Plugins can emit audit events during command handler execution. These events flow through the same `audit.Logger` the ABAC engine uses, gaining WAL durability, mode routing, and operator-visible metrics — without any extra ops configuration.
 
 Use this when your handler makes an authorization-relevant decision that the ABAC policy engine didn't catch. Examples: membership / ban / mute checks in a channels plugin, ownership checks in a building plugin, rate-limit denials in a communication plugin.

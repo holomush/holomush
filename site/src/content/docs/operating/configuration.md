@@ -72,6 +72,7 @@ support HTTP/2 upstream connections. See
 [ADR-001](https://github.com/holomush/holomush/blob/main/docs/specs/decisions/001-http2-required.md)
 for rationale.
 :::
+
 ```bash
 holomush gateway [flags]
 ```
@@ -181,6 +182,7 @@ container image, `HOME=/home/holomush`, so config lives at
 mount a volume to `/home/holomush/.config/holomush` (see [Installation](/operating/installation/)
 for compose examples). In Kubernetes, use a PersistentVolumeClaim for the same path.
 :::
+
 ### Generated Files
 
 On first startup, core automatically creates:

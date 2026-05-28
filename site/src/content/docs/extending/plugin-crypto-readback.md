@@ -5,7 +5,6 @@ title: "Reading Back Encrypted History"
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-
 Plugins that emit `sensitivity:always` events write ciphertext to the audit
 table — the host encrypts every event at emit time, before it reaches
 persistent storage. If your plugin needs to read those events back as

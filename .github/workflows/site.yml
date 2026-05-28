@@ -27,6 +27,10 @@ jobs:
         working-directory: site
         run: bun install --frozen-lockfile && bunx astro build
 
+      - name: Check internal links
+        working-directory: site
+        run: bunx linkinator dist/index.html --recurse --silent --skip "^https?://(?!127\.0\.0\.1|localhost)"
+
       - name: Deploy to Cloudflare Pages
         if: github.ref == 'refs/heads/main'
         uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4

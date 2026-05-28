@@ -193,10 +193,10 @@ so JetStream ack + audit semantics match.
 
 4. Update the "Test packages currently using the harness" table above.
 5. If your test needs a non-default ABAC engine, pass `WithPolicyEngine(eng)`
-    to `Start`.
+   to `Start`.
 6. If your test needs a new escape hatch (e.g., to produce a state shape no
-    existing helper can), add the helper to `harness.go` or `session.go` with
-    a doc comment that explains:
+   existing helper can), add the helper to `harness.go` or `session.go` with
+   a doc comment that explains:
 
     - What it bypasses.
     - Why production code can't reasonably reach that state.

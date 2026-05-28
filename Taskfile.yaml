@@ -1107,6 +1107,13 @@ tasks:
     cmds:
       - bunx astro dev
 
+  docs:linkcheck:
+    desc: Check internal links in the built docs site (INV-2)
+    dir: site
+    deps: ['docs:build']
+    cmds:
+      - bunx linkinator dist/index.html --recurse --silent --skip "^https?://(?!127\.0\.0\.1|localhost)"
+
   docs:proto:
     desc: Generate gRPC API reference from proto files
     vars:
