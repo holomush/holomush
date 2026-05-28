@@ -1,5 +1,7 @@
 ---
 title: "Lua Plugin Author Guide"
+sidebar:
+  order: 2
 ---
 
 Lua plugins run inside a sandboxed gopher-lua VM. They are ideal for simple

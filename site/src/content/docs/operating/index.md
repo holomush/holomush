@@ -1,5 +1,7 @@
 ---
 title: "Operating HoloMUSH"
+sidebar:
+  order: 0
 ---
 
 Running HoloMUSH in production is straightforward. The server ships as a single

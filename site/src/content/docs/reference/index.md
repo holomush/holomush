@@ -1,5 +1,7 @@
 ---
 title: "Reference"
+sidebar:
+  order: 0
 ---
 
 This section contains auto-generated and hand-curated reference material for

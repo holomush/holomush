@@ -1,5 +1,7 @@
 ---
 title: "Binary Plugin Author Guide"
+sidebar:
+  order: 3
 ---
 
 Binary plugins are standalone Go programs that communicate with HoloMUSH over

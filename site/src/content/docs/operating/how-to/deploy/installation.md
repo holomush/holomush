@@ -1,5 +1,7 @@
 ---
 title: "Installation"
+sidebar:
+  order: 1
 ---
 
 This guide covers installing HoloMUSH using Docker or pre-built binaries.

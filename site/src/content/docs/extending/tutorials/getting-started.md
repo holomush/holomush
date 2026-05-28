@@ -1,5 +1,7 @@
 ---
 title: "Getting Started with Plugins"
+sidebar:
+  order: 1
 ---
 
 This guide walks you through creating your first HoloMUSH plugin. By the end,

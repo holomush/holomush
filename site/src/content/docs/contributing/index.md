@@ -1,5 +1,7 @@
 ---
 title: "Contributing to HoloMUSH"
+sidebar:
+  order: 0
 ---
 
 Welcome! HoloMUSH is an open-source project licensed under

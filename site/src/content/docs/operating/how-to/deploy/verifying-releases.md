@@ -1,5 +1,7 @@
 ---
 title: "Verifying HoloMUSH Releases"
+sidebar:
+  order: 3
 ---
 
 This guide explains how to verify the authenticity and integrity of HoloMUSH releases.

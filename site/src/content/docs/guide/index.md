@@ -1,5 +1,7 @@
 ---
 title: "Player Guide"
+sidebar:
+  order: 0
 ---
 
 ## What's a MUSH?

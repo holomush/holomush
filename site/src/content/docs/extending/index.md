@@ -1,5 +1,7 @@
 ---
 title: "Extending HoloMUSH"
+sidebar:
+  order: 0
 ---
 
 HoloMUSH is designed to be extended through plugins. Whether you want to add a

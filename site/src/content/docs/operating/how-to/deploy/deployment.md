@@ -1,5 +1,7 @@
 ---
 title: "Deploying HoloMUSH"
+sidebar:
+  order: 2
 ---
 
 Deploy a production HoloMUSH instance on a DigitalOcean droplet with automatic
