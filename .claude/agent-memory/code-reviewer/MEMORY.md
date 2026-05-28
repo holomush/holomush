@@ -286,6 +286,29 @@ Keep under 200 lines. Curate — don't hoard.
   runtime-specific code, but the policy/manifest gate MUST be at the
   shared site.
 
+- **Focus per-connection delta delivery is asymmetric BY DESIGN — not a
+  symmetry violation.** Two distinct focus delivery seams: (1) session-level
+  `focus.StreamSender` (`coordinator.go:22`, `JoinFocus → StreamSender.Send →
+  SessionStreamRegistry.Send → r.channels[sessionID]`, `join.go:51`) wired on
+  the COORDINATOR in prod (`sub_grpc.go:447`) — both runtimes use it; (2)
+  per-connection `focus.ConnectionSender` (binary host field, `host_service.go:255,315`
+  AutoFocusOnJoin/SetConnectionFocus → `SendToConnection → r.connections`).
+  ConnectionSender is **nil in production** (`core.go:405-422` PluginSubsystemConfig
+  omits it; `sub_grpc.go` never sets it) — per-connection deltas are SKIPPED in
+  prod today. Lua DELIBERATELY drops per-connection deltas: `focus_ops_adapter.go:46-49`
+  ("Lua plugins react to focus events via JetStream, not via the RPC return
+  value"). So neither runtime drives per-connection deltas in prod; both deliver
+  session-level via the same coordinator StreamSender. A binary-only
+  `ConnectionSender` field/wiring is NOT a privilege gradient — it's
+  runtime-specific delta delivery, not a trust/policy/manifest gate (those stay
+  at `event_emitter.go::Emit`). Both Subscribe registrations (`server.go:822`
+  session-wide Register + `:872` RegisterConnection) write the SAME ctrlCh, so a
+  single-connection joiner gets delivery via session-level StreamSender
+  regardless of ConnectionSender. Trap: a "binary AutoFocusOnJoin delivery never
+  wired in prod" claim is FACTUALLY true (ConnectionSender nil) but does NOT
+  imply a missing capability — session-level delivery covers it. Encountered:
+  holomush-y5inx.9 harness focus wiring (2026-05-28).
+
 - **Plugin emit token store: pluginName binding is the cross-plugin
   defense**: `emitTokenStore.Lookup(pluginName, token)` rejects when the
   stored entry's pluginName != caller pluginName. The caller pluginName

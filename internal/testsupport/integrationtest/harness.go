@@ -58,6 +58,8 @@ package integrationtest
 
 import (
 	"context"
+	"errors"
+	"io"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -78,13 +80,17 @@ import (
 	authguardaudit "github.com/holomush/holomush/internal/eventbus/authguard/audit"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	"github.com/holomush/holomush/internal/eventbus/history"
+	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/grpc/focus"
+	"github.com/holomush/holomush/internal/grpc/focus/scenepolicy"
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/pgnanos"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/settings"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telnet"
 	"github.com/holomush/holomush/internal/world"
@@ -180,10 +186,11 @@ type StartOption func(*startConfig)
 
 // startConfig holds resolved Start options.
 type startConfig struct {
-	accessEngine     types.AccessPolicyEngine
-	withPlugins      bool
-	withRealABAC     bool
-	withPluginCrypto bool
+	accessEngine      types.AccessPolicyEngine
+	withPlugins       bool
+	withRealABAC      bool
+	withPluginCrypto  bool
+	withFocusDelivery bool
 	// pluginConfigOverrides is the per-plugin opaque config override
 	// (plugin name → key → value) threaded into PluginSubsystemConfig.
 	pluginConfigOverrides map[string]map[string]string
@@ -208,6 +215,23 @@ func WithPolicyEngine(eng types.AccessPolicyEngine) StartOption {
 // seed:* grants a roleless character.
 func WithRealABAC() StartOption {
 	return func(c *startConfig) { c.withRealABAC = true }
+}
+
+// WithFocusDelivery wires a real focus.Coordinator + SessionStreamRegistry into
+// the harness (mirroring production cmd/holomush/sub_grpc.go:428-470) so the
+// REAL `scene join` command path reaches JoinFocus → AutoFocusOnJoin →
+// per-connection subscription delivery. Without it, the plugin host-service
+// JoinFocus RPC short-circuits with "focus coordinator not configured"
+// (internal/plugin/goplugin/host_service.go:113) and no scene-stream
+// subscription is ever added, so a post-join IC pose is never delivered to the
+// joiner's live Subscribe stream.
+//
+// REQUIRES WithInTreePlugins (the coordinator is injected into the loaded
+// plugin hosts via Manager.ConfigureFocusDeps). Gated exactly like
+// WithPluginCrypto so non-focus suites keep the current WithSubscriber-only
+// wiring — zero blast radius (holomush-y5inx.9).
+func WithFocusDelivery() StartOption {
+	return func(c *startConfig) { c.withFocusDelivery = true }
 }
 
 // Start bootstraps a full in-process holomush stack and returns a Server.
@@ -285,6 +309,9 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	if cfg.withPluginCrypto && !cfg.withPlugins {
 		panic("integrationtest: WithPluginCrypto() requires WithInTreePlugins()")
 	}
+	if cfg.withFocusDelivery && !cfg.withPlugins {
+		panic("integrationtest: WithFocusDelivery() requires WithInTreePlugins()")
+	}
 	pe := cfg.accessEngine
 
 	// Real seeded ABAC engine (opt-in). Overrides the allow-all default and is
@@ -317,6 +344,19 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		pc = newPluginCrypto(t, bus, pool, verbRegistry)
 	}
 
+	// Focus-delivery: the SessionStreamRegistry MUST exist BEFORE startPlugins so
+	// its ConnectionSenderAdapter can be wired into the binary plugin host at
+	// construction (mirrors production core.go, which creates the registry before
+	// the plugin subsystem). The CoreServer is also given this same registry so
+	// the Subscribe handler registers each connection's control channel on it.
+	// nil under non-focus suites — zero blast radius (holomush-y5inx.9).
+	var streamRegistry *holoGRPC.SessionStreamRegistry
+	var connectionSender focus.ConnectionSender
+	if cfg.withFocusDelivery {
+		streamRegistry = holoGRPC.NewSessionStreamRegistry()
+		connectionSender = holoGRPC.NewConnectionSenderAdapter(streamRegistry)
+	}
+
 	var pluginSub *pluginsetup.PluginSubsystem
 	cmdRegistry := command.NewRegistry()
 	if cfg.withPlugins {
@@ -345,6 +385,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 			cryptoPublisher:       cryptoPublisherOf(pc),
 			gameID:                bus.Bus.GameID(),
 			pluginConfigOverrides: cfg.pluginConfigOverrides,
+			connectionSender:      connectionSender,
 		})
 		cmdRegistry = pluginSub.CommandRegistry()
 	}
@@ -388,6 +429,59 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	}
 	historyReader := history.NewReader(bus.JS, pool, 30*24*time.Hour, time.Now, historyReaderOpts...)
 
+	// Focus-delivery coordinator (opt-in via WithFocusDelivery; the
+	// SessionStreamRegistry was created above, before startPlugins). Mirrors
+	// production cmd/holomush/sub_grpc.go:428-470: a real focus.Coordinator wired
+	// with the scene KindPolicy, game settings, player-preference reader, and the
+	// plugin StreamContributor. The scene `join` command reaches JoinFocus →
+	// AutoFocusOnJoin; the binary host's AutoFocusOnJoin RPC handler then drives
+	// per-Connection subscription deltas via the ConnectionSenderAdapter (wired at
+	// host construction above) → the connection's control channel, adding the
+	// scene IC/OOC streams to the live Subscribe filter set. The coordinator is
+	// injected into the loaded plugin hosts via Manager.ConfigureFocusDeps below.
+	// Gated so non-focus suites keep the WithSubscriber-only wiring — zero blast
+	// radius (holomush-y5inx.9).
+	var focusCoord focus.Coordinator
+	if cfg.withFocusDelivery {
+		gameSettings := settings.NewGameSettings(&settings.SystemInfoAdapter{
+			Store:       evStore,
+			NotFoundErr: store.ErrSystemInfoNotFound,
+		})
+		var focusErr error
+		focusCoord, focusErr = focus.NewCoordinator(
+			focus.WithSessionStore(sessionStoreInst),
+			focus.WithKindPolicy(scenepolicy.New()),
+			focus.WithGameSettings(gameSettings),
+			focus.WithPlayerPreferences(focus.NewPlayerPrefsAdapter(playerRepo)),
+			focus.WithStreamContributor(&focusStreamContributorAdapter{pm: pluginSub.Manager()}),
+			focus.WithStreamSender(holoGRPC.NewStreamSenderAdapter(streamRegistry)),
+		)
+		require.NoError(t, focusErr, "integrationtest.Start: build focus coordinator")
+	}
+
+	// Subscriber: the embedded bus subscriber powers Subscribe → WaitForEvent /
+	// DrainEvents. Under WithFocusDelivery + WithPluginCrypto, the live Subscribe
+	// loop must decode SENSITIVE scene IC events (delivered after a `scene join`).
+	// A bare identity-codec subscriber hits the zero-key AEAD decode path and
+	// errors ("bad key length"), tearing down the transport. Threading the same
+	// AuthGuard + DEK manager + codec selector + decrypt-audit emitter that the
+	// history reader uses (buildHistoryCrypto) gives the live path Decision-5
+	// semantics: a non-DEK-participant receives a metadata-only frame (Type still
+	// stamped) rather than an error, and a participant receives plaintext. Gated
+	// to crypto so non-crypto suites keep the bare subscriber — zero blast radius
+	// (holomush-y5inx.9).
+	var subscriber eventbus.Subscriber
+	if cfg.withFocusDelivery && histCrypto != nil {
+		subscriber = bus.Bus.Subscriber(
+			eventbus.WithSubscriberCodecSelector(pc.selector),
+			eventbus.WithSubscriberAuthGuard(histCrypto.sessionGuard),
+			eventbus.WithSubscriberDEKManager(pc.dekMgr),
+			eventbus.WithSubscriberDecryptAuditEmitter(histCrypto.sessionAuditEm),
+		)
+	} else {
+		subscriber = bus.Bus.Subscriber()
+	}
+
 	// CoreServer wired with all required subsystems.
 	coreServerOpts := []holoGRPC.CoreServerOption{
 		holoGRPC.WithAuthService(authService),
@@ -399,7 +493,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		holoGRPC.WithGuestService(guestSvc),
 		// Wire embedded bus subscriber so Subscribe calls succeed for
 		// WaitForEvent / DrainEvents paths.
-		holoGRPC.WithSubscriber(bus.Bus.Subscriber()),
+		holoGRPC.WithSubscriber(subscriber),
 		// HistoryReader powers QueryStreamHistory end-to-end so privacy
 		// integration tests can exercise the full RPC path.
 		holoGRPC.WithHistoryReader(historyReader),
@@ -424,6 +518,18 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 			holoGRPC.WithBindingRepository(worldpg.NewBindingRepository(pool)),
 		)
 	}
+	// Under WithFocusDelivery, hand the CoreServer the stream registry and focus
+	// coordinator. WithStreamRegistry makes Subscribe register each connection's
+	// control channel (server.go:821/871); WithFocusCoordinator makes Subscribe
+	// run RestoreFocus and lets AutoFocusOnJoin's filter updates reach the live
+	// loop (holomush-y5inx.9).
+	if cfg.withFocusDelivery {
+		coreServerOpts = append(
+			coreServerOpts,
+			holoGRPC.WithStreamRegistry(streamRegistry),
+			holoGRPC.WithFocusCoordinator(focusCoord),
+		)
+	}
 	coreServer := holoGRPC.NewCoreServer(
 		engine,
 		sessionStoreInst,
@@ -431,6 +537,18 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		cmdServices,
 		coreServerOpts...,
 	)
+
+	// Inject the focus coordinator + history reader into the loaded plugin hosts
+	// (late-binding: plugins started before this wiring existed). Without this,
+	// the plugin host-service JoinFocus RPC short-circuits with "focus
+	// coordinator not configured" (host_service.go:113) and the real `scene join`
+	// command never registers a scene-stream subscription (holomush-y5inx.9).
+	if cfg.withFocusDelivery {
+		pluginSub.Manager().ConfigureFocusDeps(focusCoord, &focusHistoryReaderAdapter{
+			reader: historyReader,
+			gameID: bus.Bus.GameID,
+		})
+	}
 
 	srv := &Server{
 		t:                    t,
@@ -990,3 +1108,125 @@ func (*allowAllPolicyEngine) CanPerformAction(_ context.Context, _, _, _, _ stri
 }
 
 var _ types.AccessPolicyEngine = (*allowAllPolicyEngine)(nil)
+
+// focusStreamContributorAdapter bridges plugins.Manager.QuerySessionStreams to
+// focus.StreamContributor by converting the request type. Mirrors the
+// production adapter at cmd/holomush/sub_grpc.go:770. Wired only under
+// WithFocusDelivery so RestoreFocus can include ambient plugin streams.
+type focusStreamContributorAdapter struct {
+	pm *plugins.Manager
+}
+
+// QuerySessionStreams implements focus.StreamContributor.
+func (a *focusStreamContributorAdapter) QuerySessionStreams(ctx context.Context, req focus.StreamContributorRequest) []string {
+	return a.pm.QuerySessionStreams(ctx, plugins.SessionStreamsRequest{
+		CharacterID: req.CharacterID,
+		PlayerID:    req.PlayerID,
+		SessionID:   req.SessionID,
+	})
+}
+
+var _ focus.StreamContributor = (*focusStreamContributorAdapter)(nil)
+
+// focusHistoryReaderAdapter bridges eventbus.HistoryReader (QueryHistory) to
+// plugins.HistoryReader (ReplayTail), so the focus coordinator's
+// QueryStreamHistory replay path resolves under WithFocusDelivery. Mirrors the
+// production busHistoryReaderAdapter at cmd/holomush/sub_grpc.go:670.
+type focusHistoryReaderAdapter struct {
+	reader eventbus.HistoryReader
+	gameID func() string
+}
+
+var _ plugins.HistoryReader = (*focusHistoryReaderAdapter)(nil)
+
+// ReplayTail satisfies plugins.HistoryReader. Fetches up to count most-recent
+// events on stream (optionally filtered by notBefore and exclusive beforeID),
+// returning them in ascending ULID order (oldest→newest).
+func (a *focusHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error) {
+	if count <= 0 {
+		return nil, nil
+	}
+	gameID := a.gameID()
+	if gameID == "" {
+		gameID = "main"
+	}
+	natsSubject, err := subjectxlate.Legacy(stream, gameID)
+	if err != nil {
+		return nil, oops.With("stream", stream).Wrap(err)
+	}
+	sub, err := eventbus.NewSubject(natsSubject)
+	if err != nil {
+		return nil, oops.With("stream", stream).Wrap(err)
+	}
+	q := eventbus.HistoryQuery{
+		Subject:   sub,
+		Direction: eventbus.DirectionBackward,
+		PageSize:  count,
+		NotBefore: notBefore,
+	}
+	if !beforeID.IsZero() {
+		q.BeforeID = beforeID
+	}
+	hs, err := a.reader.QueryHistory(ctx, q)
+	if err != nil {
+		return nil, oops.With("stream", stream).Wrap(err)
+	}
+	defer hs.Close() //nolint:errcheck // best-effort iterator close
+
+	collected := make([]eventbus.Event, 0, count)
+	for {
+		e, nextErr := hs.Next(ctx)
+		if nextErr != nil {
+			if errors.Is(nextErr, io.EOF) {
+				break
+			}
+			return nil, oops.With("stream", stream).Wrap(nextErr)
+		}
+		collected = append(collected, e)
+		if len(collected) >= count {
+			break
+		}
+	}
+	// Backward direction yields newest-first; reverse to ascending order
+	// (oldest→newest) and translate eventbus.Event → core.Event.
+	result := make([]core.Event, len(collected))
+	for i := range collected {
+		j := len(collected) - 1 - i
+		streamName := subjectxlate.ToLegacy(string(collected[i].Subject), gameID)
+		result[j] = busEventToCoreEvent(collected[i], streamName)
+	}
+	return result, nil
+}
+
+// busEventToCoreEvent translates an eventbus.Event to a core.Event for plugin
+// consumption. Mirrors cmd/holomush/sub_grpc.go:739.
+func busEventToCoreEvent(e eventbus.Event, stream string) core.Event {
+	actorID := ""
+	if e.Actor.ID != (ulid.ULID{}) {
+		actorID = e.Actor.ID.String()
+	}
+	return core.Event{
+		ID:        e.ID,
+		Stream:    stream,
+		Type:      core.EventType(e.Type),
+		Timestamp: e.Timestamp,
+		Actor: core.Actor{
+			Kind: busActorKindToCore(e.Actor.Kind),
+			ID:   actorID,
+		},
+		Payload: e.Payload,
+	}
+}
+
+func busActorKindToCore(k eventbus.ActorKind) core.ActorKind {
+	switch k {
+	case eventbus.ActorKindCharacter:
+		return core.ActorCharacter
+	case eventbus.ActorKindSystem:
+		return core.ActorSystem
+	case eventbus.ActorKindPlugin:
+		return core.ActorPlugin
+	default:
+		return core.ActorSystem
+	}
+}
