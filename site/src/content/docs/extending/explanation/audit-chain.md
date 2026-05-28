@@ -2,14 +2,14 @@
 title: "Audit-Chain Primitive"
 ---
 
-The `auditchain` primitive (`internal/eventbus/audit/chain/`) provides
-a generalized per-scope tamper-evident sequence for host-owned system
-audit events. It was introduced in Phase 5 sub-epic E to generalize
-the `policy_set` chain from sub-epic D into a reusable primitive.
+This page is for developers adding new **host-side** system audit event chains
+to the HoloMUSH core. If you are writing a plugin that emits ABAC audit events,
+see [Emitting Audit Events from Plugins](/extending/how-to/audit-events/) instead.
 
-**Audience:** Developers adding new host-side system audit event chains.
-Plugin-emitted audit events (ABAC allow/deny) use a separate path; see
-[Emitting Audit Events from Plugins](/extending/how-to/audit-events/).
+The `auditchain` primitive (`internal/eventbus/audit/chain/`) provides a
+generalized per-scope tamper-evident sequence for host-owned system audit events.
+It was introduced in Phase 5 sub-epic E to generalize the `policy_set` chain from
+sub-epic D into a reusable primitive.
 
 ## What the primitive provides
 

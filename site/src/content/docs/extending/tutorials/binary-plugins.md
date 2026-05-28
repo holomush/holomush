@@ -4,6 +4,17 @@ sidebar:
   order: 3
 ---
 
+This guide walks you through building a binary plugin from scratch. By the end
+you will understand how to structure a Go plugin, wire up storage and service
+dependencies, expose gRPC services to the host, and test your plugin in
+isolation. The `core-scenes` plugin (in `plugins/core-scenes/`) is the reference
+implementation — examples throughout pull from it.
+
+**Prerequisites:** a working HoloMUSH development environment and familiarity
+with Go. If you are new to plugins entirely, start with
+[Getting Started with Plugins](/extending/tutorials/getting-started/) and the
+[Plugin Guide](/extending/tutorials/plugin-guide/) first.
+
 Binary plugins are standalone Go programs that communicate with HoloMUSH over
 gRPC using HashiCorp's [go-plugin](https://github.com/hashicorp/go-plugin)
 system. They run as separate processes with full access to Go's ecosystem.

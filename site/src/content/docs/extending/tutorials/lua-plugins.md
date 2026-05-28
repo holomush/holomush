@@ -4,6 +4,15 @@ sidebar:
   order: 2
 ---
 
+This guide covers everything you need to write a production-ready Lua plugin.
+You will learn how to structure a plugin, handle events, call host functions
+(world queries, KV storage, session data), and declare capability modules
+through your manifest's `requires` list.
+
+**Prerequisites:** a working HoloMUSH environment and a basic familiarity with
+Lua. If you have not built your first plugin yet, start with
+[Getting Started with Plugins](/extending/tutorials/getting-started/).
+
 Lua plugins run inside a sandboxed gopher-lua VM. They are ideal for simple
 event reactions, formatting, and game commands that do not need persistent
 storage beyond the KV store.
@@ -210,3 +219,10 @@ lua-plugin:
 With these `requires`, your `main.lua` gets access to both `session.*` and
 `alias.*` global tables in addition to the always-available `holomush.*` and
 `holo.*` functions.
+
+## Next steps
+
+- [Plugin API Reference](/extending/reference/plugin-api/) — full catalog of SDK types, host functions, and policy patterns
+- [Binary Plugin Guide](/extending/tutorials/binary-plugins/) — when you outgrow Lua and need Go, storage schemas, or service exposure
+- [Verb Registration](/extending/how-to/verb-registration/) — declare how your events render in the gateway
+- [Declaring event sensitivity](/extending/how-to/event-sensitivity/) — mark payloads for encryption with `crypto.emits`
