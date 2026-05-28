@@ -9,9 +9,15 @@ package cryptowiring
 
 import (
 	"context"
+	"errors"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/samber/oops"
+
 	"github.com/holomush/holomush/internal/eventbus/codec"
+	"github.com/holomush/holomush/internal/eventbus/history"
 )
 
 // ManifestSource is the narrow read surface the derivations need from a loaded
@@ -61,4 +67,37 @@ func (identityKeySelector) SelectForEncrypt(_ context.Context, _ string) (codec.
 
 func (identityKeySelector) SelectForDecrypt(_ context.Context, _ codec.Name, _ codec.KeyID) (codec.Key, error) {
 	return codec.NoKey, nil
+}
+
+// CryptoKeysLookup wraps the pool with the Exists query satisfying
+// history.CryptoKeysLookup. Filters destroyed_at IS NULL so destroyed DEKs read
+// as Exists=false (INV-P7-15).
+func CryptoKeysLookup(pool *pgxpool.Pool) history.CryptoKeysLookup {
+	return &cryptoKeysLookup{pool: pool}
+}
+
+type cryptoKeysLookup struct {
+	pool *pgxpool.Pool
+}
+
+func (l *cryptoKeysLookup) Exists(ctx context.Context, dekRef uint64) (bool, error) {
+	if l.pool == nil {
+		return false, oops.Code("CRYPTO_KEYS_LOOKUP_POOL_NIL").
+			Errorf("crypto_keys lookup invoked with nil pool")
+	}
+	const q = `SELECT 1 FROM crypto_keys WHERE id = $1 AND destroyed_at IS NULL LIMIT 1`
+	var one int
+	err := l.pool.QueryRow(ctx, q, dekRef).Scan(&one)
+	if err != nil {
+		// pgx returns ErrNoRows when the row is absent (or destroyed) —
+		// that's the legitimate Exists=false case, NOT an infrastructure
+		// failure.
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, oops.Code("CRYPTO_KEYS_LOOKUP_QUERY_FAILED").
+			With("dek_ref", dekRef).
+			Wrap(err)
+	}
+	return true, nil
 }

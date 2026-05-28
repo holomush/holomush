@@ -6,11 +6,8 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
@@ -19,40 +16,6 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/history"
 	pluginauditpb "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
-
-// newCryptoKeysLookup wraps the *pgxpool.Pool with a thin Exists query
-// that satisfies history.CryptoKeysLookup. The query filters
-// `destroyed_at IS NULL` so destroyed DEKs read as Exists=false (the
-// fence then surfaces the row as metadata_only=true per INV-P7-15).
-func newCryptoKeysLookup(pool *pgxpool.Pool) history.CryptoKeysLookup {
-	return &cryptoKeysLookup{pool: pool}
-}
-
-type cryptoKeysLookup struct {
-	pool *pgxpool.Pool
-}
-
-func (l *cryptoKeysLookup) Exists(ctx context.Context, dekRef uint64) (bool, error) {
-	if l.pool == nil {
-		return false, oops.Code("CRYPTO_KEYS_LOOKUP_POOL_NIL").
-			Errorf("crypto_keys lookup invoked with nil pool")
-	}
-	const q = `SELECT 1 FROM crypto_keys WHERE id = $1 AND destroyed_at IS NULL LIMIT 1`
-	var one int
-	err := l.pool.QueryRow(ctx, q, dekRef).Scan(&one)
-	if err != nil {
-		// pgx returns ErrNoRows when the row is absent (or destroyed) —
-		// that's the legitimate Exists=false case, NOT an infrastructure
-		// failure.
-		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil
-		}
-		return false, oops.Code("CRYPTO_KEYS_LOOKUP_QUERY_FAILED").
-			With("dek_ref", dekRef).
-			Wrap(err)
-	}
-	return true, nil
-}
 
 // newViolationEmitter constructs a ViolationEmitter that publishes
 // `events.<game>.system.plugin_integrity_violation` events on every

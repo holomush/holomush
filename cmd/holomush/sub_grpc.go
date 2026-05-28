@@ -376,7 +376,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	// PluginConsumerManager — its manifests are populated by now
 	// (DependsOn enforces plugin Start before gRPC Start).
 	alwaysSensitive := cryptowiring.AlwaysSensitiveSet(managerSource{mgr: pluginManager})
-	cryptoKeysLookupForFence := newCryptoKeysLookup(pool)
+	cryptoKeysLookupForFence := cryptowiring.CryptoKeysLookup(pool)
 	// Pass the RAW publisher + registry; newViolationEmitter wraps
 	// internally so the violation event gets exactly one App-Rendering
 	// stamp. The subsystem's primary `publisher` is already a

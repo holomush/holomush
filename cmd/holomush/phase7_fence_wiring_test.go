@@ -208,15 +208,3 @@ func TestViolationEmitter_BadEventID_StillEmits(t *testing.T) {
 	require.NoError(t, err, "malformed row.Id MUST NOT block the emit; zero ULID is acceptable")
 	require.Len(t, inner.published, 1)
 }
-
-// TestCryptoKeysLookup_NilPool verifies the fail-closed defensive guard
-// against a misconfigured deployment. Production wiring always supplies
-// a non-nil pool; the nil-pool branch is the safety net.
-func TestCryptoKeysLookup_NilPool(t *testing.T) {
-	t.Parallel()
-	lookup := newCryptoKeysLookup(nil)
-	exists, err := lookup.Exists(context.Background(), 42)
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "CRYPTO_KEYS_LOOKUP_POOL_NIL")
-	assert.False(t, exists, "nil pool MUST NOT report existence")
-}

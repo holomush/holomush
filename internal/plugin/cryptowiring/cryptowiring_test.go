@@ -8,9 +8,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/plugin/cryptowiring"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 func TestKeySelectorReturnsIdentityCodecForEncrypt(t *testing.T) {
@@ -69,4 +71,13 @@ func TestAlwaysSensitiveSetQualifiesUnqualifiedTypes(t *testing.T) {
 func TestAlwaysSensitiveSetEmptyForNilSource(t *testing.T) {
 	t.Parallel()
 	assert.Empty(t, cryptowiring.AlwaysSensitiveSet(nil))
+}
+
+func TestCryptoKeysLookupNilPoolReturnsError(t *testing.T) {
+	t.Parallel()
+	lookup := cryptowiring.CryptoKeysLookup(nil)
+	exists, err := lookup.Exists(context.Background(), 42)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "CRYPTO_KEYS_LOOKUP_POOL_NIL")
+	assert.False(t, exists, "nil pool MUST NOT report existence")
 }
