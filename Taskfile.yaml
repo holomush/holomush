@@ -1084,15 +1084,15 @@ tasks:
       - bun install # fallback order bun → pnpm → npm per ADR holomush-qf2oo
 
   docs:gen-events:
-    desc: "Regenerate site/docs/reference/events/<plugin>.md from plugin manifests"
+    desc: "Regenerate site/src/content/docs/reference/events/<plugin>.md from plugin manifests"
     cmds:
       - ./scripts/gen-event-docs.sh
     sources:
       - scripts/gen-event-docs.sh
       - plugins/*/plugin.yaml
     generates:
-      - site/docs/reference/events/*.md
-      - site/docs/reference/events.md
+      - site/src/content/docs/reference/events/*.md
+      - site/src/content/docs/reference/events.md
 
   docs:build:
     desc: Build documentation site
