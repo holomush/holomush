@@ -44,6 +44,7 @@ import (
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/naming"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/cryptowiring"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
 	"github.com/holomush/holomush/internal/session"
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
@@ -374,7 +375,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	// pluginSub.Manager() the audit closure used to build the
 	// PluginConsumerManager — its manifests are populated by now
 	// (DependsOn enforces plugin Start before gRPC Start).
-	alwaysSensitive := buildAlwaysSensitiveSet(pluginManager)
+	alwaysSensitive := cryptowiring.AlwaysSensitiveSet(managerSource{mgr: pluginManager})
 	cryptoKeysLookupForFence := newCryptoKeysLookup(pool)
 	// Pass the RAW publisher + registry; newViolationEmitter wraps
 	// internally so the violation event gets exactly one App-Rendering

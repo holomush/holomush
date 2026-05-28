@@ -58,12 +58,18 @@ var coreOnlyFiles = map[string]struct{}{
 	"cmd_admin_totp.go":      {},
 	"cmd_admin_totp_deps.go": {},
 	// Phase 7 INV-P7-9 + INV-P7-7 + INV-P7-15 wiring (holomush-1r0v.5).
-	// Constructs the boot-time codec.KeySelector + PluginDowngradeFence
-	// helpers (always-sensitive set, crypto_keys lookup, violation
-	// emitter). Imports eventbus/codec/history/plugin; core-only by
-	// design (matches crypto_rekey_wiring.go precedent).
+	// Constructs the boot-time PluginDowngradeFence helpers (crypto_keys
+	// lookup, violation emitter). Imports eventbus/history + core; core-only
+	// by design (matches crypto_rekey_wiring.go precedent). The KeySelector
+	// and AlwaysSensitiveSet derivations moved to internal/plugin/cryptowiring
+	// (holomush-5iaov.1/.2), so this file no longer imports codec or plugin.
 	"phase7_fence_wiring.go":      {},
 	"phase7_fence_wiring_test.go": {},
+	// AlwaysSensitiveSet adapter (holomush-5iaov.2). Adapts *plugins.Manager
+	// to cryptowiring.ManifestSource for the boot-time AlwaysSensitiveSet
+	// call. Imports internal/plugin; core-only (matches phase7_fence_wiring.go
+	// precedent).
+	"cryptowiring_adapter.go": {},
 }
 
 var forbidden = []string{

@@ -209,42 +209,6 @@ func TestViolationEmitter_BadEventID_StillEmits(t *testing.T) {
 	require.Len(t, inner.published, 1)
 }
 
-// TestStartsWith covers the tiny stdlib-free prefix helper used by
-// buildAlwaysSensitiveSet's plugin-name qualification logic.
-func TestStartsWith(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name   string
-		s      string
-		prefix string
-		want   bool
-	}{
-		{"prefix matches", "core-scenes:secret", "core-scenes:", true},
-		{"empty prefix always matches", "anything", "", true},
-		{"empty string and empty prefix matches", "", "", true},
-		{"prefix longer than string is false", "abc", "abcdef", false},
-		{"prefix-with-different-content false", "core-scenes:secret", "core-comms:", false},
-		{"exact-length match", "abc", "abc", true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, startsWith(tc.s, tc.prefix))
-		})
-	}
-}
-
-// TestBuildAlwaysSensitiveSet_NilManager verifies the documented nil-mgr
-// path: returns an empty (non-nil) map. The other branches (manifest
-// walking, sensitivity filtering, prefix qualification) are exercised
-// by the integration test that boots a real plugin manager with a real
-// manifest declaring crypto.emits[].sensitivity:always.
-func TestBuildAlwaysSensitiveSet_NilManager(t *testing.T) {
-	t.Parallel()
-	out := buildAlwaysSensitiveSet(nil)
-	require.NotNil(t, out, "MUST return non-nil map even for nil mgr (caller iterates without nil-check)")
-	assert.Empty(t, out)
-}
-
 // TestCryptoKeysLookup_NilPool verifies the fail-closed defensive guard
 // against a misconfigured deployment. Production wiring always supplies
 // a non-nil pool; the nil-pool branch is the safety net.

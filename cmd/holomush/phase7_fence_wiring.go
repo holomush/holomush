@@ -17,49 +17,8 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/history"
-	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginauditpb "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
-
-// buildAlwaysSensitiveSet walks every loaded manifest and produces the
-// qualified `<plugin>:<event_type>` set the PluginDowngradeFence uses for
-// INV-P7-7 (manifest-set heuristic). Built ONCE at boot per INV-P7-8 — the
-// fence copies the input map so callers may not mutate it after
-// construction.
-//
-// Returns an empty (non-nil) map when mgr is nil or no plugin declares
-// `crypto.emits[].sensitivity: always`, mirroring the behaviour of
-// alwaysSensitiveFromManifest in test/integration/eventbus_e2e/.
-func buildAlwaysSensitiveSet(mgr *plugins.Manager) map[string]struct{} {
-	out := map[string]struct{}{}
-	if mgr == nil {
-		return out
-	}
-	for _, name := range mgr.ListPlugins() {
-		dp, ok := mgr.GetLoadedPlugin(name)
-		if !ok || dp.Manifest == nil || dp.Manifest.Crypto == nil {
-			continue
-		}
-		for _, emit := range dp.Manifest.Crypto.Emits {
-			if emit.Sensitivity != plugins.SensitivityAlways {
-				continue
-			}
-			key := emit.EventType
-			prefix := dp.Manifest.Name + ":"
-			if !startsWith(key, prefix) {
-				key = prefix + key
-			}
-			out[key] = struct{}{}
-		}
-	}
-	return out
-}
-
-// startsWith is a tiny stdlib-free helper so this file does not pull
-// the strings package just to check a single prefix.
-func startsWith(s, prefix string) bool {
-	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
-}
 
 // newCryptoKeysLookup wraps the *pgxpool.Pool with a thin Exists query
 // that satisfies history.CryptoKeysLookup. The query filters
