@@ -2,18 +2,14 @@
 title: "Operations"
 ---
 
-This guide covers monitoring and maintaining HoloMUSH in production.
+This guide covers monitoring and maintaining HoloMUSH in production. For the
+metric set, health-check endpoints, extensions, and log-location lookups, see
+the [Monitoring reference](/operating/reference/monitoring/).
 
 ## Health Checks
 
-Both core and gateway expose health endpoints.
-
-### Endpoints
-
-| Endpoint             | Description             |
-| -------------------- | ----------------------- |
-| `/healthz/liveness`  | Process is alive        |
-| `/healthz/readiness` | Ready to accept traffic |
+Both core and gateway expose health endpoints (see
+[Health-check endpoints](/operating/reference/monitoring/#health-check-endpoints)).
 
 **Core (default port 9100):**
 
@@ -39,40 +35,9 @@ This queries both core and gateway health endpoints via gRPC.
 
 ## Prometheus Metrics
 
-HoloMUSH exposes Prometheus metrics at `/metrics`.
-
-### Available Metrics
-
-**Connections and requests:**
-
-| Metric                                    | Type      | Labels            | Description                                        |
-| ----------------------------------------- | --------- | ----------------- | -------------------------------------------------- |
-| `holomush_connections_total`              | Counter   | `type`            | Total connections (telnet, web)                    |
-| `holomush_requests_total`                | Counter   | `type`, `status`  | Total requests by type and outcome                 |
-
-**Commands:**
-
-| Metric                                    | Type      | Labels                | Description                                        |
-| ----------------------------------------- | --------- | --------------------- | -------------------------------------------------- |
-| `holomush_command_executions_total`       | Counter   | `command`, `source`, `status` | Command executions by name, source, and status (success, error, not_found, permission_denied, rate_limited) |
-| `holomush_command_duration_seconds`       | Histogram | `command`, `source`   | Command execution latency                          |
-| `holomush_command_output_failures_total`  | Counter   | `command`             | Failed to deliver command output to session        |
-| `holomush_command_rate_limited_total`     | Counter   | `command`             | Commands rejected by rate limiter                  |
-| `holomush_alias_expansions_total`        | Counter   | `alias`               | Alias expansion count by alias name                |
-| `holomush_alias_rollback_failures_total` | Counter   |                       | Alias rollback failures (requires manual fix)      |
-
-**Engine and resilience:**
-
-| Metric                                    | Type      | Labels            | Description                                        |
-| ----------------------------------------- | --------- | ----------------- | -------------------------------------------------- |
-| `holomush_engine_failures_total`         | Counter   | `operation`       | Engine operation failures (access checks, capabilities) |
-| `holomush_circuit_breaker_trips_total`   | Counter   | `handler`         | Circuit breaker activations per command handler     |
-| `holomush_circuit_breaker_skipped_total` | Counter   | `handler`         | Sessions skipped due to open circuit breaker        |
-| `holomush_ratelimiter_sessions`          | Gauge     |                   | Current number of tracked rate-limit sessions       |
-
-Go runtime and process metrics (`go_*`, `process_*`) are also exported automatically.
-
-### Scrape Configuration
+HoloMUSH exposes Prometheus metrics at `/metrics` (see the
+[metric catalog](/operating/reference/monitoring/#prometheus-metrics)). Point
+your scraper at the core and gateway endpoints:
 
 ```yaml
 scrape_configs:
@@ -85,17 +50,10 @@ scrape_configs:
       - targets: ["localhost:9101"]
 ```
 
-## PostgreSQL Extensions
+## Enable pg_stat_statements
 
-HoloMUSH requires and optionally uses these PostgreSQL extensions:
-
-| Extension            | Purpose                       | Required |
-| -------------------- | ----------------------------- | -------- |
-| `pg_trgm`            | Fuzzy text matching for exits | Yes      |
-| `pg_stat_statements` | Query performance monitoring  | Optional |
-
-### Enable pg_stat_statements
-
+HoloMUSH requires `pg_trgm` and optionally uses `pg_stat_statements` (see
+[PostgreSQL extensions](/operating/reference/monitoring/#postgresql-extensions)).
 For query performance monitoring, enable `pg_stat_statements`:
 
 ```ini
@@ -107,6 +65,9 @@ pg_stat_statements.track = all
 Restart PostgreSQL after configuration changes.
 
 ## Query Performance Monitoring
+
+The thresholds for the columns below are in
+[Query-performance metrics](/operating/reference/monitoring/#query-performance-metrics).
 
 ### Slowest Queries
 
@@ -164,15 +125,6 @@ Clear accumulated statistics:
 SELECT pg_stat_statements_reset();
 ```
 
-### Key Metrics
-
-| Metric             | Description                  | Alert Threshold  |
-| ------------------ | ---------------------------- | ---------------- |
-| `mean_exec_time`   | Average query execution time | > 100ms          |
-| `stddev_exec_time` | Variance in execution time   | High variance    |
-| `rows`             | Total rows returned          | Depends on query |
-| `shared_blks_read` | Blocks read from disk        | High = slow      |
-
 ## Connection Monitoring
 
 ### Active Connections
@@ -218,7 +170,7 @@ nats stream info EVENTS --server nats://localhost:<monitor_port>
 nats consumer info EVENTS host_audit_projection
 ```
 
-Prometheus metric `audit_projection_lag_seconds` alerts at > 5s lag. The
+The `audit_projection_lag_seconds` Prometheus metric alerts at > 5s lag. The
 embedded server does not open a network port by default (`DontListen: true`).
 
 ## Index Health
@@ -313,13 +265,8 @@ psql -U holomush -h localhost holomush < backup.sql
 
 ## Log Management
 
-### Log Locations
-
-| Component    | Location                        |
-| ------------ | ------------------------------- |
-| Core logs    | stdout (use log aggregation)    |
-| Gateway logs | stdout (use log aggregation)    |
-| PostgreSQL   | `/var/log/postgresql/` (varies) |
+Logs go to stdout per component (see
+[Log locations](/operating/reference/monitoring/#log-locations)).
 
 ### Log Aggregation
 
@@ -460,5 +407,6 @@ pooling configuration.
 
 ## Next Steps
 
+- [Monitoring reference](/operating/reference/monitoring/) - Metrics, endpoints, extensions, log locations
 - [Configuration](/operating/reference/configuration/) - Adjust server settings
 - [Installation](/operating/how-to/deploy/installation/) - Deployment options
