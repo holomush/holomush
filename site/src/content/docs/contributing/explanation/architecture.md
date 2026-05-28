@@ -2,6 +2,11 @@
 title: "System Architecture"
 ---
 
+This page is for contributors who need a map of the codebase before diving in.
+It covers how the major subsystems relate — the event bus, gateway, plugin host,
+session manager, and access control layer — and links to deeper explanations
+where the design gets interesting.
+
 HoloMUSH is a modern MUSH platform with an event-oriented architecture,
 dual protocol support (telnet + web), and extensibility through plugins.
 
@@ -299,5 +304,6 @@ and the `gateway_imports_test.go` CI tripwire.
 - [Pull Request Guide](/contributing/how-to/pr-guide/) - Contribution workflow
 - [Coding Standards](/contributing/reference/coding-standards/) - Code conventions
 - [Plugin Development](/extending/) - Building extensions
-- [Gateway Boundary](/contributing/explanation/gateway-boundary/) - Gateway constraint enforcement
+- [Gateway Boundary](/contributing/explanation/gateway-boundary/) - Gateway constraint enforcement and the forbidden-import list
+- [Event Store](/contributing/explanation/event-store/) - JetStream + PostgreSQL event log design, publish/subscribe/history interfaces
 - [Event Emit Pipeline](/contributing/explanation/event-emit-pipeline/) - Publisher chain and rendering
