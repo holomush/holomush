@@ -21,8 +21,7 @@ setup() {
   bats_load_library bats-assert
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   IA_SCRIPT="$REPO_ROOT/scripts/check-docs-ia.sh"
-  # Task 10 relocates this to scripts/tests/fixtures/sp2-slug-map.tsv; update then.
-  SLUG_MAP="$REPO_ROOT/scripts/migration/sp2-slug-map.tsv"
+  SLUG_MAP="$REPO_ROOT/scripts/tests/fixtures/sp2-slug-map.tsv"
 }
 
 @test "sp2 slug-map fixture has exactly 52 rows (move-count guard)" {
