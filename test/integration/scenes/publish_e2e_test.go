@@ -317,3 +317,184 @@ var _ = Describe("Phase 6 hard-privacy-boundary gate for a non-participant (Char
 			"INV-P6-8 (post-publish): public archive content_entries MUST be non-empty for a PUBLISHED scene")
 	})
 })
+
+// holomush-5rh.20.41 (Task E8): Phase 6 retry budget exhaustion + admin extend
+// flow end-to-end. Proves:
+//
+//   - INV-P6-E8-1: StartScenePublish returns codes.FailedPrecondition
+//     (SCENE_PUBLISH_ATTEMPTS_EXHAUSTED) once the budget is exhausted
+//     (default max = 3, after 3 start → withdraw cycles).
+//   - INV-P6-E8-2: A non-admin attempting `scene publish vote extend` is
+//     denied (COMMAND_REJECTED) by the admin ABAC gate
+//     (admin-extend-publish-attempts policy: action "extend_publish_attempts",
+//     requires "admin" in principal.character.roles — plugin.yaml:226-229).
+//   - INV-P6-E8-3: An admin running the SAME command succeeds (budget bumped).
+//   - INV-P6-E8-4: After the admin extend, the next StartScenePublish
+//     succeeds (Total=3 < newMax=5).
+//
+// Requires WithRealABAC so the admin-extend-publish-attempts ABAC gate is live
+// (under allow-all the non-admin denial assertion would be meaningless).
+// WithInTreePlugins loads core-scenes and registers its manifest policies
+// (including execute-scene-commands and admin-extend-publish-attempts) on the
+// real engine's cache.
+var _ = Describe("publish-attempt retry budget exhaustion and admin extend", func() {
+	var (
+		ts           *integrationtest.Server
+		ctx          context.Context
+		alice        *integrationtest.Session // scene owner, no admin role
+		adminSession *integrationtest.Session // admin role → extend gate passes
+	)
+
+	BeforeEach(func() {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.Background(), 120*time.Second)
+		DeferCleanup(cancel)
+		// WithRealABAC is mandatory for this suite: the admin-extend-publish-attempts
+		// policy (plugin.yaml:226-229) must be enforced. Under allow-all the non-admin
+		// denial cannot be distinguished from an admin grant.
+		ts = integrationtest.Start(
+			suiteT,
+			integrationtest.WithInTreePlugins(),
+			integrationtest.WithPluginCrypto(),
+			integrationtest.WithRealABAC(),
+		)
+		alice = ts.ConnectAuthed(ctx, "Alice")
+		adminSession = ts.ConnectAuthedWithRoles(ctx, "Admin", []string{"admin"})
+	})
+
+	AfterEach(func() {
+		if adminSession != nil {
+			adminSession.Logout(ctx)
+		}
+		if alice != nil {
+			alice.Logout(ctx)
+		}
+		ts.Stop()
+	})
+
+	It("exhausts attempt budget, non-admin extend does not bump budget, admin extend bumps budget, then StartScenePublish succeeds", func() {
+		loc := ts.NewLocation(ctx)
+
+		// CreateScene returns the bare ULID, which is exactly the stored id
+		// (holomush-y5inx — scenes mint bare ULIDs, no "scene-" prefix).
+		sceneID := alice.CreateScene(ctx, loc)
+		sceneRef := sceneID.String()
+
+		// End the scene so publish attempts can be started (scene must be in
+		// 'ended' state — StartScenePublish precondition, publish_service.go:176).
+		// The "scene end" command takes the bare stored id (no '#' required;
+		// mirrors the existing publish_e2e_test.go pattern).
+		Expect(alice.SendCommand(ctx, "scene end "+sceneRef)).To(Succeed())
+
+		// ── EXHAUST THE BUDGET (default max = 3) ─────────────────────────────
+		// Each start → withdraw cycle increments CountAttempts.Total by 1
+		// (publish_store.go: CountAttempts counts ALL rows; TriggerWithdraw
+		// transitions the row to ATTEMPT_FAILED which is terminal, so Active=0
+		// again). After 3 cycles: Total=3, Active=0 → 4th Start is rejected.
+		for i := range 3 {
+			startResp, startErr := ts.SceneServiceClient().StartScenePublish(ctx,
+				&scenev1.StartScenePublishRequest{
+					CallerCharacterId: alice.CharacterID.String(),
+					SceneId:           sceneRef,
+				})
+			Expect(startErr).NotTo(HaveOccurred(),
+				"INV-P6-E8: StartScenePublish attempt %d/%d must succeed (budget not yet exhausted)", i+1, 3)
+			Expect(startResp.GetPublishedSceneId()).NotTo(BeEmpty(),
+				"INV-P6-E8: attempt %d/%d must return a non-empty published_scene_id", i+1, 3)
+
+			_, withdrawErr := ts.SceneServiceClient().WithdrawScenePublish(ctx,
+				&scenev1.WithdrawScenePublishRequest{
+					CallerCharacterId: alice.CharacterID.String(),
+					PublishedSceneId:  startResp.GetPublishedSceneId(),
+				})
+			Expect(withdrawErr).NotTo(HaveOccurred(),
+				"INV-P6-E8: WithdrawScenePublish attempt %d/%d must succeed", i+1, 3)
+		}
+
+		// ── INV-P6-E8-1: 4th StartScenePublish → FailedPrecondition ─────────
+		// Total=3 >= maxAttempts=3; mapStoreErr maps SCENE_PUBLISH_ATTEMPTS_EXHAUSTED
+		// to codes.FailedPrecondition (publish_helpers.go:57-59).
+		_, exhaustedErr := ts.SceneServiceClient().StartScenePublish(ctx,
+			&scenev1.StartScenePublishRequest{
+				CallerCharacterId: alice.CharacterID.String(),
+				SceneId:           sceneRef,
+			})
+		Expect(exhaustedErr).To(HaveOccurred(),
+			"INV-P6-E8-1: 4th StartScenePublish MUST be rejected after budget exhaustion")
+		exhaustedSt, exhaustedOk := status.FromError(exhaustedErr)
+		Expect(exhaustedOk).To(BeTrue(),
+			"INV-P6-E8-1: exhausted error MUST be a gRPC status error")
+		Expect(exhaustedSt.Code()).To(Equal(codes.FailedPrecondition),
+			"INV-P6-E8-1: exhausted StartScenePublish MUST return FailedPrecondition (SCENE_PUBLISH_ATTEMPTS_EXHAUSTED)")
+
+		// ── INV-P6-E8-2: Non-admin extend → budget NOT changed ───────────────
+		// SendCommand routing for plugin CommandError: when handleVoteExtend
+		// returns pluginsdk.Errorf("permission denied"), the dispatcher treats a
+		// CommandError as a user-facing command RESPONSE, not a dispatch error —
+		// Dispatch returns nil (dispatcher.go), so HandleCommand reports
+		// Success=true and Session.SendCommand returns nil for plugin-level
+		// command denials (the denial reaches the player as a command_response,
+		// never as an RPC failure). The grounded signal for denial is therefore
+		// STATE-BASED: the budget MUST remain exhausted (Total=3 >= max=3) after
+		// Alice's attempt, proved by the 4th StartScenePublish still returning
+		// FailedPrecondition.
+		//
+		// Under allow-all the budget WOULD be bumped (handleVoteExtend calls
+		// ExtendScenePublishVoteAttempts when the gate passes). Under the real
+		// ABAC engine, the admin-extend-publish-attempts policy denies Alice
+		// (no admin role) so the budget stays exhausted. The delta is observable.
+		//
+		// Alice (owner, NO admin role) sends the extend command. The binary
+		// plugin's handleVoteExtend (commands.go:1565) evaluates the
+		// admin-extend-publish-attempts policy via PluginHostService.Evaluate.
+		// The real engine denies Alice (principal.character.roles = ["player"]).
+		Expect(alice.SendCommand(ctx, "scene publish vote extend 2 #"+sceneRef)).To(Succeed(),
+			"INV-P6-E8-2: Alice's extend command must dispatch without infra error — "+
+				"user-facing denials surface as command_response events, not RPC failures")
+
+		// The grounded denial signal: the budget MUST still be exhausted after
+		// Alice's extend because the ABAC gate denied her and the budget was NOT
+		// bumped. Under allow-all the budget would have been bumped to 5 and this
+		// StartScenePublish would succeed — the failure here proves the real ABAC
+		// gate is live and denied Alice.
+		_, stillExhaustedErr := ts.SceneServiceClient().StartScenePublish(ctx,
+			&scenev1.StartScenePublishRequest{
+				CallerCharacterId: alice.CharacterID.String(),
+				SceneId:           sceneRef,
+			})
+		Expect(stillExhaustedErr).To(HaveOccurred(),
+			"INV-P6-E8-2 (state-based denial proof): budget MUST still be exhausted after Alice's extend — "+
+				"if this fails under allow-all (budget bumped), it proves the real ABAC gate is non-trivially enforced")
+		stillExhaustedSt, stillExhaustedOk := status.FromError(stillExhaustedErr)
+		Expect(stillExhaustedOk).To(BeTrue(),
+			"INV-P6-E8-2: post-Alice-extend StartScenePublish MUST return a gRPC status error")
+		Expect(stillExhaustedSt.Code()).To(Equal(codes.FailedPrecondition),
+			"INV-P6-E8-2: budget MUST remain exhausted (FailedPrecondition) after Alice's non-admin extend — "+
+				"real ABAC engine denied Alice so ExtendScenePublishVoteAttempts was never called")
+
+		// ── INV-P6-E8-3: Admin extend → budget BUMPED ────────────────────────
+		// Admin has the "admin" role in character_roles (stamped by
+		// ConnectAuthedWithRoles). The real engine permits
+		// extend_publish_attempts via admin-extend-publish-attempts
+		// (plugin.yaml:226-229). Budget bumps from 3 → 5.
+		Expect(adminSession.SendCommand(ctx, "scene publish vote extend 2 #"+sceneRef)).To(Succeed(),
+			"INV-P6-E8-3: admin's extend command must dispatch without infra error")
+
+		// ── INV-P6-E8-4: StartScenePublish succeeds after admin extend ────────
+		// After the admin extend: Total=3, newMax=5 → 3 < 5 → budget not
+		// exhausted; a fresh attempt is created. This also proves the admin ABAC
+		// gate was actually enforced: Alice's extend (above) left the budget
+		// unchanged, while Admin's extend bumped it. The ONLY difference between
+		// the two callers is the "admin" role — proving the policy gate.
+		postExtendResp, postExtendErr := ts.SceneServiceClient().StartScenePublish(ctx,
+			&scenev1.StartScenePublishRequest{
+				CallerCharacterId: alice.CharacterID.String(),
+				SceneId:           sceneRef,
+			})
+		Expect(postExtendErr).NotTo(HaveOccurred(),
+			"INV-P6-E8-4: StartScenePublish MUST succeed after admin extends the budget (Total=3 < newMax=5)")
+		Expect(postExtendResp.GetPublishedSceneId()).NotTo(BeEmpty(),
+			"INV-P6-E8-4: post-extend StartScenePublish MUST return a non-empty published_scene_id — "+
+				"budget was bumped by admin and the attempt was created successfully")
+	})
+})
