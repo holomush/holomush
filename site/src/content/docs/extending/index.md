@@ -1,5 +1,7 @@
 ---
 title: "Extending HoloMUSH"
+sidebar:
+  order: 0
 ---
 
 HoloMUSH is designed to be extended through plugins. Whether you want to add a
@@ -21,54 +23,54 @@ delivery, ordering, and access control.
 
 ## Documentation
 
-### [Getting Started](/extending/getting-started/)
+### [Getting Started](/extending/tutorials/getting-started/)
 
 Set up your first plugin in minutes. Walks through creating a plugin directory,
 writing a manifest, and implementing a basic event handler.
 
-### [Plugin Guide](/extending/plugin-guide/)
+### [Plugin Guide](/extending/tutorials/plugin-guide/)
 
 The complete guide to building plugins. Covers Lua and binary plugin structure,
 manifests, host functions, world queries, ABAC policies, error handling, and
 best practices.
 
-### [Access Control](/extending/access-control/)
+### [Access Control](/extending/how-to/access-control/)
 
 How the ABAC policy engine works and how to write policies for your plugin.
 Every host function call is checked against your declared policies — this
 page explains how to get them right.
 
-### [Implementing AttributeResolverService](/extending/abac-attribute-resolver/)
+### [Implementing AttributeResolverService](/extending/how-to/abac-attribute-resolver/)
 
 For binary plugins that declare custom resource types. Documents the host
 contract for `GetSchema` and `ResolveResource`, load-time policy/schema
 validation, and common anti-patterns.
 
-### [Declaring Event Sensitivity](/extending/event-sensitivity/)
+### [Declaring Event Sensitivity](/extending/how-to/event-sensitivity/)
 
 Sensitivity contracts (`always`, `may`, `never`), the `crypto.emits` block,
 and how to request decryption of sensitive events from another plugin.
 
-### [Reading Back Encrypted History](/extending/plugin-crypto-readback/)
+### [Reading Back Encrypted History](/extending/how-to/plugin-crypto-readback/)
 
 How to decrypt your plugin's own `sensitivity:always` audit rows. Covers the
 manifest `readback` flag, the `DecryptOwnAuditRows` host RPC (Go SDK and Lua
 hostfunc), the two authorization gates, batch limits, and the per-row result
 envelope.
 
-### [Substrate Contract](/extending/substrate-contract/)
+### [Substrate Contract](/extending/reference/substrate-contract/)
 
 The rules governing what plugins can rely on from the substrate and what they
 MUST NOT touch. Covers INV-S1 plugin-boundary, INV-S5 manifest emit-type
 validation (Lua and binary), and the named-but-not-yet-built eventkit/groupkit
 SDKs.
 
-### [Event Reference](/extending/events/)
+### [Event Reference](/extending/reference/events/)
 
 Event types, payload schemas, and stream patterns. Everything you need to know
 about the data flowing through the system.
 
-### [API Guide](/extending/api-guide/)
+### [API Guide](/extending/reference/api-guide/)
 
 How the Core gRPC service works, from authentication through event streaming.
 Useful if you are building a custom client or need to understand the protocol

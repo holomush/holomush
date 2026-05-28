@@ -1,5 +1,7 @@
 ---
 title: "Operating HoloMUSH"
+sidebar:
+  order: 0
 ---
 
 Running HoloMUSH in production is straightforward. The server ships as a single
@@ -27,12 +29,12 @@ Run one or both depending on your player base.
 
 ## Documentation
 
-- [Installation](/operating/installation/) -- Docker, binaries, or build from source
-- [Deployment](/operating/deployment/) -- Production deployment with Docker Compose
-- [Configuration](/operating/configuration/) -- Flags, config files, and environment variables
-- [Database](/operating/database/) -- PostgreSQL setup, migrations, and maintenance
-- [Authentication](/operating/authentication/) -- Security properties, rate limiting, and session management
-- [Telnet Security](/operating/telnet-security/) -- Risks of cleartext telnet logins and how to mitigate them
-- [CA Rotation](/operating/ca-rotation/) -- When and how to rotate the internal mTLS certificate authority
-- [Operations](/operating/operations/) -- Health checks, metrics, monitoring, and troubleshooting
-- [Verifying Releases](/operating/verifying-releases/) -- Signature and provenance verification
+- [Installation](/operating/how-to/deploy/installation/) -- Docker, binaries, or build from source
+- [Deployment](/operating/how-to/deploy/deployment/) -- Production deployment with Docker Compose
+- [Configuration](/operating/reference/configuration/) -- Flags, config files, and environment variables
+- [Database](/operating/how-to/database/) -- PostgreSQL setup, migrations, and maintenance
+- [Authentication](/operating/explanation/authentication/) -- Security properties, rate limiting, and session management
+- [Telnet Security](/operating/how-to/telnet-security/) -- Risks of cleartext telnet logins and how to mitigate them
+- [CA Rotation](/operating/how-to/ca-rotation/) -- When and how to rotate the internal mTLS certificate authority
+- [Operations](/operating/how-to/operations/) -- Health checks, metrics, monitoring, and troubleshooting
+- [Verifying Releases](/operating/how-to/deploy/verifying-releases/) -- Signature and provenance verification

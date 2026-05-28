@@ -39,6 +39,10 @@ header:
     # header — it would corrupt the comparison. license-eye v0.8.0 scans them
     # (errors "unsupported file"); newer releases ignored them implicitly.
     - "**/*.golden"
+    # TSV data fixtures (e.g. the SP2 slug map) are tab-delimited data, not a
+    # commentable source format — license-eye v0.8.0 errors "unsupported file".
+    # Same rationale as *.golden above.
+    - "**/*.tsv"
   language:
     Markdown:
       extensions: [".md"]
