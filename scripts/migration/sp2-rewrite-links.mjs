@@ -1,3 +1,8 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2026 HoloMUSH Contributors
+ */
+
 // scripts/migration/sp2-rewrite-links.mjs — rewrite root-absolute internal
 // links ](/old/) → ](/new/) for every moved slug. The slug is terminated by
 // `/?(#…)?)` so a longer slug (/operating/operations-foo) is NOT matched by a

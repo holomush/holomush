@@ -1,3 +1,8 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2026 HoloMUSH Contributors
+ */
+
 // scripts/migration/sp2-move.mjs — read the slug map; for each old→new,
 // create the new parent dir and move the file (preserving .md/.mdx ext).
 import { readFileSync, existsSync, mkdirSync, renameSync } from 'node:fs';
