@@ -597,9 +597,10 @@ package main
 
 import (
     "context"
+    cryptorand "crypto/rand"
     "encoding/json"
     "fmt"
-    "math/rand"
+    "math/big"
     "regexp"
     "strconv"
     "strings"
@@ -608,6 +609,16 @@ import (
 )
 
 var dicePattern = regexp.MustCompile(`roll\s+(\d+)d(\d+)`)
+
+// secureRoll returns a uniformly random die result in [1, sides] using
+// crypto/rand. HoloMUSH plugins must use crypto-safe RNG — never math/rand.
+func secureRoll(sides int) (int, error) {
+    n, err := cryptorand.Int(cryptorand.Reader, big.NewInt(int64(sides)))
+    if err != nil {
+        return 0, err
+    }
+    return int(n.Int64()) + 1, nil
+}
 
 type DicePlugin struct{}
 
@@ -638,7 +649,10 @@ func (p *DicePlugin) HandleEvent(ctx context.Context, event plugin.Event) ([]plu
     var total int
     var results []string
     for i := 0; i < count; i++ {
-        roll := rand.Intn(sides) + 1
+        roll, err := secureRoll(sides)
+        if err != nil {
+            return nil, err
+        }
         total += roll
         results = append(results, strconv.Itoa(roll))
     }

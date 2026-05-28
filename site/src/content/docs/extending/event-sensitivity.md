@@ -129,4 +129,4 @@ are correct now, they'll carry forward.
 
 - [Plugin Guide](/extending/plugin-guide/) — manifest structure, event handlers, ABAC policies
 - [Event Reference](/reference/events/) — event types, payload schemas, stream patterns
-- [Auto-generated event reference](../reference/events/) — per-plugin sensitivity tables
+- [Auto-generated event reference](/reference/events/) — per-plugin sensitivity tables
