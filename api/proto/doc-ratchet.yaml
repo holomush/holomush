@@ -24,5 +24,3 @@ pending:
     bead: holomush-300ad.13
   - path: api/proto/holomush/admin/v1/rekey.proto
     bead: holomush-300ad.12
-  - path: api/proto/holomush/admin/v1/read_stream.proto
-    bead: holomush-300ad.11
