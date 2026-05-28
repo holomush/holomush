@@ -195,10 +195,10 @@ dek.RegisterRekey(verifierSubsystem)          // E's rekey chain
    that calls `v.Register(handler)`.
 4. Call `Register<YourChain>(verifierSubsystem)` in `core.go`'s wiring block.
 5. Add a unit test that asserts:
-    - `SubjectFor(someScope)` starts with `events.<game>.`
-    - `ScopeFromSubject(SubjectFor(scope)) == scope`
-    - `ScopeFromPayload(examplePayload) == scope`
-    - `RecomputeSelfHash` over a fixture matches the stored `self_hash`
+   - `SubjectFor(someScope)` starts with `events.<game>.`
+   - `ScopeFromSubject(SubjectFor(scope)) == scope`
+   - `ScopeFromPayload(examplePayload) == scope`
+   - `RecomputeSelfHash` over a fixture matches the stored `self_hash`
 6. Add an integration test that verifies the chain survives a round-trip
    through `events_audit` and `VerifierSubsystem.Start`.
 

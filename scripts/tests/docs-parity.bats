@@ -30,6 +30,10 @@ setup() {
 }
 
 @test "docs parity check passes — all nav slugs and source pages have built pages (INV-1 + INV-5)" {
+  # Requires a built site/dist (`bunx astro build`). CI builds it before this
+  # suite; locally, run `task docs:build` first. Skip cleanly when absent so an
+  # unbuilt tree is a no-op rather than a false failure.
+  [ -d "$REPO_ROOT/site/dist" ] || skip "site/dist not built — run 'task docs:build' (CI builds it before this suite)"
   run bash "$PARITY_SCRIPT"
   assert_success
   assert_output --partial "✓ nav parity: 43/43"

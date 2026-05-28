@@ -198,9 +198,9 @@ so JetStream ack + audit semantics match.
    existing helper can), add the helper to `harness.go` or `session.go` with
    a doc comment that explains:
 
-    - What it bypasses.
-    - Why production code can't reasonably reach that state.
-    - FK / cascade side effects (when applicable).
+   - What it bypasses.
+   - Why production code can't reasonably reach that state.
+   - FK / cascade side effects (when applicable).
 
 ---
 

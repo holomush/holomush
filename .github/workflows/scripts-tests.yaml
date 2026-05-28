@@ -87,6 +87,23 @@ jobs:
         # `go tool`; license-eye self-installs via the license:add guard.
         uses: ./.github/actions/install-formatters
 
+      # docs-parity.bats (INV-1/INV-5) verifies the BUILT site under site/dist.
+      # Build it here (Astro needs Node >= 22.12, hence node 24) so the parity
+      # test runs against real output; without a dist it self-skips.
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 24
+
+      - name: Install bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: latest
+
+      - name: Build docs site (for docs-parity.bats)
+        working-directory: site
+        run: bun install --frozen-lockfile && bunx astro build
+
       - name: Run bats
         # Plumb the bats-action install path into BATS_LIB_PATH so
         # `bats_load_library bats-support` / `bats-assert` resolve.

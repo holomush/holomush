@@ -17,37 +17,37 @@ Build immersive games with a high-performance server, flexible plugin system, an
 
 - :material-cellphone-link: **Play from anywhere**
 
-    ---
+---
 
     Web browser, telnet client, phone — your choice. Sessions survive disconnects and network hiccups. Pick up where you left off.
 
 - :material-shield-lock: **Secure by design**
 
-    ---
+---
 
     Your password is stored safely. Connections between server components are encrypted. Plugins run in a sandbox and can only access what they're allowed to. Security was part of the design from day one.
 
 - :material-puzzle: **Extend with Lua or Go**
 
-    ---
+---
 
     Write a quick Lua script to add a dice roller. Build a full Go plugin for a combat system. Plugins run safely in their own sandbox — they can only touch what you allow.
 
 - :material-server: **Deploy on your terms**
 
-    ---
+---
 
     Single binary plus PostgreSQL. Run it on a Raspberry Pi, a VPS, or a Kubernetes cluster. Docker Compose gets you running in minutes.
 
 - :material-database-clock: **Events all the way down**
 
-    ---
+---
 
     Every game action is recorded as an event. Replay what happened, audit the history, debug problems. Nothing gets lost, and everything stays in order.
 
 - :material-open-source-initiative: **Open source, Apache-2.0**
 
-    ---
+---
 
     Built in the open. Read the code, contribute improvements, fork it for your own purposes. No lock-in, no surprises.
 
@@ -70,7 +70,7 @@ Build immersive games with a high-performance server, flexible plugin system, an
 
 - :material-gamepad-variant: **Playing**
 
-    ---
+---
 
     Learn the basics — connecting, commands, and getting around the world.
 
@@ -78,7 +78,7 @@ Build immersive games with a high-performance server, flexible plugin system, an
 
 - :material-server: **Running a Server**
 
-    ---
+---
 
     Deploy, configure, and run your own HoloMUSH game.
 
@@ -86,7 +86,7 @@ Build immersive games with a high-performance server, flexible plugin system, an
 
 - :material-puzzle: **Building Plugins**
 
-    ---
+---
 
     Extend HoloMUSH with Lua scripts or Go extensions.
 
@@ -94,7 +94,7 @@ Build immersive games with a high-performance server, flexible plugin system, an
 
 - :material-account-group: **Contributing**
 
-    ---
+---
 
     Help build HoloMUSH — code, docs, testing, and ideas.
 
