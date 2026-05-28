@@ -1081,7 +1081,7 @@ tasks:
     desc: Set up documentation dev environment
     dir: site
     cmds:
-      - uv sync
+      - bun install # fallback order bun → pnpm → npm per ADR holomush-qf2oo
 
   docs:gen-events:
     desc: "Regenerate site/docs/reference/events/<plugin>.md from plugin manifests"
@@ -1099,13 +1099,13 @@ tasks:
     deps: ['docs:gen-events']
     dir: site
     cmds:
-      - uv run zensical build
+      - bunx astro build
 
   docs:serve:
     desc: Start documentation dev server
     dir: site
     cmds:
-      - uv run zensical serve
+      - bunx astro dev
 
   docs:proto:
     desc: Generate gRPC API reference from proto files
