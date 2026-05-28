@@ -10,15 +10,24 @@ package cryptowiring
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/eventbus/history"
 )
+
+// AuditSubjectDecl mirrors the (PluginName, Subject) pair the manager exposes
+// via AuditSubjects(); redeclared here so ManifestSource stays decoupled.
+type AuditSubjectDecl struct {
+	PluginName string
+	Subject    string
+}
 
 // ManifestSource is the narrow read surface the derivations need from a loaded
 // plugin set. *plugin.Manager satisfies the richer original API; the prod call
@@ -29,6 +38,11 @@ type ManifestSource interface {
 	// AlwaysSensitiveEmitTypes returns the crypto.emits[] event types declared
 	// sensitivity:always for pluginName (qualified or unqualified).
 	AlwaysSensitiveEmitTypes(pluginName string) []string
+	// AuditSubjects returns the plugin-declared audit subject declarations.
+	AuditSubjects() []AuditSubjectDecl
+	// HasAuditClient reports whether the named plugin has a registered
+	// PluginAuditService client.
+	HasAuditClient(pluginName string) bool
 }
 
 // AlwaysSensitiveSet produces the qualified `<plugin>:<event_type>` set the
@@ -50,6 +64,35 @@ func AlwaysSensitiveSet(src ManifestSource) map[string]struct{} {
 		}
 	}
 	return out
+}
+
+// OwnerMapFromManager builds the read-side audit.OwnerMap: a subject is owned
+// iff its plugin has a registered PluginAuditService client. Returns nil when no
+// plugin qualifies (reader treats nil as "host owns everything"). This is the
+// READ-side derivation (ports historyOwnersFromPlugins, sub_grpc.go:892-927). It
+// is intentionally NOT shared with core.go's audit-side derivation, which adds a
+// load-bearing pcm.Add-success gate (spec §1.2).
+func OwnerMapFromManager(src ManifestSource) *audit.OwnerMap {
+	if src == nil {
+		return nil
+	}
+	decls := src.AuditSubjects()
+	owners := make([]audit.SubjectOwner, 0, len(decls))
+	for _, d := range decls {
+		if !src.HasAuditClient(d.PluginName) {
+			continue
+		}
+		owners = append(owners, audit.SubjectOwner{PluginName: d.PluginName, Pattern: d.Subject})
+	}
+	if len(owners) == 0 {
+		return nil
+	}
+	m, err := audit.NewOwnerMap(owners)
+	if err != nil {
+		slog.Error("cryptowiring: OwnerMap construction failed; plugin-owned subjects route via host fallback", "error", err)
+		return nil
+	}
+	return m
 }
 
 // KeySelector returns a new identity codec.KeySelector. Callers MUST call this

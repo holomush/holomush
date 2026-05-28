@@ -5,6 +5,7 @@ package main
 
 import (
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/cryptowiring"
 )
 
 // managerSource adapts *plugins.Manager to cryptowiring.ManifestSource so the
@@ -27,4 +28,18 @@ func (s managerSource) AlwaysSensitiveEmitTypes(name string) []string {
 		}
 	}
 	return out
+}
+
+func (s managerSource) AuditSubjects() []cryptowiring.AuditSubjectDecl {
+	decls := s.mgr.AuditSubjects()
+	out := make([]cryptowiring.AuditSubjectDecl, 0, len(decls))
+	for _, d := range decls {
+		out = append(out, cryptowiring.AuditSubjectDecl{PluginName: d.PluginName, Subject: d.Subject})
+	}
+	return out
+}
+
+func (s managerSource) HasAuditClient(name string) bool {
+	_, ok := s.mgr.PluginAuditClient(name)
+	return ok
 }

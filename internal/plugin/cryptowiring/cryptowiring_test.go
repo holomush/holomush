@@ -33,8 +33,10 @@ func TestKeySelectorReturnsNoKeyForDecrypt(t *testing.T) {
 }
 
 type fakeLoadedPlugin struct {
-	name        string
-	alwaysTypes []string // event types declared sensitivity:always
+	name          string
+	alwaysTypes   []string // event types declared sensitivity:always
+	auditSubjects []string
+	hasClient     bool
 }
 
 type fakeManifestSource struct{ plugins []fakeLoadedPlugin }
@@ -80,4 +82,45 @@ func TestCryptoKeysLookupNilPoolReturnsError(t *testing.T) {
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "CRYPTO_KEYS_LOOKUP_POOL_NIL")
 	assert.False(t, exists, "nil pool MUST NOT report existence")
+}
+
+func (f fakeManifestSource) AuditSubjects() []cryptowiring.AuditSubjectDecl {
+	var out []cryptowiring.AuditSubjectDecl
+	for _, p := range f.plugins {
+		for _, s := range p.auditSubjects {
+			out = append(out, cryptowiring.AuditSubjectDecl{PluginName: p.name, Subject: s})
+		}
+	}
+	return out
+}
+
+func (f fakeManifestSource) HasAuditClient(name string) bool {
+	for _, p := range f.plugins {
+		if p.name == name {
+			return p.hasClient
+		}
+	}
+	return false
+}
+
+func TestOwnerMapFromManagerOmitsPluginsWithoutRegisteredClient(t *testing.T) {
+	t.Parallel()
+	src := fakeManifestSource{plugins: []fakeLoadedPlugin{
+		{name: "core-scenes", auditSubjects: []string{"events.*.scene.>"}, hasClient: true},
+		{name: "ghost", auditSubjects: []string{"events.*.ghost.>"}, hasClient: false}, // no client → omitted
+	}}
+	om := cryptowiring.OwnerMapFromManager(src)
+	require.NotNil(t, om)
+	assert.Equal(t, "core-scenes", om.Resolve("events.g1.scene.abc").PluginName)
+	assert.Empty(t, om.Resolve("events.g1.ghost.abc").PluginName, "ghost has no client → not owned (host fallback)")
+}
+
+func TestOwnerMapFromManagerNilWhenNoOwners(t *testing.T) {
+	t.Parallel()
+	assert.Nil(t, cryptowiring.OwnerMapFromManager(fakeManifestSource{}))
+}
+
+func TestOwnerMapFromManagerNilSourceReturnsNil(t *testing.T) {
+	t.Parallel()
+	assert.Nil(t, cryptowiring.OwnerMapFromManager(nil))
 }
