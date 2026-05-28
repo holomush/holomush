@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
+	"github.com/oklog/ulid/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -897,7 +898,10 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			It("supports create→invite→join→kick→reinvite→join→transfer→leave", func() {
 				// 1. Create a private scene as char-alice.
 				sceneID := makePrivateScene("char-alice", "E2E Test Scene")
-				Expect(sceneID).To(HavePrefix("scene-"))
+				Expect(sceneID).NotTo(HavePrefix("scene-"),
+					"scene id is a bare ULID (holomush-y5inx)")
+				_, parseErr := ulid.Parse(sceneID)
+				Expect(parseErr).NotTo(HaveOccurred(), "scene id parses as a bare ULID")
 
 				// DB validation: owner participant row inserted by CreateWithOwner.
 				var ownerRole string

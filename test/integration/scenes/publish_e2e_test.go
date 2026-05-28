@@ -61,48 +61,47 @@ var _ = Describe("happy-path scene publish lifecycle reaches PUBLISHED with decr
 	It("Alice ends, publishes, both vote yes, cool-off sweeps → PUBLISHED, both read RPCs return decrypted content", func() {
 		loc := ts.NewLocation(ctx)
 
-		// CreateScene returns the BARE ULID (prefix stripped by the harness),
-		// but core-scenes stores the id as "scene-<ULID>" and the command/RPC
-		// resolvers match the stored full form verbatim (handleEnd/handleJoin/
-		// handleInvite pass the token straight through; resolveSceneRef strips
-		// only the leading '#'). So reconstruct the stored form for refs.
+		// CreateScene returns the bare ULID, which is exactly the stored id
+		// (holomush-y5inx). Command/RPC resolvers match the stored form verbatim
+		// (handleEnd/handleJoin/handleInvite pass the token straight through;
+		// resolveSceneRef strips only the leading '#'), so the bare id is the ref.
 		sceneID := alice.CreateScene(ctx, loc)
-		fullSceneID := "scene-" + sceneID.String()
+		sceneRef := sceneID.String()
 
 		// Bob must JOIN, not merely be invited — the vote roster seeds from
 		// role IN ('owner','member') (INV-P6-1); an 'invited' row is excluded.
 		// scene invite / scene join pass fields[0] directly to the RPC (no '#'
 		// stripping), and the invite target is a character ID, not a name.
-		Expect(alice.SendCommand(ctx, "scene invite "+fullSceneID+" "+bob.CharacterID.String())).To(Succeed())
-		Expect(bob.SendCommand(ctx, "scene join "+fullSceneID)).To(Succeed())
+		Expect(alice.SendCommand(ctx, "scene invite "+sceneRef+" "+bob.CharacterID.String())).To(Succeed())
+		Expect(bob.SendCommand(ctx, "scene join "+sceneRef)).To(Succeed())
 
 		// Seed encrypted IC content into the created scene (command emit path
 		// can't set Sensitive → INV-7 fence, §3.4). EmitSceneICContent takes the
-		// BARE ULID and re-adds the "scene-" prefix internally.
+		// bare ULID and builds the bare subject.
 		ts.EmitSceneICContent(ctx, "core-scenes", sceneID,
 			alice.CharacterID, "scene_pose", `{"text":"the scene happens"}`)
 
 		// Command-driven lifecycle. scene end takes the bare stored id; scene
 		// publish / scene publish vote route through resolveSceneRef so they need
 		// the '#'-prefixed stored form.
-		Expect(alice.SendCommand(ctx, "scene end "+fullSceneID)).To(Succeed())
-		Expect(alice.SendCommand(ctx, "scene publish #"+fullSceneID)).To(Succeed())
-		Expect(alice.SendCommand(ctx, "scene publish vote yes #"+fullSceneID)).To(Succeed())
-		Expect(bob.SendCommand(ctx, "scene publish vote yes #"+fullSceneID)).To(Succeed())
+		Expect(alice.SendCommand(ctx, "scene end "+sceneRef)).To(Succeed())
+		Expect(alice.SendCommand(ctx, "scene publish #"+sceneRef)).To(Succeed())
+		Expect(alice.SendCommand(ctx, "scene publish vote yes #"+sceneRef)).To(Succeed())
+		Expect(bob.SendCommand(ctx, "scene publish vote yes #"+sceneRef)).To(Succeed())
 
 		// Scheduler (~20ms interval, ~1ms cool-off) sweeps COOLOFF → PUBLISHED.
 		// The read RPCs key off the ATTEMPT ulid (published_scene_id), recovered
 		// via ListScenePublishAttempts → the PUBLISHED summary's Id. Poll until a
 		// PUBLISHED attempt appears — that's the grounded PUBLISHED signal
 		// (status string "PUBLISHED", publish_types.go:19) regardless of event
-		// name. SceneId keys off the stored full form (IsParticipant /
-		// ListSceneAttempts), so pass fullSceneID.
+		// name. SceneId keys off the stored bare ULID (IsParticipant /
+		// ListSceneAttempts), so pass sceneRef.
 		var publishedSceneID string
 		Eventually(func(g Gomega) {
 			listResp, err := ts.SceneServiceClient().ListScenePublishAttempts(ctx,
 				&scenev1.ListScenePublishAttemptsRequest{
 					CallerCharacterId: alice.CharacterID.String(),
-					SceneId:           fullSceneID,
+					SceneId:           sceneRef,
 				})
 			g.Expect(err).NotTo(HaveOccurred())
 			publishedSceneID = ""
