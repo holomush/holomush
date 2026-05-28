@@ -29,14 +29,14 @@ HoloMUSH is a modern MUSH platform with:
 
 | Directory                | Purpose                                      | Audience                |
 | ------------------------ | -------------------------------------------- | ----------------------- |
-| `site/docs/`             | Public documentation website (zensical)      | All users               |
+| `site/src/content/docs/` | Public documentation website (Astro Starlight) | All users             |
 | `docs/roadmap.md`        | Strategic themes spanning multiple epics (substrate-and-uses framing) | Contributors (internal) |
 | `docs/plans/`            | Implementation plans, in-progress work       | Contributors (internal) |
 | `docs/specs/`            | Design specifications, architectural designs | Contributors (internal) |
 | `docs/superpowers/plans/`| AI-generated implementation plans (superpowers skill) | Contributors (internal) |
 | `docs/superpowers/specs/`| AI-generated design specifications (superpowers skill) | Contributors (internal) |
 
-**Site documentation** (`site/docs/`) is organized by audience:
+**Site documentation** (`site/src/content/docs/`) is organized by audience:
 
 - `guide/` — For players and game designers
 - `operating/` — For people running HoloMUSH servers

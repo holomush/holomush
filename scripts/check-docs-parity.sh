@@ -12,7 +12,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIST="$REPO_ROOT/site/dist"
 CONTENT_DOCS="$REPO_ROOT/site/src/content/docs"
-NAV_FIXTURE="$REPO_ROOT/scripts/tests/fixtures/zensical-nav.txt"
+NAV_FIXTURE="$REPO_ROOT/scripts/tests/fixtures/zensical-nav.golden"
 
 fail=0
 nav_missing=()
@@ -42,7 +42,7 @@ slug_to_built_path() {
 
 # ---------------------------------------------------------------------------
 # INV-1: nav parity
-#   Every slug in zensical-nav.txt must have a built page.
+#   Every slug in zensical-nav.golden must have a built page.
 # ---------------------------------------------------------------------------
 nav_count=0
 while IFS= read -r slug; do

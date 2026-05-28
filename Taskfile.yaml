@@ -115,6 +115,7 @@ tasks:
       - task: lint:no-timestamptz
       - task: lint:no-microsecond-truncate
       - task: lint:no-unixnano-in-repos
+      - task: lint:no-zensical
 
   lint:adr:
     desc: "Run docs/adr/ health check (adr-doctor.sh)"
@@ -664,6 +665,33 @@ tasks:
           echo "If unavoidable, annotate with '-- pgnanos-exempt: <reason>' on the same line."
           exit 1
         fi
+
+  lint:no-zensical:
+    desc: "INV-7: no zensical docs surface remains (bead holomush-cwnu0.19)"
+    cmds:
+      - |
+        set -euo pipefail
+        # INV-7: the old zensical docs-engine marker must be gone from every
+        # location where it would indicate the docs surface is still present.
+        # Checked: site/ content tree, .github/workflows, CLAUDE.md (root).
+        # NOT checked: Taskfile.yaml itself (this guard definition is the only
+        # remaining reference and is intentional) and .jj/node_modules/site/dist
+        # (build artifacts and VCS metadata).
+        if rg -n 'zensical' .github/workflows site CLAUDE.md \
+             --glob '!site/dist/**' --glob '!**/node_modules/**' 2>/dev/null; then
+          echo "INV-7: zensical reference(s) found — docs surface not fully decommissioned" >&2
+          exit 1
+        fi
+        # docs-side uv toolchain must be gone from site/ and docs tasks in Taskfile.
+        # The scripts/ Python `uv run` in scripts-tests.yaml is legitimate and
+        # intentionally NOT checked (that workflow tests scripts/, not docs).
+        if rg -n 'uv (run|sync)' site Taskfile.yaml \
+             --glob '!site/dist/**' --glob '!**/node_modules/**' 2>/dev/null \
+             | rg -v 'scripts'; then
+          echo "INV-7: docs-side uv reference(s) found" >&2
+          exit 1
+        fi
+        echo "✓ INV-7: no zensical/uv docs surface"
 
   # ──────────────────────────────────────────
   # Formatters (called by `task fmt`)

@@ -7,7 +7,7 @@
 #
 # Requires a current site/dist from `bunx astro build` (the Taskfile drives that
 # before invoking this suite). The fixture count test guards against silent shrinkage
-# of zensical-nav.txt after zensical.toml is removed (Task 19).
+# of zensical-nav.golden after zensical.toml is removed (Task 19).
 
 setup_file() {
   if [ ! -f "scripts/tests/Taskfile.test.yaml" ]; then
@@ -20,7 +20,7 @@ setup() {
   bats_load_library bats-support
   bats_load_library bats-assert
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
-  NAV_FIXTURE="$REPO_ROOT/scripts/tests/fixtures/zensical-nav.txt"
+  NAV_FIXTURE="$REPO_ROOT/scripts/tests/fixtures/zensical-nav.golden"
   PARITY_SCRIPT="$REPO_ROOT/scripts/check-docs-parity.sh"
 }
 
