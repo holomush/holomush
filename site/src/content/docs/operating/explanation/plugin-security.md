@@ -2,8 +2,8 @@
 title: "Plugin security"
 ---
 
-This page documents the defensive controls the plugin host enforces on
-plugin code.
+This page explains the defensive controls the plugin host enforces on
+plugin code, and why each one exists.
 
 ## Lua plugin resource limits
 
@@ -11,7 +11,7 @@ The plugin host enforces three defensive controls on every Lua plugin
 invocation to prevent CPU exhaustion, memory exhaustion, and dispatcher
 starvation.
 
-Two operator-tunable knobs govern these controls:
+Two of these controls are governed by operator-tunable knobs.
 
 The flag `--plugin-lua-timeout` (default `1s`) sets the per-invocation
 CPU deadline. Every dispatcher entry point (event, command,
@@ -26,36 +26,16 @@ cap hits a panic which `CallByParam(Protect: true)` converts to an
 error, so the dispatcher returns a controlled failure rather than an
 unbounded heap growth.
 
-A third control, the watchdog goroutine, has no operator knob: every
+The third control, the watchdog goroutine, has no operator knob: every
 `CallByParam` runs in its own goroutine so a stuck host function cannot
 hang the dispatcher. If the CPU deadline fires while a host function is
 still running, the dispatcher waits for the goroutine to drain —
 bounded by the hostfunc audit invariant that every registered host
 function respects context.
 
-### Tuning
+## See also
 
-Raise `--plugin-lua-timeout` if a legitimate plugin does synchronous
-work against the world service that can exceed one second end-to-end.
-Monitor `holomush_plugin_lua_timeouts_total{plugin,handler}` — any
-sustained non-zero rate means either the plugin has pathological loops
-or the timeout is too tight.
-
-Raise `--plugin-lua-registry-max` if a legitimate plugin holds many
-active Lua values simultaneously (for instance, caching or bulk
-operations). Monitor
-`holomush_plugin_lua_registry_full_total{plugin,handler}` — a non-zero
-rate points at either a memory-bomb plugin or a cap set too low for a
-legitimate workload.
-
-### Metrics
-
-Three Prometheus metrics expose resource-limit state for operators:
-
-- `holomush_plugin_lua_invocations_total{plugin,handler,outcome}` — the
-  denominator for outcome-rate dashboards. `outcome` takes values
-  `success`, `timeout`, `registry_full`, `error`.
-- `holomush_plugin_lua_timeouts_total{plugin,handler}` — CPU-cap
-  violations, attributable by plugin and handler.
-- `holomush_plugin_lua_registry_full_total{plugin,handler}` — memory-cap
-  violations.
+- [Tune Lua plugin resource limits](/operating/how-to/tune-plugin-resource-limits/)
+  — when and how to raise the two operator knobs.
+- [Plugin metrics](/operating/reference/plugin-metrics/) — the Prometheus
+  metrics that expose resource-limit state.
