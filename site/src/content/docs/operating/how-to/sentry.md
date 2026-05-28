@@ -7,11 +7,12 @@ alongside its existing OpenTelemetry pipeline. The integration is **opt-in
 via environment variables** — when `SENTRY_DSN` is unset, no Sentry code runs
 and the bundle is unaffected.
 
-This is currently a **trial integration**. The data shape is OTel-native:
-spans flow through Sentry's OTLP-HTTP exporter (`sentry-go/otel/otlp`),
-which is wired as a second `sdktrace.WithBatcher` alongside the existing
-collector path. Removing Sentry is a one-line config change; no app code
-needs to be touched.
+The integration is in active evaluation — the data shape and configuration
+surface are stable, but some features (grouped Issues, plugin panic capture)
+are still being wired up. The data shape is OTel-native: spans flow through
+Sentry's OTLP-HTTP exporter (`sentry-go/otel/otlp`), which is wired as a
+second `sdktrace.WithBatcher` alongside the existing collector path. Removing
+Sentry is a one-line config change; no app code needs to be touched.
 
 ## Architecture
 
@@ -130,7 +131,7 @@ processes / rebuild the web bundle. No code changes required.
 | Surface                 | Server (Go)                                   | Browser (Svelte)                |
 | ----------------------- | --------------------------------------------- | ------------------------------- |
 | Distributed traces      | All spans (OTLP HTTP via Sentry exporter)     | Browser fetch spans + nav spans |
-| Unhandled errors        | Yes, via `sentry.CaptureException` (follow-up wiring required for full coverage; see `holomush-0wun` follow-ups) | Yes, browser SDK auto-captures  |
+| Unhandled errors        | Yes, via `sentry.CaptureException` (partial coverage today) | Yes, browser SDK auto-captures  |
 | Application logs        | OTel-native: `log/slog` → OTel `LoggerProvider` → Sentry OTLP-HTTP (`…/integration/otlp/v1/logs`); gated by `logging.sentry.enabled` + `SENTRY_DSN`. No `sentry.Logger` calls in app code. | Enabled (`enableLogs: true`); `console.error` + `console.warn` auto-forwarded via `consoleLoggingIntegration` |
 | Metrics                 | Not wired (no OTel metrics pipeline today)    | Default-enabled (`enableMetrics: true` is the SDK default in 10.x) |
 | Session replay / RUM    | n/a                                           | Not enabled in trial            |
@@ -177,8 +178,7 @@ Bare `slog.Info(…)` calls produce uncorrelated log records. See
 
 ERROR-level records arrive in the Sentry **Logs** stream as individual
 entries. They do **not** become grouped, deduplicated, alertable Sentry
-**Issues** — that requires `sentry.CaptureException`, which is deferred to a
-follow-up behind a `pkg/errutil` wrapper (ADR `holomush-1wbzn`).
+**Issues** — that requires `sentry.CaptureException`, which is not yet wired up.
 
 ## Browser tunnel (ad-blocker bypass)
 
@@ -218,14 +218,3 @@ into the repo) and avoid unnecessary plaintext logging in operational
 output. If a DSN must appear in logs or dashboards (e.g., for diagnosing
 a connectivity issue), redact or truncate the public-key prefix before
 sharing widely.
-
-## Open follow-ups
-
-Tracked as follow-ups under `holomush-0wun`:
-
-- `CaptureException` → Sentry Issues: ERROR-level records currently land in
-  Sentry Logs only. Grouped, deduplicated Issues require a `pkg/errutil`
-  wrapper calling `sentry.CaptureException` — deferred to ADR `holomush-1wbzn`.
-- Connect server interceptor that captures non-OK responses as Issues
-- Plugin runner panic capture
-- Session Replay / RUM browser features (opt-in)

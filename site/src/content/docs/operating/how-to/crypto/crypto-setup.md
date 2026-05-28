@@ -2,10 +2,9 @@
 title: "Crypto Setup"
 ---
 
-This page is the operator entry point for HoloMUSH's event-payload
-cryptography setup. It is currently a stub focused on the operator
-allow-list (Phase 5 sub-epic B). Phase 8 expands this page with the full
-master-key bootstrap runbook.
+This page covers the initial configuration steps for HoloMUSH's event-payload
+cryptography. It's for operators who need to grant break-glass crypto access to
+a cohort of admin players before running rekey operations.
 
 ## Operator allow-list (`crypto.operator` capability)
 
@@ -65,8 +64,8 @@ enhancement; see the sub-epic B design spec for the documented seam.
 
 ### In-game grant UX
 
-Deferred to a future P3 follow-up bead. For now, all changes go through
-the YAML config file.
+Not yet available. All changes to the operator allow-list go through the
+YAML config file and a server restart.
 
 ## See also
 

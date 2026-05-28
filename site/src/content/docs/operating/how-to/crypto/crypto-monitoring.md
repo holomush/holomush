@@ -2,12 +2,15 @@
 title: "Crypto Monitoring"
 ---
 
-Prometheus alert rules and log signals for monitoring the event-payload
-cryptography substrate, with emphasis on rekey operations and DEK hygiene.
+This page is for operators running HoloMUSH in production who want to alert on
+cryptography substrate health. It covers two things: ready-to-paste Prometheus
+alert rules for rekey operations, and the structured log signals to watch for
+DEK hygiene failures. For the rekey procedure itself, see
+[Crypto Runbook](/operating/how-to/crypto/crypto-runbook/).
 
 ## Prometheus alert rules
 
-Add these rules to your Prometheus alerting configuration:
+Add these rules to your Prometheus alerting configuration.
 
 ```yaml
 groups:

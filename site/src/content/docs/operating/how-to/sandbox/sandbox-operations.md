@@ -2,8 +2,9 @@
 title: "Sandbox Operations — game.holomush.dev"
 ---
 
-Day-to-day operations for the long-running sandbox at `game.holomush.dev`.
-Self-hosters should refer to [Deploying HoloMUSH](/operating/how-to/deploy/deployment/) instead.
+Day-to-day operations for the HoloMUSH project's own sandbox at `game.holomush.dev`,
+maintained by the core team. Self-hosters should refer to
+[Deploying HoloMUSH](/operating/how-to/deploy/deployment/) instead.
 
 ## One-time bootstrap
 
@@ -94,7 +95,9 @@ In the Cloudflare dashboard:
 
 ### 3. Create the droplet
 
-From your local machine:
+The commands below assemble a cloud-init script by prepending your secrets
+as exported shell variables ahead of `scripts/cloud-init.sh`, then passing
+the result as user-data to the new droplet. Run these from your local machine:
 
 ```bash
 # Render user-data from scripts/sandbox.env.example + real secrets,

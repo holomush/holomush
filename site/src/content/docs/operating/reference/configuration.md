@@ -2,22 +2,12 @@
 title: "Configuration"
 ---
 
-This guide covers all configuration options for HoloMUSH.
-
-## Overview
-
-HoloMUSH uses a two-layer configuration system:
-
-1. Config file (`~/.config/holomush/config.yaml`) — lowest precedence
-2. CLI flags — highest precedence, always override config file values
-
-Built-in defaults apply when neither a config file value nor a CLI flag is provided.
-`DATABASE_URL` is a separate environment variable for database credentials — it is not
-part of the config file system and has no equivalent config key.
-
-Config files are optional. All settings have sensible defaults. Most config file keys
-have an equivalent CLI flag; the `game` section is config-file-only. You can run
-HoloMUSH without a config file; flags work exactly as before.
+HoloMUSH is configured through a two-layer system: a YAML config file for
+persistent settings and CLI flags for per-run overrides. This page is the
+complete reference for both layers — flags, environment variables, file
+locations, and a full annotated config example. For plugin-specific
+configuration, see [Plugin metrics](/operating/reference/plugin-metrics/) and
+the plugin's own `plugin.yaml`.
 
 ## Command-Line Reference
 
