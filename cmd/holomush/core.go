@@ -46,6 +46,7 @@ import (
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/logging"
+	"github.com/holomush/holomush/internal/plugin/cryptowiring"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
 	"github.com/holomush/holomush/internal/session"
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
@@ -520,7 +521,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// (via grpcSubsystemConfig.KeySelector → newHistoryReader →
 	// history.WithCodecSelector). Pointer-identity is asserted by
 	// TestDispatcherAndHotTierShareSelector.
-	pluginCodecKeySelector := buildKeySelector()
+	pluginCodecKeySelector := cryptowiring.KeySelector()
 
 	// F5: wire per-plugin audit plumbing. Both the OwnerMap (drives host-
 	// projection ack-and-skip) and the per-plugin consumer manager (drives

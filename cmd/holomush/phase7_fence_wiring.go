@@ -16,43 +16,10 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
-	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/eventbus/history"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginauditpb "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
-
-// buildKeySelector returns the single codec.KeySelector instance threaded
-// into both audit.PluginConsumerManager (via audit.WithKeySelector) and
-// history.NewReader (via history.WithCodecSelector). INV-P7-9 requires the
-// SAME pointer-identity selector in both places — see the parked test at
-// test/integration/eventbus_e2e/dispatcher_selector_identity_test.go.
-//
-// Phase 7 keeps the production deployment on the identity selector
-// (plugin-owned audit subjects are not yet encrypted at the bus level).
-// When a real KEK-backed selector ships, this constructor takes the
-// configured codec.KeySelector and returns it unchanged. The single
-// pointer is what matters for INV-P7-9.
-func buildKeySelector() codec.KeySelector {
-	return &identityProductionKeySelector{}
-}
-
-// identityProductionKeySelector is the placeholder selector used while
-// no plugin-owned audit subject is encrypted at the bus boundary. It
-// always returns (codec.NameIdentity, "", nil) for encrypt and the
-// no-op codec.NoKey for decrypt — equivalent to the package-private
-// identityKeySelector in internal/eventbus/publisher.go but lifted to
-// the boot wiring layer so the SAME instance can be threaded into both
-// the dispatcher and the reader.
-type identityProductionKeySelector struct{}
-
-func (identityProductionKeySelector) SelectForEncrypt(_ context.Context, _ string) (codec.Name, codec.KeyLabel, error) {
-	return codec.NameIdentity, "", nil
-}
-
-func (identityProductionKeySelector) SelectForDecrypt(_ context.Context, _ codec.Name, _ codec.KeyID) (codec.Key, error) {
-	return codec.NoKey, nil
-}
 
 // buildAlwaysSensitiveSet walks every loaded manifest and produces the
 // qualified `<plugin>:<event_type>` set the PluginDowngradeFence uses for

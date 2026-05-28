@@ -14,7 +14,6 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
-	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/pkg/errutil"
 	pluginauditpb "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -208,31 +207,6 @@ func TestViolationEmitter_BadEventID_StillEmits(t *testing.T) {
 	)
 	require.NoError(t, err, "malformed row.Id MUST NOT block the emit; zero ULID is acceptable")
 	require.Len(t, inner.published, 1)
-}
-
-// TestIdentityProductionKeySelector_SelectForEncrypt verifies the
-// placeholder selector returns the expected (NameIdentity, "", nil)
-// triple for any subject. Trivial branch coverage; pinned in case a
-// future refactor changes the placeholder behaviour without updating
-// the INV-P7-9 substrate test (which only asserts pointer identity, not
-// return values).
-func TestIdentityProductionKeySelector_SelectForEncrypt(t *testing.T) {
-	t.Parallel()
-	sel := &identityProductionKeySelector{}
-	name, label, err := sel.SelectForEncrypt(context.Background(), "events.any.subject")
-	require.NoError(t, err)
-	assert.Equal(t, codec.NameIdentity, name)
-	assert.Equal(t, codec.KeyLabel(""), label)
-}
-
-// TestIdentityProductionKeySelector_SelectForDecrypt mirrors the encrypt
-// test for the decrypt path.
-func TestIdentityProductionKeySelector_SelectForDecrypt(t *testing.T) {
-	t.Parallel()
-	sel := &identityProductionKeySelector{}
-	key, err := sel.SelectForDecrypt(context.Background(), codec.NameIdentity, codec.KeyID(0))
-	require.NoError(t, err)
-	assert.Equal(t, codec.NoKey, key)
 }
 
 // TestStartsWith covers the tiny stdlib-free prefix helper used by
