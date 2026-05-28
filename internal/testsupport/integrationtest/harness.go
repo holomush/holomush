@@ -143,9 +143,10 @@ type StartOption func(*startConfig)
 
 // startConfig holds resolved Start options.
 type startConfig struct {
-	accessEngine types.AccessPolicyEngine
-	withPlugins  bool
-	withRealABAC bool
+	accessEngine     types.AccessPolicyEngine
+	withPlugins      bool
+	withRealABAC     bool
+	withPluginCrypto bool
 }
 
 // WithPolicyEngine overrides the harness's default allow-all ABAC engine.
@@ -240,6 +241,9 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	cfg := &startConfig{accessEngine: &allowAllPolicyEngine{}}
 	for _, opt := range opts {
 		opt(cfg)
+	}
+	if cfg.withPluginCrypto && !cfg.withPlugins {
+		panic("integrationtest: WithPluginCrypto() requires WithInTreePlugins()")
 	}
 	pe := cfg.accessEngine
 
