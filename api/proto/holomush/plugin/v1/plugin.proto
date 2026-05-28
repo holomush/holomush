@@ -13,112 +13,193 @@ import "holomush/plugin/v1/audit.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1;pluginv1";
 
-// PluginService is called by the go-plugin host to send events and commands to binary plugins.
-// This service is implemented by the plugin (the gRPC server runs in the plugin process).
+// PluginService is the plugin-IMPLEMENTED half of the binary-plugin contract:
+// the gRPC server runs inside the plugin subprocess (hashicorp/go-plugin) and
+// the host dials it. The host adapter is pkg/plugin.pluginServerAdapter, which
+// bridges these RPCs to a plugin author's Go handler. Contrast PluginHostService
+// below, which the host implements and plugins call back into.
 service PluginService {
-  // Init is called by the host after connection, providing service configuration
-  // (DB connection string, required service addresses, etc.) and receiving
-  // the list of gRPC services the plugin provides.
+  // Init is the first call the host makes after the go-plugin handshake. It
+  // hands the plugin its ServiceConfig (DB connection string, required-service
+  // addresses, opaque runtime config) and returns the gRPC service names the
+  // plugin provides plus the emit-type set the host validates against the
+  // manifest's crypto.emits (INV-S5). Bridged by pluginServerAdapter.Init,
+  // which also lazily dials the plugin-host connection for any host-facing
+  // facade (sink/focus/evaluator/decryptor) the provider opts into.
   rpc Init(InitRequest) returns (InitResponse);
 
-  // HandleEvent delivers an event to the plugin and receives any response events.
+  // HandleEvent delivers one subscribed event to the plugin and collects the
+  // events the plugin wants to emit in response. Bridged by
+  // pluginServerAdapter.HandleEvent, which converts the proto Event to the SDK
+  // Event type, invokes the author's handler, and converts returned EmitEvents
+  // back to the wire. Response emits flow through the host emit fence, not
+  // straight to the bus.
   rpc HandleEvent(HandleEventRequest) returns (HandleEventResponse);
 
-  // HandleCommand delivers a command to the plugin.
+  // HandleCommand delivers a parsed player command to the plugin and returns
+  // the command result (output text, status, response emits, and audit hints).
+  // Bridged by pluginServerAdapter.HandleCommand; if the plugin registered no
+  // command handler the adapter returns an empty response rather than erroring.
   rpc HandleCommand(HandleCommandRequest) returns (HandleCommandResponse);
 
-  // QuerySessionStreams returns stream names the plugin wants subscribed for a session.
-  // Called once at session establishment, before LISTEN setup.
-  // Only invoked for plugins that declare session_streams: true in their manifest.
+  // QuerySessionStreams asks the plugin which stream names it wants subscribed
+  // for a session being established, before LISTEN/subscription setup. Called
+  // exactly once at session establishment, and only for plugins that declare
+  // session_streams: true in their manifest. A plugin-reported error degrades
+  // gracefully (the host logs and skips that plugin's contribution).
   rpc QuerySessionStreams(QuerySessionStreamsRequest) returns (QuerySessionStreamsResponse);
 }
 
-// PluginHostService runs in the host process, allowing binary plugins
-// to call back for event emission, logging, and KV storage.
+// PluginHostService is the host-IMPLEMENTED half of the contract: the server
+// runs in the host process and binary plugins dial it to call back for event
+// emission, ABAC evaluation, audit decryption, focus mutation, and history
+// reads. Registered live at internal/plugin/goplugin/host_service.go
+// (RegisterPluginHostServiceServer, struct pluginHostServiceServer), so unlike
+// hostfunc.proto's HostFunctionsService this surface IS served in production.
+//
+// NOTE: the registered server embeds UnimplementedPluginHostServiceServer and
+// implements only 12 of the 18 RPCs below. Log, KVGet, KVSet, KVDelete,
+// AddSessionStream, and RemoveSessionStream are declared here but have no
+// server impl and no production client — they return codes.Unimplemented
+// (tracked in holomush-l6std). Their comments below document that unwired
+// reality, not aspirational behavior.
 service PluginHostService {
-  // EmitEvent publishes an event to a stream.
+  // EmitEvent publishes one plugin-originated event onto the bus through the
+  // host emit fence. SERVED: pluginHostServiceServer.EmitEvent. The caller's
+  // identity is NOT trusted from the wire — the plugin presents a host-issued
+  // dispatch token in the x-holomush-emit-token metadata header, the host
+  // recovers the vouched-for actor from tokenStore.Lookup(pluginName, token),
+  // and a missing/foreign token is rejected (EMIT_TOKEN_MISSING /
+  // EMIT_TOKEN_REJECTED). The recovered actor then flows through
+  // PluginEventEmitter.Emit, which enforces the manifest gates: emits (subject
+  // namespace must be declared), actor_kinds_claimable (actor kind must be
+  // listed — EMIT_ACTOR_KIND_NOT_CLAIMABLE), and the crypto.emits sensitivity
+  // fence. These gates fire identically for Lua and binary plugins (plugin
+  // runtime symmetry); the token mechanism is the binary-side forgery fence.
   rpc EmitEvent(PluginHostServiceEmitEventRequest) returns (PluginHostServiceEmitEventResponse);
-  // Log writes a log message through the host's logging system.
+  // Log forwards a plugin log line to the host logger. DECLARED BUT UNSERVED:
+  // pluginHostServiceServer does not implement it and no production client
+  // calls it, so it currently returns codes.Unimplemented (holomush-l6std).
   rpc Log(PluginHostServiceLogRequest) returns (PluginHostServiceLogResponse);
-  // KVGet retrieves a value from the plugin's key-value store.
+  // KVGet reads a value from the plugin's namespaced key-value store.
+  // DECLARED BUT UNSERVED (holomush-l6std): no server impl, no client; returns
+  // codes.Unimplemented today.
   rpc KVGet(PluginHostServiceKVGetRequest) returns (PluginHostServiceKVGetResponse);
-  // KVSet stores a value in the plugin's key-value store.
+  // KVSet writes a value into the plugin's namespaced key-value store.
+  // DECLARED BUT UNSERVED (holomush-l6std): no server impl, no client; returns
+  // codes.Unimplemented today.
   rpc KVSet(PluginHostServiceKVSetRequest) returns (PluginHostServiceKVSetResponse);
-  // KVDelete removes a value from the plugin's key-value store.
+  // KVDelete removes a key from the plugin's namespaced key-value store.
+  // DECLARED BUT UNSERVED (holomush-l6std): no server impl, no client; returns
+  // codes.Unimplemented today.
   rpc KVDelete(PluginHostServiceKVDeleteRequest) returns (PluginHostServiceKVDeleteResponse);
-  // AddSessionStream subscribes an active session to an additional stream mid-session.
-  // Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+  // AddSessionStream subscribes an active session to an additional stream
+  // mid-session. DECLARED BUT UNSERVED (holomush-l6std): no server impl, no
+  // production client; returns codes.Unimplemented today. (The wire comment
+  // about SESSION_NOT_FOUND describes the intended-but-unimplemented contract.)
   rpc AddSessionStream(PluginHostServiceAddSessionStreamRequest) returns (PluginHostServiceAddSessionStreamResponse);
   // RemoveSessionStream unsubscribes an active session from a stream.
-  // Idempotent: returns success if stream is not subscribed.
+  // DECLARED BUT UNSERVED (holomush-l6std): no server impl, no production
+  // client; returns codes.Unimplemented today.
   rpc RemoveSessionStream(PluginHostServiceRemoveSessionStreamRequest) returns (PluginHostServiceRemoveSessionStreamResponse);
 
-  // JoinFocus adds a focus membership to an active or detached session.
-  // Plugins declare intent; the server applies kind-specific replay policy.
+  // JoinFocus adds a focus membership (e.g. a scene) to a session via the
+  // host focus coordinator. SERVED: pluginHostServiceServer.JoinFocus. The
+  // plugin declares intent; the coordinator applies the kind-specific replay
+  // policy. Fails if the focus coordinator is not configured.
   rpc JoinFocus(PluginHostServiceJoinFocusRequest) returns (PluginHostServiceJoinFocusResponse);
 
-  // LeaveFocus removes a focus membership. Idempotent on non-member.
+  // LeaveFocus removes one focus membership from a session. SERVED:
+  // pluginHostServiceServer.LeaveFocus. Idempotent — leaving a target the
+  // session does not hold is a successful no-op.
   rpc LeaveFocus(PluginHostServiceLeaveFocusRequest) returns (PluginHostServiceLeaveFocusResponse);
 
   // LeaveFocusByTarget removes the given focus membership from every
-  // non-expired session that holds it. Used for cross-session fan-out
-  // (e.g., scene-end reaches all participants). Partial success is normal:
-  // individual session failures are aggregated without halting the sweep.
+  // non-expired session that holds it — cross-session fan-out (e.g. a
+  // scene-end reaching all participants). SERVED:
+  // pluginHostServiceServer.LeaveFocusByTarget. Partial success is normal:
+  // per-session failures are aggregated into the response (succeeded /
+  // total_scanned / failed_session_ids) rather than aborting the sweep; the
+  // RPC error is reserved for the enumeration step itself failing.
   rpc LeaveFocusByTarget(PluginHostServiceLeaveFocusByTargetRequest) returns (PluginHostServiceLeaveFocusByTargetResponse);
 
-  // PresentFocus updates the session's PresentingFocus pointer.
-  // Target MUST already exist in FocusMemberships.
+  // PresentFocus repoints a session's PresentingFocus to an existing
+  // membership. SERVED: pluginHostServiceServer.PresentFocus. The target MUST
+  // already be in the session's FocusMemberships (membership is validated, not
+  // implicitly created).
   rpc PresentFocus(PluginHostServicePresentFocusRequest) returns (PluginHostServicePresentFocusResponse);
 
-  // QueryStreamHistory reads the tail of a stream for plugin-side display.
-  // Read-only: does not advance cursors or affect session state.
-  // Count capped at 500 server-side.
+  // QueryStreamHistory reads the tail of a stream for plugin-side display,
+  // backward-paginated by opaque cursor. SERVED:
+  // pluginHostServiceServer.QueryStreamHistory via HistoryReader.ReplayTail.
+  // Read-only: it does not advance session cursors or mutate session state.
+  // A negative count is rejected (INVALID_ARGUMENT); count is CLAMPED to
+  // maxQueryStreamHistoryCount (500), not rejected, when too large.
   rpc QueryStreamHistory(PluginHostServiceQueryStreamHistoryRequest) returns (PluginHostServiceQueryStreamHistoryResponse);
 
-  // DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN audit rows
-  // host-side. The plugin never holds a DEK. Per-row result envelope (INV-RB-12).
-  // Batch capped at 500 server-side (REJECT, not clamp). Authorization: OwnerMap
-  // subject ownership (g1) + crypto.emits[].readback manifest flag (g2) (INV-RB-2).
-  // Request / response message shapes live in audit.proto (AuditRow domain).
+  // DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN encrypted
+  // audit rows host-side; the plugin never holds a DEK. SERVED:
+  // pluginHostServiceServer.DecryptOwnAuditRows via ReadbackDecryptor.
+  // DecryptOwnRows. Authorization is two-gate (INV-RB-2): OwnerMap subject
+  // ownership (g1) plus the crypto.emits[].readback manifest flag (g2). Each
+  // input row gets an independent RowResult (INV-RB-12) carrying either
+  // plaintext or a stable snake_case no_plaintext_reason ("not_owner",
+  // "auth_guard_deny", "dek_missing", "downgrade_refused", "stale_dek",
+  // "audit_queue_full", "internal"; readback.go reasonToWire). Request /
+  // response shapes and RowResult live in audit.proto (AuditRow domain).
   rpc DecryptOwnAuditRows(DecryptOwnAuditRowsRequest) returns (DecryptOwnAuditRowsResponse);
 
-  // RequestEmitToken issues a self-token bound to the calling plugin's
-  // identity (ActorPlugin + pluginName), so plugin-served gRPC handlers
-  // (which are not invoked via DeliverEvent / DeliverCommand) can still
-  // call EmitEvent. The plugin's identity is taken from the mTLS-bound
-  // gRPC server struct — the request carries no identity fields and the
-  // plugin cannot impersonate another actor through this RPC.
-  // (Spec §3.3.5 / §5.4 self-token pattern.)
+  // RequestEmitToken issues a self-token bound to {ActorPlugin, pluginName} so
+  // a plugin-served gRPC handler (e.g. SceneService.CreateScene) — which is NOT
+  // reached via DeliverEvent/DeliverCommand and so holds no dispatch token —
+  // can still call EmitEvent. SERVED: pluginHostServiceServer.RequestEmitToken.
+  // The plugin's identity is taken from the mTLS-bound server struct
+  // (s.pluginName); the request carries no identity fields, so a plugin cannot
+  // impersonate another actor or escalate to a character actor through this
+  // RPC. The actor_kinds_claimable manifest gate still fires when the issued
+  // token is later spent at EmitEvent. (Spec §3.3.5 / §5.4 two-token pattern.)
   rpc RequestEmitToken(PluginHostServiceRequestEmitTokenRequest) returns (PluginHostServiceRequestEmitTokenResponse);
 
-  // SetConnectionFocus — Phase 5 explicit focus mutation for one
-  // Connection. Substrate validates membership against FocusMemberships
-  // (D4); writes Connection.FocusKey + (D9-gated) Info.PresentingFocus
-  // atomically under one Store-lock acquisition (D7).
+  // SetConnectionFocus is the Phase-5 explicit focus mutation for a single
+  // Connection. SERVED: pluginHostServiceServer.SetConnectionFocus. The
+  // substrate validates the requested membership against the session's
+  // FocusMemberships (D4), then writes Connection.FocusKey and (D9-gated)
+  // Info.PresentingFocus atomically under one Store-lock acquisition (D7).
   rpc SetConnectionFocus(PluginHostServiceSetConnectionFocusRequest) returns (PluginHostServiceSetConnectionFocusResponse);
 
-  // AutoFocusOnJoin — Phase 5 fan-out: focuses all terminal/telnet
-  // connections of the character on the given scene. Skips conns
-  // already explicitly focused elsewhere (D8). Caller must have
-  // completed JoinFocus before invocation.
+  // AutoFocusOnJoin is the Phase-5 fan-out that focuses all of a character's
+  // terminal/telnet connections on a scene at once. SERVED:
+  // pluginHostServiceServer.AutoFocusOnJoin. Connections already explicitly
+  // focused elsewhere are skipped (D8). The caller MUST have completed
+  // JoinFocus first, since the substrate requires the membership to exist.
   rpc AutoFocusOnJoin(PluginHostServiceAutoFocusOnJoinRequest) returns (PluginHostServiceAutoFocusOnJoinResponse);
 
-  // IsAnyConnFocused — Phase 5 notification-emission helper: true iff
-  // any of the character's connections has FocusKey == {scene, scene_id}.
+  // IsAnyConnFocused is the Phase-5 notification-emission helper: it reports
+  // whether any of the character's connections currently focuses the given
+  // scene, so callers can decide whether to emit a focus-related notification.
+  // SERVED: pluginHostServiceServer.IsAnyConnFocused.
   rpc IsAnyConnFocused(PluginHostServiceIsAnyConnFocusedRequest) returns (PluginHostServiceIsAnyConnFocusedResponse);
 
-  // Evaluate runs the host ABAC engine for a single action against a single
-  // resource instance owned by the calling plugin. The subject is derived
-  // host-side from the dispatch token (see EmitEvent) — there is no subject
-  // field on the wire (spec §2, INV-1).
+  // Evaluate runs the host ABAC engine for one action against one resource
+  // instance owned by the calling plugin. SERVED:
+  // pluginHostServiceServer.Evaluate. The subject is derived host-side from the
+  // dispatch token exactly as EmitEvent does (token→actor recovery) — there is
+  // no subject field on the wire (spec §2, INV-1). Fails closed on nil engine,
+  // missing/rejected token, empty actor subject, or a resource type the plugin
+  // does not own.
   rpc Evaluate(PluginHostServiceEvaluateRequest) returns (PluginHostServiceEvaluateResponse);
 }
 
-// ServiceConfig carries initialization data from the host to the plugin.
+// ServiceConfig carries the host→plugin initialization payload delivered in
+// InitRequest. It is consumed by pluginServerAdapter.Init / the provider's own
+// Init.
 message ServiceConfig {
-  // PostgreSQL connection string (provided when the plugin declares storage: postgres).
+  // PostgreSQL DSN the plugin uses for its own storage. Populated only when the
+  // plugin declares storage: postgres in its manifest; empty otherwise.
   string connection_string = 1;
-  // Addresses of required services, keyed by service name (future use).
+  // Network addresses of the proto services the plugin declared in requires,
+  // keyed by service name, for the plugin to dial. (Reserved for future
+  // service-to-service wiring.)
   map<string, string> required_services = 2;
   // Opaque plugin-owned runtime config: the effective (manifest-default <
   // server-override) map the host delivers at init. The host does NOT
@@ -126,15 +207,18 @@ message ServiceConfig {
   map<string, string> plugin_config = 3;
 }
 
-// InitRequest is sent by the host after connecting to the plugin process.
+// InitRequest is the host's first call to a freshly connected plugin process.
 message InitRequest {
-  // Service configuration for the plugin.
+  // The initialization payload (DSN, required-service addresses, runtime config)
+  // the plugin needs before it can serve events or commands.
   ServiceConfig config = 1;
 }
 
-// InitResponse is returned by the plugin after initialization.
+// InitResponse is the plugin's reply to Init, advertising what it serves and
+// what it may emit.
 message InitResponse {
-  // gRPC service names this plugin provides on the go-plugin transport.
+  // gRPC service names this plugin implements on the go-plugin transport, so
+  // the host's service registry can route requires→provides between plugins.
   repeated string provided_services = 1;
 
   // Set of plugin-owned event types this plugin may emit. Host validates
@@ -144,23 +228,29 @@ message InitResponse {
   repeated string registered_emit_types = 2;
 }
 
-// Event represents a game event delivered to plugins.
-// Compatible with pkg/plugin.Event but uses protobuf types.
+// Event is the host→plugin delivery shape for one game event (the proto mirror
+// of pkg/plugin.Event). pluginServerAdapter.HandleEvent converts it to the SDK
+// Event before invoking the author's handler.
 message Event {
-  // Unique event identifier (ULID string).
+  // ULID string uniquely identifying the event; also its bus dedup key.
   string id = 1 [(buf.validate.field).string.min_len = 1];
-  // Stream the event belongs to (e.g., "location:loc_abc123").
+  // Source stream this event belongs to, in legacy "prefix:id" form
+  // (e.g. "location:loc_abc123"). Translated to the dot-delimited NATS subject
+  // at the emit boundary.
   string stream = 2 [(buf.validate.field).string.min_len = 1];
-  // Event type (e.g., "say", "pose", "arrive", "leave", "system").
+  // Event-type discriminator (e.g. "say", "pose", "arrive", "leave",
+  // "system") that the plugin handler switches on.
   string type = 3 [(buf.validate.field).string.min_len = 1];
-  // Timestamp in Unix milliseconds.
+  // Event occurrence time in Unix milliseconds (host clock).
   int64 timestamp = 4;
-  // Actor kind as string (e.g., "character", "system", "plugin").
-  // Using string instead of enum for flexibility and compatibility.
+  // Actor kind as a string (e.g. "character", "system", "plugin"). Carried as
+  // a string rather than an enum for forward-compat; the SDK maps it to its
+  // ActorKind type. Distinct from the bus-internal ActorKind enum.
   string actor_kind = 5 [(buf.validate.field).string.min_len = 1];
-  // Actor identifier.
+  // ULID of the actor that caused the event (the character/system/plugin id).
   string actor_id = 6 [(buf.validate.field).string.min_len = 1];
-  // JSON-encoded payload.
+  // JSON-encoded event payload (max 64 KiB); the plugin decodes it per the
+  // event type's schema.
   string payload = 7 [(buf.validate.field).string.max_len = 65536];
   // cursor is the opaque pagination token for this event. Pass as
   // PluginHostServiceQueryStreamHistoryRequest.cursor on the next call
@@ -169,68 +259,84 @@ message Event {
   bytes cursor = 8;
 }
 
-// EmitEvent represents an event that a plugin wants to emit.
-// Compatible with pkg/plugin.EmitEvent.
+// EmitEvent is one event a plugin wants to emit, returned from HandleEvent /
+// HandleCommand (the proto mirror of pkg/plugin.EmitEvent). It is NOT published
+// directly — the host routes it through the PluginEventEmitter.Emit fence.
 message EmitEvent {
-  // Target stream for the event.
+  // Target stream the event is published to (legacy "prefix:id" form).
   string stream = 1 [(buf.validate.field).string.min_len = 1];
-  // Event type.
+  // Event-type discriminator for the emitted event; gated by the manifest's
+  // emits / crypto.emits declarations at the fence.
   string type = 2 [(buf.validate.field).string.min_len = 1];
-  // JSON-encoded payload.
+  // JSON-encoded payload (max 64 KiB); validated as well-formed JSON at the
+  // fence before publish.
   string payload = 3 [(buf.validate.field).string.max_len = 65536];
 }
 
-// HandleEventRequest wraps an event for delivery to the plugin.
+// HandleEventRequest wraps a single delivered event for the PluginService
+// HandleEvent call.
 message HandleEventRequest {
-  // The event to handle.
+  // The event being delivered to the plugin handler.
   Event event = 1;
 }
 
-// HandleEventResponse contains any events the plugin wants to emit.
+// HandleEventResponse returns the events the plugin chose to emit in reaction
+// to the delivered event.
 message HandleEventResponse {
-  // Events to emit in response.
+  // Events the plugin wants emitted; each is run through the host emit fence.
   repeated EmitEvent emit_events = 1;
 }
 
-// CommandRequest carries context for a plugin command invocation.
+// CommandRequest carries the full dispatch context for a plugin command
+// invocation. pluginServerAdapter.HandleCommand maps it to the SDK
+// CommandRequest type.
 message CommandRequest {
-  // Parsed command name (e.g., "say", "dig").
+  // Parsed command verb the plugin registered (e.g. "say", "dig").
   string command = 1 [(buf.validate.field).string.min_len = 1];
-  // Everything after the command name.
+  // Argument text following the verb (max 8 KiB).
   string args = 2 [(buf.validate.field).string.max_len = 8192];
-  // What the player actually typed (alias support).
+  // The raw line the player typed, preserving aliases; surfaced to the SDK as
+  // InvokedAs (max 8 KiB).
   string raw_input = 3 [(buf.validate.field).string.max_len = 8192];
-  // Invoking character ULID.
+  // ULID of the character invoking the command.
   string character_id = 4 [(buf.validate.field).string.min_len = 1];
-  // Character display name.
+  // Display name of the invoking character.
   string character_name = 5 [(buf.validate.field).string.min_len = 1];
-  // Character's current location ULID.
+  // ULID of the invoking character's current location.
   string location_id = 6 [(buf.validate.field).string.min_len = 1];
-  // Active session ULID.
+  // ULID of the active session the command was issued in.
   string session_id = 7 [(buf.validate.field).string.min_len = 1];
-  // Player account ULID.
+  // ULID of the player account behind the character.
   string player_id = 8 [(buf.validate.field).string.min_len = 1];
   // Originating connection ULID (Phase 5). Empty for server-side dispatch paths
   // that do not have a specific connection (e.g., non-gateway callers).
   string connection_id = 9;
 }
 
-// CommandStatus maps to pkg/plugin.CommandStatus values.
+// CommandStatus is the outcome category of a plugin command, mirroring
+// pkg/plugin.CommandStatus.
 enum CommandStatus {
+  // Zero value; a well-formed CommandResponse sets a concrete status.
   COMMAND_STATUS_UNSPECIFIED = 0;
+  // The command succeeded.
   COMMAND_STATUS_OK = 1;
+  // The command failed in a recoverable, user-facing way (e.g. bad arguments).
   COMMAND_STATUS_ERROR = 2;
+  // The command could not complete due to a runtime failure short of fatal.
   COMMAND_STATUS_FAILURE = 3;
+  // The command hit an unrecoverable condition.
   COMMAND_STATUS_FATAL = 4;
 }
 
-// CommandResponse carries the result of a plugin command execution.
+// CommandResponse is the result of a plugin command execution returned from
+// HandleCommand.
 message CommandResponse {
-  // Outcome category.
+  // Outcome category of the command.
   CommandStatus status = 1;
-  // Synchronous text output to the invoking player.
+  // Synchronous text shown to the invoking player (max 8 KiB).
   string output = 2 [(buf.validate.field).string.max_len = 8192];
-  // Events to append to the event store.
+  // Events the command wants emitted; routed through the host emit fence like
+  // HandleEvent emits.
   repeated EmitEvent events = 3;
   // Audit decision hints accumulated by the plugin handler during this
   // command dispatch. The dispatcher extracts these after the response is
@@ -246,8 +352,11 @@ message CommandResponse {
 // system_bypass) are not exposed to plugins because plugins do not produce
 // those decisions.
 enum AuditEffect {
+  // Zero value; never a meaningful plugin decision.
   AUDIT_EFFECT_UNSPECIFIED = 0;
+  // The plugin denied the action — the hint records why.
   AUDIT_EFFECT_DENY = 1;
+  // The plugin allowed the action.
   AUDIT_EFFECT_ALLOW = 2;
 }
 
@@ -291,23 +400,31 @@ message AuditDecisionHint {
   map<string, string> attributes = 7;
 }
 
-// HandleCommandRequest wraps a command for delivery to the plugin.
+// HandleCommandRequest wraps a command dispatch for the PluginService
+// HandleCommand call.
 message HandleCommandRequest {
-  // The command to handle.
+  // The command (verb, args, and dispatch context) to handle.
   CommandRequest command = 1;
 }
 
-// HandleCommandResponse wraps the command result from the plugin.
+// HandleCommandResponse wraps the plugin's command result.
 message HandleCommandResponse {
-  // The command result.
+  // The command outcome (status, output, response emits, audit hints).
   CommandResponse response = 1;
 }
 
 // --- PluginHostService messages ---
 
+// PluginHostServiceEmitEventRequest is the wire form of a plugin emit. The
+// caller's identity is NOT on this message — it is recovered host-side from the
+// x-holomush-emit-token header (see PluginHostService.EmitEvent).
 message PluginHostServiceEmitEventRequest {
+  // Target stream (legacy "prefix:id" form); its namespace must be declared in
+  // the manifest's emits list or the fence rejects the emit.
   string stream = 1 [(buf.validate.field).string.min_len = 1];
+  // Event-type discriminator for the emitted event.
   string event_type = 2 [(buf.validate.field).string.min_len = 1];
+  // Raw event payload bytes (validated as JSON at the fence).
   bytes payload = 3;
   // sensitive declares per-event sensitivity at emit time.
   // Phase 3a's host-side fence at internal/plugin/event_emitter.go::Emit
@@ -320,40 +437,71 @@ message PluginHostServiceEmitEventRequest {
   bool sensitive = 4;
 }
 
+// PluginHostServiceEmitEventResponse is the empty acknowledgement that an emit
+// passed the fence and was published.
 message PluginHostServiceEmitEventResponse {}
 
+// PluginHostServiceLogRequest is the (currently unserved, holomush-l6std)
+// request to write one plugin log line through the host logger.
 message PluginHostServiceLogRequest {
+  // Log severity (e.g. "info", "warn", "error").
   string level = 1 [(buf.validate.field).string.min_len = 1];
+  // Log message body (max 8 KiB).
   string message = 2 [(buf.validate.field).string.max_len = 8192];
 }
 
+// PluginHostServiceLogResponse is the empty ack for Log (unserved,
+// holomush-l6std).
 message PluginHostServiceLogResponse {}
 
+// PluginHostServiceKVGetRequest is the (currently unserved, holomush-l6std)
+// request to read a key from a plugin's KV namespace.
 message PluginHostServiceKVGetRequest {
+  // Owning plugin's name — the KV namespace key.
   string plugin_name = 1 [(buf.validate.field).string.min_len = 1];
+  // Key to read within that namespace.
   string key = 2 [(buf.validate.field).string.min_len = 1];
 }
 
+// PluginHostServiceKVGetResponse returns a KV lookup result (unserved,
+// holomush-l6std).
 message PluginHostServiceKVGetResponse {
+  // The stored value, or empty when not found.
   string value = 1;
+  // Whether the key existed; distinguishes a stored empty value from a miss.
   bool found = 2;
 }
 
+// PluginHostServiceKVSetRequest is the (currently unserved, holomush-l6std)
+// request to write a key in a plugin's KV namespace.
 message PluginHostServiceKVSetRequest {
+  // Owning plugin's name — the KV namespace key.
   string plugin_name = 1 [(buf.validate.field).string.min_len = 1];
+  // Key to write within that namespace.
   string key = 2 [(buf.validate.field).string.min_len = 1];
+  // Value to store under the key.
   string value = 3;
 }
 
+// PluginHostServiceKVSetResponse is the empty ack for KVSet (unserved,
+// holomush-l6std).
 message PluginHostServiceKVSetResponse {}
 
+// PluginHostServiceKVDeleteRequest is the (currently unserved, holomush-l6std)
+// request to delete a key from a plugin's KV namespace.
 message PluginHostServiceKVDeleteRequest {
+  // Owning plugin's name — the KV namespace key.
   string plugin_name = 1 [(buf.validate.field).string.min_len = 1];
+  // Key to delete within that namespace.
   string key = 2 [(buf.validate.field).string.min_len = 1];
 }
 
+// PluginHostServiceKVDeleteResponse is the empty ack for KVDelete (unserved,
+// holomush-l6std).
 message PluginHostServiceKVDeleteResponse {}
 
+// PluginHostServiceAddSessionStreamRequest is the (currently unserved,
+// holomush-l6std) request to subscribe an active session to one more stream.
 message PluginHostServiceAddSessionStreamRequest {
   // Active session identifier.
   string session_id = 1 [(buf.validate.field).string.min_len = 1];
@@ -364,13 +512,21 @@ message PluginHostServiceAddSessionStreamRequest {
   StreamReplayMode replay_mode = 3;
 }
 
+// PluginHostServiceAddSessionStreamResponse is the empty ack for
+// AddSessionStream (unserved, holomush-l6std).
 message PluginHostServiceAddSessionStreamResponse {}
 
+// PluginHostServiceRemoveSessionStreamRequest is the (currently unserved,
+// holomush-l6std) request to unsubscribe an active session from a stream.
 message PluginHostServiceRemoveSessionStreamRequest {
+  // Active session identifier.
   string session_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Stream name to unsubscribe from (format: "prefix:id").
   string stream = 2 [(buf.validate.field).string.min_len = 1];
 }
 
+// PluginHostServiceRemoveSessionStreamResponse is the empty ack for
+// RemoveSessionStream (unserved, holomush-l6std).
 message PluginHostServiceRemoveSessionStreamResponse {}
 
 // QuerySessionStreamsRequest provides session context for stream contribution.
@@ -396,40 +552,67 @@ message QuerySessionStreamsResponse {
 // (b) a matching session.FocusKind constant in Go, (c) a new
 // FocusKindPolicy implementation registered in the coordinator.
 enum FocusKind {
+  // Zero value; not a real focus kind — a well-formed FocusKey sets a concrete
+  // kind.
   FOCUS_KIND_UNSPECIFIED = 0;
+  // A roleplay scene focus.
   FOCUS_KIND_SCENE = 1;
 }
 
 // FocusKey identifies a focus membership within a session. A session's
 // focus memberships are unique by (kind, target_id) pair.
 message FocusKey {
+  // Which kind of focused context this key names.
   FocusKind kind = 1;
+  // ULID of the focused target (e.g. the scene id) within that kind.
   string target_id = 2 [(buf.validate.field).string.min_len = 1];
 }
 
 // StreamReplayMode controls how a stream subscription's initial replay
 // behaves when added via AddSessionStream.
 enum StreamReplayMode {
+  // Zero value; treated as FROM_CURSOR for backward compatibility.
   STREAM_REPLAY_MODE_UNSPECIFIED = 0;
+  // Replay from the session's saved cursor for the stream (catch-up).
   STREAM_REPLAY_MODE_FROM_CURSOR = 1;
+  // Skip historical replay and deliver only newly-arriving events.
   STREAM_REPLAY_MODE_LIVE_ONLY = 2;
 }
 
+// PluginHostServiceJoinFocusRequest names the session and the focus target to
+// add a membership for.
 message PluginHostServiceJoinFocusRequest {
+  // Session to add the focus membership to.
   string session_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The (kind, target_id) membership to add.
   FocusKey target = 2;
 }
+
+// PluginHostServiceJoinFocusResponse is the empty ack that the membership was
+// added.
 message PluginHostServiceJoinFocusResponse {}
 
+// PluginHostServiceLeaveFocusRequest names the session and the focus target to
+// remove a membership for (idempotent on non-member).
 message PluginHostServiceLeaveFocusRequest {
+  // Session to remove the focus membership from.
   string session_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The (kind, target_id) membership to remove.
   FocusKey target = 2;
 }
+
+// PluginHostServiceLeaveFocusResponse is the empty ack for LeaveFocus.
 message PluginHostServiceLeaveFocusResponse {}
 
+// PluginHostServiceLeaveFocusByTargetRequest names a focus target to remove
+// from every session that holds it (cross-session fan-out).
 message PluginHostServiceLeaveFocusByTargetRequest {
+  // The (kind, target_id) membership to sweep out of all holding sessions.
   FocusKey target = 1;
 }
+
+// PluginHostServiceLeaveFocusByTargetResponse reports the aggregate result of a
+// cross-session leave sweep.
 message PluginHostServiceLeaveFocusByTargetResponse {
   // Number of sessions successfully left. Zero is a valid result
   // (target had no members or every member was already non-a-member
@@ -451,14 +634,24 @@ message PluginHostServiceLeaveFocusByTargetResponse {
   repeated string failed_session_ids = 3;
 }
 
+// PluginHostServicePresentFocusRequest names the session and the existing
+// membership to set as its PresentingFocus.
 message PluginHostServicePresentFocusRequest {
+  // Session whose PresentingFocus pointer is being set.
   string session_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Existing membership to present; validated against FocusMemberships.
   FocusKey target = 2;
 }
+
+// PluginHostServicePresentFocusResponse is the empty ack for PresentFocus.
 message PluginHostServicePresentFocusResponse {}
 
+// PluginHostServiceQueryStreamHistoryRequest selects a backward-paginated tail
+// of a stream for plugin-side display.
 message PluginHostServiceQueryStreamHistoryRequest {
+  // Stream to read history from (legacy "prefix:id" form).
   string stream = 1 [(buf.validate.field).string.min_len = 1];
+  // Page size; negative is rejected, values above 500 are clamped to 500.
   int32 count = 2;
   // Epoch milliseconds. Events before this time are excluded. 0 means no lower bound.
   int64 not_before_ms = 3;
@@ -467,7 +660,11 @@ message PluginHostServiceQueryStreamHistoryRequest {
   bytes cursor = 4;
 }
 
+// PluginHostServiceQueryStreamHistoryResponse returns one history page plus the
+// cursor for the next (older) page.
 message PluginHostServiceQueryStreamHistoryResponse {
+  // The page of events in ascending (oldest→newest) order; each carries its own
+  // backward-paging cursor.
   repeated Event events = 1;
   // next_cursor is the opaque cursor for the next page. Empty if no more pages.
   bytes next_cursor = 2;
@@ -479,6 +676,7 @@ message PluginHostServiceQueryStreamHistoryResponse {
 // G1 forgery surface this RPC is designed to close.
 message PluginHostServiceRequestEmitTokenRequest {}
 
+// PluginHostServiceRequestEmitTokenResponse returns the issued self-token.
 message PluginHostServiceRequestEmitTokenResponse {
   // Opaque self-token. Plugins MUST treat this as opaque; only the host's
   // emitTokenStore can interpret it. The token is bound to ActorPlugin +
@@ -486,59 +684,99 @@ message PluginHostServiceRequestEmitTokenResponse {
   string token = 1;
 }
 
+// PluginHostServiceSetConnectionFocusRequest selects one connection and the
+// focus to set on it (Phase 5).
 message PluginHostServiceSetConnectionFocusRequest {
-  bytes connection_id = 1; // ULID
+  // ULID bytes of the connection whose focus is being set.
+  bytes connection_id = 1;
+  // The focus to set; absent (unset) clears the connection's focus.
   optional FocusKey focus_key = 2;
   // is_scene_grid signals that this call originated from a `scene grid`
   // command — substrate skips the D9 PresentingFocus write per D10.
   bool is_scene_grid = 3;
 }
 
+// PluginHostServiceSetConnectionFocusResponse echoes the resulting focus.
 message PluginHostServiceSetConnectionFocusResponse {
+  // The connection's focus after the write; absent if the connection was
+  // cleared/unfocused.
   optional FocusKey focus_key = 1;
 }
 
+// PluginHostServiceAutoFocusOnJoinRequest names the character and scene to
+// fan-out focus across the character's connections.
 message PluginHostServiceAutoFocusOnJoinRequest {
-  bytes character_id = 1; // ULID
-  bytes scene_id = 2; // ULID
+  // ULID bytes of the character whose connections are being focused.
+  bytes character_id = 1;
+  // ULID bytes of the scene to focus those connections on.
+  bytes scene_id = 2;
 }
 
+// PluginHostServiceAutoFocusOnJoinResponse reports per-connection fan-out
+// outcomes.
 message PluginHostServiceAutoFocusOnJoinResponse {
+  // Connection ULIDs newly focused on the scene by this call.
   repeated bytes focused_connection_ids = 1;
+  // Total terminal/telnet connections the character had (the fan-out
+  // denominator).
   uint32 total_connection_count = 2;
+  // Connection ULIDs skipped because they were already explicitly focused
+  // elsewhere (D8).
   repeated bytes skipped_connection_ids = 3;
+  // Connections that failed to focus, each with a structured reason.
   repeated FocusFailure failed_connection_ids = 4;
 }
 
 // FocusFailure carries the connection_id and reason for an AutoFocusOnJoin failure.
 message FocusFailure {
+  // ULID bytes of the connection that failed to focus.
   bytes connection_id = 1;
+  // Why the focus attempt failed for that connection.
   FocusFailureReason reason = 2;
 }
 
+// FocusFailureReason is the closed set of per-connection AutoFocusOnJoin
+// failure causes.
 enum FocusFailureReason {
+  // Zero value; not a real failure reason.
   FOCUS_FAILURE_REASON_UNSPECIFIED = 0;
+  // The session lacked the focus membership (JoinFocus was not completed first).
   FOCUS_FAILURE_REASON_MEMBERSHIP_ABSENT = 1;
+  // The connection could not be found (e.g. it dropped during the sweep).
   FOCUS_FAILURE_REASON_CONNECTION_NOT_FOUND = 2;
 }
 
+// PluginHostServiceIsAnyConnFocusedRequest names the character and scene to
+// test for any focused connection.
 message PluginHostServiceIsAnyConnFocusedRequest {
-  bytes character_id = 1; // ULID
-  bytes scene_id = 2; // ULID
+  // ULID bytes of the character to check.
+  bytes character_id = 1;
+  // ULID bytes of the scene the connections might be focused on.
+  bytes scene_id = 2;
 }
 
+// PluginHostServiceIsAnyConnFocusedResponse reports the focus check result.
 message PluginHostServiceIsAnyConnFocusedResponse {
+  // True iff at least one of the character's connections focuses the scene.
   bool focused = 1;
 }
 
+// PluginHostServiceEvaluateRequest names the action and resource to evaluate.
+// The subject is NOT here — it is recovered host-side from the dispatch token
+// (spec §2, INV-1).
 message PluginHostServiceEvaluateRequest {
+  // ABAC action verb to authorize (e.g. "read", "write").
   string action = 1 [(buf.validate.field).string.min_len = 1];
   // resource is a typed instance ref: "scene:01ABC...".
   string resource = 2 [(buf.validate.field).string.min_len = 3];
 }
 
+// PluginHostServiceEvaluateResponse returns the ABAC engine's decision.
 message PluginHostServiceEvaluateResponse {
+  // Whether the action is permitted on the resource for the recovered subject.
   bool allowed = 1;
+  // Human-readable rationale for the decision (e.g. the deny reason).
   string reason = 2;
+  // Identifier of the policy that produced the decision, when one matched.
   string matched_policy = 3;
 }

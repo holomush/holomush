@@ -4,8 +4,6 @@
 # exactly AND cite an OPEN bead. Document a proto → delete BOTH its buf.yaml
 # line and this entry, then close the bead. Delete this file when empty.
 pending:
-  - path: api/proto/holomush/plugin/v1/plugin.proto
-    bead: holomush-300ad.17
   - path: api/proto/holomush/plugin/v1/attribute.proto
     bead: holomush-300ad.9
   - path: api/proto/holomush/scene/v1/scene.proto
