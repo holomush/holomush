@@ -187,6 +187,20 @@ func (s *Server) EmitSceneICContent(ctx context.Context, plugin string, sceneID,
 		sceneID.String(), actorID, eventType, payloadJSON, true)
 }
 
+// EmitScenePlaintextContent emits a non-sensitive (Sensitive=false) scene IC
+// event for an ARBITRARY scene + actor — used to seed notice-type content
+// (sensitivity: never events such as scene_publish_started, scene_join_ic, etc.)
+// into a CreateScene-created scene. Requires WithPluginCrypto + WithInTreePlugins.
+// The scene row MUST already exist (via CreateScene).
+//
+// Complement of EmitSceneICContent (which always emits Sensitive=true for
+// content events). Use this for event types whose manifest declares
+// sensitivity: never; the INV-6 fence rejects Sensitive=true for those types.
+func (s *Server) EmitScenePlaintextContent(ctx context.Context, plugin string, sceneID, actorID ulid.ULID, eventType, payloadJSON string) EmittedEvent {
+	return s.emitPluginEventForScene(ctx, plugin,
+		sceneID.String(), actorID, eventType, payloadJSON, false)
+}
+
 // emitPluginEventForScene is the parameterized core extracted from
 // EmitPluginEvent. It drives a real plugin emit through the Manager's
 // EmitPluginEvent boundary (the same path core-scenes commands use), returning
@@ -497,6 +511,38 @@ func (s *Server) SeedSceneDEKParticipant(ctx context.Context, sceneID ulid.ULID,
 		AddedVia:    "integrationtest.SeedSceneDEKParticipant",
 	}})
 	require.NoError(s.t, err, "integrationtest.SeedSceneDEKParticipant: GetOrCreate DEK")
+}
+
+// SeedSceneDEKParticipants mints the scene's DEK with ALL provided sessions as
+// participants in a SINGLE GetOrCreate call. This is the multi-participant
+// variant of SeedSceneDEKParticipant, required when more than one session must
+// decrypt sensitive events on the same scene.
+//
+// GetOrCreate applies the initial participant set ONLY on first mint, so minting
+// with one session and then calling again for another would leave the second
+// session outside the DEK participant set — the AuthGuard would deny their
+// decrypt and return metadata-only. Calling with all sessions at once avoids
+// that. Also establishes each session's player↔character binding so
+// QueryStreamHistory's binding lookup resolves to the same binding_id stamped
+// here. Requires WithPluginCrypto.
+func (s *Server) SeedSceneDEKParticipants(ctx context.Context, sceneID ulid.ULID, sessions ...*Session) {
+	s.requirePluginCrypto("SeedSceneDEKParticipants")
+	s.t.Helper()
+	participants := make([]dek.Participant, 0, len(sessions))
+	for _, sess := range sessions {
+		require.NotZero(s.t, sess.PlayerID, "SeedSceneDEKParticipants: every session needs a non-zero PlayerID (use ConnectAuthed*, not ConnectGuest)")
+		bindingID := s.SeedCharacterBinding(ctx, sess)
+		participants = append(participants, dek.Participant{
+			PlayerID:    sess.PlayerID.String(),
+			CharacterID: sess.CharacterID.String(),
+			BindingID:   bindingID,
+			JoinedAt:    time.Now().UTC(),
+			AddedVia:    "integrationtest.SeedSceneDEKParticipants",
+		})
+	}
+	ctxID := dek.ContextID{Type: "scene", ID: sceneID.String()}
+	_, err := s.pluginCrypto.dekMgr.GetOrCreate(ctx, ctxID, participants)
+	require.NoError(s.t, err, "integrationtest.SeedSceneDEKParticipants: GetOrCreate DEK")
 }
 
 // SeedCharacterBinding ensures sess's character has an active player↔character
