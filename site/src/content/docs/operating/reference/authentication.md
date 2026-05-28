@@ -43,7 +43,7 @@ Authentication depends on these tables, all created by `holomush migrate up`:
 | Table             | Purpose              |
 | ----------------- | -------------------- |
 | `players`         | Player accounts      |
-| `web_sessions`    | Active sessions      |
+| `player_sessions` | Active sessions      |
 | `password_resets` | Pending reset tokens |
 | `characters`      | Player characters    |
 

@@ -125,6 +125,12 @@ const (
 )
 ```
 
+`ActorKind` is a `uint8` enum in the Go SDK with a `String()` method that maps
+each constant to its wire value. In the event payload (and the Lua `event`
+table above) `actor_kind` is always the **string** form — `"character"`,
+`"system"`, or `"plugin"` — so the numeric constants are a Go-side convenience,
+not the serialized representation.
+
 ## Common policy patterns
 
 Plugins declare access in their manifest using Cedar-style DSL (default-deny).

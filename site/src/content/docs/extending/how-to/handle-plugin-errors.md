@@ -13,6 +13,8 @@ Inspect the returned error and respond appropriately — handle missing entities
 gracefully, log permission errors, and surface correlation IDs:
 
 ```lua
+function on_event(event)
+-- location_id comes from your event handling (e.g. parsed from event.payload)
 local location, err = holomush.query_location(location_id)
 if err then
     if err:match("not found") then
@@ -39,6 +41,8 @@ if err then
 end
 -- Use location data safely
 holomush.log("debug", "Found location: " .. location.name)
+return nil
+end
 ```
 
 ## Surface correlation IDs
