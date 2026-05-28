@@ -12,15 +12,29 @@ option go_package = "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1
 
 // ActorKind identifies what type of entity caused an event.
 enum ActorKind {
+  // ACTOR_KIND_UNSPECIFIED is the zero value; a well-formed envelope never
+  // carries it — emitters MUST set a concrete kind.
   ACTOR_KIND_UNSPECIFIED = 0;
+  // ACTOR_KIND_CHARACTER marks an event caused by an in-game character action.
   ACTOR_KIND_CHARACTER = 1;
+  // ACTOR_KIND_PLAYER attributes an event to a human player account rather than
+  // a character. It is a recognized wire/audit value preserved across
+  // serialization and history round-trips, but no current emit path produces
+  // it: host and plugin emits resolve only to CHARACTER, SYSTEM, or PLUGIN
+  // (see validateResolvedActor / bridgeActorKind in event_emitter.go).
   ACTOR_KIND_PLAYER = 2;
+  // ACTOR_KIND_SYSTEM marks an event the host itself originated (internal
+  // infrastructure, not a character or plugin).
   ACTOR_KIND_SYSTEM = 3;
+  // ACTOR_KIND_PLUGIN marks an event a plugin emitted; gated by the
+  // manifest's actor_kinds_claimable list at event_emitter.go::Emit.
   ACTOR_KIND_PLUGIN = 4;
 }
 
 // Actor identifies who caused an event.
 message Actor {
+  // kind classifies the entity that caused the event; drives downstream audit
+  // routing (e.g. plugin_router.go selects the audit sink by kind).
   ActorKind kind = 1;
   bytes id = 2; // ULID (16 bytes); MUST be set for every ActorKind value.
   // Field 3 was `string legacy_id` (removed in holomush-w9ml).
@@ -34,9 +48,18 @@ message Actor {
 // JetStream message data; headers carry routing/codec/version metadata.
 message Event {
   bytes id = 1; // ULID (16 bytes)
+  // subject is the NATS dot-delimited routing address for this event, of the
+  // form events.<game_id>.<domain>.<entity-id>[.<facet>...], validated by
+  // NewSubject (must start with "events.").
   string subject = 2;
+  // type is the event-type discriminator, e.g. "say" or "scene.pose"; used
+  // by subscribers to route and render events without decoding the payload.
   string type = 3;
+  // timestamp records when the event occurred according to the host clock,
+  // at nanosecond precision.
   google.protobuf.Timestamp timestamp = 4;
+  // actor identifies the entity that caused the event; host-stamped and
+  // never directly settable by plugins.
   Actor actor = 5;
   bytes payload = 6; // codec.Encode output
   // Rendering metadata, populated by RenderingPublisher.Publish before
