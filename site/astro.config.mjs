@@ -15,7 +15,14 @@ export default defineConfig({
       description: 'Modern MUSH platform with Lua & Go plugins',
       logo: { src: './src/assets/logo.png', alt: 'HoloMUSH' },
       favicon: '/favicon.png',
-      social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/holomush/holomush' }],
+      editLink: { baseUrl: 'https://github.com/holomush/holomush/edit/main/site/' },
+      lastUpdated: true,
+      social: [
+        { icon: 'github', label: 'GitHub', href: 'https://github.com/holomush/holomush' },
+        { icon: 'comment-alt', label: 'Discussions', href: 'https://github.com/holomush/holomush/discussions' },
+        // Discord: add when a real invite URL exists — do NOT ship a dead link:
+        // { icon: 'discord', label: 'Discord', href: '<DISCORD_INVITE_URL>' },
+      ],
       customCss: ['./src/styles/custom.css'],
       plugins: [
         starlightClientMermaid(),
