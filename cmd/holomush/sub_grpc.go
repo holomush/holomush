@@ -44,6 +44,7 @@ import (
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/naming"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/cryptowiring"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
 	"github.com/holomush/holomush/internal/session"
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
@@ -333,7 +334,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	// QueryHistory calls for plugin-owned subjects route to the plugin's
 	// PluginAuditService.QueryHistory RPC instead of the host tiers.
 	js := s.cfg.EventBus.JS()
-	owners := historyOwnersFromPlugins(pluginManager)
+	owners := cryptowiring.OwnerMapFromManager(managerSource{mgr: pluginManager})
 	router := audit.NewPluginHistoryRouter(pluginAuditClientProvider{mgr: pluginManager})
 
 	// INV-39 wiring: if RekeyManager is set (production shape with KEK wired),
@@ -374,8 +375,8 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	// pluginSub.Manager() the audit closure used to build the
 	// PluginConsumerManager — its manifests are populated by now
 	// (DependsOn enforces plugin Start before gRPC Start).
-	alwaysSensitive := buildAlwaysSensitiveSet(pluginManager)
-	cryptoKeysLookupForFence := newCryptoKeysLookup(pool)
+	alwaysSensitive := cryptowiring.AlwaysSensitiveSet(managerSource{mgr: pluginManager})
+	cryptoKeysLookupForFence := cryptowiring.CryptoKeysLookup(pool)
 	// Pass the RAW publisher + registry; newViolationEmitter wraps
 	// internally so the violation event gets exactly one App-Rendering
 	// stamp. The subsystem's primary `publisher` is already a
@@ -881,49 +882,6 @@ func newHistoryReader(
 		}
 	}
 	return history.NewReader(js, pool, cfg.StreamMaxAge, time.Now, opts...)
-}
-
-// historyOwnersFromPlugins aggregates plugin-declared audit subjects into an
-// audit.OwnerMap. A nil return means no plugins declared ownership, which
-// the reader treats as "host owns everything" — the Phase A default.
-// Returns nil on construction failure and logs the reason; a broken
-// manifest MUST NOT block gRPC start because plugin-owned subjects will
-// still fall through to host storage (which is the safe degradation).
-func historyOwnersFromPlugins(mgr *plugins.Manager) *audit.OwnerMap {
-	if mgr == nil {
-		return nil
-	}
-	decls := mgr.AuditSubjects()
-	if len(decls) == 0 {
-		return nil
-	}
-	// Only claim ownership for plugins that actually have a registered
-	// PluginAuditService client. If a plugin declares subjects in its
-	// manifest but never brought up a service (e.g. crashed at startup),
-	// the audit subsystem leaves those subjects to the host projection;
-	// routing them to the plugin here anyway would make QueryHistory fail
-	// instead of reading from the host archive. Mirrors the filter in
-	// buildAuditSubsystem (core.go).
-	owners := make([]audit.SubjectOwner, 0, len(decls))
-	for _, d := range decls {
-		if _, ok := mgr.PluginAuditClient(d.PluginName); !ok {
-			continue
-		}
-		owners = append(owners, audit.SubjectOwner{
-			PluginName: d.PluginName,
-			Pattern:    d.Subject,
-		})
-	}
-	if len(owners) == 0 {
-		return nil
-	}
-	m, err := audit.NewOwnerMap(owners)
-	if err != nil {
-		slog.Error("history OwnerMap construction failed; plugin-owned subjects will route via host fallback",
-			"error", err)
-		return nil
-	}
-	return m
 }
 
 // pluginAuditClientProvider adapts the plugin manager to the

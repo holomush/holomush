@@ -58,6 +58,7 @@ package integrationtest
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -72,6 +73,9 @@ import (
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/audit"
+	authguardaudit "github.com/holomush/holomush/internal/eventbus/authguard/audit"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	"github.com/holomush/holomush/internal/eventbus/history"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
@@ -124,6 +128,29 @@ type Server struct {
 	// passed; nil otherwise. Stopped via t.Cleanup registered in startPlugins.
 	pluginSub *pluginsetup.PluginSubsystem
 
+	// pluginCrypto is the plugin-crypto substrate (ephemeral KEK + pool-backed
+	// DEK manager + crypto-enabled publisher) wired when WithPluginCrypto was
+	// passed; nil otherwise. The emit + wire-codec + DEK-count helpers in
+	// crypto.go require it (requirePluginCrypto panics when absent). Retained on
+	// the Server for Task 8's audit/read-back helpers.
+	pluginCrypto *pluginCrypto
+
+	// pluginConsumers is the per-plugin audit projection (link 3), wired when
+	// WithPluginCrypto was passed; nil otherwise. Stopped via t.Cleanup in Start.
+	pluginConsumers *audit.PluginConsumerManager
+
+	// readbackDecryptor is the host read-back decryptor (link 4), wired when
+	// WithPluginCrypto was passed; nil otherwise. ReadBackOwnRows drives it.
+	readbackDecryptor *history.ReadbackDecryptor
+
+	// readbackAuditCount counts read-back audit emissions on the
+	// audit.<game_id>.plugin_decrypt.<plugin> subjects (read by ReadBackAuditCount).
+	readbackAuditCount atomic.Int64
+
+	// readbackAuditEm is the read-back audit emitter (link 4); its drain
+	// goroutines are stopped via t.Cleanup in Start. nil unless WithPluginCrypto.
+	readbackAuditEm *authguardaudit.Emitter
+
 	// accessEngine is the ABAC policy engine the stack evaluates against: the
 	// allow-all default, a WithPolicyEngine override, or — under WithRealABAC —
 	// the real seeded engine (abacSub.Engine()). Exposed via AccessEngine() so
@@ -143,9 +170,10 @@ type StartOption func(*startConfig)
 
 // startConfig holds resolved Start options.
 type startConfig struct {
-	accessEngine types.AccessPolicyEngine
-	withPlugins  bool
-	withRealABAC bool
+	accessEngine     types.AccessPolicyEngine
+	withPlugins      bool
+	withRealABAC     bool
+	withPluginCrypto bool
 }
 
 // WithPolicyEngine overrides the harness's default allow-all ABAC engine.
@@ -241,6 +269,9 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	for _, opt := range opts {
 		opt(cfg)
 	}
+	if cfg.withPluginCrypto && !cfg.withPlugins {
+		panic("integrationtest: WithPluginCrypto() requires WithInTreePlugins()")
+	}
 	pe := cfg.accessEngine
 
 	// Real seeded ABAC engine (opt-in). Overrides the allow-all default and is
@@ -263,6 +294,16 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	// the plugin subsystem's command registry so plugin commands are
 	// dispatchable (mirrors cmd/holomush/sub_grpc.go); otherwise it gets an
 	// empty registry (no commands registered).
+	// Plugin-crypto substrate (opt-in via WithPluginCrypto, gated to require
+	// WithInTreePlugins above). Constructed BEFORE startPlugins so its
+	// crypto-enabled publisher can be threaded into the plugin event emitter
+	// via ConfigureEventEmitter (link 1: sensitive plugin emits encrypt on the
+	// wire with persisted DEKs).
+	var pc *pluginCrypto
+	if cfg.withPluginCrypto {
+		pc = newPluginCrypto(t, bus, pool, verbRegistry)
+	}
+
 	var pluginSub *pluginsetup.PluginSubsystem
 	cmdRegistry := command.NewRegistry()
 	if cfg.withPlugins {
@@ -288,6 +329,8 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 			pluginProvider:  pp,
 			auditor:         aud,
 			policyInstaller: policyInst,
+			cryptoPublisher: cryptoPublisherOf(pc),
+			gameID:          bus.Bus.GameID(),
 		})
 		cmdRegistry = pluginSub.CommandRegistry()
 	}
@@ -334,7 +377,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		holoGRPC.WithVerbRegistry(verbRegistry),
 	)
 
-	return &Server{
+	srv := &Server{
 		t:                    t,
 		pool:                 pool,
 		playerSessionStore:   playerSessionStore,
@@ -347,9 +390,37 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		bus:                  bus,
 		coreServer:           coreServer,
 		pluginSub:            pluginSub,
+		pluginCrypto:         pc,
 		accessEngine:         pe,
 		guestStartLocationID: guestLocID,
 	}
+
+	// Plugin-crypto links 3+4 (Task 8): the audit projection (PluginConsumerManager
+	// forwarding plugin-owned subjects to scene_log) and the read-back decryptor
+	// (host-side DEK decrypt + INV-19 audit). Wired after startPlugins so the
+	// Manager's audit clients are resolvable. INV-P7-9: the SAME pc.selector
+	// instance feeds the consumer manager that the crypto-enabled publisher used
+	// on the emit side.
+	if cfg.withPluginCrypto {
+		srv.seedScene(ctx, pc)
+		srv.pluginConsumers = startPluginConsumers(t, ctx, bus, pluginSub.Manager(), pc.selector)
+		t.Cleanup(func() { _ = srv.pluginConsumers.Stop(context.Background()) })
+		srv.configureReadback(pc)
+		t.Cleanup(func() { _ = srv.readbackAuditEm.Shutdown(context.Background()) })
+	}
+
+	return srv
+}
+
+// cryptoPublisherOf returns pc's crypto-enabled publisher, or nil when pc is
+// nil (no WithPluginCrypto). A nil cryptoPublisher leaves the plugin event
+// emitter unwired, preserving the WithInTreePlugins-only behavior the
+// whole-system census suite relies on.
+func cryptoPublisherOf(pc *pluginCrypto) eventbus.Publisher {
+	if pc == nil {
+		return nil
+	}
+	return pc.publisher
 }
 
 // Stop tears down the in-process stack. Idempotent. Postgres and NATS cleanup

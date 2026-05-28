@@ -29,6 +29,7 @@ import (
 	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/lifecycle"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
@@ -183,6 +184,17 @@ type pluginDeps struct {
 	// the allow-all default → startPlugins builds a fresh standalone installer
 	// (there is no engine cache to invalidate). (holomush-0f0f4.9, INV-WS-2)
 	policyInstaller *plugins.PolicyInstaller
+	// cryptoPublisher is the crypto-enabled publisher (DEK manager + identity
+	// codec selector, rendering-wrapped) wired by WithPluginCrypto. When
+	// non-nil, startPlugins calls Manager.ConfigureEventEmitter so plugin emits
+	// publish through it (link 1: sensitive emits encrypt on the wire). nil
+	// leaves the emitter unwired, matching the WithInTreePlugins-only behavior
+	// the whole-system census suite relies on.
+	cryptoPublisher eventbus.Publisher
+	// gameID is the embedded bus game id, threaded into the emitter as a
+	// GameIDProvider closure so plugin emits translate legacy colon-style
+	// subjects to events.<game_id>.<ns>.<id> consistently.
+	gameID string
 }
 
 // startPlugins constructs and starts a PluginSubsystem mirroring production
@@ -272,6 +284,21 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 	ps := pluginsetup.NewPluginSubsystem(cfg)
 	t.Cleanup(func() { _ = ps.Stop(context.Background()) })
 	require.NoError(t, ps.Start(ctx), "startPlugins: PluginSubsystem.Start (LoadAll)")
+
+	// Wire the plugin event emitter to the crypto-enabled publisher when
+	// WithPluginCrypto supplied one. WithGameID takes a GameIDProvider
+	// (func() string), NOT a string (event_emitter.go:63-64) — wrap the
+	// captured gameID in a closure. WithCryptoEnabled(true) turns on the Phase
+	// 3a sensitivity fence so sensitivity:always emits (e.g. scene_pose) that
+	// claim Sensitive=true publish encrypted.
+	if d.cryptoPublisher != nil {
+		gameID := d.gameID
+		ps.Manager().ConfigureEventEmitter(
+			d.cryptoPublisher,
+			plugins.WithGameID(func() string { return gameID }),
+			plugins.WithCryptoEnabled(true),
+		)
+	}
 	return ps
 }
 

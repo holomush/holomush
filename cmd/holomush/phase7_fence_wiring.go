@@ -6,127 +6,16 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
-	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/eventbus/history"
-	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginauditpb "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
-
-// buildKeySelector returns the single codec.KeySelector instance threaded
-// into both audit.PluginConsumerManager (via audit.WithKeySelector) and
-// history.NewReader (via history.WithCodecSelector). INV-P7-9 requires the
-// SAME pointer-identity selector in both places — see the parked test at
-// test/integration/eventbus_e2e/dispatcher_selector_identity_test.go.
-//
-// Phase 7 keeps the production deployment on the identity selector
-// (plugin-owned audit subjects are not yet encrypted at the bus level).
-// When a real KEK-backed selector ships, this constructor takes the
-// configured codec.KeySelector and returns it unchanged. The single
-// pointer is what matters for INV-P7-9.
-func buildKeySelector() codec.KeySelector {
-	return &identityProductionKeySelector{}
-}
-
-// identityProductionKeySelector is the placeholder selector used while
-// no plugin-owned audit subject is encrypted at the bus boundary. It
-// always returns (codec.NameIdentity, "", nil) for encrypt and the
-// no-op codec.NoKey for decrypt — equivalent to the package-private
-// identityKeySelector in internal/eventbus/publisher.go but lifted to
-// the boot wiring layer so the SAME instance can be threaded into both
-// the dispatcher and the reader.
-type identityProductionKeySelector struct{}
-
-func (identityProductionKeySelector) SelectForEncrypt(_ context.Context, _ string) (codec.Name, codec.KeyLabel, error) {
-	return codec.NameIdentity, "", nil
-}
-
-func (identityProductionKeySelector) SelectForDecrypt(_ context.Context, _ codec.Name, _ codec.KeyID) (codec.Key, error) {
-	return codec.NoKey, nil
-}
-
-// buildAlwaysSensitiveSet walks every loaded manifest and produces the
-// qualified `<plugin>:<event_type>` set the PluginDowngradeFence uses for
-// INV-P7-7 (manifest-set heuristic). Built ONCE at boot per INV-P7-8 — the
-// fence copies the input map so callers may not mutate it after
-// construction.
-//
-// Returns an empty (non-nil) map when mgr is nil or no plugin declares
-// `crypto.emits[].sensitivity: always`, mirroring the behaviour of
-// alwaysSensitiveFromManifest in test/integration/eventbus_e2e/.
-func buildAlwaysSensitiveSet(mgr *plugins.Manager) map[string]struct{} {
-	out := map[string]struct{}{}
-	if mgr == nil {
-		return out
-	}
-	for _, name := range mgr.ListPlugins() {
-		dp, ok := mgr.GetLoadedPlugin(name)
-		if !ok || dp.Manifest == nil || dp.Manifest.Crypto == nil {
-			continue
-		}
-		for _, emit := range dp.Manifest.Crypto.Emits {
-			if emit.Sensitivity != plugins.SensitivityAlways {
-				continue
-			}
-			key := emit.EventType
-			prefix := dp.Manifest.Name + ":"
-			if !startsWith(key, prefix) {
-				key = prefix + key
-			}
-			out[key] = struct{}{}
-		}
-	}
-	return out
-}
-
-// startsWith is a tiny stdlib-free helper so this file does not pull
-// the strings package just to check a single prefix.
-func startsWith(s, prefix string) bool {
-	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
-}
-
-// newCryptoKeysLookup wraps the *pgxpool.Pool with a thin Exists query
-// that satisfies history.CryptoKeysLookup. The query filters
-// `destroyed_at IS NULL` so destroyed DEKs read as Exists=false (the
-// fence then surfaces the row as metadata_only=true per INV-P7-15).
-func newCryptoKeysLookup(pool *pgxpool.Pool) history.CryptoKeysLookup {
-	return &cryptoKeysLookup{pool: pool}
-}
-
-type cryptoKeysLookup struct {
-	pool *pgxpool.Pool
-}
-
-func (l *cryptoKeysLookup) Exists(ctx context.Context, dekRef uint64) (bool, error) {
-	if l.pool == nil {
-		return false, oops.Code("CRYPTO_KEYS_LOOKUP_POOL_NIL").
-			Errorf("crypto_keys lookup invoked with nil pool")
-	}
-	const q = `SELECT 1 FROM crypto_keys WHERE id = $1 AND destroyed_at IS NULL LIMIT 1`
-	var one int
-	err := l.pool.QueryRow(ctx, q, dekRef).Scan(&one)
-	if err != nil {
-		// pgx returns ErrNoRows when the row is absent (or destroyed) —
-		// that's the legitimate Exists=false case, NOT an infrastructure
-		// failure.
-		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil
-		}
-		return false, oops.Code("CRYPTO_KEYS_LOOKUP_QUERY_FAILED").
-			With("dek_ref", dekRef).
-			Wrap(err)
-	}
-	return true, nil
-}
 
 // newViolationEmitter constructs a ViolationEmitter that publishes
 // `events.<game>.system.plugin_integrity_violation` events on every

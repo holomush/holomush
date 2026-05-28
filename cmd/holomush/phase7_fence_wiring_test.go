@@ -14,7 +14,6 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
-	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/pkg/errutil"
 	pluginauditpb "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -208,77 +207,4 @@ func TestViolationEmitter_BadEventID_StillEmits(t *testing.T) {
 	)
 	require.NoError(t, err, "malformed row.Id MUST NOT block the emit; zero ULID is acceptable")
 	require.Len(t, inner.published, 1)
-}
-
-// TestIdentityProductionKeySelector_SelectForEncrypt verifies the
-// placeholder selector returns the expected (NameIdentity, "", nil)
-// triple for any subject. Trivial branch coverage; pinned in case a
-// future refactor changes the placeholder behaviour without updating
-// the INV-P7-9 substrate test (which only asserts pointer identity, not
-// return values).
-func TestIdentityProductionKeySelector_SelectForEncrypt(t *testing.T) {
-	t.Parallel()
-	sel := &identityProductionKeySelector{}
-	name, label, err := sel.SelectForEncrypt(context.Background(), "events.any.subject")
-	require.NoError(t, err)
-	assert.Equal(t, codec.NameIdentity, name)
-	assert.Equal(t, codec.KeyLabel(""), label)
-}
-
-// TestIdentityProductionKeySelector_SelectForDecrypt mirrors the encrypt
-// test for the decrypt path.
-func TestIdentityProductionKeySelector_SelectForDecrypt(t *testing.T) {
-	t.Parallel()
-	sel := &identityProductionKeySelector{}
-	key, err := sel.SelectForDecrypt(context.Background(), codec.NameIdentity, codec.KeyID(0))
-	require.NoError(t, err)
-	assert.Equal(t, codec.NoKey, key)
-}
-
-// TestStartsWith covers the tiny stdlib-free prefix helper used by
-// buildAlwaysSensitiveSet's plugin-name qualification logic.
-func TestStartsWith(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name   string
-		s      string
-		prefix string
-		want   bool
-	}{
-		{"prefix matches", "core-scenes:secret", "core-scenes:", true},
-		{"empty prefix always matches", "anything", "", true},
-		{"empty string and empty prefix matches", "", "", true},
-		{"prefix longer than string is false", "abc", "abcdef", false},
-		{"prefix-with-different-content false", "core-scenes:secret", "core-comms:", false},
-		{"exact-length match", "abc", "abc", true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, startsWith(tc.s, tc.prefix))
-		})
-	}
-}
-
-// TestBuildAlwaysSensitiveSet_NilManager verifies the documented nil-mgr
-// path: returns an empty (non-nil) map. The other branches (manifest
-// walking, sensitivity filtering, prefix qualification) are exercised
-// by the integration test that boots a real plugin manager with a real
-// manifest declaring crypto.emits[].sensitivity:always.
-func TestBuildAlwaysSensitiveSet_NilManager(t *testing.T) {
-	t.Parallel()
-	out := buildAlwaysSensitiveSet(nil)
-	require.NotNil(t, out, "MUST return non-nil map even for nil mgr (caller iterates without nil-check)")
-	assert.Empty(t, out)
-}
-
-// TestCryptoKeysLookup_NilPool verifies the fail-closed defensive guard
-// against a misconfigured deployment. Production wiring always supplies
-// a non-nil pool; the nil-pool branch is the safety net.
-func TestCryptoKeysLookup_NilPool(t *testing.T) {
-	t.Parallel()
-	lookup := newCryptoKeysLookup(nil)
-	exists, err := lookup.Exists(context.Background(), 42)
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "CRYPTO_KEYS_LOOKUP_POOL_NIL")
-	assert.False(t, exists, "nil pool MUST NOT report existence")
 }
