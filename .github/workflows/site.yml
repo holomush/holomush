@@ -18,14 +18,25 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      # Astro 6 requires Node >= 22.12; the runner defaults to Node 20, so set
+      # the version explicitly (node 24, matching ci.yaml) before the build.
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          version: "0.11.15"
+          node-version: 24
+
+      - name: Install bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: site/.bun-version
 
       - name: Build site
         working-directory: site
-        run: uv run zensical build
+        run: bun install --frozen-lockfile && bunx astro build
+
+      - name: Check internal links
+        working-directory: site
+        run: bunx linkinator dist/index.html --recurse --silent --skip "^https?://(?!127\.0\.0\.1|localhost)"
 
       - name: Deploy to Cloudflare Pages
         if: github.ref == 'refs/heads/main'
@@ -33,4 +44,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy site/build --project-name=holomush-site
+          command: pages deploy site/dist --project-name=holomush-site

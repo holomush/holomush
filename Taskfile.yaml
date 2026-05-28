@@ -115,6 +115,7 @@ tasks:
       - task: lint:no-timestamptz
       - task: lint:no-microsecond-truncate
       - task: lint:no-unixnano-in-repos
+      - task: lint:no-zensical
 
   lint:adr:
     desc: "Run docs/adr/ health check (adr-doctor.sh)"
@@ -375,16 +376,16 @@ tasks:
       - internal/access/policy/dsl/gen-ebnf/main.go
       - internal/access/policy/dsl/ast.go
     generates:
-      - site/docs/reference/policy-dsl.ebnf
-      - site/docs/reference/policy-dsl-railroad.html
+      - site/public/reference/policy-dsl.ebnf
+      - site/public/reference/policy-dsl-railroad.html
 
   generate:ebnf:check:
     desc: Verify generated EBNF grammar + railroad diagram are current
     cmds:
       - |
         set -euo pipefail
-        EBNF=site/docs/reference/policy-dsl.ebnf
-        RAIL=site/docs/reference/policy-dsl-railroad.html
+        EBNF=site/public/reference/policy-dsl.ebnf
+        RAIL=site/public/reference/policy-dsl-railroad.html
         BEFORE=$(sha256sum "$EBNF" "$RAIL" | sha256sum)
         task --force generate:ebnf
         AFTER=$(sha256sum "$EBNF" "$RAIL" | sha256sum)
@@ -664,6 +665,33 @@ tasks:
           echo "If unavoidable, annotate with '-- pgnanos-exempt: <reason>' on the same line."
           exit 1
         fi
+
+  lint:no-zensical:
+    desc: "INV-7: no zensical docs surface remains (bead holomush-cwnu0.19)"
+    cmds:
+      - |
+        set -euo pipefail
+        # INV-7: the old zensical docs-engine marker must be gone from every
+        # location where it would indicate the docs surface is still present.
+        # Checked: site/ content tree, .github/workflows, CLAUDE.md (root).
+        # NOT checked: Taskfile.yaml itself (this guard definition is the only
+        # remaining reference and is intentional) and .jj/node_modules/site/dist
+        # (build artifacts and VCS metadata).
+        if rg -n 'zensical' .github/workflows site CLAUDE.md \
+             --glob '!site/dist/**' --glob '!**/node_modules/**' 2>/dev/null; then
+          echo "INV-7: zensical reference(s) found — docs surface not fully decommissioned" >&2
+          exit 1
+        fi
+        # docs-side uv toolchain must be gone from site/ and docs tasks in Taskfile.
+        # The scripts/ Python `uv run` in scripts-tests.yaml is legitimate and
+        # intentionally NOT checked (that workflow tests scripts/, not docs).
+        if rg -n 'uv (run|sync)' site Taskfile.yaml \
+             --glob '!site/dist/**' --glob '!**/node_modules/**' 2>/dev/null \
+             | rg -v 'scripts'; then
+          echo "INV-7: docs-side uv reference(s) found" >&2
+          exit 1
+        fi
+        echo "✓ INV-7: no zensical/uv docs surface"
 
   # ──────────────────────────────────────────
   # Formatters (called by `task fmt`)
@@ -1081,50 +1109,64 @@ tasks:
     desc: Set up documentation dev environment
     dir: site
     cmds:
-      - uv sync
+      - bun install # fallback order bun → pnpm → npm per ADR holomush-qf2oo
 
   docs:gen-events:
-    desc: "Regenerate site/docs/reference/events/<plugin>.md from plugin manifests"
+    desc: "Regenerate site/src/content/docs/reference/events/<plugin>.md from plugin manifests"
     cmds:
       - ./scripts/gen-event-docs.sh
     sources:
       - scripts/gen-event-docs.sh
       - plugins/*/plugin.yaml
     generates:
-      - site/docs/reference/events/*.md
-      - site/docs/reference/events.md
+      - site/src/content/docs/reference/events/*.md
+      - site/src/content/docs/reference/events.md
 
   docs:build:
     desc: Build documentation site
     deps: ['docs:gen-events']
     dir: site
     cmds:
-      - uv run zensical build
+      - bunx astro build
 
   docs:serve:
     desc: Start documentation dev server
     dir: site
     cmds:
-      - uv run zensical serve
+      - bunx astro dev
+
+  docs:linkcheck:
+    desc: Check internal links in the built docs site (INV-2)
+    dir: site
+    deps: ['docs:build']
+    cmds:
+      - bunx linkinator dist/index.html --recurse --silent --skip "^https?://(?!127\.0\.0\.1|localhost)"
 
   docs:proto:
     desc: Generate gRPC API reference from proto files
     vars:
       PROTOC_INCLUDE:
         sh: echo "$(dirname $(which protoc) 2>/dev/null)/../include" 2>/dev/null || echo "/usr/local/include"
+      PROTOVALIDATE_DIR: /tmp/holomush-protovalidate
     cmds:
+      # Export buf protovalidate so protoc can resolve buf/validate/validate.proto.
+      # Pinned to the buf.lock commit so import resolution is reproducible (no BSR-latest drift).
+      - buf export buf.build/bufbuild/protovalidate:80ab13bee0bf4272b6161a72bf7034e0 --output {{.PROTOVALIDATE_DIR}}
       - >-
-        protoc --doc_out=site/docs/reference --doc_opt=markdown,grpc-api.md --proto_path=api/proto --proto_path={{.PROTOC_INCLUDE}}
-        api/proto/holomush/core/v1/core.proto api/proto/holomush/web/v1/web.proto api/proto/holomush/control/v1/control.proto
+        protoc --doc_out=site/src/content/docs/reference --doc_opt=markdown,grpc-api.md --proto_path=api/proto --proto_path={{.PROTOC_INCLUDE}}
+        --proto_path={{.PROTOVALIDATE_DIR}} api/proto/holomush/core/v1/core.proto api/proto/holomush/web/v1/web.proto api/proto/holomush/control/v1/control.proto
         api/proto/holomush/plugin/v1/plugin.proto api/proto/holomush/plugin/v1/hostfunc.proto
       # Fix well-known type links to point to official protobuf docs (handles any google.protobuf.* type)
       - >-
         perl -pi -e 's|\[google\.protobuf\.([A-Za-z]+)\]\(#google-protobuf-[A-Za-z]+\)|"[google.protobuf.$1](https://protobuf.dev/reference/protobuf/google.protobuf/#"
-        . lc($1) . ")"|ge' site/docs/reference/grpc-api.md
+        . lc($1) . ")"|ge' site/src/content/docs/reference/grpc-api.md
+      # Strip protoc's leading H1 and prepend Starlight frontmatter
+      - >-
+        perl -i -0pe 's/\A\s*#[^\n]*\n+/---\ntitle: "gRPC API Reference"\n---\n\n/' site/src/content/docs/reference/grpc-api.md
     sources:
       - api/proto/holomush/*/v1/*.proto
     generates:
-      - site/docs/reference/grpc-api.md
+      - site/src/content/docs/reference/grpc-api.md
 
   # ──────────────────────────────────────────
   # Cleanup

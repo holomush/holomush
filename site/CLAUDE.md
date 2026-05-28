@@ -1,18 +1,20 @@
 # Documentation Site Guidelines
 
-Instructions for working with the HoloMUSH documentation site (zensical).
+Instructions for working with the HoloMUSH documentation site (Astro + Starlight).
 
 ## Site Structure
 
-| Path                      | Purpose                      |
-| ------------------------- | ---------------------------- |
-| `site/docs/`              | Documentation content        |
-| `site/zensical.toml`      | Site configuration           |
-| `site/.rumdl.toml`        | Markdown lint rules for site |
+| Path                              | Purpose                                    |
+| --------------------------------- | ------------------------------------------ |
+| `site/src/content/docs/`          | Documentation content (Astro collection)   |
+| `site/src/assets/`                | Image and static asset sources             |
+| `site/public/`                    | Static files served at the root            |
+| `site/astro.config.mjs`           | Site configuration (navigation, sidebars)  |
+| `site/.rumdl.toml`                | Markdown lint rules for site               |
 
 ## Audience Directories
 
-Documentation is organized by audience in `site/docs/`:
+Documentation is organized by audience in `site/src/content/docs/`:
 
 | Directory        | Audience                   |
 | ---------------- | -------------------------- |
@@ -25,25 +27,26 @@ Documentation is organized by audience in `site/docs/`:
 ## Commands
 
 ```bash
-task docs:setup   # Install dependencies (uv)
-task docs:serve   # Start local dev server
-task docs:build   # Build static site
+task docs:setup   # Install dependencies (bun install)
+task docs:serve   # Start local dev server (bunx astro dev)
+task docs:build   # Build static site (bunx astro build)
 ```
 
 ## Adding Pages
 
-1. Create `.md` file in appropriate audience directory
-2. Navigation auto-generates from directory structure
+1. Create `.md` or `.mdx` file in the appropriate audience directory under `site/src/content/docs/`
+2. Add the page to the sidebar in `site/astro.config.mjs` (navigation is explicit, not auto-generated)
 3. Use kebab-case for filenames: `getting-started.md`
+4. Include required frontmatter: `title:` and optionally `description:`
 
 ## Configuration
 
-Site settings in `zensical.toml`:
+Site settings in `site/astro.config.mjs`:
 
-- `site_name`, `site_url`, `site_description` - Basic metadata
-- `docs_dir`, `site_dir` - Directory paths
-- `theme.variant`, `theme.palette` - Visual appearance
-- `theme.features` - Navigation and search options
+- `title`, `description` - Basic metadata
+- `starlight.sidebar` - Navigation structure (explicit, ordered)
+- `starlight.social` - Social links
+- Theme, search, and other Starlight options
 
 ## Voice and Tone
 

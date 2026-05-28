@@ -28,11 +28,11 @@ setup() {
 
 @test "player-facing site docs stay header-free (INV-6)" {
   # guide/operating/reference are the player- and operator-facing rendered trees.
-  # All of site/docs/** is license-eye paths-ignore'd, so the tool stamps none of
+  # All of site/src/content/docs/** is license-eye paths-ignore'd, so the tool stamps none of
   # it; a few hand-authored headers exist on extending/ developer technical docs
   # (single-line `<!-- SPDX ... -->` form, not license-eye's), which is why this
   # guard targets the player/operator subtrees and license-eye's tilde form.
-  run rg -l '~ SPDX-License-Identifier' site/docs/guide site/docs/operating site/docs/reference --glob '*.md'
+  run rg -l '~ SPDX-License-Identifier' site/src/content/docs/guide site/src/content/docs/operating site/src/content/docs/reference --glob '*.md'
   assert_failure 1 # rg exits 1 (no match); exit 2+ (rg error) must NOT false-green the invariant
 }
 

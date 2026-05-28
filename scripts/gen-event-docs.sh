@@ -2,14 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 HoloMUSH Contributors
 #
-# scripts/gen-event-docs.sh — regenerate site/docs/reference/events/*.md
+# scripts/gen-event-docs.sh — regenerate site/src/content/docs/reference/events/*.md
 # from plugin manifests. Idempotent. Safe to run repeatedly.
 
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 plugin_dir="$repo_root/plugins"
-out_dir="$repo_root/site/docs/reference/events"
+out_dir="$repo_root/site/src/content/docs/reference/events"
 
 mkdir -p "$out_dir"
 
@@ -42,7 +42,7 @@ for plugin_path in "$plugin_dir"/*/; do
     fi
     out="$out_dir/$plugin.md"
     {
-        printf "# %s — events\n\n" "$plugin"
+        printf -- '---\ntitle: "%s — events"\n---\n\n' "$plugin"
         printf "_Auto-generated from \`plugins/%s/plugin.yaml\` by \`task docs:gen-events\`. Do not edit._\n\n" "$plugin"
         printf "| Event type | Sensitivity | Description |\n"
         printf "| --- | --- | --- |\n"
@@ -61,7 +61,7 @@ done
 
 # Re-emit the top-level index.
 {
-    printf "# Event type reference\n\n"
+    printf -- '---\ntitle: "Event type reference"\n---\n\n'
     printf "Per-plugin event-type catalogues, auto-generated from plugin manifests.\n\n"
     printf "Each event type identifier is qualified with its owning plugin, e.g. \`core-communication:whisper\`.\n\n"
     for plugin_md in "$out_dir"/*.md; do
@@ -69,6 +69,6 @@ done
         plugin="$(basename "$plugin_md" .md)"
         printf -- "- [%s](events/%s.md)\n" "$plugin" "$plugin"
     done
-} > "$repo_root/site/docs/reference/events.md"
+} > "$repo_root/site/src/content/docs/reference/events.md"
 
 echo "Generated $generated_count plugin event pages + index"
