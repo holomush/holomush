@@ -3,8 +3,7 @@ title: "Event Store & EventBus"
 ---
 
 This page describes how events flow through HoloMUSH after the JetStream
-EventBus cutover (F1-F7, `feat/eventbus-cutover`). For historical context on
-the former LISTEN/NOTIFY architecture, see [Event Delivery (superseded)](/contributing/event-delivery/).
+EventBus cutover (F1-F7, `feat/eventbus-cutover`).
 
 **Design spec**: [docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md](https://github.com/holomush/holomush/blob/main/docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md)
 
@@ -242,7 +241,6 @@ insert absorbs cleanly.
 
 - Design spec: `docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md`
   (§1 event model, §3 publish, §4 subscribe, §5 history, §6 PostgreSQL role)
-- Superseded architecture: [Event Delivery](/contributing/event-delivery/)
 - `internal/eventbus/` — bus implementation
 - `internal/eventbus/subjectxlate/` — legacy subject translation
 - `internal/eventbus/eventbustest/` — test harness (`New(t)`)

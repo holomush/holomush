@@ -48,7 +48,6 @@ For detailed guidance on each step, see the pages below.
 | [Coding Standards](/contributing/coding-standards/)   | Go conventions, testing, error handling            |
 | [Authentication](/contributing/authentication/)       | Auth internals, security design, timing defenses  |
 | [Event Store & EventBus](/contributing/event-store/)  | JetStream EventBus, subjects, plugin emit, audit   |
-| [Event Delivery (superseded)](/contributing/event-delivery/) | Former LISTEN/NOTIFY architecture (historical) |
 | [Pull Request Guide](/contributing/pr-guide/)         | Branch naming, PR format, review process           |
 | [Pre-Push Quality Gate (`task pr-prep`)](/contributing/pr-prep/) | What runs, concurrent-run behavior, collision recovery |
 
