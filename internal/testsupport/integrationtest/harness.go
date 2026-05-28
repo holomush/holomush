@@ -90,6 +90,7 @@ import (
 	"github.com/holomush/holomush/internal/world"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 	"github.com/holomush/holomush/test/testutil"
 )
 
@@ -455,6 +456,17 @@ func (s *Server) CommandRegistry() *command.Registry {
 func (s *Server) ServiceRegistry() *plugins.ServiceRegistry {
 	s.requirePlugins("ServiceRegistry")
 	return s.pluginSub.ServiceRegistry()
+}
+
+// SceneServiceClient returns a SceneService client backed by the loaded
+// core-scenes plugin, resolved from the existing plugin ServiceRegistry.
+// Test-only; requires WithInTreePlugins (panics otherwise via requirePlugins).
+func (s *Server) SceneServiceClient() scenev1.SceneServiceClient {
+	s.requirePlugins("SceneServiceClient")
+	svc, err := s.ServiceRegistry().Resolve("holomush.scene.v1.SceneService")
+	require.NoError(s.t, err, "integrationtest.Server.SceneServiceClient: resolve SceneService")
+	require.NotNil(s.t, svc.Conn, "integrationtest.Server.SceneServiceClient: nil conn")
+	return scenev1.NewSceneServiceClient(svc.Conn)
 }
 
 // AccessEngine returns the ABAC policy engine the stack evaluates against.
