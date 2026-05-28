@@ -11,9 +11,14 @@ respective runtime delivery paths. This is the plugin-runtime-symmetry
 guarantee: there are no trust differences between runtimes at the configuration
 layer.
 
-## Declaring config in the manifest
+For the descriptor fields, value types, error codes, and Lua accessor list, see
+the [Plugin configuration reference](/extending/reference/plugin-config/).
 
-Add a `config:` block to your `plugin.yaml`. Each key maps to a descriptor:
+## Declare config in the manifest
+
+Add a `config:` block to your `plugin.yaml`. Each key maps to a descriptor (see
+[Config descriptor fields](/extending/reference/plugin-config/#config-descriptor-fields)
+and [Config value types](/extending/reference/plugin-config/#config-value-types)):
 
 ```yaml
 config:
@@ -28,24 +33,6 @@ config:
     description: "How many times to retry on transient failure."
 ```
 
-### Field reference
-
-| Field         | Required | Description                                                                                              |
-| ------------- | -------- | -------------------------------------------------------------------------------------------------------- |
-| `type`        | Yes      | One of `string`, `int`, `bool`, `duration`                                                               |
-| `default`     | No       | String representation of the default value, parsed according to `type` (e.g., `"30s"` for a duration)  |
-| `required`    | No       | If `true`, the key must be supplied by either a default or a server override. Defaults to `false`.       |
-| `description` | No       | Human-readable explanation shown in plugin info output.                                                  |
-
-### Types
-
-| Type       | Format                                    | Example               |
-| ---------- | ----------------------------------------- | --------------------- |
-| `string`   | Any UTF-8 text                            | `"my-value"`          |
-| `int`      | Decimal integer                           | `"42"`                |
-| `bool`     | `"true"` or `"false"`                     | `"true"`              |
-| `duration` | Go duration string (`h`, `m`, `s`, `ms`) | `"30s"`, `"168h"`     |
-
 The host treats configuration as opaque: it validates that `default` values are
 parseable to their declared type, but it does not interpret what any key means.
 Semantics are entirely up to your plugin.
@@ -53,8 +40,9 @@ Semantics are entirely up to your plugin.
 ## Validation at load time
 
 The host validates your schema when the plugin loads. An unknown type or a
-`default` value that cannot be parsed to its declared type produces error code
-`PLUGIN_CONFIG_SCHEMA_INVALID` and the plugin fails to start.
+`default` value that cannot be parsed to its declared type fails the load with
+`PLUGIN_CONFIG_SCHEMA_INVALID` and the plugin does not start (see
+[Config error codes](/extending/reference/plugin-config/#config-error-codes)).
 
 ## Merge and precedence
 
@@ -66,18 +54,9 @@ manifest defaults < server operator overrides
 ```
 
 Operator overrides win per key. A key absent from both sources is omitted
-entirely — it is not delivered as an empty value.
-
-Three error codes cover merge failures:
-
-| Error code                      | Cause                                                          |
-| ------------------------------- | -------------------------------------------------------------- |
-| `PLUGIN_CONFIG_UNKNOWN_KEY`     | Operator supplied a key that is not in your manifest schema.   |
-| `PLUGIN_CONFIG_TYPE_INVALID`    | The effective value (after merge) cannot be parsed to its type.|
-| `PLUGIN_CONFIG_MISSING_REQUIRED`| A `required: true` key has no default and no operator override.|
-
-Any of these stops the plugin from loading. Operators see a descriptive error
-in the server log.
+entirely — it is not delivered as an empty value. Merge failures (unknown key,
+unparseable effective value, missing required key) each stop the plugin from
+loading; see [Config error codes](/extending/reference/plugin-config/#config-error-codes).
 
 ## Binary plugins (Go)
 
@@ -111,25 +90,10 @@ called the map already contains only valid, parseable values.
 
 ## Lua plugins
 
-The host injects a `holomush.config` table with typed accessor functions. Each
-function returns the value for the given key, or `nil` if the key is absent
-from the merged map.
-
-| Function                             | Returns                            |
-| ------------------------------------ | ---------------------------------- |
-| `holomush.config.string(key)`        | string or nil                      |
-| `holomush.config.int(key)`           | number or nil                      |
-| `holomush.config.bool(key)`          | boolean or nil                     |
-| `holomush.config.duration(key)`      | number of seconds (float) or nil   |
-| `holomush.config.require_int(key)`   | number or raises a Lua error       |
-| `holomush.config.require_duration(key)` | number of seconds or raises   |
-| `holomush.config.require_bool(key)`  | boolean or raises a Lua error      |
-| `holomush.config.require_string(key)` | string or raises a Lua error      |
-
-A present-but-unparseable value raises immediately (fail-loud). A `require_*`
-accessor raises if the key is absent. Every type has both a nil-returning
-variant and a `require_*` variant; use the plain accessor with an `or` fallback
-for optional keys, and the `require_*` variant when the key must be present.
+The host injects a `holomush.config` table with typed accessor functions (see
+[Lua config accessors](/extending/reference/plugin-config/#lua-config-accessors)
+for the full list). Use the plain accessor with an `or` fallback for optional
+keys, and the `require_*` variant when the key must be present:
 
 ```lua
 -- Read optional config with a fallback
@@ -189,6 +153,7 @@ yet wired; until then, the manifest defaults are what production plugins see.
 
 ## See also
 
+- [Plugin configuration reference](/extending/reference/plugin-config/) — descriptor fields, types, error codes, Lua accessors
 - [Plugin Guide](/extending/tutorials/plugin-guide/) — overview of the plugin system and manifest fields
 - [Binary Plugin Author Guide](/extending/tutorials/binary-plugins/) — `Init`, `ServiceConfig`, and the full SDK
 - [Lua Plugin Author Guide](/extending/tutorials/lua-plugins/) — host functions and the Lua event model
