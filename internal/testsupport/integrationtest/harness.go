@@ -72,6 +72,7 @@ import (
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	"github.com/holomush/holomush/internal/eventbus/history"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
@@ -123,6 +124,13 @@ type Server struct {
 	// pluginSub is the started plugin subsystem when WithInTreePlugins was
 	// passed; nil otherwise. Stopped via t.Cleanup registered in startPlugins.
 	pluginSub *pluginsetup.PluginSubsystem
+
+	// pluginCrypto is the plugin-crypto substrate (ephemeral KEK + pool-backed
+	// DEK manager + crypto-enabled publisher) wired when WithPluginCrypto was
+	// passed; nil otherwise. The emit + wire-codec + DEK-count helpers in
+	// crypto.go require it (requirePluginCrypto panics when absent). Retained on
+	// the Server for Task 8's audit/read-back helpers.
+	pluginCrypto *pluginCrypto
 
 	// accessEngine is the ABAC policy engine the stack evaluates against: the
 	// allow-all default, a WithPolicyEngine override, or — under WithRealABAC —
@@ -267,6 +275,16 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	// the plugin subsystem's command registry so plugin commands are
 	// dispatchable (mirrors cmd/holomush/sub_grpc.go); otherwise it gets an
 	// empty registry (no commands registered).
+	// Plugin-crypto substrate (opt-in via WithPluginCrypto, gated to require
+	// WithInTreePlugins above). Constructed BEFORE startPlugins so its
+	// crypto-enabled publisher can be threaded into the plugin event emitter
+	// via ConfigureEventEmitter (link 1: sensitive plugin emits encrypt on the
+	// wire with persisted DEKs).
+	var pc *pluginCrypto
+	if cfg.withPluginCrypto {
+		pc = newPluginCrypto(t, bus, pool, verbRegistry)
+	}
+
 	var pluginSub *pluginsetup.PluginSubsystem
 	cmdRegistry := command.NewRegistry()
 	if cfg.withPlugins {
@@ -292,6 +310,8 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 			pluginProvider:  pp,
 			auditor:         aud,
 			policyInstaller: policyInst,
+			cryptoPublisher: cryptoPublisherOf(pc),
+			gameID:          bus.Bus.GameID(),
 		})
 		cmdRegistry = pluginSub.CommandRegistry()
 	}
@@ -351,9 +371,21 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		bus:                  bus,
 		coreServer:           coreServer,
 		pluginSub:            pluginSub,
+		pluginCrypto:         pc,
 		accessEngine:         pe,
 		guestStartLocationID: guestLocID,
 	}
+}
+
+// cryptoPublisherOf returns pc's crypto-enabled publisher, or nil when pc is
+// nil (no WithPluginCrypto). A nil cryptoPublisher leaves the plugin event
+// emitter unwired, preserving the WithInTreePlugins-only behavior the
+// whole-system census suite relies on.
+func cryptoPublisherOf(pc *pluginCrypto) eventbus.Publisher {
+	if pc == nil {
+		return nil
+	}
+	return pc.publisher
 }
 
 // Stop tears down the in-process stack. Idempotent. Postgres and NATS cleanup
