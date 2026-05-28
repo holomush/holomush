@@ -16,6 +16,8 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Organize docs audience-first with Diátaxis modes within](holomush-md3k4-organize-docs-audience-first-di-taxis-modes-within.md) | 2026-05-28 | Accepted | `holomush-md3k4` |
+| [Use autogenerate sidebar over explicit entries](holomush-38kmt-use-autogenerate-sidebar-over-explicit-entries.md) | 2026-05-28 | Accepted | `holomush-38kmt` |
 | [Adopt Astro Starlight as the docs site platform](holomush-145ko-adopt-astro-starlight-as-docs-site-platform.md) | 2026-05-27 | Accepted | `holomush-145ko` |
 | [Render Mermaid diagrams client-side via Starlight plugin](holomush-xneg2-render-mermaid-diagrams-client-side-via-starlight-plugin.md) | 2026-05-27 | Accepted | `holomush-xneg2` |
 | [Use bun as the docs-site package manager](holomush-qf2oo-use-bun-as-docs-site-package-manager.md) | 2026-05-27 | Accepted | `holomush-qf2oo` |
