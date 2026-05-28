@@ -2,6 +2,8 @@
 title: "Plugin Guide"
 ---
 
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 HoloMUSH supports two plugin types for extending game functionality:
 
 | Type   | Language | Use Case                        | Performance |
@@ -440,68 +442,83 @@ additional context like the plugin name and operation being performed.
 
 Always check `actor_kind` to avoid responding to your own events:
 
-=== "Lua"
+<Tabs>
+  <TabItem label="Lua">
 
-    ```lua
-    if event.actor_kind == "plugin" then
-        return nil
-    end
-    ```
+```lua
+if event.actor_kind == "plugin" then
+    return nil
+end
+```
 
-=== "Go"
+  </TabItem>
+  <TabItem label="Go">
 
-    ```go
-    if event.ActorKind == plugin.ActorPlugin {
-        return nil, nil
-    }
-    ```
+```go
+if event.ActorKind == plugin.ActorPlugin {
+    return nil, nil
+}
+```
+
+  </TabItem>
+</Tabs>
 
 ### Return Early
 
 If an event doesn't match your criteria, return immediately:
 
-=== "Lua"
+<Tabs>
+  <TabItem label="Lua">
 
-    ```lua
-    if event.type ~= "say" then
-        return nil
-    end
-    ```
+```lua
+if event.type ~= "say" then
+    return nil
+end
+```
 
-=== "Go"
+  </TabItem>
+  <TabItem label="Go">
 
-    ```go
-    if event.Type != plugin.EventTypeSay {
-        return nil, nil
-    }
-    ```
+```go
+if event.Type != plugin.EventTypeSay {
+    return nil, nil
+}
+```
+
+  </TabItem>
+</Tabs>
 
 ### Handle Missing Data
 
 Check for missing or invalid data in payloads:
 
-=== "Lua"
+<Tabs>
+  <TabItem label="Lua">
 
-    ```lua
-    local msg = event.payload:match('"message":"([^"]*)"')
-    if not msg or msg == "" then
-        return nil
-    end
-    ```
+```lua
+local msg = event.payload:match('"message":"([^"]*)"')
+if not msg or msg == "" then
+    return nil
+end
+```
 
-=== "Go"
+  </TabItem>
+  <TabItem label="Go">
 
-    ```go
-    var payload struct {
-        Message string `json:"message"`
-    }
-    if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
-        return nil, nil // Skip invalid payloads
-    }
-    if payload.Message == "" {
-        return nil, nil
-    }
-    ```
+```go
+var payload struct {
+    Message string `json:"message"`
+}
+if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
+    return nil, nil // Skip invalid payloads
+}
+if payload.Message == "" {
+    return nil, nil
+}
+```
+
+  </TabItem>
+</Tabs>
 
 ### Keep Handlers Fast
 
@@ -518,134 +535,139 @@ systems.
 
 A complete example showing both plugin types:
 
-=== "Lua"
+<Tabs>
+  <TabItem label="Lua">
 
-    ```lua
-    -- plugins/dice/main.lua
-    -- Responds to "roll XdY" commands
+```lua
+-- plugins/dice/main.lua
+-- Responds to "roll XdY" commands
 
-    function on_event(event)
-        if event.type ~= "say" then
-            return nil
-        end
-
-        local msg = event.payload:match('"message":"([^"]*)"')
-        if not msg then
-            return nil
-        end
-
-        -- Match "roll XdY" pattern
-        local count, sides = msg:match("roll%s+(%d+)d(%d+)")
-        if not count then
-            return nil
-        end
-
-        count = tonumber(count)
-        sides = tonumber(sides)
-
-        if count < 1 or count > 100 or sides < 2 or sides > 100 then
-            return nil
-        end
-
-        -- Roll dice
-        local total = 0
-        local results = {}
-        for i = 1, count do
-            local roll = math.random(1, sides)
-            total = total + roll
-            table.insert(results, tostring(roll))
-        end
-
-        local result_str = table.concat(results, " + ")
-        local response = string.format("Rolled %dd%d: %s = %d",
-            count, sides, result_str, total)
-
-        return {
-            {
-                stream = event.stream,
-                type = "say",
-                payload = '{"message":"' .. response .. '"}'
-            }
-        }
+function on_event(event)
+    if event.type ~= "say" then
+        return nil
     end
-    ```
 
-=== "Go"
+    local msg = event.payload:match('"message":"([^"]*)"')
+    if not msg then
+        return nil
+    end
 
-    ```go
-    // plugins/dice/main.go
-    package main
+    -- Match "roll XdY" pattern
+    local count, sides = msg:match("roll%s+(%d+)d(%d+)")
+    if not count then
+        return nil
+    end
 
-    import (
-        "context"
-        "encoding/json"
-        "fmt"
-        "math/rand"
-        "regexp"
-        "strconv"
-        "strings"
+    count = tonumber(count)
+    sides = tonumber(sides)
 
-        "github.com/holomush/holomush/pkg/plugin"
-    )
+    if count < 1 or count > 100 or sides < 2 or sides > 100 then
+        return nil
+    end
 
-    var dicePattern = regexp.MustCompile(`roll\s+(\d+)d(\d+)`)
+    -- Roll dice
+    local total = 0
+    local results = {}
+    for i = 1, count do
+        local roll = math.random(1, sides)
+        total = total + roll
+        table.insert(results, tostring(roll))
+    end
 
-    type DicePlugin struct{}
+    local result_str = table.concat(results, " + ")
+    local response = string.format("Rolled %dd%d: %s = %d",
+        count, sides, result_str, total)
 
-    func (p *DicePlugin) HandleEvent(ctx context.Context, event plugin.Event) ([]plugin.EmitEvent, error) {
-        if event.Type != plugin.EventTypeSay {
-            return nil, nil
+    return {
+        {
+            stream = event.stream,
+            type = "say",
+            payload = '{"message":"' .. response .. '"}'
         }
+    }
+end
+```
 
-        var payload struct {
-            Message string `json:"message"`
-        }
-        if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
-            return nil, nil
-        }
+  </TabItem>
+  <TabItem label="Go">
 
-        matches := dicePattern.FindStringSubmatch(payload.Message)
-        if matches == nil {
-            return nil, nil
-        }
+```go
+// plugins/dice/main.go
+package main
 
-        count, _ := strconv.Atoi(matches[1])
-        sides, _ := strconv.Atoi(matches[2])
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "math/rand"
+    "regexp"
+    "strconv"
+    "strings"
 
-        if count < 1 || count > 100 || sides < 2 || sides > 100 {
-            return nil, nil
-        }
+    "github.com/holomush/holomush/pkg/plugin"
+)
 
-        var total int
-        var results []string
-        for i := 0; i < count; i++ {
-            roll := rand.Intn(sides) + 1
-            total += roll
-            results = append(results, strconv.Itoa(roll))
-        }
+var dicePattern = regexp.MustCompile(`roll\s+(\d+)d(\d+)`)
 
-        response := fmt.Sprintf("Rolled %dd%d: %s = %d",
-            count, sides, strings.Join(results, " + "), total)
+type DicePlugin struct{}
 
-        responsePayload, _ := json.Marshal(map[string]string{
-            "message": response,
-        })
-
-        return []plugin.EmitEvent{
-            {
-                Stream:  event.Stream,
-                Type:    plugin.EventTypeSay,
-                Payload: string(responsePayload),
-            },
-        }, nil
+func (p *DicePlugin) HandleEvent(ctx context.Context, event plugin.Event) ([]plugin.EmitEvent, error) {
+    if event.Type != plugin.EventTypeSay {
+        return nil, nil
     }
 
-    func main() {
-        plugin.Serve(&plugin.ServeConfig{
-            Handler: &DicePlugin{},
-        })
+    var payload struct {
+        Message string `json:"message"`
     }
-    ```
+    if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
+        return nil, nil
+    }
+
+    matches := dicePattern.FindStringSubmatch(payload.Message)
+    if matches == nil {
+        return nil, nil
+    }
+
+    count, _ := strconv.Atoi(matches[1])
+    sides, _ := strconv.Atoi(matches[2])
+
+    if count < 1 || count > 100 || sides < 2 || sides > 100 {
+        return nil, nil
+    }
+
+    var total int
+    var results []string
+    for i := 0; i < count; i++ {
+        roll := rand.Intn(sides) + 1
+        total += roll
+        results = append(results, strconv.Itoa(roll))
+    }
+
+    response := fmt.Sprintf("Rolled %dd%d: %s = %d",
+        count, sides, strings.Join(results, " + "), total)
+
+    responsePayload, _ := json.Marshal(map[string]string{
+        "message": response,
+    })
+
+    return []plugin.EmitEvent{
+        {
+            Stream:  event.Stream,
+            Type:    plugin.EventTypeSay,
+            Payload: string(responsePayload),
+        },
+    }, nil
+}
+
+func main() {
+    plugin.Serve(&plugin.ServeConfig{
+        Handler: &DicePlugin{},
+    })
+}
+```
+
+  </TabItem>
+</Tabs>
 
 ## Migration Guide
 
@@ -679,25 +701,30 @@ production environments.
 
 Replace `WithWorldQuerier` with `WithWorldService`:
 
-=== "Before (deprecated)"
+<Tabs>
+  <TabItem label="Before (deprecated)">
 
-    ```go
-    // Legacy approach - no authorization
-    funcs := hostfunc.New(
-        kvStore,
-        hostfunc.WithWorldQuerier(querier),
-    )
-    ```
+```go
+// Legacy approach - no authorization
+funcs := hostfunc.New(
+    kvStore,
+    hostfunc.WithWorldQuerier(querier),
+)
+```
 
-=== "After (recommended)"
+  </TabItem>
+  <TabItem label="After (recommended)">
 
-    ```go
-    // New approach - per-plugin ABAC authorization
-    funcs := hostfunc.New(
-        kvStore,
-        hostfunc.WithWorldService(worldService),
-    )
-    ```
+```go
+// New approach - per-plugin ABAC authorization
+funcs := hostfunc.New(
+    kvStore,
+    hostfunc.WithWorldService(worldService),
+)
+```
+
+  </TabItem>
+</Tabs>
 
 #### Interface Changes
 
