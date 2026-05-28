@@ -52,6 +52,7 @@ For detailed guidance on each step, see the pages below.
 | [Event Store & EventBus](/contributing/explanation/event-store/)  | JetStream EventBus, subjects, plugin emit, audit   |
 | [Pull Request Guide](/contributing/how-to/pr-guide/)         | Branch naming, PR format, review process           |
 | [Pre-Push Quality Gate (`task pr-prep`)](/contributing/how-to/pr-prep/) | What runs, concurrent-run behavior, collision recovery |
+| [Proto Doc Comments](/contributing/how-to/proto-doc-comments/) | Comment conventions, Go grounding, ratchet workflow |
 
 ## Development Workflow
 

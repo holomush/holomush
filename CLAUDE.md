@@ -232,6 +232,12 @@ Use `oops` for structured errors: `oops.With(k, v).Wrap(err)`, `oops.Errorf(...)
 
 Directories checked: `api/`, `cmd/`, `internal/`, `pkg/`, `plugins/`, `scripts/`.
 
+### Proto Doc Comments
+
+Every proto element needs a Go-grounded leading comment; no name-echo. Enforced
+by buf `COMMENTS` (ratcheted in `buf.yaml`) + name-echo gate. Full guide:
+`.claude/rules/proto-doc-comments.md` (auto-loads on `api/proto/**`).
+
 ## Testing
 
 Detail in `.claude/rules/testing.md` (auto-loads when editing test files): coverage targets, test naming (ACE), table-driven patterns, assertions, mockery, ginkgo/gomega integration tests, EventBus test harness, ABAC test engines.
