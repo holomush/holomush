@@ -1,4 +1,6 @@
-# Session Isolation
+---
+title: "Session Isolation"
+---
 
 HoloMUSH is developed primarily by concurrent AI agent sessions (Claude Code) and human contributors working in parallel. Because `jj` snapshots the working copy on every command, two sessions sharing the same `jj` workspace will collide on uncommitted edits.
 

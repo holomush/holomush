@@ -1,4 +1,6 @@
-# Configuration
+---
+title: "Configuration"
+---
 
 This guide covers all configuration options for HoloMUSH.
 

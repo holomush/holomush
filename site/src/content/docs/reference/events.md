@@ -1,4 +1,6 @@
-# Event type reference
+---
+title: "Event type reference"
+---
 
 Per-plugin event-type catalogues, auto-generated from plugin manifests.
 

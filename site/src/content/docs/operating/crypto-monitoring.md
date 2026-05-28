@@ -1,4 +1,6 @@
-# Crypto Monitoring
+---
+title: "Crypto Monitoring"
+---
 
 Prometheus alert rules and log signals for monitoring the event-payload
 cryptography substrate, with emphasis on rekey operations and DEK hygiene.

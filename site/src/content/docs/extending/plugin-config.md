@@ -1,4 +1,6 @@
-# Plugin Runtime Configuration
+---
+title: "Plugin Runtime Configuration"
+---
 
 Plugins can declare typed configuration keys in their manifest. At startup the
 host merges server-operator overrides on top of your defaults and delivers the

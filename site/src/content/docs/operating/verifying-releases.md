@@ -1,4 +1,6 @@
-# Verifying HoloMUSH Releases
+---
+title: "Verifying HoloMUSH Releases"
+---
 
 This guide explains how to verify the authenticity and integrity of HoloMUSH releases.
 

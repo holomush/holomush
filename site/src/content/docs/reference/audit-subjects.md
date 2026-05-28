@@ -1,4 +1,6 @@
-# Audit Subject Catalogue
+---
+title: "Audit Subject Catalogue"
+---
 
 This page registers the audit-stream subject namespaces that the host
 emits. ABAC denies all plugin and character subjects from subscribing

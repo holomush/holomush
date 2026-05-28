@@ -1,4 +1,6 @@
-# Operations
+---
+title: "Operations"
+---
 
 This guide covers monitoring and maintaining HoloMUSH in production.
 

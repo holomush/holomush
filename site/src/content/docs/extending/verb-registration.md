@@ -1,4 +1,6 @@
-# Verb Registration
+---
+title: "Verb Registration"
+---
 
 HoloMUSH uses a **verb registry** to associate event types with rendering
 metadata. As a plugin author, you declare verbs in your plugin manifest

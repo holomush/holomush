@@ -1,4 +1,6 @@
-# Contributing to HoloMUSH
+---
+title: "Contributing to HoloMUSH"
+---
 
 Welcome! HoloMUSH is an open-source project licensed under
 [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0), and we genuinely

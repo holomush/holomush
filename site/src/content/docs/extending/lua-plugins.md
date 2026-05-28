@@ -1,4 +1,6 @@
-# Lua Plugin Author Guide
+---
+title: "Lua Plugin Author Guide"
+---
 
 Lua plugins run inside a sandboxed gopher-lua VM. They are ideal for simple
 event reactions, formatting, and game commands that do not need persistent

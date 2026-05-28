@@ -1,4 +1,6 @@
-# Player Guide
+---
+title: "Player Guide"
+---
 
 ## What's a MUSH?
 

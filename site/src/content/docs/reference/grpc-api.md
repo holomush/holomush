@@ -1,4 +1,6 @@
-# Protocol Documentation
+---
+title: "Protocol Documentation"
+---
 
 <a name="top"></a>
 

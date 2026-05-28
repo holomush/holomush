@@ -1,4 +1,6 @@
-# Pull Request Guide
+---
+title: "Pull Request Guide"
+---
 
 This guide covers the pull request workflow for HoloMUSH, including creation,
 review, and merge processes.

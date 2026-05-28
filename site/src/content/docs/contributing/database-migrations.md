@@ -1,4 +1,6 @@
-# Database Migrations
+---
+title: "Database Migrations"
+---
 
 HoloMUSH uses [golang-migrate](https://github.com/golang-migrate/migrate) with
 embedded SQL files for schema management. Migrations live in

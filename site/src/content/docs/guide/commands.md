@@ -1,4 +1,6 @@
-# Commands
+---
+title: "Commands"
+---
 
 Commands in HoloMUSH are plain words — no `@` symbols, no `+` prefixes, no sigils. Type the command followed by any arguments and hit enter. For example: `say Hello everyone` or just `look` on its own.
 

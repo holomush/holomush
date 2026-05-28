@@ -1,4 +1,6 @@
-# Plugin security
+---
+title: "Plugin security"
+---
 
 This page documents the defensive controls the plugin host enforces on
 plugin code.

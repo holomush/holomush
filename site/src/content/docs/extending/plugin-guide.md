@@ -1,4 +1,6 @@
-# Plugin Guide
+---
+title: "Plugin Guide"
+---
 
 HoloMUSH supports two plugin types for extending game functionality:
 

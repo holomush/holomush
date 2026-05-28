@@ -1,4 +1,6 @@
-# Event Delivery Architecture (Superseded)
+---
+title: "Event Delivery Architecture (Superseded)"
+---
 
 :::warning Superseded
 This page describes the former LISTEN/NOTIFY-based delivery architecture. It has

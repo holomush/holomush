@@ -1,4 +1,6 @@
-# Deploying HoloMUSH
+---
+title: "Deploying HoloMUSH"
+---
 
 Deploy a production HoloMUSH instance on a DigitalOcean droplet with automatic
 HTTPS, telnet support, and optional monitoring. The entire deployment runs in

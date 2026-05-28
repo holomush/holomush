@@ -1,4 +1,6 @@
-# Reference
+---
+title: "Reference"
+---
 
 This section contains auto-generated and hand-curated reference material for
 HoloMUSH internals. It's designed for quick lookup rather than narrative

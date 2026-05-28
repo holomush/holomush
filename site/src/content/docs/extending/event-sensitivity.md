@@ -1,4 +1,6 @@
-# Declaring event sensitivity
+---
+title: "Declaring event sensitivity"
+---
 
 Some events shouldn't be readable by every plugin on the server. A whisper
 carries content only the sender and recipient should see. A page between two

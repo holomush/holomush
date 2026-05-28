@@ -1,4 +1,6 @@
-# Extending HoloMUSH
+---
+title: "Extending HoloMUSH"
+---
 
 HoloMUSH is designed to be extended through plugins. Whether you want to add a
 dice roller, build a crafting system, or connect to external services, the plugin

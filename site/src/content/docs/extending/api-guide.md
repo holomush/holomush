@@ -1,4 +1,6 @@
-# API Guide
+---
+title: "API Guide"
+---
 
 HoloMUSH uses a gRPC API for communication between the Gateway (protocol
 servers) and the Core (game engine). If you are building a custom client,

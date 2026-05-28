@@ -1,4 +1,6 @@
-# Implementing AttributeResolverService
+---
+title: "Implementing AttributeResolverService"
+---
 
 Binary plugins that declare custom `resource_types` in their manifest MUST
 implement the `AttributeResolverService` gRPC interface. The host calls your

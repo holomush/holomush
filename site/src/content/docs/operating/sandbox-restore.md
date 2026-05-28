@@ -1,4 +1,6 @@
-# Restoring a Postgres Backup
+---
+title: "Restoring a Postgres Backup"
+---
 
 Restore a Kopia snapshot produced by the `backups` compose profile (or a
 pre-deploy safety snapshot) into a running HoloMUSH instance.

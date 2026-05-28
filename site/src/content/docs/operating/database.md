@@ -1,4 +1,6 @@
-# Database Management
+---
+title: "Database Management"
+---
 
 HoloMUSH uses PostgreSQL as its primary data store. This guide covers database
 setup, migrations, and maintenance.

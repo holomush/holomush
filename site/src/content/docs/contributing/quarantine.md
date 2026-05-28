@@ -1,4 +1,6 @@
-# Quarantining Flaky Tests
+---
+title: "Quarantining Flaky Tests"
+---
 
 Sometimes an integration or E2E test becomes intermittently unreliable — a timing sensitivity, a port-conflict race, a testcontainer startup hiccup. When that happens you have two choices: fix it immediately, or quarantine it so CI stays green while you track the flake in a bead.
 

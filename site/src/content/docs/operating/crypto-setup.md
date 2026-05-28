@@ -1,4 +1,6 @@
-# Crypto Setup
+---
+title: "Crypto Setup"
+---
 
 This page is the operator entry point for HoloMUSH's event-payload
 cryptography setup. It is currently a stub focused on the operator

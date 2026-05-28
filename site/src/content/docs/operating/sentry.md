@@ -1,4 +1,6 @@
-# Sentry Integration (Trial)
+---
+title: "Sentry Integration (Trial)"
+---
 
 HoloMUSH can export traces, errors, and logs to [Sentry](https://sentry.io/)
 alongside its existing OpenTelemetry pipeline. The integration is **opt-in

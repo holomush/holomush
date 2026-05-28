@@ -1,4 +1,6 @@
-# Authentication System
+---
+title: "Authentication System"
+---
 
 This document describes the HoloMUSH authentication architecture for contributors.
 

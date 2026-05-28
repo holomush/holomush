@@ -1,4 +1,6 @@
-# Access Control
+---
+title: "Access Control"
+---
 
 HoloMUSH uses Attribute-Based Access Control (ABAC) as its security model. The
 same policy engine governs everything: which commands a player can run, what an

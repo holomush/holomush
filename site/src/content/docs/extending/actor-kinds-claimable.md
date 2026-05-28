@@ -1,7 +1,10 @@
+---
+title: "`actor_kinds_claimable`"
+---
+
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-# `actor_kinds_claimable`
 
 The `actor_kinds_claimable` field in your plugin's `plugin.yaml` declares which
 actor kinds your plugin is allowed to vouch for on emitted events. It is the

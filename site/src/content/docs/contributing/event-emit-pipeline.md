@@ -1,4 +1,6 @@
-# Event Emit Pipeline
+---
+title: "Event Emit Pipeline"
+---
 
 This document describes how events flow from a plugin (or host code) through
 the publisher chain, onto JetStream, and ultimately to the audit log and

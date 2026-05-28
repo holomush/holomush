@@ -1,4 +1,6 @@
-# Gateway Boundary
+---
+title: "Gateway Boundary"
+---
 
 The gateway process (`cmd/holomush gateway`) is a **protocol translation and
 connection management layer**. It MUST NOT hold domain state, perform

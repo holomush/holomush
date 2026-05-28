@@ -1,4 +1,6 @@
-# Event Reference
+---
+title: "Event Reference"
+---
 
 HoloMUSH is event-driven. Everything that happens in the game -- speech,
 movement, object interactions -- produces an event. Plugins subscribe to events

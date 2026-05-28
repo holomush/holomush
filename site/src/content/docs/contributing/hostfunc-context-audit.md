@@ -1,4 +1,6 @@
-# Host Function Context Audit
+---
+title: "Host Function Context Audit"
+---
 
 Host functions registered on Lua states via
 `internal/plugin/hostfunc/functions.go:Register` run as Go code inside

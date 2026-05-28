@@ -1,4 +1,6 @@
-# Plugin Reloads
+---
+title: "Plugin Reloads"
+---
 
 This page documents how HoloMUSH handles plugin reloads at runtime.
 

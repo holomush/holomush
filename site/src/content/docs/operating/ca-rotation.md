@@ -1,4 +1,6 @@
-# CA Rotation
+---
+title: "CA Rotation"
+---
 
 HoloMUSH uses internal mutual TLS (mTLS) for every connection between the core
 server, the gateway, binary plugins, and the control plane. All of that trust

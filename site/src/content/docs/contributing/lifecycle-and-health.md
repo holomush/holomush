@@ -1,4 +1,6 @@
-# Server Lifecycle & Health System
+---
+title: "Server Lifecycle & Health System"
+---
 
 HoloMUSH's core server uses a structured lifecycle system that manages how
 components start up, report health, and shut down. This page explains the

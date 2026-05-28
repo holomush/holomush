@@ -1,4 +1,6 @@
-# Building
+---
+title: "Building"
+---
 
 !!! warning "Early Development"
 

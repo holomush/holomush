@@ -1,4 +1,6 @@
-# Authentication
+---
+title: "Authentication"
+---
 
 This guide covers what you need to know about HoloMUSH authentication as an operator:
 what's protected, what behavior to expect, and how to recover when things go wrong.

@@ -1,4 +1,6 @@
-# Pre-Push Quality Gate (`task pr-prep`)
+---
+title: "Pre-Push Quality Gate (`task pr-prep`)"
+---
 
 `task pr-prep` is the project's mandatory pre-push gate. It MUST pass before pushing to a PR branch. HoloMUSH uses a two-lane design so the gate is always fast locally while the heavyweight integration and E2E checks run in CI.
 

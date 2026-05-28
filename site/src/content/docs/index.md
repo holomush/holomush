@@ -1,4 +1,6 @@
-# HoloMUSH
+---
+title: "HoloMUSH"
+---
 
 **Modern infrastructure for text-based virtual worlds.**
 

@@ -1,4 +1,6 @@
-# Binary Plugin Author Guide
+---
+title: "Binary Plugin Author Guide"
+---
 
 Binary plugins are standalone Go programs that communicate with HoloMUSH over
 gRPC using HashiCorp's [go-plugin](https://github.com/hashicorp/go-plugin)

@@ -1,4 +1,6 @@
-# `legacy_id` Elimination Cutover (holomush-w9ml)
+---
+title: "`legacy_id` Elimination Cutover (holomush-w9ml)"
+---
 
 One-time deploy step for `holomush-w9ml`. Run **once**, **before** bringing up
 the binary that includes the `Actor.legacy_id` proto-field removal.

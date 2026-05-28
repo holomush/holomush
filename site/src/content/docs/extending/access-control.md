@@ -1,4 +1,6 @@
-# Plugin Access Control
+---
+title: "Plugin Access Control"
+---
 
 Every host function your plugin calls is checked against the policies in your
 `plugin.yaml`. No policy, no access. This page walks through writing policies

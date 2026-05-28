@@ -1,4 +1,6 @@
-# Integration Test Harness
+---
+title: "Integration Test Harness"
+---
 
 This page describes the `internal/testsupport/integrationtest` package — the
 canonical harness for HoloMUSH **full-stack integration** tests that need a real

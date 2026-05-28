@@ -1,4 +1,6 @@
-# Crypto Rekey Runbook
+---
+title: "Crypto Rekey Runbook"
+---
 
 This runbook covers the `holomush crypto rekey` CLI surface introduced in
 Phase 5 sub-epic E. It is the operator-facing procedure for forcing a new

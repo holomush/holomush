@@ -1,4 +1,6 @@
-# System Architecture
+---
+title: "System Architecture"
+---
 
 HoloMUSH is a modern MUSH platform with an event-oriented architecture,
 dual protocol support (telnet + web), and extensibility through plugins.

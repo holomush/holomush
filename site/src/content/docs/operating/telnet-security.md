@@ -1,4 +1,6 @@
-# Telnet Security
+---
+title: "Telnet Security"
+---
 
 The telnet protocol predates TLS by decades and has no native encryption. When
 a player uses the `connect <username> <password>` command over a raw telnet

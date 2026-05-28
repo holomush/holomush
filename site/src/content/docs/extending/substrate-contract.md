@@ -1,7 +1,10 @@
+---
+title: "Substrate Contract"
+---
+
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-# Substrate Contract
 
 The substrate contract describes the rules that govern what plugins can rely on
 from the substrate and what they MUST NOT touch. Every plugin in HoloMUSH is a

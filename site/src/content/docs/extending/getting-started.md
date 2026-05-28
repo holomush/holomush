@@ -1,4 +1,6 @@
-# Getting Started with Plugins
+---
+title: "Getting Started with Plugins"
+---
 
 This guide walks you through creating your first HoloMUSH plugin. By the end,
 you will have a working Lua plugin that responds to in-game speech.

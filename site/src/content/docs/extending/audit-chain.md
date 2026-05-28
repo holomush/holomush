@@ -1,4 +1,6 @@
-# Audit-Chain Primitive
+---
+title: "Audit-Chain Primitive"
+---
 
 The `auditchain` primitive (`internal/eventbus/audit/chain/`) provides
 a generalized per-scope tamper-evident sequence for host-owned system

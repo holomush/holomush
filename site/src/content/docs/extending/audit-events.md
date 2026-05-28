@@ -1,7 +1,10 @@
+---
+title: "Emitting Audit Events from Plugins"
+---
+
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-# Emitting Audit Events from Plugins
 
 Plugins can emit audit events during command handler execution. These events flow through the same `audit.Logger` the ABAC engine uses, gaining WAL durability, mode routing, and operator-visible metrics — without any extra ops configuration.
 

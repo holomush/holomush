@@ -1,4 +1,6 @@
-# Sandbox Operations — game.holomush.dev
+---
+title: "Sandbox Operations — game.holomush.dev"
+---
 
 Day-to-day operations for the long-running sandbox at `game.holomush.dev`.
 Self-hosters should refer to [Deploying HoloMUSH](deployment.md) instead.

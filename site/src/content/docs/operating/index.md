@@ -1,4 +1,6 @@
-# Operating HoloMUSH
+---
+title: "Operating HoloMUSH"
+---
 
 Running HoloMUSH in production is straightforward. The server ships as a single
 binary with PostgreSQL as its only external dependency. Install it, point it at a

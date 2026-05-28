@@ -1,4 +1,6 @@
-# Connecting
+---
+title: "Connecting"
+---
 
 There are two ways to connect to a HoloMUSH game: a web browser or a telnet client. Both give you access to the same world — pick whichever feels more comfortable.
 

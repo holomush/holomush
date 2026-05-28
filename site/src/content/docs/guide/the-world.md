@@ -1,4 +1,6 @@
-# The World
+---
+title: "The World"
+---
 
 Every HoloMUSH server starts with a **setting** — a starter world that gives
 the game its geography, theme, and landing page. Think of it as the seed that

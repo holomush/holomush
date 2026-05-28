@@ -1,4 +1,6 @@
-# Coding Standards
+---
+title: "Coding Standards"
+---
 
 This guide covers the coding conventions and standards used in HoloMUSH development.
 

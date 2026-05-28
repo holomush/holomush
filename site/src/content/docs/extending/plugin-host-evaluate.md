@@ -1,4 +1,6 @@
-# Authorizing Plugin Actions with `host.Evaluate`
+---
+title: "Authorizing Plugin Actions with `host.Evaluate`"
+---
 
 Your plugin command declares command-level capabilities in its manifest, and
 the host checks those at dispatch time. But a single command often covers

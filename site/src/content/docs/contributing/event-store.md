@@ -1,4 +1,6 @@
-# Event Store & EventBus
+---
+title: "Event Store & EventBus"
+---
 
 This page describes how events flow through HoloMUSH after the JetStream
 EventBus cutover (F1-F7, `feat/eventbus-cutover`). For historical context on
