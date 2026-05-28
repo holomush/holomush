@@ -1110,7 +1110,7 @@ func newSceneID() (string, error) {
 	if err != nil {
 		return "", oops.Code("SCENE_ID_GEN_FAILED").Wrap(err)
 	}
-	return "scene-" + id.String(), nil
+	return id.String(), nil
 }
 
 // Phase 6 publication RPC stubs — present per plan A3 Step 5 so the Phase 6

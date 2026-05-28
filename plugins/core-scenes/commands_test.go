@@ -66,7 +66,9 @@ func TestHandleCommandCreateInvokesSceneServiceCreateScene(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
 	assert.Contains(t, resp.Output, "Scene created")
-	assert.True(t, strings.Contains(resp.Output, "scene-"), "output should include the scene id")
+	assert.False(t, strings.Contains(resp.Output, "scene-"),
+		"scene id in output must be a bare ULID, not scene- prefixed (holomush-y5inx)")
+	assert.Contains(t, resp.Output, "Scene created: ", "output should include the scene id")
 }
 
 func TestHandleCommandInfoShowsCreatedScene(t *testing.T) {
