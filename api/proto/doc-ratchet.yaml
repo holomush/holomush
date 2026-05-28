@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# SP0 proto-doc ratchet registry (holomush-300ad).
+# INV-4: every entry MUST match a buf.yaml lint.ignore_only.COMMENTS line
+# exactly AND cite an OPEN bead. Document a proto → delete BOTH its buf.yaml
+# line and this entry, then close the bead. Delete this file when empty.
+pending:
+  - path: api/proto/holomush/core/v1/core.proto
+    bead: holomush-300ad.15
+  - path: api/proto/holomush/plugin/v1/plugin.proto
+    bead: holomush-300ad.17
+  - path: api/proto/holomush/plugin/v1/hostfunc.proto
+    bead: holomush-300ad.14
+  - path: api/proto/holomush/plugin/v1/audit.proto
+    bead: holomush-300ad.10
+  - path: api/proto/holomush/plugin/v1/attribute.proto
+    bead: holomush-300ad.9
+  - path: api/proto/holomush/web/v1/web.proto
+    bead: holomush-300ad.16
+  - path: api/proto/holomush/scene/v1/scene.proto
+    bead: holomush-300ad.18
+  - path: api/proto/holomush/world/v1/world.proto
+    bead: holomush-300ad.7
+  - path: api/proto/holomush/control/v1/control.proto
+    bead: holomush-300ad.8
+  - path: api/proto/holomush/admin/v1/admin.proto
+    bead: holomush-300ad.13
+  - path: api/proto/holomush/admin/v1/rekey.proto
+    bead: holomush-300ad.12
+  - path: api/proto/holomush/admin/v1/read_stream.proto
+    bead: holomush-300ad.11

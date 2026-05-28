@@ -232,6 +232,11 @@ tasks:
     cmds:
       - bash scripts/quarantine-audit.sh
 
+  proto-ratchet:audit:
+    desc: Fail if any doc-ratchet.yaml bead is closed (needs bd; run locally / pre-bd-close). INV-4.
+    cmds:
+      - bash scripts/proto-ratchet-audit.sh
+
   test:bats:
     desc: Run bats shell tests under scripts/tests/
     cmds:
