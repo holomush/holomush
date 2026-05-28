@@ -10,8 +10,6 @@ pending:
     bead: holomush-300ad.17
   - path: api/proto/holomush/plugin/v1/hostfunc.proto
     bead: holomush-300ad.14
-  - path: api/proto/holomush/plugin/v1/audit.proto
-    bead: holomush-300ad.10
   - path: api/proto/holomush/plugin/v1/attribute.proto
     bead: holomush-300ad.9
   - path: api/proto/holomush/web/v1/web.proto
