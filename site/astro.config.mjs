@@ -5,6 +5,7 @@ import starlight from '@astrojs/starlight';
 import starlightLlmsTxt from 'starlight-llms-txt';
 import starlightClientMermaid from '@pasqal-io/starlight-client-mermaid';
 import starlightSidebarTopics from 'starlight-sidebar-topics';
+import starlightLlmActions from 'starlight-llm-actions';
 
 export default defineConfig({
   site: 'https://holomush.dev',
@@ -19,6 +20,7 @@ export default defineConfig({
       plugins: [
         starlightClientMermaid(),
         starlightLlmsTxt({ projectName: 'HoloMUSH' }),
+        starlightLlmActions(),
         starlightSidebarTopics(
           [
             {
