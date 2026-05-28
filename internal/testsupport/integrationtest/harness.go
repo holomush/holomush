@@ -340,9 +340,21 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		cmdRegistry = pluginSub.CommandRegistry()
 	}
 
-	dispatcher, err := command.NewDispatcher(cmdRegistry, pe)
+	// When plugins are loaded, route plugin-backed commands through the
+	// PluginManager deliverer (mirrors cmd/holomush/sub_grpc.go:310). Without
+	// this, SendCommand of any plugin command (e.g. "scene …") is rejected with
+	// NO_PLUGIN_DELIVERER, so command-driven plugin E2Es cannot run.
+	var dispatcherOpts []command.DispatcherOption
+	if pluginSub != nil {
+		dispatcherOpts = append(dispatcherOpts, command.WithPluginDeliverer(pluginSub.Manager()))
+	}
+	dispatcher, err := command.NewDispatcher(cmdRegistry, pe, dispatcherOpts...)
 	require.NoError(t, err, "integrationtest.Start: create command dispatcher")
-	cmdServices := command.NewTestServices(command.ServicesConfig{Engine: pe})
+	// Session service wired so plugin commands that succeed can bump session
+	// activity (dispatchToPlugin → exec.Services().Session().UpdateActivity).
+	// session.Store satisfies session.Access (mirrors cmd/holomush/sub_grpc.go:295);
+	// without it, command-driven plugin E2Es panic on the nil Session getter.
+	cmdServices := command.NewTestServices(command.ServicesConfig{Engine: pe, Session: sessionStoreInst})
 
 	// Core engine with a no-op event appender.
 	engine := core.NewEngine(&noopEventAppender{})
