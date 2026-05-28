@@ -176,17 +176,15 @@ func (s *Server) EmitPluginEvent(ctx context.Context, plugin, eventType, payload
 // exist (via CreateScene) so core-scenes' InsertScenePose UPDATE … RETURNING
 // resolves.
 //
-// sceneID is the BARE ULID returned by Session.CreateScene; core-scenes
-// PERSISTS scene rows under the "scene-"+ULID form (newSceneID,
-// service.go:1113) and its InsertScenePose keys off that stored id via
-// parseSceneSubject(subject)[3] → UPDATE scenes WHERE id=<token> (audit.go:629,
-// :233). So the subject's scene-id token MUST be "scene-"+sceneID — NOT the
-// plan's literal sceneID.String() — for the UPDATE…RETURNING to find the row.
-// This mirrors production's own subject builder dotStyleSceneSubjectIC, which
-// is fed the stored "scene-"+ULID id (store.go:1479).
+// sceneID is the BARE ULID returned by Session.CreateScene. core-scenes
+// persists scene rows under that bare id (newSceneID, service.go:1113,
+// holomush-y5inx) and its InsertScenePose keys off it via
+// parseSceneSubject(subject)[3] → UPDATE scenes WHERE id=<token>. The subject's
+// scene-id token is the bare sceneID — identical to production's own subject
+// builder dotStyleSceneSubjectIC, which is fed the stored bare id.
 func (s *Server) EmitSceneICContent(ctx context.Context, plugin string, sceneID, actorID ulid.ULID, eventType, payloadJSON string) EmittedEvent {
 	return s.emitPluginEventForScene(ctx, plugin,
-		"scene-"+sceneID.String(), actorID, eventType, payloadJSON, true)
+		sceneID.String(), actorID, eventType, payloadJSON, true)
 }
 
 // emitPluginEventForScene is the parameterized core extracted from
@@ -202,7 +200,7 @@ func (s *Server) EmitSceneICContent(ctx context.Context, plugin string, sceneID,
 // audit.go:629) and UPDATEs scenes WHERE id=<sceneSubjectID> … RETURNING
 // (requires the matching scene row). Callers own forming that token:
 // EmitPluginEvent passes the bare WithPluginCrypto sceneID (its self-seeded
-// row uses the bare form); EmitSceneICContent passes "scene-"+ULID (matching
+// row uses the bare form); EmitSceneICContent passes the bare ULID (matching
 // CreateScene's stored id).
 //
 // Panics via requirePluginCrypto if the substrate was not wired.

@@ -7,7 +7,6 @@ package integrationtest
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
@@ -468,10 +467,9 @@ func (s *Session) CreateScene(ctx context.Context, locationID ulid.ULID) ulid.UL
 		Visibility:  "open",
 	})
 	require.NoError(s.server.t, err, "integrationtest.Session.CreateScene")
-	// core-scenes stamps scene IDs as "scene-"+ULID (plugins/core-scenes/service.go:1113);
-	// strip the prefix before parsing the underlying ULID.
-	raw := strings.TrimPrefix(resp.GetScene().GetId(), "scene-")
-	id, err := ulid.Parse(raw)
+	// core-scenes mints bare ULID scene ids (plugins/core-scenes/service.go:1113,
+	// holomush-y5inx). The returned id parses directly — no prefix to strip.
+	id, err := ulid.Parse(resp.GetScene().GetId())
 	require.NoError(s.server.t, err, "integrationtest.Session.CreateScene: parse scene id")
 	return id
 }
