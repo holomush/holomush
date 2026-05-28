@@ -363,6 +363,13 @@ Keep under 200 lines. Curate — don't hoard.
   to exercise. `stream_access_test.go:39` explicitly documents the
   rejection: `{"returns false for old colon-style scene stream",
   "scene:01ABC:ic", false}`. Encountered: iwzt.9-11 (2026-05-21).
+  (c) **Harness scene-helper REAL-vs-synthetic distinction**: `Session.CreateScene`
+  (`integrationtest/session.go:465`) drives the REAL `SceneServiceClient().CreateScene`
+  RPC → core-scenes mints a BARE ULID (`service.go:1113`, holomush-y5inx) and persists
+  a backing row; `Server.NewSceneWithoutMember`/`NewScene` (`harness.go:569`) return a
+  SYNTHETIC `idgen.New()` ULID with NO backing row. A "real CreateScene bare-ULID"
+  regression claim is only honored by the `CreateScene` helper. Confirmed: y5inx.4
+  (2026-05-28) — its INV-Y5INX-2 spec correctly uses `CreateScene`.
 
 - **Contributor-guide example YAML/JSON MUST match the validator's regex/schema,
   not just "look plausible."** When a how-to doc shows a copy-paste registry/config
