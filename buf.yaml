@@ -58,7 +58,6 @@ lint:
       - api/proto/holomush/world/v1/world.proto
       - api/proto/holomush/control/v1/control.proto
       - api/proto/holomush/admin/v1/admin.proto
-      - api/proto/holomush/admin/v1/rekey.proto
 breaking:
   use:
     - FILE
