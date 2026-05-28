@@ -6,5 +6,3 @@
 pending:
   - path: api/proto/holomush/plugin/v1/attribute.proto
     bead: holomush-300ad.9
-  - path: api/proto/holomush/control/v1/control.proto
-    bead: holomush-300ad.8

@@ -7,38 +7,61 @@ package holomush.control.v1;
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/control/v1;controlv1";
 
-// ControlService provides administrative operations for HoloMUSH processes.
+// The mTLS-protected admin surface for a running HoloMUSH process.
+// Both the core server and the gateway register an instance on startup
+// (see cmd/holomush/deps.go and cmd/holomush/gateway.go). Callers must
+// present a valid client certificate issued by the game's root CA.
 service ControlService {
-  // Shutdown initiates process shutdown.
+  // Triggers an asynchronous process exit via the registered shutdown hook.
+  // The RPC returns immediately with a confirmation message; the shutdown
+  // callback runs in a background goroutine. Callers should not expect the
+  // connection to remain open after the response arrives.
+  // Grounded in: internal/control/grpc_server.go::Shutdown
   rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
 
-  // Status returns current process status.
+  // Returns a snapshot of the process's liveness and identity without
+  // requiring authentication beyond the mTLS channel. Reads from an atomic
+  // running flag, os.Getpid(), a monotonic start timestamp, and the
+  // component label supplied at construction time.
+  // Grounded in: internal/control/grpc_server.go::Status
   rpc Status(StatusRequest) returns (StatusResponse);
 }
 
-// ShutdownRequest contains shutdown parameters.
+// Parameters for a shutdown request. The graceful field is currently logged
+// but does not alter shutdown behavior — both values invoke the shutdown hook
+// identically (mismatch tracked in holomush-4gchp).
 message ShutdownRequest {
-  // If true, perform graceful shutdown allowing in-flight requests to complete.
+  // When true, the caller intends a drain-and-exit (in-flight requests
+  // allowed to complete before the process stops). Currently only logged for
+  // observability; the shutdown hook is a parameterless func() and is not yet
+  // differentiated on this value.
   bool graceful = 1;
 }
 
-// ShutdownResponse confirms shutdown initiation.
+// Confirmation that the shutdown sequence has been triggered.
 message ShutdownResponse {
-  // Human-readable status message.
+  // Human-readable confirmation string; currently always "shutdown initiated".
+  // Callers SHOULD NOT parse this value; it exists for operator logs only.
   string message = 1;
 }
 
-// StatusRequest requests current process status.
+// Empty carrier for a status poll. No parameters are required; the server
+// derives all response fields from its own runtime state.
 message StatusRequest {}
 
-// StatusResponse contains current process status.
+// A point-in-time snapshot of the process's health and identity.
 message StatusResponse {
-  // Whether the process is running.
+  // True while the process's internal running flag is set. Set to false
+  // only after GracefulStop completes (internal/control/grpc_server.go::Stop).
   bool running = 1;
-  // Process ID.
+  // Operating-system process ID as returned by os.Getpid(), cast to int32.
+  // Safe on all supported platforms; values never exceed int32 range.
   int32 pid = 2;
-  // Seconds since process started.
+  // Elapsed seconds since the GRPCServer was constructed via NewGRPCServer.
+  // Derived from a monotonic time.Time captured at construction.
   int64 uptime_seconds = 3;
-  // Component name (e.g., "core" or "gateway").
+  // Identifies which process component reported this status, e.g. "core"
+  // or "gateway". Set at construction time; never empty (enforced by
+  // NewGRPCServer which returns an error for an empty component string).
   string component = 4;
 }
