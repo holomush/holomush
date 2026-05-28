@@ -29,7 +29,7 @@ header:
     - "vendor/**"
     - "internal/web/dist/**"
     - "plugins/**/content/**"
-    - "site/docs/**"
+    - "site/src/content/docs/**"
     - "AGENTS.md"
     - "**/.gitkeep"
     - "**/*.gfo6-cutoff"
