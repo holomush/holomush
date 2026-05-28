@@ -42,7 +42,7 @@ HOLOMUSH_PR_PREP_FORCE_FULL=1 task pr-prep
 
 `Integration Test` and `E2E Test` are **required CI checks protecting `main`**. They run in CI on Namespace runners with Testcontainers Cloud — not in the mandatory local fast lane. A PR cannot merge until both are green in CI.
 
-Quarantined specs are excluded from both gating CI runs and from the full lane's Docker-backed suite. They run only nightly and locally with `HOLOMUSH_RUN_QUARANTINED=1`. See [quarantine.md](/contributing/quarantine/) for details.
+Quarantined specs are excluded from both gating CI runs and from the full lane's Docker-backed suite. They run only nightly and locally with `HOLOMUSH_RUN_QUARANTINED=1`. See [quarantine.md](/contributing/how-to/quarantine/) for details.
 
 ### Docs lane
 

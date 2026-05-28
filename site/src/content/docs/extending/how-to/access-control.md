@@ -236,5 +236,5 @@ The denial is logged server-side too, so operators can see what happened.
 ## Further Reading
 
 - [Access Control Reference](/reference/access-control/) — Full DSL spec, operator guide, capability tables
-- [Plugin Guide](/extending/plugin-guide/) — Complete plugin development guide
-- [Getting Started](/extending/getting-started/) — Your first plugin
+- [Plugin Guide](/extending/tutorials/plugin-guide/) — Complete plugin development guide
+- [Getting Started](/extending/tutorials/getting-started/) — Your first plugin

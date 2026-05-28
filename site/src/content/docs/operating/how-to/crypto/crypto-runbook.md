@@ -9,10 +9,10 @@ cold tier, invalidating cluster DEK caches, and emitting a tamper-evident
 audit event.
 
 **Audience:** Operators who hold the `crypto.operator` capability. See
-[Crypto Setup](/operating/crypto-setup/) for capability provisioning.
+[Crypto Setup](/operating/how-to/crypto/crypto-setup/) for capability provisioning.
 
-**See also:** [Crypto Monitoring](/operating/crypto-monitoring/) for alert rules,
-[Audit-Chain Primer](/extending/audit-chain/) for the underlying
+**See also:** [Crypto Monitoring](/operating/how-to/crypto/crypto-monitoring/) for alert rules,
+[Audit-Chain Primer](/extending/explanation/audit-chain/) for the underlying
 audit-chain primitive.
 
 ## Architecture overview
@@ -92,7 +92,7 @@ flowchart TD
 
 ## Prerequisites
 
-- You hold the `crypto.operator` capability (see [Crypto Setup](/operating/crypto-setup/)).
+- You hold the `crypto.operator` capability (see [Crypto Setup](/operating/how-to/crypto/crypto-setup/)).
 - You can reach the admin Unix domain socket on the target server.
 - If site policy requires `dual_control_required: [rekey]`, a second operator
   must be available and has already created an approval request.
@@ -276,7 +276,7 @@ holomush crypto rekey resume <request_id> --force-destroy --confirm scene:01ABC
 
 The audit event records `force_destroy: true` and the list of missing
 replicas. The `RekeyForceDestroyUsed` Prometheus alert fires immediately
-(see [Crypto Monitoring](/operating/crypto-monitoring/)).
+(see [Crypto Monitoring](/operating/how-to/crypto/crypto-monitoring/)).
 
 ## Sweep TTL behavior {#cold-dek-miss}
 
@@ -289,7 +289,7 @@ When the sweep aborts a checkpoint:
 - The checkpoint transitions to `status: aborted` with `aborted_reason: ttl_expired`.
 - A chained rekey audit event is emitted.
 - The `ColdDEKMissSustained` alert may fire if the old DEK is still in
-  use by the cold tier (see [Crypto Monitoring](/operating/crypto-monitoring/)).
+  use by the cold tier (see [Crypto Monitoring](/operating/how-to/crypto/crypto-monitoring/)).
 
 If you receive a `ttl_expired` abort on an unexpectedly large Phase 3
 workload, the appropriate response is to start a fresh rekey (Phase 3
@@ -378,7 +378,7 @@ For a force-destroy event: `"force_destroy": true` and
 
 ## See also
 
-- [Crypto Setup](/operating/crypto-setup/) — operator capability provisioning
-- [Crypto Monitoring](/operating/crypto-monitoring/) — Prometheus alert rules
-- [Audit-Chain Primer](/extending/audit-chain/) — audit-chain primitive for developers
+- [Crypto Setup](/operating/how-to/crypto/crypto-setup/) — operator capability provisioning
+- [Crypto Monitoring](/operating/how-to/crypto/crypto-monitoring/) — Prometheus alert rules
+- [Audit-Chain Primer](/extending/explanation/audit-chain/) — audit-chain primitive for developers
 - [Sub-epic E design spec](https://github.com/holomush/holomush/blob/main/docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md) — full design reference

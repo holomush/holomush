@@ -41,7 +41,7 @@ locally. The gate is serialized via a lockfile under `${TMPDIR:-/tmp}/holomush-p
 — on macOS this is typically per-user (because `$TMPDIR` is user-scoped); on
 Linux it is typically machine-global (because `/tmp` is shared). If you see an
 "another pr-prep is running" error, wait for the holder to finish or kill its
-process tree (see [Pre-Push Quality Gate](/contributing/pr-prep/) for details — note that
+process tree (see [Pre-Push Quality Gate](/contributing/how-to/pr-prep/) for details — note that
 `kill <pid>` alone is insufficient because descendants inherit the lock fd).
 
 ## Creating a PR
@@ -237,6 +237,6 @@ gh pr edit --add-reviewer username
 
 ## Further Reading
 
-- [Coding Standards](/contributing/coding-standards/) - Style and conventions
-- [Architecture](/contributing/architecture/) - System design overview
+- [Coding Standards](/contributing/reference/coding-standards/) - Style and conventions
+- [Architecture](/contributing/explanation/architecture/) - System design overview
 - [Contributing Guide](/contributing/) - Getting started

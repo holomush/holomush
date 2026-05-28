@@ -117,7 +117,7 @@ Audit write failures never fail your command. The dispatcher logs the failure, b
 
 ## Related Documentation
 
-- [Access Control](/extending/access-control/) — how policies and audit events fit together
-- [Binary Plugins](/extending/binary-plugins/) — Go plugin authoring guide
-- [Lua Plugins](/extending/lua-plugins/) — Lua plugin authoring guide
-- [AttributeResolverService](/extending/abac-attribute-resolver/) — for plugins that also want to expose custom resource attributes
+- [Access Control](/extending/how-to/access-control/) — how policies and audit events fit together
+- [Binary Plugins](/extending/tutorials/binary-plugins/) — Go plugin authoring guide
+- [Lua Plugins](/extending/tutorials/lua-plugins/) — Lua plugin authoring guide
+- [AttributeResolverService](/extending/how-to/abac-attribute-resolver/) — for plugins that also want to expose custom resource attributes

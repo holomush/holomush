@@ -9,7 +9,7 @@ the `policy_set` chain from sub-epic D into a reusable primitive.
 
 **Audience:** Developers adding new host-side system audit event chains.
 Plugin-emitted audit events (ABAC allow/deny) use a separate path; see
-[Emitting Audit Events from Plugins](/extending/audit-events/).
+[Emitting Audit Events from Plugins](/extending/how-to/audit-events/).
 
 ## What the primitive provides
 
@@ -211,7 +211,7 @@ dek.RegisterRekey(verifierSubsystem)          // E's rekey chain
 
 ## See also
 
-- [Crypto Runbook](/operating/crypto-runbook/) — operator procedure for the rekey chain
-- [Crypto Monitoring](/operating/crypto-monitoring/) — alert rules for chain-integrity failures
+- [Crypto Runbook](/operating/how-to/crypto/crypto-runbook/) — operator procedure for the rekey chain
+- [Crypto Monitoring](/operating/how-to/crypto/crypto-monitoring/) — alert rules for chain-integrity failures
 - [Sub-epic E design spec §3.6–§3.8](https://github.com/holomush/holomush/blob/main/docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md) — full primitive design and R6 amendment
 - [Master spec §4.6](https://github.com/holomush/holomush/blob/main/docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md) — audit event shapes

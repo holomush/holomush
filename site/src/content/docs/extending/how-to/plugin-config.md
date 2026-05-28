@@ -189,6 +189,6 @@ yet wired; until then, the manifest defaults are what production plugins see.
 
 ## See also
 
-- [Plugin Guide](/extending/plugin-guide/) — overview of the plugin system and manifest fields
-- [Binary Plugin Author Guide](/extending/binary-plugins/) — `Init`, `ServiceConfig`, and the full SDK
-- [Lua Plugin Author Guide](/extending/lua-plugins/) — host functions and the Lua event model
+- [Plugin Guide](/extending/tutorials/plugin-guide/) — overview of the plugin system and manifest fields
+- [Binary Plugin Author Guide](/extending/tutorials/binary-plugins/) — `Init`, `ServiceConfig`, and the full SDK
+- [Lua Plugin Author Guide](/extending/tutorials/lua-plugins/) — host functions and the Lua event model

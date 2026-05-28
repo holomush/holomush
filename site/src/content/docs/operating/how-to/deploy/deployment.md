@@ -171,7 +171,7 @@ Or snapshot the DigitalOcean volume if using block storage.
 | Caddy cert errors          | Port 80 open? ACME needs it for HTTP-01 challenge            |
 
 For detailed monitoring and health check information, see
-[Operations](/operating/operations/).
+[Operations](/operating/how-to/operations/).
 
 ## Generic Linux Host
 
@@ -250,4 +250,4 @@ docker compose --profile caddy --profile backups exec backup /usr/local/bin/back
 (Replace `--profile caddy` with `--profile tunnel` if you use tunnel
 ingress.)
 
-Restore from a backup: see [Restoring a backup](/operating/sandbox-restore/).
+Restore from a backup: see [Restoring a backup](/operating/how-to/sandbox/sandbox-restore/).

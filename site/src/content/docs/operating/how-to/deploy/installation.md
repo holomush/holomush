@@ -291,5 +291,5 @@ sudo systemctl start holomush-core holomush-gateway
 
 ## Next Steps
 
-- [Configuration](/operating/configuration/) - Customize server behavior
-- [Operations](/operating/operations/) - Monitor and maintain your server
+- [Configuration](/operating/reference/configuration/) - Customize server behavior
+- [Operations](/operating/how-to/operations/) - Monitor and maintain your server

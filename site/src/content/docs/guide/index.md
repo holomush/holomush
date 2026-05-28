@@ -20,6 +20,6 @@ MUSHes have been around since the early 1990s. HoloMUSH carries that tradition f
 
 ## Next Steps
 
-- [Connecting](/guide/connecting/) — How to log in for the first time
-- [Commands](/guide/commands/) — What you can type and what it does
-- [Building](/guide/building/) — Creating locations and shaping the world
+- [Connecting](/guide/how-to/connecting/) — How to log in for the first time
+- [Commands](/guide/reference/commands/) — What you can type and what it does
+- [Building](/guide/how-to/building/) — Creating locations and shaping the world

@@ -211,4 +211,4 @@ Manages reset token persistence with token hash lookups and player-based cleanup
 
 - [Design Spec](https://github.com/holomush/holomush/blob/main/docs/specs/2026-01-25-auth-identity-design.md) - Full authentication design
 - [ADR 0001](https://github.com/holomush/holomush/blob/main/docs/adr/0001-opaque-session-tokens.md) - Token design decision
-- [Operator Guide](/operating/authentication/) - Deployment and configuration
+- [Operator Guide](/operating/explanation/authentication/) - Deployment and configuration

@@ -351,5 +351,5 @@ type AccessControl interface {
 
 ## Further Reading
 
-- [Pull Request Guide](/contributing/pr-guide/) - Contribution workflow
-- [Architecture](/contributing/architecture/) - System design overview
+- [Pull Request Guide](/contributing/how-to/pr-guide/) - Contribution workflow
+- [Architecture](/contributing/explanation/architecture/) - System design overview

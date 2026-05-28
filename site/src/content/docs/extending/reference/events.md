@@ -8,7 +8,7 @@ and can emit new events in response. This page covers the event types, their
 payloads, and the stream system that organizes them.
 
 For event sensitivity (whisper, DM, private-scene content), see
-[Declaring event sensitivity](/extending/event-sensitivity/).
+[Declaring event sensitivity](/extending/how-to/event-sensitivity/).
 
 ## Communication Events
 

@@ -23,7 +23,7 @@ certificates signed by it:
 
 `<certs_dir>` defaults to `~/.config/holomush/certs/` (or
 `/opt/holomush/config/certs/` in the Docker deployment). See
-[Configuration](/operating/configuration/) for how to override the path.
+[Configuration](/operating/reference/configuration/) for how to override the path.
 
 Leaf certificates (server and client) are short-lived and reissued
 automatically by the core on startup when they near expiry. The CA certificate
@@ -265,7 +265,7 @@ one.
 
 If you would rather not rely on HoloMUSH's self-signed CA, you can issue the
 CA and leaf certificates from your own PKI. See
-[Using Your Own Certificate Authority](/operating/configuration/#using-your-own-certificate-authority)
+[Using Your Own Certificate Authority](/operating/reference/configuration/#using-your-own-certificate-authority)
 in the configuration reference.
 
 When rotating an externally issued CA, follow your PKI provider's rotation

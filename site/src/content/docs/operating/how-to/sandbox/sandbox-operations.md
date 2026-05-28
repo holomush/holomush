@@ -3,7 +3,7 @@ title: "Sandbox Operations — game.holomush.dev"
 ---
 
 Day-to-day operations for the long-running sandbox at `game.holomush.dev`.
-Self-hosters should refer to [Deploying HoloMUSH](/operating/deployment/) instead.
+Self-hosters should refer to [Deploying HoloMUSH](/operating/how-to/deploy/deployment/) instead.
 
 ## One-time bootstrap
 
@@ -309,7 +309,7 @@ in the repository becomes unreadable. There is no "re-encrypt" operation.
 
 ### Restore a backup
 
-See [sandbox-restore.md](/operating/sandbox-restore/).
+See [sandbox-restore.md](/operating/how-to/sandbox/sandbox-restore/).
 
 ### Rebuild the droplet from scratch
 
