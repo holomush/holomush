@@ -20,6 +20,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/eventbus/history"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // AuditSubjectDecl mirrors the (PluginName, Subject) pair the manager exposes
@@ -89,7 +90,7 @@ func OwnerMapFromManager(src ManifestSource) *audit.OwnerMap {
 	}
 	m, err := audit.NewOwnerMap(owners)
 	if err != nil {
-		slog.Error("cryptowiring: OwnerMap construction failed; plugin-owned subjects route via host fallback", "error", err)
+		errutil.LogError(slog.Default(), "cryptowiring: OwnerMap construction failed; plugin-owned subjects route via host fallback", err)
 		return nil
 	}
 	return m
