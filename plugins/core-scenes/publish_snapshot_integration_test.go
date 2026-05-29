@@ -551,7 +551,7 @@ var _ = Describe("C7 snapshot pipeline (COOLOFF → PUBLISHED)", func() {
 		scene, err := env.store.Get(ctx, sceneID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(scene.State).To(Equal(string(SceneStateArchived)),
-			"INV-RB-8: parent scene must be archived on PUBLISHED")
+			"INV-RB-8 / INV-P6-4: parent scene must transition to archived ONLY on PUBLISHED")
 	})
 
 	// INV-RB-10 / INV-RB-12: a host decrypt error fails the publish closed with
