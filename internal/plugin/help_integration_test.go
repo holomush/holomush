@@ -307,10 +307,15 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 	})
 
 	Describe("error engine handling", func() {
-		It("returns unavailable message when list_commands engine errors", func() {
-			// The Lua plugin calls list_commands; when the policy engine errors,
-			// list_commands returns an error and the Lua code returns a graceful
-			// failure message (status=2) rather than a partial list.
+		It("renders the available partial list when list_commands engine errors", func() {
+			// When the policy engine errors, list_commands returns a populated list
+			// of no-capability commands (always included; here "look") plus
+			// incomplete=true and a non-nil err — the SOFT-failure tier of the host
+			// contract (internal/plugin/hostfunc/commands.go). The Lua handler honors
+			// it: render the usable commands with an incompleteness indicator rather
+			// than hiding everything behind a blanket message (holomush-869o8). The
+			// blanket "temporarily unavailable" message is reserved for a genuinely
+			// nil result (registry/engine nil), which an error engine never produces.
 			errorEngine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
 			fixture, err := setupHelpTestWithEngine(errorEngine)
 			Expect(err).NotTo(HaveOccurred())
@@ -327,10 +332,14 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp).NotTo(BeNil())
 
-			Expect(resp.Status).To(Equal(pluginsdk.CommandFailure),
-				"engine error should produce CommandFailure status")
-			Expect(resp.Output).To(ContainSubstring("temporarily unavailable"),
-				"should return a graceful unavailability message, not a partial list")
+			Expect(resp.Status).To(Equal(pluginsdk.CommandOK),
+				"a populated-but-incomplete list must render, not fail")
+			Expect(resp.Output).NotTo(ContainSubstring("temporarily unavailable"),
+				"the blanket message is reserved for a genuinely nil result")
+			Expect(resp.Output).To(ContainSubstring("look"),
+				"no-capability commands are always available and must be shown")
+			Expect(resp.Output).To(ContainSubstring("incomplete"),
+				"the user must be told the list may be incomplete")
 		})
 
 		It("returns full command list when engine succeeds", func() {
@@ -353,9 +362,11 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 			Expect(resp.Output).NotTo(ContainSubstring("unavailable"))
 		})
 
-		It("returns unavailable message when search engine errors", func() {
-			// search_commands also calls list_commands; engine errors produce
-			// a graceful failure message (status=2) rather than partial search results.
+		It("renders partial search results when search engine errors", func() {
+			// search_commands shares list_commands' contract: an engine error yields
+			// a populated list of no-capability commands + incomplete=true, so the
+			// search runs over the usable subset and renders matches with an
+			// incompleteness indicator rather than a blanket failure (holomush-869o8).
 			errorEngine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
 			fixture, err := setupHelpTestWithEngine(errorEngine)
 			Expect(err).NotTo(HaveOccurred())
@@ -372,10 +383,14 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp).NotTo(BeNil())
 
-			Expect(resp.Status).To(Equal(pluginsdk.CommandFailure),
-				"engine error during search should produce CommandFailure status")
-			Expect(resp.Output).To(ContainSubstring("temporarily unavailable"),
-				"should return a graceful unavailability message, not partial search results")
+			Expect(resp.Status).To(Equal(pluginsdk.CommandOK),
+				"a populated-but-incomplete search must render, not fail")
+			Expect(resp.Output).NotTo(ContainSubstring("temporarily unavailable"),
+				"the blanket message is reserved for a genuinely nil result")
+			Expect(resp.Output).To(ContainSubstring("look"),
+				"the matching no-capability command must be shown")
+			Expect(resp.Output).To(ContainSubstring("incomplete"),
+				"the user must be told the search list may be incomplete")
 		})
 	})
 })

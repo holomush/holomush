@@ -20,14 +20,33 @@ local function table_sort_by_key(t, key)
 end
 
 -- list_all_commands handles "help" with no arguments.
+--
+-- holomush.list_commands has a two-tier failure contract (see
+-- internal/plugin/hostfunc/commands.go): a HARD failure (command registry or
+-- access engine unavailable) returns a nil result plus an error; a SOFT failure
+-- returns a fully-populated command list with result.incomplete=true plus an
+-- error, because an ABAC engine error hid some capability-gated commands.
+-- No-capability commands (help itself included) are always present, so the soft
+-- list is usable. We therefore branch on result, not on err: only a nil result
+-- warrants the blanket "unavailable" message; an incomplete list is rendered
+-- with a warning so the user still gets the commands they can run.
 local function list_all_commands(ctx)
     local result, err = holomush.list_commands(ctx.character_id)
-    if err then
-        holomush.log("error", "help: failed to list commands for " .. ctx.character_id .. ": " .. err)
+
+    if result == nil then
+        if err then
+            holomush.log("error", "help: failed to list commands for " .. ctx.character_id .. ": " .. err)
+        end
         return {status = 2, output = "Help is temporarily unavailable. Please try again later."}
     end
 
-    if result == nil or #result.commands == 0 then
+    local incomplete = err ~= nil or result.incomplete == true
+    if incomplete then
+        holomush.log("warn", "help: command list incomplete for " .. ctx.character_id ..
+            (err and (": " .. err) or ""))
+    end
+
+    if #result.commands == 0 then
         return "No commands available."
     end
 
@@ -65,6 +84,10 @@ local function list_all_commands(ctx)
     end
 
     out = out .. holo.fmt.dim("Type 'help <command>' for detailed help.")
+    if incomplete then
+        out = out .. "\n" .. holo.fmt.dim(
+            "⚠ This command list may be incomplete due to a temporary system error. Try 'help' again shortly.")
+    end
     return out
 end
 
@@ -106,11 +129,25 @@ local function show_command_help(ctx, name)
 end
 
 -- search_commands handles "help search <term>".
+--
+-- Shares list_commands' two-tier failure contract with list_all_commands: a nil
+-- result is a hard failure (blanket message), while a populated result with a
+-- non-nil err / incomplete=true is a soft failure whose usable subset we still
+-- search and render, appending an incompleteness indicator.
 local function search_commands(ctx, term)
     local result, err = holomush.list_commands(ctx.character_id)
-    if err then
-        holomush.log("error", "help: failed to search commands for " .. term .. ": " .. err)
+
+    if result == nil then
+        if err then
+            holomush.log("error", "help: failed to search commands for " .. term .. ": " .. err)
+        end
         return {status = 2, output = "Search is temporarily unavailable. Please try again later."}
+    end
+
+    local incomplete = err ~= nil or result.incomplete == true
+    if incomplete then
+        holomush.log("warn", "help: search command list incomplete for " .. term ..
+            (err and (": " .. err) or ""))
     end
 
     local lower_term = term:lower()
@@ -137,6 +174,10 @@ local function search_commands(ctx, term)
     end
     out = out .. holo.fmt.table({headers = {"Command", "Description"}, rows = rows}) .. "\n\n"
     out = out .. holo.fmt.dim("Found " .. #matches .. " command(s).")
+    if incomplete then
+        out = out .. "\n" .. holo.fmt.dim(
+            "⚠ Searchable commands may be incomplete due to a temporary system error. Try again shortly.")
+    end
 
     return out
 end
