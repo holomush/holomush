@@ -5,6 +5,7 @@ package focus
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -144,4 +145,72 @@ func TestAutoFocusOnJoinDrivesPerConnectionDeltas(t *testing.T) {
 		"events.main.scene." + scene + ".ooc",
 	}, cs.adds(), "grid→scene MUST add scene IC + OOC")
 	assert.ElementsMatch(t, []string{"location:" + loc}, cs.removes(), "grid→scene MUST remove the location stream")
+}
+
+func TestAutoFocusOnJoinNilSenderIsNoOp(t *testing.T) {
+	charID := ulid.Make()
+	sceneID := ulid.Make()
+	locID := ulid.Make()
+	connID := ulid.Make()
+	sessions := map[string]*session.Info{
+		"sess-1": {
+			ID: "sess-1", CharacterID: charID, LocationID: locID,
+			Status: session.StatusActive,
+			FocusMemberships: []session.FocusMembership{
+				{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: time.Now()},
+			},
+		},
+	}
+	coord, _ := newTestCoordinator(t, sessions) // connectionSender stays nil
+	require.NoError(t, coord.sessionStore.AddConnection(context.Background(), &session.Connection{
+		ID: connID, SessionID: "sess-1", ClientType: "terminal",
+	}))
+	// Must not panic; focus mutation still succeeds.
+	resp, err := coord.AutoFocusOnJoin(context.Background(), charID, sceneID)
+	require.NoError(t, err)
+	assert.Len(t, resp.FocusedConnectionIDs, 1)
+}
+
+func TestDriveFocusDeltasContinuesPastSendError(t *testing.T) {
+	charID := ulid.Make()
+	sceneID := ulid.Make()
+	locID := ulid.Make()
+	connID := ulid.Make()
+	sessions := map[string]*session.Info{
+		"sess-1": {
+			ID: "sess-1", CharacterID: charID, LocationID: locID,
+			Status: session.StatusActive,
+			FocusMemberships: []session.FocusMembership{
+				{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: time.Now()},
+			},
+		},
+	}
+	coord, _ := newTestCoordinator(t, sessions)
+	scene := sceneID.String()
+	// Fail the IC add; the OOC add and the location remove must still be attempted.
+	cs := &captureConnSender{errOn: map[string]error{
+		"events.main.scene." + scene + ".ic": errors.New("CONNECTION_NOT_REGISTERED"),
+	}}
+	coord.connectionSender = cs
+	coord.gameID = "main"
+	require.NoError(t, coord.sessionStore.AddConnection(context.Background(), &session.Connection{
+		ID: connID, SessionID: "sess-1", ClientType: "terminal",
+	}))
+
+	resp, err := coord.AutoFocusOnJoin(context.Background(), charID, sceneID)
+	require.NoError(t, err, "delivery failure MUST NOT fail the focus mutation")
+	require.Len(t, resp.FocusedConnectionIDs, 1)
+	// All three deltas attempted despite the IC failure.
+	assert.Len(t, cs.calls, 3, "one failing send MUST NOT abort the remaining sends")
+}
+
+func TestAutoFocusOnJoinSessionNotFoundDrivesNoDeltas(t *testing.T) {
+	coord, _ := newTestCoordinator(t, map[string]*session.Info{})
+	cs := &captureConnSender{}
+	coord.connectionSender = cs
+	coord.gameID = "main"
+	resp, err := coord.AutoFocusOnJoin(context.Background(), ulid.Make(), ulid.Make())
+	require.NoError(t, err)
+	assert.Equal(t, uint32(0), resp.TotalConnectionCount)
+	assert.Empty(t, cs.calls, "no session → no deltas")
 }
