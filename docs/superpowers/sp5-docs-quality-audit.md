@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # SP5 Documentation Quality Audit
 
 Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/docs/`). Scored against the 8-dimension rubric in [`contributing/reference/docs-style-guide.md`](/contributing/reference/docs-style-guide.md). Covers exactly 77 content pages (excludes root `index.mdx` splash and auto-generated `reference/events/*` sub-pages). Date: 2026-05-28.
