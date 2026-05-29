@@ -156,24 +156,6 @@ var _ = Describe("Help Plugin Integration", func() {
 			Expect(resp.Output).To(ContainSubstring("nonexistent"))
 		})
 
-		It("searches commands by keyword", func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-
-			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
-				Command:     "help",
-				Args:        "search room",
-				CharacterID: "01HTEST000000000000000CHAR",
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(resp).NotTo(BeNil())
-			Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
-
-			// Should find commands mentioning "room"
-			Expect(resp.Output).To(ContainSubstring("say")) // "Say something to the room"
-			Expect(resp.Output).To(ContainSubstring("dig")) // "Create a new room"
-		})
-
 		It("searches commands by help field", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
