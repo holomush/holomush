@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+# connid-echo-plugin is a test-only binary plugin used by
+# connection_id_roundtrip_test.go. Its HandleCommand echoes the received
+# ConnectionID back in the response output, proving that
+# CommandRequest.connection_id survives the host -> proto -> SDK-adapter ->
+# handler round-trip over real go-plugin gRPC (regression guard for
+# holomush-dble7). It needs no services, storage, or events — the command
+# path does not require Init/EventSink wiring.
+name: connid-echo-plugin
+version: 0.0.0
+type: binary
+requires: []
+
+binary-plugin:
+  executable: connid-echo-plugin
