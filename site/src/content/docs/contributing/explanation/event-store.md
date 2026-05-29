@@ -135,13 +135,13 @@ directly.
 
 ---
 
-## Declaring audit subjects in `manifest.yaml`
+## Declaring audit subjects in `plugin.yaml`
 
 Plugins that own a subject namespace declare it in their manifest so the host
 can route audit projection to the plugin's own consumer (spec §1c, §6):
 
 ```yaml
-# plugins/core-scenes/manifest.yaml
+# plugins/core-scenes/plugin.yaml
 name: core-scenes
 type: binary
 version: "0.1.0"

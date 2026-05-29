@@ -399,7 +399,7 @@ Three plugin types:
 | `binary`    | hashicorp/go-plugin subprocess | Complex services with proto contracts  |
 | `setting`   | Bootstrap only           | Configuration-only plugins (no runtime)     |
 
-**Manifest schema** (`manifest.yaml`): Each plugin declares `requires` (proto
+**Manifest schema** (`plugin.yaml`): Each plugin declares `requires` (proto
 services it depends on), `provides` (proto services it implements), and
 `storage` (database tables it needs). The plugin loader performs DAG dependency
 resolution to determine load order and validates that all `requires` are

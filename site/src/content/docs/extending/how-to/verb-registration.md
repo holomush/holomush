@@ -11,7 +11,7 @@ rest at load time.
 
 ## Declaring verbs in your manifest
 
-In `manifest.yaml`, add a `verbs:` block:
+In `plugin.yaml`, add a `verbs:` block:
 
 ```yaml
 verbs:
@@ -43,7 +43,7 @@ verbs:
 ## How verb metadata flows
 
 ```text
-manifest.yaml verbs:
+plugin.yaml verbs:
     ↓ plugin loader reads at LoadAll
 VerbRegistry.RegisterWithSource(reg, manifest.Version)
     ↓ RenderingPublisher wraps every Publisher call
@@ -63,7 +63,7 @@ Emitting an event whose type is not in the registry returns
 
 ## Version tracking
 
-The plugin version from `manifest.yaml` is recorded as
+The plugin version from `plugin.yaml` is recorded as
 `source_plugin_version` in the rendering metadata. After a plugin reload,
 new events carry the new version. Old events in `events_audit` keep their
 original version, enabling drift detection.
