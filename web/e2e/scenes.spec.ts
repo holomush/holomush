@@ -81,11 +81,13 @@ async function waitForOutputMatching(
 }
 
 /**
- * Extract the scene ID from a "Scene created: scene-XXXXX" terminal event.
- * Scene IDs are `scene-` plus a 26-char Crockford base32 ULID.
+ * Extract the scene ID from a "Scene created: <ULID>" terminal event.
+ * Scene IDs are bare 26-char Crockford base32 ULIDs — holomush-y5inx eliminated
+ * the legacy `scene-` prefix. The output line is `Scene created: <ULID>`; the
+ * ULID is the first 26-char uppercase-alnum token in events after the command.
  */
 async function extractSceneIdFromOutput(page: Page, sinceIndex: number): Promise<string> {
-  return waitForOutputMatching(page, /scene-[A-Z0-9]+/, sinceIndex);
+  return waitForOutputMatching(page, /[0-9A-Z]{26}/, sinceIndex);
 }
 
 test.describe('Scene lifecycle (Phase 2)', () => {
@@ -101,7 +103,7 @@ test.describe('Scene lifecycle (Phase 2)', () => {
     let before = await currentEventCount(page);
     await sendCommand(page, 'scene create Phase 2 Lifecycle Test');
     const sceneId = await extractSceneIdFromOutput(page, before);
-    expect(sceneId).toMatch(/^scene-[A-Z0-9]+$/);
+    expect(sceneId).toMatch(/^[0-9A-Z]{26}$/);
 
     // DB: scene exists with state='active', owner = current character
     let scene = await db.getSceneById(sceneId);

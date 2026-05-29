@@ -559,6 +559,15 @@ func (s *Server) SeedCharacterBinding(ctx context.Context, sess *Session) string
 	if err == nil && bindingID != "" {
 		return bindingID
 	}
+	// Only fall back to Create on the explicit not-found miss; surface any
+	// other repo error (e.g. BINDING_STORE_QUERY_FAILED) instead of masking it
+	// behind a duplicate-row Create.
+	if err != nil {
+		oe, ok := oops.AsOops(err)
+		if !ok || oe.Code() != "BINDING_NOT_FOUND" {
+			require.NoError(s.t, err, "integrationtest.SeedCharacterBinding: Current")
+		}
+	}
 	bindingID, err = repo.Create(ctx, sess.PlayerID.String(), sess.CharacterID.String(),
 		"integrationtest.SeedCharacterBinding")
 	require.NoError(s.t, err, "integrationtest.SeedCharacterBinding: Create binding")

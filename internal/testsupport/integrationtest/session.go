@@ -663,6 +663,7 @@ func (p *AuthedPlayer) OpenWebSession(ctx context.Context) *Session {
 	sess := &Session{
 		server:             p.server,
 		SessionID:          selResp.GetSessionId(),
+		PlayerID:           p.PlayerID,
 		CharacterID:        p.CharacterID,
 		CharacterName:      selResp.GetCharacterName(),
 		LocationID:         persisted.LocationID,
