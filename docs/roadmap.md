@@ -187,14 +187,17 @@ could land cleanly on it; SP0 ran in parallel since its source of truth is the
 `docs/superpowers/specs/2026-05-27-docs-starlight-migration-design.md`.
 
 **Open tail (orthogonal follow-ups, not program deliverables):** the
-`theme:docs-platform` label still tags beads that outlive the SP0–SP5 program
-and land opportunistically — a grounding-surfaced P1 schema bug
-`holomush-rkwyb.1` (NoPlaintextReason proto enum omits a wire value), a
-reproducibility chore `holomush-6n1j3` (pin `protoc-gen-doc`), the deferred
-content beads in the SP5 row above plus `holomush-k0r5o` (grpc-api orientation
-copy), and the program anchor `holomush-rkwyb` itself (kept as the enduring
-framing record). Live set: `bd list -l theme:docs-platform --limit 0 --json |
-jq -r '.[] | select(.status != "closed")'`.
+`theme:docs-platform` label still tags a handful of P3 beads that outlive the
+SP0–SP5 program and land opportunistically — a reproducibility chore
+`holomush-6n1j3` (pin `protoc-gen-doc`), `holomush-e6kvc` (hostfunc-audit-table
+drift), `holomush-k0r5o` (grpc-api orientation copy), `holomush-fvxlv` (events
+index orientation), `holomush-x8v4i` (api-guide client-connection walkthrough),
+and the feature-gated content beads in the SP5 row above. The program anchor
+`holomush-rkwyb` and the two P1s the doc work surfaced (`holomush-8cxo6`
+fail-open ABAC sentinel, `holomush-rkwyb.1` proto enum omission) are all
+**closed** — the framing record is preserved in this Completed-themes section
+and in the closed anchor's notes. Live set: `bd list -l theme:docs-platform
+--limit 0 --json | jq -r '.[] | select(.status != "closed")'`.
 
 ### v0.1 Initial Release — closed 2026-05-16
 
