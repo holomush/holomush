@@ -740,5 +740,5 @@ Run: `task pr-prep` (docs-affecting; confirm it runs the right lane and is green
 
 - **SP2** — Diátaxis re-bucketing, flip sidebar to `autogenerate`, orphan triage + superseded retirement (`event-delivery.md`, `legacy-id-cutover.md`).
 - **SP0** — proto per-field doc comments + buf `COMMENTS` ratchet.
-- **SP4** — complete gRPC service coverage (migrate `docs:proto` to buf; all 13 services with field descriptions).
+- **SP4** — complete gRPC service coverage (migrate `docs:proto` to buf; all 12 services with field descriptions).
 <!-- adr-capture: sha256=642c0cc5552d09ea; session=2f5ef07e; ts=2026-05-27T20:08:58Z; adrs=holomush-xneg2 -->
