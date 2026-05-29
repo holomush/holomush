@@ -208,10 +208,12 @@ test.describe('Scene focus routing (Phase 5, holomush-dble7)', () => {
 
     // Focus-substrate membership is established by `scene join` (JoinFocus),
     // not by `scene create` (DB row only) — so join before focusing, which is
-    // the real user flow. NB: `scene join` takes a BARE id (no `#`), whereas
-    // `scene focus` REQUIRES the `#` prefix.
+    // the real user flow. Both `scene join` and `scene focus` now accept the
+    // `#`-prefixed display form interchangeably with a bare ULID (holomush-ehbnk);
+    // joining with the `#` form here used to yield "scene not found: #<id>" and
+    // is now a regression guard for that parity fix.
     before = await currentEventCount(page);
-    await sendCommand(page, `scene join ${sceneId}`);
+    await sendCommand(page, `scene join #${sceneId}`);
     await waitForOutputMatching(page, /Joined scene/, before);
 
     before = await currentEventCount(page);
