@@ -184,6 +184,12 @@ jobs:
     name: E2E Test
     runs-on: namespace-profile-linux-amd64-4x8
     needs: [test]
+    # web:generate (via docker:build:cover) runs `buf generate`, which pulls
+    # the remote BSR plugins (buf.build/bufbuild/es, buf.build/connectrpc/es).
+    # Authenticate so it uses the token's BSR rate limit, not the anonymous one
+    # that was failing with resource_exhausted (holomush-k1kb).
+    env:
+      BUF_TOKEN: ${{ secrets.BUF_TOKEN }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
@@ -234,6 +240,11 @@ jobs:
     name: Build
     runs-on: namespace-profile-linux-amd64-2x4
     needs: [lint, test, integration, e2e]
+    # `task build` embeds the web client (web:generate → `buf generate`), which
+    # pulls remote BSR plugins; authenticate to avoid the anonymous rate limit
+    # (holomush-k1kb).
+    env:
+      BUF_TOKEN: ${{ secrets.BUF_TOKEN }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
