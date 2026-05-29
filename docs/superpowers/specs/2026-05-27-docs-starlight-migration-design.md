@@ -38,7 +38,7 @@ graph TD
     SP0["SP0 · Proto contract docs<br/>per-field comments + buf COMMENTS ratchet<br/>PLATFORM-INDEPENDENT (parallel)"]
     SP1["SP1 · Starlight migration + llms.txt<br/>THIS SPEC"]
     SP2["SP2 · Diátaxis IA redesign<br/>re-bucket + autogenerate sidebar + triage"]
-    SP4["SP4 · gRPC reference completeness<br/>all 13 services, fully field-commented"]
+    SP4["SP4 · gRPC reference completeness<br/>all 12 services, fully field-commented"]
 
     SP1 --> SP2
     SP0 --> SP4

@@ -26,32 +26,6 @@ sequencing.
 
 ## Active themes
 
-### `theme:docs-platform` — Docs site migration, IA, and gRPC reference
-
-A five-sub-project program to make the documentation site reflect reality and
-serve both humans and LLMs. The substrate is the doc platform itself; the uses
-are an accurate gRPC reference, a purpose-organized information architecture,
-and machine-readable `llms.txt`.
-
-| Sub-project | Scope | Tracking |
-| ----------- | ----- | -------- |
-| SP0 | Proto per-field doc comments + buf `COMMENTS` ratchet (platform-independent) | ✅ **landed** (#4303) — epic `holomush-300ad`; all 14 protos documented, buf `COMMENTS` unconditional + name-echo quality gate; 6 grounding-surfaced bugs filed (P1 `holomush-8cxo6` fail-open ABAC sentinel) |
-| SP1 | **Migrate zensical → Astro Starlight (bun) + llms.txt** | ✅ **landed** — epic `holomush-cwnu0`; ADRs `holomush-145ko`, `holomush-qf2oo`, `holomush-xneg2` |
-| SP2 | Diátaxis IA redesign, `autogenerate` sidebar, orphan triage + superseded retirement | ✅ **landed** (#4296 re-org + #4297 mode-purity) — epic `holomush-44nxc`; ADRs `holomush-md3k4`, `holomush-38kmt`; follow-up `holomush-e6kvc` |
-| SP3 | `llms.txt` / `llms-full.txt` / `llms-small.txt` generation | **folded into SP1** (`starlight-llms-txt` plugin) |
-| SP4 | Complete gRPC service coverage (all 13 services, field-level) | stub `holomush-okm59` (P4 backlog — not yet designed) |
-| SP5 | Docs quality & cohesion — content/arrangement/communication (rubric+audit editorial pass) + topic-tab nav, page-actions, community | ✅ **landed** (#4304) — epic `holomush-ivwij`; ADR `holomush-q924m`; deferred content tail tracked (`holomush-3skv5`, `fvxlv`, `x8v4i`, `ton17`, `e6kvc`) |
-
-**Program anchor:** decision bead `holomush-rkwyb` carries the SP0–SP4 framing and sequencing rationale; query the full program with `bd list -l theme:docs-platform`.
-
-**Why now:** the live site had drifted — ~20 docs orphaned from a hand-maintained
-nav, a gRPC reference covering only 5 of 13 services with empty field
-descriptions, and no `llms.txt` path. SP1 swaps the platform (the prerequisite
-substrate) as a strict lift-and-shift so SP2/SP4 can land cleanly on it; SP0 runs
-in parallel since its source of truth is the `.proto` files. Sequencing rationale
-and the lift-and-shift discipline are in
-`docs/superpowers/specs/2026-05-27-docs-starlight-migration-design.md`.
-
 ### `theme:social-spaces` — Scenes, Channels, Forums, Discord
 
 The largest in-flight thread. Four product surfaces sharing one substrate:
@@ -187,6 +161,40 @@ know they exist; neither has code yet.
   `site/docs/extending/binary-plugins.md`.
 
 ## Completed themes
+
+### `theme:docs-platform` — Docs site migration, IA, and gRPC reference — closed 2026-05-29
+
+A five-sub-project program to make the documentation site reflect reality and
+serve both humans and LLMs. The substrate was the doc platform itself; the uses
+were an accurate gRPC reference, a purpose-organized information architecture,
+and machine-readable `llms.txt`.
+
+| Sub-project | Scope | Outcome |
+| ----------- | ----- | -------- |
+| SP0 | Proto per-field doc comments + buf `COMMENTS` ratchet | ✅ #4303 — epic `holomush-300ad`; all 14 protos documented, buf `COMMENTS` unconditional + name-echo quality gate; 6 grounding-surfaced bugs filed (P1 `holomush-8cxo6` fail-open ABAC sentinel) |
+| SP1 | Migrate zensical → Astro Starlight (bun) + llms.txt | ✅ epic `holomush-cwnu0`; ADRs `holomush-145ko`, `holomush-qf2oo`, `holomush-xneg2` |
+| SP2 | Diátaxis IA redesign, `autogenerate` sidebar, orphan triage | ✅ #4296 + #4297 — epic `holomush-44nxc`; ADRs `holomush-md3k4`, `holomush-38kmt` |
+| SP3 | `llms.txt` / `llms-full.txt` / `llms-small.txt` generation | folded into SP1 (`starlight-llms-txt` plugin) |
+| SP4 | Complete gRPC service coverage (all 12 services, field-level) | ✅ `holomush-okm59` — `docs:proto` migrated to `buf generate` over the whole `api/proto` module (`buf.gen.docs.yaml`); coverage went 6 → 12 services structurally; coverage guard `test/meta/grpc_api_coverage_test.go` prevents enumeration drift |
+| SP5 | Docs quality & cohesion (rubric+audit editorial pass) + topic-tab nav, page-actions, community | ✅ #4304 — epic `holomush-ivwij`; ADR `holomush-q924m`; deferred content tail tracked (`holomush-3skv5`, `fvxlv`, `x8v4i`, `ton17`, `e6kvc`) |
+
+**Program anchor:** decision bead `holomush-rkwyb` carries the SP0–SP4 framing and
+sequencing rationale. The live site had drifted — ~20 docs orphaned from a
+hand-maintained nav, a gRPC reference covering only 6 of 12 services, and no
+`llms.txt` path. SP1 swapped the platform as a strict lift-and-shift so SP2/SP4
+could land cleanly on it; SP0 ran in parallel since its source of truth is the
+`.proto` files. Sequencing rationale and the lift-and-shift discipline are in
+`docs/superpowers/specs/2026-05-27-docs-starlight-migration-design.md`.
+
+**Open tail (orthogonal follow-ups, not program deliverables):** the
+`theme:docs-platform` label still tags beads that outlive the SP0–SP5 program
+and land opportunistically — a grounding-surfaced P1 schema bug
+`holomush-rkwyb.1` (NoPlaintextReason proto enum omits a wire value), a
+reproducibility chore `holomush-6n1j3` (pin `protoc-gen-doc`), the deferred
+content beads in the SP5 row above plus `holomush-k0r5o` (grpc-api orientation
+copy), and the program anchor `holomush-rkwyb` itself (kept as the enduring
+framing record). Live set: `bd list -l theme:docs-platform --limit 0 --json |
+jq -r '.[] | select(.status != "closed")'`.
 
 ### v0.1 Initial Release — closed 2026-05-16
 

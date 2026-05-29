@@ -241,6 +241,56 @@ Keep under 200 lines. Curate — don't hoard.
   non-location public streams) hits `engine.Evaluate` directly. Encountered:
   holomush-f5t07 (2026-05-26).
 
+- **`task <gen-task>` "up to date" ≠ regenerated — Task's `sources:`/`generates:`
+  checksum cache short-circuits.** To VERIFY an idempotency claim ("ran twice,
+  identical hash") you MUST force regeneration with `task --force <task>`; a plain
+  re-run reports "up to date" and does NOTHING, so a stale/wrong artifact would
+  pass unnoticed. Confirmed on `docs:proto` (SP4 holomush-okm59, 2026-05-29):
+  plain `task docs:proto` → "up to date"; `task --force docs:proto` actually ran
+  buf+perl → byte-identical hash `b6c22aa5…` (genuinely idempotent). Always
+  shasum → `task --force` → shasum to test generation stability.
+
+- **buf multi-module workspace + `inputs:[directory: api/proto]` is the correct
+  dep-isolation idiom (holomush).** `buf.yaml` is `version: v2` with TWO modules
+  (`api/proto` public, `internal/eventbus/cursor` host-internal) and BSR deps
+  (googleapis, protovalidate). A `buf.gen.*.yaml` that wants ONLY the public module
+  rendered MUST set `inputs: - directory: api/proto` (mirrors existing
+  `buf.gen.yaml`/`buf.gen.internal.yaml`). buf then resolves deps from `buf.lock`
+  as include-only — they are NOT emitted as their own doc sections (verified: no
+  `## buf/…`/`## google/…` headings in grpc-api.md). This replaces the old
+  `protoc` juggling (`buf export protovalidate:<commit> --output /tmp` +
+  `--proto_path` chain). protoc-gen-doc needs `strategy: all` to see the whole
+  module in one invocation (single combined output file). protoc-gen-doc installed
+  `@latest` (Taskfile:978) — unpinned, pre-existing reproducibility gap.
+
+- **protoc-gen-doc renders BOTH services and messages as `### Name`.** A
+  coverage meta-test that asserts "every `service X` proto decl appears as a
+  `### X` heading" (regex `^### (\w+)$`) CANNOT distinguish a service heading from
+  a same-named message heading → theoretical false-pass if a service fails to
+  render but a message of that name exists. Stricter form: anchor on the
+  `<a name="…-ServiceName"></a>` marker protoc-gen-doc emits before service
+  headings. Holomush today has zero service/message name collisions, so the
+  simple form is adequate. The proto-side regex `^service\s+(\w+)\s*\{` correctly
+  catches multi-service files (plugin.proto has PluginService + PluginHostService,
+  both flush-left). Encountered: holomush-okm59 (2026-05-29).
+  RESOLVED (re-review 2026-05-29): test rewritten to match the package-qualified
+  anchor `<a name="<pkg-dashed>-<Service>"></a>` (pkg dots→dashes + service name).
+  This IS robust: protoc-gen-doc uses the SAME `pkg-dashed-<TypeName>` anchor for
+  messages AND services (no service/message discriminator in the anchor), but
+  proto forbids a message and service sharing a name WITHIN a package (compile
+  error), so the package-scoped anchor uniquely identifies the service. De-dup is
+  by service NAME (`seen[m[1]]`) which is safe only because all 12 holomush
+  service names are globally distinct — a latent gap if two packages ever declare
+  same-named services (de-dup would collapse them; the loser's anchor would still
+  be checked via the survivor only if anchors matched, which they wouldn't —
+  so it would actually false-FAIL safe, not false-pass). Two residual non-blocking
+  gaps in the guard: (1) regex `^service\s+(\w+)\s*\{` requires brace on the
+  service-decl line — a future `service Foo\n{` (valid proto) silently escapes the
+  check; (2) test globs `holomush/*/v1/*.proto` while buf inputs `directory:
+  api/proto` — a future proto outside `*/v1` renders via buf but isn't guarded.
+  Both match current repo convention. Idempotency re-verified: `task --force
+  docs:proto` → byte-identical hash. All 3 guard tests + lint:go green.
+
 ## Invariants worth remembering
 
 - **Top-level oops Code() is the wire-visible code**: client-side error

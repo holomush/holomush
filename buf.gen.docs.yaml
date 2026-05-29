@@ -1,0 +1,39 @@
+# buf.gen.docs.yaml — gRPC API reference generation for the PUBLIC
+# schema module (api/proto).
+#
+# Drives `task docs:proto`, which renders every service, message, enum,
+# and field across the whole public module into a single Markdown
+# reference at site/src/content/docs/reference/grpc-api.md.
+#
+# Why buf instead of a hand-maintained `protoc` file list:
+#   - `inputs: [directory: api/proto]` documents EVERY proto in the
+#     module structurally. A new service or proto file is covered the
+#     moment it lands — no enumeration to drift out of sync. The old
+#     hardcoded protoc list covered only 6 of the 12 services; a new
+#     service silently fell out of the reference.
+#   - buf resolves the protovalidate dependency from buf.lock natively,
+#     so the old `buf export … --output /tmp` + manual `--proto_path`
+#     juggling in the protoc invocation is gone.
+#
+# Only the public module is documented; deps (googleapis, protovalidate)
+# are include-only and never rendered as their own sections.
+#
+# protoc-gen-doc is a LOCAL plugin (installed by `task setup`).
+# `strategy: all` feeds every proto to the plugin in a single invocation —
+# protoc-gen-doc must see the whole module at once to emit one combined
+# document; the default per-directory strategy would clobber the single
+# output file.
+#
+# Managed mode is irrelevant here (it rewrites file options such as
+# go_package) and is left off. The two post-processing perl passes in
+# `task docs:proto`
+# (well-known-type link rewrite + H1-strip/frontmatter prepend) run after
+# this template.
+version: v2
+plugins:
+  - local: protoc-gen-doc
+    out: site/src/content/docs/reference
+    opt: markdown,grpc-api.md
+    strategy: all
+inputs:
+  - directory: api/proto
