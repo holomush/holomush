@@ -217,6 +217,54 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+      # ── Publish the Sentry release object (commit association + finalize) ──
+      # Tag-time release creation so Sentry issues get commit association
+      # (suspect commits) and regression / resolved-in-next-release tracking,
+      # not just the bare auto-stub Sentry derives from the event `release` tag.
+      #
+      # `release` MUST be the bare semver (steps.version.outputs.version, e.g.
+      # 0.5.0) to match the RUNTIME event tag: prod sets SENTRY_RELEASE to the
+      # bare ${HOLOMUSH_VERSION} (scripts/cloud-init.sh; deploy.yaml strips the
+      # leading v). A v-prefixed or holomush@-prefixed name here would leave the
+      # release object and its events uncorrelated.
+      #
+      # The guard requires BOTH the token AND the org (and project): the action
+      # hard-fails on a missing SENTRY_ORG, so a partial config must SKIP rather
+      # than red the release. continue-on-error then keeps any Sentry-side hiccup
+      # (5xx, rate limit) from failing an already-published, already-signed
+      # release and the attestation jobs that depend on this one — the release
+      # object is best-effort observability metadata, recoverable out of band.
+      - name: Check Sentry configured
+        id: sentry_check
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          set -euo pipefail
+          if [ -n "${SENTRY_AUTH_TOKEN:-}" ] && [ -n "${SENTRY_ORG:-}" ] && [ -n "${SENTRY_PROJECT:-}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Sentry not fully configured (need SENTRY_AUTH_TOKEN + SENTRY_ORG + SENTRY_PROJECT); skipping release publish."
+          fi
+
+      - name: Publish Sentry release
+        if: ${{ steps.sentry_check.outputs.enabled == 'true' }}
+        continue-on-error: true
+        uses: getsentry/action-release@f71adb49d4b2aeeda98052d3de234bbb0f3e03ab # v3.6.1
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        with:
+          release: ${{ steps.version.outputs.version }}
+          set_commits: auto
+          # First release on a fresh Sentry project has no previous-release SHA
+          # to diff against; ignore_missing keeps that from hard-failing.
+          ignore_missing: true
+          finalize: true
+
   # Provenance attestation runs after goreleaser completes.
   # This adds SLSA provenance to the already-signed artifacts.
   attest-provenance:
