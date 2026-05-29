@@ -12,11 +12,15 @@
 #                    is flat by design and exempt).
 # INV-3 retired-gone:contributing/event-delivery.* and operating/legacy-id-cutover.*
 #                    are absent, and no link resolves to their slugs.
-# INV-5 branding:    vs main@origin (jj-native diff; worktree has no .git), the brand
-#                    assets (logo, favicon) are byte-identical, custom.css preserves its
-#                    font stack (accent/spacing polish allowed — SP5 INV-9), astro.config.mjs
-#                    leaves the identity fields (title/description/logo/favicon/customCss/site)
-#                    unchanged (social + plugins MAY evolve), and tsconfig.json only adds the
+# INV-5 branding:    the brand identity assets (favicon.svg, logo-light/dark.svg,
+#                    favicon.png, apple-touch-icon.png) match the committed sha256
+#                    manifest site/src/assets/brand/brand-assets.sha256 (anti-drift —
+#                    a sanctioned rebrand regenerates assets AND updates the manifest
+#                    in the same change; see .claude/rules/branding.md). custom.css
+#                    preserves its font stack (accent/spacing polish allowed — SP5
+#                    INV-9); astro.config.mjs wires logo.light/dark + favicon:'/favicon.svg'
+#                    and leaves title/description/customCss/site unchanged vs main@origin
+#                    (social + plugins MAY evolve); tsconfig.json only adds the
 #                    compilerOptions.paths alias (extends/include/exclude intact).
 # INV-6 nav:         ≤7 top-level sidebar sections (hard); mode folders with >7
 #                    direct children are flagged as a Diátaxis guideline (SHOULD
@@ -93,19 +97,32 @@ if rg -q '\](/[^)]*(event-delivery|legacy-id-cutover))' "$CONTENT"; then
 fi
 ((inv3_ok)) && ok "INV-3 retired-gone: both retired docs absent; no inbound links"
 
-# ── INV-5: branding (jj diff vs base) ──────────────────────────────────────
-if ! command -v jj >/dev/null 2>&1; then
-  note "⚑ INV-5 skipped: jj not available (branding diff requires jj-native diff vs $DIFF_BASE)"
-elif ! ( cd "$REPO_ROOT" && jj --no-pager log -r "$DIFF_BASE" >/dev/null 2>&1 ); then
-  note "⚑ INV-5 skipped: revset '$DIFF_BASE' not resolvable here"
+# ── INV-5: branding (committed manifest + config presence + vs-base diffs) ──
+inv5_ok=1
+# Brand identity assets MUST match the committed sha256 manifest. A sanctioned
+# rebrand regenerates the assets AND updates the manifest in the same change
+# (see .claude/rules/branding.md); accidental drift = a checksum mismatch.
+BRAND_MANIFEST="site/src/assets/brand/brand-assets.sha256"
+if [[ -f "$REPO_ROOT/$BRAND_MANIFEST" ]]; then
+  if ! ( cd "$REPO_ROOT" && shasum -a 256 -c "$BRAND_MANIFEST" >/dev/null 2>&1 ); then
+    err "INV-5: brand identity asset(s) do not match $BRAND_MANIFEST (regenerate via 'bun run brand:build', or refresh the manifest if this is a sanctioned rebrand):"
+    ( cd "$REPO_ROOT" && shasum -a 256 -c "$BRAND_MANIFEST" 2>&1 | rg -v ': OK$' | sed 's/^/    /' ) || true
+    inv5_ok=0
+  fi
 else
-  inv5_ok=1
-  # Brand assets (logo, favicon) MUST be byte-identical vs base.
-  for p in site/src/assets/logo.png site/public/favicon.png; do
-    if [[ -n "$( cd "$REPO_ROOT" && jj --no-pager diff --from "$DIFF_BASE" -- "$p" 2>/dev/null )" ]]; then
-      err "INV-5: branding asset changed vs $DIFF_BASE: $p"; inv5_ok=0
-    fi
-  done
+  err "INV-5: brand manifest missing: $BRAND_MANIFEST"; inv5_ok=0
+fi
+# astro.config.mjs MUST wire the brand identity (presence, not vs-base diff —
+# this is the rebrand baseline): logo.light/dark SVGs + favicon '/favicon.svg'.
+rg -q "favicon: '/favicon.svg'" "$CONFIG" || { err "INV-5: astro.config.mjs favicon is not '/favicon.svg'"; inv5_ok=0; }
+rg -q "light: './src/assets/logo-light.svg'" "$CONFIG" || { err "INV-5: astro.config.mjs logo.light missing logo-light.svg"; inv5_ok=0; }
+rg -q "dark: './src/assets/logo-dark.svg'" "$CONFIG" || { err "INV-5: astro.config.mjs logo.dark missing logo-dark.svg"; inv5_ok=0; }
+# vs-base diffs (font stack + non-brand config identity + tsconfig) require jj.
+if ! command -v jj >/dev/null 2>&1; then
+  note "⚑ INV-5: vs-base diffs skipped (jj not available); manifest + config-presence still enforced"
+elif ! ( cd "$REPO_ROOT" && jj --no-pager log -r "$DIFF_BASE" >/dev/null 2>&1 ); then
+  note "⚑ INV-5: vs-base diffs skipped (revset '$DIFF_BASE' not resolvable); manifest + config-presence still enforced"
+else
   # custom.css MAY be polished (spacing/accent) but its FONT STACK MUST be preserved (SP5 INV-9).
   css_font="$( cd "$REPO_ROOT" && jj --no-pager diff --git --from "$DIFF_BASE" -- site/src/styles/custom.css 2>/dev/null \
     | rg '^[+-]' | rg -v '^[+-]{3}' | rg -i 'font-family|--sl-font|@font-face|@import' || true )"
@@ -113,12 +130,12 @@ else
     err "INV-5: custom.css changed a font declaration vs $DIFF_BASE (fonts MUST be preserved):"
     printf '    %s\n' "$css_font"; inv5_ok=0
   fi
-  # astro.config.mjs identity fields MUST NOT change. social (community links) and plugins
-  # (functionality) MAY evolve — SP5 added GitHub Discussions + topic-tab/LLM-action plugins.
+  # Non-brand identity fields MUST NOT change vs base. logo/favicon are brand-managed
+  # (manifest + presence above); social + plugins MAY evolve.
   cfg_brand="$( cd "$REPO_ROOT" && jj --no-pager diff --git --from "$DIFF_BASE" -- site/astro.config.mjs 2>/dev/null \
-    | rg '^[+-]' | rg -v '^[+-]{3}' | rg 'title:|description:|logo:|favicon:|customCss:|site:' || true )"
+    | rg '^[+-]' | rg -v '^[+-]{3}' | rg 'title:|description:|customCss:|site:' || true )"
   if [[ -n "$cfg_brand" ]]; then
-    err "INV-5: astro.config.mjs changed a branding-identity field (title/description/logo/favicon/customCss/site):"
+    err "INV-5: astro.config.mjs changed a non-brand identity field (title/description/customCss/site):"
     printf '    %s\n' "$cfg_brand"; inv5_ok=0
   fi
   ts_removed="$( cd "$REPO_ROOT" && jj --no-pager diff --git --from "$DIFF_BASE" -- site/tsconfig.json 2>/dev/null \
@@ -127,8 +144,8 @@ else
     err "INV-5: tsconfig.json removed a preserved key (only the paths alias may be added):"
     printf '    %s\n' "$ts_removed"; inv5_ok=0
   fi
-  ((inv5_ok)) && ok "INV-5 branding: brand assets byte-identical; custom.css fonts preserved; config identity fields unchanged; tsconfig paths-alias only"
 fi
+((inv5_ok)) && ok "INV-5 branding: identity assets match manifest; config wires logo light/dark + favicon.svg; fonts preserved; non-brand identity unchanged; tsconfig paths-alias only"
 
 # ── INV-6: nav shape ───────────────────────────────────────────────────────
 sections="$(rg -c 'autogenerate:' "$CONFIG" 2>/dev/null || echo 0)"
