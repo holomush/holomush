@@ -115,9 +115,14 @@ to the gateway with no CORS involved — `propagateTraceHeaderCorsUrls`'
 > **Browser → collector reachability (prod hand-off):** browser OTLP POSTs to
 > an external collector face ad-blockers and CORS on the ingest origin — the
 > same reason the Sentry SDK tunnels through the same-origin
-> `/api/sentry-relay`. The recommended prod path is a **same-origin gateway
-> OTLP relay** that forwards browser OTLP to the collector; until that exists,
-> leave `PUBLIC_OTEL_ENDPOINT` unset in prod. See `holomush-yak8r`.
+> `/api/sentry-relay`. The prod path is the **same-origin gateway OTLP relay**
+> at `/api/otlp/v1/traces` (`internal/web/otlp_relay.go`), which forwards
+> browser spans to the collector. To enable it: set the gateway's
+> `OTLP_RELAY_ENDPOINT` to the collector's OTLP/HTTP base URL (e.g.
+> `http://otel-collector:4318`) and set `PUBLIC_OTEL_ENDPOINT=/api/otlp` at
+> build time (the tracer appends `/v1/traces`). See the
+> [Browser OTLP relay](#browser-otlp-relay-apiotlpv1traces) section below and
+> `holomush-2uogn` / `holomush-yak8r`.
 
 ## Local dev setup
 
@@ -257,6 +262,36 @@ Implementation: `internal/web/sentry_relay.go` + registration in
 `internal/web/server.go`. Unit tests cover DSN validation, oversize
 rejection, method/method-not-allowed, and the forward path
 (`internal/web/sentry_relay_test.go`).
+
+## Browser OTLP relay (`/api/otlp/v1/traces`)
+
+The OTel-native browser tracer faces the **same** ad-blocker/CORS problem as
+the Sentry SDK: a direct browser POST to an external OTLP collector origin is
+blocked. The gateway therefore exposes a same-origin OTLP/HTTP relay that the
+`WebTracerProvider`'s `OTLPTraceExporter` targets, mirroring the Sentry tunnel.
+
+| Behaviour | Detail |
+| --- | --- |
+| **Endpoint** | `POST /api/otlp/v1/traces` on the gateway web HTTP listener (the tracer's `PUBLIC_OTEL_ENDPOINT=/api/otlp` base + the exporter's `/v1/traces` suffix). |
+| **Registration gate** | Only registered when `OTLP_RELAY_ENDPOINT` is set on the gateway. Unset = no endpoint. |
+| **Forward target** | Fixed by server config (`OTLP_RELAY_ENDPOINT` + `/v1/traces`), not derived from the request — so the relay cannot be turned into an open forwarder. Recommended value: `http://otel-collector:4318`. |
+| **Header passthrough** | `Content-Type` and `Content-Encoding` are forwarded so the collector decodes JSON/protobuf and any compression. |
+| **Size limit** | Inbound bodies capped at 4 MiB; oversize returns `413`. |
+| **Upstream timeout** | 10 s (the in-cluster collector responds promptly). |
+| **Method** | `POST` only; other methods get `405`. |
+
+Unlike the Sentry relay there is no per-request validation — the target is
+fixed — but the endpoint is an **unauthenticated ingest** into the collector,
+so the body size is bounded to limit amplification abuse. The collector must be
+reachable from the gateway's network (in `compose.prod.yaml` the collector
+joins the `frontend` network for exactly this; no ports are published, so the
+receiver stays internal).
+
+Implementation: `internal/web/otlp_relay.go` + registration in
+`internal/web/server.go`. Unit tests cover endpoint parsing, oversize
+rejection, method-not-allowed, the forward path (path, body, header
+passthrough, response mirroring), and the upstream-failure (`502`) path
+(`internal/web/otlp_relay_test.go`).
 
 ## DSN handling
 
