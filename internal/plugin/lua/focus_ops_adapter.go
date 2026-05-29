@@ -44,18 +44,18 @@ func (a *coordinatorFocusOpsAdapter) PresentFocus(ctx context.Context, sessionID
 // SetConnectionFocus delegates to the coordinator. The FocusOps surface
 // returns only error; the coordinator's oldFocusKey return is consumed at
 // the T18 RPC-handler layer (which holds the Coordinator directly), so
-// dropping it here is safe — the Lua hostfunc path does not need stream
-// deltas (Lua plugins react to focus events via JetStream, not via the
-// RPC return value).
+// dropping it here is safe. Per-connection subscription deltas are driven
+// inside focus.Coordinator (INV-FS-1), so the adapter needs only to
+// delegate; the dropped oldFocusKey return value is not needed here.
 func (a *coordinatorFocusOpsAdapter) SetConnectionFocus(ctx context.Context, connectionID ulid.ULID, focusKey *session.FocusKey, isSceneGrid bool) error {
 	_, err := a.c.SetConnectionFocus(ctx, connectionID, focusKey, isSceneGrid)
 	return err //nolint:wrapcheck // coordinator errors are already oops-coded
 }
 
 // AutoFocusOnJoin delegates to the coordinator and translates the
-// AutoFocusOnJoinResponse struct to the FocusOps tuple shape. The Lua
-// hostfunc path does not need the full struct — it consumes the individual
-// slices and total count directly.
+// AutoFocusOnJoinResponse struct to the FocusOps tuple shape — the
+// individual slices and total count — discarding fields (SessionID,
+// CharLocationID) that are only needed by the T18 RPC handler.
 func (a *coordinatorFocusOpsAdapter) AutoFocusOnJoin(ctx context.Context, characterID, sceneID ulid.ULID) (focused, skipped []ulid.ULID, failed []hostfunc.FocusFailure, totalConnCount uint32, err error) {
 	resp, err := a.c.AutoFocusOnJoin(ctx, characterID, sceneID)
 	if err != nil {
