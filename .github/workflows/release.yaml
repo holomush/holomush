@@ -166,10 +166,22 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build web bundle into internal/web/dist/
-        # PUBLIC_SENTRY_* are baked into the SvelteKit static bundle at BUILD
-        # time (no runtime server). When PUBLIC_SENTRY_DSN is unset/empty the
-        # browser SDK init is a no-op, so this is safe before the secret exists.
+        # PUBLIC_* are baked into the SvelteKit static bundle at BUILD time —
+        # adapter-static emits frozen HTML embedded into the Go binary via
+        # go:embed, so there is no runtime server to inject $env/dynamic/public.
+        # Each var below is a no-op when unset/empty (browser SDK/tracer init
+        # returns early), so this is safe before the var/secret is populated.
+        #
+        # PUBLIC_OTEL_ENDPOINT gates the OTel-native browser tracer
+        # (web/src/lib/telemetry.ts) — the project's primary, vendor-neutral
+        # telemetry path. Set it (via the PUBLIC_OTEL_ENDPOINT repo/environment
+        # variable) to a BROWSER-REACHABLE OTLP-HTTP base URL once one exists;
+        # browser spans then flow to the OTel collector, which fans out to
+        # Sentry/Tempo via its own exporters. See holomush-yak8r notes: a
+        # same-origin gateway OTLP relay (mirroring /api/sentry-relay) is the
+        # recommended prod path to dodge ad-blockers/CORS on the ingest origin.
         env:
+          PUBLIC_OTEL_ENDPOINT: ${{ vars.PUBLIC_OTEL_ENDPOINT }}
           PUBLIC_SENTRY_DSN: ${{ secrets.PUBLIC_SENTRY_DSN }}
           PUBLIC_SENTRY_ENVIRONMENT: prod
           PUBLIC_SENTRY_RELEASE: ${{ steps.version.outputs.version }}
