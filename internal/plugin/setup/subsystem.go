@@ -87,19 +87,19 @@ type AdminDepsProvider interface {
 
 // PluginSubsystemConfig configures the plugin subsystem.
 type PluginSubsystemConfig struct {
-	DataDir         string
-	DatabaseConnStr string   // PostgreSQL connection string for schema provisioning
-	CertsDir        string   // path to game certs directory (for loading CA)
-	GameID          string   // game ID for cert SANs
-	TrustAllowlist  []string // server-side plugin trust escalation allowlist
-	ABAC            EngineProvider
-	PolicyInst      PolicyInstallerProvider
-	PluginProv      PluginProviderSetter
-	World           WorldServiceProvider
-	Sessions        SessionProvider
-	AdminDeps       AdminDepsProvider
-	Registry        *lifecycle.ReadinessRegistry
-	StreamRegistry  plugins.StreamRegistry
+	DataDir            string
+	DatabaseConnStr    string   // PostgreSQL connection string for schema provisioning
+	CertsDir           string   // path to game certs directory (for loading CA)
+	GameID             string   // game ID for cert SANs
+	TrustAllowlist     []string // server-side plugin trust escalation allowlist
+	ABAC               EngineProvider
+	PolicyInst         PolicyInstallerProvider
+	PluginProv         PluginProviderSetter
+	World              WorldServiceProvider
+	Sessions           SessionProvider
+	AdminDeps          AdminDepsProvider
+	Registry           *lifecycle.ReadinessRegistry
+	StreamRegistry     plugins.StreamRegistry
 	LuaTimeout         time.Duration // per-invocation CPU deadline for Lua plugins
 	LuaRegistryMaxSize int           // max Lua registry size per plugin state
 	// VerbRegistry is seeded by BootstrapVerbRegistry in core.go and passed
