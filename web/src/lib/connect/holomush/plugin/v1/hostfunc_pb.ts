@@ -924,7 +924,7 @@ export const LogLevelSchema: GenEnum<LogLevel> = /*@__PURE__*/
  * QueryLocationCharacters) and command RPCs (ListCommands, GetCommandHelp) are
  * not on PluginHostService at all. Those are realized only through the Lua
  * bridge today. Where a capability is exposed, host-side enforcement is shared:
- * host-side enforcement is shared: world reads/writes are ABAC-gated at the
+ * world reads/writes are ABAC-gated at the
  * world service layer, key-value operations are ABAC-gated at the host-function
  * layer (checkKVAccess in internal/plugin/hostfunc/functions.go), command
  * visibility is filtered by the AccessPolicyEngine, and emits pass the manifest
