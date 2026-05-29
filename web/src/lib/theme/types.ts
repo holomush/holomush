@@ -24,6 +24,7 @@ export interface ThemeColors {
   'input.background': string;
   'status.text': string;
   'status.background': string;
+  'status.online': string;
   'sidebar.background': string;
   'scrollback.indicator': string;
 

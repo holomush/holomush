@@ -20,6 +20,7 @@
     "input.background": "#ffffff",
     "status.text": "#616161",
     "status.background": "#f0f0f0",
+    "status.online": "#2e7d32",
     "sidebar.background": "#f5f5f5",
     "scrollback.indicator": "#e65100",
     "primary": "#0277bd",

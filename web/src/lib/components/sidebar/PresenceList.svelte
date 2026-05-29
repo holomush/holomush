@@ -66,7 +66,7 @@
   .name { flex: 1; color: var(--color-input-text); }
   .status-dot {
     width: 6px; height: 6px; border-radius: 50%;
-    background: var(--mush-arrive, #66bb6a);
+    background: var(--color-status-online);
   }
   .pres-row.is-idle .status-dot { background: var(--color-status-text); }
 </style>
