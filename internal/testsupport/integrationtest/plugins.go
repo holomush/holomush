@@ -206,6 +206,9 @@ type pluginDeps struct {
 	// pluginConfigOverrides is the per-plugin opaque config override
 	// (plugin name → key → value) threaded into PluginSubsystemConfig.
 	pluginConfigOverrides map[string]map[string]string
+	// extraPluginDirs holds additional plugin directories (e.g. test-only Lua
+	// fixtures) staged into the plugin load path after the in-tree plugins.
+	extraPluginDirs []string
 }
 
 // startPlugins constructs and starts a PluginSubsystem mirroring production
@@ -230,6 +233,13 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 	require.NoError(t,
 		assemblePluginsDir(pluginsDst, repoPluginsSrcDir(), buildDir),
 		"startPlugins: assemble plugins dir")
+
+	for _, extra := range d.extraPluginDirs {
+		abs, err := filepath.Abs(extra)
+		require.NoError(t, err, "startPlugins: resolve extra plugin dir")
+		dstSub := filepath.Join(pluginsDst, filepath.Base(abs))
+		require.NoError(t, copyTree(abs, dstSub), "startPlugins: stage extra plugin dir")
+	}
 
 	// WorldService — mirror internal/world/setup/subsystem.go. EventEmitter is
 	// intentionally omitted (production world/setup omits it too); world.NewService

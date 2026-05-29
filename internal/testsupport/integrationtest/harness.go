@@ -194,6 +194,9 @@ type startConfig struct {
 	// pluginConfigOverrides is the per-plugin opaque config override
 	// (plugin name → key → value) threaded into PluginSubsystemConfig.
 	pluginConfigOverrides map[string]map[string]string
+	// extraPluginDirs holds additional plugin directories (e.g. test-only Lua
+	// fixtures) staged into the plugin load path alongside the in-tree plugins.
+	extraPluginDirs []string
 }
 
 // WithPolicyEngine overrides the harness's default allow-all ABAC engine.
@@ -381,6 +384,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 			cryptoPublisher:       cryptoPublisherOf(pc),
 			gameID:                bus.Bus.GameID(),
 			pluginConfigOverrides: cfg.pluginConfigOverrides,
+			extraPluginDirs:       cfg.extraPluginDirs,
 		})
 		cmdRegistry = pluginSub.CommandRegistry()
 	}
