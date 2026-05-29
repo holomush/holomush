@@ -44,6 +44,10 @@ HoloMUSH is a modern MUSH platform with:
 - `contributing/` — For people contributing to the HoloMUSH codebase
 - `reference/` — Auto-generated API and event references
 
+**Branding:** The software brand (logo, favicon, palette) is defined in
+`.claude/rules/branding.md` and `site/CLAUDE.md` — cyan tile + `>holomush_`
+wordmark, amber cursor accent only.
+
 **Build commands:**
 
 ```bash
