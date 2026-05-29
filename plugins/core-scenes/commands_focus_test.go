@@ -291,14 +291,17 @@ func TestHandleSceneFocus_OtherSubstrateError(t *testing.T) {
 	assert.Equal(t, "SCENE_FOCUS_FAILED", oe.Code())
 }
 
-// TestHandleSceneFocus_MalformedRef verifies that a scene reference without
-// the required '#' prefix returns a usage error without calling SetConnectionFocus.
-func TestHandleSceneFocus_MalformedRef(t *testing.T) {
+// TestHandleSceneFocus_LoneHashRejected verifies that a ref that normalizes to
+// the empty string (a lone '#') returns a usage error without calling
+// SetConnectionFocus. The '#' prefix is now optional (holomush-ehbnk); a bare
+// ref is accepted (see TestSceneFocusAcceptsBareAndHash), so the only parse
+// rejection left is an empty-after-normalize ref.
+func TestHandleSceneFocus_LoneHashRejected(t *testing.T) {
 	p, fc := newTestPluginWithFocus(t)
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:      "scene",
-		Args:         "focus scene-01KS93ESFTBJW44QB1RZFC67AN", // missing '#' prefix
+		Args:         "focus #", // normalizes to empty
 		CharacterID:  "char-bob",
 		SessionID:    "sess-bob",
 		ConnectionID: "01JW0000000000000000000013",
@@ -307,7 +310,7 @@ func TestHandleSceneFocus_MalformedRef(t *testing.T) {
 	require.NotNil(t, resp)
 	assert.Equal(t, pluginsdk.CommandError, resp.Status)
 	assert.Contains(t, resp.Output, "Usage:")
-	assert.Empty(t, fc.setConnFocusCalls, "SetConnectionFocus MUST NOT be called on malformed ref")
+	assert.Empty(t, fc.setConnFocusCalls, "SetConnectionFocus MUST NOT be called on empty ref")
 }
 
 // TestHandleSceneFocus_MissingArg verifies that `scene focus` with no argument

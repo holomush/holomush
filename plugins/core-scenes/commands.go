@@ -565,9 +565,9 @@ func (p *scenePlugin) handleCreate(ctx context.Context, req pluginsdk.CommandReq
 // enforced via the host ABAC evaluator (read-scene-as-participant policy)
 // before this handler is called.
 func (p *scenePlugin) handleInfo(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
-	sceneID := strings.TrimSpace(args)
+	sceneID := normalizeSceneID(args)
 	if sceneID == "" {
-		return pluginsdk.Errorf("Usage: scene info <scene id>"), nil
+		return pluginsdk.Errorf("Usage: scene info #<scene id>"), nil
 	}
 
 	resp, err := p.service.GetScene(ctx, &scenev1.GetSceneRequest{
@@ -605,9 +605,9 @@ func (p *scenePlugin) handleInfo(ctx context.Context, req pluginsdk.CommandReque
 // non-owner participants alike. The sweep is best-effort: DB state is
 // authoritative, and focus-side errors are logged, not surfaced to the user.
 func (p *scenePlugin) handleEnd(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
-	sceneID := strings.TrimSpace(args)
+	sceneID := normalizeSceneID(args)
 	if sceneID == "" {
-		return pluginsdk.Errorf("Usage: scene end <scene id>"), nil
+		return pluginsdk.Errorf("Usage: scene end #<scene id>"), nil
 	}
 
 	if _, err := p.service.EndScene(ctx, &scenev1.EndSceneRequest{
@@ -663,9 +663,9 @@ func (p *scenePlugin) handleEnd(ctx context.Context, req pluginsdk.CommandReques
 
 // handlePause transitions an active scene to the paused state. Owner-only.
 func (p *scenePlugin) handlePause(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
-	sceneID := strings.TrimSpace(args)
+	sceneID := normalizeSceneID(args)
 	if sceneID == "" {
-		return pluginsdk.Errorf("Usage: scene pause <scene id>"), nil
+		return pluginsdk.Errorf("Usage: scene pause #<scene id>"), nil
 	}
 
 	_, err := p.service.PauseScene(ctx, &scenev1.PauseSceneRequest{
@@ -685,9 +685,9 @@ func (p *scenePlugin) handlePause(ctx context.Context, req pluginsdk.CommandRequ
 // handleResume transitions a paused scene back to active. Owner-only in
 // Phase 2; Phase 3 widens to any member per spec D6.
 func (p *scenePlugin) handleResume(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
-	sceneID := strings.TrimSpace(args)
+	sceneID := normalizeSceneID(args)
 	if sceneID == "" {
-		return pluginsdk.Errorf("Usage: scene resume <scene id>"), nil
+		return pluginsdk.Errorf("Usage: scene resume #<scene id>"), nil
 	}
 
 	_, err := p.service.ResumeScene(ctx, &scenev1.ResumeSceneRequest{
@@ -717,17 +717,18 @@ func (p *scenePlugin) handleResume(ctx context.Context, req pluginsdk.CommandReq
 func (p *scenePlugin) handleSet(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	args = strings.TrimSpace(args)
 	if args == "" {
-		return pluginsdk.Errorf("Usage: scene set <scene id> field=value"), nil
+		return pluginsdk.Errorf("Usage: scene set #<scene id> field=value"), nil
 	}
 
-	sceneID, rest := splitSubcommand(args)
+	sceneRef, rest := splitSubcommand(args)
+	sceneID := normalizeSceneID(sceneRef)
 	if sceneID == "" || rest == "" {
-		return pluginsdk.Errorf("Usage: scene set <scene id> field=value"), nil
+		return pluginsdk.Errorf("Usage: scene set #<scene id> field=value"), nil
 	}
 
 	eqIdx := strings.IndexByte(rest, '=')
 	if eqIdx < 0 {
-		return pluginsdk.Errorf("Usage: scene set <scene id> field=value"), nil
+		return pluginsdk.Errorf("Usage: scene set #<scene id> field=value"), nil
 	}
 	field := strings.TrimSpace(rest[:eqIdx])
 	value := strings.TrimSpace(rest[eqIdx+1:])
@@ -797,9 +798,9 @@ func splitSubcommand(args string) (sub, rest string) {
 func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	fields := strings.Fields(args)
 	if len(fields) != 1 {
-		return pluginsdk.Errorf("Usage: scene join <scene id>"), nil
+		return pluginsdk.Errorf("Usage: scene join #<scene id>"), nil
 	}
-	sceneID := fields[0]
+	sceneID := normalizeSceneID(fields[0])
 
 	if _, err := p.service.JoinScene(ctx, &scenev1.JoinSceneRequest{
 		CharacterId: req.CharacterID,
@@ -914,9 +915,9 @@ func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandReque
 func (p *scenePlugin) handleLeave(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	fields := strings.Fields(args)
 	if len(fields) != 1 {
-		return pluginsdk.Errorf("Usage: scene leave <scene id>"), nil
+		return pluginsdk.Errorf("Usage: scene leave #<scene id>"), nil
 	}
-	sceneID := fields[0]
+	sceneID := normalizeSceneID(fields[0])
 
 	if _, err := p.service.LeaveScene(ctx, &scenev1.LeaveSceneRequest{
 		CharacterId: req.CharacterID,
@@ -951,9 +952,9 @@ func (p *scenePlugin) handleInvite(ctx context.Context, req pluginsdk.CommandReq
 	// Strict arity: reject anything other than exactly 2 tokens — see handleJoin.
 	fields := strings.Fields(args)
 	if len(fields) != 2 {
-		return pluginsdk.Errorf("Usage: scene invite <scene id> <character>"), nil
+		return pluginsdk.Errorf("Usage: scene invite #<scene id> <character>"), nil
 	}
-	sceneID, target := fields[0], fields[1]
+	sceneID, target := normalizeSceneID(fields[0]), fields[1]
 
 	_, err := p.service.InviteToScene(ctx, &scenev1.InviteToSceneRequest{
 		CharacterId:       req.CharacterID,
@@ -975,9 +976,9 @@ func (p *scenePlugin) handleKick(ctx context.Context, req pluginsdk.CommandReque
 	// Strict arity: reject anything other than exactly 2 tokens — see handleJoin.
 	fields := strings.Fields(args)
 	if len(fields) != 2 {
-		return pluginsdk.Errorf("Usage: scene kick <scene id> <character>"), nil
+		return pluginsdk.Errorf("Usage: scene kick #<scene id> <character>"), nil
 	}
-	sceneID, target := fields[0], fields[1]
+	sceneID, target := normalizeSceneID(fields[0]), fields[1]
 
 	_, err := p.service.KickFromScene(ctx, &scenev1.KickFromSceneRequest{
 		CharacterId:       req.CharacterID,
@@ -999,9 +1000,9 @@ func (p *scenePlugin) handleTransfer(ctx context.Context, req pluginsdk.CommandR
 	// Strict arity: reject anything other than exactly 2 tokens — see handleJoin.
 	fields := strings.Fields(args)
 	if len(fields) != 2 {
-		return pluginsdk.Errorf("Usage: scene transfer <scene id> <character>"), nil
+		return pluginsdk.Errorf("Usage: scene transfer #<scene id> <character>"), nil
 	}
-	sceneID, target := fields[0], fields[1]
+	sceneID, target := normalizeSceneID(fields[0]), fields[1]
 
 	_, err := p.service.TransferOwnership(ctx, &scenev1.TransferOwnershipRequest{
 		CharacterId:         req.CharacterID,
@@ -1028,9 +1029,9 @@ func (p *scenePlugin) handleTransfer(ctx context.Context, req pluginsdk.CommandR
 func (p *scenePlugin) handleSwitch(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	fields := strings.Fields(args)
 	if len(fields) != 1 {
-		return pluginsdk.Errorf("Usage: scene switch <scene id>"), nil
+		return pluginsdk.Errorf("Usage: scene switch #<scene id>"), nil
 	}
-	sceneID := fields[0]
+	sceneID := normalizeSceneID(fields[0])
 
 	if p.focusClient == nil {
 		slog.WarnContext(
@@ -1049,7 +1050,7 @@ func (p *scenePlugin) handleSwitch(ctx context.Context, req pluginsdk.CommandReq
 		var oe oops.OopsError
 		if errors.As(err, &oe) && oe.Code() == "FOCUS_NOT_MEMBER" {
 			return pluginsdk.Errorf(
-				"You are not a member of scene %s. Use `scene join %s` first.", sceneID, sceneID,
+				"You are not a member of scene %s. Use `scene join #%s` first.", sceneID, sceneID,
 			), nil
 		}
 		slog.WarnContext(
@@ -1104,28 +1105,24 @@ func (p *scenePlugin) handleSceneGrid(ctx context.Context, req pluginsdk.Command
 	}, nil
 }
 
-// handleSceneFocus implements `scene focus #<id>`. Parses a scene reference
-// (ULID prefixed with `#`), validates it is syntactically valid, then calls
-// SetConnectionFocus on the current connection. The substrate is the canonical
-// authority for membership (INV-P5-1): FOCUS_WITHOUT_MEMBERSHIP from the
-// substrate produces a user-facing denial; other substrate errors surface as
-// SCENE_FOCUS_FAILED internal errors.
+// handleSceneFocus implements `scene focus #<id>`. Parses a scene reference,
+// then calls SetConnectionFocus on the current connection. The substrate is the
+// canonical authority for membership (INV-P5-1): FOCUS_WITHOUT_MEMBERSHIP from
+// the substrate produces a user-facing denial; other substrate errors surface
+// as SCENE_FOCUS_FAILED internal errors.
+//
+// The scene ref is normalized leniently: the '#'-prefixed display form (as
+// surfaced in the web RECENT panel) and a bare ULID are both accepted, matching
+// every other scene subcommand so a ref that works for `scene join` works here
+// too (holomush-ehbnk).
 //
 // The plugin does NOT pre-check membership; substrate enforcement via T14 is
 // sufficient per plan Task 19 ("let substrate be the authority").
 func (p *scenePlugin) handleSceneFocus(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
-	arg := strings.TrimSpace(args)
-	if arg == "" {
-		return pluginsdk.Errorf("Usage: scene focus #<scene id>"), nil
-	}
-
-	// Require the '#' prefix per the command syntax; strip it to get the
-	// bare scene ID. The substrate validates membership and scene existence;
-	// the plugin's responsibility is parse + dispatch + render only.
-	if !strings.HasPrefix(arg, "#") {
-		return pluginsdk.Errorf("Usage: scene focus #<scene id>"), nil
-	}
-	sceneID := strings.TrimPrefix(arg, "#")
+	// Accept the '#'-prefixed display form or a bare ULID interchangeably; strip
+	// the optional '#' to get the bare scene ID. The substrate validates
+	// membership and scene existence; the plugin parses + dispatches + renders.
+	sceneID := normalizeSceneID(args)
 	if sceneID == "" {
 		return pluginsdk.Errorf("Usage: scene focus #<scene id>"), nil
 	}
@@ -1498,17 +1495,32 @@ func (p *scenePlugin) resolveSingleSceneMembership(ctx context.Context, characte
 	}
 }
 
+// normalizeSceneID strips a single optional leading '#' (and surrounding
+// whitespace) from a scene-reference token, yielding the bare scene ULID used
+// downstream (holomush-y5inx bare-ULID identity). The mandatory-scene-id
+// subcommands (join, focus, switch, info, end, pause, resume, leave, invite,
+// kick, transfer, set) accept the '#'-prefixed display form — as surfaced in
+// the web RECENT panel, prompts, and join's own success hints — and the bare
+// form interchangeably, so a ref that works for one subcommand works for all
+// (holomush-ehbnk). Only the leading '#' is stripped; embedded junk is left for
+// downstream ULID validation in the service layer.
+func normalizeSceneID(token string) string {
+	return strings.TrimPrefix(strings.TrimSpace(token), "#")
+}
+
 // sceneResourceRef derives the ABAC resource string for a scene subcommand
 // from the subcommand args. Returns "scene:<id>" on success, error if args
 // are empty after trimming. Used as the ResourceRef in GatedSubcommand for
 // subcommands where the scene ID is the entire remaining args (end, pause,
-// resume, leave, info — whole remainder is the scene ID).
+// resume, leave, info — whole remainder is the scene ID). The id is normalized
+// (optional '#' stripped) so the evaluated resource ref matches the bare id the
+// handler passes downstream — no "scene:#<id>" skew (holomush-ehbnk).
 func sceneResourceRef(args string) (string, error) {
 	fields := strings.Fields(args)
 	if len(fields) == 0 {
 		return "", fmt.Errorf("scene id is required")
 	}
-	return "scene:" + fields[0], nil // ABAC resource ref (type:id), not a pub/sub subject (INV-P4-1)
+	return "scene:" + normalizeSceneID(fields[0]), nil // ABAC resource ref (type:id), not a pub/sub subject (INV-P4-1)
 }
 
 // sceneResourceRefFirstField derives the ABAC resource string for subcommands
@@ -1520,7 +1532,7 @@ func sceneResourceRefFirstField(args string) (string, error) {
 	if len(fields) == 0 {
 		return "", oops.Errorf("scene id is required")
 	}
-	return "scene:" + fields[0], nil // ABAC resource ref (type:id), not a pub/sub subject (INV-P4-1)
+	return "scene:" + normalizeSceneID(fields[0]), nil // ABAC resource ref (type:id), not a pub/sub subject (INV-P4-1)
 }
 
 // handleVoteExtend implements `scene publish vote extend <count> [#<scene id>]`
