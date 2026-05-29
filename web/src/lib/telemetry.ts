@@ -75,6 +75,13 @@ export async function initTelemetry(): Promise<void> {
     registerInstrumentations({
       instrumentations: [
         new FetchInstrumentation({
+          // DEV-ONLY matcher. FetchInstrumentation always injects `traceparent`
+          // on SAME-ORIGIN requests; this list only governs CROSS-origin ones.
+          // In prod the Go binary serves the web bundle and the ConnectRPC
+          // gateway on one origin (transport.ts prod baseUrl=""), so
+          // propagation is automatic and this matcher is irrelevant. It exists
+          // for the dev layout (vite :5173 → gateway :8080). Do NOT "widen to
+          // the gateway origin" for prod — that's a no-op there. See holomush-yak8r.
           propagateTraceHeaderCorsUrls: [/localhost/],
         }),
       ],

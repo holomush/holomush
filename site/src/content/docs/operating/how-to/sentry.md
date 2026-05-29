@@ -16,27 +16,31 @@ Sentry is a one-line config change; no app code needs to be touched.
 
 ## Architecture
 
-```text
-                         ┌──────────────────────┐
-                         │  Existing OTLP gRPC  │
-                  ┌─────►│  → Grafana / Tempo   │
-┌─────────────┐   │      └──────────────────────┘
-│ holomush    │   │
-│ TracerProv  │───┤
-│             │   │      ┌──────────────────────┐
-└─────────────┘   └─────►│  Sentry OTLP HTTP    │
-                         │  → sentry.io         │
-                         └──────────────────────┘
+```mermaid
+flowchart LR
+  subgraph server["Server (Go)"]
+    tp["TracerProvider"]
+  end
+  tp -->|"OTLP gRPC"| tempo["Grafana / Tempo"]
+  tp -->|"Sentry OTLP HTTP"| sentry["sentry.io"]
 
-         (browser)       ┌──────────────────────┐
-         WebTracerProv  ────► OTLP HTTP collector│
-         + @sentry/svelte ──► sentry.io          │
-                         └──────────────────────┘
+  subgraph browser["Browser (SvelteKit)"]
+    web["WebTracerProvider (OTel)"]
+    sdk["@sentry/svelte SDK"]
+  end
+  web -->|"OTLP HTTP"| collector["OTLP collector"]
+  collector -->|"exporters"| tempo
+  collector -->|"exporters"| sentry
+  sdk -->|"via /api/sentry-relay"| sentry
 ```
 
-Both backends receive a copy of every span. Errors and logs (captured via
-`sentry.CaptureException` and `sentry.Logger`) are emitted only over the
-Sentry channel.
+The server `TracerProvider` dual-exports every span (Grafana/Tempo **and**
+Sentry). The browser has **two independent channels**: the OTel
+`WebTracerProvider` reaches Sentry/Tempo only **through the collector's
+exporters** (it never talks to sentry.io directly), while `@sentry/svelte`
+tunnels straight to sentry.io via the same-origin relay. Errors and logs
+(`sentry.CaptureException`, `sentry.Logger`) are emitted only over the Sentry
+channel.
 
 ## Server-side (Go binaries)
 
@@ -69,6 +73,51 @@ Add the following to the web client's environment (SvelteKit reads
 The browser SDK is dynamically imported and tree-shaken out when
 `PUBLIC_SENTRY_DSN` is empty, so deployments without Sentry pay no bundle
 cost.
+
+### Browser traces are OTel-native (`PUBLIC_OTEL_ENDPOINT`)
+
+The browser has **two independent channels** (see the architecture diagram
+above): the OTel `WebTracerProvider` (`web/src/lib/telemetry.ts`) and the
+`@sentry/svelte` SDK (`web/src/lib/sentry.ts`). HoloMUSH keeps **traces
+OpenTelemetry-native** — the Sentry SDK is reserved for the Sentry-specific
+bits with no OTel browser equivalent (unhandled-error capture,
+`console.error`/`console.warn` forwarding). Custom spans
+(`command.roundtrip`, `stream.lifecycle`) are emitted on the OTel tracer, so
+they reach Sentry **only via the collector's Sentry exporter**, never through
+the Sentry browser SDK.
+
+> **Privacy note:** the `command.roundtrip` span records `command.input` — the
+> verbatim text the player typed. Authentication is a separate `/login` RPC
+> (not a terminal command), so credentials do not flow through this span, but
+> in-game commands can still carry private content. Browser spans only leave
+> the page when `PUBLIC_OTEL_ENDPOINT` is set; point it only at a collector you
+> control, and scrub/redact at the collector if your retention policy requires.
+
+| Variable               | Required | Default | Notes                                                                 |
+| ---------------------- | -------- | ------- | --------------------------------------------------------------------- |
+| `PUBLIC_OTEL_ENDPOINT` | no       | (unset) | Browser-reachable OTLP-HTTP **base** URL; `telemetry.ts` appends `/v1/traces`. When unset the web tracer no-ops. Baked at build time (see below). |
+
+Because the web client ships as an `adapter-static` bundle embedded into the
+Go binary via `go:embed`, **every `PUBLIC_*` value is frozen at
+`task web:build` (`pnpm build`) time** — there is no runtime server to inject
+`$env/dynamic/public`. Setting `PUBLIC_OTEL_ENDPOINT` (or `PUBLIC_SENTRY_DSN`)
+in the *deployed* container's runtime environment has **no effect**; the
+release pipeline (`.github/workflows/release.yaml`) injects these at build
+time before `goreleaser` packages the image.
+
+In production the Go binary serves the web bundle, the ConnectRPC gateway, and
+`/api/sentry-relay` on a **single origin** (`web/src/lib/transport.ts` prod
+`baseUrl=""`), so the OTel `FetchInstrumentation` auto-propagates `traceparent`
+to the gateway with no CORS involved — `propagateTraceHeaderCorsUrls`'
+`localhost` matcher only matters for the cross-origin **dev** layout
+(`vite` on `:5173` → gateway on `:8080`).
+
+> **Browser → collector reachability (prod hand-off):** browser OTLP POSTs to
+> an external collector face ad-blockers and CORS on the ingest origin — the
+> same reason the Sentry SDK tunnels through the same-origin
+> `/api/sentry-relay`. The recommended prod path is a **same-origin gateway
+> OTLP relay** that forwards browser OTLP to the collector; until that exists,
+> leave `PUBLIC_OTEL_ENDPOINT` unset in prod. See `holomush-yak8r`.
 
 ## Local dev setup
 

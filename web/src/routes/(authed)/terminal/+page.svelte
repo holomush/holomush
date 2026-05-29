@@ -31,6 +31,7 @@
   import Sidebar from '$lib/components/sidebar/Sidebar.svelte';
   import { goto } from '$app/navigation';
   import { trace, type Span } from '@opentelemetry/api';
+  import { commandRoundtripAttributes } from '$lib/commandSpan';
   import { backfillStreams } from '$lib/backfill/streamBackfill';
   import { isUnimplementedError } from '$lib/connect/errors';
   import { isStaleSession } from '$lib/util/stale';
@@ -626,18 +627,28 @@
       pendingCommandSpan.setStatus({ code: 2, message: 'timeout' });
       pendingCommandSpan.end();
     }
-    pendingCommandSpan = tracer.startSpan('command.roundtrip', {
+    // Capture a local handle: the module-level pendingCommandSpan can be nulled
+    // or replaced across the awaits below — by a command_response event ending
+    // it, or by a concurrent sendCommand starting a new one. All mutations go
+    // through `span`; the module var is only cleared if it still points here.
+    // command.input is set at span start so it survives a stream-ready timeout.
+    const span = tracer.startSpan('command.roundtrip', {
       attributes: { 'command.input': command },
     });
+    pendingCommandSpan = span;
 
     try {
       await waitForStreamReady();
+      // Attach the connection_id actually sent to the gateway (post stream-ready)
+      // plus command.name. An empty connection_id here is the holomush-dble7
+      // scene-focus signal — recording it makes that bug class visible on the span.
+      span.setAttributes(commandRoundtripAttributes(command, connectionId));
       const resp = await client.sendCommand({ sessionId, text: command, connectionId });
       if (!resp.success) {
         error = resp.errorMessage || 'Command failed';
-        pendingCommandSpan?.setStatus({ code: 2, message: error });
-        pendingCommandSpan?.end();
-        pendingCommandSpan = null;
+        span.setStatus({ code: 2, message: error });
+        span.end();
+        if (pendingCommandSpan === span) pendingCommandSpan = null;
       }
     } catch (e) {
       if (isStaleSession(e)) {
@@ -645,9 +656,9 @@
         return;
       }
       error = e instanceof Error ? e.message : 'Command failed';
-      pendingCommandSpan?.setStatus({ code: 2, message: error });
-      pendingCommandSpan?.end();
-      pendingCommandSpan = null;
+      span.setStatus({ code: 2, message: error });
+      span.end();
+      if (pendingCommandSpan === span) pendingCommandSpan = null;
     }
   }
 
