@@ -18,15 +18,26 @@ export const file_holomush_web_v1_web: GenFile = /*@__PURE__*/
   fileDesc("Chlob2xvbXVzaC93ZWIvdjEvd2ViLnByb3RvEg9ob2xvbXVzaC53ZWIudjEigAEKDENvbnRyb2xGcmFtZRIuCgZzaWduYWwYASABKA4yHi5ob2xvbXVzaC53ZWIudjEuQ29udHJvbFNpZ25hbBIPCgdtZXNzYWdlGAIgASgJEhUKDWNvbm5lY3Rpb25faWQYAyABKAkSGAoQYXR0YWNoX21vbWVudF9tcxgEIAEoAyJNChJTZW5kQ29tbWFuZFJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIMCgR0ZXh0GAIgASgJEhUKDWNvbm5lY3Rpb25faWQYAyABKAkiTQoTU2VuZENvbW1hbmRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg4KBm91dHB1dBgCIAEoCRIVCg1lcnJvcl9tZXNzYWdlGAMgASgJIkMKE1N0cmVhbUV2ZW50c1JlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCUoECAIQA1IScmVwbGF5X2Zyb21fY3Vyc29yIoECCglHYW1lRXZlbnQSDAoEdHlwZRgBIAEoCRIQCghjYXRlZ29yeRgCIAEoCRIOCgZmb3JtYXQYAyABKAkSNQoOZGlzcGxheV90YXJnZXQYBCABKA4yHS5ob2xvbXVzaC53ZWIudjEuRXZlbnRDaGFubmVsEhEKCXRpbWVzdGFtcBgFIAEoAxINCgVhY3RvchgGIAEoCRIMCgR0ZXh0GAcgASgJEikKCG1ldGFkYXRhGAggASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIQCghldmVudF9pZBgJIAEoCRIOCgZjdXJzb3IYCiABKAwSEAoIYWN0b3JfaWQYCyABKAkifgoUU3RyZWFtRXZlbnRzUmVzcG9uc2USKwoFZXZlbnQYASABKAsyGi5ob2xvbXVzaC53ZWIudjEuR2FtZUV2ZW50SAASMAoHY29udHJvbBgCIAEoCzIdLmhvbG9tdXNoLndlYi52MS5Db250cm9sRnJhbWVIAEIHCgVmcmFtZSInChFEaXNjb25uZWN0UmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJIhQKEkRpc2Nvbm5lY3RSZXNwb25zZSIuChhHZXRDb21tYW5kSGlzdG9yeVJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCSItChlHZXRDb21tYW5kSGlzdG9yeVJlc3BvbnNlEhAKCGNvbW1hbmRzGAEgAygJIqMBChBDaGFyYWN0ZXJTdW1tYXJ5EhQKDGNoYXJhY3Rlcl9pZBgBIAEoCRIWCg5jaGFyYWN0ZXJfbmFtZRgCIAEoCRIaChJoYXNfYWN0aXZlX3Nlc3Npb24YAyABKAgSFgoOc2Vzc2lvbl9zdGF0dXMYBCABKAkSFQoNbGFzdF9sb2NhdGlvbhgFIAEoCRIWCg5sYXN0X3BsYXllZF9hdBgGIAEoAyJXChxXZWJBdXRoZW50aWNhdGVQbGF5ZXJSZXF1ZXN0EhAKCHVzZXJuYW1lGAEgASgJEhAKCHBhc3N3b3JkGAIgASgJEhMKC3JlbWVtYmVyX21lGAMgASgIIukBCh1XZWJBdXRoZW50aWNhdGVQbGF5ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhUKDWVycm9yX21lc3NhZ2UYAyABKAkSNQoKY2hhcmFjdGVycxgEIAMoCzIhLmhvbG9tdXNoLndlYi52MS5DaGFyYWN0ZXJTdW1tYXJ5EhwKFGRlZmF1bHRfY2hhcmFjdGVyX2lkGAUgASgJEhIKCmVycm9yX2NvZGUYBiABKAkSGwoTY3VycmVudF9wbGF5ZXJfbmFtZRgHIAEoCUoECAIQA1IUcGxheWVyX3Nlc3Npb25fdG9rZW4iMQoZV2ViU2VsZWN0Q2hhcmFjdGVyUmVxdWVzdBIUCgxjaGFyYWN0ZXJfaWQYAiABKAkihAEKGldlYlNlbGVjdENoYXJhY3RlclJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSEgoKc2Vzc2lvbl9pZBgCIAEoCRIWCg5jaGFyYWN0ZXJfbmFtZRgDIAEoCRISCgpyZWF0dGFjaGVkGAQgASgIEhUKDWVycm9yX21lc3NhZ2UYBSABKAkiSwoWV2ViQ3JlYXRlUGxheWVyUmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCRINCgVlbWFpbBgDIAEoCSLFAQoXV2ViQ3JlYXRlUGxheWVyUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBI1CgpjaGFyYWN0ZXJzGAMgAygLMiEuaG9sb211c2gud2ViLnYxLkNoYXJhY3RlclN1bW1hcnkSFQoNZXJyb3JfbWVzc2FnZRgEIAEoCRISCgplcnJvcl9jb2RlGAUgASgJEhsKE2N1cnJlbnRfcGxheWVyX25hbWUYBiABKAlKBAgCEANSFHBsYXllcl9zZXNzaW9uX3Rva2VuIhcKFVdlYkNyZWF0ZUd1ZXN0UmVxdWVzdCLGAQoWV2ViQ3JlYXRlR3Vlc3RSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhUKDWVycm9yX21lc3NhZ2UYAiABKAkSNQoKY2hhcmFjdGVycxgDIAMoCzIhLmhvbG9tdXNoLndlYi52MS5DaGFyYWN0ZXJTdW1tYXJ5EhwKFGRlZmF1bHRfY2hhcmFjdGVyX2lkGAQgASgJEhIKCmVycm9yX2NvZGUYBSABKAkSGwoTY3VycmVudF9wbGF5ZXJfbmFtZRgGIAEoCSIzChlXZWJDcmVhdGVDaGFyYWN0ZXJSZXF1ZXN0EhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJInIKGldlYkNyZWF0ZUNoYXJhY3RlclJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSFAoMY2hhcmFjdGVyX2lkGAIgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAMgASgJEhUKDWVycm9yX21lc3NhZ2UYBCABKAkiGgoYV2ViTGlzdENoYXJhY3RlcnNSZXF1ZXN0IlIKGVdlYkxpc3RDaGFyYWN0ZXJzUmVzcG9uc2USNQoKY2hhcmFjdGVycxgBIAMoCzIhLmhvbG9tdXNoLndlYi52MS5DaGFyYWN0ZXJTdW1tYXJ5IhIKEFdlYkxvZ291dFJlcXVlc3QiEwoRV2ViTG9nb3V0UmVzcG9uc2UiLwoeV2ViUmVxdWVzdFBhc3N3b3JkUmVzZXRSZXF1ZXN0Eg0KBWVtYWlsGAEgASgJIjIKH1dlYlJlcXVlc3RQYXNzd29yZFJlc2V0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCJFCh5XZWJDb25maXJtUGFzc3dvcmRSZXNldFJlcXVlc3QSDQoFdG9rZW4YASABKAkSFAoMbmV3X3Bhc3N3b3JkGAIgASgJIkkKH1dlYkNvbmZpcm1QYXNzd29yZFJlc2V0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAIgASgJIhgKFldlYkNoZWNrU2Vzc2lvblJlcXVlc3QiigEKF1dlYkNoZWNrU2Vzc2lvblJlc3BvbnNlEhMKC3BsYXllcl9uYW1lGAEgASgJEhEKCXBsYXllcl9pZBgCIAEoCRIQCghpc19ndWVzdBgDIAEoCBI1CgpjaGFyYWN0ZXJzGAQgAygLMiEuaG9sb211c2gud2ViLnYxLkNoYXJhY3RlclN1bW1hcnkiIwoUV2ViR2V0Q29udGVudFJlcXVlc3QSCwoDa2V5GAEgASgJIkYKFVdlYkdldENvbnRlbnRSZXNwb25zZRItCgRpdGVtGAEgASgLMh8uaG9sb211c2gud2ViLnYxLldlYkNvbnRlbnRJdGVtIkYKFVdlYkxpc3RDb250ZW50UmVxdWVzdBIOCgZwcmVmaXgYASABKAkSDQoFbGltaXQYAiABKAUSDgoGY3Vyc29yGAMgASgJIl0KFldlYkxpc3RDb250ZW50UmVzcG9uc2USLgoFaXRlbXMYASADKAsyHy5ob2xvbXVzaC53ZWIudjEuV2ViQ29udGVudEl0ZW0SEwoLbmV4dF9jdXJzb3IYAiABKAkiswEKDldlYkNvbnRlbnRJdGVtEgsKA2tleRgBIAEoCRIUCgxjb250ZW50X3R5cGUYAiABKAkSDAoEYm9keRgDIAEoDBI/CghtZXRhZGF0YRgEIAMoCzItLmhvbG9tdXNoLndlYi52MS5XZWJDb250ZW50SXRlbS5NZXRhZGF0YUVudHJ5Gi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKOAQocV2ViUXVlcnlTdHJlYW1IaXN0b3J5UmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEg4KBnN0cmVhbRgCIAEoCRINCgVjb3VudBgDIAEoBRIVCg1ub3RfYmVmb3JlX21zGAQgASgDEg4KBmN1cnNvchgFIAEoDBIUCgxub3RfYWZ0ZXJfbXMYBiABKAMicgodV2ViUXVlcnlTdHJlYW1IaXN0b3J5UmVzcG9uc2USKgoGZXZlbnRzGAEgAygLMhouaG9sb211c2gud2ViLnYxLkdhbWVFdmVudBIQCghoYXNfbW9yZRgCIAEoCBITCgtuZXh0X2N1cnNvchgDIAEoDCIyChxXZWJMaXN0U2Vzc2lvblN0cmVhbXNSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkiMAodV2ViTGlzdFNlc3Npb25TdHJlYW1zUmVzcG9uc2USDwoHc3RyZWFtcxgBIAMoCSIeChxXZWJMaXN0UGxheWVyU2Vzc2lvbnNSZXF1ZXN0Ir8BChRXZWJQbGF5ZXJTZXNzaW9uSW5mbxIKCgJpZBgBIAEoCRIuCgpjcmVhdGVkX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtsYXN0X2FjdGl2ZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKdXNlcl9hZ2VudBgEIAEoCRISCgppcF9hZGRyZXNzGAUgASgJEhIKCmlzX2N1cnJlbnQYBiABKAgiWAodV2ViTGlzdFBsYXllclNlc3Npb25zUmVzcG9uc2USNwoIc2Vzc2lvbnMYASADKAsyJS5ob2xvbXVzaC53ZWIudjEuV2ViUGxheWVyU2Vzc2lvbkluZm8iOgodV2ViUmV2b2tlUGxheWVyU2Vzc2lvblJlcXVlc3QSGQoRdGFyZ2V0X3Nlc3Npb25faWQYASABKAkiSAoeV2ViUmV2b2tlUGxheWVyU2Vzc2lvblJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSFQoNZXJyb3JfbWVzc2FnZRgCIAEoCSIlCiNXZWJSZXZva2VPdGhlclBsYXllclNlc3Npb25zUmVxdWVzdCJOCiRXZWJSZXZva2VPdGhlclBsYXllclNlc3Npb25zUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIVCg1yZXZva2VkX2NvdW50GAIgASgFInIKEFdlYlByZXNlbmNlRW50cnkSFAoMY2hhcmFjdGVyX2lkGAEgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJEjAKBXN0YXRlGAMgASgOMiEuaG9sb211c2gud2ViLnYxLldlYlByZXNlbmNlU3RhdGUiMQobV2ViTGlzdEZvY3VzUHJlc2VuY2VSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkinAEKHFdlYkxpc3RGb2N1c1ByZXNlbmNlUmVzcG9uc2USNAoHY29udGV4dBgBIAEoDjIjLmhvbG9tdXNoLndlYi52MS5XZWJQcmVzZW5jZUNvbnRleHQSEgoKY29udGV4dF9pZBgCIAEoCRIyCgdlbnRyaWVzGAMgAygLMiEuaG9sb211c2gud2ViLnYxLldlYlByZXNlbmNlRW50cnkqmAEKDEV2ZW50Q2hhbm5lbBIdChlFVkVOVF9DSEFOTkVMX1VOU1BFQ0lGSUVEEAASGgoWRVZFTlRfQ0hBTk5FTF9URVJNSU5BTBABEhcKE0VWRU5UX0NIQU5ORUxfU1RBVEUQAhIWChJFVkVOVF9DSEFOTkVMX0JPVEgQAxIcChhFVkVOVF9DSEFOTkVMX0FVRElUX09OTFkQBCqXAQoNQ29udHJvbFNpZ25hbBIeChpDT05UUk9MX1NJR05BTF9VTlNQRUNJRklFRBAAEiIKHkNPTlRST0xfU0lHTkFMX1JFUExBWV9DT01QTEVURRABEiAKHENPTlRST0xfU0lHTkFMX1NUUkVBTV9DTE9TRUQQAhIgChxDT05UUk9MX1NJR05BTF9TVFJFQU1fT1BFTkVEEAMqfQoSV2ViUHJlc2VuY2VDb250ZXh0EiQKIFdFQl9QUkVTRU5DRV9DT05URVhUX1VOU1BFQ0lGSUVEEAASIQodV0VCX1BSRVNFTkNFX0NPTlRFWFRfTE9DQVRJT04QARIeChpXRUJfUFJFU0VOQ0VfQ09OVEVYVF9TQ0VORRACKpcBChBXZWJQcmVzZW5jZVN0YXRlEiIKHldFQl9QUkVTRU5DRV9TVEFURV9VTlNQRUNJRklFRBAAEh0KGVdFQl9QUkVTRU5DRV9TVEFURV9BQ1RJVkUQARIfChtXRUJfUFJFU0VOQ0VfU1RBVEVfREVUQUNIRUQQAhIfChtXRUJfUFJFU0VOQ0VfU1RBVEVfSU5BQ1RJVkUQAzLyEgoKV2ViU2VydmljZRJYCgtTZW5kQ29tbWFuZBIjLmhvbG9tdXNoLndlYi52MS5TZW5kQ29tbWFuZFJlcXVlc3QaJC5ob2xvbXVzaC53ZWIudjEuU2VuZENvbW1hbmRSZXNwb25zZRJdCgxTdHJlYW1FdmVudHMSJC5ob2xvbXVzaC53ZWIudjEuU3RyZWFtRXZlbnRzUmVxdWVzdBolLmhvbG9tdXNoLndlYi52MS5TdHJlYW1FdmVudHNSZXNwb25zZTABElUKCkRpc2Nvbm5lY3QSIi5ob2xvbXVzaC53ZWIudjEuRGlzY29ubmVjdFJlcXVlc3QaIy5ob2xvbXVzaC53ZWIudjEuRGlzY29ubmVjdFJlc3BvbnNlEmoKEUdldENvbW1hbmRIaXN0b3J5EikuaG9sb211c2gud2ViLnYxLkdldENvbW1hbmRIaXN0b3J5UmVxdWVzdBoqLmhvbG9tdXNoLndlYi52MS5HZXRDb21tYW5kSGlzdG9yeVJlc3BvbnNlEnYKFVdlYkF1dGhlbnRpY2F0ZVBsYXllchItLmhvbG9tdXNoLndlYi52MS5XZWJBdXRoZW50aWNhdGVQbGF5ZXJSZXF1ZXN0Gi4uaG9sb211c2gud2ViLnYxLldlYkF1dGhlbnRpY2F0ZVBsYXllclJlc3BvbnNlEm0KEldlYlNlbGVjdENoYXJhY3RlchIqLmhvbG9tdXNoLndlYi52MS5XZWJTZWxlY3RDaGFyYWN0ZXJSZXF1ZXN0GisuaG9sb211c2gud2ViLnYxLldlYlNlbGVjdENoYXJhY3RlclJlc3BvbnNlEmQKD1dlYkNyZWF0ZVBsYXllchInLmhvbG9tdXNoLndlYi52MS5XZWJDcmVhdGVQbGF5ZXJSZXF1ZXN0GiguaG9sb211c2gud2ViLnYxLldlYkNyZWF0ZVBsYXllclJlc3BvbnNlEmEKDldlYkNyZWF0ZUd1ZXN0EiYuaG9sb211c2gud2ViLnYxLldlYkNyZWF0ZUd1ZXN0UmVxdWVzdBonLmhvbG9tdXNoLndlYi52MS5XZWJDcmVhdGVHdWVzdFJlc3BvbnNlEm0KEldlYkNyZWF0ZUNoYXJhY3RlchIqLmhvbG9tdXNoLndlYi52MS5XZWJDcmVhdGVDaGFyYWN0ZXJSZXF1ZXN0GisuaG9sb211c2gud2ViLnYxLldlYkNyZWF0ZUNoYXJhY3RlclJlc3BvbnNlEmoKEVdlYkxpc3RDaGFyYWN0ZXJzEikuaG9sb211c2gud2ViLnYxLldlYkxpc3RDaGFyYWN0ZXJzUmVxdWVzdBoqLmhvbG9tdXNoLndlYi52MS5XZWJMaXN0Q2hhcmFjdGVyc1Jlc3BvbnNlElIKCVdlYkxvZ291dBIhLmhvbG9tdXNoLndlYi52MS5XZWJMb2dvdXRSZXF1ZXN0GiIuaG9sb211c2gud2ViLnYxLldlYkxvZ291dFJlc3BvbnNlEnwKF1dlYlJlcXVlc3RQYXNzd29yZFJlc2V0Ei8uaG9sb211c2gud2ViLnYxLldlYlJlcXVlc3RQYXNzd29yZFJlc2V0UmVxdWVzdBowLmhvbG9tdXNoLndlYi52MS5XZWJSZXF1ZXN0UGFzc3dvcmRSZXNldFJlc3BvbnNlEnwKF1dlYkNvbmZpcm1QYXNzd29yZFJlc2V0Ei8uaG9sb211c2gud2ViLnYxLldlYkNvbmZpcm1QYXNzd29yZFJlc2V0UmVxdWVzdBowLmhvbG9tdXNoLndlYi52MS5XZWJDb25maXJtUGFzc3dvcmRSZXNldFJlc3BvbnNlEmQKD1dlYkNoZWNrU2Vzc2lvbhInLmhvbG9tdXNoLndlYi52MS5XZWJDaGVja1Nlc3Npb25SZXF1ZXN0GiguaG9sb211c2gud2ViLnYxLldlYkNoZWNrU2Vzc2lvblJlc3BvbnNlEl4KDVdlYkdldENvbnRlbnQSJS5ob2xvbXVzaC53ZWIudjEuV2ViR2V0Q29udGVudFJlcXVlc3QaJi5ob2xvbXVzaC53ZWIudjEuV2ViR2V0Q29udGVudFJlc3BvbnNlEmEKDldlYkxpc3RDb250ZW50EiYuaG9sb211c2gud2ViLnYxLldlYkxpc3RDb250ZW50UmVxdWVzdBonLmhvbG9tdXNoLndlYi52MS5XZWJMaXN0Q29udGVudFJlc3BvbnNlEnYKFVdlYlF1ZXJ5U3RyZWFtSGlzdG9yeRItLmhvbG9tdXNoLndlYi52MS5XZWJRdWVyeVN0cmVhbUhpc3RvcnlSZXF1ZXN0Gi4uaG9sb211c2gud2ViLnYxLldlYlF1ZXJ5U3RyZWFtSGlzdG9yeVJlc3BvbnNlEnYKFVdlYkxpc3RTZXNzaW9uU3RyZWFtcxItLmhvbG9tdXNoLndlYi52MS5XZWJMaXN0U2Vzc2lvblN0cmVhbXNSZXF1ZXN0Gi4uaG9sb211c2gud2ViLnYxLldlYkxpc3RTZXNzaW9uU3RyZWFtc1Jlc3BvbnNlEnYKFVdlYkxpc3RQbGF5ZXJTZXNzaW9ucxItLmhvbG9tdXNoLndlYi52MS5XZWJMaXN0UGxheWVyU2Vzc2lvbnNSZXF1ZXN0Gi4uaG9sb211c2gud2ViLnYxLldlYkxpc3RQbGF5ZXJTZXNzaW9uc1Jlc3BvbnNlEnkKFldlYlJldm9rZVBsYXllclNlc3Npb24SLi5ob2xvbXVzaC53ZWIudjEuV2ViUmV2b2tlUGxheWVyU2Vzc2lvblJlcXVlc3QaLy5ob2xvbXVzaC53ZWIudjEuV2ViUmV2b2tlUGxheWVyU2Vzc2lvblJlc3BvbnNlEosBChxXZWJSZXZva2VPdGhlclBsYXllclNlc3Npb25zEjQuaG9sb211c2gud2ViLnYxLldlYlJldm9rZU90aGVyUGxheWVyU2Vzc2lvbnNSZXF1ZXN0GjUuaG9sb211c2gud2ViLnYxLldlYlJldm9rZU90aGVyUGxheWVyU2Vzc2lvbnNSZXNwb25zZRJzChRXZWJMaXN0Rm9jdXNQcmVzZW5jZRIsLmhvbG9tdXNoLndlYi52MS5XZWJMaXN0Rm9jdXNQcmVzZW5jZVJlcXVlc3QaLS5ob2xvbXVzaC53ZWIudjEuV2ViTGlzdEZvY3VzUHJlc2VuY2VSZXNwb25zZUI+WjxnaXRodWIuY29tL2hvbG9tdXNoL2hvbG9tdXNoL3BrZy9wcm90by9ob2xvbXVzaC93ZWIvdjE7d2VidjFiBnByb3RvMw", [file_google_protobuf_struct, file_google_protobuf_timestamp]);
 
 /**
+ * ControlFrame is the out-of-band stream-lifecycle message carried in the
+ * `control` arm of StreamEventsResponse. It conveys open/replay/close
+ * transitions and the per-stream routing identity, distinct from the in-band
+ * GameEvent traffic.
+ *
  * @generated from message holomush.web.v1.ControlFrame
  */
 export type ControlFrame = Message<"holomush.web.v1.ControlFrame"> & {
   /**
+   * signal selects which lifecycle transition this frame represents and
+   * governs which of the remaining fields are populated.
+   *
    * @generated from field: holomush.web.v1.ControlSignal signal = 1;
    */
   signal: ControlSignal;
 
   /**
+   * message is an optional human-readable detail string accompanying the
+   * signal (e.g. a close reason). May be empty.
+   *
    * @generated from field: string message = 2;
    */
   message: string;
@@ -67,15 +78,24 @@ export const ControlFrameSchema: GenMessage<ControlFrame> = /*@__PURE__*/
   messageDesc(file_holomush_web_v1_web, 0);
 
 /**
+ * SendCommandRequest carries one raw command line for a game session, optionally
+ * tagged with the stream connection it originated from.
+ *
  * @generated from message holomush.web.v1.SendCommandRequest
  */
 export type SendCommandRequest = Message<"holomush.web.v1.SendCommandRequest"> & {
   /**
+   * session_id identifies the in-game session whose character issues the
+   * command.
+   *
    * @generated from field: string session_id = 1;
    */
   sessionId: string;
 
   /**
+   * text is the raw command line exactly as the player typed it; parsing and
+   * dispatch happen core-side in HandleCommand.
+   *
    * @generated from field: string text = 2;
    */
   text: string;
@@ -100,20 +120,33 @@ export const SendCommandRequestSchema: GenMessage<SendCommandRequest> = /*@__PUR
   messageDesc(file_holomush_web_v1_web, 1);
 
 /**
+ * SendCommandResponse reports the outcome of a dispatched command. Note this is
+ * the dispatch acknowledgement; any narrative output the command produces
+ * arrives asynchronously over the StreamEvents feed, not here.
+ *
  * @generated from message holomush.web.v1.SendCommandResponse
  */
 export type SendCommandResponse = Message<"holomush.web.v1.SendCommandResponse"> & {
   /**
+   * success is true when the command was accepted and dispatched without a
+   * transport-level error.
+   *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
+   * output is an optional synchronous text result; most game output is
+   * delivered out of band over StreamEvents rather than in this field.
+   *
    * @generated from field: string output = 2;
    */
   output: string;
 
   /**
+   * error_message is a human-readable failure detail; the gateway sets a
+   * generic "command error" when the upstream HandleCommand RPC fails.
+   *
    * @generated from field: string error_message = 3;
    */
   errorMessage: string;
@@ -127,10 +160,14 @@ export const SendCommandResponseSchema: GenMessage<SendCommandResponse> = /*@__P
   messageDesc(file_holomush_web_v1_web, 2);
 
 /**
+ * StreamEventsRequest opens the server-streaming event feed for a session.
+ *
  * @generated from message holomush.web.v1.StreamEventsRequest
  */
 export type StreamEventsRequest = Message<"holomush.web.v1.StreamEventsRequest"> & {
   /**
+   * session_id identifies the in-game session whose event stream to attach.
+   *
    * @generated from field: string session_id = 1;
    */
   sessionId: string;
@@ -144,51 +181,86 @@ export const StreamEventsRequestSchema: GenMessage<StreamEventsRequest> = /*@__P
   messageDesc(file_holomush_web_v1_web, 3);
 
 /**
+ * GameEvent is the web-facing rendering of a single core EventFrame, flattened
+ * for direct display by the client. The gateway derives every field from the
+ * core EventFrame and its RenderingMetadata in
+ * internal/web/translate.go::translateEvent; events lacking rendering metadata
+ * are dropped at the gateway (INV-GW-5) and never reach this message.
+ *
  * @generated from message holomush.web.v1.GameEvent
  */
 export type GameEvent = Message<"holomush.web.v1.GameEvent"> & {
   /**
+   * type is the event-type discriminator (e.g. "say", "pose", "arrive",
+   * "location_state"), forwarded from corev1.EventFrame.type.
+   *
    * @generated from field: string type = 1;
    */
   type: string;
 
   /**
+   * category is the rendering category from RenderingMetadata (e.g.
+   * "communication", "movement", "state"); it drives client-side grouping
+   * and the gateway's own state-vs-narrative branch.
+   *
    * @generated from field: string category = 2;
    */
   category: string;
 
   /**
+   * format is the rendering format hint from RenderingMetadata (e.g.
+   * "speech", "action") guiding how the client styles the line.
+   *
    * @generated from field: string format = 3;
    */
   format: string;
 
   /**
+   * display_target is the surface the event renders on (terminal, state, or
+   * both), copied from RenderingMetadata.display_target.
+   *
    * @generated from field: holomush.web.v1.EventChannel display_target = 4;
    */
   displayTarget: EventChannel;
 
   /**
+   * timestamp is the event time as epoch SECONDS, taken from the seconds
+   * component of corev1.EventFrame.timestamp.
+   *
    * @generated from field: int64 timestamp = 5;
    */
   timestamp: bigint;
 
   /**
+   * actor is the DISPLAY NAME of the acting character, extracted from the
+   * event payload (character_name, falling back to sender_name) for
+   * rendering. For stable identity use actor_id, not this field.
+   *
    * @generated from field: string actor = 6;
    */
   actor: string;
 
   /**
+   * text is the rendered line shown to the player. Extracted from the payload
+   * (message → text → action → notice) or synthesized for arrive/leave
+   * movement events. Empty for state events whose content lives in metadata.
+   *
    * @generated from field: string text = 7;
    */
   text: string;
 
   /**
+   * metadata carries type-specific extras (label, style, channel, no_space,
+   * target_name) for narrative events, or the entire decoded payload for
+   * state-category events.
+   *
    * @generated from field: google.protobuf.Struct metadata = 8;
    */
   metadata?: JsonObject | undefined;
 
   /**
-   * ULID; populated from corev1.EventFrame.id
+   * event_id is the originating event's ULID, forwarded from
+   * corev1.EventFrame.id; the client uses it for dedup keying.
    *
    * @generated from field: string event_id = 9;
    */
@@ -223,20 +295,31 @@ export const GameEventSchema: GenMessage<GameEvent> = /*@__PURE__*/
   messageDesc(file_holomush_web_v1_web, 4);
 
 /**
+ * StreamEventsResponse is one frame in the StreamEvents server stream: either
+ * an in-band game event or an out-of-band control message, never both.
+ *
  * @generated from message holomush.web.v1.StreamEventsResponse
  */
 export type StreamEventsResponse = Message<"holomush.web.v1.StreamEventsResponse"> & {
   /**
+   * frame multiplexes the two frame kinds the gateway forwards on the single
+   * stream.
+   *
    * @generated from oneof holomush.web.v1.StreamEventsResponse.frame
    */
   frame: {
     /**
+     * event is an in-band game event for display.
+     *
      * @generated from field: holomush.web.v1.GameEvent event = 1;
      */
     value: GameEvent;
     case: "event";
   } | {
     /**
+     * control is an out-of-band stream-lifecycle signal (open, replay
+     * boundary, close).
+     *
      * @generated from field: holomush.web.v1.ControlFrame control = 2;
      */
     value: ControlFrame;
@@ -252,10 +335,14 @@ export const StreamEventsResponseSchema: GenMessage<StreamEventsResponse> = /*@_
   messageDesc(file_holomush_web_v1_web, 5);
 
 /**
+ * DisconnectRequest names the session to tear down out of band.
+ *
  * @generated from message holomush.web.v1.DisconnectRequest
  */
 export type DisconnectRequest = Message<"holomush.web.v1.DisconnectRequest"> & {
   /**
+   * session_id identifies the in-game session to end.
+   *
    * @generated from field: string session_id = 1;
    */
   sessionId: string;
@@ -269,6 +356,9 @@ export const DisconnectRequestSchema: GenMessage<DisconnectRequest> = /*@__PURE_
   messageDesc(file_holomush_web_v1_web, 6);
 
 /**
+ * DisconnectResponse is the empty acknowledgement of a Disconnect call; the
+ * gateway always returns it even when the upstream best-effort RPC failed.
+ *
  * @generated from message holomush.web.v1.DisconnectResponse
  */
 export type DisconnectResponse = Message<"holomush.web.v1.DisconnectResponse"> & {
@@ -282,10 +372,15 @@ export const DisconnectResponseSchema: GenMessage<DisconnectResponse> = /*@__PUR
   messageDesc(file_holomush_web_v1_web, 7);
 
 /**
+ * GetCommandHistoryRequest names the session whose recent command lines to
+ * retrieve.
+ *
  * @generated from message holomush.web.v1.GetCommandHistoryRequest
  */
 export type GetCommandHistoryRequest = Message<"holomush.web.v1.GetCommandHistoryRequest"> & {
   /**
+   * session_id identifies the in-game session whose command history to fetch.
+   *
    * @generated from field: string session_id = 1;
    */
   sessionId: string;
@@ -299,10 +394,15 @@ export const GetCommandHistoryRequestSchema: GenMessage<GetCommandHistoryRequest
   messageDesc(file_holomush_web_v1_web, 8);
 
 /**
+ * GetCommandHistoryResponse returns the session's recent command lines, or an
+ * empty list when the lookup failed or was unauthorized.
+ *
  * @generated from message holomush.web.v1.GetCommandHistoryResponse
  */
 export type GetCommandHistoryResponse = Message<"holomush.web.v1.GetCommandHistoryResponse"> & {
   /**
+   * commands is the ordered list of recent raw command lines for the session.
+   *
    * @generated from field: repeated string commands = 1;
    */
   commands: string[];
@@ -316,35 +416,55 @@ export const GetCommandHistoryResponseSchema: GenMessage<GetCommandHistoryRespon
   messageDesc(file_holomush_web_v1_web, 9);
 
 /**
+ * CharacterSummary is the web-facing roster row for one of a player's
+ * characters, mirroring corev1.CharacterSummary and used across the auth and
+ * character-management responses.
+ *
  * @generated from message holomush.web.v1.CharacterSummary
  */
 export type CharacterSummary = Message<"holomush.web.v1.CharacterSummary"> & {
   /**
+   * character_id is the character's ULID identity.
+   *
    * @generated from field: string character_id = 1;
    */
   characterId: string;
 
   /**
+   * character_name is the character's display name.
+   *
    * @generated from field: string character_name = 2;
    */
   characterName: string;
 
   /**
+   * has_active_session is true when the character currently has a live game
+   * session.
+   *
    * @generated from field: bool has_active_session = 3;
    */
   hasActiveSession: boolean;
 
   /**
+   * session_status is a human-readable status string for any active session
+   * (e.g. attached/detached state).
+   *
    * @generated from field: string session_status = 4;
    */
   sessionStatus: string;
 
   /**
+   * last_location is the display label of the character's most recent
+   * location.
+   *
    * @generated from field: string last_location = 5;
    */
   lastLocation: string;
 
   /**
+   * last_played_at is the epoch-seconds timestamp of the character's most
+   * recent play activity.
+   *
    * @generated from field: int64 last_played_at = 6;
    */
   lastPlayedAt: bigint;
@@ -358,20 +478,31 @@ export const CharacterSummarySchema: GenMessage<CharacterSummary> = /*@__PURE__*
   messageDesc(file_holomush_web_v1_web, 10);
 
 /**
+ * WebAuthenticatePlayerRequest carries login credentials for the
+ * WebAuthenticatePlayer RPC.
+ *
  * @generated from message holomush.web.v1.WebAuthenticatePlayerRequest
  */
 export type WebAuthenticatePlayerRequest = Message<"holomush.web.v1.WebAuthenticatePlayerRequest"> & {
   /**
+   * username identifies the player account to authenticate.
+   *
    * @generated from field: string username = 1;
    */
   username: string;
 
   /**
+   * password is the plaintext password verified core-side (never logged at
+   * the gateway).
+   *
    * @generated from field: string password = 2;
    */
   password: string;
 
   /**
+   * remember_me requests a longer-lived session/cookie; forwarded to core to
+   * determine session TTL.
+   *
    * @generated from field: bool remember_me = 3;
    */
   rememberMe: boolean;
@@ -385,41 +516,57 @@ export const WebAuthenticatePlayerRequestSchema: GenMessage<WebAuthenticatePlaye
   messageDesc(file_holomush_web_v1_web, 11);
 
 /**
+ * WebAuthenticatePlayerResponse reports the login outcome and, on success, the
+ * player's character roster. The session token itself is delivered as a
+ * Set-Cookie header by the gateway, not in this body.
+ *
  * @generated from message holomush.web.v1.WebAuthenticatePlayerResponse
  */
 export type WebAuthenticatePlayerResponse = Message<"holomush.web.v1.WebAuthenticatePlayerResponse"> & {
   /**
+   * success is true when credentials were accepted.
+   *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
+   * error_message is a human-readable failure detail on the non-success path.
+   *
    * @generated from field: string error_message = 3;
    */
   errorMessage: string;
 
   /**
+   * characters is the player's roster, returned so the client can prompt for
+   * character selection after login.
+   *
    * @generated from field: repeated holomush.web.v1.CharacterSummary characters = 4;
    */
   characters: CharacterSummary[];
 
   /**
+   * default_character_id names the character the client should preselect, if
+   * the player has a default.
+   *
    * @generated from field: string default_character_id = 5;
    */
   defaultCharacterId: string;
 
   /**
-   * NEW: machine-readable error code. Values: "" on success, "ALREADY_AUTHENTICATED"
-   * when the cookie-collision gate fires, others reserved for future use.
+   * error_code is a machine-readable error discriminator. Values: "" on
+   * success, "ALREADY_AUTHENTICATED" when the cookie-collision gate fires;
+   * others reserved for future use.
    *
    * @generated from field: string error_code = 6;
    */
   errorCode: string;
 
   /**
-   * NEW: populated only when error_code = "ALREADY_AUTHENTICATED". Holds the
-   * existing player's display name so the client renders the right
-   * "you are already signed in as X" UI without a second round trip.
+   * current_player_name is populated only when error_code =
+   * "ALREADY_AUTHENTICATED". Holds the existing player's display name so the
+   * client renders the right "you are already signed in as X" UI without a
+   * second round trip.
    *
    * @generated from field: string current_player_name = 7;
    */
@@ -434,10 +581,16 @@ export const WebAuthenticatePlayerResponseSchema: GenMessage<WebAuthenticatePlay
   messageDesc(file_holomush_web_v1_web, 12);
 
 /**
+ * WebSelectCharacterRequest names the character to bind to a game session.
+ *
  * @generated from message holomush.web.v1.WebSelectCharacterRequest
  */
 export type WebSelectCharacterRequest = Message<"holomush.web.v1.WebSelectCharacterRequest"> & {
   /**
+   * character_id is the ULID of the character to select. Field number is 2;
+   * field 1 was retired with the cookie cutover (the token now travels in the
+   * cookie header, not the request body).
+   *
    * @generated from field: string character_id = 2;
    */
   characterId: string;
@@ -451,30 +604,46 @@ export const WebSelectCharacterRequestSchema: GenMessage<WebSelectCharacterReque
   messageDesc(file_holomush_web_v1_web, 13);
 
 /**
+ * WebSelectCharacterResponse reports the result of binding a character,
+ * including the resulting game session and whether an existing session was
+ * reattached rather than freshly created.
+ *
  * @generated from message holomush.web.v1.WebSelectCharacterResponse
  */
 export type WebSelectCharacterResponse = Message<"holomush.web.v1.WebSelectCharacterResponse"> & {
   /**
+   * success is true when a session was created or reattached.
+   *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
+   * session_id is the resulting in-game session's id, used by StreamEvents
+   * and SendCommand.
+   *
    * @generated from field: string session_id = 2;
    */
   sessionId: string;
 
   /**
+   * character_name is the selected character's display name.
+   *
    * @generated from field: string character_name = 3;
    */
   characterName: string;
 
   /**
+   * reattached is true when an existing detached session was resumed instead
+   * of a new one being created.
+   *
    * @generated from field: bool reattached = 4;
    */
   reattached: boolean;
 
   /**
+   * error_message is a human-readable failure detail on the non-success path.
+   *
    * @generated from field: string error_message = 5;
    */
   errorMessage: string;
@@ -488,20 +657,28 @@ export const WebSelectCharacterResponseSchema: GenMessage<WebSelectCharacterResp
   messageDesc(file_holomush_web_v1_web, 14);
 
 /**
+ * WebCreatePlayerRequest carries the fields for new-account registration.
+ *
  * @generated from message holomush.web.v1.WebCreatePlayerRequest
  */
 export type WebCreatePlayerRequest = Message<"holomush.web.v1.WebCreatePlayerRequest"> & {
   /**
+   * username is the desired account name.
+   *
    * @generated from field: string username = 1;
    */
   username: string;
 
   /**
+   * password is the desired plaintext password (hashed core-side).
+   *
    * @generated from field: string password = 2;
    */
   password: string;
 
   /**
+   * email is the account's email address, used for password-reset delivery.
+   *
    * @generated from field: string email = 3;
    */
   email: string;
@@ -515,32 +692,46 @@ export const WebCreatePlayerRequestSchema: GenMessage<WebCreatePlayerRequest> = 
   messageDesc(file_holomush_web_v1_web, 15);
 
 /**
+ * WebCreatePlayerResponse reports the registration outcome and the initial
+ * character roster. As with login, the session token is delivered via
+ * Set-Cookie, not in this body.
+ *
  * @generated from message holomush.web.v1.WebCreatePlayerResponse
  */
 export type WebCreatePlayerResponse = Message<"holomush.web.v1.WebCreatePlayerResponse"> & {
   /**
+   * success is true when the account was created.
+   *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
+   * characters is the new account's initial character roster.
+   *
    * @generated from field: repeated holomush.web.v1.CharacterSummary characters = 3;
    */
   characters: CharacterSummary[];
 
   /**
+   * error_message is a human-readable failure detail on the non-success path.
+   *
    * @generated from field: string error_message = 4;
    */
   errorMessage: string;
 
   /**
-   * NEW: see WebAuthenticatePlayerResponse for semantics.
+   * error_code mirrors WebAuthenticatePlayerResponse.error_code semantics
+   * (e.g. "ALREADY_AUTHENTICATED" from the cookie-collision gate).
    *
    * @generated from field: string error_code = 5;
    */
   errorCode: string;
 
   /**
+   * current_player_name mirrors WebAuthenticatePlayerResponse.current_player_name;
+   * set only on the ALREADY_AUTHENTICATED path.
+   *
    * @generated from field: string current_player_name = 6;
    */
   currentPlayerName: string;
@@ -554,6 +745,9 @@ export const WebCreatePlayerResponseSchema: GenMessage<WebCreatePlayerResponse> 
   messageDesc(file_holomush_web_v1_web, 16);
 
 /**
+ * WebCreateGuestRequest is the empty request for provisioning an ephemeral
+ * guest player; guest identity is generated server-side.
+ *
  * @generated from message holomush.web.v1.WebCreateGuestRequest
  */
 export type WebCreateGuestRequest = Message<"holomush.web.v1.WebCreateGuestRequest"> & {
@@ -567,37 +761,51 @@ export const WebCreateGuestRequestSchema: GenMessage<WebCreateGuestRequest> = /*
   messageDesc(file_holomush_web_v1_web, 17);
 
 /**
+ * WebCreateGuestResponse reports the guest-provisioning outcome and the
+ * generated guest character roster. The accompanying guest session cookie
+ * (shorter TTL) is set via Set-Cookie by the gateway.
+ *
  * @generated from message holomush.web.v1.WebCreateGuestResponse
  */
 export type WebCreateGuestResponse = Message<"holomush.web.v1.WebCreateGuestResponse"> & {
   /**
+   * success is true when a guest player and character were provisioned.
+   *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
+   * error_message is a human-readable failure detail on the non-success path.
+   *
    * @generated from field: string error_message = 2;
    */
   errorMessage: string;
 
   /**
+   * characters is the generated guest character roster.
+   *
    * @generated from field: repeated holomush.web.v1.CharacterSummary characters = 3;
    */
   characters: CharacterSummary[];
 
   /**
+   * default_character_id names the guest character to preselect.
+   *
    * @generated from field: string default_character_id = 4;
    */
   defaultCharacterId: string;
 
   /**
-   * NEW: see WebAuthenticatePlayerResponse for semantics.
+   * error_code mirrors WebAuthenticatePlayerResponse.error_code semantics.
    *
    * @generated from field: string error_code = 5;
    */
   errorCode: string;
 
   /**
+   * current_player_name mirrors WebAuthenticatePlayerResponse.current_player_name.
+   *
    * @generated from field: string current_player_name = 6;
    */
   currentPlayerName: string;
@@ -611,10 +819,17 @@ export const WebCreateGuestResponseSchema: GenMessage<WebCreateGuestResponse> = 
   messageDesc(file_holomush_web_v1_web, 18);
 
 /**
+ * WebCreateCharacterRequest names the new character to add to the authenticated
+ * player. The player is identified by the cookie session token, not a body
+ * field.
+ *
  * @generated from message holomush.web.v1.WebCreateCharacterRequest
  */
 export type WebCreateCharacterRequest = Message<"holomush.web.v1.WebCreateCharacterRequest"> & {
   /**
+   * character_name is the desired display name for the new character. Field
+   * number is 2 (field 1 retired with the cookie cutover).
+   *
    * @generated from field: string character_name = 2;
    */
   characterName: string;
@@ -628,25 +843,35 @@ export const WebCreateCharacterRequestSchema: GenMessage<WebCreateCharacterReque
   messageDesc(file_holomush_web_v1_web, 19);
 
 /**
+ * WebCreateCharacterResponse reports the result of creating a character.
+ *
  * @generated from message holomush.web.v1.WebCreateCharacterResponse
  */
 export type WebCreateCharacterResponse = Message<"holomush.web.v1.WebCreateCharacterResponse"> & {
   /**
+   * success is true when the character was created.
+   *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
+   * character_id is the new character's ULID identity.
+   *
    * @generated from field: string character_id = 2;
    */
   characterId: string;
 
   /**
+   * character_name is the created character's display name.
+   *
    * @generated from field: string character_name = 3;
    */
   characterName: string;
 
   /**
+   * error_message is a human-readable failure detail on the non-success path.
+   *
    * @generated from field: string error_message = 4;
    */
   errorMessage: string;
@@ -660,6 +885,9 @@ export const WebCreateCharacterResponseSchema: GenMessage<WebCreateCharacterResp
   messageDesc(file_holomush_web_v1_web, 20);
 
 /**
+ * WebListCharactersRequest is the empty request for the authenticated player's
+ * roster; the player is identified by the cookie session token.
+ *
  * @generated from message holomush.web.v1.WebListCharactersRequest
  */
 export type WebListCharactersRequest = Message<"holomush.web.v1.WebListCharactersRequest"> & {
@@ -673,10 +901,15 @@ export const WebListCharactersRequestSchema: GenMessage<WebListCharactersRequest
   messageDesc(file_holomush_web_v1_web, 21);
 
 /**
+ * WebListCharactersResponse returns the authenticated player's character
+ * roster.
+ *
  * @generated from message holomush.web.v1.WebListCharactersResponse
  */
 export type WebListCharactersResponse = Message<"holomush.web.v1.WebListCharactersResponse"> & {
   /**
+   * characters is the player's full character roster.
+   *
    * @generated from field: repeated holomush.web.v1.CharacterSummary characters = 1;
    */
   characters: CharacterSummary[];
@@ -690,6 +923,9 @@ export const WebListCharactersResponseSchema: GenMessage<WebListCharactersRespon
   messageDesc(file_holomush_web_v1_web, 22);
 
 /**
+ * WebLogoutRequest is the empty request to end the current session; the session
+ * to end is identified by the cookie token.
+ *
  * @generated from message holomush.web.v1.WebLogoutRequest
  */
 export type WebLogoutRequest = Message<"holomush.web.v1.WebLogoutRequest"> & {
@@ -703,6 +939,10 @@ export const WebLogoutRequestSchema: GenMessage<WebLogoutRequest> = /*@__PURE__*
   messageDesc(file_holomush_web_v1_web, 23);
 
 /**
+ * WebLogoutResponse is the empty acknowledgement of logout. The meaningful
+ * effect — clearing the session cookie — is delivered as a response header by
+ * the gateway, so this body carries no fields.
+ *
  * @generated from message holomush.web.v1.WebLogoutResponse
  */
 export type WebLogoutResponse = Message<"holomush.web.v1.WebLogoutResponse"> & {
@@ -716,10 +956,14 @@ export const WebLogoutResponseSchema: GenMessage<WebLogoutResponse> = /*@__PURE_
   messageDesc(file_holomush_web_v1_web, 24);
 
 /**
+ * WebRequestPasswordResetRequest names the email address to begin a reset for.
+ *
  * @generated from message holomush.web.v1.WebRequestPasswordResetRequest
  */
 export type WebRequestPasswordResetRequest = Message<"holomush.web.v1.WebRequestPasswordResetRequest"> & {
   /**
+   * email is the account email to send the reset link to.
+   *
    * @generated from field: string email = 1;
    */
   email: string;
@@ -733,10 +977,17 @@ export const WebRequestPasswordResetRequestSchema: GenMessage<WebRequestPassword
   messageDesc(file_holomush_web_v1_web, 25);
 
 /**
+ * WebRequestPasswordResetResponse acknowledges the reset request. success is
+ * reported true even when the underlying account does not exist, to avoid
+ * leaking account existence.
+ *
  * @generated from message holomush.web.v1.WebRequestPasswordResetResponse
  */
 export type WebRequestPasswordResetResponse = Message<"holomush.web.v1.WebRequestPasswordResetResponse"> & {
   /**
+   * success is true when the request was accepted; it does NOT confirm the
+   * email exists (existence is deliberately not disclosed).
+   *
    * @generated from field: bool success = 1;
    */
   success: boolean;
@@ -750,15 +1001,22 @@ export const WebRequestPasswordResetResponseSchema: GenMessage<WebRequestPasswor
   messageDesc(file_holomush_web_v1_web, 26);
 
 /**
+ * WebConfirmPasswordResetRequest carries the emailed reset token and the
+ * replacement password.
+ *
  * @generated from message holomush.web.v1.WebConfirmPasswordResetRequest
  */
 export type WebConfirmPasswordResetRequest = Message<"holomush.web.v1.WebConfirmPasswordResetRequest"> & {
   /**
+   * token is the single-use reset token delivered by email.
+   *
    * @generated from field: string token = 1;
    */
   token: string;
 
   /**
+   * new_password is the replacement plaintext password (hashed core-side).
+   *
    * @generated from field: string new_password = 2;
    */
   newPassword: string;
@@ -772,15 +1030,21 @@ export const WebConfirmPasswordResetRequestSchema: GenMessage<WebConfirmPassword
   messageDesc(file_holomush_web_v1_web, 27);
 
 /**
+ * WebConfirmPasswordResetResponse reports whether the reset completed.
+ *
  * @generated from message holomush.web.v1.WebConfirmPasswordResetResponse
  */
 export type WebConfirmPasswordResetResponse = Message<"holomush.web.v1.WebConfirmPasswordResetResponse"> & {
   /**
+   * success is true when the password was changed.
+   *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
+   * error_message is a human-readable failure detail on the non-success path.
+   *
    * @generated from field: string error_message = 2;
    */
   errorMessage: string;
@@ -794,6 +1058,9 @@ export const WebConfirmPasswordResetResponseSchema: GenMessage<WebConfirmPasswor
   messageDesc(file_holomush_web_v1_web, 28);
 
 /**
+ * WebCheckSessionRequest is the empty request that validates the cookie-borne
+ * player session; the token is read from the cookie header, not the body.
+ *
  * @generated from message holomush.web.v1.WebCheckSessionRequest
  */
 export type WebCheckSessionRequest = Message<"holomush.web.v1.WebCheckSessionRequest"> & {
@@ -807,29 +1074,41 @@ export const WebCheckSessionRequestSchema: GenMessage<WebCheckSessionRequest> = 
   messageDesc(file_holomush_web_v1_web, 29);
 
 /**
+ * WebCheckSessionResponse returns the authenticated player's identity and
+ * roster when the cookie session is valid. An invalid/expired session yields a
+ * CodeUnauthenticated error instead of this message.
+ *
  * @generated from message holomush.web.v1.WebCheckSessionResponse
  */
 export type WebCheckSessionResponse = Message<"holomush.web.v1.WebCheckSessionResponse"> & {
   /**
+   * player_name is the authenticated player's display name.
+   *
    * @generated from field: string player_name = 1;
    */
   playerName: string;
 
   /**
-   * NEW (additive on the success path; failure path still returns
-   * connect.CodeUnauthenticated so web/src/routes/(authed)/+layout.ts:18-25
-   * continues to redirect on throw — no contract break).
+   * player_id is the authenticated player's ULID identity. Additive on the
+   * success path; the failure path still returns CodeUnauthenticated so the
+   * web client's authed layout continues to redirect on throw (no contract
+   * break).
    *
    * @generated from field: string player_id = 2;
    */
   playerId: string;
 
   /**
+   * is_guest is true when the session belongs to an ephemeral guest player.
+   *
    * @generated from field: bool is_guest = 3;
    */
   isGuest: boolean;
 
   /**
+   * characters is the player's character roster, returned so the client can
+   * restore character-selection state on reload.
+   *
    * @generated from field: repeated holomush.web.v1.CharacterSummary characters = 4;
    */
   characters: CharacterSummary[];
@@ -843,10 +1122,15 @@ export const WebCheckSessionResponseSchema: GenMessage<WebCheckSessionResponse> 
   messageDesc(file_holomush_web_v1_web, 30);
 
 /**
+ * WebGetContentRequest selects one content-store item by exact key. Served by
+ * the public, unauthenticated ContentService proxy (NOT CoreService).
+ *
  * @generated from message holomush.web.v1.WebGetContentRequest
  */
 export type WebGetContentRequest = Message<"holomush.web.v1.WebGetContentRequest"> & {
   /**
+   * key is the exact content-store key; no prefix matching is applied.
+   *
    * @generated from field: string key = 1;
    */
   key: string;
@@ -860,10 +1144,15 @@ export const WebGetContentRequestSchema: GenMessage<WebGetContentRequest> = /*@_
   messageDesc(file_holomush_web_v1_web, 31);
 
 /**
+ * WebGetContentResponse returns the requested content item, or an empty message
+ * when no item exists for the key.
+ *
  * @generated from message holomush.web.v1.WebGetContentResponse
  */
 export type WebGetContentResponse = Message<"holomush.web.v1.WebGetContentResponse"> & {
   /**
+   * item is the matched content item; unset when the key was not found.
+   *
    * @generated from field: holomush.web.v1.WebContentItem item = 1;
    */
   item?: WebContentItem | undefined;
@@ -877,20 +1166,31 @@ export const WebGetContentResponseSchema: GenMessage<WebGetContentResponse> = /*
   messageDesc(file_holomush_web_v1_web, 32);
 
 /**
+ * WebListContentRequest selects a page of content-store items under a key
+ * prefix. Served by the public ContentService proxy.
+ *
  * @generated from message holomush.web.v1.WebListContentRequest
  */
 export type WebListContentRequest = Message<"holomush.web.v1.WebListContentRequest"> & {
   /**
+   * prefix restricts results to keys beginning with this string.
+   *
    * @generated from field: string prefix = 1;
    */
   prefix: string;
 
   /**
+   * limit requests a page size; the bound is forwarded to and applied by the
+   * content service.
+   *
    * @generated from field: int32 limit = 2;
    */
   limit: number;
 
   /**
+   * cursor is the opaque next_cursor from a prior page; empty starts at the
+   * top of the prefix.
+   *
    * @generated from field: string cursor = 3;
    */
   cursor: string;
@@ -904,15 +1204,23 @@ export const WebListContentRequestSchema: GenMessage<WebListContentRequest> = /*
   messageDesc(file_holomush_web_v1_web, 33);
 
 /**
+ * WebListContentResponse returns one page of content items plus the cursor for
+ * the following page.
+ *
  * @generated from message holomush.web.v1.WebListContentResponse
  */
 export type WebListContentResponse = Message<"holomush.web.v1.WebListContentResponse"> & {
   /**
+   * items is the page of matched content items.
+   *
    * @generated from field: repeated holomush.web.v1.WebContentItem items = 1;
    */
   items: WebContentItem[];
 
   /**
+   * next_cursor is the opaque cursor for the next page; empty when no further
+   * pages remain.
+   *
    * @generated from field: string next_cursor = 2;
    */
   nextCursor: string;
@@ -926,25 +1234,37 @@ export const WebListContentResponseSchema: GenMessage<WebListContentResponse> = 
   messageDesc(file_holomush_web_v1_web, 34);
 
 /**
+ * WebContentItem is the web-facing representation of a single content-store
+ * entry, forwarded field-for-field from contentv1.ContentItem.
+ *
  * @generated from message holomush.web.v1.WebContentItem
  */
 export type WebContentItem = Message<"holomush.web.v1.WebContentItem"> & {
   /**
+   * key is the item's storage key.
+   *
    * @generated from field: string key = 1;
    */
   key: string;
 
   /**
+   * content_type is the item's MIME type, guiding how the client renders the
+   * body.
+   *
    * @generated from field: string content_type = 2;
    */
   contentType: string;
 
   /**
+   * body is the raw item content bytes.
+   *
    * @generated from field: bytes body = 3;
    */
   body: Uint8Array;
 
   /**
+   * metadata is a free-form string→string map of item attributes.
+   *
    * @generated from field: map<string, string> metadata = 4;
    */
   metadata: { [key: string]: string };
@@ -958,28 +1278,40 @@ export const WebContentItemSchema: GenMessage<WebContentItem> = /*@__PURE__*/
   messageDesc(file_holomush_web_v1_web, 35);
 
 /**
+ * WebQueryStreamHistoryRequest selects a page of historical events for a session
+ * stream, with time-window and cursor bounds. Proxies to
+ * CoreService.QueryStreamHistory.
+ *
  * @generated from message holomush.web.v1.WebQueryStreamHistoryRequest
  */
 export type WebQueryStreamHistoryRequest = Message<"holomush.web.v1.WebQueryStreamHistoryRequest"> & {
   /**
+   * session_id identifies the requesting session (used core-side for
+   * authorization).
+   *
    * @generated from field: string session_id = 1;
    */
   sessionId: string;
 
   /**
+   * stream names the event stream to read history from (e.g.
+   * "location:<id>").
+   *
    * @generated from field: string stream = 2;
    */
   stream: string;
 
   /**
-   * page size; 0 = default (150), max 500, negative rejected
+   * count is the requested page size; 0 means the server default (150),
+   * values are capped at the server maximum (500), and negative values are
+   * rejected.
    *
    * @generated from field: int32 count = 3;
    */
   count: number;
 
   /**
-   * epoch ms time floor; 0 = no lower bound
+   * not_before_ms is the epoch-ms time floor; 0 means no lower bound.
    *
    * @generated from field: int64 not_before_ms = 4;
    */
@@ -1014,15 +1346,23 @@ export const WebQueryStreamHistoryRequestSchema: GenMessage<WebQueryStreamHistor
   messageDesc(file_holomush_web_v1_web, 36);
 
 /**
+ * WebQueryStreamHistoryResponse returns one page of historical events translated
+ * for the web client, plus pagination state.
+ *
  * @generated from message holomush.web.v1.WebQueryStreamHistoryResponse
  */
 export type WebQueryStreamHistoryResponse = Message<"holomush.web.v1.WebQueryStreamHistoryResponse"> & {
   /**
+   * events is the page of historical events (translated from core EventFrames;
+   * events without rendering metadata are dropped at the gateway).
+   *
    * @generated from field: repeated holomush.web.v1.GameEvent events = 1;
    */
   events: GameEvent[];
 
   /**
+   * has_more is true when older events remain beyond this page.
+   *
    * @generated from field: bool has_more = 2;
    */
   hasMore: boolean;
@@ -1043,10 +1383,15 @@ export const WebQueryStreamHistoryResponseSchema: GenMessage<WebQueryStreamHisto
   messageDesc(file_holomush_web_v1_web, 37);
 
 /**
+ * WebListSessionStreamsRequest names the session whose subscribed stream set to
+ * enumerate.
+ *
  * @generated from message holomush.web.v1.WebListSessionStreamsRequest
  */
 export type WebListSessionStreamsRequest = Message<"holomush.web.v1.WebListSessionStreamsRequest"> & {
   /**
+   * session_id identifies the session whose subscriptions to list.
+   *
    * @generated from field: string session_id = 1;
    */
   sessionId: string;
@@ -1060,11 +1405,15 @@ export const WebListSessionStreamsRequestSchema: GenMessage<WebListSessionStream
   messageDesc(file_holomush_web_v1_web, 38);
 
 /**
+ * WebListSessionStreamsResponse returns the stream names a session is subscribed
+ * to, used by the client to drive reload-backfill across each stream.
+ *
  * @generated from message holomush.web.v1.WebListSessionStreamsResponse
  */
 export type WebListSessionStreamsResponse = Message<"holomush.web.v1.WebListSessionStreamsResponse"> & {
   /**
-   * event-store stream names (e.g. "location:<id>", "character:<id>")
+   * streams is the list of event-store stream names the session is
+   * subscribed to (e.g. "location:<id>", "character:<id>").
    *
    * @generated from field: repeated string streams = 1;
    */
@@ -1079,6 +1428,9 @@ export const WebListSessionStreamsResponseSchema: GenMessage<WebListSessionStrea
   messageDesc(file_holomush_web_v1_web, 39);
 
 /**
+ * WebListPlayerSessionsRequest is the empty request listing the caller's
+ * PlayerSessions; the caller is identified by the cookie token.
+ *
  * @generated from message holomush.web.v1.WebListPlayerSessionsRequest
  */
 export type WebListPlayerSessionsRequest = Message<"holomush.web.v1.WebListPlayerSessionsRequest"> & {
@@ -1092,6 +1444,10 @@ export const WebListPlayerSessionsRequestSchema: GenMessage<WebListPlayerSession
   messageDesc(file_holomush_web_v1_web, 40);
 
 /**
+ * WebPlayerSessionInfo describes one of a player's PlayerSessions — a
+ * device/tab login record (distinct from an in-game game session) shown in the
+ * account's "active sessions" management UI.
+ *
  * @generated from message holomush.web.v1.WebPlayerSessionInfo
  */
 export type WebPlayerSessionInfo = Message<"holomush.web.v1.WebPlayerSessionInfo"> & {
@@ -1104,21 +1460,31 @@ export type WebPlayerSessionInfo = Message<"holomush.web.v1.WebPlayerSessionInfo
   id: string;
 
   /**
+   * created_at is when the PlayerSession was first established (login time).
+   *
    * @generated from field: google.protobuf.Timestamp created_at = 2;
    */
   createdAt?: Timestamp | undefined;
 
   /**
+   * last_active is the timestamp of the PlayerSession's most recent activity.
+   *
    * @generated from field: google.protobuf.Timestamp last_active = 3;
    */
   lastActive?: Timestamp | undefined;
 
   /**
+   * user_agent is the browser User-Agent recorded at login, shown to help the
+   * player recognize the device.
+   *
    * @generated from field: string user_agent = 4;
    */
   userAgent: string;
 
   /**
+   * ip_address is the client IP recorded at login, shown for the same
+   * recognition purpose.
+   *
    * @generated from field: string ip_address = 5;
    */
   ipAddress: string;
@@ -1139,10 +1505,16 @@ export const WebPlayerSessionInfoSchema: GenMessage<WebPlayerSessionInfo> = /*@_
   messageDesc(file_holomush_web_v1_web, 41);
 
 /**
+ * WebListPlayerSessionsResponse returns all of the caller's active
+ * PlayerSessions.
+ *
  * @generated from message holomush.web.v1.WebListPlayerSessionsResponse
  */
 export type WebListPlayerSessionsResponse = Message<"holomush.web.v1.WebListPlayerSessionsResponse"> & {
   /**
+   * sessions is the caller's list of active PlayerSessions, one flagged
+   * is_current.
+   *
    * @generated from field: repeated holomush.web.v1.WebPlayerSessionInfo sessions = 1;
    */
   sessions: WebPlayerSessionInfo[];
@@ -1156,6 +1528,9 @@ export const WebListPlayerSessionsResponseSchema: GenMessage<WebListPlayerSessio
   messageDesc(file_holomush_web_v1_web, 42);
 
 /**
+ * WebRevokePlayerSessionRequest names a single PlayerSession to revoke; the
+ * caller (and thus ownership) is identified by the cookie token.
+ *
  * @generated from message holomush.web.v1.WebRevokePlayerSessionRequest
  */
 export type WebRevokePlayerSessionRequest = Message<"holomush.web.v1.WebRevokePlayerSessionRequest"> & {
@@ -1175,15 +1550,22 @@ export const WebRevokePlayerSessionRequestSchema: GenMessage<WebRevokePlayerSess
   messageDesc(file_holomush_web_v1_web, 43);
 
 /**
+ * WebRevokePlayerSessionResponse reports whether the targeted PlayerSession was
+ * revoked.
+ *
  * @generated from message holomush.web.v1.WebRevokePlayerSessionResponse
  */
 export type WebRevokePlayerSessionResponse = Message<"holomush.web.v1.WebRevokePlayerSessionResponse"> & {
   /**
+   * success is true when the targeted PlayerSession was revoked.
+   *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
+   * error_message is a human-readable failure detail on the non-success path.
+   *
    * @generated from field: string error_message = 2;
    */
   errorMessage: string;
@@ -1197,6 +1579,9 @@ export const WebRevokePlayerSessionResponseSchema: GenMessage<WebRevokePlayerSes
   messageDesc(file_holomush_web_v1_web, 44);
 
 /**
+ * WebRevokeOtherPlayerSessionsRequest is the empty "log out everywhere else"
+ * request; the surviving (current) session is identified by the cookie token.
+ *
  * @generated from message holomush.web.v1.WebRevokeOtherPlayerSessionsRequest
  */
 export type WebRevokeOtherPlayerSessionsRequest = Message<"holomush.web.v1.WebRevokeOtherPlayerSessionsRequest"> & {
@@ -1210,15 +1595,22 @@ export const WebRevokeOtherPlayerSessionsRequestSchema: GenMessage<WebRevokeOthe
   messageDesc(file_holomush_web_v1_web, 45);
 
 /**
+ * WebRevokeOtherPlayerSessionsResponse reports the bulk-revocation outcome and
+ * how many PlayerSessions were revoked.
+ *
  * @generated from message holomush.web.v1.WebRevokeOtherPlayerSessionsResponse
  */
 export type WebRevokeOtherPlayerSessionsResponse = Message<"holomush.web.v1.WebRevokeOtherPlayerSessionsResponse"> & {
   /**
+   * success is true when the bulk revocation completed.
+   *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
+   * revoked_count is the number of other PlayerSessions revoked.
+   *
    * @generated from field: int32 revoked_count = 2;
    */
   revokedCount: number;
@@ -1232,20 +1624,30 @@ export const WebRevokeOtherPlayerSessionsResponseSchema: GenMessage<WebRevokeOth
   messageDesc(file_holomush_web_v1_web, 46);
 
 /**
+ * WebPresenceEntry is one character in a presence snapshot, carrying identity
+ * and activity state for the client's presence list.
+ *
  * @generated from message holomush.web.v1.WebPresenceEntry
  */
 export type WebPresenceEntry = Message<"holomush.web.v1.WebPresenceEntry"> & {
   /**
+   * character_id is the present character's ULID identity (used for dedup
+   * keying).
+   *
    * @generated from field: string character_id = 1;
    */
   characterId: string;
 
   /**
+   * character_name is the present character's display name.
+   *
    * @generated from field: string character_name = 2;
    */
   characterName: string;
 
   /**
+   * state is the character's activity state in this context.
+   *
    * @generated from field: holomush.web.v1.WebPresenceState state = 3;
    */
   state: WebPresenceState;
@@ -1259,10 +1661,16 @@ export const WebPresenceEntrySchema: GenMessage<WebPresenceEntry> = /*@__PURE__*
   messageDesc(file_holomush_web_v1_web, 47);
 
 /**
+ * WebListFocusPresenceRequest names the session whose current focus-context
+ * presence to snapshot.
+ *
  * @generated from message holomush.web.v1.WebListFocusPresenceRequest
  */
 export type WebListFocusPresenceRequest = Message<"holomush.web.v1.WebListFocusPresenceRequest"> & {
   /**
+   * session_id identifies the requesting session; core resolves the session's
+   * current focus (location or scene) and enforces ownership.
+   *
    * @generated from field: string session_id = 1;
    */
   sessionId: string;
@@ -1276,20 +1684,30 @@ export const WebListFocusPresenceRequestSchema: GenMessage<WebListFocusPresenceR
   messageDesc(file_holomush_web_v1_web, 48);
 
 /**
+ * WebListFocusPresenceResponse returns the presence snapshot for the session's
+ * current focus context.
+ *
  * @generated from message holomush.web.v1.WebListFocusPresenceResponse
  */
 export type WebListFocusPresenceResponse = Message<"holomush.web.v1.WebListFocusPresenceResponse"> & {
   /**
+   * context indicates whether the snapshot describes a location or a scene.
+   *
    * @generated from field: holomush.web.v1.WebPresenceContext context = 1;
    */
   context: WebPresenceContext;
 
   /**
+   * context_id is the ULID of the focus location or scene the snapshot
+   * describes.
+   *
    * @generated from field: string context_id = 2;
    */
   contextId: string;
 
   /**
+   * entries is the set of characters present in the focus context.
+   *
    * @generated from field: repeated holomush.web.v1.WebPresenceEntry entries = 3;
    */
   entries: WebPresenceEntry[];
@@ -1303,25 +1721,45 @@ export const WebListFocusPresenceResponseSchema: GenMessage<WebListFocusPresence
   messageDesc(file_holomush_web_v1_web, 49);
 
 /**
+ * EventChannel is the web mirror of corev1.EventChannel: it tells the web
+ * client which surface a GameEvent should render on. The gateway forwards the
+ * core RenderingMetadata.display_target verbatim onto GameEvent.display_target
+ * (internal/web/translate.go::translateEvent), so the value semantics are
+ * identical to the core enum — no remapping happens at the boundary.
+ *
  * @generated from enum holomush.web.v1.EventChannel
  */
 export enum EventChannel {
   /**
+   * EVENT_CHANNEL_UNSPECIFIED is the zero value; rendering metadata that
+   * omits a display target lands here. The web client SHOULD treat it as a
+   * safe default rather than a routing instruction.
+   *
    * @generated from enum value: EVENT_CHANNEL_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
+   * EVENT_CHANNEL_TERMINAL routes the event to the scrolling terminal/log
+   * pane — the conversational stream (say, pose, arrive, leave, channel).
+   *
    * @generated from enum value: EVENT_CHANNEL_TERMINAL = 1;
    */
   TERMINAL = 1,
 
   /**
+   * EVENT_CHANNEL_STATE routes the event to the structured state surfaces
+   * (location panel, exits, presence) rather than the terminal log. Used by
+   * state-category events such as location_state and exit_update.
+   *
    * @generated from enum value: EVENT_CHANNEL_STATE = 2;
    */
   STATE = 2,
 
   /**
+   * EVENT_CHANNEL_BOTH routes the event to the terminal AND the state
+   * surfaces simultaneously.
+   *
    * @generated from enum value: EVENT_CHANNEL_BOTH = 3;
    */
   BOTH = 3,
@@ -1343,20 +1781,39 @@ export const EventChannelSchema: GenEnum<EventChannel> = /*@__PURE__*/
   enumDesc(file_holomush_web_v1_web, 0);
 
 /**
+ * ControlSignal is the discriminator on a ControlFrame — an out-of-band
+ * stream-lifecycle message multiplexed into the StreamEvents feed alongside
+ * game events. The gateway forwards core control signals
+ * (internal/web/handler.go::forwardFrame) and also synthesizes STREAM_OPENED
+ * itself at attach time.
+ *
  * @generated from enum holomush.web.v1.ControlSignal
  */
 export enum ControlSignal {
   /**
+   * CONTROL_SIGNAL_UNSPECIFIED is the zero value; a well-formed ControlFrame
+   * always carries a concrete signal, so this value SHOULD never appear on
+   * the wire.
+   *
    * @generated from enum value: CONTROL_SIGNAL_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
+   * CONTROL_SIGNAL_REPLAY_COMPLETE marks the boundary between the historical
+   * backfill the core Subscribe handler replays at attach and the live event
+   * tail. The accompanying ControlFrame.attach_moment_ms is the upper time
+   * bound the client feeds back into WebQueryStreamHistory backfill calls.
+   *
    * @generated from enum value: CONTROL_SIGNAL_REPLAY_COMPLETE = 1;
    */
   REPLAY_COMPLETE = 1,
 
   /**
+   * CONTROL_SIGNAL_STREAM_CLOSED signals the server is ending the stream;
+   * the gateway treats it as a terminal frame (forwardFrame returns
+   * errStreamClosed) and runs its session-cleanup Disconnect.
+   *
    * @generated from enum value: CONTROL_SIGNAL_STREAM_CLOSED = 2;
    */
   STREAM_CLOSED = 2,
@@ -1380,20 +1837,33 @@ export const ControlSignalSchema: GenEnum<ControlSignal> = /*@__PURE__*/
   enumDesc(file_holomush_web_v1_web, 1);
 
 /**
+ * WebPresenceContext is the web mirror of corev1.PresenceContext: it tells the
+ * client which kind of focus context a presence snapshot describes. The gateway
+ * maps core values 1:1 (internal/web/handler.go::translatePresenceContext).
+ *
  * @generated from enum holomush.web.v1.WebPresenceContext
  */
 export enum WebPresenceContext {
   /**
+   * WEB_PRESENCE_CONTEXT_UNSPECIFIED is the zero value / fallback for an
+   * unrecognized core context.
+   *
    * @generated from enum value: WEB_PRESENCE_CONTEXT_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
+   * WEB_PRESENCE_CONTEXT_LOCATION indicates the snapshot is the presence at a
+   * location.
+   *
    * @generated from enum value: WEB_PRESENCE_CONTEXT_LOCATION = 1;
    */
   LOCATION = 1,
 
   /**
+   * WEB_PRESENCE_CONTEXT_SCENE indicates the snapshot is the participants of a
+   * scene.
+   *
    * @generated from enum value: WEB_PRESENCE_CONTEXT_SCENE = 2;
    */
   SCENE = 2,
@@ -1406,25 +1876,41 @@ export const WebPresenceContextSchema: GenEnum<WebPresenceContext> = /*@__PURE__
   enumDesc(file_holomush_web_v1_web, 2);
 
 /**
+ * WebPresenceState is the web mirror of corev1.PresenceState: the activity
+ * state of one present character. Mapped 1:1 from core
+ * (internal/web/handler.go::translatePresenceState).
+ *
  * @generated from enum holomush.web.v1.WebPresenceState
  */
 export enum WebPresenceState {
   /**
+   * WEB_PRESENCE_STATE_UNSPECIFIED is the zero value / fallback for an
+   * unrecognized core state.
+   *
    * @generated from enum value: WEB_PRESENCE_STATE_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
+   * WEB_PRESENCE_STATE_ACTIVE means the character has a live, attached
+   * connection (grid present).
+   *
    * @generated from enum value: WEB_PRESENCE_STATE_ACTIVE = 1;
    */
   ACTIVE = 1,
 
   /**
+   * WEB_PRESENCE_STATE_DETACHED means the session exists but currently has no
+   * attached connection.
+   *
    * @generated from enum value: WEB_PRESENCE_STATE_DETACHED = 2;
    */
   DETACHED = 2,
 
   /**
+   * WEB_PRESENCE_STATE_INACTIVE means the character is present but idle/not
+   * actively connected.
+   *
    * @generated from enum value: WEB_PRESENCE_STATE_INACTIVE = 3;
    */
   INACTIVE = 3,
@@ -1437,11 +1923,25 @@ export const WebPresenceStateSchema: GenEnum<WebPresenceState> = /*@__PURE__*/
   enumDesc(file_holomush_web_v1_web, 3);
 
 /**
+ * WebService is the ConnectRPC surface the SvelteKit web client speaks to. Per
+ * the gateway-boundary invariant (.claude/rules/gateway-boundary.md) it is a
+ * protocol-translation layer ONLY: every game-state operation proxies to the
+ * corresponding CoreService gRPC RPC (content RPCs proxy to ContentService),
+ * and the gateway computes no business logic. The web-specific concerns it
+ * owns are HTTP↔gRPC framing, cookie↔token translation
+ * (internal/web/cookie.go::CookieMiddleware), and per-stream connection
+ * identity. Implemented by internal/web.Handler; registered via
+ * webv1connect.NewWebServiceHandler in internal/web/server.go.
+ *
  * @generated from service holomush.web.v1.WebService
  */
 export const WebService: GenService<{
   /**
-   * Send a game command (say, pose, quit, etc.)
+   * SendCommand submits a player's raw command line (say, pose, quit, ...)
+   * for parsing and dispatch. Proxies to CoreService.HandleCommand;
+   * command-history persistence happens core-side, so the gateway does no
+   * extra work. The connection_id ties the command to its originating stream
+   * for per-connection routing.
    *
    * @generated from rpc holomush.web.v1.WebService.SendCommand
    */
@@ -1451,8 +1951,12 @@ export const WebService: GenService<{
     output: typeof SendCommandResponseSchema;
   },
   /**
-   * Server-streaming event feed. Client receives game events
-   * (say, pose, arrive, leave) as they occur.
+   * StreamEvents opens the server-streaming game-event feed for a session.
+   * Proxies to CoreService.Subscribe; the gateway generates a per-stream
+   * connection_id, emits a synthetic STREAM_OPENED ControlFrame carrying it,
+   * forwards translated frames, and runs a best-effort Disconnect on stream
+   * exit (client disconnect, cancel, error, or STREAM_CLOSED). Session-store
+   * registration/deregistration is owned entirely by core's Subscribe path.
    *
    * @generated from rpc holomush.web.v1.WebService.StreamEvents
    */
@@ -1462,7 +1966,10 @@ export const WebService: GenService<{
     output: typeof StreamEventsResponseSchema;
   },
   /**
-   * Disconnect ends the session and triggers cleanup.
+   * Disconnect ends the game session out of band (not via stream teardown).
+   * Proxies to CoreService.Disconnect on a best-effort basis — RPC errors
+   * are logged but never surfaced to the caller. Forwards the session-token
+   * cookie header so core can enforce ownership.
    *
    * @generated from rpc holomush.web.v1.WebService.Disconnect
    */
@@ -1472,7 +1979,10 @@ export const WebService: GenService<{
     output: typeof DisconnectResponseSchema;
   },
   /**
-   * Retrieve command history for a session.
+   * GetCommandHistory retrieves the recent command lines a session has
+   * entered. Proxies to CoreService.GetCommandHistory; ownership is enforced
+   * core-side via the forwarded session-token header, and any failure (error
+   * or success=false) collapses to an empty history at the gateway.
    *
    * @generated from rpc holomush.web.v1.WebService.GetCommandHistory
    */
@@ -1482,7 +1992,11 @@ export const WebService: GenService<{
     output: typeof GetCommandHistoryResponseSchema;
   },
   /**
-   * Web auth RPCs.
+   * WebAuthenticatePlayer validates username/password and returns the
+   * player's character roster. Proxies to CoreService.AuthenticatePlayer; on
+   * success the gateway translates the core session token into a Set-Cookie
+   * signal. First runs the cookie-collision gate, short-circuiting with
+   * ALREADY_AUTHENTICATED if a valid session cookie is already present.
    *
    * @generated from rpc holomush.web.v1.WebService.WebAuthenticatePlayer
    */
@@ -1492,6 +2006,10 @@ export const WebService: GenService<{
     output: typeof WebAuthenticatePlayerResponseSchema;
   },
   /**
+   * WebSelectCharacter binds a character to a new or reattached game session.
+   * Proxies to CoreService.SelectCharacter using the session token read from
+   * the X-Session-Token cookie header; returns the resulting session_id.
+   *
    * @generated from rpc holomush.web.v1.WebService.WebSelectCharacter
    */
   webSelectCharacter: {
@@ -1500,6 +2018,10 @@ export const WebService: GenService<{
     output: typeof WebSelectCharacterResponseSchema;
   },
   /**
+   * WebCreatePlayer registers a new player account. Proxies to
+   * CoreService.CreatePlayer; on success the gateway sets the session cookie.
+   * Runs the cookie-collision gate first (ALREADY_AUTHENTICATED short-circuit).
+   *
    * @generated from rpc holomush.web.v1.WebService.WebCreatePlayer
    */
   webCreatePlayer: {
@@ -1508,7 +2030,10 @@ export const WebService: GenService<{
     output: typeof WebCreatePlayerResponseSchema;
   },
   /**
-   * Create an ephemeral guest player and character.
+   * WebCreateGuest provisions an ephemeral guest player and character.
+   * Proxies to CoreService.CreateGuest; on success the gateway sets a session
+   * cookie whose MaxAge matches the guest session's shorter TTL. Runs the
+   * cookie-collision gate first.
    *
    * @generated from rpc holomush.web.v1.WebService.WebCreateGuest
    */
@@ -1518,6 +2043,9 @@ export const WebService: GenService<{
     output: typeof WebCreateGuestResponseSchema;
   },
   /**
+   * WebCreateCharacter adds a character to the authenticated player. Proxies
+   * to CoreService.CreateCharacter using the cookie-derived session token.
+   *
    * @generated from rpc holomush.web.v1.WebService.WebCreateCharacter
    */
   webCreateCharacter: {
@@ -1526,6 +2054,10 @@ export const WebService: GenService<{
     output: typeof WebCreateCharacterResponseSchema;
   },
   /**
+   * WebListCharacters returns the authenticated player's character roster.
+   * Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
+   * CodeUnauthenticated (session expired or invalid).
+   *
    * @generated from rpc holomush.web.v1.WebService.WebListCharacters
    */
   webListCharacters: {
@@ -1534,6 +2066,10 @@ export const WebService: GenService<{
     output: typeof WebListCharactersResponseSchema;
   },
   /**
+   * WebLogout ends the player session and clears the session cookie. Proxies
+   * to CoreService.Logout (best-effort) when a token is present, then always
+   * emits the cookie-clear signal regardless of the RPC outcome.
+   *
    * @generated from rpc holomush.web.v1.WebService.WebLogout
    */
   webLogout: {
@@ -1542,6 +2078,10 @@ export const WebService: GenService<{
     output: typeof WebLogoutResponseSchema;
   },
   /**
+   * WebRequestPasswordReset initiates the email-based reset flow. Proxies to
+   * CoreService.RequestPasswordReset; to avoid leaking account existence the
+   * gateway reports success=true even when the underlying RPC errors.
+   *
    * @generated from rpc holomush.web.v1.WebService.WebRequestPasswordReset
    */
   webRequestPasswordReset: {
@@ -1550,6 +2090,9 @@ export const WebService: GenService<{
     output: typeof WebRequestPasswordResetResponseSchema;
   },
   /**
+   * WebConfirmPasswordReset completes a reset using the emailed token and a
+   * new password. Proxies to CoreService.ConfirmPasswordReset.
+   *
    * @generated from rpc holomush.web.v1.WebService.WebConfirmPasswordReset
    */
   webConfirmPasswordReset: {
@@ -1558,7 +2101,10 @@ export const WebService: GenService<{
     output: typeof WebConfirmPasswordResetResponseSchema;
   },
   /**
-   * Validate player session from cookie. Returns player info or Unauthenticated error.
+   * WebCheckSession validates the player session carried in the cookie and
+   * returns the player identity plus character roster, or a
+   * CodeUnauthenticated error. Proxies to CoreService.CheckPlayerSession; the
+   * web client's authed layout uses this to gate page loads.
    *
    * @generated from rpc holomush.web.v1.WebService.WebCheckSession
    */
@@ -1568,7 +2114,10 @@ export const WebService: GenService<{
     output: typeof WebCheckSessionResponseSchema;
   },
   /**
-   * Content store access (public, no auth required).
+   * WebGetContent fetches a single content-store item by exact key. Proxies
+   * to ContentService.GetContent (a separate gRPC service, NOT CoreService);
+   * public, no auth. Returns CodeUnimplemented if the gateway was built
+   * without a content client.
    *
    * @generated from rpc holomush.web.v1.WebService.WebGetContent
    */
@@ -1578,6 +2127,10 @@ export const WebService: GenService<{
     output: typeof WebGetContentResponseSchema;
   },
   /**
+   * WebListContent lists content-store items under a key prefix. Proxies to
+   * ContentService.ListContent (NOT CoreService); public, no auth. Returns
+   * CodeUnimplemented if no content client is configured.
+   *
    * @generated from rpc holomush.web.v1.WebService.WebListContent
    */
   webListContent: {
@@ -1609,8 +2162,12 @@ export const WebService: GenService<{
     output: typeof WebListSessionStreamsResponseSchema;
   },
   /**
-   * Session-management RPCs. The caller is identified via the X-Session-Token
-   * cookie header injected by CookieMiddleware; no token field in the request.
+   * WebListPlayerSessions returns the caller's active PlayerSessions (the
+   * device/tab login records, distinct from in-game game sessions), each
+   * flagged is_current for the calling session. Proxies to
+   * CoreService.ListPlayerSessions; the caller is identified via the
+   * X-Session-Token cookie header injected by CookieMiddleware — there is no
+   * token field in the request body.
    *
    * @generated from rpc holomush.web.v1.WebService.WebListPlayerSessions
    */
@@ -1620,6 +2177,10 @@ export const WebService: GenService<{
     output: typeof WebListPlayerSessionsResponseSchema;
   },
   /**
+   * WebRevokePlayerSession revokes one of the caller's PlayerSessions by id.
+   * Proxies to CoreService.RevokePlayerSession; caller identity comes from the
+   * X-Session-Token cookie header.
+   *
    * @generated from rpc holomush.web.v1.WebService.WebRevokePlayerSession
    */
   webRevokePlayerSession: {
@@ -1628,6 +2189,11 @@ export const WebService: GenService<{
     output: typeof WebRevokePlayerSessionResponseSchema;
   },
   /**
+   * WebRevokeOtherPlayerSessions revokes all of the caller's PlayerSessions
+   * except the current one ("log out everywhere else"). Proxies to
+   * CoreService.RevokeOtherPlayerSessions; caller identity comes from the
+   * X-Session-Token cookie header.
+   *
    * @generated from rpc holomush.web.v1.WebService.WebRevokeOtherPlayerSessions
    */
   webRevokeOtherPlayerSessions: {

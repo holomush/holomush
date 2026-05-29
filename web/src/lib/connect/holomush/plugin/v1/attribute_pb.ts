@@ -17,6 +17,10 @@ export const file_holomush_plugin_v1_attribute: GenFile = /*@__PURE__*/
   fileDesc("CiJob2xvbXVzaC9wbHVnaW4vdjEvYXR0cmlidXRlLnByb3RvEhJob2xvbXVzaC5wbHVnaW4udjEiEgoQR2V0U2NoZW1hUmVxdWVzdCLDAQoRR2V0U2NoZW1hUmVzcG9uc2USUAoOcmVzb3VyY2VfdHlwZXMYASADKAsyOC5ob2xvbXVzaC5wbHVnaW4udjEuR2V0U2NoZW1hUmVzcG9uc2UuUmVzb3VyY2VUeXBlc0VudHJ5GlwKElJlc291cmNlVHlwZXNFbnRyeRILCgNrZXkYASABKAkSNQoFdmFsdWUYAiABKAsyJi5ob2xvbXVzaC5wbHVnaW4udjEuUmVzb3VyY2VUeXBlU2NoZW1hOgI4ASK2AQoSUmVzb3VyY2VUeXBlU2NoZW1hEkoKCmF0dHJpYnV0ZXMYASADKAsyNi5ob2xvbXVzaC5wbHVnaW4udjEuUmVzb3VyY2VUeXBlU2NoZW1hLkF0dHJpYnV0ZXNFbnRyeRpUCg9BdHRyaWJ1dGVzRW50cnkSCwoDa2V5GAEgASgJEjAKBXZhbHVlGAIgASgOMiEuaG9sb211c2gucGx1Z2luLnYxLkF0dHJpYnV0ZVR5cGU6AjgBIlYKFlJlc29sdmVSZXNvdXJjZVJlcXVlc3QSHgoNcmVzb3VyY2VfdHlwZRgBIAEoCUIHukgEcgIQARIcCgtyZXNvdXJjZV9pZBgCIAEoCUIHukgEcgIQASLBAQoXUmVzb2x2ZVJlc291cmNlUmVzcG9uc2USTwoKYXR0cmlidXRlcxgBIAMoCzI7LmhvbG9tdXNoLnBsdWdpbi52MS5SZXNvbHZlUmVzb3VyY2VSZXNwb25zZS5BdHRyaWJ1dGVzRW50cnkaVQoPQXR0cmlidXRlc0VudHJ5EgsKA2tleRgBIAEoCRIxCgV2YWx1ZRgCIAEoCzIiLmhvbG9tdXNoLnBsdWdpbi52MS5BdHRyaWJ1dGVWYWx1ZToCOAEimwEKDkF0dHJpYnV0ZVZhbHVlEhYKDHN0cmluZ192YWx1ZRgBIAEoCUgAEhYKDG51bWJlcl92YWx1ZRgCIAEoAUgAEhQKCmJvb2xfdmFsdWUYAyABKAhIABI7ChFzdHJpbmdfbGlzdF92YWx1ZRgEIAEoCzIeLmhvbG9tdXNoLnBsdWdpbi52MS5TdHJpbmdMaXN0SABCBgoEa2luZCIcCgpTdHJpbmdMaXN0Eg4KBnZhbHVlcxgBIAMoCSqdAQoNQXR0cmlidXRlVHlwZRIeChpBVFRSSUJVVEVfVFlQRV9VTlNQRUNJRklFRBAAEhkKFUFUVFJJQlVURV9UWVBFX1NUUklORxABEhcKE0FUVFJJQlVURV9UWVBFX0JPT0wQAhIYChRBVFRSSUJVVEVfVFlQRV9GTE9BVBADEh4KGkFUVFJJQlVURV9UWVBFX1NUUklOR19MSVNUEAQy4AEKGEF0dHJpYnV0ZVJlc29sdmVyU2VydmljZRJYCglHZXRTY2hlbWESJC5ob2xvbXVzaC5wbHVnaW4udjEuR2V0U2NoZW1hUmVxdWVzdBolLmhvbG9tdXNoLnBsdWdpbi52MS5HZXRTY2hlbWFSZXNwb25zZRJqCg9SZXNvbHZlUmVzb3VyY2USKi5ob2xvbXVzaC5wbHVnaW4udjEuUmVzb2x2ZVJlc291cmNlUmVxdWVzdBorLmhvbG9tdXNoLnBsdWdpbi52MS5SZXNvbHZlUmVzb3VyY2VSZXNwb25zZUJEWkJnaXRodWIuY29tL2hvbG9tdXNoL2hvbG9tdXNoL3BrZy9wcm90by9ob2xvbXVzaC9wbHVnaW4vdjE7cGx1Z2ludjFiBnByb3RvMw", [file_buf_validate_validate]);
 
 /**
+ * GetSchemaRequest carries no parameters. The plugin responds with the full
+ * schema for all resource types it owns; there is no per-type filtering at the
+ * protocol level.
+ *
  * @generated from message holomush.plugin.v1.GetSchemaRequest
  */
 export type GetSchemaRequest = Message<"holomush.plugin.v1.GetSchemaRequest"> & {
@@ -30,11 +34,20 @@ export const GetSchemaRequestSchema: GenMessage<GetSchemaRequest> = /*@__PURE__*
   messageDesc(file_holomush_plugin_v1_attribute, 0);
 
 /**
+ * GetSchemaResponse describes the attribute schema for every resource type the
+ * plugin owns. The host validates that every resource type declared in the
+ * manifest's resource_types list appears as a key here; a missing key causes
+ * plugin load to fail. The schema is used by the host to build a
+ * types.NamespaceSchema per resource type for the policy engine's attribute
+ * registry.
+ *
  * @generated from message holomush.plugin.v1.GetSchemaResponse
  */
 export type GetSchemaResponse = Message<"holomush.plugin.v1.GetSchemaResponse"> & {
   /**
-   * Keyed by resource type name (e.g., "channel", "widget").
+   * Attribute schema keyed by resource type name matching the manifest's
+   * resource_types list (e.g., "scene", "channel"). Each value describes the
+   * attributes resolvable for that type.
    *
    * @generated from field: map<string, holomush.plugin.v1.ResourceTypeSchema> resource_types = 1;
    */
@@ -49,10 +62,20 @@ export const GetSchemaResponseSchema: GenMessage<GetSchemaResponse> = /*@__PURE_
   messageDesc(file_holomush_plugin_v1_attribute, 1);
 
 /**
+ * ResourceTypeSchema describes all resolvable attributes for one resource
+ * type. Every attribute that ResolveResource may ever return for this type
+ * MUST appear here; attributes returned at resolution time but absent from
+ * the schema are ignored by the host's policy engine.
+ *
  * @generated from message holomush.plugin.v1.ResourceTypeSchema
  */
 export type ResourceTypeSchema = Message<"holomush.plugin.v1.ResourceTypeSchema"> & {
   /**
+   * Attribute names for this resource type, each mapped to its declared type.
+   * Names are dot-free strings (e.g., "owner", "state", "visibility"). The set
+   * MUST be a superset of all keys that ResolveResource can return for this
+   * resource type — schema and response MUST be consistent.
+   *
    * @generated from field: map<string, holomush.plugin.v1.AttributeType> attributes = 1;
    */
   attributes: { [key: string]: AttributeType };
@@ -66,15 +89,28 @@ export const ResourceTypeSchemaSchema: GenMessage<ResourceTypeSchema> = /*@__PUR
   messageDesc(file_holomush_plugin_v1_attribute, 2);
 
 /**
+ * ResolveResourceRequest identifies the single resource whose attributes the
+ * host needs for an in-flight ABAC policy evaluation.
+ *
  * @generated from message holomush.plugin.v1.ResolveResourceRequest
  */
 export type ResolveResourceRequest = Message<"holomush.plugin.v1.ResolveResourceRequest"> & {
   /**
+   * The resource type to resolve, matching one of the keys in the plugin's
+   * GetSchemaResponse. Must be a non-empty string; buf validate enforces
+   * min_len = 1. Plugins MUST reject types they do not own with
+   * INVALID_ARGUMENT.
+   *
    * @generated from field: string resource_type = 1;
    */
   resourceType: string;
 
   /**
+   * The resource instance identifier, stripped of the "type:" prefix. Must be
+   * non-empty; buf validate enforces min_len = 1. For the scene plugin this is
+   * the raw scene ULID (e.g., "01JXYZ..."). Plugins SHOULD return NOT_FOUND
+   * when this ID is unknown.
+   *
    * @generated from field: string resource_id = 2;
    */
   resourceId: string;
@@ -88,10 +124,26 @@ export const ResolveResourceRequestSchema: GenMessage<ResolveResourceRequest> = 
   messageDesc(file_holomush_plugin_v1_attribute, 3);
 
 /**
+ * ResolveResourceResponse carries the resolved attribute bag for the requested
+ * resource instance. The host converts this into a map[string]any via
+ * internal/plugin/attribute_proxy.go::convertProtoAttributes and passes it to
+ * the policy engine's evaluator.
+ *
+ * Optional attributes MUST be omitted from the map entirely when unresolved —
+ * do not include a key with an empty-string or zero value as a sentinel. The
+ * DSL evaluator treats absent keys as fail-safe false; a present empty-string
+ * value is NOT the same as absent and may match an unintended policy condition.
+ *
  * @generated from message holomush.plugin.v1.ResolveResourceResponse
  */
 export type ResolveResourceResponse = Message<"holomush.plugin.v1.ResolveResourceResponse"> & {
   /**
+   * Resolved attribute values keyed by attribute name, matching the names
+   * declared in GetSchemaResponse for the requested resource type. Attributes
+   * whose values are unknown or not applicable for this resource instance MUST
+   * be omitted from the map rather than included with a zero or empty-string
+   * sentinel.
+   *
    * @generated from field: map<string, holomush.plugin.v1.AttributeValue> attributes = 1;
    */
   attributes: { [key: string]: AttributeValue };
@@ -105,32 +157,57 @@ export const ResolveResourceResponseSchema: GenMessage<ResolveResourceResponse> 
   messageDesc(file_holomush_plugin_v1_attribute, 4);
 
 /**
+ * AttributeValue is a discriminated union carrying the runtime value of a
+ * single resolved attribute. Exactly one kind field should be set; the variant
+ * chosen SHOULD match the AttributeType declared in GetSchemaResponse for the
+ * same attribute name.
+ *
  * @generated from message holomush.plugin.v1.AttributeValue
  */
 export type AttributeValue = Message<"holomush.plugin.v1.AttributeValue"> & {
   /**
+   * Exactly one of the following fields carries the attribute value. The kind
+   * oneof allows the host's converter (attribute_proxy.go::convertProtoAttributes)
+   * to switch on the concrete variant and produce a typed map[string]any entry
+   * for the policy evaluator. An AttributeValue with no kind set (all-zero) is
+   * silently dropped by the converter.
+   *
    * @generated from oneof holomush.plugin.v1.AttributeValue.kind
    */
   kind: {
     /**
+     * String value for ATTRIBUTE_TYPE_STRING attributes, e.g. owner ULID,
+     * state name, or visibility label.
+     *
      * @generated from field: string string_value = 1;
      */
     value: string;
     case: "stringValue";
   } | {
     /**
+     * Floating-point value for ATTRIBUTE_TYPE_FLOAT attributes. Stored as
+     * double (float64) to cover the full range needed by numeric policy
+     * comparisons.
+     *
      * @generated from field: double number_value = 2;
      */
     value: number;
     case: "numberValue";
   } | {
     /**
+     * Boolean value for ATTRIBUTE_TYPE_BOOL attributes, e.g. witness flags
+     * such as has_location.
+     *
      * @generated from field: bool bool_value = 3;
      */
     value: boolean;
     case: "boolValue";
   } | {
     /**
+     * String-list value for ATTRIBUTE_TYPE_STRING_LIST attributes, e.g.
+     * participant character IDs or invitee lists. Use StringList rather than
+     * repeated fields to fit within the oneof constraint.
+     *
      * @generated from field: holomush.plugin.v1.StringList string_list_value = 4;
      */
     value: StringList;
@@ -146,10 +223,17 @@ export const AttributeValueSchema: GenMessage<AttributeValue> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_attribute, 5);
 
 /**
+ * StringList wraps a repeated string so it can appear inside the
+ * AttributeValue.kind oneof. Proto3 does not allow repeated fields directly
+ * inside a oneof; this wrapper bridges that constraint.
+ *
  * @generated from message holomush.plugin.v1.StringList
  */
 export type StringList = Message<"holomush.plugin.v1.StringList"> & {
   /**
+   * The string elements of the list. Order is preserved; the policy engine
+   * treats the list as an ordered sequence for membership checks.
+   *
    * @generated from field: repeated string values = 1;
    */
   values: string[];
@@ -163,30 +247,57 @@ export const StringListSchema: GenMessage<StringList> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_attribute, 6);
 
 /**
+ * AttributeType declares the type of a single attribute in ResourceTypeSchema.
+ * The host uses this declaration to build the policy engine's type registry,
+ * which drives DSL type-checking and comparison semantics. Mismatches between
+ * declared and returned types produce DSL evaluation errors at runtime.
+ *
  * @generated from enum holomush.plugin.v1.AttributeType
  */
 export enum AttributeType {
   /**
+   * Zero value sentinel. Attributes with UNSPECIFIED type are mapped to
+   * AttrTypeString by the host's schema converter
+   * (internal/plugin/attribute_proxy.go::protoAttrTypeToAttrType). Prefer an
+   * explicit value in new schemas.
+   *
    * @generated from enum value: ATTRIBUTE_TYPE_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
+   * String-typed attribute. Returned as AttributeValue.string_value in
+   * ResolveResourceResponse. Maps to types.AttrTypeString in the host's policy
+   * engine. Used for identifier-like fields such as owner ULID, state enum
+   * names, and visibility labels.
+   *
    * @generated from enum value: ATTRIBUTE_TYPE_STRING = 1;
    */
   STRING = 1,
 
   /**
+   * Boolean-typed attribute. Returned as AttributeValue.bool_value. Maps to
+   * types.AttrTypeBool. Useful for binary state flags and witness attributes
+   * (has_location, is_archived).
+   *
    * @generated from enum value: ATTRIBUTE_TYPE_BOOL = 2;
    */
   BOOL = 2,
 
   /**
+   * 64-bit floating-point numeric attribute. Returned as
+   * AttributeValue.number_value (double). Maps to types.AttrTypeFloat. Used
+   * for numeric comparisons in policies, e.g. vote tallies or capacity counts.
+   *
    * @generated from enum value: ATTRIBUTE_TYPE_FLOAT = 3;
    */
   FLOAT = 3,
 
   /**
+   * Ordered list of strings. Returned as AttributeValue.string_list_value.
+   * Maps to types.AttrTypeStringList in the policy engine. Used for multi-value
+   * fields such as participant character IDs or tag sets.
+   *
    * @generated from enum value: ATTRIBUTE_TYPE_STRING_LIST = 4;
    */
   STRING_LIST = 4,
@@ -199,16 +310,42 @@ export const AttributeTypeSchema: GenEnum<AttributeType> = /*@__PURE__*/
   enumDesc(file_holomush_plugin_v1_attribute, 0);
 
 /**
- * AttributeResolverService is implemented by binary plugins that declare resource_types.
- * The host calls GetSchema once during plugin load to discover attribute schemas,
- * and ResolveResource during ABAC policy evaluation to resolve resource attributes.
+ * AttributeResolverService lets binary plugins expose ABAC attribute resolution
+ * to the host's policy engine for resource types the plugin owns. The host
+ * auto-registers this service name and calls each plugin that declares
+ * resource_types in its manifest. Plugins MUST NOT list
+ * holomush.plugin.v1.AttributeResolverService in their manifest `provides:`
+ * field — doing so causes SERVICE_ALREADY_REGISTERED at startup. Declare
+ * resource_types in the manifest instead; the host wires the gRPC client
+ * automatically during plugin load (see internal/plugin/manager.go::discoverAndRegisterAttributes).
+ *
+ * The interaction has two phases:
+ *  1. Load-time schema discovery: the host calls GetSchema once after Init
+ *     returns and registers a PluginAttributeProvider per declared resource
+ *     type. If the schema does not cover every declared resource type, plugin
+ *     load is rolled back (internal/plugin/manager.go::discoverAndRegisterAttributes).
+ *  2. Per-request attribute resolution: the host calls ResolveResource during
+ *     ABAC policy evaluation whenever a policy references an attribute for one
+ *     of the plugin's owned resource types. The call is made via the host's
+ *     PluginAttributeProvider proxy (internal/plugin/attribute_proxy.go::ResolveResource).
+ *
+ * Reference implementation: plugins/core-scenes/resolver.go::SceneResolver.
  *
  * @generated from service holomush.plugin.v1.AttributeResolverService
  */
 export const AttributeResolverService: GenService<{
   /**
-   * GetSchema returns the attribute schema for resource types this plugin owns.
-   * Called once during plugin load.
+   * GetSchema returns the full attribute schema for every resource type this
+   * plugin owns. The host calls this exactly once per plugin load, after Init
+   * returns, and caches the result for the lifetime of the plugin process.
+   * The response MUST include an entry for every resource type declared in the
+   * manifest's resource_types list — missing entries cause load to fail with a
+   * hard error and trigger plugin unload rollback. The schema MUST be
+   * deterministic across calls; the host does not re-query after the initial
+   * load.
+   *
+   * See: internal/plugin/manager.go::discoverAndRegisterAttributes (caller),
+   * plugins/core-scenes/resolver.go::GetSchema (reference implementation).
    *
    * @generated from rpc holomush.plugin.v1.AttributeResolverService.GetSchema
    */
@@ -218,8 +355,23 @@ export const AttributeResolverService: GenService<{
     output: typeof GetSchemaResponseSchema;
   },
   /**
-   * ResolveResource returns attributes for a specific resource instance.
-   * Called during ABAC policy evaluation.
+   * ResolveResource returns the current attribute values for a single resource
+   * instance identified by type and ID. The host calls this during ABAC policy
+   * evaluation when the active policy references an attribute belonging to one
+   * of the plugin's owned resource types. It is invoked per authorization
+   * check, not cached. The plugin MUST reject resource_type values it does not
+   * own with INVALID_ARGUMENT so host-side misrouting is visible immediately.
+   * The plugin SHOULD return NOT_FOUND when the resource ID is unknown.
+   *
+   * Optional attributes MUST be omitted from the response map rather than
+   * emitted with an empty-string or zero sentinel value. The DSL evaluator
+   * treats missing map keys as fail-safe false for every operator; an
+   * empty-string value would match any other unresolved empty-string peer and
+   * create a fail-open condition. See .claude/rules/abac-providers.md for the
+   * full contract.
+   *
+   * See: internal/plugin/attribute_proxy.go::ResolveResource (caller),
+   * plugins/core-scenes/resolver.go::ResolveResource (reference implementation).
    *
    * @generated from rpc holomush.plugin.v1.AttributeResolverService.ResolveResource
    */

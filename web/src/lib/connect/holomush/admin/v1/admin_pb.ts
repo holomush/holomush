@@ -22,6 +22,8 @@ export const file_holomush_admin_v1_admin: GenFile = /*@__PURE__*/
   fileDesc("Ch1ob2xvbXVzaC9hZG1pbi92MS9hZG1pbi5wcm90bxIRaG9sb211c2guYWRtaW4udjEiDwoNU3RhdHVzUmVxdWVzdCIyCg5TdGF0dXNSZXNwb25zZRIPCgd2ZXJzaW9uGAEgASgJEg8KB2hlYWx0aHkYAiABKAgiTAoTQXV0aGVudGljYXRlUmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCRIRCgl0b3RwX2NvZGUYAyABKAkicAoUQXV0aGVudGljYXRlUmVzcG9uc2USFQoNc2Vzc2lvbl90b2tlbhgBIAEoCRIuCgpleHBpcmVzX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCglwbGF5ZXJfaWQYAyABKAkiOwoOQXBwcm92ZVJlcXVlc3QSFQoNc2Vzc2lvbl90b2tlbhgBIAEoCRISCgpyZXF1ZXN0X2lkGAIgASgMIhEKD0FwcHJvdmVSZXNwb25zZSJDChBSZXNldFRPVFBSZXF1ZXN0EhUKDXNlc3Npb25fdG9rZW4YASABKAkSGAoQdGFyZ2V0X3BsYXllcl9pZBgCIAEoCSIkChFSZXNldFRPVFBSZXNwb25zZRIPCgdjbGVhcmVkGAEgASgIMpEHCgxBZG1pblNlcnZpY2USTQoGU3RhdHVzEiAuaG9sb211c2guYWRtaW4udjEuU3RhdHVzUmVxdWVzdBohLmhvbG9tdXNoLmFkbWluLnYxLlN0YXR1c1Jlc3BvbnNlEl8KDEF1dGhlbnRpY2F0ZRImLmhvbG9tdXNoLmFkbWluLnYxLkF1dGhlbnRpY2F0ZVJlcXVlc3QaJy5ob2xvbXVzaC5hZG1pbi52MS5BdXRoZW50aWNhdGVSZXNwb25zZRJQCgdBcHByb3ZlEiEuaG9sb211c2guYWRtaW4udjEuQXBwcm92ZVJlcXVlc3QaIi5ob2xvbXVzaC5hZG1pbi52MS5BcHByb3ZlUmVzcG9uc2USVgoJUmVzZXRUT1RQEiMuaG9sb211c2guYWRtaW4udjEuUmVzZXRUT1RQUmVxdWVzdBokLmhvbG9tdXNoLmFkbWluLnYxLlJlc2V0VE9UUFJlc3BvbnNlEkwKBVJla2V5Eh8uaG9sb211c2guYWRtaW4udjEuUmVrZXlSZXF1ZXN0GiAuaG9sb211c2guYWRtaW4udjEuUmVrZXlQcm9ncmVzczABElgKC1Jla2V5UmVzdW1lEiUuaG9sb211c2guYWRtaW4udjEuUmVrZXlSZXN1bWVSZXF1ZXN0GiAuaG9sb211c2guYWRtaW4udjEuUmVrZXlQcm9ncmVzczABElkKClJla2V5QWJvcnQSJC5ob2xvbXVzaC5hZG1pbi52MS5SZWtleUFib3J0UmVxdWVzdBolLmhvbG9tdXNoLmFkbWluLnYxLlJla2V5QWJvcnRSZXNwb25zZRJcCgtSZWtleVN0YXR1cxIlLmhvbG9tdXNoLmFkbWluLnYxLlJla2V5U3RhdHVzUmVxdWVzdBomLmhvbG9tdXNoLmFkbWluLnYxLlJla2V5U3RhdHVzUmVzcG9uc2USWgoJUmVrZXlMaXN0EiMuaG9sb211c2guYWRtaW4udjEuUmVrZXlMaXN0UmVxdWVzdBomLmhvbG9tdXNoLmFkbWluLnYxLlJla2V5U3RhdHVzUmVzcG9uc2UwARJqCg9BZG1pblJlYWRTdHJlYW0SKS5ob2xvbXVzaC5hZG1pbi52MS5BZG1pblJlYWRTdHJlYW1SZXF1ZXN0GiouaG9sb211c2guYWRtaW4udjEuQWRtaW5SZWFkU3RyZWFtUmVzcG9uc2UwAUJCWkBnaXRodWIuY29tL2hvbG9tdXNoL2hvbG9tdXNoL3BrZy9wcm90by9ob2xvbXVzaC9hZG1pbi92MTthZG1pbnYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_holomush_admin_v1_read_stream, file_holomush_admin_v1_rekey]);
 
 /**
+ * StatusRequest carries no fields; the Status RPC requires no input.
+ *
  * @generated from message holomush.admin.v1.StatusRequest
  */
 export type StatusRequest = Message<"holomush.admin.v1.StatusRequest"> & {
@@ -35,18 +37,22 @@ export const StatusRequestSchema: GenMessage<StatusRequest> = /*@__PURE__*/
   messageDesc(file_holomush_admin_v1_admin, 0);
 
 /**
+ * StatusResponse reports the admin socket server's health and build identity.
+ *
  * @generated from message holomush.admin.v1.StatusResponse
  */
 export type StatusResponse = Message<"holomush.admin.v1.StatusResponse"> & {
   /**
-   * version is the server binary version string (set via -X ldflag).
+   * version is the server binary version string (set via -X ldflag at build time).
    *
    * @generated from field: string version = 1;
    */
   version: string;
 
   /**
-   * healthy is true iff the admin socket HTTP server is accepting requests.
+   * healthy is true when the admin socket HTTP server is accepting requests.
+   * compositeHandler.Status always returns true; false would only appear if
+   * the handler itself were somehow called during shutdown.
    *
    * @generated from field: bool healthy = 2;
    */
@@ -61,20 +67,32 @@ export const StatusResponseSchema: GenMessage<StatusResponse> = /*@__PURE__*/
   messageDesc(file_holomush_admin_v1_admin, 1);
 
 /**
+ * AuthenticateRequest carries the operator credentials and TOTP code for
+ * the two-factor authentication step that precedes all other admin operations.
+ *
  * @generated from message holomush.admin.v1.AuthenticateRequest
  */
 export type AuthenticateRequest = Message<"holomush.admin.v1.AuthenticateRequest"> & {
   /**
+   * username is the in-game operator account name for credential lookup.
+   *
    * @generated from field: string username = 1;
    */
   username: string;
 
   /**
+   * password is the operator account password (plaintext over the UNIX socket;
+   * the socket path is a trust boundary and the connection is never exposed
+   * to the network).
+   *
    * @generated from field: string password = 2;
    */
   password: string;
 
   /**
+   * totp_code is the current TOTP one-time password from the operator's
+   * authenticator app. The provider rejects expired, reused, and locked codes.
+   *
    * @generated from field: string totp_code = 3;
    */
   totpCode: string;
@@ -88,20 +106,31 @@ export const AuthenticateRequestSchema: GenMessage<AuthenticateRequest> = /*@__P
   messageDesc(file_holomush_admin_v1_admin, 2);
 
 /**
+ * AuthenticateResponse is returned on successful operator authentication.
+ *
  * @generated from message holomush.admin.v1.AuthenticateResponse
  */
 export type AuthenticateResponse = Message<"holomush.admin.v1.AuthenticateResponse"> & {
   /**
+   * session_token is the opaque short-lived bearer token (10-minute TTL) to
+   * supply in session_token fields of subsequent admin RPCs.
+   *
    * @generated from field: string session_token = 1;
    */
   sessionToken: string;
 
   /**
+   * expires_at is the UTC timestamp after which session_token will be rejected
+   * with DENY_SESSION_EXPIRED.
+   *
    * @generated from field: google.protobuf.Timestamp expires_at = 2;
    */
   expiresAt?: Timestamp | undefined;
 
   /**
+   * player_id is the ULID of the authenticated operator's player record,
+   * included so callers can display or log the operator identity.
+   *
    * @generated from field: string player_id = 3;
    */
   playerId: string;
@@ -115,15 +144,26 @@ export const AuthenticateResponseSchema: GenMessage<AuthenticateResponse> = /*@_
   messageDesc(file_holomush_admin_v1_admin, 3);
 
 /**
+ * ApproveRequest carries the approver's session token and the ID of the
+ * pending approval row to sign off.
+ *
  * @generated from message holomush.admin.v1.ApproveRequest
  */
 export type ApproveRequest = Message<"holomush.admin.v1.ApproveRequest"> & {
   /**
+   * session_token is the approving operator's bearer token from Authenticate.
+   * Used to resolve the approver's player identity for the self-approval check
+   * (INV-D6) and for capability/role re-assertion (INV-D16).
+   *
    * @generated from field: string session_token = 1;
    */
   sessionToken: string;
 
   /**
+   * request_id is the 16-byte ULID of the admin_approvals row to approve.
+   * Must be non-zero; the all-zero sentinel is rejected as an invalid forgery
+   * shape even though ulid.Parse accepts it.
+   *
    * 16-byte ULID
    *
    * @generated from field: bytes request_id = 2;
@@ -139,6 +179,8 @@ export const ApproveRequestSchema: GenMessage<ApproveRequest> = /*@__PURE__*/
   messageDesc(file_holomush_admin_v1_admin, 4);
 
 /**
+ * ApproveResponse is empty; a nil error is the success signal.
+ *
  * @generated from message holomush.admin.v1.ApproveResponse
  */
 export type ApproveResponse = Message<"holomush.admin.v1.ApproveResponse"> & {
@@ -152,15 +194,24 @@ export const ApproveResponseSchema: GenMessage<ApproveResponse> = /*@__PURE__*/
   messageDesc(file_holomush_admin_v1_admin, 5);
 
 /**
+ * ResetTOTPRequest identifies the target player whose TOTP enrollment should
+ * be cleared by an authenticated admin operator.
+ *
  * @generated from message holomush.admin.v1.ResetTOTPRequest
  */
 export type ResetTOTPRequest = Message<"holomush.admin.v1.ResetTOTPRequest"> & {
   /**
+   * session_token is the operator's bearer token from Authenticate.
+   *
    * @generated from field: string session_token = 1;
    */
   sessionToken: string;
 
   /**
+   * target_player_id is the ULID of the player whose TOTP enrollment will be
+   * cleared. Must be a valid non-zero ULID; the handler rejects both
+   * malformed strings and the all-zero sentinel.
+   *
    * @generated from field: string target_player_id = 2;
    */
   targetPlayerId: string;
@@ -174,10 +225,16 @@ export const ResetTOTPRequestSchema: GenMessage<ResetTOTPRequest> = /*@__PURE__*
   messageDesc(file_holomush_admin_v1_admin, 6);
 
 /**
+ * ResetTOTPResponse reports whether the TOTP enrollment was actually present.
+ *
  * @generated from message holomush.admin.v1.ResetTOTPResponse
  */
 export type ResetTOTPResponse = Message<"holomush.admin.v1.ResetTOTPResponse"> & {
   /**
+   * cleared is true when the player was TOTP-enrolled and the enrollment was
+   * removed. False when the player had no active TOTP enrollment (no-op);
+   * mirrors ClearResult.WasEnrolled from internal/admin/auth/reset_handler.go.
+   *
    * @generated from field: bool cleared = 1;
    */
   cleared: boolean;
@@ -193,13 +250,18 @@ export const ResetTOTPResponseSchema: GenMessage<ResetTOTPResponse> = /*@__PURE_
 /**
  * AdminService is the break-glass operator administration service. It is
  * served exclusively over a UNIX domain socket (admin.sock) and is never
- * exposed over the network.
+ * exposed over the network. The compositeHandler implementation delegates
+ * each RPC to a registered handler; unregistered RPCs return Unimplemented,
+ * allowing incremental feature deployment without breaking callers.
  *
  * @generated from service holomush.admin.v1.AdminService
  */
 export const AdminService: GenService<{
   /**
-   * Status returns the admin-socket server's liveness state and binary version.
+   * Status returns the admin-socket server's liveness state and the binary
+   * version string stamped at build time. No authentication is required;
+   * it is intended as a health-check endpoint for operators and monitoring.
+   * Implemented directly in compositeHandler; never returns an error.
    *
    * @generated from rpc holomush.admin.v1.AdminService.Status
    */
@@ -209,9 +271,14 @@ export const AdminService: GenService<{
     output: typeof StatusResponseSchema;
   },
   /**
-   * Authenticate verifies operator credentials + TOTP and returns a
-   * short-lived (10 min) session token for use in Approve and ResetTOTP.
-   * Spec §3 wire surface; INV-D1, INV-D2.
+   * Authenticate verifies operator credentials (username + password) and a
+   * TOTP one-time code, then issues a short-lived (10-minute) opaque session
+   * token. The token is returned in session_token and must be supplied in
+   * subsequent Approve, ResetTOTP, and Rekey* RPCs. Requires the caller to
+   * hold the crypto.operator capability and the admin role (validated inside
+   * OperatorAuthProvider via AssertOperatorAdmin, internal/admin/auth).
+   * Returns DENY_INVALID_CREDENTIALS / DENY_BAD_TOTP / DENY_NOT_OPERATOR /
+   * DENY_NOT_ADMIN_ROLE on rejection; DENY_LOCKED when TOTP is rate-limited.
    *
    * @generated from rpc holomush.admin.v1.AdminService.Authenticate
    */
@@ -221,8 +288,14 @@ export const AdminService: GenService<{
     output: typeof AuthenticateResponseSchema;
   },
   /**
-   * Approve is the second-op signoff on a pending admin_approvals row.
-   * Spec §3, §6 Approve flow; INV-D5, INV-D6, INV-D7.
+   * Approve is the second-operator signoff on a pending admin_approvals row.
+   * The caller supplies their session_token (proving identity and live
+   * operator status) and the request_id of the approval row to sign off.
+   * Repo.MarkApproved atomically enforces three invariants: INV-D5 (the row
+   * must not be expired), INV-D6 (the approver cannot be the same player as
+   * the primary operator who opened the row), and INV-D7 (each row may only
+   * be approved once). Requires the crypto.operator capability and admin role
+   * re-checked at call time (INV-D16); handler in internal/admin/approval.
    *
    * @generated from rpc holomush.admin.v1.AdminService.Approve
    */
@@ -232,9 +305,13 @@ export const AdminService: GenService<{
     output: typeof ApproveResponseSchema;
   },
   /**
-   * ResetTOTP clears a target player's TOTP enrollment and emits a
-   * crypto.totp_cleared audit event with cleared_by="admin_reset".
-   * Spec §3, §4 reset flow.
+   * ResetTOTP clears a target player's TOTP enrollment, allowing them to
+   * re-enroll on next login. On success, AuditingService.ClearTOTP emits a
+   * crypto.totp_cleared audit event with cleared_by="admin_reset" (T13).
+   * Response.cleared is false when the player was not enrolled (no-op).
+   * Requires a valid session_token with the crypto.operator capability and
+   * admin role re-checked at call time (INV-D16); handler in
+   * internal/admin/auth (reset_handler.go).
    *
    * @generated from rpc holomush.admin.v1.AdminService.ResetTOTP
    */
@@ -244,8 +321,14 @@ export const AdminService: GenService<{
     output: typeof ResetTOTPResponseSchema;
   },
   /**
-   * Rekey initiates a full DEK rekey for a context and streams 7-phase
-   * orchestrator progress back to the caller. Spec §7; INV-E surface.
+   * Rekey initiates a fresh DEK rekey for the given context. Requires the
+   * crypto.operator capability and admin role (re-checked at call time,
+   * INV-D16). Streams a single terminal RekeyProgress event: RekeyCompleted
+   * on success or RekeyError on orchestrator failure. Per-phase progress
+   * updates are pre-defined in the proto but not yet emitted (follow-up).
+   * Uses the shared RekeyProgress stream type (also used by RekeyResume) —
+   * the buf RPC_REQUEST_RESPONSE_UNIQUE / RPC_RESPONSE_STANDARD_NAME
+   * exemptions are intentional (jxo8.7.27). Handler: internal/admin/socket/rekey_handler.go.
    *
    * @generated from rpc holomush.admin.v1.AdminService.Rekey
    */
@@ -255,8 +338,14 @@ export const AdminService: GenService<{
     output: typeof RekeyProgressSchema;
   },
   /**
-   * RekeyResume resumes a paused or interrupted rekey and streams progress.
-   * Spec §7; INV-E surface.
+   * RekeyResume resumes a paused or interrupted rekey identified by
+   * request_id. Requires the crypto.operator capability and admin role
+   * (INV-D16). Idempotency (INV-E16) and same-args invariant (INV-E4) are
+   * enforced inside the orchestrator, not here. The handler validates that
+   * request_id is a non-zero 16-byte ULID and forwards it to the orchestrator
+   * adapter, which looks up the checkpoint to resolve ContextType/ContextID.
+   * Streams a terminal RekeyProgress event — same shared type as Rekey.
+   * Handler: internal/admin/socket/rekey_handler.go.
    *
    * @generated from rpc holomush.admin.v1.AdminService.RekeyResume
    */
@@ -266,8 +355,12 @@ export const AdminService: GenService<{
     output: typeof RekeyProgressSchema;
   },
   /**
-   * RekeyAbort cancels an in-progress rekey operation.
-   * Spec §7; INV-E surface.
+   * RekeyAbort cancels an in-progress rekey checkpoint. Requires the
+   * crypto.operator capability only; no admin role re-check and no
+   * dual-control approval — abort is single-control regardless of site
+   * policy (INV-E17). Any crypto.operator session may abort any non-terminal
+   * checkpoint, not just the primary operator who started it.
+   * Handler: internal/admin/socket/rekey_handler.go.
    *
    * @generated from rpc holomush.admin.v1.AdminService.RekeyAbort
    */
@@ -277,8 +370,11 @@ export const AdminService: GenService<{
     output: typeof RekeyAbortResponseSchema;
   },
   /**
-   * RekeyStatus returns the current state of a single rekey operation.
-   * Spec §7; INV-E surface.
+   * RekeyStatus returns the current state of a single rekey operation
+   * identified by request_id. Requires the crypto.operator capability;
+   * no admin role re-check. Reads from the crypto_rekey_checkpoints table
+   * via CheckpointStatusReader.GetCheckpoint.
+   * Handler: internal/admin/socket/rekey_handler.go.
    *
    * @generated from rpc holomush.admin.v1.AdminService.RekeyStatus
    */
@@ -288,8 +384,12 @@ export const AdminService: GenService<{
     output: typeof RekeyStatusResponseSchema;
   },
   /**
-   * RekeyList streams status records for active (and optionally terminal)
-   * rekey operations. Spec §7; INV-E surface.
+   * RekeyList streams status records for rekey operations. By default only
+   * non-terminal checkpoints are returned; set include_terminal to include
+   * completed and aborted rows. Results are capped at 100 rows (any limit
+   * above 100 or zero is silently clamped to 100). Requires the
+   * crypto.operator capability; no admin role re-check.
+   * Handler: internal/admin/socket/rekey_handler.go.
    *
    * @generated from rpc holomush.admin.v1.AdminService.RekeyList
    */
@@ -299,10 +399,13 @@ export const AdminService: GenService<{
     output: typeof RekeyStatusResponseSchema;
   },
   /**
-   * AdminReadStream is the operator break-glass streaming read RPC.
-   * Streams EventFrame payloads (with typed metadata_only + no_plaintext_reason
-   * redaction fields) for the requested context(s) and time bounds.
-   * Spec sub-epic F §3.2, §3.3; ADR-0017.
+   * AdminReadStream is the operator break-glass streaming read RPC. Streams
+   * EventFrame payloads for the requested context(s) and time bounds, with
+   * typed metadata_only and no_plaintext_reason redaction fields for
+   * destroyed-DEK and plaintext-suppressed events. When dual_control is set
+   * in the request, the handler blocks until a second operator approves via
+   * the admin_approvals table before emitting any event frames (INV-F11/F17).
+   * Handler: internal/admin/socket/handlers.go (delegated to ReadStreamRPCHandler).
    *
    * @generated from rpc holomush.admin.v1.AdminService.AdminReadStream
    */

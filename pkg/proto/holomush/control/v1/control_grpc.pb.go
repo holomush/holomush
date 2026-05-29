@@ -30,11 +30,22 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// ControlService provides administrative operations for HoloMUSH processes.
+// The mTLS-protected admin surface for a running HoloMUSH process.
+// Both the core server and the gateway register an instance on startup
+// (see cmd/holomush/deps.go and cmd/holomush/gateway.go). Callers must
+// present a valid client certificate issued by the game's root CA.
 type ControlServiceClient interface {
-	// Shutdown initiates process shutdown.
+	// Triggers an asynchronous process exit via the registered shutdown hook.
+	// The RPC returns immediately with a confirmation message; the shutdown
+	// callback runs in a background goroutine. Callers should not expect the
+	// connection to remain open after the response arrives.
+	// Grounded in: internal/control/grpc_server.go::Shutdown
 	Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*ShutdownResponse, error)
-	// Status returns current process status.
+	// Returns a snapshot of the process's liveness and identity without
+	// requiring authentication beyond the mTLS channel. Reads from an atomic
+	// running flag, os.Getpid(), a monotonic start timestamp, and the
+	// component label supplied at construction time.
+	// Grounded in: internal/control/grpc_server.go::Status
 	Status(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (*StatusResponse, error)
 }
 
@@ -70,11 +81,22 @@ func (c *controlServiceClient) Status(ctx context.Context, in *StatusRequest, op
 // All implementations must embed UnimplementedControlServiceServer
 // for forward compatibility.
 //
-// ControlService provides administrative operations for HoloMUSH processes.
+// The mTLS-protected admin surface for a running HoloMUSH process.
+// Both the core server and the gateway register an instance on startup
+// (see cmd/holomush/deps.go and cmd/holomush/gateway.go). Callers must
+// present a valid client certificate issued by the game's root CA.
 type ControlServiceServer interface {
-	// Shutdown initiates process shutdown.
+	// Triggers an asynchronous process exit via the registered shutdown hook.
+	// The RPC returns immediately with a confirmation message; the shutdown
+	// callback runs in a background goroutine. Callers should not expect the
+	// connection to remain open after the response arrives.
+	// Grounded in: internal/control/grpc_server.go::Shutdown
 	Shutdown(context.Context, *ShutdownRequest) (*ShutdownResponse, error)
-	// Status returns current process status.
+	// Returns a snapshot of the process's liveness and identity without
+	// requiring authentication beyond the mTLS channel. Reads from an atomic
+	// running flag, os.Getpid(), a monotonic start timestamp, and the
+	// component label supplied at construction time.
+	// Grounded in: internal/control/grpc_server.go::Status
 	Status(context.Context, *StatusRequest) (*StatusResponse, error)
 	mustEmbedUnimplementedControlServiceServer()
 }

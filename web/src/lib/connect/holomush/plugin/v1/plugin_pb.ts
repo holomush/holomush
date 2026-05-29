@@ -21,20 +21,25 @@ export const file_holomush_plugin_v1_plugin: GenFile = /*@__PURE__*/
   fileDesc("Ch9ob2xvbXVzaC9wbHVnaW4vdjEvcGx1Z2luLnByb3RvEhJob2xvbXVzaC5wbHVnaW4udjEiuAIKDVNlcnZpY2VDb25maWcSGQoRY29ubmVjdGlvbl9zdHJpbmcYASABKAkSUgoRcmVxdWlyZWRfc2VydmljZXMYAiADKAsyNy5ob2xvbXVzaC5wbHVnaW4udjEuU2VydmljZUNvbmZpZy5SZXF1aXJlZFNlcnZpY2VzRW50cnkSSgoNcGx1Z2luX2NvbmZpZxgDIAMoCzIzLmhvbG9tdXNoLnBsdWdpbi52MS5TZXJ2aWNlQ29uZmlnLlBsdWdpbkNvbmZpZ0VudHJ5GjcKFVJlcXVpcmVkU2VydmljZXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGjMKEVBsdWdpbkNvbmZpZ0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiQAoLSW5pdFJlcXVlc3QSMQoGY29uZmlnGAEgASgLMiEuaG9sb211c2gucGx1Z2luLnYxLlNlcnZpY2VDb25maWciSAoMSW5pdFJlc3BvbnNlEhkKEXByb3ZpZGVkX3NlcnZpY2VzGAEgAygJEh0KFXJlZ2lzdGVyZWRfZW1pdF90eXBlcxgCIAMoCSLDAQoFRXZlbnQSEwoCaWQYASABKAlCB7pIBHICEAESFwoGc3RyZWFtGAIgASgJQge6SARyAhABEhUKBHR5cGUYAyABKAlCB7pIBHICEAESEQoJdGltZXN0YW1wGAQgASgDEhsKCmFjdG9yX2tpbmQYBSABKAlCB7pIBHICEAESGQoIYWN0b3JfaWQYBiABKAlCB7pIBHICEAESGgoHcGF5bG9hZBgHIAEoCUIJukgGcgQYgIAEEg4KBmN1cnNvchgIIAEoDCJXCglFbWl0RXZlbnQSFwoGc3RyZWFtGAEgASgJQge6SARyAhABEhUKBHR5cGUYAiABKAlCB7pIBHICEAESGgoHcGF5bG9hZBgDIAEoCUIJukgGcgQYgIAEIj4KEkhhbmRsZUV2ZW50UmVxdWVzdBIoCgVldmVudBgBIAEoCzIZLmhvbG9tdXNoLnBsdWdpbi52MS5FdmVudCJJChNIYW5kbGVFdmVudFJlc3BvbnNlEjIKC2VtaXRfZXZlbnRzGAEgAygLMh0uaG9sb211c2gucGx1Z2luLnYxLkVtaXRFdmVudCKNAgoOQ29tbWFuZFJlcXVlc3QSGAoHY29tbWFuZBgBIAEoCUIHukgEcgIQARIWCgRhcmdzGAIgASgJQgi6SAVyAxiAQBIbCglyYXdfaW5wdXQYAyABKAlCCLpIBXIDGIBAEh0KDGNoYXJhY3Rlcl9pZBgEIAEoCUIHukgEcgIQARIfCg5jaGFyYWN0ZXJfbmFtZRgFIAEoCUIHukgEcgIQARIcCgtsb2NhdGlvbl9pZBgGIAEoCUIHukgEcgIQARIbCgpzZXNzaW9uX2lkGAcgASgJQge6SARyAhABEhoKCXBsYXllcl9pZBgIIAEoCUIHukgEcgIQARIVCg1jb25uZWN0aW9uX2lkGAkgASgJIskBCg9Db21tYW5kUmVzcG9uc2USMQoGc3RhdHVzGAEgASgOMiEuaG9sb211c2gucGx1Z2luLnYxLkNvbW1hbmRTdGF0dXMSGAoGb3V0cHV0GAIgASgJQgi6SAVyAxiAQBItCgZldmVudHMYAyADKAsyHS5ob2xvbXVzaC5wbHVnaW4udjEuRW1pdEV2ZW50EjoKC2F1ZGl0X2hpbnRzGAQgAygLMiUuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0RGVjaXNpb25IaW50IswCChFBdWRpdERlY2lzaW9uSGludBIWCgJpZBgBIAEoCUIKukgHcgUQARiAARIWCgRuYW1lGAIgASgJQgi6SAVyAxiAAhIZCgdtZXNzYWdlGAMgASgJQgi6SAVyAxiACBIvCgZlZmZlY3QYBCABKA4yHy5ob2xvbXVzaC5wbHVnaW4udjEuQXVkaXRFZmZlY3QSIQoQYWN0aW9uX3F1YWxpZmllchgFIAEoCUIHukgEcgIYQBIaCghyZXNvdXJjZRgGIAEoCUIIukgFcgMYgAISSQoKYXR0cmlidXRlcxgHIAMoCzI1LmhvbG9tdXNoLnBsdWdpbi52MS5BdWRpdERlY2lzaW9uSGludC5BdHRyaWJ1dGVzRW50cnkaMQoPQXR0cmlidXRlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiSwoUSGFuZGxlQ29tbWFuZFJlcXVlc3QSMwoHY29tbWFuZBgBIAEoCzIiLmhvbG9tdXNoLnBsdWdpbi52MS5Db21tYW5kUmVxdWVzdCJOChVIYW5kbGVDb21tYW5kUmVzcG9uc2USNQoIcmVzcG9uc2UYASABKAsyIy5ob2xvbXVzaC5wbHVnaW4udjEuQ29tbWFuZFJlc3BvbnNlIn0KIVBsdWdpbkhvc3RTZXJ2aWNlRW1pdEV2ZW50UmVxdWVzdBIXCgZzdHJlYW0YASABKAlCB7pIBHICEAESGwoKZXZlbnRfdHlwZRgCIAEoCUIHukgEcgIQARIPCgdwYXlsb2FkGAMgASgMEhEKCXNlbnNpdGl2ZRgEIAEoCCIkCiJQbHVnaW5Ib3N0U2VydmljZUVtaXRFdmVudFJlc3BvbnNlIlAKG1BsdWdpbkhvc3RTZXJ2aWNlTG9nUmVxdWVzdBIWCgVsZXZlbBgBIAEoCUIHukgEcgIQARIZCgdtZXNzYWdlGAIgASgJQgi6SAVyAxiAQCIeChxQbHVnaW5Ib3N0U2VydmljZUxvZ1Jlc3BvbnNlIlMKHVBsdWdpbkhvc3RTZXJ2aWNlS1ZHZXRSZXF1ZXN0EhwKC3BsdWdpbl9uYW1lGAEgASgJQge6SARyAhABEhQKA2tleRgCIAEoCUIHukgEcgIQASI+Ch5QbHVnaW5Ib3N0U2VydmljZUtWR2V0UmVzcG9uc2USDQoFdmFsdWUYASABKAkSDQoFZm91bmQYAiABKAgiYgodUGx1Z2luSG9zdFNlcnZpY2VLVlNldFJlcXVlc3QSHAoLcGx1Z2luX25hbWUYASABKAlCB7pIBHICEAESFAoDa2V5GAIgASgJQge6SARyAhABEg0KBXZhbHVlGAMgASgJIiAKHlBsdWdpbkhvc3RTZXJ2aWNlS1ZTZXRSZXNwb25zZSJWCiBQbHVnaW5Ib3N0U2VydmljZUtWRGVsZXRlUmVxdWVzdBIcCgtwbHVnaW5fbmFtZRgBIAEoCUIHukgEcgIQARIUCgNrZXkYAiABKAlCB7pIBHICEAEiIwohUGx1Z2luSG9zdFNlcnZpY2VLVkRlbGV0ZVJlc3BvbnNlIpsBCihQbHVnaW5Ib3N0U2VydmljZUFkZFNlc3Npb25TdHJlYW1SZXF1ZXN0EhsKCnNlc3Npb25faWQYASABKAlCB7pIBHICEAESFwoGc3RyZWFtGAIgASgJQge6SARyAhABEjkKC3JlcGxheV9tb2RlGAMgASgOMiQuaG9sb211c2gucGx1Z2luLnYxLlN0cmVhbVJlcGxheU1vZGUiKwopUGx1Z2luSG9zdFNlcnZpY2VBZGRTZXNzaW9uU3RyZWFtUmVzcG9uc2UiYworUGx1Z2luSG9zdFNlcnZpY2VSZW1vdmVTZXNzaW9uU3RyZWFtUmVxdWVzdBIbCgpzZXNzaW9uX2lkGAEgASgJQge6SARyAhABEhcKBnN0cmVhbRgCIAEoCUIHukgEcgIQASIuCixQbHVnaW5Ib3N0U2VydmljZVJlbW92ZVNlc3Npb25TdHJlYW1SZXNwb25zZSJZChpRdWVyeVNlc3Npb25TdHJlYW1zUmVxdWVzdBIUCgxjaGFyYWN0ZXJfaWQYASABKAkSEQoJcGxheWVyX2lkGAIgASgJEhIKCnNlc3Npb25faWQYAyABKAkiPQobUXVlcnlTZXNzaW9uU3RyZWFtc1Jlc3BvbnNlEg8KB3N0cmVhbXMYASADKAkSDQoFZXJyb3IYAiABKAkiUwoIRm9jdXNLZXkSKwoEa2luZBgBIAEoDjIdLmhvbG9tdXNoLnBsdWdpbi52MS5Gb2N1c0tpbmQSGgoJdGFyZ2V0X2lkGAIgASgJQge6SARyAhABIm4KIVBsdWdpbkhvc3RTZXJ2aWNlSm9pbkZvY3VzUmVxdWVzdBIbCgpzZXNzaW9uX2lkGAEgASgJQge6SARyAhABEiwKBnRhcmdldBgCIAEoCzIcLmhvbG9tdXNoLnBsdWdpbi52MS5Gb2N1c0tleSIkCiJQbHVnaW5Ib3N0U2VydmljZUpvaW5Gb2N1c1Jlc3BvbnNlIm8KIlBsdWdpbkhvc3RTZXJ2aWNlTGVhdmVGb2N1c1JlcXVlc3QSGwoKc2Vzc2lvbl9pZBgBIAEoCUIHukgEcgIQARIsCgZ0YXJnZXQYAiABKAsyHC5ob2xvbXVzaC5wbHVnaW4udjEuRm9jdXNLZXkiJQojUGx1Z2luSG9zdFNlcnZpY2VMZWF2ZUZvY3VzUmVzcG9uc2UiWgoqUGx1Z2luSG9zdFNlcnZpY2VMZWF2ZUZvY3VzQnlUYXJnZXRSZXF1ZXN0EiwKBnRhcmdldBgBIAEoCzIcLmhvbG9tdXNoLnBsdWdpbi52MS5Gb2N1c0tleSJzCitQbHVnaW5Ib3N0U2VydmljZUxlYXZlRm9jdXNCeVRhcmdldFJlc3BvbnNlEhEKCXN1Y2NlZWRlZBgBIAEoBRIVCg10b3RhbF9zY2FubmVkGAIgASgFEhoKEmZhaWxlZF9zZXNzaW9uX2lkcxgDIAMoCSJxCiRQbHVnaW5Ib3N0U2VydmljZVByZXNlbnRGb2N1c1JlcXVlc3QSGwoKc2Vzc2lvbl9pZBgBIAEoCUIHukgEcgIQARIsCgZ0YXJnZXQYAiABKAsyHC5ob2xvbXVzaC5wbHVnaW4udjEuRm9jdXNLZXkiJwolUGx1Z2luSG9zdFNlcnZpY2VQcmVzZW50Rm9jdXNSZXNwb25zZSJ7CipQbHVnaW5Ib3N0U2VydmljZVF1ZXJ5U3RyZWFtSGlzdG9yeVJlcXVlc3QSFwoGc3RyZWFtGAEgASgJQge6SARyAhABEg0KBWNvdW50GAIgASgFEhUKDW5vdF9iZWZvcmVfbXMYAyABKAMSDgoGY3Vyc29yGAQgASgMIm0KK1BsdWdpbkhvc3RTZXJ2aWNlUXVlcnlTdHJlYW1IaXN0b3J5UmVzcG9uc2USKQoGZXZlbnRzGAEgAygLMhkuaG9sb211c2gucGx1Z2luLnYxLkV2ZW50EhMKC25leHRfY3Vyc29yGAIgASgMIioKKFBsdWdpbkhvc3RTZXJ2aWNlUmVxdWVzdEVtaXRUb2tlblJlcXVlc3QiOgopUGx1Z2luSG9zdFNlcnZpY2VSZXF1ZXN0RW1pdFRva2VuUmVzcG9uc2USDQoFdG9rZW4YASABKAkingEKKlBsdWdpbkhvc3RTZXJ2aWNlU2V0Q29ubmVjdGlvbkZvY3VzUmVxdWVzdBIVCg1jb25uZWN0aW9uX2lkGAEgASgMEjQKCWZvY3VzX2tleRgCIAEoCzIcLmhvbG9tdXNoLnBsdWdpbi52MS5Gb2N1c0tleUgAiAEBEhUKDWlzX3NjZW5lX2dyaWQYAyABKAhCDAoKX2ZvY3VzX2tleSJxCitQbHVnaW5Ib3N0U2VydmljZVNldENvbm5lY3Rpb25Gb2N1c1Jlc3BvbnNlEjQKCWZvY3VzX2tleRgBIAEoCzIcLmhvbG9tdXNoLnBsdWdpbi52MS5Gb2N1c0tleUgAiAEBQgwKCl9mb2N1c19rZXkiUQonUGx1Z2luSG9zdFNlcnZpY2VBdXRvRm9jdXNPbkpvaW5SZXF1ZXN0EhQKDGNoYXJhY3Rlcl9pZBgBIAEoDBIQCghzY2VuZV9pZBgCIAEoDCLLAQooUGx1Z2luSG9zdFNlcnZpY2VBdXRvRm9jdXNPbkpvaW5SZXNwb25zZRIeChZmb2N1c2VkX2Nvbm5lY3Rpb25faWRzGAEgAygMEh4KFnRvdGFsX2Nvbm5lY3Rpb25fY291bnQYAiABKA0SHgoWc2tpcHBlZF9jb25uZWN0aW9uX2lkcxgDIAMoDBI/ChVmYWlsZWRfY29ubmVjdGlvbl9pZHMYBCADKAsyIC5ob2xvbXVzaC5wbHVnaW4udjEuRm9jdXNGYWlsdXJlIl0KDEZvY3VzRmFpbHVyZRIVCg1jb25uZWN0aW9uX2lkGAEgASgMEjYKBnJlYXNvbhgCIAEoDjImLmhvbG9tdXNoLnBsdWdpbi52MS5Gb2N1c0ZhaWx1cmVSZWFzb24iUgooUGx1Z2luSG9zdFNlcnZpY2VJc0FueUNvbm5Gb2N1c2VkUmVxdWVzdBIUCgxjaGFyYWN0ZXJfaWQYASABKAwSEAoIc2NlbmVfaWQYAiABKAwiPAopUGx1Z2luSG9zdFNlcnZpY2VJc0FueUNvbm5Gb2N1c2VkUmVzcG9uc2USDwoHZm9jdXNlZBgBIAEoCCJWCiBQbHVnaW5Ib3N0U2VydmljZUV2YWx1YXRlUmVxdWVzdBIXCgZhY3Rpb24YASABKAlCB7pIBHICEAESGQoIcmVzb3VyY2UYAiABKAlCB7pIBHICEAMiXAohUGx1Z2luSG9zdFNlcnZpY2VFdmFsdWF0ZVJlc3BvbnNlEg8KB2FsbG93ZWQYASABKAgSDgoGcmVhc29uGAIgASgJEhYKDm1hdGNoZWRfcG9saWN5GAMgASgJKpYBCg1Db21tYW5kU3RhdHVzEh4KGkNPTU1BTkRfU1RBVFVTX1VOU1BFQ0lGSUVEEAASFQoRQ09NTUFORF9TVEFUVVNfT0sQARIYChRDT01NQU5EX1NUQVRVU19FUlJPUhACEhoKFkNPTU1BTkRfU1RBVFVTX0ZBSUxVUkUQAxIYChRDT01NQU5EX1NUQVRVU19GQVRBTBAEKloKC0F1ZGl0RWZmZWN0EhwKGEFVRElUX0VGRkVDVF9VTlNQRUNJRklFRBAAEhUKEUFVRElUX0VGRkVDVF9ERU5ZEAESFgoSQVVESVRfRUZGRUNUX0FMTE9XEAIqPQoJRm9jdXNLaW5kEhoKFkZPQ1VTX0tJTkRfVU5TUEVDSUZJRUQQABIUChBGT0NVU19LSU5EX1NDRU5FEAEqfAoQU3RyZWFtUmVwbGF5TW9kZRIiCh5TVFJFQU1fUkVQTEFZX01PREVfVU5TUEVDSUZJRUQQABIiCh5TVFJFQU1fUkVQTEFZX01PREVfRlJPTV9DVVJTT1IQARIgChxTVFJFQU1fUkVQTEFZX01PREVfTElWRV9PTkxZEAIqlQEKEkZvY3VzRmFpbHVyZVJlYXNvbhIkCiBGT0NVU19GQUlMVVJFX1JFQVNPTl9VTlNQRUNJRklFRBAAEioKJkZPQ1VTX0ZBSUxVUkVfUkVBU09OX01FTUJFUlNISVBfQUJTRU5UEAESLQopRk9DVVNfRkFJTFVSRV9SRUFTT05fQ09OTkVDVElPTl9OT1RfRk9VTkQQAjKYAwoNUGx1Z2luU2VydmljZRJJCgRJbml0Eh8uaG9sb211c2gucGx1Z2luLnYxLkluaXRSZXF1ZXN0GiAuaG9sb211c2gucGx1Z2luLnYxLkluaXRSZXNwb25zZRJeCgtIYW5kbGVFdmVudBImLmhvbG9tdXNoLnBsdWdpbi52MS5IYW5kbGVFdmVudFJlcXVlc3QaJy5ob2xvbXVzaC5wbHVnaW4udjEuSGFuZGxlRXZlbnRSZXNwb25zZRJkCg1IYW5kbGVDb21tYW5kEiguaG9sb211c2gucGx1Z2luLnYxLkhhbmRsZUNvbW1hbmRSZXF1ZXN0GikuaG9sb211c2gucGx1Z2luLnYxLkhhbmRsZUNvbW1hbmRSZXNwb25zZRJ2ChNRdWVyeVNlc3Npb25TdHJlYW1zEi4uaG9sb211c2gucGx1Z2luLnYxLlF1ZXJ5U2Vzc2lvblN0cmVhbXNSZXF1ZXN0Gi8uaG9sb211c2gucGx1Z2luLnYxLlF1ZXJ5U2Vzc2lvblN0cmVhbXNSZXNwb25zZTLsEgoRUGx1Z2luSG9zdFNlcnZpY2USegoJRW1pdEV2ZW50EjUuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlRW1pdEV2ZW50UmVxdWVzdBo2LmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUVtaXRFdmVudFJlc3BvbnNlEmgKA0xvZxIvLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUxvZ1JlcXVlc3QaMC5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VMb2dSZXNwb25zZRJuCgVLVkdldBIxLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUtWR2V0UmVxdWVzdBoyLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUtWR2V0UmVzcG9uc2USbgoFS1ZTZXQSMS5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VLVlNldFJlcXVlc3QaMi5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VLVlNldFJlc3BvbnNlEncKCEtWRGVsZXRlEjQuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlS1ZEZWxldGVSZXF1ZXN0GjUuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlS1ZEZWxldGVSZXNwb25zZRKPAQoQQWRkU2Vzc2lvblN0cmVhbRI8LmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUFkZFNlc3Npb25TdHJlYW1SZXF1ZXN0Gj0uaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlQWRkU2Vzc2lvblN0cmVhbVJlc3BvbnNlEpgBChNSZW1vdmVTZXNzaW9uU3RyZWFtEj8uaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlUmVtb3ZlU2Vzc2lvblN0cmVhbVJlcXVlc3QaQC5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VSZW1vdmVTZXNzaW9uU3RyZWFtUmVzcG9uc2USegoJSm9pbkZvY3VzEjUuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlSm9pbkZvY3VzUmVxdWVzdBo2LmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUpvaW5Gb2N1c1Jlc3BvbnNlEn0KCkxlYXZlRm9jdXMSNi5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VMZWF2ZUZvY3VzUmVxdWVzdBo3LmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUxlYXZlRm9jdXNSZXNwb25zZRKVAQoSTGVhdmVGb2N1c0J5VGFyZ2V0Ej4uaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlTGVhdmVGb2N1c0J5VGFyZ2V0UmVxdWVzdBo/LmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUxlYXZlRm9jdXNCeVRhcmdldFJlc3BvbnNlEoMBCgxQcmVzZW50Rm9jdXMSOC5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VQcmVzZW50Rm9jdXNSZXF1ZXN0GjkuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlUHJlc2VudEZvY3VzUmVzcG9uc2USlQEKElF1ZXJ5U3RyZWFtSGlzdG9yeRI+LmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZVF1ZXJ5U3RyZWFtSGlzdG9yeVJlcXVlc3QaPy5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VRdWVyeVN0cmVhbUhpc3RvcnlSZXNwb25zZRJ2ChNEZWNyeXB0T3duQXVkaXRSb3dzEi4uaG9sb211c2gucGx1Z2luLnYxLkRlY3J5cHRPd25BdWRpdFJvd3NSZXF1ZXN0Gi8uaG9sb211c2gucGx1Z2luLnYxLkRlY3J5cHRPd25BdWRpdFJvd3NSZXNwb25zZRKPAQoQUmVxdWVzdEVtaXRUb2tlbhI8LmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZVJlcXVlc3RFbWl0VG9rZW5SZXF1ZXN0Gj0uaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlUmVxdWVzdEVtaXRUb2tlblJlc3BvbnNlEpUBChJTZXRDb25uZWN0aW9uRm9jdXMSPi5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VTZXRDb25uZWN0aW9uRm9jdXNSZXF1ZXN0Gj8uaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlU2V0Q29ubmVjdGlvbkZvY3VzUmVzcG9uc2USjAEKD0F1dG9Gb2N1c09uSm9pbhI7LmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUF1dG9Gb2N1c09uSm9pblJlcXVlc3QaPC5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VBdXRvRm9jdXNPbkpvaW5SZXNwb25zZRKPAQoQSXNBbnlDb25uRm9jdXNlZBI8LmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUlzQW55Q29ubkZvY3VzZWRSZXF1ZXN0Gj0uaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlSXNBbnlDb25uRm9jdXNlZFJlc3BvbnNlEncKCEV2YWx1YXRlEjQuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlRXZhbHVhdGVSZXF1ZXN0GjUuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlRXZhbHVhdGVSZXNwb25zZUJEWkJnaXRodWIuY29tL2hvbG9tdXNoL2hvbG9tdXNoL3BrZy9wcm90by9ob2xvbXVzaC9wbHVnaW4vdjE7cGx1Z2ludjFiBnByb3RvMw", [file_buf_validate_validate, file_holomush_plugin_v1_audit]);
 
 /**
- * ServiceConfig carries initialization data from the host to the plugin.
+ * ServiceConfig carries the host→plugin initialization payload delivered in
+ * InitRequest. It is consumed by pluginServerAdapter.Init / the provider's own
+ * Init.
  *
  * @generated from message holomush.plugin.v1.ServiceConfig
  */
 export type ServiceConfig = Message<"holomush.plugin.v1.ServiceConfig"> & {
   /**
-   * PostgreSQL connection string (provided when the plugin declares storage: postgres).
+   * PostgreSQL DSN the plugin uses for its own storage. Populated only when the
+   * plugin declares storage: postgres in its manifest; empty otherwise.
    *
    * @generated from field: string connection_string = 1;
    */
   connectionString: string;
 
   /**
-   * Addresses of required services, keyed by service name (future use).
+   * Network addresses of the proto services the plugin declared in requires,
+   * keyed by service name, for the plugin to dial. (Reserved for future
+   * service-to-service wiring.)
    *
    * @generated from field: map<string, string> required_services = 2;
    */
@@ -58,13 +63,14 @@ export const ServiceConfigSchema: GenMessage<ServiceConfig> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 0);
 
 /**
- * InitRequest is sent by the host after connecting to the plugin process.
+ * InitRequest is the host's first call to a freshly connected plugin process.
  *
  * @generated from message holomush.plugin.v1.InitRequest
  */
 export type InitRequest = Message<"holomush.plugin.v1.InitRequest"> & {
   /**
-   * Service configuration for the plugin.
+   * The initialization payload (DSN, required-service addresses, runtime config)
+   * the plugin needs before it can serve events or commands.
    *
    * @generated from field: holomush.plugin.v1.ServiceConfig config = 1;
    */
@@ -79,13 +85,15 @@ export const InitRequestSchema: GenMessage<InitRequest> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 1);
 
 /**
- * InitResponse is returned by the plugin after initialization.
+ * InitResponse is the plugin's reply to Init, advertising what it serves and
+ * what it may emit.
  *
  * @generated from message holomush.plugin.v1.InitResponse
  */
 export type InitResponse = Message<"holomush.plugin.v1.InitResponse"> & {
   /**
-   * gRPC service names this plugin provides on the go-plugin transport.
+   * gRPC service names this plugin implements on the go-plugin transport, so
+   * the host's service registry can route requires→provides between plugins.
    *
    * @generated from field: repeated string provided_services = 1;
    */
@@ -110,57 +118,63 @@ export const InitResponseSchema: GenMessage<InitResponse> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 2);
 
 /**
- * Event represents a game event delivered to plugins.
- * Compatible with pkg/plugin.Event but uses protobuf types.
+ * Event is the host→plugin delivery shape for one game event (the proto mirror
+ * of pkg/plugin.Event). pluginServerAdapter.HandleEvent converts it to the SDK
+ * Event before invoking the author's handler.
  *
  * @generated from message holomush.plugin.v1.Event
  */
 export type Event = Message<"holomush.plugin.v1.Event"> & {
   /**
-   * Unique event identifier (ULID string).
+   * ULID string uniquely identifying the event; also its bus dedup key.
    *
    * @generated from field: string id = 1;
    */
   id: string;
 
   /**
-   * Stream the event belongs to (e.g., "location:loc_abc123").
+   * Source stream this event belongs to, in legacy "prefix:id" form
+   * (e.g. "location:loc_abc123"). Translated to the dot-delimited NATS subject
+   * at the emit boundary.
    *
    * @generated from field: string stream = 2;
    */
   stream: string;
 
   /**
-   * Event type (e.g., "say", "pose", "arrive", "leave", "system").
+   * Event-type discriminator (e.g. "say", "pose", "arrive", "leave",
+   * "system") that the plugin handler switches on.
    *
    * @generated from field: string type = 3;
    */
   type: string;
 
   /**
-   * Timestamp in Unix milliseconds.
+   * Event occurrence time in Unix milliseconds (host clock).
    *
    * @generated from field: int64 timestamp = 4;
    */
   timestamp: bigint;
 
   /**
-   * Actor kind as string (e.g., "character", "system", "plugin").
-   * Using string instead of enum for flexibility and compatibility.
+   * Actor kind as a string (e.g. "character", "system", "plugin"). Carried as
+   * a string rather than an enum for forward-compat; the SDK maps it to its
+   * ActorKind type. Distinct from the bus-internal ActorKind enum.
    *
    * @generated from field: string actor_kind = 5;
    */
   actorKind: string;
 
   /**
-   * Actor identifier.
+   * ULID of the actor that caused the event (the character/system/plugin id).
    *
    * @generated from field: string actor_id = 6;
    */
   actorId: string;
 
   /**
-   * JSON-encoded payload.
+   * JSON-encoded event payload (max 64 KiB); the plugin decodes it per the
+   * event type's schema.
    *
    * @generated from field: string payload = 7;
    */
@@ -185,28 +199,31 @@ export const EventSchema: GenMessage<Event> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 3);
 
 /**
- * EmitEvent represents an event that a plugin wants to emit.
- * Compatible with pkg/plugin.EmitEvent.
+ * EmitEvent is one event a plugin wants to emit, returned from HandleEvent /
+ * HandleCommand (the proto mirror of pkg/plugin.EmitEvent). It is NOT published
+ * directly — the host routes it through the PluginEventEmitter.Emit fence.
  *
  * @generated from message holomush.plugin.v1.EmitEvent
  */
 export type EmitEvent = Message<"holomush.plugin.v1.EmitEvent"> & {
   /**
-   * Target stream for the event.
+   * Target stream the event is published to (legacy "prefix:id" form).
    *
    * @generated from field: string stream = 1;
    */
   stream: string;
 
   /**
-   * Event type.
+   * Event-type discriminator for the emitted event; gated by the manifest's
+   * emits / crypto.emits declarations at the fence.
    *
    * @generated from field: string type = 2;
    */
   type: string;
 
   /**
-   * JSON-encoded payload.
+   * JSON-encoded payload (max 64 KiB); validated as well-formed JSON at the
+   * fence before publish.
    *
    * @generated from field: string payload = 3;
    */
@@ -221,13 +238,14 @@ export const EmitEventSchema: GenMessage<EmitEvent> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 4);
 
 /**
- * HandleEventRequest wraps an event for delivery to the plugin.
+ * HandleEventRequest wraps a single delivered event for the PluginService
+ * HandleEvent call.
  *
  * @generated from message holomush.plugin.v1.HandleEventRequest
  */
 export type HandleEventRequest = Message<"holomush.plugin.v1.HandleEventRequest"> & {
   /**
-   * The event to handle.
+   * The event being delivered to the plugin handler.
    *
    * @generated from field: holomush.plugin.v1.Event event = 1;
    */
@@ -242,13 +260,14 @@ export const HandleEventRequestSchema: GenMessage<HandleEventRequest> = /*@__PUR
   messageDesc(file_holomush_plugin_v1_plugin, 5);
 
 /**
- * HandleEventResponse contains any events the plugin wants to emit.
+ * HandleEventResponse returns the events the plugin chose to emit in reaction
+ * to the delivered event.
  *
  * @generated from message holomush.plugin.v1.HandleEventResponse
  */
 export type HandleEventResponse = Message<"holomush.plugin.v1.HandleEventResponse"> & {
   /**
-   * Events to emit in response.
+   * Events the plugin wants emitted; each is run through the host emit fence.
    *
    * @generated from field: repeated holomush.plugin.v1.EmitEvent emit_events = 1;
    */
@@ -263,62 +282,65 @@ export const HandleEventResponseSchema: GenMessage<HandleEventResponse> = /*@__P
   messageDesc(file_holomush_plugin_v1_plugin, 6);
 
 /**
- * CommandRequest carries context for a plugin command invocation.
+ * CommandRequest carries the full dispatch context for a plugin command
+ * invocation. pluginServerAdapter.HandleCommand maps it to the SDK
+ * CommandRequest type.
  *
  * @generated from message holomush.plugin.v1.CommandRequest
  */
 export type CommandRequest = Message<"holomush.plugin.v1.CommandRequest"> & {
   /**
-   * Parsed command name (e.g., "say", "dig").
+   * Parsed command verb the plugin registered (e.g. "say", "dig").
    *
    * @generated from field: string command = 1;
    */
   command: string;
 
   /**
-   * Everything after the command name.
+   * Argument text following the verb (max 8 KiB).
    *
    * @generated from field: string args = 2;
    */
   args: string;
 
   /**
-   * What the player actually typed (alias support).
+   * The raw line the player typed, preserving aliases; surfaced to the SDK as
+   * InvokedAs (max 8 KiB).
    *
    * @generated from field: string raw_input = 3;
    */
   rawInput: string;
 
   /**
-   * Invoking character ULID.
+   * ULID of the character invoking the command.
    *
    * @generated from field: string character_id = 4;
    */
   characterId: string;
 
   /**
-   * Character display name.
+   * Display name of the invoking character.
    *
    * @generated from field: string character_name = 5;
    */
   characterName: string;
 
   /**
-   * Character's current location ULID.
+   * ULID of the invoking character's current location.
    *
    * @generated from field: string location_id = 6;
    */
   locationId: string;
 
   /**
-   * Active session ULID.
+   * ULID of the active session the command was issued in.
    *
    * @generated from field: string session_id = 7;
    */
   sessionId: string;
 
   /**
-   * Player account ULID.
+   * ULID of the player account behind the character.
    *
    * @generated from field: string player_id = 8;
    */
@@ -341,27 +363,29 @@ export const CommandRequestSchema: GenMessage<CommandRequest> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 7);
 
 /**
- * CommandResponse carries the result of a plugin command execution.
+ * CommandResponse is the result of a plugin command execution returned from
+ * HandleCommand.
  *
  * @generated from message holomush.plugin.v1.CommandResponse
  */
 export type CommandResponse = Message<"holomush.plugin.v1.CommandResponse"> & {
   /**
-   * Outcome category.
+   * Outcome category of the command.
    *
    * @generated from field: holomush.plugin.v1.CommandStatus status = 1;
    */
   status: CommandStatus;
 
   /**
-   * Synchronous text output to the invoking player.
+   * Synchronous text shown to the invoking player (max 8 KiB).
    *
    * @generated from field: string output = 2;
    */
   output: string;
 
   /**
-   * Events to append to the event store.
+   * Events the command wants emitted; routed through the host emit fence like
+   * HandleEvent emits.
    *
    * @generated from field: repeated holomush.plugin.v1.EmitEvent events = 3;
    */
@@ -463,13 +487,14 @@ export const AuditDecisionHintSchema: GenMessage<AuditDecisionHint> = /*@__PURE_
   messageDesc(file_holomush_plugin_v1_plugin, 9);
 
 /**
- * HandleCommandRequest wraps a command for delivery to the plugin.
+ * HandleCommandRequest wraps a command dispatch for the PluginService
+ * HandleCommand call.
  *
  * @generated from message holomush.plugin.v1.HandleCommandRequest
  */
 export type HandleCommandRequest = Message<"holomush.plugin.v1.HandleCommandRequest"> & {
   /**
-   * The command to handle.
+   * The command (verb, args, and dispatch context) to handle.
    *
    * @generated from field: holomush.plugin.v1.CommandRequest command = 1;
    */
@@ -484,13 +509,13 @@ export const HandleCommandRequestSchema: GenMessage<HandleCommandRequest> = /*@_
   messageDesc(file_holomush_plugin_v1_plugin, 10);
 
 /**
- * HandleCommandResponse wraps the command result from the plugin.
+ * HandleCommandResponse wraps the plugin's command result.
  *
  * @generated from message holomush.plugin.v1.HandleCommandResponse
  */
 export type HandleCommandResponse = Message<"holomush.plugin.v1.HandleCommandResponse"> & {
   /**
-   * The command result.
+   * The command outcome (status, output, response emits, audit hints).
    *
    * @generated from field: holomush.plugin.v1.CommandResponse response = 1;
    */
@@ -505,20 +530,31 @@ export const HandleCommandResponseSchema: GenMessage<HandleCommandResponse> = /*
   messageDesc(file_holomush_plugin_v1_plugin, 11);
 
 /**
+ * PluginHostServiceEmitEventRequest is the wire form of a plugin emit. The
+ * caller's identity is NOT on this message — it is recovered host-side from the
+ * x-holomush-emit-token header (see PluginHostService.EmitEvent).
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceEmitEventRequest
  */
 export type PluginHostServiceEmitEventRequest = Message<"holomush.plugin.v1.PluginHostServiceEmitEventRequest"> & {
   /**
+   * Target stream (legacy "prefix:id" form); its namespace must be declared in
+   * the manifest's emits list or the fence rejects the emit.
+   *
    * @generated from field: string stream = 1;
    */
   stream: string;
 
   /**
+   * Event-type discriminator for the emitted event.
+   *
    * @generated from field: string event_type = 2;
    */
   eventType: string;
 
   /**
+   * Raw event payload bytes (validated as JSON at the fence).
+   *
    * @generated from field: bytes payload = 3;
    */
   payload: Uint8Array;
@@ -546,6 +582,9 @@ export const PluginHostServiceEmitEventRequestSchema: GenMessage<PluginHostServi
   messageDesc(file_holomush_plugin_v1_plugin, 12);
 
 /**
+ * PluginHostServiceEmitEventResponse is the empty acknowledgement that an emit
+ * passed the fence and was published.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceEmitEventResponse
  */
 export type PluginHostServiceEmitEventResponse = Message<"holomush.plugin.v1.PluginHostServiceEmitEventResponse"> & {
@@ -559,15 +598,22 @@ export const PluginHostServiceEmitEventResponseSchema: GenMessage<PluginHostServ
   messageDesc(file_holomush_plugin_v1_plugin, 13);
 
 /**
+ * PluginHostServiceLogRequest is the (currently unserved, holomush-l6std)
+ * request to write one plugin log line through the host logger.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceLogRequest
  */
 export type PluginHostServiceLogRequest = Message<"holomush.plugin.v1.PluginHostServiceLogRequest"> & {
   /**
+   * Log severity (e.g. "info", "warn", "error").
+   *
    * @generated from field: string level = 1;
    */
   level: string;
 
   /**
+   * Log message body (max 8 KiB).
+   *
    * @generated from field: string message = 2;
    */
   message: string;
@@ -581,6 +627,9 @@ export const PluginHostServiceLogRequestSchema: GenMessage<PluginHostServiceLogR
   messageDesc(file_holomush_plugin_v1_plugin, 14);
 
 /**
+ * PluginHostServiceLogResponse is the empty ack for Log (unserved,
+ * holomush-l6std).
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceLogResponse
  */
 export type PluginHostServiceLogResponse = Message<"holomush.plugin.v1.PluginHostServiceLogResponse"> & {
@@ -594,15 +643,22 @@ export const PluginHostServiceLogResponseSchema: GenMessage<PluginHostServiceLog
   messageDesc(file_holomush_plugin_v1_plugin, 15);
 
 /**
+ * PluginHostServiceKVGetRequest is the (currently unserved, holomush-l6std)
+ * request to read a key from a plugin's KV namespace.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceKVGetRequest
  */
 export type PluginHostServiceKVGetRequest = Message<"holomush.plugin.v1.PluginHostServiceKVGetRequest"> & {
   /**
+   * Owning plugin's name — the KV namespace key.
+   *
    * @generated from field: string plugin_name = 1;
    */
   pluginName: string;
 
   /**
+   * Key to read within that namespace.
+   *
    * @generated from field: string key = 2;
    */
   key: string;
@@ -616,15 +672,22 @@ export const PluginHostServiceKVGetRequestSchema: GenMessage<PluginHostServiceKV
   messageDesc(file_holomush_plugin_v1_plugin, 16);
 
 /**
+ * PluginHostServiceKVGetResponse returns a KV lookup result (unserved,
+ * holomush-l6std).
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceKVGetResponse
  */
 export type PluginHostServiceKVGetResponse = Message<"holomush.plugin.v1.PluginHostServiceKVGetResponse"> & {
   /**
+   * The stored value, or empty when not found.
+   *
    * @generated from field: string value = 1;
    */
   value: string;
 
   /**
+   * Whether the key existed; distinguishes a stored empty value from a miss.
+   *
    * @generated from field: bool found = 2;
    */
   found: boolean;
@@ -638,20 +701,29 @@ export const PluginHostServiceKVGetResponseSchema: GenMessage<PluginHostServiceK
   messageDesc(file_holomush_plugin_v1_plugin, 17);
 
 /**
+ * PluginHostServiceKVSetRequest is the (currently unserved, holomush-l6std)
+ * request to write a key in a plugin's KV namespace.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceKVSetRequest
  */
 export type PluginHostServiceKVSetRequest = Message<"holomush.plugin.v1.PluginHostServiceKVSetRequest"> & {
   /**
+   * Owning plugin's name — the KV namespace key.
+   *
    * @generated from field: string plugin_name = 1;
    */
   pluginName: string;
 
   /**
+   * Key to write within that namespace.
+   *
    * @generated from field: string key = 2;
    */
   key: string;
 
   /**
+   * Value to store under the key.
+   *
    * @generated from field: string value = 3;
    */
   value: string;
@@ -665,6 +737,9 @@ export const PluginHostServiceKVSetRequestSchema: GenMessage<PluginHostServiceKV
   messageDesc(file_holomush_plugin_v1_plugin, 18);
 
 /**
+ * PluginHostServiceKVSetResponse is the empty ack for KVSet (unserved,
+ * holomush-l6std).
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceKVSetResponse
  */
 export type PluginHostServiceKVSetResponse = Message<"holomush.plugin.v1.PluginHostServiceKVSetResponse"> & {
@@ -678,15 +753,22 @@ export const PluginHostServiceKVSetResponseSchema: GenMessage<PluginHostServiceK
   messageDesc(file_holomush_plugin_v1_plugin, 19);
 
 /**
+ * PluginHostServiceKVDeleteRequest is the (currently unserved, holomush-l6std)
+ * request to delete a key from a plugin's KV namespace.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceKVDeleteRequest
  */
 export type PluginHostServiceKVDeleteRequest = Message<"holomush.plugin.v1.PluginHostServiceKVDeleteRequest"> & {
   /**
+   * Owning plugin's name — the KV namespace key.
+   *
    * @generated from field: string plugin_name = 1;
    */
   pluginName: string;
 
   /**
+   * Key to delete within that namespace.
+   *
    * @generated from field: string key = 2;
    */
   key: string;
@@ -700,6 +782,9 @@ export const PluginHostServiceKVDeleteRequestSchema: GenMessage<PluginHostServic
   messageDesc(file_holomush_plugin_v1_plugin, 20);
 
 /**
+ * PluginHostServiceKVDeleteResponse is the empty ack for KVDelete (unserved,
+ * holomush-l6std).
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceKVDeleteResponse
  */
 export type PluginHostServiceKVDeleteResponse = Message<"holomush.plugin.v1.PluginHostServiceKVDeleteResponse"> & {
@@ -713,6 +798,9 @@ export const PluginHostServiceKVDeleteResponseSchema: GenMessage<PluginHostServi
   messageDesc(file_holomush_plugin_v1_plugin, 21);
 
 /**
+ * PluginHostServiceAddSessionStreamRequest is the (currently unserved,
+ * holomush-l6std) request to subscribe an active session to one more stream.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceAddSessionStreamRequest
  */
 export type PluginHostServiceAddSessionStreamRequest = Message<"holomush.plugin.v1.PluginHostServiceAddSessionStreamRequest"> & {
@@ -747,6 +835,9 @@ export const PluginHostServiceAddSessionStreamRequestSchema: GenMessage<PluginHo
   messageDesc(file_holomush_plugin_v1_plugin, 22);
 
 /**
+ * PluginHostServiceAddSessionStreamResponse is the empty ack for
+ * AddSessionStream (unserved, holomush-l6std).
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceAddSessionStreamResponse
  */
 export type PluginHostServiceAddSessionStreamResponse = Message<"holomush.plugin.v1.PluginHostServiceAddSessionStreamResponse"> & {
@@ -760,15 +851,22 @@ export const PluginHostServiceAddSessionStreamResponseSchema: GenMessage<PluginH
   messageDesc(file_holomush_plugin_v1_plugin, 23);
 
 /**
+ * PluginHostServiceRemoveSessionStreamRequest is the (currently unserved,
+ * holomush-l6std) request to unsubscribe an active session from a stream.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceRemoveSessionStreamRequest
  */
 export type PluginHostServiceRemoveSessionStreamRequest = Message<"holomush.plugin.v1.PluginHostServiceRemoveSessionStreamRequest"> & {
   /**
+   * Active session identifier.
+   *
    * @generated from field: string session_id = 1;
    */
   sessionId: string;
 
   /**
+   * Stream name to unsubscribe from (format: "prefix:id").
+   *
    * @generated from field: string stream = 2;
    */
   stream: string;
@@ -782,6 +880,9 @@ export const PluginHostServiceRemoveSessionStreamRequestSchema: GenMessage<Plugi
   messageDesc(file_holomush_plugin_v1_plugin, 24);
 
 /**
+ * PluginHostServiceRemoveSessionStreamResponse is the empty ack for
+ * RemoveSessionStream (unserved, holomush-l6std).
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceRemoveSessionStreamResponse
  */
 export type PluginHostServiceRemoveSessionStreamResponse = Message<"holomush.plugin.v1.PluginHostServiceRemoveSessionStreamResponse"> & {
@@ -865,11 +966,15 @@ export const QuerySessionStreamsResponseSchema: GenMessage<QuerySessionStreamsRe
  */
 export type FocusKey = Message<"holomush.plugin.v1.FocusKey"> & {
   /**
+   * Which kind of focused context this key names.
+   *
    * @generated from field: holomush.plugin.v1.FocusKind kind = 1;
    */
   kind: FocusKind;
 
   /**
+   * ULID of the focused target (e.g. the scene id) within that kind.
+   *
    * @generated from field: string target_id = 2;
    */
   targetId: string;
@@ -883,15 +988,22 @@ export const FocusKeySchema: GenMessage<FocusKey> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 28);
 
 /**
+ * PluginHostServiceJoinFocusRequest names the session and the focus target to
+ * add a membership for.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceJoinFocusRequest
  */
 export type PluginHostServiceJoinFocusRequest = Message<"holomush.plugin.v1.PluginHostServiceJoinFocusRequest"> & {
   /**
+   * Session to add the focus membership to.
+   *
    * @generated from field: string session_id = 1;
    */
   sessionId: string;
 
   /**
+   * The (kind, target_id) membership to add.
+   *
    * @generated from field: holomush.plugin.v1.FocusKey target = 2;
    */
   target?: FocusKey | undefined;
@@ -905,6 +1017,9 @@ export const PluginHostServiceJoinFocusRequestSchema: GenMessage<PluginHostServi
   messageDesc(file_holomush_plugin_v1_plugin, 29);
 
 /**
+ * PluginHostServiceJoinFocusResponse is the empty ack that the membership was
+ * added.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceJoinFocusResponse
  */
 export type PluginHostServiceJoinFocusResponse = Message<"holomush.plugin.v1.PluginHostServiceJoinFocusResponse"> & {
@@ -918,15 +1033,22 @@ export const PluginHostServiceJoinFocusResponseSchema: GenMessage<PluginHostServ
   messageDesc(file_holomush_plugin_v1_plugin, 30);
 
 /**
+ * PluginHostServiceLeaveFocusRequest names the session and the focus target to
+ * remove a membership for (idempotent on non-member).
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceLeaveFocusRequest
  */
 export type PluginHostServiceLeaveFocusRequest = Message<"holomush.plugin.v1.PluginHostServiceLeaveFocusRequest"> & {
   /**
+   * Session to remove the focus membership from.
+   *
    * @generated from field: string session_id = 1;
    */
   sessionId: string;
 
   /**
+   * The (kind, target_id) membership to remove.
+   *
    * @generated from field: holomush.plugin.v1.FocusKey target = 2;
    */
   target?: FocusKey | undefined;
@@ -940,6 +1062,8 @@ export const PluginHostServiceLeaveFocusRequestSchema: GenMessage<PluginHostServ
   messageDesc(file_holomush_plugin_v1_plugin, 31);
 
 /**
+ * PluginHostServiceLeaveFocusResponse is the empty ack for LeaveFocus.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceLeaveFocusResponse
  */
 export type PluginHostServiceLeaveFocusResponse = Message<"holomush.plugin.v1.PluginHostServiceLeaveFocusResponse"> & {
@@ -953,10 +1077,15 @@ export const PluginHostServiceLeaveFocusResponseSchema: GenMessage<PluginHostSer
   messageDesc(file_holomush_plugin_v1_plugin, 32);
 
 /**
+ * PluginHostServiceLeaveFocusByTargetRequest names a focus target to remove
+ * from every session that holds it (cross-session fan-out).
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceLeaveFocusByTargetRequest
  */
 export type PluginHostServiceLeaveFocusByTargetRequest = Message<"holomush.plugin.v1.PluginHostServiceLeaveFocusByTargetRequest"> & {
   /**
+   * The (kind, target_id) membership to sweep out of all holding sessions.
+   *
    * @generated from field: holomush.plugin.v1.FocusKey target = 1;
    */
   target?: FocusKey | undefined;
@@ -970,6 +1099,9 @@ export const PluginHostServiceLeaveFocusByTargetRequestSchema: GenMessage<Plugin
   messageDesc(file_holomush_plugin_v1_plugin, 33);
 
 /**
+ * PluginHostServiceLeaveFocusByTargetResponse reports the aggregate result of a
+ * cross-session leave sweep.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceLeaveFocusByTargetResponse
  */
 export type PluginHostServiceLeaveFocusByTargetResponse = Message<"holomush.plugin.v1.PluginHostServiceLeaveFocusByTargetResponse"> & {
@@ -1015,15 +1147,22 @@ export const PluginHostServiceLeaveFocusByTargetResponseSchema: GenMessage<Plugi
   messageDesc(file_holomush_plugin_v1_plugin, 34);
 
 /**
+ * PluginHostServicePresentFocusRequest names the session and the existing
+ * membership to set as its PresentingFocus.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServicePresentFocusRequest
  */
 export type PluginHostServicePresentFocusRequest = Message<"holomush.plugin.v1.PluginHostServicePresentFocusRequest"> & {
   /**
+   * Session whose PresentingFocus pointer is being set.
+   *
    * @generated from field: string session_id = 1;
    */
   sessionId: string;
 
   /**
+   * Existing membership to present; validated against FocusMemberships.
+   *
    * @generated from field: holomush.plugin.v1.FocusKey target = 2;
    */
   target?: FocusKey | undefined;
@@ -1037,6 +1176,8 @@ export const PluginHostServicePresentFocusRequestSchema: GenMessage<PluginHostSe
   messageDesc(file_holomush_plugin_v1_plugin, 35);
 
 /**
+ * PluginHostServicePresentFocusResponse is the empty ack for PresentFocus.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServicePresentFocusResponse
  */
 export type PluginHostServicePresentFocusResponse = Message<"holomush.plugin.v1.PluginHostServicePresentFocusResponse"> & {
@@ -1050,15 +1191,22 @@ export const PluginHostServicePresentFocusResponseSchema: GenMessage<PluginHostS
   messageDesc(file_holomush_plugin_v1_plugin, 36);
 
 /**
+ * PluginHostServiceQueryStreamHistoryRequest selects a backward-paginated tail
+ * of a stream for plugin-side display.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceQueryStreamHistoryRequest
  */
 export type PluginHostServiceQueryStreamHistoryRequest = Message<"holomush.plugin.v1.PluginHostServiceQueryStreamHistoryRequest"> & {
   /**
+   * Stream to read history from (legacy "prefix:id" form).
+   *
    * @generated from field: string stream = 1;
    */
   stream: string;
 
   /**
+   * Page size; negative is rejected, values above 500 are clamped to 500.
+   *
    * @generated from field: int32 count = 2;
    */
   count: number;
@@ -1087,10 +1235,16 @@ export const PluginHostServiceQueryStreamHistoryRequestSchema: GenMessage<Plugin
   messageDesc(file_holomush_plugin_v1_plugin, 37);
 
 /**
+ * PluginHostServiceQueryStreamHistoryResponse returns one history page plus the
+ * cursor for the next (older) page.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceQueryStreamHistoryResponse
  */
 export type PluginHostServiceQueryStreamHistoryResponse = Message<"holomush.plugin.v1.PluginHostServiceQueryStreamHistoryResponse"> & {
   /**
+   * The page of events in ascending (oldest→newest) order; each carries its own
+   * backward-paging cursor.
+   *
    * @generated from field: repeated holomush.plugin.v1.Event events = 1;
    */
   events: Event[];
@@ -1129,6 +1283,8 @@ export const PluginHostServiceRequestEmitTokenRequestSchema: GenMessage<PluginHo
   messageDesc(file_holomush_plugin_v1_plugin, 39);
 
 /**
+ * PluginHostServiceRequestEmitTokenResponse returns the issued self-token.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceRequestEmitTokenResponse
  */
 export type PluginHostServiceRequestEmitTokenResponse = Message<"holomush.plugin.v1.PluginHostServiceRequestEmitTokenResponse"> & {
@@ -1150,17 +1306,22 @@ export const PluginHostServiceRequestEmitTokenResponseSchema: GenMessage<PluginH
   messageDesc(file_holomush_plugin_v1_plugin, 40);
 
 /**
+ * PluginHostServiceSetConnectionFocusRequest selects one connection and the
+ * focus to set on it (Phase 5).
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceSetConnectionFocusRequest
  */
 export type PluginHostServiceSetConnectionFocusRequest = Message<"holomush.plugin.v1.PluginHostServiceSetConnectionFocusRequest"> & {
   /**
-   * ULID
+   * ULID bytes of the connection whose focus is being set.
    *
    * @generated from field: bytes connection_id = 1;
    */
   connectionId: Uint8Array;
 
   /**
+   * The focus to set; absent (unset) clears the connection's focus.
+   *
    * @generated from field: optional holomush.plugin.v1.FocusKey focus_key = 2;
    */
   focusKey?: FocusKey | undefined;
@@ -1182,10 +1343,15 @@ export const PluginHostServiceSetConnectionFocusRequestSchema: GenMessage<Plugin
   messageDesc(file_holomush_plugin_v1_plugin, 41);
 
 /**
+ * PluginHostServiceSetConnectionFocusResponse echoes the resulting focus.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceSetConnectionFocusResponse
  */
 export type PluginHostServiceSetConnectionFocusResponse = Message<"holomush.plugin.v1.PluginHostServiceSetConnectionFocusResponse"> & {
   /**
+   * The connection's focus after the write; absent if the connection was
+   * cleared/unfocused.
+   *
    * @generated from field: optional holomush.plugin.v1.FocusKey focus_key = 1;
    */
   focusKey?: FocusKey | undefined;
@@ -1199,18 +1365,21 @@ export const PluginHostServiceSetConnectionFocusResponseSchema: GenMessage<Plugi
   messageDesc(file_holomush_plugin_v1_plugin, 42);
 
 /**
+ * PluginHostServiceAutoFocusOnJoinRequest names the character and scene to
+ * fan-out focus across the character's connections.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceAutoFocusOnJoinRequest
  */
 export type PluginHostServiceAutoFocusOnJoinRequest = Message<"holomush.plugin.v1.PluginHostServiceAutoFocusOnJoinRequest"> & {
   /**
-   * ULID
+   * ULID bytes of the character whose connections are being focused.
    *
    * @generated from field: bytes character_id = 1;
    */
   characterId: Uint8Array;
 
   /**
-   * ULID
+   * ULID bytes of the scene to focus those connections on.
    *
    * @generated from field: bytes scene_id = 2;
    */
@@ -1225,25 +1394,38 @@ export const PluginHostServiceAutoFocusOnJoinRequestSchema: GenMessage<PluginHos
   messageDesc(file_holomush_plugin_v1_plugin, 43);
 
 /**
+ * PluginHostServiceAutoFocusOnJoinResponse reports per-connection fan-out
+ * outcomes.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceAutoFocusOnJoinResponse
  */
 export type PluginHostServiceAutoFocusOnJoinResponse = Message<"holomush.plugin.v1.PluginHostServiceAutoFocusOnJoinResponse"> & {
   /**
+   * Connection ULIDs newly focused on the scene by this call.
+   *
    * @generated from field: repeated bytes focused_connection_ids = 1;
    */
   focusedConnectionIds: Uint8Array[];
 
   /**
+   * Total terminal/telnet connections the character had (the fan-out
+   * denominator).
+   *
    * @generated from field: uint32 total_connection_count = 2;
    */
   totalConnectionCount: number;
 
   /**
+   * Connection ULIDs skipped because they were already explicitly focused
+   * elsewhere (D8).
+   *
    * @generated from field: repeated bytes skipped_connection_ids = 3;
    */
   skippedConnectionIds: Uint8Array[];
 
   /**
+   * Connections that failed to focus, each with a structured reason.
+   *
    * @generated from field: repeated holomush.plugin.v1.FocusFailure failed_connection_ids = 4;
    */
   failedConnectionIds: FocusFailure[];
@@ -1263,11 +1445,15 @@ export const PluginHostServiceAutoFocusOnJoinResponseSchema: GenMessage<PluginHo
  */
 export type FocusFailure = Message<"holomush.plugin.v1.FocusFailure"> & {
   /**
+   * ULID bytes of the connection that failed to focus.
+   *
    * @generated from field: bytes connection_id = 1;
    */
   connectionId: Uint8Array;
 
   /**
+   * Why the focus attempt failed for that connection.
+   *
    * @generated from field: holomush.plugin.v1.FocusFailureReason reason = 2;
    */
   reason: FocusFailureReason;
@@ -1281,18 +1467,21 @@ export const FocusFailureSchema: GenMessage<FocusFailure> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 45);
 
 /**
+ * PluginHostServiceIsAnyConnFocusedRequest names the character and scene to
+ * test for any focused connection.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceIsAnyConnFocusedRequest
  */
 export type PluginHostServiceIsAnyConnFocusedRequest = Message<"holomush.plugin.v1.PluginHostServiceIsAnyConnFocusedRequest"> & {
   /**
-   * ULID
+   * ULID bytes of the character to check.
    *
    * @generated from field: bytes character_id = 1;
    */
   characterId: Uint8Array;
 
   /**
-   * ULID
+   * ULID bytes of the scene the connections might be focused on.
    *
    * @generated from field: bytes scene_id = 2;
    */
@@ -1307,10 +1496,14 @@ export const PluginHostServiceIsAnyConnFocusedRequestSchema: GenMessage<PluginHo
   messageDesc(file_holomush_plugin_v1_plugin, 46);
 
 /**
+ * PluginHostServiceIsAnyConnFocusedResponse reports the focus check result.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceIsAnyConnFocusedResponse
  */
 export type PluginHostServiceIsAnyConnFocusedResponse = Message<"holomush.plugin.v1.PluginHostServiceIsAnyConnFocusedResponse"> & {
   /**
+   * True iff at least one of the character's connections focuses the scene.
+   *
    * @generated from field: bool focused = 1;
    */
   focused: boolean;
@@ -1324,10 +1517,16 @@ export const PluginHostServiceIsAnyConnFocusedResponseSchema: GenMessage<PluginH
   messageDesc(file_holomush_plugin_v1_plugin, 47);
 
 /**
+ * PluginHostServiceEvaluateRequest names the action and resource to evaluate.
+ * The subject is NOT here — it is recovered host-side from the dispatch token
+ * (spec §2, INV-1).
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceEvaluateRequest
  */
 export type PluginHostServiceEvaluateRequest = Message<"holomush.plugin.v1.PluginHostServiceEvaluateRequest"> & {
   /**
+   * ABAC action verb to authorize (e.g. "read", "write").
+   *
    * @generated from field: string action = 1;
    */
   action: string;
@@ -1348,20 +1547,28 @@ export const PluginHostServiceEvaluateRequestSchema: GenMessage<PluginHostServic
   messageDesc(file_holomush_plugin_v1_plugin, 48);
 
 /**
+ * PluginHostServiceEvaluateResponse returns the ABAC engine's decision.
+ *
  * @generated from message holomush.plugin.v1.PluginHostServiceEvaluateResponse
  */
 export type PluginHostServiceEvaluateResponse = Message<"holomush.plugin.v1.PluginHostServiceEvaluateResponse"> & {
   /**
+   * Whether the action is permitted on the resource for the recovered subject.
+   *
    * @generated from field: bool allowed = 1;
    */
   allowed: boolean;
 
   /**
+   * Human-readable rationale for the decision (e.g. the deny reason).
+   *
    * @generated from field: string reason = 2;
    */
   reason: string;
 
   /**
+   * Identifier of the policy that produced the decision, when one matched.
+   *
    * @generated from field: string matched_policy = 3;
    */
   matchedPolicy: string;
@@ -1375,32 +1582,43 @@ export const PluginHostServiceEvaluateResponseSchema: GenMessage<PluginHostServi
   messageDesc(file_holomush_plugin_v1_plugin, 49);
 
 /**
- * CommandStatus maps to pkg/plugin.CommandStatus values.
+ * CommandStatus is the outcome category of a plugin command, mirroring
+ * pkg/plugin.CommandStatus.
  *
  * @generated from enum holomush.plugin.v1.CommandStatus
  */
 export enum CommandStatus {
   /**
+   * Zero value; a well-formed CommandResponse sets a concrete status.
+   *
    * @generated from enum value: COMMAND_STATUS_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
+   * The command succeeded.
+   *
    * @generated from enum value: COMMAND_STATUS_OK = 1;
    */
   OK = 1,
 
   /**
+   * The command failed in a recoverable, user-facing way (e.g. bad arguments).
+   *
    * @generated from enum value: COMMAND_STATUS_ERROR = 2;
    */
   ERROR = 2,
 
   /**
+   * The command could not complete due to a runtime failure short of fatal.
+   *
    * @generated from enum value: COMMAND_STATUS_FAILURE = 3;
    */
   FAILURE = 3,
 
   /**
+   * The command hit an unrecoverable condition.
+   *
    * @generated from enum value: COMMAND_STATUS_FATAL = 4;
    */
   FATAL = 4,
@@ -1423,16 +1641,22 @@ export const CommandStatusSchema: GenEnum<CommandStatus> = /*@__PURE__*/
  */
 export enum AuditEffect {
   /**
+   * Zero value; never a meaningful plugin decision.
+   *
    * @generated from enum value: AUDIT_EFFECT_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
+   * The plugin denied the action — the hint records why.
+   *
    * @generated from enum value: AUDIT_EFFECT_DENY = 1;
    */
   DENY = 1,
 
   /**
+   * The plugin allowed the action.
+   *
    * @generated from enum value: AUDIT_EFFECT_ALLOW = 2;
    */
   ALLOW = 2,
@@ -1454,11 +1678,16 @@ export const AuditEffectSchema: GenEnum<AuditEffect> = /*@__PURE__*/
  */
 export enum FocusKind {
   /**
+   * Zero value; not a real focus kind — a well-formed FocusKey sets a concrete
+   * kind.
+   *
    * @generated from enum value: FOCUS_KIND_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
+   * A roleplay scene focus.
+   *
    * @generated from enum value: FOCUS_KIND_SCENE = 1;
    */
   SCENE = 1,
@@ -1478,16 +1707,22 @@ export const FocusKindSchema: GenEnum<FocusKind> = /*@__PURE__*/
  */
 export enum StreamReplayMode {
   /**
+   * Zero value; treated as FROM_CURSOR for backward compatibility.
+   *
    * @generated from enum value: STREAM_REPLAY_MODE_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
+   * Replay from the session's saved cursor for the stream (catch-up).
+   *
    * @generated from enum value: STREAM_REPLAY_MODE_FROM_CURSOR = 1;
    */
   FROM_CURSOR = 1,
 
   /**
+   * Skip historical replay and deliver only newly-arriving events.
+   *
    * @generated from enum value: STREAM_REPLAY_MODE_LIVE_ONLY = 2;
    */
   LIVE_ONLY = 2,
@@ -1500,20 +1735,29 @@ export const StreamReplayModeSchema: GenEnum<StreamReplayMode> = /*@__PURE__*/
   enumDesc(file_holomush_plugin_v1_plugin, 3);
 
 /**
+ * FocusFailureReason is the closed set of per-connection AutoFocusOnJoin
+ * failure causes.
+ *
  * @generated from enum holomush.plugin.v1.FocusFailureReason
  */
 export enum FocusFailureReason {
   /**
+   * Zero value; not a real failure reason.
+   *
    * @generated from enum value: FOCUS_FAILURE_REASON_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
+   * The session lacked the focus membership (JoinFocus was not completed first).
+   *
    * @generated from enum value: FOCUS_FAILURE_REASON_MEMBERSHIP_ABSENT = 1;
    */
   MEMBERSHIP_ABSENT = 1,
 
   /**
+   * The connection could not be found (e.g. it dropped during the sweep).
+   *
    * @generated from enum value: FOCUS_FAILURE_REASON_CONNECTION_NOT_FOUND = 2;
    */
   CONNECTION_NOT_FOUND = 2,
@@ -1526,16 +1770,23 @@ export const FocusFailureReasonSchema: GenEnum<FocusFailureReason> = /*@__PURE__
   enumDesc(file_holomush_plugin_v1_plugin, 4);
 
 /**
- * PluginService is called by the go-plugin host to send events and commands to binary plugins.
- * This service is implemented by the plugin (the gRPC server runs in the plugin process).
+ * PluginService is the plugin-IMPLEMENTED half of the binary-plugin contract:
+ * the gRPC server runs inside the plugin subprocess (hashicorp/go-plugin) and
+ * the host dials it. The host adapter is pkg/plugin.pluginServerAdapter, which
+ * bridges these RPCs to a plugin author's Go handler. Contrast PluginHostService
+ * below, which the host implements and plugins call back into.
  *
  * @generated from service holomush.plugin.v1.PluginService
  */
 export const PluginService: GenService<{
   /**
-   * Init is called by the host after connection, providing service configuration
-   * (DB connection string, required service addresses, etc.) and receiving
-   * the list of gRPC services the plugin provides.
+   * Init is the first call the host makes after the go-plugin handshake. It
+   * hands the plugin its ServiceConfig (DB connection string, required-service
+   * addresses, opaque runtime config) and returns the gRPC service names the
+   * plugin provides plus the emit-type set the host validates against the
+   * manifest's crypto.emits (INV-S5). Bridged by pluginServerAdapter.Init,
+   * which also lazily dials the plugin-host connection for any host-facing
+   * facade (sink/focus/evaluator/decryptor) the provider opts into.
    *
    * @generated from rpc holomush.plugin.v1.PluginService.Init
    */
@@ -1545,7 +1796,12 @@ export const PluginService: GenService<{
     output: typeof InitResponseSchema;
   },
   /**
-   * HandleEvent delivers an event to the plugin and receives any response events.
+   * HandleEvent delivers one subscribed event to the plugin and collects the
+   * events the plugin wants to emit in response. Bridged by
+   * pluginServerAdapter.HandleEvent, which converts the proto Event to the SDK
+   * Event type, invokes the author's handler, and converts returned EmitEvents
+   * back to the wire. Response emits flow through the host emit fence, not
+   * straight to the bus.
    *
    * @generated from rpc holomush.plugin.v1.PluginService.HandleEvent
    */
@@ -1555,7 +1811,10 @@ export const PluginService: GenService<{
     output: typeof HandleEventResponseSchema;
   },
   /**
-   * HandleCommand delivers a command to the plugin.
+   * HandleCommand delivers a parsed player command to the plugin and returns
+   * the command result (output text, status, response emits, and audit hints).
+   * Bridged by pluginServerAdapter.HandleCommand; if the plugin registered no
+   * command handler the adapter returns an empty response rather than erroring.
    *
    * @generated from rpc holomush.plugin.v1.PluginService.HandleCommand
    */
@@ -1565,9 +1824,11 @@ export const PluginService: GenService<{
     output: typeof HandleCommandResponseSchema;
   },
   /**
-   * QuerySessionStreams returns stream names the plugin wants subscribed for a session.
-   * Called once at session establishment, before LISTEN setup.
-   * Only invoked for plugins that declare session_streams: true in their manifest.
+   * QuerySessionStreams asks the plugin which stream names it wants subscribed
+   * for a session being established, before LISTEN/subscription setup. Called
+   * exactly once at session establishment, and only for plugins that declare
+   * session_streams: true in their manifest. A plugin-reported error degrades
+   * gracefully (the host logs and skips that plugin's contribution).
    *
    * @generated from rpc holomush.plugin.v1.PluginService.QuerySessionStreams
    */
@@ -1580,14 +1841,36 @@ export const PluginService: GenService<{
   serviceDesc(file_holomush_plugin_v1_plugin, 0);
 
 /**
- * PluginHostService runs in the host process, allowing binary plugins
- * to call back for event emission, logging, and KV storage.
+ * PluginHostService is the host-IMPLEMENTED half of the contract: the server
+ * runs in the host process and binary plugins dial it to call back for event
+ * emission, ABAC evaluation, audit decryption, focus mutation, and history
+ * reads. Registered live at internal/plugin/goplugin/host_service.go
+ * (RegisterPluginHostServiceServer, struct pluginHostServiceServer), so unlike
+ * hostfunc.proto's HostFunctionsService this surface IS served in production.
+ *
+ * NOTE: the registered server embeds UnimplementedPluginHostServiceServer and
+ * implements only 12 of the 18 RPCs below. Log, KVGet, KVSet, KVDelete,
+ * AddSessionStream, and RemoveSessionStream are declared here but have no
+ * server impl and no production client — they return codes.Unimplemented
+ * (tracked in holomush-l6std). Their comments below document that unwired
+ * reality, not aspirational behavior.
  *
  * @generated from service holomush.plugin.v1.PluginHostService
  */
 export const PluginHostService: GenService<{
   /**
-   * EmitEvent publishes an event to a stream.
+   * EmitEvent publishes one plugin-originated event onto the bus through the
+   * host emit fence. SERVED: pluginHostServiceServer.EmitEvent. The caller's
+   * identity is NOT trusted from the wire — the plugin presents a host-issued
+   * dispatch token in the x-holomush-emit-token metadata header, the host
+   * recovers the vouched-for actor from tokenStore.Lookup(pluginName, token),
+   * and a missing/foreign token is rejected (EMIT_TOKEN_MISSING /
+   * EMIT_TOKEN_REJECTED). The recovered actor then flows through
+   * PluginEventEmitter.Emit, which enforces the manifest gates: emits (subject
+   * namespace must be declared), actor_kinds_claimable (actor kind must be
+   * listed — EMIT_ACTOR_KIND_NOT_CLAIMABLE), and the crypto.emits sensitivity
+   * fence. These gates fire identically for Lua and binary plugins (plugin
+   * runtime symmetry); the token mechanism is the binary-side forgery fence.
    *
    * @generated from rpc holomush.plugin.v1.PluginHostService.EmitEvent
    */
@@ -1597,7 +1880,9 @@ export const PluginHostService: GenService<{
     output: typeof PluginHostServiceEmitEventResponseSchema;
   },
   /**
-   * Log writes a log message through the host's logging system.
+   * Log forwards a plugin log line to the host logger. DECLARED BUT UNSERVED:
+   * pluginHostServiceServer does not implement it and no production client
+   * calls it, so it currently returns codes.Unimplemented (holomush-l6std).
    *
    * @generated from rpc holomush.plugin.v1.PluginHostService.Log
    */
@@ -1607,7 +1892,9 @@ export const PluginHostService: GenService<{
     output: typeof PluginHostServiceLogResponseSchema;
   },
   /**
-   * KVGet retrieves a value from the plugin's key-value store.
+   * KVGet reads a value from the plugin's namespaced key-value store.
+   * DECLARED BUT UNSERVED (holomush-l6std): no server impl, no client; returns
+   * codes.Unimplemented today.
    *
    * @generated from rpc holomush.plugin.v1.PluginHostService.KVGet
    */
@@ -1617,7 +1904,9 @@ export const PluginHostService: GenService<{
     output: typeof PluginHostServiceKVGetResponseSchema;
   },
   /**
-   * KVSet stores a value in the plugin's key-value store.
+   * KVSet writes a value into the plugin's namespaced key-value store.
+   * DECLARED BUT UNSERVED (holomush-l6std): no server impl, no client; returns
+   * codes.Unimplemented today.
    *
    * @generated from rpc holomush.plugin.v1.PluginHostService.KVSet
    */
@@ -1627,7 +1916,9 @@ export const PluginHostService: GenService<{
     output: typeof PluginHostServiceKVSetResponseSchema;
   },
   /**
-   * KVDelete removes a value from the plugin's key-value store.
+   * KVDelete removes a key from the plugin's namespaced key-value store.
+   * DECLARED BUT UNSERVED (holomush-l6std): no server impl, no client; returns
+   * codes.Unimplemented today.
    *
    * @generated from rpc holomush.plugin.v1.PluginHostService.KVDelete
    */
@@ -1637,8 +1928,10 @@ export const PluginHostService: GenService<{
     output: typeof PluginHostServiceKVDeleteResponseSchema;
   },
   /**
-   * AddSessionStream subscribes an active session to an additional stream mid-session.
-   * Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+   * AddSessionStream subscribes an active session to an additional stream
+   * mid-session. DECLARED BUT UNSERVED (holomush-l6std): no server impl, no
+   * production client; returns codes.Unimplemented today. (The wire comment
+   * about SESSION_NOT_FOUND describes the intended-but-unimplemented contract.)
    *
    * @generated from rpc holomush.plugin.v1.PluginHostService.AddSessionStream
    */
@@ -1649,7 +1942,8 @@ export const PluginHostService: GenService<{
   },
   /**
    * RemoveSessionStream unsubscribes an active session from a stream.
-   * Idempotent: returns success if stream is not subscribed.
+   * DECLARED BUT UNSERVED (holomush-l6std): no server impl, no production
+   * client; returns codes.Unimplemented today.
    *
    * @generated from rpc holomush.plugin.v1.PluginHostService.RemoveSessionStream
    */
@@ -1659,8 +1953,10 @@ export const PluginHostService: GenService<{
     output: typeof PluginHostServiceRemoveSessionStreamResponseSchema;
   },
   /**
-   * JoinFocus adds a focus membership to an active or detached session.
-   * Plugins declare intent; the server applies kind-specific replay policy.
+   * JoinFocus adds a focus membership (e.g. a scene) to a session via the
+   * host focus coordinator. SERVED: pluginHostServiceServer.JoinFocus. The
+   * plugin declares intent; the coordinator applies the kind-specific replay
+   * policy. Fails if the focus coordinator is not configured.
    *
    * @generated from rpc holomush.plugin.v1.PluginHostService.JoinFocus
    */
@@ -1670,7 +1966,9 @@ export const PluginHostService: GenService<{
     output: typeof PluginHostServiceJoinFocusResponseSchema;
   },
   /**
-   * LeaveFocus removes a focus membership. Idempotent on non-member.
+   * LeaveFocus removes one focus membership from a session. SERVED:
+   * pluginHostServiceServer.LeaveFocus. Idempotent — leaving a target the
+   * session does not hold is a successful no-op.
    *
    * @generated from rpc holomush.plugin.v1.PluginHostService.LeaveFocus
    */
@@ -1681,9 +1979,12 @@ export const PluginHostService: GenService<{
   },
   /**
    * LeaveFocusByTarget removes the given focus membership from every
-   * non-expired session that holds it. Used for cross-session fan-out
-   * (e.g., scene-end reaches all participants). Partial success is normal:
-   * individual session failures are aggregated without halting the sweep.
+   * non-expired session that holds it — cross-session fan-out (e.g. a
+   * scene-end reaching all participants). SERVED:
+   * pluginHostServiceServer.LeaveFocusByTarget. Partial success is normal:
+   * per-session failures are aggregated into the response (succeeded /
+   * total_scanned / failed_session_ids) rather than aborting the sweep; the
+   * RPC error is reserved for the enumeration step itself failing.
    *
    * @generated from rpc holomush.plugin.v1.PluginHostService.LeaveFocusByTarget
    */
@@ -1693,8 +1994,10 @@ export const PluginHostService: GenService<{
     output: typeof PluginHostServiceLeaveFocusByTargetResponseSchema;
   },
   /**
-   * PresentFocus updates the session's PresentingFocus pointer.
-   * Target MUST already exist in FocusMemberships.
+   * PresentFocus repoints a session's PresentingFocus to an existing
+   * membership. SERVED: pluginHostServiceServer.PresentFocus. The target MUST
+   * already be in the session's FocusMemberships (membership is validated, not
+   * implicitly created).
    *
    * @generated from rpc holomush.plugin.v1.PluginHostService.PresentFocus
    */
@@ -1704,9 +2007,12 @@ export const PluginHostService: GenService<{
     output: typeof PluginHostServicePresentFocusResponseSchema;
   },
   /**
-   * QueryStreamHistory reads the tail of a stream for plugin-side display.
-   * Read-only: does not advance cursors or affect session state.
-   * Count capped at 500 server-side.
+   * QueryStreamHistory reads the tail of a stream for plugin-side display,
+   * backward-paginated by opaque cursor. SERVED:
+   * pluginHostServiceServer.QueryStreamHistory via HistoryReader.ReplayTail.
+   * Read-only: it does not advance session cursors or mutate session state.
+   * A negative count is rejected (INVALID_ARGUMENT); count is CLAMPED to
+   * maxQueryStreamHistoryCount (500), not rejected, when too large.
    *
    * @generated from rpc holomush.plugin.v1.PluginHostService.QueryStreamHistory
    */
@@ -1716,11 +2022,16 @@ export const PluginHostService: GenService<{
     output: typeof PluginHostServiceQueryStreamHistoryResponseSchema;
   },
   /**
-   * DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN audit rows
-   * host-side. The plugin never holds a DEK. Per-row result envelope (INV-RB-12).
-   * Batch capped at 500 server-side (REJECT, not clamp). Authorization: OwnerMap
-   * subject ownership (g1) + crypto.emits[].readback manifest flag (g2) (INV-RB-2).
-   * Request / response message shapes live in audit.proto (AuditRow domain).
+   * DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN encrypted
+   * audit rows host-side; the plugin never holds a DEK. SERVED:
+   * pluginHostServiceServer.DecryptOwnAuditRows via ReadbackDecryptor.
+   * DecryptOwnRows. Authorization is two-gate (INV-RB-2): OwnerMap subject
+   * ownership (g1) plus the crypto.emits[].readback manifest flag (g2). Each
+   * input row gets an independent RowResult (INV-RB-12) carrying either
+   * plaintext or a stable snake_case no_plaintext_reason ("not_owner",
+   * "auth_guard_deny", "dek_missing", "downgrade_refused", "stale_dek",
+   * "audit_queue_full", "internal"; readback.go reasonToWire). Request /
+   * response shapes and RowResult live in audit.proto (AuditRow domain).
    *
    * @generated from rpc holomush.plugin.v1.PluginHostService.DecryptOwnAuditRows
    */
@@ -1730,13 +2041,15 @@ export const PluginHostService: GenService<{
     output: typeof DecryptOwnAuditRowsResponseSchema;
   },
   /**
-   * RequestEmitToken issues a self-token bound to the calling plugin's
-   * identity (ActorPlugin + pluginName), so plugin-served gRPC handlers
-   * (which are not invoked via DeliverEvent / DeliverCommand) can still
-   * call EmitEvent. The plugin's identity is taken from the mTLS-bound
-   * gRPC server struct — the request carries no identity fields and the
-   * plugin cannot impersonate another actor through this RPC.
-   * (Spec §3.3.5 / §5.4 self-token pattern.)
+   * RequestEmitToken issues a self-token bound to {ActorPlugin, pluginName} so
+   * a plugin-served gRPC handler (e.g. SceneService.CreateScene) — which is NOT
+   * reached via DeliverEvent/DeliverCommand and so holds no dispatch token —
+   * can still call EmitEvent. SERVED: pluginHostServiceServer.RequestEmitToken.
+   * The plugin's identity is taken from the mTLS-bound server struct
+   * (s.pluginName); the request carries no identity fields, so a plugin cannot
+   * impersonate another actor or escalate to a character actor through this
+   * RPC. The actor_kinds_claimable manifest gate still fires when the issued
+   * token is later spent at EmitEvent. (Spec §3.3.5 / §5.4 two-token pattern.)
    *
    * @generated from rpc holomush.plugin.v1.PluginHostService.RequestEmitToken
    */
@@ -1746,10 +2059,11 @@ export const PluginHostService: GenService<{
     output: typeof PluginHostServiceRequestEmitTokenResponseSchema;
   },
   /**
-   * SetConnectionFocus — Phase 5 explicit focus mutation for one
-   * Connection. Substrate validates membership against FocusMemberships
-   * (D4); writes Connection.FocusKey + (D9-gated) Info.PresentingFocus
-   * atomically under one Store-lock acquisition (D7).
+   * SetConnectionFocus is the Phase-5 explicit focus mutation for a single
+   * Connection. SERVED: pluginHostServiceServer.SetConnectionFocus. The
+   * substrate validates the requested membership against the session's
+   * FocusMemberships (D4), then writes Connection.FocusKey and (D9-gated)
+   * Info.PresentingFocus atomically under one Store-lock acquisition (D7).
    *
    * @generated from rpc holomush.plugin.v1.PluginHostService.SetConnectionFocus
    */
@@ -1759,10 +2073,11 @@ export const PluginHostService: GenService<{
     output: typeof PluginHostServiceSetConnectionFocusResponseSchema;
   },
   /**
-   * AutoFocusOnJoin — Phase 5 fan-out: focuses all terminal/telnet
-   * connections of the character on the given scene. Skips conns
-   * already explicitly focused elsewhere (D8). Caller must have
-   * completed JoinFocus before invocation.
+   * AutoFocusOnJoin is the Phase-5 fan-out that focuses all of a character's
+   * terminal/telnet connections on a scene at once. SERVED:
+   * pluginHostServiceServer.AutoFocusOnJoin. Connections already explicitly
+   * focused elsewhere are skipped (D8). The caller MUST have completed
+   * JoinFocus first, since the substrate requires the membership to exist.
    *
    * @generated from rpc holomush.plugin.v1.PluginHostService.AutoFocusOnJoin
    */
@@ -1772,8 +2087,10 @@ export const PluginHostService: GenService<{
     output: typeof PluginHostServiceAutoFocusOnJoinResponseSchema;
   },
   /**
-   * IsAnyConnFocused — Phase 5 notification-emission helper: true iff
-   * any of the character's connections has FocusKey == {scene, scene_id}.
+   * IsAnyConnFocused is the Phase-5 notification-emission helper: it reports
+   * whether any of the character's connections currently focuses the given
+   * scene, so callers can decide whether to emit a focus-related notification.
+   * SERVED: pluginHostServiceServer.IsAnyConnFocused.
    *
    * @generated from rpc holomush.plugin.v1.PluginHostService.IsAnyConnFocused
    */
@@ -1783,10 +2100,13 @@ export const PluginHostService: GenService<{
     output: typeof PluginHostServiceIsAnyConnFocusedResponseSchema;
   },
   /**
-   * Evaluate runs the host ABAC engine for a single action against a single
-   * resource instance owned by the calling plugin. The subject is derived
-   * host-side from the dispatch token (see EmitEvent) — there is no subject
-   * field on the wire (spec §2, INV-1).
+   * Evaluate runs the host ABAC engine for one action against one resource
+   * instance owned by the calling plugin. SERVED:
+   * pluginHostServiceServer.Evaluate. The subject is derived host-side from the
+   * dispatch token exactly as EmitEvent does (token→actor recovery) — there is
+   * no subject field on the wire (spec §2, INV-1). Fails closed on nil engine,
+   * missing/rejected token, empty actor subject, or a resource type the plugin
+   * does not own.
    *
    * @generated from rpc holomush.plugin.v1.PluginHostService.Evaluate
    */

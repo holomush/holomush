@@ -10,7 +10,10 @@ import { ShutdownRequest, ShutdownResponse, StatusRequest, StatusResponse } from
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
- * ControlService provides administrative operations for HoloMUSH processes.
+ * The mTLS-protected admin surface for a running HoloMUSH process.
+ * Both the core server and the gateway register an instance on startup
+ * (see cmd/holomush/deps.go and cmd/holomush/gateway.go). Callers must
+ * present a valid client certificate issued by the game's root CA.
  *
  * @generated from service holomush.control.v1.ControlService
  */
@@ -18,7 +21,11 @@ export const ControlService = {
   typeName: "holomush.control.v1.ControlService",
   methods: {
     /**
-     * Shutdown initiates process shutdown.
+     * Triggers an asynchronous process exit via the registered shutdown hook.
+     * The RPC returns immediately with a confirmation message; the shutdown
+     * callback runs in a background goroutine. Callers should not expect the
+     * connection to remain open after the response arrives.
+     * Grounded in: internal/control/grpc_server.go::Shutdown
      *
      * @generated from rpc holomush.control.v1.ControlService.Shutdown
      */
@@ -29,7 +36,11 @@ export const ControlService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Status returns current process status.
+     * Returns a snapshot of the process's liveness and identity without
+     * requiring authentication beyond the mTLS channel. Reads from an atomic
+     * running flag, os.Getpid(), a monotonic start timestamp, and the
+     * component label supplied at construction time.
+     * Grounded in: internal/control/grpc_server.go::Status
      *
      * @generated from rpc holomush.control.v1.ControlService.Status
      */

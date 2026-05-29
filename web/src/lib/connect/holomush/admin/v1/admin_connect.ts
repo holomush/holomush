@@ -14,7 +14,9 @@ import { AdminReadStreamRequest, AdminReadStreamResponse } from "./read_stream_p
 /**
  * AdminService is the break-glass operator administration service. It is
  * served exclusively over a UNIX domain socket (admin.sock) and is never
- * exposed over the network.
+ * exposed over the network. The compositeHandler implementation delegates
+ * each RPC to a registered handler; unregistered RPCs return Unimplemented,
+ * allowing incremental feature deployment without breaking callers.
  *
  * @generated from service holomush.admin.v1.AdminService
  */
@@ -22,7 +24,10 @@ export const AdminService = {
   typeName: "holomush.admin.v1.AdminService",
   methods: {
     /**
-     * Status returns the admin-socket server's liveness state and binary version.
+     * Status returns the admin-socket server's liveness state and the binary
+     * version string stamped at build time. No authentication is required;
+     * it is intended as a health-check endpoint for operators and monitoring.
+     * Implemented directly in compositeHandler; never returns an error.
      *
      * @generated from rpc holomush.admin.v1.AdminService.Status
      */
@@ -33,9 +38,14 @@ export const AdminService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Authenticate verifies operator credentials + TOTP and returns a
-     * short-lived (10 min) session token for use in Approve and ResetTOTP.
-     * Spec §3 wire surface; INV-D1, INV-D2.
+     * Authenticate verifies operator credentials (username + password) and a
+     * TOTP one-time code, then issues a short-lived (10-minute) opaque session
+     * token. The token is returned in session_token and must be supplied in
+     * subsequent Approve, ResetTOTP, and Rekey* RPCs. Requires the caller to
+     * hold the crypto.operator capability and the admin role (validated inside
+     * OperatorAuthProvider via AssertOperatorAdmin, internal/admin/auth).
+     * Returns DENY_INVALID_CREDENTIALS / DENY_BAD_TOTP / DENY_NOT_OPERATOR /
+     * DENY_NOT_ADMIN_ROLE on rejection; DENY_LOCKED when TOTP is rate-limited.
      *
      * @generated from rpc holomush.admin.v1.AdminService.Authenticate
      */
@@ -46,8 +56,14 @@ export const AdminService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Approve is the second-op signoff on a pending admin_approvals row.
-     * Spec §3, §6 Approve flow; INV-D5, INV-D6, INV-D7.
+     * Approve is the second-operator signoff on a pending admin_approvals row.
+     * The caller supplies their session_token (proving identity and live
+     * operator status) and the request_id of the approval row to sign off.
+     * Repo.MarkApproved atomically enforces three invariants: INV-D5 (the row
+     * must not be expired), INV-D6 (the approver cannot be the same player as
+     * the primary operator who opened the row), and INV-D7 (each row may only
+     * be approved once). Requires the crypto.operator capability and admin role
+     * re-checked at call time (INV-D16); handler in internal/admin/approval.
      *
      * @generated from rpc holomush.admin.v1.AdminService.Approve
      */
@@ -58,9 +74,13 @@ export const AdminService = {
       kind: MethodKind.Unary,
     },
     /**
-     * ResetTOTP clears a target player's TOTP enrollment and emits a
-     * crypto.totp_cleared audit event with cleared_by="admin_reset".
-     * Spec §3, §4 reset flow.
+     * ResetTOTP clears a target player's TOTP enrollment, allowing them to
+     * re-enroll on next login. On success, AuditingService.ClearTOTP emits a
+     * crypto.totp_cleared audit event with cleared_by="admin_reset" (T13).
+     * Response.cleared is false when the player was not enrolled (no-op).
+     * Requires a valid session_token with the crypto.operator capability and
+     * admin role re-checked at call time (INV-D16); handler in
+     * internal/admin/auth (reset_handler.go).
      *
      * @generated from rpc holomush.admin.v1.AdminService.ResetTOTP
      */
@@ -71,8 +91,14 @@ export const AdminService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Rekey initiates a full DEK rekey for a context and streams 7-phase
-     * orchestrator progress back to the caller. Spec §7; INV-E surface.
+     * Rekey initiates a fresh DEK rekey for the given context. Requires the
+     * crypto.operator capability and admin role (re-checked at call time,
+     * INV-D16). Streams a single terminal RekeyProgress event: RekeyCompleted
+     * on success or RekeyError on orchestrator failure. Per-phase progress
+     * updates are pre-defined in the proto but not yet emitted (follow-up).
+     * Uses the shared RekeyProgress stream type (also used by RekeyResume) —
+     * the buf RPC_REQUEST_RESPONSE_UNIQUE / RPC_RESPONSE_STANDARD_NAME
+     * exemptions are intentional (jxo8.7.27). Handler: internal/admin/socket/rekey_handler.go.
      *
      * @generated from rpc holomush.admin.v1.AdminService.Rekey
      */
@@ -83,8 +109,14 @@ export const AdminService = {
       kind: MethodKind.ServerStreaming,
     },
     /**
-     * RekeyResume resumes a paused or interrupted rekey and streams progress.
-     * Spec §7; INV-E surface.
+     * RekeyResume resumes a paused or interrupted rekey identified by
+     * request_id. Requires the crypto.operator capability and admin role
+     * (INV-D16). Idempotency (INV-E16) and same-args invariant (INV-E4) are
+     * enforced inside the orchestrator, not here. The handler validates that
+     * request_id is a non-zero 16-byte ULID and forwards it to the orchestrator
+     * adapter, which looks up the checkpoint to resolve ContextType/ContextID.
+     * Streams a terminal RekeyProgress event — same shared type as Rekey.
+     * Handler: internal/admin/socket/rekey_handler.go.
      *
      * @generated from rpc holomush.admin.v1.AdminService.RekeyResume
      */
@@ -95,8 +127,12 @@ export const AdminService = {
       kind: MethodKind.ServerStreaming,
     },
     /**
-     * RekeyAbort cancels an in-progress rekey operation.
-     * Spec §7; INV-E surface.
+     * RekeyAbort cancels an in-progress rekey checkpoint. Requires the
+     * crypto.operator capability only; no admin role re-check and no
+     * dual-control approval — abort is single-control regardless of site
+     * policy (INV-E17). Any crypto.operator session may abort any non-terminal
+     * checkpoint, not just the primary operator who started it.
+     * Handler: internal/admin/socket/rekey_handler.go.
      *
      * @generated from rpc holomush.admin.v1.AdminService.RekeyAbort
      */
@@ -107,8 +143,11 @@ export const AdminService = {
       kind: MethodKind.Unary,
     },
     /**
-     * RekeyStatus returns the current state of a single rekey operation.
-     * Spec §7; INV-E surface.
+     * RekeyStatus returns the current state of a single rekey operation
+     * identified by request_id. Requires the crypto.operator capability;
+     * no admin role re-check. Reads from the crypto_rekey_checkpoints table
+     * via CheckpointStatusReader.GetCheckpoint.
+     * Handler: internal/admin/socket/rekey_handler.go.
      *
      * @generated from rpc holomush.admin.v1.AdminService.RekeyStatus
      */
@@ -119,8 +158,12 @@ export const AdminService = {
       kind: MethodKind.Unary,
     },
     /**
-     * RekeyList streams status records for active (and optionally terminal)
-     * rekey operations. Spec §7; INV-E surface.
+     * RekeyList streams status records for rekey operations. By default only
+     * non-terminal checkpoints are returned; set include_terminal to include
+     * completed and aborted rows. Results are capped at 100 rows (any limit
+     * above 100 or zero is silently clamped to 100). Requires the
+     * crypto.operator capability; no admin role re-check.
+     * Handler: internal/admin/socket/rekey_handler.go.
      *
      * @generated from rpc holomush.admin.v1.AdminService.RekeyList
      */
@@ -131,10 +174,13 @@ export const AdminService = {
       kind: MethodKind.ServerStreaming,
     },
     /**
-     * AdminReadStream is the operator break-glass streaming read RPC.
-     * Streams EventFrame payloads (with typed metadata_only + no_plaintext_reason
-     * redaction fields) for the requested context(s) and time bounds.
-     * Spec sub-epic F §3.2, §3.3; ADR-0017.
+     * AdminReadStream is the operator break-glass streaming read RPC. Streams
+     * EventFrame payloads for the requested context(s) and time bounds, with
+     * typed metadata_only and no_plaintext_reason redaction fields for
+     * destroyed-DEK and plaintext-suppressed events. When dual_control is set
+     * in the request, the handler blocks until a second operator approves via
+     * the admin_approvals table before emitting any event frames (INV-F11/F17).
+     * Handler: internal/admin/socket/handlers.go (delegated to ReadStreamRPCHandler).
      *
      * @generated from rpc holomush.admin.v1.AdminService.AdminReadStream
      */

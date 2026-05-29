@@ -27,15 +27,21 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// CommandStatus maps to pkg/plugin.CommandStatus values.
+// CommandStatus is the outcome category of a plugin command, mirroring
+// pkg/plugin.CommandStatus.
 type CommandStatus int32
 
 const (
+	// Zero value; a well-formed CommandResponse sets a concrete status.
 	CommandStatus_COMMAND_STATUS_UNSPECIFIED CommandStatus = 0
-	CommandStatus_COMMAND_STATUS_OK          CommandStatus = 1
-	CommandStatus_COMMAND_STATUS_ERROR       CommandStatus = 2
-	CommandStatus_COMMAND_STATUS_FAILURE     CommandStatus = 3
-	CommandStatus_COMMAND_STATUS_FATAL       CommandStatus = 4
+	// The command succeeded.
+	CommandStatus_COMMAND_STATUS_OK CommandStatus = 1
+	// The command failed in a recoverable, user-facing way (e.g. bad arguments).
+	CommandStatus_COMMAND_STATUS_ERROR CommandStatus = 2
+	// The command could not complete due to a runtime failure short of fatal.
+	CommandStatus_COMMAND_STATUS_FAILURE CommandStatus = 3
+	// The command hit an unrecoverable condition.
+	CommandStatus_COMMAND_STATUS_FATAL CommandStatus = 4
 )
 
 // Enum value maps for CommandStatus.
@@ -91,9 +97,12 @@ func (CommandStatus) EnumDescriptor() ([]byte, []int) {
 type AuditEffect int32
 
 const (
+	// Zero value; never a meaningful plugin decision.
 	AuditEffect_AUDIT_EFFECT_UNSPECIFIED AuditEffect = 0
-	AuditEffect_AUDIT_EFFECT_DENY        AuditEffect = 1
-	AuditEffect_AUDIT_EFFECT_ALLOW       AuditEffect = 2
+	// The plugin denied the action — the hint records why.
+	AuditEffect_AUDIT_EFFECT_DENY AuditEffect = 1
+	// The plugin allowed the action.
+	AuditEffect_AUDIT_EFFECT_ALLOW AuditEffect = 2
 )
 
 // Enum value maps for AuditEffect.
@@ -144,8 +153,11 @@ func (AuditEffect) EnumDescriptor() ([]byte, []int) {
 type FocusKind int32
 
 const (
+	// Zero value; not a real focus kind — a well-formed FocusKey sets a concrete
+	// kind.
 	FocusKind_FOCUS_KIND_UNSPECIFIED FocusKind = 0
-	FocusKind_FOCUS_KIND_SCENE       FocusKind = 1
+	// A roleplay scene focus.
+	FocusKind_FOCUS_KIND_SCENE FocusKind = 1
 )
 
 // Enum value maps for FocusKind.
@@ -192,9 +204,12 @@ func (FocusKind) EnumDescriptor() ([]byte, []int) {
 type StreamReplayMode int32
 
 const (
+	// Zero value; treated as FROM_CURSOR for backward compatibility.
 	StreamReplayMode_STREAM_REPLAY_MODE_UNSPECIFIED StreamReplayMode = 0
+	// Replay from the session's saved cursor for the stream (catch-up).
 	StreamReplayMode_STREAM_REPLAY_MODE_FROM_CURSOR StreamReplayMode = 1
-	StreamReplayMode_STREAM_REPLAY_MODE_LIVE_ONLY   StreamReplayMode = 2
+	// Skip historical replay and deliver only newly-arriving events.
+	StreamReplayMode_STREAM_REPLAY_MODE_LIVE_ONLY StreamReplayMode = 2
 )
 
 // Enum value maps for StreamReplayMode.
@@ -238,11 +253,16 @@ func (StreamReplayMode) EnumDescriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{3}
 }
 
+// FocusFailureReason is the closed set of per-connection AutoFocusOnJoin
+// failure causes.
 type FocusFailureReason int32
 
 const (
-	FocusFailureReason_FOCUS_FAILURE_REASON_UNSPECIFIED          FocusFailureReason = 0
-	FocusFailureReason_FOCUS_FAILURE_REASON_MEMBERSHIP_ABSENT    FocusFailureReason = 1
+	// Zero value; not a real failure reason.
+	FocusFailureReason_FOCUS_FAILURE_REASON_UNSPECIFIED FocusFailureReason = 0
+	// The session lacked the focus membership (JoinFocus was not completed first).
+	FocusFailureReason_FOCUS_FAILURE_REASON_MEMBERSHIP_ABSENT FocusFailureReason = 1
+	// The connection could not be found (e.g. it dropped during the sweep).
 	FocusFailureReason_FOCUS_FAILURE_REASON_CONNECTION_NOT_FOUND FocusFailureReason = 2
 )
 
@@ -287,12 +307,17 @@ func (FocusFailureReason) EnumDescriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{4}
 }
 
-// ServiceConfig carries initialization data from the host to the plugin.
+// ServiceConfig carries the host→plugin initialization payload delivered in
+// InitRequest. It is consumed by pluginServerAdapter.Init / the provider's own
+// Init.
 type ServiceConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// PostgreSQL connection string (provided when the plugin declares storage: postgres).
+	// PostgreSQL DSN the plugin uses for its own storage. Populated only when the
+	// plugin declares storage: postgres in its manifest; empty otherwise.
 	ConnectionString string `protobuf:"bytes,1,opt,name=connection_string,json=connectionString,proto3" json:"connection_string,omitempty"`
-	// Addresses of required services, keyed by service name (future use).
+	// Network addresses of the proto services the plugin declared in requires,
+	// keyed by service name, for the plugin to dial. (Reserved for future
+	// service-to-service wiring.)
 	RequiredServices map[string]string `protobuf:"bytes,2,rep,name=required_services,json=requiredServices,proto3" json:"required_services,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Opaque plugin-owned runtime config: the effective (manifest-default <
 	// server-override) map the host delivers at init. The host does NOT
@@ -353,10 +378,11 @@ func (x *ServiceConfig) GetPluginConfig() map[string]string {
 	return nil
 }
 
-// InitRequest is sent by the host after connecting to the plugin process.
+// InitRequest is the host's first call to a freshly connected plugin process.
 type InitRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Service configuration for the plugin.
+	// The initialization payload (DSN, required-service addresses, runtime config)
+	// the plugin needs before it can serve events or commands.
 	Config        *ServiceConfig `protobuf:"bytes,1,opt,name=config,proto3" json:"config,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -399,10 +425,12 @@ func (x *InitRequest) GetConfig() *ServiceConfig {
 	return nil
 }
 
-// InitResponse is returned by the plugin after initialization.
+// InitResponse is the plugin's reply to Init, advertising what it serves and
+// what it may emit.
 type InitResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// gRPC service names this plugin provides on the go-plugin transport.
+	// gRPC service names this plugin implements on the go-plugin transport, so
+	// the host's service registry can route requires→provides between plugins.
 	ProvidedServices []string `protobuf:"bytes,1,rep,name=provided_services,json=providedServices,proto3" json:"provided_services,omitempty"`
 	// Set of plugin-owned event types this plugin may emit. Host validates
 	// set-equality against manifest's crypto.emits per INV-S5. Plugins
@@ -457,24 +485,30 @@ func (x *InitResponse) GetRegisteredEmitTypes() []string {
 	return nil
 }
 
-// Event represents a game event delivered to plugins.
-// Compatible with pkg/plugin.Event but uses protobuf types.
+// Event is the host→plugin delivery shape for one game event (the proto mirror
+// of pkg/plugin.Event). pluginServerAdapter.HandleEvent converts it to the SDK
+// Event before invoking the author's handler.
 type Event struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Unique event identifier (ULID string).
+	// ULID string uniquely identifying the event; also its bus dedup key.
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// Stream the event belongs to (e.g., "location:loc_abc123").
+	// Source stream this event belongs to, in legacy "prefix:id" form
+	// (e.g. "location:loc_abc123"). Translated to the dot-delimited NATS subject
+	// at the emit boundary.
 	Stream string `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
-	// Event type (e.g., "say", "pose", "arrive", "leave", "system").
+	// Event-type discriminator (e.g. "say", "pose", "arrive", "leave",
+	// "system") that the plugin handler switches on.
 	Type string `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	// Timestamp in Unix milliseconds.
+	// Event occurrence time in Unix milliseconds (host clock).
 	Timestamp int64 `protobuf:"varint,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	// Actor kind as string (e.g., "character", "system", "plugin").
-	// Using string instead of enum for flexibility and compatibility.
+	// Actor kind as a string (e.g. "character", "system", "plugin"). Carried as
+	// a string rather than an enum for forward-compat; the SDK maps it to its
+	// ActorKind type. Distinct from the bus-internal ActorKind enum.
 	ActorKind string `protobuf:"bytes,5,opt,name=actor_kind,json=actorKind,proto3" json:"actor_kind,omitempty"`
-	// Actor identifier.
+	// ULID of the actor that caused the event (the character/system/plugin id).
 	ActorId string `protobuf:"bytes,6,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
-	// JSON-encoded payload.
+	// JSON-encoded event payload (max 64 KiB); the plugin decodes it per the
+	// event type's schema.
 	Payload string `protobuf:"bytes,7,opt,name=payload,proto3" json:"payload,omitempty"`
 	// cursor is the opaque pagination token for this event. Pass as
 	// PluginHostServiceQueryStreamHistoryRequest.cursor on the next call
@@ -571,15 +605,18 @@ func (x *Event) GetCursor() []byte {
 	return nil
 }
 
-// EmitEvent represents an event that a plugin wants to emit.
-// Compatible with pkg/plugin.EmitEvent.
+// EmitEvent is one event a plugin wants to emit, returned from HandleEvent /
+// HandleCommand (the proto mirror of pkg/plugin.EmitEvent). It is NOT published
+// directly — the host routes it through the PluginEventEmitter.Emit fence.
 type EmitEvent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Target stream for the event.
+	// Target stream the event is published to (legacy "prefix:id" form).
 	Stream string `protobuf:"bytes,1,opt,name=stream,proto3" json:"stream,omitempty"`
-	// Event type.
+	// Event-type discriminator for the emitted event; gated by the manifest's
+	// emits / crypto.emits declarations at the fence.
 	Type string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	// JSON-encoded payload.
+	// JSON-encoded payload (max 64 KiB); validated as well-formed JSON at the
+	// fence before publish.
 	Payload       string `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -636,10 +673,11 @@ func (x *EmitEvent) GetPayload() string {
 	return ""
 }
 
-// HandleEventRequest wraps an event for delivery to the plugin.
+// HandleEventRequest wraps a single delivered event for the PluginService
+// HandleEvent call.
 type HandleEventRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The event to handle.
+	// The event being delivered to the plugin handler.
 	Event         *Event `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -682,10 +720,11 @@ func (x *HandleEventRequest) GetEvent() *Event {
 	return nil
 }
 
-// HandleEventResponse contains any events the plugin wants to emit.
+// HandleEventResponse returns the events the plugin chose to emit in reaction
+// to the delivered event.
 type HandleEventResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Events to emit in response.
+	// Events the plugin wants emitted; each is run through the host emit fence.
 	EmitEvents    []*EmitEvent `protobuf:"bytes,1,rep,name=emit_events,json=emitEvents,proto3" json:"emit_events,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -728,24 +767,27 @@ func (x *HandleEventResponse) GetEmitEvents() []*EmitEvent {
 	return nil
 }
 
-// CommandRequest carries context for a plugin command invocation.
+// CommandRequest carries the full dispatch context for a plugin command
+// invocation. pluginServerAdapter.HandleCommand maps it to the SDK
+// CommandRequest type.
 type CommandRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Parsed command name (e.g., "say", "dig").
+	// Parsed command verb the plugin registered (e.g. "say", "dig").
 	Command string `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
-	// Everything after the command name.
+	// Argument text following the verb (max 8 KiB).
 	Args string `protobuf:"bytes,2,opt,name=args,proto3" json:"args,omitempty"`
-	// What the player actually typed (alias support).
+	// The raw line the player typed, preserving aliases; surfaced to the SDK as
+	// InvokedAs (max 8 KiB).
 	RawInput string `protobuf:"bytes,3,opt,name=raw_input,json=rawInput,proto3" json:"raw_input,omitempty"`
-	// Invoking character ULID.
+	// ULID of the character invoking the command.
 	CharacterId string `protobuf:"bytes,4,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	// Character display name.
+	// Display name of the invoking character.
 	CharacterName string `protobuf:"bytes,5,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
-	// Character's current location ULID.
+	// ULID of the invoking character's current location.
 	LocationId string `protobuf:"bytes,6,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
-	// Active session ULID.
+	// ULID of the active session the command was issued in.
 	SessionId string `protobuf:"bytes,7,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	// Player account ULID.
+	// ULID of the player account behind the character.
 	PlayerId string `protobuf:"bytes,8,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
 	// Originating connection ULID (Phase 5). Empty for server-side dispatch paths
 	// that do not have a specific connection (e.g., non-gateway callers).
@@ -847,14 +889,16 @@ func (x *CommandRequest) GetConnectionId() string {
 	return ""
 }
 
-// CommandResponse carries the result of a plugin command execution.
+// CommandResponse is the result of a plugin command execution returned from
+// HandleCommand.
 type CommandResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Outcome category.
+	// Outcome category of the command.
 	Status CommandStatus `protobuf:"varint,1,opt,name=status,proto3,enum=holomush.plugin.v1.CommandStatus" json:"status,omitempty"`
-	// Synchronous text output to the invoking player.
+	// Synchronous text shown to the invoking player (max 8 KiB).
 	Output string `protobuf:"bytes,2,opt,name=output,proto3" json:"output,omitempty"`
-	// Events to append to the event store.
+	// Events the command wants emitted; routed through the host emit fence like
+	// HandleEvent emits.
 	Events []*EmitEvent `protobuf:"bytes,3,rep,name=events,proto3" json:"events,omitempty"`
 	// Audit decision hints accumulated by the plugin handler during this
 	// command dispatch. The dispatcher extracts these after the response is
@@ -1037,10 +1081,11 @@ func (x *AuditDecisionHint) GetAttributes() map[string]string {
 	return nil
 }
 
-// HandleCommandRequest wraps a command for delivery to the plugin.
+// HandleCommandRequest wraps a command dispatch for the PluginService
+// HandleCommand call.
 type HandleCommandRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The command to handle.
+	// The command (verb, args, and dispatch context) to handle.
 	Command       *CommandRequest `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1083,10 +1128,10 @@ func (x *HandleCommandRequest) GetCommand() *CommandRequest {
 	return nil
 }
 
-// HandleCommandResponse wraps the command result from the plugin.
+// HandleCommandResponse wraps the plugin's command result.
 type HandleCommandResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The command result.
+	// The command outcome (status, output, response emits, audit hints).
 	Response      *CommandResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1129,11 +1174,18 @@ func (x *HandleCommandResponse) GetResponse() *CommandResponse {
 	return nil
 }
 
+// PluginHostServiceEmitEventRequest is the wire form of a plugin emit. The
+// caller's identity is NOT on this message — it is recovered host-side from the
+// x-holomush-emit-token header (see PluginHostService.EmitEvent).
 type PluginHostServiceEmitEventRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Stream    string                 `protobuf:"bytes,1,opt,name=stream,proto3" json:"stream,omitempty"`
-	EventType string                 `protobuf:"bytes,2,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
-	Payload   []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Target stream (legacy "prefix:id" form); its namespace must be declared in
+	// the manifest's emits list or the fence rejects the emit.
+	Stream string `protobuf:"bytes,1,opt,name=stream,proto3" json:"stream,omitempty"`
+	// Event-type discriminator for the emitted event.
+	EventType string `protobuf:"bytes,2,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
+	// Raw event payload bytes (validated as JSON at the fence).
+	Payload []byte `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
 	// sensitive declares per-event sensitivity at emit time.
 	// Phase 3a's host-side fence at internal/plugin/event_emitter.go::Emit
 	// validates this against the plugin manifest's declared sensitivity:
@@ -1206,6 +1258,8 @@ func (x *PluginHostServiceEmitEventRequest) GetSensitive() bool {
 	return false
 }
 
+// PluginHostServiceEmitEventResponse is the empty acknowledgement that an emit
+// passed the fence and was published.
 type PluginHostServiceEmitEventResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1242,10 +1296,14 @@ func (*PluginHostServiceEmitEventResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{13}
 }
 
+// PluginHostServiceLogRequest is the (currently unserved, holomush-l6std)
+// request to write one plugin log line through the host logger.
 type PluginHostServiceLogRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Level         string                 `protobuf:"bytes,1,opt,name=level,proto3" json:"level,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Log severity (e.g. "info", "warn", "error").
+	Level string `protobuf:"bytes,1,opt,name=level,proto3" json:"level,omitempty"`
+	// Log message body (max 8 KiB).
+	Message       string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1294,6 +1352,8 @@ func (x *PluginHostServiceLogRequest) GetMessage() string {
 	return ""
 }
 
+// PluginHostServiceLogResponse is the empty ack for Log (unserved,
+// holomush-l6std).
 type PluginHostServiceLogResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1330,10 +1390,14 @@ func (*PluginHostServiceLogResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{15}
 }
 
+// PluginHostServiceKVGetRequest is the (currently unserved, holomush-l6std)
+// request to read a key from a plugin's KV namespace.
 type PluginHostServiceKVGetRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
-	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Owning plugin's name — the KV namespace key.
+	PluginName string `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
+	// Key to read within that namespace.
+	Key           string `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1382,10 +1446,14 @@ func (x *PluginHostServiceKVGetRequest) GetKey() string {
 	return ""
 }
 
+// PluginHostServiceKVGetResponse returns a KV lookup result (unserved,
+// holomush-l6std).
 type PluginHostServiceKVGetResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Value         string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
-	Found         bool                   `protobuf:"varint,2,opt,name=found,proto3" json:"found,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The stored value, or empty when not found.
+	Value string `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
+	// Whether the key existed; distinguishes a stored empty value from a miss.
+	Found         bool `protobuf:"varint,2,opt,name=found,proto3" json:"found,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1434,11 +1502,16 @@ func (x *PluginHostServiceKVGetResponse) GetFound() bool {
 	return false
 }
 
+// PluginHostServiceKVSetRequest is the (currently unserved, holomush-l6std)
+// request to write a key in a plugin's KV namespace.
 type PluginHostServiceKVSetRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
-	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
-	Value         string                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Owning plugin's name — the KV namespace key.
+	PluginName string `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
+	// Key to write within that namespace.
+	Key string `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	// Value to store under the key.
+	Value         string `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1494,6 +1567,8 @@ func (x *PluginHostServiceKVSetRequest) GetValue() string {
 	return ""
 }
 
+// PluginHostServiceKVSetResponse is the empty ack for KVSet (unserved,
+// holomush-l6std).
 type PluginHostServiceKVSetResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1530,10 +1605,14 @@ func (*PluginHostServiceKVSetResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{19}
 }
 
+// PluginHostServiceKVDeleteRequest is the (currently unserved, holomush-l6std)
+// request to delete a key from a plugin's KV namespace.
 type PluginHostServiceKVDeleteRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
-	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Owning plugin's name — the KV namespace key.
+	PluginName string `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
+	// Key to delete within that namespace.
+	Key           string `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1582,6 +1661,8 @@ func (x *PluginHostServiceKVDeleteRequest) GetKey() string {
 	return ""
 }
 
+// PluginHostServiceKVDeleteResponse is the empty ack for KVDelete (unserved,
+// holomush-l6std).
 type PluginHostServiceKVDeleteResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1618,6 +1699,8 @@ func (*PluginHostServiceKVDeleteResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{21}
 }
 
+// PluginHostServiceAddSessionStreamRequest is the (currently unserved,
+// holomush-l6std) request to subscribe an active session to one more stream.
 type PluginHostServiceAddSessionStreamRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Active session identifier.
@@ -1682,6 +1765,8 @@ func (x *PluginHostServiceAddSessionStreamRequest) GetReplayMode() StreamReplayM
 	return StreamReplayMode_STREAM_REPLAY_MODE_UNSPECIFIED
 }
 
+// PluginHostServiceAddSessionStreamResponse is the empty ack for
+// AddSessionStream (unserved, holomush-l6std).
 type PluginHostServiceAddSessionStreamResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1718,10 +1803,14 @@ func (*PluginHostServiceAddSessionStreamResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{23}
 }
 
+// PluginHostServiceRemoveSessionStreamRequest is the (currently unserved,
+// holomush-l6std) request to unsubscribe an active session from a stream.
 type PluginHostServiceRemoveSessionStreamRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Stream        string                 `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Active session identifier.
+	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// Stream name to unsubscribe from (format: "prefix:id").
+	Stream        string `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1770,6 +1859,8 @@ func (x *PluginHostServiceRemoveSessionStreamRequest) GetStream() string {
 	return ""
 }
 
+// PluginHostServiceRemoveSessionStreamResponse is the empty ack for
+// RemoveSessionStream (unserved, holomush-l6std).
 type PluginHostServiceRemoveSessionStreamResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1928,9 +2019,11 @@ func (x *QuerySessionStreamsResponse) GetError() string {
 // FocusKey identifies a focus membership within a session. A session's
 // focus memberships are unique by (kind, target_id) pair.
 type FocusKey struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Kind          FocusKind              `protobuf:"varint,1,opt,name=kind,proto3,enum=holomush.plugin.v1.FocusKind" json:"kind,omitempty"`
-	TargetId      string                 `protobuf:"bytes,2,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Which kind of focused context this key names.
+	Kind FocusKind `protobuf:"varint,1,opt,name=kind,proto3,enum=holomush.plugin.v1.FocusKind" json:"kind,omitempty"`
+	// ULID of the focused target (e.g. the scene id) within that kind.
+	TargetId      string `protobuf:"bytes,2,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1979,10 +2072,14 @@ func (x *FocusKey) GetTargetId() string {
 	return ""
 }
 
+// PluginHostServiceJoinFocusRequest names the session and the focus target to
+// add a membership for.
 type PluginHostServiceJoinFocusRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Target        *FocusKey              `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Session to add the focus membership to.
+	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// The (kind, target_id) membership to add.
+	Target        *FocusKey `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2031,6 +2128,8 @@ func (x *PluginHostServiceJoinFocusRequest) GetTarget() *FocusKey {
 	return nil
 }
 
+// PluginHostServiceJoinFocusResponse is the empty ack that the membership was
+// added.
 type PluginHostServiceJoinFocusResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -2067,10 +2166,14 @@ func (*PluginHostServiceJoinFocusResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{30}
 }
 
+// PluginHostServiceLeaveFocusRequest names the session and the focus target to
+// remove a membership for (idempotent on non-member).
 type PluginHostServiceLeaveFocusRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Target        *FocusKey              `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Session to remove the focus membership from.
+	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// The (kind, target_id) membership to remove.
+	Target        *FocusKey `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2119,6 +2222,7 @@ func (x *PluginHostServiceLeaveFocusRequest) GetTarget() *FocusKey {
 	return nil
 }
 
+// PluginHostServiceLeaveFocusResponse is the empty ack for LeaveFocus.
 type PluginHostServiceLeaveFocusResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -2155,9 +2259,12 @@ func (*PluginHostServiceLeaveFocusResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{32}
 }
 
+// PluginHostServiceLeaveFocusByTargetRequest names a focus target to remove
+// from every session that holds it (cross-session fan-out).
 type PluginHostServiceLeaveFocusByTargetRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Target        *FocusKey              `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The (kind, target_id) membership to sweep out of all holding sessions.
+	Target        *FocusKey `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2199,6 +2306,8 @@ func (x *PluginHostServiceLeaveFocusByTargetRequest) GetTarget() *FocusKey {
 	return nil
 }
 
+// PluginHostServiceLeaveFocusByTargetResponse reports the aggregate result of a
+// cross-session leave sweep.
 type PluginHostServiceLeaveFocusByTargetResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Number of sessions successfully left. Zero is a valid result
@@ -2274,10 +2383,14 @@ func (x *PluginHostServiceLeaveFocusByTargetResponse) GetFailedSessionIds() []st
 	return nil
 }
 
+// PluginHostServicePresentFocusRequest names the session and the existing
+// membership to set as its PresentingFocus.
 type PluginHostServicePresentFocusRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Target        *FocusKey              `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Session whose PresentingFocus pointer is being set.
+	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// Existing membership to present; validated against FocusMemberships.
+	Target        *FocusKey `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2326,6 +2439,7 @@ func (x *PluginHostServicePresentFocusRequest) GetTarget() *FocusKey {
 	return nil
 }
 
+// PluginHostServicePresentFocusResponse is the empty ack for PresentFocus.
 type PluginHostServicePresentFocusResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -2362,10 +2476,14 @@ func (*PluginHostServicePresentFocusResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{36}
 }
 
+// PluginHostServiceQueryStreamHistoryRequest selects a backward-paginated tail
+// of a stream for plugin-side display.
 type PluginHostServiceQueryStreamHistoryRequest struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Stream string                 `protobuf:"bytes,1,opt,name=stream,proto3" json:"stream,omitempty"`
-	Count  int32                  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Stream to read history from (legacy "prefix:id" form).
+	Stream string `protobuf:"bytes,1,opt,name=stream,proto3" json:"stream,omitempty"`
+	// Page size; negative is rejected, values above 500 are clamped to 500.
+	Count int32 `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
 	// Epoch milliseconds. Events before this time are excluded. 0 means no lower bound.
 	NotBeforeMs int64 `protobuf:"varint,3,opt,name=not_before_ms,json=notBeforeMs,proto3" json:"not_before_ms,omitempty"`
 	// cursor is the opaque pagination cursor from a previous response.
@@ -2433,9 +2551,13 @@ func (x *PluginHostServiceQueryStreamHistoryRequest) GetCursor() []byte {
 	return nil
 }
 
+// PluginHostServiceQueryStreamHistoryResponse returns one history page plus the
+// cursor for the next (older) page.
 type PluginHostServiceQueryStreamHistoryResponse struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Events []*Event               `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The page of events in ascending (oldest→newest) order; each carries its own
+	// backward-paging cursor.
+	Events []*Event `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
 	// next_cursor is the opaque cursor for the next page. Empty if no more pages.
 	NextCursor    []byte `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -2526,6 +2648,7 @@ func (*PluginHostServiceRequestEmitTokenRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{39}
 }
 
+// PluginHostServiceRequestEmitTokenResponse returns the issued self-token.
 type PluginHostServiceRequestEmitTokenResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Opaque self-token. Plugins MUST treat this as opaque; only the host's
@@ -2573,10 +2696,14 @@ func (x *PluginHostServiceRequestEmitTokenResponse) GetToken() string {
 	return ""
 }
 
+// PluginHostServiceSetConnectionFocusRequest selects one connection and the
+// focus to set on it (Phase 5).
 type PluginHostServiceSetConnectionFocusRequest struct {
-	state        protoimpl.MessageState `protogen:"open.v1"`
-	ConnectionId []byte                 `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"` // ULID
-	FocusKey     *FocusKey              `protobuf:"bytes,2,opt,name=focus_key,json=focusKey,proto3,oneof" json:"focus_key,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ULID bytes of the connection whose focus is being set.
+	ConnectionId []byte `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// The focus to set; absent (unset) clears the connection's focus.
+	FocusKey *FocusKey `protobuf:"bytes,2,opt,name=focus_key,json=focusKey,proto3,oneof" json:"focus_key,omitempty"`
 	// is_scene_grid signals that this call originated from a `scene grid`
 	// command — substrate skips the D9 PresentingFocus write per D10.
 	IsSceneGrid   bool `protobuf:"varint,3,opt,name=is_scene_grid,json=isSceneGrid,proto3" json:"is_scene_grid,omitempty"`
@@ -2635,9 +2762,12 @@ func (x *PluginHostServiceSetConnectionFocusRequest) GetIsSceneGrid() bool {
 	return false
 }
 
+// PluginHostServiceSetConnectionFocusResponse echoes the resulting focus.
 type PluginHostServiceSetConnectionFocusResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	FocusKey      *FocusKey              `protobuf:"bytes,1,opt,name=focus_key,json=focusKey,proto3,oneof" json:"focus_key,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The connection's focus after the write; absent if the connection was
+	// cleared/unfocused.
+	FocusKey      *FocusKey `protobuf:"bytes,1,opt,name=focus_key,json=focusKey,proto3,oneof" json:"focus_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2679,10 +2809,14 @@ func (x *PluginHostServiceSetConnectionFocusResponse) GetFocusKey() *FocusKey {
 	return nil
 }
 
+// PluginHostServiceAutoFocusOnJoinRequest names the character and scene to
+// fan-out focus across the character's connections.
 type PluginHostServiceAutoFocusOnJoinRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId   []byte                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"` // ULID
-	SceneId       []byte                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`             // ULID
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ULID bytes of the character whose connections are being focused.
+	CharacterId []byte `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// ULID bytes of the scene to focus those connections on.
+	SceneId       []byte `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2731,14 +2865,22 @@ func (x *PluginHostServiceAutoFocusOnJoinRequest) GetSceneId() []byte {
 	return nil
 }
 
+// PluginHostServiceAutoFocusOnJoinResponse reports per-connection fan-out
+// outcomes.
 type PluginHostServiceAutoFocusOnJoinResponse struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	FocusedConnectionIds [][]byte               `protobuf:"bytes,1,rep,name=focused_connection_ids,json=focusedConnectionIds,proto3" json:"focused_connection_ids,omitempty"`
-	TotalConnectionCount uint32                 `protobuf:"varint,2,opt,name=total_connection_count,json=totalConnectionCount,proto3" json:"total_connection_count,omitempty"`
-	SkippedConnectionIds [][]byte               `protobuf:"bytes,3,rep,name=skipped_connection_ids,json=skippedConnectionIds,proto3" json:"skipped_connection_ids,omitempty"`
-	FailedConnectionIds  []*FocusFailure        `protobuf:"bytes,4,rep,name=failed_connection_ids,json=failedConnectionIds,proto3" json:"failed_connection_ids,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Connection ULIDs newly focused on the scene by this call.
+	FocusedConnectionIds [][]byte `protobuf:"bytes,1,rep,name=focused_connection_ids,json=focusedConnectionIds,proto3" json:"focused_connection_ids,omitempty"`
+	// Total terminal/telnet connections the character had (the fan-out
+	// denominator).
+	TotalConnectionCount uint32 `protobuf:"varint,2,opt,name=total_connection_count,json=totalConnectionCount,proto3" json:"total_connection_count,omitempty"`
+	// Connection ULIDs skipped because they were already explicitly focused
+	// elsewhere (D8).
+	SkippedConnectionIds [][]byte `protobuf:"bytes,3,rep,name=skipped_connection_ids,json=skippedConnectionIds,proto3" json:"skipped_connection_ids,omitempty"`
+	// Connections that failed to focus, each with a structured reason.
+	FailedConnectionIds []*FocusFailure `protobuf:"bytes,4,rep,name=failed_connection_ids,json=failedConnectionIds,proto3" json:"failed_connection_ids,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *PluginHostServiceAutoFocusOnJoinResponse) Reset() {
@@ -2801,9 +2943,11 @@ func (x *PluginHostServiceAutoFocusOnJoinResponse) GetFailedConnectionIds() []*F
 
 // FocusFailure carries the connection_id and reason for an AutoFocusOnJoin failure.
 type FocusFailure struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ConnectionId  []byte                 `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
-	Reason        FocusFailureReason     `protobuf:"varint,2,opt,name=reason,proto3,enum=holomush.plugin.v1.FocusFailureReason" json:"reason,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ULID bytes of the connection that failed to focus.
+	ConnectionId []byte `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// Why the focus attempt failed for that connection.
+	Reason        FocusFailureReason `protobuf:"varint,2,opt,name=reason,proto3,enum=holomush.plugin.v1.FocusFailureReason" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2852,10 +2996,14 @@ func (x *FocusFailure) GetReason() FocusFailureReason {
 	return FocusFailureReason_FOCUS_FAILURE_REASON_UNSPECIFIED
 }
 
+// PluginHostServiceIsAnyConnFocusedRequest names the character and scene to
+// test for any focused connection.
 type PluginHostServiceIsAnyConnFocusedRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId   []byte                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"` // ULID
-	SceneId       []byte                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`             // ULID
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ULID bytes of the character to check.
+	CharacterId []byte `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// ULID bytes of the scene the connections might be focused on.
+	SceneId       []byte `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2904,9 +3052,11 @@ func (x *PluginHostServiceIsAnyConnFocusedRequest) GetSceneId() []byte {
 	return nil
 }
 
+// PluginHostServiceIsAnyConnFocusedResponse reports the focus check result.
 type PluginHostServiceIsAnyConnFocusedResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Focused       bool                   `protobuf:"varint,1,opt,name=focused,proto3" json:"focused,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// True iff at least one of the character's connections focuses the scene.
+	Focused       bool `protobuf:"varint,1,opt,name=focused,proto3" json:"focused,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2948,9 +3098,13 @@ func (x *PluginHostServiceIsAnyConnFocusedResponse) GetFocused() bool {
 	return false
 }
 
+// PluginHostServiceEvaluateRequest names the action and resource to evaluate.
+// The subject is NOT here — it is recovered host-side from the dispatch token
+// (spec §2, INV-1).
 type PluginHostServiceEvaluateRequest struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Action string                 `protobuf:"bytes,1,opt,name=action,proto3" json:"action,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ABAC action verb to authorize (e.g. "read", "write").
+	Action string `protobuf:"bytes,1,opt,name=action,proto3" json:"action,omitempty"`
 	// resource is a typed instance ref: "scene:01ABC...".
 	Resource      string `protobuf:"bytes,2,opt,name=resource,proto3" json:"resource,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -3001,11 +3155,15 @@ func (x *PluginHostServiceEvaluateRequest) GetResource() string {
 	return ""
 }
 
+// PluginHostServiceEvaluateResponse returns the ABAC engine's decision.
 type PluginHostServiceEvaluateResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Allowed       bool                   `protobuf:"varint,1,opt,name=allowed,proto3" json:"allowed,omitempty"`
-	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
-	MatchedPolicy string                 `protobuf:"bytes,3,opt,name=matched_policy,json=matchedPolicy,proto3" json:"matched_policy,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Whether the action is permitted on the resource for the recovered subject.
+	Allowed bool `protobuf:"varint,1,opt,name=allowed,proto3" json:"allowed,omitempty"`
+	// Human-readable rationale for the decision (e.g. the deny reason).
+	Reason string `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Identifier of the policy that produced the decision, when one matched.
+	MatchedPolicy string `protobuf:"bytes,3,opt,name=matched_policy,json=matchedPolicy,proto3" json:"matched_policy,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

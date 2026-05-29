@@ -18,34 +18,59 @@ export const file_holomush_admin_v1_rekey: GenFile = /*@__PURE__*/
   fileDesc("Ch1ob2xvbXVzaC9hZG1pbi92MS9yZWtleS5wcm90bxIRaG9sb211c2guYWRtaW4udjEioAEKDFJla2V5UmVxdWVzdBIVCg1zZXNzaW9uX3Rva2VuGAEgASgJEhQKDGNvbnRleHRfdHlwZRgCIAEoCRISCgpjb250ZXh0X2lkGAMgASgJEhUKDWp1c3RpZmljYXRpb24YBCABKAkSIAoTYXBwcm92YWxfcmVxdWVzdF9pZBgFIAEoCUgAiAEBQhYKFF9hcHByb3ZhbF9yZXF1ZXN0X2lkIvICCg1SZWtleVByb2dyZXNzEjgKDXBoYXNlX3N0YXJ0ZWQYASABKAsyHy5ob2xvbXVzaC5hZG1pbi52MS5QaGFzZVN0YXJ0ZWRIABI8Cg9waGFzZTNfcHJvZ3Jlc3MYAiABKAsyIS5ob2xvbXVzaC5hZG1pbi52MS5QaGFzZTNQcm9ncmVzc0gAEjoKDnBoYXNlNV9hdHRlbXB0GAMgASgLMiAuaG9sb211c2guYWRtaW4udjEuUGhhc2U1QXR0ZW1wdEgAEjwKD3BoYXNlX2NvbXBsZXRlZBgEIAEoCzIhLmhvbG9tdXNoLmFkbWluLnYxLlBoYXNlQ29tcGxldGVkSAASNgoJY29tcGxldGVkGAUgASgLMiEuaG9sb211c2guYWRtaW4udjEuUmVrZXlDb21wbGV0ZWRIABIuCgVlcnJvchgGIAEoCzIdLmhvbG9tdXNoLmFkbWluLnYxLlJla2V5RXJyb3JIAEIHCgVldmVudCIdCgxQaGFzZVN0YXJ0ZWQSDQoFcGhhc2UYASABKAkiagoOUGhhc2UzUHJvZ3Jlc3MSFgoOcm93c19yZXdyaXR0ZW4YASABKAMSHwoXcm93c19yZW1haW5pbmdfZXN0aW1hdGUYAiABKAMSHwoXbGFzdF9wcm9jZXNzZWRfZXZlbnRfaWQYAyABKAwiPwoNUGhhc2U1QXR0ZW1wdBIVCg1hdHRlbXB0X2NvdW50GAEgASgFEhcKD21pc3NpbmdfbWVtYmVycxgCIAMoCSIfCg5QaGFzZUNvbXBsZXRlZBINCgVwaGFzZRgBIAEoCSK2AQoOUmVrZXlDb21wbGV0ZWQSEgoKcmVxdWVzdF9pZBgBIAEoDBIWCg5hdWRpdF9ldmVudF9pZBgCIAEoDBITCgtkdXJhdGlvbl9tcxgDIAEoAxIdChVwaGFzZTNfcm93c19yZXdyaXR0ZW4YBCABKAMSFwoPcGhhc2U1X2F0dGVtcHRzGAUgASgFEhoKEmZvcmNlX2Rlc3Ryb3lfdXNlZBgGIAEoCBIPCgdyZXN1bWVkGAcgASgIIjwKClJla2V5RXJyb3ISDAoEY29kZRgBIAEoCRIPCgdtZXNzYWdlGAIgASgJEg8KB2RldGFpbHMYAyABKAwiVgoSUmVrZXlSZXN1bWVSZXF1ZXN0EhUKDXNlc3Npb25fdG9rZW4YASABKAkSEgoKcmVxdWVzdF9pZBgCIAEoDBIVCg1mb3JjZV9kZXN0cm95GAMgASgIIj4KEVJla2V5QWJvcnRSZXF1ZXN0EhUKDXNlc3Npb25fdG9rZW4YASABKAkSEgoKcmVxdWVzdF9pZBgCIAEoDCJcChJSZWtleUFib3J0UmVzcG9uc2USLgoKYWJvcnRlZF9hdBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFgoOYXVkaXRfZXZlbnRfaWQYAiABKAwiPwoSUmVrZXlTdGF0dXNSZXF1ZXN0EhUKDXNlc3Npb25fdG9rZW4YASABKAkSEgoKcmVxdWVzdF9pZBgCIAEoDCK8AwoTUmVrZXlTdGF0dXNSZXNwb25zZRISCgpyZXF1ZXN0X2lkGAEgASgMEhQKDGNvbnRleHRfdHlwZRgCIAEoCRISCgpjb250ZXh0X2lkGAMgASgJEg4KBnN0YXR1cxgEIAEoCRIZChFwcmltYXJ5X3BsYXllcl9pZBgFIAEoCRIuCgpzdGFydGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI1ChFsYXN0X2hlYXJ0YmVhdF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMY29tcGxldGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIcChRwaGFzZTVfYXR0ZW1wdF9jb3VudBgJIAEoBRIeChZwaGFzZTVfbWlzc2luZ19tZW1iZXJzGAogAygJEhUKDWZvcmNlX2Rlc3Ryb3kYCyABKAgSFwoKb2xkX2Rla19pZBgMIAEoA0gAiAEBEhcKCm5ld19kZWtfaWQYDSABKANIAYgBAUINCgtfb2xkX2Rla19pZEINCgtfbmV3X2Rla19pZCK+AQoQUmVrZXlMaXN0UmVxdWVzdBIVCg1zZXNzaW9uX3Rva2VuGAEgASgJEhgKEGluY2x1ZGVfdGVybWluYWwYAiABKAgSHAoPY29udGV4dF9wYXR0ZXJuGAMgASgJSACIAQESLgoFc2luY2UYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSAGIAQESDQoFbGltaXQYBSABKAVCEgoQX2NvbnRleHRfcGF0dGVybkIICgZfc2luY2VCQlpAZ2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvYWRtaW4vdjE7YWRtaW52MWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
- * RekeyRequest initiates a full DEK rekey operation for a given context.
- * Spec §7; INV-E rekeying surface.
+ * RekeyRequest initiates a fresh DEK rekey operation for a single encryption
+ * context (context_type + context_id). The caller must hold an authenticated
+ * operator session (session_token from AdminService.Authenticate) and the
+ * crypto.operator in-game capability plus the admin role — both are re-asserted
+ * at dispatch time (INV-D16 defense-in-depth). Justification is recorded on
+ * the checkpoint row for audit; approval_request_id links a pending
+ * admin_approvals row when dual-control is required by site policy.
  *
  * @generated from message holomush.admin.v1.RekeyRequest
  */
 export type RekeyRequest = Message<"holomush.admin.v1.RekeyRequest"> & {
   /**
+   * session_token authenticates the issuing operator. Must be a non-expired
+   * token returned by AdminService.Authenticate; the handler re-validates
+   * crypto.operator capability and admin role on every call (INV-D16).
+   *
    * @generated from field: string session_token = 1;
    */
   sessionToken: string;
 
   /**
+   * context_type identifies the encryption domain, e.g. "scene". Together
+   * with context_id it resolves the active DEK row (old_dek_id) that the
+   * orchestrator's Phase 1 reads from crypto_keys.
+   *
    * @generated from field: string context_type = 2;
    */
   contextType: string;
 
   /**
+   * context_id is the entity identifier within context_type, e.g. a scene
+   * ULID. The orchestrator uses (context_type, context_id) to locate the
+   * active DEK and enforce INV-E5 (at most one non-terminal checkpoint per
+   * context at a time).
+   *
    * @generated from field: string context_id = 3;
    */
   contextId: string;
 
   /**
+   * justification is a free-text operator rationale stored on the checkpoint
+   * row and included in the Phase 7 chained audit event. Required for
+   * accountability; non-empty values are enforced by the handler.
+   *
    * @generated from field: string justification = 4;
    */
   justification: string;
 
   /**
-   * for dual-control
+   * approval_request_id, when present, links a pending admin_approvals row
+   * created by the first operator under dual-control policy. Absent for
+   * single-control sites. The orchestrator validates the approval row before
+   * advancing past Phase 1.
    *
    * @generated from field: optional string approval_request_id = 5;
    */
@@ -60,47 +85,74 @@ export const RekeyRequestSchema: GenMessage<RekeyRequest> = /*@__PURE__*/
   messageDesc(file_holomush_admin_v1_rekey, 0);
 
 /**
- * RekeyProgress is a streamed progress event emitted during the 7-phase
- * rekey orchestrator. Clients render phase-by-phase progress from these.
+ * RekeyProgress is the streaming event envelope shared by the Rekey and
+ * RekeyResume RPCs. Each message carries exactly one event variant via the
+ * oneof. In the current MVP the server emits a single terminal event
+ * (RekeyCompleted or RekeyError); PhaseStarted, Phase3Progress,
+ * Phase5Attempt, and PhaseCompleted are pre-defined for richer per-phase
+ * streaming in a future enhancement.
  *
  * @generated from message holomush.admin.v1.RekeyProgress
  */
 export type RekeyProgress = Message<"holomush.admin.v1.RekeyProgress"> & {
   /**
+   * event holds the progress or terminal event payload. Clients MUST handle
+   * all variants; unrecognised variants should be ignored rather than
+   * treated as errors, in anticipation of future additions.
+   *
    * @generated from oneof holomush.admin.v1.RekeyProgress.event
    */
   event: {
     /**
+     * phase_started signals the beginning of a named orchestrator phase.
+     *
      * @generated from field: holomush.admin.v1.PhaseStarted phase_started = 1;
      */
     value: PhaseStarted;
     case: "phaseStarted";
   } | {
     /**
+     * phase3_progress reports incremental re-encryption progress during
+     * Phase 3 (bulk cold-tier rewrite).
+     *
      * @generated from field: holomush.admin.v1.Phase3Progress phase3_progress = 2;
      */
     value: Phase3Progress;
     case: "phase3Progress";
   } | {
     /**
+     * phase5_attempt reports each cluster cache-invalidation attempt during
+     * Phase 5, including which replica members have not yet acknowledged.
+     *
      * @generated from field: holomush.admin.v1.Phase5Attempt phase5_attempt = 3;
      */
     value: Phase5Attempt;
     case: "phase5Attempt";
   } | {
     /**
+     * phase_completed signals that a named orchestrator phase finished
+     * successfully.
+     *
      * @generated from field: holomush.admin.v1.PhaseCompleted phase_completed = 4;
      */
     value: PhaseCompleted;
     case: "phaseCompleted";
   } | {
     /**
+     * completed is the terminal success event emitted once all 7 phases
+     * have finished. Receiving this message means the old DEK has been
+     * destroyed and the audit chain updated.
+     *
      * @generated from field: holomush.admin.v1.RekeyCompleted completed = 5;
      */
     value: RekeyCompleted;
     case: "completed";
   } | {
     /**
+     * error is the terminal failure event emitted when the orchestrator
+     * cannot proceed. The stream ends after this message; the operator
+     * may resume via RekeyResume if the checkpoint is non-terminal.
+     *
      * @generated from field: holomush.admin.v1.RekeyError error = 6;
      */
     value: RekeyError;
@@ -116,12 +168,18 @@ export const RekeyProgressSchema: GenMessage<RekeyProgress> = /*@__PURE__*/
   messageDesc(file_holomush_admin_v1_rekey, 1);
 
 /**
- * PhaseStarted is emitted when a new orchestrator phase begins.
+ * PhaseStarted is emitted at the beginning of each named orchestrator phase.
+ * The phase string matches the CheckpointStatus FSM constants (e.g.
+ * "phase1_auth", "phase3_reencrypt_cold") so clients can display a
+ * phase-by-phase progress indicator.
  *
  * @generated from message holomush.admin.v1.PhaseStarted
  */
 export type PhaseStarted = Message<"holomush.admin.v1.PhaseStarted"> & {
   /**
+   * phase is the FSM status name of the phase that is starting, matching the
+   * CheckpointStatus constants in checkpoint_fsm.go (e.g. "phase2_mint_dek").
+   *
    * @generated from field: string phase = 1;
    */
   phase: string;
@@ -135,23 +193,40 @@ export const PhaseStartedSchema: GenMessage<PhaseStarted> = /*@__PURE__*/
   messageDesc(file_holomush_admin_v1_rekey, 2);
 
 /**
- * Phase3Progress reports incremental progress during the bulk re-encryption
- * phase (phase 3) of the rekey orchestrator.
+ * Phase3Progress reports incremental progress during Phase 3, the bulk
+ * cold-tier re-encryption phase. The orchestrator rewrites events_audit rows
+ * in batches of up to 1000, decrypting each under the old DEK and
+ * re-encrypting under the new DEK with AAD rebound to the new (dek_ref,
+ * dek_version) — INV-E8. Clients may use these messages to render a
+ * progress bar; the stream is terminated by RekeyCompleted or RekeyError.
  *
  * @generated from message holomush.admin.v1.Phase3Progress
  */
 export type Phase3Progress = Message<"holomush.admin.v1.Phase3Progress"> & {
   /**
+   * rows_rewritten is the cumulative count of events_audit rows re-encrypted
+   * by this Phase 3 invocation so far. Resets to zero on a fresh resume; the
+   * checkpoint row's phase3_rows_rewritten column holds the cross-resume total.
+   *
    * @generated from field: int64 rows_rewritten = 1;
    */
   rowsRewritten: bigint;
 
   /**
+   * rows_remaining_estimate is a best-effort count of events_audit rows whose
+   * dek_ref still points at the old DEK. Not guaranteed to be exact (rows may
+   * be written concurrently); use for display only.
+   *
    * @generated from field: int64 rows_remaining_estimate = 2;
    */
   rowsRemainingEstimate: bigint;
 
   /**
+   * last_processed_event_id is the ULID bytes of the most recently committed
+   * batch's last row. Stored as the Phase 3 resume cursor in the checkpoint
+   * row (INV-E7-COLD-RESUME-CURSOR); a crash and resume picks up exactly
+   * where this cursor points.
+   *
    * @generated from field: bytes last_processed_event_id = 3;
    */
   lastProcessedEventId: Uint8Array;
@@ -165,18 +240,28 @@ export const Phase3ProgressSchema: GenMessage<Phase3Progress> = /*@__PURE__*/
   messageDesc(file_holomush_admin_v1_rekey, 3);
 
 /**
- * Phase5Attempt is emitted each time the orchestrator retries key-ceremony
- * quorum collection (phase 5).
+ * Phase5Attempt is emitted each time the orchestrator retries the Phase 5
+ * cluster cache-invalidation fan-out. Phase 5 requests every replica to evict
+ * the old DEK from its in-memory cache; it succeeds only when all members
+ * acknowledge. Timeout surfaces missing_members; the operator may retry
+ * (RekeyResume) or bypass quorum via force_destroy (RekeyResumeRequest).
  *
  * @generated from message holomush.admin.v1.Phase5Attempt
  */
 export type Phase5Attempt = Message<"holomush.admin.v1.Phase5Attempt"> & {
   /**
+   * attempt_count is the 1-based index of this invalidation attempt. The
+   * checkpoint row's phase5_attempt_count column is incremented before each
+   * attempt and is authoritative; this field mirrors it for live display.
+   *
    * @generated from field: int32 attempt_count = 1;
    */
   attemptCount: number;
 
   /**
+   * missing_members lists the node identifiers that have not yet acknowledged
+   * the cache-invalidation request. Empty on a successful attempt.
+   *
    * @generated from field: repeated string missing_members = 2;
    */
   missingMembers: string[];
@@ -190,12 +275,17 @@ export const Phase5AttemptSchema: GenMessage<Phase5Attempt> = /*@__PURE__*/
   messageDesc(file_holomush_admin_v1_rekey, 4);
 
 /**
- * PhaseCompleted is emitted when an orchestrator phase finishes successfully.
+ * PhaseCompleted is emitted when an orchestrator phase finishes without error.
+ * Paired with PhaseStarted for bracketing display; the phase string matches
+ * the CheckpointStatus FSM constant of the phase that just finished.
  *
  * @generated from message holomush.admin.v1.PhaseCompleted
  */
 export type PhaseCompleted = Message<"holomush.admin.v1.PhaseCompleted"> & {
   /**
+   * phase is the FSM status name of the phase that finished successfully,
+   * matching the CheckpointStatus constants in checkpoint_fsm.go.
+   *
    * @generated from field: string phase = 1;
    */
   phase: string;
@@ -209,43 +299,77 @@ export const PhaseCompletedSchema: GenMessage<PhaseCompleted> = /*@__PURE__*/
   messageDesc(file_holomush_admin_v1_rekey, 5);
 
 /**
- * RekeyCompleted is the terminal success event streamed at the end of a
- * successful rekey operation.
+ * RekeyCompleted is the terminal success event emitted at the end of a
+ * successful rekey operation. All 7 phases have completed: a new DEK has been
+ * minted, all cold-tier events_audit rows re-encrypted under it, the old DEK
+ * destroyed, and a chained audit event emitted (Phase 7). The stream ends
+ * after this message.
  *
  * @generated from message holomush.admin.v1.RekeyCompleted
  */
 export type RekeyCompleted = Message<"holomush.admin.v1.RekeyCompleted"> & {
   /**
+   * request_id is the 16-byte ULID of the checkpoint row that tracked this
+   * rekey operation, matching the value returned by Phase 1 and stored in
+   * crypto_rekey_checkpoints.request_id.
+   *
    * @generated from field: bytes request_id = 1;
    */
   requestId: Uint8Array;
 
   /**
+   * audit_event_id is the 16-byte ULID of the Phase 7 chained rekey audit
+   * event emitted to events_audit. Operators can retrieve this event via
+   * AdminReadStream for an end-to-end verification trace.
+   *
    * @generated from field: bytes audit_event_id = 2;
    */
   auditEventId: Uint8Array;
 
   /**
+   * duration_ms is the wall-clock time in milliseconds from Phase 1 checkpoint
+   * open (started_at) to Phase 7 completion (completed_at), measured using
+   * the server's local clock. Used for operational observability.
+   *
    * @generated from field: int64 duration_ms = 3;
    */
   durationMs: bigint;
 
   /**
+   * phase3_rows_rewritten is the cumulative count of events_audit rows that
+   * were re-encrypted during Phase 3 across all resume attempts. This value
+   * is read from the checkpoint row's phase3_rows_rewritten column at
+   * completion, which is incremented atomically inside each batch transaction.
+   *
    * @generated from field: int64 phase3_rows_rewritten = 4;
    */
   phase3RowsRewritten: bigint;
 
   /**
+   * phase5_attempts is the total number of cluster cache-invalidation attempts
+   * made during Phase 5, including retries due to missing members. A value of
+   * 1 means Phase 5 succeeded on the first try.
+   *
    * @generated from field: int32 phase5_attempts = 5;
    */
   phase5Attempts: number;
 
   /**
+   * force_destroy_used is true when the operator passed force_destroy=true on
+   * the final RekeyResume call, bypassing Phase 5 quorum by skipping the
+   * cluster invalidation step and proceeding directly to Phase 6 (old DEK
+   * soft-delete). Recorded for audit traceability.
+   *
    * @generated from field: bool force_destroy_used = 6;
    */
   forceDestroyUsed: boolean;
 
   /**
+   * resumed is true when this completion resulted from a RekeyResume call
+   * (i.e. the checkpoint was already non-terminal when Run was invoked), as
+   * opposed to a fresh Rekey call that drove to completion without
+   * interruption.
+   *
    * @generated from field: bool resumed = 7;
    */
   resumed: boolean;
@@ -259,24 +383,38 @@ export const RekeyCompletedSchema: GenMessage<RekeyCompleted> = /*@__PURE__*/
   messageDesc(file_holomush_admin_v1_rekey, 6);
 
 /**
- * RekeyError is the terminal failure event streamed when the rekey
- * orchestrator cannot proceed.
+ * RekeyError is the terminal failure event emitted when the orchestrator
+ * cannot proceed. The stream ends after this message. The checkpoint may
+ * remain non-terminal (e.g. after a Phase 5 timeout), in which case the
+ * operator may call RekeyResume to continue. If the checkpoint has already
+ * transitioned to aborted, RekeyResume will surface DEK_REKEY_CHECKPOINT_TERMINAL.
  *
  * @generated from message holomush.admin.v1.RekeyError
  */
 export type RekeyError = Message<"holomush.admin.v1.RekeyError"> & {
   /**
+   * code is the oops error code string from the orchestrator, e.g.
+   * "DEK_REKEY_PHASE5_TIMEOUT" or "DEK_REKEY_ALREADY_IN_PROGRESS". Used by
+   * operator tooling to branch on specific failure modes. "UNKNOWN" is emitted
+   * when the error has no structured code.
+   *
    * @generated from field: string code = 1;
    */
   code: string;
 
   /**
+   * message is the human-readable error description. Not intended for
+   * programmatic branching; use code instead.
+   *
    * @generated from field: string message = 2;
    */
   message: string;
 
   /**
-   * Structured context (e.g., missing_members) as JSON-encoded bytes.
+   * details carries structured context for specific error codes as
+   * JSON-encoded bytes, e.g. {"missing_members":["node-a"]} for
+   * DEK_REKEY_PHASE5_TIMEOUT. Absent (zero-length) when the error code carries
+   * no structured detail.
    *
    * @generated from field: bytes details = 3;
    */
@@ -291,22 +429,40 @@ export const RekeyErrorSchema: GenMessage<RekeyError> = /*@__PURE__*/
   messageDesc(file_holomush_admin_v1_rekey, 7);
 
 /**
- * RekeyResumeRequest resumes a paused or interrupted rekey operation.
+ * RekeyResumeRequest resumes a paused or interrupted rekey operation identified
+ * by request_id. The orchestrator determines the resume entry point from the
+ * checkpoint's current FSM status and drives forward from there. INV-E16:
+ * resuming a complete checkpoint is a no-op that re-emits RekeyCompleted.
+ * Resuming an aborted checkpoint surfaces DEK_REKEY_CHECKPOINT_TERMINAL.
  *
  * @generated from message holomush.admin.v1.RekeyResumeRequest
  */
 export type RekeyResumeRequest = Message<"holomush.admin.v1.RekeyResumeRequest"> & {
   /**
+   * session_token authenticates the resuming operator. The handler re-asserts
+   * crypto.operator capability and admin role (INV-D16).
+   *
    * @generated from field: string session_token = 1;
    */
   sessionToken: string;
 
   /**
+   * request_id is the 16-byte ULID identifying the checkpoint to resume.
+   * Must be non-zero; zero bytes are rejected with REKEY_INVALID_REQUEST_ID.
+   *
    * @generated from field: bytes request_id = 2;
    */
   requestId: Uint8Array;
 
   /**
+   * force_destroy, when true, instructs the orchestrator to bypass Phase 5
+   * quorum on this resume attempt. If the checkpoint is stuck in
+   * phase5_invalidate with missing_members populated, setting this true skips
+   * the cluster invalidation and advances directly to Phase 6 (old DEK
+   * soft-delete). Irreversible: the old DEK material is destroyed without
+   * full cluster acknowledgement. Recorded in force_destroy_used on
+   * RekeyCompleted.
+   *
    * @generated from field: bool force_destroy = 3;
    */
   forceDestroy: boolean;
@@ -320,17 +476,30 @@ export const RekeyResumeRequestSchema: GenMessage<RekeyResumeRequest> = /*@__PUR
   messageDesc(file_holomush_admin_v1_rekey, 8);
 
 /**
- * RekeyAbortRequest cancels an in-progress rekey operation.
+ * RekeyAbortRequest cancels a non-terminal rekey operation, transitioning its
+ * checkpoint to the aborted state. Abort is single-control (INV-E17): any
+ * session holding crypto.operator capability may abort any non-terminal
+ * checkpoint, regardless of site dual-control policy or which operator
+ * initiated the rekey. Once aborted the checkpoint is terminal; a new Rekey
+ * call is required to restart.
  *
  * @generated from message holomush.admin.v1.RekeyAbortRequest
  */
 export type RekeyAbortRequest = Message<"holomush.admin.v1.RekeyAbortRequest"> & {
   /**
+   * session_token authenticates the aborting operator. Only crypto.operator
+   * capability is required — no admin role re-check (INV-E17).
+   *
    * @generated from field: string session_token = 1;
    */
   sessionToken: string;
 
   /**
+   * request_id is the 16-byte ULID of the checkpoint to abort. The handler
+   * rejects zero bytes with REKEY_INVALID_REQUEST_ID. If the checkpoint is
+   * already terminal (complete or aborted), the handler returns
+   * DEK_REKEY_CHECKPOINT_TERMINAL.
+   *
    * @generated from field: bytes request_id = 2;
    */
   requestId: Uint8Array;
@@ -344,17 +513,25 @@ export const RekeyAbortRequestSchema: GenMessage<RekeyAbortRequest> = /*@__PURE_
   messageDesc(file_holomush_admin_v1_rekey, 9);
 
 /**
- * RekeyAbortResponse confirms the abort and provides the audit trail.
+ * RekeyAbortResponse confirms that the rekey checkpoint has been transitioned
+ * to the aborted terminal state.
  *
  * @generated from message holomush.admin.v1.RekeyAbortResponse
  */
 export type RekeyAbortResponse = Message<"holomush.admin.v1.RekeyAbortResponse"> & {
   /**
+   * aborted_at is the server timestamp at which the checkpoint was marked
+   * aborted in crypto_rekey_checkpoints.
+   *
    * @generated from field: google.protobuf.Timestamp aborted_at = 1;
    */
   abortedAt?: Timestamp | undefined;
 
   /**
+   * audit_event_id is the 16-byte ULID of the abort audit event emitted to
+   * events_audit. Operators can use this to correlate the abort with the
+   * full rekey operation history via AdminReadStream.
+   *
    * @generated from field: bytes audit_event_id = 2;
    */
   auditEventId: Uint8Array;
@@ -368,17 +545,25 @@ export const RekeyAbortResponseSchema: GenMessage<RekeyAbortResponse> = /*@__PUR
   messageDesc(file_holomush_admin_v1_rekey, 10);
 
 /**
- * RekeyStatusRequest fetches the current state of a single rekey operation.
+ * RekeyStatusRequest fetches the current FSM state and associated fields of
+ * a single rekey checkpoint by its request_id. Requires crypto.operator
+ * capability (read-only; no admin role re-check).
  *
  * @generated from message holomush.admin.v1.RekeyStatusRequest
  */
 export type RekeyStatusRequest = Message<"holomush.admin.v1.RekeyStatusRequest"> & {
   /**
+   * session_token authenticates the querying operator. Only crypto.operator
+   * capability is required for this read-only RPC.
+   *
    * @generated from field: string session_token = 1;
    */
   sessionToken: string;
 
   /**
+   * request_id is the 16-byte ULID of the checkpoint to fetch. Returns
+   * DEK_REKEY_CHECKPOINT_NOT_FOUND if no row exists for this ID.
+   *
    * @generated from field: bytes request_id = 2;
    */
   requestId: Uint8Array;
@@ -392,72 +577,123 @@ export const RekeyStatusRequestSchema: GenMessage<RekeyStatusRequest> = /*@__PUR
   messageDesc(file_holomush_admin_v1_rekey, 11);
 
 /**
- * RekeyStatusResponse describes the current state of one rekey operation.
+ * RekeyStatusResponse describes the current state of one rekey checkpoint.
+ * Returned by RekeyStatus (unary) and streamed by RekeyList (one message per
+ * matching checkpoint). Fields are populated directly from the
+ * crypto_rekey_checkpoints row.
  *
  * @generated from message holomush.admin.v1.RekeyStatusResponse
  */
 export type RekeyStatusResponse = Message<"holomush.admin.v1.RekeyStatusResponse"> & {
   /**
+   * request_id is the 16-byte ULID uniquely identifying this checkpoint,
+   * matching the value returned by the Phase 1 open and stored in
+   * crypto_rekey_checkpoints.request_id.
+   *
    * @generated from field: bytes request_id = 1;
    */
   requestId: Uint8Array;
 
   /**
+   * context_type is the encryption domain for which this rekey was initiated,
+   * e.g. "scene". Together with context_id it identifies the DEK being rekeyed.
+   *
    * @generated from field: string context_type = 2;
    */
   contextType: string;
 
   /**
+   * context_id is the entity identifier within context_type, e.g. a scene ULID.
+   *
    * @generated from field: string context_id = 3;
    */
   contextId: string;
 
   /**
+   * status is the current FSM state of this checkpoint. Values match the
+   * CheckpointStatus constants: "pending", "phase1_auth", "phase2_mint_dek",
+   * "phase3_reencrypt_cold", "phase5_invalidate", "phase6_destroy_old",
+   * "phase7_audit", "complete", or "aborted".
+   *
    * @generated from field: string status = 4;
    */
   status: string;
 
   /**
+   * primary_player_id is the player ID of the operator who initiated the rekey
+   * (the first operator under dual-control). Used for accountability and
+   * is included in the Phase 7 audit event.
+   *
    * @generated from field: string primary_player_id = 5;
    */
   primaryPlayerId: string;
 
   /**
+   * started_at is the server timestamp when the checkpoint row was opened
+   * (Phase 1 INSERT). Combined with completed_at it bounds the total rekey
+   * wall-clock time.
+   *
    * @generated from field: google.protobuf.Timestamp started_at = 6;
    */
   startedAt?: Timestamp | undefined;
 
   /**
+   * last_heartbeat_at is the server timestamp of the most recent heartbeat
+   * written by Phase 3. The sweep worker uses this to TTL-abort stalled
+   * checkpoints (INV-E18/E19). A value far in the past indicates a stalled
+   * or crashed orchestrator run.
+   *
    * @generated from field: google.protobuf.Timestamp last_heartbeat_at = 7;
    */
   lastHeartbeatAt?: Timestamp | undefined;
 
   /**
+   * completed_at is the server timestamp when the checkpoint reached a
+   * terminal state (complete or aborted). Zero if not yet terminal.
+   *
    * @generated from field: google.protobuf.Timestamp completed_at = 8;
    */
   completedAt?: Timestamp | undefined;
 
   /**
+   * phase5_attempt_count is the total number of cluster cache-invalidation
+   * attempts made during Phase 5 for this checkpoint. Incremented before each
+   * attempt; zero means Phase 5 has not started yet.
+   *
    * @generated from field: int32 phase5_attempt_count = 9;
    */
   phase5AttemptCount: number;
 
   /**
+   * phase5_missing_members lists the node identifiers that failed to
+   * acknowledge the most recent Phase 5 cache-invalidation request. Non-empty
+   * indicates a Phase 5 timeout; the operator may resume or use force_destroy.
+   * Empty when Phase 5 has not yet run or succeeded.
+   *
    * @generated from field: repeated string phase5_missing_members = 10;
    */
   phase5MissingMembers: string[];
 
   /**
+   * force_destroy records whether force_destroy was set on the last
+   * RekeyResume call for this checkpoint, bypassing Phase 5 quorum.
+   *
    * @generated from field: bool force_destroy = 11;
    */
   forceDestroy: boolean;
 
   /**
+   * old_dek_id is the primary key of the crypto_keys row being replaced.
+   * Absent until Phase 1 resolves the active DEK for the context.
+   *
    * @generated from field: optional int64 old_dek_id = 12;
    */
   oldDekId?: bigint | undefined;
 
   /**
+   * new_dek_id is the primary key of the freshly-minted crypto_keys row
+   * created by Phase 2. Absent until Phase 2 completes.
+   *
    * @generated from field: optional int64 new_dek_id = 13;
    */
   newDekId?: bigint | undefined;
@@ -471,32 +707,53 @@ export const RekeyStatusResponseSchema: GenMessage<RekeyStatusResponse> = /*@__P
   messageDesc(file_holomush_admin_v1_rekey, 12);
 
 /**
- * RekeyListRequest queries active and optionally terminal rekey operations.
+ * RekeyListRequest queries the operator's view of active and optionally
+ * terminal rekey checkpoints. Results are streamed as RekeyStatusResponse
+ * messages. By default only non-terminal checkpoints are included
+ * (pending through phase7_audit); set include_terminal=true to also receive
+ * complete and aborted rows.
  *
  * @generated from message holomush.admin.v1.RekeyListRequest
  */
 export type RekeyListRequest = Message<"holomush.admin.v1.RekeyListRequest"> & {
   /**
+   * session_token authenticates the querying operator. Only crypto.operator
+   * capability is required for this read-only RPC.
+   *
    * @generated from field: string session_token = 1;
    */
   sessionToken: string;
 
   /**
+   * include_terminal, when true, includes checkpoints in the complete and
+   * aborted terminal states alongside the non-terminal ones. Defaults to
+   * false so operators see only in-progress work by default.
+   *
    * @generated from field: bool include_terminal = 2;
    */
   includeTerminal: boolean;
 
   /**
+   * context_pattern, when present, filters results to checkpoints whose
+   * context_type or context_id contains this substring. Absent means no
+   * context filter.
+   *
    * @generated from field: optional string context_pattern = 3;
    */
   contextPattern?: string | undefined;
 
   /**
+   * since, when present, restricts results to checkpoints whose started_at
+   * is at or after this timestamp. Absent means no lower time bound.
+   *
    * @generated from field: optional google.protobuf.Timestamp since = 4;
    */
   since?: Timestamp | undefined;
 
   /**
+   * limit caps the number of rows returned. Values ≤0 or >100 are clamped
+   * to 100 by the handler (CheckpointListFilter cap in rekey_handler.go).
+   *
    * @generated from field: int32 limit = 5;
    */
   limit: number;

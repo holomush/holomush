@@ -10,13 +10,27 @@ import { DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCom
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
+ * WebService is the ConnectRPC surface the SvelteKit web client speaks to. Per
+ * the gateway-boundary invariant (.claude/rules/gateway-boundary.md) it is a
+ * protocol-translation layer ONLY: every game-state operation proxies to the
+ * corresponding CoreService gRPC RPC (content RPCs proxy to ContentService),
+ * and the gateway computes no business logic. The web-specific concerns it
+ * owns are HTTP↔gRPC framing, cookie↔token translation
+ * (internal/web/cookie.go::CookieMiddleware), and per-stream connection
+ * identity. Implemented by internal/web.Handler; registered via
+ * webv1connect.NewWebServiceHandler in internal/web/server.go.
+ *
  * @generated from service holomush.web.v1.WebService
  */
 export const WebService = {
   typeName: "holomush.web.v1.WebService",
   methods: {
     /**
-     * Send a game command (say, pose, quit, etc.)
+     * SendCommand submits a player's raw command line (say, pose, quit, ...)
+     * for parsing and dispatch. Proxies to CoreService.HandleCommand;
+     * command-history persistence happens core-side, so the gateway does no
+     * extra work. The connection_id ties the command to its originating stream
+     * for per-connection routing.
      *
      * @generated from rpc holomush.web.v1.WebService.SendCommand
      */
@@ -27,8 +41,12 @@ export const WebService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Server-streaming event feed. Client receives game events
-     * (say, pose, arrive, leave) as they occur.
+     * StreamEvents opens the server-streaming game-event feed for a session.
+     * Proxies to CoreService.Subscribe; the gateway generates a per-stream
+     * connection_id, emits a synthetic STREAM_OPENED ControlFrame carrying it,
+     * forwards translated frames, and runs a best-effort Disconnect on stream
+     * exit (client disconnect, cancel, error, or STREAM_CLOSED). Session-store
+     * registration/deregistration is owned entirely by core's Subscribe path.
      *
      * @generated from rpc holomush.web.v1.WebService.StreamEvents
      */
@@ -39,7 +57,10 @@ export const WebService = {
       kind: MethodKind.ServerStreaming,
     },
     /**
-     * Disconnect ends the session and triggers cleanup.
+     * Disconnect ends the game session out of band (not via stream teardown).
+     * Proxies to CoreService.Disconnect on a best-effort basis — RPC errors
+     * are logged but never surfaced to the caller. Forwards the session-token
+     * cookie header so core can enforce ownership.
      *
      * @generated from rpc holomush.web.v1.WebService.Disconnect
      */
@@ -50,7 +71,10 @@ export const WebService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Retrieve command history for a session.
+     * GetCommandHistory retrieves the recent command lines a session has
+     * entered. Proxies to CoreService.GetCommandHistory; ownership is enforced
+     * core-side via the forwarded session-token header, and any failure (error
+     * or success=false) collapses to an empty history at the gateway.
      *
      * @generated from rpc holomush.web.v1.WebService.GetCommandHistory
      */
@@ -61,7 +85,11 @@ export const WebService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Web auth RPCs.
+     * WebAuthenticatePlayer validates username/password and returns the
+     * player's character roster. Proxies to CoreService.AuthenticatePlayer; on
+     * success the gateway translates the core session token into a Set-Cookie
+     * signal. First runs the cookie-collision gate, short-circuiting with
+     * ALREADY_AUTHENTICATED if a valid session cookie is already present.
      *
      * @generated from rpc holomush.web.v1.WebService.WebAuthenticatePlayer
      */
@@ -72,6 +100,10 @@ export const WebService = {
       kind: MethodKind.Unary,
     },
     /**
+     * WebSelectCharacter binds a character to a new or reattached game session.
+     * Proxies to CoreService.SelectCharacter using the session token read from
+     * the X-Session-Token cookie header; returns the resulting session_id.
+     *
      * @generated from rpc holomush.web.v1.WebService.WebSelectCharacter
      */
     webSelectCharacter: {
@@ -81,6 +113,10 @@ export const WebService = {
       kind: MethodKind.Unary,
     },
     /**
+     * WebCreatePlayer registers a new player account. Proxies to
+     * CoreService.CreatePlayer; on success the gateway sets the session cookie.
+     * Runs the cookie-collision gate first (ALREADY_AUTHENTICATED short-circuit).
+     *
      * @generated from rpc holomush.web.v1.WebService.WebCreatePlayer
      */
     webCreatePlayer: {
@@ -90,7 +126,10 @@ export const WebService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Create an ephemeral guest player and character.
+     * WebCreateGuest provisions an ephemeral guest player and character.
+     * Proxies to CoreService.CreateGuest; on success the gateway sets a session
+     * cookie whose MaxAge matches the guest session's shorter TTL. Runs the
+     * cookie-collision gate first.
      *
      * @generated from rpc holomush.web.v1.WebService.WebCreateGuest
      */
@@ -101,6 +140,9 @@ export const WebService = {
       kind: MethodKind.Unary,
     },
     /**
+     * WebCreateCharacter adds a character to the authenticated player. Proxies
+     * to CoreService.CreateCharacter using the cookie-derived session token.
+     *
      * @generated from rpc holomush.web.v1.WebService.WebCreateCharacter
      */
     webCreateCharacter: {
@@ -110,6 +152,10 @@ export const WebService = {
       kind: MethodKind.Unary,
     },
     /**
+     * WebListCharacters returns the authenticated player's character roster.
+     * Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
+     * CodeUnauthenticated (session expired or invalid).
+     *
      * @generated from rpc holomush.web.v1.WebService.WebListCharacters
      */
     webListCharacters: {
@@ -119,6 +165,10 @@ export const WebService = {
       kind: MethodKind.Unary,
     },
     /**
+     * WebLogout ends the player session and clears the session cookie. Proxies
+     * to CoreService.Logout (best-effort) when a token is present, then always
+     * emits the cookie-clear signal regardless of the RPC outcome.
+     *
      * @generated from rpc holomush.web.v1.WebService.WebLogout
      */
     webLogout: {
@@ -128,6 +178,10 @@ export const WebService = {
       kind: MethodKind.Unary,
     },
     /**
+     * WebRequestPasswordReset initiates the email-based reset flow. Proxies to
+     * CoreService.RequestPasswordReset; to avoid leaking account existence the
+     * gateway reports success=true even when the underlying RPC errors.
+     *
      * @generated from rpc holomush.web.v1.WebService.WebRequestPasswordReset
      */
     webRequestPasswordReset: {
@@ -137,6 +191,9 @@ export const WebService = {
       kind: MethodKind.Unary,
     },
     /**
+     * WebConfirmPasswordReset completes a reset using the emailed token and a
+     * new password. Proxies to CoreService.ConfirmPasswordReset.
+     *
      * @generated from rpc holomush.web.v1.WebService.WebConfirmPasswordReset
      */
     webConfirmPasswordReset: {
@@ -146,7 +203,10 @@ export const WebService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Validate player session from cookie. Returns player info or Unauthenticated error.
+     * WebCheckSession validates the player session carried in the cookie and
+     * returns the player identity plus character roster, or a
+     * CodeUnauthenticated error. Proxies to CoreService.CheckPlayerSession; the
+     * web client's authed layout uses this to gate page loads.
      *
      * @generated from rpc holomush.web.v1.WebService.WebCheckSession
      */
@@ -157,7 +217,10 @@ export const WebService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Content store access (public, no auth required).
+     * WebGetContent fetches a single content-store item by exact key. Proxies
+     * to ContentService.GetContent (a separate gRPC service, NOT CoreService);
+     * public, no auth. Returns CodeUnimplemented if the gateway was built
+     * without a content client.
      *
      * @generated from rpc holomush.web.v1.WebService.WebGetContent
      */
@@ -168,6 +231,10 @@ export const WebService = {
       kind: MethodKind.Unary,
     },
     /**
+     * WebListContent lists content-store items under a key prefix. Proxies to
+     * ContentService.ListContent (NOT CoreService); public, no auth. Returns
+     * CodeUnimplemented if no content client is configured.
+     *
      * @generated from rpc holomush.web.v1.WebService.WebListContent
      */
     webListContent: {
@@ -202,8 +269,12 @@ export const WebService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Session-management RPCs. The caller is identified via the X-Session-Token
-     * cookie header injected by CookieMiddleware; no token field in the request.
+     * WebListPlayerSessions returns the caller's active PlayerSessions (the
+     * device/tab login records, distinct from in-game game sessions), each
+     * flagged is_current for the calling session. Proxies to
+     * CoreService.ListPlayerSessions; the caller is identified via the
+     * X-Session-Token cookie header injected by CookieMiddleware — there is no
+     * token field in the request body.
      *
      * @generated from rpc holomush.web.v1.WebService.WebListPlayerSessions
      */
@@ -214,6 +285,10 @@ export const WebService = {
       kind: MethodKind.Unary,
     },
     /**
+     * WebRevokePlayerSession revokes one of the caller's PlayerSessions by id.
+     * Proxies to CoreService.RevokePlayerSession; caller identity comes from the
+     * X-Session-Token cookie header.
+     *
      * @generated from rpc holomush.web.v1.WebService.WebRevokePlayerSession
      */
     webRevokePlayerSession: {
@@ -223,6 +298,11 @@ export const WebService = {
       kind: MethodKind.Unary,
     },
     /**
+     * WebRevokeOtherPlayerSessions revokes all of the caller's PlayerSessions
+     * except the current one ("log out everywhere else"). Proxies to
+     * CoreService.RevokeOtherPlayerSessions; caller identity comes from the
+     * X-Session-Token cookie header.
+     *
      * @generated from rpc holomush.web.v1.WebService.WebRevokeOtherPlayerSessions
      */
     webRevokeOtherPlayerSessions: {

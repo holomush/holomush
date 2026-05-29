@@ -9,122 +9,326 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/admin/v1;adminv1";
 
-// RekeyRequest initiates a full DEK rekey operation for a given context.
-// Spec §7; INV-E rekeying surface.
+// RekeyRequest initiates a fresh DEK rekey operation for a single encryption
+// context (context_type + context_id). The caller must hold an authenticated
+// operator session (session_token from AdminService.Authenticate) and the
+// crypto.operator in-game capability plus the admin role — both are re-asserted
+// at dispatch time (INV-D16 defense-in-depth). Justification is recorded on
+// the checkpoint row for audit; approval_request_id links a pending
+// admin_approvals row when dual-control is required by site policy.
 message RekeyRequest {
+  // session_token authenticates the issuing operator. Must be a non-expired
+  // token returned by AdminService.Authenticate; the handler re-validates
+  // crypto.operator capability and admin role on every call (INV-D16).
   string session_token = 1;
+  // context_type identifies the encryption domain, e.g. "scene". Together
+  // with context_id it resolves the active DEK row (old_dek_id) that the
+  // orchestrator's Phase 1 reads from crypto_keys.
   string context_type = 2;
+  // context_id is the entity identifier within context_type, e.g. a scene
+  // ULID. The orchestrator uses (context_type, context_id) to locate the
+  // active DEK and enforce INV-E5 (at most one non-terminal checkpoint per
+  // context at a time).
   string context_id = 3;
+  // justification is a free-text operator rationale stored on the checkpoint
+  // row and included in the Phase 7 chained audit event. Required for
+  // accountability; non-empty values are enforced by the handler.
   string justification = 4;
-  optional string approval_request_id = 5; // for dual-control
+  // approval_request_id, when present, links a pending admin_approvals row
+  // created by the first operator under dual-control policy. Absent for
+  // single-control sites. The orchestrator validates the approval row before
+  // advancing past Phase 1.
+  optional string approval_request_id = 5;
 }
 
-// RekeyProgress is a streamed progress event emitted during the 7-phase
-// rekey orchestrator. Clients render phase-by-phase progress from these.
+// RekeyProgress is the streaming event envelope shared by the Rekey and
+// RekeyResume RPCs. Each message carries exactly one event variant via the
+// oneof. In the current MVP the server emits a single terminal event
+// (RekeyCompleted or RekeyError); PhaseStarted, Phase3Progress,
+// Phase5Attempt, and PhaseCompleted are pre-defined for richer per-phase
+// streaming in a future enhancement.
 message RekeyProgress {
+  // event holds the progress or terminal event payload. Clients MUST handle
+  // all variants; unrecognised variants should be ignored rather than
+  // treated as errors, in anticipation of future additions.
   oneof event {
+    // phase_started signals the beginning of a named orchestrator phase.
     PhaseStarted phase_started = 1;
+    // phase3_progress reports incremental re-encryption progress during
+    // Phase 3 (bulk cold-tier rewrite).
     Phase3Progress phase3_progress = 2;
+    // phase5_attempt reports each cluster cache-invalidation attempt during
+    // Phase 5, including which replica members have not yet acknowledged.
     Phase5Attempt phase5_attempt = 3;
+    // phase_completed signals that a named orchestrator phase finished
+    // successfully.
     PhaseCompleted phase_completed = 4;
+    // completed is the terminal success event emitted once all 7 phases
+    // have finished. Receiving this message means the old DEK has been
+    // destroyed and the audit chain updated.
     RekeyCompleted completed = 5;
+    // error is the terminal failure event emitted when the orchestrator
+    // cannot proceed. The stream ends after this message; the operator
+    // may resume via RekeyResume if the checkpoint is non-terminal.
     RekeyError error = 6;
   }
 }
 
-// PhaseStarted is emitted when a new orchestrator phase begins.
+// PhaseStarted is emitted at the beginning of each named orchestrator phase.
+// The phase string matches the CheckpointStatus FSM constants (e.g.
+// "phase1_auth", "phase3_reencrypt_cold") so clients can display a
+// phase-by-phase progress indicator.
 message PhaseStarted {
+  // phase is the FSM status name of the phase that is starting, matching the
+  // CheckpointStatus constants in checkpoint_fsm.go (e.g. "phase2_mint_dek").
   string phase = 1;
 }
 
-// Phase3Progress reports incremental progress during the bulk re-encryption
-// phase (phase 3) of the rekey orchestrator.
+// Phase3Progress reports incremental progress during Phase 3, the bulk
+// cold-tier re-encryption phase. The orchestrator rewrites events_audit rows
+// in batches of up to 1000, decrypting each under the old DEK and
+// re-encrypting under the new DEK with AAD rebound to the new (dek_ref,
+// dek_version) — INV-E8. Clients may use these messages to render a
+// progress bar; the stream is terminated by RekeyCompleted or RekeyError.
 message Phase3Progress {
+  // rows_rewritten is the cumulative count of events_audit rows re-encrypted
+  // by this Phase 3 invocation so far. Resets to zero on a fresh resume; the
+  // checkpoint row's phase3_rows_rewritten column holds the cross-resume total.
   int64 rows_rewritten = 1;
+  // rows_remaining_estimate is a best-effort count of events_audit rows whose
+  // dek_ref still points at the old DEK. Not guaranteed to be exact (rows may
+  // be written concurrently); use for display only.
   int64 rows_remaining_estimate = 2;
+  // last_processed_event_id is the ULID bytes of the most recently committed
+  // batch's last row. Stored as the Phase 3 resume cursor in the checkpoint
+  // row (INV-E7-COLD-RESUME-CURSOR); a crash and resume picks up exactly
+  // where this cursor points.
   bytes last_processed_event_id = 3;
 }
 
-// Phase5Attempt is emitted each time the orchestrator retries key-ceremony
-// quorum collection (phase 5).
+// Phase5Attempt is emitted each time the orchestrator retries the Phase 5
+// cluster cache-invalidation fan-out. Phase 5 requests every replica to evict
+// the old DEK from its in-memory cache; it succeeds only when all members
+// acknowledge. Timeout surfaces missing_members; the operator may retry
+// (RekeyResume) or bypass quorum via force_destroy (RekeyResumeRequest).
 message Phase5Attempt {
+  // attempt_count is the 1-based index of this invalidation attempt. The
+  // checkpoint row's phase5_attempt_count column is incremented before each
+  // attempt and is authoritative; this field mirrors it for live display.
   int32 attempt_count = 1;
+  // missing_members lists the node identifiers that have not yet acknowledged
+  // the cache-invalidation request. Empty on a successful attempt.
   repeated string missing_members = 2;
 }
 
-// PhaseCompleted is emitted when an orchestrator phase finishes successfully.
+// PhaseCompleted is emitted when an orchestrator phase finishes without error.
+// Paired with PhaseStarted for bracketing display; the phase string matches
+// the CheckpointStatus FSM constant of the phase that just finished.
 message PhaseCompleted {
+  // phase is the FSM status name of the phase that finished successfully,
+  // matching the CheckpointStatus constants in checkpoint_fsm.go.
   string phase = 1;
 }
 
-// RekeyCompleted is the terminal success event streamed at the end of a
-// successful rekey operation.
+// RekeyCompleted is the terminal success event emitted at the end of a
+// successful rekey operation. All 7 phases have completed: a new DEK has been
+// minted, all cold-tier events_audit rows re-encrypted under it, the old DEK
+// destroyed, and a chained audit event emitted (Phase 7). The stream ends
+// after this message.
 message RekeyCompleted {
+  // request_id is the 16-byte ULID of the checkpoint row that tracked this
+  // rekey operation, matching the value returned by Phase 1 and stored in
+  // crypto_rekey_checkpoints.request_id.
   bytes request_id = 1;
+  // audit_event_id is the 16-byte ULID of the Phase 7 chained rekey audit
+  // event emitted to events_audit. Operators can retrieve this event via
+  // AdminReadStream for an end-to-end verification trace.
   bytes audit_event_id = 2;
+  // duration_ms is the wall-clock time in milliseconds from Phase 1 checkpoint
+  // open (started_at) to Phase 7 completion (completed_at), measured using
+  // the server's local clock. Used for operational observability.
   int64 duration_ms = 3;
+  // phase3_rows_rewritten is the cumulative count of events_audit rows that
+  // were re-encrypted during Phase 3 across all resume attempts. This value
+  // is read from the checkpoint row's phase3_rows_rewritten column at
+  // completion, which is incremented atomically inside each batch transaction.
   int64 phase3_rows_rewritten = 4;
+  // phase5_attempts is the total number of cluster cache-invalidation attempts
+  // made during Phase 5, including retries due to missing members. A value of
+  // 1 means Phase 5 succeeded on the first try.
   int32 phase5_attempts = 5;
+  // force_destroy_used is true when the operator passed force_destroy=true on
+  // the final RekeyResume call, bypassing Phase 5 quorum by skipping the
+  // cluster invalidation step and proceeding directly to Phase 6 (old DEK
+  // soft-delete). Recorded for audit traceability.
   bool force_destroy_used = 6;
+  // resumed is true when this completion resulted from a RekeyResume call
+  // (i.e. the checkpoint was already non-terminal when Run was invoked), as
+  // opposed to a fresh Rekey call that drove to completion without
+  // interruption.
   bool resumed = 7;
 }
 
-// RekeyError is the terminal failure event streamed when the rekey
-// orchestrator cannot proceed.
+// RekeyError is the terminal failure event emitted when the orchestrator
+// cannot proceed. The stream ends after this message. The checkpoint may
+// remain non-terminal (e.g. after a Phase 5 timeout), in which case the
+// operator may call RekeyResume to continue. If the checkpoint has already
+// transitioned to aborted, RekeyResume will surface DEK_REKEY_CHECKPOINT_TERMINAL.
 message RekeyError {
+  // code is the oops error code string from the orchestrator, e.g.
+  // "DEK_REKEY_PHASE5_TIMEOUT" or "DEK_REKEY_ALREADY_IN_PROGRESS". Used by
+  // operator tooling to branch on specific failure modes. "UNKNOWN" is emitted
+  // when the error has no structured code.
   string code = 1;
+  // message is the human-readable error description. Not intended for
+  // programmatic branching; use code instead.
   string message = 2;
-  // Structured context (e.g., missing_members) as JSON-encoded bytes.
+  // details carries structured context for specific error codes as
+  // JSON-encoded bytes, e.g. {"missing_members":["node-a"]} for
+  // DEK_REKEY_PHASE5_TIMEOUT. Absent (zero-length) when the error code carries
+  // no structured detail.
   bytes details = 3;
 }
 
-// RekeyResumeRequest resumes a paused or interrupted rekey operation.
+// RekeyResumeRequest resumes a paused or interrupted rekey operation identified
+// by request_id. The orchestrator determines the resume entry point from the
+// checkpoint's current FSM status and drives forward from there. INV-E16:
+// resuming a complete checkpoint is a no-op that re-emits RekeyCompleted.
+// Resuming an aborted checkpoint surfaces DEK_REKEY_CHECKPOINT_TERMINAL.
 message RekeyResumeRequest {
+  // session_token authenticates the resuming operator. The handler re-asserts
+  // crypto.operator capability and admin role (INV-D16).
   string session_token = 1;
+  // request_id is the 16-byte ULID identifying the checkpoint to resume.
+  // Must be non-zero; zero bytes are rejected with REKEY_INVALID_REQUEST_ID.
   bytes request_id = 2;
+  // force_destroy, when true, instructs the orchestrator to bypass Phase 5
+  // quorum on this resume attempt. If the checkpoint is stuck in
+  // phase5_invalidate with missing_members populated, setting this true skips
+  // the cluster invalidation and advances directly to Phase 6 (old DEK
+  // soft-delete). Irreversible: the old DEK material is destroyed without
+  // full cluster acknowledgement. Recorded in force_destroy_used on
+  // RekeyCompleted.
   bool force_destroy = 3;
 }
 
-// RekeyAbortRequest cancels an in-progress rekey operation.
+// RekeyAbortRequest cancels a non-terminal rekey operation, transitioning its
+// checkpoint to the aborted state. Abort is single-control (INV-E17): any
+// session holding crypto.operator capability may abort any non-terminal
+// checkpoint, regardless of site dual-control policy or which operator
+// initiated the rekey. Once aborted the checkpoint is terminal; a new Rekey
+// call is required to restart.
 message RekeyAbortRequest {
+  // session_token authenticates the aborting operator. Only crypto.operator
+  // capability is required — no admin role re-check (INV-E17).
   string session_token = 1;
+  // request_id is the 16-byte ULID of the checkpoint to abort. The handler
+  // rejects zero bytes with REKEY_INVALID_REQUEST_ID. If the checkpoint is
+  // already terminal (complete or aborted), the handler returns
+  // DEK_REKEY_CHECKPOINT_TERMINAL.
   bytes request_id = 2;
 }
 
-// RekeyAbortResponse confirms the abort and provides the audit trail.
+// RekeyAbortResponse confirms that the rekey checkpoint has been transitioned
+// to the aborted terminal state.
 message RekeyAbortResponse {
+  // aborted_at is the server timestamp at which the checkpoint was marked
+  // aborted in crypto_rekey_checkpoints.
   google.protobuf.Timestamp aborted_at = 1;
+  // audit_event_id is the 16-byte ULID of the abort audit event emitted to
+  // events_audit. Operators can use this to correlate the abort with the
+  // full rekey operation history via AdminReadStream.
   bytes audit_event_id = 2;
 }
 
-// RekeyStatusRequest fetches the current state of a single rekey operation.
+// RekeyStatusRequest fetches the current FSM state and associated fields of
+// a single rekey checkpoint by its request_id. Requires crypto.operator
+// capability (read-only; no admin role re-check).
 message RekeyStatusRequest {
+  // session_token authenticates the querying operator. Only crypto.operator
+  // capability is required for this read-only RPC.
   string session_token = 1;
+  // request_id is the 16-byte ULID of the checkpoint to fetch. Returns
+  // DEK_REKEY_CHECKPOINT_NOT_FOUND if no row exists for this ID.
   bytes request_id = 2;
 }
 
-// RekeyStatusResponse describes the current state of one rekey operation.
+// RekeyStatusResponse describes the current state of one rekey checkpoint.
+// Returned by RekeyStatus (unary) and streamed by RekeyList (one message per
+// matching checkpoint). Fields are populated directly from the
+// crypto_rekey_checkpoints row.
 message RekeyStatusResponse {
+  // request_id is the 16-byte ULID uniquely identifying this checkpoint,
+  // matching the value returned by the Phase 1 open and stored in
+  // crypto_rekey_checkpoints.request_id.
   bytes request_id = 1;
+  // context_type is the encryption domain for which this rekey was initiated,
+  // e.g. "scene". Together with context_id it identifies the DEK being rekeyed.
   string context_type = 2;
+  // context_id is the entity identifier within context_type, e.g. a scene ULID.
   string context_id = 3;
+  // status is the current FSM state of this checkpoint. Values match the
+  // CheckpointStatus constants: "pending", "phase1_auth", "phase2_mint_dek",
+  // "phase3_reencrypt_cold", "phase5_invalidate", "phase6_destroy_old",
+  // "phase7_audit", "complete", or "aborted".
   string status = 4;
+  // primary_player_id is the player ID of the operator who initiated the rekey
+  // (the first operator under dual-control). Used for accountability and
+  // is included in the Phase 7 audit event.
   string primary_player_id = 5;
+  // started_at is the server timestamp when the checkpoint row was opened
+  // (Phase 1 INSERT). Combined with completed_at it bounds the total rekey
+  // wall-clock time.
   google.protobuf.Timestamp started_at = 6;
+  // last_heartbeat_at is the server timestamp of the most recent heartbeat
+  // written by Phase 3. The sweep worker uses this to TTL-abort stalled
+  // checkpoints (INV-E18/E19). A value far in the past indicates a stalled
+  // or crashed orchestrator run.
   google.protobuf.Timestamp last_heartbeat_at = 7;
+  // completed_at is the server timestamp when the checkpoint reached a
+  // terminal state (complete or aborted). Zero if not yet terminal.
   google.protobuf.Timestamp completed_at = 8;
+  // phase5_attempt_count is the total number of cluster cache-invalidation
+  // attempts made during Phase 5 for this checkpoint. Incremented before each
+  // attempt; zero means Phase 5 has not started yet.
   int32 phase5_attempt_count = 9;
+  // phase5_missing_members lists the node identifiers that failed to
+  // acknowledge the most recent Phase 5 cache-invalidation request. Non-empty
+  // indicates a Phase 5 timeout; the operator may resume or use force_destroy.
+  // Empty when Phase 5 has not yet run or succeeded.
   repeated string phase5_missing_members = 10;
+  // force_destroy records whether force_destroy was set on the last
+  // RekeyResume call for this checkpoint, bypassing Phase 5 quorum.
   bool force_destroy = 11;
+  // old_dek_id is the primary key of the crypto_keys row being replaced.
+  // Absent until Phase 1 resolves the active DEK for the context.
   optional int64 old_dek_id = 12;
+  // new_dek_id is the primary key of the freshly-minted crypto_keys row
+  // created by Phase 2. Absent until Phase 2 completes.
   optional int64 new_dek_id = 13;
 }
 
-// RekeyListRequest queries active and optionally terminal rekey operations.
+// RekeyListRequest queries the operator's view of active and optionally
+// terminal rekey checkpoints. Results are streamed as RekeyStatusResponse
+// messages. By default only non-terminal checkpoints are included
+// (pending through phase7_audit); set include_terminal=true to also receive
+// complete and aborted rows.
 message RekeyListRequest {
+  // session_token authenticates the querying operator. Only crypto.operator
+  // capability is required for this read-only RPC.
   string session_token = 1;
+  // include_terminal, when true, includes checkpoints in the complete and
+  // aborted terminal states alongside the non-terminal ones. Defaults to
+  // false so operators see only in-progress work by default.
   bool include_terminal = 2;
+  // context_pattern, when present, filters results to checkpoints whose
+  // context_type or context_id contains this substring. Absent means no
+  // context filter.
   optional string context_pattern = 3;
+  // since, when present, restricts results to checkpoints whose started_at
+  // is at or after this timestamp. Absent means no lower time bound.
   optional google.protobuf.Timestamp since = 4;
+  // limit caps the number of rows returned. Values ≤0 or >100 are clamped
+  // to 100 by the handler (CheckpointListFilter cap in rekey_handler.go).
   int32 limit = 5;
 }

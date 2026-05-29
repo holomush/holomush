@@ -78,33 +78,77 @@ const (
 
 // HostFunctionsServiceClient is a client for the holomush.plugin.v1.HostFunctionsService service.
 type HostFunctionsServiceClient interface {
-	// EmitEvent publishes an event to a stream.
+	// EmitEvent publishes one event onto a stream on the calling plugin's
+	// behalf. The host stamps the actor and routes through
+	// PluginEventEmitter.Emit, which enforces the plugin's manifest gates:
+	// the target domain must appear in the manifest emits list, the actor kind
+	// must be in actor_kinds_claimable, and a sensitive payload requires the
+	// event type to be declared in crypto.emits. The plugin never supplies a
+	// trusted actor identity at this boundary — the host derives it. Fire this
+	// for plugin-originated game actions rather than mutating world state
+	// directly.
 	EmitEvent(context.Context, *connect.Request[v1.EmitEventRequest]) (*connect.Response[v1.EmitEventResponse], error)
-	// QueryLocation retrieves information about a location.
+	// QueryLocation returns a snapshot of one location's identity fields. The
+	// host resolves it through the world service (GetLocation), which applies
+	// ABAC for the plugin subject; a missing location maps to a not-found
+	// outcome surfaced on the response error field, not an RPC error. Read-only.
 	QueryLocation(context.Context, *connect.Request[v1.QueryLocationRequest]) (*connect.Response[v1.QueryLocationResponse], error)
-	// QueryCharacter retrieves information about a character.
+	// QueryCharacter returns a snapshot of one character's identity fields,
+	// resolved through the world service (GetCharacter) under the plugin
+	// subject's ABAC policy. A missing character is reported via the response
+	// error field. Read-only.
 	QueryCharacter(context.Context, *connect.Request[v1.QueryCharacterRequest]) (*connect.Response[v1.QueryCharacterResponse], error)
-	// QueryLocationCharacters retrieves all characters in a location.
+	// QueryLocationCharacters returns the lightweight roster (id + name only) of
+	// characters currently in a location, via the world service
+	// (GetCharactersByLocation) under the plugin subject's ABAC policy. Use
+	// QueryCharacter per id to fetch full character detail. Read-only.
 	QueryLocationCharacters(context.Context, *connect.Request[v1.QueryLocationCharactersRequest]) (*connect.Response[v1.QueryLocationCharactersResponse], error)
-	// KVGet retrieves a value from the plugin's key-value store.
+	// KVGet reads one value from the calling plugin's private namespaced
+	// key-value store. The namespace is the plugin name, so plugins cannot read
+	// each other's keys. Gated by an ABAC "read" check on the plugin's KV
+	// resource (checkKVAccess) before the store is touched; a denied check or a
+	// store error is surfaced on the response, and an absent key returns
+	// found=false with no error.
 	KVGet(context.Context, *connect.Request[v1.KVGetRequest]) (*connect.Response[v1.KVGetResponse], error)
-	// KVSet stores a value in the plugin's key-value store.
+	// KVSet writes one value into the calling plugin's private namespaced
+	// key-value store (namespace = plugin name). Gated by an ABAC "write" check
+	// on the plugin's KV resource before the store is touched. Overwrites any
+	// existing value at the key.
 	KVSet(context.Context, *connect.Request[v1.KVSetRequest]) (*connect.Response[v1.KVSetResponse], error)
-	// KVDelete removes a value from the plugin's key-value store.
+	// KVDelete removes one key from the calling plugin's private namespaced
+	// key-value store (namespace = plugin name). Gated by an ABAC "delete" check
+	// on the plugin's KV resource before the store is touched.
 	KVDelete(context.Context, *connect.Request[v1.KVDeleteRequest]) (*connect.Response[v1.KVDeleteResponse], error)
-	// Log writes a log message through the host's logging system.
+	// Log emits a structured log line through the host logger, tagged with the
+	// calling plugin's name. The message and level are plugin-supplied; the host
+	// routes to the matching slog level (debug/info/warn/error) and treats the
+	// call as fire-and-forget — there is no acknowledgement payload. This is the
+	// sanctioned way for a plugin to reach the host's observability pipeline
+	// rather than writing to stdout/stderr of its subprocess.
 	Log(context.Context, *connect.Request[v1.LogRequest]) (*connect.Response[v1.LogResponse], error)
-	// ListCommands returns all available commands.
-	// Requires capability: command.list
+	// ListCommands returns the commands visible to one character, filtered by
+	// that character's capabilities through the AccessPolicyEngine. Commands
+	// with no declared capabilities are always included; capability-gated
+	// commands require the character to pass both the execute check and every
+	// declared capability (AND logic). If engine errors hide some commands the
+	// host still returns the commands it could evaluate.
 	ListCommands(context.Context, *connect.Request[v1.ListCommandsRequest]) (*connect.Response[v1.ListCommandsResponse], error)
-	// GetCommandHelp returns detailed help for a specific command.
-	// Requires capability: command.help
+	// GetCommandHelp returns the full help detail for a single named command.
+	// For a capability-gated command the host fail-closed-evaluates the
+	// character's access through the AccessPolicyEngine before returning detail;
+	// commands without capabilities are always accessible. A missing command or
+	// a denied/failed access check is surfaced on the response error field.
 	GetCommandHelp(context.Context, *connect.Request[v1.GetCommandHelpRequest]) (*connect.Response[v1.GetCommandHelpResponse], error)
-	// AddSessionStream subscribes an active session to an additional stream mid-session.
-	// Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+	// AddSessionStream subscribes an already-active session to one more stream
+	// mid-session, via the host StreamRegistry (AddStream), using the default
+	// FROM_CURSOR replay mode. The session must be live: an unknown session_id
+	// fails with SESSION_NOT_FOUND (codes.NotFound). Use this when a plugin
+	// action should start delivering a new stream's events to a connected
+	// character without reconnecting.
 	AddSessionStream(context.Context, *connect.Request[v1.AddSessionStreamRequest]) (*connect.Response[v1.AddSessionStreamResponse], error)
-	// RemoveSessionStream unsubscribes an active session from a stream.
-	// Idempotent: returns success if stream is not subscribed.
+	// RemoveSessionStream unsubscribes an active session from a stream, via the
+	// host StreamRegistry (RemoveStream). The operation is idempotent: removing a
+	// stream the session is not subscribed to succeeds rather than erroring.
 	RemoveSessionStream(context.Context, *connect.Request[v1.RemoveSessionStreamRequest]) (*connect.Response[v1.RemoveSessionStreamResponse], error)
 }
 
@@ -273,33 +317,77 @@ func (c *hostFunctionsServiceClient) RemoveSessionStream(ctx context.Context, re
 // HostFunctionsServiceHandler is an implementation of the holomush.plugin.v1.HostFunctionsService
 // service.
 type HostFunctionsServiceHandler interface {
-	// EmitEvent publishes an event to a stream.
+	// EmitEvent publishes one event onto a stream on the calling plugin's
+	// behalf. The host stamps the actor and routes through
+	// PluginEventEmitter.Emit, which enforces the plugin's manifest gates:
+	// the target domain must appear in the manifest emits list, the actor kind
+	// must be in actor_kinds_claimable, and a sensitive payload requires the
+	// event type to be declared in crypto.emits. The plugin never supplies a
+	// trusted actor identity at this boundary — the host derives it. Fire this
+	// for plugin-originated game actions rather than mutating world state
+	// directly.
 	EmitEvent(context.Context, *connect.Request[v1.EmitEventRequest]) (*connect.Response[v1.EmitEventResponse], error)
-	// QueryLocation retrieves information about a location.
+	// QueryLocation returns a snapshot of one location's identity fields. The
+	// host resolves it through the world service (GetLocation), which applies
+	// ABAC for the plugin subject; a missing location maps to a not-found
+	// outcome surfaced on the response error field, not an RPC error. Read-only.
 	QueryLocation(context.Context, *connect.Request[v1.QueryLocationRequest]) (*connect.Response[v1.QueryLocationResponse], error)
-	// QueryCharacter retrieves information about a character.
+	// QueryCharacter returns a snapshot of one character's identity fields,
+	// resolved through the world service (GetCharacter) under the plugin
+	// subject's ABAC policy. A missing character is reported via the response
+	// error field. Read-only.
 	QueryCharacter(context.Context, *connect.Request[v1.QueryCharacterRequest]) (*connect.Response[v1.QueryCharacterResponse], error)
-	// QueryLocationCharacters retrieves all characters in a location.
+	// QueryLocationCharacters returns the lightweight roster (id + name only) of
+	// characters currently in a location, via the world service
+	// (GetCharactersByLocation) under the plugin subject's ABAC policy. Use
+	// QueryCharacter per id to fetch full character detail. Read-only.
 	QueryLocationCharacters(context.Context, *connect.Request[v1.QueryLocationCharactersRequest]) (*connect.Response[v1.QueryLocationCharactersResponse], error)
-	// KVGet retrieves a value from the plugin's key-value store.
+	// KVGet reads one value from the calling plugin's private namespaced
+	// key-value store. The namespace is the plugin name, so plugins cannot read
+	// each other's keys. Gated by an ABAC "read" check on the plugin's KV
+	// resource (checkKVAccess) before the store is touched; a denied check or a
+	// store error is surfaced on the response, and an absent key returns
+	// found=false with no error.
 	KVGet(context.Context, *connect.Request[v1.KVGetRequest]) (*connect.Response[v1.KVGetResponse], error)
-	// KVSet stores a value in the plugin's key-value store.
+	// KVSet writes one value into the calling plugin's private namespaced
+	// key-value store (namespace = plugin name). Gated by an ABAC "write" check
+	// on the plugin's KV resource before the store is touched. Overwrites any
+	// existing value at the key.
 	KVSet(context.Context, *connect.Request[v1.KVSetRequest]) (*connect.Response[v1.KVSetResponse], error)
-	// KVDelete removes a value from the plugin's key-value store.
+	// KVDelete removes one key from the calling plugin's private namespaced
+	// key-value store (namespace = plugin name). Gated by an ABAC "delete" check
+	// on the plugin's KV resource before the store is touched.
 	KVDelete(context.Context, *connect.Request[v1.KVDeleteRequest]) (*connect.Response[v1.KVDeleteResponse], error)
-	// Log writes a log message through the host's logging system.
+	// Log emits a structured log line through the host logger, tagged with the
+	// calling plugin's name. The message and level are plugin-supplied; the host
+	// routes to the matching slog level (debug/info/warn/error) and treats the
+	// call as fire-and-forget — there is no acknowledgement payload. This is the
+	// sanctioned way for a plugin to reach the host's observability pipeline
+	// rather than writing to stdout/stderr of its subprocess.
 	Log(context.Context, *connect.Request[v1.LogRequest]) (*connect.Response[v1.LogResponse], error)
-	// ListCommands returns all available commands.
-	// Requires capability: command.list
+	// ListCommands returns the commands visible to one character, filtered by
+	// that character's capabilities through the AccessPolicyEngine. Commands
+	// with no declared capabilities are always included; capability-gated
+	// commands require the character to pass both the execute check and every
+	// declared capability (AND logic). If engine errors hide some commands the
+	// host still returns the commands it could evaluate.
 	ListCommands(context.Context, *connect.Request[v1.ListCommandsRequest]) (*connect.Response[v1.ListCommandsResponse], error)
-	// GetCommandHelp returns detailed help for a specific command.
-	// Requires capability: command.help
+	// GetCommandHelp returns the full help detail for a single named command.
+	// For a capability-gated command the host fail-closed-evaluates the
+	// character's access through the AccessPolicyEngine before returning detail;
+	// commands without capabilities are always accessible. A missing command or
+	// a denied/failed access check is surfaced on the response error field.
 	GetCommandHelp(context.Context, *connect.Request[v1.GetCommandHelpRequest]) (*connect.Response[v1.GetCommandHelpResponse], error)
-	// AddSessionStream subscribes an active session to an additional stream mid-session.
-	// Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+	// AddSessionStream subscribes an already-active session to one more stream
+	// mid-session, via the host StreamRegistry (AddStream), using the default
+	// FROM_CURSOR replay mode. The session must be live: an unknown session_id
+	// fails with SESSION_NOT_FOUND (codes.NotFound). Use this when a plugin
+	// action should start delivering a new stream's events to a connected
+	// character without reconnecting.
 	AddSessionStream(context.Context, *connect.Request[v1.AddSessionStreamRequest]) (*connect.Response[v1.AddSessionStreamResponse], error)
-	// RemoveSessionStream unsubscribes an active session from a stream.
-	// Idempotent: returns success if stream is not subscribed.
+	// RemoveSessionStream unsubscribes an active session from a stream, via the
+	// host StreamRegistry (RemoveStream). The operation is idempotent: removing a
+	// stream the session is not subscribed to succeeds rather than erroring.
 	RemoveSessionStream(context.Context, *connect.Request[v1.RemoveSessionStreamRequest]) (*connect.Response[v1.RemoveSessionStreamResponse], error)
 }
 

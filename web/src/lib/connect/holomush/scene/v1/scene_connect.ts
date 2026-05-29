@@ -10,12 +10,39 @@ import { CastPublishSceneVoteRequest, CastPublishSceneVoteResponse, CastPublishV
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
+ * SceneService is the gRPC contract for the core-scenes binary plugin
+ * (plugins/core-scenes/). A scene is a structured roleplay encounter with an
+ * owner, a participant roster, a privacy mode, a pose-order discipline, and an
+ * optional published archive. The plugin owns the `scene` ABAC resource type
+ * and persists to its own `plugin_core_scenes` schema; it emits IC notice
+ * events on events.<game_id>.scene.<scene_id>.ic and audits lifecycle
+ * operations to its plugin-owned audit table.
+ *
+ * Authorization model: every mutating RPC trusts that the host's ABAC engine
+ * has already authorized the command-execute action at dispatch time
+ * (owner-only for end/pause/resume/update/invite/kick/transfer, admin-only for
+ * the publish-attempt-budget extension). The plugin itself runs NO ABAC engine
+ * (SceneServiceImpl holds no policy engine). The sole exceptions are the
+ * participant-gate reads (GetPoseOrder and the publish reads), which enforce a
+ * direct plugin-code participation check (INV-S9) precisely because it is a
+ * hard privacy boundary that must not be delegable.
+ *
+ * Implemented by SceneServiceImpl in plugins/core-scenes/service.go and
+ * plugins/core-scenes/publish_service.go.
+ *
  * @generated from service holomush.scene.v1.SceneService
  */
 export const SceneService = {
   typeName: "holomush.scene.v1.SceneService",
   methods: {
     /**
+     * ListScenes is DECLARED BUT NOT SERVED. The core-scenes plugin embeds
+     * UnimplementedSceneServiceServer and provides no override, so any call
+     * returns codes.Unimplemented. Scene discovery is instead surfaced through
+     * the plugin's `scene` listing command (handleSceneList), which reads
+     * SceneStore.ListScenesForCharacter, not this RPC. Retained as a planned
+     * read surface.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.ListScenes
      */
     listScenes: {
@@ -25,6 +52,11 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * GetScene loads one scene's metadata and participant roster by ID. The
+     * host's read-scene ABAC policy gates access before the call reaches the
+     * handler, so the handler performs no additional ownership check; it returns
+     * codes.NotFound when the scene does not exist. See service.go::GetScene.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.GetScene
      */
     getScene: {
@@ -34,6 +66,12 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * CreateScene allocates a new scene owned by the calling character, seeded
+     * active with the supplied title/description/visibility/pose-order/tags. The
+     * creating character becomes the `owner` participant in the same transaction,
+     * a lifecycle.created audit event is recorded, and a scene-created event is
+     * emitted. See service.go::CreateScene.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.CreateScene
      */
     createScene: {
@@ -43,6 +81,11 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * EndScene transitions a scene to the terminal `ended` state (owner-only via
+     * ABAC). Rejected with codes.FailedPrecondition when the scene is already
+     * ended or archived. Returns the post-transition scene row. See
+     * service.go::EndScene.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.EndScene
      */
     endScene: {
@@ -52,6 +95,10 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * PauseScene transitions an `active` scene to `paused` (owner-only via ABAC).
+     * Rejected with codes.FailedPrecondition from any non-active state. See
+     * service.go::PauseScene.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.PauseScene
      */
     pauseScene: {
@@ -61,6 +108,10 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * ResumeScene transitions a `paused` scene back to `active` (owner-only via
+     * ABAC). Rejected with codes.FailedPrecondition from any non-paused state.
+     * See service.go::ResumeScene.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.ResumeScene
      */
     resumeScene: {
@@ -70,6 +121,11 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * UpdateScene applies a partial update to mutable scene metadata, driven by
+     * the request's FieldMask (owner-only via ABAC). An empty mask is a no-op
+     * success. A pose-order-mode change auto-emits a pose-order-changed IC
+     * notice. See service.go::UpdateScene.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.UpdateScene
      */
     updateScene: {
@@ -79,6 +135,12 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * JoinScene adds the calling character to a scene as a `member`. Open scenes
+     * accept any join; private scenes require a pre-existing invitation (the
+     * invited row is promoted to member). Idempotent: a repeat join by an
+     * existing member succeeds without re-emitting a join notice. See
+     * service.go::JoinScene.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.JoinScene
      */
     joinScene: {
@@ -88,6 +150,11 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * LeaveScene removes the calling character from a scene. The scene owner
+     * cannot leave (codes.FailedPrecondition) — they must end the scene or
+     * transfer ownership first. Emits a leave IC notice with reason=left. See
+     * service.go::LeaveScene.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.LeaveScene
      */
     leaveScene: {
@@ -97,6 +164,11 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * InviteToScene records an `invited` participant row for a target character
+     * (owner-only via ABAC), granting them permission to join a private scene.
+     * Rejected with codes.AlreadyExists when the target is already a member. See
+     * service.go::InviteToScene.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.InviteToScene
      */
     inviteToScene: {
@@ -106,6 +178,11 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * KickFromScene removes a target character from a scene (owner-only via
+     * ABAC). The scene owner cannot be kicked (codes.FailedPrecondition, enforced
+     * both at the service layer and by a store WHERE filter). Emits a leave IC
+     * notice with reason=kicked. See service.go::KickFromScene.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.KickFromScene
      */
     kickFromScene: {
@@ -115,6 +192,10 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * TransferOwnership reassigns scene ownership from the calling owner to a
+     * target who MUST already be a member (owner-only via ABAC). The former owner
+     * is demoted to member. See service.go::TransferOwnership.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.TransferOwnership
      */
     transferOwnership: {
@@ -124,6 +205,11 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * CastPublishVote is DECLARED BUT NOT SERVED. It is the legacy
+     * scene-keyed publish-vote shape, superseded by CastPublishSceneVote (which
+     * is keyed by published_scene_id and is the served vote RPC). The plugin
+     * provides no handler, so a call returns codes.Unimplemented.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.CastPublishVote
      */
     castPublishVote: {
@@ -133,6 +219,12 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * GetPoseOrder returns the computed pose-order roster for a scene. Enforces
+     * the INV-S9 plugin-code participant gate (caller MUST be an owner or member,
+     * NOT merely invited; NO ABAC engine is consulted). The PermissionDenied gate
+     * fires before any existence check so a non-participant cannot distinguish a
+     * missing scene from one they may not see. See service.go::GetPoseOrder.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.GetPoseOrder
      */
     getPoseOrder: {
@@ -142,7 +234,11 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Phase 6 publication RPCs. See spec section 5.
+     * StartScenePublish opens a publication attempt for an `ended` scene
+     * (publish.go §5 precondition ladder). The scene must be ended, must not
+     * already have a published archive (one-and-done) nor an active attempt, and
+     * must not have exhausted its attempt budget. Seeds a COLLECTING attempt with
+     * a frozen vote roster. See publish_service.go::StartScenePublish.
      *
      * @generated from rpc holomush.scene.v1.SceneService.StartScenePublish
      */
@@ -153,6 +249,14 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * CastPublishSceneVote records a roster member's yes/no vote on an active
+     * publication attempt and runs the §4.3 resolution check, which may
+     * transition the attempt (COLLECTING→COOLOFF on all-yes, COLLECTING→
+     * ATTEMPT_FAILED on any-no-after-all-voted, or COOLOFF→COLLECTING on a flip
+     * to no). A vote on a terminal attempt is rejected. The recorded vote is the
+     * durable effect; a failed resolution or emit is logged but does not fail the
+     * cast. See publish_service.go::CastPublishSceneVote.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.CastPublishSceneVote
      */
     castPublishSceneVote: {
@@ -162,6 +266,12 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * WithdrawScenePublish lets the scene owner abandon an active publication
+     * attempt (COLLECTING or COOLOFF), transitioning it to ATTEMPT_FAILED with
+     * failure_reason WITHDRAWN. Owner-gated by ABAC AND a defense-in-depth
+     * in-handler owner check (the plugin holds the owner attribute, so this
+     * closes the direct-RPC gap). See publish_service.go::WithdrawScenePublish.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.WithdrawScenePublish
      */
     withdrawScenePublish: {
@@ -171,6 +281,13 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * GetPublishedScene returns a publication attempt's full state to a scene
+     * participant. Enforces the INV-S9 plugin-code participant gate with a
+     * load-bearing step order (INV-P6-5): header read → participant gate → content
+     * read (only for PUBLISHED rows, only after the gate passes). A non-participant
+     * is denied with the §10 triple-signal before any content is read. See
+     * publish_service.go::GetPublishedScene.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.GetPublishedScene
      */
     getPublishedScene: {
@@ -180,6 +297,11 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * DownloadPublishedScene returns a PUBLISHED attempt rendered in the
+     * requested format (markdown/plain_text/jsonl) to a participant. Same
+     * load-bearing participant-gate ordering as GetPublishedScene; only PUBLISHED
+     * attempts are downloadable. See publish_service.go::DownloadPublishedScene.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.DownloadPublishedScene
      */
     downloadPublishedScene: {
@@ -189,6 +311,11 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * ListScenePublishAttempts returns the audit list of a scene's publication
+     * attempts (header summaries, no content) to a participant. Participant-gated
+     * (INV-S9) so a non-participant cannot enumerate attempts. See
+     * publish_service.go::ListScenePublishAttempts.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.ListScenePublishAttempts
      */
     listScenePublishAttempts: {
@@ -198,6 +325,14 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * GetPublishedScene's PUBLIC counterpart: GetPublicSceneArchive is the
+     * unauthenticated read of a published scene. Structurally separate — NO
+     * caller validation, NO participant gate, NO ABAC. The only gate is
+     * status==PUBLISHED; a missing id OR any non-PUBLISHED attempt returns one
+     * opaque NOT_FOUND so existence/progress of an attempt cannot be inferred
+     * (INV-P6-8). Carries only public-safe fields. See
+     * publish_service.go::GetPublicSceneArchive.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.GetPublicSceneArchive
      */
     getPublicSceneArchive: {
@@ -207,6 +342,11 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * DownloadPublicSceneArchive is the PUBLIC, unauthenticated download of a
+     * published scene in the requested format. Same status-gate and opacity
+     * contract (INV-P6-8) as GetPublicSceneArchive; shares the renderer with
+     * DownloadPublishedScene. See publish_service.go::DownloadPublicSceneArchive.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.DownloadPublicSceneArchive
      */
     downloadPublicSceneArchive: {
@@ -216,6 +356,12 @@ export const SceneService = {
       kind: MethodKind.Unary,
     },
     /**
+     * ExtendScenePublishVoteAttempts raises a scene's max-publish-attempts budget
+     * by a positive amount and emits the extension notice. Admin-only, enforced
+     * by the host's ABAC policy at dispatch — there is deliberately NO in-plugin
+     * role check (the inverse of INV-S9's plugin-code privacy gate). See
+     * publish_service.go::ExtendScenePublishVoteAttempts.
+     *
      * @generated from rpc holomush.scene.v1.SceneService.ExtendScenePublishVoteAttempts
      */
     extendScenePublishVoteAttempts: {

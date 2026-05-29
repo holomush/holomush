@@ -30,11 +30,23 @@ const (
 type ActorKind int32
 
 const (
+	// ACTOR_KIND_UNSPECIFIED is the zero value; a well-formed envelope never
+	// carries it — emitters MUST set a concrete kind.
 	ActorKind_ACTOR_KIND_UNSPECIFIED ActorKind = 0
-	ActorKind_ACTOR_KIND_CHARACTER   ActorKind = 1
-	ActorKind_ACTOR_KIND_PLAYER      ActorKind = 2
-	ActorKind_ACTOR_KIND_SYSTEM      ActorKind = 3
-	ActorKind_ACTOR_KIND_PLUGIN      ActorKind = 4
+	// ACTOR_KIND_CHARACTER marks an event caused by an in-game character action.
+	ActorKind_ACTOR_KIND_CHARACTER ActorKind = 1
+	// ACTOR_KIND_PLAYER attributes an event to a human player account rather than
+	// a character. It is a recognized wire/audit value preserved across
+	// serialization and history round-trips, but no current emit path produces
+	// it: host and plugin emits resolve only to CHARACTER, SYSTEM, or PLUGIN
+	// (see validateResolvedActor / bridgeActorKind in event_emitter.go).
+	ActorKind_ACTOR_KIND_PLAYER ActorKind = 2
+	// ACTOR_KIND_SYSTEM marks an event the host itself originated (internal
+	// infrastructure, not a character or plugin).
+	ActorKind_ACTOR_KIND_SYSTEM ActorKind = 3
+	// ACTOR_KIND_PLUGIN marks an event a plugin emitted; gated by the
+	// manifest's actor_kinds_claimable list at event_emitter.go::Emit.
+	ActorKind_ACTOR_KIND_PLUGIN ActorKind = 4
 )
 
 // Enum value maps for ActorKind.
@@ -84,9 +96,15 @@ func (ActorKind) EnumDescriptor() ([]byte, []int) {
 
 // Actor identifies who caused an event.
 type Actor struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Kind          ActorKind              `protobuf:"varint,1,opt,name=kind,proto3,enum=holomush.eventbus.v1.ActorKind" json:"kind,omitempty"`
-	Id            []byte                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"` // ULID (16 bytes); MUST be set for every ActorKind value.
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// kind classifies the entity that caused the event; drives downstream audit
+	// routing (e.g. plugin_router.go selects the audit sink by kind).
+	Kind ActorKind `protobuf:"varint,1,opt,name=kind,proto3,enum=holomush.eventbus.v1.ActorKind" json:"kind,omitempty"`
+	// id is the actor's 16-byte ULID identity, letting downstream audit attribute
+	// the event to a concrete entity. Character and plugin actors carry a real
+	// ULID; system- and unknown-origin events MAY leave it as the zero ULID, in
+	// which case the field is omitted on the wire (see coreActorToEventbusActor).
+	Id            []byte `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -138,13 +156,28 @@ func (x *Actor) GetId() []byte {
 // Event is the host-side envelope. Wire encoding is proto bytes in the
 // JetStream message data; headers carry routing/codec/version metadata.
 type Event struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Id        []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"` // ULID (16 bytes)
-	Subject   string                 `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
-	Type      string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// id is the event's 16-byte ULID; it is the identity and JetStream dedup
+	// key (set as Nats-Msg-Id), stable across rebuilds. Ordering is owned by
+	// the JetStream per-stream sequence, not by this ULID's lexical order.
+	Id []byte `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// subject is the NATS dot-delimited routing address for this event, of the
+	// form events.<game_id>.<domain>.<entity-id>[.<facet>...], validated by
+	// NewSubject (must start with "events.").
+	Subject string `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
+	// type is the event-type discriminator, e.g. "say" or "scene.pose"; used
+	// by subscribers to route and render events without decoding the payload.
+	Type string `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	// timestamp records when the event occurred according to the host clock,
+	// at nanosecond precision.
 	Timestamp *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	Actor     *Actor                 `protobuf:"bytes,5,opt,name=actor,proto3" json:"actor,omitempty"`
-	Payload   []byte                 `protobuf:"bytes,6,opt,name=payload,proto3" json:"payload,omitempty"` // codec.Encode output
+	// actor identifies the entity that caused the event; host-stamped and
+	// never directly settable by plugins.
+	Actor *Actor `protobuf:"bytes,5,opt,name=actor,proto3" json:"actor,omitempty"`
+	// payload is the codec.Encode output for the event body; opaque at the
+	// envelope layer and decoded by subscribers according to the codec/version
+	// metadata carried in the JetStream message headers.
+	Payload []byte `protobuf:"bytes,6,opt,name=payload,proto3" json:"payload,omitempty"`
 	// Rendering metadata, populated by RenderingPublisher.Publish before
 	// marshaling for JetStream. Mirrors the corev1.RenderingMetadata used
 	// on the gRPC Subscribe wire (one schema, two transports).

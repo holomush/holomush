@@ -26,17 +26,40 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// TerminatedBy enumerates the cause of stream termination.
+// TerminatedBy enumerates the reason the AdminReadStream stream ended.
+// Mapped from the internal streamErr by classifyTerminator
+// (internal/admin/readstream/handler.go). The labels are also written to
+// the post-data audit payload's "terminated_by" string field via
+// terminatedByLabel.
 type ReadFinished_TerminatedBy int32
 
 const (
-	ReadFinished_TERMINATED_BY_UNSPECIFIED          ReadFinished_TerminatedBy = 0
-	ReadFinished_TERMINATED_BY_CLIENT_EOF           ReadFinished_TerminatedBy = 1
-	ReadFinished_TERMINATED_BY_CLIENT_DISCONNECT    ReadFinished_TerminatedBy = 2
-	ReadFinished_TERMINATED_BY_DEADLINE_EXCEEDED    ReadFinished_TerminatedBy = 3
-	ReadFinished_TERMINATED_BY_SERVER_ERROR         ReadFinished_TerminatedBy = 4
+	// TERMINATED_BY_UNSPECIFIED is the zero/default value; not used in
+	// production — classifyTerminator always resolves to a specific variant.
+	ReadFinished_TERMINATED_BY_UNSPECIFIED ReadFinished_TerminatedBy = 0
+	// TERMINATED_BY_CLIENT_EOF indicates the cold-tier scan finished cleanly
+	// with no error (streamErr == nil). All requested events were delivered.
+	ReadFinished_TERMINATED_BY_CLIENT_EOF ReadFinished_TerminatedBy = 1
+	// TERMINATED_BY_CLIENT_DISCONNECT indicates the client disconnected
+	// mid-stream. Mapped from context.Canceled by classifyTerminator.
+	ReadFinished_TERMINATED_BY_CLIENT_DISCONNECT ReadFinished_TerminatedBy = 2
+	// TERMINATED_BY_DEADLINE_EXCEEDED indicates either the request context
+	// deadline was exceeded (context.DeadlineExceeded) or a per-frame write
+	// deadline fired (ErrWriteDeadlineExceeded, INV-F14) during streaming.
+	ReadFinished_TERMINATED_BY_DEADLINE_EXCEEDED ReadFinished_TerminatedBy = 3
+	// TERMINATED_BY_SERVER_ERROR indicates an unexpected server-side failure
+	// (cold-reader error, codec failure, or other unclassified error). Mapped
+	// by the classifyTerminator catch-all branch.
+	ReadFinished_TERMINATED_BY_SERVER_ERROR ReadFinished_TerminatedBy = 4
+	// TERMINATED_BY_DUAL_CONTROL_TIMEOUT indicates the ApprovalTTL elapsed
+	// before a second operator approved the request (INV-F11/F17). Mapped
+	// from READSTREAM_DUAL_CONTROL_TIMEOUT oops code.
 	ReadFinished_TERMINATED_BY_DUAL_CONTROL_TIMEOUT ReadFinished_TerminatedBy = 5
-	ReadFinished_TERMINATED_BY_AUDIT_EMIT_FAILURE   ReadFinished_TerminatedBy = 6
+	// TERMINATED_BY_AUDIT_EMIT_FAILURE indicates the pre-data audit publish
+	// (EmitStart) failed before any event data was read or sent. Mapped from
+	// DENY_AUDIT_PRE_DATA_PUBLISH oops code (INV-F2). No event data was
+	// delivered when this value appears.
+	ReadFinished_TERMINATED_BY_AUDIT_EMIT_FAILURE ReadFinished_TerminatedBy = 6
 )
 
 // Enum value maps for ReadFinished_TerminatedBy.
@@ -88,27 +111,64 @@ func (ReadFinished_TerminatedBy) EnumDescriptor() ([]byte, []int) {
 	return file_holomush_admin_v1_read_stream_proto_rawDescGZIP(), []int{5, 0}
 }
 
-// AdminReadStreamRequest is the operator break-glass read request.
-// (See sub-epic F spec §3.2 for field semantics.)
+// AdminReadStreamRequest is the operator break-glass read request for the
+// AdminReadStream RPC. The handler (internal/admin/readstream/handler.go)
+// validates and canonicalises this into a domestic Request via protoToDomesticRequest
+// before passing it to ResolveBounds. Fields fall into three categories:
+// identity (session_token), query shape (subject_pattern, type_filter, context,
+// since, until, limit), and authorization metadata (dual_control,
+// dual_control_timeout_seconds, justification). The justification field is
+// REQUIRED at the application layer: ResolveBounds returns
+// DENY_OPERATOR_READ_JUSTIFICATION_EMPTY when it is absent or whitespace-only.
 type AdminReadStreamRequest struct {
-	state        protoimpl.MessageState `protogen:"open.v1"`
-	SessionToken string                 `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
-	// subject_pattern is an optional additional NATS subject filter.
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_token is the bearer token identifying the operator. The handler
+	// resolves it to an OperatorSession via SessionStore.GetOperatorSession and
+	// then checks that the resolved player holds the crypto.operator ABAC grant
+	// (INV-F3) before any data read or audit publish occurs.
+	SessionToken string `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
+	// subject_pattern is an optional additional NATS subject filter applied
+	// server-side on top of the context-derived subjects. An empty string means
+	// no additional filter; the handler uses the context-derived subjects alone.
 	SubjectPattern string `protobuf:"bytes,2,opt,name=subject_pattern,json=subjectPattern,proto3" json:"subject_pattern,omitempty"`
-	// type_filter is an optional event type prefix filter.
-	TypeFilter string        `protobuf:"bytes,3,opt,name=type_filter,json=typeFilter,proto3" json:"type_filter,omitempty"`
-	Context    []*ContextRef `protobuf:"bytes,4,rep,name=context,proto3" json:"context,omitempty"`
-	// since is nullable — server defaults when absent.
+	// type_filter is an optional event type prefix filter. When non-empty, only
+	// events whose type string has this prefix are returned. An empty string
+	// means no type filtering.
+	TypeFilter string `protobuf:"bytes,3,opt,name=type_filter,json=typeFilter,proto3" json:"type_filter,omitempty"`
+	// context scopes the read to one or more event streams. Each entry maps to a
+	// NATS wildcard subject "events.<game>.<type>.<id...>.>" via BuildSubjects
+	// (internal/admin/readstream/subjects.go). When empty, a single game-wide
+	// wildcard "events.<game>.>" is used. Up to 64 context entries are accepted;
+	// ResolveBounds validates type, arity, and ID format per sensitiveTypes.
+	Context []*ContextRef `protobuf:"bytes,4,rep,name=context,proto3" json:"context,omitempty"`
+	// since is the inclusive lower bound of the query window. When absent (nil),
+	// the server defaults to now minus the configured DefaultWindow (INV-F6).
+	// ResolveBounds rejects since >= until with DENY_OPERATOR_READ_TIME_INVERTED.
 	Since *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=since,proto3" json:"since,omitempty"`
-	// until is nullable — server defaults when absent.
+	// until is the exclusive upper bound of the query window. When absent (nil),
+	// the server defaults to now (INV-F6). ResolveBounds rejects until more than
+	// 5 seconds in the future with DENY_OPERATOR_READ_FUTURE_BOUND.
 	Until *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=until,proto3" json:"until,omitempty"`
-	// limit of 0 means no client-imposed limit.
-	Limit                     uint32 `protobuf:"varint,7,opt,name=limit,proto3" json:"limit,omitempty"`
-	DualControl               bool   `protobuf:"varint,8,opt,name=dual_control,json=dualControl,proto3" json:"dual_control,omitempty"`
+	// limit caps the maximum number of EventFrame responses the client wants to
+	// receive. A value of 0 means no client-imposed limit; the server enforces
+	// its own window-size ceiling independently via MaxWindow.
+	Limit uint32 `protobuf:"varint,7,opt,name=limit,proto3" json:"limit,omitempty"`
+	// dual_control requires a second operator to approve the request before the
+	// stream begins. When true, the server sends a PendingApproval frame and
+	// blocks until approval.Repo.WaitForApproval resolves or the ApprovalTTL
+	// elapses (INV-F11/F17). When false, the fast single-control path runs
+	// immediately after the capability check.
+	DualControl bool `protobuf:"varint,8,opt,name=dual_control,json=dualControl,proto3" json:"dual_control,omitempty"`
+	// dual_control_timeout_seconds overrides the server's configured ApprovalTTL
+	// for this request. A value of 0 uses the server's default.
 	DualControlTimeoutSeconds uint32 `protobuf:"varint,9,opt,name=dual_control_timeout_seconds,json=dualControlTimeoutSeconds,proto3" json:"dual_control_timeout_seconds,omitempty"`
-	Justification             string `protobuf:"bytes,10,opt,name=justification,proto3" json:"justification,omitempty"`
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	// justification is the operator's plain-text reason for the read. REQUIRED:
+	// ResolveBounds rejects empty or whitespace-only values with
+	// DENY_OPERATOR_READ_JUSTIFICATION_EMPTY. Maximum 4096 UTF-8 bytes.
+	// Captured verbatim in the pre-data audit payload (INV-F1/F7).
+	Justification string `protobuf:"bytes,10,opt,name=justification,proto3" json:"justification,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AdminReadStreamRequest) Reset() {
@@ -211,11 +271,27 @@ func (x *AdminReadStreamRequest) GetJustification() string {
 	return ""
 }
 
-// ContextRef is a variable-arity context reference (e.g. scene:01H, dm:01A:01B).
+// ContextRef is a typed, variable-arity scope reference that maps to a NATS
+// subject wildcard. The type selects the event domain (e.g. "scene",
+// "location", "character", "dm") and ids supplies the entity identifiers. The
+// handler validates type membership and arity against sensitiveTypes
+// (internal/admin/readstream/filter.go) and rejects unknown types with
+// DENY_OPERATOR_READ_TYPE_UNKNOWN and wrong-arity entries with
+// DENY_OPERATOR_READ_ARITY_MISMATCH. For order-insensitive types (e.g. "dm"),
+// IDs are lex-sorted during canonicalisation so that A→B and B→A are treated
+// as the same context.
 type ContextRef struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	Ids           []string               `protobuf:"bytes,2,rep,name=ids,proto3" json:"ids,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// type names the event domain being scoped. Recognised values are "scene",
+	// "location", "character", and "dm". ResolveBounds rejects unrecognised
+	// types with DENY_OPERATOR_READ_TYPE_UNKNOWN.
+	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	// ids are the entity identifiers for this context, each a 26-char Crockford
+	// Base32 ULID. The required count (arity) depends on the type: "scene",
+	// "location", and "character" each require exactly one ID; "dm" requires
+	// exactly two (the pair of participant character IDs, lex-sorted by the
+	// handler for canonicalisation).
+	Ids           []string `protobuf:"bytes,2,rep,name=ids,proto3" json:"ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -264,9 +340,20 @@ func (x *ContextRef) GetIds() []string {
 	return nil
 }
 
-// AdminReadStreamResponse is the server-streaming response.
+// AdminReadStreamResponse is the server-streaming response envelope for the
+// AdminReadStream RPC. Exactly one payload variant is populated per frame.
+// The stream follows a fixed lifecycle: an optional PendingApproval frame (only
+// when dual_control=true), exactly one ReadStarted frame once streaming begins,
+// zero or more EventFrame frames, and exactly one ReadFinished frame as the
+// terminal message. The handler (internal/admin/readstream/handler.go
+// handleInternal) enforces the audit invariants: the pre-data audit is emitted
+// before the first frame (INV-F1/F2) and the post-data audit is emitted after
+// the final frame (INV-F10).
 type AdminReadStreamResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
+	// payload carries the frame for this response message. Exactly one variant
+	// is set per AdminReadStreamResponse.
+	//
 	// Types that are valid to be assigned to Payload:
 	//
 	//	*AdminReadStreamResponse_PendingApproval
@@ -356,20 +443,31 @@ type isAdminReadStreamResponse_Payload interface {
 }
 
 type AdminReadStreamResponse_PendingApproval struct {
+	// pending_approval is sent when dual_control=true and a second operator
+	// must approve before streaming begins. Present at most once, before
+	// started.
 	PendingApproval *PendingApproval `protobuf:"bytes,1,opt,name=pending_approval,json=pendingApproval,proto3,oneof"`
 }
 
 type AdminReadStreamResponse_Started struct {
+	// started is sent once the capability check, optional dual-control
+	// approval, and pre-data audit publish all succeed. Carries the resolved
+	// request parameters so the client can confirm the effective query window.
 	Started *ReadStarted `protobuf:"bytes,2,opt,name=started,proto3,oneof"`
 }
 
 type AdminReadStreamResponse_Event struct {
-	// event uses corev1.EventFrame for typed redaction (metadata_only +
-	// no_plaintext_reason), NOT eventbusv1.Event. ADR-0017.
+	// event is a single event frame from the cold-tier audit log. Each frame
+	// carries either the decrypted payload (metadata_only=false) or, when
+	// decryption fails, only event metadata (metadata_only=true) with
+	// no_plaintext_reason set. Uses corev1.EventFrame for typed redaction
+	// (metadata_only + no_plaintext_reason), not eventbusv1.Event (ADR-0017).
 	Event *v1.EventFrame `protobuf:"bytes,3,opt,name=event,proto3,oneof"`
 }
 
 type AdminReadStreamResponse_Finished struct {
+	// finished is the terminal frame, sent after all events have been
+	// delivered or on any error or timeout. Always present as the last frame.
 	Finished *ReadFinished `protobuf:"bytes,4,opt,name=finished,proto3,oneof"`
 }
 
@@ -382,11 +480,21 @@ func (*AdminReadStreamResponse_Event) isAdminReadStreamResponse_Payload() {}
 func (*AdminReadStreamResponse_Finished) isAdminReadStreamResponse_Payload() {}
 
 // PendingApproval is sent when dual_control=true and a second operator must
-// approve before streaming begins.
+// approve before streaming begins. The handler emits this frame after opening a
+// new approval row in approval.Repo and before calling WaitForApproval
+// (internal/admin/readstream/handler.go acquireApproval). The client should
+// display the request_id so the approving operator can locate the pending row.
+// If WaitForApproval times out before approval, the stream closes with
+// ReadFinished{TERMINATED_BY_DUAL_CONTROL_TIMEOUT}.
 type PendingApproval struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// request_id is a [16]byte ULID.
-	RequestId     []byte                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// request_id is the raw 16-byte ULID of the pending approval row. Clients
+	// display or log this for the second operator to use when looking up the
+	// pending approval. Wire format is raw bytes (not Base32 string).
+	RequestId []byte `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// expires_at is the wall-clock deadline by which a second operator must
+	// approve. Derived from server clock plus the configured ApprovalTTL at the
+	// moment the approval row was opened.
 	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -436,17 +544,38 @@ func (x *PendingApproval) GetExpiresAt() *timestamppb.Timestamp {
 	return nil
 }
 
-// ReadStarted is sent once approval (or single-control fast-path) clears and
-// the stream is about to deliver events.
+// ReadStarted is sent exactly once when the operator's read clears all
+// gates (capability check, optional dual-control approval, and pre-data audit
+// publish) and the stream is about to deliver EventFrame messages. Carries the
+// resolved query parameters so the client can confirm the effective window and
+// contexts. The handler builds this frame in buildStartedFrame
+// (internal/admin/readstream/handler.go).
 type ReadStarted struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// request_id is the 26-char ULID Base32 string.
+	// request_id is the 26-character Crockford Base32 ULID for this read
+	// operation, generated fresh by the handler via idgen.New(). Stamped in both
+	// the pre-data and post-data audit payloads for correlation.
 	RequestId string `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	// policy_hash is 32 raw bytes (decoded from sha256:<hex>).
-	PolicyHash       []byte                 `protobuf:"bytes,2,opt,name=policy_hash,json=policyHash,proto3" json:"policy_hash,omitempty"`
-	ResolvedSince    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=resolved_since,json=resolvedSince,proto3" json:"resolved_since,omitempty"`
-	ResolvedUntil    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=resolved_until,json=resolvedUntil,proto3" json:"resolved_until,omitempty"`
-	ResolvedContexts []*ContextRef          `protobuf:"bytes,5,rep,name=resolved_contexts,json=resolvedContexts,proto3" json:"resolved_contexts,omitempty"`
+	// policy_hash is the raw 32-byte SHA-256 of the active site policy at the
+	// time the read was authorised. Decoded from the "sha256:<hex>" string held
+	// in handler Config.PolicyHash (a required config — an empty hash is
+	// rejected at startup). The audit payload stores the canonical
+	// "sha256:<hex>" form; this field delivers the raw bytes, and is empty only
+	// if that configured string fails to decode (a defensive guard).
+	PolicyHash []byte `protobuf:"bytes,2,opt,name=policy_hash,json=policyHash,proto3" json:"policy_hash,omitempty"`
+	// resolved_since is the effective lower bound of the query window after
+	// ResolveBounds defaulting. Always populated; equals since from the request
+	// when the client supplied a value, otherwise derived as now-DefaultWindow.
+	ResolvedSince *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=resolved_since,json=resolvedSince,proto3" json:"resolved_since,omitempty"`
+	// resolved_until is the effective upper bound of the query window after
+	// ResolveBounds defaulting. Always populated; equals until from the request
+	// when the client supplied a value, otherwise derived as now.
+	ResolvedUntil *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=resolved_until,json=resolvedUntil,proto3" json:"resolved_until,omitempty"`
+	// resolved_contexts are the canonicalised context entries after
+	// ResolveBounds validation, deduplication, and lex-sorting of
+	// order-insensitive IDs (e.g. "dm" participants). May differ from the
+	// request context when the client submitted duplicates or unsorted "dm" IDs.
+	ResolvedContexts []*ContextRef `protobuf:"bytes,5,rep,name=resolved_contexts,json=resolvedContexts,proto3" json:"resolved_contexts,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -516,16 +645,30 @@ func (x *ReadStarted) GetResolvedContexts() []*ContextRef {
 	return nil
 }
 
-// ReadFinished is the terminal frame sent after the last event (or
-// immediately on error/timeout).
+// ReadFinished is the terminal frame sent after the last EventFrame (or
+// immediately when an error, timeout, or disconnect terminates the stream
+// before any events). Always present as the final message in the stream.
+// The handler builds this frame in buildFinishedFrame and emits it
+// best-effort even after send failures (internal/admin/readstream/handler.go).
 type ReadFinished struct {
-	state            protoimpl.MessageState    `protogen:"open.v1"`
-	TerminatedBy     ReadFinished_TerminatedBy `protobuf:"varint,1,opt,name=terminated_by,json=terminatedBy,proto3,enum=holomush.admin.v1.ReadFinished_TerminatedBy" json:"terminated_by,omitempty"`
-	EventsScanned    int64                     `protobuf:"varint,2,opt,name=events_scanned,json=eventsScanned,proto3" json:"events_scanned,omitempty"`
-	DecryptFailCount int64                     `protobuf:"varint,3,opt,name=decrypt_fail_count,json=decryptFailCount,proto3" json:"decrypt_fail_count,omitempty"`
-	FinishedAt       *timestamppb.Timestamp    `protobuf:"bytes,4,opt,name=finished_at,json=finishedAt,proto3" json:"finished_at,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// terminated_by reports why the stream ended. Mapped from the streamErr by
+	// classifyTerminator (internal/admin/readstream/handler.go). CLIENT_EOF
+	// indicates a clean completion; all other values indicate some form of
+	// interruption or failure.
+	TerminatedBy ReadFinished_TerminatedBy `protobuf:"varint,1,opt,name=terminated_by,json=terminatedBy,proto3,enum=holomush.admin.v1.ReadFinished_TerminatedBy" json:"terminated_by,omitempty"`
+	// events_scanned is the total count of cold-tier audit rows that the handler
+	// processed during the stream (including rows that failed decryption and
+	// became metadata-only frames).
+	EventsScanned int64 `protobuf:"varint,2,opt,name=events_scanned,json=eventsScanned,proto3" json:"events_scanned,omitempty"`
+	// decrypt_fail_count is the count of rows where decryption failed and a
+	// metadata-only EventFrame was emitted instead of a plaintext frame.
+	DecryptFailCount int64 `protobuf:"varint,3,opt,name=decrypt_fail_count,json=decryptFailCount,proto3" json:"decrypt_fail_count,omitempty"`
+	// finished_at is the server wall-clock time when the ReadFinished frame was
+	// built, stamped by handler Config.Clock.
+	FinishedAt    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=finished_at,json=finishedAt,proto3" json:"finished_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ReadFinished) Reset() {

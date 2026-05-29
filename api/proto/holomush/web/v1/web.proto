@@ -10,10 +10,25 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/web/v1;webv1";
 
+// EventChannel is the web mirror of corev1.EventChannel: it tells the web
+// client which surface a GameEvent should render on. The gateway forwards the
+// core RenderingMetadata.display_target verbatim onto GameEvent.display_target
+// (internal/web/translate.go::translateEvent), so the value semantics are
+// identical to the core enum — no remapping happens at the boundary.
 enum EventChannel {
+  // EVENT_CHANNEL_UNSPECIFIED is the zero value; rendering metadata that
+  // omits a display target lands here. The web client SHOULD treat it as a
+  // safe default rather than a routing instruction.
   EVENT_CHANNEL_UNSPECIFIED = 0;
+  // EVENT_CHANNEL_TERMINAL routes the event to the scrolling terminal/log
+  // pane — the conversational stream (say, pose, arrive, leave, channel).
   EVENT_CHANNEL_TERMINAL = 1;
+  // EVENT_CHANNEL_STATE routes the event to the structured state surfaces
+  // (location panel, exits, presence) rather than the terminal log. Used by
+  // state-category events such as location_state and exit_update.
   EVENT_CHANNEL_STATE = 2;
+  // EVENT_CHANNEL_BOTH routes the event to the terminal AND the state
+  // surfaces simultaneously.
   EVENT_CHANNEL_BOTH = 3;
   // EVENT_CHANNEL_AUDIT_ONLY mirrors corev1.EventChannel for INV-GW-16
   // lockstep parity. These events are dropped at the gRPC Subscribe
@@ -21,9 +36,24 @@ enum EventChannel {
   EVENT_CHANNEL_AUDIT_ONLY = 4;
 }
 
+// ControlSignal is the discriminator on a ControlFrame — an out-of-band
+// stream-lifecycle message multiplexed into the StreamEvents feed alongside
+// game events. The gateway forwards core control signals
+// (internal/web/handler.go::forwardFrame) and also synthesizes STREAM_OPENED
+// itself at attach time.
 enum ControlSignal {
+  // CONTROL_SIGNAL_UNSPECIFIED is the zero value; a well-formed ControlFrame
+  // always carries a concrete signal, so this value SHOULD never appear on
+  // the wire.
   CONTROL_SIGNAL_UNSPECIFIED = 0;
+  // CONTROL_SIGNAL_REPLAY_COMPLETE marks the boundary between the historical
+  // backfill the core Subscribe handler replays at attach and the live event
+  // tail. The accompanying ControlFrame.attach_moment_ms is the upper time
+  // bound the client feeds back into WebQueryStreamHistory backfill calls.
   CONTROL_SIGNAL_REPLAY_COMPLETE = 1;
+  // CONTROL_SIGNAL_STREAM_CLOSED signals the server is ending the stream;
+  // the gateway treats it as a terminal frame (forwardFrame returns
+  // errStreamClosed) and runs its session-cleanup Disconnect.
   CONTROL_SIGNAL_STREAM_CLOSED = 2;
   // STREAM_OPENED is emitted as the first frame after a successful
   // StreamEvents subscription. The accompanying ControlFrame.connection_id
@@ -33,8 +63,16 @@ enum ControlSignal {
   CONTROL_SIGNAL_STREAM_OPENED = 3;
 }
 
+// ControlFrame is the out-of-band stream-lifecycle message carried in the
+// `control` arm of StreamEventsResponse. It conveys open/replay/close
+// transitions and the per-stream routing identity, distinct from the in-band
+// GameEvent traffic.
 message ControlFrame {
+  // signal selects which lifecycle transition this frame represents and
+  // governs which of the remaining fields are populated.
   ControlSignal signal = 1;
+  // message is an optional human-readable detail string accompanying the
+  // signal (e.g. a close reason). May be empty.
   string message = 2;
   // connection_id is populated on the first ControlFrame after a successful
   // StreamEvents open so the client can include it in subsequent
@@ -55,37 +93,104 @@ message ControlFrame {
   int64 attach_moment_ms = 4;
 }
 
+// WebService is the ConnectRPC surface the SvelteKit web client speaks to. Per
+// the gateway-boundary invariant (.claude/rules/gateway-boundary.md) it is a
+// protocol-translation layer ONLY: every game-state operation proxies to the
+// corresponding CoreService gRPC RPC (content RPCs proxy to ContentService),
+// and the gateway computes no business logic. The web-specific concerns it
+// owns are HTTP↔gRPC framing, cookie↔token translation
+// (internal/web/cookie.go::CookieMiddleware), and per-stream connection
+// identity. Implemented by internal/web.Handler; registered via
+// webv1connect.NewWebServiceHandler in internal/web/server.go.
 service WebService {
-  // Send a game command (say, pose, quit, etc.)
+  // SendCommand submits a player's raw command line (say, pose, quit, ...)
+  // for parsing and dispatch. Proxies to CoreService.HandleCommand;
+  // command-history persistence happens core-side, so the gateway does no
+  // extra work. The connection_id ties the command to its originating stream
+  // for per-connection routing.
   rpc SendCommand(SendCommandRequest) returns (SendCommandResponse);
 
-  // Server-streaming event feed. Client receives game events
-  // (say, pose, arrive, leave) as they occur.
+  // StreamEvents opens the server-streaming game-event feed for a session.
+  // Proxies to CoreService.Subscribe; the gateway generates a per-stream
+  // connection_id, emits a synthetic STREAM_OPENED ControlFrame carrying it,
+  // forwards translated frames, and runs a best-effort Disconnect on stream
+  // exit (client disconnect, cancel, error, or STREAM_CLOSED). Session-store
+  // registration/deregistration is owned entirely by core's Subscribe path.
   rpc StreamEvents(StreamEventsRequest) returns (stream StreamEventsResponse);
 
-  // Disconnect ends the session and triggers cleanup.
+  // Disconnect ends the game session out of band (not via stream teardown).
+  // Proxies to CoreService.Disconnect on a best-effort basis — RPC errors
+  // are logged but never surfaced to the caller. Forwards the session-token
+  // cookie header so core can enforce ownership.
   rpc Disconnect(DisconnectRequest) returns (DisconnectResponse);
 
-  // Retrieve command history for a session.
+  // GetCommandHistory retrieves the recent command lines a session has
+  // entered. Proxies to CoreService.GetCommandHistory; ownership is enforced
+  // core-side via the forwarded session-token header, and any failure (error
+  // or success=false) collapses to an empty history at the gateway.
   rpc GetCommandHistory(GetCommandHistoryRequest) returns (GetCommandHistoryResponse);
 
-  // Web auth RPCs.
+  // WebAuthenticatePlayer validates username/password and returns the
+  // player's character roster. Proxies to CoreService.AuthenticatePlayer; on
+  // success the gateway translates the core session token into a Set-Cookie
+  // signal. First runs the cookie-collision gate, short-circuiting with
+  // ALREADY_AUTHENTICATED if a valid session cookie is already present.
   rpc WebAuthenticatePlayer(WebAuthenticatePlayerRequest) returns (WebAuthenticatePlayerResponse);
+
+  // WebSelectCharacter binds a character to a new or reattached game session.
+  // Proxies to CoreService.SelectCharacter using the session token read from
+  // the X-Session-Token cookie header; returns the resulting session_id.
   rpc WebSelectCharacter(WebSelectCharacterRequest) returns (WebSelectCharacterResponse);
+
+  // WebCreatePlayer registers a new player account. Proxies to
+  // CoreService.CreatePlayer; on success the gateway sets the session cookie.
+  // Runs the cookie-collision gate first (ALREADY_AUTHENTICATED short-circuit).
   rpc WebCreatePlayer(WebCreatePlayerRequest) returns (WebCreatePlayerResponse);
-  // Create an ephemeral guest player and character.
+
+  // WebCreateGuest provisions an ephemeral guest player and character.
+  // Proxies to CoreService.CreateGuest; on success the gateway sets a session
+  // cookie whose MaxAge matches the guest session's shorter TTL. Runs the
+  // cookie-collision gate first.
   rpc WebCreateGuest(WebCreateGuestRequest) returns (WebCreateGuestResponse);
+
+  // WebCreateCharacter adds a character to the authenticated player. Proxies
+  // to CoreService.CreateCharacter using the cookie-derived session token.
   rpc WebCreateCharacter(WebCreateCharacterRequest) returns (WebCreateCharacterResponse);
+
+  // WebListCharacters returns the authenticated player's character roster.
+  // Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
+  // CodeUnauthenticated (session expired or invalid).
   rpc WebListCharacters(WebListCharactersRequest) returns (WebListCharactersResponse);
+
+  // WebLogout ends the player session and clears the session cookie. Proxies
+  // to CoreService.Logout (best-effort) when a token is present, then always
+  // emits the cookie-clear signal regardless of the RPC outcome.
   rpc WebLogout(WebLogoutRequest) returns (WebLogoutResponse);
+
+  // WebRequestPasswordReset initiates the email-based reset flow. Proxies to
+  // CoreService.RequestPasswordReset; to avoid leaking account existence the
+  // gateway reports success=true even when the underlying RPC errors.
   rpc WebRequestPasswordReset(WebRequestPasswordResetRequest) returns (WebRequestPasswordResetResponse);
+
+  // WebConfirmPasswordReset completes a reset using the emailed token and a
+  // new password. Proxies to CoreService.ConfirmPasswordReset.
   rpc WebConfirmPasswordReset(WebConfirmPasswordResetRequest) returns (WebConfirmPasswordResetResponse);
 
-  // Validate player session from cookie. Returns player info or Unauthenticated error.
+  // WebCheckSession validates the player session carried in the cookie and
+  // returns the player identity plus character roster, or a
+  // CodeUnauthenticated error. Proxies to CoreService.CheckPlayerSession; the
+  // web client's authed layout uses this to gate page loads.
   rpc WebCheckSession(WebCheckSessionRequest) returns (WebCheckSessionResponse);
 
-  // Content store access (public, no auth required).
+  // WebGetContent fetches a single content-store item by exact key. Proxies
+  // to ContentService.GetContent (a separate gRPC service, NOT CoreService);
+  // public, no auth. Returns CodeUnimplemented if the gateway was built
+  // without a content client.
   rpc WebGetContent(WebGetContentRequest) returns (WebGetContentResponse);
+
+  // WebListContent lists content-store items under a key prefix. Proxies to
+  // ContentService.ListContent (NOT CoreService); public, no auth. Returns
+  // CodeUnimplemented if no content client is configured.
   rpc WebListContent(WebListContentRequest) returns (WebListContentResponse);
 
   // WebQueryStreamHistory reads paginated event history for the web client.
@@ -97,10 +202,23 @@ service WebService {
   // Used by the web client to enumerate streams for reload-backfill.
   rpc WebListSessionStreams(WebListSessionStreamsRequest) returns (WebListSessionStreamsResponse);
 
-  // Session-management RPCs. The caller is identified via the X-Session-Token
-  // cookie header injected by CookieMiddleware; no token field in the request.
+  // WebListPlayerSessions returns the caller's active PlayerSessions (the
+  // device/tab login records, distinct from in-game game sessions), each
+  // flagged is_current for the calling session. Proxies to
+  // CoreService.ListPlayerSessions; the caller is identified via the
+  // X-Session-Token cookie header injected by CookieMiddleware — there is no
+  // token field in the request body.
   rpc WebListPlayerSessions(WebListPlayerSessionsRequest) returns (WebListPlayerSessionsResponse);
+
+  // WebRevokePlayerSession revokes one of the caller's PlayerSessions by id.
+  // Proxies to CoreService.RevokePlayerSession; caller identity comes from the
+  // X-Session-Token cookie header.
   rpc WebRevokePlayerSession(WebRevokePlayerSessionRequest) returns (WebRevokePlayerSessionResponse);
+
+  // WebRevokeOtherPlayerSessions revokes all of the caller's PlayerSessions
+  // except the current one ("log out everywhere else"). Proxies to
+  // CoreService.RevokeOtherPlayerSessions; caller identity comes from the
+  // X-Session-Token cookie header.
   rpc WebRevokeOtherPlayerSessions(WebRevokeOtherPlayerSessionsRequest) returns (WebRevokeOtherPlayerSessionsResponse);
 
   // WebListFocusPresence returns the presence snapshot for the session's
@@ -110,8 +228,14 @@ service WebService {
   rpc WebListFocusPresence(WebListFocusPresenceRequest) returns (WebListFocusPresenceResponse);
 }
 
+// SendCommandRequest carries one raw command line for a game session, optionally
+// tagged with the stream connection it originated from.
 message SendCommandRequest {
+  // session_id identifies the in-game session whose character issues the
+  // command.
   string session_id = 1;
+  // text is the raw command line exactly as the player typed it; parsing and
+  // dispatch happen core-side in HandleCommand.
   string text = 2;
   // connection_id identifies the originating StreamEvents stream for
   // per-connection command routing (Phase 5 scene-focus autofocus).
@@ -121,29 +245,67 @@ message SendCommandRequest {
   string connection_id = 3;
 }
 
+// SendCommandResponse reports the outcome of a dispatched command. Note this is
+// the dispatch acknowledgement; any narrative output the command produces
+// arrives asynchronously over the StreamEvents feed, not here.
 message SendCommandResponse {
+  // success is true when the command was accepted and dispatched without a
+  // transport-level error.
   bool success = 1;
+  // output is an optional synchronous text result; most game output is
+  // delivered out of band over StreamEvents rather than in this field.
   string output = 2;
+  // error_message is a human-readable failure detail; the gateway sets a
+  // generic "command error" when the upstream HandleCommand RPC fails.
   string error_message = 3;
 }
 
+// StreamEventsRequest opens the server-streaming event feed for a session.
 message StreamEventsRequest {
+  // session_id identifies the in-game session whose event stream to attach.
   string session_id = 1;
   // Field 2 (replay_from_cursor) removed — server chooses replay policy.
   reserved 2;
   reserved "replay_from_cursor";
 }
 
+// GameEvent is the web-facing rendering of a single core EventFrame, flattened
+// for direct display by the client. The gateway derives every field from the
+// core EventFrame and its RenderingMetadata in
+// internal/web/translate.go::translateEvent; events lacking rendering metadata
+// are dropped at the gateway (INV-GW-5) and never reach this message.
 message GameEvent {
+  // type is the event-type discriminator (e.g. "say", "pose", "arrive",
+  // "location_state"), forwarded from corev1.EventFrame.type.
   string type = 1;
+  // category is the rendering category from RenderingMetadata (e.g.
+  // "communication", "movement", "state"); it drives client-side grouping
+  // and the gateway's own state-vs-narrative branch.
   string category = 2;
+  // format is the rendering format hint from RenderingMetadata (e.g.
+  // "speech", "action") guiding how the client styles the line.
   string format = 3;
+  // display_target is the surface the event renders on (terminal, state, or
+  // both), copied from RenderingMetadata.display_target.
   EventChannel display_target = 4;
+  // timestamp is the event time as epoch SECONDS, taken from the seconds
+  // component of corev1.EventFrame.timestamp.
   int64 timestamp = 5;
+  // actor is the DISPLAY NAME of the acting character, extracted from the
+  // event payload (character_name, falling back to sender_name) for
+  // rendering. For stable identity use actor_id, not this field.
   string actor = 6;
+  // text is the rendered line shown to the player. Extracted from the payload
+  // (message → text → action → notice) or synthesized for arrive/leave
+  // movement events. Empty for state events whose content lives in metadata.
   string text = 7;
+  // metadata carries type-specific extras (label, style, channel, no_space,
+  // target_name) for narrative events, or the entire decoded payload for
+  // state-category events.
   google.protobuf.Struct metadata = 8;
-  string event_id = 9; // ULID; populated from corev1.EventFrame.id
+  // event_id is the originating event's ULID, forwarded from
+  // corev1.EventFrame.id; the client uses it for dedup keying.
+  string event_id = 9;
   // cursor is the opaque pagination cursor for this event. Mirrors
   // corev1.EventFrame.cursor for reconnect-with-backfill support.
   bytes cursor = 10;
@@ -156,185 +318,350 @@ message GameEvent {
   string actor_id = 11;
 }
 
+// StreamEventsResponse is one frame in the StreamEvents server stream: either
+// an in-band game event or an out-of-band control message, never both.
 message StreamEventsResponse {
+  // frame multiplexes the two frame kinds the gateway forwards on the single
+  // stream.
   oneof frame {
+    // event is an in-band game event for display.
     GameEvent event = 1;
+    // control is an out-of-band stream-lifecycle signal (open, replay
+    // boundary, close).
     ControlFrame control = 2;
   }
 }
 
+// DisconnectRequest names the session to tear down out of band.
 message DisconnectRequest {
+  // session_id identifies the in-game session to end.
   string session_id = 1;
 }
 
+// DisconnectResponse is the empty acknowledgement of a Disconnect call; the
+// gateway always returns it even when the upstream best-effort RPC failed.
 message DisconnectResponse {}
 
+// GetCommandHistoryRequest names the session whose recent command lines to
+// retrieve.
 message GetCommandHistoryRequest {
+  // session_id identifies the in-game session whose command history to fetch.
   string session_id = 1;
 }
 
+// GetCommandHistoryResponse returns the session's recent command lines, or an
+// empty list when the lookup failed or was unauthorized.
 message GetCommandHistoryResponse {
+  // commands is the ordered list of recent raw command lines for the session.
   repeated string commands = 1;
 }
 
 // --- Web auth messages ---
 
+// CharacterSummary is the web-facing roster row for one of a player's
+// characters, mirroring corev1.CharacterSummary and used across the auth and
+// character-management responses.
 message CharacterSummary {
+  // character_id is the character's ULID identity.
   string character_id = 1;
+  // character_name is the character's display name.
   string character_name = 2;
+  // has_active_session is true when the character currently has a live game
+  // session.
   bool has_active_session = 3;
+  // session_status is a human-readable status string for any active session
+  // (e.g. attached/detached state).
   string session_status = 4;
+  // last_location is the display label of the character's most recent
+  // location.
   string last_location = 5;
+  // last_played_at is the epoch-seconds timestamp of the character's most
+  // recent play activity.
   int64 last_played_at = 6;
 }
 
+// WebAuthenticatePlayerRequest carries login credentials for the
+// WebAuthenticatePlayer RPC.
 message WebAuthenticatePlayerRequest {
+  // username identifies the player account to authenticate.
   string username = 1;
+  // password is the plaintext password verified core-side (never logged at
+  // the gateway).
   string password = 2;
+  // remember_me requests a longer-lived session/cookie; forwarded to core to
+  // determine session TTL.
   bool remember_me = 3;
 }
 
+// WebAuthenticatePlayerResponse reports the login outcome and, on success, the
+// player's character roster. The session token itself is delivered as a
+// Set-Cookie header by the gateway, not in this body.
 message WebAuthenticatePlayerResponse {
+  // success is true when credentials were accepted.
   bool success = 1;
   reserved 2;
   reserved "player_session_token"; // removed by the cookie cutover (PR #179)
+  // error_message is a human-readable failure detail on the non-success path.
   string error_message = 3;
+  // characters is the player's roster, returned so the client can prompt for
+  // character selection after login.
   repeated CharacterSummary characters = 4;
+  // default_character_id names the character the client should preselect, if
+  // the player has a default.
   string default_character_id = 5;
-  // NEW: machine-readable error code. Values: "" on success, "ALREADY_AUTHENTICATED"
-  // when the cookie-collision gate fires, others reserved for future use.
+  // error_code is a machine-readable error discriminator. Values: "" on
+  // success, "ALREADY_AUTHENTICATED" when the cookie-collision gate fires;
+  // others reserved for future use.
   string error_code = 6;
-  // NEW: populated only when error_code = "ALREADY_AUTHENTICATED". Holds the
-  // existing player's display name so the client renders the right
-  // "you are already signed in as X" UI without a second round trip.
+  // current_player_name is populated only when error_code =
+  // "ALREADY_AUTHENTICATED". Holds the existing player's display name so the
+  // client renders the right "you are already signed in as X" UI without a
+  // second round trip.
   string current_player_name = 7;
 }
 
+// WebSelectCharacterRequest names the character to bind to a game session.
 message WebSelectCharacterRequest {
+  // character_id is the ULID of the character to select. Field number is 2;
+  // field 1 was retired with the cookie cutover (the token now travels in the
+  // cookie header, not the request body).
   string character_id = 2;
 }
 
+// WebSelectCharacterResponse reports the result of binding a character,
+// including the resulting game session and whether an existing session was
+// reattached rather than freshly created.
 message WebSelectCharacterResponse {
+  // success is true when a session was created or reattached.
   bool success = 1;
+  // session_id is the resulting in-game session's id, used by StreamEvents
+  // and SendCommand.
   string session_id = 2;
+  // character_name is the selected character's display name.
   string character_name = 3;
+  // reattached is true when an existing detached session was resumed instead
+  // of a new one being created.
   bool reattached = 4;
+  // error_message is a human-readable failure detail on the non-success path.
   string error_message = 5;
 }
 
+// WebCreatePlayerRequest carries the fields for new-account registration.
 message WebCreatePlayerRequest {
+  // username is the desired account name.
   string username = 1;
+  // password is the desired plaintext password (hashed core-side).
   string password = 2;
+  // email is the account's email address, used for password-reset delivery.
   string email = 3;
 }
 
+// WebCreatePlayerResponse reports the registration outcome and the initial
+// character roster. As with login, the session token is delivered via
+// Set-Cookie, not in this body.
 message WebCreatePlayerResponse {
+  // success is true when the account was created.
   bool success = 1;
   reserved 2;
   reserved "player_session_token"; // removed by the cookie cutover (PR #179)
+  // characters is the new account's initial character roster.
   repeated CharacterSummary characters = 3;
+  // error_message is a human-readable failure detail on the non-success path.
   string error_message = 4;
-  // NEW: see WebAuthenticatePlayerResponse for semantics.
+  // error_code mirrors WebAuthenticatePlayerResponse.error_code semantics
+  // (e.g. "ALREADY_AUTHENTICATED" from the cookie-collision gate).
   string error_code = 5;
+  // current_player_name mirrors WebAuthenticatePlayerResponse.current_player_name;
+  // set only on the ALREADY_AUTHENTICATED path.
   string current_player_name = 6;
 }
 
+// WebCreateGuestRequest is the empty request for provisioning an ephemeral
+// guest player; guest identity is generated server-side.
 message WebCreateGuestRequest {}
 
+// WebCreateGuestResponse reports the guest-provisioning outcome and the
+// generated guest character roster. The accompanying guest session cookie
+// (shorter TTL) is set via Set-Cookie by the gateway.
 message WebCreateGuestResponse {
+  // success is true when a guest player and character were provisioned.
   bool success = 1;
+  // error_message is a human-readable failure detail on the non-success path.
   string error_message = 2;
+  // characters is the generated guest character roster.
   repeated CharacterSummary characters = 3;
+  // default_character_id names the guest character to preselect.
   string default_character_id = 4;
-  // NEW: see WebAuthenticatePlayerResponse for semantics.
+  // error_code mirrors WebAuthenticatePlayerResponse.error_code semantics.
   string error_code = 5;
+  // current_player_name mirrors WebAuthenticatePlayerResponse.current_player_name.
   string current_player_name = 6;
 }
 
+// WebCreateCharacterRequest names the new character to add to the authenticated
+// player. The player is identified by the cookie session token, not a body
+// field.
 message WebCreateCharacterRequest {
+  // character_name is the desired display name for the new character. Field
+  // number is 2 (field 1 retired with the cookie cutover).
   string character_name = 2;
 }
 
+// WebCreateCharacterResponse reports the result of creating a character.
 message WebCreateCharacterResponse {
+  // success is true when the character was created.
   bool success = 1;
+  // character_id is the new character's ULID identity.
   string character_id = 2;
+  // character_name is the created character's display name.
   string character_name = 3;
+  // error_message is a human-readable failure detail on the non-success path.
   string error_message = 4;
 }
 
+// WebListCharactersRequest is the empty request for the authenticated player's
+// roster; the player is identified by the cookie session token.
 message WebListCharactersRequest {}
 
+// WebListCharactersResponse returns the authenticated player's character
+// roster.
 message WebListCharactersResponse {
+  // characters is the player's full character roster.
   repeated CharacterSummary characters = 1;
 }
 
+// WebLogoutRequest is the empty request to end the current session; the session
+// to end is identified by the cookie token.
 message WebLogoutRequest {}
 
+// WebLogoutResponse is the empty acknowledgement of logout. The meaningful
+// effect — clearing the session cookie — is delivered as a response header by
+// the gateway, so this body carries no fields.
 message WebLogoutResponse {}
 
+// WebRequestPasswordResetRequest names the email address to begin a reset for.
 message WebRequestPasswordResetRequest {
+  // email is the account email to send the reset link to.
   string email = 1;
 }
 
+// WebRequestPasswordResetResponse acknowledges the reset request. success is
+// reported true even when the underlying account does not exist, to avoid
+// leaking account existence.
 message WebRequestPasswordResetResponse {
+  // success is true when the request was accepted; it does NOT confirm the
+  // email exists (existence is deliberately not disclosed).
   bool success = 1;
 }
 
+// WebConfirmPasswordResetRequest carries the emailed reset token and the
+// replacement password.
 message WebConfirmPasswordResetRequest {
+  // token is the single-use reset token delivered by email.
   string token = 1;
+  // new_password is the replacement plaintext password (hashed core-side).
   string new_password = 2;
 }
 
+// WebConfirmPasswordResetResponse reports whether the reset completed.
 message WebConfirmPasswordResetResponse {
+  // success is true when the password was changed.
   bool success = 1;
+  // error_message is a human-readable failure detail on the non-success path.
   string error_message = 2;
 }
 
+// WebCheckSessionRequest is the empty request that validates the cookie-borne
+// player session; the token is read from the cookie header, not the body.
 message WebCheckSessionRequest {}
 
+// WebCheckSessionResponse returns the authenticated player's identity and
+// roster when the cookie session is valid. An invalid/expired session yields a
+// CodeUnauthenticated error instead of this message.
 message WebCheckSessionResponse {
+  // player_name is the authenticated player's display name.
   string player_name = 1;
-  // NEW (additive on the success path; failure path still returns
-  // connect.CodeUnauthenticated so web/src/routes/(authed)/+layout.ts:18-25
-  // continues to redirect on throw — no contract break).
+  // player_id is the authenticated player's ULID identity. Additive on the
+  // success path; the failure path still returns CodeUnauthenticated so the
+  // web client's authed layout continues to redirect on throw (no contract
+  // break).
   string player_id = 2;
+  // is_guest is true when the session belongs to an ephemeral guest player.
   bool is_guest = 3;
+  // characters is the player's character roster, returned so the client can
+  // restore character-selection state on reload.
   repeated CharacterSummary characters = 4;
 }
 
 // --- Web content messages ---
 
+// WebGetContentRequest selects one content-store item by exact key. Served by
+// the public, unauthenticated ContentService proxy (NOT CoreService).
 message WebGetContentRequest {
+  // key is the exact content-store key; no prefix matching is applied.
   string key = 1;
 }
 
+// WebGetContentResponse returns the requested content item, or an empty message
+// when no item exists for the key.
 message WebGetContentResponse {
+  // item is the matched content item; unset when the key was not found.
   WebContentItem item = 1;
 }
 
+// WebListContentRequest selects a page of content-store items under a key
+// prefix. Served by the public ContentService proxy.
 message WebListContentRequest {
+  // prefix restricts results to keys beginning with this string.
   string prefix = 1;
+  // limit requests a page size; the bound is forwarded to and applied by the
+  // content service.
   int32 limit = 2;
+  // cursor is the opaque next_cursor from a prior page; empty starts at the
+  // top of the prefix.
   string cursor = 3;
 }
 
+// WebListContentResponse returns one page of content items plus the cursor for
+// the following page.
 message WebListContentResponse {
+  // items is the page of matched content items.
   repeated WebContentItem items = 1;
+  // next_cursor is the opaque cursor for the next page; empty when no further
+  // pages remain.
   string next_cursor = 2;
 }
 
+// WebContentItem is the web-facing representation of a single content-store
+// entry, forwarded field-for-field from contentv1.ContentItem.
 message WebContentItem {
+  // key is the item's storage key.
   string key = 1;
+  // content_type is the item's MIME type, guiding how the client renders the
+  // body.
   string content_type = 2;
+  // body is the raw item content bytes.
   bytes body = 3;
+  // metadata is a free-form string→string map of item attributes.
   map<string, string> metadata = 4;
 }
 
+// WebQueryStreamHistoryRequest selects a page of historical events for a session
+// stream, with time-window and cursor bounds. Proxies to
+// CoreService.QueryStreamHistory.
 message WebQueryStreamHistoryRequest {
+  // session_id identifies the requesting session (used core-side for
+  // authorization).
   string session_id = 1;
+  // stream names the event stream to read history from (e.g.
+  // "location:<id>").
   string stream = 2;
-  int32 count = 3; // page size; 0 = default (150), max 500, negative rejected
-  int64 not_before_ms = 4; // epoch ms time floor; 0 = no lower bound
+  // count is the requested page size; 0 means the server default (150),
+  // values are capped at the server maximum (500), and negative values are
+  // rejected.
+  int32 count = 3;
+  // not_before_ms is the epoch-ms time floor; 0 means no lower bound.
+  int64 not_before_ms = 4;
   // cursor is the opaque pagination cursor from a previous WebQueryStreamHistoryResponse.
   // Events older than the cursor position are returned. Empty = start from latest.
   bytes cursor = 5;
@@ -347,85 +674,160 @@ message WebQueryStreamHistoryRequest {
   int64 not_after_ms = 6;
 }
 
+// WebQueryStreamHistoryResponse returns one page of historical events translated
+// for the web client, plus pagination state.
 message WebQueryStreamHistoryResponse {
+  // events is the page of historical events (translated from core EventFrames;
+  // events without rendering metadata are dropped at the gateway).
   repeated GameEvent events = 1;
+  // has_more is true when older events remain beyond this page.
   bool has_more = 2;
   // next_cursor is the opaque cursor for the next page. Empty if has_more is false.
   bytes next_cursor = 3;
 }
 
+// WebListSessionStreamsRequest names the session whose subscribed stream set to
+// enumerate.
 message WebListSessionStreamsRequest {
+  // session_id identifies the session whose subscriptions to list.
   string session_id = 1;
 }
 
+// WebListSessionStreamsResponse returns the stream names a session is subscribed
+// to, used by the client to drive reload-backfill across each stream.
 message WebListSessionStreamsResponse {
-  repeated string streams = 1; // event-store stream names (e.g. "location:<id>", "character:<id>")
+  // streams is the list of event-store stream names the session is
+  // subscribed to (e.g. "location:<id>", "character:<id>").
+  repeated string streams = 1;
 }
 
 // --- Session management messages ---
 
+// WebListPlayerSessionsRequest is the empty request listing the caller's
+// PlayerSessions; the caller is identified by the cookie token.
 message WebListPlayerSessionsRequest {}
 
+// WebPlayerSessionInfo describes one of a player's PlayerSessions — a
+// device/tab login record (distinct from an in-game game session) shown in the
+// account's "active sessions" management UI.
 message WebPlayerSessionInfo {
   // id is the PlayerSession.id (ULID). Used as target_session_id when
   // revoking. Safe to show - resource handle, not a secret.
   string id = 1;
+  // created_at is when the PlayerSession was first established (login time).
   google.protobuf.Timestamp created_at = 2;
+  // last_active is the timestamp of the PlayerSession's most recent activity.
   google.protobuf.Timestamp last_active = 3;
+  // user_agent is the browser User-Agent recorded at login, shown to help the
+  // player recognize the device.
   string user_agent = 4;
+  // ip_address is the client IP recorded at login, shown for the same
+  // recognition purpose.
   string ip_address = 5;
   // is_current is true for the PlayerSession that made this request.
   bool is_current = 6;
 }
 
+// WebListPlayerSessionsResponse returns all of the caller's active
+// PlayerSessions.
 message WebListPlayerSessionsResponse {
+  // sessions is the caller's list of active PlayerSessions, one flagged
+  // is_current.
   repeated WebPlayerSessionInfo sessions = 1;
 }
 
+// WebRevokePlayerSessionRequest names a single PlayerSession to revoke; the
+// caller (and thus ownership) is identified by the cookie token.
 message WebRevokePlayerSessionRequest {
   // target_session_id is the PlayerSession.id (ULID) to revoke.
   string target_session_id = 1;
 }
 
+// WebRevokePlayerSessionResponse reports whether the targeted PlayerSession was
+// revoked.
 message WebRevokePlayerSessionResponse {
+  // success is true when the targeted PlayerSession was revoked.
   bool success = 1;
+  // error_message is a human-readable failure detail on the non-success path.
   string error_message = 2;
 }
 
+// WebRevokeOtherPlayerSessionsRequest is the empty "log out everywhere else"
+// request; the surviving (current) session is identified by the cookie token.
 message WebRevokeOtherPlayerSessionsRequest {}
 
+// WebRevokeOtherPlayerSessionsResponse reports the bulk-revocation outcome and
+// how many PlayerSessions were revoked.
 message WebRevokeOtherPlayerSessionsResponse {
+  // success is true when the bulk revocation completed.
   bool success = 1;
+  // revoked_count is the number of other PlayerSessions revoked.
   int32 revoked_count = 2;
 }
 
 // --- Presence messages ---
 
+// WebPresenceContext is the web mirror of corev1.PresenceContext: it tells the
+// client which kind of focus context a presence snapshot describes. The gateway
+// maps core values 1:1 (internal/web/handler.go::translatePresenceContext).
 enum WebPresenceContext {
+  // WEB_PRESENCE_CONTEXT_UNSPECIFIED is the zero value / fallback for an
+  // unrecognized core context.
   WEB_PRESENCE_CONTEXT_UNSPECIFIED = 0;
+  // WEB_PRESENCE_CONTEXT_LOCATION indicates the snapshot is the presence at a
+  // location.
   WEB_PRESENCE_CONTEXT_LOCATION = 1;
+  // WEB_PRESENCE_CONTEXT_SCENE indicates the snapshot is the participants of a
+  // scene.
   WEB_PRESENCE_CONTEXT_SCENE = 2;
 }
 
+// WebPresenceState is the web mirror of corev1.PresenceState: the activity
+// state of one present character. Mapped 1:1 from core
+// (internal/web/handler.go::translatePresenceState).
 enum WebPresenceState {
+  // WEB_PRESENCE_STATE_UNSPECIFIED is the zero value / fallback for an
+  // unrecognized core state.
   WEB_PRESENCE_STATE_UNSPECIFIED = 0;
+  // WEB_PRESENCE_STATE_ACTIVE means the character has a live, attached
+  // connection (grid present).
   WEB_PRESENCE_STATE_ACTIVE = 1;
+  // WEB_PRESENCE_STATE_DETACHED means the session exists but currently has no
+  // attached connection.
   WEB_PRESENCE_STATE_DETACHED = 2;
+  // WEB_PRESENCE_STATE_INACTIVE means the character is present but idle/not
+  // actively connected.
   WEB_PRESENCE_STATE_INACTIVE = 3;
 }
 
+// WebPresenceEntry is one character in a presence snapshot, carrying identity
+// and activity state for the client's presence list.
 message WebPresenceEntry {
+  // character_id is the present character's ULID identity (used for dedup
+  // keying).
   string character_id = 1;
+  // character_name is the present character's display name.
   string character_name = 2;
+  // state is the character's activity state in this context.
   WebPresenceState state = 3;
 }
 
+// WebListFocusPresenceRequest names the session whose current focus-context
+// presence to snapshot.
 message WebListFocusPresenceRequest {
+  // session_id identifies the requesting session; core resolves the session's
+  // current focus (location or scene) and enforces ownership.
   string session_id = 1;
 }
 
+// WebListFocusPresenceResponse returns the presence snapshot for the session's
+// current focus context.
 message WebListFocusPresenceResponse {
+  // context indicates whether the snapshot describes a location or a scene.
   WebPresenceContext context = 1;
+  // context_id is the ULID of the focus location or scene the snapshot
+  // describes.
   string context_id = 2;
+  // entries is the set of characters present in the focus context.
   repeated WebPresenceEntry entries = 3;
 }

@@ -96,57 +96,103 @@ const (
 
 // CoreServiceClient is a client for the holomush.core.v1.CoreService service.
 type CoreServiceClient interface {
-	// HandleCommand processes a game command.
+	// HandleCommand validates session ownership, records the command in session
+	// history, and dispatches it through the unified command dispatcher. Handler
+	// output is NOT returned inline — it is emitted as command_response events on
+	// the character's own stream. The RPC reply carries only success/failure.
+	// Auth: requires a player_session_token matching session_id; ownership
+	// failures collapse to a generic "session not found" in the response body.
 	HandleCommand(context.Context, *connect.Request[v1.HandleCommandRequest]) (*connect.Response[v1.HandleCommandResponse], error)
-	// Subscribe opens a stream of events for the session.
+	// Subscribe opens the long-lived server-streaming event feed for a session.
+	// The server (not the client) determines which streams to deliver and the
+	// replay policy via FocusCoordinator.RestoreFocus; it registers the caller's
+	// connection, replays history, then forwards live events. Ownership is
+	// validated up front and collapses to SESSION_NOT_FOUND on any failure.
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest]) (*connect.ServerStreamForClient[v1.SubscribeResponse], error)
-	// Disconnect ends a session.
+	// Disconnect detaches a connection (or the whole session) and is idempotent:
+	// an already-gone session returns success. It validates ownership first, then
+	// removes the named connection and tears down session state.
 	Disconnect(context.Context, *connect.Request[v1.DisconnectRequest]) (*connect.Response[v1.DisconnectResponse], error)
-	// GetCommandHistory retrieves command history for a session.
+	// GetCommandHistory returns the recent commands recorded for a session (the
+	// per-session ring buffer maintained by sessionStore.AppendCommand). Ownership
+	// is validated; this is distinct from event history (QueryStreamHistory).
 	GetCommandHistory(context.Context, *connect.Request[v1.GetCommandHistoryRequest]) (*connect.Response[v1.GetCommandHistoryResponse], error)
-	// Two-phase login: authenticate player credentials.
+	// AuthenticatePlayer is phase one of two-phase login: it verifies username and
+	// password, enforces the per-player session cap, mints a PlayerSession, and
+	// returns the bearer token plus the player's character roster. No game session
+	// exists yet — that requires a follow-up SelectCharacter call.
 	AuthenticatePlayer(context.Context, *connect.Request[v1.AuthenticatePlayerRequest]) (*connect.Response[v1.AuthenticatePlayerResponse], error)
-	// Two-phase login: select a character, creating or reattaching a game session.
+	// SelectCharacter is phase two of two-phase login: given a valid player session
+	// token, it reattaches an existing detached game session (preserving scrollback)
+	// or creates a fresh one for the chosen character, emitting an arrive event.
+	// The character must belong to the authenticated player.
 	SelectCharacter(context.Context, *connect.Request[v1.SelectCharacterRequest]) (*connect.Response[v1.SelectCharacterResponse], error)
-	// Create a new player account.
+	// CreatePlayer registers a new player account and immediately returns a player
+	// session token (the new account is logged in). The returned character roster
+	// is empty — a freshly created player has no characters until CreateCharacter.
 	CreatePlayer(context.Context, *connect.Request[v1.CreatePlayerRequest]) (*connect.Response[v1.CreatePlayerResponse], error)
-	// Create an ephemeral guest player and character.
+	// CreateGuest provisions an ephemeral guest player plus one starter character
+	// and returns a short-lived (guest TTL) player session token. Used by the
+	// "play as guest" entry path; no credentials are required.
 	CreateGuest(context.Context, *connect.Request[v1.CreateGuestRequest]) (*connect.Response[v1.CreateGuestResponse], error)
-	// Create a new character for an authenticated player.
+	// CreateCharacter adds a character to the authenticated player's roster. When
+	// a transactor and bindings service are configured, the character row and its
+	// ownership binding are created atomically in one transaction.
 	CreateCharacter(context.Context, *connect.Request[v1.CreateCharacterRequest]) (*connect.Response[v1.CreateCharacterResponse], error)
-	// List characters for an authenticated player.
+	// ListCharacters returns the authenticated player's character roster enriched
+	// with per-character session status and last-known location.
 	ListCharacters(context.Context, *connect.Request[v1.ListCharactersRequest]) (*connect.Response[v1.ListCharactersResponse], error)
-	// Request a password reset (email stubbed).
+	// RequestPasswordReset begins a password-reset flow for the given email. The
+	// reply is ALWAYS success regardless of whether the email exists — this is an
+	// intentional enumeration-prevention measure; delivery is stubbed (logged).
 	RequestPasswordReset(context.Context, *connect.Request[v1.RequestPasswordResetRequest]) (*connect.Response[v1.RequestPasswordResetResponse], error)
-	// Confirm a password reset with token.
+	// ConfirmPasswordReset completes the flow by validating the reset token and
+	// setting the new password. Failure messages are sanitized so token/internal
+	// detail does not leak to the client.
 	ConfirmPasswordReset(context.Context, *connect.Request[v1.ConfirmPasswordResetRequest]) (*connect.Response[v1.ConfirmPasswordResetResponse], error)
-	// End a player session.
+	// Logout deletes the caller's PlayerSession and, before doing so, fans out
+	// disconnect + session_ended + delete + hooks to every child game session so
+	// no Subscribe stream is left orphaned. Per-session signals complete before
+	// the PlayerSession row is deleted to avoid ownership-validation flapping.
 	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
-	// Validate a player session token. Used by web gateway for cookie-based auth checks.
+	// CheckPlayerSession validates a player session token and returns the player
+	// identity plus character roster. Used by the web gateway for cookie-based auth
+	// checks. The failure path returns an Unauthenticated status (not a body flag),
+	// preserving the enumeration-safety contract for unknown/expired sessions.
 	CheckPlayerSession(context.Context, *connect.Request[v1.CheckPlayerSessionRequest]) (*connect.Response[v1.CheckPlayerSessionResponse], error)
-	// ListPlayerSessions returns the caller's active PlayerSessions
-	// (the rows of player_sessions for the caller's player_id). Tokens
-	// are not returned — only metadata useful for user-visible session
-	// management ("you are signed in on these devices").
+	// ListPlayerSessions returns the caller's active PlayerSessions (the rows in
+	// player_sessions for the caller's player_id). Tokens are never returned —
+	// only metadata useful for user-visible session management ("you are signed
+	// in on these devices"). Any auth failure returns an empty list, so callers
+	// cannot distinguish an invalid token from a player with zero sessions.
 	ListPlayerSessions(context.Context, *connect.Request[v1.ListPlayerSessionsRequest]) (*connect.Response[v1.ListPlayerSessionsResponse], error)
-	// RevokePlayerSession deletes a specific PlayerSession. Ownership is
-	// verified — a player cannot revoke another player's sessions.
+	// RevokePlayerSession deletes one specific PlayerSession. Ownership is
+	// verified: a player cannot revoke another player's session, and cross-player
+	// attempts collapse to "session not found" (logged WARN for security audit).
 	RevokePlayerSession(context.Context, *connect.Request[v1.RevokePlayerSessionRequest]) (*connect.Response[v1.RevokePlayerSessionResponse], error)
-	// RevokeOtherPlayerSessions deletes all PlayerSessions for the caller
-	// except the current one. Convenience bulk operation equivalent to
-	// listing and calling RevokePlayerSession for each.
+	// RevokeOtherPlayerSessions deletes all of the caller's PlayerSessions except
+	// the current one. Convenience bulk operation equivalent to listing and calling
+	// RevokePlayerSession for each — useful after a suspected compromise.
 	RevokeOtherPlayerSessions(context.Context, *connect.Request[v1.RevokeOtherPlayerSessionsRequest]) (*connect.Response[v1.RevokeOtherPlayerSessionsResponse], error)
-	// QueryStreamHistory reads paginated event history from a stream.
-	// Two-layer authorization: membership gate (I-17) for private streams,
-	// ABAC policy evaluation for public streams.
-	// Pure read — does not mutate session cursors (invariant I-13).
+	// QueryStreamHistory reads paginated event history from a single stream. It is
+	// a pure read that does NOT mutate session cursors (invariant I-13). Two-layer
+	// authorization applies: private streams (character / scene) use a hard
+	// membership gate (I-17, no ABAC, no admin override); public streams (location,
+	// global) are evaluated by the ABAC engine. History transparently spans the
+	// recent JetStream tier and the older PostgreSQL audit tier.
 	QueryStreamHistory(context.Context, *connect.Request[v1.QueryStreamHistoryRequest]) (*connect.Response[v1.QueryStreamHistoryResponse], error)
-	// ListSessionStreams returns the set of streams the session is currently
-	// subscribed to, derived from focusCoordinator.RestoreFocus. Used by
-	// web clients to enumerate streams for backfill on reload. Pure read.
+	// ListSessionStreams returns the stream names the session is currently
+	// subscribed to, derived from FocusCoordinator.RestoreFocus (with the same
+	// ambient-stream fallback Subscribe uses). Web clients use it to enumerate
+	// streams for backfill on reload. Pure read; ownership-validated and
+	// enumeration-safe (failures collapse to SESSION_NOT_FOUND), closing the IDOR
+	// where one player could enumerate another's subscribed streams.
 	ListSessionStreams(context.Context, *connect.Request[v1.ListSessionStreamsRequest]) (*connect.Response[v1.ListSessionStreamsResponse], error)
-	// ListFocusPresence returns the presence snapshot for the session's current
-	// focus context (location or scene). Pure read — no session mutation.
+	// ListFocusPresence returns the current-state presence snapshot for the
+	// session's focus context. It reads session.Store.ListActiveByLocation
+	// directly (NOT event history — see .claude/rules/event-interfaces.md) and is
+	// gated by the ABAC list_presence action on the location resource. Scene-focus
+	// contexts currently return UNIMPLEMENTED. Pure read — no session mutation.
 	ListFocusPresence(context.Context, *connect.Request[v1.ListFocusPresenceRequest]) (*connect.Response[v1.ListFocusPresenceResponse], error)
 }
 
@@ -410,57 +456,103 @@ func (c *coreServiceClient) ListFocusPresence(ctx context.Context, req *connect.
 
 // CoreServiceHandler is an implementation of the holomush.core.v1.CoreService service.
 type CoreServiceHandler interface {
-	// HandleCommand processes a game command.
+	// HandleCommand validates session ownership, records the command in session
+	// history, and dispatches it through the unified command dispatcher. Handler
+	// output is NOT returned inline — it is emitted as command_response events on
+	// the character's own stream. The RPC reply carries only success/failure.
+	// Auth: requires a player_session_token matching session_id; ownership
+	// failures collapse to a generic "session not found" in the response body.
 	HandleCommand(context.Context, *connect.Request[v1.HandleCommandRequest]) (*connect.Response[v1.HandleCommandResponse], error)
-	// Subscribe opens a stream of events for the session.
+	// Subscribe opens the long-lived server-streaming event feed for a session.
+	// The server (not the client) determines which streams to deliver and the
+	// replay policy via FocusCoordinator.RestoreFocus; it registers the caller's
+	// connection, replays history, then forwards live events. Ownership is
+	// validated up front and collapses to SESSION_NOT_FOUND on any failure.
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest], *connect.ServerStream[v1.SubscribeResponse]) error
-	// Disconnect ends a session.
+	// Disconnect detaches a connection (or the whole session) and is idempotent:
+	// an already-gone session returns success. It validates ownership first, then
+	// removes the named connection and tears down session state.
 	Disconnect(context.Context, *connect.Request[v1.DisconnectRequest]) (*connect.Response[v1.DisconnectResponse], error)
-	// GetCommandHistory retrieves command history for a session.
+	// GetCommandHistory returns the recent commands recorded for a session (the
+	// per-session ring buffer maintained by sessionStore.AppendCommand). Ownership
+	// is validated; this is distinct from event history (QueryStreamHistory).
 	GetCommandHistory(context.Context, *connect.Request[v1.GetCommandHistoryRequest]) (*connect.Response[v1.GetCommandHistoryResponse], error)
-	// Two-phase login: authenticate player credentials.
+	// AuthenticatePlayer is phase one of two-phase login: it verifies username and
+	// password, enforces the per-player session cap, mints a PlayerSession, and
+	// returns the bearer token plus the player's character roster. No game session
+	// exists yet — that requires a follow-up SelectCharacter call.
 	AuthenticatePlayer(context.Context, *connect.Request[v1.AuthenticatePlayerRequest]) (*connect.Response[v1.AuthenticatePlayerResponse], error)
-	// Two-phase login: select a character, creating or reattaching a game session.
+	// SelectCharacter is phase two of two-phase login: given a valid player session
+	// token, it reattaches an existing detached game session (preserving scrollback)
+	// or creates a fresh one for the chosen character, emitting an arrive event.
+	// The character must belong to the authenticated player.
 	SelectCharacter(context.Context, *connect.Request[v1.SelectCharacterRequest]) (*connect.Response[v1.SelectCharacterResponse], error)
-	// Create a new player account.
+	// CreatePlayer registers a new player account and immediately returns a player
+	// session token (the new account is logged in). The returned character roster
+	// is empty — a freshly created player has no characters until CreateCharacter.
 	CreatePlayer(context.Context, *connect.Request[v1.CreatePlayerRequest]) (*connect.Response[v1.CreatePlayerResponse], error)
-	// Create an ephemeral guest player and character.
+	// CreateGuest provisions an ephemeral guest player plus one starter character
+	// and returns a short-lived (guest TTL) player session token. Used by the
+	// "play as guest" entry path; no credentials are required.
 	CreateGuest(context.Context, *connect.Request[v1.CreateGuestRequest]) (*connect.Response[v1.CreateGuestResponse], error)
-	// Create a new character for an authenticated player.
+	// CreateCharacter adds a character to the authenticated player's roster. When
+	// a transactor and bindings service are configured, the character row and its
+	// ownership binding are created atomically in one transaction.
 	CreateCharacter(context.Context, *connect.Request[v1.CreateCharacterRequest]) (*connect.Response[v1.CreateCharacterResponse], error)
-	// List characters for an authenticated player.
+	// ListCharacters returns the authenticated player's character roster enriched
+	// with per-character session status and last-known location.
 	ListCharacters(context.Context, *connect.Request[v1.ListCharactersRequest]) (*connect.Response[v1.ListCharactersResponse], error)
-	// Request a password reset (email stubbed).
+	// RequestPasswordReset begins a password-reset flow for the given email. The
+	// reply is ALWAYS success regardless of whether the email exists — this is an
+	// intentional enumeration-prevention measure; delivery is stubbed (logged).
 	RequestPasswordReset(context.Context, *connect.Request[v1.RequestPasswordResetRequest]) (*connect.Response[v1.RequestPasswordResetResponse], error)
-	// Confirm a password reset with token.
+	// ConfirmPasswordReset completes the flow by validating the reset token and
+	// setting the new password. Failure messages are sanitized so token/internal
+	// detail does not leak to the client.
 	ConfirmPasswordReset(context.Context, *connect.Request[v1.ConfirmPasswordResetRequest]) (*connect.Response[v1.ConfirmPasswordResetResponse], error)
-	// End a player session.
+	// Logout deletes the caller's PlayerSession and, before doing so, fans out
+	// disconnect + session_ended + delete + hooks to every child game session so
+	// no Subscribe stream is left orphaned. Per-session signals complete before
+	// the PlayerSession row is deleted to avoid ownership-validation flapping.
 	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
-	// Validate a player session token. Used by web gateway for cookie-based auth checks.
+	// CheckPlayerSession validates a player session token and returns the player
+	// identity plus character roster. Used by the web gateway for cookie-based auth
+	// checks. The failure path returns an Unauthenticated status (not a body flag),
+	// preserving the enumeration-safety contract for unknown/expired sessions.
 	CheckPlayerSession(context.Context, *connect.Request[v1.CheckPlayerSessionRequest]) (*connect.Response[v1.CheckPlayerSessionResponse], error)
-	// ListPlayerSessions returns the caller's active PlayerSessions
-	// (the rows of player_sessions for the caller's player_id). Tokens
-	// are not returned — only metadata useful for user-visible session
-	// management ("you are signed in on these devices").
+	// ListPlayerSessions returns the caller's active PlayerSessions (the rows in
+	// player_sessions for the caller's player_id). Tokens are never returned —
+	// only metadata useful for user-visible session management ("you are signed
+	// in on these devices"). Any auth failure returns an empty list, so callers
+	// cannot distinguish an invalid token from a player with zero sessions.
 	ListPlayerSessions(context.Context, *connect.Request[v1.ListPlayerSessionsRequest]) (*connect.Response[v1.ListPlayerSessionsResponse], error)
-	// RevokePlayerSession deletes a specific PlayerSession. Ownership is
-	// verified — a player cannot revoke another player's sessions.
+	// RevokePlayerSession deletes one specific PlayerSession. Ownership is
+	// verified: a player cannot revoke another player's session, and cross-player
+	// attempts collapse to "session not found" (logged WARN for security audit).
 	RevokePlayerSession(context.Context, *connect.Request[v1.RevokePlayerSessionRequest]) (*connect.Response[v1.RevokePlayerSessionResponse], error)
-	// RevokeOtherPlayerSessions deletes all PlayerSessions for the caller
-	// except the current one. Convenience bulk operation equivalent to
-	// listing and calling RevokePlayerSession for each.
+	// RevokeOtherPlayerSessions deletes all of the caller's PlayerSessions except
+	// the current one. Convenience bulk operation equivalent to listing and calling
+	// RevokePlayerSession for each — useful after a suspected compromise.
 	RevokeOtherPlayerSessions(context.Context, *connect.Request[v1.RevokeOtherPlayerSessionsRequest]) (*connect.Response[v1.RevokeOtherPlayerSessionsResponse], error)
-	// QueryStreamHistory reads paginated event history from a stream.
-	// Two-layer authorization: membership gate (I-17) for private streams,
-	// ABAC policy evaluation for public streams.
-	// Pure read — does not mutate session cursors (invariant I-13).
+	// QueryStreamHistory reads paginated event history from a single stream. It is
+	// a pure read that does NOT mutate session cursors (invariant I-13). Two-layer
+	// authorization applies: private streams (character / scene) use a hard
+	// membership gate (I-17, no ABAC, no admin override); public streams (location,
+	// global) are evaluated by the ABAC engine. History transparently spans the
+	// recent JetStream tier and the older PostgreSQL audit tier.
 	QueryStreamHistory(context.Context, *connect.Request[v1.QueryStreamHistoryRequest]) (*connect.Response[v1.QueryStreamHistoryResponse], error)
-	// ListSessionStreams returns the set of streams the session is currently
-	// subscribed to, derived from focusCoordinator.RestoreFocus. Used by
-	// web clients to enumerate streams for backfill on reload. Pure read.
+	// ListSessionStreams returns the stream names the session is currently
+	// subscribed to, derived from FocusCoordinator.RestoreFocus (with the same
+	// ambient-stream fallback Subscribe uses). Web clients use it to enumerate
+	// streams for backfill on reload. Pure read; ownership-validated and
+	// enumeration-safe (failures collapse to SESSION_NOT_FOUND), closing the IDOR
+	// where one player could enumerate another's subscribed streams.
 	ListSessionStreams(context.Context, *connect.Request[v1.ListSessionStreamsRequest]) (*connect.Response[v1.ListSessionStreamsResponse], error)
-	// ListFocusPresence returns the presence snapshot for the session's current
-	// focus context (location or scene). Pure read — no session mutation.
+	// ListFocusPresence returns the current-state presence snapshot for the
+	// session's focus context. It reads session.Store.ListActiveByLocation
+	// directly (NOT event history — see .claude/rules/event-interfaces.md) and is
+	// gated by the ABAC list_presence action on the location resource. Scene-focus
+	// contexts currently return UNIMPLEMENTED. Pure read — no session mutation.
 	ListFocusPresence(context.Context, *connect.Request[v1.ListFocusPresenceRequest]) (*connect.Response[v1.ListFocusPresenceResponse], error)
 }
 

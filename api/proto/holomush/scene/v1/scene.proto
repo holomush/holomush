@@ -11,86 +11,288 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/scene/v1;scenev1";
 
+// SceneService is the gRPC contract for the core-scenes binary plugin
+// (plugins/core-scenes/). A scene is a structured roleplay encounter with an
+// owner, a participant roster, a privacy mode, a pose-order discipline, and an
+// optional published archive. The plugin owns the `scene` ABAC resource type
+// and persists to its own `plugin_core_scenes` schema; it emits IC notice
+// events on events.<game_id>.scene.<scene_id>.ic and audits lifecycle
+// operations to its plugin-owned audit table.
+//
+// Authorization model: every mutating RPC trusts that the host's ABAC engine
+// has already authorized the command-execute action at dispatch time
+// (owner-only for end/pause/resume/update/invite/kick/transfer, admin-only for
+// the publish-attempt-budget extension). The plugin itself runs NO ABAC engine
+// (SceneServiceImpl holds no policy engine). The sole exceptions are the
+// participant-gate reads (GetPoseOrder and the publish reads), which enforce a
+// direct plugin-code participation check (INV-S9) precisely because it is a
+// hard privacy boundary that must not be delegable.
+//
+// Implemented by SceneServiceImpl in plugins/core-scenes/service.go and
+// plugins/core-scenes/publish_service.go.
 service SceneService {
+  // ListScenes is DECLARED BUT NOT SERVED. The core-scenes plugin embeds
+  // UnimplementedSceneServiceServer and provides no override, so any call
+  // returns codes.Unimplemented. Scene discovery is instead surfaced through
+  // the plugin's `scene` listing command (handleSceneList), which reads
+  // SceneStore.ListScenesForCharacter, not this RPC. Retained as a planned
+  // read surface.
   rpc ListScenes(ListScenesRequest) returns (ListScenesResponse);
+
+  // GetScene loads one scene's metadata and participant roster by ID. The
+  // host's read-scene ABAC policy gates access before the call reaches the
+  // handler, so the handler performs no additional ownership check; it returns
+  // codes.NotFound when the scene does not exist. See service.go::GetScene.
   rpc GetScene(GetSceneRequest) returns (GetSceneResponse);
+
+  // CreateScene allocates a new scene owned by the calling character, seeded
+  // active with the supplied title/description/visibility/pose-order/tags. The
+  // creating character becomes the `owner` participant in the same transaction,
+  // a lifecycle.created audit event is recorded, and a scene-created event is
+  // emitted. See service.go::CreateScene.
   rpc CreateScene(CreateSceneRequest) returns (CreateSceneResponse);
+
+  // EndScene transitions a scene to the terminal `ended` state (owner-only via
+  // ABAC). Rejected with codes.FailedPrecondition when the scene is already
+  // ended or archived. Returns the post-transition scene row. See
+  // service.go::EndScene.
   rpc EndScene(EndSceneRequest) returns (EndSceneResponse);
+
+  // PauseScene transitions an `active` scene to `paused` (owner-only via ABAC).
+  // Rejected with codes.FailedPrecondition from any non-active state. See
+  // service.go::PauseScene.
   rpc PauseScene(PauseSceneRequest) returns (PauseSceneResponse);
+
+  // ResumeScene transitions a `paused` scene back to `active` (owner-only via
+  // ABAC). Rejected with codes.FailedPrecondition from any non-paused state.
+  // See service.go::ResumeScene.
   rpc ResumeScene(ResumeSceneRequest) returns (ResumeSceneResponse);
+
+  // UpdateScene applies a partial update to mutable scene metadata, driven by
+  // the request's FieldMask (owner-only via ABAC). An empty mask is a no-op
+  // success. A pose-order-mode change auto-emits a pose-order-changed IC
+  // notice. See service.go::UpdateScene.
   rpc UpdateScene(UpdateSceneRequest) returns (UpdateSceneResponse);
+
+  // JoinScene adds the calling character to a scene as a `member`. Open scenes
+  // accept any join; private scenes require a pre-existing invitation (the
+  // invited row is promoted to member). Idempotent: a repeat join by an
+  // existing member succeeds without re-emitting a join notice. See
+  // service.go::JoinScene.
   rpc JoinScene(JoinSceneRequest) returns (JoinSceneResponse);
+
+  // LeaveScene removes the calling character from a scene. The scene owner
+  // cannot leave (codes.FailedPrecondition) — they must end the scene or
+  // transfer ownership first. Emits a leave IC notice with reason=left. See
+  // service.go::LeaveScene.
   rpc LeaveScene(LeaveSceneRequest) returns (LeaveSceneResponse);
+
+  // InviteToScene records an `invited` participant row for a target character
+  // (owner-only via ABAC), granting them permission to join a private scene.
+  // Rejected with codes.AlreadyExists when the target is already a member. See
+  // service.go::InviteToScene.
   rpc InviteToScene(InviteToSceneRequest) returns (InviteToSceneResponse);
+
+  // KickFromScene removes a target character from a scene (owner-only via
+  // ABAC). The scene owner cannot be kicked (codes.FailedPrecondition, enforced
+  // both at the service layer and by a store WHERE filter). Emits a leave IC
+  // notice with reason=kicked. See service.go::KickFromScene.
   rpc KickFromScene(KickFromSceneRequest) returns (KickFromSceneResponse);
+
+  // TransferOwnership reassigns scene ownership from the calling owner to a
+  // target who MUST already be a member (owner-only via ABAC). The former owner
+  // is demoted to member. See service.go::TransferOwnership.
   rpc TransferOwnership(TransferOwnershipRequest) returns (TransferOwnershipResponse);
+
+  // CastPublishVote is DECLARED BUT NOT SERVED. It is the legacy
+  // scene-keyed publish-vote shape, superseded by CastPublishSceneVote (which
+  // is keyed by published_scene_id and is the served vote RPC). The plugin
+  // provides no handler, so a call returns codes.Unimplemented.
   rpc CastPublishVote(CastPublishVoteRequest) returns (CastPublishVoteResponse);
+
+  // GetPoseOrder returns the computed pose-order roster for a scene. Enforces
+  // the INV-S9 plugin-code participant gate (caller MUST be an owner or member,
+  // NOT merely invited; NO ABAC engine is consulted). The PermissionDenied gate
+  // fires before any existence check so a non-participant cannot distinguish a
+  // missing scene from one they may not see. See service.go::GetPoseOrder.
   rpc GetPoseOrder(GetPoseOrderRequest) returns (GetPoseOrderResponse);
-  // Phase 6 publication RPCs. See spec section 5.
+
+  // StartScenePublish opens a publication attempt for an `ended` scene
+  // (publish.go §5 precondition ladder). The scene must be ended, must not
+  // already have a published archive (one-and-done) nor an active attempt, and
+  // must not have exhausted its attempt budget. Seeds a COLLECTING attempt with
+  // a frozen vote roster. See publish_service.go::StartScenePublish.
   rpc StartScenePublish(StartScenePublishRequest) returns (StartScenePublishResponse);
+
+  // CastPublishSceneVote records a roster member's yes/no vote on an active
+  // publication attempt and runs the §4.3 resolution check, which may
+  // transition the attempt (COLLECTING→COOLOFF on all-yes, COLLECTING→
+  // ATTEMPT_FAILED on any-no-after-all-voted, or COOLOFF→COLLECTING on a flip
+  // to no). A vote on a terminal attempt is rejected. The recorded vote is the
+  // durable effect; a failed resolution or emit is logged but does not fail the
+  // cast. See publish_service.go::CastPublishSceneVote.
   rpc CastPublishSceneVote(CastPublishSceneVoteRequest) returns (CastPublishSceneVoteResponse);
+
+  // WithdrawScenePublish lets the scene owner abandon an active publication
+  // attempt (COLLECTING or COOLOFF), transitioning it to ATTEMPT_FAILED with
+  // failure_reason WITHDRAWN. Owner-gated by ABAC AND a defense-in-depth
+  // in-handler owner check (the plugin holds the owner attribute, so this
+  // closes the direct-RPC gap). See publish_service.go::WithdrawScenePublish.
   rpc WithdrawScenePublish(WithdrawScenePublishRequest) returns (WithdrawScenePublishResponse);
+
+  // GetPublishedScene returns a publication attempt's full state to a scene
+  // participant. Enforces the INV-S9 plugin-code participant gate with a
+  // load-bearing step order (INV-P6-5): header read → participant gate → content
+  // read (only for PUBLISHED rows, only after the gate passes). A non-participant
+  // is denied with the §10 triple-signal before any content is read. See
+  // publish_service.go::GetPublishedScene.
   rpc GetPublishedScene(GetPublishedSceneRequest) returns (GetPublishedSceneResponse);
+
+  // DownloadPublishedScene returns a PUBLISHED attempt rendered in the
+  // requested format (markdown/plain_text/jsonl) to a participant. Same
+  // load-bearing participant-gate ordering as GetPublishedScene; only PUBLISHED
+  // attempts are downloadable. See publish_service.go::DownloadPublishedScene.
   rpc DownloadPublishedScene(DownloadPublishedSceneRequest) returns (DownloadPublishedSceneResponse);
+
+  // ListScenePublishAttempts returns the audit list of a scene's publication
+  // attempts (header summaries, no content) to a participant. Participant-gated
+  // (INV-S9) so a non-participant cannot enumerate attempts. See
+  // publish_service.go::ListScenePublishAttempts.
   rpc ListScenePublishAttempts(ListScenePublishAttemptsRequest) returns (ListScenePublishAttemptsResponse);
+
+  // GetPublishedScene's PUBLIC counterpart: GetPublicSceneArchive is the
+  // unauthenticated read of a published scene. Structurally separate — NO
+  // caller validation, NO participant gate, NO ABAC. The only gate is
+  // status==PUBLISHED; a missing id OR any non-PUBLISHED attempt returns one
+  // opaque NOT_FOUND so existence/progress of an attempt cannot be inferred
+  // (INV-P6-8). Carries only public-safe fields. See
+  // publish_service.go::GetPublicSceneArchive.
   rpc GetPublicSceneArchive(GetPublicSceneArchiveRequest) returns (GetPublicSceneArchiveResponse);
+
+  // DownloadPublicSceneArchive is the PUBLIC, unauthenticated download of a
+  // published scene in the requested format. Same status-gate and opacity
+  // contract (INV-P6-8) as GetPublicSceneArchive; shares the renderer with
+  // DownloadPublishedScene. See publish_service.go::DownloadPublicSceneArchive.
   rpc DownloadPublicSceneArchive(DownloadPublicSceneArchiveRequest) returns (DownloadPublicSceneArchiveResponse);
+
+  // ExtendScenePublishVoteAttempts raises a scene's max-publish-attempts budget
+  // by a positive amount and emits the extension notice. Admin-only, enforced
+  // by the host's ABAC policy at dispatch — there is deliberately NO in-plugin
+  // role check (the inverse of INV-S9's plugin-code privacy gate). See
+  // publish_service.go::ExtendScenePublishVoteAttempts.
   rpc ExtendScenePublishVoteAttempts(ExtendScenePublishVoteAttemptsRequest) returns (ExtendScenePublishVoteAttemptsResponse);
 }
 
+// SceneInfo is the wire projection of a scene row plus its roster, returned by
+// the read and lifecycle RPCs (rowToProto in service.go). The state,
+// pose_order_mode, and visibility fields are the plugin's lowercase string
+// enums, not proto enums.
 message SceneInfo {
+  // Scene primary key ("scene-<ULID>"), stable for the scene's lifetime.
   string id = 1;
+  // Human-facing scene name; trimmed of surrounding whitespace at creation.
   string title = 2;
+  // Optional free-text scene synopsis (up to 4096 chars).
   string description = 3;
+  // Optional world location the scene is anchored to; empty when unanchored.
   string location_id = 4;
+  // Character ID of the current owner — the sole authority for end/pause/
+  // resume/update/invite/kick and the only member who cannot leave.
   string owner_id = 5;
+  // Lifecycle state: one of "active", "paused", "ended", or "archived" (see
+  // SceneState in types.go). Transitions are forward-only.
   string state = 6;
+  // Pose-order discipline: one of "free", "strict", "3pr", or "5pr" (see
+  // PoseOrderMode in types.go); governs GetPoseOrder eligibility computation.
   string pose_order_mode = 7;
+  // Operator-facing content advisories for the scene (max 32 entries).
   repeated string content_warnings = 8;
+  // Discovery/categorization tags (max 32 entries).
   repeated string tags = 9;
+  // Discoverability mode: "open" (listed, any character may join) or "private"
+  // (unlisted, invitation required). See SceneVisibility in types.go.
   string visibility = 10;
+  // Wall-clock creation time. For CreateScene responses this is the host clock
+  // at create; for GetScene it is the persisted row timestamp.
   google.protobuf.Timestamp created_at = 11;
+  // Set only once the scene has reached the ended state; otherwise unset.
   google.protobuf.Timestamp ended_at = 12;
+  // The current participant roster (owners and members; invited rows are not
+  // surfaced as participants here).
   repeated ParticipantInfo participants = 13;
 }
 
+// ParticipantInfo is one entry in a scene's roster — a character's relationship
+// to the scene at read time.
 message ParticipantInfo {
+  // Character ID of the participant.
   string character_id = 1;
+  // Display name of the character (best-effort; falls back to the ID when no
+  // name resolver is wired).
   string character_name = 2;
+  // Participant role: "owner", "member", or the transient "invited" (the
+  // last exists only on private scenes and is promoted to member on join). See
+  // ParticipantRole in participants.go.
   string role = 3;
+  // When the participant joined (for invited rows, when the invitation was
+  // recorded; reset to join time on promotion).
   google.protobuf.Timestamp joined_at = 4;
 }
 
+// ListScenesRequest is the (currently unserved) scene-discovery query. Its
+// fields describe the intended pagination + tag-filter contract for the planned
+// ListScenes RPC.
 message ListScenesRequest {
+  // Maximum scenes to return; 0 means server default, capped at 200.
   int32 limit = 1 [(buf.validate.field).int32 = {
     gte: 0
     lte: 200
   }];
+  // Number of leading results to skip for pagination.
   int32 offset = 2 [(buf.validate.field).int32.gte = 0];
+  // Restrict results to scenes carrying all of these tags.
   repeated string tags = 3;
 }
 
+// ListScenesResponse is the (currently unserved) scene-discovery result page.
 message ListScenesResponse {
+  // The matching scenes for this page.
   repeated SceneInfo scenes = 1;
 }
 
+// GetSceneRequest identifies the scene to read and the character reading it
+// (the latter scoping the host's ABAC read policy).
 message GetSceneRequest {
+  // The reading character's ID; required.
   string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The scene to load; required.
   string scene_id = 2 [(buf.validate.field).string.min_len = 1];
 }
 
+// GetSceneResponse carries the requested scene's full projection.
 message GetSceneResponse {
+  // The loaded scene; unset is never returned (a miss is codes.NotFound).
   SceneInfo scene = 1;
 }
 
+// CreateSceneRequest is the new-scene definition. The calling character becomes
+// the owner. Empty visibility/pose-order default to "open"/"free" at the
+// handler; whitespace-only titles are rejected after trimming.
 message CreateSceneRequest {
+  // The creating character, who becomes the scene owner; required.
   string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Scene title; required, 1-200 chars (whitespace-only also rejected by the
+  // handler's post-trim check).
   string title = 2 [(buf.validate.field).string = {
     min_len: 1
     max_len: 200
   }];
+  // Optional synopsis, up to 4096 chars.
   string description = 3 [(buf.validate.field).string.max_len = 4096];
+  // Optional world location to anchor the scene to.
   string location_id = 4;
+  // Discoverability mode; empty selects the "open" default. Constrained to
+  // ""|"open"|"private".
   string visibility = 5 [(buf.validate.field).string = {
     in: [
       "",
@@ -98,6 +300,8 @@ message CreateSceneRequest {
       "private"
     ]
   }];
+  // Pose-order discipline; empty selects the "free" default. Constrained to
+  // ""|"free"|"strict"|"3pr"|"5pr".
   string pose_order_mode = 6 [(buf.validate.field).string = {
     in: [
       "",
@@ -107,61 +311,89 @@ message CreateSceneRequest {
       "5pr"
     ]
   }];
+  // Discovery tags, max 32.
   repeated string tags = 7 [(buf.validate.field).repeated.max_items = 32];
+  // Content advisories, max 32.
   repeated string content_warnings = 8 [(buf.validate.field).repeated.max_items = 32];
 }
 
+// CreateSceneResponse carries the freshly created scene (active, owner seeded).
 message CreateSceneResponse {
+  // The new scene's projection.
   SceneInfo scene = 1;
 }
 
+// EndSceneRequest identifies the scene to end and the acting character (the
+// owner, per the ABAC end-own-scene policy).
 message EndSceneRequest {
+  // The acting character's ID; required.
   string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The scene to end; required.
   string scene_id = 2 [(buf.validate.field).string.min_len = 1];
 }
 
+// EndSceneResponse carries the scene as of the ended transition.
 message EndSceneResponse {
+  // The post-transition scene row (state == "ended").
   SceneInfo scene = 1;
 }
 
+// PauseSceneRequest identifies the scene to pause and the acting owner.
 message PauseSceneRequest {
+  // The acting character's ID; required.
   string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The scene to pause; required.
   string scene_id = 2 [(buf.validate.field).string.min_len = 1];
 }
 
+// PauseSceneResponse carries the scene as of the paused transition.
 message PauseSceneResponse {
+  // The post-transition scene row (state == "paused").
   SceneInfo scene = 1;
 }
 
+// ResumeSceneRequest identifies the scene to resume and the acting owner.
 message ResumeSceneRequest {
+  // The acting character's ID; required.
   string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The scene to resume; required.
   string scene_id = 2 [(buf.validate.field).string.min_len = 1];
 }
 
+// ResumeSceneResponse carries the scene as of the resumed transition.
 message ResumeSceneResponse {
+  // The post-transition scene row (state == "active").
   SceneInfo scene = 1;
 }
 
-// UpdateSceneRequest uses google.protobuf.FieldMask as the canonical proto3
-// pattern for partial updates (per Google AIP-134). The mask is the single
-// source of truth for "which fields to apply" — fields listed in the mask
-// are updated to the value in the request (even if that value is empty/zero);
-// fields not in the mask are left unchanged.
+// UpdateSceneRequest applies a partial update to mutable scene metadata using
+// google.protobuf.FieldMask as the canonical proto3 partial-update pattern (per
+// Google AIP-134). The mask is the single source of truth for "which fields to
+// apply" — fields listed in the mask are updated to the request value (even if
+// empty/zero); fields not in the mask are left unchanged.
 //
 // Per-field constraint semantics:
 // - max_len limits apply to all string fields regardless of mask membership
 // - min_len IS NOT used at the proto layer because the mask gates whether
 //   the field is applied; per-field semantic validation (e.g. "title cannot
 //   be empty when in the mask") happens in the service handler's mask-iteration
-//   switch statement
+//   switch statement (buildSceneUpdate in service.go)
 // - enum-style fields use `in:` constraints that include the empty string
 //   so that "field not set" doesn't trip the validator
 message UpdateSceneRequest {
+  // The acting owner's ID; required.
   string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The scene to update; required.
   string scene_id = 2 [(buf.validate.field).string.min_len = 1];
 
+  // New title (applied only when "title" is in the mask; whitespace-only is
+  // rejected by the handler). Max 200 chars.
   string title = 3 [(buf.validate.field).string.max_len = 200];
+  // New description (applied only when "description" is in the mask; empty
+  // clears it). Max 4096 chars.
   string description = 4 [(buf.validate.field).string.max_len = 4096];
+  // New visibility (applied only when "visibility" is in the mask; empty is
+  // rejected by the handler when masked). Constrained to ""|"open"|"private".
   string visibility = 5 [(buf.validate.field).string = {
     in: [
       "",
@@ -169,6 +401,9 @@ message UpdateSceneRequest {
       "private"
     ]
   }];
+  // New pose-order mode (applied only when "pose_order_mode" is in the mask;
+  // empty is rejected when masked). A real change auto-emits a pose-order-
+  // changed IC notice. Constrained to ""|"free"|"strict"|"3pr"|"5pr".
   string pose_order_mode = 6 [(buf.validate.field).string = {
     in: [
       "",
@@ -178,238 +413,466 @@ message UpdateSceneRequest {
       "5pr"
     ]
   }];
+  // New location anchor (applied only when "location_id" is in the mask; empty
+  // clears the anchor).
   string location_id = 7;
+  // Replacement content warnings (applied only when "content_warnings" is in
+  // the mask). Max 32.
   repeated string content_warnings = 8 [(buf.validate.field).repeated.max_items = 32];
+  // Replacement tags (applied only when "tags" is in the mask). Max 32.
   repeated string tags = 9 [(buf.validate.field).repeated.max_items = 32];
 
+  // The set of field paths to apply. An empty mask is a no-op success.
   google.protobuf.FieldMask update_mask = 99;
 }
 
+// UpdateSceneResponse carries the scene after the partial update.
 message UpdateSceneResponse {
+  // The post-update scene row.
   SceneInfo scene = 1;
 }
 
+// JoinSceneRequest identifies the scene to join and the joining character.
 message JoinSceneRequest {
+  // The joining character's ID; required.
   string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The scene to join; required.
   string scene_id = 2 [(buf.validate.field).string.min_len = 1];
 }
 
+// JoinSceneResponse is intentionally empty — a successful join carries no
+// body; the caller refetches scene state if needed.
 message JoinSceneResponse {}
 
+// LeaveSceneRequest identifies the scene to leave and the leaving character.
 message LeaveSceneRequest {
+  // The leaving character's ID; required (must not be the owner).
   string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The scene to leave; required.
   string scene_id = 2 [(buf.validate.field).string.min_len = 1];
 }
 
+// LeaveSceneResponse is intentionally empty — a successful leave carries no
+// body.
 message LeaveSceneResponse {}
 
+// InviteToSceneRequest identifies the inviting owner, the scene, and the
+// character being granted an invitation.
 message InviteToSceneRequest {
+  // The inviting character (the owner per ABAC); required.
   string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The scene to invite into; required.
   string scene_id = 2 [(buf.validate.field).string.min_len = 1];
+  // The character receiving the invitation; required.
   string target_character_id = 3 [(buf.validate.field).string.min_len = 1];
 }
 
+// InviteToSceneResponse is intentionally empty — a successful invite carries
+// no body.
 message InviteToSceneResponse {}
 
+// KickFromSceneRequest identifies the acting owner, the scene, and the target
+// character to remove.
 message KickFromSceneRequest {
+  // The acting character (the owner per ABAC); required.
   string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The scene to remove the target from; required.
   string scene_id = 2 [(buf.validate.field).string.min_len = 1];
+  // The character to remove (must not be the owner); required.
   string target_character_id = 3 [(buf.validate.field).string.min_len = 1];
 }
 
+// KickFromSceneResponse is intentionally empty — a successful kick carries no
+// body.
 message KickFromSceneResponse {}
 
+// TransferOwnershipRequest identifies the current owner, the scene, and the
+// member who will become the new owner.
 message TransferOwnershipRequest {
+  // The current owner; required.
   string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The scene whose ownership transfers; required.
   string scene_id = 2 [(buf.validate.field).string.min_len = 1];
+  // The new owner, who MUST already be a member of the scene; required.
   string new_owner_character_id = 3 [(buf.validate.field).string.min_len = 1];
 }
 
+// TransferOwnershipResponse is intentionally empty — a successful transfer
+// carries no body.
 message TransferOwnershipResponse {}
 
+// CastPublishVoteRequest is the legacy (unserved) scene-keyed publish-vote
+// request, superseded by CastPublishSceneVoteRequest. Retained for the unserved
+// CastPublishVote RPC's contract.
 message CastPublishVoteRequest {
+  // The voting character; required.
   string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The scene being voted on; required.
   string scene_id = 2 [(buf.validate.field).string.min_len = 1];
+  // The yes (true) / no (false) ballot.
   bool vote = 3;
 }
 
+// CastPublishVoteResponse is the legacy (unserved) publish-vote acknowledgment.
 message CastPublishVoteResponse {}
 
+// GetPoseOrderRequest identifies the scene whose pose order is requested and
+// the requesting character (who MUST be a participant; the gate is plugin-code,
+// not ABAC).
 message GetPoseOrderRequest {
+  // The requesting character; MUST be an owner or member of the scene.
   string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The scene to compute pose order for; required.
   string scene_id = 2 [(buf.validate.field).string.min_len = 1];
 }
 
+// PoseOrderEntry is one participant's standing in the computed pose order,
+// produced by poseorder.go::Compute.
 message PoseOrderEntry {
+  // The participant's character ID.
   string character_id = 1;
+  // The participant's display name (falls back to the character ID when no
+  // name resolver is wired).
   string character_name = 2;
+  // Whether this participant is currently eligible to pose under the scene's
+  // pose-order mode.
   bool eligible = 3;
+  // When the participant last posed in this scene; unset if they never have.
   google.protobuf.Timestamp last_posed_at = 4;
   // Count of poses by other characters since this participant's last pose
   // (or since scene start if never posed). Meaningful for 3pr/5pr modes.
   optional uint32 poses_since_last = 5;
 }
 
+// GetPoseOrderResponse carries the scene's pose-order mode and the computed
+// per-participant standings.
 message GetPoseOrderResponse {
-  string mode = 1; // strict | 3pr | 5pr | free
+  // The scene's pose-order mode: "strict", "3pr", "5pr", or "free".
+  string mode = 1;
+  // Total poses recorded in the scene (the rolling denominator for the
+  // poses_since_last gaps).
   uint32 total_pose_count = 2;
+  // Per-participant pose-order standings.
   repeated PoseOrderEntry entries = 3;
 }
 
-// Phase 6 publication messages. See spec section 5.
-
+// StartScenePublishRequest opens a publication attempt for an ended scene.
 message StartScenePublishRequest {
+  // The character initiating the attempt; required.
   string caller_character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The ended scene to publish; required.
   string scene_id = 2 [(buf.validate.field).string.min_len = 1];
 }
+
+// StartScenePublishResponse identifies the newly created publication attempt.
 message StartScenePublishResponse {
+  // ID of the new publication attempt row (the published_scene_id used by the
+  // vote/withdraw/read RPCs).
   string published_scene_id = 1;
+  // The attempt's ordinal within the scene's attempt budget (1-based).
   int32 attempt_number = 2;
 }
 
+// CastPublishSceneVoteRequest records a roster member's vote on a specific
+// publication attempt (keyed by published_scene_id, unlike the legacy
+// scene-keyed CastPublishVoteRequest).
 message CastPublishSceneVoteRequest {
+  // The voting character, who MUST be on the attempt's frozen roster; required.
   string caller_character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The publication attempt being voted on; required.
   string published_scene_id = 2 [(buf.validate.field).string.min_len = 1];
+  // The yes (true) / no (false) ballot.
   bool vote = 3;
 }
+
+// CastPublishSceneVoteResponse acknowledges a recorded vote.
 message CastPublishSceneVoteResponse {
+  // True only when this cast flipped a previously cast, differing vote; the
+  // first cast and a re-affirmation of the same value both report false.
   bool is_change = 1;
 }
 
+// WithdrawScenePublishRequest abandons an active publication attempt (owner
+// only).
 message WithdrawScenePublishRequest {
+  // The acting character, who MUST be the scene owner; required.
   string caller_character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The active attempt to withdraw; required.
   string published_scene_id = 2 [(buf.validate.field).string.min_len = 1];
 }
+
+// WithdrawScenePublishResponse is intentionally empty — a successful withdrawal
+// carries no body; the attempt transitions to ATTEMPT_FAILED(WITHDRAWN).
 message WithdrawScenePublishResponse {}
 
+// PublishedSceneEntry is one rendered line of a published scene's frozen
+// content. Only IC pose/say/emit content survives into a published scene; OOC
+// and ops events are excluded (EntryKind in publish_types.go).
 message PublishedSceneEntry {
+  // The speaking character's display label for this line.
   string speaker = 1;
-  string kind = 2; // "pose" | "say" | "emit"
+  // The content kind: "pose", "say", or "emit".
+  string kind = 2;
+  // The rendered line content.
   string content = 3;
 }
 
+// PublishedSceneVoteSummary is the yes/no/pending tally across a publication
+// attempt's frozen roster (VoteTally in publish_store.go). Pending counts
+// roster members who have not yet cast.
 message PublishedSceneVoteSummary {
+  // Number of yes votes cast.
   int32 yes = 1;
+  // Number of no votes cast.
   int32 no = 2;
+  // Number of roster members who have not yet voted.
   int32 pending = 3;
 }
 
+// GetPublishedSceneRequest reads a publication attempt's full state as a scene
+// participant (participant-gated, INV-S9).
 message GetPublishedSceneRequest {
+  // The reading character, who MUST be a participant of the scene; required.
   string caller_character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The publication attempt to read; required.
   string published_scene_id = 2 [(buf.validate.field).string.min_len = 1];
 }
+
+// GetPublishedSceneResponse is the participant-visible view of a publication
+// attempt: its state-machine status, vote tally, snapshots, lifecycle
+// timestamps, and (only when PUBLISHED) its frozen content.
 message GetPublishedSceneResponse {
+  // The publication attempt's ID.
   string id = 1;
+  // The scene this attempt belongs to.
   string scene_id = 2;
+  // The attempt's ordinal within the scene's budget (1-based).
   int32 attempt_number = 3;
+  // State-machine status: "COLLECTING", "COOLOFF", "PUBLISHED", or
+  // "ATTEMPT_FAILED" (PublishedSceneStatus in publish_types.go).
   string status = 4;
-  string failure_reason = 5; // empty unless ATTEMPT_FAILED
+  // The failure cause; empty unless status is ATTEMPT_FAILED. One of ANY_NO,
+  // TIMEOUT, WITHDRAWN, SNAPSHOT_DECRYPT_FAILED, SNAPSHOT_RENDER_FAILED, or
+  // COOLOFF_INVARIANT_BROKEN (PublishFailureReason in publish_types.go).
+  string failure_reason = 5;
+  // The current yes/no/pending vote tally.
   PublishedSceneVoteSummary tally = 6;
-  repeated PublishedSceneEntry content_entries = 7; // populated only when PUBLISHED
+  // The frozen published content; populated ONLY when status is PUBLISHED.
+  repeated PublishedSceneEntry content_entries = 7;
+  // The scene title snapshotted at publish time.
   string title_snapshot = 8;
+  // The participant character names snapshotted at publish time.
   repeated string participants_snapshot = 9;
+  // Epoch-nanosecond time the attempt was opened.
   int64 initiated_at_unix_ns = 10;
+  // Epoch-nanosecond time the cool-off window began; 0 if cool-off never
+  // started.
   int64 cooloff_started_at_unix_ns = 11;
+  // Epoch-nanosecond time the attempt reached a terminal status; 0 if still
+  // active.
   int64 resolved_at_unix_ns = 12;
+  // Epoch-nanosecond time the attempt was published; 0 unless PUBLISHED.
   int64 published_at_unix_ns = 13;
 }
 
+// DownloadPublishedSceneRequest fetches a PUBLISHED attempt rendered to a file
+// format, as a participant (participant-gated, INV-S9).
 message DownloadPublishedSceneRequest {
+  // The downloading character, who MUST be a participant; required.
   string caller_character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The PUBLISHED attempt to download; required.
   string published_scene_id = 2 [(buf.validate.field).string.min_len = 1];
-  string format = 3 [(buf.validate.field).string.min_len = 1]; // "markdown" | "plain_text" | "jsonl"
+  // The render format; required. Supported: "markdown", "plain_text", "jsonl"
+  // (publishRenderMime in publish_service.go); any other value is rejected.
+  string format = 3 [(buf.validate.field).string.min_len = 1];
 }
+
+// DownloadPublishedSceneResponse carries the rendered scene bytes and their
+// MIME type.
 message DownloadPublishedSceneResponse {
+  // The rendered file content.
   bytes content = 1;
+  // The content's MIME type (text/markdown, text/plain, or application/jsonl).
   string mime_type = 2;
 }
 
+// ListScenePublishAttemptsRequest lists a scene's publication attempts as a
+// participant (participant-gated, INV-S9).
 message ListScenePublishAttemptsRequest {
+  // The reading character, who MUST be a participant; required.
   string caller_character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The scene whose attempts to list; required.
   string scene_id = 2 [(buf.validate.field).string.min_len = 1];
 }
+
+// ListScenePublishAttemptsResponse carries the attempt summaries (header only,
+// no content), ordered by attempt number.
 message ListScenePublishAttemptsResponse {
+  // The scene's publication attempts.
   repeated PublishedSceneSummary attempts = 1;
 }
+
+// PublishedSceneSummary is the content-free header view of one publication
+// attempt, used in the audit list.
 message PublishedSceneSummary {
+  // The attempt's ID.
   string id = 1;
+  // The attempt's ordinal within the scene's budget (1-based).
   int32 attempt_number = 2;
+  // State-machine status (COLLECTING/COOLOFF/PUBLISHED/ATTEMPT_FAILED).
   string status = 3;
+  // Failure cause; empty unless status is ATTEMPT_FAILED.
   string failure_reason = 4;
+  // Epoch-nanosecond time the attempt was opened.
   int64 initiated_at_unix_ns = 5;
+  // Epoch-nanosecond time the attempt resolved; 0 if still active.
   int64 resolved_at_unix_ns = 6;
 }
 
+// GetPublicSceneArchiveRequest reads a published scene WITHOUT authentication.
+// No caller identity is required — the only gate is status==PUBLISHED.
 message GetPublicSceneArchiveRequest {
+  // The publication attempt to read; required. A missing id or any
+  // non-PUBLISHED attempt returns one opaque NOT_FOUND (INV-P6-8).
   string published_scene_id = 1 [(buf.validate.field).string.min_len = 1];
 }
+
+// GetPublicSceneArchiveResponse is the public-safe view of a published scene —
+// only the published artifact, never vote state, per-voter data, or
+// failure_reason (the §5.1 two-pair separation).
 message GetPublicSceneArchiveResponse {
+  // The publication attempt's ID.
   string id = 1;
+  // The scene title snapshotted at publish time.
   string title_snapshot = 2;
+  // The participant character names snapshotted at publish time.
   repeated string participants_snapshot = 3;
+  // The frozen published content.
   repeated PublishedSceneEntry content_entries = 4;
+  // Epoch-nanosecond publish time.
   int64 published_at_unix_ns = 5;
 }
 
+// DownloadPublicSceneArchiveRequest fetches a published scene rendered to a
+// file format WITHOUT authentication (status==PUBLISHED gate only).
 message DownloadPublicSceneArchiveRequest {
+  // The publication attempt to download; required. Same opacity contract as
+  // GetPublicSceneArchiveRequest.
   string published_scene_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The render format; required. Supported: "markdown", "plain_text", "jsonl".
   string format = 2 [(buf.validate.field).string.min_len = 1];
 }
+
+// DownloadPublicSceneArchiveResponse carries the rendered public-archive bytes
+// and their MIME type.
 message DownloadPublicSceneArchiveResponse {
+  // The rendered file content.
   bytes content = 1;
+  // The content's MIME type.
   string mime_type = 2;
 }
 
+// ExtendScenePublishVoteAttemptsRequest raises a scene's publish-attempt budget
+// (admin-only, ABAC-gated at dispatch).
 message ExtendScenePublishVoteAttemptsRequest {
+  // The acting admin's character ID; required (admin authority is ABAC-gated,
+  // not checked in-plugin).
   string caller_character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The scene whose budget to raise; required.
   string scene_id = 2 [(buf.validate.field).string.min_len = 1];
+  // How many additional attempts to grant; MUST be positive.
   int32 additional = 3 [(buf.validate.field).int32.gt = 0];
 }
+
+// ExtendScenePublishVoteAttemptsResponse reports the scene's new attempt
+// budget.
 message ExtendScenePublishVoteAttemptsResponse {
+  // The scene's max-publish-attempts budget after the extension.
   int32 new_max = 1;
 }
 
-// IC notice event messages for Phase 6 scene publication state transitions.
-// All carry sensitivity:never per crypto.emits manifest.
+// The following messages are the JSON payloads (protojson-marshaled by
+// publish_events.go) of the Phase 6 IC notice events emitted on
+// events.<game_id>.scene.<scene_id>.ic. All carry sensitivity:never per the
+// crypto.emits manifest — they hold metadata only, never RP content.
 
+// ScenePublishStartedEvent announces a newly opened publication attempt and its
+// frozen vote roster. Emitted as scene_publish_started.
 message ScenePublishStartedEvent {
+  // The publication attempt's ID.
   string attempt_id = 1;
+  // The attempt's ordinal within the scene's budget (1-based).
   int32 attempt_number = 2;
+  // Character ID that initiated the attempt.
   string initiated_by = 3;
+  // The voting-window duration in seconds.
   int64 vote_window_seconds = 4;
+  // The cool-off-window duration in seconds.
   int64 cooloff_window_seconds = 5;
+  // The frozen voter roster (character IDs eligible to vote on this attempt).
   repeated string roster_character_ids = 6;
 }
 
+// ScenePublishVoteCastEvent announces a vote cast on a publication attempt.
+// Emitted as scene_publish_vote_cast.
 message ScenePublishVoteCastEvent {
+  // The publication attempt's ID.
   string attempt_id = 1;
+  // The voting character's ID.
   string character_id = 2;
+  // The yes (true) / no (false) ballot just recorded.
   bool vote = 3;
+  // True only when this cast flipped a previously cast, differing vote.
   bool is_change = 4;
 }
 
+// ScenePublishCoolOffStartedEvent announces that an attempt entered the
+// cool-off window (all roster members voted yes). Emitted as
+// scene_publish_cooloff_started.
 message ScenePublishCoolOffStartedEvent {
+  // The publication attempt's ID.
   string attempt_id = 1;
+  // Epoch-nanosecond deadline at which cool-off ends (derived from the
+  // persisted cool-off start plus the window, for retry determinism).
   int64 cooloff_ends_at_unix_ns = 2;
 }
 
+// ScenePublishResolvedEvent announces that an attempt reached a terminal status
+// (PUBLISHED or ATTEMPT_FAILED). Emitted as scene_publish_resolved.
 message ScenePublishResolvedEvent {
+  // The publication attempt's ID.
   string attempt_id = 1;
-  string outcome = 2; // "PUBLISHED" | "ATTEMPT_FAILED"
-  string failure_reason = 3; // empty unless ATTEMPT_FAILED
+  // The terminal outcome: "PUBLISHED" or "ATTEMPT_FAILED".
+  string outcome = 2;
+  // The failure cause; empty unless outcome is ATTEMPT_FAILED.
+  string failure_reason = 3;
+  // Final yes-vote count.
   int32 tally_yes = 4;
+  // Final no-vote count.
   int32 tally_no = 5;
+  // Final pending (never-cast) count.
   int32 tally_pending = 6;
 }
 
+// ScenePublishWithdrawnEvent announces that the scene owner withdrew an active
+// attempt (a companion to the resolved event so renderers can distinguish a
+// withdrawal from a vote failure). Emitted as scene_publish_withdrawn.
 message ScenePublishWithdrawnEvent {
+  // The publication attempt's ID.
   string attempt_id = 1;
+  // Character ID of the owner who withdrew the attempt.
   string withdrawn_by = 2;
 }
 
+// ScenePublishVoteAttemptsExtendedEvent announces an admin raising a scene's
+// publish-attempt budget. Emitted as scene_publish_vote_attempts_extended.
 message ScenePublishVoteAttemptsExtendedEvent {
+  // The scene whose budget was raised.
   string scene_id = 1;
+  // The number of additional attempts granted.
   int32 additional = 2;
+  // The scene's new max-publish-attempts budget.
   int32 new_max = 3;
+  // Character ID of the admin who extended the budget.
   string admin_id = 4;
 }

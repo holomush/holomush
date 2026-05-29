@@ -44,9 +44,17 @@ const (
 
 // ControlServiceClient is a client for the holomush.control.v1.ControlService service.
 type ControlServiceClient interface {
-	// Shutdown initiates process shutdown.
+	// Triggers an asynchronous process exit via the registered shutdown hook.
+	// The RPC returns immediately with a confirmation message; the shutdown
+	// callback runs in a background goroutine. Callers should not expect the
+	// connection to remain open after the response arrives.
+	// Grounded in: internal/control/grpc_server.go::Shutdown
 	Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error)
-	// Status returns current process status.
+	// Returns a snapshot of the process's liveness and identity without
+	// requiring authentication beyond the mTLS channel. Reads from an atomic
+	// running flag, os.Getpid(), a monotonic start timestamp, and the
+	// component label supplied at construction time.
+	// Grounded in: internal/control/grpc_server.go::Status
 	Status(context.Context, *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error)
 }
 
@@ -94,9 +102,17 @@ func (c *controlServiceClient) Status(ctx context.Context, req *connect.Request[
 
 // ControlServiceHandler is an implementation of the holomush.control.v1.ControlService service.
 type ControlServiceHandler interface {
-	// Shutdown initiates process shutdown.
+	// Triggers an asynchronous process exit via the registered shutdown hook.
+	// The RPC returns immediately with a confirmation message; the shutdown
+	// callback runs in a background goroutine. Callers should not expect the
+	// connection to remain open after the response arrives.
+	// Grounded in: internal/control/grpc_server.go::Shutdown
 	Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error)
-	// Status returns current process status.
+	// Returns a snapshot of the process's liveness and identity without
+	// requiring authentication beyond the mTLS channel. Reads from an atomic
+	// running flag, os.Getpid(), a monotonic start timestamp, and the
+	// component label supplied at construction time.
+	// Grounded in: internal/control/grpc_server.go::Status
 	Status(context.Context, *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error)
 }
 

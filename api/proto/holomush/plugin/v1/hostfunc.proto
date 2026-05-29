@@ -11,278 +11,407 @@ import "holomush/plugin/v1/plugin.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1;pluginv1";
 
-// HostFunctionsService provides host capabilities to plugins.
-// This service is implemented by the host (the gRPC server runs in the host process).
-// Plugins call these methods to interact with the game world.
+// HostFunctionsService declares the host-capability contract plugins call into:
+// world reads, private key-value storage, command introspection, logging, event
+// emission, and session-stream control. This gRPC service has no standalone
+// server today — nothing registers a HostFunctionsServiceServer in the host.
+// The capabilities are instead delivered through the in-VM Lua host-function
+// bridge (internal/plugin/hostfunc — the holomush.* globals such as
+// holomush.emit, holomush.kv_get, holomush.query_location). Binary plugins use
+// PluginHostService (plugin.proto), but of this capability set they currently
+// reach only EmitEvent (served): the overlapping host-functions Log,
+// KVGet/KVSet/KVDelete, AddSessionStream, and RemoveSessionStream are declared
+// on PluginHostService but unserved today (codes.Unimplemented, holomush-l6std),
+// and the world-query RPCs (QueryLocation, QueryCharacter,
+// QueryLocationCharacters) and command RPCs (ListCommands, GetCommandHelp) are
+// not on PluginHostService at all. Those are realized only through the Lua
+// bridge today. Where a capability is exposed, host-side enforcement is shared:
+// world reads/writes are ABAC-gated at the
+// world service layer, key-value operations are ABAC-gated at the host-function
+// layer (checkKVAccess in internal/plugin/hostfunc/functions.go), command
+// visibility is filtered by the AccessPolicyEngine, and emits pass the manifest
+// gates in PluginEventEmitter.Emit (internal/plugin/event_emitter.go). The
+// plugin-runtime-symmetry invariant requires any capability exposed to both
+// runtimes to behave identically.
 service HostFunctionsService {
-  // EmitEvent publishes an event to a stream.
+  // EmitEvent publishes one event onto a stream on the calling plugin's
+  // behalf. The host stamps the actor and routes through
+  // PluginEventEmitter.Emit, which enforces the plugin's manifest gates:
+  // the target domain must appear in the manifest emits list, the actor kind
+  // must be in actor_kinds_claimable, and a sensitive payload requires the
+  // event type to be declared in crypto.emits. The plugin never supplies a
+  // trusted actor identity at this boundary — the host derives it. Fire this
+  // for plugin-originated game actions rather than mutating world state
+  // directly.
   rpc EmitEvent(EmitEventRequest) returns (EmitEventResponse);
 
-  // QueryLocation retrieves information about a location.
+  // QueryLocation returns a snapshot of one location's identity fields. The
+  // host resolves it through the world service (GetLocation), which applies
+  // ABAC for the plugin subject; a missing location maps to a not-found
+  // outcome surfaced on the response error field, not an RPC error. Read-only.
   rpc QueryLocation(QueryLocationRequest) returns (QueryLocationResponse);
 
-  // QueryCharacter retrieves information about a character.
+  // QueryCharacter returns a snapshot of one character's identity fields,
+  // resolved through the world service (GetCharacter) under the plugin
+  // subject's ABAC policy. A missing character is reported via the response
+  // error field. Read-only.
   rpc QueryCharacter(QueryCharacterRequest) returns (QueryCharacterResponse);
 
-  // QueryLocationCharacters retrieves all characters in a location.
+  // QueryLocationCharacters returns the lightweight roster (id + name only) of
+  // characters currently in a location, via the world service
+  // (GetCharactersByLocation) under the plugin subject's ABAC policy. Use
+  // QueryCharacter per id to fetch full character detail. Read-only.
   rpc QueryLocationCharacters(QueryLocationCharactersRequest) returns (QueryLocationCharactersResponse);
 
-  // KVGet retrieves a value from the plugin's key-value store.
+  // KVGet reads one value from the calling plugin's private namespaced
+  // key-value store. The namespace is the plugin name, so plugins cannot read
+  // each other's keys. Gated by an ABAC "read" check on the plugin's KV
+  // resource (checkKVAccess) before the store is touched; a denied check or a
+  // store error is surfaced on the response, and an absent key returns
+  // found=false with no error.
   rpc KVGet(KVGetRequest) returns (KVGetResponse);
 
-  // KVSet stores a value in the plugin's key-value store.
+  // KVSet writes one value into the calling plugin's private namespaced
+  // key-value store (namespace = plugin name). Gated by an ABAC "write" check
+  // on the plugin's KV resource before the store is touched. Overwrites any
+  // existing value at the key.
   rpc KVSet(KVSetRequest) returns (KVSetResponse);
 
-  // KVDelete removes a value from the plugin's key-value store.
+  // KVDelete removes one key from the calling plugin's private namespaced
+  // key-value store (namespace = plugin name). Gated by an ABAC "delete" check
+  // on the plugin's KV resource before the store is touched.
   rpc KVDelete(KVDeleteRequest) returns (KVDeleteResponse);
 
-  // Log writes a log message through the host's logging system.
+  // Log emits a structured log line through the host logger, tagged with the
+  // calling plugin's name. The message and level are plugin-supplied; the host
+  // routes to the matching slog level (debug/info/warn/error) and treats the
+  // call as fire-and-forget — there is no acknowledgement payload. This is the
+  // sanctioned way for a plugin to reach the host's observability pipeline
+  // rather than writing to stdout/stderr of its subprocess.
   rpc Log(LogRequest) returns (LogResponse);
 
-  // ListCommands returns all available commands.
-  // Requires capability: command.list
+  // ListCommands returns the commands visible to one character, filtered by
+  // that character's capabilities through the AccessPolicyEngine. Commands
+  // with no declared capabilities are always included; capability-gated
+  // commands require the character to pass both the execute check and every
+  // declared capability (AND logic). If engine errors hide some commands the
+  // host still returns the commands it could evaluate.
   rpc ListCommands(ListCommandsRequest) returns (ListCommandsResponse);
 
-  // GetCommandHelp returns detailed help for a specific command.
-  // Requires capability: command.help
+  // GetCommandHelp returns the full help detail for a single named command.
+  // For a capability-gated command the host fail-closed-evaluates the
+  // character's access through the AccessPolicyEngine before returning detail;
+  // commands without capabilities are always accessible. A missing command or
+  // a denied/failed access check is surfaced on the response error field.
   rpc GetCommandHelp(GetCommandHelpRequest) returns (GetCommandHelpResponse);
 
-  // AddSessionStream subscribes an active session to an additional stream mid-session.
-  // Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+  // AddSessionStream subscribes an already-active session to one more stream
+  // mid-session, via the host StreamRegistry (AddStream), using the default
+  // FROM_CURSOR replay mode. The session must be live: an unknown session_id
+  // fails with SESSION_NOT_FOUND (codes.NotFound). Use this when a plugin
+  // action should start delivering a new stream's events to a connected
+  // character without reconnecting.
   rpc AddSessionStream(AddSessionStreamRequest) returns (AddSessionStreamResponse);
 
-  // RemoveSessionStream unsubscribes an active session from a stream.
-  // Idempotent: returns success if stream is not subscribed.
+  // RemoveSessionStream unsubscribes an active session from a stream, via the
+  // host StreamRegistry (RemoveStream). The operation is idempotent: removing a
+  // stream the session is not subscribed to succeeds rather than erroring.
   rpc RemoveSessionStream(RemoveSessionStreamRequest) returns (RemoveSessionStreamResponse);
 }
 
-// LogLevel specifies the severity of a log message.
+// LogLevel selects which host slog severity a LogRequest is routed to. The
+// host maps each value to the corresponding slog method; an out-of-range or
+// unspecified value is treated as an invalid level by the logging bridge.
 enum LogLevel {
+  // LOG_LEVEL_UNSPECIFIED is the proto3 zero value. It carries no severity and
+  // is not a valid routing target — callers MUST set a concrete level.
   LOG_LEVEL_UNSPECIFIED = 0;
+  // LOG_LEVEL_DEBUG routes to slog Debug — verbose, development-time detail
+  // that is normally filtered out in production.
   LOG_LEVEL_DEBUG = 1;
+  // LOG_LEVEL_INFO routes to slog Info — routine operational milestones.
   LOG_LEVEL_INFO = 2;
+  // LOG_LEVEL_WARN routes to slog Warn — recoverable anomalies worth noting.
   LOG_LEVEL_WARN = 3;
+  // LOG_LEVEL_ERROR routes to slog Error — failures the plugin wants surfaced
+  // for operator attention.
   LOG_LEVEL_ERROR = 4;
 }
 
-// EmitEventRequest wraps an event for emission by the host.
+// EmitEventRequest carries the single event a plugin asks the host to publish.
 message EmitEventRequest {
-  // The event to emit.
+  // event is the event the plugin wants published; its fields (stream/subject,
+  // type, payload, sensitivity) are validated against the plugin's manifest
+  // gates by the host before publication. See the EmitEvent message in
+  // plugin.proto for the field contract.
   EmitEvent event = 1;
 }
 
-// EmitEventResponse indicates success or failure.
+// EmitEventResponse reports the outcome of a publish attempt. The host uses
+// this in-band success/error shape rather than an RPC status code so a plugin
+// can distinguish a refused emit (e.g. a manifest-gate denial) from a
+// transport failure.
 message EmitEventResponse {
-  // Whether the event was successfully emitted.
+  // success is true when the event was accepted and published.
   bool success = 1;
-  // Error message if success is false.
+  // error holds a human-readable reason when success is false (for example, a
+  // manifest-gate denial); empty when success is true.
   string error = 2;
 }
 
-// QueryLocationRequest requests information about a location.
+// QueryLocationRequest names the location to snapshot.
 message QueryLocationRequest {
-  // Location identifier.
+  // location_id is the ULID of the location to read. Required (min length 1);
+  // an unparseable or unknown id yields a not-found outcome on the response.
   string location_id = 1 [(buf.validate.field).string.min_len = 1];
 }
 
-// QueryLocationResponse contains location information.
+// QueryLocationResponse returns the requested location or an error reason.
 message QueryLocationResponse {
-  // Location information (nil if not found).
+  // location holds the resolved location detail; unset when the location was
+  // not found or the query failed.
   LocationInfo location = 1;
-  // Error message if query failed.
+  // error holds the failure reason (including not-found) when location is
+  // unset; empty on success.
   string error = 2;
 }
 
-// LocationInfo contains basic location information.
+// LocationInfo is the plugin-facing projection of a world location: only the
+// identity and display fields a plugin needs, not the full internal model.
 message LocationInfo {
-  // Location identifier.
+  // id is the location's ULID. Required (min length 1).
   string id = 1 [(buf.validate.field).string.min_len = 1];
-  // Location name/title.
+  // name is the location's display title. Required (min length 1).
   string name = 2 [(buf.validate.field).string.min_len = 1];
-  // Location description.
+  // description is the location's prose body, capped at 8192 bytes.
   string description = 3 [(buf.validate.field).string.max_len = 8192];
 }
 
-// QueryCharacterRequest requests information about a character.
+// QueryCharacterRequest names the character to snapshot.
 message QueryCharacterRequest {
-  // Character identifier.
+  // character_id is the ULID of the character to read. Required (min length 1);
+  // an unparseable or unknown id yields a not-found outcome on the response.
   string character_id = 1 [(buf.validate.field).string.min_len = 1];
 }
 
-// QueryCharacterResponse contains character information.
+// QueryCharacterResponse returns the requested character or an error reason.
 message QueryCharacterResponse {
-  // Character information (nil if not found).
+  // character holds the resolved character detail; unset when the character was
+  // not found or the query failed.
   CharacterInfo character = 1;
-  // Error message if query failed.
+  // error holds the failure reason (including not-found) when character is
+  // unset; empty on success.
   string error = 2;
 }
 
-// CharacterInfo contains basic character information.
+// CharacterInfo is the plugin-facing projection of a world character, limited
+// to the identity fields exposed across the host-function boundary.
 message CharacterInfo {
-  // Character identifier.
+  // id is the character's ULID. Required (min length 1).
   string id = 1 [(buf.validate.field).string.min_len = 1];
-  // Character name.
+  // name is the character's display name. Required (min length 1).
   string name = 2 [(buf.validate.field).string.min_len = 1];
 }
 
-// QueryLocationCharactersRequest requests all characters in a location.
+// QueryLocationCharactersRequest names the location whose occupant roster to
+// fetch.
 message QueryLocationCharactersRequest {
-  // Location identifier.
+  // location_id is the ULID of the location to enumerate. Required (min length
+  // 1).
   string location_id = 1 [(buf.validate.field).string.min_len = 1];
 }
 
-// QueryLocationCharactersResponse contains the list of characters.
+// QueryLocationCharactersResponse returns the location's character roster or an
+// error reason.
 message QueryLocationCharactersResponse {
-  // Characters in the location.
+  // characters is the lightweight roster (id + name per entry) of characters in
+  // the location; empty when the location holds none. Use QueryCharacter per id
+  // for full detail.
   repeated CharacterInfo characters = 1;
-  // Error message if query failed.
+  // error holds the failure reason (including not-found) when the query failed;
+  // empty on success.
   string error = 2;
 }
 
-// KVGetRequest retrieves a value by key.
+// KVGetRequest names the key to read from the plugin's private namespace.
 message KVGetRequest {
-  // Key to look up.
+  // key is the lookup key within the calling plugin's namespace. Required (min
+  // length 1).
   string key = 1 [(buf.validate.field).string.min_len = 1];
 }
 
-// KVGetResponse contains the retrieved value.
+// KVGetResponse returns the stored value and a presence witness. found
+// disambiguates an absent key from a stored empty value, since both leave value
+// empty.
 message KVGetResponse {
-  // Value if found.
+  // value is the stored bytes; empty when the key is absent (check found to
+  // disambiguate) or when an error occurred.
   bytes value = 1;
-  // Whether the key was found.
+  // found is true when the key existed in the namespace. When false with an
+  // empty error, the key was simply absent.
   bool found = 2;
-  // Error message if query failed.
+  // error holds the failure reason (such as an ABAC denial or store error)
+  // when the read failed; empty on success.
   string error = 3;
 }
 
-// KVSetRequest stores a key-value pair.
+// KVSetRequest carries the key and value to store in the plugin's private
+// namespace.
 message KVSetRequest {
-  // Key to store.
+  // key is the storage key within the calling plugin's namespace. Required (min
+  // length 1).
   string key = 1 [(buf.validate.field).string.min_len = 1];
-  // Value to store.
+  // value is the opaque bytes to store; the host does not interpret it.
   bytes value = 2;
 }
 
-// KVSetResponse indicates success or failure.
+// KVSetResponse reports the outcome of a store attempt.
 message KVSetResponse {
-  // Whether the value was successfully stored.
+  // success is true when the value was written.
   bool success = 1;
-  // Error message if success is false.
+  // error holds the failure reason (such as an ABAC denial or store error)
+  // when success is false; empty on success.
   string error = 2;
 }
 
-// KVDeleteRequest removes a key.
+// KVDeleteRequest names the key to remove from the plugin's private namespace.
 message KVDeleteRequest {
-  // Key to delete.
+  // key is the key to remove within the calling plugin's namespace. Required
+  // (min length 1).
   string key = 1 [(buf.validate.field).string.min_len = 1];
 }
 
-// KVDeleteResponse indicates success or failure.
+// KVDeleteResponse reports the outcome of a delete attempt.
 message KVDeleteResponse {
-  // Whether the key was deleted (true even if key didn't exist).
+  // deleted is true when the delete completed; the host treats removing an
+  // absent key as success rather than an error.
   bool deleted = 1;
-  // Error message if deletion failed.
+  // error holds the failure reason (such as an ABAC denial or store error)
+  // when the delete failed; empty on success.
   string error = 2;
 }
 
-// LogRequest writes a log message.
+// LogRequest is a single structured log line a plugin asks the host to emit.
 message LogRequest {
-  // Log level.
+  // level selects the host slog severity to route to. An unspecified or
+  // out-of-range value is rejected by the logging bridge as invalid.
   LogLevel level = 1;
-  // Log message.
+  // message is the log line body, capped at 8192 bytes. It is plugin-supplied
+  // and therefore dynamic by design.
   string message = 2 [(buf.validate.field).string.max_len = 8192];
-  // Additional structured fields.
+  // fields are optional structured key/value attributes attached to the log
+  // line.
   map<string, string> fields = 3;
 }
 
-// LogResponse is empty (logging is fire-and-forget).
+// LogResponse is intentionally empty: logging is fire-and-forget, so the host
+// returns no acknowledgement payload.
 message LogResponse {}
 
-// ListCommandsRequest requests the list of available commands.
-// Commands are filtered by the character's capabilities.
+// ListCommandsRequest names the character whose capability set determines which
+// commands are visible.
 message ListCommandsRequest {
-  // Character identifier for capability filtering.
+  // character_id is the ULID of the character whose capabilities filter the
+  // returned command list. Required (min length 1); commands the character
+  // cannot execute are omitted.
   string character_id = 1 [(buf.validate.field).string.min_len = 1];
 }
 
-// ListCommandsResponse contains the list of available commands.
+// ListCommandsResponse returns the commands the requesting character may see.
 message ListCommandsResponse {
-  // Available commands.
+  // commands is the capability-filtered list of available commands.
   repeated CommandInfo commands = 1;
-  // Error message if query failed.
+  // error holds the failure reason when the query failed (for example, the
+  // access engine being unavailable); empty on success.
   string error = 2;
 }
 
-// CommandInfo contains basic command information for listing.
+// CommandInfo is the listing-level summary of one command — enough to render a
+// command index without fetching full help.
 message CommandInfo {
-  // Command name.
+  // name is the command's invocation name. Required (min length 1).
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  // Short help description.
+  // help is the one-line description, capped at 8192 bytes.
   string help = 2 [(buf.validate.field).string.max_len = 8192];
-  // Usage pattern (e.g., "say <message>").
+  // usage is the argument pattern (for example, "say <message>"), capped at
+  // 8192 bytes.
   string usage = 3 [(buf.validate.field).string.max_len = 8192];
-  // Source plugin name or "core".
+  // source identifies the registering plugin name, or "core" for built-in
+  // commands. Required (min length 1).
   string source = 4 [(buf.validate.field).string.min_len = 1];
 }
 
-// GetCommandHelpRequest requests detailed help for a command.
+// GetCommandHelpRequest names the command whose full help to fetch.
 message GetCommandHelpRequest {
-  // Command name to get help for.
+  // command_name is the command to fetch detailed help for. Required (min
+  // length 1); an unknown name yields a not-found outcome on the response.
   string command_name = 1 [(buf.validate.field).string.min_len = 1];
 }
 
-// GetCommandHelpResponse contains detailed command help.
+// GetCommandHelpResponse returns the detailed help for one command or an error
+// reason.
 message GetCommandHelpResponse {
-  // Detailed command information (nil if not found).
+  // command holds the full command detail; unset when the command was not found
+  // or access was denied.
   CommandHelpInfo command = 1;
-  // Error message if query failed.
+  // error holds the failure reason (not-found, access-denied, or engine error)
+  // when command is unset; empty on success.
   string error = 2;
 }
 
-// CommandHelpInfo contains detailed help for a command.
+// CommandHelpInfo is the detailed help record for one command, including the
+// long-form help body and the capabilities a character needs to run it.
 message CommandHelpInfo {
-  // Command name.
+  // name is the command's invocation name. Required (min length 1).
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  // Short help description.
+  // help is the one-line description, capped at 8192 bytes.
   string help = 2 [(buf.validate.field).string.max_len = 8192];
-  // Usage pattern.
+  // usage is the argument pattern, capped at 8192 bytes.
   string usage = 3 [(buf.validate.field).string.max_len = 8192];
-  // Detailed markdown help text.
+  // help_text is the long-form markdown help body, capped at 65536 bytes.
   string help_text = 4 [(buf.validate.field).string.max_len = 65536];
-  // Required capabilities for this command.
+  // capabilities lists the capability strings the command declares; a character
+  // must satisfy all of them (plus the execute check) to run it.
   repeated string capabilities = 5;
-  // Source plugin name or "core".
+  // source identifies the registering plugin name, or "core" for built-in
+  // commands. Required (min length 1).
   string source = 6 [(buf.validate.field).string.min_len = 1];
 }
 
-// AddSessionStreamRequest specifies which session and stream to add.
+// AddSessionStreamRequest names the live session and the stream to subscribe it
+// to.
 message AddSessionStreamRequest {
-  // Active session identifier.
+  // session_id is the active session to modify. Required (min length 1); an
+  // unknown session fails the RPC with SESSION_NOT_FOUND.
   string session_id = 1 [(buf.validate.field).string.min_len = 1];
-  // Stream name to subscribe to (format: "prefix:id").
+  // stream is the stream to subscribe the session to, in "prefix:id" form.
+  // Required (min length 1).
   string stream = 2 [(buf.validate.field).string.min_len = 1];
 }
 
-// AddSessionStreamResponse indicates success or failure.
+// AddSessionStreamResponse reports the outcome of a subscribe attempt.
 message AddSessionStreamResponse {
-  // Whether the stream was successfully added.
+  // success is true when the session was subscribed to the stream.
   bool success = 1;
-  // Non-empty on error.
+  // error holds the failure reason when success is false; empty on success.
   string error = 2;
 }
 
-// RemoveSessionStreamRequest specifies which stream to remove.
+// RemoveSessionStreamRequest names the live session and the stream to
+// unsubscribe it from.
 message RemoveSessionStreamRequest {
-  // Active session identifier.
+  // session_id is the active session to modify. Required (min length 1).
   string session_id = 1 [(buf.validate.field).string.min_len = 1];
-  // Stream name to unsubscribe from.
+  // stream is the stream to unsubscribe the session from. Required (min length
+  // 1); unsubscribing a stream the session does not hold still succeeds.
   string stream = 2 [(buf.validate.field).string.min_len = 1];
 }
 
-// RemoveSessionStreamResponse indicates success or failure.
+// RemoveSessionStreamResponse reports the outcome of an unsubscribe attempt.
 message RemoveSessionStreamResponse {
-  // Whether the stream was successfully removed (true even if not subscribed).
+  // success is true when the session no longer holds the stream; because the
+  // operation is idempotent this is true even if the stream was not subscribed.
   bool success = 1;
-  // Non-empty on error.
+  // error holds the failure reason when success is false; empty on success.
   string error = 2;
 }

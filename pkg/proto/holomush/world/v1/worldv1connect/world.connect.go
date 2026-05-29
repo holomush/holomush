@@ -51,13 +51,25 @@ const (
 
 // WorldServiceClient is a client for the holomush.world.v1.WorldService service.
 type WorldServiceClient interface {
-	// GetLocation retrieves a single location by ID.
+	// GetLocation fetches a single location by ULID. The caller must hold the
+	// "read" permission on the location resource. Returns codes.NotFound if the
+	// location does not exist and codes.PermissionDenied if access is denied.
 	GetLocation(context.Context, *connect.Request[v1.GetLocationRequest]) (*connect.Response[v1.GetLocationResponse], error)
-	// GetCharacter retrieves a single character by ID.
+	// GetCharacter fetches a single character by ULID. The caller must hold the
+	// "read" permission on the character resource. Returns codes.NotFound if the
+	// character does not exist and codes.PermissionDenied if access is denied.
 	GetCharacter(context.Context, *connect.Request[v1.GetCharacterRequest]) (*connect.Response[v1.GetCharacterResponse], error)
-	// ListCharactersAtLocation returns all characters present at a location.
+	// ListCharactersAtLocation returns all characters whose current location
+	// matches location_id. The caller must hold the "list_characters" permission
+	// on the location resource (action=list_characters, resource=location:<id>,
+	// per ADR #76 compound-resource decomposition). Returns an empty list when
+	// no characters are present; never returns codes.NotFound for an empty
+	// location.
 	ListCharactersAtLocation(context.Context, *connect.Request[v1.ListCharactersAtLocationRequest]) (*connect.Response[v1.ListCharactersAtLocationResponse], error)
-	// ListExits returns all exits originating from a location.
+	// ListExits returns all exits originating from a location. The caller must
+	// hold the "read" permission on the location resource. Returns an empty list
+	// when the location has no exits; never returns codes.NotFound for an empty
+	// exit set.
 	ListExits(context.Context, *connect.Request[v1.ListExitsRequest]) (*connect.Response[v1.ListExitsResponse], error)
 }
 
@@ -129,13 +141,25 @@ func (c *worldServiceClient) ListExits(ctx context.Context, req *connect.Request
 
 // WorldServiceHandler is an implementation of the holomush.world.v1.WorldService service.
 type WorldServiceHandler interface {
-	// GetLocation retrieves a single location by ID.
+	// GetLocation fetches a single location by ULID. The caller must hold the
+	// "read" permission on the location resource. Returns codes.NotFound if the
+	// location does not exist and codes.PermissionDenied if access is denied.
 	GetLocation(context.Context, *connect.Request[v1.GetLocationRequest]) (*connect.Response[v1.GetLocationResponse], error)
-	// GetCharacter retrieves a single character by ID.
+	// GetCharacter fetches a single character by ULID. The caller must hold the
+	// "read" permission on the character resource. Returns codes.NotFound if the
+	// character does not exist and codes.PermissionDenied if access is denied.
 	GetCharacter(context.Context, *connect.Request[v1.GetCharacterRequest]) (*connect.Response[v1.GetCharacterResponse], error)
-	// ListCharactersAtLocation returns all characters present at a location.
+	// ListCharactersAtLocation returns all characters whose current location
+	// matches location_id. The caller must hold the "list_characters" permission
+	// on the location resource (action=list_characters, resource=location:<id>,
+	// per ADR #76 compound-resource decomposition). Returns an empty list when
+	// no characters are present; never returns codes.NotFound for an empty
+	// location.
 	ListCharactersAtLocation(context.Context, *connect.Request[v1.ListCharactersAtLocationRequest]) (*connect.Response[v1.ListCharactersAtLocationResponse], error)
-	// ListExits returns all exits originating from a location.
+	// ListExits returns all exits originating from a location. The caller must
+	// hold the "read" permission on the location resource. Returns an empty list
+	// when the location has no exits; never returns codes.NotFound for an empty
+	// exit set.
 	ListExits(context.Context, *connect.Request[v1.ListExitsRequest]) (*connect.Response[v1.ListExitsResponse], error)
 }
 

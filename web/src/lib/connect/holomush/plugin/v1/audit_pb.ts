@@ -26,69 +26,103 @@ export const file_holomush_plugin_v1_audit: GenFile = /*@__PURE__*/
  * row shape so the proto wire format and the storage shape are
  * coupled.
  *
+ * Cleartext projection fields
+ *
  * @generated from message holomush.plugin.v1.AuditRow
  */
 export type AuditRow = Message<"holomush.plugin.v1.AuditRow"> & {
   /**
-   * Cleartext projection fields
-   *
-   * 16-byte ULID
+   * id holds the 16-byte binary ULID that uniquely identifies this
+   * event. Set from the Nats-Msg-Id header. Used as the primary key
+   * for idempotent INSERT (ON CONFLICT (id) DO NOTHING). MUST be
+   * exactly 16 bytes; the plugin rejects rows with wrong length.
    *
    * @generated from field: bytes id = 1;
    */
   id: Uint8Array;
 
   /**
+   * subject is the NATS dot-delimited event subject, e.g.
+   * "events.<game_id>.scene.<scene_id>.ic". Used by the plugin to
+   * route scene_pose events and as the WHERE clause in queryLog.
+   *
    * @generated from field: string subject = 2;
    */
   subject: string;
 
   /**
+   * type is the application-level event type string extracted from the
+   * App-Event-Type header, e.g. "scene_pose" or "scene_join". The
+   * plugin dispatches on this value to route scene_pose rows through
+   * the transactional InsertScenePose path.
+   *
    * @generated from field: string type = 3;
    */
   type: string;
 
   /**
+   * timestamp is the event wall-clock time stamped at publish. Stored
+   * as nanosecond-precision TIMESTAMPTZ in scene_log. MUST be non-nil;
+   * the plugin rejects nil timestamps at ingest to prevent SQL NULL
+   * from corrupting subsequent queryLog scans.
+   *
    * @generated from field: google.protobuf.Timestamp timestamp = 4;
    */
   timestamp?: Timestamp | undefined;
 
   /**
+   * actor identifies the entity that caused the event. Nil when the
+   * event was system-originated (no actor header). Kind is stored as
+   * the enum's String() representation (e.g. "ACTOR_KIND_CHARACTER").
+   *
    * @generated from field: holomush.eventbus.v1.Actor actor = 5;
    */
   actor?: Actor | undefined;
 
   /**
-   * Crypto envelope
-   *
-   * "identity" | "xchacha20poly1305-v1"
+   * codec names the encryption codec applied to payload. "identity"
+   * means payload is plaintext; "xchacha20poly1305-v1" means payload
+   * is ciphertext. Sourced from the App-Codec header. MUST be non-empty.
    *
    * @generated from field: string codec = 6;
    */
   codec: string;
 
   /**
-   * ciphertext when codec != "identity"
+   * payload holds the event body. For identity codec this is cleartext;
+   * for xchacha20poly1305-v1 this is the AEAD ciphertext, forwarded
+   * byte-equal without decryption (INV-P7-11). Plugins store the bytes
+   * opaquely; decryption occurs at read-back via DecryptOwnAuditRows.
    *
    * @generated from field: bytes payload = 7;
    */
   payload: Uint8Array;
 
   /**
-   * DEK reference — absent on identity codec, required otherwise.
-   * Host enforces the agreement (codec=identity ⇔ both absent).
+   * dek_ref is the numeric key reference into the host's crypto_keys
+   * table identifying which DEK encrypted this payload. Absent for
+   * identity-codec rows; MUST be present for AEAD-codec rows. The host
+   * enforces the agreement: identity codec ⇔ both dek_ref and
+   * dek_version absent.
    *
    * @generated from field: optional uint64 dek_ref = 8;
    */
   dekRef?: bigint | undefined;
 
   /**
+   * dek_version is the 1-based rotation counter of the DEK at the time
+   * of encryption, stored for key-rotation audit. Absent for
+   * identity-codec rows; MUST be present for AEAD-codec rows alongside
+   * dek_ref (INV-P7-3).
+   *
    * @generated from field: optional uint32 dek_version = 9;
    */
   dekVersion?: number | undefined;
 
   /**
-   * Audit schema version (was App-Schema-Version header).
+   * schema_ver is the application schema version stamped at publish via
+   * the App-Schema-Version header. Valid range 0–32767 (SMALLINT).
+   * The plugin rejects rows outside this range at ingest.
    *
    * @generated from field: int32 schema_ver = 10;
    */
@@ -103,10 +137,20 @@ export const AuditRowSchema: GenMessage<AuditRow> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_audit, 0);
 
 /**
+ * AuditEventRequest carries a single audit row forwarded by the host
+ * per-plugin consumer for the plugin to persist. The row is built from
+ * the JetStream message by buildAuditRow, which reads projection fields
+ * from the unmarshaled envelope and crypto metadata from NATS headers.
+ *
  * @generated from message holomush.plugin.v1.AuditEventRequest
  */
 export type AuditEventRequest = Message<"holomush.plugin.v1.AuditEventRequest"> & {
   /**
+   * row is the audit row to persist. MUST be non-nil and MUST pass
+   * field validation (non-empty codec, non-nil timestamp, 16-byte id,
+   * non-empty type and subject) or the plugin returns an error and the
+   * host relies on JetStream redelivery.
+   *
    * @generated from field: holomush.plugin.v1.AuditRow row = 1;
    */
   row?: AuditRow | undefined;
@@ -120,6 +164,10 @@ export const AuditEventRequestSchema: GenMessage<AuditEventRequest> = /*@__PURE_
   messageDesc(file_holomush_plugin_v1_audit, 1);
 
 /**
+ * AuditEventResponse is the empty acknowledgement returned by the
+ * plugin after a successful idempotent INSERT. The host acks the
+ * JetStream message on receipt.
+ *
  * @generated from message holomush.plugin.v1.AuditEventResponse
  */
 export type AuditEventResponse = Message<"holomush.plugin.v1.AuditEventResponse"> & {
@@ -133,48 +181,74 @@ export const AuditEventResponseSchema: GenMessage<AuditEventResponse> = /*@__PUR
   messageDesc(file_holomush_plugin_v1_audit, 2);
 
 /**
+ * QueryHistoryRequest specifies the page of audit rows to stream back
+ * from the plugin's own audit store. The host's PluginHistoryRouter
+ * populates this from the eventbus.HistoryQuery and the authenticated
+ * session record.
+ *
  * @generated from message holomush.plugin.v1.QueryHistoryRequest
  */
 export type QueryHistoryRequest = Message<"holomush.plugin.v1.QueryHistoryRequest"> & {
   /**
+   * subject is the fully-qualified NATS dot-delimited event subject to
+   * query, e.g. "events.main.scene.<scene_id>.ic". MUST be non-empty
+   * and MUST NOT contain wildcard tokens (* or >). The plugin parses
+   * this to extract the entity identifier for membership checks.
+   *
    * @generated from field: string subject = 1;
    */
   subject: string;
 
   /**
-   * ULID; empty = from start
+   * after is an exclusive lower-bound cursor encoded as a 16-byte ULID.
+   * Rows with id > after are returned. Empty means start from the
+   * beginning of the log. ULIDs are time-ordered, so this is equivalent
+   * to a chronological lower bound within the subject.
    *
    * @generated from field: bytes after = 2;
    */
   after: Uint8Array;
 
   /**
-   * ULID; empty = unbounded
+   * before is an exclusive upper-bound cursor encoded as a 16-byte ULID.
+   * Rows with id < before are returned. Empty means no upper bound.
    *
    * @generated from field: bytes before = 3;
    */
   before: Uint8Array;
 
   /**
-   * host caps at 200
+   * page_size caps the number of rows returned in this response stream.
+   * The host clamps to 200; the plugin MUST also cap at 200 and apply a
+   * default of 50 when the value is <= 0.
    *
    * @generated from field: int32 page_size = 4;
    */
   pageSize: number;
 
   /**
-   * 1=forward, 2=backward
+   * direction controls row ordering: 1 = forward (ascending by id,
+   * oldest first), 2 = backward (descending by id, newest first).
+   * Zero is treated as forward by the plugin.
    *
    * @generated from field: int32 direction = 5;
    */
   direction: number;
 
   /**
+   * not_before filters out rows whose timestamp is strictly before this
+   * value. Applied as a SQL "timestamp >= not_before" predicate. Nil
+   * means no lower time bound.
+   *
    * @generated from field: google.protobuf.Timestamp not_before = 6;
    */
   notBefore?: Timestamp | undefined;
 
   /**
+   * not_after filters out rows whose timestamp is strictly after this
+   * value. Applied as a SQL "timestamp <= not_after" predicate. Nil
+   * means no upper time bound.
+   *
    * @generated from field: google.protobuf.Timestamp not_after = 7;
    */
   notAfter?: Timestamp | undefined;
@@ -200,10 +274,18 @@ export const QueryHistoryRequestSchema: GenMessage<QueryHistoryRequest> = /*@__P
   messageDesc(file_holomush_plugin_v1_audit, 3);
 
 /**
+ * QueryHistoryResponse wraps one audit row in the server-streaming
+ * response. The host's PluginHistoryRouter reads rows from the stream
+ * and adapts them to the eventbus.HistoryStream contract.
+ *
  * @generated from message holomush.plugin.v1.QueryHistoryResponse
  */
 export type QueryHistoryResponse = Message<"holomush.plugin.v1.QueryHistoryResponse"> & {
   /**
+   * row is a single audit row from the plugin's store. Fields match
+   * the AuditRow shape used at ingest so the host can reconstruct a
+   * full eventbus.Event, including crypto envelope fields for read-back.
+   *
    * @generated from field: holomush.plugin.v1.AuditRow row = 1;
    */
   row?: AuditRow | undefined;
@@ -228,6 +310,11 @@ export const QueryHistoryResponseSchema: GenMessage<QueryHistoryResponse> = /*@_
  */
 export type DecryptOwnAuditRowsRequest = Message<"holomush.plugin.v1.DecryptOwnAuditRowsRequest"> & {
   /**
+   * rows is the batch of audit rows to decrypt. Each row MUST have been
+   * previously stored by this plugin (subject ownership enforced by the
+   * host's OwnerMap g1 gate). A batch exceeding 500 rows is rejected
+   * outright rather than partially processed.
+   *
    * @generated from field: repeated holomush.plugin.v1.AuditRow rows = 1;
    */
   rows: AuditRow[];
@@ -248,6 +335,10 @@ export const DecryptOwnAuditRowsRequestSchema: GenMessage<DecryptOwnAuditRowsReq
  */
 export type DecryptOwnAuditRowsResponse = Message<"holomush.plugin.v1.DecryptOwnAuditRowsResponse"> & {
   /**
+   * results contains one outcome per request row, in the same order as
+   * DecryptOwnAuditRowsRequest.rows. Positional correspondence is
+   * guaranteed (INV-RB-12); callers correlate by index or by RowResult.id.
+   *
    * @generated from field: repeated holomush.plugin.v1.RowResult results = 1;
    */
   results: RowResult[];
@@ -270,7 +361,8 @@ export const DecryptOwnAuditRowsResponseSchema: GenMessage<DecryptOwnAuditRowsRe
  */
 export type RowResult = Message<"holomush.plugin.v1.RowResult"> & {
   /**
-   * echoes AuditRow.id for correlation
+   * id echoes AuditRow.id so the caller can correlate results back to
+   * their source rows without relying solely on positional ordering.
    *
    * @generated from field: bytes id = 1;
    */
@@ -285,7 +377,10 @@ export type RowResult = Message<"holomush.plugin.v1.RowResult"> & {
    */
   outcome: {
     /**
-     * set iff decrypted
+     * plaintext holds the decrypted event payload bytes when decryption
+     * succeeded. May be empty bytes for zero-length payloads; callers
+     * MUST distinguish this from no_plaintext_reason by which oneof arm
+     * is set, not by length.
      *
      * @generated from field: bytes plaintext = 2;
      */
@@ -293,7 +388,16 @@ export type RowResult = Message<"holomush.plugin.v1.RowResult"> & {
     case: "plaintext";
   } | {
     /**
-     * set iff refused
+     * no_plaintext_reason is a short ASCII token describing why decryption
+     * was refused. It is a stable wire contract (the values MUST NOT drift;
+     * SDKs switch on them — see readback.go). The full set: "not_owner" (g1
+     * OwnerMap gate — subject belongs to a different plugin), "auth_guard_deny"
+     * (recipient not authorized by manifest declaration / ABAC grant — Phase 3b
+     * AuthGuard deny), "downgrade_refused" (INV-P7-7 fence — sensitive event
+     * stored under identity codec), "dek_missing" (INV-P7-15 fence — no DEK
+     * exists for this row's context), "stale_dek" (INV-E21 — both hot and cold
+     * DEK tiers gone), "audit_queue_full" (plugin audit-emit backpressure), and
+     * "internal" (host-side error, details logged server-side only).
      *
      * @generated from field: string no_plaintext_reason = 3;
      */
@@ -322,6 +426,15 @@ export const RowResultSchema: GenMessage<RowResult> = /*@__PURE__*/
  */
 export const PluginAuditService: GenService<{
   /**
+   * AuditEvent is the per-message ingestion RPC. The host per-plugin
+   * JetStream consumer calls this for every event delivered on subjects
+   * declared in the plugin's manifest audit block. The plugin MUST
+   * INSERT idempotently (ON CONFLICT DO NOTHING) and return a success
+   * response; the host then acks the JetStream message. On error the
+   * host does NOT nak — JetStream AckWait + MaxDeliver handle retry
+   * with natural backoff. The AuditRow payload is forwarded byte-equal
+   * (ciphertext is never decrypted before forwarding, INV-P7-11).
+   *
    * @generated from rpc holomush.plugin.v1.PluginAuditService.AuditEvent
    */
   auditEvent: {
@@ -330,6 +443,15 @@ export const PluginAuditService: GenService<{
     output: typeof AuditEventResponseSchema;
   },
   /**
+   * QueryHistory streams audit rows for a single subject prefix owned
+   * by this plugin. The host's bus.QueryHistory routes the call here
+   * when the OwnerMap maps the requested subject to this plugin. The
+   * plugin MUST enforce domain-specific authorization against
+   * req.Caller before returning any rows (e.g., scene membership for
+   * core-scenes). Rows are ordered by id (ULID lex = chronological)
+   * in the direction specified by req.Direction; the page is bounded by
+   * req.PageSize (host caps at 200; plugin MUST NOT exceed that cap).
+   *
    * @generated from rpc holomush.plugin.v1.PluginAuditService.QueryHistory
    */
   queryHistory: {

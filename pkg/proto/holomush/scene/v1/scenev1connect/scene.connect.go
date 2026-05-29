@@ -103,29 +103,133 @@ const (
 
 // SceneServiceClient is a client for the holomush.scene.v1.SceneService service.
 type SceneServiceClient interface {
+	// ListScenes is DECLARED BUT NOT SERVED. The core-scenes plugin embeds
+	// UnimplementedSceneServiceServer and provides no override, so any call
+	// returns codes.Unimplemented. Scene discovery is instead surfaced through
+	// the plugin's `scene` listing command (handleSceneList), which reads
+	// SceneStore.ListScenesForCharacter, not this RPC. Retained as a planned
+	// read surface.
 	ListScenes(context.Context, *connect.Request[v1.ListScenesRequest]) (*connect.Response[v1.ListScenesResponse], error)
+	// GetScene loads one scene's metadata and participant roster by ID. The
+	// host's read-scene ABAC policy gates access before the call reaches the
+	// handler, so the handler performs no additional ownership check; it returns
+	// codes.NotFound when the scene does not exist. See service.go::GetScene.
 	GetScene(context.Context, *connect.Request[v1.GetSceneRequest]) (*connect.Response[v1.GetSceneResponse], error)
+	// CreateScene allocates a new scene owned by the calling character, seeded
+	// active with the supplied title/description/visibility/pose-order/tags. The
+	// creating character becomes the `owner` participant in the same transaction,
+	// a lifecycle.created audit event is recorded, and a scene-created event is
+	// emitted. See service.go::CreateScene.
 	CreateScene(context.Context, *connect.Request[v1.CreateSceneRequest]) (*connect.Response[v1.CreateSceneResponse], error)
+	// EndScene transitions a scene to the terminal `ended` state (owner-only via
+	// ABAC). Rejected with codes.FailedPrecondition when the scene is already
+	// ended or archived. Returns the post-transition scene row. See
+	// service.go::EndScene.
 	EndScene(context.Context, *connect.Request[v1.EndSceneRequest]) (*connect.Response[v1.EndSceneResponse], error)
+	// PauseScene transitions an `active` scene to `paused` (owner-only via ABAC).
+	// Rejected with codes.FailedPrecondition from any non-active state. See
+	// service.go::PauseScene.
 	PauseScene(context.Context, *connect.Request[v1.PauseSceneRequest]) (*connect.Response[v1.PauseSceneResponse], error)
+	// ResumeScene transitions a `paused` scene back to `active` (owner-only via
+	// ABAC). Rejected with codes.FailedPrecondition from any non-paused state.
+	// See service.go::ResumeScene.
 	ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error)
+	// UpdateScene applies a partial update to mutable scene metadata, driven by
+	// the request's FieldMask (owner-only via ABAC). An empty mask is a no-op
+	// success. A pose-order-mode change auto-emits a pose-order-changed IC
+	// notice. See service.go::UpdateScene.
 	UpdateScene(context.Context, *connect.Request[v1.UpdateSceneRequest]) (*connect.Response[v1.UpdateSceneResponse], error)
+	// JoinScene adds the calling character to a scene as a `member`. Open scenes
+	// accept any join; private scenes require a pre-existing invitation (the
+	// invited row is promoted to member). Idempotent: a repeat join by an
+	// existing member succeeds without re-emitting a join notice. See
+	// service.go::JoinScene.
 	JoinScene(context.Context, *connect.Request[v1.JoinSceneRequest]) (*connect.Response[v1.JoinSceneResponse], error)
+	// LeaveScene removes the calling character from a scene. The scene owner
+	// cannot leave (codes.FailedPrecondition) — they must end the scene or
+	// transfer ownership first. Emits a leave IC notice with reason=left. See
+	// service.go::LeaveScene.
 	LeaveScene(context.Context, *connect.Request[v1.LeaveSceneRequest]) (*connect.Response[v1.LeaveSceneResponse], error)
+	// InviteToScene records an `invited` participant row for a target character
+	// (owner-only via ABAC), granting them permission to join a private scene.
+	// Rejected with codes.AlreadyExists when the target is already a member. See
+	// service.go::InviteToScene.
 	InviteToScene(context.Context, *connect.Request[v1.InviteToSceneRequest]) (*connect.Response[v1.InviteToSceneResponse], error)
+	// KickFromScene removes a target character from a scene (owner-only via
+	// ABAC). The scene owner cannot be kicked (codes.FailedPrecondition, enforced
+	// both at the service layer and by a store WHERE filter). Emits a leave IC
+	// notice with reason=kicked. See service.go::KickFromScene.
 	KickFromScene(context.Context, *connect.Request[v1.KickFromSceneRequest]) (*connect.Response[v1.KickFromSceneResponse], error)
+	// TransferOwnership reassigns scene ownership from the calling owner to a
+	// target who MUST already be a member (owner-only via ABAC). The former owner
+	// is demoted to member. See service.go::TransferOwnership.
 	TransferOwnership(context.Context, *connect.Request[v1.TransferOwnershipRequest]) (*connect.Response[v1.TransferOwnershipResponse], error)
+	// CastPublishVote is DECLARED BUT NOT SERVED. It is the legacy
+	// scene-keyed publish-vote shape, superseded by CastPublishSceneVote (which
+	// is keyed by published_scene_id and is the served vote RPC). The plugin
+	// provides no handler, so a call returns codes.Unimplemented.
 	CastPublishVote(context.Context, *connect.Request[v1.CastPublishVoteRequest]) (*connect.Response[v1.CastPublishVoteResponse], error)
+	// GetPoseOrder returns the computed pose-order roster for a scene. Enforces
+	// the INV-S9 plugin-code participant gate (caller MUST be an owner or member,
+	// NOT merely invited; NO ABAC engine is consulted). The PermissionDenied gate
+	// fires before any existence check so a non-participant cannot distinguish a
+	// missing scene from one they may not see. See service.go::GetPoseOrder.
 	GetPoseOrder(context.Context, *connect.Request[v1.GetPoseOrderRequest]) (*connect.Response[v1.GetPoseOrderResponse], error)
-	// Phase 6 publication RPCs. See spec section 5.
+	// StartScenePublish opens a publication attempt for an `ended` scene
+	// (publish.go §5 precondition ladder). The scene must be ended, must not
+	// already have a published archive (one-and-done) nor an active attempt, and
+	// must not have exhausted its attempt budget. Seeds a COLLECTING attempt with
+	// a frozen vote roster. See publish_service.go::StartScenePublish.
 	StartScenePublish(context.Context, *connect.Request[v1.StartScenePublishRequest]) (*connect.Response[v1.StartScenePublishResponse], error)
+	// CastPublishSceneVote records a roster member's yes/no vote on an active
+	// publication attempt and runs the §4.3 resolution check, which may
+	// transition the attempt (COLLECTING→COOLOFF on all-yes, COLLECTING→
+	// ATTEMPT_FAILED on any-no-after-all-voted, or COOLOFF→COLLECTING on a flip
+	// to no). A vote on a terminal attempt is rejected. The recorded vote is the
+	// durable effect; a failed resolution or emit is logged but does not fail the
+	// cast. See publish_service.go::CastPublishSceneVote.
 	CastPublishSceneVote(context.Context, *connect.Request[v1.CastPublishSceneVoteRequest]) (*connect.Response[v1.CastPublishSceneVoteResponse], error)
+	// WithdrawScenePublish lets the scene owner abandon an active publication
+	// attempt (COLLECTING or COOLOFF), transitioning it to ATTEMPT_FAILED with
+	// failure_reason WITHDRAWN. Owner-gated by ABAC AND a defense-in-depth
+	// in-handler owner check (the plugin holds the owner attribute, so this
+	// closes the direct-RPC gap). See publish_service.go::WithdrawScenePublish.
 	WithdrawScenePublish(context.Context, *connect.Request[v1.WithdrawScenePublishRequest]) (*connect.Response[v1.WithdrawScenePublishResponse], error)
+	// GetPublishedScene returns a publication attempt's full state to a scene
+	// participant. Enforces the INV-S9 plugin-code participant gate with a
+	// load-bearing step order (INV-P6-5): header read → participant gate → content
+	// read (only for PUBLISHED rows, only after the gate passes). A non-participant
+	// is denied with the §10 triple-signal before any content is read. See
+	// publish_service.go::GetPublishedScene.
 	GetPublishedScene(context.Context, *connect.Request[v1.GetPublishedSceneRequest]) (*connect.Response[v1.GetPublishedSceneResponse], error)
+	// DownloadPublishedScene returns a PUBLISHED attempt rendered in the
+	// requested format (markdown/plain_text/jsonl) to a participant. Same
+	// load-bearing participant-gate ordering as GetPublishedScene; only PUBLISHED
+	// attempts are downloadable. See publish_service.go::DownloadPublishedScene.
 	DownloadPublishedScene(context.Context, *connect.Request[v1.DownloadPublishedSceneRequest]) (*connect.Response[v1.DownloadPublishedSceneResponse], error)
+	// ListScenePublishAttempts returns the audit list of a scene's publication
+	// attempts (header summaries, no content) to a participant. Participant-gated
+	// (INV-S9) so a non-participant cannot enumerate attempts. See
+	// publish_service.go::ListScenePublishAttempts.
 	ListScenePublishAttempts(context.Context, *connect.Request[v1.ListScenePublishAttemptsRequest]) (*connect.Response[v1.ListScenePublishAttemptsResponse], error)
+	// GetPublishedScene's PUBLIC counterpart: GetPublicSceneArchive is the
+	// unauthenticated read of a published scene. Structurally separate — NO
+	// caller validation, NO participant gate, NO ABAC. The only gate is
+	// status==PUBLISHED; a missing id OR any non-PUBLISHED attempt returns one
+	// opaque NOT_FOUND so existence/progress of an attempt cannot be inferred
+	// (INV-P6-8). Carries only public-safe fields. See
+	// publish_service.go::GetPublicSceneArchive.
 	GetPublicSceneArchive(context.Context, *connect.Request[v1.GetPublicSceneArchiveRequest]) (*connect.Response[v1.GetPublicSceneArchiveResponse], error)
+	// DownloadPublicSceneArchive is the PUBLIC, unauthenticated download of a
+	// published scene in the requested format. Same status-gate and opacity
+	// contract (INV-P6-8) as GetPublicSceneArchive; shares the renderer with
+	// DownloadPublishedScene. See publish_service.go::DownloadPublicSceneArchive.
 	DownloadPublicSceneArchive(context.Context, *connect.Request[v1.DownloadPublicSceneArchiveRequest]) (*connect.Response[v1.DownloadPublicSceneArchiveResponse], error)
+	// ExtendScenePublishVoteAttempts raises a scene's max-publish-attempts budget
+	// by a positive amount and emits the extension notice. Admin-only, enforced
+	// by the host's ABAC policy at dispatch — there is deliberately NO in-plugin
+	// role check (the inverse of INV-S9's plugin-code privacy gate). See
+	// publish_service.go::ExtendScenePublishVoteAttempts.
 	ExtendScenePublishVoteAttempts(context.Context, *connect.Request[v1.ExtendScenePublishVoteAttemptsRequest]) (*connect.Response[v1.ExtendScenePublishVoteAttemptsResponse], error)
 }
 
@@ -426,29 +530,133 @@ func (c *sceneServiceClient) ExtendScenePublishVoteAttempts(ctx context.Context,
 
 // SceneServiceHandler is an implementation of the holomush.scene.v1.SceneService service.
 type SceneServiceHandler interface {
+	// ListScenes is DECLARED BUT NOT SERVED. The core-scenes plugin embeds
+	// UnimplementedSceneServiceServer and provides no override, so any call
+	// returns codes.Unimplemented. Scene discovery is instead surfaced through
+	// the plugin's `scene` listing command (handleSceneList), which reads
+	// SceneStore.ListScenesForCharacter, not this RPC. Retained as a planned
+	// read surface.
 	ListScenes(context.Context, *connect.Request[v1.ListScenesRequest]) (*connect.Response[v1.ListScenesResponse], error)
+	// GetScene loads one scene's metadata and participant roster by ID. The
+	// host's read-scene ABAC policy gates access before the call reaches the
+	// handler, so the handler performs no additional ownership check; it returns
+	// codes.NotFound when the scene does not exist. See service.go::GetScene.
 	GetScene(context.Context, *connect.Request[v1.GetSceneRequest]) (*connect.Response[v1.GetSceneResponse], error)
+	// CreateScene allocates a new scene owned by the calling character, seeded
+	// active with the supplied title/description/visibility/pose-order/tags. The
+	// creating character becomes the `owner` participant in the same transaction,
+	// a lifecycle.created audit event is recorded, and a scene-created event is
+	// emitted. See service.go::CreateScene.
 	CreateScene(context.Context, *connect.Request[v1.CreateSceneRequest]) (*connect.Response[v1.CreateSceneResponse], error)
+	// EndScene transitions a scene to the terminal `ended` state (owner-only via
+	// ABAC). Rejected with codes.FailedPrecondition when the scene is already
+	// ended or archived. Returns the post-transition scene row. See
+	// service.go::EndScene.
 	EndScene(context.Context, *connect.Request[v1.EndSceneRequest]) (*connect.Response[v1.EndSceneResponse], error)
+	// PauseScene transitions an `active` scene to `paused` (owner-only via ABAC).
+	// Rejected with codes.FailedPrecondition from any non-active state. See
+	// service.go::PauseScene.
 	PauseScene(context.Context, *connect.Request[v1.PauseSceneRequest]) (*connect.Response[v1.PauseSceneResponse], error)
+	// ResumeScene transitions a `paused` scene back to `active` (owner-only via
+	// ABAC). Rejected with codes.FailedPrecondition from any non-paused state.
+	// See service.go::ResumeScene.
 	ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error)
+	// UpdateScene applies a partial update to mutable scene metadata, driven by
+	// the request's FieldMask (owner-only via ABAC). An empty mask is a no-op
+	// success. A pose-order-mode change auto-emits a pose-order-changed IC
+	// notice. See service.go::UpdateScene.
 	UpdateScene(context.Context, *connect.Request[v1.UpdateSceneRequest]) (*connect.Response[v1.UpdateSceneResponse], error)
+	// JoinScene adds the calling character to a scene as a `member`. Open scenes
+	// accept any join; private scenes require a pre-existing invitation (the
+	// invited row is promoted to member). Idempotent: a repeat join by an
+	// existing member succeeds without re-emitting a join notice. See
+	// service.go::JoinScene.
 	JoinScene(context.Context, *connect.Request[v1.JoinSceneRequest]) (*connect.Response[v1.JoinSceneResponse], error)
+	// LeaveScene removes the calling character from a scene. The scene owner
+	// cannot leave (codes.FailedPrecondition) — they must end the scene or
+	// transfer ownership first. Emits a leave IC notice with reason=left. See
+	// service.go::LeaveScene.
 	LeaveScene(context.Context, *connect.Request[v1.LeaveSceneRequest]) (*connect.Response[v1.LeaveSceneResponse], error)
+	// InviteToScene records an `invited` participant row for a target character
+	// (owner-only via ABAC), granting them permission to join a private scene.
+	// Rejected with codes.AlreadyExists when the target is already a member. See
+	// service.go::InviteToScene.
 	InviteToScene(context.Context, *connect.Request[v1.InviteToSceneRequest]) (*connect.Response[v1.InviteToSceneResponse], error)
+	// KickFromScene removes a target character from a scene (owner-only via
+	// ABAC). The scene owner cannot be kicked (codes.FailedPrecondition, enforced
+	// both at the service layer and by a store WHERE filter). Emits a leave IC
+	// notice with reason=kicked. See service.go::KickFromScene.
 	KickFromScene(context.Context, *connect.Request[v1.KickFromSceneRequest]) (*connect.Response[v1.KickFromSceneResponse], error)
+	// TransferOwnership reassigns scene ownership from the calling owner to a
+	// target who MUST already be a member (owner-only via ABAC). The former owner
+	// is demoted to member. See service.go::TransferOwnership.
 	TransferOwnership(context.Context, *connect.Request[v1.TransferOwnershipRequest]) (*connect.Response[v1.TransferOwnershipResponse], error)
+	// CastPublishVote is DECLARED BUT NOT SERVED. It is the legacy
+	// scene-keyed publish-vote shape, superseded by CastPublishSceneVote (which
+	// is keyed by published_scene_id and is the served vote RPC). The plugin
+	// provides no handler, so a call returns codes.Unimplemented.
 	CastPublishVote(context.Context, *connect.Request[v1.CastPublishVoteRequest]) (*connect.Response[v1.CastPublishVoteResponse], error)
+	// GetPoseOrder returns the computed pose-order roster for a scene. Enforces
+	// the INV-S9 plugin-code participant gate (caller MUST be an owner or member,
+	// NOT merely invited; NO ABAC engine is consulted). The PermissionDenied gate
+	// fires before any existence check so a non-participant cannot distinguish a
+	// missing scene from one they may not see. See service.go::GetPoseOrder.
 	GetPoseOrder(context.Context, *connect.Request[v1.GetPoseOrderRequest]) (*connect.Response[v1.GetPoseOrderResponse], error)
-	// Phase 6 publication RPCs. See spec section 5.
+	// StartScenePublish opens a publication attempt for an `ended` scene
+	// (publish.go §5 precondition ladder). The scene must be ended, must not
+	// already have a published archive (one-and-done) nor an active attempt, and
+	// must not have exhausted its attempt budget. Seeds a COLLECTING attempt with
+	// a frozen vote roster. See publish_service.go::StartScenePublish.
 	StartScenePublish(context.Context, *connect.Request[v1.StartScenePublishRequest]) (*connect.Response[v1.StartScenePublishResponse], error)
+	// CastPublishSceneVote records a roster member's yes/no vote on an active
+	// publication attempt and runs the §4.3 resolution check, which may
+	// transition the attempt (COLLECTING→COOLOFF on all-yes, COLLECTING→
+	// ATTEMPT_FAILED on any-no-after-all-voted, or COOLOFF→COLLECTING on a flip
+	// to no). A vote on a terminal attempt is rejected. The recorded vote is the
+	// durable effect; a failed resolution or emit is logged but does not fail the
+	// cast. See publish_service.go::CastPublishSceneVote.
 	CastPublishSceneVote(context.Context, *connect.Request[v1.CastPublishSceneVoteRequest]) (*connect.Response[v1.CastPublishSceneVoteResponse], error)
+	// WithdrawScenePublish lets the scene owner abandon an active publication
+	// attempt (COLLECTING or COOLOFF), transitioning it to ATTEMPT_FAILED with
+	// failure_reason WITHDRAWN. Owner-gated by ABAC AND a defense-in-depth
+	// in-handler owner check (the plugin holds the owner attribute, so this
+	// closes the direct-RPC gap). See publish_service.go::WithdrawScenePublish.
 	WithdrawScenePublish(context.Context, *connect.Request[v1.WithdrawScenePublishRequest]) (*connect.Response[v1.WithdrawScenePublishResponse], error)
+	// GetPublishedScene returns a publication attempt's full state to a scene
+	// participant. Enforces the INV-S9 plugin-code participant gate with a
+	// load-bearing step order (INV-P6-5): header read → participant gate → content
+	// read (only for PUBLISHED rows, only after the gate passes). A non-participant
+	// is denied with the §10 triple-signal before any content is read. See
+	// publish_service.go::GetPublishedScene.
 	GetPublishedScene(context.Context, *connect.Request[v1.GetPublishedSceneRequest]) (*connect.Response[v1.GetPublishedSceneResponse], error)
+	// DownloadPublishedScene returns a PUBLISHED attempt rendered in the
+	// requested format (markdown/plain_text/jsonl) to a participant. Same
+	// load-bearing participant-gate ordering as GetPublishedScene; only PUBLISHED
+	// attempts are downloadable. See publish_service.go::DownloadPublishedScene.
 	DownloadPublishedScene(context.Context, *connect.Request[v1.DownloadPublishedSceneRequest]) (*connect.Response[v1.DownloadPublishedSceneResponse], error)
+	// ListScenePublishAttempts returns the audit list of a scene's publication
+	// attempts (header summaries, no content) to a participant. Participant-gated
+	// (INV-S9) so a non-participant cannot enumerate attempts. See
+	// publish_service.go::ListScenePublishAttempts.
 	ListScenePublishAttempts(context.Context, *connect.Request[v1.ListScenePublishAttemptsRequest]) (*connect.Response[v1.ListScenePublishAttemptsResponse], error)
+	// GetPublishedScene's PUBLIC counterpart: GetPublicSceneArchive is the
+	// unauthenticated read of a published scene. Structurally separate — NO
+	// caller validation, NO participant gate, NO ABAC. The only gate is
+	// status==PUBLISHED; a missing id OR any non-PUBLISHED attempt returns one
+	// opaque NOT_FOUND so existence/progress of an attempt cannot be inferred
+	// (INV-P6-8). Carries only public-safe fields. See
+	// publish_service.go::GetPublicSceneArchive.
 	GetPublicSceneArchive(context.Context, *connect.Request[v1.GetPublicSceneArchiveRequest]) (*connect.Response[v1.GetPublicSceneArchiveResponse], error)
+	// DownloadPublicSceneArchive is the PUBLIC, unauthenticated download of a
+	// published scene in the requested format. Same status-gate and opacity
+	// contract (INV-P6-8) as GetPublicSceneArchive; shares the renderer with
+	// DownloadPublishedScene. See publish_service.go::DownloadPublicSceneArchive.
 	DownloadPublicSceneArchive(context.Context, *connect.Request[v1.DownloadPublicSceneArchiveRequest]) (*connect.Response[v1.DownloadPublicSceneArchiveResponse], error)
+	// ExtendScenePublishVoteAttempts raises a scene's max-publish-attempts budget
+	// by a positive amount and emits the extension notice. Admin-only, enforced
+	// by the host's ABAC policy at dispatch — there is deliberately NO in-plugin
+	// role check (the inverse of INV-S9's plugin-code privacy gate). See
+	// publish_service.go::ExtendScenePublishVoteAttempts.
 	ExtendScenePublishVoteAttempts(context.Context, *connect.Request[v1.ExtendScenePublishVoteAttemptsRequest]) (*connect.Response[v1.ExtendScenePublishVoteAttemptsResponse], error)
 }
 

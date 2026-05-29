@@ -27,15 +27,25 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// LogLevel specifies the severity of a log message.
+// LogLevel selects which host slog severity a LogRequest is routed to. The
+// host maps each value to the corresponding slog method; an out-of-range or
+// unspecified value is treated as an invalid level by the logging bridge.
 type LogLevel int32
 
 const (
+	// LOG_LEVEL_UNSPECIFIED is the proto3 zero value. It carries no severity and
+	// is not a valid routing target — callers MUST set a concrete level.
 	LogLevel_LOG_LEVEL_UNSPECIFIED LogLevel = 0
-	LogLevel_LOG_LEVEL_DEBUG       LogLevel = 1
-	LogLevel_LOG_LEVEL_INFO        LogLevel = 2
-	LogLevel_LOG_LEVEL_WARN        LogLevel = 3
-	LogLevel_LOG_LEVEL_ERROR       LogLevel = 4
+	// LOG_LEVEL_DEBUG routes to slog Debug — verbose, development-time detail
+	// that is normally filtered out in production.
+	LogLevel_LOG_LEVEL_DEBUG LogLevel = 1
+	// LOG_LEVEL_INFO routes to slog Info — routine operational milestones.
+	LogLevel_LOG_LEVEL_INFO LogLevel = 2
+	// LOG_LEVEL_WARN routes to slog Warn — recoverable anomalies worth noting.
+	LogLevel_LOG_LEVEL_WARN LogLevel = 3
+	// LOG_LEVEL_ERROR routes to slog Error — failures the plugin wants surfaced
+	// for operator attention.
+	LogLevel_LOG_LEVEL_ERROR LogLevel = 4
 )
 
 // Enum value maps for LogLevel.
@@ -83,10 +93,13 @@ func (LogLevel) EnumDescriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP(), []int{0}
 }
 
-// EmitEventRequest wraps an event for emission by the host.
+// EmitEventRequest carries the single event a plugin asks the host to publish.
 type EmitEventRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The event to emit.
+	// event is the event the plugin wants published; its fields (stream/subject,
+	// type, payload, sensitivity) are validated against the plugin's manifest
+	// gates by the host before publication. See the EmitEvent message in
+	// plugin.proto for the field contract.
 	Event         *EmitEvent `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -129,12 +142,16 @@ func (x *EmitEventRequest) GetEvent() *EmitEvent {
 	return nil
 }
 
-// EmitEventResponse indicates success or failure.
+// EmitEventResponse reports the outcome of a publish attempt. The host uses
+// this in-band success/error shape rather than an RPC status code so a plugin
+// can distinguish a refused emit (e.g. a manifest-gate denial) from a
+// transport failure.
 type EmitEventResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Whether the event was successfully emitted.
+	// success is true when the event was accepted and published.
 	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	// Error message if success is false.
+	// error holds a human-readable reason when success is false (for example, a
+	// manifest-gate denial); empty when success is true.
 	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -184,10 +201,11 @@ func (x *EmitEventResponse) GetError() string {
 	return ""
 }
 
-// QueryLocationRequest requests information about a location.
+// QueryLocationRequest names the location to snapshot.
 type QueryLocationRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Location identifier.
+	// location_id is the ULID of the location to read. Required (min length 1);
+	// an unparseable or unknown id yields a not-found outcome on the response.
 	LocationId    string `protobuf:"bytes,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -230,12 +248,14 @@ func (x *QueryLocationRequest) GetLocationId() string {
 	return ""
 }
 
-// QueryLocationResponse contains location information.
+// QueryLocationResponse returns the requested location or an error reason.
 type QueryLocationResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Location information (nil if not found).
+	// location holds the resolved location detail; unset when the location was
+	// not found or the query failed.
 	Location *LocationInfo `protobuf:"bytes,1,opt,name=location,proto3" json:"location,omitempty"`
-	// Error message if query failed.
+	// error holds the failure reason (including not-found) when location is
+	// unset; empty on success.
 	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -285,14 +305,15 @@ func (x *QueryLocationResponse) GetError() string {
 	return ""
 }
 
-// LocationInfo contains basic location information.
+// LocationInfo is the plugin-facing projection of a world location: only the
+// identity and display fields a plugin needs, not the full internal model.
 type LocationInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Location identifier.
+	// id is the location's ULID. Required (min length 1).
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// Location name/title.
+	// name is the location's display title. Required (min length 1).
 	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	// Location description.
+	// description is the location's prose body, capped at 8192 bytes.
 	Description   string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -349,10 +370,11 @@ func (x *LocationInfo) GetDescription() string {
 	return ""
 }
 
-// QueryCharacterRequest requests information about a character.
+// QueryCharacterRequest names the character to snapshot.
 type QueryCharacterRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Character identifier.
+	// character_id is the ULID of the character to read. Required (min length 1);
+	// an unparseable or unknown id yields a not-found outcome on the response.
 	CharacterId   string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -395,12 +417,14 @@ func (x *QueryCharacterRequest) GetCharacterId() string {
 	return ""
 }
 
-// QueryCharacterResponse contains character information.
+// QueryCharacterResponse returns the requested character or an error reason.
 type QueryCharacterResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Character information (nil if not found).
+	// character holds the resolved character detail; unset when the character was
+	// not found or the query failed.
 	Character *CharacterInfo `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
-	// Error message if query failed.
+	// error holds the failure reason (including not-found) when character is
+	// unset; empty on success.
 	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -450,12 +474,13 @@ func (x *QueryCharacterResponse) GetError() string {
 	return ""
 }
 
-// CharacterInfo contains basic character information.
+// CharacterInfo is the plugin-facing projection of a world character, limited
+// to the identity fields exposed across the host-function boundary.
 type CharacterInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Character identifier.
+	// id is the character's ULID. Required (min length 1).
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// Character name.
+	// name is the character's display name. Required (min length 1).
 	Name          string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -505,10 +530,12 @@ func (x *CharacterInfo) GetName() string {
 	return ""
 }
 
-// QueryLocationCharactersRequest requests all characters in a location.
+// QueryLocationCharactersRequest names the location whose occupant roster to
+// fetch.
 type QueryLocationCharactersRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Location identifier.
+	// location_id is the ULID of the location to enumerate. Required (min length
+	// 1).
 	LocationId    string `protobuf:"bytes,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -551,12 +578,16 @@ func (x *QueryLocationCharactersRequest) GetLocationId() string {
 	return ""
 }
 
-// QueryLocationCharactersResponse contains the list of characters.
+// QueryLocationCharactersResponse returns the location's character roster or an
+// error reason.
 type QueryLocationCharactersResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Characters in the location.
+	// characters is the lightweight roster (id + name per entry) of characters in
+	// the location; empty when the location holds none. Use QueryCharacter per id
+	// for full detail.
 	Characters []*CharacterInfo `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
-	// Error message if query failed.
+	// error holds the failure reason (including not-found) when the query failed;
+	// empty on success.
 	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -606,10 +637,11 @@ func (x *QueryLocationCharactersResponse) GetError() string {
 	return ""
 }
 
-// KVGetRequest retrieves a value by key.
+// KVGetRequest names the key to read from the plugin's private namespace.
 type KVGetRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Key to look up.
+	// key is the lookup key within the calling plugin's namespace. Required (min
+	// length 1).
 	Key           string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -652,14 +684,19 @@ func (x *KVGetRequest) GetKey() string {
 	return ""
 }
 
-// KVGetResponse contains the retrieved value.
+// KVGetResponse returns the stored value and a presence witness. found
+// disambiguates an absent key from a stored empty value, since both leave value
+// empty.
 type KVGetResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Value if found.
+	// value is the stored bytes; empty when the key is absent (check found to
+	// disambiguate) or when an error occurred.
 	Value []byte `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
-	// Whether the key was found.
+	// found is true when the key existed in the namespace. When false with an
+	// empty error, the key was simply absent.
 	Found bool `protobuf:"varint,2,opt,name=found,proto3" json:"found,omitempty"`
-	// Error message if query failed.
+	// error holds the failure reason (such as an ABAC denial or store error)
+	// when the read failed; empty on success.
 	Error         string `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -716,12 +753,14 @@ func (x *KVGetResponse) GetError() string {
 	return ""
 }
 
-// KVSetRequest stores a key-value pair.
+// KVSetRequest carries the key and value to store in the plugin's private
+// namespace.
 type KVSetRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Key to store.
+	// key is the storage key within the calling plugin's namespace. Required (min
+	// length 1).
 	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	// Value to store.
+	// value is the opaque bytes to store; the host does not interpret it.
 	Value         []byte `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -771,12 +810,13 @@ func (x *KVSetRequest) GetValue() []byte {
 	return nil
 }
 
-// KVSetResponse indicates success or failure.
+// KVSetResponse reports the outcome of a store attempt.
 type KVSetResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Whether the value was successfully stored.
+	// success is true when the value was written.
 	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	// Error message if success is false.
+	// error holds the failure reason (such as an ABAC denial or store error)
+	// when success is false; empty on success.
 	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -826,10 +866,11 @@ func (x *KVSetResponse) GetError() string {
 	return ""
 }
 
-// KVDeleteRequest removes a key.
+// KVDeleteRequest names the key to remove from the plugin's private namespace.
 type KVDeleteRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Key to delete.
+	// key is the key to remove within the calling plugin's namespace. Required
+	// (min length 1).
 	Key           string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -872,12 +913,14 @@ func (x *KVDeleteRequest) GetKey() string {
 	return ""
 }
 
-// KVDeleteResponse indicates success or failure.
+// KVDeleteResponse reports the outcome of a delete attempt.
 type KVDeleteResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Whether the key was deleted (true even if key didn't exist).
+	// deleted is true when the delete completed; the host treats removing an
+	// absent key as success rather than an error.
 	Deleted bool `protobuf:"varint,1,opt,name=deleted,proto3" json:"deleted,omitempty"`
-	// Error message if deletion failed.
+	// error holds the failure reason (such as an ABAC denial or store error)
+	// when the delete failed; empty on success.
 	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -927,14 +970,17 @@ func (x *KVDeleteResponse) GetError() string {
 	return ""
 }
 
-// LogRequest writes a log message.
+// LogRequest is a single structured log line a plugin asks the host to emit.
 type LogRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Log level.
+	// level selects the host slog severity to route to. An unspecified or
+	// out-of-range value is rejected by the logging bridge as invalid.
 	Level LogLevel `protobuf:"varint,1,opt,name=level,proto3,enum=holomush.plugin.v1.LogLevel" json:"level,omitempty"`
-	// Log message.
+	// message is the log line body, capped at 8192 bytes. It is plugin-supplied
+	// and therefore dynamic by design.
 	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	// Additional structured fields.
+	// fields are optional structured key/value attributes attached to the log
+	// line.
 	Fields        map[string]string `protobuf:"bytes,3,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -991,7 +1037,8 @@ func (x *LogRequest) GetFields() map[string]string {
 	return nil
 }
 
-// LogResponse is empty (logging is fire-and-forget).
+// LogResponse is intentionally empty: logging is fire-and-forget, so the host
+// returns no acknowledgement payload.
 type LogResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1028,11 +1075,13 @@ func (*LogResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP(), []int{17}
 }
 
-// ListCommandsRequest requests the list of available commands.
-// Commands are filtered by the character's capabilities.
+// ListCommandsRequest names the character whose capability set determines which
+// commands are visible.
 type ListCommandsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Character identifier for capability filtering.
+	// character_id is the ULID of the character whose capabilities filter the
+	// returned command list. Required (min length 1); commands the character
+	// cannot execute are omitted.
 	CharacterId   string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1075,12 +1124,13 @@ func (x *ListCommandsRequest) GetCharacterId() string {
 	return ""
 }
 
-// ListCommandsResponse contains the list of available commands.
+// ListCommandsResponse returns the commands the requesting character may see.
 type ListCommandsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Available commands.
+	// commands is the capability-filtered list of available commands.
 	Commands []*CommandInfo `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands,omitempty"`
-	// Error message if query failed.
+	// error holds the failure reason when the query failed (for example, the
+	// access engine being unavailable); empty on success.
 	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1130,16 +1180,19 @@ func (x *ListCommandsResponse) GetError() string {
 	return ""
 }
 
-// CommandInfo contains basic command information for listing.
+// CommandInfo is the listing-level summary of one command — enough to render a
+// command index without fetching full help.
 type CommandInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Command name.
+	// name is the command's invocation name. Required (min length 1).
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// Short help description.
+	// help is the one-line description, capped at 8192 bytes.
 	Help string `protobuf:"bytes,2,opt,name=help,proto3" json:"help,omitempty"`
-	// Usage pattern (e.g., "say <message>").
+	// usage is the argument pattern (for example, "say <message>"), capped at
+	// 8192 bytes.
 	Usage string `protobuf:"bytes,3,opt,name=usage,proto3" json:"usage,omitempty"`
-	// Source plugin name or "core".
+	// source identifies the registering plugin name, or "core" for built-in
+	// commands. Required (min length 1).
 	Source        string `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1203,10 +1256,11 @@ func (x *CommandInfo) GetSource() string {
 	return ""
 }
 
-// GetCommandHelpRequest requests detailed help for a command.
+// GetCommandHelpRequest names the command whose full help to fetch.
 type GetCommandHelpRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Command name to get help for.
+	// command_name is the command to fetch detailed help for. Required (min
+	// length 1); an unknown name yields a not-found outcome on the response.
 	CommandName   string `protobuf:"bytes,1,opt,name=command_name,json=commandName,proto3" json:"command_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1249,12 +1303,15 @@ func (x *GetCommandHelpRequest) GetCommandName() string {
 	return ""
 }
 
-// GetCommandHelpResponse contains detailed command help.
+// GetCommandHelpResponse returns the detailed help for one command or an error
+// reason.
 type GetCommandHelpResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Detailed command information (nil if not found).
+	// command holds the full command detail; unset when the command was not found
+	// or access was denied.
 	Command *CommandHelpInfo `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
-	// Error message if query failed.
+	// error holds the failure reason (not-found, access-denied, or engine error)
+	// when command is unset; empty on success.
 	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1304,20 +1361,23 @@ func (x *GetCommandHelpResponse) GetError() string {
 	return ""
 }
 
-// CommandHelpInfo contains detailed help for a command.
+// CommandHelpInfo is the detailed help record for one command, including the
+// long-form help body and the capabilities a character needs to run it.
 type CommandHelpInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Command name.
+	// name is the command's invocation name. Required (min length 1).
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// Short help description.
+	// help is the one-line description, capped at 8192 bytes.
 	Help string `protobuf:"bytes,2,opt,name=help,proto3" json:"help,omitempty"`
-	// Usage pattern.
+	// usage is the argument pattern, capped at 8192 bytes.
 	Usage string `protobuf:"bytes,3,opt,name=usage,proto3" json:"usage,omitempty"`
-	// Detailed markdown help text.
+	// help_text is the long-form markdown help body, capped at 65536 bytes.
 	HelpText string `protobuf:"bytes,4,opt,name=help_text,json=helpText,proto3" json:"help_text,omitempty"`
-	// Required capabilities for this command.
+	// capabilities lists the capability strings the command declares; a character
+	// must satisfy all of them (plus the execute check) to run it.
 	Capabilities []string `protobuf:"bytes,5,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
-	// Source plugin name or "core".
+	// source identifies the registering plugin name, or "core" for built-in
+	// commands. Required (min length 1).
 	Source        string `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1395,12 +1455,15 @@ func (x *CommandHelpInfo) GetSource() string {
 	return ""
 }
 
-// AddSessionStreamRequest specifies which session and stream to add.
+// AddSessionStreamRequest names the live session and the stream to subscribe it
+// to.
 type AddSessionStreamRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Active session identifier.
+	// session_id is the active session to modify. Required (min length 1); an
+	// unknown session fails the RPC with SESSION_NOT_FOUND.
 	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	// Stream name to subscribe to (format: "prefix:id").
+	// stream is the stream to subscribe the session to, in "prefix:id" form.
+	// Required (min length 1).
 	Stream        string `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1450,12 +1513,12 @@ func (x *AddSessionStreamRequest) GetStream() string {
 	return ""
 }
 
-// AddSessionStreamResponse indicates success or failure.
+// AddSessionStreamResponse reports the outcome of a subscribe attempt.
 type AddSessionStreamResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Whether the stream was successfully added.
+	// success is true when the session was subscribed to the stream.
 	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	// Non-empty on error.
+	// error holds the failure reason when success is false; empty on success.
 	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1505,12 +1568,14 @@ func (x *AddSessionStreamResponse) GetError() string {
 	return ""
 }
 
-// RemoveSessionStreamRequest specifies which stream to remove.
+// RemoveSessionStreamRequest names the live session and the stream to
+// unsubscribe it from.
 type RemoveSessionStreamRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Active session identifier.
+	// session_id is the active session to modify. Required (min length 1).
 	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	// Stream name to unsubscribe from.
+	// stream is the stream to unsubscribe the session from. Required (min length
+	// 1); unsubscribing a stream the session does not hold still succeeds.
 	Stream        string `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1560,12 +1625,13 @@ func (x *RemoveSessionStreamRequest) GetStream() string {
 	return ""
 }
 
-// RemoveSessionStreamResponse indicates success or failure.
+// RemoveSessionStreamResponse reports the outcome of an unsubscribe attempt.
 type RemoveSessionStreamResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Whether the stream was successfully removed (true even if not subscribed).
+	// success is true when the session no longer holds the stream; because the
+	// operation is idempotent this is true even if the stream was not subscribed.
 	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	// Non-empty on error.
+	// error holds the failure reason when success is false; empty on success.
 	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

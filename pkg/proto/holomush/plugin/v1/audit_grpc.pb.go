@@ -38,7 +38,23 @@ const (
 // QueryHistory is invoked by host's bus.QueryHistory when the queried
 // subject prefix is owned by this plugin.
 type PluginAuditServiceClient interface {
+	// AuditEvent is the per-message ingestion RPC. The host per-plugin
+	// JetStream consumer calls this for every event delivered on subjects
+	// declared in the plugin's manifest audit block. The plugin MUST
+	// INSERT idempotently (ON CONFLICT DO NOTHING) and return a success
+	// response; the host then acks the JetStream message. On error the
+	// host does NOT nak — JetStream AckWait + MaxDeliver handle retry
+	// with natural backoff. The AuditRow payload is forwarded byte-equal
+	// (ciphertext is never decrypted before forwarding, INV-P7-11).
 	AuditEvent(ctx context.Context, in *AuditEventRequest, opts ...grpc.CallOption) (*AuditEventResponse, error)
+	// QueryHistory streams audit rows for a single subject prefix owned
+	// by this plugin. The host's bus.QueryHistory routes the call here
+	// when the OwnerMap maps the requested subject to this plugin. The
+	// plugin MUST enforce domain-specific authorization against
+	// req.Caller before returning any rows (e.g., scene membership for
+	// core-scenes). Rows are ordered by id (ULID lex = chronological)
+	// in the direction specified by req.Direction; the page is bounded by
+	// req.PageSize (host caps at 200; plugin MUST NOT exceed that cap).
 	QueryHistory(ctx context.Context, in *QueryHistoryRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[QueryHistoryResponse], error)
 }
 
@@ -91,7 +107,23 @@ type PluginAuditService_QueryHistoryClient = grpc.ServerStreamingClient[QueryHis
 // QueryHistory is invoked by host's bus.QueryHistory when the queried
 // subject prefix is owned by this plugin.
 type PluginAuditServiceServer interface {
+	// AuditEvent is the per-message ingestion RPC. The host per-plugin
+	// JetStream consumer calls this for every event delivered on subjects
+	// declared in the plugin's manifest audit block. The plugin MUST
+	// INSERT idempotently (ON CONFLICT DO NOTHING) and return a success
+	// response; the host then acks the JetStream message. On error the
+	// host does NOT nak — JetStream AckWait + MaxDeliver handle retry
+	// with natural backoff. The AuditRow payload is forwarded byte-equal
+	// (ciphertext is never decrypted before forwarding, INV-P7-11).
 	AuditEvent(context.Context, *AuditEventRequest) (*AuditEventResponse, error)
+	// QueryHistory streams audit rows for a single subject prefix owned
+	// by this plugin. The host's bus.QueryHistory routes the call here
+	// when the OwnerMap maps the requested subject to this plugin. The
+	// plugin MUST enforce domain-specific authorization against
+	// req.Caller before returning any rows (e.g., scene membership for
+	// core-scenes). Rows are ordered by id (ULID lex = chronological)
+	// in the direction specified by req.Direction; the page is bounded by
+	// req.PageSize (host caps at 200; plugin MUST NOT exceed that cap).
 	QueryHistory(*QueryHistoryRequest, grpc.ServerStreamingServer[QueryHistoryResponse]) error
 	mustEmbedUnimplementedPluginAuditServiceServer()
 }

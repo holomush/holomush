@@ -28,6 +28,7 @@ deps:
 lint:
   use:
     - STANDARD
+    - COMMENTS
   # The internal cursor proto deliberately lives at the root of its
   # module path (internal/eventbus/cursor/cursor.proto) for file-tree
   # opacity — not in a deep holomush/eventbus/cursor/v1/ subdirectory

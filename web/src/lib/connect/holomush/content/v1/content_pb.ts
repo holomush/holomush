@@ -16,10 +16,14 @@ export const file_holomush_content_v1_content: GenFile = /*@__PURE__*/
   fileDesc("CiFob2xvbXVzaC9jb250ZW50L3YxL2NvbnRlbnQucHJvdG8SE2hvbG9tdXNoLmNvbnRlbnQudjEiIAoRR2V0Q29udGVudFJlcXVlc3QSCwoDa2V5GAEgASgJIkQKEkdldENvbnRlbnRSZXNwb25zZRIuCgRpdGVtGAEgASgLMiAuaG9sb211c2guY29udGVudC52MS5Db250ZW50SXRlbSJDChJMaXN0Q29udGVudFJlcXVlc3QSDgoGcHJlZml4GAEgASgJEg0KBWxpbWl0GAIgASgFEg4KBmN1cnNvchgDIAEoCSJbChNMaXN0Q29udGVudFJlc3BvbnNlEi8KBWl0ZW1zGAEgAygLMiAuaG9sb211c2guY29udGVudC52MS5Db250ZW50SXRlbRITCgtuZXh0X2N1cnNvchgCIAEoCSKxAQoLQ29udGVudEl0ZW0SCwoDa2V5GAEgASgJEhQKDGNvbnRlbnRfdHlwZRgCIAEoCRIMCgRib2R5GAMgASgMEkAKCG1ldGFkYXRhGAQgAygLMi4uaG9sb211c2guY29udGVudC52MS5Db250ZW50SXRlbS5NZXRhZGF0YUVudHJ5Gi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ATLRAQoOQ29udGVudFNlcnZpY2USXQoKR2V0Q29udGVudBImLmhvbG9tdXNoLmNvbnRlbnQudjEuR2V0Q29udGVudFJlcXVlc3QaJy5ob2xvbXVzaC5jb250ZW50LnYxLkdldENvbnRlbnRSZXNwb25zZRJgCgtMaXN0Q29udGVudBInLmhvbG9tdXNoLmNvbnRlbnQudjEuTGlzdENvbnRlbnRSZXF1ZXN0GiguaG9sb211c2guY29udGVudC52MS5MaXN0Q29udGVudFJlc3BvbnNlQkZaRGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL2NvbnRlbnQvdjE7Y29udGVudHYxYgZwcm90bzM");
 
 /**
+ * GetContentRequest selects a single content item by its exact storage key.
+ *
  * @generated from message holomush.content.v1.GetContentRequest
  */
 export type GetContentRequest = Message<"holomush.content.v1.GetContentRequest"> & {
   /**
+   * key is the exact content-store key to retrieve; no prefix matching is performed.
+   *
    * @generated from field: string key = 1;
    */
   key: string;
@@ -33,10 +37,15 @@ export const GetContentRequestSchema: GenMessage<GetContentRequest> = /*@__PURE_
   messageDesc(file_holomush_content_v1_content, 0);
 
 /**
+ * GetContentResponse carries the content item for the requested key. A missing
+ * key yields no response message — the RPC fails with a gRPC NotFound status.
+ *
  * @generated from message holomush.content.v1.GetContentResponse
  */
 export type GetContentResponse = Message<"holomush.content.v1.GetContentResponse"> & {
   /**
+   * item is the content item for the requested key.
+   *
    * @generated from field: holomush.content.v1.ContentItem item = 1;
    */
   item?: ContentItem | undefined;
@@ -50,20 +59,30 @@ export const GetContentResponseSchema: GenMessage<GetContentResponse> = /*@__PUR
   messageDesc(file_holomush_content_v1_content, 1);
 
 /**
+ * ListContentRequest selects a page of content items whose keys share a common prefix.
+ *
  * @generated from message holomush.content.v1.ListContentRequest
  */
 export type ListContentRequest = Message<"holomush.content.v1.ListContentRequest"> & {
   /**
+   * prefix restricts results to keys that begin with this string; pass an empty string to match all keys.
+   *
    * @generated from field: string prefix = 1;
    */
   prefix: string;
 
   /**
+   * limit is the maximum number of items to return per page; zero means no limit.
+   * The server does not impose its own cap — callers should set a reasonable bound.
+   *
    * @generated from field: int32 limit = 2;
    */
   limit: number;
 
   /**
+   * cursor is the next_cursor value from a prior ListContentResponse; pass an empty string to start from the beginning.
+   * The value is the key of the last item on the previous page, used for keyset pagination.
+   *
    * @generated from field: string cursor = 3;
    */
   cursor: string;
@@ -77,15 +96,22 @@ export const ListContentRequestSchema: GenMessage<ListContentRequest> = /*@__PUR
   messageDesc(file_holomush_content_v1_content, 2);
 
 /**
+ * ListContentResponse carries one page of content items and a pagination token.
+ *
  * @generated from message holomush.content.v1.ListContentResponse
  */
 export type ListContentResponse = Message<"holomush.content.v1.ListContentResponse"> & {
   /**
+   * items is the slice of content items matching the request prefix, ordered by key.
+   *
    * @generated from field: repeated holomush.content.v1.ContentItem items = 1;
    */
   items: ContentItem[];
 
   /**
+   * next_cursor is the key of the last returned item; pass it as cursor in a subsequent
+   * request to fetch the next page. An empty string means there are no further items.
+   *
    * @generated from field: string next_cursor = 2;
    */
   nextCursor: string;
@@ -99,25 +125,37 @@ export const ListContentResponseSchema: GenMessage<ListContentResponse> = /*@__P
   messageDesc(file_holomush_content_v1_content, 3);
 
 /**
+ * ContentItem is a single managed content record retrieved from the store.
+ *
  * @generated from message holomush.content.v1.ContentItem
  */
 export type ContentItem = Message<"holomush.content.v1.ContentItem"> & {
   /**
+   * key is the storage key identifying this item; callers conventionally use
+   * dot-delimited names such as "landing.hero", though the store enforces none.
+   *
    * @generated from field: string key = 1;
    */
   key: string;
 
   /**
+   * content_type is the IANA media type of the body, for example "text/markdown" or "application/json".
+   *
    * @generated from field: string content_type = 2;
    */
   contentType: string;
 
   /**
+   * body is the raw content bytes; interpret according to content_type.
+   *
    * @generated from field: bytes body = 3;
    */
   body: Uint8Array;
 
   /**
+   * metadata holds arbitrary string key/value annotations attached to the item,
+   * such as "title", "icon", "order", or "alt".
+   *
    * @generated from field: map<string, string> metadata = 4;
    */
   metadata: { [key: string]: string };

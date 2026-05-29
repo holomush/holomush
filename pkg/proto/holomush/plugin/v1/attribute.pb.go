@@ -25,13 +25,34 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// AttributeType declares the type of a single attribute in ResourceTypeSchema.
+// The host uses this declaration to build the policy engine's type registry,
+// which drives DSL type-checking and comparison semantics. Mismatches between
+// declared and returned types produce DSL evaluation errors at runtime.
 type AttributeType int32
 
 const (
+	// Zero value sentinel. Attributes with UNSPECIFIED type are mapped to
+	// AttrTypeString by the host's schema converter
+	// (internal/plugin/attribute_proxy.go::protoAttrTypeToAttrType). Prefer an
+	// explicit value in new schemas.
 	AttributeType_ATTRIBUTE_TYPE_UNSPECIFIED AttributeType = 0
-	AttributeType_ATTRIBUTE_TYPE_STRING      AttributeType = 1
-	AttributeType_ATTRIBUTE_TYPE_BOOL        AttributeType = 2
-	AttributeType_ATTRIBUTE_TYPE_FLOAT       AttributeType = 3
+	// String-typed attribute. Returned as AttributeValue.string_value in
+	// ResolveResourceResponse. Maps to types.AttrTypeString in the host's policy
+	// engine. Used for identifier-like fields such as owner ULID, state enum
+	// names, and visibility labels.
+	AttributeType_ATTRIBUTE_TYPE_STRING AttributeType = 1
+	// Boolean-typed attribute. Returned as AttributeValue.bool_value. Maps to
+	// types.AttrTypeBool. Useful for binary state flags and witness attributes
+	// (has_location, is_archived).
+	AttributeType_ATTRIBUTE_TYPE_BOOL AttributeType = 2
+	// 64-bit floating-point numeric attribute. Returned as
+	// AttributeValue.number_value (double). Maps to types.AttrTypeFloat. Used
+	// for numeric comparisons in policies, e.g. vote tallies or capacity counts.
+	AttributeType_ATTRIBUTE_TYPE_FLOAT AttributeType = 3
+	// Ordered list of strings. Returned as AttributeValue.string_list_value.
+	// Maps to types.AttrTypeStringList in the policy engine. Used for multi-value
+	// fields such as participant character IDs or tag sets.
 	AttributeType_ATTRIBUTE_TYPE_STRING_LIST AttributeType = 4
 )
 
@@ -80,6 +101,9 @@ func (AttributeType) EnumDescriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_attribute_proto_rawDescGZIP(), []int{0}
 }
 
+// GetSchemaRequest carries no parameters. The plugin responds with the full
+// schema for all resource types it owns; there is no per-type filtering at the
+// protocol level.
 type GetSchemaRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -116,9 +140,17 @@ func (*GetSchemaRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_attribute_proto_rawDescGZIP(), []int{0}
 }
 
+// GetSchemaResponse describes the attribute schema for every resource type the
+// plugin owns. The host validates that every resource type declared in the
+// manifest's resource_types list appears as a key here; a missing key causes
+// plugin load to fail. The schema is used by the host to build a
+// types.NamespaceSchema per resource type for the policy engine's attribute
+// registry.
 type GetSchemaResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Keyed by resource type name (e.g., "channel", "widget").
+	// Attribute schema keyed by resource type name matching the manifest's
+	// resource_types list (e.g., "scene", "channel"). Each value describes the
+	// attributes resolvable for that type.
 	ResourceTypes map[string]*ResourceTypeSchema `protobuf:"bytes,1,rep,name=resource_types,json=resourceTypes,proto3" json:"resource_types,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -161,8 +193,16 @@ func (x *GetSchemaResponse) GetResourceTypes() map[string]*ResourceTypeSchema {
 	return nil
 }
 
+// ResourceTypeSchema describes all resolvable attributes for one resource
+// type. Every attribute that ResolveResource may ever return for this type
+// MUST appear here; attributes returned at resolution time but absent from
+// the schema are ignored by the host's policy engine.
 type ResourceTypeSchema struct {
-	state         protoimpl.MessageState   `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Attribute names for this resource type, each mapped to its declared type.
+	// Names are dot-free strings (e.g., "owner", "state", "visibility"). The set
+	// MUST be a superset of all keys that ResolveResource can return for this
+	// resource type — schema and response MUST be consistent.
 	Attributes    map[string]AttributeType `protobuf:"bytes,1,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value,enum=holomush.plugin.v1.AttributeType"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -205,10 +245,20 @@ func (x *ResourceTypeSchema) GetAttributes() map[string]AttributeType {
 	return nil
 }
 
+// ResolveResourceRequest identifies the single resource whose attributes the
+// host needs for an in-flight ABAC policy evaluation.
 type ResolveResourceRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ResourceType  string                 `protobuf:"bytes,1,opt,name=resource_type,json=resourceType,proto3" json:"resource_type,omitempty"`
-	ResourceId    string                 `protobuf:"bytes,2,opt,name=resource_id,json=resourceId,proto3" json:"resource_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The resource type to resolve, matching one of the keys in the plugin's
+	// GetSchemaResponse. Must be a non-empty string; buf validate enforces
+	// min_len = 1. Plugins MUST reject types they do not own with
+	// INVALID_ARGUMENT.
+	ResourceType string `protobuf:"bytes,1,opt,name=resource_type,json=resourceType,proto3" json:"resource_type,omitempty"`
+	// The resource instance identifier, stripped of the "type:" prefix. Must be
+	// non-empty; buf validate enforces min_len = 1. For the scene plugin this is
+	// the raw scene ULID (e.g., "01JXYZ..."). Plugins SHOULD return NOT_FOUND
+	// when this ID is unknown.
+	ResourceId    string `protobuf:"bytes,2,opt,name=resource_id,json=resourceId,proto3" json:"resource_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -257,8 +307,22 @@ func (x *ResolveResourceRequest) GetResourceId() string {
 	return ""
 }
 
+// ResolveResourceResponse carries the resolved attribute bag for the requested
+// resource instance. The host converts this into a map[string]any via
+// internal/plugin/attribute_proxy.go::convertProtoAttributes and passes it to
+// the policy engine's evaluator.
+//
+// Optional attributes MUST be omitted from the map entirely when unresolved —
+// do not include a key with an empty-string or zero value as a sentinel. The
+// DSL evaluator treats absent keys as fail-safe false; a present empty-string
+// value is NOT the same as absent and may match an unintended policy condition.
 type ResolveResourceResponse struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Resolved attribute values keyed by attribute name, matching the names
+	// declared in GetSchemaResponse for the requested resource type. Attributes
+	// whose values are unknown or not applicable for this resource instance MUST
+	// be omitted from the map rather than included with a zero or empty-string
+	// sentinel.
 	Attributes    map[string]*AttributeValue `protobuf:"bytes,1,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -301,8 +365,18 @@ func (x *ResolveResourceResponse) GetAttributes() map[string]*AttributeValue {
 	return nil
 }
 
+// AttributeValue is a discriminated union carrying the runtime value of a
+// single resolved attribute. Exactly one kind field should be set; the variant
+// chosen SHOULD match the AttributeType declared in GetSchemaResponse for the
+// same attribute name.
 type AttributeValue struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
+	// Exactly one of the following fields carries the attribute value. The kind
+	// oneof allows the host's converter (attribute_proxy.go::convertProtoAttributes)
+	// to switch on the concrete variant and produce a typed map[string]any entry
+	// for the policy evaluator. An AttributeValue with no kind set (all-zero) is
+	// silently dropped by the converter.
+	//
 	// Types that are valid to be assigned to Kind:
 	//
 	//	*AttributeValue_StringValue
@@ -392,18 +466,28 @@ type isAttributeValue_Kind interface {
 }
 
 type AttributeValue_StringValue struct {
+	// String value for ATTRIBUTE_TYPE_STRING attributes, e.g. owner ULID,
+	// state name, or visibility label.
 	StringValue string `protobuf:"bytes,1,opt,name=string_value,json=stringValue,proto3,oneof"`
 }
 
 type AttributeValue_NumberValue struct {
+	// Floating-point value for ATTRIBUTE_TYPE_FLOAT attributes. Stored as
+	// double (float64) to cover the full range needed by numeric policy
+	// comparisons.
 	NumberValue float64 `protobuf:"fixed64,2,opt,name=number_value,json=numberValue,proto3,oneof"`
 }
 
 type AttributeValue_BoolValue struct {
+	// Boolean value for ATTRIBUTE_TYPE_BOOL attributes, e.g. witness flags
+	// such as has_location.
 	BoolValue bool `protobuf:"varint,3,opt,name=bool_value,json=boolValue,proto3,oneof"`
 }
 
 type AttributeValue_StringListValue struct {
+	// String-list value for ATTRIBUTE_TYPE_STRING_LIST attributes, e.g.
+	// participant character IDs or invitee lists. Use StringList rather than
+	// repeated fields to fit within the oneof constraint.
 	StringListValue *StringList `protobuf:"bytes,4,opt,name=string_list_value,json=stringListValue,proto3,oneof"`
 }
 
@@ -415,9 +499,14 @@ func (*AttributeValue_BoolValue) isAttributeValue_Kind() {}
 
 func (*AttributeValue_StringListValue) isAttributeValue_Kind() {}
 
+// StringList wraps a repeated string so it can appear inside the
+// AttributeValue.kind oneof. Proto3 does not allow repeated fields directly
+// inside a oneof; this wrapper bridges that constraint.
 type StringList struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Values        []string               `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The string elements of the list. Order is preserved; the policy engine
+	// treats the list as an ordered sequence for membership checks.
+	Values        []string `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

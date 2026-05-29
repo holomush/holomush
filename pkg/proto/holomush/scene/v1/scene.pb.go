@@ -27,23 +27,46 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// SceneInfo is the wire projection of a scene row plus its roster, returned by
+// the read and lifecycle RPCs (rowToProto in service.go). The state,
+// pose_order_mode, and visibility fields are the plugin's lowercase string
+// enums, not proto enums.
 type SceneInfo struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Id              string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Title           string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	Description     string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	LocationId      string                 `protobuf:"bytes,4,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
-	OwnerId         string                 `protobuf:"bytes,5,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`
-	State           string                 `protobuf:"bytes,6,opt,name=state,proto3" json:"state,omitempty"`
-	PoseOrderMode   string                 `protobuf:"bytes,7,opt,name=pose_order_mode,json=poseOrderMode,proto3" json:"pose_order_mode,omitempty"`
-	ContentWarnings []string               `protobuf:"bytes,8,rep,name=content_warnings,json=contentWarnings,proto3" json:"content_warnings,omitempty"`
-	Tags            []string               `protobuf:"bytes,9,rep,name=tags,proto3" json:"tags,omitempty"`
-	Visibility      string                 `protobuf:"bytes,10,opt,name=visibility,proto3" json:"visibility,omitempty"`
-	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	EndedAt         *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
-	Participants    []*ParticipantInfo     `protobuf:"bytes,13,rep,name=participants,proto3" json:"participants,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Scene primary key ("scene-<ULID>"), stable for the scene's lifetime.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Human-facing scene name; trimmed of surrounding whitespace at creation.
+	Title string `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	// Optional free-text scene synopsis (up to 4096 chars).
+	Description string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	// Optional world location the scene is anchored to; empty when unanchored.
+	LocationId string `protobuf:"bytes,4,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	// Character ID of the current owner — the sole authority for end/pause/
+	// resume/update/invite/kick and the only member who cannot leave.
+	OwnerId string `protobuf:"bytes,5,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`
+	// Lifecycle state: one of "active", "paused", "ended", or "archived" (see
+	// SceneState in types.go). Transitions are forward-only.
+	State string `protobuf:"bytes,6,opt,name=state,proto3" json:"state,omitempty"`
+	// Pose-order discipline: one of "free", "strict", "3pr", or "5pr" (see
+	// PoseOrderMode in types.go); governs GetPoseOrder eligibility computation.
+	PoseOrderMode string `protobuf:"bytes,7,opt,name=pose_order_mode,json=poseOrderMode,proto3" json:"pose_order_mode,omitempty"`
+	// Operator-facing content advisories for the scene (max 32 entries).
+	ContentWarnings []string `protobuf:"bytes,8,rep,name=content_warnings,json=contentWarnings,proto3" json:"content_warnings,omitempty"`
+	// Discovery/categorization tags (max 32 entries).
+	Tags []string `protobuf:"bytes,9,rep,name=tags,proto3" json:"tags,omitempty"`
+	// Discoverability mode: "open" (listed, any character may join) or "private"
+	// (unlisted, invitation required). See SceneVisibility in types.go.
+	Visibility string `protobuf:"bytes,10,opt,name=visibility,proto3" json:"visibility,omitempty"`
+	// Wall-clock creation time. For CreateScene responses this is the host clock
+	// at create; for GetScene it is the persisted row timestamp.
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// Set only once the scene has reached the ended state; otherwise unset.
+	EndedAt *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
+	// The current participant roster (owners and members; invited rows are not
+	// surfaced as participants here).
+	Participants  []*ParticipantInfo `protobuf:"bytes,13,rep,name=participants,proto3" json:"participants,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SceneInfo) Reset() {
@@ -167,11 +190,21 @@ func (x *SceneInfo) GetParticipants() []*ParticipantInfo {
 	return nil
 }
 
+// ParticipantInfo is one entry in a scene's roster — a character's relationship
+// to the scene at read time.
 type ParticipantInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	CharacterName string                 `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
-	Role          string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Character ID of the participant.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// Display name of the character (best-effort; falls back to the ID when no
+	// name resolver is wired).
+	CharacterName string `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
+	// Participant role: "owner", "member", or the transient "invited" (the
+	// last exists only on private scenes and is promoted to member on join). See
+	// ParticipantRole in participants.go.
+	Role string `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
+	// When the participant joined (for invited rows, when the invitation was
+	// recorded; reset to join time on promotion).
 	JoinedAt      *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=joined_at,json=joinedAt,proto3" json:"joined_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -235,11 +268,17 @@ func (x *ParticipantInfo) GetJoinedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// ListScenesRequest is the (currently unserved) scene-discovery query. Its
+// fields describe the intended pagination + tag-filter contract for the planned
+// ListScenes RPC.
 type ListScenesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Limit         int32                  `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
-	Offset        int32                  `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
-	Tags          []string               `protobuf:"bytes,3,rep,name=tags,proto3" json:"tags,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Maximum scenes to return; 0 means server default, capped at 200.
+	Limit int32 `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Number of leading results to skip for pagination.
+	Offset int32 `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
+	// Restrict results to scenes carrying all of these tags.
+	Tags          []string `protobuf:"bytes,3,rep,name=tags,proto3" json:"tags,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -295,9 +334,11 @@ func (x *ListScenesRequest) GetTags() []string {
 	return nil
 }
 
+// ListScenesResponse is the (currently unserved) scene-discovery result page.
 type ListScenesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Scenes        []*SceneInfo           `protobuf:"bytes,1,rep,name=scenes,proto3" json:"scenes,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The matching scenes for this page.
+	Scenes        []*SceneInfo `protobuf:"bytes,1,rep,name=scenes,proto3" json:"scenes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -339,10 +380,14 @@ func (x *ListScenesResponse) GetScenes() []*SceneInfo {
 	return nil
 }
 
+// GetSceneRequest identifies the scene to read and the character reading it
+// (the latter scoping the host's ABAC read policy).
 type GetSceneRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	SceneId       string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The reading character's ID; required.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// The scene to load; required.
+	SceneId       string `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -391,9 +436,11 @@ func (x *GetSceneRequest) GetSceneId() string {
 	return ""
 }
 
+// GetSceneResponse carries the requested scene's full projection.
 type GetSceneResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Scene         *SceneInfo             `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The loaded scene; unset is never returned (a miss is codes.NotFound).
+	Scene         *SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -435,16 +482,30 @@ func (x *GetSceneResponse) GetScene() *SceneInfo {
 	return nil
 }
 
+// CreateSceneRequest is the new-scene definition. The calling character becomes
+// the owner. Empty visibility/pose-order default to "open"/"free" at the
+// handler; whitespace-only titles are rejected after trimming.
 type CreateSceneRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId     string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	Title           string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	Description     string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	LocationId      string                 `protobuf:"bytes,4,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
-	Visibility      string                 `protobuf:"bytes,5,opt,name=visibility,proto3" json:"visibility,omitempty"`
-	PoseOrderMode   string                 `protobuf:"bytes,6,opt,name=pose_order_mode,json=poseOrderMode,proto3" json:"pose_order_mode,omitempty"`
-	Tags            []string               `protobuf:"bytes,7,rep,name=tags,proto3" json:"tags,omitempty"`
-	ContentWarnings []string               `protobuf:"bytes,8,rep,name=content_warnings,json=contentWarnings,proto3" json:"content_warnings,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The creating character, who becomes the scene owner; required.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// Scene title; required, 1-200 chars (whitespace-only also rejected by the
+	// handler's post-trim check).
+	Title string `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	// Optional synopsis, up to 4096 chars.
+	Description string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	// Optional world location to anchor the scene to.
+	LocationId string `protobuf:"bytes,4,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	// Discoverability mode; empty selects the "open" default. Constrained to
+	// ""|"open"|"private".
+	Visibility string `protobuf:"bytes,5,opt,name=visibility,proto3" json:"visibility,omitempty"`
+	// Pose-order discipline; empty selects the "free" default. Constrained to
+	// ""|"free"|"strict"|"3pr"|"5pr".
+	PoseOrderMode string `protobuf:"bytes,6,opt,name=pose_order_mode,json=poseOrderMode,proto3" json:"pose_order_mode,omitempty"`
+	// Discovery tags, max 32.
+	Tags []string `protobuf:"bytes,7,rep,name=tags,proto3" json:"tags,omitempty"`
+	// Content advisories, max 32.
+	ContentWarnings []string `protobuf:"bytes,8,rep,name=content_warnings,json=contentWarnings,proto3" json:"content_warnings,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -535,9 +596,11 @@ func (x *CreateSceneRequest) GetContentWarnings() []string {
 	return nil
 }
 
+// CreateSceneResponse carries the freshly created scene (active, owner seeded).
 type CreateSceneResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Scene         *SceneInfo             `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The new scene's projection.
+	Scene         *SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -579,10 +642,14 @@ func (x *CreateSceneResponse) GetScene() *SceneInfo {
 	return nil
 }
 
+// EndSceneRequest identifies the scene to end and the acting character (the
+// owner, per the ABAC end-own-scene policy).
 type EndSceneRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	SceneId       string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The acting character's ID; required.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// The scene to end; required.
+	SceneId       string `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -631,9 +698,11 @@ func (x *EndSceneRequest) GetSceneId() string {
 	return ""
 }
 
+// EndSceneResponse carries the scene as of the ended transition.
 type EndSceneResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Scene         *SceneInfo             `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The post-transition scene row (state == "ended").
+	Scene         *SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -675,10 +744,13 @@ func (x *EndSceneResponse) GetScene() *SceneInfo {
 	return nil
 }
 
+// PauseSceneRequest identifies the scene to pause and the acting owner.
 type PauseSceneRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	SceneId       string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The acting character's ID; required.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// The scene to pause; required.
+	SceneId       string `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -727,9 +799,11 @@ func (x *PauseSceneRequest) GetSceneId() string {
 	return ""
 }
 
+// PauseSceneResponse carries the scene as of the paused transition.
 type PauseSceneResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Scene         *SceneInfo             `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The post-transition scene row (state == "paused").
+	Scene         *SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -771,10 +845,13 @@ func (x *PauseSceneResponse) GetScene() *SceneInfo {
 	return nil
 }
 
+// ResumeSceneRequest identifies the scene to resume and the acting owner.
 type ResumeSceneRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	SceneId       string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The acting character's ID; required.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// The scene to resume; required.
+	SceneId       string `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -823,9 +900,11 @@ func (x *ResumeSceneRequest) GetSceneId() string {
 	return ""
 }
 
+// ResumeSceneResponse carries the scene as of the resumed transition.
 type ResumeSceneResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Scene         *SceneInfo             `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The post-transition scene row (state == "active").
+	Scene         *SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -867,34 +946,51 @@ func (x *ResumeSceneResponse) GetScene() *SceneInfo {
 	return nil
 }
 
-// UpdateSceneRequest uses google.protobuf.FieldMask as the canonical proto3
-// pattern for partial updates (per Google AIP-134). The mask is the single
-// source of truth for "which fields to apply" — fields listed in the mask
-// are updated to the value in the request (even if that value is empty/zero);
-// fields not in the mask are left unchanged.
+// UpdateSceneRequest applies a partial update to mutable scene metadata using
+// google.protobuf.FieldMask as the canonical proto3 partial-update pattern (per
+// Google AIP-134). The mask is the single source of truth for "which fields to
+// apply" — fields listed in the mask are updated to the request value (even if
+// empty/zero); fields not in the mask are left unchanged.
 //
 // Per-field constraint semantics:
 //   - max_len limits apply to all string fields regardless of mask membership
 //   - min_len IS NOT used at the proto layer because the mask gates whether
 //     the field is applied; per-field semantic validation (e.g. "title cannot
 //     be empty when in the mask") happens in the service handler's mask-iteration
-//     switch statement
+//     switch statement (buildSceneUpdate in service.go)
 //   - enum-style fields use `in:` constraints that include the empty string
 //     so that "field not set" doesn't trip the validator
 type UpdateSceneRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId     string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	SceneId         string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
-	Title           string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
-	Description     string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
-	Visibility      string                 `protobuf:"bytes,5,opt,name=visibility,proto3" json:"visibility,omitempty"`
-	PoseOrderMode   string                 `protobuf:"bytes,6,opt,name=pose_order_mode,json=poseOrderMode,proto3" json:"pose_order_mode,omitempty"`
-	LocationId      string                 `protobuf:"bytes,7,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
-	ContentWarnings []string               `protobuf:"bytes,8,rep,name=content_warnings,json=contentWarnings,proto3" json:"content_warnings,omitempty"`
-	Tags            []string               `protobuf:"bytes,9,rep,name=tags,proto3" json:"tags,omitempty"`
-	UpdateMask      *fieldmaskpb.FieldMask `protobuf:"bytes,99,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The acting owner's ID; required.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// The scene to update; required.
+	SceneId string `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	// New title (applied only when "title" is in the mask; whitespace-only is
+	// rejected by the handler). Max 200 chars.
+	Title string `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	// New description (applied only when "description" is in the mask; empty
+	// clears it). Max 4096 chars.
+	Description string `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	// New visibility (applied only when "visibility" is in the mask; empty is
+	// rejected by the handler when masked). Constrained to ""|"open"|"private".
+	Visibility string `protobuf:"bytes,5,opt,name=visibility,proto3" json:"visibility,omitempty"`
+	// New pose-order mode (applied only when "pose_order_mode" is in the mask;
+	// empty is rejected when masked). A real change auto-emits a pose-order-
+	// changed IC notice. Constrained to ""|"free"|"strict"|"3pr"|"5pr".
+	PoseOrderMode string `protobuf:"bytes,6,opt,name=pose_order_mode,json=poseOrderMode,proto3" json:"pose_order_mode,omitempty"`
+	// New location anchor (applied only when "location_id" is in the mask; empty
+	// clears the anchor).
+	LocationId string `protobuf:"bytes,7,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	// Replacement content warnings (applied only when "content_warnings" is in
+	// the mask). Max 32.
+	ContentWarnings []string `protobuf:"bytes,8,rep,name=content_warnings,json=contentWarnings,proto3" json:"content_warnings,omitempty"`
+	// Replacement tags (applied only when "tags" is in the mask). Max 32.
+	Tags []string `protobuf:"bytes,9,rep,name=tags,proto3" json:"tags,omitempty"`
+	// The set of field paths to apply. An empty mask is a no-op success.
+	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,99,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UpdateSceneRequest) Reset() {
@@ -997,9 +1093,11 @@ func (x *UpdateSceneRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
 	return nil
 }
 
+// UpdateSceneResponse carries the scene after the partial update.
 type UpdateSceneResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Scene         *SceneInfo             `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The post-update scene row.
+	Scene         *SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1041,10 +1139,13 @@ func (x *UpdateSceneResponse) GetScene() *SceneInfo {
 	return nil
 }
 
+// JoinSceneRequest identifies the scene to join and the joining character.
 type JoinSceneRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	SceneId       string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The joining character's ID; required.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// The scene to join; required.
+	SceneId       string `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1093,6 +1194,8 @@ func (x *JoinSceneRequest) GetSceneId() string {
 	return ""
 }
 
+// JoinSceneResponse is intentionally empty — a successful join carries no
+// body; the caller refetches scene state if needed.
 type JoinSceneResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1129,10 +1232,13 @@ func (*JoinSceneResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{17}
 }
 
+// LeaveSceneRequest identifies the scene to leave and the leaving character.
 type LeaveSceneRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	SceneId       string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The leaving character's ID; required (must not be the owner).
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// The scene to leave; required.
+	SceneId       string `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1181,6 +1287,8 @@ func (x *LeaveSceneRequest) GetSceneId() string {
 	return ""
 }
 
+// LeaveSceneResponse is intentionally empty — a successful leave carries no
+// body.
 type LeaveSceneResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1217,11 +1325,16 @@ func (*LeaveSceneResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{19}
 }
 
+// InviteToSceneRequest identifies the inviting owner, the scene, and the
+// character being granted an invitation.
 type InviteToSceneRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId       string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	SceneId           string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
-	TargetCharacterId string                 `protobuf:"bytes,3,opt,name=target_character_id,json=targetCharacterId,proto3" json:"target_character_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The inviting character (the owner per ABAC); required.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// The scene to invite into; required.
+	SceneId string `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	// The character receiving the invitation; required.
+	TargetCharacterId string `protobuf:"bytes,3,opt,name=target_character_id,json=targetCharacterId,proto3" json:"target_character_id,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -1277,6 +1390,8 @@ func (x *InviteToSceneRequest) GetTargetCharacterId() string {
 	return ""
 }
 
+// InviteToSceneResponse is intentionally empty — a successful invite carries
+// no body.
 type InviteToSceneResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1313,11 +1428,16 @@ func (*InviteToSceneResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{21}
 }
 
+// KickFromSceneRequest identifies the acting owner, the scene, and the target
+// character to remove.
 type KickFromSceneRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId       string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	SceneId           string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
-	TargetCharacterId string                 `protobuf:"bytes,3,opt,name=target_character_id,json=targetCharacterId,proto3" json:"target_character_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The acting character (the owner per ABAC); required.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// The scene to remove the target from; required.
+	SceneId string `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	// The character to remove (must not be the owner); required.
+	TargetCharacterId string `protobuf:"bytes,3,opt,name=target_character_id,json=targetCharacterId,proto3" json:"target_character_id,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -1373,6 +1493,8 @@ func (x *KickFromSceneRequest) GetTargetCharacterId() string {
 	return ""
 }
 
+// KickFromSceneResponse is intentionally empty — a successful kick carries no
+// body.
 type KickFromSceneResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1409,11 +1531,16 @@ func (*KickFromSceneResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{23}
 }
 
+// TransferOwnershipRequest identifies the current owner, the scene, and the
+// member who will become the new owner.
 type TransferOwnershipRequest struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId         string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	SceneId             string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
-	NewOwnerCharacterId string                 `protobuf:"bytes,3,opt,name=new_owner_character_id,json=newOwnerCharacterId,proto3" json:"new_owner_character_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The current owner; required.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// The scene whose ownership transfers; required.
+	SceneId string `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	// The new owner, who MUST already be a member of the scene; required.
+	NewOwnerCharacterId string `protobuf:"bytes,3,opt,name=new_owner_character_id,json=newOwnerCharacterId,proto3" json:"new_owner_character_id,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -1469,6 +1596,8 @@ func (x *TransferOwnershipRequest) GetNewOwnerCharacterId() string {
 	return ""
 }
 
+// TransferOwnershipResponse is intentionally empty — a successful transfer
+// carries no body.
 type TransferOwnershipResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1505,11 +1634,17 @@ func (*TransferOwnershipResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{25}
 }
 
+// CastPublishVoteRequest is the legacy (unserved) scene-keyed publish-vote
+// request, superseded by CastPublishSceneVoteRequest. Retained for the unserved
+// CastPublishVote RPC's contract.
 type CastPublishVoteRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	SceneId       string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
-	Vote          bool                   `protobuf:"varint,3,opt,name=vote,proto3" json:"vote,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The voting character; required.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// The scene being voted on; required.
+	SceneId string `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	// The yes (true) / no (false) ballot.
+	Vote          bool `protobuf:"varint,3,opt,name=vote,proto3" json:"vote,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1565,6 +1700,7 @@ func (x *CastPublishVoteRequest) GetVote() bool {
 	return false
 }
 
+// CastPublishVoteResponse is the legacy (unserved) publish-vote acknowledgment.
 type CastPublishVoteResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1601,10 +1737,15 @@ func (*CastPublishVoteResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{27}
 }
 
+// GetPoseOrderRequest identifies the scene whose pose order is requested and
+// the requesting character (who MUST be a participant; the gate is plugin-code,
+// not ABAC).
 type GetPoseOrderRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	SceneId       string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The requesting character; MUST be an owner or member of the scene.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// The scene to compute pose order for; required.
+	SceneId       string `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1653,12 +1794,20 @@ func (x *GetPoseOrderRequest) GetSceneId() string {
 	return ""
 }
 
+// PoseOrderEntry is one participant's standing in the computed pose order,
+// produced by poseorder.go::Compute.
 type PoseOrderEntry struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	CharacterName string                 `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
-	Eligible      bool                   `protobuf:"varint,3,opt,name=eligible,proto3" json:"eligible,omitempty"`
-	LastPosedAt   *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_posed_at,json=lastPosedAt,proto3" json:"last_posed_at,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The participant's character ID.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// The participant's display name (falls back to the character ID when no
+	// name resolver is wired).
+	CharacterName string `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
+	// Whether this participant is currently eligible to pose under the scene's
+	// pose-order mode.
+	Eligible bool `protobuf:"varint,3,opt,name=eligible,proto3" json:"eligible,omitempty"`
+	// When the participant last posed in this scene; unset if they never have.
+	LastPosedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_posed_at,json=lastPosedAt,proto3" json:"last_posed_at,omitempty"`
 	// Count of poses by other characters since this participant's last pose
 	// (or since scene start if never posed). Meaningful for 3pr/5pr modes.
 	PosesSinceLast *uint32 `protobuf:"varint,5,opt,name=poses_since_last,json=posesSinceLast,proto3,oneof" json:"poses_since_last,omitempty"`
@@ -1731,13 +1880,19 @@ func (x *PoseOrderEntry) GetPosesSinceLast() uint32 {
 	return 0
 }
 
+// GetPoseOrderResponse carries the scene's pose-order mode and the computed
+// per-participant standings.
 type GetPoseOrderResponse struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Mode           string                 `protobuf:"bytes,1,opt,name=mode,proto3" json:"mode,omitempty"` // strict | 3pr | 5pr | free
-	TotalPoseCount uint32                 `protobuf:"varint,2,opt,name=total_pose_count,json=totalPoseCount,proto3" json:"total_pose_count,omitempty"`
-	Entries        []*PoseOrderEntry      `protobuf:"bytes,3,rep,name=entries,proto3" json:"entries,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The scene's pose-order mode: "strict", "3pr", "5pr", or "free".
+	Mode string `protobuf:"bytes,1,opt,name=mode,proto3" json:"mode,omitempty"`
+	// Total poses recorded in the scene (the rolling denominator for the
+	// poses_since_last gaps).
+	TotalPoseCount uint32 `protobuf:"varint,2,opt,name=total_pose_count,json=totalPoseCount,proto3" json:"total_pose_count,omitempty"`
+	// Per-participant pose-order standings.
+	Entries       []*PoseOrderEntry `protobuf:"bytes,3,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetPoseOrderResponse) Reset() {
@@ -1791,12 +1946,15 @@ func (x *GetPoseOrderResponse) GetEntries() []*PoseOrderEntry {
 	return nil
 }
 
+// StartScenePublishRequest opens a publication attempt for an ended scene.
 type StartScenePublishRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	CallerCharacterId string                 `protobuf:"bytes,1,opt,name=caller_character_id,json=callerCharacterId,proto3" json:"caller_character_id,omitempty"`
-	SceneId           string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The character initiating the attempt; required.
+	CallerCharacterId string `protobuf:"bytes,1,opt,name=caller_character_id,json=callerCharacterId,proto3" json:"caller_character_id,omitempty"`
+	// The ended scene to publish; required.
+	SceneId       string `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StartScenePublishRequest) Reset() {
@@ -1843,12 +2001,16 @@ func (x *StartScenePublishRequest) GetSceneId() string {
 	return ""
 }
 
+// StartScenePublishResponse identifies the newly created publication attempt.
 type StartScenePublishResponse struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	PublishedSceneId string                 `protobuf:"bytes,1,opt,name=published_scene_id,json=publishedSceneId,proto3" json:"published_scene_id,omitempty"`
-	AttemptNumber    int32                  `protobuf:"varint,2,opt,name=attempt_number,json=attemptNumber,proto3" json:"attempt_number,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ID of the new publication attempt row (the published_scene_id used by the
+	// vote/withdraw/read RPCs).
+	PublishedSceneId string `protobuf:"bytes,1,opt,name=published_scene_id,json=publishedSceneId,proto3" json:"published_scene_id,omitempty"`
+	// The attempt's ordinal within the scene's attempt budget (1-based).
+	AttemptNumber int32 `protobuf:"varint,2,opt,name=attempt_number,json=attemptNumber,proto3" json:"attempt_number,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StartScenePublishResponse) Reset() {
@@ -1895,13 +2057,19 @@ func (x *StartScenePublishResponse) GetAttemptNumber() int32 {
 	return 0
 }
 
+// CastPublishSceneVoteRequest records a roster member's vote on a specific
+// publication attempt (keyed by published_scene_id, unlike the legacy
+// scene-keyed CastPublishVoteRequest).
 type CastPublishSceneVoteRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	CallerCharacterId string                 `protobuf:"bytes,1,opt,name=caller_character_id,json=callerCharacterId,proto3" json:"caller_character_id,omitempty"`
-	PublishedSceneId  string                 `protobuf:"bytes,2,opt,name=published_scene_id,json=publishedSceneId,proto3" json:"published_scene_id,omitempty"`
-	Vote              bool                   `protobuf:"varint,3,opt,name=vote,proto3" json:"vote,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The voting character, who MUST be on the attempt's frozen roster; required.
+	CallerCharacterId string `protobuf:"bytes,1,opt,name=caller_character_id,json=callerCharacterId,proto3" json:"caller_character_id,omitempty"`
+	// The publication attempt being voted on; required.
+	PublishedSceneId string `protobuf:"bytes,2,opt,name=published_scene_id,json=publishedSceneId,proto3" json:"published_scene_id,omitempty"`
+	// The yes (true) / no (false) ballot.
+	Vote          bool `protobuf:"varint,3,opt,name=vote,proto3" json:"vote,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CastPublishSceneVoteRequest) Reset() {
@@ -1955,9 +2123,12 @@ func (x *CastPublishSceneVoteRequest) GetVote() bool {
 	return false
 }
 
+// CastPublishSceneVoteResponse acknowledges a recorded vote.
 type CastPublishSceneVoteResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	IsChange      bool                   `protobuf:"varint,1,opt,name=is_change,json=isChange,proto3" json:"is_change,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// True only when this cast flipped a previously cast, differing vote; the
+	// first cast and a re-affirmation of the same value both report false.
+	IsChange      bool `protobuf:"varint,1,opt,name=is_change,json=isChange,proto3" json:"is_change,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1999,12 +2170,16 @@ func (x *CastPublishSceneVoteResponse) GetIsChange() bool {
 	return false
 }
 
+// WithdrawScenePublishRequest abandons an active publication attempt (owner
+// only).
 type WithdrawScenePublishRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	CallerCharacterId string                 `protobuf:"bytes,1,opt,name=caller_character_id,json=callerCharacterId,proto3" json:"caller_character_id,omitempty"`
-	PublishedSceneId  string                 `protobuf:"bytes,2,opt,name=published_scene_id,json=publishedSceneId,proto3" json:"published_scene_id,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The acting character, who MUST be the scene owner; required.
+	CallerCharacterId string `protobuf:"bytes,1,opt,name=caller_character_id,json=callerCharacterId,proto3" json:"caller_character_id,omitempty"`
+	// The active attempt to withdraw; required.
+	PublishedSceneId string `protobuf:"bytes,2,opt,name=published_scene_id,json=publishedSceneId,proto3" json:"published_scene_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *WithdrawScenePublishRequest) Reset() {
@@ -2051,6 +2226,8 @@ func (x *WithdrawScenePublishRequest) GetPublishedSceneId() string {
 	return ""
 }
 
+// WithdrawScenePublishResponse is intentionally empty — a successful withdrawal
+// carries no body; the attempt transitions to ATTEMPT_FAILED(WITHDRAWN).
 type WithdrawScenePublishResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -2087,11 +2264,17 @@ func (*WithdrawScenePublishResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{36}
 }
 
+// PublishedSceneEntry is one rendered line of a published scene's frozen
+// content. Only IC pose/say/emit content survives into a published scene; OOC
+// and ops events are excluded (EntryKind in publish_types.go).
 type PublishedSceneEntry struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Speaker       string                 `protobuf:"bytes,1,opt,name=speaker,proto3" json:"speaker,omitempty"`
-	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"` // "pose" | "say" | "emit"
-	Content       string                 `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The speaking character's display label for this line.
+	Speaker string `protobuf:"bytes,1,opt,name=speaker,proto3" json:"speaker,omitempty"`
+	// The content kind: "pose", "say", or "emit".
+	Kind string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	// The rendered line content.
+	Content       string `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2147,11 +2330,17 @@ func (x *PublishedSceneEntry) GetContent() string {
 	return ""
 }
 
+// PublishedSceneVoteSummary is the yes/no/pending tally across a publication
+// attempt's frozen roster (VoteTally in publish_store.go). Pending counts
+// roster members who have not yet cast.
 type PublishedSceneVoteSummary struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Yes           int32                  `protobuf:"varint,1,opt,name=yes,proto3" json:"yes,omitempty"`
-	No            int32                  `protobuf:"varint,2,opt,name=no,proto3" json:"no,omitempty"`
-	Pending       int32                  `protobuf:"varint,3,opt,name=pending,proto3" json:"pending,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Number of yes votes cast.
+	Yes int32 `protobuf:"varint,1,opt,name=yes,proto3" json:"yes,omitempty"`
+	// Number of no votes cast.
+	No int32 `protobuf:"varint,2,opt,name=no,proto3" json:"no,omitempty"`
+	// Number of roster members who have not yet voted.
+	Pending       int32 `protobuf:"varint,3,opt,name=pending,proto3" json:"pending,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2207,12 +2396,16 @@ func (x *PublishedSceneVoteSummary) GetPending() int32 {
 	return 0
 }
 
+// GetPublishedSceneRequest reads a publication attempt's full state as a scene
+// participant (participant-gated, INV-S9).
 type GetPublishedSceneRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	CallerCharacterId string                 `protobuf:"bytes,1,opt,name=caller_character_id,json=callerCharacterId,proto3" json:"caller_character_id,omitempty"`
-	PublishedSceneId  string                 `protobuf:"bytes,2,opt,name=published_scene_id,json=publishedSceneId,proto3" json:"published_scene_id,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The reading character, who MUST be a participant of the scene; required.
+	CallerCharacterId string `protobuf:"bytes,1,opt,name=caller_character_id,json=callerCharacterId,proto3" json:"caller_character_id,omitempty"`
+	// The publication attempt to read; required.
+	PublishedSceneId string `protobuf:"bytes,2,opt,name=published_scene_id,json=publishedSceneId,proto3" json:"published_scene_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *GetPublishedSceneRequest) Reset() {
@@ -2259,23 +2452,44 @@ func (x *GetPublishedSceneRequest) GetPublishedSceneId() string {
 	return ""
 }
 
+// GetPublishedSceneResponse is the participant-visible view of a publication
+// attempt: its state-machine status, vote tally, snapshots, lifecycle
+// timestamps, and (only when PUBLISHED) its frozen content.
 type GetPublishedSceneResponse struct {
-	state                  protoimpl.MessageState     `protogen:"open.v1"`
-	Id                     string                     `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	SceneId                string                     `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
-	AttemptNumber          int32                      `protobuf:"varint,3,opt,name=attempt_number,json=attemptNumber,proto3" json:"attempt_number,omitempty"`
-	Status                 string                     `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
-	FailureReason          string                     `protobuf:"bytes,5,opt,name=failure_reason,json=failureReason,proto3" json:"failure_reason,omitempty"` // empty unless ATTEMPT_FAILED
-	Tally                  *PublishedSceneVoteSummary `protobuf:"bytes,6,opt,name=tally,proto3" json:"tally,omitempty"`
-	ContentEntries         []*PublishedSceneEntry     `protobuf:"bytes,7,rep,name=content_entries,json=contentEntries,proto3" json:"content_entries,omitempty"` // populated only when PUBLISHED
-	TitleSnapshot          string                     `protobuf:"bytes,8,opt,name=title_snapshot,json=titleSnapshot,proto3" json:"title_snapshot,omitempty"`
-	ParticipantsSnapshot   []string                   `protobuf:"bytes,9,rep,name=participants_snapshot,json=participantsSnapshot,proto3" json:"participants_snapshot,omitempty"`
-	InitiatedAtUnixNs      int64                      `protobuf:"varint,10,opt,name=initiated_at_unix_ns,json=initiatedAtUnixNs,proto3" json:"initiated_at_unix_ns,omitempty"`
-	CooloffStartedAtUnixNs int64                      `protobuf:"varint,11,opt,name=cooloff_started_at_unix_ns,json=cooloffStartedAtUnixNs,proto3" json:"cooloff_started_at_unix_ns,omitempty"`
-	ResolvedAtUnixNs       int64                      `protobuf:"varint,12,opt,name=resolved_at_unix_ns,json=resolvedAtUnixNs,proto3" json:"resolved_at_unix_ns,omitempty"`
-	PublishedAtUnixNs      int64                      `protobuf:"varint,13,opt,name=published_at_unix_ns,json=publishedAtUnixNs,proto3" json:"published_at_unix_ns,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The publication attempt's ID.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// The scene this attempt belongs to.
+	SceneId string `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	// The attempt's ordinal within the scene's budget (1-based).
+	AttemptNumber int32 `protobuf:"varint,3,opt,name=attempt_number,json=attemptNumber,proto3" json:"attempt_number,omitempty"`
+	// State-machine status: "COLLECTING", "COOLOFF", "PUBLISHED", or
+	// "ATTEMPT_FAILED" (PublishedSceneStatus in publish_types.go).
+	Status string `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
+	// The failure cause; empty unless status is ATTEMPT_FAILED. One of ANY_NO,
+	// TIMEOUT, WITHDRAWN, SNAPSHOT_DECRYPT_FAILED, SNAPSHOT_RENDER_FAILED, or
+	// COOLOFF_INVARIANT_BROKEN (PublishFailureReason in publish_types.go).
+	FailureReason string `protobuf:"bytes,5,opt,name=failure_reason,json=failureReason,proto3" json:"failure_reason,omitempty"`
+	// The current yes/no/pending vote tally.
+	Tally *PublishedSceneVoteSummary `protobuf:"bytes,6,opt,name=tally,proto3" json:"tally,omitempty"`
+	// The frozen published content; populated ONLY when status is PUBLISHED.
+	ContentEntries []*PublishedSceneEntry `protobuf:"bytes,7,rep,name=content_entries,json=contentEntries,proto3" json:"content_entries,omitempty"`
+	// The scene title snapshotted at publish time.
+	TitleSnapshot string `protobuf:"bytes,8,opt,name=title_snapshot,json=titleSnapshot,proto3" json:"title_snapshot,omitempty"`
+	// The participant character names snapshotted at publish time.
+	ParticipantsSnapshot []string `protobuf:"bytes,9,rep,name=participants_snapshot,json=participantsSnapshot,proto3" json:"participants_snapshot,omitempty"`
+	// Epoch-nanosecond time the attempt was opened.
+	InitiatedAtUnixNs int64 `protobuf:"varint,10,opt,name=initiated_at_unix_ns,json=initiatedAtUnixNs,proto3" json:"initiated_at_unix_ns,omitempty"`
+	// Epoch-nanosecond time the cool-off window began; 0 if cool-off never
+	// started.
+	CooloffStartedAtUnixNs int64 `protobuf:"varint,11,opt,name=cooloff_started_at_unix_ns,json=cooloffStartedAtUnixNs,proto3" json:"cooloff_started_at_unix_ns,omitempty"`
+	// Epoch-nanosecond time the attempt reached a terminal status; 0 if still
+	// active.
+	ResolvedAtUnixNs int64 `protobuf:"varint,12,opt,name=resolved_at_unix_ns,json=resolvedAtUnixNs,proto3" json:"resolved_at_unix_ns,omitempty"`
+	// Epoch-nanosecond time the attempt was published; 0 unless PUBLISHED.
+	PublishedAtUnixNs int64 `protobuf:"varint,13,opt,name=published_at_unix_ns,json=publishedAtUnixNs,proto3" json:"published_at_unix_ns,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *GetPublishedSceneResponse) Reset() {
@@ -2399,13 +2613,19 @@ func (x *GetPublishedSceneResponse) GetPublishedAtUnixNs() int64 {
 	return 0
 }
 
+// DownloadPublishedSceneRequest fetches a PUBLISHED attempt rendered to a file
+// format, as a participant (participant-gated, INV-S9).
 type DownloadPublishedSceneRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	CallerCharacterId string                 `protobuf:"bytes,1,opt,name=caller_character_id,json=callerCharacterId,proto3" json:"caller_character_id,omitempty"`
-	PublishedSceneId  string                 `protobuf:"bytes,2,opt,name=published_scene_id,json=publishedSceneId,proto3" json:"published_scene_id,omitempty"`
-	Format            string                 `protobuf:"bytes,3,opt,name=format,proto3" json:"format,omitempty"` // "markdown" | "plain_text" | "jsonl"
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The downloading character, who MUST be a participant; required.
+	CallerCharacterId string `protobuf:"bytes,1,opt,name=caller_character_id,json=callerCharacterId,proto3" json:"caller_character_id,omitempty"`
+	// The PUBLISHED attempt to download; required.
+	PublishedSceneId string `protobuf:"bytes,2,opt,name=published_scene_id,json=publishedSceneId,proto3" json:"published_scene_id,omitempty"`
+	// The render format; required. Supported: "markdown", "plain_text", "jsonl"
+	// (publishRenderMime in publish_service.go); any other value is rejected.
+	Format        string `protobuf:"bytes,3,opt,name=format,proto3" json:"format,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DownloadPublishedSceneRequest) Reset() {
@@ -2459,10 +2679,14 @@ func (x *DownloadPublishedSceneRequest) GetFormat() string {
 	return ""
 }
 
+// DownloadPublishedSceneResponse carries the rendered scene bytes and their
+// MIME type.
 type DownloadPublishedSceneResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Content       []byte                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
-	MimeType      string                 `protobuf:"bytes,2,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The rendered file content.
+	Content []byte `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
+	// The content's MIME type (text/markdown, text/plain, or application/jsonl).
+	MimeType      string `protobuf:"bytes,2,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2511,12 +2735,16 @@ func (x *DownloadPublishedSceneResponse) GetMimeType() string {
 	return ""
 }
 
+// ListScenePublishAttemptsRequest lists a scene's publication attempts as a
+// participant (participant-gated, INV-S9).
 type ListScenePublishAttemptsRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	CallerCharacterId string                 `protobuf:"bytes,1,opt,name=caller_character_id,json=callerCharacterId,proto3" json:"caller_character_id,omitempty"`
-	SceneId           string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The reading character, who MUST be a participant; required.
+	CallerCharacterId string `protobuf:"bytes,1,opt,name=caller_character_id,json=callerCharacterId,proto3" json:"caller_character_id,omitempty"`
+	// The scene whose attempts to list; required.
+	SceneId       string `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListScenePublishAttemptsRequest) Reset() {
@@ -2563,8 +2791,11 @@ func (x *ListScenePublishAttemptsRequest) GetSceneId() string {
 	return ""
 }
 
+// ListScenePublishAttemptsResponse carries the attempt summaries (header only,
+// no content), ordered by attempt number.
 type ListScenePublishAttemptsResponse struct {
-	state         protoimpl.MessageState   `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The scene's publication attempts.
 	Attempts      []*PublishedSceneSummary `protobuf:"bytes,1,rep,name=attempts,proto3" json:"attempts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2607,16 +2838,24 @@ func (x *ListScenePublishAttemptsResponse) GetAttempts() []*PublishedSceneSummar
 	return nil
 }
 
+// PublishedSceneSummary is the content-free header view of one publication
+// attempt, used in the audit list.
 type PublishedSceneSummary struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	AttemptNumber     int32                  `protobuf:"varint,2,opt,name=attempt_number,json=attemptNumber,proto3" json:"attempt_number,omitempty"`
-	Status            string                 `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
-	FailureReason     string                 `protobuf:"bytes,4,opt,name=failure_reason,json=failureReason,proto3" json:"failure_reason,omitempty"`
-	InitiatedAtUnixNs int64                  `protobuf:"varint,5,opt,name=initiated_at_unix_ns,json=initiatedAtUnixNs,proto3" json:"initiated_at_unix_ns,omitempty"`
-	ResolvedAtUnixNs  int64                  `protobuf:"varint,6,opt,name=resolved_at_unix_ns,json=resolvedAtUnixNs,proto3" json:"resolved_at_unix_ns,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The attempt's ID.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// The attempt's ordinal within the scene's budget (1-based).
+	AttemptNumber int32 `protobuf:"varint,2,opt,name=attempt_number,json=attemptNumber,proto3" json:"attempt_number,omitempty"`
+	// State-machine status (COLLECTING/COOLOFF/PUBLISHED/ATTEMPT_FAILED).
+	Status string `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
+	// Failure cause; empty unless status is ATTEMPT_FAILED.
+	FailureReason string `protobuf:"bytes,4,opt,name=failure_reason,json=failureReason,proto3" json:"failure_reason,omitempty"`
+	// Epoch-nanosecond time the attempt was opened.
+	InitiatedAtUnixNs int64 `protobuf:"varint,5,opt,name=initiated_at_unix_ns,json=initiatedAtUnixNs,proto3" json:"initiated_at_unix_ns,omitempty"`
+	// Epoch-nanosecond time the attempt resolved; 0 if still active.
+	ResolvedAtUnixNs int64 `protobuf:"varint,6,opt,name=resolved_at_unix_ns,json=resolvedAtUnixNs,proto3" json:"resolved_at_unix_ns,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *PublishedSceneSummary) Reset() {
@@ -2691,9 +2930,13 @@ func (x *PublishedSceneSummary) GetResolvedAtUnixNs() int64 {
 	return 0
 }
 
+// GetPublicSceneArchiveRequest reads a published scene WITHOUT authentication.
+// No caller identity is required — the only gate is status==PUBLISHED.
 type GetPublicSceneArchiveRequest struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	PublishedSceneId string                 `protobuf:"bytes,1,opt,name=published_scene_id,json=publishedSceneId,proto3" json:"published_scene_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The publication attempt to read; required. A missing id or any
+	// non-PUBLISHED attempt returns one opaque NOT_FOUND (INV-P6-8).
+	PublishedSceneId string `protobuf:"bytes,1,opt,name=published_scene_id,json=publishedSceneId,proto3" json:"published_scene_id,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -2735,15 +2978,23 @@ func (x *GetPublicSceneArchiveRequest) GetPublishedSceneId() string {
 	return ""
 }
 
+// GetPublicSceneArchiveResponse is the public-safe view of a published scene —
+// only the published artifact, never vote state, per-voter data, or
+// failure_reason (the §5.1 two-pair separation).
 type GetPublicSceneArchiveResponse struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	Id                   string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	TitleSnapshot        string                 `protobuf:"bytes,2,opt,name=title_snapshot,json=titleSnapshot,proto3" json:"title_snapshot,omitempty"`
-	ParticipantsSnapshot []string               `protobuf:"bytes,3,rep,name=participants_snapshot,json=participantsSnapshot,proto3" json:"participants_snapshot,omitempty"`
-	ContentEntries       []*PublishedSceneEntry `protobuf:"bytes,4,rep,name=content_entries,json=contentEntries,proto3" json:"content_entries,omitempty"`
-	PublishedAtUnixNs    int64                  `protobuf:"varint,5,opt,name=published_at_unix_ns,json=publishedAtUnixNs,proto3" json:"published_at_unix_ns,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The publication attempt's ID.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// The scene title snapshotted at publish time.
+	TitleSnapshot string `protobuf:"bytes,2,opt,name=title_snapshot,json=titleSnapshot,proto3" json:"title_snapshot,omitempty"`
+	// The participant character names snapshotted at publish time.
+	ParticipantsSnapshot []string `protobuf:"bytes,3,rep,name=participants_snapshot,json=participantsSnapshot,proto3" json:"participants_snapshot,omitempty"`
+	// The frozen published content.
+	ContentEntries []*PublishedSceneEntry `protobuf:"bytes,4,rep,name=content_entries,json=contentEntries,proto3" json:"content_entries,omitempty"`
+	// Epoch-nanosecond publish time.
+	PublishedAtUnixNs int64 `protobuf:"varint,5,opt,name=published_at_unix_ns,json=publishedAtUnixNs,proto3" json:"published_at_unix_ns,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *GetPublicSceneArchiveResponse) Reset() {
@@ -2811,12 +3062,17 @@ func (x *GetPublicSceneArchiveResponse) GetPublishedAtUnixNs() int64 {
 	return 0
 }
 
+// DownloadPublicSceneArchiveRequest fetches a published scene rendered to a
+// file format WITHOUT authentication (status==PUBLISHED gate only).
 type DownloadPublicSceneArchiveRequest struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	PublishedSceneId string                 `protobuf:"bytes,1,opt,name=published_scene_id,json=publishedSceneId,proto3" json:"published_scene_id,omitempty"`
-	Format           string                 `protobuf:"bytes,2,opt,name=format,proto3" json:"format,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The publication attempt to download; required. Same opacity contract as
+	// GetPublicSceneArchiveRequest.
+	PublishedSceneId string `protobuf:"bytes,1,opt,name=published_scene_id,json=publishedSceneId,proto3" json:"published_scene_id,omitempty"`
+	// The render format; required. Supported: "markdown", "plain_text", "jsonl".
+	Format        string `protobuf:"bytes,2,opt,name=format,proto3" json:"format,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DownloadPublicSceneArchiveRequest) Reset() {
@@ -2863,10 +3119,14 @@ func (x *DownloadPublicSceneArchiveRequest) GetFormat() string {
 	return ""
 }
 
+// DownloadPublicSceneArchiveResponse carries the rendered public-archive bytes
+// and their MIME type.
 type DownloadPublicSceneArchiveResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Content       []byte                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
-	MimeType      string                 `protobuf:"bytes,2,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The rendered file content.
+	Content []byte `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
+	// The content's MIME type.
+	MimeType      string `protobuf:"bytes,2,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2915,13 +3175,19 @@ func (x *DownloadPublicSceneArchiveResponse) GetMimeType() string {
 	return ""
 }
 
+// ExtendScenePublishVoteAttemptsRequest raises a scene's publish-attempt budget
+// (admin-only, ABAC-gated at dispatch).
 type ExtendScenePublishVoteAttemptsRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	CallerCharacterId string                 `protobuf:"bytes,1,opt,name=caller_character_id,json=callerCharacterId,proto3" json:"caller_character_id,omitempty"`
-	SceneId           string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
-	Additional        int32                  `protobuf:"varint,3,opt,name=additional,proto3" json:"additional,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The acting admin's character ID; required (admin authority is ABAC-gated,
+	// not checked in-plugin).
+	CallerCharacterId string `protobuf:"bytes,1,opt,name=caller_character_id,json=callerCharacterId,proto3" json:"caller_character_id,omitempty"`
+	// The scene whose budget to raise; required.
+	SceneId string `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	// How many additional attempts to grant; MUST be positive.
+	Additional    int32 `protobuf:"varint,3,opt,name=additional,proto3" json:"additional,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ExtendScenePublishVoteAttemptsRequest) Reset() {
@@ -2975,9 +3241,12 @@ func (x *ExtendScenePublishVoteAttemptsRequest) GetAdditional() int32 {
 	return 0
 }
 
+// ExtendScenePublishVoteAttemptsResponse reports the scene's new attempt
+// budget.
 type ExtendScenePublishVoteAttemptsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NewMax        int32                  `protobuf:"varint,1,opt,name=new_max,json=newMax,proto3" json:"new_max,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The scene's max-publish-attempts budget after the extension.
+	NewMax        int32 `protobuf:"varint,1,opt,name=new_max,json=newMax,proto3" json:"new_max,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3019,16 +3288,24 @@ func (x *ExtendScenePublishVoteAttemptsResponse) GetNewMax() int32 {
 	return 0
 }
 
+// ScenePublishStartedEvent announces a newly opened publication attempt and its
+// frozen vote roster. Emitted as scene_publish_started.
 type ScenePublishStartedEvent struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	AttemptId            string                 `protobuf:"bytes,1,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
-	AttemptNumber        int32                  `protobuf:"varint,2,opt,name=attempt_number,json=attemptNumber,proto3" json:"attempt_number,omitempty"`
-	InitiatedBy          string                 `protobuf:"bytes,3,opt,name=initiated_by,json=initiatedBy,proto3" json:"initiated_by,omitempty"`
-	VoteWindowSeconds    int64                  `protobuf:"varint,4,opt,name=vote_window_seconds,json=voteWindowSeconds,proto3" json:"vote_window_seconds,omitempty"`
-	CooloffWindowSeconds int64                  `protobuf:"varint,5,opt,name=cooloff_window_seconds,json=cooloffWindowSeconds,proto3" json:"cooloff_window_seconds,omitempty"`
-	RosterCharacterIds   []string               `protobuf:"bytes,6,rep,name=roster_character_ids,json=rosterCharacterIds,proto3" json:"roster_character_ids,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The publication attempt's ID.
+	AttemptId string `protobuf:"bytes,1,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	// The attempt's ordinal within the scene's budget (1-based).
+	AttemptNumber int32 `protobuf:"varint,2,opt,name=attempt_number,json=attemptNumber,proto3" json:"attempt_number,omitempty"`
+	// Character ID that initiated the attempt.
+	InitiatedBy string `protobuf:"bytes,3,opt,name=initiated_by,json=initiatedBy,proto3" json:"initiated_by,omitempty"`
+	// The voting-window duration in seconds.
+	VoteWindowSeconds int64 `protobuf:"varint,4,opt,name=vote_window_seconds,json=voteWindowSeconds,proto3" json:"vote_window_seconds,omitempty"`
+	// The cool-off-window duration in seconds.
+	CooloffWindowSeconds int64 `protobuf:"varint,5,opt,name=cooloff_window_seconds,json=cooloffWindowSeconds,proto3" json:"cooloff_window_seconds,omitempty"`
+	// The frozen voter roster (character IDs eligible to vote on this attempt).
+	RosterCharacterIds []string `protobuf:"bytes,6,rep,name=roster_character_ids,json=rosterCharacterIds,proto3" json:"roster_character_ids,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ScenePublishStartedEvent) Reset() {
@@ -3103,12 +3380,18 @@ func (x *ScenePublishStartedEvent) GetRosterCharacterIds() []string {
 	return nil
 }
 
+// ScenePublishVoteCastEvent announces a vote cast on a publication attempt.
+// Emitted as scene_publish_vote_cast.
 type ScenePublishVoteCastEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AttemptId     string                 `protobuf:"bytes,1,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
-	CharacterId   string                 `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	Vote          bool                   `protobuf:"varint,3,opt,name=vote,proto3" json:"vote,omitempty"`
-	IsChange      bool                   `protobuf:"varint,4,opt,name=is_change,json=isChange,proto3" json:"is_change,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The publication attempt's ID.
+	AttemptId string `protobuf:"bytes,1,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	// The voting character's ID.
+	CharacterId string `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// The yes (true) / no (false) ballot just recorded.
+	Vote bool `protobuf:"varint,3,opt,name=vote,proto3" json:"vote,omitempty"`
+	// True only when this cast flipped a previously cast, differing vote.
+	IsChange      bool `protobuf:"varint,4,opt,name=is_change,json=isChange,proto3" json:"is_change,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3171,10 +3454,16 @@ func (x *ScenePublishVoteCastEvent) GetIsChange() bool {
 	return false
 }
 
+// ScenePublishCoolOffStartedEvent announces that an attempt entered the
+// cool-off window (all roster members voted yes). Emitted as
+// scene_publish_cooloff_started.
 type ScenePublishCoolOffStartedEvent struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	AttemptId           string                 `protobuf:"bytes,1,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
-	CooloffEndsAtUnixNs int64                  `protobuf:"varint,2,opt,name=cooloff_ends_at_unix_ns,json=cooloffEndsAtUnixNs,proto3" json:"cooloff_ends_at_unix_ns,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The publication attempt's ID.
+	AttemptId string `protobuf:"bytes,1,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	// Epoch-nanosecond deadline at which cool-off ends (derived from the
+	// persisted cool-off start plus the window, for retry determinism).
+	CooloffEndsAtUnixNs int64 `protobuf:"varint,2,opt,name=cooloff_ends_at_unix_ns,json=cooloffEndsAtUnixNs,proto3" json:"cooloff_ends_at_unix_ns,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -3223,14 +3512,22 @@ func (x *ScenePublishCoolOffStartedEvent) GetCooloffEndsAtUnixNs() int64 {
 	return 0
 }
 
+// ScenePublishResolvedEvent announces that an attempt reached a terminal status
+// (PUBLISHED or ATTEMPT_FAILED). Emitted as scene_publish_resolved.
 type ScenePublishResolvedEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AttemptId     string                 `protobuf:"bytes,1,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
-	Outcome       string                 `protobuf:"bytes,2,opt,name=outcome,proto3" json:"outcome,omitempty"`                                  // "PUBLISHED" | "ATTEMPT_FAILED"
-	FailureReason string                 `protobuf:"bytes,3,opt,name=failure_reason,json=failureReason,proto3" json:"failure_reason,omitempty"` // empty unless ATTEMPT_FAILED
-	TallyYes      int32                  `protobuf:"varint,4,opt,name=tally_yes,json=tallyYes,proto3" json:"tally_yes,omitempty"`
-	TallyNo       int32                  `protobuf:"varint,5,opt,name=tally_no,json=tallyNo,proto3" json:"tally_no,omitempty"`
-	TallyPending  int32                  `protobuf:"varint,6,opt,name=tally_pending,json=tallyPending,proto3" json:"tally_pending,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The publication attempt's ID.
+	AttemptId string `protobuf:"bytes,1,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	// The terminal outcome: "PUBLISHED" or "ATTEMPT_FAILED".
+	Outcome string `protobuf:"bytes,2,opt,name=outcome,proto3" json:"outcome,omitempty"`
+	// The failure cause; empty unless outcome is ATTEMPT_FAILED.
+	FailureReason string `protobuf:"bytes,3,opt,name=failure_reason,json=failureReason,proto3" json:"failure_reason,omitempty"`
+	// Final yes-vote count.
+	TallyYes int32 `protobuf:"varint,4,opt,name=tally_yes,json=tallyYes,proto3" json:"tally_yes,omitempty"`
+	// Final no-vote count.
+	TallyNo int32 `protobuf:"varint,5,opt,name=tally_no,json=tallyNo,proto3" json:"tally_no,omitempty"`
+	// Final pending (never-cast) count.
+	TallyPending  int32 `protobuf:"varint,6,opt,name=tally_pending,json=tallyPending,proto3" json:"tally_pending,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3307,10 +3604,15 @@ func (x *ScenePublishResolvedEvent) GetTallyPending() int32 {
 	return 0
 }
 
+// ScenePublishWithdrawnEvent announces that the scene owner withdrew an active
+// attempt (a companion to the resolved event so renderers can distinguish a
+// withdrawal from a vote failure). Emitted as scene_publish_withdrawn.
 type ScenePublishWithdrawnEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AttemptId     string                 `protobuf:"bytes,1,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
-	WithdrawnBy   string                 `protobuf:"bytes,2,opt,name=withdrawn_by,json=withdrawnBy,proto3" json:"withdrawn_by,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The publication attempt's ID.
+	AttemptId string `protobuf:"bytes,1,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	// Character ID of the owner who withdrew the attempt.
+	WithdrawnBy   string `protobuf:"bytes,2,opt,name=withdrawn_by,json=withdrawnBy,proto3" json:"withdrawn_by,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3359,12 +3661,18 @@ func (x *ScenePublishWithdrawnEvent) GetWithdrawnBy() string {
 	return ""
 }
 
+// ScenePublishVoteAttemptsExtendedEvent announces an admin raising a scene's
+// publish-attempt budget. Emitted as scene_publish_vote_attempts_extended.
 type ScenePublishVoteAttemptsExtendedEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SceneId       string                 `protobuf:"bytes,1,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
-	Additional    int32                  `protobuf:"varint,2,opt,name=additional,proto3" json:"additional,omitempty"`
-	NewMax        int32                  `protobuf:"varint,3,opt,name=new_max,json=newMax,proto3" json:"new_max,omitempty"`
-	AdminId       string                 `protobuf:"bytes,4,opt,name=admin_id,json=adminId,proto3" json:"admin_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The scene whose budget was raised.
+	SceneId string `protobuf:"bytes,1,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	// The number of additional attempts granted.
+	Additional int32 `protobuf:"varint,2,opt,name=additional,proto3" json:"additional,omitempty"`
+	// The scene's new max-publish-attempts budget.
+	NewMax int32 `protobuf:"varint,3,opt,name=new_max,json=newMax,proto3" json:"new_max,omitempty"`
+	// Character ID of the admin who extended the budget.
+	AdminId       string `protobuf:"bytes,4,opt,name=admin_id,json=adminId,proto3" json:"admin_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
