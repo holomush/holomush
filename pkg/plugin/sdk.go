@@ -260,7 +260,7 @@ func (a *pluginServerAdapter) HandleCommand(ctx context.Context, req *pluginv1.H
 	// Single proto->cmd mapping site (holomush-peqfu). holomush-dble7 was a
 	// hand-copied receive site that silently dropped connection_id; routing
 	// through CommandRequestFromProto, guarded by the proto round-trip parity
-	// test, makes that class of omission a build failure.
+	// test, makes that class of omission a test failure.
 	cmd := CommandRequestFromProto(req.GetCommand())
 
 	// Attach an audit hint slice to the handler context so plugin code
