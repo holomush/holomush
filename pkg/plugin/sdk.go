@@ -257,24 +257,11 @@ func (a *pluginServerAdapter) HandleCommand(ctx context.Context, req *pluginv1.H
 	}
 	ctx = contextWithIncomingActorMetadata(ctx)
 
-	protoCmd := req.GetCommand()
-	cmd := CommandRequest{
-		Command:       protoCmd.GetCommand(),
-		Args:          protoCmd.GetArgs(),
-		CharacterID:   protoCmd.GetCharacterId(),
-		CharacterName: protoCmd.GetCharacterName(),
-		LocationID:    protoCmd.GetLocationId(),
-		SessionID:     protoCmd.GetSessionId(),
-		PlayerID:      protoCmd.GetPlayerId(),
-		InvokedAs:     protoCmd.GetRawInput(),
-		// Phase 5 (holomush-dble7): without this, the per-connection id sent
-		// by the host (host.go DeliverCommand, proto field 9) is dropped on
-		// receive, so binary-plugin handlers see an empty ConnectionID and
-		// `scene focus`/`scene grid` reject every web command with "requires a
-		// live connection". Lua plugins pass the struct in-process and never
-		// lose it — omitting it here is a plugin-runtime-symmetry violation.
-		ConnectionID: protoCmd.GetConnectionId(),
-	}
+	// Single proto->cmd mapping site (holomush-peqfu). holomush-dble7 was a
+	// hand-copied receive site that silently dropped connection_id; routing
+	// through CommandRequestFromProto, guarded by the proto round-trip parity
+	// test, makes that class of omission a build failure.
+	cmd := CommandRequestFromProto(req.GetCommand())
 
 	// Attach an audit hint slice to the handler context so plugin code
 	// can call pluginsdk.Audit(ctx).Deny(...) and have hints collected
