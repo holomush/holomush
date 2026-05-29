@@ -1717,7 +1717,8 @@ function on_command(ctx)
     return ctx.command .. "|" .. ctx.args .. "|" ..
            ctx.character_id .. "|" .. ctx.character_name .. "|" ..
            ctx.location_id .. "|" .. ctx.session_id .. "|" ..
-           ctx.player_id .. "|" .. ctx.invoked_as
+           ctx.player_id .. "|" .. ctx.invoked_as .. "|" ..
+           ctx.connection_id
 end
 `)
 
@@ -1743,10 +1744,15 @@ end
 		SessionID:     "01SESS",
 		PlayerID:      "01PLAYER",
 		InvokedAs:     ";",
+		// connection_id is the per-connection routing id (Phase 5). It MUST
+		// reach the Lua on_command handler — the runtime-symmetric counterpart
+		// of the binary path guarded by connection_id_roundtrip_test.go
+		// (holomush-dble7 was the binary side dropping it).
+		ConnectionID: "01CONN",
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
-	assert.Equal(t, "say|Hello!|01CHAR|Alice|01LOC|01SESS|01PLAYER|;", resp.Output)
+	assert.Equal(t, "say|Hello!|01CHAR|Alice|01LOC|01SESS|01PLAYER|;|01CONN", resp.Output)
 }
 
 func TestLuaHostDeliverCommandWithHostFunctions(t *testing.T) {
