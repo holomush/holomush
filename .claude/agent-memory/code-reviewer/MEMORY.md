@@ -286,6 +286,29 @@ Keep under 200 lines. Curate — don't hoard.
   runtime-specific code, but the policy/manifest gate MUST be at the
   shared site.
 
+- **Focus per-connection delta delivery is asymmetric BY DESIGN — not a
+  symmetry violation.** Two distinct focus delivery seams: (1) session-level
+  `focus.StreamSender` (`coordinator.go:22`, `JoinFocus → StreamSender.Send →
+  SessionStreamRegistry.Send → r.channels[sessionID]`, `join.go:51`) wired on
+  the COORDINATOR in prod (`sub_grpc.go:447`) — both runtimes use it; (2)
+  per-connection `focus.ConnectionSender` (binary host field, `host_service.go:255,315`
+  AutoFocusOnJoin/SetConnectionFocus → `SendToConnection → r.connections`).
+  ConnectionSender is **nil in production** (`core.go:405-422` PluginSubsystemConfig
+  omits it; `sub_grpc.go` never sets it) — per-connection deltas are SKIPPED in
+  prod today. Lua DELIBERATELY drops per-connection deltas: `focus_ops_adapter.go:46-49`
+  ("Lua plugins react to focus events via JetStream, not via the RPC return
+  value"). So neither runtime drives per-connection deltas in prod; both deliver
+  session-level via the same coordinator StreamSender. A binary-only
+  `ConnectionSender` field/wiring is NOT a privilege gradient — it's
+  runtime-specific delta delivery, not a trust/policy/manifest gate (those stay
+  at `event_emitter.go::Emit`). Both Subscribe registrations (`server.go:822`
+  session-wide Register + `:872` RegisterConnection) write the SAME ctrlCh, so a
+  single-connection joiner gets delivery via session-level StreamSender
+  regardless of ConnectionSender. Trap: a "binary AutoFocusOnJoin delivery never
+  wired in prod" claim is FACTUALLY true (ConnectionSender nil) but does NOT
+  imply a missing capability — session-level delivery covers it. Encountered:
+  holomush-y5inx.9 harness focus wiring (2026-05-28).
+
 - **Plugin emit token store: pluginName binding is the cross-plugin
   defense**: `emitTokenStore.Lookup(pluginName, token)` rejects when the
   stored entry's pluginName != caller pluginName. The caller pluginName
@@ -363,6 +386,26 @@ Keep under 200 lines. Curate — don't hoard.
   to exercise. `stream_access_test.go:39` explicitly documents the
   rejection: `{"returns false for old colon-style scene stream",
   "scene:01ABC:ic", false}`. Encountered: iwzt.9-11 (2026-05-21).
+  (c) **Harness scene-helper REAL-vs-synthetic distinction**: `Session.CreateScene`
+  (`integrationtest/session.go:465`) drives the REAL `SceneServiceClient().CreateScene`
+  RPC → core-scenes mints a BARE ULID (`service.go:1113`, holomush-y5inx) and persists
+  a backing row; `Server.NewSceneWithoutMember`/`NewScene` (`harness.go:569`) return a
+  SYNTHETIC `idgen.New()` ULID with NO backing row. A "real CreateScene bare-ULID"
+  regression claim is only honored by the `CreateScene` helper. Confirmed: y5inx.4
+  (2026-05-28) — its INV-Y5INX-2 spec correctly uses `CreateScene`.
+  (d) **Sensitivity-fence INV direction** (`internal/plugin/sensitivity_fence.go:17-22`,
+  `EnforceSensitivity`): manifest=never + claim=true → REJECT **INV-6** (`EVENT_SENSITIVITY_NOT_DECLARED`);
+  manifest=always + claim=false → REJECT **INV-7** (`EVENT_SENSITIVITY_REQUIRED`). So a
+  `sensitivity: never` type (e.g. `scene_publish_started`, plugin.yaml:99-100) emitted with
+  `Sensitive=true` (EmitSceneICContent) is an INV-6 rejection — emit it plaintext via
+  `EmitScenePlaintextContent` (Sensitive=false) instead. A scene-crypto test comment citing
+  "INV-7 fence" for a never-type Sensitive=true rejection would be the wrong invariant number.
+  Confirmed correct in y5inx.6 (2026-05-28). DEK participation is orthogonal to the JoinedAt
+  temporal floor: seed ALL decryptors up front in ONE `GetOrCreate` (it only applies `initial`
+  on FIRST mint, `manager.go:204-270`); the floor (JoinScene's returned JoinedAt) is the only
+  per-session differentiator. Plaintext/identity-codec events read back MetadataOnly=false
+  (`hot_jetstream.go:499` AuthGuard NOT invoked); encrypted events decrypt to MetadataOnly=false
+  for DEK participants.
 
 - **Contributor-guide example YAML/JSON MUST match the validator's regex/schema,
   not just "look plausible."** When a how-to doc shows a copy-paste registry/config

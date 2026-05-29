@@ -176,17 +176,29 @@ func (s *Server) EmitPluginEvent(ctx context.Context, plugin, eventType, payload
 // exist (via CreateScene) so core-scenes' InsertScenePose UPDATE … RETURNING
 // resolves.
 //
-// sceneID is the BARE ULID returned by Session.CreateScene; core-scenes
-// PERSISTS scene rows under the "scene-"+ULID form (newSceneID,
-// service.go:1113) and its InsertScenePose keys off that stored id via
-// parseSceneSubject(subject)[3] → UPDATE scenes WHERE id=<token> (audit.go:629,
-// :233). So the subject's scene-id token MUST be "scene-"+sceneID — NOT the
-// plan's literal sceneID.String() — for the UPDATE…RETURNING to find the row.
-// This mirrors production's own subject builder dotStyleSceneSubjectIC, which
-// is fed the stored "scene-"+ULID id (store.go:1479).
+// sceneID is the BARE ULID returned by Session.CreateScene. core-scenes
+// persists scene rows under that bare id (newSceneID, service.go:1113,
+// holomush-y5inx) and its InsertScenePose keys off it via
+// parseSceneSubject(subject)[3] → UPDATE scenes WHERE id=<token>. The subject's
+// scene-id token is the bare sceneID — identical to production's own subject
+// builder dotStyleSceneSubjectIC, which is fed the stored bare id.
 func (s *Server) EmitSceneICContent(ctx context.Context, plugin string, sceneID, actorID ulid.ULID, eventType, payloadJSON string) EmittedEvent {
 	return s.emitPluginEventForScene(ctx, plugin,
-		"scene-"+sceneID.String(), actorID, eventType, payloadJSON, true)
+		sceneID.String(), actorID, eventType, payloadJSON, true)
+}
+
+// EmitScenePlaintextContent emits a non-sensitive (Sensitive=false) scene IC
+// event for an ARBITRARY scene + actor — used to seed notice-type content
+// (sensitivity: never events such as scene_publish_started, scene_join_ic, etc.)
+// into a CreateScene-created scene. Requires WithPluginCrypto + WithInTreePlugins.
+// The scene row MUST already exist (via CreateScene).
+//
+// Complement of EmitSceneICContent (which always emits Sensitive=true for
+// content events). Use this for event types whose manifest declares
+// sensitivity: never; the INV-6 fence rejects Sensitive=true for those types.
+func (s *Server) EmitScenePlaintextContent(ctx context.Context, plugin string, sceneID, actorID ulid.ULID, eventType, payloadJSON string) EmittedEvent {
+	return s.emitPluginEventForScene(ctx, plugin,
+		sceneID.String(), actorID, eventType, payloadJSON, false)
 }
 
 // emitPluginEventForScene is the parameterized core extracted from
@@ -202,7 +214,7 @@ func (s *Server) EmitSceneICContent(ctx context.Context, plugin string, sceneID,
 // audit.go:629) and UPDATEs scenes WHERE id=<sceneSubjectID> … RETURNING
 // (requires the matching scene row). Callers own forming that token:
 // EmitPluginEvent passes the bare WithPluginCrypto sceneID (its self-seeded
-// row uses the bare form); EmitSceneICContent passes "scene-"+ULID (matching
+// row uses the bare form); EmitSceneICContent passes the bare ULID (matching
 // CreateScene's stored id).
 //
 // Panics via requirePluginCrypto if the substrate was not wired.
@@ -361,41 +373,112 @@ func (s *Server) seedScene(ctx context.Context, pc *pluginCrypto) {
 	require.NoError(s.t, err, "integrationtest.seedScene: insert plugin_core_scenes.scenes")
 }
 
-// configureReadback wires the read-back decryptor (link 4): the REAL
-// SessionBridgeGuard (DEK-participant + plugin-manifest lookups + ABAC engine +
-// backpressure) plus the audit-chain emitter, threaded into the Manager so the
-// DecryptOwnAuditRows host RPC (and the harness's ReadBackOwnRows helper)
-// recover plaintext from a plugin's own encrypted audit rows and emit the INV-19
-// read-back audit record. Mirrors cmd/holomush/sub_grpc.go:347-366,478-485.
-// Pure construction — takes no context (all New* calls below are synchronous).
-func (s *Server) configureReadback(pc *pluginCrypto) {
-	mgr := s.pluginSub.Manager()
+// historyCrypto bundles the crypto substrate shared by the host history reader
+// (readerCryptoOptions) and the read-back decryptor (configureReadback).
+// Building these once guarantees the reader's hot-tier AuthGuard and the
+// decryptor's g2 gate are the SAME guard instance over the SAME DEK-participant
+// and plugin-manifest lookups — no divergent guards (holomush-y5inx.8).
+type historyCrypto struct {
+	// sessionGuard is the eventbus.SessionAuthGuard wrapping the real authguard
+	// (DEK-participant + plugin-manifest lookups + ABAC engine + backpressure).
+	// Threaded into history.NewReader (hot/cold tier auth) AND the read-back
+	// decryptor's g2 gate.
+	sessionGuard eventbus.SessionAuthGuard
+	// sessionAuditEm is the eventbus.SessionAuditEmitter (INV-19 plugin-decrypt
+	// audit). Wrapped by countingAuditEmitter for the decryptor; the reader's
+	// hot-tier auth path consumes the same emitter so plugin decrypts on the
+	// reader path also audit.
+	sessionAuditEm eventbus.SessionAuditEmitter
+	// auditEm is the raw QueuedEmitter retained for Shutdown (drain goroutines)
+	// and reused as the guard's BackpressureChecker.
+	auditEm *authguardaudit.Emitter
+}
 
-	auditEm, err := authguardaudit.NewQueuedEmitter(pc.publisher, authguardaudit.WithGameID(s.bus.Bus.GameID()))
-	require.NoError(s.t, err, "integrationtest.configureReadback: NewQueuedEmitter")
-	s.readbackAuditEm = auditEm
+// buildHistoryCrypto constructs the shared AuthGuard + audit-emitter substrate
+// ONCE so both the history reader and the read-back decryptor use the same
+// instances. MUST run after startPlugins (the manifest lookup needs the loaded
+// Manager) and BEFORE the host history reader is constructed (so
+// readerCryptoOptions can thread the guard into history.NewReader). Returns the
+// bundle plus the raw QueuedEmitter (retained by the caller for t.Cleanup
+// Shutdown). Pure construction — all New* calls below are synchronous.
+//
+// Free function (not a *Server method) because it runs before the *Server is
+// assembled in Start: the reader must be built with the guard threaded in, and
+// the reader is constructed before the Server struct literal.
+func buildHistoryCrypto(
+	t *testing.T,
+	pc *pluginCrypto,
+	mgr *plugins.Manager,
+	accessEngine authguard.ABACEngine,
+	gameID string,
+) *historyCrypto {
+	t.Helper()
+
+	auditEm, err := authguardaudit.NewQueuedEmitter(pc.publisher, authguardaudit.WithGameID(gameID))
+	require.NoError(t, err, "integrationtest.buildHistoryCrypto: NewQueuedEmitter")
 	sessionBridgeEm, err := authguardaudit.NewSessionBridgeEmitter(auditEm)
-	require.NoError(s.t, err, "integrationtest.configureReadback: NewSessionBridgeEmitter")
-	// Wrap so ReadBackAuditCount observes the emission synchronously (see
-	// countingAuditEmitter). The guard's BackpressureChecker still uses the raw
-	// auditEm (throttle state lives there); only the read-back audit-emit seam
-	// fed to the decryptor is wrapped.
-	countingEm := countingAuditEmitter{inner: sessionBridgeEm, n: &s.readbackAuditCount}
+	require.NoError(t, err, "integrationtest.buildHistoryCrypto: NewSessionBridgeEmitter")
 
 	guard, err := authguard.New(
 		authguard.NewDEKParticipantLookup(pc.dekMgr),
 		authguard.NewPluginManifestLookup(mgr),
-		s.accessEngine, // ABACEngine — never invoked on the plugin-readback path
-		auditEm,        // BackpressureChecker — fresh QueuedEmitter ⇒ no throttle
+		accessEngine, // ABACEngine — never invoked on the character/plugin-readback paths
+		auditEm,      // BackpressureChecker — fresh QueuedEmitter ⇒ no throttle
 	)
-	require.NoError(s.t, err, "integrationtest.configureReadback: authguard.New")
+	require.NoError(t, err, "integrationtest.buildHistoryCrypto: authguard.New")
+
+	return &historyCrypto{
+		sessionGuard:   authguard.NewSessionBridgeGuard(guard),
+		sessionAuditEm: sessionBridgeEm,
+		auditEm:        auditEm,
+	}
+}
+
+// readerCryptoOptions returns the history.Reader options that wire the shared
+// AuthGuard + DEK manager + audit emitter + codec selector into the host
+// history reader, so a SENSITIVE plugin-owned scene event read back through
+// Session.QueryStreamHistory decrypts for an authorized DEK participant
+// (hot-tier checkCharacter binding_id match) and downgrades to metadata-only
+// for a non-participant. Mirrors the production newHistoryReader shape
+// (cmd/holomush/sub_grpc.go:834-882): WithCodecSelector + WithHistoryAuth.
+//
+// The harness reader reads recent events from the hot JetStream tier, so the
+// minimum is WithHistoryAuth (no source-resolver / cold-tier fallback needed —
+// the readback event is always within JS retention).
+func (h *historyCrypto) readerCryptoOptions(pc *pluginCrypto) []history.Option {
+	return []history.Option{
+		history.WithCodecSelector(pc.selector),
+		history.WithHistoryAuth(h.sessionGuard, pc.dekMgr, h.sessionAuditEm),
+	}
+}
+
+// configureReadback wires the read-back decryptor (link 4) using the SHARED
+// SessionBridgeGuard + audit-chain emitter built once by buildHistoryCrypto,
+// threaded into the Manager so the DecryptOwnAuditRows host RPC (and the
+// harness's ReadBackOwnRows helper) recover plaintext from a plugin's own
+// encrypted audit rows and emit the INV-19 read-back audit record. Mirrors
+// cmd/holomush/sub_grpc.go:347-366,478-485.
+//
+// Reuses the guard + audit emitter built by buildHistoryCrypto (same instances
+// the history reader uses) so there is exactly one guard in the harness. Pure
+// construction — takes no context (all New* calls below are synchronous).
+func (s *Server) configureReadback(pc *pluginCrypto) {
+	s.t.Helper()
+	require.NotNil(s.t, s.histCrypto, "integrationtest.configureReadback: buildHistoryCrypto must run first")
+	mgr := s.pluginSub.Manager()
+
+	// Wrap so ReadBackAuditCount observes the emission synchronously (see
+	// countingAuditEmitter). The guard's BackpressureChecker still uses the raw
+	// auditEm (throttle state lives there); only the read-back audit-emit seam
+	// fed to the decryptor is wrapped.
+	countingEm := countingAuditEmitter{inner: s.histCrypto.sessionAuditEm, n: &s.readbackAuditCount}
 
 	src := managerSourceForHarness{mgr: mgr}
 	decryptor := history.NewReadbackDecryptor(
 		cryptowiring.OwnerMapFromManager(src),
 		cryptowiring.AlwaysSensitiveSet(src),
 		cryptowiring.CryptoKeysLookup(s.pool),
-		authguard.NewSessionBridgeGuard(guard),
+		s.histCrypto.sessionGuard,
 		pc.dekMgr,
 		countingEm,
 	)
@@ -404,6 +487,91 @@ func (s *Server) configureReadback(pc *pluginCrypto) {
 	// harness's ReadBackOwnRows helper can drive it directly without the RPC.
 	mgr.ConfigureReadbackDecryptor(decryptor)
 	s.readbackDecryptor = decryptor
+}
+
+// SeedSceneDEKParticipant mints the scene's DEK with sess as the sole
+// participant (binding_id keyed) BEFORE the sensitive emit, so the hot-tier
+// AuthGuard's checkCharacter branch PERMITS sess on read-back. GetOrCreate only
+// applies `initial` participants on FIRST mint; the publisher's emit-path
+// GetOrCreate(ctx, ctxID, nil) then finds this existing DEK, so the participant
+// set survives. Also establishes sess's player↔character binding so
+// QueryStreamHistory's binding lookup resolves to the same binding_id stamped
+// here. Requires WithPluginCrypto.
+func (s *Server) SeedSceneDEKParticipant(ctx context.Context, sceneID ulid.ULID, sess *Session) {
+	s.requirePluginCrypto("SeedSceneDEKParticipant")
+	s.t.Helper()
+	require.NotZero(s.t, sess.PlayerID, "SeedSceneDEKParticipant: session needs a non-zero PlayerID (use ConnectAuthed*, not ConnectGuest)")
+	bindingID := s.SeedCharacterBinding(ctx, sess)
+	ctxID := dek.ContextID{Type: "scene", ID: sceneID.String()}
+	_, err := s.pluginCrypto.dekMgr.GetOrCreate(ctx, ctxID, []dek.Participant{{
+		PlayerID:    sess.PlayerID.String(),
+		CharacterID: sess.CharacterID.String(),
+		BindingID:   bindingID,
+		JoinedAt:    time.Now().UTC(),
+		AddedVia:    "integrationtest.SeedSceneDEKParticipant",
+	}})
+	require.NoError(s.t, err, "integrationtest.SeedSceneDEKParticipant: GetOrCreate DEK")
+}
+
+// SeedSceneDEKParticipants mints the scene's DEK with ALL provided sessions as
+// participants in a SINGLE GetOrCreate call. This is the multi-participant
+// variant of SeedSceneDEKParticipant, required when more than one session must
+// decrypt sensitive events on the same scene.
+//
+// GetOrCreate applies the initial participant set ONLY on first mint, so minting
+// with one session and then calling again for another would leave the second
+// session outside the DEK participant set — the AuthGuard would deny their
+// decrypt and return metadata-only. Calling with all sessions at once avoids
+// that. Also establishes each session's player↔character binding so
+// QueryStreamHistory's binding lookup resolves to the same binding_id stamped
+// here. Requires WithPluginCrypto.
+func (s *Server) SeedSceneDEKParticipants(ctx context.Context, sceneID ulid.ULID, sessions ...*Session) {
+	s.requirePluginCrypto("SeedSceneDEKParticipants")
+	s.t.Helper()
+	participants := make([]dek.Participant, 0, len(sessions))
+	for _, sess := range sessions {
+		require.NotZero(s.t, sess.PlayerID, "SeedSceneDEKParticipants: every session needs a non-zero PlayerID (use ConnectAuthed*, not ConnectGuest)")
+		bindingID := s.SeedCharacterBinding(ctx, sess)
+		participants = append(participants, dek.Participant{
+			PlayerID:    sess.PlayerID.String(),
+			CharacterID: sess.CharacterID.String(),
+			BindingID:   bindingID,
+			JoinedAt:    time.Now().UTC(),
+			AddedVia:    "integrationtest.SeedSceneDEKParticipants",
+		})
+	}
+	ctxID := dek.ContextID{Type: "scene", ID: sceneID.String()}
+	_, err := s.pluginCrypto.dekMgr.GetOrCreate(ctx, ctxID, participants)
+	require.NoError(s.t, err, "integrationtest.SeedSceneDEKParticipants: GetOrCreate DEK")
+}
+
+// SeedCharacterBinding ensures sess's character has an active player↔character
+// binding row and returns its binding_id — the value QueryStreamHistory's
+// binding lookup (BindingRepository.Current) resolves and the AuthGuard's
+// checkCharacter compares against the DEK participant set. Idempotent: an
+// existing active binding is reused. Requires WithPluginCrypto.
+func (s *Server) SeedCharacterBinding(ctx context.Context, sess *Session) string {
+	s.requirePluginCrypto("SeedCharacterBinding")
+	s.t.Helper()
+	require.NotZero(s.t, sess.PlayerID, "SeedCharacterBinding: session needs a non-zero PlayerID (use ConnectAuthed*, not ConnectGuest)")
+	repo := worldpg.NewBindingRepository(s.pool)
+	bindingID, err := repo.Current(ctx, sess.CharacterID.String())
+	if err == nil && bindingID != "" {
+		return bindingID
+	}
+	// Only fall back to Create on the explicit not-found miss; surface any
+	// other repo error (e.g. BINDING_STORE_QUERY_FAILED) instead of masking it
+	// behind a duplicate-row Create.
+	if err != nil {
+		oe, ok := oops.AsOops(err)
+		if !ok || oe.Code() != "BINDING_NOT_FOUND" {
+			require.NoError(s.t, err, "integrationtest.SeedCharacterBinding: Current")
+		}
+	}
+	bindingID, err = repo.Create(ctx, sess.PlayerID.String(), sess.CharacterID.String(),
+		"integrationtest.SeedCharacterBinding")
+	require.NoError(s.t, err, "integrationtest.SeedCharacterBinding: Create binding")
+	return bindingID
 }
 
 // managerSourceForHarness adapts *plugins.Manager to

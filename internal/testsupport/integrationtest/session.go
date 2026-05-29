@@ -7,7 +7,6 @@ package integrationtest
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
@@ -41,6 +40,10 @@ type Session struct {
 
 	// SessionID is the game session identifier returned by SelectCharacter.
 	SessionID string
+	// PlayerID is the ULID of the player account that owns CharacterID. Set at
+	// connect time; used by crypto helpers that need the player_id for DEK
+	// participant rows / bindings (e.g. SeedSceneDEKParticipant).
+	PlayerID ulid.ULID
 	// CharacterID is the ULID of the in-game character for this session.
 	CharacterID ulid.ULID
 	// CharacterName is the display name of the character.
@@ -468,10 +471,9 @@ func (s *Session) CreateScene(ctx context.Context, locationID ulid.ULID) ulid.UL
 		Visibility:  "open",
 	})
 	require.NoError(s.server.t, err, "integrationtest.Session.CreateScene")
-	// core-scenes stamps scene IDs as "scene-"+ULID (plugins/core-scenes/service.go:1113);
-	// strip the prefix before parsing the underlying ULID.
-	raw := strings.TrimPrefix(resp.GetScene().GetId(), "scene-")
-	id, err := ulid.Parse(raw)
+	// core-scenes mints bare ULID scene ids (plugins/core-scenes/service.go:1113,
+	// holomush-y5inx). The returned id parses directly — no prefix to strip.
+	id, err := ulid.Parse(resp.GetScene().GetId())
 	require.NoError(s.server.t, err, "integrationtest.Session.CreateScene: parse scene id")
 	return id
 }
@@ -661,6 +663,7 @@ func (p *AuthedPlayer) OpenWebSession(ctx context.Context) *Session {
 	sess := &Session{
 		server:             p.server,
 		SessionID:          selResp.GetSessionId(),
+		PlayerID:           p.PlayerID,
 		CharacterID:        p.CharacterID,
 		CharacterName:      selResp.GetCharacterName(),
 		LocationID:         persisted.LocationID,

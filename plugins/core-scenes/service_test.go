@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -599,7 +600,10 @@ func TestSceneServiceCreateScenePersistsTitleAndOwnerWhenRequestIsValid(t *testi
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp.GetScene())
-	assert.True(t, strings.HasPrefix(resp.GetScene().GetId(), "scene-"))
+	assert.False(t, strings.HasPrefix(resp.GetScene().GetId(), "scene-"),
+		"scene id is a bare ULID (holomush-y5inx)")
+	_, idErr := ulid.Parse(resp.GetScene().GetId())
+	assert.NoError(t, idErr, "scene id parses as a bare ULID")
 	assert.Equal(t, "Tea at the Manor", resp.GetScene().GetTitle(), "title should be trimmed")
 	assert.Equal(t, "char-alice", resp.GetScene().GetOwnerId())
 	assert.Equal(t, string(SceneStateActive), resp.GetScene().GetState())
@@ -1735,4 +1739,14 @@ type erroringIsParticipantStore struct {
 
 func (e *erroringIsParticipantStore) IsParticipant(_ context.Context, _, _ string) (bool, error) {
 	return false, e.err
+}
+
+func TestNewSceneIDReturnsBareULIDWithoutPrefix(t *testing.T) {
+	id, err := newSceneID()
+	require.NoError(t, err)
+	assert.False(t, strings.HasPrefix(id, "scene-"),
+		"scene id must be a bare ULID, not a scene- prefixed string (holomush-y5inx)")
+	parsed, perr := ulid.Parse(id)
+	require.NoError(t, perr, "scene id must parse as a bare ULID")
+	assert.Equal(t, id, parsed.String(), "round-trip: stored id equals its ULID string form")
 }

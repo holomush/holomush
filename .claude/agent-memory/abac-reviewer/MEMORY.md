@@ -11,6 +11,19 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
 
 ## Known invariants to check
 
+- **History-decrypt gate ≠ ABAC engine (y5inx.8, 2026-05-28)**: `authguard.checkCharacter`
+  (`internal/eventbus/authguard/guard.go:67-79`) gates SENSITIVE history decrypt by
+  binding_id membership in the DEK participant set — the ABACEngine is consulted ONLY on
+  the player branch, NEVER character. So an allow-all policy engine in a test harness does
+  NOT make the decrypt gate trivially pass; the gate is the real DEK-participant lookup.
+  Scene `.ic` streams are private (membership-gated via `sessionHasMembership`, I-17,
+  `stream_access.go:85-115`); ABAC never consulted for them. Two distinct layers: I-17
+  membership (can SEE the frame) vs decrypt-gate AuthGuard (can decrypt). A scene member
+  who is NOT a DEK participant correctly gets metadata-only (dispatcher.go:310-314), never
+  plaintext, never error-fallthrough. When reviewing harness/test-support wiring that
+  replicates this, confirm identity is built from session-record data (PlayerID/CharacterID
+  + bindings.Current), gated on `cryptoEnabled && bindings != nil`, not client-supplied.
+
 - `context.Background()` usage in access-critical paths loses auth context — always flag
 - `TODO`/`FIXME` comments deferring security checks are blocking, not informational
 - DSL attribute names must be validated against an allowlist; arbitrary strings are an injection surface
