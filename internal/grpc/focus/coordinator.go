@@ -123,8 +123,10 @@ type SetConnectionFocusResult struct {
 type defaultCoordinator struct {
 	sessionStore      session.Store
 	streamSender      StreamSender
+	connectionSender  ConnectionSender
 	streamContributor StreamContributor
 	policies          map[session.FocusKind]KindPolicy
+	gameID            string
 
 	// Settings stores for preference resolution.
 	gameSettings      settings.Settings
@@ -146,6 +148,20 @@ func WithSessionStore(store session.Store) CoordinatorOption {
 // WithStreamSender sets the stream sender.
 func WithStreamSender(sender StreamSender) CoordinatorOption {
 	return func(c *defaultCoordinator) { c.streamSender = sender }
+}
+
+// WithConnectionSender sets the per-Connection stream sender used to deliver
+// focus-driven subscription deltas (INV-FS-1: the coordinator is the sole
+// driver). A nil sender disables per-connection delta delivery (best-effort).
+func WithConnectionSender(sender ConnectionSender) CoordinatorOption {
+	return func(c *defaultCoordinator) { c.connectionSender = sender }
+}
+
+// WithGameID sets the game ID used to compute focus-managed scene stream
+// names (events.<gameID>.scene.<id>.{ic,ooc}). Empty defaults to "main" at
+// the call site of ComputeFocusManagedStreams' caller.
+func WithGameID(gameID string) CoordinatorOption {
+	return func(c *defaultCoordinator) { c.gameID = gameID }
 }
 
 // WithKindPolicy registers a KindPolicy for its kind.

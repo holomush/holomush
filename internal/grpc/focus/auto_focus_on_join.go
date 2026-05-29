@@ -175,5 +175,11 @@ func (c *defaultCoordinator) AutoFocusOnJoin(
 		// outcome == "membership_absent" is handled in the error path above.
 	}
 
+	// INV-FS-1: drive per-connection subscription deltas at the common path.
+	// Focused conns were on grid before this call (INV-P5-11 skips already-focused
+	// conns), so the old stream set is the grid/location set (nil FocusKey).
+	sceneFk := &session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneID}
+	c.driveFocusDeltas(ctx, resp.SessionID, resp.CharLocationID, nil, sceneFk, resp.FocusedConnectionIDs)
+
 	return resp, nil
 }
