@@ -1,6 +1,0 @@
-# SPDX-License-Identifier: Apache-2.0
-# SP0 proto-doc ratchet registry (holomush-300ad).
-# INV-4: every entry MUST match a buf.yaml lint.ignore_only.COMMENTS line
-# exactly AND cite an OPEN bead. Document a proto → delete BOTH its buf.yaml
-# line and this entry, then close the bead. Delete this file when empty.
-pending: []

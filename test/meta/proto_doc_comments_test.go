@@ -198,3 +198,22 @@ func TestBufYAMLEnablesComments(t *testing.T) {
 	require.Contains(t, string(data), "- COMMENTS",
 		"buf.yaml lint.use must enable the COMMENTS category (INV-1)")
 }
+
+// TestProtoDocInvariantsHaveTests guards the spec's "every invariant has an
+// enforcing test" discipline: INV-1/3/5 each map to a named test. (INV-2 is
+// buf lint in CI; INV-4's doc-ratchet bijection was retired once every proto
+// was documented and full COMMENTS enforcement landed — SP0 close-out.)
+func TestProtoDocInvariantsHaveTests(t *testing.T) {
+	required := []string{
+		"TestBufYAMLEnablesComments",  // INV-1
+		"TestProtoCommentsNoNameEcho", // INV-3
+		"TestLintProtoRunsNameEcho",   // INV-5
+	}
+	root := findRepoRoot(t)
+	b, err := os.ReadFile(filepath.Join(root, "test", "meta", "proto_doc_comments_test.go"))
+	require.NoError(t, err)
+	src := string(b)
+	for _, name := range required {
+		require.Containsf(t, src, "func "+name, "missing enforcing test %s", name)
+	}
+}

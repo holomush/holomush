@@ -11,9 +11,10 @@ paths:
 # Proto Doc-Comment Conventions
 
 Every message, field, RPC, service, enum, and enum value MUST carry a leading
-doc comment. Enforced by buf's `COMMENTS` lint category (ratcheted per-proto in
-`buf.yaml` `lint.ignore_only.COMMENTS`) plus a name-echo quality gate
-(`test/meta/proto_doc_comments_test.go`, run by `task lint:proto`).
+doc comment. Enforced unconditionally by buf's `COMMENTS` lint category plus a
+name-echo quality gate (`test/meta/proto_doc_comments_test.go`), both run by
+`task lint:proto`. There is no exemption mechanism: a new proto element with no
+leading comment fails the build.
 
 ## What a good comment says
 
@@ -37,10 +38,14 @@ If the proto and its handler disagree (ignored field, unimplemented RPC,
 overridden default), file `bd create -t bug` capturing the mismatch and document
 the CURRENT behavior. Do NOT change the schema as part of SP0.
 
-## Ratchet workflow
+## Adding a new proto
 
-1. Document the proto fully.
-2. Remove its line from `buf.yaml` `lint.ignore_only.COMMENTS` AND its
-   `api/proto/doc-ratchet.yaml` entry (the bijection test enforces both).
-3. Close the proto's authoring bead.
-4. Confirm `task lint:proto` is green.
+There is no ratchet — enforcement is unconditional. A new proto (or any new
+element on an existing one) MUST be fully documented in the same change that
+introduces it; `task lint:proto` fails otherwise. Document every element,
+ground each comment in its Go handler, then confirm `task lint:proto` is green.
+
+> The SP0 rollout used a temporary per-proto `lint.ignore_only.COMMENTS` ratchet
+> plus an `api/proto/doc-ratchet.yaml` registry to bring the existing 14 protos
+> up to coverage incrementally (epic holomush-300ad). Both were removed once
+> coverage was complete; this note is historical.

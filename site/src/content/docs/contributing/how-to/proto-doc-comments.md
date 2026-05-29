@@ -38,23 +38,19 @@ Handler locations by proto package:
 | `plugin/audit` | `plugins/core-scenes/audit.go` |
 | `hostfunc` | `internal/plugin/` |
 
-## Ratchet workflow
+## Adding a new proto
 
-Coverage can only grow. The `buf.yaml` `lint.ignore_only.COMMENTS` block exempts
-protos that are not yet fully documented. To document a proto and remove its
-exemption:
+Enforcement is unconditional — there is no exemption mechanism. A new proto, or
+any new element on an existing one, MUST be fully documented in the same change
+that introduces it; `task lint:proto` fails otherwise. Document every message,
+field, RPC, service, enum, and enum value, ground each comment in its Go
+handler, then confirm `task lint:proto` passes.
 
-1. Document every message, field, RPC, service, enum, and enum value in the proto.
-2. Remove its line from `buf.yaml` `lint.ignore_only.COMMENTS` AND its entry in
-   `api/proto/doc-ratchet.yaml` (the bijection test requires both to match).
-3. Close the proto's authoring bead.
-4. Confirm `task lint:proto` passes — buf's `COMMENTS` category now enforces
-   full coverage on this proto.
-
-The registry at `api/proto/doc-ratchet.yaml` lists any proto still awaiting full
-documentation alongside its tracking bead; it is empty once every proto is
-covered. The bijection test (`test/meta/proto_doc_ratchet_test.go`) ensures the
-registry and the buf ratchet stay in sync.
+> During the SP0 rollout (epic `holomush-300ad`), a temporary per-proto
+> `buf.yaml` `lint.ignore_only.COMMENTS` ratchet plus an
+> `api/proto/doc-ratchet.yaml` registry brought the existing 14 protos up to
+> coverage incrementally. Both were removed once coverage was complete; the
+> `COMMENTS` category now applies to every proto with no exemptions.
 
 ## Proto ↔ handler mismatch protocol
 
