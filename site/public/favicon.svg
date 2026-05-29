@@ -1,0 +1,8 @@
+<svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="HoloMUSH">
+<defs>
+<linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#34d6f6"/><stop offset="1" stop-color="#1565c0"/></linearGradient>
+<mask id="cut"><rect width="256" height="256" rx="58" fill="#fff"/><path d="M89.92 188L74.08 188L74.08 71.20L89.92 71.20L89.92 100L89.76 116.80L89.92 116.80Q91.04 108.16 97.20 103.28Q103.36 98.40 113.44 98.40Q126.56 98.40 134.40 106.72Q142.24 115.04 142.24 129.12L142.24 188L126.40 188L126.40 131.52Q126.40 122.08 121.60 116.96Q116.80 111.84 108.48 111.84Q99.84 111.84 94.88 117.20Q89.92 122.56 89.92 132.16" fill="#000"/></mask>
+</defs>
+<rect width="256" height="256" rx="58" fill="url(#g)" mask="url(#cut)"/>
+<rect x="158" y="170" width="46" height="16" rx="3" fill="#ffb300"/>
+</svg>
