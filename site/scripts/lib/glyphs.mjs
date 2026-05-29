@@ -14,10 +14,18 @@ const _buf = readFileSync(FONT);
 const font = opentype.parse(_buf.buffer.slice(_buf.byteOffset, _buf.byteOffset + _buf.byteLength));
 
 // Return { d, width } for `text` rendered with baseline at (x,y), em size `size`.
+// Composed glyph-by-glyph: opentype.js v2.x crashes shaping a multi-glyph string
+// against JetBrains Mono ("substitutionType 62 ... not yet supported" — an
+// unsupported GSUB ccmp lookup format). Per-glyph rendering bypasses the string
+// shaper, and a monospace wordmark wants no kerning or code ligatures anyway.
 export function glyphPath(text, x, y, size) {
-  const path = font.getPath(text, x, y, size);
-  const adv = font.getAdvanceWidth(text, size);
-  return { d: path.toPathData(2), width: adv };
+  let cursor = x;
+  let d = '';
+  for (const ch of text) {
+    d += font.getPath(ch, cursor, y, size).toPathData(2);
+    cursor += font.getAdvanceWidth(ch, size);
+  }
+  return { d, width: cursor - x };
 }
 
 export const EM = font.unitsPerEm;
