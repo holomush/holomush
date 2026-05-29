@@ -24,7 +24,7 @@ Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/do
 
 | Page (slug/path)                | Orient | Aud | Mode | Clarity | Ex | Term | Xlink | Concise | Total | Priority | Biggest issue |
 | ------------------------------- | ------ | --- | ---- | ------- | -- | ---- | ----- | ------- | ----- | -------- | ------------- |
-| `guide/index.md`                | 2      | 2   | 2    | 2       | 1  | 2    | 2     | 2       | 15    | OK       | None material; "build" section could link to the world-model explanation |
+| `guide/index.mdx`               | 2      | 2   | 2    | 2       | 1  | 2    | 2     | 2       | 15    | OK       | None material; "build" section could link to the world-model explanation |
 | `guide/explanation/the-world.md`| 1      | 2   | 1    | 2       | 2  | 1    | 1     | 1       | 11    | P2       | Uses "rooms" ("dig new rooms") — terminology violation; opener lacks audience cue |
 | `guide/how-to/connecting.md`    | 2      | 2   | 2    | 2       | 2  | 2    | 1     | 2       | 15    | OK       | No link to Commands reference from the "Your First Connection" section |
 | `guide/how-to/building.md`      | 1      | 2   | 0    | 2       | 1  | 1    | 1     | 1       | 9     | P1       | Mode: concept-lecture in a how-to with no actual steps; also uses "rooms" |
@@ -36,7 +36,7 @@ Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/do
 
 | Page (slug/path)                                        | Orient | Aud | Mode | Clarity | Ex | Term | Xlink | Concise | Total | Priority | Biggest issue |
 | ------------------------------------------------------- | ------ | --- | ---- | ------- | -- | ---- | ----- | ------- | ----- | -------- | ------------- |
-| `operating/index.md`                                    | 2      | 2   | 2    | 2       | 1  | 2    | 2     | 2       | 15    | OK       | None material |
+| `operating/index.mdx`                                   | 2      | 2   | 2    | 2       | 1  | 2    | 2     | 2       | 15    | OK       | None material |
 | `operating/explanation/authentication.md`               | 2      | 2   | 2    | 2       | 1  | 2    | 2     | 2       | 15    | OK       | None material |
 | `operating/explanation/plugin-security.md`              | 2      | 2   | 2    | 1       | 0  | 2    | 2     | 1       | 12    | P2       | No example of what a flagged timeout or registry-full looks like; prose is dense internal-tech |
 | `operating/how-to/authentication-recovery.md`           | 2      | 2   | 2    | 2       | 1  | 2    | 2     | 2       | 15    | OK       | "Without email" section is a stub caution block; steps are absent |
@@ -66,7 +66,7 @@ Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/do
 
 | Page (slug/path)                                     | Orient | Aud | Mode | Clarity | Ex | Term | Xlink | Concise | Total | Priority | Biggest issue |
 | ---------------------------------------------------- | ------ | --- | ---- | ------- | -- | ---- | ----- | ------- | ----- | -------- | ------------- |
-| `extending/index.md`                                 | 2      | 2   | 2    | 2       | 1  | 2    | 2     | 2       | 15    | OK       | None material |
+| `extending/index.mdx`                                | 2      | 2   | 2    | 2       | 1  | 2    | 2     | 2       | 15    | OK       | None material |
 | `extending/explanation/audit-chain.md`               | 1      | 1   | 2    | 1       | 2  | 2    | 2     | 1       | 12    | P2       | Audience is "developers adding new host-side chains" but stated mid-page not in the opener; prose assumes deep internals familiarity |
 | `extending/explanation/substrate-invariants.md`      | 2      | 2   | 2    | 2       | 1  | 2    | 2     | 2       | 15    | OK       | None material |
 | `extending/how-to/abac-attribute-resolver.md`        | 2      | 2   | 2    | 2       | 2  | 2    | 2     | 2       | 16    | OK       | None material |
@@ -96,7 +96,7 @@ Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/do
 
 | Page (slug/path)                                           | Orient | Aud | Mode | Clarity | Ex | Term | Xlink | Concise | Total | Priority | Biggest issue |
 | ---------------------------------------------------------- | ------ | --- | ---- | ------- | -- | ---- | ----- | ------- | ----- | -------- | ------------- |
-| `contributing/index.md`                                    | 2      | 2   | 2    | 2       | 1  | 2    | 2     | 2       | 15    | OK       | None material |
+| `contributing/index.mdx`                                   | 2      | 2   | 2    | 2       | 1  | 2    | 2     | 2       | 15    | OK       | None material |
 | `contributing/explanation/architecture.md`                 | 1      | 1   | 2    | 1       | 1  | 2    | 1     | 1       | 10    | P2       | No orientation opener; audience assumed; diagram-heavy but prose light; missing link to event-store or gateway-boundary explanation |
 | `contributing/explanation/authentication.md`               | 1      | 1   | 1    | 1       | 1  | 2    | 2     | 1       | 10    | P2       | Mode: this reads as an internal spec dump (source file line references like `auth_service.go:81`) rather than an explanation; audience is undeclared |
 | `contributing/explanation/event-emit-pipeline.md`          | 2      | 1   | 2    | 2       | 2  | 2    | 2     | 2       | 15    | OK       | Assumes contributor audience without saying so; otherwise well-formed explanation |
@@ -124,7 +124,7 @@ Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/do
 
 | Page (slug/path)              | Orient | Aud | Mode | Clarity | Ex | Term | Xlink | Concise | Total | Priority | Biggest issue |
 | ----------------------------- | ------ | --- | ---- | ------- | -- | ---- | ----- | ------- | ----- | -------- | ------------- |
-| `reference/index.md`          | 2      | 2   | 2    | 2       | 0  | 2    | 2     | 2       | 14    | OK       | No examples; index pages don't require them but the Policy DSL Grammar entry is listed without a link |
+| `reference/index.mdx`         | 2      | 2   | 2    | 2       | 0  | 2    | 2     | 2       | 14    | OK       | No examples; index pages don't require them but the Policy DSL Grammar entry is listed without a link |
 | `reference/access-control.md` | 2      | 2   | 2    | 2       | 2  | 2    | 2     | 1       | 15    | OK       | None material; minor verbosity in the DSL section |
 | `reference/audit-subjects.md` | 1      | 1   | 2    | 1       | 1  | 2    | 1     | 1       | 10    | P2       | Opener is a mid-sentence statement about ABAC; no audience orientation; links only to a design spec, not to related operator/extending pages |
 | `reference/events.md`         | 1      | 1   | 2    | 1       | 0  | 2    | 0     | 1       | 8     | P1       | Stub index page: three list items and no prose; no orientation; no links to explanation pages; no examples |
