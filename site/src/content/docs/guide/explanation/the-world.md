@@ -2,6 +2,10 @@
 title: "The World"
 ---
 
+This page is for players and game designers who want to understand the world
+their characters inhabit — where you start, how the geography is shaped, and
+how operators build on top of it.
+
 Every HoloMUSH server starts with a **setting** — a starter world that gives
 the game its geography, theme, and landing page. Think of it as the seed that
 grows into whatever the community builds.
@@ -43,8 +47,8 @@ bioluminescent vines creeping through from somewhere tropical.
 
 ![The Doors Market — portals bolted to concrete, commerce across realities](../../../../assets/doors-market.jpg)
 
-These are just the starting locations. Builders expand the world from here — dig
-new rooms, link exits, write descriptions — all from inside the game.
+These are just the starting locations. Builders expand the world from here — carve
+out new locations, link exits, write descriptions — all from inside the game.
 
 ### The Landing Page
 
@@ -54,7 +58,7 @@ It's stored in the database, so operators can change it without editing code.
 ## Starting From Scratch
 
 Not every game wants the Crossroads. HoloMUSH also ships with a **skeleton**
-setting — a single empty room called "The Void" and nothing else. It's a blank
+setting — a single empty location called "The Void" and nothing else. It's a blank
 canvas for operators who want to build their own world from the ground up.
 
 The operator picks the setting with the `--setting` flag on first boot. After

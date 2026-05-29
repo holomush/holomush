@@ -9,7 +9,13 @@ the conceptual model — how locations, exits, and objects work — so you can
 start thinking about your world. In-game building commands will be
 documented here as they become available.
 :::
-Building is how game designers create the world that players explore. You don't need to write code — everything here happens through in-game commands. If you want to create plugin-powered mechanics or custom systems, see the [plugin development guide](/extending/) instead.
+
+This page is for **game designers** who want to understand how the HoloMUSH
+world model works before the in-game building commands arrive. If you already
+know the model and want to understand the starter world your characters
+inhabit, see [The World](/guide/explanation/the-world/). If you want to build
+plugin-powered mechanics or custom systems, see the
+[plugin development guide](/extending/).
 
 ## The World Model
 
