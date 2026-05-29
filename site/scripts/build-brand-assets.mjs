@@ -60,6 +60,20 @@ writeFileSync(`${ASSETS}/logo-dark.svg`, lockup({ id: 'd', wordColor: '#3dd6f7',
 writeFileSync(`${ASSETS}/logo-light.svg`, lockup({ id: 'l', wordColor: '#1565c0', promptOpacity: '0.55' }));
 console.log('wrote logo-dark.svg, logo-light.svg');
 
+// --- Rasterized favicons --------------------------------------------
+const faviconSvgBuf = Buffer.from(tileSvg);
+for (const s of [16, 32, 48]) {
+  await sharp(faviconSvgBuf, { density: 384 }).resize(s, s).png().toFile(`${PUBLIC}/favicon-${s}.png`);
+}
+// Legacy /favicon.png path (Safari/older) = 32px tile
+await sharp(faviconSvgBuf, { density: 384 }).resize(32, 32).png().toFile(`${PUBLIC}/favicon.png`);
+// apple-touch 180 on opaque ink (no transparency for iOS)
+await sharp(faviconSvgBuf, { density: 720 })
+  .resize(180, 180)
+  .flatten({ background: '#0b0c0e' })
+  .png().toFile(`${PUBLIC}/apple-touch-icon.png`);
+console.log('wrote PNG favicons + apple-touch-icon');
+
 // --- GitHub assets --------------------------------------------------
 // reuse mkdirSync already imported at the top of the file (Task 3)
 const GH = resolve(here, '../../assets/brand');
