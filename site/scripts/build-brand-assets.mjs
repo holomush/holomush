@@ -59,3 +59,19 @@ ${tileGroup(id)}
 writeFileSync(`${ASSETS}/logo-dark.svg`, lockup({ id: 'd', wordColor: '#3dd6f7', promptOpacity: '0.5' }));
 writeFileSync(`${ASSETS}/logo-light.svg`, lockup({ id: 'l', wordColor: '#1565c0', promptOpacity: '0.55' }));
 console.log('wrote logo-dark.svg, logo-light.svg');
+
+// --- GitHub assets --------------------------------------------------
+// reuse mkdirSync already imported at the top of the file (Task 3)
+const GH = resolve(here, '../../assets/brand');
+mkdirSync(GH, { recursive: true });
+// Org avatar: 460x460 tile on opaque ink
+await sharp(Buffer.from(tileSvg), { density: 920 })
+  .resize(460, 460).flatten({ background: '#0b0c0e' })
+  .png().toFile(`${GH}/og-avatar.png`);
+// README banner: 1280x320, dark lockup centered on ink
+const bannerLockup = await sharp(Buffer.from(lockup({ id: 'bn', wordColor: '#3dd6f7', promptOpacity: '0.5' })), { density: 300 })
+  .resize({ width: 720 }).png().toBuffer();
+await sharp({ create: { width: 1280, height: 320, channels: 4, background: '#0b0c0e' } })
+  .composite([{ input: bannerLockup, gravity: 'centre' }])
+  .png().toFile(`${GH}/readme-banner.png`);
+console.log('wrote og-avatar.png, readme-banner.png');
