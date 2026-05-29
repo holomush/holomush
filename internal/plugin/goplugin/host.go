@@ -805,18 +805,10 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 		return nil, oops.In("goplugin").With("plugin", name).With("operation", "deliver_command").Wrap(ErrPluginNotLoaded)
 	}
 
+	// Single cmd->proto mapping site (holomush-peqfu); see
+	// pluginsdk.CommandRequestToProto for the parity contract.
 	protoReq := &pluginv1.HandleCommandRequest{
-		Command: &pluginv1.CommandRequest{
-			Command:       cmd.Command,
-			Args:          cmd.Args,
-			RawInput:      cmd.InvokedAs,
-			CharacterId:   cmd.CharacterID,
-			CharacterName: cmd.CharacterName,
-			LocationId:    cmd.LocationID,
-			SessionId:     cmd.SessionID,
-			PlayerId:      cmd.PlayerID,
-			ConnectionId:  cmd.ConnectionID, // Phase 5 (holomush-5rh.14 T19 follow-up)
-		},
+		Command: pluginsdk.CommandRequestToProto(cmd),
 	}
 
 	callCtx, cancel := context.WithTimeout(ctx, DefaultEventTimeout)
