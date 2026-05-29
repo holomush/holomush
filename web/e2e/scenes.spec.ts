@@ -185,3 +185,52 @@ test.describe('Scene lifecycle (Phase 2)', () => {
     await waitForOutputMatching(page, /State: active/, before);
   });
 });
+
+test.describe('Scene focus routing (Phase 5, holomush-dble7)', () => {
+  // Reproduction for holomush-dble7: `scene focus`/`scene grid` are the only
+  // commands that hard-require req.ConnectionID (the per-stream connection_id
+  // the web client captures from the STREAM_OPENED ControlFrame and echoes on
+  // SendCommand). If the live stream is up but the command carries an empty
+  // connection_id, the plugin rejects with "requires a live connection"
+  // (plugins/core-scenes/commands.go:1146 for focus, :1092 for grid). A guest
+  // is auto-joined as the owner of the scene it creates, so membership is
+  // satisfied and the ONLY thing that can produce that message is an empty
+  // connection_id reaching the handler.
+  test('scene focus on a joined scene succeeds (does not report no live connection)', async ({
+    page,
+  }) => {
+    await connectAsGuest(page);
+
+    let before = await currentEventCount(page);
+    await sendCommand(page, 'scene create Focus Routing Test');
+    const sceneId = await extractSceneIdFromOutput(page, before);
+    expect(sceneId).toMatch(/^[0-9A-Z]{26}$/);
+
+    // Focus-substrate membership is established by `scene join` (JoinFocus),
+    // not by `scene create` (DB row only) — so join before focusing, which is
+    // the real user flow. NB: `scene join` takes a BARE id (no `#`), whereas
+    // `scene focus` REQUIRES the `#` prefix.
+    before = await currentEventCount(page);
+    await sendCommand(page, `scene join ${sceneId}`);
+    await waitForOutputMatching(page, /Joined scene/, before);
+
+    before = await currentEventCount(page);
+    await sendCommand(page, `scene focus #${sceneId}`);
+    // The dble7 bug surfaced here: an empty connection_id yielded
+    // "`scene focus` requires a live connection." instead of the success line.
+    await waitForOutputMatching(
+      page,
+      new RegExp(`now focused on Scene ${sceneId}`),
+      before,
+    );
+  });
+
+  test('scene grid succeeds (does not report no live connection)', async ({ page }) => {
+    await connectAsGuest(page);
+
+    // No scene needed — `scene grid` only requires a live per-connection id.
+    const before = await currentEventCount(page);
+    await sendCommand(page, 'scene grid');
+    await waitForOutputMatching(page, /Focused on the grid\./, before);
+  });
+});
