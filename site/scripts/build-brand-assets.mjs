@@ -74,6 +74,16 @@ await sharp(faviconSvgBuf, { density: 720 })
   .png().toFile(`${PUBLIC}/apple-touch-icon.png`);
 console.log('wrote PNG favicons + apple-touch-icon');
 
+// --- OG / social card -----------------------------------------------
+// OG card: dark lockup composited over the fal.ai backdrop, left-aligned
+const ogLockupPng = await sharp(Buffer.from(lockup({ id: 'og', wordColor: '#3dd6f7', promptOpacity: '0.5' })), { density: 300 })
+  .resize({ width: 760 }).png().toBuffer();
+await sharp(`${ASSETS}/brand/og-backdrop.png`)
+  .resize(1200, 630)
+  .composite([{ input: ogLockupPng, left: 90, top: 250 }])
+  .png().toFile(`${PUBLIC}/og-card.png`);
+console.log('wrote og-card.png');
+
 // --- GitHub assets --------------------------------------------------
 // reuse mkdirSync already imported at the top of the file (Task 3)
 const GH = resolve(here, '../../assets/brand');
