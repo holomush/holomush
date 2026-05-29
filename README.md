@@ -5,6 +5,8 @@
 
 # HoloMUSH
 
+<p align="center"><img src="assets/brand/readme-banner.png" alt="HoloMUSH" width="640"></p>
+
 A modern MUSH platform combining classic text-based multiplayer gameplay with contemporary technology.
 
 [![CI](https://github.com/holomush/holomush/actions/workflows/ci.yaml/badge.svg)](https://github.com/holomush/holomush/actions/workflows/ci.yaml)

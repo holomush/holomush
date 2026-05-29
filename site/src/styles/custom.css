@@ -1,18 +1,23 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright 2026 HoloMUSH Contributors */
 
-/* Deep-orange (primary) / amber (accent) palette mapped onto Starlight tokens */
-
+/* Brand tokens — holographic terminal (INV-1, INV-7). Amber is logo-only. */
 :root {
-  --sl-color-accent-low: #4a1505;
-  --sl-color-accent: #ff5722;
-  --sl-color-accent-high: #ffcc80;
+  --brand-cyan-bright: #3dd6f7;
+  --brand-cyan-deep: #1565c0;
+  --brand-amber: #ffb300; /* logo cursor only — never a UI accent (INV-1) */
+  --brand-ink: #0b0c0e;
+
+  /* Starlight accent = cyan only (dark mode default) */
+  --sl-color-accent-low: #07303f;
+  --sl-color-accent: #3dd6f7;
+  --sl-color-accent-high: #b3ecfb;
 }
 
 :root[data-theme='light'] {
-  --sl-color-accent-low: #ffccbc;
-  --sl-color-accent: #e64a19;
-  --sl-color-accent-high: #bf360c;
+  --sl-color-accent-low: #cdeefb;
+  --sl-color-accent: #1565c0;
+  --sl-color-accent-high: #0a3a66;
 }
 
 /* --- Light visual polish (holomush-ivwij.4): spacing only, no font changes --- */

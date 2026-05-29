@@ -7,7 +7,8 @@
     "start": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "brand:build": "node scripts/build-brand-assets.mjs"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.39.2",
@@ -17,5 +18,8 @@
     "starlight-llm-actions": "^0.8.0",
     "starlight-llms-txt": "^0.10.0",
     "starlight-sidebar-topics": "^0.7.1"
+  },
+  "devDependencies": {
+    "opentype.js": "^2.0.0"
   }
 }
