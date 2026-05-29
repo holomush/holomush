@@ -5,7 +5,7 @@
 
 # SP5 Documentation Quality Audit
 
-Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/docs/`). Scored against the 8-dimension rubric in [`contributing/reference/docs-style-guide.md`](/contributing/reference/docs-style-guide.md). Covers exactly 77 content pages (excludes root `index.mdx` splash and auto-generated `reference/events/*` sub-pages). Date: 2026-05-28.
+Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/docs/`). Scored against the 8-dimension rubric in [`contributing/reference/docs-style-guide.md`](/contributing/reference/docs-style-guide.md). Covers exactly 78 content pages (excludes root `index.mdx` splash and auto-generated `reference/events/*` sub-pages). Date: 2026-05-28.
 
 ## Summary
 
@@ -14,9 +14,9 @@ Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/do
 | guide          | 5     | 1  | 1  | 3  |
 | operating      | 23    | 1  | 6  | 16 |
 | extending      | 23    | 1  | 5  | 17 |
-| contributing   | 21    | 1  | 3  | 17 |
+| contributing   | 22    | 1  | 3  | 18 |
 | reference      | 5     | 1  | 2  | 2  |
-| **Total**      | **77**| **5**  | **17** | **55** |
+| **Total**      | **78**| **5**  | **17** | **56** |
 
 ---
 
@@ -92,7 +92,7 @@ Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/do
 
 ---
 
-## contributing (21 pages)
+## contributing (22 pages)
 
 | Page (slug/path)                                           | Orient | Aud | Mode | Clarity | Ex | Term | Xlink | Concise | Total | Priority | Biggest issue |
 | ---------------------------------------------------------- | ------ | --- | ---- | ------- | -- | ---- | ----- | ------- | ----- | -------- | ------------- |
@@ -111,6 +111,7 @@ Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/do
 | `contributing/how-to/migrate-world-querier.md`             | 2      | 2   | 2    | 2       | 2  | 2    | 1     | 2       | 15    | OK       | Missing link to contributing/explanation/architecture as context for why the boundary matters |
 | `contributing/how-to/pr-guide.md`                          | 1      | 2   | 2    | 2       | 1  | 2    | 2     | 2       | 14    | OK       | Opener does not state what a PR achieves; it immediately lists "this ensures…" items without a grounding sentence |
 | `contributing/how-to/pr-prep.md`                           | 2      | 2   | 2    | 2       | 2  | 2    | 2     | 2       | 16    | OK       | None material |
+| `contributing/how-to/proto-doc-comments.md`               | 2      | 2   | 2    | 2       | 2  | 2    | 1     | 2       | 15    | OK       | None material; could cross-link to coding standards or a proto reference |
 | `contributing/how-to/quarantine.md`                        | 2      | 2   | 2    | 2       | 2  | 2    | 2     | 2       | 16    | OK       | None material |
 | `contributing/how-to/sessions.md`                          | 2      | 2   | 2    | 2       | 2  | 2    | 1     | 2       | 15    | OK       | Missing link to CLAUDE.md or contributing/index.md as entry context |
 | `contributing/reference/coding-standards.md`               | 1      | 2   | 2    | 1       | 1  | 2    | 1     | 1       | 11    | P2       | Opener "This guide covers coding conventions" is flat; page is quite long with RFC2119 and Go sections but examples are sparse |
