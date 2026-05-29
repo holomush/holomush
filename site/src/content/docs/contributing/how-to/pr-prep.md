@@ -2,6 +2,15 @@
 title: "Pre-Push Quality Gate (`task pr-prep`)"
 ---
 
+:::note[Maintainer workflow]
+This page documents the maintainer/agent workflow; its examples assume
+[Jujutsu (jj)](https://jj-vcs.github.io/) and the project's internal tooling.
+**External contributors don't need jj** — `task pr-prep` works identically under
+standard `git`. See
+[CONTRIBUTING.md](https://github.com/holomush/holomush/blob/main/CONTRIBUTING.md)
+for the contributor workflow.
+:::
+
 `task pr-prep` is the project's mandatory pre-push gate. It MUST pass before pushing to a PR branch. HoloMUSH uses a two-lane design so the gate is always fast locally while the heavyweight integration and E2E checks run in CI.
 
 ## Lanes

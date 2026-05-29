@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+blank_issues_enabled: true
+contact_links:
+  - name: Questions & Discussions
+    url: https://github.com/holomush/holomush/discussions
+    about: Ask questions, share ideas, and discuss HoloMUSH with the community.
