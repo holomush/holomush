@@ -31,6 +31,14 @@ type Config struct {
 	// DSN value is used to validate inbound envelopes — the relay only
 	// forwards traffic destined for the configured project.
 	SentryDSN string
+	// OTLPRelayEndpoint, when non-empty, enables the /api/otlp/v1/traces
+	// endpoint that the browser OTel tracer (web/src/lib/telemetry.ts) POSTs
+	// spans to as a same-origin, ad-blocker-safe ingest. The value is the
+	// collector's OTLP/HTTP base URL (e.g. http://otel-collector:4318); the
+	// relay forwards to <base>/v1/traces. Distinct from
+	// OTEL_EXPORTER_OTLP_ENDPOINT, which is the gateway's own gRPC export
+	// target (port 4317).
+	OTLPRelayEndpoint string
 }
 
 // Server is the web HTTP server hosting ConnectRPC and static files.
@@ -76,6 +84,24 @@ func NewServer(cfg Config) (*Server, error) {
 		} else {
 			mux.Handle("/api/sentry-relay", relayHandler)
 			slog.Info("web: sentry relay registered at /api/sentry-relay")
+		}
+	}
+
+	// Register the browser OTLP trace relay if a collector endpoint is
+	// configured. The relay accepts same-origin OTLP/HTTP trace POSTs at
+	// /api/otlp/v1/traces and forwards them to the collector, bypassing the
+	// ad-blocker/CORS failures that block direct browser POSTs to an external
+	// ingest origin. A failed parse of the configured endpoint leaves the
+	// route unregistered (so a non-functional endpoint never ships) and is
+	// logged so operators notice.
+	if cfg.OTLPRelayEndpoint != "" {
+		otlpHandler, otlpErr := NewOTLPRelayHandler(cfg.OTLPRelayEndpoint)
+		if otlpErr != nil {
+			errutil.LogError(slog.Default(),
+				"web: OTLP trace relay not registered due to endpoint parse error", otlpErr)
+		} else {
+			mux.Handle("/api/otlp/v1/traces", otlpHandler)
+			slog.Info("web: OTLP trace relay registered at /api/otlp/v1/traces")
 		}
 	}
 

@@ -316,6 +316,11 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, logConfig confi
 		// /api/sentry-relay tunnel endpoint. Empty = no relay (and no
 		// open-proxy risk).
 		SentryDSN: os.Getenv("SENTRY_DSN"),
+		// Collector's OTLP/HTTP base URL for the same-origin browser trace
+		// relay at /api/otlp/v1/traces. Empty = relay disabled. This is the
+		// HTTP receiver (port 4318), distinct from OTEL_EXPORTER_OTLP_ENDPOINT
+		// (the gateway's own gRPC export target, port 4317).
+		OTLPRelayEndpoint: os.Getenv("OTLP_RELAY_ENDPOINT"),
 	})
 	if err != nil {
 		return oops.With("operation", "create web server").Wrap(err)

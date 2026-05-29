@@ -174,12 +174,15 @@ jobs:
         #
         # PUBLIC_OTEL_ENDPOINT gates the OTel-native browser tracer
         # (web/src/lib/telemetry.ts) — the project's primary, vendor-neutral
-        # telemetry path. Set it (via the PUBLIC_OTEL_ENDPOINT repo/environment
-        # variable) to a BROWSER-REACHABLE OTLP-HTTP base URL once one exists;
-        # browser spans then flow to the OTel collector, which fans out to
-        # Sentry/Tempo via its own exporters. See holomush-yak8r notes: a
-        # same-origin gateway OTLP relay (mirroring /api/sentry-relay) is the
-        # recommended prod path to dodge ad-blockers/CORS on the ingest origin.
+        # telemetry path. The same-origin gateway OTLP relay now exists
+        # (/api/otlp/v1/traces, internal/web/otlp_relay.go, mirroring
+        # /api/sentry-relay), so set PUBLIC_OTEL_ENDPOINT to "/api/otlp" (the
+        # tracer appends /v1/traces). The relay forwards to the collector,
+        # which fans out to Sentry/Tempo via its own exporters — dodging the
+        # ad-blocker/CORS failures that block direct browser POSTs to an
+        # external ingest origin. The gateway must have OTLP_RELAY_ENDPOINT set
+        # to the collector's OTLP/HTTP base URL (e.g. http://otel-collector:4318)
+        # for the relay to register. See holomush-2uogn / holomush-yak8r.
         env:
           PUBLIC_OTEL_ENDPOINT: ${{ vars.PUBLIC_OTEL_ENDPOINT }}
           PUBLIC_SENTRY_DSN: ${{ secrets.PUBLIC_SENTRY_DSN }}

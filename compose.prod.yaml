@@ -103,6 +103,13 @@ services:
     environment:
       # Empty by default — see the core service note above (no-op without a collector).
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      # Collector's OTLP/HTTP base URL for the same-origin browser trace relay
+      # at /api/otlp/v1/traces (cmd/holomush/gateway.go). Empty = relay
+      # disabled. Recommended value when the observability profile is active:
+      # http://otel-collector:4318 (the HTTP receiver — distinct from the gRPC
+      # 4317 above). Requires the gateway to share a network with the collector
+      # (the collector joins `frontend` below for exactly this).
+      OTLP_RELAY_ENDPOINT: ${OTLP_RELAY_ENDPOINT:-}
       # Gateway reads SENTRY_DSN (cmd/holomush/gateway.go); empty = disabled.
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
@@ -172,7 +179,13 @@ services:
     volumes:
       - ${CONFIG_DIR:-/opt/holomush/config}/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
     networks:
+      # backend: core/gateway gRPC export (OTEL_EXPORTER_OTLP_ENDPOINT, 4317).
+      # frontend: the gateway's same-origin OTLP/HTTP relay (OTLP_RELAY_ENDPOINT)
+      # forwards browser spans to the collector's 4318 receiver, so the
+      # collector must be reachable from the gateway's network. No ports are
+      # published, so the receiver stays internal to the compose networks.
       - backend
+      - frontend
 
   backup:
     build: ./docker/postgres-backup

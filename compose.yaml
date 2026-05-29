@@ -60,6 +60,12 @@ services:
     command: ["gateway", "--log-format", "text", "--core-addr", "core:9000", "--metrics-addr", "0.0.0.0:9101"]
     environment:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      # Same-origin browser trace relay (/api/otlp/v1/traces). Empty by
+      # default: the dev observability flow (`task dev` + `task dev:obs`) points
+      # PUBLIC_OTEL_ENDPOINT straight at localhost:4318, so the relay isn't on
+      # the dev path. Set to http://otel-collector:4318 to exercise the relay
+      # in compose (the gateway would also need the `backend` network).
+      OTLP_RELAY_ENDPOINT: ${OTLP_RELAY_ENDPOINT-}
       SENTRY_DSN: ${SENTRY_DSN-}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT-dev-local}
       SENTRY_RELEASE: ${SENTRY_RELEASE-}
