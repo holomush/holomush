@@ -27,7 +27,7 @@ type Publisher interface {
 
 // Subscriber — used by the gRPC Subscribe handler.
 type Subscriber interface {
-    OpenSession(ctx context.Context, sessionID string, filters []Subject) (SessionStream, error)
+    OpenSession(ctx context.Context, sessionID string, identity SessionIdentity, filters []Subject, minFloor time.Time) (SessionStream, error)
 }
 
 // HistoryReader — used by the gRPC QueryHistory handler.
