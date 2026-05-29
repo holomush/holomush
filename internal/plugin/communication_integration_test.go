@@ -165,10 +165,9 @@ var _ = Describe("Communication Plugin Integration", func() {
 		})
 	})
 
-	// All command tests use DeliverCommand, which correctly parses the
-	// {status, output, events} wrapper table that on_command returns.
-	// DeliverEvent+callOnCommand feeds the wrapper directly to parseEmitEvents
-	// (wrong path); DeliverCommand goes through parseCommandResponse (correct path).
+	// All command tests use DeliverCommand, the sole path that invokes
+	// on_command: it parses the {status, output, events} wrapper table the
+	// handler returns via parseCommandResponse.
 
 	Describe("Say Command Handling", func() {
 		Context("when say command is invoked with a message", func() {

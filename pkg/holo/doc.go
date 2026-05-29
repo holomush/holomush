@@ -8,7 +8,6 @@
 //
 //   - Event emission with stream targeting (location, character, global)
 //   - Formatting primitives with MU*-compatible %x codes (via [Fmt.Parse])
-//   - Typed command context for pre-parsed handler arguments
 //
 // Go plugins import this package directly. Lua plugins access the same
 // functionality via host function bindings.

@@ -888,244 +888,52 @@ func TestLuaHostNewHostWithFunctionsNilPanics(t *testing.T) {
 	_ = pluginlua.NewHostWithFunctions(nil)
 }
 
-func TestLuaHostDeliverEventOnCommandCommandEvent(t *testing.T) {
+// TestLuaHostDeliverEventCommandTypeDoesNotInvokeOnCommand locks in the single
+// command-context contract (holomush-di7w6). The only path that invokes
+// on_command is DeliverCommand (buildCommandRequestTable); the former
+// command-as-event path (DeliverEvent with Type=="command" → callOnCommand)
+// was vestigial and dead in production, so it was removed. A plugin defining
+// on_command but no on_event therefore produces no emits when a command-typed
+// event arrives through the event path — confirming on_command is never reached
+// via DeliverEvent.
+func TestLuaHostDeliverEventCommandTypeDoesNotInvokeOnCommand(t *testing.T) {
 	dir := t.TempDir()
 
-	// Plugin with on_command handler that echoes context fields
-	mainLua := `
+	// on_command would emit if (wrongly) invoked; on_event is intentionally absent.
+	writeMainLua(t, dir, `
 function on_command(ctx)
     return {
         {
-            subject = "location:" .. ctx.location_id,
+            subject = "location:" .. (ctx.location_id or ""),
             type = "echo",
-            payload = ctx.command .. "|" .. ctx.args .. "|" .. ctx.invoked_as .. "|" ..
-                      ctx.character_name .. "|" .. ctx.character_id .. "|" ..
-                      ctx.location_id .. "|" .. ctx.player_id
+            payload = "on_command_wrongly_invoked"
         }
     }
 end
-`
-	writeMainLua(t, dir, mainLua)
+`)
 
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
 	manifest := &plugins.Manifest{
-		Name:      "on-command-test",
+		Name:      "cmd-event-no-route",
 		Version:   "1.0.0",
 		Type:      plugins.TypeLua,
 		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
-	err := host.Load(context.Background(), manifest, dir)
-	require.NoError(t, err)
+	require.NoError(t, host.Load(context.Background(), manifest, dir))
 
-	event := pluginsdk.Event{
-		ID:        "01ABC",
-		Stream:    "character:char123",
-		Type:      pluginsdk.EventType("command"),
-		Timestamp: 1705591234000,
-		ActorKind: pluginsdk.ActorCharacter,
-		ActorID:   "char123",
-		Payload:   `{"name":"say","args":"Hello everyone!","invoked_as":";","character_name":"Alice","character_id":"01CHAR","location_id":"01LOC","player_id":"01PLAYER"}`,
-	}
-
-	emits, err := host.DeliverEvent(context.Background(), "on-command-test", event)
-	require.NoError(t, err)
-	require.Len(t, emits, 1)
-
-	// Verify all context fields were received correctly
-	expected := "say|Hello everyone!|;|Alice|01CHAR|01LOC|01PLAYER"
-	assert.Equal(t, expected, emits[0].Payload)
-	assert.Equal(t, "location:01LOC", emits[0].Stream)
-}
-
-func TestLuaHostDeliverEventOnCommandFallbackToOnEvent(t *testing.T) {
-	dir := t.TempDir()
-
-	// Plugin with only on_event (no on_command)
-	mainLua := `
-function on_event(event)
-    if event.type == "command" then
-        return {
-            {
-                subject = "fallback:1",
-                type = "echo",
-                payload = "fell_back_to_on_event"
-            }
-        }
-    end
-    return nil
-end
-`
-	writeMainLua(t, dir, mainLua)
-
-	host := pluginlua.NewHost()
-	defer closeHost(t, host)
-
-	manifest := &plugins.Manifest{
-		Name:      "fallback-test",
-		Version:   "1.0.0",
-		Type:      plugins.TypeLua,
-		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
-	}
-
-	err := host.Load(context.Background(), manifest, dir)
-	require.NoError(t, err)
-
-	// Command event should fall back to on_event
 	event := pluginsdk.Event{
 		ID:      "01ABC",
 		Stream:  "character:char123",
 		Type:    pluginsdk.EventType("command"),
-		Payload: `{"name":"say","args":"test"}`,
+		Payload: `{"name":"say","args":"Hello"}`,
 	}
 
-	emits, err := host.DeliverEvent(context.Background(), "fallback-test", event)
+	emits, err := host.DeliverEvent(context.Background(), "cmd-event-no-route", event)
 	require.NoError(t, err)
-	require.Len(t, emits, 1)
-	assert.Equal(t, "fell_back_to_on_event", emits[0].Payload)
-}
-
-func TestLuaHostDeliverEventOnCommandNonCommandEventUsesOnEvent(t *testing.T) {
-	dir := t.TempDir()
-
-	// Plugin with both on_command and on_event
-	mainLua := `
-function on_command(ctx)
-    return {
-        {
-            subject = "on_command:1",
-            type = "echo",
-            payload = "on_command_called"
-        }
-    }
-end
-
-function on_event(event)
-    return {
-        {
-            subject = "on_event:1",
-            type = "echo",
-            payload = "on_event_called"
-        }
-    }
-end
-`
-	writeMainLua(t, dir, mainLua)
-
-	host := pluginlua.NewHost()
-	defer closeHost(t, host)
-
-	manifest := &plugins.Manifest{
-		Name:      "both-handlers",
-		Version:   "1.0.0",
-		Type:      plugins.TypeLua,
-		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
-	}
-
-	err := host.Load(context.Background(), manifest, dir)
-	require.NoError(t, err)
-
-	// Non-command event should use on_event, not on_command
-	event := pluginsdk.Event{
-		ID:     "01ABC",
-		Stream: "location:123",
-		Type:   pluginsdk.EventType("say"),
-	}
-
-	emits, err := host.DeliverEvent(context.Background(), "both-handlers", event)
-	require.NoError(t, err)
-	require.Len(t, emits, 1)
-	assert.Equal(t, "on_event_called", emits[0].Payload)
-}
-
-func TestLuaHostDeliverEventOnCommandEmptyArgs(t *testing.T) {
-	dir := t.TempDir()
-
-	mainLua := `
-function on_command(ctx)
-    local args_value = ctx.args
-    if args_value == "" then
-        args_value = "EMPTY"
-    end
-    return {
-        {
-            subject = "test:1",
-            type = "echo",
-            payload = "args=" .. args_value
-        }
-    }
-end
-`
-	writeMainLua(t, dir, mainLua)
-
-	host := pluginlua.NewHost()
-	defer closeHost(t, host)
-
-	manifest := &plugins.Manifest{
-		Name:      "empty-args-test",
-		Version:   "1.0.0",
-		Type:      plugins.TypeLua,
-		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
-	}
-
-	err := host.Load(context.Background(), manifest, dir)
-	require.NoError(t, err)
-
-	event := pluginsdk.Event{
-		ID:      "01ABC",
-		Type:    pluginsdk.EventType("command"),
-		Payload: `{"name":"look","args":"","character_name":"Bob","location_id":"loc1"}`,
-	}
-
-	emits, err := host.DeliverEvent(context.Background(), "empty-args-test", event)
-	require.NoError(t, err)
-	require.Len(t, emits, 1)
-	assert.Equal(t, "args=EMPTY", emits[0].Payload)
-}
-
-func TestLuaHostDeliverEventOnCommandInvalidPayload(t *testing.T) {
-	dir := t.TempDir()
-
-	mainLua := `
-function on_command(ctx)
-    -- Even with invalid payload, ctx should have empty strings
-    return {
-        {
-            subject = "test:1",
-            type = "echo",
-            payload = "name=" .. (ctx.command or "nil")
-        }
-    }
-end
-`
-	writeMainLua(t, dir, mainLua)
-
-	host := pluginlua.NewHost()
-	defer closeHost(t, host)
-
-	manifest := &plugins.Manifest{
-		Name:      "invalid-payload-test",
-		Version:   "1.0.0",
-		Type:      plugins.TypeLua,
-		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
-	}
-
-	err := host.Load(context.Background(), manifest, dir)
-	require.NoError(t, err)
-
-	event := pluginsdk.Event{
-		ID:      "01ABC",
-		Type:    pluginsdk.EventType("command"),
-		Payload: "not valid json",
-	}
-
-	emits, err := host.DeliverEvent(context.Background(), "invalid-payload-test", event)
-	require.NoError(t, err)
-	require.Len(t, emits, 1)
-	// With invalid JSON, ctx.command should be empty string
-	assert.Equal(t, "name=", emits[0].Payload)
+	assert.Empty(t, emits, "command-typed events must not be routed to on_command via the event path")
 }
 
 func TestLuaHostDeliverEventMalformedEmitEventsWarnsOnNonTableEntry(t *testing.T) {
