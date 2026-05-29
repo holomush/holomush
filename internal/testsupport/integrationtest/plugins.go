@@ -30,7 +30,6 @@ import (
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
-	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/lifecycle"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
@@ -204,15 +203,12 @@ type pluginDeps struct {
 	// GameIDProvider closure so plugin emits translate legacy colon-style
 	// subjects to events.<game_id>.<ns>.<id> consistently.
 	gameID string
-	// connectionSender delivers per-Connection stream subscription deltas to the
-	// binary plugin host (focus.ConnectionSender). Wired only under
-	// WithFocusDelivery so the binary core-scenes AutoFocusOnJoin RPC handler can
-	// route the scene IC/OOC stream subscription onto the joiner's live Subscribe
-	// loop. nil leaves binary delta-delivery best-effort skipped (holomush-y5inx.9).
-	connectionSender focus.ConnectionSender
 	// pluginConfigOverrides is the per-plugin opaque config override
 	// (plugin name → key → value) threaded into PluginSubsystemConfig.
 	pluginConfigOverrides map[string]map[string]string
+	// extraPluginDirs holds additional plugin directories (e.g. test-only Lua
+	// fixtures) staged into the plugin load path after the in-tree plugins.
+	extraPluginDirs []string
 }
 
 // startPlugins constructs and starts a PluginSubsystem mirroring production
@@ -237,6 +233,24 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 	require.NoError(t,
 		assemblePluginsDir(pluginsDst, repoPluginsSrcDir(), buildDir),
 		"startPlugins: assemble plugins dir")
+
+	for _, extra := range d.extraPluginDirs {
+		// Reject a blank entry: filepath.Abs("") resolves to the current working
+		// directory, which would stage the entire repo as a bogus "plugin".
+		require.NotEmpty(t, extra, "startPlugins: extra plugin dir must not be empty")
+		abs, err := filepath.Abs(extra)
+		require.NoError(t, err, "startPlugins: resolve extra plugin dir")
+		base := filepath.Base(abs)
+		dstSub := filepath.Join(pluginsDst, base)
+		// Fail loudly on a basename collision rather than silently overwriting:
+		// the staging dest is keyed only by filepath.Base, so two extra dirs (or
+		// an extra dir clashing with an in-tree plugin) sharing a final component
+		// would otherwise clobber each other.
+		_, statErr := os.Stat(dstSub)
+		require.Truef(t, os.IsNotExist(statErr),
+			"startPlugins: extra plugin dir basename %q collides with an already-staged plugin at %s", base, dstSub)
+		require.NoError(t, copyTree(abs, dstSub), "startPlugins: stage extra plugin dir")
+	}
 
 	// WorldService — mirror internal/world/setup/subsystem.go. EventEmitter is
 	// intentionally omitted (production world/setup omits it too); world.NewService
@@ -298,7 +312,6 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 		LuaTimeout:            5 * time.Second,
 		LuaRegistryMaxSize:    1024 * 1024,
 		PluginConfigOverrides: d.pluginConfigOverrides,
-		ConnectionSender:      d.connectionSender,
 	}
 
 	ps := pluginsetup.NewPluginSubsystem(cfg)

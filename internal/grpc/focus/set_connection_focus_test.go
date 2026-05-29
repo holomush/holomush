@@ -73,8 +73,8 @@ func TestSetConnectionFocus_HappyPath(t *testing.T) {
 
 // TestSetConnectionFocus_HappyPath_ReturnsOldFocusKey verifies the
 // OldFocusKey-capture closure: when switching focus from scene A → B, the
-// returned old key matches A (T18 needs this to drive subscription_router
-// stream deltas).
+// returned old key matches A (the coordinator's driveFocusDeltas needs this to
+// drive subscription_router stream deltas).
 func TestSetConnectionFocus_HappyPath_ReturnsOldFocusKey(t *testing.T) {
 	t.Parallel()
 

@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: test-focus-join
+version: 1.0.0
+type: lua
+resource_types: []
+requires: []
+provides: []
+
+lua-plugin:
+  entry: plugin.lua
+
+commands:
+  - name: luafocusjoin
+    capabilities:
+      - action: write
+        resource: scene
+        scope: local
+    help: "Test command: auto-focuses the issuing character's connections onto a scene (Lua runtime symmetry fixture)"
+    usage: "luafocusjoin <character_id_ulid> <scene_id_ulid>"
+
+policies:
+  - name: execute-luafocusjoin
+    dsl: >-
+      permit(principal is character, action in ["execute"], resource is command) when { resource.command.name == "luafocusjoin"
+      };

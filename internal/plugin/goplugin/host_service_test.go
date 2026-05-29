@@ -1012,61 +1012,27 @@ func (failingReader) Read(_ []byte) (int, error) {
 
 var errFailingReader = oops.Errorf("simulated rand exhaustion")
 
-// stubConnectionSender records SendToConnection calls for assertion.
-type stubConnectionSender struct {
-	calls []connSendCall
-}
-
-type connSendCall struct {
-	sessionID    string
-	connectionID ulid.ULID
-	stream       string
-	add          bool
-}
-
-func (s *stubConnectionSender) SendToConnection(sessionID string, connectionID ulid.ULID, stream string, add bool) error {
-	s.calls = append(s.calls, connSendCall{sessionID, connectionID, stream, add})
-	return nil
-}
-
-// newTestServerWithConnSender creates a server with a ConnectionSender wired.
-func newTestServerWithConnSender(fc focus.Coordinator, cs *stubConnectionSender) *pluginHostServiceServer {
-	h := &Host{
-		plugins:          make(map[string]*loadedPlugin),
-		focusCoordinator: fc,
-		connectionSender: cs,
-		gameID:           "main",
-	}
-	return &pluginHostServiceServer{
-		host:       h,
-		pluginName: "test-plugin",
-	}
-}
-
-// TestSetConnectionFocus_DrivesSubscriptionDeltas verifies that a successful
-// SetConnectionFocus RPC call drives SendToConnection with the correct stream
-// adds and removes. Focus change from grid (nil) → scene → subscription_router
-// must remove the grid location stream and add the two scene IC/OOC streams.
-func TestSetConnectionFocus_DrivesSubscriptionDeltas(t *testing.T) {
+// TestSetConnectionFocus_DelegatesToCoordinator verifies that a successful
+// SetConnectionFocus RPC delegates to the focus coordinator and returns the
+// expected wire response. Delta driving is now owned by the coordinator.
+func TestSetConnectionFocus_DelegatesToCoordinator(t *testing.T) {
 	t.Parallel()
 
 	connID := ulid.Make()
 	sceneID := ulid.Make()
 	locID := ulid.Make()
-	sessionID := "sess-delta"
 
 	fc := &stubCoordinator{
 		setConnFocusResult: focus.SetConnectionFocusResult{
 			OldFocusKey:    nil, // grid → scene transition
-			SessionID:      sessionID,
+			SessionID:      "sess-delta",
 			CharLocationID: locID,
 		},
 	}
-	cs := &stubConnectionSender{}
-	srv := newTestServerWithConnSender(fc, cs)
+	srv := newTestServer(fc, nil)
 
 	connIDBuf := connID.Bytes()
-	_, err := srv.SetConnectionFocus(context.Background(), &pluginv1.PluginHostServiceSetConnectionFocusRequest{
+	resp, err := srv.SetConnectionFocus(context.Background(), &pluginv1.PluginHostServiceSetConnectionFocusRequest{
 		ConnectionId: connIDBuf[:],
 		FocusKey: &pluginv1.FocusKey{
 			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
@@ -1075,84 +1041,39 @@ func TestSetConnectionFocus_DrivesSubscriptionDeltas(t *testing.T) {
 		IsSceneGrid: false,
 	})
 	require.NoError(t, err)
-
-	// Grid → scene: location stream removed, scene IC+OOC added.
-	require.NotEmpty(t, cs.calls, "SendToConnection MUST be called on focus change")
-
-	// Collect adds and removes.
-	var adds, removes []string
-	for _, c := range cs.calls {
-		assert.Equal(t, sessionID, c.sessionID)
-		assert.Equal(t, connID, c.connectionID)
-		if c.add {
-			adds = append(adds, c.stream)
-		} else {
-			removes = append(removes, c.stream)
-		}
-	}
-
-	assert.ElementsMatch(t, []string{
-		"events.main.scene." + sceneID.String() + ".ic",
-		"events.main.scene." + sceneID.String() + ".ooc",
-	}, adds, "scene IC+OOC streams MUST be added")
-	assert.ElementsMatch(t, []string{
-		"location:" + locID.String(),
-	}, removes, "grid location stream MUST be removed")
+	require.NotNil(t, resp)
+	// The response echoes the new focus key back.
+	require.NotNil(t, resp.GetFocusKey())
+	assert.Equal(t, pluginv1.FocusKind_FOCUS_KIND_SCENE, resp.GetFocusKey().GetKind())
+	assert.Equal(t, sceneID.String(), resp.GetFocusKey().GetTargetId())
 }
 
-// TestAutoFocusOnJoin_DrivesSubscriptionDeltas verifies that a successful
-// AutoFocusOnJoin RPC drives SendToConnection for each focused connection.
-// The delta is grid → scene: location removed, scene IC+OOC added.
-func TestAutoFocusOnJoin_DrivesSubscriptionDeltas(t *testing.T) {
+// TestAutoFocusOnJoin_DelegatesToCoordinator verifies that a successful
+// AutoFocusOnJoin RPC delegates to the focus coordinator and returns the
+// expected connection count and IDs. Delta driving is now owned by the coordinator.
+func TestAutoFocusOnJoin_DelegatesToCoordinator(t *testing.T) {
 	t.Parallel()
 
 	connID := ulid.Make()
-	sceneID := ulid.Make()
-	locID := ulid.Make()
-	sessionID := "sess-autofocus"
 
 	fc := &stubCoordinator{
 		autoFocusResult: focus.AutoFocusOnJoinResponse{
-			SessionID:            sessionID,
-			CharLocationID:       locID,
+			SessionID:            "sess-1",
 			FocusedConnectionIDs: []ulid.ULID{connID},
 			TotalConnectionCount: 1,
 		},
 	}
-	cs := &stubConnectionSender{}
-	srv := newTestServerWithConnSender(fc, cs)
+	srv := newTestServer(fc, nil)
 
 	charID := ulid.Make()
 	charIDBuf := charID.Bytes()
-	sceneIDBuf := sceneID.Bytes()
 	resp, err := srv.AutoFocusOnJoin(context.Background(), &pluginv1.PluginHostServiceAutoFocusOnJoinRequest{
 		CharacterId: charIDBuf[:],
-		SceneId:     sceneIDBuf[:],
+		SceneId:     ulid.Make().Bytes(),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, uint32(1), resp.GetTotalConnectionCount())
 	require.Len(t, resp.GetFocusedConnectionIds(), 1)
-
-	// Verify subscription deltas.
-	require.NotEmpty(t, cs.calls, "SendToConnection MUST be called for focused connections")
-
-	var adds, removes []string
-	for _, c := range cs.calls {
-		assert.Equal(t, sessionID, c.sessionID)
-		assert.Equal(t, connID, c.connectionID)
-		if c.add {
-			adds = append(adds, c.stream)
-		} else {
-			removes = append(removes, c.stream)
-		}
-	}
-	assert.ElementsMatch(t, []string{
-		"events.main.scene." + sceneID.String() + ".ic",
-		"events.main.scene." + sceneID.String() + ".ooc",
-	}, adds, "scene IC+OOC streams MUST be added")
-	assert.ElementsMatch(t, []string{
-		"location:" + locID.String(),
-	}, removes, "grid location stream MUST be removed on grid→scene transition")
 }
 
 // TestIsAnyConnFocused_PassthroughBool verifies the simple bool passthrough
@@ -1249,7 +1170,7 @@ func TestAutoFocusOnJoin_ReturnsResponseShape(t *testing.T) {
 			},
 		},
 	}
-	srv := newTestServer(fc, nil) // no ConnectionSender — best-effort skip
+	srv := newTestServer(fc, nil) // nil coordinator extras — best-effort skip
 
 	charIDBuf := charID.Bytes()
 	sceneIDBuf := sceneID.Bytes()

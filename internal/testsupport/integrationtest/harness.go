@@ -194,6 +194,9 @@ type startConfig struct {
 	// pluginConfigOverrides is the per-plugin opaque config override
 	// (plugin name → key → value) threaded into PluginSubsystemConfig.
 	pluginConfigOverrides map[string]map[string]string
+	// extraPluginDirs holds additional plugin directories (e.g. test-only Lua
+	// fixtures) staged into the plugin load path alongside the in-tree plugins.
+	extraPluginDirs []string
 }
 
 // WithPolicyEngine overrides the harness's default allow-all ABAC engine.
@@ -345,16 +348,12 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	}
 
 	// Focus-delivery: the SessionStreamRegistry MUST exist BEFORE startPlugins so
-	// its ConnectionSenderAdapter can be wired into the binary plugin host at
-	// construction (mirrors production core.go, which creates the registry before
-	// the plugin subsystem). The CoreServer is also given this same registry so
-	// the Subscribe handler registers each connection's control channel on it.
+	// it can be wired into the CoreServer (the Subscribe handler registers each
+	// connection's control channel on it).
 	// nil under non-focus suites — zero blast radius (holomush-y5inx.9).
 	var streamRegistry *holoGRPC.SessionStreamRegistry
-	var connectionSender focus.ConnectionSender
 	if cfg.withFocusDelivery {
 		streamRegistry = holoGRPC.NewSessionStreamRegistry()
-		connectionSender = holoGRPC.NewConnectionSenderAdapter(streamRegistry)
 	}
 
 	var pluginSub *pluginsetup.PluginSubsystem
@@ -385,7 +384,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 			cryptoPublisher:       cryptoPublisherOf(pc),
 			gameID:                bus.Bus.GameID(),
 			pluginConfigOverrides: cfg.pluginConfigOverrides,
-			connectionSender:      connectionSender,
+			extraPluginDirs:       cfg.extraPluginDirs,
 		})
 		cmdRegistry = pluginSub.CommandRegistry()
 	}
@@ -433,10 +432,11 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	// SessionStreamRegistry was created above, before startPlugins). Mirrors
 	// production cmd/holomush/sub_grpc.go:428-470: a real focus.Coordinator wired
 	// with the scene KindPolicy, game settings, player-preference reader, and the
-	// plugin StreamContributor. The scene `join` command reaches JoinFocus →
-	// AutoFocusOnJoin; the binary host's AutoFocusOnJoin RPC handler then drives
-	// per-Connection subscription deltas via the ConnectionSenderAdapter (wired at
-	// host construction above) → the connection's control channel, adding the
+	// plugin StreamContributor plus the ConnectionSender (both wired from one
+	// SessionStreamRegistry via FocusStreamCoordinatorOptions, mirroring prod).
+	// The scene `join` command reaches JoinFocus → AutoFocusOnJoin; the
+	// coordinator itself then drives per-Connection subscription deltas
+	// (driveFocusDeltas, INV-FS-1) → the connection's control channel, adding the
 	// scene IC/OOC streams to the live Subscribe filter set. The coordinator is
 	// injected into the loaded plugin hosts via Manager.ConfigureFocusDeps below.
 	// Gated so non-focus suites keep the WithSubscriber-only wiring — zero blast
@@ -447,15 +447,17 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 			Store:       evStore,
 			NotFoundErr: store.ErrSystemInfoNotFound,
 		})
-		var focusErr error
-		focusCoord, focusErr = focus.NewCoordinator(
+		coordOpts := []focus.CoordinatorOption{
 			focus.WithSessionStore(sessionStoreInst),
 			focus.WithKindPolicy(scenepolicy.New()),
 			focus.WithGameSettings(gameSettings),
 			focus.WithPlayerPreferences(focus.NewPlayerPrefsAdapter(playerRepo)),
 			focus.WithStreamContributor(&focusStreamContributorAdapter{pm: pluginSub.Manager()}),
-			focus.WithStreamSender(holoGRPC.NewStreamSenderAdapter(streamRegistry)),
-		)
+			focus.WithGameID(bus.Bus.GameID()),
+		}
+		coordOpts = append(coordOpts, holoGRPC.FocusStreamCoordinatorOptions(streamRegistry)...)
+		var focusErr error
+		focusCoord, focusErr = focus.NewCoordinator(coordOpts...)
 		require.NoError(t, focusErr, "integrationtest.Start: build focus coordinator")
 	}
 

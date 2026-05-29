@@ -61,6 +61,66 @@ Do NOT use it when:
    - Why production code can't reasonably reach that state.
    - FK / cascade side effects (when applicable).
 
+## Opt into focus delivery
+
+`WithFocusDelivery` wires a real `focus.Coordinator` + `SessionStreamRegistry`
+so the plugin host's `JoinFocus` / `AutoFocusOnJoin` path reaches the live
+Subscribe filter set. Without it, those RPCs short-circuit with "focus
+coordinator not configured" and no scene-stream subscription is ever added.
+
+```go
+ts := integrationtest.Start(
+    t,
+    integrationtest.WithInTreePlugins(),
+    integrationtest.WithFocusDelivery(),
+)
+```
+
+**Requires `WithInTreePlugins()`** — the coordinator is injected into the
+loaded plugin hosts via `Manager.ConfigureFocusDeps`.
+
+### How the harness builds the coordinator senders
+
+Both production (`cmd/holomush`) and the integration harness build the
+coordinator's focus-delivery senders through the same helper:
+
+```go
+holoGRPC.FocusStreamCoordinatorOptions(streamRegistry)
+```
+
+`FocusStreamCoordinatorOptions` bundles a `StreamSender` and a
+`ConnectionSender`, both backed by the same `SessionStreamRegistry`. Because
+the harness calls this helper rather than hand-rolling the adapters, it is a
+faithful production mirror by construction (INV-FS-4).
+
+### Testing Lua runtime symmetry with `WithExtraPluginDir`
+
+`WithExtraPluginDir(dir)` stages an additional plugin directory into the load
+path alongside the in-tree plugins. This is the mechanism for the Lua
+runtime-symmetry test:
+
+```go
+ts := integrationtest.Start(
+    suiteT,
+    integrationtest.WithInTreePlugins(),
+    integrationtest.WithPluginCrypto(),
+    integrationtest.WithFocusDelivery(),
+    integrationtest.WithExtraPluginDir("testdata/lua/focus_join"),
+)
+```
+
+The fixture at `test/integration/scenes/testdata/lua/focus_join/` is a minimal
+Lua plugin that exposes the `luafocusjoin` command, which calls
+`holomush.auto_focus_on_join` (the hostfunc registered at
+`internal/plugin/hostfunc/stdlib_focus.go`). The integration test at
+`test/integration/scenes/lua_focus_parity_test.go` (INV-FS-3) loads this
+fixture and asserts that the Lua path delivers a live scene IC event to the
+joiner's Subscribe stream — the same end-to-end assertion used by the binary
+`scene join` keystone, proving plugin-runtime symmetry.
+
+`dir` is resolved relative to the test package directory (Go runs tests with
+CWD equal to the package directory).
+
 ## Opt into the whole-system plugin tier
 
 The harness supports an opt-in **whole-system** mode that loads all in-tree

@@ -16,7 +16,6 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus/cursor"
-	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/session"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -243,30 +242,11 @@ func (s *pluginHostServiceServer) SetConnectionFocus(ctx context.Context, req *p
 			Errorf("is_scene_grid=true is incompatible with a non-nil focus_key; supply one or the other")
 	}
 
-	result, err := fc.SetConnectionFocus(ctx, connID, focusKey, req.GetIsSceneGrid())
+	_, err = fc.SetConnectionFocus(ctx, connID, focusKey, req.GetIsSceneGrid())
 	if err != nil {
 		return nil, oops.With("plugin", s.pluginName).
 			With("connection_id", connID.String()).
 			Wrap(err)
-	}
-
-	// Drive subscription deltas via ConnectionSender if wired (T18, INV-P5-10).
-	// Best-effort: CONNECTION_NOT_REGISTERED means no live Subscribe goroutine.
-	cs := s.host.ConnectionSender()
-	if cs != nil {
-		gameID := s.host.gameID
-		if gameID == "" {
-			gameID = "main"
-		}
-		oldStreams := focus.ComputeFocusManagedStreams(result.OldFocusKey, result.CharLocationID, gameID)
-		newStreams := focus.ComputeFocusManagedStreams(focusKey, result.CharLocationID, gameID)
-		adds, removes := focus.StreamDeltas(oldStreams, newStreams)
-		for _, stream := range adds {
-			_ = cs.SendToConnection(result.SessionID, connID, stream, true) //nolint:errcheck // best-effort
-		}
-		for _, stream := range removes {
-			_ = cs.SendToConnection(result.SessionID, connID, stream, false) //nolint:errcheck // best-effort
-		}
 	}
 
 	// Echo back the new FocusKey (nil = grid).
@@ -307,31 +287,6 @@ func (s *pluginHostServiceServer) AutoFocusOnJoin(ctx context.Context, req *plug
 			With("character_id", charID.String()).
 			With("scene_id", sceneID.String()).
 			Wrap(err)
-	}
-
-	// Drive subscription deltas for each successfully focused connection.
-	// Focused connections were previously on grid (nil FocusKey — D8 ensures
-	// already-focused conns are skipped), so old streams = grid streams.
-	cs := s.host.ConnectionSender()
-	if cs != nil && len(r.FocusedConnectionIDs) > 0 && r.SessionID != "" {
-		gameID := s.host.gameID
-		if gameID == "" {
-			gameID = "main"
-		}
-		sceneFk := &session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneID}
-		// Old streams for grid-focused connections are location streams.
-		oldStreams := focus.ComputeFocusManagedStreams(nil, r.CharLocationID, gameID)
-		newStreams := focus.ComputeFocusManagedStreams(sceneFk, r.CharLocationID, gameID)
-		adds, removes := focus.StreamDeltas(oldStreams, newStreams)
-		for _, cid := range r.FocusedConnectionIDs {
-			connIDCopy := cid // loop var safety
-			for _, stream := range adds {
-				_ = cs.SendToConnection(r.SessionID, connIDCopy, stream, true) //nolint:errcheck // best-effort
-			}
-			for _, stream := range removes {
-				_ = cs.SendToConnection(r.SessionID, connIDCopy, stream, false) //nolint:errcheck // best-effort
-			}
-		}
 	}
 
 	resp := &pluginv1.PluginHostServiceAutoFocusOnJoinResponse{

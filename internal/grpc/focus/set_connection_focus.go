@@ -38,9 +38,9 @@ import (
 //     Connection.FocusKey but leave PresentingFocus alone (D9 split-brain
 //     guard).
 //
-// Returns SetConnectionFocusResult so the RPC handler (T18) can compute
-// stream deltas via ComputeFocusManagedStreams + StreamDeltas + SendToConnection
-// without a second store round-trip. The pre-mutation FocusKey is captured
+// Returns SetConnectionFocusResult so the coordinator can drive stream deltas
+// via ComputeFocusManagedStreams + StreamDeltas + SendToConnection without a
+// second store round-trip (INV-FS-1, see driveFocusDeltas). The pre-mutation FocusKey is captured
 // inside the mutator closure via an outer-variable binding; on any error
 // path OldFocusKey returns nil so partial state cannot leak.
 func (c *defaultCoordinator) SetConnectionFocus(
@@ -80,8 +80,8 @@ func (c *defaultCoordinator) SetConnectionFocus(
 			}
 
 			// Capture pre-mutation conn.FocusKey for the post-commit
-			// subscription delta (T18). Copy by value to break aliasing
-			// with the (about-to-be-replaced) per-conn pointer.
+			// subscription delta (driveFocusDeltas). Copy by value to break
+			// aliasing with the (about-to-be-replaced) per-conn pointer.
 			if sc.FocusKey != nil {
 				cpy := *sc.FocusKey
 				result.OldFocusKey = &cpy
@@ -108,5 +108,10 @@ func (c *defaultCoordinator) SetConnectionFocus(
 		// even if a future mutator reorders captures above the error return.
 		return SetConnectionFocusResult{}, uerr //nolint:wrapcheck // store errors are already oops-coded
 	}
+	// INV-FS-1: drive the per-connection subscription delta at the common path.
+	// Old streams derive from the pre-mutation FocusKey (result.OldFocusKey;
+	// nil = grid), new streams from focusKey (the requested target; nil = grid).
+	c.driveFocusDeltas(ctx, result.SessionID, result.CharLocationID, result.OldFocusKey, focusKey, []ulid.ULID{connectionID})
+
 	return result, nil
 }
