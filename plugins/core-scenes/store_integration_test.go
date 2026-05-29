@@ -2163,6 +2163,60 @@ var _ = Describe("Publish store — vote operations", func() {
 		Expect(tally.No).To(Equal(1))
 		Expect(tally.Pending).To(Equal(1))
 	})
+
+	// holomush-wn612: CastVote locks the attempt row FOR UPDATE and re-validates
+	// non-terminal status inside the tx, so a vote cannot land on an attempt that
+	// resolved between the handler's status check and the vote write. This is the
+	// terminal boundary of INV-P6-2 (votes are valid only during COLLECTING /
+	// COOLOFF). A roster member is established BEFORE the terminal transition to
+	// prove the rejection is the status guard, not the non-voter guard.
+	It("rejects a vote on an ATTEMPT_FAILED attempt with SCENE_PUBLISH_INVALID_STATE", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, voter := setupAttemptWithOneVoter(ctx, store)
+
+		reason := FailureAnyNo
+		Expect(store.TransitionStatus(ctx, pub.ID, TransitionInput{
+			To: StatusAttemptFailed, FailureReason: &reason, Resolved: true,
+		})).NotTo(HaveOccurred())
+
+		_, err := store.CastVote(ctx, pub.ID, voter, true)
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "SCENE_PUBLISH_INVALID_STATE")
+	})
+
+	It("rejects a vote on a PUBLISHED attempt with SCENE_PUBLISH_INVALID_STATE", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+		pub, voter := setupAttemptWithOneVoter(ctx, store)
+
+		// COLLECTING → COOLOFF → PUBLISHED (the only legal path to PUBLISHED).
+		now := time.Now()
+		Expect(store.TransitionStatus(ctx, pub.ID, TransitionInput{
+			To: StatusCoolOff, SetCoolOffAt: &now,
+		})).NotTo(HaveOccurred())
+		Expect(store.TransitionStatus(ctx, pub.ID, TransitionInput{
+			To: StatusPublished, Resolved: true,
+		})).NotTo(HaveOccurred())
+
+		_, err := store.CastVote(ctx, pub.ID, voter, true)
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "SCENE_PUBLISH_INVALID_STATE")
+	})
+
+	It("rejects a vote on a nonexistent attempt with SCENE_PUBLISH_NOT_FOUND", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		store := newTestStore()
+
+		// No attempt row exists, so the FOR UPDATE lock SELECT finds no row —
+		// distinct from the NOT_A_VOTER path, which presupposes a live attempt.
+		_, err := store.CastVote(ctx, ulid.Make().String(), ulid.Make().String(), true)
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "SCENE_PUBLISH_NOT_FOUND")
+	})
 })
 
 var _ = Describe("Publish store — status reads + transitions", func() {

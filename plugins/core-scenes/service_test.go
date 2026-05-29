@@ -151,8 +151,18 @@ func (f *fakeStore) TallyVotes(_ context.Context, publishedSceneID string) (*Vot
 
 // CastVote upserts a roster member's vote on the in-memory roster, mirroring
 // the store's is_change semantics. A non-roster character is rejected with
-// SCENE_PUBLISH_NOT_A_VOTER.
+// SCENE_PUBLISH_NOT_A_VOTER. Mirroring the real store (holomush-wn612), a vote
+// on a terminal attempt is rejected with SCENE_PUBLISH_INVALID_STATE before the
+// roster check — status-before-roster ordering. Attempts not installed via
+// installPublishedAttempt are treated as live (the looser fake contract used by
+// fixtures that seed only a voter roster).
 func (f *fakeStore) CastVote(_ context.Context, publishedSceneID, characterID string, vote bool) (*CastVoteResult, error) {
+	if pub, ok := f.publishedScenes[publishedSceneID]; ok && pub.Status.IsTerminal() {
+		return nil, oops.Code("SCENE_PUBLISH_INVALID_STATE").
+			With("published_scene_id", publishedSceneID).
+			With("status", string(pub.Status)).
+			Errorf("vote on a terminal publication attempt is rejected")
+	}
 	rows := f.publishedVoters[publishedSceneID]
 	for i := range rows {
 		if rows[i].CharacterID == characterID {
