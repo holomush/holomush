@@ -61,90 +61,108 @@ func (s *captureConnSender) removes() []string {
 	return out
 }
 
-func TestSetConnectionFocusDrivesPerConnectionDeltas(t *testing.T) {
+// TestCoordinatorDrivesPerConnectionDeltas is the table-driven matrix of
+// single-connection focus transitions and the streams each must add/remove.
+// Behavioural edge cases (nil sender, send-error continuation, session-not-
+// found, multi-connection fan-out) keep their own focused tests below, since
+// they assert delivery semantics rather than the add/remove delta itself.
+func TestCoordinatorDrivesPerConnectionDeltas(t *testing.T) {
 	charID := ulid.Make()
 	sceneA := ulid.Make()
 	sceneB := ulid.Make()
 	locID := ulid.Make()
 	connID := ulid.Make()
-
+	a, b, loc := sceneA.String(), sceneB.String(), locID.String()
 	fkA := session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneA}
-	sessions := map[string]*session.Info{
-		"sess-1": {
-			ID:          "sess-1",
-			CharacterID: charID,
-			LocationID:  locID,
-			FocusMemberships: []session.FocusMembership{
-				{Kind: session.FocusKindScene, TargetID: sceneA, JoinedAt: time.Now()},
-				{Kind: session.FocusKindScene, TargetID: sceneB, JoinedAt: time.Now()},
+
+	memberships := []session.FocusMembership{
+		{Kind: session.FocusKindScene, TargetID: sceneA, JoinedAt: time.Now()},
+		{Kind: session.FocusKindScene, TargetID: sceneB, JoinedAt: time.Now()},
+	}
+
+	tests := []struct {
+		name        string
+		connFK      *session.FocusKey // connection's focus before the call (nil = grid)
+		invoke      func(coord *defaultCoordinator) error
+		wantAdds    []string
+		wantRemoves []string
+	}{
+		{
+			name:   "SetConnectionFocus scene→scene adds the new scene's streams and removes the old",
+			connFK: &fkA,
+			invoke: func(coord *defaultCoordinator) error {
+				fkB := session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneB}
+				_, err := coord.SetConnectionFocus(context.Background(), connID, &fkB, false)
+				return err
 			},
+			wantAdds:    []string{"events.main.scene." + b + ".ic", "events.main.scene." + b + ".ooc"},
+			wantRemoves: []string{"events.main.scene." + a + ".ic", "events.main.scene." + a + ".ooc"},
+		},
+		{
+			name:   "SetConnectionFocus scene→grid adds the location stream and removes the scene streams",
+			connFK: &fkA,
+			invoke: func(coord *defaultCoordinator) error {
+				_, err := coord.SetConnectionFocus(context.Background(), connID, nil, true)
+				return err
+			},
+			wantAdds:    []string{"location:" + loc},
+			wantRemoves: []string{"events.main.scene." + a + ".ic", "events.main.scene." + a + ".ooc"},
+		},
+		{
+			name:   "AutoFocusOnJoin grid→scene adds the scene streams and removes the location stream",
+			connFK: nil,
+			invoke: func(coord *defaultCoordinator) error {
+				_, err := coord.AutoFocusOnJoin(context.Background(), charID, sceneA)
+				return err
+			},
+			wantAdds:    []string{"events.main.scene." + a + ".ic", "events.main.scene." + a + ".ooc"},
+			wantRemoves: []string{"location:" + loc},
+		},
+		{
+			// holomush-fqv8z review finding: a connection already focused on
+			// the target scene re-enters "focused" but its stream set is
+			// unchanged, so it MUST NOT receive a redundant grid→scene delta.
+			name:   "AutoFocusOnJoin re-focus on the same scene drives no delta",
+			connFK: &fkA,
+			invoke: func(coord *defaultCoordinator) error {
+				_, err := coord.AutoFocusOnJoin(context.Background(), charID, sceneA)
+				return err
+			},
+			wantAdds:    nil,
+			wantRemoves: nil,
 		},
 	}
-	coord, _ := newTestCoordinator(t, sessions)
-	cs := &captureConnSender{}
-	coord.connectionSender = cs
-	coord.gameID = "main"
 
-	require.NoError(t, coord.sessionStore.AddConnection(context.Background(), &session.Connection{
-		ID: connID, SessionID: "sess-1", ClientType: "terminal", FocusKey: &fkA,
-	}))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sessions := map[string]*session.Info{
+				"sess-1": {
+					ID:               "sess-1",
+					CharacterID:      charID,
+					LocationID:       locID,
+					Status:           session.StatusActive,
+					FocusMemberships: memberships,
+				},
+			}
+			coord, _ := newTestCoordinator(t, sessions)
+			cs := &captureConnSender{}
+			coord.connectionSender = cs
+			coord.gameID = "main"
 
-	// scene A → scene B: remove A's IC/OOC, add B's IC/OOC.
-	fkB := session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneB}
-	_, err := coord.SetConnectionFocus(context.Background(), connID, &fkB, false)
-	require.NoError(t, err)
+			require.NoError(t, coord.sessionStore.AddConnection(context.Background(), &session.Connection{
+				ID: connID, SessionID: "sess-1", ClientType: "terminal", FocusKey: tt.connFK,
+			}))
 
-	a := sceneA.String()
-	b := sceneB.String()
-	assert.ElementsMatch(t, []string{
-		"events.main.scene." + b + ".ic", "events.main.scene." + b + ".ooc",
-	}, cs.adds(), "scene→scene MUST add the new scene's streams")
-	assert.ElementsMatch(t, []string{
-		"events.main.scene." + a + ".ic", "events.main.scene." + a + ".ooc",
-	}, cs.removes(), "scene→scene MUST remove the old scene's streams (from OldFocusKey)")
-}
+			require.NoError(t, tt.invoke(coord))
 
-func TestAutoFocusOnJoinDrivesPerConnectionDeltas(t *testing.T) {
-	charID := ulid.Make()
-	sceneID := ulid.Make()
-	locID := ulid.Make()
-	termConnID := ulid.Make()
-
-	sessions := map[string]*session.Info{
-		"sess-1": {
-			ID:          "sess-1",
-			CharacterID: charID,
-			LocationID:  locID,
-			Status:      session.StatusActive,
-			FocusMemberships: []session.FocusMembership{
-				{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: time.Now()},
-			},
-		},
+			for _, c := range cs.calls {
+				assert.Equal(t, "sess-1", c.sessionID, "every delta targets the connection's session")
+				assert.Equal(t, connID, c.connectionID, "every delta targets the one connection")
+			}
+			assert.ElementsMatch(t, tt.wantAdds, cs.adds(), "delta adds")
+			assert.ElementsMatch(t, tt.wantRemoves, cs.removes(), "delta removes")
+		})
 	}
-	coord, _ := newTestCoordinator(t, sessions)
-	cs := &captureConnSender{}
-	coord.connectionSender = cs
-	coord.gameID = "main"
-
-	require.NoError(t, coord.sessionStore.AddConnection(context.Background(), &session.Connection{
-		ID: termConnID, SessionID: "sess-1", ClientType: "terminal",
-	}))
-
-	resp, err := coord.AutoFocusOnJoin(context.Background(), charID, sceneID)
-	require.NoError(t, err)
-	require.Len(t, resp.FocusedConnectionIDs, 1)
-
-	scene := sceneID.String()
-	loc := locID.String()
-	for _, c := range cs.calls {
-		assert.Equal(t, "sess-1", c.sessionID)
-		assert.Equal(t, termConnID, c.connectionID)
-	}
-	assert.ElementsMatch(t, []string{
-		"events.main.scene." + scene + ".ic",
-		"events.main.scene." + scene + ".ooc",
-	}, cs.adds(), "grid→scene MUST add scene IC + OOC")
-	assert.ElementsMatch(t, []string{"location:" + loc}, cs.removes(), "grid→scene MUST remove the location stream")
 }
 
 func TestAutoFocusOnJoinNilSenderIsNoOp(t *testing.T) {
@@ -213,47 +231,6 @@ func TestAutoFocusOnJoinSessionNotFoundDrivesNoDeltas(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint32(0), resp.TotalConnectionCount)
 	assert.Empty(t, cs.calls, "no session → no deltas")
-}
-
-func TestSetConnectionFocusSceneToGridDrivesPerConnectionDeltas(t *testing.T) {
-	charID := ulid.Make()
-	sceneA := ulid.Make()
-	locID := ulid.Make()
-	connID := ulid.Make()
-
-	fkA := session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneA}
-	sessions := map[string]*session.Info{
-		"sess-1": {
-			ID:          "sess-1",
-			CharacterID: charID,
-			LocationID:  locID,
-			FocusMemberships: []session.FocusMembership{
-				{Kind: session.FocusKindScene, TargetID: sceneA, JoinedAt: time.Now()},
-			},
-		},
-	}
-	coord, _ := newTestCoordinator(t, sessions)
-	cs := &captureConnSender{}
-	coord.connectionSender = cs
-	coord.gameID = "main"
-
-	require.NoError(t, coord.sessionStore.AddConnection(context.Background(), &session.Connection{
-		ID: connID, SessionID: "sess-1", ClientType: "terminal", FocusKey: &fkA,
-	}))
-
-	// scene A → grid: remove A's IC/OOC, add the location stream. Exercises
-	// driveFocusDeltas with newFK=nil against a LIVE connectionSender (the
-	// removal path that TestSceneGrid_DoesNotClearPresentingFocus leaves nil).
-	_, err := coord.SetConnectionFocus(context.Background(), connID, nil, true)
-	require.NoError(t, err)
-
-	a := sceneA.String()
-	loc := locID.String()
-	assert.ElementsMatch(t, []string{"location:" + loc}, cs.adds(),
-		"scene→grid MUST add the location stream")
-	assert.ElementsMatch(t, []string{
-		"events.main.scene." + a + ".ic", "events.main.scene." + a + ".ooc",
-	}, cs.removes(), "scene→grid MUST remove the old scene's streams (from OldFocusKey)")
 }
 
 func TestAutoFocusOnJoinFansOutDeltasToAllConnections(t *testing.T) {

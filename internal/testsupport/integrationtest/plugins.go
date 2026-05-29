@@ -235,6 +235,9 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 		"startPlugins: assemble plugins dir")
 
 	for _, extra := range d.extraPluginDirs {
+		// Reject a blank entry: filepath.Abs("") resolves to the current working
+		// directory, which would stage the entire repo as a bogus "plugin".
+		require.NotEmpty(t, extra, "startPlugins: extra plugin dir must not be empty")
 		abs, err := filepath.Abs(extra)
 		require.NoError(t, err, "startPlugins: resolve extra plugin dir")
 		base := filepath.Base(abs)

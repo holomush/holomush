@@ -100,6 +100,12 @@ func (c *defaultCoordinator) AutoFocusOnJoin(
 		TotalConnectionCount: uint32(len(conns)), //nolint:gosec // conn count is bounded by active connections per session
 	}
 
+	// Connections transitioning grid→scene this call — the only ones that need
+	// a subscription delta. A connection already focused on this scene re-enters
+	// "focused" but its streams are unchanged, so it is deliberately excluded
+	// (see the driveFocusDeltas call below).
+	var deltaConns []ulid.ULID
+
 	// Step 3 + 4: filter and mutate each terminal/telnet connection.
 	for _, conn := range conns {
 		if !isTerminalLike(conn.ClientType) {
@@ -111,6 +117,10 @@ func (c *defaultCoordinator) AutoFocusOnJoin(
 
 		// Track which bucket this connection ends in, set inside the mutator.
 		var outcome string // "focused" | "skipped" | "membership_absent"
+		// Whether this connection was on the grid (no FocusKey) before the
+		// mutation. Only grid→scene transitions need a subscription delta;
+		// a connection already focused on this scene keeps its streams.
+		var wasOnGrid bool
 
 		m := session.NewSessionConnectionMutator(
 			func(info session.Info, conn session.Connection) (session.Info, session.Connection, error) {
@@ -120,6 +130,10 @@ func (c *defaultCoordinator) AutoFocusOnJoin(
 					outcome = "skipped"
 					return info, conn, nil // no-op; UpdateSessionConnection commits this unchanged
 				}
+				// Reaching here, conn.FocusKey is either nil (grid) or already
+				// == target (re-focus on the same scene). Capture it before we
+				// overwrite, so the delta step can skip the no-op re-focus.
+				wasOnGrid = conn.FocusKey == nil
 
 				// INV-P5-1: scene focus requires a matching FocusMembership.
 				if !hasMembership(info.FocusMemberships, target.Kind, target.TargetID) {
@@ -172,6 +186,11 @@ func (c *defaultCoordinator) AutoFocusOnJoin(
 		switch outcome {
 		case "focused":
 			resp.FocusedConnectionIDs = append(resp.FocusedConnectionIDs, connID)
+			if wasOnGrid {
+				// Only a genuine grid→scene transition needs a delta; a
+				// re-focus on the same scene leaves the stream set unchanged.
+				deltaConns = append(deltaConns, connID)
+			}
 		case "skipped":
 			resp.SkippedConnectionIDs = append(resp.SkippedConnectionIDs, connID)
 		}
@@ -179,16 +198,16 @@ func (c *defaultCoordinator) AutoFocusOnJoin(
 	}
 
 	// INV-FS-1: drive per-connection subscription deltas at the common path.
-	// We pass nil as the old FocusKey (grid) for every focused connection.
-	// D8/INV-P5-11 (line ~119) only skips connections focused on a DIFFERENT
-	// target, so a newly-grid→scene connection gets the correct add(scene)+
-	// remove(location) delta. A connection already focused on this SAME scene
-	// also lands in FocusedConnectionIDs (it falls through the skip unchanged);
-	// for it the grid→scene delta is redundant but idempotent — SendToConnection
-	// re-adds streams it already holds and removes a location stream it already
-	// dropped, both no-ops at the registry (best-effort, INV-FS-8).
+	// deltaConns holds only connections that actually moved grid→scene this
+	// call, so passing nil as the old FocusKey (grid) is correct for every one
+	// of them: each gets the add(scene)+remove(location) delta exactly once.
+	// A connection already focused on this SAME scene is excluded — its stream
+	// set is unchanged, and re-driving a grid→scene delta would otherwise issue
+	// a redundant scene re-add (which carries ReplayModeFromCursor and could
+	// replay scene history again) plus a remove of a location stream it no
+	// longer holds (holomush-fqv8z review finding).
 	sceneFk := &session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneID}
-	c.driveFocusDeltas(ctx, resp.SessionID, resp.CharLocationID, nil, sceneFk, resp.FocusedConnectionIDs)
+	c.driveFocusDeltas(ctx, resp.SessionID, resp.CharLocationID, nil, sceneFk, deltaConns)
 
 	return resp, nil
 }

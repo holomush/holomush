@@ -65,7 +65,11 @@ var _ = Describe("INV-FS-3: Lua-runtime auto_focus_on_join parity — live IC de
 		if owner != nil {
 			owner.Logout(ctx)
 		}
-		ts.Stop()
+		// Nil-safe: if integrationtest.Start failed before ts was assigned,
+		// ts.Stop() would nil-panic and mask the real setup failure.
+		if ts != nil {
+			ts.Stop()
+		}
 	})
 
 	It("delivers a post-join scene_pose to the joiner after the Lua luafocusjoin command fires auto_focus_on_join (INV-FS-3)", func() {
