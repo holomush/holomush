@@ -2402,9 +2402,15 @@ var _ = Describe("Publish store — ReadSceneLogForSnapshot", func() {
 		subject := "events.main.scene.scene-snaplog-1.ic"
 
 		// scene_log.timestamp is BIGINT epoch-nanos (INV-TS-1, migration 000007).
-		// ulid.Make() is monotonic, so insertion order == ORDER BY id ASC.
+		// Ordering is by id ASC, so make the ids deterministically increasing:
+		// a strictly-monotonic time component with zero entropy guarantees
+		// insertion order == ORDER BY id ASC by construction, without depending
+		// on ulid.Make()'s wall-clock + global monotonic entropy source.
+		var seq uint64
 		insertLog := func(subj, eventType string) {
-			id := ulid.Make()
+			seq++
+			var id ulid.ULID
+			Expect(id.SetTime(seq)).NotTo(HaveOccurred())
 			_, err := store.pool.Exec(ctx, `
 				INSERT INTO scene_log (id, subject, type, timestamp, actor_kind, payload, schema_ver, codec)
 				VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, 'character', $4, 1, 'identity')`,
