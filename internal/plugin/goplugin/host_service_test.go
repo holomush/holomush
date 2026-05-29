@@ -1170,7 +1170,7 @@ func TestAutoFocusOnJoin_ReturnsResponseShape(t *testing.T) {
 			},
 		},
 	}
-	srv := newTestServer(fc, nil) // no ConnectionSender — best-effort skip
+	srv := newTestServer(fc, nil) // nil coordinator extras — best-effort skip
 
 	charIDBuf := charID.Bytes()
 	sceneIDBuf := sceneID.Bytes()

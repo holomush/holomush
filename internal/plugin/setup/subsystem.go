@@ -22,7 +22,6 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
-	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/lifecycle"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/goplugin"
@@ -101,24 +100,6 @@ type PluginSubsystemConfig struct {
 	AdminDeps       AdminDepsProvider
 	Registry        *lifecycle.ReadinessRegistry
 	StreamRegistry  plugins.StreamRegistry
-	// ConnectionSender is the per-connection Phase-5 delta seam for the binary
-	// plugin host. Session-level focus delivery for both runtimes flows through
-	// JoinFocus → focus.StreamSender (coordinator-wired); however, the scene
-	// KindPolicy returns ReplayModeBoundedTail/LiveOnly for OnJoin, and the
-	// StreamSenderAdapter rejects those modes with REPLAY_MODE_NOT_SUPPORTED
-	// (best-effort errcheck: the error is silently dropped). The binary host's
-	// AutoFocusOnJoin RPC handler therefore drives the actual per-connection
-	// subscription deltas via ConnectionSender.SendToConnection → the
-	// connection's control channel, adding the scene IC/OOC streams to the live
-	// Subscribe filter set. The Lua per-connection focus path
-	// (internal/plugin/lua/focus_ops_adapter.go:46-49) deliberately omits
-	// per-connection deltas — Lua plugins react via JetStream, not the RPC
-	// return. nil leaves binary AutoFocusOnJoin delta-delivery silently skipped
-	// (holomush-y5inx.9). NOTE: this field is intentionally landed here as
-	// forward-plumbing; its production wiring in cmd/holomush/sub_grpc.go is
-	// deferred until Phase 5 is fully wired end-to-end (bead holomush-y5inx
-	// scoped production out-of-scope).
-	ConnectionSender   focus.ConnectionSender
 	LuaTimeout         time.Duration // per-invocation CPU deadline for Lua plugins
 	LuaRegistryMaxSize int           // max Lua registry size per plugin state
 	// VerbRegistry is seeded by BootstrapVerbRegistry in core.go and passed
@@ -295,16 +276,6 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		// binary host so overrideFor() can look them up at plugin init time.
 		goplugin.WithConfigOverrides(s.cfg.PluginConfigOverrides),
 	)
-
-	// Wire the per-connection delta sender for the binary host's AutoFocusOnJoin
-	// RPC handler. This is the real scene-stream subscription path: JoinFocus →
-	// StreamSender is silently dropped (ReplayModeBoundedTail/LiveOnly rejected);
-	// AutoFocusOnJoin → SendToConnection → ctrlCh is the actual delivery seam.
-	// The Lua per-connection focus path deliberately omits this (focus_ops_adapter.go).
-	// nil → binary AutoFocusOnJoin delta-delivery silently skipped (holomush-y5inx.9).
-	if s.cfg.ConnectionSender != nil {
-		hostOpts = append(hostOpts, goplugin.WithConnectionSender(s.cfg.ConnectionSender))
-	}
 
 	if s.cfg.CertsDir != "" {
 		ca, caErr := tlscerts.LoadCA(s.cfg.CertsDir)

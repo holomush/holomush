@@ -345,16 +345,12 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	}
 
 	// Focus-delivery: the SessionStreamRegistry MUST exist BEFORE startPlugins so
-	// its ConnectionSenderAdapter can be wired into the binary plugin host at
-	// construction (mirrors production core.go, which creates the registry before
-	// the plugin subsystem). The CoreServer is also given this same registry so
-	// the Subscribe handler registers each connection's control channel on it.
+	// it can be wired into the CoreServer (the Subscribe handler registers each
+	// connection's control channel on it).
 	// nil under non-focus suites — zero blast radius (holomush-y5inx.9).
 	var streamRegistry *holoGRPC.SessionStreamRegistry
-	var connectionSender focus.ConnectionSender
 	if cfg.withFocusDelivery {
 		streamRegistry = holoGRPC.NewSessionStreamRegistry()
-		connectionSender = holoGRPC.NewConnectionSenderAdapter(streamRegistry)
 	}
 
 	var pluginSub *pluginsetup.PluginSubsystem
@@ -385,7 +381,6 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 			cryptoPublisher:       cryptoPublisherOf(pc),
 			gameID:                bus.Bus.GameID(),
 			pluginConfigOverrides: cfg.pluginConfigOverrides,
-			connectionSender:      connectionSender,
 		})
 		cmdRegistry = pluginSub.CommandRegistry()
 	}

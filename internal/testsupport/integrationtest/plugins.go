@@ -30,7 +30,6 @@ import (
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
-	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/lifecycle"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
@@ -204,12 +203,6 @@ type pluginDeps struct {
 	// GameIDProvider closure so plugin emits translate legacy colon-style
 	// subjects to events.<game_id>.<ns>.<id> consistently.
 	gameID string
-	// connectionSender delivers per-Connection stream subscription deltas to the
-	// binary plugin host (focus.ConnectionSender). Wired only under
-	// WithFocusDelivery so the binary core-scenes AutoFocusOnJoin RPC handler can
-	// route the scene IC/OOC stream subscription onto the joiner's live Subscribe
-	// loop. nil leaves binary delta-delivery best-effort skipped (holomush-y5inx.9).
-	connectionSender focus.ConnectionSender
 	// pluginConfigOverrides is the per-plugin opaque config override
 	// (plugin name → key → value) threaded into PluginSubsystemConfig.
 	pluginConfigOverrides map[string]map[string]string
@@ -298,7 +291,6 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 		LuaTimeout:            5 * time.Second,
 		LuaRegistryMaxSize:    1024 * 1024,
 		PluginConfigOverrides: d.pluginConfigOverrides,
-		ConnectionSender:      d.connectionSender,
 	}
 
 	ps := pluginsetup.NewPluginSubsystem(cfg)
