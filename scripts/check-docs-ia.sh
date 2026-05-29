@@ -13,8 +13,9 @@
 # INV-3 retired-gone:contributing/event-delivery.* and operating/legacy-id-cutover.*
 #                    are absent, and no link resolves to their slugs.
 # INV-5 branding:    the brand identity assets (favicon.svg, logo-light/dark.svg,
-#                    favicon.png, apple-touch-icon.png) match the committed sha256
-#                    manifest site/src/assets/brand/brand-assets.sha256 (anti-drift —
+#                    favicon.png, apple-touch-icon.png) + the fal.ai og-backdrop.png
+#                    source match the committed sha256 manifest
+#                    site/src/assets/brand/brand-assets.sha256 (anti-drift —
 #                    a sanctioned rebrand regenerates assets AND updates the manifest
 #                    in the same change; see .claude/rules/branding.md). custom.css
 #                    preserves its font stack (accent/spacing polish allowed — SP5
@@ -118,11 +119,13 @@ rg -q "favicon: '/favicon.svg'" "$CONFIG" || { err "INV-5: astro.config.mjs favi
 rg -q "light: './src/assets/logo-light.svg'" "$CONFIG" || { err "INV-5: astro.config.mjs logo.light missing logo-light.svg"; inv5_ok=0; }
 rg -q "dark: './src/assets/logo-dark.svg'" "$CONFIG" || { err "INV-5: astro.config.mjs logo.dark missing logo-dark.svg"; inv5_ok=0; }
 # vs-base diffs (font stack + non-brand config identity + tsconfig) require jj.
+vsbase_ran=0
 if ! command -v jj >/dev/null 2>&1; then
   note "⚑ INV-5: vs-base diffs skipped (jj not available); manifest + config-presence still enforced"
 elif ! ( cd "$REPO_ROOT" && jj --no-pager log -r "$DIFF_BASE" >/dev/null 2>&1 ); then
   note "⚑ INV-5: vs-base diffs skipped (revset '$DIFF_BASE' not resolvable); manifest + config-presence still enforced"
 else
+  vsbase_ran=1
   # custom.css MAY be polished (spacing/accent) but its FONT STACK MUST be preserved (SP5 INV-9).
   css_font="$( cd "$REPO_ROOT" && jj --no-pager diff --git --from "$DIFF_BASE" -- site/src/styles/custom.css 2>/dev/null \
     | rg '^[+-]' | rg -v '^[+-]{3}' | rg -i 'font-family|--sl-font|@font-face|@import' || true )"
@@ -145,7 +148,13 @@ else
     printf '    %s\n' "$ts_removed"; inv5_ok=0
   fi
 fi
-((inv5_ok)) && ok "INV-5 branding: identity assets match manifest; config wires logo light/dark + favicon.svg; fonts preserved; non-brand identity unchanged; tsconfig paths-alias only"
+if ((inv5_ok)); then
+  if ((vsbase_ran)); then
+    ok "INV-5 branding: identity assets match manifest; config wires logo light/dark + favicon.svg; fonts preserved; non-brand identity unchanged; tsconfig paths-alias only"
+  else
+    ok "INV-5 branding: identity assets match manifest; config wires logo light/dark + favicon.svg (vs-base font/identity/tsconfig diffs skipped — no jj base)"
+  fi
+fi
 
 # ── INV-6: nav shape ───────────────────────────────────────────────────────
 sections="$(rg -c 'autogenerate:' "$CONFIG" 2>/dev/null || echo 0)"

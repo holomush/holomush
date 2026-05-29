@@ -76,6 +76,8 @@ the generated SVG/PNG.
 - **Amber (`#ffb300`) is the cursor only** — links, nav, and buttons are cyan.
 - Brand colors live as `--brand-*` tokens in `src/styles/custom.css`.
 - Logo ships light + dark variants (`src/assets/logo-{light,dark}.svg`).
+- This is the **software/platform** brand only — never the game world / default
+  setting. Don't touch game-world art when changing brand assets.
 - Full rules: `.claude/rules/branding.md`. Design:
   `docs/superpowers/specs/2026-05-28-holomush-software-brand-refresh-design.md`.
 

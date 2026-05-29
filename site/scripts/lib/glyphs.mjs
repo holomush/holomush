@@ -22,6 +22,12 @@ export function glyphPath(text, x, y, size) {
   let cursor = x;
   let d = '';
   for (const ch of text) {
+    // Fail loudly rather than emit a silent .notdef box: opentype.js returns the
+    // glyph index 0 for any codepoint the font lacks, which would bake a tofu
+    // rectangle into the asset with no other signal.
+    if (font.charToGlyphIndex(ch) === 0) {
+      throw new Error(`glyphPath: font has no glyph for ${JSON.stringify(ch)} (would render .notdef)`);
+    }
     d += font.getPath(ch, cursor, y, size).toPathData(2);
     cursor += font.getAdvanceWidth(ch, size);
   }

@@ -1,6 +1,8 @@
 // site/scripts/build-brand-assets.mjs
-// All imports MUST stay at the top of the file (ESM requirement). `sharp` is
-// imported here for use in later tasks (raster/composite); unused until Task 5.
+// Generates the full brand asset set: SVG masters (favicon tile + light/dark
+// lockups), PNG rasters, and the OG/avatar/banner composites. `sharp` handles
+// rasterization and compositing; `opentype.js` (via ./lib/glyphs.mjs) outlines
+// glyphs to vector paths so the marks carry no runtime font dependency.
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -30,14 +32,13 @@ writeFileSync(`${PUBLIC}/favicon.svg`, tileSvg);
 console.log('wrote favicon.svg');
 
 // --- Header lockups -------------------------------------------------
-// Reusable inner tile (no aria; embedded). 96px tile on a 520x128 canvas.
+// Reusable inner tile (no aria; embedded): the full 256-unit favicon artwork
+// scaled to 96px and offset into the 128px-tall lockup canvas (canvas width is
+// computed per-wordmark in lockup()). Reuses the favicon's outlined `h` path.
 function tileGroup(idSuffix) {
-  // The tile is the full 256-unit artwork, scaled to 96px and offset into the
-  // 128px-tall lockup canvas. The h path uses the same full-tile coords as the
-  // standalone favicon (60,188,160).
   return `<g transform="translate(16,16) scale(0.375)">
 <defs><linearGradient id="g${idSuffix}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${CYAN1}"/><stop offset="1" stop-color="${CYAN2}"/></linearGradient>
-<mask id="cut${idSuffix}"><rect width="256" height="256" rx="58" fill="#fff"/><path d="${glyphPath('h',60,188,160).d}" fill="#000"/></mask></defs>
+<mask id="cut${idSuffix}"><rect width="256" height="256" rx="58" fill="#fff"/><path d="${h.d}" fill="#000"/></mask></defs>
 <rect width="256" height="256" rx="58" fill="url(#g${idSuffix})" mask="url(#cut${idSuffix})"/>
 <rect x="158" y="170" width="46" height="16" rx="3" fill="${AMBER}"/></g>`;
 }
@@ -85,7 +86,7 @@ await sharp(`${ASSETS}/brand/og-backdrop.png`)
 console.log('wrote og-card.png');
 
 // --- GitHub assets --------------------------------------------------
-// reuse mkdirSync already imported at the top of the file (Task 3)
+// GH = repo-root assets/brand/ (org avatar + README banner live outside site/)
 const GH = resolve(here, '../../assets/brand');
 mkdirSync(GH, { recursive: true });
 // Org avatar: 460x460 tile on opaque ink

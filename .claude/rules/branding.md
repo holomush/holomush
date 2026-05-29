@@ -47,8 +47,8 @@ app-tile mark and a `>holomush_` monospace command-line wordmark. Full design:
 The identity marks are frozen against accidental drift by a committed SHA-256
 manifest at `site/src/assets/brand/brand-assets.sha256`, enforced by INV-5 in
 `scripts/check-docs-ia.sh` (run via `task lint` / `docs-ia.bats`). The manifest
-pins `favicon.svg`, `logo-light.svg`, `logo-dark.svg`, `favicon.png`, and
-`apple-touch-icon.png`.
+pins `favicon.svg`, `logo-light.svg`, `logo-dark.svg`, `favicon.png`,
+`apple-touch-icon.png`, and the fal.ai `og-backdrop.png` source.
 
 A casual edit that changes any of these without refreshing the manifest fails
 the check. A **sanctioned rebrand** regenerates the assets and refreshes the
@@ -62,5 +62,6 @@ cd .. && shasum -a 256 \
   site/src/assets/logo-dark.svg \
   site/public/favicon.png \
   site/public/apple-touch-icon.png \
+  site/src/assets/brand/og-backdrop.png \
   > site/src/assets/brand/brand-assets.sha256
 ```
