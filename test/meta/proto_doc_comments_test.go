@@ -101,6 +101,13 @@ func TestProtoCommentsNoNameEcho(t *testing.T) {
 // info (leading comments) is included unless --exclude-source-info is passed.
 func buildFileDescriptorSet(t *testing.T, root string) *descriptorpb.FileDescriptorSet {
 	t.Helper()
+	// The unit-test runner (task test / test:cover in CI's Test job) does not
+	// install buf. Skip there rather than hard-failing: the name-echo gate
+	// (INV-3) is still enforced in CI by the buf-enabled Lint job, which runs
+	// `task lint` → `task lint:proto` → `go test -run TestProtoCommentsNoNameEcho`.
+	if _, err := exec.LookPath("buf"); err != nil {
+		t.Skip("buf not on PATH; name-echo gate (INV-3) is enforced via task lint:proto in CI's buf-enabled Lint job")
+	}
 	out := filepath.Join(t.TempDir(), "schema.binpb")
 	cmd := exec.Command("buf", "build", "api/proto", "--as-file-descriptor-set", "-o", out)
 	cmd.Dir = root
