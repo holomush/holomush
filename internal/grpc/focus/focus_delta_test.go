@@ -60,6 +60,49 @@ func (s *captureConnSender) removes() []string {
 	return out
 }
 
+func TestSetConnectionFocusDrivesPerConnectionDeltas(t *testing.T) {
+	charID := ulid.Make()
+	sceneA := ulid.Make()
+	sceneB := ulid.Make()
+	locID := ulid.Make()
+	connID := ulid.Make()
+
+	fkA := session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneA}
+	sessions := map[string]*session.Info{
+		"sess-1": {
+			ID:          "sess-1",
+			CharacterID: charID,
+			LocationID:  locID,
+			FocusMemberships: []session.FocusMembership{
+				{Kind: session.FocusKindScene, TargetID: sceneA, JoinedAt: time.Now()},
+				{Kind: session.FocusKindScene, TargetID: sceneB, JoinedAt: time.Now()},
+			},
+		},
+	}
+	coord, _ := newTestCoordinator(t, sessions)
+	cs := &captureConnSender{}
+	coord.connectionSender = cs
+	coord.gameID = "main"
+
+	require.NoError(t, coord.sessionStore.AddConnection(context.Background(), &session.Connection{
+		ID: connID, SessionID: "sess-1", ClientType: "terminal", FocusKey: &fkA,
+	}))
+
+	// scene A → scene B: remove A's IC/OOC, add B's IC/OOC.
+	fkB := session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneB}
+	_, err := coord.SetConnectionFocus(context.Background(), connID, &fkB, false)
+	require.NoError(t, err)
+
+	a := sceneA.String()
+	b := sceneB.String()
+	assert.ElementsMatch(t, []string{
+		"events.main.scene." + b + ".ic", "events.main.scene." + b + ".ooc",
+	}, cs.adds(), "scene→scene MUST add the new scene's streams")
+	assert.ElementsMatch(t, []string{
+		"events.main.scene." + a + ".ic", "events.main.scene." + a + ".ooc",
+	}, cs.removes(), "scene→scene MUST remove the old scene's streams (from OldFocusKey)")
+}
+
 func TestAutoFocusOnJoinDrivesPerConnectionDeltas(t *testing.T) {
 	charID := ulid.Make()
 	sceneID := ulid.Make()

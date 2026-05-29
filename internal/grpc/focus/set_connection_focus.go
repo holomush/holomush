@@ -108,5 +108,10 @@ func (c *defaultCoordinator) SetConnectionFocus(
 		// even if a future mutator reorders captures above the error return.
 		return SetConnectionFocusResult{}, uerr //nolint:wrapcheck // store errors are already oops-coded
 	}
+	// INV-FS-1: drive the per-connection subscription delta at the common path.
+	// Old streams derive from the pre-mutation FocusKey (result.OldFocusKey;
+	// nil = grid), new streams from focusKey (the requested target; nil = grid).
+	c.driveFocusDeltas(ctx, result.SessionID, result.CharLocationID, result.OldFocusKey, focusKey, []ulid.ULID{connectionID})
+
 	return result, nil
 }
