@@ -432,10 +432,11 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	// SessionStreamRegistry was created above, before startPlugins). Mirrors
 	// production cmd/holomush/sub_grpc.go:428-470: a real focus.Coordinator wired
 	// with the scene KindPolicy, game settings, player-preference reader, and the
-	// plugin StreamContributor. The scene `join` command reaches JoinFocus →
-	// AutoFocusOnJoin; the binary host's AutoFocusOnJoin RPC handler then drives
-	// per-Connection subscription deltas via the ConnectionSenderAdapter (wired at
-	// host construction above) → the connection's control channel, adding the
+	// plugin StreamContributor plus the ConnectionSender (both wired from one
+	// SessionStreamRegistry via FocusStreamCoordinatorOptions, mirroring prod).
+	// The scene `join` command reaches JoinFocus → AutoFocusOnJoin; the
+	// coordinator itself then drives per-Connection subscription deltas
+	// (driveFocusDeltas, INV-FS-1) → the connection's control channel, adding the
 	// scene IC/OOC streams to the live Subscribe filter set. The coordinator is
 	// injected into the loaded plugin hosts via Manager.ConfigureFocusDeps below.
 	// Gated so non-focus suites keep the WithSubscriber-only wiring — zero blast

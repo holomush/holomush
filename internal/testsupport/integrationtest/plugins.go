@@ -237,7 +237,15 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 	for _, extra := range d.extraPluginDirs {
 		abs, err := filepath.Abs(extra)
 		require.NoError(t, err, "startPlugins: resolve extra plugin dir")
-		dstSub := filepath.Join(pluginsDst, filepath.Base(abs))
+		base := filepath.Base(abs)
+		dstSub := filepath.Join(pluginsDst, base)
+		// Fail loudly on a basename collision rather than silently overwriting:
+		// the staging dest is keyed only by filepath.Base, so two extra dirs (or
+		// an extra dir clashing with an in-tree plugin) sharing a final component
+		// would otherwise clobber each other.
+		_, statErr := os.Stat(dstSub)
+		require.Truef(t, os.IsNotExist(statErr),
+			"startPlugins: extra plugin dir basename %q collides with an already-staged plugin at %s", base, dstSub)
 		require.NoError(t, copyTree(abs, dstSub), "startPlugins: stage extra plugin dir")
 	}
 

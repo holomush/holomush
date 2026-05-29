@@ -214,3 +214,100 @@ func TestAutoFocusOnJoinSessionNotFoundDrivesNoDeltas(t *testing.T) {
 	assert.Equal(t, uint32(0), resp.TotalConnectionCount)
 	assert.Empty(t, cs.calls, "no session → no deltas")
 }
+
+func TestSetConnectionFocusSceneToGridDrivesPerConnectionDeltas(t *testing.T) {
+	charID := ulid.Make()
+	sceneA := ulid.Make()
+	locID := ulid.Make()
+	connID := ulid.Make()
+
+	fkA := session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneA}
+	sessions := map[string]*session.Info{
+		"sess-1": {
+			ID:          "sess-1",
+			CharacterID: charID,
+			LocationID:  locID,
+			FocusMemberships: []session.FocusMembership{
+				{Kind: session.FocusKindScene, TargetID: sceneA, JoinedAt: time.Now()},
+			},
+		},
+	}
+	coord, _ := newTestCoordinator(t, sessions)
+	cs := &captureConnSender{}
+	coord.connectionSender = cs
+	coord.gameID = "main"
+
+	require.NoError(t, coord.sessionStore.AddConnection(context.Background(), &session.Connection{
+		ID: connID, SessionID: "sess-1", ClientType: "terminal", FocusKey: &fkA,
+	}))
+
+	// scene A → grid: remove A's IC/OOC, add the location stream. Exercises
+	// driveFocusDeltas with newFK=nil against a LIVE connectionSender (the
+	// removal path that TestSceneGrid_DoesNotClearPresentingFocus leaves nil).
+	_, err := coord.SetConnectionFocus(context.Background(), connID, nil, true)
+	require.NoError(t, err)
+
+	a := sceneA.String()
+	loc := locID.String()
+	assert.ElementsMatch(t, []string{"location:" + loc}, cs.adds(),
+		"scene→grid MUST add the location stream")
+	assert.ElementsMatch(t, []string{
+		"events.main.scene." + a + ".ic", "events.main.scene." + a + ".ooc",
+	}, cs.removes(), "scene→grid MUST remove the old scene's streams (from OldFocusKey)")
+}
+
+func TestAutoFocusOnJoinFansOutDeltasToAllConnections(t *testing.T) {
+	charID := ulid.Make()
+	sceneID := ulid.Make()
+	locID := ulid.Make()
+	conn1 := ulid.Make()
+	conn2 := ulid.Make()
+
+	sessions := map[string]*session.Info{
+		"sess-1": {
+			ID: "sess-1", CharacterID: charID, LocationID: locID,
+			Status: session.StatusActive,
+			FocusMemberships: []session.FocusMembership{
+				{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: time.Now()},
+			},
+		},
+	}
+	coord, _ := newTestCoordinator(t, sessions)
+	cs := &captureConnSender{}
+	coord.connectionSender = cs
+	coord.gameID = "main"
+
+	for _, id := range []ulid.ULID{conn1, conn2} {
+		require.NoError(t, coord.sessionStore.AddConnection(context.Background(), &session.Connection{
+			ID: id, SessionID: "sess-1", ClientType: "terminal",
+		}))
+	}
+
+	resp, err := coord.AutoFocusOnJoin(context.Background(), charID, sceneID)
+	require.NoError(t, err)
+	require.Len(t, resp.FocusedConnectionIDs, 2, "both terminal connections auto-focus")
+
+	scene := sceneID.String()
+	loc := locID.String()
+	// Each connection independently receives the full grid→scene delta — proves
+	// the per-connection fan-out loop in driveFocusDeltas reaches every conn.
+	for _, id := range []ulid.ULID{conn1, conn2} {
+		var adds, removes []string
+		for _, c := range cs.calls {
+			if c.connectionID != id {
+				continue
+			}
+			assert.Equal(t, "sess-1", c.sessionID)
+			if c.add {
+				adds = append(adds, c.stream)
+			} else {
+				removes = append(removes, c.stream)
+			}
+		}
+		assert.ElementsMatch(t, []string{
+			"events.main.scene." + scene + ".ic", "events.main.scene." + scene + ".ooc",
+		}, adds, "each connection MUST get scene IC + OOC")
+		assert.ElementsMatch(t, []string{"location:" + loc}, removes,
+			"each connection MUST drop the location stream")
+	}
+}

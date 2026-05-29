@@ -10,24 +10,7 @@ import (
 	"testing"
 )
 
-// repoRoot walks up from the test's CWD to the module root (go.mod).
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatal("go.mod not found")
-		}
-		dir = parent
-	}
-}
+// repoRoot is provided by findRepoRoot in inv_binding_test.go (same package).
 
 func nonTestGoFilesContaining(t *testing.T, root, needle string) []string {
 	t.Helper()
@@ -62,7 +45,7 @@ func nonTestGoFilesContaining(t *testing.T, root, needle string) []string {
 // internal/grpc/focus. The interface decl + the registry impl/adapter in
 // internal/grpc are the only other legitimate occurrences.
 func TestSendToConnectionConfinedToFocusAndRegistry(t *testing.T) {
-	root := repoRoot(t)
+	root := findRepoRoot(t)
 	allowed := map[string]bool{
 		"internal/grpc/stream_registry.go":           true, // impl + ConnectionSenderAdapter
 		"internal/grpc/focus/subscription_router.go": true, // ConnectionSender interface decl
@@ -79,7 +62,7 @@ func TestSendToConnectionConfinedToFocusAndRegistry(t *testing.T) {
 // FocusStreamCoordinatorOptions helper (constructors are defined in
 // stream_registry.go).
 func TestFocusAdapterPairAssembledOnlyInHelper(t *testing.T) {
-	root := repoRoot(t)
+	root := findRepoRoot(t)
 	allowed := map[string]bool{
 		"internal/grpc/stream_registry.go": true, // constructor definitions
 		"internal/grpc/focus_wiring.go":    true, // the single assembly point

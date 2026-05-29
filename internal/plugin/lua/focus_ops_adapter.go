@@ -18,7 +18,9 @@ import (
 // delegate to the wrapped coordinator. AutoFocusOnJoin translates the
 // AutoFocusOnJoinResponse struct to the FocusOps tuple shape
 // (focused, skipped []ulid.ULID, failed []FocusFailure, totalConnCount uint32, err error).
-// T18 will remove this adapter.
+// This adapter is the permanent Lua delegation seam: it lets the gopher-lua
+// hostfunc layer reach the same focus.Coordinator the binary host uses, so both
+// runtimes drive focus deltas through one common path (INV-FS-1).
 type coordinatorFocusOpsAdapter struct {
 	c focus.Coordinator
 }
@@ -42,8 +44,8 @@ func (a *coordinatorFocusOpsAdapter) PresentFocus(ctx context.Context, sessionID
 }
 
 // SetConnectionFocus delegates to the coordinator. The FocusOps surface
-// returns only error; the coordinator's oldFocusKey return is consumed at
-// the T18 RPC-handler layer (which holds the Coordinator directly), so
+// returns only error; the coordinator's oldFocusKey return is consumed inside
+// focus.Coordinator.driveFocusDeltas (which the coordinator calls itself), so
 // dropping it here is safe. Per-connection subscription deltas are driven
 // inside focus.Coordinator (INV-FS-1), so the adapter needs only to
 // delegate; the dropped oldFocusKey return value is not needed here.
@@ -55,7 +57,8 @@ func (a *coordinatorFocusOpsAdapter) SetConnectionFocus(ctx context.Context, con
 // AutoFocusOnJoin delegates to the coordinator and translates the
 // AutoFocusOnJoinResponse struct to the FocusOps tuple shape — the
 // individual slices and total count — discarding fields (SessionID,
-// CharLocationID) that are only needed by the T18 RPC handler.
+// CharLocationID) that the coordinator consumes internally in
+// driveFocusDeltas and the Lua tuple surface does not need.
 func (a *coordinatorFocusOpsAdapter) AutoFocusOnJoin(ctx context.Context, characterID, sceneID ulid.ULID) (focused, skipped []ulid.ULID, failed []hostfunc.FocusFailure, totalConnCount uint32, err error) {
 	resp, err := a.c.AutoFocusOnJoin(ctx, characterID, sceneID)
 	if err != nil {

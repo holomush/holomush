@@ -14,15 +14,18 @@ import (
 )
 
 // AutoFocusOnJoinResponse carries the fan-out result from AutoFocusOnJoin.
-// T18 translates this to the wire format (PluginHostServiceAutoFocusOnJoinResponse).
+// The binary plugin host translates this to the wire format
+// (PluginHostServiceAutoFocusOnJoinResponse).
 type AutoFocusOnJoinResponse struct {
-	// SessionID is the session that owns the auto-focused connections. Used by
-	// the T18 RPC handler to route SendToConnection calls without a second
-	// store round-trip. Empty when SESSION_NOT_FOUND (no active session).
+	// SessionID is the session that owns the auto-focused connections. Consumed
+	// by focus.Coordinator.driveFocusDeltas to route SendToConnection calls
+	// without a second store round-trip (INV-FS-1). Empty when SESSION_NOT_FOUND
+	// (no active session).
 	SessionID string
-	// CharLocationID is the session's LocationID at mutation time. Used by
-	// the T18 RPC handler to compute grid stream names for subscription
-	// delta routing (location:<charLocationID> for grid-focused connections).
+	// CharLocationID is the session's LocationID at mutation time. Consumed by
+	// focus.Coordinator.driveFocusDeltas to compute grid stream names for
+	// subscription delta routing (location:<charLocationID> for grid-focused
+	// connections).
 	CharLocationID ulid.ULID
 	// FocusedConnectionIDs are connections that were successfully auto-focused.
 	FocusedConnectionIDs []ulid.ULID
@@ -176,8 +179,14 @@ func (c *defaultCoordinator) AutoFocusOnJoin(
 	}
 
 	// INV-FS-1: drive per-connection subscription deltas at the common path.
-	// Focused conns were on grid before this call (INV-P5-11 skips already-focused
-	// conns), so the old stream set is the grid/location set (nil FocusKey).
+	// We pass nil as the old FocusKey (grid) for every focused connection.
+	// D8/INV-P5-11 (line ~119) only skips connections focused on a DIFFERENT
+	// target, so a newly-grid→scene connection gets the correct add(scene)+
+	// remove(location) delta. A connection already focused on this SAME scene
+	// also lands in FocusedConnectionIDs (it falls through the skip unchanged);
+	// for it the grid→scene delta is redundant but idempotent — SendToConnection
+	// re-adds streams it already holds and removes a location stream it already
+	// dropped, both no-ops at the registry (best-effort, INV-FS-8).
 	sceneFk := &session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneID}
 	c.driveFocusDeltas(ctx, resp.SessionID, resp.CharLocationID, nil, sceneFk, resp.FocusedConnectionIDs)
 

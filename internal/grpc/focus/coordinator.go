@@ -73,9 +73,10 @@ type Coordinator interface {
 	// (D9-gated) Info.PresentingFocus atomically under one Store-lock
 	// acquisition. Pins INV-P5-1 (FocusMemberships gate on scene targets)
 	// and INV-P5-13 (scene grid preserves PresentingFocus). Returns
-	// SetConnectionFocusResult so the RPC handler (T18) can compute
-	// subscription deltas via ComputeFocusManagedStreams + StreamDeltas +
-	// SendToConnection without a second store round-trip.
+	// SetConnectionFocusResult so the coordinator itself can drive
+	// per-connection subscription deltas via ComputeFocusManagedStreams +
+	// StreamDeltas + SendToConnection without a second store round-trip
+	// (INV-FS-1, see driveFocusDeltas).
 	// isSceneGrid=true MUST NOT touch Info.PresentingFocus.
 	SetConnectionFocus(
 		ctx context.Context,
@@ -104,8 +105,8 @@ type RestorePlan struct {
 }
 
 // SetConnectionFocusResult carries the outputs of a SetConnectionFocus call
-// needed by the T18 RPC handler to compute per-Connection subscription deltas
-// without a second store round-trip.
+// consumed by focus.Coordinator.driveFocusDeltas to compute per-Connection
+// subscription deltas without a second store round-trip (INV-FS-1).
 type SetConnectionFocusResult struct {
 	// OldFocusKey is the Connection.FocusKey value captured before the mutation.
 	// Nil means the connection was on the grid (no prior explicit focus).
@@ -158,8 +159,10 @@ func WithConnectionSender(sender ConnectionSender) CoordinatorOption {
 }
 
 // WithGameID sets the game ID used to compute focus-managed scene stream
-// names (events.<gameID>.scene.<id>.{ic,ooc}). Empty defaults to "main" at
-// the call site of ComputeFocusManagedStreams' caller.
+// names (events.<gameID>.scene.<id>.{ic,ooc}). An empty string is treated as
+// the default game "main", applied inside driveFocusDeltas. Production always
+// supplies a concrete game id (cmd/holomush wires s.cfg.EventBus.GameID());
+// the empty default exists for tests that don't set one.
 func WithGameID(gameID string) CoordinatorOption {
 	return func(c *defaultCoordinator) { c.gameID = gameID }
 }

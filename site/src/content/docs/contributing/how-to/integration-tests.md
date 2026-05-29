@@ -112,7 +112,7 @@ ts := integrationtest.Start(
 The fixture at `test/integration/scenes/testdata/lua/focus_join/` is a minimal
 Lua plugin that exposes the `luafocusjoin` command, which calls
 `holomush.auto_focus_on_join` (the hostfunc registered at
-`internal/plugin/lua/stdlib_focus.go`). The integration test at
+`internal/plugin/hostfunc/stdlib_focus.go`). The integration test at
 `test/integration/scenes/lua_focus_parity_test.go` (INV-FS-3) loads this
 fixture and asserts that the Lua path delivers a live scene IC event to the
 joiner's Subscribe stream — the same end-to-end assertion used by the binary
