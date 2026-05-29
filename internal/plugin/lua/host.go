@@ -20,7 +20,6 @@ import (
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
-	"github.com/holomush/holomush/pkg/holo"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
@@ -319,15 +318,6 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 		return nil, oops.In("lua").With("plugin", name).With("operation", "deliver_event").Hint("failed to load code").Wrap(err)
 	}
 
-	// For command events, try on_command first
-	if event.Type == "command" {
-		onCommand := L.GetGlobal("on_command")
-		if onCommand.Type() != lua.LTNil {
-			return h.callOnCommand(ctx, L, name, event, onCommand)
-		}
-		// Fall through to on_event if on_command not defined
-	}
-
 	// Check if on_event exists
 	onEvent := L.GetGlobal("on_event")
 	if onEvent.Type() == lua.LTNil {
@@ -540,52 +530,6 @@ func (h *Host) Close(_ context.Context) error {
 	return nil
 }
 
-// callOnCommand calls the on_command handler with a typed CommandContext.
-func (h *Host) callOnCommand(ctx context.Context, state *lua.LState, name string, event pluginsdk.Event, onCommand lua.LValue) ([]pluginsdk.EmitEvent, error) {
-	// Parse command payload into CommandContext
-	cmdCtx := holo.ParseCommandPayload(event.Payload)
-
-	// Build Lua context table
-	ctxTable := h.buildContextTable(state, cmdCtx)
-
-	// Call on_command(ctx) via invoke.
-	if err := h.invoke(ctx, state, name, "on_command", lua.P{
-		Fn:      onCommand,
-		NRet:    1,
-		Protect: true,
-	}, ctxTable); err != nil {
-		return nil, oops.In("lua").With("plugin", name).With("operation", "on_command").Wrap(err)
-	}
-
-	// Get return value
-	ret := state.Get(-1)
-	state.Pop(1)
-
-	emits, validationErrs := h.parseEmitEvents(ret)
-	if len(validationErrs) > 0 {
-		slog.WarnContext(ctx, "plugin emit validation errors",
-			"plugin", name,
-			"error_count", len(validationErrs),
-			"errors", validationErrs)
-	}
-	return emits, nil
-}
-
-// buildContextTable creates a Lua table from a CommandContext.
-func (h *Host) buildContextTable(state *lua.LState, ctx holo.CommandContext) *lua.LTable {
-	t := state.NewTable()
-	state.SetField(t, "command", lua.LString(ctx.Name))
-	state.SetField(t, "args", lua.LString(ctx.Args))
-	state.SetField(t, "invoked_as", lua.LString(ctx.InvokedAs))
-	state.SetField(t, "character_name", lua.LString(ctx.CharacterName))
-	state.SetField(t, "character_id", lua.LString(ctx.CharacterID))
-	state.SetField(t, "location_id", lua.LString(ctx.LocationID))
-	state.SetField(t, "player_id", lua.LString(ctx.PlayerID))
-	state.SetField(t, "session_id", lua.LString(ctx.SessionID))
-	state.SetField(t, "last_whispered", lua.LString(ctx.LastWhispered))
-	return t
-}
-
 func (h *Host) buildEventTable(state *lua.LState, event pluginsdk.Event) *lua.LTable {
 	t := state.NewTable()
 	state.SetField(t, "id", lua.LString(event.ID))
@@ -707,7 +651,7 @@ func emitTableBool(t *lua.LTable, key string) (value, ok bool) {
 func (h *Host) buildCommandRequestTable(state *lua.LState, cmd pluginsdk.CommandRequest) *lua.LTable {
 	t := state.NewTable()
 	state.SetField(t, "command", lua.LString(cmd.Command))
-	state.SetField(t, "name", lua.LString(cmd.Command)) // alias for parity with event-path on_command(ctx)
+	state.SetField(t, "name", lua.LString(cmd.Command)) // alias: handlers may read ctx.name or ctx.command
 	state.SetField(t, "args", lua.LString(cmd.Args))
 	state.SetField(t, "character_id", lua.LString(cmd.CharacterID))
 	state.SetField(t, "character_name", lua.LString(cmd.CharacterName))
