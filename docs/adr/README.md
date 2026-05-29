@@ -16,6 +16,8 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Isolate xk6 extensions in a separate Go module](holomush-2344h-isolate-xk6-extensions-separate-go-module.md) | 2026-05-28 | Accepted | `holomush-2344h` |
+| [Use k6 + Custom xk6 Binary for Full-System Load Testing](holomush-evggu-use-k6-custom-xk6-binary-full-system-load-testing.md) | 2026-05-28 | Accepted | `holomush-evggu` |
 | [Use topic-tab navigation over a single grouped sidebar](holomush-q924m-use-topic-tab-navigation-over-a-single-grouped-sidebar.md) | 2026-05-28 | Accepted | `holomush-q924m` |
 | [Organize docs audience-first with Diátaxis modes within](holomush-md3k4-organize-docs-audience-first-di-taxis-modes-within.md) | 2026-05-28 | Accepted | `holomush-md3k4` |
 | [Use autogenerate sidebar over explicit entries](holomush-38kmt-use-autogenerate-sidebar-over-explicit-entries.md) | 2026-05-28 | Accepted | `holomush-38kmt` |
