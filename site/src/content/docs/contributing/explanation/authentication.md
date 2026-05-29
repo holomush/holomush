@@ -2,7 +2,16 @@
 title: "Authentication System"
 ---
 
-This document describes the HoloMUSH authentication architecture for contributors.
+This page documents the authentication system implementation for contributors
+working in `internal/auth/`. If you're an operator configuring authentication
+for a server, see the [operator auth guide](/operating/explanation/authentication/)
+instead.
+
+The authentication system spans three layers: a protocol handler in the gateway
+that calls core gRPC services, service implementations that enforce security
+invariants (timing-safe comparisons, argon2id hashing), and a repository layer
+that persists tokens and sessions to PostgreSQL. The sections below trace each
+layer from the wire inward.
 
 ## Overview
 

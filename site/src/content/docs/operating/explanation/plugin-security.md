@@ -20,11 +20,21 @@ the caller's context and passes it to `L.SetContext`; gopher-lua checks
 this context at every VM instruction. A tight `while true do end` loop
 is caught within the deadline plus a small instruction-boundary delay.
 
+When the deadline fires, the dispatcher returns a controlled
+`PLUGIN_LUA_TIMEOUT` error rather than letting the handler run unbounded. Each
+timeout increments the `holomush_plugin_lua_timeouts_total` Prometheus counter.
+
 The flag `--plugin-lua-registry-max` (default `65536`) bounds the Lua
 value registry per state. A plugin that allocates more values than the
 cap hits a panic which `CallByParam(Protect: true)` converts to an
 error, so the dispatcher returns a controlled failure rather than an
 unbounded heap growth.
+
+When the registry cap is hit, that controlled error increments the
+`holomush_plugin_lua_registry_full_total` Prometheus counter.
+
+See [Plugin metrics](/operating/reference/plugin-metrics/) for these counters and
+the full metric set.
 
 The third control, the watchdog goroutine, has no operator knob: every
 `CallByParam` runs in its own goroutine so a stuck host function cannot

@@ -14,3 +14,21 @@
   --sl-color-accent: #e64a19;
   --sl-color-accent-high: #bf360c;
 }
+
+/* --- Light visual polish (holomush-ivwij.4): spacing only, no font changes --- */
+
+/* A touch more breathing room before section headings. */
+.sl-markdown-content :is(h2, h3) {
+  margin-block-start: 2rem;
+}
+
+/* Consistent vertical rhythm around asides and code blocks. */
+.sl-markdown-content .starlight-aside,
+.sl-markdown-content .expressive-code {
+  margin-block: 1.25rem;
+}
+
+/* Slightly tighter line-height inside code blocks for readability. */
+.expressive-code code {
+  line-height: 1.5;
+}

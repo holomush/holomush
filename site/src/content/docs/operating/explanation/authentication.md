@@ -89,6 +89,7 @@ or token blacklisting required.
 
 - [Authentication recovery](/operating/how-to/authentication-recovery/) — lockout and password-reset procedures
 - [Authentication reference](/operating/reference/authentication/) — log events, alerting, metrics, database tables
+- [Authentication System (implementation)](/contributing/explanation/authentication/) — how it's built, for contributors
 - [Configuration](/operating/reference/configuration/) — Server settings
 - [Operations](/operating/how-to/operations/) — Health checks, metrics, and troubleshooting
 - [Database](/operating/how-to/database/) — PostgreSQL setup and maintenance

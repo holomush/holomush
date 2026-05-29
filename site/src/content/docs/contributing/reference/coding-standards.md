@@ -2,7 +2,11 @@
 title: "Coding Standards"
 ---
 
-This guide covers the coding conventions and standards used in HoloMUSH development.
+This reference is for contributors writing or reviewing HoloMUSH code. It covers
+Go conventions, testing requirements, build commands, and code style — the rules
+that `task lint` enforces and that reviewers check. For the broader development
+workflow (spec-first, PR process, bead tracking), see the
+[Pull Request Guide](/contributing/how-to/pr-guide/).
 
 ## Development Principles
 
@@ -100,18 +104,24 @@ exposed to plugins while still enabling effective debugging.
 
 ### Logging
 
-Use structured logging with slog:
-
-- Log at appropriate levels (debug, info, warn, error)
-- Include relevant context in log entries
-- Use consistent key names across the codebase
+Use structured logging with slog. When a `context.Context` is in scope,
+use the context-carrying variant — it threads `trace_id`/`span_id` into
+the log entry, which is how Loki and Sentry correlate logs to traces.
 
 ```go
-logger.Info("plugin loaded",
+// CORRECT — ctx is available, use InfoContext
+slog.InfoContext(ctx, "plugin loaded",
     "plugin", name,
     "version", version,
     "load_time_ms", loadTime.Milliseconds())
+
+// WRONG — ctx is available but dropped; log line is orphaned
+slog.Info("plugin loaded", "plugin", name)
 ```
+
+Bare `slog.Info`/`slog.Warn` are only acceptable in `main`, `init`, or
+bare goroutines where no context is reachable. The `sloglint` linter
+(run by `task lint`) enforces this and will flag violations.
 
 ### Naming
 

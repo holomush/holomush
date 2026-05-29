@@ -12,9 +12,11 @@
 #                    is flat by design and exempt).
 # INV-3 retired-gone:contributing/event-delivery.* and operating/legacy-id-cutover.*
 #                    are absent, and no link resolves to their slugs.
-# INV-5 branding:    vs main@origin (jj-native diff; worktree has no .git), the
-#                    branding assets are byte-identical, astro.config.mjs differs
-#                    only within the sidebar field, and tsconfig.json only adds the
+# INV-5 branding:    vs main@origin (jj-native diff; worktree has no .git), the brand
+#                    assets (logo, favicon) are byte-identical, custom.css preserves its
+#                    font stack (accent/spacing polish allowed — SP5 INV-9), astro.config.mjs
+#                    leaves the identity fields (title/description/logo/favicon/customCss/site)
+#                    unchanged (social + plugins MAY evolve), and tsconfig.json only adds the
 #                    compilerOptions.paths alias (extends/include/exclude intact).
 # INV-6 nav:         ≤7 top-level sidebar sections (hard); mode folders with >7
 #                    direct children are flagged as a Diátaxis guideline (SHOULD
@@ -98,15 +100,25 @@ elif ! ( cd "$REPO_ROOT" && jj --no-pager log -r "$DIFF_BASE" >/dev/null 2>&1 );
   note "⚑ INV-5 skipped: revset '$DIFF_BASE' not resolvable here"
 else
   inv5_ok=1
-  for p in site/src/styles/custom.css site/src/assets/logo.png site/public/favicon.png; do
+  # Brand assets (logo, favicon) MUST be byte-identical vs base.
+  for p in site/src/assets/logo.png site/public/favicon.png; do
     if [[ -n "$( cd "$REPO_ROOT" && jj --no-pager diff --from "$DIFF_BASE" -- "$p" 2>/dev/null )" ]]; then
       err "INV-5: branding asset changed vs $DIFF_BASE: $p"; inv5_ok=0
     fi
   done
+  # custom.css MAY be polished (spacing/accent) but its FONT STACK MUST be preserved (SP5 INV-9).
+  css_font="$( cd "$REPO_ROOT" && jj --no-pager diff --git --from "$DIFF_BASE" -- site/src/styles/custom.css 2>/dev/null \
+    | rg '^[+-]' | rg -v '^[+-]{3}' | rg -i 'font-family|--sl-font|@font-face|@import' || true )"
+  if [[ -n "$css_font" ]]; then
+    err "INV-5: custom.css changed a font declaration vs $DIFF_BASE (fonts MUST be preserved):"
+    printf '    %s\n' "$css_font"; inv5_ok=0
+  fi
+  # astro.config.mjs identity fields MUST NOT change. social (community links) and plugins
+  # (functionality) MAY evolve — SP5 added GitHub Discussions + topic-tab/LLM-action plugins.
   cfg_brand="$( cd "$REPO_ROOT" && jj --no-pager diff --git --from "$DIFF_BASE" -- site/astro.config.mjs 2>/dev/null \
-    | rg '^[+-]' | rg -v '^[+-]{3}' | rg 'title:|description:|logo:|favicon:|social:|customCss:|plugins:|site:' || true )"
+    | rg '^[+-]' | rg -v '^[+-]{3}' | rg 'title:|description:|logo:|favicon:|customCss:|site:' || true )"
   if [[ -n "$cfg_brand" ]]; then
-    err "INV-5: astro.config.mjs changed a branding field (only the sidebar may change):"
+    err "INV-5: astro.config.mjs changed a branding-identity field (title/description/logo/favicon/customCss/site):"
     printf '    %s\n' "$cfg_brand"; inv5_ok=0
   fi
   ts_removed="$( cd "$REPO_ROOT" && jj --no-pager diff --git --from "$DIFF_BASE" -- site/tsconfig.json 2>/dev/null \
@@ -115,7 +127,7 @@ else
     err "INV-5: tsconfig.json removed a preserved key (only the paths alias may be added):"
     printf '    %s\n' "$ts_removed"; inv5_ok=0
   fi
-  ((inv5_ok)) && ok "INV-5 branding: assets byte-identical; config diffs scoped to sidebar + paths alias"
+  ((inv5_ok)) && ok "INV-5 branding: brand assets byte-identical; custom.css fonts preserved; config identity fields unchanged; tsconfig paths-alias only"
 fi
 
 # ── INV-6: nav shape ───────────────────────────────────────────────────────

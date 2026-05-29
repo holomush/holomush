@@ -2,9 +2,12 @@
 title: "Verb Registration"
 ---
 
-HoloMUSH uses a **verb registry** to associate event types with rendering
-metadata. As a plugin author, you declare verbs in your plugin manifest
-— the host wires everything else automatically.
+When a plugin emits an event, the gateway needs to know how to display it —
+whether it scrolls to the terminal, updates a state panel, and what verb phrase
+("says", "whispers") to use. That display contract lives in the **verb registry**.
+
+As a plugin author, you declare verbs in your plugin manifest. The host wires the
+rest at load time.
 
 ## Declaring verbs in your manifest
 
@@ -67,6 +70,7 @@ original version, enabling drift detection.
 
 ## See also
 
+- [Plugin Guide](/extending/tutorials/plugin-guide/) — overview of the plugin system and manifest format
+- [Plugin API Reference](/extending/reference/plugin-api/) — SDK types and host function catalog
+- [Declaring event sensitivity](/extending/how-to/event-sensitivity/) — `crypto.emits` for sensitive payloads
 - Verb registration spec: `docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md`
-- Event sensitivity (`crypto.emits`): `site/docs/extending/event-sensitivity.md`
-- Event emit pipeline: `site/docs/contributing/event-emit-pipeline.md`

@@ -1,0 +1,31 @@
+---
+title: "Extending HoloMUSH"
+sidebar:
+  order: 0
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Build plugins that add game mechanics, integrate external services, or shape how the world works. HoloMUSH supports two plugin runtimes — both use the same event-driven model.
+
+## Plugin Types
+
+| Type   | Language | Best For                        | Compilation |
+| ------ | -------- | ------------------------------- | ----------- |
+| Lua    | Lua 5.1  | Simple scripts, rapid iteration | None        |
+| Binary | Go       | Complex logic, external APIs    | Required    |
+
+Both types work the same way: your plugin subscribes to events (like a character speaking or moving) and can emit new events in response. The server handles delivery, ordering, and access control.
+
+<CardGrid>
+  <LinkCard title="Tutorials" href="/extending/tutorials/getting-started/" description="Build your first plugin step by step — Lua and binary walkthroughs." />
+  <LinkCard title="How-to guides" href="/extending/how-to/verb-registration/" description="Register verbs, write policies, handle errors, and configure plugins." />
+  <LinkCard title="Reference" href="/extending/reference/plugin-api/" description="Plugin API, manifest schema, actor kinds, and substrate contract." />
+  <LinkCard title="Explanation" href="/extending/explanation/substrate-invariants/" description="The rules plugins can rely on and the boundaries they must not cross." />
+</CardGrid>
+
+**Start here → [Getting Started with Plugins](/extending/tutorials/getting-started/)**
+
+## Example Plugins
+
+The [`plugins/`](https://github.com/holomush/holomush/tree/main/plugins) directory in the repository contains working examples you can use as starting points.

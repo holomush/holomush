@@ -2,9 +2,10 @@
 title: "Audit Subject Catalogue"
 ---
 
-This page registers the audit-stream subject namespaces that the host
-emits. ABAC denies all plugin and character subjects from subscribing
-to any subject in this catalogue; operators read these via
+This catalogue lists the audit-stream subjects the host emits — a reference for
+operators auditing a running game and for contributors adding new audit
+subjects. ABAC denies every plugin and character subject from subscribing to
+anything in this catalogue; operators read these via
 `holomush admin audit query …` on the localhost UNIX admin socket.
 
 The authoritative shapes (payload fields, chain participation,
@@ -40,4 +41,6 @@ master spec §4.6 and INV-15.
 
 - [Event Types reference](/reference/events/)
 - [Access Control reference](/reference/access-control/)
-- [Audit-chain integrity](https://github.com/holomush/holomush/blob/main/docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md#46x-audit-chain-integrity)
+- [Emitting audit events](/extending/how-to/audit-events/) — how plugins record audit events
+- [Audit chain](/extending/explanation/audit-chain/) — how chain-bearing audit streams link their records
+- [Audit-chain integrity](https://github.com/holomush/holomush/blob/main/docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md#46x-audit-chain-integrity) (design spec)
