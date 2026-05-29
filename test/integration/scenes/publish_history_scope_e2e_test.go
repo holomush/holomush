@@ -40,7 +40,8 @@ var _ = Describe("INV-Y5INX-4 / E9: publish-event history-scope floor", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		DeferCleanup(cancel)
 
-		ts := integrationtest.Start(suiteT,
+		ts := integrationtest.Start(
+			suiteT,
 			integrationtest.WithInTreePlugins(),
 			integrationtest.WithPluginCrypto(),
 		)
