@@ -102,30 +102,79 @@ const (
 
 // WebServiceClient is a client for the holomush.web.v1.WebService service.
 type WebServiceClient interface {
-	// Send a game command (say, pose, quit, etc.)
+	// SendCommand submits a player's raw command line (say, pose, quit, ...)
+	// for parsing and dispatch. Proxies to CoreService.HandleCommand;
+	// command-history persistence happens core-side, so the gateway does no
+	// extra work. The connection_id ties the command to its originating stream
+	// for per-connection routing.
 	SendCommand(context.Context, *connect.Request[v1.SendCommandRequest]) (*connect.Response[v1.SendCommandResponse], error)
-	// Server-streaming event feed. Client receives game events
-	// (say, pose, arrive, leave) as they occur.
+	// StreamEvents opens the server-streaming game-event feed for a session.
+	// Proxies to CoreService.Subscribe; the gateway generates a per-stream
+	// connection_id, emits a synthetic STREAM_OPENED ControlFrame carrying it,
+	// forwards translated frames, and runs a best-effort Disconnect on stream
+	// exit (client disconnect, cancel, error, or STREAM_CLOSED). Session-store
+	// registration/deregistration is owned entirely by core's Subscribe path.
 	StreamEvents(context.Context, *connect.Request[v1.StreamEventsRequest]) (*connect.ServerStreamForClient[v1.StreamEventsResponse], error)
-	// Disconnect ends the session and triggers cleanup.
+	// Disconnect ends the game session out of band (not via stream teardown).
+	// Proxies to CoreService.Disconnect on a best-effort basis — RPC errors
+	// are logged but never surfaced to the caller. Forwards the session-token
+	// cookie header so core can enforce ownership.
 	Disconnect(context.Context, *connect.Request[v1.DisconnectRequest]) (*connect.Response[v1.DisconnectResponse], error)
-	// Retrieve command history for a session.
+	// GetCommandHistory retrieves the recent command lines a session has
+	// entered. Proxies to CoreService.GetCommandHistory; ownership is enforced
+	// core-side via the forwarded session-token header, and any failure (error
+	// or success=false) collapses to an empty history at the gateway.
 	GetCommandHistory(context.Context, *connect.Request[v1.GetCommandHistoryRequest]) (*connect.Response[v1.GetCommandHistoryResponse], error)
-	// Web auth RPCs.
+	// WebAuthenticatePlayer validates username/password and returns the
+	// player's character roster. Proxies to CoreService.AuthenticatePlayer; on
+	// success the gateway translates the core session token into a Set-Cookie
+	// signal. First runs the cookie-collision gate, short-circuiting with
+	// ALREADY_AUTHENTICATED if a valid session cookie is already present.
 	WebAuthenticatePlayer(context.Context, *connect.Request[v1.WebAuthenticatePlayerRequest]) (*connect.Response[v1.WebAuthenticatePlayerResponse], error)
+	// WebSelectCharacter binds a character to a new or reattached game session.
+	// Proxies to CoreService.SelectCharacter using the session token read from
+	// the X-Session-Token cookie header; returns the resulting session_id.
 	WebSelectCharacter(context.Context, *connect.Request[v1.WebSelectCharacterRequest]) (*connect.Response[v1.WebSelectCharacterResponse], error)
+	// WebCreatePlayer registers a new player account. Proxies to
+	// CoreService.CreatePlayer; on success the gateway sets the session cookie.
+	// Runs the cookie-collision gate first (ALREADY_AUTHENTICATED short-circuit).
 	WebCreatePlayer(context.Context, *connect.Request[v1.WebCreatePlayerRequest]) (*connect.Response[v1.WebCreatePlayerResponse], error)
-	// Create an ephemeral guest player and character.
+	// WebCreateGuest provisions an ephemeral guest player and character.
+	// Proxies to CoreService.CreateGuest; on success the gateway sets a session
+	// cookie whose MaxAge matches the guest session's shorter TTL. Runs the
+	// cookie-collision gate first.
 	WebCreateGuest(context.Context, *connect.Request[v1.WebCreateGuestRequest]) (*connect.Response[v1.WebCreateGuestResponse], error)
+	// WebCreateCharacter adds a character to the authenticated player. Proxies
+	// to CoreService.CreateCharacter using the cookie-derived session token.
 	WebCreateCharacter(context.Context, *connect.Request[v1.WebCreateCharacterRequest]) (*connect.Response[v1.WebCreateCharacterResponse], error)
+	// WebListCharacters returns the authenticated player's character roster.
+	// Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
+	// CodeUnauthenticated (session expired or invalid).
 	WebListCharacters(context.Context, *connect.Request[v1.WebListCharactersRequest]) (*connect.Response[v1.WebListCharactersResponse], error)
+	// WebLogout ends the player session and clears the session cookie. Proxies
+	// to CoreService.Logout (best-effort) when a token is present, then always
+	// emits the cookie-clear signal regardless of the RPC outcome.
 	WebLogout(context.Context, *connect.Request[v1.WebLogoutRequest]) (*connect.Response[v1.WebLogoutResponse], error)
+	// WebRequestPasswordReset initiates the email-based reset flow. Proxies to
+	// CoreService.RequestPasswordReset; to avoid leaking account existence the
+	// gateway reports success=true even when the underlying RPC errors.
 	WebRequestPasswordReset(context.Context, *connect.Request[v1.WebRequestPasswordResetRequest]) (*connect.Response[v1.WebRequestPasswordResetResponse], error)
+	// WebConfirmPasswordReset completes a reset using the emailed token and a
+	// new password. Proxies to CoreService.ConfirmPasswordReset.
 	WebConfirmPasswordReset(context.Context, *connect.Request[v1.WebConfirmPasswordResetRequest]) (*connect.Response[v1.WebConfirmPasswordResetResponse], error)
-	// Validate player session from cookie. Returns player info or Unauthenticated error.
+	// WebCheckSession validates the player session carried in the cookie and
+	// returns the player identity plus character roster, or a
+	// CodeUnauthenticated error. Proxies to CoreService.CheckPlayerSession; the
+	// web client's authed layout uses this to gate page loads.
 	WebCheckSession(context.Context, *connect.Request[v1.WebCheckSessionRequest]) (*connect.Response[v1.WebCheckSessionResponse], error)
-	// Content store access (public, no auth required).
+	// WebGetContent fetches a single content-store item by exact key. Proxies
+	// to ContentService.GetContent (a separate gRPC service, NOT CoreService);
+	// public, no auth. Returns CodeUnimplemented if the gateway was built
+	// without a content client.
 	WebGetContent(context.Context, *connect.Request[v1.WebGetContentRequest]) (*connect.Response[v1.WebGetContentResponse], error)
+	// WebListContent lists content-store items under a key prefix. Proxies to
+	// ContentService.ListContent (NOT CoreService); public, no auth. Returns
+	// CodeUnimplemented if no content client is configured.
 	WebListContent(context.Context, *connect.Request[v1.WebListContentRequest]) (*connect.Response[v1.WebListContentResponse], error)
 	// WebQueryStreamHistory reads paginated event history for the web client.
 	// Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
@@ -134,10 +183,21 @@ type WebServiceClient interface {
 	// Proxies to CoreService.ListSessionStreams — authorization is enforced by core.
 	// Used by the web client to enumerate streams for reload-backfill.
 	WebListSessionStreams(context.Context, *connect.Request[v1.WebListSessionStreamsRequest]) (*connect.Response[v1.WebListSessionStreamsResponse], error)
-	// Session-management RPCs. The caller is identified via the X-Session-Token
-	// cookie header injected by CookieMiddleware; no token field in the request.
+	// WebListPlayerSessions returns the caller's active PlayerSessions (the
+	// device/tab login records, distinct from in-game game sessions), each
+	// flagged is_current for the calling session. Proxies to
+	// CoreService.ListPlayerSessions; the caller is identified via the
+	// X-Session-Token cookie header injected by CookieMiddleware — there is no
+	// token field in the request body.
 	WebListPlayerSessions(context.Context, *connect.Request[v1.WebListPlayerSessionsRequest]) (*connect.Response[v1.WebListPlayerSessionsResponse], error)
+	// WebRevokePlayerSession revokes one of the caller's PlayerSessions by id.
+	// Proxies to CoreService.RevokePlayerSession; caller identity comes from the
+	// X-Session-Token cookie header.
 	WebRevokePlayerSession(context.Context, *connect.Request[v1.WebRevokePlayerSessionRequest]) (*connect.Response[v1.WebRevokePlayerSessionResponse], error)
+	// WebRevokeOtherPlayerSessions revokes all of the caller's PlayerSessions
+	// except the current one ("log out everywhere else"). Proxies to
+	// CoreService.RevokeOtherPlayerSessions; caller identity comes from the
+	// X-Session-Token cookie header.
 	WebRevokeOtherPlayerSessions(context.Context, *connect.Request[v1.WebRevokeOtherPlayerSessionsRequest]) (*connect.Response[v1.WebRevokeOtherPlayerSessionsResponse], error)
 	// WebListFocusPresence returns the presence snapshot for the session's
 	// current focus context (location or scene). Proxies to
@@ -430,30 +490,79 @@ func (c *webServiceClient) WebListFocusPresence(ctx context.Context, req *connec
 
 // WebServiceHandler is an implementation of the holomush.web.v1.WebService service.
 type WebServiceHandler interface {
-	// Send a game command (say, pose, quit, etc.)
+	// SendCommand submits a player's raw command line (say, pose, quit, ...)
+	// for parsing and dispatch. Proxies to CoreService.HandleCommand;
+	// command-history persistence happens core-side, so the gateway does no
+	// extra work. The connection_id ties the command to its originating stream
+	// for per-connection routing.
 	SendCommand(context.Context, *connect.Request[v1.SendCommandRequest]) (*connect.Response[v1.SendCommandResponse], error)
-	// Server-streaming event feed. Client receives game events
-	// (say, pose, arrive, leave) as they occur.
+	// StreamEvents opens the server-streaming game-event feed for a session.
+	// Proxies to CoreService.Subscribe; the gateway generates a per-stream
+	// connection_id, emits a synthetic STREAM_OPENED ControlFrame carrying it,
+	// forwards translated frames, and runs a best-effort Disconnect on stream
+	// exit (client disconnect, cancel, error, or STREAM_CLOSED). Session-store
+	// registration/deregistration is owned entirely by core's Subscribe path.
 	StreamEvents(context.Context, *connect.Request[v1.StreamEventsRequest], *connect.ServerStream[v1.StreamEventsResponse]) error
-	// Disconnect ends the session and triggers cleanup.
+	// Disconnect ends the game session out of band (not via stream teardown).
+	// Proxies to CoreService.Disconnect on a best-effort basis — RPC errors
+	// are logged but never surfaced to the caller. Forwards the session-token
+	// cookie header so core can enforce ownership.
 	Disconnect(context.Context, *connect.Request[v1.DisconnectRequest]) (*connect.Response[v1.DisconnectResponse], error)
-	// Retrieve command history for a session.
+	// GetCommandHistory retrieves the recent command lines a session has
+	// entered. Proxies to CoreService.GetCommandHistory; ownership is enforced
+	// core-side via the forwarded session-token header, and any failure (error
+	// or success=false) collapses to an empty history at the gateway.
 	GetCommandHistory(context.Context, *connect.Request[v1.GetCommandHistoryRequest]) (*connect.Response[v1.GetCommandHistoryResponse], error)
-	// Web auth RPCs.
+	// WebAuthenticatePlayer validates username/password and returns the
+	// player's character roster. Proxies to CoreService.AuthenticatePlayer; on
+	// success the gateway translates the core session token into a Set-Cookie
+	// signal. First runs the cookie-collision gate, short-circuiting with
+	// ALREADY_AUTHENTICATED if a valid session cookie is already present.
 	WebAuthenticatePlayer(context.Context, *connect.Request[v1.WebAuthenticatePlayerRequest]) (*connect.Response[v1.WebAuthenticatePlayerResponse], error)
+	// WebSelectCharacter binds a character to a new or reattached game session.
+	// Proxies to CoreService.SelectCharacter using the session token read from
+	// the X-Session-Token cookie header; returns the resulting session_id.
 	WebSelectCharacter(context.Context, *connect.Request[v1.WebSelectCharacterRequest]) (*connect.Response[v1.WebSelectCharacterResponse], error)
+	// WebCreatePlayer registers a new player account. Proxies to
+	// CoreService.CreatePlayer; on success the gateway sets the session cookie.
+	// Runs the cookie-collision gate first (ALREADY_AUTHENTICATED short-circuit).
 	WebCreatePlayer(context.Context, *connect.Request[v1.WebCreatePlayerRequest]) (*connect.Response[v1.WebCreatePlayerResponse], error)
-	// Create an ephemeral guest player and character.
+	// WebCreateGuest provisions an ephemeral guest player and character.
+	// Proxies to CoreService.CreateGuest; on success the gateway sets a session
+	// cookie whose MaxAge matches the guest session's shorter TTL. Runs the
+	// cookie-collision gate first.
 	WebCreateGuest(context.Context, *connect.Request[v1.WebCreateGuestRequest]) (*connect.Response[v1.WebCreateGuestResponse], error)
+	// WebCreateCharacter adds a character to the authenticated player. Proxies
+	// to CoreService.CreateCharacter using the cookie-derived session token.
 	WebCreateCharacter(context.Context, *connect.Request[v1.WebCreateCharacterRequest]) (*connect.Response[v1.WebCreateCharacterResponse], error)
+	// WebListCharacters returns the authenticated player's character roster.
+	// Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
+	// CodeUnauthenticated (session expired or invalid).
 	WebListCharacters(context.Context, *connect.Request[v1.WebListCharactersRequest]) (*connect.Response[v1.WebListCharactersResponse], error)
+	// WebLogout ends the player session and clears the session cookie. Proxies
+	// to CoreService.Logout (best-effort) when a token is present, then always
+	// emits the cookie-clear signal regardless of the RPC outcome.
 	WebLogout(context.Context, *connect.Request[v1.WebLogoutRequest]) (*connect.Response[v1.WebLogoutResponse], error)
+	// WebRequestPasswordReset initiates the email-based reset flow. Proxies to
+	// CoreService.RequestPasswordReset; to avoid leaking account existence the
+	// gateway reports success=true even when the underlying RPC errors.
 	WebRequestPasswordReset(context.Context, *connect.Request[v1.WebRequestPasswordResetRequest]) (*connect.Response[v1.WebRequestPasswordResetResponse], error)
+	// WebConfirmPasswordReset completes a reset using the emailed token and a
+	// new password. Proxies to CoreService.ConfirmPasswordReset.
 	WebConfirmPasswordReset(context.Context, *connect.Request[v1.WebConfirmPasswordResetRequest]) (*connect.Response[v1.WebConfirmPasswordResetResponse], error)
-	// Validate player session from cookie. Returns player info or Unauthenticated error.
+	// WebCheckSession validates the player session carried in the cookie and
+	// returns the player identity plus character roster, or a
+	// CodeUnauthenticated error. Proxies to CoreService.CheckPlayerSession; the
+	// web client's authed layout uses this to gate page loads.
 	WebCheckSession(context.Context, *connect.Request[v1.WebCheckSessionRequest]) (*connect.Response[v1.WebCheckSessionResponse], error)
-	// Content store access (public, no auth required).
+	// WebGetContent fetches a single content-store item by exact key. Proxies
+	// to ContentService.GetContent (a separate gRPC service, NOT CoreService);
+	// public, no auth. Returns CodeUnimplemented if the gateway was built
+	// without a content client.
 	WebGetContent(context.Context, *connect.Request[v1.WebGetContentRequest]) (*connect.Response[v1.WebGetContentResponse], error)
+	// WebListContent lists content-store items under a key prefix. Proxies to
+	// ContentService.ListContent (NOT CoreService); public, no auth. Returns
+	// CodeUnimplemented if no content client is configured.
 	WebListContent(context.Context, *connect.Request[v1.WebListContentRequest]) (*connect.Response[v1.WebListContentResponse], error)
 	// WebQueryStreamHistory reads paginated event history for the web client.
 	// Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
@@ -462,10 +571,21 @@ type WebServiceHandler interface {
 	// Proxies to CoreService.ListSessionStreams — authorization is enforced by core.
 	// Used by the web client to enumerate streams for reload-backfill.
 	WebListSessionStreams(context.Context, *connect.Request[v1.WebListSessionStreamsRequest]) (*connect.Response[v1.WebListSessionStreamsResponse], error)
-	// Session-management RPCs. The caller is identified via the X-Session-Token
-	// cookie header injected by CookieMiddleware; no token field in the request.
+	// WebListPlayerSessions returns the caller's active PlayerSessions (the
+	// device/tab login records, distinct from in-game game sessions), each
+	// flagged is_current for the calling session. Proxies to
+	// CoreService.ListPlayerSessions; the caller is identified via the
+	// X-Session-Token cookie header injected by CookieMiddleware — there is no
+	// token field in the request body.
 	WebListPlayerSessions(context.Context, *connect.Request[v1.WebListPlayerSessionsRequest]) (*connect.Response[v1.WebListPlayerSessionsResponse], error)
+	// WebRevokePlayerSession revokes one of the caller's PlayerSessions by id.
+	// Proxies to CoreService.RevokePlayerSession; caller identity comes from the
+	// X-Session-Token cookie header.
 	WebRevokePlayerSession(context.Context, *connect.Request[v1.WebRevokePlayerSessionRequest]) (*connect.Response[v1.WebRevokePlayerSessionResponse], error)
+	// WebRevokeOtherPlayerSessions revokes all of the caller's PlayerSessions
+	// except the current one ("log out everywhere else"). Proxies to
+	// CoreService.RevokeOtherPlayerSessions; caller identity comes from the
+	// X-Session-Token cookie header.
 	WebRevokeOtherPlayerSessions(context.Context, *connect.Request[v1.WebRevokeOtherPlayerSessionsRequest]) (*connect.Response[v1.WebRevokeOtherPlayerSessionsResponse], error)
 	// WebListFocusPresence returns the presence snapshot for the session's
 	// current focus context (location or scene). Proxies to

@@ -40,9 +40,15 @@ const (
 type OwnerKind int32
 
 const (
+	// OWNER_KIND_UNSPECIFIED is the zero value; a decoded cursor never carries
+	// it, so it signals a malformed or default-constructed token.
 	OwnerKind_OWNER_KIND_UNSPECIFIED OwnerKind = 0
-	OwnerKind_OWNER_KIND_HOST        OwnerKind = 1
-	OwnerKind_OWNER_KIND_PLUGIN      OwnerKind = 2
+	// OWNER_KIND_HOST marks a cursor over a host-owned subject, whose body is a
+	// HostCursor (JetStream seq + tripwire ULID).
+	OwnerKind_OWNER_KIND_HOST OwnerKind = 1
+	// OWNER_KIND_PLUGIN marks a cursor over a plugin-owned subject, whose body
+	// is the plugin's own opaque inner cursor bytes.
+	OwnerKind_OWNER_KIND_PLUGIN OwnerKind = 2
 )
 
 // Enum value maps for OwnerKind.
@@ -89,7 +95,9 @@ func (OwnerKind) EnumDescriptor() ([]byte, []int) {
 // Owner identifies who owns the subject the cursor names.
 type Owner struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Kind  OwnerKind              `protobuf:"varint,1,opt,name=kind,proto3,enum=holomush.eventbus.cursor.v1.OwnerKind" json:"kind,omitempty"`
+	// kind selects which subject-ownership domain this cursor addresses and
+	// which Cursor.body variant is expected.
+	Kind OwnerKind `protobuf:"varint,1,opt,name=kind,proto3,enum=holomush.eventbus.cursor.v1.OwnerKind" json:"kind,omitempty"`
 	// plugin_name is set iff kind == OWNER_KIND_PLUGIN. The canonical name
 	// from the plugin manifest (internal/plugin/manifest).
 	PluginName    string `protobuf:"bytes,2,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
@@ -143,9 +151,14 @@ func (x *Owner) GetPluginName() string {
 
 // HostCursor is the body for host-owned subject cursors.
 type HostCursor struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Seq           uint64                 `protobuf:"varint,1,opt,name=seq,proto3" json:"seq,omitempty"` // JetStream stream sequence
-	Id            []byte                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`    // ULID, 16 bytes — tripwire for drift/rebuild detection
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// seq is the JetStream per-stream sequence the next page resumes after;
+	// this is the authoritative ordering position for host-owned subjects.
+	Seq uint64 `protobuf:"varint,1,opt,name=seq,proto3" json:"seq,omitempty"`
+	// id is the 16-byte ULID of the event at seq, retained as a tripwire so a
+	// stream rebuild or drift is detected when the resumed seq no longer maps
+	// to this identity.
+	Id            []byte `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -197,10 +210,19 @@ func (x *HostCursor) GetId() []byte {
 // Cursor is the on-the-wire token (proto-marshaled). Clients treat
 // these bytes as opaque.
 type Cursor struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Version uint32                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"` // bump on incompatible format change; today=1
-	Epoch   uint64                 `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`     // bumps on JS rebuild; 0 today
-	Owner   *Owner                 `protobuf:"bytes,3,opt,name=owner,proto3" json:"owner,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// version is the cursor format version; Decode accepts ONLY CurrentVersion
+	// (today=1) and rejects any other value with EVENTBUS_CURSOR_INVALID.
+	Version uint32 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	// epoch bumps whenever the JetStream backing store is rebuilt, invalidating
+	// any cursor minted under a prior epoch; 0 in the current deployment.
+	Epoch uint64 `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	// owner names whose subject this cursor addresses and selects the body
+	// variant below.
+	Owner *Owner `protobuf:"bytes,3,opt,name=owner,proto3" json:"owner,omitempty"`
+	// body carries the owner-specific resume position: a structured HostCursor
+	// for host subjects, or opaque plugin bytes for plugin subjects.
+	//
 	// Types that are valid to be assigned to Body:
 	//
 	//	*Cursor_Host
@@ -291,11 +313,14 @@ type isCursor_Body interface {
 }
 
 type Cursor_Host struct {
+	// host is the resume position for host-owned subjects.
 	Host *HostCursor `protobuf:"bytes,4,opt,name=host,proto3,oneof"`
 }
 
 type Cursor_PluginInner struct {
-	PluginInner []byte `protobuf:"bytes,5,opt,name=plugin_inner,json=pluginInner,proto3,oneof"` // opaque bytes from plugin's own QueryHistory
+	// plugin_inner is the opaque cursor a plugin's own QueryHistory returned,
+	// round-tripped verbatim without host interpretation.
+	PluginInner []byte `protobuf:"bytes,5,opt,name=plugin_inner,json=pluginInner,proto3,oneof"`
 }
 
 func (*Cursor_Host) isCursor_Body() {}

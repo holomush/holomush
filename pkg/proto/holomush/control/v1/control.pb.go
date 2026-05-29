@@ -24,10 +24,15 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ShutdownRequest contains shutdown parameters.
+// Parameters for a shutdown request. The graceful field is currently logged
+// but does not alter shutdown behavior — both values invoke the shutdown hook
+// identically (mismatch tracked in holomush-4gchp).
 type ShutdownRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// If true, perform graceful shutdown allowing in-flight requests to complete.
+	// When true, the caller intends a drain-and-exit (in-flight requests
+	// allowed to complete before the process stops). Currently only logged for
+	// observability; the shutdown hook is a parameterless func() and is not yet
+	// differentiated on this value.
 	Graceful      bool `protobuf:"varint,1,opt,name=graceful,proto3" json:"graceful,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -70,10 +75,11 @@ func (x *ShutdownRequest) GetGraceful() bool {
 	return false
 }
 
-// ShutdownResponse confirms shutdown initiation.
+// Confirmation that the shutdown sequence has been triggered.
 type ShutdownResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Human-readable status message.
+	// Human-readable confirmation string; currently always "shutdown initiated".
+	// Callers SHOULD NOT parse this value; it exists for operator logs only.
 	Message       string `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -116,7 +122,8 @@ func (x *ShutdownResponse) GetMessage() string {
 	return ""
 }
 
-// StatusRequest requests current process status.
+// Empty carrier for a status poll. No parameters are required; the server
+// derives all response fields from its own runtime state.
 type StatusRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -153,16 +160,21 @@ func (*StatusRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_control_v1_control_proto_rawDescGZIP(), []int{2}
 }
 
-// StatusResponse contains current process status.
+// A point-in-time snapshot of the process's health and identity.
 type StatusResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Whether the process is running.
+	// True while the process's internal running flag is set. Set to false
+	// only after GracefulStop completes (internal/control/grpc_server.go::Stop).
 	Running bool `protobuf:"varint,1,opt,name=running,proto3" json:"running,omitempty"`
-	// Process ID.
+	// Operating-system process ID as returned by os.Getpid(), cast to int32.
+	// Safe on all supported platforms; values never exceed int32 range.
 	Pid int32 `protobuf:"varint,2,opt,name=pid,proto3" json:"pid,omitempty"`
-	// Seconds since process started.
+	// Elapsed seconds since the GRPCServer was constructed via NewGRPCServer.
+	// Derived from a monotonic time.Time captured at construction.
 	UptimeSeconds int64 `protobuf:"varint,3,opt,name=uptime_seconds,json=uptimeSeconds,proto3" json:"uptime_seconds,omitempty"`
-	// Component name (e.g., "core" or "gateway").
+	// Identifies which process component reported this status, e.g. "core"
+	// or "gateway". Set at construction time; never empty (enforced by
+	// NewGRPCServer which returns an error for an empty component string).
 	Component     string `protobuf:"bytes,4,opt,name=component,proto3" json:"component,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

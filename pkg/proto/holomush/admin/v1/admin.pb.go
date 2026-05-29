@@ -25,6 +25,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// StatusRequest carries no fields; the Status RPC requires no input.
 type StatusRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -61,11 +62,14 @@ func (*StatusRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_admin_v1_admin_proto_rawDescGZIP(), []int{0}
 }
 
+// StatusResponse reports the admin socket server's health and build identity.
 type StatusResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// version is the server binary version string (set via -X ldflag).
+	// version is the server binary version string (set via -X ldflag at build time).
 	Version string `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	// healthy is true iff the admin socket HTTP server is accepting requests.
+	// healthy is true when the admin socket HTTP server is accepting requests.
+	// compositeHandler.Status always returns true; false would only appear if
+	// the handler itself were somehow called during shutdown.
 	Healthy       bool `protobuf:"varint,2,opt,name=healthy,proto3" json:"healthy,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -115,11 +119,19 @@ func (x *StatusResponse) GetHealthy() bool {
 	return false
 }
 
+// AuthenticateRequest carries the operator credentials and TOTP code for
+// the two-factor authentication step that precedes all other admin operations.
 type AuthenticateRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
-	Password      string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
-	TotpCode      string                 `protobuf:"bytes,3,opt,name=totp_code,json=totpCode,proto3" json:"totp_code,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// username is the in-game operator account name for credential lookup.
+	Username string `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	// password is the operator account password (plaintext over the UNIX socket;
+	// the socket path is a trust boundary and the connection is never exposed
+	// to the network).
+	Password string `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	// totp_code is the current TOTP one-time password from the operator's
+	// authenticator app. The provider rejects expired, reused, and locked codes.
+	TotpCode      string `protobuf:"bytes,3,opt,name=totp_code,json=totpCode,proto3" json:"totp_code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -175,11 +187,18 @@ func (x *AuthenticateRequest) GetTotpCode() string {
 	return ""
 }
 
+// AuthenticateResponse is returned on successful operator authentication.
 type AuthenticateResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionToken  string                 `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
-	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	PlayerId      string                 `protobuf:"bytes,3,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_token is the opaque short-lived bearer token (10-minute TTL) to
+	// supply in session_token fields of subsequent admin RPCs.
+	SessionToken string `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
+	// expires_at is the UTC timestamp after which session_token will be rejected
+	// with DENY_SESSION_EXPIRED.
+	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// player_id is the ULID of the authenticated operator's player record,
+	// included so callers can display or log the operator identity.
+	PlayerId      string `protobuf:"bytes,3,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -235,10 +254,18 @@ func (x *AuthenticateResponse) GetPlayerId() string {
 	return ""
 }
 
+// ApproveRequest carries the approver's session token and the ID of the
+// pending approval row to sign off.
 type ApproveRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionToken  string                 `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
-	RequestId     []byte                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"` // 16-byte ULID
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_token is the approving operator's bearer token from Authenticate.
+	// Used to resolve the approver's player identity for the self-approval check
+	// (INV-D6) and for capability/role re-assertion (INV-D16).
+	SessionToken string `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
+	// request_id is the 16-byte ULID of the admin_approvals row to approve.
+	// Must be non-zero; the all-zero sentinel is rejected as an invalid forgery
+	// shape even though ulid.Parse accepts it.
+	RequestId     []byte `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"` // 16-byte ULID
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -287,6 +314,7 @@ func (x *ApproveRequest) GetRequestId() []byte {
 	return nil
 }
 
+// ApproveResponse is empty; a nil error is the success signal.
 type ApproveResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -323,10 +351,16 @@ func (*ApproveResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_admin_v1_admin_proto_rawDescGZIP(), []int{5}
 }
 
+// ResetTOTPRequest identifies the target player whose TOTP enrollment should
+// be cleared by an authenticated admin operator.
 type ResetTOTPRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	SessionToken   string                 `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
-	TargetPlayerId string                 `protobuf:"bytes,2,opt,name=target_player_id,json=targetPlayerId,proto3" json:"target_player_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_token is the operator's bearer token from Authenticate.
+	SessionToken string `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
+	// target_player_id is the ULID of the player whose TOTP enrollment will be
+	// cleared. Must be a valid non-zero ULID; the handler rejects both
+	// malformed strings and the all-zero sentinel.
+	TargetPlayerId string `protobuf:"bytes,2,opt,name=target_player_id,json=targetPlayerId,proto3" json:"target_player_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -375,9 +409,13 @@ func (x *ResetTOTPRequest) GetTargetPlayerId() string {
 	return ""
 }
 
+// ResetTOTPResponse reports whether the TOTP enrollment was actually present.
 type ResetTOTPResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Cleared       bool                   `protobuf:"varint,1,opt,name=cleared,proto3" json:"cleared,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// cleared is true when the player was TOTP-enrolled and the enrollment was
+	// removed. False when the player had no active TOTP enrollment (no-op);
+	// mirrors ClearResult.WasEnrolled from internal/admin/auth/reset_handler.go.
+	Cleared       bool `protobuf:"varint,1,opt,name=cleared,proto3" json:"cleared,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

@@ -33,20 +33,52 @@ const (
 // coupled.
 type AuditRow struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Cleartext projection fields
-	Id        []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"` // 16-byte ULID
-	Subject   string                 `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
-	Type      string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	// id holds the 16-byte binary ULID that uniquely identifies this
+	// event. Set from the Nats-Msg-Id header. Used as the primary key
+	// for idempotent INSERT (ON CONFLICT (id) DO NOTHING). MUST be
+	// exactly 16 bytes; the plugin rejects rows with wrong length.
+	Id []byte `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// subject is the NATS dot-delimited event subject, e.g.
+	// "events.<game_id>.scene.<scene_id>.ic". Used by the plugin to
+	// route scene_pose events and as the WHERE clause in queryLog.
+	Subject string `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
+	// type is the application-level event type string extracted from the
+	// App-Event-Type header, e.g. "scene_pose" or "scene_join". The
+	// plugin dispatches on this value to route scene_pose rows through
+	// the transactional InsertScenePose path.
+	Type string `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	// timestamp is the event wall-clock time stamped at publish. Stored
+	// as nanosecond-precision TIMESTAMPTZ in scene_log. MUST be non-nil;
+	// the plugin rejects nil timestamps at ingest to prevent SQL NULL
+	// from corrupting subsequent queryLog scans.
 	Timestamp *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	Actor     *v1.Actor              `protobuf:"bytes,5,opt,name=actor,proto3" json:"actor,omitempty"`
-	// Crypto envelope
-	Codec   string `protobuf:"bytes,6,opt,name=codec,proto3" json:"codec,omitempty"`     // "identity" | "xchacha20poly1305-v1"
-	Payload []byte `protobuf:"bytes,7,opt,name=payload,proto3" json:"payload,omitempty"` // ciphertext when codec != "identity"
-	// DEK reference — absent on identity codec, required otherwise.
-	// Host enforces the agreement (codec=identity ⇔ both absent).
-	DekRef     *uint64 `protobuf:"varint,8,opt,name=dek_ref,json=dekRef,proto3,oneof" json:"dek_ref,omitempty"`
+	// actor identifies the entity that caused the event. Nil when the
+	// event was system-originated (no actor header). Kind is stored as
+	// the enum's String() representation (e.g. "ACTOR_KIND_CHARACTER").
+	Actor *v1.Actor `protobuf:"bytes,5,opt,name=actor,proto3" json:"actor,omitempty"`
+	// codec names the encryption codec applied to payload. "identity"
+	// means payload is plaintext; "xchacha20poly1305-v1" means payload
+	// is ciphertext. Sourced from the App-Codec header. MUST be non-empty.
+	Codec string `protobuf:"bytes,6,opt,name=codec,proto3" json:"codec,omitempty"`
+	// payload holds the event body. For identity codec this is cleartext;
+	// for xchacha20poly1305-v1 this is the AEAD ciphertext, forwarded
+	// byte-equal without decryption (INV-P7-11). Plugins store the bytes
+	// opaquely; decryption occurs at read-back via DecryptOwnAuditRows.
+	Payload []byte `protobuf:"bytes,7,opt,name=payload,proto3" json:"payload,omitempty"`
+	// dek_ref is the numeric key reference into the host's crypto_keys
+	// table identifying which DEK encrypted this payload. Absent for
+	// identity-codec rows; MUST be present for AEAD-codec rows. The host
+	// enforces the agreement: identity codec ⇔ both dek_ref and
+	// dek_version absent.
+	DekRef *uint64 `protobuf:"varint,8,opt,name=dek_ref,json=dekRef,proto3,oneof" json:"dek_ref,omitempty"`
+	// dek_version is the 1-based rotation counter of the DEK at the time
+	// of encryption, stored for key-rotation audit. Absent for
+	// identity-codec rows; MUST be present for AEAD-codec rows alongside
+	// dek_ref (INV-P7-3).
 	DekVersion *uint32 `protobuf:"varint,9,opt,name=dek_version,json=dekVersion,proto3,oneof" json:"dek_version,omitempty"`
-	// Audit schema version (was App-Schema-Version header).
+	// schema_ver is the application schema version stamped at publish via
+	// the App-Schema-Version header. Valid range 0–32767 (SMALLINT).
+	// The plugin rejects rows outside this range at ingest.
 	SchemaVer     int32 `protobuf:"varint,10,opt,name=schema_ver,json=schemaVer,proto3" json:"schema_ver,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -152,9 +184,17 @@ func (x *AuditRow) GetSchemaVer() int32 {
 	return 0
 }
 
+// AuditEventRequest carries a single audit row forwarded by the host
+// per-plugin consumer for the plugin to persist. The row is built from
+// the JetStream message by buildAuditRow, which reads projection fields
+// from the unmarshaled envelope and crypto metadata from NATS headers.
 type AuditEventRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Row           *AuditRow              `protobuf:"bytes,1,opt,name=row,proto3" json:"row,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// row is the audit row to persist. MUST be non-nil and MUST pass
+	// field validation (non-empty codec, non-nil timestamp, 16-byte id,
+	// non-empty type and subject) or the plugin returns an error and the
+	// host relies on JetStream redelivery.
+	Row           *AuditRow `protobuf:"bytes,1,opt,name=row,proto3" json:"row,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -196,6 +236,9 @@ func (x *AuditEventRequest) GetRow() *AuditRow {
 	return nil
 }
 
+// AuditEventResponse is the empty acknowledgement returned by the
+// plugin after a successful idempotent INSERT. The host acks the
+// JetStream message on receipt.
 type AuditEventResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -232,15 +275,41 @@ func (*AuditEventResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_audit_proto_rawDescGZIP(), []int{2}
 }
 
+// QueryHistoryRequest specifies the page of audit rows to stream back
+// from the plugin's own audit store. The host's PluginHistoryRouter
+// populates this from the eventbus.HistoryQuery and the authenticated
+// session record.
 type QueryHistoryRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Subject   string                 `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
-	After     []byte                 `protobuf:"bytes,2,opt,name=after,proto3" json:"after,omitempty"`                        // ULID; empty = from start
-	Before    []byte                 `protobuf:"bytes,3,opt,name=before,proto3" json:"before,omitempty"`                      // ULID; empty = unbounded
-	PageSize  int32                  `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"` // host caps at 200
-	Direction int32                  `protobuf:"varint,5,opt,name=direction,proto3" json:"direction,omitempty"`               // 1=forward, 2=backward
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// subject is the fully-qualified NATS dot-delimited event subject to
+	// query, e.g. "events.main.scene.<scene_id>.ic". MUST be non-empty
+	// and MUST NOT contain wildcard tokens (* or >). The plugin parses
+	// this to extract the entity identifier for membership checks.
+	Subject string `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
+	// after is an exclusive lower-bound cursor encoded as a 16-byte ULID.
+	// Rows with id > after are returned. Empty means start from the
+	// beginning of the log. ULIDs are time-ordered, so this is equivalent
+	// to a chronological lower bound within the subject.
+	After []byte `protobuf:"bytes,2,opt,name=after,proto3" json:"after,omitempty"`
+	// before is an exclusive upper-bound cursor encoded as a 16-byte ULID.
+	// Rows with id < before are returned. Empty means no upper bound.
+	Before []byte `protobuf:"bytes,3,opt,name=before,proto3" json:"before,omitempty"`
+	// page_size caps the number of rows returned in this response stream.
+	// The host clamps to 200; the plugin MUST also cap at 200 and apply a
+	// default of 50 when the value is <= 0.
+	PageSize int32 `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// direction controls row ordering: 1 = forward (ascending by id,
+	// oldest first), 2 = backward (descending by id, newest first).
+	// Zero is treated as forward by the plugin.
+	Direction int32 `protobuf:"varint,5,opt,name=direction,proto3" json:"direction,omitempty"`
+	// not_before filters out rows whose timestamp is strictly before this
+	// value. Applied as a SQL "timestamp >= not_before" predicate. Nil
+	// means no lower time bound.
 	NotBefore *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=not_before,json=notBefore,proto3" json:"not_before,omitempty"`
-	NotAfter  *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=not_after,json=notAfter,proto3" json:"not_after,omitempty"`
+	// not_after filters out rows whose timestamp is strictly after this
+	// value. Applied as a SQL "timestamp <= not_after" predicate. Nil
+	// means no upper time bound.
+	NotAfter *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=not_after,json=notAfter,proto3" json:"not_after,omitempty"`
 	// caller identifies the principal on whose behalf the host is reading.
 	// Plugins implementing PluginAuditService MUST enforce domain-specific
 	// authz (e.g., membership) against this identity before returning rows.
@@ -338,9 +407,15 @@ func (x *QueryHistoryRequest) GetCaller() *v1.Actor {
 	return nil
 }
 
+// QueryHistoryResponse wraps one audit row in the server-streaming
+// response. The host's PluginHistoryRouter reads rows from the stream
+// and adapts them to the eventbus.HistoryStream contract.
 type QueryHistoryResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Row           *AuditRow              `protobuf:"bytes,1,opt,name=row,proto3" json:"row,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// row is a single audit row from the plugin's store. Fields match
+	// the AuditRow shape used at ingest so the host can reconstruct a
+	// full eventbus.Event, including crypto envelope fields for read-back.
+	Row           *AuditRow `protobuf:"bytes,1,opt,name=row,proto3" json:"row,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -389,8 +464,12 @@ func (x *QueryHistoryResponse) GetRow() *AuditRow {
 // decrypted. The batch is REJECTED (not clamped) when it exceeds the
 // server-side cap of 500.
 type DecryptOwnAuditRowsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Rows          []*AuditRow            `protobuf:"bytes,1,rep,name=rows,proto3" json:"rows,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// rows is the batch of audit rows to decrypt. Each row MUST have been
+	// previously stored by this plugin (subject ownership enforced by the
+	// host's OwnerMap g1 gate). A batch exceeding 500 rows is rejected
+	// outright rather than partially processed.
+	Rows          []*AuditRow `protobuf:"bytes,1,rep,name=rows,proto3" json:"rows,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -435,8 +514,11 @@ func (x *DecryptOwnAuditRowsRequest) GetRows() []*AuditRow {
 // DecryptOwnAuditRowsResponse returns one RowResult per request row, in the
 // same order (1:1 positional correspondence, INV-RB-12).
 type DecryptOwnAuditRowsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Results       []*RowResult           `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// results contains one outcome per request row, in the same order as
+	// DecryptOwnAuditRowsRequest.rows. Positional correspondence is
+	// guaranteed (INV-RB-12); callers correlate by index or by RowResult.id.
+	Results       []*RowResult `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -484,7 +566,9 @@ func (x *DecryptOwnAuditRowsResponse) GetResults() []*RowResult {
 // "not_owner", "downgrade_refused", "dek_missing", "internal").
 type RowResult struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Id    []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"` // echoes AuditRow.id for correlation
+	// id echoes AuditRow.id so the caller can correlate results back to
+	// their source rows without relying solely on positional ordering.
+	Id []byte `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// Exactly one outcome arm is set: plaintext iff the row decrypted,
 	// no_plaintext_reason iff it was refused. The oneof makes both-set /
 	// neither-set unrepresentable and distinguishes decrypted-to-empty from refused.
@@ -565,11 +649,25 @@ type isRowResult_Outcome interface {
 }
 
 type RowResult_Plaintext struct {
-	Plaintext []byte `protobuf:"bytes,2,opt,name=plaintext,proto3,oneof"` // set iff decrypted
+	// plaintext holds the decrypted event payload bytes when decryption
+	// succeeded. May be empty bytes for zero-length payloads; callers
+	// MUST distinguish this from no_plaintext_reason by which oneof arm
+	// is set, not by length.
+	Plaintext []byte `protobuf:"bytes,2,opt,name=plaintext,proto3,oneof"`
 }
 
 type RowResult_NoPlaintextReason struct {
-	NoPlaintextReason string `protobuf:"bytes,3,opt,name=no_plaintext_reason,json=noPlaintextReason,proto3,oneof"` // set iff refused
+	// no_plaintext_reason is a short ASCII token describing why decryption
+	// was refused. It is a stable wire contract (the values MUST NOT drift;
+	// SDKs switch on them — see readback.go). The full set: "not_owner" (g1
+	// OwnerMap gate — subject belongs to a different plugin), "auth_guard_deny"
+	// (recipient not authorized by manifest declaration / ABAC grant — Phase 3b
+	// AuthGuard deny), "downgrade_refused" (INV-P7-7 fence — sensitive event
+	// stored under identity codec), "dek_missing" (INV-P7-15 fence — no DEK
+	// exists for this row's context), "stale_dek" (INV-E21 — both hot and cold
+	// DEK tiers gone), "audit_queue_full" (plugin audit-emit backpressure), and
+	// "internal" (host-side error, details logged server-side only).
+	NoPlaintextReason string `protobuf:"bytes,3,opt,name=no_plaintext_reason,json=noPlaintextReason,proto3,oneof"`
 }
 
 func (*RowResult_Plaintext) isRowResult_Outcome() {}

@@ -26,13 +26,28 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// EventChannel is the web mirror of corev1.EventChannel: it tells the web
+// client which surface a GameEvent should render on. The gateway forwards the
+// core RenderingMetadata.display_target verbatim onto GameEvent.display_target
+// (internal/web/translate.go::translateEvent), so the value semantics are
+// identical to the core enum — no remapping happens at the boundary.
 type EventChannel int32
 
 const (
+	// EVENT_CHANNEL_UNSPECIFIED is the zero value; rendering metadata that
+	// omits a display target lands here. The web client SHOULD treat it as a
+	// safe default rather than a routing instruction.
 	EventChannel_EVENT_CHANNEL_UNSPECIFIED EventChannel = 0
-	EventChannel_EVENT_CHANNEL_TERMINAL    EventChannel = 1
-	EventChannel_EVENT_CHANNEL_STATE       EventChannel = 2
-	EventChannel_EVENT_CHANNEL_BOTH        EventChannel = 3
+	// EVENT_CHANNEL_TERMINAL routes the event to the scrolling terminal/log
+	// pane — the conversational stream (say, pose, arrive, leave, channel).
+	EventChannel_EVENT_CHANNEL_TERMINAL EventChannel = 1
+	// EVENT_CHANNEL_STATE routes the event to the structured state surfaces
+	// (location panel, exits, presence) rather than the terminal log. Used by
+	// state-category events such as location_state and exit_update.
+	EventChannel_EVENT_CHANNEL_STATE EventChannel = 2
+	// EVENT_CHANNEL_BOTH routes the event to the terminal AND the state
+	// surfaces simultaneously.
+	EventChannel_EVENT_CHANNEL_BOTH EventChannel = 3
 	// EVENT_CHANNEL_AUDIT_ONLY mirrors corev1.EventChannel for INV-GW-16
 	// lockstep parity. These events are dropped at the gRPC Subscribe
 	// boundary and MUST NOT appear on the web wire format in practice.
@@ -84,12 +99,27 @@ func (EventChannel) EnumDescriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{0}
 }
 
+// ControlSignal is the discriminator on a ControlFrame — an out-of-band
+// stream-lifecycle message multiplexed into the StreamEvents feed alongside
+// game events. The gateway forwards core control signals
+// (internal/web/handler.go::forwardFrame) and also synthesizes STREAM_OPENED
+// itself at attach time.
 type ControlSignal int32
 
 const (
-	ControlSignal_CONTROL_SIGNAL_UNSPECIFIED     ControlSignal = 0
+	// CONTROL_SIGNAL_UNSPECIFIED is the zero value; a well-formed ControlFrame
+	// always carries a concrete signal, so this value SHOULD never appear on
+	// the wire.
+	ControlSignal_CONTROL_SIGNAL_UNSPECIFIED ControlSignal = 0
+	// CONTROL_SIGNAL_REPLAY_COMPLETE marks the boundary between the historical
+	// backfill the core Subscribe handler replays at attach and the live event
+	// tail. The accompanying ControlFrame.attach_moment_ms is the upper time
+	// bound the client feeds back into WebQueryStreamHistory backfill calls.
 	ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE ControlSignal = 1
-	ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED   ControlSignal = 2
+	// CONTROL_SIGNAL_STREAM_CLOSED signals the server is ending the stream;
+	// the gateway treats it as a terminal frame (forwardFrame returns
+	// errStreamClosed) and runs its session-cleanup Disconnect.
+	ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED ControlSignal = 2
 	// STREAM_OPENED is emitted as the first frame after a successful
 	// StreamEvents subscription. The accompanying ControlFrame.connection_id
 	// is the per-stream ULID — clients SHOULD store it and pass it back via
@@ -141,12 +171,21 @@ func (ControlSignal) EnumDescriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{1}
 }
 
+// WebPresenceContext is the web mirror of corev1.PresenceContext: it tells the
+// client which kind of focus context a presence snapshot describes. The gateway
+// maps core values 1:1 (internal/web/handler.go::translatePresenceContext).
 type WebPresenceContext int32
 
 const (
+	// WEB_PRESENCE_CONTEXT_UNSPECIFIED is the zero value / fallback for an
+	// unrecognized core context.
 	WebPresenceContext_WEB_PRESENCE_CONTEXT_UNSPECIFIED WebPresenceContext = 0
-	WebPresenceContext_WEB_PRESENCE_CONTEXT_LOCATION    WebPresenceContext = 1
-	WebPresenceContext_WEB_PRESENCE_CONTEXT_SCENE       WebPresenceContext = 2
+	// WEB_PRESENCE_CONTEXT_LOCATION indicates the snapshot is the presence at a
+	// location.
+	WebPresenceContext_WEB_PRESENCE_CONTEXT_LOCATION WebPresenceContext = 1
+	// WEB_PRESENCE_CONTEXT_SCENE indicates the snapshot is the participants of a
+	// scene.
+	WebPresenceContext_WEB_PRESENCE_CONTEXT_SCENE WebPresenceContext = 2
 )
 
 // Enum value maps for WebPresenceContext.
@@ -190,13 +229,24 @@ func (WebPresenceContext) EnumDescriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{2}
 }
 
+// WebPresenceState is the web mirror of corev1.PresenceState: the activity
+// state of one present character. Mapped 1:1 from core
+// (internal/web/handler.go::translatePresenceState).
 type WebPresenceState int32
 
 const (
+	// WEB_PRESENCE_STATE_UNSPECIFIED is the zero value / fallback for an
+	// unrecognized core state.
 	WebPresenceState_WEB_PRESENCE_STATE_UNSPECIFIED WebPresenceState = 0
-	WebPresenceState_WEB_PRESENCE_STATE_ACTIVE      WebPresenceState = 1
-	WebPresenceState_WEB_PRESENCE_STATE_DETACHED    WebPresenceState = 2
-	WebPresenceState_WEB_PRESENCE_STATE_INACTIVE    WebPresenceState = 3
+	// WEB_PRESENCE_STATE_ACTIVE means the character has a live, attached
+	// connection (grid present).
+	WebPresenceState_WEB_PRESENCE_STATE_ACTIVE WebPresenceState = 1
+	// WEB_PRESENCE_STATE_DETACHED means the session exists but currently has no
+	// attached connection.
+	WebPresenceState_WEB_PRESENCE_STATE_DETACHED WebPresenceState = 2
+	// WEB_PRESENCE_STATE_INACTIVE means the character is present but idle/not
+	// actively connected.
+	WebPresenceState_WEB_PRESENCE_STATE_INACTIVE WebPresenceState = 3
 )
 
 // Enum value maps for WebPresenceState.
@@ -242,10 +292,18 @@ func (WebPresenceState) EnumDescriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{3}
 }
 
+// ControlFrame is the out-of-band stream-lifecycle message carried in the
+// `control` arm of StreamEventsResponse. It conveys open/replay/close
+// transitions and the per-stream routing identity, distinct from the in-band
+// GameEvent traffic.
 type ControlFrame struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Signal  ControlSignal          `protobuf:"varint,1,opt,name=signal,proto3,enum=holomush.web.v1.ControlSignal" json:"signal,omitempty"`
-	Message string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// signal selects which lifecycle transition this frame represents and
+	// governs which of the remaining fields are populated.
+	Signal ControlSignal `protobuf:"varint,1,opt,name=signal,proto3,enum=holomush.web.v1.ControlSignal" json:"signal,omitempty"`
+	// message is an optional human-readable detail string accompanying the
+	// signal (e.g. a close reason). May be empty.
+	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
 	// connection_id is populated on the first ControlFrame after a successful
 	// StreamEvents open so the client can include it in subsequent
 	// SendCommand requests. Per-stream identity for multi-tab routing
@@ -325,10 +383,16 @@ func (x *ControlFrame) GetAttachMomentMs() int64 {
 	return 0
 }
 
+// SendCommandRequest carries one raw command line for a game session, optionally
+// tagged with the stream connection it originated from.
 type SendCommandRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Text      string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_id identifies the in-game session whose character issues the
+	// command.
+	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// text is the raw command line exactly as the player typed it; parsing and
+	// dispatch happen core-side in HandleCommand.
+	Text string `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
 	// connection_id identifies the originating StreamEvents stream for
 	// per-connection command routing (Phase 5 scene-focus autofocus).
 	// Clients set this from the connection_id they receive in the
@@ -390,11 +454,20 @@ func (x *SendCommandRequest) GetConnectionId() string {
 	return ""
 }
 
+// SendCommandResponse reports the outcome of a dispatched command. Note this is
+// the dispatch acknowledgement; any narrative output the command produces
+// arrives asynchronously over the StreamEvents feed, not here.
 type SendCommandResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Output        string                 `protobuf:"bytes,2,opt,name=output,proto3" json:"output,omitempty"`
-	ErrorMessage  string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// success is true when the command was accepted and dispatched without a
+	// transport-level error.
+	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	// output is an optional synchronous text result; most game output is
+	// delivered out of band over StreamEvents rather than in this field.
+	Output string `protobuf:"bytes,2,opt,name=output,proto3" json:"output,omitempty"`
+	// error_message is a human-readable failure detail; the gateway sets a
+	// generic "command error" when the upstream HandleCommand RPC fails.
+	ErrorMessage  string `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -450,9 +523,11 @@ func (x *SendCommandResponse) GetErrorMessage() string {
 	return ""
 }
 
+// StreamEventsRequest opens the server-streaming event feed for a session.
 type StreamEventsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_id identifies the in-game session whose event stream to attach.
+	SessionId     string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -494,17 +569,44 @@ func (x *StreamEventsRequest) GetSessionId() string {
 	return ""
 }
 
+// GameEvent is the web-facing rendering of a single core EventFrame, flattened
+// for direct display by the client. The gateway derives every field from the
+// core EventFrame and its RenderingMetadata in
+// internal/web/translate.go::translateEvent; events lacking rendering metadata
+// are dropped at the gateway (INV-GW-5) and never reach this message.
 type GameEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	Category      string                 `protobuf:"bytes,2,opt,name=category,proto3" json:"category,omitempty"`
-	Format        string                 `protobuf:"bytes,3,opt,name=format,proto3" json:"format,omitempty"`
-	DisplayTarget EventChannel           `protobuf:"varint,4,opt,name=display_target,json=displayTarget,proto3,enum=holomush.web.v1.EventChannel" json:"display_target,omitempty"`
-	Timestamp     int64                  `protobuf:"varint,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	Actor         string                 `protobuf:"bytes,6,opt,name=actor,proto3" json:"actor,omitempty"`
-	Text          string                 `protobuf:"bytes,7,opt,name=text,proto3" json:"text,omitempty"`
-	Metadata      *structpb.Struct       `protobuf:"bytes,8,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	EventId       string                 `protobuf:"bytes,9,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"` // ULID; populated from corev1.EventFrame.id
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// type is the event-type discriminator (e.g. "say", "pose", "arrive",
+	// "location_state"), forwarded from corev1.EventFrame.type.
+	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	// category is the rendering category from RenderingMetadata (e.g.
+	// "communication", "movement", "state"); it drives client-side grouping
+	// and the gateway's own state-vs-narrative branch.
+	Category string `protobuf:"bytes,2,opt,name=category,proto3" json:"category,omitempty"`
+	// format is the rendering format hint from RenderingMetadata (e.g.
+	// "speech", "action") guiding how the client styles the line.
+	Format string `protobuf:"bytes,3,opt,name=format,proto3" json:"format,omitempty"`
+	// display_target is the surface the event renders on (terminal, state, or
+	// both), copied from RenderingMetadata.display_target.
+	DisplayTarget EventChannel `protobuf:"varint,4,opt,name=display_target,json=displayTarget,proto3,enum=holomush.web.v1.EventChannel" json:"display_target,omitempty"`
+	// timestamp is the event time as epoch SECONDS, taken from the seconds
+	// component of corev1.EventFrame.timestamp.
+	Timestamp int64 `protobuf:"varint,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	// actor is the DISPLAY NAME of the acting character, extracted from the
+	// event payload (character_name, falling back to sender_name) for
+	// rendering. For stable identity use actor_id, not this field.
+	Actor string `protobuf:"bytes,6,opt,name=actor,proto3" json:"actor,omitempty"`
+	// text is the rendered line shown to the player. Extracted from the payload
+	// (message → text → action → notice) or synthesized for arrive/leave
+	// movement events. Empty for state events whose content lives in metadata.
+	Text string `protobuf:"bytes,7,opt,name=text,proto3" json:"text,omitempty"`
+	// metadata carries type-specific extras (label, style, channel, no_space,
+	// target_name) for narrative events, or the entire decoded payload for
+	// state-category events.
+	Metadata *structpb.Struct `protobuf:"bytes,8,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	// event_id is the originating event's ULID, forwarded from
+	// corev1.EventFrame.id; the client uses it for dedup keying.
+	EventId string `protobuf:"bytes,9,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
 	// cursor is the opaque pagination cursor for this event. Mirrors
 	// corev1.EventFrame.cursor for reconnect-with-backfill support.
 	Cursor []byte `protobuf:"bytes,10,opt,name=cursor,proto3" json:"cursor,omitempty"`
@@ -626,8 +728,13 @@ func (x *GameEvent) GetActorId() string {
 	return ""
 }
 
+// StreamEventsResponse is one frame in the StreamEvents server stream: either
+// an in-band game event or an out-of-band control message, never both.
 type StreamEventsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
+	// frame multiplexes the two frame kinds the gateway forwards on the single
+	// stream.
+	//
 	// Types that are valid to be assigned to Frame:
 	//
 	//	*StreamEventsResponse_Event
@@ -697,10 +804,13 @@ type isStreamEventsResponse_Frame interface {
 }
 
 type StreamEventsResponse_Event struct {
+	// event is an in-band game event for display.
 	Event *GameEvent `protobuf:"bytes,1,opt,name=event,proto3,oneof"`
 }
 
 type StreamEventsResponse_Control struct {
+	// control is an out-of-band stream-lifecycle signal (open, replay
+	// boundary, close).
 	Control *ControlFrame `protobuf:"bytes,2,opt,name=control,proto3,oneof"`
 }
 
@@ -708,9 +818,11 @@ func (*StreamEventsResponse_Event) isStreamEventsResponse_Frame() {}
 
 func (*StreamEventsResponse_Control) isStreamEventsResponse_Frame() {}
 
+// DisconnectRequest names the session to tear down out of band.
 type DisconnectRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_id identifies the in-game session to end.
+	SessionId     string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -752,6 +864,8 @@ func (x *DisconnectRequest) GetSessionId() string {
 	return ""
 }
 
+// DisconnectResponse is the empty acknowledgement of a Disconnect call; the
+// gateway always returns it even when the upstream best-effort RPC failed.
 type DisconnectResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -788,9 +902,12 @@ func (*DisconnectResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{7}
 }
 
+// GetCommandHistoryRequest names the session whose recent command lines to
+// retrieve.
 type GetCommandHistoryRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_id identifies the in-game session whose command history to fetch.
+	SessionId     string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -832,9 +949,12 @@ func (x *GetCommandHistoryRequest) GetSessionId() string {
 	return ""
 }
 
+// GetCommandHistoryResponse returns the session's recent command lines, or an
+// empty list when the lookup failed or was unauthorized.
 type GetCommandHistoryResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Commands      []string               `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// commands is the ordered list of recent raw command lines for the session.
+	Commands      []string `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -876,16 +996,29 @@ func (x *GetCommandHistoryResponse) GetCommands() []string {
 	return nil
 }
 
+// CharacterSummary is the web-facing roster row for one of a player's
+// characters, mirroring corev1.CharacterSummary and used across the auth and
+// character-management responses.
 type CharacterSummary struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId      string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	CharacterName    string                 `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
-	HasActiveSession bool                   `protobuf:"varint,3,opt,name=has_active_session,json=hasActiveSession,proto3" json:"has_active_session,omitempty"`
-	SessionStatus    string                 `protobuf:"bytes,4,opt,name=session_status,json=sessionStatus,proto3" json:"session_status,omitempty"`
-	LastLocation     string                 `protobuf:"bytes,5,opt,name=last_location,json=lastLocation,proto3" json:"last_location,omitempty"`
-	LastPlayedAt     int64                  `protobuf:"varint,6,opt,name=last_played_at,json=lastPlayedAt,proto3" json:"last_played_at,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character_id is the character's ULID identity.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// character_name is the character's display name.
+	CharacterName string `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
+	// has_active_session is true when the character currently has a live game
+	// session.
+	HasActiveSession bool `protobuf:"varint,3,opt,name=has_active_session,json=hasActiveSession,proto3" json:"has_active_session,omitempty"`
+	// session_status is a human-readable status string for any active session
+	// (e.g. attached/detached state).
+	SessionStatus string `protobuf:"bytes,4,opt,name=session_status,json=sessionStatus,proto3" json:"session_status,omitempty"`
+	// last_location is the display label of the character's most recent
+	// location.
+	LastLocation string `protobuf:"bytes,5,opt,name=last_location,json=lastLocation,proto3" json:"last_location,omitempty"`
+	// last_played_at is the epoch-seconds timestamp of the character's most
+	// recent play activity.
+	LastPlayedAt  int64 `protobuf:"varint,6,opt,name=last_played_at,json=lastPlayedAt,proto3" json:"last_played_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CharacterSummary) Reset() {
@@ -960,11 +1093,18 @@ func (x *CharacterSummary) GetLastPlayedAt() int64 {
 	return 0
 }
 
+// WebAuthenticatePlayerRequest carries login credentials for the
+// WebAuthenticatePlayer RPC.
 type WebAuthenticatePlayerRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
-	Password      string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
-	RememberMe    bool                   `protobuf:"varint,3,opt,name=remember_me,json=rememberMe,proto3" json:"remember_me,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// username identifies the player account to authenticate.
+	Username string `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	// password is the plaintext password verified core-side (never logged at
+	// the gateway).
+	Password string `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	// remember_me requests a longer-lived session/cookie; forwarded to core to
+	// determine session TTL.
+	RememberMe    bool `protobuf:"varint,3,opt,name=remember_me,json=rememberMe,proto3" json:"remember_me,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1020,18 +1160,29 @@ func (x *WebAuthenticatePlayerRequest) GetRememberMe() bool {
 	return false
 }
 
+// WebAuthenticatePlayerResponse reports the login outcome and, on success, the
+// player's character roster. The session token itself is delivered as a
+// Set-Cookie header by the gateway, not in this body.
 type WebAuthenticatePlayerResponse struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	Success            bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMessage       string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	Characters         []*CharacterSummary    `protobuf:"bytes,4,rep,name=characters,proto3" json:"characters,omitempty"`
-	DefaultCharacterId string                 `protobuf:"bytes,5,opt,name=default_character_id,json=defaultCharacterId,proto3" json:"default_character_id,omitempty"`
-	// NEW: machine-readable error code. Values: "" on success, "ALREADY_AUTHENTICATED"
-	// when the cookie-collision gate fires, others reserved for future use.
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// success is true when credentials were accepted.
+	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	// error_message is a human-readable failure detail on the non-success path.
+	ErrorMessage string `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	// characters is the player's roster, returned so the client can prompt for
+	// character selection after login.
+	Characters []*CharacterSummary `protobuf:"bytes,4,rep,name=characters,proto3" json:"characters,omitempty"`
+	// default_character_id names the character the client should preselect, if
+	// the player has a default.
+	DefaultCharacterId string `protobuf:"bytes,5,opt,name=default_character_id,json=defaultCharacterId,proto3" json:"default_character_id,omitempty"`
+	// error_code is a machine-readable error discriminator. Values: "" on
+	// success, "ALREADY_AUTHENTICATED" when the cookie-collision gate fires;
+	// others reserved for future use.
 	ErrorCode string `protobuf:"bytes,6,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
-	// NEW: populated only when error_code = "ALREADY_AUTHENTICATED". Holds the
-	// existing player's display name so the client renders the right
-	// "you are already signed in as X" UI without a second round trip.
+	// current_player_name is populated only when error_code =
+	// "ALREADY_AUTHENTICATED". Holds the existing player's display name so the
+	// client renders the right "you are already signed in as X" UI without a
+	// second round trip.
 	CurrentPlayerName string `protobuf:"bytes,7,opt,name=current_player_name,json=currentPlayerName,proto3" json:"current_player_name,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
@@ -1109,9 +1260,13 @@ func (x *WebAuthenticatePlayerResponse) GetCurrentPlayerName() string {
 	return ""
 }
 
+// WebSelectCharacterRequest names the character to bind to a game session.
 type WebSelectCharacterRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId   string                 `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character_id is the ULID of the character to select. Field number is 2;
+	// field 1 was retired with the cookie cutover (the token now travels in the
+	// cookie header, not the request body).
+	CharacterId   string `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1153,13 +1308,23 @@ func (x *WebSelectCharacterRequest) GetCharacterId() string {
 	return ""
 }
 
+// WebSelectCharacterResponse reports the result of binding a character,
+// including the resulting game session and whether an existing session was
+// reattached rather than freshly created.
 type WebSelectCharacterResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	CharacterName string                 `protobuf:"bytes,3,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
-	Reattached    bool                   `protobuf:"varint,4,opt,name=reattached,proto3" json:"reattached,omitempty"`
-	ErrorMessage  string                 `protobuf:"bytes,5,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// success is true when a session was created or reattached.
+	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	// session_id is the resulting in-game session's id, used by StreamEvents
+	// and SendCommand.
+	SessionId string `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// character_name is the selected character's display name.
+	CharacterName string `protobuf:"bytes,3,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
+	// reattached is true when an existing detached session was resumed instead
+	// of a new one being created.
+	Reattached bool `protobuf:"varint,4,opt,name=reattached,proto3" json:"reattached,omitempty"`
+	// error_message is a human-readable failure detail on the non-success path.
+	ErrorMessage  string `protobuf:"bytes,5,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1229,11 +1394,15 @@ func (x *WebSelectCharacterResponse) GetErrorMessage() string {
 	return ""
 }
 
+// WebCreatePlayerRequest carries the fields for new-account registration.
 type WebCreatePlayerRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
-	Password      string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
-	Email         string                 `protobuf:"bytes,3,opt,name=email,proto3" json:"email,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// username is the desired account name.
+	Username string `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	// password is the desired plaintext password (hashed core-side).
+	Password string `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	// email is the account's email address, used for password-reset delivery.
+	Email         string `protobuf:"bytes,3,opt,name=email,proto3" json:"email,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1289,13 +1458,22 @@ func (x *WebCreatePlayerRequest) GetEmail() string {
 	return ""
 }
 
+// WebCreatePlayerResponse reports the registration outcome and the initial
+// character roster. As with login, the session token is delivered via
+// Set-Cookie, not in this body.
 type WebCreatePlayerResponse struct {
-	state        protoimpl.MessageState `protogen:"open.v1"`
-	Success      bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Characters   []*CharacterSummary    `protobuf:"bytes,3,rep,name=characters,proto3" json:"characters,omitempty"`
-	ErrorMessage string                 `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	// NEW: see WebAuthenticatePlayerResponse for semantics.
-	ErrorCode         string `protobuf:"bytes,5,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// success is true when the account was created.
+	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	// characters is the new account's initial character roster.
+	Characters []*CharacterSummary `protobuf:"bytes,3,rep,name=characters,proto3" json:"characters,omitempty"`
+	// error_message is a human-readable failure detail on the non-success path.
+	ErrorMessage string `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	// error_code mirrors WebAuthenticatePlayerResponse.error_code semantics
+	// (e.g. "ALREADY_AUTHENTICATED" from the cookie-collision gate).
+	ErrorCode string `protobuf:"bytes,5,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	// current_player_name mirrors WebAuthenticatePlayerResponse.current_player_name;
+	// set only on the ALREADY_AUTHENTICATED path.
 	CurrentPlayerName string `protobuf:"bytes,6,opt,name=current_player_name,json=currentPlayerName,proto3" json:"current_player_name,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
@@ -1366,6 +1544,8 @@ func (x *WebCreatePlayerResponse) GetCurrentPlayerName() string {
 	return ""
 }
 
+// WebCreateGuestRequest is the empty request for provisioning an ephemeral
+// guest player; guest identity is generated server-side.
 type WebCreateGuestRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1402,14 +1582,22 @@ func (*WebCreateGuestRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{17}
 }
 
+// WebCreateGuestResponse reports the guest-provisioning outcome and the
+// generated guest character roster. The accompanying guest session cookie
+// (shorter TTL) is set via Set-Cookie by the gateway.
 type WebCreateGuestResponse struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	Success            bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMessage       string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	Characters         []*CharacterSummary    `protobuf:"bytes,3,rep,name=characters,proto3" json:"characters,omitempty"`
-	DefaultCharacterId string                 `protobuf:"bytes,4,opt,name=default_character_id,json=defaultCharacterId,proto3" json:"default_character_id,omitempty"`
-	// NEW: see WebAuthenticatePlayerResponse for semantics.
-	ErrorCode         string `protobuf:"bytes,5,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// success is true when a guest player and character were provisioned.
+	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	// error_message is a human-readable failure detail on the non-success path.
+	ErrorMessage string `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	// characters is the generated guest character roster.
+	Characters []*CharacterSummary `protobuf:"bytes,3,rep,name=characters,proto3" json:"characters,omitempty"`
+	// default_character_id names the guest character to preselect.
+	DefaultCharacterId string `protobuf:"bytes,4,opt,name=default_character_id,json=defaultCharacterId,proto3" json:"default_character_id,omitempty"`
+	// error_code mirrors WebAuthenticatePlayerResponse.error_code semantics.
+	ErrorCode string `protobuf:"bytes,5,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	// current_player_name mirrors WebAuthenticatePlayerResponse.current_player_name.
 	CurrentPlayerName string `protobuf:"bytes,6,opt,name=current_player_name,json=currentPlayerName,proto3" json:"current_player_name,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
@@ -1487,9 +1675,14 @@ func (x *WebCreateGuestResponse) GetCurrentPlayerName() string {
 	return ""
 }
 
+// WebCreateCharacterRequest names the new character to add to the authenticated
+// player. The player is identified by the cookie session token, not a body
+// field.
 type WebCreateCharacterRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CharacterName string                 `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character_name is the desired display name for the new character. Field
+	// number is 2 (field 1 retired with the cookie cutover).
+	CharacterName string `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1531,12 +1724,17 @@ func (x *WebCreateCharacterRequest) GetCharacterName() string {
 	return ""
 }
 
+// WebCreateCharacterResponse reports the result of creating a character.
 type WebCreateCharacterResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	CharacterId   string                 `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	CharacterName string                 `protobuf:"bytes,3,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
-	ErrorMessage  string                 `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// success is true when the character was created.
+	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	// character_id is the new character's ULID identity.
+	CharacterId string `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// character_name is the created character's display name.
+	CharacterName string `protobuf:"bytes,3,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
+	// error_message is a human-readable failure detail on the non-success path.
+	ErrorMessage  string `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1599,6 +1797,8 @@ func (x *WebCreateCharacterResponse) GetErrorMessage() string {
 	return ""
 }
 
+// WebListCharactersRequest is the empty request for the authenticated player's
+// roster; the player is identified by the cookie session token.
 type WebListCharactersRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1635,9 +1835,12 @@ func (*WebListCharactersRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{21}
 }
 
+// WebListCharactersResponse returns the authenticated player's character
+// roster.
 type WebListCharactersResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Characters    []*CharacterSummary    `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// characters is the player's full character roster.
+	Characters    []*CharacterSummary `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1679,6 +1882,8 @@ func (x *WebListCharactersResponse) GetCharacters() []*CharacterSummary {
 	return nil
 }
 
+// WebLogoutRequest is the empty request to end the current session; the session
+// to end is identified by the cookie token.
 type WebLogoutRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1715,6 +1920,9 @@ func (*WebLogoutRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{23}
 }
 
+// WebLogoutResponse is the empty acknowledgement of logout. The meaningful
+// effect — clearing the session cookie — is delivered as a response header by
+// the gateway, so this body carries no fields.
 type WebLogoutResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1751,9 +1959,11 @@ func (*WebLogoutResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{24}
 }
 
+// WebRequestPasswordResetRequest names the email address to begin a reset for.
 type WebRequestPasswordResetRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Email         string                 `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// email is the account email to send the reset link to.
+	Email         string `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1795,9 +2005,14 @@ func (x *WebRequestPasswordResetRequest) GetEmail() string {
 	return ""
 }
 
+// WebRequestPasswordResetResponse acknowledges the reset request. success is
+// reported true even when the underlying account does not exist, to avoid
+// leaking account existence.
 type WebRequestPasswordResetResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// success is true when the request was accepted; it does NOT confirm the
+	// email exists (existence is deliberately not disclosed).
+	Success       bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1839,10 +2054,14 @@ func (x *WebRequestPasswordResetResponse) GetSuccess() bool {
 	return false
 }
 
+// WebConfirmPasswordResetRequest carries the emailed reset token and the
+// replacement password.
 type WebConfirmPasswordResetRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	NewPassword   string                 `protobuf:"bytes,2,opt,name=new_password,json=newPassword,proto3" json:"new_password,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// token is the single-use reset token delivered by email.
+	Token string `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	// new_password is the replacement plaintext password (hashed core-side).
+	NewPassword   string `protobuf:"bytes,2,opt,name=new_password,json=newPassword,proto3" json:"new_password,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1891,10 +2110,13 @@ func (x *WebConfirmPasswordResetRequest) GetNewPassword() string {
 	return ""
 }
 
+// WebConfirmPasswordResetResponse reports whether the reset completed.
 type WebConfirmPasswordResetResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMessage  string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// success is true when the password was changed.
+	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	// error_message is a human-readable failure detail on the non-success path.
+	ErrorMessage  string `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1943,6 +2165,8 @@ func (x *WebConfirmPasswordResetResponse) GetErrorMessage() string {
 	return ""
 }
 
+// WebCheckSessionRequest is the empty request that validates the cookie-borne
+// player session; the token is read from the cookie header, not the body.
 type WebCheckSessionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1979,14 +2203,22 @@ func (*WebCheckSessionRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{29}
 }
 
+// WebCheckSessionResponse returns the authenticated player's identity and
+// roster when the cookie session is valid. An invalid/expired session yields a
+// CodeUnauthenticated error instead of this message.
 type WebCheckSessionResponse struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	PlayerName string                 `protobuf:"bytes,1,opt,name=player_name,json=playerName,proto3" json:"player_name,omitempty"`
-	// NEW (additive on the success path; failure path still returns
-	// connect.CodeUnauthenticated so web/src/routes/(authed)/+layout.ts:18-25
-	// continues to redirect on throw — no contract break).
-	PlayerId      string              `protobuf:"bytes,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	IsGuest       bool                `protobuf:"varint,3,opt,name=is_guest,json=isGuest,proto3" json:"is_guest,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// player_name is the authenticated player's display name.
+	PlayerName string `protobuf:"bytes,1,opt,name=player_name,json=playerName,proto3" json:"player_name,omitempty"`
+	// player_id is the authenticated player's ULID identity. Additive on the
+	// success path; the failure path still returns CodeUnauthenticated so the
+	// web client's authed layout continues to redirect on throw (no contract
+	// break).
+	PlayerId string `protobuf:"bytes,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	// is_guest is true when the session belongs to an ephemeral guest player.
+	IsGuest bool `protobuf:"varint,3,opt,name=is_guest,json=isGuest,proto3" json:"is_guest,omitempty"`
+	// characters is the player's character roster, returned so the client can
+	// restore character-selection state on reload.
 	Characters    []*CharacterSummary `protobuf:"bytes,4,rep,name=characters,proto3" json:"characters,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2050,9 +2282,12 @@ func (x *WebCheckSessionResponse) GetCharacters() []*CharacterSummary {
 	return nil
 }
 
+// WebGetContentRequest selects one content-store item by exact key. Served by
+// the public, unauthenticated ContentService proxy (NOT CoreService).
 type WebGetContentRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// key is the exact content-store key; no prefix matching is applied.
+	Key           string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2094,9 +2329,12 @@ func (x *WebGetContentRequest) GetKey() string {
 	return ""
 }
 
+// WebGetContentResponse returns the requested content item, or an empty message
+// when no item exists for the key.
 type WebGetContentResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Item          *WebContentItem        `protobuf:"bytes,1,opt,name=item,proto3" json:"item,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// item is the matched content item; unset when the key was not found.
+	Item          *WebContentItem `protobuf:"bytes,1,opt,name=item,proto3" json:"item,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2138,11 +2376,18 @@ func (x *WebGetContentResponse) GetItem() *WebContentItem {
 	return nil
 }
 
+// WebListContentRequest selects a page of content-store items under a key
+// prefix. Served by the public ContentService proxy.
 type WebListContentRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Prefix        string                 `protobuf:"bytes,1,opt,name=prefix,proto3" json:"prefix,omitempty"`
-	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	Cursor        string                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// prefix restricts results to keys beginning with this string.
+	Prefix string `protobuf:"bytes,1,opt,name=prefix,proto3" json:"prefix,omitempty"`
+	// limit requests a page size; the bound is forwarded to and applied by the
+	// content service.
+	Limit int32 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	// cursor is the opaque next_cursor from a prior page; empty starts at the
+	// top of the prefix.
+	Cursor        string `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2198,10 +2443,15 @@ func (x *WebListContentRequest) GetCursor() string {
 	return ""
 }
 
+// WebListContentResponse returns one page of content items plus the cursor for
+// the following page.
 type WebListContentResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Items         []*WebContentItem      `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
-	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// items is the page of matched content items.
+	Items []*WebContentItem `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	// next_cursor is the opaque cursor for the next page; empty when no further
+	// pages remain.
+	NextCursor    string `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2250,12 +2500,19 @@ func (x *WebListContentResponse) GetNextCursor() string {
 	return ""
 }
 
+// WebContentItem is the web-facing representation of a single content-store
+// entry, forwarded field-for-field from contentv1.ContentItem.
 type WebContentItem struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	ContentType   string                 `protobuf:"bytes,2,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
-	Body          []byte                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
-	Metadata      map[string]string      `protobuf:"bytes,4,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// key is the item's storage key.
+	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	// content_type is the item's MIME type, guiding how the client renders the
+	// body.
+	ContentType string `protobuf:"bytes,2,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	// body is the raw item content bytes.
+	Body []byte `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
+	// metadata is a free-form string→string map of item attributes.
+	Metadata      map[string]string `protobuf:"bytes,4,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2318,12 +2575,23 @@ func (x *WebContentItem) GetMetadata() map[string]string {
 	return nil
 }
 
+// WebQueryStreamHistoryRequest selects a page of historical events for a session
+// stream, with time-window and cursor bounds. Proxies to
+// CoreService.QueryStreamHistory.
 type WebQueryStreamHistoryRequest struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	SessionId   string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Stream      string                 `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
-	Count       int32                  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`                                  // page size; 0 = default (150), max 500, negative rejected
-	NotBeforeMs int64                  `protobuf:"varint,4,opt,name=not_before_ms,json=notBeforeMs,proto3" json:"not_before_ms,omitempty"` // epoch ms time floor; 0 = no lower bound
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_id identifies the requesting session (used core-side for
+	// authorization).
+	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// stream names the event stream to read history from (e.g.
+	// "location:<id>").
+	Stream string `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
+	// count is the requested page size; 0 means the server default (150),
+	// values are capped at the server maximum (500), and negative values are
+	// rejected.
+	Count int32 `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
+	// not_before_ms is the epoch-ms time floor; 0 means no lower bound.
+	NotBeforeMs int64 `protobuf:"varint,4,opt,name=not_before_ms,json=notBeforeMs,proto3" json:"not_before_ms,omitempty"`
 	// cursor is the opaque pagination cursor from a previous WebQueryStreamHistoryResponse.
 	// Events older than the cursor position are returned. Empty = start from latest.
 	Cursor []byte `protobuf:"bytes,5,opt,name=cursor,proto3" json:"cursor,omitempty"`
@@ -2410,10 +2678,15 @@ func (x *WebQueryStreamHistoryRequest) GetNotAfterMs() int64 {
 	return 0
 }
 
+// WebQueryStreamHistoryResponse returns one page of historical events translated
+// for the web client, plus pagination state.
 type WebQueryStreamHistoryResponse struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Events  []*GameEvent           `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
-	HasMore bool                   `protobuf:"varint,2,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// events is the page of historical events (translated from core EventFrames;
+	// events without rendering metadata are dropped at the gateway).
+	Events []*GameEvent `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	// has_more is true when older events remain beyond this page.
+	HasMore bool `protobuf:"varint,2,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	// next_cursor is the opaque cursor for the next page. Empty if has_more is false.
 	NextCursor    []byte `protobuf:"bytes,3,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -2471,9 +2744,12 @@ func (x *WebQueryStreamHistoryResponse) GetNextCursor() []byte {
 	return nil
 }
 
+// WebListSessionStreamsRequest names the session whose subscribed stream set to
+// enumerate.
 type WebListSessionStreamsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_id identifies the session whose subscriptions to list.
+	SessionId     string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2515,9 +2791,13 @@ func (x *WebListSessionStreamsRequest) GetSessionId() string {
 	return ""
 }
 
+// WebListSessionStreamsResponse returns the stream names a session is subscribed
+// to, used by the client to drive reload-backfill across each stream.
 type WebListSessionStreamsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Streams       []string               `protobuf:"bytes,1,rep,name=streams,proto3" json:"streams,omitempty"` // event-store stream names (e.g. "location:<id>", "character:<id>")
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// streams is the list of event-store stream names the session is
+	// subscribed to (e.g. "location:<id>", "character:<id>").
+	Streams       []string `protobuf:"bytes,1,rep,name=streams,proto3" json:"streams,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2559,6 +2839,8 @@ func (x *WebListSessionStreamsResponse) GetStreams() []string {
 	return nil
 }
 
+// WebListPlayerSessionsRequest is the empty request listing the caller's
+// PlayerSessions; the caller is identified by the cookie token.
 type WebListPlayerSessionsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -2595,15 +2877,24 @@ func (*WebListPlayerSessionsRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{40}
 }
 
+// WebPlayerSessionInfo describes one of a player's PlayerSessions — a
+// device/tab login record (distinct from an in-game game session) shown in the
+// account's "active sessions" management UI.
 type WebPlayerSessionInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// id is the PlayerSession.id (ULID). Used as target_session_id when
 	// revoking. Safe to show - resource handle, not a secret.
-	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	CreatedAt  *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// created_at is when the PlayerSession was first established (login time).
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// last_active is the timestamp of the PlayerSession's most recent activity.
 	LastActive *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_active,json=lastActive,proto3" json:"last_active,omitempty"`
-	UserAgent  string                 `protobuf:"bytes,4,opt,name=user_agent,json=userAgent,proto3" json:"user_agent,omitempty"`
-	IpAddress  string                 `protobuf:"bytes,5,opt,name=ip_address,json=ipAddress,proto3" json:"ip_address,omitempty"`
+	// user_agent is the browser User-Agent recorded at login, shown to help the
+	// player recognize the device.
+	UserAgent string `protobuf:"bytes,4,opt,name=user_agent,json=userAgent,proto3" json:"user_agent,omitempty"`
+	// ip_address is the client IP recorded at login, shown for the same
+	// recognition purpose.
+	IpAddress string `protobuf:"bytes,5,opt,name=ip_address,json=ipAddress,proto3" json:"ip_address,omitempty"`
 	// is_current is true for the PlayerSession that made this request.
 	IsCurrent     bool `protobuf:"varint,6,opt,name=is_current,json=isCurrent,proto3" json:"is_current,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -2682,8 +2973,12 @@ func (x *WebPlayerSessionInfo) GetIsCurrent() bool {
 	return false
 }
 
+// WebListPlayerSessionsResponse returns all of the caller's active
+// PlayerSessions.
 type WebListPlayerSessionsResponse struct {
-	state         protoimpl.MessageState  `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// sessions is the caller's list of active PlayerSessions, one flagged
+	// is_current.
 	Sessions      []*WebPlayerSessionInfo `protobuf:"bytes,1,rep,name=sessions,proto3" json:"sessions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2726,6 +3021,8 @@ func (x *WebListPlayerSessionsResponse) GetSessions() []*WebPlayerSessionInfo {
 	return nil
 }
 
+// WebRevokePlayerSessionRequest names a single PlayerSession to revoke; the
+// caller (and thus ownership) is identified by the cookie token.
 type WebRevokePlayerSessionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// target_session_id is the PlayerSession.id (ULID) to revoke.
@@ -2771,10 +3068,14 @@ func (x *WebRevokePlayerSessionRequest) GetTargetSessionId() string {
 	return ""
 }
 
+// WebRevokePlayerSessionResponse reports whether the targeted PlayerSession was
+// revoked.
 type WebRevokePlayerSessionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMessage  string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// success is true when the targeted PlayerSession was revoked.
+	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	// error_message is a human-readable failure detail on the non-success path.
+	ErrorMessage  string `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2823,6 +3124,8 @@ func (x *WebRevokePlayerSessionResponse) GetErrorMessage() string {
 	return ""
 }
 
+// WebRevokeOtherPlayerSessionsRequest is the empty "log out everywhere else"
+// request; the surviving (current) session is identified by the cookie token.
 type WebRevokeOtherPlayerSessionsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -2859,10 +3162,14 @@ func (*WebRevokeOtherPlayerSessionsRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{45}
 }
 
+// WebRevokeOtherPlayerSessionsResponse reports the bulk-revocation outcome and
+// how many PlayerSessions were revoked.
 type WebRevokeOtherPlayerSessionsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	RevokedCount  int32                  `protobuf:"varint,2,opt,name=revoked_count,json=revokedCount,proto3" json:"revoked_count,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// success is true when the bulk revocation completed.
+	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	// revoked_count is the number of other PlayerSessions revoked.
+	RevokedCount  int32 `protobuf:"varint,2,opt,name=revoked_count,json=revokedCount,proto3" json:"revoked_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2911,11 +3218,17 @@ func (x *WebRevokeOtherPlayerSessionsResponse) GetRevokedCount() int32 {
 	return 0
 }
 
+// WebPresenceEntry is one character in a presence snapshot, carrying identity
+// and activity state for the client's presence list.
 type WebPresenceEntry struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	CharacterName string                 `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
-	State         WebPresenceState       `protobuf:"varint,3,opt,name=state,proto3,enum=holomush.web.v1.WebPresenceState" json:"state,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character_id is the present character's ULID identity (used for dedup
+	// keying).
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// character_name is the present character's display name.
+	CharacterName string `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
+	// state is the character's activity state in this context.
+	State         WebPresenceState `protobuf:"varint,3,opt,name=state,proto3,enum=holomush.web.v1.WebPresenceState" json:"state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2971,9 +3284,13 @@ func (x *WebPresenceEntry) GetState() WebPresenceState {
 	return WebPresenceState_WEB_PRESENCE_STATE_UNSPECIFIED
 }
 
+// WebListFocusPresenceRequest names the session whose current focus-context
+// presence to snapshot.
 type WebListFocusPresenceRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_id identifies the requesting session; core resolves the session's
+	// current focus (location or scene) and enforces ownership.
+	SessionId     string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3015,11 +3332,17 @@ func (x *WebListFocusPresenceRequest) GetSessionId() string {
 	return ""
 }
 
+// WebListFocusPresenceResponse returns the presence snapshot for the session's
+// current focus context.
 type WebListFocusPresenceResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Context       WebPresenceContext     `protobuf:"varint,1,opt,name=context,proto3,enum=holomush.web.v1.WebPresenceContext" json:"context,omitempty"`
-	ContextId     string                 `protobuf:"bytes,2,opt,name=context_id,json=contextId,proto3" json:"context_id,omitempty"`
-	Entries       []*WebPresenceEntry    `protobuf:"bytes,3,rep,name=entries,proto3" json:"entries,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// context indicates whether the snapshot describes a location or a scene.
+	Context WebPresenceContext `protobuf:"varint,1,opt,name=context,proto3,enum=holomush.web.v1.WebPresenceContext" json:"context,omitempty"`
+	// context_id is the ULID of the focus location or scene the snapshot
+	// describes.
+	ContextId string `protobuf:"bytes,2,opt,name=context_id,json=contextId,proto3" json:"context_id,omitempty"`
+	// entries is the set of characters present in the focus context.
+	Entries       []*WebPresenceEntry `protobuf:"bytes,3,rep,name=entries,proto3" json:"entries,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

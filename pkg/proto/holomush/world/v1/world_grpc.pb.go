@@ -32,17 +32,35 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// WorldService exposes read-only world model queries for binary plugins.
-// Each RPC mirrors a method on internal/world.Service, accepting a subject_id
-// for access-control enforcement on the server side.
+// WorldService provides read-only world model queries for binary plugins.
+// It is served on an in-process gRPC connection registered in the plugin
+// service registry as "holomush.world.v1.WorldService" (see
+// internal/plugin/setup/world_conn.go::newWorldInProcessConn). Every RPC
+// enforces ABAC by passing subject_id through world.Service, which delegates
+// to the configured access.PolicyEngine before touching any repository.
+// Errors that indicate missing records map to codes.NotFound; denied access
+// maps to codes.PermissionDenied; all other failures map to codes.Internal
+// with no internal detail leaked to callers.
 type WorldServiceClient interface {
-	// GetLocation retrieves a single location by ID.
+	// GetLocation fetches a single location by ULID. The caller must hold the
+	// "read" permission on the location resource. Returns codes.NotFound if the
+	// location does not exist and codes.PermissionDenied if access is denied.
 	GetLocation(ctx context.Context, in *GetLocationRequest, opts ...grpc.CallOption) (*GetLocationResponse, error)
-	// GetCharacter retrieves a single character by ID.
+	// GetCharacter fetches a single character by ULID. The caller must hold the
+	// "read" permission on the character resource. Returns codes.NotFound if the
+	// character does not exist and codes.PermissionDenied if access is denied.
 	GetCharacter(ctx context.Context, in *GetCharacterRequest, opts ...grpc.CallOption) (*GetCharacterResponse, error)
-	// ListCharactersAtLocation returns all characters present at a location.
+	// ListCharactersAtLocation returns all characters whose current location
+	// matches location_id. The caller must hold the "list_characters" permission
+	// on the location resource (action=list_characters, resource=location:<id>,
+	// per ADR #76 compound-resource decomposition). Returns an empty list when
+	// no characters are present; never returns codes.NotFound for an empty
+	// location.
 	ListCharactersAtLocation(ctx context.Context, in *ListCharactersAtLocationRequest, opts ...grpc.CallOption) (*ListCharactersAtLocationResponse, error)
-	// ListExits returns all exits originating from a location.
+	// ListExits returns all exits originating from a location. The caller must
+	// hold the "read" permission on the location resource. Returns an empty list
+	// when the location has no exits; never returns codes.NotFound for an empty
+	// exit set.
 	ListExits(ctx context.Context, in *ListExitsRequest, opts ...grpc.CallOption) (*ListExitsResponse, error)
 }
 
@@ -98,17 +116,35 @@ func (c *worldServiceClient) ListExits(ctx context.Context, in *ListExitsRequest
 // All implementations must embed UnimplementedWorldServiceServer
 // for forward compatibility.
 //
-// WorldService exposes read-only world model queries for binary plugins.
-// Each RPC mirrors a method on internal/world.Service, accepting a subject_id
-// for access-control enforcement on the server side.
+// WorldService provides read-only world model queries for binary plugins.
+// It is served on an in-process gRPC connection registered in the plugin
+// service registry as "holomush.world.v1.WorldService" (see
+// internal/plugin/setup/world_conn.go::newWorldInProcessConn). Every RPC
+// enforces ABAC by passing subject_id through world.Service, which delegates
+// to the configured access.PolicyEngine before touching any repository.
+// Errors that indicate missing records map to codes.NotFound; denied access
+// maps to codes.PermissionDenied; all other failures map to codes.Internal
+// with no internal detail leaked to callers.
 type WorldServiceServer interface {
-	// GetLocation retrieves a single location by ID.
+	// GetLocation fetches a single location by ULID. The caller must hold the
+	// "read" permission on the location resource. Returns codes.NotFound if the
+	// location does not exist and codes.PermissionDenied if access is denied.
 	GetLocation(context.Context, *GetLocationRequest) (*GetLocationResponse, error)
-	// GetCharacter retrieves a single character by ID.
+	// GetCharacter fetches a single character by ULID. The caller must hold the
+	// "read" permission on the character resource. Returns codes.NotFound if the
+	// character does not exist and codes.PermissionDenied if access is denied.
 	GetCharacter(context.Context, *GetCharacterRequest) (*GetCharacterResponse, error)
-	// ListCharactersAtLocation returns all characters present at a location.
+	// ListCharactersAtLocation returns all characters whose current location
+	// matches location_id. The caller must hold the "list_characters" permission
+	// on the location resource (action=list_characters, resource=location:<id>,
+	// per ADR #76 compound-resource decomposition). Returns an empty list when
+	// no characters are present; never returns codes.NotFound for an empty
+	// location.
 	ListCharactersAtLocation(context.Context, *ListCharactersAtLocationRequest) (*ListCharactersAtLocationResponse, error)
-	// ListExits returns all exits originating from a location.
+	// ListExits returns all exits originating from a location. The caller must
+	// hold the "read" permission on the location resource. Returns an empty list
+	// when the location has no exits; never returns codes.NotFound for an empty
+	// exit set.
 	ListExits(context.Context, *ListExitsRequest) (*ListExitsResponse, error)
 	mustEmbedUnimplementedWorldServiceServer()
 }

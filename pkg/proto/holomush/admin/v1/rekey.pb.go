@@ -25,15 +25,37 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// RekeyRequest initiates a full DEK rekey operation for a given context.
-// Spec §7; INV-E rekeying surface.
+// RekeyRequest initiates a fresh DEK rekey operation for a single encryption
+// context (context_type + context_id). The caller must hold an authenticated
+// operator session (session_token from AdminService.Authenticate) and the
+// crypto.operator in-game capability plus the admin role — both are re-asserted
+// at dispatch time (INV-D16 defense-in-depth). Justification is recorded on
+// the checkpoint row for audit; approval_request_id links a pending
+// admin_approvals row when dual-control is required by site policy.
 type RekeyRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	SessionToken      string                 `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
-	ContextType       string                 `protobuf:"bytes,2,opt,name=context_type,json=contextType,proto3" json:"context_type,omitempty"`
-	ContextId         string                 `protobuf:"bytes,3,opt,name=context_id,json=contextId,proto3" json:"context_id,omitempty"`
-	Justification     string                 `protobuf:"bytes,4,opt,name=justification,proto3" json:"justification,omitempty"`
-	ApprovalRequestId *string                `protobuf:"bytes,5,opt,name=approval_request_id,json=approvalRequestId,proto3,oneof" json:"approval_request_id,omitempty"` // for dual-control
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_token authenticates the issuing operator. Must be a non-expired
+	// token returned by AdminService.Authenticate; the handler re-validates
+	// crypto.operator capability and admin role on every call (INV-D16).
+	SessionToken string `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
+	// context_type identifies the encryption domain, e.g. "scene". Together
+	// with context_id it resolves the active DEK row (old_dek_id) that the
+	// orchestrator's Phase 1 reads from crypto_keys.
+	ContextType string `protobuf:"bytes,2,opt,name=context_type,json=contextType,proto3" json:"context_type,omitempty"`
+	// context_id is the entity identifier within context_type, e.g. a scene
+	// ULID. The orchestrator uses (context_type, context_id) to locate the
+	// active DEK and enforce INV-E5 (at most one non-terminal checkpoint per
+	// context at a time).
+	ContextId string `protobuf:"bytes,3,opt,name=context_id,json=contextId,proto3" json:"context_id,omitempty"`
+	// justification is a free-text operator rationale stored on the checkpoint
+	// row and included in the Phase 7 chained audit event. Required for
+	// accountability; non-empty values are enforced by the handler.
+	Justification string `protobuf:"bytes,4,opt,name=justification,proto3" json:"justification,omitempty"`
+	// approval_request_id, when present, links a pending admin_approvals row
+	// created by the first operator under dual-control policy. Absent for
+	// single-control sites. The orchestrator validates the approval row before
+	// advancing past Phase 1.
+	ApprovalRequestId *string `protobuf:"bytes,5,opt,name=approval_request_id,json=approvalRequestId,proto3,oneof" json:"approval_request_id,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -103,10 +125,18 @@ func (x *RekeyRequest) GetApprovalRequestId() string {
 	return ""
 }
 
-// RekeyProgress is a streamed progress event emitted during the 7-phase
-// rekey orchestrator. Clients render phase-by-phase progress from these.
+// RekeyProgress is the streaming event envelope shared by the Rekey and
+// RekeyResume RPCs. Each message carries exactly one event variant via the
+// oneof. In the current MVP the server emits a single terminal event
+// (RekeyCompleted or RekeyError); PhaseStarted, Phase3Progress,
+// Phase5Attempt, and PhaseCompleted are pre-defined for richer per-phase
+// streaming in a future enhancement.
 type RekeyProgress struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
+	// event holds the progress or terminal event payload. Clients MUST handle
+	// all variants; unrecognised variants should be ignored rather than
+	// treated as errors, in anticipation of future additions.
+	//
 	// Types that are valid to be assigned to Event:
 	//
 	//	*RekeyProgress_PhaseStarted
@@ -216,26 +246,39 @@ type isRekeyProgress_Event interface {
 }
 
 type RekeyProgress_PhaseStarted struct {
+	// phase_started signals the beginning of a named orchestrator phase.
 	PhaseStarted *PhaseStarted `protobuf:"bytes,1,opt,name=phase_started,json=phaseStarted,proto3,oneof"`
 }
 
 type RekeyProgress_Phase3Progress struct {
+	// phase3_progress reports incremental re-encryption progress during
+	// Phase 3 (bulk cold-tier rewrite).
 	Phase3Progress *Phase3Progress `protobuf:"bytes,2,opt,name=phase3_progress,json=phase3Progress,proto3,oneof"`
 }
 
 type RekeyProgress_Phase5Attempt struct {
+	// phase5_attempt reports each cluster cache-invalidation attempt during
+	// Phase 5, including which replica members have not yet acknowledged.
 	Phase5Attempt *Phase5Attempt `protobuf:"bytes,3,opt,name=phase5_attempt,json=phase5Attempt,proto3,oneof"`
 }
 
 type RekeyProgress_PhaseCompleted struct {
+	// phase_completed signals that a named orchestrator phase finished
+	// successfully.
 	PhaseCompleted *PhaseCompleted `protobuf:"bytes,4,opt,name=phase_completed,json=phaseCompleted,proto3,oneof"`
 }
 
 type RekeyProgress_Completed struct {
+	// completed is the terminal success event emitted once all 7 phases
+	// have finished. Receiving this message means the old DEK has been
+	// destroyed and the audit chain updated.
 	Completed *RekeyCompleted `protobuf:"bytes,5,opt,name=completed,proto3,oneof"`
 }
 
 type RekeyProgress_Error struct {
+	// error is the terminal failure event emitted when the orchestrator
+	// cannot proceed. The stream ends after this message; the operator
+	// may resume via RekeyResume if the checkpoint is non-terminal.
 	Error *RekeyError `protobuf:"bytes,6,opt,name=error,proto3,oneof"`
 }
 
@@ -251,10 +294,15 @@ func (*RekeyProgress_Completed) isRekeyProgress_Event() {}
 
 func (*RekeyProgress_Error) isRekeyProgress_Event() {}
 
-// PhaseStarted is emitted when a new orchestrator phase begins.
+// PhaseStarted is emitted at the beginning of each named orchestrator phase.
+// The phase string matches the CheckpointStatus FSM constants (e.g.
+// "phase1_auth", "phase3_reencrypt_cold") so clients can display a
+// phase-by-phase progress indicator.
 type PhaseStarted struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Phase         string                 `protobuf:"bytes,1,opt,name=phase,proto3" json:"phase,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// phase is the FSM status name of the phase that is starting, matching the
+	// CheckpointStatus constants in checkpoint_fsm.go (e.g. "phase2_mint_dek").
+	Phase         string `protobuf:"bytes,1,opt,name=phase,proto3" json:"phase,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -296,15 +344,29 @@ func (x *PhaseStarted) GetPhase() string {
 	return ""
 }
 
-// Phase3Progress reports incremental progress during the bulk re-encryption
-// phase (phase 3) of the rekey orchestrator.
+// Phase3Progress reports incremental progress during Phase 3, the bulk
+// cold-tier re-encryption phase. The orchestrator rewrites events_audit rows
+// in batches of up to 1000, decrypting each under the old DEK and
+// re-encrypting under the new DEK with AAD rebound to the new (dek_ref,
+// dek_version) — INV-E8. Clients may use these messages to render a
+// progress bar; the stream is terminated by RekeyCompleted or RekeyError.
 type Phase3Progress struct {
-	state                 protoimpl.MessageState `protogen:"open.v1"`
-	RowsRewritten         int64                  `protobuf:"varint,1,opt,name=rows_rewritten,json=rowsRewritten,proto3" json:"rows_rewritten,omitempty"`
-	RowsRemainingEstimate int64                  `protobuf:"varint,2,opt,name=rows_remaining_estimate,json=rowsRemainingEstimate,proto3" json:"rows_remaining_estimate,omitempty"`
-	LastProcessedEventId  []byte                 `protobuf:"bytes,3,opt,name=last_processed_event_id,json=lastProcessedEventId,proto3" json:"last_processed_event_id,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// rows_rewritten is the cumulative count of events_audit rows re-encrypted
+	// by this Phase 3 invocation so far. Resets to zero on a fresh resume; the
+	// checkpoint row's phase3_rows_rewritten column holds the cross-resume total.
+	RowsRewritten int64 `protobuf:"varint,1,opt,name=rows_rewritten,json=rowsRewritten,proto3" json:"rows_rewritten,omitempty"`
+	// rows_remaining_estimate is a best-effort count of events_audit rows whose
+	// dek_ref still points at the old DEK. Not guaranteed to be exact (rows may
+	// be written concurrently); use for display only.
+	RowsRemainingEstimate int64 `protobuf:"varint,2,opt,name=rows_remaining_estimate,json=rowsRemainingEstimate,proto3" json:"rows_remaining_estimate,omitempty"`
+	// last_processed_event_id is the ULID bytes of the most recently committed
+	// batch's last row. Stored as the Phase 3 resume cursor in the checkpoint
+	// row (INV-E7-COLD-RESUME-CURSOR); a crash and resume picks up exactly
+	// where this cursor points.
+	LastProcessedEventId []byte `protobuf:"bytes,3,opt,name=last_processed_event_id,json=lastProcessedEventId,proto3" json:"last_processed_event_id,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *Phase3Progress) Reset() {
@@ -358,12 +420,20 @@ func (x *Phase3Progress) GetLastProcessedEventId() []byte {
 	return nil
 }
 
-// Phase5Attempt is emitted each time the orchestrator retries key-ceremony
-// quorum collection (phase 5).
+// Phase5Attempt is emitted each time the orchestrator retries the Phase 5
+// cluster cache-invalidation fan-out. Phase 5 requests every replica to evict
+// the old DEK from its in-memory cache; it succeeds only when all members
+// acknowledge. Timeout surfaces missing_members; the operator may retry
+// (RekeyResume) or bypass quorum via force_destroy (RekeyResumeRequest).
 type Phase5Attempt struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	AttemptCount   int32                  `protobuf:"varint,1,opt,name=attempt_count,json=attemptCount,proto3" json:"attempt_count,omitempty"`
-	MissingMembers []string               `protobuf:"bytes,2,rep,name=missing_members,json=missingMembers,proto3" json:"missing_members,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// attempt_count is the 1-based index of this invalidation attempt. The
+	// checkpoint row's phase5_attempt_count column is incremented before each
+	// attempt and is authoritative; this field mirrors it for live display.
+	AttemptCount int32 `protobuf:"varint,1,opt,name=attempt_count,json=attemptCount,proto3" json:"attempt_count,omitempty"`
+	// missing_members lists the node identifiers that have not yet acknowledged
+	// the cache-invalidation request. Empty on a successful attempt.
+	MissingMembers []string `protobuf:"bytes,2,rep,name=missing_members,json=missingMembers,proto3" json:"missing_members,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -412,10 +482,14 @@ func (x *Phase5Attempt) GetMissingMembers() []string {
 	return nil
 }
 
-// PhaseCompleted is emitted when an orchestrator phase finishes successfully.
+// PhaseCompleted is emitted when an orchestrator phase finishes without error.
+// Paired with PhaseStarted for bracketing display; the phase string matches
+// the CheckpointStatus FSM constant of the phase that just finished.
 type PhaseCompleted struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Phase         string                 `protobuf:"bytes,1,opt,name=phase,proto3" json:"phase,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// phase is the FSM status name of the phase that finished successfully,
+	// matching the CheckpointStatus constants in checkpoint_fsm.go.
+	Phase         string `protobuf:"bytes,1,opt,name=phase,proto3" json:"phase,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -457,19 +531,46 @@ func (x *PhaseCompleted) GetPhase() string {
 	return ""
 }
 
-// RekeyCompleted is the terminal success event streamed at the end of a
-// successful rekey operation.
+// RekeyCompleted is the terminal success event emitted at the end of a
+// successful rekey operation. All 7 phases have completed: a new DEK has been
+// minted, all cold-tier events_audit rows re-encrypted under it, the old DEK
+// destroyed, and a chained audit event emitted (Phase 7). The stream ends
+// after this message.
 type RekeyCompleted struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	RequestId           []byte                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	AuditEventId        []byte                 `protobuf:"bytes,2,opt,name=audit_event_id,json=auditEventId,proto3" json:"audit_event_id,omitempty"`
-	DurationMs          int64                  `protobuf:"varint,3,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
-	Phase3RowsRewritten int64                  `protobuf:"varint,4,opt,name=phase3_rows_rewritten,json=phase3RowsRewritten,proto3" json:"phase3_rows_rewritten,omitempty"`
-	Phase5Attempts      int32                  `protobuf:"varint,5,opt,name=phase5_attempts,json=phase5Attempts,proto3" json:"phase5_attempts,omitempty"`
-	ForceDestroyUsed    bool                   `protobuf:"varint,6,opt,name=force_destroy_used,json=forceDestroyUsed,proto3" json:"force_destroy_used,omitempty"`
-	Resumed             bool                   `protobuf:"varint,7,opt,name=resumed,proto3" json:"resumed,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// request_id is the 16-byte ULID of the checkpoint row that tracked this
+	// rekey operation, matching the value returned by Phase 1 and stored in
+	// crypto_rekey_checkpoints.request_id.
+	RequestId []byte `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// audit_event_id is the 16-byte ULID of the Phase 7 chained rekey audit
+	// event emitted to events_audit. Operators can retrieve this event via
+	// AdminReadStream for an end-to-end verification trace.
+	AuditEventId []byte `protobuf:"bytes,2,opt,name=audit_event_id,json=auditEventId,proto3" json:"audit_event_id,omitempty"`
+	// duration_ms is the wall-clock time in milliseconds from Phase 1 checkpoint
+	// open (started_at) to Phase 7 completion (completed_at), measured using
+	// the server's local clock. Used for operational observability.
+	DurationMs int64 `protobuf:"varint,3,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
+	// phase3_rows_rewritten is the cumulative count of events_audit rows that
+	// were re-encrypted during Phase 3 across all resume attempts. This value
+	// is read from the checkpoint row's phase3_rows_rewritten column at
+	// completion, which is incremented atomically inside each batch transaction.
+	Phase3RowsRewritten int64 `protobuf:"varint,4,opt,name=phase3_rows_rewritten,json=phase3RowsRewritten,proto3" json:"phase3_rows_rewritten,omitempty"`
+	// phase5_attempts is the total number of cluster cache-invalidation attempts
+	// made during Phase 5, including retries due to missing members. A value of
+	// 1 means Phase 5 succeeded on the first try.
+	Phase5Attempts int32 `protobuf:"varint,5,opt,name=phase5_attempts,json=phase5Attempts,proto3" json:"phase5_attempts,omitempty"`
+	// force_destroy_used is true when the operator passed force_destroy=true on
+	// the final RekeyResume call, bypassing Phase 5 quorum by skipping the
+	// cluster invalidation step and proceeding directly to Phase 6 (old DEK
+	// soft-delete). Recorded for audit traceability.
+	ForceDestroyUsed bool `protobuf:"varint,6,opt,name=force_destroy_used,json=forceDestroyUsed,proto3" json:"force_destroy_used,omitempty"`
+	// resumed is true when this completion resulted from a RekeyResume call
+	// (i.e. the checkpoint was already non-terminal when Run was invoked), as
+	// opposed to a fresh Rekey call that drove to completion without
+	// interruption.
+	Resumed       bool `protobuf:"varint,7,opt,name=resumed,proto3" json:"resumed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RekeyCompleted) Reset() {
@@ -551,13 +652,25 @@ func (x *RekeyCompleted) GetResumed() bool {
 	return false
 }
 
-// RekeyError is the terminal failure event streamed when the rekey
-// orchestrator cannot proceed.
+// RekeyError is the terminal failure event emitted when the orchestrator
+// cannot proceed. The stream ends after this message. The checkpoint may
+// remain non-terminal (e.g. after a Phase 5 timeout), in which case the
+// operator may call RekeyResume to continue. If the checkpoint has already
+// transitioned to aborted, RekeyResume will surface DEK_REKEY_CHECKPOINT_TERMINAL.
 type RekeyError struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Code    string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
-	Message string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	// Structured context (e.g., missing_members) as JSON-encoded bytes.
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// code is the oops error code string from the orchestrator, e.g.
+	// "DEK_REKEY_PHASE5_TIMEOUT" or "DEK_REKEY_ALREADY_IN_PROGRESS". Used by
+	// operator tooling to branch on specific failure modes. "UNKNOWN" is emitted
+	// when the error has no structured code.
+	Code string `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	// message is the human-readable error description. Not intended for
+	// programmatic branching; use code instead.
+	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	// details carries structured context for specific error codes as
+	// JSON-encoded bytes, e.g. {"missing_members":["node-a"]} for
+	// DEK_REKEY_PHASE5_TIMEOUT. Absent (zero-length) when the error code carries
+	// no structured detail.
 	Details       []byte `protobuf:"bytes,3,opt,name=details,proto3" json:"details,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -614,12 +727,27 @@ func (x *RekeyError) GetDetails() []byte {
 	return nil
 }
 
-// RekeyResumeRequest resumes a paused or interrupted rekey operation.
+// RekeyResumeRequest resumes a paused or interrupted rekey operation identified
+// by request_id. The orchestrator determines the resume entry point from the
+// checkpoint's current FSM status and drives forward from there. INV-E16:
+// resuming a complete checkpoint is a no-op that re-emits RekeyCompleted.
+// Resuming an aborted checkpoint surfaces DEK_REKEY_CHECKPOINT_TERMINAL.
 type RekeyResumeRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionToken  string                 `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
-	RequestId     []byte                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	ForceDestroy  bool                   `protobuf:"varint,3,opt,name=force_destroy,json=forceDestroy,proto3" json:"force_destroy,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_token authenticates the resuming operator. The handler re-asserts
+	// crypto.operator capability and admin role (INV-D16).
+	SessionToken string `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
+	// request_id is the 16-byte ULID identifying the checkpoint to resume.
+	// Must be non-zero; zero bytes are rejected with REKEY_INVALID_REQUEST_ID.
+	RequestId []byte `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// force_destroy, when true, instructs the orchestrator to bypass Phase 5
+	// quorum on this resume attempt. If the checkpoint is stuck in
+	// phase5_invalidate with missing_members populated, setting this true skips
+	// the cluster invalidation and advances directly to Phase 6 (old DEK
+	// soft-delete). Irreversible: the old DEK material is destroyed without
+	// full cluster acknowledgement. Recorded in force_destroy_used on
+	// RekeyCompleted.
+	ForceDestroy  bool `protobuf:"varint,3,opt,name=force_destroy,json=forceDestroy,proto3" json:"force_destroy,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -675,11 +803,22 @@ func (x *RekeyResumeRequest) GetForceDestroy() bool {
 	return false
 }
 
-// RekeyAbortRequest cancels an in-progress rekey operation.
+// RekeyAbortRequest cancels a non-terminal rekey operation, transitioning its
+// checkpoint to the aborted state. Abort is single-control (INV-E17): any
+// session holding crypto.operator capability may abort any non-terminal
+// checkpoint, regardless of site dual-control policy or which operator
+// initiated the rekey. Once aborted the checkpoint is terminal; a new Rekey
+// call is required to restart.
 type RekeyAbortRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionToken  string                 `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
-	RequestId     []byte                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_token authenticates the aborting operator. Only crypto.operator
+	// capability is required — no admin role re-check (INV-E17).
+	SessionToken string `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
+	// request_id is the 16-byte ULID of the checkpoint to abort. The handler
+	// rejects zero bytes with REKEY_INVALID_REQUEST_ID. If the checkpoint is
+	// already terminal (complete or aborted), the handler returns
+	// DEK_REKEY_CHECKPOINT_TERMINAL.
+	RequestId     []byte `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -728,11 +867,17 @@ func (x *RekeyAbortRequest) GetRequestId() []byte {
 	return nil
 }
 
-// RekeyAbortResponse confirms the abort and provides the audit trail.
+// RekeyAbortResponse confirms that the rekey checkpoint has been transitioned
+// to the aborted terminal state.
 type RekeyAbortResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AbortedAt     *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=aborted_at,json=abortedAt,proto3" json:"aborted_at,omitempty"`
-	AuditEventId  []byte                 `protobuf:"bytes,2,opt,name=audit_event_id,json=auditEventId,proto3" json:"audit_event_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// aborted_at is the server timestamp at which the checkpoint was marked
+	// aborted in crypto_rekey_checkpoints.
+	AbortedAt *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=aborted_at,json=abortedAt,proto3" json:"aborted_at,omitempty"`
+	// audit_event_id is the 16-byte ULID of the abort audit event emitted to
+	// events_audit. Operators can use this to correlate the abort with the
+	// full rekey operation history via AdminReadStream.
+	AuditEventId  []byte `protobuf:"bytes,2,opt,name=audit_event_id,json=auditEventId,proto3" json:"audit_event_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -781,11 +926,17 @@ func (x *RekeyAbortResponse) GetAuditEventId() []byte {
 	return nil
 }
 
-// RekeyStatusRequest fetches the current state of a single rekey operation.
+// RekeyStatusRequest fetches the current FSM state and associated fields of
+// a single rekey checkpoint by its request_id. Requires crypto.operator
+// capability (read-only; no admin role re-check).
 type RekeyStatusRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionToken  string                 `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
-	RequestId     []byte                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_token authenticates the querying operator. Only crypto.operator
+	// capability is required for this read-only RPC.
+	SessionToken string `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
+	// request_id is the 16-byte ULID of the checkpoint to fetch. Returns
+	// DEK_REKEY_CHECKPOINT_NOT_FOUND if no row exists for this ID.
+	RequestId     []byte `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -834,24 +985,62 @@ func (x *RekeyStatusRequest) GetRequestId() []byte {
 	return nil
 }
 
-// RekeyStatusResponse describes the current state of one rekey operation.
+// RekeyStatusResponse describes the current state of one rekey checkpoint.
+// Returned by RekeyStatus (unary) and streamed by RekeyList (one message per
+// matching checkpoint). Fields are populated directly from the
+// crypto_rekey_checkpoints row.
 type RekeyStatusResponse struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	RequestId            []byte                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	ContextType          string                 `protobuf:"bytes,2,opt,name=context_type,json=contextType,proto3" json:"context_type,omitempty"`
-	ContextId            string                 `protobuf:"bytes,3,opt,name=context_id,json=contextId,proto3" json:"context_id,omitempty"`
-	Status               string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
-	PrimaryPlayerId      string                 `protobuf:"bytes,5,opt,name=primary_player_id,json=primaryPlayerId,proto3" json:"primary_player_id,omitempty"`
-	StartedAt            *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
-	LastHeartbeatAt      *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_heartbeat_at,json=lastHeartbeatAt,proto3" json:"last_heartbeat_at,omitempty"`
-	CompletedAt          *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=completed_at,json=completedAt,proto3" json:"completed_at,omitempty"`
-	Phase5AttemptCount   int32                  `protobuf:"varint,9,opt,name=phase5_attempt_count,json=phase5AttemptCount,proto3" json:"phase5_attempt_count,omitempty"`
-	Phase5MissingMembers []string               `protobuf:"bytes,10,rep,name=phase5_missing_members,json=phase5MissingMembers,proto3" json:"phase5_missing_members,omitempty"`
-	ForceDestroy         bool                   `protobuf:"varint,11,opt,name=force_destroy,json=forceDestroy,proto3" json:"force_destroy,omitempty"`
-	OldDekId             *int64                 `protobuf:"varint,12,opt,name=old_dek_id,json=oldDekId,proto3,oneof" json:"old_dek_id,omitempty"`
-	NewDekId             *int64                 `protobuf:"varint,13,opt,name=new_dek_id,json=newDekId,proto3,oneof" json:"new_dek_id,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// request_id is the 16-byte ULID uniquely identifying this checkpoint,
+	// matching the value returned by the Phase 1 open and stored in
+	// crypto_rekey_checkpoints.request_id.
+	RequestId []byte `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// context_type is the encryption domain for which this rekey was initiated,
+	// e.g. "scene". Together with context_id it identifies the DEK being rekeyed.
+	ContextType string `protobuf:"bytes,2,opt,name=context_type,json=contextType,proto3" json:"context_type,omitempty"`
+	// context_id is the entity identifier within context_type, e.g. a scene ULID.
+	ContextId string `protobuf:"bytes,3,opt,name=context_id,json=contextId,proto3" json:"context_id,omitempty"`
+	// status is the current FSM state of this checkpoint. Values match the
+	// CheckpointStatus constants: "pending", "phase1_auth", "phase2_mint_dek",
+	// "phase3_reencrypt_cold", "phase5_invalidate", "phase6_destroy_old",
+	// "phase7_audit", "complete", or "aborted".
+	Status string `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
+	// primary_player_id is the player ID of the operator who initiated the rekey
+	// (the first operator under dual-control). Used for accountability and
+	// is included in the Phase 7 audit event.
+	PrimaryPlayerId string `protobuf:"bytes,5,opt,name=primary_player_id,json=primaryPlayerId,proto3" json:"primary_player_id,omitempty"`
+	// started_at is the server timestamp when the checkpoint row was opened
+	// (Phase 1 INSERT). Combined with completed_at it bounds the total rekey
+	// wall-clock time.
+	StartedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	// last_heartbeat_at is the server timestamp of the most recent heartbeat
+	// written by Phase 3. The sweep worker uses this to TTL-abort stalled
+	// checkpoints (INV-E18/E19). A value far in the past indicates a stalled
+	// or crashed orchestrator run.
+	LastHeartbeatAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_heartbeat_at,json=lastHeartbeatAt,proto3" json:"last_heartbeat_at,omitempty"`
+	// completed_at is the server timestamp when the checkpoint reached a
+	// terminal state (complete or aborted). Zero if not yet terminal.
+	CompletedAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=completed_at,json=completedAt,proto3" json:"completed_at,omitempty"`
+	// phase5_attempt_count is the total number of cluster cache-invalidation
+	// attempts made during Phase 5 for this checkpoint. Incremented before each
+	// attempt; zero means Phase 5 has not started yet.
+	Phase5AttemptCount int32 `protobuf:"varint,9,opt,name=phase5_attempt_count,json=phase5AttemptCount,proto3" json:"phase5_attempt_count,omitempty"`
+	// phase5_missing_members lists the node identifiers that failed to
+	// acknowledge the most recent Phase 5 cache-invalidation request. Non-empty
+	// indicates a Phase 5 timeout; the operator may resume or use force_destroy.
+	// Empty when Phase 5 has not yet run or succeeded.
+	Phase5MissingMembers []string `protobuf:"bytes,10,rep,name=phase5_missing_members,json=phase5MissingMembers,proto3" json:"phase5_missing_members,omitempty"`
+	// force_destroy records whether force_destroy was set on the last
+	// RekeyResume call for this checkpoint, bypassing Phase 5 quorum.
+	ForceDestroy bool `protobuf:"varint,11,opt,name=force_destroy,json=forceDestroy,proto3" json:"force_destroy,omitempty"`
+	// old_dek_id is the primary key of the crypto_keys row being replaced.
+	// Absent until Phase 1 resolves the active DEK for the context.
+	OldDekId *int64 `protobuf:"varint,12,opt,name=old_dek_id,json=oldDekId,proto3,oneof" json:"old_dek_id,omitempty"`
+	// new_dek_id is the primary key of the freshly-minted crypto_keys row
+	// created by Phase 2. Absent until Phase 2 completes.
+	NewDekId      *int64 `protobuf:"varint,13,opt,name=new_dek_id,json=newDekId,proto3,oneof" json:"new_dek_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RekeyStatusResponse) Reset() {
@@ -975,16 +1164,32 @@ func (x *RekeyStatusResponse) GetNewDekId() int64 {
 	return 0
 }
 
-// RekeyListRequest queries active and optionally terminal rekey operations.
+// RekeyListRequest queries the operator's view of active and optionally
+// terminal rekey checkpoints. Results are streamed as RekeyStatusResponse
+// messages. By default only non-terminal checkpoints are included
+// (pending through phase7_audit); set include_terminal=true to also receive
+// complete and aborted rows.
 type RekeyListRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	SessionToken    string                 `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
-	IncludeTerminal bool                   `protobuf:"varint,2,opt,name=include_terminal,json=includeTerminal,proto3" json:"include_terminal,omitempty"`
-	ContextPattern  *string                `protobuf:"bytes,3,opt,name=context_pattern,json=contextPattern,proto3,oneof" json:"context_pattern,omitempty"`
-	Since           *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=since,proto3,oneof" json:"since,omitempty"`
-	Limit           int32                  `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_token authenticates the querying operator. Only crypto.operator
+	// capability is required for this read-only RPC.
+	SessionToken string `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
+	// include_terminal, when true, includes checkpoints in the complete and
+	// aborted terminal states alongside the non-terminal ones. Defaults to
+	// false so operators see only in-progress work by default.
+	IncludeTerminal bool `protobuf:"varint,2,opt,name=include_terminal,json=includeTerminal,proto3" json:"include_terminal,omitempty"`
+	// context_pattern, when present, filters results to checkpoints whose
+	// context_type or context_id contains this substring. Absent means no
+	// context filter.
+	ContextPattern *string `protobuf:"bytes,3,opt,name=context_pattern,json=contextPattern,proto3,oneof" json:"context_pattern,omitempty"`
+	// since, when present, restricts results to checkpoints whose started_at
+	// is at or after this timestamp. Absent means no lower time bound.
+	Since *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=since,proto3,oneof" json:"since,omitempty"`
+	// limit caps the number of rows returned. Values ≤0 or >100 are clamped
+	// to 100 by the handler (CheckpointListFilter cap in rekey_handler.go).
+	Limit         int32 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RekeyListRequest) Reset() {

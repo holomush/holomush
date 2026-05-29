@@ -24,9 +24,11 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// GetContentRequest selects a single content item by its exact storage key.
 type GetContentRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// key is the exact content-store key to retrieve; no prefix matching is performed.
+	Key           string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -68,9 +70,12 @@ func (x *GetContentRequest) GetKey() string {
 	return ""
 }
 
+// GetContentResponse carries the content item for the requested key. A missing
+// key yields no response message — the RPC fails with a gRPC NotFound status.
 type GetContentResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Item          *ContentItem           `protobuf:"bytes,1,opt,name=item,proto3" json:"item,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// item is the content item for the requested key.
+	Item          *ContentItem `protobuf:"bytes,1,opt,name=item,proto3" json:"item,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -112,11 +117,17 @@ func (x *GetContentResponse) GetItem() *ContentItem {
 	return nil
 }
 
+// ListContentRequest selects a page of content items whose keys share a common prefix.
 type ListContentRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Prefix        string                 `protobuf:"bytes,1,opt,name=prefix,proto3" json:"prefix,omitempty"`
-	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	Cursor        string                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// prefix restricts results to keys that begin with this string; pass an empty string to match all keys.
+	Prefix string `protobuf:"bytes,1,opt,name=prefix,proto3" json:"prefix,omitempty"`
+	// limit is the maximum number of items to return per page; zero means no limit.
+	// The server does not impose its own cap — callers should set a reasonable bound.
+	Limit int32 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	// cursor is the next_cursor value from a prior ListContentResponse; pass an empty string to start from the beginning.
+	// The value is the key of the last item on the previous page, used for keyset pagination.
+	Cursor        string `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -172,10 +183,14 @@ func (x *ListContentRequest) GetCursor() string {
 	return ""
 }
 
+// ListContentResponse carries one page of content items and a pagination token.
 type ListContentResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Items         []*ContentItem         `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
-	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// items is the slice of content items matching the request prefix, ordered by key.
+	Items []*ContentItem `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	// next_cursor is the key of the last returned item; pass it as cursor in a subsequent
+	// request to fetch the next page. An empty string means there are no further items.
+	NextCursor    string `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -224,12 +239,19 @@ func (x *ListContentResponse) GetNextCursor() string {
 	return ""
 }
 
+// ContentItem is a single managed content record retrieved from the store.
 type ContentItem struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	ContentType   string                 `protobuf:"bytes,2,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
-	Body          []byte                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
-	Metadata      map[string]string      `protobuf:"bytes,4,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// key is the storage key identifying this item; callers conventionally use
+	// dot-delimited names such as "landing.hero", though the store enforces none.
+	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	// content_type is the IANA media type of the body, for example "text/markdown" or "application/json".
+	ContentType string `protobuf:"bytes,2,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	// body is the raw content bytes; interpret according to content_type.
+	Body []byte `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
+	// metadata holds arbitrary string key/value annotations attached to the item,
+	// such as "title", "icon", "order", or "alt".
+	Metadata      map[string]string `protobuf:"bytes,4,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

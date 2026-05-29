@@ -10,7 +10,12 @@ import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, CheckPlayerSessi
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
- * CoreService is the main game service.
+ * CoreService is the game-core gRPC surface served by internal/grpc.CoreServer
+ * (registered in cmd/holomush/sub_grpc.go via RegisterCoreServiceServer). It is
+ * the single entry point through which gateways (telnet, web) drive gameplay,
+ * authentication, session management, and event streaming. The gateway is a
+ * pure protocol translator (see .claude/rules/gateway-boundary.md); all game
+ * state and business logic lives behind these RPCs.
  *
  * @generated from service holomush.core.v1.CoreService
  */
@@ -18,7 +23,12 @@ export const CoreService = {
   typeName: "holomush.core.v1.CoreService",
   methods: {
     /**
-     * HandleCommand processes a game command.
+     * HandleCommand validates session ownership, records the command in session
+     * history, and dispatches it through the unified command dispatcher. Handler
+     * output is NOT returned inline — it is emitted as command_response events on
+     * the character's own stream. The RPC reply carries only success/failure.
+     * Auth: requires a player_session_token matching session_id; ownership
+     * failures collapse to a generic "session not found" in the response body.
      *
      * @generated from rpc holomush.core.v1.CoreService.HandleCommand
      */
@@ -29,7 +39,11 @@ export const CoreService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Subscribe opens a stream of events for the session.
+     * Subscribe opens the long-lived server-streaming event feed for a session.
+     * The server (not the client) determines which streams to deliver and the
+     * replay policy via FocusCoordinator.RestoreFocus; it registers the caller's
+     * connection, replays history, then forwards live events. Ownership is
+     * validated up front and collapses to SESSION_NOT_FOUND on any failure.
      *
      * @generated from rpc holomush.core.v1.CoreService.Subscribe
      */
@@ -40,7 +54,9 @@ export const CoreService = {
       kind: MethodKind.ServerStreaming,
     },
     /**
-     * Disconnect ends a session.
+     * Disconnect detaches a connection (or the whole session) and is idempotent:
+     * an already-gone session returns success. It validates ownership first, then
+     * removes the named connection and tears down session state.
      *
      * @generated from rpc holomush.core.v1.CoreService.Disconnect
      */
@@ -51,7 +67,9 @@ export const CoreService = {
       kind: MethodKind.Unary,
     },
     /**
-     * GetCommandHistory retrieves command history for a session.
+     * GetCommandHistory returns the recent commands recorded for a session (the
+     * per-session ring buffer maintained by sessionStore.AppendCommand). Ownership
+     * is validated; this is distinct from event history (QueryStreamHistory).
      *
      * @generated from rpc holomush.core.v1.CoreService.GetCommandHistory
      */
@@ -62,7 +80,10 @@ export const CoreService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Two-phase login: authenticate player credentials.
+     * AuthenticatePlayer is phase one of two-phase login: it verifies username and
+     * password, enforces the per-player session cap, mints a PlayerSession, and
+     * returns the bearer token plus the player's character roster. No game session
+     * exists yet — that requires a follow-up SelectCharacter call.
      *
      * @generated from rpc holomush.core.v1.CoreService.AuthenticatePlayer
      */
@@ -73,7 +94,10 @@ export const CoreService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Two-phase login: select a character, creating or reattaching a game session.
+     * SelectCharacter is phase two of two-phase login: given a valid player session
+     * token, it reattaches an existing detached game session (preserving scrollback)
+     * or creates a fresh one for the chosen character, emitting an arrive event.
+     * The character must belong to the authenticated player.
      *
      * @generated from rpc holomush.core.v1.CoreService.SelectCharacter
      */
@@ -84,7 +108,9 @@ export const CoreService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Create a new player account.
+     * CreatePlayer registers a new player account and immediately returns a player
+     * session token (the new account is logged in). The returned character roster
+     * is empty — a freshly created player has no characters until CreateCharacter.
      *
      * @generated from rpc holomush.core.v1.CoreService.CreatePlayer
      */
@@ -95,7 +121,9 @@ export const CoreService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Create an ephemeral guest player and character.
+     * CreateGuest provisions an ephemeral guest player plus one starter character
+     * and returns a short-lived (guest TTL) player session token. Used by the
+     * "play as guest" entry path; no credentials are required.
      *
      * @generated from rpc holomush.core.v1.CoreService.CreateGuest
      */
@@ -106,7 +134,9 @@ export const CoreService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Create a new character for an authenticated player.
+     * CreateCharacter adds a character to the authenticated player's roster. When
+     * a transactor and bindings service are configured, the character row and its
+     * ownership binding are created atomically in one transaction.
      *
      * @generated from rpc holomush.core.v1.CoreService.CreateCharacter
      */
@@ -117,7 +147,8 @@ export const CoreService = {
       kind: MethodKind.Unary,
     },
     /**
-     * List characters for an authenticated player.
+     * ListCharacters returns the authenticated player's character roster enriched
+     * with per-character session status and last-known location.
      *
      * @generated from rpc holomush.core.v1.CoreService.ListCharacters
      */
@@ -128,7 +159,9 @@ export const CoreService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Request a password reset (email stubbed).
+     * RequestPasswordReset begins a password-reset flow for the given email. The
+     * reply is ALWAYS success regardless of whether the email exists — this is an
+     * intentional enumeration-prevention measure; delivery is stubbed (logged).
      *
      * @generated from rpc holomush.core.v1.CoreService.RequestPasswordReset
      */
@@ -139,7 +172,9 @@ export const CoreService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Confirm a password reset with token.
+     * ConfirmPasswordReset completes the flow by validating the reset token and
+     * setting the new password. Failure messages are sanitized so token/internal
+     * detail does not leak to the client.
      *
      * @generated from rpc holomush.core.v1.CoreService.ConfirmPasswordReset
      */
@@ -150,7 +185,10 @@ export const CoreService = {
       kind: MethodKind.Unary,
     },
     /**
-     * End a player session.
+     * Logout deletes the caller's PlayerSession and, before doing so, fans out
+     * disconnect + session_ended + delete + hooks to every child game session so
+     * no Subscribe stream is left orphaned. Per-session signals complete before
+     * the PlayerSession row is deleted to avoid ownership-validation flapping.
      *
      * @generated from rpc holomush.core.v1.CoreService.Logout
      */
@@ -161,7 +199,10 @@ export const CoreService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Validate a player session token. Used by web gateway for cookie-based auth checks.
+     * CheckPlayerSession validates a player session token and returns the player
+     * identity plus character roster. Used by the web gateway for cookie-based auth
+     * checks. The failure path returns an Unauthenticated status (not a body flag),
+     * preserving the enumeration-safety contract for unknown/expired sessions.
      *
      * @generated from rpc holomush.core.v1.CoreService.CheckPlayerSession
      */
@@ -172,10 +213,11 @@ export const CoreService = {
       kind: MethodKind.Unary,
     },
     /**
-     * ListPlayerSessions returns the caller's active PlayerSessions
-     * (the rows of player_sessions for the caller's player_id). Tokens
-     * are not returned — only metadata useful for user-visible session
-     * management ("you are signed in on these devices").
+     * ListPlayerSessions returns the caller's active PlayerSessions (the rows in
+     * player_sessions for the caller's player_id). Tokens are never returned —
+     * only metadata useful for user-visible session management ("you are signed
+     * in on these devices"). Any auth failure returns an empty list, so callers
+     * cannot distinguish an invalid token from a player with zero sessions.
      *
      * @generated from rpc holomush.core.v1.CoreService.ListPlayerSessions
      */
@@ -186,8 +228,9 @@ export const CoreService = {
       kind: MethodKind.Unary,
     },
     /**
-     * RevokePlayerSession deletes a specific PlayerSession. Ownership is
-     * verified — a player cannot revoke another player's sessions.
+     * RevokePlayerSession deletes one specific PlayerSession. Ownership is
+     * verified: a player cannot revoke another player's session, and cross-player
+     * attempts collapse to "session not found" (logged WARN for security audit).
      *
      * @generated from rpc holomush.core.v1.CoreService.RevokePlayerSession
      */
@@ -198,9 +241,9 @@ export const CoreService = {
       kind: MethodKind.Unary,
     },
     /**
-     * RevokeOtherPlayerSessions deletes all PlayerSessions for the caller
-     * except the current one. Convenience bulk operation equivalent to
-     * listing and calling RevokePlayerSession for each.
+     * RevokeOtherPlayerSessions deletes all of the caller's PlayerSessions except
+     * the current one. Convenience bulk operation equivalent to listing and calling
+     * RevokePlayerSession for each — useful after a suspected compromise.
      *
      * @generated from rpc holomush.core.v1.CoreService.RevokeOtherPlayerSessions
      */
@@ -211,10 +254,12 @@ export const CoreService = {
       kind: MethodKind.Unary,
     },
     /**
-     * QueryStreamHistory reads paginated event history from a stream.
-     * Two-layer authorization: membership gate (I-17) for private streams,
-     * ABAC policy evaluation for public streams.
-     * Pure read — does not mutate session cursors (invariant I-13).
+     * QueryStreamHistory reads paginated event history from a single stream. It is
+     * a pure read that does NOT mutate session cursors (invariant I-13). Two-layer
+     * authorization applies: private streams (character / scene) use a hard
+     * membership gate (I-17, no ABAC, no admin override); public streams (location,
+     * global) are evaluated by the ABAC engine. History transparently spans the
+     * recent JetStream tier and the older PostgreSQL audit tier.
      *
      * @generated from rpc holomush.core.v1.CoreService.QueryStreamHistory
      */
@@ -225,9 +270,12 @@ export const CoreService = {
       kind: MethodKind.Unary,
     },
     /**
-     * ListSessionStreams returns the set of streams the session is currently
-     * subscribed to, derived from focusCoordinator.RestoreFocus. Used by
-     * web clients to enumerate streams for backfill on reload. Pure read.
+     * ListSessionStreams returns the stream names the session is currently
+     * subscribed to, derived from FocusCoordinator.RestoreFocus (with the same
+     * ambient-stream fallback Subscribe uses). Web clients use it to enumerate
+     * streams for backfill on reload. Pure read; ownership-validated and
+     * enumeration-safe (failures collapse to SESSION_NOT_FOUND), closing the IDOR
+     * where one player could enumerate another's subscribed streams.
      *
      * @generated from rpc holomush.core.v1.CoreService.ListSessionStreams
      */
@@ -238,8 +286,11 @@ export const CoreService = {
       kind: MethodKind.Unary,
     },
     /**
-     * ListFocusPresence returns the presence snapshot for the session's current
-     * focus context (location or scene). Pure read — no session mutation.
+     * ListFocusPresence returns the current-state presence snapshot for the
+     * session's focus context. It reads session.Store.ListActiveByLocation
+     * directly (NOT event history — see .claude/rules/event-interfaces.md) and is
+     * gated by the ABAC list_presence action on the location resource. Scene-focus
+     * contexts currently return UNIMPLEMENTED. Pure read — no session mutation.
      *
      * @generated from rpc holomush.core.v1.CoreService.ListFocusPresence
      */

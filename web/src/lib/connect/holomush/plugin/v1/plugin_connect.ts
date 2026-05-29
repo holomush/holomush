@@ -13,8 +13,11 @@ import { MethodKind } from "@bufbuild/protobuf";
 import { DecryptOwnAuditRowsRequest, DecryptOwnAuditRowsResponse } from "./audit_pb.js";
 
 /**
- * PluginService is called by the go-plugin host to send events and commands to binary plugins.
- * This service is implemented by the plugin (the gRPC server runs in the plugin process).
+ * PluginService is the plugin-IMPLEMENTED half of the binary-plugin contract:
+ * the gRPC server runs inside the plugin subprocess (hashicorp/go-plugin) and
+ * the host dials it. The host adapter is pkg/plugin.pluginServerAdapter, which
+ * bridges these RPCs to a plugin author's Go handler. Contrast PluginHostService
+ * below, which the host implements and plugins call back into.
  *
  * @generated from service holomush.plugin.v1.PluginService
  */
@@ -22,9 +25,13 @@ export const PluginService = {
   typeName: "holomush.plugin.v1.PluginService",
   methods: {
     /**
-     * Init is called by the host after connection, providing service configuration
-     * (DB connection string, required service addresses, etc.) and receiving
-     * the list of gRPC services the plugin provides.
+     * Init is the first call the host makes after the go-plugin handshake. It
+     * hands the plugin its ServiceConfig (DB connection string, required-service
+     * addresses, opaque runtime config) and returns the gRPC service names the
+     * plugin provides plus the emit-type set the host validates against the
+     * manifest's crypto.emits (INV-S5). Bridged by pluginServerAdapter.Init,
+     * which also lazily dials the plugin-host connection for any host-facing
+     * facade (sink/focus/evaluator/decryptor) the provider opts into.
      *
      * @generated from rpc holomush.plugin.v1.PluginService.Init
      */
@@ -35,7 +42,12 @@ export const PluginService = {
       kind: MethodKind.Unary,
     },
     /**
-     * HandleEvent delivers an event to the plugin and receives any response events.
+     * HandleEvent delivers one subscribed event to the plugin and collects the
+     * events the plugin wants to emit in response. Bridged by
+     * pluginServerAdapter.HandleEvent, which converts the proto Event to the SDK
+     * Event type, invokes the author's handler, and converts returned EmitEvents
+     * back to the wire. Response emits flow through the host emit fence, not
+     * straight to the bus.
      *
      * @generated from rpc holomush.plugin.v1.PluginService.HandleEvent
      */
@@ -46,7 +58,10 @@ export const PluginService = {
       kind: MethodKind.Unary,
     },
     /**
-     * HandleCommand delivers a command to the plugin.
+     * HandleCommand delivers a parsed player command to the plugin and returns
+     * the command result (output text, status, response emits, and audit hints).
+     * Bridged by pluginServerAdapter.HandleCommand; if the plugin registered no
+     * command handler the adapter returns an empty response rather than erroring.
      *
      * @generated from rpc holomush.plugin.v1.PluginService.HandleCommand
      */
@@ -57,9 +72,11 @@ export const PluginService = {
       kind: MethodKind.Unary,
     },
     /**
-     * QuerySessionStreams returns stream names the plugin wants subscribed for a session.
-     * Called once at session establishment, before LISTEN setup.
-     * Only invoked for plugins that declare session_streams: true in their manifest.
+     * QuerySessionStreams asks the plugin which stream names it wants subscribed
+     * for a session being established, before LISTEN/subscription setup. Called
+     * exactly once at session establishment, and only for plugins that declare
+     * session_streams: true in their manifest. A plugin-reported error degrades
+     * gracefully (the host logs and skips that plugin's contribution).
      *
      * @generated from rpc holomush.plugin.v1.PluginService.QuerySessionStreams
      */
@@ -73,8 +90,19 @@ export const PluginService = {
 } as const;
 
 /**
- * PluginHostService runs in the host process, allowing binary plugins
- * to call back for event emission, logging, and KV storage.
+ * PluginHostService is the host-IMPLEMENTED half of the contract: the server
+ * runs in the host process and binary plugins dial it to call back for event
+ * emission, ABAC evaluation, audit decryption, focus mutation, and history
+ * reads. Registered live at internal/plugin/goplugin/host_service.go
+ * (RegisterPluginHostServiceServer, struct pluginHostServiceServer), so unlike
+ * hostfunc.proto's HostFunctionsService this surface IS served in production.
+ *
+ * NOTE: the registered server embeds UnimplementedPluginHostServiceServer and
+ * implements only 12 of the 18 RPCs below. Log, KVGet, KVSet, KVDelete,
+ * AddSessionStream, and RemoveSessionStream are declared here but have no
+ * server impl and no production client — they return codes.Unimplemented
+ * (tracked in holomush-l6std). Their comments below document that unwired
+ * reality, not aspirational behavior.
  *
  * @generated from service holomush.plugin.v1.PluginHostService
  */
@@ -82,7 +110,18 @@ export const PluginHostService = {
   typeName: "holomush.plugin.v1.PluginHostService",
   methods: {
     /**
-     * EmitEvent publishes an event to a stream.
+     * EmitEvent publishes one plugin-originated event onto the bus through the
+     * host emit fence. SERVED: pluginHostServiceServer.EmitEvent. The caller's
+     * identity is NOT trusted from the wire — the plugin presents a host-issued
+     * dispatch token in the x-holomush-emit-token metadata header, the host
+     * recovers the vouched-for actor from tokenStore.Lookup(pluginName, token),
+     * and a missing/foreign token is rejected (EMIT_TOKEN_MISSING /
+     * EMIT_TOKEN_REJECTED). The recovered actor then flows through
+     * PluginEventEmitter.Emit, which enforces the manifest gates: emits (subject
+     * namespace must be declared), actor_kinds_claimable (actor kind must be
+     * listed — EMIT_ACTOR_KIND_NOT_CLAIMABLE), and the crypto.emits sensitivity
+     * fence. These gates fire identically for Lua and binary plugins (plugin
+     * runtime symmetry); the token mechanism is the binary-side forgery fence.
      *
      * @generated from rpc holomush.plugin.v1.PluginHostService.EmitEvent
      */
@@ -93,7 +132,9 @@ export const PluginHostService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Log writes a log message through the host's logging system.
+     * Log forwards a plugin log line to the host logger. DECLARED BUT UNSERVED:
+     * pluginHostServiceServer does not implement it and no production client
+     * calls it, so it currently returns codes.Unimplemented (holomush-l6std).
      *
      * @generated from rpc holomush.plugin.v1.PluginHostService.Log
      */
@@ -104,7 +145,9 @@ export const PluginHostService = {
       kind: MethodKind.Unary,
     },
     /**
-     * KVGet retrieves a value from the plugin's key-value store.
+     * KVGet reads a value from the plugin's namespaced key-value store.
+     * DECLARED BUT UNSERVED (holomush-l6std): no server impl, no client; returns
+     * codes.Unimplemented today.
      *
      * @generated from rpc holomush.plugin.v1.PluginHostService.KVGet
      */
@@ -115,7 +158,9 @@ export const PluginHostService = {
       kind: MethodKind.Unary,
     },
     /**
-     * KVSet stores a value in the plugin's key-value store.
+     * KVSet writes a value into the plugin's namespaced key-value store.
+     * DECLARED BUT UNSERVED (holomush-l6std): no server impl, no client; returns
+     * codes.Unimplemented today.
      *
      * @generated from rpc holomush.plugin.v1.PluginHostService.KVSet
      */
@@ -126,7 +171,9 @@ export const PluginHostService = {
       kind: MethodKind.Unary,
     },
     /**
-     * KVDelete removes a value from the plugin's key-value store.
+     * KVDelete removes a key from the plugin's namespaced key-value store.
+     * DECLARED BUT UNSERVED (holomush-l6std): no server impl, no client; returns
+     * codes.Unimplemented today.
      *
      * @generated from rpc holomush.plugin.v1.PluginHostService.KVDelete
      */
@@ -137,8 +184,10 @@ export const PluginHostService = {
       kind: MethodKind.Unary,
     },
     /**
-     * AddSessionStream subscribes an active session to an additional stream mid-session.
-     * Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+     * AddSessionStream subscribes an active session to an additional stream
+     * mid-session. DECLARED BUT UNSERVED (holomush-l6std): no server impl, no
+     * production client; returns codes.Unimplemented today. (The wire comment
+     * about SESSION_NOT_FOUND describes the intended-but-unimplemented contract.)
      *
      * @generated from rpc holomush.plugin.v1.PluginHostService.AddSessionStream
      */
@@ -150,7 +199,8 @@ export const PluginHostService = {
     },
     /**
      * RemoveSessionStream unsubscribes an active session from a stream.
-     * Idempotent: returns success if stream is not subscribed.
+     * DECLARED BUT UNSERVED (holomush-l6std): no server impl, no production
+     * client; returns codes.Unimplemented today.
      *
      * @generated from rpc holomush.plugin.v1.PluginHostService.RemoveSessionStream
      */
@@ -161,8 +211,10 @@ export const PluginHostService = {
       kind: MethodKind.Unary,
     },
     /**
-     * JoinFocus adds a focus membership to an active or detached session.
-     * Plugins declare intent; the server applies kind-specific replay policy.
+     * JoinFocus adds a focus membership (e.g. a scene) to a session via the
+     * host focus coordinator. SERVED: pluginHostServiceServer.JoinFocus. The
+     * plugin declares intent; the coordinator applies the kind-specific replay
+     * policy. Fails if the focus coordinator is not configured.
      *
      * @generated from rpc holomush.plugin.v1.PluginHostService.JoinFocus
      */
@@ -173,7 +225,9 @@ export const PluginHostService = {
       kind: MethodKind.Unary,
     },
     /**
-     * LeaveFocus removes a focus membership. Idempotent on non-member.
+     * LeaveFocus removes one focus membership from a session. SERVED:
+     * pluginHostServiceServer.LeaveFocus. Idempotent — leaving a target the
+     * session does not hold is a successful no-op.
      *
      * @generated from rpc holomush.plugin.v1.PluginHostService.LeaveFocus
      */
@@ -185,9 +239,12 @@ export const PluginHostService = {
     },
     /**
      * LeaveFocusByTarget removes the given focus membership from every
-     * non-expired session that holds it. Used for cross-session fan-out
-     * (e.g., scene-end reaches all participants). Partial success is normal:
-     * individual session failures are aggregated without halting the sweep.
+     * non-expired session that holds it — cross-session fan-out (e.g. a
+     * scene-end reaching all participants). SERVED:
+     * pluginHostServiceServer.LeaveFocusByTarget. Partial success is normal:
+     * per-session failures are aggregated into the response (succeeded /
+     * total_scanned / failed_session_ids) rather than aborting the sweep; the
+     * RPC error is reserved for the enumeration step itself failing.
      *
      * @generated from rpc holomush.plugin.v1.PluginHostService.LeaveFocusByTarget
      */
@@ -198,8 +255,10 @@ export const PluginHostService = {
       kind: MethodKind.Unary,
     },
     /**
-     * PresentFocus updates the session's PresentingFocus pointer.
-     * Target MUST already exist in FocusMemberships.
+     * PresentFocus repoints a session's PresentingFocus to an existing
+     * membership. SERVED: pluginHostServiceServer.PresentFocus. The target MUST
+     * already be in the session's FocusMemberships (membership is validated, not
+     * implicitly created).
      *
      * @generated from rpc holomush.plugin.v1.PluginHostService.PresentFocus
      */
@@ -210,9 +269,12 @@ export const PluginHostService = {
       kind: MethodKind.Unary,
     },
     /**
-     * QueryStreamHistory reads the tail of a stream for plugin-side display.
-     * Read-only: does not advance cursors or affect session state.
-     * Count capped at 500 server-side.
+     * QueryStreamHistory reads the tail of a stream for plugin-side display,
+     * backward-paginated by opaque cursor. SERVED:
+     * pluginHostServiceServer.QueryStreamHistory via HistoryReader.ReplayTail.
+     * Read-only: it does not advance session cursors or mutate session state.
+     * A negative count is rejected (INVALID_ARGUMENT); count is CLAMPED to
+     * maxQueryStreamHistoryCount (500), not rejected, when too large.
      *
      * @generated from rpc holomush.plugin.v1.PluginHostService.QueryStreamHistory
      */
@@ -223,11 +285,16 @@ export const PluginHostService = {
       kind: MethodKind.Unary,
     },
     /**
-     * DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN audit rows
-     * host-side. The plugin never holds a DEK. Per-row result envelope (INV-RB-12).
-     * Batch capped at 500 server-side (REJECT, not clamp). Authorization: OwnerMap
-     * subject ownership (g1) + crypto.emits[].readback manifest flag (g2) (INV-RB-2).
-     * Request / response message shapes live in audit.proto (AuditRow domain).
+     * DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN encrypted
+     * audit rows host-side; the plugin never holds a DEK. SERVED:
+     * pluginHostServiceServer.DecryptOwnAuditRows via ReadbackDecryptor.
+     * DecryptOwnRows. Authorization is two-gate (INV-RB-2): OwnerMap subject
+     * ownership (g1) plus the crypto.emits[].readback manifest flag (g2). Each
+     * input row gets an independent RowResult (INV-RB-12) carrying either
+     * plaintext or a stable snake_case no_plaintext_reason ("not_owner",
+     * "auth_guard_deny", "dek_missing", "downgrade_refused", "stale_dek",
+     * "audit_queue_full", "internal"; readback.go reasonToWire). Request /
+     * response shapes and RowResult live in audit.proto (AuditRow domain).
      *
      * @generated from rpc holomush.plugin.v1.PluginHostService.DecryptOwnAuditRows
      */
@@ -238,13 +305,15 @@ export const PluginHostService = {
       kind: MethodKind.Unary,
     },
     /**
-     * RequestEmitToken issues a self-token bound to the calling plugin's
-     * identity (ActorPlugin + pluginName), so plugin-served gRPC handlers
-     * (which are not invoked via DeliverEvent / DeliverCommand) can still
-     * call EmitEvent. The plugin's identity is taken from the mTLS-bound
-     * gRPC server struct — the request carries no identity fields and the
-     * plugin cannot impersonate another actor through this RPC.
-     * (Spec §3.3.5 / §5.4 self-token pattern.)
+     * RequestEmitToken issues a self-token bound to {ActorPlugin, pluginName} so
+     * a plugin-served gRPC handler (e.g. SceneService.CreateScene) — which is NOT
+     * reached via DeliverEvent/DeliverCommand and so holds no dispatch token —
+     * can still call EmitEvent. SERVED: pluginHostServiceServer.RequestEmitToken.
+     * The plugin's identity is taken from the mTLS-bound server struct
+     * (s.pluginName); the request carries no identity fields, so a plugin cannot
+     * impersonate another actor or escalate to a character actor through this
+     * RPC. The actor_kinds_claimable manifest gate still fires when the issued
+     * token is later spent at EmitEvent. (Spec §3.3.5 / §5.4 two-token pattern.)
      *
      * @generated from rpc holomush.plugin.v1.PluginHostService.RequestEmitToken
      */
@@ -255,10 +324,11 @@ export const PluginHostService = {
       kind: MethodKind.Unary,
     },
     /**
-     * SetConnectionFocus — Phase 5 explicit focus mutation for one
-     * Connection. Substrate validates membership against FocusMemberships
-     * (D4); writes Connection.FocusKey + (D9-gated) Info.PresentingFocus
-     * atomically under one Store-lock acquisition (D7).
+     * SetConnectionFocus is the Phase-5 explicit focus mutation for a single
+     * Connection. SERVED: pluginHostServiceServer.SetConnectionFocus. The
+     * substrate validates the requested membership against the session's
+     * FocusMemberships (D4), then writes Connection.FocusKey and (D9-gated)
+     * Info.PresentingFocus atomically under one Store-lock acquisition (D7).
      *
      * @generated from rpc holomush.plugin.v1.PluginHostService.SetConnectionFocus
      */
@@ -269,10 +339,11 @@ export const PluginHostService = {
       kind: MethodKind.Unary,
     },
     /**
-     * AutoFocusOnJoin — Phase 5 fan-out: focuses all terminal/telnet
-     * connections of the character on the given scene. Skips conns
-     * already explicitly focused elsewhere (D8). Caller must have
-     * completed JoinFocus before invocation.
+     * AutoFocusOnJoin is the Phase-5 fan-out that focuses all of a character's
+     * terminal/telnet connections on a scene at once. SERVED:
+     * pluginHostServiceServer.AutoFocusOnJoin. Connections already explicitly
+     * focused elsewhere are skipped (D8). The caller MUST have completed
+     * JoinFocus first, since the substrate requires the membership to exist.
      *
      * @generated from rpc holomush.plugin.v1.PluginHostService.AutoFocusOnJoin
      */
@@ -283,8 +354,10 @@ export const PluginHostService = {
       kind: MethodKind.Unary,
     },
     /**
-     * IsAnyConnFocused — Phase 5 notification-emission helper: true iff
-     * any of the character's connections has FocusKey == {scene, scene_id}.
+     * IsAnyConnFocused is the Phase-5 notification-emission helper: it reports
+     * whether any of the character's connections currently focuses the given
+     * scene, so callers can decide whether to emit a focus-related notification.
+     * SERVED: pluginHostServiceServer.IsAnyConnFocused.
      *
      * @generated from rpc holomush.plugin.v1.PluginHostService.IsAnyConnFocused
      */
@@ -295,10 +368,13 @@ export const PluginHostService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Evaluate runs the host ABAC engine for a single action against a single
-     * resource instance owned by the calling plugin. The subject is derived
-     * host-side from the dispatch token (see EmitEvent) — there is no subject
-     * field on the wire (spec §2, INV-1).
+     * Evaluate runs the host ABAC engine for one action against one resource
+     * instance owned by the calling plugin. SERVED:
+     * pluginHostServiceServer.Evaluate. The subject is derived host-side from the
+     * dispatch token exactly as EmitEvent does (token→actor recovery) — there is
+     * no subject field on the wire (spec §2, INV-1). Fails closed on nil engine,
+     * missing/rejected token, empty actor subject, or a resource type the plugin
+     * does not own.
      *
      * @generated from rpc holomush.plugin.v1.PluginHostService.Evaluate
      */

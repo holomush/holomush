@@ -16,13 +16,18 @@ export const file_holomush_control_v1_control: GenFile = /*@__PURE__*/
   fileDesc("CiFob2xvbXVzaC9jb250cm9sL3YxL2NvbnRyb2wucHJvdG8SE2hvbG9tdXNoLmNvbnRyb2wudjEiIwoPU2h1dGRvd25SZXF1ZXN0EhAKCGdyYWNlZnVsGAEgASgIIiMKEFNodXRkb3duUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCSIPCg1TdGF0dXNSZXF1ZXN0IlkKDlN0YXR1c1Jlc3BvbnNlEg8KB3J1bm5pbmcYASABKAgSCwoDcGlkGAIgASgFEhYKDnVwdGltZV9zZWNvbmRzGAMgASgDEhEKCWNvbXBvbmVudBgEIAEoCTK8AQoOQ29udHJvbFNlcnZpY2USVwoIU2h1dGRvd24SJC5ob2xvbXVzaC5jb250cm9sLnYxLlNodXRkb3duUmVxdWVzdBolLmhvbG9tdXNoLmNvbnRyb2wudjEuU2h1dGRvd25SZXNwb25zZRJRCgZTdGF0dXMSIi5ob2xvbXVzaC5jb250cm9sLnYxLlN0YXR1c1JlcXVlc3QaIy5ob2xvbXVzaC5jb250cm9sLnYxLlN0YXR1c1Jlc3BvbnNlQkZaRGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL2NvbnRyb2wvdjE7Y29udHJvbHYxYgZwcm90bzM");
 
 /**
- * ShutdownRequest contains shutdown parameters.
+ * Parameters for a shutdown request. The graceful field is currently logged
+ * but does not alter shutdown behavior — both values invoke the shutdown hook
+ * identically (mismatch tracked in holomush-4gchp).
  *
  * @generated from message holomush.control.v1.ShutdownRequest
  */
 export type ShutdownRequest = Message<"holomush.control.v1.ShutdownRequest"> & {
   /**
-   * If true, perform graceful shutdown allowing in-flight requests to complete.
+   * When true, the caller intends a drain-and-exit (in-flight requests
+   * allowed to complete before the process stops). Currently only logged for
+   * observability; the shutdown hook is a parameterless func() and is not yet
+   * differentiated on this value.
    *
    * @generated from field: bool graceful = 1;
    */
@@ -37,13 +42,14 @@ export const ShutdownRequestSchema: GenMessage<ShutdownRequest> = /*@__PURE__*/
   messageDesc(file_holomush_control_v1_control, 0);
 
 /**
- * ShutdownResponse confirms shutdown initiation.
+ * Confirmation that the shutdown sequence has been triggered.
  *
  * @generated from message holomush.control.v1.ShutdownResponse
  */
 export type ShutdownResponse = Message<"holomush.control.v1.ShutdownResponse"> & {
   /**
-   * Human-readable status message.
+   * Human-readable confirmation string; currently always "shutdown initiated".
+   * Callers SHOULD NOT parse this value; it exists for operator logs only.
    *
    * @generated from field: string message = 1;
    */
@@ -58,7 +64,8 @@ export const ShutdownResponseSchema: GenMessage<ShutdownResponse> = /*@__PURE__*
   messageDesc(file_holomush_control_v1_control, 1);
 
 /**
- * StatusRequest requests current process status.
+ * Empty carrier for a status poll. No parameters are required; the server
+ * derives all response fields from its own runtime state.
  *
  * @generated from message holomush.control.v1.StatusRequest
  */
@@ -73,34 +80,39 @@ export const StatusRequestSchema: GenMessage<StatusRequest> = /*@__PURE__*/
   messageDesc(file_holomush_control_v1_control, 2);
 
 /**
- * StatusResponse contains current process status.
+ * A point-in-time snapshot of the process's health and identity.
  *
  * @generated from message holomush.control.v1.StatusResponse
  */
 export type StatusResponse = Message<"holomush.control.v1.StatusResponse"> & {
   /**
-   * Whether the process is running.
+   * True while the process's internal running flag is set. Set to false
+   * only after GracefulStop completes (internal/control/grpc_server.go::Stop).
    *
    * @generated from field: bool running = 1;
    */
   running: boolean;
 
   /**
-   * Process ID.
+   * Operating-system process ID as returned by os.Getpid(), cast to int32.
+   * Safe on all supported platforms; values never exceed int32 range.
    *
    * @generated from field: int32 pid = 2;
    */
   pid: number;
 
   /**
-   * Seconds since process started.
+   * Elapsed seconds since the GRPCServer was constructed via NewGRPCServer.
+   * Derived from a monotonic time.Time captured at construction.
    *
    * @generated from field: int64 uptime_seconds = 3;
    */
   uptimeSeconds: bigint;
 
   /**
-   * Component name (e.g., "core" or "gateway").
+   * Identifies which process component reported this status, e.g. "core"
+   * or "gateway". Set at construction time; never empty (enforced by
+   * NewGRPCServer which returns an error for an empty component string).
    *
    * @generated from field: string component = 4;
    */
@@ -115,13 +127,20 @@ export const StatusResponseSchema: GenMessage<StatusResponse> = /*@__PURE__*/
   messageDesc(file_holomush_control_v1_control, 3);
 
 /**
- * ControlService provides administrative operations for HoloMUSH processes.
+ * The mTLS-protected admin surface for a running HoloMUSH process.
+ * Both the core server and the gateway register an instance on startup
+ * (see cmd/holomush/deps.go and cmd/holomush/gateway.go). Callers must
+ * present a valid client certificate issued by the game's root CA.
  *
  * @generated from service holomush.control.v1.ControlService
  */
 export const ControlService: GenService<{
   /**
-   * Shutdown initiates process shutdown.
+   * Triggers an asynchronous process exit via the registered shutdown hook.
+   * The RPC returns immediately with a confirmation message; the shutdown
+   * callback runs in a background goroutine. Callers should not expect the
+   * connection to remain open after the response arrives.
+   * Grounded in: internal/control/grpc_server.go::Shutdown
    *
    * @generated from rpc holomush.control.v1.ControlService.Shutdown
    */
@@ -131,7 +150,11 @@ export const ControlService: GenService<{
     output: typeof ShutdownResponseSchema;
   },
   /**
-   * Status returns current process status.
+   * Returns a snapshot of the process's liveness and identity without
+   * requiring authentication beyond the mTLS channel. Reads from an atomic
+   * running flag, os.Getpid(), a monotonic start timestamp, and the
+   * component label supplied at construction time.
+   * Grounded in: internal/control/grpc_server.go::Status
    *
    * @generated from rpc holomush.control.v1.ControlService.Status
    */

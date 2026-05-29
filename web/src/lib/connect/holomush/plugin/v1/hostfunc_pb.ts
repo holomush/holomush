@@ -21,13 +21,16 @@ export const file_holomush_plugin_v1_hostfunc: GenFile = /*@__PURE__*/
   fileDesc("CiFob2xvbXVzaC9wbHVnaW4vdjEvaG9zdGZ1bmMucHJvdG8SEmhvbG9tdXNoLnBsdWdpbi52MSJAChBFbWl0RXZlbnRSZXF1ZXN0EiwKBWV2ZW50GAEgASgLMh0uaG9sb211c2gucGx1Z2luLnYxLkVtaXRFdmVudCIzChFFbWl0RXZlbnRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg0KBWVycm9yGAIgASgJIjQKFFF1ZXJ5TG9jYXRpb25SZXF1ZXN0EhwKC2xvY2F0aW9uX2lkGAEgASgJQge6SARyAhABIloKFVF1ZXJ5TG9jYXRpb25SZXNwb25zZRIyCghsb2NhdGlvbhgBIAEoCzIgLmhvbG9tdXNoLnBsdWdpbi52MS5Mb2NhdGlvbkluZm8SDQoFZXJyb3IYAiABKAkiWQoMTG9jYXRpb25JbmZvEhMKAmlkGAEgASgJQge6SARyAhABEhUKBG5hbWUYAiABKAlCB7pIBHICEAESHQoLZGVzY3JpcHRpb24YAyABKAlCCLpIBXIDGIBAIjYKFVF1ZXJ5Q2hhcmFjdGVyUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAEiXQoWUXVlcnlDaGFyYWN0ZXJSZXNwb25zZRI0CgljaGFyYWN0ZXIYASABKAsyIS5ob2xvbXVzaC5wbHVnaW4udjEuQ2hhcmFjdGVySW5mbxINCgVlcnJvchgCIAEoCSI7Cg1DaGFyYWN0ZXJJbmZvEhMKAmlkGAEgASgJQge6SARyAhABEhUKBG5hbWUYAiABKAlCB7pIBHICEAEiPgoeUXVlcnlMb2NhdGlvbkNoYXJhY3RlcnNSZXF1ZXN0EhwKC2xvY2F0aW9uX2lkGAEgASgJQge6SARyAhABImcKH1F1ZXJ5TG9jYXRpb25DaGFyYWN0ZXJzUmVzcG9uc2USNQoKY2hhcmFjdGVycxgBIAMoCzIhLmhvbG9tdXNoLnBsdWdpbi52MS5DaGFyYWN0ZXJJbmZvEg0KBWVycm9yGAIgASgJIiQKDEtWR2V0UmVxdWVzdBIUCgNrZXkYASABKAlCB7pIBHICEAEiPAoNS1ZHZXRSZXNwb25zZRINCgV2YWx1ZRgBIAEoDBINCgVmb3VuZBgCIAEoCBINCgVlcnJvchgDIAEoCSIzCgxLVlNldFJlcXVlc3QSFAoDa2V5GAEgASgJQge6SARyAhABEg0KBXZhbHVlGAIgASgMIi8KDUtWU2V0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBINCgVlcnJvchgCIAEoCSInCg9LVkRlbGV0ZVJlcXVlc3QSFAoDa2V5GAEgASgJQge6SARyAhABIjIKEEtWRGVsZXRlUmVzcG9uc2USDwoHZGVsZXRlZBgBIAEoCBINCgVlcnJvchgCIAEoCSK/AQoKTG9nUmVxdWVzdBIrCgVsZXZlbBgBIAEoDjIcLmhvbG9tdXNoLnBsdWdpbi52MS5Mb2dMZXZlbBIZCgdtZXNzYWdlGAIgASgJQgi6SAVyAxiAQBI6CgZmaWVsZHMYAyADKAsyKi5ob2xvbXVzaC5wbHVnaW4udjEuTG9nUmVxdWVzdC5GaWVsZHNFbnRyeRotCgtGaWVsZHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIg0KC0xvZ1Jlc3BvbnNlIjQKE0xpc3RDb21tYW5kc1JlcXVlc3QSHQoMY2hhcmFjdGVyX2lkGAEgASgJQge6SARyAhABIlgKFExpc3RDb21tYW5kc1Jlc3BvbnNlEjEKCGNvbW1hbmRzGAEgAygLMh8uaG9sb211c2gucGx1Z2luLnYxLkNvbW1hbmRJbmZvEg0KBWVycm9yGAIgASgJIm4KC0NvbW1hbmRJbmZvEhUKBG5hbWUYASABKAlCB7pIBHICEAESFgoEaGVscBgCIAEoCUIIukgFcgMYgEASFwoFdXNhZ2UYAyABKAlCCLpIBXIDGIBAEhcKBnNvdXJjZRgEIAEoCUIHukgEcgIQASI2ChVHZXRDb21tYW5kSGVscFJlcXVlc3QSHQoMY29tbWFuZF9uYW1lGAEgASgJQge6SARyAhABIl0KFkdldENvbW1hbmRIZWxwUmVzcG9uc2USNAoHY29tbWFuZBgBIAEoCzIjLmhvbG9tdXNoLnBsdWdpbi52MS5Db21tYW5kSGVscEluZm8SDQoFZXJyb3IYAiABKAkipgEKD0NvbW1hbmRIZWxwSW5mbxIVCgRuYW1lGAEgASgJQge6SARyAhABEhYKBGhlbHAYAiABKAlCCLpIBXIDGIBAEhcKBXVzYWdlGAMgASgJQgi6SAVyAxiAQBIcCgloZWxwX3RleHQYBCABKAlCCbpIBnIEGICABBIUCgxjYXBhYmlsaXRpZXMYBSADKAkSFwoGc291cmNlGAYgASgJQge6SARyAhABIk8KF0FkZFNlc3Npb25TdHJlYW1SZXF1ZXN0EhsKCnNlc3Npb25faWQYASABKAlCB7pIBHICEAESFwoGc3RyZWFtGAIgASgJQge6SARyAhABIjoKGEFkZFNlc3Npb25TdHJlYW1SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg0KBWVycm9yGAIgASgJIlIKGlJlbW92ZVNlc3Npb25TdHJlYW1SZXF1ZXN0EhsKCnNlc3Npb25faWQYASABKAlCB7pIBHICEAESFwoGc3RyZWFtGAIgASgJQge6SARyAhABIj0KG1JlbW92ZVNlc3Npb25TdHJlYW1SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg0KBWVycm9yGAIgASgJKncKCExvZ0xldmVsEhkKFUxPR19MRVZFTF9VTlNQRUNJRklFRBAAEhMKD0xPR19MRVZFTF9ERUJVRxABEhIKDkxPR19MRVZFTF9JTkZPEAISEgoOTE9HX0xFVkVMX1dBUk4QAxITCg9MT0dfTEVWRUxfRVJST1IQBDKyCQoUSG9zdEZ1bmN0aW9uc1NlcnZpY2USWAoJRW1pdEV2ZW50EiQuaG9sb211c2gucGx1Z2luLnYxLkVtaXRFdmVudFJlcXVlc3QaJS5ob2xvbXVzaC5wbHVnaW4udjEuRW1pdEV2ZW50UmVzcG9uc2USZAoNUXVlcnlMb2NhdGlvbhIoLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeUxvY2F0aW9uUmVxdWVzdBopLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeUxvY2F0aW9uUmVzcG9uc2USZwoOUXVlcnlDaGFyYWN0ZXISKS5ob2xvbXVzaC5wbHVnaW4udjEuUXVlcnlDaGFyYWN0ZXJSZXF1ZXN0GiouaG9sb211c2gucGx1Z2luLnYxLlF1ZXJ5Q2hhcmFjdGVyUmVzcG9uc2USggEKF1F1ZXJ5TG9jYXRpb25DaGFyYWN0ZXJzEjIuaG9sb211c2gucGx1Z2luLnYxLlF1ZXJ5TG9jYXRpb25DaGFyYWN0ZXJzUmVxdWVzdBozLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeUxvY2F0aW9uQ2hhcmFjdGVyc1Jlc3BvbnNlEkwKBUtWR2V0EiAuaG9sb211c2gucGx1Z2luLnYxLktWR2V0UmVxdWVzdBohLmhvbG9tdXNoLnBsdWdpbi52MS5LVkdldFJlc3BvbnNlEkwKBUtWU2V0EiAuaG9sb211c2gucGx1Z2luLnYxLktWU2V0UmVxdWVzdBohLmhvbG9tdXNoLnBsdWdpbi52MS5LVlNldFJlc3BvbnNlElUKCEtWRGVsZXRlEiMuaG9sb211c2gucGx1Z2luLnYxLktWRGVsZXRlUmVxdWVzdBokLmhvbG9tdXNoLnBsdWdpbi52MS5LVkRlbGV0ZVJlc3BvbnNlEkYKA0xvZxIeLmhvbG9tdXNoLnBsdWdpbi52MS5Mb2dSZXF1ZXN0Gh8uaG9sb211c2gucGx1Z2luLnYxLkxvZ1Jlc3BvbnNlEmEKDExpc3RDb21tYW5kcxInLmhvbG9tdXNoLnBsdWdpbi52MS5MaXN0Q29tbWFuZHNSZXF1ZXN0GiguaG9sb211c2gucGx1Z2luLnYxLkxpc3RDb21tYW5kc1Jlc3BvbnNlEmcKDkdldENvbW1hbmRIZWxwEikuaG9sb211c2gucGx1Z2luLnYxLkdldENvbW1hbmRIZWxwUmVxdWVzdBoqLmhvbG9tdXNoLnBsdWdpbi52MS5HZXRDb21tYW5kSGVscFJlc3BvbnNlEm0KEEFkZFNlc3Npb25TdHJlYW0SKy5ob2xvbXVzaC5wbHVnaW4udjEuQWRkU2Vzc2lvblN0cmVhbVJlcXVlc3QaLC5ob2xvbXVzaC5wbHVnaW4udjEuQWRkU2Vzc2lvblN0cmVhbVJlc3BvbnNlEnYKE1JlbW92ZVNlc3Npb25TdHJlYW0SLi5ob2xvbXVzaC5wbHVnaW4udjEuUmVtb3ZlU2Vzc2lvblN0cmVhbVJlcXVlc3QaLy5ob2xvbXVzaC5wbHVnaW4udjEuUmVtb3ZlU2Vzc2lvblN0cmVhbVJlc3BvbnNlQkRaQmdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL3BsdWdpbi92MTtwbHVnaW52MWIGcHJvdG8z", [file_buf_validate_validate, file_holomush_plugin_v1_plugin]);
 
 /**
- * EmitEventRequest wraps an event for emission by the host.
+ * EmitEventRequest carries the single event a plugin asks the host to publish.
  *
  * @generated from message holomush.plugin.v1.EmitEventRequest
  */
 export type EmitEventRequest = Message<"holomush.plugin.v1.EmitEventRequest"> & {
   /**
-   * The event to emit.
+   * event is the event the plugin wants published; its fields (stream/subject,
+   * type, payload, sensitivity) are validated against the plugin's manifest
+   * gates by the host before publication. See the EmitEvent message in
+   * plugin.proto for the field contract.
    *
    * @generated from field: holomush.plugin.v1.EmitEvent event = 1;
    */
@@ -42,20 +45,24 @@ export const EmitEventRequestSchema: GenMessage<EmitEventRequest> = /*@__PURE__*
   messageDesc(file_holomush_plugin_v1_hostfunc, 0);
 
 /**
- * EmitEventResponse indicates success or failure.
+ * EmitEventResponse reports the outcome of a publish attempt. The host uses
+ * this in-band success/error shape rather than an RPC status code so a plugin
+ * can distinguish a refused emit (e.g. a manifest-gate denial) from a
+ * transport failure.
  *
  * @generated from message holomush.plugin.v1.EmitEventResponse
  */
 export type EmitEventResponse = Message<"holomush.plugin.v1.EmitEventResponse"> & {
   /**
-   * Whether the event was successfully emitted.
+   * success is true when the event was accepted and published.
    *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
-   * Error message if success is false.
+   * error holds a human-readable reason when success is false (for example, a
+   * manifest-gate denial); empty when success is true.
    *
    * @generated from field: string error = 2;
    */
@@ -70,13 +77,14 @@ export const EmitEventResponseSchema: GenMessage<EmitEventResponse> = /*@__PURE_
   messageDesc(file_holomush_plugin_v1_hostfunc, 1);
 
 /**
- * QueryLocationRequest requests information about a location.
+ * QueryLocationRequest names the location to snapshot.
  *
  * @generated from message holomush.plugin.v1.QueryLocationRequest
  */
 export type QueryLocationRequest = Message<"holomush.plugin.v1.QueryLocationRequest"> & {
   /**
-   * Location identifier.
+   * location_id is the ULID of the location to read. Required (min length 1);
+   * an unparseable or unknown id yields a not-found outcome on the response.
    *
    * @generated from field: string location_id = 1;
    */
@@ -91,20 +99,22 @@ export const QueryLocationRequestSchema: GenMessage<QueryLocationRequest> = /*@_
   messageDesc(file_holomush_plugin_v1_hostfunc, 2);
 
 /**
- * QueryLocationResponse contains location information.
+ * QueryLocationResponse returns the requested location or an error reason.
  *
  * @generated from message holomush.plugin.v1.QueryLocationResponse
  */
 export type QueryLocationResponse = Message<"holomush.plugin.v1.QueryLocationResponse"> & {
   /**
-   * Location information (nil if not found).
+   * location holds the resolved location detail; unset when the location was
+   * not found or the query failed.
    *
    * @generated from field: holomush.plugin.v1.LocationInfo location = 1;
    */
   location?: LocationInfo | undefined;
 
   /**
-   * Error message if query failed.
+   * error holds the failure reason (including not-found) when location is
+   * unset; empty on success.
    *
    * @generated from field: string error = 2;
    */
@@ -119,27 +129,28 @@ export const QueryLocationResponseSchema: GenMessage<QueryLocationResponse> = /*
   messageDesc(file_holomush_plugin_v1_hostfunc, 3);
 
 /**
- * LocationInfo contains basic location information.
+ * LocationInfo is the plugin-facing projection of a world location: only the
+ * identity and display fields a plugin needs, not the full internal model.
  *
  * @generated from message holomush.plugin.v1.LocationInfo
  */
 export type LocationInfo = Message<"holomush.plugin.v1.LocationInfo"> & {
   /**
-   * Location identifier.
+   * id is the location's ULID. Required (min length 1).
    *
    * @generated from field: string id = 1;
    */
   id: string;
 
   /**
-   * Location name/title.
+   * name is the location's display title. Required (min length 1).
    *
    * @generated from field: string name = 2;
    */
   name: string;
 
   /**
-   * Location description.
+   * description is the location's prose body, capped at 8192 bytes.
    *
    * @generated from field: string description = 3;
    */
@@ -154,13 +165,14 @@ export const LocationInfoSchema: GenMessage<LocationInfo> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_hostfunc, 4);
 
 /**
- * QueryCharacterRequest requests information about a character.
+ * QueryCharacterRequest names the character to snapshot.
  *
  * @generated from message holomush.plugin.v1.QueryCharacterRequest
  */
 export type QueryCharacterRequest = Message<"holomush.plugin.v1.QueryCharacterRequest"> & {
   /**
-   * Character identifier.
+   * character_id is the ULID of the character to read. Required (min length 1);
+   * an unparseable or unknown id yields a not-found outcome on the response.
    *
    * @generated from field: string character_id = 1;
    */
@@ -175,20 +187,22 @@ export const QueryCharacterRequestSchema: GenMessage<QueryCharacterRequest> = /*
   messageDesc(file_holomush_plugin_v1_hostfunc, 5);
 
 /**
- * QueryCharacterResponse contains character information.
+ * QueryCharacterResponse returns the requested character or an error reason.
  *
  * @generated from message holomush.plugin.v1.QueryCharacterResponse
  */
 export type QueryCharacterResponse = Message<"holomush.plugin.v1.QueryCharacterResponse"> & {
   /**
-   * Character information (nil if not found).
+   * character holds the resolved character detail; unset when the character was
+   * not found or the query failed.
    *
    * @generated from field: holomush.plugin.v1.CharacterInfo character = 1;
    */
   character?: CharacterInfo | undefined;
 
   /**
-   * Error message if query failed.
+   * error holds the failure reason (including not-found) when character is
+   * unset; empty on success.
    *
    * @generated from field: string error = 2;
    */
@@ -203,20 +217,21 @@ export const QueryCharacterResponseSchema: GenMessage<QueryCharacterResponse> = 
   messageDesc(file_holomush_plugin_v1_hostfunc, 6);
 
 /**
- * CharacterInfo contains basic character information.
+ * CharacterInfo is the plugin-facing projection of a world character, limited
+ * to the identity fields exposed across the host-function boundary.
  *
  * @generated from message holomush.plugin.v1.CharacterInfo
  */
 export type CharacterInfo = Message<"holomush.plugin.v1.CharacterInfo"> & {
   /**
-   * Character identifier.
+   * id is the character's ULID. Required (min length 1).
    *
    * @generated from field: string id = 1;
    */
   id: string;
 
   /**
-   * Character name.
+   * name is the character's display name. Required (min length 1).
    *
    * @generated from field: string name = 2;
    */
@@ -231,13 +246,15 @@ export const CharacterInfoSchema: GenMessage<CharacterInfo> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_hostfunc, 7);
 
 /**
- * QueryLocationCharactersRequest requests all characters in a location.
+ * QueryLocationCharactersRequest names the location whose occupant roster to
+ * fetch.
  *
  * @generated from message holomush.plugin.v1.QueryLocationCharactersRequest
  */
 export type QueryLocationCharactersRequest = Message<"holomush.plugin.v1.QueryLocationCharactersRequest"> & {
   /**
-   * Location identifier.
+   * location_id is the ULID of the location to enumerate. Required (min length
+   * 1).
    *
    * @generated from field: string location_id = 1;
    */
@@ -252,20 +269,24 @@ export const QueryLocationCharactersRequestSchema: GenMessage<QueryLocationChara
   messageDesc(file_holomush_plugin_v1_hostfunc, 8);
 
 /**
- * QueryLocationCharactersResponse contains the list of characters.
+ * QueryLocationCharactersResponse returns the location's character roster or an
+ * error reason.
  *
  * @generated from message holomush.plugin.v1.QueryLocationCharactersResponse
  */
 export type QueryLocationCharactersResponse = Message<"holomush.plugin.v1.QueryLocationCharactersResponse"> & {
   /**
-   * Characters in the location.
+   * characters is the lightweight roster (id + name per entry) of characters in
+   * the location; empty when the location holds none. Use QueryCharacter per id
+   * for full detail.
    *
    * @generated from field: repeated holomush.plugin.v1.CharacterInfo characters = 1;
    */
   characters: CharacterInfo[];
 
   /**
-   * Error message if query failed.
+   * error holds the failure reason (including not-found) when the query failed;
+   * empty on success.
    *
    * @generated from field: string error = 2;
    */
@@ -280,13 +301,14 @@ export const QueryLocationCharactersResponseSchema: GenMessage<QueryLocationChar
   messageDesc(file_holomush_plugin_v1_hostfunc, 9);
 
 /**
- * KVGetRequest retrieves a value by key.
+ * KVGetRequest names the key to read from the plugin's private namespace.
  *
  * @generated from message holomush.plugin.v1.KVGetRequest
  */
 export type KVGetRequest = Message<"holomush.plugin.v1.KVGetRequest"> & {
   /**
-   * Key to look up.
+   * key is the lookup key within the calling plugin's namespace. Required (min
+   * length 1).
    *
    * @generated from field: string key = 1;
    */
@@ -301,27 +323,32 @@ export const KVGetRequestSchema: GenMessage<KVGetRequest> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_hostfunc, 10);
 
 /**
- * KVGetResponse contains the retrieved value.
+ * KVGetResponse returns the stored value and a presence witness. found
+ * disambiguates an absent key from a stored empty value, since both leave value
+ * empty.
  *
  * @generated from message holomush.plugin.v1.KVGetResponse
  */
 export type KVGetResponse = Message<"holomush.plugin.v1.KVGetResponse"> & {
   /**
-   * Value if found.
+   * value is the stored bytes; empty when the key is absent (check found to
+   * disambiguate) or when an error occurred.
    *
    * @generated from field: bytes value = 1;
    */
   value: Uint8Array;
 
   /**
-   * Whether the key was found.
+   * found is true when the key existed in the namespace. When false with an
+   * empty error, the key was simply absent.
    *
    * @generated from field: bool found = 2;
    */
   found: boolean;
 
   /**
-   * Error message if query failed.
+   * error holds the failure reason (such as an ABAC denial or store error)
+   * when the read failed; empty on success.
    *
    * @generated from field: string error = 3;
    */
@@ -336,20 +363,22 @@ export const KVGetResponseSchema: GenMessage<KVGetResponse> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_hostfunc, 11);
 
 /**
- * KVSetRequest stores a key-value pair.
+ * KVSetRequest carries the key and value to store in the plugin's private
+ * namespace.
  *
  * @generated from message holomush.plugin.v1.KVSetRequest
  */
 export type KVSetRequest = Message<"holomush.plugin.v1.KVSetRequest"> & {
   /**
-   * Key to store.
+   * key is the storage key within the calling plugin's namespace. Required (min
+   * length 1).
    *
    * @generated from field: string key = 1;
    */
   key: string;
 
   /**
-   * Value to store.
+   * value is the opaque bytes to store; the host does not interpret it.
    *
    * @generated from field: bytes value = 2;
    */
@@ -364,20 +393,21 @@ export const KVSetRequestSchema: GenMessage<KVSetRequest> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_hostfunc, 12);
 
 /**
- * KVSetResponse indicates success or failure.
+ * KVSetResponse reports the outcome of a store attempt.
  *
  * @generated from message holomush.plugin.v1.KVSetResponse
  */
 export type KVSetResponse = Message<"holomush.plugin.v1.KVSetResponse"> & {
   /**
-   * Whether the value was successfully stored.
+   * success is true when the value was written.
    *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
-   * Error message if success is false.
+   * error holds the failure reason (such as an ABAC denial or store error)
+   * when success is false; empty on success.
    *
    * @generated from field: string error = 2;
    */
@@ -392,13 +422,14 @@ export const KVSetResponseSchema: GenMessage<KVSetResponse> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_hostfunc, 13);
 
 /**
- * KVDeleteRequest removes a key.
+ * KVDeleteRequest names the key to remove from the plugin's private namespace.
  *
  * @generated from message holomush.plugin.v1.KVDeleteRequest
  */
 export type KVDeleteRequest = Message<"holomush.plugin.v1.KVDeleteRequest"> & {
   /**
-   * Key to delete.
+   * key is the key to remove within the calling plugin's namespace. Required
+   * (min length 1).
    *
    * @generated from field: string key = 1;
    */
@@ -413,20 +444,22 @@ export const KVDeleteRequestSchema: GenMessage<KVDeleteRequest> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_hostfunc, 14);
 
 /**
- * KVDeleteResponse indicates success or failure.
+ * KVDeleteResponse reports the outcome of a delete attempt.
  *
  * @generated from message holomush.plugin.v1.KVDeleteResponse
  */
 export type KVDeleteResponse = Message<"holomush.plugin.v1.KVDeleteResponse"> & {
   /**
-   * Whether the key was deleted (true even if key didn't exist).
+   * deleted is true when the delete completed; the host treats removing an
+   * absent key as success rather than an error.
    *
    * @generated from field: bool deleted = 1;
    */
   deleted: boolean;
 
   /**
-   * Error message if deletion failed.
+   * error holds the failure reason (such as an ABAC denial or store error)
+   * when the delete failed; empty on success.
    *
    * @generated from field: string error = 2;
    */
@@ -441,27 +474,30 @@ export const KVDeleteResponseSchema: GenMessage<KVDeleteResponse> = /*@__PURE__*
   messageDesc(file_holomush_plugin_v1_hostfunc, 15);
 
 /**
- * LogRequest writes a log message.
+ * LogRequest is a single structured log line a plugin asks the host to emit.
  *
  * @generated from message holomush.plugin.v1.LogRequest
  */
 export type LogRequest = Message<"holomush.plugin.v1.LogRequest"> & {
   /**
-   * Log level.
+   * level selects the host slog severity to route to. An unspecified or
+   * out-of-range value is rejected by the logging bridge as invalid.
    *
    * @generated from field: holomush.plugin.v1.LogLevel level = 1;
    */
   level: LogLevel;
 
   /**
-   * Log message.
+   * message is the log line body, capped at 8192 bytes. It is plugin-supplied
+   * and therefore dynamic by design.
    *
    * @generated from field: string message = 2;
    */
   message: string;
 
   /**
-   * Additional structured fields.
+   * fields are optional structured key/value attributes attached to the log
+   * line.
    *
    * @generated from field: map<string, string> fields = 3;
    */
@@ -476,7 +512,8 @@ export const LogRequestSchema: GenMessage<LogRequest> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_hostfunc, 16);
 
 /**
- * LogResponse is empty (logging is fire-and-forget).
+ * LogResponse is intentionally empty: logging is fire-and-forget, so the host
+ * returns no acknowledgement payload.
  *
  * @generated from message holomush.plugin.v1.LogResponse
  */
@@ -491,14 +528,16 @@ export const LogResponseSchema: GenMessage<LogResponse> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_hostfunc, 17);
 
 /**
- * ListCommandsRequest requests the list of available commands.
- * Commands are filtered by the character's capabilities.
+ * ListCommandsRequest names the character whose capability set determines which
+ * commands are visible.
  *
  * @generated from message holomush.plugin.v1.ListCommandsRequest
  */
 export type ListCommandsRequest = Message<"holomush.plugin.v1.ListCommandsRequest"> & {
   /**
-   * Character identifier for capability filtering.
+   * character_id is the ULID of the character whose capabilities filter the
+   * returned command list. Required (min length 1); commands the character
+   * cannot execute are omitted.
    *
    * @generated from field: string character_id = 1;
    */
@@ -513,20 +552,21 @@ export const ListCommandsRequestSchema: GenMessage<ListCommandsRequest> = /*@__P
   messageDesc(file_holomush_plugin_v1_hostfunc, 18);
 
 /**
- * ListCommandsResponse contains the list of available commands.
+ * ListCommandsResponse returns the commands the requesting character may see.
  *
  * @generated from message holomush.plugin.v1.ListCommandsResponse
  */
 export type ListCommandsResponse = Message<"holomush.plugin.v1.ListCommandsResponse"> & {
   /**
-   * Available commands.
+   * commands is the capability-filtered list of available commands.
    *
    * @generated from field: repeated holomush.plugin.v1.CommandInfo commands = 1;
    */
   commands: CommandInfo[];
 
   /**
-   * Error message if query failed.
+   * error holds the failure reason when the query failed (for example, the
+   * access engine being unavailable); empty on success.
    *
    * @generated from field: string error = 2;
    */
@@ -541,34 +581,37 @@ export const ListCommandsResponseSchema: GenMessage<ListCommandsResponse> = /*@_
   messageDesc(file_holomush_plugin_v1_hostfunc, 19);
 
 /**
- * CommandInfo contains basic command information for listing.
+ * CommandInfo is the listing-level summary of one command — enough to render a
+ * command index without fetching full help.
  *
  * @generated from message holomush.plugin.v1.CommandInfo
  */
 export type CommandInfo = Message<"holomush.plugin.v1.CommandInfo"> & {
   /**
-   * Command name.
+   * name is the command's invocation name. Required (min length 1).
    *
    * @generated from field: string name = 1;
    */
   name: string;
 
   /**
-   * Short help description.
+   * help is the one-line description, capped at 8192 bytes.
    *
    * @generated from field: string help = 2;
    */
   help: string;
 
   /**
-   * Usage pattern (e.g., "say <message>").
+   * usage is the argument pattern (for example, "say <message>"), capped at
+   * 8192 bytes.
    *
    * @generated from field: string usage = 3;
    */
   usage: string;
 
   /**
-   * Source plugin name or "core".
+   * source identifies the registering plugin name, or "core" for built-in
+   * commands. Required (min length 1).
    *
    * @generated from field: string source = 4;
    */
@@ -583,13 +626,14 @@ export const CommandInfoSchema: GenMessage<CommandInfo> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_hostfunc, 20);
 
 /**
- * GetCommandHelpRequest requests detailed help for a command.
+ * GetCommandHelpRequest names the command whose full help to fetch.
  *
  * @generated from message holomush.plugin.v1.GetCommandHelpRequest
  */
 export type GetCommandHelpRequest = Message<"holomush.plugin.v1.GetCommandHelpRequest"> & {
   /**
-   * Command name to get help for.
+   * command_name is the command to fetch detailed help for. Required (min
+   * length 1); an unknown name yields a not-found outcome on the response.
    *
    * @generated from field: string command_name = 1;
    */
@@ -604,20 +648,23 @@ export const GetCommandHelpRequestSchema: GenMessage<GetCommandHelpRequest> = /*
   messageDesc(file_holomush_plugin_v1_hostfunc, 21);
 
 /**
- * GetCommandHelpResponse contains detailed command help.
+ * GetCommandHelpResponse returns the detailed help for one command or an error
+ * reason.
  *
  * @generated from message holomush.plugin.v1.GetCommandHelpResponse
  */
 export type GetCommandHelpResponse = Message<"holomush.plugin.v1.GetCommandHelpResponse"> & {
   /**
-   * Detailed command information (nil if not found).
+   * command holds the full command detail; unset when the command was not found
+   * or access was denied.
    *
    * @generated from field: holomush.plugin.v1.CommandHelpInfo command = 1;
    */
   command?: CommandHelpInfo | undefined;
 
   /**
-   * Error message if query failed.
+   * error holds the failure reason (not-found, access-denied, or engine error)
+   * when command is unset; empty on success.
    *
    * @generated from field: string error = 2;
    */
@@ -632,48 +679,51 @@ export const GetCommandHelpResponseSchema: GenMessage<GetCommandHelpResponse> = 
   messageDesc(file_holomush_plugin_v1_hostfunc, 22);
 
 /**
- * CommandHelpInfo contains detailed help for a command.
+ * CommandHelpInfo is the detailed help record for one command, including the
+ * long-form help body and the capabilities a character needs to run it.
  *
  * @generated from message holomush.plugin.v1.CommandHelpInfo
  */
 export type CommandHelpInfo = Message<"holomush.plugin.v1.CommandHelpInfo"> & {
   /**
-   * Command name.
+   * name is the command's invocation name. Required (min length 1).
    *
    * @generated from field: string name = 1;
    */
   name: string;
 
   /**
-   * Short help description.
+   * help is the one-line description, capped at 8192 bytes.
    *
    * @generated from field: string help = 2;
    */
   help: string;
 
   /**
-   * Usage pattern.
+   * usage is the argument pattern, capped at 8192 bytes.
    *
    * @generated from field: string usage = 3;
    */
   usage: string;
 
   /**
-   * Detailed markdown help text.
+   * help_text is the long-form markdown help body, capped at 65536 bytes.
    *
    * @generated from field: string help_text = 4;
    */
   helpText: string;
 
   /**
-   * Required capabilities for this command.
+   * capabilities lists the capability strings the command declares; a character
+   * must satisfy all of them (plus the execute check) to run it.
    *
    * @generated from field: repeated string capabilities = 5;
    */
   capabilities: string[];
 
   /**
-   * Source plugin name or "core".
+   * source identifies the registering plugin name, or "core" for built-in
+   * commands. Required (min length 1).
    *
    * @generated from field: string source = 6;
    */
@@ -688,20 +738,23 @@ export const CommandHelpInfoSchema: GenMessage<CommandHelpInfo> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_hostfunc, 23);
 
 /**
- * AddSessionStreamRequest specifies which session and stream to add.
+ * AddSessionStreamRequest names the live session and the stream to subscribe it
+ * to.
  *
  * @generated from message holomush.plugin.v1.AddSessionStreamRequest
  */
 export type AddSessionStreamRequest = Message<"holomush.plugin.v1.AddSessionStreamRequest"> & {
   /**
-   * Active session identifier.
+   * session_id is the active session to modify. Required (min length 1); an
+   * unknown session fails the RPC with SESSION_NOT_FOUND.
    *
    * @generated from field: string session_id = 1;
    */
   sessionId: string;
 
   /**
-   * Stream name to subscribe to (format: "prefix:id").
+   * stream is the stream to subscribe the session to, in "prefix:id" form.
+   * Required (min length 1).
    *
    * @generated from field: string stream = 2;
    */
@@ -716,20 +769,20 @@ export const AddSessionStreamRequestSchema: GenMessage<AddSessionStreamRequest> 
   messageDesc(file_holomush_plugin_v1_hostfunc, 24);
 
 /**
- * AddSessionStreamResponse indicates success or failure.
+ * AddSessionStreamResponse reports the outcome of a subscribe attempt.
  *
  * @generated from message holomush.plugin.v1.AddSessionStreamResponse
  */
 export type AddSessionStreamResponse = Message<"holomush.plugin.v1.AddSessionStreamResponse"> & {
   /**
-   * Whether the stream was successfully added.
+   * success is true when the session was subscribed to the stream.
    *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
-   * Non-empty on error.
+   * error holds the failure reason when success is false; empty on success.
    *
    * @generated from field: string error = 2;
    */
@@ -744,20 +797,22 @@ export const AddSessionStreamResponseSchema: GenMessage<AddSessionStreamResponse
   messageDesc(file_holomush_plugin_v1_hostfunc, 25);
 
 /**
- * RemoveSessionStreamRequest specifies which stream to remove.
+ * RemoveSessionStreamRequest names the live session and the stream to
+ * unsubscribe it from.
  *
  * @generated from message holomush.plugin.v1.RemoveSessionStreamRequest
  */
 export type RemoveSessionStreamRequest = Message<"holomush.plugin.v1.RemoveSessionStreamRequest"> & {
   /**
-   * Active session identifier.
+   * session_id is the active session to modify. Required (min length 1).
    *
    * @generated from field: string session_id = 1;
    */
   sessionId: string;
 
   /**
-   * Stream name to unsubscribe from.
+   * stream is the stream to unsubscribe the session from. Required (min length
+   * 1); unsubscribing a stream the session does not hold still succeeds.
    *
    * @generated from field: string stream = 2;
    */
@@ -772,20 +827,21 @@ export const RemoveSessionStreamRequestSchema: GenMessage<RemoveSessionStreamReq
   messageDesc(file_holomush_plugin_v1_hostfunc, 26);
 
 /**
- * RemoveSessionStreamResponse indicates success or failure.
+ * RemoveSessionStreamResponse reports the outcome of an unsubscribe attempt.
  *
  * @generated from message holomush.plugin.v1.RemoveSessionStreamResponse
  */
 export type RemoveSessionStreamResponse = Message<"holomush.plugin.v1.RemoveSessionStreamResponse"> & {
   /**
-   * Whether the stream was successfully removed (true even if not subscribed).
+   * success is true when the session no longer holds the stream; because the
+   * operation is idempotent this is true even if the stream was not subscribed.
    *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
-   * Non-empty on error.
+   * error holds the failure reason when success is false; empty on success.
    *
    * @generated from field: string error = 2;
    */
@@ -800,32 +856,47 @@ export const RemoveSessionStreamResponseSchema: GenMessage<RemoveSessionStreamRe
   messageDesc(file_holomush_plugin_v1_hostfunc, 27);
 
 /**
- * LogLevel specifies the severity of a log message.
+ * LogLevel selects which host slog severity a LogRequest is routed to. The
+ * host maps each value to the corresponding slog method; an out-of-range or
+ * unspecified value is treated as an invalid level by the logging bridge.
  *
  * @generated from enum holomush.plugin.v1.LogLevel
  */
 export enum LogLevel {
   /**
+   * LOG_LEVEL_UNSPECIFIED is the proto3 zero value. It carries no severity and
+   * is not a valid routing target — callers MUST set a concrete level.
+   *
    * @generated from enum value: LOG_LEVEL_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
+   * LOG_LEVEL_DEBUG routes to slog Debug — verbose, development-time detail
+   * that is normally filtered out in production.
+   *
    * @generated from enum value: LOG_LEVEL_DEBUG = 1;
    */
   DEBUG = 1,
 
   /**
+   * LOG_LEVEL_INFO routes to slog Info — routine operational milestones.
+   *
    * @generated from enum value: LOG_LEVEL_INFO = 2;
    */
   INFO = 2,
 
   /**
+   * LOG_LEVEL_WARN routes to slog Warn — recoverable anomalies worth noting.
+   *
    * @generated from enum value: LOG_LEVEL_WARN = 3;
    */
   WARN = 3,
 
   /**
+   * LOG_LEVEL_ERROR routes to slog Error — failures the plugin wants surfaced
+   * for operator attention.
+   *
    * @generated from enum value: LOG_LEVEL_ERROR = 4;
    */
   ERROR = 4,
@@ -838,15 +909,42 @@ export const LogLevelSchema: GenEnum<LogLevel> = /*@__PURE__*/
   enumDesc(file_holomush_plugin_v1_hostfunc, 0);
 
 /**
- * HostFunctionsService provides host capabilities to plugins.
- * This service is implemented by the host (the gRPC server runs in the host process).
- * Plugins call these methods to interact with the game world.
+ * HostFunctionsService declares the host-capability contract plugins call into:
+ * world reads, private key-value storage, command introspection, logging, event
+ * emission, and session-stream control. This gRPC service has no standalone
+ * server today — nothing registers a HostFunctionsServiceServer in the host.
+ * The capabilities are instead delivered through the in-VM Lua host-function
+ * bridge (internal/plugin/hostfunc — the holomush.* globals such as
+ * holomush.emit, holomush.kv_get, holomush.query_location). Binary plugins use
+ * PluginHostService (plugin.proto), but of this capability set they currently
+ * reach only EmitEvent (served): the overlapping host-functions Log,
+ * KVGet/KVSet/KVDelete, AddSessionStream, and RemoveSessionStream are declared
+ * on PluginHostService but unserved today (codes.Unimplemented, holomush-l6std),
+ * and the world-query RPCs (QueryLocation, QueryCharacter,
+ * QueryLocationCharacters) and command RPCs (ListCommands, GetCommandHelp) are
+ * not on PluginHostService at all. Those are realized only through the Lua
+ * bridge today. Where a capability is exposed, host-side enforcement is shared:
+ * host-side enforcement is shared: world reads/writes are ABAC-gated at the
+ * world service layer, key-value operations are ABAC-gated at the host-function
+ * layer (checkKVAccess in internal/plugin/hostfunc/functions.go), command
+ * visibility is filtered by the AccessPolicyEngine, and emits pass the manifest
+ * gates in PluginEventEmitter.Emit (internal/plugin/event_emitter.go). The
+ * plugin-runtime-symmetry invariant requires any capability exposed to both
+ * runtimes to behave identically.
  *
  * @generated from service holomush.plugin.v1.HostFunctionsService
  */
 export const HostFunctionsService: GenService<{
   /**
-   * EmitEvent publishes an event to a stream.
+   * EmitEvent publishes one event onto a stream on the calling plugin's
+   * behalf. The host stamps the actor and routes through
+   * PluginEventEmitter.Emit, which enforces the plugin's manifest gates:
+   * the target domain must appear in the manifest emits list, the actor kind
+   * must be in actor_kinds_claimable, and a sensitive payload requires the
+   * event type to be declared in crypto.emits. The plugin never supplies a
+   * trusted actor identity at this boundary — the host derives it. Fire this
+   * for plugin-originated game actions rather than mutating world state
+   * directly.
    *
    * @generated from rpc holomush.plugin.v1.HostFunctionsService.EmitEvent
    */
@@ -856,7 +954,10 @@ export const HostFunctionsService: GenService<{
     output: typeof EmitEventResponseSchema;
   },
   /**
-   * QueryLocation retrieves information about a location.
+   * QueryLocation returns a snapshot of one location's identity fields. The
+   * host resolves it through the world service (GetLocation), which applies
+   * ABAC for the plugin subject; a missing location maps to a not-found
+   * outcome surfaced on the response error field, not an RPC error. Read-only.
    *
    * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryLocation
    */
@@ -866,7 +967,10 @@ export const HostFunctionsService: GenService<{
     output: typeof QueryLocationResponseSchema;
   },
   /**
-   * QueryCharacter retrieves information about a character.
+   * QueryCharacter returns a snapshot of one character's identity fields,
+   * resolved through the world service (GetCharacter) under the plugin
+   * subject's ABAC policy. A missing character is reported via the response
+   * error field. Read-only.
    *
    * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryCharacter
    */
@@ -876,7 +980,10 @@ export const HostFunctionsService: GenService<{
     output: typeof QueryCharacterResponseSchema;
   },
   /**
-   * QueryLocationCharacters retrieves all characters in a location.
+   * QueryLocationCharacters returns the lightweight roster (id + name only) of
+   * characters currently in a location, via the world service
+   * (GetCharactersByLocation) under the plugin subject's ABAC policy. Use
+   * QueryCharacter per id to fetch full character detail. Read-only.
    *
    * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryLocationCharacters
    */
@@ -886,7 +993,12 @@ export const HostFunctionsService: GenService<{
     output: typeof QueryLocationCharactersResponseSchema;
   },
   /**
-   * KVGet retrieves a value from the plugin's key-value store.
+   * KVGet reads one value from the calling plugin's private namespaced
+   * key-value store. The namespace is the plugin name, so plugins cannot read
+   * each other's keys. Gated by an ABAC "read" check on the plugin's KV
+   * resource (checkKVAccess) before the store is touched; a denied check or a
+   * store error is surfaced on the response, and an absent key returns
+   * found=false with no error.
    *
    * @generated from rpc holomush.plugin.v1.HostFunctionsService.KVGet
    */
@@ -896,7 +1008,10 @@ export const HostFunctionsService: GenService<{
     output: typeof KVGetResponseSchema;
   },
   /**
-   * KVSet stores a value in the plugin's key-value store.
+   * KVSet writes one value into the calling plugin's private namespaced
+   * key-value store (namespace = plugin name). Gated by an ABAC "write" check
+   * on the plugin's KV resource before the store is touched. Overwrites any
+   * existing value at the key.
    *
    * @generated from rpc holomush.plugin.v1.HostFunctionsService.KVSet
    */
@@ -906,7 +1021,9 @@ export const HostFunctionsService: GenService<{
     output: typeof KVSetResponseSchema;
   },
   /**
-   * KVDelete removes a value from the plugin's key-value store.
+   * KVDelete removes one key from the calling plugin's private namespaced
+   * key-value store (namespace = plugin name). Gated by an ABAC "delete" check
+   * on the plugin's KV resource before the store is touched.
    *
    * @generated from rpc holomush.plugin.v1.HostFunctionsService.KVDelete
    */
@@ -916,7 +1033,12 @@ export const HostFunctionsService: GenService<{
     output: typeof KVDeleteResponseSchema;
   },
   /**
-   * Log writes a log message through the host's logging system.
+   * Log emits a structured log line through the host logger, tagged with the
+   * calling plugin's name. The message and level are plugin-supplied; the host
+   * routes to the matching slog level (debug/info/warn/error) and treats the
+   * call as fire-and-forget — there is no acknowledgement payload. This is the
+   * sanctioned way for a plugin to reach the host's observability pipeline
+   * rather than writing to stdout/stderr of its subprocess.
    *
    * @generated from rpc holomush.plugin.v1.HostFunctionsService.Log
    */
@@ -926,8 +1048,12 @@ export const HostFunctionsService: GenService<{
     output: typeof LogResponseSchema;
   },
   /**
-   * ListCommands returns all available commands.
-   * Requires capability: command.list
+   * ListCommands returns the commands visible to one character, filtered by
+   * that character's capabilities through the AccessPolicyEngine. Commands
+   * with no declared capabilities are always included; capability-gated
+   * commands require the character to pass both the execute check and every
+   * declared capability (AND logic). If engine errors hide some commands the
+   * host still returns the commands it could evaluate.
    *
    * @generated from rpc holomush.plugin.v1.HostFunctionsService.ListCommands
    */
@@ -937,8 +1063,11 @@ export const HostFunctionsService: GenService<{
     output: typeof ListCommandsResponseSchema;
   },
   /**
-   * GetCommandHelp returns detailed help for a specific command.
-   * Requires capability: command.help
+   * GetCommandHelp returns the full help detail for a single named command.
+   * For a capability-gated command the host fail-closed-evaluates the
+   * character's access through the AccessPolicyEngine before returning detail;
+   * commands without capabilities are always accessible. A missing command or
+   * a denied/failed access check is surfaced on the response error field.
    *
    * @generated from rpc holomush.plugin.v1.HostFunctionsService.GetCommandHelp
    */
@@ -948,8 +1077,12 @@ export const HostFunctionsService: GenService<{
     output: typeof GetCommandHelpResponseSchema;
   },
   /**
-   * AddSessionStream subscribes an active session to an additional stream mid-session.
-   * Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+   * AddSessionStream subscribes an already-active session to one more stream
+   * mid-session, via the host StreamRegistry (AddStream), using the default
+   * FROM_CURSOR replay mode. The session must be live: an unknown session_id
+   * fails with SESSION_NOT_FOUND (codes.NotFound). Use this when a plugin
+   * action should start delivering a new stream's events to a connected
+   * character without reconnecting.
    *
    * @generated from rpc holomush.plugin.v1.HostFunctionsService.AddSessionStream
    */
@@ -959,8 +1092,9 @@ export const HostFunctionsService: GenService<{
     output: typeof AddSessionStreamResponseSchema;
   },
   /**
-   * RemoveSessionStream unsubscribes an active session from a stream.
-   * Idempotent: returns success if stream is not subscribed.
+   * RemoveSessionStream unsubscribes an active session from a stream, via the
+   * host StreamRegistry (RemoveStream). The operation is idempotent: removing a
+   * stream the session is not subscribed to succeeds rather than erroring.
    *
    * @generated from rpc holomush.plugin.v1.HostFunctionsService.RemoveSessionStream
    */

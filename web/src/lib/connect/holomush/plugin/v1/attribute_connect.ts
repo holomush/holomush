@@ -10,9 +10,26 @@ import { GetSchemaRequest, GetSchemaResponse, ResolveResourceRequest, ResolveRes
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
- * AttributeResolverService is implemented by binary plugins that declare resource_types.
- * The host calls GetSchema once during plugin load to discover attribute schemas,
- * and ResolveResource during ABAC policy evaluation to resolve resource attributes.
+ * AttributeResolverService lets binary plugins expose ABAC attribute resolution
+ * to the host's policy engine for resource types the plugin owns. The host
+ * auto-registers this service name and calls each plugin that declares
+ * resource_types in its manifest. Plugins MUST NOT list
+ * holomush.plugin.v1.AttributeResolverService in their manifest `provides:`
+ * field — doing so causes SERVICE_ALREADY_REGISTERED at startup. Declare
+ * resource_types in the manifest instead; the host wires the gRPC client
+ * automatically during plugin load (see internal/plugin/manager.go::discoverAndRegisterAttributes).
+ *
+ * The interaction has two phases:
+ *  1. Load-time schema discovery: the host calls GetSchema once after Init
+ *     returns and registers a PluginAttributeProvider per declared resource
+ *     type. If the schema does not cover every declared resource type, plugin
+ *     load is rolled back (internal/plugin/manager.go::discoverAndRegisterAttributes).
+ *  2. Per-request attribute resolution: the host calls ResolveResource during
+ *     ABAC policy evaluation whenever a policy references an attribute for one
+ *     of the plugin's owned resource types. The call is made via the host's
+ *     PluginAttributeProvider proxy (internal/plugin/attribute_proxy.go::ResolveResource).
+ *
+ * Reference implementation: plugins/core-scenes/resolver.go::SceneResolver.
  *
  * @generated from service holomush.plugin.v1.AttributeResolverService
  */
@@ -20,8 +37,17 @@ export const AttributeResolverService = {
   typeName: "holomush.plugin.v1.AttributeResolverService",
   methods: {
     /**
-     * GetSchema returns the attribute schema for resource types this plugin owns.
-     * Called once during plugin load.
+     * GetSchema returns the full attribute schema for every resource type this
+     * plugin owns. The host calls this exactly once per plugin load, after Init
+     * returns, and caches the result for the lifetime of the plugin process.
+     * The response MUST include an entry for every resource type declared in the
+     * manifest's resource_types list — missing entries cause load to fail with a
+     * hard error and trigger plugin unload rollback. The schema MUST be
+     * deterministic across calls; the host does not re-query after the initial
+     * load.
+     *
+     * See: internal/plugin/manager.go::discoverAndRegisterAttributes (caller),
+     * plugins/core-scenes/resolver.go::GetSchema (reference implementation).
      *
      * @generated from rpc holomush.plugin.v1.AttributeResolverService.GetSchema
      */
@@ -32,8 +58,23 @@ export const AttributeResolverService = {
       kind: MethodKind.Unary,
     },
     /**
-     * ResolveResource returns attributes for a specific resource instance.
-     * Called during ABAC policy evaluation.
+     * ResolveResource returns the current attribute values for a single resource
+     * instance identified by type and ID. The host calls this during ABAC policy
+     * evaluation when the active policy references an attribute belonging to one
+     * of the plugin's owned resource types. It is invoked per authorization
+     * check, not cached. The plugin MUST reject resource_type values it does not
+     * own with INVALID_ARGUMENT so host-side misrouting is visible immediately.
+     * The plugin SHOULD return NOT_FOUND when the resource ID is unknown.
+     *
+     * Optional attributes MUST be omitted from the response map rather than
+     * emitted with an empty-string or zero sentinel value. The DSL evaluator
+     * treats missing map keys as fail-safe false for every operator; an
+     * empty-string value would match any other unresolved empty-string peer and
+     * create a fail-open condition. See .claude/rules/abac-providers.md for the
+     * full contract.
+     *
+     * See: internal/plugin/attribute_proxy.go::ResolveResource (caller),
+     * plugins/core-scenes/resolver.go::ResolveResource (reference implementation).
      *
      * @generated from rpc holomush.plugin.v1.AttributeResolverService.ResolveResource
      */

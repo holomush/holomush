@@ -47,11 +47,35 @@ const (
 // AttributeResolverServiceClient is a client for the holomush.plugin.v1.AttributeResolverService
 // service.
 type AttributeResolverServiceClient interface {
-	// GetSchema returns the attribute schema for resource types this plugin owns.
-	// Called once during plugin load.
+	// GetSchema returns the full attribute schema for every resource type this
+	// plugin owns. The host calls this exactly once per plugin load, after Init
+	// returns, and caches the result for the lifetime of the plugin process.
+	// The response MUST include an entry for every resource type declared in the
+	// manifest's resource_types list — missing entries cause load to fail with a
+	// hard error and trigger plugin unload rollback. The schema MUST be
+	// deterministic across calls; the host does not re-query after the initial
+	// load.
+	//
+	// See: internal/plugin/manager.go::discoverAndRegisterAttributes (caller),
+	// plugins/core-scenes/resolver.go::GetSchema (reference implementation).
 	GetSchema(context.Context, *connect.Request[v1.GetSchemaRequest]) (*connect.Response[v1.GetSchemaResponse], error)
-	// ResolveResource returns attributes for a specific resource instance.
-	// Called during ABAC policy evaluation.
+	// ResolveResource returns the current attribute values for a single resource
+	// instance identified by type and ID. The host calls this during ABAC policy
+	// evaluation when the active policy references an attribute belonging to one
+	// of the plugin's owned resource types. It is invoked per authorization
+	// check, not cached. The plugin MUST reject resource_type values it does not
+	// own with INVALID_ARGUMENT so host-side misrouting is visible immediately.
+	// The plugin SHOULD return NOT_FOUND when the resource ID is unknown.
+	//
+	// Optional attributes MUST be omitted from the response map rather than
+	// emitted with an empty-string or zero sentinel value. The DSL evaluator
+	// treats missing map keys as fail-safe false for every operator; an
+	// empty-string value would match any other unresolved empty-string peer and
+	// create a fail-open condition. See .claude/rules/abac-providers.md for the
+	// full contract.
+	//
+	// See: internal/plugin/attribute_proxy.go::ResolveResource (caller),
+	// plugins/core-scenes/resolver.go::ResolveResource (reference implementation).
 	ResolveResource(context.Context, *connect.Request[v1.ResolveResourceRequest]) (*connect.Response[v1.ResolveResourceResponse], error)
 }
 
@@ -101,11 +125,35 @@ func (c *attributeResolverServiceClient) ResolveResource(ctx context.Context, re
 // AttributeResolverServiceHandler is an implementation of the
 // holomush.plugin.v1.AttributeResolverService service.
 type AttributeResolverServiceHandler interface {
-	// GetSchema returns the attribute schema for resource types this plugin owns.
-	// Called once during plugin load.
+	// GetSchema returns the full attribute schema for every resource type this
+	// plugin owns. The host calls this exactly once per plugin load, after Init
+	// returns, and caches the result for the lifetime of the plugin process.
+	// The response MUST include an entry for every resource type declared in the
+	// manifest's resource_types list — missing entries cause load to fail with a
+	// hard error and trigger plugin unload rollback. The schema MUST be
+	// deterministic across calls; the host does not re-query after the initial
+	// load.
+	//
+	// See: internal/plugin/manager.go::discoverAndRegisterAttributes (caller),
+	// plugins/core-scenes/resolver.go::GetSchema (reference implementation).
 	GetSchema(context.Context, *connect.Request[v1.GetSchemaRequest]) (*connect.Response[v1.GetSchemaResponse], error)
-	// ResolveResource returns attributes for a specific resource instance.
-	// Called during ABAC policy evaluation.
+	// ResolveResource returns the current attribute values for a single resource
+	// instance identified by type and ID. The host calls this during ABAC policy
+	// evaluation when the active policy references an attribute belonging to one
+	// of the plugin's owned resource types. It is invoked per authorization
+	// check, not cached. The plugin MUST reject resource_type values it does not
+	// own with INVALID_ARGUMENT so host-side misrouting is visible immediately.
+	// The plugin SHOULD return NOT_FOUND when the resource ID is unknown.
+	//
+	// Optional attributes MUST be omitted from the response map rather than
+	// emitted with an empty-string or zero sentinel value. The DSL evaluator
+	// treats missing map keys as fail-safe false for every operator; an
+	// empty-string value would match any other unresolved empty-string peer and
+	// create a fail-open condition. See .claude/rules/abac-providers.md for the
+	// full contract.
+	//
+	// See: internal/plugin/attribute_proxy.go::ResolveResource (caller),
+	// plugins/core-scenes/resolver.go::ResolveResource (reference implementation).
 	ResolveResource(context.Context, *connect.Request[v1.ResolveResourceRequest]) (*connect.Response[v1.ResolveResourceResponse], error)
 }
 

@@ -19,19 +19,26 @@ export const file_holomush_core_v1_core: GenFile = /*@__PURE__*/
   fileDesc("Chtob2xvbXVzaC9jb3JlL3YxL2NvcmUucHJvdG8SEGhvbG9tdXNoLmNvcmUudjEiUAoLUmVxdWVzdE1ldGESEgoKcmVxdWVzdF9pZBgBIAEoCRItCgl0aW1lc3RhbXAYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlEKDFJlc3BvbnNlTWV0YRISCgpyZXF1ZXN0X2lkGAEgASgJEi0KCXRpbWVzdGFtcBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAinQEKFEhhbmRsZUNvbW1hbmRSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSDwoHY29tbWFuZBgDIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgEIAEoCRIVCg1jb25uZWN0aW9uX2lkGAUgASgJImsKFUhhbmRsZUNvbW1hbmRSZXNwb25zZRIsCgRtZXRhGAEgASgLMh4uaG9sb211c2guY29yZS52MS5SZXNwb25zZU1ldGESDwoHc3VjY2VzcxgCIAEoCBINCgVlcnJvchgEIAEoCUoECAMQBCLGAQoQU3Vic2NyaWJlUmVxdWVzdBIrCgRtZXRhGAEgASgLMh0uaG9sb211c2guY29yZS52MS5SZXF1ZXN0TWV0YRISCgpzZXNzaW9uX2lkGAIgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAUgASgJEhUKDWNvbm5lY3Rpb25faWQYBiABKAkSEwoLY2xpZW50X3R5cGUYByABKAlKBAgDEARKBAgEEAVSB3N0cmVhbXNSEnJlcGxheV9mcm9tX2N1cnNvciK9AgoKRXZlbnRGcmFtZRIKCgJpZBgBIAEoCRIOCgZzdHJlYW0YAiABKAkSDAoEdHlwZRgDIAEoCRItCgl0aW1lc3RhbXAYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmFjdG9yX3R5cGUYBSABKAkSEAoIYWN0b3JfaWQYBiABKAkSDwoHcGF5bG9hZBgHIAEoDBIOCgZjdXJzb3IYCCABKAwSNgoJcmVuZGVyaW5nGAkgASgLMiMuaG9sb211c2guY29yZS52MS5SZW5kZXJpbmdNZXRhZGF0YRIVCg1tZXRhZGF0YV9vbmx5GAogASgIEkAKE25vX3BsYWludGV4dF9yZWFzb24YCyABKA4yIy5ob2xvbXVzaC5jb3JlLnYxLk5vUGxhaW50ZXh0UmVhc29uIm0KDVByZXNlbmNlRW50cnkSFAoMY2hhcmFjdGVyX2lkGAEgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJEi4KBXN0YXRlGAMgASgOMh8uaG9sb211c2guY29yZS52MS5QcmVzZW5jZVN0YXRlInkKGExpc3RGb2N1c1ByZXNlbmNlUmVxdWVzdBIrCgRtZXRhGAEgASgLMh0uaG9sb211c2guY29yZS52MS5SZXF1ZXN0TWV0YRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgCIAEoCRISCgpzZXNzaW9uX2lkGAMgASgJIsMBChlMaXN0Rm9jdXNQcmVzZW5jZVJlc3BvbnNlEiwKBG1ldGEYASABKAsyHi5ob2xvbXVzaC5jb3JlLnYxLlJlc3BvbnNlTWV0YRIyCgdjb250ZXh0GAIgASgOMiEuaG9sb211c2guY29yZS52MS5QcmVzZW5jZUNvbnRleHQSEgoKY29udGV4dF9pZBgDIAEoCRIwCgdlbnRyaWVzGAQgAygLMh8uaG9sb211c2guY29yZS52MS5QcmVzZW5jZUVudHJ5IvICChFSZW5kZXJpbmdNZXRhZGF0YRIZCghjYXRlZ29yeRgBIAEoCUIHukgEcgIQARIXCgZmb3JtYXQYAiABKAlCB7pIBHICEAESDQoFbGFiZWwYAyABKAkSQgoOZGlzcGxheV90YXJnZXQYBCABKA4yHi5ob2xvbXVzaC5jb3JlLnYxLkV2ZW50Q2hhbm5lbEIKukgHggEEEAEgABIeCg1zb3VyY2VfcGx1Z2luGAUgASgJQge6SARyAhABEiYKFXNvdXJjZV9wbHVnaW5fdmVyc2lvbhgGIAEoCUIHukgEcgIQATqNAbpIiQEahgEKLHJlbmRlcmluZ19tZXRhZGF0YS5sYWJlbF9yZXF1aXJlZF9mb3Jfc3BlZWNoEilsYWJlbCBtdXN0IGJlIHNldCB3aGVuIGZvcm1hdCBpcyAnc3BlZWNoJxordGhpcy5mb3JtYXQgIT0gJ3NwZWVjaCcgfHwgdGhpcy5sYWJlbCAhPSAnJyJqCgxDb250cm9sRnJhbWUSLwoGc2lnbmFsGAEgASgOMh8uaG9sb211c2guY29yZS52MS5Db250cm9sU2lnbmFsEg8KB21lc3NhZ2UYAiABKAkSGAoQYXR0YWNoX21vbWVudF9tcxgDIAEoAyJ+ChFTdWJzY3JpYmVSZXNwb25zZRItCgVldmVudBgBIAEoCzIcLmhvbG9tdXNoLmNvcmUudjEuRXZlbnRGcmFtZUgAEjEKB2NvbnRyb2wYAiABKAsyHi5ob2xvbXVzaC5jb3JlLnYxLkNvbnRyb2xGcmFtZUgAQgcKBWZyYW1lIokBChFEaXNjb25uZWN0UmVxdWVzdBIrCgRtZXRhGAEgASgLMh0uaG9sb211c2guY29yZS52MS5SZXF1ZXN0TWV0YRISCgpzZXNzaW9uX2lkGAIgASgJEhUKDWNvbm5lY3Rpb25faWQYAyABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YBCABKAkiUwoSRGlzY29ubmVjdFJlc3BvbnNlEiwKBG1ldGEYASABKAsyHi5ob2xvbXVzaC5jb3JlLnYxLlJlc3BvbnNlTWV0YRIPCgdzdWNjZXNzGAIgASgIInkKGEdldENvbW1hbmRIaXN0b3J5UmVxdWVzdBIrCgRtZXRhGAEgASgLMh0uaG9sb211c2guY29yZS52MS5SZXF1ZXN0TWV0YRISCgpzZXNzaW9uX2lkGAIgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAMgASgJInsKGUdldENvbW1hbmRIaXN0b3J5UmVzcG9uc2USLAoEbWV0YRgBIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuUmVzcG9uc2VNZXRhEg8KB3N1Y2Nlc3MYAiABKAgSEAoIY29tbWFuZHMYAyADKAkSDQoFZXJyb3IYBCABKAkiowEKEENoYXJhY3RlclN1bW1hcnkSFAoMY2hhcmFjdGVyX2lkGAEgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJEhoKEmhhc19hY3RpdmVfc2Vzc2lvbhgDIAEoCBIWCg5zZXNzaW9uX3N0YXR1cxgEIAEoCRIVCg1sYXN0X2xvY2F0aW9uGAUgASgJEhYKDmxhc3RfcGxheWVkX2F0GAYgASgDImsKGUF1dGhlbnRpY2F0ZVBsYXllclJlcXVlc3QSEAoIdXNlcm5hbWUYASABKAkSEAoIcGFzc3dvcmQYAiABKAkSFQoNY2FwdGNoYV90b2tlbhgDIAEoCRITCgtyZW1lbWJlcl9tZRgEIAEoCCLVAQoaQXV0aGVudGljYXRlUGxheWVyUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgCIAEoCRIVCg1lcnJvcl9tZXNzYWdlGAMgASgJEjYKCmNoYXJhY3RlcnMYBCADKAsyIi5ob2xvbXVzaC5jb3JlLnYxLkNoYXJhY3RlclN1bW1hcnkSHAoUZGVmYXVsdF9jaGFyYWN0ZXJfaWQYBSABKAkSGwoTc2Vzc2lvbl90dGxfc2Vjb25kcxgGIAEoAyJMChZTZWxlY3RDaGFyYWN0ZXJSZXF1ZXN0EhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJEhQKDGNoYXJhY3Rlcl9pZBgCIAEoCSKBAQoXU2VsZWN0Q2hhcmFjdGVyUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBISCgpzZXNzaW9uX2lkGAIgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAMgASgJEhIKCnJlYXR0YWNoZWQYBCABKAgSFQoNZXJyb3JfbWVzc2FnZRgFIAEoCSJfChNDcmVhdGVQbGF5ZXJSZXF1ZXN0EhAKCHVzZXJuYW1lGAEgASgJEhAKCHBhc3N3b3JkGAIgASgJEg0KBWVtYWlsGAMgASgJEhUKDWNhcHRjaGFfdG9rZW4YBCABKAkisQEKFENyZWF0ZVBsYXllclJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSNgoKY2hhcmFjdGVycxgDIAMoCzIiLmhvbG9tdXNoLmNvcmUudjEuQ2hhcmFjdGVyU3VtbWFyeRIVCg1lcnJvcl9tZXNzYWdlGAQgASgJEhsKE3Nlc3Npb25fdHRsX3NlY29uZHMYBSABKAMiFAoSQ3JlYXRlR3Vlc3RSZXF1ZXN0Is4BChNDcmVhdGVHdWVzdFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSFQoNZXJyb3JfbWVzc2FnZRgCIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgDIAEoCRI2CgpjaGFyYWN0ZXJzGAQgAygLMiIuaG9sb211c2guY29yZS52MS5DaGFyYWN0ZXJTdW1tYXJ5EhwKFGRlZmF1bHRfY2hhcmFjdGVyX2lkGAUgASgJEhsKE3Nlc3Npb25fdHRsX3NlY29uZHMYBiABKAMiTgoWQ3JlYXRlQ2hhcmFjdGVyUmVxdWVzdBIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgBIAEoCRIWCg5jaGFyYWN0ZXJfbmFtZRgCIAEoCSJvChdDcmVhdGVDaGFyYWN0ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhQKDGNoYXJhY3Rlcl9pZBgCIAEoCRIWCg5jaGFyYWN0ZXJfbmFtZRgDIAEoCRIVCg1lcnJvcl9tZXNzYWdlGAQgASgJIjUKFUxpc3RDaGFyYWN0ZXJzUmVxdWVzdBIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgBIAEoCSJQChZMaXN0Q2hhcmFjdGVyc1Jlc3BvbnNlEjYKCmNoYXJhY3RlcnMYASADKAsyIi5ob2xvbXVzaC5jb3JlLnYxLkNoYXJhY3RlclN1bW1hcnkiLAobUmVxdWVzdFBhc3N3b3JkUmVzZXRSZXF1ZXN0Eg0KBWVtYWlsGAEgASgJIi8KHFJlcXVlc3RQYXNzd29yZFJlc2V0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCJCChtDb25maXJtUGFzc3dvcmRSZXNldFJlcXVlc3QSDQoFdG9rZW4YASABKAkSFAoMbmV3X3Bhc3N3b3JkGAIgASgJIkYKHENvbmZpcm1QYXNzd29yZFJlc2V0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAIgASgJIi0KDUxvZ291dFJlcXVlc3QSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YASABKAkiEAoOTG9nb3V0UmVzcG9uc2UiOQoZQ2hlY2tQbGF5ZXJTZXNzaW9uUmVxdWVzdBIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgBIAEoCSKOAQoaQ2hlY2tQbGF5ZXJTZXNzaW9uUmVzcG9uc2USEwoLcGxheWVyX25hbWUYASABKAkSEQoJcGxheWVyX2lkGAIgASgJEhAKCGlzX2d1ZXN0GAMgASgIEjYKCmNoYXJhY3RlcnMYBCADKAsyIi5ob2xvbXVzaC5jb3JlLnYxLkNoYXJhY3RlclN1bW1hcnkiOQoZTGlzdFBsYXllclNlc3Npb25zUmVxdWVzdBIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgBIAEoCSK8AQoRUGxheWVyU2Vzc2lvbkluZm8SCgoCaWQYASABKAkSLgoKY3JlYXRlZF9hdBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLwoLbGFzdF9hY3RpdmUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCnVzZXJfYWdlbnQYBCABKAkSEgoKaXBfYWRkcmVzcxgFIAEoCRISCgppc19jdXJyZW50GAYgASgIIlMKGkxpc3RQbGF5ZXJTZXNzaW9uc1Jlc3BvbnNlEjUKCHNlc3Npb25zGAEgAygLMiMuaG9sb211c2guY29yZS52MS5QbGF5ZXJTZXNzaW9uSW5mbyJVChpSZXZva2VQbGF5ZXJTZXNzaW9uUmVxdWVzdBIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgBIAEoCRIZChF0YXJnZXRfc2Vzc2lvbl9pZBgCIAEoCSJFChtSZXZva2VQbGF5ZXJTZXNzaW9uUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAIgASgJIkAKIFJldm9rZU90aGVyUGxheWVyU2Vzc2lvbnNSZXF1ZXN0EhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJIksKIVJldm9rZU90aGVyUGxheWVyU2Vzc2lvbnNSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhUKDXJldm9rZWRfY291bnQYAiABKAUiuAEKGVF1ZXJ5U3RyZWFtSGlzdG9yeVJlcXVlc3QSKwoEbWV0YRgBIAEoCzIdLmhvbG9tdXNoLmNvcmUudjEuUmVxdWVzdE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIOCgZzdHJlYW0YAyABKAkSDQoFY291bnQYBCABKAUSFQoNbm90X2JlZm9yZV9tcxgFIAEoAxIOCgZjdXJzb3IYBiABKAwSFAoMbm90X2FmdGVyX21zGAcgASgDIp8BChpRdWVyeVN0cmVhbUhpc3RvcnlSZXNwb25zZRIsCgRtZXRhGAEgASgLMh4uaG9sb211c2guY29yZS52MS5SZXNwb25zZU1ldGESLAoGZXZlbnRzGAIgAygLMhwuaG9sb211c2guY29yZS52MS5FdmVudEZyYW1lEhAKCGhhc19tb3JlGAMgASgIEhMKC25leHRfY3Vyc29yGAQgASgMInoKGUxpc3RTZXNzaW9uU3RyZWFtc1JlcXVlc3QSKwoEbWV0YRgBIAEoCzIdLmhvbG9tdXNoLmNvcmUudjEuUmVxdWVzdE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgDIAEoCSJbChpMaXN0U2Vzc2lvblN0cmVhbXNSZXNwb25zZRIPCgdzdHJlYW1zGAEgAygJEiwKBG1ldGEYAiABKAsyHi5ob2xvbXVzaC5jb3JlLnYxLlJlc3BvbnNlTWV0YSrIAgoRTm9QbGFpbnRleHRSZWFzb24SIwofTk9fUExBSU5URVhUX1JFQVNPTl9VTlNQRUNJRklFRBAAEiYKIk5PX1BMQUlOVEVYVF9SRUFTT05fQVVUSEdVQVJEX0RFTlkQARIhCh1OT19QTEFJTlRFWFRfUkVBU09OX1NUQUxFX0RFSxACEigKJE5PX1BMQUlOVEVYVF9SRUFTT05fQVVESVRfUVVFVUVfRlVMTBADEiMKH05PX1BMQUlOVEVYVF9SRUFTT05fREVLX01JU1NJTkcQBBInCiNOT19QTEFJTlRFWFRfUkVBU09OX0RFS19CQURfQ09MVU1OUxAFEiAKHE5PX1BMQUlOVEVYVF9SRUFTT05fSU5URVJOQUwQBhIpCiVOT19QTEFJTlRFWFRfUkVBU09OX0RPV05HUkFERV9SRUZVU0VEEAcqmAEKDEV2ZW50Q2hhbm5lbBIdChlFVkVOVF9DSEFOTkVMX1VOU1BFQ0lGSUVEEAASGgoWRVZFTlRfQ0hBTk5FTF9URVJNSU5BTBABEhcKE0VWRU5UX0NIQU5ORUxfU1RBVEUQAhIWChJFVkVOVF9DSEFOTkVMX0JPVEgQAxIcChhFVkVOVF9DSEFOTkVMX0FVRElUX09OTFkQBCpuCg9QcmVzZW5jZUNvbnRleHQSIAocUFJFU0VOQ0VfQ09OVEVYVF9VTlNQRUNJRklFRBAAEh0KGVBSRVNFTkNFX0NPTlRFWFRfTE9DQVRJT04QARIaChZQUkVTRU5DRV9DT05URVhUX1NDRU5FEAIqhAEKDVByZXNlbmNlU3RhdGUSHgoaUFJFU0VOQ0VfU1RBVEVfVU5TUEVDSUZJRUQQABIZChVQUkVTRU5DRV9TVEFURV9BQ1RJVkUQARIbChdQUkVTRU5DRV9TVEFURV9ERVRBQ0hFRBACEhsKF1BSRVNFTkNFX1NUQVRFX0lOQUNUSVZFEAMqdQoNQ29udHJvbFNpZ25hbBIeChpDT05UUk9MX1NJR05BTF9VTlNQRUNJRklFRBAAEiIKHkNPTlRST0xfU0lHTkFMX1JFUExBWV9DT01QTEVURRABEiAKHENPTlRST0xfU0lHTkFMX1NUUkVBTV9DTE9TRUQQAjLXEAoLQ29yZVNlcnZpY2USYAoNSGFuZGxlQ29tbWFuZBImLmhvbG9tdXNoLmNvcmUudjEuSGFuZGxlQ29tbWFuZFJlcXVlc3QaJy5ob2xvbXVzaC5jb3JlLnYxLkhhbmRsZUNvbW1hbmRSZXNwb25zZRJWCglTdWJzY3JpYmUSIi5ob2xvbXVzaC5jb3JlLnYxLlN1YnNjcmliZVJlcXVlc3QaIy5ob2xvbXVzaC5jb3JlLnYxLlN1YnNjcmliZVJlc3BvbnNlMAESVwoKRGlzY29ubmVjdBIjLmhvbG9tdXNoLmNvcmUudjEuRGlzY29ubmVjdFJlcXVlc3QaJC5ob2xvbXVzaC5jb3JlLnYxLkRpc2Nvbm5lY3RSZXNwb25zZRJsChFHZXRDb21tYW5kSGlzdG9yeRIqLmhvbG9tdXNoLmNvcmUudjEuR2V0Q29tbWFuZEhpc3RvcnlSZXF1ZXN0GisuaG9sb211c2guY29yZS52MS5HZXRDb21tYW5kSGlzdG9yeVJlc3BvbnNlEm8KEkF1dGhlbnRpY2F0ZVBsYXllchIrLmhvbG9tdXNoLmNvcmUudjEuQXV0aGVudGljYXRlUGxheWVyUmVxdWVzdBosLmhvbG9tdXNoLmNvcmUudjEuQXV0aGVudGljYXRlUGxheWVyUmVzcG9uc2USZgoPU2VsZWN0Q2hhcmFjdGVyEiguaG9sb211c2guY29yZS52MS5TZWxlY3RDaGFyYWN0ZXJSZXF1ZXN0GikuaG9sb211c2guY29yZS52MS5TZWxlY3RDaGFyYWN0ZXJSZXNwb25zZRJdCgxDcmVhdGVQbGF5ZXISJS5ob2xvbXVzaC5jb3JlLnYxLkNyZWF0ZVBsYXllclJlcXVlc3QaJi5ob2xvbXVzaC5jb3JlLnYxLkNyZWF0ZVBsYXllclJlc3BvbnNlEloKC0NyZWF0ZUd1ZXN0EiQuaG9sb211c2guY29yZS52MS5DcmVhdGVHdWVzdFJlcXVlc3QaJS5ob2xvbXVzaC5jb3JlLnYxLkNyZWF0ZUd1ZXN0UmVzcG9uc2USZgoPQ3JlYXRlQ2hhcmFjdGVyEiguaG9sb211c2guY29yZS52MS5DcmVhdGVDaGFyYWN0ZXJSZXF1ZXN0GikuaG9sb211c2guY29yZS52MS5DcmVhdGVDaGFyYWN0ZXJSZXNwb25zZRJjCg5MaXN0Q2hhcmFjdGVycxInLmhvbG9tdXNoLmNvcmUudjEuTGlzdENoYXJhY3RlcnNSZXF1ZXN0GiguaG9sb211c2guY29yZS52MS5MaXN0Q2hhcmFjdGVyc1Jlc3BvbnNlEnUKFFJlcXVlc3RQYXNzd29yZFJlc2V0Ei0uaG9sb211c2guY29yZS52MS5SZXF1ZXN0UGFzc3dvcmRSZXNldFJlcXVlc3QaLi5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RQYXNzd29yZFJlc2V0UmVzcG9uc2USdQoUQ29uZmlybVBhc3N3b3JkUmVzZXQSLS5ob2xvbXVzaC5jb3JlLnYxLkNvbmZpcm1QYXNzd29yZFJlc2V0UmVxdWVzdBouLmhvbG9tdXNoLmNvcmUudjEuQ29uZmlybVBhc3N3b3JkUmVzZXRSZXNwb25zZRJLCgZMb2dvdXQSHy5ob2xvbXVzaC5jb3JlLnYxLkxvZ291dFJlcXVlc3QaIC5ob2xvbXVzaC5jb3JlLnYxLkxvZ291dFJlc3BvbnNlEm8KEkNoZWNrUGxheWVyU2Vzc2lvbhIrLmhvbG9tdXNoLmNvcmUudjEuQ2hlY2tQbGF5ZXJTZXNzaW9uUmVxdWVzdBosLmhvbG9tdXNoLmNvcmUudjEuQ2hlY2tQbGF5ZXJTZXNzaW9uUmVzcG9uc2USbwoSTGlzdFBsYXllclNlc3Npb25zEisuaG9sb211c2guY29yZS52MS5MaXN0UGxheWVyU2Vzc2lvbnNSZXF1ZXN0GiwuaG9sb211c2guY29yZS52MS5MaXN0UGxheWVyU2Vzc2lvbnNSZXNwb25zZRJyChNSZXZva2VQbGF5ZXJTZXNzaW9uEiwuaG9sb211c2guY29yZS52MS5SZXZva2VQbGF5ZXJTZXNzaW9uUmVxdWVzdBotLmhvbG9tdXNoLmNvcmUudjEuUmV2b2tlUGxheWVyU2Vzc2lvblJlc3BvbnNlEoQBChlSZXZva2VPdGhlclBsYXllclNlc3Npb25zEjIuaG9sb211c2guY29yZS52MS5SZXZva2VPdGhlclBsYXllclNlc3Npb25zUmVxdWVzdBozLmhvbG9tdXNoLmNvcmUudjEuUmV2b2tlT3RoZXJQbGF5ZXJTZXNzaW9uc1Jlc3BvbnNlEm8KElF1ZXJ5U3RyZWFtSGlzdG9yeRIrLmhvbG9tdXNoLmNvcmUudjEuUXVlcnlTdHJlYW1IaXN0b3J5UmVxdWVzdBosLmhvbG9tdXNoLmNvcmUudjEuUXVlcnlTdHJlYW1IaXN0b3J5UmVzcG9uc2USbwoSTGlzdFNlc3Npb25TdHJlYW1zEisuaG9sb211c2guY29yZS52MS5MaXN0U2Vzc2lvblN0cmVhbXNSZXF1ZXN0GiwuaG9sb211c2guY29yZS52MS5MaXN0U2Vzc2lvblN0cmVhbXNSZXNwb25zZRJsChFMaXN0Rm9jdXNQcmVzZW5jZRIqLmhvbG9tdXNoLmNvcmUudjEuTGlzdEZvY3VzUHJlc2VuY2VSZXF1ZXN0GisuaG9sb211c2guY29yZS52MS5MaXN0Rm9jdXNQcmVzZW5jZVJlc3BvbnNlQkBaPmdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL2NvcmUvdjE7Y29yZXYxYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_timestamp]);
 
 /**
- * RequestMeta contains metadata for request correlation and debugging.
+ * RequestMeta travels on every request so the server can correlate a single
+ * RPC across logs, traces, and audit. The CoreServer handlers read meta.request_id
+ * into the slog "request_id" field and emit it as an OTel span attribute.
  *
  * @generated from message holomush.core.v1.RequestMeta
  */
 export type RequestMeta = Message<"holomush.core.v1.RequestMeta"> & {
   /**
-   * ULID for log correlation
+   * request_id is a client-supplied ULID used only for log/trace correlation.
+   * It is not an identity or ownership token; an empty value is accepted and
+   * simply suppresses the per-request correlation attribute.
    *
    * @generated from field: string request_id = 1;
    */
   requestId: string;
 
   /**
+   * timestamp records when the client issued the request. Advisory only —
+   * the server does not gate on it.
+   *
    * @generated from field: google.protobuf.Timestamp timestamp = 2;
    */
   timestamp?: Timestamp | undefined;
@@ -45,19 +52,23 @@ export const RequestMetaSchema: GenMessage<RequestMeta> = /*@__PURE__*/
   messageDesc(file_holomush_core_v1_core, 0);
 
 /**
- * ResponseMeta contains metadata echoed back from requests.
+ * ResponseMeta is the response-side counterpart to RequestMeta. CoreServer
+ * echoes the originating request_id back via responseMeta() so a client can
+ * match an asynchronous-feeling reply to the call that produced it.
  *
  * @generated from message holomush.core.v1.ResponseMeta
  */
 export type ResponseMeta = Message<"holomush.core.v1.ResponseMeta"> & {
   /**
-   * Echoed from request
+   * request_id is the value echoed from the originating RequestMeta.request_id.
    *
    * @generated from field: string request_id = 1;
    */
   requestId: string;
 
   /**
+   * timestamp records when the server produced the response.
+   *
    * @generated from field: google.protobuf.Timestamp timestamp = 2;
    */
   timestamp?: Timestamp | undefined;
@@ -71,28 +82,38 @@ export const ResponseMetaSchema: GenMessage<ResponseMeta> = /*@__PURE__*/
   messageDesc(file_holomush_core_v1_core, 1);
 
 /**
+ * HandleCommandRequest carries one player-issued command to dispatch within the
+ * caller's game session.
+ *
  * @generated from message holomush.core.v1.HandleCommandRequest
  */
 export type HandleCommandRequest = Message<"holomush.core.v1.HandleCommandRequest"> & {
   /**
+   * meta carries request correlation data (see RequestMeta).
+   *
    * @generated from field: holomush.core.v1.RequestMeta meta = 1;
    */
   meta?: RequestMeta | undefined;
 
   /**
+   * session_id names the game session in whose context the command runs.
+   *
    * @generated from field: string session_id = 2;
    */
   sessionId: string;
 
   /**
+   * command is the raw command line as typed by the player; the dispatcher parses
+   * and routes it.
+   *
    * @generated from field: string command = 3;
    */
   command: string;
 
   /**
-   * player_session_token proves the caller owns session_id. Required
-   * for all post-auth RPCs. Must match the player_id of session_id
-   * or the request is rejected with SESSION_NOT_FOUND.
+   * player_session_token proves the caller owns session_id. Required for all
+   * post-auth RPCs. It must match the player_id of session_id or the request is
+   * rejected with SESSION_NOT_FOUND.
    *
    * @generated from field: string player_session_token = 4;
    */
@@ -100,9 +121,9 @@ export type HandleCommandRequest = Message<"holomush.core.v1.HandleCommandReques
 
   /**
    * connection_id is the ULID of the originating gateway connection (Phase 5).
-   * Populated by telnet and web gateways; empty for non-gateway callers.
-   * The server uses this to route scene-focus autofocus to the correct
-   * connection (T20-T23). Empty string is accepted (zero value).
+   * Populated by telnet and web gateways; empty for non-gateway callers. The
+   * server uses it to route scene-focus autofocus to the correct connection
+   * (T20-T23). An empty string is accepted (parsed as the zero ULID).
    *
    * @generated from field: string connection_id = 5;
    */
@@ -117,20 +138,32 @@ export const HandleCommandRequestSchema: GenMessage<HandleCommandRequest> = /*@_
   messageDesc(file_holomush_core_v1_core, 2);
 
 /**
+ * HandleCommandResponse reports only whether dispatch succeeded. All player-
+ * visible command output is delivered out of band as command_response events on
+ * the character's stream, not in this reply.
+ *
  * @generated from message holomush.core.v1.HandleCommandResponse
  */
 export type HandleCommandResponse = Message<"holomush.core.v1.HandleCommandResponse"> & {
   /**
+   * meta echoes request correlation data back to the caller.
+   *
    * @generated from field: holomush.core.v1.ResponseMeta meta = 1;
    */
   meta?: ResponseMeta | undefined;
 
   /**
+   * success is true when the command dispatched without a transport/ownership
+   * error. User-facing command errors are still reported via command_response
+   * events with success=true here.
+   *
    * @generated from field: bool success = 2;
    */
   success: boolean;
 
   /**
+   * error carries a transport/ownership failure message when success is false.
+   *
    * @generated from field: string error = 4;
    */
   error: string;
@@ -144,15 +177,22 @@ export const HandleCommandResponseSchema: GenMessage<HandleCommandResponse> = /*
   messageDesc(file_holomush_core_v1_core, 3);
 
 /**
+ * SubscribeRequest opens the per-session event stream. The server, not the
+ * client, decides which streams to deliver and the replay policy.
+ *
  * @generated from message holomush.core.v1.SubscribeRequest
  */
 export type SubscribeRequest = Message<"holomush.core.v1.SubscribeRequest"> & {
   /**
+   * meta carries request correlation data.
+   *
    * @generated from field: holomush.core.v1.RequestMeta meta = 1;
    */
   meta?: RequestMeta | undefined;
 
   /**
+   * session_id names the game session whose events are streamed.
+   *
    * @generated from field: string session_id = 2;
    */
   sessionId: string;
@@ -165,17 +205,18 @@ export type SubscribeRequest = Message<"holomush.core.v1.SubscribeRequest"> & {
   playerSessionToken: string;
 
   /**
-   * connection_id identifies this specific client attachment. Gateway
-   * generates a fresh ULID per stream. Required so core can register
-   * and deregister connections atomically with the stream lifecycle.
+   * connection_id identifies this specific client attachment. The gateway
+   * generates a fresh ULID per stream. Required so core can register and
+   * deregister the connection atomically with the stream lifecycle. When set,
+   * client_type must also be set or the request is rejected.
    *
    * @generated from field: string connection_id = 6;
    */
   connectionId: string;
 
   /**
-   * client_type describes the connecting client for observability and
-   * routing: "terminal", "telnet", or future client types.
+   * client_type describes the connecting client for observability and routing:
+   * "terminal", "telnet", or future client types.
    *
    * @generated from field: string client_type = 7;
    */
@@ -190,85 +231,100 @@ export const SubscribeRequestSchema: GenMessage<SubscribeRequest> = /*@__PURE__*
   messageDesc(file_holomush_core_v1_core, 4);
 
 /**
+ * EventFrame is one delivered game event. The same shape is produced by both
+ * the live Subscribe path and the QueryStreamHistory backfill path.
+ *
  * @generated from message holomush.core.v1.EventFrame
  */
 export type EventFrame = Message<"holomush.core.v1.EventFrame"> & {
   /**
+   * id is the event's ULID — its identity and dedup key, NOT its ordering key.
+   *
    * @generated from field: string id = 1;
    */
   id: string;
 
   /**
+   * stream is the subject the event belongs to (e.g. a character or location stream).
+   *
    * @generated from field: string stream = 2;
    */
   stream: string;
 
   /**
+   * type is the event type string (e.g. say, pose, command_response).
+   *
    * @generated from field: string type = 3;
    */
   type: string;
 
   /**
+   * timestamp is the server-stamped event time.
+   *
    * @generated from field: google.protobuf.Timestamp timestamp = 4;
    */
   timestamp?: Timestamp | undefined;
 
   /**
+   * actor_type names the kind of actor that produced the event (character, plugin, etc.).
+   *
    * @generated from field: string actor_type = 5;
    */
   actorType: string;
 
   /**
+   * actor_id identifies the specific actor that produced the event.
+   *
    * @generated from field: string actor_id = 6;
    */
   actorId: string;
 
   /**
+   * payload is the type-specific event body, opaque at this layer. Empty when
+   * metadata_only is true.
+   *
    * @generated from field: bytes payload = 7;
    */
   payload: Uint8Array;
 
   /**
-   * cursor is the opaque pagination cursor for this event. Populated by the
-   * server on QueryStreamHistory responses and Subscribe deliveries so clients
-   * can resume without re-delivering events they already processed.
+   * cursor is the opaque pagination cursor for this event. The server populates
+   * it on QueryStreamHistory responses and Subscribe deliveries so clients can
+   * resume without re-delivering events they already processed.
    *
    * @generated from field: bytes cursor = 8;
    */
   cursor: Uint8Array;
 
   /**
-   * Rendering metadata — cleartext band, populated by RenderingPublisher
-   * at emit time. MUST be present on every frame produced by this server
-   * (INV-GW-2). Gateway treats absence as a contract violation
-   * (drops + metric + log per INV-GW-5).
+   * rendering is the cleartext rendering band, populated by RenderingPublisher
+   * at emit time. It MUST be present on every frame this server produces
+   * (INV-GW-2); the gateway treats absence as a contract violation (drops +
+   * metric + log per INV-GW-5).
    *
    * @generated from field: holomush.core.v1.RenderingMetadata rendering = 9;
    */
   rendering?: RenderingMetadata | undefined;
 
   /**
-   * metadata_only flags a delivery whose plaintext was withheld by the
-   * host's AuthGuard (Phase 3b decrypt path). When true, payload is
-   * empty bytes and the recipient was either not in the DEK's
-   * participant set, lacked the requisite plugin manifest declaration /
-   * ABAC grant, or hit the audit-emit backpressure throttle.
-   * metadata_only=false on every legitimate delivery (including
-   * legitimately-empty-payload events like a presence event with no content).
-   *
-   * Set by the host's Subscribe / QueryStreamHistory handler at fan-out
-   * time (Phase 3b grounding doc Decision 4). NEVER set by emitters;
-   * NEVER persisted to events_audit (storage rows always carry the
-   * sender's payload, ciphertext or cleartext).
+   * metadata_only flags a delivery whose plaintext was withheld by the host's
+   * AuthGuard (Phase 3b decrypt path). When true, payload is empty bytes and the
+   * recipient was either not in the DEK's participant set, lacked the requisite
+   * plugin manifest declaration / ABAC grant, or hit the audit-emit backpressure
+   * throttle. It is false on every legitimate delivery (including legitimately
+   * empty-payload events such as a presence event with no content). Set by the
+   * Subscribe / QueryStreamHistory handler at fan-out time; NEVER set by emitters
+   * and NEVER persisted to events_audit (storage rows always carry the sender's
+   * payload, ciphertext or cleartext).
    *
    * @generated from field: bool metadata_only = 10;
    */
   metadataOnly: boolean;
 
   /**
-   * no_plaintext_reason classifies why metadata_only=true was stamped.
-   * UNSPECIFIED on metadata_only=false deliveries; one of the typed reasons
-   * when metadata_only=true. Added for holomush-ojw1.6.
+   * no_plaintext_reason classifies why metadata_only=true was stamped. It is
+   * UNSPECIFIED on metadata_only=false deliveries and one of the typed reasons
+   * when metadata_only=true.
    *
    * @generated from field: holomush.core.v1.NoPlaintextReason no_plaintext_reason = 11;
    */
@@ -283,21 +339,28 @@ export const EventFrameSchema: GenMessage<EventFrame> = /*@__PURE__*/
   messageDesc(file_holomush_core_v1_core, 5);
 
 /**
+ * PresenceEntry describes one character present in a focus context.
+ *
  * @generated from message holomush.core.v1.PresenceEntry
  */
 export type PresenceEntry = Message<"holomush.core.v1.PresenceEntry"> & {
   /**
+   * character_id is the present character's ULID.
+   *
    * @generated from field: string character_id = 1;
    */
   characterId: string;
 
   /**
+   * character_name is the resolved display name; entries whose name cannot be
+   * resolved are dropped rather than returned empty.
+   *
    * @generated from field: string character_name = 2;
    */
   characterName: string;
 
   /**
-   * Deliberately NO arrived_at_ms — see spec §D-4 (no duration-of-presence leak).
+   * state is the character's presence state (ACTIVE for the location resolver).
    *
    * @generated from field: holomush.core.v1.PresenceState state = 3;
    */
@@ -312,20 +375,30 @@ export const PresenceEntrySchema: GenMessage<PresenceEntry> = /*@__PURE__*/
   messageDesc(file_holomush_core_v1_core, 6);
 
 /**
+ * ListFocusPresenceRequest asks for the current-state presence snapshot of the
+ * session's focus context.
+ *
  * @generated from message holomush.core.v1.ListFocusPresenceRequest
  */
 export type ListFocusPresenceRequest = Message<"holomush.core.v1.ListFocusPresenceRequest"> & {
   /**
+   * meta carries request correlation data.
+   *
    * @generated from field: holomush.core.v1.RequestMeta meta = 1;
    */
   meta?: RequestMeta | undefined;
 
   /**
+   * player_session_token proves the caller owns session_id; failures collapse to
+   * SESSION_NOT_FOUND.
+   *
    * @generated from field: string player_session_token = 2;
    */
   playerSessionToken: string;
 
   /**
+   * session_id names the session whose focus context is queried.
+   *
    * @generated from field: string session_id = 3;
    */
   sessionId: string;
@@ -339,27 +412,37 @@ export const ListFocusPresenceRequestSchema: GenMessage<ListFocusPresenceRequest
   messageDesc(file_holomush_core_v1_core, 7);
 
 /**
+ * ListFocusPresenceResponse returns the presence snapshot. For a session with no
+ * location yet, entries is empty under the LOCATION context rather than an error.
+ *
  * @generated from message holomush.core.v1.ListFocusPresenceResponse
  */
 export type ListFocusPresenceResponse = Message<"holomush.core.v1.ListFocusPresenceResponse"> & {
   /**
+   * meta echoes request correlation data.
+   *
    * @generated from field: holomush.core.v1.ResponseMeta meta = 1;
    */
   meta?: ResponseMeta | undefined;
 
   /**
+   * context names the focus context the snapshot describes (LOCATION today).
+   *
    * @generated from field: holomush.core.v1.PresenceContext context = 2;
    */
   context: PresenceContext;
 
   /**
-   * LOCATION → location_id; SCENE → scene_id (future)
+   * context_id is the identifier of the context: a location_id for LOCATION
+   * (and a scene_id for the future SCENE context).
    *
    * @generated from field: string context_id = 3;
    */
   contextId: string;
 
   /**
+   * entries is the deduplicated set of characters present in the context.
+   *
    * @generated from field: repeated holomush.core.v1.PresenceEntry entries = 4;
    */
   entries: PresenceEntry[];
@@ -373,51 +456,54 @@ export const ListFocusPresenceResponseSchema: GenMessage<ListFocusPresenceRespon
   messageDesc(file_holomush_core_v1_core, 8);
 
 /**
- * RenderingMetadata carries cleartext rendering instructions for an event.
- * Populated by RenderingPublisher.Publish at emit time from the verb
- * registry. See docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md.
+ * RenderingMetadata carries cleartext rendering instructions for an event. It is
+ * populated by RenderingPublisher.Publish at emit time from the verb registry —
+ * one schema with two transports (the gRPC Subscribe EventFrame and the
+ * JetStream envelope). See
+ * docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md.
  *
  * @generated from message holomush.core.v1.RenderingMetadata
  */
 export type RenderingMetadata = Message<"holomush.core.v1.RenderingMetadata"> & {
   /**
-   * Category drives client-side renderer routing.
+   * category drives client-side renderer routing and must be non-empty.
    *
    * @generated from field: string category = 1;
    */
   category: string;
 
   /**
-   * Format drives within-category presentation.
+   * format drives within-category presentation and must be non-empty.
    *
    * @generated from field: string format = 2;
    */
   format: string;
 
   /**
-   * Label provides type-specific display text. Required when format == "speech".
+   * label provides type-specific display text. Required when format == "speech".
    *
    * @generated from field: string label = 3;
    */
   label: string;
 
   /**
-   * DisplayTarget routes the event to TERMINAL, STATE, or BOTH on the client.
+   * display_target routes the event to TERMINAL, STATE, or BOTH on the client.
+   * It must be a defined, non-zero EventChannel.
    *
    * @generated from field: holomush.core.v1.EventChannel display_target = 4;
    */
   displayTarget: EventChannel;
 
   /**
-   * SourcePlugin names the plugin that owns this event type, or "builtin"
-   * for host-owned types. Recorded for historical/audit fidelity.
+   * source_plugin names the plugin that owns this event type, or "builtin" for
+   * host-owned types. Recorded for historical/audit fidelity.
    *
    * @generated from field: string source_plugin = 5;
    */
   sourcePlugin: string;
 
   /**
-   * SourcePluginVersion is the manifest's version field, or "host-<binary
+   * source_plugin_version is the manifest's version field, or "host-<binary
    * version>" for builtins. Recorded for historical/audit fidelity.
    *
    * @generated from field: string source_plugin_version = 6;
@@ -433,29 +519,34 @@ export const RenderingMetadataSchema: GenMessage<RenderingMetadata> = /*@__PURE_
   messageDesc(file_holomush_core_v1_core, 9);
 
 /**
+ * ControlFrame is a non-event control message delivered on the Subscribe stream.
+ *
  * @generated from message holomush.core.v1.ControlFrame
  */
 export type ControlFrame = Message<"holomush.core.v1.ControlFrame"> & {
   /**
+   * signal classifies the control message.
+   *
    * @generated from field: holomush.core.v1.ControlSignal signal = 1;
    */
   signal: ControlSignal;
 
   /**
+   * message is optional human-readable context for the signal.
+   *
    * @generated from field: string message = 2;
    */
   message: string;
 
   /**
    * attach_moment_ms is the server's wall-clock epoch-ms at the moment the
-   * Subscribe handler attached its durable consumer. Carried ONLY on
-   * CONTROL_SIGNAL_REPLAY_COMPLETE; clients reading other signals MUST
-   * ignore this field. The client passes this value as not_after_ms on
-   * subsequent backfill (WebQueryStreamHistory) calls so backfill returns
-   * ONLY events with timestamp <= attach_moment_ms — eliminating the
-   * race where a post-attach event could appear both as a dimmed backfill
-   * row and a live Subscribe delivery (holomush-iu8j; fujt Fix B). 0 on
-   * legacy servers; clients MUST treat 0 as "no upper bound" (back-compat).
+   * Subscribe handler attached its durable consumer. It is carried ONLY on
+   * CONTROL_SIGNAL_REPLAY_COMPLETE; clients reading other signals MUST ignore it.
+   * The client passes this value as not_after_ms on subsequent backfill
+   * (QueryStreamHistory) calls so backfill returns ONLY events with timestamp
+   * <= attach_moment_ms — eliminating the race where a post-attach event could
+   * appear both as a dimmed backfill row and a live Subscribe delivery. It is 0
+   * on legacy servers; clients MUST treat 0 as "no upper bound" (back-compat).
    *
    * @generated from field: int64 attach_moment_ms = 3;
    */
@@ -470,20 +561,29 @@ export const ControlFrameSchema: GenMessage<ControlFrame> = /*@__PURE__*/
   messageDesc(file_holomush_core_v1_core, 10);
 
 /**
+ * SubscribeResponse is one item on the Subscribe stream: either a game event or
+ * a control frame.
+ *
  * @generated from message holomush.core.v1.SubscribeResponse
  */
 export type SubscribeResponse = Message<"holomush.core.v1.SubscribeResponse"> & {
   /**
+   * frame is exactly one of an event delivery or a control signal.
+   *
    * @generated from oneof holomush.core.v1.SubscribeResponse.frame
    */
   frame: {
     /**
+     * event carries one delivered game event.
+     *
      * @generated from field: holomush.core.v1.EventFrame event = 1;
      */
     value: EventFrame;
     case: "event";
   } | {
     /**
+     * control carries an out-of-band control signal (e.g. replay-complete).
+     *
      * @generated from field: holomush.core.v1.ControlFrame control = 2;
      */
     value: ControlFrame;
@@ -499,30 +599,37 @@ export const SubscribeResponseSchema: GenMessage<SubscribeResponse> = /*@__PURE_
   messageDesc(file_holomush_core_v1_core, 11);
 
 /**
+ * DisconnectRequest detaches a connection, or the whole session, from the game.
+ *
  * @generated from message holomush.core.v1.DisconnectRequest
  */
 export type DisconnectRequest = Message<"holomush.core.v1.DisconnectRequest"> & {
   /**
+   * meta carries request correlation data.
+   *
    * @generated from field: holomush.core.v1.RequestMeta meta = 1;
    */
   meta?: RequestMeta | undefined;
 
   /**
+   * session_id names the session to disconnect.
+   *
    * @generated from field: string session_id = 2;
    */
   sessionId: string;
 
   /**
-   * optional: remove specific connection
+   * connection_id, when set, removes only that specific connection; empty
+   * disconnects the session as a whole.
    *
    * @generated from field: string connection_id = 3;
    */
   connectionId: string;
 
   /**
-   * player_session_token proves the caller owns session_id. Required
-   * for all post-auth RPCs. Must match the player_id of session_id
-   * or the request is rejected with SESSION_NOT_FOUND.
+   * player_session_token proves the caller owns session_id. Required for all
+   * post-auth RPCs. It must match the player_id of session_id or the request is
+   * rejected with SESSION_NOT_FOUND.
    *
    * @generated from field: string player_session_token = 4;
    */
@@ -537,15 +644,22 @@ export const DisconnectRequestSchema: GenMessage<DisconnectRequest> = /*@__PURE_
   messageDesc(file_holomush_core_v1_core, 12);
 
 /**
+ * DisconnectResponse reports the outcome. Disconnect is idempotent: a session
+ * that is already gone returns success.
+ *
  * @generated from message holomush.core.v1.DisconnectResponse
  */
 export type DisconnectResponse = Message<"holomush.core.v1.DisconnectResponse"> & {
   /**
+   * meta echoes request correlation data.
+   *
    * @generated from field: holomush.core.v1.ResponseMeta meta = 1;
    */
   meta?: ResponseMeta | undefined;
 
   /**
+   * success is true on a completed (or already-complete) disconnect.
+   *
    * @generated from field: bool success = 2;
    */
   success: boolean;
@@ -559,23 +673,30 @@ export const DisconnectResponseSchema: GenMessage<DisconnectResponse> = /*@__PUR
   messageDesc(file_holomush_core_v1_core, 13);
 
 /**
+ * GetCommandHistoryRequest asks for the recent command lines recorded for a
+ * session (the per-session command ring buffer, not event history).
+ *
  * @generated from message holomush.core.v1.GetCommandHistoryRequest
  */
 export type GetCommandHistoryRequest = Message<"holomush.core.v1.GetCommandHistoryRequest"> & {
   /**
+   * meta carries request correlation data.
+   *
    * @generated from field: holomush.core.v1.RequestMeta meta = 1;
    */
   meta?: RequestMeta | undefined;
 
   /**
+   * session_id names the session whose command history is requested.
+   *
    * @generated from field: string session_id = 2;
    */
   sessionId: string;
 
   /**
-   * player_session_token proves the caller owns session_id. Required
-   * for all post-auth RPCs. Must match the player_id of session_id
-   * or the request is rejected with SESSION_NOT_FOUND.
+   * player_session_token proves the caller owns session_id. Required for all
+   * post-auth RPCs. It must match the player_id of session_id or the request is
+   * rejected with SESSION_NOT_FOUND.
    *
    * @generated from field: string player_session_token = 3;
    */
@@ -590,25 +711,35 @@ export const GetCommandHistoryRequestSchema: GenMessage<GetCommandHistoryRequest
   messageDesc(file_holomush_core_v1_core, 14);
 
 /**
+ * GetCommandHistoryResponse returns the recorded command lines.
+ *
  * @generated from message holomush.core.v1.GetCommandHistoryResponse
  */
 export type GetCommandHistoryResponse = Message<"holomush.core.v1.GetCommandHistoryResponse"> & {
   /**
+   * meta echoes request correlation data.
+   *
    * @generated from field: holomush.core.v1.ResponseMeta meta = 1;
    */
   meta?: ResponseMeta | undefined;
 
   /**
+   * success is true when history was retrieved.
+   *
    * @generated from field: bool success = 2;
    */
   success: boolean;
 
   /**
+   * commands lists the recent command lines, oldest-to-newest within the ring.
+   *
    * @generated from field: repeated string commands = 3;
    */
   commands: string[];
 
   /**
+   * error carries a failure message when success is false.
+   *
    * @generated from field: string error = 4;
    */
   error: string;
@@ -622,35 +753,54 @@ export const GetCommandHistoryResponseSchema: GenMessage<GetCommandHistoryRespon
   messageDesc(file_holomush_core_v1_core, 15);
 
 /**
+ * CharacterSummary is the roster view of one character: enough to render a
+ * character-select screen, enriched with live session status and last location.
+ *
  * @generated from message holomush.core.v1.CharacterSummary
  */
 export type CharacterSummary = Message<"holomush.core.v1.CharacterSummary"> & {
   /**
+   * character_id is the character's ULID.
+   *
    * @generated from field: string character_id = 1;
    */
   characterId: string;
 
   /**
+   * character_name is the character's display name.
+   *
    * @generated from field: string character_name = 2;
    */
   characterName: string;
 
   /**
+   * has_active_session is true when this character has a session in the Active
+   * state right now.
+   *
    * @generated from field: bool has_active_session = 3;
    */
   hasActiveSession: boolean;
 
   /**
+   * session_status is the string form of the character's current session status
+   * (e.g. "active", "detached"); empty when no session exists.
+   *
    * @generated from field: string session_status = 4;
    */
   sessionStatus: string;
 
   /**
+   * last_location is the resolved name of the character's last-known location;
+   * empty when unknown or unresolvable.
+   *
    * @generated from field: string last_location = 5;
    */
   lastLocation: string;
 
   /**
+   * last_played_at is an epoch timestamp of last play (unset/zero when never
+   * played).
+   *
    * @generated from field: int64 last_played_at = 6;
    */
   lastPlayedAt: bigint;
@@ -664,25 +814,35 @@ export const CharacterSummarySchema: GenMessage<CharacterSummary> = /*@__PURE__*
   messageDesc(file_holomush_core_v1_core, 16);
 
 /**
+ * AuthenticatePlayerRequest carries phase-one login credentials.
+ *
  * @generated from message holomush.core.v1.AuthenticatePlayerRequest
  */
 export type AuthenticatePlayerRequest = Message<"holomush.core.v1.AuthenticatePlayerRequest"> & {
   /**
+   * username identifies the player account.
+   *
    * @generated from field: string username = 1;
    */
   username: string;
 
   /**
+   * password is the plaintext password to verify (over the secured transport).
+   *
    * @generated from field: string password = 2;
    */
   password: string;
 
   /**
+   * captcha_token is an optional anti-automation token.
+   *
    * @generated from field: string captcha_token = 3;
    */
   captchaToken: string;
 
   /**
+   * remember_me requests a longer-lived session per the gateway's cookie policy.
+   *
    * @generated from field: bool remember_me = 4;
    */
   rememberMe: boolean;
@@ -696,38 +856,53 @@ export const AuthenticatePlayerRequestSchema: GenMessage<AuthenticatePlayerReque
   messageDesc(file_holomush_core_v1_core, 17);
 
 /**
+ * AuthenticatePlayerResponse returns the minted player session token and the
+ * roster needed to drive phase-two character selection.
+ *
  * @generated from message holomush.core.v1.AuthenticatePlayerResponse
  */
 export type AuthenticatePlayerResponse = Message<"holomush.core.v1.AuthenticatePlayerResponse"> & {
   /**
+   * success is true when credentials verified.
+   *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
+   * player_session_token is the bearer token for subsequent post-auth RPCs;
+   * present only on success.
+   *
    * @generated from field: string player_session_token = 2;
    */
   playerSessionToken: string;
 
   /**
+   * error_message is a sanitized, generic failure message ("invalid username or
+   * password") on failure.
+   *
    * @generated from field: string error_message = 3;
    */
   errorMessage: string;
 
   /**
+   * characters is the player's roster for the character-select screen.
+   *
    * @generated from field: repeated holomush.core.v1.CharacterSummary characters = 4;
    */
   characters: CharacterSummary[];
 
   /**
+   * default_character_id is the player's preferred character to pre-select, if set.
+   *
    * @generated from field: string default_character_id = 5;
    */
   defaultCharacterId: string;
 
   /**
-   * Session TTL in seconds. Used by the web gateway to set cookie MaxAge so
-   * the cookie expires when the underlying session expires (prevents stale
-   * cookies outliving 2h guest sessions).
+   * session_ttl_seconds is the session lifetime in seconds. The web gateway uses
+   * it to set the cookie MaxAge so the cookie expires with the underlying session
+   * (preventing stale cookies outliving short guest sessions).
    *
    * @generated from field: int64 session_ttl_seconds = 6;
    */
@@ -742,15 +917,22 @@ export const AuthenticatePlayerResponseSchema: GenMessage<AuthenticatePlayerResp
   messageDesc(file_holomush_core_v1_core, 18);
 
 /**
+ * SelectCharacterRequest carries phase-two character selection.
+ *
  * @generated from message holomush.core.v1.SelectCharacterRequest
  */
 export type SelectCharacterRequest = Message<"holomush.core.v1.SelectCharacterRequest"> & {
   /**
+   * player_session_token proves the caller's authenticated player identity.
+   *
    * @generated from field: string player_session_token = 1;
    */
   playerSessionToken: string;
 
   /**
+   * character_id names the character to enter the game as; it must belong to the
+   * authenticated player.
+   *
    * @generated from field: string character_id = 2;
    */
   characterId: string;
@@ -764,30 +946,44 @@ export const SelectCharacterRequestSchema: GenMessage<SelectCharacterRequest> = 
   messageDesc(file_holomush_core_v1_core, 19);
 
 /**
+ * SelectCharacterResponse returns the game session created or reattached for the
+ * chosen character.
+ *
  * @generated from message holomush.core.v1.SelectCharacterResponse
  */
 export type SelectCharacterResponse = Message<"holomush.core.v1.SelectCharacterResponse"> & {
   /**
+   * success is true when a game session was established.
+   *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
+   * session_id is the game session id to use for Subscribe/HandleCommand.
+   *
    * @generated from field: string session_id = 2;
    */
   sessionId: string;
 
   /**
+   * character_name is the selected character's display name.
+   *
    * @generated from field: string character_name = 3;
    */
   characterName: string;
 
   /**
+   * reattached is true when an existing detached session was resumed (preserving
+   * scrollback) rather than a new one created.
+   *
    * @generated from field: bool reattached = 4;
    */
   reattached: boolean;
 
   /**
+   * error_message is a sanitized failure message on failure.
+   *
    * @generated from field: string error_message = 5;
    */
   errorMessage: string;
@@ -801,25 +997,35 @@ export const SelectCharacterResponseSchema: GenMessage<SelectCharacterResponse> 
   messageDesc(file_holomush_core_v1_core, 20);
 
 /**
+ * CreatePlayerRequest carries new-account registration details.
+ *
  * @generated from message holomush.core.v1.CreatePlayerRequest
  */
 export type CreatePlayerRequest = Message<"holomush.core.v1.CreatePlayerRequest"> & {
   /**
+   * username is the desired account name.
+   *
    * @generated from field: string username = 1;
    */
   username: string;
 
   /**
+   * password is the desired plaintext password.
+   *
    * @generated from field: string password = 2;
    */
   password: string;
 
   /**
+   * email is the contact email for the account (used by password reset).
+   *
    * @generated from field: string email = 3;
    */
   email: string;
 
   /**
+   * captcha_token is an optional anti-automation token.
+   *
    * @generated from field: string captcha_token = 4;
    */
   captchaToken: string;
@@ -833,31 +1039,44 @@ export const CreatePlayerRequestSchema: GenMessage<CreatePlayerRequest> = /*@__P
   messageDesc(file_holomush_core_v1_core, 21);
 
 /**
+ * CreatePlayerResponse returns the new account's session token; the new player
+ * is logged in immediately but has an empty character roster.
+ *
  * @generated from message holomush.core.v1.CreatePlayerResponse
  */
 export type CreatePlayerResponse = Message<"holomush.core.v1.CreatePlayerResponse"> & {
   /**
+   * success is true when the account was created.
+   *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
+   * player_session_token is the bearer token for the newly created, logged-in
+   * player.
+   *
    * @generated from field: string player_session_token = 2;
    */
   playerSessionToken: string;
 
   /**
+   * characters is always empty for a freshly created player.
+   *
    * @generated from field: repeated holomush.core.v1.CharacterSummary characters = 3;
    */
   characters: CharacterSummary[];
 
   /**
+   * error_message is a sanitized failure message on failure.
+   *
    * @generated from field: string error_message = 4;
    */
   errorMessage: string;
 
   /**
-   * Session TTL in seconds (see AuthenticatePlayerResponse).
+   * session_ttl_seconds is the session lifetime in seconds (see
+   * AuthenticatePlayerResponse).
    *
    * @generated from field: int64 session_ttl_seconds = 5;
    */
@@ -872,6 +1091,8 @@ export const CreatePlayerResponseSchema: GenMessage<CreatePlayerResponse> = /*@_
   messageDesc(file_holomush_core_v1_core, 22);
 
 /**
+ * CreateGuestRequest is empty: a guest provisioning takes no parameters.
+ *
  * @generated from message holomush.core.v1.CreateGuestRequest
  */
 export type CreateGuestRequest = Message<"holomush.core.v1.CreateGuestRequest"> & {
@@ -885,37 +1106,51 @@ export const CreateGuestRequestSchema: GenMessage<CreateGuestRequest> = /*@__PUR
   messageDesc(file_holomush_core_v1_core, 23);
 
 /**
+ * CreateGuestResponse returns an ephemeral guest player session plus the starter
+ * character that was provisioned alongside it.
+ *
  * @generated from message holomush.core.v1.CreateGuestResponse
  */
 export type CreateGuestResponse = Message<"holomush.core.v1.CreateGuestResponse"> & {
   /**
+   * success is true when the guest was provisioned.
+   *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
+   * error_message is a generic failure message on failure.
+   *
    * @generated from field: string error_message = 2;
    */
   errorMessage: string;
 
   /**
+   * player_session_token is the bearer token for the guest session.
+   *
    * @generated from field: string player_session_token = 3;
    */
   playerSessionToken: string;
 
   /**
+   * characters holds the single starter character provisioned for the guest.
+   *
    * @generated from field: repeated holomush.core.v1.CharacterSummary characters = 4;
    */
   characters: CharacterSummary[];
 
   /**
+   * default_character_id is the starter character to pre-select.
+   *
    * @generated from field: string default_character_id = 5;
    */
   defaultCharacterId: string;
 
   /**
-   * Session TTL in seconds (see AuthenticatePlayerResponse). For guest
-   * sessions this is 2h, not the 24h regular-player TTL.
+   * session_ttl_seconds is the session lifetime in seconds (see
+   * AuthenticatePlayerResponse). For guest sessions this is the shorter guest TTL,
+   * not the regular-player TTL.
    *
    * @generated from field: int64 session_ttl_seconds = 6;
    */
@@ -930,15 +1165,21 @@ export const CreateGuestResponseSchema: GenMessage<CreateGuestResponse> = /*@__P
   messageDesc(file_holomush_core_v1_core, 24);
 
 /**
+ * CreateCharacterRequest adds a character to the authenticated player's roster.
+ *
  * @generated from message holomush.core.v1.CreateCharacterRequest
  */
 export type CreateCharacterRequest = Message<"holomush.core.v1.CreateCharacterRequest"> & {
   /**
+   * player_session_token proves the caller's authenticated player identity.
+   *
    * @generated from field: string player_session_token = 1;
    */
   playerSessionToken: string;
 
   /**
+   * character_name is the desired name for the new character.
+   *
    * @generated from field: string character_name = 2;
    */
   characterName: string;
@@ -952,25 +1193,35 @@ export const CreateCharacterRequestSchema: GenMessage<CreateCharacterRequest> = 
   messageDesc(file_holomush_core_v1_core, 25);
 
 /**
+ * CreateCharacterResponse returns the newly created character.
+ *
  * @generated from message holomush.core.v1.CreateCharacterResponse
  */
 export type CreateCharacterResponse = Message<"holomush.core.v1.CreateCharacterResponse"> & {
   /**
+   * success is true when the character was created.
+   *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
+   * character_id is the new character's ULID.
+   *
    * @generated from field: string character_id = 2;
    */
   characterId: string;
 
   /**
+   * character_name is the new character's name as stored.
+   *
    * @generated from field: string character_name = 3;
    */
   characterName: string;
 
   /**
+   * error_message is a sanitized failure message on failure.
+   *
    * @generated from field: string error_message = 4;
    */
   errorMessage: string;
@@ -984,10 +1235,14 @@ export const CreateCharacterResponseSchema: GenMessage<CreateCharacterResponse> 
   messageDesc(file_holomush_core_v1_core, 26);
 
 /**
+ * ListCharactersRequest asks for the authenticated player's character roster.
+ *
  * @generated from message holomush.core.v1.ListCharactersRequest
  */
 export type ListCharactersRequest = Message<"holomush.core.v1.ListCharactersRequest"> & {
   /**
+   * player_session_token proves the caller's authenticated player identity.
+   *
    * @generated from field: string player_session_token = 1;
    */
   playerSessionToken: string;
@@ -1001,10 +1256,14 @@ export const ListCharactersRequestSchema: GenMessage<ListCharactersRequest> = /*
   messageDesc(file_holomush_core_v1_core, 27);
 
 /**
+ * ListCharactersResponse returns the player's roster with session-status enrichment.
+ *
  * @generated from message holomush.core.v1.ListCharactersResponse
  */
 export type ListCharactersResponse = Message<"holomush.core.v1.ListCharactersResponse"> & {
   /**
+   * characters is the player's roster.
+   *
    * @generated from field: repeated holomush.core.v1.CharacterSummary characters = 1;
    */
   characters: CharacterSummary[];
@@ -1018,10 +1277,14 @@ export const ListCharactersResponseSchema: GenMessage<ListCharactersResponse> = 
   messageDesc(file_holomush_core_v1_core, 28);
 
 /**
+ * RequestPasswordResetRequest begins a password-reset flow by email.
+ *
  * @generated from message holomush.core.v1.RequestPasswordResetRequest
  */
 export type RequestPasswordResetRequest = Message<"holomush.core.v1.RequestPasswordResetRequest"> & {
   /**
+   * email is the account email to send the reset to.
+   *
    * @generated from field: string email = 1;
    */
   email: string;
@@ -1035,10 +1298,16 @@ export const RequestPasswordResetRequestSchema: GenMessage<RequestPasswordResetR
   messageDesc(file_holomush_core_v1_core, 29);
 
 /**
+ * RequestPasswordResetResponse always reports success regardless of whether the
+ * email exists — an intentional account-enumeration-prevention measure.
+ *
  * @generated from message holomush.core.v1.RequestPasswordResetResponse
  */
 export type RequestPasswordResetResponse = Message<"holomush.core.v1.RequestPasswordResetResponse"> & {
   /**
+   * success is always true (enumeration-safe; reveals nothing about whether the
+   * email is registered).
+   *
    * @generated from field: bool success = 1;
    */
   success: boolean;
@@ -1052,15 +1321,21 @@ export const RequestPasswordResetResponseSchema: GenMessage<RequestPasswordReset
   messageDesc(file_holomush_core_v1_core, 30);
 
 /**
+ * ConfirmPasswordResetRequest completes a reset using the emailed token.
+ *
  * @generated from message holomush.core.v1.ConfirmPasswordResetRequest
  */
 export type ConfirmPasswordResetRequest = Message<"holomush.core.v1.ConfirmPasswordResetRequest"> & {
   /**
+   * token is the single-use reset token from the reset email.
+   *
    * @generated from field: string token = 1;
    */
   token: string;
 
   /**
+   * new_password is the plaintext replacement password.
+   *
    * @generated from field: string new_password = 2;
    */
   newPassword: string;
@@ -1074,15 +1349,22 @@ export const ConfirmPasswordResetRequestSchema: GenMessage<ConfirmPasswordResetR
   messageDesc(file_holomush_core_v1_core, 31);
 
 /**
+ * ConfirmPasswordResetResponse reports the outcome with a sanitized error.
+ *
  * @generated from message holomush.core.v1.ConfirmPasswordResetResponse
  */
 export type ConfirmPasswordResetResponse = Message<"holomush.core.v1.ConfirmPasswordResetResponse"> & {
   /**
+   * success is true when the password was reset.
+   *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
+   * error_message is a sanitized failure message on failure (never echoes the
+   * token).
+   *
    * @generated from field: string error_message = 2;
    */
   errorMessage: string;
@@ -1096,10 +1378,14 @@ export const ConfirmPasswordResetResponseSchema: GenMessage<ConfirmPasswordReset
   messageDesc(file_holomush_core_v1_core, 32);
 
 /**
+ * LogoutRequest ends the player session identified by the supplied token.
+ *
  * @generated from message holomush.core.v1.LogoutRequest
  */
 export type LogoutRequest = Message<"holomush.core.v1.LogoutRequest"> & {
   /**
+   * player_session_token identifies the PlayerSession to end.
+   *
    * @generated from field: string player_session_token = 1;
    */
   playerSessionToken: string;
@@ -1113,6 +1399,9 @@ export const LogoutRequestSchema: GenMessage<LogoutRequest> = /*@__PURE__*/
   messageDesc(file_holomush_core_v1_core, 33);
 
 /**
+ * LogoutResponse is empty: logout reports success solely by returning without an
+ * error status.
+ *
  * @generated from message holomush.core.v1.LogoutResponse
  */
 export type LogoutResponse = Message<"holomush.core.v1.LogoutResponse"> & {
@@ -1126,10 +1415,15 @@ export const LogoutResponseSchema: GenMessage<LogoutResponse> = /*@__PURE__*/
   messageDesc(file_holomush_core_v1_core, 34);
 
 /**
+ * CheckPlayerSessionRequest validates a session token, typically the value from
+ * a web auth cookie.
+ *
  * @generated from message holomush.core.v1.CheckPlayerSessionRequest
  */
 export type CheckPlayerSessionRequest = Message<"holomush.core.v1.CheckPlayerSessionRequest"> & {
   /**
+   * player_session_token is the token to validate.
+   *
    * @generated from field: string player_session_token = 1;
    */
   playerSessionToken: string;
@@ -1143,30 +1437,38 @@ export const CheckPlayerSessionRequestSchema: GenMessage<CheckPlayerSessionReque
   messageDesc(file_holomush_core_v1_core, 35);
 
 /**
+ * CheckPlayerSessionResponse returns the player identity behind a valid token.
+ * The failure path returns an Unauthenticated status with no body, so these
+ * fields are absent for unknown/expired sessions — preserving the enumeration-
+ * safety contract documented in internal/auth (session ownership).
+ *
  * @generated from message holomush.core.v1.CheckPlayerSessionResponse
  */
 export type CheckPlayerSessionResponse = Message<"holomush.core.v1.CheckPlayerSessionResponse"> & {
   /**
+   * player_name is the account username.
+   *
    * @generated from field: string player_name = 1;
    */
   playerName: string;
 
   /**
-   * NEW (additive on the success path; failure path still returns nil, err
-   * so these fields are absent on PLAYER_SESSION_NOT_FOUND / PLAYER_SESSION_EXPIRED
-   * — preserves the enumeration-safety contract documented at
-   * internal/auth/session_ownership.go:18-20).
+   * player_id is the player's ULID.
    *
    * @generated from field: string player_id = 2;
    */
   playerId: string;
 
   /**
+   * is_guest is true when the session belongs to an ephemeral guest player.
+   *
    * @generated from field: bool is_guest = 3;
    */
   isGuest: boolean;
 
   /**
+   * characters is the player's roster (enriched with session status).
+   *
    * @generated from field: repeated holomush.core.v1.CharacterSummary characters = 4;
    */
   characters: CharacterSummary[];
@@ -1180,10 +1482,15 @@ export const CheckPlayerSessionResponseSchema: GenMessage<CheckPlayerSessionResp
   messageDesc(file_holomush_core_v1_core, 36);
 
 /**
+ * ListPlayerSessionsRequest asks for the caller's own active PlayerSessions.
+ *
  * @generated from message holomush.core.v1.ListPlayerSessionsRequest
  */
 export type ListPlayerSessionsRequest = Message<"holomush.core.v1.ListPlayerSessionsRequest"> & {
   /**
+   * player_session_token identifies the caller; the response lists that player's
+   * sessions.
+   *
    * @generated from field: string player_session_token = 1;
    */
   playerSessionToken: string;
@@ -1197,44 +1504,54 @@ export const ListPlayerSessionsRequestSchema: GenMessage<ListPlayerSessionsReque
   messageDesc(file_holomush_core_v1_core, 37);
 
 /**
+ * PlayerSessionInfo describes one of the caller's PlayerSessions for device-
+ * management UX. It never carries the session token — only safe-to-display
+ * metadata.
+ *
  * @generated from message holomush.core.v1.PlayerSessionInfo
  */
 export type PlayerSessionInfo = Message<"holomush.core.v1.PlayerSessionInfo"> & {
   /**
-   * id is the PlayerSession.id (ULID). Safe to show the user - this is
-   * a resource handle, not a secret. Used as the target_session_id
-   * argument to RevokePlayerSession.
+   * id is the PlayerSession's ULID. Safe to show the user — this is a resource
+   * handle, not a secret — and is the value passed as target_session_id to
+   * RevokePlayerSession.
    *
    * @generated from field: string id = 1;
    */
   id: string;
 
   /**
+   * created_at is when the session was established.
+   *
    * @generated from field: google.protobuf.Timestamp created_at = 2;
    */
   createdAt?: Timestamp | undefined;
 
   /**
-   * last_active is sourced from player_sessions.updated_at, which is
-   * bumped whenever the session is refreshed.
+   * last_active is sourced from player_sessions.updated_at, bumped whenever the
+   * session is refreshed.
    *
    * @generated from field: google.protobuf.Timestamp last_active = 3;
    */
   lastActive?: Timestamp | undefined;
 
   /**
+   * user_agent is the client user-agent recorded at session creation.
+   *
    * @generated from field: string user_agent = 4;
    */
   userAgent: string;
 
   /**
+   * ip_address is the client IP recorded at session creation.
+   *
    * @generated from field: string ip_address = 5;
    */
   ipAddress: string;
 
   /**
    * is_current is true for exactly the PlayerSession that made the
-   * ListPlayerSessions request - supports "This device" UX.
+   * ListPlayerSessions request — supports a "this device" indicator.
    *
    * @generated from field: bool is_current = 6;
    */
@@ -1249,10 +1566,15 @@ export const PlayerSessionInfoSchema: GenMessage<PlayerSessionInfo> = /*@__PURE_
   messageDesc(file_holomush_core_v1_core, 38);
 
 /**
+ * ListPlayerSessionsResponse returns the caller's PlayerSessions. An empty list
+ * is also the enumeration-safe response on any auth failure.
+ *
  * @generated from message holomush.core.v1.ListPlayerSessionsResponse
  */
 export type ListPlayerSessionsResponse = Message<"holomush.core.v1.ListPlayerSessionsResponse"> & {
   /**
+   * sessions is the caller's active PlayerSessions; never includes tokens.
+   *
    * @generated from field: repeated holomush.core.v1.PlayerSessionInfo sessions = 1;
    */
   sessions: PlayerSessionInfo[];
@@ -1266,17 +1588,23 @@ export const ListPlayerSessionsResponseSchema: GenMessage<ListPlayerSessionsResp
   messageDesc(file_holomush_core_v1_core, 39);
 
 /**
+ * RevokePlayerSessionRequest deletes one of the caller's PlayerSessions.
+ *
  * @generated from message holomush.core.v1.RevokePlayerSessionRequest
  */
 export type RevokePlayerSessionRequest = Message<"holomush.core.v1.RevokePlayerSessionRequest"> & {
   /**
+   * player_session_token identifies the caller; only the caller's own sessions
+   * may be revoked.
+   *
    * @generated from field: string player_session_token = 1;
    */
   playerSessionToken: string;
 
   /**
-   * target_session_id is the PlayerSession.id (ULID) to revoke -
-   * NOT the game session_id. Different concept.
+   * target_session_id is the PlayerSession.id (ULID) to revoke — NOT the game
+   * session_id. A revoke targeting another player's session collapses to "session
+   * not found".
    *
    * @generated from field: string target_session_id = 2;
    */
@@ -1291,15 +1619,22 @@ export const RevokePlayerSessionRequestSchema: GenMessage<RevokePlayerSessionReq
   messageDesc(file_holomush_core_v1_core, 40);
 
 /**
+ * RevokePlayerSessionResponse reports the outcome with an enumeration-safe error.
+ *
  * @generated from message holomush.core.v1.RevokePlayerSessionResponse
  */
 export type RevokePlayerSessionResponse = Message<"holomush.core.v1.RevokePlayerSessionResponse"> & {
   /**
+   * success is true when the target session was deleted.
+   *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
+   * error_message is "session not found" on any failure, including cross-player
+   * attempts (enumeration-safe).
+   *
    * @generated from field: string error_message = 2;
    */
   errorMessage: string;
@@ -1313,10 +1648,15 @@ export const RevokePlayerSessionResponseSchema: GenMessage<RevokePlayerSessionRe
   messageDesc(file_holomush_core_v1_core, 41);
 
 /**
+ * RevokeOtherPlayerSessionsRequest bulk-revokes the caller's other sessions.
+ *
  * @generated from message holomush.core.v1.RevokeOtherPlayerSessionsRequest
  */
 export type RevokeOtherPlayerSessionsRequest = Message<"holomush.core.v1.RevokeOtherPlayerSessionsRequest"> & {
   /**
+   * player_session_token identifies the caller; the current session is preserved
+   * and all others are revoked.
+   *
    * @generated from field: string player_session_token = 1;
    */
   playerSessionToken: string;
@@ -1330,15 +1670,22 @@ export const RevokeOtherPlayerSessionsRequestSchema: GenMessage<RevokeOtherPlaye
   messageDesc(file_holomush_core_v1_core, 42);
 
 /**
+ * RevokeOtherPlayerSessionsResponse reports how many sessions were revoked.
+ *
  * @generated from message holomush.core.v1.RevokeOtherPlayerSessionsResponse
  */
 export type RevokeOtherPlayerSessionsResponse = Message<"holomush.core.v1.RevokeOtherPlayerSessionsResponse"> & {
   /**
+   * success is true when the bulk revoke completed.
+   *
    * @generated from field: bool success = 1;
    */
   success: boolean;
 
   /**
+   * revoked_count is the number of PlayerSessions deleted (excluding the current
+   * one).
+   *
    * @generated from field: int32 revoked_count = 2;
    */
   revokedCount: number;
@@ -1352,53 +1699,62 @@ export const RevokeOtherPlayerSessionsResponseSchema: GenMessage<RevokeOtherPlay
   messageDesc(file_holomush_core_v1_core, 43);
 
 /**
+ * QueryStreamHistoryRequest reads a page of event history from one stream.
+ *
  * @generated from message holomush.core.v1.QueryStreamHistoryRequest
  */
 export type QueryStreamHistoryRequest = Message<"holomush.core.v1.QueryStreamHistoryRequest"> & {
   /**
+   * meta carries request correlation data.
+   *
    * @generated from field: holomush.core.v1.RequestMeta meta = 1;
    */
   meta?: RequestMeta | undefined;
 
   /**
+   * session_id names the requesting session; its identity drives authorization.
+   *
    * @generated from field: string session_id = 2;
    */
   sessionId: string;
 
   /**
+   * stream is the subject whose history is read.
+   *
    * @generated from field: string stream = 3;
    */
   stream: string;
 
   /**
-   * page size; 0 = default (150), max 500, negative rejected
+   * count is the requested page size. 0 selects the server default (150); the
+   * server caps it at 500; a negative value is rejected with INVALID_ARGUMENT.
    *
    * @generated from field: int32 count = 4;
    */
   count: number;
 
   /**
-   * epoch ms time floor; 0 = no lower bound
+   * not_before_ms is an epoch-ms time floor; 0 means no lower bound.
    *
    * @generated from field: int64 not_before_ms = 5;
    */
   notBeforeMs: bigint;
 
   /**
-   * cursor is the opaque pagination cursor from a previous QueryStreamHistoryResponse.
-   * Events older than the cursor position are returned. Empty = start from latest.
+   * cursor is the opaque pagination cursor from a previous response. Events older
+   * than the cursor position are returned; empty starts from the latest.
    *
    * @generated from field: bytes cursor = 6;
    */
   cursor: Uint8Array;
 
   /**
-   * not_after_ms is the epoch-ms time ceiling. 0 = no upper bound (back-compat).
-   * INCLUSIVE: events with timestamp == not_after_ms are returned. Used by the
-   * web client's connect-time backfill to bound history to events that existed
-   * before the Subscribe stream attached, eliminating the connect-time race
-   * where a user-emitted event could appear both as a dimmed backfill row and
-   * a live Subscribe delivery (holomush-iu8j; holomush-fujt Fix B).
+   * not_after_ms is an epoch-ms time ceiling; 0 means no upper bound (back-compat).
+   * INCLUSIVE: events with timestamp == not_after_ms are returned. The web client
+   * sets it from ControlFrame.attach_moment_ms at connect time to bound backfill
+   * to events that existed before the Subscribe stream attached, eliminating the
+   * connect-time race where a user-emitted event could appear both as a dimmed
+   * backfill row and a live Subscribe delivery.
    *
    * @generated from field: int64 not_after_ms = 7;
    */
@@ -1413,26 +1769,35 @@ export const QueryStreamHistoryRequestSchema: GenMessage<QueryStreamHistoryReque
   messageDesc(file_holomush_core_v1_core, 44);
 
 /**
+ * QueryStreamHistoryResponse returns one page of history plus pagination state.
+ *
  * @generated from message holomush.core.v1.QueryStreamHistoryResponse
  */
 export type QueryStreamHistoryResponse = Message<"holomush.core.v1.QueryStreamHistoryResponse"> & {
   /**
+   * meta echoes request correlation data.
+   *
    * @generated from field: holomush.core.v1.ResponseMeta meta = 1;
    */
   meta?: ResponseMeta | undefined;
 
   /**
+   * events is the page of history frames, newest-first within the page.
+   *
    * @generated from field: repeated holomush.core.v1.EventFrame events = 2;
    */
   events: EventFrame[];
 
   /**
+   * has_more is true when older events remain beyond this page.
+   *
    * @generated from field: bool has_more = 3;
    */
   hasMore: boolean;
 
   /**
-   * next_cursor is the opaque cursor for the next page. Empty if has_more is false.
+   * next_cursor is the opaque cursor for the next (older) page; empty when
+   * has_more is false.
    *
    * @generated from field: bytes next_cursor = 4;
    */
@@ -1447,20 +1812,30 @@ export const QueryStreamHistoryResponseSchema: GenMessage<QueryStreamHistoryResp
   messageDesc(file_holomush_core_v1_core, 45);
 
 /**
+ * ListSessionStreamsRequest asks which streams a session is currently subscribed
+ * to.
+ *
  * @generated from message holomush.core.v1.ListSessionStreamsRequest
  */
 export type ListSessionStreamsRequest = Message<"holomush.core.v1.ListSessionStreamsRequest"> & {
   /**
+   * meta carries request correlation data.
+   *
    * @generated from field: holomush.core.v1.RequestMeta meta = 1;
    */
   meta?: RequestMeta | undefined;
 
   /**
+   * session_id names the session whose subscribed streams are listed.
+   *
    * @generated from field: string session_id = 2;
    */
   sessionId: string;
 
   /**
+   * player_session_token proves the caller owns session_id; failures collapse to
+   * SESSION_NOT_FOUND (closing the stream-enumeration IDOR).
+   *
    * @generated from field: string player_session_token = 3;
    */
   playerSessionToken: string;
@@ -1474,15 +1849,22 @@ export const ListSessionStreamsRequestSchema: GenMessage<ListSessionStreamsReque
   messageDesc(file_holomush_core_v1_core, 46);
 
 /**
+ * ListSessionStreamsResponse returns the session's subscribed stream names.
+ *
  * @generated from message holomush.core.v1.ListSessionStreamsResponse
  */
 export type ListSessionStreamsResponse = Message<"holomush.core.v1.ListSessionStreamsResponse"> & {
   /**
+   * streams lists the subscribed stream names (character / location / plugin
+   * streams), matching what Subscribe would deliver.
+   *
    * @generated from field: repeated string streams = 1;
    */
   streams: string[];
 
   /**
+   * meta echoes request correlation data.
+   *
    * @generated from field: holomush.core.v1.ResponseMeta meta = 2;
    */
   meta?: ResponseMeta | undefined;
@@ -1496,76 +1878,89 @@ export const ListSessionStreamsResponseSchema: GenMessage<ListSessionStreamsResp
   messageDesc(file_holomush_core_v1_core, 47);
 
 /**
- * NoPlaintextReason enumerates causes for metadata_only=true so clients
- * can distinguish e.g. a destroyed/stale DEK from an authorization denial
- * or backpressure-driven withholding (holomush-ojw1.6).
- *
- * UNSPECIFIED is the zero value and MUST hold when metadata_only=false.
- * Clients seeing UNSPECIFIED with metadata_only=true MUST treat it as a
- * contract violation (host stamped without classifying).
+ * NoPlaintextReason enumerates the causes for a metadata_only=true delivery so
+ * clients can distinguish, for example, a destroyed/stale DEK from an
+ * authorization denial or backpressure-driven withholding. The Go-side mirror
+ * is internal/eventbus.NoPlaintextReason (a 1:1 bijection, asserted by
+ * types_proto_sync_test.go); the reasons map to wire strings in the eventbus
+ * history readback layer. This enum backs the EventFrame / read-stream path
+ * only — the separate plugin own-audit-row decrypt path (RowResult in
+ * audit.proto) uses string reasons and adds a "not_owner" value that has no
+ * counterpart here.
  *
  * @generated from enum holomush.core.v1.NoPlaintextReason
  */
 export enum NoPlaintextReason {
   /**
+   * NO_PLAINTEXT_REASON_UNSPECIFIED is the zero value and MUST hold when
+   * metadata_only=false. A client that sees it together with metadata_only=true
+   * MUST treat the delivery as a contract violation (host stamped without
+   * classifying).
+   *
    * @generated from enum value: NO_PLAINTEXT_REASON_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
-   * Recipient was not in the DEK's participant set or lacked the requisite
-   * plugin manifest declaration / ABAC grant. Phase 3b AuthGuard deny.
+   * NO_PLAINTEXT_REASON_AUTHGUARD_DENY means the recipient was not in the DEK's
+   * participant set or lacked the requisite plugin manifest declaration / ABAC
+   * grant. Phase 3b AuthGuard deny.
    *
    * @generated from enum value: NO_PLAINTEXT_REASON_AUTHGUARD_DENY = 1;
    */
   AUTHGUARD_DENY = 1,
 
   /**
-   * Hot AND cold tier DEKs both indecipherable. Production-real post
-   * sub-epic E rekey + DEK destruction. INV-E21 double miss.
+   * NO_PLAINTEXT_REASON_STALE_DEK means both the hot and cold tier DEKs were
+   * indecipherable — a production-real outcome after a sub-epic E rekey plus DEK
+   * destruction (INV-E21 double miss).
    *
    * @generated from enum value: NO_PLAINTEXT_REASON_STALE_DEK = 2;
    */
   STALE_DEK = 2,
 
   /**
-   * Plugin audit emit backpressure (queue full). Host-side TOCTOU.
+   * NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL means a plugin audit-emit hit
+   * backpressure (queue full) — a host-side TOCTOU defense.
    *
    * @generated from enum value: NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL = 3;
    */
   AUDIT_QUEUE_FULL = 3,
 
   /**
-   * Cold-tier audit row has no dek_ref (DEK reference column missing or
-   * NULL). Stamped exclusively by F's operator-read classifier (INV-F16).
+   * NO_PLAINTEXT_REASON_DEK_MISSING means the cold-tier audit row had no dek_ref
+   * (DEK reference column missing or NULL). Stamped exclusively by sub-epic F's
+   * operator-read classifier (INV-F16).
    *
    * @generated from enum value: NO_PLAINTEXT_REASON_DEK_MISSING = 4;
    */
   DEK_MISSING = 4,
 
   /**
-   * Cold-tier audit row references a DEK whose column set does not match
-   * the event's AAD declaration. Stamped exclusively by F's classifier.
+   * NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS means a cold-tier audit row references a
+   * DEK whose column set does not match the event's AAD declaration. Stamped
+   * exclusively by sub-epic F's classifier.
    *
    * @generated from enum value: NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS = 5;
    */
   DEK_BAD_COLUMNS = 5,
 
   /**
-   * Catch-all for unexpected decrypt failures not covered by the
-   * specific cases above. Stamped exclusively by F's classifier.
+   * NO_PLAINTEXT_REASON_INTERNAL is the catch-all for unexpected decrypt failures
+   * not covered by the specific cases above. Stamped exclusively by sub-epic F's
+   * classifier.
    *
    * @generated from enum value: NO_PLAINTEXT_REASON_INTERNAL = 6;
    */
   INTERNAL = 6,
 
   /**
-   * Phase 7 PluginDowngradeFence layer (1) refusal — the host's read-side
-   * fence rejected the row before decrypt either because the type is in
-   * the always-sensitive manifest set and the plugin returned identity
-   * codec (INV-P7-7), or because the dek_ref is unknown / absent for a
-   * non-identity codec (INV-P7-15). Original event_id is preserved;
-   * payload is empty per master INV-26.
+   * NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED is a Phase 7 PluginDowngradeFence layer
+   * (1) refusal — the host's read-side fence rejected the row before decrypt,
+   * either because the type is in the always-sensitive manifest set and the
+   * plugin returned an identity codec (INV-P7-7), or because the dek_ref is
+   * unknown / absent for a non-identity codec (INV-P7-15). The original event_id
+   * is preserved; payload is empty per master INV-26.
    *
    * @generated from enum value: NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED = 7;
    */
@@ -1579,39 +1974,49 @@ export const NoPlaintextReasonSchema: GenEnum<NoPlaintextReason> = /*@__PURE__*/
   enumDesc(file_holomush_core_v1_core, 0);
 
 /**
- * EventChannel identifies the destination channel for event delivery.
- * This is the canonical internal definition; webv1.EventChannel is kept
- * in lockstep for the web wire format (INV-GW-16).
+ * EventChannel identifies the destination channel for event delivery. This is
+ * the canonical internal definition; webv1.EventChannel is kept in lockstep for
+ * the web wire format (INV-GW-16).
  *
  * @generated from enum holomush.core.v1.EventChannel
  */
 export enum EventChannel {
   /**
+   * EVENT_CHANNEL_UNSPECIFIED is the zero value; rendering metadata validation
+   * rejects it (display_target must be a defined non-zero channel).
+   *
    * @generated from enum value: EVENT_CHANNEL_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
+   * EVENT_CHANNEL_TERMINAL routes the event to the scrolling text terminal surface.
+   *
    * @generated from enum value: EVENT_CHANNEL_TERMINAL = 1;
    */
   TERMINAL = 1,
 
   /**
+   * EVENT_CHANNEL_STATE routes the event to the client's structured state surface
+   * (e.g. presence / status panels) rather than the terminal.
+   *
    * @generated from enum value: EVENT_CHANNEL_STATE = 2;
    */
   STATE = 2,
 
   /**
+   * EVENT_CHANNEL_BOTH routes the event to both the terminal and the state surface.
+   *
    * @generated from enum value: EVENT_CHANNEL_BOTH = 3;
    */
   BOTH = 3,
 
   /**
-   * EVENT_CHANNEL_AUDIT_ONLY tags host-emit security/audit events that MUST
-   * persist to events_audit but MUST NOT be delivered to client surfaces
-   * (telnet, web). The gRPC Subscribe handler drops these before send;
-   * the audit projection persists them like any other event. Used by
-   * crypto.totp_*, crypto.policy_set, and similar host-emitted audit types.
+   * EVENT_CHANNEL_AUDIT_ONLY tags host-emit security/audit events that MUST persist
+   * to events_audit but MUST NOT be delivered to client surfaces (telnet, web).
+   * The gRPC Subscribe handler drops these before send; the audit projection
+   * persists them like any other event. Used by crypto.totp_*, crypto.policy_set,
+   * and similar host-emitted audit types.
    *
    * @generated from enum value: EVENT_CHANNEL_AUDIT_ONLY = 4;
    */
@@ -1625,21 +2030,31 @@ export const EventChannelSchema: GenEnum<EventChannel> = /*@__PURE__*/
   enumDesc(file_holomush_core_v1_core, 1);
 
 /**
+ * PresenceContext names the kind of focus context a presence snapshot describes,
+ * returned in ListFocusPresenceResponse.
+ *
  * @generated from enum holomush.core.v1.PresenceContext
  */
 export enum PresenceContext {
   /**
+   * PRESENCE_CONTEXT_UNSPECIFIED is the zero value; not returned on success.
+   *
    * @generated from enum value: PRESENCE_CONTEXT_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
+   * PRESENCE_CONTEXT_LOCATION means the snapshot lists active sessions at a
+   * location (the only context implemented today).
+   *
    * @generated from enum value: PRESENCE_CONTEXT_LOCATION = 1;
    */
   LOCATION = 1,
 
   /**
-   * wire-reserved; resolver in follow-up bead
+   * PRESENCE_CONTEXT_SCENE is wire-reserved for scene-focus presence; the
+   * resolver lands in a follow-up bead and the RPC currently returns
+   * UNIMPLEMENTED for scene-focused sessions.
    *
    * @generated from enum value: PRESENCE_CONTEXT_SCENE = 2;
    */
@@ -1653,28 +2068,36 @@ export const PresenceContextSchema: GenEnum<PresenceContext> = /*@__PURE__*/
   enumDesc(file_holomush_core_v1_core, 2);
 
 /**
+ * PresenceState describes a character's presence status within a focus context.
+ *
  * @generated from enum holomush.core.v1.PresenceState
  */
 export enum PresenceState {
   /**
+   * PRESENCE_STATE_UNSPECIFIED is the zero value; not emitted on success.
+   *
    * @generated from enum value: PRESENCE_STATE_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
+   * PRESENCE_STATE_ACTIVE means the character has an active session in the
+   * context. This is the only state the location resolver emits today.
+   *
    * @generated from enum value: PRESENCE_STATE_ACTIVE = 1;
    */
   ACTIVE = 1,
 
   /**
-   * emitted by future scene resolver
+   * PRESENCE_STATE_DETACHED is reserved for the future scene resolver (character
+   * present in the scene but with a detached transport).
    *
    * @generated from enum value: PRESENCE_STATE_DETACHED = 2;
    */
   DETACHED = 2,
 
   /**
-   * emitted by future scene resolver
+   * PRESENCE_STATE_INACTIVE is reserved for the future scene resolver.
    *
    * @generated from enum value: PRESENCE_STATE_INACTIVE = 3;
    */
@@ -1688,20 +2111,31 @@ export const PresenceStateSchema: GenEnum<PresenceState> = /*@__PURE__*/
   enumDesc(file_holomush_core_v1_core, 3);
 
 /**
+ * ControlSignal classifies an out-of-band control frame interleaved into the
+ * Subscribe stream alongside event frames.
+ *
  * @generated from enum holomush.core.v1.ControlSignal
  */
 export enum ControlSignal {
   /**
+   * CONTROL_SIGNAL_UNSPECIFIED is the zero value; never sent.
+   *
    * @generated from enum value: CONTROL_SIGNAL_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
+   * CONTROL_SIGNAL_REPLAY_COMPLETE marks the boundary between replayed history
+   * and live deliveries on a Subscribe stream.
+   *
    * @generated from enum value: CONTROL_SIGNAL_REPLAY_COMPLETE = 1;
    */
   REPLAY_COMPLETE = 1,
 
   /**
+   * CONTROL_SIGNAL_STREAM_CLOSED tells the client the server is ending the stream
+   * (e.g. the session was disconnected or booted).
+   *
    * @generated from enum value: CONTROL_SIGNAL_STREAM_CLOSED = 2;
    */
   STREAM_CLOSED = 2,
@@ -1714,13 +2148,23 @@ export const ControlSignalSchema: GenEnum<ControlSignal> = /*@__PURE__*/
   enumDesc(file_holomush_core_v1_core, 4);
 
 /**
- * CoreService is the main game service.
+ * CoreService is the game-core gRPC surface served by internal/grpc.CoreServer
+ * (registered in cmd/holomush/sub_grpc.go via RegisterCoreServiceServer). It is
+ * the single entry point through which gateways (telnet, web) drive gameplay,
+ * authentication, session management, and event streaming. The gateway is a
+ * pure protocol translator (see .claude/rules/gateway-boundary.md); all game
+ * state and business logic lives behind these RPCs.
  *
  * @generated from service holomush.core.v1.CoreService
  */
 export const CoreService: GenService<{
   /**
-   * HandleCommand processes a game command.
+   * HandleCommand validates session ownership, records the command in session
+   * history, and dispatches it through the unified command dispatcher. Handler
+   * output is NOT returned inline — it is emitted as command_response events on
+   * the character's own stream. The RPC reply carries only success/failure.
+   * Auth: requires a player_session_token matching session_id; ownership
+   * failures collapse to a generic "session not found" in the response body.
    *
    * @generated from rpc holomush.core.v1.CoreService.HandleCommand
    */
@@ -1730,7 +2174,11 @@ export const CoreService: GenService<{
     output: typeof HandleCommandResponseSchema;
   },
   /**
-   * Subscribe opens a stream of events for the session.
+   * Subscribe opens the long-lived server-streaming event feed for a session.
+   * The server (not the client) determines which streams to deliver and the
+   * replay policy via FocusCoordinator.RestoreFocus; it registers the caller's
+   * connection, replays history, then forwards live events. Ownership is
+   * validated up front and collapses to SESSION_NOT_FOUND on any failure.
    *
    * @generated from rpc holomush.core.v1.CoreService.Subscribe
    */
@@ -1740,7 +2188,9 @@ export const CoreService: GenService<{
     output: typeof SubscribeResponseSchema;
   },
   /**
-   * Disconnect ends a session.
+   * Disconnect detaches a connection (or the whole session) and is idempotent:
+   * an already-gone session returns success. It validates ownership first, then
+   * removes the named connection and tears down session state.
    *
    * @generated from rpc holomush.core.v1.CoreService.Disconnect
    */
@@ -1750,7 +2200,9 @@ export const CoreService: GenService<{
     output: typeof DisconnectResponseSchema;
   },
   /**
-   * GetCommandHistory retrieves command history for a session.
+   * GetCommandHistory returns the recent commands recorded for a session (the
+   * per-session ring buffer maintained by sessionStore.AppendCommand). Ownership
+   * is validated; this is distinct from event history (QueryStreamHistory).
    *
    * @generated from rpc holomush.core.v1.CoreService.GetCommandHistory
    */
@@ -1760,7 +2212,10 @@ export const CoreService: GenService<{
     output: typeof GetCommandHistoryResponseSchema;
   },
   /**
-   * Two-phase login: authenticate player credentials.
+   * AuthenticatePlayer is phase one of two-phase login: it verifies username and
+   * password, enforces the per-player session cap, mints a PlayerSession, and
+   * returns the bearer token plus the player's character roster. No game session
+   * exists yet — that requires a follow-up SelectCharacter call.
    *
    * @generated from rpc holomush.core.v1.CoreService.AuthenticatePlayer
    */
@@ -1770,7 +2225,10 @@ export const CoreService: GenService<{
     output: typeof AuthenticatePlayerResponseSchema;
   },
   /**
-   * Two-phase login: select a character, creating or reattaching a game session.
+   * SelectCharacter is phase two of two-phase login: given a valid player session
+   * token, it reattaches an existing detached game session (preserving scrollback)
+   * or creates a fresh one for the chosen character, emitting an arrive event.
+   * The character must belong to the authenticated player.
    *
    * @generated from rpc holomush.core.v1.CoreService.SelectCharacter
    */
@@ -1780,7 +2238,9 @@ export const CoreService: GenService<{
     output: typeof SelectCharacterResponseSchema;
   },
   /**
-   * Create a new player account.
+   * CreatePlayer registers a new player account and immediately returns a player
+   * session token (the new account is logged in). The returned character roster
+   * is empty — a freshly created player has no characters until CreateCharacter.
    *
    * @generated from rpc holomush.core.v1.CoreService.CreatePlayer
    */
@@ -1790,7 +2250,9 @@ export const CoreService: GenService<{
     output: typeof CreatePlayerResponseSchema;
   },
   /**
-   * Create an ephemeral guest player and character.
+   * CreateGuest provisions an ephemeral guest player plus one starter character
+   * and returns a short-lived (guest TTL) player session token. Used by the
+   * "play as guest" entry path; no credentials are required.
    *
    * @generated from rpc holomush.core.v1.CoreService.CreateGuest
    */
@@ -1800,7 +2262,9 @@ export const CoreService: GenService<{
     output: typeof CreateGuestResponseSchema;
   },
   /**
-   * Create a new character for an authenticated player.
+   * CreateCharacter adds a character to the authenticated player's roster. When
+   * a transactor and bindings service are configured, the character row and its
+   * ownership binding are created atomically in one transaction.
    *
    * @generated from rpc holomush.core.v1.CoreService.CreateCharacter
    */
@@ -1810,7 +2274,8 @@ export const CoreService: GenService<{
     output: typeof CreateCharacterResponseSchema;
   },
   /**
-   * List characters for an authenticated player.
+   * ListCharacters returns the authenticated player's character roster enriched
+   * with per-character session status and last-known location.
    *
    * @generated from rpc holomush.core.v1.CoreService.ListCharacters
    */
@@ -1820,7 +2285,9 @@ export const CoreService: GenService<{
     output: typeof ListCharactersResponseSchema;
   },
   /**
-   * Request a password reset (email stubbed).
+   * RequestPasswordReset begins a password-reset flow for the given email. The
+   * reply is ALWAYS success regardless of whether the email exists — this is an
+   * intentional enumeration-prevention measure; delivery is stubbed (logged).
    *
    * @generated from rpc holomush.core.v1.CoreService.RequestPasswordReset
    */
@@ -1830,7 +2297,9 @@ export const CoreService: GenService<{
     output: typeof RequestPasswordResetResponseSchema;
   },
   /**
-   * Confirm a password reset with token.
+   * ConfirmPasswordReset completes the flow by validating the reset token and
+   * setting the new password. Failure messages are sanitized so token/internal
+   * detail does not leak to the client.
    *
    * @generated from rpc holomush.core.v1.CoreService.ConfirmPasswordReset
    */
@@ -1840,7 +2309,10 @@ export const CoreService: GenService<{
     output: typeof ConfirmPasswordResetResponseSchema;
   },
   /**
-   * End a player session.
+   * Logout deletes the caller's PlayerSession and, before doing so, fans out
+   * disconnect + session_ended + delete + hooks to every child game session so
+   * no Subscribe stream is left orphaned. Per-session signals complete before
+   * the PlayerSession row is deleted to avoid ownership-validation flapping.
    *
    * @generated from rpc holomush.core.v1.CoreService.Logout
    */
@@ -1850,7 +2322,10 @@ export const CoreService: GenService<{
     output: typeof LogoutResponseSchema;
   },
   /**
-   * Validate a player session token. Used by web gateway for cookie-based auth checks.
+   * CheckPlayerSession validates a player session token and returns the player
+   * identity plus character roster. Used by the web gateway for cookie-based auth
+   * checks. The failure path returns an Unauthenticated status (not a body flag),
+   * preserving the enumeration-safety contract for unknown/expired sessions.
    *
    * @generated from rpc holomush.core.v1.CoreService.CheckPlayerSession
    */
@@ -1860,10 +2335,11 @@ export const CoreService: GenService<{
     output: typeof CheckPlayerSessionResponseSchema;
   },
   /**
-   * ListPlayerSessions returns the caller's active PlayerSessions
-   * (the rows of player_sessions for the caller's player_id). Tokens
-   * are not returned — only metadata useful for user-visible session
-   * management ("you are signed in on these devices").
+   * ListPlayerSessions returns the caller's active PlayerSessions (the rows in
+   * player_sessions for the caller's player_id). Tokens are never returned —
+   * only metadata useful for user-visible session management ("you are signed
+   * in on these devices"). Any auth failure returns an empty list, so callers
+   * cannot distinguish an invalid token from a player with zero sessions.
    *
    * @generated from rpc holomush.core.v1.CoreService.ListPlayerSessions
    */
@@ -1873,8 +2349,9 @@ export const CoreService: GenService<{
     output: typeof ListPlayerSessionsResponseSchema;
   },
   /**
-   * RevokePlayerSession deletes a specific PlayerSession. Ownership is
-   * verified — a player cannot revoke another player's sessions.
+   * RevokePlayerSession deletes one specific PlayerSession. Ownership is
+   * verified: a player cannot revoke another player's session, and cross-player
+   * attempts collapse to "session not found" (logged WARN for security audit).
    *
    * @generated from rpc holomush.core.v1.CoreService.RevokePlayerSession
    */
@@ -1884,9 +2361,9 @@ export const CoreService: GenService<{
     output: typeof RevokePlayerSessionResponseSchema;
   },
   /**
-   * RevokeOtherPlayerSessions deletes all PlayerSessions for the caller
-   * except the current one. Convenience bulk operation equivalent to
-   * listing and calling RevokePlayerSession for each.
+   * RevokeOtherPlayerSessions deletes all of the caller's PlayerSessions except
+   * the current one. Convenience bulk operation equivalent to listing and calling
+   * RevokePlayerSession for each — useful after a suspected compromise.
    *
    * @generated from rpc holomush.core.v1.CoreService.RevokeOtherPlayerSessions
    */
@@ -1896,10 +2373,12 @@ export const CoreService: GenService<{
     output: typeof RevokeOtherPlayerSessionsResponseSchema;
   },
   /**
-   * QueryStreamHistory reads paginated event history from a stream.
-   * Two-layer authorization: membership gate (I-17) for private streams,
-   * ABAC policy evaluation for public streams.
-   * Pure read — does not mutate session cursors (invariant I-13).
+   * QueryStreamHistory reads paginated event history from a single stream. It is
+   * a pure read that does NOT mutate session cursors (invariant I-13). Two-layer
+   * authorization applies: private streams (character / scene) use a hard
+   * membership gate (I-17, no ABAC, no admin override); public streams (location,
+   * global) are evaluated by the ABAC engine. History transparently spans the
+   * recent JetStream tier and the older PostgreSQL audit tier.
    *
    * @generated from rpc holomush.core.v1.CoreService.QueryStreamHistory
    */
@@ -1909,9 +2388,12 @@ export const CoreService: GenService<{
     output: typeof QueryStreamHistoryResponseSchema;
   },
   /**
-   * ListSessionStreams returns the set of streams the session is currently
-   * subscribed to, derived from focusCoordinator.RestoreFocus. Used by
-   * web clients to enumerate streams for backfill on reload. Pure read.
+   * ListSessionStreams returns the stream names the session is currently
+   * subscribed to, derived from FocusCoordinator.RestoreFocus (with the same
+   * ambient-stream fallback Subscribe uses). Web clients use it to enumerate
+   * streams for backfill on reload. Pure read; ownership-validated and
+   * enumeration-safe (failures collapse to SESSION_NOT_FOUND), closing the IDOR
+   * where one player could enumerate another's subscribed streams.
    *
    * @generated from rpc holomush.core.v1.CoreService.ListSessionStreams
    */
@@ -1921,8 +2403,11 @@ export const CoreService: GenService<{
     output: typeof ListSessionStreamsResponseSchema;
   },
   /**
-   * ListFocusPresence returns the presence snapshot for the session's current
-   * focus context (location or scene). Pure read — no session mutation.
+   * ListFocusPresence returns the current-state presence snapshot for the
+   * session's focus context. It reads session.Store.ListActiveByLocation
+   * directly (NOT event history — see .claude/rules/event-interfaces.md) and is
+   * gated by the ABAC list_presence action on the location resource. Scene-focus
+   * contexts currently return UNIMPLEMENTED. Pure read — no session mutation.
    *
    * @generated from rpc holomush.core.v1.CoreService.ListFocusPresence
    */

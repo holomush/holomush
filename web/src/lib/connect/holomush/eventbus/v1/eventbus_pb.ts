@@ -26,12 +26,18 @@ export const file_holomush_eventbus_v1_eventbus: GenFile = /*@__PURE__*/
  */
 export type Actor = Message<"holomush.eventbus.v1.Actor"> & {
   /**
+   * kind classifies the entity that caused the event; drives downstream audit
+   * routing (e.g. plugin_router.go selects the audit sink by kind).
+   *
    * @generated from field: holomush.eventbus.v1.ActorKind kind = 1;
    */
   kind: ActorKind;
 
   /**
-   * ULID (16 bytes); MUST be set for every ActorKind value.
+   * id is the actor's 16-byte ULID identity, letting downstream audit attribute
+   * the event to a concrete entity. Character and plugin actors carry a real
+   * ULID; system- and unknown-origin events MAY leave it as the zero ULID, in
+   * which case the field is omitted on the wire (see coreActorToEventbusActor).
    *
    * @generated from field: bytes id = 2;
    */
@@ -53,34 +59,51 @@ export const ActorSchema: GenMessage<Actor> = /*@__PURE__*/
  */
 export type Event = Message<"holomush.eventbus.v1.Event"> & {
   /**
-   * ULID (16 bytes)
+   * id is the event's 16-byte ULID; it is the identity and JetStream dedup
+   * key (set as Nats-Msg-Id), stable across rebuilds. Ordering is owned by
+   * the JetStream per-stream sequence, not by this ULID's lexical order.
    *
    * @generated from field: bytes id = 1;
    */
   id: Uint8Array;
 
   /**
+   * subject is the NATS dot-delimited routing address for this event, of the
+   * form events.<game_id>.<domain>.<entity-id>[.<facet>...], validated by
+   * NewSubject (must start with "events.").
+   *
    * @generated from field: string subject = 2;
    */
   subject: string;
 
   /**
+   * type is the event-type discriminator, e.g. "say" or "scene.pose"; used
+   * by subscribers to route and render events without decoding the payload.
+   *
    * @generated from field: string type = 3;
    */
   type: string;
 
   /**
+   * timestamp records when the event occurred according to the host clock,
+   * at nanosecond precision.
+   *
    * @generated from field: google.protobuf.Timestamp timestamp = 4;
    */
   timestamp?: Timestamp | undefined;
 
   /**
+   * actor identifies the entity that caused the event; host-stamped and
+   * never directly settable by plugins.
+   *
    * @generated from field: holomush.eventbus.v1.Actor actor = 5;
    */
   actor?: Actor | undefined;
 
   /**
-   * codec.Encode output
+   * payload is the codec.Encode output for the event body; opaque at the
+   * envelope layer and decoded by subscribers according to the codec/version
+   * metadata carried in the JetStream message headers.
    *
    * @generated from field: bytes payload = 6;
    */
@@ -110,26 +133,43 @@ export const EventSchema: GenMessage<Event> = /*@__PURE__*/
  */
 export enum ActorKind {
   /**
+   * ACTOR_KIND_UNSPECIFIED is the zero value; a well-formed envelope never
+   * carries it — emitters MUST set a concrete kind.
+   *
    * @generated from enum value: ACTOR_KIND_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
+   * ACTOR_KIND_CHARACTER marks an event caused by an in-game character action.
+   *
    * @generated from enum value: ACTOR_KIND_CHARACTER = 1;
    */
   CHARACTER = 1,
 
   /**
+   * ACTOR_KIND_PLAYER attributes an event to a human player account rather than
+   * a character. It is a recognized wire/audit value preserved across
+   * serialization and history round-trips, but no current emit path produces
+   * it: host and plugin emits resolve only to CHARACTER, SYSTEM, or PLUGIN
+   * (see validateResolvedActor / bridgeActorKind in event_emitter.go).
+   *
    * @generated from enum value: ACTOR_KIND_PLAYER = 2;
    */
   PLAYER = 2,
 
   /**
+   * ACTOR_KIND_SYSTEM marks an event the host itself originated (internal
+   * infrastructure, not a character or plugin).
+   *
    * @generated from enum value: ACTOR_KIND_SYSTEM = 3;
    */
   SYSTEM = 3,
 
   /**
+   * ACTOR_KIND_PLUGIN marks an event a plugin emitted; gated by the
+   * manifest's actor_kinds_claimable list at event_emitter.go::Emit.
+   *
    * @generated from enum value: ACTOR_KIND_PLUGIN = 4;
    */
   PLUGIN = 4,

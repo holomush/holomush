@@ -19,70 +19,107 @@ export const file_holomush_scene_v1_scene: GenFile = /*@__PURE__*/
   fileDesc("Ch1ob2xvbXVzaC9zY2VuZS92MS9zY2VuZS5wcm90bxIRaG9sb211c2guc2NlbmUudjEi3gIKCVNjZW5lSW5mbxIKCgJpZBgBIAEoCRINCgV0aXRsZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRITCgtsb2NhdGlvbl9pZBgEIAEoCRIQCghvd25lcl9pZBgFIAEoCRINCgVzdGF0ZRgGIAEoCRIXCg9wb3NlX29yZGVyX21vZGUYByABKAkSGAoQY29udGVudF93YXJuaW5ncxgIIAMoCRIMCgR0YWdzGAkgAygJEhIKCnZpc2liaWxpdHkYCiABKAkSLgoKY3JlYXRlZF9hdBgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZW5kZWRfYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjgKDHBhcnRpY2lwYW50cxgNIAMoCzIiLmhvbG9tdXNoLnNjZW5lLnYxLlBhcnRpY2lwYW50SW5mbyJ8Cg9QYXJ0aWNpcGFudEluZm8SFAoMY2hhcmFjdGVyX2lkGAEgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJEgwKBHJvbGUYAyABKAkSLQoJam9pbmVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJVChFMaXN0U2NlbmVzUmVxdWVzdBIZCgVsaW1pdBgBIAEoBUIKukgHGgUYyAEoABIXCgZvZmZzZXQYAiABKAVCB7pIBBoCKAASDAoEdGFncxgDIAMoCSJCChJMaXN0U2NlbmVzUmVzcG9uc2USLAoGc2NlbmVzGAEgAygLMhwuaG9sb211c2guc2NlbmUudjEuU2NlbmVJbmZvIksKD0dldFNjZW5lUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESGQoIc2NlbmVfaWQYAiABKAlCB7pIBHICEAEiPwoQR2V0U2NlbmVSZXNwb25zZRIrCgVzY2VuZRgBIAEoCzIcLmhvbG9tdXNoLnNjZW5lLnYxLlNjZW5lSW5mbyKkAgoSQ3JlYXRlU2NlbmVSZXF1ZXN0Eh0KDGNoYXJhY3Rlcl9pZBgBIAEoCUIHukgEcgIQARIZCgV0aXRsZRgCIAEoCUIKukgHcgUQARjIARIdCgtkZXNjcmlwdGlvbhgDIAEoCUIIukgFcgMYgCASEwoLbG9jYXRpb25faWQYBCABKAkSKgoKdmlzaWJpbGl0eRgFIAEoCUIWukgTchFSAFIEb3BlblIHcHJpdmF0ZRI4Cg9wb3NlX29yZGVyX21vZGUYBiABKAlCH7pIHHIaUgBSBGZyZWVSBnN0cmljdFIDM3ByUgM1cHISFgoEdGFncxgHIAMoCUIIukgFkgECECASIgoQY29udGVudF93YXJuaW5ncxgIIAMoCUIIukgFkgECECAiQgoTQ3JlYXRlU2NlbmVSZXNwb25zZRIrCgVzY2VuZRgBIAEoCzIcLmhvbG9tdXNoLnNjZW5lLnYxLlNjZW5lSW5mbyJLCg9FbmRTY2VuZVJlcXVlc3QSHQoMY2hhcmFjdGVyX2lkGAEgASgJQge6SARyAhABEhkKCHNjZW5lX2lkGAIgASgJQge6SARyAhABIj8KEEVuZFNjZW5lUmVzcG9uc2USKwoFc2NlbmUYASABKAsyHC5ob2xvbXVzaC5zY2VuZS52MS5TY2VuZUluZm8iTQoRUGF1c2VTY2VuZVJlcXVlc3QSHQoMY2hhcmFjdGVyX2lkGAEgASgJQge6SARyAhABEhkKCHNjZW5lX2lkGAIgASgJQge6SARyAhABIkEKElBhdXNlU2NlbmVSZXNwb25zZRIrCgVzY2VuZRgBIAEoCzIcLmhvbG9tdXNoLnNjZW5lLnYxLlNjZW5lSW5mbyJOChJSZXN1bWVTY2VuZVJlcXVlc3QSHQoMY2hhcmFjdGVyX2lkGAEgASgJQge6SARyAhABEhkKCHNjZW5lX2lkGAIgASgJQge6SARyAhABIkIKE1Jlc3VtZVNjZW5lUmVzcG9uc2USKwoFc2NlbmUYASABKAsyHC5ob2xvbXVzaC5zY2VuZS52MS5TY2VuZUluZm8i7gIKElVwZGF0ZVNjZW5lUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESGQoIc2NlbmVfaWQYAiABKAlCB7pIBHICEAESFwoFdGl0bGUYAyABKAlCCLpIBXIDGMgBEh0KC2Rlc2NyaXB0aW9uGAQgASgJQgi6SAVyAxiAIBIqCgp2aXNpYmlsaXR5GAUgASgJQha6SBNyEVIAUgRvcGVuUgdwcml2YXRlEjgKD3Bvc2Vfb3JkZXJfbW9kZRgGIAEoCUIfukgcchpSAFIEZnJlZVIGc3RyaWN0UgMzcHJSAzVwchITCgtsb2NhdGlvbl9pZBgHIAEoCRIiChBjb250ZW50X3dhcm5pbmdzGAggAygJQgi6SAWSAQIQIBIWCgR0YWdzGAkgAygJQgi6SAWSAQIQIBIvCgt1cGRhdGVfbWFzaxhjIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2siQgoTVXBkYXRlU2NlbmVSZXNwb25zZRIrCgVzY2VuZRgBIAEoCzIcLmhvbG9tdXNoLnNjZW5lLnYxLlNjZW5lSW5mbyJMChBKb2luU2NlbmVSZXF1ZXN0Eh0KDGNoYXJhY3Rlcl9pZBgBIAEoCUIHukgEcgIQARIZCghzY2VuZV9pZBgCIAEoCUIHukgEcgIQASITChFKb2luU2NlbmVSZXNwb25zZSJNChFMZWF2ZVNjZW5lUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESGQoIc2NlbmVfaWQYAiABKAlCB7pIBHICEAEiFAoSTGVhdmVTY2VuZVJlc3BvbnNlInYKFEludml0ZVRvU2NlbmVSZXF1ZXN0Eh0KDGNoYXJhY3Rlcl9pZBgBIAEoCUIHukgEcgIQARIZCghzY2VuZV9pZBgCIAEoCUIHukgEcgIQARIkChN0YXJnZXRfY2hhcmFjdGVyX2lkGAMgASgJQge6SARyAhABIhcKFUludml0ZVRvU2NlbmVSZXNwb25zZSJ2ChRLaWNrRnJvbVNjZW5lUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESGQoIc2NlbmVfaWQYAiABKAlCB7pIBHICEAESJAoTdGFyZ2V0X2NoYXJhY3Rlcl9pZBgDIAEoCUIHukgEcgIQASIXChVLaWNrRnJvbVNjZW5lUmVzcG9uc2UifQoYVHJhbnNmZXJPd25lcnNoaXBSZXF1ZXN0Eh0KDGNoYXJhY3Rlcl9pZBgBIAEoCUIHukgEcgIQARIZCghzY2VuZV9pZBgCIAEoCUIHukgEcgIQARInChZuZXdfb3duZXJfY2hhcmFjdGVyX2lkGAMgASgJQge6SARyAhABIhsKGVRyYW5zZmVyT3duZXJzaGlwUmVzcG9uc2UiYAoWQ2FzdFB1Ymxpc2hWb3RlUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESGQoIc2NlbmVfaWQYAiABKAlCB7pIBHICEAESDAoEdm90ZRgDIAEoCCIZChdDYXN0UHVibGlzaFZvdGVSZXNwb25zZSJPChNHZXRQb3NlT3JkZXJSZXF1ZXN0Eh0KDGNoYXJhY3Rlcl9pZBgBIAEoCUIHukgEcgIQARIZCghzY2VuZV9pZBgCIAEoCUIHukgEcgIQASK3AQoOUG9zZU9yZGVyRW50cnkSFAoMY2hhcmFjdGVyX2lkGAEgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJEhAKCGVsaWdpYmxlGAMgASgIEjEKDWxhc3RfcG9zZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEh0KEHBvc2VzX3NpbmNlX2xhc3QYBSABKA1IAIgBAUITChFfcG9zZXNfc2luY2VfbGFzdCJyChRHZXRQb3NlT3JkZXJSZXNwb25zZRIMCgRtb2RlGAEgASgJEhgKEHRvdGFsX3Bvc2VfY291bnQYAiABKA0SMgoHZW50cmllcxgDIAMoCzIhLmhvbG9tdXNoLnNjZW5lLnYxLlBvc2VPcmRlckVudHJ5IlsKGFN0YXJ0U2NlbmVQdWJsaXNoUmVxdWVzdBIkChNjYWxsZXJfY2hhcmFjdGVyX2lkGAEgASgJQge6SARyAhABEhkKCHNjZW5lX2lkGAIgASgJQge6SARyAhABIk8KGVN0YXJ0U2NlbmVQdWJsaXNoUmVzcG9uc2USGgoScHVibGlzaGVkX3NjZW5lX2lkGAEgASgJEhYKDmF0dGVtcHRfbnVtYmVyGAIgASgFInYKG0Nhc3RQdWJsaXNoU2NlbmVWb3RlUmVxdWVzdBIkChNjYWxsZXJfY2hhcmFjdGVyX2lkGAEgASgJQge6SARyAhABEiMKEnB1Ymxpc2hlZF9zY2VuZV9pZBgCIAEoCUIHukgEcgIQARIMCgR2b3RlGAMgASgIIjEKHENhc3RQdWJsaXNoU2NlbmVWb3RlUmVzcG9uc2USEQoJaXNfY2hhbmdlGAEgASgIImgKG1dpdGhkcmF3U2NlbmVQdWJsaXNoUmVxdWVzdBIkChNjYWxsZXJfY2hhcmFjdGVyX2lkGAEgASgJQge6SARyAhABEiMKEnB1Ymxpc2hlZF9zY2VuZV9pZBgCIAEoCUIHukgEcgIQASIeChxXaXRoZHJhd1NjZW5lUHVibGlzaFJlc3BvbnNlIkUKE1B1Ymxpc2hlZFNjZW5lRW50cnkSDwoHc3BlYWtlchgBIAEoCRIMCgRraW5kGAIgASgJEg8KB2NvbnRlbnQYAyABKAkiRQoZUHVibGlzaGVkU2NlbmVWb3RlU3VtbWFyeRILCgN5ZXMYASABKAUSCgoCbm8YAiABKAUSDwoHcGVuZGluZxgDIAEoBSJlChhHZXRQdWJsaXNoZWRTY2VuZVJlcXVlc3QSJAoTY2FsbGVyX2NoYXJhY3Rlcl9pZBgBIAEoCUIHukgEcgIQARIjChJwdWJsaXNoZWRfc2NlbmVfaWQYAiABKAlCB7pIBHICEAEiqwMKGUdldFB1Ymxpc2hlZFNjZW5lUmVzcG9uc2USCgoCaWQYASABKAkSEAoIc2NlbmVfaWQYAiABKAkSFgoOYXR0ZW1wdF9udW1iZXIYAyABKAUSDgoGc3RhdHVzGAQgASgJEhYKDmZhaWx1cmVfcmVhc29uGAUgASgJEjsKBXRhbGx5GAYgASgLMiwuaG9sb211c2guc2NlbmUudjEuUHVibGlzaGVkU2NlbmVWb3RlU3VtbWFyeRI/Cg9jb250ZW50X2VudHJpZXMYByADKAsyJi5ob2xvbXVzaC5zY2VuZS52MS5QdWJsaXNoZWRTY2VuZUVudHJ5EhYKDnRpdGxlX3NuYXBzaG90GAggASgJEh0KFXBhcnRpY2lwYW50c19zbmFwc2hvdBgJIAMoCRIcChRpbml0aWF0ZWRfYXRfdW5peF9ucxgKIAEoAxIiChpjb29sb2ZmX3N0YXJ0ZWRfYXRfdW5peF9ucxgLIAEoAxIbChNyZXNvbHZlZF9hdF91bml4X25zGAwgASgDEhwKFHB1Ymxpc2hlZF9hdF91bml4X25zGA0gASgDIoMBCh1Eb3dubG9hZFB1Ymxpc2hlZFNjZW5lUmVxdWVzdBIkChNjYWxsZXJfY2hhcmFjdGVyX2lkGAEgASgJQge6SARyAhABEiMKEnB1Ymxpc2hlZF9zY2VuZV9pZBgCIAEoCUIHukgEcgIQARIXCgZmb3JtYXQYAyABKAlCB7pIBHICEAEiRAoeRG93bmxvYWRQdWJsaXNoZWRTY2VuZVJlc3BvbnNlEg8KB2NvbnRlbnQYASABKAwSEQoJbWltZV90eXBlGAIgASgJImIKH0xpc3RTY2VuZVB1Ymxpc2hBdHRlbXB0c1JlcXVlc3QSJAoTY2FsbGVyX2NoYXJhY3Rlcl9pZBgBIAEoCUIHukgEcgIQARIZCghzY2VuZV9pZBgCIAEoCUIHukgEcgIQASJeCiBMaXN0U2NlbmVQdWJsaXNoQXR0ZW1wdHNSZXNwb25zZRI6CghhdHRlbXB0cxgBIAMoCzIoLmhvbG9tdXNoLnNjZW5lLnYxLlB1Ymxpc2hlZFNjZW5lU3VtbWFyeSKeAQoVUHVibGlzaGVkU2NlbmVTdW1tYXJ5EgoKAmlkGAEgASgJEhYKDmF0dGVtcHRfbnVtYmVyGAIgASgFEg4KBnN0YXR1cxgDIAEoCRIWCg5mYWlsdXJlX3JlYXNvbhgEIAEoCRIcChRpbml0aWF0ZWRfYXRfdW5peF9ucxgFIAEoAxIbChNyZXNvbHZlZF9hdF91bml4X25zGAYgASgDIkMKHEdldFB1YmxpY1NjZW5lQXJjaGl2ZVJlcXVlc3QSIwoScHVibGlzaGVkX3NjZW5lX2lkGAEgASgJQge6SARyAhABIsEBCh1HZXRQdWJsaWNTY2VuZUFyY2hpdmVSZXNwb25zZRIKCgJpZBgBIAEoCRIWCg50aXRsZV9zbmFwc2hvdBgCIAEoCRIdChVwYXJ0aWNpcGFudHNfc25hcHNob3QYAyADKAkSPwoPY29udGVudF9lbnRyaWVzGAQgAygLMiYuaG9sb211c2guc2NlbmUudjEuUHVibGlzaGVkU2NlbmVFbnRyeRIcChRwdWJsaXNoZWRfYXRfdW5peF9ucxgFIAEoAyJhCiFEb3dubG9hZFB1YmxpY1NjZW5lQXJjaGl2ZVJlcXVlc3QSIwoScHVibGlzaGVkX3NjZW5lX2lkGAEgASgJQge6SARyAhABEhcKBmZvcm1hdBgCIAEoCUIHukgEcgIQASJICiJEb3dubG9hZFB1YmxpY1NjZW5lQXJjaGl2ZVJlc3BvbnNlEg8KB2NvbnRlbnQYASABKAwSEQoJbWltZV90eXBlGAIgASgJIoUBCiVFeHRlbmRTY2VuZVB1Ymxpc2hWb3RlQXR0ZW1wdHNSZXF1ZXN0EiQKE2NhbGxlcl9jaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESGQoIc2NlbmVfaWQYAiABKAlCB7pIBHICEAESGwoKYWRkaXRpb25hbBgDIAEoBUIHukgEGgIgACI5CiZFeHRlbmRTY2VuZVB1Ymxpc2hWb3RlQXR0ZW1wdHNSZXNwb25zZRIPCgduZXdfbWF4GAEgASgFIrcBChhTY2VuZVB1Ymxpc2hTdGFydGVkRXZlbnQSEgoKYXR0ZW1wdF9pZBgBIAEoCRIWCg5hdHRlbXB0X251bWJlchgCIAEoBRIUCgxpbml0aWF0ZWRfYnkYAyABKAkSGwoTdm90ZV93aW5kb3dfc2Vjb25kcxgEIAEoAxIeChZjb29sb2ZmX3dpbmRvd19zZWNvbmRzGAUgASgDEhwKFHJvc3Rlcl9jaGFyYWN0ZXJfaWRzGAYgAygJImYKGVNjZW5lUHVibGlzaFZvdGVDYXN0RXZlbnQSEgoKYXR0ZW1wdF9pZBgBIAEoCRIUCgxjaGFyYWN0ZXJfaWQYAiABKAkSDAoEdm90ZRgDIAEoCBIRCglpc19jaGFuZ2UYBCABKAgiVgofU2NlbmVQdWJsaXNoQ29vbE9mZlN0YXJ0ZWRFdmVudBISCgphdHRlbXB0X2lkGAEgASgJEh8KF2Nvb2xvZmZfZW5kc19hdF91bml4X25zGAIgASgDIpQBChlTY2VuZVB1Ymxpc2hSZXNvbHZlZEV2ZW50EhIKCmF0dGVtcHRfaWQYASABKAkSDwoHb3V0Y29tZRgCIAEoCRIWCg5mYWlsdXJlX3JlYXNvbhgDIAEoCRIRCgl0YWxseV95ZXMYBCABKAUSEAoIdGFsbHlfbm8YBSABKAUSFQoNdGFsbHlfcGVuZGluZxgGIAEoBSJGChpTY2VuZVB1Ymxpc2hXaXRoZHJhd25FdmVudBISCgphdHRlbXB0X2lkGAEgASgJEhQKDHdpdGhkcmF3bl9ieRgCIAEoCSJwCiVTY2VuZVB1Ymxpc2hWb3RlQXR0ZW1wdHNFeHRlbmRlZEV2ZW50EhAKCHNjZW5lX2lkGAEgASgJEhIKCmFkZGl0aW9uYWwYAiABKAUSDwoHbmV3X21heBgDIAEoBRIQCghhZG1pbl9pZBgEIAEoCTK1EwoMU2NlbmVTZXJ2aWNlElkKCkxpc3RTY2VuZXMSJC5ob2xvbXVzaC5zY2VuZS52MS5MaXN0U2NlbmVzUmVxdWVzdBolLmhvbG9tdXNoLnNjZW5lLnYxLkxpc3RTY2VuZXNSZXNwb25zZRJTCghHZXRTY2VuZRIiLmhvbG9tdXNoLnNjZW5lLnYxLkdldFNjZW5lUmVxdWVzdBojLmhvbG9tdXNoLnNjZW5lLnYxLkdldFNjZW5lUmVzcG9uc2USXAoLQ3JlYXRlU2NlbmUSJS5ob2xvbXVzaC5zY2VuZS52MS5DcmVhdGVTY2VuZVJlcXVlc3QaJi5ob2xvbXVzaC5zY2VuZS52MS5DcmVhdGVTY2VuZVJlc3BvbnNlElMKCEVuZFNjZW5lEiIuaG9sb211c2guc2NlbmUudjEuRW5kU2NlbmVSZXF1ZXN0GiMuaG9sb211c2guc2NlbmUudjEuRW5kU2NlbmVSZXNwb25zZRJZCgpQYXVzZVNjZW5lEiQuaG9sb211c2guc2NlbmUudjEuUGF1c2VTY2VuZVJlcXVlc3QaJS5ob2xvbXVzaC5zY2VuZS52MS5QYXVzZVNjZW5lUmVzcG9uc2USXAoLUmVzdW1lU2NlbmUSJS5ob2xvbXVzaC5zY2VuZS52MS5SZXN1bWVTY2VuZVJlcXVlc3QaJi5ob2xvbXVzaC5zY2VuZS52MS5SZXN1bWVTY2VuZVJlc3BvbnNlElwKC1VwZGF0ZVNjZW5lEiUuaG9sb211c2guc2NlbmUudjEuVXBkYXRlU2NlbmVSZXF1ZXN0GiYuaG9sb211c2guc2NlbmUudjEuVXBkYXRlU2NlbmVSZXNwb25zZRJWCglKb2luU2NlbmUSIy5ob2xvbXVzaC5zY2VuZS52MS5Kb2luU2NlbmVSZXF1ZXN0GiQuaG9sb211c2guc2NlbmUudjEuSm9pblNjZW5lUmVzcG9uc2USWQoKTGVhdmVTY2VuZRIkLmhvbG9tdXNoLnNjZW5lLnYxLkxlYXZlU2NlbmVSZXF1ZXN0GiUuaG9sb211c2guc2NlbmUudjEuTGVhdmVTY2VuZVJlc3BvbnNlEmIKDUludml0ZVRvU2NlbmUSJy5ob2xvbXVzaC5zY2VuZS52MS5JbnZpdGVUb1NjZW5lUmVxdWVzdBooLmhvbG9tdXNoLnNjZW5lLnYxLkludml0ZVRvU2NlbmVSZXNwb25zZRJiCg1LaWNrRnJvbVNjZW5lEicuaG9sb211c2guc2NlbmUudjEuS2lja0Zyb21TY2VuZVJlcXVlc3QaKC5ob2xvbXVzaC5zY2VuZS52MS5LaWNrRnJvbVNjZW5lUmVzcG9uc2USbgoRVHJhbnNmZXJPd25lcnNoaXASKy5ob2xvbXVzaC5zY2VuZS52MS5UcmFuc2Zlck93bmVyc2hpcFJlcXVlc3QaLC5ob2xvbXVzaC5zY2VuZS52MS5UcmFuc2Zlck93bmVyc2hpcFJlc3BvbnNlEmgKD0Nhc3RQdWJsaXNoVm90ZRIpLmhvbG9tdXNoLnNjZW5lLnYxLkNhc3RQdWJsaXNoVm90ZVJlcXVlc3QaKi5ob2xvbXVzaC5zY2VuZS52MS5DYXN0UHVibGlzaFZvdGVSZXNwb25zZRJfCgxHZXRQb3NlT3JkZXISJi5ob2xvbXVzaC5zY2VuZS52MS5HZXRQb3NlT3JkZXJSZXF1ZXN0GicuaG9sb211c2guc2NlbmUudjEuR2V0UG9zZU9yZGVyUmVzcG9uc2USbgoRU3RhcnRTY2VuZVB1Ymxpc2gSKy5ob2xvbXVzaC5zY2VuZS52MS5TdGFydFNjZW5lUHVibGlzaFJlcXVlc3QaLC5ob2xvbXVzaC5zY2VuZS52MS5TdGFydFNjZW5lUHVibGlzaFJlc3BvbnNlEncKFENhc3RQdWJsaXNoU2NlbmVWb3RlEi4uaG9sb211c2guc2NlbmUudjEuQ2FzdFB1Ymxpc2hTY2VuZVZvdGVSZXF1ZXN0Gi8uaG9sb211c2guc2NlbmUudjEuQ2FzdFB1Ymxpc2hTY2VuZVZvdGVSZXNwb25zZRJ3ChRXaXRoZHJhd1NjZW5lUHVibGlzaBIuLmhvbG9tdXNoLnNjZW5lLnYxLldpdGhkcmF3U2NlbmVQdWJsaXNoUmVxdWVzdBovLmhvbG9tdXNoLnNjZW5lLnYxLldpdGhkcmF3U2NlbmVQdWJsaXNoUmVzcG9uc2USbgoRR2V0UHVibGlzaGVkU2NlbmUSKy5ob2xvbXVzaC5zY2VuZS52MS5HZXRQdWJsaXNoZWRTY2VuZVJlcXVlc3QaLC5ob2xvbXVzaC5zY2VuZS52MS5HZXRQdWJsaXNoZWRTY2VuZVJlc3BvbnNlEn0KFkRvd25sb2FkUHVibGlzaGVkU2NlbmUSMC5ob2xvbXVzaC5zY2VuZS52MS5Eb3dubG9hZFB1Ymxpc2hlZFNjZW5lUmVxdWVzdBoxLmhvbG9tdXNoLnNjZW5lLnYxLkRvd25sb2FkUHVibGlzaGVkU2NlbmVSZXNwb25zZRKDAQoYTGlzdFNjZW5lUHVibGlzaEF0dGVtcHRzEjIuaG9sb211c2guc2NlbmUudjEuTGlzdFNjZW5lUHVibGlzaEF0dGVtcHRzUmVxdWVzdBozLmhvbG9tdXNoLnNjZW5lLnYxLkxpc3RTY2VuZVB1Ymxpc2hBdHRlbXB0c1Jlc3BvbnNlEnoKFUdldFB1YmxpY1NjZW5lQXJjaGl2ZRIvLmhvbG9tdXNoLnNjZW5lLnYxLkdldFB1YmxpY1NjZW5lQXJjaGl2ZVJlcXVlc3QaMC5ob2xvbXVzaC5zY2VuZS52MS5HZXRQdWJsaWNTY2VuZUFyY2hpdmVSZXNwb25zZRKJAQoaRG93bmxvYWRQdWJsaWNTY2VuZUFyY2hpdmUSNC5ob2xvbXVzaC5zY2VuZS52MS5Eb3dubG9hZFB1YmxpY1NjZW5lQXJjaGl2ZVJlcXVlc3QaNS5ob2xvbXVzaC5zY2VuZS52MS5Eb3dubG9hZFB1YmxpY1NjZW5lQXJjaGl2ZVJlc3BvbnNlEpUBCh5FeHRlbmRTY2VuZVB1Ymxpc2hWb3RlQXR0ZW1wdHMSOC5ob2xvbXVzaC5zY2VuZS52MS5FeHRlbmRTY2VuZVB1Ymxpc2hWb3RlQXR0ZW1wdHNSZXF1ZXN0GjkuaG9sb211c2guc2NlbmUudjEuRXh0ZW5kU2NlbmVQdWJsaXNoVm90ZUF0dGVtcHRzUmVzcG9uc2VCQlpAZ2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvc2NlbmUvdjE7c2NlbmV2MWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_field_mask, file_google_protobuf_timestamp]);
 
 /**
+ * SceneInfo is the wire projection of a scene row plus its roster, returned by
+ * the read and lifecycle RPCs (rowToProto in service.go). The state,
+ * pose_order_mode, and visibility fields are the plugin's lowercase string
+ * enums, not proto enums.
+ *
  * @generated from message holomush.scene.v1.SceneInfo
  */
 export type SceneInfo = Message<"holomush.scene.v1.SceneInfo"> & {
   /**
+   * Scene primary key ("scene-<ULID>"), stable for the scene's lifetime.
+   *
    * @generated from field: string id = 1;
    */
   id: string;
 
   /**
+   * Human-facing scene name; trimmed of surrounding whitespace at creation.
+   *
    * @generated from field: string title = 2;
    */
   title: string;
 
   /**
+   * Optional free-text scene synopsis (up to 4096 chars).
+   *
    * @generated from field: string description = 3;
    */
   description: string;
 
   /**
+   * Optional world location the scene is anchored to; empty when unanchored.
+   *
    * @generated from field: string location_id = 4;
    */
   locationId: string;
 
   /**
+   * Character ID of the current owner — the sole authority for end/pause/
+   * resume/update/invite/kick and the only member who cannot leave.
+   *
    * @generated from field: string owner_id = 5;
    */
   ownerId: string;
 
   /**
+   * Lifecycle state: one of "active", "paused", "ended", or "archived" (see
+   * SceneState in types.go). Transitions are forward-only.
+   *
    * @generated from field: string state = 6;
    */
   state: string;
 
   /**
+   * Pose-order discipline: one of "free", "strict", "3pr", or "5pr" (see
+   * PoseOrderMode in types.go); governs GetPoseOrder eligibility computation.
+   *
    * @generated from field: string pose_order_mode = 7;
    */
   poseOrderMode: string;
 
   /**
+   * Operator-facing content advisories for the scene (max 32 entries).
+   *
    * @generated from field: repeated string content_warnings = 8;
    */
   contentWarnings: string[];
 
   /**
+   * Discovery/categorization tags (max 32 entries).
+   *
    * @generated from field: repeated string tags = 9;
    */
   tags: string[];
 
   /**
+   * Discoverability mode: "open" (listed, any character may join) or "private"
+   * (unlisted, invitation required). See SceneVisibility in types.go.
+   *
    * @generated from field: string visibility = 10;
    */
   visibility: string;
 
   /**
+   * Wall-clock creation time. For CreateScene responses this is the host clock
+   * at create; for GetScene it is the persisted row timestamp.
+   *
    * @generated from field: google.protobuf.Timestamp created_at = 11;
    */
   createdAt?: Timestamp | undefined;
 
   /**
+   * Set only once the scene has reached the ended state; otherwise unset.
+   *
    * @generated from field: google.protobuf.Timestamp ended_at = 12;
    */
   endedAt?: Timestamp | undefined;
 
   /**
+   * The current participant roster (owners and members; invited rows are not
+   * surfaced as participants here).
+   *
    * @generated from field: repeated holomush.scene.v1.ParticipantInfo participants = 13;
    */
   participants: ParticipantInfo[];
@@ -96,25 +133,40 @@ export const SceneInfoSchema: GenMessage<SceneInfo> = /*@__PURE__*/
   messageDesc(file_holomush_scene_v1_scene, 0);
 
 /**
+ * ParticipantInfo is one entry in a scene's roster — a character's relationship
+ * to the scene at read time.
+ *
  * @generated from message holomush.scene.v1.ParticipantInfo
  */
 export type ParticipantInfo = Message<"holomush.scene.v1.ParticipantInfo"> & {
   /**
+   * Character ID of the participant.
+   *
    * @generated from field: string character_id = 1;
    */
   characterId: string;
 
   /**
+   * Display name of the character (best-effort; falls back to the ID when no
+   * name resolver is wired).
+   *
    * @generated from field: string character_name = 2;
    */
   characterName: string;
 
   /**
+   * Participant role: "owner", "member", or the transient "invited" (the
+   * last exists only on private scenes and is promoted to member on join). See
+   * ParticipantRole in participants.go.
+   *
    * @generated from field: string role = 3;
    */
   role: string;
 
   /**
+   * When the participant joined (for invited rows, when the invitation was
+   * recorded; reset to join time on promotion).
+   *
    * @generated from field: google.protobuf.Timestamp joined_at = 4;
    */
   joinedAt?: Timestamp | undefined;
@@ -128,20 +180,30 @@ export const ParticipantInfoSchema: GenMessage<ParticipantInfo> = /*@__PURE__*/
   messageDesc(file_holomush_scene_v1_scene, 1);
 
 /**
+ * ListScenesRequest is the (currently unserved) scene-discovery query. Its
+ * fields describe the intended pagination + tag-filter contract for the planned
+ * ListScenes RPC.
+ *
  * @generated from message holomush.scene.v1.ListScenesRequest
  */
 export type ListScenesRequest = Message<"holomush.scene.v1.ListScenesRequest"> & {
   /**
+   * Maximum scenes to return; 0 means server default, capped at 200.
+   *
    * @generated from field: int32 limit = 1;
    */
   limit: number;
 
   /**
+   * Number of leading results to skip for pagination.
+   *
    * @generated from field: int32 offset = 2;
    */
   offset: number;
 
   /**
+   * Restrict results to scenes carrying all of these tags.
+   *
    * @generated from field: repeated string tags = 3;
    */
   tags: string[];
@@ -155,10 +217,14 @@ export const ListScenesRequestSchema: GenMessage<ListScenesRequest> = /*@__PURE_
   messageDesc(file_holomush_scene_v1_scene, 2);
 
 /**
+ * ListScenesResponse is the (currently unserved) scene-discovery result page.
+ *
  * @generated from message holomush.scene.v1.ListScenesResponse
  */
 export type ListScenesResponse = Message<"holomush.scene.v1.ListScenesResponse"> & {
   /**
+   * The matching scenes for this page.
+   *
    * @generated from field: repeated holomush.scene.v1.SceneInfo scenes = 1;
    */
   scenes: SceneInfo[];
@@ -172,15 +238,22 @@ export const ListScenesResponseSchema: GenMessage<ListScenesResponse> = /*@__PUR
   messageDesc(file_holomush_scene_v1_scene, 3);
 
 /**
+ * GetSceneRequest identifies the scene to read and the character reading it
+ * (the latter scoping the host's ABAC read policy).
+ *
  * @generated from message holomush.scene.v1.GetSceneRequest
  */
 export type GetSceneRequest = Message<"holomush.scene.v1.GetSceneRequest"> & {
   /**
+   * The reading character's ID; required.
+   *
    * @generated from field: string character_id = 1;
    */
   characterId: string;
 
   /**
+   * The scene to load; required.
+   *
    * @generated from field: string scene_id = 2;
    */
   sceneId: string;
@@ -194,10 +267,14 @@ export const GetSceneRequestSchema: GenMessage<GetSceneRequest> = /*@__PURE__*/
   messageDesc(file_holomush_scene_v1_scene, 4);
 
 /**
+ * GetSceneResponse carries the requested scene's full projection.
+ *
  * @generated from message holomush.scene.v1.GetSceneResponse
  */
 export type GetSceneResponse = Message<"holomush.scene.v1.GetSceneResponse"> & {
   /**
+   * The loaded scene; unset is never returned (a miss is codes.NotFound).
+   *
    * @generated from field: holomush.scene.v1.SceneInfo scene = 1;
    */
   scene?: SceneInfo | undefined;
@@ -211,45 +288,68 @@ export const GetSceneResponseSchema: GenMessage<GetSceneResponse> = /*@__PURE__*
   messageDesc(file_holomush_scene_v1_scene, 5);
 
 /**
+ * CreateSceneRequest is the new-scene definition. The calling character becomes
+ * the owner. Empty visibility/pose-order default to "open"/"free" at the
+ * handler; whitespace-only titles are rejected after trimming.
+ *
  * @generated from message holomush.scene.v1.CreateSceneRequest
  */
 export type CreateSceneRequest = Message<"holomush.scene.v1.CreateSceneRequest"> & {
   /**
+   * The creating character, who becomes the scene owner; required.
+   *
    * @generated from field: string character_id = 1;
    */
   characterId: string;
 
   /**
+   * Scene title; required, 1-200 chars (whitespace-only also rejected by the
+   * handler's post-trim check).
+   *
    * @generated from field: string title = 2;
    */
   title: string;
 
   /**
+   * Optional synopsis, up to 4096 chars.
+   *
    * @generated from field: string description = 3;
    */
   description: string;
 
   /**
+   * Optional world location to anchor the scene to.
+   *
    * @generated from field: string location_id = 4;
    */
   locationId: string;
 
   /**
+   * Discoverability mode; empty selects the "open" default. Constrained to
+   * ""|"open"|"private".
+   *
    * @generated from field: string visibility = 5;
    */
   visibility: string;
 
   /**
+   * Pose-order discipline; empty selects the "free" default. Constrained to
+   * ""|"free"|"strict"|"3pr"|"5pr".
+   *
    * @generated from field: string pose_order_mode = 6;
    */
   poseOrderMode: string;
 
   /**
+   * Discovery tags, max 32.
+   *
    * @generated from field: repeated string tags = 7;
    */
   tags: string[];
 
   /**
+   * Content advisories, max 32.
+   *
    * @generated from field: repeated string content_warnings = 8;
    */
   contentWarnings: string[];
@@ -263,10 +363,14 @@ export const CreateSceneRequestSchema: GenMessage<CreateSceneRequest> = /*@__PUR
   messageDesc(file_holomush_scene_v1_scene, 6);
 
 /**
+ * CreateSceneResponse carries the freshly created scene (active, owner seeded).
+ *
  * @generated from message holomush.scene.v1.CreateSceneResponse
  */
 export type CreateSceneResponse = Message<"holomush.scene.v1.CreateSceneResponse"> & {
   /**
+   * The new scene's projection.
+   *
    * @generated from field: holomush.scene.v1.SceneInfo scene = 1;
    */
   scene?: SceneInfo | undefined;
@@ -280,15 +384,22 @@ export const CreateSceneResponseSchema: GenMessage<CreateSceneResponse> = /*@__P
   messageDesc(file_holomush_scene_v1_scene, 7);
 
 /**
+ * EndSceneRequest identifies the scene to end and the acting character (the
+ * owner, per the ABAC end-own-scene policy).
+ *
  * @generated from message holomush.scene.v1.EndSceneRequest
  */
 export type EndSceneRequest = Message<"holomush.scene.v1.EndSceneRequest"> & {
   /**
+   * The acting character's ID; required.
+   *
    * @generated from field: string character_id = 1;
    */
   characterId: string;
 
   /**
+   * The scene to end; required.
+   *
    * @generated from field: string scene_id = 2;
    */
   sceneId: string;
@@ -302,10 +413,14 @@ export const EndSceneRequestSchema: GenMessage<EndSceneRequest> = /*@__PURE__*/
   messageDesc(file_holomush_scene_v1_scene, 8);
 
 /**
+ * EndSceneResponse carries the scene as of the ended transition.
+ *
  * @generated from message holomush.scene.v1.EndSceneResponse
  */
 export type EndSceneResponse = Message<"holomush.scene.v1.EndSceneResponse"> & {
   /**
+   * The post-transition scene row (state == "ended").
+   *
    * @generated from field: holomush.scene.v1.SceneInfo scene = 1;
    */
   scene?: SceneInfo | undefined;
@@ -319,15 +434,21 @@ export const EndSceneResponseSchema: GenMessage<EndSceneResponse> = /*@__PURE__*
   messageDesc(file_holomush_scene_v1_scene, 9);
 
 /**
+ * PauseSceneRequest identifies the scene to pause and the acting owner.
+ *
  * @generated from message holomush.scene.v1.PauseSceneRequest
  */
 export type PauseSceneRequest = Message<"holomush.scene.v1.PauseSceneRequest"> & {
   /**
+   * The acting character's ID; required.
+   *
    * @generated from field: string character_id = 1;
    */
   characterId: string;
 
   /**
+   * The scene to pause; required.
+   *
    * @generated from field: string scene_id = 2;
    */
   sceneId: string;
@@ -341,10 +462,14 @@ export const PauseSceneRequestSchema: GenMessage<PauseSceneRequest> = /*@__PURE_
   messageDesc(file_holomush_scene_v1_scene, 10);
 
 /**
+ * PauseSceneResponse carries the scene as of the paused transition.
+ *
  * @generated from message holomush.scene.v1.PauseSceneResponse
  */
 export type PauseSceneResponse = Message<"holomush.scene.v1.PauseSceneResponse"> & {
   /**
+   * The post-transition scene row (state == "paused").
+   *
    * @generated from field: holomush.scene.v1.SceneInfo scene = 1;
    */
   scene?: SceneInfo | undefined;
@@ -358,15 +483,21 @@ export const PauseSceneResponseSchema: GenMessage<PauseSceneResponse> = /*@__PUR
   messageDesc(file_holomush_scene_v1_scene, 11);
 
 /**
+ * ResumeSceneRequest identifies the scene to resume and the acting owner.
+ *
  * @generated from message holomush.scene.v1.ResumeSceneRequest
  */
 export type ResumeSceneRequest = Message<"holomush.scene.v1.ResumeSceneRequest"> & {
   /**
+   * The acting character's ID; required.
+   *
    * @generated from field: string character_id = 1;
    */
   characterId: string;
 
   /**
+   * The scene to resume; required.
+   *
    * @generated from field: string scene_id = 2;
    */
   sceneId: string;
@@ -380,10 +511,14 @@ export const ResumeSceneRequestSchema: GenMessage<ResumeSceneRequest> = /*@__PUR
   messageDesc(file_holomush_scene_v1_scene, 12);
 
 /**
+ * ResumeSceneResponse carries the scene as of the resumed transition.
+ *
  * @generated from message holomush.scene.v1.ResumeSceneResponse
  */
 export type ResumeSceneResponse = Message<"holomush.scene.v1.ResumeSceneResponse"> & {
   /**
+   * The post-transition scene row (state == "active").
+   *
    * @generated from field: holomush.scene.v1.SceneInfo scene = 1;
    */
   scene?: SceneInfo | undefined;
@@ -397,18 +532,18 @@ export const ResumeSceneResponseSchema: GenMessage<ResumeSceneResponse> = /*@__P
   messageDesc(file_holomush_scene_v1_scene, 13);
 
 /**
- * UpdateSceneRequest uses google.protobuf.FieldMask as the canonical proto3
- * pattern for partial updates (per Google AIP-134). The mask is the single
- * source of truth for "which fields to apply" — fields listed in the mask
- * are updated to the value in the request (even if that value is empty/zero);
- * fields not in the mask are left unchanged.
+ * UpdateSceneRequest applies a partial update to mutable scene metadata using
+ * google.protobuf.FieldMask as the canonical proto3 partial-update pattern (per
+ * Google AIP-134). The mask is the single source of truth for "which fields to
+ * apply" — fields listed in the mask are updated to the request value (even if
+ * empty/zero); fields not in the mask are left unchanged.
  *
  * Per-field constraint semantics:
  * - max_len limits apply to all string fields regardless of mask membership
  * - min_len IS NOT used at the proto layer because the mask gates whether
  *   the field is applied; per-field semantic validation (e.g. "title cannot
  *   be empty when in the mask") happens in the service handler's mask-iteration
- *   switch statement
+ *   switch statement (buildSceneUpdate in service.go)
  * - enum-style fields use `in:` constraints that include the empty string
  *   so that "field not set" doesn't trip the validator
  *
@@ -416,51 +551,78 @@ export const ResumeSceneResponseSchema: GenMessage<ResumeSceneResponse> = /*@__P
  */
 export type UpdateSceneRequest = Message<"holomush.scene.v1.UpdateSceneRequest"> & {
   /**
+   * The acting owner's ID; required.
+   *
    * @generated from field: string character_id = 1;
    */
   characterId: string;
 
   /**
+   * The scene to update; required.
+   *
    * @generated from field: string scene_id = 2;
    */
   sceneId: string;
 
   /**
+   * New title (applied only when "title" is in the mask; whitespace-only is
+   * rejected by the handler). Max 200 chars.
+   *
    * @generated from field: string title = 3;
    */
   title: string;
 
   /**
+   * New description (applied only when "description" is in the mask; empty
+   * clears it). Max 4096 chars.
+   *
    * @generated from field: string description = 4;
    */
   description: string;
 
   /**
+   * New visibility (applied only when "visibility" is in the mask; empty is
+   * rejected by the handler when masked). Constrained to ""|"open"|"private".
+   *
    * @generated from field: string visibility = 5;
    */
   visibility: string;
 
   /**
+   * New pose-order mode (applied only when "pose_order_mode" is in the mask;
+   * empty is rejected when masked). A real change auto-emits a pose-order-
+   * changed IC notice. Constrained to ""|"free"|"strict"|"3pr"|"5pr".
+   *
    * @generated from field: string pose_order_mode = 6;
    */
   poseOrderMode: string;
 
   /**
+   * New location anchor (applied only when "location_id" is in the mask; empty
+   * clears the anchor).
+   *
    * @generated from field: string location_id = 7;
    */
   locationId: string;
 
   /**
+   * Replacement content warnings (applied only when "content_warnings" is in
+   * the mask). Max 32.
+   *
    * @generated from field: repeated string content_warnings = 8;
    */
   contentWarnings: string[];
 
   /**
+   * Replacement tags (applied only when "tags" is in the mask). Max 32.
+   *
    * @generated from field: repeated string tags = 9;
    */
   tags: string[];
 
   /**
+   * The set of field paths to apply. An empty mask is a no-op success.
+   *
    * @generated from field: google.protobuf.FieldMask update_mask = 99;
    */
   updateMask?: FieldMask | undefined;
@@ -474,10 +636,14 @@ export const UpdateSceneRequestSchema: GenMessage<UpdateSceneRequest> = /*@__PUR
   messageDesc(file_holomush_scene_v1_scene, 14);
 
 /**
+ * UpdateSceneResponse carries the scene after the partial update.
+ *
  * @generated from message holomush.scene.v1.UpdateSceneResponse
  */
 export type UpdateSceneResponse = Message<"holomush.scene.v1.UpdateSceneResponse"> & {
   /**
+   * The post-update scene row.
+   *
    * @generated from field: holomush.scene.v1.SceneInfo scene = 1;
    */
   scene?: SceneInfo | undefined;
@@ -491,15 +657,21 @@ export const UpdateSceneResponseSchema: GenMessage<UpdateSceneResponse> = /*@__P
   messageDesc(file_holomush_scene_v1_scene, 15);
 
 /**
+ * JoinSceneRequest identifies the scene to join and the joining character.
+ *
  * @generated from message holomush.scene.v1.JoinSceneRequest
  */
 export type JoinSceneRequest = Message<"holomush.scene.v1.JoinSceneRequest"> & {
   /**
+   * The joining character's ID; required.
+   *
    * @generated from field: string character_id = 1;
    */
   characterId: string;
 
   /**
+   * The scene to join; required.
+   *
    * @generated from field: string scene_id = 2;
    */
   sceneId: string;
@@ -513,6 +685,9 @@ export const JoinSceneRequestSchema: GenMessage<JoinSceneRequest> = /*@__PURE__*
   messageDesc(file_holomush_scene_v1_scene, 16);
 
 /**
+ * JoinSceneResponse is intentionally empty — a successful join carries no
+ * body; the caller refetches scene state if needed.
+ *
  * @generated from message holomush.scene.v1.JoinSceneResponse
  */
 export type JoinSceneResponse = Message<"holomush.scene.v1.JoinSceneResponse"> & {
@@ -526,15 +701,21 @@ export const JoinSceneResponseSchema: GenMessage<JoinSceneResponse> = /*@__PURE_
   messageDesc(file_holomush_scene_v1_scene, 17);
 
 /**
+ * LeaveSceneRequest identifies the scene to leave and the leaving character.
+ *
  * @generated from message holomush.scene.v1.LeaveSceneRequest
  */
 export type LeaveSceneRequest = Message<"holomush.scene.v1.LeaveSceneRequest"> & {
   /**
+   * The leaving character's ID; required (must not be the owner).
+   *
    * @generated from field: string character_id = 1;
    */
   characterId: string;
 
   /**
+   * The scene to leave; required.
+   *
    * @generated from field: string scene_id = 2;
    */
   sceneId: string;
@@ -548,6 +729,9 @@ export const LeaveSceneRequestSchema: GenMessage<LeaveSceneRequest> = /*@__PURE_
   messageDesc(file_holomush_scene_v1_scene, 18);
 
 /**
+ * LeaveSceneResponse is intentionally empty — a successful leave carries no
+ * body.
+ *
  * @generated from message holomush.scene.v1.LeaveSceneResponse
  */
 export type LeaveSceneResponse = Message<"holomush.scene.v1.LeaveSceneResponse"> & {
@@ -561,20 +745,29 @@ export const LeaveSceneResponseSchema: GenMessage<LeaveSceneResponse> = /*@__PUR
   messageDesc(file_holomush_scene_v1_scene, 19);
 
 /**
+ * InviteToSceneRequest identifies the inviting owner, the scene, and the
+ * character being granted an invitation.
+ *
  * @generated from message holomush.scene.v1.InviteToSceneRequest
  */
 export type InviteToSceneRequest = Message<"holomush.scene.v1.InviteToSceneRequest"> & {
   /**
+   * The inviting character (the owner per ABAC); required.
+   *
    * @generated from field: string character_id = 1;
    */
   characterId: string;
 
   /**
+   * The scene to invite into; required.
+   *
    * @generated from field: string scene_id = 2;
    */
   sceneId: string;
 
   /**
+   * The character receiving the invitation; required.
+   *
    * @generated from field: string target_character_id = 3;
    */
   targetCharacterId: string;
@@ -588,6 +781,9 @@ export const InviteToSceneRequestSchema: GenMessage<InviteToSceneRequest> = /*@_
   messageDesc(file_holomush_scene_v1_scene, 20);
 
 /**
+ * InviteToSceneResponse is intentionally empty — a successful invite carries
+ * no body.
+ *
  * @generated from message holomush.scene.v1.InviteToSceneResponse
  */
 export type InviteToSceneResponse = Message<"holomush.scene.v1.InviteToSceneResponse"> & {
@@ -601,20 +797,29 @@ export const InviteToSceneResponseSchema: GenMessage<InviteToSceneResponse> = /*
   messageDesc(file_holomush_scene_v1_scene, 21);
 
 /**
+ * KickFromSceneRequest identifies the acting owner, the scene, and the target
+ * character to remove.
+ *
  * @generated from message holomush.scene.v1.KickFromSceneRequest
  */
 export type KickFromSceneRequest = Message<"holomush.scene.v1.KickFromSceneRequest"> & {
   /**
+   * The acting character (the owner per ABAC); required.
+   *
    * @generated from field: string character_id = 1;
    */
   characterId: string;
 
   /**
+   * The scene to remove the target from; required.
+   *
    * @generated from field: string scene_id = 2;
    */
   sceneId: string;
 
   /**
+   * The character to remove (must not be the owner); required.
+   *
    * @generated from field: string target_character_id = 3;
    */
   targetCharacterId: string;
@@ -628,6 +833,9 @@ export const KickFromSceneRequestSchema: GenMessage<KickFromSceneRequest> = /*@_
   messageDesc(file_holomush_scene_v1_scene, 22);
 
 /**
+ * KickFromSceneResponse is intentionally empty — a successful kick carries no
+ * body.
+ *
  * @generated from message holomush.scene.v1.KickFromSceneResponse
  */
 export type KickFromSceneResponse = Message<"holomush.scene.v1.KickFromSceneResponse"> & {
@@ -641,20 +849,29 @@ export const KickFromSceneResponseSchema: GenMessage<KickFromSceneResponse> = /*
   messageDesc(file_holomush_scene_v1_scene, 23);
 
 /**
+ * TransferOwnershipRequest identifies the current owner, the scene, and the
+ * member who will become the new owner.
+ *
  * @generated from message holomush.scene.v1.TransferOwnershipRequest
  */
 export type TransferOwnershipRequest = Message<"holomush.scene.v1.TransferOwnershipRequest"> & {
   /**
+   * The current owner; required.
+   *
    * @generated from field: string character_id = 1;
    */
   characterId: string;
 
   /**
+   * The scene whose ownership transfers; required.
+   *
    * @generated from field: string scene_id = 2;
    */
   sceneId: string;
 
   /**
+   * The new owner, who MUST already be a member of the scene; required.
+   *
    * @generated from field: string new_owner_character_id = 3;
    */
   newOwnerCharacterId: string;
@@ -668,6 +885,9 @@ export const TransferOwnershipRequestSchema: GenMessage<TransferOwnershipRequest
   messageDesc(file_holomush_scene_v1_scene, 24);
 
 /**
+ * TransferOwnershipResponse is intentionally empty — a successful transfer
+ * carries no body.
+ *
  * @generated from message holomush.scene.v1.TransferOwnershipResponse
  */
 export type TransferOwnershipResponse = Message<"holomush.scene.v1.TransferOwnershipResponse"> & {
@@ -681,20 +901,30 @@ export const TransferOwnershipResponseSchema: GenMessage<TransferOwnershipRespon
   messageDesc(file_holomush_scene_v1_scene, 25);
 
 /**
+ * CastPublishVoteRequest is the legacy (unserved) scene-keyed publish-vote
+ * request, superseded by CastPublishSceneVoteRequest. Retained for the unserved
+ * CastPublishVote RPC's contract.
+ *
  * @generated from message holomush.scene.v1.CastPublishVoteRequest
  */
 export type CastPublishVoteRequest = Message<"holomush.scene.v1.CastPublishVoteRequest"> & {
   /**
+   * The voting character; required.
+   *
    * @generated from field: string character_id = 1;
    */
   characterId: string;
 
   /**
+   * The scene being voted on; required.
+   *
    * @generated from field: string scene_id = 2;
    */
   sceneId: string;
 
   /**
+   * The yes (true) / no (false) ballot.
+   *
    * @generated from field: bool vote = 3;
    */
   vote: boolean;
@@ -708,6 +938,8 @@ export const CastPublishVoteRequestSchema: GenMessage<CastPublishVoteRequest> = 
   messageDesc(file_holomush_scene_v1_scene, 26);
 
 /**
+ * CastPublishVoteResponse is the legacy (unserved) publish-vote acknowledgment.
+ *
  * @generated from message holomush.scene.v1.CastPublishVoteResponse
  */
 export type CastPublishVoteResponse = Message<"holomush.scene.v1.CastPublishVoteResponse"> & {
@@ -721,15 +953,23 @@ export const CastPublishVoteResponseSchema: GenMessage<CastPublishVoteResponse> 
   messageDesc(file_holomush_scene_v1_scene, 27);
 
 /**
+ * GetPoseOrderRequest identifies the scene whose pose order is requested and
+ * the requesting character (who MUST be a participant; the gate is plugin-code,
+ * not ABAC).
+ *
  * @generated from message holomush.scene.v1.GetPoseOrderRequest
  */
 export type GetPoseOrderRequest = Message<"holomush.scene.v1.GetPoseOrderRequest"> & {
   /**
+   * The requesting character; MUST be an owner or member of the scene.
+   *
    * @generated from field: string character_id = 1;
    */
   characterId: string;
 
   /**
+   * The scene to compute pose order for; required.
+   *
    * @generated from field: string scene_id = 2;
    */
   sceneId: string;
@@ -743,25 +983,38 @@ export const GetPoseOrderRequestSchema: GenMessage<GetPoseOrderRequest> = /*@__P
   messageDesc(file_holomush_scene_v1_scene, 28);
 
 /**
+ * PoseOrderEntry is one participant's standing in the computed pose order,
+ * produced by poseorder.go::Compute.
+ *
  * @generated from message holomush.scene.v1.PoseOrderEntry
  */
 export type PoseOrderEntry = Message<"holomush.scene.v1.PoseOrderEntry"> & {
   /**
+   * The participant's character ID.
+   *
    * @generated from field: string character_id = 1;
    */
   characterId: string;
 
   /**
+   * The participant's display name (falls back to the character ID when no
+   * name resolver is wired).
+   *
    * @generated from field: string character_name = 2;
    */
   characterName: string;
 
   /**
+   * Whether this participant is currently eligible to pose under the scene's
+   * pose-order mode.
+   *
    * @generated from field: bool eligible = 3;
    */
   eligible: boolean;
 
   /**
+   * When the participant last posed in this scene; unset if they never have.
+   *
    * @generated from field: google.protobuf.Timestamp last_posed_at = 4;
    */
   lastPosedAt?: Timestamp | undefined;
@@ -783,22 +1036,30 @@ export const PoseOrderEntrySchema: GenMessage<PoseOrderEntry> = /*@__PURE__*/
   messageDesc(file_holomush_scene_v1_scene, 29);
 
 /**
+ * GetPoseOrderResponse carries the scene's pose-order mode and the computed
+ * per-participant standings.
+ *
  * @generated from message holomush.scene.v1.GetPoseOrderResponse
  */
 export type GetPoseOrderResponse = Message<"holomush.scene.v1.GetPoseOrderResponse"> & {
   /**
-   * strict | 3pr | 5pr | free
+   * The scene's pose-order mode: "strict", "3pr", "5pr", or "free".
    *
    * @generated from field: string mode = 1;
    */
   mode: string;
 
   /**
+   * Total poses recorded in the scene (the rolling denominator for the
+   * poses_since_last gaps).
+   *
    * @generated from field: uint32 total_pose_count = 2;
    */
   totalPoseCount: number;
 
   /**
+   * Per-participant pose-order standings.
+   *
    * @generated from field: repeated holomush.scene.v1.PoseOrderEntry entries = 3;
    */
   entries: PoseOrderEntry[];
@@ -812,15 +1073,21 @@ export const GetPoseOrderResponseSchema: GenMessage<GetPoseOrderResponse> = /*@_
   messageDesc(file_holomush_scene_v1_scene, 30);
 
 /**
+ * StartScenePublishRequest opens a publication attempt for an ended scene.
+ *
  * @generated from message holomush.scene.v1.StartScenePublishRequest
  */
 export type StartScenePublishRequest = Message<"holomush.scene.v1.StartScenePublishRequest"> & {
   /**
+   * The character initiating the attempt; required.
+   *
    * @generated from field: string caller_character_id = 1;
    */
   callerCharacterId: string;
 
   /**
+   * The ended scene to publish; required.
+   *
    * @generated from field: string scene_id = 2;
    */
   sceneId: string;
@@ -834,15 +1101,22 @@ export const StartScenePublishRequestSchema: GenMessage<StartScenePublishRequest
   messageDesc(file_holomush_scene_v1_scene, 31);
 
 /**
+ * StartScenePublishResponse identifies the newly created publication attempt.
+ *
  * @generated from message holomush.scene.v1.StartScenePublishResponse
  */
 export type StartScenePublishResponse = Message<"holomush.scene.v1.StartScenePublishResponse"> & {
   /**
+   * ID of the new publication attempt row (the published_scene_id used by the
+   * vote/withdraw/read RPCs).
+   *
    * @generated from field: string published_scene_id = 1;
    */
   publishedSceneId: string;
 
   /**
+   * The attempt's ordinal within the scene's attempt budget (1-based).
+   *
    * @generated from field: int32 attempt_number = 2;
    */
   attemptNumber: number;
@@ -856,20 +1130,30 @@ export const StartScenePublishResponseSchema: GenMessage<StartScenePublishRespon
   messageDesc(file_holomush_scene_v1_scene, 32);
 
 /**
+ * CastPublishSceneVoteRequest records a roster member's vote on a specific
+ * publication attempt (keyed by published_scene_id, unlike the legacy
+ * scene-keyed CastPublishVoteRequest).
+ *
  * @generated from message holomush.scene.v1.CastPublishSceneVoteRequest
  */
 export type CastPublishSceneVoteRequest = Message<"holomush.scene.v1.CastPublishSceneVoteRequest"> & {
   /**
+   * The voting character, who MUST be on the attempt's frozen roster; required.
+   *
    * @generated from field: string caller_character_id = 1;
    */
   callerCharacterId: string;
 
   /**
+   * The publication attempt being voted on; required.
+   *
    * @generated from field: string published_scene_id = 2;
    */
   publishedSceneId: string;
 
   /**
+   * The yes (true) / no (false) ballot.
+   *
    * @generated from field: bool vote = 3;
    */
   vote: boolean;
@@ -883,10 +1167,15 @@ export const CastPublishSceneVoteRequestSchema: GenMessage<CastPublishSceneVoteR
   messageDesc(file_holomush_scene_v1_scene, 33);
 
 /**
+ * CastPublishSceneVoteResponse acknowledges a recorded vote.
+ *
  * @generated from message holomush.scene.v1.CastPublishSceneVoteResponse
  */
 export type CastPublishSceneVoteResponse = Message<"holomush.scene.v1.CastPublishSceneVoteResponse"> & {
   /**
+   * True only when this cast flipped a previously cast, differing vote; the
+   * first cast and a re-affirmation of the same value both report false.
+   *
    * @generated from field: bool is_change = 1;
    */
   isChange: boolean;
@@ -900,15 +1189,22 @@ export const CastPublishSceneVoteResponseSchema: GenMessage<CastPublishSceneVote
   messageDesc(file_holomush_scene_v1_scene, 34);
 
 /**
+ * WithdrawScenePublishRequest abandons an active publication attempt (owner
+ * only).
+ *
  * @generated from message holomush.scene.v1.WithdrawScenePublishRequest
  */
 export type WithdrawScenePublishRequest = Message<"holomush.scene.v1.WithdrawScenePublishRequest"> & {
   /**
+   * The acting character, who MUST be the scene owner; required.
+   *
    * @generated from field: string caller_character_id = 1;
    */
   callerCharacterId: string;
 
   /**
+   * The active attempt to withdraw; required.
+   *
    * @generated from field: string published_scene_id = 2;
    */
   publishedSceneId: string;
@@ -922,6 +1218,9 @@ export const WithdrawScenePublishRequestSchema: GenMessage<WithdrawScenePublishR
   messageDesc(file_holomush_scene_v1_scene, 35);
 
 /**
+ * WithdrawScenePublishResponse is intentionally empty — a successful withdrawal
+ * carries no body; the attempt transitions to ATTEMPT_FAILED(WITHDRAWN).
+ *
  * @generated from message holomush.scene.v1.WithdrawScenePublishResponse
  */
 export type WithdrawScenePublishResponse = Message<"holomush.scene.v1.WithdrawScenePublishResponse"> & {
@@ -935,22 +1234,30 @@ export const WithdrawScenePublishResponseSchema: GenMessage<WithdrawScenePublish
   messageDesc(file_holomush_scene_v1_scene, 36);
 
 /**
+ * PublishedSceneEntry is one rendered line of a published scene's frozen
+ * content. Only IC pose/say/emit content survives into a published scene; OOC
+ * and ops events are excluded (EntryKind in publish_types.go).
+ *
  * @generated from message holomush.scene.v1.PublishedSceneEntry
  */
 export type PublishedSceneEntry = Message<"holomush.scene.v1.PublishedSceneEntry"> & {
   /**
+   * The speaking character's display label for this line.
+   *
    * @generated from field: string speaker = 1;
    */
   speaker: string;
 
   /**
-   * "pose" | "say" | "emit"
+   * The content kind: "pose", "say", or "emit".
    *
    * @generated from field: string kind = 2;
    */
   kind: string;
 
   /**
+   * The rendered line content.
+   *
    * @generated from field: string content = 3;
    */
   content: string;
@@ -964,20 +1271,30 @@ export const PublishedSceneEntrySchema: GenMessage<PublishedSceneEntry> = /*@__P
   messageDesc(file_holomush_scene_v1_scene, 37);
 
 /**
+ * PublishedSceneVoteSummary is the yes/no/pending tally across a publication
+ * attempt's frozen roster (VoteTally in publish_store.go). Pending counts
+ * roster members who have not yet cast.
+ *
  * @generated from message holomush.scene.v1.PublishedSceneVoteSummary
  */
 export type PublishedSceneVoteSummary = Message<"holomush.scene.v1.PublishedSceneVoteSummary"> & {
   /**
+   * Number of yes votes cast.
+   *
    * @generated from field: int32 yes = 1;
    */
   yes: number;
 
   /**
+   * Number of no votes cast.
+   *
    * @generated from field: int32 no = 2;
    */
   no: number;
 
   /**
+   * Number of roster members who have not yet voted.
+   *
    * @generated from field: int32 pending = 3;
    */
   pending: number;
@@ -991,15 +1308,22 @@ export const PublishedSceneVoteSummarySchema: GenMessage<PublishedSceneVoteSumma
   messageDesc(file_holomush_scene_v1_scene, 38);
 
 /**
+ * GetPublishedSceneRequest reads a publication attempt's full state as a scene
+ * participant (participant-gated, INV-S9).
+ *
  * @generated from message holomush.scene.v1.GetPublishedSceneRequest
  */
 export type GetPublishedSceneRequest = Message<"holomush.scene.v1.GetPublishedSceneRequest"> & {
   /**
+   * The reading character, who MUST be a participant of the scene; required.
+   *
    * @generated from field: string caller_character_id = 1;
    */
   callerCharacterId: string;
 
   /**
+   * The publication attempt to read; required.
+   *
    * @generated from field: string published_scene_id = 2;
    */
   publishedSceneId: string;
@@ -1013,74 +1337,105 @@ export const GetPublishedSceneRequestSchema: GenMessage<GetPublishedSceneRequest
   messageDesc(file_holomush_scene_v1_scene, 39);
 
 /**
+ * GetPublishedSceneResponse is the participant-visible view of a publication
+ * attempt: its state-machine status, vote tally, snapshots, lifecycle
+ * timestamps, and (only when PUBLISHED) its frozen content.
+ *
  * @generated from message holomush.scene.v1.GetPublishedSceneResponse
  */
 export type GetPublishedSceneResponse = Message<"holomush.scene.v1.GetPublishedSceneResponse"> & {
   /**
+   * The publication attempt's ID.
+   *
    * @generated from field: string id = 1;
    */
   id: string;
 
   /**
+   * The scene this attempt belongs to.
+   *
    * @generated from field: string scene_id = 2;
    */
   sceneId: string;
 
   /**
+   * The attempt's ordinal within the scene's budget (1-based).
+   *
    * @generated from field: int32 attempt_number = 3;
    */
   attemptNumber: number;
 
   /**
+   * State-machine status: "COLLECTING", "COOLOFF", "PUBLISHED", or
+   * "ATTEMPT_FAILED" (PublishedSceneStatus in publish_types.go).
+   *
    * @generated from field: string status = 4;
    */
   status: string;
 
   /**
-   * empty unless ATTEMPT_FAILED
+   * The failure cause; empty unless status is ATTEMPT_FAILED. One of ANY_NO,
+   * TIMEOUT, WITHDRAWN, SNAPSHOT_DECRYPT_FAILED, SNAPSHOT_RENDER_FAILED, or
+   * COOLOFF_INVARIANT_BROKEN (PublishFailureReason in publish_types.go).
    *
    * @generated from field: string failure_reason = 5;
    */
   failureReason: string;
 
   /**
+   * The current yes/no/pending vote tally.
+   *
    * @generated from field: holomush.scene.v1.PublishedSceneVoteSummary tally = 6;
    */
   tally?: PublishedSceneVoteSummary | undefined;
 
   /**
-   * populated only when PUBLISHED
+   * The frozen published content; populated ONLY when status is PUBLISHED.
    *
    * @generated from field: repeated holomush.scene.v1.PublishedSceneEntry content_entries = 7;
    */
   contentEntries: PublishedSceneEntry[];
 
   /**
+   * The scene title snapshotted at publish time.
+   *
    * @generated from field: string title_snapshot = 8;
    */
   titleSnapshot: string;
 
   /**
+   * The participant character names snapshotted at publish time.
+   *
    * @generated from field: repeated string participants_snapshot = 9;
    */
   participantsSnapshot: string[];
 
   /**
+   * Epoch-nanosecond time the attempt was opened.
+   *
    * @generated from field: int64 initiated_at_unix_ns = 10;
    */
   initiatedAtUnixNs: bigint;
 
   /**
+   * Epoch-nanosecond time the cool-off window began; 0 if cool-off never
+   * started.
+   *
    * @generated from field: int64 cooloff_started_at_unix_ns = 11;
    */
   cooloffStartedAtUnixNs: bigint;
 
   /**
+   * Epoch-nanosecond time the attempt reached a terminal status; 0 if still
+   * active.
+   *
    * @generated from field: int64 resolved_at_unix_ns = 12;
    */
   resolvedAtUnixNs: bigint;
 
   /**
+   * Epoch-nanosecond time the attempt was published; 0 unless PUBLISHED.
+   *
    * @generated from field: int64 published_at_unix_ns = 13;
    */
   publishedAtUnixNs: bigint;
@@ -1094,21 +1449,29 @@ export const GetPublishedSceneResponseSchema: GenMessage<GetPublishedSceneRespon
   messageDesc(file_holomush_scene_v1_scene, 40);
 
 /**
+ * DownloadPublishedSceneRequest fetches a PUBLISHED attempt rendered to a file
+ * format, as a participant (participant-gated, INV-S9).
+ *
  * @generated from message holomush.scene.v1.DownloadPublishedSceneRequest
  */
 export type DownloadPublishedSceneRequest = Message<"holomush.scene.v1.DownloadPublishedSceneRequest"> & {
   /**
+   * The downloading character, who MUST be a participant; required.
+   *
    * @generated from field: string caller_character_id = 1;
    */
   callerCharacterId: string;
 
   /**
+   * The PUBLISHED attempt to download; required.
+   *
    * @generated from field: string published_scene_id = 2;
    */
   publishedSceneId: string;
 
   /**
-   * "markdown" | "plain_text" | "jsonl"
+   * The render format; required. Supported: "markdown", "plain_text", "jsonl"
+   * (publishRenderMime in publish_service.go); any other value is rejected.
    *
    * @generated from field: string format = 3;
    */
@@ -1123,15 +1486,22 @@ export const DownloadPublishedSceneRequestSchema: GenMessage<DownloadPublishedSc
   messageDesc(file_holomush_scene_v1_scene, 41);
 
 /**
+ * DownloadPublishedSceneResponse carries the rendered scene bytes and their
+ * MIME type.
+ *
  * @generated from message holomush.scene.v1.DownloadPublishedSceneResponse
  */
 export type DownloadPublishedSceneResponse = Message<"holomush.scene.v1.DownloadPublishedSceneResponse"> & {
   /**
+   * The rendered file content.
+   *
    * @generated from field: bytes content = 1;
    */
   content: Uint8Array;
 
   /**
+   * The content's MIME type (text/markdown, text/plain, or application/jsonl).
+   *
    * @generated from field: string mime_type = 2;
    */
   mimeType: string;
@@ -1145,15 +1515,22 @@ export const DownloadPublishedSceneResponseSchema: GenMessage<DownloadPublishedS
   messageDesc(file_holomush_scene_v1_scene, 42);
 
 /**
+ * ListScenePublishAttemptsRequest lists a scene's publication attempts as a
+ * participant (participant-gated, INV-S9).
+ *
  * @generated from message holomush.scene.v1.ListScenePublishAttemptsRequest
  */
 export type ListScenePublishAttemptsRequest = Message<"holomush.scene.v1.ListScenePublishAttemptsRequest"> & {
   /**
+   * The reading character, who MUST be a participant; required.
+   *
    * @generated from field: string caller_character_id = 1;
    */
   callerCharacterId: string;
 
   /**
+   * The scene whose attempts to list; required.
+   *
    * @generated from field: string scene_id = 2;
    */
   sceneId: string;
@@ -1167,10 +1544,15 @@ export const ListScenePublishAttemptsRequestSchema: GenMessage<ListScenePublishA
   messageDesc(file_holomush_scene_v1_scene, 43);
 
 /**
+ * ListScenePublishAttemptsResponse carries the attempt summaries (header only,
+ * no content), ordered by attempt number.
+ *
  * @generated from message holomush.scene.v1.ListScenePublishAttemptsResponse
  */
 export type ListScenePublishAttemptsResponse = Message<"holomush.scene.v1.ListScenePublishAttemptsResponse"> & {
   /**
+   * The scene's publication attempts.
+   *
    * @generated from field: repeated holomush.scene.v1.PublishedSceneSummary attempts = 1;
    */
   attempts: PublishedSceneSummary[];
@@ -1184,35 +1566,50 @@ export const ListScenePublishAttemptsResponseSchema: GenMessage<ListScenePublish
   messageDesc(file_holomush_scene_v1_scene, 44);
 
 /**
+ * PublishedSceneSummary is the content-free header view of one publication
+ * attempt, used in the audit list.
+ *
  * @generated from message holomush.scene.v1.PublishedSceneSummary
  */
 export type PublishedSceneSummary = Message<"holomush.scene.v1.PublishedSceneSummary"> & {
   /**
+   * The attempt's ID.
+   *
    * @generated from field: string id = 1;
    */
   id: string;
 
   /**
+   * The attempt's ordinal within the scene's budget (1-based).
+   *
    * @generated from field: int32 attempt_number = 2;
    */
   attemptNumber: number;
 
   /**
+   * State-machine status (COLLECTING/COOLOFF/PUBLISHED/ATTEMPT_FAILED).
+   *
    * @generated from field: string status = 3;
    */
   status: string;
 
   /**
+   * Failure cause; empty unless status is ATTEMPT_FAILED.
+   *
    * @generated from field: string failure_reason = 4;
    */
   failureReason: string;
 
   /**
+   * Epoch-nanosecond time the attempt was opened.
+   *
    * @generated from field: int64 initiated_at_unix_ns = 5;
    */
   initiatedAtUnixNs: bigint;
 
   /**
+   * Epoch-nanosecond time the attempt resolved; 0 if still active.
+   *
    * @generated from field: int64 resolved_at_unix_ns = 6;
    */
   resolvedAtUnixNs: bigint;
@@ -1226,10 +1623,16 @@ export const PublishedSceneSummarySchema: GenMessage<PublishedSceneSummary> = /*
   messageDesc(file_holomush_scene_v1_scene, 45);
 
 /**
+ * GetPublicSceneArchiveRequest reads a published scene WITHOUT authentication.
+ * No caller identity is required — the only gate is status==PUBLISHED.
+ *
  * @generated from message holomush.scene.v1.GetPublicSceneArchiveRequest
  */
 export type GetPublicSceneArchiveRequest = Message<"holomush.scene.v1.GetPublicSceneArchiveRequest"> & {
   /**
+   * The publication attempt to read; required. A missing id or any
+   * non-PUBLISHED attempt returns one opaque NOT_FOUND (INV-P6-8).
+   *
    * @generated from field: string published_scene_id = 1;
    */
   publishedSceneId: string;
@@ -1243,30 +1646,44 @@ export const GetPublicSceneArchiveRequestSchema: GenMessage<GetPublicSceneArchiv
   messageDesc(file_holomush_scene_v1_scene, 46);
 
 /**
+ * GetPublicSceneArchiveResponse is the public-safe view of a published scene —
+ * only the published artifact, never vote state, per-voter data, or
+ * failure_reason (the §5.1 two-pair separation).
+ *
  * @generated from message holomush.scene.v1.GetPublicSceneArchiveResponse
  */
 export type GetPublicSceneArchiveResponse = Message<"holomush.scene.v1.GetPublicSceneArchiveResponse"> & {
   /**
+   * The publication attempt's ID.
+   *
    * @generated from field: string id = 1;
    */
   id: string;
 
   /**
+   * The scene title snapshotted at publish time.
+   *
    * @generated from field: string title_snapshot = 2;
    */
   titleSnapshot: string;
 
   /**
+   * The participant character names snapshotted at publish time.
+   *
    * @generated from field: repeated string participants_snapshot = 3;
    */
   participantsSnapshot: string[];
 
   /**
+   * The frozen published content.
+   *
    * @generated from field: repeated holomush.scene.v1.PublishedSceneEntry content_entries = 4;
    */
   contentEntries: PublishedSceneEntry[];
 
   /**
+   * Epoch-nanosecond publish time.
+   *
    * @generated from field: int64 published_at_unix_ns = 5;
    */
   publishedAtUnixNs: bigint;
@@ -1280,15 +1697,23 @@ export const GetPublicSceneArchiveResponseSchema: GenMessage<GetPublicSceneArchi
   messageDesc(file_holomush_scene_v1_scene, 47);
 
 /**
+ * DownloadPublicSceneArchiveRequest fetches a published scene rendered to a
+ * file format WITHOUT authentication (status==PUBLISHED gate only).
+ *
  * @generated from message holomush.scene.v1.DownloadPublicSceneArchiveRequest
  */
 export type DownloadPublicSceneArchiveRequest = Message<"holomush.scene.v1.DownloadPublicSceneArchiveRequest"> & {
   /**
+   * The publication attempt to download; required. Same opacity contract as
+   * GetPublicSceneArchiveRequest.
+   *
    * @generated from field: string published_scene_id = 1;
    */
   publishedSceneId: string;
 
   /**
+   * The render format; required. Supported: "markdown", "plain_text", "jsonl".
+   *
    * @generated from field: string format = 2;
    */
   format: string;
@@ -1302,15 +1727,22 @@ export const DownloadPublicSceneArchiveRequestSchema: GenMessage<DownloadPublicS
   messageDesc(file_holomush_scene_v1_scene, 48);
 
 /**
+ * DownloadPublicSceneArchiveResponse carries the rendered public-archive bytes
+ * and their MIME type.
+ *
  * @generated from message holomush.scene.v1.DownloadPublicSceneArchiveResponse
  */
 export type DownloadPublicSceneArchiveResponse = Message<"holomush.scene.v1.DownloadPublicSceneArchiveResponse"> & {
   /**
+   * The rendered file content.
+   *
    * @generated from field: bytes content = 1;
    */
   content: Uint8Array;
 
   /**
+   * The content's MIME type.
+   *
    * @generated from field: string mime_type = 2;
    */
   mimeType: string;
@@ -1324,20 +1756,30 @@ export const DownloadPublicSceneArchiveResponseSchema: GenMessage<DownloadPublic
   messageDesc(file_holomush_scene_v1_scene, 49);
 
 /**
+ * ExtendScenePublishVoteAttemptsRequest raises a scene's publish-attempt budget
+ * (admin-only, ABAC-gated at dispatch).
+ *
  * @generated from message holomush.scene.v1.ExtendScenePublishVoteAttemptsRequest
  */
 export type ExtendScenePublishVoteAttemptsRequest = Message<"holomush.scene.v1.ExtendScenePublishVoteAttemptsRequest"> & {
   /**
+   * The acting admin's character ID; required (admin authority is ABAC-gated,
+   * not checked in-plugin).
+   *
    * @generated from field: string caller_character_id = 1;
    */
   callerCharacterId: string;
 
   /**
+   * The scene whose budget to raise; required.
+   *
    * @generated from field: string scene_id = 2;
    */
   sceneId: string;
 
   /**
+   * How many additional attempts to grant; MUST be positive.
+   *
    * @generated from field: int32 additional = 3;
    */
   additional: number;
@@ -1351,10 +1793,15 @@ export const ExtendScenePublishVoteAttemptsRequestSchema: GenMessage<ExtendScene
   messageDesc(file_holomush_scene_v1_scene, 50);
 
 /**
+ * ExtendScenePublishVoteAttemptsResponse reports the scene's new attempt
+ * budget.
+ *
  * @generated from message holomush.scene.v1.ExtendScenePublishVoteAttemptsResponse
  */
 export type ExtendScenePublishVoteAttemptsResponse = Message<"holomush.scene.v1.ExtendScenePublishVoteAttemptsResponse"> & {
   /**
+   * The scene's max-publish-attempts budget after the extension.
+   *
    * @generated from field: int32 new_max = 1;
    */
   newMax: number;
@@ -1368,35 +1815,50 @@ export const ExtendScenePublishVoteAttemptsResponseSchema: GenMessage<ExtendScen
   messageDesc(file_holomush_scene_v1_scene, 51);
 
 /**
+ * ScenePublishStartedEvent announces a newly opened publication attempt and its
+ * frozen vote roster. Emitted as scene_publish_started.
+ *
  * @generated from message holomush.scene.v1.ScenePublishStartedEvent
  */
 export type ScenePublishStartedEvent = Message<"holomush.scene.v1.ScenePublishStartedEvent"> & {
   /**
+   * The publication attempt's ID.
+   *
    * @generated from field: string attempt_id = 1;
    */
   attemptId: string;
 
   /**
+   * The attempt's ordinal within the scene's budget (1-based).
+   *
    * @generated from field: int32 attempt_number = 2;
    */
   attemptNumber: number;
 
   /**
+   * Character ID that initiated the attempt.
+   *
    * @generated from field: string initiated_by = 3;
    */
   initiatedBy: string;
 
   /**
+   * The voting-window duration in seconds.
+   *
    * @generated from field: int64 vote_window_seconds = 4;
    */
   voteWindowSeconds: bigint;
 
   /**
+   * The cool-off-window duration in seconds.
+   *
    * @generated from field: int64 cooloff_window_seconds = 5;
    */
   cooloffWindowSeconds: bigint;
 
   /**
+   * The frozen voter roster (character IDs eligible to vote on this attempt).
+   *
    * @generated from field: repeated string roster_character_ids = 6;
    */
   rosterCharacterIds: string[];
@@ -1410,25 +1872,36 @@ export const ScenePublishStartedEventSchema: GenMessage<ScenePublishStartedEvent
   messageDesc(file_holomush_scene_v1_scene, 52);
 
 /**
+ * ScenePublishVoteCastEvent announces a vote cast on a publication attempt.
+ * Emitted as scene_publish_vote_cast.
+ *
  * @generated from message holomush.scene.v1.ScenePublishVoteCastEvent
  */
 export type ScenePublishVoteCastEvent = Message<"holomush.scene.v1.ScenePublishVoteCastEvent"> & {
   /**
+   * The publication attempt's ID.
+   *
    * @generated from field: string attempt_id = 1;
    */
   attemptId: string;
 
   /**
+   * The voting character's ID.
+   *
    * @generated from field: string character_id = 2;
    */
   characterId: string;
 
   /**
+   * The yes (true) / no (false) ballot just recorded.
+   *
    * @generated from field: bool vote = 3;
    */
   vote: boolean;
 
   /**
+   * True only when this cast flipped a previously cast, differing vote.
+   *
    * @generated from field: bool is_change = 4;
    */
   isChange: boolean;
@@ -1442,15 +1915,24 @@ export const ScenePublishVoteCastEventSchema: GenMessage<ScenePublishVoteCastEve
   messageDesc(file_holomush_scene_v1_scene, 53);
 
 /**
+ * ScenePublishCoolOffStartedEvent announces that an attempt entered the
+ * cool-off window (all roster members voted yes). Emitted as
+ * scene_publish_cooloff_started.
+ *
  * @generated from message holomush.scene.v1.ScenePublishCoolOffStartedEvent
  */
 export type ScenePublishCoolOffStartedEvent = Message<"holomush.scene.v1.ScenePublishCoolOffStartedEvent"> & {
   /**
+   * The publication attempt's ID.
+   *
    * @generated from field: string attempt_id = 1;
    */
   attemptId: string;
 
   /**
+   * Epoch-nanosecond deadline at which cool-off ends (derived from the
+   * persisted cool-off start plus the window, for retry determinism).
+   *
    * @generated from field: int64 cooloff_ends_at_unix_ns = 2;
    */
   cooloffEndsAtUnixNs: bigint;
@@ -1464,39 +1946,50 @@ export const ScenePublishCoolOffStartedEventSchema: GenMessage<ScenePublishCoolO
   messageDesc(file_holomush_scene_v1_scene, 54);
 
 /**
+ * ScenePublishResolvedEvent announces that an attempt reached a terminal status
+ * (PUBLISHED or ATTEMPT_FAILED). Emitted as scene_publish_resolved.
+ *
  * @generated from message holomush.scene.v1.ScenePublishResolvedEvent
  */
 export type ScenePublishResolvedEvent = Message<"holomush.scene.v1.ScenePublishResolvedEvent"> & {
   /**
+   * The publication attempt's ID.
+   *
    * @generated from field: string attempt_id = 1;
    */
   attemptId: string;
 
   /**
-   * "PUBLISHED" | "ATTEMPT_FAILED"
+   * The terminal outcome: "PUBLISHED" or "ATTEMPT_FAILED".
    *
    * @generated from field: string outcome = 2;
    */
   outcome: string;
 
   /**
-   * empty unless ATTEMPT_FAILED
+   * The failure cause; empty unless outcome is ATTEMPT_FAILED.
    *
    * @generated from field: string failure_reason = 3;
    */
   failureReason: string;
 
   /**
+   * Final yes-vote count.
+   *
    * @generated from field: int32 tally_yes = 4;
    */
   tallyYes: number;
 
   /**
+   * Final no-vote count.
+   *
    * @generated from field: int32 tally_no = 5;
    */
   tallyNo: number;
 
   /**
+   * Final pending (never-cast) count.
+   *
    * @generated from field: int32 tally_pending = 6;
    */
   tallyPending: number;
@@ -1510,15 +2003,23 @@ export const ScenePublishResolvedEventSchema: GenMessage<ScenePublishResolvedEve
   messageDesc(file_holomush_scene_v1_scene, 55);
 
 /**
+ * ScenePublishWithdrawnEvent announces that the scene owner withdrew an active
+ * attempt (a companion to the resolved event so renderers can distinguish a
+ * withdrawal from a vote failure). Emitted as scene_publish_withdrawn.
+ *
  * @generated from message holomush.scene.v1.ScenePublishWithdrawnEvent
  */
 export type ScenePublishWithdrawnEvent = Message<"holomush.scene.v1.ScenePublishWithdrawnEvent"> & {
   /**
+   * The publication attempt's ID.
+   *
    * @generated from field: string attempt_id = 1;
    */
   attemptId: string;
 
   /**
+   * Character ID of the owner who withdrew the attempt.
+   *
    * @generated from field: string withdrawn_by = 2;
    */
   withdrawnBy: string;
@@ -1532,25 +2033,36 @@ export const ScenePublishWithdrawnEventSchema: GenMessage<ScenePublishWithdrawnE
   messageDesc(file_holomush_scene_v1_scene, 56);
 
 /**
+ * ScenePublishVoteAttemptsExtendedEvent announces an admin raising a scene's
+ * publish-attempt budget. Emitted as scene_publish_vote_attempts_extended.
+ *
  * @generated from message holomush.scene.v1.ScenePublishVoteAttemptsExtendedEvent
  */
 export type ScenePublishVoteAttemptsExtendedEvent = Message<"holomush.scene.v1.ScenePublishVoteAttemptsExtendedEvent"> & {
   /**
+   * The scene whose budget was raised.
+   *
    * @generated from field: string scene_id = 1;
    */
   sceneId: string;
 
   /**
+   * The number of additional attempts granted.
+   *
    * @generated from field: int32 additional = 2;
    */
   additional: number;
 
   /**
+   * The scene's new max-publish-attempts budget.
+   *
    * @generated from field: int32 new_max = 3;
    */
   newMax: number;
 
   /**
+   * Character ID of the admin who extended the budget.
+   *
    * @generated from field: string admin_id = 4;
    */
   adminId: string;
@@ -1564,10 +2076,37 @@ export const ScenePublishVoteAttemptsExtendedEventSchema: GenMessage<ScenePublis
   messageDesc(file_holomush_scene_v1_scene, 57);
 
 /**
+ * SceneService is the gRPC contract for the core-scenes binary plugin
+ * (plugins/core-scenes/). A scene is a structured roleplay encounter with an
+ * owner, a participant roster, a privacy mode, a pose-order discipline, and an
+ * optional published archive. The plugin owns the `scene` ABAC resource type
+ * and persists to its own `plugin_core_scenes` schema; it emits IC notice
+ * events on events.<game_id>.scene.<scene_id>.ic and audits lifecycle
+ * operations to its plugin-owned audit table.
+ *
+ * Authorization model: every mutating RPC trusts that the host's ABAC engine
+ * has already authorized the command-execute action at dispatch time
+ * (owner-only for end/pause/resume/update/invite/kick/transfer, admin-only for
+ * the publish-attempt-budget extension). The plugin itself runs NO ABAC engine
+ * (SceneServiceImpl holds no policy engine). The sole exceptions are the
+ * participant-gate reads (GetPoseOrder and the publish reads), which enforce a
+ * direct plugin-code participation check (INV-S9) precisely because it is a
+ * hard privacy boundary that must not be delegable.
+ *
+ * Implemented by SceneServiceImpl in plugins/core-scenes/service.go and
+ * plugins/core-scenes/publish_service.go.
+ *
  * @generated from service holomush.scene.v1.SceneService
  */
 export const SceneService: GenService<{
   /**
+   * ListScenes is DECLARED BUT NOT SERVED. The core-scenes plugin embeds
+   * UnimplementedSceneServiceServer and provides no override, so any call
+   * returns codes.Unimplemented. Scene discovery is instead surfaced through
+   * the plugin's `scene` listing command (handleSceneList), which reads
+   * SceneStore.ListScenesForCharacter, not this RPC. Retained as a planned
+   * read surface.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.ListScenes
    */
   listScenes: {
@@ -1576,6 +2115,11 @@ export const SceneService: GenService<{
     output: typeof ListScenesResponseSchema;
   },
   /**
+   * GetScene loads one scene's metadata and participant roster by ID. The
+   * host's read-scene ABAC policy gates access before the call reaches the
+   * handler, so the handler performs no additional ownership check; it returns
+   * codes.NotFound when the scene does not exist. See service.go::GetScene.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.GetScene
    */
   getScene: {
@@ -1584,6 +2128,12 @@ export const SceneService: GenService<{
     output: typeof GetSceneResponseSchema;
   },
   /**
+   * CreateScene allocates a new scene owned by the calling character, seeded
+   * active with the supplied title/description/visibility/pose-order/tags. The
+   * creating character becomes the `owner` participant in the same transaction,
+   * a lifecycle.created audit event is recorded, and a scene-created event is
+   * emitted. See service.go::CreateScene.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.CreateScene
    */
   createScene: {
@@ -1592,6 +2142,11 @@ export const SceneService: GenService<{
     output: typeof CreateSceneResponseSchema;
   },
   /**
+   * EndScene transitions a scene to the terminal `ended` state (owner-only via
+   * ABAC). Rejected with codes.FailedPrecondition when the scene is already
+   * ended or archived. Returns the post-transition scene row. See
+   * service.go::EndScene.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.EndScene
    */
   endScene: {
@@ -1600,6 +2155,10 @@ export const SceneService: GenService<{
     output: typeof EndSceneResponseSchema;
   },
   /**
+   * PauseScene transitions an `active` scene to `paused` (owner-only via ABAC).
+   * Rejected with codes.FailedPrecondition from any non-active state. See
+   * service.go::PauseScene.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.PauseScene
    */
   pauseScene: {
@@ -1608,6 +2167,10 @@ export const SceneService: GenService<{
     output: typeof PauseSceneResponseSchema;
   },
   /**
+   * ResumeScene transitions a `paused` scene back to `active` (owner-only via
+   * ABAC). Rejected with codes.FailedPrecondition from any non-paused state.
+   * See service.go::ResumeScene.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.ResumeScene
    */
   resumeScene: {
@@ -1616,6 +2179,11 @@ export const SceneService: GenService<{
     output: typeof ResumeSceneResponseSchema;
   },
   /**
+   * UpdateScene applies a partial update to mutable scene metadata, driven by
+   * the request's FieldMask (owner-only via ABAC). An empty mask is a no-op
+   * success. A pose-order-mode change auto-emits a pose-order-changed IC
+   * notice. See service.go::UpdateScene.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.UpdateScene
    */
   updateScene: {
@@ -1624,6 +2192,12 @@ export const SceneService: GenService<{
     output: typeof UpdateSceneResponseSchema;
   },
   /**
+   * JoinScene adds the calling character to a scene as a `member`. Open scenes
+   * accept any join; private scenes require a pre-existing invitation (the
+   * invited row is promoted to member). Idempotent: a repeat join by an
+   * existing member succeeds without re-emitting a join notice. See
+   * service.go::JoinScene.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.JoinScene
    */
   joinScene: {
@@ -1632,6 +2206,11 @@ export const SceneService: GenService<{
     output: typeof JoinSceneResponseSchema;
   },
   /**
+   * LeaveScene removes the calling character from a scene. The scene owner
+   * cannot leave (codes.FailedPrecondition) — they must end the scene or
+   * transfer ownership first. Emits a leave IC notice with reason=left. See
+   * service.go::LeaveScene.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.LeaveScene
    */
   leaveScene: {
@@ -1640,6 +2219,11 @@ export const SceneService: GenService<{
     output: typeof LeaveSceneResponseSchema;
   },
   /**
+   * InviteToScene records an `invited` participant row for a target character
+   * (owner-only via ABAC), granting them permission to join a private scene.
+   * Rejected with codes.AlreadyExists when the target is already a member. See
+   * service.go::InviteToScene.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.InviteToScene
    */
   inviteToScene: {
@@ -1648,6 +2232,11 @@ export const SceneService: GenService<{
     output: typeof InviteToSceneResponseSchema;
   },
   /**
+   * KickFromScene removes a target character from a scene (owner-only via
+   * ABAC). The scene owner cannot be kicked (codes.FailedPrecondition, enforced
+   * both at the service layer and by a store WHERE filter). Emits a leave IC
+   * notice with reason=kicked. See service.go::KickFromScene.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.KickFromScene
    */
   kickFromScene: {
@@ -1656,6 +2245,10 @@ export const SceneService: GenService<{
     output: typeof KickFromSceneResponseSchema;
   },
   /**
+   * TransferOwnership reassigns scene ownership from the calling owner to a
+   * target who MUST already be a member (owner-only via ABAC). The former owner
+   * is demoted to member. See service.go::TransferOwnership.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.TransferOwnership
    */
   transferOwnership: {
@@ -1664,6 +2257,11 @@ export const SceneService: GenService<{
     output: typeof TransferOwnershipResponseSchema;
   },
   /**
+   * CastPublishVote is DECLARED BUT NOT SERVED. It is the legacy
+   * scene-keyed publish-vote shape, superseded by CastPublishSceneVote (which
+   * is keyed by published_scene_id and is the served vote RPC). The plugin
+   * provides no handler, so a call returns codes.Unimplemented.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.CastPublishVote
    */
   castPublishVote: {
@@ -1672,6 +2270,12 @@ export const SceneService: GenService<{
     output: typeof CastPublishVoteResponseSchema;
   },
   /**
+   * GetPoseOrder returns the computed pose-order roster for a scene. Enforces
+   * the INV-S9 plugin-code participant gate (caller MUST be an owner or member,
+   * NOT merely invited; NO ABAC engine is consulted). The PermissionDenied gate
+   * fires before any existence check so a non-participant cannot distinguish a
+   * missing scene from one they may not see. See service.go::GetPoseOrder.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.GetPoseOrder
    */
   getPoseOrder: {
@@ -1680,7 +2284,11 @@ export const SceneService: GenService<{
     output: typeof GetPoseOrderResponseSchema;
   },
   /**
-   * Phase 6 publication RPCs. See spec section 5.
+   * StartScenePublish opens a publication attempt for an `ended` scene
+   * (publish.go §5 precondition ladder). The scene must be ended, must not
+   * already have a published archive (one-and-done) nor an active attempt, and
+   * must not have exhausted its attempt budget. Seeds a COLLECTING attempt with
+   * a frozen vote roster. See publish_service.go::StartScenePublish.
    *
    * @generated from rpc holomush.scene.v1.SceneService.StartScenePublish
    */
@@ -1690,6 +2298,14 @@ export const SceneService: GenService<{
     output: typeof StartScenePublishResponseSchema;
   },
   /**
+   * CastPublishSceneVote records a roster member's yes/no vote on an active
+   * publication attempt and runs the §4.3 resolution check, which may
+   * transition the attempt (COLLECTING→COOLOFF on all-yes, COLLECTING→
+   * ATTEMPT_FAILED on any-no-after-all-voted, or COOLOFF→COLLECTING on a flip
+   * to no). A vote on a terminal attempt is rejected. The recorded vote is the
+   * durable effect; a failed resolution or emit is logged but does not fail the
+   * cast. See publish_service.go::CastPublishSceneVote.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.CastPublishSceneVote
    */
   castPublishSceneVote: {
@@ -1698,6 +2314,12 @@ export const SceneService: GenService<{
     output: typeof CastPublishSceneVoteResponseSchema;
   },
   /**
+   * WithdrawScenePublish lets the scene owner abandon an active publication
+   * attempt (COLLECTING or COOLOFF), transitioning it to ATTEMPT_FAILED with
+   * failure_reason WITHDRAWN. Owner-gated by ABAC AND a defense-in-depth
+   * in-handler owner check (the plugin holds the owner attribute, so this
+   * closes the direct-RPC gap). See publish_service.go::WithdrawScenePublish.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.WithdrawScenePublish
    */
   withdrawScenePublish: {
@@ -1706,6 +2328,13 @@ export const SceneService: GenService<{
     output: typeof WithdrawScenePublishResponseSchema;
   },
   /**
+   * GetPublishedScene returns a publication attempt's full state to a scene
+   * participant. Enforces the INV-S9 plugin-code participant gate with a
+   * load-bearing step order (INV-P6-5): header read → participant gate → content
+   * read (only for PUBLISHED rows, only after the gate passes). A non-participant
+   * is denied with the §10 triple-signal before any content is read. See
+   * publish_service.go::GetPublishedScene.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.GetPublishedScene
    */
   getPublishedScene: {
@@ -1714,6 +2343,11 @@ export const SceneService: GenService<{
     output: typeof GetPublishedSceneResponseSchema;
   },
   /**
+   * DownloadPublishedScene returns a PUBLISHED attempt rendered in the
+   * requested format (markdown/plain_text/jsonl) to a participant. Same
+   * load-bearing participant-gate ordering as GetPublishedScene; only PUBLISHED
+   * attempts are downloadable. See publish_service.go::DownloadPublishedScene.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.DownloadPublishedScene
    */
   downloadPublishedScene: {
@@ -1722,6 +2356,11 @@ export const SceneService: GenService<{
     output: typeof DownloadPublishedSceneResponseSchema;
   },
   /**
+   * ListScenePublishAttempts returns the audit list of a scene's publication
+   * attempts (header summaries, no content) to a participant. Participant-gated
+   * (INV-S9) so a non-participant cannot enumerate attempts. See
+   * publish_service.go::ListScenePublishAttempts.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.ListScenePublishAttempts
    */
   listScenePublishAttempts: {
@@ -1730,6 +2369,14 @@ export const SceneService: GenService<{
     output: typeof ListScenePublishAttemptsResponseSchema;
   },
   /**
+   * GetPublishedScene's PUBLIC counterpart: GetPublicSceneArchive is the
+   * unauthenticated read of a published scene. Structurally separate — NO
+   * caller validation, NO participant gate, NO ABAC. The only gate is
+   * status==PUBLISHED; a missing id OR any non-PUBLISHED attempt returns one
+   * opaque NOT_FOUND so existence/progress of an attempt cannot be inferred
+   * (INV-P6-8). Carries only public-safe fields. See
+   * publish_service.go::GetPublicSceneArchive.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.GetPublicSceneArchive
    */
   getPublicSceneArchive: {
@@ -1738,6 +2385,11 @@ export const SceneService: GenService<{
     output: typeof GetPublicSceneArchiveResponseSchema;
   },
   /**
+   * DownloadPublicSceneArchive is the PUBLIC, unauthenticated download of a
+   * published scene in the requested format. Same status-gate and opacity
+   * contract (INV-P6-8) as GetPublicSceneArchive; shares the renderer with
+   * DownloadPublishedScene. See publish_service.go::DownloadPublicSceneArchive.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.DownloadPublicSceneArchive
    */
   downloadPublicSceneArchive: {
@@ -1746,6 +2398,12 @@ export const SceneService: GenService<{
     output: typeof DownloadPublicSceneArchiveResponseSchema;
   },
   /**
+   * ExtendScenePublishVoteAttempts raises a scene's max-publish-attempts budget
+   * by a positive amount and emits the extension notice. Admin-only, enforced
+   * by the host's ABAC policy at dispatch — there is deliberately NO in-plugin
+   * role check (the inverse of INV-S9's plugin-code privacy gate). See
+   * publish_service.go::ExtendScenePublishVoteAttempts.
+   *
    * @generated from rpc holomush.scene.v1.SceneService.ExtendScenePublishVoteAttempts
    */
   extendScenePublishVoteAttempts: {

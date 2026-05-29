@@ -12,9 +12,28 @@ import { AddSessionStreamRequest, AddSessionStreamResponse, EmitEventRequest, Em
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
- * HostFunctionsService provides host capabilities to plugins.
- * This service is implemented by the host (the gRPC server runs in the host process).
- * Plugins call these methods to interact with the game world.
+ * HostFunctionsService declares the host-capability contract plugins call into:
+ * world reads, private key-value storage, command introspection, logging, event
+ * emission, and session-stream control. This gRPC service has no standalone
+ * server today — nothing registers a HostFunctionsServiceServer in the host.
+ * The capabilities are instead delivered through the in-VM Lua host-function
+ * bridge (internal/plugin/hostfunc — the holomush.* globals such as
+ * holomush.emit, holomush.kv_get, holomush.query_location). Binary plugins use
+ * PluginHostService (plugin.proto), but of this capability set they currently
+ * reach only EmitEvent (served): the overlapping host-functions Log,
+ * KVGet/KVSet/KVDelete, AddSessionStream, and RemoveSessionStream are declared
+ * on PluginHostService but unserved today (codes.Unimplemented, holomush-l6std),
+ * and the world-query RPCs (QueryLocation, QueryCharacter,
+ * QueryLocationCharacters) and command RPCs (ListCommands, GetCommandHelp) are
+ * not on PluginHostService at all. Those are realized only through the Lua
+ * bridge today. Where a capability is exposed, host-side enforcement is shared:
+ * host-side enforcement is shared: world reads/writes are ABAC-gated at the
+ * world service layer, key-value operations are ABAC-gated at the host-function
+ * layer (checkKVAccess in internal/plugin/hostfunc/functions.go), command
+ * visibility is filtered by the AccessPolicyEngine, and emits pass the manifest
+ * gates in PluginEventEmitter.Emit (internal/plugin/event_emitter.go). The
+ * plugin-runtime-symmetry invariant requires any capability exposed to both
+ * runtimes to behave identically.
  *
  * @generated from service holomush.plugin.v1.HostFunctionsService
  */
@@ -22,7 +41,15 @@ export const HostFunctionsService = {
   typeName: "holomush.plugin.v1.HostFunctionsService",
   methods: {
     /**
-     * EmitEvent publishes an event to a stream.
+     * EmitEvent publishes one event onto a stream on the calling plugin's
+     * behalf. The host stamps the actor and routes through
+     * PluginEventEmitter.Emit, which enforces the plugin's manifest gates:
+     * the target domain must appear in the manifest emits list, the actor kind
+     * must be in actor_kinds_claimable, and a sensitive payload requires the
+     * event type to be declared in crypto.emits. The plugin never supplies a
+     * trusted actor identity at this boundary — the host derives it. Fire this
+     * for plugin-originated game actions rather than mutating world state
+     * directly.
      *
      * @generated from rpc holomush.plugin.v1.HostFunctionsService.EmitEvent
      */
@@ -33,7 +60,10 @@ export const HostFunctionsService = {
       kind: MethodKind.Unary,
     },
     /**
-     * QueryLocation retrieves information about a location.
+     * QueryLocation returns a snapshot of one location's identity fields. The
+     * host resolves it through the world service (GetLocation), which applies
+     * ABAC for the plugin subject; a missing location maps to a not-found
+     * outcome surfaced on the response error field, not an RPC error. Read-only.
      *
      * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryLocation
      */
@@ -44,7 +74,10 @@ export const HostFunctionsService = {
       kind: MethodKind.Unary,
     },
     /**
-     * QueryCharacter retrieves information about a character.
+     * QueryCharacter returns a snapshot of one character's identity fields,
+     * resolved through the world service (GetCharacter) under the plugin
+     * subject's ABAC policy. A missing character is reported via the response
+     * error field. Read-only.
      *
      * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryCharacter
      */
@@ -55,7 +88,10 @@ export const HostFunctionsService = {
       kind: MethodKind.Unary,
     },
     /**
-     * QueryLocationCharacters retrieves all characters in a location.
+     * QueryLocationCharacters returns the lightweight roster (id + name only) of
+     * characters currently in a location, via the world service
+     * (GetCharactersByLocation) under the plugin subject's ABAC policy. Use
+     * QueryCharacter per id to fetch full character detail. Read-only.
      *
      * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryLocationCharacters
      */
@@ -66,7 +102,12 @@ export const HostFunctionsService = {
       kind: MethodKind.Unary,
     },
     /**
-     * KVGet retrieves a value from the plugin's key-value store.
+     * KVGet reads one value from the calling plugin's private namespaced
+     * key-value store. The namespace is the plugin name, so plugins cannot read
+     * each other's keys. Gated by an ABAC "read" check on the plugin's KV
+     * resource (checkKVAccess) before the store is touched; a denied check or a
+     * store error is surfaced on the response, and an absent key returns
+     * found=false with no error.
      *
      * @generated from rpc holomush.plugin.v1.HostFunctionsService.KVGet
      */
@@ -77,7 +118,10 @@ export const HostFunctionsService = {
       kind: MethodKind.Unary,
     },
     /**
-     * KVSet stores a value in the plugin's key-value store.
+     * KVSet writes one value into the calling plugin's private namespaced
+     * key-value store (namespace = plugin name). Gated by an ABAC "write" check
+     * on the plugin's KV resource before the store is touched. Overwrites any
+     * existing value at the key.
      *
      * @generated from rpc holomush.plugin.v1.HostFunctionsService.KVSet
      */
@@ -88,7 +132,9 @@ export const HostFunctionsService = {
       kind: MethodKind.Unary,
     },
     /**
-     * KVDelete removes a value from the plugin's key-value store.
+     * KVDelete removes one key from the calling plugin's private namespaced
+     * key-value store (namespace = plugin name). Gated by an ABAC "delete" check
+     * on the plugin's KV resource before the store is touched.
      *
      * @generated from rpc holomush.plugin.v1.HostFunctionsService.KVDelete
      */
@@ -99,7 +145,12 @@ export const HostFunctionsService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Log writes a log message through the host's logging system.
+     * Log emits a structured log line through the host logger, tagged with the
+     * calling plugin's name. The message and level are plugin-supplied; the host
+     * routes to the matching slog level (debug/info/warn/error) and treats the
+     * call as fire-and-forget — there is no acknowledgement payload. This is the
+     * sanctioned way for a plugin to reach the host's observability pipeline
+     * rather than writing to stdout/stderr of its subprocess.
      *
      * @generated from rpc holomush.plugin.v1.HostFunctionsService.Log
      */
@@ -110,8 +161,12 @@ export const HostFunctionsService = {
       kind: MethodKind.Unary,
     },
     /**
-     * ListCommands returns all available commands.
-     * Requires capability: command.list
+     * ListCommands returns the commands visible to one character, filtered by
+     * that character's capabilities through the AccessPolicyEngine. Commands
+     * with no declared capabilities are always included; capability-gated
+     * commands require the character to pass both the execute check and every
+     * declared capability (AND logic). If engine errors hide some commands the
+     * host still returns the commands it could evaluate.
      *
      * @generated from rpc holomush.plugin.v1.HostFunctionsService.ListCommands
      */
@@ -122,8 +177,11 @@ export const HostFunctionsService = {
       kind: MethodKind.Unary,
     },
     /**
-     * GetCommandHelp returns detailed help for a specific command.
-     * Requires capability: command.help
+     * GetCommandHelp returns the full help detail for a single named command.
+     * For a capability-gated command the host fail-closed-evaluates the
+     * character's access through the AccessPolicyEngine before returning detail;
+     * commands without capabilities are always accessible. A missing command or
+     * a denied/failed access check is surfaced on the response error field.
      *
      * @generated from rpc holomush.plugin.v1.HostFunctionsService.GetCommandHelp
      */
@@ -134,8 +192,12 @@ export const HostFunctionsService = {
       kind: MethodKind.Unary,
     },
     /**
-     * AddSessionStream subscribes an active session to an additional stream mid-session.
-     * Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+     * AddSessionStream subscribes an already-active session to one more stream
+     * mid-session, via the host StreamRegistry (AddStream), using the default
+     * FROM_CURSOR replay mode. The session must be live: an unknown session_id
+     * fails with SESSION_NOT_FOUND (codes.NotFound). Use this when a plugin
+     * action should start delivering a new stream's events to a connected
+     * character without reconnecting.
      *
      * @generated from rpc holomush.plugin.v1.HostFunctionsService.AddSessionStream
      */
@@ -146,8 +208,9 @@ export const HostFunctionsService = {
       kind: MethodKind.Unary,
     },
     /**
-     * RemoveSessionStream unsubscribes an active session from a stream.
-     * Idempotent: returns success if stream is not subscribed.
+     * RemoveSessionStream unsubscribes an active session from a stream, via the
+     * host StreamRegistry (RemoveStream). The operation is idempotent: removing a
+     * stream the session is not subscribed to succeeds rather than erroring.
      *
      * @generated from rpc holomush.plugin.v1.HostFunctionsService.RemoveSessionStream
      */
