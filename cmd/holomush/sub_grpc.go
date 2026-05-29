@@ -441,11 +441,9 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		holoFocus.WithPlayerPreferences(holoFocus.NewPlayerPrefsAdapter(authPlayerRepo)),
 		holoFocus.WithStreamContributor(&focusStreamContributorAdapter{pm: pluginManager}),
 	}
+	focusCoordOpts = append(focusCoordOpts, holoFocus.WithGameID(s.cfg.EventBus.GameID()))
 	if s.cfg.StreamRegistry != nil {
-		focusCoordOpts = append(
-			focusCoordOpts,
-			holoFocus.WithStreamSender(holoGRPC.NewStreamSenderAdapter(s.cfg.StreamRegistry)),
-		)
+		focusCoordOpts = append(focusCoordOpts, holoGRPC.FocusStreamCoordinatorOptions(s.cfg.StreamRegistry)...)
 	}
 	focusCoord, focusErr := holoFocus.NewCoordinator(focusCoordOpts...)
 	if focusErr != nil {
