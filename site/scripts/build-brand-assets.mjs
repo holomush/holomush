@@ -28,3 +28,34 @@ const tileSvg = `<svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" r
 `;
 writeFileSync(`${PUBLIC}/favicon.svg`, tileSvg);
 console.log('wrote favicon.svg');
+
+// --- Header lockups -------------------------------------------------
+// Reusable inner tile (no aria; embedded). 96px tile on a 520x128 canvas.
+function tileGroup(idSuffix) {
+  // The tile is the full 256-unit artwork, scaled to 96px and offset into the
+  // 128px-tall lockup canvas. The h path uses the same full-tile coords as the
+  // standalone favicon (60,188,160).
+  return `<g transform="translate(16,16) scale(0.375)">
+<defs><linearGradient id="g${idSuffix}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${CYAN1}"/><stop offset="1" stop-color="${CYAN2}"/></linearGradient>
+<mask id="cut${idSuffix}"><rect width="256" height="256" rx="58" fill="#fff"/><path d="${glyphPath('h',60,188,160).d}" fill="#000"/></mask></defs>
+<rect width="256" height="256" rx="58" fill="url(#g${idSuffix})" mask="url(#cut${idSuffix})"/>
+<rect x="158" y="170" width="46" height="16" rx="3" fill="${AMBER}"/></g>`;
+}
+
+function lockup({ id, wordColor, promptOpacity }) {
+  const baseY = 84, size = 54, wordX = 120;
+  const prompt = glyphPath('>', wordX, baseY, size);
+  const word = glyphPath('holomush', wordX + prompt.width, baseY, size);
+  const cursorX = wordX + prompt.width + word.width + 8;
+  return `<svg viewBox="0 0 ${Math.ceil(cursorX + 44)} 128" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="HoloMUSH">
+${tileGroup(id)}
+<path d="${prompt.d}" fill="${wordColor}" opacity="${promptOpacity}"/>
+<path d="${word.d}" fill="${wordColor}"/>
+<rect x="${cursorX}" y="${baseY - 8}" width="30" height="8" rx="2" fill="${AMBER}"/>
+</svg>
+`;
+}
+
+writeFileSync(`${ASSETS}/logo-dark.svg`, lockup({ id: 'd', wordColor: '#3dd6f7', promptOpacity: '0.5' }));
+writeFileSync(`${ASSETS}/logo-light.svg`, lockup({ id: 'l', wordColor: '#1565c0', promptOpacity: '0.55' }));
+console.log('wrote logo-dark.svg, logo-light.svg');
