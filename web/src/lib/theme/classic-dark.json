@@ -21,6 +21,7 @@
     "status.text": "#555555",
     "status.background": "#12122a",
     "status.online": "#66bb6a",
+    "status.offline": "#e57373",
     "sidebar.background": "#12122a",
     "scrollback.indicator": "#ffb74d",
     "primary": "#4fc3f7",

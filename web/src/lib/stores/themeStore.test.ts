@@ -80,7 +80,35 @@ describe('status.online token (holomush-wnilg)', () => {
   }
 });
 
-describe('status dot CSS wiring (holomush-wnilg)', () => {
+describe('status.offline token (holomush-qs31c)', () => {
+  for (const [id, theme] of builtInThemes) {
+    const colors = theme.colors as Record<string, string>;
+
+    it(`${id} defines a red-dominant status.offline color`, () => {
+      const offline = colors['status.offline'];
+      expect(offline, `${id} must define a status.offline color`).toBeDefined();
+      const { r, g, b } = rgb(offline);
+      // Red channel dominates → the dot reads as red (dead connection), not orange.
+      expect(r, `${id} status.offline (${offline}) red channel must exceed green`).toBeGreaterThan(g);
+      expect(r, `${id} status.offline (${offline}) red channel must exceed blue`).toBeGreaterThan(b);
+    });
+
+    it(`${id} decouples status.offline from the orange system message token`, () => {
+      // The original bug coupled the disconnected dot to --mush-system, which
+      // every theme defines orange. The status indicator must NOT reuse it.
+      expect(colors['status.offline']).not.toBe(colors['system']);
+    });
+
+    it(`${id} exposes status.offline as the chrome --color-status-offline custom property`, () => {
+      // The CSS references var(--color-status-offline); themeToCssVars must
+      // actually define it (killing the dead var(--x, fallback) footgun).
+      const css = themeToCssVars(theme.colors as ThemeColors);
+      expect(css).toContain(`--color-status-offline: ${colors['status.offline']}`);
+    });
+  }
+});
+
+describe('status dot CSS wiring (holomush-wnilg, holomush-qs31c)', () => {
   // Guard the consuming sites, not just the token table: the original bug
   // lived in the .svelte CSS (var(--mush-arrive, …)). Reverting these lines
   // while keeping the token would otherwise pass every token-table assertion.
@@ -104,4 +132,12 @@ describe('status dot CSS wiring (holomush-wnilg)', () => {
       expect(componentSrc(rel)).not.toContain('var(--mush-arrive');
     });
   }
+
+  it('TopBar disconnected dot consumes --color-status-offline', () => {
+    expect(componentSrc('TopBar.svelte')).toContain('var(--color-status-offline)');
+  });
+
+  it('TopBar disconnected dot no longer reuses the orange --mush-system message token', () => {
+    expect(componentSrc('TopBar.svelte')).not.toContain('var(--mush-system');
+  });
 });
