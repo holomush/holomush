@@ -210,7 +210,7 @@
   .conn-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-status-text); }
   .conn-pill[data-status="connected"] .conn-dot { background: var(--color-status-online); }
   .conn-pill[data-status="syncing"] .conn-dot { background: var(--color-accent); animation: dot-pulse 1200ms ease-in-out infinite; }
-  .conn-pill[data-status="disconnected"] .conn-dot { background: var(--mush-system, #e57373); }
+  .conn-pill[data-status="disconnected"] .conn-dot { background: var(--color-status-offline); }
   .nav-link {
     color: var(--color-input-text); text-decoration: none;
     padding: 2px 8px; border-radius: 4px; border: 1px solid var(--color-border);
