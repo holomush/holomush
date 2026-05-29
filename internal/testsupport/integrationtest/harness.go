@@ -442,15 +442,17 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 			Store:       evStore,
 			NotFoundErr: store.ErrSystemInfoNotFound,
 		})
-		var focusErr error
-		focusCoord, focusErr = focus.NewCoordinator(
+		coordOpts := []focus.CoordinatorOption{
 			focus.WithSessionStore(sessionStoreInst),
 			focus.WithKindPolicy(scenepolicy.New()),
 			focus.WithGameSettings(gameSettings),
 			focus.WithPlayerPreferences(focus.NewPlayerPrefsAdapter(playerRepo)),
 			focus.WithStreamContributor(&focusStreamContributorAdapter{pm: pluginSub.Manager()}),
-			focus.WithStreamSender(holoGRPC.NewStreamSenderAdapter(streamRegistry)),
-		)
+			focus.WithGameID(bus.Bus.GameID()),
+		}
+		coordOpts = append(coordOpts, holoGRPC.FocusStreamCoordinatorOptions(streamRegistry)...)
+		var focusErr error
+		focusCoord, focusErr = focus.NewCoordinator(coordOpts...)
 		require.NoError(t, focusErr, "integrationtest.Start: build focus coordinator")
 	}
 
