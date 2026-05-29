@@ -283,6 +283,12 @@ var _ = Describe("Phase 6 hard-privacy-boundary gate for a non-participant (Char
 			g.Expect(publishedSceneID).NotTo(BeEmpty(), "no PUBLISHED attempt yet")
 		}).WithTimeout(5 * time.Second).WithPolling(20 * time.Millisecond).Should(Succeed())
 
+		// The PUBLISHED attempt MUST be the same row that was COLLECTING — proves
+		// the COLLECTING→PUBLISHED transition (opacity flip on the same attempt),
+		// not a replacement attempt (INV-P6-8).
+		Expect(publishedSceneID).To(Equal(collectingAttemptID),
+			"PUBLISHED attempt must be the same row that was COLLECTING (transition, not replacement)")
+
 		// ── POST-PUBLISH: INV-S9 denial on GetPublishedScene ─────────────────
 		// Charlie (non-participant) calls GetPublishedScene with the published
 		// attempt id. The plugin-code IsParticipant gate (publish_service.go,
