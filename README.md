@@ -38,7 +38,7 @@ A modern MUSH platform combining classic text-based multiplayer gameplay with co
 
 ### Prerequisites
 
-- Go 1.23+
+- Go (version pinned in [`go.mod`](go.mod))
 - [Task](https://taskfile.dev/) (task runner)
 - PostgreSQL (for data storage)
 - Docker (for integration tests)
@@ -86,7 +86,7 @@ telnet localhost 4201
 - **ABAC engine** with Cedar-inspired DSL, in-memory policy cache with push-based invalidation
 - **SvelteKit web client** with terminal UI, ANSI rendering, and session persistence
 
-See [Architecture](site/docs/contributors/architecture.md) for details.
+See [Architecture](https://holomush.dev/contributing/explanation/architecture/) for details.
 
 ## Development
 
@@ -141,12 +141,12 @@ cosign verify \
   ghcr.io/holomush/holomush:v1.0.0
 ```
 
-See [Verifying Releases](docs/reference/verifying-releases.md) for complete instructions.
+See [Verifying Releases](https://holomush.dev/operating/how-to/deploy/verifying-releases/) for complete instructions.
 
 ## Documentation
 
-- [Architecture](site/docs/contributors/architecture.md) - System design overview
-- [Plugin Guide](site/docs/developers/plugin-guide.md) - Writing plugins with ABAC policies
+- [Architecture](https://holomush.dev/contributing/explanation/architecture/) - System design overview
+- [Plugin Guide](https://holomush.dev/extending/tutorials/plugin-guide/) - Writing plugins with ABAC policies
 - [Contributing](CONTRIBUTING.md) - Contribution guidelines
 
 ## License

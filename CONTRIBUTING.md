@@ -5,78 +5,81 @@
 
 # Contributing to HoloMUSH
 
-Thank you for your interest in contributing to HoloMUSH!
+Thanks for your interest in contributing! HoloMUSH is open source (Apache-2.0)
+and welcomes contributions of all kinds — code, documentation, bug reports, and
+feature ideas.
 
-## Development Process
+Find work to do, or report a bug or idea, via
+[GitHub Issues](https://github.com/holomush/holomush/issues).
 
-### Prerequisites
+## Prerequisites
 
-- Go 1.22+
-- Task (task runner)
-- PostgreSQL 18+
+- Go — the required version is pinned in [`go.mod`](go.mod)
+- [Task](https://taskfile.dev/) (the task runner this project uses)
+- PostgreSQL
+- Docker (only needed to run the integration tests locally)
 
-### Setup
+## Your first pull request
+
+HoloMUSH uses a standard GitHub fork-and-pull-request workflow:
 
 ```bash
-# Clone the repository
-git clone https://github.com/holomush/holomush.git
+# 1. Fork the repo on GitHub, then clone YOUR fork
+git clone https://github.com/<your-username>/holomush.git
 cd holomush
 
-# Install tools and git hooks
+# 2. Install tools and git hooks
 task setup
 
-# Run tests
+# 3. Create a branch
+git checkout -b my-change
+
+# 4. Make your change test-first, then run the local checks
+task lint
 task test
+task pr-prep        # the local pre-PR gate; CI also runs integration + E2E
+
+# 5. Push to your fork and open a pull request
+git push -u origin my-change
 ```
 
-### Workflow
+That's the whole flow — plain `git`, your own fork, a PR. CI runs the full
+suite (including integration and E2E tests) on every pull request.
 
-We use [beads](https://github.com/steveyegge/beads) for task tracking:
+## What we expect
 
-1. Check `bd ready` for available tasks
-2. Write failing tests first (TDD)
-3. Implement until tests pass
-4. Update documentation
-5. Submit PR
+A few conventions keep the codebase coherent. Rather than restating them here
+(where they'd drift), see the canonical docs:
 
-### Commit Messages
+- **[Pull Request Guide](https://holomush.dev/contributing/how-to/pr-guide/)** —
+  PR workflow, review, and merge process; conventional-commit titles.
+- **[Coding standards](https://holomush.dev/contributing/reference/coding-standards/)** —
+  style, error handling, test naming, the >80% coverage expectation.
+- **[Integration tests](https://holomush.dev/contributing/how-to/integration-tests/)** —
+  how the Docker-backed integration suite works.
+- **[System architecture](https://holomush.dev/contributing/explanation/architecture/)** —
+  how the pieces fit together.
+- **[Plugin guide](https://holomush.dev/extending/tutorials/plugin-guide/)** —
+  writing Lua and binary plugins.
 
-We follow [Conventional Commits](https://www.conventionalcommits.org/):
+The `task pr-prep` gate covers most of this automatically before you open a PR.
 
-```text
-type(scope): description
+## How we develop (optional — not required for contributors)
 
-Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
-```
-
-Examples:
-
-- `feat(events): add event replay on reconnection`
-- `fix(telnet): handle connection timeout gracefully`
-- `docs(readme): update quick start instructions`
-
-### Code Style
-
-- Go code follows `gofumpt` formatting
-- Run `task lint` before committing
-- Pre-commit hooks enforce style automatically
-
-### Pull Requests
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run `task lint` and `task test`
-5. Submit a PR with clear description
-
-### Questions?
-
-Open an issue for discussion before starting major work.
+HoloMUSH is developed heavily with AI coding agents, using
+[Jujutsu (jj)](https://jj-vcs.github.io/) for version control and an internal
+issue tracker. **You need none of that.** Standard `git`, GitHub Issues, and
+GitHub pull requests are fully supported and are the only thing we ask of
+contributors. (This is why you'll see a `CLAUDE.md`, a `.jj/` directory, and
+agent-authored commits — they're part of the maintainer workflow, not
+requirements for you.)
 
 ## Code of Conduct
 
-Be respectful and constructive. We're all here to build something great.
+This project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md). By
+participating, you are expected to uphold it.
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the Apache 2.0 License.
+By contributing, you agree that your contributions will be licensed under the
+[Apache 2.0 License](LICENSE).

@@ -2,6 +2,14 @@
 title: "Session Isolation"
 ---
 
+:::note[Maintainer workflow]
+This page documents the maintainer/agent session-isolation workflow using
+[Jujutsu (jj)](https://jj-vcs.github.io/) workspaces. **External contributors
+don't need jj or workspaces** — a standard `git` fork-and-branch workflow is all
+that's required. See
+[CONTRIBUTING.md](https://github.com/holomush/holomush/blob/main/CONTRIBUTING.md).
+:::
+
 HoloMUSH is developed primarily by concurrent AI agent sessions (Claude Code) and human contributors working in parallel. Because `jj` snapshots the working copy on every command, two sessions sharing the same `jj` workspace will collide on uncommitted edits.
 
 To prevent this, every Claude Code session runs in its own `jj` workspace under `<repo-parent>/.worktrees/<name>`.
