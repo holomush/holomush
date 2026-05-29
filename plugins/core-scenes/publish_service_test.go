@@ -426,7 +426,9 @@ func TestWithdrawScenePublishByOwnerFailsAttempt(t *testing.T) {
 }
 
 // TestWithdrawScenePublishRejectsNonOwner — a non-owner is denied with
-// SCENE_PUBLISH_NOT_OWNER (PermissionDenied) and the attempt is unchanged.
+// SCENE_PUBLISH_NOT_OWNER (PermissionDenied) and the attempt is unchanged
+// (INV-P6-3: only the scene owner may withdraw an active attempt; participants
+// opposed to publication must vote no, not withdraw).
 func TestWithdrawScenePublishRejectsNonOwner(t *testing.T) {
 	t.Parallel()
 	owner := ulid.Make().String()

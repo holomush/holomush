@@ -95,7 +95,9 @@ func TestPublishStateMachine_ResolutionTriggers(t *testing.T) {
 }
 
 // TestPublishStateMachine_CoolOffFlipBack asserts that a no-vote during COOLOFF
-// (flip) returns the attempt to COLLECTING rather than failing it. Spec §4.1.
+// (flip) returns the attempt to COLLECTING rather than failing it (INV-P6-2:
+// once an attempt enters COOLOFF, votes may change only by voting no, which
+// transitions the attempt back to COLLECTING). Spec §4.1.
 // (Vote-state preservation across the flip is a store/handler concern verified
 // in the B3 vote-handler tests, not this pure transition predicate.)
 func TestPublishStateMachine_CoolOffFlipBack(t *testing.T) {
