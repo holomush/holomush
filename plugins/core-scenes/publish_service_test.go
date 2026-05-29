@@ -345,6 +345,30 @@ func TestCastPublishSceneVoteRejectsNonRosterMember(t *testing.T) {
 	assert.Equal(t, "SCENE_PUBLISH_NOT_A_VOTER", status.Convert(err).Message())
 }
 
+// TestCastPublishSceneVoteRejectsTerminalAttempt — holomush-wn612: the handler's
+// terminal-status pre-check (CastPublishSceneVote) rejects a vote on a resolved
+// attempt with FailedPrecondition / SCENE_PUBLISH_INVALID_STATE, before reaching
+// the store. A roster member is the caller, so the rejection is the status guard,
+// not the non-voter guard (INV-P6-2 terminal boundary).
+func TestCastPublishSceneVoteRejectsTerminalAttempt(t *testing.T) {
+	t.Parallel()
+	v1 := ulid.Make().String()
+	store := newFakeStore()
+	store.installPublishedAttempt("pub-term", "scene-term", StatusAttemptFailed)
+	store.installVoters("pub-term", v1)
+	svc := newTestService(t, store)
+
+	_, err := svc.CastPublishSceneVote(context.Background(), &scenev1.CastPublishSceneVoteRequest{
+		CallerCharacterId: v1,
+		PublishedSceneId:  "pub-term",
+		Vote:              true,
+	})
+
+	require.Error(t, err)
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+	assert.Equal(t, "SCENE_PUBLISH_INVALID_STATE", status.Convert(err).Message())
+}
+
 // TestCastPublishSceneVoteTriggersCoolOffOnAllYes — unanimous yes (all voted)
 // transitions COLLECTING→COOLOFF and stamps the cool-off marker; a partial
 // tally does not transition.

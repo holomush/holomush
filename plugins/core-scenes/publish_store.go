@@ -178,6 +178,21 @@ type CastVoteResult struct {
 // is immutable after attempt creation, so the prior-vote lookup reliably
 // distinguishes non-voters from pending voters.
 //
+// The whole cast runs in one transaction that first SELECTs the attempt row
+// FOR UPDATE and re-validates its status is non-terminal. That lock is the
+// same published_scenes row the snapshot pipeline takes in its write-tx
+// (LockForSnapshot; snapshot atomicity, spec §11.3), so a vote serializes
+// strictly against a concurrent resolution: if the attempt transitions to
+// PUBLISHED/ATTEMPT_FAILED first, the cast is rejected with
+// SCENE_PUBLISH_INVALID_STATE rather than landing on a terminal attempt; if the
+// cast wins the lock, the snapshot's own in-tx re-validation — whose SELECT FOR
+// UPDATE is the serialization point (INV-RB-8) — observes the vote consistently.
+// This closes the TOCTOU between the handler's terminal-status check
+// (publish_service.go CastPublishSceneVote) and the vote write (holomush-wn612).
+// Status is checked before the roster lookup, so a vote on a terminal attempt
+// yields INVALID_STATE for any caller — consistent with the handler, which also
+// rejects a terminal attempt before it reaches this method.
+//
 // IsChange is true ONLY when a prior NON-NULL vote existed and differs from
 // the new value — i.e. a genuine flip. The first cast (pending → value) and
 // a re-affirmation (same value) both report IsChange=false. voted_at is set
@@ -189,8 +204,32 @@ func (s *SceneStore) CastVote(ctx context.Context, publishedSceneID, characterID
 		attribute.String("character_id", characterID))
 	defer span.End()
 
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, oops.Code("SCENE_PUBLISH_CAST_TX_BEGIN_FAILED").Wrap(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
+
+	// Lock the attempt row and re-validate non-terminal status under the lock.
+	var statusStr string
+	if err := tx.QueryRow(ctx,
+		`SELECT status FROM published_scenes WHERE id = $1 FOR UPDATE`,
+		publishedSceneID).Scan(&statusStr); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.Code("SCENE_PUBLISH_NOT_FOUND").
+				With("published_scene_id", publishedSceneID).Wrap(err)
+		}
+		return nil, oops.Code("SCENE_PUBLISH_CAST_LOCK_FAILED").Wrap(err)
+	}
+	if PublishedSceneStatus(statusStr).IsTerminal() {
+		return nil, oops.Code("SCENE_PUBLISH_INVALID_STATE").
+			With("published_scene_id", publishedSceneID).
+			With("status", statusStr).
+			Errorf("vote on a terminal publication attempt is rejected")
+	}
+
 	var prior *bool
-	if err := s.pool.QueryRow(ctx,
+	if err := tx.QueryRow(ctx,
 		`SELECT vote FROM published_scene_votes
 		 WHERE published_scene_id = $1 AND character_id = $2`,
 		publishedSceneID, characterID).Scan(&prior); err != nil {
@@ -205,7 +244,7 @@ func (s *SceneStore) CastVote(ctx context.Context, publishedSceneID, characterID
 	// A change is a flip of an existing vote — not the first cast.
 	isChange := prior != nil && *prior != vote
 
-	if _, err := s.pool.Exec(ctx, `
+	if _, err := tx.Exec(ctx, `
 		UPDATE published_scene_votes
 		SET vote = $1,
 		    voted_at = COALESCE(voted_at, $2),
@@ -213,6 +252,10 @@ func (s *SceneStore) CastVote(ctx context.Context, publishedSceneID, characterID
 		WHERE published_scene_id = $3 AND character_id = $4
 	`, vote, pgnanos.From(time.Now()), publishedSceneID, characterID); err != nil {
 		return nil, oops.Code("SCENE_PUBLISH_CAST_UPDATE_FAILED").Wrap(err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.Code("SCENE_PUBLISH_CAST_COMMIT_FAILED").Wrap(err)
 	}
 
 	return &CastVoteResult{Vote: vote, IsChange: isChange}, nil
