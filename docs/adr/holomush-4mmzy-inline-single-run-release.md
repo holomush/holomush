@@ -4,7 +4,7 @@
 # Cut Releases Inline in One Dispatched Run
 
 **Date:** 2026-05-24
-**Status:** Accepted
+**Status:** Superseded by holomush-76rsl
 **Decision:** holomush-4mmzy
 **Deciders:** HoloMUSH Contributors
 
@@ -76,5 +76,9 @@ fallback for human-pushed local tags.
 
 ## References
 
+- Superseded by: [`holomush-76rsl`](holomush-76rsl-release-workflow-dispatch-only.md) —
+  drops the `on: push: tags` fallback because the App-token tag creation
+  re-triggered this workflow (duplicate `422 already_exists` run). The inline
+  single-run decision below is unchanged; only the fallback sub-clause is reversed.
 - [Cocogitto Release Tooling Design — §Why a single inline dispatched run, §Component 3b, INV-1, INV-8](../superpowers/specs/2026-05-24-cocogitto-release-tooling-design.md)
 - [Tag-only release; GitHub Release notes as canonical history (`holomush-jfb9x`)](holomush-jfb9x-tag-only-release-drop-changelog.md)
