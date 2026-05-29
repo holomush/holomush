@@ -4,9 +4,10 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
+  # Dispatch-only. A v* tag pushed with the release App token would re-fire
+  # this workflow (App-token pushes are exempt from the GITHUB_TOKEN
+  # recursion guard), producing a duplicate run that fails on already-existing
+  # release assets. `task release:cut` always uses this dispatch entry point.
   workflow_dispatch:
     inputs:
       expected_increment:
@@ -35,9 +36,6 @@ jobs:
       packages: write # push container images to GHCR
       id-token: write # Cosign keyless signing (OIDC)
       attestations: write # SLSA provenance attestations
-    # Runs on a manual release dispatch OR a human-pushed v* tag (fallback).
-    # The old release-PR tool is gone; the v* tag is the only contract.
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -48,10 +46,8 @@ jobs:
           # tag and goreleaser creates the remote tag/Release via the App token.
           persist-credentials: false
 
-      # ── Release dispatch path: derive version + create the v* tag inline ──
-      # (skipped on the tag-push fallback path, where the tag already exists)
+      # ── Derive version + create the v* tag inline from the checked-out HEAD ──
       - name: Mint GitHub App token
-        if: github.event_name == 'workflow_dispatch'
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
@@ -64,17 +60,14 @@ jobs:
           permission-packages: write
 
       - name: Install cog
-        if: github.event_name == 'workflow_dispatch'
         uses: ./.github/actions/install-cog
 
       - name: Configure git identity for tagging
-        if: github.event_name == 'workflow_dispatch'
         run: |
           git config user.name "holomush-release[bot]"
           git config user.email "holomush-release[bot]@users.noreply.github.com"
 
       - name: Preview + guard version bump
-        if: github.event_name == 'workflow_dispatch'
         env:
           EXPECTED: ${{ inputs.expected_increment }}
         run: |
@@ -106,7 +99,6 @@ jobs:
           fi
 
       - name: Cut tag (cog bump, tag-only)
-        if: github.event_name == 'workflow_dispatch'
         run: |
           set -euo pipefail
           # Creates a LOCAL v* tag from conventional commits. No bump commit
@@ -119,11 +111,7 @@ jobs:
         id: version
         run: |
           set -euo pipefail
-          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
-            TAG="$(git describe --tags --abbrev=0)"   # the cog-created local tag
-          else
-            TAG="${GITHUB_REF_NAME}"                  # the human-pushed tag
-          fi
+          TAG="$(git describe --tags --abbrev=0)"   # the cog-created local tag
           if ! printf '%s' "${TAG}" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "::error::resolved tag '${TAG}' is not a v-prefixed semver; refusing to build a malformed release"
             exit 1
@@ -199,10 +187,9 @@ jobs:
           version: "~> v2"
           args: release --clean
         env:
-          # App token on the dispatch path (creates the remote tag via
-          # target_commitish + bypasses any v* tag-protection); GITHUB_TOKEN on
-          # the human-pushed-tag fallback path.
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          # App token creates the remote tag via target_commitish and bypasses
+          # any v* tag-protection.
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
       # Verify signing artifacts were created (defense-in-depth)
       - name: Verify signing artifacts exist
