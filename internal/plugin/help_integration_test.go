@@ -14,7 +14,9 @@ import (
 
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
+	"github.com/stretchr/testify/mock"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	accesstypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
@@ -391,6 +393,60 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 				"the matching no-capability command must be shown")
 			Expect(resp.Output).To(ContainSubstring("incomplete"),
 				"the user must be told the search list may be incomplete")
+		})
+
+		It("renders the granted partial list with an incomplete indicator when only some commands' ABAC evaluations error", func() {
+			// The genuinely *partial* path the all-error NewErrorEngine cases above
+			// cannot reach: one capability-gated command survives, another is hidden
+			// by a per-command engine error, and result.incomplete must cross the
+			// Go→Lua host serialization boundary as true so the indicator renders
+			// rather than the whole list being discarded (the holomush-869o8
+			// regression; holomush-mexs). This drives that boundary through the full
+			// Lua host stack (hostfunc.New → pluginlua.Host → Load → DeliverCommand),
+			// complementing the hostfunc-level unit test
+			// TestListCommandsIncompleteFieldTrueWhenPartialErrors.
+			//
+			// Layer-1 Evaluate allows everything so control reaches the capability
+			// pre-flight; the subject matcher is pinned to the resolved CharacterSubject
+			// so a regression in subject construction would surface here.
+			const charID = "01HTEST000000000000000CHAR"
+			subject := access.CharacterSubject(charID)
+
+			partialEngine := policytest.NewMockAccessPolicyEngine(GinkgoT())
+			partialEngine.On("Evaluate", mock.Anything, mock.Anything).
+				Return(accesstypes.NewDecision(accesstypes.EffectAllow, "test-allow", ""), nil)
+			partialEngine.On("CanPerformAction", mock.Anything, subject, "emit", "stream", "local").
+				Return(true, nil).Maybe() // say: granted
+			partialEngine.On("CanPerformAction", mock.Anything, subject, "write", "location", "local").
+				Return(false, errors.New("policy store unavailable")).Maybe() // dig: engine error
+
+			fixture, err := setupHelpTestWithEngine(partialEngine)
+			Expect(err).NotTo(HaveOccurred())
+			defer fixture.Cleanup()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+				Command:     "help",
+				Args:        "",
+				CharacterID: charID,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp).NotTo(BeNil())
+
+			Expect(resp.Status).To(Equal(pluginsdk.CommandOK),
+				"a populated-but-incomplete list must render, not fail")
+			Expect(resp.Output).To(ContainSubstring("say"),
+				"the capability-gated command whose ABAC succeeded must be shown")
+			Expect(resp.Output).To(ContainSubstring("look"),
+				"no-capability commands are always available and must be shown")
+			Expect(resp.Output).NotTo(ContainSubstring("dig"),
+				"the capability-gated command whose ABAC errored must be hidden")
+			Expect(resp.Output).To(ContainSubstring("incomplete"),
+				"result.incomplete must cross the host boundary as true and surface the indicator")
+			Expect(resp.Output).NotTo(ContainSubstring("temporarily unavailable"),
+				"the blanket message is reserved for a genuinely nil result")
 		})
 	})
 })
