@@ -121,7 +121,7 @@ know they exist; neither has code yet.
 
 | Use          | Epic           | Frontier bead                                                | State                                    |
 | ------------ | -------------- | ------------------------------------------------------------ | ---------------------------------------- |
-| **Scenes**   | `holomush-5rh` | `5rh.15` Phase 6 (Logs + vote + hard privacy boundary)       | Active frontier — Phases 4 + 5 shipped   |
+| **Scenes**   | `holomush-5rh` | Phases 4-6 shipped — web Scenes Portal (`5rh.8`/`5rh.18`) next | Phases 4-6 shipped (#4279 / #4302 / #4308) |
 | **Channels** | `holomush-0sc` | `0sc.12` Channel plugin rework on plugin ABAC                | In progress                              |
 | **Forums**   | `holomush-djj` | (undesigned)                                                 | Needs brainstorm + spec                  |
 | **Discord**  | `holomush-aqq` | `aqq.5` Discord OAuth linking (`dwk.7` overlap closed today) | Blocked on Channels + OAuth substrate    |
@@ -136,8 +136,12 @@ know they exist; neither has code yet.
    emission + pose order + crypto.emits adoption. **Phase 5 shipped**
    (`5rh.14`, PR #4191, 2026-05-23) — per-connection focus model + multi-
    connection visibility + PluginHostService extension (3 new RPCs:
-   `SetConnectionFocus`, `AutoFocusOnJoin`, `IsAnyConnFocused`). Phase 6
-   (`5rh.15`) is now the frontier.
+   `SetConnectionFocus`, `AutoFocusOnJoin`, `IsAnyConnFocused`). **Phase 6
+   shipped** (`5rh.20`, 2026-05-29) — scene logs + publish vote + hard
+   privacy boundary: feature PR #4279, bare-ULID scene identity fix #4302
+   (`holomush-y5inx`, surfaced by the Phase 6 E2E work), E2E tier PR #4308.
+   Scenes (Phases 4-6) is now the shipped reference implementation; the next
+   scenes use is the web Scenes Portal (`5rh.8`/`5rh.18`).
 2. **Channels in parallel where unblocked** (`0sc.12`). The channel plugin
    rework is already in-flight on the plugin ABAC substrate — keep that
    going. Channel-specific features that depend on scenes patterns (e.g.,
