@@ -34,14 +34,14 @@ import { themeToCssVars } from './themeStore';
 import type { ThemeColors } from '$lib/theme/types';
 import defaultDark from '$lib/theme/default-dark.json';
 import defaultLight from '$lib/theme/default-light.json';
-import classicDark from '$lib/theme/classic-dark.json';
-import classicLight from '$lib/theme/classic-light.json';
+import warmDark from '$lib/theme/warm-dark.json';
+import warmLight from '$lib/theme/warm-light.json';
 
 const builtInThemes = [
   ['default-dark', defaultDark],
   ['default-light', defaultLight],
-  ['classic-dark', classicDark],
-  ['classic-light', classicLight],
+  ['warm-dark', warmDark],
+  ['warm-light', warmLight],
 ] as const;
 
 // Parse #rrggbb into channels so "is it green?" is asserted on the value,
@@ -139,5 +139,120 @@ describe('status dot CSS wiring (holomush-wnilg, holomush-qs31c)', () => {
 
   it('TopBar disconnected dot no longer reuses the orange --mush-system message token', () => {
     expect(componentSrc('TopBar.svelte')).not.toContain('var(--mush-system');
+  });
+});
+
+describe('classic-* → warm-* id migration (holomush-9ektq D9)', () => {
+  it('maps a saved classic-dark pref to warm-dark', async () => {
+    localStorage.setItem('holomush-theme-prefs', JSON.stringify({ themeId: 'classic-dark', terminalBlackBackground: false }));
+    vi.resetModules();
+    const mod = await import('./themeStore');
+    let id = '';
+    mod.themePreferences.subscribe((p) => { id = p.themeId; })();
+    expect(id).toBe('warm-dark');
+  });
+});
+
+function relLuminance(hex: string): number {
+  const { r, g, b } = rgb(hex);
+  const lin = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+function contrastRatio(fg: string, bg: string): number {
+  const a = relLuminance(fg);
+  const b = relLuminance(bg);
+  const hi = Math.max(a, b);
+  const lo = Math.min(a, b);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+// Chrome text tokens that render type and must clear AA against a background.
+const CHROME_TEXT_TOKENS = [
+  'foreground', 'status.text', 'muted.foreground', 'scrollback.replayed',
+  'card.foreground', 'popover.foreground', 'secondary.foreground',
+] as const;
+
+// All 11 message tokens render against the theme background.
+const MESSAGE_TOKENS = [
+  'say.speaker', 'say.speech', 'pose.actor', 'pose.action', 'system',
+  'arrive', 'leave', 'command.output', 'command.error', 'ooc', 'pemit',
+] as const;
+
+const AA = 4.5;
+
+describe('WCAG AA contrast (holomush-6siys, holomush-9ektq INV-2/INV-3)', () => {
+  for (const [id, theme] of builtInThemes) {
+    const c = theme.colors as Record<string, string>;
+    for (const tok of CHROME_TEXT_TOKENS) {
+      it(`${id}: chrome ${tok} ≥ ${AA}:1 on background`, () => {
+        expect(contrastRatio(c[tok], c.background)).toBeGreaterThanOrEqual(AA);
+      });
+    }
+    for (const tok of MESSAGE_TOKENS) {
+      it(`${id}: message ${tok} ≥ ${AA}:1 on background`, () => {
+        expect(contrastRatio(c[tok], c.background)).toBeGreaterThanOrEqual(AA);
+      });
+    }
+  }
+});
+
+describe('brand alignment (holomush-9ektq INV-1)', () => {
+  const brandDefaults = [['default-dark', defaultDark], ['default-light', defaultLight]] as const;
+  for (const [id, theme] of brandDefaults) {
+    const c = theme.colors as Record<string, string>;
+    for (const tok of ['primary', 'accent', 'ring', 'scrollback.indicator'] as const) {
+      it(`${id}: ${tok} is cyan-dominant (blue ≥ red), never amber`, () => {
+        const { r, b } = rgb(c[tok]);
+        expect(b, `${tok}=${c[tok]} must be cyan-family`).toBeGreaterThanOrEqual(r);
+      });
+    }
+    it(`${id}: amber appears only on cursor`, () => {
+      // amber = red-dominant warm hue; the cursor is allowed to be amber, nothing else.
+      const amberish = (hex: string) => { const { r, g, b } = rgb(hex); return r > b && g > b && r > 150; };
+      for (const [k, v] of Object.entries(c)) {
+        if (k === 'cursor' || k === 'radius') continue;
+        expect(amberish(v), `${k}=${v} must not be amber`).toBe(false);
+      }
+    });
+  }
+});
+
+describe('new tokens exposed as --color-* (holomush-9ektq INV-6)', () => {
+  for (const [id, theme] of builtInThemes) {
+    const css = themeToCssVars(theme.colors as ThemeColors);
+    for (const cssKey of ['--color-cursor', '--color-scrollback-replayed', '--color-foreground', '--color-input']) {
+      it(`${id}: themeToCssVars emits ${cssKey}`, () => {
+        expect(css).toContain(`${cssKey}: `);
+      });
+    }
+  }
+});
+
+describe('scrollback de-emphasis uses colour, not opacity (holomush-1hgk INV-4)', () => {
+  const src = (rel: string) => readFileSync(`${process.cwd()}/src/lib/components/terminal/${rel}`, 'utf8');
+  it('TerminalView replay lines use --color-scrollback-replayed', () => {
+    expect(src('TerminalView.svelte')).toContain('var(--color-scrollback-replayed)');
+  });
+  it('TerminalView no longer dims replay lines with opacity', () => {
+    expect(src('TerminalView.svelte')).not.toMatch(/\.line\.replay\s*\{[^}]*opacity/);
+  });
+  it('EventRenderer no longer has a .dimmed opacity rule', () => {
+    expect(src('EventRenderer.svelte')).not.toMatch(/\.dimmed\s*\{[^}]*opacity/);
+  });
+});
+
+describe('shortcut hint bar legibility (holomush-vhsz INV-5)', () => {
+  const src = readFileSync(`${process.cwd()}/src/lib/components/terminal/CommandInput.svelte`, 'utf8');
+  it('.cmd-hints font-size ≥ 14px', () => {
+    const m = /\.cmd-hints\s*\{[^}]*font-size:\s*(\d+)px/.exec(src);
+    expect(m && Number(m[1])).toBeGreaterThanOrEqual(14);
+  });
+  it('.cmd-hints kbd font-size ≥ 13px', () => {
+    const m = /\.cmd-hints kbd\s*\{[^}]*font-size:\s*(\d+)px/.exec(src);
+    expect(m && Number(m[1])).toBeGreaterThanOrEqual(13);
   });
 });

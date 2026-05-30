@@ -23,15 +23,15 @@
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import defaultDark from '$lib/theme/default-dark.json';
   import defaultLight from '$lib/theme/default-light.json';
-  import classicDark from '$lib/theme/classic-dark.json';
-  import classicLight from '$lib/theme/classic-light.json';
+  import warmDark from '$lib/theme/warm-dark.json';
+  import warmLight from '$lib/theme/warm-light.json';
   import type { Theme } from '$lib/theme/types';
 
   const themeData: Record<string, Theme> = {
     'default-dark': defaultDark as Theme,
     'default-light': defaultLight as Theme,
-    'classic-dark': classicDark as Theme,
-    'classic-light': classicLight as Theme,
+    'warm-dark': warmDark as Theme,
+    'warm-light': warmLight as Theme,
   };
 
   const client = createClient(WebService, transport);

@@ -52,7 +52,7 @@
         {#each replayLines as line (line.id)}
           <div class="line replay" data-event-id={line.id}>
             <span class="tstamp">{formatHHMM(line.timestamp)}</span>
-            <EventRenderer event={line.event} dimmed={true} />
+            <EventRenderer event={line.event} />
           </div>
         {/each}
       </div>
@@ -71,7 +71,7 @@
         {#each liveLines as line (line.id)}
           <div class="line" data-event-id={line.id}>
             <span class="tstamp">{formatHHMM(line.timestamp)}</span>
-            <EventRenderer event={line.event} dimmed={false} />
+            <EventRenderer event={line.event} />
           </div>
         {/each}
       </div>
@@ -106,7 +106,8 @@
     padding: var(--row-py, 3px) 0;
     line-height: 1.7;
   }
-  .line.replay { opacity: 0.45; }
+  .line.replay { color: var(--color-scrollback-replayed); }
+  .line.replay :global(*) { color: var(--color-scrollback-replayed); }
   .tstamp {
     flex-shrink: 0;
     width: 44px;
