@@ -92,6 +92,9 @@ const (
 	// CoreServiceListFocusPresenceProcedure is the fully-qualified name of the CoreService's
 	// ListFocusPresence RPC.
 	CoreServiceListFocusPresenceProcedure = "/holomush.core.v1.CoreService/ListFocusPresence"
+	// CoreServiceListAvailableCommandsProcedure is the fully-qualified name of the CoreService's
+	// ListAvailableCommands RPC.
+	CoreServiceListAvailableCommandsProcedure = "/holomush.core.v1.CoreService/ListAvailableCommands"
 )
 
 // CoreServiceClient is a client for the holomush.core.v1.CoreService service.
@@ -194,6 +197,12 @@ type CoreServiceClient interface {
 	// gated by the ABAC list_presence action on the location resource. Scene-focus
 	// contexts currently return UNIMPLEMENTED. Pure read — no session mutation.
 	ListFocusPresence(context.Context, *connect.Request[v1.ListFocusPresenceRequest]) (*connect.Response[v1.ListFocusPresenceResponse], error)
+	// ListAvailableCommands returns the commands the session's own character may
+	// execute, with the system/manifest alias map for those commands. SERVED:
+	// CoreServer.ListAvailableCommands, delegating to commandquery.Querier.Available.
+	// Self-scoped: the subject is the session's character (ownership-validated),
+	// never an arbitrary character_id. Pure read.
+	ListAvailableCommands(context.Context, *connect.Request[v1.ListAvailableCommandsRequest]) (*connect.Response[v1.ListAvailableCommandsResponse], error)
 }
 
 // NewCoreServiceClient constructs a client for the holomush.core.v1.CoreService service. By
@@ -327,6 +336,12 @@ func NewCoreServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(coreServiceMethods.ByName("ListFocusPresence")),
 			connect.WithClientOptions(opts...),
 		),
+		listAvailableCommands: connect.NewClient[v1.ListAvailableCommandsRequest, v1.ListAvailableCommandsResponse](
+			httpClient,
+			baseURL+CoreServiceListAvailableCommandsProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("ListAvailableCommands")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -352,6 +367,7 @@ type coreServiceClient struct {
 	queryStreamHistory        *connect.Client[v1.QueryStreamHistoryRequest, v1.QueryStreamHistoryResponse]
 	listSessionStreams        *connect.Client[v1.ListSessionStreamsRequest, v1.ListSessionStreamsResponse]
 	listFocusPresence         *connect.Client[v1.ListFocusPresenceRequest, v1.ListFocusPresenceResponse]
+	listAvailableCommands     *connect.Client[v1.ListAvailableCommandsRequest, v1.ListAvailableCommandsResponse]
 }
 
 // HandleCommand calls holomush.core.v1.CoreService.HandleCommand.
@@ -454,6 +470,11 @@ func (c *coreServiceClient) ListFocusPresence(ctx context.Context, req *connect.
 	return c.listFocusPresence.CallUnary(ctx, req)
 }
 
+// ListAvailableCommands calls holomush.core.v1.CoreService.ListAvailableCommands.
+func (c *coreServiceClient) ListAvailableCommands(ctx context.Context, req *connect.Request[v1.ListAvailableCommandsRequest]) (*connect.Response[v1.ListAvailableCommandsResponse], error) {
+	return c.listAvailableCommands.CallUnary(ctx, req)
+}
+
 // CoreServiceHandler is an implementation of the holomush.core.v1.CoreService service.
 type CoreServiceHandler interface {
 	// HandleCommand validates session ownership, records the command in session
@@ -554,6 +575,12 @@ type CoreServiceHandler interface {
 	// gated by the ABAC list_presence action on the location resource. Scene-focus
 	// contexts currently return UNIMPLEMENTED. Pure read — no session mutation.
 	ListFocusPresence(context.Context, *connect.Request[v1.ListFocusPresenceRequest]) (*connect.Response[v1.ListFocusPresenceResponse], error)
+	// ListAvailableCommands returns the commands the session's own character may
+	// execute, with the system/manifest alias map for those commands. SERVED:
+	// CoreServer.ListAvailableCommands, delegating to commandquery.Querier.Available.
+	// Self-scoped: the subject is the session's character (ownership-validated),
+	// never an arbitrary character_id. Pure read.
+	ListAvailableCommands(context.Context, *connect.Request[v1.ListAvailableCommandsRequest]) (*connect.Response[v1.ListAvailableCommandsResponse], error)
 }
 
 // NewCoreServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -683,6 +710,12 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(coreServiceMethods.ByName("ListFocusPresence")),
 		connect.WithHandlerOptions(opts...),
 	)
+	coreServiceListAvailableCommandsHandler := connect.NewUnaryHandler(
+		CoreServiceListAvailableCommandsProcedure,
+		svc.ListAvailableCommands,
+		connect.WithSchema(coreServiceMethods.ByName("ListAvailableCommands")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.core.v1.CoreService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CoreServiceHandleCommandProcedure:
@@ -725,6 +758,8 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 			coreServiceListSessionStreamsHandler.ServeHTTP(w, r)
 		case CoreServiceListFocusPresenceProcedure:
 			coreServiceListFocusPresenceHandler.ServeHTTP(w, r)
+		case CoreServiceListAvailableCommandsProcedure:
+			coreServiceListAvailableCommandsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -812,4 +847,8 @@ func (UnimplementedCoreServiceHandler) ListSessionStreams(context.Context, *conn
 
 func (UnimplementedCoreServiceHandler) ListFocusPresence(context.Context, *connect.Request[v1.ListFocusPresenceRequest]) (*connect.Response[v1.ListFocusPresenceResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.ListFocusPresence is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) ListAvailableCommands(context.Context, *connect.Request[v1.ListAvailableCommandsRequest]) (*connect.Response[v1.ListAvailableCommandsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.ListAvailableCommands is not implemented"))
 }

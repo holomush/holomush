@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse, WebAuthenticatePlayerRequest, WebAuthenticatePlayerResponse, WebCheckSessionRequest, WebCheckSessionResponse, WebConfirmPasswordResetRequest, WebConfirmPasswordResetResponse, WebCreateCharacterRequest, WebCreateCharacterResponse, WebCreateGuestRequest, WebCreateGuestResponse, WebCreatePlayerRequest, WebCreatePlayerResponse, WebGetContentRequest, WebGetContentResponse, WebListCharactersRequest, WebListCharactersResponse, WebListContentRequest, WebListContentResponse, WebListFocusPresenceRequest, WebListFocusPresenceResponse, WebListPlayerSessionsRequest, WebListPlayerSessionsResponse, WebListSessionStreamsRequest, WebListSessionStreamsResponse, WebLogoutRequest, WebLogoutResponse, WebQueryStreamHistoryRequest, WebQueryStreamHistoryResponse, WebRequestPasswordResetRequest, WebRequestPasswordResetResponse, WebRevokeOtherPlayerSessionsRequest, WebRevokeOtherPlayerSessionsResponse, WebRevokePlayerSessionRequest, WebRevokePlayerSessionResponse, WebSelectCharacterRequest, WebSelectCharacterResponse } from "./web_pb.js";
+import { DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse, WebAuthenticatePlayerRequest, WebAuthenticatePlayerResponse, WebCheckSessionRequest, WebCheckSessionResponse, WebConfirmPasswordResetRequest, WebConfirmPasswordResetResponse, WebCreateCharacterRequest, WebCreateCharacterResponse, WebCreateGuestRequest, WebCreateGuestResponse, WebCreatePlayerRequest, WebCreatePlayerResponse, WebGetContentRequest, WebGetContentResponse, WebListCharactersRequest, WebListCharactersResponse, WebListCommandsRequest, WebListCommandsResponse, WebListContentRequest, WebListContentResponse, WebListFocusPresenceRequest, WebListFocusPresenceResponse, WebListPlayerSessionsRequest, WebListPlayerSessionsResponse, WebListSessionStreamsRequest, WebListSessionStreamsResponse, WebLogoutRequest, WebLogoutResponse, WebQueryStreamHistoryRequest, WebQueryStreamHistoryResponse, WebRequestPasswordResetRequest, WebRequestPasswordResetResponse, WebRevokeOtherPlayerSessionsRequest, WebRevokeOtherPlayerSessionsResponse, WebRevokePlayerSessionRequest, WebRevokePlayerSessionResponse, WebSelectCharacterRequest, WebSelectCharacterResponse } from "./web_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -323,6 +323,20 @@ export const WebService = {
       name: "WebListFocusPresence",
       I: WebListFocusPresenceRequest,
       O: WebListFocusPresenceResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * WebListCommands returns the recognized-command set + alias map for the
+     * session's character, for the composer's command chip. Proxies to
+     * CoreService.ListAvailableCommands; player_session_token is read from the
+     * cookie by gateway middleware.
+     *
+     * @generated from rpc holomush.web.v1.WebService.WebListCommands
+     */
+    webListCommands: {
+      name: "WebListCommands",
+      I: WebListCommandsRequest,
+      O: WebListCommandsResponse,
       kind: MethodKind.Unary,
     },
   }

@@ -520,6 +520,14 @@ func (h *Handler) WebListFocusPresence(ctx context.Context, req *connect.Request
 	}), nil
 }
 
+// WebListCommands is a placeholder so *Handler satisfies the generated
+// webv1connect.WebServiceHandler interface after the RPC was added to the proto.
+// The real gateway proxy to CoreService.ListAvailableCommands lands in
+// holomush-2zjio.9 (Task 9); until then it reports Unimplemented.
+func (h *Handler) WebListCommands(_ context.Context, _ *connect.Request[webv1.WebListCommandsRequest]) (*connect.Response[webv1.WebListCommandsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("WebListCommands not implemented (holomush-2zjio.9)"))
+}
+
 func translatePresenceContext(c corev1.PresenceContext) webv1.WebPresenceContext {
 	switch c {
 	case corev1.PresenceContext_PRESENCE_CONTEXT_LOCATION:

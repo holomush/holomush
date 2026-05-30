@@ -42,6 +42,7 @@ const (
 	CoreService_QueryStreamHistory_FullMethodName        = "/holomush.core.v1.CoreService/QueryStreamHistory"
 	CoreService_ListSessionStreams_FullMethodName        = "/holomush.core.v1.CoreService/ListSessionStreams"
 	CoreService_ListFocusPresence_FullMethodName         = "/holomush.core.v1.CoreService/ListFocusPresence"
+	CoreService_ListAvailableCommands_FullMethodName     = "/holomush.core.v1.CoreService/ListAvailableCommands"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -153,6 +154,12 @@ type CoreServiceClient interface {
 	// gated by the ABAC list_presence action on the location resource. Scene-focus
 	// contexts currently return UNIMPLEMENTED. Pure read — no session mutation.
 	ListFocusPresence(ctx context.Context, in *ListFocusPresenceRequest, opts ...grpc.CallOption) (*ListFocusPresenceResponse, error)
+	// ListAvailableCommands returns the commands the session's own character may
+	// execute, with the system/manifest alias map for those commands. SERVED:
+	// CoreServer.ListAvailableCommands, delegating to commandquery.Querier.Available.
+	// Self-scoped: the subject is the session's character (ownership-validated),
+	// never an arbitrary character_id. Pure read.
+	ListAvailableCommands(ctx context.Context, in *ListAvailableCommandsRequest, opts ...grpc.CallOption) (*ListAvailableCommandsResponse, error)
 }
 
 type coreServiceClient struct {
@@ -372,6 +379,16 @@ func (c *coreServiceClient) ListFocusPresence(ctx context.Context, in *ListFocus
 	return out, nil
 }
 
+func (c *coreServiceClient) ListAvailableCommands(ctx context.Context, in *ListAvailableCommandsRequest, opts ...grpc.CallOption) (*ListAvailableCommandsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAvailableCommandsResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListAvailableCommands_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -481,6 +498,12 @@ type CoreServiceServer interface {
 	// gated by the ABAC list_presence action on the location resource. Scene-focus
 	// contexts currently return UNIMPLEMENTED. Pure read — no session mutation.
 	ListFocusPresence(context.Context, *ListFocusPresenceRequest) (*ListFocusPresenceResponse, error)
+	// ListAvailableCommands returns the commands the session's own character may
+	// execute, with the system/manifest alias map for those commands. SERVED:
+	// CoreServer.ListAvailableCommands, delegating to commandquery.Querier.Available.
+	// Self-scoped: the subject is the session's character (ownership-validated),
+	// never an arbitrary character_id. Pure read.
+	ListAvailableCommands(context.Context, *ListAvailableCommandsRequest) (*ListAvailableCommandsResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -550,6 +573,9 @@ func (UnimplementedCoreServiceServer) ListSessionStreams(context.Context, *ListS
 }
 func (UnimplementedCoreServiceServer) ListFocusPresence(context.Context, *ListFocusPresenceRequest) (*ListFocusPresenceResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListFocusPresence not implemented")
+}
+func (UnimplementedCoreServiceServer) ListAvailableCommands(context.Context, *ListAvailableCommandsRequest) (*ListAvailableCommandsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListAvailableCommands not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -925,6 +951,24 @@ func _CoreService_ListFocusPresence_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_ListAvailableCommands_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAvailableCommandsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListAvailableCommands(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListAvailableCommands_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListAvailableCommands(ctx, req.(*ListAvailableCommandsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1007,6 +1051,10 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListFocusPresence",
 			Handler:    _CoreService_ListFocusPresence_Handler,
+		},
+		{
+			MethodName: "ListAvailableCommands",
+			Handler:    _CoreService_ListAvailableCommands_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
