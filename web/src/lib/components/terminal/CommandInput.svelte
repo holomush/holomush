@@ -16,6 +16,8 @@
     seedCommands,
   } from '$lib/stores/commandHistoryStore';
   import ModeChip from './ModeChip.svelte';
+  import { resolveComposerChip } from './composerChip';
+  import { commandList, fetchCommandList } from '$lib/stores/commandListStore';
 
   interface Props {
     sessionId: string;
@@ -36,14 +38,8 @@
 
   const client = createClient(WebService, transport);
 
-  // Derived: mode chip from leading characters
-  let modeChip = $derived.by<'say' | 'pose' | 'ooc' | null>(() => {
-    const v = text.trimStart();
-    if (v.startsWith(':') || v.startsWith('pose ')) return 'pose';
-    if (v.startsWith('"') || v.startsWith('say ')) return 'say';
-    if (v.startsWith('ooc ')) return 'ooc';
-    return null;
-  });
+  // Derived: composer chip from text + recognized command list (INV-4: no hardcoded prefix matching)
+  let chip = $derived(resolveComposerChip(text, $commandList));
 
   // Derived: line count and near-max flag for composer nudge
   let lineCount = $derived(text === '' ? 1 : text.split('\n').length);
@@ -74,6 +70,8 @@
       if (captured !== sessionId) return;  // stale session — skip log
       console.warn('[history] load failed', e);
     });
+
+    fetchCommandList(sessionId); // refetch on session/character change
   });
 
   // Inject-from-parent pathway (recent card, composer close)
@@ -168,7 +166,7 @@
 
 <div class="cmd-wrap" class:is-suspended={$uiPrefs.composerOpen} class:is-multiline={lineCount > 1}>
   <span class="cmd-prompt">&gt;</span>
-  {#if modeChip}<ModeChip mode={modeChip} />{/if}
+  {#if chip}<ModeChip kind={chip.kind} label={chip.label} />{/if}
   <textarea
     bind:this={textarea}
     bind:value={text}
