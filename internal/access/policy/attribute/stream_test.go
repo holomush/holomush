@@ -53,6 +53,18 @@ func TestStreamProvider_ResolveResource(t *testing.T) {
 			},
 		},
 		{
+			// INV-ROPS-7: a qualified non-location stream omits the location
+			// key entirely (not an empty-string sentinel) and witnesses false.
+			// assert.Equal on the full expected map verifies the key is absent.
+			name:       "qualified character stream omits location, witness false",
+			resourceID: "stream:events.main.character.01CHR",
+			expected: map[string]any{
+				"type":         "stream",
+				"name":         "events.main.character.01CHR",
+				"has_location": false,
+			},
+		},
+		{
 			name:       "non-stream resource type",
 			resourceID: "command:say",
 			wantNil:    true,
@@ -93,21 +105,4 @@ func TestStreamProviderSchema(t *testing.T) {
 	}
 
 	assert.Equal(t, expected, schema)
-}
-
-func TestStreamProviderExtractsLocationFromQualifiedDotSubject(t *testing.T) {
-	p := NewStreamProvider()
-	attrs, err := p.ResolveResource(context.Background(), "stream:events.main.location.01LOC")
-	require.NoError(t, err)
-	require.Equal(t, "01LOC", attrs["location"])
-	require.Equal(t, true, attrs["has_location"])
-}
-
-func TestStreamProviderOmitsLocationForNonLocationStream(t *testing.T) {
-	p := NewStreamProvider()
-	attrs, err := p.ResolveResource(context.Background(), "stream:events.main.character.01CHR")
-	require.NoError(t, err)
-	_, present := attrs["location"]
-	require.False(t, present, "location key MUST be absent (not empty-sentinel) for non-location streams")
-	require.Equal(t, false, attrs["has_location"])
 }

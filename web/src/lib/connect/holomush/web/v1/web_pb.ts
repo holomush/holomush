@@ -1416,7 +1416,7 @@ export type WebListSessionStreamsResponse = Message<"holomush.web.v1.WebListSess
    * streams is the list of event-store stream names the session is
    * subscribed to. Values are domain-relative dot references
    * (e.g. "location.<id>", "character.<id>") — the same form the client
-   * passes back to WebGetStreamHistory, which the server qualifies.
+   * passes back to WebQueryStreamHistory, which the server qualifies.
    *
    * @generated from field: repeated string streams = 1;
    */

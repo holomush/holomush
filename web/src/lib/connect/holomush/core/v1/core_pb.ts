@@ -1861,9 +1861,10 @@ export const ListSessionStreamsRequestSchema: GenMessage<ListSessionStreamsReque
 export type ListSessionStreamsResponse = Message<"holomush.core.v1.ListSessionStreamsResponse"> & {
   /**
    * streams lists the subscribed stream names as domain-relative dot references
-   * (e.g. "character.<ULID>", "location.<ULID>", plugin streams), matching what
-   * Subscribe would deliver. The client passes these back unchanged; the server
-   * qualifies them.
+   * (e.g. "character.<ULID>", "location.<ULID>", plugin streams) — the form the
+   * client passes back to Subscribe/QueryStreamHistory unchanged, which the
+   * server qualifies. Delivered EventFrames carry the fully-qualified subject
+   * (see EventFrame.stream), not this relative form.
    *
    * @generated from field: repeated string streams = 1;
    */

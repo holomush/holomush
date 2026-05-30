@@ -3606,9 +3606,10 @@ func (x *ListSessionStreamsRequest) GetPlayerSessionToken() string {
 type ListSessionStreamsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// streams lists the subscribed stream names as domain-relative dot references
-	// (e.g. "character.<ULID>", "location.<ULID>", plugin streams), matching what
-	// Subscribe would deliver. The client passes these back unchanged; the server
-	// qualifies them.
+	// (e.g. "character.<ULID>", "location.<ULID>", plugin streams) — the form the
+	// client passes back to Subscribe/QueryStreamHistory unchanged, which the
+	// server qualifies. Delivered EventFrames carry the fully-qualified subject
+	// (see EventFrame.stream), not this relative form.
 	Streams []string `protobuf:"bytes,1,rep,name=streams,proto3" json:"streams,omitempty"`
 	// meta echoes request correlation data.
 	Meta          *ResponseMeta `protobuf:"bytes,2,opt,name=meta,proto3" json:"meta,omitempty"`
