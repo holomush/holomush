@@ -54,12 +54,10 @@ func TestINV_P4_Coverage_Meta(t *testing.T) {
 		testName string
 		note     string
 	}{
-		// INV-P4-1: no colon-style scene subjects in pub/sub-topic context.
-		// Pinned by the rg-based invariant test in internal/test/invariants/.
-		{
-			inv:      "INV-P4-1",
-			testName: "TestINV_P4_1_NoColonStyleSceneSubjects",
-		},
+		// INV-P4-1: superseded by INV-ROPS-3's repo-wide colon-stream
+		// eradication scan (TestINV_ROPS_3_NoColonStreamLiterals in
+		// colon_eradication_test.go). The scene-only INV-P4-1 test
+		// (scene_subjects_test.go) was retired by holomush-rops.8.
 		// INV-P4-2: manifest crypto.emits set == EmitTypeRegistrar set.
 		// Pinned by manifest-parse unit test in plugins/core-scenes/main_test.go
 		// (package main). The substrate INV-S5 integration check runs under

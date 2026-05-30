@@ -10,7 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/world"
 )
 
 // dotStyleSceneIC returns a NATS dot-style scene IC subject for testing,
@@ -248,4 +250,18 @@ func TestStreamToFocusKey(t *testing.T) {
 			assert.Equal(t, tt.wantTarget, fk.TargetID)
 		})
 	}
+}
+
+// TestRoleSplitCharacterStreamDotABACSubjectColon pins INV-ROPS-6: the two
+// roles for a character ID are now distinct package boundaries with distinct
+// delimiters. The STREAM builder (world.CharacterStream) is dot-relative; the
+// ABAC SUBJECT builder (access.CharacterSubject) is colon. They MUST NOT
+// collapse to the same form — that distinction is what lets INV-ROPS-3's scan
+// allowlist colon literals only when they're ABAC-marked.
+func TestRoleSplitCharacterStreamDotABACSubjectColon(t *testing.T) {
+	id := ulid.MustParse("01ARZ3NDEKTSV4RRFFQ69G5FAV")
+	// Stream form: dot-relative (this migration).
+	require.Equal(t, "character."+id.String(), world.CharacterStream(id))
+	// ABAC subject form: colon — the existing access builder, unchanged.
+	require.Equal(t, "character:"+id.String(), access.CharacterSubject(id.String()))
 }
