@@ -244,3 +244,15 @@ describe('scrollback de-emphasis uses colour, not opacity (holomush-1hgk INV-4)'
     expect(src('EventRenderer.svelte')).not.toMatch(/\.dimmed\s*\{[^}]*opacity/);
   });
 });
+
+describe('shortcut hint bar legibility (holomush-vhsz INV-5)', () => {
+  const src = readFileSync(`${process.cwd()}/src/lib/components/terminal/CommandInput.svelte`, 'utf8');
+  it('.cmd-hints font-size ≥ 14px', () => {
+    const m = /\.cmd-hints\s*\{[^}]*font-size:\s*(\d+)px/.exec(src);
+    expect(m && Number(m[1])).toBeGreaterThanOrEqual(14);
+  });
+  it('.cmd-hints kbd font-size ≥ 13px', () => {
+    const m = /\.cmd-hints kbd\s*\{[^}]*font-size:\s*(\d+)px/.exec(src);
+    expect(m && Number(m[1])).toBeGreaterThanOrEqual(13);
+  });
+});

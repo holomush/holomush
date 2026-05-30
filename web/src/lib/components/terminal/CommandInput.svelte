@@ -233,18 +233,18 @@
   }
   .cmd-hints {
     padding: 3px 12px;
-    font-size: 10px;
+    font-size: 14px;
     color: var(--color-status-text);
     background: var(--color-background);
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 12px;
     align-items: center;
   }
   .cmd-hints kbd {
-    font-family: inherit; padding: 0 3px;
+    font-family: inherit; padding: 1px 5px;
     border: 1px solid var(--color-border); border-radius: 3px;
-    font-size: 9px;
+    font-size: 13px;
   }
   .line-count { color: var(--color-muted-foreground); }
   .composer-nudge { color: var(--color-primary); }
