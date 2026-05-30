@@ -77,13 +77,13 @@ over a dead transport, and nothing reconciles it.
 
 ```mermaid
 flowchart LR
-  subgraph Gateway process [Gateway process — long-lived]
-    WEB[internal/web<br/>StreamEvents]
-    TEL[internal/telnet<br/>GatewayHandler]
+  subgraph gw["Gateway process — long-lived"]
+    WEB["internal/web<br/>StreamEvents"]
+    TEL["internal/telnet<br/>GatewayHandler"]
   end
-  subgraph Core process [Core process — restartable]
-    SUB[CoreService.Subscribe]
-    STORE[(sessions /<br/>session_connections)]
+  subgraph core["Core process — restartable"]
+    SUB["CoreService.Subscribe"]
+    STORE[("sessions /<br/>session_connections")]
   end
   Browser <-->|WS / HTTP2| WEB
   TelnetClient <-->|TCP| TEL
@@ -169,20 +169,20 @@ sequenceDiagram
   G->>K: Subscribe(session, conn)
   loop while client alive
     G-->>C: heartbeat (15s) + forward events (track last EventFrame.cursor)
-    G->>K: RefreshConnection(session, conn)  %% lease fresh
+    G->>K: RefreshConnection(session, conn) — keep lease fresh
   end
   Note over K: core restarts
   K--xG: Subscribe stream breaks (CodeUnavailable)
-  Note over G: client still alive → DO NOT close client
+  Note over G: client still alive, DO NOT close client
   G-->>C: ControlSignal RECONNECTING
-  loop bounded backoff (≤ ceiling)
-    G->>K: Subscribe(session, conn)  %% durable consumer resumes from acked-seq
+  loop bounded backoff (<= ceiling)
+    G->>K: Subscribe(session, conn) — durable consumer resumes from acked-seq
   end
   alt session detached during gap (SESSION_NOT_FOUND)
     G->>K: SelectCharacter (reattach, reattached=true)
   end
   G-->>C: ControlSignal RECONNECTED
-  Note over G,K: server-side durable resume; gateway dedups un-acked overlap by event id; lease re-asserted
+  Note over G,K: server-side durable resume, gateway dedups un-acked overlap by event id, lease re-asserted
 ```
 
 ## 5. Detailed design (phased)
@@ -477,4 +477,4 @@ Reattach TTL continues to come from `sessionDefaults.TTL` (guest TTL per hfvc).
   strategy; clients reconnect to a fresh gateway and re-assert leases.
 - Guest reattach-TTL tuning: holomush-hfvc.
 - Disconnect count-race atomicity: holomush-cizj.
-<!-- adr-capture: sha256=45cf080700a029d7; session=brainstorm-rsoe6; ts=2026-05-30T15:25:47Z; adrs=holomush-6syxb,holomush-2w9vh,holomush-0qx5e,holomush-6vl53,holomush-85exr -->
+<!-- adr-capture: sha256=9b852d61bb362969; session=brainstorm-rsoe6; ts=2026-05-30T15:54:05Z; adrs=holomush-6syxb,holomush-2w9vh,holomush-0qx5e,holomush-6vl53,holomush-85exr -->
