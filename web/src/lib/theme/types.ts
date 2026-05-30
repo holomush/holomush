@@ -17,8 +17,11 @@ export interface ThemeColors {
 
   // Chrome tokens (structural UI)
   background: string;
+  foreground: string;
+  input: string;
   surface: string;
   border: string;
+  cursor: string;
   'input.prompt': string;
   'input.text': string;
   'input.background': string;
@@ -28,6 +31,7 @@ export interface ThemeColors {
   'status.offline': string;
   'sidebar.background': string;
   'scrollback.indicator': string;
+  'scrollback.replayed': string;
 
   // shadcn semantic tokens
   primary: string;
