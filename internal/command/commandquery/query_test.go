@@ -5,6 +5,7 @@ package commandquery_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,9 +13,46 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/commandquery"
 )
+
+// countingErrorEngine always returns an engine error and records how many times
+// Evaluate is called. It lets a test observe the circuit breaker's trip: once
+// maxEngineErrors errors accrue, Available must stop calling Evaluate for the
+// remaining gated commands, so the recorded call count caps at MaxEngineErrors.
+type countingErrorEngine struct {
+	evaluateCalls int
+}
+
+func (e *countingErrorEngine) Evaluate(context.Context, types.AccessRequest) (types.Decision, error) {
+	e.evaluateCalls++
+	return types.Decision{}, assert.AnError
+}
+
+// CanPerformAction is unreachable in this engine's tests — Evaluate always errors
+// first and short-circuits before the capability pre-flight — so it returns a
+// plain deny rather than an error.
+func (e *countingErrorEngine) CanPerformAction(context.Context, string, string, string, string) (bool, error) {
+	return false, nil
+}
+
+// capErrorCountingEngine permits at Evaluate but errors at the capability
+// pre-flight, exercising the breaker's OTHER error source (CanPerformAction
+// failures, query.go canExecute) and recording how many pre-flight calls occur.
+type capErrorCountingEngine struct {
+	canPerformActionCalls int
+}
+
+func (e *capErrorCountingEngine) Evaluate(context.Context, types.AccessRequest) (types.Decision, error) {
+	return types.NewDecision(types.EffectAllow, "allow", "test"), nil
+}
+
+func (e *capErrorCountingEngine) CanPerformAction(context.Context, string, string, string, string) (bool, error) {
+	e.canPerformActionCalls++
+	return false, assert.AnError
+}
 
 func newRegistry(t *testing.T) *command.Registry {
 	t.Helper()
@@ -85,6 +123,63 @@ func TestQuerierAvailableMarksIncompleteOnEngineErrors(t *testing.T) {
 		}
 	}
 	assert.True(t, found)
+}
+
+func TestQuerierAvailableTripsCircuitBreaker(t *testing.T) {
+	// The breaker counts engine failures from BOTH the Evaluate stage and the
+	// capability pre-flight (CanPerformAction). Each row drives one error source
+	// with a counting engine; the count must cap at MaxEngineErrors because the
+	// trip guard stops evaluating the remaining gated commands. Registering more
+	// gated commands than the threshold (MaxEngineErrors+2) guarantees there are
+	// post-trip commands the engine must NOT be asked about — without the guard
+	// every gated command would be evaluated and the count would exceed it.
+	tests := []struct {
+		name    string
+		subject string
+		// engine returns the engine under test plus an accessor for its
+		// per-source call counter (evaluateCalls vs canPerformActionCalls).
+		engine func() (types.AccessPolicyEngine, func() int)
+	}{
+		{
+			name:    "trips on Evaluate errors",
+			subject: "01HCHAR0000000000000000FFF",
+			engine: func() (types.AccessPolicyEngine, func() int) {
+				e := &countingErrorEngine{}
+				return e, func() int { return e.evaluateCalls }
+			},
+		},
+		{
+			name:    "trips on capability pre-flight errors",
+			subject: "01HCHAR0000000000000000GGG",
+			engine: func() (types.AccessPolicyEngine, func() int) {
+				e := &capErrorCountingEngine{}
+				return e, func() int { return e.canPerformActionCalls }
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			eng, count := tt.engine()
+			reg := command.NewRegistry()
+			for i := range commandquery.MaxEngineErrors + 2 {
+				entry := command.NewTestEntry(command.CommandEntryConfig{
+					Name: fmt.Sprintf("gated%d", i), Help: "gated", Usage: "gated",
+					PluginName: "core", Source: "core",
+					Capabilities: []command.Capability{{Action: "write", Resource: "scene", Scope: command.ScopeLocal}},
+				})
+				require.NoError(t, reg.Register(entry))
+			}
+
+			q := commandquery.New(reg, eng, command.NewAliasCache())
+			res, err := q.Available(context.Background(), access.CharacterSubject(tt.subject))
+			require.NoError(t, err)
+
+			assert.True(t, res.Incomplete, "engine errors must set Incomplete")
+			assert.Equal(t, commandquery.MaxEngineErrors, count(),
+				"circuit breaker must stop calling the engine once maxEngineErrors trips it")
+		})
+	}
 }
 
 func TestQuerierHelpReturnsDetailForGranted(t *testing.T) {
