@@ -92,14 +92,11 @@ func (s *pluginHostEventSink) Emit(ctx context.Context, intent EmitIntent) error
 		}
 		callCtx = metadata.AppendToOutgoingContext(callCtx, emitTokenHeader, resp.GetToken())
 	}
-	// TODO(F5): proto field PluginHostServiceEmitEventRequest.Stream will be
-	// renamed to Subject. Keeping the Stream name on the wire for F1 avoids
-	// coupling this task to a proto regeneration step.
-	_, err := s.client.EmitEvent(callCtx, &pluginv1.PluginHostServiceEmitEventRequest{
-		Stream:    intent.Subject,
-		EventType: string(intent.Type),
-		Payload:   []byte(intent.Payload),
-	})
+	// Single EmitIntent->request mapping site (holomush-av954), guarded by
+	// TestEmitIntentEmitRequestRoundTripCarriesEveryField so a field added to
+	// EmitIntent (notably Sensitive) cannot be silently dropped on the binary
+	// active-emit send path.
+	_, err := s.client.EmitEvent(callCtx, EmitIntentToEmitRequest(intent))
 	if err != nil {
 		return oops.With("subject", intent.Subject).Wrap(err)
 	}

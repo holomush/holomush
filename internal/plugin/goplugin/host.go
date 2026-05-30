@@ -731,15 +731,10 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 			"kind", int(event.ActorKind))
 	}
 
-	protoEvent := &pluginv1.Event{
-		Id:        event.ID,
-		Stream:    event.Stream,
-		Type:      string(event.Type),
-		Timestamp: event.Timestamp,
-		ActorKind: actorKind,
-		ActorId:   event.ActorID,
-		Payload:   event.Payload,
-	}
+	// Single host-side event->proto mapping for delivery (holomush-av954),
+	// guarded by TestEventProtoRoundTripCarriesEveryField so a field added to
+	// pluginsdk.Event cannot silently miss the binary runtime.
+	protoEvent := pluginsdk.EventToProto(event)
 
 	callCtx, cancel := context.WithTimeout(ctx, DefaultEventTimeout)
 	defer cancel()
@@ -777,13 +772,12 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 		return nil, oops.In("goplugin").With("plugin", name).With("operation", "handle_event").Wrap(err)
 	}
 
+	// Single proto->emit mapping site (holomush-av954), guarded by
+	// TestEmitEventProtoRoundTripCarriesEveryField so a field added to EmitEvent
+	// (notably Sensitive) cannot be silently dropped on the return-value receive path.
 	emits := make([]pluginsdk.EmitEvent, len(resp.GetEmitEvents()))
 	for i, e := range resp.GetEmitEvents() {
-		emits[i] = pluginsdk.EmitEvent{
-			Stream:  e.GetStream(),
-			Type:    pluginsdk.EventType(e.GetType()),
-			Payload: e.GetPayload(),
-		}
+		emits[i] = pluginsdk.EmitEventFromProto(e)
 	}
 
 	return emits, nil
@@ -852,13 +846,13 @@ func protoCommandResponseToSDK(r *pluginv1.CommandResponse) *pluginsdk.CommandRe
 		return &pluginsdk.CommandResponse{}
 	}
 
+	// Single proto->emit mapping site for the command return-value path
+	// (holomush-av954), guarded by TestEmitEventProtoRoundTripCarriesEveryField
+	// so a field added to EmitEvent (notably Sensitive) cannot be silently
+	// dropped here — the sibling of the HandleEvent receive path above.
 	events := make([]pluginsdk.EmitEvent, len(r.GetEvents()))
 	for i, e := range r.GetEvents() {
-		events[i] = pluginsdk.EmitEvent{
-			Stream:  e.GetStream(),
-			Type:    pluginsdk.EventType(e.GetType()),
-			Payload: e.GetPayload(),
-		}
+		events[i] = pluginsdk.EmitEventFromProto(e)
 	}
 
 	auditHints := make([]pluginsdk.AuditHint, len(r.GetAuditHints()))
@@ -994,6 +988,21 @@ func (h *Host) Plugins() []string {
 	return names
 }
 
+// sessionStreamsRequestToProto is the single host-side site mapping
+// plugins.SessionStreamsRequest onto its proto wire form for the binary
+// runtime. SessionStreamsRequest forks per runtime (Lua passes the same fields
+// as positional on_session_subscribe args); routing the binary marshal through
+// one function lets TestSessionStreamsRequestToProtoCarriesEveryField assert by
+// reflection that every field crosses, so a field added here without wiring
+// cannot silently miss the binary runtime (holomush-av954).
+func sessionStreamsRequestToProto(req plugins.SessionStreamsRequest) *pluginv1.QuerySessionStreamsRequest {
+	return &pluginv1.QuerySessionStreamsRequest{
+		CharacterId: req.CharacterID,
+		PlayerId:    req.PlayerID,
+		SessionId:   req.SessionID,
+	}
+}
+
 // QuerySessionStreams calls the plugin's QuerySessionStreams RPC.
 // Returns nil if the plugin has no streams to contribute.
 func (h *Host) QuerySessionStreams(ctx context.Context, name string, req plugins.SessionStreamsRequest) ([]string, error) {
@@ -1012,11 +1021,7 @@ func (h *Host) QuerySessionStreams(ctx context.Context, name string, req plugins
 	callCtx, cancel := context.WithTimeout(ctx, DefaultEventTimeout)
 	defer cancel()
 
-	resp, err := p.plugin.QuerySessionStreams(callCtx, &pluginv1.QuerySessionStreamsRequest{
-		CharacterId: req.CharacterID,
-		PlayerId:    req.PlayerID,
-		SessionId:   req.SessionID,
-	})
+	resp, err := p.plugin.QuerySessionStreams(callCtx, sessionStreamsRequestToProto(req))
 	if err != nil {
 		return nil, oops.In("goplugin").With("plugin", name).With("operation", "query_session_streams").Wrap(err)
 	}

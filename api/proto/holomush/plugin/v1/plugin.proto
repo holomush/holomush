@@ -271,6 +271,15 @@ message EmitEvent {
   // JSON-encoded payload (max 64 KiB); validated as well-formed JSON at the
   // fence before publish.
   string payload = 3 [(buf.validate.field).string.max_len = 65536];
+  // Per-event sensitivity claim for a return-value emit, validated against the
+  // plugin manifest by event_emitter.go::Emit via EnforceSensitivity
+  // (internal/plugin/sensitivity_fence.go) — INV-6: a sensitivity=never manifest
+  // rejects true; INV-7: a sensitivity=always manifest rejects false. Carries
+  // the same semantics as the active EmitEvent RPC's sensitive field so a binary
+  // plugin's return-value emit cannot silently downgrade to plaintext where the
+  // Lua runtime would encrypt (holomush-av954). Default false for backward
+  // compatibility.
+  bool sensitive = 4;
 }
 
 // HandleEventRequest wraps a single delivered event for the PluginService

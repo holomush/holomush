@@ -220,16 +220,11 @@ func (a *pluginServerAdapter) HandleEvent(ctx context.Context, req *pluginv1.Han
 	// making this safe without explicit nil checks.
 	protoEvent := req.GetEvent()
 
-	// Convert proto Event to SDK Event
-	event := Event{
-		ID:        protoEvent.GetId(),
-		Stream:    protoEvent.GetStream(),
-		Type:      EventType(protoEvent.GetType()),
-		Timestamp: protoEvent.GetTimestamp(),
-		ActorKind: protoActorKindToActorKind(protoEvent.GetActorKind()),
-		ActorID:   protoEvent.GetActorId(),
-		Payload:   protoEvent.GetPayload(),
-	}
+	// Single proto->event mapping site (holomush-av954), guarded by
+	// TestEventProtoRoundTripCarriesEveryField so a field added to Event cannot
+	// be silently dropped on the binary receive side (the host→plugin analogue
+	// of the holomush-dble7 connection_id omission).
+	event := EventFromProto(protoEvent)
 
 	// Call the user's handler
 	emits, err := a.handler.HandleEvent(ctx, event)
@@ -237,14 +232,12 @@ func (a *pluginServerAdapter) HandleEvent(ctx context.Context, req *pluginv1.Han
 		return nil, oops.With("event_id", event.ID).Wrap(err)
 	}
 
-	// Convert SDK EmitEvent to proto EmitEvent
+	// Single emit->proto mapping site (holomush-av954), guarded by
+	// TestEmitEventProtoRoundTripCarriesEveryField so a field added to EmitEvent
+	// (notably Sensitive) cannot be silently dropped on the return-value emit path.
 	protoEmits := make([]*pluginv1.EmitEvent, len(emits))
 	for i, e := range emits {
-		protoEmits[i] = &pluginv1.EmitEvent{
-			Stream:  e.Stream,
-			Type:    string(e.Type),
-			Payload: e.Payload,
-		}
+		protoEmits[i] = EmitEventToProto(e)
 	}
 
 	return &pluginv1.HandleEventResponse{EmitEvents: protoEmits}, nil
@@ -284,13 +277,10 @@ func (a *pluginServerAdapter) HandleCommand(ctx context.Context, req *pluginv1.H
 	allHints := append([]AuditHint{}, contextHints...)
 	allHints = append(allHints, resp.AuditHints...)
 
+	// Single emit->proto mapping site (holomush-av954); see EmitEventToProto.
 	protoEvents := make([]*pluginv1.EmitEvent, len(resp.Events))
 	for i, e := range resp.Events {
-		protoEvents[i] = &pluginv1.EmitEvent{
-			Stream:  e.Stream,
-			Type:    string(e.Type),
-			Payload: e.Payload,
-		}
+		protoEvents[i] = EmitEventToProto(e)
 	}
 
 	protoHints := make([]*pluginv1.AuditDecisionHint, len(allHints))

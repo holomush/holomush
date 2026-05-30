@@ -35,7 +35,7 @@ func TestProtoCommandResponseToSDKCopiesStatusAndEvents(t *testing.T) {
 		Status: pluginv1.CommandStatus_COMMAND_STATUS_ERROR,
 		Output: "denied",
 		Events: []*pluginv1.EmitEvent{
-			{Stream: "character:01ABC", Type: "command_response", Payload: `{"text":"hi"}`},
+			{Stream: "character:01ABC", Type: "command_response", Payload: `{"text":"hi"}`, Sensitive: true},
 		},
 	}
 
@@ -47,6 +47,11 @@ func TestProtoCommandResponseToSDKCopiesStatusAndEvents(t *testing.T) {
 	assert.Equal(t, "character:01ABC", got.Events[0].Stream)
 	assert.Equal(t, pluginsdk.HostEventTypeCommandResponse, got.Events[0].Type)
 	assert.Equal(t, `{"text":"hi"}`, got.Events[0].Payload)
+	// Sensitive MUST survive the command return-value receive path; before
+	// holomush-av954 this site dropped it, silently downgrading a binary
+	// command handler's sensitive emit to plaintext at the fence.
+	assert.True(t, got.Events[0].Sensitive,
+		"protoCommandResponseToSDK MUST carry EmitEvent.Sensitive (holomush-av954)")
 }
 
 func TestProtoCommandResponseToSDKPropagatesAuditHintsWithEnumConversion(t *testing.T) {

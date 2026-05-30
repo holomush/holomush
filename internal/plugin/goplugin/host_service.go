@@ -90,14 +90,7 @@ func (s *pluginHostServiceServer) EmitEvent(ctx context.Context, req *pluginv1.P
 	}
 
 	emitCtx := core.WithActor(ctx, storedActor)
-	if err := emitter.Emit(emitCtx, s.pluginName, pluginsdk.EmitIntent{
-		// TODO(F5): proto request field renames to Subject; keep Stream on
-		// the wire until the proto regeneration task runs.
-		Subject:   req.GetStream(),
-		Type:      pluginsdk.EventType(req.GetEventType()),
-		Payload:   string(req.GetPayload()),
-		Sensitive: req.GetSensitive(),
-	}); err != nil {
+	if err := emitter.Emit(emitCtx, s.pluginName, pluginsdk.EmitIntentFromEmitRequest(req)); err != nil {
 		return nil, oops.With("plugin", s.pluginName).Wrap(err)
 	}
 
