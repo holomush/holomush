@@ -24,14 +24,14 @@ func TestScenePolicyStreamsForReturnsTwoStreams(t *testing.T) {
 	sceneID := ulid.Make()
 	streams := p.StreamsFor(session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneID})
 	require.Len(t, streams, 2)
-	assert.Equal(t, "scene:"+sceneID.String()+":ic", streams[0])
-	assert.Equal(t, "scene:"+sceneID.String()+":ooc", streams[1])
+	assert.Equal(t, "scene."+sceneID.String()+".ic", streams[0])
+	assert.Equal(t, "scene."+sceneID.String()+".ooc", streams[1])
 }
 
 func TestScenePolicyStreamsForPrimaryIsIC(t *testing.T) {
 	p := New()
 	streams := p.StreamsFor(session.FocusKey{Kind: session.FocusKindScene, TargetID: ulid.Make()})
-	assert.Contains(t, streams[0], ":ic")
+	assert.Contains(t, streams[0], ".ic")
 }
 
 func TestScenePolicyOnJoinReturnsBoundedTailForICAndLiveOnlyForOOC(t *testing.T) {
@@ -45,10 +45,10 @@ func TestScenePolicyOnJoinReturnsBoundedTailForICAndLiveOnlyForOOC(t *testing.T)
 	result, err := p.OnJoin(pctx)
 	require.NoError(t, err)
 	require.Len(t, result, 2)
-	assert.Equal(t, "scene:"+sceneID.String()+":ic", result[0].Stream)
+	assert.Equal(t, "scene."+sceneID.String()+".ic", result[0].Stream)
 	assert.Equal(t, focus.ReplayModeBoundedTail, result[0].Mode)
 	assert.Equal(t, 5, result[0].TailCount)
-	assert.Equal(t, "scene:"+sceneID.String()+":ooc", result[1].Stream)
+	assert.Equal(t, "scene."+sceneID.String()+".ooc", result[1].Stream)
 	assert.Equal(t, focus.ReplayModeLiveOnly, result[1].Mode)
 }
 

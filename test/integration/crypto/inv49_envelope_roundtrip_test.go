@@ -69,7 +69,7 @@ var _ = Describe("INV-49 envelope round-trip", func() {
 		plaintext := `{"text":"inv49 character"}`
 		emitSensitivePluginEvent(
 			ctx, suiteT, env,
-			"scene:"+sceneID, plaintext,
+			"scene."+sceneID, plaintext,
 			[]dek.Participant{{
 				PlayerID:    participantID.PlayerID,
 				CharacterID: participantID.CharacterID,
@@ -210,7 +210,7 @@ var _ = Describe("INV-49 envelope round-trip", func() {
 			} else {
 				emitSensitivePluginEvent(
 					ctx, suiteT, env,
-					"scene:"+tc.sceneID, plaintext,
+					"scene."+tc.sceneID, plaintext,
 					[]dek.Participant{{
 						PlayerID:    participantID.PlayerID,
 						CharacterID: participantID.CharacterID,

@@ -386,7 +386,9 @@ test.describe('Terminal UI', () => {
 
     const session = await db.getSessionById(sessionId!);
     expect(session).not.toBeNull();
-    const stream = `location:${session!.location_id}`;
+    // Dot-relative stream ref (holomush-rops): WebQueryStreamHistory's read-entry
+    // qualifier rejects colon-style; the gateway/core qualify to events.<gid>.location.<id>.
+    const stream = `location.${session!.location_id}`;
 
     // Emit a say event so there is at least one row on the location stream.
     const token = `history-${Date.now()}`;

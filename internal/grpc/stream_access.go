@@ -55,20 +55,41 @@ func extractSceneID(stream string) (string, bool) {
 	}
 }
 
+// isCharacterStream reports whether a stream is a qualified personal character
+// subject: events.<gameID>.character.<ULID> (exactly 4 segments). Dot-only per
+// holomush-rops; the legacy character:<ulid> colon form is no longer accepted.
+func isCharacterStream(stream string) bool {
+	parts := strings.Split(stream, ".")
+	return len(parts) == 4 && parts[0] == "events" && parts[1] != "" &&
+		parts[2] == "character" && parts[3] != ""
+}
+
+// extractCharacterID returns the character ULID from a qualified character
+// subject (events.<gameID>.character.<ULID>) and true, or "" and false when the
+// stream is not a qualified character subject.
+func extractCharacterID(stream string) (string, bool) {
+	parts := strings.Split(stream, ".")
+	if len(parts) == 4 && parts[0] == "events" && parts[1] != "" &&
+		parts[2] == "character" && parts[3] != "" {
+		return parts[3], true
+	}
+	return "", false
+}
+
 // isPrivateStream returns true if the stream requires membership to read.
 // This is the gate for invariant I-17: private streams are readable only by
 // members, with no policy override. Private stream types:
-//   - character:<ulid>             — personal stream (only the owning character)
+//   - events.<gid>.character.<id> — personal stream (only the owning character)
 //   - events.<gid>.scene.<id>.ic  — scene IC stream (only scene members)
 //   - events.<gid>.scene.<id>.ooc — scene OOC stream (only scene members)
 //
-// Phase 4: scene subjects use NATS dot-style per INV-P4-1 / ADR holomush-s9nu.
-// character: prefix is unchanged (tracked separately by holomush-rops).
+// All private subjects use NATS dot-style: scene per INV-P4-1 / ADR holomush-s9nu,
+// character per holomush-rops (the legacy character:<ulid> colon form is gone).
 //
-// Public streams (location:*, global, etc.) are gated by ABAC policy, not
-// by this function.
+// Public streams (events.<gid>.location.<id>, global, etc.) are gated by ABAC
+// policy, not by this function.
 func isPrivateStream(stream string) bool {
-	return strings.HasPrefix(stream, "character:") || isSceneStream(stream)
+	return isCharacterStream(stream) || isSceneStream(stream)
 }
 
 // sessionHasMembership checks if the session has membership entitling it to
@@ -76,9 +97,9 @@ func isPrivateStream(stream string) bool {
 // model (I-17): the ABAC engine is never consulted for private streams.
 //
 // Membership rules:
-//   - character:<id>  → session's CharacterID must equal <id>
-//   - scene:<id>:ic   → session must have a FocusMembership with that scene target
-//   - scene:<id>:ooc  → same as ic (IC and OOC are scoped together)
+//   - events.<gid>.character.<id>  → session's CharacterID must equal <id>
+//   - events.<gid>.scene.<id>.ic   → session must have a FocusMembership with that scene target
+//   - events.<gid>.scene.<id>.ooc  → same as ic (IC and OOC are scoped together)
 //
 // Returns false for malformed stream names, unknown stream types, or when
 // info is nil (fail-closed).
@@ -87,11 +108,10 @@ func sessionHasMembership(info *session.Info, stream string) bool {
 		return false
 	}
 
-	if strings.HasPrefix(stream, "character:") {
+	if charID, ok := extractCharacterID(stream); ok {
 		if info.CharacterID == (ulid.ULID{}) {
 			return false
 		}
-		charID := strings.TrimPrefix(stream, "character:")
 		return info.CharacterID.String() == charID
 	}
 

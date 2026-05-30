@@ -85,7 +85,7 @@ func TestEndSessionDecouplesAppendCtxFromCallerCtx(t *testing.T) {
 		"append ctx deadline must be ~sessionTerminalCommitTimeout from now")
 
 	// Event must be persisted.
-	stream := "character:" + charID.String()
+	stream := "character." + charID.String()
 	events, replayErr := inner.Replay(context.Background(), stream, ulid.ULID{}, 10)
 	require.NoError(t, replayErr)
 	assert.Len(t, events, 1, "session_ended event MUST be persisted")
@@ -126,7 +126,7 @@ func TestEndSessionAppendCtxNotCancelledWhenCallerCtxCancelsMidAppend(t *testing
 	err := engine.EndSession(callerCtx, char, NewULID().String(), SessionEndedCauseQuit, "Goodbye!")
 	require.NoError(t, err, "EndSession must succeed even when caller ctx is cancelled mid-append")
 
-	stream := "character:" + charID.String()
+	stream := "character." + charID.String()
 	events, replayErr := inner.Replay(context.Background(), stream, ulid.ULID{}, 10)
 	require.NoError(t, replayErr)
 	assert.Len(t, events, 1, "session_ended event MUST be persisted")
@@ -150,7 +150,7 @@ func TestEndSessionPersistsEventEvenWhenCallerCtxAlreadyCancelled(t *testing.T) 
 	err := engine.EndSession(ctx, char, NewULID().String(), SessionEndedCauseQuit, "Goodbye!")
 	require.NoError(t, err, "pre-cancelled ctx must not skip the terminal append")
 
-	stream := "character:" + charID.String()
+	stream := "character." + charID.String()
 	events, replayErr := store.Replay(context.Background(), stream, ulid.ULID{}, 10)
 	require.NoError(t, replayErr)
 	assert.Len(t, events, 1, "session_ended event MUST be persisted even with pre-cancelled caller ctx")

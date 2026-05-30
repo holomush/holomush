@@ -14,6 +14,7 @@ import (
 
 	"github.com/oklog/ulid/v2"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/world"
@@ -104,7 +105,7 @@ func handleResetPassword(ctx context.Context, exec *command.CommandExecution, de
 	}
 
 	engine := exec.Services().Engine()
-	subject := fmt.Sprintf("character:%s", exec.CharacterID().String())
+	subject := access.CharacterSubject(exec.CharacterID().String())
 
 	// Sub-capability checks: explicit password requires write on player,
 	// --kick requires admin on session. These refine the handler's behavior

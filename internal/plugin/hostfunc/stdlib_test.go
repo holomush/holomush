@@ -468,7 +468,7 @@ func TestEmitLocation(t *testing.T) {
 	assert.Equal(t, 1, tbl.Len(), "should have 1 event")
 
 	event := tbl.RawGetInt(1).(*lua.LTable)
-	assert.Equal(t, "location:01ABC123XYZ456", event.RawGetString("stream").String())
+	assert.Equal(t, "location.01ABC123XYZ456", event.RawGetString("stream").String())
 	assert.Equal(t, "say", event.RawGetString("type").String())
 	// Payload should be JSON
 	payload := event.RawGetString("payload").String()
@@ -519,7 +519,7 @@ func TestEmitCharacter(t *testing.T) {
 	assert.Equal(t, 1, tbl.Len())
 
 	event := tbl.RawGetInt(1).(*lua.LTable)
-	assert.Equal(t, "character:01DEF456ABC789", event.RawGetString("stream").String())
+	assert.Equal(t, "character.01DEF456ABC789", event.RawGetString("stream").String())
 	assert.Equal(t, "tell", event.RawGetString("type").String())
 }
 
@@ -572,10 +572,10 @@ func TestEmitFlushMultipleEvents(t *testing.T) {
 
 	// Verify order is preserved
 	event1 := tbl.RawGetInt(1).(*lua.LTable)
-	assert.Equal(t, "location:01ABC", event1.RawGetString("stream").String())
+	assert.Equal(t, "location.01ABC", event1.RawGetString("stream").String())
 
 	event2 := tbl.RawGetInt(2).(*lua.LTable)
-	assert.Equal(t, "character:01DEF", event2.RawGetString("stream").String())
+	assert.Equal(t, "character.01DEF", event2.RawGetString("stream").String())
 
 	event3 := tbl.RawGetInt(3).(*lua.LTable)
 	assert.Equal(t, "global", event3.RawGetString("stream").String())
@@ -789,7 +789,7 @@ func TestIntegrationPluginUsesStdlib(t *testing.T) {
 	assert.Equal(t, 1, tbl.Len())
 
 	event := tbl.RawGetInt(1).(*lua.LTable)
-	assert.Equal(t, "location:01ABC123XYZ456", event.RawGetString("stream").String())
+	assert.Equal(t, "location.01ABC123XYZ456", event.RawGetString("stream").String())
 	assert.Equal(t, "say", event.RawGetString("type").String())
 
 	payload := event.RawGetString("payload").String()
@@ -842,7 +842,7 @@ func TestIntegrationWhoCommand(t *testing.T) {
 	assert.Equal(t, 1, tbl.Len())
 
 	event := tbl.RawGetInt(1).(*lua.LTable)
-	assert.Equal(t, "character:01CHAR123ABC456", event.RawGetString("stream").String())
+	assert.Equal(t, "character.01CHAR123ABC456", event.RawGetString("stream").String())
 	assert.Equal(t, "system", event.RawGetString("type").String())
 
 	payload := event.RawGetString("payload").String()

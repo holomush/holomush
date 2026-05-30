@@ -24,17 +24,17 @@ type ConnectionSender interface {
 // ComputeFocusManagedStreams returns the focus-managed subset of a
 // Connection's stream subscriptions (INV-P5-3 deterministic function
 // of FocusKey + character_location + gameID). Always-on streams
-// (notifications:<character_id>) are written once at connection
+// (events.<gid>.notification.<id>) are written once at connection
 // creation and not touched by this router.
 //
-// Grid focus (FocusKey == nil) → location:<character_location_id>
-// (colon-style retained; dot-style migration tracked by holomush-rops).
+// Grid focus (FocusKey == nil) → location.<character_location_id>
+// (dot-relative form; host qualifier adds events.<gameID>. prefix).
 //
 // Scene focus → events.<gameID>.scene.<sceneID>.{ic,ooc} (dot-style
 // from Phase 4 T11).
 func ComputeFocusManagedStreams(fk *session.FocusKey, characterLocationID ulid.ULID, gameID string) []string {
 	if fk == nil {
-		return []string{"location:" + characterLocationID.String()}
+		return []string{"location." + characterLocationID.String()}
 	}
 	if fk.Kind == session.FocusKindScene {
 		sceneID := fk.TargetID.String()
@@ -44,7 +44,7 @@ func ComputeFocusManagedStreams(fk *session.FocusKey, characterLocationID ulid.U
 		}
 	}
 	// Future kinds (channel, etc.) fall through to grid until plumbed.
-	return []string{"location:" + characterLocationID.String()}
+	return []string{"location." + characterLocationID.String()}
 }
 
 // StreamDeltas computes the (adds, removes) sets between two stream

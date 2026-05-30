@@ -236,7 +236,7 @@ var _ = Describe("Subscribe with non-participant identity delivers MetadataOnly 
 
 		const plaintext = `{"text":"secret message for participant only"}`
 		intent := pluginsdk.EmitIntent{
-			Subject:   "scene:" + sceneID,
+			Subject:   "scene." + sceneID,
 			Type:      pluginsdk.EventType("test-plugin:whisper"),
 			Payload:   plaintext,
 			Sensitive: true,
@@ -337,7 +337,7 @@ var _ = Describe("Subscribe with participant identity delivers plaintext (INV-26
 
 		const plaintext = `{"text":"hello participant"}`
 		intent := pluginsdk.EmitIntent{
-			Subject:   "scene:" + sceneID,
+			Subject:   "scene." + sceneID,
 			Type:      pluginsdk.EventType("test-plugin:whisper"),
 			Payload:   plaintext,
 			Sensitive: true,

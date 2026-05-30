@@ -491,10 +491,10 @@ func (identityKeySelector) SelectForDecrypt(_ context.Context, _ codec.Name, _ c
 }
 
 // contextIDFromSubject derives a dek.ContextID from a NATS-native subject
-// like "events.<game>.<namespace>.<id>[.<facet>...]". Phase 3a's plugin
-// emit path translates legacy colon-style subjects (e.g. "scene:01ABC")
-// to "events.main.scene.01ABC" via subjectxlate.Legacy before reaching
-// the publisher, so parts[2]=namespace, parts[3]=id is the canonical form.
+// like "events.<game>.<namespace>.<id>[.<facet>...]". All producers emit
+// dot-style subjects directly (e.g. "events.main.scene.01ABC"); the host
+// qualifies domain-relative references via eventbus.Qualify before they
+// reach the publisher, so parts[2]=namespace, parts[3]=id is the canonical form.
 func contextIDFromSubject(subject Subject) (dek.ContextID, error) {
 	s := string(subject)
 	if !strings.HasPrefix(s, "events.") {

@@ -59,14 +59,14 @@ func SeedPolicies() []SeedPolicy {
 		{
 			Name:        "seed:player-stream-emit",
 			Description: "Characters can emit to co-located location streams",
-			DSLText:     `permit(principal is character, action in ["emit"], resource is stream) when { resource.stream.name like "location:*" && resource.stream.location == principal.character.location };`,
-			SeedVersion: 2,
+			DSLText:     `permit(principal is character, action in ["emit"], resource is stream) when { resource.stream.has_location == true && resource.stream.location == principal.character.location };`,
+			SeedVersion: 3,
 		},
 		{
 			Name:        "seed:player-location-stream-read",
 			Description: "Characters can read history of their current location stream",
-			DSLText:     `permit(principal is character, action in ["read"], resource is stream) when { resource.stream.name like "location:*" && resource.stream.location == principal.character.location };`,
-			SeedVersion: 1,
+			DSLText:     `permit(principal is character, action in ["read"], resource is stream) when { resource.stream.has_location == true && resource.stream.location == principal.character.location };`,
+			SeedVersion: 2,
 		},
 		{
 			Name:        "seed:player-movement",

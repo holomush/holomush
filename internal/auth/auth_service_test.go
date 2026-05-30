@@ -412,7 +412,7 @@ func TestAuthenticatePlayerEmitsSessionEndedForEvictedSessionChildren(t *testing
 	require.NotNil(t, gotPlayer)
 
 	// Verify a session_ended event was emitted on the child's character stream.
-	stream := "character:" + charID.String()
+	stream := "character." + charID.String()
 	events, replayErr := eventStore.Replay(ctx, stream, ulid.ULID{}, 100)
 	require.NoError(t, replayErr)
 	require.Len(t, events, 1, "expected exactly one session_ended event on character stream")
@@ -500,14 +500,14 @@ func TestAuthenticatePlayerSkipsChildSessionsNotInTrimmedSet(t *testing.T) {
 	require.NotNil(t, gotPlayer)
 
 	// Evicted child should have session_ended.
-	evictedStream := "character:" + evictedCharID.String()
+	evictedStream := "character." + evictedCharID.String()
 	evictedEvents, replayErr := eventStore.Replay(ctx, evictedStream, ulid.ULID{}, 100)
 	require.NoError(t, replayErr)
 	require.Len(t, evictedEvents, 1, "evicted child must have a session_ended event")
 	assert.Equal(t, core.EventTypeSessionEnded, evictedEvents[0].Type)
 
 	// Kept child must NOT have session_ended.
-	keptStream := "character:" + keptCharID.String()
+	keptStream := "character." + keptCharID.String()
 	keptEvents, keptErr := eventStore.Replay(ctx, keptStream, ulid.ULID{}, 100)
 	require.NoError(t, keptErr)
 	assert.Empty(t, keptEvents, "kept child must not have a session_ended event")

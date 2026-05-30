@@ -36,7 +36,7 @@ func TestWithGameIDOptionStampsConfiguredGameIDIntoSubject(t *testing.T) {
 	)
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
-		Subject: "scene:01TEST",
+		Subject: "scene.01TEST",
 		Type:    pluginsdk.EventType(core.EventTypeSystem),
 		Payload: `{"x":1}`,
 	})
@@ -58,7 +58,7 @@ func TestWithGameIDEmptyProviderFallsBackToMain(t *testing.T) {
 		plugins.WithGameID(func() string { return "" }),
 	)
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
-		Subject: "scene:01TEST",
+		Subject: "scene.01TEST",
 		Type:    pluginsdk.EventType(core.EventTypeSystem),
 		Payload: `{}`,
 	})
@@ -159,7 +159,7 @@ func TestEmitRejectsSystemActorAtManifestGate(t *testing.T) {
 		systemActorResolver,
 	)
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
-		Subject: "scene:01TEST",
+		Subject: "scene.01TEST",
 		Type:    pluginsdk.EventType(core.EventTypeSystem),
 		Payload: `{}`,
 	})

@@ -183,7 +183,7 @@ func emitSensitivePluginEvent(
 ) {
 	t.Helper()
 	if len(participants) > 0 {
-		ctxID, ok := contextIDFromLegacySubject(subject)
+		ctxID, ok := contextIDFromRelativeSubject(subject)
 		require.True(t, ok, "subject must yield a ContextID")
 		_, err := env.dekMgr.GetOrCreate(ctx, ctxID, participants)
 		require.NoError(t, err)
@@ -285,12 +285,12 @@ func contextIDFromTranslatedSubject(subject string) (dek.ContextID, bool) {
 	return dek.ContextID{}, false
 }
 
-// contextIDFromLegacySubject parses "scene:<id>" forms used by the plugin
-// emit path. Mirrors publisher.contextIDFromSubject's behavior for the
-// pre-translation form (the publisher receives the post-translation
+// contextIDFromRelativeSubject parses "scene.<id>" dot-relative forms used by
+// the plugin emit path. Mirrors publisher.contextIDFromSubject's behavior for
+// the pre-qualification form (the publisher receives the post-qualification
 // "events.main.scene.<id>" form).
-func contextIDFromLegacySubject(subject string) (dek.ContextID, bool) {
-	if len(subject) > 6 && subject[:6] == "scene:" {
+func contextIDFromRelativeSubject(subject string) (dek.ContextID, bool) {
+	if len(subject) > 6 && subject[:6] == "scene." {
 		return dek.ContextID{Type: "scene", ID: subject[6:]}, true
 	}
 	return dek.ContextID{}, false
@@ -350,7 +350,7 @@ var _ = Describe("Sensitive event end-to-end", func() {
 			}
 			emitSensitivePluginEvent(
 				ctx, suiteT, env,
-				"scene:"+sceneID,
+				"scene."+sceneID,
 				`{"text":"hello hot participant"}`,
 				[]dek.Participant{{
 					PlayerID:    participantID.PlayerID,
@@ -380,7 +380,7 @@ var _ = Describe("Sensitive event end-to-end", func() {
 			sceneID := "01HEEHOTNON0000000000000"
 			emitSensitivePluginEvent(
 				ctx, suiteT, env,
-				"scene:"+sceneID,
+				"scene."+sceneID,
 				`{"text":"hot secret"}`,
 				[]dek.Participant{{
 					PlayerID:    "01PLAYERBB000000000000000",
@@ -425,7 +425,7 @@ var _ = Describe("Sensitive event end-to-end", func() {
 			plaintext := `{"text":"cold participant secret"}`
 			emitSensitivePluginEvent(
 				ctx, suiteT, env,
-				"scene:"+sceneID, plaintext,
+				"scene."+sceneID, plaintext,
 				[]dek.Participant{{
 					PlayerID:    participantID.PlayerID,
 					CharacterID: participantID.CharacterID,
@@ -460,7 +460,7 @@ var _ = Describe("Sensitive event end-to-end", func() {
 			sceneID := "01HEECOLDNON000000000000"
 			emitSensitivePluginEvent(
 				ctx, suiteT, env,
-				"scene:"+sceneID, `{"text":"cold secret"}`,
+				"scene."+sceneID, `{"text":"cold secret"}`,
 				[]dek.Participant{{
 					PlayerID:    "01PLAYEREE000000000000000",
 					CharacterID: "01CHAREE0000000000000000",

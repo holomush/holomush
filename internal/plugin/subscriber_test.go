@@ -488,12 +488,12 @@ func TestSubscriberRoutesResponseEventsThroughSharedEmitterWithIncomingActor(t *
 
 	host := &subscriberHost{
 		response: []pluginsdk.EmitEvent{
-			{Stream: "location:123", Type: pluginsdk.EventType("say"), Payload: `{"text":"echo"}`},
+			{Stream: "location.123", Type: pluginsdk.EventType("say"), Payload: `{"text":"echo"}`},
 		},
 	}
 
 	sub := plugins.NewSubscriber(host, manager)
-	sub.Subscribe("echo-bot", "location:123", []string{"say"})
+	sub.Subscribe("echo-bot", "location.123", []string{"say"})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -505,7 +505,7 @@ func TestSubscriberRoutesResponseEventsThroughSharedEmitterWithIncomingActor(t *
 	actorID := core.NewULID()
 	events <- pluginsdk.Event{
 		ID:        "1",
-		Stream:    "location:123",
+		Stream:    "location.123",
 		Type:      pluginsdk.EventType("say"),
 		ActorKind: pluginsdk.ActorCharacter,
 		ActorID:   actorID.String(),

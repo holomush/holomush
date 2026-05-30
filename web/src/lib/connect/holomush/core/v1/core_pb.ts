@@ -245,7 +245,10 @@ export type EventFrame = Message<"holomush.core.v1.EventFrame"> & {
   id: string;
 
   /**
-   * stream is the subject the event belongs to (e.g. a character or location stream).
+   * stream is the fully-qualified JetStream subject the event belongs to
+   * (e.g. "events.main.location.<ULID>"). Producers and clients exchange
+   * domain-relative dot references (e.g. "location.<ULID>"); the server
+   * qualifies them on the way in, so delivered frames carry the qualified form.
    *
    * @generated from field: string stream = 2;
    */
@@ -1719,7 +1722,9 @@ export type QueryStreamHistoryRequest = Message<"holomush.core.v1.QueryStreamHis
   sessionId: string;
 
   /**
-   * stream is the subject whose history is read.
+   * stream is the domain-relative dot reference whose history is read
+   * (e.g. "location.<ULID>", "character.<ULID>"); the server qualifies it to the
+   * fully-qualified JetStream subject before authorization and the bus fetch.
    *
    * @generated from field: string stream = 3;
    */
@@ -1855,8 +1860,11 @@ export const ListSessionStreamsRequestSchema: GenMessage<ListSessionStreamsReque
  */
 export type ListSessionStreamsResponse = Message<"holomush.core.v1.ListSessionStreamsResponse"> & {
   /**
-   * streams lists the subscribed stream names (character / location / plugin
-   * streams), matching what Subscribe would deliver.
+   * streams lists the subscribed stream names as domain-relative dot references
+   * (e.g. "character.<ULID>", "location.<ULID>", plugin streams) — the form the
+   * client passes back to Subscribe/QueryStreamHistory unchanged, which the
+   * server qualifies. Delivered EventFrames carry the fully-qualified subject
+   * (see EventFrame.stream), not this relative form.
    *
    * @generated from field: repeated string streams = 1;
    */

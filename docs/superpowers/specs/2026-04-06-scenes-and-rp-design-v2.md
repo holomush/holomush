@@ -210,25 +210,26 @@ moves into the plugin process.)*
 
 Each scene gets two event streams:
 
-| Stream | Convention | Content | Archived in log |
-|--------|-----------|---------|-----------------|
-| IC | `events.<game_id>.scene.<scene_id>.ic` | Poses, says, arrives, leaves, system | Yes |
-| OOC | `events.<game_id>.scene.<scene_id>.ooc` | OOC chat, pose order notifications | Never |
-| Notifications | `notifications:<character_id>` | Cross-scene activity markers for non-focused members | Never |
+| Stream        | Convention                                    | Content                                              | Archived in log |
+| ------------- | --------------------------------------------- | ---------------------------------------------------- | --------------- |
+| IC            | `events.<game_id>.scene.<scene_id>.ic`        | Poses, says, arrives, leaves, system                 | Yes             |
+| OOC           | `events.<game_id>.scene.<scene_id>.ooc`       | OOC chat, pose order notifications                   | Never           |
+| Notifications | `events.<game_id>.notification.<character_id>` | Cross-scene activity markers for non-focused members | Never           |
 
-Grid locations continue using `location:<id>` as today.
+Grid locations use `events.<game_id>.location.<id>`. Character streams use
+`events.<game_id>.character.<id>`.
 
-> **Note (Phase 4 — holomush-5rh.13):** Scene IC/OOC rows were migrated from
-> colon-style (`scene:<id>:ic`) to NATS dot-style subjects
-> (`events.<game_id>.scene.<scene_id>.ic`) as part of the Phase 4 scene-aware
-> substrate work. Other entries (location, character, notifications) remain
-> colon-style and are tracked separately by holomush-rops. ADR: holomush-s9nu.
+> **Note (holomush-rops):** All pub/sub stream subjects now use NATS dot-style
+> exclusively. Scene IC/OOC migrated in Phase 4 (`holomush-5rh.13`, ADR
+> holomush-s9nu); location, character, and notification streams completed by
+> `holomush-rops`. The legacy colon form (`scene:<id>:ic`, `location:<id>`,
+> `notifications:<character_id>`) is eradicated; `subjectxlate` is deleted.
 
 ### 3.2 Command Routing
 
 When a connection sends input, the dispatcher checks that connection's focus:
 
-- Focused on grid: route to `location:<character_location_id>`
+- Focused on grid: route to `events.<game_id>.location.<character_location_id>`
 - Focused on scene: route to `events.<game_id>.scene.<scene_id>.ic`
   (or `events.<game_id>.scene.<scene_id>.ooc` for the `ooc` command)
 
@@ -236,7 +237,7 @@ When a connection sends input, the dispatcher checks that connection's focus:
 
 A connection receives events from its focused stream(s) only. Events from
 other scenes where the character has membership arrive as notifications
-through a per-character notification stream: `notifications:<character_id>`.
+through a per-character notification stream: `events.<game_id>.notification.<character_id>`.
 The plugin emits notification events as a side effect of writing to a scene
 IC stream when the scene has members not currently focused on it.
 
@@ -251,7 +252,7 @@ When a connection focuses on a scene:
 
 When a connection focuses on grid:
 
-1. Subscribe to `location:<loc_id>`
+1. Subscribe to `events.<game_id>.location.<loc_id>`
 2. Unsubscribe from previous focus stream
 3. Replay per location's replay policy
 

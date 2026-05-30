@@ -68,7 +68,7 @@ var _ = Describe("Cursor-bounded backfill (holomush-iu8j)", func() {
 		alice := ts.ConnectAuthed(ctx, "Alice")
 		defer alice.Logout(ctx)
 
-		locStream := "location:" + alice.LocationID.String()
+		locStream := "location." + alice.LocationID.String()
 
 		// Publish a pre-attach-ish event. Use the integrationtest harness's
 		// EmitDirectEvent so the event reaches events_audit via the same
@@ -100,7 +100,7 @@ var _ = Describe("Cursor-bounded backfill (holomush-iu8j)", func() {
 		alice := ts.ConnectAuthed(ctx, "Alice")
 		defer alice.Logout(ctx)
 
-		locStream := "location:" + alice.LocationID.String()
+		locStream := "location." + alice.LocationID.String()
 		attachMs := alice.AttachMomentMs()
 		Expect(attachMs).To(BeNumerically(">", int64(0)),
 			"need attach moment to scope the bounded query")

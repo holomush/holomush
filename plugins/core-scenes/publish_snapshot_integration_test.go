@@ -355,7 +355,7 @@ func (e *snapshotRealEnv) emitAndSeed(ctx context.Context, sceneID, eventType, p
 	}
 	emitter := plugins.NewPluginEventEmitter(e.pluginPub, manifestFn, actorFn, plugins.WithCryptoEnabled(true))
 	intent := pluginsdk.EmitIntent{
-		Subject:   "scene:" + sceneID,
+		Subject:   "scene." + sceneID,
 		Type:      pluginsdk.EventType(eventType), // bare type — mirrors production (commands.go:516)
 		Payload:   plaintext,
 		Sensitive: true,

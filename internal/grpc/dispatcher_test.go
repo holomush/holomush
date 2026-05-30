@@ -47,7 +47,7 @@ func registerTestCommands(t *testing.T, reg *command.Registry) {
 				"message":        exec.Args,
 			})
 			event := core.NewEvent(
-				"location:"+exec.LocationID().String(),
+				"location."+exec.LocationID().String(),
 				core.EventType(corecomm.EventTypeSay),
 				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
 				payload,
@@ -64,7 +64,7 @@ func registerTestCommands(t *testing.T, reg *command.Registry) {
 				"action":         exec.Args,
 			})
 			event := core.NewEvent(
-				"location:"+exec.LocationID().String(),
+				"location."+exec.LocationID().String(),
 				core.EventType(corecomm.EventTypePose),
 				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
 				payload,
@@ -82,7 +82,7 @@ func registerTestCommands(t *testing.T, reg *command.Registry) {
 				Style:         "say",
 			})
 			event := core.NewEvent(
-				"location:"+exec.LocationID().String(),
+				"location."+exec.LocationID().String(),
 				core.EventType(corecomm.EventTypeOOC),
 				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
 				payload,
@@ -177,7 +177,7 @@ func TestDispatcher_HandleCommand_Say(t *testing.T) {
 	// Should emit a say event on the location stream
 	require.NotEmpty(t, appended)
 	assert.Equal(t, core.EventType(corecomm.EventTypeSay), appended[0].Type)
-	assert.Equal(t, "location:"+locationID.String(), appended[0].Stream)
+	assert.Equal(t, "location."+locationID.String(), appended[0].Stream)
 }
 
 func TestDispatcher_HandleCommand_Pose(t *testing.T) {
@@ -281,7 +281,7 @@ func TestDispatcher_HandleCommand_UnknownCommand(t *testing.T) {
 	assert.True(t, resp.Success, "unknown command should succeed at RPC level")
 
 	// Should emit error command_response on character stream
-	charEvents, err := store.Replay(ctx, "character:"+charID.String(), ulid.ULID{}, 100)
+	charEvents, err := store.Replay(ctx, "character."+charID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
 	require.NotEmpty(t, charEvents, "expected command_response event")
 	assert.Equal(t, core.EventTypeCommandError, charEvents[0].Type)
@@ -329,13 +329,13 @@ func TestDispatcher_HandleCommand_Quit(t *testing.T) {
 	assert.Error(t, err, "session should be deleted after quit")
 
 	// Leave event should be emitted on location stream
-	locEvents, err := store.Replay(ctx, "location:"+locationID.String(), ulid.ULID{}, 100)
+	locEvents, err := store.Replay(ctx, "location."+locationID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
 	require.Len(t, locEvents, 1, "expected exactly one leave event")
 	assert.Equal(t, core.EventTypeLeave, locEvents[0].Type)
 
 	// Goodbye command_response event on character stream
-	charEvents, err := store.Replay(ctx, "character:"+charID.String(), ulid.ULID{}, 100)
+	charEvents, err := store.Replay(ctx, "character."+charID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
 	require.NotEmpty(t, charEvents)
 	assert.Equal(t, core.EventTypeCommandResponse, charEvents[0].Type)
@@ -382,7 +382,7 @@ func TestQuitPathAppendsSessionEndedOnCharacterStream(t *testing.T) {
 
 	// session_ended event should be present on character stream with
 	// cause=quit, the correct SessionID, and Reason="Goodbye!".
-	charEvents, err := store.Replay(ctx, "character:"+charID.String(), ulid.ULID{}, 100)
+	charEvents, err := store.Replay(ctx, "character."+charID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
 
 	var sessionEnded *core.Event
@@ -393,7 +393,7 @@ func TestQuitPathAppendsSessionEndedOnCharacterStream(t *testing.T) {
 		}
 	}
 	require.NotNil(t, sessionEnded, "expected a session_ended event on character stream")
-	assert.Equal(t, "character:"+charID.String(), sessionEnded.Stream)
+	assert.Equal(t, "character."+charID.String(), sessionEnded.Stream)
 	assert.Equal(t, core.ActorCharacter, sessionEnded.Actor.Kind,
 		"cause=quit uses ActorCharacter per Design Decision #1")
 
@@ -441,7 +441,7 @@ func TestGuestDisconnectEmitsSessionEndedOnCharacterStream(t *testing.T) {
 
 	// session_ended event should be present on character stream with
 	// cause=guest_end, the correct SessionID, and Reason="Session ended.".
-	charEvents, err := store.Replay(ctx, core.StreamPrefixCharacter+charID.String(), ulid.ULID{}, 100)
+	charEvents, err := store.Replay(ctx, "character."+charID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
 
 	var sessionEnded *core.Event
@@ -452,7 +452,7 @@ func TestGuestDisconnectEmitsSessionEndedOnCharacterStream(t *testing.T) {
 		}
 	}
 	require.NotNil(t, sessionEnded, "expected a session_ended event on character stream for guest disconnect")
-	assert.Equal(t, core.StreamPrefixCharacter+charID.String(), sessionEnded.Stream)
+	assert.Equal(t, "character."+charID.String(), sessionEnded.Stream)
 
 	var payload core.SessionEndedPayload
 	require.NoError(t, json.Unmarshal(sessionEnded.Payload, &payload))
@@ -549,7 +549,7 @@ func TestAdminBootEmitsSessionEndedWithKickedCause(t *testing.T) {
 	// session_ended event should be present on the TARGET character's
 	// stream with cause=kicked, the correct SessionID, and a reason
 	// mentioning the administrator.
-	charEvents, err := store.Replay(ctx, core.StreamPrefixCharacter+targetCharID.String(), ulid.ULID{}, 100)
+	charEvents, err := store.Replay(ctx, "character."+targetCharID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
 
 	var sessionEnded *core.Event
@@ -560,7 +560,7 @@ func TestAdminBootEmitsSessionEndedWithKickedCause(t *testing.T) {
 		}
 	}
 	require.NotNil(t, sessionEnded, "expected a session_ended event on target character stream for admin boot")
-	assert.Equal(t, core.StreamPrefixCharacter+targetCharID.String(), sessionEnded.Stream)
+	assert.Equal(t, "character."+targetCharID.String(), sessionEnded.Stream)
 
 	var payload core.SessionEndedPayload
 	require.NoError(t, json.Unmarshal(sessionEnded.Payload, &payload))

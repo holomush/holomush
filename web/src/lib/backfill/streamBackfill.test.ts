@@ -41,13 +41,13 @@ describe('backfillStreams', () => {
 			nextCursor: new Uint8Array(),
 		});
 
-		const result = await backfillStreams(client as never, 'sess-1', ['location:l1']);
+		const result = await backfillStreams(client as never, 'sess-1', ['location.l1']);
 		expect(result.events.map((e) => e.eventId)).toEqual(['e-a', 'e-b']);
 		expect(result.failedStreams).toEqual([]);
 		expect(client.webQueryStreamHistory).toHaveBeenCalledWith(
 			{
 				sessionId: 'sess-1',
-				stream: 'location:l1',
+				stream: 'location.l1',
 				count: 150,
 				cursor: new Uint8Array(),
 				notBeforeMs: 0n,
@@ -60,7 +60,7 @@ describe('backfillStreams', () => {
 	it('merges events from multiple streams in ascending (timestamp, eventId) order', async () => {
 		const client = makeClient();
 		client.webQueryStreamHistory.mockImplementation((req: { stream: string }) => {
-			if (req.stream === 'character:c1') {
+			if (req.stream === 'character.c1') {
 				return Promise.resolve({
 					events: [{ eventId: 'e-mid', timestamp: 100n, type: 'say' }],
 					hasMore: false,
@@ -78,8 +78,8 @@ describe('backfillStreams', () => {
 		});
 
 		const result = await backfillStreams(client as never, 'sess-1', [
-			'character:c1',
-			'location:l1',
+			'character.c1',
+			'location.l1',
 		]);
 		expect(result.events.map((e) => e.eventId)).toEqual(['e-first', 'e-mid', 'e-last']);
 	});
@@ -87,7 +87,7 @@ describe('backfillStreams', () => {
 	it('uses eventId as tiebreaker for same-timestamp events', async () => {
 		const client = makeClient();
 		client.webQueryStreamHistory.mockImplementation((req: { stream: string }) => {
-			if (req.stream === 'character:c1') {
+			if (req.stream === 'character.c1') {
 				return Promise.resolve({
 					events: [{ eventId: 'e-beta', timestamp: 100n, type: 'say' }],
 					hasMore: false,
@@ -102,8 +102,8 @@ describe('backfillStreams', () => {
 		});
 
 		const result = await backfillStreams(client as never, 'sess-1', [
-			'character:c1',
-			'location:l1',
+			'character.c1',
+			'location.l1',
 		]);
 		expect(result.events.map((e) => e.eventId)).toEqual(['e-alpha', 'e-beta']);
 	});
@@ -117,7 +117,7 @@ describe('backfillStreams', () => {
 			nextCursor: new Uint8Array(),
 		});
 
-		const result = await backfillStreams(client as never, 'sess-1', ['location:l1'], {
+		const result = await backfillStreams(client as never, 'sess-1', ['location.l1'], {
 			count: 150,
 		});
 		expect(result.events.map((e) => e.eventId)).toEqual(['e-x']);
@@ -130,9 +130,9 @@ describe('backfillStreams', () => {
 		const transient = new ConnectError('network', Code.Unavailable);
 		client.webQueryStreamHistory.mockRejectedValueOnce(transient).mockRejectedValueOnce(transient);
 
-		const result = await backfillStreams(client as never, 'sess-1', ['location:l1']);
+		const result = await backfillStreams(client as never, 'sess-1', ['location.l1']);
 		expect(result.events).toEqual([]);
-		expect(result.failedStreams).toEqual(['location:l1']);
+		expect(result.failedStreams).toEqual(['location.l1']);
 		expect(client.webQueryStreamHistory).toHaveBeenCalledTimes(2);
 	});
 
@@ -145,8 +145,8 @@ describe('backfillStreams', () => {
 		for (const err of permanents) {
 			const client = makeClient();
 			client.webQueryStreamHistory.mockRejectedValueOnce(err);
-			const result = await backfillStreams(client as never, 'sess-1', ['location:l1']);
-			expect(result.failedStreams).toEqual(['location:l1']);
+			const result = await backfillStreams(client as never, 'sess-1', ['location.l1']);
+			expect(result.failedStreams).toEqual(['location.l1']);
 			expect(client.webQueryStreamHistory).toHaveBeenCalledTimes(1);
 		}
 	});
@@ -154,7 +154,7 @@ describe('backfillStreams', () => {
 	it('deduplicates events appearing in multiple streams by eventId', async () => {
 		const client = makeClient();
 		client.webQueryStreamHistory.mockImplementation((req: { stream: string }) => {
-			if (req.stream === 'character:c1') {
+			if (req.stream === 'character.c1') {
 				return Promise.resolve({
 					events: [{ eventId: 'dup', timestamp: 100n, type: 'say' }],
 					hasMore: false,
@@ -169,8 +169,8 @@ describe('backfillStreams', () => {
 		});
 
 		const result = await backfillStreams(client as never, 'sess-1', [
-			'character:c1',
-			'location:l1',
+			'character.c1',
+			'location.l1',
 		]);
 		expect(result.events.map((e) => e.eventId)).toEqual(['dup']);
 	});
@@ -190,7 +190,7 @@ describe('backfillStreams', () => {
 		});
 
 		const attachMoment = 1700000999999n; // arbitrary epoch-ms
-		await backfillStreams(client as never, 'sess-1', ['location:l1'], {
+		await backfillStreams(client as never, 'sess-1', ['location.l1'], {
 			notAfterMs: attachMoment,
 		});
 
@@ -211,7 +211,7 @@ describe('backfillStreams', () => {
 			nextCursor: new Uint8Array(),
 		});
 
-		await backfillStreams(client as never, 'sess-1', ['location:l1']);
+		await backfillStreams(client as never, 'sess-1', ['location.l1']);
 
 		expect(client.webQueryStreamHistory).toHaveBeenCalledWith(
 			expect.objectContaining({ notAfterMs: 0n }),
@@ -231,7 +231,7 @@ describe('backfillStreams', () => {
 		);
 
 		const controller = new AbortController();
-		const promise = backfillStreams(client as never, 'sess-1', ['location:l1'], {
+		const promise = backfillStreams(client as never, 'sess-1', ['location.l1'], {
 			signal: controller.signal,
 		});
 		controller.abort();
@@ -263,14 +263,14 @@ describe('backfillPage', () => {
 
 		await backfillPage(client as never, {
 			sessionId: 'sess-1',
-			stream: 'location:l1',
+			stream: 'location.l1',
 			count: 50,
 			cursor: cursorBytes,
 		});
 
 		expect(client.webQueryStreamHistory).toHaveBeenCalledWith({
 			sessionId: 'sess-1',
-			stream: 'location:l1',
+			stream: 'location.l1',
 			count: 50,
 			cursor: cursorBytes,
 			notBeforeMs: 0n,
@@ -287,7 +287,7 @@ describe('backfillPage', () => {
 
 		await backfillPage(client as never, {
 			sessionId: 'sess-1',
-			stream: 'location:l1',
+			stream: 'location.l1',
 			count: 50,
 		});
 
@@ -307,7 +307,7 @@ describe('backfillPage', () => {
 
 		const resp = await backfillPage(client as never, {
 			sessionId: 'sess-1',
-			stream: 'location:l1',
+			stream: 'location.l1',
 			count: 50,
 		});
 
@@ -333,12 +333,12 @@ describe('backfillPage', () => {
 
 		const page1 = await backfillPage(client as never, {
 			sessionId: 'sess-1',
-			stream: 'location:l1',
+			stream: 'location.l1',
 			count: 50,
 		});
 		const page2 = await backfillPage(client as never, {
 			sessionId: 'sess-1',
-			stream: 'location:l1',
+			stream: 'location.l1',
 			count: 50,
 			cursor: page1.nextCursor,
 		});
@@ -359,7 +359,7 @@ describe('backfillPage', () => {
 		await expect(
 			backfillPage(client as never, {
 				sessionId: 'sess-1',
-				stream: 'location:l1',
+				stream: 'location.l1',
 				count: 50,
 				cursor: new Uint8Array([1, 2, 3]),
 			}),
@@ -377,7 +377,7 @@ describe('backfillPage', () => {
 		await expect(
 			backfillPage(client as never, {
 				sessionId: 'sess-1',
-				stream: 'location:l1',
+				stream: 'location.l1',
 				count: 50,
 			}),
 		).rejects.toBeInstanceOf(CursorInvalidError);
@@ -401,7 +401,7 @@ describe('backfillPage', () => {
 
 		const promise = backfillPage(client as never, {
 			sessionId: 'sess-1',
-			stream: 'location:l1',
+			stream: 'location.l1',
 			count: 50,
 		});
 
@@ -424,7 +424,7 @@ describe('backfillPage', () => {
 		// Attach rejection handler immediately to avoid unhandled rejection.
 		const promise = backfillPage(client as never, {
 			sessionId: 'sess-1',
-			stream: 'location:l1',
+			stream: 'location.l1',
 			count: 50,
 		});
 		const assertion = expect(promise).rejects.toBeInstanceOf(CursorLagError);
@@ -449,7 +449,7 @@ describe('backfillPage', () => {
 		await expect(
 			backfillPage(client as never, {
 				sessionId: 'sess-1',
-				stream: 'location:l1',
+				stream: 'location.l1',
 				count: 50,
 			}),
 		).rejects.toBeInstanceOf(TypeError);

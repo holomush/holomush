@@ -1141,7 +1141,7 @@ func TestLogoutEmitsSessionEndedForEachChildGameSession(t *testing.T) {
 		// Fanout must have completed before authService.Logout is called.
 		// Assert the exact char -> session pairing for every child.
 		for charIDStr, wantSessID := range expectedSessionByChar {
-			stream := "character:" + charIDStr
+			stream := "character." + charIDStr
 			events, replayErr := store.Replay(logoutCtx, stream, ulid.ULID{}, 100)
 			require.NoError(t, replayErr)
 

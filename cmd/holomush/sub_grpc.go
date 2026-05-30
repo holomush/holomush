@@ -37,7 +37,6 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/eventbus/history"
 	"github.com/holomush/holomush/internal/eventbus/history/source"
-	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	holoFocus "github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/grpc/focus/scenepolicy"
@@ -585,18 +584,15 @@ type busEventAppender struct {
 var _ core.EventAppender = (*busEventAppender)(nil)
 
 // Append translates a core.Event to an eventbus.Event and publishes it to
-// JetStream. Legacy colon-delimited streams (e.g. "location:01ABC") are
-// mapped to `events.<gameID>.<...>` via subjectxlate.Legacy.
+// JetStream. The engine emits domain-relative dot stream references
+// (e.g. "location.01ABC"); eventbus.Qualify prepends `events.<gameID>.` and
+// validates the result (holomush-rops).
 func (b *busEventAppender) Append(ctx context.Context, event core.Event) error {
 	gameID := b.bus.GameID()
 	if gameID == "" {
 		gameID = "main"
 	}
-	natsSubject, err := subjectxlate.Legacy(event.Stream, gameID)
-	if err != nil {
-		return oops.With("stream", event.Stream).Wrap(err)
-	}
-	sub, err := eventbus.NewSubject(natsSubject)
+	sub, err := eventbus.Qualify(gameID, event.Stream)
 	if err != nil {
 		return oops.With("stream", event.Stream).Wrap(err)
 	}
@@ -683,11 +679,7 @@ func (a *busHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string,
 	if gameID == "" {
 		gameID = "main"
 	}
-	natsSubject, err := subjectxlate.Legacy(stream, gameID)
-	if err != nil {
-		return nil, oops.With("stream", stream).Wrap(err)
-	}
-	sub, err := eventbus.NewSubject(natsSubject)
+	sub, err := eventbus.Qualify(gameID, stream)
 	if err != nil {
 		return nil, oops.With("stream", stream).Wrap(err)
 	}
@@ -722,12 +714,12 @@ func (a *busHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string,
 		}
 	}
 
-	// Reverse to ascending (oldest→newest) and translate to core.Event.
+	// Reverse to ascending (oldest→newest) and translate to core.Event. The
+	// frame stream is the already-qualified dot subject (holomush-rops).
 	result := make([]core.Event, len(collected))
 	for i := range collected {
 		j := len(collected) - 1 - i
-		streamName := subjectxlate.ToLegacy(string(collected[i].Subject), gameID)
-		result[j] = busEventToCoreEvent(collected[i], streamName)
+		result[j] = busEventToCoreEvent(collected[i], string(collected[i].Subject))
 	}
 	return result, nil
 }

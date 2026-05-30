@@ -2039,7 +2039,7 @@ func TestEmitPluginEventPropagatesSensitive(t *testing.T) {
 	})
 
 	err = mgr.EmitPluginEvent(ctx, "core-test", pluginsdk.EmitEvent{
-		Stream:    "location:01HXXXTESTLOC00000000000",
+		Stream:    "location.01HXXXTESTLOC00000000000",
 		Type:      "core-test:hello",
 		Payload:   `{"msg":"private"}`,
 		Sensitive: true,

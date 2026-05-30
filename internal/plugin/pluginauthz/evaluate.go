@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/core"
@@ -62,9 +63,22 @@ func initCounter() {
 func ActorSubject(a core.Actor) string {
 	switch a.Kind {
 	case core.ActorCharacter:
-		return "character:" + a.ID
+		// Empty ID would bypass the access.CharacterSubject guard (it panics on
+		// empty); fail closed instead, matching this function's documented
+		// "" contract for unresolvable actors.
+		if a.ID == "" {
+			return ""
+		}
+		return access.CharacterSubject(a.ID)
 	case core.ActorPlugin:
-		return "plugin:" + a.ID
+		// Empty ID would trip access.PluginSubject's panic-on-empty guard; fail
+		// closed instead, matching this function's "" contract (and the
+		// ActorCharacter case above). Also keeps the colon ABAC-subject literal
+		// out of host code (the INV-ROPS-3 boundary).
+		if a.ID == "" {
+			return ""
+		}
+		return access.PluginSubject(a.ID)
 	case core.ActorSystem:
 		// ID is intentionally dropped: all system actors collapse to the bare
 		// "system" subject regardless of their specific sentinel ULID.
@@ -245,7 +259,9 @@ func Evaluate(ctx context.Context, in Input) (Decision, error) {
 
 // subjectKindFromSubject extracts the kind prefix from an ABAC subject string
 // (e.g. "character:01ABC" → "character", "plugin:core-scenes" → "plugin",
-// "system" → "system", "" → "unknown"). Used as a non-PII span attribute.
+// "system" → "system", "" → "unknown"). These are ABAC subject IDs in
+// "<kind>:<id>" form — not pub/sub stream subjects, which use dot-style.
+// Used as a non-PII span attribute.
 func subjectKindFromSubject(subject string) string {
 	if subject == "" {
 		return "unknown"

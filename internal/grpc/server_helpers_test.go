@@ -68,27 +68,28 @@ func TestActorIDStringZeroIsEmpty(t *testing.T) {
 	assert.Equal(t, id.String(), actorIDString(eventbus.Actor{ID: id}, nil))
 }
 
-func TestToSubjectValidLegacyStream(t *testing.T) {
+func TestToSubjectQualifiesRelativeStream(t *testing.T) {
 	t.Parallel()
 	s := &CoreServer{}
-	sub, err := s.toSubject("main", "character:01HYXYZCHAR0000000000000CH")
+	sub, err := s.toSubject("main", "character.01HYXYZCHAR0000000000000CH")
 	require.NoError(t, err)
 	assert.Equal(t, eventbus.Subject("events.main.character.01HYXYZCHAR0000000000000CH"), sub)
 }
 
-func TestToSubjectRejectsInvalidLegacyStream(t *testing.T) {
+func TestToSubjectRejectsColonStream(t *testing.T) {
 	t.Parallel()
 	s := &CoreServer{}
-	// Double-colon produces an empty token which subjectxlate.Legacy rejects.
-	_, err := s.toSubject("main", "character::bad")
+	// Colon-style references are no longer valid stream names: Qualify produces
+	// "events.main.character:..." which NewSubject rejects (holomush-rops).
+	_, err := s.toSubject("main", "character:01HYXYZCHAR0000000000000CH")
 	require.Error(t, err)
 }
 
 func TestToSubjectRejectsInvalidSubjectCharacters(t *testing.T) {
 	t.Parallel()
 	s := &CoreServer{}
-	// Invalid characters after translation: "!" isn't in the subject token set.
-	_, err := s.toSubject("main", "character:bad!token")
+	// Invalid characters after qualification: "!" isn't in the subject token set.
+	_, err := s.toSubject("main", "character.bad!token")
 	require.Error(t, err)
 }
 
@@ -110,10 +111,10 @@ func TestComputeInitialFiltersSkipsInvalidStreams(t *testing.T) {
 	s := &CoreServer{}
 	plan := focus.RestorePlan{
 		Streams: []focus.StreamWithMode{
-			{Stream: "character:01HYXYZCHAR0000000000000CH", Mode: focus.ReplayModeFromCursor},
-			// Invalid — empty token after split.
+			{Stream: "character.01HYXYZCHAR0000000000000CH", Mode: focus.ReplayModeFromCursor},
+			// Invalid — colon reference no longer qualifies.
 			{Stream: "character::bad", Mode: focus.ReplayModeFromCursor},
-			{Stream: "location:01HYXYZ0C0000000000000000C", Mode: focus.ReplayModeFromCursor},
+			{Stream: "location.01HYXYZ0C0000000000000000C", Mode: focus.ReplayModeFromCursor},
 		},
 	}
 	subs := s.computeInitialFilters(context.Background(), plan)
@@ -138,7 +139,7 @@ func TestToProtoSubscribeResponseMapsFields(t *testing.T) {
 	ev := resp.GetEvent()
 	require.NotNil(t, ev)
 	assert.Equal(t, id.String(), ev.GetId())
-	assert.Equal(t, "character:"+charID.String(), ev.GetStream())
+	assert.Equal(t, "events.main.character."+charID.String(), ev.GetStream())
 	assert.Equal(t, "scene.pose", ev.GetType())
 	assert.Equal(t, "character", ev.GetActorType())
 	assert.Equal(t, charID.String(), ev.GetActorId())

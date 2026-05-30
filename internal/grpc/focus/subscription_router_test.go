@@ -30,7 +30,7 @@ func TestComputeFocusManagedStreams(t *testing.T) {
 			fk:       nil,
 			locID:    locID,
 			gameID:   "main",
-			expected: []string{"location:" + locID.String()},
+			expected: []string{"location." + locID.String()},
 		},
 		{
 			name:   "SceneFocus_ICAndOOC",

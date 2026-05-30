@@ -13,6 +13,12 @@ import (
 	"github.com/holomush/holomush/internal/session"
 )
 
+// dotStyleLocation returns a NATS dot-style location subject for testing,
+// using the fixed game ID "test".
+func dotStyleLocation(locID string) string {
+	return "events.test.location." + locID
+}
+
 func TestStreamScopeFloor(t *testing.T) {
 	locID := ulid.MustParse("01H000000000000000000000A1")
 	charID := ulid.MustParse("01H000000000000000000000C1")
@@ -29,17 +35,17 @@ func TestStreamScopeFloor(t *testing.T) {
 	}{
 		{
 			"location current — non-guest", &session.Info{CharacterID: charID, LocationID: locID, LocationArrivedAt: arrival},
-			"location:" + locID.String(), arrival,
+			dotStyleLocation(locID.String()), arrival,
 		},
 		{
 			"location current — guest, arrival later than guest_created",
 			&session.Info{CharacterID: charID, LocationID: locID, LocationArrivedAt: arrival, IsGuest: true, GuestCharacterCreatedAt: guestCreated},
-			"location:" + locID.String(), arrival,
+			dotStyleLocation(locID.String()), arrival,
 		},
 		{
 			"location current — guest, guest_created later than arrival (shouldn't happen but MAX wins)",
 			&session.Info{CharacterID: charID, LocationID: locID, LocationArrivedAt: time.Time{}, IsGuest: true, GuestCharacterCreatedAt: guestCreated},
-			"location:" + locID.String(), guestCreated,
+			dotStyleLocation(locID.String()), guestCreated,
 		},
 		{
 			"scene member — non-guest, uses JoinedAt (dot-style IC subject)",
@@ -47,7 +53,8 @@ func TestStreamScopeFloor(t *testing.T) {
 				{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: sceneJoin},
 			}}, dotStyleSceneIC(sceneID.String()), sceneJoin,
 		},
-		{"character own stream — no floor", &session.Info{CharacterID: charID}, "character:" + charID.String(), time.Time{}},
+		{"character own stream — no floor", &session.Info{CharacterID: charID}, dotStyleCharacter(charID.String()), time.Time{}},
+		{"legacy colon location — no longer matched, falls to zero", &session.Info{CharacterID: charID, LocationID: locID, LocationArrivedAt: arrival}, "location:" + locID.String(), time.Time{}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -59,9 +66,9 @@ func TestStreamScopeFloor(t *testing.T) {
 
 // TestMaxStreamScopeFloor covers the Subscribe-path MAX aggregation used by
 // CoreServer.Subscribe to compute the minFloor it forwards to OpenSession.
-// Scene subjects use NATS dot-style per Phase 4 / INV-P4-1 / ADR holomush-s9nu;
-// location streams retain the legacy colon-style format (tracked separately
-// by holomush-rops for migration).
+// All subjects use NATS dot-style: scene per Phase 4 / INV-P4-1 / ADR
+// holomush-s9nu, location and character per holomush-rops (the legacy colon
+// forms are no longer recognized).
 func TestMaxStreamScopeFloor(t *testing.T) {
 	locID := ulid.MustParse("01H000000000000000000000A1")
 	sceneID := ulid.MustParse("01H000000000000000000000S1")
@@ -77,9 +84,9 @@ func TestMaxStreamScopeFloor(t *testing.T) {
 			{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: sceneJoin},
 		},
 	}
-	locStream := "location:" + locID.String()
+	locStream := dotStyleLocation(locID.String())
 	sceneStream := dotStyleSceneIC(sceneID.String())
-	charStream := "character:" + charID.String()
+	charStream := dotStyleCharacter(charID.String())
 
 	cases := []struct {
 		name    string
@@ -95,7 +102,7 @@ func TestMaxStreamScopeFloor(t *testing.T) {
 		{"scene + location — order-independent — MAX is scene", []string{sceneStream, locStream}, sceneJoin},
 		{
 			"unknown subjects fall through to zero — MAX with known still wins",
-			[]string{"global", "events.gid.location.unknown", locStream},
+			[]string{"global", "events.gid.unknowndomain.x", locStream},
 			arrival,
 		},
 	}
@@ -108,10 +115,12 @@ func TestMaxStreamScopeFloor(t *testing.T) {
 }
 
 func TestIsLocationStream(t *testing.T) {
-	assert.True(t, isLocationStream("location:01H000000000000000000000A1"))
-	assert.False(t, isLocationStream("scene:01H000000000000000000000S1:ic"))
-	assert.False(t, isLocationStream("character:01H000000000000000000000C1"))
+	assert.True(t, isLocationStream(dotStyleLocation("01H000000000000000000000A1")))
+	assert.False(t, isLocationStream("location:01H000000000000000000000A1"))
+	assert.False(t, isLocationStream(dotStyleSceneIC("01H000000000000000000000S1")))
+	assert.False(t, isLocationStream(dotStyleCharacter("01H000000000000000000000C1")))
 	assert.False(t, isLocationStream("global"))
+	assert.False(t, isLocationStream("events.test.location."))
 }
 
 // TestStreamScopeFloor_SceneSubjects_INV_P4_9 pins the bug-fix moment for

@@ -27,7 +27,7 @@ func movedAwayPlayer(t *testing.T, ctx context.Context, ts *Server, charName str
 	} else {
 		sess = ts.ConnectAuthedWithRoles(ctx, charName, roles)
 	}
-	priorStream = "location:" + sess.LocationID.String()
+	priorStream = "location." + sess.LocationID.String()
 	sess.MoveTo(ctx, ts.NewLocation(ctx))
 	return sess, priorStream
 }

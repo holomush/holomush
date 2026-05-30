@@ -11,11 +11,6 @@ import (
 	"github.com/samber/oops"
 )
 
-// StreamPrefixCharacter is the stream name prefix for character-scoped event
-// streams (e.g., "character:01ABC"). Use this constant instead of the raw
-// string literal to avoid magic values.
-const StreamPrefixCharacter = "character:"
-
 // MaxPayloadSize is the maximum allowed size (in bytes) of an event payload.
 // Events exceeding this size are rejected before they reach the store to
 // prevent DoS, disk-space, and bandwidth-amplification attacks originating
@@ -227,7 +222,7 @@ type Actor struct {
 // Event represents something that happened in the game world.
 type Event struct {
 	ID        ulid.ULID
-	Stream    string // e.g., "location:01ABC", "character:01XYZ"
+	Stream    string // e.g., "location.01ABC", "character.01XYZ"
 	Type      EventType
 	Timestamp time.Time
 	Actor     Actor

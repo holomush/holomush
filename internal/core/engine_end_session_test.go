@@ -30,7 +30,7 @@ func TestEndSessionEmitsCorrectEventShapeOnCharacterStream(t *testing.T) {
 	err := engine.EndSession(ctx, char, sessionID, core.SessionEndedCauseQuit, "Goodbye!")
 	require.NoError(t, err)
 
-	stream := "character:" + charID.String()
+	stream := "character." + charID.String()
 	events, err := store.Replay(ctx, stream, ulid.ULID{}, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
@@ -72,7 +72,7 @@ func TestEndSessionUsesActorSystemForNonQuitCauses(t *testing.T) {
 			err := engine.EndSession(ctx, char, core.NewULID().String(), cause, "reason")
 			require.NoError(t, err)
 
-			stream := "character:" + charID.String()
+			stream := "character." + charID.String()
 			events, err := store.Replay(ctx, stream, ulid.ULID{}, 10)
 			require.NoError(t, err)
 			require.Len(t, events, 1)

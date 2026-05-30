@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 )
 
@@ -25,9 +26,9 @@ func NewPostgresRoleResolver(store RoleStore) *PostgresRoleResolver {
 }
 
 // GetRoles returns the roles for a subject. The subject ID arrives as "character:01ABC...";
-// the "character:" prefix is stripped before querying the store.
+// the character: prefix (access.SubjectCharacter) is stripped before querying the store.
 func (r *PostgresRoleResolver) GetRoles(ctx context.Context, subject string) []string {
-	charID := strings.TrimPrefix(subject, "character:")
+	charID := strings.TrimPrefix(subject, access.SubjectCharacter)
 	roles, err := r.store.GetRoles(ctx, charID)
 	if err != nil {
 		slog.ErrorContext(ctx, "role resolution failed", "subject", subject, "error", err)

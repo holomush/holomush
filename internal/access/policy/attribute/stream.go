@@ -11,8 +11,8 @@ import (
 )
 
 // StreamProvider resolves attributes for stream resources.
-// Streams use the format "stream:<name>" where name may contain colons
-// (e.g., "stream:global", "stream:location:01XYZ").
+// Streams use the format "stream:<name>" where name is a fully-qualified dot
+// subject (e.g. "stream:events.<gid>.location.<ULID>").
 type StreamProvider struct{}
 
 // NewStreamProvider creates a new stream attribute provider.
@@ -30,7 +30,11 @@ func (p *StreamProvider) ResolveSubject(_ context.Context, _ string) (map[string
 	return nil, nil
 }
 
-// ResolveResource resolves stream attributes for a resource.
+// ResolveResource resolves stream attributes for a resource. The resource ID is
+// "stream:<name>" where <name> is a fully-qualified dot subject
+// (e.g. "events.<gid>.location.<ULID>"). The location attribute is emitted ONLY
+// for location subjects; the has_location witness is always present (true/false)
+// per .claude/rules/abac-providers.md (omit value, never sentinel).
 func (p *StreamProvider) ResolveResource(_ context.Context, resourceID string) (map[string]any, error) {
 	id, ok := parseEntityID(resourceID, "stream")
 	if !ok {
@@ -42,9 +46,14 @@ func (p *StreamProvider) ResolveResource(_ context.Context, resourceID string) (
 		"name": id,
 	}
 
-	// Extract location ID from "location:ULID" pattern
-	if strings.HasPrefix(id, "location:") {
-		attrs["location"] = id[len("location:"):]
+	// Location subjects are "events.<gid>.location.<ULID>": parts[2]=="location".
+	parts := strings.Split(id, ".")
+	if len(parts) == 4 && parts[0] == "events" && parts[2] == "location" && parts[3] != "" {
+		attrs["location"] = parts[3]
+		attrs["has_location"] = true
+	} else {
+		attrs["has_location"] = false
+		// location key INTENTIONALLY ABSENT (ADR holomush-9gtl fail-safe).
 	}
 
 	return attrs, nil
@@ -54,9 +63,10 @@ func (p *StreamProvider) ResolveResource(_ context.Context, resourceID string) (
 func (p *StreamProvider) Schema() *types.NamespaceSchema {
 	return &types.NamespaceSchema{
 		Attributes: map[string]types.AttrType{
-			"type":     types.AttrTypeString,
-			"name":     types.AttrTypeString,
-			"location": types.AttrTypeString,
+			"type":         types.AttrTypeString,
+			"name":         types.AttrTypeString,
+			"location":     types.AttrTypeString,
+			"has_location": types.AttrTypeBool,
 		},
 	}
 }

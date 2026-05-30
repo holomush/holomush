@@ -26,27 +26,42 @@ func TestStreamProvider_ResolveResource(t *testing.T) {
 	}{
 		{
 			name:       "location stream with location ID",
-			resourceID: "stream:location:01XYZ",
+			resourceID: "stream:events.main.location.01XYZ",
 			expected: map[string]any{
-				"type":     "stream",
-				"name":     "location:01XYZ",
-				"location": "01XYZ",
+				"type":         "stream",
+				"name":         "events.main.location.01XYZ",
+				"location":     "01XYZ",
+				"has_location": true,
 			},
 		},
 		{
 			name:       "simple stream name",
 			resourceID: "stream:global",
 			expected: map[string]any{
-				"type": "stream",
-				"name": "global",
+				"type":         "stream",
+				"name":         "global",
+				"has_location": false,
 			},
 		},
 		{
 			name:       "stream with colon but not location prefix",
 			resourceID: "stream:scene:01ABC",
 			expected: map[string]any{
-				"type": "stream",
-				"name": "scene:01ABC",
+				"type":         "stream",
+				"name":         "scene:01ABC",
+				"has_location": false,
+			},
+		},
+		{
+			// INV-ROPS-7: a qualified non-location stream omits the location
+			// key entirely (not an empty-string sentinel) and witnesses false.
+			// assert.Equal on the full expected map verifies the key is absent.
+			name:       "qualified character stream omits location, witness false",
+			resourceID: "stream:events.main.character.01CHR",
+			expected: map[string]any{
+				"type":         "stream",
+				"name":         "events.main.character.01CHR",
+				"has_location": false,
 			},
 		},
 		{
@@ -82,9 +97,10 @@ func TestStreamProviderSchema(t *testing.T) {
 
 	expected := &types.NamespaceSchema{
 		Attributes: map[string]types.AttrType{
-			"type":     types.AttrTypeString,
-			"name":     types.AttrTypeString,
-			"location": types.AttrTypeString,
+			"type":         types.AttrTypeString,
+			"name":         types.AttrTypeString,
+			"location":     types.AttrTypeString,
+			"has_location": types.AttrTypeBool,
 		},
 	}
 

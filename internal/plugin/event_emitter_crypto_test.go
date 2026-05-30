@@ -70,7 +70,7 @@ func TestEmitterDoesNotRunFenceWhenCryptoDisabled(t *testing.T) {
 	emitter := plugins.NewPluginEventEmitter(pub, lookup, resolve)
 
 	intent := pluginsdk.EmitIntent{
-		Subject:   "scene:01HXXXTESTSCENE000000000",
+		Subject:   "scene.01HXXXTESTSCENE000000000",
 		Type:      pluginsdk.EventType("test-plugin:secret"),
 		Payload:   `{}`,
 		Sensitive: false, // would trigger INV-7 if the fence ran
@@ -90,7 +90,7 @@ func TestEmitterStampsSensitiveTrueForManifestMayPlusClaimTrue(t *testing.T) {
 	emitter := newCryptoTestEmitter(t, pub, manifest)
 
 	intent := pluginsdk.EmitIntent{
-		Subject:   "scene:01HXXXTESTSCENE000000000",
+		Subject:   "scene.01HXXXTESTSCENE000000000",
 		Type:      pluginsdk.EventType("test-plugin:whisper"),
 		Payload:   `{"text":"hi"}`,
 		Sensitive: true,
@@ -109,7 +109,7 @@ func TestEmitterStampsSensitiveFalseForManifestMayPlusClaimFalse(t *testing.T) {
 	emitter := newCryptoTestEmitter(t, pub, manifest)
 
 	intent := pluginsdk.EmitIntent{
-		Subject:   "scene:01HXXXTESTSCENE000000000",
+		Subject:   "scene.01HXXXTESTSCENE000000000",
 		Type:      pluginsdk.EventType("test-plugin:whisper"),
 		Payload:   `{"text":"hi"}`,
 		Sensitive: false,
@@ -128,7 +128,7 @@ func TestEmitterRejectsClaimTrueOnManifestNeverEvent(t *testing.T) {
 	emitter := newCryptoTestEmitter(t, pub, manifest)
 
 	intent := pluginsdk.EmitIntent{
-		Subject:   "scene:01HXXXTESTSCENE000000000",
+		Subject:   "scene.01HXXXTESTSCENE000000000",
 		Type:      pluginsdk.EventType("test-plugin:pose"),
 		Payload:   `{}`,
 		Sensitive: true, // INV-6 over-claim
@@ -146,7 +146,7 @@ func TestEmitterRejectsClaimFalseOnManifestAlwaysEvent(t *testing.T) {
 	emitter := newCryptoTestEmitter(t, pub, manifest)
 
 	intent := pluginsdk.EmitIntent{
-		Subject:   "scene:01HXXXTESTSCENE000000000",
+		Subject:   "scene.01HXXXTESTSCENE000000000",
 		Type:      pluginsdk.EventType("test-plugin:secret"),
 		Payload:   `{}`,
 		Sensitive: false, // INV-7 under-claim
@@ -161,7 +161,7 @@ func TestEmitterRejectsClaimFalseOnManifestAlwaysEvent(t *testing.T) {
 // (validated/normalized to lowercase strings — "plugin", "character",
 // etc.). Crypto is *CryptoSection per manifest.go:107. The plugin name
 // is fixed to "test-plugin" to match newCryptoTestEmitter's lookup, and
-// the emit namespace is fixed to "scene" so the subject "scene:..." passes
+// the emit namespace is fixed to "scene" so the subject "scene...." passes
 // the manifest gate.
 func newSensitiveTestManifest(emits []plugins.CryptoEmit) *plugins.Manifest {
 	return &plugins.Manifest{

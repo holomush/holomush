@@ -101,12 +101,16 @@ about each other's event ordering -- and shouldn't be blocked by it.
 
 #### Stream Types
 
-| Stream           | Content                                | Subscribers            |
-| ---------------- | -------------------------------------- | ---------------------- |
-| `location:<id>`  | Poses, says, arrivals, departures      | Characters in location |
-| `character:<id>` | Private messages, system notifications | That character         |
-| `channel:<name>` | Channel messages (future)              | Channel members        |
-| `location:*`     | Broadcast events (system-wide)         | All locations          |
+Subjects use NATS dot-style notation: `events.<game_id>.<domain>.<entity-id>[.<facet>...]`.
+Producers emit domain-relative references (e.g. `location.01ABC`) and the host qualifies
+them into fully-qualified JetStream subjects on the way in.
+
+| Stream (domain-relative)        | Full subject form                             | Content                                | Subscribers            |
+| ------------------------------- | --------------------------------------------- | -------------------------------------- | ---------------------- |
+| `location.<id>`                 | `events.<gid>.location.<id>`                  | Poses, says, arrivals, departures      | Characters in location |
+| `character.<id>`                | `events.<gid>.character.<id>`                 | Private messages, system notifications | That character         |
+| `scene.<id>.ic` / `scene.<id>.ooc` | `events.<gid>.scene.<id>.ic` / `.ooc`     | Scene IC / OOC roleplay                | Scene participants     |
+| `channel.<name>`                | `events.<gid>.channel.<name>`                 | Channel messages (future)              | Channel members        |
 
 #### Cross-Location Events
 
@@ -195,6 +199,10 @@ policies:
         resource like "world:*"
       };
 ```
+
+Note: the `stream:location:*` form in the DSL is an **ABAC resource ID** using
+`<resource_type>:<id>` convention — not a pub/sub stream subject. ABAC resource
+IDs retain the colon separator; only pub/sub subjects use dot-style.
 
 ### Access Control
 

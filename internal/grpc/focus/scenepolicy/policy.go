@@ -26,8 +26,8 @@ func (p *ScenePolicy) Kind() session.FocusKind { return session.FocusKindScene }
 func (p *ScenePolicy) StreamsFor(target session.FocusKey) []string {
 	id := target.TargetID.String()
 	return []string{
-		"scene:" + id + ":ic",
-		"scene:" + id + ":ooc",
+		"scene." + id + ".ic",
+		"scene." + id + ".ooc",
 	}
 }
 

@@ -91,7 +91,7 @@ func TestLuaHostConfigDeliveryRaceFree(t *testing.T) {
 	require.NoError(t, host.Load(context.Background(), manifest, dir))
 
 	event := pluginsdk.Event{
-		ID: "01ABC", Stream: "location:1", Type: "say",
+		ID: "01ABC", Stream: "location.1", Type: "say",
 		ActorKind: pluginsdk.ActorCharacter, ActorID: "c1",
 	}
 
@@ -160,7 +160,7 @@ end
 
 	event := pluginsdk.Event{
 		ID:        "01ABC",
-		Stream:    "location:123",
+		Stream:    "location.123",
 		Type:      "say",
 		Timestamp: 1705591234000,
 		ActorKind: pluginsdk.ActorCharacter,
@@ -173,7 +173,7 @@ end
 	require.Len(t, emits, 1, "expected 1 emit event")
 
 	// Verify all fields of the emitted event
-	assert.Equal(t, "location:123", emits[0].Stream)
+	assert.Equal(t, "location.123", emits[0].Stream)
 	assert.Equal(t, pluginsdk.EventType("say"), emits[0].Type)
 	assert.Contains(t, emits[0].Payload, "Echo:")
 }
@@ -227,7 +227,7 @@ end
 
 	event := pluginsdk.Event{
 		ID:        "01ABC",
-		Stream:    "location:123",
+		Stream:    "location.123",
 		Type:      "trigger",
 		Timestamp: 1705591234000,
 		ActorKind: pluginsdk.ActorCharacter,
@@ -278,7 +278,7 @@ end
 
 	event := pluginsdk.Event{
 		ID:        "01ABC",
-		Stream:    "location:123",
+		Stream:    "location.123",
 		Type:      "trigger",
 		Timestamp: 1705591234000,
 		ActorKind: pluginsdk.ActorCharacter,
@@ -338,7 +338,7 @@ end
 
 	event := pluginsdk.Event{
 		ID:        "01ABC",
-		Stream:    "location:123",
+		Stream:    "location.123",
 		Type:      "trigger",
 		Timestamp: 1705591234000,
 		ActorKind: pluginsdk.ActorCharacter,
@@ -813,7 +813,7 @@ end
 
 	event := pluginsdk.Event{
 		ID:        "01ABC",
-		Stream:    "location:123",
+		Stream:    "location.123",
 		Type:      "say",
 		Timestamp: 1705591234000,
 		ActorKind: pluginsdk.ActorCharacter,
@@ -825,7 +825,7 @@ end
 	require.NoError(t, err, "DeliverEvent() failed")
 	require.Len(t, emits, 1, "expected 1 emit event")
 
-	expected := "01ABC|location:123|say|1705591234000|character|char_1"
+	expected := "01ABC|location.123|say|1705591234000|character|char_1"
 	assert.Equal(t, expected, emits[0].Payload)
 }
 
@@ -904,7 +904,7 @@ func TestLuaHostDeliverEventCommandTypeDoesNotInvokeOnCommand(t *testing.T) {
 function on_command(ctx)
     return {
         {
-            subject = "location:" .. (ctx.location_id or ""),
+            subject = "location." .. (ctx.location_id or ""),
             type = "echo",
             payload = "on_command_wrongly_invoked"
         }
@@ -926,7 +926,7 @@ end
 
 	event := pluginsdk.Event{
 		ID:      "01ABC",
-		Stream:  "character:char123",
+		Stream:  "character.char123",
 		Type:    pluginsdk.EventType("command"),
 		Payload: `{"name":"say","args":"Hello"}`,
 	}
@@ -1286,7 +1286,7 @@ function on_command(ctx)
         output = "You say: " .. ctx.args,
         events = {
             {
-                subject = "location:" .. ctx.location_id,
+                subject = "location." .. ctx.location_id,
                 type = "say",
                 payload = ctx.args,
             },
@@ -1322,7 +1322,7 @@ end
 	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
 	assert.Equal(t, "You say: Hello!", resp.Output)
 	require.Len(t, resp.Events, 1)
-	assert.Equal(t, "location:01LOC", resp.Events[0].Stream)
+	assert.Equal(t, "location.01LOC", resp.Events[0].Stream)
 	assert.Equal(t, pluginsdk.EventType("say"), resp.Events[0].Type)
 	assert.Equal(t, "Hello!", resp.Events[0].Payload)
 }

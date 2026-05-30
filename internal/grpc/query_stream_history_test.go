@@ -95,7 +95,7 @@ func TestQueryStreamHistoryRejectsMissingHistoryReader(t *testing.T) {
 	s := &CoreServer{sessionStore: newTestSessionStore(t, nil)}
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "sess-1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 	})
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "INTERNAL")
@@ -120,7 +120,7 @@ func TestQueryStreamHistoryReturnsStreamAccessDeniedOnUnknownSession(t *testing.
 	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, newTestSessionStore(t, nil))
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "unknown",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 	})
 	require.Error(t, err)
 	oopsErr, ok := oops.AsOops(err)
@@ -141,7 +141,7 @@ func TestQueryStreamHistoryReturnsStreamAccessDeniedOnExpiredSession(t *testing.
 	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, sess)
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "e1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 	})
 	require.Error(t, err)
 	oopsErr, ok := oops.AsOops(err)
@@ -174,7 +174,7 @@ func TestQueryStreamHistoryRejectsNegativeCount(t *testing.T) {
 	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, sess)
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 		Count:     -1,
 	})
 	require.Error(t, err)
@@ -190,7 +190,7 @@ func TestQueryStreamHistoryRejectsMalformedCursor(t *testing.T) {
 	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, sess)
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 		Cursor:    []byte("not-valid-cursor-bytes"),
 	})
 	require.Error(t, err)
@@ -229,7 +229,7 @@ func TestQueryStreamHistoryEnforcesMembershipGateForPrivateStream(t *testing.T) 
 	// character stream for a DIFFERENT character → membership denied.
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "character:" + otherID.String(),
+		Stream:    "character." + otherID.String(),
 	})
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "STREAM_ACCESS_DENIED")
@@ -253,7 +253,7 @@ func TestQueryStreamHistoryAllowsOwnerOfPrivateCharacterStream(t *testing.T) {
 	s := newQueryStreamHistoryServer(t, reader, sess)
 	resp, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "character:" + charID.String(),
+		Stream:    "character." + charID.String(),
 		Count:     10,
 	})
 	require.NoError(t, err)
@@ -319,7 +319,7 @@ func TestQueryStreamHistoryRejectsPublicStreamWithoutAccessEngine(t *testing.T) 
 	}
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 	})
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "STREAM_ACCESS_DENIED")
@@ -338,7 +338,7 @@ func TestQueryStreamHistoryDeniedByABAC(t *testing.T) {
 	}
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 	})
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "STREAM_ACCESS_DENIED")
@@ -355,7 +355,7 @@ func TestQueryStreamHistoryBusErrorSurfacesAsInternal(t *testing.T) {
 	s := newQueryStreamHistoryServer(t, reader, sess)
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 	})
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "INTERNAL")
@@ -384,7 +384,7 @@ func TestQueryStreamHistoryHasMoreReflectsCountPlusOne(t *testing.T) {
 	s := newQueryStreamHistoryServer(t, reader, sess)
 	resp, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 		Count:     3,
 	})
 	require.NoError(t, err)
@@ -405,7 +405,7 @@ func TestQueryStreamHistoryCountDefaultsWhenZero(t *testing.T) {
 	s := newQueryStreamHistoryServer(t, reader, sess)
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 		Count:     0,
 	})
 	require.NoError(t, err)
@@ -423,7 +423,7 @@ func TestQueryStreamHistoryCountCappedAtMax(t *testing.T) {
 	s := newQueryStreamHistoryServer(t, reader, sess)
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 		Count:     99_999,
 	})
 	require.NoError(t, err)
@@ -451,7 +451,7 @@ func TestQueryStreamHistoryCursorForwardsToBus(t *testing.T) {
 	s := newQueryStreamHistoryServer(t, reader, sess)
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 		Cursor:    cursorBytes,
 		Count:     5,
 	})
@@ -476,7 +476,7 @@ func TestQueryStreamHistoryNotBeforeMsForwardsToBus(t *testing.T) {
 	s := newQueryStreamHistoryServer(t, reader, sess)
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId:   "s1",
-		Stream:      "location:01HYXYZ0C0000000000000000C",
+		Stream:      "location.01HYXYZ0C0000000000000000C",
 		NotBeforeMs: notBefore,
 		Count:       5,
 	})
@@ -506,7 +506,7 @@ func TestQueryStreamHistoryRejectsCursorWithStaleEpoch(t *testing.T) {
 	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, sess)
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 		Cursor:    staleEpochCursor,
 	})
 	require.Error(t, err)
@@ -540,7 +540,7 @@ func TestQueryStreamHistoryRejectsUnknownCursorOwnerKind(t *testing.T) {
 	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, sess)
 	_, err = s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 		Cursor:    cursorBytes,
 	})
 	require.Error(t, err)
@@ -586,7 +586,7 @@ func TestQueryStreamHistoryWithPluginCursorRewrapsFrames(t *testing.T) {
 	s := newQueryStreamHistoryServer(t, reader, sess)
 	resp, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 		Cursor:    pluginCursorBytes,
 		Count:     10,
 	})
@@ -632,7 +632,7 @@ func TestQueryStreamHistoryWithPluginCursorStringInner(t *testing.T) {
 	s := newQueryStreamHistoryServer(t, reader, sess)
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 		Cursor:    pluginCursorBytes,
 		Count:     5,
 	})
@@ -663,7 +663,7 @@ func TestQueryStreamHistoryEventFrameCarriesCursor(t *testing.T) {
 	s := newQueryStreamHistoryServer(t, reader, sess)
 	resp, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 		Count:     5,
 	})
 	require.NoError(t, err)
@@ -707,7 +707,7 @@ func TestQueryStreamHistoryNextCursorSetWhenHasMore(t *testing.T) {
 	s := newQueryStreamHistoryServer(t, reader, sess)
 	resp, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 		Count:     3,
 	})
 	require.NoError(t, err)
@@ -718,7 +718,7 @@ func TestQueryStreamHistoryNextCursorSetWhenHasMore(t *testing.T) {
 	s2 := newQueryStreamHistoryServer(t, &fakeHistoryReader{events: evts[:2]}, sess)
 	resp2, err2 := s2.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 		Count:     3,
 	})
 	require.NoError(t, err2)
@@ -880,7 +880,7 @@ func TestQueryStreamHistoryEncodeEventCursorWithZeroSeq(t *testing.T) {
 	s := newQueryStreamHistoryServer(t, reader, sess)
 	resp, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 		Count:     5,
 	})
 	require.NoError(t, err)
@@ -919,7 +919,7 @@ func TestQueryStreamHistoryThreadsCallerFromSession(t *testing.T) {
 	// the queried location. The test focuses on caller threading.
 	_, err := server.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "sess-1",
-		Stream:    "location:" + locID.String(),
+		Stream:    "location." + locID.String(),
 		Count:     10,
 	})
 	require.NoError(t, err)
@@ -1013,7 +1013,7 @@ func TestQueryStreamHistoryPassesIdentityFromBindingsToHistoryQuery(t *testing.T
 
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 		Count:     10,
 	})
 	require.NoError(t, err)
@@ -1054,7 +1054,7 @@ func TestQueryStreamHistoryBindingLookupFailureReturnsError(t *testing.T) {
 
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 		Count:     10,
 	})
 	require.Error(t, err)
@@ -1083,7 +1083,7 @@ func TestQueryStreamHistoryPassesZeroIdentityWhenBindingsNil(t *testing.T) {
 
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Stream:    "location.01HYXYZ0C0000000000000000C",
 		Count:     10,
 	})
 	require.NoError(t, err)
@@ -1139,7 +1139,7 @@ func TestQueryStreamHistoryFiltersAuditOnlyEvents(t *testing.T) {
 
 	resp, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "character:" + charID.String(),
+		Stream:    "character." + charID.String(),
 		Count:     10,
 	})
 	require.NoError(t, err)
@@ -1176,7 +1176,7 @@ func TestQueryStreamHistory_LocationHardGate_DeniedWhenNotInLocation(t *testing.
 
 	resp, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
-		Stream:    "location:" + locB.String(),
+		Stream:    "location." + locB.String(),
 	})
 	require.Nil(t, resp)
 	require.Error(t, err)
@@ -1222,7 +1222,7 @@ func TestQueryStreamHistory_StaffOverride_BypassesHardGate(t *testing.T) {
 
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "staff-1",
-		Stream:    "location:" + locB.String(),
+		Stream:    "location." + locB.String(),
 	})
 	require.NoError(t, err, "staff role must bypass location hard-gate (I-PRIV-6)")
 }
@@ -1286,7 +1286,7 @@ func TestQueryStreamHistoryNotAfterMsPlumbing(t *testing.T) {
 
 			_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 				SessionId:  "sess-1",
-				Stream:     "location:" + locA.String(),
+				Stream:     "location." + locA.String(),
 				NotAfterMs: tc.notAfterMs,
 			})
 			require.NoError(t, err, "request setup should succeed")

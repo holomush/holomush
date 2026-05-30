@@ -25,7 +25,15 @@ events.<game_id>.<domain>.<entity-id>[.<facet>...]
 ```
 
 - `<domain>` is plugin-owned (e.g., `scene`) or host-owned (`location`, `character`, `session`)
-- Legacy colon-style subjects (`scene:01ABC`) are translated at the EventSink boundary by `internal/eventbus/subjectxlate/` — do NOT emit colon style from new code
+- **Producers emit domain-relative dot references** (e.g. `location.<id>`, `character.<id>`,
+  `scene.<id>.ic`); `eventbus.Qualify` prepends `events.<game_id>.` at the emit and
+  read-entry boundaries. Classifiers, the bus, and the audit store see only
+  fully-qualified dot subjects.
+- **Colon-style subjects are eradicated** (`holomush-rops`). `internal/eventbus/subjectxlate/`
+  is deleted. Do NOT use colon-style stream names anywhere. The only surviving
+  colon usage is in ABAC policy DSL type-prefixes (`character:<id>` as a Cedar
+  subject, `scene:<id>` as a resource ID) — those are correct and MUST NOT be
+  changed to dot-style.
 
 ## Event identity vs ordering
 

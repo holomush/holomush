@@ -154,12 +154,10 @@ type EmittedEvent struct{ SubjectStr string }
 // EmitPluginEvent boundary (the same path core-scenes commands use), returning
 // the translated NATS subject for wire assertions.
 //
-// The legacy colon-style subject is derived as "<plugin>:<eventType>" — a
-// well-formed legacy subject whose namespace token matches the plugin's
-// declared emit namespace. The NATS subject returned mirrors the translation
-// the emitter itself performs (subjectxlate.Legacy), so WireCodecFor can read
-// the JetStream message by subject. Panics via requirePluginCrypto if the
-// substrate was not wired.
+// The returned NATS subject is the fully-qualified dot subject the emitter
+// produces via eventbus.Qualify (e.g. "events.<gameID>.scene.<sceneID>.ic"),
+// so WireCodecFor can read the JetStream message by subject. Panics via
+// requirePluginCrypto if the substrate was not wired.
 func (s *Server) EmitPluginEvent(ctx context.Context, plugin, eventType, payloadJSON string, sensitive bool) EmittedEvent {
 	// WithPluginCrypto's fixed scene is keyed by the BARE sceneID ULID (the
 	// seedScene row at crypto.go uses pc.sceneID.String() with no prefix), so

@@ -48,7 +48,7 @@ type FocusKind string
 
 const (
 	// FocusKindScene marks a focus membership as a scene participation.
-	// Streams derived by ScenePolicy: "scene:<id>:ic" and "scene:<id>:ooc".
+	// Streams derived by ScenePolicy: "events.<gid>.scene.<id>.ic" and "events.<gid>.scene.<id>.ooc".
 	FocusKindScene FocusKind = "scene"
 )
 

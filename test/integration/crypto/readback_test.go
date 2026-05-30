@@ -286,7 +286,7 @@ func emitSensitiveScenePose(
 		plugins.WithCryptoEnabled(true),
 	)
 	intent := pluginsdk.EmitIntent{
-		Subject:   "scene:" + sceneID,
+		Subject:   "scene." + sceneID,
 		Type:      pluginsdk.EventType(pluginName + ":scene_pose"),
 		Payload:   plaintext,
 		Sensitive: true,
@@ -569,7 +569,7 @@ func TestReadbackWithoutReadbackFlagDenied(t *testing.T) {
 	}
 	emitter := plugins.NewPluginEventEmitter(hostPub, manifestFn, actorFn, plugins.WithCryptoEnabled(true))
 	intent := pluginsdk.EmitIntent{
-		Subject:   "scene:" + sceneID,
+		Subject:   "scene." + sceneID,
 		Type:      pluginsdk.EventType(pluginName + ":scene_pose"),
 		Payload:   plaintext,
 		Sensitive: true,

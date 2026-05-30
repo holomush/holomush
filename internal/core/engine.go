@@ -70,7 +70,7 @@ func (e *Engine) HandleConnect(ctx context.Context, char CharacterRef) error {
 
 	event := Event{
 		ID:        NewULID(),
-		Stream:    "location:" + char.LocationID.String(),
+		Stream:    "location." + char.LocationID.String(),
 		Type:      EventTypeArrive,
 		Timestamp: time.Now(),
 		Actor:     Actor{Kind: ActorCharacter, ID: char.ID.String()},
@@ -93,7 +93,7 @@ func (e *Engine) HandleDisconnect(ctx context.Context, char CharacterRef, reason
 
 	event := Event{
 		ID:        NewULID(),
-		Stream:    "location:" + char.LocationID.String(),
+		Stream:    "location." + char.LocationID.String(),
 		Type:      EventTypeLeave,
 		Timestamp: time.Now(),
 		Actor:     Actor{Kind: ActorCharacter, ID: char.ID.String()},

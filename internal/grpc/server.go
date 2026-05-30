@@ -34,7 +34,6 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/authguard"
-	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/session"
@@ -207,9 +206,10 @@ type CoreServer struct {
 	// tier crossover (F4). Required post-F7; returns INTERNAL when nil.
 	historyReader eventbus.HistoryReader
 
-	// gameID returns the current game id used to translate legacy colon-
-	// delimited streams (e.g. "character:01ABC") to JetStream subjects
-	// (e.g. "events.main.character.01ABC"). Defaults to "main" when unset.
+	// gameID returns the current game id used to qualify domain-relative dot
+	// stream references (e.g. "character.01ABC") into fully-qualified JetStream
+	// subjects (e.g. "events.main.character.01ABC") via eventbus.Qualify.
+	// Colon-style references are rejected, not translated. Defaults to "main".
 	gameID GameIDProvider
 
 	// newSessionID is used for generating session IDs. Can be overridden for testing.
@@ -649,18 +649,18 @@ func (s *CoreServer) runDisconnectHooks(ctx context.Context, info session.Info) 
 // to a gRPC SubscribeResponse frame. metadataOnly comes from
 // Delivery.MetadataOnly() and is stamped onto EventFrame.metadata_only
 // (Phase 3b grounding doc Decision 4). ev.NoPlaintextReason is stamped into
-// EventFrame.no_plaintext_reason (holomush-ojw1.6). The stream field is
-// reverse-translated from the JetStream subject back to the colon-delimited
-// shape existing web/telnet clients expect
-// (e.g. "events.main.character.01ABC" → "character:01ABC"). F5 migrates
-// clients to subject-native APIs and drops the reverse translation.
+// EventFrame.no_plaintext_reason (holomush-ojw1.6). The stream field carries
+// the fully-qualified JetStream subject (e.g. "events.main.character.01ABC")
+// as-is: producers and clients exchange domain-relative dot references and the
+// server qualifies on the way in (holomush-rops). The web client dedups history
+// by event ID and renders live frames without matching by stream, so the
+// relative-send / qualified-receive asymmetry is intentional.
 func (s *CoreServer) toProtoSubscribeResponse(ev eventbus.Event, metadataOnly bool) *corev1.SubscribeResponse {
-	gameID := s.currentGameID()
 	return &corev1.SubscribeResponse{
 		Frame: &corev1.SubscribeResponse_Event{
 			Event: &corev1.EventFrame{
 				Id:                ev.ID.String(),
-				Stream:            subjectxlate.ToLegacy(string(ev.Subject), gameID),
+				Stream:            string(ev.Subject),
 				Type:              string(ev.Type),
 				Timestamp:         timestamppb.New(ev.Timestamp),
 				ActorType:         ev.Actor.Kind.String(),
@@ -695,11 +695,12 @@ func actorIDString(a eventbus.Actor, reg plugins.IdentityRegistry) string {
 	return a.ID.String()
 }
 
-// computeInitialFilters translates a focus restore plan's stream list into
-// bus-side subjects. Each colon-delimited legacy name becomes an events.<game>.
-// subject; subjects that already look JetStream-native pass through. Invalid
-// translations are logged and dropped so a single bad stream can't brick the
-// Subscribe handshake.
+// computeInitialFilters qualifies a focus restore plan's stream list into
+// bus-side subjects. Each domain-relative dot reference is qualified to an
+// events.<game>. subject (via eventbus.Qualify); subjects that already look
+// JetStream-native pass through unchanged. References that fail to qualify
+// (e.g. colon-style or malformed) are logged and dropped so a single bad
+// stream can't brick the Subscribe handshake.
 func (s *CoreServer) computeInitialFilters(ctx context.Context, plan focus.RestorePlan) []eventbus.Subject {
 	gameID := s.currentGameID()
 	out := make([]eventbus.Subject, 0, len(plan.Streams))
@@ -715,14 +716,12 @@ func (s *CoreServer) computeInitialFilters(ctx context.Context, plan focus.Resto
 	return out
 }
 
-// toSubject resolves a legacy stream name against the game id and validates
-// the result against eventbus.NewSubject.
+// toSubject qualifies a domain-relative stream reference (e.g. "location.01ABC")
+// against the game id via eventbus.Qualify, which validates the result against
+// eventbus.NewSubject. A colon-style reference no longer qualifies and is
+// rejected here (holomush-rops).
 func (s *CoreServer) toSubject(gameID, streamName string) (eventbus.Subject, error) {
-	raw, err := subjectxlate.Legacy(streamName, gameID)
-	if err != nil {
-		return "", oops.With("stream", streamName).Wrap(err)
-	}
-	sub, err := eventbus.NewSubject(raw)
+	sub, err := eventbus.Qualify(gameID, streamName)
 	if err != nil {
 		return "", oops.With("stream", streamName).Wrap(err)
 	}
@@ -1173,8 +1172,6 @@ func (s *CoreServer) dispatchDelivery(
 	lf *locationFollower,
 ) error {
 	event := delivery.Event()
-	gameID := s.currentGameID()
-	legacyStream := subjectxlate.ToLegacy(string(event.Subject), gameID)
 
 	// AUDIT_ONLY events (e.g., crypto.totp_*, crypto.policy_set) MUST NOT
 	// reach client streams. They flow through the bus solely so the audit
@@ -1189,11 +1186,11 @@ func (s *CoreServer) dispatchDelivery(
 	}
 
 	// Per-subject filter-at-delivery — load-bearing privacy gate per
-	// holomush-iwzt §6.2 Tier 2. The OpenSession-time minFloor (Tier 1) is
-	// silently zero in production today because streamScopeFloor inspects
-	// legacy stream prefixes while OpenSession passes NATS subjects
-	// (holomush-ofpi); here we feed it `legacyStream` which is already
-	// translated, so the floor is computed correctly.
+	// holomush-iwzt §6.2 Tier 2. The stream classifiers (streamScopeFloor /
+	// isCharacterStream / isLocationStream) are now dot-only (holomush-rops),
+	// so we feed them the qualified NATS subject `event.Subject` directly;
+	// the OpenSession-time minFloor (Tier 1) likewise classifies on NATS
+	// subjects, so the floor is computed correctly at both tiers.
 	//
 	// Re-read SessionInfo per event so the filter picks up post-reattach /
 	// post-move floor changes without subscriber restart. A follow-up bead
@@ -1225,11 +1222,11 @@ func (s *CoreServer) dispatchDelivery(
 	// Floor uses ns precision and >= semantics (INV-TS-6 / INV-TS-7,
 	// gfo6 epic): publisher no longer truncates timestamps, so the
 	// scope-floor comparison runs at full time.Now() resolution.
-	floor := streamScopeFloor(currentInfo, legacyStream)
+	floor := streamScopeFloor(currentInfo, string(event.Subject))
 	if !floor.IsZero() && event.Timestamp.Before(floor) {
 		slog.DebugContext(ctx, "subscribe: filter-at-delivery dropped event below scope floor",
 			"session_id", info.ID, "event_id", event.ID.String(),
-			"stream", legacyStream,
+			"stream", string(event.Subject),
 			"event_ts", event.Timestamp, "floor", floor)
 		if ackErr := delivery.Ack(); ackErr != nil {
 			slog.WarnContext(ctx, "subscribe: ack failed on filter-drop (below-floor) path; will redeliver",
@@ -1242,8 +1239,13 @@ func (s *CoreServer) dispatchDelivery(
 	// replies with a synthetic location_state — in that case the raw
 	// event is dropped (ack'd) rather than forwarded.
 	handled := false
+	// dispatchDelivery feeds the dot-only classifiers the qualified NATS
+	// `event.Subject`, so the move guard uses isCharacterStream(event.Subject)
+	// rather than a colon prefix. The wire frame.Stream
+	// (toProtoSubscribeResponse) now carries that same qualified subject
+	// (holomush-rops).
 	if string(event.Type) == string(core.EventTypeMove) &&
-		strings.HasPrefix(legacyStream, world.StreamPrefixCharacter) &&
+		isCharacterStream(string(event.Subject)) &&
 		lf != nil {
 		handled = lf.handleMovePayload(ctx, core.EventType(event.Type), event.Payload, stream)
 	}
@@ -1291,7 +1293,7 @@ func (s *CoreServer) applyFilterCtrl(
 	filterSet map[eventbus.Subject]struct{},
 	ctrl sessionStreamUpdate,
 ) error {
-	if strings.HasPrefix(ctrl.stream, world.StreamPrefixLocation) {
+	if strings.HasPrefix(ctrl.stream, "location.") {
 		slog.WarnContext(ctx, "plugin attempted to modify location stream — rejected",
 			"session_id", info.ID, "stream", ctrl.stream)
 		return nil

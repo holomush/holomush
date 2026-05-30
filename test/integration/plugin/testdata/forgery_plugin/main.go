@@ -14,7 +14,7 @@
 // Mode JSON schema (matches the Mode struct below):
 //
 //	{
-//	  "subject": "location:01HFORGEY00LOCATIONULID0000",
+//	  "subject": "location.01HFORGEY00LOCATIONULID0000",
 //	  "type": "say",
 //	  "payload": "{\"message\":\"...\"}",
 //	  "forgery_override_kind": "0",     // optional ActorKind int

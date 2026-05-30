@@ -100,11 +100,27 @@ INV-S1 boundary discipline: the substrate-side change crosses the `internal/grpc
 - The non-scene colon-style sweep (`location:*`, `character:*`, `notifications:*`) is tracked by `holomush-rops` (P1).
 - ABAC resource IDs (`scene:<id>` in Cedar policies) are explicitly NOT topics; they remain in `<resource_type>:<id>` form per policy-DSL convention.
 
+## Consequences Addendum (2026-05-30, holomush-rops)
+
+`holomush-rops` completed the broader non-scene colon-style sweep, making the
+dot-style subject form universal across all domains (location, character,
+notifications, scene). As a result:
+
+- **INV-P4-1's 3-file scene scan is superseded by INV-ROPS-3** — the
+  repo-wide colon-stream-literal gate (`holomush-rops`) now enforces the
+  invariant across all domains. INV-P4-1 remains historically accurate as the
+  first per-domain instance; INV-ROPS-3 is the authoritative gate going forward.
+- The dot-style scene migration this ADR recorded is now the universal stream
+  form. All pub/sub subjects use `events.<game_id>.<domain>.<entity-id>[.<facet>...]`
+  with no colon-style path remaining in production emit code.
+- `internal/eventbus/subjectxlate/` (the legacy translation layer) was removed
+  as part of `holomush-rops`.
+
 ## References
 
 - [Scenes Phase 4 Design](../superpowers/specs/2026-05-19-scenes-phase-4-streams-and-pose-order-design.md) §3.1, §3.2, §3.3
 - [Substrate Contract Spec](../superpowers/specs/2026-05-16-social-spaces-substrate-contract.md) §1.1, INV-S4 (NATS dot-style mandatory)
 - [History Scope Privacy Design](../superpowers/specs/2026-05-17-history-scope-privacy-design.md) §3, §6.1 (iwzt scene-stream temporal floor)
 - [ADR `holomush-jhl5`](holomush-jhl5-plugin-history-scope-opt-in.md) — Plugin manifest history_scope opt-in (related plugin/host contract pattern)
-- Bead: `holomush-rops` (P1 — broader non-scene colon-style sweep)
+- Bead: `holomush-rops` (P1 — broader non-scene colon-style sweep, supersedes INV-P4-1)
 - Bead: `holomush-5rh.13` (Phase 4 design)

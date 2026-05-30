@@ -54,7 +54,7 @@ func TestPipelineRendering(t *testing.T) {
 		assert.True(t, resp.Success, "say command should succeed: %s", resp.Error)
 
 		// Replay from the location stream where say events are emitted.
-		events, err := store.Replay(ctx, "location:"+locationID.String(), ulid.ULID{}, 100)
+		events, err := store.Replay(ctx, "location."+locationID.String(), ulid.ULID{}, 100)
 		require.NoError(t, err)
 
 		// Find the say event.
@@ -102,7 +102,7 @@ func TestPipelineRendering(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, resp.Success, "pose command should succeed: %s", resp.Error)
 
-		events, err := store.Replay(ctx, "location:"+locationID.String(), ulid.ULID{}, 100)
+		events, err := store.Replay(ctx, "location."+locationID.String(), ulid.ULID{}, 100)
 		require.NoError(t, err)
 
 		var poseEvent *core.Event
@@ -150,7 +150,7 @@ func TestPipelineRendering(t *testing.T) {
 		assert.True(t, resp.Success, "unknown command succeeds at RPC level")
 
 		// Error events go to the character's personal stream.
-		charEvents, err := store.Replay(ctx, "character:"+charID.String(), ulid.ULID{}, 100)
+		charEvents, err := store.Replay(ctx, "character."+charID.String(), ulid.ULID{}, 100)
 		require.NoError(t, err)
 		require.NotEmpty(t, charEvents, "expected command_error event on character stream")
 
@@ -197,14 +197,14 @@ func TestPipelineRendering(t *testing.T) {
 		assert.True(t, resp.Success, "say command should succeed: %s", resp.Error)
 
 		// Replay the stored event (mirrors what Subscribe does).
-		events, err := store.Replay(ctx, "location:"+locationID.String(), ulid.ULID{}, 100)
+		events, err := store.Replay(ctx, "location."+locationID.String(), ulid.ULID{}, 100)
 		require.NoError(t, err)
 		require.NotEmpty(t, events, "expected events in location stream")
 
 		// Verify the event carries the fields needed for EventFrame construction.
 		ev := events[0]
 		assert.Equal(t, core.EventType(corecomm.EventTypeSay), ev.Type)
-		assert.Equal(t, "location:"+locationID.String(), ev.Stream)
+		assert.Equal(t, "location."+locationID.String(), ev.Stream)
 		assert.False(t, ev.ID.IsZero(), "event ID must be set")
 		assert.False(t, ev.Timestamp.IsZero(), "timestamp must be set")
 
@@ -243,7 +243,7 @@ func TestPipelineRendering(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, resp.Success, "ooc command should succeed: %s", resp.Error)
 
-		events, err := store.Replay(ctx, "location:"+locationID.String(), ulid.ULID{}, 100)
+		events, err := store.Replay(ctx, "location."+locationID.String(), ulid.ULID{}, 100)
 		require.NoError(t, err)
 
 		var oocEvent *core.Event

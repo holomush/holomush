@@ -2583,8 +2583,9 @@ type WebQueryStreamHistoryRequest struct {
 	// session_id identifies the requesting session (used core-side for
 	// authorization).
 	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	// stream names the event stream to read history from (e.g.
-	// "location:<id>").
+	// stream names the event stream to read history from. Clients pass
+	// domain-relative dot-style references (e.g. "location.<id>"); the server
+	// qualifies them into fully-qualified JetStream subjects on the way in.
 	Stream string `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
 	// count is the requested page size; 0 means the server default (150),
 	// values are capped at the server maximum (500), and negative values are
@@ -2796,7 +2797,9 @@ func (x *WebListSessionStreamsRequest) GetSessionId() string {
 type WebListSessionStreamsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// streams is the list of event-store stream names the session is
-	// subscribed to (e.g. "location:<id>", "character:<id>").
+	// subscribed to. Values are domain-relative dot references
+	// (e.g. "location.<id>", "character.<id>") — the same form the client
+	// passes back to WebQueryStreamHistory, which the server qualifies.
 	Streams       []string `protobuf:"bytes,1,rep,name=streams,proto3" json:"streams,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
