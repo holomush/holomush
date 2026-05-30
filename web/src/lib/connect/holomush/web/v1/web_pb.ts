@@ -1294,8 +1294,9 @@ export type WebQueryStreamHistoryRequest = Message<"holomush.web.v1.WebQueryStre
   sessionId: string;
 
   /**
-   * stream names the event stream to read history from (e.g.
-   * "location:<id>").
+   * stream names the event stream to read history from. Clients pass
+   * domain-relative dot-style references (e.g. "location.<id>"); the server
+   * qualifies them into fully-qualified JetStream subjects on the way in.
    *
    * @generated from field: string stream = 2;
    */
@@ -1413,7 +1414,9 @@ export const WebListSessionStreamsRequestSchema: GenMessage<WebListSessionStream
 export type WebListSessionStreamsResponse = Message<"holomush.web.v1.WebListSessionStreamsResponse"> & {
   /**
    * streams is the list of event-store stream names the session is
-   * subscribed to (e.g. "location:<id>", "character:<id>").
+   * subscribed to. Values are domain-relative dot references
+   * (e.g. "location.<id>", "character.<id>") — the same form the client
+   * passes back to WebGetStreamHistory, which the server qualifies.
    *
    * @generated from field: repeated string streams = 1;
    */

@@ -214,8 +214,9 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		}
 	case isLocationStream(stream):
 		// Layer 2: Location hard-gate (I-PRIV-1). The session must be currently
-		// located in the requested location. staffOverride returns false until
-		// Phase 5 (iwzt.20) wires the real engine.Evaluate call.
+		// located in the requested location. staffOverride consults the ABAC
+		// engine (read_unrestricted_history action on "stream:*") and returns
+		// false if the engine is nil or evaluation fails (fail-closed).
 		if !staffOverride(ctx, info, s.accessEngine) {
 			if info.LocationID.String() != extractLocationID(stream) {
 				slog.InfoContext(ctx, "stream access denied by location hard-gate",

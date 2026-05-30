@@ -46,9 +46,9 @@ Plugin-owned subjects (channels, etc.) MAY adopt different semantics per their o
 
 | Stream subject | Gate | Temporal floor | ABAC override |
 |---|---|---|---|
-| `location:<id>` | Hard gate — `session.LocationID.String() == <id>` (default-deny) | `MAX(session.LocationArrivedAt, [if IsGuest] session.GuestCharacterCreatedAt)` | Yes — `"staff"` or `"admin"` in `principal.character.roles` bypasses the hard-gate only (temporal floor still applies — see I-PRIV-6) |
+| `events.<game_id>.location.<id>` | Hard gate — `session.LocationID.String() == <id>` (default-deny) | `MAX(session.LocationArrivedAt, [if IsGuest] session.GuestCharacterCreatedAt)` | Yes — `"staff"` or `"admin"` in `principal.character.roles` bypasses the hard-gate only (temporal floor still applies — see I-PRIV-6) |
 | `events.<game_id>.scene.<scene_id>.ic`, `events.<game_id>.scene.<scene_id>.ooc` | Existing I-17 membership gate (migrated to NATS dot-style by Phase 4 — `holomush-5rh.13`) | `MAX(focusMembership(scene_id).JoinedAt, [if IsGuest] session.GuestCharacterCreatedAt)` | None — scene privacy is absolute |
-| `character:<id>` | Existing membership gate (unchanged) | None (own stream) | N/A |
+| `events.<game_id>.character.<id>` | Existing membership gate (holomush-rops) | None (own stream) | N/A |
 | Plugin-owned subjects | Plugin's own router (unchanged) | Plugin-defined | Plugin-defined |
 | Other public (e.g., `global`, `system`) | ABAC `engine.Evaluate` (unchanged) | None | Through normal ABAC policy |
 

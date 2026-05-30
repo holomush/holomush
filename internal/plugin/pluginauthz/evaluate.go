@@ -259,7 +259,9 @@ func Evaluate(ctx context.Context, in Input) (Decision, error) {
 
 // subjectKindFromSubject extracts the kind prefix from an ABAC subject string
 // (e.g. "character:01ABC" → "character", "plugin:core-scenes" → "plugin",
-// "system" → "system", "" → "unknown"). Used as a non-PII span attribute.
+// "system" → "system", "" → "unknown"). These are ABAC subject IDs in
+// "<kind>:<id>" form — not pub/sub stream subjects, which use dot-style.
+// Used as a non-PII span attribute.
 func subjectKindFromSubject(subject string) string {
 	if subject == "" {
 		return "unknown"
