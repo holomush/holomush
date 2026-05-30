@@ -43,8 +43,8 @@
   const items: PaletteItem[] = [
     { id: 'theme.default-dark',   label: 'Switch theme: Default Dark',   run: () => setTheme('default-dark') },
     { id: 'theme.default-light',  label: 'Switch theme: Default Light',  run: () => setTheme('default-light') },
-    { id: 'theme.classic-dark',   label: 'Switch theme: Classic Dark',   run: () => setTheme('classic-dark') },
-    { id: 'theme.classic-light',  label: 'Switch theme: Classic Light',  run: () => setTheme('classic-light') },
+    { id: 'theme.warm-dark',      label: 'Switch theme: Warm Dark',      run: () => setTheme('warm-dark') },
+    { id: 'theme.warm-light',     label: 'Switch theme: Warm Light',     run: () => setTheme('warm-light') },
     { id: 'ui.rail',              label: 'Toggle rail',                  hint: '⌘B',  run: toggleRail },
     { id: 'ui.sidebar',           label: 'Toggle sidebar',               hint: '⌘.',  run: toggleSidebar },
     { id: 'ui.composer',          label: 'Toggle composer',              hint: '⌘⇧E', run: toggleComposer },

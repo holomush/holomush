@@ -34,14 +34,14 @@ import { themeToCssVars } from './themeStore';
 import type { ThemeColors } from '$lib/theme/types';
 import defaultDark from '$lib/theme/default-dark.json';
 import defaultLight from '$lib/theme/default-light.json';
-import classicDark from '$lib/theme/classic-dark.json';
-import classicLight from '$lib/theme/classic-light.json';
+import warmDark from '$lib/theme/warm-dark.json';
+import warmLight from '$lib/theme/warm-light.json';
 
 const builtInThemes = [
   ['default-dark', defaultDark],
   ['default-light', defaultLight],
-  ['classic-dark', classicDark],
-  ['classic-light', classicLight],
+  ['warm-dark', warmDark],
+  ['warm-light', warmLight],
 ] as const;
 
 // Parse #rrggbb into channels so "is it green?" is asserted on the value,
@@ -139,5 +139,16 @@ describe('status dot CSS wiring (holomush-wnilg, holomush-qs31c)', () => {
 
   it('TopBar disconnected dot no longer reuses the orange --mush-system message token', () => {
     expect(componentSrc('TopBar.svelte')).not.toContain('var(--mush-system');
+  });
+});
+
+describe('classic-* → warm-* id migration (holomush-9ektq D9)', () => {
+  it('maps a saved classic-dark pref to warm-dark', async () => {
+    localStorage.setItem('holomush-theme-prefs', JSON.stringify({ themeId: 'classic-dark', terminalBlackBackground: false }));
+    vi.resetModules();
+    const mod = await import('./themeStore');
+    let id = '';
+    mod.themePreferences.subscribe((p) => { id = p.themeId; })();
+    expect(id).toBe('warm-dark');
   });
 });

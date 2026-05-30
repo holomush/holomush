@@ -5,14 +5,20 @@ import { writable, derived } from 'svelte/store';
 import type { Theme, ThemeColors, ThemePreferences } from '$lib/theme/types';
 import defaultDark from '$lib/theme/default-dark.json';
 import defaultLight from '$lib/theme/default-light.json';
-import classicDark from '$lib/theme/classic-dark.json';
-import classicLight from '$lib/theme/classic-light.json';
+import warmDark from '$lib/theme/warm-dark.json';
+import warmLight from '$lib/theme/warm-light.json';
 
 const themes: Record<string, Theme> = {
   'default-dark': defaultDark as Theme,
   'default-light': defaultLight as Theme,
-  'classic-dark': classicDark as Theme,
-  'classic-light': classicLight as Theme,
+  'warm-dark': warmDark as Theme,
+  'warm-light': warmLight as Theme,
+};
+
+// Renamed theme ids (holomush-9ektq D3): classic-* → warm-*.
+const RENAMED_THEME_IDS: Record<string, string> = {
+  'classic-dark': 'warm-dark',
+  'classic-light': 'warm-light',
 };
 
 const PREFS_KEY = 'holomush-theme-prefs';
@@ -33,8 +39,10 @@ function loadPreferences(): ThemePreferences {
     const saved = localStorage.getItem(PREFS_KEY);
     if (saved) {
       const parsed = JSON.parse(saved) as Partial<ThemePreferences>;
+      const requested = parsed.themeId ?? '';
+      const migrated = RENAMED_THEME_IDS[requested] ?? requested;
       return {
-        themeId: (parsed.themeId && themes[parsed.themeId]) ? parsed.themeId : 'default-dark',
+        themeId: themes[migrated] ? migrated : 'default-dark',
         terminalBlackBackground: parsed.terminalBlackBackground ?? false,
       };
     }
@@ -42,11 +50,14 @@ function loadPreferences(): ThemePreferences {
 
   // Migrate from old key
   const legacyTheme = localStorage.getItem('holomush-theme');
-  if (legacyTheme && themes[legacyTheme]) {
-    const prefs = { themeId: legacyTheme, terminalBlackBackground: false };
-    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
-    localStorage.removeItem('holomush-theme');
-    return prefs;
+  if (legacyTheme) {
+    const migrated = RENAMED_THEME_IDS[legacyTheme] ?? legacyTheme;
+    if (themes[migrated]) {
+      const prefs = { themeId: migrated, terminalBlackBackground: false };
+      localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+      localStorage.removeItem('holomush-theme');
+      return prefs;
+    }
   }
 
   const prefersDark = !window.matchMedia('(prefers-color-scheme: light)').matches;
