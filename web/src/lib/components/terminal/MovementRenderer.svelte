@@ -20,7 +20,11 @@
 </script>
 
 <div class="event event-{event.type}" data-testid="event">
-  <span class="movement">{#if event.actor}{event.actor}{' '}{/if}{@html linkUrls(event.text)}</span>
+  <!-- Movement `text` is already a full sentence ("<actor> has arrived.")
+       from the server's formatMovementText, so render it verbatim. Prefixing
+       `actor` here (as communication events do, where `text` is a bare body)
+       double-prints the name — holomush-pzen. -->
+  <span class="movement">{@html linkUrls(event.text)}</span>
 </div>
 
 <style>
