@@ -53,7 +53,7 @@ func newBusWithGameID(id string) *eventbus.Subsystem {
 	return eventbus.NewSubsystem(cfg)
 }
 
-func TestBusEventAppenderTranslatesLegacySubjectAndPublishes(t *testing.T) {
+func TestBusEventAppenderQualifiesRelativeSubjectAndPublishes(t *testing.T) {
 	pub := &stubPublisher{}
 	bus := newBusWithGameID("main")
 	appender := &busEventAppender{publisher: pub, bus: bus}
@@ -62,7 +62,7 @@ func TestBusEventAppenderTranslatesLegacySubjectAndPublishes(t *testing.T) {
 	charID := core.NewULID().String()
 	require.NoError(t, appender.Append(context.Background(), core.Event{
 		ID:        evID,
-		Stream:    "location:01ABCDEFGHJKMNPQRSTVWXYZ00",
+		Stream:    "location.01ABCDEFGHJKMNPQRSTVWXYZ00",
 		Type:      core.EventType("pose"),
 		Timestamp: time.Unix(42, 0).UTC(),
 		Actor:     core.Actor{Kind: core.ActorCharacter, ID: charID},
@@ -85,7 +85,7 @@ func TestBusEventAppenderDefaultsGameIDToMainWhenBusUnset(t *testing.T) {
 	appender := &busEventAppender{publisher: pub, bus: bus}
 	require.NoError(t, appender.Append(context.Background(), core.Event{
 		ID:        core.NewULID(),
-		Stream:    "scene:01SCENE000000000000000000",
+		Stream:    "scene.01SCENE000000000000000000",
 		Type:      core.EventType("system"),
 		Timestamp: time.Unix(1, 0).UTC(),
 		Actor:     core.Actor{Kind: core.ActorSystem, ID: "system"},
@@ -101,7 +101,7 @@ func TestBusEventAppenderWrapsPublishFailure(t *testing.T) {
 	appender := &busEventAppender{publisher: pub, bus: bus}
 	err := appender.Append(context.Background(), core.Event{
 		ID:        core.NewULID(),
-		Stream:    "location:01XYZ000000000000000000000",
+		Stream:    "location.01XYZ000000000000000000000",
 		Type:      core.EventType("pose"),
 		Timestamp: time.Unix(1, 0).UTC(),
 		Actor:     core.Actor{Kind: core.ActorSystem, ID: "system"},
@@ -117,14 +117,14 @@ func TestBusEventAppenderRejectsInvalidSubject(t *testing.T) {
 	appender := &busEventAppender{publisher: pub, bus: bus}
 	err := appender.Append(context.Background(), core.Event{
 		ID:        core.NewULID(),
-		Stream:    "", // empty legacy stream → subjectxlate error
+		Stream:    "", // empty stream reference → Qualify error
 		Type:      core.EventType("pose"),
 		Timestamp: time.Unix(1, 0).UTC(),
 		Actor:     core.Actor{Kind: core.ActorSystem, ID: "system"},
 		Payload:   []byte(`{}`),
 	})
 	require.Error(t, err)
-	assert.False(t, pub.called, "must not publish when subject translation fails")
+	assert.False(t, pub.called, "must not publish when subject qualification fails")
 }
 
 func TestBusEventAppenderRejectsInvalidType(t *testing.T) {
@@ -134,7 +134,7 @@ func TestBusEventAppenderRejectsInvalidType(t *testing.T) {
 	// Empty type → eventbus.NewType returns an error.
 	err := appender.Append(context.Background(), core.Event{
 		ID:        core.NewULID(),
-		Stream:    "location:01ABC000000000000000000000",
+		Stream:    "location.01ABC000000000000000000000",
 		Type:      core.EventType(""),
 		Timestamp: time.Unix(1, 0).UTC(),
 		Actor:     core.Actor{Kind: core.ActorSystem, ID: "system"},
@@ -221,11 +221,11 @@ func TestBusEventToCoreEventPropagatesULIDActorID(t *testing.T) {
 		Actor:     eventbus.Actor{Kind: eventbus.ActorKindCharacter, ID: id},
 		Payload:   []byte(`{}`),
 	}
-	got := busEventToCoreEvent(e, "scene:01ABC")
+	got := busEventToCoreEvent(e, "events.main.scene.01ABC")
 	assert.Equal(t, id.String(), got.Actor.ID, "ULID actor id propagates through busEventToCoreEvent")
 	assert.Equal(t, core.ActorCharacter, got.Actor.Kind)
 	assert.Equal(t, e.ID, got.ID)
-	assert.Equal(t, "scene:01ABC", got.Stream)
+	assert.Equal(t, "events.main.scene.01ABC", got.Stream)
 }
 
 func TestBusEventToCoreEventEmptyActorIDYieldsEmpty(t *testing.T) {
@@ -236,7 +236,7 @@ func TestBusEventToCoreEventEmptyActorIDYieldsEmpty(t *testing.T) {
 		Actor:   eventbus.Actor{Kind: eventbus.ActorKindSystem},
 		Payload: []byte(`{}`),
 	}
-	got := busEventToCoreEvent(e, "scene:01ABC")
+	got := busEventToCoreEvent(e, "events.main.scene.01ABC")
 	assert.Empty(t, got.Actor.ID)
 }
 
@@ -295,14 +295,14 @@ func TestBusHistoryReaderReplayTailReturnsReversedEvents(t *testing.T) {
 	reader := &stubHistoryReader{stream: &stubHistoryStream{events: []eventbus.Event{e2, e1}}}
 	adapter := &busHistoryReaderAdapter{reader: reader, gameID: func() string { return "main" }}
 
-	events, err := adapter.ReplayTail(context.Background(), "scene:01ABC", 10, time.Time{}, ulid.ULID{})
+	events, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 10, time.Time{}, ulid.ULID{})
 	require.NoError(t, err)
 	require.Len(t, events, 2)
 	// Reversed: oldest-first.
 	assert.Equal(t, e1.ID, events[0].ID)
 	assert.Equal(t, e2.ID, events[1].ID)
-	// Stream name is the legacy form.
-	assert.Equal(t, "scene:01ABC", events[0].Stream)
+	// Stream name is the qualified subject (holomush-rops).
+	assert.Equal(t, "events.main.scene.01ABC", events[0].Stream)
 }
 
 func TestBusHistoryReaderReplayTailPassesBeforeIDOnQuery(t *testing.T) {
@@ -310,7 +310,7 @@ func TestBusHistoryReaderReplayTailPassesBeforeIDOnQuery(t *testing.T) {
 	reader := &stubHistoryReader{stream: &stubHistoryStream{}}
 	adapter := &busHistoryReaderAdapter{reader: reader, gameID: func() string { return "main" }}
 	notBefore := time.Unix(100, 0).UTC()
-	_, err := adapter.ReplayTail(context.Background(), "scene:01ABC", 5, notBefore, before)
+	_, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 5, notBefore, before)
 	require.NoError(t, err)
 	assert.Equal(t, before, reader.gotQuery.BeforeID)
 	assert.Equal(t, notBefore, reader.gotQuery.NotBefore)
@@ -321,7 +321,7 @@ func TestBusHistoryReaderReplayTailPassesBeforeIDOnQuery(t *testing.T) {
 func TestBusHistoryReaderReplayTailZeroCountReturnsNilWithoutQuery(t *testing.T) {
 	reader := &stubHistoryReader{stream: &stubHistoryStream{}}
 	adapter := &busHistoryReaderAdapter{reader: reader, gameID: func() string { return "main" }}
-	events, err := adapter.ReplayTail(context.Background(), "scene:01ABC", 0, time.Time{}, ulid.ULID{})
+	events, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 0, time.Time{}, ulid.ULID{})
 	require.NoError(t, err)
 	assert.Nil(t, events)
 }
@@ -329,7 +329,7 @@ func TestBusHistoryReaderReplayTailZeroCountReturnsNilWithoutQuery(t *testing.T)
 func TestBusHistoryReaderReplayTailDefaultsEmptyGameIDToMain(t *testing.T) {
 	reader := &stubHistoryReader{stream: &stubHistoryStream{}}
 	adapter := &busHistoryReaderAdapter{reader: reader, gameID: func() string { return "" }}
-	_, err := adapter.ReplayTail(context.Background(), "scene:01ABC", 5, time.Time{}, ulid.ULID{})
+	_, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 5, time.Time{}, ulid.ULID{})
 	require.NoError(t, err)
 	// Subject was translated using the "main" default.
 	assert.Equal(t, eventbus.Subject("events.main.scene.01ABC"), reader.gotQuery.Subject)
@@ -339,7 +339,7 @@ func TestBusHistoryReaderReplayTailWrapsQueryFailure(t *testing.T) {
 	sentinel := errors.New("query failed")
 	reader := &stubHistoryReader{err: sentinel}
 	adapter := &busHistoryReaderAdapter{reader: reader, gameID: func() string { return "main" }}
-	_, err := adapter.ReplayTail(context.Background(), "scene:01ABC", 5, time.Time{}, ulid.ULID{})
+	_, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 5, time.Time{}, ulid.ULID{})
 	require.Error(t, err)
 	require.ErrorIs(t, err, sentinel)
 }
@@ -349,7 +349,7 @@ func TestBusHistoryReaderReplayTailWrapsNextFailure(t *testing.T) {
 	stream := &stubHistoryStream{err: sentinel, errOn: 0}
 	reader := &stubHistoryReader{stream: stream}
 	adapter := &busHistoryReaderAdapter{reader: reader, gameID: func() string { return "main" }}
-	_, err := adapter.ReplayTail(context.Background(), "scene:01ABC", 5, time.Time{}, ulid.ULID{})
+	_, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 5, time.Time{}, ulid.ULID{})
 	require.Error(t, err)
 	require.ErrorIs(t, err, sentinel)
 	assert.True(t, stream.closed, "stream is closed via defer even on error")
@@ -358,7 +358,7 @@ func TestBusHistoryReaderReplayTailWrapsNextFailure(t *testing.T) {
 func TestBusHistoryReaderReplayTailRejectsInvalidStream(t *testing.T) {
 	reader := &stubHistoryReader{}
 	adapter := &busHistoryReaderAdapter{reader: reader, gameID: func() string { return "main" }}
-	// Empty stream → subjectxlate fails.
+	// Empty stream → Qualify fails.
 	_, err := adapter.ReplayTail(context.Background(), "", 5, time.Time{}, ulid.ULID{})
 	require.Error(t, err)
 }
@@ -386,7 +386,7 @@ func TestBusHistoryReaderAdapterFailsClosedOnPluginOwnedSubjects(t *testing.T) {
 	}
 
 	_, err := adapter.ReplayTail(context.Background(),
-		"scene:01HYXSCENE00000000000000CC:ic", 10, time.Time{}, ulid.ULID{})
+		"scene.01HYXSCENE00000000000000CC.ic", 10, time.Time{}, ulid.ULID{})
 	require.Error(t, err)
 	assert.Equal(t, codes.PermissionDenied, status.Code(err),
 		"adapter MUST surface the plugin's PermissionDenied for plugin-owned subjects until the plugin-as-caller follow-up lands")

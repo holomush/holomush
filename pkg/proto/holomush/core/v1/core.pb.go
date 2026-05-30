@@ -734,7 +734,10 @@ type EventFrame struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// id is the event's ULID — its identity and dedup key, NOT its ordering key.
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// stream is the subject the event belongs to (e.g. a character or location stream).
+	// stream is the fully-qualified JetStream subject the event belongs to
+	// (e.g. "events.main.location.<ULID>"). Producers and clients exchange
+	// domain-relative dot references (e.g. "location.<ULID>"); the server
+	// qualifies them on the way in, so delivered frames carry the qualified form.
 	Stream string `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
 	// type is the event type string (e.g. say, pose, command_response).
 	Type string `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
@@ -3357,7 +3360,9 @@ type QueryStreamHistoryRequest struct {
 	Meta *RequestMeta `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	// session_id names the requesting session; its identity drives authorization.
 	SessionId string `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	// stream is the subject whose history is read.
+	// stream is the domain-relative dot reference whose history is read
+	// (e.g. "location.<ULID>", "character.<ULID>"); the server qualifies it to the
+	// fully-qualified JetStream subject before authorization and the bus fetch.
 	Stream string `protobuf:"bytes,3,opt,name=stream,proto3" json:"stream,omitempty"`
 	// count is the requested page size. 0 selects the server default (150); the
 	// server caps it at 500; a negative value is rejected with INVALID_ARGUMENT.
@@ -3600,8 +3605,10 @@ func (x *ListSessionStreamsRequest) GetPlayerSessionToken() string {
 // ListSessionStreamsResponse returns the session's subscribed stream names.
 type ListSessionStreamsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// streams lists the subscribed stream names (character / location / plugin
-	// streams), matching what Subscribe would deliver.
+	// streams lists the subscribed stream names as domain-relative dot references
+	// (e.g. "character.<ULID>", "location.<ULID>", plugin streams), matching what
+	// Subscribe would deliver. The client passes these back unchanged; the server
+	// qualifies them.
 	Streams []string `protobuf:"bytes,1,rep,name=streams,proto3" json:"streams,omitempty"`
 	// meta echoes request correlation data.
 	Meta          *ResponseMeta `protobuf:"bytes,2,opt,name=meta,proto3" json:"meta,omitempty"`

@@ -280,9 +280,9 @@ func TestDispatchDeliverySkipsAuditOnlyEvents(t *testing.T) {
 
 // makeLocationDelivery builds a fakeDelivery carrying an event on the given
 // NATS-form location subject with an explicit timestamp. The Subject is the
-// production format (events.<game>.location.<locID>); dispatchDelivery
-// translates it to legacy form via subjectxlate.ToLegacy before invoking
-// streamScopeFloor.
+// production format (events.<game>.location.<locID>); dispatchDelivery feeds
+// that qualified subject directly to the dot-only streamScopeFloor classifier
+// (holomush-rops).
 // gameID is fixed to "main" — every dispatchDelivery test in this file uses
 // the default game; if a multi-game test arrives later it should construct
 // its own delivery rather than re-introducing an always-"main" parameter.
@@ -524,7 +524,7 @@ func TestApplyFilterCtrlAddsAndCallsSetFilters(t *testing.T) {
 	filterSet := map[eventbus.Subject]struct{}{}
 
 	charID := core.NewULID().String()
-	ctrl := sessionStreamUpdate{stream: "character:" + charID, add: true}
+	ctrl := sessionStreamUpdate{stream: "character." + charID, add: true}
 	err := s.applyFilterCtrl(context.Background(), info, bs, filterSet, ctrl)
 	require.NoError(t, err)
 	assert.Len(t, filterSet, 1)
@@ -540,7 +540,7 @@ func TestApplyFilterCtrlAddIdempotentWhenExists(t *testing.T) {
 	sub := eventbus.Subject("events.main.character." + charID)
 	filterSet := map[eventbus.Subject]struct{}{sub: {}}
 
-	ctrl := sessionStreamUpdate{stream: "character:" + charID, add: true}
+	ctrl := sessionStreamUpdate{stream: "character." + charID, add: true}
 	err := s.applyFilterCtrl(context.Background(), info, bs, filterSet, ctrl)
 	require.NoError(t, err)
 	assert.Empty(t, bs.setFilters, "no SetFilters call when already present")
@@ -555,7 +555,7 @@ func TestApplyFilterCtrlRemovesAndCallsSetFilters(t *testing.T) {
 	sub := eventbus.Subject("events.main.character." + charID)
 	filterSet := map[eventbus.Subject]struct{}{sub: {}}
 
-	ctrl := sessionStreamUpdate{stream: "character:" + charID, add: false}
+	ctrl := sessionStreamUpdate{stream: "character." + charID, add: false}
 	err := s.applyFilterCtrl(context.Background(), info, bs, filterSet, ctrl)
 	require.NoError(t, err)
 	assert.Empty(t, filterSet)
@@ -570,7 +570,7 @@ func TestApplyFilterCtrlRemoveIdempotentWhenMissing(t *testing.T) {
 	filterSet := map[eventbus.Subject]struct{}{}
 
 	charID := core.NewULID().String()
-	ctrl := sessionStreamUpdate{stream: "character:" + charID, add: false}
+	ctrl := sessionStreamUpdate{stream: "character." + charID, add: false}
 	err := s.applyFilterCtrl(context.Background(), info, bs, filterSet, ctrl)
 	require.NoError(t, err)
 	assert.Empty(t, bs.setFilters)
@@ -597,7 +597,7 @@ func TestApplyFilterCtrlPropagatesSetFiltersError(t *testing.T) {
 	filterSet := map[eventbus.Subject]struct{}{}
 
 	charID := core.NewULID().String()
-	ctrl := sessionStreamUpdate{stream: "character:" + charID, add: true}
+	ctrl := sessionStreamUpdate{stream: "character." + charID, add: true}
 	err := s.applyFilterCtrl(context.Background(), info, bs, filterSet, ctrl)
 	require.Error(t, err)
 }
@@ -613,8 +613,8 @@ func TestMakeFilterUpdaterAddsAndRemovesCorrectly(t *testing.T) {
 
 	charA := ulid.MustNew(ulid.Timestamp(time.Now()), ulidEntropy{1})
 	charB := ulid.MustNew(ulid.Timestamp(time.Now()), ulidEntropy{2})
-	addStream := "character:" + charA.String()
-	removeStream := "character:" + charB.String()
+	addStream := "character." + charA.String()
+	removeStream := "character." + charB.String()
 
 	// Seed charB as present in filterSet so removal actually deletes it.
 	bSub, err := s.toSubject("main", removeStream)
@@ -761,7 +761,7 @@ func TestRunSubscribeLoopAppliesFilterCtrl(t *testing.T) {
 	filterSet := map[eventbus.Subject]struct{}{}
 
 	charID := core.NewULID().String()
-	ctrlCh <- sessionStreamUpdate{stream: "character:" + charID, add: true}
+	ctrlCh <- sessionStreamUpdate{stream: "character." + charID, add: true}
 	// Location stream: rejected path (logged warning).
 	ctrlCh <- sessionStreamUpdate{stream: "location." + "01HYXYZ0C0000000000000000C", add: true}
 

@@ -241,7 +241,10 @@ message EventFrame {
   // id is the event's ULID — its identity and dedup key, NOT its ordering key.
   string id = 1;
 
-  // stream is the subject the event belongs to (e.g. a character or location stream).
+  // stream is the fully-qualified JetStream subject the event belongs to
+  // (e.g. "events.main.location.<ULID>"). Producers and clients exchange
+  // domain-relative dot references (e.g. "location.<ULID>"); the server
+  // qualifies them on the way in, so delivered frames carry the qualified form.
   string stream = 2;
 
   // type is the event type string (e.g. say, pose, command_response).
@@ -945,7 +948,9 @@ message QueryStreamHistoryRequest {
   // session_id names the requesting session; its identity drives authorization.
   string session_id = 2;
 
-  // stream is the subject whose history is read.
+  // stream is the domain-relative dot reference whose history is read
+  // (e.g. "location.<ULID>", "character.<ULID>"); the server qualifies it to the
+  // fully-qualified JetStream subject before authorization and the bus fetch.
   string stream = 3;
 
   // count is the requested page size. 0 selects the server default (150); the
@@ -1000,8 +1005,10 @@ message ListSessionStreamsRequest {
 
 // ListSessionStreamsResponse returns the session's subscribed stream names.
 message ListSessionStreamsResponse {
-  // streams lists the subscribed stream names (character / location / plugin
-  // streams), matching what Subscribe would deliver.
+  // streams lists the subscribed stream names as domain-relative dot references
+  // (e.g. "character.<ULID>", "location.<ULID>", plugin streams), matching what
+  // Subscribe would deliver. The client passes these back unchanged; the server
+  // qualifies them.
   repeated string streams = 1;
 
   // meta echoes request correlation data.
