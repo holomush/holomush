@@ -156,16 +156,19 @@ Commit using VCS-appropriate commands per `references/vcs-preamble.md`. Message:
 - Modify: `internal/world/events.go:22-40` (builders + delete colon consts)
 - Modify: `internal/core/event.go:14-17` (delete `StreamPrefixCharacter`)
 - Modify: `internal/core/engine.go:73,96` (inline `"location:"` → `"location."`)
+- Modify: `internal/core/engine_end_session.go:62` (inline `"character:"` → `"character."`)
 - Modify: `internal/grpc/focus/subscription_router.go:37,47` (inline `"location:"` → `"location."`)
-- Test: `internal/world/events_test.go`
+- Modify: `internal/grpc/focus/scenepolicy/policy.go:29-30` (`StreamsFor` colon scene filters → dot relative)
+- Test: `internal/world/events_test.go`, `internal/grpc/focus/scenepolicy/policy_test.go`
 
-> **Note:** `auth_handlers.go:876` is **not** in scope — it builds `"character:"+id`
-> as an ABAC *subject* (`GetLocation` call), not a stream name. Leave it colon.
-> `subscription_router.go` deliberately avoids importing `internal/grpc`/`world`
-> to dodge an import cycle (see its `:14` comment), so flip it with an **inline**
-> `"location." + characterLocationID.String()`, not `world.LocationStream`. Also
-> update its stale `:27` doc-comment that names `notifications:<character_id>` as
-> a stream — restate it in dot form (`events.<gid>.notification.<id>`).
+> **Note:** `auth_handlers.go:876` builds `"character:"+id` as an ABAC *subject*
+> (not a stream); it is handled in **Task 5 Step 7** by routing through
+> `access.CharacterSubject(...)`, not here. `subscription_router.go` deliberately
+> avoids importing `internal/grpc`/`world` to dodge an import cycle (see its `:14`
+> comment), so flip it with an **inline** `"location." + characterLocationID.String()`,
+> not `world.LocationStream`. Also update its stale `:27` doc-comment that names
+> `notifications:<character_id>` as a stream — restate it in dot form
+> (`events.<gid>.notification.<id>`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -238,11 +241,37 @@ In `internal/core/engine.go`, change the two inline literals at lines 73 and 96:
 - [ ] **Step 4: Flip the inline colon producers + fix compile breaks**
 
 First flip the inline literals the compiler will NOT catch (they use no deleted
-constant): `internal/grpc/focus/subscription_router.go:37,47`:
+constant):
+
+- `internal/grpc/focus/subscription_router.go:37,47`:
 
 ```go
 	return []string{"location." + characterLocationID.String()}
 ```
+
+- `internal/core/engine_end_session.go:62` — the `NewEvent` stream argument:
+
+```go
+	event := NewEvent(
+		"character."+char.ID.String(),
+```
+
+- `internal/grpc/focus/scenepolicy/policy.go:29-30` — `StreamsFor` returns the
+  IC/OOC **subscription filters**. `s9nu` migrated the scene emit path and
+  classifiers to dot but missed this filter producer (latent `ofpi`-class bug).
+  Flip to the dot-relative form the host qualifier expects:
+
+```go
+func (p *ScenePolicy) StreamsFor(target session.FocusKey) []string {
+	id := target.TargetID.String()
+	return []string{
+		"scene." + id + ".ic",
+		"scene." + id + ".ooc",
+	}
+}
+```
+
+  Update `policy_test.go` expectations to the dot form.
 
 Then `task build`. Expected: compile errors at every `core.StreamPrefixCharacter`
 / `world.StreamPrefix*` consumer (e.g. `internal/grpc/server.go:1246,1294`). For
@@ -410,15 +439,17 @@ Expected: PASS
 ### Task 5: Dot-only classifiers, read-entry qualifier, and location seeds
 
 This is the privacy-critical core. All four `internal/grpc/` classifiers flip to
-dot-only, `QueryStreamHistory` qualifies `req.Stream` at entry, and the two
-location seeds switch to the `has_location` witness.
+dot-only, `QueryStreamHistory` qualifies `req.Stream` at entry, the location
+seeds switch to the `has_location` witness, and the straggler host ABAC-subject
+sites route through the existing `internal/access` builders (so no inline colon
+literal survives in host code — the INV-ROPS-3 boundary).
 
 **Files:**
 
 - Modify: `internal/grpc/stream_access.go:70-115`
 - Modify: `internal/grpc/scope_floor.go:33-81,93`
-- Modify: `internal/grpc/query_stream_history.go:45-110,170-250`
-- Modify: `internal/grpc/auth_handlers.go:876`, `internal/plugin/pluginauthz/evaluate.go:65` (ABAC-subject exemption markers)
+- Modify: `internal/grpc/query_stream_history.go:45-110,170-250` (incl. `:220` ABAC subject)
+- Modify: `internal/grpc/auth_handlers.go:876`, `internal/plugin/pluginauthz/evaluate.go:65`, `internal/eventbus/authguard/guard.go:130`, `internal/command/handlers/resetpassword.go:107`, `internal/store/role_resolver.go:30` (route ABAC subjects through `access.*` builders)
 - Modify: `internal/access/policy/seed.go:59-70`
 - Test: `internal/grpc/stream_access_test.go`, `internal/grpc/scope_floor_test.go`
 
@@ -561,26 +592,32 @@ the co-location clause untouched and bump `SeedVersion`:
 		},
 ```
 
-- [ ] **Step 7: Mark the sanctioned ABAC-subject literals (INV-ROPS-3 exemption)**
+- [ ] **Step 7: Route straggler host ABAC subjects through the `access.*` builders**
 
-Three production files outside `internal/access/` build `"character:"+id` as an
-ABAC **subject** (not a stream) and MUST keep the colon. Add the explicit
-exemption marker `// rops:abac-subject` to each so the Task 8 INV-ROPS-3 scan
-skips them (the scan keys on that exact substring):
+The colon ABAC-subject form is built by the **existing** `internal/access`
+builders (`access.CharacterSubject`, `access.PluginSubject`, …), already the
+convention across `world/`, `command/`, `hostfunc/`, `grpc/`. A few host sites
+still inline the literal; route them through the builders so no inline colon
+literal survives in host code (the INV-ROPS-3 boundary, and a cleanup
+`prefix.go`'s doc-comment explicitly calls for). Each builder panics on empty
+input, which is strictly safer than the bare concatenation:
 
-- `internal/grpc/scope_floor.go:93` — the `"character:"+info.CharacterID.String()`
-  argument to `NewAccessRequest` in `staffOverride`.
-- `internal/grpc/auth_handlers.go:876` — `subj := "character:" + c.ID.String()`.
-- `internal/plugin/pluginauthz/evaluate.go:65` — `return "character:" + a.ID`.
+- `internal/grpc/scope_floor.go:93` → `access.CharacterSubject(info.CharacterID.String())`
+- `internal/grpc/query_stream_history.go:220` → `access.CharacterSubject(info.CharacterID.String())`
+- `internal/grpc/auth_handlers.go:876` → `access.CharacterSubject(c.ID.String())`
+- `internal/plugin/pluginauthz/evaluate.go:65` → `access.CharacterSubject(a.ID)`
+- `internal/eventbus/authguard/guard.go:130` → `access.PluginSubject(req.Identity.PluginName)`
+- `internal/command/handlers/resetpassword.go:107` → `access.CharacterSubject(<id>)` (replaces the `fmt.Sprintf("character:%s", …)`)
+- `internal/store/role_resolver.go:30` → parse via `access.ParseEntityRef(subject)` (or `strings.TrimPrefix(subject, access.SubjectCharacter)`) instead of the bare `"character:"` literal
 
-Example (the marker must be on the same line as the literal):
+Add the `"github.com/holomush/holomush/internal/access"` import where missing.
+After this, `task build` then `task test`.
 
-```go
-		subj := "character:" + c.ID.String() // rops:abac-subject (ABAC principal, not a stream)
-```
-
-(`scope_floor.go:49`'s `HasPrefix(stream, "character:")` is NOT marked — it is a
-stream classifier that Step 4 already flipped to dot, so the literal is gone.)
+> **Plugin residual (NOT host):** `plugins/core-scenes/commands.go` builds
+> `"scene:"+id` as an ABAC resource and **cannot** import `internal/access`
+> (plugin boundary). Those lines already call `evaluator.Evaluate(` or carry the
+> `// ABAC resource ref` comment, which the Task 8 INV-ROPS-3 scan skips — they
+> are left as-is. This is the only sanctioned inline colon residual.
 
 - [ ] **Step 8: Run tests to verify they pass**
 
@@ -715,21 +752,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestINV_ROPS_3_NoColonStreamLiterals asserts no production Go/TS source
-// contains a colon-style pub/sub STREAM literal outside the ABAC layer.
-// Supersedes INV-P4-1 with a repo-wide scan. Roots MUST exist (fail, not skip).
+// TestINV_ROPS_3_NoColonStreamLiterals asserts no production Go source contains
+// a colon-style entity-prefix literal as a pub/sub STREAM name. Supersedes
+// INV-P4-1 with a repo-wide scan. Roots MUST exist (fail, not skip).
 //
-// Colon type-prefixes legitimately appear as ABAC SUBJECT literals
-// ("character:"+id for NewAccessRequest) in production files OUTSIDE
-// internal/access/ (scope_floor.go:93, auth_handlers.go:876,
-// pluginauthz/evaluate.go:65). Content alone cannot distinguish an ABAC subject
-// from a missed stream producer, so the scan skips: (a) comment lines, and
-// (b) any line bearing the explicit exemption marker "rops:abac-subject" — which
-// those three sites carry (added in Task 5). This mirrors INV-P4-1's
-// abacContextMarkers approach, made explicit per-line.
+// The stream-vs-ABAC ambiguity is solved structurally: ABAC subjects/resources
+// are built ONLY via internal/access builders (access.CharacterSubject,
+// SceneResource, …), which live in the allowlisted internal/access package.
+// Host code therefore has NO inline colon literal (Task 5 Step 7 routed the
+// stragglers through the builders). The scan skips: (a) internal/access/;
+// (b) comment lines; (c) lines that call an ABAC evaluation API or carry the
+// "ABAC resource ref" marker — the only residual, in plugins/core-scenes/ which
+// cannot import internal/access. Any other hit is unambiguously a stream-producer
+// bug. (mirrors INV-P4-1's proven abacContextMarkers approach.)
 func TestINV_ROPS_3_NoColonStreamLiterals(t *testing.T) {
 	roots := []string{"../../../internal", "../../../pkg", "../../../plugins", "../../../cmd"}
-	pattern := regexp.MustCompile(`"(location|character|notifications|scene):`)
+	pattern := regexp.MustCompile(`"(location|character|notifications|scene|plugin):`)
+	abacMarkers := []string{"Evaluate(", "CanPerformAction(", "NewAccessRequest(", ".Grant(", "ABAC resource ref"}
 	for _, root := range roots {
 		info, err := os.Stat(root)
 		require.NoErrorf(t, err, "scan root missing: %s", root) // fail, never skip
@@ -741,9 +780,8 @@ func TestINV_ROPS_3_NoColonStreamLiterals(t *testing.T) {
 				return err
 			}
 			if d.IsDir() {
-				// allowlist: ABAC policy-DSL layer keeps colon type-prefixes.
 				if strings.Contains(path, "internal/access") {
-					return filepath.SkipDir
+					return filepath.SkipDir // sole sanctioned home of colon prefixes
 				}
 				return nil
 			}
@@ -760,8 +798,15 @@ func TestINV_ROPS_3_NoColonStreamLiterals(t *testing.T) {
 				if strings.HasPrefix(line, "//") || strings.HasPrefix(line, "*") {
 					continue // doc/comment line, not a producer
 				}
-				if strings.Contains(raw, "rops:abac-subject") {
-					continue // sanctioned ABAC-subject literal (Task 5 marker)
+				skip := false
+				for _, m := range abacMarkers {
+					if strings.Contains(raw, m) {
+						skip = true // ABAC subject/resource construction, not a stream
+						break
+					}
+				}
+				if skip {
+					continue
 				}
 				t.Errorf("INV-ROPS-3: colon-style stream literal in %s:%d:\n  %s", path, i+1, line)
 			}
@@ -877,11 +922,10 @@ empty `policy_id` + "by ABAC" log line).
 
 - [ ] **Step 4: Write INV-ROPS-6 role-split unit test**
 
-There is **no** `access.CharacterSubject` builder (verified: `internal/access`
-exports only `ParseSubject`). The canonical colon ABAC-subject construction site
-is `internal/grpc/scope_floor.go:93` (`"character:"+info.CharacterID.String()`).
-Assert both forms directly — the stream builder is dot, the ABAC subject literal
-stays colon — without introducing a builder:
+The role split is now a real package boundary: the **stream** builder
+(`world.CharacterStream`, dot) vs the **ABAC subject** builder
+(`access.CharacterSubject`, colon, in `internal/access/prefix.go`). Assert both
+against the real builders:
 
 ```go
 // internal/grpc/stream_access_test.go — add
@@ -889,9 +933,8 @@ func TestRoleSplitCharacterStreamDotABACSubjectColon(t *testing.T) {
 	id := ulid.MustParse("01ARZ3NDEKTSV4RRFFQ69G5FAV")
 	// Stream form: dot-relative (this migration).
 	require.Equal(t, "character."+id.String(), world.CharacterStream(id))
-	// ABAC subject form: colon — unchanged, as built at scope_floor.go:93.
-	abacSubject := "character:" + id.String()
-	require.True(t, strings.HasPrefix(abacSubject, "character:"))
+	// ABAC subject form: colon — the existing access builder, unchanged.
+	require.Equal(t, "character:"+id.String(), access.CharacterSubject(id.String()))
 }
 ```
 
@@ -960,7 +1003,7 @@ Expected: PASS
 
 - [ ] `task pr-prep` green (fast lane).
 - [ ] `task pr-prep:full` green (this diff touches int + E2E surface — Subscribe/QueryStreamHistory + scene/privacy integration suites).
-- [ ] `rg -n '"(location|character|notifications|scene):' internal pkg plugins cmd | rg -v internal/access` returns nothing (INV-ROPS-3 holds manually).
+- [ ] `rg -n '"(location|character|notifications|scene|plugin):' internal pkg plugins cmd | rg -v 'internal/access|Evaluate\(|CanPerformAction\(|NewAccessRequest\(|\.Grant\(|ABAC resource ref|^\s*//'` returns nothing (INV-ROPS-3 holds manually — host code routes ABAC subjects through `access.*` builders; the only colon residual is plugin `Evaluate(` lines).
 - [ ] `holomush-pkixe` verified fixed by this work (scene members read their own history via the I-17 gate); close it with evidence.
 - [ ] `holomush-ofpi` verified fixed (Subscribe scope-floor sees qualified subjects); close it.
 - [ ] `holomush-ec22.3` closed as superseded (subjectxlate deleted).

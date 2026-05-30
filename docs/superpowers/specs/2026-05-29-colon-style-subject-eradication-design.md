@@ -78,9 +78,9 @@ A producer/classifier survey narrows the bead's 2026-05-20 discovered scope:
 | Stream | Colon (today) | Dot (canonical) | Live code? |
 | --- | --- | --- | --- |
 | Location | `location:<ULID>` | `events.<gid>.location.<ULID>` | **Yes** — `internal/core/engine.go:73,96`, `internal/world/events.go`, `internal/grpc/server.go:1294`, grid focus routing, scope floor, ABAC `StreamProvider`, **Lua SDK `pkg/holo/emit.go` `Emitter.Location()`** |
-| Character (personal) | `character:<ULID>` | `events.<gid>.character.<ULID>` | **Yes** — `internal/grpc/auth_handlers.go:876`, `stream_access.go`, `scope_floor.go`, `internal/grpc/server.go:1246`, `internal/core/event.go:17`, **Lua SDK `pkg/holo/emit.go` `Emitter.Character()`** |
+| Character (personal) | `character:<ULID>` | `events.<gid>.character.<ULID>` | **Yes** — `stream_access.go`, `scope_floor.go`, `internal/grpc/server.go:1246`, `internal/core/event.go:17`, `internal/core/engine_end_session.go:62` (`NewEvent` producer), **Lua SDK `pkg/holo/emit.go` `Emitter.Character()`** |
 | Global (ambient) | `global` | `events.<gid>.global` | **Yes** — **Lua SDK `pkg/holo/emit.go:21` `Emitter.Global()`** emits to stream name `"global"`. This is a live pub/sub stream, not merely an ABAC scope. |
-| Scene IC/OOC | *(already dot, `s9nu`)* | `events.<gid>.scene.<ULID>.{ic,ooc}` | Done — this design only extends its meta-test |
+| Scene IC/OOC | partly dot (`s9nu`) | `events.<gid>.scene.<ULID>.{ic,ooc}` | **Mostly done** — emit path + classifiers are dot (`s9nu`). BUT `internal/grpc/focus/scenepolicy/policy.go:29-30` `StreamsFor` still builds colon `scene:<id>:ic/:ooc` **subscription filters** — a producer `s9nu` missed (latent `ofpi`-class bug). This design flips it + extends the meta-test. |
 | Notifications | `notifications:<charID>` | `events.<gid>.notification.<charID>` | **No live producer** — design-reference only (scenes v2 §3.1, future Phase 10). Spec-text update; no code to flip. |
 | `system` | — | — | **Not a pub/sub stream** — ABAC actor-kind / audit source only. No emitter targets it as a stream. Out of scope. |
 
@@ -140,8 +140,17 @@ distinct, and the stream builders emit the **domain-relative dot reference**
   `world.StreamPrefixLocation/Character` (`events.go:23-24`) and
   `core.StreamPrefixCharacter` (`event.go:17`) are deleted; callers route through
   the builders or emit relative dot refs inline.
-- ABAC subjects continue through the existing `internal/access` builders
-  (`character:<id>`), **untouched** — they are not stream names.
+- ABAC subjects/resources are constructed through the **existing**
+  `internal/access` builders — `access.CharacterSubject(id)`,
+  `access.SceneResource(id)`, `access.PluginSubject(name)`, etc.
+  (`internal/access/prefix.go`), already the established convention across
+  `world/`, `command/`, `grpc/`, `hostfunc/`. These return the colon form
+  (`character:<id>`) and live inside the scan-allowlisted `internal/access/`
+  package. A handful of straggler host sites still inline `"character:"+id`;
+  routing them through the builders (a cleanup `prefix.go` explicitly calls for)
+  means **no inline colon literal survives in host code outside
+  `internal/access/`** — making the role split a real package boundary, not a
+  convention.
 - `global` (`pkg/holo/emit.go:21`) is already a bare token with no separator; its
   relative reference is unchanged. Only the host qualifier must keep producing
   `events.<gid>.global` after the shim is gone.
@@ -361,14 +370,23 @@ boundary test as noted. RFC2119 keywords are normative.
 - **INV-ROPS-2** — Unclassifiable stream names are rejected at handler entry
   with `INVALID_ARGUMENT`, never routed to a default authorization branch.
 - **INV-ROPS-3 (eradication gate)** — A CI meta-test asserts no production Go or
-  TypeScript source contains a colon-style pub/sub stream literal (`location:`,
-  `character:`, `notifications:`, `scene:` as a stream name) outside the ABAC
-  layer (`internal/access/` + the policy DSL, the sole allowlist). This
-  **subsumes** INV-P4-1's 3-file scene scope with a strictly stronger repo-wide
-  gate; INV-P4-1 is removed in favor of it. The scan MUST **fail** (not
-  `t.Skipf`) if a target file or directory is missing — the old INV-P4-1
-  skip-on-missing logic (`scene_subjects_test.go:62-73`) is a false-pass trap a
-  repo-wide scan cannot inherit.
+  TypeScript source contains a colon-style entity-prefix literal (`location:`,
+  `character:`, `notifications:`, `scene:`, `plugin:`, …) as a **stream name**.
+  Distinguishing a stream-name literal from a legitimate ABAC subject/resource
+  literal is solved structurally, not heuristically: **ABAC subjects/resources
+  are built only via `internal/access` builders** (`access.CharacterSubject`,
+  `SceneResource`, …), which live in the scan's sole allowlisted package. The
+  scan therefore: (a) skips `internal/access/`; (b) skips comment lines; (c)
+  skips lines that call an ABAC evaluation API (`Evaluate(`, `CanPerformAction(`,
+  `NewAccessRequest(`, `.Grant(`) or carry the `// ABAC resource ref` marker —
+  the residual for plugin code (`plugins/core-scenes/`), which cannot import
+  `internal/access`. Host code has **zero** inline colon literals (all route
+  through the builders), so any host hit is unambiguously a stream-producer bug.
+  This **subsumes** INV-P4-1's 3-file scene scope with a strictly stronger
+  repo-wide gate; INV-P4-1 is removed in favor of it. The scan MUST **fail** (not
+  `t.Skipf`) on a missing root — the old INV-P4-1 skip-on-missing logic
+  (`scene_subjects_test.go:62-73`) is a false-pass trap a repo-wide scan cannot
+  inherit.
 - **INV-ROPS-4 (producer↔subscriber symmetry)** — An integration test (real
   embedded NATS via `eventbustest`) emits through the production producer path
   for each migrated stream type and asserts a subscriber built from the
