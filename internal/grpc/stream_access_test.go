@@ -8,6 +8,7 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/session"
 )
@@ -24,6 +25,39 @@ func dotStyleSceneOOC(sceneID string) string {
 	return "events.test.scene." + sceneID + ".ooc"
 }
 
+// dotStyleCharacter returns a NATS dot-style personal character subject for
+// testing, using the fixed game ID "test".
+func dotStyleCharacter(charID string) string {
+	return "events.test.character." + charID
+}
+
+// TestStreamClassifiersNonCollision asserts the dot-only classifiers
+// (isPrivateStream / isSceneStream / isLocationStream) partition qualified
+// subjects correctly and reject every colon-style legacy form (INV-ROPS-5).
+func TestStreamClassifiersNonCollision(t *testing.T) {
+	cases := []struct {
+		name         string
+		stream       string
+		wantPrivate  bool
+		wantScene    bool
+		wantLocation bool
+	}{
+		{"qualified location is public-not-scene", "events.main.location.01LOC", false, false, true},
+		{"qualified character is private-not-scene", "events.main.character.01CHR", true, false, false},
+		{"qualified scene ic is private-and-scene", "events.main.scene.01SCN.ic", true, true, false},
+		{"colon character is rejected (no longer private)", "character:01CHR", false, false, false},
+		{"colon location is rejected (not location)", "location:01LOC", false, false, false},
+		{"garbage is none", "nonsense", false, false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.wantPrivate, isPrivateStream(tc.stream))
+			require.Equal(t, tc.wantScene, isSceneStream(tc.stream))
+			require.Equal(t, tc.wantLocation, isLocationStream(tc.stream))
+		})
+	}
+}
+
 func TestIsPrivateStream(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -32,11 +66,12 @@ func TestIsPrivateStream(t *testing.T) {
 	}{
 		{"returns true for scene IC stream", dotStyleSceneIC("01ABC01ABC01ABC01ABC01ABC01"), true},
 		{"returns true for scene OOC stream", dotStyleSceneOOC("01ABC01ABC01ABC01ABC01ABC01"), true},
-		{"returns true for character stream", "character:01ABC", true},
-		{"returns false for location stream", "location:01ABC", false},
+		{"returns true for dot-style character stream", dotStyleCharacter("01ABC"), true},
+		{"returns false for dot-style location stream", "events.test.location.01ABC", false},
 		{"returns false for unknown type", "global", false},
 		{"returns false for empty string", "", false},
 		{"returns false for old colon-style scene stream", "scene:01ABC:ic", false},
+		{"returns false for old colon-style character stream", "character:01ABC", false},
 	}
 
 	for _, tt := range tests {
@@ -66,13 +101,19 @@ func TestSessionHasMembership(t *testing.T) {
 		{
 			name:     "permits own character stream",
 			info:     &session.Info{CharacterID: ownCharID},
-			stream:   "character:" + ownCharID.String(),
+			stream:   dotStyleCharacter(ownCharID.String()),
 			expected: true,
 		},
 		{
 			name:     "denies other character's stream",
 			info:     &session.Info{CharacterID: ownCharID},
-			stream:   "character:" + otherCharID.String(),
+			stream:   dotStyleCharacter(otherCharID.String()),
+			expected: false,
+		},
+		{
+			name:     "denies legacy colon-style character stream",
+			info:     &session.Info{CharacterID: ownCharID},
+			stream:   "character:" + ownCharID.String(),
 			expected: false,
 		},
 		{
@@ -108,7 +149,7 @@ func TestSessionHasMembership(t *testing.T) {
 		{
 			name:     "denies nil info for character stream",
 			info:     nil,
-			stream:   "character:" + ownCharID.String(),
+			stream:   dotStyleCharacter(ownCharID.String()),
 			expected: false,
 		},
 		{
@@ -120,7 +161,7 @@ func TestSessionHasMembership(t *testing.T) {
 		{
 			name:     "denies zero CharacterID against zero-ID character stream",
 			info:     &session.Info{CharacterID: zeroID},
-			stream:   "character:" + zeroID.String(),
+			stream:   dotStyleCharacter(zeroID.String()),
 			expected: false,
 		},
 		{

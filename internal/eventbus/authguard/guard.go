@@ -10,6 +10,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/access"
 	accesstypes "github.com/holomush/holomush/internal/access/policy/types"
 )
 
@@ -127,7 +128,7 @@ func (g *Guard) checkPlugin(ctx context.Context, req CheckRequest) (Decision, er
 		return Decision{Permit: false, Code: DenyManifestDeclarationMissing, Reason: "manifest does not declare requests_decryption"}, nil
 	}
 	abacReq, err := accesstypes.NewAccessRequest(
-		"plugin:"+req.Identity.PluginName,
+		access.PluginSubject(req.Identity.PluginName),
 		"decrypt",
 		fmt.Sprintf("dek:%d:%d", req.KeyID, req.KeyVersion),
 		map[string]any{

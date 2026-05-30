@@ -16,11 +16,11 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/internal/access"
 	accessTypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/authguard"
 	"github.com/holomush/holomush/internal/eventbus/cursor"
-	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
@@ -34,12 +34,17 @@ const (
 
 // QueryStreamHistory implements CoreServiceServer.QueryStreamHistory.
 //
-// Two-layer authorization:
-//   - Private streams (character:*, events.<gid>.scene.<id>.{ic,ooc}): membership
-//     gate via sessionHasMembership (invariant I-17). This is a HARD GATE, not a
-//     policy — the ABAC engine is NEVER consulted for private streams, and
-//     there is no admin override.
-//   - Public streams (location:*, global, etc.): ABAC engine.Evaluate.
+// The client-supplied req.Stream is a domain-relative dot reference; it is
+// qualified to a fully-qualified subject at entry (INV-ROPS-2) and every gate
+// below operates on the qualified value. Colon-style legacy refs fail to
+// qualify and are rejected with InvalidArgument.
+//
+// Two-layer authorization (on the qualified subject):
+//   - Private streams (events.<gid>.character.<id>, events.<gid>.scene.<id>.{ic,ooc}):
+//     membership gate via sessionHasMembership (invariant I-17). This is a HARD
+//     GATE, not a policy — the ABAC engine is NEVER consulted for private
+//     streams, and there is no admin override.
+//   - Public streams (events.<gid>.location.<id>, global, etc.): ABAC engine.Evaluate.
 //
 // Pure read — does not mutate session cursors (invariant I-13).
 func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QueryStreamHistoryRequest) (*corev1.QueryStreamHistoryResponse, error) {
@@ -92,10 +97,24 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 			Errorf("not authorized to read stream")
 	}
 
-	// Step 2: Validate stream.
+	// Step 2: Validate stream and qualify to a fully-qualified dot subject.
 	if req.Stream == "" {
 		return nil, oops.Code("INVALID_ARGUMENT").Errorf("stream is required")
 	}
+	// INV-ROPS-2: the read path is dot-native. Qualify the client-supplied
+	// domain-relative reference (e.g. "location.<id>") into a fully-qualified
+	// subject (events.<gid>.location.<id>) up front; everything below — the
+	// classifier switch, scope floor, ABAC resource, and bus fetch — operates
+	// on the qualified value. Colon-style legacy refs fail Qualify and are
+	// rejected fail-closed as InvalidArgument.
+	qualified, qErr := eventbus.Qualify(s.currentGameID(), req.Stream)
+	if qErr != nil {
+		// Generic message (no inner error) — qErr may name internal token rules;
+		// matches the ":stream is required" guard above and the §5.5 wire-opacity
+		// contract. oops.Code maps to codes.InvalidArgument at the gRPC boundary.
+		return nil, oops.Code("INVALID_ARGUMENT").Errorf("invalid stream")
+	}
+	stream := string(qualified)
 
 	// Step 3: Normalize count.
 	count := int(req.Count)
@@ -165,47 +184,47 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		}
 	}
 
-	// Step 5: Authorization — three-way classifier.
-	//   1. Private streams (character:*, events.<gid>.scene.<id>.{ic,ooc}): membership gate (I-17).
-	//   2. Location streams (location:<id>): hard-gate via session.LocationID (I-PRIV-1).
+	// Step 5: Authorization — three-way classifier (on the qualified subject).
+	//   1. Private streams (events.<gid>.character.<id>, events.<gid>.scene.<id>.{ic,ooc}): membership gate (I-17).
+	//   2. Location streams (events.<gid>.location.<id>): hard-gate via session.LocationID (I-PRIV-1).
 	//   3. Other public streams (global, system, …): ABAC engine.Evaluate.
 	switch {
-	case isPrivateStream(req.Stream):
+	case isPrivateStream(stream):
 		// Validate scene stream format up-front so malformed scene streams
 		// (e.g. invalid ULID in the sceneID segment) surface as INVALID_ARGUMENT
 		// rather than STREAM_ACCESS_DENIED. Dot-style per INV-P4-1 / ADR holomush-s9nu.
-		if isSceneStream(req.Stream) {
-			if _, keyErr := streamToFocusKey(req.Stream); keyErr != nil {
+		if isSceneStream(stream) {
+			if _, keyErr := streamToFocusKey(stream); keyErr != nil {
 				return nil, keyErr
 			}
 		}
 		// Layer 1: Membership gate (I-17). ABAC is never consulted for
 		// private streams — no policy override is possible.
-		if !sessionHasMembership(info, req.Stream) {
+		if !sessionHasMembership(info, stream) {
 			slog.InfoContext(
 				ctx, "stream access denied by I-17 membership gate",
 				"session_id", req.SessionId,
 				"character_id", info.CharacterID.String(),
-				"stream", req.Stream,
+				"stream", stream,
 			)
 			return nil, oops.Code("STREAM_ACCESS_DENIED").
 				With("session_id", req.SessionId).
-				With("stream", req.Stream).
+				With("stream", stream).
 				Errorf("not authorized to read stream")
 		}
-	case isLocationStream(req.Stream):
+	case isLocationStream(stream):
 		// Layer 2: Location hard-gate (I-PRIV-1). The session must be currently
 		// located in the requested location. staffOverride returns false until
 		// Phase 5 (iwzt.20) wires the real engine.Evaluate call.
 		if !staffOverride(ctx, info, s.accessEngine) {
-			if info.LocationID.String() != extractLocationID(req.Stream) {
+			if info.LocationID.String() != extractLocationID(stream) {
 				slog.InfoContext(ctx, "stream access denied by location hard-gate",
 					"session_id", req.SessionId, "denial_reason", "wrong_location",
 					"character_id", info.CharacterID.String(),
 					"session_location", info.LocationID.String(),
-					"requested_stream", req.Stream)
+					"requested_stream", stream)
 				return nil, oops.Code("STREAM_ACCESS_DENIED").
-					With("session_id", req.SessionId).With("stream", req.Stream).
+					With("session_id", req.SessionId).With("stream", stream).
 					Errorf("not authorized to read stream")
 			}
 		}
@@ -213,13 +232,13 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		// Layer 3: ABAC policy for other public streams (global, system, …).
 		if s.accessEngine == nil {
 			return nil, oops.Code("STREAM_ACCESS_DENIED").
-				With("stream", req.Stream).
+				With("stream", stream).
 				Errorf("access engine not configured")
 		}
 		accessReq, reqErr := accessTypes.NewAccessRequest(
-			"character:"+info.CharacterID.String(),
+			access.CharacterSubject(info.CharacterID.String()),
 			accessTypes.ActionRead,
-			"stream:"+req.Stream,
+			"stream:"+stream,
 			nil,
 		)
 		if reqErr != nil {
@@ -228,7 +247,7 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		decision, evalErr := s.accessEngine.Evaluate(ctx, accessReq)
 		if evalErr != nil {
 			return nil, oops.Code("INTERNAL").
-				With("stream", req.Stream).
+				With("stream", stream).
 				Wrap(evalErr)
 		}
 		if !decision.IsAllowed() {
@@ -236,12 +255,12 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 				ctx, "stream access denied by ABAC",
 				"session_id", req.SessionId,
 				"character_id", info.CharacterID.String(),
-				"stream", req.Stream,
+				"stream", stream,
 				"policy_id", decision.PolicyID(),
 			)
 			return nil, oops.Code("STREAM_ACCESS_DENIED").
 				With("session_id", req.SessionId).
-				With("stream", req.Stream).
+				With("stream", stream).
 				Errorf("not authorized to read stream")
 		}
 	}
@@ -251,7 +270,7 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	if req.NotBeforeMs > 0 {
 		notBefore = time.UnixMilli(req.NotBeforeMs).UTC()
 	}
-	scopeFloor := streamScopeFloor(info, req.Stream)
+	scopeFloor := streamScopeFloor(info, stream)
 	if scopeFloor.After(notBefore) {
 		notBefore = scopeFloor
 	}
@@ -305,14 +324,14 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	}
 
 	frames, fetchErr := fetchHistoryFramesFromBus(
-		ctx, s.historyReader, s.identityRegistry, s.currentGameID(), req.Stream, count,
+		ctx, s.historyReader, s.identityRegistry, stream, count,
 		notBefore, notAfter, beforeSeq, beforeID, caller, historyIdentity,
 	)
 	if fetchErr != nil {
 		return nil, mapHistoryError(
-			oops.Code("INTERNAL").With("stream", req.Stream).Wrap(fetchErr),
+			oops.Code("INTERNAL").With("stream", stream).Wrap(fetchErr),
 			req.SessionId,
-			req.Stream,
+			stream,
 		)
 	}
 	protoFrames := frames
@@ -413,7 +432,7 @@ func fetchHistoryFramesFromBus(
 	ctx context.Context,
 	reader eventbus.HistoryReader,
 	reg plugins.IdentityRegistry,
-	gameID, legacyStream string,
+	qualifiedStream string,
 	count int,
 	notBefore time.Time,
 	notAfter time.Time,
@@ -422,13 +441,12 @@ func fetchHistoryFramesFromBus(
 	caller eventbus.Actor,
 	identity eventbus.SessionIdentity,
 ) ([]*corev1.EventFrame, error) {
-	natsSubject, err := subjectxlate.Legacy(legacyStream, gameID)
+	// qualifiedStream is already a fully-qualified dot subject (the caller ran
+	// eventbus.Qualify at read entry — INV-ROPS-2), so we construct the Subject
+	// directly — no legacy colon translation on the read path.
+	sub, err := eventbus.NewSubject(qualifiedStream)
 	if err != nil {
-		return nil, oops.With("stream", legacyStream).Wrap(err)
-	}
-	sub, err := eventbus.NewSubject(natsSubject)
-	if err != nil {
-		return nil, oops.With("stream", legacyStream).Wrap(err)
+		return nil, oops.With("stream", qualifiedStream).Wrap(err)
 	}
 
 	q := eventbus.HistoryQuery{
@@ -491,8 +509,10 @@ func fetchHistoryFramesFromBus(
 	for i := range collected {
 		// Reverse index: collected[0] is newest; result[0] should be oldest.
 		j := len(collected) - 1 - i
-		legacyStreamName := subjectxlate.ToLegacy(string(collected[i].Subject), gameID)
-		frame := eventbusEventToEventFrame(collected[i], legacyStreamName, reg)
+		// The frame's stream field is the already-qualified dot subject
+		// (INV-ROPS-2 / Task 6): return the event's subject directly rather
+		// than translating back to a legacy colon form.
+		frame := eventbusEventToEventFrame(collected[i], string(collected[i].Subject), reg)
 		frame.Cursor = encodeEventCursor(collected[i])
 		result[j] = frame
 	}
@@ -574,19 +594,20 @@ func rewrapFrameCursorsForPlugin(frames []*corev1.EventFrame, pluginName string)
 }
 
 // eventbusEventToEventFrame converts an eventbus.Event to a proto EventFrame.
-// legacyStreamName is the pre-translated colon-delimited stream name
-// (e.g. "location:01ABC") that the web client expects in the Stream field.
+// streamName is the fully-qualified dot subject (e.g.
+// "events.<gid>.location.01ABC") set on the Stream field — the read path is
+// dot-native per INV-ROPS-2, so no colon translation is applied.
 // Event.MetadataOnly (populated by the hot-tier AuthGuard on deny) is
 // stamped into EventFrame.metadata_only (Phase 3b grounding doc Decision 4).
 // Event.NoPlaintextReason is stamped into EventFrame.no_plaintext_reason
 // (holomush-ojw1.6) to let clients distinguish causes.
 // reg resolves plugin/system ULIDs to display names; nil falls back to
 // ULID-string form (same behaviour as actorIDString in server.go).
-func eventbusEventToEventFrame(e eventbus.Event, legacyStreamName string, reg plugins.IdentityRegistry) *corev1.EventFrame {
+func eventbusEventToEventFrame(e eventbus.Event, streamName string, reg plugins.IdentityRegistry) *corev1.EventFrame {
 	actorID := actorIDString(e.Actor, reg)
 	return &corev1.EventFrame{
 		Id:                e.ID.String(),
-		Stream:            legacyStreamName,
+		Stream:            streamName,
 		Type:              string(e.Type),
 		Timestamp:         timestamppb.New(e.Timestamp),
 		ActorType:         e.Actor.Kind.String(),

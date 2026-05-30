@@ -1173,8 +1173,6 @@ func (s *CoreServer) dispatchDelivery(
 	lf *locationFollower,
 ) error {
 	event := delivery.Event()
-	gameID := s.currentGameID()
-	legacyStream := subjectxlate.ToLegacy(string(event.Subject), gameID)
 
 	// AUDIT_ONLY events (e.g., crypto.totp_*, crypto.policy_set) MUST NOT
 	// reach client streams. They flow through the bus solely so the audit
@@ -1189,11 +1187,11 @@ func (s *CoreServer) dispatchDelivery(
 	}
 
 	// Per-subject filter-at-delivery — load-bearing privacy gate per
-	// holomush-iwzt §6.2 Tier 2. The OpenSession-time minFloor (Tier 1) is
-	// silently zero in production today because streamScopeFloor inspects
-	// legacy stream prefixes while OpenSession passes NATS subjects
-	// (holomush-ofpi); here we feed it `legacyStream` which is already
-	// translated, so the floor is computed correctly.
+	// holomush-iwzt §6.2 Tier 2. The stream classifiers (streamScopeFloor /
+	// isCharacterStream / isLocationStream) are now dot-only (holomush-rops),
+	// so we feed them the qualified NATS subject `event.Subject` directly;
+	// the OpenSession-time minFloor (Tier 1) likewise classifies on NATS
+	// subjects, so the floor is computed correctly at both tiers.
 	//
 	// Re-read SessionInfo per event so the filter picks up post-reattach /
 	// post-move floor changes without subscriber restart. A follow-up bead
@@ -1225,11 +1223,11 @@ func (s *CoreServer) dispatchDelivery(
 	// Floor uses ns precision and >= semantics (INV-TS-6 / INV-TS-7,
 	// gfo6 epic): publisher no longer truncates timestamps, so the
 	// scope-floor comparison runs at full time.Now() resolution.
-	floor := streamScopeFloor(currentInfo, legacyStream)
+	floor := streamScopeFloor(currentInfo, string(event.Subject))
 	if !floor.IsZero() && event.Timestamp.Before(floor) {
 		slog.DebugContext(ctx, "subscribe: filter-at-delivery dropped event below scope floor",
 			"session_id", info.ID, "event_id", event.ID.String(),
-			"stream", legacyStream,
+			"stream", string(event.Subject),
 			"event_ts", event.Timestamp, "floor", floor)
 		if ackErr := delivery.Ack(); ackErr != nil {
 			slog.WarnContext(ctx, "subscribe: ack failed on filter-drop (below-floor) path; will redeliver",
@@ -1242,15 +1240,12 @@ func (s *CoreServer) dispatchDelivery(
 	// replies with a synthetic location_state — in that case the raw
 	// event is dropped (ack'd) rather than forwarded.
 	handled := false
-	// legacyStream is subjectxlate.ToLegacy output (colon-delimited, e.g.
-	// "character:01ABC") and stays colon-form until the ToLegacy shim at the
-	// top of this function is removed in holomush-rops.6 — at which point this
-	// prefix flips to "character." in lockstep (the round-3 "three-tentacle"
-	// dispatchDelivery edit). Keeping it colon here preserves location-following
-	// across the intermediate migration commits; a premature dot prefix would
-	// never match the colon legacyStream and silently kill handleMovePayload.
+	// Forced rops.5↔rops.6 classifier lockstep: dispatchDelivery now feeds the
+	// dot-only classifiers the qualified NATS `event.Subject`, so the move guard
+	// uses isCharacterStream(event.Subject) rather than a colon prefix. The wire
+	// frame.Stream (toProtoSubscribeResponse) still flips to dot form in rops.6.
 	if string(event.Type) == string(core.EventTypeMove) &&
-		strings.HasPrefix(legacyStream, "character:") &&
+		isCharacterStream(string(event.Subject)) &&
 		lf != nil {
 		handled = lf.handleMovePayload(ctx, core.EventType(event.Type), event.Payload, stream)
 	}

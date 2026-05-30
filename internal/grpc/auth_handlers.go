@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
@@ -873,7 +874,7 @@ func (s *CoreServer) buildCharacterSummaries(ctx context.Context, playerID ulid.
 		}
 
 		if c.LocationID != nil && s.worldQuerier != nil {
-			subj := "character:" + c.ID.String()
+			subj := access.CharacterSubject(c.ID.String())
 			if loc, locErr := s.worldQuerier.GetLocation(ctx, subj, *c.LocationID); locErr == nil && loc != nil {
 				summary.LastLocation = loc.Name
 			}

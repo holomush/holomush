@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/holomush/holomush/internal/access"
 	accessTypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/session"
 )
@@ -46,7 +47,7 @@ func streamScopeFloor(info *session.Info, stream string) time.Time {
 				break
 			}
 		}
-	case strings.HasPrefix(stream, "character:"):
+	case isCharacterStream(stream):
 		return time.Time{}
 	default:
 		return time.Time{}
@@ -64,20 +65,25 @@ func streamScopeFloor(info *session.Info, stream string) time.Time {
 	return base
 }
 
-// isLocationStream reports whether a stream subject is a grid location stream.
-// Per holomush-iwzt §3.
+// isLocationStream reports whether a stream is a qualified location subject:
+// events.<gameID>.location.<ULID> (exactly 4 segments). Dot-only per
+// holomush-rops / holomush-iwzt §3; the legacy location:<ulid> colon form is
+// no longer accepted.
 func isLocationStream(stream string) bool {
-	if !strings.HasPrefix(stream, "location:") {
-		return false
-	}
-	rest := strings.TrimPrefix(stream, "location:")
-	return rest != "" && !strings.Contains(rest, ":")
+	parts := strings.Split(stream, ".")
+	return len(parts) == 4 && parts[0] == "events" && parts[1] != "" &&
+		parts[2] == "location" && parts[3] != ""
 }
 
-// extractLocationID returns the ULID portion of a location stream.
-// Caller MUST check isLocationStream first; otherwise behavior is undefined.
+// extractLocationID returns the ULID portion of a qualified location stream
+// (events.<gameID>.location.<ULID>). Caller MUST check isLocationStream first;
+// otherwise behavior is undefined.
 func extractLocationID(stream string) string {
-	return strings.TrimPrefix(stream, "location:")
+	parts := strings.Split(stream, ".")
+	if len(parts) == 4 {
+		return parts[3]
+	}
+	return ""
 }
 
 // staffOverride reports whether the session's character has been granted the
@@ -90,7 +96,7 @@ func staffOverride(ctx context.Context, info *session.Info, engine accessTypes.A
 		return false
 	}
 	accessReq, err := accessTypes.NewAccessRequest(
-		"character:"+info.CharacterID.String(),
+		access.CharacterSubject(info.CharacterID.String()),
 		"read_unrestricted_history",
 		"stream:*",
 		nil,
