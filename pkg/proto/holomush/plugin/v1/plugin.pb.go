@@ -3548,6 +3548,520 @@ func (x *PluginHostServiceGetCommandHelpResponse) GetSource() string {
 	return ""
 }
 
+// PluginHostServiceQueryLocationRequest names the location to snapshot. It
+// carries no subject: the host derives the acting subject from the dispatch
+// token.
+type PluginHostServiceQueryLocationRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// location_id is the ULID of the location to read.
+	LocationId    string `protobuf:"bytes,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PluginHostServiceQueryLocationRequest) Reset() {
+	*x = PluginHostServiceQueryLocationRequest{}
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PluginHostServiceQueryLocationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PluginHostServiceQueryLocationRequest) ProtoMessage() {}
+
+func (x *PluginHostServiceQueryLocationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PluginHostServiceQueryLocationRequest.ProtoReflect.Descriptor instead.
+func (*PluginHostServiceQueryLocationRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *PluginHostServiceQueryLocationRequest) GetLocationId() string {
+	if x != nil {
+		return x.LocationId
+	}
+	return ""
+}
+
+// PluginHostServiceQueryLocationResponse returns the requested location's
+// identity fields.
+type PluginHostServiceQueryLocationResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// id is the location ULID.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// name is the location's display name.
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// description is the location's prose description.
+	Description   string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PluginHostServiceQueryLocationResponse) Reset() {
+	*x = PluginHostServiceQueryLocationResponse{}
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PluginHostServiceQueryLocationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PluginHostServiceQueryLocationResponse) ProtoMessage() {}
+
+func (x *PluginHostServiceQueryLocationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PluginHostServiceQueryLocationResponse.ProtoReflect.Descriptor instead.
+func (*PluginHostServiceQueryLocationResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *PluginHostServiceQueryLocationResponse) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *PluginHostServiceQueryLocationResponse) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *PluginHostServiceQueryLocationResponse) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+// PluginHostServiceQueryCharacterRequest names the character to snapshot; it
+// carries no subject.
+type PluginHostServiceQueryCharacterRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character_id is the ULID of the character to read.
+	CharacterId   string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PluginHostServiceQueryCharacterRequest) Reset() {
+	*x = PluginHostServiceQueryCharacterRequest{}
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PluginHostServiceQueryCharacterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PluginHostServiceQueryCharacterRequest) ProtoMessage() {}
+
+func (x *PluginHostServiceQueryCharacterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PluginHostServiceQueryCharacterRequest.ProtoReflect.Descriptor instead.
+func (*PluginHostServiceQueryCharacterRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *PluginHostServiceQueryCharacterRequest) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
+	}
+	return ""
+}
+
+// PluginHostServiceQueryCharacterResponse returns the requested character's
+// identity fields. location_id is empty when the character is not in the world.
+type PluginHostServiceQueryCharacterResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// id is the character ULID.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// player_id is the owning player's ULID.
+	PlayerId string `protobuf:"bytes,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	// name is the character's display name.
+	Name string `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	// description is the character's prose description.
+	Description string `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	// location_id is the character's current location ULID, empty if none.
+	LocationId    string `protobuf:"bytes,5,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PluginHostServiceQueryCharacterResponse) Reset() {
+	*x = PluginHostServiceQueryCharacterResponse{}
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PluginHostServiceQueryCharacterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PluginHostServiceQueryCharacterResponse) ProtoMessage() {}
+
+func (x *PluginHostServiceQueryCharacterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PluginHostServiceQueryCharacterResponse.ProtoReflect.Descriptor instead.
+func (*PluginHostServiceQueryCharacterResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *PluginHostServiceQueryCharacterResponse) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *PluginHostServiceQueryCharacterResponse) GetPlayerId() string {
+	if x != nil {
+		return x.PlayerId
+	}
+	return ""
+}
+
+func (x *PluginHostServiceQueryCharacterResponse) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *PluginHostServiceQueryCharacterResponse) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *PluginHostServiceQueryCharacterResponse) GetLocationId() string {
+	if x != nil {
+		return x.LocationId
+	}
+	return ""
+}
+
+// PluginHostServiceQueryLocationCharactersRequest names the location whose
+// occupant roster to return; it carries no subject.
+type PluginHostServiceQueryLocationCharactersRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// location_id is the ULID of the location whose roster to read.
+	LocationId    string `protobuf:"bytes,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PluginHostServiceQueryLocationCharactersRequest) Reset() {
+	*x = PluginHostServiceQueryLocationCharactersRequest{}
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PluginHostServiceQueryLocationCharactersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PluginHostServiceQueryLocationCharactersRequest) ProtoMessage() {}
+
+func (x *PluginHostServiceQueryLocationCharactersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PluginHostServiceQueryLocationCharactersRequest.ProtoReflect.Descriptor instead.
+func (*PluginHostServiceQueryLocationCharactersRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *PluginHostServiceQueryLocationCharactersRequest) GetLocationId() string {
+	if x != nil {
+		return x.LocationId
+	}
+	return ""
+}
+
+// PluginHostServiceCharacterRef is one entry in a character roster: id + name
+// only. Use QueryCharacter to fetch full detail.
+type PluginHostServiceCharacterRef struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// id is the character ULID.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// name is the character's display name.
+	Name          string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PluginHostServiceCharacterRef) Reset() {
+	*x = PluginHostServiceCharacterRef{}
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PluginHostServiceCharacterRef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PluginHostServiceCharacterRef) ProtoMessage() {}
+
+func (x *PluginHostServiceCharacterRef) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[60]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PluginHostServiceCharacterRef.ProtoReflect.Descriptor instead.
+func (*PluginHostServiceCharacterRef) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{60}
+}
+
+func (x *PluginHostServiceCharacterRef) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *PluginHostServiceCharacterRef) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+// PluginHostServiceQueryLocationCharactersResponse returns the location's
+// occupant roster; empty when the location holds no characters.
+type PluginHostServiceQueryLocationCharactersResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// characters is the {id, name} roster at the location.
+	Characters    []*PluginHostServiceCharacterRef `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PluginHostServiceQueryLocationCharactersResponse) Reset() {
+	*x = PluginHostServiceQueryLocationCharactersResponse{}
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[61]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PluginHostServiceQueryLocationCharactersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PluginHostServiceQueryLocationCharactersResponse) ProtoMessage() {}
+
+func (x *PluginHostServiceQueryLocationCharactersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[61]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PluginHostServiceQueryLocationCharactersResponse.ProtoReflect.Descriptor instead.
+func (*PluginHostServiceQueryLocationCharactersResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{61}
+}
+
+func (x *PluginHostServiceQueryLocationCharactersResponse) GetCharacters() []*PluginHostServiceCharacterRef {
+	if x != nil {
+		return x.Characters
+	}
+	return nil
+}
+
+// PluginHostServiceQueryObjectRequest names the object to snapshot; it carries
+// no subject.
+type PluginHostServiceQueryObjectRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// object_id is the ULID of the object to read.
+	ObjectId      string `protobuf:"bytes,1,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PluginHostServiceQueryObjectRequest) Reset() {
+	*x = PluginHostServiceQueryObjectRequest{}
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[62]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PluginHostServiceQueryObjectRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PluginHostServiceQueryObjectRequest) ProtoMessage() {}
+
+func (x *PluginHostServiceQueryObjectRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[62]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PluginHostServiceQueryObjectRequest.ProtoReflect.Descriptor instead.
+func (*PluginHostServiceQueryObjectRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{62}
+}
+
+func (x *PluginHostServiceQueryObjectRequest) GetObjectId() string {
+	if x != nil {
+		return x.ObjectId
+	}
+	return ""
+}
+
+// PluginHostServiceQueryObjectResponse returns the requested object's identity
+// fields. location_id is empty when the object is not placed.
+type PluginHostServiceQueryObjectResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// id is the object ULID.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// name is the object's display name.
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// description is the object's prose description.
+	Description string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	// location_id is the object's current location ULID, empty if none.
+	LocationId    string `protobuf:"bytes,4,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PluginHostServiceQueryObjectResponse) Reset() {
+	*x = PluginHostServiceQueryObjectResponse{}
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[63]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PluginHostServiceQueryObjectResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PluginHostServiceQueryObjectResponse) ProtoMessage() {}
+
+func (x *PluginHostServiceQueryObjectResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[63]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PluginHostServiceQueryObjectResponse.ProtoReflect.Descriptor instead.
+func (*PluginHostServiceQueryObjectResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{63}
+}
+
+func (x *PluginHostServiceQueryObjectResponse) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *PluginHostServiceQueryObjectResponse) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *PluginHostServiceQueryObjectResponse) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *PluginHostServiceQueryObjectResponse) GetLocationId() string {
+	if x != nil {
+		return x.LocationId
+	}
+	return ""
+}
+
 var File_holomush_plugin_v1_plugin_proto protoreflect.FileDescriptor
 
 const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
@@ -3762,7 +4276,41 @@ const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x04help\x18\x02 \x01(\tR\x04help\x12\x14\n" +
 	"\x05usage\x18\x03 \x01(\tR\x05usage\x12\x1b\n" +
 	"\thelp_text\x18\x04 \x01(\tR\bhelpText\x12\x16\n" +
-	"\x06source\x18\x05 \x01(\tR\x06source*\x96\x01\n" +
+	"\x06source\x18\x05 \x01(\tR\x06source\"H\n" +
+	"%PluginHostServiceQueryLocationRequest\x12\x1f\n" +
+	"\vlocation_id\x18\x01 \x01(\tR\n" +
+	"locationId\"n\n" +
+	"&PluginHostServiceQueryLocationResponse\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\"K\n" +
+	"&PluginHostServiceQueryCharacterRequest\x12!\n" +
+	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\"\xad\x01\n" +
+	"'PluginHostServiceQueryCharacterResponse\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
+	"\tplayer_id\x18\x02 \x01(\tR\bplayerId\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x1f\n" +
+	"\vlocation_id\x18\x05 \x01(\tR\n" +
+	"locationId\"R\n" +
+	"/PluginHostServiceQueryLocationCharactersRequest\x12\x1f\n" +
+	"\vlocation_id\x18\x01 \x01(\tR\n" +
+	"locationId\"C\n" +
+	"\x1dPluginHostServiceCharacterRef\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"\x85\x01\n" +
+	"0PluginHostServiceQueryLocationCharactersResponse\x12Q\n" +
+	"\n" +
+	"characters\x18\x01 \x03(\v21.holomush.plugin.v1.PluginHostServiceCharacterRefR\n" +
+	"characters\"B\n" +
+	"#PluginHostServiceQueryObjectRequest\x12\x1b\n" +
+	"\tobject_id\x18\x01 \x01(\tR\bobjectId\"\x8d\x01\n" +
+	"$PluginHostServiceQueryObjectResponse\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1f\n" +
+	"\vlocation_id\x18\x04 \x01(\tR\n" +
+	"locationId*\x96\x01\n" +
 	"\rCommandStatus\x12\x1e\n" +
 	"\x1aCOMMAND_STATUS_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11COMMAND_STATUS_OK\x10\x01\x12\x18\n" +
@@ -3788,7 +4336,7 @@ const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x04Init\x12\x1f.holomush.plugin.v1.InitRequest\x1a .holomush.plugin.v1.InitResponse\x12^\n" +
 	"\vHandleEvent\x12&.holomush.plugin.v1.HandleEventRequest\x1a'.holomush.plugin.v1.HandleEventResponse\x12d\n" +
 	"\rHandleCommand\x12(.holomush.plugin.v1.HandleCommandRequest\x1a).holomush.plugin.v1.HandleCommandResponse\x12v\n" +
-	"\x13QuerySessionStreams\x12..holomush.plugin.v1.QuerySessionStreamsRequest\x1a/.holomush.plugin.v1.QuerySessionStreamsResponse2\xfe\x14\n" +
+	"\x13QuerySessionStreams\x12..holomush.plugin.v1.QuerySessionStreamsRequest\x1a/.holomush.plugin.v1.QuerySessionStreamsResponse2\xbd\x19\n" +
 	"\x11PluginHostService\x12z\n" +
 	"\tEmitEvent\x125.holomush.plugin.v1.PluginHostServiceEmitEventRequest\x1a6.holomush.plugin.v1.PluginHostServiceEmitEventResponse\x12h\n" +
 	"\x03Log\x12/.holomush.plugin.v1.PluginHostServiceLogRequest\x1a0.holomush.plugin.v1.PluginHostServiceLogResponse\x12n\n" +
@@ -3808,7 +4356,11 @@ const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x12SetConnectionFocus\x12>.holomush.plugin.v1.PluginHostServiceSetConnectionFocusRequest\x1a?.holomush.plugin.v1.PluginHostServiceSetConnectionFocusResponse\x12\x8c\x01\n" +
 	"\x0fAutoFocusOnJoin\x12;.holomush.plugin.v1.PluginHostServiceAutoFocusOnJoinRequest\x1a<.holomush.plugin.v1.PluginHostServiceAutoFocusOnJoinResponse\x12\x8f\x01\n" +
 	"\x10IsAnyConnFocused\x12<.holomush.plugin.v1.PluginHostServiceIsAnyConnFocusedRequest\x1a=.holomush.plugin.v1.PluginHostServiceIsAnyConnFocusedResponse\x12w\n" +
-	"\bEvaluate\x124.holomush.plugin.v1.PluginHostServiceEvaluateRequest\x1a5.holomush.plugin.v1.PluginHostServiceEvaluateResponse\x12\x83\x01\n" +
+	"\bEvaluate\x124.holomush.plugin.v1.PluginHostServiceEvaluateRequest\x1a5.holomush.plugin.v1.PluginHostServiceEvaluateResponse\x12\x86\x01\n" +
+	"\rQueryLocation\x129.holomush.plugin.v1.PluginHostServiceQueryLocationRequest\x1a:.holomush.plugin.v1.PluginHostServiceQueryLocationResponse\x12\x89\x01\n" +
+	"\x0eQueryCharacter\x12:.holomush.plugin.v1.PluginHostServiceQueryCharacterRequest\x1a;.holomush.plugin.v1.PluginHostServiceQueryCharacterResponse\x12\xa4\x01\n" +
+	"\x17QueryLocationCharacters\x12C.holomush.plugin.v1.PluginHostServiceQueryLocationCharactersRequest\x1aD.holomush.plugin.v1.PluginHostServiceQueryLocationCharactersResponse\x12\x80\x01\n" +
+	"\vQueryObject\x127.holomush.plugin.v1.PluginHostServiceQueryObjectRequest\x1a8.holomush.plugin.v1.PluginHostServiceQueryObjectResponse\x12\x83\x01\n" +
 	"\fListCommands\x128.holomush.plugin.v1.PluginHostServiceListCommandsRequest\x1a9.holomush.plugin.v1.PluginHostServiceListCommandsResponse\x12\x89\x01\n" +
 	"\x0eGetCommandHelp\x12:.holomush.plugin.v1.PluginHostServiceGetCommandHelpRequest\x1a;.holomush.plugin.v1.PluginHostServiceGetCommandHelpResponseB\xd3\x01\n" +
 	"\x16com.holomush.plugin.v1B\vPluginProtoP\x01ZBgithub.com/holomush/holomush/pkg/proto/holomush/plugin/v1;pluginv1\xa2\x02\x03HPX\xaa\x02\x12Holomush.Plugin.V1\xca\x02\x12Holomush\\Plugin\\V1\xe2\x02\x1eHolomush\\Plugin\\V1\\GPBMetadata\xea\x02\x14Holomush::Plugin::V1b\x06proto3"
@@ -3826,77 +4378,86 @@ func file_holomush_plugin_v1_plugin_proto_rawDescGZIP() []byte {
 }
 
 var file_holomush_plugin_v1_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_holomush_plugin_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 58)
+var file_holomush_plugin_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 67)
 var file_holomush_plugin_v1_plugin_proto_goTypes = []any{
-	(CommandStatus)(0),                                   // 0: holomush.plugin.v1.CommandStatus
-	(AuditEffect)(0),                                     // 1: holomush.plugin.v1.AuditEffect
-	(FocusKind)(0),                                       // 2: holomush.plugin.v1.FocusKind
-	(StreamReplayMode)(0),                                // 3: holomush.plugin.v1.StreamReplayMode
-	(FocusFailureReason)(0),                              // 4: holomush.plugin.v1.FocusFailureReason
-	(*ServiceConfig)(nil),                                // 5: holomush.plugin.v1.ServiceConfig
-	(*InitRequest)(nil),                                  // 6: holomush.plugin.v1.InitRequest
-	(*InitResponse)(nil),                                 // 7: holomush.plugin.v1.InitResponse
-	(*Event)(nil),                                        // 8: holomush.plugin.v1.Event
-	(*EmitEvent)(nil),                                    // 9: holomush.plugin.v1.EmitEvent
-	(*HandleEventRequest)(nil),                           // 10: holomush.plugin.v1.HandleEventRequest
-	(*HandleEventResponse)(nil),                          // 11: holomush.plugin.v1.HandleEventResponse
-	(*CommandRequest)(nil),                               // 12: holomush.plugin.v1.CommandRequest
-	(*CommandResponse)(nil),                              // 13: holomush.plugin.v1.CommandResponse
-	(*AuditDecisionHint)(nil),                            // 14: holomush.plugin.v1.AuditDecisionHint
-	(*HandleCommandRequest)(nil),                         // 15: holomush.plugin.v1.HandleCommandRequest
-	(*HandleCommandResponse)(nil),                        // 16: holomush.plugin.v1.HandleCommandResponse
-	(*PluginHostServiceEmitEventRequest)(nil),            // 17: holomush.plugin.v1.PluginHostServiceEmitEventRequest
-	(*PluginHostServiceEmitEventResponse)(nil),           // 18: holomush.plugin.v1.PluginHostServiceEmitEventResponse
-	(*PluginHostServiceLogRequest)(nil),                  // 19: holomush.plugin.v1.PluginHostServiceLogRequest
-	(*PluginHostServiceLogResponse)(nil),                 // 20: holomush.plugin.v1.PluginHostServiceLogResponse
-	(*PluginHostServiceKVGetRequest)(nil),                // 21: holomush.plugin.v1.PluginHostServiceKVGetRequest
-	(*PluginHostServiceKVGetResponse)(nil),               // 22: holomush.plugin.v1.PluginHostServiceKVGetResponse
-	(*PluginHostServiceKVSetRequest)(nil),                // 23: holomush.plugin.v1.PluginHostServiceKVSetRequest
-	(*PluginHostServiceKVSetResponse)(nil),               // 24: holomush.plugin.v1.PluginHostServiceKVSetResponse
-	(*PluginHostServiceKVDeleteRequest)(nil),             // 25: holomush.plugin.v1.PluginHostServiceKVDeleteRequest
-	(*PluginHostServiceKVDeleteResponse)(nil),            // 26: holomush.plugin.v1.PluginHostServiceKVDeleteResponse
-	(*PluginHostServiceAddSessionStreamRequest)(nil),     // 27: holomush.plugin.v1.PluginHostServiceAddSessionStreamRequest
-	(*PluginHostServiceAddSessionStreamResponse)(nil),    // 28: holomush.plugin.v1.PluginHostServiceAddSessionStreamResponse
-	(*PluginHostServiceRemoveSessionStreamRequest)(nil),  // 29: holomush.plugin.v1.PluginHostServiceRemoveSessionStreamRequest
-	(*PluginHostServiceRemoveSessionStreamResponse)(nil), // 30: holomush.plugin.v1.PluginHostServiceRemoveSessionStreamResponse
-	(*QuerySessionStreamsRequest)(nil),                   // 31: holomush.plugin.v1.QuerySessionStreamsRequest
-	(*QuerySessionStreamsResponse)(nil),                  // 32: holomush.plugin.v1.QuerySessionStreamsResponse
-	(*FocusKey)(nil),                                     // 33: holomush.plugin.v1.FocusKey
-	(*PluginHostServiceJoinFocusRequest)(nil),            // 34: holomush.plugin.v1.PluginHostServiceJoinFocusRequest
-	(*PluginHostServiceJoinFocusResponse)(nil),           // 35: holomush.plugin.v1.PluginHostServiceJoinFocusResponse
-	(*PluginHostServiceLeaveFocusRequest)(nil),           // 36: holomush.plugin.v1.PluginHostServiceLeaveFocusRequest
-	(*PluginHostServiceLeaveFocusResponse)(nil),          // 37: holomush.plugin.v1.PluginHostServiceLeaveFocusResponse
-	(*PluginHostServiceLeaveFocusByTargetRequest)(nil),   // 38: holomush.plugin.v1.PluginHostServiceLeaveFocusByTargetRequest
-	(*PluginHostServiceLeaveFocusByTargetResponse)(nil),  // 39: holomush.plugin.v1.PluginHostServiceLeaveFocusByTargetResponse
-	(*PluginHostServicePresentFocusRequest)(nil),         // 40: holomush.plugin.v1.PluginHostServicePresentFocusRequest
-	(*PluginHostServicePresentFocusResponse)(nil),        // 41: holomush.plugin.v1.PluginHostServicePresentFocusResponse
-	(*PluginHostServiceQueryStreamHistoryRequest)(nil),   // 42: holomush.plugin.v1.PluginHostServiceQueryStreamHistoryRequest
-	(*PluginHostServiceQueryStreamHistoryResponse)(nil),  // 43: holomush.plugin.v1.PluginHostServiceQueryStreamHistoryResponse
-	(*PluginHostServiceRequestEmitTokenRequest)(nil),     // 44: holomush.plugin.v1.PluginHostServiceRequestEmitTokenRequest
-	(*PluginHostServiceRequestEmitTokenResponse)(nil),    // 45: holomush.plugin.v1.PluginHostServiceRequestEmitTokenResponse
-	(*PluginHostServiceSetConnectionFocusRequest)(nil),   // 46: holomush.plugin.v1.PluginHostServiceSetConnectionFocusRequest
-	(*PluginHostServiceSetConnectionFocusResponse)(nil),  // 47: holomush.plugin.v1.PluginHostServiceSetConnectionFocusResponse
-	(*PluginHostServiceAutoFocusOnJoinRequest)(nil),      // 48: holomush.plugin.v1.PluginHostServiceAutoFocusOnJoinRequest
-	(*PluginHostServiceAutoFocusOnJoinResponse)(nil),     // 49: holomush.plugin.v1.PluginHostServiceAutoFocusOnJoinResponse
-	(*FocusFailure)(nil),                                 // 50: holomush.plugin.v1.FocusFailure
-	(*PluginHostServiceIsAnyConnFocusedRequest)(nil),     // 51: holomush.plugin.v1.PluginHostServiceIsAnyConnFocusedRequest
-	(*PluginHostServiceIsAnyConnFocusedResponse)(nil),    // 52: holomush.plugin.v1.PluginHostServiceIsAnyConnFocusedResponse
-	(*PluginHostServiceEvaluateRequest)(nil),             // 53: holomush.plugin.v1.PluginHostServiceEvaluateRequest
-	(*PluginHostServiceEvaluateResponse)(nil),            // 54: holomush.plugin.v1.PluginHostServiceEvaluateResponse
-	(*PluginHostServiceCommandInfo)(nil),                 // 55: holomush.plugin.v1.PluginHostServiceCommandInfo
-	(*PluginHostServiceListCommandsRequest)(nil),         // 56: holomush.plugin.v1.PluginHostServiceListCommandsRequest
-	(*PluginHostServiceListCommandsResponse)(nil),        // 57: holomush.plugin.v1.PluginHostServiceListCommandsResponse
-	(*PluginHostServiceGetCommandHelpRequest)(nil),       // 58: holomush.plugin.v1.PluginHostServiceGetCommandHelpRequest
-	(*PluginHostServiceGetCommandHelpResponse)(nil),      // 59: holomush.plugin.v1.PluginHostServiceGetCommandHelpResponse
-	nil,                                 // 60: holomush.plugin.v1.ServiceConfig.RequiredServicesEntry
-	nil,                                 // 61: holomush.plugin.v1.ServiceConfig.PluginConfigEntry
-	nil,                                 // 62: holomush.plugin.v1.AuditDecisionHint.AttributesEntry
-	(*DecryptOwnAuditRowsRequest)(nil),  // 63: holomush.plugin.v1.DecryptOwnAuditRowsRequest
-	(*DecryptOwnAuditRowsResponse)(nil), // 64: holomush.plugin.v1.DecryptOwnAuditRowsResponse
+	(CommandStatus)(0),                                       // 0: holomush.plugin.v1.CommandStatus
+	(AuditEffect)(0),                                         // 1: holomush.plugin.v1.AuditEffect
+	(FocusKind)(0),                                           // 2: holomush.plugin.v1.FocusKind
+	(StreamReplayMode)(0),                                    // 3: holomush.plugin.v1.StreamReplayMode
+	(FocusFailureReason)(0),                                  // 4: holomush.plugin.v1.FocusFailureReason
+	(*ServiceConfig)(nil),                                    // 5: holomush.plugin.v1.ServiceConfig
+	(*InitRequest)(nil),                                      // 6: holomush.plugin.v1.InitRequest
+	(*InitResponse)(nil),                                     // 7: holomush.plugin.v1.InitResponse
+	(*Event)(nil),                                            // 8: holomush.plugin.v1.Event
+	(*EmitEvent)(nil),                                        // 9: holomush.plugin.v1.EmitEvent
+	(*HandleEventRequest)(nil),                               // 10: holomush.plugin.v1.HandleEventRequest
+	(*HandleEventResponse)(nil),                              // 11: holomush.plugin.v1.HandleEventResponse
+	(*CommandRequest)(nil),                                   // 12: holomush.plugin.v1.CommandRequest
+	(*CommandResponse)(nil),                                  // 13: holomush.plugin.v1.CommandResponse
+	(*AuditDecisionHint)(nil),                                // 14: holomush.plugin.v1.AuditDecisionHint
+	(*HandleCommandRequest)(nil),                             // 15: holomush.plugin.v1.HandleCommandRequest
+	(*HandleCommandResponse)(nil),                            // 16: holomush.plugin.v1.HandleCommandResponse
+	(*PluginHostServiceEmitEventRequest)(nil),                // 17: holomush.plugin.v1.PluginHostServiceEmitEventRequest
+	(*PluginHostServiceEmitEventResponse)(nil),               // 18: holomush.plugin.v1.PluginHostServiceEmitEventResponse
+	(*PluginHostServiceLogRequest)(nil),                      // 19: holomush.plugin.v1.PluginHostServiceLogRequest
+	(*PluginHostServiceLogResponse)(nil),                     // 20: holomush.plugin.v1.PluginHostServiceLogResponse
+	(*PluginHostServiceKVGetRequest)(nil),                    // 21: holomush.plugin.v1.PluginHostServiceKVGetRequest
+	(*PluginHostServiceKVGetResponse)(nil),                   // 22: holomush.plugin.v1.PluginHostServiceKVGetResponse
+	(*PluginHostServiceKVSetRequest)(nil),                    // 23: holomush.plugin.v1.PluginHostServiceKVSetRequest
+	(*PluginHostServiceKVSetResponse)(nil),                   // 24: holomush.plugin.v1.PluginHostServiceKVSetResponse
+	(*PluginHostServiceKVDeleteRequest)(nil),                 // 25: holomush.plugin.v1.PluginHostServiceKVDeleteRequest
+	(*PluginHostServiceKVDeleteResponse)(nil),                // 26: holomush.plugin.v1.PluginHostServiceKVDeleteResponse
+	(*PluginHostServiceAddSessionStreamRequest)(nil),         // 27: holomush.plugin.v1.PluginHostServiceAddSessionStreamRequest
+	(*PluginHostServiceAddSessionStreamResponse)(nil),        // 28: holomush.plugin.v1.PluginHostServiceAddSessionStreamResponse
+	(*PluginHostServiceRemoveSessionStreamRequest)(nil),      // 29: holomush.plugin.v1.PluginHostServiceRemoveSessionStreamRequest
+	(*PluginHostServiceRemoveSessionStreamResponse)(nil),     // 30: holomush.plugin.v1.PluginHostServiceRemoveSessionStreamResponse
+	(*QuerySessionStreamsRequest)(nil),                       // 31: holomush.plugin.v1.QuerySessionStreamsRequest
+	(*QuerySessionStreamsResponse)(nil),                      // 32: holomush.plugin.v1.QuerySessionStreamsResponse
+	(*FocusKey)(nil),                                         // 33: holomush.plugin.v1.FocusKey
+	(*PluginHostServiceJoinFocusRequest)(nil),                // 34: holomush.plugin.v1.PluginHostServiceJoinFocusRequest
+	(*PluginHostServiceJoinFocusResponse)(nil),               // 35: holomush.plugin.v1.PluginHostServiceJoinFocusResponse
+	(*PluginHostServiceLeaveFocusRequest)(nil),               // 36: holomush.plugin.v1.PluginHostServiceLeaveFocusRequest
+	(*PluginHostServiceLeaveFocusResponse)(nil),              // 37: holomush.plugin.v1.PluginHostServiceLeaveFocusResponse
+	(*PluginHostServiceLeaveFocusByTargetRequest)(nil),       // 38: holomush.plugin.v1.PluginHostServiceLeaveFocusByTargetRequest
+	(*PluginHostServiceLeaveFocusByTargetResponse)(nil),      // 39: holomush.plugin.v1.PluginHostServiceLeaveFocusByTargetResponse
+	(*PluginHostServicePresentFocusRequest)(nil),             // 40: holomush.plugin.v1.PluginHostServicePresentFocusRequest
+	(*PluginHostServicePresentFocusResponse)(nil),            // 41: holomush.plugin.v1.PluginHostServicePresentFocusResponse
+	(*PluginHostServiceQueryStreamHistoryRequest)(nil),       // 42: holomush.plugin.v1.PluginHostServiceQueryStreamHistoryRequest
+	(*PluginHostServiceQueryStreamHistoryResponse)(nil),      // 43: holomush.plugin.v1.PluginHostServiceQueryStreamHistoryResponse
+	(*PluginHostServiceRequestEmitTokenRequest)(nil),         // 44: holomush.plugin.v1.PluginHostServiceRequestEmitTokenRequest
+	(*PluginHostServiceRequestEmitTokenResponse)(nil),        // 45: holomush.plugin.v1.PluginHostServiceRequestEmitTokenResponse
+	(*PluginHostServiceSetConnectionFocusRequest)(nil),       // 46: holomush.plugin.v1.PluginHostServiceSetConnectionFocusRequest
+	(*PluginHostServiceSetConnectionFocusResponse)(nil),      // 47: holomush.plugin.v1.PluginHostServiceSetConnectionFocusResponse
+	(*PluginHostServiceAutoFocusOnJoinRequest)(nil),          // 48: holomush.plugin.v1.PluginHostServiceAutoFocusOnJoinRequest
+	(*PluginHostServiceAutoFocusOnJoinResponse)(nil),         // 49: holomush.plugin.v1.PluginHostServiceAutoFocusOnJoinResponse
+	(*FocusFailure)(nil),                                     // 50: holomush.plugin.v1.FocusFailure
+	(*PluginHostServiceIsAnyConnFocusedRequest)(nil),         // 51: holomush.plugin.v1.PluginHostServiceIsAnyConnFocusedRequest
+	(*PluginHostServiceIsAnyConnFocusedResponse)(nil),        // 52: holomush.plugin.v1.PluginHostServiceIsAnyConnFocusedResponse
+	(*PluginHostServiceEvaluateRequest)(nil),                 // 53: holomush.plugin.v1.PluginHostServiceEvaluateRequest
+	(*PluginHostServiceEvaluateResponse)(nil),                // 54: holomush.plugin.v1.PluginHostServiceEvaluateResponse
+	(*PluginHostServiceCommandInfo)(nil),                     // 55: holomush.plugin.v1.PluginHostServiceCommandInfo
+	(*PluginHostServiceListCommandsRequest)(nil),             // 56: holomush.plugin.v1.PluginHostServiceListCommandsRequest
+	(*PluginHostServiceListCommandsResponse)(nil),            // 57: holomush.plugin.v1.PluginHostServiceListCommandsResponse
+	(*PluginHostServiceGetCommandHelpRequest)(nil),           // 58: holomush.plugin.v1.PluginHostServiceGetCommandHelpRequest
+	(*PluginHostServiceGetCommandHelpResponse)(nil),          // 59: holomush.plugin.v1.PluginHostServiceGetCommandHelpResponse
+	(*PluginHostServiceQueryLocationRequest)(nil),            // 60: holomush.plugin.v1.PluginHostServiceQueryLocationRequest
+	(*PluginHostServiceQueryLocationResponse)(nil),           // 61: holomush.plugin.v1.PluginHostServiceQueryLocationResponse
+	(*PluginHostServiceQueryCharacterRequest)(nil),           // 62: holomush.plugin.v1.PluginHostServiceQueryCharacterRequest
+	(*PluginHostServiceQueryCharacterResponse)(nil),          // 63: holomush.plugin.v1.PluginHostServiceQueryCharacterResponse
+	(*PluginHostServiceQueryLocationCharactersRequest)(nil),  // 64: holomush.plugin.v1.PluginHostServiceQueryLocationCharactersRequest
+	(*PluginHostServiceCharacterRef)(nil),                    // 65: holomush.plugin.v1.PluginHostServiceCharacterRef
+	(*PluginHostServiceQueryLocationCharactersResponse)(nil), // 66: holomush.plugin.v1.PluginHostServiceQueryLocationCharactersResponse
+	(*PluginHostServiceQueryObjectRequest)(nil),              // 67: holomush.plugin.v1.PluginHostServiceQueryObjectRequest
+	(*PluginHostServiceQueryObjectResponse)(nil),             // 68: holomush.plugin.v1.PluginHostServiceQueryObjectResponse
+	nil,                                 // 69: holomush.plugin.v1.ServiceConfig.RequiredServicesEntry
+	nil,                                 // 70: holomush.plugin.v1.ServiceConfig.PluginConfigEntry
+	nil,                                 // 71: holomush.plugin.v1.AuditDecisionHint.AttributesEntry
+	(*DecryptOwnAuditRowsRequest)(nil),  // 72: holomush.plugin.v1.DecryptOwnAuditRowsRequest
+	(*DecryptOwnAuditRowsResponse)(nil), // 73: holomush.plugin.v1.DecryptOwnAuditRowsResponse
 }
 var file_holomush_plugin_v1_plugin_proto_depIdxs = []int32{
-	60, // 0: holomush.plugin.v1.ServiceConfig.required_services:type_name -> holomush.plugin.v1.ServiceConfig.RequiredServicesEntry
-	61, // 1: holomush.plugin.v1.ServiceConfig.plugin_config:type_name -> holomush.plugin.v1.ServiceConfig.PluginConfigEntry
+	69, // 0: holomush.plugin.v1.ServiceConfig.required_services:type_name -> holomush.plugin.v1.ServiceConfig.RequiredServicesEntry
+	70, // 1: holomush.plugin.v1.ServiceConfig.plugin_config:type_name -> holomush.plugin.v1.ServiceConfig.PluginConfigEntry
 	5,  // 2: holomush.plugin.v1.InitRequest.config:type_name -> holomush.plugin.v1.ServiceConfig
 	8,  // 3: holomush.plugin.v1.HandleEventRequest.event:type_name -> holomush.plugin.v1.Event
 	9,  // 4: holomush.plugin.v1.HandleEventResponse.emit_events:type_name -> holomush.plugin.v1.EmitEvent
@@ -3904,7 +4465,7 @@ var file_holomush_plugin_v1_plugin_proto_depIdxs = []int32{
 	9,  // 6: holomush.plugin.v1.CommandResponse.events:type_name -> holomush.plugin.v1.EmitEvent
 	14, // 7: holomush.plugin.v1.CommandResponse.audit_hints:type_name -> holomush.plugin.v1.AuditDecisionHint
 	1,  // 8: holomush.plugin.v1.AuditDecisionHint.effect:type_name -> holomush.plugin.v1.AuditEffect
-	62, // 9: holomush.plugin.v1.AuditDecisionHint.attributes:type_name -> holomush.plugin.v1.AuditDecisionHint.AttributesEntry
+	71, // 9: holomush.plugin.v1.AuditDecisionHint.attributes:type_name -> holomush.plugin.v1.AuditDecisionHint.AttributesEntry
 	12, // 10: holomush.plugin.v1.HandleCommandRequest.command:type_name -> holomush.plugin.v1.CommandRequest
 	13, // 11: holomush.plugin.v1.HandleCommandResponse.response:type_name -> holomush.plugin.v1.CommandResponse
 	3,  // 12: holomush.plugin.v1.PluginHostServiceAddSessionStreamRequest.replay_mode:type_name -> holomush.plugin.v1.StreamReplayMode
@@ -3919,59 +4480,68 @@ var file_holomush_plugin_v1_plugin_proto_depIdxs = []int32{
 	50, // 21: holomush.plugin.v1.PluginHostServiceAutoFocusOnJoinResponse.failed_connection_ids:type_name -> holomush.plugin.v1.FocusFailure
 	4,  // 22: holomush.plugin.v1.FocusFailure.reason:type_name -> holomush.plugin.v1.FocusFailureReason
 	55, // 23: holomush.plugin.v1.PluginHostServiceListCommandsResponse.commands:type_name -> holomush.plugin.v1.PluginHostServiceCommandInfo
-	6,  // 24: holomush.plugin.v1.PluginService.Init:input_type -> holomush.plugin.v1.InitRequest
-	10, // 25: holomush.plugin.v1.PluginService.HandleEvent:input_type -> holomush.plugin.v1.HandleEventRequest
-	15, // 26: holomush.plugin.v1.PluginService.HandleCommand:input_type -> holomush.plugin.v1.HandleCommandRequest
-	31, // 27: holomush.plugin.v1.PluginService.QuerySessionStreams:input_type -> holomush.plugin.v1.QuerySessionStreamsRequest
-	17, // 28: holomush.plugin.v1.PluginHostService.EmitEvent:input_type -> holomush.plugin.v1.PluginHostServiceEmitEventRequest
-	19, // 29: holomush.plugin.v1.PluginHostService.Log:input_type -> holomush.plugin.v1.PluginHostServiceLogRequest
-	21, // 30: holomush.plugin.v1.PluginHostService.KVGet:input_type -> holomush.plugin.v1.PluginHostServiceKVGetRequest
-	23, // 31: holomush.plugin.v1.PluginHostService.KVSet:input_type -> holomush.plugin.v1.PluginHostServiceKVSetRequest
-	25, // 32: holomush.plugin.v1.PluginHostService.KVDelete:input_type -> holomush.plugin.v1.PluginHostServiceKVDeleteRequest
-	27, // 33: holomush.plugin.v1.PluginHostService.AddSessionStream:input_type -> holomush.plugin.v1.PluginHostServiceAddSessionStreamRequest
-	29, // 34: holomush.plugin.v1.PluginHostService.RemoveSessionStream:input_type -> holomush.plugin.v1.PluginHostServiceRemoveSessionStreamRequest
-	34, // 35: holomush.plugin.v1.PluginHostService.JoinFocus:input_type -> holomush.plugin.v1.PluginHostServiceJoinFocusRequest
-	36, // 36: holomush.plugin.v1.PluginHostService.LeaveFocus:input_type -> holomush.plugin.v1.PluginHostServiceLeaveFocusRequest
-	38, // 37: holomush.plugin.v1.PluginHostService.LeaveFocusByTarget:input_type -> holomush.plugin.v1.PluginHostServiceLeaveFocusByTargetRequest
-	40, // 38: holomush.plugin.v1.PluginHostService.PresentFocus:input_type -> holomush.plugin.v1.PluginHostServicePresentFocusRequest
-	42, // 39: holomush.plugin.v1.PluginHostService.QueryStreamHistory:input_type -> holomush.plugin.v1.PluginHostServiceQueryStreamHistoryRequest
-	63, // 40: holomush.plugin.v1.PluginHostService.DecryptOwnAuditRows:input_type -> holomush.plugin.v1.DecryptOwnAuditRowsRequest
-	44, // 41: holomush.plugin.v1.PluginHostService.RequestEmitToken:input_type -> holomush.plugin.v1.PluginHostServiceRequestEmitTokenRequest
-	46, // 42: holomush.plugin.v1.PluginHostService.SetConnectionFocus:input_type -> holomush.plugin.v1.PluginHostServiceSetConnectionFocusRequest
-	48, // 43: holomush.plugin.v1.PluginHostService.AutoFocusOnJoin:input_type -> holomush.plugin.v1.PluginHostServiceAutoFocusOnJoinRequest
-	51, // 44: holomush.plugin.v1.PluginHostService.IsAnyConnFocused:input_type -> holomush.plugin.v1.PluginHostServiceIsAnyConnFocusedRequest
-	53, // 45: holomush.plugin.v1.PluginHostService.Evaluate:input_type -> holomush.plugin.v1.PluginHostServiceEvaluateRequest
-	56, // 46: holomush.plugin.v1.PluginHostService.ListCommands:input_type -> holomush.plugin.v1.PluginHostServiceListCommandsRequest
-	58, // 47: holomush.plugin.v1.PluginHostService.GetCommandHelp:input_type -> holomush.plugin.v1.PluginHostServiceGetCommandHelpRequest
-	7,  // 48: holomush.plugin.v1.PluginService.Init:output_type -> holomush.plugin.v1.InitResponse
-	11, // 49: holomush.plugin.v1.PluginService.HandleEvent:output_type -> holomush.plugin.v1.HandleEventResponse
-	16, // 50: holomush.plugin.v1.PluginService.HandleCommand:output_type -> holomush.plugin.v1.HandleCommandResponse
-	32, // 51: holomush.plugin.v1.PluginService.QuerySessionStreams:output_type -> holomush.plugin.v1.QuerySessionStreamsResponse
-	18, // 52: holomush.plugin.v1.PluginHostService.EmitEvent:output_type -> holomush.plugin.v1.PluginHostServiceEmitEventResponse
-	20, // 53: holomush.plugin.v1.PluginHostService.Log:output_type -> holomush.plugin.v1.PluginHostServiceLogResponse
-	22, // 54: holomush.plugin.v1.PluginHostService.KVGet:output_type -> holomush.plugin.v1.PluginHostServiceKVGetResponse
-	24, // 55: holomush.plugin.v1.PluginHostService.KVSet:output_type -> holomush.plugin.v1.PluginHostServiceKVSetResponse
-	26, // 56: holomush.plugin.v1.PluginHostService.KVDelete:output_type -> holomush.plugin.v1.PluginHostServiceKVDeleteResponse
-	28, // 57: holomush.plugin.v1.PluginHostService.AddSessionStream:output_type -> holomush.plugin.v1.PluginHostServiceAddSessionStreamResponse
-	30, // 58: holomush.plugin.v1.PluginHostService.RemoveSessionStream:output_type -> holomush.plugin.v1.PluginHostServiceRemoveSessionStreamResponse
-	35, // 59: holomush.plugin.v1.PluginHostService.JoinFocus:output_type -> holomush.plugin.v1.PluginHostServiceJoinFocusResponse
-	37, // 60: holomush.plugin.v1.PluginHostService.LeaveFocus:output_type -> holomush.plugin.v1.PluginHostServiceLeaveFocusResponse
-	39, // 61: holomush.plugin.v1.PluginHostService.LeaveFocusByTarget:output_type -> holomush.plugin.v1.PluginHostServiceLeaveFocusByTargetResponse
-	41, // 62: holomush.plugin.v1.PluginHostService.PresentFocus:output_type -> holomush.plugin.v1.PluginHostServicePresentFocusResponse
-	43, // 63: holomush.plugin.v1.PluginHostService.QueryStreamHistory:output_type -> holomush.plugin.v1.PluginHostServiceQueryStreamHistoryResponse
-	64, // 64: holomush.plugin.v1.PluginHostService.DecryptOwnAuditRows:output_type -> holomush.plugin.v1.DecryptOwnAuditRowsResponse
-	45, // 65: holomush.plugin.v1.PluginHostService.RequestEmitToken:output_type -> holomush.plugin.v1.PluginHostServiceRequestEmitTokenResponse
-	47, // 66: holomush.plugin.v1.PluginHostService.SetConnectionFocus:output_type -> holomush.plugin.v1.PluginHostServiceSetConnectionFocusResponse
-	49, // 67: holomush.plugin.v1.PluginHostService.AutoFocusOnJoin:output_type -> holomush.plugin.v1.PluginHostServiceAutoFocusOnJoinResponse
-	52, // 68: holomush.plugin.v1.PluginHostService.IsAnyConnFocused:output_type -> holomush.plugin.v1.PluginHostServiceIsAnyConnFocusedResponse
-	54, // 69: holomush.plugin.v1.PluginHostService.Evaluate:output_type -> holomush.plugin.v1.PluginHostServiceEvaluateResponse
-	57, // 70: holomush.plugin.v1.PluginHostService.ListCommands:output_type -> holomush.plugin.v1.PluginHostServiceListCommandsResponse
-	59, // 71: holomush.plugin.v1.PluginHostService.GetCommandHelp:output_type -> holomush.plugin.v1.PluginHostServiceGetCommandHelpResponse
-	48, // [48:72] is the sub-list for method output_type
-	24, // [24:48] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	65, // 24: holomush.plugin.v1.PluginHostServiceQueryLocationCharactersResponse.characters:type_name -> holomush.plugin.v1.PluginHostServiceCharacterRef
+	6,  // 25: holomush.plugin.v1.PluginService.Init:input_type -> holomush.plugin.v1.InitRequest
+	10, // 26: holomush.plugin.v1.PluginService.HandleEvent:input_type -> holomush.plugin.v1.HandleEventRequest
+	15, // 27: holomush.plugin.v1.PluginService.HandleCommand:input_type -> holomush.plugin.v1.HandleCommandRequest
+	31, // 28: holomush.plugin.v1.PluginService.QuerySessionStreams:input_type -> holomush.plugin.v1.QuerySessionStreamsRequest
+	17, // 29: holomush.plugin.v1.PluginHostService.EmitEvent:input_type -> holomush.plugin.v1.PluginHostServiceEmitEventRequest
+	19, // 30: holomush.plugin.v1.PluginHostService.Log:input_type -> holomush.plugin.v1.PluginHostServiceLogRequest
+	21, // 31: holomush.plugin.v1.PluginHostService.KVGet:input_type -> holomush.plugin.v1.PluginHostServiceKVGetRequest
+	23, // 32: holomush.plugin.v1.PluginHostService.KVSet:input_type -> holomush.plugin.v1.PluginHostServiceKVSetRequest
+	25, // 33: holomush.plugin.v1.PluginHostService.KVDelete:input_type -> holomush.plugin.v1.PluginHostServiceKVDeleteRequest
+	27, // 34: holomush.plugin.v1.PluginHostService.AddSessionStream:input_type -> holomush.plugin.v1.PluginHostServiceAddSessionStreamRequest
+	29, // 35: holomush.plugin.v1.PluginHostService.RemoveSessionStream:input_type -> holomush.plugin.v1.PluginHostServiceRemoveSessionStreamRequest
+	34, // 36: holomush.plugin.v1.PluginHostService.JoinFocus:input_type -> holomush.plugin.v1.PluginHostServiceJoinFocusRequest
+	36, // 37: holomush.plugin.v1.PluginHostService.LeaveFocus:input_type -> holomush.plugin.v1.PluginHostServiceLeaveFocusRequest
+	38, // 38: holomush.plugin.v1.PluginHostService.LeaveFocusByTarget:input_type -> holomush.plugin.v1.PluginHostServiceLeaveFocusByTargetRequest
+	40, // 39: holomush.plugin.v1.PluginHostService.PresentFocus:input_type -> holomush.plugin.v1.PluginHostServicePresentFocusRequest
+	42, // 40: holomush.plugin.v1.PluginHostService.QueryStreamHistory:input_type -> holomush.plugin.v1.PluginHostServiceQueryStreamHistoryRequest
+	72, // 41: holomush.plugin.v1.PluginHostService.DecryptOwnAuditRows:input_type -> holomush.plugin.v1.DecryptOwnAuditRowsRequest
+	44, // 42: holomush.plugin.v1.PluginHostService.RequestEmitToken:input_type -> holomush.plugin.v1.PluginHostServiceRequestEmitTokenRequest
+	46, // 43: holomush.plugin.v1.PluginHostService.SetConnectionFocus:input_type -> holomush.plugin.v1.PluginHostServiceSetConnectionFocusRequest
+	48, // 44: holomush.plugin.v1.PluginHostService.AutoFocusOnJoin:input_type -> holomush.plugin.v1.PluginHostServiceAutoFocusOnJoinRequest
+	51, // 45: holomush.plugin.v1.PluginHostService.IsAnyConnFocused:input_type -> holomush.plugin.v1.PluginHostServiceIsAnyConnFocusedRequest
+	53, // 46: holomush.plugin.v1.PluginHostService.Evaluate:input_type -> holomush.plugin.v1.PluginHostServiceEvaluateRequest
+	60, // 47: holomush.plugin.v1.PluginHostService.QueryLocation:input_type -> holomush.plugin.v1.PluginHostServiceQueryLocationRequest
+	62, // 48: holomush.plugin.v1.PluginHostService.QueryCharacter:input_type -> holomush.plugin.v1.PluginHostServiceQueryCharacterRequest
+	64, // 49: holomush.plugin.v1.PluginHostService.QueryLocationCharacters:input_type -> holomush.plugin.v1.PluginHostServiceQueryLocationCharactersRequest
+	67, // 50: holomush.plugin.v1.PluginHostService.QueryObject:input_type -> holomush.plugin.v1.PluginHostServiceQueryObjectRequest
+	56, // 51: holomush.plugin.v1.PluginHostService.ListCommands:input_type -> holomush.plugin.v1.PluginHostServiceListCommandsRequest
+	58, // 52: holomush.plugin.v1.PluginHostService.GetCommandHelp:input_type -> holomush.plugin.v1.PluginHostServiceGetCommandHelpRequest
+	7,  // 53: holomush.plugin.v1.PluginService.Init:output_type -> holomush.plugin.v1.InitResponse
+	11, // 54: holomush.plugin.v1.PluginService.HandleEvent:output_type -> holomush.plugin.v1.HandleEventResponse
+	16, // 55: holomush.plugin.v1.PluginService.HandleCommand:output_type -> holomush.plugin.v1.HandleCommandResponse
+	32, // 56: holomush.plugin.v1.PluginService.QuerySessionStreams:output_type -> holomush.plugin.v1.QuerySessionStreamsResponse
+	18, // 57: holomush.plugin.v1.PluginHostService.EmitEvent:output_type -> holomush.plugin.v1.PluginHostServiceEmitEventResponse
+	20, // 58: holomush.plugin.v1.PluginHostService.Log:output_type -> holomush.plugin.v1.PluginHostServiceLogResponse
+	22, // 59: holomush.plugin.v1.PluginHostService.KVGet:output_type -> holomush.plugin.v1.PluginHostServiceKVGetResponse
+	24, // 60: holomush.plugin.v1.PluginHostService.KVSet:output_type -> holomush.plugin.v1.PluginHostServiceKVSetResponse
+	26, // 61: holomush.plugin.v1.PluginHostService.KVDelete:output_type -> holomush.plugin.v1.PluginHostServiceKVDeleteResponse
+	28, // 62: holomush.plugin.v1.PluginHostService.AddSessionStream:output_type -> holomush.plugin.v1.PluginHostServiceAddSessionStreamResponse
+	30, // 63: holomush.plugin.v1.PluginHostService.RemoveSessionStream:output_type -> holomush.plugin.v1.PluginHostServiceRemoveSessionStreamResponse
+	35, // 64: holomush.plugin.v1.PluginHostService.JoinFocus:output_type -> holomush.plugin.v1.PluginHostServiceJoinFocusResponse
+	37, // 65: holomush.plugin.v1.PluginHostService.LeaveFocus:output_type -> holomush.plugin.v1.PluginHostServiceLeaveFocusResponse
+	39, // 66: holomush.plugin.v1.PluginHostService.LeaveFocusByTarget:output_type -> holomush.plugin.v1.PluginHostServiceLeaveFocusByTargetResponse
+	41, // 67: holomush.plugin.v1.PluginHostService.PresentFocus:output_type -> holomush.plugin.v1.PluginHostServicePresentFocusResponse
+	43, // 68: holomush.plugin.v1.PluginHostService.QueryStreamHistory:output_type -> holomush.plugin.v1.PluginHostServiceQueryStreamHistoryResponse
+	73, // 69: holomush.plugin.v1.PluginHostService.DecryptOwnAuditRows:output_type -> holomush.plugin.v1.DecryptOwnAuditRowsResponse
+	45, // 70: holomush.plugin.v1.PluginHostService.RequestEmitToken:output_type -> holomush.plugin.v1.PluginHostServiceRequestEmitTokenResponse
+	47, // 71: holomush.plugin.v1.PluginHostService.SetConnectionFocus:output_type -> holomush.plugin.v1.PluginHostServiceSetConnectionFocusResponse
+	49, // 72: holomush.plugin.v1.PluginHostService.AutoFocusOnJoin:output_type -> holomush.plugin.v1.PluginHostServiceAutoFocusOnJoinResponse
+	52, // 73: holomush.plugin.v1.PluginHostService.IsAnyConnFocused:output_type -> holomush.plugin.v1.PluginHostServiceIsAnyConnFocusedResponse
+	54, // 74: holomush.plugin.v1.PluginHostService.Evaluate:output_type -> holomush.plugin.v1.PluginHostServiceEvaluateResponse
+	61, // 75: holomush.plugin.v1.PluginHostService.QueryLocation:output_type -> holomush.plugin.v1.PluginHostServiceQueryLocationResponse
+	63, // 76: holomush.plugin.v1.PluginHostService.QueryCharacter:output_type -> holomush.plugin.v1.PluginHostServiceQueryCharacterResponse
+	66, // 77: holomush.plugin.v1.PluginHostService.QueryLocationCharacters:output_type -> holomush.plugin.v1.PluginHostServiceQueryLocationCharactersResponse
+	68, // 78: holomush.plugin.v1.PluginHostService.QueryObject:output_type -> holomush.plugin.v1.PluginHostServiceQueryObjectResponse
+	57, // 79: holomush.plugin.v1.PluginHostService.ListCommands:output_type -> holomush.plugin.v1.PluginHostServiceListCommandsResponse
+	59, // 80: holomush.plugin.v1.PluginHostService.GetCommandHelp:output_type -> holomush.plugin.v1.PluginHostServiceGetCommandHelpResponse
+	53, // [53:81] is the sub-list for method output_type
+	25, // [25:53] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_holomush_plugin_v1_plugin_proto_init() }
@@ -3988,7 +4558,7 @@ func file_holomush_plugin_v1_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_plugin_v1_plugin_proto_rawDesc), len(file_holomush_plugin_v1_plugin_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   58,
+			NumMessages:   67,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

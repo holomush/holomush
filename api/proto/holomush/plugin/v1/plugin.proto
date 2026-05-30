@@ -58,11 +58,13 @@ service PluginService {
 // surface IS served in production.
 //
 // NOTE: the registered server embeds UnimplementedPluginHostServiceServer and
-// implements only 12 of the 18 RPCs below. Log, KVGet, KVSet, KVDelete,
+// implements only 12 of the 22 RPCs below. Log, KVGet, KVSet, KVDelete,
 // AddSessionStream, and RemoveSessionStream are declared here but have no
 // server impl and no production client — they return codes.Unimplemented
-// (tracked in holomush-l6std). Their comments below document that unwired
-// reality, not aspirational behavior.
+// (tracked in holomush-l6std). QueryLocation, QueryCharacter,
+// QueryLocationCharacters, and QueryObject are newly declared and also
+// unimplemented (handlers come in a later task). Their comments below document
+// that unwired reality, not aspirational behavior.
 service PluginHostService {
   // EmitEvent publishes one plugin-originated event onto the bus through the
   // host emit fence. SERVED: pluginHostServiceServer.EmitEvent. The caller's
@@ -188,6 +190,28 @@ service PluginHostService {
   // missing/rejected token, empty actor subject, or a resource type the plugin
   // does not own.
   rpc Evaluate(PluginHostServiceEvaluateRequest) returns (PluginHostServiceEvaluateResponse);
+
+  // QueryLocation returns one location's identity snapshot. The host resolves
+  // it through world.Service.GetLocation under the acting subject derived from
+  // the dispatch token (the invoking character for command/event dispatch, the
+  // plugin itself for plugin-initiated reads). No subject is accepted on the
+  // wire; ABAC is enforced at the world-service layer.
+  rpc QueryLocation(PluginHostServiceQueryLocationRequest) returns (PluginHostServiceQueryLocationResponse);
+
+  // QueryCharacter returns one character's identity snapshot via
+  // world.Service.GetCharacter under the host-derived acting subject. location_id
+  // is empty when the character is not in the world. No subject on the wire.
+  rpc QueryCharacter(PluginHostServiceQueryCharacterRequest) returns (PluginHostServiceQueryCharacterResponse);
+
+  // QueryLocationCharacters returns the {id, name} roster of characters at a
+  // location via world.Service.GetCharactersByLocation under the host-derived
+  // acting subject. The roster is empty when none are present. No subject on the wire.
+  rpc QueryLocationCharacters(PluginHostServiceQueryLocationCharactersRequest) returns (PluginHostServiceQueryLocationCharactersResponse);
+
+  // QueryObject returns one object's identity snapshot via world.Service.GetObject
+  // under the host-derived acting subject. location_id is empty when the object
+  // is not placed in the world. No subject on the wire.
+  rpc QueryObject(PluginHostServiceQueryObjectRequest) returns (PluginHostServiceQueryObjectResponse);
 
   // ListCommands enumerates the commands the named character may execute,
   // ABAC-filtered by the host. SERVED: pluginHostServiceServer.ListCommands,
@@ -853,4 +877,88 @@ message PluginHostServiceGetCommandHelpResponse {
   string help_text = 4;
   // source is "core" or the owning plugin name.
   string source = 5;
+}
+
+// PluginHostServiceQueryLocationRequest names the location to snapshot. It
+// carries no subject: the host derives the acting subject from the dispatch
+// token.
+message PluginHostServiceQueryLocationRequest {
+  // location_id is the ULID of the location to read.
+  string location_id = 1;
+}
+
+// PluginHostServiceQueryLocationResponse returns the requested location's
+// identity fields.
+message PluginHostServiceQueryLocationResponse {
+  // id is the location ULID.
+  string id = 1;
+  // name is the location's display name.
+  string name = 2;
+  // description is the location's prose description.
+  string description = 3;
+}
+
+// PluginHostServiceQueryCharacterRequest names the character to snapshot; it
+// carries no subject.
+message PluginHostServiceQueryCharacterRequest {
+  // character_id is the ULID of the character to read.
+  string character_id = 1;
+}
+
+// PluginHostServiceQueryCharacterResponse returns the requested character's
+// identity fields. location_id is empty when the character is not in the world.
+message PluginHostServiceQueryCharacterResponse {
+  // id is the character ULID.
+  string id = 1;
+  // player_id is the owning player's ULID.
+  string player_id = 2;
+  // name is the character's display name.
+  string name = 3;
+  // description is the character's prose description.
+  string description = 4;
+  // location_id is the character's current location ULID, empty if none.
+  string location_id = 5;
+}
+
+// PluginHostServiceQueryLocationCharactersRequest names the location whose
+// occupant roster to return; it carries no subject.
+message PluginHostServiceQueryLocationCharactersRequest {
+  // location_id is the ULID of the location whose roster to read.
+  string location_id = 1;
+}
+
+// PluginHostServiceCharacterRef is one entry in a character roster: id + name
+// only. Use QueryCharacter to fetch full detail.
+message PluginHostServiceCharacterRef {
+  // id is the character ULID.
+  string id = 1;
+  // name is the character's display name.
+  string name = 2;
+}
+
+// PluginHostServiceQueryLocationCharactersResponse returns the location's
+// occupant roster; empty when the location holds no characters.
+message PluginHostServiceQueryLocationCharactersResponse {
+  // characters is the {id, name} roster at the location.
+  repeated PluginHostServiceCharacterRef characters = 1;
+}
+
+// PluginHostServiceQueryObjectRequest names the object to snapshot; it carries
+// no subject.
+message PluginHostServiceQueryObjectRequest {
+  // object_id is the ULID of the object to read.
+  string object_id = 1;
+}
+
+// PluginHostServiceQueryObjectResponse returns the requested object's identity
+// fields. location_id is empty when the object is not placed.
+message PluginHostServiceQueryObjectResponse {
+  // id is the object ULID.
+  string id = 1;
+  // name is the object's display name.
+  string name = 2;
+  // description is the object's prose description.
+  string description = 3;
+  // location_id is the object's current location ULID, empty if none.
+  string location_id = 4;
 }

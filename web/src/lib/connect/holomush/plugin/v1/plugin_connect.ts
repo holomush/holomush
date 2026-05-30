@@ -8,7 +8,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceAddSessionStreamRequest, PluginHostServiceAddSessionStreamResponse, PluginHostServiceAutoFocusOnJoinRequest, PluginHostServiceAutoFocusOnJoinResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceEvaluateRequest, PluginHostServiceEvaluateResponse, PluginHostServiceGetCommandHelpRequest, PluginHostServiceGetCommandHelpResponse, PluginHostServiceIsAnyConnFocusedRequest, PluginHostServiceIsAnyConnFocusedResponse, PluginHostServiceJoinFocusRequest, PluginHostServiceJoinFocusResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLeaveFocusByTargetRequest, PluginHostServiceLeaveFocusByTargetResponse, PluginHostServiceLeaveFocusRequest, PluginHostServiceLeaveFocusResponse, PluginHostServiceListCommandsRequest, PluginHostServiceListCommandsResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServicePresentFocusRequest, PluginHostServicePresentFocusResponse, PluginHostServiceQueryStreamHistoryRequest, PluginHostServiceQueryStreamHistoryResponse, PluginHostServiceRemoveSessionStreamRequest, PluginHostServiceRemoveSessionStreamResponse, PluginHostServiceRequestEmitTokenRequest, PluginHostServiceRequestEmitTokenResponse, PluginHostServiceSetConnectionFocusRequest, PluginHostServiceSetConnectionFocusResponse, QuerySessionStreamsRequest, QuerySessionStreamsResponse } from "./plugin_pb.js";
+import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceAddSessionStreamRequest, PluginHostServiceAddSessionStreamResponse, PluginHostServiceAutoFocusOnJoinRequest, PluginHostServiceAutoFocusOnJoinResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceEvaluateRequest, PluginHostServiceEvaluateResponse, PluginHostServiceGetCommandHelpRequest, PluginHostServiceGetCommandHelpResponse, PluginHostServiceIsAnyConnFocusedRequest, PluginHostServiceIsAnyConnFocusedResponse, PluginHostServiceJoinFocusRequest, PluginHostServiceJoinFocusResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLeaveFocusByTargetRequest, PluginHostServiceLeaveFocusByTargetResponse, PluginHostServiceLeaveFocusRequest, PluginHostServiceLeaveFocusResponse, PluginHostServiceListCommandsRequest, PluginHostServiceListCommandsResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServicePresentFocusRequest, PluginHostServicePresentFocusResponse, PluginHostServiceQueryCharacterRequest, PluginHostServiceQueryCharacterResponse, PluginHostServiceQueryLocationCharactersRequest, PluginHostServiceQueryLocationCharactersResponse, PluginHostServiceQueryLocationRequest, PluginHostServiceQueryLocationResponse, PluginHostServiceQueryObjectRequest, PluginHostServiceQueryObjectResponse, PluginHostServiceQueryStreamHistoryRequest, PluginHostServiceQueryStreamHistoryResponse, PluginHostServiceRemoveSessionStreamRequest, PluginHostServiceRemoveSessionStreamResponse, PluginHostServiceRequestEmitTokenRequest, PluginHostServiceRequestEmitTokenResponse, PluginHostServiceSetConnectionFocusRequest, PluginHostServiceSetConnectionFocusResponse, QuerySessionStreamsRequest, QuerySessionStreamsResponse } from "./plugin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { DecryptOwnAuditRowsRequest, DecryptOwnAuditRowsResponse } from "./audit_pb.js";
 
@@ -98,11 +98,13 @@ export const PluginService = {
  * surface IS served in production.
  *
  * NOTE: the registered server embeds UnimplementedPluginHostServiceServer and
- * implements only 12 of the 18 RPCs below. Log, KVGet, KVSet, KVDelete,
+ * implements only 12 of the 22 RPCs below. Log, KVGet, KVSet, KVDelete,
  * AddSessionStream, and RemoveSessionStream are declared here but have no
  * server impl and no production client — they return codes.Unimplemented
- * (tracked in holomush-l6std). Their comments below document that unwired
- * reality, not aspirational behavior.
+ * (tracked in holomush-l6std). QueryLocation, QueryCharacter,
+ * QueryLocationCharacters, and QueryObject are newly declared and also
+ * unimplemented (handlers come in a later task). Their comments below document
+ * that unwired reality, not aspirational behavior.
  *
  * @generated from service holomush.plugin.v1.PluginHostService
  */
@@ -382,6 +384,60 @@ export const PluginHostService = {
       name: "Evaluate",
       I: PluginHostServiceEvaluateRequest,
       O: PluginHostServiceEvaluateResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * QueryLocation returns one location's identity snapshot. The host resolves
+     * it through world.Service.GetLocation under the acting subject derived from
+     * the dispatch token (the invoking character for command/event dispatch, the
+     * plugin itself for plugin-initiated reads). No subject is accepted on the
+     * wire; ABAC is enforced at the world-service layer.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.QueryLocation
+     */
+    queryLocation: {
+      name: "QueryLocation",
+      I: PluginHostServiceQueryLocationRequest,
+      O: PluginHostServiceQueryLocationResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * QueryCharacter returns one character's identity snapshot via
+     * world.Service.GetCharacter under the host-derived acting subject. location_id
+     * is empty when the character is not in the world. No subject on the wire.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.QueryCharacter
+     */
+    queryCharacter: {
+      name: "QueryCharacter",
+      I: PluginHostServiceQueryCharacterRequest,
+      O: PluginHostServiceQueryCharacterResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * QueryLocationCharacters returns the {id, name} roster of characters at a
+     * location via world.Service.GetCharactersByLocation under the host-derived
+     * acting subject. The roster is empty when none are present. No subject on the wire.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.QueryLocationCharacters
+     */
+    queryLocationCharacters: {
+      name: "QueryLocationCharacters",
+      I: PluginHostServiceQueryLocationCharactersRequest,
+      O: PluginHostServiceQueryLocationCharactersResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * QueryObject returns one object's identity snapshot via world.Service.GetObject
+     * under the host-derived acting subject. location_id is empty when the object
+     * is not placed in the world. No subject on the wire.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.QueryObject
+     */
+    queryObject: {
+      name: "QueryObject",
+      I: PluginHostServiceQueryObjectRequest,
+      O: PluginHostServiceQueryObjectResponse,
       kind: MethodKind.Unary,
     },
     /**

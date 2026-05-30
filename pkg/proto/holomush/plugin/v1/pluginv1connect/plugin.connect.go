@@ -102,6 +102,18 @@ const (
 	// PluginHostServiceEvaluateProcedure is the fully-qualified name of the PluginHostService's
 	// Evaluate RPC.
 	PluginHostServiceEvaluateProcedure = "/holomush.plugin.v1.PluginHostService/Evaluate"
+	// PluginHostServiceQueryLocationProcedure is the fully-qualified name of the PluginHostService's
+	// QueryLocation RPC.
+	PluginHostServiceQueryLocationProcedure = "/holomush.plugin.v1.PluginHostService/QueryLocation"
+	// PluginHostServiceQueryCharacterProcedure is the fully-qualified name of the PluginHostService's
+	// QueryCharacter RPC.
+	PluginHostServiceQueryCharacterProcedure = "/holomush.plugin.v1.PluginHostService/QueryCharacter"
+	// PluginHostServiceQueryLocationCharactersProcedure is the fully-qualified name of the
+	// PluginHostService's QueryLocationCharacters RPC.
+	PluginHostServiceQueryLocationCharactersProcedure = "/holomush.plugin.v1.PluginHostService/QueryLocationCharacters"
+	// PluginHostServiceQueryObjectProcedure is the fully-qualified name of the PluginHostService's
+	// QueryObject RPC.
+	PluginHostServiceQueryObjectProcedure = "/holomush.plugin.v1.PluginHostService/QueryObject"
 	// PluginHostServiceListCommandsProcedure is the fully-qualified name of the PluginHostService's
 	// ListCommands RPC.
 	PluginHostServiceListCommandsProcedure = "/holomush.plugin.v1.PluginHostService/ListCommands"
@@ -417,6 +429,24 @@ type PluginHostServiceClient interface {
 	// missing/rejected token, empty actor subject, or a resource type the plugin
 	// does not own.
 	Evaluate(context.Context, *connect.Request[v1.PluginHostServiceEvaluateRequest]) (*connect.Response[v1.PluginHostServiceEvaluateResponse], error)
+	// QueryLocation returns one location's identity snapshot. The host resolves
+	// it through world.Service.GetLocation under the acting subject derived from
+	// the dispatch token (the invoking character for command/event dispatch, the
+	// plugin itself for plugin-initiated reads). No subject is accepted on the
+	// wire; ABAC is enforced at the world-service layer.
+	QueryLocation(context.Context, *connect.Request[v1.PluginHostServiceQueryLocationRequest]) (*connect.Response[v1.PluginHostServiceQueryLocationResponse], error)
+	// QueryCharacter returns one character's identity snapshot via
+	// world.Service.GetCharacter under the host-derived acting subject. location_id
+	// is empty when the character is not in the world. No subject on the wire.
+	QueryCharacter(context.Context, *connect.Request[v1.PluginHostServiceQueryCharacterRequest]) (*connect.Response[v1.PluginHostServiceQueryCharacterResponse], error)
+	// QueryLocationCharacters returns the {id, name} roster of characters at a
+	// location via world.Service.GetCharactersByLocation under the host-derived
+	// acting subject. The roster is empty when none are present. No subject on the wire.
+	QueryLocationCharacters(context.Context, *connect.Request[v1.PluginHostServiceQueryLocationCharactersRequest]) (*connect.Response[v1.PluginHostServiceQueryLocationCharactersResponse], error)
+	// QueryObject returns one object's identity snapshot via world.Service.GetObject
+	// under the host-derived acting subject. location_id is empty when the object
+	// is not placed in the world. No subject on the wire.
+	QueryObject(context.Context, *connect.Request[v1.PluginHostServiceQueryObjectRequest]) (*connect.Response[v1.PluginHostServiceQueryObjectResponse], error)
 	// ListCommands enumerates the commands the named character may execute,
 	// ABAC-filtered by the host. SERVED: pluginHostServiceServer.ListCommands,
 	// delegating to commandquery.Querier.Available. The subject is the request's
@@ -551,6 +581,30 @@ func NewPluginHostServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(pluginHostServiceMethods.ByName("Evaluate")),
 			connect.WithClientOptions(opts...),
 		),
+		queryLocation: connect.NewClient[v1.PluginHostServiceQueryLocationRequest, v1.PluginHostServiceQueryLocationResponse](
+			httpClient,
+			baseURL+PluginHostServiceQueryLocationProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("QueryLocation")),
+			connect.WithClientOptions(opts...),
+		),
+		queryCharacter: connect.NewClient[v1.PluginHostServiceQueryCharacterRequest, v1.PluginHostServiceQueryCharacterResponse](
+			httpClient,
+			baseURL+PluginHostServiceQueryCharacterProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("QueryCharacter")),
+			connect.WithClientOptions(opts...),
+		),
+		queryLocationCharacters: connect.NewClient[v1.PluginHostServiceQueryLocationCharactersRequest, v1.PluginHostServiceQueryLocationCharactersResponse](
+			httpClient,
+			baseURL+PluginHostServiceQueryLocationCharactersProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("QueryLocationCharacters")),
+			connect.WithClientOptions(opts...),
+		),
+		queryObject: connect.NewClient[v1.PluginHostServiceQueryObjectRequest, v1.PluginHostServiceQueryObjectResponse](
+			httpClient,
+			baseURL+PluginHostServiceQueryObjectProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("QueryObject")),
+			connect.WithClientOptions(opts...),
+		),
 		listCommands: connect.NewClient[v1.PluginHostServiceListCommandsRequest, v1.PluginHostServiceListCommandsResponse](
 			httpClient,
 			baseURL+PluginHostServiceListCommandsProcedure,
@@ -568,26 +622,30 @@ func NewPluginHostServiceClient(httpClient connect.HTTPClient, baseURL string, o
 
 // pluginHostServiceClient implements PluginHostServiceClient.
 type pluginHostServiceClient struct {
-	emitEvent           *connect.Client[v1.PluginHostServiceEmitEventRequest, v1.PluginHostServiceEmitEventResponse]
-	log                 *connect.Client[v1.PluginHostServiceLogRequest, v1.PluginHostServiceLogResponse]
-	kVGet               *connect.Client[v1.PluginHostServiceKVGetRequest, v1.PluginHostServiceKVGetResponse]
-	kVSet               *connect.Client[v1.PluginHostServiceKVSetRequest, v1.PluginHostServiceKVSetResponse]
-	kVDelete            *connect.Client[v1.PluginHostServiceKVDeleteRequest, v1.PluginHostServiceKVDeleteResponse]
-	addSessionStream    *connect.Client[v1.PluginHostServiceAddSessionStreamRequest, v1.PluginHostServiceAddSessionStreamResponse]
-	removeSessionStream *connect.Client[v1.PluginHostServiceRemoveSessionStreamRequest, v1.PluginHostServiceRemoveSessionStreamResponse]
-	joinFocus           *connect.Client[v1.PluginHostServiceJoinFocusRequest, v1.PluginHostServiceJoinFocusResponse]
-	leaveFocus          *connect.Client[v1.PluginHostServiceLeaveFocusRequest, v1.PluginHostServiceLeaveFocusResponse]
-	leaveFocusByTarget  *connect.Client[v1.PluginHostServiceLeaveFocusByTargetRequest, v1.PluginHostServiceLeaveFocusByTargetResponse]
-	presentFocus        *connect.Client[v1.PluginHostServicePresentFocusRequest, v1.PluginHostServicePresentFocusResponse]
-	queryStreamHistory  *connect.Client[v1.PluginHostServiceQueryStreamHistoryRequest, v1.PluginHostServiceQueryStreamHistoryResponse]
-	decryptOwnAuditRows *connect.Client[v1.DecryptOwnAuditRowsRequest, v1.DecryptOwnAuditRowsResponse]
-	requestEmitToken    *connect.Client[v1.PluginHostServiceRequestEmitTokenRequest, v1.PluginHostServiceRequestEmitTokenResponse]
-	setConnectionFocus  *connect.Client[v1.PluginHostServiceSetConnectionFocusRequest, v1.PluginHostServiceSetConnectionFocusResponse]
-	autoFocusOnJoin     *connect.Client[v1.PluginHostServiceAutoFocusOnJoinRequest, v1.PluginHostServiceAutoFocusOnJoinResponse]
-	isAnyConnFocused    *connect.Client[v1.PluginHostServiceIsAnyConnFocusedRequest, v1.PluginHostServiceIsAnyConnFocusedResponse]
-	evaluate            *connect.Client[v1.PluginHostServiceEvaluateRequest, v1.PluginHostServiceEvaluateResponse]
-	listCommands        *connect.Client[v1.PluginHostServiceListCommandsRequest, v1.PluginHostServiceListCommandsResponse]
-	getCommandHelp      *connect.Client[v1.PluginHostServiceGetCommandHelpRequest, v1.PluginHostServiceGetCommandHelpResponse]
+	emitEvent               *connect.Client[v1.PluginHostServiceEmitEventRequest, v1.PluginHostServiceEmitEventResponse]
+	log                     *connect.Client[v1.PluginHostServiceLogRequest, v1.PluginHostServiceLogResponse]
+	kVGet                   *connect.Client[v1.PluginHostServiceKVGetRequest, v1.PluginHostServiceKVGetResponse]
+	kVSet                   *connect.Client[v1.PluginHostServiceKVSetRequest, v1.PluginHostServiceKVSetResponse]
+	kVDelete                *connect.Client[v1.PluginHostServiceKVDeleteRequest, v1.PluginHostServiceKVDeleteResponse]
+	addSessionStream        *connect.Client[v1.PluginHostServiceAddSessionStreamRequest, v1.PluginHostServiceAddSessionStreamResponse]
+	removeSessionStream     *connect.Client[v1.PluginHostServiceRemoveSessionStreamRequest, v1.PluginHostServiceRemoveSessionStreamResponse]
+	joinFocus               *connect.Client[v1.PluginHostServiceJoinFocusRequest, v1.PluginHostServiceJoinFocusResponse]
+	leaveFocus              *connect.Client[v1.PluginHostServiceLeaveFocusRequest, v1.PluginHostServiceLeaveFocusResponse]
+	leaveFocusByTarget      *connect.Client[v1.PluginHostServiceLeaveFocusByTargetRequest, v1.PluginHostServiceLeaveFocusByTargetResponse]
+	presentFocus            *connect.Client[v1.PluginHostServicePresentFocusRequest, v1.PluginHostServicePresentFocusResponse]
+	queryStreamHistory      *connect.Client[v1.PluginHostServiceQueryStreamHistoryRequest, v1.PluginHostServiceQueryStreamHistoryResponse]
+	decryptOwnAuditRows     *connect.Client[v1.DecryptOwnAuditRowsRequest, v1.DecryptOwnAuditRowsResponse]
+	requestEmitToken        *connect.Client[v1.PluginHostServiceRequestEmitTokenRequest, v1.PluginHostServiceRequestEmitTokenResponse]
+	setConnectionFocus      *connect.Client[v1.PluginHostServiceSetConnectionFocusRequest, v1.PluginHostServiceSetConnectionFocusResponse]
+	autoFocusOnJoin         *connect.Client[v1.PluginHostServiceAutoFocusOnJoinRequest, v1.PluginHostServiceAutoFocusOnJoinResponse]
+	isAnyConnFocused        *connect.Client[v1.PluginHostServiceIsAnyConnFocusedRequest, v1.PluginHostServiceIsAnyConnFocusedResponse]
+	evaluate                *connect.Client[v1.PluginHostServiceEvaluateRequest, v1.PluginHostServiceEvaluateResponse]
+	queryLocation           *connect.Client[v1.PluginHostServiceQueryLocationRequest, v1.PluginHostServiceQueryLocationResponse]
+	queryCharacter          *connect.Client[v1.PluginHostServiceQueryCharacterRequest, v1.PluginHostServiceQueryCharacterResponse]
+	queryLocationCharacters *connect.Client[v1.PluginHostServiceQueryLocationCharactersRequest, v1.PluginHostServiceQueryLocationCharactersResponse]
+	queryObject             *connect.Client[v1.PluginHostServiceQueryObjectRequest, v1.PluginHostServiceQueryObjectResponse]
+	listCommands            *connect.Client[v1.PluginHostServiceListCommandsRequest, v1.PluginHostServiceListCommandsResponse]
+	getCommandHelp          *connect.Client[v1.PluginHostServiceGetCommandHelpRequest, v1.PluginHostServiceGetCommandHelpResponse]
 }
 
 // EmitEvent calls holomush.plugin.v1.PluginHostService.EmitEvent.
@@ -678,6 +736,26 @@ func (c *pluginHostServiceClient) IsAnyConnFocused(ctx context.Context, req *con
 // Evaluate calls holomush.plugin.v1.PluginHostService.Evaluate.
 func (c *pluginHostServiceClient) Evaluate(ctx context.Context, req *connect.Request[v1.PluginHostServiceEvaluateRequest]) (*connect.Response[v1.PluginHostServiceEvaluateResponse], error) {
 	return c.evaluate.CallUnary(ctx, req)
+}
+
+// QueryLocation calls holomush.plugin.v1.PluginHostService.QueryLocation.
+func (c *pluginHostServiceClient) QueryLocation(ctx context.Context, req *connect.Request[v1.PluginHostServiceQueryLocationRequest]) (*connect.Response[v1.PluginHostServiceQueryLocationResponse], error) {
+	return c.queryLocation.CallUnary(ctx, req)
+}
+
+// QueryCharacter calls holomush.plugin.v1.PluginHostService.QueryCharacter.
+func (c *pluginHostServiceClient) QueryCharacter(ctx context.Context, req *connect.Request[v1.PluginHostServiceQueryCharacterRequest]) (*connect.Response[v1.PluginHostServiceQueryCharacterResponse], error) {
+	return c.queryCharacter.CallUnary(ctx, req)
+}
+
+// QueryLocationCharacters calls holomush.plugin.v1.PluginHostService.QueryLocationCharacters.
+func (c *pluginHostServiceClient) QueryLocationCharacters(ctx context.Context, req *connect.Request[v1.PluginHostServiceQueryLocationCharactersRequest]) (*connect.Response[v1.PluginHostServiceQueryLocationCharactersResponse], error) {
+	return c.queryLocationCharacters.CallUnary(ctx, req)
+}
+
+// QueryObject calls holomush.plugin.v1.PluginHostService.QueryObject.
+func (c *pluginHostServiceClient) QueryObject(ctx context.Context, req *connect.Request[v1.PluginHostServiceQueryObjectRequest]) (*connect.Response[v1.PluginHostServiceQueryObjectResponse], error) {
+	return c.queryObject.CallUnary(ctx, req)
 }
 
 // ListCommands calls holomush.plugin.v1.PluginHostService.ListCommands.
@@ -806,6 +884,24 @@ type PluginHostServiceHandler interface {
 	// missing/rejected token, empty actor subject, or a resource type the plugin
 	// does not own.
 	Evaluate(context.Context, *connect.Request[v1.PluginHostServiceEvaluateRequest]) (*connect.Response[v1.PluginHostServiceEvaluateResponse], error)
+	// QueryLocation returns one location's identity snapshot. The host resolves
+	// it through world.Service.GetLocation under the acting subject derived from
+	// the dispatch token (the invoking character for command/event dispatch, the
+	// plugin itself for plugin-initiated reads). No subject is accepted on the
+	// wire; ABAC is enforced at the world-service layer.
+	QueryLocation(context.Context, *connect.Request[v1.PluginHostServiceQueryLocationRequest]) (*connect.Response[v1.PluginHostServiceQueryLocationResponse], error)
+	// QueryCharacter returns one character's identity snapshot via
+	// world.Service.GetCharacter under the host-derived acting subject. location_id
+	// is empty when the character is not in the world. No subject on the wire.
+	QueryCharacter(context.Context, *connect.Request[v1.PluginHostServiceQueryCharacterRequest]) (*connect.Response[v1.PluginHostServiceQueryCharacterResponse], error)
+	// QueryLocationCharacters returns the {id, name} roster of characters at a
+	// location via world.Service.GetCharactersByLocation under the host-derived
+	// acting subject. The roster is empty when none are present. No subject on the wire.
+	QueryLocationCharacters(context.Context, *connect.Request[v1.PluginHostServiceQueryLocationCharactersRequest]) (*connect.Response[v1.PluginHostServiceQueryLocationCharactersResponse], error)
+	// QueryObject returns one object's identity snapshot via world.Service.GetObject
+	// under the host-derived acting subject. location_id is empty when the object
+	// is not placed in the world. No subject on the wire.
+	QueryObject(context.Context, *connect.Request[v1.PluginHostServiceQueryObjectRequest]) (*connect.Response[v1.PluginHostServiceQueryObjectResponse], error)
 	// ListCommands enumerates the commands the named character may execute,
 	// ABAC-filtered by the host. SERVED: pluginHostServiceServer.ListCommands,
 	// delegating to commandquery.Querier.Available. The subject is the request's
@@ -936,6 +1032,30 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 		connect.WithSchema(pluginHostServiceMethods.ByName("Evaluate")),
 		connect.WithHandlerOptions(opts...),
 	)
+	pluginHostServiceQueryLocationHandler := connect.NewUnaryHandler(
+		PluginHostServiceQueryLocationProcedure,
+		svc.QueryLocation,
+		connect.WithSchema(pluginHostServiceMethods.ByName("QueryLocation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pluginHostServiceQueryCharacterHandler := connect.NewUnaryHandler(
+		PluginHostServiceQueryCharacterProcedure,
+		svc.QueryCharacter,
+		connect.WithSchema(pluginHostServiceMethods.ByName("QueryCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pluginHostServiceQueryLocationCharactersHandler := connect.NewUnaryHandler(
+		PluginHostServiceQueryLocationCharactersProcedure,
+		svc.QueryLocationCharacters,
+		connect.WithSchema(pluginHostServiceMethods.ByName("QueryLocationCharacters")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pluginHostServiceQueryObjectHandler := connect.NewUnaryHandler(
+		PluginHostServiceQueryObjectProcedure,
+		svc.QueryObject,
+		connect.WithSchema(pluginHostServiceMethods.ByName("QueryObject")),
+		connect.WithHandlerOptions(opts...),
+	)
 	pluginHostServiceListCommandsHandler := connect.NewUnaryHandler(
 		PluginHostServiceListCommandsProcedure,
 		svc.ListCommands,
@@ -986,6 +1106,14 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 			pluginHostServiceIsAnyConnFocusedHandler.ServeHTTP(w, r)
 		case PluginHostServiceEvaluateProcedure:
 			pluginHostServiceEvaluateHandler.ServeHTTP(w, r)
+		case PluginHostServiceQueryLocationProcedure:
+			pluginHostServiceQueryLocationHandler.ServeHTTP(w, r)
+		case PluginHostServiceQueryCharacterProcedure:
+			pluginHostServiceQueryCharacterHandler.ServeHTTP(w, r)
+		case PluginHostServiceQueryLocationCharactersProcedure:
+			pluginHostServiceQueryLocationCharactersHandler.ServeHTTP(w, r)
+		case PluginHostServiceQueryObjectProcedure:
+			pluginHostServiceQueryObjectHandler.ServeHTTP(w, r)
 		case PluginHostServiceListCommandsProcedure:
 			pluginHostServiceListCommandsHandler.ServeHTTP(w, r)
 		case PluginHostServiceGetCommandHelpProcedure:
@@ -1069,6 +1197,22 @@ func (UnimplementedPluginHostServiceHandler) IsAnyConnFocused(context.Context, *
 
 func (UnimplementedPluginHostServiceHandler) Evaluate(context.Context, *connect.Request[v1.PluginHostServiceEvaluateRequest]) (*connect.Response[v1.PluginHostServiceEvaluateResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.Evaluate is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) QueryLocation(context.Context, *connect.Request[v1.PluginHostServiceQueryLocationRequest]) (*connect.Response[v1.PluginHostServiceQueryLocationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.QueryLocation is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) QueryCharacter(context.Context, *connect.Request[v1.PluginHostServiceQueryCharacterRequest]) (*connect.Response[v1.PluginHostServiceQueryCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.QueryCharacter is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) QueryLocationCharacters(context.Context, *connect.Request[v1.PluginHostServiceQueryLocationCharactersRequest]) (*connect.Response[v1.PluginHostServiceQueryLocationCharactersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.QueryLocationCharacters is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) QueryObject(context.Context, *connect.Request[v1.PluginHostServiceQueryObjectRequest]) (*connect.Response[v1.PluginHostServiceQueryObjectResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.QueryObject is not implemented"))
 }
 
 func (UnimplementedPluginHostServiceHandler) ListCommands(context.Context, *connect.Request[v1.PluginHostServiceListCommandsRequest]) (*connect.Response[v1.PluginHostServiceListCommandsResponse], error) {

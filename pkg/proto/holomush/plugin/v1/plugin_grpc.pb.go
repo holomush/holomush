@@ -296,26 +296,30 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	PluginHostService_EmitEvent_FullMethodName           = "/holomush.plugin.v1.PluginHostService/EmitEvent"
-	PluginHostService_Log_FullMethodName                 = "/holomush.plugin.v1.PluginHostService/Log"
-	PluginHostService_KVGet_FullMethodName               = "/holomush.plugin.v1.PluginHostService/KVGet"
-	PluginHostService_KVSet_FullMethodName               = "/holomush.plugin.v1.PluginHostService/KVSet"
-	PluginHostService_KVDelete_FullMethodName            = "/holomush.plugin.v1.PluginHostService/KVDelete"
-	PluginHostService_AddSessionStream_FullMethodName    = "/holomush.plugin.v1.PluginHostService/AddSessionStream"
-	PluginHostService_RemoveSessionStream_FullMethodName = "/holomush.plugin.v1.PluginHostService/RemoveSessionStream"
-	PluginHostService_JoinFocus_FullMethodName           = "/holomush.plugin.v1.PluginHostService/JoinFocus"
-	PluginHostService_LeaveFocus_FullMethodName          = "/holomush.plugin.v1.PluginHostService/LeaveFocus"
-	PluginHostService_LeaveFocusByTarget_FullMethodName  = "/holomush.plugin.v1.PluginHostService/LeaveFocusByTarget"
-	PluginHostService_PresentFocus_FullMethodName        = "/holomush.plugin.v1.PluginHostService/PresentFocus"
-	PluginHostService_QueryStreamHistory_FullMethodName  = "/holomush.plugin.v1.PluginHostService/QueryStreamHistory"
-	PluginHostService_DecryptOwnAuditRows_FullMethodName = "/holomush.plugin.v1.PluginHostService/DecryptOwnAuditRows"
-	PluginHostService_RequestEmitToken_FullMethodName    = "/holomush.plugin.v1.PluginHostService/RequestEmitToken"
-	PluginHostService_SetConnectionFocus_FullMethodName  = "/holomush.plugin.v1.PluginHostService/SetConnectionFocus"
-	PluginHostService_AutoFocusOnJoin_FullMethodName     = "/holomush.plugin.v1.PluginHostService/AutoFocusOnJoin"
-	PluginHostService_IsAnyConnFocused_FullMethodName    = "/holomush.plugin.v1.PluginHostService/IsAnyConnFocused"
-	PluginHostService_Evaluate_FullMethodName            = "/holomush.plugin.v1.PluginHostService/Evaluate"
-	PluginHostService_ListCommands_FullMethodName        = "/holomush.plugin.v1.PluginHostService/ListCommands"
-	PluginHostService_GetCommandHelp_FullMethodName      = "/holomush.plugin.v1.PluginHostService/GetCommandHelp"
+	PluginHostService_EmitEvent_FullMethodName               = "/holomush.plugin.v1.PluginHostService/EmitEvent"
+	PluginHostService_Log_FullMethodName                     = "/holomush.plugin.v1.PluginHostService/Log"
+	PluginHostService_KVGet_FullMethodName                   = "/holomush.plugin.v1.PluginHostService/KVGet"
+	PluginHostService_KVSet_FullMethodName                   = "/holomush.plugin.v1.PluginHostService/KVSet"
+	PluginHostService_KVDelete_FullMethodName                = "/holomush.plugin.v1.PluginHostService/KVDelete"
+	PluginHostService_AddSessionStream_FullMethodName        = "/holomush.plugin.v1.PluginHostService/AddSessionStream"
+	PluginHostService_RemoveSessionStream_FullMethodName     = "/holomush.plugin.v1.PluginHostService/RemoveSessionStream"
+	PluginHostService_JoinFocus_FullMethodName               = "/holomush.plugin.v1.PluginHostService/JoinFocus"
+	PluginHostService_LeaveFocus_FullMethodName              = "/holomush.plugin.v1.PluginHostService/LeaveFocus"
+	PluginHostService_LeaveFocusByTarget_FullMethodName      = "/holomush.plugin.v1.PluginHostService/LeaveFocusByTarget"
+	PluginHostService_PresentFocus_FullMethodName            = "/holomush.plugin.v1.PluginHostService/PresentFocus"
+	PluginHostService_QueryStreamHistory_FullMethodName      = "/holomush.plugin.v1.PluginHostService/QueryStreamHistory"
+	PluginHostService_DecryptOwnAuditRows_FullMethodName     = "/holomush.plugin.v1.PluginHostService/DecryptOwnAuditRows"
+	PluginHostService_RequestEmitToken_FullMethodName        = "/holomush.plugin.v1.PluginHostService/RequestEmitToken"
+	PluginHostService_SetConnectionFocus_FullMethodName      = "/holomush.plugin.v1.PluginHostService/SetConnectionFocus"
+	PluginHostService_AutoFocusOnJoin_FullMethodName         = "/holomush.plugin.v1.PluginHostService/AutoFocusOnJoin"
+	PluginHostService_IsAnyConnFocused_FullMethodName        = "/holomush.plugin.v1.PluginHostService/IsAnyConnFocused"
+	PluginHostService_Evaluate_FullMethodName                = "/holomush.plugin.v1.PluginHostService/Evaluate"
+	PluginHostService_QueryLocation_FullMethodName           = "/holomush.plugin.v1.PluginHostService/QueryLocation"
+	PluginHostService_QueryCharacter_FullMethodName          = "/holomush.plugin.v1.PluginHostService/QueryCharacter"
+	PluginHostService_QueryLocationCharacters_FullMethodName = "/holomush.plugin.v1.PluginHostService/QueryLocationCharacters"
+	PluginHostService_QueryObject_FullMethodName             = "/holomush.plugin.v1.PluginHostService/QueryObject"
+	PluginHostService_ListCommands_FullMethodName            = "/holomush.plugin.v1.PluginHostService/ListCommands"
+	PluginHostService_GetCommandHelp_FullMethodName          = "/holomush.plugin.v1.PluginHostService/GetCommandHelp"
 )
 
 // PluginHostServiceClient is the client API for PluginHostService service.
@@ -330,11 +334,13 @@ const (
 // surface IS served in production.
 //
 // NOTE: the registered server embeds UnimplementedPluginHostServiceServer and
-// implements only 12 of the 18 RPCs below. Log, KVGet, KVSet, KVDelete,
+// implements only 12 of the 22 RPCs below. Log, KVGet, KVSet, KVDelete,
 // AddSessionStream, and RemoveSessionStream are declared here but have no
 // server impl and no production client — they return codes.Unimplemented
-// (tracked in holomush-l6std). Their comments below document that unwired
-// reality, not aspirational behavior.
+// (tracked in holomush-l6std). QueryLocation, QueryCharacter,
+// QueryLocationCharacters, and QueryObject are newly declared and also
+// unimplemented (handlers come in a later task). Their comments below document
+// that unwired reality, not aspirational behavior.
 type PluginHostServiceClient interface {
 	// EmitEvent publishes one plugin-originated event onto the bus through the
 	// host emit fence. SERVED: pluginHostServiceServer.EmitEvent. The caller's
@@ -449,6 +455,24 @@ type PluginHostServiceClient interface {
 	// missing/rejected token, empty actor subject, or a resource type the plugin
 	// does not own.
 	Evaluate(ctx context.Context, in *PluginHostServiceEvaluateRequest, opts ...grpc.CallOption) (*PluginHostServiceEvaluateResponse, error)
+	// QueryLocation returns one location's identity snapshot. The host resolves
+	// it through world.Service.GetLocation under the acting subject derived from
+	// the dispatch token (the invoking character for command/event dispatch, the
+	// plugin itself for plugin-initiated reads). No subject is accepted on the
+	// wire; ABAC is enforced at the world-service layer.
+	QueryLocation(ctx context.Context, in *PluginHostServiceQueryLocationRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryLocationResponse, error)
+	// QueryCharacter returns one character's identity snapshot via
+	// world.Service.GetCharacter under the host-derived acting subject. location_id
+	// is empty when the character is not in the world. No subject on the wire.
+	QueryCharacter(ctx context.Context, in *PluginHostServiceQueryCharacterRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryCharacterResponse, error)
+	// QueryLocationCharacters returns the {id, name} roster of characters at a
+	// location via world.Service.GetCharactersByLocation under the host-derived
+	// acting subject. The roster is empty when none are present. No subject on the wire.
+	QueryLocationCharacters(ctx context.Context, in *PluginHostServiceQueryLocationCharactersRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryLocationCharactersResponse, error)
+	// QueryObject returns one object's identity snapshot via world.Service.GetObject
+	// under the host-derived acting subject. location_id is empty when the object
+	// is not placed in the world. No subject on the wire.
+	QueryObject(ctx context.Context, in *PluginHostServiceQueryObjectRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryObjectResponse, error)
 	// ListCommands enumerates the commands the named character may execute,
 	// ABAC-filtered by the host. SERVED: pluginHostServiceServer.ListCommands,
 	// delegating to commandquery.Querier.Available. The subject is the request's
@@ -652,6 +676,46 @@ func (c *pluginHostServiceClient) Evaluate(ctx context.Context, in *PluginHostSe
 	return out, nil
 }
 
+func (c *pluginHostServiceClient) QueryLocation(ctx context.Context, in *PluginHostServiceQueryLocationRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryLocationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceQueryLocationResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_QueryLocation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginHostServiceClient) QueryCharacter(ctx context.Context, in *PluginHostServiceQueryCharacterRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceQueryCharacterResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_QueryCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginHostServiceClient) QueryLocationCharacters(ctx context.Context, in *PluginHostServiceQueryLocationCharactersRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryLocationCharactersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceQueryLocationCharactersResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_QueryLocationCharacters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginHostServiceClient) QueryObject(ctx context.Context, in *PluginHostServiceQueryObjectRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryObjectResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceQueryObjectResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_QueryObject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *pluginHostServiceClient) ListCommands(ctx context.Context, in *PluginHostServiceListCommandsRequest, opts ...grpc.CallOption) (*PluginHostServiceListCommandsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PluginHostServiceListCommandsResponse)
@@ -684,11 +748,13 @@ func (c *pluginHostServiceClient) GetCommandHelp(ctx context.Context, in *Plugin
 // surface IS served in production.
 //
 // NOTE: the registered server embeds UnimplementedPluginHostServiceServer and
-// implements only 12 of the 18 RPCs below. Log, KVGet, KVSet, KVDelete,
+// implements only 12 of the 22 RPCs below. Log, KVGet, KVSet, KVDelete,
 // AddSessionStream, and RemoveSessionStream are declared here but have no
 // server impl and no production client — they return codes.Unimplemented
-// (tracked in holomush-l6std). Their comments below document that unwired
-// reality, not aspirational behavior.
+// (tracked in holomush-l6std). QueryLocation, QueryCharacter,
+// QueryLocationCharacters, and QueryObject are newly declared and also
+// unimplemented (handlers come in a later task). Their comments below document
+// that unwired reality, not aspirational behavior.
 type PluginHostServiceServer interface {
 	// EmitEvent publishes one plugin-originated event onto the bus through the
 	// host emit fence. SERVED: pluginHostServiceServer.EmitEvent. The caller's
@@ -803,6 +869,24 @@ type PluginHostServiceServer interface {
 	// missing/rejected token, empty actor subject, or a resource type the plugin
 	// does not own.
 	Evaluate(context.Context, *PluginHostServiceEvaluateRequest) (*PluginHostServiceEvaluateResponse, error)
+	// QueryLocation returns one location's identity snapshot. The host resolves
+	// it through world.Service.GetLocation under the acting subject derived from
+	// the dispatch token (the invoking character for command/event dispatch, the
+	// plugin itself for plugin-initiated reads). No subject is accepted on the
+	// wire; ABAC is enforced at the world-service layer.
+	QueryLocation(context.Context, *PluginHostServiceQueryLocationRequest) (*PluginHostServiceQueryLocationResponse, error)
+	// QueryCharacter returns one character's identity snapshot via
+	// world.Service.GetCharacter under the host-derived acting subject. location_id
+	// is empty when the character is not in the world. No subject on the wire.
+	QueryCharacter(context.Context, *PluginHostServiceQueryCharacterRequest) (*PluginHostServiceQueryCharacterResponse, error)
+	// QueryLocationCharacters returns the {id, name} roster of characters at a
+	// location via world.Service.GetCharactersByLocation under the host-derived
+	// acting subject. The roster is empty when none are present. No subject on the wire.
+	QueryLocationCharacters(context.Context, *PluginHostServiceQueryLocationCharactersRequest) (*PluginHostServiceQueryLocationCharactersResponse, error)
+	// QueryObject returns one object's identity snapshot via world.Service.GetObject
+	// under the host-derived acting subject. location_id is empty when the object
+	// is not placed in the world. No subject on the wire.
+	QueryObject(context.Context, *PluginHostServiceQueryObjectRequest) (*PluginHostServiceQueryObjectResponse, error)
 	// ListCommands enumerates the commands the named character may execute,
 	// ABAC-filtered by the host. SERVED: pluginHostServiceServer.ListCommands,
 	// delegating to commandquery.Querier.Available. The subject is the request's
@@ -879,6 +963,18 @@ func (UnimplementedPluginHostServiceServer) IsAnyConnFocused(context.Context, *P
 }
 func (UnimplementedPluginHostServiceServer) Evaluate(context.Context, *PluginHostServiceEvaluateRequest) (*PluginHostServiceEvaluateResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Evaluate not implemented")
+}
+func (UnimplementedPluginHostServiceServer) QueryLocation(context.Context, *PluginHostServiceQueryLocationRequest) (*PluginHostServiceQueryLocationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method QueryLocation not implemented")
+}
+func (UnimplementedPluginHostServiceServer) QueryCharacter(context.Context, *PluginHostServiceQueryCharacterRequest) (*PluginHostServiceQueryCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method QueryCharacter not implemented")
+}
+func (UnimplementedPluginHostServiceServer) QueryLocationCharacters(context.Context, *PluginHostServiceQueryLocationCharactersRequest) (*PluginHostServiceQueryLocationCharactersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method QueryLocationCharacters not implemented")
+}
+func (UnimplementedPluginHostServiceServer) QueryObject(context.Context, *PluginHostServiceQueryObjectRequest) (*PluginHostServiceQueryObjectResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method QueryObject not implemented")
 }
 func (UnimplementedPluginHostServiceServer) ListCommands(context.Context, *PluginHostServiceListCommandsRequest) (*PluginHostServiceListCommandsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListCommands not implemented")
@@ -1231,6 +1327,78 @@ func _PluginHostService_Evaluate_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginHostService_QueryLocation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceQueryLocationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).QueryLocation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_QueryLocation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).QueryLocation(ctx, req.(*PluginHostServiceQueryLocationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginHostService_QueryCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceQueryCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).QueryCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_QueryCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).QueryCharacter(ctx, req.(*PluginHostServiceQueryCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginHostService_QueryLocationCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceQueryLocationCharactersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).QueryLocationCharacters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_QueryLocationCharacters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).QueryLocationCharacters(ctx, req.(*PluginHostServiceQueryLocationCharactersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginHostService_QueryObject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceQueryObjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).QueryObject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_QueryObject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).QueryObject(ctx, req.(*PluginHostServiceQueryObjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _PluginHostService_ListCommands_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PluginHostServiceListCommandsRequest)
 	if err := dec(in); err != nil {
@@ -1345,6 +1513,22 @@ var PluginHostService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Evaluate",
 			Handler:    _PluginHostService_Evaluate_Handler,
+		},
+		{
+			MethodName: "QueryLocation",
+			Handler:    _PluginHostService_QueryLocation_Handler,
+		},
+		{
+			MethodName: "QueryCharacter",
+			Handler:    _PluginHostService_QueryCharacter_Handler,
+		},
+		{
+			MethodName: "QueryLocationCharacters",
+			Handler:    _PluginHostService_QueryLocationCharacters_Handler,
+		},
+		{
+			MethodName: "QueryObject",
+			Handler:    _PluginHostService_QueryObject_Handler,
 		},
 		{
 			MethodName: "ListCommands",
