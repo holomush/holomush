@@ -296,12 +296,18 @@ Expected: PASS. (Wire stays correct: `subjectxlate.Legacy("location.<id>")` ==
 
 ---
 
-### Task 3: Lua SDK emitter emits dot-relative references
+### Task 3: Lua emit layer emits dot-relative references
+
+Covers both Lua emit paths: the `pkg/holo` SDK constants AND the in-tree
+`core-communication` plugin, which builds subjects **inline in Lua** (it does not
+use the SDK constants). Both reach `event_emitter.go:207`, which qualifies with
+the gameID — so both must emit the relative dot form, not colon.
 
 **Files:**
 
 - Modify: `pkg/holo/emit.go:18-22` (constants), `:54-88` (methods unchanged in shape)
-- Test: `pkg/holo/emit_test.go`
+- Modify: `plugins/core-communication/main.lua:76,121,156,178,276,397,398,443` (inline `subject =` colon → dot)
+- Test: `pkg/holo/emit_test.go`, plus the `core-communication` integration/behavior coverage (say/pose/ooc/page/whisper/pemit/emit)
 
 - [ ] **Step 1: Update the failing test**
 
@@ -342,14 +348,38 @@ const (
 concatenate the prefix; only the prefix value changes. Update their doc-comments
 that say `"location:<id>"` to `"location.<id>"`.)
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: Flip the inline Lua subjects in `core-communication/main.lua`**
 
-Run: `task test -- ./pkg/holo/`
-Expected: PASS
+The plugin returns events with inline-built `subject =` strings. Flip the colon
+to dot at all 8 sites (the `type = "core-communication:say"` colons are
+event-type names — `plugin:verb` form — and stay):
 
-- [ ] **Step 5: Commit**
+```lua
+        {subject = "location." .. ctx.location_id, type = "core-communication:say", payload = payload}
+        {subject = "location." .. ctx.location_id, type = "core-communication:pose", payload = payload}
+        {subject = "location." .. ctx.location_id, type = "core-communication:ooc", payload = payload}
+        {subject = "location." .. loc, type = "emit", payload = payload}
+        {subject = "character." .. target_session.character_id, type = "core-communication:page", payload = payload}
+        {subject = "location." .. loc, type = "core-communication:whisper_notice", payload = notice_payload}
+        {subject = "character." .. target.character_id, type = "core-communication:whisper", payload = whisper_payload}
+        {subject = "character." .. target_session.character_id, type = "core-communication:pemit", payload = payload}
+```
 
-`refactor(holo): Lua SDK emits dot-relative stream references (holomush-rops)`
+Why it matters: these bypass `pkg/holo` and reach `event_emitter.go:207`. After
+Task 7 replaces `subjectxlate.Legacy` with `eventbus.Qualify`, a colon subject
+(`"location:01ABC"`) qualifies to `"events.main.location:01ABC"`, which fails
+`NewSubject` token validation (the colon is not in `[A-Za-z0-9_-]`) — breaking
+every say/pose/ooc/page/whisper/pemit/emit command. The dot form qualifies cleanly.
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `task test -- ./pkg/holo/` and the `core-communication` plugin tests
+(`task test -- ./plugins/core-communication/...` and the comms integration suite).
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+`refactor(holo,core-communication): Lua emit layer emits dot-relative stream references (holomush-rops)`
 
 ---
 
@@ -693,7 +723,7 @@ Expected: PASS
 **Files:**
 
 - Delete: `internal/eventbus/subjectxlate/subjectxlate.go`, `subjectxlate_test.go`
-- Modify: `internal/grpc/server.go:663`, `cmd/holomush/sub_grpc.go`, `internal/admin/readstream/`, `internal/testsupport/integrationtest/session.go:585`, `harness.go:1155,1197`, `crypto.go:160` (stale comment), `internal/testsupport/integrationtest/real_abac_test.go:30` (builds `"location:"+id` — flip to `world.LocationStream`; breaks silently post-migration otherwise)
+- Modify: `internal/grpc/server.go:663`, `cmd/holomush/sub_grpc.go`, `internal/admin/readstream/`, `internal/testsupport/integrationtest/session.go:585`, `harness.go:1155,1197`, `crypto.go:160` (stale comment), `internal/testsupport/integrationtest/real_abac_test.go:30` and `harness_smoke_test.go:135` (both build `"location:"+id` for `EmitDirectEvent` — flip to `world.LocationStream`; break at `pr-prep:full` post-migration otherwise — `_test.go` so INV-ROPS-3 won't catch them)
 
 - [ ] **Step 1: Replace the remaining callers**
 
@@ -785,7 +815,11 @@ func TestINV_ROPS_3_NoColonStreamLiterals(t *testing.T) {
 				}
 				return nil
 			}
-			if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			// Scan Go AND Lua: core-communication/main.lua builds stream
+			// subjects inline (bypasses pkg/holo), so .lua must be covered.
+			isGo := strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go")
+			isLua := strings.HasSuffix(path, ".lua")
+			if !isGo && !isLua {
 				return nil
 			}
 			data, rerr := os.ReadFile(path)

@@ -77,8 +77,8 @@ A producer/classifier survey narrows the bead's 2026-05-20 discovered scope:
 
 | Stream | Colon (today) | Dot (canonical) | Live code? |
 | --- | --- | --- | --- |
-| Location | `location:<ULID>` | `events.<gid>.location.<ULID>` | **Yes** — `internal/core/engine.go:73,96`, `internal/world/events.go`, `internal/grpc/server.go:1294`, grid focus routing, scope floor, ABAC `StreamProvider`, **Lua SDK `pkg/holo/emit.go` `Emitter.Location()`** |
-| Character (personal) | `character:<ULID>` | `events.<gid>.character.<ULID>` | **Yes** — `stream_access.go`, `scope_floor.go`, `internal/grpc/server.go:1246`, `internal/core/event.go:17`, `internal/core/engine_end_session.go:62` (`NewEvent` producer), **Lua SDK `pkg/holo/emit.go` `Emitter.Character()`** |
+| Location | `location:<ULID>` | `events.<gid>.location.<ULID>` | **Yes** — `internal/core/engine.go:73,96`, `internal/world/events.go`, `internal/grpc/server.go:1294`, grid focus routing, scope floor, ABAC `StreamProvider`, **Lua SDK `pkg/holo/emit.go` `Emitter.Location()`**, **inline Lua `plugins/core-communication/main.lua`** (say/pose/ooc/emit/whisper_notice) |
+| Character (personal) | `character:<ULID>` | `events.<gid>.character.<ULID>` | **Yes** — `stream_access.go`, `scope_floor.go`, `internal/grpc/server.go:1246`, `internal/core/event.go:17`, `internal/core/engine_end_session.go:62` (`NewEvent` producer), **Lua SDK `pkg/holo/emit.go` `Emitter.Character()`**, **inline Lua `plugins/core-communication/main.lua`** (page/whisper/pemit) |
 | Global (ambient) | `global` | `events.<gid>.global` | **Yes** — **Lua SDK `pkg/holo/emit.go:21` `Emitter.Global()`** emits to stream name `"global"`. This is a live pub/sub stream, not merely an ABAC scope. |
 | Scene IC/OOC | partly dot (`s9nu`) | `events.<gid>.scene.<ULID>.{ic,ooc}` | **Mostly done** — emit path + classifiers are dot (`s9nu`). BUT `internal/grpc/focus/scenepolicy/policy.go:29-30` `StreamsFor` still builds colon `scene:<id>:ic/:ooc` **subscription filters** — a producer `s9nu` missed (latent `ofpi`-class bug). This design flips it + extends the meta-test. |
 | Notifications | `notifications:<charID>` | `events.<gid>.notification.<charID>` | **No live producer** — design-reference only (scenes v2 §3.1, future Phase 10). Spec-text update; no code to flip. |
@@ -370,7 +370,9 @@ boundary test as noted. RFC2119 keywords are normative.
 - **INV-ROPS-2** — Unclassifiable stream names are rejected at handler entry
   with `INVALID_ARGUMENT`, never routed to a default authorization branch.
 - **INV-ROPS-3 (eradication gate)** — A CI meta-test asserts no production Go or
-  TypeScript source contains a colon-style entity-prefix literal (`location:`,
+  Lua source (`.go` + `.lua` — `core-communication/main.lua` builds subjects
+  inline, bypassing `pkg/holo`; the SvelteKit client is covered by its own Task-6
+  flip + web tests) contains a colon-style entity-prefix literal (`location:`,
   `character:`, `notifications:`, `scene:`, `plugin:`, …) as a **stream name**.
   Distinguishing a stream-name literal from a legitimate ABAC subject/resource
   literal is solved structurally, not heuristically: **ABAC subjects/resources
