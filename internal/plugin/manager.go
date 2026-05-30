@@ -25,6 +25,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/internal/settings"
 	"github.com/holomush/holomush/internal/store"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -382,6 +383,30 @@ func (m *Manager) ConfigureReadbackDecryptor(d ReadbackDecryptor) {
 	if m.luaHost != nil {
 		if configurer := findOptional[ReadbackDepsConfigurer](m.luaHost); configurer != nil {
 			configurer.SetReadbackDecryptor(d)
+		}
+	}
+}
+
+// ConfigureSettingsDeps injects the owner-partitioned settings stores into all
+// registered hosts that implement SettingsDepsConfigurer. Production startup
+// MUST call this before plugins issue GetSetting / SetSetting RPCs (or the Lua
+// equivalents). Called from the gRPC subsystem's Start after the settings stores
+// are assembled. Same late-binding pattern as ConfigureFocusDeps (holomush-iokti.7).
+func (m *Manager) ConfigureSettingsDeps(
+	player settings.PlayerSettingsStore,
+	character settings.CharacterSettingsStore,
+	game settings.GameSettings,
+) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, host := range m.hosts {
+		if configurer := findOptional[SettingsDepsConfigurer](host); configurer != nil {
+			configurer.SetSettingsStores(player, character, game)
+		}
+	}
+	if m.luaHost != nil {
+		if configurer := findOptional[SettingsDepsConfigurer](m.luaHost); configurer != nil {
+			configurer.SetSettingsStores(player, character, game)
 		}
 	}
 }

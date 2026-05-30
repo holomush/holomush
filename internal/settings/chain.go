@@ -76,3 +76,13 @@ func (c *Chain) DurationN(ctx context.Context, key string) (time.Duration, bool)
 	}
 	return 0, false
 }
+
+// StringSliceN returns the first non-absent string-slice value across scopes.
+func (c *Chain) StringSliceN(ctx context.Context, key string) ([]string, bool) {
+	for _, s := range c.scopes {
+		if v, ok := s.StringSliceN(ctx, key); ok {
+			return v, true
+		}
+	}
+	return nil, false
+}

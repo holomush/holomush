@@ -13,6 +13,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/settings"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"google.golang.org/grpc"
@@ -148,6 +149,19 @@ type ReadbackDecryptor interface {
 // assembled during gRPC subsystem Start, after plugin loading.
 type ReadbackDepsConfigurer interface {
 	SetReadbackDecryptor(d ReadbackDecryptor)
+}
+
+// SettingsDepsConfigurer is an optional interface for hosts that need the
+// owner-partitioned settings stores injected after construction. Same
+// late-binding rationale as FocusDepsConfigurer: the player / character / game
+// settings stores are assembled during gRPC subsystem Start, after plugin
+// loading. Used by the GetSetting / SetSetting host RPCs (holomush-iokti.7).
+type SettingsDepsConfigurer interface {
+	SetSettingsStores(
+		player settings.PlayerSettingsStore,
+		character settings.CharacterSettingsStore,
+		game settings.GameSettings,
+	)
 }
 
 // IdentityRegistryConfigurer is implemented by hosts that need an

@@ -108,6 +108,12 @@ const (
 	// PluginHostServiceGetCommandHelpProcedure is the fully-qualified name of the PluginHostService's
 	// GetCommandHelp RPC.
 	PluginHostServiceGetCommandHelpProcedure = "/holomush.plugin.v1.PluginHostService/GetCommandHelp"
+	// PluginHostServiceGetSettingProcedure is the fully-qualified name of the PluginHostService's
+	// GetSetting RPC.
+	PluginHostServiceGetSettingProcedure = "/holomush.plugin.v1.PluginHostService/GetSetting"
+	// PluginHostServiceSetSettingProcedure is the fully-qualified name of the PluginHostService's
+	// SetSetting RPC.
+	PluginHostServiceSetSettingProcedure = "/holomush.plugin.v1.PluginHostService/SetSetting"
 )
 
 // PluginServiceClient is a client for the holomush.plugin.v1.PluginService service.
@@ -430,6 +436,17 @@ type PluginHostServiceClient interface {
 	// delegating to commandquery.Querier.Help. Mirrors the Lua
 	// holomush.get_command_help(name, character_id) host function.
 	GetCommandHelp(context.Context, *connect.Request[v1.PluginHostServiceGetCommandHelpRequest]) (*connect.Response[v1.PluginHostServiceGetCommandHelpResponse], error)
+	// GetSetting reads a single-scope setting in the calling plugin's owner
+	// partition (owner bound host-side from the authenticated plugin name, never
+	// from the request). The handler resolves SettingScope to its backing store;
+	// a missing key returns a successful response with found=false, never a
+	// codes.NotFound status error.
+	GetSetting(context.Context, *connect.Request[v1.PluginHostServiceGetSettingRequest]) (*connect.Response[v1.PluginHostServiceGetSettingResponse], error)
+	// SetSetting writes a single-scope setting in the calling plugin's partition;
+	// GAME scope requires an operator authorization decision (host-enforced, not
+	// trusted from the wire). The owner partition is bound host-side from the
+	// authenticated plugin name.
+	SetSetting(context.Context, *connect.Request[v1.PluginHostServiceSetSettingRequest]) (*connect.Response[v1.PluginHostServiceSetSettingResponse], error)
 }
 
 // NewPluginHostServiceClient constructs a client for the holomush.plugin.v1.PluginHostService
@@ -563,6 +580,18 @@ func NewPluginHostServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(pluginHostServiceMethods.ByName("GetCommandHelp")),
 			connect.WithClientOptions(opts...),
 		),
+		getSetting: connect.NewClient[v1.PluginHostServiceGetSettingRequest, v1.PluginHostServiceGetSettingResponse](
+			httpClient,
+			baseURL+PluginHostServiceGetSettingProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("GetSetting")),
+			connect.WithClientOptions(opts...),
+		),
+		setSetting: connect.NewClient[v1.PluginHostServiceSetSettingRequest, v1.PluginHostServiceSetSettingResponse](
+			httpClient,
+			baseURL+PluginHostServiceSetSettingProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("SetSetting")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -588,6 +617,8 @@ type pluginHostServiceClient struct {
 	evaluate            *connect.Client[v1.PluginHostServiceEvaluateRequest, v1.PluginHostServiceEvaluateResponse]
 	listCommands        *connect.Client[v1.PluginHostServiceListCommandsRequest, v1.PluginHostServiceListCommandsResponse]
 	getCommandHelp      *connect.Client[v1.PluginHostServiceGetCommandHelpRequest, v1.PluginHostServiceGetCommandHelpResponse]
+	getSetting          *connect.Client[v1.PluginHostServiceGetSettingRequest, v1.PluginHostServiceGetSettingResponse]
+	setSetting          *connect.Client[v1.PluginHostServiceSetSettingRequest, v1.PluginHostServiceSetSettingResponse]
 }
 
 // EmitEvent calls holomush.plugin.v1.PluginHostService.EmitEvent.
@@ -688,6 +719,16 @@ func (c *pluginHostServiceClient) ListCommands(ctx context.Context, req *connect
 // GetCommandHelp calls holomush.plugin.v1.PluginHostService.GetCommandHelp.
 func (c *pluginHostServiceClient) GetCommandHelp(ctx context.Context, req *connect.Request[v1.PluginHostServiceGetCommandHelpRequest]) (*connect.Response[v1.PluginHostServiceGetCommandHelpResponse], error) {
 	return c.getCommandHelp.CallUnary(ctx, req)
+}
+
+// GetSetting calls holomush.plugin.v1.PluginHostService.GetSetting.
+func (c *pluginHostServiceClient) GetSetting(ctx context.Context, req *connect.Request[v1.PluginHostServiceGetSettingRequest]) (*connect.Response[v1.PluginHostServiceGetSettingResponse], error) {
+	return c.getSetting.CallUnary(ctx, req)
+}
+
+// SetSetting calls holomush.plugin.v1.PluginHostService.SetSetting.
+func (c *pluginHostServiceClient) SetSetting(ctx context.Context, req *connect.Request[v1.PluginHostServiceSetSettingRequest]) (*connect.Response[v1.PluginHostServiceSetSettingResponse], error) {
+	return c.setSetting.CallUnary(ctx, req)
 }
 
 // PluginHostServiceHandler is an implementation of the holomush.plugin.v1.PluginHostService
@@ -819,6 +860,17 @@ type PluginHostServiceHandler interface {
 	// delegating to commandquery.Querier.Help. Mirrors the Lua
 	// holomush.get_command_help(name, character_id) host function.
 	GetCommandHelp(context.Context, *connect.Request[v1.PluginHostServiceGetCommandHelpRequest]) (*connect.Response[v1.PluginHostServiceGetCommandHelpResponse], error)
+	// GetSetting reads a single-scope setting in the calling plugin's owner
+	// partition (owner bound host-side from the authenticated plugin name, never
+	// from the request). The handler resolves SettingScope to its backing store;
+	// a missing key returns a successful response with found=false, never a
+	// codes.NotFound status error.
+	GetSetting(context.Context, *connect.Request[v1.PluginHostServiceGetSettingRequest]) (*connect.Response[v1.PluginHostServiceGetSettingResponse], error)
+	// SetSetting writes a single-scope setting in the calling plugin's partition;
+	// GAME scope requires an operator authorization decision (host-enforced, not
+	// trusted from the wire). The owner partition is bound host-side from the
+	// authenticated plugin name.
+	SetSetting(context.Context, *connect.Request[v1.PluginHostServiceSetSettingRequest]) (*connect.Response[v1.PluginHostServiceSetSettingResponse], error)
 }
 
 // NewPluginHostServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -948,6 +1000,18 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 		connect.WithSchema(pluginHostServiceMethods.ByName("GetCommandHelp")),
 		connect.WithHandlerOptions(opts...),
 	)
+	pluginHostServiceGetSettingHandler := connect.NewUnaryHandler(
+		PluginHostServiceGetSettingProcedure,
+		svc.GetSetting,
+		connect.WithSchema(pluginHostServiceMethods.ByName("GetSetting")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pluginHostServiceSetSettingHandler := connect.NewUnaryHandler(
+		PluginHostServiceSetSettingProcedure,
+		svc.SetSetting,
+		connect.WithSchema(pluginHostServiceMethods.ByName("SetSetting")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.plugin.v1.PluginHostService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PluginHostServiceEmitEventProcedure:
@@ -990,6 +1054,10 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 			pluginHostServiceListCommandsHandler.ServeHTTP(w, r)
 		case PluginHostServiceGetCommandHelpProcedure:
 			pluginHostServiceGetCommandHelpHandler.ServeHTTP(w, r)
+		case PluginHostServiceGetSettingProcedure:
+			pluginHostServiceGetSettingHandler.ServeHTTP(w, r)
+		case PluginHostServiceSetSettingProcedure:
+			pluginHostServiceSetSettingHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1077,4 +1145,12 @@ func (UnimplementedPluginHostServiceHandler) ListCommands(context.Context, *conn
 
 func (UnimplementedPluginHostServiceHandler) GetCommandHelp(context.Context, *connect.Request[v1.PluginHostServiceGetCommandHelpRequest]) (*connect.Response[v1.PluginHostServiceGetCommandHelpResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.GetCommandHelp is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) GetSetting(context.Context, *connect.Request[v1.PluginHostServiceGetSettingRequest]) (*connect.Response[v1.PluginHostServiceGetSettingResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.GetSetting is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) SetSetting(context.Context, *connect.Request[v1.PluginHostServiceSetSettingRequest]) (*connect.Response[v1.PluginHostServiceSetSettingResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.SetSetting is not implemented"))
 }

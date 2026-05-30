@@ -286,3 +286,153 @@ func (f *foreignNotFoundStore) SetSystemInfo(context.Context, string, string) er
 func TestGameSettingsImplementsGameSettingsInterface(_ *testing.T) {
 	var _ settings.GameSettings = settings.NewGameSettings(newMockSystemInfoStore()) //nolint:staticcheck // intentional interface check
 }
+
+func TestGameSettingsStringSliceNDecodesJSONArrayString(t *testing.T) {
+	ctx := context.Background()
+	store := newMockSystemInfoStore()
+	store.data["scenes.focus.tags"] = `["a","b"]`
+	gs := settings.NewGameSettings(store)
+
+	v, ok := gs.StringSliceN(ctx, "scenes.focus.tags")
+	assert.True(t, ok)
+	assert.Equal(t, []string{"a", "b"}, v)
+}
+
+func TestGameSettingsStringSliceNReturnsFalseForNonArrayString(t *testing.T) {
+	ctx := context.Background()
+	store := newMockSystemInfoStore()
+	store.data["scenes.focus.tags"] = "not-an-array"
+	gs := settings.NewGameSettings(store)
+
+	v, ok := gs.StringSliceN(ctx, "scenes.focus.tags")
+	assert.False(t, ok)
+	assert.Nil(t, v)
+}
+
+func TestGameSettingsStringSliceNReturnsFalseWhenNotFound(t *testing.T) {
+	ctx := context.Background()
+	gs := settings.NewGameSettings(newMockSystemInfoStore())
+
+	v, ok := gs.StringSliceN(ctx, "scenes.focus.tags")
+	assert.False(t, ok)
+	assert.Nil(t, v)
+}
+
+// --- owner-partition (Scoped) tests ---
+
+func TestGameSettingsImplementsScopedInterface(_ *testing.T) {
+	var _ settings.Scoped = settings.NewGameSettings(newMockSystemInfoStore())
+}
+
+func TestGameSettingsHostSetStringSliceStoresJSONArrayString(t *testing.T) {
+	ctx := context.Background()
+	store := newMockSystemInfoStore()
+	gs := settings.NewGameSettings(store)
+
+	err := gs.Host().SetStringSlice(ctx, "scenes.focus.tags", []string{"a", "b"})
+	require.NoError(t, err)
+	assert.Equal(t, `["a","b"]`, store.data["scenes.focus.tags"])
+
+	v, ok := gs.StringSliceN(ctx, "scenes.focus.tags")
+	assert.True(t, ok)
+	assert.Equal(t, []string{"a", "b"}, v)
+}
+
+func TestGameSettingsHostSetStringSliceRejectsInvalidNamespace(t *testing.T) {
+	ctx := context.Background()
+	gs := settings.NewGameSettings(newMockSystemInfoStore())
+
+	err := gs.Host().SetStringSlice(ctx, "content.cw_taxonomy", []string{"a"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown namespace")
+}
+
+func TestGameSettingsOwnerStringSliceRoundTripsUnderPrefix(t *testing.T) {
+	ctx := context.Background()
+	store := newMockSystemInfoStore()
+	gs := settings.NewGameSettings(store)
+
+	err := gs.Owner("core-scenes").SetStringSlice(ctx, "content.cw_taxonomy", []string{"violence", "gore"})
+	require.NoError(t, err)
+
+	// Stored under the owner prefix, JSON-array-encoded.
+	assert.Equal(t, `["violence","gore"]`, store.data["plugin/core-scenes/content.cw_taxonomy"])
+
+	// Readable back via the same owner.
+	v, ok := gs.Owner("core-scenes").StringSliceN(ctx, "content.cw_taxonomy")
+	assert.True(t, ok)
+	assert.Equal(t, []string{"violence", "gore"}, v)
+}
+
+func TestGameSettingsOwnerSetStringRoundTripsUnderPrefix(t *testing.T) {
+	ctx := context.Background()
+	store := newMockSystemInfoStore()
+	gs := settings.NewGameSettings(store)
+
+	err := gs.Owner("core-scenes").SetString(ctx, "content.mode", "strict")
+	require.NoError(t, err)
+	assert.Equal(t, "strict", store.data["plugin/core-scenes/content.mode"])
+
+	v, ok := gs.Owner("core-scenes").StringN(ctx, "content.mode")
+	assert.True(t, ok)
+	assert.Equal(t, "strict", v)
+}
+
+func TestGameSettingsOwnerBypassesNamespaceValidation(t *testing.T) {
+	ctx := context.Background()
+	store := newMockSystemInfoStore()
+	gs := settings.NewGameSettings(store)
+
+	// "content" is NOT a registered host namespace; an owner write must still
+	// succeed because the plugin owns its keyspace.
+	err := gs.Owner("core-scenes").SetString(ctx, "content.cw_taxonomy", "x")
+	require.NoError(t, err)
+}
+
+func TestGameSettingsOwnerPartitionIsInvisibleToHostAndOtherOwners(t *testing.T) {
+	ctx := context.Background()
+	store := newMockSystemInfoStore()
+	gs := settings.NewGameSettings(store)
+
+	require.NoError(t,
+		gs.Owner("a").SetStringSlice(ctx, "content.cw_taxonomy", []string{"x"}))
+
+	// Owner("b") cannot see owner a's key.
+	_, ok := gs.Owner("b").StringSliceN(ctx, "content.cw_taxonomy")
+	assert.False(t, ok, "owner b must not see owner a's partition")
+
+	// Host (bare reads) cannot see the owner-prefixed key either.
+	_, ok = gs.StringSliceN(ctx, "content.cw_taxonomy")
+	assert.False(t, ok, "host bare read must not see owner a's partition")
+
+	// Host() Writable view also cannot see it.
+	_, ok = gs.Host().StringSliceN(ctx, "content.cw_taxonomy")
+	assert.False(t, ok, "host writable view must not see owner a's partition")
+}
+
+func TestGameSettingsHostWritablePersistsNamespaceValidatedKey(t *testing.T) {
+	ctx := context.Background()
+	store := newMockSystemInfoStore()
+	gs := settings.NewGameSettings(store)
+
+	err := gs.Host().SetString(ctx, "scenes.focus.mode", "bounded")
+	require.NoError(t, err)
+	assert.Equal(t, "bounded", store.data["scenes.focus.mode"])
+
+	// Readable via bare reads too (same host keyspace).
+	v, ok := gs.StringN(ctx, "scenes.focus.mode")
+	assert.True(t, ok)
+	assert.Equal(t, "bounded", v)
+}
+
+func TestGameSettingsHostWritableRejectsInvalidNamespace(t *testing.T) {
+	ctx := context.Background()
+	gs := settings.NewGameSettings(newMockSystemInfoStore())
+
+	err := gs.Host().SetString(ctx, "content.cw_taxonomy", "x")
+	assert.Error(t, err)
+
+	err = gs.Host().SetString(ctx, "plugin.something", "x")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "reserved")
+}

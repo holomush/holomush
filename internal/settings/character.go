@@ -5,6 +5,7 @@ package settings
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/oklog/ulid/v2"
@@ -22,8 +23,12 @@ func NewNullCharacterSettingsStore() CharacterSettingsStore {
 	return &nullCharacterSettingsStore{}
 }
 
-func (n *nullCharacterSettingsStore) For(_ context.Context, _ ulid.ULID) Settings {
-	return &emptySettings{}
+// For returns a Scoped handle whose host partition is empty: bare reads
+// report all keys as unset (matching the Phase 4 null behavior). Owner
+// partitions are usable in-memory. The commit func is nil — writes do not
+// persist; real character-scope persistence is deferred (see iokti.3).
+func (n *nullCharacterSettingsStore) For(_ context.Context, _ ulid.ULID) Scoped {
+	return newScopedView(map[string]json.RawMessage{})
 }
 
 func (n *nullCharacterSettingsStore) SetString(

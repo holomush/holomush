@@ -152,7 +152,7 @@ var _ = Describe("Migrator", func() {
 
 			version, dirty, err = migrator.Version()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(version).To(Equal(uint(44)))
+			Expect(version).To(Equal(uint(45)))
 			Expect(dirty).To(BeFalse())
 
 			tables = queryTableNames(suiteT, ctx, connStr)
@@ -175,7 +175,7 @@ var _ = Describe("Migrator", func() {
 
 			version, dirty, err = migrator.Version()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(version).To(Equal(uint(44)))
+			Expect(version).To(Equal(uint(45)))
 			Expect(dirty).To(BeFalse())
 
 			tables = queryTableNames(suiteT, ctx, connStr)

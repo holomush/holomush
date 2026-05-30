@@ -316,6 +316,8 @@ const (
 	PluginHostService_Evaluate_FullMethodName            = "/holomush.plugin.v1.PluginHostService/Evaluate"
 	PluginHostService_ListCommands_FullMethodName        = "/holomush.plugin.v1.PluginHostService/ListCommands"
 	PluginHostService_GetCommandHelp_FullMethodName      = "/holomush.plugin.v1.PluginHostService/GetCommandHelp"
+	PluginHostService_GetSetting_FullMethodName          = "/holomush.plugin.v1.PluginHostService/GetSetting"
+	PluginHostService_SetSetting_FullMethodName          = "/holomush.plugin.v1.PluginHostService/SetSetting"
 )
 
 // PluginHostServiceClient is the client API for PluginHostService service.
@@ -462,6 +464,17 @@ type PluginHostServiceClient interface {
 	// delegating to commandquery.Querier.Help. Mirrors the Lua
 	// holomush.get_command_help(name, character_id) host function.
 	GetCommandHelp(ctx context.Context, in *PluginHostServiceGetCommandHelpRequest, opts ...grpc.CallOption) (*PluginHostServiceGetCommandHelpResponse, error)
+	// GetSetting reads a single-scope setting in the calling plugin's owner
+	// partition (owner bound host-side from the authenticated plugin name, never
+	// from the request). The handler resolves SettingScope to its backing store;
+	// a missing key returns a successful response with found=false, never a
+	// codes.NotFound status error.
+	GetSetting(ctx context.Context, in *PluginHostServiceGetSettingRequest, opts ...grpc.CallOption) (*PluginHostServiceGetSettingResponse, error)
+	// SetSetting writes a single-scope setting in the calling plugin's partition;
+	// GAME scope requires an operator authorization decision (host-enforced, not
+	// trusted from the wire). The owner partition is bound host-side from the
+	// authenticated plugin name.
+	SetSetting(ctx context.Context, in *PluginHostServiceSetSettingRequest, opts ...grpc.CallOption) (*PluginHostServiceSetSettingResponse, error)
 }
 
 type pluginHostServiceClient struct {
@@ -672,6 +685,26 @@ func (c *pluginHostServiceClient) GetCommandHelp(ctx context.Context, in *Plugin
 	return out, nil
 }
 
+func (c *pluginHostServiceClient) GetSetting(ctx context.Context, in *PluginHostServiceGetSettingRequest, opts ...grpc.CallOption) (*PluginHostServiceGetSettingResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceGetSettingResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_GetSetting_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginHostServiceClient) SetSetting(ctx context.Context, in *PluginHostServiceSetSettingRequest, opts ...grpc.CallOption) (*PluginHostServiceSetSettingResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceSetSettingResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_SetSetting_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginHostServiceServer is the server API for PluginHostService service.
 // All implementations must embed UnimplementedPluginHostServiceServer
 // for forward compatibility.
@@ -816,6 +849,17 @@ type PluginHostServiceServer interface {
 	// delegating to commandquery.Querier.Help. Mirrors the Lua
 	// holomush.get_command_help(name, character_id) host function.
 	GetCommandHelp(context.Context, *PluginHostServiceGetCommandHelpRequest) (*PluginHostServiceGetCommandHelpResponse, error)
+	// GetSetting reads a single-scope setting in the calling plugin's owner
+	// partition (owner bound host-side from the authenticated plugin name, never
+	// from the request). The handler resolves SettingScope to its backing store;
+	// a missing key returns a successful response with found=false, never a
+	// codes.NotFound status error.
+	GetSetting(context.Context, *PluginHostServiceGetSettingRequest) (*PluginHostServiceGetSettingResponse, error)
+	// SetSetting writes a single-scope setting in the calling plugin's partition;
+	// GAME scope requires an operator authorization decision (host-enforced, not
+	// trusted from the wire). The owner partition is bound host-side from the
+	// authenticated plugin name.
+	SetSetting(context.Context, *PluginHostServiceSetSettingRequest) (*PluginHostServiceSetSettingResponse, error)
 	mustEmbedUnimplementedPluginHostServiceServer()
 }
 
@@ -885,6 +929,12 @@ func (UnimplementedPluginHostServiceServer) ListCommands(context.Context, *Plugi
 }
 func (UnimplementedPluginHostServiceServer) GetCommandHelp(context.Context, *PluginHostServiceGetCommandHelpRequest) (*PluginHostServiceGetCommandHelpResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCommandHelp not implemented")
+}
+func (UnimplementedPluginHostServiceServer) GetSetting(context.Context, *PluginHostServiceGetSettingRequest) (*PluginHostServiceGetSettingResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSetting not implemented")
+}
+func (UnimplementedPluginHostServiceServer) SetSetting(context.Context, *PluginHostServiceSetSettingRequest) (*PluginHostServiceSetSettingResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetSetting not implemented")
 }
 func (UnimplementedPluginHostServiceServer) mustEmbedUnimplementedPluginHostServiceServer() {}
 func (UnimplementedPluginHostServiceServer) testEmbeddedByValue()                           {}
@@ -1267,6 +1317,42 @@ func _PluginHostService_GetCommandHelp_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginHostService_GetSetting_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceGetSettingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).GetSetting(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_GetSetting_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).GetSetting(ctx, req.(*PluginHostServiceGetSettingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginHostService_SetSetting_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceSetSettingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).SetSetting(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_SetSetting_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).SetSetting(ctx, req.(*PluginHostServiceSetSettingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginHostService_ServiceDesc is the grpc.ServiceDesc for PluginHostService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1353,6 +1439,14 @@ var PluginHostService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetCommandHelp",
 			Handler:    _PluginHostService_GetCommandHelp_Handler,
+		},
+		{
+			MethodName: "GetSetting",
+			Handler:    _PluginHostService_GetSetting_Handler,
+		},
+		{
+			MethodName: "SetSetting",
+			Handler:    _PluginHostService_SetSetting_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

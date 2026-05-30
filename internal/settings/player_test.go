@@ -16,6 +16,21 @@ import (
 	"github.com/holomush/holomush/internal/settings"
 )
 
+// TestRepoPlayerSettingsStoreSetStringIsUnsupported proves the store-level
+// SetString on a repo-backed player store fails with an explicit error instead
+// of panicking on a nil reader. Host-key writes are unsupported on the
+// repo-backed store; plugin owner-partition writes go through For().Owner().
+func TestRepoPlayerSettingsStoreSetStringIsUnsupported(t *testing.T) {
+	ctx := context.Background()
+	// The repo is never dereferenced by SetString — the nil-reader guard
+	// returns first — so a nil repo is sufficient to exercise the guard.
+	store := settings.NewRepoPlayerSettingsStore(nil)
+	assert.NotPanics(t, func() {
+		err := store.SetString(ctx, ulid.Make(), "scenes.focus.mode", "bounded")
+		assert.Error(t, err)
+	})
+}
+
 // mockPlayerPrefsReader implements settings.PlayerPrefsReader for testing.
 type mockPlayerPrefsReader struct {
 	prefs map[ulid.ULID]json.RawMessage
@@ -330,4 +345,56 @@ func TestPlayerSettingsIntNReturnsFalseForFractionalJSONNumber(t *testing.T) {
 
 func TestPlayerSettingsStoreConcreteTypeSatisfiesInterface(_ *testing.T) {
 	var _ settings.PlayerSettingsStore = settings.NewPlayerSettingsStore(newMockPlayerPrefsReader())
+}
+
+func TestPlayerSettingsStringSliceNReturnsNativeJSONArray(t *testing.T) {
+	ctx := context.Background()
+	reader := newMockPlayerPrefsReader()
+	pid := ulid.Make()
+	reader.prefs[pid] = json.RawMessage(`{"scenes.focus.tags":["a","b"]}`)
+	store := settings.NewPlayerSettingsStore(reader)
+
+	s := store.For(ctx, pid)
+	v, ok := s.StringSliceN(ctx, "scenes.focus.tags")
+	assert.True(t, ok)
+	assert.Equal(t, []string{"a", "b"}, v)
+}
+
+func TestPlayerSettingsStringSliceNReturnsFalseForScalarValue(t *testing.T) {
+	ctx := context.Background()
+	reader := newMockPlayerPrefsReader()
+	pid := ulid.Make()
+	reader.prefs[pid] = json.RawMessage(`{"scenes.focus.tags":"hello"}`)
+	store := settings.NewPlayerSettingsStore(reader)
+
+	s := store.For(ctx, pid)
+	v, ok := s.StringSliceN(ctx, "scenes.focus.tags")
+	assert.False(t, ok)
+	assert.Nil(t, v)
+}
+
+func TestPlayerSettingsStringSliceNReturnsFalseForMissingKey(t *testing.T) {
+	ctx := context.Background()
+	reader := newMockPlayerPrefsReader()
+	pid := ulid.Make()
+	reader.prefs[pid] = json.RawMessage(`{"other.key":"hello"}`)
+	store := settings.NewPlayerSettingsStore(reader)
+
+	s := store.For(ctx, pid)
+	v, ok := s.StringSliceN(ctx, "scenes.focus.tags")
+	assert.False(t, ok)
+	assert.Nil(t, v)
+}
+
+func TestPlayerSettingsStringSliceNReturnsFalseForUnknownNamespace(t *testing.T) {
+	ctx := context.Background()
+	reader := newMockPlayerPrefsReader()
+	pid := ulid.Make()
+	reader.prefs[pid] = json.RawMessage(`{"bogus.key":["a","b"]}`)
+	store := settings.NewPlayerSettingsStore(reader)
+
+	s := store.For(ctx, pid)
+	v, ok := s.StringSliceN(ctx, "bogus.key")
+	assert.False(t, ok)
+	assert.Nil(t, v)
 }

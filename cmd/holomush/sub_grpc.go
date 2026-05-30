@@ -434,10 +434,16 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		Store:       rawEventStore,
 		NotFoundErr: store.ErrSystemInfoNotFound,
 	})
+	// Character-scope settings: repo-backed over characters.preferences
+	// (iokti.5). Owner-partitioned, persisted via read-modify-write.
+	characterSettings := settings.NewRepoCharacterSettingsStore(
+		store.NewCharacterSettingsRepository(pool),
+	)
 	focusCoordOpts := []holoFocus.CoordinatorOption{
 		holoFocus.WithSessionStore(sessionStore),
 		holoFocus.WithKindPolicy(scenepolicy.New()),
 		holoFocus.WithGameSettings(gameSettings),
+		holoFocus.WithCharacterSettings(characterSettings),
 		holoFocus.WithPlayerPreferences(holoFocus.NewPlayerPrefsAdapter(authPlayerRepo)),
 		holoFocus.WithStreamContributor(&focusStreamContributorAdapter{pm: pluginManager}),
 	}
@@ -466,6 +472,16 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		gameID: s.cfg.EventBus.GameID,
 	}
 	pluginManager.ConfigureFocusDeps(focusCoord, pluginHistoryReader)
+
+	// 8b2: Inject the owner-partitioned settings stores into plugin hosts
+	// (late-binding, holomush-iokti.7). Binary plugins use them for the
+	// GetSetting/SetSetting host RPCs; the player store is repo-backed over
+	// players.preferences (owner partition persisted via read-modify-write),
+	// reusing the same player repo as the focus coordinator's player-prefs
+	// adapter. gameSettings / characterSettings were built above for the focus
+	// coordinator and are shared here.
+	playerSettings := settings.NewRepoPlayerSettingsStore(authPlayerRepo)
+	pluginManager.ConfigureSettingsDeps(playerSettings, characterSettings, gameSettings)
 
 	// Wire the read-back decryptor for the DecryptOwnAuditRows host RPC
 	// (holomush-m7pxs INV-RB-2/6/12). It reuses the SAME OwnerMap (g1

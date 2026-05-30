@@ -5,6 +5,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"regexp"
 	"strings"
 	"time"
@@ -90,6 +91,13 @@ type PlayerPreferences struct {
 	MaxCharacters int                    `json:"max_characters,omitempty"`
 	Theme         string                 `json:"theme,omitempty"`
 	Scenes        ScenePlayerPreferences `json:"scenes,omitempty"`
+	// Plugins is an opaque, owner-partitioned settings bag. The host never
+	// interprets its contents (INV-10); each key is a plugin owner name and
+	// each value is that owner's serialized settings partition. Whole-struct
+	// JSON (de)marshaling carries it to/from the players.preferences JSONB
+	// column alongside the typed fields above, so the bag and the typed fields
+	// round-trip together without clobbering one another.
+	Plugins map[string]json.RawMessage `json:"plugins,omitempty"`
 }
 
 // ScenePlayerPreferences holds scene-related per-player configuration.

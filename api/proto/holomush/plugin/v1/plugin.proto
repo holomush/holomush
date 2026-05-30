@@ -188,7 +188,6 @@ service PluginHostService {
   // missing/rejected token, empty actor subject, or a resource type the plugin
   // does not own.
   rpc Evaluate(PluginHostServiceEvaluateRequest) returns (PluginHostServiceEvaluateResponse);
-
   // ListCommands enumerates the commands the named character may execute,
   // ABAC-filtered by the host. SERVED: pluginHostServiceServer.ListCommands,
   // delegating to commandquery.Querier.Available. The subject is the request's
@@ -203,6 +202,19 @@ service PluginHostService {
   // delegating to commandquery.Querier.Help. Mirrors the Lua
   // holomush.get_command_help(name, character_id) host function.
   rpc GetCommandHelp(PluginHostServiceGetCommandHelpRequest) returns (PluginHostServiceGetCommandHelpResponse);
+
+  // GetSetting reads a single-scope setting in the calling plugin's owner
+  // partition (owner bound host-side from the authenticated plugin name, never
+  // from the request). The handler resolves SettingScope to its backing store;
+  // a missing key returns a successful response with found=false, never a
+  // codes.NotFound status error.
+  rpc GetSetting(PluginHostServiceGetSettingRequest) returns (PluginHostServiceGetSettingResponse);
+
+  // SetSetting writes a single-scope setting in the calling plugin's partition;
+  // GAME scope requires an operator authorization decision (host-enforced, not
+  // trusted from the wire). The owner partition is bound host-side from the
+  // authenticated plugin name.
+  rpc SetSetting(PluginHostServiceSetSettingRequest) returns (PluginHostServiceSetSettingResponse);
 }
 
 // ServiceConfig carries the host→plugin initialization payload delivered in
@@ -854,3 +866,58 @@ message PluginHostServiceGetCommandHelpResponse {
   // source is "core" or the owning plugin name.
   string source = 5;
 }
+
+// SettingScope selects which settings scope a Get/Set targets. There is no
+// chained mode — callers compose scopes themselves (e.g. a CW-block union read
+// across game+player+character). The iokti.7 handler maps each value to its
+// backing store and rejects the unspecified value (fail closed).
+enum SettingScope {
+  // Unspecified scope — rejected by the handler (fail closed).
+  SETTING_SCOPE_UNSPECIFIED = 0;
+  // Server-wide scope, backed by holomush_system_info.
+  SETTING_SCOPE_GAME = 1;
+  // Per-player scope, backed by players.preferences.
+  SETTING_SCOPE_PLAYER = 2;
+  // Per-character scope, backed by characters.preferences.
+  SETTING_SCOPE_CHARACTER = 3;
+}
+
+// PluginHostServiceGetSettingRequest reads one owner-partitioned key. The owner
+// is NOT on the wire — the host binds it from the authenticated plugin name
+// (structural cross-plugin isolation).
+message PluginHostServiceGetSettingRequest {
+  // Scope to read from.
+  SettingScope scope = 1;
+  // Principal ULID: player ID for PLAYER, character ID for CHARACTER, empty for GAME.
+  string principal_id = 2;
+  // Plugin-owned dot-key to read (e.g. "content.cw_block").
+  string key = 3 [(buf.validate.field).string.min_len = 1];
+}
+
+// PluginHostServiceGetSettingResponse returns a typed list-or-scalar value read
+// from the resolved scope/partition.
+message PluginHostServiceGetSettingResponse {
+  // Whether the key resolved in the requested scope/partition.
+  bool found = 1;
+  // String-list value (Phase 8 settings are list-valued).
+  repeated string string_list = 2;
+  // Scalar string value (for non-list keys).
+  string string_value = 3;
+}
+
+// PluginHostServiceSetSettingRequest writes one key in the caller's owner
+// partition. Owner is bound host-side, not supplied here.
+message PluginHostServiceSetSettingRequest {
+  // Target scope to write.
+  SettingScope scope = 1;
+  // Principal ULID (empty for GAME).
+  string principal_id = 2;
+  // Plugin-owned dot-key to write.
+  string key = 3 [(buf.validate.field).string.min_len = 1];
+  // String-list value to store.
+  repeated string string_list = 4;
+}
+
+// PluginHostServiceSetSettingResponse is the empty acknowledgement returned on a
+// successful write.
+message PluginHostServiceSetSettingResponse {}
