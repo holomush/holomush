@@ -216,6 +216,7 @@
     background: transparent;
     border: none; outline: none;
     color: var(--color-input-text);
+    caret-color: var(--color-cursor);
     font-family: inherit; font-size: inherit;
     resize: none; line-height: 20px;
     overflow-y: auto;
