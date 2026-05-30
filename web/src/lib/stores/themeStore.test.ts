@@ -152,3 +152,82 @@ describe('classic-* → warm-* id migration (holomush-9ektq D9)', () => {
     expect(id).toBe('warm-dark');
   });
 });
+
+function relLuminance(hex: string): number {
+  const { r, g, b } = rgb(hex);
+  const lin = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+function contrastRatio(fg: string, bg: string): number {
+  const a = relLuminance(fg);
+  const b = relLuminance(bg);
+  const hi = Math.max(a, b);
+  const lo = Math.min(a, b);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+// Chrome text tokens that render type and must clear AA against a background.
+const CHROME_TEXT_TOKENS = [
+  'foreground', 'status.text', 'muted.foreground', 'scrollback.replayed',
+  'card.foreground', 'popover.foreground', 'secondary.foreground',
+] as const;
+
+// All 11 message tokens render against the theme background.
+const MESSAGE_TOKENS = [
+  'say.speaker', 'say.speech', 'pose.actor', 'pose.action', 'system',
+  'arrive', 'leave', 'command.output', 'command.error', 'ooc', 'pemit',
+] as const;
+
+const AA = 4.5;
+
+describe('WCAG AA contrast (holomush-6siys, holomush-9ektq INV-2/INV-3)', () => {
+  for (const [id, theme] of builtInThemes) {
+    const c = theme.colors as Record<string, string>;
+    for (const tok of CHROME_TEXT_TOKENS) {
+      it(`${id}: chrome ${tok} ≥ ${AA}:1 on background`, () => {
+        expect(contrastRatio(c[tok], c.background)).toBeGreaterThanOrEqual(AA);
+      });
+    }
+    for (const tok of MESSAGE_TOKENS) {
+      it(`${id}: message ${tok} ≥ ${AA}:1 on background`, () => {
+        expect(contrastRatio(c[tok], c.background)).toBeGreaterThanOrEqual(AA);
+      });
+    }
+  }
+});
+
+describe('brand alignment (holomush-9ektq INV-1)', () => {
+  const brandDefaults = [['default-dark', defaultDark], ['default-light', defaultLight]] as const;
+  for (const [id, theme] of brandDefaults) {
+    const c = theme.colors as Record<string, string>;
+    for (const tok of ['primary', 'accent', 'ring', 'scrollback.indicator'] as const) {
+      it(`${id}: ${tok} is cyan-dominant (blue ≥ red), never amber`, () => {
+        const { r, b } = rgb(c[tok]);
+        expect(b, `${tok}=${c[tok]} must be cyan-family`).toBeGreaterThanOrEqual(r);
+      });
+    }
+    it(`${id}: amber appears only on cursor`, () => {
+      // amber = red-dominant warm hue; the cursor is allowed to be amber, nothing else.
+      const amberish = (hex: string) => { const { r, g, b } = rgb(hex); return r > b && g > b && r > 150; };
+      for (const [k, v] of Object.entries(c)) {
+        if (k === 'cursor' || k === 'radius') continue;
+        expect(amberish(v), `${k}=${v} must not be amber`).toBe(false);
+      }
+    });
+  }
+});
+
+describe('new tokens exposed as --color-* (holomush-9ektq INV-6)', () => {
+  for (const [id, theme] of builtInThemes) {
+    const css = themeToCssVars(theme.colors as ThemeColors);
+    for (const cssKey of ['--color-cursor', '--color-scrollback-replayed', '--color-foreground', '--color-input']) {
+      it(`${id}: themeToCssVars emits ${cssKey}`, () => {
+        expect(css).toContain(`${cssKey}: `);
+      });
+    }
+  }
+});
