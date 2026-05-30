@@ -6,6 +6,11 @@
 package wholesystem_test
 
 import (
+	"context"
+
+	"github.com/oklog/ulid/v2"
+
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
@@ -46,5 +51,28 @@ var _ = Describe("whole-system plugin load (INV-5)", Ordered, func() {
 		reg := srv.CommandRegistry()
 		_, ok := reg.Get("help")
 		Expect(ok).To(BeTrue(), "core-help command must be registered")
+	})
+
+	// Wiring regression (holomush-2zjio): the production PluginSubsystem.Start()
+	// path MUST late-bind a non-nil command querier into the stack via
+	// SetCommandQuerier. hostfunc.New is constructed before cmdRegistry exists,
+	// so without the late-bind the Lua list_commands would return "command
+	// registry not available". Driving the REAL Start() here (not a hand-wired
+	// hostfunc.New) proves the production wiring yields a non-nil querier that
+	// enumerates real registered commands (design spec INV-1: single filter).
+	It("late-binds a non-nil command querier that lists real commands (Start wiring)", func() {
+		q := srv.CommandQuerier()
+		Expect(q).NotTo(BeNil(), "Start() must produce a non-nil command querier")
+
+		subject := access.CharacterSubject(ulid.Make().String())
+		res, err := q.Available(context.Background(), subject)
+		Expect(err).NotTo(HaveOccurred())
+
+		var names []string
+		for _, c := range res.Commands {
+			names = append(names, c.Name)
+		}
+		Expect(names).To(ContainElement("help"),
+			"the production querier must enumerate real registered commands, not return 'command registry not available'")
 	})
 })

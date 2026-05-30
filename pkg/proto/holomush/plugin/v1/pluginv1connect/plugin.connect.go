@@ -102,6 +102,12 @@ const (
 	// PluginHostServiceEvaluateProcedure is the fully-qualified name of the PluginHostService's
 	// Evaluate RPC.
 	PluginHostServiceEvaluateProcedure = "/holomush.plugin.v1.PluginHostService/Evaluate"
+	// PluginHostServiceListCommandsProcedure is the fully-qualified name of the PluginHostService's
+	// ListCommands RPC.
+	PluginHostServiceListCommandsProcedure = "/holomush.plugin.v1.PluginHostService/ListCommands"
+	// PluginHostServiceGetCommandHelpProcedure is the fully-qualified name of the PluginHostService's
+	// GetCommandHelp RPC.
+	PluginHostServiceGetCommandHelpProcedure = "/holomush.plugin.v1.PluginHostService/GetCommandHelp"
 )
 
 // PluginServiceClient is a client for the holomush.plugin.v1.PluginService service.
@@ -411,6 +417,19 @@ type PluginHostServiceClient interface {
 	// missing/rejected token, empty actor subject, or a resource type the plugin
 	// does not own.
 	Evaluate(context.Context, *connect.Request[v1.PluginHostServiceEvaluateRequest]) (*connect.Response[v1.PluginHostServiceEvaluateResponse], error)
+	// ListCommands enumerates the commands the named character may execute,
+	// ABAC-filtered by the host. SERVED: pluginHostServiceServer.ListCommands,
+	// delegating to commandquery.Querier.Available. The subject is the request's
+	// character_id (parity with the Lua holomush.list_commands(character_id) host
+	// function — not the dispatch-token actor, since this is read-only metadata,
+	// not an actor-gated mutation). incomplete is true when engine errors hid
+	// some commands.
+	ListCommands(context.Context, *connect.Request[v1.PluginHostServiceListCommandsRequest]) (*connect.Response[v1.PluginHostServiceListCommandsResponse], error)
+	// GetCommandHelp returns full help detail for one command after an access
+	// check for character_id. SERVED: pluginHostServiceServer.GetCommandHelp,
+	// delegating to commandquery.Querier.Help. Mirrors the Lua
+	// holomush.get_command_help(name, character_id) host function.
+	GetCommandHelp(context.Context, *connect.Request[v1.PluginHostServiceGetCommandHelpRequest]) (*connect.Response[v1.PluginHostServiceGetCommandHelpResponse], error)
 }
 
 // NewPluginHostServiceClient constructs a client for the holomush.plugin.v1.PluginHostService
@@ -532,6 +551,18 @@ func NewPluginHostServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(pluginHostServiceMethods.ByName("Evaluate")),
 			connect.WithClientOptions(opts...),
 		),
+		listCommands: connect.NewClient[v1.PluginHostServiceListCommandsRequest, v1.PluginHostServiceListCommandsResponse](
+			httpClient,
+			baseURL+PluginHostServiceListCommandsProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("ListCommands")),
+			connect.WithClientOptions(opts...),
+		),
+		getCommandHelp: connect.NewClient[v1.PluginHostServiceGetCommandHelpRequest, v1.PluginHostServiceGetCommandHelpResponse](
+			httpClient,
+			baseURL+PluginHostServiceGetCommandHelpProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("GetCommandHelp")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -555,6 +586,8 @@ type pluginHostServiceClient struct {
 	autoFocusOnJoin     *connect.Client[v1.PluginHostServiceAutoFocusOnJoinRequest, v1.PluginHostServiceAutoFocusOnJoinResponse]
 	isAnyConnFocused    *connect.Client[v1.PluginHostServiceIsAnyConnFocusedRequest, v1.PluginHostServiceIsAnyConnFocusedResponse]
 	evaluate            *connect.Client[v1.PluginHostServiceEvaluateRequest, v1.PluginHostServiceEvaluateResponse]
+	listCommands        *connect.Client[v1.PluginHostServiceListCommandsRequest, v1.PluginHostServiceListCommandsResponse]
+	getCommandHelp      *connect.Client[v1.PluginHostServiceGetCommandHelpRequest, v1.PluginHostServiceGetCommandHelpResponse]
 }
 
 // EmitEvent calls holomush.plugin.v1.PluginHostService.EmitEvent.
@@ -645,6 +678,16 @@ func (c *pluginHostServiceClient) IsAnyConnFocused(ctx context.Context, req *con
 // Evaluate calls holomush.plugin.v1.PluginHostService.Evaluate.
 func (c *pluginHostServiceClient) Evaluate(ctx context.Context, req *connect.Request[v1.PluginHostServiceEvaluateRequest]) (*connect.Response[v1.PluginHostServiceEvaluateResponse], error) {
 	return c.evaluate.CallUnary(ctx, req)
+}
+
+// ListCommands calls holomush.plugin.v1.PluginHostService.ListCommands.
+func (c *pluginHostServiceClient) ListCommands(ctx context.Context, req *connect.Request[v1.PluginHostServiceListCommandsRequest]) (*connect.Response[v1.PluginHostServiceListCommandsResponse], error) {
+	return c.listCommands.CallUnary(ctx, req)
+}
+
+// GetCommandHelp calls holomush.plugin.v1.PluginHostService.GetCommandHelp.
+func (c *pluginHostServiceClient) GetCommandHelp(ctx context.Context, req *connect.Request[v1.PluginHostServiceGetCommandHelpRequest]) (*connect.Response[v1.PluginHostServiceGetCommandHelpResponse], error) {
+	return c.getCommandHelp.CallUnary(ctx, req)
 }
 
 // PluginHostServiceHandler is an implementation of the holomush.plugin.v1.PluginHostService
@@ -763,6 +806,19 @@ type PluginHostServiceHandler interface {
 	// missing/rejected token, empty actor subject, or a resource type the plugin
 	// does not own.
 	Evaluate(context.Context, *connect.Request[v1.PluginHostServiceEvaluateRequest]) (*connect.Response[v1.PluginHostServiceEvaluateResponse], error)
+	// ListCommands enumerates the commands the named character may execute,
+	// ABAC-filtered by the host. SERVED: pluginHostServiceServer.ListCommands,
+	// delegating to commandquery.Querier.Available. The subject is the request's
+	// character_id (parity with the Lua holomush.list_commands(character_id) host
+	// function — not the dispatch-token actor, since this is read-only metadata,
+	// not an actor-gated mutation). incomplete is true when engine errors hid
+	// some commands.
+	ListCommands(context.Context, *connect.Request[v1.PluginHostServiceListCommandsRequest]) (*connect.Response[v1.PluginHostServiceListCommandsResponse], error)
+	// GetCommandHelp returns full help detail for one command after an access
+	// check for character_id. SERVED: pluginHostServiceServer.GetCommandHelp,
+	// delegating to commandquery.Querier.Help. Mirrors the Lua
+	// holomush.get_command_help(name, character_id) host function.
+	GetCommandHelp(context.Context, *connect.Request[v1.PluginHostServiceGetCommandHelpRequest]) (*connect.Response[v1.PluginHostServiceGetCommandHelpResponse], error)
 }
 
 // NewPluginHostServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -880,6 +936,18 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 		connect.WithSchema(pluginHostServiceMethods.ByName("Evaluate")),
 		connect.WithHandlerOptions(opts...),
 	)
+	pluginHostServiceListCommandsHandler := connect.NewUnaryHandler(
+		PluginHostServiceListCommandsProcedure,
+		svc.ListCommands,
+		connect.WithSchema(pluginHostServiceMethods.ByName("ListCommands")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pluginHostServiceGetCommandHelpHandler := connect.NewUnaryHandler(
+		PluginHostServiceGetCommandHelpProcedure,
+		svc.GetCommandHelp,
+		connect.WithSchema(pluginHostServiceMethods.ByName("GetCommandHelp")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.plugin.v1.PluginHostService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PluginHostServiceEmitEventProcedure:
@@ -918,6 +986,10 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 			pluginHostServiceIsAnyConnFocusedHandler.ServeHTTP(w, r)
 		case PluginHostServiceEvaluateProcedure:
 			pluginHostServiceEvaluateHandler.ServeHTTP(w, r)
+		case PluginHostServiceListCommandsProcedure:
+			pluginHostServiceListCommandsHandler.ServeHTTP(w, r)
+		case PluginHostServiceGetCommandHelpProcedure:
+			pluginHostServiceGetCommandHelpHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -997,4 +1069,12 @@ func (UnimplementedPluginHostServiceHandler) IsAnyConnFocused(context.Context, *
 
 func (UnimplementedPluginHostServiceHandler) Evaluate(context.Context, *connect.Request[v1.PluginHostServiceEvaluateRequest]) (*connect.Response[v1.PluginHostServiceEvaluateResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.Evaluate is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) ListCommands(context.Context, *connect.Request[v1.PluginHostServiceListCommandsRequest]) (*connect.Response[v1.PluginHostServiceListCommandsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.ListCommands is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) GetCommandHelp(context.Context, *connect.Request[v1.PluginHostServiceGetCommandHelpRequest]) (*connect.Response[v1.PluginHostServiceGetCommandHelpResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.GetCommandHelp is not implemented"))
 }

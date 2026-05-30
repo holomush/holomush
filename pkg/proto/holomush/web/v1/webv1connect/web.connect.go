@@ -98,6 +98,9 @@ const (
 	// WebServiceWebListFocusPresenceProcedure is the fully-qualified name of the WebService's
 	// WebListFocusPresence RPC.
 	WebServiceWebListFocusPresenceProcedure = "/holomush.web.v1.WebService/WebListFocusPresence"
+	// WebServiceWebListCommandsProcedure is the fully-qualified name of the WebService's
+	// WebListCommands RPC.
+	WebServiceWebListCommandsProcedure = "/holomush.web.v1.WebService/WebListCommands"
 )
 
 // WebServiceClient is a client for the holomush.web.v1.WebService service.
@@ -204,6 +207,11 @@ type WebServiceClient interface {
 	// CoreService.ListFocusPresence — authorization is enforced by core.
 	// player_session_token is read from the HTTP cookie by gateway middleware.
 	WebListFocusPresence(context.Context, *connect.Request[v1.WebListFocusPresenceRequest]) (*connect.Response[v1.WebListFocusPresenceResponse], error)
+	// WebListCommands returns the recognized-command set + alias map for the
+	// session's character, for the composer's command chip. Proxies to
+	// CoreService.ListAvailableCommands; player_session_token is read from the
+	// cookie by gateway middleware.
+	WebListCommands(context.Context, *connect.Request[v1.WebListCommandsRequest]) (*connect.Response[v1.WebListCommandsResponse], error)
 }
 
 // NewWebServiceClient constructs a client for the holomush.web.v1.WebService service. By default,
@@ -349,6 +357,12 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebListFocusPresence")),
 			connect.WithClientOptions(opts...),
 		),
+		webListCommands: connect.NewClient[v1.WebListCommandsRequest, v1.WebListCommandsResponse](
+			httpClient,
+			baseURL+WebServiceWebListCommandsProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebListCommands")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -376,6 +390,7 @@ type webServiceClient struct {
 	webRevokePlayerSession       *connect.Client[v1.WebRevokePlayerSessionRequest, v1.WebRevokePlayerSessionResponse]
 	webRevokeOtherPlayerSessions *connect.Client[v1.WebRevokeOtherPlayerSessionsRequest, v1.WebRevokeOtherPlayerSessionsResponse]
 	webListFocusPresence         *connect.Client[v1.WebListFocusPresenceRequest, v1.WebListFocusPresenceResponse]
+	webListCommands              *connect.Client[v1.WebListCommandsRequest, v1.WebListCommandsResponse]
 }
 
 // SendCommand calls holomush.web.v1.WebService.SendCommand.
@@ -488,6 +503,11 @@ func (c *webServiceClient) WebListFocusPresence(ctx context.Context, req *connec
 	return c.webListFocusPresence.CallUnary(ctx, req)
 }
 
+// WebListCommands calls holomush.web.v1.WebService.WebListCommands.
+func (c *webServiceClient) WebListCommands(ctx context.Context, req *connect.Request[v1.WebListCommandsRequest]) (*connect.Response[v1.WebListCommandsResponse], error) {
+	return c.webListCommands.CallUnary(ctx, req)
+}
+
 // WebServiceHandler is an implementation of the holomush.web.v1.WebService service.
 type WebServiceHandler interface {
 	// SendCommand submits a player's raw command line (say, pose, quit, ...)
@@ -592,6 +612,11 @@ type WebServiceHandler interface {
 	// CoreService.ListFocusPresence — authorization is enforced by core.
 	// player_session_token is read from the HTTP cookie by gateway middleware.
 	WebListFocusPresence(context.Context, *connect.Request[v1.WebListFocusPresenceRequest]) (*connect.Response[v1.WebListFocusPresenceResponse], error)
+	// WebListCommands returns the recognized-command set + alias map for the
+	// session's character, for the composer's command chip. Proxies to
+	// CoreService.ListAvailableCommands; player_session_token is read from the
+	// cookie by gateway middleware.
+	WebListCommands(context.Context, *connect.Request[v1.WebListCommandsRequest]) (*connect.Response[v1.WebListCommandsResponse], error)
 }
 
 // NewWebServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -733,6 +758,12 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebListFocusPresence")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebListCommandsHandler := connect.NewUnaryHandler(
+		WebServiceWebListCommandsProcedure,
+		svc.WebListCommands,
+		connect.WithSchema(webServiceMethods.ByName("WebListCommands")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.web.v1.WebService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WebServiceSendCommandProcedure:
@@ -779,6 +810,8 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebRevokeOtherPlayerSessionsHandler.ServeHTTP(w, r)
 		case WebServiceWebListFocusPresenceProcedure:
 			webServiceWebListFocusPresenceHandler.ServeHTTP(w, r)
+		case WebServiceWebListCommandsProcedure:
+			webServiceWebListCommandsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -874,4 +907,8 @@ func (UnimplementedWebServiceHandler) WebRevokeOtherPlayerSessions(context.Conte
 
 func (UnimplementedWebServiceHandler) WebListFocusPresence(context.Context, *connect.Request[v1.WebListFocusPresenceRequest]) (*connect.Response[v1.WebListFocusPresenceResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListFocusPresence is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebListCommands(context.Context, *connect.Request[v1.WebListCommandsRequest]) (*connect.Response[v1.WebListCommandsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListCommands is not implemented"))
 }

@@ -226,6 +226,12 @@ service WebService {
   // CoreService.ListFocusPresence — authorization is enforced by core.
   // player_session_token is read from the HTTP cookie by gateway middleware.
   rpc WebListFocusPresence(WebListFocusPresenceRequest) returns (WebListFocusPresenceResponse);
+
+  // WebListCommands returns the recognized-command set + alias map for the
+  // session's character, for the composer's command chip. Proxies to
+  // CoreService.ListAvailableCommands; player_session_token is read from the
+  // cookie by gateway middleware.
+  rpc WebListCommands(WebListCommandsRequest) returns (WebListCommandsResponse);
 }
 
 // SendCommandRequest carries one raw command line for a game session, optionally
@@ -833,4 +839,32 @@ message WebListFocusPresenceResponse {
   string context_id = 2;
   // entries is the set of characters present in the focus context.
   repeated WebPresenceEntry entries = 3;
+}
+
+// WebAvailableCommand is one command's metadata for the web composer.
+message WebAvailableCommand {
+  // name is the canonical command name shown on the chip.
+  string name = 1;
+  // help is the one-line description (for future tooltip use).
+  string help = 2;
+  // usage is the usage pattern.
+  string usage = 3;
+  // source is "core" or the owning plugin name.
+  string source = 4;
+}
+
+// WebListCommandsRequest names the session whose character's commands to list.
+message WebListCommandsRequest {
+  // session_id identifies the requesting session; core resolves the character and enforces ownership.
+  string session_id = 1;
+}
+
+// WebListCommandsResponse returns the command set + alias map for the composer.
+message WebListCommandsResponse {
+  // commands is the set the session character may execute.
+  repeated WebAvailableCommand commands = 1;
+  // aliases maps alias → canonical command name for visible commands.
+  map<string, string> aliases = 2;
+  // incomplete is true when engine errors hid some commands.
+  bool incomplete = 3;
 }

@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, CheckPlayerSessionRequest, CheckPlayerSessionResponse, ConfirmPasswordResetRequest, ConfirmPasswordResetResponse, CreateCharacterRequest, CreateCharacterResponse, CreateGuestRequest, CreateGuestResponse, CreatePlayerRequest, CreatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, ListCharactersRequest, ListCharactersResponse, ListFocusPresenceRequest, ListFocusPresenceResponse, ListPlayerSessionsRequest, ListPlayerSessionsResponse, ListSessionStreamsRequest, ListSessionStreamsResponse, LogoutRequest, LogoutResponse, QueryStreamHistoryRequest, QueryStreamHistoryResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, RevokeOtherPlayerSessionsRequest, RevokeOtherPlayerSessionsResponse, RevokePlayerSessionRequest, RevokePlayerSessionResponse, SelectCharacterRequest, SelectCharacterResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
+import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, CheckPlayerSessionRequest, CheckPlayerSessionResponse, ConfirmPasswordResetRequest, ConfirmPasswordResetResponse, CreateCharacterRequest, CreateCharacterResponse, CreateGuestRequest, CreateGuestResponse, CreatePlayerRequest, CreatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, ListAvailableCommandsRequest, ListAvailableCommandsResponse, ListCharactersRequest, ListCharactersResponse, ListFocusPresenceRequest, ListFocusPresenceResponse, ListPlayerSessionsRequest, ListPlayerSessionsResponse, ListSessionStreamsRequest, ListSessionStreamsResponse, LogoutRequest, LogoutResponse, QueryStreamHistoryRequest, QueryStreamHistoryResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, RevokeOtherPlayerSessionsRequest, RevokeOtherPlayerSessionsResponse, RevokePlayerSessionRequest, RevokePlayerSessionResponse, SelectCharacterRequest, SelectCharacterResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -298,6 +298,21 @@ export const CoreService = {
       name: "ListFocusPresence",
       I: ListFocusPresenceRequest,
       O: ListFocusPresenceResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * ListAvailableCommands returns the commands the session's own character may
+     * execute, with the system/manifest alias map for those commands. SERVED:
+     * CoreServer.ListAvailableCommands, delegating to commandquery.Querier.Available.
+     * Self-scoped: the subject is the session's character (ownership-validated),
+     * never an arbitrary character_id. Pure read.
+     *
+     * @generated from rpc holomush.core.v1.CoreService.ListAvailableCommands
+     */
+    listAvailableCommands: {
+      name: "ListAvailableCommands",
+      I: ListAvailableCommandsRequest,
+      O: ListAvailableCommandsResponse,
       kind: MethodKind.Unary,
     },
   }

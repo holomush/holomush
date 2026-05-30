@@ -174,6 +174,10 @@ func (m *mockGRPCClient) ListFocusPresence(_ context.Context, _ *corev1.ListFocu
 	return nil, nil
 }
 
+func (m *mockGRPCClient) ListAvailableCommands(_ context.Context, _ *corev1.ListAvailableCommandsRequest) (*corev1.ListAvailableCommandsResponse, error) {
+	return nil, nil
+}
+
 func (m *mockGRPCClient) GetContent(_ context.Context, _ *contentv1.GetContentRequest) (*contentv1.GetContentResponse, error) {
 	return nil, nil
 }

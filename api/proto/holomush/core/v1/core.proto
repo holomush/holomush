@@ -159,6 +159,13 @@ service CoreService {
   // gated by the ABAC list_presence action on the location resource. Scene-focus
   // contexts currently return UNIMPLEMENTED. Pure read — no session mutation.
   rpc ListFocusPresence(ListFocusPresenceRequest) returns (ListFocusPresenceResponse);
+
+  // ListAvailableCommands returns the commands the session's own character may
+  // execute, with the system/manifest alias map for those commands. SERVED:
+  // CoreServer.ListAvailableCommands, delegating to commandquery.Querier.Available.
+  // Self-scoped: the subject is the session's character (ownership-validated),
+  // never an arbitrary character_id. Pure read.
+  rpc ListAvailableCommands(ListAvailableCommandsRequest) returns (ListAvailableCommandsResponse);
 }
 
 // HandleCommandRequest carries one player-issued command to dispatch within the
@@ -449,6 +456,40 @@ message ListFocusPresenceResponse {
 
   // entries is the deduplicated set of characters present in the context.
   repeated PresenceEntry entries = 4;
+}
+
+// AvailableCommand is one command's metadata in a ListAvailableCommands result.
+message AvailableCommand {
+  // name is the canonical command name.
+  string name = 1;
+  // help is the one-line description.
+  string help = 2;
+  // usage is the usage pattern.
+  string usage = 3;
+  // source is "core" or the owning plugin name.
+  string source = 4;
+}
+
+// ListAvailableCommandsRequest asks for the session character's executable set.
+message ListAvailableCommandsRequest {
+  // meta carries request correlation data.
+  RequestMeta meta = 1;
+  // player_session_token proves the caller owns session_id; failures collapse to SESSION_NOT_FOUND.
+  string player_session_token = 2;
+  // session_id names the session whose character's command set is enumerated.
+  string session_id = 3;
+}
+
+// ListAvailableCommandsResponse returns the filtered set + alias map.
+message ListAvailableCommandsResponse {
+  // meta echoes request correlation data.
+  ResponseMeta meta = 1;
+  // commands is the ABAC-filtered set the session character may execute.
+  repeated AvailableCommand commands = 2;
+  // aliases maps alias → canonical command name (system/manifest aliases for visible commands).
+  map<string, string> aliases = 3;
+  // incomplete is true when engine errors hid some commands.
+  bool incomplete = 4;
 }
 
 // RenderingMetadata carries cleartext rendering instructions for an event. It is

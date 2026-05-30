@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/command/commandquery"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
@@ -191,6 +192,16 @@ func WithConfigOverrides(overrides map[string]map[string]string) HostOption {
 	return func(h *Host) { h.configOverrides = cloned }
 }
 
+// WithCommandQuerier wires the shared command querier so
+// PluginHostService.ListCommands / GetCommandHelp resolve for binary plugins
+// (parity with the Lua list_commands host function; plugin-runtime-symmetry).
+// The querier is constructed after the Host in subsystem.go, so use
+// SetCommandQuerier for the late-bind path instead of this option when the
+// construction order requires it.
+func WithCommandQuerier(q *commandquery.Querier) HostOption {
+	return func(h *Host) { h.commandQuerier = q }
+}
+
 // Host manages binary plugins via HashiCorp go-plugins.
 type Host struct {
 	clientFactory     ClientFactory
@@ -207,6 +218,7 @@ type Host struct {
 	identityRegistry  plugins.IdentityRegistry
 	engine            types.AccessPolicyEngine
 	auditor           pluginauthz.Auditor
+	commandQuerier    *commandquery.Querier
 	// configOverrides is the per-plugin server-provided config override
 	// (plugin name → key → value), threaded from PluginSubsystemConfig.
 	configOverrides map[string]map[string]string
@@ -345,6 +357,17 @@ func (h *Host) HistoryReader() plugins.HistoryReader {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.historyReader
+}
+
+// SetCommandQuerier late-binds the shared command querier into the host after
+// construction. The querier is built after binaryHost in subsystem.go (it
+// depends on the command registry which is populated after plugin load), so
+// it cannot be passed via WithCommandQuerier at Host construction time.
+// Mirrors hostfunc.SetCommandQuerier (plugin-runtime-symmetry).
+func (h *Host) SetCommandQuerier(q *commandquery.Querier) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.commandQuerier = q
 }
 
 // SetReadbackDecryptor injects the read-back decryptor after construction.

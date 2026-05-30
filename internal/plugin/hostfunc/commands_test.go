@@ -4,39 +4,41 @@
 package hostfunc
 
 import (
-	"bytes"
-	"context"
 	"errors"
-	"log/slog"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/holomush/holomush/internal/access"
-	"github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
-	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/command/commandquery"
 )
 
-// Compile-time check: policy.Engine must satisfy types.AccessPolicyEngine.
-var _ types.AccessPolicyEngine = (*policy.Engine)(nil)
+// These tests cover ONLY the list_commands / get_command_help host-function
+// SHIMS — the thin Go↔Lua bridge over commandquery.Querier (design spec INV-1).
+// The ABAC filter itself (deny/error/infra-failure/circuit-breaker/AND-logic,
+// no-capability visibility, capability-gated denial) is exercised exhaustively
+// in internal/command/commandquery/query_test.go and is NOT re-tested here.
+//
+// Shim responsibilities verified below:
+//   (a) the Lua-table shape {commands:[{name,help,usage,source}], incomplete}
+//       is built correctly from a Querier result;
+//   (b) the incomplete→warning-string mapping;
+//   (c) nil querier → "command registry not available";
+//   (d) get_command_help Detail→Lua table mapping + typed-error
+//       (NOT_FOUND/PERMISSION_DENIED/UNAVAILABLE) → legacy-string translation;
+//   (e) the NOT-FOUND-wins-over-bad-character_id precedence.
 
-// testContextKey is a type for context keys in tests.
-type testContextKey string
-
-// mockCommandRegistry implements CommandRegistry for testing.
+// mockCommandRegistry implements commandquery.Registry for shim tests.
 type mockCommandRegistry struct {
 	commands []command.CommandEntry
 }
 
-func (m *mockCommandRegistry) All() []command.CommandEntry {
-	return m.commands
-}
+func (m *mockCommandRegistry) All() []command.CommandEntry { return m.commands }
 
 func (m *mockCommandRegistry) Get(name string) (command.CommandEntry, bool) {
 	for _, cmd := range m.commands {
@@ -47,1291 +49,311 @@ func (m *mockCommandRegistry) Get(name string) (command.CommandEntry, bool) {
 	return command.CommandEntry{}, false
 }
 
-func TestListCommandsReturnsAllCommands(t *testing.T) {
-	// Given: a registry with commands (no capabilities required)
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			{Name: "say", Help: "Say something", Usage: "say <message>", Source: "communication"},
-			{Name: "look", Help: "Look around", Usage: "look [target]", Source: "core"},
-			{Name: "quit", Help: "Disconnect", Usage: "quit", Source: "core"},
-		},
-	}
+// newAllowQuerier builds a Querier over the given commands with an allow-all
+// engine (the filter behavior is tested in commandquery; here we only need a
+// querier that yields a populated, complete result).
+func newAllowQuerier(commands []command.CommandEntry) *commandquery.Querier {
+	registry := &mockCommandRegistry{commands: commands}
+	return commandquery.New(registry, policytest.AllowAllEngine(), nil)
+}
 
-	// Character can see all commands (no capabilities required on any command)
+func TestListCommandsShimBuildsLuaTableFromQuerierResult(t *testing.T) {
+	// (a) The shim maps a Querier result onto the {commands:[...], incomplete}
+	// Lua table with name/help/usage/source per command.
+	q := newAllowQuerier([]command.CommandEntry{
+		{Name: "say", Help: "Say something", Usage: "say <message>", Source: "communication"},
+		{Name: "look", Help: "Look around", Usage: "look [target]", Source: "core"},
+	})
 	charID := ulid.Make()
-	ac := policytest.NewGrantEngine()
 
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
-
+	hf := New(nil, WithCommandQuerier(q))
 	L := lua.NewState()
 	defer L.Close()
 	hf.Register(L, "test-plugin")
 
-	// When: list_commands is called with character_id
-	err := L.DoString(`
-		result, err = holomush.list_commands("` + charID.String() + `")
-	`)
+	err := L.DoString(`result, err = holomush.list_commands("` + charID.String() + `")`)
 	require.NoError(t, err)
 
-	// Then: all commands are returned as a Lua table
 	result := L.GetGlobal("result")
-	require.NotEqual(t, lua.LNil, result)
-
 	resultTbl, ok := result.(*lua.LTable)
 	require.True(t, ok, "expected table, got %T", result)
 
-	commands := L.GetField(resultTbl, "commands")
-	require.NotEqual(t, lua.LNil, commands, "commands field should exist")
+	// (b) incomplete=false → second return is nil.
+	assert.Equal(t, lua.LFalse, L.GetField(resultTbl, "incomplete"))
+	assert.Equal(t, lua.LNil, L.GetGlobal("err"), "err must be nil when result is complete")
 
-	tbl, ok := commands.(*lua.LTable)
-	require.True(t, ok, "expected table, got %T", commands)
+	commands, ok := L.GetField(resultTbl, "commands").(*lua.LTable)
+	require.True(t, ok)
 
-	// Verify we got 3 commands
-	count := 0
-	tbl.ForEach(func(_, _ lua.LValue) {
-		count++
-	})
-	assert.Equal(t, 3, count)
-
-	// Verify first command structure (order may vary, so check by name)
 	var sayFound bool
-	tbl.ForEach(func(_, v lua.LValue) {
-		if cmdTbl, ok := v.(*lua.LTable); ok {
-			if L.GetField(cmdTbl, "name").String() == "say" {
-				sayFound = true
-				assert.Equal(t, "Say something", L.GetField(cmdTbl, "help").String())
-				assert.Equal(t, "say <message>", L.GetField(cmdTbl, "usage").String())
-				assert.Equal(t, "communication", L.GetField(cmdTbl, "source").String())
-			}
+	count := 0
+	commands.ForEach(func(_, v lua.LValue) {
+		count++
+		if cmdTbl, ok := v.(*lua.LTable); ok && L.GetField(cmdTbl, "name").String() == "say" {
+			sayFound = true
+			assert.Equal(t, "Say something", L.GetField(cmdTbl, "help").String())
+			assert.Equal(t, "say <message>", L.GetField(cmdTbl, "usage").String())
+			assert.Equal(t, "communication", L.GetField(cmdTbl, "source").String())
 		}
 	})
-	assert.True(t, sayFound, "expected 'say' command in results")
+	assert.Equal(t, 2, count)
+	assert.True(t, sayFound, "expected 'say' command in shim-built table")
 }
 
-func TestListCommandsNoRegistry(t *testing.T) {
-	// Given: no command registry configured (but access control is available)
-
+func TestListCommandsShimMapsIncompleteToWarningString(t *testing.T) {
+	// (b) When the Querier reports Incomplete (engine error on a gated command),
+	// the shim sets incomplete=true and returns the warning string. The filtering
+	// logic that produces Incomplete is tested in commandquery; here we only assert
+	// the shim translates it.
+	registry := &mockCommandRegistry{commands: []command.CommandEntry{
+		command.NewTestEntry(command.CommandEntryConfig{
+			Name: "boot", Help: "Boot a player",
+			Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}},
+			Source:       "admin",
+		}),
+		{Name: "look", Help: "Look around", Source: "core"},
+	}}
+	q := commandquery.New(registry, policytest.NewErrorEngine(errors.New("policy store unavailable")), nil)
 	charID := ulid.Make()
-	ac := policytest.NewGrantEngine()
 
-	hf := New(nil, WithEngine(ac)) // No WithCommandRegistry
-
+	hf := New(nil, WithCommandQuerier(q))
 	L := lua.NewState()
 	defer L.Close()
 	hf.Register(L, "test-plugin")
 
-	// When: list_commands is called
-	err := L.DoString(`
-		commands, err = holomush.list_commands("` + charID.String() + `")
-	`)
+	err := L.DoString(`result, err = holomush.list_commands("` + charID.String() + `")`)
 	require.NoError(t, err)
 
-	// Then: error is returned
+	resultTbl, ok := L.GetGlobal("result").(*lua.LTable)
+	require.True(t, ok)
+	assert.Equal(t, lua.LTrue, L.GetField(resultTbl, "incomplete"))
+
+	errVal := L.GetGlobal("err")
+	assert.NotEqual(t, lua.LNil, errVal)
+	assert.Contains(t, errVal.String(), "system error",
+		"incomplete result must carry the warning string")
+}
+
+func TestListCommandsShimNilQuerierReturnsRegistryUnavailable(t *testing.T) {
+	// (c) nil querier → "command registry not available".
+	charID := ulid.Make()
+	hf := New(nil) // no WithCommandQuerier
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`commands, err = holomush.list_commands("` + charID.String() + `")`)
+	require.NoError(t, err)
+
 	errVal := L.GetGlobal("err")
 	assert.NotEqual(t, lua.LNil, errVal)
 	assert.Contains(t, errVal.String(), "command registry not available")
 }
 
-func TestGetCommandHelpReturnsCommandDetails(t *testing.T) {
-	// Given: a registry with a command that has detailed help
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{
-				Name:         "say",
-				Help:         "Say something to the room",
-				Usage:        "say <message>",
-				HelpText:     "# Say Command\n\nSay something that everyone in the room can hear.",
-				Capabilities: []command.Capability{{Action: "emit", Resource: "stream", Scope: command.ScopeLocal}},
-				Source:       "communication",
-			}),
-		},
-	}
-
-	charID := ulid.Make()
-	ac := policytest.NewGrantEngine()
-	ac.GrantCommandExecution(access.SubjectCharacter+charID.String(), "say")
-	ac.Grant(access.SubjectCharacter+charID.String(), "emit", "stream")
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
-
+func TestListCommandsShimEmptyCharacterIDRaises(t *testing.T) {
+	hf := New(nil, WithCommandQuerier(newAllowQuerier(nil)))
 	L := lua.NewState()
 	defer L.Close()
 	hf.Register(L, "test-plugin")
 
-	// When: get_command_help is called with character_id
-	err := L.DoString(`
-		info, err = holomush.get_command_help("say", "` + charID.String() + `")
-	`)
+	err := L.DoString(`commands, err = holomush.list_commands("")`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "character ID cannot be empty")
+}
+
+func TestListCommandsShimInvalidCharacterIDRaises(t *testing.T) {
+	hf := New(nil, WithCommandQuerier(newAllowQuerier(nil)))
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`commands, err = holomush.list_commands("not-a-ulid")`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid character ID")
+}
+
+func TestGetCommandHelpShimMapsDetailToLuaTable(t *testing.T) {
+	// (d) Detail→Lua table mapping, including the structured capabilities array.
+	registry := &mockCommandRegistry{commands: []command.CommandEntry{
+		command.NewTestEntry(command.CommandEntryConfig{
+			Name:         "say",
+			Help:         "Say something to the room",
+			Usage:        "say <message>",
+			HelpText:     "# Say Command\n\nSay something that everyone in the room can hear.",
+			Capabilities: []command.Capability{{Action: "emit", Resource: "stream", Scope: command.ScopeLocal}},
+			Source:       "communication",
+		}),
+	}}
+	charID := ulid.Make()
+	ac := policytest.NewGrantEngine()
+	ac.GrantCommandExecution(access.SubjectCharacter+charID.String(), "say")
+	ac.Grant(access.SubjectCharacter+charID.String(), "emit", "stream")
+	q := commandquery.New(registry, ac, nil)
+
+	hf := New(nil, WithCommandQuerier(q))
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`info, err = holomush.get_command_help("say", "` + charID.String() + `")`)
 	require.NoError(t, err)
 
-	// Then: detailed command info is returned
-	info := L.GetGlobal("info")
-	require.NotEqual(t, lua.LNil, info)
-
-	tbl, ok := info.(*lua.LTable)
+	tbl, ok := L.GetGlobal("info").(*lua.LTable)
 	require.True(t, ok)
-
 	assert.Equal(t, "say", L.GetField(tbl, "name").String())
 	assert.Equal(t, "Say something to the room", L.GetField(tbl, "help").String())
 	assert.Equal(t, "say <message>", L.GetField(tbl, "usage").String())
 	assert.Equal(t, "# Say Command\n\nSay something that everyone in the room can hear.", L.GetField(tbl, "help_text").String())
 	assert.Equal(t, "communication", L.GetField(tbl, "source").String())
 
-	// Check capabilities array (now structured tables)
-	caps := L.GetField(tbl, "capabilities")
-	require.NotEqual(t, lua.LNil, caps)
-	capsTbl, ok := caps.(*lua.LTable)
+	caps, ok := L.GetField(tbl, "capabilities").(*lua.LTable)
 	require.True(t, ok)
-	capEntry := L.GetTable(capsTbl, lua.LNumber(1))
-	require.NotEqual(t, lua.LNil, capEntry)
-	capEntryTbl, ok := capEntry.(*lua.LTable)
+	capEntry, ok := L.GetTable(caps, lua.LNumber(1)).(*lua.LTable)
 	require.True(t, ok, "capability entry should be a table")
-	assert.Equal(t, "emit", L.GetField(capEntryTbl, "action").String())
-	assert.Equal(t, "stream", L.GetField(capEntryTbl, "resource").String())
-	assert.Equal(t, "local", L.GetField(capEntryTbl, "scope").String())
+	assert.Equal(t, "emit", L.GetField(capEntry, "action").String())
+	assert.Equal(t, "stream", L.GetField(capEntry, "resource").String())
+	assert.Equal(t, "local", L.GetField(capEntry, "scope").String())
+
+	assert.Equal(t, lua.LNil, L.GetGlobal("err"))
 }
 
-func TestGetCommandHelpCommandNotFound(t *testing.T) {
-	// Given: an empty registry
-	charID := ulid.Make()
+func TestGetCommandHelpShimTranslatesNotFound(t *testing.T) {
+	// (d) NOT_FOUND → "command not found: <name>".
 	registry := &mockCommandRegistry{commands: []command.CommandEntry{}}
-
-	hf := New(nil, WithCommandRegistry(registry))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: get_command_help is called for non-existent command
-	err := L.DoString(`
-		info, err = holomush.get_command_help("nonexistent", "` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// Then: nil result with error message
-	info := L.GetGlobal("info")
-	assert.Equal(t, lua.LNil, info)
-
-	errVal := L.GetGlobal("err")
-	assert.NotEqual(t, lua.LNil, errVal)
-	assert.Contains(t, errVal.String(), "command not found")
-}
-
-func TestGetCommandHelpNoRegistry(t *testing.T) {
-	// Given: no command registry configured
+	q := commandquery.New(registry, policytest.AllowAllEngine(), nil)
 	charID := ulid.Make()
 
-	hf := New(nil) // No WithCommandRegistry
-
+	hf := New(nil, WithCommandQuerier(q))
 	L := lua.NewState()
 	defer L.Close()
 	hf.Register(L, "test-plugin")
 
-	// When: get_command_help is called
-	err := L.DoString(`
-		info, err = holomush.get_command_help("say", "` + charID.String() + `")
-	`)
+	err := L.DoString(`info, err = holomush.get_command_help("nonexistent", "` + charID.String() + `")`)
 	require.NoError(t, err)
 
-	// Then: error is returned
-	errVal := L.GetGlobal("err")
-	assert.NotEqual(t, lua.LNil, errVal)
-	assert.Contains(t, errVal.String(), "command registry not available")
-}
-
-func TestGetCommandHelpEmptyCommandName(t *testing.T) {
-	// Given: a valid setup
-	charID := ulid.Make()
-	registry := &mockCommandRegistry{commands: []command.CommandEntry{}}
-
-	hf := New(nil, WithCommandRegistry(registry))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: get_command_help is called with empty name
-	err := L.DoString(`holomush.get_command_help("", "` + charID.String() + `")`)
-
-	// Then: error is raised
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "command name cannot be empty")
-}
-
-func TestListCommandsFiltersCommandsByCharacterCapabilities(t *testing.T) {
-	// Given: a registry with commands having different capabilities
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "say", Help: "Say something", Capabilities: []command.Capability{{Action: "emit", Resource: "stream", Scope: command.ScopeLocal}}, Source: "core"}),
-			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
-			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}}, Source: "admin"}),                                                                 // Admin only
-			command.NewTestEntry(command.CommandEntryConfig{Name: "nuke", Help: "Dangerous", Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}, {Action: "delete", Resource: "server", Scope: command.ScopeGlobal}}, Source: "admin"}), // Multiple caps
-		},
-	}
-
-	// AccessControl that grants Layer 1 execute + Layer 2 "emit" to our character but NOT admin caps
-	charID := ulid.Make()
-	ac := policytest.NewGrantEngine()
-	ac.GrantCommandExecution(access.SubjectCharacter+charID.String(), "say")
-	ac.Grant(access.SubjectCharacter+charID.String(), "emit", "stream")
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: list_commands is called with character_id
-	err := L.DoString(`
-		result, err = holomush.list_commands("` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// Then: only commands the character can execute are returned
-	result := L.GetGlobal("result")
-	require.NotEqual(t, lua.LNil, result)
-
-	resultTbl, ok := result.(*lua.LTable)
-	require.True(t, ok, "expected table, got %T", result)
-
-	commands := L.GetField(resultTbl, "commands")
-	require.NotEqual(t, lua.LNil, commands, "commands field should exist")
-
-	tbl, ok := commands.(*lua.LTable)
-	require.True(t, ok, "expected table, got %T", commands)
-
-	// Collect returned command names
-	var names []string
-	tbl.ForEach(func(_, v lua.LValue) {
-		if cmdTbl, ok := v.(*lua.LTable); ok {
-			names = append(names, L.GetField(cmdTbl, "name").String())
-		}
-	})
-
-	// Should include: say (has Layer 1 execute + Layer 2 emit), look (no caps required)
-	// Should NOT include: boot (no Layer 1 grant), nuke (no Layer 1 grant)
-	assert.Contains(t, names, "say")
-	assert.Contains(t, names, "look")
-	assert.NotContains(t, names, "boot")
-	assert.NotContains(t, names, "nuke")
-	assert.Len(t, names, 2)
-}
-
-func TestListCommandsEmptyCapabilitiesAlwaysIncluded(t *testing.T) {
-	// Given: commands with empty capabilities slice (not nil)
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "help", Help: "Get help", Capabilities: []command.Capability{}, Source: "core"}), // Empty slice
-			{Name: "quit", Help: "Quit", Source: "core"}, // Nil slice (no capabilities)
-		},
-	}
-
-	charID := ulid.Make()
-	ac := policytest.NewGrantEngine() // No grants - character has zero capabilities
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: list_commands is called
-	err := L.DoString(`
-		result, err = holomush.list_commands("` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// Then: both commands are returned (no capabilities required)
-	result := L.GetGlobal("result")
-	resultTbl, ok := result.(*lua.LTable)
-	require.True(t, ok)
-
-	commands := L.GetField(resultTbl, "commands")
-	tbl, ok := commands.(*lua.LTable)
-	require.True(t, ok)
-
-	count := 0
-	tbl.ForEach(func(_, _ lua.LValue) {
-		count++
-	})
-	assert.Equal(t, 2, count)
-}
-
-func TestListCommandsRequiresAllCapabilitiesANDLogic(t *testing.T) {
-	// Given: a command requiring multiple capabilities (AND logic)
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "nuke", Help: "Dangerous", Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}, {Action: "delete", Resource: "server", Scope: command.ScopeGlobal}}, Source: "admin"}),
-		},
-	}
-
-	charID := ulid.Make()
-	ac := policytest.NewGrantEngine()
-	// Grant only ONE of the required capabilities
-	ac.Grant(access.SubjectCharacter+charID.String(), "admin", "server")
-	// NOT granting "delete" action
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: list_commands is called
-	err := L.DoString(`
-		result, err = holomush.list_commands("` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// Then: nuke command should NOT be in results (needs BOTH caps)
-	result := L.GetGlobal("result")
-	resultTbl, ok := result.(*lua.LTable)
-	require.True(t, ok)
-
-	commands := L.GetField(resultTbl, "commands")
-	tbl, ok := commands.(*lua.LTable)
-	require.True(t, ok)
-
-	count := 0
-	tbl.ForEach(func(_, _ lua.LValue) {
-		count++
-	})
-	assert.Equal(t, 0, count, "command requiring multiple capabilities should not appear when only one is granted")
-}
-
-func TestListCommandsWithAllCapabilitiesGranted(t *testing.T) {
-	// Given: a command requiring multiple capabilities
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "nuke", Help: "Dangerous", Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}, {Action: "delete", Resource: "server", Scope: command.ScopeGlobal}}, Source: "admin"}),
-		},
-	}
-
-	charID := ulid.Make()
-	ac := policytest.NewGrantEngine()
-	// Grant Layer 1 execute + ALL required Layer 2 capabilities
-	ac.GrantCommandExecution(access.SubjectCharacter+charID.String(), "nuke")
-	ac.Grant(access.SubjectCharacter+charID.String(), "admin", "server")
-	ac.Grant(access.SubjectCharacter+charID.String(), "delete", "server")
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: list_commands is called
-	err := L.DoString(`
-		result, err = holomush.list_commands("` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// Then: command IS included because character has Layer 1 execute + both Layer 2 caps
-	result := L.GetGlobal("result")
-	resultTbl, ok := result.(*lua.LTable)
-	require.True(t, ok)
-
-	commands := L.GetField(resultTbl, "commands")
-	tbl, ok := commands.(*lua.LTable)
-	require.True(t, ok)
-
-	count := 0
-	tbl.ForEach(func(_, _ lua.LValue) {
-		count++
-	})
-	assert.Equal(t, 1, count)
-}
-
-func TestListCommandsEngineErrorHidesCapabilityCommands(t *testing.T) {
-	// Given: commands with capabilities and an engine that always errors
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}}, Source: "admin"}),
-			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
-		},
-	}
-
-	charID := ulid.Make()
-	engineErr := errors.New("policy store unavailable")
-	errorEngine := policytest.NewErrorEngine(engineErr)
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(errorEngine))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: list_commands is called
-	err := L.DoString(`
-		result, err = holomush.list_commands("` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// Then: only commands without capabilities are returned (fail-closed)
-	result := L.GetGlobal("result")
-	require.NotEqual(t, lua.LNil, result)
-
-	resultTbl, ok := result.(*lua.LTable)
-	require.True(t, ok, "expected table, got %T", result)
-
-	commands := L.GetField(resultTbl, "commands")
-	require.NotEqual(t, lua.LNil, commands, "commands field should exist")
-
-	tbl, ok := commands.(*lua.LTable)
-	require.True(t, ok, "expected table, got %T", commands)
-
-	var names []string
-	tbl.ForEach(func(_, v lua.LValue) {
-		if cmdTbl, ok := v.(*lua.LTable); ok {
-			names = append(names, L.GetField(cmdTbl, "name").String())
-		}
-	})
-
-	assert.Contains(t, names, "look", "commands without capabilities should still appear")
-	assert.NotContains(t, names, "boot", "commands with capabilities should be hidden when engine errors")
-	assert.Len(t, names, 1)
-}
-
-func TestListCommandsCircuitBreakerTripsAfterThreeErrors(t *testing.T) {
-	// Given: 6 commands each requiring a capability, and an engine that always errors.
-	// The circuit breaker should trip after exactly 3 errors, leaving remaining commands
-	// unqueried. This verifies the maxEngineErrors=3 threshold behavior.
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "cmd1", Help: "Command 1", Capabilities: []command.Capability{{Action: "read", Resource: "object"}}, Source: "test"}),
-			command.NewTestEntry(command.CommandEntryConfig{Name: "cmd2", Help: "Command 2", Capabilities: []command.Capability{{Action: "read", Resource: "location"}}, Source: "test"}),
-			command.NewTestEntry(command.CommandEntryConfig{Name: "cmd3", Help: "Command 3", Capabilities: []command.Capability{{Action: "write", Resource: "object"}}, Source: "test"}),
-			command.NewTestEntry(command.CommandEntryConfig{Name: "cmd4", Help: "Command 4", Capabilities: []command.Capability{{Action: "write", Resource: "location"}}, Source: "test"}),
-			command.NewTestEntry(command.CommandEntryConfig{Name: "cmd5", Help: "Command 5", Capabilities: []command.Capability{{Action: "emit", Resource: "stream"}}, Source: "test"}),
-			command.NewTestEntry(command.CommandEntryConfig{Name: "cmd6", Help: "Command 6", Capabilities: []command.Capability{{Action: "enter", Resource: "location"}}, Source: "test"}),
-		},
-	}
-
-	charID := ulid.Make()
-	errorEngine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
-
-	// Capture log output to verify circuit breaker warning
-	var logBuf bytes.Buffer
-	originalLogger := slog.Default()
-	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
-		Level: slog.LevelWarn,
-	}))
-	slog.SetDefault(testLogger)
-	defer slog.SetDefault(originalLogger)
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(errorEngine))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	err := L.DoString(`
-		result, err = holomush.list_commands("` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// All 6 capability commands should be hidden (fail-closed)
-	result := L.GetGlobal("result")
-	require.NotEqual(t, lua.LNil, result)
-
-	resultTbl, ok := result.(*lua.LTable)
-	require.True(t, ok, "expected table, got %T", result)
-
-	commands := L.GetField(resultTbl, "commands")
-	tbl, ok := commands.(*lua.LTable)
-	require.True(t, ok, "expected table, got %T", commands)
-
-	var names []string
-	tbl.ForEach(func(_, v lua.LValue) {
-		if cmdTbl, ok := v.(*lua.LTable); ok {
-			names = append(names, L.GetField(cmdTbl, "name").String())
-		}
-	})
-	assert.Empty(t, names, "all capability commands should be hidden when engine errors")
-
-	// Verify the incomplete flag is set
-	incomplete := L.GetField(resultTbl, "incomplete")
-	assert.Equal(t, lua.LTrue, incomplete, "result should be marked incomplete when circuit breaker trips")
-
-	// Verify the circuit breaker warning was logged with correct threshold
-	logOutput := logBuf.String()
-	assert.Contains(t, logOutput, "circuit breaker tripped",
-		"circuit breaker warning should be logged")
-	assert.Contains(t, logOutput, "engine_failures=3",
-		"log should show exactly 3 engine failures before tripping")
-}
-
-func TestListCommandsInvalidCharacterID(t *testing.T) {
-	// Given: valid setup
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			{Name: "say", Help: "Say something"},
-		},
-	}
-
-	ac := policytest.NewGrantEngine()
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: list_commands is called with invalid character ID
-	err := L.DoString(`
-		commands, err = holomush.list_commands("not-a-ulid")
-	`)
-
-	// Then: error is raised
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid character ID")
-}
-
-func TestListCommandsEmptyCharacterID(t *testing.T) {
-	// Given: valid setup
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			{Name: "say", Help: "Say something"},
-		},
-	}
-
-	ac := policytest.NewGrantEngine()
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: list_commands is called with empty character ID
-	err := L.DoString(`
-		commands, err = holomush.list_commands("")
-	`)
-
-	// Then: error is raised
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "character ID cannot be empty")
-}
-
-func TestListCommandsNoEngineConfigured(t *testing.T) {
-	// Given: no AccessPolicyEngine configured (nil)
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "say", Help: "Say something", Capabilities: []command.Capability{{Action: "emit", Resource: "stream", Scope: command.ScopeLocal}}}),
-		},
-	}
-
-	// NOT providing WithEngine
-	hf := New(nil, WithCommandRegistry(registry))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	charID := ulid.Make()
-
-	// When: list_commands is called with character_id
-	err := L.DoString(`
-		commands, err = holomush.list_commands("` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// Then: error is returned (access control required for filtering)
-	errVal := L.GetGlobal("err")
-	assert.NotEqual(t, lua.LNil, errVal)
-	assert.Contains(t, errVal.String(), "access engine not available")
-}
-
-// AccessRequest Verification Tests (PR #88 Priority 1)
-
-func TestListCommandsVerifiesAccessRequest(t *testing.T) {
-	// Given: a registry with a command requiring capabilities
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{
-				Name:         "admin_cmd",
-				Help:         "Admin command",
-				Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}},
-				Source:       "admin",
-			}),
-		},
-	}
-
-	charID := ulid.Make()
-	subject := access.CharacterSubject(charID.String())
-
-	// Capture CanPerformAction args
-	var capturedSubject, capturedAction, capturedResource string
-	mockEngine := policytest.NewMockAccessPolicyEngine(t)
-	// Layer 1: Evaluate must allow command execution
-	mockEngine.On("Evaluate", mock.Anything, mock.Anything).
-		Return(types.NewDecision(types.EffectAllow, "test-allow", ""), nil)
-	mockEngine.On("CanPerformAction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Run(func(args mock.Arguments) {
-			capturedSubject = args.Get(1).(string)
-			capturedAction = args.Get(2).(string)
-			capturedResource = args.Get(3).(string)
-		}).Return(true, nil)
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(mockEngine))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: list_commands is called with character_id
-	err := L.DoString(`
-		result, err = holomush.list_commands("` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// Verify CanPerformAction was called with correct args
-	assert.Equal(t, subject, capturedSubject, "subject should be character:<id>")
-	assert.Equal(t, "admin", capturedAction, "action should match capability")
-	assert.Equal(t, "server", capturedResource, "resource should match capability")
-}
-
-func TestListCommandsEvaluateErrorLogsErrorWithContext(t *testing.T) {
-	// Given: a registry with a command requiring capabilities
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{
-				Name:         "protected",
-				Help:         "Protected command",
-				Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}},
-				Source:       "core",
-			}),
-		},
-	}
-
-	charID := ulid.Make()
-	subject := access.CharacterSubject(charID.String())
-	evalErr := errors.New("policy store unavailable")
-
-	mockEngine := policytest.NewMockAccessPolicyEngine(t)
-
-	// Layer 1: Evaluate must allow so we reach capability pre-flight
-	mockEngine.On("Evaluate", mock.Anything, mock.Anything).
-		Return(types.NewDecision(types.EffectAllow, "test-allow", ""), nil)
-
-	// Mock engine to return error for the capability pre-flight
-	mockEngine.On("CanPerformAction", mock.Anything, subject, "admin", "server", "global").
-		Return(false, evalErr)
-
-	// Capture log output
-	var logBuf bytes.Buffer
-	oldLogger := slog.Default()
-	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelError}))
-	slog.SetDefault(testLogger)
-	defer slog.SetDefault(oldLogger)
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(mockEngine))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: list_commands is called
-	err := L.DoString(`
-		result, err = holomush.list_commands("` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// Verify log output contains error and context
-	logOutput := logBuf.String()
-	assert.Contains(t, logOutput, "capability pre-flight failed", "log should mention capability pre-flight failure")
-	assert.Contains(t, logOutput, subject, "log should contain subject")
-	assert.Contains(t, logOutput, "admin", "log should contain action")
-	assert.Contains(t, logOutput, "server", "log should contain resource")
-	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
-}
-
-func TestListCommandsExplicitDenyFiltersCommands(t *testing.T) {
-	// Given: a registry with commands requiring capabilities
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "say", Help: "Say something", Capabilities: []command.Capability{{Action: "emit", Resource: "stream", Scope: command.ScopeLocal}}, Source: "core"}),
-			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
-			command.NewTestEntry(command.CommandEntryConfig{Name: "admin", Help: "Admin command", Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}}, Source: "admin"}),
-		},
-	}
-
-	// DenyAllEngine returns EffectDeny with err == nil (explicit policy denial)
-	charID := ulid.Make()
-	denyEngine := policytest.DenyAllEngine()
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(denyEngine))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: list_commands is called with explicit deny engine
-	err := L.DoString(`
-		result, err = holomush.list_commands("` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// Then: only commands with no capability requirements are returned
-	result := L.GetGlobal("result")
-	require.NotEqual(t, lua.LNil, result)
-
-	resultTbl, ok := result.(*lua.LTable)
-	require.True(t, ok)
-
-	commands := L.GetField(resultTbl, "commands")
-	require.NotEqual(t, lua.LNil, commands, "commands field should exist")
-
-	tbl, ok := commands.(*lua.LTable)
-	require.True(t, ok)
-
-	// Collect returned command names
-	var names []string
-	tbl.ForEach(func(_, v lua.LValue) {
-		if cmdTbl, ok := v.(*lua.LTable); ok {
-			names = append(names, L.GetField(cmdTbl, "name").String())
-		}
-	})
-
-	// Should include: look (no caps required)
-	// Should NOT include: say (EffectDeny for comms.say), admin (EffectDeny for admin:manage)
-	assert.Contains(t, names, "look", "commands without capabilities should be included")
-	assert.NotContains(t, names, "say", "explicit deny should filter out command requiring comms.say")
-	assert.NotContains(t, names, "admin", "explicit deny should filter out command requiring admin:manage")
-	assert.Len(t, names, 1, "only commands without capability requirements should be included")
-}
-
-func TestListCommandsInfraFailureSetsIncompleteTrue(t *testing.T) {
-	// Given: commands with capabilities and an engine that returns infra failure decisions
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}}, Source: "admin"}),
-			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
-		},
-	}
-
-	charID := ulid.Make()
-	infraEngine := policytest.NewInfraFailureEngine(t, "session resolution failed", "infra:session-resolver")
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(infraEngine))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: list_commands is called
-	err := L.DoString(`
-		result, err = holomush.list_commands("` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// Then: commands with capabilities are hidden (fail-closed, same as engine error)
-	result := L.GetGlobal("result")
-	require.NotEqual(t, lua.LNil, result)
-
-	resultTbl, ok := result.(*lua.LTable)
-	require.True(t, ok, "expected table, got %T", result)
-
-	commands := L.GetField(resultTbl, "commands")
-	require.NotEqual(t, lua.LNil, commands, "commands field should exist")
-
-	tbl, ok := commands.(*lua.LTable)
-	require.True(t, ok, "expected table, got %T", commands)
-
-	var names []string
-	tbl.ForEach(func(_, v lua.LValue) {
-		if cmdTbl, ok := v.(*lua.LTable); ok {
-			names = append(names, L.GetField(cmdTbl, "name").String())
-		}
-	})
-
-	assert.Contains(t, names, "look", "commands without capabilities should still appear")
-	assert.NotContains(t, names, "boot", "commands with capabilities should be hidden during infra failure")
-
-	// Verify incomplete=true (the key distinction from explicit deny)
-	incomplete := L.GetField(resultTbl, "incomplete")
-	assert.Equal(t, lua.LTrue, incomplete, "incomplete should be true when infra failure occurs")
-}
-
-func TestListCommandsThreadsLuaContext(t *testing.T) {
-	// Given: a registry with a command requiring capabilities
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{
-				Name:         "protected",
-				Help:         "Protected command",
-				Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}},
-				Source:       "core",
-			}),
-		},
-	}
-
-	charID := ulid.Make()
-
-	mockEngine := policytest.NewMockAccessPolicyEngine(t)
-
-	// Layer 1: Evaluate must allow so we reach capability pre-flight
-	mockEngine.On("Evaluate", mock.Anything, mock.Anything).
-		Return(types.NewDecision(types.EffectAllow, "test-allow", ""), nil)
-
-	// Capture the context passed to CanPerformAction
-	var capturedCtx context.Context
-	mockEngine.On("CanPerformAction", mock.MatchedBy(func(ctx context.Context) bool {
-		capturedCtx = ctx
-		return true
-	}), mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(false, nil)
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(mockEngine))
-
-	L := lua.NewState()
-	defer L.Close()
-
-	// Set a context on the Lua state with a test value
-	const testKey testContextKey = "test-key"
-	parentCtx := context.WithValue(context.Background(), testKey, "test-value")
-	L.SetContext(parentCtx)
-
-	hf.Register(L, "test-plugin")
-
-	// When: list_commands is called
-	err := L.DoString(`
-		result, err = holomush.list_commands("` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// Then: the context from L.Context() should be threaded to the engine
-	require.NotNil(t, capturedCtx, "context should be passed to engine")
-	assert.Equal(t, "test-value", capturedCtx.Value(testKey), "context should preserve values from L.Context()")
-}
-
-func TestListCommandsFallsBackToBackgroundContext(t *testing.T) {
-	// Given: a registry with a command requiring capabilities
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{
-				Name:         "protected",
-				Help:         "Protected command",
-				Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}},
-				Source:       "core",
-			}),
-		},
-	}
-
-	charID := ulid.Make()
-
-	mockEngine := policytest.NewMockAccessPolicyEngine(t)
-
-	// Layer 1: Evaluate must allow so we reach capability pre-flight
-	mockEngine.On("Evaluate", mock.Anything, mock.Anything).
-		Return(types.NewDecision(types.EffectAllow, "test-allow", ""), nil)
-
-	// Capture the context passed to CanPerformAction
-	var capturedCtx context.Context
-	mockEngine.On("CanPerformAction", mock.MatchedBy(func(ctx context.Context) bool {
-		capturedCtx = ctx
-		return true
-	}), mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(false, nil)
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(mockEngine))
-
-	L := lua.NewState()
-	defer L.Close()
-
-	// Do NOT set context on L - should fall back to context.Background()
-
-	hf.Register(L, "test-plugin")
-
-	// When: list_commands is called without context set on L
-	err := L.DoString(`
-		result, err = holomush.list_commands("` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// Then: context should not be nil (should have fallen back to context.Background())
-	require.NotNil(t, capturedCtx, "context should not be nil even when L.Context() returns nil")
-}
-
-// F4: Incomplete metadata tests
-
-func TestListCommandsIncompleteFieldFalseWhenNoErrors(t *testing.T) {
-	// Given: a registry with commands and an engine that succeeds
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "say", Help: "Say something", Capabilities: []command.Capability{{Action: "emit", Resource: "stream", Scope: command.ScopeLocal}}, Source: "core"}),
-			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
-		},
-	}
-
-	charID := ulid.Make()
-	ac := policytest.NewGrantEngine()
-	ac.GrantCommandExecution(access.SubjectCharacter+charID.String(), "say")
-	ac.Grant(access.SubjectCharacter+charID.String(), "emit", "stream")
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: list_commands is called with no engine errors
-	err := L.DoString(`
-		result, err = holomush.list_commands("` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// Then: result.incomplete should be false
-	result := L.GetGlobal("result")
-	require.NotEqual(t, lua.LNil, result)
-
-	tbl, ok := result.(*lua.LTable)
-	require.True(t, ok, "expected table, got %T", result)
-
-	incomplete := L.GetField(tbl, "incomplete")
-	assert.Equal(t, lua.LFalse, incomplete, "incomplete should be false when no engine errors occur")
-
-	// Verify commands array exists
-	commands := L.GetField(tbl, "commands")
-	require.NotEqual(t, lua.LNil, commands, "commands field should exist")
-	cmdsTbl, ok := commands.(*lua.LTable)
-	require.True(t, ok, "commands should be a table")
-
-	count := 0
-	cmdsTbl.ForEach(func(_, _ lua.LValue) {
-		count++
-	})
-	assert.Equal(t, 2, count, "both commands should be included")
-}
-
-func TestListCommandsIncompleteFieldTrueWhenEngineErrors(t *testing.T) {
-	// Given: a registry with commands and an engine that always errors
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}}, Source: "admin"}),
-			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
-		},
-	}
-
-	charID := ulid.Make()
-	engineErr := errors.New("policy store unavailable")
-	errorEngine := policytest.NewErrorEngine(engineErr)
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(errorEngine))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: list_commands is called with engine that errors
-	err := L.DoString(`
-		result, err = holomush.list_commands("` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// Then: result.incomplete should be true
-	result := L.GetGlobal("result")
-	require.NotEqual(t, lua.LNil, result)
-
-	tbl, ok := result.(*lua.LTable)
-	require.True(t, ok, "expected table, got %T", result)
-
-	incomplete := L.GetField(tbl, "incomplete")
-	assert.Equal(t, lua.LTrue, incomplete, "incomplete should be true when engine errors occur")
-
-	// Verify commands array exists with only non-capability commands
-	commands := L.GetField(tbl, "commands")
-	require.NotEqual(t, lua.LNil, commands, "commands field should exist")
-	cmdsTbl, ok := commands.(*lua.LTable)
-	require.True(t, ok, "commands should be a table")
-
-	var names []string
-	cmdsTbl.ForEach(func(_, v lua.LValue) {
-		if cmdTbl, ok := v.(*lua.LTable); ok {
-			names = append(names, L.GetField(cmdTbl, "name").String())
-		}
-	})
-
-	assert.Contains(t, names, "look", "commands without capabilities should still appear")
-	assert.NotContains(t, names, "boot", "commands with capabilities should be hidden when engine errors")
-	assert.Len(t, names, 1)
-}
-
-func TestListCommandsIncompleteFieldTrueWhenPartialErrors(t *testing.T) {
-	// Given: a registry with multiple commands and an engine that errors for some
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "say", Help: "Say something", Capabilities: []command.Capability{{Action: "emit", Resource: "stream", Scope: command.ScopeLocal}}, Source: "core"}),
-			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
-			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}}, Source: "admin"}),
-		},
-	}
-
-	charID := ulid.Make()
-	subject := access.CharacterSubject(charID.String())
-
-	mockEngine := policytest.NewMockAccessPolicyEngine(t)
-
-	// Layer 1: Evaluate must allow so we reach capability pre-flight
-	mockEngine.On("Evaluate", mock.Anything, mock.Anything).
-		Return(types.NewDecision(types.EffectAllow, "test-allow", ""), nil)
-
-	// emit/stream succeeds (say command)
-	mockEngine.On("CanPerformAction", mock.Anything, subject, "emit", "stream", "local").
-		Return(true, nil).Maybe()
-
-	// admin/server errors (boot command)
-	mockEngine.On("CanPerformAction", mock.Anything, subject, "admin", "server", "global").
-		Return(false, errors.New("policy store unavailable")).Maybe()
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(mockEngine))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: list_commands is called with partial engine errors
-	err := L.DoString(`
-		result, err = holomush.list_commands("` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// Then: result.incomplete should be true
-	result := L.GetGlobal("result")
-	require.NotEqual(t, lua.LNil, result)
-
-	tbl, ok := result.(*lua.LTable)
-	require.True(t, ok, "expected table, got %T", result)
-
-	incomplete := L.GetField(tbl, "incomplete")
-	assert.Equal(t, lua.LTrue, incomplete, "incomplete should be true when any engine errors occur")
-
-	// Verify commands array exists
-	commands := L.GetField(tbl, "commands")
-	require.NotEqual(t, lua.LNil, commands, "commands field should exist")
-	cmdsTbl, ok := commands.(*lua.LTable)
-	require.True(t, ok, "commands should be a table")
-
-	var names []string
-	cmdsTbl.ForEach(func(_, v lua.LValue) {
-		if cmdTbl, ok := v.(*lua.LTable); ok {
-			names = append(names, L.GetField(cmdTbl, "name").String())
-		}
-	})
-
-	// Should include: say (granted), look (no caps required)
-	// Should NOT include: boot (errored)
-	assert.Contains(t, names, "say")
-	assert.Contains(t, names, "look")
-	assert.NotContains(t, names, "boot")
-}
-
-func TestListCommandsReturnsErrorWhenEngineErrors(t *testing.T) {
-	// Given: a registry with commands and an engine that always errors
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}}, Source: "admin"}),
-			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
-		},
-	}
-
-	charID := ulid.Make()
-	engineErr := errors.New("policy store unavailable")
-	errorEngine := policytest.NewErrorEngine(engineErr)
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(errorEngine))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: list_commands is called with engine that errors
-	err := L.DoString(`
-		result, err = holomush.list_commands("` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// Then: the second return value should be an error string (not lua.LNil)
-	errVal := L.GetGlobal("err")
-	assert.NotEqual(t, lua.LNil, errVal, "error return value should not be nil when engine errors")
-	assert.Contains(t, errVal.String(), "system error", "error message should indicate system error")
-
-	// AND the result table should still be returned with incomplete: true
-	result := L.GetGlobal("result")
-	require.NotEqual(t, lua.LNil, result, "result table should still be returned")
-
-	tbl, ok := result.(*lua.LTable)
-	require.True(t, ok, "expected table, got %T", result)
-
-	incomplete := L.GetField(tbl, "incomplete")
-	assert.Equal(t, lua.LTrue, incomplete, "incomplete should be true when engine errors occur")
-
-	// Verify commands array exists with only non-capability commands
-	commands := L.GetField(tbl, "commands")
-	require.NotEqual(t, lua.LNil, commands, "commands field should exist")
-	cmdsTbl, ok := commands.(*lua.LTable)
-	require.True(t, ok, "commands should be a table")
-
-	var names []string
-	cmdsTbl.ForEach(func(_, v lua.LValue) {
-		if cmdTbl, ok := v.(*lua.LTable); ok {
-			names = append(names, L.GetField(cmdTbl, "name").String())
-		}
-	})
-
-	assert.Contains(t, names, "look", "commands without capabilities should still appear")
-	assert.NotContains(t, names, "boot", "commands with capabilities should be hidden when engine errors")
-	assert.Len(t, names, 1)
-}
-
-func TestGetCommandHelpAccessDenied(t *testing.T) {
-	// Given: a command with capabilities and an engine that denies access
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{
-				Name:         "secret-cmd",
-				Help:         "Secret command",
-				Usage:        "secret-cmd",
-				Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}},
-				Source:       "admin",
-			}),
-		},
-	}
-
-	charID := ulid.Make()
-	ac := policytest.NewGrantEngine() // No grants — denies everything by default
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: get_command_help is called for a capability-gated command the character cannot access
-	err := L.DoString(`
-		info, err = holomush.get_command_help("secret-cmd", "` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// Then: nil result with "access denied" error
-	info := L.GetGlobal("info")
-	assert.Equal(t, lua.LNil, info)
-
-	errVal := L.GetGlobal("err")
-	assert.NotEqual(t, lua.LNil, errVal)
-	assert.Contains(t, errVal.String(), "access denied")
-}
-
-func TestGetCommandHelpNoCapabilitiesNoCheck(t *testing.T) {
-	// Given: a command WITHOUT capabilities — engine denies all, but help should still be returned
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			{Name: "look", Help: "Look around", Usage: "look [target]", Source: "core"}, // No capabilities
-		},
-	}
-
-	charID := ulid.Make()
-	denyEngine := policytest.DenyAllEngine()
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(denyEngine))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: get_command_help is called for a command with no capabilities
-	err := L.DoString(`
-		info, err = holomush.get_command_help("look", "` + charID.String() + `")
-	`)
-	require.NoError(t, err)
-
-	// Then: help is returned (no access check needed for commands without capabilities)
-	info := L.GetGlobal("info")
-	require.NotEqual(t, lua.LNil, info)
-
-	tbl, ok := info.(*lua.LTable)
-	require.True(t, ok)
-
-	assert.Equal(t, "look", L.GetField(tbl, "name").String())
-	assert.Equal(t, "Look around", L.GetField(tbl, "help").String())
-
-	errVal := L.GetGlobal("err")
-	assert.Equal(t, lua.LNil, errVal)
-}
-
-func TestGetCommandHelpNilEngineFailsClosed(t *testing.T) {
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{
-				Name: "secret-cmd", Help: "Secret",
-				Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}}, Source: "admin",
-			}),
-		},
-	}
-	hf := New(nil, WithCommandRegistry(registry))
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-	charID := ulid.Make()
-	err := L.DoString(`info, err = holomush.get_command_help("secret-cmd", "` + charID.String() + `")`)
-	require.NoError(t, err)
 	assert.Equal(t, lua.LNil, L.GetGlobal("info"))
-	assert.Contains(t, L.GetGlobal("err").String(), "access engine not available")
+	assert.Contains(t, L.GetGlobal("err").String(), "command not found")
 }
 
-func TestGetCommandHelpEngineErrorReturnsCheckFailed(t *testing.T) {
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{
-				Name: "secret-cmd", Help: "Secret",
-				Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}}, Source: "admin",
-			}),
-		},
-	}
-	engine := policytest.NewErrorEngine(assert.AnError)
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(engine))
+func TestGetCommandHelpShimTranslatesPermissionDenied(t *testing.T) {
+	// (d) PERMISSION_DENIED → "access denied".
+	registry := &mockCommandRegistry{commands: []command.CommandEntry{
+		command.NewTestEntry(command.CommandEntryConfig{
+			Name:         "secret-cmd",
+			Help:         "Secret command",
+			Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}},
+			Source:       "admin",
+		}),
+	}}
+	q := commandquery.New(registry, policytest.NewGrantEngine(), nil) // no grants → deny
+	charID := ulid.Make()
+
+	hf := New(nil, WithCommandQuerier(q))
 	L := lua.NewState()
 	defer L.Close()
 	hf.Register(L, "test-plugin")
-	charID := ulid.Make()
+
 	err := L.DoString(`info, err = holomush.get_command_help("secret-cmd", "` + charID.String() + `")`)
 	require.NoError(t, err)
+
+	assert.Equal(t, lua.LNil, L.GetGlobal("info"))
+	assert.Contains(t, L.GetGlobal("err").String(), "access denied")
+}
+
+func TestGetCommandHelpShimTranslatesUnavailableToCheckFailed(t *testing.T) {
+	// (d) UNAVAILABLE (engine error) → "access check failed".
+	registry := &mockCommandRegistry{commands: []command.CommandEntry{
+		command.NewTestEntry(command.CommandEntryConfig{
+			Name:         "secret-cmd",
+			Help:         "Secret command",
+			Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}},
+			Source:       "admin",
+		}),
+	}}
+	q := commandquery.New(registry, policytest.NewErrorEngine(assert.AnError), nil)
+	charID := ulid.Make()
+
+	hf := New(nil, WithCommandQuerier(q))
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`info, err = holomush.get_command_help("secret-cmd", "` + charID.String() + `")`)
+	require.NoError(t, err)
+
 	assert.Equal(t, lua.LNil, L.GetGlobal("info"))
 	assert.Contains(t, L.GetGlobal("err").String(), "access check failed")
 }
 
-func TestListCommandsNoErrorWhenEngineSucceeds(t *testing.T) {
-	// Given: a registry with commands and an engine that succeeds
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "say", Help: "Say something", Capabilities: []command.Capability{{Action: "emit", Resource: "stream", Scope: command.ScopeLocal}}, Source: "core"}),
-			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
-		},
-	}
-
+func TestGetCommandHelpShimNilQuerierReturnsRegistryUnavailable(t *testing.T) {
+	// (c) nil querier → "command registry not available".
 	charID := ulid.Make()
-	ac := policytest.NewGrantEngine()
-	ac.Grant(access.SubjectCharacter+charID.String(), "emit", "stream")
-
-	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
-
+	hf := New(nil) // no WithCommandQuerier
 	L := lua.NewState()
 	defer L.Close()
 	hf.Register(L, "test-plugin")
 
-	// When: list_commands is called with no engine errors
-	err := L.DoString(`
-		result, err = holomush.list_commands("` + charID.String() + `")
-	`)
+	err := L.DoString(`info, err = holomush.get_command_help("say", "` + charID.String() + `")`)
 	require.NoError(t, err)
 
-	// Then: the second return value should be lua.LNil (no error)
-	errVal := L.GetGlobal("err")
-	assert.Equal(t, lua.LNil, errVal, "error return value should be nil when no engine errors occur")
+	assert.Equal(t, lua.LNil, L.GetGlobal("info"))
+	assert.Contains(t, L.GetGlobal("err").String(), "command registry not available")
+}
 
-	// AND result.incomplete should be false
-	result := L.GetGlobal("result")
-	require.NotEqual(t, lua.LNil, result)
+func TestGetCommandHelpShimEmptyCommandNameRaises(t *testing.T) {
+	charID := ulid.Make()
+	hf := New(nil, WithCommandQuerier(newAllowQuerier(nil)))
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
 
-	tbl, ok := result.(*lua.LTable)
-	require.True(t, ok, "expected table, got %T", result)
+	err := L.DoString(`holomush.get_command_help("", "` + charID.String() + `")`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "command name cannot be empty")
+}
 
-	incomplete := L.GetField(tbl, "incomplete")
-	assert.Equal(t, lua.LFalse, incomplete, "incomplete should be false when no engine errors occur")
+func TestGetCommandHelpShimNotFoundWinsOverInvalidCharacterID(t *testing.T) {
+	// (e) Precedence: a non-existent command must resolve to "command not found"
+	// even when the character_id is malformed — the lookup (NOT_FOUND) happens
+	// inside Querier.Help before the subject is consulted, so the shim must NOT
+	// pre-parse/validate character_id ahead of the lookup.
+	registry := &mockCommandRegistry{commands: []command.CommandEntry{
+		{Name: "look", Help: "Look around", Source: "core"},
+	}}
+	q := commandquery.New(registry, policytest.AllowAllEngine(), nil)
+
+	hf := New(nil, WithCommandQuerier(q))
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`info, err = holomush.get_command_help("nonexistent", "not-a-ulid")`)
+	require.NoError(t, err)
+
+	assert.Equal(t, lua.LNil, L.GetGlobal("info"))
+	assert.Contains(t, L.GetGlobal("err").String(), "command not found",
+		"non-existent command must win over invalid character_id")
+}
+
+func TestGetCommandHelpShimNoCapabilitiesSkipsAccessCheck(t *testing.T) {
+	// (d) A command with no capabilities returns help without an access check —
+	// the querier resolves Detail directly; the shim maps it through.
+	registry := &mockCommandRegistry{commands: []command.CommandEntry{
+		{Name: "look", Help: "Look around", Usage: "look [target]", Source: "core"},
+	}}
+	q := commandquery.New(registry, policytest.DenyAllEngine(), nil) // deny-all, but no caps → no check
+	charID := ulid.Make()
+
+	hf := New(nil, WithCommandQuerier(q))
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`info, err = holomush.get_command_help("look", "` + charID.String() + `")`)
+	require.NoError(t, err)
+
+	tbl, ok := L.GetGlobal("info").(*lua.LTable)
+	require.True(t, ok)
+	assert.Equal(t, "look", L.GetField(tbl, "name").String())
+	assert.Equal(t, lua.LNil, L.GetGlobal("err"))
 }

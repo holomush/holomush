@@ -3401,6 +3401,189 @@ func (x *WebListFocusPresenceResponse) GetEntries() []*WebPresenceEntry {
 	return nil
 }
 
+// WebAvailableCommand is one command's metadata for the web composer.
+type WebAvailableCommand struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// name is the canonical command name shown on the chip.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// help is the one-line description (for future tooltip use).
+	Help string `protobuf:"bytes,2,opt,name=help,proto3" json:"help,omitempty"`
+	// usage is the usage pattern.
+	Usage string `protobuf:"bytes,3,opt,name=usage,proto3" json:"usage,omitempty"`
+	// source is "core" or the owning plugin name.
+	Source        string `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebAvailableCommand) Reset() {
+	*x = WebAvailableCommand{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebAvailableCommand) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebAvailableCommand) ProtoMessage() {}
+
+func (x *WebAvailableCommand) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebAvailableCommand.ProtoReflect.Descriptor instead.
+func (*WebAvailableCommand) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *WebAvailableCommand) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *WebAvailableCommand) GetHelp() string {
+	if x != nil {
+		return x.Help
+	}
+	return ""
+}
+
+func (x *WebAvailableCommand) GetUsage() string {
+	if x != nil {
+		return x.Usage
+	}
+	return ""
+}
+
+func (x *WebAvailableCommand) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+// WebListCommandsRequest names the session whose character's commands to list.
+type WebListCommandsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_id identifies the requesting session; core resolves the character and enforces ownership.
+	SessionId     string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebListCommandsRequest) Reset() {
+	*x = WebListCommandsRequest{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebListCommandsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebListCommandsRequest) ProtoMessage() {}
+
+func (x *WebListCommandsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebListCommandsRequest.ProtoReflect.Descriptor instead.
+func (*WebListCommandsRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *WebListCommandsRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+// WebListCommandsResponse returns the command set + alias map for the composer.
+type WebListCommandsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// commands is the set the session character may execute.
+	Commands []*WebAvailableCommand `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands,omitempty"`
+	// aliases maps alias → canonical command name for visible commands.
+	Aliases map[string]string `protobuf:"bytes,2,rep,name=aliases,proto3" json:"aliases,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// incomplete is true when engine errors hid some commands.
+	Incomplete    bool `protobuf:"varint,3,opt,name=incomplete,proto3" json:"incomplete,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebListCommandsResponse) Reset() {
+	*x = WebListCommandsResponse{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebListCommandsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebListCommandsResponse) ProtoMessage() {}
+
+func (x *WebListCommandsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebListCommandsResponse.ProtoReflect.Descriptor instead.
+func (*WebListCommandsResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *WebListCommandsResponse) GetCommands() []*WebAvailableCommand {
+	if x != nil {
+		return x.Commands
+	}
+	return nil
+}
+
+func (x *WebListCommandsResponse) GetAliases() map[string]string {
+	if x != nil {
+		return x.Aliases
+	}
+	return nil
+}
+
+func (x *WebListCommandsResponse) GetIncomplete() bool {
+	if x != nil {
+		return x.Incomplete
+	}
+	return false
+}
+
 var File_holomush_web_v1_web_proto protoreflect.FileDescriptor
 
 const file_holomush_web_v1_web_proto_rawDesc = "" +
@@ -3613,7 +3796,24 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\acontext\x18\x01 \x01(\x0e2#.holomush.web.v1.WebPresenceContextR\acontext\x12\x1d\n" +
 	"\n" +
 	"context_id\x18\x02 \x01(\tR\tcontextId\x12;\n" +
-	"\aentries\x18\x03 \x03(\v2!.holomush.web.v1.WebPresenceEntryR\aentries*\x98\x01\n" +
+	"\aentries\x18\x03 \x03(\v2!.holomush.web.v1.WebPresenceEntryR\aentries\"k\n" +
+	"\x13WebAvailableCommand\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04help\x18\x02 \x01(\tR\x04help\x12\x14\n" +
+	"\x05usage\x18\x03 \x01(\tR\x05usage\x12\x16\n" +
+	"\x06source\x18\x04 \x01(\tR\x06source\"7\n" +
+	"\x16WebListCommandsRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"\x88\x02\n" +
+	"\x17WebListCommandsResponse\x12@\n" +
+	"\bcommands\x18\x01 \x03(\v2$.holomush.web.v1.WebAvailableCommandR\bcommands\x12O\n" +
+	"\aaliases\x18\x02 \x03(\v25.holomush.web.v1.WebListCommandsResponse.AliasesEntryR\aaliases\x12\x1e\n" +
+	"\n" +
+	"incomplete\x18\x03 \x01(\bR\n" +
+	"incomplete\x1a:\n" +
+	"\fAliasesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\x98\x01\n" +
 	"\fEventChannel\x12\x1d\n" +
 	"\x19EVENT_CHANNEL_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16EVENT_CHANNEL_TERMINAL\x10\x01\x12\x17\n" +
@@ -3633,7 +3833,7 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x1eWEB_PRESENCE_STATE_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19WEB_PRESENCE_STATE_ACTIVE\x10\x01\x12\x1f\n" +
 	"\x1bWEB_PRESENCE_STATE_DETACHED\x10\x02\x12\x1f\n" +
-	"\x1bWEB_PRESENCE_STATE_INACTIVE\x10\x032\xf2\x12\n" +
+	"\x1bWEB_PRESENCE_STATE_INACTIVE\x10\x032\xd8\x13\n" +
 	"\n" +
 	"WebService\x12X\n" +
 	"\vSendCommand\x12#.holomush.web.v1.SendCommandRequest\x1a$.holomush.web.v1.SendCommandResponse\x12]\n" +
@@ -3658,7 +3858,8 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x15WebListPlayerSessions\x12-.holomush.web.v1.WebListPlayerSessionsRequest\x1a..holomush.web.v1.WebListPlayerSessionsResponse\x12y\n" +
 	"\x16WebRevokePlayerSession\x12..holomush.web.v1.WebRevokePlayerSessionRequest\x1a/.holomush.web.v1.WebRevokePlayerSessionResponse\x12\x8b\x01\n" +
 	"\x1cWebRevokeOtherPlayerSessions\x124.holomush.web.v1.WebRevokeOtherPlayerSessionsRequest\x1a5.holomush.web.v1.WebRevokeOtherPlayerSessionsResponse\x12s\n" +
-	"\x14WebListFocusPresence\x12,.holomush.web.v1.WebListFocusPresenceRequest\x1a-.holomush.web.v1.WebListFocusPresenceResponseB\xbb\x01\n" +
+	"\x14WebListFocusPresence\x12,.holomush.web.v1.WebListFocusPresenceRequest\x1a-.holomush.web.v1.WebListFocusPresenceResponse\x12d\n" +
+	"\x0fWebListCommands\x12'.holomush.web.v1.WebListCommandsRequest\x1a(.holomush.web.v1.WebListCommandsResponseB\xbb\x01\n" +
 	"\x13com.holomush.web.v1B\bWebProtoP\x01Z<github.com/holomush/holomush/pkg/proto/holomush/web/v1;webv1\xa2\x02\x03HWX\xaa\x02\x0fHolomush.Web.V1\xca\x02\x0fHolomush\\Web\\V1\xe2\x02\x1bHolomush\\Web\\V1\\GPBMetadata\xea\x02\x11Holomush::Web::V1b\x06proto3"
 
 var (
@@ -3674,7 +3875,7 @@ func file_holomush_web_v1_web_proto_rawDescGZIP() []byte {
 }
 
 var file_holomush_web_v1_web_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_holomush_web_v1_web_proto_msgTypes = make([]protoimpl.MessageInfo, 51)
+var file_holomush_web_v1_web_proto_msgTypes = make([]protoimpl.MessageInfo, 55)
 var file_holomush_web_v1_web_proto_goTypes = []any{
 	(EventChannel)(0),                            // 0: holomush.web.v1.EventChannel
 	(ControlSignal)(0),                           // 1: holomush.web.v1.ControlSignal
@@ -3730,14 +3931,18 @@ var file_holomush_web_v1_web_proto_goTypes = []any{
 	(*WebPresenceEntry)(nil),                     // 51: holomush.web.v1.WebPresenceEntry
 	(*WebListFocusPresenceRequest)(nil),          // 52: holomush.web.v1.WebListFocusPresenceRequest
 	(*WebListFocusPresenceResponse)(nil),         // 53: holomush.web.v1.WebListFocusPresenceResponse
-	nil,                                          // 54: holomush.web.v1.WebContentItem.MetadataEntry
-	(*structpb.Struct)(nil),                      // 55: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),                // 56: google.protobuf.Timestamp
+	(*WebAvailableCommand)(nil),                  // 54: holomush.web.v1.WebAvailableCommand
+	(*WebListCommandsRequest)(nil),               // 55: holomush.web.v1.WebListCommandsRequest
+	(*WebListCommandsResponse)(nil),              // 56: holomush.web.v1.WebListCommandsResponse
+	nil,                                          // 57: holomush.web.v1.WebContentItem.MetadataEntry
+	nil,                                          // 58: holomush.web.v1.WebListCommandsResponse.AliasesEntry
+	(*structpb.Struct)(nil),                      // 59: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),                // 60: google.protobuf.Timestamp
 }
 var file_holomush_web_v1_web_proto_depIdxs = []int32{
 	1,  // 0: holomush.web.v1.ControlFrame.signal:type_name -> holomush.web.v1.ControlSignal
 	0,  // 1: holomush.web.v1.GameEvent.display_target:type_name -> holomush.web.v1.EventChannel
-	55, // 2: holomush.web.v1.GameEvent.metadata:type_name -> google.protobuf.Struct
+	59, // 2: holomush.web.v1.GameEvent.metadata:type_name -> google.protobuf.Struct
 	8,  // 3: holomush.web.v1.StreamEventsResponse.event:type_name -> holomush.web.v1.GameEvent
 	4,  // 4: holomush.web.v1.StreamEventsResponse.control:type_name -> holomush.web.v1.ControlFrame
 	14, // 5: holomush.web.v1.WebAuthenticatePlayerResponse.characters:type_name -> holomush.web.v1.CharacterSummary
@@ -3747,63 +3952,67 @@ var file_holomush_web_v1_web_proto_depIdxs = []int32{
 	14, // 9: holomush.web.v1.WebCheckSessionResponse.characters:type_name -> holomush.web.v1.CharacterSummary
 	39, // 10: holomush.web.v1.WebGetContentResponse.item:type_name -> holomush.web.v1.WebContentItem
 	39, // 11: holomush.web.v1.WebListContentResponse.items:type_name -> holomush.web.v1.WebContentItem
-	54, // 12: holomush.web.v1.WebContentItem.metadata:type_name -> holomush.web.v1.WebContentItem.MetadataEntry
+	57, // 12: holomush.web.v1.WebContentItem.metadata:type_name -> holomush.web.v1.WebContentItem.MetadataEntry
 	8,  // 13: holomush.web.v1.WebQueryStreamHistoryResponse.events:type_name -> holomush.web.v1.GameEvent
-	56, // 14: holomush.web.v1.WebPlayerSessionInfo.created_at:type_name -> google.protobuf.Timestamp
-	56, // 15: holomush.web.v1.WebPlayerSessionInfo.last_active:type_name -> google.protobuf.Timestamp
+	60, // 14: holomush.web.v1.WebPlayerSessionInfo.created_at:type_name -> google.protobuf.Timestamp
+	60, // 15: holomush.web.v1.WebPlayerSessionInfo.last_active:type_name -> google.protobuf.Timestamp
 	45, // 16: holomush.web.v1.WebListPlayerSessionsResponse.sessions:type_name -> holomush.web.v1.WebPlayerSessionInfo
 	3,  // 17: holomush.web.v1.WebPresenceEntry.state:type_name -> holomush.web.v1.WebPresenceState
 	2,  // 18: holomush.web.v1.WebListFocusPresenceResponse.context:type_name -> holomush.web.v1.WebPresenceContext
 	51, // 19: holomush.web.v1.WebListFocusPresenceResponse.entries:type_name -> holomush.web.v1.WebPresenceEntry
-	5,  // 20: holomush.web.v1.WebService.SendCommand:input_type -> holomush.web.v1.SendCommandRequest
-	7,  // 21: holomush.web.v1.WebService.StreamEvents:input_type -> holomush.web.v1.StreamEventsRequest
-	10, // 22: holomush.web.v1.WebService.Disconnect:input_type -> holomush.web.v1.DisconnectRequest
-	12, // 23: holomush.web.v1.WebService.GetCommandHistory:input_type -> holomush.web.v1.GetCommandHistoryRequest
-	15, // 24: holomush.web.v1.WebService.WebAuthenticatePlayer:input_type -> holomush.web.v1.WebAuthenticatePlayerRequest
-	17, // 25: holomush.web.v1.WebService.WebSelectCharacter:input_type -> holomush.web.v1.WebSelectCharacterRequest
-	19, // 26: holomush.web.v1.WebService.WebCreatePlayer:input_type -> holomush.web.v1.WebCreatePlayerRequest
-	21, // 27: holomush.web.v1.WebService.WebCreateGuest:input_type -> holomush.web.v1.WebCreateGuestRequest
-	23, // 28: holomush.web.v1.WebService.WebCreateCharacter:input_type -> holomush.web.v1.WebCreateCharacterRequest
-	25, // 29: holomush.web.v1.WebService.WebListCharacters:input_type -> holomush.web.v1.WebListCharactersRequest
-	27, // 30: holomush.web.v1.WebService.WebLogout:input_type -> holomush.web.v1.WebLogoutRequest
-	29, // 31: holomush.web.v1.WebService.WebRequestPasswordReset:input_type -> holomush.web.v1.WebRequestPasswordResetRequest
-	31, // 32: holomush.web.v1.WebService.WebConfirmPasswordReset:input_type -> holomush.web.v1.WebConfirmPasswordResetRequest
-	33, // 33: holomush.web.v1.WebService.WebCheckSession:input_type -> holomush.web.v1.WebCheckSessionRequest
-	35, // 34: holomush.web.v1.WebService.WebGetContent:input_type -> holomush.web.v1.WebGetContentRequest
-	37, // 35: holomush.web.v1.WebService.WebListContent:input_type -> holomush.web.v1.WebListContentRequest
-	40, // 36: holomush.web.v1.WebService.WebQueryStreamHistory:input_type -> holomush.web.v1.WebQueryStreamHistoryRequest
-	42, // 37: holomush.web.v1.WebService.WebListSessionStreams:input_type -> holomush.web.v1.WebListSessionStreamsRequest
-	44, // 38: holomush.web.v1.WebService.WebListPlayerSessions:input_type -> holomush.web.v1.WebListPlayerSessionsRequest
-	47, // 39: holomush.web.v1.WebService.WebRevokePlayerSession:input_type -> holomush.web.v1.WebRevokePlayerSessionRequest
-	49, // 40: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:input_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsRequest
-	52, // 41: holomush.web.v1.WebService.WebListFocusPresence:input_type -> holomush.web.v1.WebListFocusPresenceRequest
-	6,  // 42: holomush.web.v1.WebService.SendCommand:output_type -> holomush.web.v1.SendCommandResponse
-	9,  // 43: holomush.web.v1.WebService.StreamEvents:output_type -> holomush.web.v1.StreamEventsResponse
-	11, // 44: holomush.web.v1.WebService.Disconnect:output_type -> holomush.web.v1.DisconnectResponse
-	13, // 45: holomush.web.v1.WebService.GetCommandHistory:output_type -> holomush.web.v1.GetCommandHistoryResponse
-	16, // 46: holomush.web.v1.WebService.WebAuthenticatePlayer:output_type -> holomush.web.v1.WebAuthenticatePlayerResponse
-	18, // 47: holomush.web.v1.WebService.WebSelectCharacter:output_type -> holomush.web.v1.WebSelectCharacterResponse
-	20, // 48: holomush.web.v1.WebService.WebCreatePlayer:output_type -> holomush.web.v1.WebCreatePlayerResponse
-	22, // 49: holomush.web.v1.WebService.WebCreateGuest:output_type -> holomush.web.v1.WebCreateGuestResponse
-	24, // 50: holomush.web.v1.WebService.WebCreateCharacter:output_type -> holomush.web.v1.WebCreateCharacterResponse
-	26, // 51: holomush.web.v1.WebService.WebListCharacters:output_type -> holomush.web.v1.WebListCharactersResponse
-	28, // 52: holomush.web.v1.WebService.WebLogout:output_type -> holomush.web.v1.WebLogoutResponse
-	30, // 53: holomush.web.v1.WebService.WebRequestPasswordReset:output_type -> holomush.web.v1.WebRequestPasswordResetResponse
-	32, // 54: holomush.web.v1.WebService.WebConfirmPasswordReset:output_type -> holomush.web.v1.WebConfirmPasswordResetResponse
-	34, // 55: holomush.web.v1.WebService.WebCheckSession:output_type -> holomush.web.v1.WebCheckSessionResponse
-	36, // 56: holomush.web.v1.WebService.WebGetContent:output_type -> holomush.web.v1.WebGetContentResponse
-	38, // 57: holomush.web.v1.WebService.WebListContent:output_type -> holomush.web.v1.WebListContentResponse
-	41, // 58: holomush.web.v1.WebService.WebQueryStreamHistory:output_type -> holomush.web.v1.WebQueryStreamHistoryResponse
-	43, // 59: holomush.web.v1.WebService.WebListSessionStreams:output_type -> holomush.web.v1.WebListSessionStreamsResponse
-	46, // 60: holomush.web.v1.WebService.WebListPlayerSessions:output_type -> holomush.web.v1.WebListPlayerSessionsResponse
-	48, // 61: holomush.web.v1.WebService.WebRevokePlayerSession:output_type -> holomush.web.v1.WebRevokePlayerSessionResponse
-	50, // 62: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:output_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsResponse
-	53, // 63: holomush.web.v1.WebService.WebListFocusPresence:output_type -> holomush.web.v1.WebListFocusPresenceResponse
-	42, // [42:64] is the sub-list for method output_type
-	20, // [20:42] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	54, // 20: holomush.web.v1.WebListCommandsResponse.commands:type_name -> holomush.web.v1.WebAvailableCommand
+	58, // 21: holomush.web.v1.WebListCommandsResponse.aliases:type_name -> holomush.web.v1.WebListCommandsResponse.AliasesEntry
+	5,  // 22: holomush.web.v1.WebService.SendCommand:input_type -> holomush.web.v1.SendCommandRequest
+	7,  // 23: holomush.web.v1.WebService.StreamEvents:input_type -> holomush.web.v1.StreamEventsRequest
+	10, // 24: holomush.web.v1.WebService.Disconnect:input_type -> holomush.web.v1.DisconnectRequest
+	12, // 25: holomush.web.v1.WebService.GetCommandHistory:input_type -> holomush.web.v1.GetCommandHistoryRequest
+	15, // 26: holomush.web.v1.WebService.WebAuthenticatePlayer:input_type -> holomush.web.v1.WebAuthenticatePlayerRequest
+	17, // 27: holomush.web.v1.WebService.WebSelectCharacter:input_type -> holomush.web.v1.WebSelectCharacterRequest
+	19, // 28: holomush.web.v1.WebService.WebCreatePlayer:input_type -> holomush.web.v1.WebCreatePlayerRequest
+	21, // 29: holomush.web.v1.WebService.WebCreateGuest:input_type -> holomush.web.v1.WebCreateGuestRequest
+	23, // 30: holomush.web.v1.WebService.WebCreateCharacter:input_type -> holomush.web.v1.WebCreateCharacterRequest
+	25, // 31: holomush.web.v1.WebService.WebListCharacters:input_type -> holomush.web.v1.WebListCharactersRequest
+	27, // 32: holomush.web.v1.WebService.WebLogout:input_type -> holomush.web.v1.WebLogoutRequest
+	29, // 33: holomush.web.v1.WebService.WebRequestPasswordReset:input_type -> holomush.web.v1.WebRequestPasswordResetRequest
+	31, // 34: holomush.web.v1.WebService.WebConfirmPasswordReset:input_type -> holomush.web.v1.WebConfirmPasswordResetRequest
+	33, // 35: holomush.web.v1.WebService.WebCheckSession:input_type -> holomush.web.v1.WebCheckSessionRequest
+	35, // 36: holomush.web.v1.WebService.WebGetContent:input_type -> holomush.web.v1.WebGetContentRequest
+	37, // 37: holomush.web.v1.WebService.WebListContent:input_type -> holomush.web.v1.WebListContentRequest
+	40, // 38: holomush.web.v1.WebService.WebQueryStreamHistory:input_type -> holomush.web.v1.WebQueryStreamHistoryRequest
+	42, // 39: holomush.web.v1.WebService.WebListSessionStreams:input_type -> holomush.web.v1.WebListSessionStreamsRequest
+	44, // 40: holomush.web.v1.WebService.WebListPlayerSessions:input_type -> holomush.web.v1.WebListPlayerSessionsRequest
+	47, // 41: holomush.web.v1.WebService.WebRevokePlayerSession:input_type -> holomush.web.v1.WebRevokePlayerSessionRequest
+	49, // 42: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:input_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsRequest
+	52, // 43: holomush.web.v1.WebService.WebListFocusPresence:input_type -> holomush.web.v1.WebListFocusPresenceRequest
+	55, // 44: holomush.web.v1.WebService.WebListCommands:input_type -> holomush.web.v1.WebListCommandsRequest
+	6,  // 45: holomush.web.v1.WebService.SendCommand:output_type -> holomush.web.v1.SendCommandResponse
+	9,  // 46: holomush.web.v1.WebService.StreamEvents:output_type -> holomush.web.v1.StreamEventsResponse
+	11, // 47: holomush.web.v1.WebService.Disconnect:output_type -> holomush.web.v1.DisconnectResponse
+	13, // 48: holomush.web.v1.WebService.GetCommandHistory:output_type -> holomush.web.v1.GetCommandHistoryResponse
+	16, // 49: holomush.web.v1.WebService.WebAuthenticatePlayer:output_type -> holomush.web.v1.WebAuthenticatePlayerResponse
+	18, // 50: holomush.web.v1.WebService.WebSelectCharacter:output_type -> holomush.web.v1.WebSelectCharacterResponse
+	20, // 51: holomush.web.v1.WebService.WebCreatePlayer:output_type -> holomush.web.v1.WebCreatePlayerResponse
+	22, // 52: holomush.web.v1.WebService.WebCreateGuest:output_type -> holomush.web.v1.WebCreateGuestResponse
+	24, // 53: holomush.web.v1.WebService.WebCreateCharacter:output_type -> holomush.web.v1.WebCreateCharacterResponse
+	26, // 54: holomush.web.v1.WebService.WebListCharacters:output_type -> holomush.web.v1.WebListCharactersResponse
+	28, // 55: holomush.web.v1.WebService.WebLogout:output_type -> holomush.web.v1.WebLogoutResponse
+	30, // 56: holomush.web.v1.WebService.WebRequestPasswordReset:output_type -> holomush.web.v1.WebRequestPasswordResetResponse
+	32, // 57: holomush.web.v1.WebService.WebConfirmPasswordReset:output_type -> holomush.web.v1.WebConfirmPasswordResetResponse
+	34, // 58: holomush.web.v1.WebService.WebCheckSession:output_type -> holomush.web.v1.WebCheckSessionResponse
+	36, // 59: holomush.web.v1.WebService.WebGetContent:output_type -> holomush.web.v1.WebGetContentResponse
+	38, // 60: holomush.web.v1.WebService.WebListContent:output_type -> holomush.web.v1.WebListContentResponse
+	41, // 61: holomush.web.v1.WebService.WebQueryStreamHistory:output_type -> holomush.web.v1.WebQueryStreamHistoryResponse
+	43, // 62: holomush.web.v1.WebService.WebListSessionStreams:output_type -> holomush.web.v1.WebListSessionStreamsResponse
+	46, // 63: holomush.web.v1.WebService.WebListPlayerSessions:output_type -> holomush.web.v1.WebListPlayerSessionsResponse
+	48, // 64: holomush.web.v1.WebService.WebRevokePlayerSession:output_type -> holomush.web.v1.WebRevokePlayerSessionResponse
+	50, // 65: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:output_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsResponse
+	53, // 66: holomush.web.v1.WebService.WebListFocusPresence:output_type -> holomush.web.v1.WebListFocusPresenceResponse
+	56, // 67: holomush.web.v1.WebService.WebListCommands:output_type -> holomush.web.v1.WebListCommandsResponse
+	45, // [45:68] is the sub-list for method output_type
+	22, // [22:45] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_holomush_web_v1_web_proto_init() }
@@ -3821,7 +4030,7 @@ func file_holomush_web_v1_web_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_web_v1_web_proto_rawDesc), len(file_holomush_web_v1_web_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   51,
+			NumMessages:   55,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

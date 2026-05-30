@@ -8,34 +8,21 @@ import (
 	"log/slog"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/holomush/holomush/internal/access"
-	"github.com/holomush/holomush/internal/access/policy/types"
-	"github.com/holomush/holomush/internal/command"
-	"github.com/holomush/holomush/internal/observability"
-	"github.com/holomush/holomush/pkg/errutil"
+	"github.com/holomush/holomush/internal/command/commandquery"
 )
 
-// CommandRegistry provides read-only access to registered commands.
-type CommandRegistry interface {
-	// All returns all registered commands.
-	All() []command.CommandEntry
-	// Get retrieves a command by name.
-	Get(name string) (command.CommandEntry, bool)
-}
-
-// WithCommandRegistry sets the command registry for command-related host functions.
-func WithCommandRegistry(reg CommandRegistry) Option {
+// WithCommandQuerier injects the shared command-query service. The
+// list_commands / get_command_help host functions delegate to it exclusively,
+// providing the single ABAC-filtered enumeration via commandquery.Querier
+// (design spec INV-1: exactly one command-visibility filter). There is no
+// second filter implementation in this package.
+func WithCommandQuerier(q *commandquery.Querier) Option {
 	return func(f *Functions) {
-		f.commandRegistry = reg
-	}
-}
-
-// WithEngine sets the access policy engine for capability filtering.
-func WithEngine(engine types.AccessPolicyEngine) Option {
-	return func(f *Functions) {
-		f.engine = engine
+		f.commandQuerier = q
 	}
 }
 
@@ -54,38 +41,24 @@ func WithEngine(engine types.AccessPolicyEngine) Option {
 //     may be incomplete (e.g., show the error string from the second return value).
 //   - The error string (second return) is non-nil only when incomplete is true.
 //
-// Commands are filtered by capability:
-//   - Commands with no capabilities (nil or empty slice) are always included
-//   - Commands with capabilities require ALL capabilities to be granted (AND logic)
+// This function is a thin shim: it parses/validates the character_id, then
+// delegates to commandquery.Querier (INV-1). All ABAC filtering, capability
+// AND-logic, and the engine-error circuit breaker live in commandquery.
 func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
-	return func(L *lua.LState) int {
-		charIDStr := L.CheckString(1)
+	return func(ls *lua.LState) int {
+		charIDStr := ls.CheckString(1)
 		if charIDStr == "" {
-			L.RaiseError("character ID cannot be empty")
+			ls.RaiseError("character ID cannot be empty")
 			return 0
 		}
 
 		charID, err := ulid.Parse(charIDStr)
 		if err != nil {
-			L.RaiseError("invalid character ID: %s", charIDStr)
+			ls.RaiseError("invalid character ID: %s", charIDStr)
 			return 0
 		}
 
-		if f.commandRegistry == nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString("command registry not available"))
-			return 2
-		}
-
-		if f.engine == nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString("access engine not available"))
-			return 2
-		}
-
-		commands := f.commandRegistry.All()
-		subject := access.CharacterSubject(charID.String())
-		ctx := L.Context()
+		ctx := ls.Context()
 		if ctx == nil {
 			// Lua VM has no context — fall back to background context.
 			// This shouldn't happen when events are delivered via DeliverEvent,
@@ -94,215 +67,154 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 			ctx = context.Background()
 		}
 
-		// Filter commands by character capabilities.
-		// Circuit breaker: stop querying the engine after repeated failures to avoid
-		// O(n_commands * n_capabilities) calls against a degraded engine.
-		// Each command contributes at most 1 to the count regardless of how many capabilities it has.
-		// Independent from handlers/who.go: command-list iterates registry entries while
-		// who iterates sessions — different cardinalities and failure impacts.
-		//
-		// Invariant: commands with no capabilities are ALWAYS included, even when the
-		// circuit breaker has tripped. The circuit breaker only suppresses engine calls;
-		// no-capability commands do not require an engine call, so they are unaffected.
-		const maxEngineErrors = 3
-		var filtered []command.CommandEntry
-		var hadEngineError bool
-		var engineErrorCount int
-		circuitTripped := false
-		for i := range commands {
-			// No-capability commands are always visible — skip engine entirely.
-			if len(commands[i].GetCapabilities()) == 0 {
-				filtered = append(filtered, commands[i])
-				continue
-			}
-
-			// Circuit breaker has tripped: skip capability-gated commands rather than
-			// querying a degraded engine. The list will be marked incomplete.
-			if circuitTripped {
-				continue
-			}
-
-			allowed, hadError := f.canExecuteCommand(ctx, subject, commands[i])
-			if hadError {
-				hadEngineError = true
-				engineErrorCount++
-				if engineErrorCount >= maxEngineErrors {
-					slog.WarnContext(
-						ctx, "command list circuit breaker tripped",
-						"engine_failures", engineErrorCount,
-						"threshold", maxEngineErrors,
-					)
-					circuitTripped = true
-				}
-			}
-			if allowed {
-				filtered = append(filtered, commands[i])
-			}
+		if f.commandQuerier == nil {
+			ls.Push(lua.LNil)
+			ls.Push(lua.LString("command registry not available"))
+			return 2
 		}
 
-		// Create commands array
-		commandsTbl := L.NewTable()
-		for i := range filtered {
-			cmdTbl := L.NewTable()
-			L.SetField(cmdTbl, "name", lua.LString(filtered[i].Name))
-			L.SetField(cmdTbl, "help", lua.LString(filtered[i].Help))
-			L.SetField(cmdTbl, "usage", lua.LString(filtered[i].Usage))
-			L.SetField(cmdTbl, "source", lua.LString(filtered[i].Source))
-
-			// Add to array (1-indexed for Lua)
-			L.SetTable(commandsTbl, lua.LNumber(i+1), cmdTbl)
-		}
-
-		// Create result table with commands and incomplete metadata
-		resultTbl := L.NewTable()
-		L.SetField(resultTbl, "commands", commandsTbl)
-		if hadEngineError {
-			L.SetField(resultTbl, "incomplete", lua.LTrue)
-		} else {
-			L.SetField(resultTbl, "incomplete", lua.LFalse)
-		}
-
-		L.Push(resultTbl)
-		if hadEngineError {
-			L.Push(lua.LString("some commands may be hidden due to a system error; try again or contact an admin if the problem persists"))
-		} else {
-			L.Push(lua.LNil) // no error
-		}
-		return 2
+		subject := access.CharacterSubject(charID.String())
+		return listCommandsViaQuerier(ctx, ls, f.commandQuerier, subject)
 	}
 }
 
-// canExecuteCommand checks if subject has all required capabilities for a command.
-// Returns (allowed bool, hadError bool) where:
-//   - allowed is true if command has no capabilities or subject has ALL required capabilities
-//   - hadError is true if any engine evaluation failed (returned error or indicated infrastructure failure)
-func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd command.CommandEntry) (allowed, hadError bool) {
-	// Layer 1: can this character execute this command?
-	req, reqErr := types.NewAccessRequest(subject, "execute", "command:"+cmd.Name, nil)
-	if reqErr != nil {
-		errutil.LogErrorContext(ctx, "command access request failed",
-			reqErr, "subject", subject, "command", cmd.Name)
-		observability.RecordEngineFailure("command_capability_engine_error")
-		return false, true
-	}
-	decision, evalErr := f.engine.Evaluate(ctx, req)
-	if evalErr != nil {
-		errutil.LogErrorContext(ctx, "command access evaluation failed",
-			evalErr, "subject", subject, "command", cmd.Name)
-		observability.RecordEngineFailure("command_capability_engine_error")
-		return false, true
-	}
-	if !decision.IsAllowed() {
-		if decision.IsInfraFailure() {
-			return false, true
-		}
-		return false, false
+// listCommandsViaQuerier delegates to commandquery.Querier and maps its Result
+// onto the Lua-table shape the help plugin expects.
+func listCommandsViaQuerier(ctx context.Context, ls *lua.LState, q *commandquery.Querier, subject string) int {
+	res, qErr := q.Available(ctx, subject)
+	if qErr != nil {
+		ls.Push(lua.LNil)
+		ls.Push(lua.LString("command listing failed"))
+		return 2
 	}
 
-	// Layer 2: capability pre-flight (AND logic) — fail-closed on errors
-	for _, capability := range cmd.GetCapabilities() {
-		ok, err := f.engine.CanPerformAction(ctx, subject, capability.Action, capability.Resource, capability.EffectiveScope())
-		if err != nil {
-			errutil.LogErrorContext(ctx, "capability pre-flight failed",
-				err, "subject", subject, "action", capability.Action, "resource", capability.Resource)
-			observability.RecordEngineFailure("command_capability_engine_error")
-			return false, true
-		}
-		if !ok {
-			return false, hadError
-		}
+	commandsTbl := ls.NewTable()
+	for i := range res.Commands {
+		cmdTbl := ls.NewTable()
+		ls.SetField(cmdTbl, "name", lua.LString(res.Commands[i].Name))
+		ls.SetField(cmdTbl, "help", lua.LString(res.Commands[i].Help))
+		ls.SetField(cmdTbl, "usage", lua.LString(res.Commands[i].Usage))
+		ls.SetField(cmdTbl, "source", lua.LString(res.Commands[i].Source))
+		ls.SetTable(commandsTbl, lua.LNumber(i+1), cmdTbl)
 	}
-	return true, hadError
+
+	resultTbl := ls.NewTable()
+	ls.SetField(resultTbl, "commands", commandsTbl)
+	ls.SetField(resultTbl, "incomplete", lua.LBool(res.Incomplete))
+
+	ls.Push(resultTbl)
+	if res.Incomplete {
+		ls.Push(lua.LString("some commands may be hidden due to a system error; try again or contact an admin if the problem persists"))
+	} else {
+		ls.Push(lua.LNil)
+	}
+	return 2
 }
 
 // getCommandHelpFn returns the get_command_help host function.
 // Args: command_name (string), character_id (string)
 // Returns: (command info table, error string)
 //
-// For commands with capabilities, evaluates ABAC before returning help.
-// Commands without capabilities are always accessible.
+// This function is a thin shim over commandquery.Querier.Help (INV-1). It maps
+// the querier's typed errors back to the legacy error strings the Lua help
+// plugin matches on:
+//   - NOT_FOUND          → "command not found: <name>"
+//   - PERMISSION_DENIED  → "access denied"
+//   - UNAVAILABLE / other → "access check failed"
+//
+// Precedence note: command lookup (NOT_FOUND) happens inside Querier.Help BEFORE
+// any capability/character evaluation, so a non-existent command yields
+// "command not found" regardless of the character_id value — matching the
+// pre-refactor contract. We therefore only parse/validate character_id AFTER a
+// successful Help (i.e. for the subject string), not before the lookup.
 func (f *Functions) getCommandHelpFn(_ string) lua.LGFunction {
-	return func(L *lua.LState) int {
-		name := L.CheckString(1)
-		characterID := L.CheckString(2)
+	return func(ls *lua.LState) int {
+		name := ls.CheckString(1)
+		characterID := ls.CheckString(2)
 		if name == "" {
-			L.RaiseError("command name cannot be empty")
+			ls.RaiseError("command name cannot be empty")
 			return 0
 		}
 
-		if f.commandRegistry == nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString("command registry not available"))
+		ctx := ls.Context()
+		if ctx == nil {
+			ctx = context.Background()
+			slog.WarnContext(ctx, "lua VM context is nil in get_command_help, using background context")
+		}
+
+		if f.commandQuerier == nil {
+			ls.Push(lua.LNil)
+			ls.Push(lua.LString("command registry not available"))
 			return 2
 		}
 
-		cmd, found := f.commandRegistry.Get(name)
-		if !found {
-			L.Push(lua.LNil)
-			L.Push(lua.LString("command not found: " + name))
+		// Validate character_id but do NOT let a bad id pre-empt the command
+		// lookup: a non-existent command must report "command not found" even
+		// when the character_id is malformed. We pass a best-effort subject to
+		// the querier; for an empty/invalid id the subject is harmless because
+		// Querier.Help resolves NOT_FOUND before consulting the engine. Only
+		// when the command exists AND requires capabilities does the subject
+		// matter — and in that case an invalid id surfaces as a denied/failed
+		// access check, which is the correct fail-closed behavior.
+		subject := characterSubjectOrRaw(characterID)
+
+		detail, helpErr := f.commandQuerier.Help(ctx, subject, name)
+		if helpErr != nil {
+			if oopsErr, ok := oops.AsOops(helpErr); ok {
+				switch oopsErr.Code() {
+				case "NOT_FOUND":
+					ls.Push(lua.LNil)
+					ls.Push(lua.LString("command not found: " + name))
+					return 2
+				case "PERMISSION_DENIED":
+					ls.Push(lua.LNil)
+					ls.Push(lua.LString("access denied"))
+					return 2
+				}
+			}
+			ls.Push(lua.LNil)
+			ls.Push(lua.LString("access check failed"))
 			return 2
 		}
-
-		// Access check for capability-gated commands (fail-closed)
-		if len(cmd.GetCapabilities()) > 0 {
-			if f.engine == nil {
-				L.Push(lua.LNil)
-				L.Push(lua.LString("access engine not available"))
-				return 2
-			}
-
-			charID, err := ulid.Parse(characterID)
-			if err != nil {
-				L.Push(lua.LNil)
-				L.Push(lua.LString("invalid character_id"))
-				return 2
-			}
-
-			ctx := L.Context()
-			if ctx == nil {
-				slog.Warn("lua VM context is nil in get_command_help, using background context")
-				ctx = context.Background()
-			}
-
-			subject := access.CharacterSubject(charID.String())
-			allowed, hadError := f.canExecuteCommand(ctx, subject, cmd)
-			if hadError {
-				slog.Error("engine error in get_command_help",
-					"command", name, "character", characterID)
-				L.Push(lua.LNil)
-				L.Push(lua.LString("access check failed"))
-				return 2
-			}
-			if !allowed {
-				L.Push(lua.LNil)
-				L.Push(lua.LString("access denied"))
-				return 2
-			}
-		}
-
-		// Build result table with full command details
-		tbl := L.NewTable()
-		L.SetField(tbl, "name", lua.LString(cmd.Name))
-		L.SetField(tbl, "help", lua.LString(cmd.Help))
-		L.SetField(tbl, "usage", lua.LString(cmd.Usage))
-		L.SetField(tbl, "help_text", lua.LString(cmd.HelpText))
-		L.SetField(tbl, "source", lua.LString(cmd.Source))
-
-		// Add capabilities array (use getter for defensive copy)
-		capsTbl := L.NewTable()
-		for i, cap := range cmd.GetCapabilities() {
-			capTbl := L.NewTable()
-			L.SetField(capTbl, "action", lua.LString(cap.Action))
-			L.SetField(capTbl, "resource", lua.LString(cap.Resource))
-			if cap.Scope != "" {
-				L.SetField(capTbl, "scope", lua.LString(cap.Scope))
-			}
-			L.SetTable(capsTbl, lua.LNumber(i+1), capTbl)
-		}
-		L.SetField(tbl, "capabilities", capsTbl)
-
-		L.Push(tbl)
-		L.Push(lua.LNil) // no error
-		return 2
+		return buildHelpTable(ls, detail)
 	}
+}
+
+// characterSubjectOrRaw formats characterID as a character subject when it is a
+// valid ULID, otherwise returns the raw string. A raw (non-ULID) subject can
+// never match a granting policy, so capability-gated commands fail closed —
+// while a non-existent command still resolves to NOT_FOUND before the subject is
+// ever consulted (Querier.Help order). This preserves the pre-refactor
+// "command not found wins over invalid character_id" precedence.
+func characterSubjectOrRaw(characterID string) string {
+	if charID, err := ulid.Parse(characterID); err == nil {
+		return access.CharacterSubject(charID.String())
+	}
+	return characterID
+}
+
+// buildHelpTable pushes a command help result table onto the Lua stack.
+func buildHelpTable(ls *lua.LState, d commandquery.Detail) int {
+	tbl := ls.NewTable()
+	ls.SetField(tbl, "name", lua.LString(d.Name))
+	ls.SetField(tbl, "help", lua.LString(d.Help))
+	ls.SetField(tbl, "usage", lua.LString(d.Usage))
+	ls.SetField(tbl, "help_text", lua.LString(d.HelpText))
+	ls.SetField(tbl, "source", lua.LString(d.Source))
+
+	capsTbl := ls.NewTable()
+	for i, cap := range d.Capabilities {
+		capTbl := ls.NewTable()
+		ls.SetField(capTbl, "action", lua.LString(cap.Action))
+		ls.SetField(capTbl, "resource", lua.LString(cap.Resource))
+		if cap.Scope != "" {
+			ls.SetField(capTbl, "scope", lua.LString(cap.Scope))
+		}
+		ls.SetTable(capsTbl, lua.LNumber(i+1), capTbl)
+	}
+	ls.SetField(tbl, "capabilities", capsTbl)
+
+	ls.Push(tbl)
+	ls.Push(lua.LNil)
+	return 2
 }

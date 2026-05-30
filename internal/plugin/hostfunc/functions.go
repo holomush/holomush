@@ -19,6 +19,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/command/commandquery"
 	"github.com/holomush/holomush/internal/idgen"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
@@ -42,8 +43,8 @@ type KVStore interface {
 type Functions struct {
 	kvStore          KVStore
 	worldMutator     WorldMutator
-	commandRegistry  CommandRegistry
 	engine           types.AccessPolicyEngine
+	commandQuerier   *commandquery.Querier
 	auditor          pluginauthz.Auditor
 	propertyRegistry *property.Registry
 	sessionAccess    session.Access
@@ -63,6 +64,17 @@ type Functions struct {
 
 // Option configures Functions.
 type Option func(*Functions)
+
+// WithEngine sets the access policy engine for holomush.evaluate (evaluate.go)
+// and the requires-gated capability checks (functions.go). Command-visibility
+// filtering does NOT use this engine directly — that flows through the
+// commandquery.Querier wired via WithCommandQuerier / SetCommandQuerier
+// (design spec INV-1: single command-visibility filter).
+func WithEngine(engine types.AccessPolicyEngine) Option {
+	return func(f *Functions) {
+		f.engine = engine
+	}
+}
 
 // WithWorldService sets the world service for world query and mutation functions.
 // Each plugin will get its own adapter with authorization subject "plugin:<name>".
@@ -145,6 +157,15 @@ func (f *Functions) SetFocusOps(fo FocusOps) {
 // function. Same late-binding rationale as SetFocusOps.
 func (f *Functions) SetHistoryReader(hr HistoryReader) {
 	f.historyReader = hr
+}
+
+// SetCommandQuerier late-binds the shared command querier after the command
+// registry is built. The querier is constructed in PluginSubsystem.Start after
+// both s.cmdRegistry (line ~391) and s.aliasCache are populated — after
+// hostfunc.New (line ~193) — so it cannot be injected via WithCommandQuerier at
+// construction time. This setter is the production wiring point.
+func (f *Functions) SetCommandQuerier(q *commandquery.Querier) {
+	f.commandQuerier = q
 }
 
 // SetPluginConfigs injects the merged per-plugin config map (plugin name →

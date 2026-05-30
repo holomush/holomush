@@ -44,6 +44,7 @@ const (
 	WebService_WebRevokePlayerSession_FullMethodName       = "/holomush.web.v1.WebService/WebRevokePlayerSession"
 	WebService_WebRevokeOtherPlayerSessions_FullMethodName = "/holomush.web.v1.WebService/WebRevokeOtherPlayerSessions"
 	WebService_WebListFocusPresence_FullMethodName         = "/holomush.web.v1.WebService/WebListFocusPresence"
+	WebService_WebListCommands_FullMethodName              = "/holomush.web.v1.WebService/WebListCommands"
 )
 
 // WebServiceClient is the client API for WebService service.
@@ -162,6 +163,11 @@ type WebServiceClient interface {
 	// CoreService.ListFocusPresence — authorization is enforced by core.
 	// player_session_token is read from the HTTP cookie by gateway middleware.
 	WebListFocusPresence(ctx context.Context, in *WebListFocusPresenceRequest, opts ...grpc.CallOption) (*WebListFocusPresenceResponse, error)
+	// WebListCommands returns the recognized-command set + alias map for the
+	// session's character, for the composer's command chip. Proxies to
+	// CoreService.ListAvailableCommands; player_session_token is read from the
+	// cookie by gateway middleware.
+	WebListCommands(ctx context.Context, in *WebListCommandsRequest, opts ...grpc.CallOption) (*WebListCommandsResponse, error)
 }
 
 type webServiceClient struct {
@@ -401,6 +407,16 @@ func (c *webServiceClient) WebListFocusPresence(ctx context.Context, in *WebList
 	return out, nil
 }
 
+func (c *webServiceClient) WebListCommands(ctx context.Context, in *WebListCommandsRequest, opts ...grpc.CallOption) (*WebListCommandsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebListCommandsResponse)
+	err := c.cc.Invoke(ctx, WebService_WebListCommands_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WebServiceServer is the server API for WebService service.
 // All implementations must embed UnimplementedWebServiceServer
 // for forward compatibility.
@@ -517,6 +533,11 @@ type WebServiceServer interface {
 	// CoreService.ListFocusPresence — authorization is enforced by core.
 	// player_session_token is read from the HTTP cookie by gateway middleware.
 	WebListFocusPresence(context.Context, *WebListFocusPresenceRequest) (*WebListFocusPresenceResponse, error)
+	// WebListCommands returns the recognized-command set + alias map for the
+	// session's character, for the composer's command chip. Proxies to
+	// CoreService.ListAvailableCommands; player_session_token is read from the
+	// cookie by gateway middleware.
+	WebListCommands(context.Context, *WebListCommandsRequest) (*WebListCommandsResponse, error)
 	mustEmbedUnimplementedWebServiceServer()
 }
 
@@ -592,6 +613,9 @@ func (UnimplementedWebServiceServer) WebRevokeOtherPlayerSessions(context.Contex
 }
 func (UnimplementedWebServiceServer) WebListFocusPresence(context.Context, *WebListFocusPresenceRequest) (*WebListFocusPresenceResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebListFocusPresence not implemented")
+}
+func (UnimplementedWebServiceServer) WebListCommands(context.Context, *WebListCommandsRequest) (*WebListCommandsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebListCommands not implemented")
 }
 func (UnimplementedWebServiceServer) mustEmbedUnimplementedWebServiceServer() {}
 func (UnimplementedWebServiceServer) testEmbeddedByValue()                    {}
@@ -1003,6 +1027,24 @@ func _WebService_WebListFocusPresence_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebListCommands_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebListCommandsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebListCommands(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebListCommands_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebListCommands(ctx, req.(*WebListCommandsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WebService_ServiceDesc is the grpc.ServiceDesc for WebService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1093,6 +1135,10 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebListFocusPresence",
 			Handler:    _WebService_WebListFocusPresence_Handler,
+		},
+		{
+			MethodName: "WebListCommands",
+			Handler:    _WebService_WebListCommands_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

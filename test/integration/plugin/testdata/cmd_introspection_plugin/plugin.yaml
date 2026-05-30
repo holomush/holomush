@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+# cmd_introspection_plugin is a test-only binary plugin used by the
+# command_introspection_parity_test.go integration suite to prove
+# INV-2: the binary PluginHostService.ListCommands and the Lua
+# holomush.list_commands host function delegate to the same
+# commandquery.Querier, returning identical filtered command-name sets.
+#
+# On a trigger event whose payload is a JSON TriggerMode document, the
+# plugin calls commandLister.ListCommands(ctx, character_id) and emits
+# a single event whose payload is a JSON array of sorted command names
+# (plus an "incomplete" boolean field). The test compares that result
+# to the Lua hostfunc's output for the same character and querier.
+name: cmd-introspection-plugin
+version: 0.0.0
+type: binary
+requires: []
+# Declares a fictional provided service so the host's Init gate fires
+# (host.go only calls Init when Requires|Provides|Postgres-storage is
+# non-empty, which is what wires up the CommandLister injection).
+provides:
+  - holomush.test.v1.CmdIntrospectionTriggerService
+storage: kv
+
+binary-plugin:
+  executable: cmd-introspection-plugin

@@ -20,6 +20,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	accesstypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/command/commandquery"
 	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
@@ -193,10 +194,14 @@ func setupHelpTestWithEngine(engine accesstypes.AccessPolicyEngine) (*helpFixtur
 	}
 
 	registry := &mockHelpCommandRegistry{}
+	// Delegate to the single ABAC-filtered enumerator (INV-1). The help plugin's
+	// list_commands/get_command_help host functions go through commandquery.Querier;
+	// there is no second filter in hostfunc. nil AliasLister: these fixtures don't
+	// exercise system aliases.
+	querier := commandquery.New(registry, engine, nil)
 	hostFuncs := hostfunc.New(
 		nil,
-		hostfunc.WithCommandRegistry(registry),
-		hostfunc.WithEngine(engine),
+		hostfunc.WithCommandQuerier(querier),
 	)
 	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
 

@@ -106,6 +106,10 @@ func (c *coreClientShim) ListFocusPresence(ctx context.Context, req *corev1.List
 	return c.s.ListFocusPresence(ctx, req)
 }
 
+func (c *coreClientShim) ListAvailableCommands(ctx context.Context, req *corev1.ListAvailableCommandsRequest) (*corev1.ListAvailableCommandsResponse, error) {
+	return c.s.ListAvailableCommands(ctx, req)
+}
+
 // Compile-time check that coreClientShim satisfies the interface. If
 // web.CoreClient gains a method, this fails to build until the shim is updated.
 var _ web.CoreClient = (*coreClientShim)(nil)
