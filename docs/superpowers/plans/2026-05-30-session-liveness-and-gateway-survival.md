@@ -39,7 +39,7 @@ Copyright 2026 HoloMUSH Contributors
 
 > **Test-fixture convention:** integration tests construct an `*auth.PlayerSession`
 > and `*session.Info` and seed them via `sessiontest.SeedPlayerSession(t, pool, ps)`
-> + `store.Set(ctx, sess.ID, sess)`, following
+> plus `store.Set(ctx, sess.ID, sess)`, following
 > `test/integration/session/session_persistence_suite_test.go`. The
 > `sessiontest.NewPlayerSession()` / `NewActiveSession(ps)` calls in the snippets
 > below are **shorthand** for that construction — add them as local test helpers
@@ -1277,3 +1277,4 @@ var _ = Describe("Lease-driven liveness", func() {
 - [ ] `task pr-prep:full` (touches int + E2E surface — Ginkgo presence suites + Playwright spec).
 - [ ] Spec invariants I-LIVE-1..5 / I-PRES-1 / I-SURV-1..5 / I-SEC-1 each map to a passing test (Task 16).
 - [ ] Update the session-lifecycle contributor doc + diagram (holomush-bgxg) with the connection-lease layer.
+<!-- adr-capture: sha256=a664895cce8ad863; session=brainstorm-rsoe6; ts=2026-05-30T15:40:32Z; adrs=holomush-6syxb,holomush-2w9vh,holomush-0qx5e,holomush-6vl53,holomush-85exr -->

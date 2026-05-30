@@ -477,3 +477,4 @@ Reattach TTL continues to come from `sessionDefaults.TTL` (guest TTL per hfvc).
   strategy; clients reconnect to a fresh gateway and re-assert leases.
 - Guest reattach-TTL tuning: holomush-hfvc.
 - Disconnect count-race atomicity: holomush-cizj.
+<!-- adr-capture: sha256=45cf080700a029d7; session=brainstorm-rsoe6; ts=2026-05-30T15:25:47Z; adrs=holomush-6syxb,holomush-2w9vh,holomush-0qx5e,holomush-6vl53,holomush-85exr -->
