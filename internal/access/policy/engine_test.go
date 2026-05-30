@@ -1876,6 +1876,17 @@ func TestEngineDegradedModeClearResumesNormal(t *testing.T) {
 	assert.NotContains(t, decision.Reason(), "degraded_mode")
 }
 
+func TestEngineIsDegradedReflectsEnterAndClearTransitions(t *testing.T) {
+	engine, _ := createTestEngine(t, nil)
+	assert.False(t, engine.IsDegraded(), "engine starts in normal mode")
+
+	engine.EnterDegradedMode("test")
+	assert.True(t, engine.IsDegraded(), "IsDegraded reports true after EnterDegradedMode")
+
+	engine.ClearDegradedMode()
+	assert.False(t, engine.IsDegraded(), "IsDegraded reports false after ClearDegradedMode")
+}
+
 func TestEngineDegradedModeSystemBypassStillWorks(t *testing.T) {
 	engine, _ := createTestEngine(t, nil)
 	engine.EnterDegradedMode("test")
@@ -1889,18 +1900,6 @@ func TestEngineDegradedModeSystemBypassStillWorks(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, types.EffectSystemBypass, decision.Effect())
-}
-
-func TestEngineOnCorruptForbidPolicyEntersDegraded(t *testing.T) {
-	engine, _ := createTestEngine(t, nil)
-	engine.OnPolicyCorruption("policy-123", types.PolicyEffectForbid)
-	assert.True(t, engine.IsDegraded())
-}
-
-func TestEngineOnCorruptPermitPolicyDoesNotEnterDegraded(t *testing.T) {
-	engine, _ := createTestEngine(t, nil)
-	engine.OnPolicyCorruption("policy-456", types.PolicyEffectPermit)
-	assert.False(t, engine.IsDegraded())
 }
 
 // --- CanPerformAction tests ---
@@ -2117,13 +2116,6 @@ func TestEngineCanPerformActionConditionUnsatisfied(t *testing.T) {
 	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
 	require.NoError(t, err)
 	assert.False(t, allowed, "unsatisfied condition should result in default deny")
-}
-
-func TestEngineOnPolicyCorruptionUnknownEffect(t *testing.T) {
-	// Exercise the default branch in OnPolicyCorruption
-	engine, _ := createTestEngine(t, nil)
-	engine.OnPolicyCorruption("policy-789", types.PolicyEffect("bogus"))
-	assert.True(t, engine.IsDegraded(), "unknown effect type should trigger degraded mode")
 }
 
 func TestEngineCanPerformActionDoesNotInvokeResourceProvidersWhenCapabilityCheckRuns(t *testing.T) {

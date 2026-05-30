@@ -126,6 +126,18 @@ func (pc *Cache) Snapshot(ctx context.Context) (*Snapshot, error) {
 // Reload fetches enabled policies from the store, compiles them, and atomically
 // swaps the snapshot. The write lock is held only during the pointer swap (~50us),
 // not during the DB fetch + compilation (~50ms).
+//
+// Corruption handling is all-or-nothing: if any policy fails to compile, Reload
+// returns an error and the snapshot pointer swap never happens, so the last-good
+// snapshot is retained. A corrupt policy therefore never enters the cache and can
+// grant nothing — default-deny holds. Both Reload callers (see internal/access/setup)
+// log the failure and record it against the cache HealthTracker: the poller on its
+// poll path, and the store-mutation OnMutate callback on the invalidation fast path.
+// The OnMutate path reloads behind the read barrier, so a failure there propagates
+// to concurrent Snapshot callers as an error (never stale data); the poll path
+// absorbs the failure silently and keeps serving the last-good snapshot. Persistent
+// failures escalate the health tier, which drives Engine.EnterDegradedMode (deny-all,
+// fail-closed) and ClearDegradedMode on recovery.
 func (pc *Cache) Reload(ctx context.Context) error {
 	stored, err := pc.store.ListEnabled(ctx)
 	if err != nil {

@@ -5,7 +5,6 @@ package policy
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"strings"
 	"sync/atomic"
@@ -66,27 +65,6 @@ func (e *Engine) ClearDegradedMode() {
 // IsDegraded returns true if the engine is in degraded mode.
 func (e *Engine) IsDegraded() bool {
 	return e.degraded.Load()
-}
-
-// OnPolicyCorruption handles detection of a corrupted policy during cache reload.
-// Forbid policies trigger degraded mode; permit policies are auto-disabled.
-func (e *Engine) OnPolicyCorruption(policyID string, effect types.PolicyEffect) {
-	switch effect {
-	case types.PolicyEffectForbid:
-		e.EnterDegradedMode(fmt.Sprintf("corrupted forbid policy: %s", policyID))
-	case types.PolicyEffectPermit:
-		slog.Error(
-			"corrupted permit policy auto-disabled",
-			"policy_id", policyID,
-		)
-	default:
-		slog.Error(
-			"corrupted policy with unexpected effect type",
-			"policy_id", policyID,
-			"effect", string(effect),
-		)
-		e.EnterDegradedMode(fmt.Sprintf("corrupted policy with unknown effect %q: %s", effect, policyID))
-	}
 }
 
 // NewEngine creates a new policy engine with the given dependencies.
