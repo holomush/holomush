@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus/cursor"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
@@ -709,6 +710,69 @@ func coreEventToProto(e core.Event) *pluginv1.Event {
 		ActorId:   e.Actor.ID,
 		Payload:   string(e.Payload),
 	}
+}
+
+// ListCommands implements PluginHostService.ListCommands for binary plugins.
+// Unlike Evaluate/EmitEvent, this is read-only metadata keyed by the request's
+// character_id (parity with the Lua list_commands host function), so it does NOT
+// require a dispatch token. Fail-closed on nil host / nil querier.
+func (s *pluginHostServiceServer) ListCommands(ctx context.Context, req *pluginv1.PluginHostServiceListCommandsRequest) (*pluginv1.PluginHostServiceListCommandsResponse, error) {
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+	s.host.mu.RLock()
+	q := s.host.commandQuerier
+	s.host.mu.RUnlock()
+	if q == nil {
+		return nil, oops.Code("COMMAND_QUERIER_UNCONFIGURED").With("plugin", s.pluginName).Errorf("command querier is not configured")
+	}
+	charID, err := ulid.Parse(req.GetCharacterId())
+	if err != nil {
+		return nil, oops.Code("INVALID_ARGUMENT").With("plugin", s.pluginName).Errorf("invalid character_id")
+	}
+	res, err := q.Available(ctx, access.CharacterSubject(charID.String()))
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
+	}
+	out := make([]*pluginv1.PluginHostServiceCommandInfo, 0, len(res.Commands))
+	for i := range res.Commands {
+		out = append(out, &pluginv1.PluginHostServiceCommandInfo{
+			Name:   res.Commands[i].Name,
+			Help:   res.Commands[i].Help,
+			Usage:  res.Commands[i].Usage,
+			Source: res.Commands[i].Source,
+		})
+	}
+	return &pluginv1.PluginHostServiceListCommandsResponse{Commands: out, Incomplete: res.Incomplete}, nil
+}
+
+// GetCommandHelp implements PluginHostService.GetCommandHelp for binary plugins.
+// Read-only; no dispatch token required (parity with Lua get_command_help host function).
+func (s *pluginHostServiceServer) GetCommandHelp(ctx context.Context, req *pluginv1.PluginHostServiceGetCommandHelpRequest) (*pluginv1.PluginHostServiceGetCommandHelpResponse, error) {
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+	s.host.mu.RLock()
+	q := s.host.commandQuerier
+	s.host.mu.RUnlock()
+	if q == nil {
+		return nil, oops.Code("COMMAND_QUERIER_UNCONFIGURED").With("plugin", s.pluginName).Errorf("command querier is not configured")
+	}
+	charID, err := ulid.Parse(req.GetCharacterId())
+	if err != nil {
+		return nil, oops.Code("INVALID_ARGUMENT").With("plugin", s.pluginName).Errorf("invalid character_id")
+	}
+	d, err := q.Help(ctx, access.CharacterSubject(charID.String()), req.GetName())
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
+	}
+	return &pluginv1.PluginHostServiceGetCommandHelpResponse{
+		Name:     d.Name,
+		Help:     d.Help,
+		Usage:    d.Usage,
+		HelpText: d.HelpText,
+		Source:   d.Source,
+	}, nil
 }
 
 func sdkActorKindToCore(kind pluginsdk.ActorKind) core.ActorKind {

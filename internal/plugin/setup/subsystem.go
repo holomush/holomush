@@ -408,6 +408,11 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	}
 	s.commandQuerier = commandquery.New(s.cmdRegistry, s.cfg.ABAC.Engine(), aliasLister)
 	hostFuncs.SetCommandQuerier(s.commandQuerier)
+	// Late-bind the querier into the binary host (parity with the Lua hostfunc
+	// SetCommandQuerier above; plugin-runtime-symmetry). binaryHost is constructed
+	// earlier in Start() before the registry and querier exist, so the option
+	// cannot be threaded at construction time — use the setter instead.
+	binaryHost.SetCommandQuerier(s.commandQuerier)
 
 	slog.InfoContext(ctx, "plugin subsystem started", "plugins_dir", pluginsDir)
 	return nil
