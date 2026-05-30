@@ -195,6 +195,40 @@ func TestScenePlayerPreferencesExplicitZeroIsPreserved(t *testing.T) {
 	assert.Equal(t, 0, *decoded.Scenes.FocusReplayTail)
 }
 
+// TestPlayerPreferencesPluginsBagRoundTrips asserts the opaque, owner-
+// partitioned Plugins bag survives a whole-struct JSON marshal/unmarshal cycle
+// (the players.preferences JSONB round-trip) without clobbering any typed
+// preference field. This is the no-clobber invariant (plan §218).
+func TestPlayerPreferencesPluginsBagRoundTrips(t *testing.T) {
+	replayTail := 7
+	orig := auth.PlayerPreferences{
+		AutoLogin:     true,
+		MaxCharacters: 3,
+		Theme:         "x",
+		Scenes:        auth.ScenePlayerPreferences{FocusReplayTail: &replayTail},
+		Plugins: map[string]json.RawMessage{
+			"core-scenes": json.RawMessage(`{"content.cw_block":["violence"]}`),
+		},
+	}
+
+	data, err := json.Marshal(orig)
+	require.NoError(t, err)
+
+	var got auth.PlayerPreferences
+	require.NoError(t, json.Unmarshal(data, &got))
+
+	// Every typed field survives.
+	assert.True(t, got.AutoLogin)
+	assert.Equal(t, 3, got.MaxCharacters)
+	assert.Equal(t, "x", got.Theme)
+	require.NotNil(t, got.Scenes.FocusReplayTail)
+	assert.Equal(t, 7, *got.Scenes.FocusReplayTail)
+
+	// The opaque plugins bag survives (semantically).
+	require.Contains(t, got.Plugins, "core-scenes")
+	assert.JSONEq(t, `{"content.cw_block":["violence"]}`, string(got.Plugins["core-scenes"]))
+}
+
 func TestPlayer_Fields(t *testing.T) {
 	t.Run("all fields are settable", func(t *testing.T) {
 		now := time.Now()

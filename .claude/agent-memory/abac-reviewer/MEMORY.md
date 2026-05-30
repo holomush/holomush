@@ -274,3 +274,34 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   in-handler gate is the correct shape and the top-level INV-7 backstop test (commands_test.go
   TestSceneGatedSubcommands_DenyWhenPolicyDenies) does NOT cover them — each needs its own
   dedicated deny-path + nil-eval + engine-err tests.
+- **Settings host RPCs (iokti.7, 2026-05-30) — GetSetting/SetSetting owner-partition pattern**:
+  `internal/plugin/goplugin/host_service.go`. Verified-good shape for plugin host
+  RPCs touching owner-partitioned state. Trust anchor = `s.pluginName`, stamped at
+  `newPluginHostServiceServer(h, manifest.Name)` (host.go:640, manifest name), NEVER from
+  request/metadata. Owner bound via `base.Owner(s.pluginName)` — INV-11. The real
+  `Owner(name)` (internal/settings/game.go:174) prefixes every key with `plugin/<name>/`
+  (ReservedNamespace); `ValidateNamespace` (namespaces.go:41) rejects `plugin` as a host
+  key, so a crafted `key` cannot escape the partition — INV-7 holds end-to-end. Single
+  shared authz gate `resolveSettingScope`: nil-host→err; UNSPECIFIED→InvalidArgument;
+  `actorFromToken(ctx)` (real x-holomush-emit-token → tokenStore.Lookup(pluginName,tok),
+  same as Evaluate/EmitEvent) fail-closed on missing/rejected; `ActorSubject(actor)`
+  (=`character:<id>`, evaluate.go:62); empty subject→PermissionDenied; nil per-scope
+  store→Unimplemented; PLAYER/CHARACTER→`requirePrincipalOwnership(req.principalID, actor)`
+  compares against TOKEN actor.ID (bare ULID) not a request field; default→InvalidArgument.
+  GAME writes also gate `authorizeGameWrite`: nil engine→Unimplemented,
+  `eng.Evaluate(write,"setting:game")`, `!dec.IsAllowed()`→PermissionDenied (IsAllowed
+  types.go:228 = EffectAllow only), engine err→codes.Internal. GAME *reads* intentionally
+  open (no engine) but owner-partitioned. `GrantEngine.Evaluate` (policytest/helpers.go:64)
+  returns explicit EffectDeny+nil-err on no-match (deny path is real). `contextWithValidToken`
+  (host_service_test.go:947) issues a REAL token into the real store — tests hit the genuine
+  auth path, not a bypass. Two Low findings: (1) `setting:game` is one global resource for
+  ALL plugins' game writes — coarse, but owner-partition contains blast radius; (2) GAME
+  reads open — fine, owner-partitioned (TestGameSettingOwnerPartitionIsolatedAcrossPlugins).
+- **Degraded-harness survival (2026-05-30)**: this worktree's bash/Read harness
+  intermittently returns STALE/garbled stdout. Detection trick that works: `base64 < file`
+  — if decoded bytes don't match what you wrote, the harness is replaying. Trust exit
+  codes captured as the FIRST token (`TESTRC=$?`) over printed text; `task test` exit 0 is
+  authoritative even when stdout is garbage. NOTE: trailing `echo ... rc=$?` can show a
+  bogus `rc=2` because the PreToolUse hook appends advisory text after the command — the
+  preceding printed value is still correct. The "MEMORY.md became a directory" theory from
+  a prior degraded run was FALSE — the file is intact.

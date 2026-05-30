@@ -20,6 +20,7 @@ type stubSettings struct {
 	ints      map[string]int
 	bools     map[string]bool
 	durations map[string]time.Duration
+	slices    map[string][]string
 }
 
 func newStub() *stubSettings {
@@ -28,6 +29,7 @@ func newStub() *stubSettings {
 		ints:      make(map[string]int),
 		bools:     make(map[string]bool),
 		durations: make(map[string]time.Duration),
+		slices:    make(map[string][]string),
 	}
 }
 
@@ -48,6 +50,11 @@ func (s *stubSettings) BoolN(_ context.Context, key string) (bool, bool) {
 
 func (s *stubSettings) DurationN(_ context.Context, key string) (time.Duration, bool) {
 	v, ok := s.durations[key]
+	return v, ok
+}
+
+func (s *stubSettings) StringSliceN(_ context.Context, key string) ([]string, bool) {
+	v, ok := s.slices[key]
 	return v, ok
 }
 
@@ -265,6 +272,39 @@ func TestChainBoolNFallsToLaterScope(t *testing.T) {
 	v, ok := chain.BoolN(ctx, "auth.auto_login")
 	assert.True(t, ok)
 	assert.True(t, v)
+}
+
+func TestChainStringSliceNReturnsFirstMatchInScopeOrder(t *testing.T) {
+	ctx := context.Background()
+	player := newStub()
+	player.slices["scenes.focus.tags"] = []string{"player"}
+	game := newStub()
+	game.slices["scenes.focus.tags"] = []string{"game"}
+
+	chain := settings.NewChain(player, game)
+	v, ok := chain.StringSliceN(ctx, "scenes.focus.tags")
+	assert.True(t, ok)
+	assert.Equal(t, []string{"player"}, v)
+}
+
+func TestChainStringSliceNFallsToLaterScope(t *testing.T) {
+	ctx := context.Background()
+	player := newStub() // no value set
+	game := newStub()
+	game.slices["scenes.focus.tags"] = []string{"game"}
+
+	chain := settings.NewChain(player, game)
+	v, ok := chain.StringSliceN(ctx, "scenes.focus.tags")
+	assert.True(t, ok)
+	assert.Equal(t, []string{"game"}, v)
+}
+
+func TestChainStringSliceNReturnsFalseWhenNoScopeHasKey(t *testing.T) {
+	ctx := context.Background()
+	chain := settings.NewChain(newStub(), newStub())
+	v, ok := chain.StringSliceN(ctx, "scenes.focus.tags")
+	assert.False(t, ok)
+	assert.Nil(t, v)
 }
 
 func TestChainTypeMixStringFromCharIntFromGame(t *testing.T) {

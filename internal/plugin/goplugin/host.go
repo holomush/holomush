@@ -32,6 +32,7 @@ import (
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
+	"github.com/holomush/holomush/internal/settings"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -171,6 +172,27 @@ func WithEngine(eng types.AccessPolicyEngine) HostOption {
 	return func(h *Host) { h.engine = eng }
 }
 
+// WithPlayerSettings configures the host with the player-scope settings store
+// used by the GetSetting / SetSetting host RPCs (holomush-iokti.7). Without it
+// PLAYER-scope settings calls fail closed.
+func WithPlayerSettings(s settings.PlayerSettingsStore) HostOption {
+	return func(h *Host) { h.playerSettings = s }
+}
+
+// WithCharacterSettings configures the host with the character-scope settings
+// store used by the GetSetting / SetSetting host RPCs (holomush-iokti.7).
+// Without it CHARACTER-scope settings calls fail closed.
+func WithCharacterSettings(s settings.CharacterSettingsStore) HostOption {
+	return func(h *Host) { h.characterSettings = s }
+}
+
+// WithGameSettings configures the host with the game-scope (server-wide)
+// settings store used by the GetSetting / SetSetting host RPCs
+// (holomush-iokti.7). Without it GAME-scope settings calls fail closed.
+func WithGameSettings(s settings.GameSettings) HostOption {
+	return func(h *Host) { h.gameSettings = s }
+}
+
 // WithAuditLogger configures the host with an audit logger for
 // PluginHostService.Evaluate calls. Optional — omitting it skips audit
 // logging without affecting authorization decisions.
@@ -219,6 +241,14 @@ type Host struct {
 	engine            types.AccessPolicyEngine
 	auditor           pluginauthz.Auditor
 	commandQuerier    *commandquery.Querier
+	// playerSettings / characterSettings / gameSettings back the owner-
+	// partitioned GetSetting / SetSetting host RPCs (holomush-iokti.7). They are
+	// late-bound (SetSettingsStores) because the settings stores are assembled in
+	// the gRPC subsystem after the plugin host is constructed — same rationale as
+	// focusCoordinator / historyReader.
+	playerSettings    settings.PlayerSettingsStore
+	characterSettings settings.CharacterSettingsStore
+	gameSettings      settings.GameSettings
 	// configOverrides is the per-plugin server-provided config override
 	// (plugin name → key → value), threaded from PluginSubsystemConfig.
 	configOverrides map[string]map[string]string
@@ -385,6 +415,44 @@ func (h *Host) ReadbackDecryptor() plugins.ReadbackDecryptor {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.readbackDecryptor
+}
+
+// SetSettingsStores injects the player / character / game settings stores after
+// construction. Same late-binding rationale as SetFocusCoordinator: the stores
+// are assembled in the gRPC subsystem (cmd/holomush/sub_grpc.go) after the
+// plugin host is constructed. Used by the GetSetting / SetSetting host RPCs
+// (holomush-iokti.7). Implements plugins.SettingsDepsConfigurer.
+func (h *Host) SetSettingsStores(
+	player settings.PlayerSettingsStore,
+	character settings.CharacterSettingsStore,
+	game settings.GameSettings,
+) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.playerSettings = player
+	h.characterSettings = character
+	h.gameSettings = game
+}
+
+// PlayerSettings returns the player-scope settings store, or nil if not set.
+func (h *Host) PlayerSettings() settings.PlayerSettingsStore {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.playerSettings
+}
+
+// CharacterSettings returns the character-scope settings store, or nil if not set.
+func (h *Host) CharacterSettings() settings.CharacterSettingsStore {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.characterSettings
+}
+
+// GameSettings returns the game-scope settings store, or nil if not set.
+func (h *Host) GameSettings() settings.GameSettings {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.gameSettings
 }
 
 // SetIdentityRegistry implements plugins.IdentityRegistryConfigurer.

@@ -12,13 +12,17 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus/cursor"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/settings"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -588,6 +592,254 @@ func (s *pluginHostServiceServer) Evaluate(ctx context.Context, req *pluginv1.Pl
 		Reason:        dec.Reason,
 		MatchedPolicy: dec.MatchedPolicy,
 	}, nil
+}
+
+// settingsGameWriteResource is the ABAC resource the host evaluates for a
+// GAME-scope SetSetting. The subject (recovered from the dispatch token) must be
+// permitted to "write" it; in practice only operator subjects are granted this,
+// so a non-operator plugin/character is denied (PermissionDenied).
+const settingsGameWriteResource = "setting:game"
+
+// GetSetting reads one owner-partitioned setting for the calling plugin.
+//
+// Security invariants (holomush-iokti.7):
+//   - The owner partition is bound host-side from s.pluginName (stamped at
+//     construction, never from the request) via base.Owner(s.pluginName). Two
+//     plugins with different names address disjoint partitions (INV-11).
+//   - Scope must be specified; SETTING_SCOPE_UNSPECIFIED fails closed
+//     (InvalidArgument).
+//   - PLAYER / CHARACTER: the acting subject (recovered from the dispatch token,
+//     exactly as Evaluate does) must own the principal — req.principal_id must
+//     equal the acting actor's ID. Mismatch → PermissionDenied (own settings only).
+//   - GAME reads are server-wide readable by any plugin (no engine call): game
+//     settings are not principal-scoped, and the owner prefix already isolates
+//     the plugin's keyspace.
+//
+// Phase 8 settings are list-valued: the response sets found + string_list from
+// StringSliceN. string_value (scalar reads) is deferred — left empty in Phase 8.
+//
+// Inner errors are never leaked past the gRPC boundary (grpc-errors.md): the
+// settings stores follow the reads-never-error contract, so the only error paths
+// here are argument validation and authorization.
+func (s *pluginHostServiceServer) GetSetting(ctx context.Context, req *pluginv1.PluginHostServiceGetSettingRequest) (*pluginv1.PluginHostServiceGetSettingResponse, error) {
+	// resolveSettingScope is the single authorization gate shared with
+	// SetSetting: it recovers the acting subject from the dispatch token,
+	// fails closed on a missing/invalid token or empty subject, and — for
+	// PLAYER / CHARACTER scope — enforces requirePrincipalOwnership so a
+	// plugin can only READ the settings of the principal it is currently
+	// acting on behalf of (own settings only). A foreign principal_id ⇒
+	// PermissionDenied before any read happens.
+	//
+	// GAME-read decision (plan Task 7 authz matrix): game settings are
+	// server-wide readable by ANY plugin, so the GAME path deliberately
+	// performs NO engine check. There is no cross-plugin leak because the
+	// owner partition below (base.Owner(s.pluginName)) confines the read to
+	// the calling plugin's own keyspace (INV-11). GAME *writes* still require
+	// an operator engine decision in SetSetting; only reads are open.
+	base, _, err := s.resolveSettingScope(ctx, req.GetScope(), req.GetPrincipalId())
+	if err != nil {
+		return nil, err
+	}
+
+	// Owner is bound from s.pluginName host-side — NEVER from the request.
+	part := base.Owner(s.pluginName)
+
+	values, found := part.StringSliceN(ctx, req.GetKey())
+	return &pluginv1.PluginHostServiceGetSettingResponse{
+		Found:      found,
+		StringList: values,
+		// StringValue intentionally empty: Phase 8 settings are list-valued and
+		// returned via StringList. Scalar reads are deferred (holomush-iokti.7).
+	}, nil
+}
+
+// SetSetting writes one owner-partitioned setting for the calling plugin.
+//
+// Security invariants (holomush-iokti.7):
+//   - Owner partition bound host-side from s.pluginName (same as GetSetting).
+//   - SETTING_SCOPE_UNSPECIFIED → InvalidArgument (fail closed).
+//   - PLAYER / CHARACTER: acting subject must own the principal (req.principal_id
+//     == acting actor ID) → else PermissionDenied.
+//   - GAME writes require an operator authorization decision: the recovered
+//     subject must be permitted to "write" settingsGameWriteResource via the
+//     ABAC engine. A non-operator subject is denied (PermissionDenied). This is
+//     host-enforced, never trusted from the wire.
+//
+// Inner errors from the engine or the store are logged and replaced with a
+// generic Internal status (grpc-errors.md).
+func (s *pluginHostServiceServer) SetSetting(ctx context.Context, req *pluginv1.PluginHostServiceSetSettingRequest) (*pluginv1.PluginHostServiceSetSettingResponse, error) {
+	base, subject, err := s.resolveSettingScope(ctx, req.GetScope(), req.GetPrincipalId())
+	if err != nil {
+		return nil, err
+	}
+
+	// GAME-scope writes require an operator authorization decision via the engine.
+	if req.GetScope() == pluginv1.SettingScope_SETTING_SCOPE_GAME {
+		if authErr := s.authorizeGameWrite(ctx, subject); authErr != nil {
+			return nil, authErr
+		}
+	}
+
+	// Owner is bound from s.pluginName host-side — NEVER from the request.
+	part := base.Owner(s.pluginName)
+
+	if setErr := part.SetStringSlice(ctx, req.GetKey(), req.GetStringList()); setErr != nil {
+		slog.ErrorContext(ctx, "set setting failed",
+			"plugin", s.pluginName, "scope", req.GetScope().String(), "err", setErr)
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+	return &pluginv1.PluginHostServiceSetSettingResponse{}, nil
+}
+
+// resolveSettingScope validates the scope, recovers the acting subject from the
+// dispatch token (exactly as Evaluate does — never from plugin-supplied data),
+// enforces principal ownership for PLAYER / CHARACTER scopes, and returns the
+// base Scoped handle plus the recovered ABAC subject string.
+//
+// The returned Scoped is NEVER nil on a nil error.
+func (s *pluginHostServiceServer) resolveSettingScope(
+	ctx context.Context, scope pluginv1.SettingScope, principalID string,
+) (settings.Scoped, string, error) {
+	if s.host == nil {
+		return nil, "", oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+
+	// Fail closed on an unspecified scope.
+	if scope == pluginv1.SettingScope_SETTING_SCOPE_UNSPECIFIED {
+		return nil, "", status.Error(codes.InvalidArgument, "scope required") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+
+	// Recover the acting actor from the dispatch token — mirrors Evaluate /
+	// EmitEvent token→actor recovery. Plugin-supplied identity is never trusted.
+	actor, err := s.actorFromToken(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	subject := pluginauthz.ActorSubject(actor)
+	if subject == "" {
+		return nil, "", status.Error(codes.PermissionDenied, "permission denied") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+
+	switch scope {
+	case pluginv1.SettingScope_SETTING_SCOPE_GAME:
+		game := s.host.GameSettings()
+		// Fail closed on an unwired deployment: a nil store would nil-deref
+		// in Owner/StringSliceN below. Unimplemented signals "settings not
+		// configured" to the plugin without leaking host internals.
+		if game == nil {
+			return nil, "", status.Error(codes.Unimplemented, "settings not configured") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+		}
+		return game, subject, nil
+
+	case pluginv1.SettingScope_SETTING_SCOPE_PLAYER:
+		store := s.host.PlayerSettings()
+		if store == nil {
+			return nil, "", status.Error(codes.Unimplemented, "settings not configured") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+		}
+		pid, ownErr := s.requirePrincipalOwnership(principalID, actor)
+		if ownErr != nil {
+			return nil, "", ownErr
+		}
+		return store.For(ctx, pid), subject, nil
+
+	case pluginv1.SettingScope_SETTING_SCOPE_CHARACTER:
+		store := s.host.CharacterSettings()
+		if store == nil {
+			return nil, "", status.Error(codes.Unimplemented, "settings not configured") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+		}
+		pid, ownErr := s.requirePrincipalOwnership(principalID, actor)
+		if ownErr != nil {
+			return nil, "", ownErr
+		}
+		return store.For(ctx, pid), subject, nil
+
+	default:
+		return nil, "", status.Error(codes.InvalidArgument, "unsupported scope") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+}
+
+// requirePrincipalOwnership parses principalID as a ULID and enforces that the
+// acting subject owns it (principal == acting actor ID). A plugin may only read
+// or write the settings of the principal it is currently acting on behalf of
+// (own settings only). Returns PermissionDenied on mismatch and InvalidArgument
+// on an unparseable/empty principal.
+func (s *pluginHostServiceServer) requirePrincipalOwnership(principalID string, actor core.Actor) (ulid.ULID, error) {
+	pid, err := ulid.Parse(principalID)
+	if err != nil {
+		return ulid.ULID{}, status.Error(codes.InvalidArgument, "invalid principal_id") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+	// Compare against the token-recovered actor ID, never a request field.
+	if principalID != actor.ID {
+		return ulid.ULID{}, status.Error(codes.PermissionDenied, "permission denied") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+	return pid, nil
+}
+
+// authorizeGameWrite evaluates the operator authorization decision required for
+// a GAME-scope write. The subject (token-recovered) must be permitted to "write"
+// settingsGameWriteResource. A deny → PermissionDenied; an engine/build failure
+// is logged and surfaced as a generic Internal (no inner-error leak).
+func (s *pluginHostServiceServer) authorizeGameWrite(ctx context.Context, subject string) error {
+	s.host.mu.RLock()
+	eng := s.host.engine
+	s.host.mu.RUnlock()
+	// Fail closed on a nil engine: a GAME write cannot be authorized without
+	// the ABAC engine, so deny rather than nil-deref on eng.Evaluate below.
+	// Unimplemented mirrors the nil-store guard in resolveSettingScope.
+	if eng == nil {
+		return status.Error(codes.Unimplemented, "settings not configured") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+
+	areq, err := types.NewAccessRequest(subject, types.ActionWrite, settingsGameWriteResource, nil)
+	if err != nil {
+		slog.ErrorContext(ctx, "build game-write access request failed",
+			"plugin", s.pluginName, "err", err)
+		return status.Error(codes.Internal, "internal error") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+
+	dec, err := eng.Evaluate(ctx, areq)
+	if err != nil {
+		slog.ErrorContext(ctx, "game-write authorization failed",
+			"plugin", s.pluginName, "err", err)
+		return status.Error(codes.Internal, "internal error") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+	if !dec.IsAllowed() {
+		return status.Error(codes.PermissionDenied, "permission denied") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+	return nil
+}
+
+// actorFromToken recovers the host-issued dispatch-token actor from the incoming
+// metadata, mirroring Evaluate / EmitEvent exactly. Plugin-supplied identity
+// claims are never trusted. Fails closed on missing token, unconfigured store,
+// or a token not valid for this plugin.
+func (s *pluginHostServiceServer) actorFromToken(ctx context.Context) (core.Actor, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	tokens := md.Get("x-holomush-emit-token")
+	if len(tokens) == 0 || tokens[0] == "" {
+		return core.Actor{}, oops.Code("EMIT_TOKEN_MISSING").
+			With("plugin", s.pluginName).
+			Errorf("plugin called settings without a host-issued dispatch token")
+	}
+
+	s.host.mu.RLock()
+	tokenStore := s.host.tokenStore
+	s.host.mu.RUnlock()
+	if tokenStore == nil {
+		return core.Actor{}, oops.Code("EMIT_TOKEN_STORE_UNCONFIGURED").
+			With("plugin", s.pluginName).
+			Errorf("plugin token store is not configured")
+	}
+
+	storedActor, ok := tokenStore.Lookup(s.pluginName, tokens[0])
+	if !ok {
+		slog.WarnContext(ctx, "setting rejected: token not valid for this plugin",
+			"plugin", s.pluginName, "code", "EMIT_TOKEN_REJECTED")
+		return core.Actor{}, oops.Code("EMIT_TOKEN_REJECTED").
+			With("plugin", s.pluginName).
+			Errorf("dispatch token is not valid for this plugin")
+	}
+	return storedActor, nil
 }
 
 // DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN audit rows

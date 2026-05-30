@@ -50,3 +50,24 @@ func TestRegisteredNamespacesContainsExpectedEntries(t *testing.T) {
 		assert.Contains(t, settings.RegisteredNamespaces, ns, "missing expected namespace %q", ns)
 	}
 }
+
+func TestValidateNamespaceRejectsReservedPluginSegment(t *testing.T) {
+	err := settings.ValidateNamespace("plugin.core-scenes")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "reserved")
+}
+
+func TestValidateNamespaceDoesNotReserveOtherSegmentsContainingPlugin(t *testing.T) {
+	// Only the exact top-level segment "plugin" is reserved; a registered
+	// namespace remains valid and a non-"plugin" segment is rejected as unknown
+	// (not as reserved).
+	err := settings.ValidateNamespace("plugins.foo")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown namespace")
+}
+
+func TestReservedNamespaceConstantIsPlugin(t *testing.T) {
+	assert.Equal(t, "plugin", settings.ReservedNamespace)
+	assert.NotContains(t, settings.RegisteredNamespaces, settings.ReservedNamespace,
+		"reserved namespace must not also be registered")
+}

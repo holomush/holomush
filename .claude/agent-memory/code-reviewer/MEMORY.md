@@ -23,6 +23,56 @@ Keep under 200 lines. Curate — don't hoard.
   asserts only lua==bin with no presence check; DenyAll `It` (`:314-326`) does
   pin look-present/say-dig-absent per path. Net High non-blocking (2026-05-29).
 
+- **Plugin host deps wire at TWO lifecycle points — check BOTH before claiming a
+  dep is unwired (iokti.7, 2026-05-30).** goplugin `Host` gets deps via (1)
+  construction-time options at `internal/plugin/setup/subsystem.go`
+  `goplugin.NewHost(hostOpts...)` (`:298`) — `WithEngine` fed there at `:278`; and
+  (2) late-binders `Manager.ConfigureXxxDeps` → `findOptional[XxxConfigurer]`
+  from `cmd/holomush/sub_grpc.go` Start (settings via `ConfigureSettingsDeps`
+  `:484`, focus via `ConfigureFocusDeps`, readback decryptor). A dep in the struct
+  with no caller in cmd/manager is NOT necessarily dead — `setup/subsystem.go` is
+  the real construction site. I nearly filed a false BLOCKING "GAME writes
+  dead-on-arrival (engine never wired)" because I only searched cmd+manager; the
+  engine is wired at the construction site. `host_engine_wiring_test.go`
+  (holomush-8kkv5.18) + `subsystem_test.go` guard the engine half; the settings
+  half has NO equivalent production-wiring guard (Low finding). For "is X wired in
+  prod" grep the dep name repo-wide and find the actual `NewHost(...)` call.
+
+- **iokti.7 settings authz shape (verified-good reference).** `GetSetting`/
+  `SetSetting` in `internal/plugin/goplugin/host_service.go`: owner bound host-side
+  from `s.pluginName` (never request); shared gate `resolveSettingScope`
+  (UNSPECIFIED→InvalidArgument; `actorFromToken` fail-closed on missing/rejected;
+  empty-subject→PermissionDenied; nil per-scope store→Unimplemented;
+  PLAYER/CHARACTER→`requirePrincipalOwnership` compares principalID vs token
+  actor.ID). GAME writes add `authorizeGameWrite` (nil-engine→Unimplemented; engine
+  deny→PermissionDenied; engine err→generic Internal). GAME reads intentionally
+  open (owner-partitioned). `setting:game` is ONE global ABAC resource for all
+  plugins' game writes (coarse but owner-partition contains it). Error hygiene
+  clean (no `%v` leak; line-scoped `//nolint:wrapcheck` on status pass-through).
+
+- **Character settings repo store (iokti.5) mirrors iokti.3 player store but
+  seeds host NON-empty.** `internal/settings/character_store.go` For() builds
+  `newScopedViewWithPlugins(host, plugins, commit)` with a DECODED host map and
+  wires `SetString → Host().SetString` + commit — unlike the player repo path
+  (`player.go:132`) which seeds host EMPTY so it is NOT used as the resolution
+  Chain's player layer. Character store is consumed via `WithCharacterSettings`
+  (focus scope), NOT the Chain, so non-empty host is fine; flag if a future Chain
+  wiring expects legacy dot-keyed host resolution. Migration 000045 `ADD COLUMN
+  IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}'` / down `DROP COLUMN IF
+  EXISTS` is correct & paired. `store → settings` dep is clean (no cycle).
+  Lost-update closure is sequential (no tx), same as player store — not a regr.
+  All gates green (unit 279, int 109/exit0, build, lint, fmt). READY 2026-05-30.
+
+- **Hook-risky commands (`go test -tags=...`, `gofmt`, `tail`) BLOCKED by
+  task-runner PreToolUse hook, and a blocked command CANCELS THE WHOLE PARALLEL
+  BATCH** — every sibling reports "Cancelled: parallel tool call ... errored".
+  When any command might trip a hook, run it ALONE, never batched with real work.
+  Allowed: `task test:int -- ./pkg/` (Docker), `task fmt:check`, `task lint`,
+  `task build`. Read a captured log via `cmd > /tmp/x.log 2>&1; echo exit=$?` in
+  ONE chained call, then `Read` the file (not `tail`). NEVER report a failure
+  from a CANCELLED sibling whose exit code you never observed — re-run it solo
+  (my "integration test broken / channel degraded" first pass was wrong; solo
+  re-run showed 109 tests exit 0). Encountered: holomush-iokti.5 (2026-05-30).
 - **ast-grep (`sg` 0.42.3) CANNOT match package-qualified Go CALL patterns.**
   `sg -p 'slog.Info($$$ARGS)' -l go` (and `slog.InfoContext($CTX, $$$ARGS)`,
   `fmt.Println(...)`, any `pkg.Fn(...)`) parses at statement top-level as a
@@ -507,3 +557,48 @@ Keep under 200 lines. Curate — don't hoard.
   Medium/non-blocking IF a sibling bead owns it; check `bd list` for the owning
   task before calling it a blocker. (Distinct from finding #1 above, which is a
   doc that breaks an ALREADY-LANDED validator.) Encountered: holomush-b4myw.10.
+
+- **Player settings opaque bag round-trips via WHOLE-STRUCT marshal (iokti epic).**
+  `auth.PlayerPreferences.Plugins map[string]json.RawMessage` persists through
+  `internal/auth/postgres/player_repo.go` Create:33 / Update:169 (`json.Marshal(player.Preferences)`)
+  and scanPlayer:450 (`json.Unmarshal(prefsJSON, &prefs)`). Both legs whole-struct ⇒
+  a new typed field OR the Plugins bag is carried automatically; a no-clobber test
+  MUST assert EVERY typed field (AutoLogin/MaxCharacters/Theme/Scenes.FocusReplayTail)
+  alongside Plugins, not just the bag. `settings.NewRepoPlayerSettingsStore` (iokti.3)
+  persists owner writes via a read-modify-write commit closure
+  (`internal/settings/player.go:108-130`) that RE-READS via GetByID then overwrites
+  `fresh.Preferences.Plugins[owner]` per captured owner — sibling owners survive
+  SEQUENTIALLY, but SAME-owner concurrent writes are last-writer-wins at PARTITION
+  granularity (no key-level merge). TWO traps for future iokti reviews: (a) the repo
+  path seeds the HOST partition EMPTY (`player.go:132`) — only the legacy reader path
+  (`readerScopedFor`) loads dot-keyed host prefs; do NOT wire the repo store as the
+  resolution Chain's player layer (Chain reads bare host via `scoped.go` hostReader)
+  or host resolution silently breaks; (b) `settings → auth` is a clean one-way dep
+  (`go list -deps ./internal/auth/ | grep internal/settings` = 0) — no cycle.
+  `SetStringSlice` (`scoped.go:167`) stores `json.Marshal([]string)` native array so
+  `StringSliceN` reads `[]string` back. Encountered: holomush-iokti.3 (2026-05-30, READY).
+
+- **`task test:int -- -run X -v ./pkg/` DOES narrow (refines older note).** With BOTH
+  a `-run` filter AND an explicit package, gotestsum's DONE count drops to the matched
+  set (94 → `DONE 2 tests` for two funcs in iokti.3), proving the named tests exist+pass
+  rather than a silent suite-wide green. The old "`-run X` does not filter" failure mode
+  was a `-run` with NO package narrowing. When verifying a named int test: pass the
+  package too and confirm the DONE count collapsed. Encountered: holomush-iokti.3.
+
+- **`settings` game-scope owner partitioning isolates by key PREFIX, not row ACL.**
+  `internal/settings` `Scoped`: `Owner(name)` (game.go) returns a
+  `gameOwnerSettings` prefixing EVERY key with `"plugin/<name>/"`; `Host()` returns
+  the receiver (bare dot-namespaced, namespace-validated). All partitions share ONE
+  `holomush_system_info` keyspace. Isolation has two legs: (1) WRITE-side
+  reserved-namespace guard — `ValidateNamespace` rejects a host key whose first
+  dot-segment == `ReservedNamespace` ("plugin"), placed BEFORE the registered-NS
+  allow-loop (namespaces.go); (2) disjoint key SHAPE (slash-prefixed owner vs
+  dot-namespaced host). Host READS are NOT namespace-validated (existing game-scope
+  design), so a host caller hand-crafting the literal `"plugin/<name>/<key>"`
+  string and bare-reading it WOULD see the owner value — latent, non-exploitable
+  (no production host caller builds slash keys; the write guard blocks host from
+  populating that space). Flag Low/non-blocking unless a stronger guarantee is
+  asked. When reviewing this shape: confirm reserved check is BEFORE the allow-loop,
+  BOTH `SetString`+`SetStringSlice` validate, and the isolation test is a 3-way
+  assertion (other-owner miss + host-bare miss + host-Writable miss), not one
+  round-trip. Encountered: holomush-iokti.4 (2026-05-30) — READY.

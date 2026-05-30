@@ -12,6 +12,8 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/auth"
 )
 
 // PlayerPrefsReader is the narrow interface for reading and writing player
@@ -22,44 +24,177 @@ type PlayerPrefsReader interface {
 	SetPlayerPreferenceKey(ctx context.Context, playerID ulid.ULID, key, value string) error
 }
 
-// PlayerSettings implements PlayerSettingsStore.
+// PlayerRepository is the narrow whole-struct player persistence surface the
+// repo-backed player settings store needs. It is satisfied by
+// auth.PlayerRepository (and by *postgres.PlayerRepository). Reads load the
+// full player; Update persists the whole player, whole-struct-marshaling
+// Preferences (including the opaque Plugins bag) to the players.preferences
+// JSONB column.
+type PlayerRepository interface {
+	GetByID(ctx context.Context, id ulid.ULID) (*auth.Player, error)
+	Update(ctx context.Context, player *auth.Player) error
+}
+
+// PlayerSettings implements PlayerSettingsStore. It is backed either by a
+// read-only PlayerPrefsReader (NewPlayerSettingsStore) for the legacy host-
+// partition path, or by a whole-struct PlayerRepository
+// (NewRepoPlayerSettingsStore) whose owner partition writes persist via a
+// read-modify-write commit func.
 type PlayerSettings struct {
 	reader PlayerPrefsReader
+	repo   PlayerRepository
 }
 
 // NewPlayerSettingsStore creates a PlayerSettingsStore backed by a
-// PlayerPrefsReader.
+// PlayerPrefsReader. Owner/Host writes through the returned views update
+// in-memory maps only and do NOT persist (the commit func is nil); this path
+// serves bare host-partition reads for the resolution Chain.
 func NewPlayerSettingsStore(reader PlayerPrefsReader) *PlayerSettings {
 	return &PlayerSettings{reader: reader}
 }
 
-// For returns a read-only Settings view for a specific player. The
-// returned Settings reads the player's preferences JSONB as a flat
-// dot-keyed map (keys like "scenes.focus.replay_tail_default").
-func (s *PlayerSettings) For(ctx context.Context, playerID ulid.ULID) Settings {
+// NewRepoPlayerSettingsStore creates a PlayerSettingsStore backed by the player
+// repository. Owner partition writes persist: each write re-reads the player,
+// merges only the mutated owner partition into Preferences.Plugins, and
+// Updates — so sibling owner partitions written by a separate For() call are
+// not lost.
+func NewRepoPlayerSettingsStore(repo PlayerRepository) *PlayerSettings {
+	return &PlayerSettings{repo: repo}
+}
+
+// For returns an owner-partitioned Scoped handle for a specific player.
+//
+// Bare Settings reads on the returned handle target the host partition,
+// reading the player's preferences as a flat dot-keyed map (keys like
+// "scenes.focus.replay_tail_default") with namespace validation — preserving
+// the legacy behavior the resolution Chain depends on. Owner(name) narrows to a
+// plugin's isolated, namespace-unvalidated partition.
+//
+// When the store is repo-backed, the handle's Owner partitions are loaded from
+// Preferences.Plugins and Owner writes persist via a non-nil commit func. When
+// the store is reader-backed, the commit func is nil (writes are in-memory
+// only). On any load failure the handle degrades to an empty, read-only view so
+// bare reads and the Chain resolve to defaults rather than panicking.
+//
+// Concurrency: the returned handle is per-request — one For() call per request.
+// Its in-memory partition maps are mutated without synchronization and MUST NOT
+// be shared across goroutines. Lost-update safety across separate For() calls is
+// provided by the commit func re-reading the player.
+func (s *PlayerSettings) For(ctx context.Context, playerID ulid.ULID) Scoped {
+	if s.repo != nil {
+		return s.repoScopedFor(ctx, playerID)
+	}
+	return s.readerScopedFor(ctx, playerID)
+}
+
+// repoScopedFor loads the player via the repo, materializes its
+// Preferences.Plugins bag into owner partitions, and wires a commit func that
+// persists owner writes via read-modify-write.
+func (s *PlayerSettings) repoScopedFor(ctx context.Context, playerID ulid.ULID) Scoped {
+	player, err := s.repo.GetByID(ctx, playerID)
+	if err != nil {
+		// Fail closed: reads still resolve to defaults (Settings never errors),
+		// but a write surfaces the load failure rather than silently dropping.
+		slog.WarnContext(ctx, "player settings load failed",
+			"player_id", playerID.String(), "error", err)
+		return newFailClosedView(oops.With("player_id", playerID.String()).Wrap(err))
+	}
+
+	// plugins is the live owner->key->value map the scopedView mutates via
+	// Owner writes. The commit closure captures it directly so a write
+	// serializes the touched owner partitions back.
+	plugins := decodePluginPartitions(ctx, player.Preferences.Plugins)
+
+	return newTrackedScopedView(map[string]json.RawMessage{}, plugins,
+		func(dirty *dirtyTracker) func(ctx context.Context) error {
+			return func(ctx context.Context) error {
+				// Re-read so the merge runs against the latest persisted state, then
+				// overwrite ONLY the owner partitions this view mutated. A clean-loaded
+				// sibling owner is never re-serialized with its stale value, so a
+				// concurrent For() handle that changed a different owner keeps its
+				// update (cross-owner lost-update safety).
+				fresh, err := s.repo.GetByID(ctx, playerID)
+				if err != nil {
+					return oops.With("player_id", playerID.String()).Wrap(err)
+				}
+				if fresh.Preferences.Plugins == nil {
+					fresh.Preferences.Plugins = map[string]json.RawMessage{}
+				}
+				for owner := range dirty.owners {
+					encoded, err := json.Marshal(plugins[owner])
+					if err != nil {
+						return oops.With("player_id", playerID.String(), "owner", owner).Wrap(err)
+					}
+					fresh.Preferences.Plugins[owner] = json.RawMessage(encoded)
+				}
+				if err := s.repo.Update(ctx, fresh); err != nil {
+					return oops.With("player_id", playerID.String()).Wrap(err)
+				}
+				return nil
+			}
+		})
+}
+
+// readerScopedFor is the legacy reader-backed path: host partition only, no
+// persistence.
+func (s *PlayerSettings) readerScopedFor(ctx context.Context, playerID ulid.ULID) Scoped {
+	emptyHost := func() Scoped {
+		return newScopedView(map[string]json.RawMessage{})
+	}
+
 	raw, err := s.reader.GetPlayerPreferencesJSON(ctx, playerID)
 	if err != nil {
 		slog.DebugContext(ctx, "player settings read failed",
 			"player_id", playerID.String(), "error", err)
-		return &emptySettings{}
+		return emptyHost()
 	}
 	if raw == nil {
-		return &emptySettings{}
+		return emptyHost()
 	}
 
 	var data map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &data); err != nil {
 		slog.DebugContext(ctx, "player settings JSON unmarshal failed",
 			"player_id", playerID.String(), "error", err)
-		return &emptySettings{}
+		return emptyHost()
 	}
-	return &jsonMapSettings{data: data}
+	return newScopedView(data)
+}
+
+// decodePluginPartitions materializes the opaque Preferences.Plugins bag
+// (owner -> serialized partition JSON) into the scopedView's nested map
+// (owner -> key -> raw value). A partition that fails to decode is skipped and
+// logged; the host never interprets partition contents, but a malformed
+// partition is unreadable and would otherwise fail the unmarshal.
+func decodePluginPartitions(
+	ctx context.Context, bag map[string]json.RawMessage,
+) map[string]map[string]json.RawMessage {
+	out := make(map[string]map[string]json.RawMessage, len(bag))
+	for owner, raw := range bag {
+		var partition map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &partition); err != nil {
+			slog.WarnContext(ctx, "skipping undecodable plugin settings partition",
+				"owner", owner, "error", err)
+			continue
+		}
+		out[owner] = partition
+	}
+	return out
 }
 
 // SetString writes a single preference key for a player.
 func (s *PlayerSettings) SetString(
 	ctx context.Context, playerID ulid.ULID, key, value string,
 ) error {
+	if s.reader == nil {
+		// Repo-backed store: the host partition is the typed player-preferences
+		// struct, not flat-key-writable through here. Plugin owner-partition
+		// writes go through For(playerID).Owner(plugin). Fail explicitly rather
+		// than dereferencing a nil reader (which would panic).
+		return oops.Code("PLAYER_SETTINGS_HOST_WRITE_UNSUPPORTED").
+			With("key", key).With("player_id", playerID.String()).
+			Errorf("host-key writes are not supported on the repo-backed player settings store")
+	}
 	if err := ValidateNamespace(key); err != nil {
 		return oops.With("key", key).Wrap(err)
 	}
@@ -73,14 +208,21 @@ func (s *PlayerSettings) SetString(
 // be JSON strings, numbers, or bools. String accessor returns the raw
 // JSON-decoded string; int/bool/duration parse from the string
 // representation.
+//
+// validateNamespace gates namespace validation on reads. The host partition
+// sets it true (legacy behavior); owner/plugin partitions set it false so
+// plugin-private keys need no RegisteredNamespaces entry.
 type jsonMapSettings struct {
-	data map[string]json.RawMessage
+	data              map[string]json.RawMessage
+	validateNamespace bool
 }
 
 func (j *jsonMapSettings) StringN(ctx context.Context, key string) (string, bool) {
-	if err := ValidateNamespace(key); err != nil {
-		slog.DebugContext(ctx, "settings read: invalid namespace", "key", key, "error", err)
-		return "", false
+	if j.validateNamespace {
+		if err := ValidateNamespace(key); err != nil {
+			slog.DebugContext(ctx, "settings read: invalid namespace", "key", key, "error", err)
+			return "", false
+		}
 	}
 	raw, ok := j.data[key]
 	if !ok {
@@ -96,9 +238,11 @@ func (j *jsonMapSettings) StringN(ctx context.Context, key string) (string, bool
 }
 
 func (j *jsonMapSettings) IntN(ctx context.Context, key string) (int, bool) {
-	if err := ValidateNamespace(key); err != nil {
-		slog.DebugContext(ctx, "settings read: invalid namespace", "key", key, "error", err)
-		return 0, false
+	if j.validateNamespace {
+		if err := ValidateNamespace(key); err != nil {
+			slog.DebugContext(ctx, "settings read: invalid namespace", "key", key, "error", err)
+			return 0, false
+		}
 	}
 	raw, ok := j.data[key]
 	if !ok {
@@ -126,9 +270,11 @@ func (j *jsonMapSettings) IntN(ctx context.Context, key string) (int, bool) {
 }
 
 func (j *jsonMapSettings) BoolN(ctx context.Context, key string) (value, ok bool) {
-	if err := ValidateNamespace(key); err != nil {
-		slog.DebugContext(ctx, "settings read: invalid namespace", "key", key, "error", err)
-		return false, false
+	if j.validateNamespace {
+		if err := ValidateNamespace(key); err != nil {
+			slog.DebugContext(ctx, "settings read: invalid namespace", "key", key, "error", err)
+			return false, false
+		}
 	}
 	raw, ok := j.data[key]
 	if !ok {
@@ -164,6 +310,25 @@ func (j *jsonMapSettings) DurationN(ctx context.Context, key string) (time.Durat
 	return v, true
 }
 
+func (j *jsonMapSettings) StringSliceN(ctx context.Context, key string) ([]string, bool) {
+	if j.validateNamespace {
+		if err := ValidateNamespace(key); err != nil {
+			slog.DebugContext(ctx, "settings read: invalid namespace", "key", key, "error", err)
+			return nil, false
+		}
+	}
+	raw, ok := j.data[key]
+	if !ok {
+		return nil, false
+	}
+	var v []string
+	if err := json.Unmarshal(raw, &v); err != nil {
+		slog.DebugContext(ctx, "settings read: string slice unmarshal failed", "key", key, "error", err)
+		return nil, false
+	}
+	return v, true
+}
+
 // emptySettings always returns (zero, false) for all reads.
 type emptySettings struct{}
 
@@ -171,6 +336,7 @@ func (e *emptySettings) StringN(context.Context, string) (string, bool)         
 func (e *emptySettings) IntN(context.Context, string) (int, bool)                { return 0, false }
 func (e *emptySettings) BoolN(context.Context, string) (value, ok bool)          { return false, false }
 func (e *emptySettings) DurationN(context.Context, string) (time.Duration, bool) { return 0, false }
+func (e *emptySettings) StringSliceN(context.Context, string) ([]string, bool)   { return nil, false }
 
 // Compile-time interface checks.
 var (

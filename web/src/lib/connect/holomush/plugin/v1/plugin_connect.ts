@@ -8,7 +8,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceAddSessionStreamRequest, PluginHostServiceAddSessionStreamResponse, PluginHostServiceAutoFocusOnJoinRequest, PluginHostServiceAutoFocusOnJoinResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceEvaluateRequest, PluginHostServiceEvaluateResponse, PluginHostServiceGetCommandHelpRequest, PluginHostServiceGetCommandHelpResponse, PluginHostServiceIsAnyConnFocusedRequest, PluginHostServiceIsAnyConnFocusedResponse, PluginHostServiceJoinFocusRequest, PluginHostServiceJoinFocusResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLeaveFocusByTargetRequest, PluginHostServiceLeaveFocusByTargetResponse, PluginHostServiceLeaveFocusRequest, PluginHostServiceLeaveFocusResponse, PluginHostServiceListCommandsRequest, PluginHostServiceListCommandsResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServicePresentFocusRequest, PluginHostServicePresentFocusResponse, PluginHostServiceQueryStreamHistoryRequest, PluginHostServiceQueryStreamHistoryResponse, PluginHostServiceRemoveSessionStreamRequest, PluginHostServiceRemoveSessionStreamResponse, PluginHostServiceRequestEmitTokenRequest, PluginHostServiceRequestEmitTokenResponse, PluginHostServiceSetConnectionFocusRequest, PluginHostServiceSetConnectionFocusResponse, QuerySessionStreamsRequest, QuerySessionStreamsResponse } from "./plugin_pb.js";
+import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceAddSessionStreamRequest, PluginHostServiceAddSessionStreamResponse, PluginHostServiceAutoFocusOnJoinRequest, PluginHostServiceAutoFocusOnJoinResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceEvaluateRequest, PluginHostServiceEvaluateResponse, PluginHostServiceGetCommandHelpRequest, PluginHostServiceGetCommandHelpResponse, PluginHostServiceGetSettingRequest, PluginHostServiceGetSettingResponse, PluginHostServiceIsAnyConnFocusedRequest, PluginHostServiceIsAnyConnFocusedResponse, PluginHostServiceJoinFocusRequest, PluginHostServiceJoinFocusResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLeaveFocusByTargetRequest, PluginHostServiceLeaveFocusByTargetResponse, PluginHostServiceLeaveFocusRequest, PluginHostServiceLeaveFocusResponse, PluginHostServiceListCommandsRequest, PluginHostServiceListCommandsResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServicePresentFocusRequest, PluginHostServicePresentFocusResponse, PluginHostServiceQueryStreamHistoryRequest, PluginHostServiceQueryStreamHistoryResponse, PluginHostServiceRemoveSessionStreamRequest, PluginHostServiceRemoveSessionStreamResponse, PluginHostServiceRequestEmitTokenRequest, PluginHostServiceRequestEmitTokenResponse, PluginHostServiceSetConnectionFocusRequest, PluginHostServiceSetConnectionFocusResponse, PluginHostServiceSetSettingRequest, PluginHostServiceSetSettingResponse, QuerySessionStreamsRequest, QuerySessionStreamsResponse } from "./plugin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { DecryptOwnAuditRowsRequest, DecryptOwnAuditRowsResponse } from "./audit_pb.js";
 
@@ -413,6 +413,35 @@ export const PluginHostService = {
       name: "GetCommandHelp",
       I: PluginHostServiceGetCommandHelpRequest,
       O: PluginHostServiceGetCommandHelpResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * GetSetting reads a single-scope setting in the calling plugin's owner
+     * partition (owner bound host-side from the authenticated plugin name, never
+     * from the request). The handler resolves SettingScope to its backing store;
+     * a missing key returns a successful response with found=false, never a
+     * codes.NotFound status error.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.GetSetting
+     */
+    getSetting: {
+      name: "GetSetting",
+      I: PluginHostServiceGetSettingRequest,
+      O: PluginHostServiceGetSettingResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * SetSetting writes a single-scope setting in the calling plugin's partition;
+     * GAME scope requires an operator authorization decision (host-enforced, not
+     * trusted from the wire). The owner partition is bound host-side from the
+     * authenticated plugin name.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.SetSetting
+     */
+    setSetting: {
+      name: "SetSetting",
+      I: PluginHostServiceSetSettingRequest,
+      O: PluginHostServiceSetSettingResponse,
       kind: MethodKind.Unary,
     },
   }
