@@ -102,7 +102,7 @@ muted               #d3dde4   muted.foreground    #5a6b76   (≥AA)
 status.text         #5a6b76   status.online       #2e7d32   status.offline #c62828
 input.text          #1a2026   input.background    #ffffff
 input.prompt        #1565c0   cursor              #e09000   (NEW; darkened amber)
-scrollback.indicator #1565c0  scrollback.replayed #6b7a85   (NEW; ≥AA, dim)
+scrollback.indicator #1565c0  scrollback.replayed #62717c   (NEW; ≥AA, dim — #6b7a85 measured 4.15:1, below AA)
 ```
 
 Message colours (dark-on-light, AA on `#f6f8fa`):

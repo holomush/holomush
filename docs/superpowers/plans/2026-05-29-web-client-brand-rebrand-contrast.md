@@ -83,6 +83,7 @@ Run: `cd /Volumes/Code/github.com/holomush/.worktrees/web-brand-rebrand && jj co
 - Delete: `web/src/lib/theme/classic-dark.json`, `web/src/lib/theme/classic-light.json`
 - Modify: `web/src/lib/stores/themeStore.ts:6-16,28-54`
 - Modify: `web/src/lib/components/terminal/CommandPalette.svelte:44-47`
+- Modify: `web/src/lib/components/TopBar.svelte:24-35` (duplicate static theme registry)
 - Modify: `web/src/lib/stores/themeStore.test.ts:35-45`
 
 - [ ] **Step 1: Create `warm-dark.json`** (brown palette relocated; `status.text`/`muted.foreground` raised to AA `#9a8f7e`; new tokens added)
@@ -144,7 +145,7 @@ Run: `cd /Volumes/Code/github.com/holomush/.worktrees/web-brand-rebrand && jj co
 {
   "name": "warm-light",
   "colors": {
-    "say.speaker": "#0277bd",
+    "say.speaker": "#0268a8",
     "say.speech": "#1a1a1a",
     "pose.actor": "#2e7d32",
     "pose.action": "#666666",
@@ -256,6 +257,23 @@ Replace lines 46-47 of `web/src/lib/components/terminal/CommandPalette.svelte`:
 ```svelte
     { id: 'theme.warm-dark',      label: 'Switch theme: Warm Dark',      run: () => setTheme('warm-dark') },
     { id: 'theme.warm-light',     label: 'Switch theme: Warm Light',     run: () => setTheme('warm-light') },
+```
+
+- [ ] **Step 5b: Update `TopBar.svelte`'s duplicate theme registry** — it statically imports the JSON files deleted in Step 3, so this MUST change or `pnpm check`/`pnpm build` fails with module-not-found. Replace lines 24-35 of `web/src/lib/components/TopBar.svelte`:
+
+```svelte
+  import defaultDark from '$lib/theme/default-dark.json';
+  import defaultLight from '$lib/theme/default-light.json';
+  import warmDark from '$lib/theme/warm-dark.json';
+  import warmLight from '$lib/theme/warm-light.json';
+  import type { Theme } from '$lib/theme/types';
+
+  const themeData: Record<string, Theme> = {
+    'default-dark': defaultDark as Theme,
+    'default-light': defaultLight as Theme,
+    'warm-dark': warmDark as Theme,
+    'warm-light': warmLight as Theme,
+  };
 ```
 
 - [ ] **Step 6: Update the test fixture imports**
@@ -556,7 +574,7 @@ Run: `cd /Volumes/Code/github.com/holomush/.worktrees/web-brand-rebrand && jj co
 - [ ] **Step 1: Run the entire theme test file**
 
 Run: `cd web && pnpm vitest run src/lib/stores/themeStore.test.ts`
-Expected: PASS — all four themes clear contrast (INV-2/3/7), brand guards hold (INV-1), tokens exposed (INV-6), migration works (D9). If a `warm-dark`/`warm-light` contrast case fails, raise that theme's `status.text`/`muted.foreground`/`scrollback.replayed` until ≥4.5:1 (warm-dark muted is `#9a8f7e`; bump toward `#a89c8a` if needed).
+Expected: PASS — all four themes clear contrast (INV-2/3/7), brand guards hold (INV-1), tokens exposed (INV-6), migration works (D9). If any contrast case fails, darken the offending token until ≥4.5:1: for chrome, `status.text`/`muted.foreground`/`scrollback.replayed` (warm-dark muted is `#9a8f7e`; bump toward `#a89c8a`); for messages, the dimmest hues — note `warm-light say.speaker` was pre-darkened `#0277bd`→`#0268a8` (4.43→5.46:1) in Task 2 for exactly this reason, so any *other* warm-light message token that fails gets the same one-step darkening treatment.
 
 - [ ] **Step 2: Commit (only if a warm token was adjusted; otherwise skip)**
 
