@@ -146,6 +146,7 @@ type pluginServerAdapter struct {
 //   - FocusClientAware       -> provider.SetFocusClient(...)
 //   - HostEvaluatorAware     -> provider.SetHostEvaluator(...)
 //   - SnapshotDecryptorAware -> provider.SetSnapshotDecryptor(...)
+//   - CommandListerAware     -> provider.SetCommandLister(...)
 //
 // To avoid opening one broker connection per facade, Init dials the plugin
 // host exactly once and shares that *grpc.ClientConn across every facade
@@ -161,12 +162,13 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 	_, wantsFocus := a.serviceProvider.(FocusClientAware)
 	_, wantsEvaluator := a.serviceProvider.(HostEvaluatorAware)
 	_, wantsDecryptor := a.serviceProvider.(SnapshotDecryptorAware)
+	_, wantsCommandLister := a.serviceProvider.(CommandListerAware)
 
 	// Lazily dial a single plugin-host gRPC connection shared by every
 	// host-facing SDK facade the provider opts into. If the provider opts
 	// into none, we never dial.
 	var hostClient pluginv1.PluginHostServiceClient
-	if wantsSink || wantsFocus || wantsEvaluator || wantsDecryptor {
+	if wantsSink || wantsFocus || wantsEvaluator || wantsDecryptor || wantsCommandLister {
 		requiredServices := map[string]string(nil)
 		if config != nil {
 			requiredServices = config.GetRequiredServices()
@@ -189,6 +191,9 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 	}
 	if decAware, ok := a.serviceProvider.(SnapshotDecryptorAware); ok {
 		decAware.SetSnapshotDecryptor(&snapshotDecryptClient{client: hostClient})
+	}
+	if clAware, ok := a.serviceProvider.(CommandListerAware); ok {
+		clAware.SetCommandLister(&hostCommandClient{client: hostClient})
 	}
 
 	if a.serviceProvider == nil {
