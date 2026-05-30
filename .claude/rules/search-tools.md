@@ -7,8 +7,14 @@
 
 This rule defines the search-tool precedence for HoloMUSH. It pairs with the
 `enforce-task-runner.sh` PreToolUse hook, which **nudges** (no longer blocks)
-`grep` toward this ladder and still blocks `cat`/`head`/`tail`/`find` toward
-the native Read/Glob tools.
+the `grep`/`cat`/`head`/`tail`/`find` file utilities toward this ladder — it
+prints a reminder but lets the command run. It still **hard-blocks**
+`go test`/`go build`/`golangci-lint`/`gofmt` (use the `task` runner instead).
+The file utilities were softened from hard blocks because an `exit 2` deny now
+cascades badly: recent harnesses dispatch tool calls in parallel batches, so
+denying one segment (e.g. the `tail /tmp/log` in a `task test … ; tail` run)
+cancels every sibling call in the batch. Honor the nudges, but they won't
+dead-end you.
 
 ## The ladder — match the tool to the question
 
