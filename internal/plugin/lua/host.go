@@ -443,6 +443,22 @@ func (h *Host) PluginEmitRegistry(name string) ([]string, bool) {
 	return append([]string(nil), p.emitRegistry...), true
 }
 
+// sessionStreamsRequestToLuaArgs is the single Lua-side site mapping
+// plugins.SessionStreamsRequest onto the positional argument list passed to
+// on_session_subscribe. The order MUST stay (character_id, player_id,
+// session_id) to match the documented Lua signature. SessionStreamsRequest
+// forks per runtime (binary marshals it onto a proto); routing the Lua marshal
+// through one function lets TestSessionStreamsRequestToLuaArgsCarriesEveryField
+// assert by reflection that every field is passed, so a field added here
+// without wiring cannot silently miss the Lua runtime (holomush-av954).
+func sessionStreamsRequestToLuaArgs(req plugins.SessionStreamsRequest) []lua.LValue {
+	return []lua.LValue{
+		lua.LString(req.CharacterID),
+		lua.LString(req.PlayerID),
+		lua.LString(req.SessionID),
+	}
+}
+
 // QuerySessionStreams calls the plugin's on_session_subscribe(character_id, player_id, session_id)
 // function if defined. Returns the list of stream names the plugin wants added.
 // Returns nil without error if the function is not defined.
@@ -493,9 +509,7 @@ func (h *Host) QuerySessionStreams(ctx context.Context, name string, req plugins
 			NRet:    1,
 			Protect: true,
 		},
-		lua.LString(req.CharacterID),
-		lua.LString(req.PlayerID),
-		lua.LString(req.SessionID),
+		sessionStreamsRequestToLuaArgs(req)...,
 	); err != nil {
 		return nil, oops.In("lua").With("plugin", name).With("operation", "on_session_subscribe").Wrap(err)
 	}

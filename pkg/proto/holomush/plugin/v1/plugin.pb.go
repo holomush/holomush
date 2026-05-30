@@ -617,7 +617,16 @@ type EmitEvent struct {
 	Type string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
 	// JSON-encoded payload (max 64 KiB); validated as well-formed JSON at the
 	// fence before publish.
-	Payload       string `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	Payload string `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	// Per-event sensitivity claim for a return-value emit, validated against the
+	// plugin manifest by event_emitter.go::Emit via EnforceSensitivity
+	// (internal/plugin/sensitivity_fence.go) — INV-6: a sensitivity=never manifest
+	// rejects true; INV-7: a sensitivity=always manifest rejects false. Carries
+	// the same semantics as the active EmitEvent RPC's sensitive field so a binary
+	// plugin's return-value emit cannot silently downgrade to plaintext where the
+	// Lua runtime would encrypt (holomush-av954). Default false for backward
+	// compatibility.
+	Sensitive     bool `protobuf:"varint,4,opt,name=sensitive,proto3" json:"sensitive,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -671,6 +680,13 @@ func (x *EmitEvent) GetPayload() string {
 		return x.Payload
 	}
 	return ""
+}
+
+func (x *EmitEvent) GetSensitive() bool {
+	if x != nil {
+		return x.Sensitive
+	}
+	return false
 }
 
 // HandleEventRequest wraps a single delivered event for the PluginService
@@ -3248,11 +3264,12 @@ const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"actor_kind\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tactorKind\x12\"\n" +
 	"\bactor_id\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\aactorId\x12#\n" +
 	"\apayload\x18\a \x01(\tB\t\xbaH\x06r\x04\x18\x80\x80\x04R\apayload\x12\x16\n" +
-	"\x06cursor\x18\b \x01(\fR\x06cursor\"n\n" +
+	"\x06cursor\x18\b \x01(\fR\x06cursor\"\x8c\x01\n" +
 	"\tEmitEvent\x12\x1f\n" +
 	"\x06stream\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06stream\x12\x1b\n" +
 	"\x04type\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04type\x12#\n" +
-	"\apayload\x18\x03 \x01(\tB\t\xbaH\x06r\x04\x18\x80\x80\x04R\apayload\"E\n" +
+	"\apayload\x18\x03 \x01(\tB\t\xbaH\x06r\x04\x18\x80\x80\x04R\apayload\x12\x1c\n" +
+	"\tsensitive\x18\x04 \x01(\bR\tsensitive\"E\n" +
 	"\x12HandleEventRequest\x12/\n" +
 	"\x05event\x18\x01 \x01(\v2\x19.holomush.plugin.v1.EventR\x05event\"U\n" +
 	"\x13HandleEventResponse\x12>\n" +

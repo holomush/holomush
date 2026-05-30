@@ -414,15 +414,26 @@ func (m *Manager) EmitPluginEvent(ctx context.Context, pluginName string, event 
 		return oops.With("plugin", pluginName).
 			New("plugin event emitter is not configured")
 	}
-	return emitter.Emit(ctx, pluginName, pluginsdk.EmitIntent{
-		// EmitEvent is the plugin-return shape (Stream is the legacy field
-		// name); EmitIntent is the host-facing shape (Subject). F5 migrates
-		// plugin code to Subject natively.
+	return emitter.Emit(ctx, pluginName, emitIntentFromEmitEvent(event))
+}
+
+// emitIntentFromEmitEvent maps a plugin-return EmitEvent onto the host-facing
+// EmitIntent. This is the single construction site for the Lua and binary
+// return-value emit paths (both reach the shared emitter through here); routing
+// it through one function lets TestEmitIntentFromEmitEventCarriesEveryField
+// assert by reflection that every EmitIntent field is populated, so a field
+// added to EmitIntent cannot silently stay zero on these paths (holomush-av954).
+//
+// EmitEvent is the plugin-return shape (Stream is the legacy field name);
+// EmitIntent is the host-facing shape (Subject). F5 migrates plugin code to
+// Subject natively.
+func emitIntentFromEmitEvent(event pluginsdk.EmitEvent) pluginsdk.EmitIntent {
+	return pluginsdk.EmitIntent{
 		Subject:   event.Stream,
 		Type:      event.Type,
 		Payload:   event.Payload,
 		Sensitive: event.Sensitive,
-	})
+	}
 }
 
 // DiscoveredPlugin contains a manifest and its directory.
