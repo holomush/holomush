@@ -608,9 +608,15 @@ const settingsGameWriteResource = "setting:game"
 //     plugins with different names address disjoint partitions (INV-11).
 //   - Scope must be specified; SETTING_SCOPE_UNSPECIFIED fails closed
 //     (InvalidArgument).
-//   - PLAYER / CHARACTER: the acting subject (recovered from the dispatch token,
-//     exactly as Evaluate does) must own the principal — req.principal_id must
-//     equal the acting actor's ID. Mismatch → PermissionDenied (own settings only).
+//   - CHARACTER: req.principal_id must equal the acting character's ID (correct
+//     and functional; the dispatch-token actor is always an ActorCharacter).
+//   - PLAYER: intended semantics are "the owning player of the acting character"
+//     (spec §3.3, INV-6 — settings shared across a player's characters). The
+//     host-side char→player resolver is DEFERRED (holomush-iokti.19). Until it
+//     lands, the gate is fail-closed: requirePrincipalOwnership compares
+//     principal_id against the character actor's ID, and a player's ULID
+//     differs from the acting character's ULID (distinct entities), so a real
+//     player-principal PLAYER request is denied. Decision in holomush-iokti.16.
 //   - GAME reads are server-wide readable by any plugin (no engine call): game
 //     settings are not principal-scoped, and the owner prefix already isolates
 //     the plugin's keyspace.
@@ -658,8 +664,10 @@ func (s *pluginHostServiceServer) GetSetting(ctx context.Context, req *pluginv1.
 // Security invariants (holomush-iokti.7):
 //   - Owner partition bound host-side from s.pluginName (same as GetSetting).
 //   - SETTING_SCOPE_UNSPECIFIED → InvalidArgument (fail closed).
-//   - PLAYER / CHARACTER: acting subject must own the principal (req.principal_id
-//     == acting actor ID) → else PermissionDenied.
+//   - CHARACTER: req.principal_id must equal the acting character's ID (correct
+//     and functional).
+//   - PLAYER: fail-closed pending char→player resolution (holomush-iokti.19) —
+//     see GetSetting invariants for the full rationale (holomush-iokti.16).
 //   - GAME writes require an operator authorization decision: the recovered
 //     subject must be permitted to "write" settingsGameWriteResource via the
 //     ABAC engine. A non-operator subject is denied (PermissionDenied). This is
@@ -759,10 +767,19 @@ func (s *pluginHostServiceServer) resolveSettingScope(
 }
 
 // requirePrincipalOwnership parses principalID as a ULID and enforces that the
-// acting subject owns it (principal == acting actor ID). A plugin may only read
-// or write the settings of the principal it is currently acting on behalf of
-// (own settings only). Returns PermissionDenied on mismatch and InvalidArgument
-// on an unparseable/empty principal.
+// acting subject owns it (principal_id == actor.ID). Returns InvalidArgument on
+// an unparseable/empty principal, PermissionDenied on mismatch.
+//
+// For CHARACTER scope this is correct and functional: the dispatch-token actor
+// is always an ActorCharacter, so principal_id == character ID is the expected
+// comparison (holomush-iokti.16).
+//
+// For PLAYER scope the INTENDED semantics are "the owning player of the acting
+// character" (spec §3.3; holomush-iokti.16 decision). The char→player resolver
+// is deferred to holomush-iokti.19. Until it lands the gate is fail-closed: a
+// player's ULID differs from the acting character's ULID (distinct entities),
+// so any real player-principal PLAYER request is denied. This is a deliberate
+// interim contract, NOT a bug.
 func (s *pluginHostServiceServer) requirePrincipalOwnership(principalID string, actor core.Actor) (ulid.ULID, error) {
 	pid, err := ulid.Parse(principalID)
 	if err != nil {
