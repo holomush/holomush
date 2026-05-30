@@ -231,3 +231,16 @@ describe('new tokens exposed as --color-* (holomush-9ektq INV-6)', () => {
     }
   }
 });
+
+describe('scrollback de-emphasis uses colour, not opacity (holomush-1hgk INV-4)', () => {
+  const src = (rel: string) => readFileSync(`${process.cwd()}/src/lib/components/terminal/${rel}`, 'utf8');
+  it('TerminalView replay lines use --color-scrollback-replayed', () => {
+    expect(src('TerminalView.svelte')).toContain('var(--color-scrollback-replayed)');
+  });
+  it('TerminalView no longer dims replay lines with opacity', () => {
+    expect(src('TerminalView.svelte')).not.toMatch(/\.line\.replay\s*\{[^}]*opacity/);
+  });
+  it('EventRenderer no longer has a .dimmed opacity rule', () => {
+    expect(src('EventRenderer.svelte')).not.toMatch(/\.dimmed\s*\{[^}]*opacity/);
+  });
+});

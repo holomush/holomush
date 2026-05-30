@@ -18,13 +18,12 @@
       text: string;
       metadata?: Record<string, unknown>;
     };
-    dimmed?: boolean;
   }
 
-  let { event, dimmed = false }: Props = $props();
+  let { event }: Props = $props();
 </script>
 
-<div class:dimmed>
+<div>
   {#if event.category === 'communication'}
     <CommunicationRenderer {event} />
   {:else if event.category === 'movement'}
@@ -41,5 +40,4 @@
 </div>
 
 <style>
-  .dimmed { opacity: 0.5; }
 </style>
