@@ -138,8 +138,8 @@ func (f *Functions) getCommandHelpFn(_ string) lua.LGFunction {
 
 		ctx := ls.Context()
 		if ctx == nil {
-			slog.Warn("lua VM context is nil in get_command_help, using background context")
 			ctx = context.Background()
+			slog.WarnContext(ctx, "lua VM context is nil in get_command_help, using background context")
 		}
 
 		if f.commandQuerier == nil {

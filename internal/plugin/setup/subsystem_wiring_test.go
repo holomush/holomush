@@ -11,6 +11,7 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
@@ -85,22 +86,19 @@ func TestPluginSubsystemWiresCommandQuerierIntoLuaHost(t *testing.T) {
 	assert.NotEqual(t, lua.LNil, result,
 		"AFTER fix: list_commands must return a result table when querier is wired")
 
-	if tbl, ok := result.(*lua.LTable); ok {
-		cmds := L2.GetField(tbl, "commands")
-		assert.NotEqual(t, lua.LNil, cmds, "result.commands must be present")
-		if cmdsTbl, ok2 := cmds.(*lua.LTable); ok2 {
-			var names []string
-			cmdsTbl.ForEach(func(_, v lua.LValue) {
-				if ct, ok3 := v.(*lua.LTable); ok3 {
-					names = append(names, L2.GetField(ct, "name").String())
-				}
-			})
-			assert.Contains(t, names, "look",
-				"wired list_commands must include 'look'")
-			assert.Contains(t, names, "help",
-				"wired list_commands must include 'help'")
+	tbl, ok := result.(*lua.LTable)
+	require.True(t, ok, "result must be an *lua.LTable when querier is wired")
+	cmds := L2.GetField(tbl, "commands")
+	cmdsTbl, ok2 := cmds.(*lua.LTable)
+	require.True(t, ok2, "result.commands must be a table")
+	var names []string
+	cmdsTbl.ForEach(func(_, v lua.LValue) {
+		if ct, ok3 := v.(*lua.LTable); ok3 {
+			names = append(names, L2.GetField(ct, "name").String())
 		}
-	}
+	})
+	assert.Contains(t, names, "look", "wired list_commands must include 'look'")
+	assert.Contains(t, names, "help", "wired list_commands must include 'help'")
 }
 
 // wiringTestRegistry is a minimal CommandRegistry for the wiring regression test.
