@@ -314,6 +314,8 @@ const (
 	PluginHostService_AutoFocusOnJoin_FullMethodName     = "/holomush.plugin.v1.PluginHostService/AutoFocusOnJoin"
 	PluginHostService_IsAnyConnFocused_FullMethodName    = "/holomush.plugin.v1.PluginHostService/IsAnyConnFocused"
 	PluginHostService_Evaluate_FullMethodName            = "/holomush.plugin.v1.PluginHostService/Evaluate"
+	PluginHostService_ListCommands_FullMethodName        = "/holomush.plugin.v1.PluginHostService/ListCommands"
+	PluginHostService_GetCommandHelp_FullMethodName      = "/holomush.plugin.v1.PluginHostService/GetCommandHelp"
 )
 
 // PluginHostServiceClient is the client API for PluginHostService service.
@@ -447,6 +449,19 @@ type PluginHostServiceClient interface {
 	// missing/rejected token, empty actor subject, or a resource type the plugin
 	// does not own.
 	Evaluate(ctx context.Context, in *PluginHostServiceEvaluateRequest, opts ...grpc.CallOption) (*PluginHostServiceEvaluateResponse, error)
+	// ListCommands enumerates the commands the named character may execute,
+	// ABAC-filtered by the host. SERVED: pluginHostServiceServer.ListCommands,
+	// delegating to commandquery.Querier.Available. The subject is the request's
+	// character_id (parity with the Lua holomush.list_commands(character_id) host
+	// function — not the dispatch-token actor, since this is read-only metadata,
+	// not an actor-gated mutation). incomplete is true when engine errors hid
+	// some commands.
+	ListCommands(ctx context.Context, in *PluginHostServiceListCommandsRequest, opts ...grpc.CallOption) (*PluginHostServiceListCommandsResponse, error)
+	// GetCommandHelp returns full help detail for one command after an access
+	// check for character_id. SERVED: pluginHostServiceServer.GetCommandHelp,
+	// delegating to commandquery.Querier.Help. Mirrors the Lua
+	// holomush.get_command_help(name, character_id) host function.
+	GetCommandHelp(ctx context.Context, in *PluginHostServiceGetCommandHelpRequest, opts ...grpc.CallOption) (*PluginHostServiceGetCommandHelpResponse, error)
 }
 
 type pluginHostServiceClient struct {
@@ -637,6 +652,26 @@ func (c *pluginHostServiceClient) Evaluate(ctx context.Context, in *PluginHostSe
 	return out, nil
 }
 
+func (c *pluginHostServiceClient) ListCommands(ctx context.Context, in *PluginHostServiceListCommandsRequest, opts ...grpc.CallOption) (*PluginHostServiceListCommandsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceListCommandsResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_ListCommands_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginHostServiceClient) GetCommandHelp(ctx context.Context, in *PluginHostServiceGetCommandHelpRequest, opts ...grpc.CallOption) (*PluginHostServiceGetCommandHelpResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceGetCommandHelpResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_GetCommandHelp_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginHostServiceServer is the server API for PluginHostService service.
 // All implementations must embed UnimplementedPluginHostServiceServer
 // for forward compatibility.
@@ -768,6 +803,19 @@ type PluginHostServiceServer interface {
 	// missing/rejected token, empty actor subject, or a resource type the plugin
 	// does not own.
 	Evaluate(context.Context, *PluginHostServiceEvaluateRequest) (*PluginHostServiceEvaluateResponse, error)
+	// ListCommands enumerates the commands the named character may execute,
+	// ABAC-filtered by the host. SERVED: pluginHostServiceServer.ListCommands,
+	// delegating to commandquery.Querier.Available. The subject is the request's
+	// character_id (parity with the Lua holomush.list_commands(character_id) host
+	// function — not the dispatch-token actor, since this is read-only metadata,
+	// not an actor-gated mutation). incomplete is true when engine errors hid
+	// some commands.
+	ListCommands(context.Context, *PluginHostServiceListCommandsRequest) (*PluginHostServiceListCommandsResponse, error)
+	// GetCommandHelp returns full help detail for one command after an access
+	// check for character_id. SERVED: pluginHostServiceServer.GetCommandHelp,
+	// delegating to commandquery.Querier.Help. Mirrors the Lua
+	// holomush.get_command_help(name, character_id) host function.
+	GetCommandHelp(context.Context, *PluginHostServiceGetCommandHelpRequest) (*PluginHostServiceGetCommandHelpResponse, error)
 	mustEmbedUnimplementedPluginHostServiceServer()
 }
 
@@ -831,6 +879,12 @@ func (UnimplementedPluginHostServiceServer) IsAnyConnFocused(context.Context, *P
 }
 func (UnimplementedPluginHostServiceServer) Evaluate(context.Context, *PluginHostServiceEvaluateRequest) (*PluginHostServiceEvaluateResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Evaluate not implemented")
+}
+func (UnimplementedPluginHostServiceServer) ListCommands(context.Context, *PluginHostServiceListCommandsRequest) (*PluginHostServiceListCommandsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListCommands not implemented")
+}
+func (UnimplementedPluginHostServiceServer) GetCommandHelp(context.Context, *PluginHostServiceGetCommandHelpRequest) (*PluginHostServiceGetCommandHelpResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetCommandHelp not implemented")
 }
 func (UnimplementedPluginHostServiceServer) mustEmbedUnimplementedPluginHostServiceServer() {}
 func (UnimplementedPluginHostServiceServer) testEmbeddedByValue()                           {}
@@ -1177,6 +1231,42 @@ func _PluginHostService_Evaluate_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginHostService_ListCommands_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceListCommandsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).ListCommands(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_ListCommands_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).ListCommands(ctx, req.(*PluginHostServiceListCommandsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginHostService_GetCommandHelp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceGetCommandHelpRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).GetCommandHelp(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_GetCommandHelp_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).GetCommandHelp(ctx, req.(*PluginHostServiceGetCommandHelpRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginHostService_ServiceDesc is the grpc.ServiceDesc for PluginHostService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1255,6 +1345,14 @@ var PluginHostService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Evaluate",
 			Handler:    _PluginHostService_Evaluate_Handler,
+		},
+		{
+			MethodName: "ListCommands",
+			Handler:    _PluginHostService_ListCommands_Handler,
+		},
+		{
+			MethodName: "GetCommandHelp",
+			Handler:    _PluginHostService_GetCommandHelp_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

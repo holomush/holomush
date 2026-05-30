@@ -188,6 +188,21 @@ service PluginHostService {
   // missing/rejected token, empty actor subject, or a resource type the plugin
   // does not own.
   rpc Evaluate(PluginHostServiceEvaluateRequest) returns (PluginHostServiceEvaluateResponse);
+
+  // ListCommands enumerates the commands the named character may execute,
+  // ABAC-filtered by the host. SERVED: pluginHostServiceServer.ListCommands,
+  // delegating to commandquery.Querier.Available. The subject is the request's
+  // character_id (parity with the Lua holomush.list_commands(character_id) host
+  // function — not the dispatch-token actor, since this is read-only metadata,
+  // not an actor-gated mutation). incomplete is true when engine errors hid
+  // some commands.
+  rpc ListCommands(PluginHostServiceListCommandsRequest) returns (PluginHostServiceListCommandsResponse);
+
+  // GetCommandHelp returns full help detail for one command after an access
+  // check for character_id. SERVED: pluginHostServiceServer.GetCommandHelp,
+  // delegating to commandquery.Querier.Help. Mirrors the Lua
+  // holomush.get_command_help(name, character_id) host function.
+  rpc GetCommandHelp(PluginHostServiceGetCommandHelpRequest) returns (PluginHostServiceGetCommandHelpResponse);
 }
 
 // ServiceConfig carries the host→plugin initialization payload delivered in
@@ -788,4 +803,54 @@ message PluginHostServiceEvaluateResponse {
   string reason = 2;
   // Identifier of the policy that produced the decision, when one matched.
   string matched_policy = 3;
+}
+
+// PluginHostServiceCommandInfo is per-command metadata returned by ListCommands.
+message PluginHostServiceCommandInfo {
+  // name is the canonical command name (e.g. "scene").
+  string name = 1;
+  // help is the one-line description from the command registry.
+  string help = 2;
+  // usage is the usage pattern (e.g. "scene <subcommand>").
+  string usage = 3;
+  // source is "core" or the owning plugin name.
+  string source = 4;
+}
+
+// PluginHostServiceListCommandsRequest names the character whose executable
+// command set to enumerate.
+message PluginHostServiceListCommandsRequest {
+  // character_id is the ULID of the character whose capabilities filter the list.
+  string character_id = 1 [(buf.validate.field).string.min_len = 26];
+}
+
+// PluginHostServiceListCommandsResponse returns the filtered command set.
+message PluginHostServiceListCommandsResponse {
+  // commands is the ABAC-filtered set the character may execute.
+  repeated PluginHostServiceCommandInfo commands = 1;
+  // incomplete is true when engine errors hid some commands from the result.
+  bool incomplete = 2;
+}
+
+// PluginHostServiceGetCommandHelpRequest names a command and the character whose
+// access is checked before returning detail.
+message PluginHostServiceGetCommandHelpRequest {
+  // name is the canonical command name to describe.
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  // character_id is the ULID of the character whose access is checked.
+  string character_id = 2 [(buf.validate.field).string.min_len = 26];
+}
+
+// PluginHostServiceGetCommandHelpResponse returns full help detail.
+message PluginHostServiceGetCommandHelpResponse {
+  // name is the canonical command name.
+  string name = 1;
+  // help is the one-line description.
+  string help = 2;
+  // usage is the usage pattern.
+  string usage = 3;
+  // help_text is the detailed markdown help body.
+  string help_text = 4;
+  // source is "core" or the owning plugin name.
+  string source = 5;
 }

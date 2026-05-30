@@ -8,7 +8,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceAddSessionStreamRequest, PluginHostServiceAddSessionStreamResponse, PluginHostServiceAutoFocusOnJoinRequest, PluginHostServiceAutoFocusOnJoinResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceEvaluateRequest, PluginHostServiceEvaluateResponse, PluginHostServiceIsAnyConnFocusedRequest, PluginHostServiceIsAnyConnFocusedResponse, PluginHostServiceJoinFocusRequest, PluginHostServiceJoinFocusResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLeaveFocusByTargetRequest, PluginHostServiceLeaveFocusByTargetResponse, PluginHostServiceLeaveFocusRequest, PluginHostServiceLeaveFocusResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServicePresentFocusRequest, PluginHostServicePresentFocusResponse, PluginHostServiceQueryStreamHistoryRequest, PluginHostServiceQueryStreamHistoryResponse, PluginHostServiceRemoveSessionStreamRequest, PluginHostServiceRemoveSessionStreamResponse, PluginHostServiceRequestEmitTokenRequest, PluginHostServiceRequestEmitTokenResponse, PluginHostServiceSetConnectionFocusRequest, PluginHostServiceSetConnectionFocusResponse, QuerySessionStreamsRequest, QuerySessionStreamsResponse } from "./plugin_pb.js";
+import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceAddSessionStreamRequest, PluginHostServiceAddSessionStreamResponse, PluginHostServiceAutoFocusOnJoinRequest, PluginHostServiceAutoFocusOnJoinResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceEvaluateRequest, PluginHostServiceEvaluateResponse, PluginHostServiceGetCommandHelpRequest, PluginHostServiceGetCommandHelpResponse, PluginHostServiceIsAnyConnFocusedRequest, PluginHostServiceIsAnyConnFocusedResponse, PluginHostServiceJoinFocusRequest, PluginHostServiceJoinFocusResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLeaveFocusByTargetRequest, PluginHostServiceLeaveFocusByTargetResponse, PluginHostServiceLeaveFocusRequest, PluginHostServiceLeaveFocusResponse, PluginHostServiceListCommandsRequest, PluginHostServiceListCommandsResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServicePresentFocusRequest, PluginHostServicePresentFocusResponse, PluginHostServiceQueryStreamHistoryRequest, PluginHostServiceQueryStreamHistoryResponse, PluginHostServiceRemoveSessionStreamRequest, PluginHostServiceRemoveSessionStreamResponse, PluginHostServiceRequestEmitTokenRequest, PluginHostServiceRequestEmitTokenResponse, PluginHostServiceSetConnectionFocusRequest, PluginHostServiceSetConnectionFocusResponse, QuerySessionStreamsRequest, QuerySessionStreamsResponse } from "./plugin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { DecryptOwnAuditRowsRequest, DecryptOwnAuditRowsResponse } from "./audit_pb.js";
 
@@ -382,6 +382,37 @@ export const PluginHostService = {
       name: "Evaluate",
       I: PluginHostServiceEvaluateRequest,
       O: PluginHostServiceEvaluateResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * ListCommands enumerates the commands the named character may execute,
+     * ABAC-filtered by the host. SERVED: pluginHostServiceServer.ListCommands,
+     * delegating to commandquery.Querier.Available. The subject is the request's
+     * character_id (parity with the Lua holomush.list_commands(character_id) host
+     * function — not the dispatch-token actor, since this is read-only metadata,
+     * not an actor-gated mutation). incomplete is true when engine errors hid
+     * some commands.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.ListCommands
+     */
+    listCommands: {
+      name: "ListCommands",
+      I: PluginHostServiceListCommandsRequest,
+      O: PluginHostServiceListCommandsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * GetCommandHelp returns full help detail for one command after an access
+     * check for character_id. SERVED: pluginHostServiceServer.GetCommandHelp,
+     * delegating to commandquery.Querier.Help. Mirrors the Lua
+     * holomush.get_command_help(name, character_id) host function.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.GetCommandHelp
+     */
+    getCommandHelp: {
+      name: "GetCommandHelp",
+      I: PluginHostServiceGetCommandHelpRequest,
+      O: PluginHostServiceGetCommandHelpResponse,
       kind: MethodKind.Unary,
     },
   }
