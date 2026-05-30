@@ -11,13 +11,11 @@ import (
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
-// Stream prefixes for event streams.
-// Note: The character stream prefix was changed from "char:" to "character:" during
-// Phase 7.6. No backward compatibility layer is needed because no event stores have
-// been deployed yet. If stores exist before first release, add a migration.
+// Domain-relative stream tokens. The host qualifier (eventbus.Qualify) prepends
+// "events.<gameID>." — the SDK lacks the gameID, so it emits the relative ref.
 const (
-	streamPrefixCharacter = "character:"
-	streamPrefixLocation  = "location:"
+	streamPrefixCharacter = "character."
+	streamPrefixLocation  = "location."
 	streamPrefixGlobal    = "global"
 )
 
@@ -51,12 +49,12 @@ func NewEmitterWithLogger(logger *slog.Logger) *Emitter {
 	return &Emitter{logger: logger}
 }
 
-// Location emits an event to a location stream ("location:<id>").
+// Location emits an event to a location stream ("location.<id>").
 func (e *Emitter) Location(locationID string, eventType pluginsdk.EventType, payload Payload) {
 	e.emit(streamPrefixLocation+locationID, eventType, payload, false)
 }
 
-// Character emits an event to a character stream ("character:<id>").
+// Character emits an event to a character stream ("character.<id>").
 func (e *Emitter) Character(characterID string, eventType pluginsdk.EventType, payload Payload) {
 	e.emit(streamPrefixCharacter+characterID, eventType, payload, false)
 }
