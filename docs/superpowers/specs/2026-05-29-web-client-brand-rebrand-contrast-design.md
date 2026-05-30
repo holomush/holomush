@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Web Client Brand Rebrand + AA Contrast — Design
 
 **Status:** Draft (brainstorming output, pending design-reviewer)
@@ -65,7 +70,7 @@ New `--color-*` tokens introduced (per `web/CLAUDE.md` "Adding a New Theme Token
 
 Chrome (`--color-*`):
 
-```
+```text
 background          #0b0c0e   foreground          #e8edf2
 surface             #101418   border / input      #1d2a33
 card                #101418   card.foreground     #e8edf2
@@ -86,7 +91,7 @@ radius              0.5rem
 
 Message colours (`--mush-*`, D4 +10%):
 
-```
+```text
 say.speaker #43ebff   say.speech #f2f5f8   pose.actor #69ddb9
 pose.action #99a7b4   system #7acaeb       arrive #758a96   leave #758a96
 command.output #dbe3e9  command.error #fc7f7f  ooc #98b0f6  pemit #65ddd3
@@ -94,7 +99,7 @@ command.output #dbe3e9  command.error #fc7f7f  ooc #98b0f6  pemit #65ddd3
 
 ### `default-light` (brand) — target values
 
-```
+```text
 background          #f6f8fa   foreground          #1a2026
 surface             #eef2f5   border / input      #d3dde4
 primary / accent / ring  #1565c0     primary.foreground  #ffffff
@@ -107,7 +112,7 @@ scrollback.indicator #1565c0  scrollback.replayed #62717c   (NEW; ≥AA, dim —
 
 Message colours (dark-on-light, AA on `#f6f8fa`):
 
-```
+```text
 say.speaker #0277bd   say.speech #1a2026   pose.actor #1b7a5e
 pose.action #5a6b76   system #1565c0       arrive #62717c   leave #62717c
 command.output #1a2026  command.error #c62828  ooc #5e35b1  pemit #00796b

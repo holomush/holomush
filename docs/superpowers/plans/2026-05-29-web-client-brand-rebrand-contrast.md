@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Web Client Brand Rebrand + AA Contrast Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -38,6 +43,7 @@
 ### Task 1: Promote/add the four new theme token keys to the type contract
 
 **Files:**
+
 - Modify: `web/src/lib/theme/types.ts:18-30`
 
 - [ ] **Step 1: Add the keys to `ThemeColors`**
@@ -78,6 +84,7 @@ Run: `cd /Volumes/Code/github.com/holomush/.worktrees/web-brand-rebrand && jj co
 ### Task 2: Relocate warm themes + rename theme ids + localStorage migration (D3, D9)
 
 **Files:**
+
 - Create: `web/src/lib/theme/warm-dark.json` (content = current `default-dark.json` brown palette + new tokens)
 - Create: `web/src/lib/theme/warm-light.json` (content = current `default-light.json` cream palette + new tokens)
 - Delete: `web/src/lib/theme/classic-dark.json`, `web/src/lib/theme/classic-light.json`
@@ -325,6 +332,7 @@ Run: `cd /Volumes/Code/github.com/holomush/.worktrees/web-brand-rebrand && jj co
 ### Task 3: Add the WCAG contrast + brand-guard test harness (INV-1, INV-2, INV-3, INV-6)
 
 **Files:**
+
 - Modify: `web/src/lib/stores/themeStore.test.ts` (append new describe blocks + helpers)
 
 - [ ] **Step 1: Add the luminance + contrast helpers** (append near the `rgb()` helper, after line 53)
@@ -432,6 +440,7 @@ Run: `cd /Volumes/Code/github.com/holomush/.worktrees/web-brand-rebrand && jj co
 ### Task 4: Rewrite `default-dark.json` to the brand palette
 
 **Files:**
+
 - Modify: `web/src/lib/theme/default-dark.json` (full rewrite)
 
 - [ ] **Step 1: Replace the entire file**
@@ -501,6 +510,7 @@ Run: `cd /Volumes/Code/github.com/holomush/.worktrees/web-brand-rebrand && jj co
 ### Task 5: Rewrite `default-light.json` to the brand palette
 
 **Files:**
+
 - Modify: `web/src/lib/theme/default-light.json` (full rewrite)
 
 - [ ] **Step 1: Replace the entire file**
@@ -585,6 +595,7 @@ Run: `cd /Volumes/Code/github.com/holomush/.worktrees/web-brand-rebrand && jj co
 ### Task 7: Update `app.css` `@theme` statics + wire the amber caret (D7, D8, INV-1)
 
 **Files:**
+
 - Modify: `web/src/app.css:9-48`
 - Modify: `web/src/lib/components/terminal/CommandInput.svelte:214-222`
 
@@ -664,6 +675,7 @@ Run: `cd /Volumes/Code/github.com/holomush/.worktrees/web-brand-rebrand && jj co
 ### Task 8: holomush-1hgk — replace scrollback compounding opacity with a colour token (INV-4)
 
 **Files:**
+
 - Modify: `web/src/lib/components/terminal/EventRenderer.svelte:27,44`
 - Modify: `web/src/lib/components/terminal/TerminalView.svelte:53-55,74,109`
 - Modify: `web/src/lib/stores/themeStore.test.ts` (consuming-site guard)
@@ -751,6 +763,7 @@ Run: `cd /Volumes/Code/github.com/holomush/.worktrees/web-brand-rebrand && jj co
 ### Task 9: holomush-vhsz — enlarge the shortcut hint bar (INV-5)
 
 **Files:**
+
 - Modify: `web/src/lib/components/terminal/CommandInput.svelte:233-247`
 - Modify: `web/src/lib/stores/themeStore.test.ts` (consuming-site guard)
 
