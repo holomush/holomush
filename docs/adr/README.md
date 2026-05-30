@@ -16,6 +16,8 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Derive world-read subject host-side; no subject field on wire](holomush-nthq6-derive-world-read-subject-host-side-no-subject-field-wire.md) | 2026-05-30 | Accepted | `holomush-nthq6` |
+| [Remove forgeable injectable WorldService; PluginHostService Query is the sole binary world-read path](holomush-c6oo8-remove-forgeable-injectable-worldservice-pluginhostservice-q.md) | 2026-05-30 | Accepted | `holomush-c6oo8` |
 | [Isolate xk6 extensions in a separate Go module](holomush-2344h-isolate-xk6-extensions-separate-go-module.md) | 2026-05-28 | Accepted | `holomush-2344h` |
 | [Use k6 + Custom xk6 Binary for Full-System Load Testing](holomush-evggu-use-k6-custom-xk6-binary-full-system-load-testing.md) | 2026-05-28 | Accepted | `holomush-evggu` |
 | [Use topic-tab navigation over a single grouped sidebar](holomush-q924m-use-topic-tab-navigation-over-a-single-grouped-sidebar.md) | 2026-05-28 | Accepted | `holomush-q924m` |
