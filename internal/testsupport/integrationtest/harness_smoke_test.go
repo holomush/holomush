@@ -132,7 +132,7 @@ var _ = Describe("Integration harness Subscribe transport lifecycle", func() {
 		// Iris emits during Felix's detach window — the event lands in Felix's
 		// durable consumer and MUST be redelivered on reattach.
 		const marker = "m5nj-smoke:during-detach"
-		Expect(iris.EmitDirectEvent(ctx, "location:"+iris.LocationID.String(), marker,
+		Expect(iris.EmitDirectEvent(ctx, "location."+iris.LocationID.String(), marker,
 			[]byte(`{"character_name":"Iris","action":"speaks while Felix is detached."}`))).
 			To(Succeed(), "during-detach emit MUST publish")
 

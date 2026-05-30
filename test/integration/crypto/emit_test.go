@@ -152,16 +152,16 @@ var _ = Describe("Sensitive emit produces ciphertext on bus and in audit (INV-21
 
 		const plaintext = `{"text":"hello, secret world"}`
 		intent := pluginsdk.EmitIntent{
-			Subject:   "scene:01HXXXTESTSCENE000000000",
+			Subject:   "scene.01HXXXTESTSCENE000000000",
 			Type:      pluginsdk.EventType("test-plugin:whisper"),
 			Payload:   plaintext,
 			Sensitive: true,
 		}
 		Expect(emitter.Emit(ctx, "test-plugin", intent)).NotTo(HaveOccurred())
 
-		// 1. Bus assertion. The emitter's subjectxlate.Legacy translates
-		// scene:<id> → events.main.scene.<id>; subscribe to events.> to
-		// avoid coupling to the exact translated subject shape.
+		// 1. Bus assertion. The emitter's eventbus.Qualify translates
+		// scene.<id> → events.main.scene.<id>; subscribe to events.> to
+		// avoid coupling to the exact qualified subject shape.
 		msg := testutil.WaitForOneJetStreamMsg(suiteT, bus, "events.>", testutil.DefaultWait)
 		headers := msg.Headers()
 		Expect(headers.Get(eventbus.HeaderCodec)).To(Equal("xchacha20poly1305-v1"))

@@ -16,7 +16,8 @@ import (
 // gameID MUST be non-empty for any relative reference that still needs it.
 //
 // This is the single host-side gameID-injection point introduced by
-// holomush-rops; it replaces subjectxlate.Legacy. Producers and clients, which
+// holomush-rops; the previous colon-translation shim was deleted in this change.
+// Producers and clients, which
 // lack the gameID, emit relative references; Qualify is applied at the emit and
 // read-entry boundaries (spec §1 "where gameID enters").
 func Qualify(gameID, relativeRef string) (Subject, error) {

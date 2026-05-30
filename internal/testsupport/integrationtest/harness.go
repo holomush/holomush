@@ -80,7 +80,6 @@ import (
 	authguardaudit "github.com/holomush/holomush/internal/eventbus/authguard/audit"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	"github.com/holomush/holomush/internal/eventbus/history"
-	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/grpc/focus/scenepolicy"
@@ -1152,11 +1151,7 @@ func (a *focusHistoryReaderAdapter) ReplayTail(ctx context.Context, stream strin
 	if gameID == "" {
 		gameID = "main"
 	}
-	natsSubject, err := subjectxlate.Legacy(stream, gameID)
-	if err != nil {
-		return nil, oops.With("stream", stream).Wrap(err)
-	}
-	sub, err := eventbus.NewSubject(natsSubject)
+	sub, err := eventbus.Qualify(gameID, stream)
 	if err != nil {
 		return nil, oops.With("stream", stream).Wrap(err)
 	}
@@ -1194,7 +1189,7 @@ func (a *focusHistoryReaderAdapter) ReplayTail(ctx context.Context, stream strin
 	result := make([]core.Event, len(collected))
 	for i := range collected {
 		j := len(collected) - 1 - i
-		streamName := subjectxlate.ToLegacy(string(collected[i].Subject), gameID)
+		streamName := string(collected[i].Subject)
 		result[j] = busEventToCoreEvent(collected[i], streamName)
 	}
 	return result, nil

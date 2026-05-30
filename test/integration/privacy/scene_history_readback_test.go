@@ -425,7 +425,7 @@ func emitSensitiveScenePoseForPrivacy(
 		plugins.WithCryptoEnabled(true),
 	)
 	intent := pluginsdk.EmitIntent{
-		Subject:   "scene:" + sceneID,
+		Subject:   "scene." + sceneID,
 		Type:      pluginsdk.EventType(env.pluginName + ":scene_pose"),
 		Payload:   plaintext,
 		Sensitive: true,

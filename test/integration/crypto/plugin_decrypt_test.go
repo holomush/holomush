@@ -307,7 +307,7 @@ func emitSensitiveWhisper(t *testing.T, h *pluginDecryptHarness, sceneID, plaint
 	)
 
 	intent := pluginsdk.EmitIntent{
-		Subject:   "scene:" + sceneID,
+		Subject:   "scene." + sceneID,
 		Type:      pluginsdk.EventType("test-plugin:whisper"),
 		Payload:   plaintext,
 		Sensitive: true,

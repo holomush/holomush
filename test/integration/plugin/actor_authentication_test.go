@@ -222,7 +222,7 @@ func pollResultFile(path string, timeout time.Duration) (string, error) {
 }
 
 const (
-	forgeryEmitSubject = "location:01HFORGEY00LOCATIONULID0000"
+	forgeryEmitSubject = "location.01HFORGEY00LOCATIONULID0000"
 	dispatchCharID     = "01HCHAR0000000000000000000"
 	dispatchCharKind   = core.ActorCharacter
 	forgedTargetID     = "01HFAKE0000000000000000000"

@@ -12,7 +12,8 @@ import (
 // subjectFor builds a single NATS subject for a context reference.
 // Format: "events.<gameID>.<type>.<id1>[.<id2>...].>"
 //
-// MUST NOT import internal/eventbus/subjectxlate (legacy colon-form).
+// MUST use dot-form subjects only. The legacy colon-translation shim
+// (eventbus/subjectxlate) has been deleted — dot is the sole canonical form.
 func subjectFor(c ContextRef, gameID string) eventbus.Subject {
 	// Capacity: "events" + gameID + type + len(IDs) + ">" = 4 + len(IDs) tokens.
 	parts := make([]string, 0, 3+len(c.IDs)+1)

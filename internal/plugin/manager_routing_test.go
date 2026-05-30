@@ -197,7 +197,7 @@ binary-plugin:
 		// Post-w9ml: Actor.ID MUST be a ULID; use a deterministic fixture.
 		emitCtx := core.WithActor(ctx, core.Actor{Kind: core.ActorPlugin, ID: fixturePluginULID.String()})
 		return host.emitter.Emit(emitCtx, manifest.Name, pluginsdk.EmitIntent{
-			Subject: "scene:test",
+			Subject: "scene.test",
 			Type:    pluginsdk.EventType(core.EventTypeSystem),
 			Payload: `{"phase":"init"}`,
 		})
@@ -222,7 +222,7 @@ binary-plugin:
 
 	msgs := drainStream(t, bus.JS)
 	require.Len(t, msgs, 1)
-	// Legacy "scene:test" → events.main.scene.test (default game_id).
+	// Dot-relative "scene.test" → events.main.scene.test (default game_id).
 	assert.Equal(t, "events.main.scene.test", msgs[0].Subject)
 	// Post-w9ml: every stamp site emits a real ULID, so App-Actor-ID is
 	// always present for plugin actors (matches fixturePluginULID above).
@@ -341,7 +341,7 @@ func TestManagerEmitPluginEventUsesConfiguredSharedEmitter(t *testing.T) {
 	})
 
 	err := mgr.EmitPluginEvent(ctx, "say-plugin", pluginsdk.EmitEvent{
-		Stream:  "location:123",
+		Stream:  "location.123",
 		Type:    pluginsdk.EventType("say"),
 		Payload: `{"text":"hello"}`,
 	})

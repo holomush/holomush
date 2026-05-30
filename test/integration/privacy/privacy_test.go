@@ -67,7 +67,7 @@ var _ = Describe("I-PRIV-6 (gate-bypass arm): staff override bypasses the locati
 
 		// Create a second location (not the staff member's location).
 		locBID := ts.NewLocation(ctx)
-		locB = "location:" + locBID.String()
+		locB = "location." + locBID.String()
 
 		// Staff session is at the guest start location (locA), which differs from locB.
 		// ConnectAuthedWithRoles stamps "staff" into character_roles and opens a game session.
@@ -173,7 +173,7 @@ var _ = Describe("I-PRIV-3: ReattachCAS preserves durable; Subscribe replay deli
 		// Felix's durable JetStream consumer (per-session durable, immutable
 		// OptStartTime); reattach replay below MUST deliver it.
 		Expect(gemma.EmitDirectEvent(ctx,
-			"location:"+gemma.LocationID.String(),
+			"location."+gemma.LocationID.String(),
 			detachWindowType,
 			[]byte(`{"character_name":"Gemma","action":"speaks while Felix is detached."}`))).
 			To(Succeed(), "during-detach emit MUST publish into Felix's durable consumer")
@@ -253,7 +253,7 @@ var _ = Describe("I-PRIV-3 / I-PRIV-4: detach/reattach preserves session floor a
 		// LocationArrivedAt is captured from the persisted row (canonical).
 		hugo = ts.AuthedPlayer(ctx, "Hugo")
 		firstSess = hugo.OpenWebSession(ctx)
-		locStream = "location:" + firstSess.LocationID.String()
+		locStream = "location." + firstSess.LocationID.String()
 
 		// A different character at the same location emits a pre-detach event.
 		// Using a separate session avoids hijacking hugo's session for the
@@ -414,7 +414,7 @@ var _ = Describe("I-PRIV-1: new guest sees no pre-arrival location history", fun
 	It("returns only events emitted after guest B's session created_at", func() {
 		// Guest A connects, emits a pose into the location stream, disconnects.
 		guestA = ts.ConnectGuest(ctx)
-		locStream := "location:" + guestA.LocationID.String()
+		locStream := "location." + guestA.LocationID.String()
 		payload := []byte(`{"character_name":"` + guestA.CharacterName + `","action":"waves a greeting."}`)
 		Expect(guestA.EmitDirectEvent(ctx, locStream, "core-communication:pose", payload)).
 			To(Succeed(), "harness emit MUST succeed for the seed event")
@@ -477,7 +477,7 @@ var _ = Describe("I-PRIV-2: guest name reuse does not leak prior holder's events
 		// First guest: connect, emit, logout. Record name + emit timestamp.
 		guestA := ts.ConnectGuest(ctx)
 		firstName = guestA.CharacterName
-		locStream = "location:" + guestA.LocationID.String()
+		locStream = "location." + guestA.LocationID.String()
 		priorEmit = time.Now()
 		payload := []byte(`{"character_name":"` + guestA.CharacterName + `","action":"waves once."}`)
 		Expect(guestA.EmitDirectEvent(ctx, locStream, "core-communication:pose", payload)).
@@ -672,7 +672,7 @@ var _ = Describe("I-PRIV-1: character move resets location floor", func() {
 		ts = integrationtest.Start(suiteT, integrationtest.WithPolicyEngine(policytest.DenyAllEngine()))
 
 		mover = ts.ConnectAuthed(ctx, "Mover")
-		startLoc = "location:" + mover.LocationID.String()
+		startLoc = "location." + mover.LocationID.String()
 
 		// Pre-move: emit a seed event at locA so we can verify the post-move
 		// hard-gate denial is content-independent (denial fires before any
@@ -683,7 +683,7 @@ var _ = Describe("I-PRIV-1: character move resets location floor", func() {
 
 		// Move to a fresh location.
 		destLocID := ts.NewLocation(ctx)
-		destLoc = "location:" + destLocID.String()
+		destLoc = "location." + destLocID.String()
 		mover.MoveTo(ctx, destLocID)
 	})
 
@@ -779,7 +779,7 @@ var _ = Describe("I-PRIV-5: denial wire opacity", func() {
 		defer sess.Logout(ctx)
 		// Pre-create a different location; sess is at the guest start location.
 		otherLoc := ts.NewLocation(ctx)
-		_, err := sess.QueryStreamHistory(ctx, "location:"+otherLoc.String())
+		_, err := sess.QueryStreamHistory(ctx, "location."+otherLoc.String())
 		expectStreamAccessDenied(err, "wrong_location")
 	})
 
@@ -803,7 +803,7 @@ var _ = Describe("I-PRIV-5: denial wire opacity", func() {
 		defer sess.Logout(ctx)
 		// "admin:audit" is a stream pattern with no seed grant; DenyAll
 		// engine rejects every Evaluate call → ABAC denial path.
-		_, err := sess.QueryStreamHistory(ctx, "admin:audit")
+		_, err := sess.QueryStreamHistory(ctx, "admin.audit")
 		expectStreamAccessDenied(err, "policy_denied")
 	})
 
@@ -813,7 +813,7 @@ var _ = Describe("I-PRIV-5: denial wire opacity", func() {
 		// production logout RPC against an expired session may behave
 		// differently than this test cares about.
 		ts.ExpireSession(ctx, sess.SessionID)
-		_, err := sess.QueryStreamHistory(ctx, "location:"+sess.LocationID.String())
+		_, err := sess.QueryStreamHistory(ctx, "location."+sess.LocationID.String())
 		expectStreamAccessDenied(err, "expired_session")
 	})
 
@@ -821,7 +821,7 @@ var _ = Describe("I-PRIV-5: denial wire opacity", func() {
 		sess := ts.ConnectAuthed(ctx, "Epsilon")
 		// No defer Logout — the session row is deleted below.
 		ts.DeleteSession(ctx, sess.SessionID)
-		_, err := sess.QueryStreamHistory(ctx, "location:"+sess.LocationID.String())
+		_, err := sess.QueryStreamHistory(ctx, "location."+sess.LocationID.String())
 		expectStreamAccessDenied(err, "session_not_found")
 	})
 })

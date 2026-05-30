@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/eventbus"
-	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -577,17 +576,17 @@ func (s *Session) AttachMomentMs() int64 {
 // production path callers use — eventbus.Subsystem.Publisher.Publish — so
 // JetStream-side persistence and audit semantics match production.
 //
-// stream is the legacy colon-style stream name (e.g., "location:01ABC"); the
-// helper translates it to the JetStream-native subject. Returns once the
+// stream is a domain-relative dot subject (e.g., "location.01ABC"); the
+// helper qualifies it to the JetStream-native subject. Returns once the
 // underlying Publish completes — JetStream's ack guarantees the event is
 // queryable on return.
 func (s *Session) EmitDirectEvent(ctx context.Context, stream, evType string, payload []byte) error {
-	natsSubject, err := subjectxlate.Legacy(stream, s.server.bus.Bus.GameID())
+	sub, err := eventbus.Qualify(s.server.bus.Bus.GameID(), stream)
 	if err != nil {
 		return oops.With("stream", stream).Wrap(err)
 	}
 	event := eventbus.NewEvent(
-		eventbus.Subject(natsSubject),
+		sub,
 		eventbus.Type(evType),
 		eventbus.Actor{Kind: eventbus.ActorKindCharacter, ID: s.CharacterID},
 		payload,

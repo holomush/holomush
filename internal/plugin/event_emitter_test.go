@@ -27,8 +27,8 @@ import (
 )
 
 // sceneManifest returns a manifest declaring `scene` as an allowed emit
-// namespace — matches the historical colon-namespace shape that every
-// in-tree plugin still uses during the F1 transition.
+// namespace. Tests emit dot-relative subjects (e.g., "scene.01TEST") which
+// Qualify turns into "events.main.scene.01TEST".
 //
 // ActorKindsClaimable mirrors the in-tree core-scenes manifest (Task 4 of
 // the plugin actor-claim authentication rollout): plugin + character so
@@ -87,15 +87,15 @@ func fetchAllMessages(t *testing.T, js jetstream.JetStream) []*jetstream.RawStre
 }
 
 // TestPluginEventEmitterStampsHostOwnedFields is the happy-path contract:
-// a legacy colon-delimited subject is translated to JS form, the message
-// carries every required header, and the envelope decodes to the plugin's
-// payload with the host-stamped actor.
+// a dot-relative subject is qualified to JS form, the message carries every
+// required header, and the envelope decodes to the plugin's payload with the
+// host-stamped actor.
 func TestPluginEventEmitterStampsHostOwnedFields(t *testing.T) {
 	bus := eventbustest.New(t)
 	emitter := newEmitter(t, bus, func(string) *plugins.Manifest { return sceneManifest() }, pluginActorResolver)
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
-		Subject: "scene:01TEST",
+		Subject: "scene.01TEST",
 		Type:    pluginsdk.EventType(core.EventTypeSystem),
 		Payload: `{"text":"hi"}`,
 	})
@@ -105,7 +105,7 @@ func TestPluginEventEmitterStampsHostOwnedFields(t *testing.T) {
 	require.Len(t, msgs, 1)
 	msg := msgs[0]
 
-	// Subject was translated: legacy "scene:01TEST" → events.<game_id>.scene.01TEST.
+	// Subject qualified: "scene.01TEST" → events.<game_id>.scene.01TEST.
 	// Default game_id is "main" (eventbus.Config default).
 	assert.Equal(t, "events.main.scene.01TEST", msg.Subject)
 
@@ -129,6 +129,32 @@ func TestPluginEventEmitterStampsHostOwnedFields(t *testing.T) {
 	assert.Equal(t, eventbusv1.ActorKind_ACTOR_KIND_PLUGIN, env.GetActor().GetKind())
 }
 
+// TestPluginEventEmitterEmitsGlobalStream pins the bare-token namespace path
+// (rops.7 regression guard): "global" is a live emit stream (Emitter.Global →
+// "global"), so subjectNamespace MUST extract "global" as the namespace rather
+// than reject it as malformed, the manifest gate then authorizes it, and Qualify
+// produces events.<game_id>.global.
+func TestPluginEventEmitterEmitsGlobalStream(t *testing.T) {
+	bus := eventbustest.New(t)
+	globalManifest := &plugins.Manifest{
+		Name:                "core-broadcast",
+		Emits:               []string{"global"},
+		ActorKindsClaimable: []string{"plugin"},
+	}
+	emitter := newEmitter(t, bus, func(string) *plugins.Manifest { return globalManifest }, pluginActorResolver)
+
+	err := emitter.Emit(context.Background(), "core-broadcast", pluginsdk.EmitIntent{
+		Subject: "global",
+		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Payload: `{"text":"server restart"}`,
+	})
+	require.NoError(t, err)
+
+	msgs := fetchAllMessages(t, bus.JS)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, "events.main.global", msgs[0].Subject)
+}
+
 // TestPluginEventEmitterRejectsNonULIDActorID is the post-w9ml invariant:
 // the strict ULID gate at coreActorToEventbusActor surfaces
 // ACTOR_ID_NOT_ULID and refuses to publish when a resolver returns a
@@ -146,7 +172,7 @@ func TestPluginEventEmitterRejectsNonULIDActorID(t *testing.T) {
 	)
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
-		Subject: "scene:01TEST",
+		Subject: "scene.01TEST",
 		Type:    pluginsdk.EventType(core.EventTypeSystem),
 		Payload: `{}`,
 	})
@@ -171,7 +197,7 @@ func TestPluginEventEmitterIdempotentRetryIsNoOpOnStreamState(t *testing.T) {
 	// that by publishing to JS directly with a fixed Msg-Id first, then the
 	// emitter, to guarantee both paths observe dedup.
 	intent := pluginsdk.EmitIntent{
-		Subject: "scene:01TEST",
+		Subject: "scene.01TEST",
 		Type:    pluginsdk.EventType(core.EventTypeSystem),
 		Payload: `{"n":1}`,
 	}
@@ -252,7 +278,7 @@ func TestPluginEventEmitterRejectsMissingManifestWithoutPublishing(t *testing.T)
 	emitter := newEmitter(t, bus, func(string) *plugins.Manifest { return nil }, pluginActorResolver)
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
-		Subject: "scene:01TEST",
+		Subject: "scene.01TEST",
 		Type:    pluginsdk.EventType(core.EventTypeSystem),
 		Payload: `{"text":"hi"}`,
 	})
@@ -266,7 +292,7 @@ func TestPluginEventEmitterRejectsMissingManifestLookupWithoutPublishing(t *test
 	emitter := plugins.NewPluginEventEmitter(bus.Bus.Publisher(), nil, pluginActorResolver)
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
-		Subject: "scene:01TEST",
+		Subject: "scene.01TEST",
 		Type:    pluginsdk.EventType(core.EventTypeSystem),
 		Payload: `{"text":"hi"}`,
 	})
@@ -282,7 +308,7 @@ func TestPluginEventEmitterRejectsActorResolverFailureWithoutPublishing(t *testi
 	})
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
-		Subject: "scene:01TEST",
+		Subject: "scene.01TEST",
 		Type:    pluginsdk.EventType(core.EventTypeSystem),
 		Payload: `{"text":"hi"}`,
 	})
@@ -300,7 +326,7 @@ func TestPluginEventEmitterRejectsNilActorResolverWithoutPublishing(t *testing.T
 	)
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
-		Subject: "scene:01TEST",
+		Subject: "scene.01TEST",
 		Type:    pluginsdk.EventType(core.EventTypeSystem),
 		Payload: `{"text":"hi"}`,
 	})
@@ -316,7 +342,7 @@ func TestPluginEventEmitterRejectsEmptyResolvedActorWithoutPublishing(t *testing
 	})
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
-		Subject: "scene:01TEST",
+		Subject: "scene.01TEST",
 		Type:    pluginsdk.EventType(core.EventTypeSystem),
 		Payload: `{"text":"hi"}`,
 	})
@@ -332,7 +358,7 @@ func TestPluginEventEmitterRejectsUnknownResolvedActorKindWithoutPublishing(t *t
 	})
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
-		Subject: "scene:01TEST",
+		Subject: "scene.01TEST",
 		Type:    pluginsdk.EventType(core.EventTypeSystem),
 		Payload: `{"text":"hi"}`,
 	})
@@ -379,7 +405,7 @@ func TestPluginEventEmitterWrapsPublisherFailure(t *testing.T) {
 	emitter := plugins.NewPluginEventEmitter(errPub, func(string) *plugins.Manifest { return sceneManifest() }, pluginActorResolver)
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
-		Subject: "scene:01TEST",
+		Subject: "scene.01TEST",
 		Type:    pluginsdk.EventType(core.EventTypeSystem),
 		Payload: `{"text":"hi"}`,
 	})
@@ -391,7 +417,7 @@ func TestPluginEventEmitterRejectsMissingPublisherWithoutPanic(t *testing.T) {
 	emitter := plugins.NewPluginEventEmitter(nil, func(string) *plugins.Manifest { return sceneManifest() }, pluginActorResolver)
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
-		Subject: "scene:01TEST",
+		Subject: "scene.01TEST",
 		Type:    pluginsdk.EventType(core.EventTypeSystem),
 		Payload: `{"text":"hi"}`,
 	})
@@ -412,7 +438,7 @@ func TestPluginEventEmitterAcceptsPayloadAtMaxPayloadSize(t *testing.T) {
 	require.Len(t, payload, core.MaxPayloadSize)
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
-		Subject: "scene:01TEST",
+		Subject: "scene.01TEST",
 		Type:    pluginsdk.EventType(core.EventTypeSystem),
 		Payload: string(payload),
 	})
@@ -433,7 +459,7 @@ func TestPluginEventEmitterRejectsOversizedPayloadWithoutPublishing(t *testing.T
 	require.Len(t, payload, core.MaxPayloadSize+1)
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
-		Subject: "scene:01TEST",
+		Subject: "scene.01TEST",
 		Type:    pluginsdk.EventType(core.EventTypeSystem),
 		Payload: string(payload),
 	})
@@ -447,7 +473,7 @@ func TestPluginEventEmitterRejectsInvalidJSONPayloadWithoutPublishing(t *testing
 	emitter := newEmitter(t, bus, func(string) *plugins.Manifest { return sceneManifest() }, pluginActorResolver)
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
-		Subject: "scene:01TEST",
+		Subject: "scene.01TEST",
 		Type:    pluginsdk.EventType(core.EventTypeSystem),
 		Payload: `{"text":`,
 	})
@@ -523,7 +549,7 @@ func TestEmitManifestGateRejectsCharacterClaimWithoutOptIn(t *testing.T) {
 		ID:   "01HCHAR0000000000000000000",
 	})
 	err := e.Emit(ctx, "plug-A", pluginsdk.EmitIntent{
-		Subject: "location:01HLOC0000000000000000000",
+		Subject: "location.01HLOC0000000000000000000",
 		Type:    "say",
 		Payload: `{"message":"hi"}`,
 	})
@@ -554,7 +580,7 @@ func TestEmitManifestGateAllowsClaimedKind(t *testing.T) {
 		ID:   "01HCHAR0000000000000000000",
 	})
 	err := e.Emit(ctx, "plug-A", pluginsdk.EmitIntent{
-		Subject: "location:01HLOC0000000000000000000",
+		Subject: "location.01HLOC0000000000000000000",
 		Type:    "say",
 		Payload: `{"message":"hi"}`,
 	})
@@ -584,7 +610,7 @@ func TestEmitManifestGateAllowsPluginCascade(t *testing.T) {
 		ID:   ulid.MustNew(0xB, bytes.NewReader(make([]byte, 16))).String(), // upstream cascade
 	})
 	err := e.Emit(ctx, "plug-A", pluginsdk.EmitIntent{
-		Subject: "location:01HLOC0000000000000000000",
+		Subject: "location.01HLOC0000000000000000000",
 		Type:    "test",
 		Payload: `{}`,
 	})

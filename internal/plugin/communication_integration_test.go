@@ -183,7 +183,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				Expect(resp).NotTo(BeNil())
 				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
 				Expect(resp.Events).To(HaveLen(1))
-				Expect(resp.Events[0].Stream).To(Equal("location:loc456"))
+				Expect(resp.Events[0].Stream).To(Equal("location.loc456"))
 				Expect(resp.Events[0].Type).To(Equal(pluginsdk.EventType(corecomm.EventTypeSay)))
 				Expect(resp.Events[0].Payload).To(ContainSubstring(`"character_name":"Alice"`))
 				Expect(resp.Events[0].Payload).To(ContainSubstring(`Hello everyone!`))
@@ -222,7 +222,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				Expect(resp).NotTo(BeNil())
 				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
 				Expect(resp.Events).To(HaveLen(1))
-				Expect(resp.Events[0].Stream).To(Equal("location:loc456"))
+				Expect(resp.Events[0].Stream).To(Equal("location.loc456"))
 				Expect(resp.Events[0].Type).To(Equal(pluginsdk.EventType(corecomm.EventTypePose)))
 				// Payload is structured JSON: {character_name, action}; rendering happens at display layer
 				Expect(resp.Events[0].Payload).To(ContainSubstring(`"character_name":"Bob"`))
@@ -363,7 +363,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				Expect(resp).NotTo(BeNil())
 				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
 				Expect(resp.Events).To(HaveLen(1))
-				Expect(resp.Events[0].Stream).To(Equal("location:loc456"))
+				Expect(resp.Events[0].Stream).To(Equal("location.loc456"))
 				// The Lua emit handler returns type = "emit" (unqualified); the host
 				// namespace-qualifies emitted types only when going through PluginEventEmitter.Emit,
 				// not on the direct DeliverCommand path.
@@ -395,7 +395,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				ctx := context.Background()
 				event := pluginsdk.Event{
 					ID:        "01MNO",
-					Stream:    "location:123",
+					Stream:    "location.123",
 					Type:      pluginsdk.EventType(corecomm.EventTypeSay),
 					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char_1",

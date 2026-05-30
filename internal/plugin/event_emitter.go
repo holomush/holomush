@@ -15,7 +15,6 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
-	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
@@ -204,14 +203,9 @@ func (e *PluginEventEmitter) Emit(ctx context.Context, pluginName string, intent
 			gameID = g
 		}
 	}
-	natsSubject, err := subjectxlate.Legacy(subjectRaw, gameID)
+	sub, err := eventbus.Qualify(gameID, subjectRaw)
 	if err != nil {
 		return oops.With("plugin", pluginName).With("subject", subjectRaw).Wrap(err)
-	}
-	sub, err := eventbus.NewSubject(natsSubject)
-	if err != nil {
-		return oops.With("plugin", pluginName).With("subject", subjectRaw).
-			With("nats_subject", natsSubject).Wrap(err)
 	}
 
 	busActor, err := coreActorToEventbusActor(actor)
@@ -229,15 +223,16 @@ func (e *PluginEventEmitter) Emit(ctx context.Context, pluginName string, intent
 	}
 	if err := e.publisher.Publish(ctx, event); err != nil {
 		return oops.With("plugin", pluginName).With("subject", subjectRaw).
-			With("nats_subject", natsSubject).Wrap(err)
+			With("qualified_subject", string(sub)).Wrap(err)
 	}
 	return nil
 }
 
 // subjectNamespace extracts the plugin-level namespace token from a raw
-// EmitIntent.Subject. Accepts legacy colon-delimited subjects (the F1
-// status-quo for every in-tree plugin) as well as JetStream-native
-// dot-delimited subjects that start with `events.<game_id>.`.
+// EmitIntent.Subject. Accepts:
+//   - JetStream-native: "events.<game_id>.<namespace>.<...>"
+//   - Dot-relative:     "<namespace>.<id>[.<facet>...]"  (canonical post-rops form)
+//   - Legacy colon:     "<namespace>[:<suffix>]"         (rejected by Qualify — kept for early validation)
 func subjectNamespace(subject string) (string, error) {
 	// JetStream-native: events.<game_id>.<namespace>.<...>
 	if strings.HasPrefix(subject, "events.") {
@@ -256,7 +251,30 @@ func subjectNamespace(subject string) (string, error) {
 		return ns, nil
 	}
 
-	// Legacy colon-delimited: <namespace>[:<suffix>]
+	// Dot-relative: <namespace>.<id>[.<facet>...] — canonical post-rops form.
+	// Colon subjects fall through to the legacy branch below.
+	if !strings.ContainsRune(subject, ':') {
+		if idx := strings.IndexByte(subject, '.'); idx >= 0 {
+			ns := subject[:idx]
+			if !namePattern.MatchString(ns) {
+				return "", oops.With("namespace", ns).
+					New("subject namespace must match plugin naming pattern")
+			}
+			return ns, nil
+		}
+		// Bare single-token (e.g. "global"): the token IS the namespace. This is
+		// a live emit stream per the rops design (Emitter.Global → "global"); the
+		// manifest gate at the call site remains the authority on whether a plugin
+		// may emit it. Reject only malformed tokens.
+		if !namePattern.MatchString(subject) {
+			return "", oops.With("namespace", subject).
+				New("subject namespace must match plugin naming pattern")
+		}
+		return subject, nil
+	}
+
+	// Legacy colon-delimited: <namespace>[:<suffix>] — still validated for
+	// early error quality, but Qualify will reject the colon form before publish.
 	suffix := ""
 	hasSeparator := false
 	head := subject

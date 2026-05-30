@@ -690,7 +690,7 @@ func TestEmitEventUsesStoredActorIgnoringPluginClaim(t *testing.T) {
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
 	_, err = s.EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
-		Stream:    "location:01HLOC0000000000000000000",
+		Stream:    "location.01HLOC0000000000000000000",
 		EventType: "say",
 		Payload:   []byte(`{"message":"hi"}`),
 	})
