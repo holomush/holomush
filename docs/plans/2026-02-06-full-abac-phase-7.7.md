@@ -112,6 +112,17 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ### Task 31: Degraded mode implementation
 
+> **Superseded in part (holomush-aefb, 2026-05-29):** the per-policy
+> "auto-disable corrupted permit policies (set `enabled=false`)" and
+> `compiled_ast` unmarshal-detection design below was never wired. The cache
+> recompiles from `DSLText` on every reload, so corruption handling is
+> all-or-nothing in `Cache.Reload` (a compile failure aborts the snapshot swap,
+> retaining the last-good snapshot — a corrupt policy never enters the cache),
+> and degraded mode is driven by the cache `HealthTracker` circuit breaker
+> (`internal/access/setup`), not by per-policy effect dispatch. The vestigial
+> `Engine.OnPolicyCorruption` hook was removed in holomush-aefb. Do not
+> re-implement the auto-disable mechanism without first revisiting this decision.
+
 **Spec References:** [Degraded Mode](../specs/abac/04-resolution-evaluation.md#error-handling) (Security note section)
 
 **Dependencies:**
