@@ -103,6 +103,10 @@ type mockCoreClient struct {
 	listFocusPresenceResp *corev1.ListFocusPresenceResponse
 	listFocusPresenceErr  error
 	listFocusPresenceReq  *corev1.ListFocusPresenceRequest // captured for assertion
+
+	listAvailableCommandsResp *corev1.ListAvailableCommandsResponse
+	listAvailableCommandsErr  error
+	listAvailableCommandsReq  *corev1.ListAvailableCommandsRequest // captured for assertion
 }
 
 func (m *mockCoreClient) HandleCommand(_ context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
@@ -212,6 +216,11 @@ func (m *mockCoreClient) RevokeOtherPlayerSessions(_ context.Context, req *corev
 func (m *mockCoreClient) ListFocusPresence(_ context.Context, req *corev1.ListFocusPresenceRequest) (*corev1.ListFocusPresenceResponse, error) {
 	m.listFocusPresenceReq = req
 	return m.listFocusPresenceResp, m.listFocusPresenceErr
+}
+
+func (m *mockCoreClient) ListAvailableCommands(_ context.Context, req *corev1.ListAvailableCommandsRequest) (*corev1.ListAvailableCommandsResponse, error) {
+	m.listAvailableCommandsReq = req
+	return m.listAvailableCommandsResp, m.listAvailableCommandsErr
 }
 
 func TestHandler_SendCommand_Success(t *testing.T) {
@@ -855,4 +864,70 @@ func TestWebListFocusPresenceForwardsToCoreService(t *testing.T) {
 	require.Len(t, msg.GetEntries(), 1)
 	assert.Equal(t, "alice", msg.GetEntries()[0].GetCharacterName())
 	assert.Equal(t, webv1.WebPresenceState_WEB_PRESENCE_STATE_ACTIVE, msg.GetEntries()[0].GetState())
+}
+
+func TestWebListCommandsForwardsToCoreServiceAndMapsFields(t *testing.T) {
+	sessID := "sess-cmd-1"
+	token := "tok-cmd-header"
+	coreResp := &corev1.ListAvailableCommandsResponse{
+		Commands: []*corev1.AvailableCommand{
+			{Name: "look", Help: "Look around", Usage: "look [target]", Source: "core"},
+			{Name: "say", Help: "Say something", Usage: "say <text>", Source: "core"},
+		},
+		Aliases:    map[string]string{"l": "look", "'": "say"},
+		Incomplete: true,
+	}
+	client := &mockCoreClient{
+		listAvailableCommandsResp: coreResp,
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebListCommandsRequest{SessionId: sessID})
+	req.Header().Set(headerInjectSessionToken, token)
+
+	resp, err := h.WebListCommands(context.Background(), req)
+	require.NoError(t, err)
+
+	require.NotNil(t, client.listAvailableCommandsReq, "ListAvailableCommands should have been called")
+	assert.Equal(t, sessID, client.listAvailableCommandsReq.GetSessionId())
+	assert.Equal(t, token, client.listAvailableCommandsReq.GetPlayerSessionToken())
+
+	msg := resp.Msg
+	require.Len(t, msg.GetCommands(), 2)
+	assert.Equal(t, "look", msg.GetCommands()[0].GetName())
+	assert.Equal(t, "Look around", msg.GetCommands()[0].GetHelp())
+	assert.Equal(t, "look [target]", msg.GetCommands()[0].GetUsage())
+	assert.Equal(t, "core", msg.GetCommands()[0].GetSource())
+	assert.Equal(t, "say", msg.GetCommands()[1].GetName())
+	assert.Equal(t, map[string]string{"l": "look", "'": "say"}, msg.GetAliases())
+	assert.True(t, msg.GetIncomplete())
+}
+
+func TestWebListCommandsSkipsNilCommandsInResponse(t *testing.T) {
+	coreResp := &corev1.ListAvailableCommandsResponse{
+		Commands: []*corev1.AvailableCommand{
+			nil,
+			{Name: "look", Help: "Look around", Usage: "look [target]", Source: "core"},
+			nil,
+		},
+	}
+	client := &mockCoreClient{listAvailableCommandsResp: coreResp}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebListCommandsRequest{SessionId: "sess-nil"})
+	resp, err := h.WebListCommands(context.Background(), req)
+	require.NoError(t, err)
+	require.Len(t, resp.Msg.GetCommands(), 1)
+	assert.Equal(t, "look", resp.Msg.GetCommands()[0].GetName())
+}
+
+func TestWebListCommandsPassesThroughCoreServiceError(t *testing.T) {
+	coreErr := oops.Errorf("RPC_FAILED: core unavailable")
+	client := &mockCoreClient{listAvailableCommandsErr: coreErr}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebListCommandsRequest{SessionId: "sess-err"})
+	_, err := h.WebListCommands(context.Background(), req)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, coreErr)
 }

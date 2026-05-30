@@ -299,6 +299,15 @@ func (c *Client) ListFocusPresence(ctx context.Context, req *corev1.ListFocusPre
 	return resp, nil
 }
 
+// ListAvailableCommands returns the ABAC-filtered command set for the session's character.
+func (c *Client) ListAvailableCommands(ctx context.Context, req *corev1.ListAvailableCommandsRequest) (*corev1.ListAvailableCommandsResponse, error) {
+	resp, err := c.client.ListAvailableCommands(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "ListAvailableCommands").Wrap(err)
+	}
+	return resp, nil
+}
+
 // GetContent retrieves a single content item by key from the content service.
 func (c *Client) GetContent(ctx context.Context, req *contentv1.GetContentRequest) (*contentv1.GetContentResponse, error) {
 	resp, err := c.contentClient.GetContent(ctx, req)

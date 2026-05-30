@@ -56,6 +56,8 @@ type CoreClient interface {
 	RevokeOtherPlayerSessions(ctx context.Context, req *corev1.RevokeOtherPlayerSessionsRequest) (*corev1.RevokeOtherPlayerSessionsResponse, error)
 	// Presence RPCs
 	ListFocusPresence(ctx context.Context, req *corev1.ListFocusPresenceRequest) (*corev1.ListFocusPresenceResponse, error)
+	// Command introspection
+	ListAvailableCommands(ctx context.Context, req *corev1.ListAvailableCommandsRequest) (*corev1.ListAvailableCommandsResponse, error)
 }
 
 // ContentClient is the gRPC interface used by Handler to communicate with the
@@ -520,12 +522,45 @@ func (h *Handler) WebListFocusPresence(ctx context.Context, req *connect.Request
 	}), nil
 }
 
-// WebListCommands is a placeholder so *Handler satisfies the generated
-// webv1connect.WebServiceHandler interface after the RPC was added to the proto.
-// The real gateway proxy to CoreService.ListAvailableCommands lands in
-// holomush-2zjio.9 (Task 9); until then it reports Unimplemented.
-func (h *Handler) WebListCommands(_ context.Context, _ *connect.Request[webv1.WebListCommandsRequest]) (*connect.Response[webv1.WebListCommandsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("WebListCommands not implemented (holomush-2zjio.9)"))
+// WebListCommands proxies to CoreService.ListAvailableCommands. The
+// player_session_token is read from the request header (not the wire
+// request body); core enforces ownership and ABAC filtering.
+func (h *Handler) WebListCommands(ctx context.Context, req *connect.Request[webv1.WebListCommandsRequest]) (*connect.Response[webv1.WebListCommandsResponse], error) {
+	slog.DebugContext(ctx, "web: WebListCommands", "session_id", req.Msg.GetSessionId())
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	coreResp, err := h.client.ListAvailableCommands(rpcCtx, &corev1.ListAvailableCommandsRequest{
+		SessionId:          req.Msg.GetSessionId(),
+		PlayerSessionToken: token,
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "web: list available commands RPC failed",
+			"session_id", req.Msg.GetSessionId(), "error", err)
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through so clients can distinguish SESSION_NOT_FOUND / PERMISSION_DENIED.
+	}
+
+	out := make([]*webv1.WebAvailableCommand, 0, len(coreResp.GetCommands()))
+	for _, c := range coreResp.GetCommands() {
+		if c == nil {
+			continue
+		}
+		out = append(out, &webv1.WebAvailableCommand{
+			Name:   c.GetName(),
+			Help:   c.GetHelp(),
+			Usage:  c.GetUsage(),
+			Source: c.GetSource(),
+		})
+	}
+
+	return connect.NewResponse(&webv1.WebListCommandsResponse{
+		Commands:   out,
+		Aliases:    coreResp.GetAliases(),
+		Incomplete: coreResp.GetIncomplete(),
+	}), nil
 }
 
 func translatePresenceContext(c corev1.PresenceContext) webv1.WebPresenceContext {
