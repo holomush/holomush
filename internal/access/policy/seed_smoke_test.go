@@ -81,8 +81,9 @@ func streamProvider(resourceAttrs map[string]any) *mockAttributeProvider {
 		resourceMap: resourceAttrs,
 		schema: &types.NamespaceSchema{
 			Attributes: map[string]types.AttrType{
-				"name":     types.AttrTypeString,
-				"location": types.AttrTypeString,
+				"name":         types.AttrTypeString,
+				"location":     types.AttrTypeString,
+				"has_location": types.AttrTypeBool,
 			},
 		},
 	}
@@ -209,14 +210,14 @@ func TestSeedSmokePlayerStreamEmit(t *testing.T) {
 			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": locID},
 			nil,
 		),
-		streamProvider(map[string]any{"name": "location:01LOC000", "location": locID}),
+		streamProvider(map[string]any{"name": "events.main.location.01LOC000", "location": locID, "has_location": true}),
 	})
 
 	// Emitting to co-located location stream → permit (seed:player-stream-emit)
 	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
 		Subject:  "character:01CHAR01",
 		Action:   "emit",
-		Resource: "stream:location:01LOC000",
+		Resource: "stream:events.main.location.01LOC000",
 	})
 	require.NoError(t, err)
 	assert.True(t, decision.IsAllowed(), "player should emit to co-located stream; got: %s — %s", decision.Effect(), decision.Reason())
@@ -239,11 +240,11 @@ func TestSeedSmokePlayerCanReadCoLocatedLocationStream(t *testing.T) {
 	})
 
 	// Reading history of co-located location stream → permit
-	// (seed:player-location-stream-read)
+	// (seed:player-location-stream-read) — dot-form subject: events.<gid>.location.<ULID>
 	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
 		Subject:  "character:01CHAR01",
 		Action:   "read",
-		Resource: "stream:location:" + locID,
+		Resource: "stream:events.main.location." + locID,
 	})
 	require.NoError(t, err)
 	assert.True(t, decision.IsAllowed(), "co-located character should read location stream; got: %s — %s", decision.Effect(), decision.Reason())
@@ -266,7 +267,7 @@ func TestSeedSmokePlayerCannotReadNonCoLocatedLocationStream(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
 		Subject:  "character:01CHAR01",
 		Action:   "read",
-		Resource: "stream:location:" + otherLocID,
+		Resource: "stream:events.main.location." + otherLocID,
 	})
 	require.NoError(t, err)
 	assert.False(t, decision.IsAllowed(), "non-co-located character should NOT read location stream; got: %s — %s", decision.Effect(), decision.Reason())
@@ -686,7 +687,7 @@ func TestSeedSmokeAdminReadsNonCoLocatedLocationStream(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
 		Subject:  "character:01ADMIN2",
 		Action:   "read",
-		Resource: "stream:location:" + targetLocID,
+		Resource: "stream:events.main.location." + targetLocID,
 	})
 	require.NoError(t, err)
 	assert.True(t, decision.IsAllowed(), "admin should read non-co-located location stream; got: %s — %s", decision.Effect(), decision.Reason())

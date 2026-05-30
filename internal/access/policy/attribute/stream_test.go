@@ -26,27 +26,30 @@ func TestStreamProvider_ResolveResource(t *testing.T) {
 	}{
 		{
 			name:       "location stream with location ID",
-			resourceID: "stream:location:01XYZ",
+			resourceID: "stream:events.main.location.01XYZ",
 			expected: map[string]any{
-				"type":     "stream",
-				"name":     "location:01XYZ",
-				"location": "01XYZ",
+				"type":         "stream",
+				"name":         "events.main.location.01XYZ",
+				"location":     "01XYZ",
+				"has_location": true,
 			},
 		},
 		{
 			name:       "simple stream name",
 			resourceID: "stream:global",
 			expected: map[string]any{
-				"type": "stream",
-				"name": "global",
+				"type":         "stream",
+				"name":         "global",
+				"has_location": false,
 			},
 		},
 		{
 			name:       "stream with colon but not location prefix",
 			resourceID: "stream:scene:01ABC",
 			expected: map[string]any{
-				"type": "stream",
-				"name": "scene:01ABC",
+				"type":         "stream",
+				"name":         "scene:01ABC",
+				"has_location": false,
 			},
 		},
 		{
@@ -82,11 +85,29 @@ func TestStreamProviderSchema(t *testing.T) {
 
 	expected := &types.NamespaceSchema{
 		Attributes: map[string]types.AttrType{
-			"type":     types.AttrTypeString,
-			"name":     types.AttrTypeString,
-			"location": types.AttrTypeString,
+			"type":         types.AttrTypeString,
+			"name":         types.AttrTypeString,
+			"location":     types.AttrTypeString,
+			"has_location": types.AttrTypeBool,
 		},
 	}
 
 	assert.Equal(t, expected, schema)
+}
+
+func TestStreamProviderExtractsLocationFromQualifiedDotSubject(t *testing.T) {
+	p := NewStreamProvider()
+	attrs, err := p.ResolveResource(context.Background(), "stream:events.main.location.01LOC")
+	require.NoError(t, err)
+	require.Equal(t, "01LOC", attrs["location"])
+	require.Equal(t, true, attrs["has_location"])
+}
+
+func TestStreamProviderOmitsLocationForNonLocationStream(t *testing.T) {
+	p := NewStreamProvider()
+	attrs, err := p.ResolveResource(context.Background(), "stream:events.main.character.01CHR")
+	require.NoError(t, err)
+	_, present := attrs["location"]
+	require.False(t, present, "location key MUST be absent (not empty-sentinel) for non-location streams")
+	require.Equal(t, false, attrs["has_location"])
 }
