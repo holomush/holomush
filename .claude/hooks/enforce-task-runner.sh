@@ -2,14 +2,21 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 HoloMUSH Contributors
 #
-# PreToolUse hook: enforce task runner and dedicated tools
-# Blocks direct go/lint commands (go test/build, golangci-lint, gofmt) and
-# the cat/head/tail/find file utilities, suggesting the proper task commands
-# or native Claude Code tools. grep is a soft nudge (not a block) toward the
-# modern search ladder — see the grep case for why.
+# PreToolUse hook: enforce task runner, nudge toward dedicated tools
+# HARD-BLOCKS direct go/lint commands (go test/build, golangci-lint, gofmt):
+# these have a correct `task` alternative and raw use bypasses task-runner
+# setup, so running them is a genuine mistake worth denying.
+# SOFT-NUDGES the cat/head/tail/find/grep file utilities (echo to stderr, no
+# exit 2). They are frequently the right tool (head -c, tail -f, piping into
+# jq, find -exec) and even when Read/Glob would do, a hard block is now a net
+# hazard: recent harnesses dispatch tool calls in parallel batches, and an
+# exit-2 deny on ONE segment cancels every sibling call in the batch — so a
+# `task test … ; tail /tmp/log` verification idiom loses the real test run.
+# grep was softened first (see its case); cat/head/tail/find followed for the
+# same reason.
 # Error strategy: enforcement hook — fails open on jq/parse errors
 # (command proceeds unchecked), but reliably blocks known bad patterns
-# when parsing succeeds.
+# (go/lint/fmt) when parsing succeeds.
 set -uo pipefail
 
 # --- Parse phase: fail open on malformed input ---
@@ -164,16 +171,18 @@ while IFS= read -r segment; do
       echo "Nudge: prefer 'rg' over $word (faster, .gitignore-aware). For Go symbol/AST reads use mcp__probe__search_code; for structural patterns or codemods use ast-grep. ($word still runs.)" >&2
       ;;
     cat)
-      # Allow heredocs (with or without space/flags): cat <<EOF, cat<<EOF, cat -s <<EOF
-      # Allow /dev paths: cat /dev/null
+      # Soft nudge, NOT a block (no exit 2) — see header for the parallel-batch
+      # cascade rationale. Stay silent for heredocs (cat <<EOF, cat<<EOF,
+      # cat -s <<EOF) and /dev paths (cat /dev/null), which have no Read-tool
+      # equivalent at all.
       if ! echo "$before_pipe" | command grep -qE "(<<|/dev/)"; then
-        echo "Use the Read tool instead of cat" >&2
-        exit 2
+        echo "Nudge: prefer the Read tool over cat for file reads (offset/limit for ranges). cat still runs." >&2
       fi
       ;;
     head|tail)
-      echo "Use the Read tool with offset/limit instead of $word" >&2
-      exit 2
+      # Soft nudge, NOT a block (no exit 2) — see header. head -c (byte limit),
+      # tail -f, and piping (cmd | tail -N) have no Read-tool equivalent.
+      echo "Nudge: prefer the Read tool with offset/limit over $word for file reads. $word still runs." >&2
       ;;
     find)
       # Allow find when used with predicates Glob can't express:
@@ -182,10 +191,10 @@ while IFS= read -r segment; do
       # or actions (-exec/-delete/-printf). Block plain "find . -name '*.x'"
       # patterns since Glob handles those.
       if echo "$rest" | command grep -qE -- '(-(m|a|c)(time|min)|-newer|-size|-perm|-user|-group|-uid|-gid|-empty|-exec|-delete|-printf|-fprint|-iname|-iwholename|-i?regex|-maxdepth|-mindepth|-prune|-follow|-xdev)\b'; then
-        :  # allow
+        :  # predicate Glob can't express — stay silent
       else
-        echo "Use the Glob tool instead of find (or add -mtime/-newer/-size/-exec/etc. if you need a predicate Glob can't express)" >&2
-        exit 2
+        # Soft nudge, NOT a block (no exit 2) — see header.
+        echo "Nudge: prefer the Glob tool over find for plain name/path matches (find still runs; add -mtime/-newer/-size/-exec/etc. for predicates Glob can't express)." >&2
       fi
       ;;
   esac
