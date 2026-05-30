@@ -18,25 +18,27 @@ import (
 	coreobj "github.com/holomush/holomush/plugins/core-objects"
 )
 
-// Stream prefixes for event streams.
+// Stream domain tokens for domain-relative stream references. The host
+// qualifier (eventbus.Qualify) prepends "events.<gameID>." to produce the
+// fully-qualified subject; these builders return the relative reference only.
 const (
-	StreamPrefixLocation  = "location:"
-	StreamPrefixCharacter = "character:"
+	streamDomainLocation  = "location."
+	streamDomainCharacter = "character."
 )
 
-// LocationStream returns the stream name for a location.
+// LocationStream returns the domain-relative stream reference for a location.
 func LocationStream(id ulid.ULID) string {
-	return StreamPrefixLocation + id.String()
+	return streamDomainLocation + id.String()
 }
 
-// CharacterStream returns the stream name for a character.
+// CharacterStream returns the domain-relative stream reference for a character.
 func CharacterStream(id ulid.ULID) string {
-	return StreamPrefixCharacter + id.String()
+	return streamDomainCharacter + id.String()
 }
 
-// BroadcastLocationStream returns the stream name for broadcasting to all locations.
+// BroadcastLocationStream returns the relative reference matching all locations.
 func BroadcastLocationStream() string {
-	return StreamPrefixLocation + "*"
+	return streamDomainLocation + "*"
 }
 
 // EventEmitter publishes world events.
@@ -114,7 +116,7 @@ func emitWithRetry(ctx context.Context, emitter EventEmitter, stream, eventType,
 
 // EmitMoveEvent emits a move event for character or object movement.
 // For character moves, the event is emitted to both the destination location
-// stream and the character's own stream (character:<entityID>) so that the
+// stream and the character's own stream (character.<entityID>) so that the
 // character's event subscriber can detect the move for location-following.
 // Retries up to 3 times with exponential backoff (4 total attempts) before
 // returning EVENT_EMIT_FAILED.

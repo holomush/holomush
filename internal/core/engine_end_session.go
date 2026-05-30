@@ -59,7 +59,7 @@ func (e *Engine) EndSession(
 	}
 
 	event := NewEvent(
-		"character:"+char.ID.String(),
+		"character."+char.ID.String(),
 		EventTypeSessionEnded,
 		actor,
 		payload,

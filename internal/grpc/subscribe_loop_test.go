@@ -20,7 +20,6 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/session"
-	"github.com/holomush/holomush/internal/world"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -510,7 +509,7 @@ func TestApplyFilterCtrlRejectsLocationStreams(t *testing.T) {
 	bs := newFakeSessionStream()
 	filterSet := map[eventbus.Subject]struct{}{}
 
-	ctrl := sessionStreamUpdate{stream: world.StreamPrefixLocation + "01HYXYZ0C0000000000000000C", add: true}
+	ctrl := sessionStreamUpdate{stream: "location." + "01HYXYZ0C0000000000000000C", add: true}
 	err := s.applyFilterCtrl(context.Background(), info, bs, filterSet, ctrl)
 	require.NoError(t, err)
 	assert.Empty(t, filterSet, "location filters must be owned by locationFollower")
@@ -764,7 +763,7 @@ func TestRunSubscribeLoopAppliesFilterCtrl(t *testing.T) {
 	charID := core.NewULID().String()
 	ctrlCh <- sessionStreamUpdate{stream: "character:" + charID, add: true}
 	// Location stream: rejected path (logged warning).
-	ctrlCh <- sessionStreamUpdate{stream: world.StreamPrefixLocation + "01HYXYZ0C0000000000000000C", add: true}
+	ctrlCh <- sessionStreamUpdate{stream: "location." + "01HYXYZ0C0000000000000000C", add: true}
 
 	errCh := make(chan error, 1)
 	go func() {

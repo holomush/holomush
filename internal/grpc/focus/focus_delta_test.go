@@ -105,7 +105,7 @@ func TestCoordinatorDrivesPerConnectionDeltas(t *testing.T) {
 				_, err := coord.SetConnectionFocus(context.Background(), connID, nil, true)
 				return err
 			},
-			wantAdds:    []string{"location:" + loc},
+			wantAdds:    []string{"location." + loc},
 			wantRemoves: []string{"events.main.scene." + a + ".ic", "events.main.scene." + a + ".ooc"},
 		},
 		{
@@ -116,7 +116,7 @@ func TestCoordinatorDrivesPerConnectionDeltas(t *testing.T) {
 				return err
 			},
 			wantAdds:    []string{"events.main.scene." + a + ".ic", "events.main.scene." + a + ".ooc"},
-			wantRemoves: []string{"location:" + loc},
+			wantRemoves: []string{"location." + loc},
 		},
 		{
 			// holomush-fqv8z review finding: a connection already focused on
@@ -284,7 +284,7 @@ func TestAutoFocusOnJoinFansOutDeltasToAllConnections(t *testing.T) {
 		assert.ElementsMatch(t, []string{
 			"events.main.scene." + scene + ".ic", "events.main.scene." + scene + ".ooc",
 		}, adds, "each connection MUST get scene IC + OOC")
-		assert.ElementsMatch(t, []string{"location:" + loc}, removes,
+		assert.ElementsMatch(t, []string{"location." + loc}, removes,
 			"each connection MUST drop the location stream")
 	}
 }

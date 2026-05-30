@@ -1242,8 +1242,15 @@ func (s *CoreServer) dispatchDelivery(
 	// replies with a synthetic location_state — in that case the raw
 	// event is dropped (ack'd) rather than forwarded.
 	handled := false
+	// legacyStream is subjectxlate.ToLegacy output (colon-delimited, e.g.
+	// "character:01ABC") and stays colon-form until the ToLegacy shim at the
+	// top of this function is removed in holomush-rops.6 — at which point this
+	// prefix flips to "character." in lockstep (the round-3 "three-tentacle"
+	// dispatchDelivery edit). Keeping it colon here preserves location-following
+	// across the intermediate migration commits; a premature dot prefix would
+	// never match the colon legacyStream and silently kill handleMovePayload.
 	if string(event.Type) == string(core.EventTypeMove) &&
-		strings.HasPrefix(legacyStream, world.StreamPrefixCharacter) &&
+		strings.HasPrefix(legacyStream, "character:") &&
 		lf != nil {
 		handled = lf.handleMovePayload(ctx, core.EventType(event.Type), event.Payload, stream)
 	}
@@ -1291,7 +1298,7 @@ func (s *CoreServer) applyFilterCtrl(
 	filterSet map[eventbus.Subject]struct{},
 	ctrl sessionStreamUpdate,
 ) error {
-	if strings.HasPrefix(ctrl.stream, world.StreamPrefixLocation) {
+	if strings.HasPrefix(ctrl.stream, "location.") {
 		slog.WarnContext(ctx, "plugin attempted to modify location stream — rejected",
 			"session_id", info.ID, "stream", ctrl.stream)
 		return nil

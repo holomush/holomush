@@ -25,7 +25,7 @@ func TestEngineHandleConnectStoresArriveEventWithCharacterPayload(t *testing.T) 
 	locationID := core.NewULID()
 	char := core.CharacterRef{ID: charID, Name: "Alyssa", LocationID: locationID}
 
-	stream := "location:" + locationID.String()
+	stream := "location." + locationID.String()
 
 	err := engine.HandleConnect(ctx, char)
 	require.NoError(t, err)
@@ -54,7 +54,7 @@ func TestEngineHandleDisconnectStoresLeaveEventWithReasonPayload(t *testing.T) {
 	locationID := core.NewULID()
 	char := core.CharacterRef{ID: charID, Name: "Alyssa", LocationID: locationID}
 
-	stream := "location:" + locationID.String()
+	stream := "location." + locationID.String()
 
 	err := engine.HandleDisconnect(ctx, char, "quit")
 	require.NoError(t, err)
