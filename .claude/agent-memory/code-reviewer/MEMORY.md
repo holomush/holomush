@@ -8,6 +8,21 @@ Keep under 200 lines. Curate — don't hoard.
 
 ## Anti-patterns
 
+- **Equality-only parity test is a tautology trap.** A test asserting
+  `Expect(pathA).To(Equal(pathB))` for two runtime paths (e.g. binary↔Lua
+  `ListCommands`, INV-2) FALSE-PASSES if BOTH paths regress to the same wrong
+  value (empty/`nil` sets: `[] == []` holds). A genuine parity test MUST also
+  pin the EXPECTED set independently — `ConsistOf(...)` / `ContainElements(...)`
+  + `NotTo(BeEmpty())` — on at least one path, in the dimension under test.
+  Check BOTH the permit case (gated cmds PRESENT when allowed) and the deny case
+  (gated cmds ABSENT, no-cap cmd PRESENT) carry independent set assertions, not
+  just cross-path equality. Mitigants that bound (not close) the gap: the path
+  loud-fails on a misconfig (asserts `DeliverEvent` ok + `emits` len 1) rather
+  than returning empty; the sibling deny-case block pins the set. Encountered:
+  holomush-2zjio.10 — AllowAll `It` (`command_introspection_parity_test.go:249-262`)
+  asserts only lua==bin with no presence check; DenyAll `It` (`:314-326`) does
+  pin look-present/say-dig-absent per path. Net High non-blocking (2026-05-29).
+
 - **ast-grep (`sg` 0.42.3) CANNOT match package-qualified Go CALL patterns.**
   `sg -p 'slog.Info($$$ARGS)' -l go` (and `slog.InfoContext($CTX, $$$ARGS)`,
   `fmt.Println(...)`, any `pkg.Fn(...)`) parses at statement top-level as a
