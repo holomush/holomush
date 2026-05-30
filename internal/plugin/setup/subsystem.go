@@ -20,6 +20,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/command/commandquery"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/lifecycle"
@@ -128,6 +129,7 @@ type PluginSubsystem struct {
 	cfg               PluginSubsystemConfig
 	manager           *plugins.Manager
 	cmdRegistry       *command.Registry
+	commandQuerier    *commandquery.Querier
 	registry          *plugins.ServiceRegistry
 	worldConn         *plugins.InProcessConn
 	schemaProvisioner *plugins.SchemaProvisioner
@@ -390,6 +392,23 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	// Register plugin-provided commands.
 	s.manager.RegisterPluginCommands(s.cmdRegistry)
 
+	// Build the shared command querier now that both the registry and alias cache
+	// are fully populated. The alias cache may be nil when DatabaseConnStr is empty
+	// (no DB configured). commandquery.New accepts a nil AliasLister *interface*,
+	// but s.aliasCache is a typed *command.AliasCache: passing a typed-nil pointer
+	// into the interface parameter would yield a non-nil interface whose method set
+	// dereferences the nil receiver (panic in ListSystemAliases). Convert to the
+	// interface only when non-nil so the querier sees a genuine nil interface.
+	// This MUST happen after RegisterPluginCommands so plugin-declared commands are
+	// visible to the querier. hostFuncs was constructed at line ~193, before the
+	// registry existed — SetCommandQuerier late-binds the querier into the Lua host.
+	var aliasLister commandquery.AliasLister
+	if s.aliasCache != nil {
+		aliasLister = s.aliasCache
+	}
+	s.commandQuerier = commandquery.New(s.cmdRegistry, s.cfg.ABAC.Engine(), aliasLister)
+	hostFuncs.SetCommandQuerier(s.commandQuerier)
+
 	slog.InfoContext(ctx, "plugin subsystem started", "plugins_dir", pluginsDir)
 	return nil
 }
@@ -433,6 +452,16 @@ func (s *PluginSubsystem) CommandRegistry() *command.Registry {
 		panic("plugin/setup: CommandRegistry() called before Start()")
 	}
 	return s.cmdRegistry
+}
+
+// CommandQuerier returns the shared command querier. Panics if called before Start().
+// Consumed by the gRPC subsystem (holoGRPC.WithCommandQuerier) and the binary
+// PluginHostService (bead .8) to ensure a single command-visibility filter (INV-1).
+func (s *PluginSubsystem) CommandQuerier() *commandquery.Querier {
+	if s.commandQuerier == nil {
+		panic("plugin/setup: CommandQuerier() called before Start()")
+	}
+	return s.commandQuerier
 }
 
 // ServiceRegistry returns the ServiceRegistry. Panics if called before Start().

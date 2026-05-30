@@ -57,6 +57,11 @@ func TestPluginSubsystemAliasCachePanicsBeforeStart(t *testing.T) {
 	assert.Panics(t, func() { sub.AliasCache() })
 }
 
+func TestPluginSubsystemCommandQuerierPanicsBeforeStart(t *testing.T) {
+	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{})
+	assert.Panics(t, func() { sub.CommandQuerier() })
+}
+
 func TestPluginSubsystemImplementsSubsystem(_ *testing.T) {
 	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{})
 	var _ lifecycle.Subsystem = sub

@@ -415,6 +415,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		holoGRPC.WithBindingRepository(bindingRepo),
 		holoGRPC.WithStreamContributor(pluginManager),
 		holoGRPC.WithAccessEngine(policyEngine),
+		holoGRPC.WithCommandQuerier(s.cfg.Plugins.CommandQuerier()),
 		holoGRPC.WithSubscriber(subscriber),
 		holoGRPC.WithHistoryReader(historyReader),
 		holoGRPC.WithGameID(s.cfg.EventBus.GameID),

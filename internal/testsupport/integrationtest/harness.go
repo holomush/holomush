@@ -74,6 +74,7 @@ import (
 	"github.com/holomush/holomush/internal/auth"
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/command/commandquery"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
@@ -622,6 +623,16 @@ func (s *Server) PluginManager() *plugins.Manager {
 func (s *Server) CommandRegistry() *command.Registry {
 	s.requirePlugins("CommandRegistry")
 	return s.pluginSub.CommandRegistry()
+}
+
+// CommandQuerier returns the shared, ABAC-filtered command querier built by the
+// production PluginSubsystem.Start() path (subsystem.go) and late-bound into the
+// Lua host via SetCommandQuerier. Panics if WithInTreePlugins was not passed.
+// Used by the whole-system wiring regression to prove Start() yields a non-nil
+// querier (design spec INV-1: single command-visibility filter).
+func (s *Server) CommandQuerier() *commandquery.Querier {
+	s.requirePlugins("CommandQuerier")
+	return s.pluginSub.CommandQuerier()
 }
 
 // ServiceRegistry returns the plugin service registry. Panics if
