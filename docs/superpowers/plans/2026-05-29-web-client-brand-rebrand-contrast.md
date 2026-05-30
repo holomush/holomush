@@ -860,3 +860,5 @@ Run: `cd /Volumes/Code/github.com/holomush/.worktrees/web-brand-rebrand && jj co
 ## Out of scope (per spec)
 
 Game/sandbox warm-theme adoption; operator custom themes (holomush-nmr8); `terminalBlackBackground` semantics; non-theme component restructuring.
+
+<!-- adr-capture: sha256=63b1ae52b335c618; session=brainstorm-9ektq; ts=2026-05-29T00:00:00Z; adrs=holomush-lcr84,holomush-poxub -->

@@ -180,3 +180,5 @@ Mirrors `themeStore.test.ts` (pure vitest, no browser):
 ## Out of scope
 
 Game/sandbox warm-theme adoption; operator custom themes (holomush-nmr8); `terminalBlackBackground` semantics; any non-theme component restructuring.
+
+<!-- adr-capture: sha256=6970e6f9145cd747; session=brainstorm-9ektq; ts=2026-05-29T00:00:00Z; adrs=holomush-lcr84,holomush-poxub -->
