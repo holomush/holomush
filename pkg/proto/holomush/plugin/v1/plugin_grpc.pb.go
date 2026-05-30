@@ -326,8 +326,8 @@ const (
 // runs in the host process and binary plugins dial it to call back for event
 // emission, ABAC evaluation, audit decryption, focus mutation, and history
 // reads. Registered live at internal/plugin/goplugin/host_service.go
-// (RegisterPluginHostServiceServer, struct pluginHostServiceServer), so unlike
-// hostfunc.proto's HostFunctionsService this surface IS served in production.
+// (RegisterPluginHostServiceServer, struct pluginHostServiceServer) — this
+// surface IS served in production.
 //
 // NOTE: the registered server embeds UnimplementedPluginHostServiceServer and
 // implements only 12 of the 18 RPCs below. Log, KVGet, KVSet, KVDelete,
@@ -680,8 +680,8 @@ func (c *pluginHostServiceClient) GetCommandHelp(ctx context.Context, in *Plugin
 // runs in the host process and binary plugins dial it to call back for event
 // emission, ABAC evaluation, audit decryption, focus mutation, and history
 // reads. Registered live at internal/plugin/goplugin/host_service.go
-// (RegisterPluginHostServiceServer, struct pluginHostServiceServer), so unlike
-// hostfunc.proto's HostFunctionsService this surface IS served in production.
+// (RegisterPluginHostServiceServer, struct pluginHostServiceServer) — this
+// surface IS served in production.
 //
 // NOTE: the registered server embeds UnimplementedPluginHostServiceServer and
 // implements only 12 of the 18 RPCs below. Log, KVGet, KVSet, KVDelete,

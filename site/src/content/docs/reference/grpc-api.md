@@ -9,6 +9,7 @@ title: "gRPC API Reference"
 - [holomush/core/v1/core.proto](#holomush_core_v1_core-proto)
     - [AuthenticatePlayerRequest](#holomush-core-v1-AuthenticatePlayerRequest)
     - [AuthenticatePlayerResponse](#holomush-core-v1-AuthenticatePlayerResponse)
+    - [AvailableCommand](#holomush-core-v1-AvailableCommand)
     - [CharacterSummary](#holomush-core-v1-CharacterSummary)
     - [CheckPlayerSessionRequest](#holomush-core-v1-CheckPlayerSessionRequest)
     - [CheckPlayerSessionResponse](#holomush-core-v1-CheckPlayerSessionResponse)
@@ -28,6 +29,9 @@ title: "gRPC API Reference"
     - [GetCommandHistoryResponse](#holomush-core-v1-GetCommandHistoryResponse)
     - [HandleCommandRequest](#holomush-core-v1-HandleCommandRequest)
     - [HandleCommandResponse](#holomush-core-v1-HandleCommandResponse)
+    - [ListAvailableCommandsRequest](#holomush-core-v1-ListAvailableCommandsRequest)
+    - [ListAvailableCommandsResponse](#holomush-core-v1-ListAvailableCommandsResponse)
+    - [ListAvailableCommandsResponse.AliasesEntry](#holomush-core-v1-ListAvailableCommandsResponse-AliasesEntry)
     - [ListCharactersRequest](#holomush-core-v1-ListCharactersRequest)
     - [ListCharactersResponse](#holomush-core-v1-ListCharactersResponse)
     - [ListFocusPresenceRequest](#holomush-core-v1-ListFocusPresenceRequest)
@@ -173,10 +177,13 @@ title: "gRPC API Reference"
     - [PluginHostServiceAddSessionStreamResponse](#holomush-plugin-v1-PluginHostServiceAddSessionStreamResponse)
     - [PluginHostServiceAutoFocusOnJoinRequest](#holomush-plugin-v1-PluginHostServiceAutoFocusOnJoinRequest)
     - [PluginHostServiceAutoFocusOnJoinResponse](#holomush-plugin-v1-PluginHostServiceAutoFocusOnJoinResponse)
+    - [PluginHostServiceCommandInfo](#holomush-plugin-v1-PluginHostServiceCommandInfo)
     - [PluginHostServiceEmitEventRequest](#holomush-plugin-v1-PluginHostServiceEmitEventRequest)
     - [PluginHostServiceEmitEventResponse](#holomush-plugin-v1-PluginHostServiceEmitEventResponse)
     - [PluginHostServiceEvaluateRequest](#holomush-plugin-v1-PluginHostServiceEvaluateRequest)
     - [PluginHostServiceEvaluateResponse](#holomush-plugin-v1-PluginHostServiceEvaluateResponse)
+    - [PluginHostServiceGetCommandHelpRequest](#holomush-plugin-v1-PluginHostServiceGetCommandHelpRequest)
+    - [PluginHostServiceGetCommandHelpResponse](#holomush-plugin-v1-PluginHostServiceGetCommandHelpResponse)
     - [PluginHostServiceIsAnyConnFocusedRequest](#holomush-plugin-v1-PluginHostServiceIsAnyConnFocusedRequest)
     - [PluginHostServiceIsAnyConnFocusedResponse](#holomush-plugin-v1-PluginHostServiceIsAnyConnFocusedResponse)
     - [PluginHostServiceJoinFocusRequest](#holomush-plugin-v1-PluginHostServiceJoinFocusRequest)
@@ -191,6 +198,8 @@ title: "gRPC API Reference"
     - [PluginHostServiceLeaveFocusByTargetResponse](#holomush-plugin-v1-PluginHostServiceLeaveFocusByTargetResponse)
     - [PluginHostServiceLeaveFocusRequest](#holomush-plugin-v1-PluginHostServiceLeaveFocusRequest)
     - [PluginHostServiceLeaveFocusResponse](#holomush-plugin-v1-PluginHostServiceLeaveFocusResponse)
+    - [PluginHostServiceListCommandsRequest](#holomush-plugin-v1-PluginHostServiceListCommandsRequest)
+    - [PluginHostServiceListCommandsResponse](#holomush-plugin-v1-PluginHostServiceListCommandsResponse)
     - [PluginHostServiceLogRequest](#holomush-plugin-v1-PluginHostServiceLogRequest)
     - [PluginHostServiceLogResponse](#holomush-plugin-v1-PluginHostServiceLogResponse)
     - [PluginHostServicePresentFocusRequest](#holomush-plugin-v1-PluginHostServicePresentFocusRequest)
@@ -217,41 +226,6 @@ title: "gRPC API Reference"
   
     - [PluginHostService](#holomush-plugin-v1-PluginHostService)
     - [PluginService](#holomush-plugin-v1-PluginService)
-  
-- [holomush/plugin/v1/hostfunc.proto](#holomush_plugin_v1_hostfunc-proto)
-    - [AddSessionStreamRequest](#holomush-plugin-v1-AddSessionStreamRequest)
-    - [AddSessionStreamResponse](#holomush-plugin-v1-AddSessionStreamResponse)
-    - [CharacterInfo](#holomush-plugin-v1-CharacterInfo)
-    - [CommandHelpInfo](#holomush-plugin-v1-CommandHelpInfo)
-    - [CommandInfo](#holomush-plugin-v1-CommandInfo)
-    - [EmitEventRequest](#holomush-plugin-v1-EmitEventRequest)
-    - [EmitEventResponse](#holomush-plugin-v1-EmitEventResponse)
-    - [GetCommandHelpRequest](#holomush-plugin-v1-GetCommandHelpRequest)
-    - [GetCommandHelpResponse](#holomush-plugin-v1-GetCommandHelpResponse)
-    - [KVDeleteRequest](#holomush-plugin-v1-KVDeleteRequest)
-    - [KVDeleteResponse](#holomush-plugin-v1-KVDeleteResponse)
-    - [KVGetRequest](#holomush-plugin-v1-KVGetRequest)
-    - [KVGetResponse](#holomush-plugin-v1-KVGetResponse)
-    - [KVSetRequest](#holomush-plugin-v1-KVSetRequest)
-    - [KVSetResponse](#holomush-plugin-v1-KVSetResponse)
-    - [ListCommandsRequest](#holomush-plugin-v1-ListCommandsRequest)
-    - [ListCommandsResponse](#holomush-plugin-v1-ListCommandsResponse)
-    - [LocationInfo](#holomush-plugin-v1-LocationInfo)
-    - [LogRequest](#holomush-plugin-v1-LogRequest)
-    - [LogRequest.FieldsEntry](#holomush-plugin-v1-LogRequest-FieldsEntry)
-    - [LogResponse](#holomush-plugin-v1-LogResponse)
-    - [QueryCharacterRequest](#holomush-plugin-v1-QueryCharacterRequest)
-    - [QueryCharacterResponse](#holomush-plugin-v1-QueryCharacterResponse)
-    - [QueryLocationCharactersRequest](#holomush-plugin-v1-QueryLocationCharactersRequest)
-    - [QueryLocationCharactersResponse](#holomush-plugin-v1-QueryLocationCharactersResponse)
-    - [QueryLocationRequest](#holomush-plugin-v1-QueryLocationRequest)
-    - [QueryLocationResponse](#holomush-plugin-v1-QueryLocationResponse)
-    - [RemoveSessionStreamRequest](#holomush-plugin-v1-RemoveSessionStreamRequest)
-    - [RemoveSessionStreamResponse](#holomush-plugin-v1-RemoveSessionStreamResponse)
-  
-    - [LogLevel](#holomush-plugin-v1-LogLevel)
-  
-    - [HostFunctionsService](#holomush-plugin-v1-HostFunctionsService)
   
 - [holomush/scene/v1/scene.proto](#holomush_scene_v1_scene-proto)
     - [CastPublishSceneVoteRequest](#holomush-scene-v1-CastPublishSceneVoteRequest)
@@ -329,6 +303,7 @@ title: "gRPC API Reference"
     - [StreamEventsResponse](#holomush-web-v1-StreamEventsResponse)
     - [WebAuthenticatePlayerRequest](#holomush-web-v1-WebAuthenticatePlayerRequest)
     - [WebAuthenticatePlayerResponse](#holomush-web-v1-WebAuthenticatePlayerResponse)
+    - [WebAvailableCommand](#holomush-web-v1-WebAvailableCommand)
     - [WebCheckSessionRequest](#holomush-web-v1-WebCheckSessionRequest)
     - [WebCheckSessionResponse](#holomush-web-v1-WebCheckSessionResponse)
     - [WebConfirmPasswordResetRequest](#holomush-web-v1-WebConfirmPasswordResetRequest)
@@ -345,6 +320,9 @@ title: "gRPC API Reference"
     - [WebGetContentResponse](#holomush-web-v1-WebGetContentResponse)
     - [WebListCharactersRequest](#holomush-web-v1-WebListCharactersRequest)
     - [WebListCharactersResponse](#holomush-web-v1-WebListCharactersResponse)
+    - [WebListCommandsRequest](#holomush-web-v1-WebListCommandsRequest)
+    - [WebListCommandsResponse](#holomush-web-v1-WebListCommandsResponse)
+    - [WebListCommandsResponse.AliasesEntry](#holomush-web-v1-WebListCommandsResponse-AliasesEntry)
     - [WebListContentRequest](#holomush-web-v1-WebListContentRequest)
     - [WebListContentResponse](#holomush-web-v1-WebListContentResponse)
     - [WebListFocusPresenceRequest](#holomush-web-v1-WebListFocusPresenceRequest)
@@ -434,6 +412,24 @@ roster needed to drive phase-two character selection.
 | characters | [CharacterSummary](#holomush-core-v1-CharacterSummary) | repeated | characters is the player&#39;s roster for the character-select screen. |
 | default_character_id | [string](#string) |  | default_character_id is the player&#39;s preferred character to pre-select, if set. |
 | session_ttl_seconds | [int64](#int64) |  | session_ttl_seconds is the session lifetime in seconds. The web gateway uses it to set the cookie MaxAge so the cookie expires with the underlying session (preventing stale cookies outliving short guest sessions). |
+
+
+
+
+
+
+<a name="holomush-core-v1-AvailableCommand"></a>
+
+### AvailableCommand
+AvailableCommand is one command&#39;s metadata in a ListAvailableCommands result.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| name | [string](#string) |  | name is the canonical command name. |
+| help | [string](#string) |  | help is the one-line description. |
+| usage | [string](#string) |  | usage is the usage pattern. |
+| source | [string](#string) |  | source is &#34;core&#34; or the owning plugin name. |
 
 
 
@@ -695,7 +691,7 @@ the live Subscribe path and the QueryStreamHistory backfill path.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | id | [string](#string) |  | id is the event&#39;s ULID — its identity and dedup key, NOT its ordering key. |
-| stream | [string](#string) |  | stream is the subject the event belongs to (e.g. a character or location stream). |
+| stream | [string](#string) |  | stream is the fully-qualified JetStream subject the event belongs to (e.g. &#34;events.main.location.&lt;ULID&gt;&#34;). Producers and clients exchange domain-relative dot references (e.g. &#34;location.&lt;ULID&gt;&#34;); the server qualifies them on the way in, so delivered frames carry the qualified form. |
 | type | [string](#string) |  | type is the event type string (e.g. say, pose, command_response). |
 | timestamp | [google.protobuf.Timestamp](https://protobuf.dev/reference/protobuf/google.protobuf/#timestamp) |  | timestamp is the server-stamped event time. |
 | actor_type | [string](#string) |  | actor_type names the kind of actor that produced the event (character, plugin, etc.). |
@@ -780,6 +776,57 @@ the character&#39;s stream, not in this reply.
 | meta | [ResponseMeta](#holomush-core-v1-ResponseMeta) |  | meta echoes request correlation data back to the caller. |
 | success | [bool](#bool) |  | success is true when the command dispatched without a transport/ownership error. User-facing command errors are still reported via command_response events with success=true here. |
 | error | [string](#string) |  | error carries a transport/ownership failure message when success is false. |
+
+
+
+
+
+
+<a name="holomush-core-v1-ListAvailableCommandsRequest"></a>
+
+### ListAvailableCommandsRequest
+ListAvailableCommandsRequest asks for the session character&#39;s executable set.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| meta | [RequestMeta](#holomush-core-v1-RequestMeta) |  | meta carries request correlation data. |
+| player_session_token | [string](#string) |  | player_session_token proves the caller owns session_id; failures collapse to SESSION_NOT_FOUND. |
+| session_id | [string](#string) |  | session_id names the session whose character&#39;s command set is enumerated. |
+
+
+
+
+
+
+<a name="holomush-core-v1-ListAvailableCommandsResponse"></a>
+
+### ListAvailableCommandsResponse
+ListAvailableCommandsResponse returns the filtered set &#43; alias map.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| meta | [ResponseMeta](#holomush-core-v1-ResponseMeta) |  | meta echoes request correlation data. |
+| commands | [AvailableCommand](#holomush-core-v1-AvailableCommand) | repeated | commands is the ABAC-filtered set the session character may execute. |
+| aliases | [ListAvailableCommandsResponse.AliasesEntry](#holomush-core-v1-ListAvailableCommandsResponse-AliasesEntry) | repeated | aliases maps alias → canonical command name (system/manifest aliases for visible commands). |
+| incomplete | [bool](#bool) |  | incomplete is true when engine errors hid some commands. |
+
+
+
+
+
+
+<a name="holomush-core-v1-ListAvailableCommandsResponse-AliasesEntry"></a>
+
+### ListAvailableCommandsResponse.AliasesEntry
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#string) |  |  |
+| value | [string](#string) |  |  |
 
 
 
@@ -910,7 +957,7 @@ ListSessionStreamsResponse returns the session&#39;s subscribed stream names.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| streams | [string](#string) | repeated | streams lists the subscribed stream names (character / location / plugin streams), matching what Subscribe would deliver. |
+| streams | [string](#string) | repeated | streams lists the subscribed stream names as domain-relative dot references (e.g. &#34;character.&lt;ULID&gt;&#34;, &#34;location.&lt;ULID&gt;&#34;, plugin streams) — the form the client passes back to Subscribe/QueryStreamHistory unchanged, which the server qualifies. Delivered EventFrames carry the fully-qualified subject (see EventFrame.stream), not this relative form. |
 | meta | [ResponseMeta](#holomush-core-v1-ResponseMeta) |  | meta echoes request correlation data. |
 
 
@@ -993,7 +1040,7 @@ QueryStreamHistoryRequest reads a page of event history from one stream.
 | ----- | ---- | ----- | ----------- |
 | meta | [RequestMeta](#holomush-core-v1-RequestMeta) |  | meta carries request correlation data. |
 | session_id | [string](#string) |  | session_id names the requesting session; its identity drives authorization. |
-| stream | [string](#string) |  | stream is the subject whose history is read. |
+| stream | [string](#string) |  | stream is the domain-relative dot reference whose history is read (e.g. &#34;location.&lt;ULID&gt;&#34;, &#34;character.&lt;ULID&gt;&#34;); the server qualifies it to the fully-qualified JetStream subject before authorization and the bus fetch. |
 | count | [int32](#int32) |  | count is the requested page size. 0 selects the server default (150); the server caps it at 500; a negative value is rejected with INVALID_ARGUMENT. |
 | not_before_ms | [int64](#int64) |  | not_before_ms is an epoch-ms time floor; 0 means no lower bound. |
 | cursor | [bytes](#bytes) |  | cursor is the opaque pagination cursor from a previous response. Events older than the cursor position are returned; empty starts from the latest. |
@@ -1372,6 +1419,7 @@ state and business logic lives behind these RPCs.
 | QueryStreamHistory | [QueryStreamHistoryRequest](#holomush-core-v1-QueryStreamHistoryRequest) | [QueryStreamHistoryResponse](#holomush-core-v1-QueryStreamHistoryResponse) | QueryStreamHistory reads paginated event history from a single stream. It is a pure read that does NOT mutate session cursors (invariant I-13). Two-layer authorization applies: private streams (character / scene) use a hard membership gate (I-17, no ABAC, no admin override); public streams (location, global) are evaluated by the ABAC engine. History transparently spans the recent JetStream tier and the older PostgreSQL audit tier. |
 | ListSessionStreams | [ListSessionStreamsRequest](#holomush-core-v1-ListSessionStreamsRequest) | [ListSessionStreamsResponse](#holomush-core-v1-ListSessionStreamsResponse) | ListSessionStreams returns the stream names the session is currently subscribed to, derived from FocusCoordinator.RestoreFocus (with the same ambient-stream fallback Subscribe uses). Web clients use it to enumerate streams for backfill on reload. Pure read; ownership-validated and enumeration-safe (failures collapse to SESSION_NOT_FOUND), closing the IDOR where one player could enumerate another&#39;s subscribed streams. |
 | ListFocusPresence | [ListFocusPresenceRequest](#holomush-core-v1-ListFocusPresenceRequest) | [ListFocusPresenceResponse](#holomush-core-v1-ListFocusPresenceResponse) | ListFocusPresence returns the current-state presence snapshot for the session&#39;s focus context. It reads session.Store.ListActiveByLocation directly (NOT event history — see .claude/rules/event-interfaces.md) and is gated by the ABAC list_presence action on the location resource. Scene-focus contexts currently return UNIMPLEMENTED. Pure read — no session mutation. |
+| ListAvailableCommands | [ListAvailableCommandsRequest](#holomush-core-v1-ListAvailableCommandsRequest) | [ListAvailableCommandsResponse](#holomush-core-v1-ListAvailableCommandsResponse) | ListAvailableCommands returns the commands the session&#39;s own character may execute, with the system/manifest alias map for those commands. SERVED: CoreServer.ListAvailableCommands, delegating to commandquery.Querier.Available. Self-scoped: the subject is the session&#39;s character (ownership-validated), never an arbitrary character_id. Pure read. |
 
  
 
@@ -2874,6 +2922,7 @@ directly — the host routes it through the PluginEventEmitter.Emit fence.
 | stream | [string](#string) |  | Target stream the event is published to (legacy &#34;prefix:id&#34; form). |
 | type | [string](#string) |  | Event-type discriminator for the emitted event; gated by the manifest&#39;s emits / crypto.emits declarations at the fence. |
 | payload | [string](#string) |  | JSON-encoded payload (max 64 KiB); validated as well-formed JSON at the fence before publish. |
+| sensitive | [bool](#bool) |  | Per-event sensitivity claim for a return-value emit, validated against the plugin manifest by event_emitter.go::Emit via EnforceSensitivity (internal/plugin/sensitivity_fence.go) — INV-6: a sensitivity=never manifest rejects true; INV-7: a sensitivity=always manifest rejects false. Carries the same semantics as the active EmitEvent RPC&#39;s sensitive field so a binary plugin&#39;s return-value emit cannot silently downgrade to plaintext where the Lua runtime would encrypt (holomush-av954). Default false for backward compatibility. |
 
 
 
@@ -3097,6 +3146,24 @@ outcomes.
 
 
 
+<a name="holomush-plugin-v1-PluginHostServiceCommandInfo"></a>
+
+### PluginHostServiceCommandInfo
+PluginHostServiceCommandInfo is per-command metadata returned by ListCommands.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| name | [string](#string) |  | name is the canonical command name (e.g. &#34;scene&#34;). |
+| help | [string](#string) |  | help is the one-line description from the command registry. |
+| usage | [string](#string) |  | usage is the usage pattern (e.g. &#34;scene &lt;subcommand&gt;&#34;). |
+| source | [string](#string) |  | source is &#34;core&#34; or the owning plugin name. |
+
+
+
+
+
+
 <a name="holomush-plugin-v1-PluginHostServiceEmitEventRequest"></a>
 
 ### PluginHostServiceEmitEventRequest
@@ -3157,6 +3224,42 @@ PluginHostServiceEvaluateResponse returns the ABAC engine&#39;s decision.
 | allowed | [bool](#bool) |  | Whether the action is permitted on the resource for the recovered subject. |
 | reason | [string](#string) |  | Human-readable rationale for the decision (e.g. the deny reason). |
 | matched_policy | [string](#string) |  | Identifier of the policy that produced the decision, when one matched. |
+
+
+
+
+
+
+<a name="holomush-plugin-v1-PluginHostServiceGetCommandHelpRequest"></a>
+
+### PluginHostServiceGetCommandHelpRequest
+PluginHostServiceGetCommandHelpRequest names a command and the character whose
+access is checked before returning detail.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| name | [string](#string) |  | name is the canonical command name to describe. |
+| character_id | [string](#string) |  | character_id is the ULID of the character whose access is checked. |
+
+
+
+
+
+
+<a name="holomush-plugin-v1-PluginHostServiceGetCommandHelpResponse"></a>
+
+### PluginHostServiceGetCommandHelpResponse
+PluginHostServiceGetCommandHelpResponse returns full help detail.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| name | [string](#string) |  | name is the canonical command name. |
+| help | [string](#string) |  | help is the one-line description. |
+| usage | [string](#string) |  | usage is the usage pattern. |
+| help_text | [string](#string) |  | help_text is the detailed markdown help body. |
+| source | [string](#string) |  | source is &#34;core&#34; or the owning plugin name. |
 
 
 
@@ -3369,6 +3472,38 @@ remove a membership for (idempotent on non-member).
 
 ### PluginHostServiceLeaveFocusResponse
 PluginHostServiceLeaveFocusResponse is the empty ack for LeaveFocus.
+
+
+
+
+
+
+<a name="holomush-plugin-v1-PluginHostServiceListCommandsRequest"></a>
+
+### PluginHostServiceListCommandsRequest
+PluginHostServiceListCommandsRequest names the character whose executable
+command set to enumerate.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the ULID of the character whose capabilities filter the list. |
+
+
+
+
+
+
+<a name="holomush-plugin-v1-PluginHostServiceListCommandsResponse"></a>
+
+### PluginHostServiceListCommandsResponse
+PluginHostServiceListCommandsResponse returns the filtered command set.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| commands | [PluginHostServiceCommandInfo](#holomush-plugin-v1-PluginHostServiceCommandInfo) | repeated | commands is the ABAC-filtered set the character may execute. |
+| incomplete | [bool](#bool) |  | incomplete is true when engine errors hid some commands from the result. |
 
 
 
@@ -3728,8 +3863,8 @@ PluginHostService is the host-IMPLEMENTED half of the contract: the server
 runs in the host process and binary plugins dial it to call back for event
 emission, ABAC evaluation, audit decryption, focus mutation, and history
 reads. Registered live at internal/plugin/goplugin/host_service.go
-(RegisterPluginHostServiceServer, struct pluginHostServiceServer), so unlike
-hostfunc.proto&#39;s HostFunctionsService this surface IS served in production.
+(RegisterPluginHostServiceServer, struct pluginHostServiceServer) — this
+surface IS served in production.
 
 NOTE: the registered server embeds UnimplementedPluginHostServiceServer and
 implements only 12 of the 18 RPCs below. Log, KVGet, KVSet, KVDelete,
@@ -3758,6 +3893,8 @@ reality, not aspirational behavior.
 | AutoFocusOnJoin | [PluginHostServiceAutoFocusOnJoinRequest](#holomush-plugin-v1-PluginHostServiceAutoFocusOnJoinRequest) | [PluginHostServiceAutoFocusOnJoinResponse](#holomush-plugin-v1-PluginHostServiceAutoFocusOnJoinResponse) | AutoFocusOnJoin is the Phase-5 fan-out that focuses all of a character&#39;s terminal/telnet connections on a scene at once. SERVED: pluginHostServiceServer.AutoFocusOnJoin. Connections already explicitly focused elsewhere are skipped (D8). The caller MUST have completed JoinFocus first, since the substrate requires the membership to exist. |
 | IsAnyConnFocused | [PluginHostServiceIsAnyConnFocusedRequest](#holomush-plugin-v1-PluginHostServiceIsAnyConnFocusedRequest) | [PluginHostServiceIsAnyConnFocusedResponse](#holomush-plugin-v1-PluginHostServiceIsAnyConnFocusedResponse) | IsAnyConnFocused is the Phase-5 notification-emission helper: it reports whether any of the character&#39;s connections currently focuses the given scene, so callers can decide whether to emit a focus-related notification. SERVED: pluginHostServiceServer.IsAnyConnFocused. |
 | Evaluate | [PluginHostServiceEvaluateRequest](#holomush-plugin-v1-PluginHostServiceEvaluateRequest) | [PluginHostServiceEvaluateResponse](#holomush-plugin-v1-PluginHostServiceEvaluateResponse) | Evaluate runs the host ABAC engine for one action against one resource instance owned by the calling plugin. SERVED: pluginHostServiceServer.Evaluate. The subject is derived host-side from the dispatch token exactly as EmitEvent does (token→actor recovery) — there is no subject field on the wire (spec §2, INV-1). Fails closed on nil engine, missing/rejected token, empty actor subject, or a resource type the plugin does not own. |
+| ListCommands | [PluginHostServiceListCommandsRequest](#holomush-plugin-v1-PluginHostServiceListCommandsRequest) | [PluginHostServiceListCommandsResponse](#holomush-plugin-v1-PluginHostServiceListCommandsResponse) | ListCommands enumerates the commands the named character may execute, ABAC-filtered by the host. SERVED: pluginHostServiceServer.ListCommands, delegating to commandquery.Querier.Available. The subject is the request&#39;s character_id (parity with the Lua holomush.list_commands(character_id) host function — not the dispatch-token actor, since this is read-only metadata, not an actor-gated mutation). incomplete is true when engine errors hid some commands. |
+| GetCommandHelp | [PluginHostServiceGetCommandHelpRequest](#holomush-plugin-v1-PluginHostServiceGetCommandHelpRequest) | [PluginHostServiceGetCommandHelpResponse](#holomush-plugin-v1-PluginHostServiceGetCommandHelpResponse) | GetCommandHelp returns full help detail for one command after an access check for character_id. SERVED: pluginHostServiceServer.GetCommandHelp, delegating to commandquery.Querier.Help. Mirrors the Lua holomush.get_command_help(name, character_id) host function. |
 
 
 <a name="holomush-plugin-v1-PluginService"></a>
@@ -3775,557 +3912,6 @@ below, which the host implements and plugins call back into.
 | HandleEvent | [HandleEventRequest](#holomush-plugin-v1-HandleEventRequest) | [HandleEventResponse](#holomush-plugin-v1-HandleEventResponse) | HandleEvent delivers one subscribed event to the plugin and collects the events the plugin wants to emit in response. Bridged by pluginServerAdapter.HandleEvent, which converts the proto Event to the SDK Event type, invokes the author&#39;s handler, and converts returned EmitEvents back to the wire. Response emits flow through the host emit fence, not straight to the bus. |
 | HandleCommand | [HandleCommandRequest](#holomush-plugin-v1-HandleCommandRequest) | [HandleCommandResponse](#holomush-plugin-v1-HandleCommandResponse) | HandleCommand delivers a parsed player command to the plugin and returns the command result (output text, status, response emits, and audit hints). Bridged by pluginServerAdapter.HandleCommand; if the plugin registered no command handler the adapter returns an empty response rather than erroring. |
 | QuerySessionStreams | [QuerySessionStreamsRequest](#holomush-plugin-v1-QuerySessionStreamsRequest) | [QuerySessionStreamsResponse](#holomush-plugin-v1-QuerySessionStreamsResponse) | QuerySessionStreams asks the plugin which stream names it wants subscribed for a session being established, before LISTEN/subscription setup. Called exactly once at session establishment, and only for plugins that declare session_streams: true in their manifest. A plugin-reported error degrades gracefully (the host logs and skips that plugin&#39;s contribution). |
-
- 
-
-
-
-<a name="holomush_plugin_v1_hostfunc-proto"></a>
-<p align="right"><a href="#top">Top</a></p>
-
-## holomush/plugin/v1/hostfunc.proto
-api/proto/holomush/plugin/v1/hostfunc.proto
-
-
-<a name="holomush-plugin-v1-AddSessionStreamRequest"></a>
-
-### AddSessionStreamRequest
-AddSessionStreamRequest names the live session and the stream to subscribe it
-to.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| session_id | [string](#string) |  | session_id is the active session to modify. Required (min length 1); an unknown session fails the RPC with SESSION_NOT_FOUND. |
-| stream | [string](#string) |  | stream is the stream to subscribe the session to, in &#34;prefix:id&#34; form. Required (min length 1). |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-AddSessionStreamResponse"></a>
-
-### AddSessionStreamResponse
-AddSessionStreamResponse reports the outcome of a subscribe attempt.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| success | [bool](#bool) |  | success is true when the session was subscribed to the stream. |
-| error | [string](#string) |  | error holds the failure reason when success is false; empty on success. |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-CharacterInfo"></a>
-
-### CharacterInfo
-CharacterInfo is the plugin-facing projection of a world character, limited
-to the identity fields exposed across the host-function boundary.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| id | [string](#string) |  | id is the character&#39;s ULID. Required (min length 1). |
-| name | [string](#string) |  | name is the character&#39;s display name. Required (min length 1). |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-CommandHelpInfo"></a>
-
-### CommandHelpInfo
-CommandHelpInfo is the detailed help record for one command, including the
-long-form help body and the capabilities a character needs to run it.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| name | [string](#string) |  | name is the command&#39;s invocation name. Required (min length 1). |
-| help | [string](#string) |  | help is the one-line description, capped at 8192 bytes. |
-| usage | [string](#string) |  | usage is the argument pattern, capped at 8192 bytes. |
-| help_text | [string](#string) |  | help_text is the long-form markdown help body, capped at 65536 bytes. |
-| capabilities | [string](#string) | repeated | capabilities lists the capability strings the command declares; a character must satisfy all of them (plus the execute check) to run it. |
-| source | [string](#string) |  | source identifies the registering plugin name, or &#34;core&#34; for built-in commands. Required (min length 1). |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-CommandInfo"></a>
-
-### CommandInfo
-CommandInfo is the listing-level summary of one command — enough to render a
-command index without fetching full help.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| name | [string](#string) |  | name is the command&#39;s invocation name. Required (min length 1). |
-| help | [string](#string) |  | help is the one-line description, capped at 8192 bytes. |
-| usage | [string](#string) |  | usage is the argument pattern (for example, &#34;say &lt;message&gt;&#34;), capped at 8192 bytes. |
-| source | [string](#string) |  | source identifies the registering plugin name, or &#34;core&#34; for built-in commands. Required (min length 1). |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-EmitEventRequest"></a>
-
-### EmitEventRequest
-EmitEventRequest carries the single event a plugin asks the host to publish.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| event | [EmitEvent](#holomush-plugin-v1-EmitEvent) |  | event is the event the plugin wants published; its fields (stream/subject, type, payload, sensitivity) are validated against the plugin&#39;s manifest gates by the host before publication. See the EmitEvent message in plugin.proto for the field contract. |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-EmitEventResponse"></a>
-
-### EmitEventResponse
-EmitEventResponse reports the outcome of a publish attempt. The host uses
-this in-band success/error shape rather than an RPC status code so a plugin
-can distinguish a refused emit (e.g. a manifest-gate denial) from a
-transport failure.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| success | [bool](#bool) |  | success is true when the event was accepted and published. |
-| error | [string](#string) |  | error holds a human-readable reason when success is false (for example, a manifest-gate denial); empty when success is true. |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-GetCommandHelpRequest"></a>
-
-### GetCommandHelpRequest
-GetCommandHelpRequest names the command whose full help to fetch.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| command_name | [string](#string) |  | command_name is the command to fetch detailed help for. Required (min length 1); an unknown name yields a not-found outcome on the response. |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-GetCommandHelpResponse"></a>
-
-### GetCommandHelpResponse
-GetCommandHelpResponse returns the detailed help for one command or an error
-reason.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| command | [CommandHelpInfo](#holomush-plugin-v1-CommandHelpInfo) |  | command holds the full command detail; unset when the command was not found or access was denied. |
-| error | [string](#string) |  | error holds the failure reason (not-found, access-denied, or engine error) when command is unset; empty on success. |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-KVDeleteRequest"></a>
-
-### KVDeleteRequest
-KVDeleteRequest names the key to remove from the plugin&#39;s private namespace.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| key | [string](#string) |  | key is the key to remove within the calling plugin&#39;s namespace. Required (min length 1). |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-KVDeleteResponse"></a>
-
-### KVDeleteResponse
-KVDeleteResponse reports the outcome of a delete attempt.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| deleted | [bool](#bool) |  | deleted is true when the delete completed; the host treats removing an absent key as success rather than an error. |
-| error | [string](#string) |  | error holds the failure reason (such as an ABAC denial or store error) when the delete failed; empty on success. |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-KVGetRequest"></a>
-
-### KVGetRequest
-KVGetRequest names the key to read from the plugin&#39;s private namespace.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| key | [string](#string) |  | key is the lookup key within the calling plugin&#39;s namespace. Required (min length 1). |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-KVGetResponse"></a>
-
-### KVGetResponse
-KVGetResponse returns the stored value and a presence witness. found
-disambiguates an absent key from a stored empty value, since both leave value
-empty.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| value | [bytes](#bytes) |  | value is the stored bytes; empty when the key is absent (check found to disambiguate) or when an error occurred. |
-| found | [bool](#bool) |  | found is true when the key existed in the namespace. When false with an empty error, the key was simply absent. |
-| error | [string](#string) |  | error holds the failure reason (such as an ABAC denial or store error) when the read failed; empty on success. |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-KVSetRequest"></a>
-
-### KVSetRequest
-KVSetRequest carries the key and value to store in the plugin&#39;s private
-namespace.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| key | [string](#string) |  | key is the storage key within the calling plugin&#39;s namespace. Required (min length 1). |
-| value | [bytes](#bytes) |  | value is the opaque bytes to store; the host does not interpret it. |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-KVSetResponse"></a>
-
-### KVSetResponse
-KVSetResponse reports the outcome of a store attempt.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| success | [bool](#bool) |  | success is true when the value was written. |
-| error | [string](#string) |  | error holds the failure reason (such as an ABAC denial or store error) when success is false; empty on success. |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-ListCommandsRequest"></a>
-
-### ListCommandsRequest
-ListCommandsRequest names the character whose capability set determines which
-commands are visible.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| character_id | [string](#string) |  | character_id is the ULID of the character whose capabilities filter the returned command list. Required (min length 1); commands the character cannot execute are omitted. |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-ListCommandsResponse"></a>
-
-### ListCommandsResponse
-ListCommandsResponse returns the commands the requesting character may see.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| commands | [CommandInfo](#holomush-plugin-v1-CommandInfo) | repeated | commands is the capability-filtered list of available commands. |
-| error | [string](#string) |  | error holds the failure reason when the query failed (for example, the access engine being unavailable); empty on success. |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-LocationInfo"></a>
-
-### LocationInfo
-LocationInfo is the plugin-facing projection of a world location: only the
-identity and display fields a plugin needs, not the full internal model.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| id | [string](#string) |  | id is the location&#39;s ULID. Required (min length 1). |
-| name | [string](#string) |  | name is the location&#39;s display title. Required (min length 1). |
-| description | [string](#string) |  | description is the location&#39;s prose body, capped at 8192 bytes. |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-LogRequest"></a>
-
-### LogRequest
-LogRequest is a single structured log line a plugin asks the host to emit.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| level | [LogLevel](#holomush-plugin-v1-LogLevel) |  | level selects the host slog severity to route to. An unspecified or out-of-range value is rejected by the logging bridge as invalid. |
-| message | [string](#string) |  | message is the log line body, capped at 8192 bytes. It is plugin-supplied and therefore dynamic by design. |
-| fields | [LogRequest.FieldsEntry](#holomush-plugin-v1-LogRequest-FieldsEntry) | repeated | fields are optional structured key/value attributes attached to the log line. |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-LogRequest-FieldsEntry"></a>
-
-### LogRequest.FieldsEntry
-
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| key | [string](#string) |  |  |
-| value | [string](#string) |  |  |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-LogResponse"></a>
-
-### LogResponse
-LogResponse is intentionally empty: logging is fire-and-forget, so the host
-returns no acknowledgement payload.
-
-
-
-
-
-
-<a name="holomush-plugin-v1-QueryCharacterRequest"></a>
-
-### QueryCharacterRequest
-QueryCharacterRequest names the character to snapshot.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| character_id | [string](#string) |  | character_id is the ULID of the character to read. Required (min length 1); an unparseable or unknown id yields a not-found outcome on the response. |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-QueryCharacterResponse"></a>
-
-### QueryCharacterResponse
-QueryCharacterResponse returns the requested character or an error reason.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| character | [CharacterInfo](#holomush-plugin-v1-CharacterInfo) |  | character holds the resolved character detail; unset when the character was not found or the query failed. |
-| error | [string](#string) |  | error holds the failure reason (including not-found) when character is unset; empty on success. |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-QueryLocationCharactersRequest"></a>
-
-### QueryLocationCharactersRequest
-QueryLocationCharactersRequest names the location whose occupant roster to
-fetch.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| location_id | [string](#string) |  | location_id is the ULID of the location to enumerate. Required (min length 1). |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-QueryLocationCharactersResponse"></a>
-
-### QueryLocationCharactersResponse
-QueryLocationCharactersResponse returns the location&#39;s character roster or an
-error reason.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| characters | [CharacterInfo](#holomush-plugin-v1-CharacterInfo) | repeated | characters is the lightweight roster (id &#43; name per entry) of characters in the location; empty when the location holds none. Use QueryCharacter per id for full detail. |
-| error | [string](#string) |  | error holds the failure reason (including not-found) when the query failed; empty on success. |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-QueryLocationRequest"></a>
-
-### QueryLocationRequest
-QueryLocationRequest names the location to snapshot.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| location_id | [string](#string) |  | location_id is the ULID of the location to read. Required (min length 1); an unparseable or unknown id yields a not-found outcome on the response. |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-QueryLocationResponse"></a>
-
-### QueryLocationResponse
-QueryLocationResponse returns the requested location or an error reason.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| location | [LocationInfo](#holomush-plugin-v1-LocationInfo) |  | location holds the resolved location detail; unset when the location was not found or the query failed. |
-| error | [string](#string) |  | error holds the failure reason (including not-found) when location is unset; empty on success. |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-RemoveSessionStreamRequest"></a>
-
-### RemoveSessionStreamRequest
-RemoveSessionStreamRequest names the live session and the stream to
-unsubscribe it from.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| session_id | [string](#string) |  | session_id is the active session to modify. Required (min length 1). |
-| stream | [string](#string) |  | stream is the stream to unsubscribe the session from. Required (min length 1); unsubscribing a stream the session does not hold still succeeds. |
-
-
-
-
-
-
-<a name="holomush-plugin-v1-RemoveSessionStreamResponse"></a>
-
-### RemoveSessionStreamResponse
-RemoveSessionStreamResponse reports the outcome of an unsubscribe attempt.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| success | [bool](#bool) |  | success is true when the session no longer holds the stream; because the operation is idempotent this is true even if the stream was not subscribed. |
-| error | [string](#string) |  | error holds the failure reason when success is false; empty on success. |
-
-
-
-
-
- 
-
-
-<a name="holomush-plugin-v1-LogLevel"></a>
-
-### LogLevel
-LogLevel selects which host slog severity a LogRequest is routed to. The
-host maps each value to the corresponding slog method; an out-of-range or
-unspecified value is treated as an invalid level by the logging bridge.
-
-| Name | Number | Description |
-| ---- | ------ | ----------- |
-| LOG_LEVEL_UNSPECIFIED | 0 | LOG_LEVEL_UNSPECIFIED is the proto3 zero value. It carries no severity and is not a valid routing target — callers MUST set a concrete level. |
-| LOG_LEVEL_DEBUG | 1 | LOG_LEVEL_DEBUG routes to slog Debug — verbose, development-time detail that is normally filtered out in production. |
-| LOG_LEVEL_INFO | 2 | LOG_LEVEL_INFO routes to slog Info — routine operational milestones. |
-| LOG_LEVEL_WARN | 3 | LOG_LEVEL_WARN routes to slog Warn — recoverable anomalies worth noting. |
-| LOG_LEVEL_ERROR | 4 | LOG_LEVEL_ERROR routes to slog Error — failures the plugin wants surfaced for operator attention. |
-
-
- 
-
- 
-
-
-<a name="holomush-plugin-v1-HostFunctionsService"></a>
-
-### HostFunctionsService
-HostFunctionsService declares the host-capability contract plugins call into:
-world reads, private key-value storage, command introspection, logging, event
-emission, and session-stream control. This gRPC service has no standalone
-server today — nothing registers a HostFunctionsServiceServer in the host.
-The capabilities are instead delivered through the in-VM Lua host-function
-bridge (internal/plugin/hostfunc — the holomush.* globals such as
-holomush.emit, holomush.kv_get, holomush.query_location). Binary plugins use
-PluginHostService (plugin.proto), but of this capability set they currently
-reach only EmitEvent (served): the overlapping host-functions Log,
-KVGet/KVSet/KVDelete, AddSessionStream, and RemoveSessionStream are declared
-on PluginHostService but unserved today (codes.Unimplemented, holomush-l6std),
-and the world-query RPCs (QueryLocation, QueryCharacter,
-QueryLocationCharacters) and command RPCs (ListCommands, GetCommandHelp) are
-not on PluginHostService at all. Those are realized only through the Lua
-bridge today. Where a capability is exposed, host-side enforcement is shared:
-world reads/writes are ABAC-gated at the
-world service layer, key-value operations are ABAC-gated at the host-function
-layer (checkKVAccess in internal/plugin/hostfunc/functions.go), command
-visibility is filtered by the AccessPolicyEngine, and emits pass the manifest
-gates in PluginEventEmitter.Emit (internal/plugin/event_emitter.go). The
-plugin-runtime-symmetry invariant requires any capability exposed to both
-runtimes to behave identically.
-
-| Method Name | Request Type | Response Type | Description |
-| ----------- | ------------ | ------------- | ------------|
-| EmitEvent | [EmitEventRequest](#holomush-plugin-v1-EmitEventRequest) | [EmitEventResponse](#holomush-plugin-v1-EmitEventResponse) | EmitEvent publishes one event onto a stream on the calling plugin&#39;s behalf. The host stamps the actor and routes through PluginEventEmitter.Emit, which enforces the plugin&#39;s manifest gates: the target domain must appear in the manifest emits list, the actor kind must be in actor_kinds_claimable, and a sensitive payload requires the event type to be declared in crypto.emits. The plugin never supplies a trusted actor identity at this boundary — the host derives it. Fire this for plugin-originated game actions rather than mutating world state directly. |
-| QueryLocation | [QueryLocationRequest](#holomush-plugin-v1-QueryLocationRequest) | [QueryLocationResponse](#holomush-plugin-v1-QueryLocationResponse) | QueryLocation returns a snapshot of one location&#39;s identity fields. The host resolves it through the world service (GetLocation), which applies ABAC for the plugin subject; a missing location maps to a not-found outcome surfaced on the response error field, not an RPC error. Read-only. |
-| QueryCharacter | [QueryCharacterRequest](#holomush-plugin-v1-QueryCharacterRequest) | [QueryCharacterResponse](#holomush-plugin-v1-QueryCharacterResponse) | QueryCharacter returns a snapshot of one character&#39;s identity fields, resolved through the world service (GetCharacter) under the plugin subject&#39;s ABAC policy. A missing character is reported via the response error field. Read-only. |
-| QueryLocationCharacters | [QueryLocationCharactersRequest](#holomush-plugin-v1-QueryLocationCharactersRequest) | [QueryLocationCharactersResponse](#holomush-plugin-v1-QueryLocationCharactersResponse) | QueryLocationCharacters returns the lightweight roster (id &#43; name only) of characters currently in a location, via the world service (GetCharactersByLocation) under the plugin subject&#39;s ABAC policy. Use QueryCharacter per id to fetch full character detail. Read-only. |
-| KVGet | [KVGetRequest](#holomush-plugin-v1-KVGetRequest) | [KVGetResponse](#holomush-plugin-v1-KVGetResponse) | KVGet reads one value from the calling plugin&#39;s private namespaced key-value store. The namespace is the plugin name, so plugins cannot read each other&#39;s keys. Gated by an ABAC &#34;read&#34; check on the plugin&#39;s KV resource (checkKVAccess) before the store is touched; a denied check or a store error is surfaced on the response, and an absent key returns found=false with no error. |
-| KVSet | [KVSetRequest](#holomush-plugin-v1-KVSetRequest) | [KVSetResponse](#holomush-plugin-v1-KVSetResponse) | KVSet writes one value into the calling plugin&#39;s private namespaced key-value store (namespace = plugin name). Gated by an ABAC &#34;write&#34; check on the plugin&#39;s KV resource before the store is touched. Overwrites any existing value at the key. |
-| KVDelete | [KVDeleteRequest](#holomush-plugin-v1-KVDeleteRequest) | [KVDeleteResponse](#holomush-plugin-v1-KVDeleteResponse) | KVDelete removes one key from the calling plugin&#39;s private namespaced key-value store (namespace = plugin name). Gated by an ABAC &#34;delete&#34; check on the plugin&#39;s KV resource before the store is touched. |
-| Log | [LogRequest](#holomush-plugin-v1-LogRequest) | [LogResponse](#holomush-plugin-v1-LogResponse) | Log emits a structured log line through the host logger, tagged with the calling plugin&#39;s name. The message and level are plugin-supplied; the host routes to the matching slog level (debug/info/warn/error) and treats the call as fire-and-forget — there is no acknowledgement payload. This is the sanctioned way for a plugin to reach the host&#39;s observability pipeline rather than writing to stdout/stderr of its subprocess. |
-| ListCommands | [ListCommandsRequest](#holomush-plugin-v1-ListCommandsRequest) | [ListCommandsResponse](#holomush-plugin-v1-ListCommandsResponse) | ListCommands returns the commands visible to one character, filtered by that character&#39;s capabilities through the AccessPolicyEngine. Commands with no declared capabilities are always included; capability-gated commands require the character to pass both the execute check and every declared capability (AND logic). If engine errors hide some commands the host still returns the commands it could evaluate. |
-| GetCommandHelp | [GetCommandHelpRequest](#holomush-plugin-v1-GetCommandHelpRequest) | [GetCommandHelpResponse](#holomush-plugin-v1-GetCommandHelpResponse) | GetCommandHelp returns the full help detail for a single named command. For a capability-gated command the host fail-closed-evaluates the character&#39;s access through the AccessPolicyEngine before returning detail; commands without capabilities are always accessible. A missing command or a denied/failed access check is surfaced on the response error field. |
-| AddSessionStream | [AddSessionStreamRequest](#holomush-plugin-v1-AddSessionStreamRequest) | [AddSessionStreamResponse](#holomush-plugin-v1-AddSessionStreamResponse) | AddSessionStream subscribes an already-active session to one more stream mid-session, via the host StreamRegistry (AddStream), using the default FROM_CURSOR replay mode. The session must be live: an unknown session_id fails with SESSION_NOT_FOUND (codes.NotFound). Use this when a plugin action should start delivering a new stream&#39;s events to a connected character without reconnecting. |
-| RemoveSessionStream | [RemoveSessionStreamRequest](#holomush-plugin-v1-RemoveSessionStreamRequest) | [RemoveSessionStreamResponse](#holomush-plugin-v1-RemoveSessionStreamResponse) | RemoveSessionStream unsubscribes an active session from a stream, via the host StreamRegistry (RemoveStream). The operation is idempotent: removing a stream the session is not subscribed to succeeds rather than erroring. |
 
  
 
@@ -5657,6 +5243,24 @@ Set-Cookie header by the gateway, not in this body.
 
 
 
+<a name="holomush-web-v1-WebAvailableCommand"></a>
+
+### WebAvailableCommand
+WebAvailableCommand is one command&#39;s metadata for the web composer.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| name | [string](#string) |  | name is the canonical command name shown on the chip. |
+| help | [string](#string) |  | help is the one-line description (for future tooltip use). |
+| usage | [string](#string) |  | usage is the usage pattern. |
+| source | [string](#string) |  | source is &#34;core&#34; or the owning plugin name. |
+
+
+
+
+
+
 <a name="holomush-web-v1-WebCheckSessionRequest"></a>
 
 ### WebCheckSessionRequest
@@ -5921,6 +5525,54 @@ roster.
 
 
 
+<a name="holomush-web-v1-WebListCommandsRequest"></a>
+
+### WebListCommandsRequest
+WebListCommandsRequest names the session whose character&#39;s commands to list.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id identifies the requesting session; core resolves the character and enforces ownership. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebListCommandsResponse"></a>
+
+### WebListCommandsResponse
+WebListCommandsResponse returns the command set &#43; alias map for the composer.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| commands | [WebAvailableCommand](#holomush-web-v1-WebAvailableCommand) | repeated | commands is the set the session character may execute. |
+| aliases | [WebListCommandsResponse.AliasesEntry](#holomush-web-v1-WebListCommandsResponse-AliasesEntry) | repeated | aliases maps alias → canonical command name for visible commands. |
+| incomplete | [bool](#bool) |  | incomplete is true when engine errors hid some commands. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebListCommandsResponse-AliasesEntry"></a>
+
+### WebListCommandsResponse.AliasesEntry
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#string) |  |  |
+| value | [string](#string) |  |  |
+
+
+
+
+
+
 <a name="holomush-web-v1-WebListContentRequest"></a>
 
 ### WebListContentRequest
@@ -6042,7 +5694,7 @@ to, used by the client to drive reload-backfill across each stream.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| streams | [string](#string) | repeated | streams is the list of event-store stream names the session is subscribed to (e.g. &#34;location:&lt;id&gt;&#34;, &#34;character:&lt;id&gt;&#34;). |
+| streams | [string](#string) | repeated | streams is the list of event-store stream names the session is subscribed to. Values are domain-relative dot references (e.g. &#34;location.&lt;id&gt;&#34;, &#34;character.&lt;id&gt;&#34;) — the same form the client passes back to WebQueryStreamHistory, which the server qualifies. |
 
 
 
@@ -6123,7 +5775,7 @@ CoreService.QueryStreamHistory.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | session_id | [string](#string) |  | session_id identifies the requesting session (used core-side for authorization). |
-| stream | [string](#string) |  | stream names the event stream to read history from (e.g. &#34;location:&lt;id&gt;&#34;). |
+| stream | [string](#string) |  | stream names the event stream to read history from. Clients pass domain-relative dot-style references (e.g. &#34;location.&lt;id&gt;&#34;); the server qualifies them into fully-qualified JetStream subjects on the way in. |
 | count | [int32](#int32) |  | count is the requested page size; 0 means the server default (150), values are capped at the server maximum (500), and negative values are rejected. |
 | not_before_ms | [int64](#int64) |  | not_before_ms is the epoch-ms time floor; 0 means no lower bound. |
 | cursor | [bytes](#bytes) |  | cursor is the opaque pagination cursor from a previous WebQueryStreamHistoryResponse. Events older than the cursor position are returned. Empty = start from latest. |
@@ -6392,6 +6044,7 @@ webv1connect.NewWebServiceHandler in internal/web/server.go.
 | WebRevokePlayerSession | [WebRevokePlayerSessionRequest](#holomush-web-v1-WebRevokePlayerSessionRequest) | [WebRevokePlayerSessionResponse](#holomush-web-v1-WebRevokePlayerSessionResponse) | WebRevokePlayerSession revokes one of the caller&#39;s PlayerSessions by id. Proxies to CoreService.RevokePlayerSession; caller identity comes from the X-Session-Token cookie header. |
 | WebRevokeOtherPlayerSessions | [WebRevokeOtherPlayerSessionsRequest](#holomush-web-v1-WebRevokeOtherPlayerSessionsRequest) | [WebRevokeOtherPlayerSessionsResponse](#holomush-web-v1-WebRevokeOtherPlayerSessionsResponse) | WebRevokeOtherPlayerSessions revokes all of the caller&#39;s PlayerSessions except the current one (&#34;log out everywhere else&#34;). Proxies to CoreService.RevokeOtherPlayerSessions; caller identity comes from the X-Session-Token cookie header. |
 | WebListFocusPresence | [WebListFocusPresenceRequest](#holomush-web-v1-WebListFocusPresenceRequest) | [WebListFocusPresenceResponse](#holomush-web-v1-WebListFocusPresenceResponse) | WebListFocusPresence returns the presence snapshot for the session&#39;s current focus context (location or scene). Proxies to CoreService.ListFocusPresence — authorization is enforced by core. player_session_token is read from the HTTP cookie by gateway middleware. |
+| WebListCommands | [WebListCommandsRequest](#holomush-web-v1-WebListCommandsRequest) | [WebListCommandsResponse](#holomush-web-v1-WebListCommandsResponse) | WebListCommands returns the recognized-command set &#43; alias map for the session&#39;s character, for the composer&#39;s command chip. Proxies to CoreService.ListAvailableCommands; player_session_token is read from the cookie by gateway middleware. |
 
  
 
