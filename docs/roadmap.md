@@ -95,14 +95,14 @@ know they exist; neither has code yet.
 
 | Use          | Epic           | Frontier bead                                                | State                                    |
 | ------------ | -------------- | ------------------------------------------------------------ | ---------------------------------------- |
-| **Scenes**   | `holomush-5rh` | Phases 4-6 shipped — web Scenes Portal (`5rh.8`/`5rh.18`) next | Phases 4-6 shipped (#4279 / #4302 / #4308) |
+| **Scenes**   | `holomush-5rh` | Phases 4-6 shipped — Phase 8 scene board (`5rh.17`) → web Scenes Portal (`5rh.8`/`5rh.18`) next (`holomush-ztiqj`) | Phases 4-6 shipped (#4279 / #4302 / #4308) |
 | **Channels** | `holomush-0sc` | `0sc.12` Channel plugin rework on plugin ABAC                | In progress                              |
 | **Forums**   | `holomush-djj` | (undesigned)                                                 | Needs brainstorm + spec                  |
 | **Discord**  | `holomush-aqq` | `aqq.5` Discord OAuth linking (`dwk.7` overlap closed today) | Blocked on Channels + OAuth substrate    |
 
 #### Sequencing rationale
 
-1. **Scenes Phase 4-6 first** (`5rh.13/.14/.15`). Scenes is the reference
+1. **Scenes Phase 4-6 first** (`5rh.13/.14/.20`). Scenes is the reference
    implementation; getting IC emission + pose order + vote machine right
    exercises every substrate layer end-to-end. Channels and Forums will
    re-use the patterns. Doing scenes first reduces redesign risk later.
@@ -114,8 +114,16 @@ know they exist; neither has code yet.
    shipped** (`5rh.20`, 2026-05-29) — scene logs + publish vote + hard
    privacy boundary: feature PR #4279, bare-ULID scene identity fix #4302
    (`holomush-y5inx`, surfaced by the Phase 6 E2E work), E2E tier PR #4308.
-   Scenes (Phases 4-6) is now the shipped reference implementation; the next
-   scenes use is the web Scenes Portal (`5rh.8`/`5rh.18`).
+   Scenes (Phases 4-6) is now the shipped reference implementation. The next
+   scenes slice is the **Phase 8 → Web Portal arc** (decision
+   `holomush-ztiqj`): Phase 8 (`5rh.17`) builds the scene board — a browsable
+   directory of open scenes plus content-warning filtering — as the
+   discoverability backend, then the web Scenes Portal (`5rh.8`, folding/
+   scoping the `5rh.18` chat view) surfaces that board over ConnectRPC. The
+   portal's core "browse active scenes" view needs the board as its data
+   source, so the board precedes the portal rather than the reverse. Phase 7
+   templates (`5rh.16`) is orthogonal authoring work, deprioritized relative
+   to discoverability.
 2. **Channels in parallel where unblocked** (`0sc.12`). The channel plugin
    rework is already in-flight on the plugin ABAC substrate — keep that
    going. Channel-specific features that depend on scenes patterns (e.g.,
