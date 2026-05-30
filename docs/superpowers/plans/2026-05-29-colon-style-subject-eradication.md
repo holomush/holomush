@@ -1042,3 +1042,5 @@ Expected: PASS
 - [ ] `holomush-ofpi` verified fixed (Subscribe scope-floor sees qualified subjects); close it.
 - [ ] `holomush-ec22.3` closed as superseded (subjectxlate deleted).
 - [ ] `code-reviewer` + `abac-reviewer` run before push (touches `internal/access/` + I-17 gate).
+
+<!-- adr-capture: sha256=56edd66c42d34847; session=brainstorm-rops; ts=2026-05-29T00:00:00Z; adrs=holomush-21ahd,holomush-wia9e -->

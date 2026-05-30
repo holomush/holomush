@@ -478,3 +478,5 @@ is provisional spec text only; it binds nothing until a producer is built.
   mandates dot-style for new code; this closes the gap on legacy code
 - `holomush-pkixe`, `holomush-ofpi`, `holomush-ec22.3` — subsumed beads
 - `.claude/rules/abac-providers.md` — the omit-don't-sentinel fail-safe rule
+
+<!-- adr-capture: sha256=2d647005fecc29f6; session=brainstorm-rops; ts=2026-05-29T00:00:00Z; adrs=holomush-21ahd,holomush-wia9e -->
