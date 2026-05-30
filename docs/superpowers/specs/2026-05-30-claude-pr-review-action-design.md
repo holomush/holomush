@@ -398,7 +398,7 @@ These are filed upstream as **requirements** (not solutions), as three issues on
   no precise anchor.
 - **Issue 3 (documentation) — model-tier env-var contract** (requirement D):
   document that the skill relies on `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`
-  + `CLAUDE_CODE_SUBAGENT_MODEL` and runs unmodified against non-Anthropic
+  and `CLAUDE_CODE_SUBAGENT_MODEL`; runs unmodified against non-Anthropic
   providers when they are mapped; list the logical tiers it uses.
 
 ## 9. Grounding traces
@@ -438,4 +438,4 @@ Recorded on bead holomush-3f5s9 (`bd show holomush-3f5s9`):
 input syntax for the official action (the `dev-flow@fzymgc-house-skills`
 marketplace-qualifier form, §4.1), and the live model identifiers for each
 provider (§3.2 note).
-<!-- adr-capture: sha256=e5fbcfb46f0f52e0; session=cli; ts=2026-05-30T21:21:55Z; adrs= -->
+<!-- adr-capture: sha256=33f1a7f09e559925; session=cli; ts=2026-05-30T21:57:05Z; adrs= -->

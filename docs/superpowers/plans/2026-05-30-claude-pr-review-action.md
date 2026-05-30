@@ -730,6 +730,7 @@ jobs:
 ```
 
 > **Implementer notes:**
+>
 > - `actions/checkout` and `actions/setup-go` are SHA-pinned above to the same
 >   SHAs every other repo workflow uses (`de0fac2…` / `4a3601…`). Confirm they
 >   still match (`rg 'actions/checkout@' .github/workflows`) before committing.
@@ -863,4 +864,4 @@ jj new
 - `pull_request_target` privileged fork review with secrets.
 - Multi-PR batch review.
 - The raw Claude Code CLI invocation path (spec §7; documented fallback only).
-<!-- adr-capture: sha256=15220a6f7a8c5382; session=cli; ts=2026-05-30T21:23:26Z; adrs= -->
+<!-- adr-capture: sha256=12024e7a22aa178b; session=cli; ts=2026-05-30T21:57:05Z; adrs= -->
