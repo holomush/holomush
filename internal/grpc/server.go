@@ -31,6 +31,7 @@ import (
 	accessTypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/command/commandquery"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/authguard"
@@ -197,6 +198,10 @@ type CoreServer struct {
 	// ListFocusPresence and other current-state RPCs (5b2j).
 	characterNameResolver characterNameResolver
 
+	// commandQuerier is the ABAC-filtered command enumeration for ListAvailableCommands
+	// (2zjio). Nil until WithCommandQuerier is called; nil fails closed with PERMISSION_DENIED.
+	commandQuerier *commandquery.Querier
+
 	// subscriber opens per-session durable consumers against the JetStream
 	// event bus. Post-F3 Subscribe delegates its live loop to subscribe
 	// streams; nil subscriber causes Subscribe to error early. Wired via
@@ -294,6 +299,11 @@ func WithAccessEngine(engine accessTypes.AccessPolicyEngine) CoreServerOption {
 // WithCharacterNameResolver sets the character name resolver for ListFocusPresence (5b2j).
 func WithCharacterNameResolver(r characterNameResolver) CoreServerOption {
 	return func(s *CoreServer) { s.characterNameResolver = r }
+}
+
+// WithCommandQuerier sets the ABAC-filtered command querier for ListAvailableCommands (2zjio).
+func WithCommandQuerier(q *commandquery.Querier) CoreServerOption {
+	return func(s *CoreServer) { s.commandQuerier = q }
 }
 
 // WithSubscriber wires the JetStream EventBus subscriber into the Subscribe
