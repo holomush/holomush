@@ -24,9 +24,12 @@ func NewNullCharacterSettingsStore() CharacterSettingsStore {
 }
 
 // For returns a Scoped handle whose host partition is empty: bare reads
-// report all keys as unset (matching the Phase 4 null behavior). Owner
-// partitions are usable in-memory. The commit func is nil — writes do not
-// persist; real character-scope persistence is deferred (see iokti.3).
+// report all keys as unset (matching the Phase 4 null behavior). Plugin
+// partitions are usable in-memory only and are NOT persisted — the commit func
+// is nil, so any Plugin/Host write is silently dropped when the handle goes out
+// of scope. Real character-scope persistence is provided by the repo-backed
+// CharacterSettings store (NewRepoCharacterSettingsStore); this null store is
+// the deferred-persistence placeholder (see iokti.3).
 func (n *nullCharacterSettingsStore) For(_ context.Context, _ ulid.ULID) Scoped {
 	return newScopedView(map[string]json.RawMessage{})
 }

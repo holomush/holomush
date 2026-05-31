@@ -121,7 +121,7 @@ func WithFocusOps(fo FocusOps) Option {
 	return func(f *Functions) { f.focusOps = fo }
 }
 
-// WithSettingsOps sets the owner-partitioned settings store seam for the
+// WithSettingsOps sets the plugin-partitioned settings store seam for the
 // holomush.get_setting / set_setting host functions (plugin-runtime-symmetry
 // with the binary GetSetting / SetSetting RPCs; INV-8).
 func WithSettingsOps(so SettingsOps) Option {
@@ -161,7 +161,7 @@ func (f *Functions) SetFocusOps(fo FocusOps) {
 	f.focusOps = fo
 }
 
-// SetSettingsOps sets the owner-partitioned settings store seam for the
+// SetSettingsOps sets the plugin-partitioned settings store seam for the
 // holomush.get_setting / set_setting host functions. Supports late-binding: the
 // settings stores are assembled during gRPC subsystem Start, after plugin
 // loading. Lua VMs are created per-event delivery, so the value is read at

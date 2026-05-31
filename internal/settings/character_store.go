@@ -15,17 +15,17 @@ import (
 // CharacterPreferences is the persisted shape of a character's settings bag,
 // stored whole-struct in the characters.preferences JSONB column. It mirrors
 // the player Preferences layout (auth.PlayerPreferences): a reserved host
-// partition plus an owner-partitioned plugin map. The whole struct round-trips
-// through the repository so partitions are never clobbered by an
-// owner-partition write.
+// partition plus a plugin-partitioned map. The whole struct round-trips
+// through the repository so partitions are never clobbered by a
+// plugin-partition write.
 type CharacterPreferences struct {
 	// Host holds the host-owned settings partition: a flat dot-keyed map
 	// serialized as JSON. Reserved for symmetry with the player layout;
 	// character host settings are minimal today (SetString persists here).
 	Host json.RawMessage `json:"host,omitempty"`
-	// Plugins is the opaque, owner-partitioned settings bag. The host never
-	// interprets partition contents; it maps an owner key (plugin name) to that
-	// owner's serialized partition. JSON (de)marshaling carries it to/from the
+	// Plugins is the opaque, plugin-partitioned settings bag. The host never
+	// interprets partition contents; it maps a plugin name to that plugin's
+	// serialized partition. JSON (de)marshaling carries it to/from the
 	// characters.preferences JSONB column — the mirror of
 	// auth.PlayerPreferences.Plugins.
 	Plugins map[string]json.RawMessage `json:"plugins,omitempty"`
@@ -42,9 +42,9 @@ type CharacterRepository interface {
 }
 
 // CharacterSettings implements CharacterSettingsStore backed by a
-// CharacterRepository. Owner partition writes persist via a read-modify-write
+// CharacterRepository. Plugin partition writes persist via a read-modify-write
 // commit func: each write re-reads the character's preferences, merges only the
-// mutated partitions into the bag, and writes the whole bag — so sibling owner
+// mutated partitions into the bag, and writes the whole bag — so sibling plugin
 // partitions written by a separate For() call are not lost.
 type CharacterSettings struct {
 	repo CharacterRepository
@@ -56,9 +56,9 @@ func NewRepoCharacterSettingsStore(repo CharacterRepository) *CharacterSettings 
 	return &CharacterSettings{repo: repo}
 }
 
-// For returns an owner-partitioned Scoped handle for a character.
+// For returns a plugin-partitioned Scoped handle for a character.
 //
-// Owner partitions and the host partition are loaded from the character's
+// Plugin partitions and the host partition are loaded from the character's
 // persisted preferences, and writes persist via a non-nil commit func. On any
 // load failure the handle degrades to an empty, read-only view so bare reads
 // and the resolution Chain resolve to defaults rather than panicking — matching
@@ -79,7 +79,7 @@ func (s *CharacterSettings) For(ctx context.Context, characterID ulid.ULID) Scop
 		return newFailClosedView(oops.With("character_id", characterID.String()).Wrap(err))
 	}
 
-	// host and plugins are the live maps the scopedView's Host()/Owner()
+	// host and plugins are the live maps the scopedView's Host()/Plugin()
 	// writables mutate. The commit closure captures them directly so a write
 	// serializes the touched partitions back.
 	host := decodeHostPartition(ctx, characterID, prefs.Host)
@@ -90,9 +90,9 @@ func (s *CharacterSettings) For(ctx context.Context, characterID ulid.ULID) Scop
 			return func(ctx context.Context) error {
 				// Re-read so the merge runs against the latest persisted state, then
 				// overwrite ONLY the partitions this view mutated. A clean-loaded
-				// sibling owner is never re-serialized with its stale value, so a
-				// concurrent For() handle that changed a different owner keeps its
-				// update (cross-owner lost-update safety).
+				// sibling partition is never re-serialized with its stale value, so a
+				// concurrent For() handle that changed a different plugin keeps its
+				// update (cross-plugin lost-update safety).
 				fresh, err := s.repo.GetPreferences(ctx, characterID)
 				if err != nil {
 					return oops.With("character_id", characterID.String()).Wrap(err)
@@ -100,19 +100,19 @@ func (s *CharacterSettings) For(ctx context.Context, characterID ulid.ULID) Scop
 				if fresh.Plugins == nil {
 					fresh.Plugins = map[string]json.RawMessage{}
 				}
-				for owner := range dirty.owners {
-					encoded, encErr := json.Marshal(plugins[owner])
+				for plugin := range dirty.plugins {
+					encoded, encErr := json.Marshal(plugins[plugin])
 					if encErr != nil {
-						return oops.With("character_id", characterID.String(), "owner", owner).Wrap(encErr)
+						return oops.With("character_id", characterID.String(), "plugin", plugin).Wrap(encErr)
 					}
-					fresh.Plugins[owner] = json.RawMessage(encoded)
+					fresh.Plugins[plugin] = encoded
 				}
 				if dirty.host {
 					encodedHost, encErr := json.Marshal(host)
 					if encErr != nil {
 						return oops.With("character_id", characterID.String()).Wrap(encErr)
 					}
-					fresh.Host = json.RawMessage(encodedHost)
+					fresh.Host = encodedHost
 				}
 				if err := s.repo.SetPreferences(ctx, characterID, fresh); err != nil {
 					return oops.With("character_id", characterID.String()).Wrap(err)
@@ -126,6 +126,11 @@ func (s *CharacterSettings) For(ctx context.Context, characterID ulid.ULID) Scop
 // dot-keyed map) into the scopedView's host map. A NULL/empty or undecodable
 // host blob yields an empty map and a warning; the host never panics on a
 // malformed partition.
+//
+// characterID is used ONLY for the diagnostic warning on an undecodable blob —
+// it does not affect decoding. It is kept (rather than dropped) so the
+// "skipping undecodable character host settings partition" log line carries the
+// affected character (holomush-iokti.17 .19).
 func decodeHostPartition(
 	ctx context.Context, characterID ulid.ULID, raw json.RawMessage,
 ) map[string]json.RawMessage {
@@ -144,7 +149,7 @@ func decodeHostPartition(
 // SetString writes a single host-partition preference key for a character. It
 // loads the character's current preferences, sets the key on the host
 // partition, and persists the whole bag via the commit func, so it never
-// clobbers the owner-partitioned Plugins bag. The host writable namespace-
+// clobbers the plugin-partitioned Plugins bag. The host writable namespace-
 // validates the key.
 func (s *CharacterSettings) SetString(
 	ctx context.Context, characterID ulid.ULID, key, value string,

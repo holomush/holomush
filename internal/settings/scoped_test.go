@@ -21,10 +21,10 @@ func TestScopedView_Owner(t *testing.T) {
 		t.Parallel()
 		sc := settings.NewScopedForTest(map[string]json.RawMessage{})
 
-		require.NoError(t, sc.Owner("core-scenes").SetString(ctx, "anything.goes", "yes"))
+		require.NoError(t, sc.Plugin("core-scenes").SetString(ctx, "anything.goes", "yes"))
 
 		// A different owner sees nothing.
-		got, ok := sc.Owner("core-channels").StringN(ctx, "anything.goes")
+		got, ok := sc.Plugin("core-channels").StringN(ctx, "anything.goes")
 		assert.False(t, ok)
 		assert.Empty(t, got)
 
@@ -34,7 +34,7 @@ func TestScopedView_Owner(t *testing.T) {
 		assert.Empty(t, hgot)
 
 		// The owning partition round-trips.
-		own, ownOK := sc.Owner("core-scenes").StringN(ctx, "anything.goes")
+		own, ownOK := sc.Plugin("core-scenes").StringN(ctx, "anything.goes")
 		assert.True(t, ownOK)
 		assert.Equal(t, "yes", own)
 	})
@@ -45,9 +45,9 @@ func TestScopedView_Owner(t *testing.T) {
 
 		// "content" is NOT a registered namespace; owner partitions skip
 		// namespace validation, so this must succeed and round-trip.
-		require.NoError(t, sc.Owner("content").SetString(ctx, "content.cw_block", "gore"))
+		require.NoError(t, sc.Plugin("content").SetString(ctx, "content.cw_block", "gore"))
 
-		got, ok := sc.Owner("content").StringN(ctx, "content.cw_block")
+		got, ok := sc.Plugin("content").StringN(ctx, "content.cw_block")
 		assert.True(t, ok)
 		assert.Equal(t, "gore", got)
 	})
@@ -57,9 +57,9 @@ func TestScopedView_Owner(t *testing.T) {
 		sc := settings.NewScopedForTest(map[string]json.RawMessage{})
 
 		want := []string{"alpha", "beta", "gamma"}
-		require.NoError(t, sc.Owner("content").SetStringSlice(ctx, "content.cw_list", want))
+		require.NoError(t, sc.Plugin("content").SetStringSlice(ctx, "content.cw_list", want))
 
-		got, ok := sc.Owner("content").StringSliceN(ctx, "content.cw_list")
+		got, ok := sc.Plugin("content").StringSliceN(ctx, "content.cw_list")
 		assert.True(t, ok)
 		assert.Equal(t, want, got)
 	})

@@ -45,9 +45,9 @@ type Settings interface {
 }
 
 // GameSettings is the server-wide scope backed by holomush_system_info.
-// Exactly one GameSettings instance per server. It is owner-partitioned
+// Exactly one GameSettings instance per server. It is plugin-partitioned
 // (embeds Scoped): bare Settings reads target the namespace-validated host
-// keyspace, Owner(name) narrows to a plugin's isolated "plugin/<name>/"-
+// keyspace, Plugin(name) narrows to a plugin's isolated "plugin/<name>/"-
 // prefixed partition, and Host() returns the namespace-validated host
 // Writable. SetString persists a single host key directly (legacy operator-
 // tooling surface, equivalent to Host().SetString).
@@ -56,14 +56,19 @@ type GameSettings interface {
 	SetString(ctx context.Context, key, value string) error
 }
 
-// Scoped is an owner-partitioned settings handle. Bare Settings reads target
-// the HOST partition (namespace-validated, identical to the legacy behavior).
-// Owner(name) narrows to a plugin's isolated partition (NOT namespace-
-// validated); Host() returns the host partition for writes.
+// Scoped is a host/plugin-partitioned settings handle. Bare Settings reads
+// target the HOST partition (namespace-validated, identical to the legacy
+// behavior). Plugin(name) narrows to that plugin's isolated partition (NOT
+// namespace-validated); Host() returns the host partition for writes.
+//
+// Plugin-partition names are NOT namespace-validated and accepted as-is: the
+// host binds the name from the authenticated calling plugin (host_service.go),
+// so it is a trusted, host-supplied identity rather than caller-controlled
+// input. Namespace validation applies only to the Host() partition's keys.
 type Scoped interface {
-	Settings                    // bare reads -> host partition (namespace-validated)
-	Owner(name string) Writable // plugin partition: isolated, NOT namespace-validated
-	Host() Writable             // host partition (namespace-validated)
+	Settings                     // bare reads -> host partition (namespace-validated)
+	Plugin(name string) Writable // plugin partition: isolated, NOT namespace-validated
+	Host() Writable              // host partition (namespace-validated)
 }
 
 // Writable is a read+write settings view. Reads follow the same typed,
@@ -75,7 +80,7 @@ type Writable interface {
 }
 
 // PlayerSettingsStore is the factory for per-player Scoped settings handles.
-// Call For(playerID) to obtain the owner-partitioned view for a specific
+// Call For(playerID) to obtain the plugin-partitioned view for a specific
 // player, backed by their row in players.preferences. Bare reads on the
 // returned Scoped target the host partition.
 type PlayerSettingsStore interface {

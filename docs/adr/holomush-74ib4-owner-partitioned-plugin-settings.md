@@ -3,7 +3,7 @@
   ~ Copyright 2026 HoloMUSH Contributors
 -->
 
-# Owner-Partitioned Plugin Settings with Opaque Host Passthrough
+# Plugin-Partitioned Plugin Settings with Opaque Host Passthrough
 
 **Status:** Accepted
 **Decision:** holomush-74ib4
@@ -44,25 +44,25 @@ type PlayerPreferences struct {
 }
 ```
 
-The settings substrate exposes owner-narrowed handles. `Settings` (the read
+The settings substrate exposes plugin-narrowed handles. `Settings` (the read
 interface) is unchanged; stores return `Scoped`, which narrows to a partition:
 
 ```go
 type Scoped interface {
-    Settings                    // bare reads → host partition
-    Owner(name string) Writable // narrow to a plugin's partition
-    Host() Writable             // explicit host partition
+    Settings                     // bare reads → host partition
+    Plugin(name string) Writable // narrow to a plugin's partition
+    Host() Writable              // explicit host partition
 }
 ```
 
-`.Owner("core-scenes")` re-points the underlying `jsonMapSettings.data` at
+`.Plugin("core-scenes")` re-points the underlying `jsonMapSettings.data` at
 `plugins["core-scenes"]`; writes commit via the **single** existing
 `auth.PlayerRepository.Update` path (read-modify-write), so the typed marshal now
 round-trips plugin keys instead of dropping them. The host never interprets the
 contents of `Plugins`.
 
 Namespace validation is **host-partition-only**: the view returned by
-`.Owner(name)` carries `validateNamespace = false`, so the `RegisteredNamespaces`
+`.Plugin(name)` carries `validateNamespace = false`, so the `RegisteredNamespaces`
 allowlist (`internal/settings/namespaces.go`) applies only to the host partition.
 Inside a plugin partition the plugin owns its keyspace, unchecked — adding a key
 like `content.cw_block` requires **zero `internal/` edits**.
@@ -71,11 +71,11 @@ like `content.cw_block` requires **zero `internal/` edits**.
 
 - Eliminates the two-writer clobber: the typed repo stays the sole marshal path
   for the column; `json:"plugins,omitempty"` + read-modify-write preserves other
-  owners' keys.
+  plugins' keys.
 - Keeps the host domain-ignorant (INV-10): no plugin vocabulary enters
   `internal/`; `content` is never added to `RegisteredNamespaces`.
 - Reusable by every future plugin with zero per-key substrate cost (INV-12). The
-  one-time `Plugins` field + owner-narrowing machinery is substrate, paid once.
+  one-time `Plugins` field + plugin-narrowing machinery is substrate, paid once.
 - `ValidateNamespace` enforces the *host's* namespace contract, which is
   meaningless inside a partition the host does not interpret; scoping it by a
   factory-level flag is structural, not a per-call conditional.
@@ -89,7 +89,7 @@ like `content.cw_block` requires **zero `internal/` edits**.
   embeds plugin vocabulary in `internal/auth` and requires an `internal/` edit
   per new plugin preference — the same leak as the existing `Scenes.FocusReplayTail`
   field, debt not to extend.
-- **Generic flat-map over `players.preferences` without owner partitioning.**
+- **Generic flat-map over `players.preferences` without plugin partitioning.**
   Rejected: collides with the typed whole-struct marshal — two writers, silent
   key loss.
 - **Plugin-local table per plugin.** Rejected: re-solders generic preference
@@ -114,4 +114,5 @@ like `content.cw_block` requires **zero `internal/` edits**.
 
 - Spec: `docs/superpowers/specs/2026-05-29-scenes-phase-8-board-content-warnings-design.md` §1.1, §3.1 (A2–A4), INV-10, INV-12
 - Related: `holomush-z1e7` (strict plugin boundary), `holomush-7pdhf` (opaque plugin manifest config — distinct), `holomush-uvbyt` (structural isolation of this substrate)
+- Nomenclature: the "owner" partition dimension was renamed to "plugin" (host/plugin nomenclature, decision `holomush-iokti.18`; rename in `holomush-iokti.17`). The partition concept and isolation invariants are unchanged — only the word `owner` → `plugin`.
 - Design bead: `holomush-iokti`

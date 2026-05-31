@@ -21,7 +21,7 @@ import (
 // layer above (getSettingFn / setSettingFn), exactly as the binary
 // PluginHostService performs them before touching the store. The adapter that
 // satisfies this interface (internal/plugin/lua.settingsStoresOpsAdapter)
-// selects the store by scope, binds .Owner(pluginName), and performs
+// selects the store by scope, binds .Plugin(pluginName), and performs
 // StringSliceN / SetStringSlice — mirroring the binary GetSetting / SetSetting
 // post-resolution store calls.
 //

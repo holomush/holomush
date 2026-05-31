@@ -131,7 +131,7 @@ func (h *Host) SetFocusCoordinator(fc focus.Coordinator) {
 	h.hostFuncs.SetFocusOps(&coordinatorFocusOpsAdapter{c: fc})
 }
 
-// SetSettingsStores injects the owner-partitioned settings stores into the
+// SetSettingsStores injects the plugin-partitioned settings stores into the
 // underlying hostfunc bridge via a settingsStoresOpsAdapter that satisfies
 // hostfunc.SettingsOps, so the Lua get_setting / set_setting hostfuncs reach the
 // SAME stores the binary GetSetting / SetSetting RPCs use (plugin-runtime-

@@ -54,7 +54,7 @@ func seedCharacter(t *testing.T, ctx context.Context, pool *pgxpool.Pool) ulid.U
 }
 
 // TestRepoCharacterSettingsPersistsOwnerPartitionAcrossHandles is the persist+
-// readback invariant: a write under Owner(name).SetStringSlice persists via the
+// readback invariant: a write under Plugin(name).SetStringSlice persists via the
 // commit func (GetPreferences -> mutate -> SetPreferences), and a FRESH handle
 // re-reading the character from the repo observes the value.
 func TestRepoCharacterSettingsPersistsOwnerPartitionAcrossHandles(t *testing.T) {
@@ -66,13 +66,13 @@ func TestRepoCharacterSettingsPersistsOwnerPartitionAcrossHandles(t *testing.T) 
 	require.NoError(
 		t,
 		st.For(ctx, characterID).
-			Owner("core-scenes").
+			Plugin("core-scenes").
 			SetStringSlice(ctx, "content.cw_block", []string{"spiders", "gore"}),
 	)
 
 	// A FRESH handle re-reads the character from the repo and must see the value.
 	got, ok := st.For(ctx, characterID).
-		Owner("core-scenes").
+		Plugin("core-scenes").
 		StringSliceN(ctx, "content.cw_block")
 	require.True(t, ok)
 	assert.Equal(t, []string{"spiders", "gore"}, got)
@@ -88,20 +88,20 @@ func TestRepoCharacterSettingsDoesNotLostUpdateSiblingOwners(t *testing.T) {
 
 	require.NoError(
 		t,
-		st.For(ctx, characterID).Owner("owner_a").
+		st.For(ctx, characterID).Plugin("owner_a").
 			SetStringSlice(ctx, "k", []string{"a"}),
 	)
 	require.NoError(
 		t,
-		st.For(ctx, characterID).Owner("owner_b").
+		st.For(ctx, characterID).Plugin("owner_b").
 			SetStringSlice(ctx, "k", []string{"b"}),
 	)
 
-	gotA, okA := st.For(ctx, characterID).Owner("owner_a").StringSliceN(ctx, "k")
+	gotA, okA := st.For(ctx, characterID).Plugin("owner_a").StringSliceN(ctx, "k")
 	require.True(t, okA, "owner_a partition must survive the owner_b write")
 	assert.Equal(t, []string{"a"}, gotA)
 
-	gotB, okB := st.For(ctx, characterID).Owner("owner_b").StringSliceN(ctx, "k")
+	gotB, okB := st.For(ctx, characterID).Plugin("owner_b").StringSliceN(ctx, "k")
 	require.True(t, okB)
 	assert.Equal(t, []string{"b"}, gotB)
 }
@@ -113,7 +113,7 @@ func TestRepoCharacterSettingsReturnsEmptyViewForUnprovisionedCharacter(t *testi
 	ctx := context.Background()
 	st, _ := newRepoCharacterStore(t)
 
-	_, ok := st.For(ctx, idgen.New()).Owner("core-scenes").StringSliceN(ctx, "content.cw_block")
+	_, ok := st.For(ctx, idgen.New()).Plugin("core-scenes").StringSliceN(ctx, "content.cw_block")
 	assert.False(t, ok)
 }
 
@@ -148,24 +148,24 @@ func TestRepoCharacterSettingsConcurrentHandlesDoNotLoseUpdate(t *testing.T) {
 	characterID := seedCharacter(t, ctx, pool)
 
 	// Pre-seed both owner partitions so each handle below loads both.
-	require.NoError(t, st.For(ctx, characterID).Owner("owner_a").SetStringSlice(ctx, "k", []string{"a1"}))
-	require.NoError(t, st.For(ctx, characterID).Owner("owner_b").SetStringSlice(ctx, "k", []string{"b1"}))
+	require.NoError(t, st.For(ctx, characterID).Plugin("owner_a").SetStringSlice(ctx, "k", []string{"a1"}))
+	require.NoError(t, st.For(ctx, characterID).Plugin("owner_b").SetStringSlice(ctx, "k", []string{"b1"}))
 
 	// Open both handles BEFORE either commits — each loads {owner_a:[a1], owner_b:[b1]}.
 	handleA := st.For(ctx, characterID)
 	handleB := st.For(ctx, characterID)
 
 	// Each handle mutates a different owner and commits.
-	require.NoError(t, handleA.Owner("owner_a").SetStringSlice(ctx, "k", []string{"a2"}))
-	require.NoError(t, handleB.Owner("owner_b").SetStringSlice(ctx, "k", []string{"b2"}))
+	require.NoError(t, handleA.Plugin("owner_a").SetStringSlice(ctx, "k", []string{"a2"}))
+	require.NoError(t, handleB.Plugin("owner_b").SetStringSlice(ctx, "k", []string{"b2"}))
 
 	// Both updates must survive: dirty tracking serializes only the mutated owner,
 	// so handleB's commit does not rewrite owner_a with its stale loaded copy.
-	gotA, okA := st.For(ctx, characterID).Owner("owner_a").StringSliceN(ctx, "k")
+	gotA, okA := st.For(ctx, characterID).Plugin("owner_a").StringSliceN(ctx, "k")
 	require.True(t, okA)
 	assert.Equal(t, []string{"a2"}, gotA, "owner_a update must survive owner_b's concurrent commit")
 
-	gotB, okB := st.For(ctx, characterID).Owner("owner_b").StringSliceN(ctx, "k")
+	gotB, okB := st.For(ctx, characterID).Plugin("owner_b").StringSliceN(ctx, "k")
 	require.True(t, okB)
 	assert.Equal(t, []string{"b2"}, gotB)
 }

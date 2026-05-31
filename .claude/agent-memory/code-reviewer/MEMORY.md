@@ -648,3 +648,27 @@ Keep under 200 lines. Curate — don't hoard.
   `principal_id` is fine because it can only succeed by EQUALLING the host value.
   All gates green (1234 unit exit0, lint exit0). Encountered: holomush-iokti.19
   (2026-05-30) — READY.
+
+- **iokti.17 settings Owner→Plugin rename (verified-good no-behavior-change reference).**
+  Method `Scoped.Owner(name)`→`Plugin(name)` + impls (`scopedView`, `postgresGameSettings`
+  `gameOwnerSettings`→`gamePluginSettings`), internal field `dirtyTracker.owners`→`plugins`,
+  `markOwnerDirty`→`markPluginDirty`, commit-loop `owner`→`plugin` vars. Verified COMPLETE:
+  `rg '\.Owner\(' internal/ plugins/ pkg/ cmd/` = 0; no leftover `gameOwnerSettings|
+  markOwnerDirty|dirty\.owners`. CRITICAL left-alone (genuine owner concepts, NOT
+  plugin-partition keys): `ownerPlayer`/`OwningPlayer` (iokti.19 host-vouched owning
+  player, host_service.go:712/736/876) and scene `owner_id` (world/core-scenes). `Chain`
+  (chain.go:23) does NOT embed Scoped → has no Owner/Plugin method (spec's "Chain.Owner"
+  was aspirational prose; rename correctly confined to types that have the method).
+  .22 cast drop (`json.RawMessage(encoded)`→`encoded`) is type-safe: `json.RawMessage`
+  is `type RawMessage []byte` and `json.Marshal` returns `[]byte` (directly assignable).
+  .20 dedup (`principalScopedStore`/`principalScopedFor` helper) preserves the Go
+  nil-interface guard: `host.PlayerSettings()` returns the interface FIELD (untyped nil,
+  not typed-nil), so `store == nil` in the new helper still catches unwired —
+  `TestGetSettingNilStoreReturnsUnimplemented` (host_settings_test.go:218) confirms.
+  .21 skip legit (no `emptyView` closure exists anywhere). .18 skip (focus.WithGameSettings
+  takes broad `settings.Settings` not narrow — "already narrow" rationale is slightly
+  inaccurate but skipping a sig-narrowing IS correct for a no-behavior bead; untouched file).
+  New test TestWithSettingsOptionsPopulateHostStores (construction-time WithX options) is
+  distinct from the late-bound SetSettingsStores guard; uses export_test.go *ForTest
+  accessors, Same()+NotNil assertions, ACE name. All gates green (1329 unit exit0, lint
+  exit0). Encountered: holomush-iokti.17 (2026-05-31) — READY.

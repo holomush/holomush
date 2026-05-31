@@ -338,3 +338,24 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   to ulid.ULID and compares values — case-insensitive (ULID encoding-independent), distinct
   ULIDs can't collide (no over-grant), empty-expectedOwnerID fail-closed branch PRESERVED
   before the parse (line 67 < 77), malformed-expected fails closed PRINCIPAL_NOT_OWNED.
+- **owner→plugin nomenclature rename (iokti.17, 2026-05-30) — pure-vocabulary, INV-11 intact**:
+  STRUCTURAL-ONLY reframe of the settings substrate: `Scoped.Owner(name)`→`Plugin(name)`,
+  `gameOwnerSettings`→`gamePluginSettings`, `markOwnerDirty`→`markPluginDirty`,
+  `dirtyTracker.owners`→`.plugins`, plus spec/ADR prose (`holomush-uvbyt`, `holomush-74ib4`).
+  Verified NO substance change: (1) trust anchor untouched — partition still bound from
+  `s.pluginName` (binary, struct field set at `newPluginHostServiceServer`, host_service.go:33/41)
+  / registration-time `pluginName` (Lua, closed over in getSettingFn/setSettingFn; Lua sig is
+  `(scope,principal_id,key)` — pluginName NOT an arg); (2) `Plugin(name)` indexes `v.plugins[name]`,
+  distinct from `v.host` — `Plugin("")` keys an empty-string plugin partition, Host UNREACHABLE via
+  Plugin; (3) `ReservedNamespace="plugin"` + GAME `plugin/<name>/` prefix byte-for-byte unchanged
+  (namespaces.go), host-key `plugin.*` rejection intact; (4) INV-11 spec:170 + both ADRs read
+  identically post-reframe, both add an explicit "word-only, invariants unchanged" footnote.
+  Also iokti.17 .20: `resolveSettingScope` PLAYER/CHARACTER dedup into `principalScopedStore`
+  helper (host_service.go:765) — helper takes `expectedOwnerID` as a PARAM, never chooses it;
+  PLAYER passes `ownerPlayer` (token-vouched), CHARACTER passes `actor.ID`; nil-store→Unimplemented
+  + PLAYER-no-owner→PRINCIPAL_NOT_OWNED both preserved. When reviewing rename/dedup "no-behavior"
+  PRs: (a) rg the OLD method/identifier across non-test code to confirm zero stragglers in
+  enforcement paths; (b) confirm the host/plugin partition namespace-validation asymmetry survives
+  (Host validateNamespace:true vs Plugin:false); (c) confirm dedup helpers take the per-scope
+  distinguisher as a param, not a hardcoded constant. Lone straggler found: spec mermaid node
+  (spec:34) still says "owner BOUND to authenticated caller" — cosmetic Low, not blocking.

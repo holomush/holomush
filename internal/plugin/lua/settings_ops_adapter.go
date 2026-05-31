@@ -13,10 +13,10 @@ import (
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
-// settingsStoresOpsAdapter adapts the three owner-partitioned settings stores to
-// the hostfunc.SettingsOps store seam. It is the permanent Lua delegation seam:
-// it lets the gopher-lua hostfunc layer reach the SAME settings stores the
-// binary PluginHostService uses, so both runtimes drive owner-partitioned
+// settingsStoresOpsAdapter adapts the three plugin-partitioned settings stores
+// to the hostfunc.SettingsOps store seam. It is the permanent Lua delegation
+// seam: it lets the gopher-lua hostfunc layer reach the SAME settings stores the
+// binary PluginHostService uses, so both runtimes drive plugin-partitioned
 // settings through one common store path (plugin-runtime-symmetry, INV-8).
 //
 // All trust checks (actor recovery, principal ownership, GAME-write operator
@@ -24,7 +24,7 @@ import (
 // exactly as the binary GetSetting / SetSetting resolve the scope and ownership
 // before touching the store. By the time GetSetting / SetSetting are called
 // here, principalID is the validated owner ULID (for PLAYER / CHARACTER) and the
-// owner partition is bound from pluginName, never the wire.
+// plugin partition is bound from pluginName, never the wire.
 type settingsStoresOpsAdapter struct {
 	player    settings.PlayerSettingsStore
 	character settings.CharacterSettingsStore
@@ -70,9 +70,9 @@ func (a *settingsStoresOpsAdapter) scopedFor(
 	}
 }
 
-// GetSetting reads the owner-partitioned list value, binding the owner partition
-// from pluginName host-side (NEVER the wire) — mirroring the binary GetSetting's
-// base.Owner(s.pluginName).StringSliceN(key).
+// GetSetting reads the plugin-partitioned list value, binding the plugin
+// partition from pluginName host-side (NEVER the wire) — mirroring the binary
+// GetSetting's base.Plugin(s.pluginName).StringSliceN(key).
 func (a *settingsStoresOpsAdapter) GetSetting(
 	ctx context.Context, scope pluginv1.SettingScope, pluginName, principalID, key string,
 ) (values []string, found bool, err error) {
@@ -80,13 +80,13 @@ func (a *settingsStoresOpsAdapter) GetSetting(
 	if !ok {
 		return nil, false, nil
 	}
-	values, found = base.Owner(pluginName).StringSliceN(ctx, key)
+	values, found = base.Plugin(pluginName).StringSliceN(ctx, key)
 	return values, found, nil
 }
 
-// SetSetting writes the owner-partitioned list value, binding the owner
+// SetSetting writes the plugin-partitioned list value, binding the plugin
 // partition from pluginName host-side — mirroring the binary SetSetting's
-// base.Owner(s.pluginName).SetStringSlice(key, values).
+// base.Plugin(s.pluginName).SetStringSlice(key, values).
 func (a *settingsStoresOpsAdapter) SetSetting(
 	ctx context.Context, scope pluginv1.SettingScope, pluginName, principalID, key string, values []string,
 ) error {
@@ -94,5 +94,5 @@ func (a *settingsStoresOpsAdapter) SetSetting(
 	if !ok {
 		return nil
 	}
-	return base.Owner(pluginName).SetStringSlice(ctx, key, values) //nolint:wrapcheck // settings store errors propagate as-is to the hostfunc sanitizer
+	return base.Plugin(pluginName).SetStringSlice(ctx, key, values) //nolint:wrapcheck // settings store errors propagate as-is to the hostfunc sanitizer
 }

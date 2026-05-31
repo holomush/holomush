@@ -387,7 +387,7 @@ func (m *Manager) ConfigureReadbackDecryptor(d ReadbackDecryptor) {
 	}
 }
 
-// ConfigureSettingsDeps injects the owner-partitioned settings stores into all
+// ConfigureSettingsDeps injects the plugin-partitioned settings stores into all
 // registered hosts that implement SettingsDepsConfigurer. Production startup
 // MUST call this before plugins issue GetSetting / SetSetting RPCs (or the Lua
 // equivalents). Called from the gRPC subsystem's Start after the settings stores

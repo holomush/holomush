@@ -35,11 +35,11 @@ func TestRepoCharacterSettingsWriteFailsClosedOnLoadError(t *testing.T) {
 	st := settings.NewRepoCharacterSettingsStore(errCharacterRepo{err: errors.New("load boom")})
 
 	// Read degrades to empty (never-error contract preserved).
-	_, ok := st.For(ctx, ulid.Make()).Owner("core-scenes").StringSliceN(ctx, "k")
+	_, ok := st.For(ctx, ulid.Make()).Plugin("core-scenes").StringSliceN(ctx, "k")
 	assert.False(t, ok)
 
 	// Write must surface the failure, not silently succeed.
-	err := st.For(ctx, ulid.Make()).Owner("core-scenes").SetStringSlice(ctx, "k", []string{"v"})
+	err := st.For(ctx, ulid.Make()).Plugin("core-scenes").SetStringSlice(ctx, "k", []string{"v"})
 	assert.Error(t, err, "a write after a load failure must fail closed, not silently drop")
 }
 

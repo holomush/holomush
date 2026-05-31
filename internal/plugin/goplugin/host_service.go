@@ -596,11 +596,11 @@ func (s *pluginHostServiceServer) Evaluate(ctx context.Context, req *pluginv1.Pl
 	}, nil
 }
 
-// GetSetting reads one owner-partitioned setting for the calling plugin.
+// GetSetting reads one plugin-partitioned setting for the calling plugin.
 //
 // Security invariants (holomush-iokti.7):
-//   - The owner partition is bound host-side from s.pluginName (stamped at
-//     construction, never from the request) via base.Owner(s.pluginName). Two
+//   - The plugin partition is bound host-side from s.pluginName (stamped at
+//     construction, never from the request) via base.Plugin(s.pluginName). Two
 //     plugins with different names address disjoint partitions (INV-11).
 //   - Scope must be specified; SETTING_SCOPE_UNSPECIFIED fails closed
 //     (InvalidArgument).
@@ -624,27 +624,18 @@ func (s *pluginHostServiceServer) Evaluate(ctx context.Context, req *pluginv1.Pl
 // settings stores follow the reads-never-error contract, so the only error paths
 // here are argument validation and authorization.
 func (s *pluginHostServiceServer) GetSetting(ctx context.Context, req *pluginv1.PluginHostServiceGetSettingRequest) (*pluginv1.PluginHostServiceGetSettingResponse, error) {
-	// resolveSettingScope is the single authorization gate shared with
-	// SetSetting: it recovers the acting subject from the dispatch token,
-	// fails closed on a missing/invalid token or empty subject, and — for
-	// PLAYER / CHARACTER scope — enforces requirePrincipalOwnership so a
-	// plugin can only READ the settings of the principal it is currently
-	// acting on behalf of (own settings only). A foreign principal_id ⇒
-	// PermissionDenied before any read happens.
-	//
-	// GAME-read decision (plan Task 7 authz matrix): game settings are
-	// server-wide readable by ANY plugin, so the GAME path deliberately
-	// performs NO engine check. There is no cross-plugin leak because the
-	// owner partition below (base.Owner(s.pluginName)) confines the read to
-	// the calling plugin's own keyspace (INV-11). GAME *writes* still require
-	// an operator engine decision in SetSetting; only reads are open.
+	// resolveSettingScope is the shared authorization gate (see its doc and the
+	// method-level invariants above): it fails closed on a bad token/subject and
+	// enforces principal ownership for PLAYER / CHARACTER. GAME reads are open to
+	// any plugin (no engine check); base.Plugin(s.pluginName) below confines the
+	// read to the caller's own keyspace (INV-11).
 	base, _, err := s.resolveSettingScope(ctx, req.GetScope(), req.GetPrincipalId())
 	if err != nil {
 		return nil, err
 	}
 
-	// Owner is bound from s.pluginName host-side — NEVER from the request.
-	part := base.Owner(s.pluginName)
+	// Plugin partition is bound from s.pluginName host-side — NEVER from the request.
+	part := base.Plugin(s.pluginName)
 
 	values, found := part.StringSliceN(ctx, req.GetKey())
 	return &pluginv1.PluginHostServiceGetSettingResponse{
@@ -655,10 +646,10 @@ func (s *pluginHostServiceServer) GetSetting(ctx context.Context, req *pluginv1.
 	}, nil
 }
 
-// SetSetting writes one owner-partitioned setting for the calling plugin.
+// SetSetting writes one plugin-partitioned setting for the calling plugin.
 //
 // Security invariants (holomush-iokti.7):
-//   - Owner partition bound host-side from s.pluginName (same as GetSetting).
+//   - Plugin partition bound host-side from s.pluginName (same as GetSetting).
 //   - SETTING_SCOPE_UNSPECIFIED → InvalidArgument (fail closed).
 //   - CHARACTER: req.principal_id must equal the acting character's ID (correct
 //     and functional).
@@ -686,8 +677,8 @@ func (s *pluginHostServiceServer) SetSetting(ctx context.Context, req *pluginv1.
 		}
 	}
 
-	// Owner is bound from s.pluginName host-side — NEVER from the request.
-	part := base.Owner(s.pluginName)
+	// Plugin partition is bound from s.pluginName host-side — NEVER from the request.
+	part := base.Plugin(s.pluginName)
 
 	if setErr := part.SetStringSlice(ctx, req.GetKey(), req.GetStringList()); setErr != nil {
 		slog.ErrorContext(ctx, "set setting failed",
@@ -739,35 +730,53 @@ func (s *pluginHostServiceServer) resolveSettingScope(
 		return game, subject, nil
 
 	case pluginv1.SettingScope_SETTING_SCOPE_PLAYER:
-		store := s.host.PlayerSettings()
-		if store == nil {
-			return nil, "", status.Error(codes.Unimplemented, "settings not configured") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
-		}
 		// PLAYER ownership compares principal_id against the host-vouched owning
 		// player of the acting character (token-carried). The resulting pid IS the
 		// player ULID, so store.For keys the player partition correctly.
-		pid, ownErr := s.requirePrincipalOwnership(principalID, ownerPlayer)
-		if ownErr != nil {
-			return nil, "", ownErr
-		}
-		return store.For(ctx, pid), subject, nil
+		return s.principalScopedStore(ctx, s.host.PlayerSettings(), principalID, ownerPlayer, subject)
 
 	case pluginv1.SettingScope_SETTING_SCOPE_CHARACTER:
-		store := s.host.CharacterSettings()
-		if store == nil {
-			return nil, "", status.Error(codes.Unimplemented, "settings not configured") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
-		}
 		// CHARACTER ownership compares principal_id against the acting character's
 		// ID (the dispatch-token actor is always an ActorCharacter).
-		pid, ownErr := s.requirePrincipalOwnership(principalID, actor.ID)
-		if ownErr != nil {
-			return nil, "", ownErr
-		}
-		return store.For(ctx, pid), subject, nil
+		return s.principalScopedStore(ctx, s.host.CharacterSettings(), principalID, actor.ID, subject)
 
 	default:
 		return nil, "", status.Error(codes.InvalidArgument, "unsupported scope") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
 	}
+}
+
+// principalScopedFor is the narrow For-factory shape shared by the player and
+// character settings stores. Both PlayerSettingsStore and CharacterSettingsStore
+// satisfy it, letting principalScopedStore handle the structurally-identical
+// nil-store guard, ownership check, and For() call once for both scopes.
+type principalScopedFor interface {
+	For(ctx context.Context, principalID ulid.ULID) settings.Scoped
+}
+
+// principalScopedStore is the shared PLAYER / CHARACTER resolution path: it fails
+// closed when the store is unwired, enforces requirePrincipalOwnership against
+// the caller-supplied expectedOwnerID, and returns the principal's Scoped handle.
+//
+// The per-scope security distinction is preserved at the call site: PLAYER passes
+// the host-vouched owning player, CHARACTER passes the acting character's ID. This
+// helper never chooses the expected owner — it only deduplicates the surrounding
+// guard/lookup boilerplate. A nil store interface value (an unset store) fails
+// closed with Unimplemented.
+func (s *pluginHostServiceServer) principalScopedStore(
+	ctx context.Context, store principalScopedFor, principalID, expectedOwnerID, subject string,
+) (settings.Scoped, string, error) {
+	// An unset store is a true nil interface: Host().PlayerSettings() /
+	// CharacterSettings() return the interface-typed field unchanged, and a nil
+	// PlayerSettingsStore / CharacterSettingsStore converts to a nil
+	// principalScopedFor — so this guard catches the unwired case as before.
+	if store == nil {
+		return nil, "", status.Error(codes.Unimplemented, "settings not configured") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+	pid, ownErr := s.requirePrincipalOwnership(principalID, expectedOwnerID)
+	if ownErr != nil {
+		return nil, "", ownErr
+	}
+	return store.For(ctx, pid), subject, nil
 }
 
 // requirePrincipalOwnership enforces that the request's principal_id equals the

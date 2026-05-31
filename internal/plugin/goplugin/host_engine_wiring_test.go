@@ -197,3 +197,61 @@ func TestSetSettingsStoresPropagatesAllThreeStoresIntoHost(t *testing.T) {
 	assert.Same(t, gameStore, gotGame,
 		"host must store the identical GameSettings instance passed to SetSettingsStores")
 }
+
+// TestWithSettingsOptionsPopulateHostStores is the construction-time companion to
+// TestSetSettingsStoresPropagatesAllThreeStoresIntoHost (holomush-iokti.17 .3/.8).
+// The earlier guard covers the late-bound SetSettingsStores path; this one covers
+// the three HostOption constructors WithPlayerSettings / WithCharacterSettings /
+// WithGameSettings, mirroring TestWithEngineStoresEngineInHost.
+//
+// Both wiring surfaces exist in production: the gRPC subsystem late-binds via
+// SetSettingsStores, while NewHost callers (and tests) can inject at construction
+// via the options. A future refactor that dropped or mis-wired one option would
+// silently make the corresponding scope's GetSetting / SetSetting RPC fail
+// Unimplemented; this guard pins each option to its host field.
+//
+// This test confirms:
+//  1. WithPlayerSettings / WithCharacterSettings / WithGameSettings are valid
+//     HostOptions (compile-time guard).
+//  2. After NewHost with all three, Host.PlayerSettings(), CharacterSettings(),
+//     and GameSettings() return the non-nil, identical instances injected
+//     (identity guard).
+func TestWithSettingsOptionsPopulateHostStores(t *testing.T) {
+	playerStore := &stubPlayerStoreForWiringGuard{}
+	characterStore := &stubCharacterStoreForWiringGuard{}
+	gameStore := settings.NewGameSettings(&stubSysInfoForWiringGuard{})
+
+	require.NotNil(t, playerStore)
+	require.NotNil(t, characterStore)
+	require.NotNil(t, gameStore)
+
+	host := goplugin.NewHost(
+		goplugin.WithPlayerSettings(playerStore),
+		goplugin.WithCharacterSettings(characterStore),
+		goplugin.WithGameSettings(gameStore),
+	)
+	require.NotNil(t, host)
+	t.Cleanup(func() { _ = host.Close(context.Background()) })
+
+	gotPlayer := host.PlayerSettingsForTest()
+	assert.NotNil(t, gotPlayer,
+		"binary host MUST have a non-nil PlayerSettingsStore after WithPlayerSettings; "+
+			"nil means all PLAYER-scope GetSetting/SetSetting RPCs fail Unimplemented "+
+			"(settings-wiring regression guard, holomush-iokti.17)")
+	assert.Same(t, playerStore, gotPlayer,
+		"host must store the identical PlayerSettingsStore instance passed to WithPlayerSettings")
+
+	gotCharacter := host.CharacterSettingsForTest()
+	assert.NotNil(t, gotCharacter,
+		"binary host MUST have a non-nil CharacterSettingsStore after WithCharacterSettings; "+
+			"nil means all CHARACTER-scope GetSetting/SetSetting RPCs fail Unimplemented")
+	assert.Same(t, characterStore, gotCharacter,
+		"host must store the identical CharacterSettingsStore instance passed to WithCharacterSettings")
+
+	gotGame := host.GameSettingsForTest()
+	assert.NotNil(t, gotGame,
+		"binary host MUST have a non-nil GameSettings after WithGameSettings; "+
+			"nil means all GAME-scope GetSetting/SetSetting RPCs fail Unimplemented")
+	assert.Same(t, gameStore, gotGame,
+		"host must store the identical GameSettings instance passed to WithGameSettings")
+}

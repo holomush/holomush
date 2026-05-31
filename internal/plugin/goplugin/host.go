@@ -241,7 +241,7 @@ type Host struct {
 	engine            types.AccessPolicyEngine
 	auditor           pluginauthz.Auditor
 	commandQuerier    *commandquery.Querier
-	// playerSettings / characterSettings / gameSettings back the owner-
+	// playerSettings / characterSettings / gameSettings back the plugin-
 	// partitioned GetSetting / SetSetting host RPCs (holomush-iokti.7). They are
 	// late-bound (SetSettingsStores) because the settings stores are assembled in
 	// the gRPC subsystem after the plugin host is constructed — same rationale as
