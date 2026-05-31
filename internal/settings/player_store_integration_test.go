@@ -66,6 +66,40 @@ func TestRepoPlayerSettingsPersistsOwnerPartitionAcrossHandles(t *testing.T) {
 	assert.Equal(t, player.Username, reloaded.Username)
 }
 
+// TestRepoPlayerSettingsPersistsHostPartitionAcrossHandles is the host-write
+// persist+readback invariant (holomush-sl0ir.17): a write through
+// For().Host().SetString persists via the commit func into Preferences.Host,
+// and a FRESH handle re-reading the player observes it. Before the fix the
+// repo-backed store silently discarded Host() writes; this mirrors the
+// CharacterSettings host-persist behavior.
+func TestRepoPlayerSettingsPersistsHostPartitionAcrossHandles(t *testing.T) {
+	ctx := context.Background()
+	st, repo := newRepoPlayerStore(t)
+
+	player, err := auth.NewPlayer("settingshostbob", nil, "hash")
+	require.NoError(t, err)
+	require.NoError(t, repo.Create(ctx, player))
+
+	// Write through the host partition; the non-nil commit func must persist it.
+	require.NoError(
+		t,
+		st.For(ctx, player.ID).
+			Host().
+			SetString(ctx, "scenes.focus.replay_tail_default", "25"),
+	)
+
+	// A FRESH handle re-reads the player from the repo and must see the value —
+	// no longer silently discarded.
+	got, ok := st.For(ctx, player.ID).Host().StringN(ctx, "scenes.focus.replay_tail_default")
+	require.True(t, ok, "host write through For().Host() must persist")
+	assert.Equal(t, "25", got)
+
+	// The write must land in Preferences.Host, not clobber the Plugins bag.
+	reloaded, err := repo.GetByID(ctx, player.ID)
+	require.NoError(t, err)
+	assert.NotEmpty(t, reloaded.Preferences.Host, "host write must persist into Preferences.Host")
+}
+
 // TestRepoPlayerSettingsDoesNotLostUpdateSiblingOwners proves the commit func
 // re-reads and merges, so a write to one owner partition does not clobber a
 // sibling owner's partition persisted by a separate For() call.

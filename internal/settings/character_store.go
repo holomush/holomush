@@ -82,7 +82,7 @@ func (s *CharacterSettings) For(ctx context.Context, characterID ulid.ULID) Scop
 	// host and plugins are the live maps the scopedView's Host()/Plugin()
 	// writables mutate. The commit closure captures them directly so a write
 	// serializes the touched partitions back.
-	host := decodeHostPartition(ctx, characterID, prefs.Host)
+	host := decodeHostPartition(ctx, "character", characterID, prefs.Host)
 	plugins := decodePluginPartitions(ctx, prefs.Plugins)
 
 	return newTrackedScopedView(host, plugins,
@@ -125,22 +125,23 @@ func (s *CharacterSettings) For(ctx context.Context, characterID ulid.ULID) Scop
 // decodeHostPartition materializes the serialized host partition (a flat
 // dot-keyed map) into the scopedView's host map. A NULL/empty or undecodable
 // host blob yields an empty map and a warning; the host never panics on a
-// malformed partition.
+// malformed partition. Shared by the character and repo-backed player stores.
 //
-// characterID is used ONLY for the diagnostic warning on an undecodable blob —
-// it does not affect decoding. It is kept (rather than dropped) so the
-// "skipping undecodable character host settings partition" log line carries the
-// affected character (holomush-iokti.17 .19).
+// ownerKind ("character" / "player") and ownerID are used ONLY for the
+// diagnostic warning on an undecodable blob — they do not affect decoding. They
+// are kept (rather than dropped) so the "skipping undecodable host settings
+// partition" log line names the affected owner (holomush-iokti.17 .19,
+// holomush-sl0ir.17).
 func decodeHostPartition(
-	ctx context.Context, characterID ulid.ULID, raw json.RawMessage,
+	ctx context.Context, ownerKind string, ownerID ulid.ULID, raw json.RawMessage,
 ) map[string]json.RawMessage {
 	out := map[string]json.RawMessage{}
 	if len(raw) == 0 {
 		return out
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
-		slog.WarnContext(ctx, "skipping undecodable character host settings partition",
-			"character_id", characterID.String(), "error", err)
+		slog.WarnContext(ctx, "skipping undecodable host settings partition",
+			"owner_kind", ownerKind, "owner_id", ownerID.String(), "error", err)
 		return map[string]json.RawMessage{}
 	}
 	return out

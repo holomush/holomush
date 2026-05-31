@@ -65,12 +65,15 @@ func NewPlayerSettingsStore(reader PlayerPrefsReader) *PlayerSettings {
 // NewRepoPlayerSettingsStore creates a PlayerSettingsStore backed by the player
 // repository.
 //
-// Persistence semantics: PERSISTING. Plugin partition writes through For()
-// persist via a read-modify-write commit func: each write re-reads the player,
-// merges only the mutated plugin partition into Preferences.Plugins, and
-// Updates — so sibling plugin partitions written by a separate For() call are
-// not lost. This is the production write-through store; contrast
-// NewPlayerSettingsStore, whose partition writes are in-memory only.
+// Persistence semantics: PERSISTING. Both plugin-partition AND host-partition
+// writes through For() persist via a read-modify-write commit func: each write
+// re-reads the player, merges only the mutated partitions into
+// Preferences.Plugins / Preferences.Host, and Updates — so sibling partitions
+// written by a separate For() call are not lost. This is the production
+// write-through store; contrast NewPlayerSettingsStore, whose partition writes
+// are in-memory only. Host writes persist into the Preferences.Host sub-bag,
+// mirroring the character store (holomush-sl0ir.17); the store-level SetString
+// host-key path remains unsupported on this store (use For().Host()).
 func NewRepoPlayerSettingsStore(repo PlayerRepository) *PlayerSettings {
 	return &PlayerSettings{repo: repo}
 }
@@ -83,11 +86,12 @@ func NewRepoPlayerSettingsStore(repo PlayerRepository) *PlayerSettings {
 // the legacy behavior the resolution Chain depends on. Plugin(name) narrows to
 // that plugin's isolated, namespace-unvalidated partition.
 //
-// When the store is repo-backed, the handle's plugin partitions are loaded from
-// Preferences.Plugins and Plugin writes persist via a non-nil commit func. When
-// the store is reader-backed, the commit func is nil (writes are in-memory
-// only). On any load failure the handle degrades to an empty, read-only view so
-// bare reads and the Chain resolve to defaults rather than panicking.
+// When the store is repo-backed, the handle's host partition is loaded from
+// Preferences.Host and its plugin partitions from Preferences.Plugins, and both
+// Host and Plugin writes persist via a non-nil commit func. When the store is
+// reader-backed, the commit func is nil (writes are in-memory only). On any load
+// failure the handle degrades to an empty, read-only view so bare reads and the
+// Chain resolve to defaults rather than panicking.
 //
 // Concurrency: the returned handle is per-request — one For() call per request.
 // Its in-memory partition maps are mutated without synchronization and MUST NOT
@@ -113,16 +117,17 @@ func (s *PlayerSettings) repoScopedFor(ctx context.Context, playerID ulid.ULID) 
 		return newFailClosedView(oops.With("player_id", playerID.String()).Wrap(err))
 	}
 
-	// plugins is the live plugin->key->value map the scopedView mutates via
-	// Plugin writes. The commit closure captures it directly so a write
-	// serializes the touched plugin partitions back.
+	// host and plugins are the live maps the scopedView's Host()/Plugin()
+	// writables mutate. The commit closure captures them directly so a write
+	// serializes the touched partitions back.
+	host := decodeHostPartition(ctx, "player", playerID, player.Preferences.Host)
 	plugins := decodePluginPartitions(ctx, player.Preferences.Plugins)
 
-	return newTrackedScopedView(map[string]json.RawMessage{}, plugins,
+	return newTrackedScopedView(host, plugins,
 		func(dirty *dirtyTracker) func(ctx context.Context) error {
 			return func(ctx context.Context) error {
 				// Re-read so the merge runs against the latest persisted state, then
-				// overwrite ONLY the plugin partitions this view mutated. A clean-loaded
+				// overwrite ONLY the partitions this view mutated. A clean-loaded
 				// sibling partition is never re-serialized with its stale value, so a
 				// concurrent For() handle that changed a different plugin keeps its
 				// update (cross-plugin lost-update safety).
@@ -139,6 +144,13 @@ func (s *PlayerSettings) repoScopedFor(ctx context.Context, playerID ulid.ULID) 
 						return oops.With("player_id", playerID.String(), "plugin", plugin).Wrap(err)
 					}
 					fresh.Preferences.Plugins[plugin] = encoded
+				}
+				if dirty.host {
+					encodedHost, err := json.Marshal(host)
+					if err != nil {
+						return oops.With("player_id", playerID.String()).Wrap(err)
+					}
+					fresh.Preferences.Host = encodedHost
 				}
 				if err := s.repo.Update(ctx, fresh); err != nil {
 					return oops.With("player_id", playerID.String()).Wrap(err)
