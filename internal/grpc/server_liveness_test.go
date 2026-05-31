@@ -13,116 +13,76 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 )
 
+// TestRecomputeSessionLiveness exercises the connection-count → session-liveness
+// mapping owned by recomputeSessionLiveness: zero connections detach (with the
+// session's TTL window, or the 1800 s default when TTLSeconds=0) and clear
+// grid_present; a live terminal connection keeps/flips the session active and
+// grid-present (including reactivating a previously-detached row, the I2 case).
 // Verifies: I-LIVE-3
 // Verifies: I-LIVE-5
-func TestRecomputeSessionLivenessDetachesOnZeroConnections(t *testing.T) {
-	char := ulid.Make()
-	loc := ulid.Make()
-	sess := mkActiveAt("sess-1", char, loc)
-	sess.TTLSeconds = 300 // explicit TTL so we can assert the exact window
-	store := newTestSessionStore(t, map[string]*session.Info{"sess-1": sess})
-	s := &CoreServer{sessionStore: store}
+func TestRecomputeSessionLiveness(t *testing.T) {
+	const sessionID = "sess"
 
-	before := time.Now()
-	err := s.recomputeSessionLiveness(context.Background(), "sess-1")
-	require.NoError(t, err)
-
-	got, err := store.Get(context.Background(), "sess-1")
-	require.NoError(t, err)
-	assert.Equal(t, session.StatusDetached, got.Status)
-	assert.False(t, got.GridPresent)
-	require.NotNil(t, got.ExpiresAt, "detached session must have a non-nil ExpiresAt (reattach TTL)")
-
-	// Assert the expiry window matches the session's TTLSeconds (300 s), not
-	// the 1800 s default. Allow a 5-second wall-clock slack for slow CI.
-	wantMin := before.Add(300 * time.Second)
-	wantMax := before.Add(305 * time.Second)
-	assert.True(t, !got.ExpiresAt.Before(wantMin) && !got.ExpiresAt.After(wantMax),
-		"ExpiresAt %v should be within [%v, %v] (TTL=300 s ± 5 s slack)",
-		got.ExpiresAt, wantMin, wantMax)
-}
-
-func TestRecomputeSessionLivenessUsesDefaultTTLWhenTTLSecondsIsZero(t *testing.T) {
-	char := ulid.Make()
-	loc := ulid.Make()
-	sess := mkActiveAt("sess-default-ttl", char, loc)
-	// TTLSeconds left at zero → helper must fall back to 1800 s.
-	store := newTestSessionStore(t, map[string]*session.Info{"sess-default-ttl": sess})
-	s := &CoreServer{sessionStore: store}
-
-	before := time.Now()
-	err := s.recomputeSessionLiveness(context.Background(), "sess-default-ttl")
-	require.NoError(t, err)
-
-	got, err := store.Get(context.Background(), "sess-default-ttl")
-	require.NoError(t, err)
-	assert.Equal(t, session.StatusDetached, got.Status)
-	require.NotNil(t, got.ExpiresAt)
-
-	// Default TTL is 1800 s; allow 5 s slack.
-	wantMin := before.Add(1800 * time.Second)
-	wantMax := before.Add(1805 * time.Second)
-	assert.True(t, !got.ExpiresAt.Before(wantMin) && !got.ExpiresAt.After(wantMax),
-		"ExpiresAt %v should be within [%v, %v] (default TTL=1800 s ± 5 s slack)",
-		got.ExpiresAt, wantMin, wantMax)
-}
-
-func TestRecomputeSessionLivenessKeepsActiveWithConnections(t *testing.T) {
-	char := ulid.Make()
-	loc := ulid.Make()
-	sess := mkActiveAt("sess-2", char, loc)
-	store := newTestSessionStore(t, map[string]*session.Info{"sess-2": sess})
-	s := &CoreServer{sessionStore: store}
-
-	connID := ulid.Make()
-	require.NoError(t, store.AddConnection(context.Background(), &session.Connection{
-		ID: connID, SessionID: "sess-2", ClientType: "terminal",
-	}))
-
-	err := s.recomputeSessionLiveness(context.Background(), "sess-2")
-	require.NoError(t, err)
-
-	got, err := store.Get(context.Background(), "sess-2")
-	require.NoError(t, err)
-	assert.Equal(t, session.StatusActive, got.Status)
-	assert.True(t, got.GridPresent)
-}
-
-// TestRecomputeSessionLivenessReactivatesDetachedSessionWithConnections
-// covers the I2 finding: when a session row is StatusDetached but connections
-// exist (e.g. the lease sweep or a future AddConnection caller runs after an
-// interrupted recompute), the >0 branch MUST flip status back to active.
-func TestRecomputeSessionLivenessReactivatesDetachedSessionWithConnections(t *testing.T) {
-	char := ulid.Make()
-	loc := ulid.Make()
-	future := time.Now().Add(30 * time.Minute)
-	sess := &session.Info{
-		ID:          "sess-detached",
-		Status:      session.StatusDetached,
-		ExpiresAt:   &future,
-		CharacterID: char,
-		LocationID:  loc,
-		PlayerID:    ownedPlayerID,
-		GridPresent: false,
-		TTLSeconds:  1800,
+	tests := []struct {
+		name          string
+		ttlSeconds    int
+		startDetached bool // seed the row as StatusDetached (reactivation case)
+		addConn       bool // seed a live terminal connection
+		wantStatus    session.Status
+		wantGrid      bool
+		wantExpiryTTL time.Duration // >0 → assert ExpiresAt ∈ [before+ttl, before+ttl+5s]
+	}{
+		{name: "zero connections detach with explicit TTL", ttlSeconds: 300, wantStatus: session.StatusDetached, wantGrid: false, wantExpiryTTL: 300 * time.Second},
+		{name: "zero connections detach with default TTL when TTLSeconds=0", ttlSeconds: 0, wantStatus: session.StatusDetached, wantGrid: false, wantExpiryTTL: 1800 * time.Second},
+		{name: "live terminal connection keeps active and grid-present", ttlSeconds: 0, addConn: true, wantStatus: session.StatusActive, wantGrid: true},
+		{name: "detached row with live connection reactivates (I2)", ttlSeconds: 1800, startDetached: true, addConn: true, wantStatus: session.StatusActive, wantGrid: true},
 	}
-	store := newTestSessionStore(t, map[string]*session.Info{"sess-detached": sess})
-	s := &CoreServer{sessionStore: store}
 
-	connID := ulid.Make()
-	require.NoError(t, store.AddConnection(context.Background(), &session.Connection{
-		ID: connID, SessionID: "sess-detached", ClientType: "terminal",
-	}))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			store := sessiontest.NewStore(t)
 
-	err := s.recomputeSessionLiveness(context.Background(), "sess-detached")
-	require.NoError(t, err)
+			var sess *session.Info
+			if tt.startDetached {
+				future := time.Now().Add(30 * time.Minute)
+				sess = &session.Info{
+					ID: sessionID, Status: session.StatusDetached, ExpiresAt: &future,
+					CharacterID: ulid.Make(), LocationID: ulid.Make(), PlayerID: ownedPlayerID,
+					GridPresent: false, TTLSeconds: tt.ttlSeconds,
+				}
+			} else {
+				sess = mkActiveAt(sessionID, ulid.Make(), ulid.Make())
+				sess.TTLSeconds = tt.ttlSeconds
+			}
+			require.NoError(t, store.Set(ctx, sessionID, sess))
 
-	got, err := store.Get(context.Background(), "sess-detached")
-	require.NoError(t, err)
-	assert.Equal(t, session.StatusActive, got.Status,
-		"detached session with live connections MUST be flipped back to active")
-	assert.True(t, got.GridPresent,
-		"terminal connection MUST set grid_present=true")
+			if tt.addConn {
+				require.NoError(t, store.AddConnection(ctx, &session.Connection{
+					ID: ulid.Make(), SessionID: sessionID, ClientType: "terminal",
+				}))
+			}
+
+			s := &CoreServer{sessionStore: store}
+			before := time.Now()
+			require.NoError(t, s.recomputeSessionLiveness(ctx, sessionID))
+
+			got, err := store.Get(ctx, sessionID)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, got.Status)
+			assert.Equal(t, tt.wantGrid, got.GridPresent)
+
+			if tt.wantExpiryTTL > 0 {
+				require.NotNil(t, got.ExpiresAt, "detached session must have a non-nil ExpiresAt (reattach TTL)")
+				wantMin := before.Add(tt.wantExpiryTTL)
+				wantMax := before.Add(tt.wantExpiryTTL + 5*time.Second) // 5 s slack for slow CI
+				assert.True(t, !got.ExpiresAt.Before(wantMin) && !got.ExpiresAt.After(wantMax),
+					"ExpiresAt %v should be within [%v, %v] (TTL=%v ± 5 s slack)",
+					got.ExpiresAt, wantMin, wantMax, tt.wantExpiryTTL)
+			}
+		})
+	}
 }

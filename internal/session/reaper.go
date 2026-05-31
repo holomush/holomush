@@ -168,6 +168,15 @@ func (r *Reaper) recomputeAfterSweep(ctx context.Context, sessionID string) {
 			slog.WarnContext(ctx, "reaper: detach after sweep failed", "session_id", sessionID, "error", updErr)
 			return
 		}
+		// The last connection is gone, so the session is no longer grid-present.
+		// Roster queries (ListActiveByLocation) filter on grid_present, so leaving
+		// it set would keep a lease-swept session visible until TTL expiry.
+		if info.GridPresent {
+			if updErr := r.store.UpdateGridPresent(ctx, sessionID, false); updErr != nil {
+				slog.WarnContext(ctx, "reaper: clear grid_present after detach failed", "session_id", sessionID, "error", updErr)
+				return
+			}
+		}
 		r.safeCallback(ctx, "OnSessionDetached", r.config.OnSessionDetached, info)
 		return
 	}

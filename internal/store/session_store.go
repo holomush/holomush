@@ -577,17 +577,23 @@ func (s *PostgresSessionStore) RemoveConnection(ctx context.Context, connectionI
 }
 
 // RefreshConnection bumps a connection's lease to now (holomush-rsoe6, I-LIVE-2).
-func (s *PostgresSessionStore) RefreshConnection(ctx context.Context, connectionID ulid.ULID) error {
+// The UPDATE is scoped by both id AND session_id so a connection can only be
+// refreshed by its owning session; pairing a foreign connection ULID with a
+// caller-controlled session affects zero rows (I-SEC-1).
+func (s *PostgresSessionStore) RefreshConnection(ctx context.Context, connectionID ulid.ULID, sessionID string) error {
 	tag, err := s.pool.Exec(ctx,
-		`UPDATE session_connections SET last_seen_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT WHERE id = $1`,
-		connectionID.String())
+		`UPDATE session_connections SET last_seen_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT WHERE id = $1 AND session_id = $2`,
+		connectionID.String(), sessionID)
 	if err != nil {
 		return oops.With("operation", "refresh connection").
-			With("connection_id", connectionID.String()).Wrap(err)
+			With("connection_id", connectionID.String()).
+			With("session_id", sessionID).Wrap(err)
 	}
 	if tag.RowsAffected() == 0 {
+		// Absent OR owned by another session — indistinguishable on purpose.
 		return oops.Code("CONNECTION_NOT_FOUND").
 			With("connection_id", connectionID.String()).
+			With("session_id", sessionID).
 			Errorf("connection not found")
 	}
 	return nil

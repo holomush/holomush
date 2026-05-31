@@ -34,7 +34,12 @@ func (s *CoreServer) RefreshConnection(ctx context.Context, req *corev1.RefreshC
 		return nil, oops.Code("INVALID_ARGUMENT").With("connection_id", req.GetConnectionId()).
 			Errorf("connection_id is not a valid ULID")
 	}
-	if refreshErr := s.sessionStore.RefreshConnection(ctx, connID); refreshErr != nil {
+	// Scope the refresh to the validated session: the ownership check above
+	// proves the caller owns session_id, and the store UPDATE is keyed on both
+	// connection_id AND session_id, so a caller cannot refresh a connection
+	// owned by a different session. A foreign/absent connection affects zero
+	// rows → CONNECTION_NOT_FOUND (enumeration-safe, I-SEC-1).
+	if refreshErr := s.sessionStore.RefreshConnection(ctx, connID, req.GetSessionId()); refreshErr != nil {
 		return nil, refreshErr //nolint:wrapcheck // store returns canonical CONNECTION_NOT_FOUND oops code
 	}
 	return &corev1.RefreshConnectionResponse{Meta: responseMeta(req.GetMeta().GetRequestId())}, nil

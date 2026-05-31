@@ -988,10 +988,11 @@ func TestStreamEventsRefreshesLeaseOnHeartbeat(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	const refreshToken = "tok-heartbeat-refresh"
 	wsc := webv1connect.NewWebServiceClient(http.DefaultClient, srv.URL)
-	stream, err := wsc.StreamEvents(ctx, connect.NewRequest(&webv1.StreamEventsRequest{
-		SessionId: "sess-refresh",
-	}))
+	streamReq := connect.NewRequest(&webv1.StreamEventsRequest{SessionId: "sess-refresh"})
+	streamReq.Header().Set(headerInjectSessionToken, refreshToken)
+	stream, err := wsc.StreamEvents(ctx, streamReq)
 	require.NoError(t, err)
 
 	// Receive the STREAM_OPENED frame so the HTTP/2 stream is live.
@@ -1022,6 +1023,8 @@ func TestStreamEventsRefreshesLeaseOnHeartbeat(t *testing.T) {
 		"refresh must carry the session_id")
 	assert.Equal(t, connID, lastReq.GetConnectionId(),
 		"refresh must carry the connection_id from STREAM_OPENED")
+	assert.Equal(t, refreshToken, lastReq.GetPlayerSessionToken(),
+		"refresh must carry the player session token so the ownership-validated RefreshConnection gate passes")
 }
 
 // scriptedSubscribeStream is a CoreService_SubscribeClient that yields a fixed

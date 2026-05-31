@@ -1216,17 +1216,17 @@ func (_c *MockStore_ReattachCAS_Call) RunAndReturn(run func(context.Context, str
 	return _c
 }
 
-// RefreshConnection provides a mock function with given fields: ctx, connectionID
-func (_m *MockStore) RefreshConnection(ctx context.Context, connectionID ulid.ULID) error {
-	ret := _m.Called(ctx, connectionID)
+// RefreshConnection provides a mock function with given fields: ctx, connectionID, sessionID
+func (_m *MockStore) RefreshConnection(ctx context.Context, connectionID ulid.ULID, sessionID string) error {
+	ret := _m.Called(ctx, connectionID, sessionID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for RefreshConnection")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) error); ok {
-		r0 = rf(ctx, connectionID)
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, string) error); ok {
+		r0 = rf(ctx, connectionID, sessionID)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -1242,13 +1242,14 @@ type MockStore_RefreshConnection_Call struct {
 // RefreshConnection is a helper method to define mock.On call
 //   - ctx context.Context
 //   - connectionID ulid.ULID
-func (_e *MockStore_Expecter) RefreshConnection(ctx interface{}, connectionID interface{}) *MockStore_RefreshConnection_Call {
-	return &MockStore_RefreshConnection_Call{Call: _e.mock.On("RefreshConnection", ctx, connectionID)}
+//   - sessionID string
+func (_e *MockStore_Expecter) RefreshConnection(ctx interface{}, connectionID interface{}, sessionID interface{}) *MockStore_RefreshConnection_Call {
+	return &MockStore_RefreshConnection_Call{Call: _e.mock.On("RefreshConnection", ctx, connectionID, sessionID)}
 }
 
-func (_c *MockStore_RefreshConnection_Call) Run(run func(ctx context.Context, connectionID ulid.ULID)) *MockStore_RefreshConnection_Call {
+func (_c *MockStore_RefreshConnection_Call) Run(run func(ctx context.Context, connectionID ulid.ULID, sessionID string)) *MockStore_RefreshConnection_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(ulid.ULID))
+		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(string))
 	})
 	return _c
 }
@@ -1258,7 +1259,7 @@ func (_c *MockStore_RefreshConnection_Call) Return(_a0 error) *MockStore_Refresh
 	return _c
 }
 
-func (_c *MockStore_RefreshConnection_Call) RunAndReturn(run func(context.Context, ulid.ULID) error) *MockStore_RefreshConnection_Call {
+func (_c *MockStore_RefreshConnection_Call) RunAndReturn(run func(context.Context, ulid.ULID, string) error) *MockStore_RefreshConnection_Call {
 	_c.Call.Return(run)
 	return _c
 }

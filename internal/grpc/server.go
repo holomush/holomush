@@ -1628,10 +1628,8 @@ func (s *CoreServer) recomputeSessionLiveness(ctx context.Context, sessionID str
 			return oops.With("session_id", sessionID).Wrap(err)
 		}
 		if info.GridPresent {
-			err = s.sessionStore.UpdateGridPresent(ctx, sessionID, false)
-			if err != nil {
-				slog.WarnContext(ctx, "recomputeSessionLiveness: failed to clear grid_present",
-					"session_id", sessionID, "error", err)
+			if err = s.sessionStore.UpdateGridPresent(ctx, sessionID, false); err != nil {
+				return oops.With("session_id", sessionID).Wrap(err)
 			}
 		}
 		return nil

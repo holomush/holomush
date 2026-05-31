@@ -456,9 +456,13 @@ type Store interface {
 
 	// RefreshConnection bumps a connection's lease (last_seen_at = now).
 	// Called periodically by the gateway while the client socket is open
-	// (holomush-rsoe6, I-LIVE-2). Returns CONNECTION_NOT_FOUND if no row
-	// matches connectionID.
-	RefreshConnection(ctx context.Context, connectionID ulid.ULID) error
+	// (holomush-rsoe6, I-LIVE-2). The write is scoped to sessionID so a
+	// connection can only be refreshed by its owning session — a caller
+	// cannot keep a foreign connection alive by pairing its ULID with a
+	// session they control. Returns CONNECTION_NOT_FOUND when no row matches
+	// both connectionID AND sessionID (absent or owned by another session —
+	// indistinguishable, enumeration-safe, I-SEC-1).
+	RefreshConnection(ctx context.Context, connectionID ulid.ULID, sessionID string) error
 
 	// ListLapsedConnections returns connections whose lease is older than
 	// olderThan (i.e. last_seen_at < olderThan). Used by the lease sweep

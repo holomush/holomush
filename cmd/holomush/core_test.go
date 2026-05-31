@@ -1153,91 +1153,54 @@ func TestParseSessionConfigPreservesPositiveMaxHistory(t *testing.T) {
 	assert.Equal(t, 250, cfg.SessionMaxHistory)
 }
 
-// TestParseSessionConfigRejectsInvalidLeaseTTL verifies that a malformed
-// session_lease_ttl value returns a CONFIG_INVALID error.
-func TestParseSessionConfigRejectsInvalidLeaseTTL(t *testing.T) {
-	cfg := &coreConfig{
-		SessionTTL:            "30m",
-		SessionReaperInterval: "30s",
-		SessionLeaseTTL:       "bogus",
+// TestParseSessionConfigLeaseTTLAndBootGrace covers parsing/validation of
+// session_lease_ttl and session_boot_grace: malformed and zero values are
+// rejected, empty values default to 45s/60s, and explicit values are preserved.
+func TestParseSessionConfigLeaseTTLAndBootGrace(t *testing.T) {
+	tests := []struct {
+		name          string
+		leaseTTL      string
+		bootGrace     string
+		wantErrCode   string        // non-empty → assert this oops code
+		wantErrSubstr string        // non-empty → assert err.Error() contains
+		wantLease     time.Duration // asserted when no error expected
+		wantBoot      time.Duration
+	}{
+		{name: "rejects malformed lease_ttl", leaseTTL: "bogus", wantErrCode: "CONFIG_INVALID"},
+		{name: "rejects malformed boot_grace", bootGrace: "bogus", wantErrCode: "CONFIG_INVALID"},
+		{name: "rejects zero lease_ttl", leaseTTL: "0s", wantErrSubstr: "positive"},
+		{name: "rejects zero boot_grace", bootGrace: "0s", wantErrSubstr: "positive"},
+		{name: "empty values default to 45s/60s", wantLease: 45 * time.Second, wantBoot: 60 * time.Second},
+		{name: "explicit values preserved", leaseTTL: "2m", bootGrace: "3m", wantLease: 2 * time.Minute, wantBoot: 3 * time.Minute},
 	}
 
-	_, _, _, _, err := parseSessionConfig(cfg)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &coreConfig{
+				SessionTTL:            "30m",
+				SessionReaperInterval: "30s",
+				SessionLeaseTTL:       tt.leaseTTL,
+				SessionBootGrace:      tt.bootGrace,
+			}
 
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "CONFIG_INVALID")
-}
+			_, _, leaseTTL, bootGrace, err := parseSessionConfig(cfg)
 
-// TestParseSessionConfigRejectsInvalidBootGrace verifies that a malformed
-// session_boot_grace value returns a CONFIG_INVALID error.
-func TestParseSessionConfigRejectsInvalidBootGrace(t *testing.T) {
-	cfg := &coreConfig{
-		SessionTTL:            "30m",
-		SessionReaperInterval: "30s",
-		SessionBootGrace:      "bogus",
+			if tt.wantErrCode != "" || tt.wantErrSubstr != "" {
+				require.Error(t, err)
+				if tt.wantErrCode != "" {
+					errutil.AssertErrorCode(t, err, tt.wantErrCode)
+				}
+				if tt.wantErrSubstr != "" {
+					assert.Contains(t, err.Error(), tt.wantErrSubstr)
+				}
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantLease, leaseTTL)
+			assert.Equal(t, tt.wantBoot, bootGrace)
+		})
 	}
-
-	_, _, _, _, err := parseSessionConfig(cfg)
-
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "CONFIG_INVALID")
-}
-
-// TestParseSessionConfigRejectsZeroLeaseTTL verifies that a zero lease TTL
-// returns an error containing "positive".
-func TestParseSessionConfigRejectsZeroLeaseTTL(t *testing.T) {
-	cfg := &coreConfig{
-		SessionTTL:            "30m",
-		SessionReaperInterval: "30s",
-		SessionLeaseTTL:       "0s",
-	}
-
-	_, _, _, _, err := parseSessionConfig(cfg)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "positive")
-}
-
-// TestParseSessionConfigRejectsZeroBootGrace verifies that a zero boot grace
-// returns an error containing "positive".
-func TestParseSessionConfigRejectsZeroBootGrace(t *testing.T) {
-	cfg := &coreConfig{
-		SessionTTL:            "30m",
-		SessionReaperInterval: "30s",
-		SessionBootGrace:      "0s",
-	}
-
-	_, _, _, _, err := parseSessionConfig(cfg)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "positive")
-}
-
-// TestParseSessionConfigDefaultsLeaseTTLAndBootGrace verifies that empty
-// session_lease_ttl and session_boot_grace receive their defaults (45s / 60s).
-func TestParseSessionConfigDefaultsLeaseTTLAndBootGrace(t *testing.T) {
-	cfg := &coreConfig{}
-
-	_, _, leaseTTL, bootGrace, err := parseSessionConfig(cfg)
-
-	require.NoError(t, err)
-	assert.Equal(t, 45*time.Second, leaseTTL)
-	assert.Equal(t, 60*time.Second, bootGrace)
-}
-
-// TestParseSessionConfigUsesExplicitLeaseTTLAndBootGrace verifies that explicit
-// session_lease_ttl and session_boot_grace values are preserved.
-func TestParseSessionConfigUsesExplicitLeaseTTLAndBootGrace(t *testing.T) {
-	cfg := &coreConfig{
-		SessionLeaseTTL:  "2m",
-		SessionBootGrace: "3m",
-	}
-
-	_, _, leaseTTL, bootGrace, err := parseSessionConfig(cfg)
-
-	require.NoError(t, err)
-	assert.Equal(t, 2*time.Minute, leaseTTL)
-	assert.Equal(t, 3*time.Minute, bootGrace)
 }
 
 // TestResolveLogLevel verifies that resolveLogLevel correctly resolves log level
