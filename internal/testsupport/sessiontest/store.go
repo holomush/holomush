@@ -22,9 +22,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/oklog/ulid/v2"
-
 	"github.com/holomush/holomush/internal/auth"
+	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/store"
@@ -64,9 +63,9 @@ func NewStoreWithPool(t *testing.T) (session.Store, *pgxpool.Pool) {
 // prerequisites in integration tests. The PlayerID and ID are fresh ULIDs;
 // TokenHash is a deterministic placeholder derived from the ID.
 func NewPlayerSession() *auth.PlayerSession {
-	playerID := ulid.Make()
+	playerID := idgen.New()
 	ps := &auth.PlayerSession{
-		ID:        ulid.Make(),
+		ID:        idgen.New(),
 		PlayerID:  playerID,
 		TokenHash: "placeholder-test-token-hash-" + playerID.String(),
 		ExpiresAt: time.Now().Add(24 * time.Hour),
@@ -81,11 +80,11 @@ func NewPlayerSession() *auth.PlayerSession {
 // fresh ULID string; CharacterID is a fresh random ULID; ExpiresAt is set
 // one hour in the future so the session is not expired.
 func NewActiveSession(ps *auth.PlayerSession) *session.Info {
-	charID := ulid.Make()
-	locID := ulid.Make()
+	charID := idgen.New()
+	locID := idgen.New()
 	expiresAt := time.Now().Add(time.Hour)
 	return &session.Info{
-		ID:              ulid.Make().String(),
+		ID:              idgen.New().String(),
 		CharacterID:     charID,
 		PlayerID:        ps.PlayerID,
 		PlayerSessionID: ps.ID,
