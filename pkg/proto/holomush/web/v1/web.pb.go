@@ -126,6 +126,12 @@ const (
 	// SendCommandRequest.connection_id so the gateway routes per-connection
 	// commands (Phase 5 scene-focus autofocus) correctly under multi-tab.
 	ControlSignal_CONTROL_SIGNAL_STREAM_OPENED ControlSignal = 3
+	// CONTROL_SIGNAL_RECONNECTING: the gateway lost its core stream but is holding
+	// the client and reconnecting; the UI shows a reconnecting indicator (holomush-rsoe6).
+	ControlSignal_CONTROL_SIGNAL_RECONNECTING ControlSignal = 4
+	// CONTROL_SIGNAL_RECONNECTED: the gateway re-established the core stream; the
+	// client may clear the reconnecting indicator.
+	ControlSignal_CONTROL_SIGNAL_RECONNECTED ControlSignal = 5
 )
 
 // Enum value maps for ControlSignal.
@@ -135,12 +141,16 @@ var (
 		1: "CONTROL_SIGNAL_REPLAY_COMPLETE",
 		2: "CONTROL_SIGNAL_STREAM_CLOSED",
 		3: "CONTROL_SIGNAL_STREAM_OPENED",
+		4: "CONTROL_SIGNAL_RECONNECTING",
+		5: "CONTROL_SIGNAL_RECONNECTED",
 	}
 	ControlSignal_value = map[string]int32{
 		"CONTROL_SIGNAL_UNSPECIFIED":     0,
 		"CONTROL_SIGNAL_REPLAY_COMPLETE": 1,
 		"CONTROL_SIGNAL_STREAM_CLOSED":   2,
 		"CONTROL_SIGNAL_STREAM_OPENED":   3,
+		"CONTROL_SIGNAL_RECONNECTING":    4,
+		"CONTROL_SIGNAL_RECONNECTED":     5,
 	}
 )
 
@@ -3819,12 +3829,14 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x16EVENT_CHANNEL_TERMINAL\x10\x01\x12\x17\n" +
 	"\x13EVENT_CHANNEL_STATE\x10\x02\x12\x16\n" +
 	"\x12EVENT_CHANNEL_BOTH\x10\x03\x12\x1c\n" +
-	"\x18EVENT_CHANNEL_AUDIT_ONLY\x10\x04*\x97\x01\n" +
+	"\x18EVENT_CHANNEL_AUDIT_ONLY\x10\x04*\xd8\x01\n" +
 	"\rControlSignal\x12\x1e\n" +
 	"\x1aCONTROL_SIGNAL_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eCONTROL_SIGNAL_REPLAY_COMPLETE\x10\x01\x12 \n" +
 	"\x1cCONTROL_SIGNAL_STREAM_CLOSED\x10\x02\x12 \n" +
-	"\x1cCONTROL_SIGNAL_STREAM_OPENED\x10\x03*}\n" +
+	"\x1cCONTROL_SIGNAL_STREAM_OPENED\x10\x03\x12\x1f\n" +
+	"\x1bCONTROL_SIGNAL_RECONNECTING\x10\x04\x12\x1e\n" +
+	"\x1aCONTROL_SIGNAL_RECONNECTED\x10\x05*}\n" +
 	"\x12WebPresenceContext\x12$\n" +
 	" WEB_PRESENCE_CONTEXT_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dWEB_PRESENCE_CONTEXT_LOCATION\x10\x01\x12\x1e\n" +
