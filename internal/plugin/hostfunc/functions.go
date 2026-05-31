@@ -271,7 +271,7 @@ func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...stri
 	// Authorization query
 	ls.SetField(mod, "evaluate", ls.NewFunction(f.evaluateFn(pluginName)))
 
-	// Owner-partitioned settings (parity with the binary GetSetting/SetSetting RPCs).
+	// Plugin-partitioned settings (parity with the binary GetSetting/SetSetting RPCs).
 	ls.SetField(mod, "get_setting", ls.NewFunction(f.getSettingFn(pluginName)))
 	ls.SetField(mod, "set_setting", ls.NewFunction(f.setSettingFn(pluginName)))
 

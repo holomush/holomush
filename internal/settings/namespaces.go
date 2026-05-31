@@ -19,8 +19,8 @@ var RegisteredNamespaces = []string{
 	"auth",
 }
 
-// ReservedNamespace is the top-level segment owned by plugin owner partitions.
-// Owner-partitioned scopes prefix every key with "plugin/<name>/" (slash-
+// ReservedNamespace is the top-level segment owned by plugin partitions.
+// Plugin-partitioned scopes prefix every key with "plugin/<name>/" (slash-
 // delimited), so a host key whose first dot-delimited segment is "plugin" is
 // rejected by ValidateNamespace to guarantee host writes can never collide with
 // the plugin-partition keyspace. It is intentionally NOT a registered namespace.
@@ -39,7 +39,7 @@ func ValidateNamespace(key string) error {
 	}
 	ns := key[:dot]
 	if ns == ReservedNamespace {
-		return fmt.Errorf("namespace %q is reserved for plugin owner partitions and cannot be a host key (key %q)", ReservedNamespace, key)
+		return fmt.Errorf("namespace %q is reserved for plugin partitions and cannot be a host key (key %q)", ReservedNamespace, key)
 	}
 	for _, registered := range RegisteredNamespaces {
 		if ns == registered {

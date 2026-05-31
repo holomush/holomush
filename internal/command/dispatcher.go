@@ -334,7 +334,19 @@ func (d *Dispatcher) dispatchToPlugin(ctx context.Context, entry *CommandEntry, 
 	// (core.OwningPlayerFromContext). PLAYER-scope settings ownership compares the
 	// request's principal_id against this value (holomush-iokti.19). The player ID
 	// is the dispatcher's authenticated executor identity — never plugin-supplied.
-	dispatchCtx = core.WithOwningPlayer(dispatchCtx, exec.PlayerID().String())
+	//
+	// Only stamp when PlayerID is set. A zero-value ulid.ULID stringifies to 26
+	// zeros — a syntactically valid, parseable ULID — and PlayerID is optional
+	// (legacy sessions predating the players.player_session_id column leave it
+	// zero; see store/session_store.go). Stamping the 26-zero string would make
+	// CheckPrincipalOwnership compare against a real-looking anchor, letting any
+	// caller that crafts principal_id="000…0" match the shared zero partition —
+	// a fail-OPEN bypass of the PLAYER-scope gate. Leaving the owner unstamped
+	// keeps expectedOwnerID empty, which CheckPrincipalOwnership fails closed on.
+	// Mirrors the ConnectionID treatment above (holomush-sl0ir.3 / iokti.19).
+	if pid := exec.PlayerID(); pid != (ulid.ULID{}) {
+		dispatchCtx = core.WithOwningPlayer(dispatchCtx, pid.String())
+	}
 
 	resp, err := d.pluginDeliverer.DeliverCommand(dispatchCtx, entry.PluginName(), cmd)
 	if err != nil {

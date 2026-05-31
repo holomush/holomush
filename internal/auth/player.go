@@ -92,8 +92,8 @@ type PlayerPreferences struct {
 	Theme         string                 `json:"theme,omitempty"`
 	Scenes        ScenePlayerPreferences `json:"scenes,omitempty"`
 	// Plugins is an opaque, plugin-partitioned settings bag. The host never
-	// interprets its contents (INV-10); each key is a plugin owner name and
-	// each value is that owner's serialized settings partition. Whole-struct
+	// interprets its contents (INV-10); each key is a plugin name and
+	// each value is that plugin's serialized settings partition. Whole-struct
 	// JSON (de)marshaling carries it to/from the players.preferences JSONB
 	// column alongside the typed fields above, so the bag and the typed fields
 	// round-trip together without clobbering one another.

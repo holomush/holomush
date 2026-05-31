@@ -21,7 +21,8 @@ const (
 	// SettingScopeUnspecified is the zero value and the host rejects it.
 	SettingScopeUnspecified SettingScope = iota
 	// SettingScopeGame targets the game-wide partition. The host binds the
-	// owner from the authenticated plugin name; PrincipalID is ignored.
+	// plugin partition from the authenticated plugin name; PrincipalID is
+	// ignored.
 	SettingScopeGame
 	// SettingScopePlayer targets a single player's partition keyed by
 	// PrincipalID (a player ULID).
@@ -48,13 +49,15 @@ func toProtoSettingScope(s SettingScope) pluginv1.SettingScope {
 
 // SettingsClient is the SDK-facing facade binary plugins use to read and write
 // host-managed settings via PluginHostService.GetSetting/SetSetting. The host
-// binds the owner partition from the authenticated plugin name, so there is no
-// owner parameter. Phase 8 settings are list-valued.
+// binds the plugin partition from the authenticated plugin name, so there is no
+// plugin parameter. Phase 8 settings are list-valued.
 //
 // For PLAYER/CHARACTER scopes the host enforces principal_id ownership; a
-// plugin cannot read or write another principal's partition. Per
-// holomush-iokti.16, PLAYER-scope resolution is currently fail-closed pending
-// the char→player resolution work in holomush-iokti.19.
+// plugin cannot read or write another principal's partition. PLAYER-scope
+// resolution is functional as of holomush-iokti.19: principal_id is compared
+// against the host-vouched owning player of the acting character (stamped at
+// command dispatch). It fails closed only when the dispatch carried no player
+// context.
 type SettingsClient interface {
 	// GetSetting reads the string-list value for key in the given scope and
 	// principal partition. found is false when no value is stored. A nil

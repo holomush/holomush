@@ -143,7 +143,7 @@ func (f *Functions) authorizeGameWrite(ctx context.Context, pluginName, subject 
 
 // getSettingFn returns the holomush.get_setting(scope, principal_id, key) Lua
 // host function. It mirrors evaluateFn's parity shape: identity is recovered
-// from the host-stamped actor on the context (NEVER from Lua args), the owner
+// from the host-stamped actor on the context (NEVER from Lua args), the plugin
 // partition is bound from the registration-time pluginName (NEVER from Lua
 // args), and PLAYER / CHARACTER ownership is enforced through the shared
 // pluginauthz gate — the same trust the binary GetSetting applies.
