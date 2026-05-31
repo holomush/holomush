@@ -16,6 +16,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/settings"
 	"github.com/holomush/holomush/pkg/errutil"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -254,13 +255,14 @@ func TestSetSettingGameNilEngineReturnsUnimplemented(t *testing.T) {
 	})
 }
 
-// TestSetSettingGameOperatorAllowed: a subject granted write on setting:game
-// succeeds.
+// TestSetSettingGameOperatorAllowed: a subject granted write on the per-plugin
+// resource "setting:game:plug-A" succeeds (holomush-iokti.15 Item 2: per-plugin
+// GAME-write resource so operator policies can scope GAME-write per plugin).
 func TestSetSettingGameOperatorAllowed(t *testing.T) {
 	t.Parallel()
 	actor := settingsActor(t)
 	eng := policytest.NewGrantEngine()
-	eng.Grant("character:"+actor.ID, "write", settingsGameWriteResource)
+	eng.Grant("character:"+actor.ID, "write", pluginauthz.SettingsGameWriteResource("plug-A"))
 	srv, ctx := newSettingsServer(t, eng, actor)
 
 	_, err := srv.SetSetting(ctx, &pluginv1.PluginHostServiceSetSettingRequest{
@@ -468,7 +470,8 @@ func TestGameSettingOwnerPartitionIsolatedAcrossPlugins(t *testing.T) {
 	shared := settings.NewGameSettings(newMemSysInfo())
 
 	engA := policytest.NewGrantEngine()
-	engA.Grant("character:"+actor.ID, "write", settingsGameWriteResource)
+	// Grant on plug-A's per-plugin resource only (holomush-iokti.15 Item 2).
+	engA.Grant("character:"+actor.ID, "write", pluginauthz.SettingsGameWriteResource("plug-A"))
 	srvA, ctxA := newSettingsServerWith(t, "plug-A", shared, engA, actor)
 
 	_, err := srvA.SetSetting(ctxA, &pluginv1.PluginHostServiceSetSettingRequest{

@@ -596,14 +596,6 @@ func (s *pluginHostServiceServer) Evaluate(ctx context.Context, req *pluginv1.Pl
 	}, nil
 }
 
-// settingsGameWriteResource is the ABAC resource the host evaluates for a
-// GAME-scope SetSetting. The subject (recovered from the dispatch token) must be
-// permitted to "write" it; in practice only operator subjects are granted this,
-// so a non-operator plugin/character is denied (PermissionDenied). Sourced from
-// the single shared constant so the binary and Lua surfaces cannot drift
-// (plugin-runtime-symmetry, INV-8).
-const settingsGameWriteResource = pluginauthz.SettingsGameWriteResource
-
 // GetSetting reads one owner-partitioned setting for the calling plugin.
 //
 // Security invariants (holomush-iokti.7):
@@ -674,9 +666,10 @@ func (s *pluginHostServiceServer) GetSetting(ctx context.Context, req *pluginv1.
 //     acting character — FUNCTIONAL as of holomush-iokti.19. See GetSetting
 //     invariants for the full rationale; fails closed when no player context.
 //   - GAME writes require an operator authorization decision: the recovered
-//     subject must be permitted to "write" settingsGameWriteResource via the
-//     ABAC engine. A non-operator subject is denied (PermissionDenied). This is
-//     host-enforced, never trusted from the wire.
+//     subject must be permitted to "write" the per-plugin resource
+//     pluginauthz.SettingsGameWriteResource(s.pluginName) via the ABAC engine. A
+//     non-operator subject is denied (PermissionDenied). This is host-enforced,
+//     never trusted from the wire.
 //
 // Inner errors from the engine or the store are logged and replaced with a
 // generic Internal status (grpc-errors.md).
@@ -809,8 +802,11 @@ func (s *pluginHostServiceServer) requirePrincipalOwnership(principalID, expecte
 
 // authorizeGameWrite evaluates the operator authorization decision required for
 // a GAME-scope write. The subject (token-recovered) must be permitted to "write"
-// settingsGameWriteResource. A deny → PermissionDenied; an engine/build failure
-// is logged and surfaced as a generic Internal (no inner-error leak).
+// the per-plugin resource pluginauthz.SettingsGameWriteResource(s.pluginName).
+// Using the per-plugin resource lets operator policies scope GAME-write per
+// plugin (plugin-runtime-symmetry, INV-8; holomush-iokti.15 Item 2).
+// A deny → PermissionDenied; an engine/build failure is logged and surfaced as
+// a generic Internal (no inner-error leak).
 func (s *pluginHostServiceServer) authorizeGameWrite(ctx context.Context, subject string) error {
 	s.host.mu.RLock()
 	eng := s.host.engine
@@ -822,7 +818,7 @@ func (s *pluginHostServiceServer) authorizeGameWrite(ctx context.Context, subjec
 		return status.Error(codes.Unimplemented, "settings not configured") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
 	}
 
-	areq, err := types.NewAccessRequest(subject, types.ActionWrite, settingsGameWriteResource, nil)
+	areq, err := types.NewAccessRequest(subject, types.ActionWrite, pluginauthz.SettingsGameWriteResource(s.pluginName), nil)
 	if err != nil {
 		slog.ErrorContext(ctx, "build game-write access request failed",
 			"plugin", s.pluginName, "err", err)

@@ -322,3 +322,19 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   hardcodes `WHERE visibility='open'` (store.go:1393) as defense-in-depth. Integration tests
   calling `p.HandleCommand` directly with `allowEvaluator{}` BYPASS the host dispatcher pre-flight
   (dispatcher.go:234) — they don't cover CanPerformAction; add a real-engine pre-flight test.
+- **Per-plugin GAME-write resource (iokti.15, 2026-05-30) — resolves iokti.7 Low#1**:
+  `pluginauthz.SettingsGameWriteResource` const `"setting:game"` → func returning
+  `"setting:game:"+pluginName` (principal.go:22). Both runtimes' authorizeGameWrite
+  (host_service.go:820, stdlib_settings.go:126) call the single func — no drift. NARROWS,
+  not widens: `parseEntityType` (engine.go:542, `SplitN(":",2)`) still yields type `setting`,
+  the suffix only scopes the per-instance ID. NO orphaned grant: `rg "setting:game"` shows
+  ZERO shipped policy/seed/yaml grants — new substrate, only tests grant it (plugin.yaml
+  `setting:`/`type: setting` matches are the plugin-type field, NOT the ABAC resource).
+  When auditing "const→per-entity resource" refactors: (1) rg the OLD resource string
+  across seed.go + plugin.yaml `policies:` + migrations — a shipped grant on the old string
+  = ORPHAN = NOT READY; (2) confirm parseEntityType still yields the same TYPE (SplitN keeps
+  type stable regardless of suffix count); (3) confirm single-func source so both runtimes
+  can't drift. Also iokti.15: CheckPrincipalOwnership (principal.go:58) now parses BOTH ids
+  to ulid.ULID and compares values — case-insensitive (ULID encoding-independent), distinct
+  ULIDs can't collide (no over-grant), empty-expectedOwnerID fail-closed branch PRESERVED
+  before the parse (line 67 < 77), malformed-expected fails closed PRINCIPAL_NOT_OWNED.

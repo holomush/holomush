@@ -8,13 +8,20 @@ import (
 	"github.com/samber/oops"
 )
 
-// SettingsGameWriteResource is the ABAC resource a GAME-scope SetSetting writes
-// to. It is the single source of truth shared by the binary
-// (PluginHostService.SetSetting) and Lua (holomush.set_setting) surfaces so the
-// two runtimes cannot drift onto different operator-permission resources
-// (plugin-runtime-symmetry, INV-8). Only operator subjects are granted "write"
-// on it; a non-operator plugin/character is denied.
-const SettingsGameWriteResource = "setting:game"
+// SettingsGameWriteResource returns the ABAC resource a GAME-scope SetSetting
+// writes to for the given plugin. It is the single source of truth shared by
+// the binary (PluginHostService.SetSetting) and Lua (holomush.set_setting)
+// surfaces so the two runtimes cannot drift onto different operator-permission
+// resources (plugin-runtime-symmetry, INV-8). The resource is per-plugin so
+// operator policies can scope GAME-write permission per plugin: a grant on
+// "setting:game:core-scenes" authorises only that plugin's GAME writes, not
+// all plugins'. The owner partition already confines the DATA to the plugin's
+// keyspace (INV-11); this scopes the operator POLICY to match.
+// Only operator subjects are granted "write" on it; a non-operator
+// plugin/character is denied.
+func SettingsGameWriteResource(pluginName string) string {
+	return "setting:game:" + pluginName
+}
 
 // CheckPrincipalOwnership parses principalID as a ULID and enforces that it
 // equals expectedOwnerID — the host-vouched owner the caller is permitted to
@@ -61,8 +68,20 @@ func CheckPrincipalOwnership(principalID, expectedOwnerID string) (ulid.ULID, er
 		return ulid.ULID{}, oops.Code("PRINCIPAL_NOT_OWNED").
 			Errorf("no host-vouched owner for principal")
 	}
-	// Compare against the host-vouched expected owner, never a caller-supplied field.
-	if principalID != expectedOwnerID {
+	// Parse the host-vouched expected owner ID. A malformed expectedOwnerID is a
+	// host defect (it is always host-stamped, never caller-supplied); fail closed
+	// rather than proceeding with an unparseable expected owner. Using parsed ULID
+	// values for comparison makes the ownership gate case-insensitive (ULIDs are
+	// case-insensitive; a lowercase-encoded principalID encoding the same 128-bit
+	// value as expectedOwnerID MUST be accepted). (holomush-iokti.15 Item 3)
+	expectedPid, err := ulid.Parse(expectedOwnerID)
+	if err != nil {
+		return ulid.ULID{}, oops.Code("PRINCIPAL_NOT_OWNED").
+			With("expected_owner_id", expectedOwnerID).
+			Errorf("host-vouched expectedOwnerID is not a valid ULID (host defect)")
+	}
+	// Compare parsed ULID values: encoding-independent, case-insensitive.
+	if pid != expectedPid {
 		return ulid.ULID{}, oops.Code("PRINCIPAL_NOT_OWNED").
 			Errorf("principal not owned by acting actor")
 	}

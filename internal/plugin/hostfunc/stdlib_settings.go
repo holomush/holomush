@@ -15,14 +15,6 @@ import (
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
-// settingsGameWriteResource is the ABAC resource evaluated for a GAME-scope
-// SetSetting. It is sourced from the single shared constant so both runtimes
-// gate GAME writes on the identical operator permission and cannot drift
-// (plugin-runtime-symmetry, INV-8). The recovered subject must be permitted to
-// "write" it; only operator subjects are granted this, so a non-operator
-// plugin/character is denied.
-const settingsGameWriteResource = pluginauthz.SettingsGameWriteResource
-
 // SettingsOps is the narrow store seam the Lua get_setting/set_setting hostfuncs
 // delegate to. It is a PURE store partition seam: trust checks (actor recovery,
 // principal ownership, GAME-write operator authorization) happen in the hostfunc
@@ -119,16 +111,19 @@ func (f *Functions) resolveSettingsAccess(
 
 // authorizeGameWrite enforces the operator authorization decision required for a
 // GAME-scope SetSetting. It mirrors the binary host's authorizeGameWrite exactly:
-// the recovered subject must be permitted to "write" settingsGameWriteResource
-// via the ABAC engine. A nil engine or a deny → permission denied; engine build
-// errors are logged and surfaced as a generic message (no inner-error leak).
+// the recovered subject must be permitted to "write" the per-plugin resource
+// pluginauthz.SettingsGameWriteResource(pluginName) via the ABAC engine. Using
+// the per-plugin resource keeps binary and Lua identical (plugin-runtime-symmetry,
+// INV-8; holomush-iokti.15 Item 2). A nil engine or a deny → permission denied;
+// engine build errors are logged and surfaced as a generic message (no
+// inner-error leak).
 func (f *Functions) authorizeGameWrite(ctx context.Context, pluginName, subject string) string {
 	if f.engine == nil {
 		slog.WarnContext(ctx, "GAME-scope set_setting denied: no access engine configured",
 			"plugin", pluginName)
 		return "settings not available"
 	}
-	req, err := types.NewAccessRequest(subject, types.ActionWrite, settingsGameWriteResource, nil)
+	req, err := types.NewAccessRequest(subject, types.ActionWrite, pluginauthz.SettingsGameWriteResource(pluginName), nil)
 	if err != nil {
 		slog.ErrorContext(ctx, "build game-write access request failed",
 			"plugin", pluginName, "err", err)
