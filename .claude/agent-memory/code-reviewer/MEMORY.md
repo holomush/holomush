@@ -672,3 +672,7 @@ Keep under 200 lines. Curate — don't hoard.
   distinct from the late-bound SetSettingsStores guard; uses export_test.go *ForTest
   accessors, Same()+NotNil assertions, ACE name. All gates green (1329 unit exit0, lint
   exit0). Encountered: holomush-iokti.17 (2026-05-31) — READY.
+
+- **Sister implementations of `recomputeSessionLiveness` must carry the same TTL=0 guard.** `internal/grpc/server.go:1590-1592` guards `if ttlSeconds <= 0 { ttlSeconds = 1800 }` before computing `expiresAt`. Any new implementation of the same liveness-recompute logic (e.g., `reaper.recomputeAfterSweep`) must carry the same guard, or a session with `TTLSeconds=0` (the int zero-value) gets `expiresAt=now` and is immediately re-queued for expiry. `sessiontest.NewActiveSession` does NOT set `TTLSeconds`, so tests that only assert the detach fires (not the ExpiresAt value) silently hide this bug. Always assert `ExpiresAt > now` when testing the detach path. Encountered: holomush-rsoe6.5 (2026-05-30) — NOT READY.
+
+- **Reaper callbacks wired from sub_grpc (engine emit path) need the same panic-recovery wrapper as OnExpired.** `reapExpired` wraps `OnExpired` in a recover closure (`reaper.go:82-91`) to prevent a callback panic from aborting the reaper loop. New callbacks (`OnSessionDetached`, `OnGridPhaseOut`) wired in the same fashion must get the same protection. Omitting it is an asymmetry trap for the Task 6 implementer. Encountered: holomush-rsoe6.5 (2026-05-30).
