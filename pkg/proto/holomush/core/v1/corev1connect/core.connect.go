@@ -95,6 +95,9 @@ const (
 	// CoreServiceListAvailableCommandsProcedure is the fully-qualified name of the CoreService's
 	// ListAvailableCommands RPC.
 	CoreServiceListAvailableCommandsProcedure = "/holomush.core.v1.CoreService/ListAvailableCommands"
+	// CoreServiceRefreshConnectionProcedure is the fully-qualified name of the CoreService's
+	// RefreshConnection RPC.
+	CoreServiceRefreshConnectionProcedure = "/holomush.core.v1.CoreService/RefreshConnection"
 )
 
 // CoreServiceClient is a client for the holomush.core.v1.CoreService service.
@@ -203,6 +206,10 @@ type CoreServiceClient interface {
 	// Self-scoped: the subject is the session's character (ownership-validated),
 	// never an arbitrary character_id. Pure read.
 	ListAvailableCommands(context.Context, *connect.Request[v1.ListAvailableCommandsRequest]) (*connect.Response[v1.ListAvailableCommandsResponse], error)
+	// RefreshConnection bumps a connection's liveness lease. Called periodically
+	// by the gateway while the client socket is open (holomush-rsoe6). SERVED by
+	// CoreServer.RefreshConnection; ownership-validated and enumeration-safe.
+	RefreshConnection(context.Context, *connect.Request[v1.RefreshConnectionRequest]) (*connect.Response[v1.RefreshConnectionResponse], error)
 }
 
 // NewCoreServiceClient constructs a client for the holomush.core.v1.CoreService service. By
@@ -342,6 +349,12 @@ func NewCoreServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(coreServiceMethods.ByName("ListAvailableCommands")),
 			connect.WithClientOptions(opts...),
 		),
+		refreshConnection: connect.NewClient[v1.RefreshConnectionRequest, v1.RefreshConnectionResponse](
+			httpClient,
+			baseURL+CoreServiceRefreshConnectionProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("RefreshConnection")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -368,6 +381,7 @@ type coreServiceClient struct {
 	listSessionStreams        *connect.Client[v1.ListSessionStreamsRequest, v1.ListSessionStreamsResponse]
 	listFocusPresence         *connect.Client[v1.ListFocusPresenceRequest, v1.ListFocusPresenceResponse]
 	listAvailableCommands     *connect.Client[v1.ListAvailableCommandsRequest, v1.ListAvailableCommandsResponse]
+	refreshConnection         *connect.Client[v1.RefreshConnectionRequest, v1.RefreshConnectionResponse]
 }
 
 // HandleCommand calls holomush.core.v1.CoreService.HandleCommand.
@@ -473,6 +487,11 @@ func (c *coreServiceClient) ListFocusPresence(ctx context.Context, req *connect.
 // ListAvailableCommands calls holomush.core.v1.CoreService.ListAvailableCommands.
 func (c *coreServiceClient) ListAvailableCommands(ctx context.Context, req *connect.Request[v1.ListAvailableCommandsRequest]) (*connect.Response[v1.ListAvailableCommandsResponse], error) {
 	return c.listAvailableCommands.CallUnary(ctx, req)
+}
+
+// RefreshConnection calls holomush.core.v1.CoreService.RefreshConnection.
+func (c *coreServiceClient) RefreshConnection(ctx context.Context, req *connect.Request[v1.RefreshConnectionRequest]) (*connect.Response[v1.RefreshConnectionResponse], error) {
+	return c.refreshConnection.CallUnary(ctx, req)
 }
 
 // CoreServiceHandler is an implementation of the holomush.core.v1.CoreService service.
@@ -581,6 +600,10 @@ type CoreServiceHandler interface {
 	// Self-scoped: the subject is the session's character (ownership-validated),
 	// never an arbitrary character_id. Pure read.
 	ListAvailableCommands(context.Context, *connect.Request[v1.ListAvailableCommandsRequest]) (*connect.Response[v1.ListAvailableCommandsResponse], error)
+	// RefreshConnection bumps a connection's liveness lease. Called periodically
+	// by the gateway while the client socket is open (holomush-rsoe6). SERVED by
+	// CoreServer.RefreshConnection; ownership-validated and enumeration-safe.
+	RefreshConnection(context.Context, *connect.Request[v1.RefreshConnectionRequest]) (*connect.Response[v1.RefreshConnectionResponse], error)
 }
 
 // NewCoreServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -716,6 +739,12 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(coreServiceMethods.ByName("ListAvailableCommands")),
 		connect.WithHandlerOptions(opts...),
 	)
+	coreServiceRefreshConnectionHandler := connect.NewUnaryHandler(
+		CoreServiceRefreshConnectionProcedure,
+		svc.RefreshConnection,
+		connect.WithSchema(coreServiceMethods.ByName("RefreshConnection")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.core.v1.CoreService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CoreServiceHandleCommandProcedure:
@@ -760,6 +789,8 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 			coreServiceListFocusPresenceHandler.ServeHTTP(w, r)
 		case CoreServiceListAvailableCommandsProcedure:
 			coreServiceListAvailableCommandsHandler.ServeHTTP(w, r)
+		case CoreServiceRefreshConnectionProcedure:
+			coreServiceRefreshConnectionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -851,4 +882,8 @@ func (UnimplementedCoreServiceHandler) ListFocusPresence(context.Context, *conne
 
 func (UnimplementedCoreServiceHandler) ListAvailableCommands(context.Context, *connect.Request[v1.ListAvailableCommandsRequest]) (*connect.Response[v1.ListAvailableCommandsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.ListAvailableCommands is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) RefreshConnection(context.Context, *connect.Request[v1.RefreshConnectionRequest]) (*connect.Response[v1.RefreshConnectionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.RefreshConnection is not implemented"))
 }

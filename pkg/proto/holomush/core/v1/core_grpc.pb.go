@@ -43,6 +43,7 @@ const (
 	CoreService_ListSessionStreams_FullMethodName        = "/holomush.core.v1.CoreService/ListSessionStreams"
 	CoreService_ListFocusPresence_FullMethodName         = "/holomush.core.v1.CoreService/ListFocusPresence"
 	CoreService_ListAvailableCommands_FullMethodName     = "/holomush.core.v1.CoreService/ListAvailableCommands"
+	CoreService_RefreshConnection_FullMethodName         = "/holomush.core.v1.CoreService/RefreshConnection"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -160,6 +161,10 @@ type CoreServiceClient interface {
 	// Self-scoped: the subject is the session's character (ownership-validated),
 	// never an arbitrary character_id. Pure read.
 	ListAvailableCommands(ctx context.Context, in *ListAvailableCommandsRequest, opts ...grpc.CallOption) (*ListAvailableCommandsResponse, error)
+	// RefreshConnection bumps a connection's liveness lease. Called periodically
+	// by the gateway while the client socket is open (holomush-rsoe6). SERVED by
+	// CoreServer.RefreshConnection; ownership-validated and enumeration-safe.
+	RefreshConnection(ctx context.Context, in *RefreshConnectionRequest, opts ...grpc.CallOption) (*RefreshConnectionResponse, error)
 }
 
 type coreServiceClient struct {
@@ -389,6 +394,16 @@ func (c *coreServiceClient) ListAvailableCommands(ctx context.Context, in *ListA
 	return out, nil
 }
 
+func (c *coreServiceClient) RefreshConnection(ctx context.Context, in *RefreshConnectionRequest, opts ...grpc.CallOption) (*RefreshConnectionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RefreshConnectionResponse)
+	err := c.cc.Invoke(ctx, CoreService_RefreshConnection_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -504,6 +519,10 @@ type CoreServiceServer interface {
 	// Self-scoped: the subject is the session's character (ownership-validated),
 	// never an arbitrary character_id. Pure read.
 	ListAvailableCommands(context.Context, *ListAvailableCommandsRequest) (*ListAvailableCommandsResponse, error)
+	// RefreshConnection bumps a connection's liveness lease. Called periodically
+	// by the gateway while the client socket is open (holomush-rsoe6). SERVED by
+	// CoreServer.RefreshConnection; ownership-validated and enumeration-safe.
+	RefreshConnection(context.Context, *RefreshConnectionRequest) (*RefreshConnectionResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -576,6 +595,9 @@ func (UnimplementedCoreServiceServer) ListFocusPresence(context.Context, *ListFo
 }
 func (UnimplementedCoreServiceServer) ListAvailableCommands(context.Context, *ListAvailableCommandsRequest) (*ListAvailableCommandsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListAvailableCommands not implemented")
+}
+func (UnimplementedCoreServiceServer) RefreshConnection(context.Context, *RefreshConnectionRequest) (*RefreshConnectionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RefreshConnection not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -969,6 +991,24 @@ func _CoreService_ListAvailableCommands_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_RefreshConnection_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RefreshConnectionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).RefreshConnection(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_RefreshConnection_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).RefreshConnection(ctx, req.(*RefreshConnectionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1055,6 +1095,10 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListAvailableCommands",
 			Handler:    _CoreService_ListAvailableCommands_Handler,
+		},
+		{
+			MethodName: "RefreshConnection",
+			Handler:    _CoreService_RefreshConnection_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

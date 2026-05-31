@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, CheckPlayerSessionRequest, CheckPlayerSessionResponse, ConfirmPasswordResetRequest, ConfirmPasswordResetResponse, CreateCharacterRequest, CreateCharacterResponse, CreateGuestRequest, CreateGuestResponse, CreatePlayerRequest, CreatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, ListAvailableCommandsRequest, ListAvailableCommandsResponse, ListCharactersRequest, ListCharactersResponse, ListFocusPresenceRequest, ListFocusPresenceResponse, ListPlayerSessionsRequest, ListPlayerSessionsResponse, ListSessionStreamsRequest, ListSessionStreamsResponse, LogoutRequest, LogoutResponse, QueryStreamHistoryRequest, QueryStreamHistoryResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, RevokeOtherPlayerSessionsRequest, RevokeOtherPlayerSessionsResponse, RevokePlayerSessionRequest, RevokePlayerSessionResponse, SelectCharacterRequest, SelectCharacterResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
+import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, CheckPlayerSessionRequest, CheckPlayerSessionResponse, ConfirmPasswordResetRequest, ConfirmPasswordResetResponse, CreateCharacterRequest, CreateCharacterResponse, CreateGuestRequest, CreateGuestResponse, CreatePlayerRequest, CreatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, ListAvailableCommandsRequest, ListAvailableCommandsResponse, ListCharactersRequest, ListCharactersResponse, ListFocusPresenceRequest, ListFocusPresenceResponse, ListPlayerSessionsRequest, ListPlayerSessionsResponse, ListSessionStreamsRequest, ListSessionStreamsResponse, LogoutRequest, LogoutResponse, QueryStreamHistoryRequest, QueryStreamHistoryResponse, RefreshConnectionRequest, RefreshConnectionResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, RevokeOtherPlayerSessionsRequest, RevokeOtherPlayerSessionsResponse, RevokePlayerSessionRequest, RevokePlayerSessionResponse, SelectCharacterRequest, SelectCharacterResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -313,6 +313,19 @@ export const CoreService = {
       name: "ListAvailableCommands",
       I: ListAvailableCommandsRequest,
       O: ListAvailableCommandsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * RefreshConnection bumps a connection's liveness lease. Called periodically
+     * by the gateway while the client socket is open (holomush-rsoe6). SERVED by
+     * CoreServer.RefreshConnection; ownership-validated and enumeration-safe.
+     *
+     * @generated from rpc holomush.core.v1.CoreService.RefreshConnection
+     */
+    refreshConnection: {
+      name: "RefreshConnection",
+      I: RefreshConnectionRequest,
+      O: RefreshConnectionResponse,
       kind: MethodKind.Unary,
     },
   }
