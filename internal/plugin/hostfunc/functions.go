@@ -51,6 +51,7 @@ type Functions struct {
 	capabilities     *CapabilityRegistry
 	streamRegistry   plugins.StreamRegistry
 	focusOps         FocusOps
+	settingsOps      SettingsOps
 	historyReader    HistoryReader
 	auditDecryptor   AuditDecryptor
 	// pluginConfigs holds the merged (opaque) config per plugin, set by the
@@ -120,6 +121,13 @@ func WithFocusOps(fo FocusOps) Option {
 	return func(f *Functions) { f.focusOps = fo }
 }
 
+// WithSettingsOps sets the plugin-partitioned settings store seam for the
+// holomush.get_setting / set_setting host functions (plugin-runtime-symmetry
+// with the binary GetSetting / SetSetting RPCs; INV-8).
+func WithSettingsOps(so SettingsOps) Option {
+	return func(f *Functions) { f.settingsOps = so }
+}
+
 // WithHistoryReader sets the event store reader for query_stream_history host function.
 func WithHistoryReader(hr HistoryReader) Option {
 	return func(f *Functions) { f.historyReader = hr }
@@ -151,6 +159,15 @@ func (f *Functions) SetAuditDecryptor(d AuditDecryptor) {
 // per-event delivery, so the value is read at Register time.
 func (f *Functions) SetFocusOps(fo FocusOps) {
 	f.focusOps = fo
+}
+
+// SetSettingsOps sets the plugin-partitioned settings store seam for the
+// holomush.get_setting / set_setting host functions. Supports late-binding: the
+// settings stores are assembled during gRPC subsystem Start, after plugin
+// loading. Lua VMs are created per-event delivery, so the value is read at
+// Register time (same late-binding rationale as SetFocusOps).
+func (f *Functions) SetSettingsOps(so SettingsOps) {
+	f.settingsOps = so
 }
 
 // SetHistoryReader sets the event store reader for query_stream_history host
@@ -254,6 +271,10 @@ func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...stri
 	// Authorization query
 	ls.SetField(mod, "evaluate", ls.NewFunction(f.evaluateFn(pluginName)))
 
+	// Plugin-partitioned settings (parity with the binary GetSetting/SetSetting RPCs).
+	ls.SetField(mod, "get_setting", ls.NewFunction(f.getSettingFn(pluginName)))
+	ls.SetField(mod, "set_setting", ls.NewFunction(f.setSettingFn(pluginName)))
+
 	// Register stream management functions (always; guard against nil registry inside).
 	RegisterStreamFuncs(ls, mod, f.streamRegistry)
 
@@ -347,6 +368,8 @@ func (f *Functions) RegisteredFunctionsForAudit() []AuditEntry {
 		{Name: "holomush.list_commands"},
 		{Name: "holomush.get_command_help"},
 		{Name: "holomush.evaluate"},
+		{Name: "holomush.get_setting"},
+		{Name: "holomush.set_setting"},
 		// Unconditionally registered by RegisterStreamFuncs.
 		{Name: "holomush.add_session_stream"},
 		{Name: "holomush.remove_session_stream"},

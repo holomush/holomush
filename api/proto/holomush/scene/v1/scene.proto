@@ -31,12 +31,12 @@ option go_package = "github.com/holomush/holomush/pkg/proto/holomush/scene/v1;sc
 // Implemented by SceneServiceImpl in plugins/core-scenes/service.go and
 // plugins/core-scenes/publish_service.go.
 service SceneService {
-  // ListScenes is DECLARED BUT NOT SERVED. The core-scenes plugin embeds
-  // UnimplementedSceneServiceServer and provides no override, so any call
-  // returns codes.Unimplemented. Scene discovery is instead surfaced through
-  // the plugin's `scene` listing command (handleSceneList), which reads
-  // SceneStore.ListScenesForCharacter, not this RPC. Retained as a planned
-  // read surface.
+  // ListScenes returns the public scene board: open scenes in state `active`
+  // or `paused`, paginated and optionally tag-filtered, with content-warning-
+  // blocked scenes excluded via the union of game/player/character scope
+  // cw_block settings plus any per-query exclude_content_warnings. Served by
+  // SceneServiceImpl.ListScenes and surfaced through the plugin's `scenes`
+  // board command. See service.go::ListScenes.
   rpc ListScenes(ListScenesRequest) returns (ListScenesResponse);
 
   // GetScene loads one scene's metadata and participant roster by ID. The
@@ -239,9 +239,9 @@ message ParticipantInfo {
   google.protobuf.Timestamp joined_at = 4;
 }
 
-// ListScenesRequest is the (currently unserved) scene-discovery query. Its
-// fields describe the intended pagination + tag-filter contract for the planned
-// ListScenes RPC.
+// ListScenesRequest is the scene-board discovery query. It supports pagination,
+// tag filtering, and content-warning exclusion via the union of scope-based
+// cw_block settings, served by SceneServiceImpl.ListScenes.
 message ListScenesRequest {
   // Maximum scenes to return; 0 means server default, capped at 200.
   int32 limit = 1 [(buf.validate.field).int32 = {
@@ -252,9 +252,30 @@ message ListScenesRequest {
   int32 offset = 2 [(buf.validate.field).int32.gte = 0];
   // Restrict results to scenes carrying all of these tags.
   repeated string tags = 3;
+  // Extra content-warning categories to hide for this one query, on top of the
+  // caller's stored block. The board query unions these with the
+  // game/player/character content.cw_block lists and drops any scene tagged with
+  // a blocked category. Applied server-side so the page limit/offset stay correct
+  // after filtering.
+  repeated string exclude_content_warnings = 4;
+  // Acting character ULID. The board query reads this principal's character-scope
+  // content.cw_block to assemble the effective block set. Optional — omit to
+  // browse without character-scope CW filtering.
+  string character_id = 5 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  // Owning player ULID. The board query reads this principal's player-scope
+  // content.cw_block, which applies across all of the player's characters, into
+  // the effective block set. Optional — omit to browse without player-scope CW
+  // filtering.
+  string player_id = 6 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
 }
 
-// ListScenesResponse is the (currently unserved) scene-discovery result page.
+// ListScenesResponse is the scene-board discovery result page.
 message ListScenesResponse {
   // The matching scenes for this page.
   repeated SceneInfo scenes = 1;

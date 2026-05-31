@@ -82,7 +82,8 @@ func (s *pluginHostServiceServer) EmitEvent(ctx context.Context, req *pluginv1.P
 			Errorf("plugin token store is not configured")
 	}
 
-	storedActor, ok := tokenStore.Lookup(s.pluginName, tokens[0])
+	// EmitEvent does not need the owning player — actor identity is sufficient.
+	storedActor, _, ok := tokenStore.Lookup(s.pluginName, tokens[0])
 	if !ok {
 		slog.WarnContext(
 			ctx, "emitEvent rejected: token not valid for this plugin",
@@ -559,7 +560,8 @@ func (s *pluginHostServiceServer) Evaluate(ctx context.Context, req *pluginv1.Pl
 			Errorf("plugin token store is not configured")
 	}
 
-	storedActor, ok := tokenStore.Lookup(s.pluginName, tokens[0])
+	// Evaluate does not need the owning player — actor identity is sufficient.
+	storedActor, _, ok := tokenStore.Lookup(s.pluginName, tokens[0])
 	if !ok {
 		slog.WarnContext(
 			ctx, "evaluate rejected: token not valid for this plugin",
@@ -594,23 +596,23 @@ func (s *pluginHostServiceServer) Evaluate(ctx context.Context, req *pluginv1.Pl
 	}, nil
 }
 
-// settingsGameWriteResource is the ABAC resource the host evaluates for a
-// GAME-scope SetSetting. The subject (recovered from the dispatch token) must be
-// permitted to "write" it; in practice only operator subjects are granted this,
-// so a non-operator plugin/character is denied (PermissionDenied).
-const settingsGameWriteResource = "setting:game"
-
-// GetSetting reads one owner-partitioned setting for the calling plugin.
+// GetSetting reads one plugin-partitioned setting for the calling plugin.
 //
 // Security invariants (holomush-iokti.7):
-//   - The owner partition is bound host-side from s.pluginName (stamped at
-//     construction, never from the request) via base.Owner(s.pluginName). Two
+//   - The plugin partition is bound host-side from s.pluginName (stamped at
+//     construction, never from the request) via base.Plugin(s.pluginName). Two
 //     plugins with different names address disjoint partitions (INV-11).
 //   - Scope must be specified; SETTING_SCOPE_UNSPECIFIED fails closed
 //     (InvalidArgument).
-//   - PLAYER / CHARACTER: the acting subject (recovered from the dispatch token,
-//     exactly as Evaluate does) must own the principal — req.principal_id must
-//     equal the acting actor's ID. Mismatch → PermissionDenied (own settings only).
+//   - CHARACTER: req.principal_id must equal the acting character's ID (correct
+//     and functional; the dispatch-token actor is always an ActorCharacter).
+//   - PLAYER: req.principal_id must equal the host-vouched owning player of the
+//     acting character (spec §3.3, INV-6 — settings shared across a player's
+//     characters). FUNCTIONAL as of holomush-iokti.19: the owning player is
+//     carried on the dispatch token (stamped by the command dispatcher via
+//     core.WithOwningPlayer), recovered by actorFromToken, and compared by
+//     requirePrincipalOwnership. A PLAYER request whose dispatch had no player
+//     context (e.g. from a pure event handler) fails closed (PermissionDenied).
 //   - GAME reads are server-wide readable by any plugin (no engine call): game
 //     settings are not principal-scoped, and the owner prefix already isolates
 //     the plugin's keyspace.
@@ -622,27 +624,18 @@ const settingsGameWriteResource = "setting:game"
 // settings stores follow the reads-never-error contract, so the only error paths
 // here are argument validation and authorization.
 func (s *pluginHostServiceServer) GetSetting(ctx context.Context, req *pluginv1.PluginHostServiceGetSettingRequest) (*pluginv1.PluginHostServiceGetSettingResponse, error) {
-	// resolveSettingScope is the single authorization gate shared with
-	// SetSetting: it recovers the acting subject from the dispatch token,
-	// fails closed on a missing/invalid token or empty subject, and — for
-	// PLAYER / CHARACTER scope — enforces requirePrincipalOwnership so a
-	// plugin can only READ the settings of the principal it is currently
-	// acting on behalf of (own settings only). A foreign principal_id ⇒
-	// PermissionDenied before any read happens.
-	//
-	// GAME-read decision (plan Task 7 authz matrix): game settings are
-	// server-wide readable by ANY plugin, so the GAME path deliberately
-	// performs NO engine check. There is no cross-plugin leak because the
-	// owner partition below (base.Owner(s.pluginName)) confines the read to
-	// the calling plugin's own keyspace (INV-11). GAME *writes* still require
-	// an operator engine decision in SetSetting; only reads are open.
+	// resolveSettingScope is the shared authorization gate (see its doc and the
+	// method-level invariants above): it fails closed on a bad token/subject and
+	// enforces principal ownership for PLAYER / CHARACTER. GAME reads are open to
+	// any plugin (no engine check); base.Plugin(s.pluginName) below confines the
+	// read to the caller's own keyspace (INV-11).
 	base, _, err := s.resolveSettingScope(ctx, req.GetScope(), req.GetPrincipalId())
 	if err != nil {
 		return nil, err
 	}
 
-	// Owner is bound from s.pluginName host-side — NEVER from the request.
-	part := base.Owner(s.pluginName)
+	// Plugin partition is bound from s.pluginName host-side — NEVER from the request.
+	part := base.Plugin(s.pluginName)
 
 	values, found := part.StringSliceN(ctx, req.GetKey())
 	return &pluginv1.PluginHostServiceGetSettingResponse{
@@ -653,17 +646,21 @@ func (s *pluginHostServiceServer) GetSetting(ctx context.Context, req *pluginv1.
 	}, nil
 }
 
-// SetSetting writes one owner-partitioned setting for the calling plugin.
+// SetSetting writes one plugin-partitioned setting for the calling plugin.
 //
 // Security invariants (holomush-iokti.7):
-//   - Owner partition bound host-side from s.pluginName (same as GetSetting).
+//   - Plugin partition bound host-side from s.pluginName (same as GetSetting).
 //   - SETTING_SCOPE_UNSPECIFIED → InvalidArgument (fail closed).
-//   - PLAYER / CHARACTER: acting subject must own the principal (req.principal_id
-//     == acting actor ID) → else PermissionDenied.
+//   - CHARACTER: req.principal_id must equal the acting character's ID (correct
+//     and functional).
+//   - PLAYER: req.principal_id must equal the host-vouched owning player of the
+//     acting character — FUNCTIONAL as of holomush-iokti.19. See GetSetting
+//     invariants for the full rationale; fails closed when no player context.
 //   - GAME writes require an operator authorization decision: the recovered
-//     subject must be permitted to "write" settingsGameWriteResource via the
-//     ABAC engine. A non-operator subject is denied (PermissionDenied). This is
-//     host-enforced, never trusted from the wire.
+//     subject must be permitted to "write" the per-plugin resource
+//     pluginauthz.SettingsGameWriteResource(s.pluginName) via the ABAC engine. A
+//     non-operator subject is denied (PermissionDenied). This is host-enforced,
+//     never trusted from the wire.
 //
 // Inner errors from the engine or the store are logged and replaced with a
 // generic Internal status (grpc-errors.md).
@@ -680,8 +677,8 @@ func (s *pluginHostServiceServer) SetSetting(ctx context.Context, req *pluginv1.
 		}
 	}
 
-	// Owner is bound from s.pluginName host-side — NEVER from the request.
-	part := base.Owner(s.pluginName)
+	// Plugin partition is bound from s.pluginName host-side — NEVER from the request.
+	part := base.Plugin(s.pluginName)
 
 	if setErr := part.SetStringSlice(ctx, req.GetKey(), req.GetStringList()); setErr != nil {
 		slog.ErrorContext(ctx, "set setting failed",
@@ -709,9 +706,10 @@ func (s *pluginHostServiceServer) resolveSettingScope(
 		return nil, "", status.Error(codes.InvalidArgument, "scope required") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
 	}
 
-	// Recover the acting actor from the dispatch token — mirrors Evaluate /
-	// EmitEvent token→actor recovery. Plugin-supplied identity is never trusted.
-	actor, err := s.actorFromToken(ctx)
+	// Recover the acting actor AND the host-vouched owning player from the
+	// dispatch token — mirrors Evaluate / EmitEvent token recovery. Plugin-supplied
+	// identity is never trusted.
+	actor, ownerPlayer, err := s.actorFromToken(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -732,53 +730,92 @@ func (s *pluginHostServiceServer) resolveSettingScope(
 		return game, subject, nil
 
 	case pluginv1.SettingScope_SETTING_SCOPE_PLAYER:
-		store := s.host.PlayerSettings()
-		if store == nil {
-			return nil, "", status.Error(codes.Unimplemented, "settings not configured") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
-		}
-		pid, ownErr := s.requirePrincipalOwnership(principalID, actor)
-		if ownErr != nil {
-			return nil, "", ownErr
-		}
-		return store.For(ctx, pid), subject, nil
+		// PLAYER ownership compares principal_id against the host-vouched owning
+		// player of the acting character (token-carried). The resulting pid IS the
+		// player ULID, so store.For keys the player partition correctly.
+		return s.principalScopedStore(ctx, s.host.PlayerSettings(), principalID, ownerPlayer, subject)
 
 	case pluginv1.SettingScope_SETTING_SCOPE_CHARACTER:
-		store := s.host.CharacterSettings()
-		if store == nil {
-			return nil, "", status.Error(codes.Unimplemented, "settings not configured") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
-		}
-		pid, ownErr := s.requirePrincipalOwnership(principalID, actor)
-		if ownErr != nil {
-			return nil, "", ownErr
-		}
-		return store.For(ctx, pid), subject, nil
+		// CHARACTER ownership compares principal_id against the acting character's
+		// ID (the dispatch-token actor is always an ActorCharacter).
+		return s.principalScopedStore(ctx, s.host.CharacterSettings(), principalID, actor.ID, subject)
 
 	default:
 		return nil, "", status.Error(codes.InvalidArgument, "unsupported scope") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
 	}
 }
 
-// requirePrincipalOwnership parses principalID as a ULID and enforces that the
-// acting subject owns it (principal == acting actor ID). A plugin may only read
-// or write the settings of the principal it is currently acting on behalf of
-// (own settings only). Returns PermissionDenied on mismatch and InvalidArgument
-// on an unparseable/empty principal.
-func (s *pluginHostServiceServer) requirePrincipalOwnership(principalID string, actor core.Actor) (ulid.ULID, error) {
-	pid, err := ulid.Parse(principalID)
-	if err != nil {
-		return ulid.ULID{}, status.Error(codes.InvalidArgument, "invalid principal_id") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+// principalScopedFor is the narrow For-factory shape shared by the player and
+// character settings stores. Both PlayerSettingsStore and CharacterSettingsStore
+// satisfy it, letting principalScopedStore handle the structurally-identical
+// nil-store guard, ownership check, and For() call once for both scopes.
+type principalScopedFor interface {
+	For(ctx context.Context, principalID ulid.ULID) settings.Scoped
+}
+
+// principalScopedStore is the shared PLAYER / CHARACTER resolution path: it fails
+// closed when the store is unwired, enforces requirePrincipalOwnership against
+// the caller-supplied expectedOwnerID, and returns the principal's Scoped handle.
+//
+// The per-scope security distinction is preserved at the call site: PLAYER passes
+// the host-vouched owning player, CHARACTER passes the acting character's ID. This
+// helper never chooses the expected owner — it only deduplicates the surrounding
+// guard/lookup boilerplate. A nil store interface value (an unset store) fails
+// closed with Unimplemented.
+func (s *pluginHostServiceServer) principalScopedStore(
+	ctx context.Context, store principalScopedFor, principalID, expectedOwnerID, subject string,
+) (settings.Scoped, string, error) {
+	// An unset store is a true nil interface: Host().PlayerSettings() /
+	// CharacterSettings() return the interface-typed field unchanged, and a nil
+	// PlayerSettingsStore / CharacterSettingsStore converts to a nil
+	// principalScopedFor — so this guard catches the unwired case as before.
+	if store == nil {
+		return nil, "", status.Error(codes.Unimplemented, "settings not configured") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
 	}
-	// Compare against the token-recovered actor ID, never a request field.
-	if principalID != actor.ID {
+	pid, ownErr := s.requirePrincipalOwnership(principalID, expectedOwnerID)
+	if ownErr != nil {
+		return nil, "", ownErr
+	}
+	return store.For(ctx, pid), subject, nil
+}
+
+// requirePrincipalOwnership enforces that the request's principal_id equals the
+// host-vouched expectedOwnerID by delegating to the runtime-neutral shared gate
+// pluginauthz.CheckPrincipalOwnership — the SAME helper the Lua
+// get_setting/set_setting hostfuncs use, so the binary and Lua ownership trust
+// checks cannot diverge (plugin-runtime-symmetry, INV-8). The oops codes the
+// helper returns are mapped to the gRPC statuses this RPC has always returned:
+// INVALID_PRINCIPAL_ID → InvalidArgument ("invalid principal_id"),
+// PRINCIPAL_NOT_OWNED → PermissionDenied ("permission denied").
+//
+// expectedOwnerID is supplied by resolveSettingScope per scope:
+//   - CHARACTER: the acting character's ID (dispatch-token actor is always an
+//     ActorCharacter).
+//   - PLAYER: the host-vouched owning player ULID of the acting character,
+//     recovered from the dispatch token (holomush-iokti.19). PLAYER scope is now
+//     FUNCTIONAL — a principal_id matching the owning player succeeds. When the
+//     dispatch carried no player context the owning player is "" and the shared
+//     gate fails closed (PRINCIPAL_NOT_OWNED → PermissionDenied).
+func (s *pluginHostServiceServer) requirePrincipalOwnership(principalID, expectedOwnerID string) (ulid.ULID, error) {
+	pid, err := pluginauthz.CheckPrincipalOwnership(principalID, expectedOwnerID)
+	if err == nil {
+		return pid, nil
+	}
+	oopsErr, _ := oops.AsOops(err)
+	if oopsErr.Code() == "PRINCIPAL_NOT_OWNED" {
 		return ulid.ULID{}, status.Error(codes.PermissionDenied, "permission denied") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
 	}
-	return pid, nil
+	// INVALID_PRINCIPAL_ID and any unexpected code fail closed as InvalidArgument.
+	return ulid.ULID{}, status.Error(codes.InvalidArgument, "invalid principal_id") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
 }
 
 // authorizeGameWrite evaluates the operator authorization decision required for
 // a GAME-scope write. The subject (token-recovered) must be permitted to "write"
-// settingsGameWriteResource. A deny → PermissionDenied; an engine/build failure
-// is logged and surfaced as a generic Internal (no inner-error leak).
+// the per-plugin resource pluginauthz.SettingsGameWriteResource(s.pluginName).
+// Using the per-plugin resource lets operator policies scope GAME-write per
+// plugin (plugin-runtime-symmetry, INV-8; holomush-iokti.15 Item 2).
+// A deny → PermissionDenied; an engine/build failure is logged and surfaced as
+// a generic Internal (no inner-error leak).
 func (s *pluginHostServiceServer) authorizeGameWrite(ctx context.Context, subject string) error {
 	s.host.mu.RLock()
 	eng := s.host.engine
@@ -790,7 +827,7 @@ func (s *pluginHostServiceServer) authorizeGameWrite(ctx context.Context, subjec
 		return status.Error(codes.Unimplemented, "settings not configured") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
 	}
 
-	areq, err := types.NewAccessRequest(subject, types.ActionWrite, settingsGameWriteResource, nil)
+	areq, err := types.NewAccessRequest(subject, types.ActionWrite, pluginauthz.SettingsGameWriteResource(s.pluginName), nil)
 	if err != nil {
 		slog.ErrorContext(ctx, "build game-write access request failed",
 			"plugin", s.pluginName, "err", err)
@@ -809,15 +846,20 @@ func (s *pluginHostServiceServer) authorizeGameWrite(ctx context.Context, subjec
 	return nil
 }
 
-// actorFromToken recovers the host-issued dispatch-token actor from the incoming
-// metadata, mirroring Evaluate / EmitEvent exactly. Plugin-supplied identity
-// claims are never trusted. Fails closed on missing token, unconfigured store,
-// or a token not valid for this plugin.
-func (s *pluginHostServiceServer) actorFromToken(ctx context.Context) (core.Actor, error) {
+// actorFromToken recovers the host-issued dispatch-token actor AND the
+// host-vouched owning player ULID from the incoming metadata, mirroring
+// Evaluate / EmitEvent token recovery. Plugin-supplied identity claims are never
+// trusted. The owning player is the binary runtime's recovery of the value the
+// dispatcher stamped via core.WithOwningPlayer (Lua recovers the same value
+// in-process from the ctx); PLAYER-scope settings ownership compares it against
+// the request's principal_id. It is "" when the dispatch had no player context.
+// Fails closed on missing token, unconfigured store, or a token not valid for
+// this plugin.
+func (s *pluginHostServiceServer) actorFromToken(ctx context.Context) (core.Actor, string, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 	tokens := md.Get("x-holomush-emit-token")
 	if len(tokens) == 0 || tokens[0] == "" {
-		return core.Actor{}, oops.Code("EMIT_TOKEN_MISSING").
+		return core.Actor{}, "", oops.Code("EMIT_TOKEN_MISSING").
 			With("plugin", s.pluginName).
 			Errorf("plugin called settings without a host-issued dispatch token")
 	}
@@ -826,20 +868,20 @@ func (s *pluginHostServiceServer) actorFromToken(ctx context.Context) (core.Acto
 	tokenStore := s.host.tokenStore
 	s.host.mu.RUnlock()
 	if tokenStore == nil {
-		return core.Actor{}, oops.Code("EMIT_TOKEN_STORE_UNCONFIGURED").
+		return core.Actor{}, "", oops.Code("EMIT_TOKEN_STORE_UNCONFIGURED").
 			With("plugin", s.pluginName).
 			Errorf("plugin token store is not configured")
 	}
 
-	storedActor, ok := tokenStore.Lookup(s.pluginName, tokens[0])
+	storedActor, ownerPlayer, ok := tokenStore.Lookup(s.pluginName, tokens[0])
 	if !ok {
 		slog.WarnContext(ctx, "setting rejected: token not valid for this plugin",
 			"plugin", s.pluginName, "code", "EMIT_TOKEN_REJECTED")
-		return core.Actor{}, oops.Code("EMIT_TOKEN_REJECTED").
+		return core.Actor{}, "", oops.Code("EMIT_TOKEN_REJECTED").
 			With("plugin", s.pluginName).
 			Errorf("dispatch token is not valid for this plugin")
 	}
-	return storedActor, nil
+	return storedActor, ownerPlayer, nil
 }
 
 // DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN audit rows
@@ -922,7 +964,10 @@ func (s *pluginHostServiceServer) RequestEmitToken(_ context.Context, _ *pluginv
 			Wrap(stampErr)
 	}
 
-	token, err := tokenStore.Issue(s.pluginName, storedActor)
+	// Self-tokens carry no player context (no DeliverCommand dispatch), so the
+	// owning player is "" — PLAYER-scope settings from a self-token path fail
+	// closed, consistent with DeliverEvent.
+	token, err := tokenStore.Issue(s.pluginName, storedActor, "")
 	if err != nil {
 		return nil, oops.Code("EMIT_TOKEN_ISSUE_FAILED").
 			With("plugin", s.pluginName).

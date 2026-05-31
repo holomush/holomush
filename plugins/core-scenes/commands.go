@@ -1535,6 +1535,95 @@ func sceneResourceRefFirstField(args string) (string, error) {
 	return "scene:" + normalizeSceneID(fields[0]), nil // ABAC resource ref (type:id), not a pub/sub subject (INV-P4-1)
 }
 
+// handleScenesBoard implements the top-level `scenes` command: the public
+// open-scene board browser. It is distinct from `scene list` (handleSceneList,
+// which lists the calling character's own memberships).
+//
+// Arg parsing: tokens of the form `tag:<t>` are collected into Tags; tokens of
+// the form `hide:<cw>` are collected into ExcludeContentWarnings. Unrecognised
+// tokens are silently ignored to keep the interface lenient for clients that
+// pass extra whitespace or future unknown flags.
+//
+// Identity safety (iokti.14): PlayerID and CharacterID are taken exclusively
+// from the authenticated CommandRequest — never from parsed args — so the CW
+// block resolution inside ListScenes reads settings owned by the dispatch-token
+// principal. This matches the ownership gate in iokti.19 and means persistent
+// player/character blocks actually apply without any privilege escalation.
+//
+// Note on participant count: SceneInfo carries no participant count field.
+// Rendering it would require an N+1 per-scene query, which is an anti-pattern
+// for a list endpoint. The count is omitted from the board render; per-scene
+// detail is available via `scene info <id>` (deviation from the plan draft).
+func (p *scenePlugin) handleScenesBoard(ctx context.Context, req pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+	// Parse tag:<t> / hide:<cw> tokens from args.
+	var tags, hides []string
+	for _, tok := range strings.Fields(req.Args) {
+		switch {
+		case strings.HasPrefix(tok, "tag:"):
+			if t := strings.TrimPrefix(tok, "tag:"); t != "" {
+				tags = append(tags, t)
+			}
+		case strings.HasPrefix(tok, "hide:"):
+			if cw := strings.TrimPrefix(tok, "hide:"); cw != "" {
+				hides = append(hides, cw)
+			}
+		default:
+			// Unrecognized tokens are silently ignored.
+		}
+	}
+
+	// Build the request with identity from the authenticated CommandRequest
+	// (iokti.14 safety invariant: these match the dispatch-token's owning principal).
+	boardReq := &scenev1.ListScenesRequest{
+		Limit:                  50,
+		Tags:                   tags,
+		ExcludeContentWarnings: hides,
+		CharacterId:            req.CharacterID,
+		PlayerId:               req.PlayerID,
+	}
+
+	resp, err := p.service.ListScenes(ctx, boardReq)
+	if err != nil {
+		slog.WarnContext(ctx, "scenes board list failed", "error", err)
+		return pluginsdk.Errorf("Could not load the scene board."), nil
+	}
+
+	scenes := resp.GetScenes()
+	if len(scenes) == 0 {
+		return pluginsdk.OK("No open scenes."), nil
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Open scenes (%d):\n", len(scenes))
+	for _, s := range scenes {
+		// Build the CW label suffix — omit entirely when empty.
+		cwLabel := ""
+		if len(s.GetContentWarnings()) > 0 {
+			cwLabel = fmt.Sprintf(" [CW: %s]", strings.Join(s.GetContentWarnings(), ", "))
+		}
+		// Build the tag suffix — omit when empty.
+		tagLabel := ""
+		if len(s.GetTags()) > 0 {
+			tagLabel = fmt.Sprintf(" [tags: %s]", strings.Join(s.GetTags(), ", "))
+		}
+		// Paused marker.
+		pausedMarker := ""
+		if s.GetState() == string(SceneStatePaused) {
+			pausedMarker = " [paused]"
+		}
+		fmt.Fprintf(
+			&b, "  %s — %s (owner: %s)%s%s%s\n",
+			s.GetId(),
+			s.GetTitle(),
+			s.GetOwnerId(),
+			pausedMarker,
+			cwLabel,
+			tagLabel,
+		)
+	}
+	return pluginsdk.OK(b.String()), nil
+}
+
 // handleVoteExtend implements `scene publish vote extend <count> [#<scene id>]`
 // (spec §6.1 E2). It bumps the scene's max_publish_attempts budget by <count>
 // (a positive integer). The caller must be a server admin: the admin-extend-

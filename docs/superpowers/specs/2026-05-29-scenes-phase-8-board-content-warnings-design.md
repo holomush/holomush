@@ -55,8 +55,8 @@ verbs"*). Two rejected designs and why:
   marshal (`player_repo.go:33,169`) silently drops any key the generic writer
   added. Two writers, one column, data loss.
 
-The resolution is an **owner-partitioned** settings model. The host provides
-generic, typed-value settings storage partitioned by an **owner** dimension; the
+The resolution is a **plugin-partitioned** settings model. The host provides
+generic, typed-value settings storage partitioned by a **plugin** dimension; the
 host stores each plugin's keys opaquely and never interprets them. "Content
 warning" exists only inside core-scenes. This keeps the substrate reusable by
 every future plugin (channels, forums, …) — solving preference storage once —
@@ -79,8 +79,8 @@ is correct.
 - Support persistent per-player and per-character content-warning *block*
   preferences that auto-apply, plus per-query ad-hoc filtering.
 - Expose the settings substrate to plugins via a runtime-symmetric host RPC, with
-  **owner-partitioned, structurally-isolated** access.
-- Add first-class list support (`StringSliceN`) and the owner-narrowing model to
+  **plugin-partitioned, structurally-isolated** access.
+- Add first-class list support (`StringSliceN`) and the plugin-narrowing model to
   the settings substrate.
 
 ### 2.2 Non-goals
@@ -101,9 +101,9 @@ board uses (C–E) consume them. Mirrors Phase 5's substrate-then-use shape.
 ```mermaid
 flowchart TD
     subgraph host["Host (internal/) — domain-ignorant"]
-        SET["internal/settings<br/>Scoped/Writable + Owner() narrowing<br/>+ StringSliceN"]
+        SET["internal/settings<br/>Scoped/Writable + Plugin() narrowing<br/>+ StringSliceN"]
         STORE["players/characters.preferences JSONB<br/>opaque 'plugins' passthrough partition"]
-        RPC["PluginHostService GetSetting/SetSetting<br/>(owner BOUND to authenticated caller)"]
+        RPC["PluginHostService GetSetting/SetSetting<br/>(plugin partition BOUND to authenticated caller)"]
         ABAC["ABAC Evaluate<br/>scope/principal authz"]
     end
     subgraph plugin["core-scenes — owns the CW vocabulary"]
@@ -114,7 +114,7 @@ flowchart TD
     end
 
     CMD --> LIST
-    LIST -->|"GetSetting PLAYER/CHARACTER content.cw_block<br/>(owner=core-scenes, bound host-side)"| RPC
+    LIST -->|"GetSetting PLAYER/CHARACTER content.cw_block<br/>(plugin=core-scenes, bound host-side)"| RPC
     VALID -->|"GetSetting GAME content.cw_taxonomy<br/>(fallback: DefaultCWTaxonomy)"| RPC
     RPC --> ABAC
     RPC --> SET
@@ -123,7 +123,7 @@ flowchart TD
     LIST -->|"exclude scenes carrying any blocked CW;<br/>always attach CW labels"| CMD
 ```
 
-### 3.1 Workstream A — Settings substrate: list type + owner partitioning
+### 3.1 Workstream A — Settings substrate: list type + plugin partitioning
 
 **A1. First-class list type.** Add `StringSliceN(ctx, key) ([]string, bool)` to
 the `Settings` read interface, implemented across all backings (`jsonMapSettings`,
@@ -132,9 +132,9 @@ type, never a JSON blob smuggled through `StringN` (INV-9). JSONB scopes store a
 native JSON array; the game scope (`holomush_system_info`, string k/v) stores a
 JSON-array string and decodes on read.
 
-**A2. Owner-partitioned access.** The `Settings` read interface stays unchanged
+**A2. Plugin-partitioned access.** The `Settings` read interface stays unchanged
 (2-arg accessors). Stores upgrade their factory return type from `Settings` to
-`Scoped`, which adds owner-narrowing:
+`Scoped`, which adds plugin-narrowing:
 
 ```go
 // Read view — UNCHANGED.
@@ -146,14 +146,14 @@ type Settings interface {
     StringSliceN(ctx, key) ([]string, bool)
 }
 
-// A Settings that can be narrowed to an owner partition.
+// A Settings that can be narrowed to a plugin partition.
 type Scoped interface {
-    Settings                    // bare reads → HOST partition (owner "")
-    Owner(name string) Writable // narrow+bind to a plugin's partition
-    Host() Writable             // explicit host partition (writable)
+    Settings                     // bare reads → HOST partition
+    Plugin(name string) Writable // narrow+bind to a plugin's partition
+    Host() Writable              // explicit host partition (writable)
 }
 
-// A handle bound to (scope-principal, owner). Read + write.
+// A handle bound to (scope-principal, plugin partition). Read + write.
 type Writable interface {
     Settings
     SetString(ctx, key, value string) error
@@ -166,10 +166,10 @@ type CharacterSettingsStore interface { For(ctx, characterID ulid.ULID) Scoped }
 type GameSettings           interface { Scoped }
 ```
 
-`Chain.Owner(name)` narrows every scope in the chain, so scope-chaining and owner
-partitioning compose orthogonally.
+`Chain.Plugin(name)` narrows every scope in the chain, so scope-chaining and
+plugin partitioning compose orthogonally.
 
-**A3. Storage — one column, partitioned by owner.** The host typed preferences
+**A3. Storage — one column, partitioned by plugin.** The host typed preferences
 struct gains a single **opaque passthrough** field; it never interprets its
 contents:
 
@@ -177,8 +177,8 @@ contents:
 // players.preferences
 {
   "max_characters": 5,
-  "scenes": { "focus": { "replay_tail": 3 } },           // owner "" (host)
-  "plugins": { "core-scenes": { "content.cw_block": ["violence"] } } // owner "core-scenes"
+  "scenes": { "focus": { "replay_tail": 3 } },           // host partition
+  "plugins": { "core-scenes": { "content.cw_block": ["violence"] } } // plugin "core-scenes"
 }
 ```
 
@@ -191,29 +191,29 @@ type PlayerPreferences struct {
 }
 ```
 
-`.Owner("core-scenes")` re-points the underlying `jsonMapSettings.data` at
+`.Plugin("core-scenes")` re-points the underlying `jsonMapSettings.data` at
 `plugins["core-scenes"]`; `.Host()` reads the top level. Because `Plugins` is a
 real struct field, the typed marshal round-trips plugin keys instead of dropping
 them — **one writer, no clobber**, host stays ignorant of the contents.
 
 **Game scope partitioning.** The game scope is `holomush_system_info`, flat
-string k/v (`internal/settings/game.go`), with no sub-object. Its `.Owner(name)`
+string k/v (`internal/settings/game.go`), with no sub-object. Its `.Plugin(name)`
 view partitions by a **host-controlled key prefix**: `plugin/<name>/<key>` (the
 `plugin/` segment is reserved and rejected as a host-partition namespace, so host
 and plugin keyspaces can't collide). The narrowed view prepends the prefix
 internally — accessors still take the bare key (`content.cw_taxonomy`). The
-prefix is derived from the host-bound owner (§3.2), never caller-supplied, so the
-same structural-isolation guarantee (INV-11) holds as for the JSONB scopes; and
-the narrowed view skips `ValidateNamespace` per A4.
+prefix is derived from the host-bound plugin name (§3.2), never caller-supplied,
+so the same structural-isolation guarantee (INV-11) holds as for the JSONB
+scopes; and the narrowed view skips `ValidateNamespace` per A4.
 
 **A4. Namespace validation is host-partition-only — by construction.**
 Today `jsonMapSettings.StringN`/`StringSliceN` call `ValidateNamespace(key)`
 **unconditionally** on every read (`internal/settings/player.go:81`). A
-naive owner-narrowed read of `content.cw_block` would therefore be rejected
+naive plugin-narrowed read of `content.cw_block` would therefore be rejected
 ("content" is not in `RegisteredNamespaces`) and the feature would silently
 return unset — so the bypass must be explicit, not assumed.
 
-**Mechanism:** the view returned by `.Owner(name)` (and `.Host()`'s non-host
+**Mechanism:** the view returned by `.Plugin(name)` (and `.Host()`'s non-host
 counterpart) carries a `validateNamespace bool` that is **false** for plugin
 partitions and **true** for the host partition. The accessors call
 `ValidateNamespace` only when the flag is set. Equivalently: `ValidateNamespace`
@@ -228,7 +228,7 @@ plugin owns its keyspace.
 **A5. Character scope.** Add a `characters.preferences` JSONB migration (host
 migration, next number after the current max) and a real `CharacterSettingsStore`
 implementation mirroring `PlayerSettings`. Player + game scopes already function;
-character scope completes the set. (The `Owner`/`Plugins` partitioning applies
+character scope completes the set. (The `Plugin`/`Plugins` partitioning applies
 identically.)
 
 ### 3.2 Workstream B — Plugin settings access (host RPC + parity)
@@ -242,11 +242,11 @@ Add a `PluginHostService` RPC pair (`api/proto/holomush/plugin/v1/plugin.proto`)
   or empty (GAME).
 - `SetSetting(scope, principal_id, key, values)` → ack.
 
-**Owner binding (structural isolation, INV-11).** The host resolves the
+**Plugin-partition binding (structural isolation, INV-11).** The host resolves the
 **authenticated calling plugin's name** at the RPC boundary and serves the call
-against `base.Owner(callerName)`. The plugin **does not** pass an owner — there is
-no parameter through which it could name another plugin's partition. Isolation is
-by construction, not a per-call runtime check.
+against `base.Plugin(callerName)`. The plugin **does not** pass a partition name —
+there is no parameter through which it could name another plugin's partition.
+Isolation is by construction, not a per-call runtime check.
 
 **Runtime symmetry (INV-8).** The Go SDK method *and* the Lua hostfunc MUST ship
 together (`.claude/rules/plugin-runtime-symmetry.md`).
@@ -334,26 +334,26 @@ planning).
 | **INV-8** | The settings host RPC MUST ship a Go SDK method AND a Lua hostfunc together (runtime parity). |
 | **INV-9** | List-valued settings MUST use the first-class `StringSliceN` accessor; they MUST NOT be JSON blobs through `StringN`. |
 | **INV-10** | The host MUST remain domain-ignorant: it MUST NOT contain a typed field naming a plugin-domain concept; plugin settings live in an opaque `plugins` passthrough partition the host never interprets. |
-| **INV-11** | Cross-plugin isolation MUST be structural: the host binds the owner partition from the authenticated caller identity (`pluginHostServiceServer.pluginName`, stamped at server construction, `host_service.go:28`), never from caller-supplied input; a plugin MUST NOT be able to address another owner's partition. |
-| **INV-12** | `RegisteredNamespaces` validation MUST apply only to the host partition (owner `""`); plugin partitions own their keyspace unchecked. Once the substrate ships, adding a new plugin setting key MUST require zero `internal/` edits (the one-time `Plugins` passthrough field and the owner-narrowing machinery are substrate, not per-key cost). |
+| **INV-11** | Cross-plugin isolation MUST be structural: the host binds the plugin partition from the authenticated caller identity (`pluginHostServiceServer.pluginName`, stamped at server construction, `host_service.go:28`), never from caller-supplied input; a plugin MUST NOT be able to address another plugin's partition. |
+| **INV-12** | `RegisteredNamespaces` validation MUST apply only to the host partition; plugin partitions own their keyspace unchecked. Once the substrate ships, adding a new plugin setting key MUST require zero `internal/` edits (the one-time `Plugins` passthrough field and the plugin-narrowing machinery are substrate, not per-key cost). |
 
 Each invariant is backed by a test; a meta-test asserts the catalog is complete.
 
 ## 5. Testing strategy
 
 - **Settings substrate (unit):** `StringSliceN` across all backings (game-scope
-  encode/decode round-trip, `emptySettings` unset contract). `Owner()`/`Host()`
-  narrowing: a write under `.Owner("x")` is invisible to `.Owner("y")` and to
+  encode/decode round-trip, `emptySettings` unset contract). `Plugin()`/`Host()`
+  narrowing: a write under `.Plugin("x")` is invisible to `.Plugin("y")` and to
   `.Host()`, and survives a host-partition typed-struct round-trip (no clobber).
-- **Owner isolation (unit, INV-11):** the host-bound view rejects/has-no-path to
-  another owner's keys; a plugin partition write does not require a
+- **Plugin isolation (unit, INV-11):** the host-bound view rejects/has-no-path to
+  another plugin's keys; a plugin partition write does not require a
   `RegisteredNamespaces` entry (INV-12).
 - **Character scope (integration):** real `characters.preferences` CRUD against a
   Postgres testcontainer; migration up/down reversibility.
 - **Host RPC (integration):** `GetSetting`/`SetSetting` over the real
   `PluginHostService`, both Go and Lua paths (INV-8 parity), with ABAC denial
   paths (`policytest.DenyAllEngine`) for cross-principal and GAME-scope writes
-  (INV-7), and a test that a plugin cannot reach another owner's partition (INV-11).
+  (INV-7), and a test that a plugin cannot reach another plugin's partition (INV-11).
 - **Content-warning model (unit + integration):** INV-4 reject path; INV-5
   default-taxonomy fallback with no game config; INV-6 union across the three
   scopes.
@@ -367,7 +367,7 @@ Each invariant is backed by a test; a meta-test asserts the catalog is complete.
   (INV-10): walks a plugin-domain concept into `internal/auth` and forces an
   `internal/` edit per plugin preference — the existing `Scenes.FocusReplayTail`
   field is this same leak, debt not to extend.
-- **Generic flat-map over `players.preferences` without owner partitioning.**
+- **Generic flat-map over `players.preferences` without plugin partitioning.**
   Rejected: collides with the typed `auth.PlayerPreferences` whole-struct marshal
   (`player_repo.go:33,169`) — two writers of one column, the typed write silently
   drops generic keys.
@@ -379,9 +379,12 @@ Each invariant is backed by a test; a meta-test asserts the catalog is complete.
   consumer (CW block) needs a *union* across scopes (INV-6), not the chain's
   first-match-wins — so the plugin makes three explicit single-scope calls
   regardless, and a chained mode would be dead surface. (Secondarily, a chained
-  read from a single `principal_id` would force the host to do a character→player
-  lookup the single-scope design never needs.) Host code that wants first-match
-  chaining still uses the in-process `settings.Chain` directly.
+  read would have to derive PLAYER ownership host-side. PLAYER ownership *is*
+  resolved — via the host-vouched owning player carried on the dispatch token
+  (binary) / ctx (Lua) from the authenticated command dispatch, with no DB
+  lookup (holomush-iokti.19) — but the single-scope design avoids the chained
+  mode's coupling regardless.) Host code that wants first-match chaining still
+  uses the in-process `settings.Chain` directly.
 - **Bootstrap taxonomy seeding.** Rejected in favor of read-time default fallback:
   avoids a seed migration, bootstrap-order dependency, and the seed-write authz
   question (who may write GAME scope at init).

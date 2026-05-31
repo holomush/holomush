@@ -7,12 +7,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
@@ -1097,6 +1099,70 @@ func TestSceneGatedSubcommands_DenyWhenPolicyDenies(t *testing.T) {
 	}
 }
 
+// TestScenesBoardCommandDeclaresBrowseCapabilityGate is the INV-7 backstop for
+// the top-level `scenes` board command. Unlike the `scene` subcommands (covered
+// by the deny/nil-evaluator tables above), handleScenesBoard is intentionally
+// NOT gated by the plugin evaluator — the public board returns only open scenes
+// any character may browse, so its authorization is the host dispatcher's
+// Layer-2 capability pre-flight (CanPerformAction, dispatcher.go) on the
+// capability the command DECLARES in the manifest, not a plugin-code check.
+// Calling p.HandleCommand directly (as the unit/integration board tests do)
+// bypasses that pre-flight, so the board is never exercised against a deny
+// engine there. The meaningful regression guard is therefore that the
+// capability declaration exists and is the DISTINCT browse action: removing it,
+// or widening it to the membership-gated `read`, would silently change the
+// board's authorization. This pins the gate's declaration (holomush-sl0ir.15).
+func TestScenesBoardCommandDeclaresBrowseCapabilityGate(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile("plugin.yaml")
+	require.NoError(t, err)
+
+	var manifest struct {
+		Actions  []string `yaml:"actions"`
+		Commands []struct {
+			Name         string `yaml:"name"`
+			Capabilities []struct {
+				Action   string `yaml:"action"`
+				Resource string `yaml:"resource"`
+				Scope    string `yaml:"scope"`
+			} `yaml:"capabilities"`
+		} `yaml:"commands"`
+	}
+	require.NoError(t, yaml.Unmarshal(data, &manifest))
+
+	var found bool
+	for _, cmd := range manifest.Commands {
+		if cmd.Name != "scenes" {
+			continue
+		}
+		found = true
+		require.Len(t, cmd.Capabilities, 1,
+			"the `scenes` board command must declare exactly one capability (the host pre-flight gate)")
+		c := cmd.Capabilities[0]
+		assert.Equal(t, "browse", c.Action,
+			"board must use the DISTINCT browse action, not the membership-gated read")
+		assert.Equal(t, "scene", c.Resource)
+		assert.Equal(t, "global", c.Scope)
+	}
+	require.True(t, found, "the `scenes` board command must be declared in the manifest")
+
+	// The policy that PERMITS the browse capability must also ship; without it
+	// the declared gate would deny every board browse.
+	assert.Contains(t, string(data), "browse-open-scenes-board",
+		"the policy permitting the board browse capability must be declared")
+
+	// The browse action MUST ALSO be registered in the manifest's top-level
+	// actions: list. CollectActions admits only core actions + each plugin's
+	// declared actions to knownActions; an action used solely in a capability
+	// (or policy) but absent from actions: is rejected at plugin load with
+	// `unknown action "browse"`, which panics the whole-system integration
+	// harness and stops the core server from booting. This pins the missing
+	// link that broke CI: browse was declared on the capability + policy but
+	// not registered here.
+	assert.Contains(t, manifest.Actions, "browse",
+		"browse must be declared in the manifest actions: list so CollectActions admits it to knownActions at plugin load")
+}
+
 // TestSceneResourceRefTokenizesFirstField verifies that sceneResourceRef extracts
 // only the first whitespace-separated token, so multi-token input like
 // "scene-x extra" produces "scene:scene-x" rather than "scene:scene-x extra".
@@ -1182,4 +1248,172 @@ func TestSceneGatedSubcommands_NilEvaluatorFailsClosed(t *testing.T) {
 				"nil evaluator MUST fail closed for subcommand %q", tc.sub)
 		})
 	}
+}
+
+// ── scenes board command tests (iokti.14) ─────────────────────────────────────
+
+// TestScenesBoardRendersOpenScenesWithCWLabels asserts that handleScenesBoard
+// renders a scene's content_warnings in the output line so players can
+// identify CW-tagged scenes on the board.
+func TestScenesBoardRendersOpenScenesWithCWLabels(t *testing.T) {
+	store := newFakeStore()
+	store.listBoardRows = []*SceneRow{
+		{
+			ID:              "scene-cw-1",
+			Title:           "Dark Alley",
+			OwnerID:         "char-owner",
+			State:           string(SceneStateActive),
+			Visibility:      "open",
+			PoseOrder:       string(PoseOrderModeFree),
+			ContentWarnings: []string{"violence"},
+			Tags:            []string{},
+		},
+	}
+	svc := newTestService(t, store)
+	svc.SetEventSink(&recordingEventSink{})
+	p := &scenePlugin{service: svc, evaluator: allowEvaluator{}}
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scenes",
+		Args:        "",
+		CharacterID: "char-alice",
+		PlayerID:    "player-alice",
+	})
+	require.NoError(t, err)
+	require.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "violence", "CW label must appear in output")
+	assert.Contains(t, resp.Output, "Dark Alley", "scene title must appear in output")
+}
+
+// TestScenesBoardParsesHideArgExcludesMatchingScene asserts that a hide:<cw>
+// argument is forwarded as ExcludeContentWarnings to ListScenes, causing the
+// board to omit scenes carrying that warning (verified via the BoardQuery
+// recorded by the fake store).
+func TestScenesBoardParsesHideArgExcludesMatchingScene(t *testing.T) {
+	store := newFakeStore()
+	// The fake store returns nothing — we care about the query shape.
+	store.listBoardRows = []*SceneRow{}
+	svc := newTestService(t, store)
+	svc.SetEventSink(&recordingEventSink{})
+	p := &scenePlugin{service: svc, evaluator: allowEvaluator{}}
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scenes",
+		Args:        "hide:violence",
+		CharacterID: "char-alice",
+		PlayerID:    "player-alice",
+	})
+	require.NoError(t, err)
+	require.Equal(t, pluginsdk.CommandOK, resp.Status)
+
+	require.NotNil(t, store.listBoardGot, "ListBoard must have been called")
+	assert.Contains(t, store.listBoardGot.BlockedCW, "violence",
+		"hide:violence must be forwarded to BoardQuery.BlockedCW")
+}
+
+// TestScenesBoardParsesTagArgFiltersBoard asserts that a tag:<t> argument is
+// forwarded as Tags to the BoardQuery so the board is filtered by tag.
+func TestScenesBoardParsesTagArgFiltersBoard(t *testing.T) {
+	store := newFakeStore()
+	store.listBoardRows = []*SceneRow{}
+	svc := newTestService(t, store)
+	svc.SetEventSink(&recordingEventSink{})
+	p := &scenePlugin{service: svc, evaluator: allowEvaluator{}}
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scenes",
+		Args:        "tag:action",
+		CharacterID: "char-alice",
+		PlayerID:    "player-alice",
+	})
+	require.NoError(t, err)
+	require.Equal(t, pluginsdk.CommandOK, resp.Status)
+
+	require.NotNil(t, store.listBoardGot, "ListBoard must have been called")
+	assert.Contains(t, store.listBoardGot.Tags, "action",
+		"tag:action must be forwarded to BoardQuery.Tags")
+}
+
+// TestScenesBoardEmptyBoardRendersNoScenesMessage asserts that when the board
+// has no open scenes, the output contains an appropriate "no open scenes"
+// message rather than a blank or partial output.
+func TestScenesBoardEmptyBoardRendersNoScenesMessage(t *testing.T) {
+	store := newFakeStore()
+	store.listBoardRows = []*SceneRow{}
+	svc := newTestService(t, store)
+	svc.SetEventSink(&recordingEventSink{})
+	p := &scenePlugin{service: svc, evaluator: allowEvaluator{}}
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scenes",
+		Args:        "",
+		CharacterID: "char-alice",
+		PlayerID:    "player-alice",
+	})
+	require.NoError(t, err)
+	require.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "No open scenes")
+}
+
+// TestScenesBoardRendersPausedMarkerWhenSceneIsPaused asserts that a paused
+// scene displays a [paused] marker in the board listing.
+func TestScenesBoardRendersPausedMarkerWhenSceneIsPaused(t *testing.T) {
+	store := newFakeStore()
+	store.listBoardRows = []*SceneRow{
+		{
+			ID:              "scene-paused-1",
+			Title:           "Quiet Meadow",
+			OwnerID:         "char-owner",
+			State:           string(SceneStatePaused),
+			Visibility:      "open",
+			PoseOrder:       string(PoseOrderModeFree),
+			ContentWarnings: []string{},
+			Tags:            []string{},
+		},
+	}
+	svc := newTestService(t, store)
+	svc.SetEventSink(&recordingEventSink{})
+	p := &scenePlugin{service: svc, evaluator: allowEvaluator{}}
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scenes",
+		Args:        "",
+		CharacterID: "char-alice",
+		PlayerID:    "player-alice",
+	})
+	require.NoError(t, err)
+	require.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "[paused]", "paused scene must show [paused] marker")
+}
+
+// TestScenesBoardUsesAuthenticatedIdentityForCWBlocking asserts that the
+// PlayerID and CharacterID from the authenticated CommandRequest are forwarded
+// to ListScenes — not from parsed args — so the CW block settings read is
+// gated by the dispatch-token-owned principal (iokti.14 safety invariant).
+func TestScenesBoardUsesAuthenticatedIdentityForCWBlocking(t *testing.T) {
+	store := newFakeStore()
+	store.listBoardRows = []*SceneRow{}
+	svc := newTestService(t, store)
+	svc.SetEventSink(&recordingEventSink{})
+	// Wire a settings client that returns a block for "char-alice" at character scope.
+	svc.settings = &scopedFakeSettingsClient{
+		byScope: map[pluginsdk.SettingScope]scopedFakeOutcome{
+			pluginsdk.SettingScopeCharacter: {values: []string{"gore"}, found: true},
+		},
+	}
+	p := &scenePlugin{service: svc, evaluator: allowEvaluator{}}
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scenes",
+		Args:        "",
+		CharacterID: "char-alice",
+		PlayerID:    "player-alice",
+	})
+	require.NoError(t, err)
+	require.Equal(t, pluginsdk.CommandOK, resp.Status)
+
+	// The CW block must have been applied via the authenticated identity.
+	require.NotNil(t, store.listBoardGot, "ListBoard must have been called")
+	assert.Contains(t, store.listBoardGot.BlockedCW, "gore",
+		"character-scope CW block must be resolved and forwarded to BoardQuery")
 }

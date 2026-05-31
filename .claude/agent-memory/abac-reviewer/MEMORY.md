@@ -305,3 +305,57 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   bogus `rc=2` because the PreToolUse hook appends advisory text after the command — the
   preceding printed value is still correct. The "MEMORY.md became a directory" theory from
   a prior degraded run was FALSE — the file is intact.
+- **Optimistic resource-conditioned permit at class pre-flight (iokti.14, 2026-05-30)**:
+  `Engine.CanPerformAction` (engine.go:406-540) resolves subject+env attrs ONLY (no
+  resource provider call). A permit whose `when` references `resource.*` and fails under
+  subject-only attrs is treated as `anyPermit=true` OPTIMISTICALLY (engine.go:517-520, via
+  `dsl.ReferencesResourceAttrs`, refs.go:55-66). So a global class-capability conditioned on
+  a per-resource attr (e.g. `scenes` cmd cap {read,scene,global} + permit
+  `when{resource.scene.visibility=="open"}`) does NOT fail-safe-deny at pre-flight — board
+  works in prod. The STRICT per-instance gate is `Evaluate` (gated_dispatch.go:52), which DOES
+  resolve resource attrs; the optimistic branch is UNIQUE to CanPerformAction. Two recurring
+  checks for this shape: (1) confirm a strict instance-level `Evaluate` consumer exists for the
+  same action so private/non-matching resources are still gated (here `scene info`@commands.go:482);
+  (2) watch for SILENT read-broadening: adding `permit(read,scene) when{visibility=="open"}`
+  also widens any OTHER instance-level read consumer of that action (here `scene info` for
+  non-members) — scope to a distinct action if board-only was intended. Board SQL also
+  hardcodes `WHERE visibility='open'` (store.go:1393) as defense-in-depth. Integration tests
+  calling `p.HandleCommand` directly with `allowEvaluator{}` BYPASS the host dispatcher pre-flight
+  (dispatcher.go:234) — they don't cover CanPerformAction; add a real-engine pre-flight test.
+- **Per-plugin GAME-write resource (iokti.15, 2026-05-30) — resolves iokti.7 Low#1**:
+  `pluginauthz.SettingsGameWriteResource` const `"setting:game"` → func returning
+  `"setting:game:"+pluginName` (principal.go:22). Both runtimes' authorizeGameWrite
+  (host_service.go:820, stdlib_settings.go:126) call the single func — no drift. NARROWS,
+  not widens: `parseEntityType` (engine.go:542, `SplitN(":",2)`) still yields type `setting`,
+  the suffix only scopes the per-instance ID. NO orphaned grant: `rg "setting:game"` shows
+  ZERO shipped policy/seed/yaml grants — new substrate, only tests grant it (plugin.yaml
+  `setting:`/`type: setting` matches are the plugin-type field, NOT the ABAC resource).
+  When auditing "const→per-entity resource" refactors: (1) rg the OLD resource string
+  across seed.go + plugin.yaml `policies:` + migrations — a shipped grant on the old string
+  = ORPHAN = NOT READY; (2) confirm parseEntityType still yields the same TYPE (SplitN keeps
+  type stable regardless of suffix count); (3) confirm single-func source so both runtimes
+  can't drift. Also iokti.15: CheckPrincipalOwnership (principal.go:58) now parses BOTH ids
+  to ulid.ULID and compares values — case-insensitive (ULID encoding-independent), distinct
+  ULIDs can't collide (no over-grant), empty-expectedOwnerID fail-closed branch PRESERVED
+  before the parse (line 67 < 77), malformed-expected fails closed PRINCIPAL_NOT_OWNED.
+- **owner→plugin nomenclature rename (iokti.17, 2026-05-30) — pure-vocabulary, INV-11 intact**:
+  STRUCTURAL-ONLY reframe of the settings substrate: `Scoped.Owner(name)`→`Plugin(name)`,
+  `gameOwnerSettings`→`gamePluginSettings`, `markOwnerDirty`→`markPluginDirty`,
+  `dirtyTracker.owners`→`.plugins`, plus spec/ADR prose (`holomush-uvbyt`, `holomush-74ib4`).
+  Verified NO substance change: (1) trust anchor untouched — partition still bound from
+  `s.pluginName` (binary, struct field set at `newPluginHostServiceServer`, host_service.go:33/41)
+  / registration-time `pluginName` (Lua, closed over in getSettingFn/setSettingFn; Lua sig is
+  `(scope,principal_id,key)` — pluginName NOT an arg); (2) `Plugin(name)` indexes `v.plugins[name]`,
+  distinct from `v.host` — `Plugin("")` keys an empty-string plugin partition, Host UNREACHABLE via
+  Plugin; (3) `ReservedNamespace="plugin"` + GAME `plugin/<name>/` prefix byte-for-byte unchanged
+  (namespaces.go), host-key `plugin.*` rejection intact; (4) INV-11 spec:170 + both ADRs read
+  identically post-reframe, both add an explicit "word-only, invariants unchanged" footnote.
+  Also iokti.17 .20: `resolveSettingScope` PLAYER/CHARACTER dedup into `principalScopedStore`
+  helper (host_service.go:765) — helper takes `expectedOwnerID` as a PARAM, never chooses it;
+  PLAYER passes `ownerPlayer` (token-vouched), CHARACTER passes `actor.ID`; nil-store→Unimplemented
+  + PLAYER-no-owner→PRINCIPAL_NOT_OWNED both preserved. When reviewing rename/dedup "no-behavior"
+  PRs: (a) rg the OLD method/identifier across non-test code to confirm zero stragglers in
+  enforcement paths; (b) confirm the host/plugin partition namespace-validation asymmetry survives
+  (Host validateNamespace:true vs Plugin:false); (c) confirm dedup helpers take the per-scope
+  distinguisher as a param, not a hardcoded constant. Lone straggler found: spec mermaid node
+  (spec:34) still says "owner BOUND to authenticated caller" — cosmetic Low, not blocking.

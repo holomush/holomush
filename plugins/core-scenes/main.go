@@ -81,13 +81,18 @@ func (p *scenePlugin) HandleEvent(_ context.Context, _ pluginsdk.Event) ([]plugi
 }
 
 // HandleCommand routes scene commands to the appropriate subcommand handler.
-// The dispatcher lives in commands.go to keep main.go focused on plugin
-// lifecycle.
+// "scene" dispatches to the per-character subcommand router; "scenes" dispatches
+// to the public open-scene board browser. The dispatcher lives in commands.go to
+// keep main.go focused on plugin lifecycle.
 func (p *scenePlugin) HandleCommand(ctx context.Context, req pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
-	if req.Command != "scene" {
+	switch req.Command {
+	case "scene":
+		return p.dispatchCommand(ctx, req)
+	case "scenes":
+		return p.handleScenesBoard(ctx, req)
+	default:
 		return pluginsdk.Errorf("core-scenes does not handle command %q", req.Command), nil
 	}
-	return p.dispatchCommand(ctx, req)
 }
 
 // RegisterServices registers the SceneServiceServer on the go-plugin gRPC
@@ -137,6 +142,16 @@ func (p *scenePlugin) SetEventSink(sink pluginsdk.EventSink) {
 func (p *scenePlugin) SetSnapshotDecryptor(d pluginsdk.SnapshotDecryptor) {
 	if p.service != nil {
 		p.service.SetSnapshotDecryptor(d)
+	}
+}
+
+// SetSettingsClient forwards the SDK-injected host settings client to the scene
+// service so service-owned RPC handlers can read game-scope settings (e.g. the
+// content-warning taxonomy override). Declares scenePlugin as
+// pluginsdk.SettingsClientAware so the SDK adapter wires it before Init.
+func (p *scenePlugin) SetSettingsClient(c pluginsdk.SettingsClient) {
+	if p.service != nil {
+		p.service.SetSettingsClient(c)
 	}
 }
 

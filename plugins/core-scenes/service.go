@@ -68,6 +68,10 @@ type sceneStorer interface {
 	// handleEmit's single-membership inference per spec §5.2 (Phase 5 will
 	// replace with focus-aware routing).
 	ListScenesForCharacter(ctx context.Context, characterID string) ([]string, error)
+	// ListBoard returns the paginated public scene board: open scenes in state
+	// 'active' or 'paused', optionally filtered by tags. CW and identity
+	// filtering are applied by the caller (iokti.13).
+	ListBoard(ctx context.Context, q BoardQuery) ([]*SceneRow, error)
 	// Phase 6 publication reads used by the publish-vote handlers. The
 	// header read deliberately EXCLUDES content_entries so the INV-S9
 	// participant gate runs between the header read and the content read
@@ -135,6 +139,11 @@ type SceneServiceImpl struct {
 	// wires it at Init; runSnapshot fails closed when nil. The plugin never
 	// holds a DEK — it submits ciphertext rows and receives plaintext (INV-RB-1).
 	decryptor snapshotDecryptor
+	// settings is the SDK-injected host settings client used by
+	// effectiveTaxonomy to read the game-scope "content.cw_taxonomy" override.
+	// nil until SetSettingsClient wires it; effectiveTaxonomy falls back to
+	// DefaultCWTaxonomy when nil (INV-5).
+	settings pluginsdk.SettingsClient
 }
 
 // NewSceneServiceImpl returns a service backed by the given store.
@@ -174,6 +183,13 @@ func (s *SceneServiceImpl) SetSnapshotDecryptor(d snapshotDecryptor) {
 	s.decryptor = d
 }
 
+// SetSettingsClient installs the SDK-injected host settings client used by
+// effectiveTaxonomy to read the game-scope content-warning taxonomy override.
+// Wired via scenePlugin.SetSettingsClient before Init; nil until then.
+func (s *SceneServiceImpl) SetSettingsClient(c pluginsdk.SettingsClient) {
+	s.settings = c
+}
+
 // CreateScene generates a new scene ID, persists the scene, and returns it.
 // The caller (host) is responsible for ensuring ABAC has authorised the
 // command-execute action; per-resource ABAC for the new scene happens at
@@ -199,6 +215,11 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 		return nil, status.Errorf(codes.InvalidArgument, "title cannot be whitespace-only")
 	}
 
+	if err := s.validateContentWarnings(ctx, req.GetContentWarnings()); err != nil {
+		recordError(span, err)
+		return nil, err
+	}
+
 	id, err := newSceneID()
 	if err != nil {
 		recordError(span, err)
@@ -211,6 +232,13 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 		visibility = SceneVisibility(v)
 	}
 
+	// Persist the validated content warnings. If the request carries none,
+	// use an empty non-nil slice to match the storage shape (store/rowToProto
+	// expects a non-nil []string for JSON serialisation).
+	contentWarnings := req.GetContentWarnings()
+	if contentWarnings == nil {
+		contentWarnings = []string{}
+	}
 	row := &SceneRow{
 		ID:              id,
 		Title:           title,
@@ -219,7 +247,7 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 		State:           string(SceneStateActive),
 		PoseOrder:       string(PoseOrderModeFree),
 		Visibility:      string(visibility),
-		ContentWarnings: []string{},
+		ContentWarnings: contentWarnings,
 		Tags:            []string{},
 	}
 	if loc := req.GetLocationId(); loc != "" {
@@ -351,6 +379,102 @@ func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRe
 	}, nil
 }
 
+// resolveBlockedCW returns the effective CW block set for a board request.
+// It is the UNION (INV-6, safety-accumulating) of:
+//   - req.GetExcludeContentWarnings() (per-query caller-supplied excludes)
+//   - GAME-scope "content.cw_block" setting (principal "")
+//   - PLAYER-scope "content.cw_block" setting (principal = req.GetPlayerId())
+//   - CHARACTER-scope "content.cw_block" setting (principal = req.GetCharacterId())
+//
+// When s.settings is nil only the per-query excludes are returned. For each
+// scope read, expected errors (ownership-denied for a foreign principal,
+// not-found, missing dispatch token) are silently skipped — the board is never
+// failed by a blocked settings read. An unexpected (infrastructure) error is
+// logged at WARN before skipping, because it means a configured CW block may be
+// silently dropped from the result and ops needs visibility. The returned slice
+// is deduplicated; order is not specified.
+func (s *SceneServiceImpl) resolveBlockedCW(ctx context.Context, req *scenev1.ListScenesRequest) []string {
+	seen := make(map[string]struct{})
+	for _, cw := range req.GetExcludeContentWarnings() {
+		seen[cw] = struct{}{}
+	}
+
+	if s.settings != nil {
+		type scopeRead struct {
+			scope     pluginsdk.SettingScope
+			principal string
+		}
+		reads := []scopeRead{
+			{pluginsdk.SettingScopeGame, ""},
+			{pluginsdk.SettingScopePlayer, req.GetPlayerId()},
+			{pluginsdk.SettingScopeCharacter, req.GetCharacterId()},
+		}
+		for _, r := range reads {
+			vals, found, err := s.settings.GetSetting(ctx, r.scope, r.principal, "content.cw_block")
+			if err != nil {
+				if isUnexpectedSettingsError(err) {
+					slog.WarnContext(
+						ctx,
+						"scene.service.resolve_blocked_cw scope read failed; CW block may be unenforced for this query",
+						"scope", r.scope,
+						"key", "content.cw_block",
+						"error", err,
+					)
+				}
+				// Skip denied / errored scopes — never fail the board.
+				continue
+			}
+			if !found {
+				continue
+			}
+			for _, cw := range vals {
+				seen[cw] = struct{}{}
+			}
+		}
+	}
+
+	if len(seen) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(seen))
+	for cw := range seen {
+		out = append(out, cw)
+	}
+	return out
+}
+
+// ListScenes returns the public scene board: open scenes in state 'active' or
+// 'paused', optionally filtered by tags and with blocked content warnings
+// excluded via the union of all scope-based cw_block settings plus any
+// per-query ExcludeContentWarnings (iokti.13).
+func (s *SceneServiceImpl) ListScenes(ctx context.Context, req *scenev1.ListScenesRequest) (*scenev1.ListScenesResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.list_scenes")
+	defer span.End()
+
+	q := BoardQuery{
+		Limit:     int(req.GetLimit()),
+		Offset:    int(req.GetOffset()),
+		Tags:      req.GetTags(),
+		BlockedCW: s.resolveBlockedCW(ctx, req),
+	}
+
+	rows, err := s.store.ListBoard(ctx, q)
+	if err != nil {
+		recordError(span, err)
+		slog.WarnContext(
+			ctx, "scene.service.list_scenes store error",
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to list scenes")
+	}
+
+	scenes := make([]*scenev1.SceneInfo, 0, len(rows))
+	for _, row := range rows {
+		scenes = append(scenes, rowToProto(row, row.CreatedAt.Time()))
+	}
+	return &scenev1.ListScenesResponse{Scenes: scenes}, nil
+}
+
 // EndScene transitions a scene to the ended state. Only the scene owner is
 // authorized (gated by ABAC end-own-scene policy). The transition is
 // rejected if the scene is already ended or archived (FailedPrecondition).
@@ -480,6 +604,13 @@ func (s *SceneServiceImpl) UpdateScene(ctx context.Context, req *scenev1.UpdateS
 	if err != nil {
 		recordError(span, err)
 		return nil, err // already a gRPC status error
+	}
+
+	if update.UpdateContentWarnings {
+		if cwErr := s.validateContentWarnings(ctx, update.ContentWarnings); cwErr != nil {
+			recordError(span, cwErr)
+			return nil, cwErr
+		}
 	}
 
 	// Best-effort pre-update read: only needed when pose_order_mode is in the

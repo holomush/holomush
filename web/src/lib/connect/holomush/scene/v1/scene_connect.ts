@@ -36,12 +36,12 @@ export const SceneService = {
   typeName: "holomush.scene.v1.SceneService",
   methods: {
     /**
-     * ListScenes is DECLARED BUT NOT SERVED. The core-scenes plugin embeds
-     * UnimplementedSceneServiceServer and provides no override, so any call
-     * returns codes.Unimplemented. Scene discovery is instead surfaced through
-     * the plugin's `scene` listing command (handleSceneList), which reads
-     * SceneStore.ListScenesForCharacter, not this RPC. Retained as a planned
-     * read surface.
+     * ListScenes returns the public scene board: open scenes in state `active`
+     * or `paused`, paginated and optionally tag-filtered, with content-warning-
+     * blocked scenes excluded via the union of game/player/character scope
+     * cw_block settings plus any per-query exclude_content_warnings. Served by
+     * SceneServiceImpl.ListScenes and surfaced through the plugin's `scenes`
+     * board command. See service.go::ListScenes.
      *
      * @generated from rpc holomush.scene.v1.SceneService.ListScenes
      */

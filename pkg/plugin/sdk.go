@@ -145,6 +145,7 @@ type pluginServerAdapter struct {
 //   - EventSinkAware         -> provider.SetEventSink(...)
 //   - FocusClientAware       -> provider.SetFocusClient(...)
 //   - HostEvaluatorAware     -> provider.SetHostEvaluator(...)
+//   - SettingsClientAware    -> provider.SetSettingsClient(...)
 //   - SnapshotDecryptorAware -> provider.SetSnapshotDecryptor(...)
 //   - CommandListerAware     -> provider.SetCommandLister(...)
 //
@@ -161,6 +162,7 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 	_, wantsSink := a.serviceProvider.(EventSinkAware)
 	_, wantsFocus := a.serviceProvider.(FocusClientAware)
 	_, wantsEvaluator := a.serviceProvider.(HostEvaluatorAware)
+	_, wantsSettings := a.serviceProvider.(SettingsClientAware)
 	_, wantsDecryptor := a.serviceProvider.(SnapshotDecryptorAware)
 	_, wantsCommandLister := a.serviceProvider.(CommandListerAware)
 
@@ -168,7 +170,7 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 	// host-facing SDK facade the provider opts into. If the provider opts
 	// into none, we never dial.
 	var hostClient pluginv1.PluginHostServiceClient
-	if wantsSink || wantsFocus || wantsEvaluator || wantsDecryptor || wantsCommandLister {
+	if wantsSink || wantsFocus || wantsEvaluator || wantsSettings || wantsDecryptor || wantsCommandLister {
 		requiredServices := map[string]string(nil)
 		if config != nil {
 			requiredServices = config.GetRequiredServices()
@@ -188,6 +190,9 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 	}
 	if evalAware, ok := a.serviceProvider.(HostEvaluatorAware); ok {
 		evalAware.SetHostEvaluator(&hostEvaluateClient{client: hostClient})
+	}
+	if settingsAware, ok := a.serviceProvider.(SettingsClientAware); ok {
+		settingsAware.SetSettingsClient(newPluginHostSettingsClient(hostClient))
 	}
 	if decAware, ok := a.serviceProvider.(SnapshotDecryptorAware); ok {
 		decAware.SetSnapshotDecryptor(&snapshotDecryptClient{client: hostClient})

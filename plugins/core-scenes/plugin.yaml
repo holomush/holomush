@@ -52,6 +52,12 @@ audit:
 # because the registry treats service names as singletons.
 
 actions:
+  # Public board discovery (Task iokti.14): a DISTINCT browse action on the
+  # scene resource, deliberately separate from the membership-gated "read" so
+  # the open-board grant cannot widen `scene info`. MUST be declared here so
+  # CollectActions admits it to knownActions during plugin load — the `scenes`
+  # board command capability and the browse-open-scenes-board policy use it.
+  - browse
   - extend_publish_attempts
 
 storage: postgres
@@ -129,8 +135,19 @@ commands:
     help: "Manage RP scenes"
     usage: "scene <subcommand> [args]"
   - name: scenes
-    help: "Browse open scenes"
-    usage: "scenes [--tags tag1,tag2]"
+    # Layer-2 capability: public board discovery requires no per-resource
+    # ownership or membership gate — the board returns only visibility='open'
+    # scenes that any character may browse. We use a DISTINCT "browse" action
+    # (not "read") so this public-board grant does NOT widen the per-scene
+    # "read" action used by `scene info` (which stays membership-gated via
+    # read-scene-as-participant). The browse-open-scenes-board policy below
+    # permits it; the Layer-2 pre-flight fires on this declared capability.
+    capabilities:
+      - action: browse
+        resource: scene
+        scope: global
+    help: "Browse the open scene board"
+    usage: "scenes [tag:<t>] [hide:<cw>]"
 
 policies:
   # ─── Layer 1: command execution gate (unchanged from Phase 1) ─────────
@@ -233,3 +250,14 @@ policies:
     dsl: >-
       permit(principal is character, action in ["withdraw_publish"], resource is scene) when { resource.scene.owner == principal.id
       };
+
+  # ─── Phase 8: public board discovery (Task iokti.14) ─────────────────
+  # ANY authenticated character may browse the open-scene board. The board
+  # returns only visibility='open' scenes; the distinct "browse" action on the
+  # scene resource type is scoped globally (not per-resource) since the board
+  # is a list query, not a per-scene read. Using "browse" (not "read") keeps
+  # this grant from widening `scene info`'s membership-gated "read" action. The
+  # membership-gated read-scene-as-participant policy does NOT cover this case.
+  - name: browse-open-scenes-board
+    dsl: >-
+      permit(principal is character, action in ["browse"], resource is scene) when { resource.scene.visibility == "open" };

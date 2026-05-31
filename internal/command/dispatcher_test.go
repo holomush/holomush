@@ -2565,3 +2565,66 @@ func TestDispatcherStampsCharacterActorBeforeDeliverCommand(t *testing.T) {
 	assert.Equal(t, core.ActorCharacter, got.Kind)
 	assert.Equal(t, expectedCharID, got.ID)
 }
+
+// TestDispatcherStampsOwningPlayerBeforeDeliverCommand asserts the dispatcher
+// stamps the executor's player ID onto the dispatch ctx via core.WithOwningPlayer
+// BEFORE DeliverCommand — the single stamping site that feeds PLAYER-scope
+// settings ownership for both binary (token) and Lua (ctx) runtimes
+// (holomush-iokti.19).
+func TestDispatcherStampsOwningPlayerBeforeDeliverCommand(t *testing.T) {
+	t.Parallel()
+
+	cd := &capturingDeliverer{}
+	d := newTestDispatcherWithPlugin(t, cd)
+
+	playerID := ulid.Make()
+	var buf bytes.Buffer
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: ulid.Make(),
+		PlayerID:    playerID,
+		Output:      &buf,
+		Services:    stubServices(),
+	})
+
+	require.NoError(t, d.Dispatch(context.Background(), "plugintest", exec))
+
+	cd.mu.Lock()
+	defer cd.mu.Unlock()
+	require.NotNil(t, cd.deliverCtx, "DeliverCommand must have been invoked")
+	gotPlayer, ok := core.OwningPlayerFromContext(cd.deliverCtx)
+	require.True(t, ok, "DeliverCommand MUST receive ctx with owning player populated")
+	assert.Equal(t, playerID.String(), gotPlayer)
+}
+
+// TestDispatcherDoesNotStampOwningPlayerForZeroPlayerID asserts that a
+// zero-value PlayerID (a legacy session predating the players.player_session_id
+// column leaves CommandExecutionConfig.PlayerID zero, and NewCommandExecution
+// validates only CharacterID) is NOT stamped via core.WithOwningPlayer. A zero
+// ulid.ULID stringifies to 26 zeros — a parseable, real-looking anchor — so
+// stamping it would let any caller crafting principal_id="000…0" match the
+// shared zero partition: a fail-OPEN bypass of the PLAYER-scope ownership gate.
+// Leaving it unstamped keeps the expected owner empty so CheckPrincipalOwnership
+// fails closed (holomush-sl0ir.3 / iokti.19).
+func TestDispatcherDoesNotStampOwningPlayerForZeroPlayerID(t *testing.T) {
+	t.Parallel()
+
+	cd := &capturingDeliverer{}
+	d := newTestDispatcherWithPlugin(t, cd)
+
+	var buf bytes.Buffer
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: ulid.Make(),
+		// PlayerID intentionally omitted → zero ulid.ULID{}.
+		Output:   &buf,
+		Services: stubServices(),
+	})
+
+	require.NoError(t, d.Dispatch(context.Background(), "plugintest", exec))
+
+	cd.mu.Lock()
+	defer cd.mu.Unlock()
+	require.NotNil(t, cd.deliverCtx, "DeliverCommand must have been invoked")
+	gotPlayer, ok := core.OwningPlayerFromContext(cd.deliverCtx)
+	assert.False(t, ok, "zero PlayerID MUST NOT stamp an owning-player anchor")
+	assert.Empty(t, gotPlayer, "owning player must be empty for a zero-PlayerID dispatch")
+}

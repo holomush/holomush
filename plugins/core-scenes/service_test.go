@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"buf.build/go/protovalidate"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
@@ -43,6 +44,10 @@ type fakeStore struct {
 	getErr                    error
 	addParticipantErr         error
 	listScenesForCharacterErr error
+	// ListBoard control fields (iokti.12).
+	listBoardRows []*SceneRow
+	listBoardErr  error
+	listBoardGot  *BoardQuery // records the last query received
 }
 
 type recordingEventSink struct {
@@ -460,6 +465,17 @@ func (f *fakeStore) ListScenesForCharacter(_ context.Context, characterID string
 		ids = append(ids, sceneID)
 	}
 	return ids, nil
+}
+
+// ListBoard records the query it received and returns the configured rows/err.
+// Satisfies sceneStorer for iokti.12 unit tests.
+func (f *fakeStore) ListBoard(_ context.Context, q BoardQuery) ([]*SceneRow, error) {
+	got := q
+	f.listBoardGot = &got
+	if f.listBoardErr != nil {
+		return nil, f.listBoardErr
+	}
+	return f.listBoardRows, nil
 }
 
 func (f *fakeStore) End(_ context.Context, id string) (*SceneRow, error) {
@@ -1759,4 +1775,301 @@ func TestNewSceneIDReturnsBareULIDWithoutPrefix(t *testing.T) {
 	parsed, perr := ulid.Parse(id)
 	require.NoError(t, perr, "scene id must parse as a bare ULID")
 	assert.Equal(t, id, parsed.String(), "round-trip: stored id equals its ULID string form")
+}
+
+// ── ListScenes unit tests (iokti.12) ─────────────────────────────────────────
+
+func TestListScenesMapsRequestFieldsToBoardQueryAndReturnsSceneInfos(t *testing.T) {
+	store := newFakeStore()
+	now := time.Now().UTC()
+	store.listBoardRows = []*SceneRow{
+		{
+			ID:              "scene-a",
+			Title:           "Alpha Scene",
+			OwnerID:         "owner-1",
+			State:           string(SceneStateActive),
+			Visibility:      "open",
+			PoseOrder:       string(PoseOrderModeFree),
+			ContentWarnings: []string{},
+			Tags:            []string{"plot"},
+			CreatedAt:       pgnanos.From(now),
+		},
+		{
+			ID:              "scene-b",
+			Title:           "Beta Scene",
+			OwnerID:         "owner-2",
+			State:           string(SceneStatePaused),
+			Visibility:      "open",
+			PoseOrder:       string(PoseOrderModeFree),
+			ContentWarnings: []string{},
+			Tags:            []string{"plot", "action"},
+			CreatedAt:       pgnanos.From(now),
+		},
+	}
+
+	svc := newTestService(t, store)
+	resp, err := svc.ListScenes(context.Background(), &scenev1.ListScenesRequest{
+		Limit:  10,
+		Offset: 5,
+		Tags:   []string{"plot"},
+	})
+	require.NoError(t, err)
+
+	// Verify BoardQuery was built correctly from request fields.
+	require.NotNil(t, store.listBoardGot, "ListBoard must have been called")
+	assert.Equal(t, 10, store.listBoardGot.Limit)
+	assert.Equal(t, 5, store.listBoardGot.Offset)
+	assert.Equal(t, []string{"plot"}, store.listBoardGot.Tags)
+
+	// Verify rows were mapped to SceneInfo.
+	require.Len(t, resp.GetScenes(), 2)
+	assert.Equal(t, "scene-a", resp.GetScenes()[0].GetId())
+	assert.Equal(t, "Alpha Scene", resp.GetScenes()[0].GetTitle())
+	assert.Equal(t, "scene-b", resp.GetScenes()[1].GetId())
+}
+
+func TestListScenesRequestValidationAllowsEmptyIdentityFields(t *testing.T) {
+	// iokti review .1: character_id (5) and player_id (6) carry min_len=1 but
+	// are optional filters. IGNORE_IF_ZERO_VALUE must let an anonymous browse
+	// (both omitted) pass protovalidate so the request reaches the handler;
+	// without it the interceptor would reject every board query that omits an
+	// identity. Populated values still pass min_len.
+	v, err := protovalidate.New()
+	require.NoError(t, err)
+
+	require.NoError(t, v.Validate(&scenev1.ListScenesRequest{
+		Limit: 10,
+		Tags:  []string{"plot"},
+	}), "anonymous browse with empty character_id/player_id must validate")
+
+	require.NoError(t, v.Validate(&scenev1.ListScenesRequest{
+		CharacterId: "char-1",
+		PlayerId:    "player-1",
+	}), "populated identity fields must validate")
+}
+
+func TestListScenesForwardsExcludeContentWarningsToBoardQuery(t *testing.T) {
+	// ExcludeContentWarnings, CharacterId, PlayerId are wired in iokti.13 — the
+	// handler passes the blocked-CW union to BoardQuery.BlockedCW. With no
+	// settings client wired (nil), resolveBlockedCW returns the per-query
+	// excludes alone, so BlockedCW MUST carry exactly the request's
+	// ExcludeContentWarnings; Limit still flows through unchanged.
+	store := newFakeStore()
+	store.listBoardRows = []*SceneRow{}
+
+	svc := newTestService(t, store)
+	_, err := svc.ListScenes(context.Background(), &scenev1.ListScenesRequest{
+		Limit:                  3,
+		ExcludeContentWarnings: []string{"violence"},
+		CharacterId:            "char-1",
+		PlayerId:               "player-1",
+	})
+	require.NoError(t, err)
+
+	require.NotNil(t, store.listBoardGot)
+	assert.Equal(t, 3, store.listBoardGot.Limit)
+	assert.Equal(t, []string{"violence"}, store.listBoardGot.BlockedCW,
+		"per-query ExcludeContentWarnings must be forwarded as BoardQuery.BlockedCW")
+}
+
+func TestListScenesStoreErrorReturnsInternalWithoutLeakingDetails(t *testing.T) {
+	store := newFakeStore()
+	store.listBoardErr = errors.New("db exploded: secret connection string info")
+
+	svc := newTestService(t, store)
+	_, err := svc.ListScenes(context.Background(), &scenev1.ListScenesRequest{})
+	require.Error(t, err)
+
+	st, ok := status.FromError(err)
+	require.True(t, ok, "error must be a gRPC status")
+	assert.Equal(t, codes.Internal, st.Code())
+	// The inner error detail MUST NOT leak into the status message.
+	assert.NotContains(t, st.Message(), "db exploded",
+		"internal error detail must not be included in gRPC status message")
+	assert.NotContains(t, st.Message(), "secret connection string",
+		"internal error detail must not be included in gRPC status message")
+}
+
+// ── resolveBlockedCW + ListScenes CW union tests (iokti.13) ─────────────────
+
+// scopedFakeSettingsClient is a per-scope fakeSettingsClient for iokti.13
+// tests. It maps (scope, principalID) → (values, found, err) so each scope
+// read can return a distinct result, mirroring the three single-scope reads
+// that resolveBlockedCW performs.
+type scopedFakeSettingsClient struct {
+	// byScope maps SettingScope → per-scope outcome.
+	byScope map[pluginsdk.SettingScope]scopedFakeOutcome
+}
+
+type scopedFakeOutcome struct {
+	values []string
+	found  bool
+	err    error
+}
+
+func (f *scopedFakeSettingsClient) GetSetting(_ context.Context, scope pluginsdk.SettingScope, _, _ string) ([]string, bool, error) {
+	if out, ok := f.byScope[scope]; ok {
+		return out.values, out.found, out.err
+	}
+	return nil, false, nil
+}
+
+func (f *scopedFakeSettingsClient) SetSetting(_ context.Context, _ pluginsdk.SettingScope, _, _ string, _ []string) error {
+	return nil
+}
+
+// TestResolveBlockedCWUnionsAllScopesPlusExclude asserts that resolveBlockedCW
+// accumulates blocks from GAME, PLAYER, and CHARACTER scopes plus the per-query
+// exclude list into a single deduplicated union.
+func TestResolveBlockedCWUnionsAllScopesPlusExclude(t *testing.T) {
+	svc := newTestService(t, newFakeStore())
+	svc.settings = &scopedFakeSettingsClient{
+		byScope: map[pluginsdk.SettingScope]scopedFakeOutcome{
+			pluginsdk.SettingScopeGame:      {values: []string{"a"}, found: true},
+			pluginsdk.SettingScopePlayer:    {values: []string{"b"}, found: true},
+			pluginsdk.SettingScopeCharacter: {values: []string{"c"}, found: true},
+		},
+	}
+
+	req := &scenev1.ListScenesRequest{
+		PlayerId:               "player-1",
+		CharacterId:            "char-1",
+		ExcludeContentWarnings: []string{"d"},
+	}
+	got := svc.resolveBlockedCW(context.Background(), req)
+	sort.Strings(got)
+
+	assert.Equal(t, []string{"a", "b", "c", "d"}, got)
+}
+
+// TestResolveBlockedCWDeduplicatesAcrossScopes asserts that a CW tag that
+// appears in multiple scopes is only present once in the returned union.
+func TestResolveBlockedCWDeduplicatesAcrossScopes(t *testing.T) {
+	svc := newTestService(t, newFakeStore())
+	svc.settings = &scopedFakeSettingsClient{
+		byScope: map[pluginsdk.SettingScope]scopedFakeOutcome{
+			pluginsdk.SettingScopeGame:      {values: []string{"violence", "death"}, found: true},
+			pluginsdk.SettingScopePlayer:    {values: []string{"death", "abuse"}, found: true},
+			pluginsdk.SettingScopeCharacter: {values: []string{"violence"}, found: true},
+		},
+	}
+
+	req := &scenev1.ListScenesRequest{
+		PlayerId:    "player-1",
+		CharacterId: "char-1",
+	}
+	got := svc.resolveBlockedCW(context.Background(), req)
+	sort.Strings(got)
+
+	assert.Equal(t, []string{"abuse", "death", "violence"}, got)
+}
+
+// TestResolveBlockedCWSkipsDeniedScopeWithoutBoardFailure asserts that a
+// settings read error for one scope is silently skipped; other scopes still
+// contribute their blocks and no error is propagated.
+func TestResolveBlockedCWSkipsDeniedScopeWithoutBoardFailure(t *testing.T) {
+	svc := newTestService(t, newFakeStore())
+	svc.settings = &scopedFakeSettingsClient{
+		byScope: map[pluginsdk.SettingScope]scopedFakeOutcome{
+			pluginsdk.SettingScopeGame:      {values: []string{"a"}, found: true},
+			pluginsdk.SettingScopePlayer:    {err: errors.New("ownership denied")},
+			pluginsdk.SettingScopeCharacter: {values: []string{"c"}, found: true},
+		},
+	}
+
+	req := &scenev1.ListScenesRequest{
+		PlayerId:    "player-x",
+		CharacterId: "char-1",
+	}
+	got := svc.resolveBlockedCW(context.Background(), req)
+	sort.Strings(got)
+
+	// PLAYER scope error is skipped; GAME and CHARACTER blocks still apply.
+	assert.Equal(t, []string{"a", "c"}, got)
+}
+
+// TestResolveBlockedCWNilSettingsClientUsesExcludeOnly asserts that when the
+// settings client is nil, resolveBlockedCW returns only the per-query exclude
+// list (no scope reads attempted).
+func TestResolveBlockedCWNilSettingsClientUsesExcludeOnly(t *testing.T) {
+	svc := newTestService(t, newFakeStore())
+	// settings is nil — no SetSettingsClient call.
+
+	req := &scenev1.ListScenesRequest{
+		PlayerId:               "player-1",
+		CharacterId:            "char-1",
+		ExcludeContentWarnings: []string{"violence", "death"},
+	}
+	got := svc.resolveBlockedCW(context.Background(), req)
+	sort.Strings(got)
+
+	assert.Equal(t, []string{"death", "violence"}, got)
+}
+
+// TestListScenesExcludesUnionOfBlockedCWsAndKeepsNonOverlappingScene asserts
+// that ListScenes passes the resolved blocked-CW union to BoardQuery.BlockedCW,
+// and that a scene with a blocked CW tag is excluded while a scene without
+// any overlap is kept. The kept scene still carries its content_warnings (INV-2).
+func TestListScenesExcludesUnionOfBlockedCWsAndKeepsNonOverlappingScene(t *testing.T) {
+	store := newFakeStore()
+	// fakeStore.ListBoard records the BlockedCW it received but does NOT filter
+	// rows itself — the SQL exclusion is tested at the integration tier.
+	// Here we assert that the correct BlockedCW set reaches the store.
+	store.listBoardRows = []*SceneRow{
+		{
+			ID:              "scene-safe",
+			Title:           "Safe Scene",
+			OwnerID:         "owner-1",
+			State:           string(SceneStateActive),
+			Visibility:      "open",
+			PoseOrder:       string(PoseOrderModeFree),
+			ContentWarnings: []string{"romance"},
+			Tags:            []string{},
+			CreatedAt:       pgnanos.From(time.Now().UTC()),
+		},
+	}
+
+	svc := newTestService(t, store)
+	svc.settings = &scopedFakeSettingsClient{
+		byScope: map[pluginsdk.SettingScope]scopedFakeOutcome{
+			pluginsdk.SettingScopePlayer: {values: []string{"death"}, found: true},
+		},
+	}
+
+	resp, err := svc.ListScenes(context.Background(), &scenev1.ListScenesRequest{
+		PlayerId:    "player-1",
+		CharacterId: "char-1",
+	})
+	require.NoError(t, err)
+
+	// The blocked union {death} must have been passed to the store.
+	require.NotNil(t, store.listBoardGot)
+	assert.Equal(t, []string{"death"}, store.listBoardGot.BlockedCW)
+
+	// The kept scene still carries its content_warnings (INV-2).
+	require.Len(t, resp.GetScenes(), 1)
+	assert.Equal(t, "scene-safe", resp.GetScenes()[0].GetId())
+	assert.Equal(t, []string{"romance"}, resp.GetScenes()[0].GetContentWarnings(),
+		"INV-2: content_warnings must not be stripped from the board response")
+}
+
+// TestListScenesPassesEmptyBlockedCWWhenNoBlocksAreConfigured asserts that
+// when no scopes return blocks and no exclude_content_warnings is set, the
+// BoardQuery.BlockedCW is nil/empty (no exclusion applied).
+func TestListScenesPassesEmptyBlockedCWWhenNoBlocksAreConfigured(t *testing.T) {
+	store := newFakeStore()
+	store.listBoardRows = []*SceneRow{}
+
+	svc := newTestService(t, store)
+	svc.settings = &scopedFakeSettingsClient{byScope: map[pluginsdk.SettingScope]scopedFakeOutcome{}}
+
+	_, err := svc.ListScenes(context.Background(), &scenev1.ListScenesRequest{
+		PlayerId:    "player-1",
+		CharacterId: "char-1",
+	})
+	require.NoError(t, err)
+
+	require.NotNil(t, store.listBoardGot)
+	assert.Empty(t, store.listBoardGot.BlockedCW,
+		"no blocks configured → BlockedCW must be empty so IS NULL skips the filter")
 }

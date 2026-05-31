@@ -38,43 +38,60 @@ type PlayerRepository interface {
 // PlayerSettings implements PlayerSettingsStore. It is backed either by a
 // read-only PlayerPrefsReader (NewPlayerSettingsStore) for the legacy host-
 // partition path, or by a whole-struct PlayerRepository
-// (NewRepoPlayerSettingsStore) whose owner partition writes persist via a
-// read-modify-write commit func.
+// (NewRepoPlayerSettingsStore) whose plugin partition writes persist via a
+// read-modify-write commit func. The two construction paths differ in write
+// persistence — see each constructor's doc — and that difference is otherwise
+// invisible at the PlayerSettingsStore interface (holomush-iokti.17 .11/.15).
 type PlayerSettings struct {
 	reader PlayerPrefsReader
 	repo   PlayerRepository
 }
 
 // NewPlayerSettingsStore creates a PlayerSettingsStore backed by a
-// PlayerPrefsReader. Owner/Host writes through the returned views update
-// in-memory maps only and do NOT persist (the commit func is nil); this path
-// serves bare host-partition reads for the resolution Chain.
+// PlayerPrefsReader.
+//
+// Persistence semantics: NON-PERSISTING for partition writes. Plugin/Host
+// writes through the views returned by For() update in-memory maps only and are
+// silently discarded when the handle goes out of scope (the commit func is
+// nil). This path exists to serve bare host-partition READS for the resolution
+// Chain; it is NOT a write-through store. Single-key host writes via the
+// store-level SetString() DO persist (through the reader's
+// SetPlayerPreferenceKey). Use NewRepoPlayerSettingsStore when plugin-partition
+// writes must persist.
 func NewPlayerSettingsStore(reader PlayerPrefsReader) *PlayerSettings {
 	return &PlayerSettings{reader: reader}
 }
 
 // NewRepoPlayerSettingsStore creates a PlayerSettingsStore backed by the player
-// repository. Owner partition writes persist: each write re-reads the player,
-// merges only the mutated owner partition into Preferences.Plugins, and
-// Updates — so sibling owner partitions written by a separate For() call are
-// not lost.
+// repository.
+//
+// Persistence semantics: PERSISTING. Both plugin-partition AND host-partition
+// writes through For() persist via a read-modify-write commit func: each write
+// re-reads the player, merges only the mutated partitions into
+// Preferences.Plugins / Preferences.Host, and Updates — so sibling partitions
+// written by a separate For() call are not lost. This is the production
+// write-through store; contrast NewPlayerSettingsStore, whose partition writes
+// are in-memory only. Host writes persist into the Preferences.Host sub-bag,
+// mirroring the character store (holomush-sl0ir.17); the store-level SetString
+// host-key path remains unsupported on this store (use For().Host()).
 func NewRepoPlayerSettingsStore(repo PlayerRepository) *PlayerSettings {
 	return &PlayerSettings{repo: repo}
 }
 
-// For returns an owner-partitioned Scoped handle for a specific player.
+// For returns a plugin-partitioned Scoped handle for a specific player.
 //
 // Bare Settings reads on the returned handle target the host partition,
 // reading the player's preferences as a flat dot-keyed map (keys like
 // "scenes.focus.replay_tail_default") with namespace validation — preserving
-// the legacy behavior the resolution Chain depends on. Owner(name) narrows to a
-// plugin's isolated, namespace-unvalidated partition.
+// the legacy behavior the resolution Chain depends on. Plugin(name) narrows to
+// that plugin's isolated, namespace-unvalidated partition.
 //
-// When the store is repo-backed, the handle's Owner partitions are loaded from
-// Preferences.Plugins and Owner writes persist via a non-nil commit func. When
-// the store is reader-backed, the commit func is nil (writes are in-memory
-// only). On any load failure the handle degrades to an empty, read-only view so
-// bare reads and the Chain resolve to defaults rather than panicking.
+// When the store is repo-backed, the handle's host partition is loaded from
+// Preferences.Host and its plugin partitions from Preferences.Plugins, and both
+// Host and Plugin writes persist via a non-nil commit func. When the store is
+// reader-backed, the commit func is nil (writes are in-memory only). On any load
+// failure the handle degrades to an empty, read-only view so bare reads and the
+// Chain resolve to defaults rather than panicking.
 //
 // Concurrency: the returned handle is per-request — one For() call per request.
 // Its in-memory partition maps are mutated without synchronization and MUST NOT
@@ -88,8 +105,8 @@ func (s *PlayerSettings) For(ctx context.Context, playerID ulid.ULID) Scoped {
 }
 
 // repoScopedFor loads the player via the repo, materializes its
-// Preferences.Plugins bag into owner partitions, and wires a commit func that
-// persists owner writes via read-modify-write.
+// Preferences.Plugins bag into plugin partitions, and wires a commit func that
+// persists plugin writes via read-modify-write.
 func (s *PlayerSettings) repoScopedFor(ctx context.Context, playerID ulid.ULID) Scoped {
 	player, err := s.repo.GetByID(ctx, playerID)
 	if err != nil {
@@ -100,19 +117,20 @@ func (s *PlayerSettings) repoScopedFor(ctx context.Context, playerID ulid.ULID) 
 		return newFailClosedView(oops.With("player_id", playerID.String()).Wrap(err))
 	}
 
-	// plugins is the live owner->key->value map the scopedView mutates via
-	// Owner writes. The commit closure captures it directly so a write
-	// serializes the touched owner partitions back.
+	// host and plugins are the live maps the scopedView's Host()/Plugin()
+	// writables mutate. The commit closure captures them directly so a write
+	// serializes the touched partitions back.
+	host := decodeHostPartition(ctx, "player", playerID, player.Preferences.Host)
 	plugins := decodePluginPartitions(ctx, player.Preferences.Plugins)
 
-	return newTrackedScopedView(map[string]json.RawMessage{}, plugins,
+	return newTrackedScopedView(host, plugins,
 		func(dirty *dirtyTracker) func(ctx context.Context) error {
 			return func(ctx context.Context) error {
 				// Re-read so the merge runs against the latest persisted state, then
-				// overwrite ONLY the owner partitions this view mutated. A clean-loaded
-				// sibling owner is never re-serialized with its stale value, so a
-				// concurrent For() handle that changed a different owner keeps its
-				// update (cross-owner lost-update safety).
+				// overwrite ONLY the partitions this view mutated. A clean-loaded
+				// sibling partition is never re-serialized with its stale value, so a
+				// concurrent For() handle that changed a different plugin keeps its
+				// update (cross-plugin lost-update safety).
 				fresh, err := s.repo.GetByID(ctx, playerID)
 				if err != nil {
 					return oops.With("player_id", playerID.String()).Wrap(err)
@@ -120,12 +138,19 @@ func (s *PlayerSettings) repoScopedFor(ctx context.Context, playerID ulid.ULID) 
 				if fresh.Preferences.Plugins == nil {
 					fresh.Preferences.Plugins = map[string]json.RawMessage{}
 				}
-				for owner := range dirty.owners {
-					encoded, err := json.Marshal(plugins[owner])
+				for plugin := range dirty.plugins {
+					encoded, err := json.Marshal(plugins[plugin])
 					if err != nil {
-						return oops.With("player_id", playerID.String(), "owner", owner).Wrap(err)
+						return oops.With("player_id", playerID.String(), "plugin", plugin).Wrap(err)
 					}
-					fresh.Preferences.Plugins[owner] = json.RawMessage(encoded)
+					fresh.Preferences.Plugins[plugin] = encoded
+				}
+				if dirty.host {
+					encodedHost, err := json.Marshal(host)
+					if err != nil {
+						return oops.With("player_id", playerID.String()).Wrap(err)
+					}
+					fresh.Preferences.Host = encodedHost
 				}
 				if err := s.repo.Update(ctx, fresh); err != nil {
 					return oops.With("player_id", playerID.String()).Wrap(err)
@@ -162,22 +187,22 @@ func (s *PlayerSettings) readerScopedFor(ctx context.Context, playerID ulid.ULID
 }
 
 // decodePluginPartitions materializes the opaque Preferences.Plugins bag
-// (owner -> serialized partition JSON) into the scopedView's nested map
-// (owner -> key -> raw value). A partition that fails to decode is skipped and
+// (plugin -> serialized partition JSON) into the scopedView's nested map
+// (plugin -> key -> raw value). A partition that fails to decode is skipped and
 // logged; the host never interprets partition contents, but a malformed
 // partition is unreadable and would otherwise fail the unmarshal.
 func decodePluginPartitions(
 	ctx context.Context, bag map[string]json.RawMessage,
 ) map[string]map[string]json.RawMessage {
 	out := make(map[string]map[string]json.RawMessage, len(bag))
-	for owner, raw := range bag {
+	for plugin, raw := range bag {
 		var partition map[string]json.RawMessage
 		if err := json.Unmarshal(raw, &partition); err != nil {
 			slog.WarnContext(ctx, "skipping undecodable plugin settings partition",
-				"owner", owner, "error", err)
+				"plugin", plugin, "error", err)
 			continue
 		}
-		out[owner] = partition
+		out[plugin] = partition
 	}
 	return out
 }
@@ -188,9 +213,9 @@ func (s *PlayerSettings) SetString(
 ) error {
 	if s.reader == nil {
 		// Repo-backed store: the host partition is the typed player-preferences
-		// struct, not flat-key-writable through here. Plugin owner-partition
-		// writes go through For(playerID).Owner(plugin). Fail explicitly rather
-		// than dereferencing a nil reader (which would panic).
+		// struct, not flat-key-writable through here. Plugin-partition writes go
+		// through For(playerID).Plugin(name). Fail explicitly rather than
+		// dereferencing a nil reader (which would panic).
 		return oops.Code("PLAYER_SETTINGS_HOST_WRITE_UNSUPPORTED").
 			With("key", key).With("player_id", playerID.String()).
 			Errorf("host-key writes are not supported on the repo-backed player settings store")
@@ -210,7 +235,7 @@ func (s *PlayerSettings) SetString(
 // representation.
 //
 // validateNamespace gates namespace validation on reads. The host partition
-// sets it true (legacy behavior); owner/plugin partitions set it false so
+// sets it true (legacy behavior); plugin partitions set it false so
 // plugin-private keys need no RegisteredNamespaces entry.
 type jsonMapSettings struct {
 	data              map[string]json.RawMessage

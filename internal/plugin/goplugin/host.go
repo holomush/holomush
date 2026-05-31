@@ -241,7 +241,7 @@ type Host struct {
 	engine            types.AccessPolicyEngine
 	auditor           pluginauthz.Auditor
 	commandQuerier    *commandquery.Querier
-	// playerSettings / characterSettings / gameSettings back the owner-
+	// playerSettings / characterSettings / gameSettings back the plugin-
 	// partitioned GetSetting / SetSetting host RPCs (holomush-iokti.7). They are
 	// late-bound (SetSettingsStores) because the settings stores are assembled in
 	// the gRPC subsystem after the plugin host is constructed — same rationale as
@@ -847,7 +847,11 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 		}
 	}
 
-	emitToken, err := h.tokenStore.Issue(name, storedActor)
+	// DeliverEvent has no player context — events are not dispatched on behalf of
+	// an authenticated player. The owning player is "" so PLAYER-scope settings
+	// ownership from a pure event handler stays fail-closed (holomush-iokti.19),
+	// symmetric with the Lua event path where core.OwningPlayerFromContext is absent.
+	emitToken, err := h.tokenStore.Issue(name, storedActor, "")
 	if err != nil {
 		return nil, oops.In("goplugin").With("plugin", name).With("operation", "issue_emit_token").Wrap(err)
 	}
@@ -914,7 +918,15 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 		}
 	}
 
-	emitToken, err := h.tokenStore.Issue(name, storedActor)
+	// Carry the host-vouched owning player of the acting character onto the
+	// dispatch-token entry. The dispatcher stamped it via core.WithOwningPlayer
+	// (single stamping site); the binary plugin recovers it out-of-process from
+	// this token at the settings boundary, exactly as the Lua path recovers it
+	// in-process from the ctx — both converge on the same PLAYER-scope ownership
+	// gate (holomush-iokti.19). Absent ⇒ "" ⇒ PLAYER-scope fails closed.
+	ownerPlayer, _ := core.OwningPlayerFromContext(ctx)
+
+	emitToken, err := h.tokenStore.Issue(name, storedActor, ownerPlayer)
 	if err != nil {
 		return nil, oops.In("goplugin").With("plugin", name).With("operation", "issue_emit_token").Wrap(err)
 	}

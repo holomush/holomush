@@ -67,7 +67,7 @@ func (r *CharacterSettingsRepository) GetPreferences(
 
 // SetPreferences writes the whole preferences bag for a character into the
 // preferences JSONB column, overwriting the prior value. The full struct is
-// marshaled so typed partitions round-trip alongside the owner-partitioned
+// marshaled so typed partitions round-trip alongside the plugin-partitioned
 // Plugins bag (no field cherry-picking, no clobber).
 func (r *CharacterSettingsRepository) SetPreferences(
 	ctx context.Context, characterID ulid.ULID, prefs settings.CharacterPreferences,

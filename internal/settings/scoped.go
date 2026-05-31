@@ -11,40 +11,41 @@ import (
 	"github.com/samber/oops"
 )
 
-// scopedView is the owner-partitioned implementation of Scoped. The host
+// scopedView is the plugin-partitioned implementation of Scoped. The host
 // partition holds the principal's flat dot-keyed preferences (e.g.
 // "scenes.focus.replay_tail_default") and is namespace-validated on reads,
 // preserving the legacy bare-read behavior. Each plugin partition is an
-// isolated map keyed by owner name and is NOT namespace-validated, so
+// isolated map keyed by plugin name and is NOT namespace-validated, so
 // plugin-private keys need no RegisteredNamespaces entry.
 //
-// commit persists Owner/Host writes when non-nil (repo-backed views built by
+// commit persists Plugin/Host writes when non-nil (repo-backed views built by
 // the player/character stores). It is nil for read-only views (the legacy
 // reader path and the null character store), in which case writes update the
 // in-memory maps only.
 //
 // dirty records which partitions THIS view mutated so a repo-backed commit
-// serializes only changed partitions, never re-writing a clean-loaded owner
-// with its stale value (cross-owner lost-update safety). It is nil for views
-// without dirty tracking (read-only / test views), where it is simply unused.
+// serializes only changed partitions, never re-writing a clean-loaded plugin
+// partition with its stale value (cross-plugin lost-update safety). It is nil
+// for views without dirty tracking (read-only / test views), where it is
+// simply unused.
 type scopedView struct {
 	host    map[string]json.RawMessage            // host-partition flat data
-	plugins map[string]map[string]json.RawMessage // owner name -> partition data
+	plugins map[string]map[string]json.RawMessage // plugin name -> partition data
 	dirty   *dirtyTracker                         // nil unless repo-backed + tracking
 	commit  func(ctx context.Context) error       // nil for read-only views; non-nil persists
 }
 
 // dirtyTracker records the partitions a scopedView mutated through its
-// Owner(name)/Host() writables. A repo-backed commit reads it to serialize only
-// the changed partitions, so a concurrent For() handle that loaded the same
-// owners but mutated different ones does not lose the other's update.
+// Plugin(name)/Host() writables. A repo-backed commit reads it to serialize
+// only the changed partitions, so a concurrent For() handle that loaded the
+// same plugins but mutated different ones does not lose the other's update.
 type dirtyTracker struct {
-	owners map[string]bool // owner-partition names written through this view
-	host   bool            // host partition written through this view
+	plugins map[string]bool // plugin-partition names written through this view
+	host    bool            // host partition written through this view
 }
 
 func newDirtyTracker() *dirtyTracker {
-	return &dirtyTracker{owners: map[string]bool{}}
+	return &dirtyTracker{plugins: map[string]bool{}}
 }
 
 // newScopedView constructs a read-only scopedView over the given host partition
@@ -56,9 +57,9 @@ func newScopedView(host map[string]json.RawMessage) *scopedView {
 }
 
 // newScopedViewWithPlugins constructs a scopedView seeded with both the host
-// partition and pre-loaded owner partitions (owner name -> key -> raw value),
+// partition and pre-loaded plugin partitions (plugin name -> key -> raw value),
 // plus the supplied commit func (may be nil). The repo-backed player store uses
-// this to materialize Preferences.Plugins so previously-persisted owner
+// this to materialize Preferences.Plugins so previously-persisted plugin
 // partitions are readable.
 func newScopedViewWithPlugins(
 	host map[string]json.RawMessage,
@@ -87,9 +88,9 @@ func NewScopedForTest(host map[string]json.RawMessage) Scoped {
 
 // newTrackedScopedView builds a repo-backed, dirty-tracking scopedView. The
 // makeCommit factory receives the view's dirtyTracker so the commit serializes
-// only the partitions this view mutated — the cross-owner lost-update fix: a
-// concurrent For() handle that loaded the same owners but changed different ones
-// will not have its writes clobbered by this view's stale loaded copies.
+// only the partitions this view mutated — the cross-plugin lost-update fix: a
+// concurrent For() handle that loaded the same plugins but changed different
+// ones will not have its writes clobbered by this view's stale loaded copies.
 func newTrackedScopedView(
 	host map[string]json.RawMessage,
 	plugins map[string]map[string]json.RawMessage,
@@ -109,9 +110,10 @@ func newTrackedScopedView(
 
 // newFailClosedView returns a scopedView whose reads resolve to empty (honoring
 // the Settings reads-never-error contract) but whose writes fail closed: every
-// Owner/Host write returns loadErr instead of silently mutating an in-memory map
-// that will never be persisted. Repo-backed stores return this when the initial
-// load fails, so a caller's write surfaces the failure rather than vanishing.
+// Plugin/Host write returns loadErr instead of silently mutating an in-memory
+// map that will never be persisted. Repo-backed stores return this when the
+// initial load fails, so a caller's write surfaces the failure rather than
+// vanishing.
 func newFailClosedView(loadErr error) *scopedView {
 	v := newScopedViewWithPlugins(nil, nil, nil)
 	v.commit = func(context.Context) error { return loadErr }
@@ -146,15 +148,15 @@ func (v *scopedView) StringSliceN(ctx context.Context, key string) ([]string, bo
 	return v.hostReader().StringSliceN(ctx, key)
 }
 
-// Owner returns a Writable over the named plugin's isolated partition. The
+// Plugin returns a Writable over the named plugin's isolated partition. The
 // partition is created lazily on first access and is NOT namespace-validated.
-func (v *scopedView) Owner(name string) Writable {
+func (v *scopedView) Plugin(name string) Writable {
 	data, ok := v.plugins[name]
 	if !ok {
 		data = map[string]json.RawMessage{}
 		v.plugins[name] = data
 	}
-	return &writableView{data: data, validateNamespace: false, commit: v.commit, onWrite: v.markOwnerDirty(name)}
+	return &writableView{data: data, validateNamespace: false, commit: v.commit, onWrite: v.markPluginDirty(name)}
 }
 
 // Host returns a Writable over the host partition (namespace-validated).
@@ -162,13 +164,13 @@ func (v *scopedView) Host() Writable {
 	return &writableView{data: v.host, validateNamespace: true, commit: v.commit, onWrite: v.markHostDirty()}
 }
 
-// markOwnerDirty returns a callback that records a write to the named owner
+// markPluginDirty returns a callback that records a write to the named plugin
 // partition, or nil when this view has no dirty tracker (read-only views).
-func (v *scopedView) markOwnerDirty(name string) func() {
+func (v *scopedView) markPluginDirty(name string) func() {
 	if v.dirty == nil {
 		return nil
 	}
-	return func() { v.dirty.owners[name] = true }
+	return func() { v.dirty.plugins[name] = true }
 }
 
 // markHostDirty returns a callback that records a write to the host partition,
@@ -226,7 +228,9 @@ func (w *writableView) SetString(ctx context.Context, key, value string) error {
 	if err != nil {
 		return oops.With("key", key).Wrap(err)
 	}
-	w.data[key] = json.RawMessage(encoded)
+	// json.Marshal returns []byte, which is assignable to json.RawMessage
+	// (the map's value type) without an explicit conversion.
+	w.data[key] = encoded
 	if w.onWrite != nil {
 		w.onWrite()
 	}
@@ -248,7 +252,7 @@ func (w *writableView) SetStringSlice(ctx context.Context, key string, values []
 	if err != nil {
 		return oops.With("key", key).Wrap(err)
 	}
-	w.data[key] = json.RawMessage(encoded)
+	w.data[key] = encoded
 	if w.onWrite != nil {
 		w.onWrite()
 	}

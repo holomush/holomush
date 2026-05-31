@@ -91,9 +91,18 @@ type PlayerPreferences struct {
 	MaxCharacters int                    `json:"max_characters,omitempty"`
 	Theme         string                 `json:"theme,omitempty"`
 	Scenes        ScenePlayerPreferences `json:"scenes,omitempty"`
-	// Plugins is an opaque, owner-partitioned settings bag. The host never
-	// interprets its contents (INV-10); each key is a plugin owner name and
-	// each value is that owner's serialized settings partition. Whole-struct
+	// Host holds the host-owned settings partition written through the
+	// repo-backed player settings store's For(playerID).Host() handle: a flat
+	// dot-keyed map serialized as JSON. It mirrors CharacterPreferences.Host so
+	// host writes through For() persist instead of being silently discarded
+	// (holomush-sl0ir.17). It is whole-struct (de)marshaled to/from the
+	// players.preferences JSONB column alongside the typed fields and the
+	// Plugins bag, so none clobbers another. Distinct from the legacy
+	// reader-backed store, whose host reads flatten the whole preferences struct.
+	Host json.RawMessage `json:"host,omitempty"`
+	// Plugins is an opaque, plugin-partitioned settings bag. The host never
+	// interprets its contents (INV-10); each key is a plugin name and
+	// each value is that plugin's serialized settings partition. Whole-struct
 	// JSON (de)marshaling carries it to/from the players.preferences JSONB
 	// column alongside the typed fields above, so the bag and the typed fields
 	// round-trip together without clobbering one another.

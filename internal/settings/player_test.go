@@ -19,7 +19,7 @@ import (
 // TestRepoPlayerSettingsStoreSetStringIsUnsupported proves the store-level
 // SetString on a repo-backed player store fails with an explicit error instead
 // of panicking on a nil reader. Host-key writes are unsupported on the
-// repo-backed store; plugin owner-partition writes go through For().Owner().
+// repo-backed store; plugin owner-partition writes go through For().Plugin().
 func TestRepoPlayerSettingsStoreSetStringIsUnsupported(t *testing.T) {
 	ctx := context.Background()
 	// The repo is never dereferenced by SetString — the nil-reader guard

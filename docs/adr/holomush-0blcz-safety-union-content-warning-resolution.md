@@ -65,5 +65,5 @@ A `SETTING_SCOPE_CHAINED` RPC mode (host-side chain merge) is **not** provided.
 ## References
 
 - Spec: `docs/superpowers/specs/2026-05-29-scenes-phase-8-board-content-warnings-design.md` §3.4, INV-6
-- Related: `holomush-74ib4` (owner-partitioned settings substrate the reads run against)
+- Related: `holomush-74ib4` (plugin-partitioned settings substrate the reads run against)
 - Design bead: `holomush-iokti`

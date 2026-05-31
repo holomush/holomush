@@ -352,14 +352,14 @@ func TestGameSettingsOwnerStringSliceRoundTripsUnderPrefix(t *testing.T) {
 	store := newMockSystemInfoStore()
 	gs := settings.NewGameSettings(store)
 
-	err := gs.Owner("core-scenes").SetStringSlice(ctx, "content.cw_taxonomy", []string{"violence", "gore"})
+	err := gs.Plugin("core-scenes").SetStringSlice(ctx, "content.cw_taxonomy", []string{"violence", "gore"})
 	require.NoError(t, err)
 
 	// Stored under the owner prefix, JSON-array-encoded.
 	assert.Equal(t, `["violence","gore"]`, store.data["plugin/core-scenes/content.cw_taxonomy"])
 
 	// Readable back via the same owner.
-	v, ok := gs.Owner("core-scenes").StringSliceN(ctx, "content.cw_taxonomy")
+	v, ok := gs.Plugin("core-scenes").StringSliceN(ctx, "content.cw_taxonomy")
 	assert.True(t, ok)
 	assert.Equal(t, []string{"violence", "gore"}, v)
 }
@@ -369,11 +369,11 @@ func TestGameSettingsOwnerSetStringRoundTripsUnderPrefix(t *testing.T) {
 	store := newMockSystemInfoStore()
 	gs := settings.NewGameSettings(store)
 
-	err := gs.Owner("core-scenes").SetString(ctx, "content.mode", "strict")
+	err := gs.Plugin("core-scenes").SetString(ctx, "content.mode", "strict")
 	require.NoError(t, err)
 	assert.Equal(t, "strict", store.data["plugin/core-scenes/content.mode"])
 
-	v, ok := gs.Owner("core-scenes").StringN(ctx, "content.mode")
+	v, ok := gs.Plugin("core-scenes").StringN(ctx, "content.mode")
 	assert.True(t, ok)
 	assert.Equal(t, "strict", v)
 }
@@ -385,7 +385,7 @@ func TestGameSettingsOwnerBypassesNamespaceValidation(t *testing.T) {
 
 	// "content" is NOT a registered host namespace; an owner write must still
 	// succeed because the plugin owns its keyspace.
-	err := gs.Owner("core-scenes").SetString(ctx, "content.cw_taxonomy", "x")
+	err := gs.Plugin("core-scenes").SetString(ctx, "content.cw_taxonomy", "x")
 	require.NoError(t, err)
 }
 
@@ -395,10 +395,10 @@ func TestGameSettingsOwnerPartitionIsInvisibleToHostAndOtherOwners(t *testing.T)
 	gs := settings.NewGameSettings(store)
 
 	require.NoError(t,
-		gs.Owner("a").SetStringSlice(ctx, "content.cw_taxonomy", []string{"x"}))
+		gs.Plugin("a").SetStringSlice(ctx, "content.cw_taxonomy", []string{"x"}))
 
-	// Owner("b") cannot see owner a's key.
-	_, ok := gs.Owner("b").StringSliceN(ctx, "content.cw_taxonomy")
+	// Plugin("b") cannot see plugin a's key.
+	_, ok := gs.Plugin("b").StringSliceN(ctx, "content.cw_taxonomy")
 	assert.False(t, ok, "owner b must not see owner a's partition")
 
 	// Host (bare reads) cannot see the owner-prefixed key either.
