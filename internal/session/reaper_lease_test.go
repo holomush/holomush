@@ -16,6 +16,7 @@ import (
 	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 )
 
+// Verifies: I-LIVE-2
 func TestReaperSweepsLapsedConnectionAndDetachesSession(t *testing.T) {
 	ctx := context.Background()
 	store, pool := sessiontest.NewStoreWithPool(t)
@@ -54,6 +55,7 @@ func TestReaperSweepsLapsedConnectionAndDetachesSession(t *testing.T) {
 	assert.True(t, got.ExpiresAt.After(now), "detached session keeps a future reattach window (TTL guard)")
 }
 
+// Verifies: I-LIVE-4
 func TestReaperSuppressesLeaseSweepDuringBootGrace(t *testing.T) {
 	ctx := context.Background()
 	store, pool := sessiontest.NewStoreWithPool(t)

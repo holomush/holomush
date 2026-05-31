@@ -461,6 +461,7 @@ func TestPresenceEntryHasExactlyThreeFields(t *testing.T) {
 }
 
 // Verifies: I-PRES-1
+// Verifies: I-LIVENESS-PRES-1
 // A session that is active but has grid_present=false (e.g. only a
 // comms_hub connection, no terminal/telnet) MUST NOT appear in the
 // location roster.

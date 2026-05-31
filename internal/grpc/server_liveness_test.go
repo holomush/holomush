@@ -15,6 +15,8 @@ import (
 	"github.com/holomush/holomush/internal/session"
 )
 
+// Verifies: I-LIVE-3
+// Verifies: I-LIVE-5
 func TestRecomputeSessionLivenessDetachesOnZeroConnections(t *testing.T) {
 	char := ulid.Make()
 	loc := ulid.Make()

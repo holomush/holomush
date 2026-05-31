@@ -2723,6 +2723,8 @@ func TestSendSetsWriteDeadline(t *testing.T) {
 
 // TestGatewayHandlerRefreshesLeaseWhileAuthed verifies that refreshOnce calls
 // RefreshConnection with the current session/connection/token when authed.
+// Verifies: I-LIVE-1
+// Verifies: I-SURV-5
 func TestGatewayHandlerRefreshesLeaseWhileAuthed(t *testing.T) {
 	serverConn, clientConn := net.Pipe()
 	defer serverConn.Close()
@@ -2787,6 +2789,9 @@ func reconnectEventFrame(id, actor, message string) *corev1.SubscribeResponse {
 // re-subscribes (the durable consumer resumes server-side), shows a reconnecting
 // notice, dedupes the single redelivered overlap frame by last event id, and
 // continues — rather than terminating (holomush-rsoe6).
+// Verifies: I-SURV-1
+// Verifies: I-SURV-2
+// Verifies: I-SURV-5
 func TestGatewayHandlerReconnectsOnCoreStreamClose(t *testing.T) {
 	serverConn, clientConn := net.Pipe()
 	defer clientConn.Close()
@@ -2911,6 +2916,7 @@ func (e *errorRecvStream) Recv() (*corev1.SubscribeResponse, error) { return nil
 // was codes.Unknown (bare oops, no GRPCStatus), TranslateSubscribeErr would have
 // classified it RPC_FAILED, and resubscribe would have retried to the ceiling
 // instead of returning to the picker; and before FIX 3 no Disconnect was issued.
+// Verifies: I-SURV-1
 func TestGatewayHandlerTreatsWireSessionNotFoundAsTerminalAndDisconnects(t *testing.T) {
 	serverConn, clientConn := net.Pipe()
 	defer clientConn.Close()

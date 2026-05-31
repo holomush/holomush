@@ -970,6 +970,7 @@ func (b *blockingSubscribeStream) RecvMsg(_ any) error          { return nil }
 // TestStreamEventsRefreshesLeaseOnHeartbeat asserts that the heartbeat tick
 // calls RefreshConnection so the server-side liveness lease is renewed while
 // the stream is open (I-LIVE-1).
+// Verifies: I-LIVE-1
 func TestStreamEventsRefreshesLeaseOnHeartbeat(t *testing.T) {
 	done := make(chan struct{})
 	mc := &mockCoreClient{
@@ -1115,6 +1116,8 @@ func eventIDs(frames []*webv1.StreamEventsResponse) []string {
 // durable JetStream consumer resumes server-side), dedups the redelivered
 // overlap frame, and continues — emitting RECONNECTING then RECONNECTED control
 // frames around the break. (holomush-rsoe6.10, I-SURV-1/2/4.)
+// Verifies: I-SURV-1
+// Verifies: I-SURV-2
 func TestStreamEventsReconnectsOnCoreStreamBreakWithoutClosingClient(t *testing.T) {
 	var subscribeCalls atomic.Int32
 
@@ -1214,6 +1217,7 @@ func (g *gatedSubscribeStream) RecvMsg(_ any) error          { return nil }
 // dropped, never seeing RECONNECTED or E2. With the per-outage budget the
 // outage clock starts at break-detection, so the reconnect proceeds and the
 // client survives to E2.
+// Verifies: I-SURV-4
 func TestStreamEventsReconnectCeilingIsPerOutageNotStreamLifetime(t *testing.T) {
 	const ceiling = 50 * time.Millisecond
 	// healthyFor must exceed the ceiling so the break lands past
@@ -1297,6 +1301,7 @@ func TestStreamEventsReconnectCeilingIsPerOutageNotStreamLifetime(t *testing.T) 
 // re-authenticates) rather than treating it as a transient core break and
 // retrying for the full reconnect ceiling. Before the fix, this recv error fell
 // into the breakCoreGone branch and the loop spun until the ceiling lapsed.
+// Verifies: I-SURV-1
 func TestStreamEventsTerminatesOnSessionNotFoundFromRecv(t *testing.T) {
 	var subscribeCalls atomic.Int32
 

@@ -18,6 +18,10 @@ import (
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 )
 
+// Verifies: I-LIVE-3
+// Verifies: I-SURV-3
+// Verifies: I-LIVENESS-PRES-1
+//
 // Verifies (against the design invariant catalog §297-309):
 //   - I-LIVE-3 (derivation): grid_present is DERIVED from live connection count.
 //     A session that detaches (grid_present=false) and reattaches via Subscribe

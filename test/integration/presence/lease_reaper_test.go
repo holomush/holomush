@@ -23,6 +23,10 @@ import (
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 )
 
+// Verifies: I-LIVE-2
+// Verifies: I-LIVE-3
+// Verifies: I-LIVENESS-PRES-1
+//
 // Verifies (against the design invariant catalog, §297-309):
 //   - I-LIVE-2 (expiry): a connection whose last_seen_at is older than the
 //     lease cutoff is swept.

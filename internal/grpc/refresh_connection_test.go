@@ -55,6 +55,7 @@ func TestRefreshConnectionReturnsInvalidArgumentOnMissingConnectionID(t *testing
 // TestRefreshConnectionCollapsesOwnershipFailureToSessionNotFound verifies
 // that ALL ownership validation failures collapse to SESSION_NOT_FOUND
 // (enumeration-safe, I-SEC-1). Here the session does not exist.
+// Verifies: I-SEC-1
 func TestRefreshConnectionCollapsesOwnershipFailureToSessionNotFound(t *testing.T) {
 	s := &CoreServer{
 		sessionStore:      newTestSessionStore(t, nil),

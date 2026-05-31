@@ -20,6 +20,9 @@ import (
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 )
 
+// Verifies: I-LIVE-4
+// Verifies: I-LIVENESS-PRES-1
+//
 // Verifies (against the design invariant catalog §297-309):
 //   - I-LIVE-4 (boot grace): the lease sweep MUST NOT reap any connection
 //     within the boot-grace window after core process start.
