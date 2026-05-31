@@ -107,6 +107,12 @@ type mockCoreClient struct {
 	listAvailableCommandsResp *corev1.ListAvailableCommandsResponse
 	listAvailableCommandsErr  error
 	listAvailableCommandsReq  *corev1.ListAvailableCommandsRequest // captured for assertion
+
+	// RefreshConnection fields
+	refreshConnectionResp  *corev1.RefreshConnectionResponse
+	refreshConnectionErr   error
+	refreshConnectionCalls atomic.Int32
+	refreshConnectionReq   atomic.Pointer[corev1.RefreshConnectionRequest] // last captured request (atomic for -race)
 }
 
 func (m *mockCoreClient) HandleCommand(_ context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
@@ -221,6 +227,15 @@ func (m *mockCoreClient) ListFocusPresence(_ context.Context, req *corev1.ListFo
 func (m *mockCoreClient) ListAvailableCommands(_ context.Context, req *corev1.ListAvailableCommandsRequest) (*corev1.ListAvailableCommandsResponse, error) {
 	m.listAvailableCommandsReq = req
 	return m.listAvailableCommandsResp, m.listAvailableCommandsErr
+}
+
+func (m *mockCoreClient) RefreshConnection(_ context.Context, req *corev1.RefreshConnectionRequest) (*corev1.RefreshConnectionResponse, error) {
+	m.refreshConnectionCalls.Add(1)
+	m.refreshConnectionReq.Store(req)
+	if m.refreshConnectionResp == nil {
+		return &corev1.RefreshConnectionResponse{}, m.refreshConnectionErr
+	}
+	return m.refreshConnectionResp, m.refreshConnectionErr
 }
 
 func TestHandler_SendCommand_Success(t *testing.T) {
@@ -930,4 +945,78 @@ func TestWebListCommandsPassesThroughCoreServiceError(t *testing.T) {
 	_, err := h.WebListCommands(context.Background(), req)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, coreErr)
+}
+
+// blockingSubscribeStream is a CoreService_SubscribeClient that blocks on Recv
+// until its done channel is closed, then returns io.EOF.
+type blockingSubscribeStream struct {
+	done chan struct{}
+}
+
+func (b *blockingSubscribeStream) Recv() (*corev1.SubscribeResponse, error) {
+	<-b.done
+	return nil, io.EOF
+}
+
+func (b *blockingSubscribeStream) Header() (metadata.MD, error) { return nil, nil }
+func (b *blockingSubscribeStream) Trailer() metadata.MD         { return nil }
+func (b *blockingSubscribeStream) CloseSend() error             { return nil }
+func (b *blockingSubscribeStream) Context() context.Context     { return context.Background() }
+func (b *blockingSubscribeStream) SendMsg(_ any) error          { return nil }
+func (b *blockingSubscribeStream) RecvMsg(_ any) error          { return nil }
+
+// TestStreamEventsRefreshesLeaseOnHeartbeat asserts that the heartbeat tick
+// calls RefreshConnection so the server-side liveness lease is renewed while
+// the stream is open (I-LIVE-1).
+func TestStreamEventsRefreshesLeaseOnHeartbeat(t *testing.T) {
+	done := make(chan struct{})
+	mc := &mockCoreClient{
+		subStream: &blockingSubscribeStream{done: done},
+		discResp:  &corev1.DisconnectResponse{Success: true},
+	}
+
+	h := NewHandler(mc)
+	h.heartbeatInterval = 5 * time.Millisecond
+
+	_, httpHandler := webv1connect.NewWebServiceHandler(h)
+	srv := httptest.NewServer(httpHandler)
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	wsc := webv1connect.NewWebServiceClient(http.DefaultClient, srv.URL)
+	stream, err := wsc.StreamEvents(ctx, connect.NewRequest(&webv1.StreamEventsRequest{
+		SessionId: "sess-refresh",
+	}))
+	require.NoError(t, err)
+
+	// Receive the STREAM_OPENED frame so the HTTP/2 stream is live.
+	ok := stream.Receive()
+	require.True(t, ok, "expected STREAM_OPENED frame")
+	ctrl := stream.Msg().GetControl()
+	require.NotNil(t, ctrl)
+	assert.Equal(t, webv1.ControlSignal_CONTROL_SIGNAL_STREAM_OPENED, ctrl.GetSignal())
+	connID := ctrl.GetConnectionId()
+	require.NotEmpty(t, connID, "STREAM_OPENED must carry a connection_id")
+
+	// Wait for at least one RefreshConnection call (heartbeat fires every 5ms).
+	assert.Eventually(t, func() bool {
+		return mc.refreshConnectionCalls.Load() >= 1
+	}, 500*time.Millisecond, time.Millisecond, "heartbeat must call RefreshConnection at least once")
+
+	// Cancel the context to terminate StreamEvents, then unblock Recv.
+	cancel()
+	close(done)
+	// Drain remaining frames.
+	for stream.Receive() {
+	}
+
+	// Assert on the last captured refresh request.
+	lastReq := mc.refreshConnectionReq.Load()
+	require.NotNil(t, lastReq, "RefreshConnection must have been called")
+	assert.Equal(t, "sess-refresh", lastReq.GetSessionId(),
+		"refresh must carry the session_id")
+	assert.Equal(t, connID, lastReq.GetConnectionId(),
+		"refresh must carry the connection_id from STREAM_OPENED")
 }

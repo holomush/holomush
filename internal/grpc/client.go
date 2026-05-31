@@ -308,6 +308,15 @@ func (c *Client) ListAvailableCommands(ctx context.Context, req *corev1.ListAvai
 	return resp, nil
 }
 
+// RefreshConnection bumps the liveness lease for a connection (I-LIVE-1).
+func (c *Client) RefreshConnection(ctx context.Context, req *corev1.RefreshConnectionRequest) (*corev1.RefreshConnectionResponse, error) {
+	resp, err := c.client.RefreshConnection(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "RefreshConnection").Wrap(err)
+	}
+	return resp, nil
+}
+
 // GetContent retrieves a single content item by key from the content service.
 func (c *Client) GetContent(ctx context.Context, req *contentv1.GetContentRequest) (*contentv1.GetContentResponse, error) {
 	resp, err := c.contentClient.GetContent(ctx, req)

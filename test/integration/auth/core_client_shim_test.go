@@ -38,6 +38,10 @@ func (c *coreClientShim) Disconnect(ctx context.Context, req *corev1.DisconnectR
 	return c.s.Disconnect(ctx, req)
 }
 
+func (c *coreClientShim) RefreshConnection(ctx context.Context, req *corev1.RefreshConnectionRequest) (*corev1.RefreshConnectionResponse, error) {
+	return c.s.RefreshConnection(ctx, req)
+}
+
 func (c *coreClientShim) GetCommandHistory(ctx context.Context, req *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error) {
 	return c.s.GetCommandHistory(ctx, req)
 }

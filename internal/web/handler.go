@@ -58,6 +58,8 @@ type CoreClient interface {
 	ListFocusPresence(ctx context.Context, req *corev1.ListFocusPresenceRequest) (*corev1.ListFocusPresenceResponse, error)
 	// Command introspection
 	ListAvailableCommands(ctx context.Context, req *corev1.ListAvailableCommandsRequest) (*corev1.ListAvailableCommandsResponse, error)
+	// Liveness RPCs
+	RefreshConnection(ctx context.Context, req *corev1.RefreshConnectionRequest) (*corev1.RefreshConnectionResponse, error)
 }
 
 // ContentClient is the gRPC interface used by Handler to communicate with the
@@ -76,6 +78,9 @@ type ContentClient interface {
 type Handler struct {
 	client        CoreClient
 	contentClient ContentClient
+	// heartbeatInterval controls the StreamEvents heartbeat ticker period.
+	// Zero means 15 seconds (production default). Overridable in tests.
+	heartbeatInterval time.Duration
 }
 
 // compile-time check that Handler satisfies the generated interface.
@@ -238,7 +243,11 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 			}
 		}
 	}()
-	heartbeat := time.NewTicker(15 * time.Second)
+	hbInterval := h.heartbeatInterval
+	if hbInterval <= 0 {
+		hbInterval = 15 * time.Second
+	}
+	heartbeat := time.NewTicker(hbInterval)
 	defer heartbeat.Stop()
 
 	for {
@@ -257,6 +266,17 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 			}); sendErr != nil {
 				return nil
 			}
+			// Refresh the server-side liveness lease for this connection (I-LIVE-1).
+			// Failure is transient — log at Debug and keep the stream open.
+			refreshCtx, refreshCancel := context.WithTimeout(ctx, rpcTimeout)
+			if _, refreshErr := h.client.RefreshConnection(refreshCtx, &corev1.RefreshConnectionRequest{
+				SessionId:          sessionID,
+				ConnectionId:       connID.String(),
+				PlayerSessionToken: token,
+			}); refreshErr != nil {
+				slog.DebugContext(ctx, "web: lease refresh failed (transient)", "session_id", sessionID, "error", refreshErr)
+			}
+			refreshCancel()
 
 		case result, ok := <-recvCh:
 			if !ok {
