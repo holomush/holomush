@@ -305,3 +305,20 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   bogus `rc=2` because the PreToolUse hook appends advisory text after the command — the
   preceding printed value is still correct. The "MEMORY.md became a directory" theory from
   a prior degraded run was FALSE — the file is intact.
+- **Optimistic resource-conditioned permit at class pre-flight (iokti.14, 2026-05-30)**:
+  `Engine.CanPerformAction` (engine.go:406-540) resolves subject+env attrs ONLY (no
+  resource provider call). A permit whose `when` references `resource.*` and fails under
+  subject-only attrs is treated as `anyPermit=true` OPTIMISTICALLY (engine.go:517-520, via
+  `dsl.ReferencesResourceAttrs`, refs.go:55-66). So a global class-capability conditioned on
+  a per-resource attr (e.g. `scenes` cmd cap {read,scene,global} + permit
+  `when{resource.scene.visibility=="open"}`) does NOT fail-safe-deny at pre-flight — board
+  works in prod. The STRICT per-instance gate is `Evaluate` (gated_dispatch.go:52), which DOES
+  resolve resource attrs; the optimistic branch is UNIQUE to CanPerformAction. Two recurring
+  checks for this shape: (1) confirm a strict instance-level `Evaluate` consumer exists for the
+  same action so private/non-matching resources are still gated (here `scene info`@commands.go:482);
+  (2) watch for SILENT read-broadening: adding `permit(read,scene) when{visibility=="open"}`
+  also widens any OTHER instance-level read consumer of that action (here `scene info` for
+  non-members) — scope to a distinct action if board-only was intended. Board SQL also
+  hardcodes `WHERE visibility='open'` (store.go:1393) as defense-in-depth. Integration tests
+  calling `p.HandleCommand` directly with `allowEvaluator{}` BYPASS the host dispatcher pre-flight
+  (dispatcher.go:234) — they don't cover CanPerformAction; add a real-engine pre-flight test.

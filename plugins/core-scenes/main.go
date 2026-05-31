@@ -81,13 +81,18 @@ func (p *scenePlugin) HandleEvent(_ context.Context, _ pluginsdk.Event) ([]plugi
 }
 
 // HandleCommand routes scene commands to the appropriate subcommand handler.
-// The dispatcher lives in commands.go to keep main.go focused on plugin
-// lifecycle.
+// "scene" dispatches to the per-character subcommand router; "scenes" dispatches
+// to the public open-scene board browser. The dispatcher lives in commands.go to
+// keep main.go focused on plugin lifecycle.
 func (p *scenePlugin) HandleCommand(ctx context.Context, req pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
-	if req.Command != "scene" {
+	switch req.Command {
+	case "scene":
+		return p.dispatchCommand(ctx, req)
+	case "scenes":
+		return p.handleScenesBoard(ctx, req)
+	default:
 		return pluginsdk.Errorf("core-scenes does not handle command %q", req.Command), nil
 	}
-	return p.dispatchCommand(ctx, req)
 }
 
 // RegisterServices registers the SceneServiceServer on the go-plugin gRPC
