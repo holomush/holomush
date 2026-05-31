@@ -11,13 +11,16 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/gatewaymetrics"
@@ -111,6 +114,11 @@ type mockCoreClient struct {
 
 	listCharResp *corev1.ListCharactersResponse
 	listCharErr  error
+
+	refreshResp    *corev1.RefreshConnectionResponse
+	refreshErr     error
+	refreshCalls   atomic.Int32
+	lastRefreshReq atomic.Pointer[corev1.RefreshConnectionRequest]
 }
 
 func (m *mockCoreClient) AuthenticatePlayer(_ context.Context, req *corev1.AuthenticatePlayerRequest) (*corev1.AuthenticatePlayerResponse, error) {
@@ -182,6 +190,15 @@ func (m *mockCoreClient) Disconnect(_ context.Context, req *corev1.DisconnectReq
 
 func (m *mockCoreClient) GetCommandHistory(_ context.Context, _ *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error) {
 	return &corev1.GetCommandHistoryResponse{Meta: &corev1.ResponseMeta{}, Success: true}, nil
+}
+
+func (m *mockCoreClient) RefreshConnection(_ context.Context, req *corev1.RefreshConnectionRequest) (*corev1.RefreshConnectionResponse, error) {
+	m.refreshCalls.Add(1)
+	m.lastRefreshReq.Store(req)
+	if m.refreshResp == nil {
+		return &corev1.RefreshConnectionResponse{}, m.refreshErr
+	}
+	return m.refreshResp, m.refreshErr
 }
 
 // readLines reads exactly n lines from r, stripping \r\n.
@@ -2702,4 +2719,309 @@ func TestSendSetsWriteDeadline(t *testing.T) {
 		"deadline must not be absurdly far in the future")
 	assert.Contains(t, string(mc.writeBuf), "hello world",
 		"send must actually write the message body")
+}
+
+// TestGatewayHandlerRefreshesLeaseWhileAuthed verifies that refreshOnce calls
+// RefreshConnection with the current session/connection/token when authed.
+// Verifies: I-LIVE-1
+// Verifies: I-SURV-5
+func TestGatewayHandlerRefreshesLeaseWhileAuthed(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer serverConn.Close()
+	defer clientConn.Close()
+
+	mc := &mockCoreClient{}
+	h := newTestHandler(serverConn, mc)
+	h.authed = true
+	h.sessionID = "sess-1"
+	h.connectionID = "conn-1"
+	h.playerSessionToken = "tok-1"
+
+	h.refreshOnce(context.Background())
+
+	require.Equal(t, int32(1), mc.refreshCalls.Load())
+	got := mc.lastRefreshReq.Load()
+	require.NotNil(t, got)
+	assert.Equal(t, "sess-1", got.GetSessionId())
+	assert.Equal(t, "conn-1", got.GetConnectionId())
+	assert.Equal(t, "tok-1", got.GetPlayerSessionToken())
+}
+
+// TestGatewayHandlerRefreshOnceNoopWhenNotAuthed verifies that refreshOnce
+// is a no-op when the handler is not authenticated (no session in progress).
+func TestGatewayHandlerRefreshOnceNoopWhenNotAuthed(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer serverConn.Close()
+	defer clientConn.Close()
+
+	mc := &mockCoreClient{}
+	h := newTestHandler(serverConn, mc)
+	h.authed = false
+
+	h.refreshOnce(context.Background())
+
+	assert.Equal(t, int32(0), mc.refreshCalls.Load())
+}
+
+// reconnectEventFrame builds a SubscribeResponse carrying a renderable speech
+// event with the given id and message text, used to verify dedup of the single
+// redelivery-overlap frame after a durable-resume reconnect.
+func reconnectEventFrame(id, actor, message string) *corev1.SubscribeResponse {
+	return &corev1.SubscribeResponse{
+		Frame: &corev1.SubscribeResponse_Event{
+			Event: &corev1.EventFrame{
+				Id:   id,
+				Type: "core-communication:say",
+				Rendering: &corev1.RenderingMetadata{
+					Category:      "communication",
+					Format:        "speech",
+					Label:         "says",
+					DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
+				},
+				Payload: []byte(`{"character_name":"` + actor + `","message":"` + message + `"}`),
+			},
+		},
+	}
+}
+
+// TestGatewayHandlerReconnectsOnCoreStreamClose verifies that when the core
+// event stream closes while the telnet client is still connected, the handler
+// re-subscribes (the durable consumer resumes server-side), shows a reconnecting
+// notice, dedupes the single redelivered overlap frame by last event id, and
+// continues — rather than terminating (holomush-rsoe6).
+// Verifies: I-SURV-1
+// Verifies: I-SURV-2
+// Verifies: I-SURV-5
+func TestGatewayHandlerReconnectsOnCoreStreamClose(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// stream1 carries E1 then closes (core-gone). stream2 resumes, redelivering
+	// E1 (the single overlap frame) then E2.
+	stream1 := newChanSubscribeStream(ctx)
+	stream2 := newChanSubscribeStream(ctx)
+
+	var subCalls atomic.Int32
+	client := &mockCoreClient{
+		authPlayerResp: &corev1.AuthenticatePlayerResponse{
+			Success:            true,
+			PlayerSessionToken: "tok-reconnect",
+			Characters:         []*corev1.CharacterSummary{{CharacterId: "char-one", CharacterName: "Alaric"}},
+			DefaultCharacterId: "char-one",
+		},
+		selectCharResp: &corev1.SelectCharacterResponse{
+			Success:       true,
+			SessionId:     "sess-reconnect",
+			CharacterName: "Alaric",
+		},
+		subscribeFn: func(_ context.Context, _ *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+			if subCalls.Add(1) == 1 {
+				return stream1, nil
+			}
+			return stream2, nil
+		},
+		listCharResp: &corev1.ListCharactersResponse{
+			Characters: []*corev1.CharacterSummary{{CharacterId: "char-one", CharacterName: "Alaric"}},
+		},
+		discResp: &corev1.DisconnectResponse{Success: true},
+	}
+
+	// Short refresh interval keeps the reconnect ceiling (8×) modest; this test
+	// never reaches it (stream2 subscribes on the first retry).
+	limits := DefaultLimits
+	limits.LeaseRefreshInterval = 50 * time.Millisecond
+	handler := NewGatewayHandler(serverConn, client, limits)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.Handle(ctx)
+	}()
+
+	reset := withDeadline(t, clientConn)
+	defer reset()
+
+	r := bufio.NewReader(clientConn)
+	readLines(t, r, 2) // banner
+
+	_, err := clientConn.Write([]byte("connect alice secret\n"))
+	require.NoError(t, err)
+	readLinesUntil(t, r, "Alaric") // welcome — first subscription established
+
+	// Deliver E1 on the first stream, then close it (core-gone). Accumulate all
+	// rendered lines across both subscriptions so dedup can be asserted on the
+	// full transcript.
+	all := make([]string, 0, 8)
+	stream1.ch <- reconnectEventFrame("E1", "Alaric", "first")
+	all = append(all, readLinesUntil(t, r, "first")...)
+	close(stream1.ch) // Recv -> io.EOF -> eventCh closes -> !ok branch
+
+	// The handler should emit a reconnecting notice and re-subscribe.
+	all = append(all, readLinesUntil(t, r, "Reconnecting")...)
+	all = append(all, readLinesUntil(t, r, "Reconnected")...)
+
+	// stream2 redelivers E1 (overlap, must be deduped) then E2 (new).
+	stream2.ch <- reconnectEventFrame("E1", "Alaric", "first")
+	stream2.ch <- reconnectEventFrame("E2", "Alaric", "second")
+
+	// Reading until "second" collects the post-reconnect lines. The redelivered
+	// E1 ("first") must NOT appear again — it was deduped by lastEventID.
+	all = append(all, readLinesUntil(t, r, "second")...)
+
+	assert.GreaterOrEqual(t, int(subCalls.Load()), 2, "re-subscribed after core stream closed")
+
+	firstCount := 0
+	secondCount := 0
+	for _, line := range all {
+		if strings.Contains(line, "first") {
+			firstCount++
+		}
+		if strings.Contains(line, "second") {
+			secondCount++
+		}
+	}
+	assert.Equal(t, 1, firstCount, "E1 rendered exactly once despite redelivery overlap")
+	assert.Equal(t, 1, secondCount, "E2 rendered once after reconnect")
+
+	cancel()
+	<-done
+}
+
+// errorRecvStream is a CoreService_SubscribeClient whose first Recv returns the
+// given error — modelling how the production core surfaces an immediate handler
+// failure: grpc-go returns (nonNilStream, nil) from Subscribe and defers the
+// handler error to the first Recv, NOT the Subscribe call.
+type errorRecvStream struct {
+	corev1.CoreService_SubscribeClient
+	err error
+}
+
+func (e *errorRecvStream) Recv() (*corev1.SubscribeResponse, error) { return nil, e.err }
+
+// TestGatewayHandlerTreatsWireSessionNotFoundAsTerminalAndDisconnects is the
+// production-path regression guard for rsoe6.11.1 + rsoe6.11.2. It drives the
+// error the way the fixed server produces it: the resubscribe stream's first
+// Recv returns codes.Unauthenticated (the wire form of SESSION_NOT_FOUND, set
+// by subscribeSessionNotFound). trySubscribe consumes that first frame
+// synchronously and runs the recv error through holoGRPC.TranslateSubscribeErr,
+// so resubscribe MUST classify it as terminal — return the client to the picker
+// (enter selectMode, clear the session) AND issue a best-effort Disconnect to
+// release the dead core-side connection (rsoe6.11.2) — rather than retrying for
+// the full reconnect ceiling.
+//
+// This is the test the pre-fix code could not pass: before FIX 1 the wire code
+// was codes.Unknown (bare oops, no GRPCStatus), TranslateSubscribeErr would have
+// classified it RPC_FAILED, and resubscribe would have retried to the ceiling
+// instead of returning to the picker; and before FIX 3 no Disconnect was issued.
+// Verifies: I-SURV-1
+func TestGatewayHandlerTreatsWireSessionNotFoundAsTerminalAndDisconnects(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// stream1 delivers one event then closes (core-gone) → triggers resubscribe.
+	stream1 := newChanSubscribeStream(ctx)
+
+	var subCalls atomic.Int32
+	client := &mockCoreClient{
+		// Single-char auto-select so `connect` establishes the session and the
+		// first subscription directly (mirrors TestGatewayHandlerReconnectsOnCoreStreamClose).
+		authPlayerResp: &corev1.AuthenticatePlayerResponse{
+			Success:            true,
+			PlayerSessionToken: "tok-reaped",
+			Characters:         []*corev1.CharacterSummary{{CharacterId: "char-one", CharacterName: "Alaric"}},
+			DefaultCharacterId: "char-one",
+		},
+		selectCharResp: &corev1.SelectCharacterResponse{
+			Success:       true,
+			SessionId:     "sess-reaped",
+			CharacterName: "Alaric",
+		},
+		subscribeFn: func(_ context.Context, _ *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+			if subCalls.Add(1) == 1 {
+				return stream1, nil
+			}
+			// Resubscribe: the reaped session crosses the wire as
+			// codes.Unauthenticated (production shape post server-fix). The
+			// error surfaces on the FIRST Recv, exactly as grpc-go does it.
+			return &errorRecvStream{err: status.Error(codes.Unauthenticated, "session not found")}, nil
+		},
+		listCharResp: &corev1.ListCharactersResponse{
+			Characters: []*corev1.CharacterSummary{{CharacterId: "char-one", CharacterName: "Alaric"}},
+		},
+		discResp: &corev1.DisconnectResponse{Success: true},
+	}
+
+	// Short refresh interval keeps the reconnect ceiling (8×) modest; a terminal
+	// classification returns well before it, so the test is fast.
+	limits := DefaultLimits
+	limits.LeaseRefreshInterval = 50 * time.Millisecond
+	handler := NewGatewayHandler(serverConn, client, limits)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.Handle(ctx)
+	}()
+
+	reset := withDeadline(t, clientConn)
+	defer reset()
+
+	r := bufio.NewReader(clientConn)
+	readLines(t, r, 2) // banner
+
+	_, err := clientConn.Write([]byte("connect alice secret\n"))
+	require.NoError(t, err)
+	readLinesUntil(t, r, "Alaric") // welcome — first subscription established
+
+	// Deliver one event, then close stream1 (core-gone) → resubscribe fires.
+	// A distinct actor name (vs the other reconnect tests' "Alaric") keeps the
+	// reconnectEventFrame helper's actor parameter genuinely varied across call
+	// sites.
+	stream1.ch <- reconnectEventFrame("E1", "Brenna", "first")
+	readLinesUntil(t, r, "first")
+
+	// Re-arm the I/O deadline: withDeadline sets a single absolute 2s window at
+	// setup; the auth handshake + first event consumed part of it, and the
+	// reconnect backoff that follows needs its own fresh window.
+	reset()
+	reset2 := withDeadline(t, clientConn)
+	defer reset2()
+
+	close(stream1.ch)
+
+	// resubscribe hits codes.Unauthenticated on the first Recv → terminal:
+	// return to the character picker rather than retrying to the ceiling. The
+	// "Returning to character selection" line is emitted AFTER the best-effort
+	// Disconnect in the Handle goroutine, so once we've read it the Disconnect
+	// fields are already set (happens-before via the telnet write) and can be
+	// read without a data race. Read on to "Your characters:" to confirm the
+	// picker is actually shown.
+	readLinesUntil(t, r, "Returning to character selection")
+	readLinesUntil(t, r, "Your characters:")
+
+	// Cancel + join so the Handle goroutine is fully stopped before we read its
+	// fields, eliminating any -race window on the mock's unsynchronized fields.
+	cancel()
+	<-done
+
+	// rsoe6.11.2: a best-effort Disconnect for the OLD connection must have been
+	// issued before the session fields were cleared, so the core-side
+	// session_connections row is released rather than leaked.
+	require.NotNil(t, client.lastDisconnectReq,
+		"abandoned reconnect must issue a Disconnect to release the dead connection (rsoe6.11.2)")
+	assert.Equal(t, "sess-reaped", client.lastDisconnectReq.GetSessionId(),
+		"Disconnect must target the reaped session")
+	assert.Equal(t, "tok-reaped", client.lastDisconnectReq.GetPlayerSessionToken(),
+		"Disconnect must carry the player session token so the ownership gate passes")
+
+	// Terminal, not retried-to-ceiling: exactly one resubscribe attempt fired
+	// (2 total Subscribe calls: initial + the one terminal resubscribe).
+	assert.Equal(t, int32(2), subCalls.Load(),
+		"terminal SESSION_NOT_FOUND must not retry; exactly one resubscribe attempt")
 }

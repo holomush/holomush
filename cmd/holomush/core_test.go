@@ -1044,7 +1044,7 @@ func TestCoreCommand_ConfigFileLoading(t *testing.T) {
 func TestParseSessionConfigDefaultsEmptyFields(t *testing.T) {
 	cfg := &coreConfig{}
 
-	ttl, reaper, err := parseSessionConfig(cfg)
+	ttl, reaper, _, _, err := parseSessionConfig(cfg)
 
 	require.NoError(t, err)
 	assert.Equal(t, 30*time.Minute, ttl)
@@ -1061,7 +1061,7 @@ func TestParseSessionConfigUsesExplicitValues(t *testing.T) {
 		SessionMaxHistory:     250,
 	}
 
-	ttl, reaper, err := parseSessionConfig(cfg)
+	ttl, reaper, _, _, err := parseSessionConfig(cfg)
 
 	require.NoError(t, err)
 	assert.Equal(t, 1*time.Hour, ttl)
@@ -1077,7 +1077,7 @@ func TestParseSessionConfigRejectsInvalidTTL(t *testing.T) {
 		SessionReaperInterval: "30s",
 	}
 
-	_, _, err := parseSessionConfig(cfg)
+	_, _, _, _, err := parseSessionConfig(cfg)
 
 	require.Error(t, err)
 }
@@ -1090,7 +1090,7 @@ func TestParseSessionConfigRejectsInvalidReaperInterval(t *testing.T) {
 		SessionReaperInterval: "not-a-duration",
 	}
 
-	_, _, err := parseSessionConfig(cfg)
+	_, _, _, _, err := parseSessionConfig(cfg)
 
 	require.Error(t, err)
 }
@@ -1103,7 +1103,7 @@ func TestParseSessionConfigRejectsZeroTTL(t *testing.T) {
 		SessionReaperInterval: "30s",
 	}
 
-	_, _, err := parseSessionConfig(cfg)
+	_, _, _, _, err := parseSessionConfig(cfg)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "positive")
@@ -1117,7 +1117,7 @@ func TestParseSessionConfigRejectsZeroReaperInterval(t *testing.T) {
 		SessionReaperInterval: "0s",
 	}
 
-	_, _, err := parseSessionConfig(cfg)
+	_, _, _, _, err := parseSessionConfig(cfg)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "positive")
@@ -1132,7 +1132,7 @@ func TestParseSessionConfigDefaultsNegativeMaxHistory(t *testing.T) {
 		SessionMaxHistory:     -1,
 	}
 
-	_, _, err := parseSessionConfig(cfg)
+	_, _, _, _, err := parseSessionConfig(cfg)
 
 	require.NoError(t, err)
 	assert.Equal(t, 500, cfg.SessionMaxHistory)
@@ -1147,10 +1147,60 @@ func TestParseSessionConfigPreservesPositiveMaxHistory(t *testing.T) {
 		SessionMaxHistory:     250,
 	}
 
-	_, _, err := parseSessionConfig(cfg)
+	_, _, _, _, err := parseSessionConfig(cfg)
 
 	require.NoError(t, err)
 	assert.Equal(t, 250, cfg.SessionMaxHistory)
+}
+
+// TestParseSessionConfigLeaseTTLAndBootGrace covers parsing/validation of
+// session_lease_ttl and session_boot_grace: malformed and zero values are
+// rejected, empty values default to 45s/60s, and explicit values are preserved.
+func TestParseSessionConfigLeaseTTLAndBootGrace(t *testing.T) {
+	tests := []struct {
+		name          string
+		leaseTTL      string
+		bootGrace     string
+		wantErrCode   string        // non-empty → assert this oops code
+		wantErrSubstr string        // non-empty → assert err.Error() contains
+		wantLease     time.Duration // asserted when no error expected
+		wantBoot      time.Duration
+	}{
+		{name: "rejects malformed lease_ttl", leaseTTL: "bogus", wantErrCode: "CONFIG_INVALID"},
+		{name: "rejects malformed boot_grace", bootGrace: "bogus", wantErrCode: "CONFIG_INVALID"},
+		{name: "rejects zero lease_ttl", leaseTTL: "0s", wantErrSubstr: "positive"},
+		{name: "rejects zero boot_grace", bootGrace: "0s", wantErrSubstr: "positive"},
+		{name: "empty values default to 45s/60s", wantLease: 45 * time.Second, wantBoot: 60 * time.Second},
+		{name: "explicit values preserved", leaseTTL: "2m", bootGrace: "3m", wantLease: 2 * time.Minute, wantBoot: 3 * time.Minute},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &coreConfig{
+				SessionTTL:            "30m",
+				SessionReaperInterval: "30s",
+				SessionLeaseTTL:       tt.leaseTTL,
+				SessionBootGrace:      tt.bootGrace,
+			}
+
+			_, _, leaseTTL, bootGrace, err := parseSessionConfig(cfg)
+
+			if tt.wantErrCode != "" || tt.wantErrSubstr != "" {
+				require.Error(t, err)
+				if tt.wantErrCode != "" {
+					errutil.AssertErrorCode(t, err, tt.wantErrCode)
+				}
+				if tt.wantErrSubstr != "" {
+					assert.Contains(t, err.Error(), tt.wantErrSubstr)
+				}
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantLease, leaseTTL)
+			assert.Equal(t, tt.wantBoot, bootGrace)
+		})
+	}
 }
 
 // TestResolveLogLevel verifies that resolveLogLevel correctly resolves log level

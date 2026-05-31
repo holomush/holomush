@@ -17,8 +17,11 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/samber/oops"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
+	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/web"
 	"github.com/holomush/holomush/internal/world"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -577,9 +580,21 @@ var _ = Describe("Multi-tab session isolation — Subscribe-path post-logout (sp
 		}, stream)
 		Expect(err).To(HaveOccurred(), "Subscribe MUST surface stale-session error at the transport level")
 
-		var oerr oops.OopsError
-		Expect(errors.As(err, &oerr)).To(BeTrue(), "Subscribe error MUST be an oops error")
-		Expect(oerr.Code()).To(Equal("SESSION_NOT_FOUND"),
+		// Post-rsoe6.11.1 wire contract: the Subscribe handler stamps the
+		// enumeration-safe SESSION_NOT_FOUND with a classifiable gRPC status
+		// code (codes.Unauthenticated) via subscribeSessionNotFound, rather
+		// than returning a bare oops error (which grpc-go would surface as
+		// codes.Unknown — indistinguishable from a transient core-down). The
+		// gateway client recovers the SESSION_NOT_FOUND oops code via
+		// holoGRPC.TranslateSubscribeErr. Mirrors the unit-level contract in
+		// internal/grpc/server_helpers_test.go + client_test.go.
+		st, ok := status.FromError(err)
+		Expect(ok).To(BeTrue(), "Subscribe error MUST carry a gRPC status code")
+		Expect(st.Code()).To(Equal(codes.Unauthenticated),
+			"stale-token failure MUST cross the wire as Unauthenticated")
+		o, ok := oops.AsOops(holoGRPC.TranslateSubscribeErr(err))
+		Expect(ok).To(BeTrue(), "TranslateSubscribeErr MUST yield an oops error")
+		Expect(o.Code()).To(Equal("SESSION_NOT_FOUND"),
 			"Subscribe MUST collapse stale-token failure to enumeration-safe SESSION_NOT_FOUND")
 		Expect(stream.sent).To(BeEmpty(),
 			"Subscribe MUST NOT send any frame before ownership validation fires")

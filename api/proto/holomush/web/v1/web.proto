@@ -61,6 +61,12 @@ enum ControlSignal {
   // SendCommandRequest.connection_id so the gateway routes per-connection
   // commands (Phase 5 scene-focus autofocus) correctly under multi-tab.
   CONTROL_SIGNAL_STREAM_OPENED = 3;
+  // CONTROL_SIGNAL_RECONNECTING: the gateway lost its core stream but is holding
+  // the client and reconnecting; the UI shows a reconnecting indicator (holomush-rsoe6).
+  CONTROL_SIGNAL_RECONNECTING = 4;
+  // CONTROL_SIGNAL_RECONNECTED: the gateway re-established the core stream; the
+  // client may clear the reconnecting indicator.
+  CONTROL_SIGNAL_RECONNECTED = 5;
 }
 
 // ControlFrame is the out-of-band stream-lifecycle message carried in the

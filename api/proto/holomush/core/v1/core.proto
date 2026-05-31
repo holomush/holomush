@@ -166,6 +166,11 @@ service CoreService {
   // Self-scoped: the subject is the session's character (ownership-validated),
   // never an arbitrary character_id. Pure read.
   rpc ListAvailableCommands(ListAvailableCommandsRequest) returns (ListAvailableCommandsResponse);
+
+  // RefreshConnection bumps a connection's liveness lease. Called periodically
+  // by the gateway while the client socket is open (holomush-rsoe6). SERVED by
+  // CoreServer.RefreshConnection; ownership-validated and enumeration-safe.
+  rpc RefreshConnection(RefreshConnectionRequest) returns (RefreshConnectionResponse);
 }
 
 // HandleCommandRequest carries one player-issued command to dispatch within the
@@ -603,6 +608,27 @@ message DisconnectResponse {
 
   // success is true on a completed (or already-complete) disconnect.
   bool success = 2;
+}
+
+// RefreshConnectionRequest asks core to bump the lease for one connection.
+message RefreshConnectionRequest {
+  // meta carries request correlation data.
+  RequestMeta meta = 1;
+
+  // session_id names the game session owning the connection.
+  string session_id = 2;
+
+  // connection_id is the connection whose lease to refresh.
+  string connection_id = 3;
+
+  // player_session_token proves the caller owns session_id.
+  string player_session_token = 4;
+}
+
+// RefreshConnectionResponse is empty on success; failures are gRPC status codes.
+message RefreshConnectionResponse {
+  // meta carries response correlation data.
+  ResponseMeta meta = 1;
 }
 
 // GetCommandHistoryRequest asks for the recent command lines recorded for a

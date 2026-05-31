@@ -738,6 +738,23 @@ func (s *CoreServer) toSubject(gameID, streamName string) (eventbus.Subject, err
 	return sub, nil
 }
 
+// subscribeSessionNotFound builds the enumeration-safe SESSION_NOT_FOUND error
+// for the Subscribe handler AND stamps it with a wire-classifiable gRPC status
+// code. A bare oops error has no GRPCStatus method, so grpc-go would surface it
+// to the client as codes.Unknown — indistinguishable from a transient
+// core-down. Routing through authFailureToStatus maps the SESSION_NOT_FOUND
+// oops code to codes.Unauthenticated on the wire, which the gateway client
+// (translateSubscribeErr) decodes back to the SESSION_NOT_FOUND oops code so the
+// telnet/web reconnect loops treat a reaped session as terminal (return to
+// re-auth) rather than retrying for the full reconnect ceiling (rsoe6.11.1).
+func subscribeSessionNotFound(sessionID string) error {
+	err := oops.Code("SESSION_NOT_FOUND").With("session_id", sessionID).Errorf("session not found")
+	if statusErr := authFailureToStatus(err); statusErr != nil {
+		return statusErr
+	}
+	return err
+}
+
 // Subscribe opens a stream of events for the session.
 //
 // SECURITY (bd-jv7z): Before opening the stream, the caller's
@@ -806,7 +823,7 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 			"session_id", req.SessionId,
 			"error", err,
 		)
-		return oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
+		return subscribeSessionNotFound(req.SessionId)
 	}
 	validateSpan.End()
 
@@ -815,7 +832,7 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	if err != nil {
 		recordSpanError(getSpan, err)
 		getSpan.End()
-		return oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
+		return subscribeSessionNotFound(req.SessionId)
 	}
 	getSpan.End()
 
@@ -904,6 +921,20 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		// (post-2026-05-17 amendment): only session-create and
 		// character-move advance the floor. See SelectCharacter reattach
 		// branch for the matching commentary.
+	}
+
+	// Recompute grid_present now that a connection exists (and after
+	// ReattachCAS has already transitioned a formerly-detached session to
+	// active). This restores grid_present=true when a reattaching session
+	// was left at grid_present=false after the prior Disconnect (I-LIVE-3).
+	// Placed here — after ReattachCAS — so that recomputeSessionLiveness
+	// reads status=active and only needs to fix grid_present, rather than
+	// racing with ReattachCAS over the detached→active transition.
+	if req.GetConnectionId() != "" {
+		if liveErr := s.recomputeSessionLiveness(ctx, req.GetSessionId()); liveErr != nil {
+			slog.WarnContext(ctx, "subscribe: failed to recompute session liveness after add_connection",
+				"session_id", req.GetSessionId(), "error", liveErr)
+		}
 	}
 
 	// RestoreFocus — produces the full stream list and replay modes.
@@ -1512,27 +1543,21 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 			// Run disconnect hooks for guests
 			s.runDisconnectHooks(ctx, *info)
 		} else {
-			// Non-guest: detach session with TTL instead of deleting
-			now := time.Now()
-			ttlSeconds := info.TTLSeconds
-			if ttlSeconds <= 0 {
-				ttlSeconds = 1800 // default 30 minutes
-			}
-			expiresAt := now.Add(time.Duration(ttlSeconds) * time.Second)
-			if err := s.sessionStore.UpdateStatus(ctx, req.SessionId,
-				session.StatusDetached, &now, &expiresAt); err != nil {
+			// Non-guest: detach session with TTL instead of deleting.
+			// Do NOT emit leave event — player may reconnect.
+			// Reaper handles leave events when TTL expires.
+			if err := s.recomputeSessionLiveness(ctx, req.SessionId); err != nil {
 				slog.WarnContext(
-					ctx, "failed to detach session",
+					ctx, "failed to recompute session liveness on disconnect",
 					"request_id", requestID,
+					"session_id", req.SessionId,
 					"error", err,
 				)
 			}
-
-			// Do NOT emit leave event — player may reconnect.
-			// Reaper handles leave events when TTL expires.
 		}
 	} else if gridConns == 0 && info.GridPresent {
-		// Only comms_hub connections remain — phase out from grid
+		// Only comms_hub connections remain — phase out from grid.
+		// Emit the leave event (engine concern), then update grid presence via helper.
 		char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
 		if err := s.engine.HandleDisconnect(ctx, char, "phased out"); err != nil {
 			slog.WarnContext(
@@ -1542,9 +1567,9 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 				"error", err,
 			)
 		}
-		if err := s.sessionStore.UpdateGridPresent(ctx, req.SessionId, false); err != nil {
+		if err := s.recomputeSessionLiveness(ctx, req.SessionId); err != nil {
 			slog.WarnContext(
-				ctx, "failed to update grid presence",
+				ctx, "failed to recompute session liveness on phase-out",
 				"request_id", requestID,
 				"session_id", req.SessionId,
 				"error", err,
@@ -1563,6 +1588,82 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 		Meta:    responseMeta(requestID),
 		Success: true,
 	}, nil
+}
+
+// recomputeSessionLiveness inspects the current connection counts for
+// sessionID and applies the canonical liveness transition:
+//
+//   - 0 total connections → detach (StatusDetached, grid_present=false,
+//     expires_at = now + reattach TTL). TTL is taken from info.TTLSeconds;
+//     defaults to 1800 s (30 min) when ≤0. Does NOT emit a leave event —
+//     the caller is responsible for any engine-level side effects.
+//   - >0 total connections → ensure status=active; set grid_present=true
+//     when at least one terminal or telnet connection exists, false otherwise.
+//
+// This helper is the single place that owns the connection-count →
+// session-liveness mapping. Disconnect, the lease sweep (Task 5), and
+// AddConnection all call it so the rule stays DRY.
+func (s *CoreServer) recomputeSessionLiveness(ctx context.Context, sessionID string) error {
+	info, err := s.sessionStore.Get(ctx, sessionID)
+	if err != nil {
+		return oops.With("session_id", sessionID).Wrap(err)
+	}
+
+	totalCount, err := s.sessionStore.CountConnections(ctx, sessionID)
+	if err != nil {
+		return oops.With("session_id", sessionID).Wrap(err)
+	}
+
+	if totalCount == 0 {
+		// Detach: set status + expires_at; clear grid presence.
+		now := time.Now()
+		ttlSeconds := info.TTLSeconds
+		if ttlSeconds <= 0 {
+			ttlSeconds = 1800 // default 30 minutes
+		}
+		expiresAt := now.Add(time.Duration(ttlSeconds) * time.Second)
+		err = s.sessionStore.UpdateStatus(ctx, sessionID,
+			session.StatusDetached, &now, &expiresAt)
+		if err != nil {
+			return oops.With("session_id", sessionID).Wrap(err)
+		}
+		if info.GridPresent {
+			if err = s.sessionStore.UpdateGridPresent(ctx, sessionID, false); err != nil {
+				return oops.With("session_id", sessionID).Wrap(err)
+			}
+		}
+		return nil
+	}
+
+	// >0 connections: ensure status=active + correct grid presence.
+	// This matters when the lease sweep (Task 5) or a future AddConnection
+	// caller invokes recomputeSessionLiveness on a session that is still
+	// StatusDetached because a prior recompute was interrupted or missed.
+	if info.Status != session.StatusActive {
+		if err = s.sessionStore.UpdateStatus(ctx, sessionID,
+			session.StatusActive, nil, nil); err != nil {
+			return oops.With("session_id", sessionID).Wrap(err)
+		}
+	}
+
+	termCount, err := s.sessionStore.CountConnectionsByType(ctx, sessionID, "terminal")
+	if err != nil {
+		return oops.With("session_id", sessionID).Wrap(err)
+	}
+	telCount, err := s.sessionStore.CountConnectionsByType(ctx, sessionID, "telnet")
+	if err != nil {
+		return oops.With("session_id", sessionID).Wrap(err)
+	}
+	gridConns := termCount + telCount
+	wantGrid := gridConns > 0
+
+	if info.GridPresent != wantGrid {
+		err = s.sessionStore.UpdateGridPresent(ctx, sessionID, wantGrid)
+		if err != nil {
+			return oops.With("session_id", sessionID).Wrap(err)
+		}
+	}
+	return nil
 }
 
 // GetCommandHistory retrieves command history for a session.

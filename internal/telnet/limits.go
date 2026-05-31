@@ -23,12 +23,21 @@ type Limits struct {
 	// successful character selection. Fires once; a fire after auth is
 	// a no-op.
 	PreAuthTimeout time.Duration
+
+	// LeaseRefreshInterval is the period between connection-lease refresh
+	// RPCs while the connection is authenticated (holomush-rsoe6, I-LIVE-1).
+	// A live client refreshes the server-side lease at this interval, keeping
+	// the connection visible to the liveness sweep. MUST be well under the
+	// sweep's LeaseTTL (default 45 s) so at least one refresh fires per
+	// window. Defaults to 15 s in DefaultLimits.
+	LeaseRefreshInterval time.Duration
 }
 
 // DefaultLimits are the production-safe defaults for a modest VPS hosting
 // a hobby-to-mid-size MUSH.
 var DefaultLimits = Limits{
-	IdleReadTimeout: 5 * time.Minute,
-	WriteTimeout:    30 * time.Second,
-	PreAuthTimeout:  2 * time.Minute,
+	IdleReadTimeout:      5 * time.Minute,
+	WriteTimeout:         30 * time.Second,
+	PreAuthTimeout:       2 * time.Minute,
+	LeaseRefreshInterval: 15 * time.Second,
 }

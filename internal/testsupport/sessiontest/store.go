@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/auth"
+	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/store"
@@ -56,6 +57,45 @@ func NewStoreWithPool(t *testing.T) (session.Store, *pgxpool.Pool) {
 	t.Cleanup(pool.Close)
 
 	return store.NewPostgresSessionStore(pool), pool
+}
+
+// NewPlayerSession creates an *auth.PlayerSession suitable for seeding FK
+// prerequisites in integration tests. The PlayerID and ID are fresh ULIDs;
+// TokenHash is a deterministic placeholder derived from the ID.
+func NewPlayerSession() *auth.PlayerSession {
+	playerID := idgen.New()
+	ps := &auth.PlayerSession{
+		ID:        idgen.New(),
+		PlayerID:  playerID,
+		TokenHash: "placeholder-test-token-hash-" + playerID.String(),
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	return ps
+}
+
+// NewActiveSession constructs a *session.Info in StatusActive state that
+// references the given PlayerSession for FK seeding. The session ID is a
+// fresh ULID string; CharacterID is a fresh random ULID; ExpiresAt is set
+// one hour in the future so the session is not expired.
+func NewActiveSession(ps *auth.PlayerSession) *session.Info {
+	charID := idgen.New()
+	locID := idgen.New()
+	expiresAt := time.Now().Add(time.Hour)
+	return &session.Info{
+		ID:              idgen.New().String(),
+		CharacterID:     charID,
+		PlayerID:        ps.PlayerID,
+		PlayerSessionID: ps.ID,
+		CharacterName:   "TestChar-" + charID.String(),
+		LocationID:      locID,
+		Status:          session.StatusActive,
+		GridPresent:     true,
+		ExpiresAt:       &expiresAt,
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
+	}
 }
 
 // SeedPlayerSession inserts the minimal FK chain required to store a game

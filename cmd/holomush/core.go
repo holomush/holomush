@@ -73,6 +73,8 @@ type coreConfig struct {
 	SessionTTL            string        `koanf:"session_ttl"`
 	SessionMaxHistory     int           `koanf:"session_max_history"`
 	SessionReaperInterval string        `koanf:"session_reaper_interval"`
+	SessionLeaseTTL       string        `koanf:"session_lease_ttl"`
+	SessionBootGrace      string        `koanf:"session_boot_grace"`
 	Setting               string        `koanf:"setting"`
 	ResetSetting          bool          `koanf:"reset_setting"`
 	LuaTimeout            time.Duration `koanf:"lua_timeout"`
@@ -157,6 +159,8 @@ manages plugins, and handles game state.`,
 	cmd.Flags().StringVar(&cfg.SessionTTL, "session-ttl", "30m", "default session TTL after disconnect")
 	cmd.Flags().IntVar(&cfg.SessionMaxHistory, "session-max-history", 500, "max command history entries per session")
 	cmd.Flags().StringVar(&cfg.SessionReaperInterval, "session-reaper-interval", "30s", "session reaper check interval")
+	cmd.Flags().StringVar(&cfg.SessionLeaseTTL, "session-lease-ttl", "45s", "connection lease TTL")
+	cmd.Flags().StringVar(&cfg.SessionBootGrace, "session-boot-grace", "60s", "lease-sweep suppression window after core start")
 	cmd.Flags().StringVar(&cfg.Setting, "setting", "crossroads", "setting plugin to bootstrap on first boot")
 	cmd.Flags().BoolVar(&cfg.ResetSetting, "reset-setting", false, "force re-bootstrap from setting plugin")
 	cmd.Flags().DurationVar(&cfg.LuaTimeout, "plugin-lua-timeout", defaultPluginLuaTimeout, "per-invocation CPU deadline for Lua plugins")
@@ -321,7 +325,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	}
 
 	// --- 5. Parse session configuration ---
-	sessionTTL, reaperInterval, err := parseSessionConfig(cfg)
+	sessionTTL, reaperInterval, leaseTTL, bootGrace, err := parseSessionConfig(cfg)
 	if err != nil {
 		return err
 	}
@@ -618,6 +622,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		TLSConfig:      tlsConfig,
 		SessionTTL:     sessionTTL,
 		ReaperInterval: reaperInterval,
+		LeaseTTL:       leaseTTL,
+		BootGrace:      bootGrace,
 		MaxHistory:     cfg.SessionMaxHistory,
 		GameConfig:     gameConfig,
 		StreamRegistry: streamRegistry,
@@ -1109,16 +1115,16 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	return nil
 }
 
-// parseSessionConfig parses and validates session TTL and reaper interval from cfg,
-// applying defaults when values are empty. Returns an error if parsing fails or
-// either duration is not positive.
-func parseSessionConfig(cfg *coreConfig) (sessionTTL, reaperInterval time.Duration, err error) {
+// parseSessionConfig parses and validates session TTL, reaper interval, lease TTL,
+// and boot grace from cfg, applying defaults when values are empty. Returns an error
+// if parsing fails or any duration is not positive.
+func parseSessionConfig(cfg *coreConfig) (sessionTTL, reaperInterval, leaseTTL, bootGrace time.Duration, err error) {
 	if cfg.SessionTTL == "" {
 		cfg.SessionTTL = "30m"
 	}
 	sessionTTL, err = time.ParseDuration(cfg.SessionTTL)
 	if err != nil {
-		return 0, 0, oops.Code("CONFIG_INVALID").With("field", "session_ttl").Wrap(err)
+		return 0, 0, 0, 0, oops.Code("CONFIG_INVALID").With("field", "session_ttl").Wrap(err)
 	}
 
 	if cfg.SessionReaperInterval == "" {
@@ -1126,21 +1132,43 @@ func parseSessionConfig(cfg *coreConfig) (sessionTTL, reaperInterval time.Durati
 	}
 	reaperInterval, err = time.ParseDuration(cfg.SessionReaperInterval)
 	if err != nil {
-		return 0, 0, oops.Code("CONFIG_INVALID").With("field", "session_reaper_interval").Wrap(err)
+		return 0, 0, 0, 0, oops.Code("CONFIG_INVALID").With("field", "session_reaper_interval").Wrap(err)
+	}
+
+	if cfg.SessionLeaseTTL == "" {
+		cfg.SessionLeaseTTL = "45s"
+	}
+	leaseTTL, err = time.ParseDuration(cfg.SessionLeaseTTL)
+	if err != nil {
+		return 0, 0, 0, 0, oops.Code("CONFIG_INVALID").With("field", "session_lease_ttl").Wrap(err)
+	}
+
+	if cfg.SessionBootGrace == "" {
+		cfg.SessionBootGrace = "60s"
+	}
+	bootGrace, err = time.ParseDuration(cfg.SessionBootGrace)
+	if err != nil {
+		return 0, 0, 0, 0, oops.Code("CONFIG_INVALID").With("field", "session_boot_grace").Wrap(err)
 	}
 
 	if sessionTTL <= 0 {
-		return 0, 0, oops.Code("CONFIG_INVALID").With("field", "session_ttl").Errorf("session TTL must be positive")
+		return 0, 0, 0, 0, oops.Code("CONFIG_INVALID").With("field", "session_ttl").Errorf("session TTL must be positive")
 	}
 	if reaperInterval <= 0 {
-		return 0, 0, oops.Code("CONFIG_INVALID").With("field", "session_reaper_interval").Errorf("reaper interval must be positive")
+		return 0, 0, 0, 0, oops.Code("CONFIG_INVALID").With("field", "session_reaper_interval").Errorf("reaper interval must be positive")
+	}
+	if leaseTTL <= 0 {
+		return 0, 0, 0, 0, oops.Code("CONFIG_INVALID").With("field", "session_lease_ttl").Errorf("lease TTL must be positive")
+	}
+	if bootGrace <= 0 {
+		return 0, 0, 0, 0, oops.Code("CONFIG_INVALID").With("field", "session_boot_grace").Errorf("boot grace must be positive")
 	}
 
 	if cfg.SessionMaxHistory <= 0 {
 		cfg.SessionMaxHistory = 500
 	}
 
-	return sessionTTL, reaperInterval, nil
+	return sessionTTL, reaperInterval, leaseTTL, bootGrace, nil
 }
 
 // --- Subsystem bridge adapters ---

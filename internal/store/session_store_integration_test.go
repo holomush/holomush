@@ -26,7 +26,7 @@ func TestSessionConnectionsHasFocusKeyColumn(t *testing.T) {
 	pool, cleanup := newTestPool(t)
 	defer cleanup()
 
-	require.NoError(t, runMigrations(ctx, pool, 41))
+	require.NoError(t, runMigrations(ctx, pool, 46))
 
 	var dataType string
 	err := pool.QueryRow(ctx, `
@@ -46,7 +46,7 @@ func TestPostgresListConnectionsBySession(t *testing.T) {
 	pool, cleanup := newTestPool(t)
 	defer cleanup()
 
-	require.NoError(t, runMigrations(ctx, pool, 41))
+	require.NoError(t, runMigrations(ctx, pool, 46))
 
 	s := store.NewPostgresSessionStore(pool)
 
@@ -76,7 +76,7 @@ func TestPostgresUpdateSessionConnection_HappyPath(t *testing.T) {
 	pool, cleanup := newTestPool(t)
 	defer cleanup()
 
-	require.NoError(t, runMigrations(ctx, pool, 41))
+	require.NoError(t, runMigrations(ctx, pool, 46))
 
 	s := store.NewPostgresSessionStore(pool)
 
@@ -127,7 +127,7 @@ func TestPostgresUpdateSessionConnection_LockAcquisitionOrder_NoDeadlock(t *test
 	pool, cleanup := newTestPool(t)
 	defer cleanup()
 
-	require.NoError(t, runMigrations(ctx, pool, 41))
+	require.NoError(t, runMigrations(ctx, pool, 46))
 
 	s := store.NewPostgresSessionStore(pool)
 

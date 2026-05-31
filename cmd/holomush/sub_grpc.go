@@ -76,6 +76,8 @@ type grpcSubsystemConfig struct {
 	TLSConfig      *cryptotls.Config
 	SessionTTL     time.Duration
 	ReaperInterval time.Duration
+	LeaseTTL       time.Duration
+	BootGrace      time.Duration
 	MaxHistory     int
 	GameConfig     config.GameConfig
 	StreamRegistry *holoGRPC.SessionStreamRegistry
@@ -510,7 +512,9 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	s.reaperCancel = reaperCancel
 
 	s.sessionReaper = session.NewReaper(sessionStore, session.ReaperConfig{
-		Interval: s.cfg.ReaperInterval,
+		Interval:  s.cfg.ReaperInterval,
+		LeaseTTL:  s.cfg.LeaseTTL,
+		BootGrace: s.cfg.BootGrace,
 		OnExpired: func(info *session.Info) {
 			char := core.CharacterRef{
 				ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID,
@@ -531,6 +535,19 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 			}
 			if info.IsGuest {
 				guestAuth.ReleaseGuest(info.CharacterName)
+			}
+		},
+		OnSessionDetached: func(info *session.Info) {
+			slog.InfoContext(reaperCtx, "lease sweep detached session", "session_id", info.ID)
+			// Leave is deferred to OnExpired at TTL (matches the cooperative detach path).
+		},
+		OnGridPhaseOut: func(info *session.Info) {
+			char := core.CharacterRef{
+				ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID,
+			}
+			if dcErr := engine.HandleDisconnect(reaperCtx, char, "phased out"); dcErr != nil {
+				slog.WarnContext(reaperCtx, "lease sweep grid phase-out leave failed",
+					"session_id", info.ID, "error", dcErr)
 			}
 		},
 	})

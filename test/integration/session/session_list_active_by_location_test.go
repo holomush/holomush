@@ -32,12 +32,18 @@ var _ = Describe("PostgresSessionStore.ListActiveByLocation (I-PRES-1)", func() 
 	// seedSession inserts a minimal session row directly into the sessions
 	// table. Only the columns that have no DEFAULT or are required for the
 	// test assertions are supplied; the rest rely on column DEFAULTs.
+	// grid_present is derived in production from a live connection lease
+	// (recomputeSessionLiveness, holomush-rsoe6.4). ListActiveByLocation
+	// filters on it (status='active' AND grid_present=true — the presence
+	// roster, holomush-rsoe6.12). Raw-seeded rows bypass the lease path, so
+	// the seed sets grid_present explicitly: true for active sessions
+	// (simulating a live connection), false otherwise.
 	seedSession := func(id string, charID ulid.ULID, locID ulid.ULID, status string) {
 		_, err := env.pool.Exec(
 			env.ctx,
-			`INSERT INTO sessions (id, character_id, character_name, location_id, status)
-			 VALUES ($1, $2, $3, $4, $5)`,
-			id, charID.String(), "TestChar-"+id, locID.String(), status,
+			`INSERT INTO sessions (id, character_id, character_name, location_id, status, grid_present)
+			 VALUES ($1, $2, $3, $4, $5, $6)`,
+			id, charID.String(), "TestChar-"+id, locID.String(), status, status == "active",
 		)
 		Expect(err).NotTo(HaveOccurred(), "seed session %q", id)
 	}
