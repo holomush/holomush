@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/session"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
@@ -414,7 +415,7 @@ func (h *Handler) runSubscribeOnce(
 
 	hbInterval := h.heartbeatInterval
 	if hbInterval <= 0 {
-		hbInterval = 15 * time.Second
+		hbInterval = session.DefaultLeaseRefreshInterval
 	}
 	heartbeat := time.NewTicker(hbInterval)
 	defer heartbeat.Stop()
