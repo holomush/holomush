@@ -68,6 +68,10 @@ type sceneStorer interface {
 	// handleEmit's single-membership inference per spec §5.2 (Phase 5 will
 	// replace with focus-aware routing).
 	ListScenesForCharacter(ctx context.Context, characterID string) ([]string, error)
+	// ListBoard returns the paginated public scene board: open scenes in state
+	// 'active' or 'paused', optionally filtered by tags. CW and identity
+	// filtering are applied by the caller (iokti.13).
+	ListBoard(ctx context.Context, q BoardQuery) ([]*SceneRow, error)
 	// Phase 6 publication reads used by the publish-vote handlers. The
 	// header read deliberately EXCLUDES content_entries so the INV-S9
 	// participant gate runs between the header read and the content read
@@ -373,6 +377,37 @@ func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRe
 	return &scenev1.GetSceneResponse{
 		Scene: rowToProto(row, row.CreatedAt.Time()),
 	}, nil
+}
+
+// ListScenes returns the public scene board: open scenes in state 'active' or
+// 'paused', optionally filtered by tags, paginated by limit/offset. Content-
+// warning and identity filtering (ExcludeContentWarnings, CharacterId,
+// PlayerId) are out of scope here and handled by iokti.13.
+func (s *SceneServiceImpl) ListScenes(ctx context.Context, req *scenev1.ListScenesRequest) (*scenev1.ListScenesResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.list_scenes")
+	defer span.End()
+
+	q := BoardQuery{
+		Limit:  int(req.GetLimit()),
+		Offset: int(req.GetOffset()),
+		Tags:   req.GetTags(),
+	}
+
+	rows, err := s.store.ListBoard(ctx, q)
+	if err != nil {
+		recordError(span, err)
+		slog.WarnContext(
+			ctx, "scene.service.list_scenes store error",
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to list scenes")
+	}
+
+	scenes := make([]*scenev1.SceneInfo, 0, len(rows))
+	for _, row := range rows {
+		scenes = append(scenes, rowToProto(row, row.CreatedAt.Time()))
+	}
+	return &scenev1.ListScenesResponse{Scenes: scenes}, nil
 }
 
 // EndScene transitions a scene to the ended state. Only the scene owner is

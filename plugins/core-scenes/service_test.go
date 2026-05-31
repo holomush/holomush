@@ -43,6 +43,10 @@ type fakeStore struct {
 	getErr                    error
 	addParticipantErr         error
 	listScenesForCharacterErr error
+	// ListBoard control fields (iokti.12).
+	listBoardRows []*SceneRow
+	listBoardErr  error
+	listBoardGot  *BoardQuery // records the last query received
 }
 
 type recordingEventSink struct {
@@ -460,6 +464,17 @@ func (f *fakeStore) ListScenesForCharacter(_ context.Context, characterID string
 		ids = append(ids, sceneID)
 	}
 	return ids, nil
+}
+
+// ListBoard records the query it received and returns the configured rows/err.
+// Satisfies sceneStorer for iokti.12 unit tests.
+func (f *fakeStore) ListBoard(_ context.Context, q BoardQuery) ([]*SceneRow, error) {
+	got := q
+	f.listBoardGot = &got
+	if f.listBoardErr != nil {
+		return nil, f.listBoardErr
+	}
+	return f.listBoardRows, nil
 }
 
 func (f *fakeStore) End(_ context.Context, id string) (*SceneRow, error) {
@@ -1759,4 +1774,93 @@ func TestNewSceneIDReturnsBareULIDWithoutPrefix(t *testing.T) {
 	parsed, perr := ulid.Parse(id)
 	require.NoError(t, perr, "scene id must parse as a bare ULID")
 	assert.Equal(t, id, parsed.String(), "round-trip: stored id equals its ULID string form")
+}
+
+// ── ListScenes unit tests (iokti.12) ─────────────────────────────────────────
+
+func TestListScenesMapsRequestFieldsToBoardQueryAndReturnsSceneInfos(t *testing.T) {
+	store := newFakeStore()
+	now := time.Now().UTC()
+	store.listBoardRows = []*SceneRow{
+		{
+			ID:              "scene-a",
+			Title:           "Alpha Scene",
+			OwnerID:         "owner-1",
+			State:           string(SceneStateActive),
+			Visibility:      "open",
+			PoseOrder:       string(PoseOrderModeFree),
+			ContentWarnings: []string{},
+			Tags:            []string{"plot"},
+			CreatedAt:       pgnanos.From(now),
+		},
+		{
+			ID:              "scene-b",
+			Title:           "Beta Scene",
+			OwnerID:         "owner-2",
+			State:           string(SceneStatePaused),
+			Visibility:      "open",
+			PoseOrder:       string(PoseOrderModeFree),
+			ContentWarnings: []string{},
+			Tags:            []string{"plot", "action"},
+			CreatedAt:       pgnanos.From(now),
+		},
+	}
+
+	svc := newTestService(t, store)
+	resp, err := svc.ListScenes(context.Background(), &scenev1.ListScenesRequest{
+		Limit:  10,
+		Offset: 5,
+		Tags:   []string{"plot"},
+	})
+	require.NoError(t, err)
+
+	// Verify BoardQuery was built correctly from request fields.
+	require.NotNil(t, store.listBoardGot, "ListBoard must have been called")
+	assert.Equal(t, 10, store.listBoardGot.Limit)
+	assert.Equal(t, 5, store.listBoardGot.Offset)
+	assert.Equal(t, []string{"plot"}, store.listBoardGot.Tags)
+
+	// Verify rows were mapped to SceneInfo.
+	require.Len(t, resp.GetScenes(), 2)
+	assert.Equal(t, "scene-a", resp.GetScenes()[0].GetId())
+	assert.Equal(t, "Alpha Scene", resp.GetScenes()[0].GetTitle())
+	assert.Equal(t, "scene-b", resp.GetScenes()[1].GetId())
+}
+
+func TestListScenesIgnoresCWAndIdentityFieldsFromRequest(t *testing.T) {
+	// ExcludeContentWarnings, CharacterId, PlayerId are iokti.13 — the handler
+	// MUST NOT pass them to BoardQuery (which doesn't have those fields).
+	store := newFakeStore()
+	store.listBoardRows = []*SceneRow{}
+
+	svc := newTestService(t, store)
+	_, err := svc.ListScenes(context.Background(), &scenev1.ListScenesRequest{
+		Limit:                  3,
+		ExcludeContentWarnings: []string{"violence"},
+		CharacterId:            "char-1",
+		PlayerId:               "player-1",
+	})
+	require.NoError(t, err)
+
+	require.NotNil(t, store.listBoardGot)
+	assert.Equal(t, 3, store.listBoardGot.Limit)
+	// BoardQuery has no CW/identity fields — just confirm Limit flowed through.
+}
+
+func TestListScenesStoreErrorReturnsInternalWithoutLeakingDetails(t *testing.T) {
+	store := newFakeStore()
+	store.listBoardErr = errors.New("db exploded: secret connection string info")
+
+	svc := newTestService(t, store)
+	_, err := svc.ListScenes(context.Background(), &scenev1.ListScenesRequest{})
+	require.Error(t, err)
+
+	st, ok := status.FromError(err)
+	require.True(t, ok, "error must be a gRPC status")
+	assert.Equal(t, codes.Internal, st.Code())
+	// The inner error detail MUST NOT leak into the status message.
+	assert.NotContains(t, st.Message(), "db exploded",
+		"internal error detail must not be included in gRPC status message")
+	assert.NotContains(t, st.Message(), "secret connection string",
+		"internal error detail must not be included in gRPC status message")
 }

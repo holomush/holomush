@@ -2438,3 +2438,114 @@ var _ = Describe("Publish store — ReadSceneLogForSnapshot", func() {
 		Expect(logs[0].DEKRef).To(BeNil(), "identity-codec rows have NULL dek_ref")
 	})
 })
+
+// ── ListBoard store integration tests (iokti.12) ─────────────────────────────
+
+var _ = Describe("SceneStore.ListBoard", func() {
+	var (
+		store   *SceneStore
+		ctx     context.Context
+		ownerID string
+	)
+
+	BeforeEach(func() {
+		store = newTestStore()
+		ctx = context.Background()
+		ownerID = ulid.Make().String()
+	})
+
+	// mustCreateSceneWithState seeds a scene with arbitrary state, visibility
+	// and tags via the store's Create path (minimal, no participant side-effects).
+	mustCreateSceneWithState := func(id, state, visibility string, tags []string) *SceneRow {
+		GinkgoHelper()
+		row := &SceneRow{
+			ID:              id,
+			Title:           "Scene " + id,
+			OwnerID:         ownerID,
+			State:           state,
+			PoseOrder:       string(PoseOrderModeFree),
+			Visibility:      visibility,
+			ContentWarnings: []string{},
+			Tags:            tags,
+		}
+		Expect(store.Create(ctx, row)).NotTo(HaveOccurred())
+		return row
+	}
+
+	It("returns only open+active/paused scenes with matching tag, excluding private and ended", func() {
+		plotTagged := mustCreateSceneWithState(ulid.Make().String(), "active", "open", []string{"plot"})
+		// Excluded: private visibility (even if active + tagged).
+		mustCreateSceneWithState(ulid.Make().String(), "active", "private", []string{"plot"})
+		// Excluded: ended state (even if open + tagged).
+		mustCreateSceneWithState(ulid.Make().String(), "ended", "open", []string{"plot"})
+		// Excluded: open + active but no "plot" tag.
+		mustCreateSceneWithState(ulid.Make().String(), "active", "open", []string{"social"})
+
+		rows, err := store.ListBoard(ctx, BoardQuery{Tags: []string{"plot"}})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(rows).To(HaveLen(1))
+		Expect(rows[0].ID).To(Equal(plotTagged.ID))
+	})
+
+	It("includes both active and paused scenes when no tag filter is applied", func() {
+		active := mustCreateSceneWithState(ulid.Make().String(), "active", "open", []string{})
+		paused := mustCreateSceneWithState(ulid.Make().String(), "paused", "open", []string{})
+		// Excluded: ended.
+		mustCreateSceneWithState(ulid.Make().String(), "ended", "open", []string{})
+
+		rows, err := store.ListBoard(ctx, BoardQuery{})
+		Expect(err).NotTo(HaveOccurred())
+		ids := make([]string, len(rows))
+		for i, r := range rows {
+			ids[i] = r.ID
+		}
+		Expect(ids).To(ContainElements(active.ID, paused.ID))
+		for _, r := range rows {
+			Expect(r.State).To(BeElementOf("active", "paused"))
+		}
+	})
+
+	It("excludes scenes that have some but not all requested tags", func() {
+		// Both tags: should be included.
+		both := mustCreateSceneWithState(ulid.Make().String(), "active", "open", []string{"plot", "action"})
+		// Only one tag: excluded by the @> containment requirement.
+		mustCreateSceneWithState(ulid.Make().String(), "active", "open", []string{"plot"})
+
+		rows, err := store.ListBoard(ctx, BoardQuery{Tags: []string{"plot", "action"}})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(rows).To(HaveLen(1))
+		Expect(rows[0].ID).To(Equal(both.ID))
+	})
+
+	It("respects Limit and Offset for pagination", func() {
+		// Seed three open+active scenes.
+		for i := 0; i < 3; i++ {
+			mustCreateSceneWithState(ulid.Make().String(), "active", "open", []string{})
+		}
+
+		// First page: limit 2.
+		page1, err := store.ListBoard(ctx, BoardQuery{Limit: 2, Offset: 0})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(page1).To(HaveLen(2))
+
+		// Second page: offset 2, should return the remaining 1.
+		page2, err := store.ListBoard(ctx, BoardQuery{Limit: 2, Offset: 2})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(page2).To(HaveLen(1))
+
+		// No scene appears on both pages.
+		page1IDs := map[string]bool{}
+		for _, r := range page1 {
+			page1IDs[r.ID] = true
+		}
+		for _, r := range page2 {
+			Expect(page1IDs[r.ID]).To(BeFalse(), "scene %s appears in both pages", r.ID)
+		}
+	})
+
+	It("normalises zero Limit to defaultBoardLimit and does not panic on empty result", func() {
+		rows, err := store.ListBoard(ctx, BoardQuery{Limit: 0})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(rows).To(BeEmpty(), "no scenes seeded, so empty result is expected")
+	})
+})

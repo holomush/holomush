@@ -1327,6 +1327,85 @@ func (s *SceneStore) ListScenesForCharacter(ctx context.Context, characterID str
 	return ids, nil
 }
 
+// BoardQuery parameterizes the public scene-board listing returned by
+// ListBoard. Only limit, offset, and tags are consulted here; content-warning
+// and identity filtering are handled by iokti.13.
+type BoardQuery struct {
+	// Limit is the page size. 0 is normalised to defaultBoardLimit; values
+	// above maxBoardLimit are capped at maxBoardLimit.
+	Limit int
+	// Offset is the zero-based row skip. Negative values are clamped to 0.
+	Offset int
+	// Tags, when non-empty, restricts results to scenes carrying ALL of the
+	// listed tags (array containment: tags @> $1). Empty means no tag filter.
+	Tags []string
+}
+
+const (
+	defaultBoardLimit = 50
+	maxBoardLimit     = 200
+)
+
+// ListBoard returns open scenes in state 'active' or 'paused', ordered by
+// creation time (newest first) with id as a tiebreaker. Results are
+// paginated via Limit and Offset. When Tags is non-empty only scenes that
+// carry all of the requested tags are returned (tags @> $tags).
+//
+// Mirrors ListScenesForCharacter: startSpan, oops.Code error wrapping, pool
+// query, defer rows.Close, scan loop, rows.Err check.
+func (s *SceneStore) ListBoard(ctx context.Context, q BoardQuery) ([]*SceneRow, error) {
+	// Normalise pagination parameters.
+	if q.Limit <= 0 {
+		q.Limit = defaultBoardLimit
+	} else if q.Limit > maxBoardLimit {
+		q.Limit = maxBoardLimit
+	}
+	if q.Offset < 0 {
+		q.Offset = 0
+	}
+
+	ctx, span := startSpan(ctx, "scene.store.list_board")
+	defer span.End()
+
+	// $1 is the tags filter: pass nil when no filter so the IS NULL branch
+	// matches all rows; pass the slice to require containment.
+	var tagsArg interface{}
+	if len(q.Tags) > 0 {
+		tagsArg = q.Tags
+	}
+
+	const boardQuery = `
+		SELECT ` + sceneSelectColumns + `
+		FROM scenes
+		WHERE visibility = 'open'
+		  AND state IN ('active', 'paused')
+		  AND ($1::text[] IS NULL OR tags @> $1)
+		ORDER BY created_at DESC, id ASC
+		LIMIT $2 OFFSET $3
+	`
+	rows, err := s.pool.Query(ctx, boardQuery, tagsArg, q.Limit, q.Offset)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LIST_BOARD_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+
+	var out []*SceneRow
+	for rows.Next() {
+		row := &SceneRow{}
+		if err := scanSceneRow(rows, row); err != nil {
+			recordError(span, err)
+			return nil, oops.Code("SCENE_LIST_BOARD_SCAN_FAILED").Wrap(err)
+		}
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LIST_BOARD_ITER_FAILED").Wrap(err)
+	}
+	return out, nil
+}
+
 // ListParticipantsWithPoseMeta is a single SELECT joining scenes +
 // scene_participants and returning the participants (owner+member, NOT
 // invited) with their pose metadata. Pinned by spec §6.1 / INV-P4-7.
