@@ -1118,6 +1118,7 @@ func TestScenesBoardCommandDeclaresBrowseCapabilityGate(t *testing.T) {
 	require.NoError(t, err)
 
 	var manifest struct {
+		Actions  []string `yaml:"actions"`
 		Commands []struct {
 			Name         string `yaml:"name"`
 			Capabilities []struct {
@@ -1149,6 +1150,17 @@ func TestScenesBoardCommandDeclaresBrowseCapabilityGate(t *testing.T) {
 	// the declared gate would deny every board browse.
 	assert.Contains(t, string(data), "browse-open-scenes-board",
 		"the policy permitting the board browse capability must be declared")
+
+	// The browse action MUST ALSO be registered in the manifest's top-level
+	// actions: list. CollectActions admits only core actions + each plugin's
+	// declared actions to knownActions; an action used solely in a capability
+	// (or policy) but absent from actions: is rejected at plugin load with
+	// `unknown action "browse"`, which panics the whole-system integration
+	// harness and stops the core server from booting. This pins the missing
+	// link that broke CI: browse was declared on the capability + policy but
+	// not registered here.
+	assert.Contains(t, manifest.Actions, "browse",
+		"browse must be declared in the manifest actions: list so CollectActions admits it to knownActions at plugin load")
 }
 
 // TestSceneResourceRefTokenizesFirstField verifies that sceneResourceRef extracts

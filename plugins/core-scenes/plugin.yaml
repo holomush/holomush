@@ -52,6 +52,12 @@ audit:
 # because the registry treats service names as singletons.
 
 actions:
+  # Public board discovery (Task iokti.14): a DISTINCT browse action on the
+  # scene resource, deliberately separate from the membership-gated "read" so
+  # the open-board grant cannot widen `scene info`. MUST be declared here so
+  # CollectActions admits it to knownActions during plugin load — the `scenes`
+  # board command capability and the browse-open-scenes-board policy use it.
+  - browse
   - extend_publish_attempts
 
 storage: postgres
