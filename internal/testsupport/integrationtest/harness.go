@@ -821,6 +821,7 @@ func (s *Server) ConnectGuest(ctx context.Context) *Session {
 	sess := &Session{
 		server:             s,
 		SessionID:          selResp.GetSessionId(),
+		PlayerID:           persisted.PlayerID, // populated from persisted row so guest-reaper tests can backdate the player
 		CharacterID:        charID,
 		CharacterName:      selResp.GetCharacterName(),
 		LocationID:         s.guestStartLocationID,
@@ -1012,6 +1013,34 @@ func (s *Server) ReattachSession(ctx context.Context, sessionID string) {
 	require.NoError(s.t, err, "integrationtest.Server.ReattachSession: ReattachCAS")
 	require.Truef(s.t, ok,
 		"integrationtest.Server.ReattachSession: CAS lost — session %s was not in Detached status", sessionID)
+}
+
+// Pool returns the shared Postgres connection pool. Exposed for tests that
+// construct store instances (e.g. authpg.PlayerRepository) to drive
+// reaper-level scenarios end-to-end (holomush-rsoe6, Task 13).
+func (s *Server) Pool() *pgxpool.Pool {
+	return s.pool
+}
+
+// SessionStore returns the session.Store backed by the shared Postgres pool.
+// Exposed for reaper tests that need to drive the session reaper against the
+// same store the harness uses (holomush-rsoe6, Task 13).
+func (s *Server) SessionStore() session.Store {
+	return s.sessionStore
+}
+
+// BackdateGuestPlayer sets a guest player's updated_at to the given time.
+// Used by lease-reaper tests to make the player appear idle to
+// ListIdleGuests (predicate: updated_at < idleSince). Direct SQL; test-only.
+func (s *Server) BackdateGuestPlayer(ctx context.Context, playerID ulid.ULID, backdateTo time.Time) {
+	s.t.Helper()
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE players SET updated_at = $1 WHERE id = $2 AND is_guest = true`,
+		backdateTo.UTC().UnixNano(), playerID.String())
+	require.NoError(s.t, err, "integrationtest.Server.BackdateGuestPlayer")
+	require.Equalf(s.t, int64(1), tag.RowsAffected(),
+		"integrationtest.Server.BackdateGuestPlayer: expected 1 row affected, got %d (playerID=%s)",
+		tag.RowsAffected(), playerID.String())
 }
 
 // --- internal helpers ---

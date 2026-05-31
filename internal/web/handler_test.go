@@ -17,7 +17,9 @@ import (
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
@@ -107,6 +109,12 @@ type mockCoreClient struct {
 	listAvailableCommandsResp *corev1.ListAvailableCommandsResponse
 	listAvailableCommandsErr  error
 	listAvailableCommandsReq  *corev1.ListAvailableCommandsRequest // captured for assertion
+
+	// RefreshConnection fields
+	refreshConnectionResp  *corev1.RefreshConnectionResponse
+	refreshConnectionErr   error
+	refreshConnectionCalls atomic.Int32
+	refreshConnectionReq   atomic.Pointer[corev1.RefreshConnectionRequest] // last captured request (atomic for -race)
 }
 
 func (m *mockCoreClient) HandleCommand(_ context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
@@ -221,6 +229,15 @@ func (m *mockCoreClient) ListFocusPresence(_ context.Context, req *corev1.ListFo
 func (m *mockCoreClient) ListAvailableCommands(_ context.Context, req *corev1.ListAvailableCommandsRequest) (*corev1.ListAvailableCommandsResponse, error) {
 	m.listAvailableCommandsReq = req
 	return m.listAvailableCommandsResp, m.listAvailableCommandsErr
+}
+
+func (m *mockCoreClient) RefreshConnection(_ context.Context, req *corev1.RefreshConnectionRequest) (*corev1.RefreshConnectionResponse, error) {
+	m.refreshConnectionCalls.Add(1)
+	m.refreshConnectionReq.Store(req)
+	if m.refreshConnectionResp == nil {
+		return &corev1.RefreshConnectionResponse{}, m.refreshConnectionErr
+	}
+	return m.refreshConnectionResp, m.refreshConnectionErr
 }
 
 func TestHandler_SendCommand_Success(t *testing.T) {
@@ -930,4 +947,416 @@ func TestWebListCommandsPassesThroughCoreServiceError(t *testing.T) {
 	_, err := h.WebListCommands(context.Background(), req)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, coreErr)
+}
+
+// blockingSubscribeStream is a CoreService_SubscribeClient that blocks on Recv
+// until its done channel is closed, then returns io.EOF.
+type blockingSubscribeStream struct {
+	done chan struct{}
+}
+
+func (b *blockingSubscribeStream) Recv() (*corev1.SubscribeResponse, error) {
+	<-b.done
+	return nil, io.EOF
+}
+
+func (b *blockingSubscribeStream) Header() (metadata.MD, error) { return nil, nil }
+func (b *blockingSubscribeStream) Trailer() metadata.MD         { return nil }
+func (b *blockingSubscribeStream) CloseSend() error             { return nil }
+func (b *blockingSubscribeStream) Context() context.Context     { return context.Background() }
+func (b *blockingSubscribeStream) SendMsg(_ any) error          { return nil }
+func (b *blockingSubscribeStream) RecvMsg(_ any) error          { return nil }
+
+// TestStreamEventsRefreshesLeaseOnHeartbeat asserts that the heartbeat tick
+// calls RefreshConnection so the server-side liveness lease is renewed while
+// the stream is open (I-LIVE-1).
+// Verifies: I-LIVE-1
+func TestStreamEventsRefreshesLeaseOnHeartbeat(t *testing.T) {
+	done := make(chan struct{})
+	mc := &mockCoreClient{
+		subStream: &blockingSubscribeStream{done: done},
+		discResp:  &corev1.DisconnectResponse{Success: true},
+	}
+
+	h := NewHandler(mc)
+	h.heartbeatInterval = 5 * time.Millisecond
+
+	_, httpHandler := webv1connect.NewWebServiceHandler(h)
+	srv := httptest.NewServer(httpHandler)
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	wsc := webv1connect.NewWebServiceClient(http.DefaultClient, srv.URL)
+	stream, err := wsc.StreamEvents(ctx, connect.NewRequest(&webv1.StreamEventsRequest{
+		SessionId: "sess-refresh",
+	}))
+	require.NoError(t, err)
+
+	// Receive the STREAM_OPENED frame so the HTTP/2 stream is live.
+	ok := stream.Receive()
+	require.True(t, ok, "expected STREAM_OPENED frame")
+	ctrl := stream.Msg().GetControl()
+	require.NotNil(t, ctrl)
+	assert.Equal(t, webv1.ControlSignal_CONTROL_SIGNAL_STREAM_OPENED, ctrl.GetSignal())
+	connID := ctrl.GetConnectionId()
+	require.NotEmpty(t, connID, "STREAM_OPENED must carry a connection_id")
+
+	// Wait for at least one RefreshConnection call (heartbeat fires every 5ms).
+	assert.Eventually(t, func() bool {
+		return mc.refreshConnectionCalls.Load() >= 1
+	}, 500*time.Millisecond, time.Millisecond, "heartbeat must call RefreshConnection at least once")
+
+	// Cancel the context to terminate StreamEvents, then unblock Recv.
+	cancel()
+	close(done)
+	// Drain remaining frames.
+	for stream.Receive() {
+	}
+
+	// Assert on the last captured refresh request.
+	lastReq := mc.refreshConnectionReq.Load()
+	require.NotNil(t, lastReq, "RefreshConnection must have been called")
+	assert.Equal(t, "sess-refresh", lastReq.GetSessionId(),
+		"refresh must carry the session_id")
+	assert.Equal(t, connID, lastReq.GetConnectionId(),
+		"refresh must carry the connection_id from STREAM_OPENED")
+}
+
+// scriptedSubscribeStream is a CoreService_SubscribeClient that yields a fixed
+// list of frames, then returns a terminal error (e.g. a non-EOF transport error
+// to simulate a core-stream break, or io.EOF for a clean end). Used by the
+// reconnect-survival test to script a break-then-resume sequence.
+type scriptedSubscribeStream struct {
+	ctx     context.Context
+	frames  []*corev1.SubscribeResponse
+	idx     int
+	termErr error
+}
+
+func (s *scriptedSubscribeStream) Recv() (*corev1.SubscribeResponse, error) {
+	if s.idx < len(s.frames) {
+		f := s.frames[s.idx]
+		s.idx++
+		return f, nil
+	}
+	return nil, s.termErr
+}
+
+func (s *scriptedSubscribeStream) Header() (metadata.MD, error) { return nil, nil }
+func (s *scriptedSubscribeStream) Trailer() metadata.MD         { return nil }
+func (s *scriptedSubscribeStream) CloseSend() error             { return nil }
+func (s *scriptedSubscribeStream) Context() context.Context {
+	if s.ctx != nil {
+		return s.ctx
+	}
+	return context.Background()
+}
+func (s *scriptedSubscribeStream) SendMsg(_ any) error { return nil }
+func (s *scriptedSubscribeStream) RecvMsg(_ any) error { return nil }
+
+// reconnectCoreClient embeds the standard mock but routes Subscribe through a
+// per-call func so the test can script a different stream on each (re)Subscribe.
+type reconnectCoreClient struct {
+	mockCoreClient
+	subscribeFunc func(ctx context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error)
+}
+
+func (m *reconnectCoreClient) Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+	return m.subscribeFunc(ctx, req)
+}
+
+// reconnectEventFrame builds a forward-able event frame carrying an id (the dedup
+// key) and the rendering band the gateway requires (INV-GW-5).
+func reconnectEventFrame(id string) *corev1.SubscribeResponse {
+	return &corev1.SubscribeResponse{
+		Frame: &corev1.SubscribeResponse_Event{
+			Event: &corev1.EventFrame{
+				Id:      id,
+				Type:    "say",
+				Payload: []byte(`{"message":"hello"}`),
+				Rendering: &corev1.RenderingMetadata{
+					Category:      "communication",
+					Format:        "speech",
+					Label:         "says",
+					DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
+					SourcePlugin:  "core-communication",
+				},
+			},
+		},
+	}
+}
+
+// controlSignals extracts the control-frame signals from a captured frame slice.
+func controlSignals(frames []*webv1.StreamEventsResponse) []webv1.ControlSignal {
+	var sigs []webv1.ControlSignal
+	for _, f := range frames {
+		if c := f.GetControl(); c != nil {
+			sigs = append(sigs, c.GetSignal())
+		}
+	}
+	return sigs
+}
+
+// eventIDs extracts the forwarded event ids (GameEvent.event_id) in order.
+func eventIDs(frames []*webv1.StreamEventsResponse) []string {
+	var ids []string
+	for _, f := range frames {
+		if e := f.GetEvent(); e != nil {
+			ids = append(ids, e.GetEventId())
+		}
+	}
+	return ids
+}
+
+// TestStreamEventsReconnectsOnCoreStreamBreakWithoutClosingClient verifies that
+// when the core Subscribe stream errors mid-flight (core redeploy / transient
+// transport loss), the gateway holds the client stream open, re-subscribes (the
+// durable JetStream consumer resumes server-side), dedups the redelivered
+// overlap frame, and continues — emitting RECONNECTING then RECONNECTED control
+// frames around the break. (holomush-rsoe6.10, I-SURV-1/2/4.)
+// Verifies: I-SURV-1
+// Verifies: I-SURV-2
+func TestStreamEventsReconnectsOnCoreStreamBreakWithoutClosingClient(t *testing.T) {
+	var subscribeCalls atomic.Int32
+
+	mc := &reconnectCoreClient{}
+	mc.discResp = &corev1.DisconnectResponse{Success: true}
+	mc.subscribeFunc = func(ctx context.Context, _ *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+		n := subscribeCalls.Add(1)
+		if n == 1 {
+			// First attempt: yield E1, then break with a non-EOF transport error
+			// (simulating core going away mid-stream).
+			return &scriptedSubscribeStream{
+				ctx:     ctx,
+				frames:  []*corev1.SubscribeResponse{reconnectEventFrame("E1")},
+				termErr: connect.NewError(connect.CodeUnavailable, errors.New("core stream broke")),
+			}, nil
+		}
+		// Resume: the durable consumer redelivers E1 (overlap), then E2, then
+		// ends cleanly via io.EOF.
+		return &scriptedSubscribeStream{
+			ctx:     ctx,
+			frames:  []*corev1.SubscribeResponse{reconnectEventFrame("E1"), reconnectEventFrame("E2")},
+			termErr: io.EOF,
+		}, nil
+	}
+
+	h := NewHandler(mc)
+	h.reconnectCeiling = 2 * time.Second
+	h.heartbeatInterval = 1 * time.Hour // keep the heartbeat out of the way
+
+	_, httpHandler := webv1connect.NewWebServiceHandler(h)
+	srv := httptest.NewServer(httpHandler)
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	wsc := webv1connect.NewWebServiceClient(http.DefaultClient, srv.URL)
+	stream, err := wsc.StreamEvents(ctx, connect.NewRequest(&webv1.StreamEventsRequest{
+		SessionId: "session-reconnect",
+	}))
+	require.NoError(t, err)
+
+	var frames []*webv1.StreamEventsResponse
+	for stream.Receive() {
+		frames = append(frames, stream.Msg())
+	}
+	require.NoError(t, stream.Err())
+
+	// The client stream was NOT closed on the first core break: it received E2,
+	// which only arrives on the second (resumed) subscription.
+	ids := eventIDs(frames)
+	require.Equal(t, []string{"E1", "E2"}, ids, "E1 forwarded once (redelivery deduped), E2 forwarded")
+
+	sigs := controlSignals(frames)
+	require.Contains(t, sigs, webv1.ControlSignal_CONTROL_SIGNAL_RECONNECTING)
+	require.Contains(t, sigs, webv1.ControlSignal_CONTROL_SIGNAL_RECONNECTED)
+
+	require.GreaterOrEqual(t, subscribeCalls.Load(), int32(2), "expected at least one re-Subscribe")
+}
+
+// gatedSubscribeStream forwards its frames, then blocks on a release channel
+// before returning its terminal error. This lets a test hold a subscription
+// "healthy" for a controlled wall-clock duration (longer than the reconnect
+// ceiling) before simulating a core-stream break, proving the reconnect budget
+// is per-outage rather than measured from stream-open.
+type gatedSubscribeStream struct {
+	frames  []*corev1.SubscribeResponse
+	idx     int
+	release <-chan struct{} // closed by the test to let the break happen
+	termErr error
+}
+
+func (g *gatedSubscribeStream) Recv() (*corev1.SubscribeResponse, error) {
+	if g.idx < len(g.frames) {
+		f := g.frames[g.idx]
+		g.idx++
+		return f, nil
+	}
+	if g.release != nil {
+		<-g.release // stay "healthy" until the test releases us
+	}
+	return nil, g.termErr
+}
+
+func (g *gatedSubscribeStream) Header() (metadata.MD, error) { return nil, nil }
+func (g *gatedSubscribeStream) Trailer() metadata.MD         { return nil }
+func (g *gatedSubscribeStream) CloseSend() error             { return nil }
+func (g *gatedSubscribeStream) Context() context.Context     { return context.Background() }
+func (g *gatedSubscribeStream) SendMsg(_ any) error          { return nil }
+func (g *gatedSubscribeStream) RecvMsg(_ any) error          { return nil }
+
+// TestStreamEventsReconnectCeilingIsPerOutageNotStreamLifetime proves the
+// reconnect ceiling bounds a single outage, not total stream lifetime
+// (I-SURV-4). The first subscription stays healthy (forwarding E1) for longer
+// than the (small) ceiling before the core breaks. Under the old stream-open
+// deadline the break would be past the ceiling → CodeUnavailable → client
+// dropped, never seeing RECONNECTED or E2. With the per-outage budget the
+// outage clock starts at break-detection, so the reconnect proceeds and the
+// client survives to E2.
+// Verifies: I-SURV-4
+func TestStreamEventsReconnectCeilingIsPerOutageNotStreamLifetime(t *testing.T) {
+	const ceiling = 50 * time.Millisecond
+	// healthyFor must exceed the ceiling so the break lands past
+	// stream-open+ceiling — the exact condition that fails the old code.
+	const healthyFor = 150 * time.Millisecond
+
+	var subscribeCalls atomic.Int32
+	release := make(chan struct{})
+
+	mc := &reconnectCoreClient{}
+	mc.discResp = &corev1.DisconnectResponse{Success: true}
+	mc.subscribeFunc = func(_ context.Context, _ *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+		n := subscribeCalls.Add(1)
+		if n == 1 {
+			// First attempt: forward E1, then stay healthy past the ceiling
+			// (blocking on release) before breaking with a transport error.
+			return &gatedSubscribeStream{
+				frames:  []*corev1.SubscribeResponse{reconnectEventFrame("E1")},
+				release: release,
+				termErr: connect.NewError(connect.CodeUnavailable, errors.New("core stream broke")),
+			}, nil
+		}
+		// Resume: redeliver E1 (deduped) then E2, then end cleanly.
+		return &scriptedSubscribeStream{
+			frames:  []*corev1.SubscribeResponse{reconnectEventFrame("E1"), reconnectEventFrame("E2")},
+			termErr: io.EOF,
+		}, nil
+	}
+
+	h := NewHandler(mc)
+	h.reconnectCeiling = ceiling
+	h.heartbeatInterval = 1 * time.Hour // keep the heartbeat out of the way
+
+	_, httpHandler := webv1connect.NewWebServiceHandler(h)
+	srv := httptest.NewServer(httpHandler)
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Release the first stream's break only after the stream has been healthy
+	// longer than the ceiling, so the break is provably past stream-open+ceiling.
+	go func() {
+		time.Sleep(healthyFor)
+		close(release)
+	}()
+
+	wsc := webv1connect.NewWebServiceClient(http.DefaultClient, srv.URL)
+	stream, err := wsc.StreamEvents(ctx, connect.NewRequest(&webv1.StreamEventsRequest{
+		SessionId: "session-per-outage",
+	}))
+	require.NoError(t, err)
+
+	var frames []*webv1.StreamEventsResponse
+	for stream.Receive() {
+		frames = append(frames, stream.Msg())
+	}
+	// With the old stream-open deadline this stream would terminate with
+	// CodeUnavailable; with the per-outage budget it ends cleanly.
+	require.NoError(t, stream.Err(),
+		"per-outage ceiling: a long-healthy stream must survive a later core blip, not return CodeUnavailable")
+
+	ids := eventIDs(frames)
+	require.Equal(t, []string{"E1", "E2"}, ids,
+		"stream survived the break: E1 forwarded once (redelivery deduped), E2 forwarded after reconnect")
+
+	sigs := controlSignals(frames)
+	require.Contains(t, sigs, webv1.ControlSignal_CONTROL_SIGNAL_RECONNECTING)
+	require.Contains(t, sigs, webv1.ControlSignal_CONTROL_SIGNAL_RECONNECTED,
+		"the client must see RECONNECTED — proving the reconnect was not aborted by a lapsed ceiling")
+
+	require.GreaterOrEqual(t, subscribeCalls.Load(), int32(2), "expected a re-Subscribe after the break")
+}
+
+// TestStreamEventsTerminatesOnSessionNotFoundFromRecv is the round-2 P0
+// regression guard: grpc-go's server-streaming dispatch returns (stream, nil)
+// from Subscribe and defers the handler's ownership error to the FIRST Recv().
+// So a session reaped past its reattach TTL surfaces as a codes.Unauthenticated
+// status from sub.Recv() — NOT from the synchronous Subscribe return. The
+// gateway MUST classify that as terminal (send STREAM_CLOSED so the client
+// re-authenticates) rather than treating it as a transient core break and
+// retrying for the full reconnect ceiling. Before the fix, this recv error fell
+// into the breakCoreGone branch and the loop spun until the ceiling lapsed.
+// Verifies: I-SURV-1
+func TestStreamEventsTerminatesOnSessionNotFoundFromRecv(t *testing.T) {
+	var subscribeCalls atomic.Int32
+
+	mc := &reconnectCoreClient{}
+	mc.discResp = &corev1.DisconnectResponse{Success: true}
+	mc.subscribeFunc = func(ctx context.Context, _ *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+		subscribeCalls.Add(1)
+		// Subscribe succeeds synchronously (the production shape); the
+		// reaped-session error is deferred to the first Recv, surfacing as a
+		// codes.Unauthenticated status — exactly what the core server stamps
+		// for SESSION_NOT_FOUND on the wire (subscribeSessionNotFound).
+		return &scriptedSubscribeStream{
+			ctx:     ctx,
+			frames:  nil,
+			termErr: status.Error(codes.Unauthenticated, "session not found"),
+		}, nil
+	}
+
+	h := NewHandler(mc)
+	// A small ceiling: if the fix regresses and the recv error is treated as
+	// transient (breakCoreGone), the loop would retry until this lapses. We
+	// instead assert exactly one Subscribe and no RECONNECTING, so a regression
+	// shows up as extra Subscribe calls / a RECONNECTING frame, not a hang.
+	h.reconnectCeiling = 2 * time.Second
+	h.heartbeatInterval = 1 * time.Hour // keep the heartbeat out of the way
+
+	_, httpHandler := webv1connect.NewWebServiceHandler(h)
+	srv := httptest.NewServer(httpHandler)
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	wsc := webv1connect.NewWebServiceClient(http.DefaultClient, srv.URL)
+	stream, err := wsc.StreamEvents(ctx, connect.NewRequest(&webv1.StreamEventsRequest{
+		SessionId: "session-reaped",
+	}))
+	require.NoError(t, err)
+
+	var frames []*webv1.StreamEventsResponse
+	for stream.Receive() {
+		frames = append(frames, stream.Msg())
+	}
+	require.NoError(t, stream.Err(),
+		"terminal SESSION_NOT_FOUND must end the stream cleanly (client re-auths), not as CodeUnavailable")
+
+	sigs := controlSignals(frames)
+	// (a) The client is told to re-auth via STREAM_CLOSED.
+	require.Contains(t, sigs, webv1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED,
+		"a reaped session surfacing on Recv MUST send STREAM_CLOSED so the client re-authenticates")
+	// (c) It was NOT treated as a transient core break.
+	require.NotContains(t, sigs, webv1.ControlSignal_CONTROL_SIGNAL_RECONNECTING,
+		"terminal SESSION_NOT_FOUND MUST NOT emit RECONNECTING — it is not a transient core break")
+
+	// (b) Exactly one Subscribe attempt: no reconnect loop.
+	require.Equal(t, int32(1), subscribeCalls.Load(),
+		"terminal SESSION_NOT_FOUND on Recv MUST NOT trigger a re-Subscribe")
 }

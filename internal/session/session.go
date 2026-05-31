@@ -271,6 +271,14 @@ type Connection struct {
 	ConnectedAt time.Time
 }
 
+// LapsedConnection is the projection the lease sweep needs: enough to remove
+// the row and recompute the owning session's derived liveness (holomush-rsoe6).
+type LapsedConnection struct {
+	ID         ulid.ULID
+	SessionID  string
+	ClientType string
+}
+
 // Access provides session operations for command handlers.
 // This is a narrow subset of Store — only what handlers need.
 type Access interface {
@@ -445,4 +453,15 @@ type Store interface {
 	// has no connections; returns SESSION_NOT_FOUND if the session
 	// itself doesn't exist.
 	ListConnectionsBySession(ctx context.Context, sessionID string) ([]*Connection, error)
+
+	// RefreshConnection bumps a connection's lease (last_seen_at = now).
+	// Called periodically by the gateway while the client socket is open
+	// (holomush-rsoe6, I-LIVE-2). Returns CONNECTION_NOT_FOUND if no row
+	// matches connectionID.
+	RefreshConnection(ctx context.Context, connectionID ulid.ULID) error
+
+	// ListLapsedConnections returns connections whose lease is older than
+	// olderThan (i.e. last_seen_at < olderThan). Used by the lease sweep
+	// to identify stale connections for reaping (holomush-rsoe6, I-LIVE-2).
+	ListLapsedConnections(ctx context.Context, olderThan time.Time) ([]LapsedConnection, error)
 }

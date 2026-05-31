@@ -14,6 +14,8 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/samber/oops"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/holomush/holomush/internal/core"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
@@ -25,10 +27,30 @@ import (
 const (
 	// rpcTimeout is the per-call timeout for unary gRPC RPCs.
 	rpcTimeout = 10 * time.Second
+
+	// defaultReconnectCeiling is the max wall-clock the gateway holds a client
+	// open while re-establishing a broken core stream when the caller has not
+	// configured an explicit ceiling. Well under the 30m session reattach TTL.
+	defaultReconnectCeiling = 2 * time.Minute
 )
 
 // errStreamClosed is a sentinel to signal that the stream was closed by the server.
 var errStreamClosed = errors.New("stream closed")
+
+// breakCause classifies why a single Subscribe attempt ended.
+type breakCause int
+
+const (
+	// breakDone: ctx cancelled or clean server close (EOF / STREAM_CLOSED /
+	// terminal SESSION_NOT_FOUND) — StreamEvents returns nil.
+	breakDone breakCause = iota
+	// breakClientGone: the client transport was lost (a Send to the client
+	// failed) — StreamEvents returns nil and the outer defer Disconnect fires.
+	breakClientGone
+	// breakCoreGone: the core stream errored with a non-EOF transport error
+	// while the client is still alive — the gateway re-Subscribes.
+	breakCoreGone
+)
 
 // CoreClient is the gRPC interface used by Handler to communicate with the
 // core service.
@@ -58,6 +80,8 @@ type CoreClient interface {
 	ListFocusPresence(ctx context.Context, req *corev1.ListFocusPresenceRequest) (*corev1.ListFocusPresenceResponse, error)
 	// Command introspection
 	ListAvailableCommands(ctx context.Context, req *corev1.ListAvailableCommandsRequest) (*corev1.ListAvailableCommandsResponse, error)
+	// Liveness RPCs
+	RefreshConnection(ctx context.Context, req *corev1.RefreshConnectionRequest) (*corev1.RefreshConnectionResponse, error)
 }
 
 // ContentClient is the gRPC interface used by Handler to communicate with the
@@ -76,6 +100,13 @@ type ContentClient interface {
 type Handler struct {
 	client        CoreClient
 	contentClient ContentClient
+	// heartbeatInterval controls the StreamEvents heartbeat ticker period.
+	// Zero means 15 seconds (production default). Overridable in tests.
+	heartbeatInterval time.Duration
+	// reconnectCeiling is the max wall-clock the gateway holds a client while
+	// re-establishing a broken core stream; zero → defaultReconnectCeiling.
+	// Capped (by convention) at the session reattach TTL.
+	reconnectCeiling time.Duration
 }
 
 // compile-time check that Handler satisfies the generated interface.
@@ -191,38 +222,176 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 	// Synthetic location_state is injected by the core server's Subscribe handler
 	// (which has direct access to WorldService). The gateway just forwards it.
 
-	sub, err := h.client.Subscribe(ctx, &corev1.SubscribeRequest{
+	// Survive a core-stream break: hold the client open across a broken core
+	// Subscribe, re-establish the (durable) subscription, dedup the redelivery
+	// overlap, and continue — bounded by a reconnect ceiling. (I-SURV-1/2/4.)
+	ceiling := h.reconnectCeiling
+	if ceiling <= 0 {
+		ceiling = defaultReconnectCeiling
+	}
+	// outageDeadline is the per-outage reconnect budget. Reset to zero on every
+	// successful (re)open so a long-healthy stream that later hits a core blip
+	// gets a fresh ceiling — the bound is per-outage, not total stream lifetime
+	// (I-SURV-4). Zero value means "not currently in an outage".
+	var outageDeadline time.Time
+	backoff := 100 * time.Millisecond
+
+	// seen is the dedup set for the redelivery overlap after a reconnect. Core
+	// acks JetStream delivery AFTER Send, so only sent-but-unacked frames replay
+	// on resume — a small window. The set is session-lifetime for simplicity; if
+	// a single session ever forwards enough distinct events to make this a
+	// memory concern, bound it to a recent-id ring (follow-up).
+	seen := make(map[string]struct{})
+	var lastForwardedID string
+	firstOpen := true
+
+	for {
+		cause, opened := h.runSubscribeOnce(ctx, sessionID, token, connID.String(), stream, firstOpen, seen, &lastForwardedID)
+		if opened {
+			// A successful (re)open ends any outage: reset the per-outage budget
+			// and backoff so a later break gets a fresh ceiling (I-SURV-4 is a
+			// per-outage bound, not a total-stream-lifetime bound).
+			outageDeadline = time.Time{}
+			backoff = 100 * time.Millisecond
+		}
+		switch cause {
+		case breakDone:
+			return nil
+		case breakClientGone:
+			return nil // outer defer Disconnect fires
+		case breakCoreGone:
+			if outageDeadline.IsZero() {
+				outageDeadline = time.Now().Add(ceiling) // start of a new outage
+			}
+			if time.Now().After(outageDeadline) {
+				slog.WarnContext(ctx, "web: core unreachable past reconnect ceiling", "session_id", sessionID)
+				return connect.NewError(connect.CodeUnavailable,
+					oops.With("session_id", sessionID).Errorf("core unreachable past reconnect ceiling"))
+			}
+			// Tell the client we are reconnecting; if that Send fails the client
+			// is gone, so stop.
+			if sendErr := stream.Send(reconnectingControlFrame()); sendErr != nil {
+				return nil
+			}
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(backoff):
+			}
+			if backoff < 5*time.Second {
+				backoff *= 2
+			}
+			firstOpen = false
+			// loop: re-Subscribe — the durable consumer resumes server-side.
+		}
+	}
+}
+
+// subscribeRecvErrIsTerminal reports whether a core Subscribe recv error is the
+// terminal "session is gone" signal (the session was reaped past its reattach
+// TTL) rather than a transient core break to reconnect through. Terminal errors
+// arrive as a gRPC codes.Unauthenticated or codes.NotFound status — the same
+// shape the core server stamps for SESSION_NOT_FOUND on the wire. A transient
+// core break (codes.Unavailable, EOF, context cancellation) is NOT terminal and
+// must reconnect. This mirrors the client-side SESSION_NOT_FOUND classification
+// (internal/grpc TranslateSubscribeErr) without coupling the web package to the
+// gRPC client layer.
+func subscribeRecvErrIsTerminal(err error) bool {
+	if err == nil {
+		return false
+	}
+	switch status.Code(err) {
+	case codes.Unauthenticated, codes.NotFound:
+		return true
+	default:
+		return false
+	}
+}
+
+// runSubscribeOnce runs a single core Subscribe attempt to completion and
+// classifies why it ended. On a healthy open it sends STREAM_OPENED (first
+// attempt) or RECONNECTED (subsequent attempts), forwards frames (deduping the
+// redelivery overlap via seen), and runs the heartbeat/lease refresh. It owns a
+// per-attempt context so the spawned recv goroutine is always unblocked and
+// reaped when this function returns.
+//
+// The returned bool (opened) reports whether this attempt successfully opened
+// the subscription AND sent its open frame (STREAM_OPENED or RECONNECTED). The
+// caller uses it to reset the per-outage reconnect budget on every successful
+// (re)open.
+func (h *Handler) runSubscribeOnce(
+	ctx context.Context,
+	sessionID, token, connID string,
+	stream *connect.ServerStream[webv1.StreamEventsResponse],
+	firstOpen bool,
+	seen map[string]struct{},
+	lastForwardedID *string,
+) (breakCause, bool) {
+	opened := false
+	// Per-attempt context: cancelling it on return unblocks the recv goroutine's
+	// sub.Recv() so no goroutine leaks across attempts.
+	subCtx, subCancel := context.WithCancel(ctx)
+	defer subCancel()
+
+	sub, err := h.client.Subscribe(subCtx, &corev1.SubscribeRequest{
 		SessionId:          sessionID,
 		PlayerSessionToken: token,
-		ConnectionId:       connID.String(),
+		ConnectionId:       connID,
 		ClientType:         "terminal",
 	})
 	if err != nil {
-		return connect.NewError(connect.CodeInternal,
-			oops.With("session_id", sessionID).Wrap(err))
+		var oe oops.OopsError
+		if errors.As(err, &oe) && oe.Code() == "SESSION_NOT_FOUND" {
+			// SESSION_NOT_FOUND = the session was reaped past its reattach TTL.
+			// This is intentionally terminal: re-establishing the session needs a
+			// SelectCharacter call, but StreamEvents carries only the session
+			// token, not the character_id SelectCharacter requires — so by design
+			// the client (which holds both) re-authenticates rather than the
+			// gateway reattaching in-band. We signal STREAM_CLOSED to prompt that.
+			// This branch does NOT fire on a core RESTART (the survival case this
+			// reconnect loop exists for): there the session row + durable consumer
+			// survive, so re-Subscribe resumes transparently. It fires only when
+			// the session is genuinely gone (reaped), where client re-auth is the
+			// correct recovery.
+			slog.DebugContext(ctx, "web: session not found on subscribe; signalling client to re-auth", "session_id", sessionID)
+			if sendErr := stream.Send(&webv1.StreamEventsResponse{
+				Frame: &webv1.StreamEventsResponse_Control{
+					Control: &webv1.ControlFrame{Signal: webv1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED},
+				},
+			}); sendErr != nil {
+				// Client already gone; nothing more to do — terminal either way.
+				slog.DebugContext(ctx, "web: failed to send STREAM_CLOSED on session-not-found", "session_id", sessionID, "error", sendErr)
+			}
+			return breakDone, opened
+		}
+		slog.DebugContext(ctx, "web: core subscribe failed; will reconnect", "session_id", sessionID, "error", err)
+		return breakCoreGone, opened
 	}
 
-	// Emit a STREAM_OPENED ControlFrame carrying the per-stream
-	// connection_id so the client can include it in subsequent
-	// SendCommand requests. This is the routing identity for Phase 5
-	// per-connection commands (scene focus / grid autofocus).
-	if sendErr := stream.Send(&webv1.StreamEventsResponse{
-		Frame: &webv1.StreamEventsResponse_Control{
-			Control: &webv1.ControlFrame{
-				Signal:       webv1.ControlSignal_CONTROL_SIGNAL_STREAM_OPENED,
-				ConnectionId: connID.String(),
+	// Announce the open: STREAM_OPENED (with connID) on the first attempt,
+	// RECONNECTED on a resumed attempt.
+	var openFrame *webv1.StreamEventsResponse
+	if firstOpen {
+		openFrame = &webv1.StreamEventsResponse{
+			Frame: &webv1.StreamEventsResponse_Control{
+				Control: &webv1.ControlFrame{
+					Signal:       webv1.ControlSignal_CONTROL_SIGNAL_STREAM_OPENED,
+					ConnectionId: connID,
+				},
 			},
-		},
-	}); sendErr != nil {
-		return connect.NewError(connect.CodeInternal,
-			oops.With("session_id", sessionID).Wrap(sendErr))
+		}
+	} else {
+		openFrame = reconnectedControlFrame()
 	}
+	if sendErr := stream.Send(openFrame); sendErr != nil {
+		return breakClientGone, opened
+	}
+	// The subscription is open and the open frame is delivered: the outage (if
+	// any) is over. Every return below reports opened=true.
+	opened = true
 
-	// Pump upstream events in a goroutine. The main loop selects on the
-	// recv channel, ctx.Done(), and a heartbeat timer. For HTTP/2 (TLS),
-	// ReadIdleTimeout + PingTimeout on the server also detects dead
-	// connections. For HTTP/1.1 (dev mode), the heartbeat write is the
-	// only way to detect a dead peer — Send() fails with broken pipe.
+	// Pump upstream events in a goroutine. The main loop selects on the recv
+	// channel, ctx.Done(), and a heartbeat timer.
 	type recvResult struct {
 		resp *corev1.SubscribeResponse
 		err  error
@@ -232,19 +401,28 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 		defer close(recvCh)
 		for {
 			resp, recvErr := sub.Recv()
-			recvCh <- recvResult{resp, recvErr}
+			select {
+			case recvCh <- recvResult{resp, recvErr}:
+			case <-subCtx.Done():
+				return
+			}
 			if recvErr != nil {
 				return
 			}
 		}
 	}()
-	heartbeat := time.NewTicker(15 * time.Second)
+
+	hbInterval := h.heartbeatInterval
+	if hbInterval <= 0 {
+		hbInterval = 15 * time.Second
+	}
+	heartbeat := time.NewTicker(hbInterval)
 	defer heartbeat.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return breakDone, opened
 
 		case <-heartbeat.C:
 			// Probe the connection — if the client is gone, Send fails.
@@ -255,30 +433,91 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 					},
 				},
 			}); sendErr != nil {
-				return nil
+				return breakClientGone, opened
 			}
+			// Refresh the server-side liveness lease for this connection (I-LIVE-1).
+			// Failure is transient — log at Debug and keep the stream open.
+			refreshCtx, refreshCancel := context.WithTimeout(ctx, rpcTimeout)
+			if _, refreshErr := h.client.RefreshConnection(refreshCtx, &corev1.RefreshConnectionRequest{
+				SessionId:          sessionID,
+				ConnectionId:       connID,
+				PlayerSessionToken: token,
+			}); refreshErr != nil {
+				slog.DebugContext(ctx, "web: lease refresh failed (transient)", "session_id", sessionID, "error", refreshErr)
+			}
+			refreshCancel()
 
 		case result, ok := <-recvCh:
 			if !ok {
-				return nil
+				// recv goroutine ended without a clean STREAM_CLOSED — core likely gone.
+				return breakCoreGone, opened
 			}
 			if result.err != nil {
 				if errors.Is(result.err, io.EOF) ||
 					errors.Is(result.err, context.Canceled) ||
 					errors.Is(result.err, context.DeadlineExceeded) {
-					return nil
+					return breakDone, opened
 				}
-				slog.WarnContext(ctx, "web: event stream recv error", "session_id", sessionID, "error", result.err)
-				return connect.NewError(connect.CodeUnavailable,
-					oops.With("session_id", sessionID).Wrap(result.err))
+				// Server-streaming RPCs defer the subscription's ownership error to
+				// the first Recv rather than the synchronous Subscribe return, so a
+				// session reaped past its reattach TTL surfaces HERE as a
+				// codes.Unauthenticated / codes.NotFound status — not above. That is
+				// terminal (the client must re-authenticate, exactly as in the
+				// synchronous SESSION_NOT_FOUND branch), NOT a transient core break.
+				// Signal STREAM_CLOSED so the client re-auths instead of letting the
+				// reconnect loop spin for the full ceiling.
+				if subscribeRecvErrIsTerminal(result.err) {
+					slog.DebugContext(ctx, "web: session not found on recv; signalling client to re-auth", "session_id", sessionID, "error", result.err)
+					if sendErr := stream.Send(&webv1.StreamEventsResponse{
+						Frame: &webv1.StreamEventsResponse_Control{
+							Control: &webv1.ControlFrame{Signal: webv1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED},
+						},
+					}); sendErr != nil {
+						slog.DebugContext(ctx, "web: failed to send STREAM_CLOSED on recv session-not-found", "session_id", sessionID, "error", sendErr)
+					}
+					return breakDone, opened
+				}
+				slog.DebugContext(ctx, "web: core recv errored; will reconnect", "session_id", sessionID, "error", result.err)
+				return breakCoreGone, opened
+			}
+			// Dedup the redelivery overlap before forwarding. Only Event frames
+			// carry ids; Control frames pass straight through.
+			if ef, isEvent := result.resp.GetFrame().(*corev1.SubscribeResponse_Event); isEvent {
+				if id := ef.Event.GetId(); id != "" {
+					if _, dup := seen[id]; dup {
+						continue // already forwarded; skip the redelivery
+					}
+					seen[id] = struct{}{}
+					*lastForwardedID = id
+				}
 			}
 			if fwdErr := h.forwardFrame(ctx, result.resp, stream, sessionID); fwdErr != nil {
 				if errors.Is(fwdErr, errStreamClosed) {
-					return nil
+					return breakDone, opened // server-initiated clean close
 				}
-				return fwdErr
+				return breakClientGone, opened // client Send failed
 			}
 		}
+	}
+}
+
+// reconnectingControlFrame is sent to the client when the gateway has detected a
+// core-stream break and is about to re-establish the subscription.
+func reconnectingControlFrame() *webv1.StreamEventsResponse {
+	return &webv1.StreamEventsResponse{
+		Frame: &webv1.StreamEventsResponse_Control{
+			Control: &webv1.ControlFrame{Signal: webv1.ControlSignal_CONTROL_SIGNAL_RECONNECTING},
+		},
+	}
+}
+
+// reconnectedControlFrame is sent to the client once the gateway has
+// re-established the core subscription after a break.
+func reconnectedControlFrame() *webv1.StreamEventsResponse {
+	return &webv1.StreamEventsResponse{
+		Frame: &webv1.StreamEventsResponse_Control{
+			Control: &webv1.ControlFrame{Signal: webv1.ControlSignal_CONTROL_SIGNAL_RECONNECTED},
+		},
 	}
 }
 

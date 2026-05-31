@@ -178,6 +178,10 @@ func (m *mockGRPCClient) ListAvailableCommands(_ context.Context, _ *corev1.List
 	return nil, nil
 }
 
+func (m *mockGRPCClient) RefreshConnection(_ context.Context, _ *corev1.RefreshConnectionRequest) (*corev1.RefreshConnectionResponse, error) {
+	return &corev1.RefreshConnectionResponse{}, nil
+}
+
 func (m *mockGRPCClient) GetContent(_ context.Context, _ *contentv1.GetContentRequest) (*contentv1.GetContentResponse, error) {
 	return nil, nil
 }

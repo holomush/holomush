@@ -12,7 +12,9 @@ import (
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
@@ -185,7 +187,15 @@ func TestSubscribeRejectsMissingSessionToken(t *testing.T) {
 		// PlayerSessionToken missing
 	}, &fakeSubscribeStream{ctx: context.Background()})
 	require.Error(t, err)
-	o, ok := oops.AsOops(err)
+	// Post-rsoe6.11.1: the enumeration-safe SESSION_NOT_FOUND is stamped with a
+	// gRPC status code (codes.Unauthenticated) so the gateway can classify a
+	// reaped session on the wire rather than getting an undecodable codes.Unknown.
+	st, ok := status.FromError(err)
+	require.True(t, ok, "SESSION_NOT_FOUND must carry a gRPC status code")
+	assert.Equal(t, codes.Unauthenticated, st.Code())
+	// And it must round-trip back to the SESSION_NOT_FOUND oops code via the
+	// client translator the gateways use.
+	o, ok := oops.AsOops(TranslateSubscribeErr(err))
 	require.True(t, ok)
 	assert.Equal(t, "SESSION_NOT_FOUND", o.Code())
 }
@@ -202,7 +212,12 @@ func TestSubscribeRejectsUnknownSession(t *testing.T) {
 		PlayerSessionToken: testPlayerSessionToken,
 	}, &fakeSubscribeStream{ctx: context.Background()})
 	require.Error(t, err)
-	o, ok := oops.AsOops(err)
+	// Post-rsoe6.11.1: SESSION_NOT_FOUND crosses the wire as codes.Unauthenticated
+	// (see subscribeSessionNotFound) and round-trips back via TranslateSubscribeErr.
+	st, ok := status.FromError(err)
+	require.True(t, ok, "SESSION_NOT_FOUND must carry a gRPC status code")
+	assert.Equal(t, codes.Unauthenticated, st.Code())
+	o, ok := oops.AsOops(TranslateSubscribeErr(err))
 	require.True(t, ok)
 	assert.Equal(t, "SESSION_NOT_FOUND", o.Code())
 }

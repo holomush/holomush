@@ -22,8 +22,11 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/samber/oops"
+
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/gatewaymetrics"
+	grpcclient "github.com/holomush/holomush/internal/grpc"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -62,6 +65,8 @@ type CoreClient interface {
 	ConfirmPasswordReset(ctx context.Context, req *corev1.ConfirmPasswordResetRequest) (*corev1.ConfirmPasswordResetResponse, error)
 	Logout(ctx context.Context, req *corev1.LogoutRequest) (*corev1.LogoutResponse, error)
 	CreateGuest(ctx context.Context, req *corev1.CreateGuestRequest) (*corev1.CreateGuestResponse, error)
+	// Liveness RPCs
+	RefreshConnection(ctx context.Context, req *corev1.RefreshConnectionRequest) (*corev1.RefreshConnectionResponse, error)
 }
 
 // GatewayHandler manages a single telnet connection, using gRPC to communicate
@@ -76,6 +81,21 @@ type GatewayHandler struct {
 	authed       bool
 	quitting     bool
 	eventCh      chan *corev1.SubscribeResponse
+
+	// lastEventID is the id of the most recently forwarded event; used to drop
+	// the single redelivery-overlap frame after a durable-resume reconnect
+	// (holomush-rsoe6, I-SURV-5).
+	lastEventID string
+
+	// lastSubscribeErr holds the classified error from the most recent stream's
+	// receive goroutine (set before the event channel closes). The Handle
+	// reconnect loop reads it after a channel close to distinguish a terminal
+	// reaped-session SESSION_NOT_FOUND (→ return to picker) from a transient
+	// core-down (→ retry). grpc-go defers the Subscribe handler error to the
+	// first Recv, so this is the only place the wire code is observable
+	// (rsoe6.11.1). Accessed only from the single-threaded Handle goroutine and
+	// its trySubscribe receive goroutine, serialized by the event-channel close.
+	lastSubscribeErr error
 
 	limits Limits
 
@@ -140,6 +160,16 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 	preAuth := time.NewTimer(h.limits.PreAuthTimeout)
 	defer preAuth.Stop()
 
+	// refreshInterval guards against a zero-duration ticker (e.g., Limits{}
+	// literals in tests that don't set LeaseRefreshInterval). A zero-duration
+	// ticker panics; fall back to the DefaultLimits value.
+	refreshInterval := h.limits.LeaseRefreshInterval
+	if refreshInterval <= 0 {
+		refreshInterval = DefaultLimits.LeaseRefreshInterval
+	}
+	refreshTicker := time.NewTicker(refreshInterval)
+	defer refreshTicker.Stop()
+
 	lineCh := make(chan string)
 	errCh := make(chan error, 1)
 
@@ -178,6 +208,9 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 		select {
 		case <-childCtx.Done():
 			return
+
+		case <-refreshTicker.C:
+			h.refreshOnce(childCtx)
 
 		case <-preAuth.C:
 			if !h.authed {
@@ -223,12 +256,69 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 		case resp, ok := <-eventRecv:
 			if !ok {
 				eventRecv = nil
-				slog.DebugContext(childCtx, "gateway: event stream closed", "session_id", h.sessionID)
-				h.send("Connection to server lost.")
+				if h.quitting || !h.authed || h.sessionID == "" {
+					// Expected close during teardown / unauthenticated — not a
+					// survival case.
+					slog.DebugContext(childCtx, "gateway: event stream closed", "session_id", h.sessionID)
+					continue
+				}
+				slog.DebugContext(childCtx, "gateway: core stream closed; attempting reconnect", "session_id", h.sessionID)
+				h.send("[Reconnecting to server…]")
+				// resubscribe is authoritative for terminal-vs-transient: it
+				// probes each fresh stream's first frame and returns nil for a
+				// reaped-session SESSION_NOT_FOUND (rsoe6.11.1) rather than
+				// retrying to the ceiling.
+				if ch := h.resubscribe(childCtx); ch != nil {
+					eventRecv = ch
+					h.send("[Reconnected.]")
+				} else {
+					// Reconnect abandoned (ceiling exceeded, ctx done, or the
+					// session was reaped past its reattach TTL). If the player is
+					// still authenticated at the gateway, return to the character
+					// picker so they can re-select; otherwise the stream is lost.
+					if h.playerSessionToken != "" {
+						// rsoe6.11.2: release the (now-dead) core-side connection
+						// before dropping our session state, so we don't leak a
+						// session_connections row. The outer defer-Disconnect in
+						// Handle only fires when Handle RETURNS; on this
+						// return-to-picker path Handle keeps running, so without
+						// this explicit call the old connection is never released.
+						// Best-effort: a reaped session is already gone and a down
+						// core can't be reached — log at Debug and proceed.
+						discCtx, discCancel := context.WithTimeout(context.Background(), rpcTimeout)
+						if _, discErr := h.client.Disconnect(discCtx, &corev1.DisconnectRequest{
+							SessionId:          h.sessionID,
+							ConnectionId:       h.connectionID,
+							PlayerSessionToken: h.playerSessionToken,
+						}); discErr != nil {
+							slog.DebugContext(childCtx, "gateway: disconnect after abandoned reconnect failed", "session_id", h.sessionID, "error", discErr)
+						}
+						discCancel()
+						h.send("Connection to server lost. Returning to character selection.")
+						h.sessionID = ""
+						h.connectionID = ""
+						h.charName = ""
+						h.authed = false
+						h.refreshCharacterList(childCtx)
+						h.selectMode = true
+						h.showCharacterList()
+					} else {
+						h.send("Connection to server lost.")
+					}
+				}
 				continue
 			}
 			switch frame := resp.GetFrame().(type) {
 			case *corev1.SubscribeResponse_Event:
+				// Single lastEventID (not a set) suffices: core acks JetStream
+				// delivery AFTER send, so a durable resume replays at most the
+				// one in-flight frame (holomush-rsoe6).
+				if id := frame.Event.GetId(); id != "" {
+					if id == h.lastEventID {
+						continue // redelivery overlap after a reconnect — already shown
+					}
+					h.lastEventID = id
+				}
 				h.sendProtoEvent(frame.Event)
 			case *corev1.SubscribeResponse_Control:
 				if frame.Control.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED {
@@ -522,6 +612,21 @@ func (h *GatewayHandler) selectCharacter(ctx context.Context, ch *corev1.Charact
 // RPC so core can register the connection in the session store (bd-j2xj).
 // The same connection_id is reused for the deferred Disconnect on exit.
 func (h *GatewayHandler) subscribeAndEnter(ctx context.Context) <-chan *corev1.SubscribeResponse {
+	ch, err := h.trySubscribe(ctx)
+	if err != nil {
+		slog.WarnContext(ctx, "gateway: subscribe RPC failed — no live events", "session_id", h.sessionID, "error", err)
+		return nil
+	}
+	return ch
+}
+
+// trySubscribe performs the Subscribe RPC for the current session and, on
+// success, spawns the receive goroutine and returns the buffered event channel.
+// Unlike subscribeAndEnter (which swallows the error to keep its nil-on-error
+// contract for the auth callers), trySubscribe surfaces the Subscribe error so
+// resubscribe can classify a terminal SESSION_NOT_FOUND apart from a transient
+// core-down. A nil error with a non-nil channel means the subscription is live.
+func (h *GatewayHandler) trySubscribe(ctx context.Context) (<-chan *corev1.SubscribeResponse, error) {
 	h.connectionID = core.NewULID().String()
 	stream, err := h.client.Subscribe(ctx, &corev1.SubscribeRequest{
 		SessionId:          h.sessionID,
@@ -530,13 +635,26 @@ func (h *GatewayHandler) subscribeAndEnter(ctx context.Context) <-chan *corev1.S
 		ClientType:         "telnet",
 	})
 	if err != nil {
-		slog.WarnContext(ctx, "gateway: subscribe RPC failed — no live events", "session_id", h.sessionID, "error", err)
-		return nil
+		return nil, err //nolint:wrapcheck // pass the client.go-translated error through unwrapped so resubscribe can classify SESSION_NOT_FOUND (set by TranslateSubscribeErr in Client.Subscribe) vs RPC_FAILED; re-wrapping would mask the oops code.
 	}
 	if stream == nil {
 		slog.WarnContext(ctx, "gateway: subscribe returned nil stream", "session_id", h.sessionID)
-		return nil
+		return nil, nil
 	}
+
+	// Clear any error captured by a previous stream's receive goroutine before
+	// arming this one. grpc-go's server-streaming dispatch returns
+	// (nonNilStream, nil) from Subscribe even when the handler errors
+	// immediately — the handler error (e.g. a reaped-session SESSION_NOT_FOUND,
+	// stamped with a wire code by subscribeSessionNotFound) surfaces on the
+	// FIRST Recv, NOT from the Subscribe call. So an immediate error does NOT
+	// come back through this function's return; instead the goroutine below
+	// classifies it through the same TranslateSubscribeErr the Client.Subscribe
+	// wrapper uses and stashes it in h.lastSubscribeErr before closing the
+	// channel. The Handle reconnect loop reads h.lastSubscribeErr after the
+	// channel closes to decide terminal (reaped → picker) vs transient (retry)
+	// — see the !ok branch in Handle (rsoe6.11.1).
+	h.lastSubscribeErr = nil
 
 	// Capture session ID and event channel as locals so the receive
 	// goroutine never reads from h.* — the main Handle loop mutates those
@@ -552,6 +670,12 @@ func (h *GatewayHandler) subscribeAndEnter(ctx context.Context) <-chan *corev1.S
 			resp, recvErr := stream.Recv()
 			if recvErr != nil {
 				if !errors.Is(recvErr, io.EOF) {
+					// Classify and stash for the Handle reconnect loop; the
+					// channel close (deferred above) is the wakeup signal, this
+					// field carries the terminal-vs-transient reason. Written
+					// before close so a reader observing the closed channel sees
+					// the populated field (happens-before via channel close).
+					h.lastSubscribeErr = grpcclient.TranslateSubscribeErr(recvErr)
 					slog.DebugContext(ctx, "gateway: event stream recv error", "session_id", sessionID, "error", recvErr)
 				}
 				return
@@ -564,7 +688,85 @@ func (h *GatewayHandler) subscribeAndEnter(ctx context.Context) <-chan *corev1.S
 		}
 	}()
 
-	return eventCh
+	return eventCh, nil
+}
+
+// subscribeErrIsTerminal reports whether err (as captured in h.lastSubscribeErr
+// or returned by trySubscribe) is the terminal reaped-session signal:
+// SESSION_NOT_FOUND. A terminal error means the session was reaped past its
+// reattach TTL, so the gateway returns the client to the character picker rather
+// than retrying. Any other error (or none) is transient → reconnect.
+func subscribeErrIsTerminal(err error) bool {
+	if err == nil {
+		return false
+	}
+	var oe oops.OopsError
+	return errors.As(err, &oe) && oe.Code() == "SESSION_NOT_FOUND"
+}
+
+// resubscribe re-establishes the core event subscription after a core-stream
+// break, reusing the existing sessionID. The JetStream durable consumer resumes
+// server-side (the single redelivery-overlap frame is deduped by lastEventID in
+// the Handle loop). It retries with backoff until a per-outage deadline, so a
+// brief core restart is survived while a genuinely-down core eventually gives up.
+// Returns the new event channel, or nil if reconnection failed/was abandoned.
+// SESSION_NOT_FOUND is terminal (returns nil): the session was reaped past its
+// reattach TTL, so the caller returns the client to the character picker to
+// re-select (telnet's in-process re-auth) rather than reattaching in-band.
+func (h *GatewayHandler) resubscribe(ctx context.Context) <-chan *corev1.SubscribeResponse {
+	ceiling := h.limits.LeaseRefreshInterval * 8 // ~2m at the 15s default; bounded per-outage
+	if ceiling <= 0 {
+		ceiling = 2 * time.Minute
+	}
+	deadline := time.Now().Add(ceiling)
+	backoff := 100 * time.Millisecond
+	for {
+		// A reaped session surfaces in one of two shapes (rsoe6.11.1):
+		//
+		//   (1) The Subscribe RPC fails synchronously (older shape) — the
+		//       Client.Subscribe wrapper runs TranslateSubscribeErr, so
+		//       trySubscribe returns a SESSION_NOT_FOUND oops error directly.
+		//
+		//   (2) grpc-go returns (nonNilStream, nil) and defers the handler error
+		//       to the first Recv (the production shape) — trySubscribe returns a
+		//       live channel whose receive goroutine classifies the recv error
+		//       via TranslateSubscribeErr, stashes it in h.lastSubscribeErr, and
+		//       closes the channel. The Handle !ok branch then calls back into
+		//       resubscribe, so on this iteration h.lastSubscribeErr (carried over
+		//       from the just-closed stream) is the terminal signal.
+		//
+		// Checking the carried-over h.lastSubscribeErr at the top covers shape
+		// (2); checking trySubscribe's direct return covers shape (1). Neither
+		// loops to the reconnect ceiling.
+		if subscribeErrIsTerminal(h.lastSubscribeErr) {
+			slog.DebugContext(ctx, "gateway: session not found on resubscribe; returning to picker", "session_id", h.sessionID)
+			return nil // terminal — caller returns to character picker
+		}
+
+		ch, err := h.trySubscribe(ctx)
+		if err == nil && ch != nil {
+			return ch
+		}
+		if err != nil {
+			if subscribeErrIsTerminal(err) {
+				slog.DebugContext(ctx, "gateway: session not found on resubscribe; returning to picker", "session_id", h.sessionID)
+				return nil // terminal — caller returns to character picker
+			}
+			slog.DebugContext(ctx, "gateway: resubscribe attempt failed; will retry", "session_id", h.sessionID, "error", err)
+		}
+		if time.Now().After(deadline) {
+			slog.WarnContext(ctx, "gateway: resubscribe exceeded reconnect ceiling", "session_id", h.sessionID)
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(backoff):
+		}
+		if backoff < 5*time.Second {
+			backoff *= 2
+		}
+	}
 }
 
 func (h *GatewayHandler) handleSay(ctx context.Context, message string) {
@@ -722,6 +924,25 @@ func (h *GatewayHandler) handleDisconnect(ctx context.Context) {
 	h.connectionID = ""
 	h.quitting = true
 	h.loggingOut = true // skip the "return to character picker" branch
+}
+
+// refreshOnce renews the server-side connection lease for the current
+// session (holomush-rsoe6, I-LIVE-1). No-op unless authed with a session.
+// Failure is transient — logged at Debug; the next tick retries and the
+// lease sweep tolerates a missed refresh within LeaseTTL.
+func (h *GatewayHandler) refreshOnce(ctx context.Context) {
+	if !h.authed || h.sessionID == "" {
+		return
+	}
+	rCtx, rCancel := context.WithTimeout(ctx, rpcTimeout)
+	defer rCancel()
+	if _, err := h.client.RefreshConnection(rCtx, &corev1.RefreshConnectionRequest{
+		SessionId:          h.sessionID,
+		ConnectionId:       h.connectionID,
+		PlayerSessionToken: h.playerSessionToken,
+	}); err != nil {
+		slog.DebugContext(ctx, "gateway: lease refresh failed (transient)", "session_id", h.sessionID, "error", err)
+	}
 }
 
 func (h *GatewayHandler) handleQuit(ctx context.Context) {

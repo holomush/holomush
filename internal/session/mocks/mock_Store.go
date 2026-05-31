@@ -1100,6 +1100,65 @@ func (_c *MockStore_ListExpired_Call) RunAndReturn(run func(context.Context) ([]
 	return _c
 }
 
+// ListLapsedConnections provides a mock function with given fields: ctx, olderThan
+func (_m *MockStore) ListLapsedConnections(ctx context.Context, olderThan time.Time) ([]session.LapsedConnection, error) {
+	ret := _m.Called(ctx, olderThan)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListLapsedConnections")
+	}
+
+	var r0 []session.LapsedConnection
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time) ([]session.LapsedConnection, error)); ok {
+		return rf(ctx, olderThan)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time) []session.LapsedConnection); ok {
+		r0 = rf(ctx, olderThan)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]session.LapsedConnection)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, time.Time) error); ok {
+		r1 = rf(ctx, olderThan)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockStore_ListLapsedConnections_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListLapsedConnections'
+type MockStore_ListLapsedConnections_Call struct {
+	*mock.Call
+}
+
+// ListLapsedConnections is a helper method to define mock.On call
+//   - ctx context.Context
+//   - olderThan time.Time
+func (_e *MockStore_Expecter) ListLapsedConnections(ctx interface{}, olderThan interface{}) *MockStore_ListLapsedConnections_Call {
+	return &MockStore_ListLapsedConnections_Call{Call: _e.mock.On("ListLapsedConnections", ctx, olderThan)}
+}
+
+func (_c *MockStore_ListLapsedConnections_Call) Run(run func(ctx context.Context, olderThan time.Time)) *MockStore_ListLapsedConnections_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockStore_ListLapsedConnections_Call) Return(_a0 []session.LapsedConnection, _a1 error) *MockStore_ListLapsedConnections_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockStore_ListLapsedConnections_Call) RunAndReturn(run func(context.Context, time.Time) ([]session.LapsedConnection, error)) *MockStore_ListLapsedConnections_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ReattachCAS provides a mock function with given fields: ctx, id
 func (_m *MockStore) ReattachCAS(ctx context.Context, id string) (bool, error) {
 	ret := _m.Called(ctx, id)
@@ -1153,6 +1212,53 @@ func (_c *MockStore_ReattachCAS_Call) Return(_a0 bool, _a1 error) *MockStore_Rea
 }
 
 func (_c *MockStore_ReattachCAS_Call) RunAndReturn(run func(context.Context, string) (bool, error)) *MockStore_ReattachCAS_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RefreshConnection provides a mock function with given fields: ctx, connectionID
+func (_m *MockStore) RefreshConnection(ctx context.Context, connectionID ulid.ULID) error {
+	ret := _m.Called(ctx, connectionID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RefreshConnection")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) error); ok {
+		r0 = rf(ctx, connectionID)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockStore_RefreshConnection_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RefreshConnection'
+type MockStore_RefreshConnection_Call struct {
+	*mock.Call
+}
+
+// RefreshConnection is a helper method to define mock.On call
+//   - ctx context.Context
+//   - connectionID ulid.ULID
+func (_e *MockStore_Expecter) RefreshConnection(ctx interface{}, connectionID interface{}) *MockStore_RefreshConnection_Call {
+	return &MockStore_RefreshConnection_Call{Call: _e.mock.On("RefreshConnection", ctx, connectionID)}
+}
+
+func (_c *MockStore_RefreshConnection_Call) Run(run func(ctx context.Context, connectionID ulid.ULID)) *MockStore_RefreshConnection_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(ulid.ULID))
+	})
+	return _c
+}
+
+func (_c *MockStore_RefreshConnection_Call) Return(_a0 error) *MockStore_RefreshConnection_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockStore_RefreshConnection_Call) RunAndReturn(run func(context.Context, ulid.ULID) error) *MockStore_RefreshConnection_Call {
 	_c.Call.Return(run)
 	return _c
 }
