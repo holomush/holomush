@@ -1328,8 +1328,7 @@ func (s *SceneStore) ListScenesForCharacter(ctx context.Context, characterID str
 }
 
 // BoardQuery parameterizes the public scene-board listing returned by
-// ListBoard. Only limit, offset, and tags are consulted here; content-warning
-// and identity filtering are handled by iokti.13.
+// ListBoard.
 type BoardQuery struct {
 	// Limit is the page size. 0 is normalised to defaultBoardLimit; values
 	// above maxBoardLimit are capped at maxBoardLimit.
@@ -1339,6 +1338,11 @@ type BoardQuery struct {
 	// Tags, when non-empty, restricts results to scenes carrying ALL of the
 	// listed tags (array containment: tags @> $1). Empty means no tag filter.
 	Tags []string
+	// BlockedCW, when non-empty, excludes scenes whose content_warnings array
+	// overlaps this set (Postgres && operator). Nil or empty means no CW
+	// exclusion. Resolved by the service layer as the union of all scope-based
+	// cw_block settings plus any per-query ExcludeContentWarnings (iokti.13).
+	BlockedCW []string
 }
 
 const (
@@ -1374,16 +1378,26 @@ func (s *SceneStore) ListBoard(ctx context.Context, q BoardQuery) ([]*SceneRow, 
 		tagsArg = q.Tags
 	}
 
+	// $4 is the blocked CW set: pass nil when empty so the IS NULL branch
+	// skips the exclusion; pass the slice to exclude scenes with any overlap
+	// (Postgres && = array overlap). NOT (content_warnings && $4) excludes
+	// any scene that shares at least one CW with the blocked set.
+	var blockedCWArg interface{}
+	if len(q.BlockedCW) > 0 {
+		blockedCWArg = q.BlockedCW
+	}
+
 	const boardQuery = `
 		SELECT ` + sceneSelectColumns + `
 		FROM scenes
 		WHERE visibility = 'open'
 		  AND state IN ('active', 'paused')
 		  AND ($1::text[] IS NULL OR tags @> $1)
+		  AND ($4::text[] IS NULL OR NOT (content_warnings && $4))
 		ORDER BY created_at DESC, id ASC
 		LIMIT $2 OFFSET $3
 	`
-	rows, err := s.pool.Query(ctx, boardQuery, tagsArg, q.Limit, q.Offset)
+	rows, err := s.pool.Query(ctx, boardQuery, tagsArg, q.Limit, q.Offset, blockedCWArg)
 	if err != nil {
 		recordError(span, err)
 		return nil, oops.Code("SCENE_LIST_BOARD_FAILED").Wrap(err)

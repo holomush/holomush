@@ -2549,3 +2549,122 @@ var _ = Describe("SceneStore.ListBoard", func() {
 		Expect(rows).To(BeEmpty(), "no scenes seeded, so empty result is expected")
 	})
 })
+
+// ── ListBoard CW exclusion integration tests (iokti.13) ─────────────────────
+
+var _ = Describe("SceneStore.ListBoard CW exclusion", func() {
+	var (
+		store   *SceneStore
+		ctx     context.Context
+		ownerID string
+	)
+
+	BeforeEach(func() {
+		store = newTestStore()
+		ctx = context.Background()
+		ownerID = ulid.Make().String()
+	})
+
+	// mustCreateBoardScene seeds an open+active scene with the given CW tags.
+	mustCreateBoardScene := func(id string, cws []string) *SceneRow {
+		GinkgoHelper()
+		row := &SceneRow{
+			ID:              id,
+			Title:           "Board Scene " + id,
+			OwnerID:         ownerID,
+			State:           string(SceneStateActive),
+			PoseOrder:       string(PoseOrderModeFree),
+			Visibility:      "open",
+			ContentWarnings: cws,
+			Tags:            []string{},
+		}
+		Expect(store.Create(ctx, row)).NotTo(HaveOccurred())
+		return row
+	}
+
+	It("excludes a scene whose content_warnings overlap the blocked set", func() {
+		blocked := mustCreateBoardScene(ulid.Make().String(), []string{"death", "violence"})
+		safe := mustCreateBoardScene(ulid.Make().String(), []string{"romance"})
+		noTags := mustCreateBoardScene(ulid.Make().String(), []string{})
+
+		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{"death"}})
+		Expect(err).NotTo(HaveOccurred())
+
+		ids := make([]string, len(rows))
+		for i, r := range rows {
+			ids[i] = r.ID
+		}
+		// scene with "death" is excluded (overlap); others are kept.
+		Expect(ids).NotTo(ContainElement(blocked.ID),
+			"scene with blocked CW 'death' must be excluded")
+		Expect(ids).To(ContainElement(safe.ID))
+		Expect(ids).To(ContainElement(noTags.ID))
+	})
+
+	It("keeps all scenes when BlockedCW is empty", func() {
+		a := mustCreateBoardScene(ulid.Make().String(), []string{"death"})
+		b := mustCreateBoardScene(ulid.Make().String(), []string{"romance"})
+
+		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{}})
+		Expect(err).NotTo(HaveOccurred())
+
+		ids := make([]string, len(rows))
+		for i, r := range rows {
+			ids[i] = r.ID
+		}
+		Expect(ids).To(ContainElement(a.ID))
+		Expect(ids).To(ContainElement(b.ID))
+	})
+
+	It("keeps all scenes when BlockedCW is nil", func() {
+		a := mustCreateBoardScene(ulid.Make().String(), []string{"violence"})
+		b := mustCreateBoardScene(ulid.Make().String(), []string{})
+
+		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: nil})
+		Expect(err).NotTo(HaveOccurred())
+
+		ids := make([]string, len(rows))
+		for i, r := range rows {
+			ids[i] = r.ID
+		}
+		Expect(ids).To(ContainElement(a.ID))
+		Expect(ids).To(ContainElement(b.ID))
+	})
+
+	It("excludes a scene that shares any one CW from a multi-element block set", func() {
+		// Scene has both death and romance; block set contains only romance.
+		blocked := mustCreateBoardScene(ulid.Make().String(), []string{"death", "romance"})
+		// Scene has only violence — no overlap with the block set.
+		safe := mustCreateBoardScene(ulid.Make().String(), []string{"violence"})
+
+		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{"romance"}})
+		Expect(err).NotTo(HaveOccurred())
+
+		ids := make([]string, len(rows))
+		for i, r := range rows {
+			ids[i] = r.ID
+		}
+		Expect(ids).NotTo(ContainElement(blocked.ID),
+			"scene sharing any blocked CW must be excluded")
+		Expect(ids).To(ContainElement(safe.ID))
+	})
+
+	It("keeps content_warnings on returned scenes (INV-2: CW labels not stripped)", func() {
+		safe := mustCreateBoardScene(ulid.Make().String(), []string{"romance", "violence"})
+
+		// Block "death" — safe scene has no overlap, so it is returned.
+		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{"death"}})
+		Expect(err).NotTo(HaveOccurred())
+
+		var found *SceneRow
+		for _, r := range rows {
+			if r.ID == safe.ID {
+				found = r
+				break
+			}
+		}
+		Expect(found).NotTo(BeNil(), "safe scene must appear in board results")
+		Expect(found.ContentWarnings).To(ConsistOf("romance", "violence"),
+			"INV-2: content_warnings must not be stripped from returned rows")
+	})
+})

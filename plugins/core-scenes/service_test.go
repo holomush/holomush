@@ -1828,8 +1828,9 @@ func TestListScenesMapsRequestFieldsToBoardQueryAndReturnsSceneInfos(t *testing.
 }
 
 func TestListScenesIgnoresCWAndIdentityFieldsFromRequest(t *testing.T) {
-	// ExcludeContentWarnings, CharacterId, PlayerId are iokti.13 — the handler
-	// MUST NOT pass them to BoardQuery (which doesn't have those fields).
+	// ExcludeContentWarnings, CharacterId, PlayerId are wired in iokti.13 — the
+	// handler now passes blocked CW union to BoardQuery.BlockedCW; confirm the
+	// non-CW fields (Limit) still flow through correctly.
 	store := newFakeStore()
 	store.listBoardRows = []*SceneRow{}
 
@@ -1844,7 +1845,6 @@ func TestListScenesIgnoresCWAndIdentityFieldsFromRequest(t *testing.T) {
 
 	require.NotNil(t, store.listBoardGot)
 	assert.Equal(t, 3, store.listBoardGot.Limit)
-	// BoardQuery has no CW/identity fields — just confirm Limit flowed through.
 }
 
 func TestListScenesStoreErrorReturnsInternalWithoutLeakingDetails(t *testing.T) {
@@ -1863,4 +1863,188 @@ func TestListScenesStoreErrorReturnsInternalWithoutLeakingDetails(t *testing.T) 
 		"internal error detail must not be included in gRPC status message")
 	assert.NotContains(t, st.Message(), "secret connection string",
 		"internal error detail must not be included in gRPC status message")
+}
+
+// ── resolveBlockedCW + ListScenes CW union tests (iokti.13) ─────────────────
+
+// scopedFakeSettingsClient is a per-scope fakeSettingsClient for iokti.13
+// tests. It maps (scope, principalID) → (values, found, err) so each scope
+// read can return a distinct result, mirroring the three single-scope reads
+// that resolveBlockedCW performs.
+type scopedFakeSettingsClient struct {
+	// byScope maps SettingScope → per-scope outcome.
+	byScope map[pluginsdk.SettingScope]scopedFakeOutcome
+}
+
+type scopedFakeOutcome struct {
+	values []string
+	found  bool
+	err    error
+}
+
+func (f *scopedFakeSettingsClient) GetSetting(_ context.Context, scope pluginsdk.SettingScope, _, _ string) ([]string, bool, error) {
+	if out, ok := f.byScope[scope]; ok {
+		return out.values, out.found, out.err
+	}
+	return nil, false, nil
+}
+
+func (f *scopedFakeSettingsClient) SetSetting(_ context.Context, _ pluginsdk.SettingScope, _, _ string, _ []string) error {
+	return nil
+}
+
+// TestResolveBlockedCWUnionsAllScopesPlusExclude asserts that resolveBlockedCW
+// accumulates blocks from GAME, PLAYER, and CHARACTER scopes plus the per-query
+// exclude list into a single deduplicated union.
+func TestResolveBlockedCWUnionsAllScopesPlusExclude(t *testing.T) {
+	svc := newTestService(t, newFakeStore())
+	svc.settings = &scopedFakeSettingsClient{
+		byScope: map[pluginsdk.SettingScope]scopedFakeOutcome{
+			pluginsdk.SettingScopeGame:      {values: []string{"a"}, found: true},
+			pluginsdk.SettingScopePlayer:    {values: []string{"b"}, found: true},
+			pluginsdk.SettingScopeCharacter: {values: []string{"c"}, found: true},
+		},
+	}
+
+	req := &scenev1.ListScenesRequest{
+		PlayerId:               "player-1",
+		CharacterId:            "char-1",
+		ExcludeContentWarnings: []string{"d"},
+	}
+	got := svc.resolveBlockedCW(context.Background(), req)
+	sort.Strings(got)
+
+	assert.Equal(t, []string{"a", "b", "c", "d"}, got)
+}
+
+// TestResolveBlockedCWDeduplicatesAcrossScopes asserts that a CW tag that
+// appears in multiple scopes is only present once in the returned union.
+func TestResolveBlockedCWDeduplicatesAcrossScopes(t *testing.T) {
+	svc := newTestService(t, newFakeStore())
+	svc.settings = &scopedFakeSettingsClient{
+		byScope: map[pluginsdk.SettingScope]scopedFakeOutcome{
+			pluginsdk.SettingScopeGame:      {values: []string{"violence", "death"}, found: true},
+			pluginsdk.SettingScopePlayer:    {values: []string{"death", "abuse"}, found: true},
+			pluginsdk.SettingScopeCharacter: {values: []string{"violence"}, found: true},
+		},
+	}
+
+	req := &scenev1.ListScenesRequest{
+		PlayerId:    "player-1",
+		CharacterId: "char-1",
+	}
+	got := svc.resolveBlockedCW(context.Background(), req)
+	sort.Strings(got)
+
+	assert.Equal(t, []string{"abuse", "death", "violence"}, got)
+}
+
+// TestResolveBlockedCWSkipsDeniedScopeWithoutBoardFailure asserts that a
+// settings read error for one scope is silently skipped; other scopes still
+// contribute their blocks and no error is propagated.
+func TestResolveBlockedCWSkipsDeniedScopeWithoutBoardFailure(t *testing.T) {
+	svc := newTestService(t, newFakeStore())
+	svc.settings = &scopedFakeSettingsClient{
+		byScope: map[pluginsdk.SettingScope]scopedFakeOutcome{
+			pluginsdk.SettingScopeGame:      {values: []string{"a"}, found: true},
+			pluginsdk.SettingScopePlayer:    {err: errors.New("ownership denied")},
+			pluginsdk.SettingScopeCharacter: {values: []string{"c"}, found: true},
+		},
+	}
+
+	req := &scenev1.ListScenesRequest{
+		PlayerId:    "player-x",
+		CharacterId: "char-1",
+	}
+	got := svc.resolveBlockedCW(context.Background(), req)
+	sort.Strings(got)
+
+	// PLAYER scope error is skipped; GAME and CHARACTER blocks still apply.
+	assert.Equal(t, []string{"a", "c"}, got)
+}
+
+// TestResolveBlockedCWNilSettingsClientUsesExcludeOnly asserts that when the
+// settings client is nil, resolveBlockedCW returns only the per-query exclude
+// list (no scope reads attempted).
+func TestResolveBlockedCWNilSettingsClientUsesExcludeOnly(t *testing.T) {
+	svc := newTestService(t, newFakeStore())
+	// settings is nil — no SetSettingsClient call.
+
+	req := &scenev1.ListScenesRequest{
+		PlayerId:               "player-1",
+		CharacterId:            "char-1",
+		ExcludeContentWarnings: []string{"violence", "death"},
+	}
+	got := svc.resolveBlockedCW(context.Background(), req)
+	sort.Strings(got)
+
+	assert.Equal(t, []string{"death", "violence"}, got)
+}
+
+// TestListScenesExcludesUnionOfBlockedCWsAndKeepsNonOverlappingScene asserts
+// that ListScenes passes the resolved blocked-CW union to BoardQuery.BlockedCW,
+// and that a scene with a blocked CW tag is excluded while a scene without
+// any overlap is kept. The kept scene still carries its content_warnings (INV-2).
+func TestListScenesExcludesUnionOfBlockedCWsAndKeepsNonOverlappingScene(t *testing.T) {
+	store := newFakeStore()
+	// fakeStore.ListBoard records the BlockedCW it received but does NOT filter
+	// rows itself — the SQL exclusion is tested at the integration tier.
+	// Here we assert that the correct BlockedCW set reaches the store.
+	store.listBoardRows = []*SceneRow{
+		{
+			ID:              "scene-safe",
+			Title:           "Safe Scene",
+			OwnerID:         "owner-1",
+			State:           string(SceneStateActive),
+			Visibility:      "open",
+			PoseOrder:       string(PoseOrderModeFree),
+			ContentWarnings: []string{"romance"},
+			Tags:            []string{},
+			CreatedAt:       pgnanos.From(time.Now().UTC()),
+		},
+	}
+
+	svc := newTestService(t, store)
+	svc.settings = &scopedFakeSettingsClient{
+		byScope: map[pluginsdk.SettingScope]scopedFakeOutcome{
+			pluginsdk.SettingScopePlayer: {values: []string{"death"}, found: true},
+		},
+	}
+
+	resp, err := svc.ListScenes(context.Background(), &scenev1.ListScenesRequest{
+		PlayerId:    "player-1",
+		CharacterId: "char-1",
+	})
+	require.NoError(t, err)
+
+	// The blocked union {death} must have been passed to the store.
+	require.NotNil(t, store.listBoardGot)
+	assert.Equal(t, []string{"death"}, store.listBoardGot.BlockedCW)
+
+	// The kept scene still carries its content_warnings (INV-2).
+	require.Len(t, resp.GetScenes(), 1)
+	assert.Equal(t, "scene-safe", resp.GetScenes()[0].GetId())
+	assert.Equal(t, []string{"romance"}, resp.GetScenes()[0].GetContentWarnings(),
+		"INV-2: content_warnings must not be stripped from the board response")
+}
+
+// TestListScenesPassesEmptyBlockedCWWhenNoBlocksAreConfigured asserts that
+// when no scopes return blocks and no exclude_content_warnings is set, the
+// BoardQuery.BlockedCW is nil/empty (no exclusion applied).
+func TestListScenesPassesEmptyBlockedCWWhenNoBlocksAreConfigured(t *testing.T) {
+	store := newFakeStore()
+	store.listBoardRows = []*SceneRow{}
+
+	svc := newTestService(t, store)
+	svc.settings = &scopedFakeSettingsClient{byScope: map[pluginsdk.SettingScope]scopedFakeOutcome{}}
+
+	_, err := svc.ListScenes(context.Background(), &scenev1.ListScenesRequest{
+		PlayerId:    "player-1",
+		CharacterId: "char-1",
+	})
+	require.NoError(t, err)
+
+	require.NotNil(t, store.listBoardGot)
+	assert.Empty(t, store.listBoardGot.BlockedCW,
+		"no blocks configured → BlockedCW must be empty so IS NULL skips the filter")
 }

@@ -379,18 +379,68 @@ func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRe
 	}, nil
 }
 
+// resolveBlockedCW returns the effective CW block set for a board request.
+// It is the UNION (INV-6, safety-accumulating) of:
+//   - req.GetExcludeContentWarnings() (per-query caller-supplied excludes)
+//   - GAME-scope "content.cw_block" setting (principal "")
+//   - PLAYER-scope "content.cw_block" setting (principal = req.GetPlayerId())
+//   - CHARACTER-scope "content.cw_block" setting (principal = req.GetCharacterId())
+//
+// When s.settings is nil only the per-query excludes are returned. For each
+// scope read, errors (e.g. ownership-denied for a foreign principal) are
+// silently skipped — the board is never failed by a blocked settings read.
+// The returned slice is deduplicated; order is not specified.
+func (s *SceneServiceImpl) resolveBlockedCW(ctx context.Context, req *scenev1.ListScenesRequest) []string {
+	seen := make(map[string]struct{})
+	for _, cw := range req.GetExcludeContentWarnings() {
+		seen[cw] = struct{}{}
+	}
+
+	if s.settings != nil {
+		type scopeRead struct {
+			scope     pluginsdk.SettingScope
+			principal string
+		}
+		reads := []scopeRead{
+			{pluginsdk.SettingScopeGame, ""},
+			{pluginsdk.SettingScopePlayer, req.GetPlayerId()},
+			{pluginsdk.SettingScopeCharacter, req.GetCharacterId()},
+		}
+		for _, r := range reads {
+			vals, found, err := s.settings.GetSetting(ctx, r.scope, r.principal, "content.cw_block")
+			if err != nil || !found {
+				// Skip denied / errored / not-found scopes — never fail the board.
+				continue
+			}
+			for _, cw := range vals {
+				seen[cw] = struct{}{}
+			}
+		}
+	}
+
+	if len(seen) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(seen))
+	for cw := range seen {
+		out = append(out, cw)
+	}
+	return out
+}
+
 // ListScenes returns the public scene board: open scenes in state 'active' or
-// 'paused', optionally filtered by tags, paginated by limit/offset. Content-
-// warning and identity filtering (ExcludeContentWarnings, CharacterId,
-// PlayerId) are out of scope here and handled by iokti.13.
+// 'paused', optionally filtered by tags and with blocked content warnings
+// excluded via the union of all scope-based cw_block settings plus any
+// per-query ExcludeContentWarnings (iokti.13).
 func (s *SceneServiceImpl) ListScenes(ctx context.Context, req *scenev1.ListScenesRequest) (*scenev1.ListScenesResponse, error) {
 	ctx, span := startSpan(ctx, "scene.service.list_scenes")
 	defer span.End()
 
 	q := BoardQuery{
-		Limit:  int(req.GetLimit()),
-		Offset: int(req.GetOffset()),
-		Tags:   req.GetTags(),
+		Limit:     int(req.GetLimit()),
+		Offset:    int(req.GetOffset()),
+		Tags:      req.GetTags(),
+		BlockedCW: s.resolveBlockedCW(ctx, req),
 	}
 
 	rows, err := s.store.ListBoard(ctx, q)
