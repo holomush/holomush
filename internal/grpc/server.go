@@ -923,6 +923,20 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		// branch for the matching commentary.
 	}
 
+	// Recompute grid_present now that a connection exists (and after
+	// ReattachCAS has already transitioned a formerly-detached session to
+	// active). This restores grid_present=true when a reattaching session
+	// was left at grid_present=false after the prior Disconnect (I-LIVE-3).
+	// Placed here — after ReattachCAS — so that recomputeSessionLiveness
+	// reads status=active and only needs to fix grid_present, rather than
+	// racing with ReattachCAS over the detached→active transition.
+	if req.GetConnectionId() != "" {
+		if liveErr := s.recomputeSessionLiveness(ctx, req.GetSessionId()); liveErr != nil {
+			slog.WarnContext(ctx, "subscribe: failed to recompute session liveness after add_connection",
+				"session_id", req.GetSessionId(), "error", liveErr)
+		}
+	}
+
 	// RestoreFocus — produces the full stream list and replay modes.
 	var plan focus.RestorePlan
 	if s.focusCoordinator != nil {
