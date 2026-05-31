@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	"google.golang.org/grpc/codes"
@@ -34,15 +35,51 @@ var DefaultCWTaxonomy = []string{
 // DefaultCWTaxonomy is returned unchanged (INV-5: the settings RPC is
 // dispatch-token-gated and some RPC paths lack a token; the fallback is the
 // correct graceful degradation — never propagate the error).
+//
+// An unexpected (infrastructure) settings error is logged at WARN before the
+// fallback: validation then runs against the default taxonomy instead of the
+// operator's custom one, which can let an operator-removed tag pass. Ops need
+// that visibility; the read still never fails the caller.
 func (s *SceneServiceImpl) effectiveTaxonomy(ctx context.Context) []string {
 	if s.settings == nil {
 		return DefaultCWTaxonomy
 	}
 	vals, ok, err := s.settings.GetSetting(ctx, pluginsdk.SettingScopeGame, "", "content.cw_taxonomy")
-	if err == nil && ok && len(vals) > 0 {
+	if err != nil {
+		if isUnexpectedSettingsError(err) {
+			slog.WarnContext(
+				ctx,
+				"scene.service.effective_taxonomy falling back to default taxonomy on settings read error",
+				"key", "content.cw_taxonomy",
+				"error", err,
+			)
+		}
+		return DefaultCWTaxonomy
+	}
+	if ok && len(vals) > 0 {
 		return vals
 	}
 	return DefaultCWTaxonomy
+}
+
+// isUnexpectedSettingsError reports whether a host-settings GetSetting error is
+// an infrastructure failure worth logging, rather than an expected
+// auth-denied / not-found / missing-dispatch-token outcome that the CW
+// resolution paths intentionally swallow. Expected codes (PermissionDenied,
+// Unauthenticated, InvalidArgument, NotFound) are skipped quietly; everything
+// else (Internal, Unavailable, Unknown transport failures) is unexpected and
+// is surfaced before the safe fallback runs.
+func isUnexpectedSettingsError(err error) bool {
+	switch status.Code(err) {
+	case codes.OK,
+		codes.PermissionDenied,
+		codes.Unauthenticated,
+		codes.InvalidArgument,
+		codes.NotFound:
+		return false
+	default:
+		return true
+	}
 }
 
 // validateContentWarnings checks that every tag in cws appears in the effective

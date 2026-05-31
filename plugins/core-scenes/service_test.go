@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"buf.build/go/protovalidate"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
@@ -1827,10 +1828,32 @@ func TestListScenesMapsRequestFieldsToBoardQueryAndReturnsSceneInfos(t *testing.
 	assert.Equal(t, "scene-b", resp.GetScenes()[1].GetId())
 }
 
-func TestListScenesIgnoresCWAndIdentityFieldsFromRequest(t *testing.T) {
+func TestListScenesRequestValidationAllowsEmptyIdentityFields(t *testing.T) {
+	// iokti review .1: character_id (5) and player_id (6) carry min_len=1 but
+	// are optional filters. IGNORE_IF_ZERO_VALUE must let an anonymous browse
+	// (both omitted) pass protovalidate so the request reaches the handler;
+	// without it the interceptor would reject every board query that omits an
+	// identity. Populated values still pass min_len.
+	v, err := protovalidate.New()
+	require.NoError(t, err)
+
+	require.NoError(t, v.Validate(&scenev1.ListScenesRequest{
+		Limit: 10,
+		Tags:  []string{"plot"},
+	}), "anonymous browse with empty character_id/player_id must validate")
+
+	require.NoError(t, v.Validate(&scenev1.ListScenesRequest{
+		CharacterId: "char-1",
+		PlayerId:    "player-1",
+	}), "populated identity fields must validate")
+}
+
+func TestListScenesForwardsExcludeContentWarningsToBoardQuery(t *testing.T) {
 	// ExcludeContentWarnings, CharacterId, PlayerId are wired in iokti.13 — the
-	// handler now passes blocked CW union to BoardQuery.BlockedCW; confirm the
-	// non-CW fields (Limit) still flow through correctly.
+	// handler passes the blocked-CW union to BoardQuery.BlockedCW. With no
+	// settings client wired (nil), resolveBlockedCW returns the per-query
+	// excludes alone, so BlockedCW MUST carry exactly the request's
+	// ExcludeContentWarnings; Limit still flows through unchanged.
 	store := newFakeStore()
 	store.listBoardRows = []*SceneRow{}
 
@@ -1845,6 +1868,8 @@ func TestListScenesIgnoresCWAndIdentityFieldsFromRequest(t *testing.T) {
 
 	require.NotNil(t, store.listBoardGot)
 	assert.Equal(t, 3, store.listBoardGot.Limit)
+	assert.Equal(t, []string{"violence"}, store.listBoardGot.BlockedCW,
+		"per-query ExcludeContentWarnings must be forwarded as BoardQuery.BlockedCW")
 }
 
 func TestListScenesStoreErrorReturnsInternalWithoutLeakingDetails(t *testing.T) {

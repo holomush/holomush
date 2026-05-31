@@ -387,9 +387,12 @@ func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRe
 //   - CHARACTER-scope "content.cw_block" setting (principal = req.GetCharacterId())
 //
 // When s.settings is nil only the per-query excludes are returned. For each
-// scope read, errors (e.g. ownership-denied for a foreign principal) are
-// silently skipped — the board is never failed by a blocked settings read.
-// The returned slice is deduplicated; order is not specified.
+// scope read, expected errors (ownership-denied for a foreign principal,
+// not-found, missing dispatch token) are silently skipped — the board is never
+// failed by a blocked settings read. An unexpected (infrastructure) error is
+// logged at WARN before skipping, because it means a configured CW block may be
+// silently dropped from the result and ops needs visibility. The returned slice
+// is deduplicated; order is not specified.
 func (s *SceneServiceImpl) resolveBlockedCW(ctx context.Context, req *scenev1.ListScenesRequest) []string {
 	seen := make(map[string]struct{})
 	for _, cw := range req.GetExcludeContentWarnings() {
@@ -408,8 +411,20 @@ func (s *SceneServiceImpl) resolveBlockedCW(ctx context.Context, req *scenev1.Li
 		}
 		for _, r := range reads {
 			vals, found, err := s.settings.GetSetting(ctx, r.scope, r.principal, "content.cw_block")
-			if err != nil || !found {
-				// Skip denied / errored / not-found scopes — never fail the board.
+			if err != nil {
+				if isUnexpectedSettingsError(err) {
+					slog.WarnContext(
+						ctx,
+						"scene.service.resolve_blocked_cw scope read failed; CW block may be unenforced for this query",
+						"scope", r.scope,
+						"key", "content.cw_block",
+						"error", err,
+					)
+				}
+				// Skip denied / errored scopes — never fail the board.
+				continue
+			}
+			if !found {
 				continue
 			}
 			for _, cw := range vals {

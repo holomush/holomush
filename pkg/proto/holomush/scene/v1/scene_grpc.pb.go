@@ -71,12 +71,12 @@ const (
 // Implemented by SceneServiceImpl in plugins/core-scenes/service.go and
 // plugins/core-scenes/publish_service.go.
 type SceneServiceClient interface {
-	// ListScenes is DECLARED BUT NOT SERVED. The core-scenes plugin embeds
-	// UnimplementedSceneServiceServer and provides no override, so any call
-	// returns codes.Unimplemented. Scene discovery is instead surfaced through
-	// the plugin's `scene` listing command (handleSceneList), which reads
-	// SceneStore.ListScenesForCharacter, not this RPC. Retained as a planned
-	// read surface.
+	// ListScenes returns the public scene board: open scenes in state `active`
+	// or `paused`, paginated and optionally tag-filtered, with content-warning-
+	// blocked scenes excluded via the union of game/player/character scope
+	// cw_block settings plus any per-query exclude_content_warnings. Served by
+	// SceneServiceImpl.ListScenes and surfaced through the plugin's `scenes`
+	// board command. See service.go::ListScenes.
 	ListScenes(ctx context.Context, in *ListScenesRequest, opts ...grpc.CallOption) (*ListScenesResponse, error)
 	// GetScene loads one scene's metadata and participant roster by ID. The
 	// host's read-scene ABAC policy gates access before the call reaches the
@@ -463,12 +463,12 @@ func (c *sceneServiceClient) ExtendScenePublishVoteAttempts(ctx context.Context,
 // Implemented by SceneServiceImpl in plugins/core-scenes/service.go and
 // plugins/core-scenes/publish_service.go.
 type SceneServiceServer interface {
-	// ListScenes is DECLARED BUT NOT SERVED. The core-scenes plugin embeds
-	// UnimplementedSceneServiceServer and provides no override, so any call
-	// returns codes.Unimplemented. Scene discovery is instead surfaced through
-	// the plugin's `scene` listing command (handleSceneList), which reads
-	// SceneStore.ListScenesForCharacter, not this RPC. Retained as a planned
-	// read surface.
+	// ListScenes returns the public scene board: open scenes in state `active`
+	// or `paused`, paginated and optionally tag-filtered, with content-warning-
+	// blocked scenes excluded via the union of game/player/character scope
+	// cw_block settings plus any per-query exclude_content_warnings. Served by
+	// SceneServiceImpl.ListScenes and surfaced through the plugin's `scenes`
+	// board command. See service.go::ListScenes.
 	ListScenes(context.Context, *ListScenesRequest) (*ListScenesResponse, error)
 	// GetScene loads one scene's metadata and participant roster by ID. The
 	// host's read-scene ABAC policy gates access before the call reaches the

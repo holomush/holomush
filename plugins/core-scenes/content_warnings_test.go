@@ -8,6 +8,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -86,6 +87,40 @@ func TestEffectiveTaxonomyUsesGameOverrideWhenSet(t *testing.T) {
 	got := svc.effectiveTaxonomy(context.Background())
 
 	assert.Equal(t, custom, got)
+}
+
+// TestIsUnexpectedSettingsError pins the classification that gates the WARN log
+// on the CW resolution fail-open paths (effectiveTaxonomy, resolveBlockedCW):
+// expected auth/not-found/missing-token outcomes are skipped quietly, while
+// infrastructure failures are surfaced. The oops-wrapped cases are the
+// safety-critical ones — the settings SDK client wraps the wire status in
+// oops.With(...).Wrap(err), so the classifier MUST see the gRPC code through
+// the wrap (host_service.go maps missing-token/foreign-principal to
+// PermissionDenied at the boundary).
+func TestIsUnexpectedSettingsError(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil error is not unexpected", nil, false},
+		{"permission denied is expected (missing token / foreign principal)", status.Error(codes.PermissionDenied, "permission denied"), false},
+		{"unauthenticated is expected", status.Error(codes.Unauthenticated, "no token"), false},
+		{"invalid argument is expected (bad principal / scope)", status.Error(codes.InvalidArgument, "invalid principal_id"), false},
+		{"not found is expected", status.Error(codes.NotFound, "missing"), false},
+		{"internal is an unexpected infra error", status.Error(codes.Internal, "boom"), true},
+		{"unavailable is an unexpected transport error", status.Error(codes.Unavailable, "transport"), true},
+		{"plain non-status error is unexpected (e.g. misconfigured client)", errors.New("not configured"), true},
+		{"oops-wrapped permission denied stays expected", oops.With("scope", "game").Wrap(status.Error(codes.PermissionDenied, "permission denied")), false},
+		{"oops-wrapped internal stays unexpected", oops.With("scope", "game").Wrap(status.Error(codes.Internal, "boom")), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, isUnexpectedSettingsError(tt.err))
+		})
+	}
 }
 
 // ── CreateScene content_warnings validation ──────────────────────────────────
