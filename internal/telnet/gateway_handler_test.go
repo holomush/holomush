@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -111,6 +112,11 @@ type mockCoreClient struct {
 
 	listCharResp *corev1.ListCharactersResponse
 	listCharErr  error
+
+	refreshResp    *corev1.RefreshConnectionResponse
+	refreshErr     error
+	refreshCalls   atomic.Int32
+	lastRefreshReq atomic.Pointer[corev1.RefreshConnectionRequest]
 }
 
 func (m *mockCoreClient) AuthenticatePlayer(_ context.Context, req *corev1.AuthenticatePlayerRequest) (*corev1.AuthenticatePlayerResponse, error) {
@@ -182,6 +188,15 @@ func (m *mockCoreClient) Disconnect(_ context.Context, req *corev1.DisconnectReq
 
 func (m *mockCoreClient) GetCommandHistory(_ context.Context, _ *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error) {
 	return &corev1.GetCommandHistoryResponse{Meta: &corev1.ResponseMeta{}, Success: true}, nil
+}
+
+func (m *mockCoreClient) RefreshConnection(_ context.Context, req *corev1.RefreshConnectionRequest) (*corev1.RefreshConnectionResponse, error) {
+	m.refreshCalls.Add(1)
+	m.lastRefreshReq.Store(req)
+	if m.refreshResp == nil {
+		return &corev1.RefreshConnectionResponse{}, m.refreshErr
+	}
+	return m.refreshResp, m.refreshErr
 }
 
 // readLines reads exactly n lines from r, stripping \r\n.
@@ -2702,4 +2717,44 @@ func TestSendSetsWriteDeadline(t *testing.T) {
 		"deadline must not be absurdly far in the future")
 	assert.Contains(t, string(mc.writeBuf), "hello world",
 		"send must actually write the message body")
+}
+
+// TestGatewayHandlerRefreshesLeaseWhileAuthed verifies that refreshOnce calls
+// RefreshConnection with the current session/connection/token when authed.
+func TestGatewayHandlerRefreshesLeaseWhileAuthed(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer serverConn.Close()
+	defer clientConn.Close()
+
+	mc := &mockCoreClient{}
+	h := newTestHandler(serverConn, mc)
+	h.authed = true
+	h.sessionID = "sess-1"
+	h.connectionID = "conn-1"
+	h.playerSessionToken = "tok-1"
+
+	h.refreshOnce(context.Background())
+
+	require.Equal(t, int32(1), mc.refreshCalls.Load())
+	got := mc.lastRefreshReq.Load()
+	require.NotNil(t, got)
+	assert.Equal(t, "sess-1", got.GetSessionId())
+	assert.Equal(t, "conn-1", got.GetConnectionId())
+	assert.Equal(t, "tok-1", got.GetPlayerSessionToken())
+}
+
+// TestGatewayHandlerRefreshOnceNoopWhenNotAuthed verifies that refreshOnce
+// is a no-op when the handler is not authenticated (no session in progress).
+func TestGatewayHandlerRefreshOnceNoopWhenNotAuthed(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer serverConn.Close()
+	defer clientConn.Close()
+
+	mc := &mockCoreClient{}
+	h := newTestHandler(serverConn, mc)
+	h.authed = false
+
+	h.refreshOnce(context.Background())
+
+	assert.Equal(t, int32(0), mc.refreshCalls.Load())
 }

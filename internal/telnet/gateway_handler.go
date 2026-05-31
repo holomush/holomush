@@ -62,6 +62,8 @@ type CoreClient interface {
 	ConfirmPasswordReset(ctx context.Context, req *corev1.ConfirmPasswordResetRequest) (*corev1.ConfirmPasswordResetResponse, error)
 	Logout(ctx context.Context, req *corev1.LogoutRequest) (*corev1.LogoutResponse, error)
 	CreateGuest(ctx context.Context, req *corev1.CreateGuestRequest) (*corev1.CreateGuestResponse, error)
+	// Liveness RPCs
+	RefreshConnection(ctx context.Context, req *corev1.RefreshConnectionRequest) (*corev1.RefreshConnectionResponse, error)
 }
 
 // GatewayHandler manages a single telnet connection, using gRPC to communicate
@@ -140,6 +142,16 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 	preAuth := time.NewTimer(h.limits.PreAuthTimeout)
 	defer preAuth.Stop()
 
+	// refreshInterval guards against a zero-duration ticker (e.g., Limits{}
+	// literals in tests that don't set LeaseRefreshInterval). A zero-duration
+	// ticker panics; fall back to the DefaultLimits value.
+	refreshInterval := h.limits.LeaseRefreshInterval
+	if refreshInterval <= 0 {
+		refreshInterval = DefaultLimits.LeaseRefreshInterval
+	}
+	refreshTicker := time.NewTicker(refreshInterval)
+	defer refreshTicker.Stop()
+
 	lineCh := make(chan string)
 	errCh := make(chan error, 1)
 
@@ -178,6 +190,9 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 		select {
 		case <-childCtx.Done():
 			return
+
+		case <-refreshTicker.C:
+			h.refreshOnce(childCtx)
 
 		case <-preAuth.C:
 			if !h.authed {
@@ -722,6 +737,25 @@ func (h *GatewayHandler) handleDisconnect(ctx context.Context) {
 	h.connectionID = ""
 	h.quitting = true
 	h.loggingOut = true // skip the "return to character picker" branch
+}
+
+// refreshOnce renews the server-side connection lease for the current
+// session (holomush-rsoe6, I-LIVE-1). No-op unless authed with a session.
+// Failure is transient — logged at Debug; the next tick retries and the
+// lease sweep tolerates a missed refresh within LeaseTTL.
+func (h *GatewayHandler) refreshOnce(ctx context.Context) {
+	if !h.authed || h.sessionID == "" {
+		return
+	}
+	rCtx, rCancel := context.WithTimeout(ctx, rpcTimeout)
+	defer rCancel()
+	if _, err := h.client.RefreshConnection(rCtx, &corev1.RefreshConnectionRequest{
+		SessionId:          h.sessionID,
+		ConnectionId:       h.connectionID,
+		PlayerSessionToken: h.playerSessionToken,
+	}); err != nil {
+		slog.DebugContext(ctx, "gateway: lease refresh failed (transient)", "session_id", h.sessionID, "error", err)
+	}
 }
 
 func (h *GatewayHandler) handleQuit(ctx context.Context) {
