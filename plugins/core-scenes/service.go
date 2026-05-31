@@ -135,6 +135,11 @@ type SceneServiceImpl struct {
 	// wires it at Init; runSnapshot fails closed when nil. The plugin never
 	// holds a DEK — it submits ciphertext rows and receives plaintext (INV-RB-1).
 	decryptor snapshotDecryptor
+	// settings is the SDK-injected host settings client used by
+	// effectiveTaxonomy to read the game-scope "content.cw_taxonomy" override.
+	// nil until SetSettingsClient wires it; effectiveTaxonomy falls back to
+	// DefaultCWTaxonomy when nil (INV-5).
+	settings pluginsdk.SettingsClient
 }
 
 // NewSceneServiceImpl returns a service backed by the given store.
@@ -174,6 +179,13 @@ func (s *SceneServiceImpl) SetSnapshotDecryptor(d snapshotDecryptor) {
 	s.decryptor = d
 }
 
+// SetSettingsClient installs the SDK-injected host settings client used by
+// effectiveTaxonomy to read the game-scope content-warning taxonomy override.
+// Wired via scenePlugin.SetSettingsClient before Init; nil until then.
+func (s *SceneServiceImpl) SetSettingsClient(c pluginsdk.SettingsClient) {
+	s.settings = c
+}
+
 // CreateScene generates a new scene ID, persists the scene, and returns it.
 // The caller (host) is responsible for ensuring ABAC has authorised the
 // command-execute action; per-resource ABAC for the new scene happens at
@@ -199,6 +211,11 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 		return nil, status.Errorf(codes.InvalidArgument, "title cannot be whitespace-only")
 	}
 
+	if err := s.validateContentWarnings(ctx, req.GetContentWarnings()); err != nil {
+		recordError(span, err)
+		return nil, err
+	}
+
 	id, err := newSceneID()
 	if err != nil {
 		recordError(span, err)
@@ -211,6 +228,13 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 		visibility = SceneVisibility(v)
 	}
 
+	// Persist the validated content warnings. If the request carries none,
+	// use an empty non-nil slice to match the storage shape (store/rowToProto
+	// expects a non-nil []string for JSON serialisation).
+	contentWarnings := req.GetContentWarnings()
+	if contentWarnings == nil {
+		contentWarnings = []string{}
+	}
 	row := &SceneRow{
 		ID:              id,
 		Title:           title,
@@ -219,7 +243,7 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 		State:           string(SceneStateActive),
 		PoseOrder:       string(PoseOrderModeFree),
 		Visibility:      string(visibility),
-		ContentWarnings: []string{},
+		ContentWarnings: contentWarnings,
 		Tags:            []string{},
 	}
 	if loc := req.GetLocationId(); loc != "" {
@@ -480,6 +504,13 @@ func (s *SceneServiceImpl) UpdateScene(ctx context.Context, req *scenev1.UpdateS
 	if err != nil {
 		recordError(span, err)
 		return nil, err // already a gRPC status error
+	}
+
+	if update.UpdateContentWarnings {
+		if cwErr := s.validateContentWarnings(ctx, update.ContentWarnings); cwErr != nil {
+			recordError(span, cwErr)
+			return nil, cwErr
+		}
 	}
 
 	// Best-effort pre-update read: only needed when pose_order_mode is in the

@@ -140,6 +140,16 @@ func (p *scenePlugin) SetSnapshotDecryptor(d pluginsdk.SnapshotDecryptor) {
 	}
 }
 
+// SetSettingsClient forwards the SDK-injected host settings client to the scene
+// service so service-owned RPC handlers can read game-scope settings (e.g. the
+// content-warning taxonomy override). Declares scenePlugin as
+// pluginsdk.SettingsClientAware so the SDK adapter wires it before Init.
+func (p *scenePlugin) SetSettingsClient(c pluginsdk.SettingsClient) {
+	if p.service != nil {
+		p.service.SetSettingsClient(c)
+	}
+}
+
 // EmitRegistry implements pluginsdk.EmitTypeRegistrar. The substrate
 // INV-S5 validator reads this set via the binary-plugin Init RPC and
 // validates set-equality against manifest crypto.emits.
