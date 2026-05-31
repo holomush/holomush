@@ -17,7 +17,9 @@ import (
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
@@ -1284,4 +1286,72 @@ func TestStreamEventsReconnectCeilingIsPerOutageNotStreamLifetime(t *testing.T) 
 		"the client must see RECONNECTED — proving the reconnect was not aborted by a lapsed ceiling")
 
 	require.GreaterOrEqual(t, subscribeCalls.Load(), int32(2), "expected a re-Subscribe after the break")
+}
+
+// TestStreamEventsTerminatesOnSessionNotFoundFromRecv is the round-2 P0
+// regression guard: grpc-go's server-streaming dispatch returns (stream, nil)
+// from Subscribe and defers the handler's ownership error to the FIRST Recv().
+// So a session reaped past its reattach TTL surfaces as a codes.Unauthenticated
+// status from sub.Recv() — NOT from the synchronous Subscribe return. The
+// gateway MUST classify that as terminal (send STREAM_CLOSED so the client
+// re-authenticates) rather than treating it as a transient core break and
+// retrying for the full reconnect ceiling. Before the fix, this recv error fell
+// into the breakCoreGone branch and the loop spun until the ceiling lapsed.
+func TestStreamEventsTerminatesOnSessionNotFoundFromRecv(t *testing.T) {
+	var subscribeCalls atomic.Int32
+
+	mc := &reconnectCoreClient{}
+	mc.discResp = &corev1.DisconnectResponse{Success: true}
+	mc.subscribeFunc = func(ctx context.Context, _ *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+		subscribeCalls.Add(1)
+		// Subscribe succeeds synchronously (the production shape); the
+		// reaped-session error is deferred to the first Recv, surfacing as a
+		// codes.Unauthenticated status — exactly what the core server stamps
+		// for SESSION_NOT_FOUND on the wire (subscribeSessionNotFound).
+		return &scriptedSubscribeStream{
+			ctx:     ctx,
+			frames:  nil,
+			termErr: status.Error(codes.Unauthenticated, "session not found"),
+		}, nil
+	}
+
+	h := NewHandler(mc)
+	// A small ceiling: if the fix regresses and the recv error is treated as
+	// transient (breakCoreGone), the loop would retry until this lapses. We
+	// instead assert exactly one Subscribe and no RECONNECTING, so a regression
+	// shows up as extra Subscribe calls / a RECONNECTING frame, not a hang.
+	h.reconnectCeiling = 2 * time.Second
+	h.heartbeatInterval = 1 * time.Hour // keep the heartbeat out of the way
+
+	_, httpHandler := webv1connect.NewWebServiceHandler(h)
+	srv := httptest.NewServer(httpHandler)
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	wsc := webv1connect.NewWebServiceClient(http.DefaultClient, srv.URL)
+	stream, err := wsc.StreamEvents(ctx, connect.NewRequest(&webv1.StreamEventsRequest{
+		SessionId: "session-reaped",
+	}))
+	require.NoError(t, err)
+
+	var frames []*webv1.StreamEventsResponse
+	for stream.Receive() {
+		frames = append(frames, stream.Msg())
+	}
+	require.NoError(t, stream.Err(),
+		"terminal SESSION_NOT_FOUND must end the stream cleanly (client re-auths), not as CodeUnavailable")
+
+	sigs := controlSignals(frames)
+	// (a) The client is told to re-auth via STREAM_CLOSED.
+	require.Contains(t, sigs, webv1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED,
+		"a reaped session surfacing on Recv MUST send STREAM_CLOSED so the client re-authenticates")
+	// (c) It was NOT treated as a transient core break.
+	require.NotContains(t, sigs, webv1.ControlSignal_CONTROL_SIGNAL_RECONNECTING,
+		"terminal SESSION_NOT_FOUND MUST NOT emit RECONNECTING — it is not a transient core break")
+
+	// (b) Exactly one Subscribe attempt: no reconnect loop.
+	require.Equal(t, int32(1), subscribeCalls.Load(),
+		"terminal SESSION_NOT_FOUND on Recv MUST NOT trigger a re-Subscribe")
 }

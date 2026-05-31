@@ -14,6 +14,8 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/samber/oops"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/holomush/holomush/internal/core"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
@@ -285,6 +287,27 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 	}
 }
 
+// subscribeRecvErrIsTerminal reports whether a core Subscribe recv error is the
+// terminal "session is gone" signal (the session was reaped past its reattach
+// TTL) rather than a transient core break to reconnect through. Terminal errors
+// arrive as a gRPC codes.Unauthenticated or codes.NotFound status — the same
+// shape the core server stamps for SESSION_NOT_FOUND on the wire. A transient
+// core break (codes.Unavailable, EOF, context cancellation) is NOT terminal and
+// must reconnect. This mirrors the client-side SESSION_NOT_FOUND classification
+// (internal/grpc TranslateSubscribeErr) without coupling the web package to the
+// gRPC client layer.
+func subscribeRecvErrIsTerminal(err error) bool {
+	if err == nil {
+		return false
+	}
+	switch status.Code(err) {
+	case codes.Unauthenticated, codes.NotFound:
+		return true
+	default:
+		return false
+	}
+}
+
 // runSubscribeOnce runs a single core Subscribe attempt to completion and
 // classifies why it ended. On a healthy open it sends STREAM_OPENED (first
 // attempt) or RECONNECTED (subsequent attempts), forwards frames (deduping the
@@ -433,6 +456,25 @@ func (h *Handler) runSubscribeOnce(
 				if errors.Is(result.err, io.EOF) ||
 					errors.Is(result.err, context.Canceled) ||
 					errors.Is(result.err, context.DeadlineExceeded) {
+					return breakDone, opened
+				}
+				// Server-streaming RPCs defer the subscription's ownership error to
+				// the first Recv rather than the synchronous Subscribe return, so a
+				// session reaped past its reattach TTL surfaces HERE as a
+				// codes.Unauthenticated / codes.NotFound status — not above. That is
+				// terminal (the client must re-authenticate, exactly as in the
+				// synchronous SESSION_NOT_FOUND branch), NOT a transient core break.
+				// Signal STREAM_CLOSED so the client re-auths instead of letting the
+				// reconnect loop spin for the full ceiling.
+				if subscribeRecvErrIsTerminal(result.err) {
+					slog.DebugContext(ctx, "web: session not found on recv; signalling client to re-auth", "session_id", sessionID, "error", result.err)
+					if sendErr := stream.Send(&webv1.StreamEventsResponse{
+						Frame: &webv1.StreamEventsResponse_Control{
+							Control: &webv1.ControlFrame{Signal: webv1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED},
+						},
+					}); sendErr != nil {
+						slog.DebugContext(ctx, "web: failed to send STREAM_CLOSED on recv session-not-found", "session_id", sessionID, "error", sendErr)
+					}
 					return breakDone, opened
 				}
 				slog.DebugContext(ctx, "web: core recv errored; will reconnect", "session_id", sessionID, "error", result.err)

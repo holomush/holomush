@@ -738,6 +738,23 @@ func (s *CoreServer) toSubject(gameID, streamName string) (eventbus.Subject, err
 	return sub, nil
 }
 
+// subscribeSessionNotFound builds the enumeration-safe SESSION_NOT_FOUND error
+// for the Subscribe handler AND stamps it with a wire-classifiable gRPC status
+// code. A bare oops error has no GRPCStatus method, so grpc-go would surface it
+// to the client as codes.Unknown — indistinguishable from a transient
+// core-down. Routing through authFailureToStatus maps the SESSION_NOT_FOUND
+// oops code to codes.Unauthenticated on the wire, which the gateway client
+// (translateSubscribeErr) decodes back to the SESSION_NOT_FOUND oops code so the
+// telnet/web reconnect loops treat a reaped session as terminal (return to
+// re-auth) rather than retrying for the full reconnect ceiling (rsoe6.11.1).
+func subscribeSessionNotFound(sessionID string) error {
+	err := oops.Code("SESSION_NOT_FOUND").With("session_id", sessionID).Errorf("session not found")
+	if statusErr := authFailureToStatus(err); statusErr != nil {
+		return statusErr
+	}
+	return err
+}
+
 // Subscribe opens a stream of events for the session.
 //
 // SECURITY (bd-jv7z): Before opening the stream, the caller's
@@ -806,7 +823,7 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 			"session_id", req.SessionId,
 			"error", err,
 		)
-		return oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
+		return subscribeSessionNotFound(req.SessionId)
 	}
 	validateSpan.End()
 
@@ -815,7 +832,7 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	if err != nil {
 		recordSpanError(getSpan, err)
 		getSpan.End()
-		return oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
+		return subscribeSessionNotFound(req.SessionId)
 	}
 	getSpan.End()
 

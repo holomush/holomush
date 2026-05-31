@@ -108,11 +108,39 @@ func (c *Client) HandleCommand(ctx context.Context, req *corev1.HandleCommandReq
 	return resp, nil
 }
 
+// TranslateSubscribeErr converts a gRPC status error from the Subscribe RPC
+// (either the synchronous dispatch error or a stream.Recv() error) into an
+// oops-coded error the gateways can classify. The server collapses every
+// session-ownership failure mode to SESSION_NOT_FOUND (enumeration-safe,
+// I-SEC-1) and stamps it with a wire code via subscribeSessionNotFound, so it
+// crosses the wire as codes.Unauthenticated (or codes.NotFound); either maps
+// back to the SESSION_NOT_FOUND oops code so the gateway reconnect loops (web
+// runSubscribeOnce / telnet resubscribe) can treat a reaped session as terminal
+// rather than retrying for the full reconnect ceiling. Everything else stays
+// RPC_FAILED (transient → reconnect).
+//
+// Exported so the telnet gateway can apply the SAME classification to the
+// stream.Recv() error it observes directly: grpc-go's server-streaming dispatch
+// returns (nonNilStream, nil) from Subscribe and defers the handler error to the
+// first Recv, bypassing the Client.Subscribe wrapper below.
+func TranslateSubscribeErr(err error) error {
+	st, ok := status.FromError(err)
+	if !ok {
+		return oops.Code("RPC_FAILED").With("method", "Subscribe").Wrap(err)
+	}
+	switch st.Code() {
+	case codes.NotFound, codes.Unauthenticated:
+		return oops.Code("SESSION_NOT_FOUND").Wrap(err)
+	default:
+		return oops.Code("RPC_FAILED").With("method", "Subscribe").Wrap(err)
+	}
+}
+
 // Subscribe opens a stream of events for the session.
 func (c *Client) Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
 	stream, err := c.client.Subscribe(ctx, req)
 	if err != nil {
-		return nil, oops.Code("RPC_FAILED").With("method", "Subscribe").Wrap(err)
+		return nil, TranslateSubscribeErr(err)
 	}
 	return stream, nil
 }

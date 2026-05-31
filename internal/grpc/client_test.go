@@ -628,6 +628,77 @@ func TestClientSubscribeWrapsImmediateRPCErrorAsRPCFailed(t *testing.T) {
 	assert.Equal(t, "RPC_FAILED", oopsErr.Code())
 }
 
+// TestTranslateSubscribeErrClassifiesWireCodes is the regression guard for the
+// rsoe6.11.1 P0: a reaped session crosses the Subscribe wire as
+// codes.Unauthenticated (or codes.NotFound) and MUST decode back to the
+// SESSION_NOT_FOUND oops code so the gateways treat it as terminal; every other
+// status code (and non-status errors) MUST stay RPC_FAILED so a transient
+// core-down is retried. This pins the fix at its source: the server stamps the
+// wire code via subscribeSessionNotFound, and this translator decodes it.
+func TestTranslateSubscribeErrClassifiesWireCodes(t *testing.T) {
+	tests := []struct {
+		name         string
+		input        error
+		expectedCode string
+	}{
+		{
+			name:         "codes.Unauthenticated decodes to SESSION_NOT_FOUND (reaped session, terminal)",
+			input:        status.Error(codes.Unauthenticated, "session not found"),
+			expectedCode: "SESSION_NOT_FOUND",
+		},
+		{
+			name:         "codes.NotFound decodes to SESSION_NOT_FOUND (terminal)",
+			input:        status.Error(codes.NotFound, "session not found"),
+			expectedCode: "SESSION_NOT_FOUND",
+		},
+		{
+			name:         "codes.Unavailable stays RPC_FAILED (transient core-down, retry)",
+			input:        status.Error(codes.Unavailable, "connection refused"),
+			expectedCode: "RPC_FAILED",
+		},
+		{
+			name:         "codes.Unknown stays RPC_FAILED (transient)",
+			input:        status.Error(codes.Unknown, "boom"),
+			expectedCode: "RPC_FAILED",
+		},
+		{
+			name:         "non-status error stays RPC_FAILED",
+			input:        errors.New("transport flake"),
+			expectedCode: "RPC_FAILED",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := TranslateSubscribeErr(tt.input)
+			require.Error(t, got)
+			oopsErr, ok := oops.AsOops(got)
+			require.True(t, ok, "translator must always return an oops error")
+			assert.Equal(t, tt.expectedCode, oopsErr.Code())
+		})
+	}
+}
+
+// TestSubscribeSessionNotFoundStampsUnauthenticatedWireCode pins the server
+// half of the rsoe6.11.1 fix: subscribeSessionNotFound MUST carry a gRPC status
+// code on the wire (codes.Unauthenticated) rather than a bare oops error, which
+// grpc-go would surface to the client as codes.Unknown — indistinguishable from
+// a transient fault and thus undecodable by TranslateSubscribeErr.
+func TestSubscribeSessionNotFoundStampsUnauthenticatedWireCode(t *testing.T) {
+	err := subscribeSessionNotFound("test-session")
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok, "SESSION_NOT_FOUND must be a gRPC status error so the wire code is classifiable")
+	assert.Equal(t, codes.Unauthenticated, st.Code(),
+		"SESSION_NOT_FOUND must cross the wire as Unauthenticated so the gateway decodes it as terminal")
+	// Round-trip: the wire code must decode back to the SESSION_NOT_FOUND oops
+	// code via the client translator.
+	decoded := TranslateSubscribeErr(err)
+	oopsErr, ok := oops.AsOops(decoded)
+	require.True(t, ok)
+	assert.Equal(t, "SESSION_NOT_FOUND", oopsErr.Code(),
+		"server wire code MUST round-trip back to SESSION_NOT_FOUND through the client translator")
+}
+
 // fakeCoreClient is a minimal corev1.CoreServiceClient that lets a single
 // test exercise the wrapper-level error branch on Client.Subscribe without
 // spinning up a real grpc.Server. Only Subscribe is implemented; other
