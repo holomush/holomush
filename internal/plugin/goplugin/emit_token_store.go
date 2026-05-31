@@ -43,7 +43,14 @@ type emitTokenStore struct {
 type emitTokenEntry struct {
 	pluginName string
 	actor      core.Actor
-	expiresAt  time.Time
+	// ownerPlayerID is the host-vouched owning player ULID of the acting
+	// character, carried from the command dispatch ctx (core.OwningPlayerFromContext)
+	// at issuance. It is the trust anchor PLAYER-scope settings ownership compares
+	// the request's principal_id against (holomush-iokti.19). Empty when the
+	// dispatch had no player context (e.g. DeliverEvent), in which case PLAYER-scope
+	// ownership fails closed.
+	ownerPlayerID string
+	expiresAt     time.Time
 }
 
 func newEmitTokenStore() *emitTokenStore {
@@ -60,10 +67,15 @@ func newEmitTokenStore() *emitTokenStore {
 // Issue creates a new token for an outgoing dispatch. Caller MUST defer
 // Revoke or the entry will rely on TTL expiry for cleanup.
 //
+// ownerPlayerID is the host-vouched owning player ULID of the acting character
+// (from the dispatch ctx); pass "" when there is no player context (DeliverEvent,
+// self-tokens). It is stored verbatim and returned by Lookup so PLAYER-scope
+// settings ownership can compare it against the request's principal_id.
+//
 // Returns EMIT_TOKEN_STORE_CLOSED if Close() has fired — the store is
 // terminal-on-close so a host shutting down cannot keep minting tokens
 // that survive into a successor's lifetime.
-func (s *emitTokenStore) Issue(pluginName string, actor core.Actor) (string, error) {
+func (s *emitTokenStore) Issue(pluginName string, actor core.Actor, ownerPlayerID string) (string, error) {
 	var buf [16]byte
 	if _, err := io.ReadFull(s.rand, buf[:]); err != nil {
 		return "", oops.Code("EMIT_TOKEN_ISSUE_FAILED").
@@ -79,37 +91,44 @@ func (s *emitTokenStore) Issue(pluginName string, actor core.Actor) (string, err
 			Errorf("emit token store is closed")
 	}
 	s.items[token] = emitTokenEntry{
-		pluginName: pluginName,
-		actor:      actor,
-		expiresAt:  s.now().Add(s.ttl),
+		pluginName:    pluginName,
+		actor:         actor,
+		ownerPlayerID: ownerPlayerID,
+		expiresAt:     s.now().Add(s.ttl),
 	}
 	s.mu.Unlock()
 	return token, nil
 }
 
-// Lookup retrieves the actor stored for a token. Returns ok=false if the
-// token is missing, expired, OR if the stored entry's pluginName does not
-// match the caller's. All three failure modes are indistinguishable to
-// callers (the security log records the specific reason at the call site).
+// Lookup retrieves the actor and host-vouched owning player ULID stored for a
+// token. Returns ok=false if the token is missing, expired, OR if the stored
+// entry's pluginName does not match the caller's. All three failure modes are
+// indistinguishable to callers (the security log records the specific reason at
+// the call site).
+//
+// The returned ownerPlayerID is the value supplied at Issue ("" when the
+// dispatch had no player context); PLAYER-scope settings ownership compares it
+// against the request's principal_id. Callers that don't need it (Evaluate /
+// EmitEvent) ignore it.
 //
 // pluginName tagging is defense-in-depth on top of 128-bit token entropy:
 // if a future host bug ever lets plugin A's gRPC client invoke plugin B's
 // server, the mismatch trips EMIT_TOKEN_REJECTED rather than allowing
 // actor escalation.
-func (s *emitTokenStore) Lookup(pluginName, token string) (core.Actor, bool) {
+func (s *emitTokenStore) Lookup(pluginName, token string) (core.Actor, string, bool) {
 	s.mu.RLock()
 	entry, ok := s.items[token]
 	s.mu.RUnlock()
 	if !ok {
-		return core.Actor{}, false
+		return core.Actor{}, "", false
 	}
 	if entry.pluginName != pluginName {
-		return core.Actor{}, false
+		return core.Actor{}, "", false
 	}
 	if !s.now().Before(entry.expiresAt) {
-		return core.Actor{}, false
+		return core.Actor{}, "", false
 	}
-	return entry.actor, true
+	return entry.actor, entry.ownerPlayerID, true
 }
 
 // Revoke removes a token entry. Idempotent.

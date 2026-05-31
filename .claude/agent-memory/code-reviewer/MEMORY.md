@@ -624,3 +624,27 @@ Keep under 200 lines. Curate — don't hoard.
   Non-blockers seen: GAME-write nil-engine MESSAGE strings differ binary/Lua (both
   fail closed — cosmetic); adapter nil-store branches unreachable (SetSettingsStores
   all-or-nothing gate). Encountered: holomush-iokti.9 (2026-05-30) — READY.
+
+- **iokti.19 owning-player threading (verified-good security reference).** Makes
+  PLAYER-scope settings ownership FUNCTIONAL across both runtimes by carrying a
+  host-vouched owning player. Trust anchor: `exec.PlayerID()` (= `session.Info.PlayerID`,
+  NOT-NULL FK to players, migration `000008_session_player_fk`) stamped ONCE at
+  `internal/command/dispatcher.go:337` via `core.WithOwningPlayer`. Single site feeds
+  BOTH: (a) binary — `host.go:929` DeliverCommand reads `core.OwningPlayerFromContext(ctx)`
+  → stores verbatim on emit-token entry (`emit_token_store.go` `ownerPlayerID`) →
+  `actorFromToken` (host_service.go:871) recovers it → PLAYER passes it to
+  `requirePrincipalOwnership(principalID, ownerPlayer)`; (b) Lua — `stdlib_settings.go:108-109`
+  reads same ctx in-process. NEVER plugin-supplied: Lua `principalID` (`L.CheckString(2)`)
+  is the REQUESTED principal being COMPARED against the host-vouched expected owner, not
+  the expected owner itself. CHARACTER scope UNCHANGED (`actor.ID`, host_service.go:769;
+  Lua `actor.ID`). Token integrity intact: actor stored/returned verbatim (G1); EmitEvent
+  (:86) + Evaluate (:564) discard the new 3rd return; DeliverEvent/self-token/RequestEmitToken
+  pass `""` → PLAYER fails closed. Shared gate `CheckPrincipalOwnership(principalID,
+  expectedOwnerID)`: empty expected → PRINCIPAL_NOT_OWNED (deny); parse-first ordering
+  preserved (malformed principal → INVALID_PRINCIPAL_ID even with empty owner). gRPC
+  mapping unchanged. Tests: both runtimes have success(owner==principal)/mismatch-deny/
+  no-owner-deny; old iokti.16 "fail-closed pending resolution" tests RECOMMENTED not
+  deleted. Note the comparison-vs-anchor distinction when reviewing: a plugin-supplied
+  `principal_id` is fine because it can only succeed by EQUALLING the host value.
+  All gates green (1234 unit exit0, lint exit0). Encountered: holomush-iokti.19
+  (2026-05-30) — READY.

@@ -328,6 +328,14 @@ func (d *Dispatcher) dispatchToPlugin(ctx context.Context, entry *CommandEntry, 
 		ID:   exec.CharacterID().String(),
 	})
 
+	// Also stamp the host-vouched owning player of the acting character. This is
+	// the SINGLE stamping site feeding BOTH the binary-plugin dispatch token
+	// (host.go issues it onto the emit-token entry) and the in-process Lua ctx
+	// (core.OwningPlayerFromContext). PLAYER-scope settings ownership compares the
+	// request's principal_id against this value (holomush-iokti.19). The player ID
+	// is the dispatcher's authenticated executor identity — never plugin-supplied.
+	dispatchCtx = core.WithOwningPlayer(dispatchCtx, exec.PlayerID().String())
+
 	resp, err := d.pluginDeliverer.DeliverCommand(dispatchCtx, entry.PluginName(), cmd)
 	if err != nil {
 		return oops.In("dispatcher").With("command", entry.Name).With("plugin", entry.PluginName()).Wrap(err)

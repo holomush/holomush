@@ -14,40 +14,48 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
-func TestCheckPrincipalOwnershipReturnsParsedULIDWhenActorOwnsPrincipal(t *testing.T) {
+func TestCheckPrincipalOwnershipReturnsParsedULIDWhenPrincipalMatchesExpectedOwner(t *testing.T) {
 	id := core.NewULID()
-	actor := core.Actor{Kind: core.ActorCharacter, ID: id.String()}
 
-	pid, err := pluginauthz.CheckPrincipalOwnership(id.String(), actor)
+	pid, err := pluginauthz.CheckPrincipalOwnership(id.String(), id.String())
 	require.NoError(t, err)
 	assert.Equal(t, id.String(), pid.String())
 }
 
-func TestCheckPrincipalOwnershipDeniesForeignPrincipal(t *testing.T) {
-	// A well-formed ULID that the acting character does NOT own (e.g. a
-	// player ULID, or another character). Mirrors the iokti.16 PLAYER
-	// fail-closed contract: a player ULID never equals the acting
-	// character's ULID, so a real player-principal request is denied.
-	foreign := core.NewULID()
-	actor := core.Actor{Kind: core.ActorCharacter, ID: core.NewULID().String()}
+func TestCheckPrincipalOwnershipDeniesWhenPrincipalDiffersFromExpectedOwner(t *testing.T) {
+	// A well-formed ULID that does NOT match the host-vouched expected owner —
+	// e.g. a PLAYER request whose principal_id is not the acting character's
+	// owning player. Denied (PRINCIPAL_NOT_OWNED).
+	principal := core.NewULID()
+	expectedOwner := core.NewULID()
 
-	_, err := pluginauthz.CheckPrincipalOwnership(foreign.String(), actor)
+	_, err := pluginauthz.CheckPrincipalOwnership(principal.String(), expectedOwner.String())
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "PRINCIPAL_NOT_OWNED")
+}
+
+func TestCheckPrincipalOwnershipDeniesWhenExpectedOwnerIsEmpty(t *testing.T) {
+	// No host-vouched owner (e.g. PLAYER scope from a dispatch with no player
+	// context) ⇒ fail closed, even though principal_id is a valid ULID.
+	principal := core.NewULID()
+
+	_, err := pluginauthz.CheckPrincipalOwnership(principal.String(), "")
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "PRINCIPAL_NOT_OWNED")
 }
 
 func TestCheckPrincipalOwnershipRejectsEmptyPrincipalID(t *testing.T) {
-	actor := core.Actor{Kind: core.ActorCharacter, ID: core.NewULID().String()}
+	expectedOwner := core.NewULID()
 
-	_, err := pluginauthz.CheckPrincipalOwnership("", actor)
+	_, err := pluginauthz.CheckPrincipalOwnership("", expectedOwner.String())
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "INVALID_PRINCIPAL_ID")
 }
 
 func TestCheckPrincipalOwnershipRejectsMalformedPrincipalID(t *testing.T) {
-	actor := core.Actor{Kind: core.ActorCharacter, ID: core.NewULID().String()}
+	expectedOwner := core.NewULID()
 
-	_, err := pluginauthz.CheckPrincipalOwnership("not-a-ulid", actor)
+	_, err := pluginauthz.CheckPrincipalOwnership("not-a-ulid", expectedOwner.String())
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "INVALID_PRINCIPAL_ID")
 }

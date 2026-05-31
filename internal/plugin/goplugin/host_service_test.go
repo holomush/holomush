@@ -675,7 +675,7 @@ func TestEmitEventUsesStoredActorIgnoringPluginClaim(t *testing.T) {
 	// Host issues a token storing the legitimate dispatching character.
 	storedID := "01HCHAR0000000000000000000"
 	storedActor := core.Actor{Kind: core.ActorCharacter, ID: storedID}
-	token, err := h.tokenStore.Issue("plug-A", storedActor)
+	token, err := h.tokenStore.Issue("plug-A", storedActor, "")
 	require.NoError(t, err)
 	defer h.tokenStore.Revoke(token)
 
@@ -781,7 +781,7 @@ func TestEmitEventCrossPluginTokenLeakFails(t *testing.T) {
 	defer func() { _ = h.Close(context.Background()) }()
 
 	// Issue a token for plug-A.
-	tok, err := h.tokenStore.Issue("plug-A", core.Actor{Kind: core.ActorCharacter, ID: "01HCHAR0000000000000000000"})
+	tok, err := h.tokenStore.Issue("plug-A", core.Actor{Kind: core.ActorCharacter, ID: "01HCHAR0000000000000000000"}, "")
 	require.NoError(t, err)
 
 	// Invoke EmitEvent on plug-B's server (different pluginName). Note
@@ -824,7 +824,7 @@ func TestRequestEmitTokenIssuesSelfTokenBoundToPluginActor(t *testing.T) {
 	// actor pinned to {ActorPlugin, <plugin-ULID-string>}. This is the
 	// load-bearing G1 invariant for the self-token path: the plugin
 	// cannot escalate to a character or system actor through this RPC.
-	storedActor, ok := h.tokenStore.Lookup("plug-A", resp.GetToken())
+	storedActor, _, ok := h.tokenStore.Lookup("plug-A", resp.GetToken())
 	require.True(t, ok, "issued token must resolve in the host's tokenStore")
 	assert.Equal(t, core.ActorPlugin, storedActor.Kind)
 	assert.Equal(t, plugAID.String(), storedActor.ID,
@@ -852,7 +852,7 @@ func TestRequestEmitTokenAlwaysHardcodesActorPluginAndPluginULID(t *testing.T) {
 	resp, err := s.RequestEmitToken(context.Background(), &pluginv1.PluginHostServiceRequestEmitTokenRequest{})
 	require.NoError(t, err)
 
-	storedActor, ok := h.tokenStore.Lookup("plug-B", resp.GetToken())
+	storedActor, _, ok := h.tokenStore.Lookup("plug-B", resp.GetToken())
 	require.True(t, ok)
 	assert.Equal(t, core.ActorPlugin, storedActor.Kind,
 		"actor kind MUST be ActorPlugin regardless of any future request fields")
@@ -861,7 +861,7 @@ func TestRequestEmitTokenAlwaysHardcodesActorPluginAndPluginULID(t *testing.T) {
 
 	// Cross-plugin defense intact: a sibling server with a different
 	// pluginName MUST NOT be able to use this token.
-	_, leaked := h.tokenStore.Lookup("plug-A", resp.GetToken())
+	_, _, leaked := h.tokenStore.Lookup("plug-A", resp.GetToken())
 	assert.False(t, leaked, "plug-B's self-token MUST NOT resolve under plug-A")
 }
 
@@ -942,11 +942,23 @@ func newTestHostServiceServerWithEmitter(pluginName string, emitter plugins.Plug
 	return &pluginHostServiceServer{host: h, pluginName: pluginName}
 }
 
-// contextWithValidToken returns a context with a valid emit token for the given actor.
+// contextWithValidToken returns a context with a valid emit token for the given
+// actor, carrying NO host-vouched owning player ("" ⇒ PLAYER-scope fails closed).
 // The token store is accessed from the provided server's host.
 func contextWithValidToken(t *testing.T, srv *pluginHostServiceServer, actor core.Actor) (context.Context, string) {
 	t.Helper()
-	token, err := srv.host.tokenStore.Issue(srv.pluginName, actor)
+	return contextWithValidTokenOwning(t, srv, actor, "")
+}
+
+// contextWithValidTokenOwning is contextWithValidToken plus an explicit
+// host-vouched owning player ULID stored on the emit token. PLAYER-scope settings
+// ownership compares req.principal_id against this owner (holomush-iokti.19); pass
+// "" to exercise the fail-closed path, or the player ULID to exercise success.
+func contextWithValidTokenOwning(
+	t *testing.T, srv *pluginHostServiceServer, actor core.Actor, ownerPlayerID string,
+) (context.Context, string) {
+	t.Helper()
+	token, err := srv.host.tokenStore.Issue(srv.pluginName, actor, ownerPlayerID)
 	require.NoError(t, err, "failed to issue emit token")
 	return metadata.NewIncomingContext(
 		context.Background(),
@@ -1380,7 +1392,7 @@ func TestEvaluateRejectedTokenFailsClosed(t *testing.T) {
 	defer func() { _ = h.Close(context.Background()) }()
 
 	// Issue a token for plug-A; present it to plug-B's server.
-	tok, err := h.tokenStore.Issue("plug-A", core.Actor{Kind: core.ActorCharacter, ID: core.NewULID().String()})
+	tok, err := h.tokenStore.Issue("plug-A", core.Actor{Kind: core.ActorCharacter, ID: core.NewULID().String()}, "")
 	require.NoError(t, err)
 	defer h.tokenStore.Revoke(tok)
 

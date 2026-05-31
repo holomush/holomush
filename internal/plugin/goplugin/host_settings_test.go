@@ -207,36 +207,10 @@ func TestSetSettingPlayerForeignPrincipalDenied(t *testing.T) {
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
-// TestPlayerSettingRoundTripsForOwnPrincipal: writing then reading one's OWN
-// PLAYER settings round-trips the list and leaves string_value empty (Phase 8).
-// This exercises the ID-equality gate in requirePrincipalOwnership — it passes
-// because the actor IS an ActorCharacter and the PrincipalId is set to that same
-// character ID. Production PLAYER "owning-player" semantics (spec §3.3) are
-// deferred to holomush-iokti.19; this test is NOT a validation of player-ownership.
-func TestPlayerSettingRoundTripsForOwnPrincipal(t *testing.T) {
-	t.Parallel()
-	actor := settingsActor(t)
-	srv, ctx := newSettingsServer(t, nil, actor)
-
-	_, err := srv.SetSetting(ctx, &pluginv1.PluginHostServiceSetSettingRequest{
-		Scope:       pluginv1.SettingScope_SETTING_SCOPE_PLAYER,
-		PrincipalId: actor.ID,
-		Key:         "content.cw_block",
-		StringList:  []string{"violence", "gore"},
-	})
-	require.NoError(t, err)
-
-	resp, err := srv.GetSetting(ctx, &pluginv1.PluginHostServiceGetSettingRequest{
-		Scope:       pluginv1.SettingScope_SETTING_SCOPE_PLAYER,
-		PrincipalId: actor.ID,
-		Key:         "content.cw_block",
-	})
-	require.NoError(t, err)
-	assert.True(t, resp.GetFound())
-	assert.Equal(t, []string{"violence", "gore"}, resp.GetStringList())
-	assert.Empty(t, resp.GetStringValue(),
-		"string_value MUST stay empty in Phase 8 (list-valued)")
-}
+// PLAYER own-principal round-trip is now covered by
+// TestPlayerSettingRoundTripsForOwningPlayer below, which keys ownership on the
+// host-vouched owning player carried on the dispatch token (holomush-iokti.19),
+// replacing the former character-ID-equality stand-in.
 
 // TestGetSettingNilStoreReturnsUnimplemented: an unwired store fails closed with
 // Unimplemented rather than nil-dereferencing.
@@ -405,22 +379,19 @@ func TestSettingInvalidPrincipalIDReturnsInvalidArgument(t *testing.T) {
 	}
 }
 
-// TestPlayerScopeCharacterActorDeniedPendingResolution pins the deferred-resolution
-// contract from holomush-iokti.16: a character actor presenting a DISTINCT valid
-// player ULID as PLAYER-scope principal is denied (PermissionDenied) because the
-// host-side char→player resolver does not yet exist (deferred to holomush-iokti.19).
-// The ID-equality gate in requirePrincipalOwnership compares principal_id against
-// the character actor's ID; a player's ULID differs from the acting character's
-// ULID (distinct entities), so the gate is fail-closed. This is intentionally
-// distinct in INTENT from
-// TestGetSettingPlayerForeignPrincipalDenied (which frames it as a cross-PLAYER
-// foreign principal) — both tests are correct and complementary.
-func TestPlayerScopeCharacterActorDeniedPendingResolution(t *testing.T) {
+// TestPlayerScopeDeniedWhenNoOwningPlayerVouched pins the fail-closed contract
+// for PLAYER scope when the dispatch token carries NO host-vouched owning player
+// (the iokti.16 test, recomment for the iokti.19 semantics). The default
+// newSettingsServer helper issues a token with owner "", so even a valid player
+// ULID principal is denied (PermissionDenied): the shared gate refuses a
+// PLAYER request without a host-vouched owner. This is the binary mirror of the
+// Lua "absent owning player" denial.
+func TestPlayerScopeDeniedWhenNoOwningPlayerVouched(t *testing.T) {
 	t.Parallel()
 	actor := settingsActor(t) // ActorCharacter with character ULID
 	srv, ctx := newSettingsServer(t, nil, actor)
 
-	// A valid player ULID that is distinct from the character ID.
+	// A valid player ULID, but the token carries no owning player.
 	playerULID := core.NewULID().String()
 
 	_, err := srv.GetSetting(ctx, &pluginv1.PluginHostServiceGetSettingRequest{
@@ -430,8 +401,62 @@ func TestPlayerScopeCharacterActorDeniedPendingResolution(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Equal(t, codes.PermissionDenied, status.Code(err),
-		"PLAYER scope with a player-ULID principal MUST be denied until "+
-			"char→player resolution lands (holomush-iokti.19)")
+		"PLAYER scope with no host-vouched owning player on the token MUST be "+
+			"denied (fail closed, holomush-iokti.19)")
+}
+
+// TestPlayerSettingRoundTripsForOwningPlayer is the iokti.19 functional success
+// test: when the dispatch token carries an owning player equal to the request's
+// principal_id, PLAYER-scope set/get succeeds and round-trips the value. The
+// owner partition is keyed by the player ULID. This is the binary counterpart of
+// the Lua TestPlayerSettingRoundTripsForOwningPlayer — both runtimes converge on
+// the same shared ownership gate (plugin-runtime-symmetry).
+func TestPlayerSettingRoundTripsForOwningPlayer(t *testing.T) {
+	t.Parallel()
+	actor := settingsActor(t) // ActorCharacter
+	owningPlayer := core.NewULID().String()
+
+	srv, _ := newSettingsServer(t, nil, actor)
+	ctx, _ := contextWithValidTokenOwning(t, srv, actor, owningPlayer)
+
+	_, err := srv.SetSetting(ctx, &pluginv1.PluginHostServiceSetSettingRequest{
+		Scope:       pluginv1.SettingScope_SETTING_SCOPE_PLAYER,
+		PrincipalId: owningPlayer,
+		Key:         "content.cw_block",
+		StringList:  []string{"violence", "gore"},
+	})
+	require.NoError(t, err)
+
+	resp, err := srv.GetSetting(ctx, &pluginv1.PluginHostServiceGetSettingRequest{
+		Scope:       pluginv1.SettingScope_SETTING_SCOPE_PLAYER,
+		PrincipalId: owningPlayer,
+		Key:         "content.cw_block",
+	})
+	require.NoError(t, err)
+	assert.True(t, resp.GetFound())
+	assert.Equal(t, []string{"violence", "gore"}, resp.GetStringList())
+}
+
+// TestPlayerSettingDeniedWhenPrincipalNotOwningPlayer: even with a host-vouched
+// owning player on the token, a principal_id that does NOT equal it is denied —
+// a plugin cannot read/write another player's PLAYER settings (holomush-iokti.19).
+func TestPlayerSettingDeniedWhenPrincipalNotOwningPlayer(t *testing.T) {
+	t.Parallel()
+	actor := settingsActor(t)
+	owningPlayer := core.NewULID().String()
+	otherPlayer := core.NewULID().String() // distinct from the vouched owner
+
+	srv, _ := newSettingsServer(t, nil, actor)
+	ctx, _ := contextWithValidTokenOwning(t, srv, actor, owningPlayer)
+
+	_, err := srv.GetSetting(ctx, &pluginv1.PluginHostServiceGetSettingRequest{
+		Scope:       pluginv1.SettingScope_SETTING_SCOPE_PLAYER,
+		PrincipalId: otherPlayer,
+		Key:         "content.cw_block",
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err),
+		"PLAYER principal_id MUST equal the token's owning player")
 }
 
 // TestGameSettingOwnerPartitionIsolatedAcrossPlugins is the INV-11 security test:

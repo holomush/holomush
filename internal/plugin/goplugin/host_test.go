@@ -1457,7 +1457,7 @@ func TestPluginHostServiceEmitEventReturnsWrappedEmitterError(t *testing.T) {
 	// the host validates a per-dispatch token, so the test issues one and
 	// presents it on the incoming context. The malformed JSON payload
 	// then exercises the emitter's error-wrap path.
-	tok, err := host.tokenStore.Issue("core-scenes", core.Actor{Kind: core.ActorPlugin, ID: "core-scenes"})
+	tok, err := host.tokenStore.Issue("core-scenes", core.Actor{Kind: core.ActorPlugin, ID: "core-scenes"}, "")
 	require.NoError(t, err)
 	defer host.tokenStore.Revoke(tok)
 	ctx := metadata.NewIncomingContext(context.Background(),
@@ -1843,7 +1843,7 @@ func TestNewHostInitializesTokenStore(t *testing.T) {
 func TestHostCloseClosesTokenStore(t *testing.T) {
 	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
 	h := NewHost()
-	_, err := h.tokenStore.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"})
+	_, err := h.tokenStore.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"}, "")
 	require.NoError(t, err)
 	require.NoError(t, h.Close(context.Background()))
 	// After Close, the token store is reset.
@@ -1892,7 +1892,7 @@ func TestDeliverEventIssuesTokenWithCharacterActor(t *testing.T) {
 	require.NotEmpty(t, capturedToken)
 
 	// The entry will already be Revoke'd by defer when DeliverEvent returns.
-	_, ok = h.tokenStore.Lookup("plug-A", capturedToken)
+	_, _, ok = h.tokenStore.Lookup("plug-A", capturedToken)
 	assert.False(t, ok, "deferred Revoke MUST clear the token after DeliverEvent returns")
 }
 
@@ -1995,7 +1995,7 @@ func TestDeliverCommandIssuesTokenWithCharacterActor(t *testing.T) {
 	require.Len(t, tokens, 1)
 	assert.NotEmpty(t, tokens[0])
 
-	_, ok = h.tokenStore.Lookup("plug-A", tokens[0])
+	_, _, ok = h.tokenStore.Lookup("plug-A", tokens[0])
 	assert.False(t, ok, "deferred Revoke MUST clear the token after DeliverCommand returns")
 }
 

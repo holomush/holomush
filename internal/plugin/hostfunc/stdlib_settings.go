@@ -56,11 +56,13 @@ func settingScopeFromString(s string) pluginv1.SettingScope {
 	}
 }
 
-// resolveSettingsAccess recovers the acting actor from the Lua VM context
-// (INV-1: NEVER from Lua args), maps the scope string, enforces principal
-// ownership for PLAYER / CHARACTER via the SHARED pluginauthz.CheckPrincipalOwnership
-// gate (the SAME helper the binary host uses), and — never trusting the wire —
-// confines the partition to the registration-time pluginName at the adapter.
+// resolveSettingsAccess recovers the acting actor and (for PLAYER scope) the
+// host-vouched owning player from the Lua VM context (INV-1: NEVER from Lua
+// args), maps the scope string, enforces principal ownership for PLAYER /
+// CHARACTER via the SHARED pluginauthz.CheckPrincipalOwnership gate (the SAME
+// helper the binary host uses, with the SAME expected-owner semantics), and —
+// never trusting the wire — confines the partition to the registration-time
+// pluginName at the adapter.
 //
 // On any failure it returns a short, non-leaking Lua-facing message. The
 // returned principalID is the canonical ULID string for PLAYER / CHARACTER and
@@ -91,10 +93,23 @@ func (f *Functions) resolveSettingsAccess(
 		return scope, "", ""
 	}
 
-	// PLAYER / CHARACTER: enforce ownership via the shared gate. A foreign or
-	// malformed principal is denied before any store access — identical trust
-	// to the binary requirePrincipalOwnership.
-	pid, ownErr := pluginauthz.CheckPrincipalOwnership(principalID, actor)
+	// PLAYER / CHARACTER: enforce ownership via the shared gate against the
+	// host-vouched expected owner. A foreign or malformed principal is denied
+	// before any store access — identical trust to the binary
+	// requirePrincipalOwnership.
+	//
+	//   - CHARACTER: expected owner is the acting character's ID.
+	//   - PLAYER: expected owner is the host-vouched owning player ULID of the
+	//     acting character, recovered in-process from the dispatch ctx
+	//     (core.OwningPlayerFromContext) — the SAME value the binary path recovers
+	//     from the dispatch token (holomush-iokti.19). Absent ⇒ "" ⇒ the shared
+	//     gate fails closed, symmetric with the binary DeliverEvent path.
+	expectedOwner := actor.ID
+	if scope == pluginv1.SettingScope_SETTING_SCOPE_PLAYER {
+		expectedOwner, _ = core.OwningPlayerFromContext(ctx)
+	}
+
+	pid, ownErr := pluginauthz.CheckPrincipalOwnership(principalID, expectedOwner)
 	if ownErr != nil {
 		// Do not leak inner error text to the plugin.
 		return scope, "", "permission denied"

@@ -32,34 +32,51 @@ func newStoreForTest(t *testing.T) *emitTokenStore {
 	return s
 }
 
-func TestEmitTokenStoreIssueLookupHappyPath(t *testing.T) {
+func TestEmitTokenStoreIssueLookupHappyPathCarriesActorAndOwnerPlayer(t *testing.T) {
 	t.Parallel()
 	s := newStoreForTest(t)
 	actor := core.Actor{Kind: core.ActorCharacter, ID: "01HCHAR..."}
-	tok, err := s.Issue("plug-A", actor)
+	ownerPlayer := "01HPLAYER0000000000000000"
+	tok, err := s.Issue("plug-A", actor, ownerPlayer)
 	require.NoError(t, err)
 	require.NotEmpty(t, tok)
 
-	got, ok := s.Lookup("plug-A", tok)
+	got, gotOwner, ok := s.Lookup("plug-A", tok)
 	require.True(t, ok)
 	assert.Equal(t, actor, got)
+	assert.Equal(t, ownerPlayer, gotOwner,
+		"Lookup MUST return the owning player supplied at Issue")
+}
+
+func TestEmitTokenStoreLookupReturnsEmptyOwnerPlayerWhenNoneSupplied(t *testing.T) {
+	t.Parallel()
+	s := newStoreForTest(t)
+	actor := core.Actor{Kind: core.ActorPlugin, ID: "plug-A"}
+	tok, err := s.Issue("plug-A", actor, "")
+	require.NoError(t, err)
+
+	got, gotOwner, ok := s.Lookup("plug-A", tok)
+	require.True(t, ok)
+	assert.Equal(t, actor, got)
+	assert.Empty(t, gotOwner,
+		"an Issue with no owning player MUST Lookup an empty owner (PLAYER fails closed)")
 }
 
 func TestEmitTokenStoreLookupWrongPluginNameReturnsFalse(t *testing.T) {
 	t.Parallel()
 	s := newStoreForTest(t)
 	actor := core.Actor{Kind: core.ActorCharacter, ID: "01HCHAR..."}
-	tok, err := s.Issue("plug-A", actor)
+	tok, err := s.Issue("plug-A", actor, "")
 	require.NoError(t, err)
 
-	_, ok := s.Lookup("plug-B", tok)
+	_, _, ok := s.Lookup("plug-B", tok)
 	assert.False(t, ok)
 }
 
 func TestEmitTokenStoreLookupUnknownTokenReturnsFalse(t *testing.T) {
 	t.Parallel()
 	s := newStoreForTest(t)
-	_, ok := s.Lookup("plug-A", "not-a-real-token")
+	_, _, ok := s.Lookup("plug-A", "not-a-real-token")
 	assert.False(t, ok)
 }
 
@@ -68,22 +85,22 @@ func TestEmitTokenStoreLookupExpiredEntryReturnsFalse(t *testing.T) {
 	now := time.Now()
 	s := newStoreForTest(t)
 	s.now = func() time.Time { return now }
-	tok, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"})
+	tok, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"}, "")
 	require.NoError(t, err)
 
 	// Advance clock past TTL.
 	s.now = func() time.Time { return now.Add(s.ttl + time.Second) }
-	_, ok := s.Lookup("plug-A", tok)
+	_, _, ok := s.Lookup("plug-A", tok)
 	assert.False(t, ok)
 }
 
 func TestEmitTokenStoreRevokeRemovesEntry(t *testing.T) {
 	t.Parallel()
 	s := newStoreForTest(t)
-	tok, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"})
+	tok, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"}, "")
 	require.NoError(t, err)
 	s.Revoke(tok)
-	_, ok := s.Lookup("plug-A", tok)
+	_, _, ok := s.Lookup("plug-A", tok)
 	assert.False(t, ok)
 }
 
@@ -91,7 +108,7 @@ func TestEmitTokenStoreRevokeIsIdempotent(t *testing.T) {
 	t.Parallel()
 	s := newStoreForTest(t)
 	s.Revoke("never-issued")
-	tok, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"})
+	tok, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"}, "")
 	require.NoError(t, err)
 	s.Revoke(tok)
 	s.Revoke(tok) // second call must not panic
@@ -100,7 +117,7 @@ func TestEmitTokenStoreRevokeIsIdempotent(t *testing.T) {
 func TestEmitTokenStoreTokenFormat(t *testing.T) {
 	t.Parallel()
 	s := newStoreForTest(t)
-	tok, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"})
+	tok, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"}, "")
 	require.NoError(t, err)
 	assert.Len(t, tok, 22, "token MUST be 22 base64url chars (16 bytes unpadded)")
 	decoded, decodeErr := base64.RawURLEncoding.DecodeString(tok)
@@ -114,7 +131,7 @@ func TestEmitTokenStoreTokenUniqueness(t *testing.T) {
 	const N = 10000
 	seen := make(map[string]bool, N)
 	for i := 0; i < N; i++ {
-		tok, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"})
+		tok, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"}, "")
 		require.NoError(t, err)
 		require.False(t, seen[tok], "token collision at i=%d", i)
 		seen[tok] = true
@@ -135,12 +152,12 @@ func TestEmitTokenStoreConcurrentIssueLookupSafety(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			tok, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"})
+			tok, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"}, "")
 			if err != nil {
 				errCh <- err
 				return
 			}
-			if _, ok := s.Lookup("plug-A", tok); !ok {
+			if _, _, ok := s.Lookup("plug-A", tok); !ok {
 				errCh <- errors.New("lookup returned ok=false for freshly-issued token")
 				return
 			}
@@ -158,7 +175,7 @@ func TestEmitTokenStoreIssueFailsOnRandFailure(t *testing.T) {
 	t.Parallel()
 	s := newStoreForTest(t)
 	s.rand = bytes.NewReader(nil) // exhausted reader → io.EOF on Read
-	_, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"})
+	_, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"}, "")
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EMIT_TOKEN_ISSUE_FAILED")
 }
@@ -167,7 +184,7 @@ func TestEmitTokenStoreIssueFailsAfterClose(t *testing.T) {
 	t.Parallel()
 	s := newStoreForTest(t)
 	require.NoError(t, s.Close())
-	_, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"})
+	_, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"}, "")
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EMIT_TOKEN_STORE_CLOSED")
 }
@@ -188,7 +205,7 @@ func TestEmitTokenStoreSweeperRemovesExpired(t *testing.T) {
 	s := newStoreForTest(t)
 	s.now = func() time.Time { return time.Unix(0, nowUnix.Load()) }
 	s.sweep = 10 * time.Millisecond
-	tok, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"})
+	tok, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"}, "")
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -199,7 +216,7 @@ func TestEmitTokenStoreSweeperRemovesExpired(t *testing.T) {
 	nowUnix.Store(now.Add(s.ttl + time.Second).UnixNano())
 	// Wait for sweeper to fire.
 	require.Eventually(t, func() bool {
-		_, ok := s.Lookup("plug-A", tok)
+		_, _, ok := s.Lookup("plug-A", tok)
 		return !ok
 	}, 200*time.Millisecond, 5*time.Millisecond, "sweeper should remove expired entry")
 }

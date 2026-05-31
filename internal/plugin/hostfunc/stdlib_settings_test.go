@@ -58,6 +58,14 @@ func characterActorCtx(id string) context.Context {
 	return core.WithActor(context.Background(), core.Actor{Kind: core.ActorCharacter, ID: id})
 }
 
+// characterActorCtxOwning stamps both the acting character actor AND the
+// host-vouched owning player on the ctx — exactly as the command dispatcher does
+// via core.WithActor + core.WithOwningPlayer. PLAYER-scope ownership compares
+// req principal_id against this owner (holomush-iokti.19).
+func characterActorCtxOwning(charID, owningPlayerID string) context.Context {
+	return core.WithOwningPlayer(characterActorCtx(charID), owningPlayerID)
+}
+
 func TestGetSettingReturnsStoredListForOwnedCharacterPrincipal(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
@@ -156,16 +164,14 @@ func TestSetSettingDeniesForeignPrincipal(t *testing.T) {
 	assert.False(t, found, "denied write MUST NOT reach the store")
 }
 
-func TestGetSettingPlayerScopeFailsClosedUntilResolverLands(t *testing.T) {
-	// iokti.16 contract: a player ULID never equals the acting character's
-	// ULID, so a PLAYER-scope read with a player principal is denied until
-	// iokti.19. Using the acting character's own ID as principal also fails
-	// for PLAYER because the player partition keys differ — here we assert
-	// the foreign-principal denial path that mirrors the binary host.
+func TestGetSettingPlayerScopeDeniedWhenNoOwningPlayerOnContext(t *testing.T) {
+	// iokti.19 fail-closed: with only an actor on the ctx and NO owning player
+	// stamped (characterActorCtx), a PLAYER-scope read is denied. This is the Lua
+	// mirror of the binary "no host-vouched owning player on the token" denial.
 	L := lua.NewState()
 	defer L.Close()
 	charID := core.NewULID().String()
-	L.SetContext(characterActorCtx(charID))
+	L.SetContext(characterActorCtx(charID)) // no owning player stamped
 
 	ops := newFakeSettingsOps()
 	hf := hostfunc.New(nil,
@@ -173,12 +179,78 @@ func TestGetSettingPlayerScopeFailsClosedUntilResolverLands(t *testing.T) {
 		hostfunc.WithSettingsOps(ops))
 	hf.Register(L, "lua-plug")
 
-	playerID := core.NewULID().String() // distinct from charID
+	playerID := core.NewULID().String()
 	require.NoError(t, L.DoString(`
 		vals, err = holomush.get_setting("player", "`+playerID+`", "content.cw_block")
 	`))
 	assert.Equal(t, lua.LNil, L.GetGlobal("vals"))
 	assert.NotEqual(t, lua.LNil, L.GetGlobal("err"))
+}
+
+// TestPlayerSettingRoundTripsForOwningPlayer is the iokti.19 Lua functional
+// success test and the SYMMETRY counterpart of the binary
+// TestPlayerSettingRoundTripsForOwningPlayer: when the ctx carries an owning
+// player equal to the request's principal_id, PLAYER-scope set/get succeeds and
+// round-trips. Both runtimes converge on the same shared ownership gate.
+func TestPlayerSettingRoundTripsForOwningPlayer(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	charID := core.NewULID().String()
+	owningPlayer := core.NewULID().String()
+	L.SetContext(characterActorCtxOwning(charID, owningPlayer))
+
+	ops := newFakeSettingsOps()
+	hf := hostfunc.New(nil,
+		hostfunc.WithEngine(policytest.AllowAllEngine()),
+		hostfunc.WithSettingsOps(ops))
+	hf.Register(L, "lua-plug")
+
+	require.NoError(t, L.DoString(`
+		ok, err = holomush.set_setting("player", "`+owningPlayer+`", "content.cw_block", {"gore", "nsfw"})
+	`))
+	assert.True(t, bool(L.GetGlobal("ok").(lua.LBool)))
+	assert.Equal(t, lua.LNil, L.GetGlobal("err"))
+
+	require.NoError(t, L.DoString(`
+		vals, found = holomush.get_setting("player", "`+owningPlayer+`", "content.cw_block")
+	`))
+	assert.True(t, bool(L.GetGlobal("found").(lua.LBool)))
+	tbl, ok := L.GetGlobal("vals").(*lua.LTable)
+	require.True(t, ok, "vals must be a table")
+	assert.Equal(t, 2, tbl.Len())
+	assert.Equal(t, "gore", tbl.RawGetInt(1).String())
+	assert.Equal(t, "nsfw", tbl.RawGetInt(2).String())
+
+	// The owner partition is keyed by the player ULID, matching the binary path.
+	got, found, err := ops.GetSetting(context.Background(),
+		pluginv1.SettingScope_SETTING_SCOPE_PLAYER, "lua-plug", owningPlayer, "content.cw_block")
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, []string{"gore", "nsfw"}, got)
+}
+
+// TestPlayerSettingDeniedWhenPrincipalNotOwningPlayer: even with an owning player
+// on the ctx, a principal_id that does NOT equal it is denied (holomush-iokti.19).
+func TestPlayerSettingDeniedWhenPrincipalNotOwningPlayer(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	charID := core.NewULID().String()
+	owningPlayer := core.NewULID().String()
+	otherPlayer := core.NewULID().String() // distinct from the vouched owner
+	L.SetContext(characterActorCtxOwning(charID, owningPlayer))
+
+	ops := newFakeSettingsOps()
+	hf := hostfunc.New(nil,
+		hostfunc.WithEngine(policytest.AllowAllEngine()),
+		hostfunc.WithSettingsOps(ops))
+	hf.Register(L, "lua-plug")
+
+	require.NoError(t, L.DoString(`
+		vals, err = holomush.get_setting("player", "`+otherPlayer+`", "content.cw_block")
+	`))
+	assert.Equal(t, lua.LNil, L.GetGlobal("vals"))
+	assert.NotEqual(t, lua.LNil, L.GetGlobal("err"),
+		"PLAYER principal_id MUST equal the ctx's owning player")
 }
 
 func TestGetSettingGameScopeNeedsNoPrincipalOwnership(t *testing.T) {

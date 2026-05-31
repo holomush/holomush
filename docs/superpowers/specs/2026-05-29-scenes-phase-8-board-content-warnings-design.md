@@ -379,9 +379,12 @@ Each invariant is backed by a test; a meta-test asserts the catalog is complete.
   consumer (CW block) needs a *union* across scopes (INV-6), not the chain's
   first-match-wins — so the plugin makes three explicit single-scope calls
   regardless, and a chained mode would be dead surface. (Secondarily, a chained
-  read from a single `principal_id` would force the host to do a character→player
-  lookup the single-scope design never needs.) Host code that wants first-match
-  chaining still uses the in-process `settings.Chain` directly.
+  read would have to derive PLAYER ownership host-side. PLAYER ownership *is*
+  resolved — via the host-vouched owning player carried on the dispatch token
+  (binary) / ctx (Lua) from the authenticated command dispatch, with no DB
+  lookup (holomush-iokti.19) — but the single-scope design avoids the chained
+  mode's coupling regardless.) Host code that wants first-match chaining still
+  uses the in-process `settings.Chain` directly.
 - **Bootstrap taxonomy seeding.** Rejected in favor of read-time default fallback:
   avoids a seed migration, bootstrap-order dependency, and the seed-write authz
   question (who may write GAME scope at init).

@@ -2565,3 +2565,33 @@ func TestDispatcherStampsCharacterActorBeforeDeliverCommand(t *testing.T) {
 	assert.Equal(t, core.ActorCharacter, got.Kind)
 	assert.Equal(t, expectedCharID, got.ID)
 }
+
+// TestDispatcherStampsOwningPlayerBeforeDeliverCommand asserts the dispatcher
+// stamps the executor's player ID onto the dispatch ctx via core.WithOwningPlayer
+// BEFORE DeliverCommand — the single stamping site that feeds PLAYER-scope
+// settings ownership for both binary (token) and Lua (ctx) runtimes
+// (holomush-iokti.19).
+func TestDispatcherStampsOwningPlayerBeforeDeliverCommand(t *testing.T) {
+	t.Parallel()
+
+	cd := &capturingDeliverer{}
+	d := newTestDispatcherWithPlugin(t, cd)
+
+	playerID := ulid.Make()
+	var buf bytes.Buffer
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: ulid.Make(),
+		PlayerID:    playerID,
+		Output:      &buf,
+		Services:    stubServices(),
+	})
+
+	require.NoError(t, d.Dispatch(context.Background(), "plugintest", exec))
+
+	cd.mu.Lock()
+	defer cd.mu.Unlock()
+	require.NotNil(t, cd.deliverCtx, "DeliverCommand must have been invoked")
+	gotPlayer, ok := core.OwningPlayerFromContext(cd.deliverCtx)
+	require.True(t, ok, "DeliverCommand MUST receive ctx with owning player populated")
+	assert.Equal(t, playerID.String(), gotPlayer)
+}
