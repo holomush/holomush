@@ -237,17 +237,16 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 	var outageDeadline time.Time
 	backoff := 100 * time.Millisecond
 
-	// seen is the dedup set for the redelivery overlap after a reconnect. Core
-	// acks JetStream delivery AFTER Send, so only sent-but-unacked frames replay
-	// on resume — a small window. The set is session-lifetime for simplicity; if
-	// a single session ever forwards enough distinct events to make this a
-	// memory concern, bound it to a recent-id ring (follow-up).
-	seen := make(map[string]struct{})
-	var lastForwardedID string
+	// dedup suppresses the redelivery overlap after a reconnect. Core acks
+	// JetStream delivery AFTER Send, so only sent-but-unacked frames replay on
+	// resume — a small window. A bounded recent-id set (not an unbounded
+	// session-lifetime map) keeps per-connection memory fixed regardless of how
+	// many distinct events a long-lived stream forwards (holomush-rsoe6.21).
+	dedup := newReconnectDedup()
 	firstOpen := true
 
 	for {
-		cause, opened := h.runSubscribeOnce(ctx, sessionID, token, connID.String(), stream, firstOpen, seen, &lastForwardedID)
+		cause, opened := h.runSubscribeOnce(ctx, sessionID, token, connID.String(), stream, firstOpen, dedup)
 		if opened {
 			// A successful (re)open ends any outage: reset the per-outage budget
 			// and backoff so a later break gets a fresh ceiling (I-SURV-4 is a
@@ -312,9 +311,9 @@ func subscribeRecvErrIsTerminal(err error) bool {
 // runSubscribeOnce runs a single core Subscribe attempt to completion and
 // classifies why it ended. On a healthy open it sends STREAM_OPENED (first
 // attempt) or RECONNECTED (subsequent attempts), forwards frames (deduping the
-// redelivery overlap via seen), and runs the heartbeat/lease refresh. It owns a
-// per-attempt context so the spawned recv goroutine is always unblocked and
-// reaped when this function returns.
+// redelivery overlap via the bounded dedup window), and runs the heartbeat/lease
+// refresh. It owns a per-attempt context so the spawned recv goroutine is always
+// unblocked and reaped when this function returns.
 //
 // The returned bool (opened) reports whether this attempt successfully opened
 // the subscription AND sent its open frame (STREAM_OPENED or RECONNECTED). The
@@ -325,8 +324,7 @@ func (h *Handler) runSubscribeOnce(
 	sessionID, token, connID string,
 	stream *connect.ServerStream[webv1.StreamEventsResponse],
 	firstOpen bool,
-	seen map[string]struct{},
-	lastForwardedID *string,
+	dedup *reconnectDedup,
 ) (breakCause, bool) {
 	opened := false
 	// Per-attempt context: cancelling it on return unblocks the recv goroutine's
@@ -484,12 +482,8 @@ func (h *Handler) runSubscribeOnce(
 			// Dedup the redelivery overlap before forwarding. Only Event frames
 			// carry ids; Control frames pass straight through.
 			if ef, isEvent := result.resp.GetFrame().(*corev1.SubscribeResponse_Event); isEvent {
-				if id := ef.Event.GetId(); id != "" {
-					if _, dup := seen[id]; dup {
-						continue // already forwarded; skip the redelivery
-					}
-					seen[id] = struct{}{}
-					*lastForwardedID = id
+				if id := ef.Event.GetId(); id != "" && dedup.seenOrRecord(id) {
+					continue // already forwarded within the recent window; skip the redelivery
 				}
 			}
 			if fwdErr := h.forwardFrame(ctx, result.resp, stream, sessionID); fwdErr != nil {
