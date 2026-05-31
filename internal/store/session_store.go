@@ -555,8 +555,8 @@ func (s *PostgresSessionStore) AddConnection(ctx context.Context, conn *session.
 	}
 
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO session_connections (id, session_id, client_type, streams, focus_key, connected_at)
-		 VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
+		`INSERT INTO session_connections (id, session_id, client_type, streams, focus_key, connected_at, last_seen_at)
+		 VALUES ($1, $2, $3, $4, $5::jsonb, $6, $6)`,
 		conn.ID.String(), conn.SessionID, conn.ClientType, streams, focusKeyJSON, pgnanos.From(conn.ConnectedAt))
 	if err != nil {
 		return oops.With("operation", "add connection").
@@ -574,6 +574,50 @@ func (s *PostgresSessionStore) RemoveConnection(ctx context.Context, connectionI
 		return oops.With("operation", "remove connection").With("connection_id", connectionID.String()).Wrap(err)
 	}
 	return nil
+}
+
+// RefreshConnection bumps a connection's lease to now (holomush-rsoe6, I-LIVE-2).
+func (s *PostgresSessionStore) RefreshConnection(ctx context.Context, connectionID ulid.ULID) error {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE session_connections SET last_seen_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT WHERE id = $1`,
+		connectionID.String())
+	if err != nil {
+		return oops.With("operation", "refresh connection").
+			With("connection_id", connectionID.String()).Wrap(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return oops.Code("CONNECTION_NOT_FOUND").
+			With("connection_id", connectionID.String()).
+			Errorf("connection not found")
+	}
+	return nil
+}
+
+// ListLapsedConnections returns connections whose lease is older than olderThan
+// (i.e. last_seen_at < olderThan). Used by the lease sweep (holomush-rsoe6, I-LIVE-2).
+func (s *PostgresSessionStore) ListLapsedConnections(ctx context.Context, olderThan time.Time) ([]session.LapsedConnection, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, session_id, client_type FROM session_connections WHERE last_seen_at < $1`,
+		pgnanos.From(olderThan))
+	if err != nil {
+		return nil, oops.With("operation", "list lapsed connections").Wrap(err)
+	}
+	defer rows.Close()
+	var out []session.LapsedConnection
+	for rows.Next() {
+		var idStr string
+		var lc session.LapsedConnection
+		if scanErr := rows.Scan(&idStr, &lc.SessionID, &lc.ClientType); scanErr != nil {
+			return nil, oops.With("operation", "scan lapsed connection").Wrap(scanErr)
+		}
+		id, parseErr := ulid.Parse(idStr)
+		if parseErr != nil {
+			return nil, oops.With("operation", "parse lapsed connection id").With("id", idStr).Wrap(parseErr)
+		}
+		lc.ID = id
+		out = append(out, lc)
+	}
+	return out, oops.Wrap(rows.Err())
 }
 
 // CountConnections returns the number of active connections for a session.

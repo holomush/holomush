@@ -278,7 +278,7 @@ func TestMigratorCloseIsIdempotent(t *testing.T) {
 }
 
 func TestMigratorPendingMigrationsReturnsMigrationsAboveCurrentVersion(t *testing.T) {
-	// At version 0, migrations 1-20, 30-39, 40-45 should be pending
+	// At version 0, migrations 1-20, 30-39, 40-46 should be pending
 	// (baseline + is_guest + alias_source + session_player_id + audit_source_component +
 	// session_focus + seed_scene_defaults + session_player_fk + create_events_audit +
 	// drop_events_and_cursors + events_audit_js_seq_index + events_audit_rendering +
@@ -291,16 +291,16 @@ func TestMigratorPendingMigrationsReturnsMigrationsAboveCurrentVersion(t *testin
 	// add_session_history_floor_columns + eventbus_crypto_timestamps_to_bigint +
 	// connection_focus_key + player_character_bindings_cascade + auth_timestamps_to_bigint +
 	// world_timestamps_to_bigint + totp_misc_timestamps_to_bigint + pregfo6_gap_timestamps_to_bigint +
-	// character_preferences)
+	// character_preferences + session_connection_last_seen)
 	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45}, pending)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46}, pending)
 }
 
 func TestMigratorPendingMigrationsReturnsEmptyAtLatestVersion(t *testing.T) {
-	// At version 45 (latest), no migrations should be pending
-	m := &Migrator{m: &mockMigrate{versionVal: 45}}
+	// At version 46 (latest), no migrations should be pending
+	m := &Migrator{m: &mockMigrate{versionVal: 46}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
 	assert.Empty(t, pending)
