@@ -253,6 +253,71 @@ func TestPlayerSettingDeniedWhenPrincipalNotOwningPlayer(t *testing.T) {
 		"PLAYER principal_id MUST equal the ctx's owning player")
 }
 
+// TestSetSettingPlayerScopeDeniedWhenNoOwningPlayerOnContext is the Lua SET-path
+// mirror of the binary TestPlayerScopeDeniedWhenNoOwningPlayerVouched and of the
+// Lua GET-path TestGetSettingPlayerScopeDeniedWhenNoOwningPlayerOnContext: a
+// PLAYER-scope WRITE with no owning player stamped on the ctx fails closed, and
+// the denied write never reaches the store. Closes the runtime-symmetry test gap
+// (INV-8, holomush-sl0ir.13): the gate is shared (set_setting → resolveSettingsAccess
+// → CheckPrincipalOwnership), but the write path lacked an explicit Lua mirror.
+func TestSetSettingPlayerScopeDeniedWhenNoOwningPlayerOnContext(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	charID := core.NewULID().String()
+	L.SetContext(characterActorCtx(charID)) // no owning player stamped
+
+	ops := newFakeSettingsOps()
+	hf := hostfunc.New(nil,
+		hostfunc.WithEngine(policytest.AllowAllEngine()),
+		hostfunc.WithSettingsOps(ops))
+	hf.Register(L, "lua-plug")
+
+	playerID := core.NewULID().String()
+	require.NoError(t, L.DoString(`
+		ok, err = holomush.set_setting("player", "`+playerID+`", "content.cw_block", {"gore"})
+	`))
+	assert.NotEqual(t, lua.LTrue, L.GetGlobal("ok"))
+	assert.NotEqual(t, lua.LNil, L.GetGlobal("err"),
+		"PLAYER-scope write with no owning player on ctx MUST fail closed")
+
+	_, found, err := ops.GetSetting(context.Background(),
+		pluginv1.SettingScope_SETTING_SCOPE_PLAYER, "lua-plug", playerID, "content.cw_block")
+	require.NoError(t, err)
+	assert.False(t, found, "denied write MUST NOT reach the store")
+}
+
+// TestSetSettingPlayerScopeDeniedWhenPrincipalNotOwningPlayer is the Lua SET-path
+// mirror of the binary TestSetSettingPlayerForeignPrincipalDenied: even with an
+// owning player on the ctx, a PLAYER-scope WRITE whose principal_id does NOT
+// equal the vouched owner is denied and never reaches the store
+// (holomush-sl0ir.13 / INV-8).
+func TestSetSettingPlayerScopeDeniedWhenPrincipalNotOwningPlayer(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	charID := core.NewULID().String()
+	owningPlayer := core.NewULID().String()
+	otherPlayer := core.NewULID().String() // distinct from the vouched owner
+	L.SetContext(characterActorCtxOwning(charID, owningPlayer))
+
+	ops := newFakeSettingsOps()
+	hf := hostfunc.New(nil,
+		hostfunc.WithEngine(policytest.AllowAllEngine()),
+		hostfunc.WithSettingsOps(ops))
+	hf.Register(L, "lua-plug")
+
+	require.NoError(t, L.DoString(`
+		ok, err = holomush.set_setting("player", "`+otherPlayer+`", "content.cw_block", {"gore"})
+	`))
+	assert.NotEqual(t, lua.LTrue, L.GetGlobal("ok"))
+	assert.NotEqual(t, lua.LNil, L.GetGlobal("err"),
+		"PLAYER-scope write principal_id MUST equal the ctx's owning player")
+
+	_, found, err := ops.GetSetting(context.Background(),
+		pluginv1.SettingScope_SETTING_SCOPE_PLAYER, "lua-plug", otherPlayer, "content.cw_block")
+	require.NoError(t, err)
+	assert.False(t, found, "denied write MUST NOT reach the store")
+}
+
 func TestGetSettingGameScopeNeedsNoPrincipalOwnership(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()

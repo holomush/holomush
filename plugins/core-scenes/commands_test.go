@@ -7,12 +7,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
@@ -1095,6 +1097,58 @@ func TestSceneGatedSubcommands_DenyWhenPolicyDenies(t *testing.T) {
 				"subcommand %q with action %q must deny via engine gate", tc.sub, tc.action)
 		})
 	}
+}
+
+// TestScenesBoardCommandDeclaresBrowseCapabilityGate is the INV-7 backstop for
+// the top-level `scenes` board command. Unlike the `scene` subcommands (covered
+// by the deny/nil-evaluator tables above), handleScenesBoard is intentionally
+// NOT gated by the plugin evaluator — the public board returns only open scenes
+// any character may browse, so its authorization is the host dispatcher's
+// Layer-2 capability pre-flight (CanPerformAction, dispatcher.go) on the
+// capability the command DECLARES in the manifest, not a plugin-code check.
+// Calling p.HandleCommand directly (as the unit/integration board tests do)
+// bypasses that pre-flight, so the board is never exercised against a deny
+// engine there. The meaningful regression guard is therefore that the
+// capability declaration exists and is the DISTINCT browse action: removing it,
+// or widening it to the membership-gated `read`, would silently change the
+// board's authorization. This pins the gate's declaration (holomush-sl0ir.15).
+func TestScenesBoardCommandDeclaresBrowseCapabilityGate(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile("plugin.yaml")
+	require.NoError(t, err)
+
+	var manifest struct {
+		Commands []struct {
+			Name         string `yaml:"name"`
+			Capabilities []struct {
+				Action   string `yaml:"action"`
+				Resource string `yaml:"resource"`
+				Scope    string `yaml:"scope"`
+			} `yaml:"capabilities"`
+		} `yaml:"commands"`
+	}
+	require.NoError(t, yaml.Unmarshal(data, &manifest))
+
+	var found bool
+	for _, cmd := range manifest.Commands {
+		if cmd.Name != "scenes" {
+			continue
+		}
+		found = true
+		require.Len(t, cmd.Capabilities, 1,
+			"the `scenes` board command must declare exactly one capability (the host pre-flight gate)")
+		c := cmd.Capabilities[0]
+		assert.Equal(t, "browse", c.Action,
+			"board must use the DISTINCT browse action, not the membership-gated read")
+		assert.Equal(t, "scene", c.Resource)
+		assert.Equal(t, "global", c.Scope)
+	}
+	require.True(t, found, "the `scenes` board command must be declared in the manifest")
+
+	// The policy that PERMITS the browse capability must also ship; without it
+	// the declared gate would deny every board browse.
+	assert.Contains(t, string(data), "browse-open-scenes-board",
+		"the policy permitting the board browse capability must be declared")
 }
 
 // TestSceneResourceRefTokenizesFirstField verifies that sceneResourceRef extracts

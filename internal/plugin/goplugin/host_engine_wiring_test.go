@@ -164,10 +164,6 @@ func TestSetSettingsStoresPropagatesAllThreeStoresIntoHost(t *testing.T) {
 	characterStore := &stubCharacterStoreForWiringGuard{}
 	gameStore := settings.NewGameSettings(&stubSysInfoForWiringGuard{})
 
-	require.NotNil(t, playerStore)
-	require.NotNil(t, characterStore)
-	require.NotNil(t, gameStore)
-
 	host := goplugin.NewHost()
 	require.NotNil(t, host)
 	t.Cleanup(func() { _ = host.Close(context.Background()) })
@@ -220,10 +216,6 @@ func TestWithSettingsOptionsPopulateHostStores(t *testing.T) {
 	playerStore := &stubPlayerStoreForWiringGuard{}
 	characterStore := &stubCharacterStoreForWiringGuard{}
 	gameStore := settings.NewGameSettings(&stubSysInfoForWiringGuard{})
-
-	require.NotNil(t, playerStore)
-	require.NotNil(t, characterStore)
-	require.NotNil(t, gameStore)
 
 	host := goplugin.NewHost(
 		goplugin.WithPlayerSettings(playerStore),
