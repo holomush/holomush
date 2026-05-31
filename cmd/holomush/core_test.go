@@ -1155,7 +1155,9 @@ func TestParseSessionConfigPreservesPositiveMaxHistory(t *testing.T) {
 
 // TestParseSessionConfigLeaseTTLAndBootGrace covers parsing/validation of
 // session_lease_ttl and session_boot_grace: malformed and zero values are
-// rejected, empty values default to 45s/60s, and explicit values are preserved.
+// rejected, empty values default to 45s/60s, explicit values are preserved, and
+// values below 2× the gateway refresh cadence (the 30s floor, holomush-rsoe6.22)
+// are rejected to prevent the reaper sweeping a healthy connection between refreshes.
 func TestParseSessionConfigLeaseTTLAndBootGrace(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -1172,6 +1174,14 @@ func TestParseSessionConfigLeaseTTLAndBootGrace(t *testing.T) {
 		{name: "rejects zero boot_grace", bootGrace: "0s", wantErrSubstr: "positive"},
 		{name: "empty values default to 45s/60s", wantLease: 45 * time.Second, wantBoot: 60 * time.Second},
 		{name: "explicit values preserved", leaseTTL: "2m", bootGrace: "3m", wantLease: 2 * time.Minute, wantBoot: 3 * time.Minute},
+		// holomush-rsoe6.22: lease/grace below 2× the gateway refresh cadence
+		// (session.DefaultLeaseRefreshInterval = 15s) let the reaper sweep a
+		// healthy connection between refreshes. Reject anything under the 30s floor.
+		{name: "rejects lease_ttl below 2x refresh cadence", leaseTTL: "20s", wantErrCode: "CONFIG_INVALID", wantErrSubstr: "cadence"},
+		{name: "rejects boot_grace below 2x refresh cadence", bootGrace: "20s", wantErrCode: "CONFIG_INVALID", wantErrSubstr: "cadence"},
+		// Both below floor: the lease check runs first, so its error wins.
+		{name: "rejects when both below floor — lease error wins", leaseTTL: "20s", bootGrace: "20s", wantErrCode: "CONFIG_INVALID", wantErrSubstr: "lease TTL"},
+		{name: "accepts lease_ttl and boot_grace at the 2x cadence floor", leaseTTL: "30s", bootGrace: "30s", wantLease: 30 * time.Second, wantBoot: 30 * time.Second},
 	}
 
 	for _, tt := range tests {

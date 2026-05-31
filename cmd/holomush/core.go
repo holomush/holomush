@@ -1164,6 +1164,21 @@ func parseSessionConfig(cfg *coreConfig) (sessionTTL, reaperInterval, leaseTTL, 
 		return 0, 0, 0, 0, oops.Code("CONFIG_INVALID").With("field", "session_boot_grace").Errorf("boot grace must be positive")
 	}
 
+	// A live gateway connection only refreshes its lease once per
+	// session.DefaultLeaseRefreshInterval (15s). A LeaseTTL/BootGrace below 2× that
+	// cadence lets the reaper sweep a healthy connection between refreshes (lease)
+	// or before a surviving gateway re-asserts after restart (grace, I-LIVE-4), so
+	// reject anything under the floor (holomush-rsoe6.22). Defaults (45s/60s) clear it.
+	minLeaseGrace := 2 * session.DefaultLeaseRefreshInterval
+	if leaseTTL < minLeaseGrace {
+		return 0, 0, 0, 0, oops.Code("CONFIG_INVALID").With("field", "session_lease_ttl").
+			Errorf("lease TTL must be at least %s (2× the %s gateway refresh cadence) so a healthy connection is not reaped between refreshes", minLeaseGrace, session.DefaultLeaseRefreshInterval)
+	}
+	if bootGrace < minLeaseGrace {
+		return 0, 0, 0, 0, oops.Code("CONFIG_INVALID").With("field", "session_boot_grace").
+			Errorf("boot grace must be at least %s (2× the %s gateway refresh cadence) so a surviving gateway can re-assert its leases before the post-restart sweep", minLeaseGrace, session.DefaultLeaseRefreshInterval)
+	}
+
 	if cfg.SessionMaxHistory <= 0 {
 		cfg.SessionMaxHistory = 500
 	}

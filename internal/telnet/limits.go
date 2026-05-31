@@ -3,7 +3,11 @@
 
 package telnet
 
-import "time"
+import (
+	"time"
+
+	"github.com/holomush/holomush/internal/session"
+)
 
 // Limits bounds per-connection resource use. Zero values in a Limits value
 // are NOT interpreted as "unlimited" — callers MUST populate the struct
@@ -28,8 +32,9 @@ type Limits struct {
 	// RPCs while the connection is authenticated (holomush-rsoe6, I-LIVE-1).
 	// A live client refreshes the server-side lease at this interval, keeping
 	// the connection visible to the liveness sweep. MUST be well under the
-	// sweep's LeaseTTL (default 45 s) so at least one refresh fires per
-	// window. Defaults to 15 s in DefaultLimits.
+	// sweep's LeaseTTL so at least one refresh fires per window; parseSessionConfig
+	// (cmd/holomush) enforces LeaseTTL/BootGrace ≥ 2× this interval. Defaults to
+	// session.DefaultLeaseRefreshInterval (15 s) in DefaultLimits.
 	LeaseRefreshInterval time.Duration
 }
 
@@ -39,5 +44,5 @@ var DefaultLimits = Limits{
 	IdleReadTimeout:      5 * time.Minute,
 	WriteTimeout:         30 * time.Second,
 	PreAuthTimeout:       2 * time.Minute,
-	LeaseRefreshInterval: 15 * time.Second,
+	LeaseRefreshInterval: session.DefaultLeaseRefreshInterval,
 }
