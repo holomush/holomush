@@ -16,6 +16,8 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [INV-<SCOPE>-<N> canonical invariant naming convention](holomush-6wcf2-adr-inv-scope-n-canonical-invariant-naming-convention.md) | 2026-05-31 | Accepted | `holomush-6wcf2` |
+| [Paired YAML+markdown invariant registry with drift meta-test](holomush-4v2dq-adr-paired-yaml-markdown-invariant-registry-drift-meta-test.md) | 2026-05-31 | Accepted | `holomush-4v2dq` |
 | [Derive world-read subject host-side; no subject field on wire](holomush-nthq6-derive-world-read-subject-host-side-no-subject-field-wire.md) | 2026-05-30 | Accepted | `holomush-nthq6` |
 | [Remove forgeable injectable WorldService; PluginHostService Query is the sole binary world-read path](holomush-c6oo8-remove-forgeable-injectable-worldservice-pluginhostservice-q.md) | 2026-05-30 | Accepted | `holomush-c6oo8` |
 | [Isolate xk6 extensions in a separate Go module](holomush-2344h-isolate-xk6-extensions-separate-go-module.md) | 2026-05-28 | Accepted | `holomush-2344h` |
