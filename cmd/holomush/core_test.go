@@ -1044,7 +1044,7 @@ func TestCoreCommand_ConfigFileLoading(t *testing.T) {
 func TestParseSessionConfigDefaultsEmptyFields(t *testing.T) {
 	cfg := &coreConfig{}
 
-	ttl, reaper, err := parseSessionConfig(cfg)
+	ttl, reaper, _, _, err := parseSessionConfig(cfg)
 
 	require.NoError(t, err)
 	assert.Equal(t, 30*time.Minute, ttl)
@@ -1061,7 +1061,7 @@ func TestParseSessionConfigUsesExplicitValues(t *testing.T) {
 		SessionMaxHistory:     250,
 	}
 
-	ttl, reaper, err := parseSessionConfig(cfg)
+	ttl, reaper, _, _, err := parseSessionConfig(cfg)
 
 	require.NoError(t, err)
 	assert.Equal(t, 1*time.Hour, ttl)
@@ -1077,7 +1077,7 @@ func TestParseSessionConfigRejectsInvalidTTL(t *testing.T) {
 		SessionReaperInterval: "30s",
 	}
 
-	_, _, err := parseSessionConfig(cfg)
+	_, _, _, _, err := parseSessionConfig(cfg)
 
 	require.Error(t, err)
 }
@@ -1090,7 +1090,7 @@ func TestParseSessionConfigRejectsInvalidReaperInterval(t *testing.T) {
 		SessionReaperInterval: "not-a-duration",
 	}
 
-	_, _, err := parseSessionConfig(cfg)
+	_, _, _, _, err := parseSessionConfig(cfg)
 
 	require.Error(t, err)
 }
@@ -1103,7 +1103,7 @@ func TestParseSessionConfigRejectsZeroTTL(t *testing.T) {
 		SessionReaperInterval: "30s",
 	}
 
-	_, _, err := parseSessionConfig(cfg)
+	_, _, _, _, err := parseSessionConfig(cfg)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "positive")
@@ -1117,7 +1117,7 @@ func TestParseSessionConfigRejectsZeroReaperInterval(t *testing.T) {
 		SessionReaperInterval: "0s",
 	}
 
-	_, _, err := parseSessionConfig(cfg)
+	_, _, _, _, err := parseSessionConfig(cfg)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "positive")
@@ -1132,7 +1132,7 @@ func TestParseSessionConfigDefaultsNegativeMaxHistory(t *testing.T) {
 		SessionMaxHistory:     -1,
 	}
 
-	_, _, err := parseSessionConfig(cfg)
+	_, _, _, _, err := parseSessionConfig(cfg)
 
 	require.NoError(t, err)
 	assert.Equal(t, 500, cfg.SessionMaxHistory)
@@ -1147,10 +1147,97 @@ func TestParseSessionConfigPreservesPositiveMaxHistory(t *testing.T) {
 		SessionMaxHistory:     250,
 	}
 
-	_, _, err := parseSessionConfig(cfg)
+	_, _, _, _, err := parseSessionConfig(cfg)
 
 	require.NoError(t, err)
 	assert.Equal(t, 250, cfg.SessionMaxHistory)
+}
+
+// TestParseSessionConfigRejectsInvalidLeaseTTL verifies that a malformed
+// session_lease_ttl value returns a CONFIG_INVALID error.
+func TestParseSessionConfigRejectsInvalidLeaseTTL(t *testing.T) {
+	cfg := &coreConfig{
+		SessionTTL:            "30m",
+		SessionReaperInterval: "30s",
+		SessionLeaseTTL:       "bogus",
+	}
+
+	_, _, _, _, err := parseSessionConfig(cfg)
+
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "CONFIG_INVALID")
+}
+
+// TestParseSessionConfigRejectsInvalidBootGrace verifies that a malformed
+// session_boot_grace value returns a CONFIG_INVALID error.
+func TestParseSessionConfigRejectsInvalidBootGrace(t *testing.T) {
+	cfg := &coreConfig{
+		SessionTTL:            "30m",
+		SessionReaperInterval: "30s",
+		SessionBootGrace:      "bogus",
+	}
+
+	_, _, _, _, err := parseSessionConfig(cfg)
+
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "CONFIG_INVALID")
+}
+
+// TestParseSessionConfigRejectsZeroLeaseTTL verifies that a zero lease TTL
+// returns an error containing "positive".
+func TestParseSessionConfigRejectsZeroLeaseTTL(t *testing.T) {
+	cfg := &coreConfig{
+		SessionTTL:            "30m",
+		SessionReaperInterval: "30s",
+		SessionLeaseTTL:       "0s",
+	}
+
+	_, _, _, _, err := parseSessionConfig(cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "positive")
+}
+
+// TestParseSessionConfigRejectsZeroBootGrace verifies that a zero boot grace
+// returns an error containing "positive".
+func TestParseSessionConfigRejectsZeroBootGrace(t *testing.T) {
+	cfg := &coreConfig{
+		SessionTTL:            "30m",
+		SessionReaperInterval: "30s",
+		SessionBootGrace:      "0s",
+	}
+
+	_, _, _, _, err := parseSessionConfig(cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "positive")
+}
+
+// TestParseSessionConfigDefaultsLeaseTTLAndBootGrace verifies that empty
+// session_lease_ttl and session_boot_grace receive their defaults (45s / 60s).
+func TestParseSessionConfigDefaultsLeaseTTLAndBootGrace(t *testing.T) {
+	cfg := &coreConfig{}
+
+	_, _, leaseTTL, bootGrace, err := parseSessionConfig(cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, 45*time.Second, leaseTTL)
+	assert.Equal(t, 60*time.Second, bootGrace)
+}
+
+// TestParseSessionConfigUsesExplicitLeaseTTLAndBootGrace verifies that explicit
+// session_lease_ttl and session_boot_grace values are preserved.
+func TestParseSessionConfigUsesExplicitLeaseTTLAndBootGrace(t *testing.T) {
+	cfg := &coreConfig{
+		SessionLeaseTTL:  "2m",
+		SessionBootGrace: "3m",
+	}
+
+	_, _, leaseTTL, bootGrace, err := parseSessionConfig(cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2*time.Minute, leaseTTL)
+	assert.Equal(t, 3*time.Minute, bootGrace)
 }
 
 // TestResolveLogLevel verifies that resolveLogLevel correctly resolves log level
