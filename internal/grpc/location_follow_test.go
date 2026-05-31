@@ -233,6 +233,9 @@ func TestLocationFollower_BuildLocationState(t *testing.T) {
 	}
 
 	// Presence comes from active sessions at the location, not character repo.
+	// GridPresent=true is required: ListActiveByLocation filters
+	// `status='active' AND grid_present=true` (holomush-rsoe6.12, invariant
+	// I-PRES-1 — a session in the location roster must be grid-present).
 	ss := sessiontest.NewStore(t)
 	_ = ss.Set(context.Background(), "s1", &session.Info{
 		ID:            "s1",
@@ -240,6 +243,7 @@ func TestLocationFollower_BuildLocationState(t *testing.T) {
 		CharacterName: "Alice",
 		LocationID:    locID,
 		Status:        session.StatusActive,
+		GridPresent:   true,
 	})
 
 	lf := &locationFollower{worldQuerier: wq, sessionStore: ss, verbRegistry: testVerbRegistry(t)}

@@ -38,14 +38,17 @@ func (s *stubNameResolver) Names(_ context.Context, ids []ulid.ULID) (map[ulid.U
 	return out, nil
 }
 
-// mkActiveAt returns a session.Info with Status=Active, non-zero ExpiresAt,
-// and the given characterID / locationID. PlayerID matches ownedPlayerID so
-// that newFakePlayerSessionRepo(ownedPlayerID) passes ownership validation.
+// mkActiveAt returns a session.Info with Status=Active, GridPresent=true,
+// non-zero ExpiresAt, and the given characterID / locationID. PlayerID matches
+// ownedPlayerID so that newFakePlayerSessionRepo(ownedPlayerID) passes
+// ownership validation. GridPresent=true reflects the invariant that a session
+// returned by ListActiveByLocation must be grid-present (I-PRES-1).
 func mkActiveAt(id string, characterID, locationID ulid.ULID) *session.Info {
 	future := time.Now().Add(time.Hour)
 	return &session.Info{
 		ID:          id,
 		Status:      session.StatusActive,
+		GridPresent: true,
 		ExpiresAt:   &future,
 		CharacterID: characterID,
 		LocationID:  locationID,
@@ -455,6 +458,45 @@ func TestPresenceEntryHasExactlyThreeFields(t *testing.T) {
 		t.Errorf("I-PRES-7: PresenceEntry MUST have exactly %d fields (character_id, character_name, state); got %d: %v",
 			wantFields, fields.Len(), names)
 	}
+}
+
+// Verifies: I-PRES-1
+// A session that is active but has grid_present=false (e.g. only a
+// comms_hub connection, no terminal/telnet) MUST NOT appear in the
+// location roster.
+func TestListFocusPresenceExcludesActiveButNotGridPresent(t *testing.T) {
+	char := ulid.Make()
+	commsChar := ulid.Make()
+	loc := ulid.Make()
+	// caller session: active AND grid-present — appears in the roster.
+	caller := mkActiveAt("sess-caller", char, loc)
+	// comms-only session: active but NOT grid-present — must be excluded.
+	// commsChar IS resolvable so the name-resolver skip path does not mask
+	// the failure; only the grid_present filter must exclude it.
+	commsOnly := mkActiveAt("sess-comms", commsChar, loc)
+	commsOnly.GridPresent = false
+
+	grant := policytest.NewGrantEngine()
+	grant.Grant(access.CharacterSubject(char.String()), "list_presence", access.LocationResource(loc.String()))
+
+	s := &CoreServer{
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			"sess-caller": caller,
+			"sess-comms":  commsOnly,
+		}),
+		playerSessionRepo: newFakePlayerSessionRepo(ownedPlayerID),
+		accessEngine:      grant,
+		characterNameResolver: &stubNameResolver{names: map[ulid.ULID]string{
+			char:      "alice",
+			commsChar: "bob-comms", // resolvable: ensures exclusion is by grid_present filter, not name-resolver skip
+		}},
+	}
+	resp, err := s.ListFocusPresence(context.Background(), &corev1.ListFocusPresenceRequest{
+		SessionId: "sess-caller", PlayerSessionToken: testPlayerSessionToken,
+	})
+	require.NoError(t, err)
+	assert.Len(t, resp.Entries, 1, "active-but-not-grid-present session must be excluded from presence roster")
+	assert.Equal(t, "alice", resp.Entries[0].CharacterName)
 }
 
 // Missing characterNameResolver → INTERNAL (misconfiguration; not a security
