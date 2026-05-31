@@ -252,6 +252,19 @@ message ListScenesRequest {
   int32 offset = 2 [(buf.validate.field).int32.gte = 0];
   // Restrict results to scenes carrying all of these tags.
   repeated string tags = 3;
+  // Extra content-warning categories to hide for this one query, on top of the
+  // caller's stored block. The planned board query (holomush-iokti.13) unions
+  // these with the game/player/character content.cw_block lists and drops any
+  // scene tagged with a blocked category. Applied server-side so the page
+  // limit/offset stay correct after filtering.
+  repeated string exclude_content_warnings = 4;
+  // Acting character ULID. The planned board query reads this principal's
+  // character-scope content.cw_block to assemble the effective block set.
+  string character_id = 5 [(buf.validate.field).string.min_len = 1];
+  // Owning player ULID. The planned board query reads this principal's
+  // player-scope content.cw_block, which applies across all of the player's
+  // characters, into the effective block set.
+  string player_id = 6 [(buf.validate.field).string.min_len = 1];
 }
 
 // ListScenesResponse is the (currently unserved) scene-discovery result page.

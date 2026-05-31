@@ -278,7 +278,20 @@ type ListScenesRequest struct {
 	// Number of leading results to skip for pagination.
 	Offset int32 `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
 	// Restrict results to scenes carrying all of these tags.
-	Tags          []string `protobuf:"bytes,3,rep,name=tags,proto3" json:"tags,omitempty"`
+	Tags []string `protobuf:"bytes,3,rep,name=tags,proto3" json:"tags,omitempty"`
+	// Extra content-warning categories to hide for this one query, on top of the
+	// caller's stored block. The planned board query (holomush-iokti.13) unions
+	// these with the game/player/character content.cw_block lists and drops any
+	// scene tagged with a blocked category. Applied server-side so the page
+	// limit/offset stay correct after filtering.
+	ExcludeContentWarnings []string `protobuf:"bytes,4,rep,name=exclude_content_warnings,json=excludeContentWarnings,proto3" json:"exclude_content_warnings,omitempty"`
+	// Acting character ULID. The planned board query reads this principal's
+	// character-scope content.cw_block to assemble the effective block set.
+	CharacterId string `protobuf:"bytes,5,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// Owning player ULID. The planned board query reads this principal's
+	// player-scope content.cw_block, which applies across all of the player's
+	// characters, into the effective block set.
+	PlayerId      string `protobuf:"bytes,6,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -332,6 +345,27 @@ func (x *ListScenesRequest) GetTags() []string {
 		return x.Tags
 	}
 	return nil
+}
+
+func (x *ListScenesRequest) GetExcludeContentWarnings() []string {
+	if x != nil {
+		return x.ExcludeContentWarnings
+	}
+	return nil
+}
+
+func (x *ListScenesRequest) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
+	}
+	return ""
+}
+
+func (x *ListScenesRequest) GetPlayerId() string {
+	if x != nil {
+		return x.PlayerId
+	}
+	return ""
 }
 
 // ListScenesResponse is the (currently unserved) scene-discovery result page.
@@ -3763,12 +3797,15 @@ const file_holomush_scene_v1_scene_proto_rawDesc = "" +
 	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12%\n" +
 	"\x0echaracter_name\x18\x02 \x01(\tR\rcharacterName\x12\x12\n" +
 	"\x04role\x18\x03 \x01(\tR\x04role\x127\n" +
-	"\tjoined_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bjoinedAt\"j\n" +
+	"\tjoined_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bjoinedAt\"\xf6\x01\n" +
 	"\x11ListScenesRequest\x12 \n" +
 	"\x05limit\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\x05limit\x12\x1f\n" +
 	"\x06offset\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\x06offset\x12\x12\n" +
-	"\x04tags\x18\x03 \x03(\tR\x04tags\"J\n" +
+	"\x04tags\x18\x03 \x03(\tR\x04tags\x128\n" +
+	"\x18exclude_content_warnings\x18\x04 \x03(\tR\x16excludeContentWarnings\x12*\n" +
+	"\fcharacter_id\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcharacterId\x12$\n" +
+	"\tplayer_id\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\bplayerId\"J\n" +
 	"\x12ListScenesResponse\x124\n" +
 	"\x06scenes\x18\x01 \x03(\v2\x1c.holomush.scene.v1.SceneInfoR\x06scenes\"a\n" +
 	"\x0fGetSceneRequest\x12*\n" +
