@@ -20,6 +20,7 @@ import (
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
+	"github.com/holomush/holomush/internal/settings"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
@@ -28,6 +29,7 @@ var (
 	_ plugins.Host                   = (*Host)(nil)
 	_ plugins.FocusDepsConfigurer    = (*Host)(nil)
 	_ plugins.ReadbackDepsConfigurer = (*Host)(nil)
+	_ plugins.SettingsDepsConfigurer = (*Host)(nil)
 )
 
 // luaPlugin holds compiled Lua code for a plugins.
@@ -127,6 +129,35 @@ func (h *Host) SetFocusCoordinator(fc focus.Coordinator) {
 		return
 	}
 	h.hostFuncs.SetFocusOps(&coordinatorFocusOpsAdapter{c: fc})
+}
+
+// SetSettingsStores injects the owner-partitioned settings stores into the
+// underlying hostfunc bridge via a settingsStoresOpsAdapter that satisfies
+// hostfunc.SettingsOps, so the Lua get_setting / set_setting hostfuncs reach the
+// SAME stores the binary GetSetting / SetSetting RPCs use (plugin-runtime-
+// symmetry, INV-8). Implements plugins.SettingsDepsConfigurer; invoked by
+// Manager.ConfigureSettingsDeps via findOptional during gRPC subsystem Start.
+//
+// If any store is nil the binding is cleared rather than wrapping a partial set
+// of stores — a half-wired adapter would nil-deref inside scopedFor's For()
+// calls. Clearing makes the affected scopes fail closed at the hostfunc layer.
+func (h *Host) SetSettingsStores(
+	player settings.PlayerSettingsStore,
+	character settings.CharacterSettingsStore,
+	game settings.GameSettings,
+) {
+	if h.hostFuncs == nil {
+		return
+	}
+	if player == nil || character == nil || game == nil {
+		h.hostFuncs.SetSettingsOps(nil)
+		return
+	}
+	h.hostFuncs.SetSettingsOps(&settingsStoresOpsAdapter{
+		player:    player,
+		character: character,
+		game:      game,
+	})
 }
 
 // SetHistoryReader injects the history reader into the underlying hostfunc bridge.

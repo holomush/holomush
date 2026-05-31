@@ -597,8 +597,10 @@ func (s *pluginHostServiceServer) Evaluate(ctx context.Context, req *pluginv1.Pl
 // settingsGameWriteResource is the ABAC resource the host evaluates for a
 // GAME-scope SetSetting. The subject (recovered from the dispatch token) must be
 // permitted to "write" it; in practice only operator subjects are granted this,
-// so a non-operator plugin/character is denied (PermissionDenied).
-const settingsGameWriteResource = "setting:game"
+// so a non-operator plugin/character is denied (PermissionDenied). Sourced from
+// the single shared constant so the binary and Lua surfaces cannot drift
+// (plugin-runtime-symmetry, INV-8).
+const settingsGameWriteResource = pluginauthz.SettingsGameWriteResource
 
 // GetSetting reads one owner-partitioned setting for the calling plugin.
 //
@@ -766,9 +768,14 @@ func (s *pluginHostServiceServer) resolveSettingScope(
 	}
 }
 
-// requirePrincipalOwnership parses principalID as a ULID and enforces that the
-// acting subject owns it (principal_id == actor.ID). Returns InvalidArgument on
-// an unparseable/empty principal, PermissionDenied on mismatch.
+// requirePrincipalOwnership enforces that the token-recovered actor owns the
+// requested principal by delegating to the runtime-neutral shared gate
+// pluginauthz.CheckPrincipalOwnership — the SAME helper the Lua
+// get_setting/set_setting hostfuncs use, so the binary and Lua ownership trust
+// checks cannot diverge (plugin-runtime-symmetry, INV-8). The oops codes the
+// helper returns are mapped to the gRPC statuses this RPC has always returned:
+// INVALID_PRINCIPAL_ID → InvalidArgument ("invalid principal_id"),
+// PRINCIPAL_NOT_OWNED → PermissionDenied ("permission denied").
 //
 // For CHARACTER scope this is correct and functional: the dispatch-token actor
 // is always an ActorCharacter, so principal_id == character ID is the expected
@@ -781,15 +788,16 @@ func (s *pluginHostServiceServer) resolveSettingScope(
 // so any real player-principal PLAYER request is denied. This is a deliberate
 // interim contract, NOT a bug.
 func (s *pluginHostServiceServer) requirePrincipalOwnership(principalID string, actor core.Actor) (ulid.ULID, error) {
-	pid, err := ulid.Parse(principalID)
-	if err != nil {
-		return ulid.ULID{}, status.Error(codes.InvalidArgument, "invalid principal_id") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	pid, err := pluginauthz.CheckPrincipalOwnership(principalID, actor)
+	if err == nil {
+		return pid, nil
 	}
-	// Compare against the token-recovered actor ID, never a request field.
-	if principalID != actor.ID {
+	oopsErr, _ := oops.AsOops(err)
+	if oopsErr.Code() == "PRINCIPAL_NOT_OWNED" {
 		return ulid.ULID{}, status.Error(codes.PermissionDenied, "permission denied") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
 	}
-	return pid, nil
+	// INVALID_PRINCIPAL_ID and any unexpected code fail closed as InvalidArgument.
+	return ulid.ULID{}, status.Error(codes.InvalidArgument, "invalid principal_id") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
 }
 
 // authorizeGameWrite evaluates the operator authorization decision required for

@@ -602,3 +602,25 @@ Keep under 200 lines. Curate — don't hoard.
   BOTH `SetString`+`SetStringSlice` validate, and the isolation test is a 3-way
   assertion (other-owner miss + host-bare miss + host-Writable miss), not one
   round-trip. Encountered: holomush-iokti.4 (2026-05-30) — READY.
+
+- **iokti.9 Lua settings parity (verified-good INV-8 reference).** Lua
+  `get_setting`/`set_setting` (`hostfunc/stdlib_settings.go`) achieve symmetry
+  with binary `host_service.go` by SHARING the gate, not re-implementing it:
+  `pluginauthz.CheckPrincipalOwnership` (`pluginauthz/principal.go`, new) +
+  `pluginauthz.SettingsGameWriteResource="setting:game"` const are the single
+  source of truth; binary `requirePrincipalOwnership` was refactored to delegate
+  (INVALID_PRINCIPAL_ID→InvalidArgument, PRINCIPAL_NOT_OWNED→PermissionDenied,
+  any-other/non-oops→InvalidArgument fail-closed — behavior-identical, guarded by
+  existing `host_settings_test.go`). Identity: Lua `core.ActorFromContext`, binary
+  dispatch token — both feed the SAME ownership compare; owner partition bound from
+  `pluginName` at the adapter (`lua/settings_ops_adapter.go` Owner(pluginName)),
+  never wire. GAME reads open, writes→`authorizeGameWrite` engine deny. Lua-store
+  seam `SettingsOps` is PURE store (trust above it). Wiring: `Manager.Configure
+  SettingsDeps` loops binary hosts AND `m.luaHost` via findOptional — NO cmd change.
+  When reviewing runtime-parity beads: confirm the gate is a SHARED helper both
+  paths call (not two copies), refactor preserves the old path's exact gRPC codes
+  (diff the OLD vs NEW status mapping), and Lua tests drive REAL `L.DoString`
+  through registered funcs asserting deny-path BOTH errors AND never-reached-store.
+  Non-blockers seen: GAME-write nil-engine MESSAGE strings differ binary/Lua (both
+  fail closed — cosmetic); adapter nil-store branches unreachable (SetSettingsStores
+  all-or-nothing gate). Encountered: holomush-iokti.9 (2026-05-30) — READY.
