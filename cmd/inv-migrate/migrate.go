@@ -24,14 +24,15 @@ type rewrite struct {
 
 // rewriteAll applies each rewrite to its file. Whole-token match only (so INV-3
 // never matches inside INV-31). Idempotent: a file whose Token is already absent
-// is left unchanged. Returns the count of files actually modified. A recorded
-// file that does not exist is an error (the registry is stale — fail loud).
+// is left unchanged. Returns the count of DISTINCT files actually modified (a
+// file with multiple recorded token rewrites counts once). A recorded file that
+// does not exist is an error (the registry is stale — fail loud).
 func rewriteAll(plan []rewrite) (int, error) {
-	changed := 0
+	changedFiles := map[string]bool{}
 	for _, r := range plan {
 		data, err := os.ReadFile(r.File)
 		if err != nil {
-			return changed, fmt.Errorf("recorded ref unreadable %s: %w", r.File, err)
+			return len(changedFiles), fmt.Errorf("recorded ref unreadable %s: %w", r.File, err)
 		}
 		re := regexp.MustCompile(`\b` + regexp.QuoteMeta(r.Token) + `\b`)
 		out := re.ReplaceAll(data, []byte(r.Canonical))
@@ -39,9 +40,9 @@ func rewriteAll(plan []rewrite) (int, error) {
 			continue
 		}
 		if err := os.WriteFile(r.File, out, 0o644); err != nil { //nolint:gosec // G306: source files are 0644 by repo convention
-			return changed, fmt.Errorf("write %s: %w", r.File, err)
+			return len(changedFiles), fmt.Errorf("write %s: %w", r.File, err)
 		}
-		changed++
+		changedFiles[r.File] = true
 	}
-	return changed, nil
+	return len(changedFiles), nil
 }
