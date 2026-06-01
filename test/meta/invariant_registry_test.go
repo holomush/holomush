@@ -104,6 +104,33 @@ invariants:
 	}
 }
 
+// TestOwnedPathsPartition asserts that no path glob is claimed by two scopes'
+// owned_paths unless it appears in some scope's shared_files allowlist. This is
+// the deterministic F2 defense: owned_paths MUST partition the annotated tree
+// so a mislabeled annotation (e.g. a scene file stamped INV-CRYPTO-*) cannot
+// pass the provenance guard's ownership check.
+func TestOwnedPathsPartition(t *testing.T) {
+	reg := loadRegistry(t)
+	owner := map[string]string{} // path glob -> scope
+	shared := map[string]bool{}
+	for _, sc := range reg.Scopes {
+		for _, f := range sc.SharedFiles {
+			shared[f] = true
+		}
+	}
+	for _, sc := range reg.Scopes {
+		for _, p := range sc.OwnedPaths {
+			if shared[p] {
+				continue // explicitly shared; ownership waived
+			}
+			if prev, dup := owner[p]; dup {
+				t.Errorf("owned_paths overlap: %q owned by both %s and %s", p, prev, sc.Name)
+			}
+			owner[p] = sc.Name
+		}
+	}
+}
+
 // registryVerifiesRE matches `// Verifies: INV-<SCOPE>-<N>` annotations in test files.
 var registryVerifiesRE = regexp.MustCompile(`//\s*Verifies:\s*(INV-[A-Z]+-\d+)`)
 
