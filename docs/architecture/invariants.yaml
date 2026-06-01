@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+# HoloMUSH Invariant Registry — machine-readable source of truth.
+# Paired with invariants.md (human-readable view).
+# The meta-test at test/meta/invariant_registry_test.go reads this file.
+# CI check scripts/check-invariant-registry-consistency.sh verifies
+# this file and invariants.md are in sync.
+
+scopes:
+  - name: INV-CRYPTO
+    description: "Event payload encryption, DEK lifecycle, key wrapping, decryption delivery, participant sets, AdminReadStream"
+    boundary: "Cryptographic operations on event payloads. Does NOT include: audit projection (→ INV-EVENTBUS), plugin manifest
+      validation (→ INV-PLUGIN), cluster coordination (→ INV-CLUSTER). Crypto invariants that operate on in-process state
+      (DEK cache, key material, envelope codec) belong here; invariants that govern wire-level coordination between replicas
+      (invalidation pings, probe-and-pill, N-of-N ack contracts) belong under INV-CLUSTER."
+
+  - name: INV-PRIVACY
+    description: "Stream history temporal floors, scope gating, guest-session bounds, reattach/Idle arrival-timestamp semantics"
+    boundary: "Privacy-relevant gating on history reads. Does NOT include: ABAC policy evaluation (→ INV-ACCESS), subscribe
+      authorization (→ INV-EVENTBUS)."
+
+  - name: INV-PRESENCE
+    description: "Presence snapshot correctness, field enumeration, client-side dedup, ownership obscuration"
+    boundary: "Current-state presence queries. Does NOT include: session status lifecycle (→ INV-SESSION)."
+
+  - name: INV-SCENE
+    description: "Scene lifecycle, board queries, content warnings, pose ordering, focus model, publish snapshot/state, IC
+      isolation, history readability"
+    boundary: "All scene-domain behavior. Cross-cuts multiple Phase specs (P4–P8)."
+
+  - name: INV-PLUGIN
+    description: "Runtime symmetry, manifest validation, hostfunc safety, emit gates, setting isolation, plugin authz"
+    boundary: "Plugin-system contracts applicable to both Lua and binary runtimes. Does NOT include: plugin crypto wiring
+      (→ INV-CRYPTO)."
+
+  - name: INV-EVENTBUS
+    description: "Subject naming, JetStream consumer config, audit projection, delivery contracts, tier routing, rendering
+      completeness, colon eradication"
+    boundary: "Event infrastructure. Does NOT include: event payload encryption (→ INV-CRYPTO), history privacy gating (→
+      INV-PRIVACY)."
+
+  - name: INV-CLUSTER
+    description: "Member identity, heartbeats, cache invalidation (cross-replica coordination path), probe-and-pill, clock
+      independence"
+    boundary: "Multi-replica coordination. Includes cluster-scoped invalidation contracts (e.g., INV-28/INV-29 N-of-N ack
+      pings, INV-56 Coordinator retry limits, INV-59 cache-invalidation correctness) that govern wire-level behavior between
+      replicas. Does NOT include single-process DEK operations (→ INV-CRYPTO)."
+
+  - name: INV-ACCESS
+    description: "ABAC policy evaluation, attribute provider invariants, seed policy shape, authorization decisions"
+    boundary: "Access control evaluation. Does NOT include: stream-access gating at gRPC boundary (→ INV-EVENTBUS)."
+
+  - name: INV-SESSION
+    description: "Session status lifecycle, connection attachment, focus membership, idle detection"
+    boundary: "Session state machine. Does NOT include: presence snapshot (→ INV-PRESENCE)."
+
+  - name: INV-STORE
+    description: "Migration discipline, no-DELETE enforcement, spec compliance scanning"
+    boundary: "Database invariants."
+
+  - name: INV-TELEMETRY
+    description: "Logging discipline, trace context, metric naming, sloglint policy"
+    boundary: "Observability contracts."
+
+  - name: INV-BRANDING
+    description: "Asset integrity, palette tokens, logo generation"
+    boundary: "Visual identity invariants. Does NOT include: docs quality (separate concern)."
+
+  - name: INV-DOCS
+    description: "Proto doc comments, doc IA, contributor onboarding surface"
+    boundary: "Documentation quality invariants."
+
+invariants: []
