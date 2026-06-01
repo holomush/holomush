@@ -9,8 +9,10 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-YAML="$REPO_ROOT/docs/architecture/invariants.yaml"
-MD="$REPO_ROOT/docs/architecture/invariants.md"
+# Paths default to the in-repo registry but are overridable so the consistency
+# logic can be exercised against fixtures (scripts/tests/*.bats).
+YAML="${INV_REGISTRY_YAML:-$REPO_ROOT/docs/architecture/invariants.yaml}"
+MD="${INV_REGISTRY_MD:-$REPO_ROOT/docs/architecture/invariants.md}"
 
 if [[ ! -f "$YAML" ]]; then
   echo "ERROR: invariants.yaml not found at $YAML"
@@ -28,8 +30,12 @@ if [[ -z "$yaml_ids" ]]; then
   exit 0
 fi
 
-# Extract IDs from markdown table rows (lines matching "| `INV-...` |")
-md_ids=$(grep -E '^\|[[:space:]]+`INV-[A-Z]+-[0-9]+`' "$MD" | sed -E 's/^.*`(INV-[A-Z]+-[0-9]+)`.*$/\1/' | sort || true)
+# Extract IDs from markdown table rows (lines matching "| `INV-...` |").
+# Anchor the sed capture to the first column so a row that also references a
+# legacy ID in backticks (e.g. "| `INV-CRYPTO-1` | replaces `INV-RB-5` |")
+# yields the PRIMARY id, not the last backtick-wrapped token. A greedy `^.*`
+# prefix would bind the capture to the trailing legacy ID (holomush-hz0v4.14.19).
+md_ids=$(grep -E '^\|[[:space:]]+`INV-[A-Z]+-[0-9]+`' "$MD" | sed -E 's/^\|[[:space:]]+`(INV-[A-Z]+-[0-9]+)`.*$/\1/' | sort || true)
 
 # Every YAML ID must appear in markdown.
 fail=0
