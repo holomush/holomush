@@ -15,9 +15,18 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ref is a path-anchored annotation site: a file plus the ID token to anchor on.
+// Never a line number — line numbers drift between classification and migration.
+type ref struct {
+	File  string `yaml:"file"`
+	Token string `yaml:"token"`
+}
+
 // registryEntry mirrors one invariant in invariants.yaml.
 type registryEntry struct {
 	ID         string   `yaml:"id"`
+	Scope      string   `yaml:"scope"`
+	OriginSpec string   `yaml:"origin_spec"`
 	Legacy     []string `yaml:"legacy"`
 	Summary    string   `yaml:"summary"`
 	Severity   string   `yaml:"severity"`
@@ -25,15 +34,74 @@ type registryEntry struct {
 	AssertedBy []string `yaml:"asserted_by"`
 	External   bool     `yaml:"external"`
 	Binding    string   `yaml:"binding"`
+	Refs       []ref    `yaml:"refs"`
+}
+
+type scopeRecord struct {
+	Name        string   `yaml:"name"`
+	Description string   `yaml:"description"`
+	Boundary    string   `yaml:"boundary"`
+	Status      string   `yaml:"status"`       // pending | migrated
+	OriginSpecs []string `yaml:"origin_specs"`
+	OwnedPaths  []string `yaml:"owned_paths"`  // path globs; MAY target individual files
+	SharedFiles []string `yaml:"shared_files"` // exact paths annotating >1 scope
 }
 
 type registryDoc struct {
-	Scopes []struct {
-		Name        string `yaml:"name"`
-		Description string `yaml:"description"`
-		Boundary    string `yaml:"boundary"`
-	} `yaml:"scopes"`
+	Scopes     []scopeRecord   `yaml:"scopes"`
 	Invariants []registryEntry `yaml:"invariants"`
+}
+
+// loadRegistry parses invariants.yaml from the repo root.
+func loadRegistry(t *testing.T) registryDoc {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(findRepoRoot(t), "docs", "architecture", "invariants.yaml"))
+	if err != nil {
+		t.Fatalf("read invariants.yaml: %v", err)
+	}
+	var reg registryDoc
+	if err := yaml.Unmarshal(data, &reg); err != nil {
+		t.Fatalf("parse invariants.yaml: %v", err)
+	}
+	return reg
+}
+
+func TestRegistrySchemaParsesOwnershipFields(t *testing.T) {
+	const fixture = `
+scopes:
+  - name: INV-PRESENCE
+    status: migrated
+    origin_specs: ["docs/superpowers/specs/x.md"]
+    owned_paths: ["internal/grpc/focus/**"]
+    shared_files: ["test/integration/wholesystem/census_test.go"]
+invariants:
+  - id: INV-PRESENCE-1
+    scope: INV-PRESENCE
+    origin_spec: "docs/superpowers/specs/x.md"
+    legacy: ["INV-3@docs/superpowers/specs/x.md"]
+    summary: "snapshot enumerates all active sessions"
+    binding: pending
+    refs:
+      - {file: "internal/grpc/focus/presence.go", token: "INV-3"}
+`
+	var reg registryDoc
+	if err := yaml.Unmarshal([]byte(fixture), &reg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(reg.Scopes) != 1 {
+		t.Fatalf("want 1 scope, got %d", len(reg.Scopes))
+	}
+	sc := reg.Scopes[0]
+	if sc.Status != "migrated" || len(sc.OwnedPaths) != 1 || len(sc.SharedFiles) != 1 {
+		t.Errorf("scope ownership fields not parsed: %+v", sc)
+	}
+	inv := reg.Invariants[0]
+	if inv.OriginSpec == "" || len(inv.Refs) != 1 {
+		t.Fatalf("invariant origin/refs not parsed: %+v", inv)
+	}
+	if inv.Refs[0].File != "internal/grpc/focus/presence.go" || inv.Refs[0].Token != "INV-3" {
+		t.Errorf("ref not parsed: %+v", inv.Refs[0])
+	}
 }
 
 // registryVerifiesRE matches `// Verifies: INV-<SCOPE>-<N>` annotations in test files.
