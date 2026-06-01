@@ -5,7 +5,6 @@
 # Verifies docs/architecture/invariants.yaml and invariants.md are in sync.
 # - Every invariant ID in the YAML must appear in the markdown table.
 # - Every invariant ID in the markdown table must appear in the YAML.
-# - The scope count in YAML scopes: must match the scope index table rows.
 
 set -euo pipefail
 
@@ -22,15 +21,15 @@ if [[ ! -f "$MD" ]]; then
   exit 1
 fi
 
-# Extract IDs from YAML (lines matching "id: INV-...")
-yaml_ids=$(grep -E '^[[:space:]]+id:[[:space:]]+INV-[A-Z]+-[0-9]+' "$YAML" | sed -E 's/^[[:space:]]+id:[[:space:]]+//' | sort || true)
+# Extract IDs from YAML (lines matching "id: INV-..." or "- id: INV-...")
+yaml_ids=$(grep -E '^[[:space:]]+(- )?id:[[:space:]]+INV-[A-Z]+-[0-9]+' "$YAML" | sed -E 's/^[[:space:]]+(- )?id:[[:space:]]+//' | sort || true)
 if [[ -z "$yaml_ids" ]]; then
   echo "WARNING: invariants.yaml has no invariant entries yet — consistency check skipped"
   exit 0
 fi
 
 # Extract IDs from markdown table rows (lines matching "| `INV-...` |")
-md_ids=$(grep -E '^\|[[:space:]]+`INV-[A-Z]+-[0-9]+`' "$MD" | sed -E 's/^.*`(INV-[A-Z]+-[0-9]+)`.*$/\1/' | sort)
+md_ids=$(grep -E '^\|[[:space:]]+`INV-[A-Z]+-[0-9]+`' "$MD" | sed -E 's/^.*`(INV-[A-Z]+-[0-9]+)`.*$/\1/' | sort || true)
 
 # Every YAML ID must appear in markdown.
 fail=0
