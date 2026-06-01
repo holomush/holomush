@@ -14,31 +14,201 @@ scopes:
       validation (→ INV-PLUGIN), cluster coordination (→ INV-CLUSTER). Crypto invariants that operate on in-process state
       (DEK cache, key material, envelope codec) belong here; invariants that govern wire-level coordination between replicas
       (invalidation pings, probe-and-pill, N-of-N ack contracts) belong under INV-CLUSTER."
+    # Family→scope evidence: bare INV-N (crypto payload/DEK/KEK/AAD) →
+    # 2026-04-25-event-payload-crypto-design.md; RB → 2026-05-25-plugin-readback-decrypt-design.md;
+    # P7 (crypto half) → 2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md.
+    # See redesign spec §2.1.
+    status: pending
+    origin_specs:
+      - "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+      - "docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"
+      - "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
+    owned_paths:
+      - "internal/eventbus/crypto/**"
+      - "internal/eventbus/history/**"
+      - "internal/admin/readstream/**"
+      - "test/integration/crypto/**"
+      - "pkg/plugin/decrypt_client.go"
+      - "pkg/plugin/audit.go"
+      - "internal/plugin/cryptowiring/**"
+      - "internal/plugin/hostfunc/stdlib_audit.go"
+      - "internal/plugin/hostfunc/stdlib_audit_test.go"
+      - "internal/eventbus/authguard/**"
+      - "internal/eventbus/audit_row_access.go"
+      - "internal/eventbus/audit/**"
+      - "test/integration/privacy/scene_history_readback_test.go"
+    shared_files:
+      # CRYPTO+STORE: history files carrying both P7/RB and TS (nanos) annotations.
+      - "internal/eventbus/history/readback.go"
+      - "internal/eventbus/history/phase7_boundary_meta_test.go"
+      - "internal/eventbus/history/plugin_aad_reconstruction_test.go"
+      - "internal/eventbus/history/cold_postgres.go"
+      - "internal/eventbus/history/cold_postgres_integration_test.go"
+      - "internal/eventbus/history/plugin_aad_adapter.go"
+      # CRYPTO+SCENE: core-scenes files carrying both scene-domain and crypto annotations.
+      - "plugins/core-scenes/audit.go"
+      - "plugins/core-scenes/main.go"
+      - "plugins/core-scenes/main_test.go"
+      - "plugins/core-scenes/service.go"
+      - "plugins/core-scenes/publish_snapshot_integration_test.go"
+      - "plugins/core-scenes/publish_store.go"
+      - "internal/plugin/goplugin/host_service.go"
+      # CRYPTO+EVENTBUS+STORE: publisher carries GW + P7 + TS.
+      - "internal/eventbus/publisher.go"
+      - "internal/eventbus/types.go"
+      - "internal/eventbus/publisher_test.go"
+      # CRYPTO+ACCESS+SCENE+EVENTBUS+PLUGIN: the shared integration harness.
+      - "internal/testsupport/integrationtest/harness.go"
+      - "internal/testsupport/integrationtest/crypto.go"
 
   - name: INV-PRIVACY
     description: "Stream history temporal floors, scope gating, guest-session bounds, reattach/Idle arrival-timestamp semantics"
     boundary: "Privacy-relevant gating on history reads. Does NOT include: ABAC policy evaluation (→ INV-ACCESS), subscribe
       authorization (→ INV-EVENTBUS)."
+    # No legacy family migrates here in this pass; privacy invariants live in
+    # the history-scope spec and are asserted under test/integration/privacy/.
+    status: pending
+    origin_specs:
+      - "docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"
+    owned_paths:
+      - "internal/grpc/scope_floor.go"
+    shared_files: []
 
   - name: INV-PRESENCE
     description: "Presence snapshot correctness, field enumeration, client-side dedup, ownership obscuration"
     boundary: "Current-state presence queries. Does NOT include: session status lifecycle (→ INV-SESSION)."
+    status: pending
+    origin_specs:
+      - "docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"
+    owned_paths:
+      - "internal/grpc/focus/presence*.go"
+      - "test/integration/presence/**"
+    shared_files: []
 
   - name: INV-SCENE
     description: "Scene lifecycle, board queries, content warnings, pose ordering, focus model, publish snapshot/state, IC
       isolation, history readability"
     boundary: "All scene-domain behavior. Cross-cuts multiple Phase specs (P4–P8)."
+    # Families P4/P5/P6/FS/FW/Y5INX and the SH publish-driving harness. See redesign spec §2.1.
+    status: pending
+    origin_specs:
+      - "docs/superpowers/specs/2026-05-19-scenes-phase-4-streams-and-pose-order-design.md"
+      - "docs/superpowers/specs/2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md"
+      - "docs/superpowers/specs/2026-05-23-scenes-phase-6-logs-vote-privacy-design.md"
+      - "docs/superpowers/specs/2026-05-28-focus-delta-coordinator-unification-design.md"
+      - "docs/superpowers/specs/2026-05-28-scene-bare-ulid-identity-design.md"
+      - "docs/superpowers/specs/2026-05-27-shcyu-harness-publish-driving-design.md"
+    owned_paths:
+      - "plugins/core-scenes/**"
+      - "internal/grpc/focus/**"
+      - "internal/grpc/stream_registry*.go"
+      - "internal/grpc/focus_wiring*.go"
+      - "internal/grpc/scope_floor_test.go"
+      - "internal/plugin/lua/focus_ops_adapter.go"
+      - "internal/plugin/hostfunc/stdlib_focus.go"
+      - "internal/plugin/hostfunc/stdlib_focus_test.go"
+      - "pkg/plugin/focus_client.go"
+      - "test/integration/scenes/**"
+      - "test/meta/focus_delta_gate_test.go"
+      - "test/meta/scenes_phase6_invariants_test.go"
+      - "internal/test/invariants/inv_p5_coverage_meta_test.go"
+      - "internal/test/invariants/scene_no_abac_in_getposeorder_test.go"
+      - "internal/test/invariants/scene_resolver_no_poseorder_leak_test.go"
+    shared_files:
+      # SCENE+CRYPTO: see CRYPTO.shared_files (core-scenes audit/main/service/publish_store).
+      - "plugins/core-scenes/audit.go"
+      - "plugins/core-scenes/main.go"
+      - "plugins/core-scenes/main_test.go"
+      - "plugins/core-scenes/service.go"
+      - "plugins/core-scenes/publish_snapshot_integration_test.go"
+      - "plugins/core-scenes/publish_store.go"
+      # SCENE+SESSION: P5 focus-model annotations on session-domain files.
+      - "internal/session/session.go"
+      - "internal/session/connection_test.go"
+      - "internal/session/session_connection_mutator_test.go"
+      - "internal/store/session_store.go"
+      - "internal/store/session_store_integration_test.go"
+      # SCENE+STORE: server.go carries P5-11 + TS; privacy_test carries P4 + TS.
+      - "internal/grpc/server.go"
+      - "test/integration/privacy/privacy_test.go"
+      # SCENE+EVENTBUS: query_stream_history carries P4 + ROPS; the colon-eradication meta-tests carry P4 + ROPS.
+      - "internal/grpc/query_stream_history.go"
+      - "internal/grpc/stream_access.go"
+      - "internal/test/invariants/colon_eradication_test.go"
+      - "internal/test/invariants/inv_p4_coverage_meta_test.go"
+      # SCENE+EVENTBUS+PLUGIN: plugin subsystem carries FS + GW + PC.
+      - "internal/plugin/setup/subsystem.go"
+      - "internal/plugin/goplugin/host_service.go"
+      # Shared integration harness (see CRYPTO.shared_files).
+      - "internal/testsupport/integrationtest/harness.go"
 
   - name: INV-PLUGIN
     description: "Runtime symmetry, manifest validation, hostfunc safety, emit gates, setting isolation, plugin authz"
     boundary: "Plugin-system contracts applicable to both Lua and binary runtimes. Does NOT include: plugin crypto wiring
       (→ INV-CRYPTO)."
+    # Families PC (runtime config), W9ML (plugin identity), WS (whole-system load harness). See redesign spec §2.1.
+    status: pending
+    origin_specs:
+      - "docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"
+      - "docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"
+      - "docs/superpowers/specs/2026-05-25-wholesystem-plugin-integration-design.md"
+    owned_paths:
+      - "internal/plugin/identity_registry.go"
+      - "internal/plugin/identity_registry_test.go"
+      - "internal/plugin/pluginauthz/**"
+      - "internal/store/plugin_repo.go"
+      - "internal/eventbus/proto_legacy_id_grep_test.go"
+      - "internal/eventbus/no_legacy_id_grep_test.go"
+      - "test/integration/wholesystem/**"
+      - "test/integration/plugin/**"
+    shared_files:
+      # PLUGIN+EVENTBUS: manager carries GW + W9ML.
+      - "internal/plugin/manager.go"
+      - "internal/plugin/manager_test.go"
+      # PLUGIN+SCENE+EVENTBUS: plugin subsystem (see SCENE.shared_files).
+      - "internal/plugin/setup/subsystem.go"
+      # Shared integration harness (see CRYPTO.shared_files).
+      - "internal/testsupport/integrationtest/harness.go"
 
   - name: INV-EVENTBUS
     description: "Subject naming, JetStream consumer config, audit projection, delivery contracts, tier routing, rendering
       completeness, colon eradication"
     boundary: "Event infrastructure. Does NOT include: event payload encryption (→ INV-CRYPTO), history privacy gating (→
       INV-PRIVACY)."
+    # Families GW (rendering completeness), ROPS (colon eradication), P7 (audit-plumbing half). See redesign spec §2.1.
+    status: pending
+    origin_specs:
+      - "docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md"
+      - "docs/superpowers/specs/2026-05-29-colon-style-subject-eradication-design.md"
+      - "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
+    owned_paths:
+      - "internal/eventbus/rendering_publisher*.go"
+      - "internal/gateway_invariants/**"
+      - "internal/gatewaymetrics/**"
+      - "internal/telnet/gateway_handler*.go"
+      - "internal/web/translate*.go"
+      - "internal/grpc/location_follow*.go"
+      - "internal/core/registry_test.go"
+      - "internal/core/exports_test.go"
+      - "test/integration/eventbus_e2e/rendering_completeness_test.go"
+      - "test/integration/streams/rops_test.go"
+      - "internal/grpc/stream_access_test.go"
+    shared_files:
+      # EVENTBUS+CRYPTO+STORE: publisher/types (see CRYPTO.shared_files).
+      - "internal/eventbus/publisher.go"
+      - "internal/eventbus/types.go"
+      - "internal/eventbus/publisher_test.go"
+      # EVENTBUS+SCENE: query_stream_history / stream_access / colon-eradication meta-tests (see SCENE.shared_files).
+      - "internal/grpc/query_stream_history.go"
+      - "internal/grpc/stream_access.go"
+      - "internal/test/invariants/colon_eradication_test.go"
+      - "internal/test/invariants/inv_p4_coverage_meta_test.go"
+      # EVENTBUS+PLUGIN: manager / subsystem (see PLUGIN.shared_files).
+      - "internal/plugin/manager.go"
+      - "internal/plugin/manager_test.go"
+      - "internal/plugin/setup/subsystem.go"
+      # Shared integration harness (see CRYPTO.shared_files).
+      - "internal/testsupport/integrationtest/harness.go"
 
   - name: INV-CLUSTER
     description: "Member identity, heartbeats, cache invalidation (cross-replica coordination path), probe-and-pill, clock
@@ -46,29 +216,114 @@ scopes:
     boundary: "Multi-replica coordination. Includes cluster-scoped invalidation contracts (e.g., INV-28/INV-29 N-of-N ack
       pings, INV-56 Coordinator retry limits, INV-59 cache-invalidation correctness) that govern wire-level behavior between
       replicas. Does NOT include single-process DEK operations (→ INV-CRYPTO)."
+    # bare INV-28/29/56/59 (cross-replica invalidation) defined in the master crypto spec
+    # but scoped to CLUSTER per the boundary note. See redesign spec §2.1.
+    status: pending
+    origin_specs:
+      - "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    owned_paths:
+      - "internal/cluster/**"
+      - "internal/eventbus/crypto/invalidation/**"
+    shared_files: []
 
   - name: INV-ACCESS
     description: "ABAC policy evaluation, attribute provider invariants, seed policy shape, authorization decisions"
     boundary: "Access control evaluation. Does NOT include: stream-access gating at gRPC boundary (→ INV-EVENTBUS)."
+    # Family RA (real-ABAC harness). See redesign spec §2.1.
+    status: pending
+    origin_specs:
+      - "docs/superpowers/specs/2026-05-26-harness-real-abac-design.md"
+    owned_paths:
+      - "internal/access/**"
+    shared_files:
+      # ACCESS+SCENE+CRYPTO+EVENTBUS+PLUGIN: shared integration harness (RA-4 site).
+      - "internal/testsupport/integrationtest/harness.go"
 
   - name: INV-SESSION
     description: "Session status lifecycle, connection attachment, focus membership, idle detection"
     boundary: "Session state machine. Does NOT include: presence snapshot (→ INV-PRESENCE)."
+    # Family M (remove session memstore). See redesign spec §2.1.
+    status: pending
+    origin_specs:
+      - "docs/superpowers/specs/2026-05-23-remove-session-memstore-design.md"
+    owned_paths:
+      - "internal/store/session_store_test.go"
+      - "internal/testsupport/sessiontest/**"
+    shared_files:
+      # SESSION+SCENE: P5 focus-model annotations on session-domain files (see SCENE.shared_files).
+      - "internal/session/session.go"
+      - "internal/session/connection_test.go"
+      - "internal/session/session_connection_mutator_test.go"
+      - "internal/store/session_store.go"
+      - "internal/store/session_store_integration_test.go"
 
   - name: INV-STORE
     description: "Migration discipline, no-DELETE enforcement, spec compliance scanning"
     boundary: "Database invariants."
+    # Family TS (nanosecond-timestamps migration discipline + pgnanos seam). See redesign spec §2.1.
+    status: pending
+    origin_specs:
+      - "docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md"
+    owned_paths:
+      - "internal/pgnanos/**"
+      - "internal/store/migrations/**"
+      - "internal/store/migrate_inv_ts_integration_test.go"
+      - "internal/store/migrate_clamp_integration_test.go"
+      - "internal/store/lint_meta_test.go"
+      - "internal/store/spec_meta_test.go"
+      - "internal/store/no_delete_grep_test.go"
+    shared_files:
+      # STORE+CRYPTO: history files carrying TS + P7/RB (see CRYPTO.shared_files).
+      - "internal/eventbus/history/readback.go"
+      - "internal/eventbus/history/phase7_boundary_meta_test.go"
+      - "internal/eventbus/history/plugin_aad_reconstruction_test.go"
+      - "internal/eventbus/history/cold_postgres.go"
+      - "internal/eventbus/history/cold_postgres_integration_test.go"
+      - "internal/eventbus/history/plugin_aad_adapter.go"
+      # STORE+EVENTBUS+CRYPTO: publisher (see CRYPTO.shared_files).
+      - "internal/eventbus/publisher.go"
+      - "internal/eventbus/publisher_test.go"
+      # STORE+SCENE: server.go + privacy_test + core-scenes publish_store (see SCENE.shared_files).
+      - "internal/grpc/server.go"
+      - "test/integration/privacy/privacy_test.go"
+      - "plugins/core-scenes/publish_store.go"
+      # STORE+CRYPTO harness (TS in crypto integration harness).
+      - "internal/testsupport/integrationtest/crypto.go"
 
   - name: INV-TELEMETRY
     description: "Logging discipline, trace context, metric naming, sloglint policy"
     boundary: "Observability contracts."
+    # Family LOAD (load/perf harness latency+verdict). See redesign spec §2.1.
+    status: pending
+    origin_specs:
+      - "docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md"
+    owned_paths:
+      - "internal/logging/**"
+      - "internal/telemetry/**"
+      - "test/load/**"
+    shared_files: []
 
   - name: INV-BRANDING
     description: "Asset integrity, palette tokens, logo generation"
     boundary: "Visual identity invariants. Does NOT include: docs quality (separate concern)."
+    status: pending
+    origin_specs:
+      - "docs/superpowers/specs/2026-05-28-holomush-software-brand-refresh-design.md"
+    owned_paths:
+      - "site/src/styles/custom.css"
+      - "site/src/assets/brand/**"
+      - "site/scripts/build-brand-assets.mjs"
+    shared_files: []
 
   - name: INV-DOCS
     description: "Proto doc comments, doc IA, contributor onboarding surface"
     boundary: "Documentation quality invariants."
+    status: pending
+    origin_specs:
+      - "docs/superpowers/specs/2026-05-28-proto-doc-comments-design.md"
+    owned_paths:
+      - "test/meta/proto_doc_comments_test.go"
+      - "scripts/check-docs-ia.sh"
+    shared_files: []
 
 invariants: []

@@ -144,6 +144,36 @@ NOT trusted): `P4/P5/P6/FS/FW → SCENE`; `RB → CRYPTO`; `GW → EVENTBUS`;
 `ROPS`, `Y5INX`, `W9ML`, `M`, `RA` are unclassified and MUST be resolved during
 classification.
 
+#### 2.1 Derived family→scope map (holomush-hz0v4.14.2)
+
+Re-derived from each family's defining spec (the spec whose prose *states* the
+invariant, not merely a spec that references it). Every row cites a verified
+origin-spec path and a one-line evidence note. Where a family splits across
+scopes, it appears on multiple rows.
+
+| Family | Scope | Origin spec (path) | Evidence (what in the spec establishes it) |
+| --- | --- | --- | --- |
+| P4 | INV-SCENE | `docs/superpowers/specs/2026-05-19-scenes-phase-4-streams-and-pose-order-design.md` | §12 numbered-invariant table defines INV-P4-1..13: scene event subjects, pose-order gating, IC isolation — all scene-domain behavior. |
+| P5 | INV-SCENE | `docs/superpowers/specs/2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md` | §10 defines INV-P5-1..14: focus-membership precondition, focus-key atomicity, terminal-only filter — the scene focus model. |
+| P6 | INV-SCENE | `docs/superpowers/specs/2026-05-23-scenes-phase-6-logs-vote-privacy-design.md` | §16 defines INV-P6-1..9: publication-vote roster, IsParticipant publish gate, archive-state transitions — scene logs/vote/privacy. |
+| FS | INV-SCENE | `docs/superpowers/specs/2026-05-28-focus-delta-coordinator-unification-design.md` | Table defines INV-FS-1..7: per-connection focus-delta delivery driven inside `focus.Coordinator` — the scene focus-delivery model (subsumes ex-ymgjs INV-FW-*). |
+| FW | INV-SCENE | `docs/superpowers/specs/2026-05-28-focus-delta-coordinator-unification-design.md` | INV-FW-1/2/4/5 are explicitly re-stated as INV-FS-2/4/5/6 ("ex-ymgjs INV-FW-N"); same focus-delivery domain. |
+| Y5INX | INV-SCENE | `docs/superpowers/specs/2026-05-28-scene-bare-ulid-identity-design.md` | INV-Y5INX-1..4: `newSceneID()` bare ULID, scene readable via real RPC, join opens focus subscription, history-scope floor — scene identity/lifecycle. |
+| RB | INV-CRYPTO | `docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md` | INV-RB-1..10: host-side read-back decryption, DEK never reaches plugin, AAD round-trip, `plugin_decrypt` audit, downgrade/DEK-existence reuse — cryptographic operations on payloads. (RB-9 runtime symmetry is a property *of* the crypto primitive, not a plugin-system invariant.) |
+| P7 | INV-CRYPTO | `docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md` | SPLIT — crypto half: INV-P7-1,2,5,6,7,9,11,12,15,16 = ciphertext byte-equality, DEK-existence fence, downgrade refusal, AAD reconstruction, shared KeySelector. These are payload-encryption invariants (carry master INV-25/26/46/48/50 onto the plugin-routed path). |
+| P7 | INV-EVENTBUS | `docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md` | SPLIT — eventbus/audit-plumbing half: INV-P7-3,4,10 = plugin audit-table DEK columns + header parser + standalone migration ordering. These are audit-projection/dispatcher plumbing (host-owned-vs-plugin-owned audit), the INV-EVENTBUS "audit projection" surface. (INV-P7-13/14 plugin-role/sensitivity-gate are corroborating boundary checks that ride with the crypto half.) |
+| GW | INV-EVENTBUS | `docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md` | INV-GW-1..16: verb-registry sourcing, `EMIT_UNKNOWN_VERB`/`EMIT_VALIDATION_FAILED` paths, rendering-field propagation, `events_audit.rendering` column, enum parity — event rendering-completeness, an INV-EVENTBUS surface. |
+| ROPS | INV-EVENTBUS | `docs/superpowers/specs/2026-05-29-colon-style-subject-eradication-design.md` | INV-ROPS-1..3: colon-style subjects survive only as ABAC policy-DSL identifiers; `QueryStreamHistory`/`Subscribe` qualify to dot-form; repo-wide scan fails CI on surviving colon streams — subject-naming/colon-eradication, INV-EVENTBUS. |
+| PC | INV-PLUGIN | `docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md` | INV-PC-1,8: host MUST NOT interpret plugin config-key meaning; `needsInit` gate includes `len(Config)>0` — plugin-system manifest/runtime contract. |
+| W9ML | INV-PLUGIN | `docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md` | INV-W9ML-1..8: uniform ULID identity per actor kind, `IdentityRegistry` resolution path, plugin-name uniqueness/stable-ULID across retention — plugin identity contract. (Spans store/eventbus annotation sites, but the invariant *is* plugin identity.) |
+| RA | INV-ACCESS | `docs/superpowers/specs/2026-05-26-harness-real-abac-design.md` | INV-RA-1..4: `WithRealABAC()` wires the real access engine and installs the `seed:*` policy set; allow-all retained without it — ABAC policy-evaluation harness wiring. |
+| TS | INV-STORE | `docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md` | INV-TS-1..7: all persistent time = `BIGINT` epoch-ns, no new `TIMESTAMPTZ` migrations, `pgnanos.Time` canonical scan/insert seam, no `Truncate(µs)` — migration discipline + storage seam. (Annotated widely because every nanos round-trip touches it; the invariant is database/storage.) |
+| M | INV-SESSION | `docs/superpowers/specs/2026-05-23-remove-session-memstore-design.md` | INV-M-1..4: `session.Store` has exactly one production impl (`PostgresSessionStore`), `sessiontest.NewStore` isolation, `client_type` rejection semantics — session-store state machine. |
+| WS | (test-infra) → INV-PLUGIN | `docs/superpowers/specs/2026-05-25-wholesystem-plugin-integration-design.md` | INV-WS-1..4: `WithInTreePlugins()` reuses `setup.PluginSubsystem`, asserts cross-plugin ABAC permit+forbid, not silently skipped, opt-in — whole-system plugin-load harness; owned under INV-PLUGIN (plugin-subsystem load discipline). |
+| LOAD | (test-infra) → INV-TELEMETRY | `docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md` | INV-LOAD-1..4: harness drives web/telnet tiers, latency thresholds, k6-exit-code verdict — load/perf observability harness; owned under INV-TELEMETRY (latency/metric verdicts). |
+| SH | (test-infra) → INV-SCENE | `docs/superpowers/specs/2026-05-27-shcyu-harness-publish-driving-design.md` | INV-SH-1..5: plugin-config overrides reach core-scenes, `SceneServiceClient` resolves the scene plugin, `CreateScene` returns a real ULID, zero production code, publish lifecycle E2E — scene publish-driving harness; owned under INV-SCENE. |
+| bare `INV-N` | per-origin-spec | `docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md` (master) + `docs/architecture/invariants.md`-tracked | NOT a single scope. INV-1..27/30..55 (crypto payload/DEK/KEK/AAD) → INV-CRYPTO (`internal/eventbus/crypto/**`, `internal/eventbus/history/**`). INV-28/29/56/59 (N-of-N invalidation ack, Coordinator retry, cache-invalidation correctness) → INV-CLUSTER (`internal/cluster/**`) per the existing INV-CLUSTER boundary note. Each bare token is scoped by *its* origin spec, not forced into one family. |
+
 ### 3. Per-ref classification
 
 For each scope, classification proceeds per reference using three signals, in
