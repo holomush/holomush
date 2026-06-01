@@ -116,6 +116,12 @@ tasks:
       - task: lint:no-microsecond-truncate
       - task: lint:no-unixnano-in-repos
       - task: lint:no-zensical
+      - task: lint:invariants
+
+  lint:invariants:
+    desc: Check invariant registry YAML↔markdown consistency
+    cmds:
+      - bash scripts/check-invariant-registry-consistency.sh
 
   lint:adr:
     desc: "Run docs/adr/ health check (adr-doctor.sh)"
