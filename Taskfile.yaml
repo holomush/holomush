@@ -119,9 +119,14 @@ tasks:
       - task: lint:invariants
 
   lint:invariants:
-    desc: Check invariant registry YAML↔markdown consistency
+    desc: Verify invariants.md is up to date with invariants.yaml (generate-and-diff)
     cmds:
-      - bash scripts/check-invariant-registry-consistency.sh
+      - go run ./cmd/inv-render -check
+
+  invariants:render:
+    desc: Render docs/architecture/invariants.md from invariants.yaml
+    cmds:
+      - go run ./cmd/inv-render
 
   lint:adr:
     desc: "Run docs/adr/ health check (adr-doctor.sh)"
