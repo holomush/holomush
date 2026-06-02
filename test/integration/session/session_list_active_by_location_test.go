@@ -15,7 +15,7 @@ import (
 	"github.com/holomush/holomush/internal/idgen"
 )
 
-// Verifies: I-PRES-1
+// Verifies: INV-PRESENCE-1
 // Postgres S-1/S-2/S-3: PostgresSessionStore.ListActiveByLocation enforces
 // the same filtering semantics as the original session store — Active-only, LocationID-strict,
 // empty result for empty location. This locks the SQL predicate at
@@ -24,7 +24,7 @@ import (
 // Sessions are seeded via raw SQL to bypass the full FK chain (players,
 // characters, player_sessions). The sessions table has no FK on character_id,
 // so direct INSERT is valid for store-layer isolation tests.
-var _ = Describe("PostgresSessionStore.ListActiveByLocation (I-PRES-1)", func() {
+var _ = Describe("PostgresSessionStore.ListActiveByLocation (INV-PRESENCE-1)", func() {
 	BeforeEach(func() {
 		cleanupTestData(env.ctx, env.pool)
 	})
@@ -48,7 +48,7 @@ var _ = Describe("PostgresSessionStore.ListActiveByLocation (I-PRES-1)", func() 
 		Expect(err).NotTo(HaveOccurred(), "seed session %q", id)
 	}
 
-	// Verifies: I-PRES-1
+	// Verifies: INV-PRESENCE-1
 	// S-1: Only status='active' sessions are returned; detached and expired
 	// rows at the same location are excluded.
 	It("returns only active sessions — detached and expired are excluded", func() {
@@ -70,7 +70,7 @@ var _ = Describe("PostgresSessionStore.ListActiveByLocation (I-PRES-1)", func() 
 			"detached and expired sessions must not appear in ListActiveByLocation")
 	})
 
-	// Verifies: I-PRES-1
+	// Verifies: INV-PRESENCE-1
 	// S-2: Query against a location with no sessions returns an empty slice
 	// (not an error).
 	It("returns empty slice for a location with no active sessions", func() {
@@ -82,7 +82,7 @@ var _ = Describe("PostgresSessionStore.ListActiveByLocation (I-PRES-1)", func() 
 			"empty location must return empty slice, not an error")
 	})
 
-	// Verifies: I-PRES-1
+	// Verifies: INV-PRESENCE-1
 	// S-3: Sessions at other locations are excluded — LocationID filter is strict.
 	It("excludes sessions at other locations", func() {
 		loc1 := idgen.New()
@@ -98,7 +98,7 @@ var _ = Describe("PostgresSessionStore.ListActiveByLocation (I-PRES-1)", func() 
 			"only sessions at the queried location must be returned")
 	})
 
-	// Verifies: I-PRES-1
+	// Verifies: INV-PRESENCE-1
 	// Schema-level dedup guard: the unique partial index
 	//   idx_sessions_active_character ON sessions(character_id)
 	//     WHERE status IN ('active','detached')

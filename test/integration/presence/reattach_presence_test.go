@@ -93,7 +93,7 @@ var _ = Describe("Reattach restores grid_present (I-LIVE-3)", func() {
 			resp, presErr := guest.ListFocusPresence(ctx)
 			g.Expect(presErr).NotTo(HaveOccurred())
 			g.Expect(entryNames(resp.GetEntries())).NotTo(ContainElement(guest.CharacterName),
-				"I-LIVE-3/I-PRES-1: detached guest MUST NOT appear in presence (grid_present=false)")
+				"I-LIVE-3/INV-PRESENCE-1: detached guest MUST NOT appear in presence (grid_present=false)")
 		}, 2*time.Second, 50*time.Millisecond).Should(Succeed())
 
 		// Phase 3 — reattach: routes through the real coreServer.Subscribe path →
@@ -119,7 +119,7 @@ var _ = Describe("Reattach restores grid_present (I-LIVE-3)", func() {
 			resp, presErr := guest.ListFocusPresence(ctx)
 			g.Expect(presErr).NotTo(HaveOccurred())
 			g.Expect(entryNames(resp.GetEntries())).To(ContainElement(guest.CharacterName),
-				"I-LIVE-3/I-PRES-1: reattached guest MUST appear in presence (grid_present restored to true)")
+				"I-LIVE-3/INV-PRESENCE-1: reattached guest MUST appear in presence (grid_present restored to true)")
 		}, 2*time.Second, 50*time.Millisecond).Should(Succeed())
 	})
 })

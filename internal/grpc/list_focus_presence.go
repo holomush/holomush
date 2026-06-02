@@ -111,7 +111,7 @@ func (s *CoreServer) ListFocusPresence(ctx context.Context, req *corev1.ListFocu
 		return nil, oops.Code("INTERNAL").Errorf("character name resolver not configured")
 	}
 
-	// ABAC gate (I-PRES-4). Default-deny; same-location subjects allowed via
+	// ABAC gate (INV-PRESENCE-4). Default-deny; same-location subjects allowed via
 	// seed:player-location-list-presence; admin via the admin super-rule.
 	accessReq, err := types.NewAccessRequest(
 		access.CharacterSubject(info.CharacterID.String()),
@@ -144,7 +144,7 @@ func (s *CoreServer) ListFocusPresence(ctx context.Context, req *corev1.ListFocu
 		return nil, oops.Code("INTERNAL").Wrap(err)
 	}
 
-	// Build the unique character-ID set (I-PRES-9 dedup defense).
+	// Build the unique character-ID set (INV-PRESENCE-9 dedup defense).
 	seen := make(map[ulid.ULID]struct{}, len(sessions))
 	uniqueIDs := make([]ulid.ULID, 0, len(sessions))
 	for _, sess := range sessions {

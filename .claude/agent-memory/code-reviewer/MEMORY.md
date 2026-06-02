@@ -682,3 +682,29 @@ Keep under 200 lines. Curate — don't hoard.
 - **Web `runSubscribeOnce` SESSION_NOT_FOUND branch is synchronous-Subscribe-only (pre-existing gap, rsoe6.10).** `internal/web/handler.go:319-343` checks SESSION_NOT_FOUND on the synchronous client.Subscribe error path only. When a reaped-session error surfaces on the streaming recv goroutine (recvCh at line 432), the web code treats it as breakCoreGone (reconnect), not terminal. The rsoe6.11 fix correctly wired the telnet path; web is pre-existing. The web recv-error path must apply TranslateSubscribeErr and check subscribeErrIsTerminal. Track in rsoe6.10 or a new bead.
 
 - **rsoe6 RefreshConnection cross-session scoping (verified-good I-SEC-1 reference).** `store.RefreshConnection(ctx, connID, sessionID)` scopes the UPDATE to `WHERE id=$1 AND session_id=$2` (`session_store.go:583`); 0 rows → CONNECTION_NOT_FOUND (absent≡foreign, enumeration-safe). The handler (`internal/grpc/refresh_connection.go:42`) first runs `auth.ValidateSessionOwnership` (token→ps.PlayerID==info.PlayerID), so a caller can only pass a session_id they own — the scoped UPDATE then proves the conn belongs to it. Two-impl method (PostgresSessionStore + regenerated MockStore); all RPC-handler `(ctx,req)` shims unchanged (session_id rides the proto). Web heartbeat propagates the token (`handler.go:441-444`); `handler_test.go:1026` now pins it. The prior rsoe6.5 TTL=0 NOT-READY is resolved: `TestRecomputeSessionLiveness` explicitly asserts the 1800s default via `wantExpiryTTL` when TTLSeconds=0. Encountered: rsoe6 CodeRabbit fixes PR #4354 (2026-05-31) — READY.
+
+- **INV-<SCOPE>-N registry per-scope migration (hz0v4.14.x) — verified-good reference.**
+  Two meta-test layers gate it: provenance guard (`test/meta/invariant_registry_test.go::checkProvenance`)
+  checks ref→file (canonical token present at recorded site + file owned/shared by scope)
+  and a RESIDUAL walk over migrated owned dirs flagging bare `INV-N`. CRITICAL gap by
+  design: `bareInvRE = \bINV-\d+\b` matches the redesigned legacy form (`INV-3`), NOT the
+  older `I-PRES-N`/`I-<SCOPE>-N` form — so a leftover legacy token in a glob-owned file is
+  INVISIBLE to the guard (the missed I-PRES-6 was caught by human diff review; hardening
+  filed hz0v4.14.21). Classification correctness (right INV→right scope) is NOT machine-
+  verified either — human backstop. Orphan check (§4) and scope-has-invariants check are
+  BOTH gated to `status: migrated` scopes (parts=`SplitN(id,"-",3)`, `migratedScopes[parts[0]+"-"+parts[1]]`);
+  legacy family tokens + not-yet-migrated illustrative examples (INV-CRYPTO-1) tolerated.
+  This does NOT hide real orphans for a migrated scope. NOTE: specs retain the LEGACY label
+  (`I-PRES-N`) recorded in registry `legacy:`; canonical `INV-PRESENCE-N` appears in CODE only,
+  so the orphan scan (canonical-only regex) finds zero spec refs — correct, not a miss.
+  Review recipe: (1) `rg 'I-<OLD>-[0-9]' --glob '*.go' --glob '*.ts'` → ZERO in owned/shared
+  (fixtures in cmd/inv-render/render_test.go + internal/invregistry/registry_test.go +
+  liveness_invariants_test.go doc-note MUST remain legacy — confirm UNTOUCHED via diff);
+  (2) adjacent scopes (I-PRIV/I-LIVE/I-SURV) unchanged (whole-token rewrite safety);
+  (3) `go run ./cmd/inv-render -check` exit 0 (md↔yaml drift); (4) refs map to actual tokens
+  (provenance test passes); frontend-only invariant → `refs: []` legit (PRESENCE-8). Trap:
+  deleting a per-family coverage test (`i_pres_coverage_test.go`) leaves STALE doc-comments
+  in sibling (`i_priv_coverage_test.go:43,48` reference deleted `iPresVerifiesRE` /
+  `i_pres_coverage_test.go`) — comments only, non-blocking, but flag. Helpers `findRepoRoot`/
+  `skipDirs` live in `inv_binding_test.go` (NOT the deleted file) — deletion compile-safe.
+  Encountered: holomush-hz0v4.14.5 (2026-06-01) — READY.

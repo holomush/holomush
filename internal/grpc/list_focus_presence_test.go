@@ -42,7 +42,7 @@ func (s *stubNameResolver) Names(_ context.Context, ids []ulid.ULID) (map[ulid.U
 // non-zero ExpiresAt, and the given characterID / locationID. PlayerID matches
 // ownedPlayerID so that newFakePlayerSessionRepo(ownedPlayerID) passes
 // ownership validation. GridPresent=true reflects the invariant that a session
-// returned by ListActiveByLocation must be grid-present (I-PRES-1).
+// returned by ListActiveByLocation must be grid-present (INV-PRESENCE-1).
 func mkActiveAt(id string, characterID, locationID ulid.ULID) *session.Info {
 	future := time.Now().Add(time.Hour)
 	return &session.Info{
@@ -93,7 +93,7 @@ func TestListFocusPresenceReturnsInvalidArgumentOnEmptySessionID(t *testing.T) {
 	assert.Equal(t, "INVALID_ARGUMENT", o.Code())
 }
 
-// Verifies: I-PRES-3
+// Verifies: INV-PRESENCE-3
 func TestListFocusPresenceReturnsSessionNotFoundOnUnknownSession(t *testing.T) {
 	s := &CoreServer{
 		sessionStore:      newTestSessionStore(t, nil),
@@ -110,7 +110,7 @@ func TestListFocusPresenceReturnsSessionNotFoundOnUnknownSession(t *testing.T) {
 	assert.Equal(t, "SESSION_NOT_FOUND", o.Code())
 }
 
-// Verifies: I-PRES-3
+// Verifies: INV-PRESENCE-3
 func TestListFocusPresenceCollapsesOwnershipMismatchToNotFound(t *testing.T) {
 	// Caller's player_session_token resolves to a player session with a
 	// different PlayerID than the target session's PlayerID — ownership
@@ -180,7 +180,7 @@ func TestListFocusPresenceReturnsSessionExpiredForExpiredSession(t *testing.T) {
 	assert.Equal(t, "SESSION_EXPIRED", o.Code())
 }
 
-// Verifies: I-PRES-5
+// Verifies: INV-PRESENCE-5
 func TestListFocusPresenceReturnsUnimplementedForSceneFocus(t *testing.T) {
 	sess := mkOwnedSession("sess-1", func(s *session.Info) {
 		s.CharacterID = ulid.MustParse("01HYXCHAR0000000000000000C")
@@ -224,7 +224,7 @@ func TestListFocusPresenceReturnsEmptyEntriesWhenLocationUnset(t *testing.T) {
 
 // ---------- T7 tests ----------
 
-// Verifies: I-PRES-4
+// Verifies: INV-PRESENCE-4
 func TestListFocusPresenceReturnsPermissionDeniedWhenABACDenies(t *testing.T) {
 	char := ulid.MustParse("01HYXCHARALICE0000000000AA")
 	loc := ulid.MustParse("01HYXLOCATION0000000000001")
@@ -244,9 +244,9 @@ func TestListFocusPresenceReturnsPermissionDeniedWhenABACDenies(t *testing.T) {
 	assert.Equal(t, "PERMISSION_DENIED", o.Code())
 }
 
-// Verifies: I-PRES-1
-// Verifies: I-PRES-4
-// Verifies: I-PRES-6
+// Verifies: INV-PRESENCE-1
+// Verifies: INV-PRESENCE-4
+// Verifies: INV-PRESENCE-6
 func TestListFocusPresenceReturnsCallerAndOtherSessions(t *testing.T) {
 	char1 := ulid.MustParse("01HYXCHARALICE0000000000AA")
 	char2 := ulid.MustParse("01HYXCHARBOB000000000000BB")
@@ -306,7 +306,7 @@ func TestListFocusPresenceSkipsEntryWhenNameUnresolved(t *testing.T) {
 	assert.Equal(t, "alice", resp.Entries[0].CharacterName)
 }
 
-// Verifies: I-PRES-9 (expired-exclusion half)
+// Verifies: INV-PRESENCE-9 (expired-exclusion half)
 // Drift fix (holomush-9mxr Task 10): The former in-memory store allowed two active sessions for the
 // same character; PostgresSessionStore enforces idx_sessions_active_character (a
 // partial unique index on character_id WHERE status IN ('active','detached')).
@@ -341,7 +341,7 @@ func TestListFocusPresenceExcludesExpiredSessions(t *testing.T) {
 	assert.Len(t, resp.Entries, 1, "expired session must be excluded from presence list")
 }
 
-// Verifies: I-PRES-9 (dedup-guard half)
+// Verifies: INV-PRESENCE-9 (dedup-guard half)
 // The Postgres unique index idx_sessions_active_character makes it impossible for
 // the real store to return two active/detached sessions for the same character.
 // This test drives the defensive dedup guard in list_focus_presence.go directly
@@ -393,7 +393,7 @@ func TestListFocusPresenceDeduplicatesByCharacterID(t *testing.T) {
 	assert.Equal(t, "alice", resp.Entries[0].CharacterName)
 }
 
-// Verifies: I-PRES-1
+// Verifies: INV-PRESENCE-1
 func TestListFocusPresenceDoesNotLeakSessionsFromOtherLocations(t *testing.T) {
 	char1 := ulid.MustParse("01HYXCHARALICE0000000000AA")
 	char2 := ulid.MustParse("01HYXCHARBOB000000000000BB")
@@ -441,7 +441,7 @@ func TestListFocusPresenceReturnsPermissionDeniedWhenAccessEngineIsNil(t *testin
 	assert.Equal(t, "PERMISSION_DENIED", o.Code())
 }
 
-// Verifies: I-PRES-7
+// Verifies: INV-PRESENCE-7
 // PresenceEntry wire shape must contain exactly 3 fields: character_id,
 // character_name, state. No timestamps or duration-of-presence fields.
 // Uses proto reflection to assert field count stays exactly 3 — any
@@ -455,12 +455,12 @@ func TestPresenceEntryHasExactlyThreeFields(t *testing.T) {
 		for i := range fields.Len() {
 			names[i] = string(fields.Get(i).Name())
 		}
-		t.Errorf("I-PRES-7: PresenceEntry MUST have exactly %d fields (character_id, character_name, state); got %d: %v",
+		t.Errorf("INV-PRESENCE-7: PresenceEntry MUST have exactly %d fields (character_id, character_name, state); got %d: %v",
 			wantFields, fields.Len(), names)
 	}
 }
 
-// Verifies: I-PRES-1
+// Verifies: INV-PRESENCE-1
 // Verifies: I-LIVENESS-PRES-1
 // A session that is active but has grid_present=false (e.g. only a
 // comms_hub connection, no terminal/telnet) MUST NOT appear in the

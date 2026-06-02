@@ -32,7 +32,7 @@ import (
 //     lease cutoff is swept.
 //   - I-LIVE-3 (derivation): with zero live connections the session is no
 //     longer active and grid_present is cleared, so presence empties.
-//   - I-PRES-1: the presence roster reflects grid_present.
+//   - INV-PRESENCE-1: the presence roster reflects grid_present.
 //
 // End-to-end goal (the deadlock resolution motivating this epic): the lease
 // sweep → session detach → session expiry chain unblocks the guest reaper,
@@ -118,7 +118,7 @@ var _ = Describe("Lease-driven liveness", func() {
 			presResp, presErr := guest.ListFocusPresence(ctx)
 			g.Expect(presErr).NotTo(HaveOccurred())
 			g.Expect(entryNames(presResp.GetEntries())).NotTo(ContainElement(guest.CharacterName),
-				"I-LIVE-3/I-PRES-1: guest MUST NOT appear in presence after the lease-lapse sweep "+
+				"I-LIVE-3/INV-PRESENCE-1: guest MUST NOT appear in presence after the lease-lapse sweep "+
 					"(zero live connections ⇒ grid_present cleared)")
 		}, 5*time.Second, 100*time.Millisecond).Should(Succeed())
 

@@ -162,10 +162,15 @@ func checkRegistryBindings(reg registryDoc, bindings map[string][]string, root s
 		}
 	}
 
-	// Cross-check: every scope declared in the YAML has at least one invariant.
+	// Cross-check: every MIGRATED scope has at least one invariant. Pending
+	// scopes are declared up-front by the .14.2 scaffold and populated as each
+	// is migrated, so an empty pending scope is the expected mid-migration state
+	// (holomush-hz0v4.14.5 — the first migrated scope surfaced this; before any
+	// scope landed the enclosing test skipped, so the end-state assumption was
+	// latent).
 	for _, sc := range reg.Scopes {
-		if !seenScopes[sc.Name] {
-			findings = append(findings, fmt.Sprintf("scope %s declared in YAML scopes but has no invariants", sc.Name))
+		if sc.Status == "migrated" && !seenScopes[sc.Name] {
+			findings = append(findings, fmt.Sprintf("migrated scope %s has no invariants", sc.Name))
 		}
 	}
 
@@ -282,7 +287,26 @@ func TestEveryRegistryInvariantHasBinding(t *testing.T) {
 	}
 	t.Logf("registry: %d invariant(s) marked binding: pending (verification backfill tracked separately)", pendingCount)
 
-	// 4. Orphan detection: scan specs/ for INV-<SCOPE>-<N> references not in registry.
+	// 4. Orphan detection: scan specs/ for INV-<SCOPE>-<N> references that belong
+	// to a MIGRATED scope but are missing from the registry. Restricting to
+	// migrated scopes makes the check incremental-migration-safe:
+	//   - legacy family tokens (INV-RB-11, INV-TS-1, …) match the canonical regex
+	//     but their prefix is not a declared scope — they migrate to a real scope
+	//     later while specs retain the legacy label as the `legacy:` origin, so
+	//     they are not orphans;
+	//   - illustrative INV-<SCOPE>-N examples for not-yet-migrated scopes (e.g.
+	//     INV-CRYPTO-1 in the registry-design specs) are tolerated until that
+	//     scope is actually migrated.
+	// Once a scope is migrated, every INV-<SCOPE>-N a spec references for it MUST
+	// be registered. Surfaced by INV-PRESENCE as the first migrated scope
+	// (holomush-hz0v4.14.5); before any scope landed this whole test skipped, so
+	// the over-broad match was latent.
+	migratedScopes := make(map[string]bool, len(reg.Scopes))
+	for _, sc := range reg.Scopes {
+		if sc.Status == "migrated" {
+			migratedScopes[sc.Name] = true
+		}
+	}
 	byID := make(map[string]registryEntry, len(reg.Invariants))
 	for _, e := range reg.Invariants {
 		byID[e.ID] = e
@@ -305,6 +329,10 @@ func TestEveryRegistryInvariantHasBinding(t *testing.T) {
 		matches := registryInvRefRE.FindAllSubmatch(specData, -1)
 		for _, m := range matches {
 			id := string(m[1])
+			parts := strings.SplitN(id, "-", 3)
+			if len(parts) < 2 || !migratedScopes[parts[0]+"-"+parts[1]] {
+				continue // not a migrated scope's canonical ID — not an orphan yet
+			}
 			if _, known := byID[id]; !known {
 				orphans[id]++
 			}
@@ -351,16 +379,16 @@ func TestRegistryBindingChecks(t *testing.T) {
 			findingLike:  "duplicate ID",
 		},
 		{
-			name: "detects scope with no invariants",
+			name: "detects migrated scope with no invariants",
 			reg: registryDoc{
-				Scopes: []scopeRecord{{Name: "INV-BAR"}},
+				Scopes: []scopeRecord{{Name: "INV-BAR", Status: "migrated"}},
 				Invariants: []registryEntry{
 					{ID: "INV-FOO-1", Scope: "INV-FOO", Binding: "pending"},
 				},
 			},
 			bindings:     map[string][]string{},
 			wantFindings: 1,
-			findingLike:  "INV-BAR declared in YAML scopes but has no invariants",
+			findingLike:  "migrated scope INV-BAR has no invariants",
 		},
 		{
 			name: "detects missing binding",
