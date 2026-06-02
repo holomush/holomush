@@ -2,15 +2,15 @@
 -- Copyright 2026 HoloMUSH Contributors
 
 -- Convert pre-gfo6 gap timestamp columns from TIMESTAMPTZ to BIGINT
--- (epoch nanoseconds, UTC). INV-TS-1. These tables were missed in the
--- Phases 1–4 sweep and surfaced by the INV-TS-1 meta-test (holomush-gfo6.22).
+-- (epoch nanoseconds, UTC). INV-STORE-1. These tables were missed in the
+-- Phases 1–4 sweep and surfaced by the INV-STORE-1 meta-test (holomush-gfo6.22).
 --
 -- Idempotent: each ALTER COLUMN ... TYPE step is wrapped in a DO block that
 -- guards on information_schema.columns.data_type, so re-running this migration
 -- (recovery replays, partial-apply retries) is safe. Pattern mirrors
 -- 000038_eventbus_crypto_timestamps_to_bigint.up.sql.
 --
--- Overflow-safe (INV-TS-9): each TYPE USING clause converts in numeric and
+-- Overflow-safe (INV-STORE-9): each TYPE USING clause converts in numeric and
 -- clamps with GREATEST/LEAST to the int64-ns range, so pre-existing values
 -- beyond ~[1678, 2262] or ±infinity saturate to the int64 bounds instead of
 -- raising "bigint out of range" (SQLSTATE 22003). NULL is guarded explicitly

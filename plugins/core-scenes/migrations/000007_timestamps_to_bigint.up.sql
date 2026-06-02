@@ -2,8 +2,8 @@
 -- Copyright 2026 HoloMUSH Contributors
 
 -- Convert core-scenes timestamp columns from TIMESTAMPTZ to BIGINT (epoch
--- nanoseconds, UTC). Plugin-side companion to host migration. INV-TS-1,
--- INV-TS-5 (plugin AAD path).
+-- nanoseconds, UTC). Plugin-side companion to host migration. INV-STORE-1,
+-- INV-STORE-5 (plugin AAD path).
 
 -- Drop TIMESTAMPTZ defaults before type conversion; PostgreSQL cannot
 -- auto-cast TIMESTAMPTZ defaults when changing column type to BIGINT.

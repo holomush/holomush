@@ -376,7 +376,7 @@ var _ = Describe("PostgresColdTier", func() {
 
 			// Insert two events: one AT the boundary timestamp (must
 			// be included) and one strictly after (must be excluded).
-			// INV-TS-1: events_audit is BIGINT-ns end-to-end, so no µs
+			// INV-STORE-1: events_audit is BIGINT-ns end-to-end, so no µs
 			// truncation needed — the boundary value round-trips bit-exact.
 			boundary := time.Now().UTC()
 			atID := integrationULID(uint64(boundary.UnixMilli()))

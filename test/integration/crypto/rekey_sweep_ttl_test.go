@@ -51,7 +51,7 @@ func (p *sweepTestAuditPublisher) PublishAudit(
 	payload []byte,
 ) (ulid.ULID, error) {
 	id := ulid.Make()
-	// events_audit.timestamp is BIGINT-ns post-gfo6 (INV-TS-1).
+	// events_audit.timestamp is BIGINT-ns post-gfo6 (INV-STORE-1).
 	_, err := p.pool.Exec(ctx,
 		`INSERT INTO events_audit
 		   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)

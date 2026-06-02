@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// TestLintNoMicrosecondTruncatePasses pins INV-TS-3 via the lint task.
+// TestLintNoMicrosecondTruncatePasses pins INV-STORE-3 via the lint task.
 // If anyone reintroduces a microsecond-precision truncate call without a
 // pgnanos-exempt annotation, this test fails along with the lint.
 //
@@ -29,12 +29,12 @@ func TestLintNoMicrosecondTruncatePasses(t *testing.T) {
 	cmd := exec.CommandContext(ctx, "task", "lint:no-microsecond-truncate")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("INV-TS-3 violated: %s\n%s", err, strings.TrimSpace(string(out)))
+		t.Fatalf("INV-STORE-3 violated: %s\n%s", err, strings.TrimSpace(string(out)))
 	}
 }
 
 // TestLintNoMicrosecondTruncateScansAnExplicitPath is the regression guard for
-// holomush-vpvu5. The INV-TS-3 lint MUST hand rg an explicit search path. A
+// holomush-vpvu5. The INV-STORE-3 lint MUST hand rg an explicit search path. A
 // path-less `rg ... --type=go` reads stdin whenever stdin is not a TTY (CI
 // wires every run-step's stdin to /dev/null; background agents attach idle
 // pipes), so it scans empty stdin instead of the repo — passing silently while
@@ -53,7 +53,7 @@ func TestLintNoMicrosecondTruncateScansAnExplicitPath(t *testing.T) {
 		t.Fatalf("read %s: %v", taskfile, err)
 	}
 
-	// The lone rg invocation enforcing INV-TS-3 is the only line carrying all
+	// The lone rg invocation enforcing INV-STORE-3 is the only line carrying all
 	// of "rg -n", "--type=go", and "Microsecond"; the surrounding comment/echo
 	// lines that mention the pattern have neither "rg -n" nor "--type=go".
 	var rgLine string
@@ -65,7 +65,7 @@ func TestLintNoMicrosecondTruncateScansAnExplicitPath(t *testing.T) {
 		}
 	}
 	if rgLine == "" {
-		t.Fatal("could not locate the INV-TS-3 rg invocation in Taskfile.yaml")
+		t.Fatal("could not locate the INV-STORE-3 rg invocation in Taskfile.yaml")
 	}
 
 	// Capture the first token after --type=go. The path-less form leaves only
@@ -73,10 +73,10 @@ func TestLintNoMicrosecondTruncateScansAnExplicitPath(t *testing.T) {
 	// a search path such as {{.ROOT_DIR}}.
 	m := regexp.MustCompile(`--type=go\s+(\S+)`).FindStringSubmatch(rgLine)
 	if m == nil {
-		t.Fatalf("INV-TS-3 rg invocation has nothing after --type=go: %q", rgLine)
+		t.Fatalf("INV-STORE-3 rg invocation has nothing after --type=go: %q", rgLine)
 	}
 	if tok := m[1]; tok == `\` || tok == "|" {
-		t.Fatalf("INV-TS-3 rg invocation is path-less (token %q after --type=go) — under a "+
+		t.Fatalf("INV-STORE-3 rg invocation is path-less (token %q after --type=go) — under a "+
 			"non-TTY stdin rg reads stdin, not the repo: silent no-op in CI / hang on a pipe "+
 			"(holomush-vpvu5). Line: %s", tok, strings.TrimSpace(rgLine))
 	}

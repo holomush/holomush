@@ -249,7 +249,7 @@ var _ = Describe("Manager", func() {
 		mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache, noopInvalidator, &stubBindingResolver{})
 		Expect(err).NotTo(HaveOccurred())
 
-		// INV-TS-1: deterministic ns-precision fixture so the JoinedAt round-trip
+		// INV-STORE-1: deterministic ns-precision fixture so the JoinedAt round-trip
 		// assertion below is load-bearing — sub-microsecond bits are preserved
 		// through pgnanos.Time scan/insert paths.
 		joinedAt1 := time.Date(2026, 5, 22, 12, 0, 0, 123456789, time.UTC)
@@ -268,12 +268,12 @@ var _ = Describe("Manager", func() {
 		Expect(parts[0].CharacterID).To(Equal("01XYZ"))
 		Expect(parts[0].BindingID).To(Equal("01DEF"))
 		Expect(parts[0].JoinedAt.UnixNano()).To(Equal(joinedAt1.UnixNano()),
-			"INV-TS-1: JoinedAt ns precision MUST survive round-trip")
+			"INV-STORE-1: JoinedAt ns precision MUST survive round-trip")
 		Expect(parts[1].PlayerID).To(Equal("01GHI"))
 		Expect(parts[1].CharacterID).To(Equal("01JKL"))
 		Expect(parts[1].BindingID).To(Equal("01MNO"))
 		Expect(parts[1].JoinedAt.UnixNano()).To(Equal(joinedAt2.UnixNano()),
-			"INV-TS-1: JoinedAt ns precision MUST survive round-trip")
+			"INV-STORE-1: JoinedAt ns precision MUST survive round-trip")
 	})
 
 	It("Participants not found returns DEK_NOT_FOUND", func() {

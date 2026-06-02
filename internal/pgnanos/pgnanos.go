@@ -15,7 +15,7 @@ type Time time.Time
 
 // From constructs a Time from a time.Time, preserving nanosecond
 // precision and normalizing to UTC. Callers MUST NOT have already
-// truncated t (INV-TS-3).
+// truncated t (INV-STORE-3).
 func From(t time.Time) Time { return Time(t.UTC()) }
 
 // Time returns the underlying time.Time in UTC.

@@ -17,7 +17,7 @@ import (
 	"github.com/holomush/holomush/test/testutil"
 )
 
-// INV-TS-1: After all migrations run, no holomush-owned schema may contain
+// INV-STORE-1: After all migrations run, no holomush-owned schema may contain
 // a TIMESTAMPTZ or TIMESTAMP column. All pre-gfo6 gap tables (bootstrap_metadata,
 // crypto_rekey_checkpoints, holomush_system_info, setting_bootstrap_state) were
 // migrated in 000044 (holomush-gfo6.34).
@@ -25,7 +25,7 @@ import (
 // Suite-registered with the store package's Ginkgo runner in
 // store_suite_test.go::TestStore. The Describe string is the literal pinned in
 // spec_meta_test.go cases (INV-TS-META meta-test).
-var _ = Describe("INV-TS-1: no TIMESTAMPTZ columns after migration", func() {
+var _ = Describe("INV-STORE-1: no TIMESTAMPTZ columns after migration", func() {
 	var (
 		ctx    context.Context
 		cancel context.CancelFunc
@@ -68,7 +68,7 @@ var _ = Describe("INV-TS-1: no TIMESTAMPTZ columns after migration", func() {
 		Expect(rows.Err()).NotTo(HaveOccurred())
 
 		Expect(violations).To(BeEmpty(),
-			"INV-TS-1: holomush schemas MUST NOT contain TIMESTAMPTZ/TIMESTAMP columns after migration. Violations: %v",
+			"INV-STORE-1: holomush schemas MUST NOT contain TIMESTAMPTZ/TIMESTAMP columns after migration. Violations: %v",
 			violations)
 	})
 })

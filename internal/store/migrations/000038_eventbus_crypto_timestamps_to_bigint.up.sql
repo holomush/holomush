@@ -4,14 +4,14 @@
 -- Convert events_audit and crypto_keys timestamp columns from TIMESTAMPTZ
 -- to BIGINT (epoch nanoseconds, UTC). See:
 --   docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md
--- INV-TS-1, INV-TS-4, INV-TS-5.
+-- INV-STORE-1, INV-STORE-4, INV-STORE-5.
 --
 -- Idempotent: each ALTER COLUMN ... TYPE step is wrapped in a DO block that
 -- guards on information_schema.columns.data_type, so re-running this migration
 -- (recovery replays, partial-apply retries) is safe. Pattern mirrors
 -- 000017_events_audit_envelope_rename.up.sql.
 --
--- Overflow-safe (INV-TS-9): each TYPE USING clause converts in numeric and
+-- Overflow-safe (INV-STORE-9): each TYPE USING clause converts in numeric and
 -- clamps with GREATEST/LEAST to the int64-ns range, so pre-existing values
 -- beyond ~[1678, 2262] or ±infinity saturate to the int64 bounds instead of
 -- raising "bigint out of range" (SQLSTATE 22003). NULL is guarded explicitly

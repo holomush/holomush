@@ -550,7 +550,7 @@ func (p *testAuditPublisher) PublishAudit(
 	payload []byte,
 ) (ulid.ULID, error) {
 	id := ulid.Make()
-	// events_audit.timestamp is BIGINT-ns post-gfo6 (INV-TS-1); use the SQL-side
+	// events_audit.timestamp is BIGINT-ns post-gfo6 (INV-STORE-1); use the SQL-side
 	// BIGINT-ns expression rather than TIMESTAMPTZ now().
 	_, err := p.pool.Exec(ctx,
 		`INSERT INTO events_audit
@@ -769,7 +769,7 @@ func (p *directSQLPublisher) Publish(ctx context.Context, ev eventbus.Event) err
 	// Store ev.Payload (raw JSON body) directly as the envelope column.
 	// The policy chain verifier's decodePolicyPayloadJSON falls back to raw JSON
 	// when proto.Unmarshal fails, so this path is correct for test usage.
-	// events_audit.timestamp is BIGINT-ns post-gfo6 (INV-TS-1); SQL-side
+	// events_audit.timestamp is BIGINT-ns post-gfo6 (INV-STORE-1); SQL-side
 	// expression mirrors the migration's DEFAULT.
 	_, err := p.pool.Exec(ctx,
 		`INSERT INTO events_audit

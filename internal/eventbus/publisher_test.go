@@ -302,7 +302,7 @@ func TestPublisherStampsAllRequiredHeaders(t *testing.T) {
 	require.NoError(t, d.Ack())
 }
 
-// TestPublisherPreservesNanoseconds gates INV-TS-4. The publisher MUST
+// TestPublisherPreservesNanoseconds gates INV-STORE-4. The publisher MUST
 // NOT truncate the event timestamp before AAD construction or envelope
 // marshal. After the BIGINT-ns migration, AAD reconstruction at read
 // time receives the full-precision timestamp from PG, so byte-equal AAD
@@ -338,9 +338,9 @@ func TestPublisherPreservesNanoseconds(t *testing.T) {
 	require.NoError(t, d.Ack())
 
 	assert.Equal(t, 789, got.Timestamp.Nanosecond()%1000,
-		"INV-TS-4: publisher MUST preserve sub-µs nanoseconds; sub-µs digits MUST survive")
+		"INV-STORE-4: publisher MUST preserve sub-µs nanoseconds; sub-µs digits MUST survive")
 	assert.Equal(t, ev.Timestamp, got.Timestamp.UTC(),
-		"INV-TS-4: published timestamp MUST equal source timestamp at full precision")
+		"INV-STORE-4: published timestamp MUST equal source timestamp at full precision")
 }
 
 func TestActorKindStringCoversAllVariants(t *testing.T) {

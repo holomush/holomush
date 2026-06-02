@@ -319,7 +319,7 @@ func (s *SceneServiceImpl) failSnapshotTx(ctx context.Context, tx pgx.Tx, attemp
 // host read-back primitive consumes. The conversion mirrors the QueryHistory
 // proto build (audit.go) field-for-field so the AAD the host rebuilds via
 // AuditRowToEvent + aad.Build is byte-equal to the encrypt-side AAD
-// (INV-RB-4 / INV-TS-5). Subject is the snapshot's authoritative IC subject
+// (INV-RB-4 / INV-STORE-5). Subject is the snapshot's authoritative IC subject
 // (the store passes the same value to the WHERE clause). DEK ref/version are
 // widened to the proto's unsigned optional fields only when present (identity
 // rows leave them nil).

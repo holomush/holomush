@@ -610,7 +610,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 		}
 
 		// Helper for direct DB state read. ended_at is BIGINT-ns post-gfo6
-		// (INV-TS-1); nullable column → *pgnanos.Time pointer pattern.
+		// (INV-STORE-1); nullable column → *pgnanos.Time pointer pattern.
 		readSceneState := func(id string) (state string, endedAt *pgnanos.Time) {
 			err := lifecyclepool.QueryRow(
 				lifecyclectx,

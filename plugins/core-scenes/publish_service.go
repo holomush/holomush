@@ -112,7 +112,7 @@ func assembleParticipantResponse(pub *PublishedScene, entries []PublishedSceneEn
 		AttemptNumber:          int32(pub.AttemptNumber), //nolint:gosec // attempt_number is bounded by max_publish_attempts (single digits); never overflows int32
 		Status:                 string(pub.Status),
 		ParticipantsSnapshot:   pub.ParticipantsSnapshot,
-		InitiatedAtUnixNs:      pub.InitiatedAt.Time().UnixNano(), // pgnanos-exempt: proto int64 *_unix_ns wire field; serializing a pgnanos.Time, not a DB scan/insert seam (INV-TS-2 targets the DB seam)
+		InitiatedAtUnixNs:      pub.InitiatedAt.Time().UnixNano(), // pgnanos-exempt: proto int64 *_unix_ns wire field; serializing a pgnanos.Time, not a DB scan/insert seam (INV-STORE-2 targets the DB seam)
 		CooloffStartedAtUnixNs: unixNanoOrZero(pub.CoolOffStartedAt),
 		ResolvedAtUnixNs:       unixNanoOrZero(pub.ResolvedAt),
 		PublishedAtUnixNs:      unixNanoOrZero(pub.PublishedAt),
@@ -146,7 +146,7 @@ func unixNanoOrZero(t *pgnanos.Time) int64 {
 	if t == nil {
 		return 0
 	}
-	return t.Time().UnixNano() // pgnanos-exempt: proto int64 *_unix_ns wire field; serializing a pgnanos.Time, not a DB scan/insert seam (INV-TS-2 targets the DB seam)
+	return t.Time().UnixNano() // pgnanos-exempt: proto int64 *_unix_ns wire field; serializing a pgnanos.Time, not a DB scan/insert seam (INV-STORE-2 targets the DB seam)
 }
 
 // StartScenePublish opens a publication attempt for an ended scene. The
@@ -461,7 +461,7 @@ func assembleAttemptsResponse(attempts []PublishedScene) *scenev1.ListScenePubli
 			Id:                a.ID,
 			AttemptNumber:     int32(a.AttemptNumber), //nolint:gosec // attempt_number bounded by max_publish_attempts; never overflows int32
 			Status:            string(a.Status),
-			InitiatedAtUnixNs: a.InitiatedAt.Time().UnixNano(), // pgnanos-exempt: proto int64 *_unix_ns wire field; serializing a pgnanos.Time, not a DB scan/insert seam (INV-TS-2 targets the DB seam)
+			InitiatedAtUnixNs: a.InitiatedAt.Time().UnixNano(), // pgnanos-exempt: proto int64 *_unix_ns wire field; serializing a pgnanos.Time, not a DB scan/insert seam (INV-STORE-2 targets the DB seam)
 			ResolvedAtUnixNs:  unixNanoOrZero(a.ResolvedAt),
 		}
 		if a.FailureReason != nil {

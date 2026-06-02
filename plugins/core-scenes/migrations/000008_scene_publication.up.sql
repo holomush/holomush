@@ -3,7 +3,7 @@
 
 -- Phase 6 (holomush-5rh.15): publication artifact distinct from the
 -- audit scene_log table. See spec section 3.3.
--- Timestamps are BIGINT epoch-nanoseconds (INV-TS-1).
+-- Timestamps are BIGINT epoch-nanoseconds (INV-STORE-1).
 
 CREATE TABLE IF NOT EXISTS published_scenes (
     id                     TEXT        PRIMARY KEY,
