@@ -256,19 +256,22 @@ scopes:
     description: "Session status lifecycle, connection attachment, focus membership, idle detection"
     boundary: "Session state machine. Does NOT include: presence snapshot (→ INV-PRESENCE)."
     # Family M (remove session memstore). See redesign spec §2.1.
-    status: pending
+    status: migrated
     origin_specs:
       - "docs/superpowers/specs/2026-05-23-remove-session-memstore-design.md"
     owned_paths:
       - "internal/store/session_store_test.go"
       - "internal/testsupport/sessiontest/**"
-    shared_files:
-      # SESSION+SCENE: P5 focus-model annotations on session-domain files (see SCENE.shared_files).
-      - "internal/session/session.go"
-      - "internal/session/connection_test.go"
-      - "internal/session/session_connection_mutator_test.go"
-      - "internal/store/session_store.go"
-      - "internal/store/session_store_integration_test.go"
+    # No shared_files: every INV-M token lives under owned_paths. The scaffold
+    # previously listed 5 session-domain files here, but NONE carry an INV-M
+    # token (holomush-hz0v4.14.6 survey) — they carry OTHER scopes' annotations
+    # and are already parked in INV-SCENE.shared_files; their true ownership is
+    # sorted when those scopes migrate (.14.13):
+    #   internal/session/{session.go,connection_test.go,
+    #     session_connection_mutator_test.go} → SCENE P5 focus annotations
+    #   internal/store/session_store.go, session_store_integration_test.go →
+    #     I-LIVE-2 / I-SEC-1 / I-PRIV-1 (liveness/security/privacy, not SCENE)
+    shared_files: []
 
   - name: INV-STORE
     description: "Migration discipline, no-DELETE enforcement, spec compliance scanning"
@@ -425,4 +428,43 @@ invariants:
     binding: pending
     refs:
       - {file: "internal/grpc/list_focus_presence.go", token: "I-PRES-9"}
-      - {file: "internal/grpc/list_focus_presence_test.go", token: "I-PRES-9"}
+      - {file: "internal/grpc/list_focus_presence_test.go", token: "I-PRES-9",}
+
+  # ── INV-SESSION ── migrated from INV-M-N (holomush-hz0v4.14.6).
+  # Origin: docs/superpowers/specs/2026-05-23-remove-session-memstore-design.md §"Invariants".
+  # binding: pending across the scope — verification backfill is holomush-hz0v4.11.
+  - id: INV-SESSION-1
+    scope: INV-SESSION
+    origin_spec: "docs/superpowers/specs/2026-05-23-remove-session-memstore-design.md"
+    legacy: ["INV-M-1@docs/superpowers/specs/2026-05-23-remove-session-memstore-design.md"]
+    summary: "session.Store has exactly one production implementation: store.PostgresSessionStore."
+    binding: pending
+    # Architectural invariant verified by a meta-grep (`_ session.Store = ` → one
+    # match); no in-code annotation token to migrate.
+    refs: []
+  - id: INV-SESSION-2
+    scope: INV-SESSION
+    origin_spec: "docs/superpowers/specs/2026-05-23-remove-session-memstore-design.md"
+    legacy: ["INV-M-2@docs/superpowers/specs/2026-05-23-remove-session-memstore-design.md"]
+    summary: "sessiontest.NewStore(t) returns a fresh, isolated store per invocation; cross-test state never leaks."
+    binding: pending
+    refs:
+      - {file: "internal/testsupport/sessiontest/store_test.go", token: "INV-M-2"}
+  - id: INV-SESSION-3
+    scope: INV-SESSION
+    origin_spec: "docs/superpowers/specs/2026-05-23-remove-session-memstore-design.md"
+    legacy: ["INV-M-3@docs/superpowers/specs/2026-05-23-remove-session-memstore-design.md"]
+    summary: "PostgresSessionStore.AddConnection rejects invalid client_type (accept terminal/comms_hub/telnet; reject others)."
+    binding: pending
+    refs:
+      - {file: "internal/store/session_store_test.go", token: "INV-M-3"}
+  - id: INV-SESSION-4
+    scope: INV-SESSION
+    origin_spec: "docs/superpowers/specs/2026-05-23-remove-session-memstore-design.md"
+    legacy: ["INV-M-4@docs/superpowers/specs/2026-05-23-remove-session-memstore-design.md"]
+    summary: "Memstore-removal preserves behavioral coverage: every pre-consolidation test is named in a surviving test's
+      // replaces: chain."
+    binding: pending
+    # Process/review invariant (// replaces: attestation chain); no in-code
+    # annotation token to migrate.
+    refs: []
