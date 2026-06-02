@@ -81,4 +81,17 @@ invariants.
 | `INV-STORE-7` | Sub-microsecond timestamp ties resolve deterministically; the privacy floor uses >= so an event at the exact floor ns is included. | `INV-TS-7` | pending |
 | `INV-STORE-9` | TIMESTAMPTZ->BIGINT conversion migrations saturate out-of-range / +/-infinity to int64 bounds, pass NULL through, and convert in-range values exactly (numeric arithmetic). | `INV-TS-9` | pending |
 
+### `INV-TELEMETRY`
+
+| ID | Summary | Legacy | Binding |
+|----|---------|--------|---------|
+| `INV-TELEMETRY-1` | Load harness drives the web tier over the Connect protocol (not gRPC/gRPC-Web). | `INV-LOAD-1` | pending |
+| `INV-TELEMETRY-2` | Load harness drives the telnet tier over raw TCP through the real gateway telnet listener. | `INV-LOAD-2` | pending |
+| `INV-TELEMETRY-3` | say->broadcast and page/whisper->delivery latency is computed from an in-payload emit-timestamp recorded by the recipient VU (never cross-VU shared state); generator/SUT clock skew <= 50ms. | `INV-LOAD-3` | pending |
+| `INV-TELEMETRY-4` | Load pass/fail verdict is derived from k6's exit code (thresholds), never a substring match on k6 output. | `INV-LOAD-4` | pending |
+| `INV-TELEMETRY-5` | SLO thresholds gate against .benchmarks/load-baseline.json (relative regression), not hard-coded absolutes, once a baseline exists. | `INV-LOAD-5` | pending |
+| `INV-TELEMETRY-6` | Load scenario must not issue command verbs not registered in the running server (command-availability gating). | `INV-LOAD-6` | pending |
+| `INV-TELEMETRY-7` | Load action selection is seeded deterministically so two runs of the same scenario config produce the same action sequence. | `INV-LOAD-7` | pending |
+| `INV-TELEMETRY-8` | The load harness must not be wired into task pr-prep (fast lane). | `INV-LOAD-8` | pending |
+
 <!-- END GENERATED: invariant-tables -->

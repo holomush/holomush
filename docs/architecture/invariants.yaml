@@ -326,8 +326,9 @@ scopes:
   - name: INV-TELEMETRY
     description: "Logging discipline, trace context, metric naming, sloglint policy"
     boundary: "Observability contracts."
-    # Family LOAD (load/perf harness latency+verdict). See redesign spec §2.1.
-    status: pending
+    # Family LOAD (INV-LOAD-1..8, load/perf harness). Spec-only — harness unbuilt;
+    # see redesign spec §2.1. (Scaffold/map said 1..4; the spec defines 8.)
+    status: migrated
     origin_specs:
       - "docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md"
     owned_paths:
@@ -621,4 +622,69 @@ invariants:
       - {file: "internal/store/migrations/000042_world_timestamps_to_bigint.up.sql", token: "INV-TS-9"}
       - {file: "internal/store/migrations/000043_totp_misc_timestamps_to_bigint.up.sql", token: "INV-TS-9"}
       - {file: "internal/store/migrations/000044_pregfo6_gap_timestamps_to_bigint.up.sql", token: "INV-TS-9"}
-      - {file: "internal/store/spec_meta_test.go", token: "INV-TS-9"}
+      - {file: "internal/store/spec_meta_test.go", token: "INV-TS-9",}
+
+  # -- INV-TELEMETRY -- migrated from INV-LOAD-N (family LOAD, load-perf harness) (holomush-hz0v4.14.8).
+  # Origin: docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md.
+  # Spec-only family: the load-perf harness is not yet built (test/load/ absent, no
+  # k6/baseline, zero in-code annotations), so all 8 are refs: [] / binding: pending.
+  # When the harness lands it annotates with INV-TELEMETRY-N directly (backfill .11).
+  - id: INV-TELEMETRY-1
+    scope: INV-TELEMETRY
+    origin_spec: "docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md"
+    legacy: ["INV-LOAD-1@docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md"]
+    summary: "Load harness drives the web tier over the Connect protocol (not gRPC/gRPC-Web)."
+    binding: pending
+    refs: []
+  - id: INV-TELEMETRY-2
+    scope: INV-TELEMETRY
+    origin_spec: "docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md"
+    legacy: ["INV-LOAD-2@docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md"]
+    summary: "Load harness drives the telnet tier over raw TCP through the real gateway telnet listener."
+    binding: pending
+    refs: []
+  - id: INV-TELEMETRY-3
+    scope: INV-TELEMETRY
+    origin_spec: "docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md"
+    legacy: ["INV-LOAD-3@docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md"]
+    summary: "say->broadcast and page/whisper->delivery latency is computed from an in-payload emit-timestamp recorded by
+      the recipient VU (never cross-VU shared state); generator/SUT clock skew <= 50ms."
+    binding: pending
+    refs: []
+  - id: INV-TELEMETRY-4
+    scope: INV-TELEMETRY
+    origin_spec: "docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md"
+    legacy: ["INV-LOAD-4@docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md"]
+    summary: "Load pass/fail verdict is derived from k6's exit code (thresholds), never a substring match on k6 output."
+    binding: pending
+    refs: []
+  - id: INV-TELEMETRY-5
+    scope: INV-TELEMETRY
+    origin_spec: "docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md"
+    legacy: ["INV-LOAD-5@docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md"]
+    summary: "SLO thresholds gate against .benchmarks/load-baseline.json (relative regression), not hard-coded absolutes,
+      once a baseline exists."
+    binding: pending
+    refs: []
+  - id: INV-TELEMETRY-6
+    scope: INV-TELEMETRY
+    origin_spec: "docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md"
+    legacy: ["INV-LOAD-6@docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md"]
+    summary: "Load scenario must not issue command verbs not registered in the running server (command-availability gating)."
+    binding: pending
+    refs: []
+  - id: INV-TELEMETRY-7
+    scope: INV-TELEMETRY
+    origin_spec: "docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md"
+    legacy: ["INV-LOAD-7@docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md"]
+    summary: "Load action selection is seeded deterministically so two runs of the same scenario config produce the same action
+      sequence."
+    binding: pending
+    refs: []
+  - id: INV-TELEMETRY-8
+    scope: INV-TELEMETRY
+    origin_spec: "docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md"
+    legacy: ["INV-LOAD-8@docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md"]
+    summary: "The load harness must not be wired into task pr-prep (fast lane)."
+    binding: pending
+    refs: []
