@@ -72,6 +72,21 @@ invariants.
 | `INV-PRESENCE-8` | Client presence map keyed by character_id; idempotent add/remove. | `I-PRES-8` | pending |
 | `INV-PRESENCE-9` | Response deduplicates by character_id (defense-in-depth). | `I-PRES-9` | pending |
 
+### `INV-CLUSTER`
+
+| ID | Summary | Legacy | Binding |
+|----|---------|--------|---------|
+| `INV-CLUSTER-1` | KEK rotation issues a cluster-prefixed NATS request-reply cache-invalidate ping and MUST receive N-of-N replica acks (30s timeout; rollback on timeout). | `INV-28` | pending |
+| `INV-CLUSTER-2` | Rotate/Rekey(context) issues a cluster-prefixed cache-invalidate ping and MUST receive N-of-N replica acks before returning (5s timeout; N=1 degenerates to local self-ack; rollback on timeout). | `INV-29` | pending |
+| `INV-CLUSTER-3` | Every cluster.Registry member has a unique MemberID; colliding concurrent registration is rejected with CLUSTER_MEMBER_DUPLICATE_ID. | `INV-53` | pending |
+| `INV-CLUSTER-4` | All Phase-3c internal coordination subjects are cluster_id-prefixed; members drop messages whose payload cluster_id disagrees with their configured cluster_id. | `INV-54` | pending |
+| `INV-CLUSTER-5` | A pill on internal.<cluster_id>.member.poison.<self_id> triggers Pill.Trigger after flushing audit telemetry; the production Pill terminates the process with exit code 125. | `INV-55` | pending |
+| `INV-CLUSTER-6` | invalidation.Coordinator attempts at most one probe-and-pill + retry cycle per RequestInvalidation; after the second timeout it returns INVALIDATION_PARTIAL_FAILURE with the missing-member set. | `INV-56` | pending |
+| `INV-CLUSTER-7` | cluster.Registry.ProbeAndPill issues at most one attempt per (member_id, reason) per PillRateLimit window (claim-then-probe, closing the TOCTOU race); over-limit returns ErrPillRateLimited without reaching the wire. | `INV-57` | pending |
+| `INV-CLUSTER-8` | No Phase-3c decision is conditioned on cross-host wall-clock comparison (enforced by the noremoteclockcompare analyzer; observability-only skew/latency metrics are the carved-out exceptions). | `INV-58` | pending |
+| `INV-CLUSTER-9` | A successful RequestInvalidation(participants_changed) leaves every other live member's dek.ParticipantsCache with no entry for (ctxType, ctxId, version) on return (re-fetch from PG). | `INV-59` | pending |
+| `INV-CLUSTER-10` | cluster.Registry.ProbeAndPill refuses id==Self() with ErrCannotPillSelf; the Coordinator filters Self() out of the missing-member set (prevents N=1 self-pill). | `INV-60` | pending |
+
 ### `INV-ACCESS`
 
 | ID | Summary | Legacy | Binding |

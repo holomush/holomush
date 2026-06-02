@@ -51,7 +51,7 @@ var ErrPillProbeSucceeded = oops.Code("CLUSTER_PILL_PROBE_SUCCEEDED").
 // file rather than registry.go so the rate-limit + self-refusal logic
 // stays close to the probe/pill semantics.
 func (r *registry) probeAndPill(ctx context.Context, id MemberID, reason PillReason) error {
-	// INV-60: refuse self-targeted pills. We do NOT increment
+	// INV-CLUSTER-10: refuse self-targeted pills. We do NOT increment
 	// SelfTimeoutMetrics here — that counter's contract (see
 	// metrics.go cluster_self_timeout_total Help text) is "Coordinator
 	// missed-ack set after probe-and-pill phase contains only Self()",
@@ -61,14 +61,14 @@ func (r *registry) probeAndPill(ctx context.Context, id MemberID, reason PillRea
 	if id == r.self {
 		r.deps.Logger.WarnContext(
 			ctx,
-			"cluster.ProbeAndPill self-pill refused (INV-60)",
+			"cluster.ProbeAndPill self-pill refused (INV-CLUSTER-10)",
 			"self", string(r.self),
 			"reason", string(reason),
 		)
 		return ErrCannotPillSelf
 	}
 
-	// INV-57: rate limit per (member_id, reason). Single-acquisition
+	// INV-CLUSTER-7: rate limit per (member_id, reason). Single-acquisition
 	// "claim" pattern: check the window AND write the timestamp under
 	// one lock acquisition so two concurrent ProbeAndPill calls cannot
 	// both pass the gate. The check governs *attempts*, not

@@ -55,7 +55,7 @@ type coordinator struct {
 }
 
 // timeoutFor returns the action-specific timeout. KEK rotation uses
-// 30s per INV-28; everything else uses cfg.InvalidateTimeout (default 5s).
+// 30s per INV-CLUSTER-1; everything else uses cfg.InvalidateTimeout (default 5s).
 func (c *coordinator) timeoutFor(action Action) time.Duration {
 	if action == ActionKEKRotation {
 		return 30 * time.Second
@@ -93,7 +93,7 @@ func (c *coordinator) Stop(_ context.Context) error {
 
 // RequestInvalidation publishes an invalidation request and waits for
 // N-of-N replica acks; on partial timeout, runs probe-and-pill on
-// missing members and retries once. INV-28, INV-29, INV-56, INV-60.
+// missing members and retries once. INV-CLUSTER-1, INV-CLUSTER-2, INV-CLUSTER-6, INV-CLUSTER-10.
 func (c *coordinator) RequestInvalidation(
 	ctx context.Context,
 	ctxID dek.ContextID,
@@ -137,7 +137,7 @@ func (c *coordinator) RequestInvalidation(
 	// Probe-and-pill phase. Compute missing against the SAME snapshot
 	// used to derive the expected ack count.
 	missing := computeMissingFromSnapshot(snapshot1, acks)
-	// INV-60: filter Self() from missing set.
+	// INV-CLUSTER-10: filter Self() from missing set.
 	self := c.deps.Registry.Self()
 	selfFiltered := make([]cluster.MemberID, 0, len(missing))
 	for _, m := range missing {
@@ -327,7 +327,7 @@ func (c *coordinator) recordSuccess(action Action, outcome string, issuedAt time
 
 // handleInvalidate is the receive-side handler. Parses payload,
 // dispatches on action enum, evicts caches per Phase 3c grounding doc
-// Decision 5/6, and acks via msg.Respond. INV-54: cluster_id-mismatch
+// Decision 5/6, and acks via msg.Respond. INV-CLUSTER-4: cluster_id-mismatch
 // messages dropped without ack.
 //
 // Note on time.Since(payload.IssuedAt): in single-process tests the

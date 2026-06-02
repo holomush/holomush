@@ -26,7 +26,7 @@ type ParticipantsCacheKey struct {
 // (participants invalidate per-version on Add via participants_changed
 // action; DEK material invalidates per-context on Rekey).
 //
-// Phase 3c grounding doc Decision 3 + INV-59 + INV-27.
+// Phase 3c grounding doc Decision 3 + INV-CLUSTER-9 + INV-27.
 type ParticipantsCache struct {
 	cap   int
 	ttl   time.Duration

@@ -257,13 +257,25 @@ scopes:
       replicas. Does NOT include single-process DEK operations (→ INV-CRYPTO)."
     # bare INV-28/29/56/59 (cross-replica invalidation) defined in the master crypto spec
     # but scoped to CLUSTER per the boundary note. See redesign spec §2.1.
-    status: pending
+    status: migrated
     origin_specs:
       - "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
     owned_paths:
       - "internal/cluster/**"
       - "internal/eventbus/crypto/invalidation/**"
-    shared_files: []
+      - "test/integration/cluster/**"
+    shared_files:
+      # CRYPTO-owned files (crypto/dek/**, test/integration/crypto/**) carrying
+      # cluster invalidation tokens, + the noremoteclockcompare lint analyzer/testdata
+      # that enforces INV-CLUSTER-8 (legacy INV-58). Co-located CRYPTO tokens untouched.
+      - "gorules/analyzers/noremoteclockcompare/noremoteclockcompare.go"
+      - "gorules/analyzers/noremoteclockcompare/testdata/src/example.com/negative/negative.go"
+      - "gorules/analyzers/noremoteclockcompare/testdata/src/example.com/positive/positive.go"
+      - "internal/eventbus/crypto/dek/manager.go"
+      - "internal/eventbus/crypto/dek/manager_integration_test.go"
+      - "internal/eventbus/crypto/dek/participants_cache.go"
+      - "internal/eventbus/crypto/dek/rekey_run.go"
+      - "test/integration/crypto/cache_invalidation_test.go"
 
   - name: INV-ACCESS
     description: "ABAC policy evaluation, attribute provider invariants, seed policy shape, authorization decisions"
@@ -889,4 +901,123 @@ invariants:
       behavior."
     binding: pending
     refs:
-      - {file: "internal/testsupport/integrationtest/real_abac_test.go", token: "INV-RA-6"}
+      - {file: "internal/testsupport/integrationtest/real_abac_test.go", token: "INV-RA-6",}
+
+  # -- INV-CLUSTER -- migrated from bare INV-N (cross-replica coordination) (holomush-hz0v4.14.11).
+  # Origin: docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md (master crypto spec; these bare invariants are CLUSTER-scoped per the
+  # boundary note). FIRST bare-INV-N scope: dense per-scope renumbering (legacy 28,29,53-60
+  # are non-contiguous in the crypto spec's global numbering). binding: pending — backfill .11.
+  # Co-located CRYPTO bare tokens (e.g. INV-27 in participants_cache.go) are NOT touched.
+  - id: INV-CLUSTER-1
+    scope: INV-CLUSTER
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-28@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "KEK rotation issues a cluster-prefixed NATS request-reply cache-invalidate ping and MUST receive N-of-N replica
+      acks (30s timeout; rollback on timeout)."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/invalidation/coordinator.go", token: "INV-28"}
+      - {file: "internal/eventbus/crypto/invalidation/coordinator_internal_test.go", token: "INV-28"}
+  - id: INV-CLUSTER-2
+    scope: INV-CLUSTER
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-29@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "Rotate/Rekey(context) issues a cluster-prefixed cache-invalidate ping and MUST receive N-of-N replica acks before
+      returning (5s timeout; N=1 degenerates to local self-ack; rollback on timeout)."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/dek/manager_integration_test.go", token: "INV-29"}
+      - {file: "internal/eventbus/crypto/invalidation/coordinator.go", token: "INV-29"}
+      - {file: "test/integration/crypto/cache_invalidation_test.go", token: "INV-29"}
+  - id: INV-CLUSTER-3
+    scope: INV-CLUSTER
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-53@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "Every cluster.Registry member has a unique MemberID; colliding concurrent registration is rejected with CLUSTER_MEMBER_DUPLICATE_ID."
+    binding: pending
+    refs:
+      - {file: "gorules/analyzers/noremoteclockcompare/testdata/src/example.com/negative/negative.go", token: "INV-53"}
+      - {file: "internal/cluster/heartbeat.go", token: "INV-53"}
+      - {file: "internal/cluster/metrics.go", token: "INV-53"}
+      - {file: "internal/cluster/registry.go", token: "INV-53"}
+      - {file: "test/integration/cluster/cluster_test.go", token: "INV-53"}
+  - id: INV-CLUSTER-4
+    scope: INV-CLUSTER
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-54@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "All Phase-3c internal coordination subjects are cluster_id-prefixed; members drop messages whose payload cluster_id
+      disagrees with their configured cluster_id."
+    binding: pending
+    refs:
+      - {file: "internal/cluster/heartbeat.go", token: "INV-54"}
+      - {file: "internal/eventbus/crypto/invalidation/coordinator.go", token: "INV-54"}
+      - {file: "internal/eventbus/crypto/invalidation/coordinator_internal_test.go", token: "INV-54"}
+      - {file: "test/integration/cluster/cluster_test.go", token: "INV-54"}
+  - id: INV-CLUSTER-5
+    scope: INV-CLUSTER
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-55@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "A pill on internal.<cluster_id>.member.poison.<self_id> triggers Pill.Trigger after flushing audit telemetry;
+      the production Pill terminates the process with exit code 125."
+    binding: pending
+    refs:
+      - {file: "internal/cluster/probe_pill_test.go", token: "INV-55"}
+      - {file: "test/integration/cluster/cluster_test.go", token: "INV-55"}
+  - id: INV-CLUSTER-6
+    scope: INV-CLUSTER
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-56@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "invalidation.Coordinator attempts at most one probe-and-pill + retry cycle per RequestInvalidation; after the
+      second timeout it returns INVALIDATION_PARTIAL_FAILURE with the missing-member set."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/invalidation/coordinator.go", token: "INV-56"}
+      - {file: "test/integration/crypto/cache_invalidation_test.go", token: "INV-56"}
+  - id: INV-CLUSTER-7
+    scope: INV-CLUSTER
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-57@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "cluster.Registry.ProbeAndPill issues at most one attempt per (member_id, reason) per PillRateLimit window (claim-then-probe,
+      closing the TOCTOU race); over-limit returns ErrPillRateLimited without reaching the wire."
+    binding: pending
+    refs:
+      - {file: "internal/cluster/probe_pill.go", token: "INV-57"}
+      - {file: "internal/cluster/probe_pill_test.go", token: "INV-57"}
+      - {file: "internal/cluster/registry.go", token: "INV-57"}
+      - {file: "test/integration/cluster/cluster_test.go", token: "INV-57"}
+  - id: INV-CLUSTER-8
+    scope: INV-CLUSTER
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-58@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "No Phase-3c decision is conditioned on cross-host wall-clock comparison (enforced by the noremoteclockcompare
+      analyzer; observability-only skew/latency metrics are the carved-out exceptions)."
+    binding: pending
+    refs:
+      - {file: "gorules/analyzers/noremoteclockcompare/noremoteclockcompare.go", token: "INV-58"}
+      - {file: "gorules/analyzers/noremoteclockcompare/testdata/src/example.com/negative/negative.go", token: "INV-58"}
+      - {file: "gorules/analyzers/noremoteclockcompare/testdata/src/example.com/positive/positive.go", token: "INV-58"}
+      - {file: "internal/cluster/heartbeat.go", token: "INV-58"}
+      - {file: "internal/eventbus/crypto/dek/rekey_run.go", token: "INV-58"}
+  - id: INV-CLUSTER-9
+    scope: INV-CLUSTER
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-59@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "A successful RequestInvalidation(participants_changed) leaves every other live member's dek.ParticipantsCache
+      with no entry for (ctxType, ctxId, version) on return (re-fetch from PG)."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/dek/manager.go", token: "INV-59"}
+      - {file: "internal/eventbus/crypto/dek/participants_cache.go", token: "INV-59"}
+      - {file: "test/integration/crypto/cache_invalidation_test.go", token: "INV-59"}
+  - id: INV-CLUSTER-10
+    scope: INV-CLUSTER
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-60@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "cluster.Registry.ProbeAndPill refuses id==Self() with ErrCannotPillSelf; the Coordinator filters Self() out
+      of the missing-member set (prevents N=1 self-pill)."
+    binding: pending
+    refs:
+      - {file: "internal/cluster/probe_pill.go", token: "INV-60"}
+      - {file: "internal/cluster/probe_pill_test.go", token: "INV-60"}
+      - {file: "internal/eventbus/crypto/invalidation/coordinator.go", token: "INV-60"}
+      - {file: "test/integration/cluster/cluster_test.go", token: "INV-60"}

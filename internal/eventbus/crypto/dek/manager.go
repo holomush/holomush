@@ -292,7 +292,7 @@ func (m *manager) Resolve(ctx context.Context, keyID codec.KeyID, version uint32
 
 // Participants returns the participant set for the (keyID, version)
 // DEK. Reads from ParticipantsCache on hit; on miss, falls through to
-// PG and seeds the cache. Phase 3c grounding doc Decision 3 + INV-59.
+// PG and seeds the cache. Phase 3c grounding doc Decision 3 + INV-CLUSTER-9.
 //
 // PG-before-cache note: this body reads PG first (selectByID) to derive
 // the cache key (ContextType, ContextID, Version), then checks the

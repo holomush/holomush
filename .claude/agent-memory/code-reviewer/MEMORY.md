@@ -20,3 +20,31 @@
   -tags=integration` surfaces `lostcancel` warnings at `context.WithTimeout` sites
   that already carry `//nolint:govet` — NOT findings (bare vet ignores golangci
   nolint; `task lint` is the real gate). Encountered: hz0v4.14.9 (2026-06-02) — NOT READY.
+
+- **Bare-INV-N (CLUSTER) migration is the same shape as I-<OLD>-N but the
+  per-family test lives in `test/meta/inv_binding_test.go`, not a separate
+  `i_<old>_coverage_test.go` (hz0v4.14.11 READY).** Phase-3c invariants
+  (INV-53..60 + INV-28/29) were tracked by
+  `TestEveryPhase3cInvariantHasAtLeastOneTestBinding` (scanned `// Verifies:
+  INV-<digits>`). On migration this test + its 3 locals
+  (`phase3cInvariants`/`invLintEnforced`/`verifiesRE`) MUST be removed, but the
+  shared `findRepoRoot`/`skipDirs` helpers in the SAME file MUST be KEPT (used by
+  10+ meta files — `liveness_invariants_test.go`, `proto_doc_comments_test.go`,
+  `invariant_registry_test.go`, etc.). Verify file still compiles via `task test
+  -- ./test/meta/`. The lone surviving `TestEveryPhase3c...` mention is fine if
+  it's in the rewritten doc-comment explaining the retirement (not a symbol ref).
+  Review pattern for bare-INV-N: (1) `rg '\bINV-(28|29|53..60)\b' -g '!docs/**'
+  -g '!*.md' -g '!test/meta/**'` → exit 1 (NO matches); (2) closed-world
+  {file,token} rewrite preserves co-located non-set bare tokens — INV-27 in
+  participants_cache.go must read "INV-CLUSTER-9 + INV-27", and CRYPTO tokens
+  (INV-9,12,13,17-21,25,26,30,32,33,34,37,39,49) elsewhere untouched; (3) DENSE
+  renumber: non-contiguous legacy maps ascending-by-position to 1..N — verify each
+  entry's `legacy:` AND every `refs[].token` equals the legacy token (awk
+  block-scan), no dup legacy; (4) gorules is a SEPARATE module — its analyzer
+  user-facing diagnostic message + Doc + testdata `// want` directives rename in
+  lockstep (INV-58→INV-CLUSTER-8); run `task test:gorules` after `go clean
+  -testcache` (else cached `ok` masks the testdata edit); (5) `task
+  lint:invariants` (= `inv-render -check`) must exit 0 for invariants.md sync.
+  Origin SPEC is NOT migrated (spec line still says INV-58) — by design; legacy
+  column in invariants.md/yaml records the link. Encountered: hz0v4.14.11
+  (2026-06-02) — READY.

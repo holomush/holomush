@@ -227,7 +227,7 @@ func (o *Orchestrator) driveToCompletion(ctx context.Context, rid RequestID, req
 			// observability-only duration: both timestamps originate on this
 			// host's clock (StartedAt at Phase 1 INSERT, CompletedAt at Phase 7
 			// MarkComplete), so the cross-host clock-skew concern that
-			// INV-58 guards against does not apply. The value is for CLI
+			// INV-CLUSTER-8 guards against does not apply. The value is for CLI
 			// display, never for protocol decisions.
 			out.DurationMs = ckpt.CompletedAt.Sub(ckpt.StartedAt).Milliseconds() //nolint:noremoteclockcompare // observability-only; both timestamps are local host wall-clock writes.
 		}

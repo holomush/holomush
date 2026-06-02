@@ -266,7 +266,7 @@ func (r *registry) handleAlive(msg *nats.Msg) {
 		return
 	}
 	if p.ClusterID != r.cfg.ClusterID {
-		// INV-54: drop messages from other clusters.
+		// INV-CLUSTER-4: drop messages from other clusters.
 		r.deps.Logger.Warn("heartbeat cluster_id mismatch; dropping",
 			"got", p.ClusterID, "want", r.cfg.ClusterID, "from", string(p.MemberID))
 		return
@@ -280,7 +280,7 @@ func (r *registry) handleAlive(msg *nats.Msg) {
 
 	r.mu.Lock()
 	existing, present := r.members[p.MemberID]
-	// INV-53: duplicate-MemberID detection. ULID collision is birthday-
+	// INV-CLUSTER-3: duplicate-MemberID detection. ULID collision is birthday-
 	// bound astronomical, but defense-in-depth: if we've already seen a
 	// heartbeat from this MemberID with a different StartedAt, a
 	// different process is re-using the ULID. Reject the new heartbeat
@@ -348,7 +348,7 @@ func (r *registry) handleBye(msg *nats.Msg) {
 		return
 	}
 	if p.ClusterID != r.cfg.ClusterID {
-		return // INV-54
+		return // INV-CLUSTER-4
 	}
 	if p.MemberID == r.self {
 		return
@@ -394,7 +394,7 @@ func (r *registry) handlePoison(msg *nats.Msg) {
 		return
 	}
 	if p.ClusterID != r.cfg.ClusterID {
-		return // INV-54
+		return // INV-CLUSTER-4
 	}
 	// Pill accepted; trigger termination via injected Pill (Decision 7).
 	r.deps.Pill.Trigger(context.Background(), p.Reason, p.CoordinatorMemberID)
@@ -457,7 +457,7 @@ func (r *registry) recordSkew(source MemberID, skew float64) {
 }
 
 // computeSkew returns absolute drift in seconds between local clock and
-// the remote-sourced published_at timestamp. INV-58 carve-out: this
+// the remote-sourced published_at timestamp. INV-CLUSTER-8 carve-out: this
 // computation is the single allowed cross-host clock comparison; the
 // result feeds an observability gauge only and never gates protocol
 // decisions (Phase 3c grounding doc Decision 8).

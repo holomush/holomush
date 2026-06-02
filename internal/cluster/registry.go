@@ -65,7 +65,7 @@ type Deps struct {
 	PillMetrics       *PillMetrics
 	SkewMetrics       *SkewMetrics
 	SelfTimeout       *SelfTimeoutMetrics
-	DuplicateMemberID *DuplicateMemberIDMetrics // INV-53 detection metric
+	DuplicateMemberID *DuplicateMemberIDMetrics // INV-CLUSTER-3 detection metric
 	HeartbeatMetrics  *HeartbeatMetrics         // heartbeat-publish failures (ticker path)
 	Pill              Pill                      // production / test / dev
 	SelfIDForTest     MemberID                  // tests inject; production uses ulid.Make()
@@ -158,7 +158,7 @@ type registry struct {
 	// outgoing heartbeats. Updated by external setters in T9.
 	lastInvSeq uint64
 
-	// Pill rate-limit machinery (INV-57). Tracks the timestamp of the
+	// Pill rate-limit machinery (INV-CLUSTER-7). Tracks the timestamp of the
 	// most-recent pill issued for each (member_id, reason) tuple. Lazy
 	// map init in probeAndPill / issuePill — zero-value sync.Mutex and
 	// nil map are safe.

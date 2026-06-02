@@ -24,7 +24,7 @@ func okLocalSelectorSub(s sample) time.Duration {
 }
 
 // IsZero / Equal are not in timeMethodAllowlist; remote-remote identity
-// checks (e.g., INV-53 duplicate-MemberID detection) MUST NOT fire.
+// checks (e.g., INV-CLUSTER-3 duplicate-MemberID detection) MUST NOT fire.
 func okRemoteEqual(a, b sample) bool {
 	if a.StartedAt.IsZero() {
 		return false
@@ -45,7 +45,7 @@ type fakeMember struct {
 
 // Custom type with same-named methods (Before/After/Sub) on a
 // non-time.Time receiver. The analyzer's isTimeMethod check MUST
-// filter these out — they are not the time.Time methods INV-58
+// filter these out — they are not the time.Time methods INV-CLUSTER-8
 // guards against.
 type customOrdered struct {
 	IssuedAt int64
