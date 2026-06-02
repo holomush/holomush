@@ -40,14 +40,16 @@ import (
 var iPrivInvariants = []int{1, 2, 3, 4, 5, 6, 7, 8}
 
 // iPrivVerifiesRE matches `// Verifies: I-PRIV-<digits>` annotations in
-// test files. Mirrors iPresVerifiesRE / verifiesRE — same anchoring rules
-// for consistent tolerance of `// Verifies:` and `//  Verifies:` forms.
+// test files. Same anchoring rules as the other per-family coverage tests —
+// consistent tolerance of `// Verifies:` and `//  Verifies:` forms.
 var iPrivVerifiesRE = regexp.MustCompile(`//\s*Verifies:\s*I-PRIV-(\d+)`)
 
-// TestEveryIPRIVInvariantHasAtLeastOneTestBinding mirrors
-// TestEveryIPRESInvariantHasAtLeastOneTestBinding (in i_pres_coverage_test.go)
-// for the I-PRIV-N invariant family. A new I-PRIV-N invariant added to the
-// spec without a paired test binding causes this meta-test to fail.
+// TestEveryIPRIVInvariantHasAtLeastOneTestBinding asserts the I-PRIV-N
+// invariant family each has a paired test binding. (The analogous PRESENCE
+// per-family test was retired once INV-PRESENCE migrated to the registry,
+// whose TestEveryRegistryInvariantHasBinding now owns that coverage —
+// holomush-hz0v4.14.5; PRIVACY follows when it migrates.) A new I-PRIV-N
+// invariant added to the spec without a paired test binding fails this test.
 func TestEveryIPRIVInvariantHasAtLeastOneTestBinding(t *testing.T) {
 	root := findRepoRoot(t)
 

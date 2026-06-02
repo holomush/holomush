@@ -22,8 +22,8 @@ import (
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
-// Verifies: I-PRES-1
-// Verifies: I-PRES-6
+// Verifies: INV-PRESENCE-1
+// Verifies: INV-PRESENCE-6
 // AC4: A connects, B then connects to the same location, B's ListFocusPresence
 // MUST include A within 1s of session open. Proves the snapshot RPC populates
 // presence independent of event replay — the architectural pattern that
@@ -86,7 +86,7 @@ var _ = Describe("AC4: joiner sees prior presence", func() {
 	})
 })
 
-// AC3 / I-PRES-2: the snapshot RPC MUST be exempt from the I-PRIV-1 temporal
+// AC3 / INV-PRESENCE-2: the snapshot RPC MUST be exempt from the I-PRIV-1 temporal
 // floor (LocationArrivedAt). Manipulate bob's LocationArrivedAt to 1 hour in
 // the future — under any temporal-floor-based filter (e.g., iwzt.15 Tier 2),
 // alice's arrive event would be filtered out. The snapshot reads sessionStore
@@ -105,8 +105,8 @@ var _ = Describe("AC4: joiner sees prior presence", func() {
 // upgrade this scenario to also exercise an active filter (e.g., via a
 // WithTier2FilterActive harness option). Until then, the future-floor
 // write + architectural assertion is the strongest available shape.
-// Verifies: I-PRES-2
-var _ = Describe("AC3 / I-PRES-2: snapshot bypasses I-PRIV-1 temporal floor", func() {
+// Verifies: INV-PRESENCE-2
+var _ = Describe("AC3 / INV-PRESENCE-2: snapshot bypasses I-PRIV-1 temporal floor", func() {
 	var (
 		ts    *integrationtest.Server
 		ctx   context.Context
@@ -150,9 +150,9 @@ var _ = Describe("AC3 / I-PRES-2: snapshot bypasses I-PRIV-1 temporal floor", fu
 			g.Expect(resp).NotTo(BeNil())
 			g.Expect(resp.GetContext()).To(Equal(corev1.PresenceContext_PRESENCE_CONTEXT_LOCATION))
 			g.Expect(entryNames(resp.GetEntries())).To(ContainElement("Alice"),
-				"I-PRES-2: snapshot MUST surface alice despite bob's strict LocationArrivedAt floor")
+				"INV-PRESENCE-2: snapshot MUST surface alice despite bob's strict LocationArrivedAt floor")
 			g.Expect(entryNames(resp.GetEntries())).To(ContainElement("Bob"),
-				"I-PRES-6: caller's own session MUST be in the response")
+				"INV-PRESENCE-6: caller's own session MUST be in the response")
 		}, time.Second, 50*time.Millisecond).Should(Succeed())
 	})
 })
@@ -227,10 +227,10 @@ var _ = Describe("AC4 scale: snapshot returns all active sessions under accumula
 			g.Expect(resp.GetEntries()).To(HaveLen(priorCount+1),
 				"snapshot MUST include all %d prior sessions PLUS fresh (g776 repro)", priorCount)
 
-			// Fresh session's own character MUST be present (I-PRES-6).
+			// Fresh session's own character MUST be present (INV-PRESENCE-6).
 			names := entryNames(resp.GetEntries())
 			g.Expect(names).To(ContainElement(fresh.CharacterName),
-				"I-PRES-6: caller's own session MUST be in the response")
+				"INV-PRESENCE-6: caller's own session MUST be in the response")
 
 			// Each prior MUST be present too — no silent drops.
 			for i, p := range priorSess {

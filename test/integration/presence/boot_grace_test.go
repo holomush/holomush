@@ -148,7 +148,7 @@ var _ = Describe("Boot-grace suppression (I-LIVE-4 / G2)", func() {
 			resp, presErr := guest.ListFocusPresence(ctx)
 			g.Expect(presErr).NotTo(HaveOccurred())
 			g.Expect(entryNames(resp.GetEntries())).To(ContainElement(guest.CharacterName),
-				"I-LIVE-4/I-PRES-1: guest MUST remain visible in presence throughout boot-grace window; "+
+				"I-LIVE-4/INV-PRESENCE-1: guest MUST remain visible in presence throughout boot-grace window; "+
 					"grid_present MUST NOT be cleared by a suppressed sweep")
 		}, 600*time.Millisecond, 50*time.Millisecond).Should(Succeed())
 

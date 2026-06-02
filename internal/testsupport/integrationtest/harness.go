@@ -741,7 +741,7 @@ func (s *Server) ExpireSession(ctx context.Context, sessionID string) {
 
 // SetLocationArrivedAt directly mutates a session's location_arrived_at column
 // in Postgres. Used by 5b2j tests to exercise floor-bypass semantics
-// (I-PRES-2): the snapshot RPC reads sessionStore directly and is exempt from
+// (INV-PRESENCE-2): the snapshot RPC reads sessionStore directly and is exempt from
 // the I-PRIV-1 temporal floor, so manipulating this column should NOT affect
 // ListFocusPresence's behavior.
 func (s *Server) SetLocationArrivedAt(ctx context.Context, sessionID string, t time.Time) {

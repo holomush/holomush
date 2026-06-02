@@ -78,13 +78,25 @@ scopes:
   - name: INV-PRESENCE
     description: "Presence snapshot correctness, field enumeration, client-side dedup, ownership obscuration"
     boundary: "Current-state presence queries. Does NOT include: session status lifecycle (→ INV-SESSION)."
-    status: pending
+    status: migrated
     origin_specs:
       - "docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"
     owned_paths:
-      - "internal/grpc/focus/presence*.go"
+      # The presence RPC lives at internal/grpc/list_focus_presence*.go (NOT
+      # internal/grpc/focus/, which is INV-SCENE). Corrected from the original
+      # focus/presence*.go glob, which matched zero files (holomush-hz0v4.14.5).
+      # Listed as concrete paths, not a `*.go` glob: the provenance residual
+      # walk only descends concrete paths or `/**` dirs, so a `*` file-glob
+      # would skip these files entirely (CodeRabbit PR #4363; see .14.21).
+      - "internal/grpc/list_focus_presence.go"
+      - "internal/grpc/list_focus_presence_test.go"
       - "test/integration/presence/**"
-    shared_files: []
+    shared_files:
+      # I-PRES-N annotations that ride on files owned by other domains; renamed
+      # to INV-PRESENCE-N here (one scope = one consistent rename of all refs).
+      - "internal/grpc/location_follow_test.go"
+      - "test/integration/session/session_list_active_by_location_test.go"
+      - "internal/testsupport/integrationtest/harness.go" # also INV-CRYPTO shared
 
   - name: INV-SCENE
     description: "Scene lifecycle, board queries, content warnings, pose ordering, focus model, publish snapshot/state, IC
@@ -327,4 +339,90 @@ scopes:
       - "scripts/check-docs-ia.sh"
     shared_files: []
 
-invariants: []
+invariants:
+  # ── INV-PRESENCE ── migrated from I-PRES-N (holomush-hz0v4.14.5).
+  # Origin: docs/superpowers/specs/2026-05-19-presence-snapshot-design.md §7.
+  # binding: pending across the scope — verification backfill is holomush-hz0v4.11.
+  - id: INV-PRESENCE-1
+    scope: INV-PRESENCE
+    origin_spec: "docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"
+    legacy: ["I-PRES-1@docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"]
+    summary: "Snapshot returns only Active sessions; Detached/Expired excluded."
+    binding: pending
+    refs:
+      - {file: "internal/grpc/list_focus_presence_test.go", token: "I-PRES-1"}
+      - {file: "internal/grpc/location_follow_test.go", token: "I-PRES-1"}
+      - {file: "test/integration/presence/presence_test.go", token: "I-PRES-1"}
+      - {file: "test/integration/presence/reattach_presence_test.go", token: "I-PRES-1"}
+      - {file: "test/integration/presence/lease_reaper_test.go", token: "I-PRES-1"}
+      - {file: "test/integration/presence/boot_grace_test.go", token: "I-PRES-1"}
+      - {file: "test/integration/session/session_list_active_by_location_test.go", token: "I-PRES-1"}
+  - id: INV-PRESENCE-2
+    scope: INV-PRESENCE
+    origin_spec: "docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"
+    legacy: ["I-PRES-2@docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"]
+    summary: "Snapshot exempt from I-PRIV-1 temporal floor (timeless current state)."
+    binding: pending
+    refs:
+      - {file: "test/integration/presence/presence_test.go", token: "I-PRES-2"}
+      - {file: "internal/testsupport/integrationtest/harness.go", token: "I-PRES-2"}
+  - id: INV-PRESENCE-3
+    scope: INV-PRESENCE
+    origin_spec: "docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"
+    legacy: ["I-PRES-3@docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"]
+    summary: "Ownership failures collapse to SESSION_NOT_FOUND (enumeration-safe)."
+    binding: pending
+    refs:
+      - {file: "internal/grpc/list_focus_presence_test.go", token: "I-PRES-3"}
+  - id: INV-PRESENCE-4
+    scope: INV-PRESENCE
+    origin_spec: "docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"
+    legacy: ["I-PRES-4@docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"]
+    summary: "RPC ABAC-gated by action=list_presence on resource=location:<id>."
+    binding: pending
+    refs:
+      - {file: "internal/grpc/list_focus_presence.go", token: "I-PRES-4"}
+      - {file: "internal/grpc/list_focus_presence_test.go", token: "I-PRES-4"}
+  - id: INV-PRESENCE-5
+    scope: INV-PRESENCE
+    origin_spec: "docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"
+    legacy: ["I-PRES-5@docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"]
+    summary: "Non-empty FocusMemberships → UNIMPLEMENTED; no silent fallback."
+    binding: pending
+    refs:
+      - {file: "internal/grpc/list_focus_presence_test.go", token: "I-PRES-5"}
+  - id: INV-PRESENCE-6
+    scope: INV-PRESENCE
+    origin_spec: "docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"
+    legacy: ["I-PRES-6@docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"]
+    summary: "Caller's own session included when status+location qualify."
+    binding: pending
+    refs:
+      - {file: "test/integration/presence/presence_test.go", token: "I-PRES-6"}
+      - {file: "internal/grpc/list_focus_presence_test.go", token: "I-PRES-6"}
+  - id: INV-PRESENCE-7
+    scope: INV-PRESENCE
+    origin_spec: "docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"
+    legacy: ["I-PRES-7@docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"]
+    summary: "PresenceEntry has exactly 3 fields: character_id, character_name, state."
+    binding: pending
+    refs:
+      - {file: "internal/grpc/list_focus_presence_test.go", token: "I-PRES-7"}
+  - id: INV-PRESENCE-8
+    scope: INV-PRESENCE
+    origin_spec: "docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"
+    legacy: ["I-PRES-8@docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"]
+    summary: "Client presence map keyed by character_id; idempotent add/remove."
+    binding: pending
+    # Frontend-only invariant (web/src/lib/presence vitest); no in-code Go
+    # annotation token to migrate. External binding backfilled in holomush-hz0v4.11.
+    refs: []
+  - id: INV-PRESENCE-9
+    scope: INV-PRESENCE
+    origin_spec: "docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"
+    legacy: ["I-PRES-9@docs/superpowers/specs/2026-05-19-presence-snapshot-design.md"]
+    summary: "Response deduplicates by character_id (defense-in-depth)."
+    binding: pending
+    refs:
+      - {file: "internal/grpc/list_focus_presence.go", token: "I-PRES-9"}
+      - {file: "internal/grpc/list_focus_presence_test.go", token: "I-PRES-9"}
