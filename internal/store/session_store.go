@@ -1139,7 +1139,7 @@ func (s *PostgresSessionStore) UpdateSessionConnection(
 // for all Active sessions belonging to characterID.
 // Detached and Expired sessions are not touched.
 //
-// arrivedAt MUST be non-zero — a zero time.Time would collapse the I-PRIV-1
+// arrivedAt MUST be non-zero — a zero time.Time would collapse the INV-PRIVACY-1
 // per-session location floor to year-1 and silently disable history privacy.
 func (s *PostgresSessionStore) UpdateLocationOnMove(ctx context.Context, characterID, newLocationID ulid.ULID, arrivedAt time.Time) error {
 	if arrivedAt.IsZero() {
@@ -1162,7 +1162,7 @@ func (s *PostgresSessionStore) UpdateLocationOnMove(ctx context.Context, charact
 // BumpLocationArrivedAt updates location_arrived_at for a single session
 // regardless of status.
 //
-// arrivedAt MUST be non-zero — a zero time.Time would collapse the I-PRIV-1
+// arrivedAt MUST be non-zero — a zero time.Time would collapse the INV-PRIVACY-1
 // per-session location floor to year-1 and silently disable history privacy.
 //
 // Errors:

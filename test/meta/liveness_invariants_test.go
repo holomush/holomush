@@ -17,18 +17,19 @@
 //	I-SURV-1 .. I-SURV-5
 //	I-SEC-1
 //
-// # Note on I-PRES-1 label collision
+// # Note on presence label collision
 //
-// The existing i_pres_coverage_test.go already owns the annotation label
-// "I-PRES-1" with a distinct meaning ("Snapshot returns only Active sessions;
-// Detached/Expired excluded" — from the presence-snapshot design spec §7).
-// The liveness catalog's I-PRES-1 ("location presence roster filtered to
-// grid_present") is a DIFFERENT invariant that happens to share the name.
+// The presence-snapshot invariant "Snapshot returns only Active sessions;
+// Detached/Expired excluded" (presence-snapshot design spec §7) migrated to
+// the registry as INV-PRESENCE-1 (holomush-hz0v4.14.5); the invariant registry
+// meta-test (TestEveryRegistryInvariantHasBinding) now owns its coverage.
+// The liveness catalog's presence invariant ("location presence roster
+// filtered to grid_present") is a DIFFERENT invariant that historically shared
+// the legacy "I-PRES-1" label.
 //
-// To avoid two independent meta-tests both claiming "I-PRES-1" with
+// To avoid two independent meta-tests both claiming the same label with
 // different semantics, this gate uses "I-LIVENESS-PRES-1" for the liveness
-// family's presence invariant. The existing i_pres_coverage_test.go continues
-// to own "I-PRES-1" unmodified. Covering tests that satisfy both invariants
+// family's presence invariant. Covering tests that satisfy both invariants
 // simultaneously carry both annotations.
 package meta
 

@@ -73,12 +73,12 @@ func TestBuildConsumerConfig_FreshOpenSession_ZeroMinFloor_UsesDeliverAll(t *tes
 	assert.Nil(t, cfg.OptStartTime, "DeliverAllPolicy MUST NOT set OptStartTime")
 }
 
-// Verifies: I-PRIV-8
+// Verifies: INV-PRIVACY-8
 //
 // TestBuildConsumerConfig_ExistingConsumer_PreservesStartPolicy verifies that
 // when a durable consumer already exists, the builder copies DeliverPolicy and
 // OptStartTime verbatim from the existing config and does NOT use the fresh
-// minFloor passed by the caller. This is the core I-PRIV-8 invariant.
+// minFloor passed by the caller. This is the core INV-PRIVACY-8 invariant.
 func TestBuildConsumerConfig_ExistingConsumer_PreservesStartPolicy(t *testing.T) {
 	origStart := time.Now().Add(-2 * time.Hour)
 	js := &stubJS{info: &stubConsumer{cfg: jetstream.ConsumerConfig{
@@ -92,7 +92,7 @@ func TestBuildConsumerConfig_ExistingConsumer_PreservesStartPolicy(t *testing.T)
 	require.NoError(t, err)
 	assert.Equal(t, jetstream.DeliverByStartTimePolicy, cfg.DeliverPolicy)
 	require.NotNil(t, cfg.OptStartTime)
-	assert.True(t, cfg.OptStartTime.Equal(origStart), "MUST copy existing OptStartTime verbatim — I-PRIV-8")
+	assert.True(t, cfg.OptStartTime.Equal(origStart), "MUST copy existing OptStartTime verbatim — INV-PRIVACY-8")
 	assert.ElementsMatch(t, []string{"events.gid.location.X", "events.gid.scene.Y.ic"}, cfg.FilterSubjects)
 }
 
@@ -114,7 +114,7 @@ func TestBuildConsumerConfig_SetFilters_PreservesStartPolicy(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, jetstream.DeliverByStartTimePolicy, cfg.DeliverPolicy)
 	require.NotNil(t, cfg.OptStartTime)
-	assert.True(t, cfg.OptStartTime.Equal(origStart), "filter rotation MUST NOT regress start-policy — I-PRIV-8")
+	assert.True(t, cfg.OptStartTime.Equal(origStart), "filter rotation MUST NOT regress start-policy — INV-PRIVACY-8")
 	assert.ElementsMatch(t, newFilters, cfg.FilterSubjects)
 }
 

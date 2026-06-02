@@ -309,7 +309,7 @@ func (s *Session) DetachTransport(ctx context.Context) {
 // ReattachTransport reopens the Subscribe stream after a DetachTransport.
 // Mirrors the client's reconnection flow.
 //
-// Per spec I-PRIV-3 (Round 3 amendment), reattach MUST NOT change the
+// Per spec INV-PRIVACY-3 (Round 3 amendment), reattach MUST NOT change the
 // session's LocationArrivedAt — the durable JetStream consumer's
 // OptStartTime is immutable post-creation (NATS error 10012) and the
 // filter-at-delivery in dispatchDelivery enforces the original floor.
@@ -634,7 +634,7 @@ type AuthedPlayer struct {
 // handler reattaches and returns the SAME SessionID — per spec §5 row 2
 // and the schema-enforced one-session-per-character invariant
 // (idx_sessions_active_character). LocationArrivedAt is preserved across
-// reattach per I-PRIV-3.
+// reattach per INV-PRIVACY-3.
 //
 // Returns a Session hydrated from the persisted row so the harness-side
 // LocationArrivedAt / SessionCreatedAt fields reflect the canonical

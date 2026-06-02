@@ -443,7 +443,7 @@ func TestSelectCharacter_FreshSession_SetsLocationArrivedAt(t *testing.T) {
 }
 
 // TestSelectCharacter_Reattach_PreservesLocationArrivedAt asserts the
-// session-row-as-continuity rule (spec §5 row 2 + I-PRIV-3, amended
+// session-row-as-continuity rule (spec §5 row 2 + INV-PRIVACY-3, amended
 // 2026-05-18): reattach within TTL is the same session continuing — its
 // LocationArrivedAt MUST NOT be advanced. The original floor is preserved
 // so the player's own pre-disconnect scrollback survives page reload,
@@ -496,7 +496,7 @@ func TestSelectCharacter_Reattach_PreservesLocationArrivedAt(t *testing.T) {
 	stored, err := sessionStore.Get(ctx, existingSessionID)
 	require.NoError(t, err)
 	assert.True(t, stored.LocationArrivedAt.Equal(originalArrival),
-		"LocationArrivedAt MUST be unchanged on reattach (spec §5 row 2, I-PRIV-3); got %v, want %v",
+		"LocationArrivedAt MUST be unchanged on reattach (spec §5 row 2, INV-PRIVACY-3); got %v, want %v",
 		stored.LocationArrivedAt, originalArrival)
 	assert.Equal(t, session.StatusActive, stored.Status,
 		"reattach MUST flip status back to Active")
@@ -2394,12 +2394,12 @@ func TestLogoutFanoutContinuesAfterIndividualSessionErrors(t *testing.T) {
 }
 
 // =============================================================================
-// Guest session I-PRIV-2 floor fields (iwzt.5)
+// Guest session INV-PRIVACY-2 floor fields (iwzt.5)
 // =============================================================================
 
 // TestGuestSessionCarriesCharacterCreatedAt verifies that SelectCharacter for a
 // guest player stamps a non-zero GuestCharacterCreatedAt on the created
-// session.Info so that QueryStreamHistory has a temporal floor for I-PRIV-2
+// session.Info so that QueryStreamHistory has a temporal floor for INV-PRIVACY-2
 // (per-session attach interval). IsGuest is intentionally NOT stamped — see
 // holomush-hfvc for the disconnect-path redesign that will re-enable it.
 func TestGuestSessionCarriesCharacterCreatedAt(t *testing.T) {
@@ -2454,13 +2454,13 @@ func TestGuestSessionCarriesCharacterCreatedAt(t *testing.T) {
 	info, err := sessionStore.Get(ctx, resp.SessionId)
 	require.NoError(t, err)
 
-	// Non-zero GuestCharacterCreatedAt is the I-PRIV-2 guest-overlay signal
+	// Non-zero GuestCharacterCreatedAt is the INV-PRIVACY-2 guest-overlay signal
 	// used by streamScopeFloor. We intentionally do NOT stamp IsGuest=true
 	// here — that flag also drives the immediate-delete branch at
 	// server.go::Disconnect:1260 which breaks page-reload reattach.
 	// Redesign of that disconnect path is tracked separately.
 	assert.False(t, info.GuestCharacterCreatedAt.IsZero(),
-		"guest session must capture character.CreatedAt for I-PRIV-2 floor")
+		"guest session must capture character.CreatedAt for INV-PRIVACY-2 floor")
 	assert.WithinDuration(t, charCreatedAt, info.GuestCharacterCreatedAt, time.Second,
 		"GuestCharacterCreatedAt must match character.CreatedAt")
 }

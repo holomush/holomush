@@ -35,7 +35,7 @@ import (
 // Sequence note: ConnectAuthed attaches the Subscribe transport at the guest
 // start location, so the initial filter is derived there. We MoveTo(locID) then
 // detach+reattach so the re-derived filters include locID — mirrors the
-// production reconnect flow and the privacy I-PRIV-3 reattach pattern. The
+// production reconnect flow and the privacy INV-PRIVACY-3 reattach pattern. The
 // post-move emit's JetStream timestamp is strictly after the MoveTo-stamped
 // LocationArrivedAt floor, so it passes the per-event floor at delivery.
 func TestINV_ROPS_4_ProducerSubscriberSymmetry(t *testing.T) {
@@ -66,7 +66,7 @@ func TestINV_ROPS_4_ProducerSubscriberSymmetry(t *testing.T) {
 // arrives at a location AFTER an event was emitted there cannot read that
 // pre-arrival event — the scope floor (streamScopeFloor → LocationArrivedAt for
 // location streams) excludes it. The read itself is authorized by the LOCATION
-// HARD-GATE (I-PRIV-1: session.LocationID == requested-stream location), which
+// HARD-GATE (INV-PRIVACY-1: session.LocationID == requested-stream location), which
 // is the gate for location streams; the I-17 membership gate applies only to
 // PRIVATE streams (character/scene), not location streams.
 //
@@ -103,7 +103,7 @@ func TestINV_ROPS_7_LateJoinerFloorAndLocationGate(t *testing.T) {
 	// The read is permitted by the location hard-gate (late IS at locID), but the
 	// floor excludes the pre-join frame.
 	frames, err := late.QueryStreamHistory(ctx, world.LocationStream(locID))
-	require.NoError(t, err, "co-located read must pass the location hard-gate (I-PRIV-1)")
+	require.NoError(t, err, "co-located read must pass the location hard-gate (INV-PRIVACY-1)")
 	for _, f := range frames {
 		require.False(t,
 			f.GetTimestamp().AsTime().Before(late.LocationArrivedAt),
@@ -143,7 +143,7 @@ func TestINV_ROPS_7_LateJoinerFloorAndLocationGate(t *testing.T) {
 // non-co-located character is denied (hard-gate STREAM_ACCESS_DENIED).
 //
 // Note on the gate: for LOCATION streams, QueryStreamHistory authorizes via the
-// I-PRIV-1 location hard-gate (session.LocationID == stream location), with
+// INV-PRIVACY-1 location hard-gate (session.LocationID == stream location), with
 // staffOverride consulting the real engine's read_unrestricted_history grant.
 // A roleless ConnectAuthed character has no such grant, so staffOverride=false
 // and the hard-gate is the deciding path. (EmitDirectEvent publishes straight

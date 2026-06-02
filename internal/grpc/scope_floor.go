@@ -87,8 +87,8 @@ func extractLocationID(stream string) string {
 }
 
 // staffOverride reports whether the session's character has been granted the
-// read_unrestricted_history action via ABAC (I-PRIV-6 / ADR wxty). When true,
-// the location hard-gate (I-PRIV-1) is bypassed; the temporal floor still
+// read_unrestricted_history action via ABAC (INV-PRIVACY-6 / ADR wxty). When true,
+// the location hard-gate (INV-PRIVACY-1) is bypassed; the temporal floor still
 // applies. Returns false if the engine is nil or if evaluation fails
 // (fail-closed).
 func staffOverride(ctx context.Context, info *session.Info, engine accessTypes.AccessPolicyEngine) bool {

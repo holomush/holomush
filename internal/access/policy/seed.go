@@ -296,7 +296,7 @@ func SeedPolicies() []SeedPolicy {
 			SeedVersion: 1,
 		},
 
-		// --- Phase-5 iwzt history-scope-privacy staff override policy (I-PRIV-6) ---
+		// --- Phase-5 iwzt history-scope-privacy staff override policy (INV-PRIVACY-6) ---
 		//
 		// Staff and admins may bypass the per-session temporal floor (the read_unrestricted_history
 		// action) but NOT the location hard-gate (ADR wxty preserves the gate for all principals).
@@ -304,7 +304,7 @@ func SeedPolicies() []SeedPolicy {
 		// not the resource namespace.
 		{
 			Name:        "seed:staff-read-unrestricted-history",
-			Description: "Staff and admins may bypass the per-session temporal floor for history reads (I-PRIV-6); location hard-gate still applies (ADR wxty)",
+			Description: "Staff and admins may bypass the per-session temporal floor for history reads (INV-PRIVACY-6); location hard-gate still applies (ADR wxty)",
 			DSLText:     `permit(principal is character, action in ["read_unrestricted_history"], resource) when { "staff" in principal.character.roles || "admin" in principal.character.roles };`,
 			SeedVersion: 1,
 		},

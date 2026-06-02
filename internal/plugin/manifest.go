@@ -119,11 +119,11 @@ type Manifest struct {
 	Audit []AuditBlock `yaml:"audit,omitempty" json:"audit,omitempty"`
 
 	// HistoryScope declares which history visibility bucket the plugin's
-	// emitted events fall into. Required when emits is non-empty (I-PRIV-7).
+	// emitted events fall into. Required when emits is non-empty (INV-PRIVACY-7).
 	// Valid values: "grid" (visible to all observers in the grid),
 	// "scene" (visible to scene participants only),
 	// "custom" (plugin owns visibility via QueryHistory RPC).
-	// See spec docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md §I-PRIV-7.
+	// See spec docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md §INV-PRIVACY-7.
 	HistoryScope string `yaml:"history_scope,omitempty" json:"history_scope,omitempty"`
 
 	// ABAC trust boundary fields
@@ -327,7 +327,7 @@ const maxNameLength = 64
 var namePattern = regexp.MustCompile(`^[a-z](-?[a-z0-9])*$`)
 
 // validHistoryScopes is the closed enum of accepted history_scope values.
-// Enforced by I-PRIV-7: any plugin that declares emits MUST declare one.
+// Enforced by INV-PRIVACY-7: any plugin that declares emits MUST declare one.
 var validHistoryScopes = map[string]bool{
 	"grid":   true,
 	"scene":  true,
@@ -476,7 +476,7 @@ func (m *Manifest) Validate() error {
 		}
 		m.Emits = validated
 	}
-	// I-PRIV-7: validate history_scope closed enum and require it when emits is non-empty.
+	// INV-PRIVACY-7: validate history_scope closed enum and require it when emits is non-empty.
 	if m.HistoryScope != "" && !validHistoryScopes[m.HistoryScope] {
 		return oops.In("manifest").With("name", m.Name).
 			With("history_scope", m.HistoryScope).
@@ -485,7 +485,7 @@ func (m *Manifest) Validate() error {
 	if len(m.Emits) > 0 && m.HistoryScope == "" {
 		return oops.In("manifest").With("name", m.Name).
 			With("emits", m.Emits).
-			New("plugin emits events but manifest does not declare history_scope (holomush-iwzt I-PRIV-7)")
+			New("plugin emits events but manifest does not declare history_scope (holomush-iwzt INV-PRIVACY-7)")
 	}
 	// Validate load priority: priorities below -999 are reserved (historically for core plugins).
 	if m.Priority != nil && int(*m.Priority) < -999 {

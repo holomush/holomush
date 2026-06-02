@@ -183,7 +183,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 
 	// Wire session store as the movement hook so character moves propagate
 	// LocationID + LocationArrivedAt to active sessions before the move event
-	// is emitted (ADR holomush-kmac; I-PRIV-1 Tier 1).
+	// is emitted (ADR holomush-kmac; INV-PRIVACY-1 Tier 1).
 	worldService.SetMovementHook(&sessionStoreMovementHook{sessions: sessionStore})
 
 	startLocationID := s.cfg.Bootstrap.StartLocationID()
@@ -681,7 +681,7 @@ func coreActorKindToBus(k core.ActorKind) eventbus.ActorKind {
 // sessionStoreMovementHook implements world.MovementHook by delegating to
 // session.Store.UpdateLocationOnMove. Wired at gRPC subsystem startup so
 // character moves propagate LocationID + LocationArrivedAt to active sessions
-// before the move event is emitted (ADR holomush-kmac; I-PRIV-1 Tier 1).
+// before the move event is emitted (ADR holomush-kmac; INV-PRIVACY-1 Tier 1).
 type sessionStoreMovementHook struct {
 	sessions session.Store
 }

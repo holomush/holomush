@@ -22,25 +22,25 @@ import (
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 )
 
-// Verifies: I-PRIV-7
+// Verifies: INV-PRIVACY-7
 //
-// I-PRIV-7 placeholder: no plugin currently declares history_scope: custom.
+// INV-PRIVACY-7 placeholder: no plugin currently declares history_scope: custom.
 // The full scenario will exercise a plugin whose history_scope semantics
 // diverge from grid/scene; until that plugin lands, the test is skipped
 // to record the invariant requirement explicitly. Replace Skip with the
 // real assertion when a custom-scope plugin adopts the field.
-var _ = Describe("I-PRIV-7: plugin-owned history_scope semantics", func() {
+var _ = Describe("INV-PRIVACY-7: plugin-owned history_scope semantics", func() {
 	It("exercises a plugin that declared custom history_scope (placeholder)", func() {
 		Skip("no plugin currently declares history_scope: custom — re-enable when a plugin adopts this field")
 	})
 })
 
-// Verifies: I-PRIV-6
+// Verifies: INV-PRIVACY-6
 //
-// I-PRIV-6 gate-bypass arm only: a character granted
-// read_unrestricted_history MUST bypass the I-PRIV-1 location hard-gate.
+// INV-PRIVACY-6 gate-bypass arm only: a character granted
+// read_unrestricted_history MUST bypass the INV-PRIVACY-1 location hard-gate.
 //
-// I-PRIV-6 also asserts the floor-preservation arm — staff querying a
+// INV-PRIVACY-6 also asserts the floor-preservation arm — staff querying a
 // location they're not in still sees only events from their own
 // LocationArrivedAt forward. That arm requires emitting events with
 // controlled timestamps across the staff session's LocationArrivedAt
@@ -53,7 +53,7 @@ var _ = Describe("I-PRIV-7: plugin-owned history_scope semantics", func() {
 // Per ADR wxty. The harness uses allowAllPolicyEngine which grants
 // read_unrestricted_history for all requests, exercising the
 // staffOverride → gate-bypass code path end-to-end.
-var _ = Describe("I-PRIV-6 (gate-bypass arm): staff override bypasses the location hard-gate", func() {
+var _ = Describe("INV-PRIVACY-6 (gate-bypass arm): staff override bypasses the location hard-gate", func() {
 	var (
 		ts    *integrationtest.Server
 		ctx   context.Context
@@ -85,14 +85,14 @@ var _ = Describe("I-PRIV-6 (gate-bypass arm): staff override bypasses the locati
 		// Staff is at the guest start location (locA); locB is a different
 		// location they're not in. The harness's allowAllPolicyEngine
 		// permits read_unrestricted_history for every principal, so
-		// staffOverride returns true and the I-PRIV-1 location hard-gate
+		// staffOverride returns true and the INV-PRIVACY-1 location hard-gate
 		// (session.LocationID == requested-location) is bypassed.
 		// LocB has no events, so the response is an empty (non-nil) slice.
 		// This asserts ONLY the gate-bypass — the floor-preservation arm
-		// of I-PRIV-6 is tracked separately (no harness event-emit yet).
+		// of INV-PRIVACY-6 is tracked separately (no harness event-emit yet).
 		events, err := staff.QueryStreamHistory(ctx, locB)
 		Expect(err).NotTo(HaveOccurred(),
-			"staff with read_unrestricted_history MUST bypass the location hard-gate (I-PRIV-6 gate-bypass arm)")
+			"staff with read_unrestricted_history MUST bypass the location hard-gate (INV-PRIVACY-6 gate-bypass arm)")
 		Expect(events).NotTo(BeNil(),
 			"response events must be a non-nil slice (empty is fine; locB has no history)")
 		Expect(events).To(BeEmpty(),
@@ -100,18 +100,18 @@ var _ = Describe("I-PRIV-6 (gate-bypass arm): staff override bypasses the locati
 	})
 })
 
-// Verifies: I-PRIV-3
+// Verifies: INV-PRIVACY-3
 //
-// I-PRIV-3 (Subscribe-replay path): when a session's transport drops and later
+// INV-PRIVACY-3 (Subscribe-replay path): when a session's transport drops and later
 // reattaches within TTL, events emitted during the detach window MUST be
 // DELIVERED via the live Subscribe stream's durable replay (NOT dropped by
 // the filter-at-delivery). The durable consumer's OptStartTime is immutable
-// per NATS error 10012 (I-PRIV-8) and LocationArrivedAt is unchanged across
-// reattach (I-PRIV-3); detach-window event timestamps are therefore at-or-after
+// per NATS error 10012 (INV-PRIVACY-8) and LocationArrivedAt is unchanged across
+// reattach (INV-PRIVACY-3); detach-window event timestamps are therefore at-or-after
 // the unchanged filter floor and pass through.
 //
 // Companion to the QueryStreamHistory-path version asserted by the
-// "I-PRIV-3 / I-PRIV-4: detach/reattach preserves session floor and replays
+// "INV-PRIVACY-3 / INV-PRIVACY-4: detach/reattach preserves session floor and replays
 // events" block below. Both share the same LocationArrivedAt floor invariant
 // but exercise different production code paths:
 //
@@ -123,10 +123,10 @@ var _ = Describe("I-PRIV-6 (gate-bypass arm): staff override bypasses the locati
 // OptStartTime=T0), third party emits at T1, A detaches at T2, third party
 // emits at T3 (during detach window), A reattaches at T4 — A's Subscribe
 // replay MUST deliver both T1 and T3 events.
-var _ = Describe("I-PRIV-3: ReattachCAS preserves durable; Subscribe replay delivers detach-window events", func() {
+var _ = Describe("INV-PRIVACY-3: ReattachCAS preserves durable; Subscribe replay delivers detach-window events", func() {
 	// Unique event type for the during-detach emit so WaitForEvent matches
 	// exactly the seeded event (not any later same-typed event). Mirrors the
-	// pattern in the I-PRIV-3 QueryStreamHistory test below.
+	// pattern in the INV-PRIVACY-3 QueryStreamHistory test below.
 	const detachWindowType = "iwzt16-test:during-detach-marker"
 
 	var (
@@ -162,7 +162,7 @@ var _ = Describe("I-PRIV-3: ReattachCAS preserves durable; Subscribe replay deli
 
 	It("delivers events emitted during transport detach when transport reattaches", func() {
 		// Capture LocationArrivedAt before any state-changing op so we can
-		// assert it's UNCHANGED after reattach (the load-bearing I-PRIV-3
+		// assert it's UNCHANGED after reattach (the load-bearing INV-PRIVACY-3
 		// claim — together with iwzt.17's QueryStreamHistory assertion,
 		// this proves the floor is preserved on BOTH code paths).
 		preDetachFloor := felix.LocationArrivedAt
@@ -190,11 +190,11 @@ var _ = Describe("I-PRIV-3: ReattachCAS preserves durable; Subscribe replay deli
 		defer waitCancel()
 		ev := felix.WaitForEvent(waitCtx, detachWindowType)
 		Expect(ev).NotTo(BeNil(),
-			"I-PRIV-3 (Subscribe replay): durable replay MUST deliver the during-detach event to the reattached transport")
+			"INV-PRIVACY-3 (Subscribe replay): durable replay MUST deliver the during-detach event to the reattached transport")
 		Expect(ev.GetType()).To(Equal(detachWindowType),
 			"delivered event type must match the seeded marker")
 		Expect(ev.GetTimestamp().AsTime()).To(BeTemporally(">=", preDetachFloor),
-			"I-PRIV-3 floor preservation: delivered event timestamp must be at-or-after the unchanged LocationArrivedAt — "+
+			"INV-PRIVACY-3 floor preservation: delivered event timestamp must be at-or-after the unchanged LocationArrivedAt — "+
 				"if production accidentally advanced the floor on reattach (e.g. by re-running auth_handlers.go:331's "+
 				"session-create logic in the reattach branch), the marker's pre-reattach timestamp would be below the "+
 				"advanced floor and dispatchDelivery's filter at internal/grpc/server.go:1053 would have dropped it. "+
@@ -205,10 +205,10 @@ var _ = Describe("I-PRIV-3: ReattachCAS preserves durable; Subscribe replay deli
 	})
 })
 
-// Verifies: I-PRIV-3
-// Verifies: I-PRIV-4
+// Verifies: INV-PRIVACY-3
+// Verifies: INV-PRIVACY-4
 //
-// I-PRIV-3 / I-PRIV-4 / spec §2 "transport-continuity worked example":
+// INV-PRIVACY-3 / INV-PRIVACY-4 / spec §2 "transport-continuity worked example":
 // the session row is the unit of continuity, not the transport connection.
 // When a session detaches (transport drop) and later reattaches within TTL,
 // LocationArrivedAt MUST be preserved and the durable consumer's events
@@ -226,7 +226,7 @@ var _ = Describe("I-PRIV-3: ReattachCAS preserves durable; Subscribe replay deli
 //
 // Default allow-all engine is sufficient: location streams pass the hard-gate
 // because the session stays at its original location across detach/reattach.
-var _ = Describe("I-PRIV-3 / I-PRIV-4: detach/reattach preserves session floor and replays events", func() {
+var _ = Describe("INV-PRIVACY-3 / INV-PRIVACY-4: detach/reattach preserves session floor and replays events", func() {
 	// Unique event type for the during-detach emit so the post-reattach
 	// assertion can match it exactly rather than relying solely on a
 	// timestamp window (a future regression adding an unrelated emit whose
@@ -274,7 +274,7 @@ var _ = Describe("I-PRIV-3 / I-PRIV-4: detach/reattach preserves session floor a
 
 		// During-detach emit: this is the key event the test asserts on —
 		// the spec's "events emitted during transport disconnect" claim
-		// (§2 worked example + I-PRIV-1's session-row-lifetime clause).
+		// (§2 worked example + INV-PRIVACY-1's session-row-lifetime clause).
 		// Tagged with duringDetachType (declared at Describe scope) so the
 		// post-reattach assertion can match the exact seeded event rather
 		// than any event in a timestamp window.
@@ -292,7 +292,7 @@ var _ = Describe("I-PRIV-3 / I-PRIV-4: detach/reattach preserves session floor a
 		// A second OpenWebSession after reattach exercises the production
 		// SelectCharacter reattach branch (spec §5 row 2) — it MUST return
 		// the same SessionID with LocationArrivedAt unchanged. This is the
-		// I-PRIV-3 invariant in code form.
+		// INV-PRIVACY-3 invariant in code form.
 		reattachedSess = hugo.OpenWebSession(ctx)
 	})
 
@@ -325,9 +325,9 @@ var _ = Describe("I-PRIV-3 / I-PRIV-4: detach/reattach preserves session floor a
 			"first OpenWebSession MUST take the fresh-create branch")
 	})
 
-	It("preserves LocationArrivedAt across detach/reattach (I-PRIV-3)", func() {
+	It("preserves LocationArrivedAt across detach/reattach (INV-PRIVACY-3)", func() {
 		Expect(reattachedSess.LocationArrivedAt).To(BeTemporally("==", firstSess.LocationArrivedAt),
-			"I-PRIV-3: LocationArrivedAt MUST be unchanged across detach/reattach within TTL")
+			"INV-PRIVACY-3: LocationArrivedAt MUST be unchanged across detach/reattach within TTL")
 	})
 
 	It("returns events emitted during the detach window after reattach", func() {
@@ -380,13 +380,13 @@ var _ = Describe("I-PRIV-3 / I-PRIV-4: detach/reattach preserves session floor a
 	})
 })
 
-// Verifies: I-PRIV-1
+// Verifies: INV-PRIVACY-1
 //
-// I-PRIV-1: a fresh guest connecting to a location MUST NOT see any event
+// INV-PRIVACY-1: a fresh guest connecting to a location MUST NOT see any event
 // whose timestamp predates their session's SessionCreatedAt. This is the
 // regression guard for the Phase 2 QueryStreamHistory restructure (hard-gate
 // + scope floor) landed via holomush-iwzt.8.
-var _ = Describe("I-PRIV-1: new guest sees no pre-arrival location history", func() {
+var _ = Describe("INV-PRIVACY-1: new guest sees no pre-arrival location history", func() {
 	var (
 		ts     *integrationtest.Server
 		ctx    context.Context
@@ -430,11 +430,11 @@ var _ = Describe("I-PRIV-1: new guest sees no pre-arrival location history", fun
 
 		events, err := guestB.QueryStreamHistory(ctx, locStream)
 		Expect(err).NotTo(HaveOccurred(),
-			"I-PRIV-1: same-location query MUST succeed for guest B (no hard-gate denial)")
+			"INV-PRIVACY-1: same-location query MUST succeed for guest B (no hard-gate denial)")
 
 		for _, ev := range events {
 			// Floor is at guestB.SessionCreatedAt — events with earlier
-			// timestamps are I-PRIV-1 leaks.
+			// timestamps are INV-PRIVACY-1 leaks.
 			Expect(ev.GetTimestamp().AsTime()).To(BeTemporally(">=", guestB.SessionCreatedAt),
 				"event %q at %s leaked before guest B SessionCreatedAt %s",
 				ev.GetType(), ev.GetTimestamp().AsTime(), guestB.SessionCreatedAt)
@@ -442,9 +442,9 @@ var _ = Describe("I-PRIV-1: new guest sees no pre-arrival location history", fun
 	})
 })
 
-// Verifies: I-PRIV-2
+// Verifies: INV-PRIVACY-2
 //
-// I-PRIV-2 (guest identity overlay): when a guest's display name happens to
+// INV-PRIVACY-2 (guest identity overlay): when a guest's display name happens to
 // collide with a previous guest's name (random-namer collisions are possible
 // within 20×20 = 400 names — see internal/naming/gemstone.go), the new guest
 // MUST NOT see events emitted by the previous holder of that name. The
@@ -455,10 +455,10 @@ var _ = Describe("I-PRIV-1: new guest sees no pre-arrival location history", fun
 // Test infra caveat: name collision is probabilistic. The harness loops up
 // to 50 attempts; if no collision is observed (≈4% with 400-name pool), the
 // test Skips with a documented reason. This matches the bead's acceptance
-// criteria. The same invariant is exercised by I-PRIV-1 above against
-// fresh-named guests, so a Skip here does not leave the I-PRIV-2 invariant
+// criteria. The same invariant is exercised by INV-PRIVACY-1 above against
+// fresh-named guests, so a Skip here does not leave the INV-PRIVACY-2 invariant
 // unbound.
-var _ = Describe("I-PRIV-2: guest name reuse does not leak prior holder's events", func() {
+var _ = Describe("INV-PRIVACY-2: guest name reuse does not leak prior holder's events", func() {
 	var (
 		ts          *integrationtest.Server
 		ctx         context.Context
@@ -523,8 +523,8 @@ var _ = Describe("I-PRIV-2: guest name reuse does not leak prior holder's events
 	It("returns no events emitted by the prior holder of the reused name", func() {
 		if reusedGuest == nil {
 			Skip("namer-pool collision did not occur within " +
-				"maxCollisionAttempts (probabilistic test infra; I-PRIV-2 " +
-				"invariant is still exercised by the fresh-name I-PRIV-1 test)")
+				"maxCollisionAttempts (probabilistic test infra; INV-PRIVACY-2 " +
+				"invariant is still exercised by the fresh-name INV-PRIVACY-1 test)")
 		}
 
 		Expect(reusedGuest.CharacterName).To(Equal(firstName),
@@ -538,7 +538,7 @@ var _ = Describe("I-PRIV-2: guest name reuse does not leak prior holder's events
 
 		events, err := reusedGuest.QueryStreamHistory(ctx, locStream)
 		Expect(err).NotTo(HaveOccurred(),
-			"I-PRIV-2: same-location query MUST succeed for the reused-name guest")
+			"INV-PRIVACY-2: same-location query MUST succeed for the reused-name guest")
 
 		// Floor isolates by character row identity. No event emitted by the
 		// prior name-holder may appear.
@@ -550,10 +550,10 @@ var _ = Describe("I-PRIV-2: guest name reuse does not leak prior holder's events
 	})
 })
 
-// Verifies: I-PRIV-2
+// Verifies: INV-PRIVACY-2
 //
-// I-PRIV-2 (scene-join floor): when a character joins a scene at time T, the
-// I-PRIV-2 scene branch of streamScopeFloor MUST floor the joiner's view of
+// INV-PRIVACY-2 (scene-join floor): when a character joins a scene at time T, the
+// INV-PRIVACY-2 scene branch of streamScopeFloor MUST floor the joiner's view of
 // the scene at FocusMembership.JoinedAt. Events emitted to the scene BEFORE
 // the joiner's join time are invisible; events at or after the join time are
 // visible.
@@ -565,7 +565,7 @@ var _ = Describe("I-PRIV-2: guest name reuse does not leak prior holder's events
 // default allow-all engine is sufficient here: scene streams are
 // membership-gated (I-17), not ABAC-gated, so the policy engine is never
 // consulted on the visible-events path.
-var _ = Describe("I-PRIV-2 (scene): scene events before join are invisible", func() {
+var _ = Describe("INV-PRIVACY-2 (scene): scene events before join are invisible", func() {
 	var (
 		ts          *integrationtest.Server
 		ctx         context.Context
@@ -628,7 +628,7 @@ var _ = Describe("I-PRIV-2 (scene): scene events before join are invisible", fun
 	It("floors scene history at FocusMembership.JoinedAt", func() {
 		events, err := joiner.QueryStreamHistory(ctx, sceneStream)
 		Expect(err).NotTo(HaveOccurred(),
-			"I-PRIV-2 (scene): joiner with FocusMembership MUST pass the I-17 gate")
+			"INV-PRIVACY-2 (scene): joiner with FocusMembership MUST pass the I-17 gate")
 		// Vacuous-pass guard — the post-join emit must be visible. Without
 		// this, a regression that floored every scene event to time.Now()
 		// would return an empty slice and the loop below would pass.
@@ -643,12 +643,12 @@ var _ = Describe("I-PRIV-2 (scene): scene events before join are invisible", fun
 	})
 })
 
-// Verifies: I-PRIV-1
+// Verifies: INV-PRIVACY-1
 //
-// I-PRIV-1 (character move): when a character moves from locA to locB, the
+// INV-PRIVACY-1 (character move): when a character moves from locA to locB, the
 // floor MUST reset to the new location's arrival time and the hard-gate
 // MUST deny queries against the prior location. This is the location-
-// switching arm of I-PRIV-1.
+// switching arm of INV-PRIVACY-1.
 //
 // Harness contract: this test uses WithPolicyEngine(DenyAllEngine) so the
 // staffOverride bypass in QueryStreamHistory returns false — without that
@@ -656,7 +656,7 @@ var _ = Describe("I-PRIV-2 (scene): scene events before join are invisible", fun
 // read_unrestricted_history and the hard-gate denial path can't be
 // exercised (see internal/grpc/scope_floor.go::staffOverride +
 // query_stream_history.go hard-gate branch).
-var _ = Describe("I-PRIV-1: character move resets location floor", func() {
+var _ = Describe("INV-PRIVACY-1: character move resets location floor", func() {
 	var (
 		ts       *integrationtest.Server
 		ctx      context.Context
@@ -701,7 +701,7 @@ var _ = Describe("I-PRIV-1: character move resets location floor", func() {
 	It("denies queries against the prior location (hard-gate)", func() {
 		_, err := mover.QueryStreamHistory(ctx, startLoc)
 		Expect(err).To(HaveOccurred(),
-			"I-PRIV-1 hard-gate: query against prior location MUST fail after move")
+			"INV-PRIVACY-1 hard-gate: query against prior location MUST fail after move")
 		oopsErr, ok := oops.AsOops(err)
 		Expect(ok).To(BeTrue(), "denial must surface as an oops error")
 		Expect(oopsErr.Code()).To(Equal("STREAM_ACCESS_DENIED"),
@@ -717,7 +717,7 @@ var _ = Describe("I-PRIV-1: character move resets location floor", func() {
 
 		events, err := mover.QueryStreamHistory(ctx, destLoc)
 		Expect(err).NotTo(HaveOccurred(),
-			"I-PRIV-1: same-location query at the destination MUST succeed")
+			"INV-PRIVACY-1: same-location query at the destination MUST succeed")
 		// Guard against vacuous pass: the post-move event must be visible.
 		// Without this assertion, a regression that over-filters everything
 		// to nil would silently pass the floor loop below.
@@ -725,7 +725,7 @@ var _ = Describe("I-PRIV-1: character move resets location floor", func() {
 			"post-move emit must be visible in history (vacuous-pass guard)")
 
 		// Floor at the new location is LocationArrivedAt (updated by MoveTo).
-		// Any returned event with timestamp before that is an I-PRIV-1 leak.
+		// Any returned event with timestamp before that is an INV-PRIVACY-1 leak.
 		for _, ev := range events {
 			Expect(ev.GetTimestamp().AsTime()).To(BeTemporally(">=", mover.LocationArrivedAt),
 				"event %q at %s leaked before mover.LocationArrivedAt %s after move",
@@ -734,9 +734,9 @@ var _ = Describe("I-PRIV-1: character move resets location floor", func() {
 	})
 })
 
-// Verifies: I-PRIV-5
+// Verifies: INV-PRIVACY-5
 //
-// I-PRIV-5: every denial path on QueryStreamHistory MUST return the same
+// INV-PRIVACY-5: every denial path on QueryStreamHistory MUST return the same
 // wire-level code STREAM_ACCESS_DENIED. The internal denial_reason
 // (wrong_location, not_member, policy_denied, expired_session,
 // session_not_found) goes to slog only — it MUST NOT cross the wire as a
@@ -747,7 +747,7 @@ var _ = Describe("I-PRIV-1: character move resets location floor", func() {
 // returns false (otherwise the hard-gate is bypassed for staff). The
 // policy-denied entry queries an unseeded stream ("admin:audit") which
 // DenyAll rejects regardless.
-var _ = Describe("I-PRIV-5: denial wire opacity", func() {
+var _ = Describe("INV-PRIVACY-5: denial wire opacity", func() {
 	var (
 		ts  *integrationtest.Server
 		ctx context.Context
@@ -766,11 +766,11 @@ var _ = Describe("I-PRIV-5: denial wire opacity", func() {
 
 	expectStreamAccessDenied := func(err error, denialReason string) {
 		Expect(err).To(HaveOccurred(),
-			"I-PRIV-5: %s denial MUST surface as an error", denialReason)
+			"INV-PRIVACY-5: %s denial MUST surface as an error", denialReason)
 		oopsErr, ok := oops.AsOops(err)
 		Expect(ok).To(BeTrue(), "denial must surface as an oops error")
 		Expect(oopsErr.Code()).To(Equal("STREAM_ACCESS_DENIED"),
-			"I-PRIV-5: %s denial MUST collapse to STREAM_ACCESS_DENIED on the wire (internal denial_reason goes to slog only)",
+			"INV-PRIVACY-5: %s denial MUST collapse to STREAM_ACCESS_DENIED on the wire (internal denial_reason goes to slog only)",
 			denialReason)
 	}
 

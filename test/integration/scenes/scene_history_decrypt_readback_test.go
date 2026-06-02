@@ -95,7 +95,7 @@ var _ = Describe("encrypted scene IC content read back through QueryStreamHistor
 		ts.SeedSceneDEKParticipant(ctx, sceneID, alice)
 
 		// Bob is a scene member (passes the I-17 membership gate) and joins
-		// BEFORE the emit so the I-PRIV-6 temporal scope floor (his JoinedAt)
+		// BEFORE the emit so the INV-PRIVACY-6 temporal scope floor (his JoinedAt)
 		// does not filter the event out — he can SEE the frame. But he is NOT a
 		// DEK participant, so the decrypt-layer AuthGuard denies, yielding a
 		// metadata-only frame WITHOUT an error (dispatcher.go:310-314).

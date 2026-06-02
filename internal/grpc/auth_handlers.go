@@ -285,7 +285,7 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 		}, nil
 	}
 
-	// Determine the guest temporal floor for I-PRIV-2 BEFORE the reattach
+	// Determine the guest temporal floor for INV-PRIVACY-2 BEFORE the reattach
 	// branch — both fresh and reattach paths need GuestCharacterCreatedAt
 	// so a reattach to a pre-iwzt-T5 session can backfill the floor.
 	// Best-effort: if the player lookup fails (or playerRepo is
