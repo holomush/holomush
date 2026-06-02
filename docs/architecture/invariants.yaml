@@ -2,10 +2,11 @@
 # Copyright 2026 HoloMUSH Contributors
 
 # HoloMUSH Invariant Registry — machine-readable source of truth.
-# Paired with invariants.md (human-readable view).
-# The meta-test at test/meta/invariant_registry_test.go reads this file.
-# CI check scripts/check-invariant-registry-consistency.sh verifies
-# this file and invariants.md are in sync.
+# Paired with invariants.md (human-readable view), which is GENERATED from
+# this file by cmd/inv-render. After editing here, run `task invariants:render`
+# and commit invariants.md. The meta-test at
+# test/meta/invariant_registry_test.go reads this file; CI runs
+# `inv-render -check` (generate-and-diff) to fail on stale invariants.md.
 
 scopes:
   - name: INV-CRYPTO

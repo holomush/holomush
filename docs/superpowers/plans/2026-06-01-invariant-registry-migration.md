@@ -35,7 +35,7 @@
 | `cmd/inv-migrate/main.go` | CLI entrypoint: `inv-migrate -scope <SCOPE> [-dry-run]`. Thin wrapper over the rewrite package. | Task 3 |
 | `cmd/inv-migrate/migrate.go` | Pure rewrite logic: load registry → for a scope's entries, rewrite each `{file, token}` → idempotent, refuses unrecorded sites. | Task 3 |
 | `cmd/inv-migrate/migrate_test.go` | Unit tests for the rewrite logic (idempotence, scope isolation, refuse-unrecorded). | Task 3 |
-| `docs/architecture/invariants.md` | Human-readable view; kept in sync (consistency lint `.3`). | exists (`.3`); updated Phase 4 |
+| `docs/architecture/invariants.md` | Human-readable view; GENERATED from the YAML by `cmd/inv-render`, guarded by `inv-render -check` generate-and-diff (holomush-hz0v4.15, supersedes consistency lint `.3`). | exists (`.3`); regenerated Phase 4 |
 
 **Scope vocabulary (from `invariants.yaml`):** `CRYPTO, PRIVACY, PRESENCE, SCENE, PLUGIN, EVENTBUS, CLUSTER, ACCESS, SESSION, STORE, TELEMETRY, BRANDING, DOCS`.
 
@@ -673,11 +673,11 @@ Expected: prints exactly the `{file: token -> canonical}` lines you recorded —
 
 - [ ] **Step 4: Apply + flip status**
 
-Run: `go run ./cmd/inv-migrate -scope INV-<SCOPE>` then set that scope's `status: migrated` in `invariants.yaml`, and update `invariants.md` rows (consistency lint).
+Run: `go run ./cmd/inv-migrate -scope INV-<SCOPE>` then set that scope's `status: migrated` in `invariants.yaml`, then run `task invariants:render` to regenerate `invariants.md` from the YAML and commit the result. Do NOT hand-edit `invariants.md` — its tables are generated (holomush-hz0v4.15).
 
 - [ ] **Step 5: Guard + lint + test green**
 
-Run: `task test -- -run 'TestProvenanceGuard|TestOwnedPathsPartition|TestEveryRegistryInvariantHasBinding' ./test/meta/` and `bash scripts/check-invariant-registry-consistency.sh` and `task lint`
+Run: `task test -- -run 'TestProvenanceGuard|TestOwnedPathsPartition|TestEveryRegistryInvariantHasBinding' ./test/meta/` and `task lint:invariants` (runs `inv-render -check` — generate-and-diff) and `task lint`
 Expected: all green; no bare `INV-N` remains in this scope's owned paths.
 
 - [ ] **Step 6: Commit (one scope per commit/PR)**
@@ -911,7 +911,7 @@ Expected: only matches inside `shared_files` pending entries (if any scope is st
 
 - [ ] **Step 2: Registry complete + all gates green**
 
-Run: `task test -- ./test/meta/`, `bash scripts/check-invariant-registry-consistency.sh`, `task lint`, `task test`, `task test:int`
+Run: `task test -- ./test/meta/`, `task lint:invariants` (runs `inv-render -check`), `task lint`, `task test`, `task test:int`
 Expected: all green; every `scopes:` entry `status: migrated`; `TestEveryRegistryInvariantHasBinding` green (pending entries tolerated per `.10`).
 
 - [ ] **Step 3: Confirm the negative test still bites**
