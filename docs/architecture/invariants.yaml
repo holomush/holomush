@@ -268,15 +268,20 @@ scopes:
   - name: INV-ACCESS
     description: "ABAC policy evaluation, attribute provider invariants, seed policy shape, authorization decisions"
     boundary: "Access control evaluation. Does NOT include: stream-access gating at gRPC boundary (→ INV-EVENTBUS)."
-    # Family RA (real-ABAC harness). See redesign spec §2.1.
-    status: pending
+    # Family RA (real-ABAC harness). All INV-RA sites are in the integration
+    # harness (internal/testsupport/integrationtest/), not internal/access/. See .14.10.
+    status: migrated
     origin_specs:
       - "docs/superpowers/specs/2026-05-26-harness-real-abac-design.md"
     owned_paths:
-      - "internal/access/**"
+      # The real-ABAC harness files (where INV-RA-1..6 live). NOT internal/access/**
+      # — that has no RA token and harbors a separate unmigrated bare-INV-N family.
+      - "internal/testsupport/integrationtest/real_abac.go"
+      - "internal/testsupport/integrationtest/real_abac_test.go"
     shared_files:
-      # ACCESS+SCENE+CRYPTO+EVENTBUS+PLUGIN: shared integration harness (RA-4 site).
+      # General integration harness (RA-4 pointer-identity ride-along).
       - "internal/testsupport/integrationtest/harness.go"
+      - "internal/testsupport/integrationtest/plugins.go"
 
   - name: INV-SESSION
     description: "Session status lifecycle, connection attachment, focus membership, idle detection"
@@ -822,4 +827,66 @@ invariants:
     refs:
       - {file: "internal/eventbus/subscriber_consumer_config.go", token: "I-PRIV-8"}
       - {file: "internal/eventbus/subscriber_consumer_config_test.go", token: "I-PRIV-8"}
-      - {file: "test/integration/privacy/privacy_test.go", token: "I-PRIV-8"}
+      - {file: "test/integration/privacy/privacy_test.go", token: "I-PRIV-8",}
+
+  # -- INV-ACCESS -- migrated from INV-RA-N (family RA, real-ABAC harness) (holomush-hz0v4.14.10).
+  # Origin: docs/superpowers/specs/2026-05-26-harness-real-abac-design.md. binding: pending — backfill .11.
+  # NOTE: all INV-RA sites live in internal/testsupport/integrationtest/ (the real-ABAC
+  # harness), NOT internal/access/. The scaffold's owned_paths=internal/access/** was
+  # corrected (it owns zero RA tokens and harbors a SEPARATE unmigrated bare-INV-N family
+  # INV-15/INV-A16 that a /** residual walk would false-flag).
+  - id: INV-ACCESS-1
+    scope: INV-ACCESS
+    origin_spec: "docs/superpowers/specs/2026-05-26-harness-real-abac-design.md"
+    legacy: ["INV-RA-1@docs/superpowers/specs/2026-05-26-harness-real-abac-design.md"]
+    summary: "With WithRealABAC(), the CoreServer access engine is the setup.BuildABACStack engine, not allowAllPolicyEngine."
+    binding: pending
+    refs:
+      - {file: "internal/testsupport/integrationtest/real_abac_test.go", token: "INV-RA-1"}
+  - id: INV-ACCESS-2
+    scope: INV-ACCESS
+    origin_spec: "docs/superpowers/specs/2026-05-26-harness-real-abac-design.md"
+    legacy: ["INV-RA-2@docs/superpowers/specs/2026-05-26-harness-real-abac-design.md"]
+    summary: "Without WithRealABAC(), the harness retains the allow-all default (no regression)."
+    binding: pending
+    refs:
+      - {file: "internal/testsupport/integrationtest/real_abac_test.go", token: "INV-RA-2"}
+  - id: INV-ACCESS-3
+    scope: INV-ACCESS
+    origin_spec: "docs/superpowers/specs/2026-05-26-harness-real-abac-design.md"
+    legacy: ["INV-RA-3@docs/superpowers/specs/2026-05-26-harness-real-abac-design.md"]
+    summary: "With WithRealABAC(), the seed:* policy set is installed before the engine's cache loads; the engine evaluates
+      against a non-empty seeded policy set."
+    binding: pending
+    refs:
+      - {file: "internal/testsupport/integrationtest/real_abac_test.go", token: "INV-RA-3"}
+  - id: INV-ACCESS-4
+    scope: INV-ACCESS
+    origin_spec: "docs/superpowers/specs/2026-05-26-harness-real-abac-design.md"
+    legacy: ["INV-RA-4@docs/superpowers/specs/2026-05-26-harness-real-abac-design.md"]
+    summary: "With WithRealABAC()+WithInTreePlugins(), the attribute.Resolver and attribute.PluginProvider the plugin subsystem
+      registers on are the SAME instances (pointer identity) the engine evaluates against."
+    binding: pending
+    refs:
+      - {file: "internal/testsupport/integrationtest/harness.go", token: "INV-RA-4"}
+      - {file: "internal/testsupport/integrationtest/plugins.go", token: "INV-RA-4"}
+      - {file: "internal/testsupport/integrationtest/real_abac.go", token: "INV-RA-4"}
+      - {file: "internal/testsupport/integrationtest/real_abac_test.go", token: "INV-RA-4"}
+  - id: INV-ACCESS-5
+    scope: INV-ACCESS
+    origin_spec: "docs/superpowers/specs/2026-05-26-harness-real-abac-design.md"
+    legacy: ["INV-RA-5@docs/superpowers/specs/2026-05-26-harness-real-abac-design.md"]
+    summary: "Every attribute namespace referenced by an installed seed policy has a registered provider under WithRealABAC
+      (no silent default-deny from an unregistered provider)."
+    binding: pending
+    refs:
+      - {file: "internal/testsupport/integrationtest/real_abac_test.go", token: "INV-RA-5"}
+  - id: INV-ACCESS-6
+    scope: INV-ACCESS
+    origin_spec: "docs/superpowers/specs/2026-05-26-harness-real-abac-design.md"
+    legacy: ["INV-RA-6@docs/superpowers/specs/2026-05-26-harness-real-abac-design.md"]
+    summary: "Option order MUST NOT affect the resulting stack: Start(t,A,B) and Start(t,B,A) produce identical permit/deny
+      behavior."
+    binding: pending
+    refs:
+      - {file: "internal/testsupport/integrationtest/real_abac_test.go", token: "INV-RA-6"}

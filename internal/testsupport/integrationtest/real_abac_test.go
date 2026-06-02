@@ -32,7 +32,7 @@ func movedAwayPlayer(t *testing.T, ctx context.Context, ts *Server, charName str
 	return sess, priorStream
 }
 
-// INV-RA-1: under WithRealABAC, a regular (non-staff) character is DENIED a
+// INV-ACCESS-1: under WithRealABAC, a regular (non-staff) character is DENIED a
 // read against a location it has left. Allow-all would permit this via the
 // staffOverride bypass — so a passing assertion here proves the engine is the
 // real seeded engine, not allowAllPolicyEngine.
@@ -43,14 +43,14 @@ func TestRealABAC_RegularPlayerDeniedNonColocatedRead(t *testing.T) {
 	mover, priorStream := movedAwayPlayer(t, ctx, ts, "Mover", nil)
 
 	_, err := mover.QueryStreamHistory(ctx, priorStream)
-	require.Error(t, err, "INV-RA-1: real engine MUST deny a regular player's non-colocated read")
+	require.Error(t, err, "INV-ACCESS-1: real engine MUST deny a regular player's non-colocated read")
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok, "denial must surface as an oops error")
 	require.Equal(t, "STREAM_ACCESS_DENIED", oopsErr.Code(),
-		"INV-RA-1: denial MUST collapse to STREAM_ACCESS_DENIED")
+		"INV-ACCESS-1: denial MUST collapse to STREAM_ACCESS_DENIED")
 }
 
-// INV-RA-2: without WithRealABAC, the harness retains the allow-all default —
+// INV-ACCESS-2: without WithRealABAC, the harness retains the allow-all default —
 // the same non-colocated read SUCCEEDS (staff bypass). Guards against an
 // accidental flip of the default.
 func TestRealABAC_DefaultEngineStillAllowAll(t *testing.T) {
@@ -61,10 +61,10 @@ func TestRealABAC_DefaultEngineStillAllowAll(t *testing.T) {
 
 	_, err := mover.QueryStreamHistory(ctx, priorStream)
 	require.NoError(t, err,
-		"INV-RA-2: allow-all default MUST permit the non-colocated read via staff bypass")
+		"INV-ACCESS-2: allow-all default MUST permit the non-colocated read via staff bypass")
 }
 
-// INV-RA-3 + INV-RA-5: under WithRealABAC, an admin-role character is PERMITTED
+// INV-ACCESS-3 + INV-ACCESS-5: under WithRealABAC, an admin-role character is PERMITTED
 // the non-colocated read via seed:admin-full-access (read_unrestricted_history).
 // This proves (a) the seed:* set is installed and a seeded permit works, and
 // (b) the provider populating principal.character.roles is registered — an
@@ -78,11 +78,11 @@ func TestRealABAC_AdminPermittedNonColocatedRead_g776Sentinel(t *testing.T) {
 
 	_, err := boss.QueryStreamHistory(ctx, priorStream)
 	require.NoError(t, err,
-		"INV-RA-3/RA-5: seed:admin-full-access MUST permit an admin's non-colocated read; "+
+		"INV-ACCESS-3/INV-ACCESS-5: seed:admin-full-access MUST permit an admin's non-colocated read; "+
 			"a failure here means seeds weren't installed or the roles provider is unregistered")
 }
 
-// INV-RA-4: when a real ABAC subsystem is present, pluginAttrSources MUST route
+// INV-ACCESS-4: when a real ABAC subsystem is present, pluginAttrSources MUST route
 // the plugin layer to the subsystem's OWN resolver and plugin provider (pointer
 // identity) — not freshly-allocated standalone instances — so plugin-declared
 // attribute providers register on the resolver the engine evaluates against.
@@ -99,11 +99,11 @@ func TestRealABAC_PluginAttrSourcesUsesEngineInstances(t *testing.T) {
 	res, pp, aud := pluginAttrSources(abacSub)
 
 	require.Same(t, abacSub.AttributeResolver(), res,
-		"INV-RA-4: plugin resolver MUST be the engine's resolver instance")
+		"INV-ACCESS-4: plugin resolver MUST be the engine's resolver instance")
 	require.Same(t, abacSub.PluginProvider(), pp,
-		"INV-RA-4: plugin provider MUST be the engine's plugin-provider instance")
+		"INV-ACCESS-4: plugin provider MUST be the engine's plugin-provider instance")
 	require.Equal(t, abacSub.AuditLogger(), aud,
-		"INV-RA-4: plugin auditor MUST be the engine's auditor")
+		"INV-ACCESS-4: plugin auditor MUST be the engine's auditor")
 
 	// nil subsystem → fresh standalone instances (the allow-all default path).
 	resStd, ppStd, audStd := pluginAttrSources(nil)
@@ -114,7 +114,7 @@ func TestRealABAC_PluginAttrSourcesUsesEngineInstances(t *testing.T) {
 		"standalone resolver must differ from the engine's")
 }
 
-// INV-RA-6: option order MUST NOT affect the resulting stack. Both orderings
+// INV-ACCESS-6: option order MUST NOT affect the resulting stack. Both orderings
 // must produce the same real-ABAC deny for a regular non-colocated read.
 // Plugin-gated: skipped when binary plugins are unbuilt (HOLOMUSH_REQUIRE_PLUGINS
 // forces failure instead — see plugins.go).
@@ -133,7 +133,7 @@ func TestRealABAC_OptionOrderIndependent(t *testing.T) {
 			mover, priorStream := movedAwayPlayer(t, ctx, ts, "Mover", nil)
 
 			_, err := mover.QueryStreamHistory(ctx, priorStream)
-			require.Error(t, err, "INV-RA-6: composed real engine MUST deny regardless of option order")
+			require.Error(t, err, "INV-ACCESS-6: composed real engine MUST deny regardless of option order")
 			oopsErr, ok := oops.AsOops(err)
 			require.True(t, ok)
 			require.Equal(t, "STREAM_ACCESS_DENIED", oopsErr.Code())
