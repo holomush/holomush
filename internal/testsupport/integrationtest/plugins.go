@@ -294,7 +294,7 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 	// Resolver / plugin provider are caller-supplied (pluginAttrSources): with a
 	// real ABAC subsystem they are the engine's OWN instances so plugin-declared
 	// providers (e.g. core-scenes' "scene" namespace) register on the resolver the
-	// engine evaluates against (INV-RA-4); with allow-all they are fresh standalone
+	// engine evaluates against (INV-ACCESS-4); with allow-all they are fresh standalone
 	// instances. Both are non-nil — PluginSubsystem.Start calls
 	// resolver.RegisterProvider per plugin that declares resource_types and panics
 	// on a nil resolver (subsystem.go:319).

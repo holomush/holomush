@@ -72,6 +72,17 @@ invariants.
 | `INV-PRESENCE-8` | Client presence map keyed by character_id; idempotent add/remove. | `I-PRES-8` | pending |
 | `INV-PRESENCE-9` | Response deduplicates by character_id (defense-in-depth). | `I-PRES-9` | pending |
 
+### `INV-ACCESS`
+
+| ID | Summary | Legacy | Binding |
+|----|---------|--------|---------|
+| `INV-ACCESS-1` | With WithRealABAC(), the CoreServer access engine is the setup.BuildABACStack engine, not allowAllPolicyEngine. | `INV-RA-1` | pending |
+| `INV-ACCESS-2` | Without WithRealABAC(), the harness retains the allow-all default (no regression). | `INV-RA-2` | pending |
+| `INV-ACCESS-3` | With WithRealABAC(), the seed:* policy set is installed before the engine's cache loads; the engine evaluates against a non-empty seeded policy set. | `INV-RA-3` | pending |
+| `INV-ACCESS-4` | With WithRealABAC()+WithInTreePlugins(), the attribute.Resolver and attribute.PluginProvider the plugin subsystem registers on are the SAME instances (pointer identity) the engine evaluates against. | `INV-RA-4` | pending |
+| `INV-ACCESS-5` | Every attribute namespace referenced by an installed seed policy has a registered provider under WithRealABAC (no silent default-deny from an unregistered provider). | `INV-RA-5` | pending |
+| `INV-ACCESS-6` | Option order MUST NOT affect the resulting stack: Start(t,A,B) and Start(t,B,A) produce identical permit/deny behavior. | `INV-RA-6` | pending |
+
 ### `INV-SESSION`
 
 | ID | Summary | Legacy | Binding |

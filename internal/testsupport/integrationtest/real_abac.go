@@ -66,7 +66,7 @@ func startRealABAC(t *testing.T, ctx context.Context, pool *pgxpool.Pool) *abacs
 // the plugin subsystem should register against. With a real ABAC subsystem, these
 // are the subsystem's OWN instances so plugin-declared providers (e.g. core-scenes'
 // "scene" namespace) register on the resolver the engine evaluates against
-// (INV-RA-4). With no real engine (allow-all default), fresh standalone instances
+// (INV-ACCESS-4). With no real engine (allow-all default), fresh standalone instances
 // are correct — allow-all ignores attributes, so the #4275 behavior is preserved.
 func pluginAttrSources(abacSub *abacsetup.ABACSubsystem) (*attribute.Resolver, *attribute.PluginProvider, pluginauthz.Auditor) {
 	if abacSub != nil {

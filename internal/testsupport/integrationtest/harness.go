@@ -362,7 +362,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		res, pp, aud := pluginAttrSources(abacSub)
 		// Under WithRealABAC, route plugin manifest-policy installs through the
 		// engine's own cache-wired installer so they go live on the real engine
-		// (mirrors INV-RA-4's resolver/provider routing). nil → startPlugins uses
+		// (mirrors INV-ACCESS-4's resolver/provider routing). nil → startPlugins uses
 		// a fresh standalone installer for the allow-all default.
 		var policyInst *plugins.PolicyInstaller
 		if abacSub != nil {
