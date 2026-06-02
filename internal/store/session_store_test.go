@@ -15,7 +15,7 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
-// TestPostgresSessionStore_AddConnectionRejectsInvalidClientType pins INV-M-3:
+// TestPostgresSessionStore_AddConnectionRejectsInvalidClientType pins INV-SESSION-3:
 // AddConnection rejects a client_type outside the allowed set
 // (terminal, comms_hub, telnet) before issuing any SQL. The pgxmock pool
 // registers no expectations because the validation short-circuits ahead of the

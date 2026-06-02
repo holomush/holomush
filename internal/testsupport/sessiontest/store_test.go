@@ -35,7 +35,7 @@ func TestNewStore_ReturnsUsableSessionStore(t *testing.T) {
 	assert.Equal(t, info.CharacterName, got.CharacterName)
 }
 
-// TestNewStore_IsolatedBetweenCalls verifies INV-M-2: each NewStore call
+// TestNewStore_IsolatedBetweenCalls verifies INV-SESSION-2: each NewStore call
 // returns a store backed by a fresh database. State from a prior call MUST
 // NOT be visible in a subsequent call.
 func TestNewStore_IsolatedBetweenCalls(t *testing.T) {
@@ -52,5 +52,5 @@ func TestNewStore_IsolatedBetweenCalls(t *testing.T) {
 
 	storeB := sessiontest.NewStore(t)
 	_, err := storeB.Get(ctx, info.ID)
-	require.Error(t, err, "INV-M-2: storeB MUST NOT see state from storeA")
+	require.Error(t, err, "INV-SESSION-2: storeB MUST NOT see state from storeA")
 }
