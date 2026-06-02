@@ -111,7 +111,7 @@ func TestQueryStreamHistoryRejectsMissingSessionID(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "INVALID_ARGUMENT")
 }
 
-// I-PRIV-5 wire opacity: missing-session denial MUST collapse to
+// INV-PRIVACY-5 wire opacity: missing-session denial MUST collapse to
 // STREAM_ACCESS_DENIED on the wire (denial_reason=session_not_found goes to
 // slog only). Top-level oops code is asserted per .claude/rules/grpc-errors.md
 // to avoid double-wrap chain-walk false positives.
@@ -126,10 +126,10 @@ func TestQueryStreamHistoryReturnsStreamAccessDeniedOnUnknownSession(t *testing.
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok, "denial must surface as an oops error")
 	assert.Equal(t, "STREAM_ACCESS_DENIED", oopsErr.Code(),
-		"I-PRIV-5: missing-session denial must NOT leak SESSION_NOT_FOUND to the wire")
+		"INV-PRIVACY-5: missing-session denial must NOT leak SESSION_NOT_FOUND to the wire")
 }
 
-// I-PRIV-5 wire opacity: expired-session denial MUST collapse to
+// INV-PRIVACY-5 wire opacity: expired-session denial MUST collapse to
 // STREAM_ACCESS_DENIED on the wire (denial_reason=expired_session goes to
 // slog only).
 func TestQueryStreamHistoryReturnsStreamAccessDeniedOnExpiredSession(t *testing.T) {
@@ -147,7 +147,7 @@ func TestQueryStreamHistoryReturnsStreamAccessDeniedOnExpiredSession(t *testing.
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok, "denial must surface as an oops error")
 	assert.Equal(t, "STREAM_ACCESS_DENIED", oopsErr.Code(),
-		"I-PRIV-5: expired-session denial must NOT leak SESSION_EXPIRED to the wire")
+		"INV-PRIVACY-5: expired-session denial must NOT leak SESSION_EXPIRED to the wire")
 }
 
 func TestQueryStreamHistoryRejectsEmptyStream(t *testing.T) {
@@ -1151,8 +1151,8 @@ func TestQueryStreamHistoryFiltersAuditOnlyEvents(t *testing.T) {
 
 // TestQueryStreamHistory_LocationHardGate_DeniedWhenNotInLocation verifies
 // that a session requesting a location stream is denied when the session's
-// LocationID does not match the requested location (I-PRIV-1 Tier 1).
-// Uses DenyAllEngine so the staff override path (I-PRIV-6) returns false,
+// LocationID does not match the requested location (INV-PRIVACY-1 Tier 1).
+// Uses DenyAllEngine so the staff override path (INV-PRIVACY-6) returns false,
 // exercising the hard-gate denial without ABAC interference.
 func TestQueryStreamHistory_LocationHardGate_DeniedWhenNotInLocation(t *testing.T) {
 	t.Parallel()
@@ -1166,7 +1166,7 @@ func TestQueryStreamHistory_LocationHardGate_DeniedWhenNotInLocation(t *testing.
 			ExpiresAt:  &future,
 		},
 	})
-	// DenyAllEngine ensures staffOverride returns false, so the I-PRIV-1
+	// DenyAllEngine ensures staffOverride returns false, so the INV-PRIVACY-1
 	// hard-gate rejects the request when the session is at a different location.
 	s := &CoreServer{
 		sessionStore:  sess,
@@ -1186,7 +1186,7 @@ func TestQueryStreamHistory_LocationHardGate_DeniedWhenNotInLocation(t *testing.
 // TestQueryStreamHistory_StaffOverride_BypassesHardGate verifies that a
 // session whose character is granted read_unrestricted_history via ABAC can
 // query a location stream even when not co-located with that location
-// (I-PRIV-6 / ADR wxty). The staff override path bypasses the I-PRIV-1
+// (INV-PRIVACY-6 / ADR wxty). The staff override path bypasses the INV-PRIVACY-1
 // location hard-gate.
 func TestQueryStreamHistory_StaffOverride_BypassesHardGate(t *testing.T) {
 	t.Parallel()
@@ -1224,7 +1224,7 @@ func TestQueryStreamHistory_StaffOverride_BypassesHardGate(t *testing.T) {
 		SessionId: "staff-1",
 		Stream:    "location." + locB.String(),
 	})
-	require.NoError(t, err, "staff role must bypass location hard-gate (I-PRIV-6)")
+	require.NoError(t, err, "staff role must bypass location hard-gate (INV-PRIVACY-6)")
 }
 
 // TestQueryStreamHistoryNotAfterMsPlumbing pins the wire contract for

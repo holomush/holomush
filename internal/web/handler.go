@@ -676,7 +676,7 @@ func (h *Handler) WebQueryStreamHistory(ctx context.Context, req *connect.Reques
 	if err != nil {
 		slog.ErrorContext(ctx, "web: query stream history RPC failed",
 			"session_id", req.Msg.GetSessionId(), "error", err)
-		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is so clients can distinguish STREAM_ACCESS_DENIED / INVALID_ARGUMENT. (Per I-PRIV-5 wire-opacity, expired-session + missing-session denials now collapse into STREAM_ACCESS_DENIED upstream.)
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is so clients can distinguish STREAM_ACCESS_DENIED / INVALID_ARGUMENT. (Per INV-PRIVACY-5 wire-opacity, expired-session + missing-session denials now collapse into STREAM_ACCESS_DENIED upstream.)
 	}
 
 	gameEvents := make([]*webv1.GameEvent, 0, len(resp.GetEvents()))
@@ -719,7 +719,7 @@ func (h *Handler) WebListSessionStreams(ctx context.Context, req *connect.Reques
 	if err != nil {
 		slog.ErrorContext(ctx, "web: list session streams RPC failed",
 			"session_id", req.Msg.GetSessionId(), "error", err)
-		return nil, err //nolint:wrapcheck // gRPC status errors pass through so clients can distinguish SESSION_EXPIRED / SESSION_NOT_FOUND / INVALID_ARGUMENT. ListSessionStreams is NOT governed by I-PRIV-5 wire-opacity (that invariant applies only to QueryStreamHistory denial paths); distinct codes here are intentional.
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through so clients can distinguish SESSION_EXPIRED / SESSION_NOT_FOUND / INVALID_ARGUMENT. ListSessionStreams is NOT governed by INV-PRIVACY-5 wire-opacity (that invariant applies only to QueryStreamHistory denial paths); distinct codes here are intentional.
 	}
 
 	return connect.NewResponse(&webv1.WebListSessionStreamsResponse{

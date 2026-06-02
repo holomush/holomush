@@ -66,14 +66,40 @@ scopes:
     description: "Stream history temporal floors, scope gating, guest-session bounds, reattach/Idle arrival-timestamp semantics"
     boundary: "Privacy-relevant gating on history reads. Does NOT include: ABAC policy evaluation (→ INV-ACCESS), subscribe
       authorization (→ INV-EVENTBUS)."
-    # No legacy family migrates here in this pass; privacy invariants live in
-    # the history-scope spec and are asserted under test/integration/privacy/.
-    status: pending
+    # Family I-PRIV-N (history-scope privacy). owned_paths = privacy-core files;
+    # most I-PRIV sites ride on other-domain files (shared_files). See .14.9.
+    status: migrated
     origin_specs:
       - "docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"
     owned_paths:
+      - "internal/grpc/query_stream_history.go"
+      - "internal/grpc/query_stream_history_test.go"
       - "internal/grpc/scope_floor.go"
-    shared_files: []
+      - "test/integration/privacy/privacy_test.go"
+    shared_files:
+      # I-PRIV-N rides on files whose primary domain is elsewhere
+      # (session/eventbus/plugin/access/web/gateway/harness); renamed to
+      # INV-PRIVACY-N here. Some are owned by other scopes (ACCESS/PRESENCE/
+      # SCENE/EVENTBUS) — partition requires they be shared, not owned.
+      - "cmd/holomush/sub_grpc.go"
+      - "internal/access/policy/seed.go"
+      - "internal/access/policy/seed_test.go"
+      - "internal/eventbus/subscriber_consumer_config.go"
+      - "internal/eventbus/subscriber_consumer_config_test.go"
+      - "internal/grpc/auth_handlers.go"
+      - "internal/grpc/auth_handlers_test.go"
+      - "internal/grpc/subscribe_loop_test.go"
+      - "internal/grpc/subscribe_server_test.go"
+      - "internal/plugin/manifest.go"
+      - "internal/session/session.go"
+      - "internal/store/session_store.go"
+      - "internal/testsupport/integrationtest/harness.go"
+      - "internal/testsupport/integrationtest/harness_smoke_test.go"
+      - "internal/testsupport/integrationtest/session.go"
+      - "internal/web/handler.go"
+      - "test/integration/presence/presence_test.go"
+      - "test/integration/scenes/scene_history_decrypt_readback_test.go"
+      - "test/integration/streams/rops_test.go"
 
   - name: INV-PRESENCE
     description: "Presence snapshot correctness, field enumeration, client-side dedup, ownership obscuration"
@@ -688,3 +714,112 @@ invariants:
     summary: "The load harness must not be wired into task pr-prep (fast lane)."
     binding: pending
     refs: []
+
+  # -- INV-PRIVACY -- migrated from I-PRIV-N (history-scope privacy) (holomush-hz0v4.14.9).
+  # Origin: docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md (§ invariants). binding: pending — backfill .11.
+  # NOTE: the scaffold comment 'no legacy family migrates here' was WRONG —
+  # I-PRIV-1..8 are annotated across 23 files; this scope migrates all of them.
+  - id: INV-PRIVACY-1
+    scope: INV-PRIVACY
+    origin_spec: "docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"
+    legacy: ["I-PRIV-1@docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"]
+    summary: "A session may read only events from the interval its session row has existed for that stream's scope (active/idle/detached-within-TTL);
+      the session-row lifetime is the continuity unit. ABAC read_unrestricted_history grants a limited bypass (location hard-gate
+      only; temporal floor still applies)."
+    binding: pending
+    refs:
+      - {file: "cmd/holomush/sub_grpc.go", token: "I-PRIV-1"}
+      - {file: "internal/grpc/query_stream_history.go", token: "I-PRIV-1"}
+      - {file: "internal/grpc/query_stream_history_test.go", token: "I-PRIV-1"}
+      - {file: "internal/grpc/scope_floor.go", token: "I-PRIV-1"}
+      - {file: "internal/grpc/subscribe_loop_test.go", token: "I-PRIV-1"}
+      - {file: "internal/session/session.go", token: "I-PRIV-1"}
+      - {file: "internal/store/session_store.go", token: "I-PRIV-1"}
+      - {file: "internal/testsupport/integrationtest/harness.go", token: "I-PRIV-1"}
+      - {file: "test/integration/presence/presence_test.go", token: "I-PRIV-1"}
+      - {file: "test/integration/privacy/privacy_test.go", token: "I-PRIV-1"}
+      - {file: "test/integration/streams/rops_test.go", token: "I-PRIV-1"}
+  - id: INV-PRIVACY-2
+    scope: INV-PRIVACY
+    origin_spec: "docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"
+    legacy: ["I-PRIV-2@docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"]
+    summary: "Guest sessions get a temporal floor of MAX(scope_floor, guest_character.CreatedAt) on all stream history reads."
+    binding: pending
+    refs:
+      - {file: "internal/grpc/auth_handlers.go", token: "I-PRIV-2"}
+      - {file: "internal/grpc/auth_handlers_test.go", token: "I-PRIV-2"}
+      - {file: "internal/session/session.go", token: "I-PRIV-2"}
+      - {file: "internal/testsupport/integrationtest/harness.go", token: "I-PRIV-2"}
+      - {file: "test/integration/privacy/privacy_test.go", token: "I-PRIV-2"}
+  - id: INV-PRIVACY-3
+    scope: INV-PRIVACY
+    origin_spec: "docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"
+    legacy: ["I-PRIV-3@docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"]
+    summary: "Subscribe.ReattachCAS and SelectCharacter reattach leave LocationArrivedAt UNCHANGED and MUST NOT change the
+      durable's DeliverPolicy/OptStartTime/OptStartSeq (FilterSubjects may change)."
+    binding: pending
+    refs:
+      - {file: "internal/grpc/auth_handlers_test.go", token: "I-PRIV-3"}
+      - {file: "internal/grpc/subscribe_server_test.go", token: "I-PRIV-3"}
+      - {file: "internal/testsupport/integrationtest/harness.go", token: "I-PRIV-3"}
+      - {file: "internal/testsupport/integrationtest/harness_smoke_test.go", token: "I-PRIV-3"}
+      - {file: "internal/testsupport/integrationtest/session.go", token: "I-PRIV-3"}
+      - {file: "test/integration/privacy/privacy_test.go", token: "I-PRIV-3"}
+      - {file: "test/integration/streams/rops_test.go", token: "I-PRIV-3"}
+  - id: INV-PRIVACY-4
+    scope: INV-PRIVACY
+    origin_spec: "docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"
+    legacy: ["I-PRIV-4@docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"]
+    summary: "Idle status change and transport/SelectCharacter reattach MUST NOT advance LocationArrivedAt."
+    binding: pending
+    refs:
+      - {file: "test/integration/privacy/privacy_test.go", token: "I-PRIV-4"}
+  - id: INV-PRIVACY-5
+    scope: INV-PRIVACY
+    origin_spec: "docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"
+    legacy: ["I-PRIV-5@docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"]
+    summary: "All denial paths (hard-gate, I-17, ABAC, expired/missing session) return the same wire code STREAM_ACCESS_DENIED;
+      the internal denial_reason is slog-only and never crosses the wire."
+    binding: pending
+    refs:
+      - {file: "internal/grpc/query_stream_history.go", token: "I-PRIV-5"}
+      - {file: "internal/grpc/query_stream_history_test.go", token: "I-PRIV-5"}
+      - {file: "internal/testsupport/integrationtest/harness.go", token: "I-PRIV-5"}
+      - {file: "internal/web/handler.go", token: "I-PRIV-5"}
+      - {file: "test/integration/privacy/privacy_test.go", token: "I-PRIV-5"}
+  - id: INV-PRIVACY-6
+    scope: INV-PRIVACY
+    origin_spec: "docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"
+    legacy: ["I-PRIV-6@docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"]
+    summary: "ABAC staff override bypasses the hard-gate location-match only, NOT the temporal floor."
+    binding: pending
+    refs:
+      - {file: "internal/access/policy/seed.go", token: "I-PRIV-6"}
+      - {file: "internal/access/policy/seed_test.go", token: "I-PRIV-6"}
+      - {file: "internal/grpc/query_stream_history_test.go", token: "I-PRIV-6"}
+      - {file: "internal/grpc/scope_floor.go", token: "I-PRIV-6"}
+      - {file: "internal/testsupport/integrationtest/harness.go", token: "I-PRIV-6"}
+      - {file: "test/integration/privacy/privacy_test.go", token: "I-PRIV-6"}
+      - {file: "test/integration/scenes/scene_history_decrypt_readback_test.go", token: "I-PRIV-6"}
+  - id: INV-PRIVACY-7
+    scope: INV-PRIVACY
+    origin_spec: "docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"
+    legacy: ["I-PRIV-7@docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"]
+    summary: "Plugin-owned subjects with divergent history-replay semantics MUST declare history_scope in the manifest and
+      be exercised by a test; silent inheritance of permissive semantics is forbidden."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/manifest.go", token: "I-PRIV-7"}
+      - {file: "test/integration/privacy/privacy_test.go", token: "I-PRIV-7"}
+  - id: INV-PRIVACY-8
+    scope: INV-PRIVACY
+    origin_spec: "docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"
+    legacy: ["I-PRIV-8@docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"]
+    summary: "OpenSession (incl. reattach) and SetFilters query the existing durable before CreateOrUpdateConsumer; an existing
+      durable's DeliverPolicy/OptStartTime/OptStartSeq are copied verbatim (only FilterSubjects mutates); NATS is the source
+      of truth."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/subscriber_consumer_config.go", token: "I-PRIV-8"}
+      - {file: "internal/eventbus/subscriber_consumer_config_test.go", token: "I-PRIV-8"}
+      - {file: "test/integration/privacy/privacy_test.go", token: "I-PRIV-8"}

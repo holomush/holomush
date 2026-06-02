@@ -72,7 +72,7 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	info, err := s.sessionStore.Get(ctx, req.SessionId)
 	if err != nil {
 		if oopsErr, ok := oops.AsOops(err); ok && oopsErr.Code() == "SESSION_NOT_FOUND" {
-			// I-PRIV-5 wire opacity: missing-session denial collapses to
+			// INV-PRIVACY-5 wire opacity: missing-session denial collapses to
 			// STREAM_ACCESS_DENIED on the wire. denial_reason goes to slog
 			// only; internal SESSION_NOT_FOUND must not leak to the client.
 			slog.InfoContext(ctx, "stream access denied: session not found",
@@ -86,7 +86,7 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		return nil, oops.Code("INTERNAL").Wrap(err)
 	}
 	if info.IsExpired() {
-		// I-PRIV-5 wire opacity: expired-session denial collapses to
+		// INV-PRIVACY-5 wire opacity: expired-session denial collapses to
 		// STREAM_ACCESS_DENIED on the wire. denial_reason goes to slog only.
 		slog.InfoContext(ctx, "stream access denied: session expired",
 			"session_id", req.SessionId,
@@ -186,7 +186,7 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 
 	// Step 5: Authorization — three-way classifier (on the qualified subject).
 	//   1. Private streams (events.<gid>.character.<id>, events.<gid>.scene.<id>.{ic,ooc}): membership gate (I-17).
-	//   2. Location streams (events.<gid>.location.<id>): hard-gate via session.LocationID (I-PRIV-1).
+	//   2. Location streams (events.<gid>.location.<id>): hard-gate via session.LocationID (INV-PRIVACY-1).
 	//   3. Other public streams (global, system, …): ABAC engine.Evaluate.
 	switch {
 	case isPrivateStream(stream):
@@ -213,7 +213,7 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 				Errorf("not authorized to read stream")
 		}
 	case isLocationStream(stream):
-		// Layer 2: Location hard-gate (I-PRIV-1). The session must be currently
+		// Layer 2: Location hard-gate (INV-PRIVACY-1). The session must be currently
 		// located in the requested location. staffOverride consults the ABAC
 		// engine (read_unrestricted_history action on "stream:*") and returns
 		// false if the engine is nil or evaluation fails (fail-closed).

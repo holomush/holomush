@@ -212,10 +212,10 @@ type Info struct {
 	CharacterName   string
 	LocationID      ulid.ULID
 	// LocationArrivedAt is the per-session attach floor for history queries
-	// (invariant I-PRIV-1). Set on login and on each location move.
+	// (invariant INV-PRIVACY-1). Set on login and on each location move.
 	LocationArrivedAt time.Time
 	// GuestCharacterCreatedAt is the guest identity overlay floor for history
-	// queries (invariant I-PRIV-2). Zero for non-guest sessions.
+	// queries (invariant INV-PRIVACY-2). Zero for non-guest sessions.
 	GuestCharacterCreatedAt time.Time
 	IsGuest                 bool
 	Status                  Status
@@ -370,7 +370,7 @@ type Store interface {
 	// Called by the movement hook after a character changes location.
 	//
 	// arrivedAt MUST be non-zero — a zero time.Time would collapse the
-	// I-PRIV-1 per-session location floor to year-1 and silently disable
+	// INV-PRIVACY-1 per-session location floor to year-1 and silently disable
 	// history privacy. Implementations MUST return INVALID_ARGUMENT in
 	// that case.
 	UpdateLocationOnMove(ctx context.Context, characterID, newLocationID ulid.ULID, arrivedAt time.Time) error
@@ -380,7 +380,7 @@ type Store interface {
 	// floor when a player reconnects to a different location than where they
 	// last detached.
 	//
-	// arrivedAt MUST be non-zero — same I-PRIV-1 invariant as
+	// arrivedAt MUST be non-zero — same INV-PRIVACY-1 invariant as
 	// UpdateLocationOnMove.
 	//
 	// Errors:

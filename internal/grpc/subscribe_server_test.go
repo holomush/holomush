@@ -431,7 +431,7 @@ func (c *identityCapturingSubscriber) OpenSession(_ context.Context, _ string, i
 var _ eventbus.Subscriber = (*identityCapturingSubscriber)(nil)
 
 // TestSubscribeReattachCAS_PreservesLocationArrivedAt asserts the
-// session-row-as-continuity rule (spec §5 row 3 + I-PRIV-3, amended
+// session-row-as-continuity rule (spec §5 row 3 + INV-PRIVACY-3, amended
 // 2026-05-18): transport-level reattach via Subscribe.ReattachCAS leaves
 // LocationArrivedAt UNCHANGED. The session row exists across the
 // disconnect; the floor was set at session-create and is only advanced
@@ -481,7 +481,7 @@ func TestSubscribeReattachCAS_PreservesLocationArrivedAt(t *testing.T) {
 	stored, err := sessStore.Get(context.Background(), "s1")
 	require.NoError(t, err)
 	assert.True(t, stored.LocationArrivedAt.Equal(originalArrival),
-		"LocationArrivedAt MUST be unchanged on ReattachCAS (spec §5 row 3, I-PRIV-3); got %v, want %v",
+		"LocationArrivedAt MUST be unchanged on ReattachCAS (spec §5 row 3, INV-PRIVACY-3); got %v, want %v",
 		stored.LocationArrivedAt, originalArrival)
 	assert.Equal(t, session.StatusActive, stored.Status,
 		"ReattachCAS MUST flip status back to Active")

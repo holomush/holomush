@@ -200,8 +200,8 @@ type startConfig struct {
 }
 
 // WithPolicyEngine overrides the harness's default allow-all ABAC engine.
-// Tests that need to exercise denial paths — e.g., the I-PRIV-1 hard-gate
-// (iwzt.10) or the I-PRIV-5 wire-opacity meta-test (iwzt.11) — pass a
+// Tests that need to exercise denial paths — e.g., the INV-PRIVACY-1 hard-gate
+// (iwzt.10) or the INV-PRIVACY-5 wire-opacity meta-test (iwzt.11) — pass a
 // stricter engine such as policytest.DenyAllEngine so staffOverride
 // returns false and the hard-gate is exercised end-to-end.
 func WithPolicyEngine(eng types.AccessPolicyEngine) StartOption {
@@ -501,7 +501,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		holoGRPC.WithHistoryReader(historyReader),
 		// AccessEngine drives staffOverride() in QueryStreamHistory; with
 		// it unwired, every override check returns false (the nil-engine
-		// short-circuit), defeating I-PRIV-6 tests. The harness uses
+		// short-circuit), defeating INV-PRIVACY-6 tests. The harness uses
 		// allowAllPolicyEngine so override semantics are exercised
 		// without the operational complexity of seeded ABAC policies.
 		holoGRPC.WithAccessEngine(pe),
@@ -710,7 +710,7 @@ func (s *Server) GameID() string {
 
 // DeleteSession directly deletes a session row from Postgres. Used by
 // iwzt.11 wire-opacity tests to exercise the missing-session denial
-// branch of I-PRIV-5: a client holding a session_id that no longer
+// branch of INV-PRIVACY-5: a client holding a session_id that no longer
 // resolves in sessionStore.Get MUST receive STREAM_ACCESS_DENIED on the
 // wire (denial_reason=session_not_found is slog-only).
 //
@@ -742,7 +742,7 @@ func (s *Server) ExpireSession(ctx context.Context, sessionID string) {
 // SetLocationArrivedAt directly mutates a session's location_arrived_at column
 // in Postgres. Used by 5b2j tests to exercise floor-bypass semantics
 // (INV-PRESENCE-2): the snapshot RPC reads sessionStore directly and is exempt from
-// the I-PRIV-1 temporal floor, so manipulating this column should NOT affect
+// the INV-PRIVACY-1 temporal floor, so manipulating this column should NOT affect
 // ListFocusPresence's behavior.
 func (s *Server) SetLocationArrivedAt(ctx context.Context, sessionID string, t time.Time) {
 	s.t.Helper()
@@ -755,7 +755,7 @@ func (s *Server) SetLocationArrivedAt(ctx context.Context, sessionID string, t t
 }
 
 // DeleteCharacter removes a character row + its FK-dependent rows from
-// Postgres in dependency-safe order. Used by iwzt.21 (I-PRIV-2 guest
+// Postgres in dependency-safe order. Used by iwzt.21 (INV-PRIVACY-2 guest
 // name-reuse) to simulate guest-character cleanup that production logout
 // does NOT currently perform — without this, the unique-name constraint on
 // `characters.LOWER(name)` blocks any subsequent guest from drawing the
@@ -897,8 +897,8 @@ func (s *Server) ConnectAuthedWithRoles(ctx context.Context, charName string, ro
 		"integrationtest.ConnectAuthedWithRoles: SelectCharacter failed: %s", selResp.GetErrorMessage())
 
 	// Hydrate session timestamps from the persisted session row, NOT from
-	// time.Now() — the server-side LocationArrivedAt drives the I-PRIV-1 /
-	// I-PRIV-6 floor in QueryStreamHistory, so tests that assert against
+	// time.Now() — the server-side LocationArrivedAt drives the INV-PRIVACY-1 /
+	// INV-PRIVACY-6 floor in QueryStreamHistory, so tests that assert against
 	// it MUST see the canonical value (per CodeRabbit thread on PR #4048).
 	persisted, getErr := s.sessionStore.Get(ctx, selResp.GetSessionId())
 	require.NoError(s.t, getErr, "integrationtest.ConnectAuthedWithRoles: read persisted session")
@@ -925,7 +925,7 @@ func (s *Server) ConnectAuthedWithRoles(ctx context.Context, charName string, ro
 // creation with a single SelectCharacter call), AuthedPlayer defers
 // SelectCharacter to OpenWebSession so tests can exercise
 // detach/reattach scenarios where a second OpenWebSession call reattaches
-// to an existing session row (per spec §5 row 2 + I-PRIV-3).
+// to an existing session row (per spec §5 row 2 + INV-PRIVACY-3).
 //
 // The returned handle carries the player_session bearer token for use
 // across subsequent OpenWebSession calls.
@@ -963,7 +963,7 @@ func (s *Server) AuthedPlayer(ctx context.Context, charName string) *AuthedPlaye
 // the session row is held open for the TTL window so a later reattach (via
 // SelectCharacter or Subscribe.ReattachCAS) can resume the same session.
 //
-// Used by iwzt.17 (I-PRIV-3 / transport-continuity) to simulate the
+// Used by iwzt.17 (INV-PRIVACY-3 / transport-continuity) to simulate the
 // transport-drop side of detach/reattach without tearing down a live
 // Subscribe stream (iwzt.16's separate concern). LocationArrivedAt is
 // NOT touched here — verifying the floor's preservation across this
@@ -999,7 +999,7 @@ func (s *Server) DetachSession(ctx context.Context, sessionID string) {
 // QueryStreamHistory result against a stale status.
 //
 // LocationArrivedAt is preserved by ReattachCAS (the UPDATE writes only
-// status/detached_at/expires_at/updated_at) — this is what I-PRIV-3 codifies
+// status/detached_at/expires_at/updated_at) — this is what INV-PRIVACY-3 codifies
 // and what iwzt.17 verifies end-to-end.
 //
 // Bypasses the production session-ownership guard

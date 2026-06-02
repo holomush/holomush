@@ -380,7 +380,7 @@ func TestDispatchDeliveryIncludesEventAtExactFloorNanosecond(t *testing.T) {
 }
 
 // TestDispatchDeliveryDropsBelowScopeFloor is the unit-level regression lock
-// for holomush-iwzt I-PRIV-1 Tier 2 (load-bearing privacy gate per spec
+// for holomush-iwzt INV-PRIVACY-1 Tier 2 (load-bearing privacy gate per spec
 // §6.2): events with a timestamp strictly before the session's
 // streamScopeFloor for the event's subject MUST be ack'd and dropped before
 // stream.Send. Ack-and-return (not skip-without-ack) so JetStream does not
@@ -408,7 +408,7 @@ func TestDispatchDeliveryDropsBelowScopeFloor(t *testing.T) {
 		"below-floor event must be ack'd so JS does not redeliver indefinitely")
 	assert.Equal(t, 0, d.nacks())
 	assert.Empty(t, stream.sent,
-		"below-floor event must NOT reach client stream (I-PRIV-1 Tier 2)")
+		"below-floor event must NOT reach client stream (INV-PRIVACY-1 Tier 2)")
 }
 
 // TestDispatchDeliveryForwardsAtOrAboveScopeFloor asserts the converse: an

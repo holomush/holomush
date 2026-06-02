@@ -120,7 +120,7 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 		// Phase-5 sub-epic E broad events.*.system.* deny policies (A16 future-proof + rekey namespace)
 		"seed:deny-events-system-read-character",
 		"seed:deny-events-system-read-plugin",
-		// Phase-5 iwzt history-scope-privacy staff override policy (I-PRIV-6)
+		// Phase-5 iwzt history-scope-privacy staff override policy (INV-PRIVACY-6)
 		"seed:staff-read-unrestricted-history",
 	}
 

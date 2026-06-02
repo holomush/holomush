@@ -110,7 +110,7 @@ var _ = Describe("Integration harness Session.RefreshFromPersisted", func() {
 // session to Detached; ReattachTransport rebuilds the stream against the
 // same session (production ReattachCAS flips status back to Active); an
 // event published during the detach window is delivered to the reattached
-// stream via JetStream durable replay (the I-PRIV-3 Round 3 claim that
+// stream via JetStream durable replay (the INV-PRIVACY-3 Round 3 claim that
 // iwzt.16 will assert formally in test/integration/privacy/).
 var _ = Describe("Integration harness Subscribe transport lifecycle", func() {
 	It("redelivers detach-window events via durable replay on reattach", func() {

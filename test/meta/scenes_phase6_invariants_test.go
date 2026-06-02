@@ -51,13 +51,15 @@ const phase6SelfFile = "scenes_phase6_invariants_test.go"
 // asserts each is cited by at least one *_test.go file (excluding this one).
 // A new Phase-6 invariant added to the spec without a paired, ID-citing test —
 // or the silent removal of the last test citing an existing invariant — fails
-// this meta-test. Mirrors i_priv_coverage_test.go / i_pres_coverage_test.go.
+// this meta-test. Same shape as the other per-family coverage gates (the
+// PRESENCE/PRIVACY ones were retired into the invariant registry meta-test as
+// their scopes migrated; this INV-P6 gate retires when INV-SCENE migrates).
 func TestPhase6InvariantsHaveTestCoverage(t *testing.T) {
 	root := findRepoRoot(t)
 
 	// os.Root gives race-free, symlink-safe reads confined to the repo tree
 	// (gosec G304/G122); all WalkDir paths are converted to root-relative form
-	// before Root.Open. Mirrors i_priv_coverage_test.go.
+	// before Root.Open. Same os.Root pattern as the other meta-test gates.
 	rootFS, err := os.OpenRoot(root)
 	if err != nil {
 		t.Fatalf("open repo root %q: %v", root, err)

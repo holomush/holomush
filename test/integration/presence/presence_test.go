@@ -86,7 +86,7 @@ var _ = Describe("AC4: joiner sees prior presence", func() {
 	})
 })
 
-// AC3 / INV-PRESENCE-2: the snapshot RPC MUST be exempt from the I-PRIV-1 temporal
+// AC3 / INV-PRESENCE-2: the snapshot RPC MUST be exempt from the INV-PRIVACY-1 temporal
 // floor (LocationArrivedAt). Manipulate bob's LocationArrivedAt to 1 hour in
 // the future — under any temporal-floor-based filter (e.g., iwzt.15 Tier 2),
 // alice's arrive event would be filtered out. The snapshot reads sessionStore
@@ -106,7 +106,7 @@ var _ = Describe("AC4: joiner sees prior presence", func() {
 // WithTier2FilterActive harness option). Until then, the future-floor
 // write + architectural assertion is the strongest available shape.
 // Verifies: INV-PRESENCE-2
-var _ = Describe("AC3 / INV-PRESENCE-2: snapshot bypasses I-PRIV-1 temporal floor", func() {
+var _ = Describe("AC3 / INV-PRESENCE-2: snapshot bypasses INV-PRIVACY-1 temporal floor", func() {
 	var (
 		ts    *integrationtest.Server
 		ctx   context.Context

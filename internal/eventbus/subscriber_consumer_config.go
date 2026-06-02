@@ -45,7 +45,7 @@ func (a jsConsumerLookupAdapter) LookupConsumer(ctx context.Context, stream, nam
 
 // buildConsumerConfig produces a jetstream.ConsumerConfig that is safe to pass
 // to CreateOrUpdateConsumer regardless of whether the durable already exists.
-// Implements the NATS-source-of-truth pattern per holomush-iwzt §6.2 / I-PRIV-8.
+// Implements the NATS-source-of-truth pattern per holomush-iwzt §6.2 / INV-PRIVACY-8.
 //
 // Three branches:
 //
