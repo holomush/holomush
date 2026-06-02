@@ -10,7 +10,7 @@
 // `// Verifies: INV-N` so T14's meta-test can bind invariant numbers to
 // test names.
 //
-// INV-55 (production Pill os.Exit(125)) is exercised by a TestPill
+// INV-CLUSTER-5 (production Pill os.Exit(125)) is exercised by a TestPill
 // substitute in internal/cluster/probe_pill_test.go; a real subprocess
 // harness for the production-Pill path is deferred to a follow-up.
 package cluster_test
@@ -28,7 +28,7 @@ import (
 )
 
 var _ = Describe("Cluster Registry", func() {
-	// Verifies: INV-53
+	// Verifies: INV-CLUSTER-3
 	Describe("first-seen StartedAt preservation under duplicate MemberID", func() {
 		It("rejects a duplicate heartbeat carrying a different StartedAt and HolomushVersion", func(ctx SpecContext) {
 			h := clustertest.New(GinkgoT(), "test-game", 1)
@@ -88,7 +88,7 @@ var _ = Describe("Cluster Registry", func() {
 		})
 	})
 
-	// Verifies: INV-54
+	// Verifies: INV-CLUSTER-4
 	Describe("cluster_id namespace isolation", func() {
 		It("never observes a foreign-cluster heartbeat in the local registry", func(ctx SpecContext) {
 			h := clustertest.New(GinkgoT(), "test-game", 1)
@@ -107,7 +107,7 @@ var _ = Describe("Cluster Registry", func() {
 		})
 	})
 
-	// Verifies: INV-57
+	// Verifies: INV-CLUSTER-7
 	Describe("pill rate-limiting", func() {
 		It("blocks a duplicate pill within the rate-limit window", func() {
 			h := clustertest.New(GinkgoT(), "test-game", 1)
@@ -133,8 +133,8 @@ var _ = Describe("Cluster Registry", func() {
 		})
 	})
 
-	// Verifies: INV-60
-	Describe("INV-60 self-pill refusal", func() {
+	// Verifies: INV-CLUSTER-10
+	Describe("INV-CLUSTER-10 self-pill refusal", func() {
 		It("returns CLUSTER_CANNOT_PILL_SELF when target is Self()", func() {
 			h := clustertest.New(GinkgoT(), "test-game", 1)
 			err := h.Members[0].Registry.ProbeAndPill(

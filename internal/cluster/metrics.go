@@ -84,7 +84,7 @@ func NewHeartbeatMetrics(reg prometheus.Registerer) *HeartbeatMetrics {
 	return m
 }
 
-// DuplicateMemberIDMetrics tracks INV-53 enforcement events: heartbeat
+// DuplicateMemberIDMetrics tracks INV-CLUSTER-3 enforcement events: heartbeat
 // receive observed a colliding MemberID with a different StartedAt
 // (indicating a different process re-using the ULID — birthday-bound
 // astronomical, defense-in-depth detection).
@@ -98,7 +98,7 @@ func NewDuplicateMemberIDMetrics(reg prometheus.Registerer) *DuplicateMemberIDMe
 	m := &DuplicateMemberIDMetrics{
 		DuplicateMemberIDTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "cluster_duplicate_member_id_total",
-			Help: "INV-53 enforcement: heartbeat receive observed a colliding MemberID with a mismatched StartedAt; the duplicate heartbeat was rejected.",
+			Help: "INV-CLUSTER-3 enforcement: heartbeat receive observed a colliding MemberID with a mismatched StartedAt; the duplicate heartbeat was rejected.",
 		}, []string{"member_id"}),
 	}
 	reg.MustRegister(m.DuplicateMemberIDTotal)

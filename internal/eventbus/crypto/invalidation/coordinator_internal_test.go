@@ -46,7 +46,7 @@ func TestHandleInvalidateDropsCrossClusterMessage(t *testing.T) {
 	c := newTestCoordinator(t, logBuf)
 
 	// Subscribe to a real reply subject so we can assert that
-	// handleInvalidate's INV-54 cross-cluster drop path did NOT publish
+	// handleInvalidate's INV-CLUSTER-4 cross-cluster drop path did NOT publish
 	// an ack. (Setting msg.Reply = "" wouldn't catch a bug where the
 	// drop path forgot the early-return: the empty-Reply branch's
 	// "msg.Reply empty" warn-log would mask the regression.)
@@ -68,7 +68,7 @@ func TestHandleInvalidateDropsCrossClusterMessage(t *testing.T) {
 	})
 
 	// Build a payload with a mismatched cluster_id; cluster_id-mismatch
-	// must be dropped without ack (INV-54).
+	// must be dropped without ack (INV-CLUSTER-4).
 	payload := Payload{
 		Seq:                 1,
 		CoordinatorMemberID: "01HSENDERAAAAAAAAAAAAAAA",
@@ -91,11 +91,11 @@ func TestHandleInvalidateDropsCrossClusterMessage(t *testing.T) {
 		t.Errorf("expected 'cross-cluster message dropped' warning in log; got: %s", logBuf.String())
 	}
 
-	// INV-54 requires the message be dropped WITHOUT ack. Wait briefly
+	// INV-CLUSTER-4 requires the message be dropped WITHOUT ack. Wait briefly
 	// for any wrongly-published reply to land; assert nothing arrives.
 	select {
 	case stray := <-ackCh:
-		t.Errorf("INV-54 violation: handleInvalidate sent ack on cross-cluster drop path; got reply with data %q", string(stray.Data))
+		t.Errorf("INV-CLUSTER-4 violation: handleInvalidate sent ack on cross-cluster drop path; got reply with data %q", string(stray.Data))
 	case <-time.After(100 * time.Millisecond):
 		// Expected: silence on the reply subject.
 	}
@@ -214,10 +214,10 @@ func TestConfigDefaultsPreservesPositiveInvalidateTimeout(t *testing.T) {
 
 func TestTimeoutForActionKEKRotationReturnsThirtySeconds(t *testing.T) {
 	c := &coordinator{cfg: Config{InvalidateTimeout: 5 * time.Second}}
-	// KEK rotation has its own 30s budget per INV-28; the configured
+	// KEK rotation has its own 30s budget per INV-CLUSTER-1; the configured
 	// InvalidateTimeout (default 5s) MUST NOT apply.
 	if got := c.timeoutFor(ActionKEKRotation); got != 30*time.Second {
-		t.Errorf("timeoutFor(KEKRotation) = %v; want 30s (INV-28 budget)", got)
+		t.Errorf("timeoutFor(KEKRotation) = %v; want 30s (INV-CLUSTER-1 budget)", got)
 	}
 }
 

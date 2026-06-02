@@ -13,7 +13,7 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
-// Verifies: INV-60
+// Verifies: INV-CLUSTER-10
 func TestProbeAndPillRefusesSelfPerINV60(t *testing.T) {
 	h := clustertest.New(t, "test-game", 1)
 	r := h.Members[0].Registry
@@ -74,7 +74,7 @@ func TestProbeAndPillTriggersPillOnUnresponsivePeer(t *testing.T) {
 	}
 }
 
-// Verifies: INV-57
+// Verifies: INV-CLUSTER-7
 func TestPillRateLimitBlocksSecondPillWithinWindow(t *testing.T) {
 	h := clustertest.New(t, "test-game", 1)
 	r := h.Members[0].Registry
@@ -98,7 +98,7 @@ func TestPillRateLimitBlocksSecondPillWithinWindow(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "CLUSTER_PILL_RATE_LIMITED")
 }
 
-// Verifies: INV-55
+// Verifies: INV-CLUSTER-5
 func TestPillReceivedOnPoisonSubjectInvokesPillTrigger(t *testing.T) {
 	h := clustertest.New(t, "test-game", 1)
 

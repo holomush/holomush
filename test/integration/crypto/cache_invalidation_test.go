@@ -63,7 +63,7 @@ func newCoordOnMember(
 }
 
 var _ = Describe("Invalidation Coordinator", func() {
-	// Verifies: INV-29
+	// Verifies: INV-CLUSTER-2
 	Describe("rekey requires all live members to ack within timeout", func() {
 		It("evicts every replica's DEK cache for the context after a 3-member rekey", func() {
 			h := clustertest.New(GinkgoT(), "test-game", 3)
@@ -102,7 +102,7 @@ var _ = Describe("Invalidation Coordinator", func() {
 		})
 	})
 
-	// Verifies: INV-29 (single-replica degeneration)
+	// Verifies: INV-CLUSTER-2 (single-replica degeneration)
 	Describe("single-member cluster degenerates to self-ack", func() {
 		It("returns nil after a Rekey publishes via NATS loopback to its own subscription", func() {
 			h := clustertest.New(GinkgoT(), "test-game", 1)
@@ -117,7 +117,7 @@ var _ = Describe("Invalidation Coordinator", func() {
 		})
 	})
 
-	// Verifies: INV-59
+	// Verifies: INV-CLUSTER-9
 	// Verifies: INV-12 (read-immediacy substrate)
 	Describe("participants_changed propagates within timeout", func() {
 		It("evicts every replica's ParticipantsCache for (ctxType, ctxID, version) on Add", func() {
@@ -145,7 +145,7 @@ var _ = Describe("Invalidation Coordinator", func() {
 				context.Background(), ctxID, invalidation.ActionParticipantsChanged, 1, 0,
 			)).To(Succeed(), "RequestInvalidation participants_changed")
 
-			// INV-59: every replica's ParticipantsCache for this version
+			// INV-CLUSTER-9: every replica's ParticipantsCache for this version
 			// MUST have no entry upon return.
 			_, ok0 := partCaches[0].Get(pck)
 			Expect(ok0).To(BeFalse(), "member 0 still has cached participants after RequestInvalidation")
@@ -154,7 +154,7 @@ var _ = Describe("Invalidation Coordinator", func() {
 		})
 	})
 
-	// Verifies: INV-56 (single retry)
+	// Verifies: INV-CLUSTER-6 (single retry)
 	Describe("Coordinator attempts at most one probe-and-pill retry cycle", func() {
 		It("returns nil OR a typed timeout error (SELF_TIMEOUT|PARTIAL_FAILURE) when a synthetic peer never acks", func() {
 			h := clustertest.New(GinkgoT(), "test-game", 1)

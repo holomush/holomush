@@ -638,8 +638,8 @@ var _ = Describe("Manager", func() {
 		Expect(parts[0].PlayerID).To(Equal("p2"))
 	})
 
-	// TestManager_Rotate_RollsBackOnInvalidationFailure is INV-29.
-	It("Rotate rolls back on invalidation failure (INV-29)", func() {
+	// TestManager_Rotate_RollsBackOnInvalidationFailure is INV-CLUSTER-2.
+	It("Rotate rolls back on invalidation failure (INV-CLUSTER-2)", func() {
 		pool := testIntegrationPool(suiteT)
 		st := dek.NewStore(pool)
 		cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})

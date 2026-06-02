@@ -2,7 +2,7 @@
 // Copyright 2026 HoloMUSH Contributors
 
 // Package noremoteclockcompare implements the lint rule that enforces
-// INV-58 (Phase 3c grounding doc Decision 8): no cross-host wall-clock
+// INV-CLUSTER-8 (Phase 3c grounding doc Decision 8): no cross-host wall-clock
 // comparisons. The rule flags any subtraction or comparison between a
 // time.Time value and a struct-field selector whose name is on the
 // remote-sourced allowlist (PublishedAt, IssuedAt, StartedAt,
@@ -83,13 +83,13 @@ var timePackageFuncAllowlist = map[string]struct{}{
 	"Until": {},
 }
 
-const message = "INV-58: no cross-host wall-clock comparison; remote-sourced timestamps must not feed protocol decisions. Use sequence numbers (Phase 3c grounding doc Decision 8). Annotate with //nolint:noremoteclockcompare with justification if this is an observability-only carve-out."
+const message = "INV-CLUSTER-8: no cross-host wall-clock comparison; remote-sourced timestamps must not feed protocol decisions. Use sequence numbers (Phase 3c grounding doc Decision 8). Annotate with //nolint:noremoteclockcompare with justification if this is an observability-only carve-out."
 
 // Analyzer is the registered analyzer instance. Wired into golangci-lint
 // via gorules/analyzers/noremoteclockcompare/plugin.go.
 var Analyzer = &analysis.Analyzer{
 	Name:     "noremoteclockcompare",
-	Doc:      "INV-58: forbids wall-clock comparisons against remote-sourced struct fields (PublishedAt, IssuedAt, StartedAt, LastPublishedAt) when the operand resolves to time.Time",
+	Doc:      "INV-CLUSTER-8: forbids wall-clock comparisons against remote-sourced struct fields (PublishedAt, IssuedAt, StartedAt, LastPublishedAt) when the operand resolves to time.Time",
 	Requires: []*analysis.Analyzer{inspect.Analyzer},
 	Run:      run,
 }
