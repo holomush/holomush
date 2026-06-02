@@ -116,7 +116,7 @@ func decryptPluginRow(
 	}
 
 	// AuditRowToEvent omits Payload (it carries only the AAD-canonical
-	// fields, INV-TS-5). Restore the ciphertext so the dispatcher's Decode
+	// fields, INV-STORE-5). Restore the ciphertext so the dispatcher's Decode
 	// has its AEAD input; aad.Build excludes Payload, so the reconstructed
 	// AAD is unaffected by this assignment.
 	envelope := AuditRowToEvent(row)

@@ -18,8 +18,8 @@ import (
 // TestNanosecondTimestampsInvariantsHaveNamedTests is the drift detector
 // for the invariants table in
 // docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md §5.
-// For each INV-TS-N (1..7 and 9; INV-TS-8 was dropped — see the §7
-// future-work table), the test verifies the named test that pins the
+// For each INV-STORE-N (1..7 and 9; there is no INV-STORE-8 — the legacy
+// INV-TS-8 was dropped, see the §7 future-work table), the test verifies the named test that pins the
 // invariant exists somewhere in the repo's *_test.go corpus.
 //
 // "Named test" matches against two surfaces collected from the source AST:
@@ -49,28 +49,28 @@ func TestNanosecondTimestampsInvariantsHaveNamedTests(t *testing.T) {
 		inv      string
 		testName string
 	}{
-		// INV-TS-1: lint + Ginkgo integration spec (Describe string is
+		// INV-STORE-1: lint + Ginkgo integration spec (Describe string is
 		// the pinned identifier — the test is suite-registered under
 		// store_suite_test.go::TestStore, not a standalone func Test*).
-		{"INV-TS-1", "INV-TS-1: no TIMESTAMPTZ columns after migration"},
-		// INV-TS-2: pgnanos round-trip test
-		{"INV-TS-2", "TestRoundTripPreservesSubMicrosecondNanoseconds"},
-		// INV-TS-3: enforced by lint:no-microsecond-truncate; meta-test asserts the lint passes
-		{"INV-TS-3", "TestLintNoMicrosecondTruncatePasses"},
-		// INV-TS-4: publisher preserves ns
-		{"INV-TS-4", "TestPublisherPreservesNanoseconds"},
-		// INV-TS-5: AAD round-trip preserves ns
-		{"INV-TS-5", "TestRoundTripPreservesAADWithSubMicrosecondNanos"},
-		// INV-TS-6: floor drops sub-floor-ns events
-		{"INV-TS-6", "TestDispatchDeliveryDropsEventEmittedInSameNanosecondAsArrival"},
-		// INV-TS-7: floor includes exact-floor-ns events
-		{"INV-TS-7", "TestDispatchDeliveryIncludesEventAtExactFloorNanosecond"},
-		// INV-TS-9: conversion migrations saturate out-of-range/infinity to
+		{"INV-STORE-1", "INV-STORE-1: no TIMESTAMPTZ columns after migration"},
+		// INV-STORE-2: pgnanos round-trip test
+		{"INV-STORE-2", "TestRoundTripPreservesSubMicrosecondNanoseconds"},
+		// INV-STORE-3: enforced by lint:no-microsecond-truncate; meta-test asserts the lint passes
+		{"INV-STORE-3", "TestLintNoMicrosecondTruncatePasses"},
+		// INV-STORE-4: publisher preserves ns
+		{"INV-STORE-4", "TestPublisherPreservesNanoseconds"},
+		// INV-STORE-5: AAD round-trip preserves ns
+		{"INV-STORE-5", "TestRoundTripPreservesAADWithSubMicrosecondNanos"},
+		// INV-STORE-6: floor drops sub-floor-ns events
+		{"INV-STORE-6", "TestDispatchDeliveryDropsEventEmittedInSameNanosecondAsArrival"},
+		// INV-STORE-7: floor includes exact-floor-ns events
+		{"INV-STORE-7", "TestDispatchDeliveryIncludesEventAtExactFloorNanosecond"},
+		// INV-STORE-9: conversion migrations saturate out-of-range/infinity to
 		// int64-ns bounds, preserve NULL (Describe string is the pinned
-		// identifier — suite-registered under TestStore). INV-TS-8 was dropped
-		// (former wire-format invariant; see §7 future-work table), so the
-		// number is intentionally skipped.
-		{"INV-TS-9", "INV-TS-9: TIMESTAMPTZ→BIGINT conversion saturates out-of-range and infinity to int64-ns bounds and preserves NULL"},
+		// identifier — suite-registered under TestStore). The legacy INV-TS-8
+		// was dropped (former wire-format invariant; see §7 future-work table),
+		// so there is no INV-STORE-8 — the number is intentionally skipped.
+		{"INV-STORE-9", "INV-STORE-9: TIMESTAMPTZ→BIGINT conversion saturates out-of-range and infinity to int64-ns bounds and preserves NULL"},
 	}
 
 	repoRoot := findRepoRoot(t)

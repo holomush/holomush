@@ -61,7 +61,7 @@ func (d *directColdLookup) LookupByID(ctx context.Context, id eventbus.EventID) 
 		codecName  string
 		dekRef     *int64
 		dekVersion *uint32
-		// events_audit.timestamp is BIGINT-ns post-gfo6 (INV-TS-1);
+		// events_audit.timestamp is BIGINT-ns post-gfo6 (INV-STORE-1);
 		// scan target must be pgnanos.Time. ts is unused downstream
 		// (env is built from envelope bytes), so this is a position
 		// placeholder for Scan's column-count alignment.
@@ -136,7 +136,7 @@ func insertEncryptedAuditRow(
 		return ulid.ULID{}, err
 	}
 
-	// timestamp is BIGINT-ns post-gfo6 (INV-TS-1).
+	// timestamp is BIGINT-ns post-gfo6 (INV-STORE-1).
 	_, execErr := pool.Exec(ctx, `
 		INSERT INTO events_audit
 		  (id, subject, type, timestamp, actor_kind, envelope, schema_ver,

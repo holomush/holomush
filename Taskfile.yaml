@@ -596,7 +596,7 @@ tasks:
         echo "AGENTS.md → CLAUDE.md symlink intact."
 
   lint:no-unixnano-in-repos:
-    desc: "Reject UnixNano() / time.Unix(0, ...) in repo packages outside pgnanos (INV-TS-2)"
+    desc: "Reject UnixNano() / time.Unix(0, ...) in repo packages outside pgnanos (INV-STORE-2)"
     cmds:
       - |
         set -euo pipefail
@@ -616,7 +616,7 @@ tasks:
         fi
 
   lint:no-microsecond-truncate:
-    desc: "Reject .Truncate(time.Microsecond) in Go code (INV-TS-3)"
+    desc: "Reject .Truncate(time.Microsecond) in Go code (INV-STORE-3)"
     cmds:
       - |
         set -euo pipefail
@@ -642,7 +642,7 @@ tasks:
         fi
 
   lint:no-timestamptz:
-    desc: "Reject new TIMESTAMPTZ/TIMESTAMP columns in post-gfo6 migrations (INV-TS-1)"
+    desc: "Reject new TIMESTAMPTZ/TIMESTAMP columns in post-gfo6 migrations (INV-STORE-1)"
     cmds:
       - |
         set -euo pipefail

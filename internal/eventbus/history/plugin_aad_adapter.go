@@ -28,7 +28,7 @@ import (
 // plugin-stored event failing AEAD tag-check on decrypt, because the
 // reconstructed AAD would no longer be byte-equal to the encrypt-side
 // AAD computed at publish time. The integration test
-// TestRoundTripPreservesAADWithSubMicrosecondNanos (INV-TS-5, formerly
+// TestRoundTripPreservesAADWithSubMicrosecondNanos (INV-STORE-5, formerly
 // INV-P7-16 per ADR holomush-f5h0) is the load-bearing guard.
 func AuditRowToEvent(row *pluginauditpb.AuditRow) *eventbusv1.Event {
 	if row == nil {

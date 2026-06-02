@@ -359,7 +359,7 @@ var _ = Describe("I-PRIV-3 / I-PRIV-4: detach/reattach preserves session floor a
 		// with the same type at unrelated timestamps).
 		//
 		// Post-holomush-gfo6 the entire pipeline preserves nanosecond precision
-		// end-to-end (INV-TS-1 BIGINT-ns columns + INV-TS-4 publisher does not
+		// end-to-end (INV-STORE-1 BIGINT-ns columns + INV-STORE-4 publisher does not
 		// truncate). The prior defensive microsecond floor-truncate is no
 		// longer needed — wall-clock floors compare against equal-precision
 		// event timestamps.
@@ -420,7 +420,7 @@ var _ = Describe("I-PRIV-1: new guest sees no pre-arrival location history", fun
 			To(Succeed(), "harness emit MUST succeed for the seed event")
 		guestA.Logout(ctx)
 
-		// INV-TS-6/INV-TS-7 (gfo6): ns-resolution timestamps + >= floor semantics
+		// INV-STORE-6/INV-STORE-7 (gfo6): ns-resolution timestamps + >= floor semantics
 		// make the prior µs tie-prevention gap unnecessary.
 
 		// Guest B connects (fresh) into the same location.
@@ -591,7 +591,7 @@ var _ = Describe("I-PRIV-2 (scene): scene events before join are invisible", fun
 		Expect(owner.EmitDirectEvent(ctx, sceneStream, "core-scenes:pose", prePayload)).
 			To(Succeed(), "pre-join seed event MUST publish")
 
-		// INV-TS-6/INV-TS-7 (gfo6): ns-resolution timestamps + >= floor semantics
+		// INV-STORE-6/INV-STORE-7 (gfo6): ns-resolution timestamps + >= floor semantics
 		// make the prior µs tie-prevention gap unnecessary.
 
 		// Joiner connects and joins the scene. JoinScene stamps the

@@ -64,7 +64,7 @@ func insertEncryptedAuditRow(
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	// timestamp is BIGINT-ns post-gfo6 (INV-TS-1).
+	// timestamp is BIGINT-ns post-gfo6 (INV-STORE-1).
 	_, err = pool.Exec(context.Background(), `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
@@ -96,7 +96,7 @@ func insertIdentityAuditRow(
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	// timestamp is BIGINT-ns post-gfo6 (INV-TS-1).
+	// timestamp is BIGINT-ns post-gfo6 (INV-STORE-1).
 	_, err = pool.Exec(context.Background(), `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,

@@ -709,7 +709,7 @@ func (s *Server) ReadBackAuditCount(_ context.Context) int {
 // auditRowToProto rebuilds the *pluginv1.AuditRow from a scene_log PluginAuditRow
 // field-for-field, mirroring plugins/core-scenes/publish_snapshot.go::
 // logRowToAuditRow so the AAD the host rebuilds (AuditRowToEvent + aad.Build) is
-// byte-equal to the encrypt-side AAD (INV-RB-4 / INV-TS-5).
+// byte-equal to the encrypt-side AAD (INV-RB-4 / INV-STORE-5).
 func auditRowToProto(r *PluginAuditRow) *pluginv1.AuditRow {
 	out := &pluginv1.AuditRow{
 		Id:        r.ID,

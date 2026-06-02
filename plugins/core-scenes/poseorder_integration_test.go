@@ -262,7 +262,7 @@ var _ = Describe("INV-P4-8: pose-order metadata is a function of scene_log", fun
 		Expect(*gotChar2.lastPoseSeq).To(Equal(*wantChar2.lastPoseSeq),
 			"INV-P4-8: rebuilt char2.last_pose_seq MUST equal maintained value")
 
-		// last_pose_at is BIGINT-ns; round-trip is bit-exact (INV-TS-1, INV-TS-2).
+		// last_pose_at is BIGINT-ns; round-trip is bit-exact (INV-STORE-1, INV-STORE-2).
 		Expect(gotChar1.lastPoseAt).NotTo(BeNil(),
 			"INV-P4-8: rebuilt char1.last_pose_at MUST be set")
 		Expect(gotChar2.lastPoseAt).NotTo(BeNil(),

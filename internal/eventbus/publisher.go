@@ -188,7 +188,7 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 		Subject: string(event.Subject),
 		Type:    string(event.Type),
 		// Full ns precision — BIGINT-ns column migration (gfo6) makes µs-truncation
-		// unnecessary; structural AAD byte-equality holds via INV-TS-4 / INV-TS-5
+		// unnecessary; structural AAD byte-equality holds via INV-STORE-4 / INV-STORE-5
 		// (supersedes former INV-P7-16 discipline-dependent guarantee).
 		Timestamp: timestamppb.New(event.Timestamp),
 		Actor:     ActorToProto(event.Actor),

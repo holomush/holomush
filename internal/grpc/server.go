@@ -1260,7 +1260,7 @@ func (s *CoreServer) dispatchDelivery(
 			"session_id", info.ID, "event_id", event.ID.String(), "error", getErr)
 		currentInfo = info
 	}
-	// Floor uses ns precision and >= semantics (INV-TS-6 / INV-TS-7,
+	// Floor uses ns precision and >= semantics (INV-STORE-6 / INV-STORE-7,
 	// gfo6 epic): publisher no longer truncates timestamps, so the
 	// scope-floor comparison runs at full time.Now() resolution.
 	floor := streamScopeFloor(currentInfo, string(event.Subject))

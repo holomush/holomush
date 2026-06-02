@@ -93,7 +93,7 @@ func TestValue(t *testing.T) {
 	}
 }
 
-// TestRoundTripPreservesSubMicrosecondNanoseconds pins INV-TS-2 (see
+// TestRoundTripPreservesSubMicrosecondNanoseconds pins INV-STORE-2 (see
 // internal/store/spec_meta_test.go cases slice). MUST remain a top-level
 // Test* function — the meta-test walks the AST for top-level decls,
 // not for t.Run subtests. Do not collapse into a table.

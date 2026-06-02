@@ -312,7 +312,7 @@ func (e *erroringSessionStore) Get(_ context.Context, _ string) (*session.Info, 
 }
 
 // TestDispatchDeliveryDropsEventEmittedInSameNanosecondAsArrival gates
-// INV-TS-6. The floor comparison MUST operate at nanosecond resolution.
+// INV-STORE-6. The floor comparison MUST operate at nanosecond resolution.
 // An event whose Timestamp is one nanosecond BELOW the floor
 // (LocationArrivedAt) MUST be filtered out by dispatchDelivery.
 //
@@ -343,12 +343,12 @@ func TestDispatchDeliveryDropsEventEmittedInSameNanosecondAsArrival(t *testing.T
 	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
 	require.NoError(t, err)
 	require.Len(t, stream.sent, 0,
-		"INV-TS-6: event one ns below floor MUST be filtered at dispatchDelivery")
+		"INV-STORE-6: event one ns below floor MUST be filtered at dispatchDelivery")
 	assert.Equal(t, 1, d.acks(),
 		"filtered event is ack'd (consumed, not forwarded)")
 }
 
-// TestDispatchDeliveryIncludesEventAtExactFloorNanosecond gates INV-TS-7.
+// TestDispatchDeliveryIncludesEventAtExactFloorNanosecond gates INV-STORE-7.
 // The floor MUST use >= semantics: an event whose Timestamp exactly equals
 // LocationArrivedAt MUST be INCLUDED in the visible window.
 //
@@ -375,7 +375,7 @@ func TestDispatchDeliveryIncludesEventAtExactFloorNanosecond(t *testing.T) {
 	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
 	require.NoError(t, err)
 	require.Len(t, stream.sent, 1,
-		"INV-TS-7: event at exact floor ns MUST be included (>= semantics)")
+		"INV-STORE-7: event at exact floor ns MUST be included (>= semantics)")
 	assert.Equal(t, 1, d.acks())
 }
 

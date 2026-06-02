@@ -1890,7 +1890,7 @@ var _ = Describe("SceneStore", func() {
 			sceneID := "scene-cascade-test-01"
 
 			// Insert a published_scenes row with all NOT NULL columns.
-			// initiated_at is BIGINT epoch-nanoseconds (INV-TS-1).
+			// initiated_at is BIGINT epoch-nanoseconds (INV-STORE-1).
 			_, err := store.pool.Exec(
 				ctx, `
 				INSERT INTO published_scenes
@@ -2401,7 +2401,7 @@ var _ = Describe("Publish store — ReadSceneLogForSnapshot", func() {
 		store := newTestStore()
 		subject := "events.main.scene.scene-snaplog-1.ic"
 
-		// scene_log.timestamp is BIGINT epoch-nanos (INV-TS-1, migration 000007).
+		// scene_log.timestamp is BIGINT epoch-nanos (INV-STORE-1, migration 000007).
 		// Ordering is by id ASC, so make the ids deterministically increasing:
 		// a strictly-monotonic time component with zero entropy guarantees
 		// insertion order == ORDER BY id ASC by construction, without depending

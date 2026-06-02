@@ -19,5 +19,5 @@
 //	    ..., pgnanos.From(time.Now()))
 //
 // See docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md
-// (INV-TS-1 through INV-TS-7) for the spec this package serves.
+// (INV-STORE-1 through INV-STORE-7) for the spec this package serves.
 package pgnanos

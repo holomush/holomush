@@ -19,7 +19,7 @@ import (
 	pluginauditpb "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
-// TestRoundTripPreservesAADWithSubMicrosecondNanos asserts INV-TS-5
+// TestRoundTripPreservesAADWithSubMicrosecondNanos asserts INV-STORE-5
 // (formerly INV-P7-16, superseded by ADR holomush-f5h0): byte-equal
 // AAD reconstruction across an ns-precise publisher AAD and an
 // ns-precise PG-BIGINT round-trip. Without this, EVERY sensitive
@@ -89,14 +89,14 @@ func TestRoundTripPreservesAADWithSubMicrosecondNanos(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, encryptSideAAD, reconstructedAAD,
-		"INV-TS-5: AAD reconstruction MUST be byte-equal to encrypt-side; "+
+		"INV-STORE-5: AAD reconstruction MUST be byte-equal to encrypt-side; "+
 			"a mismatch breaks AEAD tag-check on every sensitive plugin-stored event")
 
-	// INV-TS-5 reinforcement: the sub-µs nanosecond component survives the
+	// INV-STORE-5 reinforcement: the sub-µs nanosecond component survives the
 	// publish → DB → read → AAD-reconstruct round-trip at ns column resolution.
 	roundTripTs := reconstructedEvent.GetTimestamp().AsTime()
 	assert.Equal(t, 789, roundTripTs.Nanosecond()%1000,
-		"INV-TS-5: AAD round-trip MUST preserve sub-µs nanoseconds at ns column resolution")
+		"INV-STORE-5: AAD round-trip MUST preserve sub-µs nanoseconds at ns column resolution")
 }
 
 // TestRoundTripProducesByteEqualAAD_NilActor exercises the same
@@ -139,5 +139,5 @@ func TestRoundTripProducesByteEqualAAD_NilActor(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, encryptSideAAD, reconstructedAAD,
-		"INV-TS-5: nil-Actor round trip MUST also produce byte-equal AAD")
+		"INV-STORE-5: nil-Actor round trip MUST also produce byte-equal AAD")
 }

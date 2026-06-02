@@ -277,7 +277,7 @@ scopes:
     description: "Migration discipline, no-DELETE enforcement, spec compliance scanning"
     boundary: "Database invariants."
     # Family TS (nanosecond-timestamps migration discipline + pgnanos seam). See redesign spec §2.1.
-    status: pending
+    status: migrated
     origin_specs:
       - "docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md"
     owned_paths:
@@ -289,22 +289,39 @@ scopes:
       - "internal/store/spec_meta_test.go"
       - "internal/store/no_delete_grep_test.go"
     shared_files:
-      # STORE+CRYPTO: history files carrying TS + P7/RB (see CRYPTO.shared_files).
-      - "internal/eventbus/history/readback.go"
-      - "internal/eventbus/history/phase7_boundary_meta_test.go"
-      - "internal/eventbus/history/plugin_aad_reconstruction_test.go"
+      # All non-STORE-owned files carrying an INV-TS token (renamed to INV-STORE-N
+      # here): .go + plugin migration comments + Taskfile lint descs. They hold TS
+      # alongside other scopes' (CRYPTO/SCENE/EVENTBUS/PRIVACY) annotations. Survey .14.7.
+      - "Taskfile.yaml"
+      - "cmd/holomush/crypto_operator_validation_test.go"
+      - "internal/admin/readstream/cold_reader.go"
+      - "internal/admin/readstream/cold_reader_integration_test.go"
+      - "internal/eventbus/crypto/dek/manager_integration_test.go"
       - "internal/eventbus/history/cold_postgres.go"
       - "internal/eventbus/history/cold_postgres_integration_test.go"
+      - "internal/eventbus/history/phase7_boundary_meta_test.go"
       - "internal/eventbus/history/plugin_aad_adapter.go"
-      # STORE+EVENTBUS+CRYPTO: publisher (see CRYPTO.shared_files).
+      - "internal/eventbus/history/plugin_aad_reconstruction_test.go"
+      - "internal/eventbus/history/readback.go"
       - "internal/eventbus/publisher.go"
       - "internal/eventbus/publisher_test.go"
-      # STORE+SCENE: server.go + privacy_test + core-scenes publish_store (see SCENE.shared_files).
       - "internal/grpc/server.go"
-      - "test/integration/privacy/privacy_test.go"
-      - "plugins/core-scenes/publish_store.go"
-      # STORE+CRYPTO harness (TS in crypto integration harness).
+      - "internal/grpc/subscribe_loop_test.go"
+      - "internal/testsupport/holomushtest/server.go"
       - "internal/testsupport/integrationtest/crypto.go"
+      - "plugins/core-scenes/migrations/000007_timestamps_to_bigint.up.sql"
+      - "plugins/core-scenes/migrations/000008_scene_publication.up.sql"
+      - "plugins/core-scenes/poseorder_integration_test.go"
+      - "plugins/core-scenes/publish_service.go"
+      - "plugins/core-scenes/publish_snapshot.go"
+      - "plugins/core-scenes/publish_store.go"
+      - "plugins/core-scenes/store.go"
+      - "plugins/core-scenes/store_integration_test.go"
+      - "test/integration/crypto/harness_impl_test.go"
+      - "test/integration/crypto/rekey_inv39_test.go"
+      - "test/integration/crypto/rekey_sweep_ttl_test.go"
+      - "test/integration/plugin/binary_plugin_test.go"
+      - "test/integration/privacy/privacy_test.go"
 
   - name: INV-TELEMETRY
     description: "Logging discipline, trace context, metric naming, sloglint policy"
@@ -468,3 +485,140 @@ invariants:
     # Process/review invariant (// replaces: attestation chain); no in-code
     # annotation token to migrate.
     refs: []
+
+  # -- INV-STORE -- migrated from INV-TS-N (family TS, nanosecond-timestamps) (holomush-hz0v4.14.7).
+  # Origin: docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md (Invariants table).
+  # 1:1 number mapping preserved; NO INV-STORE-8 (legacy INV-TS-8 was dropped, spec successor is a P3 task).
+  # Refs span .go + shipped .up.sql migration comments + Taskfile.yaml lint descs (full survey).
+  # binding: pending across the scope -- verification backfill is holomush-hz0v4.11.
+  - id: INV-STORE-1
+    scope: INV-STORE
+    origin_spec: "docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md"
+    legacy: ["INV-TS-1@docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md"]
+    summary: "All persistent time values stored as BIGINT epoch-ns (UTC); no new TIMESTAMPTZ/TIMESTAMP columns."
+    binding: pending
+    refs:
+      - {file: "Taskfile.yaml", token: "INV-TS-1"}
+      - {file: "cmd/holomush/crypto_operator_validation_test.go", token: "INV-TS-1"}
+      - {file: "internal/admin/readstream/cold_reader.go", token: "INV-TS-1"}
+      - {file: "internal/admin/readstream/cold_reader_integration_test.go", token: "INV-TS-1"}
+      - {file: "internal/eventbus/crypto/dek/manager_integration_test.go", token: "INV-TS-1"}
+      - {file: "internal/eventbus/history/cold_postgres_integration_test.go", token: "INV-TS-1"}
+      - {file: "internal/pgnanos/doc.go", token: "INV-TS-1"}
+      - {file: "internal/store/migrate_inv_ts_integration_test.go", token: "INV-TS-1"}
+      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.up.sql", token: "INV-TS-1"}
+      - {file: "internal/store/migrations/000041_auth_timestamps_to_bigint.up.sql", token: "INV-TS-1"}
+      - {file: "internal/store/migrations/000042_world_timestamps_to_bigint.up.sql", token: "INV-TS-1"}
+      - {file: "internal/store/migrations/000043_totp_misc_timestamps_to_bigint.up.sql", token: "INV-TS-1"}
+      - {file: "internal/store/migrations/000044_pregfo6_gap_timestamps_to_bigint.up.sql", token: "INV-TS-1"}
+      - {file: "internal/store/spec_meta_test.go", token: "INV-TS-1"}
+      - {file: "internal/testsupport/holomushtest/server.go", token: "INV-TS-1"}
+      - {file: "plugins/core-scenes/migrations/000007_timestamps_to_bigint.up.sql", token: "INV-TS-1"}
+      - {file: "plugins/core-scenes/migrations/000008_scene_publication.up.sql", token: "INV-TS-1"}
+      - {file: "plugins/core-scenes/poseorder_integration_test.go", token: "INV-TS-1"}
+      - {file: "plugins/core-scenes/publish_store.go", token: "INV-TS-1"}
+      - {file: "plugins/core-scenes/store.go", token: "INV-TS-1"}
+      - {file: "plugins/core-scenes/store_integration_test.go", token: "INV-TS-1"}
+      - {file: "test/integration/crypto/harness_impl_test.go", token: "INV-TS-1"}
+      - {file: "test/integration/crypto/rekey_inv39_test.go", token: "INV-TS-1"}
+      - {file: "test/integration/crypto/rekey_sweep_ttl_test.go", token: "INV-TS-1"}
+      - {file: "test/integration/plugin/binary_plugin_test.go", token: "INV-TS-1"}
+      - {file: "test/integration/privacy/privacy_test.go", token: "INV-TS-1"}
+  - id: INV-STORE-2
+    scope: INV-STORE
+    origin_spec: "docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md"
+    legacy: ["INV-TS-2@docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md"]
+    summary: "pgnanos.Time is the canonical scan/insert seam between time.Time and BIGINT epoch-ns; no int64<->time.Time arithmetic
+      outside pgnanos."
+    binding: pending
+    refs:
+      - {file: "Taskfile.yaml", token: "INV-TS-2"}
+      - {file: "internal/pgnanos/pgnanos_test.go", token: "INV-TS-2"}
+      - {file: "internal/store/spec_meta_test.go", token: "INV-TS-2"}
+      - {file: "plugins/core-scenes/poseorder_integration_test.go", token: "INV-TS-2"}
+      - {file: "plugins/core-scenes/publish_service.go", token: "INV-TS-2"}
+  - id: INV-STORE-3
+    scope: INV-STORE
+    origin_spec: "docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md"
+    legacy: ["INV-TS-3@docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md"]
+    summary: "Application code (production + tests) must not Truncate(time.Microsecond) on any time.Time round-tripping through
+      PG."
+    binding: pending
+    refs:
+      - {file: "Taskfile.yaml", token: "INV-TS-3"}
+      - {file: "internal/pgnanos/pgnanos.go", token: "INV-TS-3"}
+      - {file: "internal/store/lint_meta_test.go", token: "INV-TS-3"}
+      - {file: "internal/store/spec_meta_test.go", token: "INV-TS-3"}
+  - id: INV-STORE-4
+    scope: INV-STORE
+    origin_spec: "docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md"
+    legacy: ["INV-TS-4@docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md"]
+    summary: "publisher.Publish does not truncate event.Timestamp before AAD/envelope; the on-wire timestamp carries full
+      nanosecond precision."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/publisher.go", token: "INV-TS-4"}
+      - {file: "internal/eventbus/publisher_test.go", token: "INV-TS-4"}
+      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.up.sql", token: "INV-TS-4"}
+      - {file: "internal/store/spec_meta_test.go", token: "INV-TS-4"}
+      - {file: "test/integration/privacy/privacy_test.go", token: "INV-TS-4"}
+  - id: INV-STORE-5
+    scope: INV-STORE
+    origin_spec: "docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md"
+    legacy: ["INV-TS-5@docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md"]
+    summary: "AAD round-trip publish->persist->read->reconstruct is byte-equal at full nanosecond resolution (strengthens
+      former INV-P7-16)."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/cold_postgres.go", token: "INV-TS-5"}
+      - {file: "internal/eventbus/history/phase7_boundary_meta_test.go", token: "INV-TS-5"}
+      - {file: "internal/eventbus/history/plugin_aad_adapter.go", token: "INV-TS-5"}
+      - {file: "internal/eventbus/history/plugin_aad_reconstruction_test.go", token: "INV-TS-5"}
+      - {file: "internal/eventbus/history/readback.go", token: "INV-TS-5"}
+      - {file: "internal/eventbus/publisher.go", token: "INV-TS-5"}
+      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.up.sql", token: "INV-TS-5"}
+      - {file: "internal/store/spec_meta_test.go", token: "INV-TS-5"}
+      - {file: "internal/testsupport/integrationtest/crypto.go", token: "INV-TS-5"}
+      - {file: "plugins/core-scenes/migrations/000007_timestamps_to_bigint.up.sql", token: "INV-TS-5"}
+      - {file: "plugins/core-scenes/publish_snapshot.go", token: "INV-TS-5"}
+      - {file: "plugins/core-scenes/publish_store.go", token: "INV-TS-5"}
+  - id: INV-STORE-6
+    scope: INV-STORE
+    origin_spec: "docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md"
+    legacy: ["INV-TS-6@docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md"]
+    summary: "Privacy/scope floor comparisons operate at nanosecond resolution; the dispatchDelivery Truncate(microsecond)
+      is deleted, not stubbed."
+    binding: pending
+    refs:
+      - {file: "internal/grpc/server.go", token: "INV-TS-6"}
+      - {file: "internal/grpc/subscribe_loop_test.go", token: "INV-TS-6"}
+      - {file: "internal/store/spec_meta_test.go", token: "INV-TS-6"}
+      - {file: "test/integration/privacy/privacy_test.go", token: "INV-TS-6"}
+  - id: INV-STORE-7
+    scope: INV-STORE
+    origin_spec: "docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md"
+    legacy: ["INV-TS-7@docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md"]
+    summary: "Sub-microsecond timestamp ties resolve deterministically; the privacy floor uses >= so an event at the exact
+      floor ns is included."
+    binding: pending
+    refs:
+      - {file: "internal/grpc/server.go", token: "INV-TS-7"}
+      - {file: "internal/grpc/subscribe_loop_test.go", token: "INV-TS-7"}
+      - {file: "internal/pgnanos/doc.go", token: "INV-TS-7"}
+      - {file: "internal/store/spec_meta_test.go", token: "INV-TS-7"}
+      - {file: "test/integration/privacy/privacy_test.go", token: "INV-TS-7"}
+  - id: INV-STORE-9
+    scope: INV-STORE
+    origin_spec: "docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md"
+    legacy: ["INV-TS-9@docs/superpowers/specs/2026-05-22-nanosecond-timestamps-design.md"]
+    summary: "TIMESTAMPTZ->BIGINT conversion migrations saturate out-of-range / +/-infinity to int64 bounds, pass NULL through,
+      and convert in-range values exactly (numeric arithmetic)."
+    binding: pending
+    refs:
+      - {file: "internal/store/migrate_clamp_integration_test.go", token: "INV-TS-9"}
+      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.up.sql", token: "INV-TS-9"}
+      - {file: "internal/store/migrations/000041_auth_timestamps_to_bigint.up.sql", token: "INV-TS-9"}
+      - {file: "internal/store/migrations/000042_world_timestamps_to_bigint.up.sql", token: "INV-TS-9"}
+      - {file: "internal/store/migrations/000043_totp_misc_timestamps_to_bigint.up.sql", token: "INV-TS-9"}
+      - {file: "internal/store/migrations/000044_pregfo6_gap_timestamps_to_bigint.up.sql", token: "INV-TS-9"}
+      - {file: "internal/store/spec_meta_test.go", token: "INV-TS-9"}

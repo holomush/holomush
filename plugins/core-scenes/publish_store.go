@@ -605,10 +605,10 @@ func (s *SceneStore) ExtendMaxPublishAttempts(ctx context.Context, sceneID strin
 // Timestamp and ActorKind are carried because the host read-back decrypt
 // primitive rebuilds the per-event AAD from the row's authoritative fields
 // (id/subject/type/timestamp/actor.kind/actor.id/codec/dek_ref/dek_version) via
-// AuditRowToEvent + aad.Build — the INV-TS-5 byte-equal round-trip. A LogRow
+// AuditRowToEvent + aad.Build — the INV-STORE-5 byte-equal round-trip. A LogRow
 // missing these fields would reconstruct a non-matching AAD and fail AEAD
 // tag-check on every sensitive row (read-back design INV-RB-4). Timestamp is the
-// BIGINT epoch-ns scene_log column (INV-TS-1).
+// BIGINT epoch-ns scene_log column (INV-STORE-1).
 type LogRow struct {
 	ID         []byte
 	Type       string
@@ -760,7 +760,7 @@ func (s *SceneStore) MarkPublished(ctx context.Context, tx pgx.Tx, id string, in
 //
 // nowNs is supplied by the Go-clock caller as epoch nanoseconds
 // rather than using SQL now() so the comparison is always against the same Go
-// clock used to write initiated_at (INV-TS-1, noremoteclockcompare gorule).
+// clock used to write initiated_at (INV-STORE-1, noremoteclockcompare gorule).
 //
 // vote_window is an INTERVAL stored as microseconds; it is converted to
 // nanoseconds inline: EXTRACT(EPOCH FROM vote_window)::BIGINT * 1000000000.

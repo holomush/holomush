@@ -106,7 +106,7 @@ func (c *ColdReader) Read(ctx context.Context, q ColdQuery) ([]ColdRow, error) {
 			idBytes    []byte
 			subjectStr string
 			eventType  string
-			// events_audit.timestamp is BIGINT-ns post-gfo6 (INV-TS-1).
+			// events_audit.timestamp is BIGINT-ns post-gfo6 (INV-STORE-1).
 			ts           pgnanos.Time
 			actorKindStr string
 			actorIDBytes []byte

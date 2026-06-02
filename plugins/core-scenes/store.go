@@ -363,7 +363,7 @@ func (s *SceneStore) IsMember(ctx context.Context, sceneID, characterID string) 
 // transitions cannot corrupt the state machine.
 //
 // Sets `state = 'ended'` and `ended_at = $2` (app-supplied `pgnanos.From(time.Now())`,
-// per INV-TS-1 BIGINT-ns seam) atomically and returns the resulting row via
+// per INV-STORE-1 BIGINT-ns seam) atomically and returns the resulting row via
 // Postgres RETURNING. Returns SCENE_NOT_FOUND if no row
 // matches the ID at all, or SCENE_TRANSITION_FORBIDDEN if the row exists
 // but is in a state that cannot be ended.

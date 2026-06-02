@@ -214,7 +214,7 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 			eventType  string
 			// ts is scanned for column-position alignment with the SELECT list
 			// only; Event.Timestamp is recovered from envelopeBytes via
-			// decodeColdRow's proto.Unmarshal (INV-TS-5 AAD byte-equality).
+			// decodeColdRow's proto.Unmarshal (INV-STORE-5 AAD byte-equality).
 			ts             pgnanos.Time
 			actorKindStr   string
 			actorIDBytes   []byte

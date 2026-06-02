@@ -18,7 +18,7 @@ import (
 	"github.com/holomush/holomush/test/testutil"
 )
 
-// INV-TS-9: The TIMESTAMPTZ→BIGINT (epoch-nanosecond) conversion migrations
+// INV-STORE-9: The TIMESTAMPTZ→BIGINT (epoch-nanosecond) conversion migrations
 // (000038, 000041, 000042, 000043, 000044) MUST NOT error on pre-existing
 // data outside the int64-nanosecond range or on ±infinity sentinels. Such
 // values saturate to the int64 bounds (max ≈ 2262-04-11, min ≈ 1677-09-21);
@@ -55,7 +55,7 @@ type convCase struct {
 	insertNull func(label string) string
 }
 
-var _ = Describe("INV-TS-9: TIMESTAMPTZ→BIGINT conversion saturates out-of-range and infinity to int64-ns bounds and preserves NULL", func() {
+var _ = Describe("INV-STORE-9: TIMESTAMPTZ→BIGINT conversion saturates out-of-range and infinity to int64-ns bounds and preserves NULL", func() {
 	// boundary rows: SQL literal → expected post-conversion BIGINT.
 	type boundaryRow struct {
 		label string
