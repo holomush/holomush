@@ -128,7 +128,7 @@ func (NoPlaintextReason) EnumDescriptor() ([]byte, []int) {
 
 // EventChannel identifies the destination channel for event delivery. This is
 // the canonical internal definition; webv1.EventChannel is kept in lockstep for
-// the web wire format (INV-GW-16).
+// the web wire format (INV-EVENTBUS-16).
 type EventChannel int32
 
 const (
@@ -756,8 +756,8 @@ type EventFrame struct {
 	Cursor []byte `protobuf:"bytes,8,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	// rendering is the cleartext rendering band, populated by RenderingPublisher
 	// at emit time. It MUST be present on every frame this server produces
-	// (INV-GW-2); the gateway treats absence as a contract violation (drops +
-	// metric + log per INV-GW-5).
+	// (INV-EVENTBUS-2); the gateway treats absence as a contract violation (drops +
+	// metric + log per INV-EVENTBUS-6).
 	Rendering *RenderingMetadata `protobuf:"bytes,9,opt,name=rendering,proto3" json:"rendering,omitempty"`
 	// metadata_only flags a delivery whose plaintext was withheld by the host's
 	// AuthGuard (Phase 3b decrypt path). When true, payload is empty bytes and the

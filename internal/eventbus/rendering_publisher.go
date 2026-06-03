@@ -74,7 +74,7 @@ func (p *RenderingPublisher) Publish(ctx context.Context, event Event) error {
 
 	// Stamp the App-Rendering NATS header (protojson form) so the audit
 	// projection can write events_audit.rendering without proto-decoding
-	// the envelope. INV-GW-15 enforces parity with event.Rendering.
+	// the envelope. INV-EVENTBUS-15 enforces parity with event.Rendering.
 	headerBytes, err := renderingJSONOpts.Marshal(RenderingToProto(event.Rendering))
 	if err != nil {
 		return oops.Code("EMIT_HEADER_MARSHAL_FAILED").
@@ -102,7 +102,7 @@ func (p *RenderingPublisher) Publish(ctx context.Context, event Event) error {
 	}
 	event.Headers["App-Rendering"] = string(headerBytes)
 
-	// Validate the rendering proto against protovalidate rules (INV-GW-4).
+	// Validate the rendering proto against protovalidate rules (INV-EVENTBUS-5).
 	if vErr := p.validateRendering(RenderingToProto(event.Rendering)); vErr != nil {
 		return oops.Code("EMIT_VALIDATION_FAILED").
 			With("event_type", string(event.Type)).

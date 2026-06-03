@@ -148,7 +148,7 @@ func NewSceneAuditStore(pool *pgxpool.Pool) *SceneAuditStore {
 // caller still Acks.
 //
 // dekRef / dekVersion are nil for identity-codec rows and non-nil for
-// AEAD-codec rows. The plugin stores the values opaquely (INV-P7-3); the
+// AEAD-codec rows. The plugin stores the values opaquely (INV-EVENTBUS-25); the
 // host owns interpretation.
 func (s *SceneAuditStore) Insert(
 	ctx context.Context,

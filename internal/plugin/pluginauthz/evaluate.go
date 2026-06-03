@@ -74,7 +74,7 @@ func ActorSubject(a core.Actor) string {
 		// Empty ID would trip access.PluginSubject's panic-on-empty guard; fail
 		// closed instead, matching this function's "" contract (and the
 		// ActorCharacter case above). Also keeps the colon ABAC-subject literal
-		// out of host code (the INV-ROPS-3 boundary).
+		// out of host code (the INV-EVENTBUS-19 boundary).
 		if a.ID == "" {
 			return ""
 		}

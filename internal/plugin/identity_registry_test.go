@@ -63,7 +63,7 @@ func (s *stubPluginRepo) SweepInactive(_ context.Context, _ int) ([]store.Plugin
 
 func newManagerForRegistryTest(t *testing.T, repo store.PluginRepo) *Manager {
 	t.Helper()
-	// NewManager enforces INV-GW-10: a VerbRegistry MUST be passed.
+	// NewManager enforces INV-EVENTBUS-11: a VerbRegistry MUST be passed.
 	mgr, err := NewManager(
 		t.TempDir(),
 		WithPluginRepo(repo),

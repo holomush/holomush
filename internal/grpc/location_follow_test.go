@@ -30,7 +30,7 @@ var _ WorldQuerier = (*world.Service)(nil)
 // testVerbRegistry returns a freshly-bootstrapped registry with the builtin
 // verbs (including location_state) registered. Used by the locationFollower
 // tests since buildLocationState now requires a non-nil registry to stamp
-// RenderingMetadata on synthetic events (per INV-GW-5 at internal/web/translate.go:42-60).
+// RenderingMetadata on synthetic events (per INV-EVENTBUS-6 at internal/web/translate.go:42-60).
 func testVerbRegistry(t *testing.T) *core.VerbRegistry {
 	t.Helper()
 	r, err := core.BootstrapVerbRegistry("test")
@@ -257,9 +257,9 @@ func TestLocationFollower_BuildLocationState(t *testing.T) {
 	assert.Equal(t, world.LocationStream(locID), ef.GetStream())
 
 	// holomush-4wdu: RenderingMetadata MUST be stamped on synthetic
-	// location_state events so the gateway's INV-GW-5 guard doesn't drop them.
+	// location_state events so the gateway's INV-EVENTBUS-6 guard doesn't drop them.
 	rendering := ef.GetRendering()
-	require.NotNil(t, rendering, "synthetic location_state MUST carry RenderingMetadata (INV-GW-5)")
+	require.NotNil(t, rendering, "synthetic location_state MUST carry RenderingMetadata (INV-EVENTBUS-6)")
 	assert.Equal(t, "state", rendering.GetCategory())
 	assert.Equal(t, "snapshot", rendering.GetFormat())
 	assert.Equal(t, corev1.EventChannel_EVENT_CHANNEL_STATE, rendering.GetDisplayTarget())
@@ -352,9 +352,9 @@ func TestSendSyntheticSendsLocationStateForCurrentLocation(t *testing.T) {
 	require.Len(t, stream.sent, 1)
 	assert.Equal(t, string(core.EventTypeLocationState), stream.sent[0].GetEvent().GetType())
 	// holomush-4wdu: synthetic location_state MUST carry RenderingMetadata
-	// (gateway drops nil-Rendering events per INV-GW-5).
+	// (gateway drops nil-Rendering events per INV-EVENTBUS-6).
 	require.NotNil(t, stream.sent[0].GetEvent().GetRendering(),
-		"synthetic location_state MUST carry RenderingMetadata (INV-GW-5)")
+		"synthetic location_state MUST carry RenderingMetadata (INV-EVENTBUS-6)")
 }
 
 // TestBuildLocationStateRendering_NilRegistryFailsClosed asserts the

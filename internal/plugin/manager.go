@@ -57,12 +57,12 @@ const (
 	CodeHostMissingConnProvider = "PLUGIN_HOST_MISSING_CONN_PROVIDER"
 
 	// CodeMissingVerbRegistry is returned by NewManager when no
-	// VerbRegistry has been configured via WithVerbRegistry. INV-GW-10.
+	// VerbRegistry has been configured via WithVerbRegistry. INV-EVENTBUS-11.
 	CodeMissingVerbRegistry = "MISSING_VERB_REGISTRY"
 )
 
 // ErrMissingVerbRegistry is returned by NewManager when no VerbRegistry has
-// been configured via WithVerbRegistry. INV-GW-10: every plugin manager MUST
+// been configured via WithVerbRegistry. INV-EVENTBUS-11: every plugin manager MUST
 // be constructed with a non-nil VerbRegistry so plugin-declared verbs and
 // host-owned event types resolve through a single shared source of truth.
 var ErrMissingVerbRegistry = oops.Code(CodeMissingVerbRegistry).
@@ -210,7 +210,7 @@ func (m *Manager) Registry() *ServiceRegistry {
 
 // NewManager creates a plugin manager.
 //
-// INV-GW-10: callers MUST supply a non-nil VerbRegistry via
+// INV-EVENTBUS-11: callers MUST supply a non-nil VerbRegistry via
 // WithVerbRegistry. Construction returns ErrMissingVerbRegistry when the
 // option is omitted so plugin-declared verbs always have a place to land.
 func NewManager(pluginsDir string, opts ...ManagerOption) (*Manager, error) {

@@ -34,7 +34,7 @@ type genericPayload struct {
 // for the web client. Reads rendering metadata from EventFrame.Rendering
 // (populated by core's RenderingPublisher at emit time).
 //
-// INV-GW-5: events arriving without rendering metadata are dropped at the
+// INV-EVENTBUS-6: events arriving without rendering metadata are dropped at the
 // gateway and counted via gatewaymetrics.DroppedNilRenderingTotal. A
 // non-zero counter indicates the core process's RenderingPublisher failed
 // to stamp rendering before publish, or a publisher path bypassed it.
@@ -50,7 +50,7 @@ func (h *Handler) translateEvent(ev *corev1.EventFrame) *webv1.GameEvent {
 	rendering := ev.GetRendering()
 	if rendering == nil {
 		slog.Error(
-			"web: dropping event with nil Rendering (INV-GW-5)",
+			"web: dropping event with nil Rendering (INV-EVENTBUS-6)",
 			"event_id", ev.GetId(),
 			"event_type", eventType,
 			"stream", ev.GetStream(),

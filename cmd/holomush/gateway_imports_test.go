@@ -18,7 +18,7 @@ import (
 // coreOnlyFiles are cmd/holomush files that legitimately import domain
 // packages because they are part of the core process entry point, not
 // the gateway. Every other .go file in cmd/holomush is treated as
-// gateway-side and held to INV-GW-1.
+// gateway-side and held to INV-EVENTBUS-1.
 var coreOnlyFiles = map[string]struct{}{
 	"core.go":                         {},
 	"core_test.go":                    {},
@@ -82,7 +82,7 @@ var forbidden = []string{
 	"github.com/holomush/holomush/internal/command",
 }
 
-// TestGatewayImportsAreOnlyProtocolTranslation is INV-GW-1. Gateway-side
+// TestGatewayImportsAreOnlyProtocolTranslation is INV-EVENTBUS-1. Gateway-side
 // files MUST NOT import domain packages. Core-process files are excluded
 // via coreOnlyFiles.
 func TestGatewayImportsAreOnlyProtocolTranslation(t *testing.T) {
@@ -93,7 +93,7 @@ func TestGatewayImportsAreOnlyProtocolTranslation(t *testing.T) {
 				packages.NeedTypes,
 			// Tests:true loads *_test.go files into pkg.Syntax so the import
 			// guard sees gateway-side test files (core_test.go, deps_test.go,
-			// sub_grpc_adapters_test.go) which would otherwise bypass INV-GW-1.
+			// sub_grpc_adapters_test.go) which would otherwise bypass INV-EVENTBUS-1.
 			Tests: true,
 		},
 		"github.com/holomush/holomush/cmd/holomush",

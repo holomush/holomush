@@ -48,3 +48,28 @@
   Origin SPEC is NOT migrated (spec line still says INV-58) — by design; legacy
   column in invariants.md/yaml records the link. Encountered: hz0v4.14.11
   (2026-06-02) — READY.
+
+- **Multi-family scope migration (EVENTBUS = GW+ROPS+P7-split) is the same shape
+  as single-family but with three legacy specs feeding one scope, and includes a
+  DENSE-with-letter-suffix renumber (GW-3a) (hz0v4.14.12 READY).** Verify per
+  family: GW 1..16 DENSE over spec set {1,2,3,3a,4,5,6,7,8,9,10,11,13,14,15,16}
+  (16 ids; GW-3a→EB-4 shifts 4..11 by one; GW-12 forward-declared, NOT migrated);
+  ROPS 1..8 → 16+N (offset by GW count); P7 SPLIT — only audit-half P7-3/4/10 →
+  25/26/27, P7-1,2,5-9,11-16 STAY as bare INV-P7-N for later CRYPTO/PLUGIN scopes.
+  Checks that held: (1) `awk` ref/legacy match scans give FALSE mismatches on
+  `3a` (splits at `INV-GW-3`), `refs: []`, and `,}` — hand-read the diff, don't
+  trust awk; (2) the per-family coverage test for GW was
+  `TestAllGatewayRegistryInvariantsHaveTests` living INSIDE
+  `internal/gateway_invariants/meta_test.go` (NOT a separate
+  `i_<old>_coverage_test.go`) — retired correctly, generic
+  `TestInvariantTokenBoundariesRejectFalsePositives` KEPT with documented
+  INV-GW-* regex fixtures (residual GW tokens there are intentional, not
+  unmigrated annotations); (3) global partition: 76 owned paths across all
+  scopes, 0 dup, 0 glob/concrete overlap — other scopes (PRIVACY/PRESENCE) may
+  list an EVENTBUS-owned file in THEIR shared_files (correct: shared = rides on
+  another scope's owned file); (4) generated pb.go/_pb.ts + proto sources must be
+  comment-only — filter `^[+-]` minus `(//|*|/*)` → empty. WATCH FOR: stray
+  trailing-comma edits to a NON-migrated scope's flow-mapping (saw `INV-60",}`
+  added to INV-CLUSTER's last ref) — valid YAML, renderer-inert, but out-of-scope
+  noise in a closed-world diff → Low non-blocking. Encountered: hz0v4.14.12
+  (2026-06-02) — READY.

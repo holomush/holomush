@@ -53,7 +53,7 @@ func TestStreamProvider_ResolveResource(t *testing.T) {
 			},
 		},
 		{
-			// INV-ROPS-7: a qualified non-location stream omits the location
+			// INV-EVENTBUS-23: a qualified non-location stream omits the location
 			// key entirely (not an empty-string sentinel) and witnesses false.
 			// assert.Equal on the full expected map verifies the key is absent.
 			name:       "qualified character stream omits location, witness false",

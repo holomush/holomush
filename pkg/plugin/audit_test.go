@@ -190,7 +190,7 @@ func TestAuditRowStructMirrorsProto(t *testing.T) {
 		"Codec", "Payload", "DEKRef", "DEKVersion", "SchemaVer",
 	}
 	require.Equal(t, len(wantFields), got.NumField(),
-		"AuditRow field count drifted from proto; INV-P7-4 broken")
+		"AuditRow field count drifted from proto; INV-EVENTBUS-26 broken")
 	for i, want := range wantFields {
 		assert.Equal(t, want, got.Field(i).Name)
 	}

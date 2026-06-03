@@ -1869,7 +1869,7 @@ func TestPluginCanReadBack(t *testing.T) {
 	assert.False(t, m.PluginCanReadBack("other", "scene_pose"), "wrong plugin")
 }
 
-// TestNewManagerRequiresVerbRegistry pins INV-GW-10: every plugin manager
+// TestNewManagerRequiresVerbRegistry pins INV-EVENTBUS-11: every plugin manager
 // MUST be constructed with a non-nil VerbRegistry. Omitting the option
 // returns ErrMissingVerbRegistry rather than silently skipping verb
 // registration.

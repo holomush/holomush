@@ -125,11 +125,11 @@ func listSceneLogDekColumns(t *testing.T, pool *pgxpool.Pool, schema string) []s
 	return present
 }
 
-// Phase 7 plugin migration standalone — INV-P7-3 + INV-P7-10. Verifies
+// Phase 7 plugin migration standalone — INV-EVENTBUS-25 + INV-EVENTBUS-27. Verifies
 // that migration 000005 adds dek_ref + dek_version on top of the
 // pre-existing migrations 1-4 in isolation, and that re-applying it is
 // a no-op (idempotency via ADD COLUMN IF NOT EXISTS).
-var _ = Describe("Phase 7 plugin migration standalone (INV-P7-3, INV-P7-10)", func() {
+var _ = Describe("Phase 7 plugin migration standalone (INV-EVENTBUS-25, INV-EVENTBUS-27)", func() {
 	It("adds dek_ref + dek_version on migration 5 and is idempotent", func() {
 		const schema = "plugin_core_scenes_test"
 		pool := pluginMigrationPool(suiteT, schema)
@@ -147,14 +147,14 @@ var _ = Describe("Phase 7 plugin migration standalone (INV-P7-3, INV-P7-10)", fu
 
 		got := listSceneLogDekColumns(suiteT, pool, schema)
 		Expect(got).To(Equal([]string{"dek_ref", "dek_version"}),
-			"INV-P7-3: scene_log MUST have dek_ref + dek_version after migration 5")
+			"INV-EVENTBUS-25: scene_log MUST have dek_ref + dek_version after migration 5")
 
 		// Idempotency: re-applying migration 5 is a no-op (CREATE INDEX IF
 		// NOT EXISTS + ADD COLUMN IF NOT EXISTS).
 		applyPluginMigrationN(suiteT, pool, migrationsDirCoreScenes, schema, 5)
 		got = listSceneLogDekColumns(suiteT, pool, schema)
 		Expect(got).To(Equal([]string{"dek_ref", "dek_version"}),
-			"INV-P7-10: re-applying migration 5 MUST be idempotent")
+			"INV-EVENTBUS-27: re-applying migration 5 MUST be idempotent")
 	})
 })
 
@@ -162,11 +162,11 @@ var _ = Describe("Phase 7 plugin migration standalone (INV-P7-3, INV-P7-10)", fu
 // plugin migration sequence (1..N), scene_log carries both columns with
 // the expected SQL types (BIGINT for dek_ref, INTEGER for dek_version).
 //
-// INV-P7-3 cross-reference: this spec is the named carrier for the
+// INV-EVENTBUS-25 cross-reference: this spec is the named carrier for the
 // invariant; the phase7_boundary_meta_test.go drift detector maps the
 // invariant to the suite entry TestBinaryPlugin (Ginkgo Describes are
 // not top-level *testing.T funcs).
-var _ = Describe("Scene log has DEK columns (INV-P7-3)", func() {
+var _ = Describe("Scene log has DEK columns (INV-EVENTBUS-25)", func() {
 	It("has bigint dek_ref + integer dek_version after full migration sequence", func() {
 		const schema = "plugin_core_scenes_full"
 		pool := pluginMigrationPool(suiteT, schema)

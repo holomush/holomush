@@ -48,7 +48,7 @@ const (
 	// EVENT_CHANNEL_BOTH routes the event to the terminal AND the state
 	// surfaces simultaneously.
 	EventChannel_EVENT_CHANNEL_BOTH EventChannel = 3
-	// EVENT_CHANNEL_AUDIT_ONLY mirrors corev1.EventChannel for INV-GW-16
+	// EVENT_CHANNEL_AUDIT_ONLY mirrors corev1.EventChannel for INV-EVENTBUS-16
 	// lockstep parity. These events are dropped at the gRPC Subscribe
 	// boundary and MUST NOT appear on the web wire format in practice.
 	EventChannel_EVENT_CHANNEL_AUDIT_ONLY EventChannel = 4
@@ -583,7 +583,7 @@ func (x *StreamEventsRequest) GetSessionId() string {
 // for direct display by the client. The gateway derives every field from the
 // core EventFrame and its RenderingMetadata in
 // internal/web/translate.go::translateEvent; events lacking rendering metadata
-// are dropped at the gateway (INV-GW-5) and never reach this message.
+// are dropped at the gateway (INV-EVENTBUS-6) and never reach this message.
 type GameEvent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// type is the event-type discriminator (e.g. "say", "pose", "arrive",

@@ -35,7 +35,7 @@ func dotStyleCharacter(charID string) string {
 
 // TestStreamClassifiersNonCollision asserts the dot-only classifiers
 // (isPrivateStream / isSceneStream / isLocationStream) partition qualified
-// subjects correctly and reject every colon-style legacy form (INV-ROPS-5).
+// subjects correctly and reject every colon-style legacy form (INV-EVENTBUS-21).
 func TestStreamClassifiersNonCollision(t *testing.T) {
 	cases := []struct {
 		name         string
@@ -252,11 +252,11 @@ func TestStreamToFocusKey(t *testing.T) {
 	}
 }
 
-// TestRoleSplitCharacterStreamDotABACSubjectColon pins INV-ROPS-6: the two
+// TestRoleSplitCharacterStreamDotABACSubjectColon pins INV-EVENTBUS-22: the two
 // roles for a character ID are now distinct package boundaries with distinct
 // delimiters. The STREAM builder (world.CharacterStream) is dot-relative; the
 // ABAC SUBJECT builder (access.CharacterSubject) is colon. They MUST NOT
-// collapse to the same form — that distinction is what lets INV-ROPS-3's scan
+// collapse to the same form — that distinction is what lets INV-EVENTBUS-19's scan
 // allowlist colon literals only when they're ABAC-marked.
 func TestRoleSplitCharacterStreamDotABACSubjectColon(t *testing.T) {
 	id := ulid.MustParse("01ARZ3NDEKTSV4RRFFQ69G5FAV")

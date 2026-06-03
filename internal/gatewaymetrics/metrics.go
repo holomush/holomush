@@ -16,7 +16,7 @@ import (
 
 // DroppedNilRenderingTotal counts events the gateway dropped because
 // EventFrame.Rendering was nil. A non-zero value indicates an upstream
-// invariant violation (INV-GW-5): the core process's RenderingPublisher
+// invariant violation (INV-EVENTBUS-6): the core process's RenderingPublisher
 // failed to stamp rendering metadata before publish, or a publisher
 // path bypassed it.
 //
@@ -28,7 +28,7 @@ var DroppedNilRenderingTotal = promauto.NewCounterVec(
 		Namespace: "holomush",
 		Subsystem: "gateway",
 		Name:      "dropped_nil_rendering_total",
-		Help:      "Number of events dropped at the gateway because Rendering was nil (INV-GW-5 violation upstream).",
+		Help:      "Number of events dropped at the gateway because Rendering was nil (INV-EVENTBUS-6 violation upstream).",
 	},
 	[]string{"surface", "event_type"},
 )

@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRegisterBuiltinTypesIsUnexported is INV-GW-11. RegisterBuiltinTypes
+// TestRegisterBuiltinTypesIsUnexported is INV-EVENTBUS-12. RegisterBuiltinTypes
 // MUST NOT be a public symbol. BootstrapVerbRegistry is the only public
 // path that returns a seeded registry.
 func TestRegisterBuiltinTypesIsUnexported(t *testing.T) {
@@ -32,7 +32,7 @@ func TestRegisterBuiltinTypesIsUnexported(t *testing.T) {
 		name := fn.Name.Name
 		// RegisterBuiltinTypes (uppercase) must not exist.
 		if name == "RegisterBuiltinTypes" {
-			t.Errorf("RegisterBuiltinTypes is exported but MUST be unexported (INV-GW-11)")
+			t.Errorf("RegisterBuiltinTypes is exported but MUST be unexported (INV-EVENTBUS-12)")
 		}
 		// Public seeded constructor must exist.
 		if name == "BootstrapVerbRegistry" {
@@ -42,5 +42,5 @@ func TestRegisterBuiltinTypesIsUnexported(t *testing.T) {
 		}
 	}
 	require.True(t, foundBootstrapVerbRegistry,
-		"BootstrapVerbRegistry must exist as a public seeded-registry constructor (INV-GW-11)")
+		"BootstrapVerbRegistry must exist as a public seeded-registry constructor (INV-EVENTBUS-12)")
 }

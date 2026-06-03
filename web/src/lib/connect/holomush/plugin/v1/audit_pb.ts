@@ -113,7 +113,7 @@ export type AuditRow = Message<"holomush.plugin.v1.AuditRow"> & {
    * dek_version is the 1-based rotation counter of the DEK at the time
    * of encryption, stored for key-rotation audit. Absent for
    * identity-codec rows; MUST be present for AEAD-codec rows alongside
-   * dek_ref (INV-P7-3).
+   * dek_ref (INV-EVENTBUS-25).
    *
    * @generated from field: optional uint32 dek_version = 9;
    */

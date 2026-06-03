@@ -302,8 +302,8 @@ export type EventFrame = Message<"holomush.core.v1.EventFrame"> & {
   /**
    * rendering is the cleartext rendering band, populated by RenderingPublisher
    * at emit time. It MUST be present on every frame this server produces
-   * (INV-GW-2); the gateway treats absence as a contract violation (drops +
-   * metric + log per INV-GW-5).
+   * (INV-EVENTBUS-2); the gateway treats absence as a contract violation (drops +
+   * metric + log per INV-EVENTBUS-6).
    *
    * @generated from field: holomush.core.v1.RenderingMetadata rendering = 9;
    */
@@ -2166,7 +2166,7 @@ export const NoPlaintextReasonSchema: GenEnum<NoPlaintextReason> = /*@__PURE__*/
 /**
  * EventChannel identifies the destination channel for event delivery. This is
  * the canonical internal definition; webv1.EventChannel is kept in lockstep for
- * the web wire format (INV-GW-16).
+ * the web wire format (INV-EVENTBUS-16).
  *
  * @generated from enum holomush.core.v1.EventChannel
  */

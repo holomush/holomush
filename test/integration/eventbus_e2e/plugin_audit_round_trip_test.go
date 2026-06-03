@@ -42,7 +42,7 @@ func (s *dekBindingStubE2E) Current(_ context.Context, _ string) (string, error)
 //   - The plugin row's payload bytes are byte-equal to the bus envelope
 //     payload (INV-P7-6: plugin storage MUST mirror the bus byte-for-byte).
 //   - The plugin row carries dek_ref + dek_version populated from the
-//     bus headers (INV-P7-3 column shape, INV-P7-1 wire shape).
+//     bus headers (INV-EVENTBUS-25 column shape, INV-P7-1 wire shape).
 var _ = Describe("Scene log preserves ciphertext and audit headers (INV-P7-6, INV-P7-12)", func() {
 	It("plugin scene_log row is ciphertext byte-equal to bus envelope payload", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -151,7 +151,7 @@ var _ = Describe("Scene log preserves ciphertext and audit headers (INV-P7-6, IN
 			"INV-P7-12: plugin row MUST hold ciphertext for sensitive events")
 		Expect(pluginRow.payload).NotTo(BeEmpty())
 
-		// INV-P7-3: dek_ref + dek_version present.
+		// INV-EVENTBUS-25: dek_ref + dek_version present.
 		Expect(pluginRow.dekRef).NotTo(BeNil())
 		Expect(pluginRow.dekVersion).NotTo(BeNil())
 
