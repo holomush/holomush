@@ -4,7 +4,7 @@
 -- Phase 4 pose-order metadata + idle-nudge threshold per holomush-5rh.13
 -- spec §9. Maintained transactionally by the audit consumer on each
 -- scene_pose insertion (see holomush-5rh.13.7 / .8 for the update path).
--- INV-P4-8 pins rebuild equivalence with documented recovery SQL.
+-- INV-SCENE-8 pins rebuild equivalence with documented recovery SQL.
 
 -- Per-scene monotonic pose counter. Incremented on each scene_pose audit
 -- row insert via SceneAuditStore.InsertScenePose.

@@ -50,7 +50,7 @@ func readParticipantMeta(ctx context.Context, pool *pgxpool.Pool, sceneID, chara
 }
 
 // rebuildMetadataFromSceneLog re-derives pose-order metadata purely from
-// scene_log scene_pose rows. This is the INV-P4-8 recovery path: if
+// scene_log scene_pose rows. This is the INV-SCENE-8 recovery path: if
 // maintained metadata (total_pose_count, last_pose_at, last_pose_seq)
 // drifts due to operator intervention or a future bug, reading scene_log
 // and recomputing in Go produces identical state.
@@ -129,8 +129,8 @@ func rebuildMetadataFromSceneLog(ctx context.Context, pool *pgxpool.Pool, sceneI
 	}
 }
 
-var _ = Describe("INV-P4-8: pose-order metadata is a function of scene_log", func() {
-	// INV-P4-8: scenes.total_pose_count + scene_participants.last_pose_at /
+var _ = Describe("INV-SCENE-8: pose-order metadata is a function of scene_log", func() {
+	// INV-SCENE-8: scenes.total_pose_count + scene_participants.last_pose_at /
 	// last_pose_seq are a deterministic function of scene_log scene_pose rows.
 	// After tampering with the maintained metadata (simulating operator drift),
 	// a rebuild that re-reads scene_log MUST produce identical state to what
@@ -138,10 +138,10 @@ var _ = Describe("INV-P4-8: pose-order metadata is a function of scene_log", fun
 	//
 	// This pins the defense-in-depth guarantee: if maintained metadata drifts
 	// (operator intervention, future bug), the canonical truth is scene_log
-	// and a rebuild produces identical state. Supports INV-P4-10 (transactional
+	// and a rebuild produces identical state. Supports INV-SCENE-10 (transactional
 	// consistency is not the only guard; the event log is the source of truth).
 
-	It("rebuilds maintained metadata identically after tamper (INV-P4-8)", func() {
+	It("rebuilds maintained metadata identically after tamper (INV-SCENE-8)", func() {
 		store := newTestStore()
 		audit := NewSceneAuditStore(store.Pool())
 		ctx := context.Background()
@@ -160,7 +160,7 @@ var _ = Describe("INV-P4-8: pose-order metadata is a function of scene_log", fun
 
 		// Setup: create scene with char1 as owner; add char2 as member.
 		sceneRow := &SceneRow{
-			ID: sceneID, Title: "INV-P4-8 Rebuild Test", OwnerID: char1ID,
+			ID: sceneID, Title: "INV-SCENE-8 Rebuild Test", OwnerID: char1ID,
 			State:           string(SceneStateActive),
 			PoseOrder:       string(PoseOrderModeFree),
 			Visibility:      string(SceneVisibilityOpen),
@@ -244,32 +244,32 @@ var _ = Describe("INV-P4-8: pose-order metadata is a function of scene_log", fun
 		rebuildMetadataFromSceneLog(ctx, store.Pool(), sceneID)
 
 		// Phase 4: assert rebuilt state matches Phase 1 capture exactly.
-		// INV-P4-8: metadata is a deterministic function of scene_log.
+		// INV-SCENE-8: metadata is a deterministic function of scene_log.
 		gotTotal := readTotalPoseCount(ctx, store.Pool(), sceneID)
 		gotChar1 := readParticipantMeta(ctx, store.Pool(), sceneID, char1ID)
 		gotChar2 := readParticipantMeta(ctx, store.Pool(), sceneID, char2ID)
 
 		Expect(gotTotal).To(Equal(wantTotal),
-			"INV-P4-8: rebuilt total_pose_count MUST equal maintained value")
+			"INV-SCENE-8: rebuilt total_pose_count MUST equal maintained value")
 
 		Expect(gotChar1.lastPoseSeq).NotTo(BeNil(),
-			"INV-P4-8: rebuilt char1.last_pose_seq MUST be set")
+			"INV-SCENE-8: rebuilt char1.last_pose_seq MUST be set")
 		Expect(*gotChar1.lastPoseSeq).To(Equal(*wantChar1.lastPoseSeq),
-			"INV-P4-8: rebuilt char1.last_pose_seq MUST equal maintained value")
+			"INV-SCENE-8: rebuilt char1.last_pose_seq MUST equal maintained value")
 
 		Expect(gotChar2.lastPoseSeq).NotTo(BeNil(),
-			"INV-P4-8: rebuilt char2.last_pose_seq MUST be set")
+			"INV-SCENE-8: rebuilt char2.last_pose_seq MUST be set")
 		Expect(*gotChar2.lastPoseSeq).To(Equal(*wantChar2.lastPoseSeq),
-			"INV-P4-8: rebuilt char2.last_pose_seq MUST equal maintained value")
+			"INV-SCENE-8: rebuilt char2.last_pose_seq MUST equal maintained value")
 
 		// last_pose_at is BIGINT-ns; round-trip is bit-exact (INV-STORE-1, INV-STORE-2).
 		Expect(gotChar1.lastPoseAt).NotTo(BeNil(),
-			"INV-P4-8: rebuilt char1.last_pose_at MUST be set")
+			"INV-SCENE-8: rebuilt char1.last_pose_at MUST be set")
 		Expect(gotChar2.lastPoseAt).NotTo(BeNil(),
-			"INV-P4-8: rebuilt char2.last_pose_at MUST be set")
+			"INV-SCENE-8: rebuilt char2.last_pose_at MUST be set")
 		Expect(gotChar1.lastPoseAt.Time().Equal(wantChar1.lastPoseAt.Time())).To(BeTrue(),
-			"INV-P4-8: rebuilt char1.last_pose_at MUST equal maintained value at ns precision")
+			"INV-SCENE-8: rebuilt char1.last_pose_at MUST equal maintained value at ns precision")
 		Expect(gotChar2.lastPoseAt.Time().Equal(wantChar2.lastPoseAt.Time())).To(BeTrue(),
-			"INV-P4-8: rebuilt char2.last_pose_at MUST equal maintained value at ns precision")
+			"INV-SCENE-8: rebuilt char2.last_pose_at MUST equal maintained value at ns precision")
 	})
 })

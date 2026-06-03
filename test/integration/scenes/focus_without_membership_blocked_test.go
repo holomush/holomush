@@ -20,7 +20,7 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
-// INV-P5-1 (FocusMemberships gate): SetConnectionFocus on a scene-kind
+// INV-SCENE-14 (FocusMemberships gate): SetConnectionFocus on a scene-kind
 // focusKey MUST be rejected with FOCUS_WITHOUT_MEMBERSHIP when the session's
 // FocusMemberships does not contain the target scene. After JoinFocus adds the
 // membership, the same SetConnectionFocus call MUST succeed.
@@ -46,9 +46,9 @@ import (
 // required: the invariant lives entirely in the session-store mutation path,
 // not in the eventbus.
 //
-// Spec: docs/superpowers/specs/2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md §10, INV-P5-1.
+// Spec: docs/superpowers/specs/2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md §10, INV-SCENE-14.
 // Bead: holomush-5rh.14.24.
-var _ = Describe("INV-P5-1: focus without membership blocked", func() {
+var _ = Describe("INV-SCENE-14: focus without membership blocked", func() {
 	It("SetConnectionFocus fails without membership, succeeds after JoinFocus", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		DeferCleanup(cancel)
@@ -93,7 +93,7 @@ var _ = Describe("INV-P5-1: focus without membership blocked", func() {
 		})).To(Succeed())
 
 		// ----------------------------------------------------------------
-		// Step 3 — INV-P5-1 FAIL assertion.
+		// Step 3 — INV-SCENE-14 FAIL assertion.
 		//
 		// SetConnectionFocus with a scene focusKey while FocusMemberships
 		// is empty MUST return FOCUS_WITHOUT_MEMBERSHIP.  No state must
@@ -102,19 +102,19 @@ var _ = Describe("INV-P5-1: focus without membership blocked", func() {
 		focusKey := &session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneID}
 		_, setErr := coord.SetConnectionFocus(ctx, connID, focusKey, false)
 		Expect(setErr).To(HaveOccurred(),
-			"INV-P5-1: SetConnectionFocus MUST fail when FocusMemberships is empty")
+			"INV-SCENE-14: SetConnectionFocus MUST fail when FocusMemberships is empty")
 		errutil.AssertErrorCode(suiteT, setErr, "FOCUS_WITHOUT_MEMBERSHIP")
 
 		// Confirm no state was written (membership-gate runs before any commit).
 		conn, getErr := store.GetConnection(ctx, connID)
 		Expect(getErr).NotTo(HaveOccurred())
 		Expect(conn.FocusKey).To(BeNil(),
-			"INV-P5-1: FocusKey MUST remain nil after membership-gate rejection")
+			"INV-SCENE-14: FocusKey MUST remain nil after membership-gate rejection")
 
 		info, getErr := store.Get(ctx, sessionID)
 		Expect(getErr).NotTo(HaveOccurred())
 		Expect(info.PresentingFocus).To(BeNil(),
-			"INV-P5-1: PresentingFocus MUST remain nil after membership-gate rejection")
+			"INV-SCENE-14: PresentingFocus MUST remain nil after membership-gate rejection")
 
 		// ----------------------------------------------------------------
 		// Step 4 — JoinFocus adds the scene membership.
@@ -137,7 +137,7 @@ var _ = Describe("INV-P5-1: focus without membership blocked", func() {
 		Expect(info.FocusMemberships[0].TargetID).To(Equal(sceneID))
 
 		// ----------------------------------------------------------------
-		// Step 5 — INV-P5-1 PASS assertion.
+		// Step 5 — INV-SCENE-14 PASS assertion.
 		//
 		// Retry SetConnectionFocus — the membership now exists.  The call
 		// MUST succeed and commit Connection.FocusKey and PresentingFocus
@@ -145,7 +145,7 @@ var _ = Describe("INV-P5-1: focus without membership blocked", func() {
 		// ----------------------------------------------------------------
 		res, setErr := coord.SetConnectionFocus(ctx, connID, focusKey, false)
 		Expect(setErr).NotTo(HaveOccurred(),
-			"INV-P5-1: SetConnectionFocus MUST succeed after JoinFocus adds membership")
+			"INV-SCENE-14: SetConnectionFocus MUST succeed after JoinFocus adds membership")
 		Expect(res.SessionID).To(Equal(sessionID),
 			"result SessionID must match the session under test")
 
@@ -153,7 +153,7 @@ var _ = Describe("INV-P5-1: focus without membership blocked", func() {
 		conn, getErr = store.GetConnection(ctx, connID)
 		Expect(getErr).NotTo(HaveOccurred())
 		Expect(conn.FocusKey).NotTo(BeNil(),
-			"INV-P5-1 post-membership: Connection.FocusKey MUST be set after successful SetConnectionFocus")
+			"INV-SCENE-14 post-membership: Connection.FocusKey MUST be set after successful SetConnectionFocus")
 		Expect(conn.FocusKey.Kind).To(Equal(session.FocusKindScene))
 		Expect(conn.FocusKey.TargetID).To(Equal(sceneID))
 

@@ -22,7 +22,7 @@ type ConnectionSender interface {
 }
 
 // ComputeFocusManagedStreams returns the focus-managed subset of a
-// Connection's stream subscriptions (INV-P5-3 deterministic function
+// Connection's stream subscriptions (INV-SCENE-16 deterministic function
 // of FocusKey + character_location + gameID). Always-on streams
 // (events.<gid>.notification.<id>) are written once at connection
 // creation and not touched by this router.

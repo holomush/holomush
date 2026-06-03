@@ -125,7 +125,7 @@ func TestSceneSubcommand_NonParticipant_PermissionDenied(t *testing.T) {
 	// "no scene" for bob, not "wrong scene". To exercise the IsParticipant
 	// defense-in-depth path we need bob to be a member of a *different*
 	// scene; since only one scene exists, this test asserts the broader
-	// "you are not currently in any scene" path. INV-P4-11 is also pinned
+	// "you are not currently in any scene" path. INV-SCENE-11 is also pinned
 	// by the integration test (test-driven by store path).
 	p, _ := newTestPluginWithMember(t, "scene-perm-test")
 

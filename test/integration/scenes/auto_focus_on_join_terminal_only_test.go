@@ -19,14 +19,14 @@ import (
 	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 )
 
-// INV-P5-4 + INV-P5-11 (AutoFocusOnJoin filter + skip rules):
+// INV-SCENE-17 + INV-SCENE-24 (AutoFocusOnJoin filter + skip rules):
 //
-// INV-P5-4: AutoFocusOnJoin MUST only auto-focus terminal/telnet connections.
+// INV-SCENE-17: AutoFocusOnJoin MUST only auto-focus terminal/telnet connections.
 // comms_hub and any other non-terminal client types MUST be excluded from the
 // FocusedConnectionIDs result. TotalConnectionCount still counts ALL connections
 // regardless of type.
 //
-// INV-P5-11: AutoFocusOnJoin MUST skip connections that are already explicitly
+// INV-SCENE-24: AutoFocusOnJoin MUST skip connections that are already explicitly
 // focused on a different target (D8 skip-rule). Such connections land in
 // SkippedConnectionIDs, not FocusedConnectionIDs.
 //
@@ -37,9 +37,9 @@ import (
 //
 // Harness pattern follows focus_without_membership_blocked_test.go (T24).
 //
-// Spec: docs/superpowers/specs/2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md §6.2, INV-P5-4, INV-P5-11.
+// Spec: docs/superpowers/specs/2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md §6.2, INV-SCENE-17, INV-SCENE-24.
 // Bead: holomush-5rh.14.25.
-var _ = Describe("INV-P5-4 + INV-P5-11: AutoFocusOnJoin terminal filter and skip rules", func() {
+var _ = Describe("INV-SCENE-17 + INV-SCENE-24: AutoFocusOnJoin terminal filter and skip rules", func() {
 	// -----------------------------------------------------------------------
 	// Shared harness builder — wires a Coordinator + Postgres-backed store with a
 	// NullPolicy for FocusKindScene, then returns a helper to seed sessions.
@@ -64,7 +64,7 @@ var _ = Describe("INV-P5-4 + INV-P5-11: AutoFocusOnJoin terminal filter and skip
 	}
 
 	// -----------------------------------------------------------------------
-	// Scenario (a) — INV-P5-4: comms_hub filtered, terminal focused.
+	// Scenario (a) — INV-SCENE-17: comms_hub filtered, terminal focused.
 	//
 	//   Alice has 2 connections: 1 terminal + 1 comms_hub.
 	//   After JoinFocus(alice, scene), AutoFocusOnJoin(alice, scene) MUST:
@@ -73,7 +73,7 @@ var _ = Describe("INV-P5-4 + INV-P5-11: AutoFocusOnJoin terminal filter and skip
 	//     - comms_hub absent from FocusedConnectionIDs, SkippedConnectionIDs,
 	//       and FailedConnectionIDs
 	// -----------------------------------------------------------------------
-	It("filters out comms_hub connections (INV-P5-4)", func() {
+	It("filters out comms_hub connections (INV-SCENE-17)", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		DeferCleanup(cancel)
 
@@ -114,12 +114,12 @@ var _ = Describe("INV-P5-4 + INV-P5-11: AutoFocusOnJoin terminal filter and skip
 		resp, err := h.coord.AutoFocusOnJoin(ctx, aliceCharID, sceneID)
 		Expect(err).NotTo(HaveOccurred(), "AutoFocusOnJoin must not return a store-level error")
 
-		// INV-P5-4: only the terminal connection must be focused.
+		// INV-SCENE-17: only the terminal connection must be focused.
 		// Use HaveLen + ContainElement to be order-agnostic (ordering is not guaranteed).
 		Expect(resp.FocusedConnectionIDs).To(HaveLen(1),
-			"INV-P5-4: FocusedConnectionIDs MUST have exactly one entry")
+			"INV-SCENE-17: FocusedConnectionIDs MUST have exactly one entry")
 		Expect(resp.FocusedConnectionIDs).To(ContainElement(terminalConnID),
-			"INV-P5-4: FocusedConnectionIDs MUST contain only the terminal connection")
+			"INV-SCENE-17: FocusedConnectionIDs MUST contain only the terminal connection")
 
 		// TotalConnectionCount counts ALL connections regardless of client type.
 		Expect(resp.TotalConnectionCount).To(BeEquivalentTo(2),
@@ -135,7 +135,7 @@ var _ = Describe("INV-P5-4 + INV-P5-11: AutoFocusOnJoin terminal filter and skip
 	})
 
 	// -----------------------------------------------------------------------
-	// Scenario (b) — INV-P5-11: skip-already-focused.
+	// Scenario (b) — INV-SCENE-24: skip-already-focused.
 	//
 	//   Alice has 2 terminal connections:
 	//     conn1: already explicitly focused on scene #99 (different scene)
@@ -144,7 +144,7 @@ var _ = Describe("INV-P5-4 + INV-P5-11: AutoFocusOnJoin terminal filter and skip
 	//     - FocusedConnectionIDs = [conn2]
 	//     - SkippedConnectionIDs = [conn1]
 	// -----------------------------------------------------------------------
-	It("skips connections already focused elsewhere (INV-P5-11)", func() {
+	It("skips connections already focused elsewhere (INV-SCENE-24)", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		DeferCleanup(cancel)
 
@@ -191,18 +191,18 @@ var _ = Describe("INV-P5-4 + INV-P5-11: AutoFocusOnJoin terminal filter and skip
 		resp, err := h.coord.AutoFocusOnJoin(ctx, aliceCharID, targetSceneID)
 		Expect(err).NotTo(HaveOccurred(), "AutoFocusOnJoin must not return a store-level error")
 
-		// INV-P5-11: conn2 (unfocused) gets focused; conn1 (already elsewhere) skipped.
+		// INV-SCENE-24: conn2 (unfocused) gets focused; conn1 (already elsewhere) skipped.
 		// Use HaveLen + ContainElement to be order-agnostic (ordering is not guaranteed).
 		Expect(resp.FocusedConnectionIDs).To(HaveLen(1),
-			"INV-P5-11: FocusedConnectionIDs MUST have exactly one entry")
+			"INV-SCENE-24: FocusedConnectionIDs MUST have exactly one entry")
 		Expect(resp.FocusedConnectionIDs).To(ContainElement(conn2ID),
-			"INV-P5-11: FocusedConnectionIDs MUST contain only unfocused conn2")
+			"INV-SCENE-24: FocusedConnectionIDs MUST contain only unfocused conn2")
 		Expect(resp.SkippedConnectionIDs).To(HaveLen(1),
-			"INV-P5-11: SkippedConnectionIDs MUST have exactly one entry")
+			"INV-SCENE-24: SkippedConnectionIDs MUST have exactly one entry")
 		Expect(resp.SkippedConnectionIDs).To(ContainElement(conn1ID),
-			"INV-P5-11: SkippedConnectionIDs MUST contain conn1 (focused elsewhere)")
+			"INV-SCENE-24: SkippedConnectionIDs MUST contain conn1 (focused elsewhere)")
 		Expect(resp.FailedConnectionIDs).To(BeEmpty(),
-			"INV-P5-11: no connection should fail — only focused or skipped")
+			"INV-SCENE-24: no connection should fail — only focused or skipped")
 	})
 
 	// -----------------------------------------------------------------------

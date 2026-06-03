@@ -2971,7 +2971,7 @@ func (x *PublishedSceneSummary) GetResolvedAtUnixNs() int64 {
 type GetPublicSceneArchiveRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The publication attempt to read; required. A missing id or any
-	// non-PUBLISHED attempt returns one opaque NOT_FOUND (INV-P6-8).
+	// non-PUBLISHED attempt returns one opaque NOT_FOUND (INV-SCENE-35).
 	PublishedSceneId string `protobuf:"bytes,1,opt,name=published_scene_id,json=publishedSceneId,proto3" json:"published_scene_id,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache

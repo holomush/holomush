@@ -126,7 +126,7 @@ func metricSceneOpsEventRecorded(kind string) {
 // Metric: scene_publish_privacy_block_total{operation, reason}. No-op stub
 // per the metrics.go header until the binary-plugin metrics pipeline lands.
 //
-// Declared as a package var (not a plain func) so the INV-P6-9 triple-signal
+// Declared as a package var (not a plain func) so the INV-SCENE-36 triple-signal
 // test (service_privacy_block_test.go) can shim it to assert the call fires.
 var metricScenePublishPrivacyBlock = func(operation, reason string) {
 	_ = operation

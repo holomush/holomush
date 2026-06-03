@@ -894,10 +894,10 @@ func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandReque
 		// Terminal-focused: one or more terminal/telnet connections were auto-focused.
 		msg = fmt.Sprintf("Joined scene #%s and focused your terminal connection(s) on it.", sceneID)
 	case len(afResult.SkippedConnectionIDs) > 0 && len(afResult.FocusedConnectionIDs) == 0:
-		// Explicitly-focused-elsewhere: terminal stays on its current focus (INV-P5-11).
+		// Explicitly-focused-elsewhere: terminal stays on its current focus (INV-SCENE-24).
 		msg = fmt.Sprintf("Joined scene #%s. Your terminal stays on its current focus; use 'scene focus #%s' to switch.", sceneID, sceneID)
 	case afResult.TotalConnectionCount > 0 && len(afResult.FocusedConnectionIDs) == 0 && len(afResult.SkippedConnectionIDs) == 0:
-		// Comms-hub-only: only non-terminal connections exist (INV-P5-4 filtered them out).
+		// Comms-hub-only: only non-terminal connections exist (INV-SCENE-17 filtered them out).
 		msg = fmt.Sprintf("Joined scene #%s. Use 'scene focus #%s' to enter.", sceneID, sceneID)
 	default:
 		// TotalConnectionCount == 0: no live connections (admin / scripted join).
@@ -1072,7 +1072,7 @@ func (p *scenePlugin) handleSwitch(ctx context.Context, req pluginsdk.CommandReq
 // handleSceneGrid implements `scene grid`. Clears the per-connection focus
 // pointer back to grid (nil FocusKey) without touching Info.PresentingFocus.
 //
-// D10 + INV-P5-13: the substrate skips the PresentingFocus write when
+// D10 + INV-SCENE-26: the substrate skips the PresentingFocus write when
 // isSceneGrid=true, so the player's focus context (e.g., the scene they
 // were last presenting) survives the grid pivot and is restored on reconnect.
 // The plugin is only responsible for issuing the RPC with the correct args;
@@ -1107,7 +1107,7 @@ func (p *scenePlugin) handleSceneGrid(ctx context.Context, req pluginsdk.Command
 
 // handleSceneFocus implements `scene focus #<id>`. Parses a scene reference,
 // then calls SetConnectionFocus on the current connection. The substrate is the
-// canonical authority for membership (INV-P5-1): FOCUS_WITHOUT_MEMBERSHIP from
+// canonical authority for membership (INV-SCENE-14): FOCUS_WITHOUT_MEMBERSHIP from
 // the substrate produces a user-facing denial; other substrate errors surface
 // as SCENE_FOCUS_FAILED internal errors.
 //
@@ -1210,7 +1210,7 @@ func (p *scenePlugin) handleSceneList(ctx context.Context, req pluginsdk.Command
 // verbs (pose / say / emit / ooc). The eventType determines the emitted
 // type; the ooc flag determines the subject facet (.ic vs .ooc). All
 // four emit with Sensitive: true to match the crypto.emits manifest's
-// sensitivity:always declaration (INV-P4-3).
+// sensitivity:always declaration (INV-SCENE-3).
 //
 // Target scene resolution uses single-membership inference (Phase 4
 // only); Phase 5 will replace this with focus-aware routing that
@@ -1322,7 +1322,7 @@ func (p *scenePlugin) handleEmit(
 		Subject:   subject,
 		Type:      pluginsdk.EventType(eventType),
 		Payload:   string(payload),
-		Sensitive: true, // sensitivity:always per crypto.emits manifest §2 / INV-P4-3
+		Sensitive: true, // sensitivity:always per crypto.emits manifest §2 / INV-SCENE-3
 	}
 	if err := p.service.eventSink.Emit(ctx, intent); err != nil {
 		err = oops.Code("SCENE_EMIT_FAILED").
@@ -1520,7 +1520,7 @@ func sceneResourceRef(args string) (string, error) {
 	if len(fields) == 0 {
 		return "", fmt.Errorf("scene id is required")
 	}
-	return "scene:" + normalizeSceneID(fields[0]), nil // ABAC resource ref (type:id), not a pub/sub subject (INV-P4-1)
+	return "scene:" + normalizeSceneID(fields[0]), nil // ABAC resource ref (type:id), not a pub/sub subject (INV-SCENE-1)
 }
 
 // sceneResourceRefFirstField derives the ABAC resource string for subcommands
@@ -1532,7 +1532,7 @@ func sceneResourceRefFirstField(args string) (string, error) {
 	if len(fields) == 0 {
 		return "", oops.Errorf("scene id is required")
 	}
-	return "scene:" + normalizeSceneID(fields[0]), nil // ABAC resource ref (type:id), not a pub/sub subject (INV-P4-1)
+	return "scene:" + normalizeSceneID(fields[0]), nil // ABAC resource ref (type:id), not a pub/sub subject (INV-SCENE-1)
 }
 
 // handleScenesBoard implements the top-level `scenes` command: the public

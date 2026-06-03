@@ -60,7 +60,7 @@ type sceneStorer interface {
 	// per-participant pose metadata (last_pose_at, last_pose_seq) for all
 	// owner+member rows in a single SELECT. Excludes invited role per
 	// INV-S9 pose-order-only-for-participants discipline. Pinned by spec
-	// §6.1 / INV-P4-7. See ADR holomush-r4th (denormalize pose-order metadata).
+	// §6.1 / INV-SCENE-7. See ADR holomush-r4th (denormalize pose-order metadata).
 	ListParticipantsWithPoseMeta(ctx context.Context, sceneID string) (ParticipantsWithPoseMeta, error)
 	// ListScenesForCharacter returns the scene IDs the character is
 	// currently a participant of (role IN ('owner', 'member'), excluding
@@ -75,7 +75,7 @@ type sceneStorer interface {
 	// Phase 6 publication reads used by the publish-vote handlers. The
 	// header read deliberately EXCLUDES content_entries so the INV-S9
 	// participant gate runs between the header read and the content read
-	// (INV-P6-5). Implemented by *SceneStore in publish_store.go.
+	// (INV-SCENE-32). Implemented by *SceneStore in publish_store.go.
 	GetPublishedSceneHeader(ctx context.Context, id string) (*PublishedScene, error)
 	GetPublishedSceneContent(ctx context.Context, id string) ([]PublishedSceneEntry, error)
 	TallyVotes(ctx context.Context, publishedSceneID string) (*VoteTally, error)
@@ -142,7 +142,7 @@ type SceneServiceImpl struct {
 	// settings is the SDK-injected host settings client used by
 	// effectiveTaxonomy to read the game-scope "content.cw_taxonomy" override.
 	// nil until SetSettingsClient wires it; effectiveTaxonomy falls back to
-	// DefaultCWTaxonomy when nil (INV-5).
+	// DefaultCWTaxonomy when nil (INV-SCENE-57).
 	settings pluginsdk.SettingsClient
 }
 
@@ -380,7 +380,7 @@ func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRe
 }
 
 // resolveBlockedCW returns the effective CW block set for a board request.
-// It is the UNION (INV-6, safety-accumulating) of:
+// It is the UNION (INV-SCENE-58, safety-accumulating) of:
 //   - req.GetExcludeContentWarnings() (per-query caller-supplied excludes)
 //   - GAME-scope "content.cw_block" setting (principal "")
 //   - PLAYER-scope "content.cw_block" setting (principal = req.GetPlayerId())
@@ -1095,7 +1095,7 @@ func (s *SceneServiceImpl) TransferOwnership(ctx context.Context, req *scenev1.T
 //
 // INV-S9 plugin-code gate: the caller MUST be a current participant
 // of the scene (owner or member, NOT invited). The ABAC engine is
-// NEVER consulted from this handler; INV-P4-4 (T23 meta-test, future
+// NEVER consulted from this handler; INV-SCENE-4 (T23 meta-test, future
 // bead) enforces this by rg-asserting that no engine.Evaluate /
 // engine.CanPerformAction call appears in this function body.
 //

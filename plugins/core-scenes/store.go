@@ -1248,7 +1248,7 @@ func (s *SceneStore) GetParticipant(ctx context.Context, sceneID, characterID st
 // IsParticipant reports whether the character is a participant (owner or
 // member, NOT invited) of the scene. The invited-role exclusion is
 // load-bearing: INV-S9's gate at GetPoseOrder MUST NOT treat pending
-// invites as participants. Pinned by spec INV-P4-4 / INV-P4-11.
+// invites as participants. Pinned by spec INV-SCENE-4 / INV-SCENE-11.
 //
 // Returns (false, nil) for both "not found" and "invited" — the binary
 // contract hides those distinctions intentionally (info-hiding per ADR
@@ -1422,7 +1422,7 @@ func (s *SceneStore) ListBoard(ctx context.Context, q BoardQuery) ([]*SceneRow, 
 
 // ListParticipantsWithPoseMeta is a single SELECT joining scenes +
 // scene_participants and returning the participants (owner+member, NOT
-// invited) with their pose metadata. Pinned by spec §6.1 / INV-P4-7.
+// invited) with their pose metadata. Pinned by spec §6.1 / INV-SCENE-7.
 // See ADR holomush-r4th (denormalize pose-order metadata).
 func (s *SceneStore) ListParticipantsWithPoseMeta(ctx context.Context, sceneID string) (ParticipantsWithPoseMeta, error) {
 	ctx, span := startSpan(

@@ -211,7 +211,7 @@ func (s *pluginHostServiceServer) SetConnectionFocus(ctx context.Context, req *p
 		return nil, oops.With("plugin", s.pluginName).New("focus coordinator not configured")
 	}
 
-	// Decode connection_id bytes → ULID (16-byte wire format, INV-P5-9).
+	// Decode connection_id bytes → ULID (16-byte wire format, INV-SCENE-22).
 	connID, err := bytesToULID(req.GetConnectionId())
 	if err != nil {
 		return nil, oops.Code("INVALID_ULID").

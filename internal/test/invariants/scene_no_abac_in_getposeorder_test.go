@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestINV_P4_4_NoABACInGetPoseOrder pins INV-P4-4 / INV-S9 plugin-code-gate
+// TestINV_SCENE_4_NoABACInGetPoseOrder pins INV-SCENE-4 / INV-S9 plugin-code-gate
 // discipline: GetPoseOrder MUST NOT consult the ABAC engine. The participant
 // gate is direct (IsParticipant store check), NOT via engine.Evaluate.
 //
@@ -25,7 +25,7 @@ import (
 //
 // T20 (scene RPC handler) closed at jj tto b3d with zero such calls;
 // this test pins the invariant for CI to catch future regressions.
-func TestINV_P4_4_NoABACInGetPoseOrder(t *testing.T) {
+func TestINV_SCENE_4_NoABACInGetPoseOrder(t *testing.T) {
 	t.Parallel()
 	const sourcePath = "../../../plugins/core-scenes/service.go"
 
@@ -76,13 +76,13 @@ func TestINV_P4_4_NoABACInGetPoseOrder(t *testing.T) {
 
 	if matches := forbidden.FindAllString(bodyText, -1); len(matches) > 0 {
 		uniqueMatches := dedupeStrings(matches)
-		t.Errorf("INV-P4-4 violated: GetPoseOrder body contains forbidden ABAC engine call(s): %s\n\nINV-S9 plugin-code gate forbids ABAC engine consultation. Use IsParticipant store check instead.",
+		t.Errorf("INV-SCENE-4 violated: GetPoseOrder body contains forbidden ABAC engine call(s): %s\n\nINV-S9 plugin-code gate forbids ABAC engine consultation. Use IsParticipant store check instead.",
 			strings.Join(uniqueMatches, ", "))
 	}
 
 	if matches := indirectForbidden.FindAllString(bodyText, -1); len(matches) > 0 {
 		uniqueMatches := dedupeStrings(matches)
-		t.Errorf("INV-P4-4 violated: GetPoseOrder body contains indirect ABAC engine call(s): %s",
+		t.Errorf("INV-SCENE-4 violated: GetPoseOrder body contains indirect ABAC engine call(s): %s",
 			strings.Join(uniqueMatches, ", "))
 	}
 }

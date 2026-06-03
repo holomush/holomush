@@ -326,7 +326,7 @@ func TestCastPublishSceneVoteFlipYesToNoIsAChange(t *testing.T) {
 	assert.True(t, resp.GetIsChange(), "flipping yes→no is a change")
 }
 
-// TestCastPublishSceneVoteRejectsNonRosterMember — INV-P6-1: a character not on
+// TestCastPublishSceneVoteRejectsNonRosterMember — INV-SCENE-28: a character not on
 // the frozen roster cannot vote (PermissionDenied / SCENE_PUBLISH_NOT_A_VOTER).
 func TestCastPublishSceneVoteRejectsNonRosterMember(t *testing.T) {
 	t.Parallel()
@@ -349,7 +349,7 @@ func TestCastPublishSceneVoteRejectsNonRosterMember(t *testing.T) {
 // terminal-status pre-check (CastPublishSceneVote) rejects a vote on a resolved
 // attempt with FailedPrecondition / SCENE_PUBLISH_INVALID_STATE, before reaching
 // the store. A roster member is the caller, so the rejection is the status guard,
-// not the non-voter guard (INV-P6-2 terminal boundary).
+// not the non-voter guard (INV-SCENE-29 terminal boundary).
 func TestCastPublishSceneVoteRejectsTerminalAttempt(t *testing.T) {
 	t.Parallel()
 	v1 := ulid.Make().String()
@@ -451,7 +451,7 @@ func TestWithdrawScenePublishByOwnerFailsAttempt(t *testing.T) {
 
 // TestWithdrawScenePublishRejectsNonOwner — a non-owner is denied with
 // SCENE_PUBLISH_NOT_OWNER (PermissionDenied) and the attempt is unchanged
-// (INV-P6-3: only the scene owner may withdraw an active attempt; participants
+// (INV-SCENE-30: only the scene owner may withdraw an active attempt; participants
 // opposed to publication must vote no, not withdraw).
 func TestWithdrawScenePublishRejectsNonOwner(t *testing.T) {
 	t.Parallel()

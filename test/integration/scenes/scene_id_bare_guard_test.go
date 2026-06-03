@@ -18,10 +18,10 @@ import (
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 )
 
-// INV-Y5INX-1 / INV-Y5INX-5: the production CreateScene RPC mints a bare ULID
+// INV-SCENE-46 / INV-SCENE-50: the production CreateScene RPC mints a bare ULID
 // scene id — no "scene-" (or any) prefix. This guards against reintroducing a
 // type-tag prefix on entity ids (the bare-ULID identity convention).
-var _ = Describe("INV-Y5INX-1/5: CreateScene mints a bare ULID", func() {
+var _ = Describe("INV-SCENE-46/5: CreateScene mints a bare ULID", func() {
 	It("returns an id with no scene- prefix that parses as a ULID", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -44,7 +44,7 @@ var _ = Describe("INV-Y5INX-1/5: CreateScene mints a bare ULID", func() {
 		rawID := resp.GetScene().GetId()
 
 		Expect(strings.HasPrefix(rawID, "scene-")).To(BeFalse(),
-			"INV-Y5INX-1/5: scene id MUST be a bare ULID, not scene- prefixed")
+			"INV-SCENE-46/5: scene id MUST be a bare ULID, not scene- prefixed")
 		_, perr := ulid.Parse(rawID)
 		Expect(perr).NotTo(HaveOccurred(), "scene id MUST parse as a bare ULID")
 	})

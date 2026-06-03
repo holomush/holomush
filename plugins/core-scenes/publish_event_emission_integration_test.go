@@ -197,7 +197,7 @@ var _ = Describe("D4: Phase-6 publish lifecycle events", func() {
 		sceneICSubject := "events." + ts.GameID() + ".scene." + sceneRef + ".ic"
 
 		// Bob must JOIN (owner=alice is already a DB participant; Bob needs the
-		// DB membership row so the vote roster seeds him — INV-P6-1). Post
+		// DB membership row so the vote roster seeds him — INV-SCENE-28). Post
 		// holomush-y5inx the scene id is a bare ULID, so JoinFocus parses it and
 		// the focus subscription succeeds cleanly; the DB membership row (seeded
 		// from scene_participants WHERE role IN ('owner','member')) is what the

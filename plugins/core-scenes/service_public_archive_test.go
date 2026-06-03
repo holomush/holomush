@@ -35,7 +35,7 @@ func newFakeStoreWithPublishedScene(id, sceneID string, entries []PublishedScene
 }
 
 // TestGetPublicSceneArchiveReturnsOpaqueNotFoundForNonReadableStates pins
-// INV-P6-8: a nonexistent id and every non-PUBLISHED status return the SAME
+// INV-SCENE-35: a nonexistent id and every non-PUBLISHED status return the SAME
 // opaque NOT_FOUND (code + message), so a caller cannot infer that an attempt
 // exists or is in progress.
 func TestGetPublicSceneArchiveReturnsOpaqueNotFoundForNonReadableStates(t *testing.T) {
@@ -63,9 +63,9 @@ func TestGetPublicSceneArchiveReturnsOpaqueNotFoundForNonReadableStates(t *testi
 
 			require.Error(t, err)
 			assert.Equal(t, codes.NotFound, status.Code(err),
-				"INV-P6-8: opaque NOT_FOUND for all non-PUBLISHED states")
+				"INV-SCENE-35: opaque NOT_FOUND for all non-PUBLISHED states")
 			assert.Equal(t, "scene archive not found", status.Convert(err).Message(),
-				"INV-P6-8: identical wire message across non-PUBLISHED states")
+				"INV-SCENE-35: identical wire message across non-PUBLISHED states")
 		})
 	}
 }
@@ -93,7 +93,7 @@ func TestGetPublicSceneArchiveReturnsContentForPublishedScene(t *testing.T) {
 }
 
 // TestDownloadPublicSceneArchiveReturnsOpaqueNotFoundForNonReadableStates pins
-// INV-P6-8 for the DOWNLOAD path: identical opacity to the GET path — a
+// INV-SCENE-35 for the DOWNLOAD path: identical opacity to the GET path — a
 // nonexistent id and every non-PUBLISHED status return the same opaque
 // NOT_FOUND (code + message), regardless of the requested format.
 func TestDownloadPublicSceneArchiveReturnsOpaqueNotFoundForNonReadableStates(t *testing.T) {
@@ -122,9 +122,9 @@ func TestDownloadPublicSceneArchiveReturnsOpaqueNotFoundForNonReadableStates(t *
 
 			require.Error(t, err)
 			assert.Equal(t, codes.NotFound, status.Code(err),
-				"INV-P6-8: opaque NOT_FOUND for all non-PUBLISHED states")
+				"INV-SCENE-35: opaque NOT_FOUND for all non-PUBLISHED states")
 			assert.Equal(t, "scene archive not found", status.Convert(err).Message(),
-				"INV-P6-8: identical wire message across non-PUBLISHED states")
+				"INV-SCENE-35: identical wire message across non-PUBLISHED states")
 		})
 	}
 }

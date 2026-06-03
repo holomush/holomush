@@ -20,7 +20,7 @@ import (
 // (focused, skipped []ulid.ULID, failed []FocusFailure, totalConnCount uint32, err error).
 // This adapter is the permanent Lua delegation seam: it lets the gopher-lua
 // hostfunc layer reach the same focus.Coordinator the binary host uses, so both
-// runtimes drive focus deltas through one common path (INV-FS-1).
+// runtimes drive focus deltas through one common path (INV-SCENE-38).
 type coordinatorFocusOpsAdapter struct {
 	c focus.Coordinator
 }
@@ -47,7 +47,7 @@ func (a *coordinatorFocusOpsAdapter) PresentFocus(ctx context.Context, sessionID
 // returns only error; the coordinator's oldFocusKey return is consumed inside
 // focus.Coordinator.driveFocusDeltas (which the coordinator calls itself), so
 // dropping it here is safe. Per-connection subscription deltas are driven
-// inside focus.Coordinator (INV-FS-1), so the adapter needs only to
+// inside focus.Coordinator (INV-SCENE-38), so the adapter needs only to
 // delegate; the dropped oldFocusKey return value is not needed here.
 func (a *coordinatorFocusOpsAdapter) SetConnectionFocus(ctx context.Context, connectionID ulid.ULID, focusKey *session.FocusKey, isSceneGrid bool) error {
 	_, err := a.c.SetConnectionFocus(ctx, connectionID, focusKey, isSceneGrid)

@@ -35,7 +35,7 @@ func TestSessionConnectionsHasFocusKeyColumn(t *testing.T) {
 	`).Scan(&dataType)
 	require.NoError(t, err)
 	require.Equal(t, "jsonb", dataType,
-		"INV-P5-2 substrate column: session_connections.focus_key MUST be JSONB nullable")
+		"INV-SCENE-15 substrate column: session_connections.focus_key MUST be JSONB nullable")
 }
 
 func TestPostgresListConnectionsBySession(t *testing.T) {
@@ -113,7 +113,7 @@ func TestPostgresUpdateSessionConnection_HappyPath(t *testing.T) {
 }
 
 // TestPostgresUpdateSessionConnection_LockAcquisitionOrder_NoDeadlock
-// pins INV-P5-14 / D11: two concurrent UpdateSessionConnection calls on
+// pins INV-SCENE-27 / D11: two concurrent UpdateSessionConnection calls on
 // the SAME session for DIFFERENT connections MUST NOT deadlock. The
 // canonical lock order is the sessions row FIRST (FOR UPDATE), then
 // the session_connections row (FOR UPDATE). Without canonical order
@@ -172,6 +172,6 @@ func TestPostgresUpdateSessionConnection_LockAcquisitionOrder_NoDeadlock(t *test
 	}
 
 	for i := 0; i < iters*2; i++ {
-		require.NoError(t, <-errs, "INV-P5-14: lock-order discipline MUST prevent deadlock under concurrency")
+		require.NoError(t, <-errs, "INV-SCENE-27: lock-order discipline MUST prevent deadlock under concurrency")
 	}
 }

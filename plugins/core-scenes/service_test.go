@@ -99,7 +99,7 @@ func (f *fakeStore) GetPublishedSceneHeader(_ context.Context, id string) (*Publ
 }
 
 // GetPublishedSceneContent returns the installed content entries for an
-// attempt (nil when none). The INV-P6-5 tripwire test overrides this on an
+// attempt (nil when none). The INV-SCENE-32 tripwire test overrides this on an
 // embedding type to count calls.
 func (f *fakeStore) GetPublishedSceneContent(_ context.Context, id string) ([]PublishedSceneEntry, error) {
 	return f.publishedContent[id], nil
@@ -2009,7 +2009,7 @@ func TestResolveBlockedCWNilSettingsClientUsesExcludeOnly(t *testing.T) {
 // TestListScenesExcludesUnionOfBlockedCWsAndKeepsNonOverlappingScene asserts
 // that ListScenes passes the resolved blocked-CW union to BoardQuery.BlockedCW,
 // and that a scene with a blocked CW tag is excluded while a scene without
-// any overlap is kept. The kept scene still carries its content_warnings (INV-2).
+// any overlap is kept. The kept scene still carries its content_warnings (INV-SCENE-56).
 func TestListScenesExcludesUnionOfBlockedCWsAndKeepsNonOverlappingScene(t *testing.T) {
 	store := newFakeStore()
 	// fakeStore.ListBoard records the BlockedCW it received but does NOT filter
@@ -2046,11 +2046,11 @@ func TestListScenesExcludesUnionOfBlockedCWsAndKeepsNonOverlappingScene(t *testi
 	require.NotNil(t, store.listBoardGot)
 	assert.Equal(t, []string{"death"}, store.listBoardGot.BlockedCW)
 
-	// The kept scene still carries its content_warnings (INV-2).
+	// The kept scene still carries its content_warnings (INV-SCENE-56).
 	require.Len(t, resp.GetScenes(), 1)
 	assert.Equal(t, "scene-safe", resp.GetScenes()[0].GetId())
 	assert.Equal(t, []string{"romance"}, resp.GetScenes()[0].GetContentWarnings(),
-		"INV-2: content_warnings must not be stripped from the board response")
+		"INV-SCENE-56: content_warnings must not be stripped from the board response")
 }
 
 // TestListScenesPassesEmptyBlockedCWWhenNoBlocksAreConfigured asserts that

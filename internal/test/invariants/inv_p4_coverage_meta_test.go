@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestINV_P4_Coverage_Meta pins INV-P4-13 (meta): every numbered INV-P4-N
+// TestINV_P4_Coverage_Meta pins INV-SCENE-13 (meta): every numbered INV-P4-N
 // declaration in the Phase 4 design spec MUST have at least one named
 // test in the Go corpus.
 //
@@ -34,7 +34,7 @@ import (
 // Fix by updating the cases slice AND the spec's §12.1 coverage matrix
 // in lockstep — the two MUST agree at all times.
 //
-// INV-P4-13 is THIS meta-test; recursive self-inclusion would be circular,
+// INV-SCENE-13 is THIS meta-test; recursive self-inclusion would be circular,
 // so it is excluded from the cases table and is self-evidently covered by
 // its own execution.
 //
@@ -54,107 +54,107 @@ func TestINV_P4_Coverage_Meta(t *testing.T) {
 		testName string
 		note     string
 	}{
-		// INV-P4-1: superseded by INV-EVENTBUS-19's repo-wide colon-stream
+		// INV-SCENE-1: superseded by INV-EVENTBUS-19's repo-wide colon-stream
 		// eradication scan (TestINV_EVENTBUS_19_NoColonStreamLiterals in
-		// colon_eradication_test.go). The scene-only INV-P4-1 test
+		// colon_eradication_test.go). The scene-only INV-SCENE-1 test
 		// (scene_subjects_test.go) was retired by holomush-rops.8.
-		// INV-P4-2: manifest crypto.emits set == EmitTypeRegistrar set.
+		// INV-SCENE-2: manifest crypto.emits set == EmitTypeRegistrar set.
 		// Pinned by manifest-parse unit test in plugins/core-scenes/main_test.go
 		// (package main). The substrate INV-S5 integration check runs under
 		// TestCoreScenesIntegration but the manifest-parse unit is the named pin.
 		{
-			inv:      "INV-P4-2",
+			inv:      "INV-SCENE-2",
 			testName: "TestPlugin_CryptoEmitsMatchesRegistry",
 		},
-		// INV-P4-3: sensitivity matrix must match spec §2 table.
+		// INV-SCENE-3: sensitivity matrix must match spec §2 table.
 		// Pinned by manifest-parse unit in plugins/core-scenes/main_test.go.
 		{
-			inv:      "INV-P4-3",
+			inv:      "INV-SCENE-3",
 			testName: "TestPlugin_SensitivityMatrix",
 		},
-		// INV-P4-4: GetPoseOrder MUST NOT consult the ABAC engine.
+		// INV-SCENE-4: GetPoseOrder MUST NOT consult the ABAC engine.
 		// Two complementary pins:
 		//   (a) unit test asserting PermissionDenied for non-participants
 		//   (b) go/parser meta-test asserting no engine.Evaluate in function body
 		{
-			inv:      "INV-P4-4",
+			inv:      "INV-SCENE-4",
 			testName: "TestGetPoseOrder_NotParticipant_PermissionDenied",
 		},
 		{
-			inv:      "INV-P4-4",
-			testName: "TestINV_P4_4_NoABACInGetPoseOrder",
+			inv:      "INV-SCENE-4",
+			testName: "TestINV_SCENE_4_NoABACInGetPoseOrder",
 			note:     "meta-test: no engine.Evaluate call in GetPoseOrder body",
 		},
-		// INV-P4-5: resolver MUST NOT expose pose-order metadata as attributes.
+		// INV-SCENE-5: resolver MUST NOT expose pose-order metadata as attributes.
 		// Two complementary pins:
 		//   (a) unit test on resolver output
 		//   (b) rg-based meta-test asserting no pose-metadata columns in resolver.go
 		{
-			inv:      "INV-P4-5",
+			inv:      "INV-SCENE-5",
 			testName: "TestResolveResourceDoesNotLeakPoseOrderMetadata",
 		},
 		{
-			inv:      "INV-P4-5",
-			testName: "TestINV_P4_5_ResolverNoPoseOrderLeak",
+			inv:      "INV-SCENE-5",
+			testName: "TestINV_SCENE_5_ResolverNoPoseOrderLeak",
 			note:     "meta-test: no pose-metadata column refs in resolver.go",
 		},
-		// INV-P4-6: non-participants MUST NOT receive scene IC events.
+		// INV-SCENE-6: non-participants MUST NOT receive scene IC events.
 		// Ginkgo integration test; entry point is TestScenes in
 		// test/integration/scenes/suite_test.go. The Describe label
-		// "INV-P4-6: non-participant scene IC isolation" is greppable.
+		// "INV-SCENE-6: non-participant scene IC isolation" is greppable.
 		{
-			inv:      "INV-P4-6",
+			inv:      "INV-SCENE-6",
 			testName: "TestScenes",
-			note:     "Ginkgo suite entry; Describe: INV-P4-6 non-participant scene IC isolation",
+			note:     "Ginkgo suite entry; Describe: INV-SCENE-6 non-participant scene IC isolation",
 		},
-		// INV-P4-7: per-mode pose-order computation correctness.
+		// INV-SCENE-7: per-mode pose-order computation correctness.
 		// Table-driven pure-function unit test in plugins/core-scenes/poseorder_test.go.
 		{
-			inv:      "INV-P4-7",
+			inv:      "INV-SCENE-7",
 			testName: "TestCompute",
 		},
-		// INV-P4-8: maintained metadata == SQL-recovery result.
+		// INV-SCENE-8: maintained metadata == SQL-recovery result.
 		// Ginkgo integration test; entry point is TestCoreScenesIntegration in
 		// plugins/core-scenes/core_scenes_suite_test.go. The Describe label
 		// "SceneStore.InsertScenePose + pose-order rebuild" is greppable.
 		{
-			inv:      "INV-P4-8",
+			inv:      "INV-SCENE-8",
 			testName: "TestCoreScenesIntegration",
 			note:     "Ginkgo suite entry; Describe: pose-order metadata rebuild from scene_log",
 		},
-		// INV-P4-9: late-joining participants see only IC events from joined_at.
+		// INV-SCENE-9: late-joining participants see only IC events from joined_at.
 		// Ginkgo integration test; entry point is TestScenes in
 		// test/integration/scenes/suite_test.go. The Describe label
-		// "INV-P4-9: late-joiner temporal floor" is greppable.
+		// "INV-SCENE-9: late-joiner temporal floor" is greppable.
 		{
-			inv:      "INV-P4-9",
+			inv:      "INV-SCENE-9",
 			testName: "TestScenes",
-			note:     "Ginkgo suite entry; Describe: INV-P4-9 late-joiner temporal floor",
+			note:     "Ginkgo suite entry; Describe: INV-SCENE-9 late-joiner temporal floor",
 		},
-		// INV-P4-10: scene_pose audit INSERT + pose-metadata UPDATE are transactional.
+		// INV-SCENE-10: scene_pose audit INSERT + pose-metadata UPDATE are transactional.
 		// Ginkgo integration test; entry point is TestCoreScenesIntegration in
 		// plugins/core-scenes/core_scenes_suite_test.go. The Describe label
 		// "SceneAuditStore.InsertScenePose" is greppable.
 		{
-			inv:      "INV-P4-10",
+			inv:      "INV-SCENE-10",
 			testName: "TestCoreScenesIntegration",
-			note:     "Ginkgo suite entry; Describe: SceneAuditStore.InsertScenePose (INV-P4-10)",
+			note:     "Ginkgo suite entry; Describe: SceneAuditStore.InsertScenePose (INV-SCENE-10)",
 		},
-		// INV-P4-11: emit subcommands require participant membership.
+		// INV-SCENE-11: emit subcommands require participant membership.
 		// Pinned by unit test in plugins/core-scenes/commands_emit_test.go.
 		{
-			inv:      "INV-P4-11",
+			inv:      "INV-SCENE-11",
 			testName: "TestSceneSubcommand_NonParticipant_PermissionDenied",
 		},
-		// INV-P4-12: scene update pose_order_mode requires scene owner.
+		// INV-SCENE-12: scene update pose_order_mode requires scene owner.
 		// Ginkgo integration test; entry point is TestCoreScenesIntegration in
 		// plugins/core-scenes/core_scenes_suite_test.go. ABAC update-own-scene
 		// policy enforced at Layer-2 capability pre-flight. The Describe label
-		// "UpdateScene pose_order_mode non-owner rejection (INV-P4-12)" is greppable.
+		// "UpdateScene pose_order_mode non-owner rejection (INV-SCENE-12)" is greppable.
 		{
-			inv:      "INV-P4-12",
+			inv:      "INV-SCENE-12",
 			testName: "TestCoreScenesIntegration",
-			note:     "Ginkgo suite entry; Describe: UpdateScene pose_order_mode non-owner (INV-P4-12)",
+			note:     "Ginkgo suite entry; Describe: UpdateScene pose_order_mode non-owner (INV-SCENE-12)",
 		},
 	}
 

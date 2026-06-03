@@ -99,7 +99,7 @@ func TestRestoreConnectionFocus_NoOpWhenPresentingFocusNil(t *testing.T) {
 	assert.Nil(t, conn.FocusKey, "FocusKey must remain nil when PresentingFocus is nil (grid default)")
 }
 
-// TestReconnect_FallsBackToGridWhenMembershipRevoked pins INV-P5-5: when
+// TestReconnect_FallsBackToGridWhenMembershipRevoked pins INV-SCENE-18: when
 // PresentingFocus is set but the matching FocusMembership was removed while
 // disconnected, restoration falls back to grid (FocusKey stays nil) rather
 // than restoring stale state.
@@ -135,10 +135,10 @@ func TestReconnect_FallsBackToGridWhenMembershipRevoked(t *testing.T) {
 
 	conn, err := coord.sessionStore.GetConnection(ctx, connID)
 	require.NoError(t, err)
-	assert.Nil(t, conn.FocusKey, "INV-P5-5: FocusKey must stay nil when membership is revoked (grid fallback)")
+	assert.Nil(t, conn.FocusKey, "INV-SCENE-18: FocusKey must stay nil when membership is revoked (grid fallback)")
 }
 
-// TestReconnect_VsConcurrentLeave_Serializes pins INV-P5-12: concurrent
+// TestReconnect_VsConcurrentLeave_Serializes pins INV-SCENE-25: concurrent
 // RestoreConnectionFocus and LeaveFocus serialize via the SessionConnectionMutator
 // / FocusMutator path under the store-side lock. Both orderings are valid:
 //   - leave-first: restoration's mutator sees no membership → grid fallback.

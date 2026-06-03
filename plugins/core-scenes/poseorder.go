@@ -25,7 +25,7 @@ type PoseOrderEntry struct {
 
 // Compute returns the pose-order entries for the given scene mode +
 // maintained metadata. Pure function: no DB, no globals, no I/O.
-// Pins INV-P4-7 (spec §6.2).
+// Pins INV-SCENE-7 (spec §6.2).
 //
 // Parameters:
 //   - mode: "strict" | "3pr" | "5pr" | "free" (scene's pose_order_mode).

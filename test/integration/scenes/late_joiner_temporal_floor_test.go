@@ -21,14 +21,14 @@ import (
 	"github.com/holomush/holomush/internal/session"
 )
 
-// INV-P4-9: Late-joining participants MUST see only IC events from
+// INV-SCENE-9: Late-joining participants MUST see only IC events from
 // `FocusMembership.JoinedAt` forward when reading via `QueryStreamHistory`.
 // Pose-order computation remains scene-global; display via `GetPoseOrder` is
 // unaffected by the caller's `joined_at` and is pinned separately by T27.
 //
 // # End-to-end shape pinned by this spec
 //
-// The chain that delivers INV-P4-9 in production is:
+// The chain that delivers INV-SCENE-9 in production is:
 //
 //  1. `CoreServer.QueryStreamHistory` (internal/grpc/query_stream_history.go)
 //     loads the caller's `session.Info` and calls
@@ -48,9 +48,9 @@ import (
 // This spec exercises (2)+(3) directly against a real embedded JetStream bus,
 // computing the `NotBefore` value the way the substrate would (i.e.,
 // `FocusMembership.JoinedAt`). T13 already pinned (1) at the unit level via
-// `scope_floor_test.go::TestStreamScopeFloor_SceneSubjects_INV_P4_9`; T26 pins
+// `scope_floor_test.go::TestStreamScopeFloor_SceneSubjects_INV_SCENE_9`; T26 pins
 // (2)+(3) end-to-end on the post-migration code. The two together cover
-// INV-P4-9 from the session-membership timestamp through to the JetStream
+// INV-SCENE-9 from the session-membership timestamp through to the JetStream
 // candidate-event filter.
 //
 // # Why we don't build a CoreServer here
@@ -62,7 +62,7 @@ import (
 // (T13's scope_floor pin) or this spec (the substrate filter end-to-end).
 // The Reader.QueryHistory call path is the shared production code; pinning it
 // here with a `NotBefore` value sourced from a real `session.Info` exercises
-// the substrate's INV-P4-9 contract authentically.
+// the substrate's INV-SCENE-9 contract authentically.
 //
 // # Pre-Phase-4 regression context (spec §3.3)
 //
@@ -72,17 +72,17 @@ import (
 // through to the default branch and returned `time.Time{}` for every real
 // scene subject — the temporal floor was wired up but never actually fired.
 // Late joiners therefore saw the entire scene's history, in direct violation
-// of INV-P4-9.
+// of INV-SCENE-9.
 //
 // T13 migrated the scope_floor scene branch to dot-style; this test pins the
 // post-migration property end-to-end. The git diff between this file and the
 // absence of it (combined with `scope_floor_test.go`'s diff between colon-
 // and dot-style fixtures) is the auditable artifact for the bug-fix moment.
 //
-// Spec: docs/superpowers/specs/2026-05-19-scenes-phase-4-streams-and-pose-order-design.md §3.3, INV-P4-9.
+// Spec: docs/superpowers/specs/2026-05-19-scenes-phase-4-streams-and-pose-order-design.md §3.3, INV-SCENE-9.
 // ADRs: holomush-r4th (dot-style scene subjects), holomush-nt2d (I-17 plugin-code gate; layered above scope-floor for participation check).
 // Bead: holomush-5rh.13.26.
-var _ = Describe("INV-P4-9: late-joiner temporal floor", func() {
+var _ = Describe("INV-SCENE-9: late-joiner temporal floor", func() {
 	It("history reader filters pre-join events for late participants", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		DeferCleanup(cancel)
@@ -162,7 +162,7 @@ var _ = Describe("INV-P4-9: late-joiner temporal floor", func() {
 		// tier-boundary filter (`ev.Timestamp.Before(edge)`) never rejects
 		// our events. That keeps the spec focused exclusively on the
 		// NotBefore filter — the value `streamScopeFloor` feeds — which is
-		// the one INV-P4-9 turns on.
+		// the one INV-SCENE-9 turns on.
 		now := t3.Add(10 * time.Minute)
 		reader := history.NewReader(
 			bus.JS, nil, 30*24*time.Hour,
@@ -188,20 +188,20 @@ var _ = Describe("INV-P4-9: late-joiner temporal floor", func() {
 
 		bobEvents := drainHistory(ctx, bobStream)
 
-		// INV-P4-9 ASSERTION: Bob's history MUST contain ONLY events at or
+		// INV-SCENE-9 ASSERTION: Bob's history MUST contain ONLY events at or
 		// after his JoinedAt (t2 and t3). The pre-join events (t0 and t1)
 		// MUST be filtered by the substrate.
 		bobIDs := idSet(bobEvents)
 		Expect(bobIDs).To(HaveLen(2),
-			"INV-P4-9: bob's history MUST contain exactly 2 events (t2, t3) — got %d", len(bobIDs))
+			"INV-SCENE-9: bob's history MUST contain exactly 2 events (t2, t3) — got %d", len(bobIDs))
 		Expect(bobIDs).To(HaveKey(poses[2].ID.String()),
-			"INV-P4-9: bob MUST see the t2 pose (his join moment — NotBefore is inclusive)")
+			"INV-SCENE-9: bob MUST see the t2 pose (his join moment — NotBefore is inclusive)")
 		Expect(bobIDs).To(HaveKey(poses[3].ID.String()),
-			"INV-P4-9: bob MUST see the t3 pose (after his join)")
+			"INV-SCENE-9: bob MUST see the t3 pose (after his join)")
 		Expect(bobIDs).NotTo(HaveKey(poses[0].ID.String()),
-			"INV-P4-9 violation guard: bob MUST NOT see the t0 pose (pre-join leak)")
+			"INV-SCENE-9 violation guard: bob MUST NOT see the t0 pose (pre-join leak)")
 		Expect(bobIDs).NotTo(HaveKey(poses[1].ID.String()),
-			"INV-P4-9 violation guard: bob MUST NOT see the t1 pose (pre-join leak)")
+			"INV-SCENE-9 violation guard: bob MUST NOT see the t1 pose (pre-join leak)")
 
 		// Alice (positive control): with NotBefore = her JoinedAt at t0, she
 		// MUST see every pose. This proves the absence in Bob's response is

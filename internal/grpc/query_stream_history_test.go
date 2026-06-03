@@ -69,7 +69,7 @@ func (f *fakeHistoryStream) Close() error { return nil }
 
 // sceneFocusMembership returns a FocusMembership-aligned scene stream name and the
 // matching FocusMembership the session needs to pass the I-17 gate.
-// Stream is dot-style per INV-P4-1 / ADR holomush-s9nu.
+// Stream is dot-style per INV-SCENE-1 / ADR holomush-s9nu.
 func sceneFocusMembership(t *testing.T) (string, session.FocusMembership) {
 	t.Helper()
 	sceneID := ulid.MustParse("01HYXSCENE00000000000000CC")

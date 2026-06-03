@@ -14,8 +14,8 @@ import (
 
 // RestoreConnectionFocus restores a reconnecting Connection's FocusKey from
 // the session's PresentingFocus, gated on FocusMemberships validation. Pins
-// INV-P5-5 (validation under one Store-lock acquisition; grid fallback on
-// revoked membership) and INV-P5-12 (reconnect vs concurrent LeaveFocus
+// INV-SCENE-18 (validation under one Store-lock acquisition; grid fallback on
+// revoked membership) and INV-SCENE-25 (reconnect vs concurrent LeaveFocus
 // serializes via SessionConnectionMutator under the same store-side lock —
 // no torn state, no read-then-mutate race).
 //

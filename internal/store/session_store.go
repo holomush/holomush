@@ -943,7 +943,7 @@ func (s *PostgresSessionStore) GetConnection(ctx context.Context, connectionID u
 }
 
 // UpdateSessionConnection runs the mutator under a single transaction.
-// Lock-acquisition order is canonical per D11 / INV-P5-14: sessions row
+// Lock-acquisition order is canonical per D11 / INV-SCENE-27: sessions row
 // FOR UPDATE FIRST, then session_connections row FOR UPDATE. Two
 // concurrent calls on the same session for different connections
 // therefore cannot deadlock — both serialize on the shared sessions

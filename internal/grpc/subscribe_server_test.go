@@ -487,7 +487,7 @@ func TestSubscribeReattachCAS_PreservesLocationArrivedAt(t *testing.T) {
 		"ReattachCAS MUST flip status back to Active")
 }
 
-// TestSubscribe_RegistersByConnectionID verifies INV-P5-11: when Subscribe
+// TestSubscribe_RegistersByConnectionID verifies INV-SCENE-24: when Subscribe
 // is called with a ConnectionId, the SessionStreamRegistry MUST register
 // the connection via RegisterConnection (per-connection routing), not just
 // the session-wide Register path. Two concurrent subscribers on the same
@@ -531,7 +531,7 @@ func TestSubscribe_RegistersByConnectionID(t *testing.T) {
 	// Wait until both registrations have landed.
 	waitForRegistrations(t, registry, sessionID, 2)
 
-	// INV-P5-11: the registry tracks both connections as distinct
+	// INV-SCENE-24: the registry tracks both connections as distinct
 	// (sessionID, connectionID) keys in the per-connection routing map.
 	assert.True(t, registry.HasConnection(sessionID, connA),
 		"Subscribe MUST register connA via RegisterConnection")

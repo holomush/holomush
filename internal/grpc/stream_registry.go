@@ -120,7 +120,7 @@ func (r *SessionStreamRegistry) DeregisterConnection(sessionID string, connectio
 }
 
 // SendToConnection delivers update to EXACTLY the named connection's
-// channel. INV-P5-10.
+// channel. INV-SCENE-23.
 // Returns CONNECTION_NOT_REGISTERED if the conn isn't registered;
 // CONTROL_CHANNEL_FULL if the buffer is exhausted.
 func (r *SessionStreamRegistry) SendToConnection(

@@ -75,7 +75,7 @@ type sceneAuditLogStore interface {
 	//      SET last_pose_at = <event-timestamp>, last_pose_seq = <new-total>
 	//      WHERE scene_id = sceneID AND character_id = posedCharID.
 	//
-	// Either all three operations commit, or none do. Pins INV-P4-10
+	// Either all three operations commit, or none do. Pins INV-SCENE-10
 	// (transactional consistency).
 	//
 	// sceneID and posedCharID are caller-extracted from the audit
@@ -175,7 +175,7 @@ func (s *SceneAuditStore) Insert(
 
 // InsertScenePose runs the scene_log INSERT + scenes.total_pose_count
 // increment + scene_participants.last_pose_at/last_pose_seq UPDATE in
-// a single transaction. Per spec §9.4. Pins INV-P4-10 (transactional
+// a single transaction. Per spec §9.4. Pins INV-SCENE-10 (transactional
 // consistency): either all three rows commit, or none do.
 //
 // The event timestamp (not wall clock) is stamped onto
@@ -209,7 +209,7 @@ func (s *SceneAuditStore) InsertScenePose(
 		// Step 1: INSERT into scene_log (reuses the T6 helper). Returns
 		// inserted=false when ON CONFLICT fired (redelivery); in that
 		// case skip steps 2-3 so total_pose_count / last_pose_seq stay
-		// a function of distinct scene_log rows (INV-P4-10).
+		// a function of distinct scene_log rows (INV-SCENE-10).
 		inserted, err := s.insertSceneLogTx(
 			ctx, tx,
 			id, subject, eventType, timestamp,
@@ -280,7 +280,7 @@ func (s *SceneAuditStore) InsertScenePose(
 // Returns (inserted, err) where inserted is true when a row was actually
 // written; false when the ON CONFLICT branch fired. Callers that maintain
 // downstream counters (e.g. InsertScenePose) MUST gate those UPDATEs behind
-// inserted so redelivery does not over-count (INV-P4-10).
+// inserted so redelivery does not over-count (INV-SCENE-10).
 func (s *SceneAuditStore) insertSceneLogTx(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -394,7 +394,7 @@ func (s *SceneAuditServer) AuditEvent(ctx context.Context, req *pluginv1.AuditEv
 	// Dispatch on event type per spec §9.4: scene_pose routes through
 	// InsertScenePose (which composes the scene_log INSERT +
 	// scenes.total_pose_count UPDATE + scene_participants metadata UPDATE
-	// transactionally per T7/INV-P4-10); all other event types route
+	// transactionally per T7/INV-SCENE-10); all other event types route
 	// through plain Insert (existing behaviour).
 	if eventType == "scene_pose" {
 		// scene_pose MUST come from a character actor carrying a full

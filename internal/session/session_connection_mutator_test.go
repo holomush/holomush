@@ -13,7 +13,7 @@ import (
 )
 
 // TestSessionConnectionMutator_OnlyConstructibleViaConstructor pins
-// INV-P5-7: the sentinel pattern blocks direct struct construction
+// INV-SCENE-20: the sentinel pattern blocks direct struct construction
 // from outside this package. The constructor is the sole legitimate
 // path. This is a runtime check; a parallel compile-fail doc test
 // in internal/grpc/focus enforces the actual at-rest invariant.

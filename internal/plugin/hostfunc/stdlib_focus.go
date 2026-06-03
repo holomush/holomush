@@ -35,7 +35,7 @@ type FocusOps interface {
 	LeaveFocus(ctx context.Context, sessionID string, target session.FocusKey) error
 	LeaveFocusByTarget(ctx context.Context, target session.FocusKey) (session.LeaveByTargetResult, error)
 	PresentFocus(ctx context.Context, sessionID string, target session.FocusKey) error
-	// Phase 5 additions (INV-P5-6, D6):
+	// Phase 5 additions (INV-SCENE-19, D6):
 	SetConnectionFocus(ctx context.Context, connectionID ulid.ULID, focusKey *session.FocusKey, isSceneGrid bool) error
 	AutoFocusOnJoin(ctx context.Context, characterID, sceneID ulid.ULID) (focused, skipped []ulid.ULID, failed []FocusFailure, totalConnCount uint32, err error)
 	IsAnyConnFocused(ctx context.Context, characterID, sceneID ulid.ULID) (bool, error)

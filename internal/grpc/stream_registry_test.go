@@ -187,7 +187,7 @@ func TestSendCarriesReplayMode(t *testing.T) {
 
 func TestSendToConnection_TargetsOneConnectionOnly(t *testing.T) {
 	t.Parallel()
-	// INV-P5-10: SendToConnection delivers update to EXACTLY the named
+	// INV-SCENE-23: SendToConnection delivers update to EXACTLY the named
 	// connection's channel; other connections in the same session do
 	// NOT receive the update via this path.
 	r := NewSessionStreamRegistry()
@@ -213,7 +213,7 @@ func TestSendToConnection_TargetsOneConnectionOnly(t *testing.T) {
 
 	select {
 	case upd := <-chB:
-		t.Fatalf("INV-P5-10 violated: connB received SendToConnection meant for connA: %+v", upd)
+		t.Fatalf("INV-SCENE-23 violated: connB received SendToConnection meant for connA: %+v", upd)
 	case <-time.After(50 * time.Millisecond):
 		// good — connB did NOT receive
 	}
