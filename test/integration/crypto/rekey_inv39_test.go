@@ -3,7 +3,7 @@
 
 //go:build integration
 
-// rekey_inv39_test.go — E2E specs for INV-39: hot→cold-tier fallback when
+// rekey_inv39_test.go — E2E specs for INV-CRYPTO-22: hot→cold-tier fallback when
 // the hot DEK is destroyed after a completed rekey.
 //
 // Verifies:
@@ -46,7 +46,7 @@ import (
 )
 
 // directColdLookup implements source.ColdTierLookup against events_audit
-// via a direct pgxpool query. Used by the INV-39 E2E test to avoid a
+// via a direct pgxpool query. Used by the INV-CRYPTO-22 E2E test to avoid a
 // dependency on history.newPostgresColdTier (which is unexported).
 type directColdLookup struct {
 	pool *pgxpool.Pool
@@ -150,7 +150,7 @@ func insertEncryptedAuditRow(
 	return id, execErr
 }
 
-var _ = Describe("INV-39 cold-tier fallback", func() {
+var _ = Describe("INV-CRYPTO-22 cold-tier fallback", func() {
 	It("E2E_INV39_ColdFallback: substitutes cold envelope when hot DEK is destroyed", func() {
 		h := SetupRekeyHarness(suiteT, WithEventCount(5))
 		defer h.Cleanup()
@@ -210,16 +210,16 @@ var _ = Describe("INV-39 cold-tier fallback", func() {
 			KeyVersion: initialKey.Version,
 		})
 
-		// INV-39: FallbackResolver MUST return TierColdFallback because the hot
+		// INV-CRYPTO-22: FallbackResolver MUST return TierColdFallback because the hot
 		// DEK is destroyed but the cold-tier row (re-encrypted by Phase 3) exists
 		// with the new DEK, which IS resolvable.
 		resolved, resolveErr := fallback.Resolve(ctx, hotEnv)
 		Expect(resolveErr).NotTo(HaveOccurred(),
-			"INV-39: FallbackResolver must not error when cold-tier row exists with resolvable DEK")
+			"INV-CRYPTO-22: FallbackResolver must not error when cold-tier row exists with resolvable DEK")
 		Expect(resolved.SourceTier).To(Equal(source.TierColdFallback),
-			"INV-39: cold-tier fallback must be used when hot DEK is destroyed")
+			"INV-CRYPTO-22: cold-tier fallback must be used when hot DEK is destroyed")
 		Expect(resolved.Key.Bytes).NotTo(BeEmpty(),
-			"INV-39: resolved key bytes must be non-empty for cold-tier substitution")
+			"INV-CRYPTO-22: resolved key bytes must be non-empty for cold-tier substitution")
 	})
 
 	It("delivers metadata_only on double miss", func() {
@@ -271,10 +271,10 @@ var _ = Describe("INV-39 cold-tier fallback", func() {
 			KeyVersion: initialKey.Version,
 		})
 
-		// INV-39 double-miss: hot DEK destroyed + cold-tier row deleted →
+		// INV-CRYPTO-22 double-miss: hot DEK destroyed + cold-tier row deleted →
 		// FallbackResolver MUST return ErrMetadataOnly.
 		_, resolveErr := fallback.Resolve(ctx, hotEnv)
 		Expect(errors.Is(resolveErr, source.ErrMetadataOnly)).To(BeTrue(),
-			"INV-39 double-miss: ErrMetadataOnly must be returned when both tiers are unavailable")
+			"INV-CRYPTO-22 double-miss: ErrMetadataOnly must be returned when both tiers are unavailable")
 	})
 })

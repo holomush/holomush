@@ -28,7 +28,7 @@ import (
 //
 // Pre-Phase-7 the plugin separately consumed App-Actor-Kind / App-Actor-ID /
 // App-Codec / App-Schema-Version / App-Event-Type headers; with the wire
-// reshape (INV-P7-1) those values now arrive on the AuditRow proto fields
+// reshape (INV-CRYPTO-38) those values now arrive on the AuditRow proto fields
 // populated by the host dispatcher's buildAuditRow.
 const defaultActorKind = "system"
 
@@ -319,8 +319,8 @@ func (s *SceneAuditStore) insertSceneLogTx(
 
 // AuditEvent is the per-message ingestion RPC. The host per-plugin consumer
 // forwards each JetStream delivery here as a *pluginv1.AuditRow built by
-// `internal/eventbus/audit.buildAuditRow` (Phase 7 widening, INV-P7-1 +
-// INV-P7-11). A successful return ⇒ host acks the JS message.
+// `internal/eventbus/audit.buildAuditRow` (Phase 7 widening, INV-CRYPTO-38 +
+// INV-CRYPTO-46). A successful return ⇒ host acks the JS message.
 //
 // The Row shape guarantees crypto + projection fields at the wire level —
 // no fallback to `req.Event` / `req.Headers` is needed (those legacy

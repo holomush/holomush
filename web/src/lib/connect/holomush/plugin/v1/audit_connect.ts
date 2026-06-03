@@ -31,7 +31,7 @@ export const PluginAuditService = {
      * response; the host then acks the JetStream message. On error the
      * host does NOT nak — JetStream AckWait + MaxDeliver handle retry
      * with natural backoff. The AuditRow payload is forwarded byte-equal
-     * (ciphertext is never decrypted before forwarding, INV-P7-11).
+     * (ciphertext is never decrypted before forwarding, INV-CRYPTO-46).
      *
      * @generated from rpc holomush.plugin.v1.PluginAuditService.AuditEvent
      */

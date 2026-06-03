@@ -12,7 +12,7 @@ import (
 )
 
 // TestParseAuditHeadersIsDeterministic asserts that the shared parser
-// returns identical typed values for identical inputs. INV-P7-2's
+// returns identical typed values for identical inputs. INV-CRYPTO-39's
 // stronger claim (cross-branch byte-equality of typed values produced
 // by projection.persist() and pluginConsumer.dispatch()) is structural —
 // the same ParseAuditHeaders implementation feeds both branches — and

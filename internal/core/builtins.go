@@ -100,7 +100,7 @@ func registerBuiltinTypes(r *VerbRegistry, hostVersion string) error {
 		{Type: "crypto.system.operator_read_completed", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},
 		// Phase 7 PluginDowngradeFence violation audit (host-emit, persistence-only).
 		// Emitted by cmd/holomush/phase7_fence_wiring.go::violationEmitter on every
-		// INV-P7-7 row refusal, via RenderingPublisher. AUDIT_ONLY so the gRPC
+		// INV-CRYPTO-42 row refusal, via RenderingPublisher. AUDIT_ONLY so the gRPC
 		// Subscribe handler drops the event before delivery; audit projection
 		// persists it to events_audit on subject events.<game>.system.plugin_integrity_violation
 		// (events.> prefix per INV-E26 — only events.> reaches the EVENTS stream filter).

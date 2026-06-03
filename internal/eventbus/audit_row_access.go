@@ -17,7 +17,7 @@ import (
 //
 // The Phase 7 read-side fence (history.PluginDowngradeFence) calls this
 // to recover the plugin-supplied codec, dek_ref, and dek_version so it
-// can apply the INV-P7-7 (manifest-set heuristic) and INV-P7-15 (DEK
+// can apply the INV-CRYPTO-42 (manifest-set heuristic) and INV-CRYPTO-50 (DEK
 // existence) checks against the plugin's original wire shape rather
 // than the host-side projection.
 //
@@ -62,12 +62,12 @@ func StampAuditRow(ev *Event, row *pluginauditpb.AuditRow) {
 // proto field on the original e.auditRow. This is intentional given
 // the StampAuditRow unique-pointer contract — the row was freshly
 // allocated for this Event by the router, so no other Event aliases
-// it. Master spec INV-26 (refused row payload empty).
+// it. Master spec INV-CRYPTO-15 (refused row payload empty).
 //
 // Slice-header semantics: nilling Payload drops the slice header but
 // does not zero the underlying byte array. Concurrent readers that
 // captured a slice copy BEFORE the refusal still see the bytes; this
-// is acceptable because INV-26 governs proto-field reachability, not
+// is acceptable because INV-CRYPTO-15 governs proto-field reachability, not
 // GC-bounded in-memory residue.
 //
 // This method lives in package eventbus because auditRow is unexported;

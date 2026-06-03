@@ -58,7 +58,7 @@ func WithHistoryDecryptAuditEmitter(em eventbus.SessionAuditEmitter) HotTierOpti
 // WithHistorySourceResolver injects the source.SourceResolver used to
 // resolve DEK material on the hot-tier history path. When set, the tier
 // delegates to the resolver-aware dispatcher (newDispatcher.DispatchFor)
-// instead of decodeAuthorizeAndDispatch, enabling the INV-39 hot→cold-tier
+// instead of decodeAuthorizeAndDispatch, enabling the INV-CRYPTO-22 hot→cold-tier
 // fallback. Production wiring at cmd/holomush/sub_grpc.go pairs this with
 // a source.FallbackResolver; when unset the tier falls back to the legacy
 // dekManager path. Sub-epic E T44 (holomush-jxo8.7.44).
@@ -85,7 +85,7 @@ type jetStreamHotTier struct {
 	// auditEmitter logs plugin decrypt records.
 	auditEmitter eventbus.SessionAuditEmitter
 	// sourceResolver, when non-nil, routes sensitive history reads through
-	// the resolver-aware dispatcher (DispatchFor) for INV-39 hot→cold-tier
+	// the resolver-aware dispatcher (DispatchFor) for INV-CRYPTO-22 hot→cold-tier
 	// fallback. Sub-epic E T44 (holomush-jxo8.7.44).
 	sourceResolver source.SourceResolver
 }
@@ -502,7 +502,7 @@ func decodeJetStreamMessage(
 	case guard != nil:
 		// Sensitive codec with AuthGuard wired: full Decision 5 order-of-operations.
 		// When the hot tier has a SourceResolver wired (sub-epic E T44), route
-		// through the resolver-aware DispatchFor path for INV-39 hot→cold-tier
+		// through the resolver-aware DispatchFor path for INV-CRYPTO-22 hot→cold-tier
 		// fallback. Otherwise fall back to the legacy decodeAuthorizeAndDispatch
 		// path that consumes dekMgr directly.
 		var ev eventbus.Event
@@ -601,7 +601,7 @@ func decodeAndAuthorizeHistory(
 // parses DEK headers from the hot-tier JetStream message and dispatches via
 // the newDispatcher (DispatchFor) configured with the provided resolver.
 // Replaces the legacy dekMgr.Resolve seam with resolver.Resolve, enabling the
-// INV-39 hot→cold-tier fallback when the resolver is a *source.FallbackResolver.
+// INV-CRYPTO-22 hot→cold-tier fallback when the resolver is a *source.FallbackResolver.
 // Sub-epic E T44 (holomush-jxo8.7.44).
 func decodeViaResolver(
 	ctx context.Context,

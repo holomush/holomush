@@ -53,7 +53,7 @@ type PluginAuditServiceClient interface {
 	// response; the host then acks the JetStream message. On error the
 	// host does NOT nak — JetStream AckWait + MaxDeliver handle retry
 	// with natural backoff. The AuditRow payload is forwarded byte-equal
-	// (ciphertext is never decrypted before forwarding, INV-P7-11).
+	// (ciphertext is never decrypted before forwarding, INV-CRYPTO-46).
 	AuditEvent(context.Context, *connect.Request[v1.AuditEventRequest]) (*connect.Response[v1.AuditEventResponse], error)
 	// QueryHistory streams audit rows for a single subject prefix owned
 	// by this plugin. The host's bus.QueryHistory routes the call here
@@ -118,7 +118,7 @@ type PluginAuditServiceHandler interface {
 	// response; the host then acks the JetStream message. On error the
 	// host does NOT nak — JetStream AckWait + MaxDeliver handle retry
 	// with natural backoff. The AuditRow payload is forwarded byte-equal
-	// (ciphertext is never decrypted before forwarding, INV-P7-11).
+	// (ciphertext is never decrypted before forwarding, INV-CRYPTO-46).
 	AuditEvent(context.Context, *connect.Request[v1.AuditEventRequest]) (*connect.Response[v1.AuditEventResponse], error)
 	// QueryHistory streams audit rows for a single subject prefix owned
 	// by this plugin. The host's bus.QueryHistory routes the call here

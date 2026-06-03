@@ -3,7 +3,7 @@
 
 // Internal-package coverage tests for Checkpoint accessors that read
 // unexported byte-slice fields (policyHash, lastProcessedEventID,
-// phase5MissingMembers). INV-27 forbids exporting []byte from this package,
+// phase5MissingMembers). INV-CRYPTO-16 forbids exporting []byte from this package,
 // so these accessors gate the only legal read paths and MUST be tested
 // directly against the unexported fields.
 package dek
@@ -16,7 +16,7 @@ import (
 )
 
 // TestCheckpoint_PolicyHashAccessor verifies PolicyHash returns the stored
-// 32-byte hash as a [32]byte array (INV-27 — no exported []byte). The
+// 32-byte hash as a [32]byte array (INV-CRYPTO-16 — no exported []byte). The
 // accessor zero-pads if the stored slice is shorter; we exercise the
 // full-length path that production hits.
 func TestCheckpoint_PolicyHashAccessor(t *testing.T) {

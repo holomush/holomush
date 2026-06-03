@@ -17,13 +17,18 @@ scopes:
       (invalidation pings, probe-and-pill, N-of-N ack contracts) belong under INV-CLUSTER."
     # Family→scope evidence: bare INV-N (crypto payload/DEK/KEK/AAD) →
     # 2026-04-25-event-payload-crypto-design.md; RB → 2026-05-25-plugin-readback-decrypt-design.md;
-    # P7 (crypto half) → 2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md.
-    # See redesign spec §2.1.
-    status: pending
+    # P7 (crypto half) → 2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md;
+    # reader-options INV-1..6 → 2026-05-05-history-reader-crypto-options-design.md.
+    # See redesign spec §2.1 and bead holomush-hz0v4.14.15. LEFT untouched (closed-world,
+    # flagged on epic .14): INV-F* sub-epic-F family (AdminReadStream operator-read) and
+    # master INV-6/INV-7 emit-time sensitivity-fence (home in internal/plugin/) — both
+    # unclassified, need a dedicated pass before .14.17 final verification.
+    status: migrated
     origin_specs:
       - "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
       - "docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"
       - "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
+      - "docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"
     owned_paths:
       - "internal/eventbus/crypto/**"
       - "internal/eventbus/history/**"
@@ -61,6 +66,29 @@ scopes:
       # CRYPTO+ACCESS+SCENE+EVENTBUS+PLUGIN: the shared integration harness.
       - "internal/testsupport/integrationtest/harness.go"
       - "internal/testsupport/integrationtest/crypto.go"
+      # RB/P7 ride on plugin-domain files (PLUGIN-owned or unowned) — shared so the
+      # CRYPTO ref ownership check passes; their foreign/deferred bare INV-N
+      # (pluginauthz/settings INV-6/8/11 in host_service.go; command-vis INV-1 in
+      # harness.go) stays untouched (closed-world; residual walk skips shared files).
+      - "internal/plugin/crypto_manifest.go"
+      - "internal/plugin/host.go"
+      - "internal/plugin/manager_test.go"
+      - "internal/core/builtins.go"
+      - "pkg/plugin/audit_test.go"
+      - "plugins/core-scenes/publish_snapshot.go"
+      # P7 fence/dispatcher E2E + role-permission specs (EVENTBUS/PLUGIN int dirs).
+      - "test/integration/eventbus_e2e/dispatcher_selector_identity_test.go"
+      - "test/integration/eventbus_e2e/plugin_audit_isolation_test.go"
+      - "test/integration/eventbus_e2e/plugin_audit_round_trip_test.go"
+      - "test/integration/eventbus_e2e/plugin_downgrade_attacker_test.go"
+      - "test/integration/plugin/plugin_role_permissions_test.go"
+      - "test/integration/plugin/testdata/test_downgrade_attacker/main.go"
+      - "test/integration/plugin/testdata/test_downgrade_attacker/plugin.yaml"
+      # Proto SOURCES carrying RB/P7 doc-comment tokens (regen propagates to *.pb.go /
+      # *_pb.ts / grpc-api.md). core.proto + audit.proto already shared by INV-EVENTBUS.
+      - "api/proto/holomush/core/v1/core.proto"
+      - "api/proto/holomush/plugin/v1/plugin.proto"
+      - "api/proto/holomush/plugin/v1/audit.proto"
 
   - name: INV-PRIVACY
     description: "Stream history temporal floors, scope gating, guest-session bounds, reattach/Idle arrival-timestamp semantics"
@@ -470,6 +498,625 @@ scopes:
     shared_files: []
 
 invariants:
+  # ── INV-CRYPTO ── migrated (holomush-hz0v4.14.15). Origins: 2026-04-25 master
+  # crypto, 2026-05-25 plugin-readback (RB), 2026-05-13 phase-7 (P7 crypto half),
+  # 2026-05-05 history-reader-crypto-options (reader-opts INV-1..6). Bare INV-N refs
+  # are HARDCODED per-site (shared bare namespace — Task-4 territory); RB/P7 refs are
+  # prefix-unambiguous. P7 split: CRYPTO = {1,2,5,6,7,7b,8,9,11,12,13,14,15,16,C0};
+  # EVENTBUS took 3/4/10 (.14.12). LEFT untouched (closed-world, flagged on epic .14):
+  # the INV-F* sub-epic-F family (AdminReadStream operator-read, 15 tokens) and master
+  # INV-6/INV-7 emit-time sensitivity-fence — both unclassified, need a dedicated pass.
+  # binding: pending across the scope — verification backfill is holomush-hz0v4.11.
+  - id: INV-CRYPTO-1
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"
+    legacy: ["INV-1@docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"]
+    summary: "WithHistoryAuth(g, m, em) MUST produce the same coldOpts as WithCryptoCold with the matching per-tier cold constructors."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/tier_crypto_options_test.go", token: "INV-1"}
+  - id: INV-CRYPTO-2
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"
+    legacy: ["INV-2@docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"]
+    summary: "WithHistoryAuth(g, m, em) MUST produce the same hotOpts as WithCryptoHot with the matching per-tier hot constructors."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/tier_crypto_options_test.go", token: "INV-2"}
+  - id: INV-CRYPTO-3
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"
+    legacy: ["INV-3@docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"]
+    summary: "NewReader MUST forward accumulated hotOpts to newJetStreamHotTier when building the default hot tier."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/tier_crypto_options_test.go", token: "INV-3"}
+  - id: INV-CRYPTO-4
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"
+    legacy: ["INV-4@docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"]
+    summary: "WithCryptoHot MUST be a no-op when WithHotTier is also supplied — crypto options are not forwarded to a custom
+      tier."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/tier_crypto_options_test.go", token: "INV-4"}
+  - id: INV-CRYPTO-5
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"
+    legacy: ["INV-6@docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"]
+    summary: "newHistoryReader(nil, nil, nil) MUST preserve the existing nil-auth passthrough behavior (no auth option appended)."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/tier_crypto_options_test.go", token: "INV-6"}
+  - id: INV-CRYPTO-6
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-9@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "A subject NOT in a DEK's participant set MUST NOT receive plaintext via fan-out, even when subscribed to the
+      matching subject."
+    binding: pending
+    refs:
+      - {file: "test/integration/crypto/metadata_only_test.go", token: "INV-9"}
+  - id: INV-CRYPTO-7
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-12@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "Add(participant) MUST grant immediate read access to all existing DEK history without rotating the DEK."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/dek/manager_integration_test.go", token: "INV-12"}
+      - {file: "test/integration/crypto/cache_invalidation_test.go", token: "INV-12"}
+  - id: INV-CRYPTO-8
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-13@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "Rotate(context) MUST preserve the old DEK ciphertext and old DEK record unchanged (holds under Phase 3c soft-delete)."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/dek/manager_integration_test.go", token: "INV-13"}
+  - id: INV-CRYPTO-9
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-17@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "A plugin without manifest requests_decryption for an event class MUST receive metadata-only delivery, regardless
+      of subject subscription."
+    binding: pending
+    refs:
+      - {file: "test/integration/crypto/plugin_decrypt_test.go", token: "INV-17"}
+  - id: INV-CRYPTO-10
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-18@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "A plugin with manifest declaration but without an active ABAC grant MUST receive metadata-only delivery."
+    binding: pending
+    refs:
+      - {file: "test/integration/crypto/plugin_decrypt_test.go", token: "INV-18"}
+  - id: INV-CRYPTO-11
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-19@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "Every plugin decryption MUST emit an audit event on a subject the plugin cannot subscribe to."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/decode_jetstream_test.go", token: "INV-19"}
+      - {file: "internal/eventbus/history/dispatcher.go", token: "INV-19"}
+      - {file: "internal/eventbus/history/dispatcher_errors_test.go", token: "INV-19"}
+      - {file: "internal/eventbus/history/plugin_downgrade_fence.go", token: "INV-19"}
+      - {file: "internal/eventbus/history/readback.go", token: "INV-19"}
+      - {file: "internal/eventbus/history/readback_test.go", token: "INV-19"}
+      - {file: "test/integration/crypto/plugin_decrypt_test.go", token: "INV-19"}
+      - {file: "test/integration/crypto/readback_test.go", token: "INV-19"}
+      - {file: "test/integration/privacy/scene_history_readback_test.go", token: "INV-19"}
+      - {file: "internal/testsupport/integrationtest/crypto.go", token: "INV-19"}
+      - {file: "internal/testsupport/integrationtest/harness.go", token: "INV-19"}
+  - id: INV-CRYPTO-12
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-20@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "A plugin authorization failure MUST NOT block fan-out to other recipients."
+    binding: pending
+    refs:
+      - {file: "test/integration/crypto/plugin_decrypt_test.go", token: "INV-20"}
+  - id: INV-CRYPTO-13
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-21@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "events_audit.envelope MUST be byte-equal to the marshaled Event proto envelope on the bus for sensitive events."
+    binding: pending
+    refs:
+      - {file: "test/integration/crypto/emit_test.go", token: "INV-21"}
+  - id: INV-CRYPTO-14
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-25@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "An event whose cleartext metadata, codec, or dek_ref has been altered MUST fail decryption with a tag-mismatch
+      error and MUST NOT yield plaintext."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/aad/aad.go", token: "INV-25"}
+      - {file: "internal/eventbus/crypto/aad/aad_test.go", token: "INV-25"}
+      - {file: "internal/eventbus/history/plugin_aad_adapter.go", token: "INV-25"}
+      - {file: "test/integration/crypto/emit_test.go", token: "INV-25"}
+  - id: INV-CRYPTO-15
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-26@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "A recipient denied decryption MUST receive the event with metadata_only=true, empty payload bytes, populated
+      cleartext metadata, and no ciphertext."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/audit_row_access.go", token: "INV-26"}
+      - {file: "internal/eventbus/history/plugin_downgrade_fence.go", token: "INV-26"}
+      - {file: "internal/eventbus/history/plugin_downgrade_fence_test.go", token: "INV-26"}
+      - {file: "test/integration/crypto/metadata_only_test.go", token: "INV-26"}
+      - {file: "internal/eventbus/types.go", token: "INV-26"}
+  - id: INV-CRYPTO-16
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-27@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "dek.Material MUST NOT be passed to any io.Writer, json/gob/proto marshaler, slog/log, fmt.Sprint/Print/Errorf,
+      or any []byte-returning function other than the codec Encode/Decode (gocritic ruleguard-enforced)."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/dek/api_test.go", token: "INV-27"}
+      - {file: "internal/eventbus/crypto/dek/audit_chain.go", token: "INV-27"}
+      - {file: "internal/eventbus/crypto/dek/cache.go", token: "INV-27"}
+      - {file: "internal/eventbus/crypto/dek/checkpoint.go", token: "INV-27"}
+      - {file: "internal/eventbus/crypto/dek/checkpoint_accessors_internal_test.go", token: "INV-27"}
+      - {file: "internal/eventbus/crypto/dek/participants_cache.go", token: "INV-27"}
+      - {file: "internal/eventbus/crypto/dek/rekey.go", token: "INV-27"}
+      - {file: "internal/eventbus/crypto/dek/store.go", token: "INV-27"}
+  - id: INV-CRYPTO-17
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-30@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "Wrap followed by Unwrap with the returned keyID MUST recover the original DEK byte-for-byte."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/kek/local_aead_test.go", token: "INV-30"}
+  - id: INV-CRYPTO-18
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-32@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "A startup with provider.name=none MUST refuse if any crypto_keys row exists."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/kek/none.go", token: "INV-32"}
+      - {file: "internal/eventbus/crypto/kek/none_integration_test.go", token: "INV-32"}
+  - id: INV-CRYPTO-19
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-33@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "A startup with provider X MUST refuse if any crypto_keys row's wrap_provider is not unwrappable by X."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/kek/local_aead.go", token: "INV-33"}
+      - {file: "internal/eventbus/crypto/kek/local_aead_integration_test.go", token: "INV-33"}
+      - {file: "internal/eventbus/crypto/kek/none.go", token: "INV-33"}
+  - id: INV-CRYPTO-20
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-34@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "A NoneProvider MUST refuse Wrap and MUST cause emit-time failure for any event with Sensitive=true."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/kek/none.go", token: "INV-34"}
+      - {file: "internal/eventbus/crypto/kek/none_test.go", token: "INV-34"}
+  - id: INV-CRYPTO-21
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-37@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "A crashed Rotate MUST be resolvable by the startup integrity check without manual intervention."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/dek/store_integrity_test.go", token: "INV-37"}
+  - id: INV-CRYPTO-22
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-39@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "Reads of historical events whose dek_ref no longer exists in crypto_keys MUST automatically fall back to the
+      cold tier (host-owned subjects only)."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/dek/store_integration_test.go", token: "INV-39"}
+      - {file: "internal/eventbus/history/cold_postgres.go", token: "INV-39"}
+      - {file: "internal/eventbus/history/dispatcher.go", token: "INV-39"}
+      - {file: "internal/eventbus/history/hot_jetstream.go", token: "INV-39"}
+      - {file: "internal/eventbus/history/source/fallback.go", token: "INV-39"}
+      - {file: "internal/eventbus/history/source/metrics.go", token: "INV-39"}
+      - {file: "internal/eventbus/history/source/resolver.go", token: "INV-39"}
+      - {file: "internal/eventbus/history/tier.go", token: "INV-39"}
+      - {file: "test/integration/crypto/rekey_inv39_test.go", token: "INV-39"}
+  - id: INV-CRYPTO-23
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-42@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "AdminReadStream MUST emit its audit event before delivering any plaintext data; if the audit emit fails, the
+      call MUST refuse."
+    binding: pending
+    refs:
+      - {file: "internal/admin/readstream/handler.go", token: "INV-42"}
+  - id: INV-CRYPTO-24
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-43@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "The runtime AuthGuard MUST NEVER return PERMIT for a subject of kind operator; legitimate operator reads go
+      through AdminReadStream."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/authguard/guard_test.go", token: "INV-43"}
+      - {file: "internal/eventbus/authguard/identity.go", token: "INV-43"}
+  - id: INV-CRYPTO-25
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-49@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "Envelope byte-equality across emit->audit->cold-read: the marshaled Event proto envelope on JetStream MUST be
+      byte-equal to events_audit.envelope and to the cold-tier reader's recovered envelope bytes."
+    binding: pending
+    refs:
+      - {file: "internal/admin/readstream/cold_reader.go", token: "INV-49"}
+      - {file: "internal/admin/readstream/cold_reader_integration_test.go", token: "INV-49"}
+      - {file: "internal/admin/readstream/decrypt.go", token: "INV-49"}
+      - {file: "internal/eventbus/history/cold_postgres.go", token: "INV-49"}
+      - {file: "test/integration/crypto/inv49_envelope_roundtrip_test.go", token: "INV-49"}
+  - id: INV-CRYPTO-26
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"
+    legacy: ["INV-RB-1@docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"]
+    summary: "Read-back decryption MUST occur host-side; the plugin MUST NOT receive or hold a DEK — it receives only plaintext
+      or a refusal."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/dispatcher.go", token: "INV-RB-1"}
+      - {file: "internal/eventbus/history/readback.go", token: "INV-RB-1"}
+      - {file: "internal/eventbus/history/readback_test.go", token: "INV-RB-1"}
+      - {file: "pkg/plugin/decrypt_client.go", token: "INV-RB-1"}
+      - {file: "plugins/core-scenes/main.go", token: "INV-RB-1"}
+      - {file: "plugins/core-scenes/publish_snapshot.go", token: "INV-RB-1"}
+      - {file: "plugins/core-scenes/service.go", token: "INV-RB-1"}
+      - {file: "test/integration/crypto/readback_test.go", token: "INV-RB-1"}
+  - id: INV-CRYPTO-27
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"
+    legacy: ["INV-RB-2@docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"]
+    summary: "A plugin read-back decrypt MUST pass two gates evaluated once each (default-deny): (g1) host-side OwnerMap subject-ownership
+      at primitive entry; (g2) manifest crypto.emits[].readback:true via PluginCanReadBack."
+    binding: pending
+    refs:
+      - {file: "api/proto/holomush/plugin/v1/plugin.proto", token: "INV-RB-2"}
+      - {file: "internal/eventbus/authguard/guard.go", token: "INV-RB-2"}
+      - {file: "internal/eventbus/history/readback.go", token: "INV-RB-2"}
+      - {file: "internal/plugin/crypto_manifest.go", token: "INV-RB-2"}
+      - {file: "internal/plugin/goplugin/host_service.go", token: "INV-RB-2"}
+      - {file: "internal/plugin/manager_test.go", token: "INV-RB-2"}
+      - {file: "plugins/core-scenes/main_test.go", token: "INV-RB-2"}
+      - {file: "test/integration/crypto/readback_test.go", token: "INV-RB-2"}
+  - id: INV-CRYPTO-28
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"
+    legacy: ["INV-RB-3@docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"]
+    summary: "Every read-back decrypt MUST emit an INV-19 plugin_decrypt audit event on a subject the plugin cannot subscribe
+      to; the primitive MUST fail closed if the audit emitter is absent."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/readback.go", token: "INV-RB-3"}
+      - {file: "internal/eventbus/history/readback_test.go", token: "INV-RB-3"}
+      - {file: "plugins/core-scenes/publish_snapshot_integration_test.go", token: "INV-RB-3"}
+      - {file: "test/integration/crypto/readback_test.go", token: "INV-RB-3"}
+  - id: INV-CRYPTO-29
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"
+    legacy: ["INV-RB-4@docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"]
+    summary: "AAD for read-back decrypt MUST be built by routing the row through AuditRowToEvent + aad.Build (delegating to
+      decodeAuthorizeAndDispatch, not reimplementing decode); a row whose fields mismatch the bound AAD MUST fail decrypt."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/readback.go", token: "INV-RB-4"}
+      - {file: "internal/testsupport/integrationtest/crypto.go", token: "INV-RB-4"}
+      - {file: "plugins/core-scenes/publish_snapshot.go", token: "INV-RB-4"}
+      - {file: "plugins/core-scenes/publish_store.go", token: "INV-RB-4"}
+      - {file: "test/integration/crypto/readback_test.go", token: "INV-RB-4"}
+  - id: INV-CRYPTO-30
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"
+    legacy: ["INV-RB-5@docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"]
+    summary: "INV-P7-7 (downgrade refusal) and INV-P7-15 (DEK-existence) MUST apply on every read-back path — snapshot direct
+      entry and routed fence — identically to the pre-existing fence behavior."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/plugin_downgrade_fence.go", token: "INV-RB-5"}
+      - {file: "internal/eventbus/history/readback.go", token: "INV-RB-5"}
+      - {file: "internal/eventbus/history/readback_test.go", token: "INV-RB-5"}
+      - {file: "test/integration/crypto/readback_test.go", token: "INV-RB-5"}
+      - {file: "test/integration/privacy/scene_history_readback_test.go", token: "INV-RB-5"}
+  - id: INV-CRYPTO-31
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"
+    legacy: ["INV-RB-6@docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"]
+    summary: "The snapshot MUST read its IC events via the plugin's in-tx SQL read + the direct decrypt entry; it MUST NOT
+      route through PluginAuditService.QueryHistory (no self-loop)."
+    binding: pending
+    refs:
+      - {file: "pkg/plugin/decrypt_client.go", token: "INV-RB-6"}
+      - {file: "plugins/core-scenes/publish_snapshot_integration_test.go", token: "INV-RB-6"}
+      - {file: "test/integration/crypto/readback_test.go", token: "INV-RB-6"}
+  - id: INV-CRYPTO-32
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"
+    legacy: ["INV-RB-7@docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"]
+    summary: "The fence clean-row path MUST return decrypted plaintext to a routed reader authorized by AuthGuard DEK-participant-set
+      membership; a non-member MUST receive a refused/metadata-only row."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/plugin_downgrade_fence.go", token: "INV-RB-7"}
+      - {file: "internal/eventbus/history/plugin_downgrade_fence_internal_test.go", token: "INV-RB-7"}
+      - {file: "internal/eventbus/history/tier.go", token: "INV-RB-7"}
+      - {file: "test/integration/crypto/readback_test.go", token: "INV-RB-7"}
+      - {file: "test/integration/privacy/scene_history_readback_test.go", token: "INV-RB-7"}
+  - id: INV-CRYPTO-33
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"
+    legacy: ["INV-RB-8@docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"]
+    summary: "Snapshot read+decrypt+render MUST complete before the write-tx; the in-tx SELECT FOR UPDATE re-validation of
+      COOLOFF + all-yes MUST be the serialization point; a vote-flip between read and write MUST yield a no-op commit."
+    binding: pending
+    refs:
+      - {file: "plugins/core-scenes/publish_snapshot.go", token: "INV-RB-8"}
+      - {file: "plugins/core-scenes/publish_snapshot_integration_test.go", token: "INV-RB-8"}
+      - {file: "plugins/core-scenes/publish_store.go", token: "INV-RB-8"}
+      - {file: "plugins/core-scenes/service.go", token: "INV-RB-8"}
+      - {file: "test/integration/crypto/readback_test.go", token: "INV-RB-8"}
+  - id: INV-CRYPTO-34
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"
+    legacy: ["INV-RB-9@docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"]
+    summary: "The capability, fence, and audit MUST apply identically to binary and Lua plugins (runtime symmetry)."
+    binding: pending
+    refs:
+      - {file: "test/integration/crypto/readback_test.go", token: "INV-RB-9"}
+  - id: INV-CRYPTO-35
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"
+    legacy: ["INV-RB-10@docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"]
+    summary: "A snapshot decrypt failure MUST transition the attempt to ATTEMPT_FAILED with failure_reason = SNAPSHOT_DECRYPT_FAILED."
+    binding: pending
+    refs:
+      - {file: "plugins/core-scenes/publish_snapshot.go", token: "INV-RB-10"}
+      - {file: "plugins/core-scenes/publish_snapshot_integration_test.go", token: "INV-RB-10"}
+      - {file: "test/integration/crypto/readback_test.go", token: "INV-RB-10"}
+  - id: INV-CRYPTO-36
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"
+    legacy: ["INV-RB-11@docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"]
+    summary: "The decrypt primitive and fence completion MUST be subject-agnostic: any plugin-owned sensitivity:always subject
+      MUST flow through the identical primitive with no per-plugin special-casing."
+    binding: pending
+    refs:
+      - {file: "test/integration/crypto/readback_test.go", token: "INV-RB-11"}
+  - id: INV-CRYPTO-37
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"
+    legacy: ["INV-RB-12@docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"]
+    summary: "DecryptOwnAuditRows MUST return a per-row result (plaintext or typed refusal), never all-or-nothing, with ordering
+      matching the input; any refusal/error is a publish failure."
+    binding: pending
+    refs:
+      - {file: "api/proto/holomush/plugin/v1/audit.proto", token: "INV-RB-12"}
+      - {file: "api/proto/holomush/plugin/v1/plugin.proto", token: "INV-RB-12"}
+      - {file: "internal/eventbus/history/readback.go", token: "INV-RB-12"}
+      - {file: "internal/plugin/goplugin/host_service.go", token: "INV-RB-12"}
+      - {file: "internal/plugin/host.go", token: "INV-RB-12"}
+      - {file: "internal/plugin/hostfunc/stdlib_audit.go", token: "INV-RB-12"}
+      - {file: "internal/plugin/hostfunc/stdlib_audit_test.go", token: "INV-RB-12"}
+      - {file: "pkg/plugin/audit.go", token: "INV-RB-12"}
+      - {file: "pkg/plugin/decrypt_client.go", token: "INV-RB-12"}
+      - {file: "plugins/core-scenes/publish_snapshot.go", token: "INV-RB-12"}
+      - {file: "plugins/core-scenes/publish_snapshot_integration_test.go", token: "INV-RB-12"}
+      - {file: "test/integration/crypto/readback_test.go", token: "INV-RB-12"}
+  - id: INV-CRYPTO-38
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
+    legacy: ["INV-P7-1@docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"]
+    summary: "The per-plugin audit dispatcher MUST forward ciphertext bytes byte-equal to what arrived on JetStream when App-Codec
+      is non-identity; no decode-to-plaintext step occurs before forwarding."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/audit/plugin_consumer.go", token: "INV-P7-1"}
+      - {file: "internal/eventbus/audit/plugin_consumer_unit_test.go", token: "INV-P7-1"}
+      - {file: "internal/eventbus/history/phase7_boundary_meta_test.go", token: "INV-P7-1"}
+      - {file: "pkg/plugin/audit_test.go", token: "INV-P7-1"}
+      - {file: "plugins/core-scenes/audit.go", token: "INV-P7-1"}
+      - {file: "test/integration/eventbus_e2e/plugin_audit_isolation_test.go", token: "INV-P7-1"}
+      - {file: "test/integration/eventbus_e2e/plugin_audit_round_trip_test.go", token: "INV-P7-1"}
+  - id: INV-CRYPTO-39
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
+    legacy: ["INV-P7-2@docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"]
+    summary: "The dispatcher MUST populate AuditRow.codec/dek_ref/dek_version from the JS App-Codec/App-Dek-Ref/App-Dek-Version
+      headers using the shared parser also used by the events_audit projection writer."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/audit/auditheader/auditheader.go", token: "INV-P7-2"}
+      - {file: "internal/eventbus/audit/header_parser.go", token: "INV-P7-2"}
+      - {file: "internal/eventbus/audit/header_parser_determinism_test.go", token: "INV-P7-2"}
+      - {file: "internal/eventbus/audit/plugin_consumer_unit_test.go", token: "INV-P7-2"}
+      - {file: "internal/eventbus/audit/projection.go", token: "INV-P7-2"}
+      - {file: "internal/eventbus/history/phase7_boundary_meta_test.go", token: "INV-P7-2"}
+      - {file: "pkg/plugin/audit.go", token: "INV-P7-2"}
+  - id: INV-CRYPTO-40
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
+    legacy: ["INV-P7-5@docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"]
+    summary: "pluginsdk.StoreFromMessage round-tripped through pluginsdk.LoadForQuery MUST yield byte-equal payload, identical
+      projection fields, and identical codec/dek_ref/dek_version typed values."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/phase7_boundary_meta_test.go", token: "INV-P7-5"}
+      - {file: "pkg/plugin/audit.go", token: "INV-P7-5"}
+  - id: INV-CRYPTO-41
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
+    legacy: ["INV-P7-6@docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"]
+    summary: "A plugin's stored audit row MUST byte-equal the row received via the AuditEvent RPC: (payload, codec, dek_ref,
+      dek_version) are written and returned verbatim (extends master INV-46)."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/phase7_boundary_meta_test.go", token: "INV-P7-6"}
+      - {file: "pkg/plugin/audit.go", token: "INV-P7-6"}
+      - {file: "test/integration/eventbus_e2e/plugin_audit_round_trip_test.go", token: "INV-P7-6"}
+  - id: INV-CRYPTO-42
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
+    legacy: ["INV-P7-7@docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"]
+    summary: "The host QueryStreamHistory handler MUST refuse a plugin-returned row where codec=identity AND type is in the
+      manifest-derived always-sensitive set (keyed by qualified <plugin>:<type>), emitting AUDIT_ROW_DOWNGRADE_DETECTED +
+      plugin_integrity_violation (re-scopes master INV-50)."
+    binding: pending
+    refs:
+      - {file: "api/proto/holomush/core/v1/core.proto", token: "INV-P7-7"}
+      - {file: "api/proto/holomush/plugin/v1/audit.proto", token: "INV-P7-7"}
+      - {file: "internal/core/builtins.go", token: "INV-P7-7"}
+      - {file: "internal/eventbus/audit/plugin_router.go", token: "INV-P7-7"}
+      - {file: "internal/eventbus/audit/plugin_router_stamp_test.go", token: "INV-P7-7"}
+      - {file: "internal/eventbus/audit_row_access.go", token: "INV-P7-7"}
+      - {file: "internal/eventbus/history/phase7_boundary_meta_test.go", token: "INV-P7-7"}
+      - {file: "internal/eventbus/history/plugin_downgrade_fence.go", token: "INV-P7-7"}
+      - {file: "internal/eventbus/history/plugin_downgrade_fence_internal_test.go", token: "INV-P7-7"}
+      - {file: "internal/eventbus/history/plugin_downgrade_fence_test.go", token: "INV-P7-7"}
+      - {file: "internal/eventbus/history/readback.go", token: "INV-P7-7"}
+      - {file: "internal/eventbus/history/readback_test.go", token: "INV-P7-7"}
+      - {file: "internal/eventbus/history/tier.go", token: "INV-P7-7"}
+      - {file: "internal/eventbus/types.go", token: "INV-P7-7"}
+      - {file: "internal/plugin/cryptowiring/cryptowiring.go", token: "INV-P7-7"}
+      - {file: "pkg/plugin/audit.go", token: "INV-P7-7"}
+      - {file: "test/integration/eventbus_e2e/plugin_downgrade_attacker_test.go", token: "INV-P7-7"}
+      - {file: "test/integration/plugin/testdata/test_downgrade_attacker/main.go", token: "INV-P7-7"}
+      - {file: "test/integration/plugin/testdata/test_downgrade_attacker/plugin.yaml", token: "INV-P7-7"}
+      - {file: "test/integration/privacy/scene_history_readback_test.go", token: "INV-P7-7"}
+  - id: INV-CRYPTO-43
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
+    legacy: ["INV-P7-7b@docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"]
+    summary: "The downgrade-fence refusal MUST be per-row and NOT stream-fatal — the stream continues after a single-row refusal
+      (corrected v3 design)."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/phase7_boundary_meta_test.go", token: "INV-P7-7b"}
+  - id: INV-CRYPTO-44
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
+    legacy: ["INV-P7-8@docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"]
+    summary: "The always-sensitive set used by the fence MUST be built once at server boot and be immutable for the server's
+      lifetime; a regression introducing hot-reload without atomicity MUST be caught."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/phase7_boundary_meta_test.go", token: "INV-P7-8"}
+      - {file: "internal/eventbus/history/plugin_downgrade_fence.go", token: "INV-P7-8"}
+      - {file: "internal/eventbus/history/plugin_downgrade_fence_test.go", token: "INV-P7-8"}
+      - {file: "internal/eventbus/history/tier.go", token: "INV-P7-8"}
+  - id: INV-CRYPTO-45
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
+    legacy: ["INV-P7-9@docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"]
+    summary: "The dispatcher's KeySelector MUST be the SAME KeySelector instance the host's hot-tier reader uses — no second
+      selector, no parallel cache."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/audit/plugin_consumer.go", token: "INV-P7-9"}
+      - {file: "internal/eventbus/audit/plugin_consumer_export_integration.go", token: "INV-P7-9"}
+      - {file: "internal/eventbus/history/phase7_boundary_meta_test.go", token: "INV-P7-9"}
+      - {file: "internal/eventbus/history/tier_export_integration.go", token: "INV-P7-9"}
+      - {file: "internal/plugin/cryptowiring/cryptowiring.go", token: "INV-P7-9"}
+      - {file: "internal/testsupport/integrationtest/crypto.go", token: "INV-P7-9"}
+      - {file: "internal/testsupport/integrationtest/harness.go", token: "INV-P7-9"}
+      - {file: "test/integration/eventbus_e2e/dispatcher_selector_identity_test.go", token: "INV-P7-9"}
+  - id: INV-CRYPTO-46
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
+    legacy: ["INV-P7-11@docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"]
+    summary: "The dispatcher MUST NOT decrypt to plaintext before forwarding to the plugin; the plugin receives ciphertext
+      and the host (only) decrypts."
+    binding: pending
+    refs:
+      - {file: "api/proto/holomush/plugin/v1/audit.proto", token: "INV-P7-11"}
+      - {file: "internal/eventbus/audit/plugin_consumer.go", token: "INV-P7-11"}
+      - {file: "internal/eventbus/audit/plugin_consumer_unit_test.go", token: "INV-P7-11"}
+      - {file: "internal/eventbus/history/phase7_boundary_meta_test.go", token: "INV-P7-11"}
+      - {file: "plugins/core-scenes/audit.go", token: "INV-P7-11"}
+  - id: INV-CRYPTO-47
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
+    legacy: ["INV-P7-12@docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"]
+    summary: "The plugin's stored row MUST NOT carry any cleartext content for sensitive events — the plugin sees codec=xchacha20poly1305-v1
+      + ciphertext bytes only."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/phase7_boundary_meta_test.go", token: "INV-P7-12"}
+      - {file: "test/integration/eventbus_e2e/plugin_audit_round_trip_test.go", token: "INV-P7-12"}
+  - id: INV-CRYPTO-48
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
+    legacy: ["INV-P7-13@docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"]
+    summary: "Plugin code MUST NOT have a path that writes directly to host-owned tables (events_audit, crypto_keys); the
+      plugin Postgres role lacks USAGE on schema public."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/phase7_boundary_meta_test.go", token: "INV-P7-13"}
+      - {file: "test/integration/plugin/plugin_role_permissions_test.go", token: "INV-P7-13"}
+  - id: INV-CRYPTO-49
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
+    legacy: ["INV-P7-14@docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"]
+    summary: "Phase 7 MUST NOT add a second emit-time sensitivity gate — the crypto.emits manifest declaration enforced by
+      sensitivity_fence.go (INV-6/INV-7) is the sole emit-time gate."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/phase7_boundary_meta_test.go", token: "INV-P7-14"}
+  - id: INV-CRYPTO-50
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
+    legacy: ["INV-P7-15@docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"]
+    summary: "The host QueryStreamHistory plugin path MUST refuse any plugin-returned row where codec!=identity AND dek_ref
+      is absent or not present in crypto_keys (destroyed_at IS NULL filter); refusal surfaces as metadata_only=true (carries
+      master INV-48)."
+    binding: pending
+    refs:
+      - {file: "api/proto/holomush/core/v1/core.proto", token: "INV-P7-15"}
+      - {file: "api/proto/holomush/plugin/v1/audit.proto", token: "INV-P7-15"}
+      - {file: "internal/eventbus/audit/plugin_router.go", token: "INV-P7-15"}
+      - {file: "internal/eventbus/audit/plugin_router_stamp_test.go", token: "INV-P7-15"}
+      - {file: "internal/eventbus/audit_row_access.go", token: "INV-P7-15"}
+      - {file: "internal/eventbus/history/phase7_boundary_meta_test.go", token: "INV-P7-15"}
+      - {file: "internal/eventbus/history/plugin_downgrade_fence.go", token: "INV-P7-15"}
+      - {file: "internal/eventbus/history/plugin_downgrade_fence_internal_test.go", token: "INV-P7-15"}
+      - {file: "internal/eventbus/history/plugin_downgrade_fence_test.go", token: "INV-P7-15"}
+      - {file: "internal/eventbus/history/readback.go", token: "INV-P7-15"}
+      - {file: "internal/eventbus/history/tier.go", token: "INV-P7-15"}
+      - {file: "internal/eventbus/types.go", token: "INV-P7-15"}
+      - {file: "internal/plugin/cryptowiring/cryptowiring.go", token: "INV-P7-15"}
+      - {file: "test/integration/eventbus_e2e/plugin_downgrade_attacker_test.go", token: "INV-P7-15"}
+      - {file: "test/integration/privacy/scene_history_readback_test.go", token: "INV-P7-15"}
+  - id: INV-CRYPTO-51
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
+    legacy: ["INV-P7-16@docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"]
+    summary: "The AuditRow -> *eventbusv1.Event adapter MUST produce a value whose AAD reconstruction is byte-equal to the
+      AAD used at encrypt for the same event_id (superseded by INV-STORE-5 at full ns resolution; ADR holomush-f5h0)."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/phase7_boundary_meta_test.go", token: "INV-P7-16"}
+      - {file: "internal/eventbus/history/plugin_aad_adapter.go", token: "INV-P7-16"}
+      - {file: "internal/eventbus/history/plugin_aad_reconstruction_test.go", token: "INV-P7-16"}
+      - {file: "internal/eventbus/publisher.go", token: "INV-P7-16"}
+  - id: INV-CRYPTO-52
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
+    legacy: ["INV-P7-C0@docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"]
+    summary: "Phase C.0 substrate: the plugin audit router MUST stamp the AuditRow.of (origin) on each routed row and expose
+      it via the accessor used by the dispatcher."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/phase7_boundary_meta_test.go", token: "INV-P7-C0"}
   # ── INV-PRESENCE ── migrated from I-PRES-N (holomush-hz0v4.14.5).
   # Origin: docs/superpowers/specs/2026-05-19-presence-snapshot-design.md §7.
   # binding: pending across the scope — verification backfill is holomush-hz0v4.11.

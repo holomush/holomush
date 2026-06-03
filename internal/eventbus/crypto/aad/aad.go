@@ -3,7 +3,7 @@
 
 // Package aad builds the Additional Authenticated Data (AAD) bytes
 // hashed by AEAD codecs. The canonicalization rule is fixed by master
-// spec §4.2 and verified by INV-25: any tampering with cleartext
+// spec §4.2 and verified by INV-CRYPTO-14: any tampering with cleartext
 // metadata, codec name, or DEK reference changes the AAD bytes and
 // breaks decryption with a tag-mismatch error.
 //

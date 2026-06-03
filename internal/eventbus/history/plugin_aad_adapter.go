@@ -10,7 +10,7 @@ import (
 
 // AuditRowToEvent converts a plugin-returned *pluginauditpb.AuditRow
 // into the *eventbusv1.Event shape consumed by aad.Build for AAD
-// reconstruction (INV-P7-16, master INV-25).
+// reconstruction (INV-CRYPTO-51, master INV-CRYPTO-14).
 //
 // Behavior contract (spec §5.4 adapter table):
 //
@@ -29,7 +29,7 @@ import (
 // reconstructed AAD would no longer be byte-equal to the encrypt-side
 // AAD computed at publish time. The integration test
 // TestRoundTripPreservesAADWithSubMicrosecondNanos (INV-STORE-5, formerly
-// INV-P7-16 per ADR holomush-f5h0) is the load-bearing guard.
+// INV-CRYPTO-51 per ADR holomush-f5h0) is the load-bearing guard.
 func AuditRowToEvent(row *pluginauditpb.AuditRow) *eventbusv1.Event {
 	if row == nil {
 		return nil

@@ -3,7 +3,7 @@
 
 // Package source provides the SourceResolver abstraction that decouples the
 // history dispatcher from hot/cold tier selection. SimpleResolver is the
-// no-fallback binding; FallbackResolver (Task 11) implements INV-39.
+// no-fallback binding; FallbackResolver (Task 11) implements INV-CRYPTO-22.
 package source
 
 import (

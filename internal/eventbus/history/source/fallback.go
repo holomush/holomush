@@ -15,7 +15,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 )
 
-// FallbackResolver implements SourceResolver with the INV-39 hot→cold-tier
+// FallbackResolver implements SourceResolver with the INV-CRYPTO-22 hot→cold-tier
 // fallback algorithm. On a DEK_NOT_FOUND or DEK_DESTROYED error from the hot
 // tier, it attempts to locate the event in the cold tier and resolve the
 // cold-tier DEK. A double miss returns ErrMetadataOnly; non-typed errors
@@ -32,7 +32,7 @@ func NewFallbackResolver(m dek.Manager, c ColdTierLookup, met *Metrics, l *slog.
 	return &FallbackResolver{DEKManager: m, ColdReader: c, Metrics: met, Logger: l}
 }
 
-// Resolve implements SourceResolver per spec §5.3 (INV-39 algorithm).
+// Resolve implements SourceResolver per spec §5.3 (INV-CRYPTO-22 algorithm).
 //
 // Decision tree:
 //  1. Identity codec → return TierHot immediately (no DEK lookup).

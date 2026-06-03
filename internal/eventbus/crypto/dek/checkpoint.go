@@ -27,7 +27,7 @@ import (
 
 // CheckpointOpenRequest contains the arguments to open a new rekey
 // checkpoint row. All fields are mandatory. Byte-slice fields are
-// intentionally unexported (INV-27); use NewCheckpointOpenRequest to
+// intentionally unexported (INV-CRYPTO-16); use NewCheckpointOpenRequest to
 // construct a value.
 type CheckpointOpenRequest struct {
 	ContextType     string
@@ -71,7 +71,7 @@ func NewCheckpointOpenRequest(
 }
 
 // Checkpoint mirrors a crypto_rekey_checkpoints row.
-// Byte-slice fields are intentionally unexported (INV-27): they are
+// Byte-slice fields are intentionally unexported (INV-CRYPTO-16): they are
 // populated by scanCheckpoint and read only within this package.
 type Checkpoint struct {
 	RequestID            RequestID
@@ -98,7 +98,7 @@ type Checkpoint struct {
 
 // PolicyHash returns the policy_hash captured at Phase 1 (INV-E25) as a
 // [32]byte array. Using a fixed-size array rather than []byte preserves
-// INV-27 (no exported []byte in the dek package). The array is zero-padded
+// INV-CRYPTO-16 (no exported []byte in the dek package). The array is zero-padded
 // if the stored slice is shorter than 32 bytes (should not happen in
 // production — the CHECK constraint enforces NOT NULL).
 func (c *Checkpoint) PolicyHash() [32]byte {
@@ -112,7 +112,7 @@ func (c *Checkpoint) PolicyHash() [32]byte {
 // 16-byte ULID). The bool result distinguishes "cursor present"
 // (true → batches committed) from "cursor unset" (false → initial scan,
 // no batches yet). Using a fixed-size array rather than []byte preserves
-// INV-27 (no exported []byte in the dek package); the bool replaces the
+// INV-CRYPTO-16 (no exported []byte in the dek package); the bool replaces the
 // nil-slice nullability signal.
 func (c *Checkpoint) LastProcessedEventID() ([16]byte, bool) {
 	var out [16]byte
@@ -129,7 +129,7 @@ func (c *Checkpoint) LastProcessedEventID() ([16]byte, bool) {
 // run that cleared the column). A non-nil empty slice is also possible if
 // the column was explicitly written as an empty JSON array.
 //
-// INV-27 compliance: the underlying column is JSONB; this accessor decodes
+// INV-CRYPTO-16 compliance: the underlying column is JSONB; this accessor decodes
 // it on every call rather than exposing the raw []byte. Callers that need
 // a stable view should snapshot the return value.
 //

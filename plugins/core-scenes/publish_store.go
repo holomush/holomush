@@ -186,7 +186,7 @@ type CastVoteResult struct {
 // PUBLISHED/ATTEMPT_FAILED first, the cast is rejected with
 // SCENE_PUBLISH_INVALID_STATE rather than landing on a terminal attempt; if the
 // cast wins the lock, the snapshot's own in-tx re-validation — whose SELECT FOR
-// UPDATE is the serialization point (INV-RB-8) — observes the vote consistently.
+// UPDATE is the serialization point (INV-CRYPTO-33) — observes the vote consistently.
 // This closes the TOCTOU between the handler's terminal-status check
 // (publish_service.go CastPublishSceneVote) and the vote write (holomush-wn612).
 // Status is checked before the roster lookup, so a vote on a terminal attempt
@@ -287,7 +287,7 @@ func (s *SceneStore) TallyVotes(ctx context.Context, publishedSceneID string) (*
 // TallyVotesTx is TallyVotes scoped to the caller's transaction. The snapshot
 // pipeline re-validates the all-yes invariant inside the write-tx (after the
 // SELECT FOR UPDATE serialization point) using this so a vote-flip that landed
-// before the lock is observed consistently (spec §11.3, INV-RB-8).
+// before the lock is observed consistently (spec §11.3, INV-CRYPTO-33).
 func (s *SceneStore) TallyVotesTx(ctx context.Context, tx pgx.Tx, publishedSceneID string) (*VoteTally, error) {
 	var t VoteTally
 	if err := tx.QueryRow(ctx, `
@@ -607,7 +607,7 @@ func (s *SceneStore) ExtendMaxPublishAttempts(ctx context.Context, sceneID strin
 // (id/subject/type/timestamp/actor.kind/actor.id/codec/dek_ref/dek_version) via
 // AuditRowToEvent + aad.Build — the INV-STORE-5 byte-equal round-trip. A LogRow
 // missing these fields would reconstruct a non-matching AAD and fail AEAD
-// tag-check on every sensitive row (read-back design INV-RB-4). Timestamp is the
+// tag-check on every sensitive row (read-back design INV-CRYPTO-29). Timestamp is the
 // BIGINT epoch-ns scene_log column (INV-STORE-1).
 type LogRow struct {
 	ID         []byte

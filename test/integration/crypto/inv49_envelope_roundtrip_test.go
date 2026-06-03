@@ -3,10 +3,10 @@
 
 //go:build integration
 
-// Package crypto_test — Phase 3d Task 11: INV-49 envelope round-trip
+// Package crypto_test — Phase 3d Task 11: INV-CRYPTO-25 envelope round-trip
 // targeted proof.
 //
-// INV-49: events_audit.envelope is byte-equal to the bus envelope across
+// INV-CRYPTO-25: events_audit.envelope is byte-equal to the bus envelope across
 // emit → audit projection → cold-read for both character (plugin emit on
 // behalf of a character binding) and plugin (Actor.ID-bearing ULID)
 // actors. This test is the end-to-end lock for the regression Decision 5
@@ -41,7 +41,7 @@ import (
 	"github.com/holomush/holomush/test/testutil"
 )
 
-var _ = Describe("INV-49 envelope round-trip", func() {
+var _ = Describe("INV-CRYPTO-25 envelope round-trip", func() {
 	var (
 		ctx    context.Context
 		cancel context.CancelFunc
@@ -95,9 +95,9 @@ var _ = Describe("INV-49 envelope round-trip", func() {
 		idBytes := testutil.MustParseULID(suiteT, natsMsgID).Bytes()
 		row := testutil.QueryEventsAuditByID(suiteT, env.pool, idBytes)
 
-		// INV-49: byte-equal envelope.
+		// INV-CRYPTO-25: byte-equal envelope.
 		Expect(row.Envelope).To(Equal(busEnvelope),
-			"INV-49: events_audit.envelope MUST be byte-equal to the bus envelope")
+			"INV-CRYPTO-25: events_audit.envelope MUST be byte-equal to the bus envelope")
 
 		// Re-unmarshal the row and verify proto.Equal with the bus envelope's
 		// proto form. This is a stronger semantic check on top of byte
@@ -108,7 +108,7 @@ var _ = Describe("INV-49 envelope round-trip", func() {
 		var fromAudit eventbusv1.Event
 		require.NoError(suiteT, proto.Unmarshal(row.Envelope, &fromAudit))
 		Expect(proto.Equal(&fromBus, &fromAudit)).To(BeTrue(),
-			"INV-49: bus and audit envelope must be proto-equal")
+			"INV-CRYPTO-25: bus and audit envelope must be proto-equal")
 	})
 
 	It("byte-equal envelope for plugin actor with Actor.ID (post-w9ml regression lock)", func() {
@@ -147,7 +147,7 @@ var _ = Describe("INV-49 envelope round-trip", func() {
 		row := testutil.QueryEventsAuditByID(suiteT, env.pool, idBytes)
 
 		Expect(row.Envelope).To(Equal(busEnvelope),
-			"INV-49 (plugin actor): events_audit.envelope MUST equal bus envelope")
+			"INV-CRYPTO-25 (plugin actor): events_audit.envelope MUST equal bus envelope")
 
 		// Post-w9ml regression lock: re-unmarshal and confirm Actor.ID
 		// (ULID bytes) survived the round-trip.
@@ -157,7 +157,7 @@ var _ = Describe("INV-49 envelope round-trip", func() {
 			"envelope.Actor.id must survive emit→audit round-trip")
 
 		// AAD bytes built at encrypt time MUST be reproducible from the
-		// audit row alone — that's the deeper INV-49 invariant Decision 5
+		// audit row alone — that's the deeper INV-CRYPTO-25 invariant Decision 5
 		// motivated. If an attacker (or a buggy projection) could alter the
 		// envelope during persist, AAD reconstruction at cold-decrypt time
 		// would fail tag verification and the plaintext would be unrecoverable.

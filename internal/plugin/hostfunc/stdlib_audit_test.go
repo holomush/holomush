@@ -132,7 +132,7 @@ func TestDecryptOwnAuditRowsHostfuncRejectsMalformedRowEntry(t *testing.T) {
 	t.Parallel()
 	// A non-table entry in the rows array MUST reject the whole call (nil +
 	// error), NOT silently shorten the batch — silent skips misalign results
-	// with input indices and break INV-RB-12 positional correlation.
+	// with input indices and break INV-CRYPTO-37 positional correlation.
 	L, mock := newAuditTestState(t, nil)
 
 	err := L.DoString(`

@@ -46,7 +46,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-// TestStore_ResolveIntegrity_ResolvesCrashedRotate is INV-37.
+// TestStore_ResolveIntegrity_ResolvesCrashedRotate is INV-CRYPTO-21.
 // Simulates a crashed Rotate by directly inserting two unrotated rows
 // (bypassing Manager.Rotate via package-internal access), then verifies
 // ResolveIntegrity resolves them.

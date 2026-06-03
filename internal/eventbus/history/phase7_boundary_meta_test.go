@@ -22,9 +22,11 @@ import (
 // TestPhase7InvariantsHaveNamedTests is the drift detector for the
 // invariants table in
 // docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md
-// §2. For each INV-P7-N (1..16) plus the two plan-internal substrate
-// keys (INV-P7-7b, INV-P7-C0), the test verifies the named test that
-// pins the invariant exists somewhere in the repo's *_test.go corpus.
+// §2. For each Phase-7 §2 invariant (the legacy INV-P7-1..16 set, migrated to
+// INV-CRYPTO-* for the crypto half and INV-EVENTBUS-25/26/27 for the
+// audit-plumbing half per holomush-hz0v4.14.15) plus the two plan-internal
+// substrate keys (INV-CRYPTO-43, INV-CRYPTO-52), the test verifies the named
+// test that pins the invariant exists somewhere in the repo's *_test.go corpus.
 //
 // If this test FAILS:
 //   - Either an invariant was removed without updating this table, OR
@@ -33,9 +35,9 @@ import (
 // Fix by adjusting the cases slice below AND the spec's invariant table
 // in lockstep — the two MUST agree at all times.
 //
-// INV-P7-2 and INV-P7-14 are intentionally excluded from this table:
-// INV-P7-14 is THIS meta-test (the table protects everything except
-// itself; recursive coverage would be circular). INV-P7-2 is a
+// INV-CRYPTO-39 and INV-CRYPTO-49 are intentionally excluded from this table:
+// INV-CRYPTO-49 is THIS meta-test (the table protects everything except
+// itself; recursive coverage would be circular). INV-CRYPTO-39 is a
 // build-time invariant covered by `task plugin:build-all` rather than a
 // named test in the Go corpus.
 //
@@ -49,7 +51,7 @@ func TestPhase7InvariantsHaveNamedTests(t *testing.T) {
 		inv      string
 		testName string
 	}{
-		{"INV-P7-1", "TestDispatchForwardsCiphertextByteEqual"},
+		{"INV-CRYPTO-38", "TestDispatchForwardsCiphertextByteEqual"},
 		// INV-EVENTBUS-25 was carried by func TestSceneLogHasDekColumns until the
 		// 1hq.26 testify+ginkgo migration converted the spec to a Ginkgo
 		// Describe registered under the suite entry TestBinaryPlugin (see
@@ -58,27 +60,27 @@ func TestPhase7InvariantsHaveNamedTests(t *testing.T) {
 		// that file for invariant traceability.
 		{"INV-EVENTBUS-25", "TestBinaryPlugin"},
 		{"INV-EVENTBUS-26", "TestAuditRowStructMirrorsProto"},
-		{"INV-P7-5", "TestAuditRowRoundTripPreservesAllFields"},
-		// INV-P7-6 was carried by func TestSceneLogPreservesCiphertextAndAuditHeaders
+		{"INV-CRYPTO-40", "TestAuditRowRoundTripPreservesAllFields"},
+		// INV-CRYPTO-41 was carried by func TestSceneLogPreservesCiphertextAndAuditHeaders
 		// until the holomush-cz4s testify+ginkgo migration converted the spec to a
 		// Ginkgo Describe registered under the suite entry TestEventbusE2E (see
 		// test/integration/eventbus_e2e/plugin_audit_round_trip_test.go). The spec
-		// name "Scene log preserves ciphertext and audit headers (INV-P7-6, INV-P7-12)"
+		// name "Scene log preserves ciphertext and audit headers (INV-CRYPTO-41, INV-CRYPTO-47)"
 		// remains greppable inside that file for invariant traceability.
-		{"INV-P7-6", "TestEventbusE2E"},
-		{"INV-P7-7", "TestFenceRefusesIdentityForAlwaysSensitiveType"},
-		// INV-P7-7b — per-row, NOT stream-fatal (the corrected v3 design).
-		{"INV-P7-7b", "TestFenceContinuesStreamAfterRefusal"},
-		{"INV-P7-8", "TestFenceSetBuiltOnceAtBoot"},
-		// INV-P7-C0 — Phase C.0 substrate (auditRow stamp + accessor).
-		{"INV-P7-C0", "TestAuditRowOfStampedByRouter"},
-		// INV-P7-9 was carried by func TestDispatcherAndHotTierShareSelector until
+		{"INV-CRYPTO-41", "TestEventbusE2E"},
+		{"INV-CRYPTO-42", "TestFenceRefusesIdentityForAlwaysSensitiveType"},
+		// INV-CRYPTO-43 — per-row, NOT stream-fatal (the corrected v3 design).
+		{"INV-CRYPTO-43", "TestFenceContinuesStreamAfterRefusal"},
+		{"INV-CRYPTO-44", "TestFenceSetBuiltOnceAtBoot"},
+		// INV-CRYPTO-52 — Phase C.0 substrate (auditRow stamp + accessor).
+		{"INV-CRYPTO-52", "TestAuditRowOfStampedByRouter"},
+		// INV-CRYPTO-45 was carried by func TestDispatcherAndHotTierShareSelector until
 		// the holomush-cz4s testify+ginkgo migration converted the spec to a Ginkgo
 		// Describe registered under the suite entry TestEventbusE2E (see
 		// test/integration/eventbus_e2e/dispatcher_selector_identity_test.go). The
-		// spec name "Dispatcher and hot tier share selector (INV-P7-9)" remains
+		// spec name "Dispatcher and hot tier share selector (INV-CRYPTO-45)" remains
 		// greppable inside that file for invariant traceability.
-		{"INV-P7-9", "TestEventbusE2E"},
+		{"INV-CRYPTO-45", "TestEventbusE2E"},
 		// INV-EVENTBUS-27 was carried by func TestDowngradeAttackerMaliciousPathRefuses until
 		// the holomush-cz4s testify+ginkgo migration converted the spec to a Ginkgo
 		// Describe registered under the suite entry TestEventbusE2E (see
@@ -86,27 +88,27 @@ func TestPhase7InvariantsHaveNamedTests(t *testing.T) {
 		// name "Downgrade attacker malicious path refuses (INV-EVENTBUS-27)" remains
 		// greppable inside that file for invariant traceability.
 		{"INV-EVENTBUS-27", "TestEventbusE2E"},
-		{"INV-P7-11", "TestDispatchDoesNotDecryptBeforeForward"},
-		// INV-P7-12 shares its named Ginkgo spec with INV-P7-6 (one round-trip
+		{"INV-CRYPTO-46", "TestDispatchDoesNotDecryptBeforeForward"},
+		// INV-CRYPTO-47 shares its named Ginkgo spec with INV-CRYPTO-41 (one round-trip
 		// covers both cleartext-vs-ciphertext invariants). Was carried by func
 		// TestSceneLogPreservesCiphertextAndAuditHeaders until the holomush-cz4s
 		// testify+ginkgo migration; now registered under TestEventbusE2E (see
 		// test/integration/eventbus_e2e/plugin_audit_round_trip_test.go).
-		{"INV-P7-12", "TestEventbusE2E"},
-		// INV-P7-13 was carried by func TestPluginRoleCannotWriteHostTables
+		{"INV-CRYPTO-47", "TestEventbusE2E"},
+		// INV-CRYPTO-48 was carried by func TestPluginRoleCannotWriteHostTables
 		// until the 1hq.26 testify+ginkgo migration converted the spec to a
 		// Ginkgo Describe registered under the suite entry TestBinaryPlugin
 		// (see test/integration/plugin/plugin_role_permissions_test.go).
 		// The meta-test maps to the suite entry — the spec name "Plugin role
-		// cannot write host tables (INV-P7-13)" remains greppable inside
+		// cannot write host tables (INV-CRYPTO-48)" remains greppable inside
 		// that file for invariant traceability.
-		{"INV-P7-13", "TestBinaryPlugin"},
-		{"INV-P7-15", "TestFenceRefusesUnknownDekRef"},
-		// INV-P7-16 was superseded by INV-STORE-5 (ADR holomush-f5h0); the
+		{"INV-CRYPTO-48", "TestBinaryPlugin"},
+		{"INV-CRYPTO-50", "TestFenceRefusesUnknownDekRef"},
+		// INV-CRYPTO-51 was superseded by INV-STORE-5 (ADR holomush-f5h0); the
 		// carrier test was renamed from TestRoundTripProducesByteEqualAAD
 		// to TestRoundTripPreservesAADWithSubMicrosecondNanos as part of
 		// gfo6 Phase 1 (ns-precise timestamps).
-		{"INV-P7-16", "TestRoundTripPreservesAADWithSubMicrosecondNanos"},
+		{"INV-CRYPTO-51", "TestRoundTripPreservesAADWithSubMicrosecondNanos"},
 	}
 
 	repoRoot := findRepoRoot(t)

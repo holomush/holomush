@@ -306,7 +306,7 @@ func TestStoreFromMessage_IdentityCodecHappyPath(t *testing.T) {
 	assert.Equal(t, "events.test.scene.01ABC.ic", row.Subject)
 	assert.Equal(t, "test-plugin:secret", row.Type)
 	assert.Equal(t, []byte("envelope-payload-bytes"), row.Payload,
-		"INV-P7-1: payload bytes from envelope must round-trip verbatim")
+		"INV-CRYPTO-38: payload bytes from envelope must round-trip verbatim")
 	assert.Equal(t, rowID[:], row.EventID[:])
 	assert.Nil(t, row.DEKRef, "identity codec MUST have nil DEKRef")
 	assert.Nil(t, row.DEKVersion, "identity codec MUST have nil DEKVersion")

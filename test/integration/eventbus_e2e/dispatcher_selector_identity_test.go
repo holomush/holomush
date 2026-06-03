@@ -30,16 +30,16 @@ func (fakeKeySelectorForIdentityTest) SelectForDecrypt(_ context.Context, _ code
 	return codec.NoKey, nil
 }
 
-// Dispatcher and hot tier share selector specs — INV-P7-9. Mirrors the
+// Dispatcher and hot tier share selector specs — INV-CRYPTO-45. Mirrors the
 // production wiring path at cmd/holomush/core.go:488 +
 // cmd/holomush/sub_grpc.go::newHistoryReader: a single
 // codec.KeySelector instance is constructed once at boot and threaded
 // into both PluginConsumerManager (via WithKeySelector) and
 // history.Reader (via WithCodecSelector). E.3 (1r0v.5) lands the
 // production wiring; this spec guards the contract.
-var _ = Describe("Dispatcher and hot tier share selector (INV-P7-9)", func() {
+var _ = Describe("Dispatcher and hot tier share selector (INV-CRYPTO-45)", func() {
 	It("PluginConsumerManager and history.Reader hold the same KeySelector instance", func() {
-		// The single shared selector instance — INV-P7-9 requires both
+		// The single shared selector instance — INV-CRYPTO-45 requires both
 		// substrates to hold this exact pointer. Pointer (not value) so
 		// reflect.ValueOf(iface).Pointer() returns the address at line 68
 		// rather than panicking on a struct-kind interface value.
@@ -61,8 +61,8 @@ var _ = Describe("Dispatcher and hot tier share selector (INV-P7-9)", func() {
 		Expect(readerSel).NotTo(BeNil(),
 			"history.Reader MUST hold the shared selector (substrate already wired)")
 		Expect(pcmSel).NotTo(BeNil(),
-			"INV-P7-9: PluginConsumerManager MUST hold the shared selector — wiring lands in Task E.3 (1r0v.5)")
+			"INV-CRYPTO-45: PluginConsumerManager MUST hold the shared selector — wiring lands in Task E.3 (1r0v.5)")
 		Expect(pcmSel != nil && reflect.ValueOf(pcmSel).Pointer() == reflect.ValueOf(readerSel).Pointer()).To(BeTrue(),
-			"INV-P7-9: PluginConsumerManager and history.Reader MUST share the same KeySelector instance")
+			"INV-CRYPTO-45: PluginConsumerManager and history.Reader MUST share the same KeySelector instance")
 	})
 })

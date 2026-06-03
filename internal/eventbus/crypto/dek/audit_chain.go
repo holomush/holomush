@@ -97,7 +97,7 @@ type RekeyChainBlock struct {
 // nullable byte-slice fields that require empty-form normalization (unlike
 // PolicySetChain). Spec §3.7.
 //
-// Unexported — INV-27 prohibits exported []byte returns in the dek package.
+// Unexported — INV-CRYPTO-16 prohibits exported []byte returns in the dek package.
 // Used by RekeyChain registration; tested via audit_chain_internal_test.go.
 func canonicalizeRekeyPayload(payload []byte) ([]byte, error) {
 	// Parse to map[string]any so JCS key-sorting is applied over the full
@@ -141,7 +141,7 @@ func parseRekeyScopeFromPayload(payload []byte) (string, error) {
 // "events.<game>.system.rekey.<ct>.<cid>".
 //
 // Exported for use by bead .17 (RekeyAuditEmitter) which constructs
-// subjects dynamically. Does not return []byte so INV-27 is satisfied.
+// subjects dynamically. Does not return []byte so INV-CRYPTO-16 is satisfied.
 func ParseRekeyScopeFromSubject(subject string) (string, error) {
 	prefix := "events." + currentGameIDForRekey + ".system.rekey."
 	if !strings.HasPrefix(subject, prefix) {

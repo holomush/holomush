@@ -9,7 +9,7 @@
 // Both call decodeAuthorizeAndDispatch.
 //
 // Task 12 (holomush-jxo8.7.12) adds the dispatcher struct + WithSourceResolver
-// option, replacing inline dekMgr.Resolve with resolver.Resolve for INV-39
+// option, replacing inline dekMgr.Resolve with resolver.Resolve for INV-CRYPTO-22
 // fallback support.
 package history
 
@@ -32,7 +32,7 @@ import (
 // Construct via newDispatcher; configure with WithSourceResolver.
 //
 // DispatchFor replaces the inline dekMgr.Resolve call in
-// decodeAuthorizeAndDispatch with resolver.Resolve, enabling the INV-39
+// decodeAuthorizeAndDispatch with resolver.Resolve, enabling the INV-CRYPTO-22
 // hot→cold-tier fallback (holomush-jxo8.7.12).
 type dispatcher struct {
 	resolver source.SourceResolver
@@ -42,7 +42,7 @@ type dispatcher struct {
 type DispatcherOption func(*dispatcher)
 
 // WithSourceResolver injects the SourceResolver used for DEK resolution and
-// optional cold-tier fallback (INV-39). Required for sensitive codec events.
+// optional cold-tier fallback (INV-CRYPTO-22). Required for sensitive codec events.
 func WithSourceResolver(r source.SourceResolver) DispatcherOption {
 	return func(d *dispatcher) { d.resolver = r }
 }
@@ -58,7 +58,7 @@ func newDispatcher(opts ...DispatcherOption) *dispatcher {
 
 // DispatchFor is the resolver-aware dispatcher for historical reads. It
 // replaces the inline dekMgr.Resolve block in decodeAuthorizeAndDispatch
-// with d.resolver.Resolve, enabling the INV-39 hot→cold-tier fallback.
+// with d.resolver.Resolve, enabling the INV-CRYPTO-22 hot→cold-tier fallback.
 //
 // Auth flow is identical to decodeAuthorizeAndDispatch: identity codec
 // short-circuits; AuthGuard decision gates decryption; plugin decrypts
@@ -193,12 +193,12 @@ func (d *dispatcher) DispatchFor(
 			With("codec", string(codecName)).Wrap(err)
 	}
 
-	// Plugin recipient: INV-19 — every plugin decrypt MUST produce an audit
+	// Plugin recipient: INV-CRYPTO-11 — every plugin decrypt MUST produce an audit
 	// record. Fail closed if the emitter is absent or fails unexpectedly.
 	if identity.Kind == eventbus.IdentityKindPlugin {
 		if auditEm == nil {
 			return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_AUDIT_EMITTER_NIL").
-				Errorf("AuthGuard permitted plugin decrypt but no DecryptAuditEmitter configured (INV-19)")
+				Errorf("AuthGuard permitted plugin decrypt but no DecryptAuditEmitter configured (INV-CRYPTO-11)")
 		}
 		rec := eventbus.PluginDecryptRecord{
 			PluginName:       identity.PluginName,
@@ -227,7 +227,7 @@ func (d *dispatcher) DispatchFor(
 			}
 			return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_AUDIT_EMIT_FAILED").
 				With("emit_error", emitErr.Error()).
-				Errorf("plugin decrypt audit emit failed — cannot confirm audit landed (INV-19)")
+				Errorf("plugin decrypt audit emit failed — cannot confirm audit landed (INV-CRYPTO-11)")
 		}
 	}
 
@@ -253,7 +253,7 @@ func (d *dispatcher) DispatchFor(
 // readBack selects the read-back authorization path on the AuthGuard
 // (manifest crypto.emits[].readback) over the live-delivery path. It is
 // only meaningful for IdentityKindPlugin; the live hot/cold tier callers
-// pass false. The read-back primitive (decryptPluginRow, INV-RB-1) passes
+// pass false. The read-back primitive (decryptPluginRow, INV-CRYPTO-26) passes
 // true for plugin principals.
 func decodeAuthorizeAndDispatch(
 	ctx context.Context,
@@ -344,14 +344,14 @@ func decodeAuthorizeAndDispatch(
 			With("codec", string(codecName)).Wrap(err)
 	}
 
-	// Plugin recipient: INV-19 — every plugin decrypt MUST produce an audit
+	// Plugin recipient: INV-CRYPTO-11 — every plugin decrypt MUST produce an audit
 	// record. Fail closed if the emitter is absent or fails unexpectedly.
 	if identity.Kind == eventbus.IdentityKindPlugin {
 		if auditEm == nil {
 			// AuthGuard permitted the read but no emitter is wired — configuration
 			// error. Fail closed rather than deliver plaintext without audit.
 			return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_AUDIT_EMITTER_NIL").
-				Errorf("AuthGuard permitted plugin decrypt but no DecryptAuditEmitter configured (INV-19)")
+				Errorf("AuthGuard permitted plugin decrypt but no DecryptAuditEmitter configured (INV-CRYPTO-11)")
 		}
 		rec := eventbus.PluginDecryptRecord{
 			PluginName:       identity.PluginName,
@@ -378,7 +378,7 @@ func decodeAuthorizeAndDispatch(
 			}
 			return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_AUDIT_EMIT_FAILED").
 				With("emit_error", emitErr.Error()).
-				Errorf("plugin decrypt audit emit failed — cannot confirm audit landed (INV-19)")
+				Errorf("plugin decrypt audit emit failed — cannot confirm audit landed (INV-CRYPTO-11)")
 		}
 	}
 

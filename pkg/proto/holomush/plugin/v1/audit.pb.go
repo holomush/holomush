@@ -62,7 +62,7 @@ type AuditRow struct {
 	Codec string `protobuf:"bytes,6,opt,name=codec,proto3" json:"codec,omitempty"`
 	// payload holds the event body. For identity codec this is cleartext;
 	// for xchacha20poly1305-v1 this is the AEAD ciphertext, forwarded
-	// byte-equal without decryption (INV-P7-11). Plugins store the bytes
+	// byte-equal without decryption (INV-CRYPTO-46). Plugins store the bytes
 	// opaquely; decryption occurs at read-back via DecryptOwnAuditRows.
 	Payload []byte `protobuf:"bytes,7,opt,name=payload,proto3" json:"payload,omitempty"`
 	// dek_ref is the numeric key reference into the host's crypto_keys
@@ -512,12 +512,12 @@ func (x *DecryptOwnAuditRowsRequest) GetRows() []*AuditRow {
 }
 
 // DecryptOwnAuditRowsResponse returns one RowResult per request row, in the
-// same order (1:1 positional correspondence, INV-RB-12).
+// same order (1:1 positional correspondence, INV-CRYPTO-37).
 type DecryptOwnAuditRowsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// results contains one outcome per request row, in the same order as
 	// DecryptOwnAuditRowsRequest.rows. Positional correspondence is
-	// guaranteed (INV-RB-12); callers correlate by index or by RowResult.id.
+	// guaranteed (INV-CRYPTO-37); callers correlate by index or by RowResult.id.
 	Results       []*RowResult `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -662,8 +662,8 @@ type RowResult_NoPlaintextReason struct {
 	// SDKs switch on them — see readback.go). The full set: "not_owner" (g1
 	// OwnerMap gate — subject belongs to a different plugin), "auth_guard_deny"
 	// (recipient not authorized by manifest declaration / ABAC grant — Phase 3b
-	// AuthGuard deny), "downgrade_refused" (INV-P7-7 fence — sensitive event
-	// stored under identity codec), "dek_missing" (INV-P7-15 fence — no DEK
+	// AuthGuard deny), "downgrade_refused" (INV-CRYPTO-42 fence — sensitive event
+	// stored under identity codec), "dek_missing" (INV-CRYPTO-50 fence — no DEK
 	// exists for this row's context), "stale_dek" (INV-E21 — both hot and cold
 	// DEK tiers gone), "audit_queue_full" (plugin audit-emit backpressure), and
 	// "internal" (host-side error, details logged server-side only).

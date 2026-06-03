@@ -47,7 +47,7 @@ type ManifestSource interface {
 }
 
 // AlwaysSensitiveSet produces the qualified `<plugin>:<event_type>` set the
-// PluginDowngradeFence uses for INV-P7-7. Returns a non-nil empty map when src
+// PluginDowngradeFence uses for INV-CRYPTO-42. Returns a non-nil empty map when src
 // is nil. Each unqualified event type is prefixed with `<pluginName>:`.
 func AlwaysSensitiveSet(src ManifestSource) map[string]struct{} {
 	out := map[string]struct{}{}
@@ -98,7 +98,7 @@ func OwnerMapFromManager(src ManifestSource) *audit.OwnerMap {
 
 // KeySelector returns a new identity codec.KeySelector. Callers MUST call this
 // once and thread the SAME instance into both audit.PluginConsumerManager
-// (WithKeySelector) and history.NewReader (WithCodecSelector): INV-P7-9 requires
+// (WithKeySelector) and history.NewReader (WithCodecSelector): INV-CRYPTO-45 requires
 // pointer-identity across the two sinks, which is the caller's responsibility,
 // not a guarantee of this constructor (it allocates a fresh value per call).
 func KeySelector() codec.KeySelector { return &identityKeySelector{} }
@@ -115,7 +115,7 @@ func (identityKeySelector) SelectForDecrypt(_ context.Context, _ codec.Name, _ c
 
 // CryptoKeysLookup wraps the pool with the Exists query satisfying
 // history.CryptoKeysLookup. Filters destroyed_at IS NULL so destroyed DEKs read
-// as Exists=false (INV-P7-15).
+// as Exists=false (INV-CRYPTO-50).
 func CryptoKeysLookup(pool *pgxpool.Pool) history.CryptoKeysLookup {
 	return &cryptoKeysLookup{pool: pool}
 }

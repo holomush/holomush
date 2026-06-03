@@ -106,7 +106,7 @@ func TestBuild_ActorMarshalIsDeterministic(t *testing.T) {
 	// Verifies the Actor proto submessage is canonicalized via
 	// proto.MarshalOptions{Deterministic: true} — bare proto.Marshal
 	// would silently produce non-byte-equal AAD across runs and break
-	// INV-25.
+	// INV-CRYPTO-14.
 	e := newTestEvent()
 
 	first, err := aad.Build(e, "xchacha20poly1305-v1", 42, 1)

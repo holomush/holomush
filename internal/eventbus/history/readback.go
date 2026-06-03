@@ -10,17 +10,17 @@ package history
 // authorization path (manifest crypto.emits[].readback), distinct from the
 // live-delivery path.
 //
-// INV-RB-1 — one primitive, two consumers: snapshot + fence both call
+// INV-CRYPTO-26 — one primitive, two consumers: snapshot + fence both call
 // decryptPluginRow rather than re-implementing decrypt/authz/audit.
-// INV-RB-3 — every plugin read-back decrypt produces an INV-19 audit
+// INV-CRYPTO-28 — every plugin read-back decrypt produces an INV-CRYPTO-11 audit
 // record; absence of an audit emitter fails closed (enforced inside
 // decodeAuthorizeAndDispatch).
-// INV-RB-4 — clean rows yield plaintext; refused rows yield a typed
+// INV-CRYPTO-29 — clean rows yield plaintext; refused rows yield a typed
 // NoPlaintextReason and no plaintext.
-// INV-RB-5 — the downgrade/DEK-existence fence (fenceCheckRow, T4) runs
+// INV-CRYPTO-30 — the downgrade/DEK-existence fence (fenceCheckRow, T4) runs
 // BEFORE any decrypt, so the read-back path inherits the same layer-(1)
 // refusals as the routed read path.
-// INV-RB-12 — the read-back authorization discriminator (ReadBack=true) is
+// INV-CRYPTO-37 — the read-back authorization discriminator (ReadBack=true) is
 // threaded onto the AuthGuard check for plugin principals.
 
 import (
@@ -52,7 +52,7 @@ const maxDecryptBatch = 500
 //     Plaintext is nil. Reason is one of the eventbus.NoPlaintextReason
 //     refusal values (non-zero).
 //   - Errored (infrastructure / fail-closed): Err != nil. The caller MUST
-//     NOT surface plaintext; this includes the INV-RB-3 nil-audit-emitter
+//     NOT surface plaintext; this includes the INV-CRYPTO-28 nil-audit-emitter
 //     fail-closed case.
 type RowResult struct {
 	Plaintext []byte
@@ -62,7 +62,7 @@ type RowResult struct {
 
 // OK reports whether the row decrypted to usable plaintext — no error and
 // no refusal reason. Zero-value NoPlaintextReason is the canonical "no
-// refusal" sentinel (INV-RB-4); adding a new reason constant is forbidden
+// refusal" sentinel (INV-CRYPTO-29); adding a new reason constant is forbidden
 // (TestNoPlaintextReasonEnumParity pins the count at 8).
 func (r RowResult) OK() bool {
 	return r.Err == nil && r.Reason == eventbus.NoPlaintextReasonUnspecified
@@ -73,25 +73,25 @@ func (r RowResult) OK() bool {
 // passed by value per call.
 type readbackDeps struct {
 	// alwaysSensitive is the manifest-derived set of event types that MUST
-	// NOT appear with an identity codec (INV-P7-7 downgrade detection).
+	// NOT appear with an identity codec (INV-CRYPTO-42 downgrade detection).
 	alwaysSensitive map[string]struct{}
-	// cryptoKeys answers the layer-(1) DEK existence pre-check (INV-P7-15).
+	// cryptoKeys answers the layer-(1) DEK existence pre-check (INV-CRYPTO-50).
 	cryptoKeys CryptoKeysLookup
 	// guard authorizes the read-back (ReadBack=true path).
 	guard eventbus.SessionAuthGuard
 	// dek resolves DEK key material for decryption.
 	dek eventbus.SessionDEKManager
-	// audit records the INV-19 plugin decrypt event (INV-RB-3). A nil audit
+	// audit records the INV-CRYPTO-11 plugin decrypt event (INV-CRYPTO-28). A nil audit
 	// emitter fails closed for plugin principals inside the dispatcher.
 	audit eventbus.SessionAuditEmitter
 }
 
 // decryptPluginRow is the reusable host-side read-back decrypt primitive
-// (INV-RB-1). It runs the downgrade/DEK-existence fence first (INV-RB-5),
+// (INV-CRYPTO-26). It runs the downgrade/DEK-existence fence first (INV-CRYPTO-30),
 // maps a refusal verdict to a typed RowResult, and otherwise reconstructs
 // the AAD envelope from the audit row and delegates decrypt + authorization
 // + audit to the shared dispatcher with ReadBack=true for plugin principals
-// (INV-RB-12). The dispatcher enforces the INV-19 / INV-RB-3 audit
+// (INV-CRYPTO-37). The dispatcher enforces the INV-CRYPTO-11 / INV-CRYPTO-28 audit
 // fail-closed contract.
 func decryptPluginRow(
 	ctx context.Context,
@@ -99,7 +99,7 @@ func decryptPluginRow(
 	row *pluginauditpb.AuditRow,
 	d readbackDeps,
 ) RowResult {
-	// INV-RB-5: layer-(1) fence BEFORE any decrypt.
+	// INV-CRYPTO-30: layer-(1) fence BEFORE any decrypt.
 	verdict, err := fenceCheckRow(ctx, row, d.alwaysSensitive, d.cryptoKeys)
 	if err != nil {
 		return RowResult{Err: err}
@@ -126,7 +126,7 @@ func decryptPluginRow(
 	keyID := codec.KeyID(row.GetDekRef())
 	keyVersion := row.GetDekVersion()
 
-	// INV-RB-12: ReadBack=true selects the manifest crypto.emits[].readback
+	// INV-CRYPTO-37: ReadBack=true selects the manifest crypto.emits[].readback
 	// authorization branch — only meaningful for plugin principals.
 	readBack := identity.Kind == eventbus.IdentityKindPlugin
 
@@ -186,11 +186,11 @@ func reasonToWire(r eventbus.NoPlaintextReason) string {
 // the single seam between the snapshot's PluginHostService.DecryptOwnAuditRows
 // handler (package goplugin) and the unexported primitive in this package — the
 // host never touches decryptPluginRow directly, and the primitive stays
-// unexported (INV-RB-1).
+// unexported (INV-CRYPTO-26).
 //
 // g1 (this type) refuses any row whose subject the OwnerMap attributes to a
 // different plugin BEFORE any decrypt; g2 (the manifest crypto.emits[].readback
-// flag, INV-RB-2) is enforced inside decryptPluginRow's AuthGuard check via the
+// flag, INV-CRYPTO-27) is enforced inside decryptPluginRow's AuthGuard check via the
 // ReadBack=true discriminator.
 type ReadbackDecryptor struct {
 	owners *audit.OwnerMap
@@ -230,18 +230,18 @@ func NewReadbackDecryptor(
 }
 
 // DecryptOwnRow decrypts one of pluginName's OWN audit rows, returning the
-// per-row proto envelope the host streams back (INV-RB-12: id always echoes
+// per-row proto envelope the host streams back (INV-CRYPTO-37: id always echoes
 // AuditRow.id for positional correlation).
 //
 // g1 ownership gate runs FIRST: if the OwnerMap attributes row.Subject to a
 // plugin other than pluginName (or to the host), the row is refused with
 // no_plaintext_reason="not_owner" and decryptPluginRow is NEVER called — no
 // decrypt, no DEK touch, no audit emission. Otherwise the row flows through the
-// shared primitive, which runs the downgrade/DEK fence (INV-RB-5), the
-// ReadBack=true AuthGuard branch (g2 / INV-RB-2), and the INV-19 audit
-// (INV-RB-3). Clean rows yield plaintext; refused rows map their reason to the
+// shared primitive, which runs the downgrade/DEK fence (INV-CRYPTO-30), the
+// ReadBack=true AuthGuard branch (g2 / INV-CRYPTO-27), and the INV-CRYPTO-11 audit
+// (INV-CRYPTO-28). Clean rows yield plaintext; refused rows map their reason to the
 // stable wire string; infrastructure errors map to "internal" and NEVER leak
-// plaintext (INV-RB-4 fail-closed).
+// plaintext (INV-CRYPTO-29 fail-closed).
 func (d *ReadbackDecryptor) DecryptOwnRow(
 	ctx context.Context,
 	pluginName, instanceID string,
@@ -266,7 +266,7 @@ func (d *ReadbackDecryptor) DecryptOwnRow(
 	res := decryptPluginRow(ctx, identity, row, d.deps)
 	switch {
 	case res.Err != nil:
-		// Infrastructure / fail-closed (incl. INV-RB-3 nil-audit-emitter).
+		// Infrastructure / fail-closed (incl. INV-CRYPTO-28 nil-audit-emitter).
 		// Surface a generic refusal — NEVER plaintext.
 		return &pluginauditpb.RowResult{
 			Id:      row.GetId(),
@@ -290,7 +290,7 @@ func (d *ReadbackDecryptor) DecryptOwnRow(
 // runtimes (binary gRPC + Lua hostfunc) inherit the identical bound. A batch
 // larger than maxDecryptBatch is REJECTED (not clamped) with
 // DECRYPT_BATCH_TOO_LARGE and NO row is decrypted. Otherwise each row flows
-// through DecryptOwnRow; results are returned 1:1 in request order (INV-RB-12).
+// through DecryptOwnRow; results are returned 1:1 in request order (INV-CRYPTO-37).
 func (d *ReadbackDecryptor) DecryptOwnRows(
 	ctx context.Context,
 	pluginName, instanceID string,

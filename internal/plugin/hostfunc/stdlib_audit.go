@@ -71,7 +71,7 @@ func decryptOwnAuditRowsImpl(ls *lua.LState, pluginName string, dec AuditDecrypt
 
 	// A malformed row entry (anything that is not a table) is rejected — the
 	// whole call fails rather than silently skipping the entry. Silent skips
-	// would misalign results with input indices and break INV-RB-12 positional
+	// would misalign results with input indices and break INV-CRYPTO-37 positional
 	// correlation; a malformed batch is a plugin bug, so failing closed is the
 	// safe behavior.
 	rows := make([]*pluginv1.AuditRow, 0, rowsTbl.Len())

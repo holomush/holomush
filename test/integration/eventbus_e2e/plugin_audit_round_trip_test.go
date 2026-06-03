@@ -34,16 +34,16 @@ func (s *dekBindingStubE2E) Current(_ context.Context, _ string) (string, error)
 	return s.id, nil
 }
 
-// Scene log ciphertext and audit header round-trip specs — INV-P7-6 + INV-P7-12.
+// Scene log ciphertext and audit header round-trip specs — INV-CRYPTO-41 + INV-CRYPTO-47.
 //
 // Emits one sensitive event under a plugin-owned subject and asserts:
 //
-//   - The plugin's scene_log row holds CIPHERTEXT, not plaintext (INV-P7-12).
+//   - The plugin's scene_log row holds CIPHERTEXT, not plaintext (INV-CRYPTO-47).
 //   - The plugin row's payload bytes are byte-equal to the bus envelope
-//     payload (INV-P7-6: plugin storage MUST mirror the bus byte-for-byte).
+//     payload (INV-CRYPTO-41: plugin storage MUST mirror the bus byte-for-byte).
 //   - The plugin row carries dek_ref + dek_version populated from the
-//     bus headers (INV-EVENTBUS-25 column shape, INV-P7-1 wire shape).
-var _ = Describe("Scene log preserves ciphertext and audit headers (INV-P7-6, INV-P7-12)", func() {
+//     bus headers (INV-EVENTBUS-25 column shape, INV-CRYPTO-38 wire shape).
+var _ = Describe("Scene log preserves ciphertext and audit headers (INV-CRYPTO-41, INV-CRYPTO-47)", func() {
 	It("plugin scene_log row is ciphertext byte-equal to bus envelope payload", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		DeferCleanup(cancel)
@@ -145,20 +145,20 @@ var _ = Describe("Scene log preserves ciphertext and audit headers (INV-P7-6, IN
 		// Read back the persisted row.
 		pluginRow := readSceneLogRow(suiteT, pool, eventID.Bytes())
 
-		// INV-P7-12: plugin row payload MUST be ciphertext, not plaintext.
+		// INV-CRYPTO-47: plugin row payload MUST be ciphertext, not plaintext.
 		Expect(pluginRow.codec).To(Equal("xchacha20poly1305-v1"))
 		Expect(pluginRow.payload).NotTo(Equal([]byte(plaintext)),
-			"INV-P7-12: plugin row MUST hold ciphertext for sensitive events")
+			"INV-CRYPTO-47: plugin row MUST hold ciphertext for sensitive events")
 		Expect(pluginRow.payload).NotTo(BeEmpty())
 
 		// INV-EVENTBUS-25: dek_ref + dek_version present.
 		Expect(pluginRow.dekRef).NotTo(BeNil())
 		Expect(pluginRow.dekVersion).NotTo(BeNil())
 
-		// INV-P7-6: plugin payload byte-equal to the bus envelope payload.
+		// INV-CRYPTO-41: plugin payload byte-equal to the bus envelope payload.
 		busPayload := lookupBusEnvelopePayload(suiteT, bus, eventID)
 		Expect(pluginRow.payload).To(Equal(busPayload),
-			"INV-P7-6: plugin storage MUST be byte-equal to bus envelope payload")
+			"INV-CRYPTO-41: plugin storage MUST be byte-equal to bus envelope payload")
 
 		// Cross-check: bus payload itself MUST be ciphertext (sanity).
 		Expect(busPayload).NotTo(Equal([]byte(plaintext)),

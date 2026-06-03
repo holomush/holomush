@@ -7,15 +7,15 @@
 //
 // These tests exercise the CONSUMER side of the read-back design
 // (docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md): the
-// snapshot pipeline's atomicity (INV-RB-8), failure mapping (INV-RB-10), and the
+// snapshot pipeline's atomicity (INV-CRYPTO-33), failure mapping (INV-CRYPTO-35), and the
 // FK soft-no-op (ADR holomush-jrefa) — invariants explicitly OUT OF SCOPE for
 // the primitive-side tests in test/integration/crypto/readback_test.go.
 //
 // Two decryptor seams are used:
 //   - Happy path / chunking: a REAL history.ReadbackDecryptor (full DEK manager
 //   - xchacha20poly1305 codec + OwnerMap + AuthGuard) proves end-to-end
-//     ciphertext → plaintext through the production primitive (INV-RB-6
-//     consumer-side, INV-RB-8). scene_log is seeded with REAL ciphertext.
+//     ciphertext → plaintext through the production primitive (INV-CRYPTO-31
+//     consumer-side, INV-CRYPTO-33). scene_log is seeded with REAL ciphertext.
 //   - Failure modes / soft-no-op / idempotency: a fault-injecting fake
 //     snapshotDecryptor so the pipeline's failure mapping is asserted precisely
 //     without coupling to crypto-fault injection.
@@ -268,11 +268,11 @@ func buildSnapshotRealEnv(ctx context.Context, pluginName string) *snapshotRealE
 	Expect(err).NotTo(HaveOccurred())
 	sessionGuard := authguard.NewSessionBridgeGuard(guardCore)
 
-	// INV-RB-3 audit emitter. The ReadbackDecryptor requires a non-nil
+	// INV-CRYPTO-28 audit emitter. The ReadbackDecryptor requires a non-nil
 	// SessionAuditEmitter for plugin principals (fail-closed). The queued
 	// emitter's drain goroutine silently drops audit.> publish errors against
 	// the EVENTS stream, so a plain rawPub is sufficient here — this test does
-	// NOT assert on the audit record (INV-RB-3 is covered by
+	// NOT assert on the audit record (INV-CRYPTO-28 is covered by
 	// test/integration/crypto/readback_test.go).
 	auditEmitter, err := guardaudit.NewQueuedEmitter(rawPub)
 	Expect(err).NotTo(HaveOccurred())
@@ -509,10 +509,10 @@ var _ = Describe("C7 snapshot pipeline (COOLOFF → PUBLISHED)", func() {
 	})
 	AfterEach(func() { cancel() })
 
-	// INV-RB-8 / INV-RB-6 consumer-side: real ciphertext in scene_log decrypts
+	// INV-CRYPTO-33 / INV-CRYPTO-31 consumer-side: real ciphertext in scene_log decrypts
 	// end-to-end through the production primitive; the attempt transitions to
 	// PUBLISHED with rendered PLAINTEXT content_entries and the scene archives.
-	It("publishes with decrypted content_entries and archives the scene (INV-RB-8)", func() {
+	It("publishes with decrypted content_entries and archives the scene (INV-CRYPTO-33)", func() {
 		const (
 			pluginName = "core-scenes"
 			sceneID    = "01C7SNAPHAPPY00000000000A"
@@ -537,26 +537,26 @@ var _ = Describe("C7 snapshot pipeline (COOLOFF → PUBLISHED)", func() {
 		// PUBLISHED with content_entries holding the rendered PLAINTEXT.
 		pub, err := env.store.GetPublishedSceneHeader(ctx, attemptID)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(pub.Status).To(Equal(StatusPublished), "INV-RB-8: attempt must be PUBLISHED")
+		Expect(pub.Status).To(Equal(StatusPublished), "INV-CRYPTO-33: attempt must be PUBLISHED")
 		Expect(pub.PublishedAt).NotTo(BeNil())
 
 		entries, err := env.store.GetPublishedSceneContent(ctx, attemptID)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(entries).To(HaveLen(1), "INV-RB-8: content_entries must hold the decrypted pose")
+		Expect(entries).To(HaveLen(1), "INV-CRYPTO-33: content_entries must hold the decrypted pose")
 		Expect(entries[0].Kind).To(Equal(EntryKindPose))
 		Expect(entries[0].Content).To(Equal(text),
-			"INV-RB-8: content_entries must hold rendered PLAINTEXT, not ciphertext")
+			"INV-CRYPTO-33: content_entries must hold rendered PLAINTEXT, not ciphertext")
 
 		// Scene archived.
 		scene, err := env.store.Get(ctx, sceneID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(scene.State).To(Equal(string(SceneStateArchived)),
-			"INV-RB-8 / INV-SCENE-31: parent scene must transition to archived ONLY on PUBLISHED")
+			"INV-CRYPTO-33 / INV-SCENE-31: parent scene must transition to archived ONLY on PUBLISHED")
 	})
 
-	// INV-RB-10 / INV-RB-12: a host decrypt error fails the publish closed with
+	// INV-CRYPTO-35 / INV-CRYPTO-37: a host decrypt error fails the publish closed with
 	// SNAPSHOT_DECRYPT_FAILED and writes NO content.
-	It("transitions to ATTEMPT_FAILED with SNAPSHOT_DECRYPT_FAILED on decrypt error (INV-RB-10)", func() {
+	It("transitions to ATTEMPT_FAILED with SNAPSHOT_DECRYPT_FAILED on decrypt error (INV-CRYPTO-35)", func() {
 		const sceneID = "01C7SNAPDECFAIL000000000A"
 		const ownerID = "01C7SNAPDECFAILOWNER0000A"
 		dec := &fakeSnapshotDecryptor{err: oops.Code("DEK_DESTROYED").Errorf("dek gone")}
@@ -569,17 +569,17 @@ var _ = Describe("C7 snapshot pipeline (COOLOFF → PUBLISHED)", func() {
 
 		pub, err := store.GetPublishedSceneHeader(ctx, attemptID)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(pub.Status).To(Equal(StatusAttemptFailed), "INV-RB-10: decrypt error → ATTEMPT_FAILED")
+		Expect(pub.Status).To(Equal(StatusAttemptFailed), "INV-CRYPTO-35: decrypt error → ATTEMPT_FAILED")
 		Expect(pub.FailureReason).NotTo(BeNil())
 		Expect(*pub.FailureReason).To(Equal(FailureSnapshotDecryptFailed),
-			"INV-RB-10: failure_reason must be SNAPSHOT_DECRYPT_FAILED")
+			"INV-CRYPTO-35: failure_reason must be SNAPSHOT_DECRYPT_FAILED")
 		entries, err := store.GetPublishedSceneContent(ctx, attemptID)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(entries).To(BeEmpty(), "INV-RB-10: no content written on decrypt failure")
+		Expect(entries).To(BeEmpty(), "INV-CRYPTO-35: no content written on decrypt failure")
 	})
 
-	// INV-RB-12: ANY per-row refusal → publish fails closed.
-	It("transitions to ATTEMPT_FAILED with SNAPSHOT_DECRYPT_FAILED on a per-row refusal (INV-RB-12)", func() {
+	// INV-CRYPTO-37: ANY per-row refusal → publish fails closed.
+	It("transitions to ATTEMPT_FAILED with SNAPSHOT_DECRYPT_FAILED on a per-row refusal (INV-CRYPTO-37)", func() {
 		const sceneID = "01C7SNAPREFUSE0000000000A"
 		const ownerID = "01C7SNAPREFUSEOWNER00000A"
 		dec := &fakeSnapshotDecryptor{refuseReason: "not_owner"}
@@ -594,7 +594,7 @@ var _ = Describe("C7 snapshot pipeline (COOLOFF → PUBLISHED)", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(pub.Status).To(Equal(StatusAttemptFailed))
 		Expect(*pub.FailureReason).To(Equal(FailureSnapshotDecryptFailed),
-			"INV-RB-12: any per-row refusal is a publish failure")
+			"INV-CRYPTO-37: any per-row refusal is a publish failure")
 	})
 
 	// SNAPSHOT_RENDER_FAILED: a decrypted payload that is not valid {actor_id,text}

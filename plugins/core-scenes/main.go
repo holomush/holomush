@@ -137,7 +137,7 @@ func (p *scenePlugin) SetEventSink(sink pluginsdk.EventSink) {
 // SetSnapshotDecryptor forwards the SDK-injected host-mediated read-back
 // decryptor to the scene service, where the COOLOFF→PUBLISHED snapshot pipeline
 // (C7) uses it to decrypt its own IC content (the plugin holds no DEK —
-// INV-RB-1). Declares scenePlugin as pluginsdk.SnapshotDecryptorAware so the SDK
+// INV-CRYPTO-26). Declares scenePlugin as pluginsdk.SnapshotDecryptorAware so the SDK
 // adapter wires it before Init.
 func (p *scenePlugin) SetSnapshotDecryptor(d pluginsdk.SnapshotDecryptor) {
 	if p.service != nil {

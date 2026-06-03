@@ -20,10 +20,10 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
-// TestLocalAEADProvider_Startup_RefusesIfWrapKeyIDUnknown verifies INV-33:
+// TestLocalAEADProvider_Startup_RefusesIfWrapKeyIDUnknown verifies INV-CRYPTO-19:
 // startup integrity check fails if any crypto_keys row references a
 // wrap_key_id the current provider cannot unwrap.
-var _ = Describe("LocalAEADProvider startup (INV-33)", func() {
+var _ = Describe("LocalAEADProvider startup (INV-CRYPTO-19)", func() {
 	It("refuses startup if wrap_key_id is unknown", func() {
 		ctx := context.Background()
 		// Use postgres.BasicWaitStrategies() which combines the log wait

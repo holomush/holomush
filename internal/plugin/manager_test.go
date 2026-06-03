@@ -1853,7 +1853,7 @@ lua-plugin:
 }
 
 // TestPluginCanReadBack verifies Manager.PluginCanReadBack against the
-// crypto.emits[].readback field (INV-RB-2).
+// crypto.emits[].readback field (INV-CRYPTO-27).
 func TestPluginCanReadBack(t *testing.T) {
 	t.Parallel()
 	m := newTestManagerWithManifest(t, &plugins.Manifest{

@@ -120,3 +120,28 @@
   spec-only refs:[] = exactly W9ML-1..6 (6). Same `token: "...",}` trailing-comma noise
   recurred AGAIN (3rd time: SCENE INV-7 ref) — Low non-blocking; renderer-inert.
   Encountered: hz0v4.14.14 (2026-06-03) — READY.
+
+- **Final/hardest CRYPTO leg (52 ids: reader-opts 1..6→1..5 + master-crypto bare
+  9..49 + RB-1..12 + P7-crypto-half) is the same shape; all checks held (hz0v4.14.15
+  READY).** Key residual-walk subtlety confirmed at source: `bareInvRE` in
+  `test/meta/invariant_registry_test.go:488` is `\bINV-\d+\b` — matches ONLY bare
+  NUMERIC `INV-9`. It does NOT match `INV-P7-1` / `INV-RB-1` (the `-P7-`/`-RB-`
+  segment breaks `\d+` right after `INV-`). So a surviving descriptive prose
+  reference like `// the legacy INV-P7-1..16 set, migrated to...` in an OWNED file
+  (phase7_boundary_meta_test.go:25) is INERT to the residual walk — NOT a finding.
+  Residual walk also `continue`s on shared files (line 554). The
+  `phase7_boundary_meta_test.go` is a `testName`-EXISTENCE meta-test (collects Go
+  Test* func names via go/parser; `tc.inv` is a t.Run label only, robust to rename)
+  — distinct from `// Verifies:`-grep scanners that MUST be deleted (.14.9). Its
+  `cases` table `inv` strings migrate in lockstep. Shared_files MAY be unowned by
+  any scope: `TestOwnedPathsPartition` (line 113) only forbids the SAME glob in two
+  scopes' owned_paths; an unowned shared file (crypto_manifest.go carrying only
+  INV-CRYPTO-27; plugin_role_permissions_test.go only INV-CRYPTO-48) is permissible —
+  `checkProvenance` line 524 accepts shared-OR-owned. Dense renumber maps
+  non-contiguous legacy ascending-by-position (reader INV-5 was never a real inv →
+  1,2,3,4,6→1,2,3,4,5; master INV-17→CRYPTO-9). Provenance check greps canonical
+  `e.ID` (line 520), NOT `r.Token` (legacy FROM-anchor) — so 209 refs showing
+  "legacy TOKEN-ABSENT" is EXPECTED/correct; re-scan for canonical id instead.
+  grpc-api.md table-row "non-comment" diffs are doc prose; verify each ± pair
+  differs ONLY in the token. No `token:",}` trailing-comma noise this time.
+  Encountered: hz0v4.14.15 (2026-06-03) — READY.

@@ -109,7 +109,7 @@ type sceneStorer interface {
 	// SnapshotPool exposes the connection pool so runSnapshot can orchestrate
 	// the read-tx → decrypt(outside tx) → write-tx sequence (read-back design
 	// §6). The remaining methods are tx-scoped so the lock + re-validate +
-	// MarkPublished + archive run in one write transaction (INV-RB-8).
+	// MarkPublished + archive run in one write transaction (INV-CRYPTO-33).
 	SnapshotPool() *pgxpool.Pool
 	LockForSnapshot(ctx context.Context, tx pgx.Tx, id string) (*PublishedScene, error)
 	TallyVotesTx(ctx context.Context, tx pgx.Tx, publishedSceneID string) (*VoteTally, error)
@@ -137,7 +137,7 @@ type SceneServiceImpl struct {
 	// decryptor is the host-mediated read-back decrypt seam used by the
 	// COOLOFF→PUBLISHED snapshot pipeline (C7). nil until SetSnapshotDecryptor
 	// wires it at Init; runSnapshot fails closed when nil. The plugin never
-	// holds a DEK — it submits ciphertext rows and receives plaintext (INV-RB-1).
+	// holds a DEK — it submits ciphertext rows and receives plaintext (INV-CRYPTO-26).
 	decryptor snapshotDecryptor
 	// settings is the SDK-injected host settings client used by
 	// effectiveTaxonomy to read the game-scope "content.cw_taxonomy" override.

@@ -17,7 +17,7 @@ import (
 	"github.com/holomush/holomush/test/testutil"
 )
 
-// Plugin role permissions — INV-P7-13.
+// Plugin role permissions — INV-CRYPTO-48.
 //
 // The plugin role provisioned by SchemaProvisioner.ProvisionSchema
 // (internal/plugin/schema_provisioner.go) is granted USAGE+CREATE on its
@@ -32,11 +32,11 @@ import (
 // schema_provisioner's introduction; this spec is the explicit cross-
 // cutting check that Phase 7 can rely on it.
 //
-// INV-P7-13 cross-reference: this spec is the named carrier for the
+// INV-CRYPTO-48 cross-reference: this spec is the named carrier for the
 // invariant; the phase7_boundary_meta_test.go drift detector maps the
 // invariant to the suite entry func TestBinaryPlugin (Ginkgo Describes are
 // not top-level *testing.T funcs).
-var _ = Describe("Plugin role cannot write host tables (INV-P7-13)", func() {
+var _ = Describe("Plugin role cannot write host tables (INV-CRYPTO-48)", func() {
 	It("denies INSERT on host-owned events_audit", func() {
 		ctx := context.Background()
 
@@ -56,7 +56,7 @@ var _ = Describe("Plugin role cannot write host tables (INV-P7-13)", func() {
 		Expect(err).NotTo(HaveOccurred())
 		defer pluginPool.Close()
 
-		// INV-P7-13: plugin role MUST NOT be able to INSERT into events_audit.
+		// INV-CRYPTO-48: plugin role MUST NOT be able to INSERT into events_audit.
 		//
 		// Schema-qualify the name (public.events_audit) so Postgres surfaces a
 		// permission error rather than the search_path-dependent "relation
@@ -69,15 +69,15 @@ var _ = Describe("Plugin role cannot write host tables (INV-P7-13)", func() {
 		_, err = pluginPool.Exec(ctx, `
 			INSERT INTO public.events_audit (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec)
 			VALUES ('\x0123456789ABCDEF0123456789ABCDEF', 'events.test.x', 'y', 0, 'system', '\x', 1, 'identity')`)
-		Expect(err).To(HaveOccurred(), "INV-P7-13: plugin role MUST be denied INSERT on host-owned events_audit")
+		Expect(err).To(HaveOccurred(), "INV-CRYPTO-48: plugin role MUST be denied INSERT on host-owned events_audit")
 
 		// The substrate revokes USAGE on schema public from the plugin role
 		// (schema_provisioner.go:165). Postgres surfaces this as
 		// "permission denied for schema public" before it ever evaluates the
 		// table-level INSERT privilege — the schema-USAGE check is the gate
 		// that fails first. Either error wording (schema public OR table
-		// events_audit) satisfies INV-P7-13; assert the shared substring.
+		// events_audit) satisfies INV-CRYPTO-48; assert the shared substring.
 		Expect(strings.Contains(strings.ToLower(err.Error()), "permission denied")).To(BeTrue(),
-			"INV-P7-13: error MUST be a permission-denied (got: %v)", err)
+			"INV-CRYPTO-48: error MUST be a permission-denied (got: %v)", err)
 	})
 })

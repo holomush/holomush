@@ -91,7 +91,7 @@ export type AuditRow = Message<"holomush.plugin.v1.AuditRow"> & {
   /**
    * payload holds the event body. For identity codec this is cleartext;
    * for xchacha20poly1305-v1 this is the AEAD ciphertext, forwarded
-   * byte-equal without decryption (INV-P7-11). Plugins store the bytes
+   * byte-equal without decryption (INV-CRYPTO-46). Plugins store the bytes
    * opaquely; decryption occurs at read-back via DecryptOwnAuditRows.
    *
    * @generated from field: bytes payload = 7;
@@ -329,7 +329,7 @@ export const DecryptOwnAuditRowsRequestSchema: GenMessage<DecryptOwnAuditRowsReq
 
 /**
  * DecryptOwnAuditRowsResponse returns one RowResult per request row, in the
- * same order (1:1 positional correspondence, INV-RB-12).
+ * same order (1:1 positional correspondence, INV-CRYPTO-37).
  *
  * @generated from message holomush.plugin.v1.DecryptOwnAuditRowsResponse
  */
@@ -337,7 +337,7 @@ export type DecryptOwnAuditRowsResponse = Message<"holomush.plugin.v1.DecryptOwn
   /**
    * results contains one outcome per request row, in the same order as
    * DecryptOwnAuditRowsRequest.rows. Positional correspondence is
-   * guaranteed (INV-RB-12); callers correlate by index or by RowResult.id.
+   * guaranteed (INV-CRYPTO-37); callers correlate by index or by RowResult.id.
    *
    * @generated from field: repeated holomush.plugin.v1.RowResult results = 1;
    */
@@ -393,8 +393,8 @@ export type RowResult = Message<"holomush.plugin.v1.RowResult"> & {
      * SDKs switch on them — see readback.go). The full set: "not_owner" (g1
      * OwnerMap gate — subject belongs to a different plugin), "auth_guard_deny"
      * (recipient not authorized by manifest declaration / ABAC grant — Phase 3b
-     * AuthGuard deny), "downgrade_refused" (INV-P7-7 fence — sensitive event
-     * stored under identity codec), "dek_missing" (INV-P7-15 fence — no DEK
+     * AuthGuard deny), "downgrade_refused" (INV-CRYPTO-42 fence — sensitive event
+     * stored under identity codec), "dek_missing" (INV-CRYPTO-50 fence — no DEK
      * exists for this row's context), "stale_dek" (INV-E21 — both hot and cold
      * DEK tiers gone), "audit_queue_full" (plugin audit-emit backpressure), and
      * "internal" (host-side error, details logged server-side only).
@@ -433,7 +433,7 @@ export const PluginAuditService: GenService<{
    * response; the host then acks the JetStream message. On error the
    * host does NOT nak — JetStream AckWait + MaxDeliver handle retry
    * with natural backoff. The AuditRow payload is forwarded byte-equal
-   * (ciphertext is never decrypted before forwarding, INV-P7-11).
+   * (ciphertext is never decrypted before forwarding, INV-CRYPTO-46).
    *
    * @generated from rpc holomush.plugin.v1.PluginAuditService.AuditEvent
    */

@@ -190,7 +190,7 @@ func TestGuardBranchPluginBackpressureDeniesEarly(t *testing.T) {
 	assert.Equal(t, authguard.DenyAuditBackpressure, decision.Code)
 }
 
-// Branch 4 — operator: INV-43.
+// Branch 4 — operator: INV-CRYPTO-24.
 func TestGuardBranchOperatorAlwaysDenies(t *testing.T) {
 	g := newGuardWithFakes(t, nil, true)
 	id := authguard.NewOperatorIdentity()

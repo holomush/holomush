@@ -20,7 +20,7 @@ import (
 )
 
 // TestRoundTripPreservesAADWithSubMicrosecondNanos asserts INV-STORE-5
-// (formerly INV-P7-16, superseded by ADR holomush-f5h0): byte-equal
+// (formerly INV-CRYPTO-51, superseded by ADR holomush-f5h0): byte-equal
 // AAD reconstruction across an ns-precise publisher AAD and an
 // ns-precise PG-BIGINT round-trip. Without this, EVERY sensitive
 // plugin-stored event would fail AEAD tag-check on decrypt because

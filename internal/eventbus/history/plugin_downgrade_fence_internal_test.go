@@ -46,8 +46,8 @@ func (f fenceLookupStub) Exists(_ context.Context, _ uint64) (bool, error) {
 }
 
 // TestFenceCheckRowVerdictsMatchSpec verifies that fenceCheckRow returns the
-// correct fenceVerdict for each spec-mandated branch (INV-P7-7 downgrade,
-// INV-P7-15 DEK existence) without going through the full fencedStream path.
+// correct fenceVerdict for each spec-mandated branch (INV-CRYPTO-42 downgrade,
+// INV-CRYPTO-50 DEK existence) without going through the full fencedStream path.
 func TestFenceCheckRowVerdictsMatchSpec(t *testing.T) {
 	t.Parallel()
 	always := map[string]struct{}{"scene_pose": {}}
@@ -126,7 +126,7 @@ func TestFenceCheckRowForwardsLookupError(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "AUDIT_ROW_DEK_LOOKUP_FAILED")
 }
 
-// --- INV-RB-7: clean-row decrypt for routed participants ---
+// --- INV-CRYPTO-32: clean-row decrypt for routed participants ---
 
 // fenceStubRouter / fenceStubStream are in-package fakes (the external
 // fakeRouter/fakeFenceStream live in package history_test and cannot drive
@@ -209,7 +209,7 @@ func (fenceNoopEmitter) EmitViolation(_ context.Context, _ string, _ *pluginaudi
 
 // TestFenceDecryptsCleanRowForMember asserts a member character reading a
 // clean (encrypted, valid-DEK) plugin-owned row over the routed path receives
-// DECRYPTED plaintext — the INV-RB-7 contract change (was ciphertext
+// DECRYPTED plaintext — the INV-CRYPTO-32 contract change (was ciphertext
 // passthrough pre-T8). The participant path is ReadBack=false (checkCharacter).
 func TestFenceDecryptsCleanRowForMember(t *testing.T) {
 	t.Parallel()
@@ -232,7 +232,7 @@ func TestFenceDecryptsCleanRowForMember(t *testing.T) {
 
 // TestFenceRefusesCleanRowForNonMember asserts a non-member character reading a
 // clean plugin-owned row receives a metadata-only refusal (AuthGuardDeny) with
-// NO plaintext — the security crux of INV-RB-7. checkCharacter denies, so the
+// NO plaintext — the security crux of INV-CRYPTO-32. checkCharacter denies, so the
 // row is refused after the layer-(1) fence but before any plaintext is surfaced.
 func TestFenceRefusesCleanRowForNonMember(t *testing.T) {
 	t.Parallel()
@@ -252,5 +252,5 @@ func TestFenceRefusesCleanRowForNonMember(t *testing.T) {
 	assert.True(t, ev.MetadataOnly, "non-member MUST get metadata-only")
 	assert.Equal(t, eventbus.NoPlaintextReasonAuthGuardDeny, ev.NoPlaintextReason,
 		"non-member denial surfaces AuthGuardDeny (checkCharacter denied)")
-	assert.Nil(t, ev.Payload, "non-member MUST NOT receive plaintext (INV-RB-7)")
+	assert.Nil(t, ev.Payload, "non-member MUST NOT receive plaintext (INV-CRYPTO-32)")
 }

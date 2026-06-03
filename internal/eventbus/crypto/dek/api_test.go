@@ -18,7 +18,7 @@ import (
 // TestPackageHasNoExportedByteSlices guarantees the dek package never
 // exposes an exported function/method returning []byte or an exported
 // struct field of type []byte. This is the ground-truth defense for
-// INV-27 — the dekmaterialno* and codeckeybytesallowlist analyzers in
+// INV-CRYPTO-16 — the dekmaterialno* and codeckeybytesallowlist analyzers in
 // gorules/analyzers/ catch known sinks, but this test catches API drift
 // (a future contributor adding a Bytes() accessor would bypass the
 // analyzers by introducing a new export).
@@ -80,7 +80,7 @@ func assertFuncDoesNotReturnByteSlice(t *testing.T, fn *types.Func) {
 	for i := 0; i < results.Len(); i++ {
 		r := results.At(i)
 		if isByteSlice(r.Type()) {
-			t.Fatalf("INV-27 violation: dek.%s returns []byte at result position %d. "+
+			t.Fatalf("INV-CRYPTO-16 violation: dek.%s returns []byte at result position %d. "+
 				"If you need to expose key bytes, route through codec.Key (which is "+
 				"lint-allowlisted via gorules/codec_key_bytes_allowlist.go).",
 				fn.Name(), i)
@@ -100,7 +100,7 @@ func assertNamedTypeHasNoByteSliceFields(t *testing.T, tn *types.TypeName) {
 			continue
 		}
 		if isByteSlice(f.Type()) {
-			t.Fatalf("INV-27 violation: dek.%s.%s is an exported []byte field. "+
+			t.Fatalf("INV-CRYPTO-16 violation: dek.%s.%s is an exported []byte field. "+
 				"Make it unexported and use codec.Key for the egress path.",
 				tn.Name(), f.Name())
 		}

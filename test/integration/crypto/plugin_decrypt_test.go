@@ -4,7 +4,7 @@
 //go:build integration
 
 // Package crypto_test — Phase 3b integration tests for plugin-decrypt
-// AuthGuard invariants (INV-17/18/19/20). These tests exercise the
+// AuthGuard invariants (INV-CRYPTO-9/18/19/20). These tests exercise the
 // checkPlugin branch on the subscriber fan-out path using in-process
 // stubs (no binary plugin processes required).
 package crypto_test
@@ -81,7 +81,7 @@ func (m mapManifestLookup) PluginCanReadBack(name, eventType string) bool {
 // any subject that doesn't start with "events.", but audit events use
 // "audit.<gameID>.plugin_decrypt.<pluginName>" subjects. In production,
 // the emitter's drain goroutine silently drops the publish error (the
-// EVENTS stream doesn't capture audit.> subjects anyway). For INV-19,
+// EVENTS stream doesn't capture audit.> subjects anyway). For INV-CRYPTO-11,
 // we need the audit event to actually land on JetStream so we can consume
 // it from the AUDIT stream. This wrapper delegates events.> subjects to
 // the wrapped publisher and publishes audit.> subjects directly to
@@ -165,7 +165,7 @@ func buildPluginDecryptHarness(t *testing.T) *pluginDecryptHarness {
 	// succeed. The default EVENTS stream only captures events.>; audit
 	// events are published to audit.> subjects which no stream matches
 	// in production (emitter.go:215-218 silently drops the error). The
-	// test creates this stream so INV-19 can verify the event was emitted.
+	// test creates this stream so INV-CRYPTO-11 can verify the event was emitted.
 	_, err := bus.JS.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
 		Name:     "AUDIT",
 		Subjects: []string{"audit.>"},
@@ -317,12 +317,12 @@ func emitSensitiveWhisper(t *testing.T, h *pluginDecryptHarness, sceneID, plaint
 	}
 }
 
-// TestPluginDecryptManifestGateDeniesWithoutDeclaration verifies INV-17:
+// TestPluginDecryptManifestGateDeniesWithoutDeclaration verifies INV-CRYPTO-9:
 // a plugin without manifest requests_decryption for an event class MUST
 // receive metadata-only delivery for events of that class, regardless of
 // subject subscription. The manifest gate fires before the ABAC evaluation
 // (guard.go:123), so even with an ABAC grant, the plugin is denied.
-var _ = Describe("Plugin decrypt manifest gate denies without declaration (INV-17)", func() {
+var _ = Describe("Plugin decrypt manifest gate denies without declaration (INV-CRYPTO-9)", func() {
 	It("plugin without requests_decryption receives MetadataOnly=true", func() {
 		h := buildPluginDecryptHarness(suiteT)
 
@@ -352,7 +352,7 @@ var _ = Describe("Plugin decrypt manifest gate denies without declaration (INV-1
 		// manifest gate denies first.
 		h.abacEngine.Grant("plugin:"+pluginName, "decrypt", "dek:1:1")
 
-		// Do NOT register the plugin in manifests — this is the INV-17 condition.
+		// Do NOT register the plugin in manifests — this is the INV-CRYPTO-9 condition.
 
 		const plaintext = `{"text":"inv17 secret"}`
 		emitSensitiveWhisper(suiteT, h, sceneID, plaintext)
@@ -372,17 +372,17 @@ var _ = Describe("Plugin decrypt manifest gate denies without declaration (INV-1
 		Expect(err).NotTo(HaveOccurred(), "expected delivery from stream")
 		Expect(delivery.Ack()).NotTo(HaveOccurred())
 
-		// Verifies: INV-17
-		Expect(delivery.MetadataOnly()).To(BeTrue(), "INV-17: plugin without requests_decryption must receive MetadataOnly=true")
-		Expect(delivery.Event().Payload).To(BeEmpty(), "INV-17: metadata-only delivery must have empty payload")
+		// Verifies: INV-CRYPTO-9
+		Expect(delivery.MetadataOnly()).To(BeTrue(), "INV-CRYPTO-9: plugin without requests_decryption must receive MetadataOnly=true")
+		Expect(delivery.Event().Payload).To(BeEmpty(), "INV-CRYPTO-9: metadata-only delivery must have empty payload")
 	})
 })
 
-// TestPluginDecryptABACGateDeniesWithoutGrant verifies INV-18: a plugin
+// TestPluginDecryptABACGateDeniesWithoutGrant verifies INV-CRYPTO-10: a plugin
 // with manifest declaration but without an active ABAC grant MUST receive
 // metadata-only. The manifest gate passes (requests_decryption declared)
 // but the ABAC evaluation denies (guard.go:143-144).
-var _ = Describe("Plugin decrypt ABAC gate denies without grant (INV-18)", func() {
+var _ = Describe("Plugin decrypt ABAC gate denies without grant (INV-CRYPTO-10)", func() {
 	It("plugin with manifest but no ABAC grant receives MetadataOnly=true", func() {
 		h := buildPluginDecryptHarness(suiteT)
 
@@ -421,7 +421,7 @@ var _ = Describe("Plugin decrypt ABAC gate denies without grant (INV-18)", func(
 			},
 		}
 
-		// Do NOT call h.abacEngine.Grant — this is the INV-18 condition.
+		// Do NOT call h.abacEngine.Grant — this is the INV-CRYPTO-10 condition.
 
 		const plaintext = `{"text":"inv18 secret"}`
 		emitSensitiveWhisper(suiteT, h, sceneID, plaintext)
@@ -441,20 +441,20 @@ var _ = Describe("Plugin decrypt ABAC gate denies without grant (INV-18)", func(
 		Expect(err).NotTo(HaveOccurred(), "expected delivery from stream")
 		Expect(delivery.Ack()).NotTo(HaveOccurred())
 
-		// Verifies: INV-18
-		Expect(delivery.MetadataOnly()).To(BeTrue(), "INV-18: plugin with manifest but no ABAC grant must receive MetadataOnly=true")
-		Expect(delivery.Event().Payload).To(BeEmpty(), "INV-18: metadata-only delivery must have empty payload")
+		// Verifies: INV-CRYPTO-10
+		Expect(delivery.MetadataOnly()).To(BeTrue(), "INV-CRYPTO-10: plugin with manifest but no ABAC grant must receive MetadataOnly=true")
+		Expect(delivery.Event().Payload).To(BeEmpty(), "INV-CRYPTO-10: metadata-only delivery must have empty payload")
 	})
 })
 
-// TestPluginDecryptEmitsAuditOnPermitAndIsolation verifies INV-19: every
+// TestPluginDecryptEmitsAuditOnPermitAndIsolation verifies INV-CRYPTO-11: every
 // plugin decryption MUST emit an audit event on a subject the plugin cannot
 // subscribe to. The audit event is published to
 // audit.holomush.plugin_decrypt.<pluginName> (guardaudit.Emitter defaults
 // gameID to "holomush" per emitter.go:29), which is outside the events.>
 // subject namespace. The plugin session subscribes to events.> only, so
 // the audit event is invisible by construction.
-var _ = Describe("Plugin decrypt emits audit on permit and isolation (INV-19)", func() {
+var _ = Describe("Plugin decrypt emits audit on permit and isolation (INV-CRYPTO-11)", func() {
 	It("permitted plugin receives plaintext and audit event is isolated from plugin session", func() {
 		h := buildPluginDecryptHarness(suiteT)
 
@@ -521,17 +521,17 @@ var _ = Describe("Plugin decrypt emits audit on permit and isolation (INV-19)", 
 		Expect(delivery.Ack()).NotTo(HaveOccurred())
 
 		// Assertion 1: plugin received plaintext (permit path).
-		// Verifies: INV-19 (permit branch)
-		Expect(delivery.MetadataOnly()).To(BeFalse(), "INV-19: permitted plugin must receive MetadataOnly=false")
-		Expect(delivery.Event().Payload).To(Equal([]byte(plaintext)), "INV-19: permitted plugin must receive original plaintext")
+		// Verifies: INV-CRYPTO-11 (permit branch)
+		Expect(delivery.MetadataOnly()).To(BeFalse(), "INV-CRYPTO-11: permitted plugin must receive MetadataOnly=false")
+		Expect(delivery.Event().Payload).To(Equal([]byte(plaintext)), "INV-CRYPTO-11: permitted plugin must receive original plaintext")
 
 		// Assertion 2: audit event exists on audit.holomush.plugin_decrypt.inv19-audit-plugin.
 		// The guardaudit.Emitter publishes to the AUDIT stream (not events.>).
-		// Verifies: INV-19 (audit-on-permit)
+		// Verifies: INV-CRYPTO-11 (audit-on-permit)
 		auditSubject := "audit.holomush.plugin_decrypt." + pluginName
 		auditMsg := testutil.WaitForOneJetStreamMsgOnStream(suiteT, h.bus, "AUDIT", auditSubject, testutil.DefaultWait)
 		Expect(auditMsg.Headers().Get("App-Event-Type")).To(Equal("audit:plugin_decrypt"),
-			"INV-19: audit event must have type audit:plugin_decrypt")
+			"INV-CRYPTO-11: audit event must have type audit:plugin_decrypt")
 
 		// Assertion 3: the plugin session did NOT receive the audit event.
 		// The session subscribes to events.>; the audit event is on audit.>,
@@ -544,18 +544,18 @@ var _ = Describe("Plugin decrypt emits audit on permit and isolation (INV-19)", 
 		noMoreCtx, noMoreCancel := context.WithTimeout(ctx, 500*time.Millisecond)
 		defer noMoreCancel()
 		_, noMoreErr := stream.Next(noMoreCtx)
-		Expect(noMoreErr).To(HaveOccurred(), "INV-19: plugin session must not receive audit events (audit.> is outside events.> filter)")
+		Expect(noMoreErr).To(HaveOccurred(), "INV-CRYPTO-11: plugin session must not receive audit events (audit.> is outside events.> filter)")
 	})
 })
 
-// TestPluginDecryptDenialDoesNotBlockFanout verifies INV-20: a plugin
+// TestPluginDecryptDenialDoesNotBlockFanout verifies INV-CRYPTO-12: a plugin
 // authorization failure MUST NOT block fan-out to other recipients.
 // Two sessions subscribe to the same events.> subject: a character
 // participant (permitted) and a plugin without manifest (denied). The
 // test asserts both receive the event — the character gets plaintext
 // and the plugin gets metadata-only — proving that the plugin's deny
 // did not block the character's delivery.
-var _ = Describe("Plugin decrypt denial does not block fanout (INV-20)", func() {
+var _ = Describe("Plugin decrypt denial does not block fanout (INV-CRYPTO-12)", func() {
 	It("character receives plaintext and denied plugin receives MetadataOnly without blocking each other", func() {
 		h := buildPluginDecryptHarness(suiteT)
 
@@ -583,7 +583,7 @@ var _ = Describe("Plugin decrypt denial does not block fanout (INV-20)", func() 
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		// Do NOT register the denied plugin's manifest — INV-20 condition.
+		// Do NOT register the denied plugin's manifest — INV-CRYPTO-12 condition.
 
 		const plaintext = `{"text":"inv20 fanout secret"}`
 
@@ -626,13 +626,13 @@ var _ = Describe("Plugin decrypt denial does not block fanout (INV-20)", func() 
 		Expect(err).NotTo(HaveOccurred(), "plugin session must receive the event (metadata-only)")
 		Expect(pluginDelivery.Ack()).NotTo(HaveOccurred())
 
-		// Verifies: INV-20 — the character's plaintext delivery proves the
+		// Verifies: INV-CRYPTO-12 — the character's plaintext delivery proves the
 		// plugin's deny did not block fan-out to other recipients.
-		Expect(charDelivery.MetadataOnly()).To(BeFalse(), "INV-20: character participant must receive MetadataOnly=false (plaintext)")
-		Expect(charDelivery.Event().Payload).To(Equal([]byte(plaintext)), "INV-20: character must receive original plaintext")
+		Expect(charDelivery.MetadataOnly()).To(BeFalse(), "INV-CRYPTO-12: character participant must receive MetadataOnly=false (plaintext)")
+		Expect(charDelivery.Event().Payload).To(Equal([]byte(plaintext)), "INV-CRYPTO-12: character must receive original plaintext")
 
-		// The plugin's deny is expected (INV-17 manifest gate).
-		Expect(pluginDelivery.MetadataOnly()).To(BeTrue(), "INV-20: denied plugin must receive MetadataOnly=true")
-		Expect(pluginDelivery.Event().Payload).To(BeEmpty(), "INV-20: denied plugin payload must be empty")
+		// The plugin's deny is expected (INV-CRYPTO-9 manifest gate).
+		Expect(pluginDelivery.MetadataOnly()).To(BeTrue(), "INV-CRYPTO-12: denied plugin must receive MetadataOnly=true")
+		Expect(pluginDelivery.Event().Payload).To(BeEmpty(), "INV-CRYPTO-12: denied plugin payload must be empty")
 	})
 })

@@ -264,7 +264,7 @@ func (p *projection) persist(msg jetstream.Msg) error {
 		return oops.Code("AUDIT_MISSING_HEADER").With("header", headerMsgID).Errorf("missing header")
 	}
 	// Shared header parser produces typed Codec / SchemaVer / DEKRef /
-	// DEKVersion. The per-plugin dispatcher uses the same parser; INV-P7-2
+	// DEKVersion. The per-plugin dispatcher uses the same parser; INV-CRYPTO-39
 	// byte-equality across the host-projection branch and the per-plugin
 	// dispatcher branch is structural (single implementation feeds both).
 	parsed, err := ParseAuditHeaders(h)
