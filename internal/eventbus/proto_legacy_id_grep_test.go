@@ -54,7 +54,7 @@ func grepFile(t *testing.T, path string, pattern *regexp.Regexp) []string {
 	return hits
 }
 
-// TestProtoHasNoLegacyIDField asserts INV-W9ML-7 at the proto schema layer:
+// TestProtoHasNoLegacyIDField asserts INV-PLUGIN-15 at the proto schema layer:
 // `legacy_id` MUST NOT appear as an active field in the eventbus proto.
 // `reserved` declarations (which intentionally name the deleted field to
 // prevent accidental reuse of field number 3) are explicitly permitted.
@@ -78,7 +78,7 @@ func TestProtoHasNoLegacyIDField(t *testing.T) {
 	}
 }
 
-// TestRegeneratedPbGoHasNoLegacyId asserts INV-W9ML-7 at the regenerated
+// TestRegeneratedPbGoHasNoLegacyId asserts INV-PLUGIN-15 at the regenerated
 // proto Go code: `LegacyId` MUST NOT appear.
 func TestRegeneratedPbGoHasNoLegacyId(t *testing.T) {
 	root := repoRoot(t)
@@ -90,7 +90,7 @@ func TestRegeneratedPbGoHasNoLegacyId(t *testing.T) {
 	}
 }
 
-// TestEventbusActorStructHasNoLegacyID asserts INV-W9ML-7 at the Go struct
+// TestEventbusActorStructHasNoLegacyID asserts INV-PLUGIN-15 at the Go struct
 // layer: `LegacyID` MUST NOT exist on eventbus.Actor.
 func TestEventbusActorStructHasNoLegacyID(t *testing.T) {
 	root := repoRoot(t)
@@ -102,7 +102,7 @@ func TestEventbusActorStructHasNoLegacyID(t *testing.T) {
 	}
 }
 
-// TestPublisherHasNoLegacyIDReferences asserts INV-W9ML-7 at the publisher
+// TestPublisherHasNoLegacyIDReferences asserts INV-PLUGIN-15 at the publisher
 // layer: no LegacyID/legacy_id/header references remain.
 func TestPublisherHasNoLegacyIDReferences(t *testing.T) {
 	root := repoRoot(t)

@@ -19,7 +19,7 @@ import (
 )
 
 // TestInitAppliesManifestConfig verifies that applyConfig decodes plugin_config
-// into service.cfg and schedInterval correctly (INV-PC-7).
+// into service.cfg and schedInterval correctly (INV-PLUGIN-7).
 func TestInitAppliesManifestConfig(t *testing.T) {
 	t.Parallel()
 	p := &scenePlugin{service: &SceneServiceImpl{}}

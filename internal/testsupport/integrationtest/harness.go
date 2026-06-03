@@ -173,7 +173,7 @@ type Server struct {
 	// whole-system tests can evaluate plugin-installed manifest policies (e.g.
 	// test-abac-widget's widget-read-normal / widget-forbid-restricted) directly
 	// against the same engine the harness wired the plugin attribute resolvers
-	// onto (holomush-0f0f4.9, INV-WS-2).
+	// onto (holomush-0f0f4.9, INV-PLUGIN-19).
 	accessEngine types.AccessPolicyEngine
 
 	// guestStartLocationID is the location all guests are placed into.
@@ -656,7 +656,7 @@ func (s *Server) SceneServiceClient() scenev1.SceneServiceClient {
 // Under WithRealABAC it is the real seeded engine (abacSub.Engine()); composed
 // with WithInTreePlugins, plugin-declared attribute resolvers are registered on
 // that engine's resolver, so callers can evaluate plugin-installed manifest
-// policies against it directly (holomush-0f0f4.9, INV-WS-2). Without
+// policies against it directly (holomush-0f0f4.9, INV-PLUGIN-19). Without
 // WithRealABAC it is the allow-all default (or a WithPolicyEngine override).
 func (s *Server) AccessEngine() types.AccessPolicyEngine {
 	return s.accessEngine

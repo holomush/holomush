@@ -196,28 +196,53 @@ scopes:
     boundary: "Plugin-system contracts applicable to both Lua and binary runtimes. Does NOT include: plugin crypto wiring
       (→ INV-CRYPTO)."
     # Families PC (runtime config), W9ML (plugin identity), WS (whole-system load harness). See redesign spec §2.1.
-    status: pending
+    # P7 split: PLUGIN gets ZERO P7 tokens (§2.1 lines 163-164 — all remaining P7 → CRYPTO .14.15).
+    # The pluginauthz/settings bare INV-1..5/8/11 are DEFERRED to the dedicated bare-INV-N pass
+    # (tri-overloaded shared namespace: plugin-host-evaluate vs command-query vs phase-8-settings;
+    # same class as the INV-15/A16 ABAC tokens flagged on epic .14). pluginauthz/** is NOT owned here.
+    # owned_paths use file-paths (not /** globs) for dirs that hold deferred/foreign bare INV-N
+    # (pluginauthz, wholesystem/census, internal/plugin settings) so the residual walk stays clean.
+    status: migrated
     origin_specs:
       - "docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"
       - "docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"
       - "docs/superpowers/specs/2026-05-25-wholesystem-plugin-integration-design.md"
     owned_paths:
+      # PC (plugin-runtime-config): config files are PLUGIN-exclusive.
+      - "internal/plugin/config.go"
+      - "internal/plugin/config_test.go"
+      - "internal/plugin/config_opacity_test.go"
+      # W9ML (plugin identity): registry + repo + legacy-id grep gates (PLUGIN-exclusive).
       - "internal/plugin/identity_registry.go"
-      - "internal/plugin/identity_registry_test.go"
-      - "internal/plugin/pluginauthz/**"
       - "internal/store/plugin_repo.go"
       - "internal/eventbus/proto_legacy_id_grep_test.go"
       - "internal/eventbus/no_legacy_id_grep_test.go"
-      - "test/integration/wholesystem/**"
-      - "test/integration/plugin/**"
+      # WS (whole-system harness): WS-only harness files (file-paths — wholesystem/ also holds
+      # census_test.go which carries foreign bare INV-1/INV-5, so do NOT own the dir glob).
+      - "internal/testsupport/integrationtest/invariants_test.go"
+      - "internal/testsupport/integrationtest/default_plugins_test.go"
+      - "test/integration/wholesystem/abac_test.go"
     shared_files:
-      # PLUGIN+EVENTBUS: manager carries GW + W9ML.
+      # PLUGIN+STORE: no_delete grep gate (W9ML-9) lives in a STORE-owned file.
+      - "internal/store/no_delete_grep_test.go"
+      # PLUGIN+(S substrate): goplugin host (PC-8 + foreign INV-S5).
+      - "internal/plugin/goplugin/host.go"
+      - "internal/plugin/goplugin/host_test.go"
+      # PLUGIN+(settings/S substrate): lua host (PC-3 + deferred bare INV-6/7/8 + INV-S5).
+      - "internal/plugin/lua/host.go"
+      # PLUGIN+EVENTBUS: manager carries EVENTBUS-11 + W9ML-8.
       - "internal/plugin/manager.go"
-      - "internal/plugin/manager_test.go"
-      # PLUGIN+SCENE+EVENTBUS: plugin subsystem (see SCENE.shared_files).
+      # PLUGIN+SCENE+EVENTBUS: plugin subsystem (PC-3 + foreign INV-1/4 + EVENTBUS-11 + SCENE-38).
       - "internal/plugin/setup/subsystem.go"
-      # Shared integration harness (see CRYPTO.shared_files).
+      # PLUGIN+ACCESS: whole-system plugins helper (WS-2/3 + ACCESS-4).
+      - "internal/testsupport/integrationtest/plugins.go"
+      # Shared integration harness (carries WS-2 + many foreign; see CRYPTO.shared_files).
       - "internal/testsupport/integrationtest/harness.go"
+      # PLUGIN+SCENE: PC-7 (cfg-zero regression lock) sites in SCENE-owned core-scenes files.
+      - "plugins/core-scenes/main_test.go"
+      - "plugins/core-scenes/publish_helpers.go"
+      - "plugins/core-scenes/service.go"
+      - "plugins/core-scenes/testhelpers_test.go"
 
   - name: INV-EVENTBUS
     description: "Subject naming, JetStream consumer config, audit projection, delivery contracts, tier routing, rendering
@@ -1987,4 +2012,199 @@ invariants:
     refs:
       - {file: "plugins/core-scenes/commands_test.go", token: "INV-7"}
       - {file: "test/integration/scenes/publish_e2e_test.go", token: "INV-7"}
-      - {file: "test/integration/scenes/seed_encrypted_ic_validation_test.go", token: "INV-7"}
+      - {file: "test/integration/scenes/seed_encrypted_ic_validation_test.go", token: "INV-7",}
+
+  # -- INV-PLUGIN -- migrated from families PC/W9ML/WS + pluginauthz bare INV-N (holomush-hz0v4.14.14).
+  # P7 SPLIT: PLUGIN gets ZERO P7 tokens (redesign §2.1: crypto half=1,2,5,6,7,9,11,12,15,16; P7-13/14 ride
+  # with crypto; EVENTBUS took 3/4/10; remainder → CRYPTO .14.15). Dense by family: PC 1..8→1..8,
+  # W9ML 1..9→9..17 (1..6 spec-only refs:[]), WS 1..4→18..21. pluginauthz/settings bare INV-1..5/8/11 DEFERRED to the dedicated bare-INV-N pass (tri-overloaded shared namespace; epic .14 note).
+  # Bare INV-1..5 (plugin-host-evaluate) scoped to pluginauthz/evaluate.go ONLY — bare INV-1..5 are a
+  # massively-shared namespace (20+ unrelated files: world/docs/theme/commandquery); those are NOT touched.
+  # INV-8/INV-11 (phase-8 spec, plugin settings authz) scoped to their plugin-settings files.
+  # binding: pending — legacy // INV-<fam>/bare annotations; backfill .11.
+  - id: INV-PLUGIN-1
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"
+    legacy: ["INV-PC-1@docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"]
+    summary: "The host MUST NOT interpret plugin config-key meaning — only declared generic types (no plugin-config key literals
+      in host packages)."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/config_opacity_test.go", token: "INV-PC-1"}
+  - id: INV-PLUGIN-2
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"
+    legacy: ["INV-PC-2@docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"]
+    summary: "Effective config = manifest defaults overlaid by server override, per key; override wins."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/config_test.go", token: "INV-PC-2"}
+  - id: INV-PLUGIN-3
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"
+    legacy: ["INV-PC-3@docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"]
+    summary: "The host builds one merged value map per plugin; both binary (plugin_config) and Lua (holomush.config) delivery
+      carry that same map — parity enforced at the host-merge layer, not re-derived per runtime."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/config_test.go", token: "INV-PC-3"}
+      - {file: "internal/plugin/lua/host.go", token: "INV-PC-3"}
+      - {file: "internal/plugin/setup/subsystem.go", token: "INV-PC-3"}
+  - id: INV-PLUGIN-4
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"
+    legacy: ["INV-PC-4@docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"]
+    summary: "A required key absent from both manifest default and override → fail-fast at plugin load (PLUGIN_CONFIG_MISSING_REQUIRED)."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/config.go", token: "INV-PC-4"}
+      - {file: "internal/plugin/config_test.go", token: "INV-PC-4"}
+  - id: INV-PLUGIN-5
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"
+    legacy: ["INV-PC-5@docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"]
+    summary: "A value that does not parse to its declared type → fail-fast at load (PLUGIN_CONFIG_TYPE_INVALID)."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/config.go", token: "INV-PC-5"}
+      - {file: "internal/plugin/config_test.go", token: "INV-PC-5"}
+  - id: INV-PLUGIN-6
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"
+    legacy: ["INV-PC-6@docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"]
+    summary: "An override key not declared in the manifest schema → fail-fast at load (PLUGIN_CONFIG_UNKNOWN_KEY)."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/config.go", token: "INV-PC-6"}
+      - {file: "internal/plugin/config_test.go", token: "INV-PC-6"}
+  - id: INV-PLUGIN-7
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"
+    legacy: ["INV-PC-7@docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"]
+    summary: "With no override (production), core-scenes resolves vote_window=168h, cooloff_window=30m, scheduler_interval=30s
+      (cfg-zero regression lock)."
+    binding: pending
+    refs:
+      - {file: "plugins/core-scenes/main_test.go", token: "INV-PC-7"}
+      - {file: "plugins/core-scenes/publish_helpers.go", token: "INV-PC-7"}
+      - {file: "plugins/core-scenes/service.go", token: "INV-PC-7"}
+      - {file: "plugins/core-scenes/testhelpers_test.go", token: "INV-PC-7"}
+  - id: INV-PLUGIN-8
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"
+    legacy: ["INV-PC-8@docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"]
+    summary: "A binary plugin declaring config: MUST receive Init (and its plugin_config) even with none of requires/provides/storage/crypto.emits
+      — the needsInit gate MUST include len(manifest.Config) > 0."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/goplugin/host.go", token: "INV-PC-8"}
+      - {file: "internal/plugin/goplugin/host_test.go", token: "INV-PC-8"}
+  - id: INV-PLUGIN-9
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"
+    legacy: ["INV-W9ML-1@docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"]
+    summary: "Every Actor at every layer and kind carries a ULID identity; system sentinels resolve via NameByID after Manager
+      bootstrap."
+    binding: pending
+    refs: []
+  - id: INV-PLUGIN-10
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"
+    legacy: ["INV-W9ML-2@docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"]
+    summary: "IdentityRegistry is the sole resolution path for actor identity (IDByName at stamp sites, NameByID at render
+      sites)."
+    binding: pending
+    refs: []
+  - id: INV-PLUGIN-11
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"
+    legacy: ["INV-W9ML-3@docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"]
+    summary: "Plugin name uniqueness: two active plugins with the same name — the second load fails with a constraint violation."
+    binding: pending
+    refs: []
+  - id: INV-PLUGIN-12
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"
+    legacy: ["INV-W9ML-4@docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"]
+    summary: "A plugin's ULID is stable across manifest updates, content updates, and unload/reload within the retention window."
+    binding: pending
+    refs: []
+  - id: INV-PLUGIN-13
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"
+    legacy: ["INV-W9ML-5@docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"]
+    summary: "Plugin policies are lifecycle-coupled (installed/removed with the plugin)."
+    binding: pending
+    refs: []
+  - id: INV-PLUGIN-14
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"
+    legacy: ["INV-W9ML-6@docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"]
+    summary: "No production-shape-discipline regressions (documentary; verified by spec review)."
+    binding: pending
+    refs: []
+  - id: INV-PLUGIN-15
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"
+    legacy: ["INV-W9ML-7@docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"]
+    summary: "Clean wire format: no legacy-ID references in production code (grep gate over non-doc, non-generated files returns
+      zero matches)."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/no_legacy_id_grep_test.go", token: "INV-W9ML-7"}
+      - {file: "internal/eventbus/proto_legacy_id_grep_test.go", token: "INV-W9ML-7"}
+  - id: INV-PLUGIN-16
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"
+    legacy: ["INV-W9ML-8@docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"]
+    summary: "Sweep ordering: the retention GC sweep MUST NOT collect a plugin loaded this cycle."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/manager.go", token: "INV-W9ML-8"}
+  - id: INV-PLUGIN-17
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"
+    legacy: ["INV-W9ML-9@docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"]
+    summary: "No deletion: production code MUST NOT issue DELETE FROM plugins (grep gate returns zero matches outside explicit
+      test fixtures)."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/identity_registry.go", token: "INV-W9ML-9"}
+      - {file: "internal/store/no_delete_grep_test.go", token: "INV-W9ML-9"}
+      - {file: "internal/store/plugin_repo.go", token: "INV-W9ML-9"}
+  - id: INV-PLUGIN-18
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-25-wholesystem-plugin-integration-design.md"
+    legacy: ["INV-WS-1@docs/superpowers/specs/2026-05-25-wholesystem-plugin-integration-design.md"]
+    summary: "WithInTreePlugins() MUST reuse setup.PluginSubsystem and MUST NOT construct plugins.NewManager directly in the
+      harness."
+    binding: pending
+    refs:
+      - {file: "internal/testsupport/integrationtest/invariants_test.go", token: "INV-WS-1"}
+  - id: INV-PLUGIN-19
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-25-wholesystem-plugin-integration-design.md"
+    legacy: ["INV-WS-2@docs/superpowers/specs/2026-05-25-wholesystem-plugin-integration-design.md"]
+    summary: "The whole-system suite MUST assert >=1 cross-plugin-ABAC permit AND >=1 forbid against the real seeded engine."
+    binding: pending
+    refs:
+      - {file: "internal/testsupport/integrationtest/harness.go", token: "INV-WS-2"}
+      - {file: "internal/testsupport/integrationtest/plugins.go", token: "INV-WS-2"}
+      - {file: "test/integration/wholesystem/abac_test.go", token: "INV-WS-2"}
+  - id: INV-PLUGIN-20
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-25-wholesystem-plugin-integration-design.md"
+    legacy: ["INV-WS-3@docs/superpowers/specs/2026-05-25-wholesystem-plugin-integration-design.md"]
+    summary: "The whole-system suite MUST NOT be silently skipped in CI: with HOLOMUSH_REQUIRE_PLUGINS set, a missing binary
+      artifact is a hard failure."
+    binding: pending
+    refs:
+      - {file: "internal/testsupport/integrationtest/plugins.go", token: "INV-WS-3"}
+  - id: INV-PLUGIN-21
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-25-wholesystem-plugin-integration-design.md"
+    legacy: ["INV-WS-4@docs/superpowers/specs/2026-05-25-wholesystem-plugin-integration-design.md"]
+    summary: "WithInTreePlugins() MUST be opt-in: omitting it leaves the harness plugin-free and behaviorally unchanged."
+    binding: pending
+    refs:
+      - {file: "internal/testsupport/integrationtest/default_plugins_test.go", token: "INV-WS-4"}

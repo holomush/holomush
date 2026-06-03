@@ -649,7 +649,7 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 
 	// w9ml T8: GC sweep — runs AFTER all loads have refreshed last_seen_at,
 	// so a plugin loaded in this cycle is never swept in the same cycle
-	// (INV-W9ML-8). Skipped on the graceful-degradation early return path
+	// (INV-PLUGIN-16). Skipped on the graceful-degradation early return path
 	// because partial-load failures may leave last_seen_at stale.
 	if m.pluginRepo != nil && m.retentionDays > 0 {
 		swept, err := m.pluginRepo.SweepInactive(ctx, m.retentionDays)

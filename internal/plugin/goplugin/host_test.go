@@ -2126,7 +2126,7 @@ func TestHostConfigOverrideForPlugin(t *testing.T) {
 }
 
 func TestNeedsInitIncludesConfig(t *testing.T) {
-	// INV-PC-8: a config-only plugin (no requires/provides/storage/crypto)
+	// INV-PLUGIN-8: a config-only plugin (no requires/provides/storage/crypto)
 	// MUST still be initialised so its plugin_config is delivered.
 	m := &plugins.Manifest{
 		Name:   "demo",

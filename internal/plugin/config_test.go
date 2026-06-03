@@ -18,7 +18,7 @@ func TestMergePluginConfig(t *testing.T) {
 		"needs_override": {Type: "int", Required: true}, // no default
 		"optional_note":  {Type: "string"},              // optional, no default
 	}
-	t.Run("override wins per key and manifest defaults fill the rest (INV-PC-2)", func(t *testing.T) {
+	t.Run("override wins per key and manifest defaults fill the rest (INV-PLUGIN-2)", func(t *testing.T) {
 		got, err := MergePluginConfig(schema, map[string]string{"cooloff_window": "5s", "needs_override": "1"})
 		require.NoError(t, err)
 		require.Equal(t, map[string]string{"vote_window": "168h", "cooloff_window": "5s", "needs_override": "1"}, got)
@@ -28,15 +28,15 @@ func TestMergePluginConfig(t *testing.T) {
 		require.NoError(t, err)
 		require.NotContains(t, got, "optional_note")
 	})
-	t.Run("rejects a required key with no default and no override (INV-PC-4)", func(t *testing.T) {
+	t.Run("rejects a required key with no default and no override (INV-PLUGIN-4)", func(t *testing.T) {
 		_, err := MergePluginConfig(schema, map[string]string{})
 		errutil.AssertErrorCode(t, err, "PLUGIN_CONFIG_MISSING_REQUIRED")
 	})
-	t.Run("rejects an override value that fails its declared type (INV-PC-5)", func(t *testing.T) {
+	t.Run("rejects an override value that fails its declared type (INV-PLUGIN-5)", func(t *testing.T) {
 		_, err := MergePluginConfig(schema, map[string]string{"vote_window": "banana", "needs_override": "1"})
 		errutil.AssertErrorCode(t, err, "PLUGIN_CONFIG_TYPE_INVALID")
 	})
-	t.Run("rejects an override key not declared in the schema (INV-PC-6)", func(t *testing.T) {
+	t.Run("rejects an override key not declared in the schema (INV-PLUGIN-6)", func(t *testing.T) {
 		_, err := MergePluginConfig(schema, map[string]string{"needs_override": "1", "bogus": "x"})
 		errutil.AssertErrorCode(t, err, "PLUGIN_CONFIG_UNKNOWN_KEY")
 	})
@@ -47,7 +47,7 @@ func TestMergePluginConfig(t *testing.T) {
 // delivery paths receive — and that calling it twice with the same inputs
 // yields equal maps.
 //
-// INV-PC-3: both delivery paths (binary gRPC, Lua return-value) receive the
+// INV-PLUGIN-3: both delivery paths (binary gRPC, Lua return-value) receive the
 // same merged map from MergePluginConfig; there is no per-runtime fork of the
 // config computation.
 func TestMergePluginConfigProducesSingleMergedMap(t *testing.T) {

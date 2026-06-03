@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-// TestNoDeleteFromPluginsInCodebase enforces INV-W9ML-9: plugin rows are
+// TestNoDeleteFromPluginsInCodebase enforces INV-PLUGIN-17: plugin rows are
 // never DELETEd. SweepInactive sets gc_at instead. This static guard
 // catches future changes that would reintroduce DELETE.
 //
@@ -69,7 +69,7 @@ func TestNoDeleteFromPluginsInCodebase(t *testing.T) {
 		}
 	}
 	if len(violations) > 0 {
-		t.Fatalf("INV-W9ML-9 violation: matches in production code:\n%s",
+		t.Fatalf("INV-PLUGIN-17 violation: matches in production code:\n%s",
 			strings.Join(violations, "\n"))
 	}
 }

@@ -136,6 +136,32 @@ invariants.
 | `INV-SCENE-58` | content.cw_block resolution MUST be the union of GAME, PLAYER, and CHARACTER scope lists (safety-accumulating), not first-match-wins. | `INV-6` | pending |
 | `INV-SCENE-59` | Scene settings/sensitivity access MUST be ABAC-authorized and default-deny: a principal may read/write its own PLAYER/CHARACTER settings; GAME-scope writes require an operator action. | `INV-7` | pending |
 
+### `INV-PLUGIN`
+
+| ID | Summary | Legacy | Binding |
+|----|---------|--------|---------|
+| `INV-PLUGIN-1` | The host MUST NOT interpret plugin config-key meaning — only declared generic types (no plugin-config key literals in host packages). | `INV-PC-1` | pending |
+| `INV-PLUGIN-2` | Effective config = manifest defaults overlaid by server override, per key; override wins. | `INV-PC-2` | pending |
+| `INV-PLUGIN-3` | The host builds one merged value map per plugin; both binary (plugin_config) and Lua (holomush.config) delivery carry that same map — parity enforced at the host-merge layer, not re-derived per runtime. | `INV-PC-3` | pending |
+| `INV-PLUGIN-4` | A required key absent from both manifest default and override → fail-fast at plugin load (PLUGIN_CONFIG_MISSING_REQUIRED). | `INV-PC-4` | pending |
+| `INV-PLUGIN-5` | A value that does not parse to its declared type → fail-fast at load (PLUGIN_CONFIG_TYPE_INVALID). | `INV-PC-5` | pending |
+| `INV-PLUGIN-6` | An override key not declared in the manifest schema → fail-fast at load (PLUGIN_CONFIG_UNKNOWN_KEY). | `INV-PC-6` | pending |
+| `INV-PLUGIN-7` | With no override (production), core-scenes resolves vote_window=168h, cooloff_window=30m, scheduler_interval=30s (cfg-zero regression lock). | `INV-PC-7` | pending |
+| `INV-PLUGIN-8` | A binary plugin declaring config: MUST receive Init (and its plugin_config) even with none of requires/provides/storage/crypto.emits — the needsInit gate MUST include len(manifest.Config) > 0. | `INV-PC-8` | pending |
+| `INV-PLUGIN-9` | Every Actor at every layer and kind carries a ULID identity; system sentinels resolve via NameByID after Manager bootstrap. | `INV-W9ML-1` | pending |
+| `INV-PLUGIN-10` | IdentityRegistry is the sole resolution path for actor identity (IDByName at stamp sites, NameByID at render sites). | `INV-W9ML-2` | pending |
+| `INV-PLUGIN-11` | Plugin name uniqueness: two active plugins with the same name — the second load fails with a constraint violation. | `INV-W9ML-3` | pending |
+| `INV-PLUGIN-12` | A plugin's ULID is stable across manifest updates, content updates, and unload/reload within the retention window. | `INV-W9ML-4` | pending |
+| `INV-PLUGIN-13` | Plugin policies are lifecycle-coupled (installed/removed with the plugin). | `INV-W9ML-5` | pending |
+| `INV-PLUGIN-14` | No production-shape-discipline regressions (documentary; verified by spec review). | `INV-W9ML-6` | pending |
+| `INV-PLUGIN-15` | Clean wire format: no legacy-ID references in production code (grep gate over non-doc, non-generated files returns zero matches). | `INV-W9ML-7` | pending |
+| `INV-PLUGIN-16` | Sweep ordering: the retention GC sweep MUST NOT collect a plugin loaded this cycle. | `INV-W9ML-8` | pending |
+| `INV-PLUGIN-17` | No deletion: production code MUST NOT issue DELETE FROM plugins (grep gate returns zero matches outside explicit test fixtures). | `INV-W9ML-9` | pending |
+| `INV-PLUGIN-18` | WithInTreePlugins() MUST reuse setup.PluginSubsystem and MUST NOT construct plugins.NewManager directly in the harness. | `INV-WS-1` | pending |
+| `INV-PLUGIN-19` | The whole-system suite MUST assert >=1 cross-plugin-ABAC permit AND >=1 forbid against the real seeded engine. | `INV-WS-2` | pending |
+| `INV-PLUGIN-20` | The whole-system suite MUST NOT be silently skipped in CI: with HOLOMUSH_REQUIRE_PLUGINS set, a missing binary artifact is a hard failure. | `INV-WS-3` | pending |
+| `INV-PLUGIN-21` | WithInTreePlugins() MUST be opt-in: omitting it leaves the harness plugin-free and behaviorally unchanged. | `INV-WS-4` | pending |
+
 ### `INV-EVENTBUS`
 
 | ID | Summary | Legacy | Binding |
