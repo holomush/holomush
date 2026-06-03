@@ -118,7 +118,7 @@ var _ = Describe("Invalidation Coordinator", func() {
 	})
 
 	// Verifies: INV-CLUSTER-9
-	// Verifies: INV-12 (read-immediacy substrate)
+	// Verifies: INV-CRYPTO-7 (read-immediacy substrate)
 	Describe("participants_changed propagates within timeout", func() {
 		It("evicts every replica's ParticipantsCache for (ctxType, ctxID, version) on Add", func() {
 			h := clustertest.New(GinkgoT(), "test-game", 2)

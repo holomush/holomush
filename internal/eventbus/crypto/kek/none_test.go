@@ -15,7 +15,7 @@ import (
 )
 
 func TestNoneProvider_Wrap_RefusesWithTypedError(t *testing.T) {
-	// INV-34: NoneProvider.Wrap MUST refuse and surface a typed error.
+	// INV-CRYPTO-20: NoneProvider.Wrap MUST refuse and surface a typed error.
 	provider := kek.NewNoneProviderForUnitTest() // skips DB check; tests Wrap path only
 	_, _, err := provider.Wrap(context.Background(), make([]byte, 32))
 	require.Error(t, err)

@@ -49,7 +49,7 @@ func (cfg CacheConfig) applyDefaults() CacheConfig {
 }
 
 // Cache holds unwrapped DEK Material in process memory with LRU
-// eviction and TTL safety net. INV-27: MUST NOT live in NATS KV, PG,
+// eviction and TTL safety net. INV-CRYPTO-16: MUST NOT live in NATS KV, PG,
 // disk, or logs.
 //
 // The cache is internally synchronized for concurrent use. Phase 2's
@@ -58,7 +58,7 @@ func (cfg CacheConfig) applyDefaults() CacheConfig {
 // Phase 3c (holomush-ojw1.3) added the byContext reverse index so
 // InvalidateContext can evict every (KeyID, Version) belonging to a
 // ContextID in O(entries-for-context). The reverse index is part of
-// the in-process state — INV-27 is preserved (no serialization).
+// the in-process state — INV-CRYPTO-16 is preserved (no serialization).
 type Cache struct {
 	cap   int
 	ttl   time.Duration

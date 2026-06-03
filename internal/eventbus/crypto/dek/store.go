@@ -495,7 +495,7 @@ func (s *Store) ResolveIntegrity(ctx context.Context) error {
 // Row is the exported view of a crypto_keys row. Mirrors the internal
 // `row` struct but adds DestroyedAt (only populated by SelectAnyByID).
 //
-// INV-27 note: the wrapped DEK ciphertext is intentionally held in an
+// INV-CRYPTO-16 note: the wrapped DEK ciphertext is intentionally held in an
 // unexported `wrappedDEK` field rather than an exported `WrappedDEK
 // []byte` — the static API guard in api_test.go rejects exported
 // []byte fields and methods returning []byte across the dek package

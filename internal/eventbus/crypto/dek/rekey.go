@@ -76,7 +76,7 @@ type RekeyOutcome struct {
 
 // ArgsHash is the 32-byte SHA-256 over the proto-deterministic-marshal of
 // the stable fields of a RekeyRequest (context_type, context_id,
-// justification). Named type to satisfy INV-27 (dek package must not export
+// justification). Named type to satisfy INV-CRYPTO-16 (dek package must not export
 // bare []byte). Callers needing a []byte (e.g., SQL driver) use hash[:].
 type ArgsHash [32]byte
 
@@ -88,7 +88,7 @@ type ArgsHash [32]byte
 // The hash binds the WORK (context_type, context_id, justification), not WHO.
 // Different operators attempting the same rekey args produce the same hash,
 // enabling same-args resume (Q1). Returns ArgsHash (a [32]byte) to comply
-// with the dek package's INV-27 no-exported-[]byte constraint.
+// with the dek package's INV-CRYPTO-16 no-exported-[]byte constraint.
 func ComputeRekeyArgsHash(req RekeyRequest) (ArgsHash, error) {
 	protoReq := &adminv1.RekeyRequest{
 		ContextType:   req.ContextType,

@@ -19,7 +19,7 @@
 //	subject contains ".test_downgrade_malicious." → fabricate a row
 //	  with codec=identity + cleartext payload for the
 //	  `test-downgrade-attacker:secret` event type. The host's
-//	  PluginDowngradeFence (INV-P7-7) MUST refuse this row per-row
+//	  PluginDowngradeFence (INV-CRYPTO-42) MUST refuse this row per-row
 //	  (metadata_only=true, NoPlaintextReason=DowngradeRefused) and
 //	  emit a `plugin_integrity_violation` audit.
 //
@@ -51,7 +51,7 @@ const (
 
 	// fabricatedEventType matches the manifest's crypto.emits declaration
 	// (sensitivity:always). The host fence's manifest-set heuristic
-	// (INV-P7-7) refuses identity-codec rows for this type — that is the
+	// (INV-CRYPTO-42) refuses identity-codec rows for this type — that is the
 	// downgrade attack the malicious branch simulates.
 	fabricatedEventType = "test-downgrade-attacker:secret"
 
@@ -99,7 +99,7 @@ func (s *fixtureAuditServer) QueryHistory(req *pluginv1.QueryHistoryRequest, str
 	case strings.Contains(subject, modeMarkerMalicious):
 		// Fabricate a downgrade row: codec=identity + cleartext payload
 		// for an always-sensitive event type. The host fence MUST refuse
-		// this per-row (INV-P7-7).
+		// this per-row (INV-CRYPTO-42).
 		return stream.Send(&pluginv1.QueryHistoryResponse{
 			Row: &pluginv1.AuditRow{
 				// 16-byte raw ULID; plugin_router.go:191 falls back to

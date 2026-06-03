@@ -56,7 +56,7 @@ func NewPluginIdentity(pluginName, instanceID string) (Identity, error) {
 }
 
 // NewOperatorIdentity creates an operator Identity. Operator reads
-// go through AdminReadStream (INV-43); Guard always denies.
+// go through AdminReadStream (INV-CRYPTO-24); Guard always denies.
 func NewOperatorIdentity() Identity {
 	return Identity{Kind: IdentityKindOperator}
 }

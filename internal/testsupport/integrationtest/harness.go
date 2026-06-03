@@ -573,8 +573,8 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 
 	// Plugin-crypto links 3+4 (Task 8): the audit projection (PluginConsumerManager
 	// forwarding plugin-owned subjects to scene_log) and the read-back decryptor
-	// (host-side DEK decrypt + INV-19 audit). Wired after startPlugins so the
-	// Manager's audit clients are resolvable. INV-P7-9: the SAME pc.selector
+	// (host-side DEK decrypt + INV-CRYPTO-11 audit). Wired after startPlugins so the
+	// Manager's audit clients are resolvable. INV-CRYPTO-45: the SAME pc.selector
 	// instance feeds the consumer manager that the crypto-enabled publisher used
 	// on the emit side. The read-back decryptor reuses the guard + audit emitter
 	// built by buildHistoryCrypto above (also used by the host history reader).

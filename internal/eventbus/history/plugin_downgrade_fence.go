@@ -29,7 +29,7 @@ type CryptoKeysLookup interface {
 
 // ViolationEmitter publishes a host-emit
 // `audit.<game>.system.plugin_integrity_violation` event when the
-// fence detects a downgrade attempt at INV-P7-7. EmitViolation MUST
+// fence detects a downgrade attempt at INV-CRYPTO-42. EmitViolation MUST
 // NOT block indefinitely — the fence applies a 100ms bounded timeout
 // and proceeds with the row refusal regardless of emit success.
 type ViolationEmitter interface {
@@ -46,7 +46,7 @@ type ViolationEmitter interface {
 type PluginDowngradeFenceOption func(*PluginDowngradeFence)
 
 // WithAlwaysSensitiveTypes installs the manifest-derived always-sensitive
-// type set. Built ONCE at boot per INV-P7-8 — no hot-reload. The fence
+// type set. Built ONCE at boot per INV-CRYPTO-44 — no hot-reload. The fence
 // copies the input map so callers may not mutate it after construction
 // (any mutation would silently shift the refusal surface).
 func WithAlwaysSensitiveTypes(set map[string]struct{}) PluginDowngradeFenceOption {
@@ -61,13 +61,13 @@ func WithAlwaysSensitiveTypes(set map[string]struct{}) PluginDowngradeFenceOptio
 }
 
 // WithCryptoKeysLookup wires the layer (1) DEK existence check.
-// Required for INV-P7-15; a nil lookup makes the fence treat any
+// Required for INV-CRYPTO-50; a nil lookup makes the fence treat any
 // non-identity codec row as a refusal.
 func WithCryptoKeysLookup(lookup CryptoKeysLookup) PluginDowngradeFenceOption {
 	return func(f *PluginDowngradeFence) { f.cryptoKeysLookup = lookup }
 }
 
-// WithViolationEmitter wires the audit emitter for INV-P7-7 refusals.
+// WithViolationEmitter wires the audit emitter for INV-CRYPTO-42 refusals.
 // A nil emitter means the fence still refuses the row but does not
 // emit the host audit event (the caller decides whether to allow this
 // degraded mode in tests).
@@ -88,14 +88,14 @@ func WithFenceLogger(log *slog.Logger) PluginDowngradeFenceOption {
 
 // WithFenceReadbackCrypto wires the host-side crypto capabilities the fence
 // needs to DECRYPT a clean plugin-owned row for an authorized routed reader
-// (INV-RB-7). Without these the fence cannot decrypt and falls back to the
+// (INV-CRYPTO-32). Without these the fence cannot decrypt and falls back to the
 // pre-T8 ciphertext-passthrough behaviour on the clean-row path.
 //
 // The guard authorizes the reader: for a CHARACTER caller it routes to the
 // participant DEK-membership branch (checkCharacter); the fence never sets
 // ReadBack=true (that is the plugin-readback path, distinct from the routed
 // participant read). The dek manager resolves DEK key material. The audit
-// emitter records the INV-19 plugin-decrypt event — only consulted for plugin
+// emitter records the INV-CRYPTO-11 plugin-decrypt event — only consulted for plugin
 // principals (a character routed read does NOT emit a plugin-decrypt record).
 func WithFenceReadbackCrypto(
 	guard eventbus.SessionAuthGuard,
@@ -109,7 +109,7 @@ func WithFenceReadbackCrypto(
 	}
 }
 
-// violationEmitTimeout bounds the synchronous emit at INV-P7-7 so a
+// violationEmitTimeout bounds the synchronous emit at INV-CRYPTO-42 so a
 // backpressured `audit.<game>.system.*` cannot block the read stream
 // indefinitely. 100ms is the spec-pinned ceiling (Phase C plan §3
 // rule 3); on timeout the row refusal still proceeds — losing the
@@ -123,10 +123,10 @@ const violationEmitTimeout = 100 * time.Millisecond
 // the Reader.QueryHistory plugin branch.
 //
 // Two-layer fence:
-//   - Layer (1) — INV-P7-7 manifest-set heuristic: identity codec
+//   - Layer (1) — INV-CRYPTO-42 manifest-set heuristic: identity codec
 //     for an always-sensitive type is a downgrade attempt; refuse +
 //     emit violation audit.
-//   - Layer (1) — INV-P7-15 DEK existence: non-identity codec with
+//   - Layer (1) — INV-CRYPTO-50 DEK existence: non-identity codec with
 //     unknown / absent dek_ref is unrecoverable; refuse silently
 //     (indistinguishable from legitimate Rekey-destroyed case).
 //
@@ -141,7 +141,7 @@ type PluginDowngradeFence struct {
 	log              *slog.Logger
 
 	// guard / dek / audit are the read-back decrypt capabilities used by
-	// the clean-row path (INV-RB-7). When guard is nil the fence cannot
+	// the clean-row path (INV-CRYPTO-32). When guard is nil the fence cannot
 	// decrypt and falls back to ciphertext passthrough on clean rows.
 	guard eventbus.SessionAuthGuard
 	dek   eventbus.SessionDEKManager
@@ -163,7 +163,7 @@ func (f *PluginDowngradeFence) readbackDeps() readbackDeps {
 
 // NewPluginDowngradeFence builds the fence. The set passed via
 // WithAlwaysSensitiveTypes is captured by copy at construction time
-// per INV-P7-8 — no hot-reload. Hot-reload infrastructure is filed
+// per INV-CRYPTO-44 — no hot-reload. Hot-reload infrastructure is filed
 // as holomush-kl9w (P3, separate bead).
 func NewPluginDowngradeFence(inner PluginHistoryRouter, opts ...PluginDowngradeFenceOption) *PluginDowngradeFence {
 	f := &PluginDowngradeFence{
@@ -195,7 +195,7 @@ func (f *PluginDowngradeFence) QueryHistory(
 		inner:      inner,
 		pluginName: pluginName,
 		// Caller identity drives the clean-row decrypt authorization
-		// (INV-RB-7). For a routed participant read this is a CHARACTER
+		// (INV-CRYPTO-32). For a routed participant read this is a CHARACTER
 		// identity, so decryptPluginRow routes to checkCharacter
 		// DEK-membership (ReadBack=false), NOT the plugin-readback path.
 		caller: q.Identity,
@@ -203,32 +203,32 @@ func (f *PluginDowngradeFence) QueryHistory(
 }
 
 // fenceVerdict is the result of fenceCheckRow — the per-row check that
-// enforces INV-P7-7 (downgrade heuristic) and INV-P7-15 (DEK existence).
-// Shared in-package so the snapshot read-back path (T5 / INV-RB-5) can
+// enforces INV-CRYPTO-42 (downgrade heuristic) and INV-CRYPTO-50 (DEK existence).
+// Shared in-package so the snapshot read-back path (T5 / INV-CRYPTO-30) can
 // reuse the check without going through the full fencedStream pipeline.
 type fenceVerdict int
 
 const (
 	// fenceClean means the row passed both checks and may proceed to decryption.
 	fenceClean fenceVerdict = iota
-	// fenceRefuseDowngrade means INV-P7-7 fired: identity codec for an
+	// fenceRefuseDowngrade means INV-CRYPTO-42 fired: identity codec for an
 	// always-sensitive type. Caller MUST emit a plugin_integrity_violation
 	// audit event (emitViolationBounded) before refusing.
 	fenceRefuseDowngrade
-	// fenceRefuseDEKMissing means INV-P7-15 fired: non-identity codec with
+	// fenceRefuseDEKMissing means INV-CRYPTO-50 fired: non-identity codec with
 	// absent or lookup-miss dek_ref. Indistinguishable from legitimate
 	// Rekey-destroyed case; no violation emit.
 	fenceRefuseDEKMissing
-	// fenceRefuseInternal means INV-P7-15 fail-closed: cryptoKeysLookup is
+	// fenceRefuseInternal means INV-CRYPTO-50 fail-closed: cryptoKeysLookup is
 	// nil (configuration failure). Distinct from fenceRefuseDEKMissing so
 	// callers can surface the right NoPlaintextReason.
 	fenceRefuseInternal
 )
 
-// fenceCheckRow applies INV-P7-7 (downgrade) + INV-P7-15 (DEK existence)
+// fenceCheckRow applies INV-CRYPTO-42 (downgrade) + INV-CRYPTO-50 (DEK existence)
 // to one plugin audit row. Pure except for the cryptoKeys existence lookup.
 // Shared by fencedStream.Next (routed reads, T4) and the snapshot direct
-// entry (T5) so INV-RB-5 holds on both paths.
+// entry (T5) so INV-CRYPTO-30 holds on both paths.
 //
 // The caller is responsible for mapping the returned fenceVerdict to the
 // appropriate refusal reason and emitting the violation audit on
@@ -241,7 +241,7 @@ func fenceCheckRow(
 ) (fenceVerdict, error) {
 	codec := row.GetCodec()
 
-	// INV-P7-7 — manifest-set heuristic.
+	// INV-CRYPTO-42 — manifest-set heuristic.
 	if codec == "identity" {
 		if _, sensitive := alwaysSensitive[row.GetType()]; sensitive {
 			return fenceRefuseDowngrade, nil
@@ -250,7 +250,7 @@ func fenceCheckRow(
 		return fenceClean, nil
 	}
 
-	// INV-P7-15 — DEK existence pre-check for non-identity codec.
+	// INV-CRYPTO-50 — DEK existence pre-check for non-identity codec.
 	if row.DekRef == nil {
 		// Absent dek_ref for non-identity codec is unrecoverable. No
 		// violation emit — indistinguishable from legitimate
@@ -296,7 +296,7 @@ type fencedStream struct {
 	pluginName string
 	// caller is the principal on whose behalf the read happens. A routed
 	// participant read carries a CHARACTER identity; clean rows decrypt for
-	// it via the checkCharacter DEK-membership branch (INV-RB-7).
+	// it via the checkCharacter DEK-membership branch (INV-CRYPTO-32).
 	caller eventbus.SessionIdentity
 }
 
@@ -330,12 +330,12 @@ func (s *fencedStream) Next(ctx context.Context) (eventbus.Event, error) {
 
 	switch verdict {
 	case fenceRefuseDowngrade:
-		// INV-P7-7 still refuses BEFORE any decrypt. Emit the violation
+		// INV-CRYPTO-42 still refuses BEFORE any decrypt. Emit the violation
 		// audit then surface the metadata-only row.
 		s.fence.emitViolationBounded(ctx, s.pluginName, row)
 		return refuseEvent(ev, eventbus.NoPlaintextReasonDowngradeRefused), nil
 	case fenceRefuseDEKMissing:
-		// INV-P7-15 still refuses BEFORE any decrypt.
+		// INV-CRYPTO-50 still refuses BEFORE any decrypt.
 		return refuseEvent(ev, eventbus.NoPlaintextReasonDEKMissing), nil
 	case fenceRefuseInternal:
 		return refuseEvent(ev, eventbus.NoPlaintextReasonInternal), nil
@@ -344,7 +344,7 @@ func (s *fencedStream) Next(ctx context.Context) (eventbus.Event, error) {
 	}
 }
 
-// decryptClean handles a row that passed the layer-(1) fence (INV-RB-7).
+// decryptClean handles a row that passed the layer-(1) fence (INV-CRYPTO-32).
 // When the fence has read-back crypto wired, the clean row is decrypted for
 // the routed caller via the shared decryptPluginRow primitive using the
 // caller's CHARACTER identity — so decryptPluginRow routes to the
@@ -395,23 +395,23 @@ func (s *fencedStream) Close() error {
 // refuseEvent wraps eventbus.Event.Refused with the fence's reason
 // taxonomy in one place. Delegates payload + auditRow.Payload clearing
 // to eventbus.Event.Refused, which is the canonical refusal semantic
-// (master spec INV-26: refused row payload empty — both Event.Payload
+// (master spec INV-CRYPTO-15: refused row payload empty — both Event.Payload
 // AND the embedded plugin-source-of-truth auditRow's Payload).
 //
 // The reason MUST distinguish the spec-mandated branches:
-//   - INV-P7-7 downgrade detected → NoPlaintextReasonDowngradeRefused
-//   - INV-P7-15 DEK absent / DEK lookup-miss → NoPlaintextReasonDEKMissing
+//   - INV-CRYPTO-42 downgrade detected → NoPlaintextReasonDowngradeRefused
+//   - INV-CRYPTO-50 DEK absent / DEK lookup-miss → NoPlaintextReasonDEKMissing
 //     (so the row reads operationally identical to the legitimate
-//     destroyed-DEK metadata-only case per master spec INV-26 — a malicious
+//     destroyed-DEK metadata-only case per master spec INV-CRYPTO-15 — a malicious
 //     plugin that omits dek_ref MUST NOT be reported as a "downgrade").
-//   - INV-P7-15 nil-lookup fail-closed → NoPlaintextReasonInternal
+//   - INV-CRYPTO-50 nil-lookup fail-closed → NoPlaintextReasonInternal
 //     (configuration failure — production wiring at E.3 always supplies a
 //     non-nil lookup; only test fakes hit this fail-closed branch).
 func refuseEvent(ev eventbus.Event, reason eventbus.NoPlaintextReason) eventbus.Event {
 	return ev.Refused(reason)
 }
 
-// emitViolationBounded fires the INV-P7-7 audit emit synchronously
+// emitViolationBounded fires the INV-CRYPTO-42 audit emit synchronously
 // with a 100ms bounded timeout. On timeout / error the row refusal
 // still proceeds — the audit signal is best-effort. WARN-level log
 // captures the failure for operator visibility.
@@ -450,7 +450,7 @@ func (f *PluginDowngradeFence) emitViolationBounded(
 }
 
 // AlwaysSensitiveTypesForTest exposes the captured always-sensitive
-// set for the INV-P7-8 boot-built immutability test. Returns a copy
+// set for the INV-CRYPTO-44 boot-built immutability test. Returns a copy
 // to prevent the test from mutating the live set.
 //
 // Build-tagged would be ideal but the corresponding test file is in

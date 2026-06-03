@@ -42,7 +42,7 @@ func (*stubAuditEmitter) EmitPluginDecrypt(_ context.Context, _ eventbus.PluginD
 	return nil
 }
 
-// TestWithHistoryAuthProducesSameColdOptsAsCryptoCold asserts INV-1:
+// TestWithHistoryAuthProducesSameColdOptsAsCryptoCold asserts INV-CRYPTO-1:
 // WithHistoryAuth(g, m, em) populates coldOpts identically to calling
 // WithCryptoCold with the matching per-tier constructors.
 func TestWithHistoryAuthProducesSameColdOptsAsCryptoCold(t *testing.T) {
@@ -77,7 +77,7 @@ func TestWithHistoryAuthProducesSameColdOptsAsCryptoCold(t *testing.T) {
 	assert.Equal(t, explicitCT.auditEmitter, bundleCT.auditEmitter, "auditEmitter must match")
 }
 
-// TestWithHistoryAuthProducesSameHotOptsAsCryptoHot asserts INV-2:
+// TestWithHistoryAuthProducesSameHotOptsAsCryptoHot asserts INV-CRYPTO-2:
 // WithHistoryAuth(g, m, em) populates hotOpts identically to calling
 // WithCryptoHot with the matching per-tier constructors.
 func TestWithHistoryAuthProducesSameHotOptsAsCryptoHot(t *testing.T) {
@@ -112,7 +112,7 @@ func TestWithHistoryAuthProducesSameHotOptsAsCryptoHot(t *testing.T) {
 	assert.Equal(t, explicitHT.auditEmitter, bundleHT.auditEmitter, "auditEmitter must match")
 }
 
-// TestNewReaderForwardsHotOptsToHotTier asserts INV-3: when NewReader builds
+// TestNewReaderForwardsHotOptsToHotTier asserts INV-CRYPTO-3: when NewReader builds
 // the default hot tier, HotTierOption values accumulated via WithCryptoHot are
 // forwarded to newJetStreamHotTier. A sentinel option sets a detectable field
 // on the hot tier; after NewReader returns, the sentinel must be visible.
@@ -142,7 +142,7 @@ func TestNewReaderForwardsHotOptsToHotTier(t *testing.T) {
 	assert.Equal(t, em, ht.auditEmitter, "auditEmitter forwarded to hot tier")
 }
 
-// TestWithCryptoHotIgnoredWhenCustomHotTier asserts INV-4:
+// TestWithCryptoHotIgnoredWhenCustomHotTier asserts INV-CRYPTO-4:
 // WithCryptoHot options are not forwarded to a custom tier supplied
 // via WithHotTier. The custom tier retains its original fields.
 func TestWithCryptoHotIgnoredWhenCustomHotTier(t *testing.T) {
@@ -157,7 +157,7 @@ func TestWithCryptoHotIgnoredWhenCustomHotTier(t *testing.T) {
 	assert.Nil(t, customTier.authGuard, "custom tier authGuard unchanged — crypto not forwarded")
 }
 
-// TestNewReaderDefaultNoAuthOptions asserts INV-6 (internal check):
+// TestNewReaderDefaultNoAuthOptions asserts INV-CRYPTO-5 (internal check):
 // NewReader without WithCryptoHot, WithCryptoCold, or WithHistoryAuth
 // must produce a Reader whose hotOpts and coldOpts are empty — the
 // zero-value nil-auth passthrough path.

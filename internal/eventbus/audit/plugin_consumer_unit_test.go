@@ -118,13 +118,13 @@ func TestPluginConsumerDispatchSuccess(t *testing.T) {
 	require.NotNil(t, cli.gotReq)
 	row := cli.gotReq.GetRow()
 	require.NotNil(t, row)
-	// INV-P7-1: Row carries projection fields parsed from the envelope.
+	// INV-CRYPTO-38: Row carries projection fields parsed from the envelope.
 	assert.Equal(t, "events.main.plugin.test", row.GetSubject())
 	assert.Equal(t, "plugin.test", row.GetType())
-	// INV-P7-2: Codec + SchemaVer come from header parser, byte-equal to host projection.
+	// INV-CRYPTO-39: Codec + SchemaVer come from header parser, byte-equal to host projection.
 	assert.Equal(t, "identity", row.GetCodec())
 	assert.Equal(t, int32(1), row.GetSchemaVer())
-	// Identity codec ⇒ no DEK fields (M3 follow-up: Row assertions per INV-P7-1).
+	// Identity codec ⇒ no DEK fields (M3 follow-up: Row assertions per INV-CRYPTO-38).
 	assert.Nil(t, row.DekRef)
 	assert.Nil(t, row.DekVersion)
 }
@@ -155,7 +155,7 @@ func TestPluginConsumerDispatchBadMsgID(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "AUDIT_BAD_ULID")
 }
 
-// TestDispatchForwardsCiphertextByteEqual — INV-P7-1. Per Phase 7 spec
+// TestDispatchForwardsCiphertextByteEqual — INV-CRYPTO-38. Per Phase 7 spec
 // §3 + §5.1, the dispatcher MUST forward the envelope's payload bytes
 // byte-equal to the plugin (no decryption before forward).
 func TestDispatchForwardsCiphertextByteEqual(t *testing.T) {
@@ -186,7 +186,7 @@ func TestDispatchForwardsCiphertextByteEqual(t *testing.T) {
 	row := cli.gotReq.GetRow()
 	require.NotNil(t, row)
 	assert.Equal(t, ciphertext, row.GetPayload(),
-		"INV-P7-1: dispatcher MUST forward ciphertext byte-equal")
+		"INV-CRYPTO-38: dispatcher MUST forward ciphertext byte-equal")
 	assert.Equal(t, "xchacha20poly1305-v1", row.GetCodec())
 	require.NotNil(t, row.DekRef)
 	assert.Equal(t, uint64(42), row.GetDekRef())
@@ -195,7 +195,7 @@ func TestDispatchForwardsCiphertextByteEqual(t *testing.T) {
 	assert.Equal(t, int32(1), row.GetSchemaVer())
 }
 
-// TestDispatchDoesNotDecryptBeforeForward — INV-P7-11. The dispatcher
+// TestDispatchDoesNotDecryptBeforeForward — INV-CRYPTO-46. The dispatcher
 // MUST NOT invoke any codec.Decode path before forwarding to the plugin.
 // We verify this by setting the App-Codec header to a non-identity value
 // AND providing a payload that would NOT round-trip through Decode (no

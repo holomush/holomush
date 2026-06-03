@@ -4,9 +4,9 @@
 //go:build integration
 
 // Package crypto_test — Phase 3b integration tests for the decrypt-on-fanout
-// subscriber path. This file covers INV-26 (delivery contract: non-participant
+// subscriber path. This file covers INV-CRYPTO-15 (delivery contract: non-participant
 // receives MetadataOnly, participant receives plaintext) and by extension
-// INV-9 (no plaintext to non-participant).
+// INV-CRYPTO-6 (no plaintext to non-participant).
 package crypto_test
 
 import (
@@ -165,13 +165,13 @@ func buildSubscribeHarness(t *testing.T) *subscribeHarness {
 	}
 }
 
-// TestSubscribeWithNonParticipantIdentityDeliversMetadataOnly covers INV-26
-// (delivery contract) and INV-9 (no plaintext to non-participant):
+// TestSubscribeWithNonParticipantIdentityDeliversMetadataOnly covers INV-CRYPTO-15
+// (delivery contract) and INV-CRYPTO-6 (no plaintext to non-participant):
 //
 //   - Publishes a sensitive event whose DEK has exactly one participant.
 //   - Opens a session as a different identity (non-participant binding_id).
 //   - Asserts: MetadataOnly()==true, Event().Payload is empty.
-var _ = Describe("Subscribe with non-participant identity delivers MetadataOnly (INV-26, INV-9)", func() {
+var _ = Describe("Subscribe with non-participant identity delivers MetadataOnly (INV-CRYPTO-15, INV-CRYPTO-6)", func() {
 	It("non-participant receives MetadataOnly=true with empty payload", func() {
 		ctx := context.Background()
 		h := buildSubscribeHarness(suiteT)
@@ -263,10 +263,10 @@ var _ = Describe("Subscribe with non-participant identity delivers MetadataOnly 
 		Expect(err).NotTo(HaveOccurred(), "expected delivery from stream")
 		Expect(delivery.Ack()).NotTo(HaveOccurred())
 
-		// INV-26: non-participant must receive metadata-only delivery (no plaintext).
-		Expect(delivery.MetadataOnly()).To(BeTrue(), "INV-26: non-participant must receive MetadataOnly=true")
-		// INV-9: the delivery payload must be empty — no plaintext visible to non-participant.
-		Expect(delivery.Event().Payload).To(BeEmpty(), "INV-9: non-participant payload must be empty bytes")
+		// INV-CRYPTO-15: non-participant must receive metadata-only delivery (no plaintext).
+		Expect(delivery.MetadataOnly()).To(BeTrue(), "INV-CRYPTO-15: non-participant must receive MetadataOnly=true")
+		// INV-CRYPTO-6: the delivery payload must be empty — no plaintext visible to non-participant.
+		Expect(delivery.Event().Payload).To(BeEmpty(), "INV-CRYPTO-6: non-participant payload must be empty bytes")
 
 		// Metadata fields must still be present.
 		Expect(delivery.Event().Type).To(Equal(eventbus.Type("test-plugin:whisper")),
@@ -275,13 +275,13 @@ var _ = Describe("Subscribe with non-participant identity delivers MetadataOnly 
 	})
 })
 
-// TestSubscribeWithParticipantIdentityDeliversPlaintext covers INV-26
+// TestSubscribeWithParticipantIdentityDeliversPlaintext covers INV-CRYPTO-15
 // (delivery contract — permit path):
 //
 //   - Same setup as the non-participant test above, but opens the session
 //     as the participant identity.
 //   - Asserts: MetadataOnly()==false, Event().Payload equals the original JSON.
-var _ = Describe("Subscribe with participant identity delivers plaintext (INV-26)", func() {
+var _ = Describe("Subscribe with participant identity delivers plaintext (INV-CRYPTO-15)", func() {
 	It("participant receives MetadataOnly=false with original plaintext", func() {
 		ctx := context.Background()
 		h := buildSubscribeHarness(suiteT)
@@ -364,14 +364,14 @@ var _ = Describe("Subscribe with participant identity delivers plaintext (INV-26
 		Expect(err).NotTo(HaveOccurred(), "expected delivery from stream")
 		Expect(delivery.Ack()).NotTo(HaveOccurred())
 
-		// INV-26: participant must receive full plaintext (MetadataOnly=false).
-		Expect(delivery.MetadataOnly()).To(BeFalse(), "INV-26: participant must receive MetadataOnly=false")
+		// INV-CRYPTO-15: participant must receive full plaintext (MetadataOnly=false).
+		Expect(delivery.MetadataOnly()).To(BeFalse(), "INV-CRYPTO-15: participant must receive MetadataOnly=false")
 
-		// INV-9 (permit path): payload must be the original plaintext.
+		// INV-CRYPTO-6 (permit path): payload must be the original plaintext.
 		// The publisher encrypts event.Payload (the JSON bytes) and the subscriber
 		// decrypts to recover the original bytes.
 		Expect(delivery.Event().Payload).To(Equal([]byte(plaintext)),
-			"INV-26: participant payload must equal original plaintext")
+			"INV-CRYPTO-15: participant payload must equal original plaintext")
 
 		// Metadata fields also present.
 		Expect(delivery.Event().Type).To(Equal(eventbus.Type("test-plugin:whisper")),

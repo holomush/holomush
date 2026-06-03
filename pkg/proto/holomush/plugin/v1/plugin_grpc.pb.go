@@ -408,9 +408,9 @@ type PluginHostServiceClient interface {
 	// DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN encrypted
 	// audit rows host-side; the plugin never holds a DEK. SERVED:
 	// pluginHostServiceServer.DecryptOwnAuditRows via ReadbackDecryptor.
-	// DecryptOwnRows. Authorization is two-gate (INV-RB-2): OwnerMap subject
+	// DecryptOwnRows. Authorization is two-gate (INV-CRYPTO-27): OwnerMap subject
 	// ownership (g1) plus the crypto.emits[].readback manifest flag (g2). Each
-	// input row gets an independent RowResult (INV-RB-12) carrying either
+	// input row gets an independent RowResult (INV-CRYPTO-37) carrying either
 	// plaintext or a stable snake_case no_plaintext_reason ("not_owner",
 	// "auth_guard_deny", "dek_missing", "downgrade_refused", "stale_dek",
 	// "audit_queue_full", "internal"; readback.go reasonToWire). Request /
@@ -793,9 +793,9 @@ type PluginHostServiceServer interface {
 	// DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN encrypted
 	// audit rows host-side; the plugin never holds a DEK. SERVED:
 	// pluginHostServiceServer.DecryptOwnAuditRows via ReadbackDecryptor.
-	// DecryptOwnRows. Authorization is two-gate (INV-RB-2): OwnerMap subject
+	// DecryptOwnRows. Authorization is two-gate (INV-CRYPTO-27): OwnerMap subject
 	// ownership (g1) plus the crypto.emits[].readback manifest flag (g2). Each
-	// input row gets an independent RowResult (INV-RB-12) carrying either
+	// input row gets an independent RowResult (INV-CRYPTO-37) carrying either
 	// plaintext or a stable snake_case no_plaintext_reason ("not_owner",
 	// "auth_guard_deny", "dek_missing", "downgrade_refused", "stale_dek",
 	// "audit_queue_full", "internal"; readback.go reasonToWire). Request /

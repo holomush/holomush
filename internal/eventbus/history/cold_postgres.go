@@ -92,7 +92,7 @@ func newPostgresColdTier(pool *pgxpool.Pool, opts ...ColdTierOption) *postgresCo
 
 // NewColdTierLookup returns a source.ColdTierLookup backed by the
 // events_audit PostgreSQL table. Used by cmd/holomush to construct a
-// source.FallbackResolver for the production INV-39 hot→cold fallback path
+// source.FallbackResolver for the production INV-CRYPTO-22 hot→cold fallback path
 // without exposing the unexported postgresColdTier type.
 func NewColdTierLookup(pool *pgxpool.Pool) source.ColdTierLookup {
 	return newPostgresColdTier(pool)
@@ -416,7 +416,7 @@ func decodeColdRow(
 	if codecName != codec.NameIdentity {
 		// Sensitive (non-identity) rows MUST carry both DEK columns —
 		// the audit projection stamps them from the App-Dek-Ref /
-		// App-Dek-Version headers (per INV-49). NULL columns on a
+		// App-Dek-Version headers (per INV-CRYPTO-25). NULL columns on a
 		// sensitive row mean a corrupted or partially-projected row;
 		// fail-closed rather than feeding (0, 0) to the dispatcher
 		// which would surface as a confusing Resolve(0, 0) miss or an
@@ -480,7 +480,7 @@ func actorFromAuditRow(kindStr string, idBytes []byte) eventbus.Actor {
 }
 
 // LookupByID implements source.ColdTierLookup for the events_audit-backed
-// cold tier. Used by the INV-39 fallback path: dispatcher's hot-tier DEK
+// cold tier. Used by the INV-CRYPTO-22 fallback path: dispatcher's hot-tier DEK
 // lookup failed, ask the cold tier whether a re-encrypted copy exists.
 // Returns (envelope, false, nil) when no row exists.
 func (c *postgresColdTier) LookupByID(ctx context.Context, id eventbus.EventID) (eventbus.Envelope, bool, error) {

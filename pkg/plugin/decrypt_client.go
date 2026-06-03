@@ -15,12 +15,12 @@ import (
 // read-back decryption of their OWN sensitive audit rows. The plugin never holds
 // a DEK; it passes ciphertext rows (read from its own audit table) to the host,
 // which decrypts host-side and returns per-row plaintext or a typed refusal
-// (INV-RB-1, INV-RB-12).
+// (INV-CRYPTO-26, INV-CRYPTO-37).
 //
 // This is the snapshot direct entry of the read-back design
 // (docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md §3.2):
 // the plugin already holds the rows from its in-tx SQL read, so it does NOT
-// route through PluginAuditService.QueryHistory (no self-loop, INV-RB-6).
+// route through PluginAuditService.QueryHistory (no self-loop, INV-CRYPTO-31).
 //
 // The host enforces a per-call batch cap (maxDecryptBatch=500) and REJECTS an
 // over-cap batch with DECRYPT_BATCH_TOO_LARGE; callers MUST chunk larger row
@@ -28,7 +28,7 @@ import (
 type SnapshotDecryptor interface {
 	// DecryptOwnAuditRows submits a batch of the plugin's own audit rows for
 	// host-mediated decryption. The result slice is per-row, order-preserving,
-	// echoing each row's Id for positional correlation (INV-RB-12). A nil
+	// echoing each row's Id for positional correlation (INV-CRYPTO-37). A nil
 	// client fails closed (returns an error).
 	DecryptOwnAuditRows(ctx context.Context, rows []*pluginv1.AuditRow) ([]*pluginv1.RowResult, error)
 }

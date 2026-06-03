@@ -12,7 +12,7 @@ import (
 // HeaderAuditMetadata is the typed projection of a JetStream message's
 // audit-related headers. Both the host audit projection (events_audit
 // writer) and the per-plugin dispatcher use this parser; byte-equality
-// of typed values across the two branches is structural (INV-P7-2).
+// of typed values across the two branches is structural (INV-CRYPTO-39).
 //
 // Aliased from internal/eventbus/audit/auditheader.Metadata. The leaf
 // package exists so pkg/plugin/audit.go::StoreFromMessage can use the

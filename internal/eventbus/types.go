@@ -57,10 +57,10 @@ const (
 	NoPlaintextReasonInternal NoPlaintextReason = 6
 	// NoPlaintextReasonDowngradeRefused indicates the PluginDowngradeFence
 	// refused the row at layer (1) pre-decrypt — either the manifest-set
-	// heuristic (INV-P7-7: identity codec for an always-sensitive type) or
-	// the DEK existence pre-check (INV-P7-15: unknown / absent dek_ref for
+	// heuristic (INV-CRYPTO-42: identity codec for an always-sensitive type) or
+	// the DEK existence pre-check (INV-CRYPTO-50: unknown / absent dek_ref for
 	// a non-identity codec). The original event_id is preserved; payload
-	// is empty per master INV-26.
+	// is empty per master INV-CRYPTO-15.
 	NoPlaintextReasonDowngradeRefused NoPlaintextReason = 7
 )
 
@@ -196,7 +196,7 @@ type Event struct {
 	// Populated by audit.PluginHistoryRouter when converting a plugin's
 	// QueryHistoryResponse → Event for the read path. Consumed by
 	// history.PluginDowngradeFence (via the package-internal accessor
-	// AuditRowOf, see audit_row_access.go) to apply INV-P7-7 / INV-P7-15
+	// AuditRowOf, see audit_row_access.go) to apply INV-CRYPTO-42 / INV-CRYPTO-50
 	// checks against the plugin-supplied original. nil for events not
 	// sourced from a plugin (host-owned subjects). Never serialized;
 	// never persisted.

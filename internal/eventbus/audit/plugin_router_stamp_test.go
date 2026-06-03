@@ -23,7 +23,7 @@ import (
 // eventbus.Event, the underlying *pluginauditpb.AuditRow MUST be
 // stamped onto the event so eventbus.AuditRowOf returns it (pointer-
 // equal). This is the substrate the Phase 7 PluginDowngradeFence
-// (INV-P7-7 + INV-P7-15) reads from.
+// (INV-CRYPTO-42 + INV-CRYPTO-50) reads from.
 func TestAuditRowOfStampedByRouter(t *testing.T) {
 	t.Parallel()
 

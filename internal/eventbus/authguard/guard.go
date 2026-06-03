@@ -156,7 +156,7 @@ func (g *Guard) checkPlugin(ctx context.Context, req CheckRequest) (Decision, er
 }
 
 // checkPluginReadback — read-back path: backpressure pre-check → readback
-// manifest declaration → permit. INV-RB-2 gate g2 (manifest); gate g1
+// manifest declaration → permit. INV-CRYPTO-27 gate g2 (manifest); gate g1
 // (OwnerMap subject ownership) is enforced upstream at the primitive entry.
 // NO ABAC gate — gate 3 was dropped (that plumbing is unbuilt; spec §7.5).
 // ctx is unused (kept for signature parity with checkPlugin / future ABAC).

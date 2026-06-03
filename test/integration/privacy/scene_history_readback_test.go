@@ -3,10 +3,10 @@
 
 //go:build integration
 
-// Package privacy_test — Task 9 Step 3: INV-RB-7 participant fence decrypt E2E.
+// Package privacy_test — Task 9 Step 3: INV-CRYPTO-32 participant fence decrypt E2E.
 //
 // This file exercises the PluginDowngradeFence's clean-row decrypt path for
-// routed participants (INV-RB-7). The test uses a REAL stack (DEK manager,
+// routed participants (INV-CRYPTO-32). The test uses a REAL stack (DEK manager,
 // codec, fence, AuthGuard) rather than fakeHistoryReader, closing the
 // fake-bus coverage gap described in holomush-m7pxs Task 9.
 //
@@ -24,11 +24,11 @@
 //  6. Query with a different CHARACTER identity (non-member) → fence's
 //     checkCharacter denies → ev.MetadataOnly=true, ev.Payload=nil.
 //
-// INV-RB invariants covered: INV-RB-7.
+// INV-RB invariants covered: INV-CRYPTO-32.
 //
 // The audit emitter passed to WithFenceReadbackCrypto is nil because the
 // audit emitter is only consulted for IdentityKindPlugin principals
-// (see dispatcher.go:349). CHARACTER callers skip the INV-19 audit record,
+// (see dispatcher.go:349). CHARACTER callers skip the INV-CRYPTO-11 audit record,
 // so nil is safe here — verified by TestDecodeJetStreamMessagePluginIdentityWithNilAuditEmitterFailsClosed
 // which covers the fail-closed behaviour for plugin principals.
 package privacy_test
@@ -123,7 +123,7 @@ func (m *rbPrivacyManifestLookup) PluginCanReadBack(name, evType string) bool {
 // audit.PluginHistoryRouter performs on real gRPC responses.
 //
 // The fence wraps this router via WithPluginDowngradeFenceReadback, so the
-// fence's clean-row path (INV-RB-7) runs on top of rows we serve here.
+// fence's clean-row path (INV-CRYPTO-32) runs on top of rows we serve here.
 type pgPluginHistoryRouter struct {
 	pool *pgxpool.Pool
 }
@@ -228,7 +228,7 @@ func (r *pgPluginHistoryRouter) QueryHistory(
 			Payload:   ciphertext, // mirror AuditRow.Payload for the fence's hot-path check
 		}
 		// Stamp the plugin source-of-truth row so the fence can inspect
-		// codec, dek_ref, dek_version (INV-RB-5 / INV-P7-7 / INV-P7-15).
+		// codec, dek_ref, dek_version (INV-CRYPTO-30 / INV-CRYPTO-42 / INV-CRYPTO-50).
 		// Unique-pointer contract: a fresh row is allocated per iteration.
 		eventbus.StampAuditRow(&ev, row)
 
@@ -245,7 +245,7 @@ func (r *pgPluginHistoryRouter) QueryHistory(
 // fencedReaderEnv — full real-stack fixture
 // ---------------------------------------------------------------------------
 
-// fencedReaderEnv groups the real-stack components needed for INV-RB-7 tests.
+// fencedReaderEnv groups the real-stack components needed for INV-CRYPTO-32 tests.
 type fencedReaderEnv struct {
 	pool         *pgxpool.Pool
 	bus          *testutil.EmbeddedBus
@@ -264,10 +264,10 @@ func (e *fencedReaderEnv) teardown() {
 	}
 }
 
-// buildFencedReaderEnv constructs the full INV-RB-7 fixture. The resulting
+// buildFencedReaderEnv constructs the full INV-CRYPTO-32 fixture. The resulting
 // reader uses WithPluginDowngradeFenceReadback so that:
-//   - CHARACTER callers that are DEK participants get plaintext (INV-RB-7 positive)
-//   - CHARACTER callers not in the DEK participant list get MetadataOnly=true (INV-RB-7 negative)
+//   - CHARACTER callers that are DEK participants get plaintext (INV-CRYPTO-32 positive)
+//   - CHARACTER callers not in the DEK participant list get MetadataOnly=true (INV-CRYPTO-32 negative)
 func buildFencedReaderEnv(ctx context.Context, pluginName string) *fencedReaderEnv {
 	GinkgoHelper()
 
@@ -346,7 +346,7 @@ func buildFencedReaderEnv(ctx context.Context, pluginName string) *fencedReaderE
 	// pgPluginHistoryRouter: satisfies PluginHistoryRouter from events_audit.
 	pgRouter := &pgPluginHistoryRouter{pool: pool}
 
-	// history.Reader wired with the full INV-RB-7 fence.
+	// history.Reader wired with the full INV-CRYPTO-32 fence.
 	// Clock set to far future so all queries route cold (events_audit).
 	farFuture := time.Now().UTC().Add(100 * 365 * 24 * time.Hour)
 	reader := history.NewReader(
@@ -361,7 +361,7 @@ func buildFencedReaderEnv(ctx context.Context, pluginName string) *fencedReaderE
 			nil, // violationEmitter: nil is safe — downgrade refusals still surface as metadata_only
 			sessionGuard,
 			dekMgr,
-			nil, // auditEm: nil is safe — CHARACTER callers skip the INV-19 audit record (dispatcher.go:349)
+			nil, // auditEm: nil is safe — CHARACTER callers skip the INV-CRYPTO-11 audit record (dispatcher.go:349)
 		),
 	)
 
@@ -454,10 +454,10 @@ func drainHistory(ctx context.Context, stream eventbus.HistoryStream) []eventbus
 }
 
 // ---------------------------------------------------------------------------
-// INV-RB-7 Ginkgo spec
+// INV-CRYPTO-32 Ginkgo spec
 // ---------------------------------------------------------------------------
 
-var _ = Describe("INV-RB-7: participant fence decrypt via PluginDowngradeFence", func() {
+var _ = Describe("INV-CRYPTO-32: participant fence decrypt via PluginDowngradeFence", func() {
 	const (
 		pluginNameRB7 = "core-scenes-rb7"
 		plaintextRB7  = `{"text":"A participant's sensitive pose."}`
@@ -479,12 +479,12 @@ var _ = Describe("INV-RB-7: participant fence decrypt via PluginDowngradeFence",
 		cancel()
 	})
 
-	// INV-RB-7 positive arm: a scene participant reads through the fence and
+	// INV-CRYPTO-32 positive arm: a scene participant reads through the fence and
 	// receives the decrypted plaintext. The fence's decryptClean routes to
 	// the CHARACTER DEK-membership branch (ReadBack=false) and succeeds
 	// because the participant's BindingID is in the DEK's participant list.
 	Describe("participant read — fence decrypt positive arm", func() {
-		It("delivers plaintext to a scene participant via fence decrypt (INV-RB-7)", func() {
+		It("delivers plaintext to a scene participant via fence decrypt (INV-CRYPTO-32)", func() {
 			const sceneID = "01RB7PART0000000000000000"
 
 			participantIdentity := eventbus.SessionIdentity{
@@ -514,27 +514,27 @@ var _ = Describe("INV-RB-7: participant fence decrypt via PluginDowngradeFence",
 				PageSize: 10,
 			})
 			Expect(err).NotTo(HaveOccurred(),
-				"INV-RB-7: participant QueryHistory must not error")
+				"INV-CRYPTO-32: participant QueryHistory must not error")
 
 			events := drainHistory(ctx, stream)
 			Expect(events).NotTo(BeEmpty(),
-				"INV-RB-7: at least one event must be returned for the scene subject")
+				"INV-CRYPTO-32: at least one event must be returned for the scene subject")
 
 			ev := events[0]
-			// INV-RB-7 positive: MetadataOnly must be false and Payload must equal plaintext.
+			// INV-CRYPTO-32 positive: MetadataOnly must be false and Payload must equal plaintext.
 			Expect(ev.MetadataOnly).To(BeFalse(),
-				"INV-RB-7: scene participant must receive non-metadata-only event via fence decrypt")
+				"INV-CRYPTO-32: scene participant must receive non-metadata-only event via fence decrypt")
 			Expect(string(ev.Payload)).To(Equal(plaintextRB7),
-				"INV-RB-7: fence decrypt must restore the original plaintext for the participant")
+				"INV-CRYPTO-32: fence decrypt must restore the original plaintext for the participant")
 		})
 	})
 
-	// INV-RB-7 negative arm: a non-participant CHARACTER reads through the fence
+	// INV-CRYPTO-32 negative arm: a non-participant CHARACTER reads through the fence
 	// and receives a metadata-only event. The fence's decryptClean routes to the
 	// checkCharacter DEK-membership branch (ReadBack=false) and denies because
 	// the non-participant's BindingID is NOT in the DEK's participant list.
 	Describe("non-participant read — fence decrypt negative arm", func() {
-		It("delivers metadata-only to a non-participant reading a plugin-owned scene (INV-RB-7)", func() {
+		It("delivers metadata-only to a non-participant reading a plugin-owned scene (INV-CRYPTO-32)", func() {
 			const sceneID = "01RB7NONP0000000000000000"
 
 			participantIdentity := eventbus.SessionIdentity{
@@ -570,18 +570,18 @@ var _ = Describe("INV-RB-7: participant fence decrypt via PluginDowngradeFence",
 				PageSize: 10,
 			})
 			Expect(err).NotTo(HaveOccurred(),
-				"INV-RB-7: non-participant QueryHistory must not error (refusal is per-row, not stream-fatal)")
+				"INV-CRYPTO-32: non-participant QueryHistory must not error (refusal is per-row, not stream-fatal)")
 
 			events := drainHistory(ctx, stream)
 			Expect(events).NotTo(BeEmpty(),
-				"INV-RB-7: at least one event must be returned even for non-participants (metadata-only row)")
+				"INV-CRYPTO-32: at least one event must be returned even for non-participants (metadata-only row)")
 
 			ev := events[0]
-			// INV-RB-7 negative: MetadataOnly must be true and Payload must be nil.
+			// INV-CRYPTO-32 negative: MetadataOnly must be true and Payload must be nil.
 			Expect(ev.MetadataOnly).To(BeTrue(),
-				"INV-RB-7: non-participant must receive metadata-only event via fence decrypt refusal")
+				"INV-CRYPTO-32: non-participant must receive metadata-only event via fence decrypt refusal")
 			Expect(ev.Payload).To(BeNil(),
-				"INV-RB-7: non-participant must not receive plaintext — Payload must be nil")
+				"INV-CRYPTO-32: non-participant must not receive plaintext — Payload must be nil")
 		})
 	})
 })

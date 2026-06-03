@@ -197,7 +197,7 @@ func (c *connectStream) Send(resp *adminv1.AdminReadStreamResponse) error {
 }
 
 // handleInternal runs the full operator-read flow per ADR-0017. The
-// invariant ordering enforced here is INV-42 / INV-F1 / INV-F2:
+// invariant ordering enforced here is INV-CRYPTO-23 / INV-F1 / INV-F2:
 //
 //	capability check → resolve bounds → (optional) dual-control →
 //	EmitStart → first frame send → cold read → frame stream →

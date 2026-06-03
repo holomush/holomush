@@ -147,7 +147,7 @@ func (c *ColdReader) Read(ctx context.Context, q ColdQuery) ([]ColdRow, error) {
 					Errorf("events_audit.dek_ref must not be negative")
 			}
 			keyID = codec.KeyID(uint64(dekRef.Int64))
-			// INV-49: a sensitive row MUST carry both dek_ref and dek_version.
+			// INV-CRYPTO-25: a sensitive row MUST carry both dek_ref and dek_version.
 			// If dek_ref is present but dek_version is NULL the row is malformed;
 			// returning an explicit error lets classifyDecryptErr map it to
 			// DEKBadColumns rather than silently producing keyVersion=0 which

@@ -18,10 +18,10 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
-// TestNoneProvider_Constructor_RefusesIfCryptoKeysNonempty verifies INV-32:
+// TestNoneProvider_Constructor_RefusesIfCryptoKeysNonempty verifies INV-CRYPTO-18:
 // startup with provider.name=none MUST refuse if any crypto_keys row exists.
 // Enforced at constructor time (synchronous DB SELECT).
-var _ = Describe("NoneProvider startup (INV-32)", func() {
+var _ = Describe("NoneProvider startup (INV-CRYPTO-18)", func() {
 	It("refuses startup if crypto_keys table is non-empty", func() {
 		ctx := context.Background()
 		pgContainer, err := postgres.Run(

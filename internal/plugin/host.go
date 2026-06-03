@@ -131,7 +131,7 @@ type FocusDepsConfigurer interface {
 // DecryptOwnAuditRows RPC. Satisfied by *history.ReadbackDecryptor, which
 // enforces the OwnerMap g1 ownership gate before delegating to the unexported
 // read-back decrypt primitive. The id field of every returned RowResult always
-// echoes row.GetId() for positional correlation (INV-RB-12).
+// echoes row.GetId() for positional correlation (INV-CRYPTO-37).
 //
 // DecryptOwnRows is the COMMON batch entry both plugin runtimes (binary gRPC
 // handler and Lua hostfunc adapter) route through: it enforces the

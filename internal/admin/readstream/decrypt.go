@@ -121,7 +121,7 @@ func classifyDecryptErr(err error) (eventbus.NoPlaintextReason, bool) {
 		return eventbus.NoPlaintextReasonStaleDEK, false
 	}
 	// Branch 5: DEK row columns malformed — dek_ref present but dek_version NULL
-	// (INV-49 violation) or zero KeyID. Classified as DEKBadColumns so operators
+	// (INV-CRYPTO-25 violation) or zero KeyID. Classified as DEKBadColumns so operators
 	// see a structured reason rather than a misleading STALE_DEK.
 	if isOopsCode(err, "ADMIN_READSTREAM_COLD_DEK_VERSION_NULL") || isOopsCode(err, "ADMIN_READSTREAM_COLD_NO_DEK") {
 		return eventbus.NoPlaintextReasonDEKBadColumns, false

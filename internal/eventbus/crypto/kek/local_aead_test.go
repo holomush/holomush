@@ -86,7 +86,7 @@ func sanitizeTestName(s string) string {
 }
 
 func TestLocalAEADProvider_WrapUnwrap_Roundtrip(t *testing.T) {
-	// INV-30: Wrap then Unwrap recovers the original DEK byte-for-byte.
+	// INV-CRYPTO-17: Wrap then Unwrap recovers the original DEK byte-for-byte.
 	ctx := context.Background()
 	kekBytes := newKEKBytes(t)
 	provider, err := kek.NewLocalAEADProviderForUnitTest(ctx, envSourceWith(t, kekBytes))

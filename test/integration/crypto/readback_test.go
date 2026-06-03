@@ -18,23 +18,23 @@
 // holomush-m7pxs Task 9.
 //
 // INV-RB invariants covered:
-//   - INV-RB-1: one primitive, snapshot + fence (both call decryptPluginRow)
-//   - INV-RB-2: g1 OwnerMap ownership gate refuses foreign-plugin subjects (not_owner)
-//   - INV-RB-3: every clean plugin read-back emits an INV-19 audit record
-//   - INV-RB-4: clean rows yield plaintext; refused rows yield reason + no plaintext
-//   - INV-RB-5: downgrade fence runs BEFORE any decrypt (layer-1)
-//   - INV-RB-6 (direct-entry side): snapshot direct entry calls decryptPluginRow
-//   - INV-RB-9: over-cap batch rejected (DECRYPT_BATCH_TOO_LARGE)
-//   - INV-RB-11: no plaintext reason echoes row.Id for correlation
-//   - INV-RB-12: ReadBack=true selects manifest readback branch for plugin principals
+//   - INV-CRYPTO-26: one primitive, snapshot + fence (both call decryptPluginRow)
+//   - INV-CRYPTO-27: g1 OwnerMap ownership gate refuses foreign-plugin subjects (not_owner)
+//   - INV-CRYPTO-28: every clean plugin read-back emits an INV-CRYPTO-11 audit record
+//   - INV-CRYPTO-29: clean rows yield plaintext; refused rows yield reason + no plaintext
+//   - INV-CRYPTO-30: downgrade fence runs BEFORE any decrypt (layer-1)
+//   - INV-CRYPTO-31 (direct-entry side): snapshot direct entry calls decryptPluginRow
+//   - INV-CRYPTO-34: over-cap batch rejected (DECRYPT_BATCH_TOO_LARGE)
+//   - INV-CRYPTO-36: no plaintext reason echoes row.Id for correlation
+//   - INV-CRYPTO-37: ReadBack=true selects manifest readback branch for plugin principals
 //
-// INV-RB-7 (participant fence decrypt) is covered by
+// INV-CRYPTO-32 (participant fence decrypt) is covered by
 // test/integration/privacy/scene_history_readback_test.go.
 //
 // OUT OF SCOPE (holomush-5rh.20.26):
-//   - INV-RB-8 (snapshot atomicity)
-//   - INV-RB-10 (SNAPSHOT_DECRYPT_FAILED)
-//   - INV-RB-6 consumer-side (snapshot pipeline calling DecryptOwnAuditRows)
+//   - INV-CRYPTO-33 (snapshot atomicity)
+//   - INV-CRYPTO-35 (SNAPSHOT_DECRYPT_FAILED)
+//   - INV-CRYPTO-31 consumer-side (snapshot pipeline calling DecryptOwnAuditRows)
 package crypto_test
 
 import (
@@ -87,7 +87,7 @@ type readbackEnv struct {
 	auditEm      eventbus.SessionAuditEmitter
 	pluginPub    eventbus.Publisher    // emits sensitive events as a plugin actor
 	hostAuditSub *audit.Subsystem      // populates events_audit
-	bus          *testutil.EmbeddedBus // for consuming INV-RB-3 plugin-decrypt audit records
+	bus          *testutil.EmbeddedBus // for consuming INV-CRYPTO-28 plugin-decrypt audit records
 	gameID       string
 	cleanup      []func()
 }
@@ -109,7 +109,7 @@ func buildReadbackEnv(ctx context.Context, t *testing.T, pluginName string) *rea
 
 	bus := testutil.StartEmbeddedJetStream(t)
 
-	// Create an AUDIT stream so guardaudit.Emitter publishes succeed for INV-RB-3.
+	// Create an AUDIT stream so guardaudit.Emitter publishes succeed for INV-CRYPTO-28.
 	_, err := bus.JS.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
 		Name:     "AUDIT",
 		Subjects: []string{"audit.>"},
@@ -367,10 +367,10 @@ func loadFirstAuditRowAsPluginRow(ctx context.Context, t *testing.T, pool *pgxpo
 // Step 1 tests — snapshot direct-entry path
 // -----------------------------------------------------------------------------
 
-// TestReadbackAuthorizedReturnsPlaintext verifies INV-RB-1/2/3/4/12:
+// TestReadbackAuthorizedReturnsPlaintext verifies INV-CRYPTO-26/2/3/4/12:
 // an authorized plugin (owner of the subject, readback:true in manifest) calling
 // DecryptOwnRows on its own encrypted row receives the original plaintext, and
-// an INV-19 plugin-decrypt audit record is emitted (INV-RB-3).
+// an INV-CRYPTO-11 plugin-decrypt audit record is emitted (INV-CRYPTO-28).
 func TestReadbackAuthorizedReturnsPlaintext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -399,28 +399,28 @@ func TestReadbackAuthorizedReturnsPlaintext(t *testing.T) {
 	subject := "events." + env.gameID + ".scene." + sceneID
 	row := loadFirstAuditRowAsPluginRow(ctx, t, env.pool, subject)
 	require.NotNil(t, row, "TestReadbackAuthorizedReturnsPlaintext: no audit row found for subject=%s", subject)
-	require.NotNil(t, row.DekRef, "INV-RB-5: sensitive row must have dek_ref set")
+	require.NotNil(t, row.DekRef, "INV-CRYPTO-30: sensitive row must have dek_ref set")
 
 	// Invoke the real decryptor (same path as the goplugin host handler).
 	results, err := env.decryptor.DecryptOwnRows(ctx, pluginName, "", []*pluginv1.AuditRow{row})
-	require.NoError(t, err, "INV-RB-1: DecryptOwnRows must not error for authorized owner")
+	require.NoError(t, err, "INV-CRYPTO-26: DecryptOwnRows must not error for authorized owner")
 	require.Len(t, results, 1)
 
-	// INV-RB-1/4: clean row yields plaintext, no refusal reason.
+	// INV-CRYPTO-26/4: clean row yields plaintext, no refusal reason.
 	assert.Empty(t, results[0].GetNoPlaintextReason(),
-		"INV-RB-4: clean owned row must have no refusal reason")
+		"INV-CRYPTO-29: clean owned row must have no refusal reason")
 	// Recovering the exact plaintext proves the snapshot direct-entry path ran
-	// the real decryptPluginRow primitive (INV-RB-6 direct-entry side) — no
+	// the real decryptPluginRow primitive (INV-CRYPTO-31 direct-entry side) — no
 	// other code path yields plaintext from the ciphertext audit row.
 	assert.Equal(t, []byte(plaintext), results[0].GetPlaintext(),
-		"INV-RB-1: authorized owner must receive original plaintext (INV-RB-4 clean, INV-RB-12 echo)")
+		"INV-CRYPTO-26: authorized owner must receive original plaintext (INV-CRYPTO-29 clean, INV-CRYPTO-37 echo)")
 	assert.Equal(t, []byte(plaintext), results[0].GetPlaintext(),
-		"INV-RB-6: snapshot direct-entry must decrypt via the real decryptPluginRow primitive")
+		"INV-CRYPTO-31: snapshot direct-entry must decrypt via the real decryptPluginRow primitive")
 
-	// INV-RB-12: id echoes row.id for positional correlation.
-	assert.Equal(t, row.GetId(), results[0].GetId(), "INV-RB-12: result id must echo row id")
+	// INV-CRYPTO-37: id echoes row.id for positional correlation.
+	assert.Equal(t, row.GetId(), results[0].GetId(), "INV-CRYPTO-37: result id must echo row id")
 
-	// INV-RB-3: a clean plugin read-back MUST emit an INV-19 plugin-decrypt
+	// INV-CRYPTO-28: a clean plugin read-back MUST emit an INV-CRYPTO-11 plugin-decrypt
 	// audit record. The guardaudit.Emitter publishes to the AUDIT stream on
 	// subject audit.<gameID>.plugin_decrypt.<pluginName>; the emitter defaults
 	// gameID to "holomush" (emitter.go defaultGameID), independent of the
@@ -429,10 +429,10 @@ func TestReadbackAuthorizedReturnsPlaintext(t *testing.T) {
 	auditSubject := "audit.holomush.plugin_decrypt." + pluginName
 	auditMsg := testutil.WaitForOneJetStreamMsgOnStream(t, env.bus, "AUDIT", auditSubject, testutil.DefaultWait)
 	assert.Equal(t, "audit:plugin_decrypt", auditMsg.Headers().Get("App-Event-Type"),
-		"INV-RB-3: read-back must emit an audit:plugin_decrypt record on the AUDIT stream")
+		"INV-CRYPTO-28: read-back must emit an audit:plugin_decrypt record on the AUDIT stream")
 }
 
-// TestReadbackForeignSubjectRefused verifies INV-RB-2:
+// TestReadbackForeignSubjectRefused verifies INV-CRYPTO-27:
 // a plugin asking to decrypt a row whose subject belongs to a DIFFERENT plugin
 // receives not_owner (g1 OwnerMap gate), and no decrypt/audit happens.
 func TestReadbackForeignSubjectRefused(t *testing.T) {
@@ -468,16 +468,16 @@ func TestReadbackForeignSubjectRefused(t *testing.T) {
 	require.NoError(t, err, "g1 refusal must not be an RPC-level error")
 	require.Len(t, results, 1)
 
-	// INV-RB-2: g1 gate refuses with not_owner.
+	// INV-CRYPTO-27: g1 gate refuses with not_owner.
 	assert.Equal(t, "not_owner", results[0].GetNoPlaintextReason(),
-		"INV-RB-2: foreign plugin must receive not_owner")
+		"INV-CRYPTO-27: foreign plugin must receive not_owner")
 	assert.Nil(t, results[0].GetPlaintext(),
-		"INV-RB-2: foreign-subject row must not yield plaintext")
+		"INV-CRYPTO-27: foreign-subject row must not yield plaintext")
 	assert.Equal(t, row.GetId(), results[0].GetId(),
-		"INV-RB-11: id must echo even on refusal")
+		"INV-CRYPTO-36: id must echo even on refusal")
 }
 
-// TestReadbackWithoutReadbackFlagDenied verifies INV-RB-2 (g2 gate):
+// TestReadbackWithoutReadbackFlagDenied verifies INV-CRYPTO-27 (g2 gate):
 // a plugin whose manifest declares the event type but WITHOUT readback:true
 // is denied via the checkPluginReadback guard (auth_guard_deny).
 func TestReadbackWithoutReadbackFlagDenied(t *testing.T) {
@@ -619,14 +619,14 @@ func TestReadbackWithoutReadbackFlagDenied(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
-	// INV-RB-2 (g2): readback:false → auth_guard_deny or downgrade_refused.
+	// INV-CRYPTO-27 (g2): readback:false → auth_guard_deny or downgrade_refused.
 	// The g2 check fires after the g1 owner check passes; the manifest check
 	// inside checkPluginReadback denies because PluginCanReadBack returns false.
 	assert.Equal(t, "auth_guard_deny", results[0].GetNoPlaintextReason(),
-		"INV-RB-2: plugin without readback flag must be denied by the g2 readback gate (auth_guard_deny)")
+		"INV-CRYPTO-27: plugin without readback flag must be denied by the g2 readback gate (auth_guard_deny)")
 	assert.Nil(t, results[0].GetPlaintext(),
-		"INV-RB-2: plugin without readback flag must not receive plaintext")
-	assert.Equal(t, row.GetId(), results[0].GetId(), "INV-RB-11: id echoes on refusal")
+		"INV-CRYPTO-27: plugin without readback flag must not receive plaintext")
+	assert.Equal(t, row.GetId(), results[0].GetId(), "INV-CRYPTO-36: id echoes on refusal")
 }
 
 // noReadbackManifestLookup returns false for PluginCanReadBack unconditionally.
@@ -644,9 +644,9 @@ func (noReadbackManifestLookup) PluginCanReadBack(_, _ string) bool        { ret
 // package or in test/integration/privacy/.
 //
 // OUT OF SCOPE (holomush-5rh.20.26, C7 snapshot-pipeline bead):
-//   - INV-RB-8 (snapshot atomicity)
-//   - INV-RB-10 (SNAPSHOT_DECRYPT_FAILED)
-//   - INV-RB-6 consumer-side (snapshot pipeline calling DecryptOwnAuditRows)
+//   - INV-CRYPTO-33 (snapshot atomicity)
+//   - INV-CRYPTO-35 (SNAPSHOT_DECRYPT_FAILED)
+//   - INV-CRYPTO-31 consumer-side (snapshot pipeline calling DecryptOwnAuditRows)
 //
 // These MUST NOT be required here; their absence from the name-list below
 // is deliberate and documents the boundary.
@@ -658,61 +658,61 @@ func TestINVRBInvariantCoverage(t *testing.T) {
 		files []string // files that reference the invariant
 	}{
 		{
-			inv: "INV-RB-1",
+			inv: "INV-CRYPTO-26",
 			files: []string{
 				"test/integration/crypto/readback_test.go",
 			},
 		},
 		{
-			inv: "INV-RB-2",
+			inv: "INV-CRYPTO-27",
 			files: []string{
 				"test/integration/crypto/readback_test.go",
 			},
 		},
 		{
-			inv: "INV-RB-3",
+			inv: "INV-CRYPTO-28",
 			files: []string{
 				"test/integration/crypto/readback_test.go",
 			},
 		},
 		{
-			inv: "INV-RB-4",
+			inv: "INV-CRYPTO-29",
 			files: []string{
 				"test/integration/crypto/readback_test.go",
 			},
 		},
 		{
-			inv: "INV-RB-5",
+			inv: "INV-CRYPTO-30",
 			files: []string{
 				"test/integration/crypto/readback_test.go",
 			},
 		},
 		{
-			inv: "INV-RB-6",
+			inv: "INV-CRYPTO-31",
 			files: []string{
 				"test/integration/crypto/readback_test.go", // direct-entry side only
 			},
 		},
 		{
-			inv: "INV-RB-7",
+			inv: "INV-CRYPTO-32",
 			files: []string{
 				"test/integration/privacy/scene_history_readback_test.go",
 			},
 		},
 		{
-			inv: "INV-RB-9",
+			inv: "INV-CRYPTO-34",
 			files: []string{
 				"test/integration/crypto/readback_test.go",
 			},
 		},
 		{
-			inv: "INV-RB-11",
+			inv: "INV-CRYPTO-36",
 			files: []string{
 				"test/integration/crypto/readback_test.go",
 			},
 		},
 		{
-			inv: "INV-RB-12",
+			inv: "INV-CRYPTO-37",
 			files: []string{
 				"test/integration/crypto/readback_test.go",
 			},
@@ -726,7 +726,7 @@ func TestINVRBInvariantCoverage(t *testing.T) {
 	// excluded by countInvariantStringLiterals). This catches the failure mode
 	// where someone silently adds an in-package assertion for a C7 invariant
 	// without moving it in-scope.
-	outOfScope := []string{"INV-RB-8", "INV-RB-10"}
+	outOfScope := []string{"INV-CRYPTO-33", "INV-CRYPTO-35"}
 	const thisFile = "test/integration/crypto/readback_test.go"
 	for _, inv := range outOfScope {
 		assert.Zero(t, countInvariantStringLiterals(t, thisFile, inv),
@@ -768,8 +768,8 @@ func fileReferencesInvariant(t *testing.T, relPath, inv string) bool {
 // inv. Comments are excluded by construction (they are not BasicLit nodes).
 //
 // A real assertion message embeds the invariant in a larger sentence, e.g.
-// "INV-RB-1: DecryptOwnRows must not error...". The meta-test's own coverage
-// catalog stores the invariant as a BARE literal (`inv: "INV-RB-1"`); counting
+// "INV-CRYPTO-26: DecryptOwnRows must not error...". The meta-test's own coverage
+// catalog stores the invariant as a BARE literal (`inv: "INV-CRYPTO-26"`); counting
 // those would make the gate trivially self-satisfying. We therefore require the
 // literal's value to STRICTLY CONTAIN inv (be longer than the invariant token
 // alone) — that excludes the catalog entries and demands a real labeled
@@ -797,7 +797,7 @@ func countInvariantStringLiterals(t *testing.T, relPath, inv string) int {
 			val = lit.Value // raw fallback for backtick/unparseable literals
 		}
 		// Strict containment: the literal must say MORE than the bare invariant
-		// token, which excludes the coverage-catalog entries (`inv: "INV-RB-N"`)
+		// token, which excludes the coverage-catalog entries (`inv: "INV-CRYPTO-N"`)
 		// and demands an actual assertion message naming the invariant.
 		if strings.Contains(val, inv) && val != inv {
 			count++
@@ -807,7 +807,7 @@ func countInvariantStringLiterals(t *testing.T, relPath, inv string) int {
 	return count
 }
 
-// TestReadbackBatchCapRejected verifies INV-RB-9:
+// TestReadbackBatchCapRejected verifies INV-CRYPTO-34:
 // a batch larger than maxDecryptBatch (500) is REJECTED with DECRYPT_BATCH_TOO_LARGE,
 // not truncated silently.
 func TestReadbackBatchCapRejected(t *testing.T) {
@@ -830,7 +830,7 @@ func TestReadbackBatchCapRejected(t *testing.T) {
 	}
 
 	_, err := env.decryptor.DecryptOwnRows(ctx, pluginName, "", rows)
-	require.Error(t, err, "INV-RB-9: batch > maxDecryptBatch must be rejected")
+	require.Error(t, err, "INV-CRYPTO-34: batch > maxDecryptBatch must be rejected")
 
 	// The error must carry the DECRYPT_BATCH_TOO_LARGE oops code.
 	// Use errutil.AssertErrorCode — the project-standard way to discriminate

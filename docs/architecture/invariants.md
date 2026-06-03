@@ -45,6 +45,63 @@ invariants.
 
 <!-- BEGIN GENERATED: invariant-tables (edit invariants.yaml + run `task invariants:render`) -->
 
+### `INV-CRYPTO`
+
+| ID | Summary | Legacy | Binding |
+|----|---------|--------|---------|
+| `INV-CRYPTO-1` | WithHistoryAuth(g, m, em) MUST produce the same coldOpts as WithCryptoCold with the matching per-tier cold constructors. | `INV-1` | pending |
+| `INV-CRYPTO-2` | WithHistoryAuth(g, m, em) MUST produce the same hotOpts as WithCryptoHot with the matching per-tier hot constructors. | `INV-2` | pending |
+| `INV-CRYPTO-3` | NewReader MUST forward accumulated hotOpts to newJetStreamHotTier when building the default hot tier. | `INV-3` | pending |
+| `INV-CRYPTO-4` | WithCryptoHot MUST be a no-op when WithHotTier is also supplied — crypto options are not forwarded to a custom tier. | `INV-4` | pending |
+| `INV-CRYPTO-5` | newHistoryReader(nil, nil, nil) MUST preserve the existing nil-auth passthrough behavior (no auth option appended). | `INV-6` | pending |
+| `INV-CRYPTO-6` | A subject NOT in a DEK's participant set MUST NOT receive plaintext via fan-out, even when subscribed to the matching subject. | `INV-9` | pending |
+| `INV-CRYPTO-7` | Add(participant) MUST grant immediate read access to all existing DEK history without rotating the DEK. | `INV-12` | pending |
+| `INV-CRYPTO-8` | Rotate(context) MUST preserve the old DEK ciphertext and old DEK record unchanged (holds under Phase 3c soft-delete). | `INV-13` | pending |
+| `INV-CRYPTO-9` | A plugin without manifest requests_decryption for an event class MUST receive metadata-only delivery, regardless of subject subscription. | `INV-17` | pending |
+| `INV-CRYPTO-10` | A plugin with manifest declaration but without an active ABAC grant MUST receive metadata-only delivery. | `INV-18` | pending |
+| `INV-CRYPTO-11` | Every plugin decryption MUST emit an audit event on a subject the plugin cannot subscribe to. | `INV-19` | pending |
+| `INV-CRYPTO-12` | A plugin authorization failure MUST NOT block fan-out to other recipients. | `INV-20` | pending |
+| `INV-CRYPTO-13` | events_audit.envelope MUST be byte-equal to the marshaled Event proto envelope on the bus for sensitive events. | `INV-21` | pending |
+| `INV-CRYPTO-14` | An event whose cleartext metadata, codec, or dek_ref has been altered MUST fail decryption with a tag-mismatch error and MUST NOT yield plaintext. | `INV-25` | pending |
+| `INV-CRYPTO-15` | A recipient denied decryption MUST receive the event with metadata_only=true, empty payload bytes, populated cleartext metadata, and no ciphertext. | `INV-26` | pending |
+| `INV-CRYPTO-16` | dek.Material MUST NOT be passed to any io.Writer, json/gob/proto marshaler, slog/log, fmt.Sprint/Print/Errorf, or any []byte-returning function other than the codec Encode/Decode (gocritic ruleguard-enforced). | `INV-27` | pending |
+| `INV-CRYPTO-17` | Wrap followed by Unwrap with the returned keyID MUST recover the original DEK byte-for-byte. | `INV-30` | pending |
+| `INV-CRYPTO-18` | A startup with provider.name=none MUST refuse if any crypto_keys row exists. | `INV-32` | pending |
+| `INV-CRYPTO-19` | A startup with provider X MUST refuse if any crypto_keys row's wrap_provider is not unwrappable by X. | `INV-33` | pending |
+| `INV-CRYPTO-20` | A NoneProvider MUST refuse Wrap and MUST cause emit-time failure for any event with Sensitive=true. | `INV-34` | pending |
+| `INV-CRYPTO-21` | A crashed Rotate MUST be resolvable by the startup integrity check without manual intervention. | `INV-37` | pending |
+| `INV-CRYPTO-22` | Reads of historical events whose dek_ref no longer exists in crypto_keys MUST automatically fall back to the cold tier (host-owned subjects only). | `INV-39` | pending |
+| `INV-CRYPTO-23` | AdminReadStream MUST emit its audit event before delivering any plaintext data; if the audit emit fails, the call MUST refuse. | `INV-42` | pending |
+| `INV-CRYPTO-24` | The runtime AuthGuard MUST NEVER return PERMIT for a subject of kind operator; legitimate operator reads go through AdminReadStream. | `INV-43` | pending |
+| `INV-CRYPTO-25` | Envelope byte-equality across emit->audit->cold-read: the marshaled Event proto envelope on JetStream MUST be byte-equal to events_audit.envelope and to the cold-tier reader's recovered envelope bytes. | `INV-49` | pending |
+| `INV-CRYPTO-26` | Read-back decryption MUST occur host-side; the plugin MUST NOT receive or hold a DEK — it receives only plaintext or a refusal. | `INV-RB-1` | pending |
+| `INV-CRYPTO-27` | A plugin read-back decrypt MUST pass two gates evaluated once each (default-deny): (g1) host-side OwnerMap subject-ownership at primitive entry; (g2) manifest crypto.emits[].readback:true via PluginCanReadBack. | `INV-RB-2` | pending |
+| `INV-CRYPTO-28` | Every read-back decrypt MUST emit an INV-19 plugin_decrypt audit event on a subject the plugin cannot subscribe to; the primitive MUST fail closed if the audit emitter is absent. | `INV-RB-3` | pending |
+| `INV-CRYPTO-29` | AAD for read-back decrypt MUST be built by routing the row through AuditRowToEvent + aad.Build (delegating to decodeAuthorizeAndDispatch, not reimplementing decode); a row whose fields mismatch the bound AAD MUST fail decrypt. | `INV-RB-4` | pending |
+| `INV-CRYPTO-30` | INV-P7-7 (downgrade refusal) and INV-P7-15 (DEK-existence) MUST apply on every read-back path — snapshot direct entry and routed fence — identically to the pre-existing fence behavior. | `INV-RB-5` | pending |
+| `INV-CRYPTO-31` | The snapshot MUST read its IC events via the plugin's in-tx SQL read + the direct decrypt entry; it MUST NOT route through PluginAuditService.QueryHistory (no self-loop). | `INV-RB-6` | pending |
+| `INV-CRYPTO-32` | The fence clean-row path MUST return decrypted plaintext to a routed reader authorized by AuthGuard DEK-participant-set membership; a non-member MUST receive a refused/metadata-only row. | `INV-RB-7` | pending |
+| `INV-CRYPTO-33` | Snapshot read+decrypt+render MUST complete before the write-tx; the in-tx SELECT FOR UPDATE re-validation of COOLOFF + all-yes MUST be the serialization point; a vote-flip between read and write MUST yield a no-op commit. | `INV-RB-8` | pending |
+| `INV-CRYPTO-34` | The capability, fence, and audit MUST apply identically to binary and Lua plugins (runtime symmetry). | `INV-RB-9` | pending |
+| `INV-CRYPTO-35` | A snapshot decrypt failure MUST transition the attempt to ATTEMPT_FAILED with failure_reason = SNAPSHOT_DECRYPT_FAILED. | `INV-RB-10` | pending |
+| `INV-CRYPTO-36` | The decrypt primitive and fence completion MUST be subject-agnostic: any plugin-owned sensitivity:always subject MUST flow through the identical primitive with no per-plugin special-casing. | `INV-RB-11` | pending |
+| `INV-CRYPTO-37` | DecryptOwnAuditRows MUST return a per-row result (plaintext or typed refusal), never all-or-nothing, with ordering matching the input; any refusal/error is a publish failure. | `INV-RB-12` | pending |
+| `INV-CRYPTO-38` | The per-plugin audit dispatcher MUST forward ciphertext bytes byte-equal to what arrived on JetStream when App-Codec is non-identity; no decode-to-plaintext step occurs before forwarding. | `INV-P7-1` | pending |
+| `INV-CRYPTO-39` | The dispatcher MUST populate AuditRow.codec/dek_ref/dek_version from the JS App-Codec/App-Dek-Ref/App-Dek-Version headers using the shared parser also used by the events_audit projection writer. | `INV-P7-2` | pending |
+| `INV-CRYPTO-40` | pluginsdk.StoreFromMessage round-tripped through pluginsdk.LoadForQuery MUST yield byte-equal payload, identical projection fields, and identical codec/dek_ref/dek_version typed values. | `INV-P7-5` | pending |
+| `INV-CRYPTO-41` | A plugin's stored audit row MUST byte-equal the row received via the AuditEvent RPC: (payload, codec, dek_ref, dek_version) are written and returned verbatim (extends master INV-46). | `INV-P7-6` | pending |
+| `INV-CRYPTO-42` | The host QueryStreamHistory handler MUST refuse a plugin-returned row where codec=identity AND type is in the manifest-derived always-sensitive set (keyed by qualified <plugin>:<type>), emitting AUDIT_ROW_DOWNGRADE_DETECTED + plugin_integrity_violation (re-scopes master INV-50). | `INV-P7-7` | pending |
+| `INV-CRYPTO-43` | The downgrade-fence refusal MUST be per-row and NOT stream-fatal — the stream continues after a single-row refusal (corrected v3 design). | `INV-P7-7b` | pending |
+| `INV-CRYPTO-44` | The always-sensitive set used by the fence MUST be built once at server boot and be immutable for the server's lifetime; a regression introducing hot-reload without atomicity MUST be caught. | `INV-P7-8` | pending |
+| `INV-CRYPTO-45` | The dispatcher's KeySelector MUST be the SAME KeySelector instance the host's hot-tier reader uses — no second selector, no parallel cache. | `INV-P7-9` | pending |
+| `INV-CRYPTO-46` | The dispatcher MUST NOT decrypt to plaintext before forwarding to the plugin; the plugin receives ciphertext and the host (only) decrypts. | `INV-P7-11` | pending |
+| `INV-CRYPTO-47` | The plugin's stored row MUST NOT carry any cleartext content for sensitive events — the plugin sees codec=xchacha20poly1305-v1 + ciphertext bytes only. | `INV-P7-12` | pending |
+| `INV-CRYPTO-48` | Plugin code MUST NOT have a path that writes directly to host-owned tables (events_audit, crypto_keys); the plugin Postgres role lacks USAGE on schema public. | `INV-P7-13` | pending |
+| `INV-CRYPTO-49` | Phase 7 MUST NOT add a second emit-time sensitivity gate — the crypto.emits manifest declaration enforced by sensitivity_fence.go (INV-6/INV-7) is the sole emit-time gate. | `INV-P7-14` | pending |
+| `INV-CRYPTO-50` | The host QueryStreamHistory plugin path MUST refuse any plugin-returned row where codec!=identity AND dek_ref is absent or not present in crypto_keys (destroyed_at IS NULL filter); refusal surfaces as metadata_only=true (carries master INV-48). | `INV-P7-15` | pending |
+| `INV-CRYPTO-51` | The AuditRow -> *eventbusv1.Event adapter MUST produce a value whose AAD reconstruction is byte-equal to the AAD used at encrypt for the same event_id (superseded by INV-STORE-5 at full ns resolution; ADR holomush-f5h0). | `INV-P7-16` | pending |
+| `INV-CRYPTO-52` | Phase C.0 substrate: the plugin audit router MUST stamp the AuditRow.of (origin) on each routed row and expose it via the accessor used by the dispatcher. | `INV-P7-C0` | pending |
+
 ### `INV-PRIVACY`
 
 | ID | Summary | Legacy | Binding |

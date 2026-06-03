@@ -2148,8 +2148,8 @@ export enum NoPlaintextReason {
    * NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED is a Phase 7 PluginDowngradeFence layer
    * (1) refusal — the host's read-side fence rejected the row before decrypt,
    * either because the type is in the always-sensitive manifest set and the
-   * plugin returned an identity codec (INV-P7-7), or because the dek_ref is
-   * unknown / absent for a non-identity codec (INV-P7-15). The original event_id
+   * plugin returned an identity codec (INV-CRYPTO-42), or because the dek_ref is
+   * unknown / absent for a non-identity codec (INV-CRYPTO-50). The original event_id
    * is preserved; payload is empty per master INV-26.
    *
    * @generated from enum value: NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED = 7;

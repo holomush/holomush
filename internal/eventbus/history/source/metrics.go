@@ -5,7 +5,7 @@ package source
 
 import "github.com/prometheus/client_golang/prometheus"
 
-// Metrics holds the three INV-39 fallback counters per spec §5.6.
+// Metrics holds the three INV-CRYPTO-22 fallback counters per spec §5.6.
 type Metrics struct {
 	HotDEKMiss          prometheus.Counter
 	ColdFallbackSuccess prometheus.Counter

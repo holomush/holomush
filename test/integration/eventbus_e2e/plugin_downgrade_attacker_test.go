@@ -237,8 +237,8 @@ func (p singletonAuditProvider) PluginAuditClient(name string) (pluginauditpb.Pl
 
 // fenceLookupAlwaysFound satisfies history.CryptoKeysLookup: every
 // dek_ref reads as Exists=true. The honest path needs this so the
-// non-identity codec row passes the INV-P7-15 check; the malicious
-// path never reaches INV-P7-15 (codec=identity bails at INV-P7-7).
+// non-identity codec row passes the INV-CRYPTO-50 check; the malicious
+// path never reaches INV-CRYPTO-50 (codec=identity bails at INV-CRYPTO-42).
 type fenceLookupAlwaysFound struct{}
 
 func (fenceLookupAlwaysFound) Exists(_ context.Context, _ uint64) (bool, error) {
@@ -281,7 +281,7 @@ func (e *capturingViolationEmitter) snapshot() []capturedViolation {
 
 // alwaysSensitiveFromManifest extracts the manifest's
 // crypto.emits.sensitivity:always set, formatted as `<plugin>:<event>`
-// per INV-P7-7's manifest-set heuristic.
+// per INV-CRYPTO-42's manifest-set heuristic.
 func alwaysSensitiveFromManifest(m *plugins.Manifest) map[string]struct{} {
 	out := map[string]struct{}{}
 	if m == nil || m.Crypto == nil {

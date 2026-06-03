@@ -310,7 +310,7 @@ func (a pluginAuditClientAdapter) AuditEvent(ctx context.Context, req *pluginv1.
 // which projects the (encrypted) event into the plugin's audit table (e.g.
 // plugin_core_scenes.scene_log). Mirrors cmd/holomush/core.go:556-591.
 //
-// INV-P7-9: the SAME codec.KeySelector instance threaded here MUST also feed
+// INV-CRYPTO-45: the SAME codec.KeySelector instance threaded here MUST also feed
 // the read-side history reader; the caller (Start) owns that pointer identity
 // by passing pc.selector to both sinks.
 func startPluginConsumers(t *testing.T, ctx context.Context, bus *eventbustest.Embedded, mgr *plugins.Manager, sel codec.KeySelector) *audit.PluginConsumerManager {
@@ -382,7 +382,7 @@ type historyCrypto struct {
 	// Threaded into history.NewReader (hot/cold tier auth) AND the read-back
 	// decryptor's g2 gate.
 	sessionGuard eventbus.SessionAuthGuard
-	// sessionAuditEm is the eventbus.SessionAuditEmitter (INV-19 plugin-decrypt
+	// sessionAuditEm is the eventbus.SessionAuditEmitter (INV-CRYPTO-11 plugin-decrypt
 	// audit). Wrapped by countingAuditEmitter for the decryptor; the reader's
 	// hot-tier auth path consumes the same emitter so plugin decrypts on the
 	// reader path also audit.
@@ -454,7 +454,7 @@ func (h *historyCrypto) readerCryptoOptions(pc *pluginCrypto) []history.Option {
 // SessionBridgeGuard + audit-chain emitter built once by buildHistoryCrypto,
 // threaded into the Manager so the DecryptOwnAuditRows host RPC (and the
 // harness's ReadBackOwnRows helper) recover plaintext from a plugin's own
-// encrypted audit rows and emit the INV-19 read-back audit record. Mirrors
+// encrypted audit rows and emit the INV-CRYPTO-11 read-back audit record. Mirrors
 // cmd/holomush/sub_grpc.go:347-366,478-485.
 //
 // Reuses the guard + audit emitter built by buildHistoryCrypto (same instances
@@ -670,7 +670,7 @@ func (s *Server) QueryPluginAuditRows(ctx context.Context, plugin, subject strin
 }
 
 // ReadBackOwnRows decrypts each row as plugin's own via the read-back decryptor
-// (link 4): real SessionBridgeGuard authorization + DEK decrypt + INV-19 audit
+// (link 4): real SessionBridgeGuard authorization + DEK decrypt + INV-CRYPTO-11 audit
 // emission. Results are 1:1 with rows in request order. A refused row
 // (g1 not_owner / g2 manifest-or-AuthGuard deny / fail-closed) maps to
 // Denied=true with empty Plaintext. Panics via requirePluginCrypto if the
@@ -709,7 +709,7 @@ func (s *Server) ReadBackAuditCount(_ context.Context) int {
 // auditRowToProto rebuilds the *pluginv1.AuditRow from a scene_log PluginAuditRow
 // field-for-field, mirroring plugins/core-scenes/publish_snapshot.go::
 // logRowToAuditRow so the AAD the host rebuilds (AuditRowToEvent + aad.Build) is
-// byte-equal to the encrypt-side AAD (INV-RB-4 / INV-STORE-5).
+// byte-equal to the encrypt-side AAD (INV-CRYPTO-29 / INV-STORE-5).
 func auditRowToProto(r *PluginAuditRow) *pluginv1.AuditRow {
 	out := &pluginv1.AuditRow{
 		Id:        r.ID,

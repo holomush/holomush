@@ -111,12 +111,12 @@ func WithPluginRouter(router PluginHistoryRouter) Option {
 }
 
 // WithPluginDowngradeFence wires the Phase 7 read-side fence around the
-// inner PluginHistoryRouter. The fence applies INV-P7-7 (manifest-set
-// heuristic) and INV-P7-15 (DEK existence) checks before forwarding rows
+// inner PluginHistoryRouter. The fence applies INV-CRYPTO-42 (manifest-set
+// heuristic) and INV-CRYPTO-50 (DEK existence) checks before forwarding rows
 // to the caller; refusals surface as per-row metadata_only=true.
 //
 // Production wiring at cmd/holomush/core.go (Task E.3 / bead 1r0v.5)
-// supplies the always-sensitive set (built once at boot per INV-P7-8),
+// supplies the always-sensitive set (built once at boot per INV-CRYPTO-44),
 // the crypto_keys lookup, and the violation emitter. Until then this
 // option is exposed for integration tests; an unset fence preserves
 // pre-Phase-7 behaviour (router output passes through unfenced).
@@ -134,7 +134,7 @@ func WithPluginDowngradeFence(
 // WithPluginDowngradeFenceReadback is WithPluginDowngradeFence plus the
 // read-back crypto capabilities (guard / dek / audit) that let the fence
 // DECRYPT a clean plugin-owned row for an authorized routed participant
-// (INV-RB-7). A nil guard preserves the pre-T8 ciphertext-passthrough
+// (INV-CRYPTO-32). A nil guard preserves the pre-T8 ciphertext-passthrough
 // behaviour on clean rows (Crypto.Enabled=false deployments).
 //
 // The caller's CHARACTER identity is forwarded on HistoryQuery.Identity, so
@@ -149,7 +149,7 @@ func WithPluginDowngradeFenceReadback(
 	auditEm eventbus.SessionAuditEmitter,
 ) Option {
 	// Copy at capture-time so post-NewReader mutation by the caller cannot
-	// alter the fence's refusal surface (INV-P7-8 "built once at boot"
+	// alter the fence's refusal surface (INV-CRYPTO-44 "built once at boot"
 	// applies even though fence construction is lazy in fencedRouter).
 	copied := make(map[string]struct{}, len(alwaysSensitive))
 	for k := range alwaysSensitive {
@@ -266,7 +266,7 @@ func WithHistoryAuth(
 // WithHistoryAuthAndSourceResolver wires AuthGuard + DecryptAuditEmitter
 // into both tiers PLUS a per-tier source.SourceResolver. The hot tier
 // receives `hotResolver` (typically a *source.FallbackResolver wired to a
-// cold-tier LookupByID seam, enabling INV-39 hot→cold-tier fallback). The
+// cold-tier LookupByID seam, enabling INV-CRYPTO-22 hot→cold-tier fallback). The
 // cold tier receives `coldResolver` (typically a *source.SimpleResolver —
 // fallback on cold reads would recurse since cold IS the fallback target).
 //
@@ -455,7 +455,7 @@ func (r *Reader) QueryHistory(ctx context.Context, q eventbus.HistoryQuery) (eve
 // PluginDowngradeFence wrapping r.router when WithPluginDowngradeFence
 // supplied options. The fence is built once and reused across plugin
 // queries — the always-sensitive set is captured by copy at construction
-// per INV-P7-8 (no hot-reload).
+// per INV-CRYPTO-44 (no hot-reload).
 func (r *Reader) fencedRouter() PluginHistoryRouter {
 	if len(r.fenceOpts) == 0 {
 		return r.router

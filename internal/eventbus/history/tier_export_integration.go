@@ -8,7 +8,7 @@ package history
 import "github.com/holomush/holomush/internal/eventbus/codec"
 
 // KeySelectorForTest exposes the reader's KeySelector to integration
-// tests that assert INV-P7-9 pointer-identity with PluginConsumerManager.
+// tests that assert INV-CRYPTO-45 pointer-identity with PluginConsumerManager.
 //
 // Integration-only: gated by the `integration` build tag so the
 // accessor never reaches a production binary.

@@ -79,7 +79,7 @@ func TestPlugin_CryptoEmitsMatchesRegistry(t *testing.T) {
 		"INV-SCENE-2: manifest crypto.emits MUST equal EmitTypeRegistrar set")
 }
 
-// TestCoreScenesManifestDeclaresReadback pins INV-RB-2: the three IC content
+// TestCoreScenesManifestDeclaresReadback pins INV-CRYPTO-27: the three IC content
 // event types (scene_pose, scene_say, scene_emit) MUST declare readback:true so
 // the host can decrypt historical snapshots on behalf of the plugin. scene_ooc
 // is excluded because OOC content is never archived into the published scene log.

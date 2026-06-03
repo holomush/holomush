@@ -34,7 +34,7 @@ type LocalAEADProvider struct {
 }
 
 // NewLocalAEADProvider constructs a LocalAEADProvider, loading the KEK
-// from the source and running INV-33 against db (refuses startup if
+// from the source and running INV-CRYPTO-19 against db (refuses startup if
 // any crypto_keys row references a wrap_key_id this provider cannot
 // unwrap). Pass a *pgx.Conn or *pgxpool.Pool for db.
 //
@@ -63,7 +63,7 @@ func NewLocalAEADProvider(ctx context.Context, source KEKSource, db PGQuerier) (
 }
 
 // NewLocalAEADProviderForUnitTest constructs a LocalAEADProvider
-// without the INV-33 DB check. For unit tests of Wrap/Unwrap;
+// without the INV-CRYPTO-19 DB check. For unit tests of Wrap/Unwrap;
 // integration tests use NewLocalAEADProvider.
 //
 // Returns KEK_LOCAL_AEAD_DEPENDENCY_NIL if source is nil.
@@ -169,7 +169,7 @@ func (p *LocalAEADProvider) RotateKEK(_ context.Context) (string, error) {
 // HealthCheck returns nil — the KEK is in process memory.
 func (p *LocalAEADProvider) HealthCheck(_ context.Context) error { return nil }
 
-// startupIntegrityCheck enforces INV-33: no crypto_keys row may
+// startupIntegrityCheck enforces INV-CRYPTO-19: no crypto_keys row may
 // reference a wrap_key_id this provider cannot unwrap.
 func (p *LocalAEADProvider) startupIntegrityCheck(ctx context.Context, db PGQuerier) error {
 	rows, err := db.Query(ctx, "SELECT DISTINCT wrap_key_id FROM crypto_keys WHERE wrap_provider = $1", p.sourceName)

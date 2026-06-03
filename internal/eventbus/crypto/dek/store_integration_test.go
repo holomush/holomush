@@ -37,7 +37,7 @@ func (s *testBindingStub) Current(_ context.Context, _ string) (string, error) {
 // read predicates: selectByID (exercised via Manager.Resolve, which
 // translates pgx.ErrNoRows into DEK_NOT_FOUND) and selectActive
 // (exercised via a direct SQL check of the same predicate the method
-// uses). Phase 3c Decision 4 / INV-39.
+// uses). Phase 3c Decision 4 / INV-CRYPTO-22.
 //
 // We don't assert via Manager.GetOrCreate because the unique
 // (context_type, context_id, version) constraint on crypto_keys
@@ -45,7 +45,7 @@ func (s *testBindingStub) Current(_ context.Context, _ string) (string, error) {
 // context after a soft-delete is a Rekey-tenure concern out of scope
 // for T8. The selectActive predicate behavior is the property under
 // test, and we verify it directly.
-var _ = Describe("Store soft-delete behaviour (Phase 3c Decision 4 / INV-39)", func() {
+var _ = Describe("Store soft-delete behaviour (Phase 3c Decision 4 / INV-CRYPTO-22)", func() {
 	It("soft-deleted DEK appears as no rows for production reads", func() {
 		ctx := context.Background()
 		connStr, teardown := newTestPGPool(suiteT)

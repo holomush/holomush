@@ -81,13 +81,13 @@ type PluginConsumerManager struct {
 	consumers []*pluginConsumer
 	started   bool
 
-	// keySelector is wired on the manager per INV-P7-9 (substrate-symmetry
+	// keySelector is wired on the manager per INV-CRYPTO-45 (substrate-symmetry
 	// with the hot-tier reader at internal/eventbus/history/tier.go) so
 	// production wiring (cmd/holomush/core.go:488) can thread the same
 	// codec.KeySelector instance to both. Phase 7's per-consumer dispatch
 	// path (pluginConsumer.dispatch) does NOT consume the selector — it
 	// forwards ciphertext byte-equal without invoking any codec
-	// (INV-P7-11). The field exists so future dispatcher-side validation
+	// (INV-CRYPTO-46). The field exists so future dispatcher-side validation
 	// (e.g. "refuse if dek_ref doesn't resolve" before forwarding) can
 	// thread the selector without re-wiring the constructor.
 	keySelector codec.KeySelector
@@ -97,7 +97,7 @@ type PluginConsumerManager struct {
 type PluginConsumerManagerOption func(*PluginConsumerManager)
 
 // WithKeySelector wires a codec.KeySelector onto the manager. The selector
-// is substrate per INV-P7-9 — see PluginConsumerManager.keySelector for
+// is substrate per INV-CRYPTO-45 — see PluginConsumerManager.keySelector for
 // the in-Phase-7 semantics.
 func WithKeySelector(sel codec.KeySelector) PluginConsumerManagerOption {
 	return func(m *PluginConsumerManager) { m.keySelector = sel }
@@ -332,7 +332,7 @@ func (pc *pluginConsumer) handle(msg jetstream.Msg) {
 // retried delivery on the host side therefore produces zero duplicate
 // plugin rows.
 //
-// Per Phase 7 spec §3 + §5.1 (INV-P7-1, INV-P7-11): the dispatcher
+// Per Phase 7 spec §3 + §5.1 (INV-CRYPTO-38, INV-CRYPTO-46): the dispatcher
 // forwards ciphertext byte-equal — it does NOT decrypt the envelope's
 // payload before forwarding. The envelope projection fields (id,
 // subject, type, timestamp, actor) are read from a no-decryption
@@ -372,8 +372,8 @@ func (pc *pluginConsumer) dispatch(msg jetstream.Msg) error {
 }
 
 // buildAuditRow constructs the AuditRow forwarded to the plugin's
-// AuditEvent RPC. NEVER decrypts (INV-P7-11). Payload bytes are
-// preserved byte-equal from the bus envelope (INV-P7-1).
+// AuditEvent RPC. NEVER decrypts (INV-CRYPTO-46). Payload bytes are
+// preserved byte-equal from the bus envelope (INV-CRYPTO-38).
 //
 // Wire-format invariant (verified at publisher.go:266-292 + hot_jetstream.go:441-444):
 // the codec encrypts the event.Payload field in place; cleartext
@@ -391,7 +391,7 @@ func buildAuditRow(msg jetstream.Msg) (*pluginv1.AuditRow, error) {
 	// Unmarshal the envelope ONLY to read projection fields. We do NOT
 	// invoke the codec's Decode here — the projection fields are
 	// cleartext regardless of codec, and decrypting would violate
-	// INV-P7-11 (no decrypt before forward).
+	// INV-CRYPTO-46 (no decrypt before forward).
 	envelope, err := unmarshalProjectionOnly(msg.Data())
 	if err != nil {
 		return nil, oops.Code("AUDIT_PLUGIN_ENVELOPE_UNMARSHAL_FAILED").Wrap(err)

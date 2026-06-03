@@ -175,13 +175,13 @@ func (r *contextRecorder) record(id, message string, effect AuditEffect, attrs A
 // Plugin authors typically don't construct AuditRow manually — they use
 // StoreFromMessage(msg) at AuditEvent RPC ingest, persist the row
 // fields verbatim, then use LoadForQuery(row) to construct the proto
-// frame returned on QueryHistory. Round-trip stability is INV-P7-5.
+// frame returned on QueryHistory. Round-trip stability is INV-CRYPTO-40.
 //
 // crypto fields (Codec, Payload, DEKRef, DEKVersion) are OPAQUE to the
 // plugin — plugin code MUST store and return them byte-for-byte. The
 // host owns interpretation. Plugin Layer 2 is convenience for plugin
 // authors; the host's threat model does not rely on Layer 2 correctness
-// (INV-P7-6 and INV-P7-7 are enforced host-side).
+// (INV-CRYPTO-41 and INV-CRYPTO-42 are enforced host-side).
 
 // AuditRow is the Go-side mirror of pluginv1.AuditRow. Field
 // ordering matches the proto field-numbering for stability across
@@ -205,7 +205,7 @@ type AuditRow struct {
 // StoreFromMessage extracts an AuditRow from a JetStream message.
 // Preserves payload bytes byte-equal; uses the shared header parser
 // (internal/eventbus/audit/header_parser.go) for typed crypto/schema
-// values — INV-P7-2 byte-equality across the host-projection branch
+// values — INV-CRYPTO-39 byte-equality across the host-projection branch
 // and the per-plugin dispatcher branch is structural.
 //
 // Mirrors the host dispatcher's buildAuditRow construction so plugin
@@ -260,7 +260,7 @@ func StoreFromMessage(msg jetstream.Msg) (AuditRow, error) {
 
 // LoadForQuery converts a stored AuditRow into the proto frame returned
 // by PluginAuditService.QueryHistory. Round-trip stable with
-// StoreFromMessage (INV-P7-5).
+// StoreFromMessage (INV-CRYPTO-40).
 //
 // Per-field copy from AuditRow to *pluginv1.AuditRow:
 //   - EventID → Id (raw 16-byte ULID via row.EventID[:])
@@ -296,7 +296,7 @@ func LoadForQuery(row AuditRow) (*pluginv1.AuditRow, error) {
 // DecryptOwnAuditRows sends a batch of AuditRows to the host's
 // PluginHostService.DecryptOwnAuditRows RPC and returns the per-row
 // RowResult slice (one result per input row, echoing row.Id for
-// positional correlation per INV-RB-12).
+// positional correlation per INV-CRYPTO-37).
 //
 // The host owns all crypto decisions; this function is client transport
 // only — it MUST NOT log or cache the returned plaintext bytes. Callers

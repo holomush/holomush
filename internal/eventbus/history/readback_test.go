@@ -45,7 +45,7 @@ func (d readbackFixedDEK) Resolve(_ context.Context, _ codec.KeyID, _ uint32) (c
 	return d.key, nil
 }
 
-// readbackRecordingAudit captures EmitPluginDecrypt calls so the INV-RB-3
+// readbackRecordingAudit captures EmitPluginDecrypt calls so the INV-CRYPTO-28
 // "audit emitted on a clean plugin decrypt" assertion can be made.
 type readbackRecordingAudit struct {
 	records []eventbus.PluginDecryptRecord
@@ -128,8 +128,8 @@ func encryptedRow(t *testing.T, deps readbackTestDeps, plaintext []byte) *plugin
 }
 
 // TestDecryptPluginRowPlaintextOnCleanRow asserts a clean sensitive row
-// round-trips to plaintext, emits an INV-19 audit record (INV-RB-3), and
-// reports OK (INV-RB-1/4).
+// round-trips to plaintext, emits an INV-CRYPTO-11 audit record (INV-CRYPTO-28), and
+// reports OK (INV-CRYPTO-26/4).
 func TestDecryptPluginRowPlaintextOnCleanRow(t *testing.T) {
 	t.Parallel()
 	deps := newReadbackDeps(t)
@@ -138,12 +138,12 @@ func TestDecryptPluginRowPlaintextOnCleanRow(t *testing.T) {
 	res := decryptPluginRow(context.Background(), pluginPrincipal("core-scenes", "inst-1"), row, deps.readbackDeps)
 	require.True(t, res.OK(), "clean row must decrypt OK: %v", res.Err)
 	assert.Equal(t, []byte("Alice poses."), res.Plaintext)
-	assert.Len(t, deps.audit.records, 1, "INV-19 audit emitted on plugin read-back decrypt (INV-RB-3)")
+	assert.Len(t, deps.audit.records, 1, "INV-CRYPTO-11 audit emitted on plugin read-back decrypt (INV-CRYPTO-28)")
 }
 
 // TestDecryptPluginRowRefusesDowngrade asserts an identity-codec row for an
 // always-sensitive type is refused with DowngradeRefused before any decrypt
-// or audit (INV-RB-5 / INV-P7-7).
+// or audit (INV-CRYPTO-30 / INV-CRYPTO-42).
 func TestDecryptPluginRowRefusesDowngrade(t *testing.T) {
 	t.Parallel()
 	deps := newReadbackDeps(t)
@@ -164,15 +164,15 @@ func TestDecryptPluginRowRefusesDowngrade(t *testing.T) {
 }
 
 // TestDecryptPluginRowFailClosedWithoutAuditEmitter asserts a plugin decrypt
-// with no audit emitter wired fails closed (INV-RB-3): no plaintext, error set.
+// with no audit emitter wired fails closed (INV-CRYPTO-28): no plaintext, error set.
 func TestDecryptPluginRowFailClosedWithoutAuditEmitter(t *testing.T) {
 	t.Parallel()
 	deps := newReadbackDeps(t)
-	deps.readbackDeps.audit = nil // INV-RB-3 fail-closed: emitter absent
+	deps.readbackDeps.audit = nil // INV-CRYPTO-28 fail-closed: emitter absent
 	row := encryptedRow(t, deps, []byte("Alice poses."))
 
 	res := decryptPluginRow(context.Background(), pluginPrincipal("core-scenes", "inst-1"), row, deps.readbackDeps)
-	require.Error(t, res.Err, "INV-RB-3: plugin decrypt without audit emitter must fail closed")
+	require.Error(t, res.Err, "INV-CRYPTO-28: plugin decrypt without audit emitter must fail closed")
 	assert.False(t, res.OK())
 	assert.Nil(t, res.Plaintext, "fail-closed must not surface plaintext")
 }
@@ -221,7 +221,7 @@ func TestReadbackDecryptorRefusesForeignSubjectBeforeDecrypt(t *testing.T) {
 }
 
 // TestReadbackDecryptorDecryptsOwnSubject asserts the happy path: the owning
-// plugin gets plaintext and the INV-19 audit fires (proves g1 passed and the
+// plugin gets plaintext and the INV-CRYPTO-11 audit fires (proves g1 passed and the
 // primitive ran).
 func TestReadbackDecryptorDecryptsOwnSubject(t *testing.T) {
 	t.Parallel()
@@ -234,7 +234,7 @@ func TestReadbackDecryptorDecryptsOwnSubject(t *testing.T) {
 	assert.Equal(t, row.GetId(), res.GetId())
 	assert.Empty(t, res.GetNoPlaintextReason(), "clean owned row yields no refusal reason")
 	assert.Equal(t, []byte("Alice poses."), res.GetPlaintext())
-	assert.Len(t, deps.audit.records, 1, "INV-RB-3 audit emitted on owned read-back decrypt")
+	assert.Len(t, deps.audit.records, 1, "INV-CRYPTO-28 audit emitted on owned read-back decrypt")
 }
 
 // TestReadbackDecryptorNilOwnerMapFailsClosed asserts a nil OwnerMap (no plugin

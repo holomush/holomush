@@ -8,7 +8,7 @@
 // container, an embedded NATS+JetStream bus, the audit projection
 // worker, and a real DEK manager wired to an env-backed KEK, then
 // assert that a sensitive plugin emit produces ciphertext on the bus
-// and a byte-equal events_audit row (INV-21).
+// and a byte-equal events_audit row (INV-CRYPTO-13).
 package crypto_test
 
 import (
@@ -49,10 +49,10 @@ func (f fixedPool) Pool() *pgxpool.Pool { return f.pool }
 // TestSensitiveEmitProducesCiphertextOnBusAndInAudit lands the
 // end-to-end Phase 3a behavior: a manifest=may + Sensitive=true emit
 // produces ciphertext on the bus and a byte-equal events_audit row
-// (INV-21). AAD-bind tamper detection (INV-25) is unit-tested in
+// (INV-CRYPTO-13). AAD-bind tamper detection (INV-CRYPTO-14) is unit-tested in
 // internal/eventbus/codec/xchacha20poly1305_test.go; full decrypt
 // round-trip is Phase 3b's job (subscribe path).
-var _ = Describe("Sensitive emit produces ciphertext on bus and in audit (INV-21)", func() {
+var _ = Describe("Sensitive emit produces ciphertext on bus and in audit (INV-CRYPTO-13)", func() {
 	It("emits encrypted envelope to JetStream and matching events_audit row", func() {
 		ctx := context.Background()
 
@@ -171,7 +171,7 @@ var _ = Describe("Sensitive emit produces ciphertext on bus and in audit (INV-21
 		Expect(dekVerHdr).NotTo(BeEmpty())
 		Expect(msg.Data()).NotTo(Equal([]byte(plaintext)), "payload must be ciphertext")
 
-		// 2. Audit row mirrors bus (INV-21). Wait for the projection to
+		// 2. Audit row mirrors bus (INV-CRYPTO-13). Wait for the projection to
 		// drain so the INSERT lands before we query.
 		hostSub.AwaitDrained(suiteT, 10*time.Second)
 
@@ -188,7 +188,7 @@ var _ = Describe("Sensitive emit produces ciphertext on bus and in audit (INV-21
 		gotVer, err := strconv.ParseInt(dekVerHdr, 10, 32)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(int32(gotVer)).To(Equal(*row.DekVersion)) //nolint:gosec // G115: ParseInt with bitSize=32 already bounds the value to int32.
-		Expect(msg.Data()).To(Equal(row.Envelope), "INV-21: bus and audit envelope bytes must be byte-equal")
+		Expect(msg.Data()).To(Equal(row.Envelope), "INV-CRYPTO-13: bus and audit envelope bytes must be byte-equal")
 
 		// Decision 0: msg.Data is the marshaled envelope (cleartext metadata
 		// fields + ciphertext payload field), NOT a single ciphertext blob.
@@ -200,7 +200,7 @@ var _ = Describe("Sensitive emit produces ciphertext on bus and in audit (INV-21
 		Expect(wireEnvelope.Timestamp).NotTo(BeNil(), "envelope.Timestamp MUST be cleartext on the wire")
 		Expect(wireEnvelope.Actor).NotTo(BeNil(), "envelope.Actor MUST be cleartext on the wire")
 
-		// AAD-bind verification (INV-25 round-trip) is unit-tested at
+		// AAD-bind verification (INV-CRYPTO-14 round-trip) is unit-tested at
 		// internal/eventbus/codec/xchacha20poly1305_test.go::TestXChaCha20Poly1305DetectsAADTamper.
 		// Decrypt-on-fanout E2E (full plaintext recovery via the subscriber
 		// path) is Phase 3b.

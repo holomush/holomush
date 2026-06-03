@@ -57,7 +57,7 @@ func (s *fakeFenceStream) Close() error {
 }
 
 // stubLookupAlwaysFound implements CryptoKeysLookup with Exists=true
-// for any dek_ref. Used for tests that focus on INV-P7-7 paths.
+// for any dek_ref. Used for tests that focus on INV-CRYPTO-42 paths.
 type stubLookupAlwaysFound struct {
 	calls int
 	mu    sync.Mutex
@@ -70,7 +70,7 @@ func (s *stubLookupAlwaysFound) Exists(_ context.Context, _ uint64) (bool, error
 	return true, nil
 }
 
-// stubLookupNotFound returns Exists=false for INV-P7-15 unknown-dek tests.
+// stubLookupNotFound returns Exists=false for INV-CRYPTO-50 unknown-dek tests.
 type stubLookupNotFound struct{}
 
 func (stubLookupNotFound) Exists(_ context.Context, _ uint64) (bool, error) {
@@ -146,7 +146,7 @@ func sensitiveSet(types ...string) map[string]struct{} {
 
 // --- Tests ---
 
-// TestFenceRefusesIdentityForAlwaysSensitiveType — INV-P7-7. Plugin
+// TestFenceRefusesIdentityForAlwaysSensitiveType — INV-CRYPTO-42. Plugin
 // returns codec=identity + cleartext for an always-sensitive type;
 // the fence MUST surface metadata_only=true with refusal reason
 // DowngradeRefused, AND emit a plugin_integrity_violation audit.
@@ -176,19 +176,19 @@ func TestFenceRefusesIdentityForAlwaysSensitiveType(t *testing.T) {
 	t.Cleanup(func() { _ = out.Close() })
 
 	ev, err := out.Next(context.Background())
-	require.NoError(t, err, "INV-P7-7 refusal MUST be per-row, not stream-fatal")
+	require.NoError(t, err, "INV-CRYPTO-42 refusal MUST be per-row, not stream-fatal")
 	assert.True(t, ev.MetadataOnly, "refused row MUST stamp metadata_only=true")
 	assert.Equal(t, eventbus.NoPlaintextReasonDowngradeRefused, ev.NoPlaintextReason)
 	assert.Nil(t, ev.Payload, "refused row MUST drop payload")
 
 	calls := rec.snapshot()
-	require.Len(t, calls, 1, "INV-P7-7 refusal MUST emit exactly one violation")
+	require.Len(t, calls, 1, "INV-CRYPTO-42 refusal MUST emit exactly one violation")
 	assert.Equal(t, "test-plugin", calls[0].plugin)
 	assert.Equal(t, "test-plugin:secret", calls[0].rowType)
 	assert.Equal(t, "AUDIT_ROW_DOWNGRADE_DETECTED", calls[0].refusalCode)
 }
 
-// TestFenceContinuesStreamAfterRefusal — INV-P7-7. The original v1
+// TestFenceContinuesStreamAfterRefusal — INV-CRYPTO-42. The original v1
 // plan returned a stream-fatal error here, which would let any
 // malicious plugin DoS legitimate rows by putting a downgrade event
 // first. The corrected design: refused row is per-row metadata_only,
@@ -234,7 +234,7 @@ func TestFenceContinuesStreamAfterRefusal(t *testing.T) {
 	assert.Equal(t, []byte("legit-plaintext"), row1.Payload)
 }
 
-// TestFenceAllowsIdentityForNonSensitiveType — INV-P7-7 negative.
+// TestFenceAllowsIdentityForNonSensitiveType — INV-CRYPTO-42 negative.
 // Identity codec for a NON-sensitive type passes through unchanged.
 func TestFenceAllowsIdentityForNonSensitiveType(t *testing.T) {
 	t.Parallel()
@@ -268,7 +268,7 @@ func TestFenceAllowsIdentityForNonSensitiveType(t *testing.T) {
 	assert.Empty(t, rec.snapshot(), "no violation should fire for non-sensitive identity")
 }
 
-// TestFenceRefusesUnknownDekRef — INV-P7-15. Plugin returns a non-
+// TestFenceRefusesUnknownDekRef — INV-CRYPTO-50. Plugin returns a non-
 // identity codec with a dek_ref the crypto_keys lookup says doesn't
 // exist; the fence MUST surface metadata_only=true. NO violation
 // emit (indistinguishable from legitimate Rekey-destroyed case).
@@ -302,14 +302,14 @@ func TestFenceRefusesUnknownDekRef(t *testing.T) {
 	t.Cleanup(func() { _ = out.Close() })
 
 	ev, err := out.Next(context.Background())
-	require.NoError(t, err, "INV-P7-15 unknown DEK MUST be per-row refusal, not stream-fatal")
+	require.NoError(t, err, "INV-CRYPTO-50 unknown DEK MUST be per-row refusal, not stream-fatal")
 	assert.True(t, ev.MetadataOnly)
 	assert.Equal(t, eventbus.NoPlaintextReasonDEKMissing, ev.NoPlaintextReason,
-		"INV-P7-15 unknown-DEK MUST report DEKMissing (legitimate Rekey-destroyed lookalike), NOT DowngradeRefused")
-	assert.Empty(t, rec.snapshot(), "INV-P7-15 path MUST NOT emit violation audit")
+		"INV-CRYPTO-50 unknown-DEK MUST report DEKMissing (legitimate Rekey-destroyed lookalike), NOT DowngradeRefused")
+	assert.Empty(t, rec.snapshot(), "INV-CRYPTO-50 path MUST NOT emit violation audit")
 }
 
-// TestFenceRefusesAbsentDekRefForNonIdentityCodec — INV-P7-15. Plugin
+// TestFenceRefusesAbsentDekRefForNonIdentityCodec — INV-CRYPTO-50. Plugin
 // returns a non-identity codec with dek_ref absent (nil); the fence
 // MUST surface metadata_only=true.
 func TestFenceRefusesAbsentDekRefForNonIdentityCodec(t *testing.T) {
@@ -341,10 +341,10 @@ func TestFenceRefusesAbsentDekRefForNonIdentityCodec(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, ev.MetadataOnly)
 	assert.Equal(t, eventbus.NoPlaintextReasonDEKMissing, ev.NoPlaintextReason,
-		"INV-P7-15 absent-dek_ref MUST report DEKMissing (Rekey-destroyed lookalike), NOT DowngradeRefused")
+		"INV-CRYPTO-50 absent-dek_ref MUST report DEKMissing (Rekey-destroyed lookalike), NOT DowngradeRefused")
 }
 
-// TestFenceRefusalClearsEmbeddedAuditRowPayload — master spec INV-26
+// TestFenceRefusalClearsEmbeddedAuditRowPayload — master spec INV-CRYPTO-15
 // (refused row payload empty). Pre-1r0v.9, refuseEvent nilled the
 // outer Event.Payload but left the embedded *pluginauditpb.AuditRow
 // intact — the value-copied refused.auditRow still pointed at the
@@ -387,14 +387,14 @@ func TestFenceRefusalClearsEmbeddedAuditRowPayload(t *testing.T) {
 	embedded := eventbus.AuditRowOf(ev)
 	require.NotNil(t, embedded, "embedded auditRow MUST survive refusal (diagnostic metadata preserved)")
 	assert.Empty(t, embedded.GetPayload(),
-		"INV-26: refused row MUST NOT carry cleartext anywhere — embedded auditRow.Payload MUST be empty")
+		"INV-CRYPTO-15: refused row MUST NOT carry cleartext anywhere — embedded auditRow.Payload MUST be empty")
 	// Diagnostic metadata (codec) is intentionally preserved so an
 	// operator-read classifier can still see WHY the row was refused.
 	assert.Equal(t, "identity", embedded.GetCodec(),
 		"diagnostic metadata (codec) MUST survive refusal — only Payload is stripped")
 }
 
-// TestFenceFailsClosedWithNilCryptoKeysLookup — INV-P7-15 fail-closed
+// TestFenceFailsClosedWithNilCryptoKeysLookup — INV-CRYPTO-50 fail-closed
 // guard. Production wiring (E.3) always supplies a non-nil lookup, but
 // a future change to the default ("nil → refuse" to "nil → pass") would
 // silently weaken the fence. A non-identity codec + dek_ref-present row
@@ -438,7 +438,7 @@ func TestFenceFailsClosedWithNilCryptoKeysLookup(t *testing.T) {
 		"nil cryptoKeysLookup is a configuration failure — MUST report Internal, NOT DEKMissing or DowngradeRefused")
 }
 
-// TestFenceForwardsCryptoKeysLookupError — INV-P7-15 error path. A
+// TestFenceForwardsCryptoKeysLookupError — INV-CRYPTO-50 error path. A
 // non-nil error from the crypto_keys lookup is infrastructure failure,
 // stream-fatal — distinguishes "DEK doesn't exist" (per-row refusal)
 // from "we can't even check" (stop the stream).
@@ -475,7 +475,7 @@ func TestFenceForwardsCryptoKeysLookupError(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "AUDIT_ROW_DEK_LOOKUP_FAILED")
 }
 
-// TestFenceSetBuiltOnceAtBoot — INV-P7-8. The always-sensitive set is
+// TestFenceSetBuiltOnceAtBoot — INV-CRYPTO-44. The always-sensitive set is
 // captured at construction time; subsequent caller-side mutation MUST
 // NOT shift the fence's behavior. We verify by mutating the source
 // map after construction and asserting the fence's view is unchanged.
@@ -497,7 +497,7 @@ func TestFenceSetBuiltOnceAtBoot(t *testing.T) {
 	_, ok := got["test-plugin:secret"]
 	assert.True(t, ok, "fence's set MUST contain the original boot-time value")
 	_, leak := got["test-plugin:added-after-boot"]
-	assert.False(t, leak, "fence's set MUST NOT reflect post-boot mutation (INV-P7-8)")
+	assert.False(t, leak, "fence's set MUST NOT reflect post-boot mutation (INV-CRYPTO-44)")
 }
 
 // TestFenceForwardsInnerRouterError verifies a router-level error

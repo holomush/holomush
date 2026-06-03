@@ -387,7 +387,7 @@ func TestDecodeJetStreamMessageAuthGuardPermitDecodeErrorPropagates(t *testing.T
 	errutil.AssertErrorCode(t, err, "EVENTBUS_CODEC_DECODE_FAILED")
 }
 
-// --- Round 5: nil-dekMgr and INV-19 error paths (history) ---
+// --- Round 5: nil-dekMgr and INV-CRYPTO-11 error paths (history) ---
 
 // historyFailingAuditEmitterWithCode is a SessionAuditEmitter that always
 // returns an oops error with the given error code. Used to test the narrowed
@@ -417,7 +417,7 @@ func TestDecodeJetStreamMessageNilDEKManagerAfterPermitFailsClosed(t *testing.T)
 }
 
 // TestDecodeJetStreamMessagePluginIdentityWithNilAuditEmitterFailsClosed
-// verifies INV-19: when a plugin identity receives a permit decision but the
+// verifies INV-CRYPTO-11: when a plugin identity receives a permit decision but the
 // audit emitter is nil, decodeAndAuthorizeHistory must fail closed with
 // EVENTBUS_HISTORY_AUDIT_EMITTER_NIL rather than delivering plaintext.
 func TestDecodeJetStreamMessagePluginIdentityWithNilAuditEmitterFailsClosed(t *testing.T) {

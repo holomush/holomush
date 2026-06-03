@@ -888,7 +888,7 @@ func (s *pluginHostServiceServer) actorFromToken(ctx context.Context) (core.Acto
 // host-side (the plugin never holds a DEK). Each row is gated by the OwnerMap
 // g1 ownership check inside the ReadbackDecryptor; rows owned by a different
 // plugin are refused with no_plaintext_reason="not_owner" before any decrypt
-// (INV-RB-2). Results are returned 1:1 in request order (INV-RB-12). The
+// (INV-CRYPTO-27). Results are returned 1:1 in request order (INV-CRYPTO-37). The
 // per-call batch cap (DECRYPT_BATCH_TOO_LARGE on an over-cap batch) is enforced
 // inside the common ReadbackDecryptor.DecryptOwnRows path — the SAME bound the
 // Lua hostfunc adapter inherits, so neither runtime gets an unbounded batch the

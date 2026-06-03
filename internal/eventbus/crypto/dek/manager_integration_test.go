@@ -430,8 +430,8 @@ var _ = Describe("Manager", func() {
 		Expect(ok).To(BeTrue(), "ParticipantsCache miss after fall-through; expected re-seed")
 	})
 
-	// TestManager_Add_AppendsParticipantAndPublishesInvalidation is INV-12.
-	It("Add appends participant and publishes invalidation (INV-12)", func() {
+	// TestManager_Add_AppendsParticipantAndPublishesInvalidation is INV-CRYPTO-7.
+	It("Add appends participant and publishes invalidation (INV-CRYPTO-7)", func() {
 		pool := testIntegrationPool(suiteT)
 		st := dek.NewStore(pool)
 		cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
@@ -573,8 +573,8 @@ var _ = Describe("Manager", func() {
 		Expect(invStub.calls).To(BeEmpty())
 	})
 
-	// TestManager_Rotate_MintsFreshDEKAndMarksOldRotated is INV-13.
-	It("Rotate mints fresh DEK and marks old rotated (INV-13)", func() {
+	// TestManager_Rotate_MintsFreshDEKAndMarksOldRotated is INV-CRYPTO-8.
+	It("Rotate mints fresh DEK and marks old rotated (INV-CRYPTO-8)", func() {
 		pool := testIntegrationPool(suiteT)
 		st := dek.NewStore(pool)
 		cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
@@ -616,7 +616,7 @@ var _ = Describe("Manager", func() {
 		Expect(invStub.calls[0].version).To(Equal(uint32(1)))
 		Expect(invStub.calls[0].successorVersion).To(Equal(uint32(2)))
 
-		// Old DEK (v1) should still be unwrappable (INV-13).
+		// Old DEK (v1) should still be unwrappable (INV-CRYPTO-8).
 		_, err = mgr.Resolve(context.Background(), v1Key.ID, v1Version)
 		Expect(err).NotTo(HaveOccurred())
 

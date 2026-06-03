@@ -8,7 +8,7 @@
 # / fence chain.
 #
 # crypto.emits declares `secret` as sensitivity:always so the host's
-# manifest-set heuristic (INV-P7-7) treats `test-downgrade-attacker:secret`
+# manifest-set heuristic (INV-CRYPTO-42) treats `test-downgrade-attacker:secret`
 # as always-sensitive. The malicious QueryHistory branch returns
 # codec=identity for that type to simulate the downgrade attack.
 #

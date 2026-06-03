@@ -233,7 +233,7 @@ func (s *pluginHistoryStream) Next(ctx context.Context) (eventbus.Event, error) 
 	}
 	// Stamp the plugin-source-of-truth row so the read-side fence
 	// (history.PluginDowngradeFence) can recover codec / dek_ref /
-	// dek_version verbatim — INV-P7-7 + INV-P7-15 (Phase 7).
+	// dek_version verbatim — INV-CRYPTO-42 + INV-CRYPTO-50 (Phase 7).
 	eventbus.StampAuditRow(&out, ev)
 	return out, nil
 }

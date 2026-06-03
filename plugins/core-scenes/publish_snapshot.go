@@ -40,7 +40,7 @@ var snapshotEventKinds = map[string]EntryKind{
 // pluginsdk.SnapshotDecryptor; tests substitute a real-stack ReadbackDecryptor
 // adapter so the full crypto path is exercised without standing up the gRPC
 // plugin host. The plugin NEVER holds a DEK — it submits ciphertext rows and
-// receives per-row plaintext or a typed refusal (INV-RB-1, INV-RB-12).
+// receives per-row plaintext or a typed refusal (INV-CRYPTO-26, INV-CRYPTO-37).
 type snapshotDecryptor interface {
 	DecryptOwnAuditRows(ctx context.Context, rows []*pluginv1.AuditRow) ([]*pluginv1.RowResult, error)
 }
@@ -49,12 +49,12 @@ type snapshotDecryptor interface {
 // (read-back design §3.3, §6; scenes-phase-6 §11). It is a callable invoked by
 // the scheduler ticker (E5, out of scope here).
 //
-// Ordering (atomicity, INV-RB-8): the IC rows are read, decrypted, and rendered
+// Ordering (atomicity, INV-CRYPTO-33): the IC rows are read, decrypted, and rendered
 // BEFORE the write-tx opens — the write-tx (SELECT FOR UPDATE on published_scenes
 // + re-validate COOLOFF + all-yes) is the serialization point, and there is no
 // observable intermediate state where a publication is PUBLISHED without content.
 //
-// Failure mapping (INV-RB-10, §11.4):
+// Failure mapping (INV-CRYPTO-35, §11.4):
 //   - ANY per-row decrypt refusal/error → ATTEMPT_FAILED / SNAPSHOT_DECRYPT_FAILED
 //   - render/decode error               → ATTEMPT_FAILED / SNAPSHOT_RENDER_FAILED
 //   - all-yes broken at re-validate      → ATTEMPT_FAILED / COOLOFF_INVARIANT_BROKEN
@@ -121,7 +121,7 @@ func (s *SceneServiceImpl) runSnapshot(ctx context.Context, attemptID, sceneID, 
 		return err //nolint:wrapcheck // store oops code (SCENE_PUBLISH_LOCK_FAILED/NOT_FOUND) passes through to the ticker logger
 	}
 
-	// Re-validate the all-yes invariant under the lock (INV-RB-8, §11.3). A
+	// Re-validate the all-yes invariant under the lock (INV-CRYPTO-33, §11.3). A
 	// vote-flip that committed before our lock is observed here consistently.
 	tally, err := s.store.TallyVotesTx(ctx, tx, pub.ID)
 	if err != nil {
@@ -211,13 +211,13 @@ func (s *SceneServiceImpl) readSceneLogTx(ctx context.Context, fullICSubject str
 }
 
 // decryptAndRender chunks the IC rows through the host read-back decrypt entry
-// (≤snapshotDecryptBatch per call, INV-RB-12 order-preserving), then decodes
+// (≤snapshotDecryptBatch per call, INV-CRYPTO-37 order-preserving), then decodes
 // each plaintext {actor_id,text} payload into a PublishedSceneEntry.
 //
 // Return contract — (entries, failReason):
 //   - (entries, "")                         — success
 //   - (nil, FailureSnapshotDecryptFailed)   — any per-row refusal/host error
-//     (INV-RB-10, INV-RB-12 "treat any refusal as a publish failure")
+//     (INV-CRYPTO-35, INV-CRYPTO-37 "treat any refusal as a publish failure")
 //   - (nil, FailureSnapshotRenderFailed)    — a plaintext payload could not be
 //     decoded into an entry
 //
@@ -244,7 +244,7 @@ func (s *SceneServiceImpl) decryptAndRender(ctx context.Context, attemptID, full
 		results, err := s.decryptor.DecryptOwnAuditRows(ctx, auditRows)
 		if err != nil {
 			// A host-level decrypt error (e.g. DEK destroyed mid-flight, batch
-			// rejection) is a snapshot decrypt failure (INV-RB-10): the content
+			// rejection) is a snapshot decrypt failure (INV-CRYPTO-35): the content
 			// cannot be recovered.
 			slog.ErrorContext(ctx, "snapshot decrypt batch failed",
 				"err", err.Error(), "attempt_id", attemptID,
@@ -253,7 +253,7 @@ func (s *SceneServiceImpl) decryptAndRender(ctx context.Context, attemptID, full
 			return nil, FailureSnapshotDecryptFailed
 		}
 		if len(results) != len(chunk) {
-			// The primitive contract is 1:1 in input order (INV-RB-12). A
+			// The primitive contract is 1:1 in input order (INV-CRYPTO-37). A
 			// length mismatch is a contract violation — fail the snapshot
 			// closed rather than render a partial scene.
 			slog.ErrorContext(ctx, "snapshot decrypt returned wrong result count",
@@ -265,7 +265,7 @@ func (s *SceneServiceImpl) decryptAndRender(ctx context.Context, attemptID, full
 		for i := range results {
 			plaintext, refused := decryptedPlaintext(results[i])
 			if refused != "" {
-				// ANY row refusal → the whole publish fails (INV-RB-12). Do NOT
+				// ANY row refusal → the whole publish fails (INV-CRYPTO-37). Do NOT
 				// render a partial scene.
 				slog.ErrorContext(ctx, "snapshot row decrypt refused",
 					"attempt_id", attemptID, "reason", refused,
@@ -319,7 +319,7 @@ func (s *SceneServiceImpl) failSnapshotTx(ctx context.Context, tx pgx.Tx, attemp
 // host read-back primitive consumes. The conversion mirrors the QueryHistory
 // proto build (audit.go) field-for-field so the AAD the host rebuilds via
 // AuditRowToEvent + aad.Build is byte-equal to the encrypt-side AAD
-// (INV-RB-4 / INV-STORE-5). Subject is the snapshot's authoritative IC subject
+// (INV-CRYPTO-29 / INV-STORE-5). Subject is the snapshot's authoritative IC subject
 // (the store passes the same value to the WHERE clause). DEK ref/version are
 // widened to the proto's unsigned optional fields only when present (identity
 // rows leave them nil).

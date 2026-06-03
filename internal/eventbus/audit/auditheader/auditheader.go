@@ -40,7 +40,7 @@ const (
 // Metadata is the typed projection of audit-related JetStream headers.
 // Both the host audit projection and the per-plugin dispatcher use this
 // parser; byte-equality of typed values across the two branches is
-// structural (INV-P7-2).
+// structural (INV-CRYPTO-39).
 //
 // schema_ver is co-located here despite not being a crypto field —
 // single source of truth for header → typed-value conversion prevents

@@ -267,7 +267,7 @@ func TestDispatcher_CodecDecodeFailed(t *testing.T) {
 }
 
 // TestDispatcher_PluginAuditEmitterNil verifies that a plugin-identity
-// decrypt with a nil audit emitter (INV-19 violation) fails closed with
+// decrypt with a nil audit emitter (INV-CRYPTO-11 violation) fails closed with
 // EVENTBUS_HISTORY_AUDIT_EMITTER_NIL (dispatcher.go:196).
 func TestDispatcher_PluginAuditEmitterNil(t *testing.T) {
 	testKey, hotProto, hotEnv := buildEncryptedDispatchInputs(t, []byte("plaintext-for-plugin"))

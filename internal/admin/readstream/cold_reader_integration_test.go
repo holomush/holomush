@@ -228,7 +228,7 @@ var _ = Describe("ColdReader", func() {
 	})
 
 	Describe("DEKVersionNullWithDEKRefPresent", func() {
-		It("returns ADMIN_READSTREAM_COLD_DEK_VERSION_NULL for row with dek_ref NOT NULL but dek_version NULL (INV-49)", func() {
+		It("returns ADMIN_READSTREAM_COLD_DEK_VERSION_NULL for row with dek_ref NOT NULL but dek_version NULL (INV-CRYPTO-25)", func() {
 			pool := newColdReaderTestPool()
 			now := time.Now().UTC()
 			subject := eventbus.Subject("events.game.scene.DEKVNULL.>")
@@ -244,7 +244,7 @@ var _ = Describe("ColdReader", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Insert a row with dek_ref set but dek_version explicitly NULL.
-			// This violates INV-49 and must be detected by the scanner.
+			// This violates INV-CRYPTO-25 and must be detected by the scanner.
 			_, err = pool.Exec(context.Background(), `
 				INSERT INTO events_audit (
 					id, subject, type, timestamp, actor_kind, actor_id,
