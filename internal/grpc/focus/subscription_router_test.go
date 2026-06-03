@@ -65,7 +65,7 @@ func TestComputeFocusManagedStreams(t *testing.T) {
 
 func TestComputeFocusManagedStreamsDeterministic(t *testing.T) {
 	t.Parallel()
-	// INV-P5-3: same inputs → same streams (membership comparison).
+	// INV-SCENE-16: same inputs → same streams (membership comparison).
 	// Kept as a standalone test because the assertion shape (idempotence
 	// loop) doesn't fit the input/output table above.
 	sceneID := ulid.Make()

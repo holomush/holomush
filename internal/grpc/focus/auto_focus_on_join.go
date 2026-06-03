@@ -19,7 +19,7 @@ import (
 type AutoFocusOnJoinResponse struct {
 	// SessionID is the session that owns the auto-focused connections. Consumed
 	// by focus.Coordinator.driveFocusDeltas to route SendToConnection calls
-	// without a second store round-trip (INV-FS-1). Empty when SESSION_NOT_FOUND
+	// without a second store round-trip (INV-SCENE-38). Empty when SESSION_NOT_FOUND
 	// (no active session).
 	SessionID string
 	// CharLocationID is the session's LocationID at mutation time. Consumed by
@@ -30,7 +30,7 @@ type AutoFocusOnJoinResponse struct {
 	// FocusedConnectionIDs are connections that were successfully auto-focused.
 	FocusedConnectionIDs []ulid.ULID
 	// SkippedConnectionIDs are connections that were already explicitly focused
-	// on a different target (INV-P5-11, D8 skip-rule).
+	// on a different target (INV-SCENE-24, D8 skip-rule).
 	SkippedConnectionIDs []ulid.ULID
 	// FailedConnectionIDs are connections that could not be focused, with reason.
 	FailedConnectionIDs []AutoFocusFailure
@@ -48,7 +48,7 @@ type AutoFocusFailure struct {
 }
 
 // isTerminalLike reports whether the given clientType should participate in
-// the AutoFocusOnJoin fan-out (INV-P5-4: terminal/telnet only).
+// the AutoFocusOnJoin fan-out (INV-SCENE-17: terminal/telnet only).
 func isTerminalLike(clientType string) bool {
 	return clientType == "terminal" || clientType == "telnet"
 }
@@ -60,12 +60,12 @@ func isTerminalLike(clientType string) bool {
 //  1. Resolve the character's active session via FindByCharacter. SESSION_NOT_FOUND
 //     → return empty AutoFocusOnJoinResponse (consistent with IsAnyConnFocused T16).
 //  2. List all connections for the session. Record TotalConnectionCount = len(all conns).
-//  3. Filter to {terminal, telnet} client types (INV-P5-4).
+//  3. Filter to {terminal, telnet} client types (INV-SCENE-17).
 //  4. For each filtered connection, call UpdateSessionConnection under one
 //     Store-lock acquisition. The mutator applies:
-//     - D8 skip-rule (INV-P5-11): conn.FocusKey != nil && *FocusKey != target →
+//     - D8 skip-rule (INV-SCENE-24): conn.FocusKey != nil && *FocusKey != target →
 //     return unchanged + record in SkippedConnectionIDs.
-//     - INV-P5-1 membership gate: FocusMemberships lacks target → return
+//     - INV-SCENE-14 membership gate: FocusMemberships lacks target → return
 //     FOCUS_WITHOUT_MEMBERSHIP error → record in FailedConnectionIDs with
 //     reason "membership_absent".
 //     - Apply: conn.FocusKey = &target; terminal→ info.PresentingFocus = &target (D9);
@@ -109,7 +109,7 @@ func (c *defaultCoordinator) AutoFocusOnJoin(
 	// Step 3 + 4: filter and mutate each terminal/telnet connection.
 	for _, conn := range conns {
 		if !isTerminalLike(conn.ClientType) {
-			continue // INV-P5-4: skip non-terminal/telnet connections
+			continue // INV-SCENE-17: skip non-terminal/telnet connections
 		}
 
 		// Capture conn.ID for closure (loop variable safety in older Go).
@@ -124,7 +124,7 @@ func (c *defaultCoordinator) AutoFocusOnJoin(
 
 		m := session.NewSessionConnectionMutator(
 			func(info session.Info, conn session.Connection) (session.Info, session.Connection, error) {
-				// D8 skip-rule (INV-P5-11): conn is already explicitly focused
+				// D8 skip-rule (INV-SCENE-24): conn is already explicitly focused
 				// on a DIFFERENT target — do not override.
 				if conn.FocusKey != nil && *conn.FocusKey != target {
 					outcome = "skipped"
@@ -135,7 +135,7 @@ func (c *defaultCoordinator) AutoFocusOnJoin(
 				// overwrite, so the delta step can skip the no-op re-focus.
 				wasOnGrid = conn.FocusKey == nil
 
-				// INV-P5-1: scene focus requires a matching FocusMembership.
+				// INV-SCENE-14: scene focus requires a matching FocusMembership.
 				if !hasMembership(info.FocusMemberships, target.Kind, target.TargetID) {
 					outcome = "membership_absent"
 					return info, conn, oops.Code("FOCUS_WITHOUT_MEMBERSHIP").
@@ -197,7 +197,7 @@ func (c *defaultCoordinator) AutoFocusOnJoin(
 		// outcome == "membership_absent" is handled in the error path above.
 	}
 
-	// INV-FS-1: drive per-connection subscription deltas at the common path.
+	// INV-SCENE-38: drive per-connection subscription deltas at the common path.
 	// deltaConns holds only connections that actually moved grid→scene this
 	// call, so passing nil as the old FocusKey (grid) is correct for every one
 	// of them: each gets the add(scene)+remove(location) delta exactly once.

@@ -13,7 +13,7 @@ import (
 	"github.com/holomush/holomush/internal/pgnanos"
 )
 
-// TestCompute pins INV-P4-7 (spec §6.2). Table-driven across all 4 modes,
+// TestCompute pins INV-SCENE-7 (spec §6.2). Table-driven across all 4 modes,
 // covering empty / single / multi-participant scenarios, mixed pose
 // history, and the threshold edge case for cooldown modes (3pr/5pr).
 func TestCompute(t *testing.T) {

@@ -83,7 +83,7 @@ func extractCharacterID(stream string) (string, bool) {
 //   - events.<gid>.scene.<id>.ic  — scene IC stream (only scene members)
 //   - events.<gid>.scene.<id>.ooc — scene OOC stream (only scene members)
 //
-// All private subjects use NATS dot-style: scene per INV-P4-1 / ADR holomush-s9nu,
+// All private subjects use NATS dot-style: scene per INV-SCENE-1 / ADR holomush-s9nu,
 // character per holomush-rops (the legacy character:<ulid> colon form is gone).
 //
 // Public streams (events.<gid>.location.<id>, global, etc.) are gated by ABAC

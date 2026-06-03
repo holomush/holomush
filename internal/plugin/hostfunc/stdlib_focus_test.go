@@ -583,7 +583,7 @@ assert(errmsg ~= nil, "expected error message")
 
 func TestFocusHostfunc_PhaseFive_LuaParity(t *testing.T) {
 	t.Parallel()
-	// INV-P5-6: the 3 new RPCs ship Go SDK + Lua hostfunc together.
+	// INV-SCENE-19: the 3 new RPCs ship Go SDK + Lua hostfunc together.
 	// Test that each is registered in the holomush module table.
 	ls := lua.NewState()
 	defer ls.Close()
@@ -592,13 +592,13 @@ func TestFocusHostfunc_PhaseFive_LuaParity(t *testing.T) {
 
 	for _, name := range []string{"set_connection_focus", "auto_focus_on_join", "is_any_conn_focused"} {
 		fn := ls.GetField(mod, name)
-		require.NotEqual(t, lua.LNil, fn, "hostfunc %q MUST be registered for INV-P5-6 parity", name)
+		require.NotEqual(t, lua.LNil, fn, "hostfunc %q MUST be registered for INV-SCENE-19 parity", name)
 	}
 }
 
 func TestFocusHostfunc_ULIDRoundTrip(t *testing.T) {
 	t.Parallel()
-	// INV-P5-9: Lua hostfunc accepts 26-char base32 string ULIDs; proto
+	// INV-SCENE-22: Lua hostfunc accepts 26-char base32 string ULIDs; proto
 	// wire takes bytes; the boundary converts. This MUST drive the
 	// hostfunc end-to-end (Lua → Go binding → FocusOps mock) rather
 	// than only calling ulid.Parse in Go — otherwise a regression in

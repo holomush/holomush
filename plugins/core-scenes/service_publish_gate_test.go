@@ -25,7 +25,7 @@ import (
 )
 
 // contentTripwireStore embeds *fakeStore and counts GetPublishedSceneContent
-// calls. The INV-P6-5 tripwire asserts the count stays at 0 when the
+// calls. The INV-SCENE-32 tripwire asserts the count stays at 0 when the
 // participant gate denies a non-participant — i.e. content is NEVER read on
 // the deny path.
 type contentTripwireStore struct {
@@ -36,12 +36,12 @@ type contentTripwireStore struct {
 func (s *contentTripwireStore) GetPublishedSceneContent(ctx context.Context, id string) ([]PublishedSceneEntry, error) {
 	s.contentReadCalls.Add(1)
 	// Delegate to the embedded fake so seeded content flows through (the
-	// counter still records the read for the INV-P6-5 gate-ordering tests).
+	// counter still records the read for the INV-SCENE-32 gate-ordering tests).
 	return s.fakeStore.GetPublishedSceneContent(ctx, id)
 }
 
 // TestGetPublishedSceneDeniesNonParticipantWithoutReadingContent is the
-// load-bearing INV-S9 / INV-P6-5 tripwire: a non-participant is denied with
+// load-bearing INV-S9 / INV-SCENE-32 tripwire: a non-participant is denied with
 // SCENE_PRIVACY_BOUNDARY_BLOCK (PermissionDenied) BEFORE any content read.
 func TestGetPublishedSceneDeniesNonParticipantWithoutReadingContent(t *testing.T) {
 	t.Parallel()
@@ -65,7 +65,7 @@ func TestGetPublishedSceneDeniesNonParticipantWithoutReadingContent(t *testing.T
 		"non-participant must be denied with PermissionDenied")
 	require.Equal(t, "SCENE_PRIVACY_BOUNDARY_BLOCK", status.Convert(err).Message())
 	require.Equal(t, int32(0), store.contentReadCalls.Load(),
-		"INV-P6-5 violation: content store was read before the participant gate denied")
+		"INV-SCENE-32 violation: content store was read before the participant gate denied")
 }
 
 // TestGetPublishedSceneAllowsParticipantToReadContent is the allow-path
@@ -124,7 +124,7 @@ func TestGetPublishedSceneDenialEmitsPrivacyBoundaryWarn(t *testing.T) {
 	assert.Contains(t, out, "scene-3", "the WARN must record the affected scene")
 }
 
-// TestPublicationServiceFileImportsNoABACPolicyPackage enforces INV-P6-6
+// TestPublicationServiceFileImportsNoABACPolicyPackage enforces INV-SCENE-33
 // structurally: the participant-gated publication handler file must not import
 // ANY host access/ABAC package — the gate is plugin-code, never the engine.
 func TestPublicationServiceFileImportsNoABACPolicyPackage(t *testing.T) {
@@ -137,11 +137,11 @@ func TestPublicationServiceFileImportsNoABACPolicyPackage(t *testing.T) {
 	for _, imp := range f.Imports {
 		path := strings.Trim(imp.Path.Value, `"`)
 		require.NotContains(t, path, "internal/access",
-			"INV-P6-6 violation: publish_service.go imports access/ABAC package %q; the participant gate must be plugin-code only", path)
+			"INV-SCENE-33 violation: publish_service.go imports access/ABAC package %q; the participant gate must be plugin-code only", path)
 	}
 }
 
-// TestPublicationServiceTypeHasNoABACEngineField enforces INV-P6-6 at runtime:
+// TestPublicationServiceTypeHasNoABACEngineField enforces INV-SCENE-33 at runtime:
 // SceneServiceImpl carries no field whose type names an ABAC policy/engine, so
 // the participant-gated handlers physically cannot consult the engine.
 func TestPublicationServiceTypeHasNoABACEngineField(t *testing.T) {
@@ -151,14 +151,14 @@ func TestPublicationServiceTypeHasNoABACEngineField(t *testing.T) {
 		field := typ.Field(i)
 		typeName := strings.ToLower(field.Type.String())
 		require.NotContains(t, typeName, "policy",
-			"INV-P6-6 violation: SceneServiceImpl.%s carries ABAC policy type %s", field.Name, field.Type.String())
+			"INV-SCENE-33 violation: SceneServiceImpl.%s carries ABAC policy type %s", field.Name, field.Type.String())
 		require.NotContains(t, typeName, "engine",
-			"INV-P6-6 violation: SceneServiceImpl.%s carries ABAC engine type %s", field.Name, field.Type.String())
+			"INV-SCENE-33 violation: SceneServiceImpl.%s carries ABAC engine type %s", field.Name, field.Type.String())
 	}
 }
 
 // TestDownloadPublishedSceneDeniesNonParticipantWithoutReadingContent applies
-// the B5 INV-P6-5 tripwire to the download path: a non-participant is denied
+// the B5 INV-SCENE-32 tripwire to the download path: a non-participant is denied
 // before any content read.
 func TestDownloadPublishedSceneDeniesNonParticipantWithoutReadingContent(t *testing.T) {
 	t.Parallel()
@@ -180,7 +180,7 @@ func TestDownloadPublishedSceneDeniesNonParticipantWithoutReadingContent(t *test
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	require.Equal(t, "SCENE_PRIVACY_BOUNDARY_BLOCK", status.Convert(err).Message())
 	require.Equal(t, int32(0), store.contentReadCalls.Load(),
-		"INV-P6-5 violation: content read before the participant gate denied")
+		"INV-SCENE-32 violation: content read before the participant gate denied")
 }
 
 // TestDownloadPublishedSceneRendersForParticipant covers the allow path: a

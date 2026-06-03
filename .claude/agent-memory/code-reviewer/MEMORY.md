@@ -73,3 +73,28 @@
   added to INV-CLUSTER's last ref) — valid YAML, renderer-inert, but out-of-scope
   noise in a closed-world diff → Low non-blocking. Encountered: hz0v4.14.12
   (2026-06-02) — READY.
+
+- **Largest multi-family scope migration to date (SCENE = P4+P5+P6+FS(+FW)+Y5INX+SH
+  + phase-8 bare 2/5/6/7 → 59 ids across 6 origin specs, 86 files) follows the
+  established shape; all checks held (hz0v4.14.13 READY).** Reusable patterns: (1)
+  the P4/P5 in-place coverage meta-tests (`inv_p4/p5_coverage_meta_test.go`) are
+  `testName`-EXISTENCE checks (go/parser collects Test* func names; table has
+  `{inv, testName}` rows) — robust to rename so long as the `testName:` strings AND
+  any manually-renamed funcs move in lockstep. Distinct from the FRAGILE
+  `// Verifies:`-annotation scanners (those MUST be deleted on migration, per .14.9).
+  Confirm which kind before deciding delete-vs-migrate-in-place. (2) The retired
+  `scenes_phase6_invariants_test.go` SCANNED for `INV-P6-N` substrings (broke on
+  rename); verify the deleted file defined ONLY locals (`phase6Invariants`,
+  `invP6CitationRE`, `TestPhase6...`) and merely USED shared helpers — `rg` the
+  deleted symbols across `test/meta/` → zero dangling. (3) Manual `\b`-unreachable
+  underscore-form renames: `TestINV_P4_4/5→_SCENE_4/5`,
+  `TestStreamScopeFloor_..._INV_P4_9→_SCENE_9` — grep old names → ZERO, and chase
+  their string refs (coverage table) + cross-file doc-comment cite
+  (`late_joiner_temporal_floor_test.go`). (4) Closed-world with co-located foreign
+  families: `INV-S*` substrate (~48 sites, NOT a scope yet) + `INV-S9`/`INV-S5`
+  must survive UNTOUCHED next to rewritten scene tokens (e.g. `INV-S9 / INV-SCENE-32`);
+  crypto's bare `INV-2/5/6/7` elsewhere untouched (scene rewrite is path-scoped).
+  (5) Same renderer-inert `token: "...",}` trailing-comma noise on an out-of-scope
+  line (here INV-P7-10 in EVENTBUS) recurs — Low non-blocking. spec-only refs:[]
+  count must equal exactly the declared spec-only set (FS-2/6/7 + SH-1..5 = 8).
+  Encountered: hz0v4.14.13 (2026-06-02) — READY.

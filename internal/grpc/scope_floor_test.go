@@ -66,7 +66,7 @@ func TestStreamScopeFloor(t *testing.T) {
 
 // TestMaxStreamScopeFloor covers the Subscribe-path MAX aggregation used by
 // CoreServer.Subscribe to compute the minFloor it forwards to OpenSession.
-// All subjects use NATS dot-style: scene per Phase 4 / INV-P4-1 / ADR
+// All subjects use NATS dot-style: scene per Phase 4 / INV-SCENE-1 / ADR
 // holomush-s9nu, location and character per holomush-rops (the legacy colon
 // forms are no longer recognized).
 func TestMaxStreamScopeFloor(t *testing.T) {
@@ -123,7 +123,7 @@ func TestIsLocationStream(t *testing.T) {
 	assert.False(t, isLocationStream("events.test.location."))
 }
 
-// TestStreamScopeFloor_SceneSubjects_INV_P4_9 pins the bug-fix moment for
+// TestStreamScopeFloor_SceneSubjects_INV_SCENE_9 pins the bug-fix moment for
 // the scope_floor.go format mismatch (spec §3.3). Pre-Phase-4, the scene
 // branch matched the colon-style "scene:<id>:ic" form, but production
 // callers pass NATS dot-style ("events.<gid>.scene.<id>.{ic,ooc}"), so
@@ -136,8 +136,8 @@ func TestIsLocationStream(t *testing.T) {
 //   - dot-style IC and OOC subjects floor to FocusMembership.JoinedAt
 //
 // The diff between this test and the previous TestStreamScopeFloor scene
-// fixture IS the audit artifact for INV-P4-9 per spec §3.3.
-func TestStreamScopeFloor_SceneSubjects_INV_P4_9(t *testing.T) {
+// fixture IS the audit artifact for INV-SCENE-9 per spec §3.3.
+func TestStreamScopeFloor_SceneSubjects_INV_SCENE_9(t *testing.T) {
 	t.Parallel()
 	sceneID := ulid.Make()
 	// Post-gfo6: pgnanos preserves nanosecond precision end-to-end; no truncation needed.

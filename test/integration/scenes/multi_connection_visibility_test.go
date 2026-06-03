@@ -18,7 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 )
 
-// INV-P5-10: SessionStreamRegistry.SendToConnection delivers an update to
+// INV-SCENE-23: SessionStreamRegistry.SendToConnection delivers an update to
 // EXACTLY the named connection's channel; other connections in the same
 // session do NOT receive the update via this path.
 //
@@ -44,7 +44,7 @@ import (
 //
 //   - A scene_pose event published on the scene IC subject MUST be delivered
 //     to the web stream (scene IC filter now active) and MUST NOT be
-//     delivered to the telnet stream (grid filter unchanged — INV-P5-10
+//     delivered to the telnet stream (grid filter unchanged — INV-SCENE-23
 //     isolation on the wire).
 //
 //   - Reciprocal: a grid event published on the location subject MUST be
@@ -55,9 +55,9 @@ import (
 // by verifying that a targeted registry update reaches the web control
 // channel only and leaves the telnet control channel untouched.
 //
-// Spec: docs/superpowers/specs/2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md §10 INV-P5-10.
+// Spec: docs/superpowers/specs/2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md §10 INV-SCENE-23.
 // Bead: holomush-5rh.14.27.
-var _ = Describe("INV-P5-10: multi-connection visibility", func() {
+var _ = Describe("INV-SCENE-23: multi-connection visibility", func() {
 	It("per-Connection SetFilters produces disjoint event delivery on the wire", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		DeferCleanup(cancel)
@@ -69,7 +69,7 @@ var _ = Describe("INV-P5-10: multi-connection visibility", func() {
 		Expect(sub).NotTo(BeNil())
 
 		// Fixed deterministic ULIDs. Subjects follow the dot-style
-		// production format established in Phase 4 (INV-P4-1).
+		// production format established in Phase 4 (INV-SCENE-1).
 		locID := ulid.MustNew(ulid.Timestamp(time.Now()), crand.Reader)
 		sceneID := ulid.MustNew(ulid.Timestamp(time.Now()), crand.Reader)
 
@@ -144,7 +144,7 @@ var _ = Describe("INV-P5-10: multi-connection visibility", func() {
 			"web delivery subject MUST be the scene IC subject")
 		Expect(webDelivery.Ack()).To(Succeed())
 
-		// INV-P5-10 assertion: telnet MUST NOT receive the scene IC event.
+		// INV-SCENE-23 assertion: telnet MUST NOT receive the scene IC event.
 		// Two probe rounds give JetStream an extra delivery window; the
 		// expected termination is context.DeadlineExceeded (no event).
 		for i := 0; i < 2; i++ {
@@ -152,7 +152,7 @@ var _ = Describe("INV-P5-10: multi-connection visibility", func() {
 			leak, leakErr := telnetStream.Next(probeCtx)
 			probeCancel()
 			if leakErr == nil {
-				Fail("INV-P5-10 violation: telnet connection received scene IC event with subject=" +
+				Fail("INV-SCENE-23 violation: telnet connection received scene IC event with subject=" +
 					string(leak.Event().Subject) + " type=" + string(leak.Event().Type) +
 					" — per-Connection filter isolation must prevent this leak")
 			}
@@ -186,7 +186,7 @@ var _ = Describe("INV-P5-10: multi-connection visibility", func() {
 			leak, leakErr := webStream.Next(probeCtx)
 			probeCancel()
 			if leakErr == nil {
-				Fail("INV-P5-10 reciprocal violation: web connection received grid location event with subject=" +
+				Fail("INV-SCENE-23 reciprocal violation: web connection received grid location event with subject=" +
 					string(leak.Event().Subject) + " — after SetFilters to scene IC, location events must not leak to web")
 			}
 			Expect(errors.Is(leakErr, context.DeadlineExceeded)).To(BeTrue(),

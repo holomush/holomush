@@ -62,17 +62,17 @@ type FocusClient interface {
 
 	// SetConnectionFocus sets the per-connection focus pointer for the given
 	// connection. focusKey nil = grid focus (D10: isSceneGrid=true skips
-	// PresentingFocus write on the substrate side; INV-P5-13).
+	// PresentingFocus write on the substrate side; INV-SCENE-26).
 	// connectionID is the 26-char base32 ULID string from CommandRequest.ConnectionID.
 	SetConnectionFocus(ctx context.Context, connectionID string, focusKey *FocusKey, isSceneGrid bool) error
 
 	// AutoFocusOnJoin fans out to all terminal/telnet connections for the
 	// character and sets their per-connection FocusKey to {scene, sceneID}.
 	// Connections that are already explicitly focused on a different scene
-	// are skipped (INV-P5-11). Connections whose client type is comms_hub
-	// are excluded (INV-P5-4). Callers MUST have completed JoinFocus for
+	// are skipped (INV-SCENE-24). Connections whose client type is comms_hub
+	// are excluded (INV-SCENE-17). Callers MUST have completed JoinFocus for
 	// the session before invoking this RPC; the host validates membership
-	// (INV-P5-1).
+	// (INV-SCENE-14).
 	//
 	// characterID and sceneID are 26-char base32 ULID strings. Returns a
 	// zero-value result and nil error when the character has no active
@@ -176,21 +176,21 @@ type QueryStreamHistoryResponse struct {
 //
 // Distinguishing outcomes:
 //   - len(FocusedConnectionIDs) > 0 && len(SkippedConnectionIDs) == 0 && len(FailedConnectionIDs) == 0 → terminal-focused
-//   - len(SkippedConnectionIDs) > 0 && len(FocusedConnectionIDs) == 0 → all terminal conns explicitly focused elsewhere (INV-P5-11)
-//   - TotalConnectionCount > 0 && len(FocusedConnectionIDs) == 0 && len(SkippedConnectionIDs) == 0 → comms_hub-only conns (INV-P5-4)
+//   - len(SkippedConnectionIDs) > 0 && len(FocusedConnectionIDs) == 0 → all terminal conns explicitly focused elsewhere (INV-SCENE-24)
+//   - TotalConnectionCount > 0 && len(FocusedConnectionIDs) == 0 && len(SkippedConnectionIDs) == 0 → comms_hub-only conns (INV-SCENE-17)
 //   - TotalConnectionCount == 0 → no live connections (admin / scripted join)
 //   - len(FailedConnectionIDs) > 0 → at least one per-conn focus failed (non-fatal; log detail only)
 type AutoFocusOnJoinResult struct {
 	// FocusedConnectionIDs lists connections that were successfully auto-focused.
 	FocusedConnectionIDs []ulid.ULID
 	// SkippedConnectionIDs lists terminal/telnet connections that were skipped
-	// because they were already explicitly focused on a different scene (INV-P5-11).
+	// because they were already explicitly focused on a different scene (INV-SCENE-24).
 	SkippedConnectionIDs []ulid.ULID
 	// FailedConnectionIDs lists connections for which the focus mutation failed.
 	// These are non-fatal: the join already succeeded; per-conn errors are advisory.
 	FailedConnectionIDs []AutoFocusFailure
 	// TotalConnectionCount is the total number of connections the host considered
-	// (including comms_hub connections which are excluded from focusing per INV-P5-4).
+	// (including comms_hub connections which are excluded from focusing per INV-SCENE-17).
 	TotalConnectionCount uint32
 }
 

@@ -16,17 +16,17 @@ import (
 // SetConnectionFocus RPC. It delegates to a single
 // Store.UpdateSessionConnection call so Connection.FocusKey and (D9-gated)
 // Info.PresentingFocus commit atomically under one Store-lock acquisition
-// (D7, INV-P5-7).
+// (D7, INV-SCENE-20).
 //
 // Invariants pinned here:
 //
-//   - INV-P5-1 (FocusMemberships gate): a non-nil scene-kind focusKey is
+//   - INV-SCENE-14 (FocusMemberships gate): a non-nil scene-kind focusKey is
 //     rejected with FOCUS_WITHOUT_MEMBERSHIP unless info.FocusMemberships
 //     contains the matching {kind, target_id}. Membership validation runs
 //     inside the same store-locked snapshot the write commits against — no
 //     read-then-mutate TOCTOU window.
 //
-//   - INV-P5-13 (scene grid preserves PresentingFocus): when isSceneGrid is
+//   - INV-SCENE-26 (scene grid preserves PresentingFocus): when isSceneGrid is
 //     true, Info.PresentingFocus is NOT touched, even if focusKey is nil.
 //     This ensures a scene-grid pivot from terminal does not destroy the
 //     session's last explicit focus — reconnect must land on the explicit
@@ -40,7 +40,7 @@ import (
 //
 // Returns SetConnectionFocusResult so the coordinator can drive stream deltas
 // via ComputeFocusManagedStreams + StreamDeltas + SendToConnection without a
-// second store round-trip (INV-FS-1, see driveFocusDeltas). The pre-mutation FocusKey is captured
+// second store round-trip (INV-SCENE-38, see driveFocusDeltas). The pre-mutation FocusKey is captured
 // inside the mutator closure via an outer-variable binding; on any error
 // path OldFocusKey returns nil so partial state cannot leak.
 func (c *defaultCoordinator) SetConnectionFocus(
@@ -69,7 +69,7 @@ func (c *defaultCoordinator) SetConnectionFocus(
 			// as the focus mutation. A concurrent location move otherwise leaks
 			// a stale ID into ComputeFocusManagedStreams. (CodeRabbit PR #4191)
 			result.CharLocationID = si.LocationID
-			// INV-P5-1: scene focus requires a matching FocusMembership.
+			// INV-SCENE-14: scene focus requires a matching FocusMembership.
 			if focusKey != nil && focusKey.Kind == session.FocusKindScene {
 				if !hasMembership(si.FocusMemberships, focusKey.Kind, focusKey.TargetID) {
 					return si, sc, oops.Code("FOCUS_WITHOUT_MEMBERSHIP").
@@ -90,7 +90,7 @@ func (c *defaultCoordinator) SetConnectionFocus(
 			// Write Connection.FocusKey unconditionally (nil clears to grid).
 			sc.FocusKey = focusKey
 
-			// D9 + INV-P5-13: only terminal/telnet explicit focus changes
+			// D9 + INV-SCENE-26: only terminal/telnet explicit focus changes
 			// update PresentingFocus. Scene-grid pivots (isSceneGrid=true)
 			// MUST leave it alone so reconnect lands on the prior explicit
 			// focus, not the grid.
@@ -108,7 +108,7 @@ func (c *defaultCoordinator) SetConnectionFocus(
 		// even if a future mutator reorders captures above the error return.
 		return SetConnectionFocusResult{}, uerr //nolint:wrapcheck // store errors are already oops-coded
 	}
-	// INV-FS-1: drive the per-connection subscription delta at the common path.
+	// INV-SCENE-38: drive the per-connection subscription delta at the common path.
 	// Old streams derive from the pre-mutation FocusKey (result.OldFocusKey;
 	// nil = grid), new streams from focusKey (the requested target; nil = grid).
 	c.driveFocusDeltas(ctx, result.SessionID, result.CharLocationID, result.OldFocusKey, focusKey, []ulid.ULID{connectionID})

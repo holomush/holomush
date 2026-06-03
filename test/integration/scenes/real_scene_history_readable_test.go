@@ -15,7 +15,7 @@ import (
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 )
 
-// INV-Y5INX-2: a participant can read the IC history of a REAL CreateScene-minted
+// INV-SCENE-47: a participant can read the IC history of a REAL CreateScene-minted
 // (bare-ULID) scene via the host QueryStreamHistory path (the "scene log" route),
 // receiving the REAL DECRYPTED sensitive pose — with no INVALID_ARGUMENT and no
 // EVENTBUS_HISTORY_DECODE_FAILED.
@@ -35,8 +35,8 @@ import (
 // ULID), JoinScene (I-17 membership), SeedSceneDEKParticipant (DEK participant
 // set), EmitSceneICContent (real encrypted scene_pose), QueryStreamHistory → clean
 // decrypt, payload == plaintext.
-var _ = Describe("INV-Y5INX-2: real scene history readable and decrypted via host", func() {
-	const plaintext = `{"text":"a real scene pose for regression INV-Y5INX-2"}`
+var _ = Describe("INV-SCENE-47: real scene history readable and decrypted via host", func() {
+	const plaintext = `{"text":"a real scene pose for regression INV-SCENE-47"}`
 
 	var (
 		ts    *integrationtest.Server
@@ -104,8 +104,8 @@ var _ = Describe("INV-Y5INX-2: real scene history readable and decrypted via hos
 		Expect(got).NotTo(BeEmpty())
 		ev := got[len(got)-1]
 		Expect(ev.GetMetadataOnly()).To(BeFalse(),
-			"INV-Y5INX-2: participant must receive a DECRYPTED (non-metadata-only) frame via the scene log route")
+			"INV-SCENE-47: participant must receive a DECRYPTED (non-metadata-only) frame via the scene log route")
 		Expect(string(ev.GetPayload())).To(Equal(plaintext),
-			"INV-Y5INX-2: decrypted payload must equal the original plaintext JSON")
+			"INV-SCENE-47: decrypted payload must equal the original plaintext JSON")
 	})
 })

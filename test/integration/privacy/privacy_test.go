@@ -559,7 +559,7 @@ var _ = Describe("INV-PRIVACY-2: guest name reuse does not leak prior holder's e
 // visible.
 //
 // Harness contract: scene streams use the NATS-native dot-style subject
-// `events.<gameID>.scene.<sceneID>.ic` (per INV-P4-1 / ADR holomush-s9nu) —
+// `events.<gameID>.scene.<sceneID>.ic` (per INV-SCENE-1 / ADR holomush-s9nu) —
 // the legacy colon-style `scene:<id>:ic` falls through to the ABAC default
 // branch and would defeat the I-17 / scope-floor codepaths. The harness's
 // default allow-all engine is sufficient here: scene streams are

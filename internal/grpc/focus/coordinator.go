@@ -63,20 +63,20 @@ type Coordinator interface {
 	// character has no active session (SESSION_NOT_FOUND → false per spec §6.3).
 	IsAnyConnFocused(ctx context.Context, characterID, sceneID ulid.ULID) (bool, error)
 	// RestoreConnectionFocus restores a reconnecting Connection's FocusKey
-	// from the session's PresentingFocus, gated on FocusMemberships. INV-P5-5
+	// from the session's PresentingFocus, gated on FocusMemberships. INV-SCENE-18
 	// (validation + grid fallback under one Store-lock acquisition) +
-	// INV-P5-12 (reconnect vs concurrent LeaveFocus serializes via the
+	// INV-SCENE-25 (reconnect vs concurrent LeaveFocus serializes via the
 	// SessionConnectionMutator path). See restore_connection_focus.go for
 	// the three-branch decision table.
 	RestoreConnectionFocus(ctx context.Context, sessionID string, connectionID ulid.ULID) error
 	// SetConnectionFocus mutates a single Connection.FocusKey and
 	// (D9-gated) Info.PresentingFocus atomically under one Store-lock
-	// acquisition. Pins INV-P5-1 (FocusMemberships gate on scene targets)
-	// and INV-P5-13 (scene grid preserves PresentingFocus). Returns
+	// acquisition. Pins INV-SCENE-14 (FocusMemberships gate on scene targets)
+	// and INV-SCENE-26 (scene grid preserves PresentingFocus). Returns
 	// SetConnectionFocusResult so the coordinator itself can drive
 	// per-connection subscription deltas via ComputeFocusManagedStreams +
 	// StreamDeltas + SendToConnection without a second store round-trip
-	// (INV-FS-1, see driveFocusDeltas).
+	// (INV-SCENE-38, see driveFocusDeltas).
 	// isSceneGrid=true MUST NOT touch Info.PresentingFocus.
 	SetConnectionFocus(
 		ctx context.Context,
@@ -86,7 +86,7 @@ type Coordinator interface {
 	) (SetConnectionFocusResult, error)
 	// AutoFocusOnJoin fans out a focus assignment to every terminal/telnet
 	// connection belonging to characterID's active session, targeting sceneID.
-	// Pins INV-P5-4 (terminal-only filter) and INV-P5-11 (D8 skip-already-focused).
+	// Pins INV-SCENE-17 (terminal-only filter) and INV-SCENE-24 (D8 skip-already-focused).
 	// SESSION_NOT_FOUND → empty response, nil error (consistent with T16).
 	// Per-connection failures (membership_absent, connection_not_found) are
 	// carried in AutoFocusOnJoinResponse.FailedConnectionIDs, not returned as
@@ -106,7 +106,7 @@ type RestorePlan struct {
 
 // SetConnectionFocusResult carries the outputs of a SetConnectionFocus call
 // consumed by focus.Coordinator.driveFocusDeltas to compute per-Connection
-// subscription deltas without a second store round-trip (INV-FS-1).
+// subscription deltas without a second store round-trip (INV-SCENE-38).
 type SetConnectionFocusResult struct {
 	// OldFocusKey is the Connection.FocusKey value captured before the mutation.
 	// Nil means the connection was on the grid (no prior explicit focus).
@@ -152,7 +152,7 @@ func WithStreamSender(sender StreamSender) CoordinatorOption {
 }
 
 // WithConnectionSender sets the per-Connection stream sender used to deliver
-// focus-driven subscription deltas (INV-FS-1: the coordinator is the sole
+// focus-driven subscription deltas (INV-SCENE-38: the coordinator is the sole
 // driver). A nil sender disables per-connection delta delivery (best-effort).
 func WithConnectionSender(sender ConnectionSender) CoordinatorOption {
 	return func(c *defaultCoordinator) { c.connectionSender = sender }

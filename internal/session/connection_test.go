@@ -12,9 +12,9 @@ import (
 
 func TestConnection_FocusKeyNilByDefault(t *testing.T) {
 	t.Parallel()
-	// Zero-value Connection: INV-P5-2 asserts FocusKey starts nil.
+	// Zero-value Connection: INV-SCENE-15 asserts FocusKey starts nil.
 	var c Connection
-	assert.Nil(t, c.FocusKey, "INV-P5-2: new Connection MUST default to nil FocusKey (= grid focus)")
+	assert.Nil(t, c.FocusKey, "INV-SCENE-15: new Connection MUST default to nil FocusKey (= grid focus)")
 }
 
 func TestConnection_FocusKeyAcceptsSceneKey(t *testing.T) {

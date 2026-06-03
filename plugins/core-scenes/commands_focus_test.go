@@ -129,7 +129,7 @@ func TestHandleSceneList_RPCError(t *testing.T) {
 	assert.Equal(t, "SCENE_LIST_FAILED", oe.Code())
 }
 
-// TestHandleSceneGrid_PreservesPresentingFocus pins INV-P5-13: scene grid
+// TestHandleSceneGrid_PreservesPresentingFocus pins INV-SCENE-26: scene grid
 // calls SetConnectionFocus with focusKey=nil and isSceneGrid=true.
 // The substrate skips the PresentingFocus write (D10) — the plugin's only
 // responsibility is to issue the RPC with the correct arguments.
@@ -149,12 +149,12 @@ func TestHandleSceneGrid_PreservesPresentingFocus(t *testing.T) {
 	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
 	assert.Contains(t, resp.Output, "Focused on the grid.")
 
-	// INV-P5-13: SetConnectionFocus MUST be called with focusKey=nil and isSceneGrid=true.
+	// INV-SCENE-26: SetConnectionFocus MUST be called with focusKey=nil and isSceneGrid=true.
 	require.Len(t, fc.setConnFocusCalls, 1, "SetConnectionFocus MUST be called exactly once")
 	call := fc.setConnFocusCalls[0]
 	assert.Equal(t, connID, call.connectionID, "connection ID MUST match req.ConnectionID")
 	assert.Nil(t, call.focusKey, "focusKey MUST be nil for scene grid (D10)")
-	assert.True(t, call.isSceneGrid, "isSceneGrid MUST be true so substrate skips PresentingFocus write (INV-P5-13)")
+	assert.True(t, call.isSceneGrid, "isSceneGrid MUST be true so substrate skips PresentingFocus write (INV-SCENE-26)")
 }
 
 // TestHandleSceneGrid_ReturnsErrorWhenFocusClientNil verifies that scene grid
@@ -383,7 +383,7 @@ func TestHandleJoin_AutoFocus_Terminal(t *testing.T) {
 
 // TestHandleJoin_AutoFocus_SkippedExplicit verifies the skipped-explicit render branch:
 // when skipped=[conn] and focused empty, the response indicates the terminal stays on
-// its current focus (INV-P5-11 signal from substrate).
+// its current focus (INV-SCENE-24 signal from substrate).
 func TestHandleJoin_AutoFocus_SkippedExplicit(t *testing.T) {
 	p, fc := newTestPluginWithFocus(t)
 
@@ -414,7 +414,7 @@ func TestHandleJoin_AutoFocus_SkippedExplicit(t *testing.T) {
 
 // TestHandleJoin_AutoFocus_CommsHubOnly verifies the comms-hub-only render branch:
 // when TotalConnectionCount > 0 but both focused and skipped are empty, the substrate
-// filtered out all connections as comms_hub (INV-P5-4).
+// filtered out all connections as comms_hub (INV-SCENE-17).
 func TestHandleJoin_AutoFocus_CommsHubOnly(t *testing.T) {
 	p, fc := newTestPluginWithFocus(t)
 

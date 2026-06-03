@@ -45,7 +45,7 @@ func TestApplyConfigRejectsNonPositiveSchedulerInterval(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "SCENE_INIT_FAILED")
 }
 
-// TestPlugin_CryptoEmitsMatchesRegistry pins INV-P4-2 / INV-S5: the scene
+// TestPlugin_CryptoEmitsMatchesRegistry pins INV-SCENE-2 / INV-S5: the scene
 // event types in crypto.emits (8 Phase 4 + 6 Phase 6 publication notices)
 // MUST equal the set registered via EmitTypeRegistrar.
 func TestPlugin_CryptoEmitsMatchesRegistry(t *testing.T) {
@@ -76,7 +76,7 @@ func TestPlugin_CryptoEmitsMatchesRegistry(t *testing.T) {
 	sort.Strings(registrySet)
 
 	assert.Equal(t, manifestSet, registrySet,
-		"INV-P4-2: manifest crypto.emits MUST equal EmitTypeRegistrar set")
+		"INV-SCENE-2: manifest crypto.emits MUST equal EmitTypeRegistrar set")
 }
 
 // TestCoreScenesManifestDeclaresReadback pins INV-RB-2: the three IC content
@@ -123,7 +123,7 @@ func TestCoreScenesManifestDeclaresReadback(t *testing.T) {
 	}
 }
 
-// TestPlugin_SensitivityMatrix pins INV-P4-3: per-type sensitivity matches
+// TestPlugin_SensitivityMatrix pins INV-SCENE-3: per-type sensitivity matches
 // spec §2 table.
 func TestPlugin_SensitivityMatrix(t *testing.T) {
 	t.Parallel()
@@ -161,5 +161,5 @@ func TestPlugin_SensitivityMatrix(t *testing.T) {
 		got[e.EventType] = e.Sensitivity
 	}
 	assert.Equal(t, want, got,
-		"INV-P4-3: sensitivity matrix MUST match spec §2 table")
+		"INV-SCENE-3: sensitivity matrix MUST match spec §2 table")
 }

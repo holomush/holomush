@@ -1059,7 +1059,7 @@ func TestVoteExtendEngineErrorReturnsCommandFailure(t *testing.T) {
 	assert.Equal(t, 3, store.maxPublishAttempts[sceneID], "budget MUST NOT change on engine error")
 }
 
-// TestSceneGatedSubcommands_DenyWhenPolicyDenies is the INV-7 backstop: every
+// TestSceneGatedSubcommands_DenyWhenPolicyDenies is the INV-SCENE-59 backstop: every
 // subcommand that carries an action gate MUST deny via the evaluator, not via
 // a Go-level owner/participant check that bypasses the policy engine.
 // Each row uses args that are structurally valid (so arity guards pass) and
@@ -1099,7 +1099,7 @@ func TestSceneGatedSubcommands_DenyWhenPolicyDenies(t *testing.T) {
 	}
 }
 
-// TestScenesBoardCommandDeclaresBrowseCapabilityGate is the INV-7 backstop for
+// TestScenesBoardCommandDeclaresBrowseCapabilityGate is the INV-SCENE-59 backstop for
 // the top-level `scenes` board command. Unlike the `scene` subcommands (covered
 // by the deny/nil-evaluator tables above), handleScenesBoard is intentionally
 // NOT gated by the plugin evaluator — the public board returns only open scenes

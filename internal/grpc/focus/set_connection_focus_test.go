@@ -114,7 +114,7 @@ func TestSetConnectionFocus_HappyPath_ReturnsOldFocusKey(t *testing.T) {
 	assert.Equal(t, sceneA, res.OldFocusKey.TargetID, "OldFocusKey MUST be the pre-mutation conn.FocusKey")
 }
 
-// TestSetConnectionFocus_RequiresMembership pins INV-P5-1: focus on a scene
+// TestSetConnectionFocus_RequiresMembership pins INV-SCENE-14: focus on a scene
 // requires a matching FocusMembership in the session. Missing membership →
 // FOCUS_WITHOUT_MEMBERSHIP and no state writes.
 func TestSetConnectionFocus_RequiresMembership(t *testing.T) {
@@ -132,7 +132,7 @@ func TestSetConnectionFocus_RequiresMembership(t *testing.T) {
 				CharacterID:      charID,
 				LocationID:       ulid.Make(),
 				Status:           session.StatusActive,
-				FocusMemberships: nil, // INV-P5-1 violation if SetConnectionFocus proceeds
+				FocusMemberships: nil, // INV-SCENE-14 violation if SetConnectionFocus proceeds
 			},
 		},
 	)
@@ -205,7 +205,7 @@ func TestSetConnectionFocus_CommsHubDoesNotWritePresentingFocus(t *testing.T) {
 	assert.Nil(t, info.PresentingFocus, "D9: comms_hub MUST NOT write Info.PresentingFocus")
 }
 
-// TestSceneGrid_DoesNotClearPresentingFocus pins INV-P5-13: a scene-grid
+// TestSceneGrid_DoesNotClearPresentingFocus pins INV-SCENE-26: a scene-grid
 // focus call (isSceneGrid=true) MUST NOT touch Info.PresentingFocus, even
 // when focusKey is nil. The session's last explicit focus must survive a
 // grid-pivot so reconnect lands on the explicit focus, not the grid.
@@ -258,8 +258,8 @@ func TestSceneGrid_DoesNotClearPresentingFocus(t *testing.T) {
 
 	info, err = coord.sessionStore.Get(ctx, "sess-1")
 	require.NoError(t, err)
-	require.NotNil(t, info.PresentingFocus, "INV-P5-13: scene-grid MUST NOT clear PresentingFocus")
-	assert.Equal(t, sceneID, info.PresentingFocus.TargetID, "INV-P5-13: PresentingFocus must still point at the prior explicit focus")
+	require.NotNil(t, info.PresentingFocus, "INV-SCENE-26: scene-grid MUST NOT clear PresentingFocus")
+	assert.Equal(t, sceneID, info.PresentingFocus.TargetID, "INV-SCENE-26: PresentingFocus must still point at the prior explicit focus")
 }
 
 // TestSetConnectionFocus_ConnectionNotFound verifies that a bogus connID

@@ -20,7 +20,7 @@ import (
 
 // holomush-shcyu (Task 5, folds holomush-5rh.20.39/E6): the happy-path publish
 // E2E. Alice creates a scene, Bob joins (so the vote roster seeds him — an
-// invited-only row is excluded by role IN ('owner','member'), INV-P6-1),
+// invited-only row is excluded by role IN ('owner','member'), INV-SCENE-28),
 // encrypted IC content is seeded (the command emit path is fence-rejected under
 // crypto, spec §3.4), the lifecycle is driven entirely by commands (end →
 // publish → unanimous vote), the scheduler sweeps COOLOFF → PUBLISHED (short
@@ -71,14 +71,14 @@ var _ = Describe("happy-path scene publish lifecycle reaches PUBLISHED with decr
 		sceneRef := sceneID.String()
 
 		// Bob must JOIN, not merely be invited — the vote roster seeds from
-		// role IN ('owner','member') (INV-P6-1); an 'invited' row is excluded.
+		// role IN ('owner','member') (INV-SCENE-28); an 'invited' row is excluded.
 		// scene invite / scene join pass fields[0] directly to the RPC (no '#'
 		// stripping), and the invite target is a character ID, not a name.
 		Expect(alice.SendCommand(ctx, "scene invite "+sceneRef+" "+bob.CharacterID.String())).To(Succeed())
 		Expect(bob.SendCommand(ctx, "scene join "+sceneRef)).To(Succeed())
 
 		// Seed encrypted IC content into the created scene (command emit path
-		// can't set Sensitive → INV-7 fence, §3.4). EmitSceneICContent takes the
+		// can't set Sensitive → INV-SCENE-59 fence, §3.4). EmitSceneICContent takes the
 		// bare ULID and builds the bare subject.
 		ts.EmitSceneICContent(ctx, "core-scenes", sceneID,
 			alice.CharacterID, "scene_pose", `{"text":"the scene happens"}`)
@@ -140,12 +140,12 @@ var _ = Describe("happy-path scene publish lifecycle reaches PUBLISHED with decr
 // NON-PARTICIPANT (Charlie). Asserts the wire-observable denial codes that
 // cross the binary-plugin process boundary:
 //
-//   - INV-P6-8: GetPublicSceneArchive returns codes.NotFound (opaque) while
+//   - INV-SCENE-35: GetPublicSceneArchive returns codes.NotFound (opaque) while
 //     the attempt is COLLECTING — the attempt's existence MUST NOT leak.
 //   - INV-S9:   GetPublishedScene returns codes.PermissionDenied for a
 //     non-participant after PUBLISHED (plugin-code participant gate;
 //     SCENE_PRIVACY_BOUNDARY_BLOCK → PermissionDenied).
-//   - INV-P6-8 (post-publish): GetPublicSceneArchive flips from NOT_FOUND to
+//   - INV-SCENE-35 (post-publish): GetPublicSceneArchive flips from NOT_FOUND to
 //     SUCCESS with non-empty content_entries once the attempt is PUBLISHED
 //     (public archive has NO caller gate — opacity resolves on publication).
 //
@@ -155,12 +155,12 @@ var _ = Describe("happy-path scene publish lifecycle reaches PUBLISHED with decr
 // plugins/core-scenes/service_privacy_block_test.go (Task D7). This spec
 // asserts only the wire-observable gRPC status codes (INV-S9 / spec §9.1).
 //
-// NOTE: INV-P6-7 (AttributeResolverService MUST NOT leak content under any
+// NOTE: INV-SCENE-34 (AttributeResolverService MUST NOT leak content under any
 // attribute) is unit-covered by
 // plugins/core-scenes/resolver_test.go::TestResolverNeverExposesContentByForbiddenAttributeName.
 // It cannot be re-asserted cleanly E2E across the binary process boundary;
 // the unit meta-test (Task E10) greps for INV-P6-N substrings to enumerate
-// coverage — citing INV-P6-7 here satisfies that grep.
+// coverage — citing INV-SCENE-34 here satisfies that grep.
 var _ = Describe("Phase 6 hard-privacy-boundary gate for a non-participant (Charlie)", func() {
 	var (
 		ts      *integrationtest.Server
@@ -210,12 +210,12 @@ var _ = Describe("Phase 6 hard-privacy-boundary gate for a non-participant (Char
 		sceneRef := sceneID.String()
 
 		// Bob must JOIN (not merely invited) so the vote roster seeds him —
-		// role IN ('owner','member'); an 'invited' row is excluded (INV-P6-1).
+		// role IN ('owner','member'); an 'invited' row is excluded (INV-SCENE-28).
 		Expect(alice.SendCommand(ctx, "scene invite "+sceneRef+" "+bob.CharacterID.String())).To(Succeed())
 		Expect(bob.SendCommand(ctx, "scene join "+sceneRef)).To(Succeed())
 
 		// Seed encrypted IC content (command emit path can't set Sensitive →
-		// INV-7 fence, §3.4). EmitSceneICContent takes the bare ULID.
+		// INV-SCENE-59 fence, §3.4). EmitSceneICContent takes the bare ULID.
 		ts.EmitSceneICContent(ctx, "core-scenes", sceneID,
 			alice.CharacterID, "scene_pose", `{"text":"the scene happens"}`)
 
@@ -245,7 +245,7 @@ var _ = Describe("Phase 6 hard-privacy-boundary gate for a non-participant (Char
 			g.Expect(collectingAttemptID).NotTo(BeEmpty(), "no COLLECTING attempt yet")
 		}).WithTimeout(5 * time.Second).WithPolling(20 * time.Millisecond).Should(Succeed())
 
-		// ── PRE-PUBLISH: INV-P6-8 opacity check on a REAL COLLECTING attempt ──
+		// ── PRE-PUBLISH: INV-SCENE-35 opacity check on a REAL COLLECTING attempt ──
 		// A real attempt EXISTS in COLLECTING, yet GetPublicSceneArchive MUST
 		// return codes.NotFound — the public surface MUST NOT reveal a non-
 		// PUBLISHED attempt's existence (publicArchiveNotFound, publish_helpers.go;
@@ -257,7 +257,7 @@ var _ = Describe("Phase 6 hard-privacy-boundary gate for a non-participant (Char
 		preSt, preOk := status.FromError(preErr)
 		Expect(preOk).To(BeTrue(), "pre-publish GetPublicSceneArchive must return a gRPC status error")
 		Expect(preSt.Code()).To(Equal(codes.NotFound),
-			"INV-P6-8: GetPublicSceneArchive MUST return NotFound for a real COLLECTING attempt (opacity — must not reveal attempt existence)")
+			"INV-SCENE-35: GetPublicSceneArchive MUST return NotFound for a real COLLECTING attempt (opacity — must not reveal attempt existence)")
 
 		// ── DRIVE LIFECYCLE TO PUBLISHED ─────────────────────────────────────
 		// Unanimous vote → scheduler sweeps COOLOFF→PUBLISHED (mirrors happy path).
@@ -285,7 +285,7 @@ var _ = Describe("Phase 6 hard-privacy-boundary gate for a non-participant (Char
 
 		// The PUBLISHED attempt MUST be the same row that was COLLECTING — proves
 		// the COLLECTING→PUBLISHED transition (opacity flip on the same attempt),
-		// not a replacement attempt (INV-P6-8).
+		// not a replacement attempt (INV-SCENE-35).
 		Expect(publishedSceneID).To(Equal(collectingAttemptID),
 			"PUBLISHED attempt must be the same row that was COLLECTING (transition, not replacement)")
 
@@ -308,7 +308,7 @@ var _ = Describe("Phase 6 hard-privacy-boundary gate for a non-participant (Char
 		Expect(deniedSt.Code()).To(Equal(codes.PermissionDenied),
 			"INV-S9: non-participant GetPublishedScene MUST return PermissionDenied (SCENE_PRIVACY_BOUNDARY_BLOCK)")
 
-		// ── POST-PUBLISH: INV-P6-8 opacity flip on GetPublicSceneArchive ─────
+		// ── POST-PUBLISH: INV-SCENE-35 opacity flip on GetPublicSceneArchive ─────
 		// Once PUBLISHED the public archive has NO caller gate (no participant
 		// check, no ABAC — GetPublicSceneArchive, publish_service.go:323). The
 		// opacity flips from NOT_FOUND (COLLECTING) to SUCCESS: Charlie can read
@@ -318,9 +318,9 @@ var _ = Describe("Phase 6 hard-privacy-boundary gate for a non-participant (Char
 			PublishedSceneId: publishedSceneID,
 		})
 		Expect(archErr).NotTo(HaveOccurred(),
-			"INV-P6-8 (post-publish): non-participant GetPublicSceneArchive MUST succeed once PUBLISHED — public archive has no caller gate")
+			"INV-SCENE-35 (post-publish): non-participant GetPublicSceneArchive MUST succeed once PUBLISHED — public archive has no caller gate")
 		Expect(arch.GetContentEntries()).NotTo(BeEmpty(),
-			"INV-P6-8 (post-publish): public archive content_entries MUST be non-empty for a PUBLISHED scene")
+			"INV-SCENE-35 (post-publish): public archive content_entries MUST be non-empty for a PUBLISHED scene")
 	})
 })
 

@@ -72,6 +72,70 @@ invariants.
 | `INV-PRESENCE-8` | Client presence map keyed by character_id; idempotent add/remove. | `I-PRES-8` | pending |
 | `INV-PRESENCE-9` | Response deduplicates by character_id (defense-in-depth). | `I-PRES-9` | pending |
 
+### `INV-SCENE`
+
+| ID | Summary | Legacy | Binding |
+|----|---------|--------|---------|
+| `INV-SCENE-1` | All Phase-4 plugin-owned scene events MUST emit to dot-style NATS subjects (events.<game_id>.scene.<scene_id>.<facet>); legacy colon-style scene:<id>:* MUST NOT appear in any pub/sub topic context. | `INV-P4-1` | pending |
+| `INV-SCENE-2` | The 8 scene event types MUST be declared in core-scenes plugin.yaml crypto.emits AND registered via EmitTypeRegistrar.RegisterEmitTypes; the two sets MUST be set-equal. | `INV-P4-2` | pending |
+| `INV-SCENE-3` | Sensitivity classification MUST be: scene_pose/say/emit/ooc are always; scene_join_ic/leave_ic/pose_order_changed_ic/idle_nudge are never. No may-classified events in Phase 4. | `INV-P4-3` | pending |
+| `INV-SCENE-4` | GetPoseOrder MUST gate non-participant callers via a direct scene_participants membership check before any computation; the ABAC engine MUST NOT be consulted for this gate. | `INV-P4-4` | pending |
+| `INV-SCENE-5` | AttributeResolverService.ResolveResource MUST NOT expose pose-order data (last_pose_at/last_pose_seq/total_pose_count) as a scene attribute; pose-order is reachable only via the gated GetPoseOrder RPC. | `INV-P4-5` | pending |
+| `INV-SCENE-6` | Non-participants in the same physical location MUST NOT receive scene IC events (closes audit-finding holomush-ac50). | `INV-P4-6` | pending |
+| `INV-SCENE-7` | Pose-order computation MUST produce correct results for each of the 4 modes (strict, 3pr, 5pr, free) across empty/single/multi participants and turn-edge cases. | `INV-P4-7` | pending |
+| `INV-SCENE-8` | Maintained pose-order metadata (scenes.total_pose_count, scene_participants.last_pose_at/last_pose_seq) MUST be a function of scene_log scene_pose rows; the recovery SQL MUST reproduce identical values. | `INV-P4-8` | pending |
+| `INV-SCENE-9` | Late-joining participants MUST see only IC events from scene_participants.joined_at forward via QueryStreamHistory; pose-order computation remains scene-global. | `INV-P4-9` | pending |
+| `INV-SCENE-10` | scene_pose audit-row insertion AND pose-metadata update MUST be transactional — either both commit or both roll back. | `INV-P4-10` | pending |
+| `INV-SCENE-11` | scene pose/say/emit/ooc subcommands MUST require the actor to be a participant of the target scene (inherits the write-scene-as-participant ABAC policy via command-capability pre-flight). | `INV-P4-11` | pending |
+| `INV-SCENE-12` | scene update with pose_order_mode in update_mask MUST require the actor to be the scene owner (inherits the update-own-scene ABAC policy). | `INV-P4-12` | pending |
+| `INV-SCENE-13` | Meta: every numbered INV-P4-* MUST have at least one cited test file; the §12.1 coverage matrix MUST exist. | `INV-P4-13` | pending |
+| `INV-SCENE-14` | Focus-without-membership MUST NOT be possible: substrate validates against info.FocusMemberships inside the SessionConnectionMutator callback before applying any non-nil Connection.FocusKey; validation and write are atomic under one Store-lock. | `INV-P5-1` | pending |
+| `INV-SCENE-15` | Each Connection has exactly one FocusKey at all times (nil = grid; otherwise a single FocusKey) — no multiple focuses per connection. | `INV-P5-2` | pending |
+| `INV-SCENE-16` | The focus-managed subset of Connection.Streams is a deterministic function of (FocusKey, character-level always-on streams); plugin-added streams co-exist additively. | `INV-P5-3` | pending |
+| `INV-SCENE-17` | AutoFocusOnJoin terminal-only filter: ClientType in {terminal, telnet}; comms_hub connections are NEVER auto-focused. | `INV-P5-4` | pending |
+| `INV-SCENE-18` | On reconnect, focus restoration validates info.PresentingFocus against info.FocusMemberships inside the SessionConnectionMutator callback under one Store-lock; falls back to grid on failure with no read-then-mutate race. | `INV-P5-5` | pending |
+| `INV-SCENE-19` | The 3 new PluginHostService focus RPCs ship with Go SDK + Lua hostfunc bindings together (substrate-contract parity). | `INV-P5-6` | pending |
+| `INV-SCENE-20` | Phase-5 multi-field focus mutations (Connection.FocusKey + Info.PresentingFocus) MUST be applied via a single SessionConnectionMutator invocation under one Store-lock — both fields atomic; no observer sees torn state. | `INV-P5-7` | pending |
+| `INV-SCENE-21` | Meta: every numbered INV-P5-N declaration MUST cite at least one existing test path. | `INV-P5-8` | pending |
+| `INV-SCENE-22` | ULID encoding boundary (D6): proto wire = 16-byte bytes; Lua hostfunc accepts 26-char base32; malformed input → INVALID_ULID; Go SDK + Lua round-trip a known ULID identically. | `INV-P5-9` | pending |
+| `INV-SCENE-23` | SessionStreamRegistry.SendToConnection delivers an update to EXACTLY the named connection's channel; other connections in the same session do NOT receive it via this path. | `INV-P5-10` | pending |
+| `INV-SCENE-24` | AutoFocusOnJoin MUST skip a connection whose FocusKey is already non-nil and different from the target; the skipped conn_id is reported and its FocusKey is unchanged. | `INV-P5-11` | pending |
+| `INV-SCENE-25` | Reconnect restoration vs concurrent LeaveFocus serializes via the single Store-lock — either leave-first (grid fallback) or restore-first (leave's scene_leave_ic reaches the subscribed connection); no torn state. | `INV-P5-12` | pending |
+| `INV-SCENE-26` | scene grid MUST NOT modify info.PresentingFocus; the per-Connection FocusKey is cleared to nil while the session-level reconnect target is preserved. | `INV-P5-13` | pending |
+| `INV-SCENE-27` | Postgres UpdateSessionConnection MUST lock the sessions row FIRST via FOR UPDATE, then the session_connections row (canonical order) — pinned by a deadlock-detector regression test. | `INV-P5-14` | pending |
+| `INV-SCENE-28` | Publication-vote rosters are frozen at attempt creation and immutable for the attempt's lifetime; owner+member roles only, invited rows excluded. | `INV-P6-1` | pending |
+| `INV-SCENE-29` | A vote MAY be cast/changed any number of times during COLLECTING; once in COOLOFF, votes MAY change only by voting no (which transitions back to COLLECTING). | `INV-P6-2` | pending |
+| `INV-SCENE-30` | Only the scene owner MAY withdraw an active attempt; opposed participants express their position by voting no, not via withdraw. | `INV-P6-3` | pending |
+| `INV-SCENE-31` | A scene transitions to archived ONLY on PUBLISHED; ATTEMPT_FAILED does not advance scene state; attempts-exhausted scenes stay ended indefinitely. | `INV-P6-4` | pending |
+| `INV-SCENE-32` | The IsParticipant gate at GetPublishedScene/DownloadPublishedScene/ListScenePublishAttempts MUST execute before any DB query against published_scenes.content_entries or published_scene_votes. | `INV-P6-5` | pending |
+| `INV-SCENE-33` | The ABAC engine MUST NOT be called during participant-gated publication RPC handlers (the participant-only read path forbids ABAC). | `INV-P6-6` | pending |
+| `INV-SCENE-34` | AttributeResolverService.ResolveResource MUST NOT return scene content (poses, says, emits, OOC, publication content_entries) under any attribute name. | `INV-P6-7` | pending |
+| `INV-SCENE-35` | GetPublicSceneArchive/DownloadPublicSceneArchive MUST return opaque NOT_FOUND for any non-PUBLISHED publication; the wire shape is identical for nonexistent/COLLECTING/COOLOFF/ATTEMPT_FAILED. | `INV-P6-8` | pending |
+| `INV-SCENE-36` | Hard-privacy-boundary blocks MUST emit a WARN log AND increment scene_publish_privacy_blocks_total AND mark the OTel span error with deny.reason; NO IC stream event is emitted (side-channel prevention). | `INV-P6-9` | pending |
+| `INV-SCENE-37` | Snapshot at COOLOFF → PUBLISHED MUST be atomic (SELECT FOR UPDATE + content build + UPDATE + scene-state change in one transaction); failures transition to ATTEMPT_FAILED without partial state. | `INV-P6-10` | pending |
+| `INV-SCENE-38` | Per-connection focus-delta delivery MUST be driven inside focus.Coordinator; no runtime-specific layer may be its sole driver. | `INV-FS-1` | pending |
+| `INV-SCENE-39` | A character joining a binary-plugin scene MUST receive live IC/OOC poses via per-connection delivery under production-equivalent wiring (ex-ymgjs INV-FW-1). | `INV-FS-2` | pending |
+| `INV-SCENE-40` | A character joining a scene via the Lua focus path MUST receive the same per-connection deltas as the binary path. | `INV-FS-3` | pending |
+| `INV-SCENE-41` | Production and the integration-test harness MUST build the coordinator's focus-delivery wiring through holoGRPC.FocusStreamCoordinatorOptions; no hand-rolled parallel adapter assembly (ex-ymgjs INV-FW-2). | `INV-FS-4` | pending |
+| `INV-SCENE-42` | The StreamSender and ConnectionSender produced for one coordinator MUST target the same SessionStreamRegistry (ex-ymgjs INV-FW-4). | `INV-FS-5` | pending |
+| `INV-SCENE-43` | The session-level StreamSenderAdapter MUST continue to reject non-FromCursor replay modes with REPLAY_MODE_NOT_SUPPORTED (ex-ymgjs INV-FW-5). | `INV-FS-6` | pending |
+| `INV-SCENE-44` | The Lua hostfunc stream-registry wiring (hostfunc.WithStreamRegistry) MUST be preserved (ex-ymgjs INV-FW-6). | `INV-FS-7` | pending |
+| `INV-SCENE-45` | A SendToConnection failure MUST NOT fail the focus mutation or abort delivery to the remaining focused connections, and MUST be logged. | `INV-FS-8` | pending |
+| `INV-SCENE-46` | newSceneID() returns a bare 26-character ULID with no scene- (or any) prefix. | `INV-Y5INX-1` | pending |
+| `INV-SCENE-47` | A scene created via CreateScene is readable via the host CoreServer.QueryStreamHistory by a participant (scene log returns the events). | `INV-Y5INX-2` | pending |
+| `INV-SCENE-48` | Joining a real scene opens a focus subscription: protoToFocusKey parses the bare join key and JoinFocus succeeds. | `INV-Y5INX-3` | pending |
+| `INV-SCENE-49` | The history-scope temporal floor (streamScopeFloor) excludes pre-join events for a late participant of a scene. | `INV-Y5INX-4` | pending |
+| `INV-SCENE-50` | No production code path strips a scene- prefix from an identifier or subject token (the masking strip lives only in the test harness). | `INV-Y5INX-5` | pending |
+| `INV-SCENE-51` | WithPluginConfigOverrides reaches PluginSubsystemConfig.PluginConfigOverrides so core-scenes runs with the test's cooloff_window/scheduler_interval. | `INV-SH-1` | pending |
+| `INV-SCENE-52` | Server.SceneServiceClient() resolves the loaded plugin's SceneService (read-back works). | `INV-SH-2` | pending |
+| `INV-SCENE-53` | Session.CreateScene returns a valid scene ULID via the real RPC (no t.Fatalf). | `INV-SH-3` | pending |
+| `INV-SCENE-54` | The driving layer adds zero production code: SceneServiceClient uses the existing ServiceRegistry() getter; all new symbols are integration-build-tagged. | `INV-SH-4` | pending |
+| `INV-SCENE-55` | The happy-path lifecycle drives to PUBLISHED through SendCommand + reads back via the client (E6 acceptance). | `INV-SH-5` | pending |
+| `INV-SCENE-56` | Every board row MUST display its content-warning labels regardless of active filters; display MUST NOT be suppressible by a filter. | `INV-2` | pending |
+| `INV-SCENE-57` | With no game-configured taxonomy, core-scenes' DefaultCWTaxonomy MUST apply; a fresh game validates/filters correctly with zero operator configuration. | `INV-5` | pending |
+| `INV-SCENE-58` | content.cw_block resolution MUST be the union of GAME, PLAYER, and CHARACTER scope lists (safety-accumulating), not first-match-wins. | `INV-6` | pending |
+| `INV-SCENE-59` | Scene settings/sensitivity access MUST be ABAC-authorized and default-deny: a principal may read/write its own PLAYER/CHARACTER settings; GAME-scope writes require an operator action. | `INV-7` | pending |
+
 ### `INV-EVENTBUS`
 
 | ID | Summary | Legacy | Binding |

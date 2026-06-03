@@ -134,7 +134,7 @@ func NewFocusMutator(fn func(
 // sessionConnectionMutatorSentinel is an unexported type that prevents
 // construction of SessionConnectionMutator from outside the
 // internal/grpc/focus package — same compile-time enforcement as
-// focusMutatorSentinel at :91-93. Phase 5 (INV-P5-7) requires that
+// focusMutatorSentinel at :91-93. Phase 5 (INV-SCENE-20) requires that
 // per-Connection focus mutations route through the Coordinator alone.
 type sessionConnectionMutatorSentinel struct{}
 
@@ -144,7 +144,7 @@ type sessionConnectionMutatorSentinel struct{}
 // of the separate FocusMutator + ConnectionMutator two-call pattern
 // the round-2 reviewer flagged: that pattern admitted a torn-state
 // observer window between the two locked sections. This single mutator
-// closes that window (INV-P5-7).
+// closes that window (INV-SCENE-20).
 //
 // FocusMutator (above) retains its existing role for FocusMemberships /
 // PresentingFocus-only mutations (LeaveFocus, JoinFocus). The two
@@ -263,10 +263,10 @@ type Connection struct {
 	SessionID  string
 	ClientType string   // "terminal", "comms_hub", "telnet"
 	Streams    []string // event streams this connection subscribes to
-	// FocusKey is the per-connection focus pointer (Phase 5, INV-P5-2).
+	// FocusKey is the per-connection focus pointer (Phase 5, INV-SCENE-15).
 	// nil = grid focus (default for new connections); non-nil = focused
 	// on the named context. Mutated only via the Coordinator-invoked
-	// SessionConnectionMutator (I-6 server-authoritative; INV-P5-7).
+	// SessionConnectionMutator (I-6 server-authoritative; INV-SCENE-20).
 	FocusKey    *FocusKey
 	ConnectedAt time.Time
 }

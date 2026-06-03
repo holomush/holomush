@@ -15,7 +15,7 @@ import (
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 )
 
-// INV-Y5INX-4 / E9 (holomush-5rh.20.42): the history-scope temporal floor
+// INV-SCENE-49 / E9 (holomush-5rh.20.42): the history-scope temporal floor
 // excludes a publish event emitted BEFORE a late participant joined a REAL
 // scene. The early participant (joined first) sees it; the late participant
 // does not. Floors at FocusMembership.JoinedAt via streamScopeFloor.
@@ -35,7 +35,7 @@ import (
 //
 // Spec: docs/superpowers/plans/2026-05-28-scene-bare-ulid-identity.md §Task 6.
 // Bead: holomush-y5inx.6, unblocks holomush-5rh.20.42.
-var _ = Describe("INV-Y5INX-4 / E9: publish-event history-scope floor", func() {
+var _ = Describe("INV-SCENE-49 / E9: publish-event history-scope floor", func() {
 	It("hides a pre-join scene_publish_started from a late joiner of a real scene", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		DeferCleanup(cancel)
@@ -73,7 +73,7 @@ var _ = Describe("INV-Y5INX-4 / E9: publish-event history-scope floor", func() {
 		// Emit the publish-started event BEFORE the late joiner joins.
 		// scene_publish_started has sensitivity: never in the manifest, so it
 		// must be emitted as Sensitive=false (EmitScenePlaintextContent).
-		// EmitSceneICContent would be rejected by the INV-6 fence for this type.
+		// EmitSceneICContent would be rejected by the INV-SCENE-58 fence for this type.
 		ts.EmitScenePlaintextContent(ctx, "core-scenes", sceneID,
 			owner.CharacterID, "scene_publish_started", `{"attempt":"first"}`)
 
@@ -97,7 +97,7 @@ var _ = Describe("INV-Y5INX-4 / E9: publish-event history-scope floor", func() {
 				"early joiner must see the pre-join publish event and the later pose")
 			for _, e := range evs {
 				g.Expect(e.GetMetadataOnly()).To(BeFalse(),
-					"INV-Y5INX-4: early participant (DEK member) must receive DECRYPTED frames")
+					"INV-SCENE-49: early participant (DEK member) must receive DECRYPTED frames")
 			}
 		}).WithTimeout(20 * time.Second).WithPolling(200 * time.Millisecond).Should(Succeed())
 
@@ -113,10 +113,10 @@ var _ = Describe("INV-Y5INX-4 / E9: publish-event history-scope floor", func() {
 				"late joiner must see the post-join pose (vacuous-pass guard)")
 			for _, e := range evs {
 				g.Expect(e.GetTimestamp().AsTime()).To(BeTemporally(">=", lateJoinedAt),
-					"INV-Y5INX-4: event %q at %s leaked before late joiner's JoinedAt %s",
+					"INV-SCENE-49: event %q at %s leaked before late joiner's JoinedAt %s",
 					e.GetType(), e.GetTimestamp().AsTime(), lateJoinedAt)
 				g.Expect(e.GetMetadataOnly()).To(BeFalse(),
-					"INV-Y5INX-4: late participant (DEK member) must receive DECRYPTED frames")
+					"INV-SCENE-49: late participant (DEK member) must receive DECRYPTED frames")
 			}
 		}).WithTimeout(20 * time.Second).WithPolling(200 * time.Millisecond).Should(Succeed())
 	})

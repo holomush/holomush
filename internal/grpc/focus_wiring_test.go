@@ -13,7 +13,7 @@ import (
 	"github.com/holomush/holomush/internal/grpc/focus"
 )
 
-// INV-FS-5: the StreamSender and ConnectionSender produced for one coordinator
+// INV-SCENE-42: the StreamSender and ConnectionSender produced for one coordinator
 // MUST target the same SessionStreamRegistry. We prove it by routing through
 // each registry-derived adapter and asserting it reaches the one registry.
 func TestFocusStreamCoordinatorOptionsShareOneRegistry(t *testing.T) {

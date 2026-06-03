@@ -1970,7 +1970,7 @@ var _ = Describe("Publish store — attempt + roster lifecycle", func() {
 
 		voters, err := store.ListPublishVoters(ctx, pub.ID)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(voters).To(HaveLen(2), "roster must include owner+member, NOT invited (INV-P6-1)")
+		Expect(voters).To(HaveLen(2), "roster must include owner+member, NOT invited (INV-SCENE-28)")
 		voterIDs := make(map[string]bool, len(voters))
 		for _, v := range voters {
 			voterIDs[v.CharacterID] = true
@@ -1978,7 +1978,7 @@ var _ = Describe("Publish store — attempt + roster lifecycle", func() {
 		}
 		Expect(voterIDs[ownerID]).To(BeTrue())
 		Expect(voterIDs[memberID]).To(BeTrue())
-		Expect(voterIDs[invitedID]).To(BeFalse(), "invited role MUST be excluded — INV-P6-1")
+		Expect(voterIDs[invitedID]).To(BeFalse(), "invited role MUST be excluded — INV-SCENE-28")
 	})
 
 	It("rejects a duplicate active attempt for the same scene", func() {
@@ -2167,7 +2167,7 @@ var _ = Describe("Publish store — vote operations", func() {
 	// holomush-wn612: CastVote locks the attempt row FOR UPDATE and re-validates
 	// non-terminal status inside the tx, so a vote cannot land on an attempt that
 	// resolved between the handler's status check and the vote write. This is the
-	// terminal boundary of INV-P6-2 (votes are valid only during COLLECTING /
+	// terminal boundary of INV-SCENE-29 (votes are valid only during COLLECTING /
 	// COOLOFF). A roster member is established BEFORE the terminal transition to
 	// prove the rejection is the status guard, not the non-voter guard.
 	It("rejects a vote on an ATTEMPT_FAILED attempt with SCENE_PUBLISH_INVALID_STATE", func() {
@@ -2238,7 +2238,7 @@ var _ = Describe("Publish store — status reads + transitions", func() {
 		Expect(got.CoolOffWindow).To(Equal(30 * time.Minute))
 		Expect(got.MaxAttemptsSnapshot).To(Equal(3))
 		Expect(got.CoolOffStartedAt).To(BeNil())
-		Expect(got.ContentEntries).To(BeNil(), "header read MUST NOT carry content (INV-P6-5)")
+		Expect(got.ContentEntries).To(BeNil(), "header read MUST NOT carry content (INV-SCENE-32)")
 	})
 
 	It("GetPublishedSceneHeader returns nil for a nonexistent id", func() {
@@ -2649,7 +2649,7 @@ var _ = Describe("SceneStore.ListBoard CW exclusion", func() {
 		Expect(ids).To(ContainElement(safe.ID))
 	})
 
-	It("keeps content_warnings on returned scenes (INV-2: CW labels not stripped)", func() {
+	It("keeps content_warnings on returned scenes (INV-SCENE-56: CW labels not stripped)", func() {
 		safe := mustCreateBoardScene(ulid.Make().String(), []string{"romance", "violence"})
 
 		// Block "death" — safe scene has no overlap, so it is returned.
@@ -2665,6 +2665,6 @@ var _ = Describe("SceneStore.ListBoard CW exclusion", func() {
 		}
 		Expect(found).NotTo(BeNil(), "safe scene must appear in board results")
 		Expect(found.ContentWarnings).To(ConsistOf("romance", "violence"),
-			"INV-2: content_warnings must not be stripped from returned rows")
+			"INV-SCENE-56: content_warnings must not be stripped from returned rows")
 	})
 })

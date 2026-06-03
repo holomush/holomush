@@ -182,7 +182,7 @@ func phase4EmitTypes() []string {
 // phase6EmitTypes returns the 6 Phase 6 publication notice event types
 // declared in crypto.emits (all sensitivity:never). These MUST be
 // registered alongside phase4EmitTypes so the EmitTypeRegistrar set equals
-// the manifest crypto.emits set (INV-S5 / INV-P4-2); the host fails plugin
+// the manifest crypto.emits set (INV-S5 / INV-SCENE-2); the host fails plugin
 // load otherwise. The matching emitter wiring lands in Phase D2.
 func phase6EmitTypes() []string {
 	return []string{

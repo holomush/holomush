@@ -84,7 +84,7 @@ func ResolveFromTally(t VoteTally) (PublishTrigger, bool) {
 }
 
 // IsEligibleVoterRole returns true for roles that may be on a publish roster
-// per INV-P6-1: owner and member only, NOT invited (and not any other role).
+// per INV-SCENE-28: owner and member only, NOT invited (and not any other role).
 func IsEligibleVoterRole(role string) bool {
 	return role == "owner" || role == "member"
 }

@@ -1661,7 +1661,7 @@ export const PublishedSceneSummarySchema: GenMessage<PublishedSceneSummary> = /*
 export type GetPublicSceneArchiveRequest = Message<"holomush.scene.v1.GetPublicSceneArchiveRequest"> & {
   /**
    * The publication attempt to read; required. A missing id or any
-   * non-PUBLISHED attempt returns one opaque NOT_FOUND (INV-P6-8).
+   * non-PUBLISHED attempt returns one opaque NOT_FOUND (INV-SCENE-35).
    *
    * @generated from field: string published_scene_id = 1;
    */
@@ -2360,7 +2360,7 @@ export const SceneService: GenService<{
   /**
    * GetPublishedScene returns a publication attempt's full state to a scene
    * participant. Enforces the INV-S9 plugin-code participant gate with a
-   * load-bearing step order (INV-P6-5): header read → participant gate → content
+   * load-bearing step order (INV-SCENE-32): header read → participant gate → content
    * read (only for PUBLISHED rows, only after the gate passes). A non-participant
    * is denied with the §10 triple-signal before any content is read. See
    * publish_service.go::GetPublishedScene.
@@ -2404,7 +2404,7 @@ export const SceneService: GenService<{
    * caller validation, NO participant gate, NO ABAC. The only gate is
    * status==PUBLISHED; a missing id OR any non-PUBLISHED attempt returns one
    * opaque NOT_FOUND so existence/progress of an attempt cannot be inferred
-   * (INV-P6-8). Carries only public-safe fields. See
+   * (INV-SCENE-35). Carries only public-safe fields. See
    * publish_service.go::GetPublicSceneArchive.
    *
    * @generated from rpc holomush.scene.v1.SceneService.GetPublicSceneArchive
@@ -2417,7 +2417,7 @@ export const SceneService: GenService<{
   /**
    * DownloadPublicSceneArchive is the PUBLIC, unauthenticated download of a
    * published scene in the requested format. Same status-gate and opacity
-   * contract (INV-P6-8) as GetPublicSceneArchive; shares the renderer with
+   * contract (INV-SCENE-35) as GetPublicSceneArchive; shares the renderer with
    * DownloadPublishedScene. See publish_service.go::DownloadPublicSceneArchive.
    *
    * @generated from rpc holomush.scene.v1.SceneService.DownloadPublicSceneArchive

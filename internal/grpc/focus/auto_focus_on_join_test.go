@@ -17,7 +17,7 @@ import (
 
 // TestAutoFocus_HappyPath_TerminalOnly verifies the canonical fan-out case:
 // a session with one terminal and one comms_hub connection, with the
-// required FocusMembership. Only the terminal connection is focused (INV-P5-4);
+// required FocusMembership. Only the terminal connection is focused (INV-SCENE-17);
 // total_connection_count reflects all connections.
 func TestAutoFocus_HappyPath_TerminalOnly(t *testing.T) {
 	t.Parallel()
@@ -75,13 +75,13 @@ func TestAutoFocus_HappyPath_TerminalOnly(t *testing.T) {
 	require.NotNil(t, updatedInfo.PresentingFocus)
 	assert.Equal(t, sceneID, updatedInfo.PresentingFocus.TargetID)
 
-	// comms_hub FocusKey must remain nil (filtered out by INV-P5-4).
+	// comms_hub FocusKey must remain nil (filtered out by INV-SCENE-17).
 	commsConn, err := coord.sessionStore.GetConnection(ctx, commsConnID)
 	require.NoError(t, err)
-	assert.Nil(t, commsConn.FocusKey, "INV-P5-4: comms_hub must not be auto-focused")
+	assert.Nil(t, commsConn.FocusKey, "INV-SCENE-17: comms_hub must not be auto-focused")
 }
 
-// TestAutoFocus_FiltersByClientType pins INV-P5-4: AutoFocusOnJoin only fans
+// TestAutoFocus_FiltersByClientType pins INV-SCENE-17: AutoFocusOnJoin only fans
 // out to terminal and telnet connections. A session with a telnet connection
 // and a comms_hub connection should auto-focus only the telnet connection.
 func TestAutoFocus_FiltersByClientType(t *testing.T) {
@@ -123,11 +123,11 @@ func TestAutoFocus_FiltersByClientType(t *testing.T) {
 	assert.Equal(t, uint32(2), resp.TotalConnectionCount)
 	assert.Len(t, resp.FocusedConnectionIDs, 1)
 	assert.Equal(t, telnetConnID, resp.FocusedConnectionIDs[0])
-	assert.Empty(t, resp.SkippedConnectionIDs, "INV-P5-4: comms_hub is filtered, not skipped")
+	assert.Empty(t, resp.SkippedConnectionIDs, "INV-SCENE-17: comms_hub is filtered, not skipped")
 	assert.Empty(t, resp.FailedConnectionIDs)
 }
 
-// TestAutoFocus_SkipsAlreadyExplicitlyFocusedConn pins INV-P5-11 (D8 skip-rule):
+// TestAutoFocus_SkipsAlreadyExplicitlyFocusedConn pins INV-SCENE-24 (D8 skip-rule):
 // a terminal connection that is already explicitly focused on a different
 // scene (FocusKey != nil && *FocusKey != target) lands in skipped, not focused.
 func TestAutoFocus_SkipsAlreadyExplicitlyFocusedConn(t *testing.T) {
@@ -168,8 +168,8 @@ func TestAutoFocus_SkipsAlreadyExplicitlyFocusedConn(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, uint32(1), resp.TotalConnectionCount)
-	assert.Empty(t, resp.FocusedConnectionIDs, "INV-P5-11: already-focused conn must not be refocused")
-	assert.Len(t, resp.SkippedConnectionIDs, 1, "INV-P5-11: already-focused conn must be in skipped")
+	assert.Empty(t, resp.FocusedConnectionIDs, "INV-SCENE-24: already-focused conn must not be refocused")
+	assert.Len(t, resp.SkippedConnectionIDs, 1, "INV-SCENE-24: already-focused conn must be in skipped")
 	assert.Equal(t, connID, resp.SkippedConnectionIDs[0])
 	assert.Empty(t, resp.FailedConnectionIDs)
 
@@ -182,7 +182,7 @@ func TestAutoFocus_SkipsAlreadyExplicitlyFocusedConn(t *testing.T) {
 
 // TestAutoFocus_FailsForMembershipAbsent verifies that when the session has
 // no FocusMembership for the target scene, all terminal connections land in
-// failed with reason "membership_absent" (INV-P5-1 FOCUS_WITHOUT_MEMBERSHIP).
+// failed with reason "membership_absent" (INV-SCENE-14 FOCUS_WITHOUT_MEMBERSHIP).
 func TestAutoFocus_FailsForMembershipAbsent(t *testing.T) {
 	t.Parallel()
 

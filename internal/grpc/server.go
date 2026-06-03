@@ -889,7 +889,7 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 				)
 			}
 		}()
-		// Per-Connection routing (INV-P5-11): register in the per-Connection
+		// Per-Connection routing (INV-SCENE-24): register in the per-Connection
 		// map immediately after AddConnection so T14-T18 coordinators can
 		// route to exactly one connection. The session-wide Register above
 		// has already armed ctrlCh.

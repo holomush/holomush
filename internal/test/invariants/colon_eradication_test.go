@@ -16,7 +16,7 @@ import (
 
 // TestINV_EVENTBUS_19_NoColonStreamLiterals asserts no production Go (or Lua) source
 // contains a colon-style entity-prefix literal as a pub/sub STREAM name.
-// Supersedes INV-P4-1 (scene-only) with a repo-wide scan. Roots MUST exist
+// Supersedes INV-SCENE-1 (scene-only) with a repo-wide scan. Roots MUST exist
 // (fail, not skip).
 //
 // The stream-vs-ABAC ambiguity is solved structurally: ABAC subjects/resources
@@ -25,7 +25,7 @@ import (
 // package. Host code therefore has NO inline colon stream literal; the only
 // residual colon literal in scanned roots is in plugins/core-scenes/ (which
 // cannot import internal/access), marked with an "ABAC resource ref" comment.
-// Any other hit is unambiguously a stream-producer bug. (Mirrors INV-P4-1's
+// Any other hit is unambiguously a stream-producer bug. (Mirrors INV-SCENE-1's
 // proven abacContextMarkers approach.)
 //
 // Why the regex covers exactly four domains (location|character|notifications|

@@ -35,7 +35,7 @@ type CreatePublishAttemptInput struct {
 // CreatePublishAttempt creates a published_scenes row in COLLECTING status
 // and seeds published_scene_votes from the scene's owner+member
 // participants in a single transaction. Invited participants are excluded
-// from the roster (INV-P6-1). The partial unique index
+// from the roster (INV-SCENE-28). The partial unique index
 // published_scenes_one_active_per_scene enforces "at most one active
 // attempt per scene"; published_scenes_one_published_per_scene enforces
 // one-and-done. Fails closed with SCENE_PUBLISH_NO_ELIGIBLE_VOTERS when the
@@ -79,7 +79,7 @@ func (s *SceneStore) CreatePublishAttempt(ctx context.Context, in CreatePublishA
 		return nil, oops.Code("SCENE_PUBLISH_CREATE_FAILED").Wrap(err)
 	}
 
-	// Seed the roster from owner+member participants (NOT invited — INV-P6-1).
+	// Seed the roster from owner+member participants (NOT invited — INV-SCENE-28).
 	tag, err := tx.Exec(ctx, `
 		INSERT INTO published_scene_votes (published_scene_id, character_id)
 		SELECT $1, character_id FROM scene_participants
@@ -90,7 +90,7 @@ func (s *SceneStore) CreatePublishAttempt(ctx context.Context, in CreatePublishA
 	}
 
 	// Fail closed if the roster is empty — an attempt with no eligible voters
-	// can never resolve (INV-P6-1). The INSERT...SELECT's affected-row count
+	// can never resolve (INV-SCENE-28). The INSERT...SELECT's affected-row count
 	// is the roster size, so no separate count query is needed.
 	if tag.RowsAffected() == 0 {
 		return nil, oops.Code("SCENE_PUBLISH_NO_ELIGIBLE_VOTERS").
@@ -304,7 +304,7 @@ func (s *SceneStore) TallyVotesTx(ctx context.Context, tx pgx.Tx, publishedScene
 
 // publishedSceneHeaderColumns is the column list for a header read — every
 // published_scenes column EXCEPT content_entries. The deliberate omission of
-// content_entries is load-bearing for INV-P6-5: the participant gate runs
+// content_entries is load-bearing for INV-SCENE-32: the participant gate runs
 // between GetPublishedSceneHeader and GetPublishedSceneContent, so the header
 // read MUST NOT carry IC content.
 const publishedSceneHeaderColumns = `
@@ -362,7 +362,7 @@ func intervalToDuration(iv pgtype.Interval) time.Duration {
 
 // GetPublishedSceneHeader returns the attempt row WITHOUT content_entries, or
 // (nil, nil) when no row exists. Callers needing content call
-// GetPublishedSceneContent separately, after the participant gate (INV-P6-5).
+// GetPublishedSceneContent separately, after the participant gate (INV-SCENE-32).
 func (s *SceneStore) GetPublishedSceneHeader(ctx context.Context, id string) (*PublishedScene, error) {
 	ctx, span := startSpan(ctx, "scene.store.get_publish_header",
 		attribute.String("published_scene_id", id))
@@ -382,7 +382,7 @@ func (s *SceneStore) GetPublishedSceneHeader(ctx context.Context, id string) (*P
 // GetPublishedSceneContent returns the frozen content entries for an attempt,
 // or nil when the row does not exist or has no content (non-PUBLISHED rows
 // have NULL content_entries). MUST only be called after the participant gate
-// has approved the caller for a participant-gated RPC (INV-P6-5).
+// has approved the caller for a participant-gated RPC (INV-SCENE-32).
 func (s *SceneStore) GetPublishedSceneContent(ctx context.Context, id string) ([]PublishedSceneEntry, error) {
 	var raw []byte
 	if err := s.pool.QueryRow(
@@ -853,7 +853,7 @@ func (s *SceneStore) ArchiveSceneStateForPublish(ctx context.Context, tx pgx.Tx,
 
 // SnapshotSceneMeta carries the scene metadata frozen onto the publication at
 // PUBLISHED time: the scene title and the owner+member participant character
-// IDs (invited excluded — INV-P6-1). Read inside the snapshot's write-tx for a
+// IDs (invited excluded — INV-SCENE-28). Read inside the snapshot's write-tx for a
 // consistent snapshot. Name resolution is a follow-up; character IDs are the
 // available identity surface (see commands.go handleLog speaker note).
 type SnapshotSceneMeta struct {

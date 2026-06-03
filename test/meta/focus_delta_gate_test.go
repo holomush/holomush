@@ -41,7 +41,7 @@ func nonTestGoFilesContaining(t *testing.T, root, needle string) []string {
 	return hits
 }
 
-// INV-FS-1: per-connection focus-delta delivery is driven ONLY inside
+// INV-SCENE-38: per-connection focus-delta delivery is driven ONLY inside
 // internal/grpc/focus. The interface decl + the registry impl/adapter in
 // internal/grpc are the only other legitimate occurrences.
 func TestSendToConnectionConfinedToFocusAndRegistry(t *testing.T) {
@@ -53,12 +53,12 @@ func TestSendToConnectionConfinedToFocusAndRegistry(t *testing.T) {
 	}
 	for _, f := range nonTestGoFilesContaining(t, root, "SendToConnection(") {
 		if !allowed[f] {
-			t.Errorf("INV-FS-1 violation: SendToConnection( used outside the focus gate: %s", f)
+			t.Errorf("INV-SCENE-38 violation: SendToConnection( used outside the focus gate: %s", f)
 		}
 	}
 }
 
-// INV-FS-4: the registry-derived adapter pair is assembled ONLY in the
+// INV-SCENE-41: the registry-derived adapter pair is assembled ONLY in the
 // FocusStreamCoordinatorOptions helper (constructors are defined in
 // stream_registry.go).
 func TestFocusAdapterPairAssembledOnlyInHelper(t *testing.T) {
@@ -70,7 +70,7 @@ func TestFocusAdapterPairAssembledOnlyInHelper(t *testing.T) {
 	for _, needle := range []string{"NewConnectionSenderAdapter(", "NewStreamSenderAdapter("} {
 		for _, f := range nonTestGoFilesContaining(t, root, needle) {
 			if !allowed[f] {
-				t.Errorf("INV-FS-4 violation: %s used outside FocusStreamCoordinatorOptions: %s", needle, f)
+				t.Errorf("INV-SCENE-41 violation: %s used outside FocusStreamCoordinatorOptions: %s", needle, f)
 			}
 		}
 	}

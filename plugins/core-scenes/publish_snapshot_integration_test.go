@@ -551,7 +551,7 @@ var _ = Describe("C7 snapshot pipeline (COOLOFF → PUBLISHED)", func() {
 		scene, err := env.store.Get(ctx, sceneID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(scene.State).To(Equal(string(SceneStateArchived)),
-			"INV-RB-8 / INV-P6-4: parent scene must transition to archived ONLY on PUBLISHED")
+			"INV-RB-8 / INV-SCENE-31: parent scene must transition to archived ONLY on PUBLISHED")
 	})
 
 	// INV-RB-10 / INV-RB-12: a host decrypt error fails the publish closed with
@@ -619,9 +619,9 @@ var _ = Describe("C7 snapshot pipeline (COOLOFF → PUBLISHED)", func() {
 			"render failure → SNAPSHOT_RENDER_FAILED")
 	})
 
-	// INV-P6-10 idempotency / vote-flip: a second fire after PUBLISHED is a no-op
+	// INV-SCENE-37 idempotency / vote-flip: a second fire after PUBLISHED is a no-op
 	// (the lock re-check finds non-COOLOFF status).
-	It("is idempotent — a re-fire after PUBLISHED is a no-op (INV-P6-10)", func() {
+	It("is idempotent — a re-fire after PUBLISHED is a no-op (INV-SCENE-37)", func() {
 		const sceneID = "01C7SNAPIDEMPOTENT00000A0"
 		const ownerID = "01C7SNAPIDEMPOTENTOWN000A"
 		dec := &fakeSnapshotDecryptor{plaintextFor: map[string][]byte{
@@ -641,9 +641,9 @@ var _ = Describe("C7 snapshot pipeline (COOLOFF → PUBLISHED)", func() {
 		Expect(svc.runSnapshot(ctx, attemptID, sceneID, icSubjectFor(sceneID))).To(Succeed())
 		pub2, err := store.GetPublishedSceneHeader(ctx, attemptID)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(pub2.Status).To(Equal(StatusPublished), "INV-P6-10: re-fire must not change a PUBLISHED row")
+		Expect(pub2.Status).To(Equal(StatusPublished), "INV-SCENE-37: re-fire must not change a PUBLISHED row")
 		Expect(pub2.PublishedAt.Time()).To(Equal(pub1.PublishedAt.Time()),
-			"INV-P6-10: published_at must be stable across re-fire (no re-publish)")
+			"INV-SCENE-37: published_at must be stable across re-fire (no re-publish)")
 	})
 
 	// COOLOFF_INVARIANT_BROKEN: a no-vote that landed before the lock fails the

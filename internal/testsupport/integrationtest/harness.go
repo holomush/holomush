@@ -436,7 +436,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	// SessionStreamRegistry via FocusStreamCoordinatorOptions, mirroring prod).
 	// The scene `join` command reaches JoinFocus → AutoFocusOnJoin; the
 	// coordinator itself then drives per-Connection subscription deltas
-	// (driveFocusDeltas, INV-FS-1) → the connection's control channel, adding the
+	// (driveFocusDeltas, INV-SCENE-38) → the connection's control channel, adding the
 	// scene IC/OOC streams to the live Subscribe filter set. The coordinator is
 	// injected into the loaded plugin hosts via Manager.ConfigureFocusDeps below.
 	// Gated so non-focus suites keep the WithSubscriber-only wiring — zero blast
@@ -703,7 +703,7 @@ func (s *Server) NewSceneWithoutMember(_ context.Context) ulid.ULID {
 
 // GameID returns the embedded NATS JetStream game identifier, used by tests
 // that need to construct dot-style stream subjects of the form
-// `events.<gameID>.scene.<sceneID>.{ic,ooc}` (per INV-P4-1 / ADR holomush-s9nu).
+// `events.<gameID>.scene.<sceneID>.{ic,ooc}` (per INV-SCENE-1 / ADR holomush-s9nu).
 func (s *Server) GameID() string {
 	return s.bus.Bus.GameID()
 }

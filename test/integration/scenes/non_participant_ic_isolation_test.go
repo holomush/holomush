@@ -18,7 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 )
 
-// INV-P4-6: Non-participants in the same physical location MUST NOT receive
+// INV-SCENE-6: Non-participants in the same physical location MUST NOT receive
 // scene IC events. The substrate enforces this by the focus-subscription model:
 // joining a scene opens a per-session subscription to the scene IC subject;
 // a session that is co-located but NOT a scene participant never has that
@@ -45,7 +45,7 @@ import (
 // Closes audit-finding holomush-ac50.
 //
 // Spec: docs/superpowers/specs/2026-05-19-scenes-phase-4-streams-and-pose-order-design.md §2.
-var _ = Describe("INV-P4-6: non-participant scene IC isolation", func() {
+var _ = Describe("INV-SCENE-6: non-participant scene IC isolation", func() {
 	It("non-participant in same location MUST NOT receive scene IC events", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		DeferCleanup(cancel)
@@ -118,7 +118,7 @@ var _ = Describe("INV-P4-6: non-participant scene IC isolation", func() {
 		// and assert the pose ID is among them.
 		aliceSeen := drainIDs(ctx, alice, 2, 5*time.Second)
 		Expect(aliceSeen).To(HaveKey(poseEvent.ID.String()),
-			"INV-P4-6 positive control: participant Alice MUST receive scene_pose IC event")
+			"INV-SCENE-6 positive control: participant Alice MUST receive scene_pose IC event")
 
 		// Bob MUST receive the ambient (positive control proving his
 		// subscriber is alive on the location subject).
@@ -133,7 +133,7 @@ var _ = Describe("INV-P4-6: non-participant scene IC isolation", func() {
 			"Bob's delivery subject MUST be the location subject, never the scene IC subject")
 		Expect(bobFirst.Ack()).To(Succeed())
 
-		// INV-P4-6 assertion: Bob has NO further events. Draining with a
+		// INV-SCENE-6 assertion: Bob has NO further events. Draining with a
 		// bounded deadline proves absence-by-timeout. We probe twice as
 		// belt-and-braces (e.g., if JetStream were buggy and delayed
 		// delivery, the second probe gives it another window to leak).
@@ -143,7 +143,7 @@ var _ = Describe("INV-P4-6: non-participant scene IC isolation", func() {
 			probeCancel()
 			if leakErr == nil {
 				// Re-deliver as a clean failure message naming exactly what leaked.
-				Fail("INV-P4-6 violation: non-participant Bob received an event with subject " +
+				Fail("INV-SCENE-6 violation: non-participant Bob received an event with subject " +
 					string(leak.Event().Subject) + " type " + string(leak.Event().Type) +
 					" — non-participants MUST NOT see scene IC events")
 			}

@@ -17,7 +17,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
-// These tests pin INV-P6-9 / spec §10: the privacy-boundary block fires a
+// These tests pin INV-SCENE-36 / spec §10: the privacy-boundary block fires a
 // THREE-part signal (WARN log + metric + span error) and emits ZERO IC events
 // (no side channel that leaks the attempt's existence to a non-participant).
 // They exercise emitPrivacyBoundaryBlock (publish_service.go, Task B5) directly.

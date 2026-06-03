@@ -6,7 +6,7 @@ package grpc
 import "github.com/holomush/holomush/internal/grpc/focus"
 
 // FocusStreamCoordinatorOptions is the SINGLE assembly point for the two
-// registry-derived focus.Coordinator senders (INV-FS-4): the session-wide
+// registry-derived focus.Coordinator senders (INV-SCENE-41): the session-wide
 // StreamSender and the per-Connection ConnectionSender, both backed by the
 // same SessionStreamRegistry. Production (cmd/holomush) and the integration
 // harness MUST build their coordinator stream wiring through this helper rather

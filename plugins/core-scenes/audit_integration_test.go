@@ -30,7 +30,7 @@ func newPoseULID() []byte {
 }
 
 var _ = Describe("SceneAuditStore.InsertScenePose", func() {
-	// INV-P4-10: the scene_log INSERT, scenes.total_pose_count UPDATE,
+	// INV-SCENE-10: the scene_log INSERT, scenes.total_pose_count UPDATE,
 	// and scene_participants.last_pose_at/last_pose_seq UPDATE MUST
 	// either all commit, or none do. This block exercises all three
 	// branches: happy path, rollback on missing scene (forces step-2
@@ -103,7 +103,7 @@ var _ = Describe("SceneAuditStore.InsertScenePose", func() {
 		Expect(*lastSeq).To(Equal(int32(1)), "last_pose_seq MUST match total_pose_count")
 	})
 
-	It("rolls back the scene_log INSERT when the scenes UPDATE fails (INV-P4-10)", func() {
+	It("rolls back the scene_log INSERT when the scenes UPDATE fails (INV-SCENE-10)", func() {
 		store := newTestStore()
 		audit := NewSceneAuditStore(store.Pool())
 		ctx := context.Background()
@@ -131,7 +131,7 @@ var _ = Describe("SceneAuditStore.InsertScenePose", func() {
 			`SELECT COUNT(*) FROM scene_log WHERE id = $1`, eventID,
 		).Scan(&logCount)).NotTo(HaveOccurred())
 		Expect(logCount).To(Equal(0),
-			"scene_log INSERT MUST roll back when total_pose_count UPDATE finds no scene (INV-P4-10)")
+			"scene_log INSERT MUST roll back when total_pose_count UPDATE finds no scene (INV-SCENE-10)")
 	})
 
 	It("commits scene_log + total_pose_count when actor is not a current participant", func() {

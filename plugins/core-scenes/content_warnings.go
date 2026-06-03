@@ -15,7 +15,7 @@ import (
 // DefaultCWTaxonomy is the built-in OOTB set of content warning tags that
 // every HoloMUSH game has available without any configuration. It is used as
 // the fallback by effectiveTaxonomy when no game-scope override is stored
-// (INV-5: read-time fallback is always safe and never propagates errors).
+// (INV-SCENE-57: read-time fallback is always safe and never propagates errors).
 //
 // Game operators can override the full list via the "content.cw_taxonomy"
 // game-scope setting (see effectiveTaxonomy).
@@ -32,7 +32,7 @@ var DefaultCWTaxonomy = []string{
 // effectiveTaxonomy returns the active content-warning taxonomy for this game.
 // It reads the game-scope "content.cw_taxonomy" setting from the host settings
 // service. If the setting is not found, returns an error, or the client is nil,
-// DefaultCWTaxonomy is returned unchanged (INV-5: the settings RPC is
+// DefaultCWTaxonomy is returned unchanged (INV-SCENE-57: the settings RPC is
 // dispatch-token-gated and some RPC paths lack a token; the fallback is the
 // correct graceful degradation — never propagate the error).
 //

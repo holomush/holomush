@@ -19,12 +19,12 @@ import (
 
 // GetPublishedScene returns a publication attempt's full state to a scene
 // participant. It is the canonical INV-S9 participant-gated read, and its
-// step ordering is LOAD-BEARING (INV-P6-5):
+// step ordering is LOAD-BEARING (INV-SCENE-32):
 //
 //  1. validate the caller_character_id;
 //  2. read the header ONLY (no content_entries);
 //  3. run the plugin-code IsParticipant gate — NO ABAC engine is consulted
-//     (INV-P6-6: SceneServiceImpl has no policy engine to call);
+//     (INV-SCENE-33: SceneServiceImpl has no policy engine to call);
 //  4. read content ONLY after the gate passes, and only for PUBLISHED rows.
 //
 // A non-participant is rejected with SCENE_PRIVACY_BOUNDARY_BLOCK BEFORE any
@@ -52,7 +52,7 @@ func (s *SceneServiceImpl) GetPublishedScene(ctx context.Context, req *scenev1.G
 	}
 
 	// Step 3 — INV-S9 plugin-code participant gate. No ABAC engine is
-	// consulted; the deny path runs BEFORE any content read (INV-P6-5).
+	// consulted; the deny path runs BEFORE any content read (INV-SCENE-32).
 	ok, err := s.store.IsParticipant(ctx, pub.SceneID, callerID)
 	if err != nil {
 		return nil, internalErr(ctx, err)
@@ -232,7 +232,7 @@ var publishRenderMime = map[string]string{
 }
 
 // DownloadPublishedScene returns a published scene rendered in the requested
-// format to a participant. It uses the SAME load-bearing INV-S9 / INV-P6-5
+// format to a participant. It uses the SAME load-bearing INV-S9 / INV-SCENE-32
 // ordering as GetPublishedScene: caller validation → format validation →
 // header read (no content) → IsParticipant gate (NO ABAC) → PUBLISHED check →
 // content read only on gate pass → render. A non-participant is denied with
@@ -268,7 +268,7 @@ func (s *SceneServiceImpl) DownloadPublishedScene(ctx context.Context, req *scen
 	}
 
 	// INV-S9 plugin-code participant gate (NO ABAC); deny BEFORE any content
-	// read (INV-P6-5).
+	// read (INV-SCENE-32).
 	isParticipant, err := s.store.IsParticipant(ctx, pub.SceneID, callerID)
 	if err != nil {
 		return nil, internalErr(ctx, err)
@@ -326,7 +326,7 @@ func renderPublishedScene(format string, entries []PublishedSceneEntry) ([]byte,
 // participant gate, and NO ABAC. The only gate is status==PUBLISHED; every
 // other case — a nonexistent id and any non-PUBLISHED attempt (COLLECTING /
 // COOLOFF / ATTEMPT_FAILED) — returns the single opaque NOT_FOUND so a caller
-// cannot infer that an attempt exists or is in progress (INV-P6-8). The public
+// cannot infer that an attempt exists or is in progress (INV-SCENE-35). The public
 // response carries only the published artifact (title, participant names,
 // content, published_at) — never vote state or per-voter data (spec §5.1).
 func (s *SceneServiceImpl) GetPublicSceneArchive(ctx context.Context, req *scenev1.GetPublicSceneArchiveRequest) (*scenev1.GetPublicSceneArchiveResponse, error) {
@@ -377,7 +377,7 @@ func assemblePublicResponse(pub *PublishedScene, entries []PublishedSceneEntry) 
 // DownloadPublicSceneArchive is the PUBLIC, unauthenticated download of a
 // published scene rendered to the requested format (markdown / plain_text /
 // jsonl). Same status-gate + opacity contract as GetPublicSceneArchive
-// (INV-P6-8): no caller validation, no participant gate, no ABAC; the only gate
+// (INV-SCENE-35): no caller validation, no participant gate, no ABAC; the only gate
 // is status==PUBLISHED, and a missing id or any non-PUBLISHED attempt returns
 // the single opaque NOT_FOUND. Shares the renderer code path with
 // DownloadPublishedScene (spec §12). Format is validated first (a
@@ -397,7 +397,7 @@ func (s *SceneServiceImpl) DownloadPublicSceneArchive(ctx context.Context, req *
 	if err != nil {
 		return nil, internalErr(ctx, err)
 	}
-	// Public opacity (INV-P6-8): missing OR any non-PUBLISHED status → uniform
+	// Public opacity (INV-SCENE-35): missing OR any non-PUBLISHED status → uniform
 	// NOT_FOUND, identical to GetPublicSceneArchive.
 	if pub == nil || pub.Status != StatusPublished {
 		return nil, publicArchiveNotFound()

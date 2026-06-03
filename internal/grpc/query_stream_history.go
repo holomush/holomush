@@ -192,7 +192,7 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	case isPrivateStream(stream):
 		// Validate scene stream format up-front so malformed scene streams
 		// (e.g. invalid ULID in the sceneID segment) surface as INVALID_ARGUMENT
-		// rather than STREAM_ACCESS_DENIED. Dot-style per INV-P4-1 / ADR holomush-s9nu.
+		// rather than STREAM_ACCESS_DENIED. Dot-style per INV-SCENE-1 / ADR holomush-s9nu.
 		if isSceneStream(stream) {
 			if _, keyErr := streamToFocusKey(stream); keyErr != nil {
 				return nil, keyErr

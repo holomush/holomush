@@ -19,7 +19,7 @@ import (
 // holomush-shcyu (Task 4 validation): proves the parameterized crypto
 // round-trip — encrypted IC content seeded into a CreateScene-created scene
 // reads back on the wire as XChaCha20v1 — BEFORE the full publish E2E. The
-// command emit path can't set Sensitive (INV-7 fence, spec §3.4), so the
+// command emit path can't set Sensitive (INV-SCENE-59 fence, spec §3.4), so the
 // harness seeds encrypted content via EmitSceneICContent for an arbitrary
 // scene + actor.
 var _ = Describe("encrypted IC content seeded into a CreateScene'd scene", func() {

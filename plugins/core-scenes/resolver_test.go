@@ -30,7 +30,7 @@ func TestSceneResolverGetSchemaReturnsSceneAttributes(t *testing.T) {
 	assert.Equal(t, pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING, sceneSchema.GetAttributes()["visibility"])
 }
 
-// TestResolverNeverExposesContentByForbiddenAttributeName pins INV-P6-7
+// TestResolverNeverExposesContentByForbiddenAttributeName pins INV-SCENE-34
 // (spec §9.3): the scene attribute resolver MUST NOT expose any attribute
 // whose name could carry IC content (pose/say/emit/ooc text, the publication
 // log, or content_entries). The hard privacy boundary (INV-S9) keeps log
@@ -50,7 +50,7 @@ func TestResolverNeverExposesContentByForbiddenAttributeName(t *testing.T) {
 	forbidden := regexp.MustCompile(`^(content|content_entries|poses?|says?|emits?|ooc|log|entries|publication)$`)
 	for name := range sceneSchema.GetAttributes() {
 		assert.False(t, forbidden.MatchString(name),
-			"INV-P6-7 violation: resolver exposes attribute %q matching forbidden content pattern", name)
+			"INV-SCENE-34 violation: resolver exposes attribute %q matching forbidden content pattern", name)
 	}
 }
 
@@ -147,7 +147,7 @@ func TestResolveResourceReturnsParticipantsAndInviteesLists(t *testing.T) {
 	assert.Empty(t, inviteesAttr.GetStringListValue().GetValues())
 }
 
-// TestResolveResourceDoesNotLeakPoseOrderMetadata pins INV-P4-5: the ABAC
+// TestResolveResourceDoesNotLeakPoseOrderMetadata pins INV-SCENE-5: the ABAC
 // attribute path MUST NOT expose pose-order metadata (last_pose_at,
 // last_pose_seq, total_pose_count). Even when a scene has those fields
 // populated in the store, ResolveResource must omit them from the
@@ -174,14 +174,14 @@ func TestResolveResourceDoesNotLeakPoseOrderMetadata(t *testing.T) {
 
 	attrs := resp.GetAttributes()
 
-	// INV-P4-5: these keys MUST NOT appear in the attribute map regardless
+	// INV-SCENE-5: these keys MUST NOT appear in the attribute map regardless
 	// of what pose-metadata columns exist in the underlying store/database.
-	assert.NotContains(t, attrs, "last_pose_at", "INV-P4-5: resolver MUST NOT expose last_pose_at")
-	assert.NotContains(t, attrs, "last_pose_seq", "INV-P4-5: resolver MUST NOT expose last_pose_seq")
-	assert.NotContains(t, attrs, "total_pose_count", "INV-P4-5: resolver MUST NOT expose total_pose_count")
-	assert.NotContains(t, attrs, "LastPoseAt", "INV-P4-5: resolver MUST NOT expose LastPoseAt")
-	assert.NotContains(t, attrs, "LastPoseSeq", "INV-P4-5: resolver MUST NOT expose LastPoseSeq")
-	assert.NotContains(t, attrs, "TotalPoseCount", "INV-P4-5: resolver MUST NOT expose TotalPoseCount")
+	assert.NotContains(t, attrs, "last_pose_at", "INV-SCENE-5: resolver MUST NOT expose last_pose_at")
+	assert.NotContains(t, attrs, "last_pose_seq", "INV-SCENE-5: resolver MUST NOT expose last_pose_seq")
+	assert.NotContains(t, attrs, "total_pose_count", "INV-SCENE-5: resolver MUST NOT expose total_pose_count")
+	assert.NotContains(t, attrs, "LastPoseAt", "INV-SCENE-5: resolver MUST NOT expose LastPoseAt")
+	assert.NotContains(t, attrs, "LastPoseSeq", "INV-SCENE-5: resolver MUST NOT expose LastPoseSeq")
+	assert.NotContains(t, attrs, "TotalPoseCount", "INV-SCENE-5: resolver MUST NOT expose TotalPoseCount")
 
 	// Verify the expected allowed attributes ARE present (regression guard).
 	assert.Contains(t, attrs, "owner")

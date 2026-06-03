@@ -15,7 +15,7 @@ import (
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 )
 
-// INV-FS-3: Lua-runtime focus-delta parity.
+// INV-SCENE-40: Lua-runtime focus-delta parity.
 //
 // Proves that the gopher-lua VM path into holomush.auto_focus_on_join (the
 // Lua hostfunc registered at internal/plugin/lua/stdlib_focus.go) delivers
@@ -28,7 +28,7 @@ import (
 //
 // Bead: holomush-66228
 // Spec: docs/superpowers/plans/2026-05-28-focus-delta-coordinator-unification.md §Task 13
-var _ = Describe("INV-FS-3: Lua-runtime auto_focus_on_join parity — live IC delivery", func() {
+var _ = Describe("INV-SCENE-40: Lua-runtime auto_focus_on_join parity — live IC delivery", func() {
 	var (
 		ts     *integrationtest.Server
 		ctx    context.Context
@@ -72,7 +72,7 @@ var _ = Describe("INV-FS-3: Lua-runtime auto_focus_on_join parity — live IC de
 		}
 	})
 
-	It("delivers a post-join scene_pose to the joiner after the Lua luafocusjoin command fires auto_focus_on_join (INV-FS-3)", func() {
+	It("delivers a post-join scene_pose to the joiner after the Lua luafocusjoin command fires auto_focus_on_join (INV-SCENE-40)", func() {
 		loc := ts.NewLocation(ctx)
 		sceneID := owner.CreateScene(ctx, loc)
 		Expect(sceneID).NotTo(BeZero(), "CreateScene must return a non-zero bare ULID")
@@ -95,27 +95,27 @@ var _ = Describe("INV-FS-3: Lua-runtime auto_focus_on_join parity — live IC de
 		// `scene join` path tested in scene_command_join_delivery_test.go).
 		err := joiner.SendCommand(ctx, "luafocusjoin "+joiner.CharacterID.String()+" "+sceneID.String())
 		Expect(err).NotTo(HaveOccurred(),
-			"INV-FS-3: `luafocusjoin` must succeed — the Lua hostfunc should "+
+			"INV-SCENE-40: `luafocusjoin` must succeed — the Lua hostfunc should "+
 				"reach the focus coordinator and open the scene IC subscription")
 
 		// Emit a real sensitive scene_pose into the scene AFTER the focus join
 		// so the only delivery path is the subscription auto_focus_on_join
 		// opened via the Lua VM. If the Lua runtime path does not wire the
 		// subscription, WaitForEvent will time out.
-		const poseJSON = `{"text":"lua focus parity pose for INV-FS-3"}`
+		const poseJSON = `{"text":"lua focus parity pose for INV-SCENE-40"}`
 		emitted := ts.EmitSceneICContent(ctx, "core-scenes", sceneID,
 			owner.CharacterID, "scene_pose", poseJSON)
 		Expect(emitted.SubjectStr).To(ContainSubstring(sceneID.String()),
 			"emitted subject must carry the bare scene ULID")
 
-		// Authoritative delivery assertion (INV-FS-3): the joiner's live
+		// Authoritative delivery assertion (INV-SCENE-40): the joiner's live
 		// Subscribe stream receives a scene_pose frame. Pre-fix (without the
 		// Lua hostfunc or coordinator wiring) this would time out because no
 		// subscription was ever added. Post-fix the frame arrives once the
 		// Lua auto_focus_on_join call succeeds and registers the subscription.
 		frame := joiner.WaitForEvent(ctx, "scene_pose")
 		Expect(frame).NotTo(BeNil(),
-			"INV-FS-3: post-join pose MUST be delivered via the Lua-runtime "+
+			"INV-SCENE-40: post-join pose MUST be delivered via the Lua-runtime "+
 				"auto_focus_on_join path — the scene IC subscription must be "+
 				"wired into the joiner's live Subscribe filter set")
 		Expect(frame.GetType()).To(Equal("scene_pose"))
@@ -123,7 +123,7 @@ var _ = Describe("INV-FS-3: Lua-runtime auto_focus_on_join parity — live IC de
 		// metadata-only (no plaintext payload). Mirrors the binary assertion in
 		// scene_command_join_delivery_test.go: fail-closed, no plaintext leak.
 		Expect(frame.GetMetadataOnly()).To(BeTrue(),
-			"INV-FS-3: non-DEK-participant joiner MUST receive a metadata-only "+
+			"INV-SCENE-40: non-DEK-participant joiner MUST receive a metadata-only "+
 				"frame (fail-closed: no plaintext payload leak)")
 	})
 })

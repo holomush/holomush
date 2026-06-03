@@ -20,19 +20,19 @@ import (
 	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 )
 
-// INV-P5-5 + INV-P5-12 + INV-P5-13 (reconnect focus restoration):
+// INV-SCENE-18 + INV-SCENE-25 + INV-SCENE-26 (reconnect focus restoration):
 //
-// INV-P5-5: RestoreConnectionFocus MUST fall back to grid (FocusKey = nil) and
+// INV-SCENE-18: RestoreConnectionFocus MUST fall back to grid (FocusKey = nil) and
 // emit a structured warning when PresentingFocus is set but the matching
 // FocusMembership has been revoked. The validation and fallback MUST occur
 // inside one store-locked mutator — no read-then-mutate race.
 //
-// INV-P5-12: Concurrent RestoreConnectionFocus and LeaveFocus MUST serialize
+// INV-SCENE-25: Concurrent RestoreConnectionFocus and LeaveFocus MUST serialize
 // via the SessionConnectionMutator / FocusMutator path (D11 lock order). Both
 // orderings are valid outcomes; the invariant is that no corruption results —
 // no panic, no orphaned state, consistent post-state.
 //
-// INV-P5-13 (end-to-end reconnect path): after a terminal connection explicitly
+// INV-SCENE-26 (end-to-end reconnect path): after a terminal connection explicitly
 // focuses scene #A, then pivots to scene grid (isSceneGrid=true), the session's
 // PresentingFocus MUST remain #A (D10 — grid pivot MUST NOT touch
 // PresentingFocus). On reconnect, RestoreConnectionFocus reads PresentingFocus
@@ -43,9 +43,9 @@ import (
 // Postgres-backed sessiontest.NewStore, NullPolicy for FocusKindScene, no JetStream bus.
 //
 // Spec: docs/superpowers/specs/2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md
-// §7 (INV-P5-5, INV-P5-12), §8 (INV-P5-13).
+// §7 (INV-SCENE-18, INV-SCENE-25), §8 (INV-SCENE-26).
 // Bead: holomush-5rh.14.26.
-var _ = Describe("INV-P5-5 + INV-P5-12 + INV-P5-13: reconnect focus restoration", func() {
+var _ = Describe("INV-SCENE-18 + INV-SCENE-25 + INV-SCENE-26: reconnect focus restoration", func() {
 	// -----------------------------------------------------------------------
 	// Shared harness builder — wires a Coordinator + Postgres-backed store with a
 	// NullPolicy for FocusKindScene, then returns helpers to seed sessions.
@@ -70,7 +70,7 @@ var _ = Describe("INV-P5-5 + INV-P5-12 + INV-P5-13: reconnect focus restoration"
 	}
 
 	// -----------------------------------------------------------------------
-	// Scenario (a) — INV-P5-5: PresentingFocus set + membership revoked →
+	// Scenario (a) — INV-SCENE-18: PresentingFocus set + membership revoked →
 	// grid fallback + no error.
 	//
 	//   Alice's session has PresentingFocus = {Kind:Scene, TargetID:#42} but
@@ -80,7 +80,7 @@ var _ = Describe("INV-P5-5 + INV-P5-12 + INV-P5-13: reconnect focus restoration"
 	//     - return nil (no top-level error)
 	//     - leave Connection.FocusKey = nil (grid fallback)
 	// -----------------------------------------------------------------------
-	It("falls back to grid when PresentingFocus set but membership revoked (INV-P5-5)", func() {
+	It("falls back to grid when PresentingFocus set but membership revoked (INV-SCENE-18)", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		DeferCleanup(cancel)
 
@@ -112,20 +112,20 @@ var _ = Describe("INV-P5-5 + INV-P5-12 + INV-P5-13: reconnect focus restoration"
 			ClientType: "terminal",
 		})).To(Succeed())
 
-		// RestoreConnectionFocus MUST NOT error; INV-P5-5 fallback is silent
+		// RestoreConnectionFocus MUST NOT error; INV-SCENE-18 fallback is silent
 		// at the API boundary (warning is logged internally).
 		Expect(h.coord.RestoreConnectionFocus(ctx, sessionID, connID)).
-			To(Succeed(), "INV-P5-5: RestoreConnectionFocus MUST return nil even when membership is revoked")
+			To(Succeed(), "INV-SCENE-18: RestoreConnectionFocus MUST return nil even when membership is revoked")
 
 		// Grid fallback: FocusKey must remain nil.
 		conn, err := h.store.GetConnection(ctx, connID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(conn.FocusKey).To(BeNil(),
-			"INV-P5-5: Connection.FocusKey MUST be nil (grid fallback) when membership is revoked")
+			"INV-SCENE-18: Connection.FocusKey MUST be nil (grid fallback) when membership is revoked")
 	})
 
 	// -----------------------------------------------------------------------
-	// Scenario (b) — INV-P5-12: concurrent RestoreConnectionFocus vs
+	// Scenario (b) — INV-SCENE-25: concurrent RestoreConnectionFocus vs
 	// LeaveFocus → both serialization orderings are valid; no corruption.
 	//
 	//   Setup: Alice has scene #42 membership + PresentingFocus on scene #42.
@@ -136,7 +136,7 @@ var _ = Describe("INV-P5-5 + INV-P5-12 + INV-P5-13: reconnect focus restoration"
 	//     - leave-first:   conn.FocusKey = nil (membership gone when restore checks)
 	//   Assert: no panic, no error from either goroutine, consistent post-state.
 	// -----------------------------------------------------------------------
-	It("serializes concurrent reconnect vs leave with no corruption (INV-P5-12)", func() {
+	It("serializes concurrent reconnect vs leave with no corruption (INV-SCENE-25)", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		DeferCleanup(cancel)
 
@@ -187,7 +187,7 @@ var _ = Describe("INV-P5-5 + INV-P5-12 + INV-P5-13: reconnect focus restoration"
 			}()
 			wg.Wait()
 
-			// INV-P5-12: neither operation must error.
+			// INV-SCENE-25: neither operation must error.
 			Expect(restoreErr).NotTo(HaveOccurred(),
 				"iter %d: RestoreConnectionFocus MUST NOT error under concurrent LeaveFocus", i)
 			Expect(leaveErr).NotTo(HaveOccurred(),
@@ -198,9 +198,9 @@ var _ = Describe("INV-P5-5 + INV-P5-12 + INV-P5-13: reconnect focus restoration"
 			info, err := h.store.Get(ctx, sessionID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(info.FocusMemberships).To(BeEmpty(),
-				"iter %d: INV-P5-12: LeaveFocus MUST clear FocusMemberships", i)
+				"iter %d: INV-SCENE-25: LeaveFocus MUST clear FocusMemberships", i)
 			Expect(info.PresentingFocus).To(BeNil(),
-				"iter %d: INV-P5-12: LeaveFocus MUST clear PresentingFocus (pointed at removed membership)", i)
+				"iter %d: INV-SCENE-25: LeaveFocus MUST clear PresentingFocus (pointed at removed membership)", i)
 
 			// conn.FocusKey: either nil (leave-first → restore saw no membership)
 			// or the original scene focus (restore-first → leave doesn't touch FocusKey).
@@ -208,22 +208,22 @@ var _ = Describe("INV-P5-5 + INV-P5-12 + INV-P5-13: reconnect focus restoration"
 			Expect(err).NotTo(HaveOccurred())
 			if conn.FocusKey != nil {
 				Expect(conn.FocusKey.Kind).To(Equal(session.FocusKindScene),
-					"iter %d: INV-P5-12: if FocusKey set, Kind MUST be the original scene kind", i)
+					"iter %d: INV-SCENE-25: if FocusKey set, Kind MUST be the original scene kind", i)
 				Expect(conn.FocusKey.TargetID).To(Equal(sceneID),
-					"iter %d: INV-P5-12: if FocusKey set, TargetID MUST match original sceneID", i)
+					"iter %d: INV-SCENE-25: if FocusKey set, TargetID MUST match original sceneID", i)
 			}
 		}
 	})
 
 	// -----------------------------------------------------------------------
-	// Scenario (c) — INV-P5-13: scene focus → scene grid → disconnect+reconnect
+	// Scenario (c) — INV-SCENE-26: scene focus → scene grid → disconnect+reconnect
 	// → new connection lands on scene (end-to-end).
 	//
 	//   1. Alice has scene #A membership; terminal conn1 present.
 	//   2. SetConnectionFocus(conn1, #A, isSceneGrid=false) → conn1.FocusKey=#A,
 	//      PresentingFocus=#A (D9: terminal + explicit focus).
 	//   3. SetConnectionFocus(conn1, nil, isSceneGrid=true) → conn1.FocusKey=nil,
-	//      PresentingFocus REMAINS #A (D10/INV-P5-13: scene-grid MUST NOT touch it).
+	//      PresentingFocus REMAINS #A (D10/INV-SCENE-26: scene-grid MUST NOT touch it).
 	//   4. Disconnect: conn1 is dropped (no longer in store — simulate via
 	//      AddConnection + RemoveConnection or just verify state is set correctly
 	//      then add conn2).
@@ -231,7 +231,7 @@ var _ = Describe("INV-P5-5 + INV-P5-12 + INV-P5-13: reconnect focus restoration"
 	//      reads PresentingFocus = #A, validates membership, sets conn2.FocusKey=#A.
 	//   Assert: conn2.FocusKey = {Scene, #A}.
 	// -----------------------------------------------------------------------
-	It("restores PresentingFocus after disconnect+reconnect end-to-end (INV-P5-13)", func() {
+	It("restores PresentingFocus after disconnect+reconnect end-to-end (INV-SCENE-26)", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		DeferCleanup(cancel)
 
@@ -270,16 +270,16 @@ var _ = Describe("INV-P5-5 + INV-P5-12 + INV-P5-13: reconnect focus restoration"
 		Expect(err).NotTo(HaveOccurred())
 		Expect(conn1.FocusKey).NotTo(BeNil())
 		Expect(conn1.FocusKey.TargetID).To(Equal(sceneAID),
-			"INV-P5-13 step 2: conn1.FocusKey must be scene #A after explicit focus")
+			"INV-SCENE-26 step 2: conn1.FocusKey must be scene #A after explicit focus")
 
 		info, err := h.store.Get(ctx, sessionID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(info.PresentingFocus).NotTo(BeNil())
 		Expect(info.PresentingFocus.TargetID).To(Equal(sceneAID),
-			"INV-P5-13 step 2: PresentingFocus must be scene #A after explicit terminal focus")
+			"INV-SCENE-26 step 2: PresentingFocus must be scene #A after explicit terminal focus")
 
 		// Step 3: pivot to scene grid (isSceneGrid=true).
-		// D10/INV-P5-13: PresentingFocus MUST NOT be touched.
+		// D10/INV-SCENE-26: PresentingFocus MUST NOT be touched.
 		_, err = h.coord.SetConnectionFocus(ctx, conn1ID, nil, true)
 		Expect(err).NotTo(HaveOccurred(), "SetConnectionFocus to scene grid MUST succeed")
 
@@ -287,14 +287,14 @@ var _ = Describe("INV-P5-5 + INV-P5-12 + INV-P5-13: reconnect focus restoration"
 		conn1, err = h.store.GetConnection(ctx, conn1ID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(conn1.FocusKey).To(BeNil(),
-			"INV-P5-13 step 3: conn1.FocusKey MUST be nil after scene-grid pivot")
+			"INV-SCENE-26 step 3: conn1.FocusKey MUST be nil after scene-grid pivot")
 
 		info, err = h.store.Get(ctx, sessionID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(info.PresentingFocus).NotTo(BeNil(),
-			"INV-P5-13 step 3: PresentingFocus MUST remain #A after scene-grid pivot (D10)")
+			"INV-SCENE-26 step 3: PresentingFocus MUST remain #A after scene-grid pivot (D10)")
 		Expect(info.PresentingFocus.TargetID).To(Equal(sceneAID),
-			"INV-P5-13 step 3: PresentingFocus target MUST still be scene #A after grid pivot")
+			"INV-SCENE-26 step 3: PresentingFocus target MUST still be scene #A after grid pivot")
 
 		// Step 4: disconnect (simulate by removing conn1; conn2 will be the reconnect).
 		Expect(h.store.RemoveConnection(ctx, conn1ID)).To(Succeed(),
@@ -312,16 +312,16 @@ var _ = Describe("INV-P5-5 + INV-P5-12 + INV-P5-13: reconnect focus restoration"
 		// RestoreConnectionFocus: reads PresentingFocus=#A, validates membership,
 		// sets conn2.FocusKey=#A.
 		Expect(h.coord.RestoreConnectionFocus(ctx, sessionID, conn2ID)).
-			To(Succeed(), "INV-P5-13: RestoreConnectionFocus MUST succeed on reconnect")
+			To(Succeed(), "INV-SCENE-26: RestoreConnectionFocus MUST succeed on reconnect")
 
 		// Assert: new conn2.FocusKey = {Scene, #A}.
 		conn2, err := h.store.GetConnection(ctx, conn2ID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(conn2.FocusKey).NotTo(BeNil(),
-			"INV-P5-13: conn2.FocusKey MUST be restored to scene #A on reconnect")
+			"INV-SCENE-26: conn2.FocusKey MUST be restored to scene #A on reconnect")
 		Expect(conn2.FocusKey.Kind).To(Equal(session.FocusKindScene),
-			"INV-P5-13: restored FocusKey.Kind MUST be FocusKindScene")
+			"INV-SCENE-26: restored FocusKey.Kind MUST be FocusKindScene")
 		Expect(conn2.FocusKey.TargetID).To(Equal(sceneAID),
-			"INV-P5-13: restored FocusKey.TargetID MUST be scene #A")
+			"INV-SCENE-26: restored FocusKey.TargetID MUST be scene #A")
 	})
 })
