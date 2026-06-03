@@ -184,7 +184,7 @@ func (r *PostgresPluginRepo) ListAll(ctx context.Context) ([]PluginRow, error) {
 }
 
 // SweepInactive marks plugins inactive (sets gc_at) whose last_seen_at is
-// older than retentionDays. It never DELETEs rows (INV-W9ML-9). Returns the
+// older than retentionDays. It never DELETEs rows (INV-PLUGIN-17). Returns the
 // swept rows so the caller can log or act on them.
 //
 // retentionDays MUST be non-negative. A negative value would push the cutoff

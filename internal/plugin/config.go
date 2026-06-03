@@ -41,9 +41,9 @@ func validScalar(typ, value string) error {
 // MergePluginConfig computes the effective config a plugin receives: manifest
 // defaults overlaid by the server-provided override, per key (override wins).
 // It enforces, opaquely w.r.t. plugin meaning:
-//   - INV-PC-6: an override key not declared in schema → PLUGIN_CONFIG_UNKNOWN_KEY
-//   - INV-PC-5: an effective value not parseable to its declared type → PLUGIN_CONFIG_TYPE_INVALID
-//   - INV-PC-4: a required key with neither default nor override → PLUGIN_CONFIG_MISSING_REQUIRED
+//   - INV-PLUGIN-6: an override key not declared in schema → PLUGIN_CONFIG_UNKNOWN_KEY
+//   - INV-PLUGIN-5: an effective value not parseable to its declared type → PLUGIN_CONFIG_TYPE_INVALID
+//   - INV-PLUGIN-4: a required key with neither default nor override → PLUGIN_CONFIG_MISSING_REQUIRED
 //
 // Returns a flat map[string]string ready for opaque delivery to either runtime.
 func MergePluginConfig(schema map[string]ConfigParam, override map[string]string) (map[string]string, error) {

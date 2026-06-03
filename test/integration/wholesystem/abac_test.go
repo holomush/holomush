@@ -14,7 +14,7 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 )
 
-// INV-WS-2: the whole-system stack — real in-tree plugins (WithInTreePlugins)
+// INV-PLUGIN-19: the whole-system stack — real in-tree plugins (WithInTreePlugins)
 // loaded over the real seeded ABAC engine (WithRealABAC) — MUST evaluate a
 // plugin-installed manifest policy end-to-end. test-abac-widget ships
 // widget-read-normal (permit) and widget-forbid-restricted (forbid)
@@ -24,7 +24,7 @@ import (
 // AccessEngine() returns. The forbid spec is the real-engine sentinel: allow-all
 // would *permit* widget:restricted-1, so a passing deny proves the plugin
 // resolver and the seeded forbid policy are both live on the real engine.
-var _ = Describe("cross-plugin ABAC (INV-WS-2)", Ordered, func() {
+var _ = Describe("cross-plugin ABAC (INV-PLUGIN-19)", Ordered, func() {
 	var (
 		srv     *integrationtest.Server
 		subject string

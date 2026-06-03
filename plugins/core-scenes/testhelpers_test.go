@@ -42,7 +42,7 @@ func manifestServiceConfig(t testingT) *pluginv1.ServiceConfig {
 // newTestService creates a *SceneServiceImpl backed by store and applies the
 // manifest config defaults via applyConfig. This is the canonical test
 // constructor that replaces NewSceneServiceImpl(store) in all test files —
-// it ensures tests source config from the real manifest (INV-PC-7) rather
+// it ensures tests source config from the real manifest (INV-PLUGIN-7) rather
 // than a hard-coded Go default.
 func newTestService(t testingT, store sceneStorer) *SceneServiceImpl {
 	t.Helper()

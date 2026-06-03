@@ -262,7 +262,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		}
 	}
 
-	// INV-PC-3: compute and stash the merged config for this plugin so every
+	// INV-PLUGIN-3: compute and stash the merged config for this plugin so every
 	// per-delivery Register call injects an identical map to what the binary
 	// host delivers via ServiceConfig.PluginConfig. Fail-loud on error
 	// (same posture as goplugin/host.go:Load). Plugins with no config schema

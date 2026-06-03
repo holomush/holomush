@@ -79,7 +79,7 @@ func copyTree(src, dst string) error {
 }
 
 // requirePluginsEnv, when truthy, turns a missing binary-plugin artifact into a
-// hard failure instead of a skip (INV-WS-3). The CI integration job sets it.
+// hard failure instead of a skip (INV-PLUGIN-20). The CI integration job sets it.
 const requirePluginsEnv = "HOLOMUSH_REQUIRE_PLUGINS"
 
 // goPlatformDir is the per-platform subdir name build-plugins.sh emits
@@ -150,7 +150,7 @@ func (p pluginProviderSetter) PluginProvider() *attribute.PluginProvider { retur
 // Manager.LoadAll). It is engine-agnostic — compose it with WithPolicyEngine
 // for cross-plugin-ABAC coverage. If the binary-plugin artifacts are missing,
 // the harness skips the test (run `task plugin:build-all`), unless
-// HOLOMUSH_REQUIRE_PLUGINS is set, in which case it fails (INV-WS-3).
+// HOLOMUSH_REQUIRE_PLUGINS is set, in which case it fails (INV-PLUGIN-20).
 //
 // Event EMISSION is deliberately NOT wired: startPlugins does not call
 // Manager.ConfigureEventEmitter, and the WorldService is built without an
@@ -190,7 +190,7 @@ type pluginDeps struct {
 	// fires the store→cache invalidation (setup.go SetOnMutate) and plugin
 	// policies become live on the engine the harness evaluates against. nil under
 	// the allow-all default → startPlugins builds a fresh standalone installer
-	// (there is no engine cache to invalidate). (holomush-0f0f4.9, INV-WS-2)
+	// (there is no engine cache to invalidate). (holomush-0f0f4.9, INV-PLUGIN-19)
 	policyInstaller *plugins.PolicyInstaller
 	// cryptoPublisher is the crypto-enabled publisher (DEK manager + identity
 	// codec selector, rendering-wrapped) wired by WithPluginCrypto. When

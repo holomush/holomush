@@ -105,7 +105,7 @@ func publicArchiveNotFound() error {
 // via applyConfig (main.go). Per-scene overrides are read from the scene row
 // at StartScenePublish time and take precedence over these defaults. The zero
 // value is intentionally invalid — config MUST be applied via applyConfig
-// before any publish handler runs (INV-PC-7).
+// before any publish handler runs (INV-PLUGIN-7).
 type SceneServiceConfig struct {
 	DefaultVoteWindow    time.Duration
 	DefaultCoolOffWindow time.Duration

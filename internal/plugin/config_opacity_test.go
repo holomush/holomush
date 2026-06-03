@@ -12,13 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestHostDoesNotReferencePluginConfigKeys verifies INV-PC-1: the host treats
+// TestHostDoesNotReferencePluginConfigKeys verifies INV-PLUGIN-1: the host treats
 // plugin config opaquely — it MUST NOT contain literals of any plugin's config
 // keys (it understands only generic types, never specific plugin semantics).
 // This pins the boundary against a future host edit that special-cases a plugin
 // key such as "vote_window" or "cooloff_window".
 //
-// INV-PC-1: host opacity — host code MUST NOT reference plugin config key
+// INV-PLUGIN-1: host opacity — host code MUST NOT reference plugin config key
 // literals; keys are the exclusive concern of each plugin's manifest.
 func TestHostDoesNotReferencePluginConfigKeys(t *testing.T) {
 	bannedKeys := []string{"vote_window", "cooloff_window", "scheduler_interval"}

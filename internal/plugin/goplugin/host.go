@@ -338,7 +338,7 @@ func (h *Host) overrideFor(pluginName string) map[string]string {
 
 // manifestNeedsInit reports whether the host must call Init on a plugin.
 // Init injects services (requires/provides), provisions storage, captures
-// crypto.emits (INV-S5), AND — INV-PC-8 — delivers plugin_config for any
+// crypto.emits (INV-S5), AND — INV-PLUGIN-8 — delivers plugin_config for any
 // plugin declaring a config schema.
 func manifestNeedsInit(m *plugins.Manifest) bool {
 	return len(m.Requires) > 0 ||
@@ -696,7 +696,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 
 	// Call Init on plugins that need service injection (storage or requires),
 	// declare crypto.emits (INV-S5 needs InitResponse), or declare a config
-	// schema (INV-PC-8: plugin_config must be delivered).
+	// schema (INV-PLUGIN-8: plugin_config must be delivered).
 	needsInit := manifestNeedsInit(manifest)
 	var registeredEmitTypes []string
 	if needsInit {

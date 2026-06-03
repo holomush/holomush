@@ -154,7 +154,7 @@ type SceneServiceImpl struct {
 //
 // Config (vote/cool-off windows) is NOT seeded here — applyConfig (called
 // from Init and from newTestService in tests) is the sole config source so
-// production and tests both derive windows from the manifest (INV-PC-7).
+// production and tests both derive windows from the manifest (INV-PLUGIN-7).
 func NewSceneServiceImpl(store sceneStorer) *SceneServiceImpl {
 	return &SceneServiceImpl{
 		store:  store,

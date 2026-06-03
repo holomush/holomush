@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// TestNoLegacyIDReferencesInProductionCode enforces INV-W9ML-7: no
+// TestNoLegacyIDReferencesInProductionCode enforces INV-PLUGIN-15: no
 // LegacyID/legacy_id/App-Actor-Legacy-ID references in production code
 // (excludes docs/, *.pb.go, and *_test.go). Uses filepath.WalkDir to be
 // VCS-agnostic (works under both git and jj-colocated repos).
@@ -78,7 +78,7 @@ func TestNoLegacyIDReferencesInProductionCode(t *testing.T) {
 		}
 	}
 	if len(violations) > 0 {
-		t.Fatalf("INV-W9ML-7 violation: LegacyID references in production code:\n%s",
+		t.Fatalf("INV-PLUGIN-15 violation: LegacyID references in production code:\n%s",
 			strings.Join(violations, "\n"))
 	}
 }

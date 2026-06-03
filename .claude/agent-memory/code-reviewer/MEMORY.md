@@ -98,3 +98,25 @@
   line (here INV-P7-10 in EVENTBUS) recurs — Low non-blocking. spec-only refs:[]
   count must equal exactly the declared spec-only set (FS-2/6/7 + SH-1..5 = 8).
   Encountered: hz0v4.14.13 (2026-06-02) — READY.
+
+- **Scope with DEFERRED bare-INV-N + foreign tokens uses file-path owned_paths
+  (NOT /** globs) to keep the residual walk clean (hz0v4.14.14 PLUGIN READY).**
+  When a scope's directory holds un-migrated bare INV-N (deferred to a later pass)
+  or foreign-family tokens, owning the `dir/**` glob would make the residual walk
+  trip on those left-behind tokens. Fix: list only the specific migrated files in
+  `owned_paths`; put every mixed/foreign-carrying file in `shared_files` (shared ≠
+  residual-walked). PLUGIN: `pluginauthz/**`, `wholesystem/**`, `plugin/**` REMOVED
+  from scaffold globs → only `config.go`, `identity_registry.go`, `plugin_repo.go`,
+  2 eventbus grep tests, 3 WS harness files owned. Review checks that HELD: (1)
+  per-file token scan of every owned file → ONLY INV-<SCOPE>-N (no bare/foreign
+  leftover) ⇒ residual walk clean; (2) every mixed file in shared_files actually
+  carries a foreign/deferred token (lua/host.go=INV-6/7/8/S5, manager.go=EVENTBUS-11/
+  M1/S5, subsystem.go=INV-1/4/SCENE-38, harness.go=PRIVACY/ACCESS-4/P7-9/bare-1,
+  plugins.go=ACCESS-4) — justifies shared-not-owned; (3) STORE-owned
+  no_delete_grep_test.go is in PLUGIN shared (not owned); (4) deferred bare INV-1..5/8/11
+  LEFT in pluginauthz/hostfunc untouched. P7-split sanity: PLUGIN block has NO P7 entry,
+  no P7 token rewritten (pre-existing EVENTBUS P7-3/4/10 refs untouched). W9ML source
+  spec defines 1..9 (redesign §2.1 undercounted to 1..8) — code reality authoritative;
+  spec-only refs:[] = exactly W9ML-1..6 (6). Same `token: "...",}` trailing-comma noise
+  recurred AGAIN (3rd time: SCENE INV-7 ref) — Low non-blocking; renderer-inert.
+  Encountered: hz0v4.14.14 (2026-06-03) — READY.

@@ -21,7 +21,7 @@ type IdentityRegistry interface {
 	// THREE populations:
 	//   1. Currently-active plugins (rows with gc_at IS NULL).
 	//   2. Historically-registered plugins (rows with gc_at IS NOT NULL —
-	//      preserved across the registry's lifetime per INV-W9ML-9).
+	//      preserved across the registry's lifetime per INV-PLUGIN-17).
 	//   3. Compile-time system actor sentinels registered at Manager
 	//      bootstrap (e.g., SystemActorULID -> "system",
 	//      WorldServiceActorULID -> "world-service"). Sentinels are NOT

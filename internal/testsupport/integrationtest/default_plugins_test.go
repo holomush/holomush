@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestStartWithoutPluginsLeavesHarnessPluginFree enforces INV-WS-4: omitting
+// TestStartWithoutPluginsLeavesHarnessPluginFree enforces INV-PLUGIN-21: omitting
 // WithInTreePlugins yields a plugin-free harness; the plugin accessors panic.
 func TestStartWithoutPluginsLeavesHarnessPluginFree(t *testing.T) {
 	srv := Start(t)
