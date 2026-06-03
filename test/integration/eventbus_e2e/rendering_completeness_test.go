@@ -17,17 +17,17 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/audit"
 )
 
-// Rendering completeness specs — covers INV-GW-6 + INV-GW-13. After
+// Rendering completeness specs — covers INV-EVENTBUS-7 + INV-EVENTBUS-13. After
 // publishing host-builtin events through RenderingPublisher, every
 // events_audit row MUST have a non-null rendering JSONB column populated
 // from the App-Rendering NATS header by the audit projection.
 //
-//   - INV-GW-6: events_audit.rendering is NOT NULL for every projected row.
-//   - INV-GW-13: the rendering column carries the same metadata stamped by
+//   - INV-EVENTBUS-7: events_audit.rendering is NOT NULL for every projected row.
+//   - INV-EVENTBUS-13: the rendering column carries the same metadata stamped by
 //     the publisher (verified here via source_plugin = "builtin" for all
 //     host-owned event types).
 var _ = Describe("Rendering completeness", func() {
-	It("every events_audit row has non-null rendering with correct source_plugin (INV-GW-6, INV-GW-13)", func() {
+	It("every events_audit row has non-null rendering with correct source_plugin (INV-EVENTBUS-7, INV-EVENTBUS-13)", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		DeferCleanup(cancel)
 
@@ -79,7 +79,7 @@ var _ = Describe("Rendering completeness", func() {
 		}, 10*time.Second, 100*time.Millisecond).Should(BeTrue(),
 			"audit projection did not drain all events")
 
-		// INV-GW-6: every row has a non-null rendering JSONB column. Schema
+		// INV-EVENTBUS-7: every row has a non-null rendering JSONB column. Schema
 		// enforces NOT NULL, but we assert here so a regression that drops the
 		// constraint or writes 'null' JSONB is caught.
 		var nullCount int
@@ -88,9 +88,9 @@ var _ = Describe("Rendering completeness", func() {
 			"SELECT COUNT(*) FROM events_audit WHERE subject LIKE $1 AND rendering IS NULL",
 			subjectLike,
 		).Scan(&nullCount)).To(Succeed())
-		Expect(nullCount).To(BeZero(), "INV-GW-6: every events_audit row MUST have non-null rendering")
+		Expect(nullCount).To(BeZero(), "INV-EVENTBUS-7: every events_audit row MUST have non-null rendering")
 
-		// INV-GW-13: rendering column carries the metadata stamped by the
+		// INV-EVENTBUS-13: rendering column carries the metadata stamped by the
 		// publisher. Spot-check the first row's source_plugin, then verify
 		// every host-builtin row reports source_plugin="builtin".
 		var sourcePlugin string
@@ -108,6 +108,6 @@ var _ = Describe("Rendering completeness", func() {
 			subjectLike,
 		).Scan(&nonBuiltinCount)).To(Succeed())
 		Expect(nonBuiltinCount).To(BeZero(),
-			"INV-GW-13: every host-builtin row must report source_plugin='builtin'")
+			"INV-EVENTBUS-13: every host-builtin row must report source_plugin='builtin'")
 	})
 })

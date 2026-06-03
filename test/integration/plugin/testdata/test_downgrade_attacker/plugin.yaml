@@ -2,7 +2,7 @@
 # Copyright 2026 HoloMUSH Contributors
 
 # test_downgrade_attacker is a test-only binary plugin used by the
-# Phase 7 INV-P7-10 e2e suite (test/integration/eventbus_e2e/
+# Phase 7 INV-EVENTBUS-27 e2e suite (test/integration/eventbus_e2e/
 # plugin_downgrade_attacker_test.go). It exercises the read-side
 # PluginDowngradeFence end-to-end via real loader / gRPC / dispatcher
 # / fence chain.

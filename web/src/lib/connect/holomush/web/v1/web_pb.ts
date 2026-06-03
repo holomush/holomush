@@ -185,7 +185,7 @@ export const StreamEventsRequestSchema: GenMessage<StreamEventsRequest> = /*@__P
  * for direct display by the client. The gateway derives every field from the
  * core EventFrame and its RenderingMetadata in
  * internal/web/translate.go::translateEvent; events lacking rendering metadata
- * are dropped at the gateway (INV-GW-5) and never reach this message.
+ * are dropped at the gateway (INV-EVENTBUS-6) and never reach this message.
  *
  * @generated from message holomush.web.v1.GameEvent
  */
@@ -1866,7 +1866,7 @@ export enum EventChannel {
   BOTH = 3,
 
   /**
-   * EVENT_CHANNEL_AUDIT_ONLY mirrors corev1.EventChannel for INV-GW-16
+   * EVENT_CHANNEL_AUDIT_ONLY mirrors corev1.EventChannel for INV-EVENTBUS-16
    * lockstep parity. These events are dropped at the gRPC Subscribe
    * boundary and MUST NOT appear on the web wire format in practice.
    *

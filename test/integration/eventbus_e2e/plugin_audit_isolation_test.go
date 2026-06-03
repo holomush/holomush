@@ -177,7 +177,7 @@ type pgSceneLogClient struct {
 }
 
 func (c *pgSceneLogClient) AuditEvent(ctx context.Context, req *pluginv1.AuditEventRequest) (*pluginv1.AuditEventResponse, error) {
-	// Phase 7 (INV-P7-1, INV-P7-3): the host dispatcher's buildAuditRow
+	// Phase 7 (INV-P7-1, INV-EVENTBUS-25): the host dispatcher's buildAuditRow
 	// populates Row.{Codec,SchemaVer,DekRef,DekVersion} from the JS
 	// headers; the test stub mirrors the real plugin Insert by carrying
 	// those fields verbatim into the plugin's scene_log table.

@@ -50,14 +50,14 @@ func TestPhase7InvariantsHaveNamedTests(t *testing.T) {
 		testName string
 	}{
 		{"INV-P7-1", "TestDispatchForwardsCiphertextByteEqual"},
-		// INV-P7-3 was carried by func TestSceneLogHasDekColumns until the
+		// INV-EVENTBUS-25 was carried by func TestSceneLogHasDekColumns until the
 		// 1hq.26 testify+ginkgo migration converted the spec to a Ginkgo
 		// Describe registered under the suite entry TestBinaryPlugin (see
 		// test/integration/plugin/plugin_migration_test.go). The spec name
-		// "Scene log has DEK columns (INV-P7-3)" remains greppable inside
+		// "Scene log has DEK columns (INV-EVENTBUS-25)" remains greppable inside
 		// that file for invariant traceability.
-		{"INV-P7-3", "TestBinaryPlugin"},
-		{"INV-P7-4", "TestAuditRowStructMirrorsProto"},
+		{"INV-EVENTBUS-25", "TestBinaryPlugin"},
+		{"INV-EVENTBUS-26", "TestAuditRowStructMirrorsProto"},
 		{"INV-P7-5", "TestAuditRowRoundTripPreservesAllFields"},
 		// INV-P7-6 was carried by func TestSceneLogPreservesCiphertextAndAuditHeaders
 		// until the holomush-cz4s testify+ginkgo migration converted the spec to a
@@ -79,13 +79,13 @@ func TestPhase7InvariantsHaveNamedTests(t *testing.T) {
 		// spec name "Dispatcher and hot tier share selector (INV-P7-9)" remains
 		// greppable inside that file for invariant traceability.
 		{"INV-P7-9", "TestEventbusE2E"},
-		// INV-P7-10 was carried by func TestDowngradeAttackerMaliciousPathRefuses until
+		// INV-EVENTBUS-27 was carried by func TestDowngradeAttackerMaliciousPathRefuses until
 		// the holomush-cz4s testify+ginkgo migration converted the spec to a Ginkgo
 		// Describe registered under the suite entry TestEventbusE2E (see
 		// test/integration/eventbus_e2e/plugin_downgrade_attacker_test.go). The spec
-		// name "Downgrade attacker malicious path refuses (INV-P7-10)" remains
+		// name "Downgrade attacker malicious path refuses (INV-EVENTBUS-27)" remains
 		// greppable inside that file for invariant traceability.
-		{"INV-P7-10", "TestEventbusE2E"},
+		{"INV-EVENTBUS-27", "TestEventbusE2E"},
 		{"INV-P7-11", "TestDispatchDoesNotDecryptBeforeForward"},
 		// INV-P7-12 shares its named Ginkgo spec with INV-P7-6 (one round-trip
 		// covers both cleartext-vs-ciphertext invariants). Was carried by func

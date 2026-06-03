@@ -35,7 +35,7 @@ const (
 // QueryStreamHistory implements CoreServiceServer.QueryStreamHistory.
 //
 // The client-supplied req.Stream is a domain-relative dot reference; it is
-// qualified to a fully-qualified subject at entry (INV-ROPS-2) and every gate
+// qualified to a fully-qualified subject at entry (INV-EVENTBUS-18) and every gate
 // below operates on the qualified value. Colon-style legacy refs fail to
 // qualify and are rejected with InvalidArgument.
 //
@@ -101,7 +101,7 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	if req.Stream == "" {
 		return nil, oops.Code("INVALID_ARGUMENT").Errorf("stream is required")
 	}
-	// INV-ROPS-2: the read path is dot-native. Qualify the client-supplied
+	// INV-EVENTBUS-18: the read path is dot-native. Qualify the client-supplied
 	// domain-relative reference (e.g. "location.<id>") into a fully-qualified
 	// subject (events.<gid>.location.<id>) up front; everything below — the
 	// classifier switch, scope floor, ABAC resource, and bus fetch — operates
@@ -443,7 +443,7 @@ func fetchHistoryFramesFromBus(
 	identity eventbus.SessionIdentity,
 ) ([]*corev1.EventFrame, error) {
 	// qualifiedStream is already a fully-qualified dot subject (the caller ran
-	// eventbus.Qualify at read entry — INV-ROPS-2), so we construct the Subject
+	// eventbus.Qualify at read entry — INV-EVENTBUS-18), so we construct the Subject
 	// directly — no legacy colon translation on the read path.
 	sub, err := eventbus.NewSubject(qualifiedStream)
 	if err != nil {
@@ -511,7 +511,7 @@ func fetchHistoryFramesFromBus(
 		// Reverse index: collected[0] is newest; result[0] should be oldest.
 		j := len(collected) - 1 - i
 		// The frame's stream field is the already-qualified dot subject
-		// (INV-ROPS-2 / Task 6): return the event's subject directly rather
+		// (INV-EVENTBUS-18 / Task 6): return the event's subject directly rather
 		// than translating back to a legacy colon form.
 		frame := eventbusEventToEventFrame(collected[i], string(collected[i].Subject), reg)
 		frame.Cursor = encodeEventCursor(collected[i])
@@ -597,7 +597,7 @@ func rewrapFrameCursorsForPlugin(frames []*corev1.EventFrame, pluginName string)
 // eventbusEventToEventFrame converts an eventbus.Event to a proto EventFrame.
 // streamName is the fully-qualified dot subject (e.g.
 // "events.<gid>.location.01ABC") set on the Stream field — the read path is
-// dot-native per INV-ROPS-2, so no colon translation is applied.
+// dot-native per INV-EVENTBUS-18, so no colon translation is applied.
 // Event.MetadataOnly (populated by the hot-tier AuthGuard on deny) is
 // stamped into EventFrame.metadata_only (Phase 3b grounding doc Decision 4).
 // Event.NoPlaintextReason is stamped into EventFrame.no_plaintext_reason

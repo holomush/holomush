@@ -25,7 +25,7 @@ type Type string
 // NoPlaintextReason enumerates the causes for metadata_only=true on a
 // delivered event so operators and clients can distinguish authorization
 // denials, stale-DEK double-misses, and audit-queue backpressure.
-// Mirrors corev1.NoPlaintextReason; kept in sync by INV-GW-14 convention.
+// Mirrors corev1.NoPlaintextReason; kept in sync by INV-EVENTBUS-14 convention.
 type NoPlaintextReason uint8
 
 const (
@@ -103,7 +103,7 @@ type Actor struct {
 
 // EventChannel mirrors corev1.EventChannel for ergonomic host-side use
 // (avoids forcing test fixtures and emit-site struct literals to import
-// the proto package). Kept in lockstep with the proto enum by INV-GW-14.
+// the proto package). Kept in lockstep with the proto enum by INV-EVENTBUS-14.
 type EventChannel uint8
 
 const (

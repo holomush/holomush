@@ -328,7 +328,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	// VerbRegistry must exist before plugins load (they register verbs). It is
 	// also required by the locationFollower's synthetic location_state emit path
 	// so RenderingMetadata is stamped on the EventFrame (gateway drops
-	// nil-Rendering events per INV-GW-5, holomush-4wdu). Production wires this in
+	// nil-Rendering events per INV-EVENTBUS-6, holomush-4wdu). Production wires this in
 	// cmd/holomush/sub_grpc.go.
 	verbRegistry, err := core.BootstrapVerbRegistry("test")
 	require.NoError(t, err, "integrationtest.Start: BootstrapVerbRegistry")

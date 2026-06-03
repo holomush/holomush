@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestINV_ROPS_3_NoColonStreamLiterals asserts no production Go (or Lua) source
+// TestINV_EVENTBUS_19_NoColonStreamLiterals asserts no production Go (or Lua) source
 // contains a colon-style entity-prefix literal as a pub/sub STREAM name.
 // Supersedes INV-P4-1 (scene-only) with a repo-wide scan. Roots MUST exist
 // (fail, not skip).
@@ -35,7 +35,7 @@ import (
 // idiom `"plugin: <message>"` (e.g. panic("plugin: ...") / errors.New("plugin:
 // ...") in pkg/plugin/service.go and pkg/plugin/sdk.go). This scan targets
 // STREAM literals; "plugin" is not a stream domain.
-func TestINV_ROPS_3_NoColonStreamLiterals(t *testing.T) {
+func TestINV_EVENTBUS_19_NoColonStreamLiterals(t *testing.T) {
 	roots := []string{"../../../internal", "../../../pkg", "../../../plugins", "../../../cmd"}
 	pattern := regexp.MustCompile(`"(location|character|notifications|scene):`)
 	abacMarkers := []string{"Evaluate(", "CanPerformAction(", "NewAccessRequest(", ".Grant(", "ABAC resource ref"}
@@ -91,7 +91,7 @@ func TestINV_ROPS_3_NoColonStreamLiterals(t *testing.T) {
 				if skip {
 					continue
 				}
-				t.Errorf("INV-ROPS-3: colon-style stream literal in %s:%d:\n  %s", path, i+1, line)
+				t.Errorf("INV-EVENTBUS-19: colon-style stream literal in %s:%d:\n  %s", path, i+1, line)
 			}
 			return nil
 		})

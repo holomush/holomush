@@ -424,7 +424,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		// VerbRegistry feeds the synthetic-location_state emit path's
 		// RenderingMetadata stamp. Without it, the locationFollower's
 		// fallback EventFrame has nil Rendering and the gateway drops
-		// every synthetic event per INV-GW-5 (holomush-4wdu).
+		// every synthetic event per INV-EVENTBUS-6 (holomush-4wdu).
 		holoGRPC.WithVerbRegistry(s.cfg.VerbRegistry),
 	}
 	if s.cfg.StreamRegistry != nil {

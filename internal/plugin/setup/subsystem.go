@@ -113,7 +113,7 @@ type PluginSubsystemConfig struct {
 	LuaRegistryMaxSize int           // max Lua registry size per plugin state
 	// VerbRegistry is seeded by BootstrapVerbRegistry in core.go and passed
 	// through so the plugin manager can call WithVerbRegistry(). Required by
-	// Task 20's nil check (INV-GW-10), but safe to thread now.
+	// Task 20's nil check (INV-EVENTBUS-11), but safe to thread now.
 	VerbRegistry *core.VerbRegistry
 	// PluginConfigOverrides maps plugin name → (config key → value), merged
 	// over each plugin's manifest config defaults at init (override wins).

@@ -72,6 +72,38 @@ invariants.
 | `INV-PRESENCE-8` | Client presence map keyed by character_id; idempotent add/remove. | `I-PRES-8` | pending |
 | `INV-PRESENCE-9` | Response deduplicates by character_id (defense-in-depth). | `I-PRES-9` | pending |
 
+### `INV-EVENTBUS`
+
+| ID | Summary | Legacy | Binding |
+|----|---------|--------|---------|
+| `INV-EVENTBUS-1` | The gateway process MUST NOT import internal/world, internal/access, internal/store, internal/plugin, internal/eventbus, internal/auth/service, or internal/command. | `INV-GW-1` | pending |
+| `INV-EVENTBUS-2` | RenderingPublisher.Publish MUST stamp event.Rendering from the verb registry before publishing. | `INV-GW-2` | pending |
+| `INV-EVENTBUS-3` | RenderingPublisher.Publish MUST return EMIT_UNKNOWN_VERB when the verb registry has no entry for event.Type. | `INV-GW-3` | pending |
+| `INV-EVENTBUS-4` | JetStreamPublisher.Publish MUST copy event.Rendering into the eventbusv1.Event.Rendering proto field before proto.Marshal; round-trip publish + JetStream consume MUST preserve Rendering byte-for-byte. | `INV-GW-3a` | pending |
+| `INV-EVENTBUS-5` | RenderingPublisher.Publish MUST return EMIT_VALIDATION_FAILED when protovalidate.Validate(ev) fails on the stamped frame. | `INV-GW-4` | pending |
+| `INV-EVENTBUS-6` | Gateway translation (web + telnet) MUST drop events with Rendering == nil, increment holomush_gateway_dropped_nil_rendering_total, and log an error; MUST NOT render fallback. | `INV-GW-5` | pending |
+| `INV-EVENTBUS-7` | Every row in events_audit MUST have a non-nil rendering sub-message after a full E2E run. | `INV-GW-6` | pending |
+| `INV-EVENTBUS-8` | RenderingMetadata.label MUST be set when format == "speech"; enforced at the proto layer (CEL) and at VerbRegistry.Register. | `INV-GW-7` | pending |
+| `INV-EVENTBUS-9` | RenderingMetadata.display_target MUST NOT be EVENT_CHANNEL_UNSPECIFIED; enforced at the proto layer (enum.not_in: [0]). | `INV-GW-8` | pending |
+| `INV-EVENTBUS-10` | RenderingMetadata.source_plugin and source_plugin_version MUST be populated. For builtins, source_plugin == "builtin" and source_plugin_version == "host-<binary version>". | `INV-GW-9` | pending |
+| `INV-EVENTBUS-11` | The plugin manager MUST require a non-nil VerbRegistry at construction time; a nil registry returns ErrMissingVerbRegistry. | `INV-GW-10` | pending |
+| `INV-EVENTBUS-12` | BootstrapVerbRegistry() MUST be the only public path that returns a registry seeded with host builtins; RegisterBuiltinTypes MUST be unexported. | `INV-GW-11` | pending |
+| `INV-EVENTBUS-13` | The audit projection writer MUST read the App-Rendering NATS header and write its JSON value into events_audit.rendering (NOT NULL); a missing, empty, or malformed JSON header MUST fail the insert. | `INV-GW-13` | pending |
+| `INV-EVENTBUS-14` | The Go-side eventbus.RenderingMetadata struct and proto-side corev1.RenderingMetadata MUST stay in sync — same field set, same names. | `INV-GW-14` | pending |
+| `INV-EVENTBUS-15` | For every event published through RenderingPublisher, the JSON value of the App-Rendering NATS header MUST encode the same RenderingMetadata as the Rendering field inside the proto envelope — the two transports cannot drift. | `INV-GW-15` | pending |
+| `INV-EVENTBUS-16` | corev1.EventChannel and webv1.EventChannel MUST stay in lockstep — same enum values, same names, same numeric assignments. | `INV-GW-16` | pending |
+| `INV-EVENTBUS-17` | Colon-style subjects appear only as an ABAC policy-DSL identifier, never as a pub/sub stream name (enforced executably by INV-EVENTBUS-19 + INV-EVENTBUS-22). Spec-only — no standalone code annotation. | `INV-ROPS-1` | pending |
+| `INV-EVENTBUS-18` | Unclassifiable stream names are rejected at handler entry with INVALID_ARGUMENT, never routed to a default authorization branch. | `INV-ROPS-2` | pending |
+| `INV-EVENTBUS-19` | A CI meta-test asserts no production Go or Lua source contains a colon-style entity-prefix literal (location:, character:, scene:, plugin:, …) as a stream name (the eradication gate; ABAC builders are allowlisted). | `INV-ROPS-3` | pending |
+| `INV-EVENTBUS-20` | Producer↔subscriber symmetry: an integration test (real embedded NATS) emits through the production producer path for each migrated stream type and asserts a subscriber built from the production filter constructor receives it. | `INV-ROPS-4` | pending |
+| `INV-EVENTBUS-21` | Classifier non-collision: a table-driven unit test over the four internal/grpc classifiers asserts location is public-not-scene, character private-not-scene, scene private-and-scene, and unknown/malformed none. | `INV-ROPS-5` | pending |
+| `INV-EVENTBUS-22` | Role split both directions: for the same character ULID, the stream is dot (events.<gid>.character.<id>) and the ABAC subject is colon (character:<id>) — guards against an over-eager sweep migrating the ABAC subject. | `INV-ROPS-6` | pending |
+| `INV-EVENTBUS-23` | Temporal floor on every private stream: a late joiner cannot read pre-join history on each private stream type (scope floor applied, not zero-floor). StreamProvider populates resource.location + has_location for dot location streams; absent (not empty-sentinel) for non-location streams. | `INV-ROPS-7` | pending |
+| `INV-EVENTBUS-24` | Location-seed authorization survives the dot-form flip: an integration test seeds the engine and asserts a co-located character can emit to and read its own dot-form location stream, and a non-co-located character cannot. | `INV-ROPS-8` | pending |
+| `INV-EVENTBUS-25` | Plugin audit tables MUST add dek_ref BIGINT NULL and dek_version INTEGER NULL columns (mirror-events_audit contract); the columns are nullable, and identity-codec rows store NULL on both. | `INV-P7-3` | pending |
+| `INV-EVENTBUS-26` | Plugin SDK Layer 2: pluginsdk.AuditRow Go struct fields MUST be 1:1 with pluginauditpb.AuditRow proto fields (id, subject, type, timestamp, actor, codec, payload, dek_ref, dek_version). | `INV-P7-4` | pending |
+| `INV-EVENTBUS-27` | Plugin migrations MAY run before or after Phase 7's host migration (no host-side schema change beyond Phases 2–5); the two crypto columns added to plugin tables are nullable and require no new host-side support. | `INV-P7-10` | pending |
+
 ### `INV-CLUSTER`
 
 | ID | Summary | Legacy | Binding |

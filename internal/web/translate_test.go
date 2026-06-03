@@ -413,7 +413,7 @@ func TestTranslateEvent_CorruptPayload(t *testing.T) {
 }
 
 func TestTranslateEventDropsEventWithNilRenderingAndIncrementsMetric(t *testing.T) {
-	// INV-GW-5: events arriving without RenderingMetadata are dropped at
+	// INV-EVENTBUS-6: events arriving without RenderingMetadata are dropped at
 	// the gateway and counted via gatewaymetrics.DroppedNilRenderingTotal.
 	// A non-zero counter indicates an upstream invariant violation in the
 	// core process's RenderingPublisher.
@@ -474,7 +474,7 @@ func TestTranslateEvent_PopulatesEventIdForStateEvents(t *testing.T) {
 	assert.Equal(t, expectedID, got.GetEventId())
 }
 
-// TestEventChannelEnumsInLockstep is INV-GW-16. corev1.EventChannel and
+// TestEventChannelEnumsInLockstep is INV-EVENTBUS-16. corev1.EventChannel and
 // webv1.EventChannel MUST stay in lockstep — same enum values, same names,
 // same numeric assignments.
 func TestEventChannelEnumsInLockstep(t *testing.T) {

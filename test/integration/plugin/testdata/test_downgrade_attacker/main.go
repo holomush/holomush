@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-// Binary plugin fixture for the Phase 7 INV-P7-10 e2e test
+// Binary plugin fixture for the Phase 7 INV-EVENTBUS-27 e2e test
 // (holomush-1r0v.4). The fixture exercises the read-side
 // PluginDowngradeFence end-to-end through the real loader / gRPC /
 // dispatcher / fence chain.

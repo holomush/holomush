@@ -30,7 +30,7 @@ import (
 )
 
 // downgradeAttackerSuite encapsulates the binary-fixture e2e harness for
-// the Phase 7 INV-P7-10 attack-path coverage. Each test compiles + spawns
+// the Phase 7 INV-EVENTBUS-27 attack-path coverage. Each test compiles + spawns
 // a fresh fixture, builds a PluginHistoryRouter wrapped by a
 // PluginDowngradeFence configured from the fixture's manifest, then drives
 // honest and malicious queries through the fence.
@@ -163,9 +163,9 @@ func (s *downgradeAttackerSuite) queryFenced(subject string) []eventbus.Event {
 	return out
 }
 
-// Downgrade attacker specs — INV-P7-10. Covers both the honest path and the
+// Downgrade attacker specs — INV-EVENTBUS-27. Covers both the honest path and the
 // malicious path of the PluginDowngradeFence via a real binary fixture.
-var _ = Describe("Downgrade attacker malicious path refuses (INV-P7-10)", func() {
+var _ = Describe("Downgrade attacker malicious path refuses (INV-EVENTBUS-27)", func() {
 	It("fence refuses malicious downgrade row with metadata_only and violation signal", func() {
 		suite := newDowngradeAttackerSuiteForGinkgo()
 
@@ -175,15 +175,15 @@ var _ = Describe("Downgrade attacker malicious path refuses (INV-P7-10)", func()
 
 		got := events[0]
 		Expect(got.MetadataOnly).To(BeTrue(),
-			"INV-P7-10: malicious downgrade row MUST surface as metadata_only=true")
+			"INV-EVENTBUS-27: malicious downgrade row MUST surface as metadata_only=true")
 		Expect(got.NoPlaintextReason).To(Equal(eventbus.NoPlaintextReasonDowngradeRefused),
-			"INV-P7-10: refusal reason MUST be DowngradeRefused")
+			"INV-EVENTBUS-27: refusal reason MUST be DowngradeRefused")
 		Expect(got.Payload).To(BeEmpty(),
-			"INV-P7-10: refused row MUST NOT leak plaintext payload")
+			"INV-EVENTBUS-27: refused row MUST NOT leak plaintext payload")
 
 		violations := suite.emitter.snapshot()
 		Expect(violations).To(HaveLen(1),
-			"INV-P7-10: violation emitter MUST fire exactly once for the refused row")
+			"INV-EVENTBUS-27: violation emitter MUST fire exactly once for the refused row")
 		Expect(violations[0].pluginName).To(Equal(downgradeAttackerPluginName))
 		Expect(violations[0].rowType).To(Equal(downgradeAttackerSensitive))
 		Expect(violations[0].refusalCode).To(Equal("AUDIT_ROW_DOWNGRADE_DETECTED"))
@@ -202,11 +202,11 @@ var _ = Describe("Downgrade attacker honest path delivers", func() {
 
 		got := events[0]
 		Expect(got.MetadataOnly).To(BeFalse(),
-			"INV-P7-10 honest path: row MUST NOT be marked metadata_only")
+			"INV-EVENTBUS-27 honest path: row MUST NOT be marked metadata_only")
 		Expect(got.NoPlaintextReason).To(Equal(eventbus.NoPlaintextReasonUnspecified),
-			"INV-P7-10 honest path: NoPlaintextReason MUST be unset for clean rows")
+			"INV-EVENTBUS-27 honest path: NoPlaintextReason MUST be unset for clean rows")
 		Expect(got.Payload).To(Equal(cachedPayload),
-			"INV-P7-10 honest path: fence MUST pass payload through byte-equal")
+			"INV-EVENTBUS-27 honest path: fence MUST pass payload through byte-equal")
 
 		row := eventbus.AuditRowOf(got)
 		Expect(row).NotTo(BeNil(), "router MUST stamp the source-of-truth AuditRow")
@@ -215,7 +215,7 @@ var _ = Describe("Downgrade attacker honest path delivers", func() {
 		Expect(*row.DekRef).To(Equal(downgradeAttackerCachedDekRef))
 
 		Expect(suite.emitter.snapshot()).To(BeEmpty(),
-			"INV-P7-10 honest path: violation emitter MUST NOT fire")
+			"INV-EVENTBUS-27 honest path: violation emitter MUST NOT fire")
 	})
 })
 

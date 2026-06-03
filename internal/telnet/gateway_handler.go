@@ -1096,7 +1096,7 @@ func (h *GatewayHandler) sendProtoEvent(ev *corev1.EventFrame) {
 // formatEvent dispatches formatting by EventFrame.Rendering category+format.
 // Returns empty string for events that should not be displayed in telnet.
 //
-// INV-GW-5: events arriving without rendering metadata are dropped (return
+// INV-EVENTBUS-6: events arriving without rendering metadata are dropped (return
 // empty string) and counted via gatewaymetrics.DroppedNilRenderingTotal.
 // A non-zero counter indicates the core process's RenderingPublisher
 // failed to stamp rendering before publish, or a publisher path bypassed
@@ -1106,7 +1106,7 @@ func (h *GatewayHandler) formatEvent(ev *corev1.EventFrame) string {
 	rendering := ev.GetRendering()
 	if rendering == nil {
 		slog.Error(
-			"telnet: dropping event with nil Rendering (INV-GW-5)",
+			"telnet: dropping event with nil Rendering (INV-EVENTBUS-6)",
 			"event_id", ev.GetId(),
 			"event_type", ev.GetType(),
 		)

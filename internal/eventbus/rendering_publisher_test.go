@@ -35,7 +35,7 @@ func newSeededTestRegistry(t *testing.T) *core.VerbRegistry {
 	return r
 }
 
-// TestRenderingPublisherStampsEventRendering is INV-GW-2.
+// TestRenderingPublisherStampsEventRendering is INV-EVENTBUS-2.
 // RenderingPublisher.Publish MUST stamp event.Rendering from the verb
 // registry before publishing.
 func TestRenderingPublisherStampsEventRendering(t *testing.T) {
@@ -63,7 +63,7 @@ func TestRenderingPublisherStampsEventRendering(t *testing.T) {
 	assert.Equal(t, "0.1.0", got.Rendering.SourcePluginVersion)
 }
 
-// TestRenderingPublisherStampsAppRenderingHeader is INV-GW-15. The
+// TestRenderingPublisherStampsAppRenderingHeader is INV-EVENTBUS-15. The
 // header value MUST encode the same RenderingMetadata as event.Rendering,
 // using protojson.MarshalOptions{UseProtoNames, UseEnumNumbers=false}.
 func TestRenderingPublisherStampsAppRenderingHeader(t *testing.T) {
@@ -103,7 +103,7 @@ func TestRenderingPublisherStampsAppRenderingHeader(t *testing.T) {
 	assert.Equal(t, "speech", headerMD.GetFormat())
 }
 
-// TestRenderingPublisherUnknownVerb is INV-GW-3. Registry-miss returns
+// TestRenderingPublisherUnknownVerb is INV-EVENTBUS-3. Registry-miss returns
 // EMIT_UNKNOWN_VERB and does NOT publish.
 func TestRenderingPublisherUnknownVerb(t *testing.T) {
 	inner := &fakePublisher{}
@@ -123,7 +123,7 @@ func TestRenderingPublisherUnknownVerb(t *testing.T) {
 	assert.Empty(t, inner.published, "must not publish on unknown verb")
 }
 
-// TestRenderingPublisherSourcePluginVersionForBuiltin is INV-GW-9 for builtins.
+// TestRenderingPublisherSourcePluginVersionForBuiltin is INV-EVENTBUS-10 for builtins.
 // host-owned event types (registered via BootstrapVerbRegistry) MUST have
 // source_plugin == "builtin" and source_plugin_version == "host-<binary version>".
 func TestRenderingPublisherSourcePluginVersionForBuiltin(t *testing.T) {
@@ -149,7 +149,7 @@ func TestRenderingPublisherSourcePluginVersionForBuiltin(t *testing.T) {
 	assert.Equal(t, "host-0.4.2-test", got.SourcePluginVersion)
 }
 
-// TestRenderingPublisherSourcePluginVersionForPlugin is INV-GW-9 for plugins.
+// TestRenderingPublisherSourcePluginVersionForPlugin is INV-EVENTBUS-10 for plugins.
 // Plugin-owned event types MUST have source_plugin = manifest name and
 // source_plugin_version = manifest version.
 func TestRenderingPublisherSourcePluginVersionForPlugin(t *testing.T) {

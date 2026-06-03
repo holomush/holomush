@@ -445,7 +445,7 @@ func ActorKindToProto(k ActorKind) eventbusv1.ActorKind {
 }
 
 // RenderingToProto converts the host-side RenderingMetadata to its proto
-// form. Returns nil if input is nil. INV-GW-14 ensures parity.
+// form. Returns nil if input is nil. INV-EVENTBUS-14 ensures parity.
 func RenderingToProto(r *RenderingMetadata) *corev1.RenderingMetadata {
 	if r == nil {
 		return nil

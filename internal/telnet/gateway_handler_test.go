@@ -1284,7 +1284,7 @@ func TestFormatEvent_System(t *testing.T) {
 }
 
 func TestFormatEventDropsEventWithNilRenderingAndIncrementsMetric(t *testing.T) {
-	// INV-GW-5: events arriving without RenderingMetadata are dropped at
+	// INV-EVENTBUS-6: events arriving without RenderingMetadata are dropped at
 	// the gateway and counted via gatewaymetrics.DroppedNilRenderingTotal.
 	// A non-zero counter indicates an upstream invariant violation in the
 	// core process's RenderingPublisher.

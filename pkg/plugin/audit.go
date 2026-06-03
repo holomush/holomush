@@ -169,7 +169,7 @@ func (r *contextRecorder) record(id, message string, effect AuditEffect, attrs A
 // pluginsdk.AuditRow is the projection-only-plus-crypto-envelope shape
 // plugins store in their audit tables (e.g. plugin_core_scenes.scene_log)
 // and return on PluginAuditService.QueryHistory. It mirrors
-// pluginv1.AuditRow 1:1 (INV-P7-4) and is consumed via the two
+// pluginv1.AuditRow 1:1 (INV-EVENTBUS-26) and is consumed via the two
 // helpers below.
 //
 // Plugin authors typically don't construct AuditRow manually — they use

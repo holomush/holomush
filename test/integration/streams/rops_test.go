@@ -25,7 +25,7 @@ import (
 	"github.com/holomush/holomush/internal/world"
 )
 
-// TestINV_ROPS_4_ProducerSubscriberSymmetry pins INV-ROPS-4: an event emitted
+// TestINV_EVENTBUS_20_ProducerSubscriberSymmetry pins INV-EVENTBUS-20: an event emitted
 // to a location's DOT stream (world.LocationStream → eventbus.Qualify) is
 // delivered to a live Subscribe stream whose filter the server derives the same
 // way (server.go:923 — world.LocationStream(info.LocationID)). If the producer
@@ -38,7 +38,7 @@ import (
 // production reconnect flow and the privacy INV-PRIVACY-3 reattach pattern. The
 // post-move emit's JetStream timestamp is strictly after the MoveTo-stamped
 // LocationArrivedAt floor, so it passes the per-event floor at delivery.
-func TestINV_ROPS_4_ProducerSubscriberSymmetry(t *testing.T) {
+func TestINV_EVENTBUS_20_ProducerSubscriberSymmetry(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	s := integrationtest.Start(t)
@@ -62,7 +62,7 @@ func TestINV_ROPS_4_ProducerSubscriberSymmetry(t *testing.T) {
 	require.Equal(t, "say", frame.GetType())
 }
 
-// TestINV_ROPS_7_LateJoinerFloorAndLocationGate pins INV-ROPS-7: a session that
+// TestINV_EVENTBUS_23_LateJoinerFloorAndLocationGate pins INV-EVENTBUS-23: a session that
 // arrives at a location AFTER an event was emitted there cannot read that
 // pre-arrival event — the scope floor (streamScopeFloor → LocationArrivedAt for
 // location streams) excludes it. The read itself is authorized by the LOCATION
@@ -73,7 +73,7 @@ func TestINV_ROPS_4_ProducerSubscriberSymmetry(t *testing.T) {
 // DenyAllEngine is used so staffOverride returns false and the hard-gate is the
 // load-bearing authorization path (otherwise the allow-all default would bypass
 // it via read_unrestricted_history).
-func TestINV_ROPS_7_LateJoinerFloorAndLocationGate(t *testing.T) {
+func TestINV_EVENTBUS_23_LateJoinerFloorAndLocationGate(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	// DenyAll: staffOverride=false → the location hard-gate is exercised, not bypassed.
@@ -107,7 +107,7 @@ func TestINV_ROPS_7_LateJoinerFloorAndLocationGate(t *testing.T) {
 	for _, f := range frames {
 		require.False(t,
 			f.GetTimestamp().AsTime().Before(late.LocationArrivedAt),
-			"INV-ROPS-7: frame %q at %s leaked before late joiner's LocationArrivedAt %s (scope floor)",
+			"INV-EVENTBUS-23: frame %q at %s leaked before late joiner's LocationArrivedAt %s (scope floor)",
 			f.GetType(), f.GetTimestamp().AsTime(), late.LocationArrivedAt)
 	}
 
@@ -125,7 +125,7 @@ func TestINV_ROPS_7_LateJoinerFloorAndLocationGate(t *testing.T) {
 			sawPost = true
 		}
 	}
-	require.True(t, sawPost, "INV-ROPS-7 vacuous-pass guard: a post-arrival event MUST be readable by the late joiner")
+	require.True(t, sawPost, "INV-EVENTBUS-23 vacuous-pass guard: a post-arrival event MUST be readable by the late joiner")
 
 	// TODO(rops): also assert the read traversed the location HARD-GATE path
 	// (not ABAC fall-through) by inspecting the server's "stream access denied by
@@ -137,7 +137,7 @@ func TestINV_ROPS_7_LateJoinerFloorAndLocationGate(t *testing.T) {
 	// success proves the hard-gate (not ABAC) authorized it.
 }
 
-// TestINV_ROPS_8_LocationSeedAuthorization pins INV-ROPS-8: with the real
+// TestINV_EVENTBUS_24_LocationSeedAuthorization pins INV-EVENTBUS-24: with the real
 // seeded ABAC engine, the dot location stream's authorization is location-bound.
 // A co-located character may read its location stream (hard-gate permit); a
 // non-co-located character is denied (hard-gate STREAM_ACCESS_DENIED).
@@ -149,7 +149,7 @@ func TestINV_ROPS_7_LateJoinerFloorAndLocationGate(t *testing.T) {
 // and the hard-gate is the deciding path. (EmitDirectEvent publishes straight
 // to the bus and is NOT a deny surface — authorization lives on the read path,
 // so the deny assertion is on QueryStreamHistory, per the production gates.)
-func TestINV_ROPS_8_LocationSeedAuthorization(t *testing.T) {
+func TestINV_EVENTBUS_24_LocationSeedAuthorization(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	s := integrationtest.Start(t, integrationtest.WithRealABAC())
@@ -168,7 +168,7 @@ func TestINV_ROPS_8_LocationSeedAuthorization(t *testing.T) {
 
 	// Permit: co-located read succeeds under the real seeded engine.
 	_, err := resident.QueryStreamHistory(ctx, world.LocationStream(locID))
-	require.NoError(t, err, "INV-ROPS-8: co-located character MUST read its own dot location stream under real ABAC")
+	require.NoError(t, err, "INV-EVENTBUS-24: co-located character MUST read its own dot location stream under real ABAC")
 
 	// Deny: an outsider at a DIFFERENT location is rejected reading locID's stream.
 	otherLoc := s.NewLocation(ctx)
@@ -177,9 +177,9 @@ func TestINV_ROPS_8_LocationSeedAuthorization(t *testing.T) {
 	outsider.MoveTo(ctx, otherLoc)
 
 	_, err = outsider.QueryStreamHistory(ctx, world.LocationStream(locID))
-	require.Error(t, err, "INV-ROPS-8: non-co-located read MUST be denied by the location hard-gate")
+	require.Error(t, err, "INV-EVENTBUS-24: non-co-located read MUST be denied by the location hard-gate")
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok, "denial must surface as an oops error")
 	require.Equal(t, "STREAM_ACCESS_DENIED", oopsErr.Code(),
-		"INV-ROPS-8: non-co-located denial MUST collapse to STREAM_ACCESS_DENIED")
+		"INV-EVENTBUS-24: non-co-located denial MUST collapse to STREAM_ACCESS_DENIED")
 }

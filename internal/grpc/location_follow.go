@@ -43,7 +43,7 @@ type locationFollower struct {
 	updateFilters locationFilterUpdater
 	// verbRegistry is the source of rendering metadata for the synthetic
 	// location_state events this follower emits. Required: events emitted
-	// without RenderingMetadata are dropped by the gateway per INV-GW-5
+	// without RenderingMetadata are dropped by the gateway per INV-EVENTBUS-6
 	// (internal/web/translate.go:42-60), so a nil registry guarantees every
 	// synthetic emit silently disappears at the gateway boundary.
 	verbRegistry *core.VerbRegistry
@@ -247,7 +247,7 @@ func (lf *locationFollower) buildLocationState(ctx context.Context, locationID u
 		return nil, oops.Wrapf(err, "marshal location_state")
 	}
 
-	// Stamp RenderingMetadata from the verb registry so the gateway's INV-GW-5
+	// Stamp RenderingMetadata from the verb registry so the gateway's INV-EVENTBUS-6
 	// guard (internal/web/translate.go:42-60) doesn't drop this synthetic
 	// event. This path bypasses the bus (and therefore RenderingPublisher),
 	// so we must do the same lookup here that RenderingPublisher.Publish
@@ -284,13 +284,13 @@ func (lf *locationFollower) buildLocationState(ctx context.Context, locationID u
 func buildLocationStateRendering(registry *core.VerbRegistry) (*corev1.RenderingMetadata, error) {
 	if registry == nil {
 		return nil, oops.Code("LOCATION_STATE_NO_REGISTRY").
-			Errorf("verb registry not configured; synthetic location_state would fail INV-GW-5 at gateway")
+			Errorf("verb registry not configured; synthetic location_state would fail INV-EVENTBUS-6 at gateway")
 	}
 	reg, ok := registry.Lookup(string(core.EventTypeLocationState))
 	if !ok {
 		return nil, oops.Code("LOCATION_STATE_UNREGISTERED").
 			With("event_type", string(core.EventTypeLocationState)).
-			Errorf("location_state verb not registered; synthetic emit would fail INV-GW-5 at gateway")
+			Errorf("location_state verb not registered; synthetic emit would fail INV-EVENTBUS-6 at gateway")
 	}
 	return &corev1.RenderingMetadata{
 		Category:            reg.Category,

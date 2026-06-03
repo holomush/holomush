@@ -1071,7 +1071,7 @@ func (m *reconnectCoreClient) Subscribe(ctx context.Context, req *corev1.Subscri
 }
 
 // reconnectEventFrame builds a forward-able event frame carrying an id (the dedup
-// key) and the rendering band the gateway requires (INV-GW-5).
+// key) and the rendering band the gateway requires (INV-EVENTBUS-6).
 func reconnectEventFrame(id string) *corev1.SubscribeResponse {
 	return &corev1.SubscribeResponse{
 		Frame: &corev1.SubscribeResponse_Event{

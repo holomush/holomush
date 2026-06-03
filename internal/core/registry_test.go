@@ -54,7 +54,7 @@ func TestVerbRegistryLookupUnknownTypeReturnsFalse(t *testing.T) {
 }
 
 // TestVerbRegistryRegisterSpeechFormatWithoutLabelReturnsError enforces
-// INV-GW-7: RenderingMetadata.label MUST be set when format == "speech".
+// INV-EVENTBUS-8: RenderingMetadata.label MUST be set when format == "speech".
 func TestVerbRegistryRegisterSpeechFormatWithoutLabelReturnsError(t *testing.T) {
 	r := NewVerbRegistry()
 	err := r.RegisterWithSource(VerbRegistration{

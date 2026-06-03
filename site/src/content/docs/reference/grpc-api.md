@@ -46,6 +46,8 @@ title: "gRPC API Reference"
     - [PresenceEntry](#holomush-core-v1-PresenceEntry)
     - [QueryStreamHistoryRequest](#holomush-core-v1-QueryStreamHistoryRequest)
     - [QueryStreamHistoryResponse](#holomush-core-v1-QueryStreamHistoryResponse)
+    - [RefreshConnectionRequest](#holomush-core-v1-RefreshConnectionRequest)
+    - [RefreshConnectionResponse](#holomush-core-v1-RefreshConnectionResponse)
     - [RenderingMetadata](#holomush-core-v1-RenderingMetadata)
     - [RequestMeta](#holomush-core-v1-RequestMeta)
     - [RequestPasswordResetRequest](#holomush-core-v1-RequestPasswordResetRequest)
@@ -184,6 +186,8 @@ title: "gRPC API Reference"
     - [PluginHostServiceEvaluateResponse](#holomush-plugin-v1-PluginHostServiceEvaluateResponse)
     - [PluginHostServiceGetCommandHelpRequest](#holomush-plugin-v1-PluginHostServiceGetCommandHelpRequest)
     - [PluginHostServiceGetCommandHelpResponse](#holomush-plugin-v1-PluginHostServiceGetCommandHelpResponse)
+    - [PluginHostServiceGetSettingRequest](#holomush-plugin-v1-PluginHostServiceGetSettingRequest)
+    - [PluginHostServiceGetSettingResponse](#holomush-plugin-v1-PluginHostServiceGetSettingResponse)
     - [PluginHostServiceIsAnyConnFocusedRequest](#holomush-plugin-v1-PluginHostServiceIsAnyConnFocusedRequest)
     - [PluginHostServiceIsAnyConnFocusedResponse](#holomush-plugin-v1-PluginHostServiceIsAnyConnFocusedResponse)
     - [PluginHostServiceJoinFocusRequest](#holomush-plugin-v1-PluginHostServiceJoinFocusRequest)
@@ -212,6 +216,8 @@ title: "gRPC API Reference"
     - [PluginHostServiceRequestEmitTokenResponse](#holomush-plugin-v1-PluginHostServiceRequestEmitTokenResponse)
     - [PluginHostServiceSetConnectionFocusRequest](#holomush-plugin-v1-PluginHostServiceSetConnectionFocusRequest)
     - [PluginHostServiceSetConnectionFocusResponse](#holomush-plugin-v1-PluginHostServiceSetConnectionFocusResponse)
+    - [PluginHostServiceSetSettingRequest](#holomush-plugin-v1-PluginHostServiceSetSettingRequest)
+    - [PluginHostServiceSetSettingResponse](#holomush-plugin-v1-PluginHostServiceSetSettingResponse)
     - [QuerySessionStreamsRequest](#holomush-plugin-v1-QuerySessionStreamsRequest)
     - [QuerySessionStreamsResponse](#holomush-plugin-v1-QuerySessionStreamsResponse)
     - [ServiceConfig](#holomush-plugin-v1-ServiceConfig)
@@ -222,6 +228,7 @@ title: "gRPC API Reference"
     - [CommandStatus](#holomush-plugin-v1-CommandStatus)
     - [FocusFailureReason](#holomush-plugin-v1-FocusFailureReason)
     - [FocusKind](#holomush-plugin-v1-FocusKind)
+    - [SettingScope](#holomush-plugin-v1-SettingScope)
     - [StreamReplayMode](#holomush-plugin-v1-StreamReplayMode)
   
     - [PluginHostService](#holomush-plugin-v1-PluginHostService)
@@ -698,7 +705,7 @@ the live Subscribe path and the QueryStreamHistory backfill path.
 | actor_id | [string](#string) |  | actor_id identifies the specific actor that produced the event. |
 | payload | [bytes](#bytes) |  | payload is the type-specific event body, opaque at this layer. Empty when metadata_only is true. |
 | cursor | [bytes](#bytes) |  | cursor is the opaque pagination cursor for this event. The server populates it on QueryStreamHistory responses and Subscribe deliveries so clients can resume without re-delivering events they already processed. |
-| rendering | [RenderingMetadata](#holomush-core-v1-RenderingMetadata) |  | rendering is the cleartext rendering band, populated by RenderingPublisher at emit time. It MUST be present on every frame this server produces (INV-GW-2); the gateway treats absence as a contract violation (drops &#43; metric &#43; log per INV-GW-5). |
+| rendering | [RenderingMetadata](#holomush-core-v1-RenderingMetadata) |  | rendering is the cleartext rendering band, populated by RenderingPublisher at emit time. It MUST be present on every frame this server produces (INV-EVENTBUS-2); the gateway treats absence as a contract violation (drops &#43; metric &#43; log per INV-EVENTBUS-6). |
 | metadata_only | [bool](#bool) |  | metadata_only flags a delivery whose plaintext was withheld by the host&#39;s AuthGuard (Phase 3b decrypt path). When true, payload is empty bytes and the recipient was either not in the DEK&#39;s participant set, lacked the requisite plugin manifest declaration / ABAC grant, or hit the audit-emit backpressure throttle. It is false on every legitimate delivery (including legitimately empty-payload events such as a presence event with no content). Set by the Subscribe / QueryStreamHistory handler at fan-out time; NEVER set by emitters and NEVER persisted to events_audit (storage rows always carry the sender&#39;s payload, ciphertext or cleartext). |
 | no_plaintext_reason | [NoPlaintextReason](#holomush-core-v1-NoPlaintextReason) |  | no_plaintext_reason classifies why metadata_only=true was stamped. It is UNSPECIFIED on metadata_only=false deliveries and one of the typed reasons when metadata_only=true. |
 
@@ -1069,6 +1076,39 @@ QueryStreamHistoryResponse returns one page of history plus pagination state.
 
 
 
+<a name="holomush-core-v1-RefreshConnectionRequest"></a>
+
+### RefreshConnectionRequest
+RefreshConnectionRequest asks core to bump the lease for one connection.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| meta | [RequestMeta](#holomush-core-v1-RequestMeta) |  | meta carries request correlation data. |
+| session_id | [string](#string) |  | session_id names the game session owning the connection. |
+| connection_id | [string](#string) |  | connection_id is the connection whose lease to refresh. |
+| player_session_token | [string](#string) |  | player_session_token proves the caller owns session_id. |
+
+
+
+
+
+
+<a name="holomush-core-v1-RefreshConnectionResponse"></a>
+
+### RefreshConnectionResponse
+RefreshConnectionResponse is empty on success; failures are gRPC status codes.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| meta | [ResponseMeta](#holomush-core-v1-ResponseMeta) |  | meta carries response correlation data. |
+
+
+
+
+
+
 <a name="holomush-core-v1-RenderingMetadata"></a>
 
 ### RenderingMetadata
@@ -1317,7 +1357,7 @@ Subscribe stream alongside event frames.
 ### EventChannel
 EventChannel identifies the destination channel for event delivery. This is
 the canonical internal definition; webv1.EventChannel is kept in lockstep for
-the web wire format (INV-GW-16).
+the web wire format (INV-EVENTBUS-16).
 
 | Name | Number | Description |
 | ---- | ------ | ----------- |
@@ -1420,6 +1460,7 @@ state and business logic lives behind these RPCs.
 | ListSessionStreams | [ListSessionStreamsRequest](#holomush-core-v1-ListSessionStreamsRequest) | [ListSessionStreamsResponse](#holomush-core-v1-ListSessionStreamsResponse) | ListSessionStreams returns the stream names the session is currently subscribed to, derived from FocusCoordinator.RestoreFocus (with the same ambient-stream fallback Subscribe uses). Web clients use it to enumerate streams for backfill on reload. Pure read; ownership-validated and enumeration-safe (failures collapse to SESSION_NOT_FOUND), closing the IDOR where one player could enumerate another&#39;s subscribed streams. |
 | ListFocusPresence | [ListFocusPresenceRequest](#holomush-core-v1-ListFocusPresenceRequest) | [ListFocusPresenceResponse](#holomush-core-v1-ListFocusPresenceResponse) | ListFocusPresence returns the current-state presence snapshot for the session&#39;s focus context. It reads session.Store.ListActiveByLocation directly (NOT event history — see .claude/rules/event-interfaces.md) and is gated by the ABAC list_presence action on the location resource. Scene-focus contexts currently return UNIMPLEMENTED. Pure read — no session mutation. |
 | ListAvailableCommands | [ListAvailableCommandsRequest](#holomush-core-v1-ListAvailableCommandsRequest) | [ListAvailableCommandsResponse](#holomush-core-v1-ListAvailableCommandsResponse) | ListAvailableCommands returns the commands the session&#39;s own character may execute, with the system/manifest alias map for those commands. SERVED: CoreServer.ListAvailableCommands, delegating to commandquery.Querier.Available. Self-scoped: the subject is the session&#39;s character (ownership-validated), never an arbitrary character_id. Pure read. |
+| RefreshConnection | [RefreshConnectionRequest](#holomush-core-v1-RefreshConnectionRequest) | [RefreshConnectionResponse](#holomush-core-v1-RefreshConnectionResponse) | RefreshConnection bumps a connection&#39;s liveness lease. Called periodically by the gateway while the client socket is open (holomush-rsoe6). SERVED by CoreServer.RefreshConnection; ownership-validated and enumeration-safe. |
 
  
 
@@ -2682,7 +2723,7 @@ Cleartext projection fields
 | codec | [string](#string) |  | codec names the encryption codec applied to payload. &#34;identity&#34; means payload is plaintext; &#34;xchacha20poly1305-v1&#34; means payload is ciphertext. Sourced from the App-Codec header. MUST be non-empty. |
 | payload | [bytes](#bytes) |  | payload holds the event body. For identity codec this is cleartext; for xchacha20poly1305-v1 this is the AEAD ciphertext, forwarded byte-equal without decryption (INV-P7-11). Plugins store the bytes opaquely; decryption occurs at read-back via DecryptOwnAuditRows. |
 | dek_ref | [uint64](#uint64) | optional | dek_ref is the numeric key reference into the host&#39;s crypto_keys table identifying which DEK encrypted this payload. Absent for identity-codec rows; MUST be present for AEAD-codec rows. The host enforces the agreement: identity codec ⇔ both dek_ref and dek_version absent. |
-| dek_version | [uint32](#uint32) | optional | dek_version is the 1-based rotation counter of the DEK at the time of encryption, stored for key-rotation audit. Absent for identity-codec rows; MUST be present for AEAD-codec rows alongside dek_ref (INV-P7-3). |
+| dek_version | [uint32](#uint32) | optional | dek_version is the 1-based rotation counter of the DEK at the time of encryption, stored for key-rotation audit. Absent for identity-codec rows; MUST be present for AEAD-codec rows alongside dek_ref (INV-EVENTBUS-25). |
 | schema_ver | [int32](#int32) |  | schema_ver is the application schema version stamped at publish via the App-Schema-Version header. Valid range 0–32767 (SMALLINT). The plugin rejects rows outside this range at ingest. |
 
 
@@ -3266,6 +3307,43 @@ PluginHostServiceGetCommandHelpResponse returns full help detail.
 
 
 
+<a name="holomush-plugin-v1-PluginHostServiceGetSettingRequest"></a>
+
+### PluginHostServiceGetSettingRequest
+PluginHostServiceGetSettingRequest reads one owner-partitioned key. The owner
+is NOT on the wire — the host binds it from the authenticated plugin name
+(structural cross-plugin isolation).
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| scope | [SettingScope](#holomush-plugin-v1-SettingScope) |  | Scope to read from. |
+| principal_id | [string](#string) |  | Principal ULID: player ID for PLAYER, character ID for CHARACTER, empty for GAME. |
+| key | [string](#string) |  | Plugin-owned dot-key to read (e.g. &#34;content.cw_block&#34;). |
+
+
+
+
+
+
+<a name="holomush-plugin-v1-PluginHostServiceGetSettingResponse"></a>
+
+### PluginHostServiceGetSettingResponse
+PluginHostServiceGetSettingResponse returns a typed list-or-scalar value read
+from the resolved scope/partition.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| found | [bool](#bool) |  | Whether the key resolved in the requested scope/partition. |
+| string_list | [string](#string) | repeated | String-list value (Phase 8 settings are list-valued). |
+| string_value | [string](#string) |  | Scalar string value (for non-list keys). |
+
+
+
+
+
+
 <a name="holomush-plugin-v1-PluginHostServiceIsAnyConnFocusedRequest"></a>
 
 ### PluginHostServiceIsAnyConnFocusedRequest
@@ -3690,6 +3768,36 @@ PluginHostServiceSetConnectionFocusResponse echoes the resulting focus.
 
 
 
+<a name="holomush-plugin-v1-PluginHostServiceSetSettingRequest"></a>
+
+### PluginHostServiceSetSettingRequest
+PluginHostServiceSetSettingRequest writes one key in the caller&#39;s owner
+partition. Owner is bound host-side, not supplied here.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| scope | [SettingScope](#holomush-plugin-v1-SettingScope) |  | Target scope to write. |
+| principal_id | [string](#string) |  | Principal ULID (empty for GAME). |
+| key | [string](#string) |  | Plugin-owned dot-key to write. |
+| string_list | [string](#string) | repeated | String-list value to store. |
+
+
+
+
+
+
+<a name="holomush-plugin-v1-PluginHostServiceSetSettingResponse"></a>
+
+### PluginHostServiceSetSettingResponse
+PluginHostServiceSetSettingResponse is the empty acknowledgement returned on a
+successful write.
+
+
+
+
+
+
 <a name="holomush-plugin-v1-QuerySessionStreamsRequest"></a>
 
 ### QuerySessionStreamsRequest
@@ -3838,6 +3946,23 @@ FocusKindPolicy implementation registered in the coordinator.
 
 
 
+<a name="holomush-plugin-v1-SettingScope"></a>
+
+### SettingScope
+SettingScope selects which settings scope a Get/Set targets. There is no
+chained mode — callers compose scopes themselves (e.g. a CW-block union read
+across game&#43;player&#43;character). The iokti.7 handler maps each value to its
+backing store and rejects the unspecified value (fail closed).
+
+| Name | Number | Description |
+| ---- | ------ | ----------- |
+| SETTING_SCOPE_UNSPECIFIED | 0 | Unspecified scope — rejected by the handler (fail closed). |
+| SETTING_SCOPE_GAME | 1 | Server-wide scope, backed by holomush_system_info. |
+| SETTING_SCOPE_PLAYER | 2 | Per-player scope, backed by players.preferences. |
+| SETTING_SCOPE_CHARACTER | 3 | Per-character scope, backed by characters.preferences. |
+
+
+
 <a name="holomush-plugin-v1-StreamReplayMode"></a>
 
 ### StreamReplayMode
@@ -3895,6 +4020,8 @@ reality, not aspirational behavior.
 | Evaluate | [PluginHostServiceEvaluateRequest](#holomush-plugin-v1-PluginHostServiceEvaluateRequest) | [PluginHostServiceEvaluateResponse](#holomush-plugin-v1-PluginHostServiceEvaluateResponse) | Evaluate runs the host ABAC engine for one action against one resource instance owned by the calling plugin. SERVED: pluginHostServiceServer.Evaluate. The subject is derived host-side from the dispatch token exactly as EmitEvent does (token→actor recovery) — there is no subject field on the wire (spec §2, INV-1). Fails closed on nil engine, missing/rejected token, empty actor subject, or a resource type the plugin does not own. |
 | ListCommands | [PluginHostServiceListCommandsRequest](#holomush-plugin-v1-PluginHostServiceListCommandsRequest) | [PluginHostServiceListCommandsResponse](#holomush-plugin-v1-PluginHostServiceListCommandsResponse) | ListCommands enumerates the commands the named character may execute, ABAC-filtered by the host. SERVED: pluginHostServiceServer.ListCommands, delegating to commandquery.Querier.Available. The subject is the request&#39;s character_id (parity with the Lua holomush.list_commands(character_id) host function — not the dispatch-token actor, since this is read-only metadata, not an actor-gated mutation). incomplete is true when engine errors hid some commands. |
 | GetCommandHelp | [PluginHostServiceGetCommandHelpRequest](#holomush-plugin-v1-PluginHostServiceGetCommandHelpRequest) | [PluginHostServiceGetCommandHelpResponse](#holomush-plugin-v1-PluginHostServiceGetCommandHelpResponse) | GetCommandHelp returns full help detail for one command after an access check for character_id. SERVED: pluginHostServiceServer.GetCommandHelp, delegating to commandquery.Querier.Help. Mirrors the Lua holomush.get_command_help(name, character_id) host function. |
+| GetSetting | [PluginHostServiceGetSettingRequest](#holomush-plugin-v1-PluginHostServiceGetSettingRequest) | [PluginHostServiceGetSettingResponse](#holomush-plugin-v1-PluginHostServiceGetSettingResponse) | GetSetting reads a single-scope setting in the calling plugin&#39;s owner partition (owner bound host-side from the authenticated plugin name, never from the request). The handler resolves SettingScope to its backing store; a missing key returns a successful response with found=false, never a codes.NotFound status error. |
+| SetSetting | [PluginHostServiceSetSettingRequest](#holomush-plugin-v1-PluginHostServiceSetSettingRequest) | [PluginHostServiceSetSettingResponse](#holomush-plugin-v1-PluginHostServiceSetSettingResponse) | SetSetting writes a single-scope setting in the calling plugin&#39;s partition; GAME scope requires an operator authorization decision (host-enforced, not trusted from the wire). The owner partition is bound host-side from the authenticated plugin name. |
 
 
 <a name="holomush-plugin-v1-PluginService"></a>
@@ -4460,9 +4587,9 @@ no content), ordered by attempt number.
 <a name="holomush-scene-v1-ListScenesRequest"></a>
 
 ### ListScenesRequest
-ListScenesRequest is the (currently unserved) scene-discovery query. Its
-fields describe the intended pagination &#43; tag-filter contract for the planned
-ListScenes RPC.
+ListScenesRequest is the scene-board discovery query. It supports pagination,
+tag filtering, and content-warning exclusion via the union of scope-based
+cw_block settings, served by SceneServiceImpl.ListScenes.
 
 
 | Field | Type | Label | Description |
@@ -4470,6 +4597,9 @@ ListScenes RPC.
 | limit | [int32](#int32) |  | Maximum scenes to return; 0 means server default, capped at 200. |
 | offset | [int32](#int32) |  | Number of leading results to skip for pagination. |
 | tags | [string](#string) | repeated | Restrict results to scenes carrying all of these tags. |
+| exclude_content_warnings | [string](#string) | repeated | Extra content-warning categories to hide for this one query, on top of the caller&#39;s stored block. The board query unions these with the game/player/character content.cw_block lists and drops any scene tagged with a blocked category. Applied server-side so the page limit/offset stay correct after filtering. |
+| character_id | [string](#string) |  | Acting character ULID. The board query reads this principal&#39;s character-scope content.cw_block to assemble the effective block set. Optional — omit to browse without character-scope CW filtering. |
+| player_id | [string](#string) |  | Owning player ULID. The board query reads this principal&#39;s player-scope content.cw_block, which applies across all of the player&#39;s characters, into the effective block set. Optional — omit to browse without player-scope CW filtering. |
 
 
 
@@ -4479,7 +4609,7 @@ ListScenes RPC.
 <a name="holomush-scene-v1-ListScenesResponse"></a>
 
 ### ListScenesResponse
-ListScenesResponse is the (currently unserved) scene-discovery result page.
+ListScenesResponse is the scene-board discovery result page.
 
 
 | Field | Type | Label | Description |
@@ -4969,7 +5099,7 @@ plugins/core-scenes/publish_service.go.
 
 | Method Name | Request Type | Response Type | Description |
 | ----------- | ------------ | ------------- | ------------|
-| ListScenes | [ListScenesRequest](#holomush-scene-v1-ListScenesRequest) | [ListScenesResponse](#holomush-scene-v1-ListScenesResponse) | ListScenes is DECLARED BUT NOT SERVED. The core-scenes plugin embeds UnimplementedSceneServiceServer and provides no override, so any call returns codes.Unimplemented. Scene discovery is instead surfaced through the plugin&#39;s `scene` listing command (handleSceneList), which reads SceneStore.ListScenesForCharacter, not this RPC. Retained as a planned read surface. |
+| ListScenes | [ListScenesRequest](#holomush-scene-v1-ListScenesRequest) | [ListScenesResponse](#holomush-scene-v1-ListScenesResponse) | ListScenes returns the public scene board: open scenes in state `active` or `paused`, paginated and optionally tag-filtered, with content-warning- blocked scenes excluded via the union of game/player/character scope cw_block settings plus any per-query exclude_content_warnings. Served by SceneServiceImpl.ListScenes and surfaced through the plugin&#39;s `scenes` board command. See service.go::ListScenes. |
 | GetScene | [GetSceneRequest](#holomush-scene-v1-GetSceneRequest) | [GetSceneResponse](#holomush-scene-v1-GetSceneResponse) | GetScene loads one scene&#39;s metadata and participant roster by ID. The host&#39;s read-scene ABAC policy gates access before the call reaches the handler, so the handler performs no additional ownership check; it returns codes.NotFound when the scene does not exist. See service.go::GetScene. |
 | CreateScene | [CreateSceneRequest](#holomush-scene-v1-CreateSceneRequest) | [CreateSceneResponse](#holomush-scene-v1-CreateSceneResponse) | CreateScene allocates a new scene owned by the calling character, seeded active with the supplied title/description/visibility/pose-order/tags. The creating character becomes the `owner` participant in the same transaction, a lifecycle.created audit event is recorded, and a scene-created event is emitted. See service.go::CreateScene. |
 | EndScene | [EndSceneRequest](#holomush-scene-v1-EndSceneRequest) | [EndSceneResponse](#holomush-scene-v1-EndSceneResponse) | EndScene transitions a scene to the terminal `ended` state (owner-only via ABAC). Rejected with codes.FailedPrecondition when the scene is already ended or archived. Returns the post-transition scene row. See service.go::EndScene. |
@@ -5080,7 +5210,7 @@ GameEvent is the web-facing rendering of a single core EventFrame, flattened
 for direct display by the client. The gateway derives every field from the
 core EventFrame and its RenderingMetadata in
 internal/web/translate.go::translateEvent; events lacking rendering metadata
-are dropped at the gateway (INV-GW-5) and never reach this message.
+are dropped at the gateway (INV-EVENTBUS-6) and never reach this message.
 
 
 | Field | Type | Label | Description |
@@ -5950,6 +6080,8 @@ itself at attach time.
 | CONTROL_SIGNAL_REPLAY_COMPLETE | 1 | CONTROL_SIGNAL_REPLAY_COMPLETE marks the boundary between the historical backfill the core Subscribe handler replays at attach and the live event tail. The accompanying ControlFrame.attach_moment_ms is the upper time bound the client feeds back into WebQueryStreamHistory backfill calls. |
 | CONTROL_SIGNAL_STREAM_CLOSED | 2 | CONTROL_SIGNAL_STREAM_CLOSED signals the server is ending the stream; the gateway treats it as a terminal frame (forwardFrame returns errStreamClosed) and runs its session-cleanup Disconnect. |
 | CONTROL_SIGNAL_STREAM_OPENED | 3 | STREAM_OPENED is emitted as the first frame after a successful StreamEvents subscription. The accompanying ControlFrame.connection_id is the per-stream ULID — clients SHOULD store it and pass it back via SendCommandRequest.connection_id so the gateway routes per-connection commands (Phase 5 scene-focus autofocus) correctly under multi-tab. |
+| CONTROL_SIGNAL_RECONNECTING | 4 | CONTROL_SIGNAL_RECONNECTING: the gateway lost its core stream but is holding the client and reconnecting; the UI shows a reconnecting indicator (holomush-rsoe6). |
+| CONTROL_SIGNAL_RECONNECTED | 5 | CONTROL_SIGNAL_RECONNECTED: the gateway re-established the core stream; the client may clear the reconnecting indicator. |
 
 
 
@@ -5968,7 +6100,7 @@ identical to the core enum — no remapping happens at the boundary.
 | EVENT_CHANNEL_TERMINAL | 1 | EVENT_CHANNEL_TERMINAL routes the event to the scrolling terminal/log pane — the conversational stream (say, pose, arrive, leave, channel). |
 | EVENT_CHANNEL_STATE | 2 | EVENT_CHANNEL_STATE routes the event to the structured state surfaces (location panel, exits, presence) rather than the terminal log. Used by state-category events such as location_state and exit_update. |
 | EVENT_CHANNEL_BOTH | 3 | EVENT_CHANNEL_BOTH routes the event to the terminal AND the state surfaces simultaneously. |
-| EVENT_CHANNEL_AUDIT_ONLY | 4 | EVENT_CHANNEL_AUDIT_ONLY mirrors corev1.EventChannel for INV-GW-16 lockstep parity. These events are dropped at the gRPC Subscribe boundary and MUST NOT appear on the web wire format in practice. |
+| EVENT_CHANNEL_AUDIT_ONLY | 4 | EVENT_CHANNEL_AUDIT_ONLY mirrors corev1.EventChannel for INV-EVENTBUS-16 lockstep parity. These events are dropped at the gRPC Subscribe boundary and MUST NOT appear on the web wire format in practice. |
 
 
 

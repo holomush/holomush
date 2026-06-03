@@ -74,7 +74,7 @@ type AuditRow struct {
 	// dek_version is the 1-based rotation counter of the DEK at the time
 	// of encryption, stored for key-rotation audit. Absent for
 	// identity-codec rows; MUST be present for AEAD-codec rows alongside
-	// dek_ref (INV-P7-3).
+	// dek_ref (INV-EVENTBUS-25).
 	DekVersion *uint32 `protobuf:"varint,9,opt,name=dek_version,json=dekVersion,proto3,oneof" json:"dek_version,omitempty"`
 	// schema_ver is the application schema version stamped at publish via
 	// the App-Schema-Version header. Valid range 0–32767 (SMALLINT).

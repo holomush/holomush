@@ -18,7 +18,7 @@ import (
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
-// TestRenderingMetadataGoProtoParity is INV-GW-14. The Go struct and
+// TestRenderingMetadataGoProtoParity is INV-EVENTBUS-14. The Go struct and
 // proto message MUST stay in sync — round-tripping through both
 // conversion helpers MUST produce equal values.
 func TestRenderingMetadataGoProtoParity(t *testing.T) {
@@ -50,7 +50,7 @@ func TestRenderingMetadataNilRoundTrip(t *testing.T) {
 }
 
 // TestEventChannelEnumParity asserts the Go-side mirror values match
-// the proto enum values. INV-GW-14 (the parity dimension covering
+// the proto enum values. INV-EVENTBUS-14 (the parity dimension covering
 // the EventChannel mirror specifically).
 func TestEventChannelEnumParity(t *testing.T) {
 	cases := []struct {
@@ -69,7 +69,7 @@ func TestEventChannelEnumParity(t *testing.T) {
 }
 
 // TestNoPlaintextReasonEnumParity asserts Go-side NoPlaintextReason mirror
-// values match proto enum values (INV-GW-14 — holomush-ojw1.6).
+// values match proto enum values (INV-EVENTBUS-14 — holomush-ojw1.6).
 //
 // The length check catches one-sided enum extension: if a new value is added
 // to the proto without a Go-side mirror (or vice versa), the test fails
