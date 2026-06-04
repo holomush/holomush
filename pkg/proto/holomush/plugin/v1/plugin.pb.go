@@ -3176,7 +3176,7 @@ func (x *PluginHostServiceIsAnyConnFocusedResponse) GetFocused() bool {
 
 // PluginHostServiceEvaluateRequest names the action and resource to evaluate.
 // The subject is NOT here — it is recovered host-side from the dispatch token
-// (spec §2, INV-1).
+// (spec §2, INV-PLUGIN-22).
 type PluginHostServiceEvaluateRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// ABAC action verb to authorize (e.g. "read", "write").
