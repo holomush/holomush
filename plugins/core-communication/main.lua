@@ -3,7 +3,7 @@
 
 -- core-communication: provides say, pose, ooc, emit, page, whisper, pemit, wall.
 
--- INV-S5: register the 8 event types this plugin can emit.
+-- INV-PLUGIN-32: register the 8 event types this plugin can emit.
 -- These MUST match plugin.yaml's crypto.emits block exactly.
 holomush.register_emit_type("say")
 holomush.register_emit_type("pose")

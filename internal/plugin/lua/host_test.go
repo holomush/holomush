@@ -1969,7 +1969,7 @@ func TestLuaHostLoadEntryLegitimatePathSucceeds(t *testing.T) {
 	require.NoError(t, err, "legitimate nested entry path should load successfully")
 }
 
-// TestLuaHost_INVS5 covers the INV-S5 mechanism across the PluginEmitRegistry
+// TestLuaHost_INVS5 covers the INV-PLUGIN-32 mechanism across the PluginEmitRegistry
 // lookup surface (not-loaded, loaded-without-emits, loaded-with-emits) and
 // the capture-pass execution-error path. Each case shares the same shape:
 // optionally write main.lua + manifest, optionally Load, then either assert
@@ -2014,7 +2014,7 @@ end
 `,
 			pluginName: "noemit",
 			expectedOk: true,
-			// expectedRegistry nil — plugin known but out of INV-S5 scope
+			// expectedRegistry nil — plugin known but out of INV-PLUGIN-32 scope
 		},
 		{
 			name: "loaded plugin with crypto.emits returns ([alpha beta], true) from capture pass",
@@ -2033,7 +2033,7 @@ end
 			expectedRegistry:     []string{"alpha", "beta"},
 		},
 		{
-			name: "capture-pass execution error surfaces operation=load + INV-S5 hint",
+			name: "capture-pass execution error surfaces operation=load + INV-PLUGIN-32 hint",
 			luaSource: `
 error("intentional capture-pass failure")
 `,
@@ -2041,7 +2041,7 @@ error("intentional capture-pass failure")
 			pluginName:           "explodes",
 			declaredEmits:        []string{"ignored"},
 			expectLoadErr:        true,
-			expectedHint:         "INV-S5 capture pass execution error",
+			expectedHint:         "INV-PLUGIN-32 capture pass execution error",
 		},
 	}
 
@@ -2098,7 +2098,7 @@ error("intentional capture-pass failure")
 }
 
 // TestLuaHost_Load_CryptoEmitsCapturePassExecutionError verifies that a
-// plugin whose top-level Lua throws an error during the INV-S5 capture
+// plugin whose top-level Lua throws an error during the INV-PLUGIN-32 capture
 // pass fails Load with operation=load and a hint mentioning the capture
 // pass.
 func TestLuaHost_Load_CryptoEmitsCapturePassExecutionError(t *testing.T) {
@@ -2126,7 +2126,7 @@ error("intentional capture-pass failure")
 	require.Error(t, err)
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok, "Load failure should be an oops error")
-	assert.Equal(t, "INV-S5 capture pass execution error", oopsErr.Hint(),
+	assert.Equal(t, "INV-PLUGIN-32 capture pass execution error", oopsErr.Hint(),
 		"hint must surface that the capture pass failed")
 	assert.Equal(t, "load", oopsErr.Context()["operation"])
 }

@@ -1048,7 +1048,7 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 		return oops.In("manager").With("plugin", dp.Manifest.Name).With("operation", "load").Wrap(err)
 	}
 
-	// INV-S5: manifest emit-type startup validation. Scope per INV-M1:
+	// INV-PLUGIN-32: manifest emit-type startup validation. Scope per INV-M1:
 	// only plugins with non-empty crypto.emits participate.
 	if dp.Manifest.Crypto != nil && len(dp.Manifest.Crypto.Emits) > 0 {
 		registered, ok := host.PluginEmitRegistry(dp.Manifest.Name)
@@ -1071,14 +1071,14 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 			// table (and any live subprocess / gRPC client for binary
 			// plugins) does not leak after fail-closed rejection.
 			if unloadErr := host.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
-				slog.ErrorContext(ctx, "failed to rollback plugin load after INV-S5 mismatch",
+				slog.ErrorContext(ctx, "failed to rollback plugin load after INV-PLUGIN-32 mismatch",
 					"plugin", dp.Manifest.Name, "error", unloadErr)
 			}
 			return oops.Code("EVENT_TYPE_REGISTRY_MISMATCH").
 				In("manager").With("plugin", dp.Manifest.Name).
 				With("declared_but_unregistered", mismatch.DeclaredButUnregistered).
 				With("registered_but_undeclared", mismatch.RegisteredButUndeclared).
-				Errorf("plugin crypto.emits manifest does not match registered emit-type set (INV-S5)")
+				Errorf("plugin crypto.emits manifest does not match registered emit-type set (INV-PLUGIN-32)")
 		}
 	}
 
@@ -1666,7 +1666,7 @@ func displayTargetFromString(s string) corev1.EventChannel {
 }
 
 // manifestDeclaredEmitTypes extracts the event-type strings from
-// manifest.Crypto.Emits for INV-S5 set-equality validation. Returns nil
+// manifest.Crypto.Emits for INV-PLUGIN-32 set-equality validation. Returns nil
 // when manifest.Crypto is nil.
 func manifestDeclaredEmitTypes(m *Manifest) []string {
 	if m.Crypto == nil {

@@ -60,7 +60,7 @@ func TestINV_P4_Coverage_Meta(t *testing.T) {
 		// (scene_subjects_test.go) was retired by holomush-rops.8.
 		// INV-SCENE-2: manifest crypto.emits set == EmitTypeRegistrar set.
 		// Pinned by manifest-parse unit test in plugins/core-scenes/main_test.go
-		// (package main). The substrate INV-S5 integration check runs under
+		// (package main). The substrate INV-PLUGIN-32 integration check runs under
 		// TestCoreScenesIntegration but the manifest-parse unit is the named pin.
 		{
 			inv:      "INV-SCENE-2",

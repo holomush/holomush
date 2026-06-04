@@ -208,7 +208,7 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 		return nil, oops.With("phase", "init").Wrap(err)
 	}
 
-	// INV-S5: populate RegisteredEmitTypes from EmitTypeRegistrar if the
+	// INV-PLUGIN-32: populate RegisteredEmitTypes from EmitTypeRegistrar if the
 	// provider opts in. Plugins without crypto.emits leave the set empty.
 	// A registrar may legally return nil from EmitRegistry() (e.g., during
 	// early construction); guard the dereference to avoid an init-time

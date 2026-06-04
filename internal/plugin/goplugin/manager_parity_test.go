@@ -21,8 +21,8 @@ import (
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
-// TestManager_INVS5_ParityAcrossRuntimes verifies that INV-S5 validation is
-// equally enforced on both runtimes — Lua and binary — per INV-M7 / INV-S3.
+// TestManager_INVS5_ParityAcrossRuntimes verifies that INV-PLUGIN-32 validation is
+// equally enforced on both runtimes — Lua and binary — per INV-M7 / INV-PLUGIN-31.
 //
 // Four scenarios x 2 runtimes = 8 subtests. The "host-owned-filtered"
 // scenario verifies INV-M2 round-trips through both the Lua hostfunc path
@@ -84,7 +84,7 @@ func TestManager_INVS5_ParityAcrossRuntimes(t *testing.T) {
 				// table (and for binary, a live subprocess + gRPC client)
 				// would leak.
 				assert.NotContains(t, mgr.ListPlugins(), pluginName,
-					"INV-S5 rejection MUST roll back: plugin %q should not appear in manager's plugin list after fail-closed", pluginName)
+					"INV-PLUGIN-32 rejection MUST roll back: plugin %q should not appear in manager's plugin list after fail-closed", pluginName)
 			}
 		})
 
@@ -116,7 +116,7 @@ func TestManager_INVS5_ParityAcrossRuntimes(t *testing.T) {
 				errutil.AssertErrorCode(t, err, sc.wantCode)
 				// INV-M3 rollback regression: see lua/ subtest above.
 				assert.NotContains(t, mgr.ListPlugins(), pluginName,
-					"INV-S5 rejection MUST roll back: plugin %q should not appear in manager's plugin list after fail-closed", pluginName)
+					"INV-PLUGIN-32 rejection MUST roll back: plugin %q should not appear in manager's plugin list after fail-closed", pluginName)
 			}
 		})
 	}

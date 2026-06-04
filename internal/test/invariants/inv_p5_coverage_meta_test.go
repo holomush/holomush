@@ -86,7 +86,7 @@ func TestINV_P5_Coverage_Meta(t *testing.T) {
 			note:     "in internal/grpc/focus/restore_connection_focus_test.go (not session/)",
 		},
 		// INV-SCENE-19: 3 new PluginHostService RPCs ship with Go SDK + Lua hostfunc
-		// bindings together (INV-S3 substrate-contract parity).
+		// bindings together (INV-PLUGIN-31 substrate-contract parity).
 		// Pinned by the Lua parity test in stdlib_focus_test.go.
 		{
 			inv:      "INV-SCENE-19",

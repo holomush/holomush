@@ -65,7 +65,7 @@ const (
 // the publish-attempt-budget extension). The plugin itself runs NO ABAC engine
 // (SceneServiceImpl holds no policy engine). The sole exceptions are the
 // participant-gate reads (GetPoseOrder and the publish reads), which enforce a
-// direct plugin-code participation check (INV-S9) precisely because it is a
+// direct plugin-code participation check (INV-SCENE-60) precisely because it is a
 // hard privacy boundary that must not be delegable.
 //
 // Implemented by SceneServiceImpl in plugins/core-scenes/service.go and
@@ -138,7 +138,7 @@ type SceneServiceClient interface {
 	// provides no handler, so a call returns codes.Unimplemented.
 	CastPublishVote(ctx context.Context, in *CastPublishVoteRequest, opts ...grpc.CallOption) (*CastPublishVoteResponse, error)
 	// GetPoseOrder returns the computed pose-order roster for a scene. Enforces
-	// the INV-S9 plugin-code participant gate (caller MUST be an owner or member,
+	// the INV-SCENE-60 plugin-code participant gate (caller MUST be an owner or member,
 	// NOT merely invited; NO ABAC engine is consulted). The PermissionDenied gate
 	// fires before any existence check so a non-participant cannot distinguish a
 	// missing scene from one they may not see. See service.go::GetPoseOrder.
@@ -164,7 +164,7 @@ type SceneServiceClient interface {
 	// closes the direct-RPC gap). See publish_service.go::WithdrawScenePublish.
 	WithdrawScenePublish(ctx context.Context, in *WithdrawScenePublishRequest, opts ...grpc.CallOption) (*WithdrawScenePublishResponse, error)
 	// GetPublishedScene returns a publication attempt's full state to a scene
-	// participant. Enforces the INV-S9 plugin-code participant gate with a
+	// participant. Enforces the INV-SCENE-60 plugin-code participant gate with a
 	// load-bearing step order (INV-SCENE-32): header read → participant gate → content
 	// read (only for PUBLISHED rows, only after the gate passes). A non-participant
 	// is denied with the §10 triple-signal before any content is read. See
@@ -177,7 +177,7 @@ type SceneServiceClient interface {
 	DownloadPublishedScene(ctx context.Context, in *DownloadPublishedSceneRequest, opts ...grpc.CallOption) (*DownloadPublishedSceneResponse, error)
 	// ListScenePublishAttempts returns the audit list of a scene's publication
 	// attempts (header summaries, no content) to a participant. Participant-gated
-	// (INV-S9) so a non-participant cannot enumerate attempts. See
+	// (INV-SCENE-60) so a non-participant cannot enumerate attempts. See
 	// publish_service.go::ListScenePublishAttempts.
 	ListScenePublishAttempts(ctx context.Context, in *ListScenePublishAttemptsRequest, opts ...grpc.CallOption) (*ListScenePublishAttemptsResponse, error)
 	// GetPublishedScene's PUBLIC counterpart: GetPublicSceneArchive is the
@@ -196,7 +196,7 @@ type SceneServiceClient interface {
 	// ExtendScenePublishVoteAttempts raises a scene's max-publish-attempts budget
 	// by a positive amount and emits the extension notice. Admin-only, enforced
 	// by the host's ABAC policy at dispatch — there is deliberately NO in-plugin
-	// role check (the inverse of INV-S9's plugin-code privacy gate). See
+	// role check (the inverse of INV-SCENE-60's plugin-code privacy gate). See
 	// publish_service.go::ExtendScenePublishVoteAttempts.
 	ExtendScenePublishVoteAttempts(ctx context.Context, in *ExtendScenePublishVoteAttemptsRequest, opts ...grpc.CallOption) (*ExtendScenePublishVoteAttemptsResponse, error)
 }
@@ -457,7 +457,7 @@ func (c *sceneServiceClient) ExtendScenePublishVoteAttempts(ctx context.Context,
 // the publish-attempt-budget extension). The plugin itself runs NO ABAC engine
 // (SceneServiceImpl holds no policy engine). The sole exceptions are the
 // participant-gate reads (GetPoseOrder and the publish reads), which enforce a
-// direct plugin-code participation check (INV-S9) precisely because it is a
+// direct plugin-code participation check (INV-SCENE-60) precisely because it is a
 // hard privacy boundary that must not be delegable.
 //
 // Implemented by SceneServiceImpl in plugins/core-scenes/service.go and
@@ -530,7 +530,7 @@ type SceneServiceServer interface {
 	// provides no handler, so a call returns codes.Unimplemented.
 	CastPublishVote(context.Context, *CastPublishVoteRequest) (*CastPublishVoteResponse, error)
 	// GetPoseOrder returns the computed pose-order roster for a scene. Enforces
-	// the INV-S9 plugin-code participant gate (caller MUST be an owner or member,
+	// the INV-SCENE-60 plugin-code participant gate (caller MUST be an owner or member,
 	// NOT merely invited; NO ABAC engine is consulted). The PermissionDenied gate
 	// fires before any existence check so a non-participant cannot distinguish a
 	// missing scene from one they may not see. See service.go::GetPoseOrder.
@@ -556,7 +556,7 @@ type SceneServiceServer interface {
 	// closes the direct-RPC gap). See publish_service.go::WithdrawScenePublish.
 	WithdrawScenePublish(context.Context, *WithdrawScenePublishRequest) (*WithdrawScenePublishResponse, error)
 	// GetPublishedScene returns a publication attempt's full state to a scene
-	// participant. Enforces the INV-S9 plugin-code participant gate with a
+	// participant. Enforces the INV-SCENE-60 plugin-code participant gate with a
 	// load-bearing step order (INV-SCENE-32): header read → participant gate → content
 	// read (only for PUBLISHED rows, only after the gate passes). A non-participant
 	// is denied with the §10 triple-signal before any content is read. See
@@ -569,7 +569,7 @@ type SceneServiceServer interface {
 	DownloadPublishedScene(context.Context, *DownloadPublishedSceneRequest) (*DownloadPublishedSceneResponse, error)
 	// ListScenePublishAttempts returns the audit list of a scene's publication
 	// attempts (header summaries, no content) to a participant. Participant-gated
-	// (INV-S9) so a non-participant cannot enumerate attempts. See
+	// (INV-SCENE-60) so a non-participant cannot enumerate attempts. See
 	// publish_service.go::ListScenePublishAttempts.
 	ListScenePublishAttempts(context.Context, *ListScenePublishAttemptsRequest) (*ListScenePublishAttemptsResponse, error)
 	// GetPublishedScene's PUBLIC counterpart: GetPublicSceneArchive is the
@@ -588,7 +588,7 @@ type SceneServiceServer interface {
 	// ExtendScenePublishVoteAttempts raises a scene's max-publish-attempts budget
 	// by a positive amount and emits the extension notice. Admin-only, enforced
 	// by the host's ABAC policy at dispatch — there is deliberately NO in-plugin
-	// role check (the inverse of INV-S9's plugin-code privacy gate). See
+	// role check (the inverse of INV-SCENE-60's plugin-code privacy gate). See
 	// publish_service.go::ExtendScenePublishVoteAttempts.
 	ExtendScenePublishVoteAttempts(context.Context, *ExtendScenePublishVoteAttemptsRequest) (*ExtendScenePublishVoteAttemptsResponse, error)
 	mustEmbedUnimplementedSceneServiceServer()

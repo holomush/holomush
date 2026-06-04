@@ -169,7 +169,7 @@ func (s *Server) EmitPluginEvent(ctx context.Context, plugin, eventType, payload
 
 // EmitSceneICContent emits an encrypted (Sensitive=true) scene IC event for an
 // ARBITRARY scene + actor — used to seed content into a CreateScene-created
-// scene (the command emit path can't set Sensitive; INV-7 fence, spec §3.4).
+// scene (the command emit path can't set Sensitive; INV-PLUGIN-30 fence, spec §3.4).
 // Requires WithPluginCrypto + WithInTreePlugins. The scene row MUST already
 // exist (via CreateScene) so core-scenes' InsertScenePose UPDATE … RETURNING
 // resolves.
@@ -193,7 +193,7 @@ func (s *Server) EmitSceneICContent(ctx context.Context, plugin string, sceneID,
 //
 // Complement of EmitSceneICContent (which always emits Sensitive=true for
 // content events). Use this for event types whose manifest declares
-// sensitivity: never; the INV-6 fence rejects Sensitive=true for those types.
+// sensitivity: never; the INV-PLUGIN-29 fence rejects Sensitive=true for those types.
 func (s *Server) EmitScenePlaintextContent(ctx context.Context, plugin string, sceneID, actorID ulid.ULID, eventType, payloadJSON string) EmittedEvent {
 	return s.emitPluginEventForScene(ctx, plugin,
 		sceneID.String(), actorID, eventType, payloadJSON, false)

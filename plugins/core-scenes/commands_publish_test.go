@@ -241,7 +241,7 @@ func TestHandleStatusShowsAttemptState(t *testing.T) {
 }
 
 // TestHandleStatusDeniesNonParticipant — a non-participant is denied
-// (GetPublishedScene INV-S9 gate).
+// (GetPublishedScene INV-SCENE-60 gate).
 func TestHandleStatusDeniesNonParticipant(t *testing.T) {
 	t.Parallel()
 	p, _, sceneID, _, _ := newPublishOpFixture(t, StatusCollecting)

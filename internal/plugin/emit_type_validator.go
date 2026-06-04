@@ -11,7 +11,7 @@ import (
 
 // hostOwnedEmitTypes lists event-type strings that are host-owned (per
 // pkg/plugin/event.go constants) and therefore filtered out of the
-// registered set before INV-S5 set-equality comparison. Per INV-M2.
+// registered set before INV-PLUGIN-32 set-equality comparison. Per INV-M2.
 var hostOwnedEmitTypes = map[string]struct{}{
 	string(pluginsdk.HostEventTypeSystem):          {},
 	string(pluginsdk.HostEventTypeSessionEnded):    {},
@@ -25,7 +25,7 @@ var hostOwnedEmitTypes = map[string]struct{}{
 }
 
 // EmitTypeMismatch describes the diff between a plugin's manifest-declared
-// crypto.emits set and the SDK-registered emit-type set per INV-S5.
+// crypto.emits set and the SDK-registered emit-type set per INV-PLUGIN-32.
 type EmitTypeMismatch struct {
 	DeclaredButUnregistered []string
 	RegisteredButUndeclared []string
@@ -39,7 +39,7 @@ func (m EmitTypeMismatch) HasMismatch() bool {
 
 // ValidateEmitTypeSetEquality compares the manifest-declared emit-type
 // set against the SDK-registered set (with host-owned types filtered out
-// per INV-M2). Per INV-S5, the two sets MUST be equal in both directions.
+// per INV-M2). Per INV-PLUGIN-32, the two sets MUST be equal in both directions.
 func ValidateEmitTypeSetEquality(declared, registered []string) EmitTypeMismatch {
 	declSet := toEmitSet(declared)
 	regSet := toEmitSet(filterHostOwned(registered))
@@ -61,7 +61,7 @@ func ValidateEmitTypeSetEquality(declared, registered []string) EmitTypeMismatch
 }
 
 // filterHostOwned removes host-owned event types from the registered
-// set before INV-S5 comparison. Per INV-M2 — substrate filters; the
+// set before INV-PLUGIN-32 comparison. Per INV-M2 — substrate filters; the
 // SDK + hostfunc surface accepts any string (plugins MAY register host-
 // owned types; the validator MUST NOT count them as plugin-owned).
 func filterHostOwned(registered []string) []string {

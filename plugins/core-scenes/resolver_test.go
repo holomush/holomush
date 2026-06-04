@@ -33,7 +33,7 @@ func TestSceneResolverGetSchemaReturnsSceneAttributes(t *testing.T) {
 // TestResolverNeverExposesContentByForbiddenAttributeName pins INV-SCENE-34
 // (spec §9.3): the scene attribute resolver MUST NOT expose any attribute
 // whose name could carry IC content (pose/say/emit/ooc text, the publication
-// log, or content_entries). The hard privacy boundary (INV-S9) keeps log
+// log, or content_entries). The hard privacy boundary (INV-SCENE-60) keeps log
 // content out of the ABAC attribute path entirely; this is the regression
 // lock. It passes today — GetSchema exposes only id/owner/state/visibility/
 // location/participants/invitees — and fails any future PR that adds a
@@ -153,7 +153,7 @@ func TestResolveResourceReturnsParticipantsAndInviteesLists(t *testing.T) {
 // populated in the store, ResolveResource must omit them from the
 // returned attribute map.
 //
-// Spec §5.5 hard-privacy boundary / INV-S9 / ADR holomush-nt2d:
+// Spec §5.5 hard-privacy boundary / INV-SCENE-60 / ADR holomush-nt2d:
 // pose-order data is reachable exclusively via the gated GetPoseOrder RPC.
 func TestResolveResourceDoesNotLeakPoseOrderMetadata(t *testing.T) {
 	store := newFakeStore()

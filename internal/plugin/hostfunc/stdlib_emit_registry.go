@@ -11,7 +11,7 @@ import (
 )
 
 // LuaEmitRegistry accumulates registrations from holomush.register_emit_type
-// calls during a Lua plugin's INV-S5 Load-pass. One instance per plugin.
+// calls during a Lua plugin's INV-PLUGIN-32 Load-pass. One instance per plugin.
 type LuaEmitRegistry struct {
 	mu    sync.Mutex
 	types map[string]struct{}
@@ -44,7 +44,7 @@ func (r *LuaEmitRegistry) Types() []string {
 // the given module table; calls append to reg.
 //
 // Called via Functions.RegisterWithEmitCapture during the Lua Host's
-// INV-S5 Load-pass to install the capturing variant. The standard
+// INV-PLUGIN-32 Load-pass to install the capturing variant. The standard
 // per-delivery Functions.Register path installs a no-op variant of
 // register_emit_type so that Lua plugin code (whose main.lua executes
 // at top level on every event/command delivery) doesn't crash on the

@@ -2053,7 +2053,7 @@ func TestEmitPluginEventPropagatesSensitive(t *testing.T) {
 
 // writeINVS5LuaPlugin writes a synthetic Lua plugin under pluginsDir whose
 // main.lua calls register_emit_type with `registered` and whose plugin.yaml
-// declares `declared` in crypto.emits. Used by INV-S5 manager validator tests.
+// declares `declared` in crypto.emits. Used by INV-PLUGIN-32 manager validator tests.
 func writeINVS5LuaPlugin(t *testing.T, pluginsDir, name string, declared, registered []string) {
 	t.Helper()
 	dir := filepath.Join(pluginsDir, name)
@@ -2079,7 +2079,7 @@ func writeINVS5LuaPlugin(t *testing.T, pluginsDir, name string, declared, regist
 	writeFile(t, filepath.Join(dir, "main.lua"), []byte(main.String()))
 }
 
-// TestManagerLoadAll_INVS5 covers the manager-level INV-S5 wiring across
+// TestManagerLoadAll_INVS5 covers the manager-level INV-PLUGIN-32 wiring across
 // mismatch (declared/registered set inequality), matching-sets (equal sets),
 // and no-crypto-emits (validator gated off via INV-M1) scenarios. Each case
 // shares the same setup → LoadAll → assert flow; a table form keeps future
@@ -2101,14 +2101,14 @@ func TestManagerLoadAll_INVS5(t *testing.T) {
 			registeredEmits:   []string{"a"},
 			expectError:       true,
 			expectedErrorCode: "EVENT_TYPE_REGISTRY_MISMATCH",
-			assertMsg:         "INV-S5 mismatch must surface as a load error",
+			assertMsg:         "INV-PLUGIN-32 mismatch must surface as a load error",
 		},
 		{
 			name:            "matching sets load successfully",
 			pluginName:      "matched",
 			declaredEmits:   []string{"a", "b"},
 			registeredEmits: []string{"a", "b"},
-			assertMsg:       "matched INV-S5 sets must load cleanly",
+			assertMsg:       "matched INV-PLUGIN-32 sets must load cleanly",
 		},
 		{
 			name:       "no crypto.emits skips validator entirely (INV-M1 gate)",

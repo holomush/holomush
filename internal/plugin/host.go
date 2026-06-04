@@ -64,8 +64,8 @@ type Host interface {
 
 	// PluginEmitRegistry returns the code-registered emit-type set for a
 	// loaded plugin, captured during Load. Returns:
-	//   - (set, true)  : plugin loaded and opted into INV-S5 (non-empty crypto.emits)
-	//   - (nil, true)  : plugin loaded; INV-S5 not applicable (empty crypto.emits)
+	//   - (set, true)  : plugin loaded and opted into INV-PLUGIN-32 (non-empty crypto.emits)
+	//   - (nil, true)  : plugin loaded; INV-PLUGIN-32 not applicable (empty crypto.emits)
 	//   - (nil, false) : plugin not loaded under this Host
 	PluginEmitRegistry(name string) ([]string, bool)
 

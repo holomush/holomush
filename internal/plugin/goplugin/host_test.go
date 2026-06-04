@@ -116,13 +116,13 @@ type mockGRPCPluginClient struct {
 	initCalled   bool
 	initReq      *pluginv1.InitRequest
 	initErr      error
-	initResponse *pluginv1.InitResponse // INV-S5: per-test override; nil falls back to empty InitResponse
+	initResponse *pluginv1.InitResponse // INV-PLUGIN-32: per-test override; nil falls back to empty InitResponse
 
 	QuerySessionStreamsFunc func(ctx context.Context, req *pluginv1.QuerySessionStreamsRequest) (*pluginv1.QuerySessionStreamsResponse, error)
 }
 
 // setInitResponse installs a per-test override for the Init RPC response
-// (used by INV-S5 tests to feed RegisteredEmitTypes through the host).
+// (used by INV-PLUGIN-32 tests to feed RegisteredEmitTypes through the host).
 func (m *mockGRPCPluginClient) setInitResponse(r *pluginv1.InitResponse) {
 	m.initResponse = r
 }

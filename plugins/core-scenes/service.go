@@ -52,14 +52,14 @@ type sceneStorer interface {
 	GetParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, error)
 	// IsParticipant returns true if the character is a current participant
 	// of the scene with role "owner" or "member" (NOT "invited"). Used by
-	// the INV-S9 plugin-code gate at GetPoseOrder per ADR holomush-nt2d.
+	// the INV-SCENE-60 plugin-code gate at GetPoseOrder per ADR holomush-nt2d.
 	// Returns (false, nil) if the character is not a participant — no
 	// distinction from "not found"; the gate's contract is binary.
 	IsParticipant(ctx context.Context, sceneID, characterID string) (bool, error)
 	// ListParticipantsWithPoseMeta fetches scenes.total_pose_count and the
 	// per-participant pose metadata (last_pose_at, last_pose_seq) for all
 	// owner+member rows in a single SELECT. Excludes invited role per
-	// INV-S9 pose-order-only-for-participants discipline. Pinned by spec
+	// INV-SCENE-60 pose-order-only-for-participants discipline. Pinned by spec
 	// §6.1 / INV-SCENE-7. See ADR holomush-r4th (denormalize pose-order metadata).
 	ListParticipantsWithPoseMeta(ctx context.Context, sceneID string) (ParticipantsWithPoseMeta, error)
 	// ListScenesForCharacter returns the scene IDs the character is
@@ -73,7 +73,7 @@ type sceneStorer interface {
 	// filtering are applied by the caller (iokti.13).
 	ListBoard(ctx context.Context, q BoardQuery) ([]*SceneRow, error)
 	// Phase 6 publication reads used by the publish-vote handlers. The
-	// header read deliberately EXCLUDES content_entries so the INV-S9
+	// header read deliberately EXCLUDES content_entries so the INV-SCENE-60
 	// participant gate runs between the header read and the content read
 	// (INV-SCENE-32). Implemented by *SceneStore in publish_store.go.
 	GetPublishedSceneHeader(ctx context.Context, id string) (*PublishedScene, error)
@@ -130,7 +130,7 @@ type SceneServiceImpl struct {
 	scenev1.UnimplementedSceneServiceServer
 	store     sceneStorer
 	eventSink pluginsdk.EventSink
-	gameID    string // per substrate INV-S4. Defaults to "main"; wired in Init.
+	gameID    string // per substrate INV-EVENTBUS-28. Defaults to "main"; wired in Init.
 	// Phase 6 publish-vote machinery.
 	cfg    SceneServiceConfig // game-wide vote/cool-off defaults.
 	events publishEventer     // scene_publish_* notice emitter; noop until Phase D wires the real one.
@@ -1093,7 +1093,7 @@ func (s *SceneServiceImpl) TransferOwnership(ctx context.Context, req *scenev1.T
 
 // GetPoseOrder returns the current pose-order entries for a scene.
 //
-// INV-S9 plugin-code gate: the caller MUST be a current participant
+// INV-SCENE-60 plugin-code gate: the caller MUST be a current participant
 // of the scene (owner or member, NOT invited). The ABAC engine is
 // NEVER consulted from this handler; INV-SCENE-4 (T23 meta-test, future
 // bead) enforces this by rg-asserting that no engine.Evaluate /
@@ -1121,7 +1121,7 @@ func (s *SceneServiceImpl) GetPoseOrder(ctx context.Context, req *scenev1.GetPos
 	)
 	defer span.End()
 
-	// INV-S9 gate: direct plugin-code participant check, NO ABAC.
+	// INV-SCENE-60 gate: direct plugin-code participant check, NO ABAC.
 	// Fires before scene-existence check to avoid leaking the
 	// existence of a scene to non-participants.
 	ok, err := s.store.IsParticipant(ctx, req.GetSceneId(), req.GetCharacterId())

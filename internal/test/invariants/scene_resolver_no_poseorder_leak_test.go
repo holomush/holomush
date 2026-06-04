@@ -14,7 +14,7 @@ import (
 
 // TestINV_SCENE_5_ResolverNoPoseOrderLeak rg-asserts that resolver.go does
 // not reference pose-metadata columns in attribute-construction code
-// paths. INV-S9 / ADR holomush-nt2d: pose-order data is reachable
+// paths. INV-SCENE-60 / ADR holomush-nt2d: pose-order data is reachable
 // exclusively via the gated GetPoseOrder RPC; ABAC attribute path is
 // forbidden.
 func TestINV_SCENE_5_ResolverNoPoseOrderLeak(t *testing.T) {
@@ -25,5 +25,5 @@ func TestINV_SCENE_5_ResolverNoPoseOrderLeak(t *testing.T) {
 	forbidden := regexp.MustCompile(`\b(last_pose_at|last_pose_seq|total_pose_count|LastPoseAt|LastPoseSeq|TotalPoseCount)\b`)
 	matches := forbidden.FindAll(data, -1)
 	assert.Empty(t, matches,
-		"INV-SCENE-5: resolver.go MUST NOT reference pose-metadata columns; INV-S9 forbids attribute-driven path to pose data")
+		"INV-SCENE-5: resolver.go MUST NOT reference pose-metadata columns; INV-SCENE-60 forbids attribute-driven path to pose data")
 }

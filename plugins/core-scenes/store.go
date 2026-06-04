@@ -1247,7 +1247,7 @@ func (s *SceneStore) GetParticipant(ctx context.Context, sceneID, characterID st
 
 // IsParticipant reports whether the character is a participant (owner or
 // member, NOT invited) of the scene. The invited-role exclusion is
-// load-bearing: INV-S9's gate at GetPoseOrder MUST NOT treat pending
+// load-bearing: INV-SCENE-60's gate at GetPoseOrder MUST NOT treat pending
 // invites as participants. Pinned by spec INV-SCENE-4 / INV-SCENE-11.
 //
 // Returns (false, nil) for both "not found" and "invited" — the binary
@@ -1560,7 +1560,7 @@ func (s *SceneStore) classifyTransitionMiss(ctx context.Context, id string, span
 }
 
 // dotStyleSceneSubject returns the NATS dot-style entity-level subject
-// for a scene per substrate INV-S4: events.<gameID>.scene.<sceneID>.
+// for a scene per substrate INV-EVENTBUS-28: events.<gameID>.scene.<sceneID>.
 // Used for lifecycle/system events that target the scene itself, not
 // a facet. ADR holomush-s9nu.
 func dotStyleSceneSubject(gameID, sceneID string) string {

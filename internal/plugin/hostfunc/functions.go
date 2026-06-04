@@ -284,12 +284,12 @@ func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...stri
 	// Register audit read-back decrypt functions.
 	RegisterAuditFuncs(ls, mod, pluginName, f.auditDecryptor)
 
-	// INV-S5: install a no-op register_emit_type in the per-delivery
+	// INV-PLUGIN-32: install a no-op register_emit_type in the per-delivery
 	// hostfunc surface. Lua plugins call register_emit_type at top level
 	// (idempotent registrations), and main.lua is re-executed on every
 	// event/command delivery — so the function MUST exist at runtime even
 	// though only Load-time calls matter. RegisterWithEmitCapture (used by
-	// the Lua Host's INV-S5 Load pass) overwrites this with the capturing
+	// the Lua Host's INV-PLUGIN-32 Load pass) overwrites this with the capturing
 	// variant.
 	ls.SetField(mod, "register_emit_type", ls.NewFunction(func(ls *lua.LState) int {
 		_ = ls.CheckString(1)
@@ -310,7 +310,7 @@ func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...stri
 }
 
 // RegisterWithEmitCapture is the variant of Register used during the
-// Lua Host's INV-S5 Load-pass. Identical to Register, but overwrites the
+// Lua Host's INV-PLUGIN-32 Load-pass. Identical to Register, but overwrites the
 // no-op register_emit_type stub with the capturing variant that appends
 // to reg.
 //
@@ -318,7 +318,7 @@ func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...stri
 // register_emit_type (see the no-op installation block above); plugin
 // main.lua is re-executed on every event/command delivery, so calls to
 // register_emit_type MUST not raise at runtime. Only Load-time captures
-// are honored by the INV-S5 substrate validator — per-delivery calls
+// are honored by the INV-PLUGIN-32 substrate validator — per-delivery calls
 // are accepted but discarded by the no-op stub.
 func (f *Functions) RegisterWithEmitCapture(
 	ls *lua.LState,
@@ -380,7 +380,7 @@ func (f *Functions) RegisteredFunctionsForAudit() []AuditEntry {
 		{Name: "holomush.query_stream_history"},
 		// Unconditionally registered by RegisterAuditFuncs.
 		{Name: "holomush.decrypt_own_audit_rows"},
-		// INV-S5 (jg9b.3): per-delivery no-op; Load-pass capturing variant
+		// INV-PLUGIN-32 (jg9b.3): per-delivery no-op; Load-pass capturing variant
 		// is installed by RegisterWithEmitCapture.
 		{Name: "holomush.register_emit_type"},
 	}

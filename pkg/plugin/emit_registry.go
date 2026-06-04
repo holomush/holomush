@@ -11,7 +11,7 @@ import (
 // EmitRegistry accumulates the set of event types a binary plugin can
 // emit. Plugins register types during construction or in Init. The host
 // reads the set via InitResponse.registered_emit_types and validates
-// against manifest's crypto.emits per INV-S5.
+// against manifest's crypto.emits per INV-PLUGIN-32.
 type EmitRegistry struct {
 	mu    sync.Mutex
 	types map[string]struct{}
@@ -59,7 +59,7 @@ func (r *EmitRegistry) RegisteredEmitTypes() []string {
 //
 // Plugins with non-empty crypto.emits MUST implement this interface;
 // the substrate validator fails load on mismatch. Plugins without
-// crypto.emits are out of INV-S5 scope (per INV-M1) and may skip.
+// crypto.emits are out of INV-PLUGIN-32 scope (per INV-M1) and may skip.
 type EmitTypeRegistrar interface {
 	EmitRegistry() *EmitRegistry
 }

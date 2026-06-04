@@ -65,7 +65,7 @@ storage: postgres
 crypto:
   emits:
     # Content events (sensitivity: always) — participant-only IC/OOC RP
-    # content. Privacy boundary is the participant list per INV-S9, NOT
+    # content. Privacy boundary is the participant list per INV-SCENE-60, NOT
     # the location. Analog to whisper/page in core-communication, not
     # to say/pose (which are location-bounded). See ADR holomush-sb3n.
     - event_type: scene_pose

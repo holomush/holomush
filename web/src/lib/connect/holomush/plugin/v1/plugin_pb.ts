@@ -101,7 +101,7 @@ export type InitResponse = Message<"holomush.plugin.v1.InitResponse"> & {
 
   /**
    * Set of plugin-owned event types this plugin may emit. Host validates
-   * set-equality against manifest's crypto.emits per INV-S5. Plugins
+   * set-equality against manifest's crypto.emits per INV-PLUGIN-32. Plugins
    * without crypto.emits leave empty and skip validation; plugins WITH
    * crypto.emits MUST populate (mismatch fails load).
    *
@@ -232,8 +232,8 @@ export type EmitEvent = Message<"holomush.plugin.v1.EmitEvent"> & {
   /**
    * Per-event sensitivity claim for a return-value emit, validated against the
    * plugin manifest by event_emitter.go::Emit via EnforceSensitivity
-   * (internal/plugin/sensitivity_fence.go) — INV-6: a sensitivity=never manifest
-   * rejects true; INV-7: a sensitivity=always manifest rejects false. Carries
+   * (internal/plugin/sensitivity_fence.go) — INV-PLUGIN-29: a sensitivity=never manifest
+   * rejects true; INV-PLUGIN-30: a sensitivity=always manifest rejects false. Carries
    * the same semantics as the active EmitEvent RPC's sensitive field so a binary
    * plugin's return-value emit cannot silently downgrade to plaintext where the
    * Lua runtime would encrypt (holomush-av954). Default false for backward
@@ -577,9 +577,9 @@ export type PluginHostServiceEmitEventRequest = Message<"holomush.plugin.v1.Plug
    * sensitive declares per-event sensitivity at emit time.
    * Phase 3a's host-side fence at internal/plugin/event_emitter.go::Emit
    * validates this against the plugin manifest's declared sensitivity:
-   *   - manifest sensitivity=never:  sensitive=true rejected (INV-6).
-   *   - manifest sensitivity=may:    sensitive=true|false honored.
-   *   - manifest sensitivity=always: sensitive=false rejected (INV-7).
+   *   - manifest sensitivity=never:  sensitive=true rejected (INV-PLUGIN-29).
+   *   - manifest sensitivity=may:    sensitive=true/false honored.
+   *   - manifest sensitivity=always: sensitive=false rejected (INV-PLUGIN-30).
    * Default false (proto3 zero) for older plugins compiled before this
    * field existed — matching pre-Phase-3d behavior.
    *
@@ -2144,7 +2144,7 @@ export const PluginService: GenService<{
    * hands the plugin its ServiceConfig (DB connection string, required-service
    * addresses, opaque runtime config) and returns the gRPC service names the
    * plugin provides plus the emit-type set the host validates against the
-   * manifest's crypto.emits (INV-S5). Bridged by pluginServerAdapter.Init,
+   * manifest's crypto.emits (INV-PLUGIN-32). Bridged by pluginServerAdapter.Init,
    * which also lazily dials the plugin-host connection for any host-facing
    * facade (sink/focus/evaluator/decryptor) the provider opts into.
    *

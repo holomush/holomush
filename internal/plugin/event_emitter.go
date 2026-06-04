@@ -67,7 +67,7 @@ func WithGameID(p GameIDProvider) EmitterOption {
 // (the default and the production state at Phase 3a merge time), the
 // emitter skips the manifest sensitivity lookup + EnforceSensitivity
 // check and stamps event.Sensitive=false unconditionally — matching
-// pre-Phase-3a behavior. When true, the fence runs and INV-6/INV-7 are
+// pre-Phase-3a behavior. When true, the fence runs and INV-PLUGIN-29/INV-PLUGIN-30 are
 // enforced. The flag is sourced from eventbus.Config.Crypto.Enabled in
 // internal/bootstrap.
 //

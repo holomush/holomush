@@ -2433,7 +2433,7 @@ func (x *PublishedSceneVoteSummary) GetPending() int32 {
 }
 
 // GetPublishedSceneRequest reads a publication attempt's full state as a scene
-// participant (participant-gated, INV-S9).
+// participant (participant-gated, INV-SCENE-60).
 type GetPublishedSceneRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The reading character, who MUST be a participant of the scene; required.
@@ -2650,7 +2650,7 @@ func (x *GetPublishedSceneResponse) GetPublishedAtUnixNs() int64 {
 }
 
 // DownloadPublishedSceneRequest fetches a PUBLISHED attempt rendered to a file
-// format, as a participant (participant-gated, INV-S9).
+// format, as a participant (participant-gated, INV-SCENE-60).
 type DownloadPublishedSceneRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The downloading character, who MUST be a participant; required.
@@ -2772,7 +2772,7 @@ func (x *DownloadPublishedSceneResponse) GetMimeType() string {
 }
 
 // ListScenePublishAttemptsRequest lists a scene's publication attempts as a
-// participant (participant-gated, INV-S9).
+// participant (participant-gated, INV-SCENE-60).
 type ListScenePublishAttemptsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The reading character, who MUST be a participant; required.
