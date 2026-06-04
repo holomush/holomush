@@ -6,7 +6,7 @@
 // omits AuthGuard, SessionAuditEmitter, and plugin-identity branching — F has
 // no per-event auth and no per-decrypt audit.
 //
-// INV-F12: the 6-branch classifier matrix maps decrypt errors to
+// INV-CRYPTO-62: the 6-branch classifier matrix maps decrypt errors to
 // NoPlaintextReason values. Row-level failures produce metadata-only frames;
 // context cancellation/deadline is fatal and bails the stream.
 
@@ -100,7 +100,7 @@ func DecryptRow(
 }
 
 // classifyDecryptErr maps an error to a NoPlaintextReason + fatal flag per
-// INV-F12's 6-branch matrix.
+// INV-CRYPTO-62's 6-branch matrix.
 //
 // Fatal=true means the entire stream should bail (ctx canceled/deadline).
 // Fatal=false means the row becomes a metadata-only frame and streaming continues.

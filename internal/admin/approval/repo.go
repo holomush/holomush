@@ -141,7 +141,7 @@ func (r *PostgresRepo) getRaw(ctx context.Context, id RequestID) (Approval, erro
 
 // GetByOpArgsHash returns the most-recently-approved fresh approval for the
 // given (opKind, opArgsHash) pair that was not authored by excludePlayerID.
-// All filters are applied server-side in a single query. INV-F17.
+// All filters are applied server-side in a single query. INV-CRYPTO-67.
 //
 // Returns APPROVAL_NOT_FOUND if no matching row exists (expired, unapproved,
 // authored by excludePlayerID, or simply absent).

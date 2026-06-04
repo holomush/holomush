@@ -93,24 +93,24 @@ type CryptoConfig struct {
 	RekeyCheckpointSweepInterval time.Duration `koanf:"rekey_checkpoint_sweep_interval"`
 
 	// OperatorReadDefaultWindow is the size of since-defaulted AdminReadStream
-	// reads (INV-F6 / spec §6). Defaults to 1h via Defaults() when unset/zero.
+	// reads (INV-CRYPTO-56 / spec §6). Defaults to 1h via Defaults() when unset/zero.
 	// Sub-epic F R.14 (holomush-jxo8.8.38).
 	OperatorReadDefaultWindow time.Duration `koanf:"operator_read_default_window"`
 
 	// OperatorReadMaxWindow caps the (until - since) span on AdminReadStream
-	// requests (INV-F6). Defaults to 30d via Defaults() when unset/zero.
+	// requests (INV-CRYPTO-56). Defaults to 30d via Defaults() when unset/zero.
 	// Operators configuring values >90d trigger a WARN at boot — the cap
 	// remains in force but oversized windows greatly inflate row-count and
 	// memory pressure on the cold-tier reader.
 	OperatorReadMaxWindow time.Duration `koanf:"operator_read_max_window"`
 
 	// OperatorReadWriteDeadline is the per-frame send deadline on the
-	// AdminReadStream server stream (INV-F14). Defaults to 30s via Defaults()
+	// AdminReadStream server stream (INV-CRYPTO-64). Defaults to 30s via Defaults()
 	// when unset/zero.
 	OperatorReadWriteDeadline time.Duration `koanf:"operator_read_write_deadline"`
 
 	// OperatorReadApprovalTTL is the dual-control wait budget on AdminReadStream
-	// (INV-F11). Defaults to 5m via Defaults() when unset/zero.
+	// (INV-CRYPTO-61). Defaults to 5m via Defaults() when unset/zero.
 	OperatorReadApprovalTTL time.Duration `koanf:"operator_read_approval_ttl"`
 }
 
@@ -124,19 +124,19 @@ const DefaultRekeyCheckpointTTL = 24 * time.Hour
 const DefaultRekeyCheckpointSweepInterval = 1 * time.Hour
 
 // DefaultOperatorReadDefaultWindow is the default since-defaulted window for
-// AdminReadStream reads (INV-F6). Sub-epic F R.14 (holomush-jxo8.8.38).
+// AdminReadStream reads (INV-CRYPTO-56). Sub-epic F R.14 (holomush-jxo8.8.38).
 const DefaultOperatorReadDefaultWindow = 1 * time.Hour
 
 // DefaultOperatorReadMaxWindow caps the (until - since) span on
-// AdminReadStream reads (INV-F6). Sub-epic F R.14.
+// AdminReadStream reads (INV-CRYPTO-56). Sub-epic F R.14.
 const DefaultOperatorReadMaxWindow = 30 * 24 * time.Hour
 
 // DefaultOperatorReadWriteDeadline is the per-frame send deadline on the
-// AdminReadStream server stream (INV-F14). Sub-epic F R.14.
+// AdminReadStream server stream (INV-CRYPTO-64). Sub-epic F R.14.
 const DefaultOperatorReadWriteDeadline = 30 * time.Second
 
 // DefaultOperatorReadApprovalTTL is the default dual-control wait budget on
-// AdminReadStream (INV-F11). Sub-epic F R.14.
+// AdminReadStream (INV-CRYPTO-61). Sub-epic F R.14.
 const DefaultOperatorReadApprovalTTL = 5 * time.Minute
 
 // Defaults returns a copy of c with the zero-valued fields populated from

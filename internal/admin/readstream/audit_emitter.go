@@ -17,13 +17,13 @@ import (
 )
 
 // CompletedAuditFailuresTotal counts completion-audit publish failures
-// (INV-F10). Exported so tests can read via testutil.ToFloat64.
+// (INV-CRYPTO-60). Exported so tests can read via testutil.ToFloat64.
 //
 // Registered via promauto (process-global DefaultRegisterer) so it survives
 // test suite restarts in the same process without duplicate-registration panics.
 var CompletedAuditFailuresTotal = promauto.NewCounter(prometheus.CounterOpts{
 	Name: "holomush_admin_readstream_completed_audit_failures_total",
-	Help: "Total failures emitting the crypto.system.operator_read_completed audit event (INV-F10)",
+	Help: "Total failures emitting the crypto.system.operator_read_completed audit event (INV-CRYPTO-60)",
 })
 
 const (
@@ -37,13 +37,13 @@ type OperatorReadAuditEmitter interface {
 	// EmitStart canonicalizes the start payload, computes prev_hash for the
 	// scope (genesis: nil), stamps prev_hash + self_hash into the payload,
 	// and publishes to events.<game>.system.operator_read.<request_id>.
-	// Returns an error; callers MUST NOT stream data if EmitStart fails (INV-F1).
+	// Returns an error; callers MUST NOT stream data if EmitStart fails (INV-CRYPTO-53).
 	EmitStart(ctx context.Context, payload OperatorReadStartPayload, requestID ulid.ULID) error
 
 	// EmitCompleted does the same for the completed event. The chain emitter
 	// loads existing entries by scope (returns the start event), and its
 	// recomputed self_hash becomes prev_hash. Returns nil on publish success.
-	// On failure: increments INV-F10 metric and returns wrapped error.
+	// On failure: increments INV-CRYPTO-60 metric and returns wrapped error.
 	EmitCompleted(ctx context.Context, payload OperatorReadCompletedPayload, requestID ulid.ULID) error
 }
 
@@ -109,9 +109,9 @@ func (e *operatorReadAuditEmitter) EmitStart(ctx context.Context, payload Operat
 
 // EmitCompleted implements OperatorReadAuditEmitter.
 //
-// INV-F9: prev_hash MUST equal the recomputed self_hash of the start event.
+// INV-CRYPTO-59: prev_hash MUST equal the recomputed self_hash of the start event.
 // Returns a wrapped error on publish/chain failure; the caller MUST log and
-// discard the error per INV-F10 (see handler.go::handleInternal step 10).
+// discard the error per INV-CRYPTO-60 (see handler.go::handleInternal step 10).
 // CompletedAuditFailuresTotal is incremented inside this method on every
 // failure path before returning.
 func (e *operatorReadAuditEmitter) EmitCompleted(ctx context.Context, payload OperatorReadCompletedPayload, requestID ulid.ULID) error {

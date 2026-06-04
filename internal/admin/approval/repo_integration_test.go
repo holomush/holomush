@@ -292,7 +292,7 @@ var _ = Describe("Approval Repo", func() {
 		})
 	})
 
-	Describe("GetByOpArgsHash (INV-F17)", func() {
+	Describe("GetByOpArgsHash (INV-CRYPTO-67)", func() {
 		// openAndApprove is a spec-local helper that opens a fresh approval and
 		// immediately marks it approved by secondOp, returning the resulting Approval.
 		openAndApprove := func(r *approval.PostgresRepo, primary, secondOp, opKind string, opArgsHash []byte) approval.Approval {

@@ -1,5 +1,3 @@
-  Encountered: holomush-hz0v4.14.5 (2026-06-01) — READY.
-
 - **Per-family coverage meta-test MUST be DELETED on registry migration — not
   optional (hz0v4.14.9 NOT-READY).** When a scope migrates I-<OLD>-N →
   INV-<SCOPE>-N, the legacy `test/meta/i_<old>_coverage_test.go` greps for
@@ -171,3 +169,32 @@
   (7) This diff CLEANED a pre-existing `,}` (INV-RA-6 line 1657) but ADDED a new one
   (INV-A16 line 1682) — 5th recurrence, Low non-blocking, renderer-inert. PLUGIN dense
   1..28, ACCESS dense 1..8. Encountered: hz0v4.14.22 (2026-06-03) — READY.
+
+- **First NOT-READY in the .14.x classification series: registry guards are
+  BLIND to unregistered files, so a green meta-test run does NOT prove a family
+  migration is complete (hz0v4.14.23 INV-F NOT READY).** Two defects survived a
+  fully-green run (lint:invariants, provenance, partition, binding, 617 unit tests,
+  int-compile): (A) **51 residual bare `INV-F*` token refs** (INV-F1/2/3/6/9/10/11/
+  12/14/15/17) in THREE cmd/holomush files NOT in the diff: admin_read_stream_e2e_test.go
+  (45), readstream_wiring_test.go (4), admin_authenticate_e2e_test.go (2). These are
+  the SAME family the bead migrates, but the files are neither owned_paths nor
+  shared_files nor in any registry `refs[]`, so the residual walk + provenance guard
+  never look at them → green despite incomplete migration. 4 of those are STALE
+  cross-file func-name cites (`TestINV_F2/F6/F3/F17_...` at lines 1124/1159/1245/2137)
+  pointing at funcs THIS diff RENAMED to TestINV_CRYPTO_54/56/55/67 — now dangling.
+  (B) **Range-rewrite corruption**: phase7_boundary_meta_test.go:25 prose
+  `INV-P7-1..16` → `INV-CRYPTO-38..16` (tool rewrote left side of a `..N` range,
+  left suffix). `INV-P7-1` is a P7 token (handled in .14.15), OUT OF SCOPE for the
+  F pass — tool should not have touched it. Substring `INV-CRYPTO-38` keeps
+  provenance green (real anchor is the table row at line 54), so CI is blind.
+  Redesign spec (2026-06-01-...-redesign.md:42) DOCUMENTS this exact class:
+  "INV-CRYPTO-1..5 — nonsensical as crypto. Every CI gate passed." Same bug the
+  crypto-reviewer caught on F-compound-refs (INV-CRYPTO-56/F7), recurred on a
+  `..N` range. **Review pattern for family migrations: do NOT trust green guards
+  as proof of completeness. ALWAYS run `rg -c '\bINV-<OLD>[0-9]' --glob '!docs/**'`
+  over the WHOLE tree (not just diffed files) — residual hits in unregistered files
+  = incomplete migration. Also `rg 'INV-<SCOPE>-[0-9]+\.\.[0-9]+'` for range
+  corruption, and `rg 'TestINV_<OLD>[0-9]'` for dangling renamed-func cites.**
+  Mechanical search-replace correct part: 35 diffed files all comment/string/test-func
+  swaps, dense 53..67, no executable edits, generated artifacts in sync. The DEFECT
+  is what was MISSED, not what was changed. Encountered: hz0v4.14.23 (2026-06-03) — NOT READY.

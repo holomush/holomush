@@ -92,8 +92,8 @@ func TestOperatorReadHandler_ScopeFromSubjectRejectsInvalidSuffix(t *testing.T) 
 	}
 }
 
-func TestINV_F9_AuditChainLinksStartToCompletedSameSubject(t *testing.T) {
-	// INV-F9: both events share NATS subject; chain primitive links them.
+func TestINV_CRYPTO_59_AuditChainLinksStartToCompletedSameSubject(t *testing.T) {
+	// INV-CRYPTO-59: both events share NATS subject; chain primitive links them.
 	// Construct fake start + completed envelopes with shared request_id.
 	h := readstream.OperatorReadHandlerFor("g1")
 	requestID := "01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -123,7 +123,7 @@ func TestINV_F9_AuditChainLinksStartToCompletedSameSubject(t *testing.T) {
 	// (a) Both subjects are equal via SubjectFor
 	startSubject := h.SubjectFor(requestID)
 	completedSubject := h.SubjectFor(requestID)
-	assert.Equal(t, startSubject, completedSubject, "both events must share the same subject (INV-F9)")
+	assert.Equal(t, startSubject, completedSubject, "both events must share the same subject (INV-CRYPTO-59)")
 
 	// (b) ScopeFromPayload extracts request_id from both
 	startScope, err := h.ScopeFromPayload(startBytes)

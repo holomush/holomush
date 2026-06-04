@@ -25,7 +25,7 @@ import (
 // INV-E26: SubjectPrefix starts with "events.".
 // INV-E27: ScopePayloadField is "request_id" (non-empty).
 // INV-E28: SelfHashField is "self_hash"; PrevHashField is "prev_hash".
-// INV-F9: Both events share the same NATS subject pattern.
+// INV-CRYPTO-59: Both events share the same NATS subject pattern.
 func OperatorReadChainFor(gameID string) chain.Chain {
 	return chain.Chain{
 		SubjectPrefix:     "events." + gameID + ".system.operator_read",

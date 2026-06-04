@@ -45,7 +45,7 @@ package main
 // which the classifier maps to STALE_DEK (not DEKMissing / DEKBadColumns).
 // F-E17 therefore exercises the realistic STALE_DEK path: 5 rows whose
 // dek_ref points to nonexistent crypto_keys IDs (orphans). All 5 frames
-// arrive metadata-only with NoPlaintextReason=STALE_DEK. INV-F12's
+// arrive metadata-only with NoPlaintextReason=STALE_DEK. INV-CRYPTO-62's
 // "metadata-only on missing DEK" contract is enforced; the specific reason
 // enum is whichever the production classifier emits.
 //
@@ -60,7 +60,7 @@ package main
 // Note on F-E4 approach: the live server's handler was constructed at boot
 // with the production emitter. R.18 constructs an in-process handler
 // directly (not through the live UDS) so it can inject a failing emitter.
-// This is consistent with how handler_test.go exercises INV-F2 at the unit
+// This is consistent with how handler_test.go exercises INV-CRYPTO-54 at the unit
 // level.
 //
 // R.19 lifecycle scenarios:
@@ -100,7 +100,7 @@ package main
 //     PendingApproval frames, both invocations' audit payloads share
 //     the SAME approval_id. Two-requester setup required because
 //     GetByOpArgsHash excludes the requester's own primary_player_id
-//     per R.2's INV-F17 contract — carol cannot reuse her own row.
+//     per R.2's INV-CRYPTO-67 contract — carol cannot reuse her own row.
 
 import (
 	"context"
@@ -181,7 +181,7 @@ type adminReadStreamView struct {
 func (v *adminReadStreamView) EventCount() int { return len(v.events) }
 
 // DecryptFailCount returns the number of metadata-only frames received.
-// Mirrors the server-side decrypt_fail_count counter for INV-F12.
+// Mirrors the server-side decrypt_fail_count counter for INV-CRYPTO-62.
 func (v *adminReadStreamView) DecryptFailCount() int {
 	var n int
 	for _, e := range v.events {
@@ -505,7 +505,7 @@ func (e *adminAuthEnv) seedAdminReadStreamData(
 // seedPlainAuditRow inserts a single identity-codec (cleartext) row into
 // events_audit. dek_ref is NULL — the row MUST NOT be returned by the
 // cold-tier filter (R.10's WHERE dek_ref IS NOT NULL clause excludes it).
-// Used by F-E14 to assert the sensitive-content filter (INV-F15).
+// Used by F-E14 to assert the sensitive-content filter (INV-CRYPTO-65).
 func (e *adminAuthEnv) seedPlainAuditRow(subject string, ts time.Time) ulid.ULID {
 	ctx, cancel := context.WithTimeout(e.ctx, 5*time.Second)
 	defer cancel()
@@ -537,7 +537,7 @@ func (e *adminAuthEnv) seedPlainAuditRow(subject string, ts time.Time) ulid.ULID
 // a nonexistent crypto_keys row. The envelope payload is a random byte
 // string (cannot be decrypted; DEK lookup fails first anyway). DecryptRow's
 // DEK-resolve step returns DEK_NOT_FOUND, which classifyDecryptErr maps to
-// NoPlaintextReason_STALE_DEK (INV-F12 branch 3/4).
+// NoPlaintextReason_STALE_DEK (INV-CRYPTO-62 branch 3/4).
 //
 // orphanDEKRef is the synthetic dek_ref value (caller-chosen, MUST be
 // unused; e.g., 0x7FFF_FFFF_FFFF_FFF0 + offset).
@@ -782,10 +782,10 @@ func runAdminReadStreamScenarios(env *adminAuthEnv) {
 	By("F-E13: multi-context — 20 events in global timestamp order")
 	scenarioFE13MultiContext(env)
 
-	By("F-E14: sensitive-content filter — 5 encrypted received, 3 plain filtered (INV-F15)")
+	By("F-E14: sensitive-content filter — 5 encrypted received, 3 plain filtered (INV-CRYPTO-65)")
 	scenarioFE14SensitiveFilter(env)
 
-	By("F-E17: classifier surface — 5 metadata-only frames with STALE_DEK reason (INV-F12 producers)")
+	By("F-E17: classifier surface — 5 metadata-only frames with STALE_DEK reason (INV-CRYPTO-62 producers)")
 	scenarioFE17ClassifierSurface(env)
 
 	// R.18 validation / denial scenarios.
@@ -793,7 +793,7 @@ func runAdminReadStreamScenarios(env *adminAuthEnv) {
 	By("F-E4 (INV-42): audit-emit failure → DENY_AUDIT_PRE_DATA_PUBLISH, zero data frames")
 	scenarioFE4AuditEmitFailure(env)
 
-	By("F-E8 (INV-F6): window > MaxWindow → DENY_OPERATOR_READ_WINDOW_TOO_LARGE, zero audit rows")
+	By("F-E8 (INV-CRYPTO-56): window > MaxWindow → DENY_OPERATOR_READ_WINDOW_TOO_LARGE, zero audit rows")
 	scenarioFE8WindowTooLarge(env)
 
 	By("F-E9a: whitespace-only justification → DENY_OPERATOR_READ_JUSTIFICATION_EMPTY, zero audit rows")
@@ -802,7 +802,7 @@ func runAdminReadStreamScenarios(env *adminAuthEnv) {
 	By("F-E9b: 4097-byte justification → DENY_OPERATOR_READ_JUSTIFICATION_TOO_LONG, zero audit rows")
 	scenarioFE9bJustificationTooLong(env)
 
-	By("F-E11 (INV-F3): missing crypto.operator capability → DENY_OPERATOR_CAPABILITY, zero audit rows")
+	By("F-E11 (INV-CRYPTO-55): missing crypto.operator capability → DENY_OPERATOR_CAPABILITY, zero audit rows")
 	scenarioFE11MissingCapability(env)
 
 	By("F-E15a: dm with 1 id → DENY_OPERATOR_READ_ARITY_MISMATCH")
@@ -816,7 +816,7 @@ func runAdminReadStreamScenarios(env *adminAuthEnv) {
 	By("F-E3: mixed decrypt — 80 plaintext + 20 STALE_DEK metadata-only frames after DEK destroy")
 	scenarioFE3MixedDecrypt(env)
 
-	By("F-E5 (INV-F11): dual-control happy — carol initiates, MarkApproved by playerD, stream resumes")
+	By("F-E5 (INV-CRYPTO-61): dual-control happy — carol initiates, MarkApproved by playerD, stream resumes")
 	scenarioFE5DualControlHappy(env)
 
 	By("F-E6: dual-control timeout — no approver; TerminatedBy=DUAL_CONTROL_TIMEOUT; zero audit rows")
@@ -825,16 +825,16 @@ func runAdminReadStreamScenarios(env *adminAuthEnv) {
 	By("F-E7: client disconnect — context cancel mid-stream; TerminatedBy=CLIENT_DISCONNECT")
 	scenarioFE7ClientDisconnect(env)
 
-	By("F-E10 (INV-F14): per-frame write deadline — slow sender trips ErrWriteDeadlineExceeded → DEADLINE_EXCEEDED")
+	By("F-E10 (INV-CRYPTO-64): per-frame write deadline — slow sender trips ErrWriteDeadlineExceeded → DEADLINE_EXCEEDED")
 	scenarioFE10WriteDeadline(env)
 
 	// quarantined: holomush-7b9n — F-E12 audit-row projection flakes under load; skip only this step in gating runs (runs nightly).
 	if quarantinetest.Enabled() {
-		By("F-E12 (INV-F9): chain verification — VerifyScope on a happy-path request_id succeeds")
+		By("F-E12 (INV-CRYPTO-59): chain verification — VerifyScope on a happy-path request_id succeeds")
 		scenarioFE12ChainVerification(env)
 	}
 
-	By("F-E16 (INV-F11): idempotent dual-control reuse — second invocation by different requester finds approved row, no PendingApproval")
+	By("F-E16 (INV-CRYPTO-61): idempotent dual-control reuse — second invocation by different requester finds approved row, no PendingApproval")
 	scenarioFE16IdempotentDualControlReuse(env)
 }
 
@@ -876,11 +876,11 @@ func scenarioFE1HappyPath(env *adminAuthEnv) {
 	Eventually(func() int {
 		return env.operatorReadAuditCount("crypto.system.operator_read", requestID)
 	}, "10s", "200ms").Should(Equal(1),
-		"F-E1: exactly one crypto.system.operator_read audit row (INV-F1)")
+		"F-E1: exactly one crypto.system.operator_read audit row (INV-CRYPTO-53)")
 	Eventually(func() int {
 		return env.operatorReadAuditCount("crypto.system.operator_read_completed", requestID)
 	}, "10s", "200ms").Should(Equal(1),
-		"F-E1: exactly one crypto.system.operator_read_completed audit row (INV-F10)")
+		"F-E1: exactly one crypto.system.operator_read_completed audit row (INV-CRYPTO-60)")
 }
 
 // ---- F-E2 ----
@@ -971,7 +971,7 @@ func scenarioFE14SensitiveFilter(env *adminAuthEnv) {
 	Expect(seededIDs).To(HaveLen(encryptedCount), "F-E14 encrypted seed count")
 
 	// Plain rows under the SAME subject pattern — these MUST be filtered by
-	// R.10's `dek_ref IS NOT NULL` clause (INV-F15).
+	// R.10's `dek_ref IS NOT NULL` clause (INV-CRYPTO-65).
 	plainSubject := env.readstreamSubjectForContext("scene", sceneID, "test.cleartext")
 	plainTimestamps := make([]time.Time, plainCount)
 	plainIDs := make([]ulid.ULID, plainCount)
@@ -993,7 +993,7 @@ func scenarioFE14SensitiveFilter(env *adminAuthEnv) {
 	Expect(view.TerminatedBy()).To(Equal(adminv1.ReadFinished_TERMINATED_BY_CLIENT_EOF),
 		"F-E14: clean-EOF terminator")
 	Expect(view.EventCount()).To(Equal(encryptedCount),
-		"F-E14: exactly 5 encrypted events (plain rows MUST be filtered, INV-F15)")
+		"F-E14: exactly 5 encrypted events (plain rows MUST be filtered, INV-CRYPTO-65)")
 	Expect(view.DecryptFailCount()).To(Equal(0),
 		"F-E14: no decrypt failures expected")
 	Expect(view.finished.GetEventsScanned()).To(Equal(int64(encryptedCount)),
@@ -1007,7 +1007,7 @@ func scenarioFE14SensitiveFilter(env *adminAuthEnv) {
 	for _, ev := range view.events {
 		_, leaked := plainIDSet[ev.GetId()]
 		Expect(leaked).To(BeFalse(),
-			"F-E14: plain (identity-codec) row %s MUST NEVER appear (INV-F15)", ev.GetId())
+			"F-E14: plain (identity-codec) row %s MUST NEVER appear (INV-CRYPTO-65)", ev.GetId())
 	}
 }
 
@@ -1020,7 +1020,7 @@ func scenarioFE17ClassifierSurface(env *adminAuthEnv) {
 
 	// Seed 5 rows whose dek_ref points to nonexistent crypto_keys IDs.
 	// dek.Manager.Resolve returns DEK_NOT_FOUND for each — classifyDecryptErr
-	// maps that to STALE_DEK (INV-F12 branch 3/4). The brief's originally-
+	// maps that to STALE_DEK (INV-CRYPTO-62 branch 3/4). The brief's originally-
 	// planned DEK_MISSING / DEK_BAD_COLUMNS shape is unreachable in r8
 	// (see file header for rationale).
 	baseTime := time.Now().UTC().Add(-45 * time.Second)
@@ -1054,7 +1054,7 @@ func scenarioFE17ClassifierSurface(env *adminAuthEnv) {
 
 	// Plaintext MUST NEVER leak — metadata-only payloads are empty.
 	Expect(view.PayloadsAllEmpty()).To(BeTrue(),
-		"F-E17: metadata-only frames MUST carry empty Payload (no plaintext leak, INV-F12)")
+		"F-E17: metadata-only frames MUST carry empty Payload (no plaintext leak, INV-CRYPTO-62)")
 
 	// Classifier verdict: every row's reason is STALE_DEK in r8.
 	// (See file header note — DEK_MISSING / DEK_BAD_COLUMNS branches are
@@ -1064,7 +1064,7 @@ func scenarioFE17ClassifierSurface(env *adminAuthEnv) {
 		"F-E17: one reason per metadata-only frame")
 	for i, r := range reasons {
 		Expect(r).To(Equal(corev1.NoPlaintextReason_NO_PLAINTEXT_REASON_STALE_DEK),
-			"F-E17: row %d must classify as STALE_DEK (orphan dek_ref → DEK_NOT_FOUND → STALE_DEK per INV-F12)", i)
+			"F-E17: row %d must classify as STALE_DEK (orphan dek_ref → DEK_NOT_FOUND → STALE_DEK per INV-CRYPTO-62)", i)
 	}
 
 	// The dek_ref classifier branches DEK_MISSING and DEK_BAD_COLUMNS are
@@ -1088,7 +1088,7 @@ func scenarioFE17ClassifierSurface(env *adminAuthEnv) {
 
 // scenarioFE4AuditEmitFailure asserts that when EmitStart fails, the handler
 // returns DENY_AUDIT_PRE_DATA_PUBLISH and emits ZERO data frames (INV-42 /
-// INV-F2). Because the live server's handler was constructed at boot with
+// INV-CRYPTO-54). Because the live server's handler was constructed at boot with
 // the production emitter, this scenario constructs an in-process handler
 // (via buildInProcessReadStreamClient) with a failing audit emitter injected.
 //
@@ -1120,12 +1120,12 @@ func scenarioFE4AuditEmitFailure(env *adminAuthEnv) {
 	Expect(streamErr).To(HaveOccurred(), "F-E4: stream.Err() must be non-nil when EmitStart fails")
 	// ConnectRPC deviation (documented in file header): oops codes are NOT
 	// transmitted over the wire — only CodeUnknown + the Errorf message text.
-	// The substantive invariant is zero data frames (INV-42 / INV-F2), asserted
-	// below. Oops code coverage lives in handler_test.go::TestINV_F2_AuditPublishFailRefuses.
+	// The substantive invariant is zero data frames (INV-42 / INV-CRYPTO-54), asserted
+	// below. Oops code coverage lives in handler_test.go::TestINV_CRYPTO_54_AuditPublishFailRefuses.
 	Expect(streamErr.Error()).To(ContainSubstring("audit emit failed"),
 		"F-E4: error message MUST contain the audit-emit-failure text")
 
-	// ZERO data frames: no EventFrame, no ReadStarted (INV-42 / INV-F2).
+	// ZERO data frames: no EventFrame, no ReadStarted (INV-42 / INV-CRYPTO-54).
 	for _, f := range frames {
 		Expect(f.GetEvent()).To(BeNil(),
 			"F-E4: ZERO EventFrame frames MUST arrive when EmitStart fails (INV-42)")
@@ -1134,10 +1134,10 @@ func scenarioFE4AuditEmitFailure(env *adminAuthEnv) {
 	}
 }
 
-// ---- F-E8 (INV-F6) ----
+// ---- F-E8 (INV-CRYPTO-56) ----
 
 // scenarioFE8WindowTooLarge asserts that requesting a window > MaxWindow (30d)
-// returns DENY_OPERATOR_READ_WINDOW_TOO_LARGE. Per INV-F3 ordering the
+// returns DENY_OPERATOR_READ_WINDOW_TOO_LARGE. Per INV-CRYPTO-55 ordering the
 // rejection fires BEFORE EmitStart, so zero audit rows should exist for
 // a request_id that never got one. We assert no new audit rows of any
 // operator_read type appear for a fresh pseudo-requestID probe.
@@ -1156,11 +1156,11 @@ func scenarioFE8WindowTooLarge(env *adminAuthEnv) {
 	Expect(streamErr).To(HaveOccurred(), "F-E8: stream must error when window exceeds MaxWindow")
 	// ConnectRPC deviation: oops code DENY_OPERATOR_READ_WINDOW_TOO_LARGE is NOT
 	// transmitted over the wire. Assert on the Errorf message text instead.
-	// Oops code coverage lives in filter_test.go::TestINV_F6_WindowTooLargeRejected.
+	// Oops code coverage lives in filter_test.go::TestINV_CRYPTO_56_WindowTooLargeRejected.
 	Expect(streamErr.Error()).To(ContainSubstring("exceeds maximum"),
 		"F-E8: error message MUST contain the window-too-large text")
 
-	// INV-F3: rejection precedes pre-data audit — zero operator_read audit rows.
+	// INV-CRYPTO-55: rejection precedes pre-data audit — zero operator_read audit rows.
 	// Because we have no request_id (rejection fired before EmitStart stamped one),
 	// we assert the total count of new operator_read rows is zero at this instant.
 	// We don't assert a specific request_id because there isn't one.
@@ -1207,10 +1207,10 @@ func scenarioFE9bJustificationTooLong(env *adminAuthEnv) {
 		"F-E9b: error message MUST reference justification validation failure")
 }
 
-// ---- F-E11 (INV-F3) ----
+// ---- F-E11 (INV-CRYPTO-55) ----
 
 // scenarioFE11MissingCapability asserts that a player without crypto.operator
-// receives DENY_OPERATOR_CAPABILITY. Per INV-F3, the capability check runs
+// receives DENY_OPERATOR_CAPABILITY. Per INV-CRYPTO-55, the capability check runs
 // BEFORE EmitStart — zero audit rows may be created for this request.
 //
 // Because PlayerAttributeProvider is read-only post-construction (INV-B6),
@@ -1242,19 +1242,19 @@ func scenarioFE11MissingCapability(env *adminAuthEnv) {
 	Expect(streamErr).To(HaveOccurred(), "F-E11: stream must error when crypto.operator is absent")
 	// ConnectRPC deviation: oops code DENY_OPERATOR_CAPABILITY not transmitted.
 	// Assert Errorf text instead. Oops code coverage in
-	// handler_test.go::TestINV_F3_CapabilityCheckPrecedesAudit.
+	// handler_test.go::TestINV_CRYPTO_55_CapabilityCheckPrecedesAudit.
 	Expect(streamErr.Error()).To(ContainSubstring("crypto.operator"),
 		"F-E11: error message MUST reference the missing crypto.operator capability")
 
-	// INV-F3: capability check precedes EmitStart — ZERO data frames.
+	// INV-CRYPTO-55: capability check precedes EmitStart — ZERO data frames.
 	for _, f := range frames {
 		Expect(f.GetEvent()).To(BeNil(),
-			"F-E11: ZERO EventFrame frames MUST arrive when capability is denied (INV-F3)")
+			"F-E11: ZERO EventFrame frames MUST arrive when capability is denied (INV-CRYPTO-55)")
 		Expect(f.GetStarted()).To(BeNil(),
 			"F-E11: ReadStarted MUST NOT be sent when capability is denied")
 	}
 
-	// INV-F3: EmitStart MUST NOT have been called, so zero operator_read rows.
+	// INV-CRYPTO-55: EmitStart MUST NOT have been called, so zero operator_read rows.
 	// Use the live env's queryPool — the in-process handler uses the same pool.
 	// A unique marker in the justification would let us filter by payload, but
 	// since the audit emitter is failingAuditEmitter (never succeeds even if
@@ -1510,7 +1510,7 @@ func (s *slowStreamSender) Send(resp *adminv1.AdminReadStreamResponse) error {
 //   - Every metadata-only frame has empty Payload (no plaintext leak).
 //
 // The classifier maps DEK_NOT_FOUND (returned by Resolve on a destroyed
-// key) → STALE_DEK per INV-F12 branch 3/4 (decrypt.go::classifyDecryptErr).
+// key) → STALE_DEK per INV-CRYPTO-62 branch 3/4 (decrypt.go::classifyDecryptErr).
 func scenarioFE3MixedDecrypt(env *adminAuthEnv) {
 	const plaintextCount = 80
 	const destroyedCount = 20
@@ -1555,7 +1555,7 @@ func scenarioFE3MixedDecrypt(env *adminAuthEnv) {
 	Expect(view.finished.GetDecryptFailCount()).To(Equal(int64(destroyedCount)),
 		"F-E3: finished.decrypt_fail_count = 20")
 
-	// Plaintext MUST NEVER leak on metadata-only frames (INV-F12 contract).
+	// Plaintext MUST NEVER leak on metadata-only frames (INV-CRYPTO-62 contract).
 	Expect(view.PayloadsAllEmpty()).To(BeTrue(),
 		"F-E3: every metadata-only frame MUST have empty Payload")
 
@@ -1659,7 +1659,7 @@ func scenarioFE5DualControlHappy(env *adminAuthEnv) {
 	pl := env.operatorReadStartPayloadFor(requestID)
 	Expect(pl.ApproverPlayerID).NotTo(BeNil())
 	Expect(pl.ApproverPlayerID.String()).To(Equal(env.playerD.String()),
-		"F-E5: audit approver_player_id MUST equal playerD (not carol — INV-F11 no self-approve)")
+		"F-E5: audit approver_player_id MUST equal playerD (not carol — INV-CRYPTO-61 no self-approve)")
 	Expect(pl.ApprovalID).NotTo(BeNil(),
 		"F-E5: audit approval_id MUST be set")
 	Expect(*pl.ApprovalID).To(Equal(ulid.ULID(approvalRID)),
@@ -1886,12 +1886,12 @@ func pendingApprovalCount(env *adminAuthEnv, primaryPlayer ulid.ULID, opKind str
 // context.Canceled (deadline_writer.go:54), which classifyTerminator
 // maps to CLIENT_DISCONNECT inside the handler.
 //
-// PRODUCTION CAVEAT (INV-F10): EmitCompleted uses the same ctx as the
+// PRODUCTION CAVEAT (INV-CRYPTO-60): EmitCompleted uses the same ctx as the
 // request — once that ctx is cancelled, the chain emitter's SQL load
 // fails with AUDIT_CHAIN_LOAD_FAILED + context.Canceled. The handler
 // logs WARN and continues (handler.go:297). The completed audit row
 // MAY therefore be absent for CLIENT_DISCONNECT. This is acceptable
-// per INV-F10 ("completion audit failure does NOT raise"); the start
+// per INV-CRYPTO-60 ("completion audit failure does NOT raise"); the start
 // row is the durable record. Asserting the completed row's
 // terminated_by here would be racy: it depends on whether the cancel
 // arrived before or after the audit emitter's first DB roundtrip.
@@ -1946,7 +1946,7 @@ func scenarioFE7ClientDisconnect(env *adminAuthEnv) {
 //   - Driving the production handler with a custom StreamSenderForTest
 //     gives us deterministic per-frame timing. SendWithDeadline runs
 //     inside the same handler that the UDS exercises, so this still
-//     covers the INV-F14 production path.
+//     covers the INV-CRYPTO-64 production path.
 //
 // Sanity case follow-up: with WriteDeadline=500ms and sleep=10ms, the
 // scan completes cleanly (CLIENT_EOF, all events delivered).
@@ -2085,7 +2085,7 @@ func (nopEventbusPublisherForTest) Publish(_ context.Context, _ eventbus.Event) 
 // then verifies the resulting chain on disk via chain.NewVerifier +
 // VerifyScope. The chain MUST link: start payload (prev_hash=nil at
 // genesis OR prev_hash=previous chain entry) → completed payload
-// (prev_hash=start's self_hash). INV-F9.
+// (prev_hash=start's self_hash). INV-CRYPTO-59.
 //
 // VerifyScope walks the chain for the given scope (request_id) and
 // recomputes each entry's self_hash from the canonical-form payload,
@@ -2125,7 +2125,7 @@ func scenarioFE12ChainVerification(env *adminAuthEnv) {
 	handler := readstream.OperatorReadHandlerFor(env.gameID)
 	verifyErr := verifier.VerifyScope(env.ctx, handler, requestID)
 	Expect(verifyErr).NotTo(HaveOccurred(),
-		"F-E12: chain.VerifyScope MUST succeed (INV-F9): start.self_hash → completed.prev_hash linkage holds")
+		"F-E12: chain.VerifyScope MUST succeed (INV-CRYPTO-59): start.self_hash → completed.prev_hash linkage holds")
 }
 
 // ---- F-E16 (idempotent dual-control reuse) ----
@@ -2134,7 +2134,7 @@ func scenarioFE12ChainVerification(env *adminAuthEnv) {
 // path. Carol opens an approval (request 1); we MarkApproved it with
 // playerD. Then a SECOND requester invokes AdminReadStream with
 // IDENTICAL args + DualControl=true. GetByOpArgsHash filters out the
-// requester's own author (INV-F17 per R.2's TestINV_F17_GetByOpArgsHashFiltersOwnAuthor),
+// requester's own author (INV-CRYPTO-67 per R.2's TestINV_CRYPTO_67_GetByOpArgsHashFiltersOwnAuthor),
 // so the second invocation MUST be made by a DIFFERENT requester from
 // the original. We use playerA (alice) — even though alice is locked
 // out for Authenticate, the in-process handler bypasses session-store
@@ -2161,7 +2161,7 @@ func scenarioFE16IdempotentDualControlReuse(env *adminAuthEnv) {
 	contexts := []*adminv1.ContextRef{
 		{Type: "scene", Ids: []string{sceneID}},
 	}
-	// INV-F11 idempotent reuse requires that invocation 2's opArgsHash equal
+	// INV-CRYPTO-61 idempotent reuse requires that invocation 2's opArgsHash equal
 	// invocation 1's. ResolveBounds defaults missing Since/Until from
 	// time.Now() at the resolve site, so two invocations submitted seconds
 	// apart resolve to DIFFERENT bounds → different hashes → reuse miss →
@@ -2273,7 +2273,7 @@ func scenarioFE16IdempotentDualControlReuse(env *adminAuthEnv) {
 	// Practical check: invocation 1's audit start payload's approval_id
 	// MUST equal approval1RID. That single check, combined with "invocation
 	// 2 emitted zero PendingApproval and Open was therefore never called",
-	// proves the reuse contract (INV-F11 idempotent reuse) at E2E level.
+	// proves the reuse contract (INV-CRYPTO-61 idempotent reuse) at E2E level.
 	Eventually(func() *ulid.ULID {
 		pl := env.operatorReadStartPayloadFor(requestID1)
 		return pl.ApprovalID
@@ -2295,7 +2295,7 @@ func scenarioFE16IdempotentDualControlReuse(env *adminAuthEnv) {
 // envSessionStoreFE16Adapter wraps the base envSessionStoreAdapter with
 // an extra (token, playerID) pair. F-E16 uses this to add a synthetic
 // alice token so the second invocation can run under a DIFFERENT
-// requester than carol (INV-F17 requires the requester to differ from
+// requester than carol (INV-CRYPTO-67 requires the requester to differ from
 // the approval row's primary_player_id for GetByOpArgsHash to find the
 // row).
 type envSessionStoreFE16Adapter struct {

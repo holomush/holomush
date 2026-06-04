@@ -17,7 +17,7 @@ import (
 // not cancelled (i.e., the slow path is server-side, not a client disconnect).
 var ErrWriteDeadlineExceeded = errors.New("readstream: write deadline exceeded")
 
-// SendWithDeadline enforces a per-frame write deadline (INV-F14) using a
+// SendWithDeadline enforces a per-frame write deadline (INV-CRYPTO-64) using a
 // hybrid mechanism:
 //
 //  1. setDeadline(now+deadline) primes the underlying conn's write deadline so

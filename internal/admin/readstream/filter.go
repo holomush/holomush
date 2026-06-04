@@ -24,7 +24,7 @@ type typeSpec struct {
 }
 
 // sensitiveTypes is the package-private registry of recognised context types
-// (INV-F6/F7). Hardcoded — no runtime registration.
+// (INV-CRYPTO-56/INV-CRYPTO-57). Hardcoded — no runtime registration.
 var sensitiveTypes = map[string]typeSpec{
 	"scene":     {Arity: 1, OrderInsensitiveIDs: false, MatchID: isULID},
 	"location":  {Arity: 1, OrderInsensitiveIDs: false, MatchID: isULID},

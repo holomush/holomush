@@ -53,7 +53,7 @@ func TestResolveBounds_DefaultsFromZeroBounds(t *testing.T) {
 	assert.WithinDuration(t, now, resolved.Until, time.Second)
 }
 
-func TestINV_F6_WindowTooLargeRejected(t *testing.T) {
+func TestINV_CRYPTO_56_WindowTooLargeRejected(t *testing.T) {
 	now := time.Now()
 	req := &readstream.Request{
 		Contexts:      []readstream.ContextRef{{Type: "scene", IDs: []string{"01ARZ3NDEKTSV4RRFFQ69G5FAV"}}},

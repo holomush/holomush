@@ -101,6 +101,21 @@ invariants.
 | `INV-CRYPTO-50` | The host QueryStreamHistory plugin path MUST refuse any plugin-returned row where codec!=identity AND dek_ref is absent or not present in crypto_keys (destroyed_at IS NULL filter); refusal surfaces as metadata_only=true (carries master INV-48). | `INV-P7-15` | pending |
 | `INV-CRYPTO-51` | The AuditRow -> *eventbusv1.Event adapter MUST produce a value whose AAD reconstruction is byte-equal to the AAD used at encrypt for the same event_id (superseded by INV-STORE-5 at full ns resolution; ADR holomush-f5h0). | `INV-P7-16` | pending |
 | `INV-CRYPTO-52` | Phase C.0 substrate: the plugin audit router MUST stamp the AuditRow.of (origin) on each routed row and expose it via the accessor used by the dispatcher. | `INV-P7-C0` | pending |
+| `INV-CRYPTO-53` | AdminReadStream MUST emit the crypto.system.operator_read audit event and observe a successful OperatorReadAuditEmitter.EmitStart ack BEFORE sending any ReadStarted or Event frame. | `INV-F1` | pending |
+| `INV-CRYPTO-54` | If the pre-data audit publish fails, AdminReadStream MUST return DENY_AUDIT_PRE_DATA_PUBLISH and MUST NOT invoke HistoryReader.QueryHistory. | `INV-F2` | pending |
+| `INV-CRYPTO-55` | AdminReadStream MUST reject with DENY_OPERATOR_CAPABILITY when the operator lacks crypto.operator, BEFORE any audit emit. | `INV-F3` | pending |
+| `INV-CRYPTO-56` | (until - since) > MaxWindow MUST return DENY_OPERATOR_READ_WINDOW_TOO_LARGE BEFORE the pre-data audit emit. | `INV-F6` | pending |
+| `INV-CRYPTO-57` | OperatorReadStartPayload MUST persist both the Requested-prefixed (nullable, capturing defaulting) and Resolved-prefixed (always populated) since/until/contexts fields. | `INV-F7` | pending |
+| `INV-CRYPTO-58` | ReadStarted.request_id, OperatorReadStartPayload.RequestID, the start event ID, and OperatorReadCompletedPayload.RequestID MUST all be equal. | `INV-F8` | pending |
+| `INV-CRYPTO-59` | The crypto.system.operator_read_completed event's prev_hash MUST equal the recomputed self_hash of its corresponding operator_read start event; both share NATS subject events.<game>.system.operator_read.<request_id>. | `INV-F9` | pending |
+| `INV-CRYPTO-60` | Completion-audit publish failure MUST NOT raise an error (data already delivered; the pre-data audit is the integrity anchor); it MUST be logged at WARN and counted via holomush_admin_readstream_completed_audit_failures_total. | `INV-F10` | pending |
+| `INV-CRYPTO-61` | Dual-control: when req.dual_control=true and GetByOpArgsHash returns NOT_FOUND, the handler MUST send exactly one PendingApproval frame and block via Repo.WaitForApproval; no in-process pending-approval registry. | `INV-F11` | pending |
+| `INV-CRYPTO-62` | F's classifier (classify.go::Classify) MUST match its documented matrix; every branch corresponds to a production-verified error producer, and unknown errors MUST surface as NO_PLAINTEXT_REASON_INTERNAL with a WARN log. | `INV-F12` | pending |
+| `INV-CRYPTO-63` | crypto.system.operator_read and crypto.system.operator_read_completed MUST be registered in internal/core/builtins.go with DisplayTarget == EVENT_CHANNEL_AUDIT_ONLY. | `INV-F13` | pending |
+| `INV-CRYPTO-64` | A per-frame write deadline (WriteDeadline, default 30s) MUST be enforced via sendWithDeadline; total stream duration MUST NOT be capped. | `INV-F14` | pending |
+| `INV-CRYPTO-65` | F MUST set HistoryQuery.SensitiveOnly=true on every cold-tier query (canonical server-side WHERE dek_ref IS NOT NULL filter); identity-codec rows MUST NOT reach the operator's stream. | `INV-F15` | pending |
+| `INV-CRYPTO-66` | The NoPlaintextReason enum expansion (4→7) MUST preserve INV-GW-14 parity, and the new values (DEK_MISSING, DEK_BAD_COLUMNS, INTERNAL) MUST NOT be stamped by cold_postgres.go or history/dispatcher.go — F's classifier is the only producer. | `INV-F16` | pending |
+| `INV-CRYPTO-67` | approval.Repo.GetByOpArgsHash MUST apply all filters server-side (op_kind, op_args_hash, expires_at>now(), approved_at IS NOT NULL, primary_player_id != excludePlayerID); tiebreaker = most recently approved. | `INV-F17` | pending |
 
 ### `INV-PRIVACY`
 

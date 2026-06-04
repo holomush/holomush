@@ -126,10 +126,10 @@ func TestOperatorReadAuditEmitter_EmitStartPropagatesPublishError(t *testing.T) 
 	errutil.AssertErrorCode(t, err, "OPERATOR_READ_AUDIT_PUBLISH_FAILED")
 }
 
-// TestINV_F8_RequestIDCoherence verifies INV-F8:
+// TestINV_CRYPTO_58_RequestIDCoherence verifies INV-CRYPTO-58:
 // EmitStart and EmitCompleted must both publish events with the same RequestID
 // in the payload, and subjects must share the request_id suffix.
-func TestINV_F8_RequestIDCoherence(t *testing.T) {
+func TestINV_CRYPTO_58_RequestIDCoherence(t *testing.T) {
 	// First call: genesis (no prev)
 	// Second call: prevHash = some bytes (simulating the start's self_hash)
 	callCount := 0
@@ -166,10 +166,10 @@ func TestINV_F8_RequestIDCoherence(t *testing.T) {
 
 	assert.Equal(t, requestID.String(), startReqID, "start payload request_id must match input")
 	assert.Equal(t, requestID.String(), completedReqID, "completed payload request_id must match input")
-	assert.Equal(t, startReqID, completedReqID, "both events must share request_id (INV-F8)")
+	assert.Equal(t, startReqID, completedReqID, "both events must share request_id (INV-CRYPTO-58)")
 
 	// Both subjects must contain the request_id suffix
-	assert.Equal(t, pub.events[0].Subject, pub.events[1].Subject, "both events must share the NATS subject (INV-F9)")
+	assert.Equal(t, pub.events[0].Subject, pub.events[1].Subject, "both events must share the NATS subject (INV-CRYPTO-59)")
 }
 
 // TestOperatorReadAuditEmitter_EmitCompletedRefusesWithoutStart tests that
@@ -187,12 +187,12 @@ func TestOperatorReadAuditEmitter_EmitCompletedRefusesWithoutStart(t *testing.T)
 	errutil.AssertErrorCode(t, err, "OPERATOR_READ_AUDIT_COMPLETED_NO_START")
 
 	// Metric must have incremented
-	assert.Equal(t, float64(0), float64(0)) // see TestINV_F10_MetricIncrements
+	assert.Equal(t, float64(0), float64(0)) // see TestINV_CRYPTO_60_MetricIncrements
 }
 
-// TestINV_F10_MetricIncrements verifies INV-F10: EmitCompleted failure increments
+// TestINV_CRYPTO_60_MetricIncrements verifies INV-CRYPTO-60: EmitCompleted failure increments
 // holomush_admin_readstream_completed_audit_failures_total.
-func TestINV_F10_MetricIncrements(t *testing.T) {
+func TestINV_CRYPTO_60_MetricIncrements(t *testing.T) {
 	before := testutil.ToFloat64(readstream.CompletedAuditFailuresTotal)
 
 	// Fault-inject: chain returns nil prevHash → OPERATOR_READ_AUDIT_COMPLETED_NO_START
@@ -206,12 +206,12 @@ func TestINV_F10_MetricIncrements(t *testing.T) {
 	require.Error(t, err)
 
 	after := testutil.ToFloat64(readstream.CompletedAuditFailuresTotal)
-	assert.Equal(t, before+1, after, "metric must increment on EmitCompleted failure (INV-F10)")
+	assert.Equal(t, before+1, after, "metric must increment on EmitCompleted failure (INV-CRYPTO-60)")
 }
 
-// TestINV_F10_EmitStartFailureDoesNotIncrementMetric verifies INV-F10 inverse:
+// TestINV_CRYPTO_60_EmitStartFailureDoesNotIncrementMetric verifies INV-CRYPTO-60 inverse:
 // EmitStart failure must NOT increment the completed-audit-failures metric.
-func TestINV_F10_EmitStartFailureDoesNotIncrementMetric(t *testing.T) {
+func TestINV_CRYPTO_60_EmitStartFailureDoesNotIncrementMetric(t *testing.T) {
 	before := testutil.ToFloat64(readstream.CompletedAuditFailuresTotal)
 
 	// Fault-inject: publisher fails
@@ -225,7 +225,7 @@ func TestINV_F10_EmitStartFailureDoesNotIncrementMetric(t *testing.T) {
 	require.Error(t, err)
 
 	after := testutil.ToFloat64(readstream.CompletedAuditFailuresTotal)
-	assert.Equal(t, before, after, "EmitStart failure must NOT increment completed-audit metric (INV-F10)")
+	assert.Equal(t, before, after, "EmitStart failure must NOT increment completed-audit metric (INV-CRYPTO-60)")
 }
 
 // chainEmitterFunc is a function-backed chain.Emitter for test flexibility.

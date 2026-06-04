@@ -22,7 +22,7 @@ import (
 // TestPhase7InvariantsHaveNamedTests is the drift detector for the
 // invariants table in
 // docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md
-// §2. For each Phase-7 §2 invariant (the legacy INV-P7-1..16 set, migrated to
+// §2. For each Phase-7 §2 invariant (the legacy INV-P7 set, numbers 1..16, migrated to
 // INV-CRYPTO-* for the crypto half and INV-EVENTBUS-25/26/27 for the
 // audit-plumbing half per holomush-hz0v4.14.15) plus the two plan-internal
 // substrate keys (INV-CRYPTO-43, INV-CRYPTO-52), the test verifies the named

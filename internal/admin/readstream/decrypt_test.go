@@ -96,9 +96,9 @@ func buildEncryptedColdRow(t *testing.T, plaintext []byte) (readstream.ColdRow, 
 	return row, testKey
 }
 
-// ---- INV-F12 classifier matrix ----
+// ---- INV-CRYPTO-62 classifier matrix ----
 
-func TestINV_F12_ClassifierMatrix(t *testing.T) {
+func TestINV_CRYPTO_62_ClassifierMatrix(t *testing.T) {
 	// We test classifyDecryptErr indirectly through DecryptRow by injecting
 	// errors at the DEK-resolve step and checking the (reason, fatal) output.
 	tests := []struct {
