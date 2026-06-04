@@ -2081,7 +2081,7 @@ func writeINVS5LuaPlugin(t *testing.T, pluginsDir, name string, declared, regist
 
 // TestManagerLoadAll_INVS5 covers the manager-level INV-PLUGIN-32 wiring across
 // mismatch (declared/registered set inequality), matching-sets (equal sets),
-// and no-crypto-emits (validator gated off via INV-M1) scenarios. Each case
+// and no-crypto-emits (validator gated off via INV-PLUGIN-33) scenarios. Each case
 // shares the same setup → LoadAll → assert flow; a table form keeps future
 // scenario additions cheap.
 func TestManagerLoadAll_INVS5(t *testing.T) {
@@ -2111,7 +2111,7 @@ func TestManagerLoadAll_INVS5(t *testing.T) {
 			assertMsg:       "matched INV-PLUGIN-32 sets must load cleanly",
 		},
 		{
-			name:       "no crypto.emits skips validator entirely (INV-M1 gate)",
+			name:       "no crypto.emits skips validator entirely (INV-PLUGIN-33 gate)",
 			pluginName: "no-emits",
 			assertMsg:  "plugins without crypto.emits must load cleanly",
 		},

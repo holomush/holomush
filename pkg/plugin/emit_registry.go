@@ -59,7 +59,7 @@ func (r *EmitRegistry) RegisteredEmitTypes() []string {
 //
 // Plugins with non-empty crypto.emits MUST implement this interface;
 // the substrate validator fails load on mismatch. Plugins without
-// crypto.emits are out of INV-PLUGIN-32 scope (per INV-M1) and may skip.
+// crypto.emits are out of INV-PLUGIN-32 scope (per INV-PLUGIN-33) and may skip.
 type EmitTypeRegistrar interface {
 	EmitRegistry() *EmitRegistry
 }

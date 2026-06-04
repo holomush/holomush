@@ -372,7 +372,7 @@ export const PluginHostService = {
      * instance owned by the calling plugin. SERVED:
      * pluginHostServiceServer.Evaluate. The subject is derived host-side from the
      * dispatch token exactly as EmitEvent does (token→actor recovery) — there is
-     * no subject field on the wire (spec §2, INV-1). Fails closed on nil engine,
+     * no subject field on the wire (spec §2, INV-PLUGIN-22). Fails closed on nil engine,
      * missing/rejected token, empty actor subject, or a resource type the plugin
      * does not own.
      *

@@ -13,7 +13,7 @@ import (
 
 // TestValidateEmitTypeSetEquality covers the validator's mismatch detection
 // across the documented scenario matrix (matching sets, both directions of
-// diff, both empty, host-owned filter per INV-M2). Each case exercises the
+// diff, both empty, host-owned filter per INV-PLUGIN-34). Each case exercises the
 // same call shape — declared/registered inputs, three-field mismatch
 // assertion — so a table form makes future scenario additions cheap.
 func TestValidateEmitTypeSetEquality(t *testing.T) {
@@ -61,7 +61,7 @@ func TestValidateEmitTypeSetEquality(t *testing.T) {
 			registered: nil,
 		},
 		{
-			name:       "host-owned types are filtered from registered before comparison (INV-M2)",
+			name:       "host-owned types are filtered from registered before comparison (INV-PLUGIN-34)",
 			declared:   []string{"plugin_alpha", "plugin_beta"},
 			registered: []string{"plugin_alpha", "plugin_beta", "system", "move", "arrive"},
 			assertMsg:  "host-owned types should be filtered out of registered before comparison",

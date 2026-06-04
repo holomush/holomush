@@ -1,23 +1,14 @@
-- **Per-family coverage meta-test MUST be DELETED on registry migration — not
-  optional (hz0v4.14.9 NOT-READY).** When a scope migrates I-<OLD>-N →
-  INV-<SCOPE>-N, the legacy `test/meta/i_<old>_coverage_test.go` greps for
-  `// Verifies: I-<OLD>-N` annotations (e.g. `iPrivVerifiesRE =
-  //\s*Verifies:\s*I-PRIV-(\d+)`) and requires each 1..N to have ≥1 binding. The
-  migration renames every `// Verifies: I-<OLD>-N` to `// Verifies: INV-<SCOPE>-N`,
-  so the stale test finds ZERO and fails ALL N invariants. `.14.5` (PRESENCE)
-  correctly DELETED `i_pres_coverage_test.go`; `.14.9` (PRIVACY) MISSED the
-  deletion → `TestEveryIPRIVInvariantHasAtLeastOneTestBinding` failed I-PRIV-1..8
-  (`DONE 15 tests, 1 failure`). The file's own doc-comment even says "PRIVACY
-  follows when it migrates." Coverage is absorbed by registry-driven
-  `TestEveryRegistryInvariantHasBinding` (passes — found all 8). Review check: after
-  confirming `rg 'Verifies:\s*I-<OLD>-[0-9]' --glob '*_test.go'` → ZERO, the
-  matching `i_<old>_coverage_test.go` MUST be absent from the tree; if present,
-  it's a guaranteed FAIL. Also note: `r.Token` in registry refs is UNUSED by
-  `checkProvenance` (line 520 greps `e.ID` canonical, not `r.Token`), so refs
-  recording legacy `token: "I-PRIV-1"` is cosmetic-only, harmless. Bare `go vet
-  -tags=integration` surfaces `lostcancel` warnings at `context.WithTimeout` sites
-  that already carry `//nolint:govet` — NOT findings (bare vet ignores golangci
-  nolint; `task lint` is the real gate). Encountered: hz0v4.14.9 (2026-06-02) — NOT READY.
+- **Per-family `// Verifies:`-grep coverage meta-test MUST be DELETED on registry
+  migration (hz0v4.14.9 NOT-READY).** `test/meta/i_<old>_coverage_test.go` greps
+  `// Verifies: I-<OLD>-N` and requires each 1..N bound. Migration renames every
+  annotation to `INV-<SCOPE>-N`, so the stale test finds ZERO and fails ALL N. `.14.5`
+  DELETED it; `.14.9` MISSED → I-PRIV-1..8 failed. Coverage is absorbed by registry-driven
+  `TestEveryRegistryInvariantHasBinding`. CHECK: after `rg 'Verifies:\s*I-<OLD>-[0-9]'
+  *_test.go`→ZERO, the `i_<old>_coverage_test.go` MUST be absent (if present = guaranteed
+  FAIL). FROM-anchor: `checkProvenance` greps canonical `e.ID` not `r.Token`, so refs
+  recording legacy tokens is harmless. Bare `go vet -tags=integration` `lostcancel`
+  warnings at //nolint:govet sites are NOT findings (`task lint` is the gate).
+  hz0v4.14.9 (2026-06-02) — NOT READY.
 
 - **Bare-INV-N (CLUSTER) migration is the same shape as I-<OLD>-N but the
   per-family test lives in `test/meta/inv_binding_test.go`, not a separate
@@ -47,25 +38,19 @@
   column in invariants.md/yaml records the link. Encountered: hz0v4.14.11
   (2026-06-02) — READY.
 
-- **Multi-family scope (EVENTBUS=GW+ROPS+P7-split) + DENSE letter-suffix renumber
-  (GW-3a) (hz0v4.14.12 READY).** GW 1..16 dense over {1,2,3,3a,4..11,13..16};
-  P7 SPLIT (audit-half P7-3/4/10→25/26/27, rest stay bare for later scopes). `awk`
-  ref/legacy scans FALSE-mismatch on `3a`/`refs:[]`/`,}` — hand-read. Per-family
-  coverage test was `TestAllGatewayRegistryInvariantsHaveTests` in
-  `internal/gateway_invariants/meta_test.go`; generic
-  `TestInvariantTokenBoundariesRejectFalsePositives` KEPT (its INV-GW-* fixtures
-  intentional). Global partition: other scopes may list a foreign-owned file in
-  THEIR shared_files. Trailing-comma `,}` noise recurs — Low non-blocking.
-
-- **Largest multi-family (SCENE=P4+P5+P6+FS+Y5INX+SH+phase-8 bare → 59 ids, 86
-  files) (hz0v4.14.13 READY).** P4/P5 coverage meta-tests
-  (`inv_p4/p5_coverage_meta_test.go`) are `testName`-EXISTENCE checks (go/parser
-  Test* names; `{inv,testName}` table) — robust to rename if `testName:` strings +
-  renamed funcs move in lockstep; DISTINCT from fragile `// Verifies:` scanners
-  (delete those, per .14.9). Confirm which kind before delete-vs-migrate-in-place.
-  Manual `\b`-unreachable underscore renames (`TestINV_P4_4→_SCENE_4`): grep old →
-  ZERO + chase string refs + cross-file cites. spec-only `refs:[]` count = declared
-  spec-only set exactly. Same `,}` noise — Low non-blocking.
+- **Multi-family + dense letter-suffix renumber (EVENTBUS=GW+ROPS+P7-split .14.12;
+  SCENE=P4/P5/P6/FS/Y5INX/SH+bare → 59 ids/86 files .14.13; both READY).** GW dense
+  over {1,2,3,3a,4..11,13..16} (letter-suffix 3a); P7 SPLIT (audit-half →25/26/27,
+  rest bare for later). `awk` ref/legacy scans FALSE-mismatch on `3a`/`refs:[]`/`,}`
+  — hand-read. Coverage-test taxonomy: per-family `TestAll*RegistryInvariantsHaveTests`
+  + `inv_p4/p5_coverage_meta_test.go` are `testName`-EXISTENCE checks (go/parser Test*
+  names; `{inv,testName}` table) — robust to rename when testName strings + funcs move
+  in lockstep; DISTINCT from fragile `// Verifies:` scanners (DELETE those, .14.9).
+  Confirm which kind before delete-vs-migrate. Manual `\b`-unreachable underscore
+  renames (TestINV_P4_4→_SCENE_4): grep old→ZERO + chase string/cross-file cites.
+  Generic `TestInvariantTokenBoundariesRejectFalsePositives` KEPT (INV-GW-* fixtures
+  intentional). Partition: other scopes MAY list a foreign-owned file in THEIR
+  shared_files. Trailing-comma `,}` noise — Low non-blocking.
 
 - **Scope with DEFERRED bare-INV-N + foreign tokens uses file-path owned_paths
   (NOT /** globs) to keep the residual walk clean (hz0v4.14.14 PLUGIN READY).**
@@ -186,3 +171,27 @@
   .14.23) → clean. Dense: PLUGIN 1..32, EVENTBUS 1..28, SCENE 1..60, no dup/gap. Trailing-comma
   ,} noise recurred (6th time): added 2 (EVENTBUS-28/SCENE-60 last refs), cleaned 2 — Low
   non-blocking, renderer-inert. Encountered: hz0v4.14.24 (2026-06-04) — READY.
+
+- **INV-S5 MECHANISM family (M1..M7 → PLUGIN-33..39) + missed plugin.proto INV-1
+  api/proto site → PLUGIN-22 (hz0v4.14.27 READY).** Companion pass to .14.24's
+  INV-S5 substrate token (S5→PLUGIN-32): adds the 7 mechanism sub-invariants.
+  Key: M4/M5/M6 are `refs: []` spec-only/binding:pending — HONEST because the
+  origin spec (2026-05-17-inv-s5-mechanism-design.md:62-68) maps those mechanisms
+  to code sites that annotate with the PARENT token INV-PLUGIN-32 (lua/host.go:39,237;
+  stdlib_emit_registry.go:14,47), NOT their own INV-M4/5/6 tokens. The migrate tool
+  can only rename tokens physically present; M4/5/6 never existed as annotations →
+  refs:[] is correct, NOT an incomplete migration. (Same convention as .14.14 W9ML
+  1..6.) `TestEveryRegistryInvariantHasBinding` tolerates binding:pending+refs:[].
+  M1/M2/M3/M7 DID have annotations → canonical PLUGIN-33/34/35/39 verified physically
+  present in their ref files. The .14.22 missed plugin.proto INV-1 ('no subject field'
+  plugin-host-evaluate) → PLUGIN-22 now closed across proto + 5 generated artifacts
+  (.pb.go/_grpc.pb.go/.connect.go/_pb.ts/_connect.ts/grpc-api.md) — all in sync, zero
+  stale '(spec §2, INV-1)'. CRITICAL non-collision: command-vis INV-1 (commandquery/
+  query.go, hostfunc/commands.go+functions.go, setup/subsystem.go, help_integration_test.go,
+  harness.go) + world/service_test.go per-property INV-1 ALL untouched — diff only
+  touched plugin.proto's INV-1, a distinct namespace. Owned emit_type_validator{,_test}.go
+  carry ONLY INV-PLUGIN-* (bareInvRE \bINV-\d+\b doesn't match INV-PLUGIN-NN, residual
+  clean). manager.go/manager_test.go/manager_parity_test.go/plugin.proto are SHARED (carry
+  foreign EVENTBUS-11/W9ML-8/CRYPTO/regen). Zero executable edits; dense PLUGIN 1..39.
+  NO trailing-comma ,} noise this time. Counts CRYPTO=67/PLUGIN=39/ACCESS=8/EVENTBUS=28/
+  SCENE=60. Encountered: hz0v4.14.27 (2026-06-04) — READY.

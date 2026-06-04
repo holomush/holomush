@@ -264,9 +264,12 @@ scopes:
     # plugin-evaluate invariants span pluginauthz/hostfunc/goplugin + audit-wiring setup files, NOT
     # evaluate.go alone (the earlier .14.14 'evaluate.go ONLY' note undercounted; corrected here).
     # owned_paths use file-paths (not /** globs) for dirs that hold foreign bare INV-N so the residual
-    # walk stays clean. LEFT untouched (foreign, co-located): command-visibility INV-1 (commands.go/
-    # functions.go/help_integration_test.go/setup/subsystem.go), settings INV-6 (host_service.go),
-    # sensitivity-fence INV-6/7 (lua/host.go — flagged on epic .14 for classification).
+    # walk stays clean. .14.27: INV-S5 mechanism family INV-M1..M7 → 33..39 (origin 2026-05-17-inv-s5-
+    # mechanism; M4/M5/M6 spec-only refs:[]); plugin.proto INV-1 (plugin-host-evaluate 'no subject
+    # field') → INV-PLUGIN-22 (missed .14.22 api/proto site). LEFT untouched (foreign, co-located):
+    # command-visibility INV-1 (commands.go/functions.go/help_integration_test.go/setup/subsystem.go)
+    # → INV-COMMAND scope (.14.27); settings INV-6 (host_service.go); sensitivity-fence INV-6/7 already
+    # → INV-PLUGIN-29/30 (.14.24).
     status: migrated
     origin_specs:
       - "docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"
@@ -276,6 +279,7 @@ scopes:
       - "docs/superpowers/specs/2026-05-29-scenes-phase-8-board-content-warnings-design.md"
       - "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
       - "docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md"
+      - "docs/superpowers/specs/2026-05-17-inv-s5-mechanism-design.md"
     owned_paths:
       # PC (plugin-runtime-config): config files are PLUGIN-exclusive.
       - "internal/plugin/config.go"
@@ -316,6 +320,7 @@ scopes:
       - "internal/plugin/event_emitter_crypto_test.go"
       - "pkg/plugin/event.go"
       - "internal/plugin/emit_type_validator.go"
+      - "internal/plugin/emit_type_validator_test.go"
       - "internal/plugin/hostfunc/stdlib_emit_registry.go"
       - "pkg/plugin/emit_registry.go"
       - "pkg/plugin/sdk.go"
@@ -3194,6 +3199,7 @@ invariants:
       - {file: "internal/plugin/hostfunc/evaluate.go", token: "INV-1"}
       - {file: "internal/plugin/hostfunc/stdlib_settings.go", token: "INV-1"}
       - {file: "internal/plugin/goplugin/evaluate_invariants_test.go", token: "INV-1"}
+      - {file: "api/proto/holomush/plugin/v1/plugin.proto", token: "INV-1"}
   - id: INV-PLUGIN-23
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md"
@@ -3333,3 +3339,67 @@ invariants:
       - {file: "plugins/core-objects/main.lua", token: "INV-S5"}
       - {file: "plugins/core-scenes/main.go", token: "INV-S5"}
       - {file: "plugins/core-scenes/main_test.go", token: "INV-S5"}
+  - id: INV-PLUGIN-33
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-17-inv-s5-mechanism-design.md"
+    legacy: ["INV-M1@docs/superpowers/specs/2026-05-17-inv-s5-mechanism-design.md"]
+    summary: "The INV-S5 emit-type set-equality validation applies ONLY to plugins with a non-empty manifest.Crypto.Emits;
+      plugins without crypto.emits skip the Load-pass and validation entirely."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/manager.go", token: "INV-M1"}
+      - {file: "internal/plugin/manager_test.go", token: "INV-M1"}
+      - {file: "pkg/plugin/emit_registry.go", token: "INV-M1"}
+  - id: INV-PLUGIN-34
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-17-inv-s5-mechanism-design.md"
+    legacy: ["INV-M2@docs/superpowers/specs/2026-05-17-inv-s5-mechanism-design.md"]
+    summary: "The code-side emit-type registry MUST contain ALL plugin-owned event types the plugin may emit (not only sensitive
+      ones); host-owned types (e.g. pluginsdk.HostEventTypeSystem) are filtered out before the set-equality comparison."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/emit_type_validator.go", token: "INV-M2"}
+      - {file: "internal/plugin/emit_type_validator_test.go", token: "INV-M2"}
+      - {file: "internal/plugin/goplugin/manager_parity_test.go", token: "INV-M2"}
+  - id: INV-PLUGIN-35
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-17-inv-s5-mechanism-design.md"
+    legacy: ["INV-M3@docs/superpowers/specs/2026-05-17-inv-s5-mechanism-design.md"]
+    summary: "Binary plugins with non-empty crypto.emits MUST implement pluginsdk.EmitTypeRegistrar and populate InitResponse.registered_emit_types;
+      a mismatch fails plugin load."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/goplugin/manager_parity_test.go", token: "INV-M3"}
+  - id: INV-PLUGIN-36
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-17-inv-s5-mechanism-design.md"
+    legacy: ["INV-M4@docs/superpowers/specs/2026-05-17-inv-s5-mechanism-design.md"]
+    summary: "Lua plugins with non-empty crypto.emits MUST call holomush.register_emit_type(<type>) at top level for every
+      emit type they may produce; the Load-pass captures these calls and missing registrations fail plugin load."
+    binding: pending
+    refs: []
+  - id: INV-PLUGIN-37
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-17-inv-s5-mechanism-design.md"
+    legacy: ["INV-M5@docs/superpowers/specs/2026-05-17-inv-s5-mechanism-design.md"]
+    summary: "The INV-S5 validator MUST fire in manager.go::loadPlugin AFTER host.Load returns successfully and BEFORE the
+      plugin is added to the manager's ready plugin cache."
+    binding: pending
+    refs: []
+  - id: INV-PLUGIN-38
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-17-inv-s5-mechanism-design.md"
+    legacy: ["INV-M6@docs/superpowers/specs/2026-05-17-inv-s5-mechanism-design.md"]
+    summary: "Lua Load-pass DoString errors MUST fail plugin load with the same wrapper shape as the syntax-check error (oops.In(\"lua\"),
+      operation=load); the Hint string is branch-specific (\"INV-S5 capture pass execution error\" for crypto plugins)."
+    binding: pending
+    refs: []
+  - id: INV-PLUGIN-39
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-17-inv-s5-mechanism-design.md"
+    legacy: ["INV-M7@docs/superpowers/specs/2026-05-17-inv-s5-mechanism-design.md"]
+    summary: "Every primitive in the INV-S5 mechanism MUST ship a Go SDK method + Lua hostfunc + parity test together (per
+      parent substrate invariant INV-S3 / INV-PLUGIN-31)."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/goplugin/manager_parity_test.go", token: "INV-M7"}

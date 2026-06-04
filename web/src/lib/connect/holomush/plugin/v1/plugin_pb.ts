@@ -1533,7 +1533,7 @@ export const PluginHostServiceIsAnyConnFocusedResponseSchema: GenMessage<PluginH
 /**
  * PluginHostServiceEvaluateRequest names the action and resource to evaluate.
  * The subject is NOT here — it is recovered host-side from the dispatch token
- * (spec §2, INV-1).
+ * (spec §2, INV-PLUGIN-22).
  *
  * @generated from message holomush.plugin.v1.PluginHostServiceEvaluateRequest
  */
@@ -2464,7 +2464,7 @@ export const PluginHostService: GenService<{
    * instance owned by the calling plugin. SERVED:
    * pluginHostServiceServer.Evaluate. The subject is derived host-side from the
    * dispatch token exactly as EmitEvent does (token→actor recovery) — there is
-   * no subject field on the wire (spec §2, INV-1). Fails closed on nil engine,
+   * no subject field on the wire (spec §2, INV-PLUGIN-22). Fails closed on nil engine,
    * missing/rejected token, empty actor subject, or a resource type the plugin
    * does not own.
    *

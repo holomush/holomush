@@ -22,17 +22,17 @@ import (
 )
 
 // TestManager_INVS5_ParityAcrossRuntimes verifies that INV-PLUGIN-32 validation is
-// equally enforced on both runtimes — Lua and binary — per INV-M7 / INV-PLUGIN-31.
+// equally enforced on both runtimes — Lua and binary — per INV-PLUGIN-39 / INV-PLUGIN-31.
 //
 // Four scenarios x 2 runtimes = 8 subtests. The "host-owned-filtered"
-// scenario verifies INV-M2 round-trips through both the Lua hostfunc path
+// scenario verifies INV-PLUGIN-34 round-trips through both the Lua hostfunc path
 // and the binary InitResponse.RegisteredEmitTypes path (a regression here
 // would mean a new host-owned constant added to pkg/plugin/event.go without
 // updating hostOwnedEmitTypes in the validator could silently break
 // fail-closed semantics for legitimate plugins).
 //
 // In addition to verdict parity, each error case asserts the manager rolls
-// back successful host.Load on validator rejection (INV-M3 fail-closed +
+// back successful host.Load on validator rejection (INV-PLUGIN-35 fail-closed +
 // rollback) — the rejected plugin MUST NOT appear in mgr.ListPlugins().
 //
 // This test lives in package goplugin (not _test) so it has direct access
@@ -48,7 +48,7 @@ func TestManager_INVS5_ParityAcrossRuntimes(t *testing.T) {
 		{name: "match", declared: []string{"a", "b"}, registered: []string{"a", "b"}, wantCode: ""},
 		{name: "declared-but-unregistered", declared: []string{"a", "b"}, registered: []string{"a"}, wantCode: "EVENT_TYPE_REGISTRY_MISMATCH"},
 		{name: "registered-but-undeclared", declared: []string{"a"}, registered: []string{"a", "b"}, wantCode: "EVENT_TYPE_REGISTRY_MISMATCH"},
-		// INV-M2 round-trip: host-owned types (system, move) appear in the
+		// INV-PLUGIN-34 round-trip: host-owned types (system, move) appear in the
 		// registered set but MUST be filtered before set-equality. The plugin
 		// declared only {a, b}; filtered registered set MUST equal {a, b}.
 		{name: "host-owned-filtered", declared: []string{"a", "b"}, registered: []string{"a", "b", "system", "move"}, wantCode: ""},
@@ -78,7 +78,7 @@ func TestManager_INVS5_ParityAcrossRuntimes(t *testing.T) {
 			} else {
 				require.Error(t, err)
 				errutil.AssertErrorCode(t, err, sc.wantCode)
-				// INV-M3 rollback regression: a rejected plugin MUST NOT
+				// INV-PLUGIN-35 rollback regression: a rejected plugin MUST NOT
 				// appear in the manager's plugin list. Without host.Unload
 				// in manager.loadPlugin's error path, the host's plugin
 				// table (and for binary, a live subprocess + gRPC client)
@@ -114,7 +114,7 @@ func TestManager_INVS5_ParityAcrossRuntimes(t *testing.T) {
 			} else {
 				require.Error(t, err)
 				errutil.AssertErrorCode(t, err, sc.wantCode)
-				// INV-M3 rollback regression: see lua/ subtest above.
+				// INV-PLUGIN-35 rollback regression: see lua/ subtest above.
 				assert.NotContains(t, mgr.ListPlugins(), pluginName,
 					"INV-PLUGIN-32 rejection MUST roll back: plugin %q should not appear in manager's plugin list after fail-closed", pluginName)
 			}

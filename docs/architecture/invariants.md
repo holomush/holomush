@@ -245,6 +245,13 @@ invariants.
 | `INV-PLUGIN-30` | A plugin declaring an event type as sensitivity:always MUST NOT publish that event with Sensitive=false; the emit-time fence rejects with EVENT_SENSITIVITY_REQUIRED (under-claim reject). | `INV-7` | pending |
 | `INV-PLUGIN-31` | Every Plugin Host RPC and SDK primitive MUST ship a Go SDK method AND a Lua hostfunc together; asymmetric capability between the binary and Lua runtimes is forbidden. | `INV-S3` | pending |
 | `INV-PLUGIN-32` | Every plugin declaring crypto.emits MUST pass startup-time set-equality validation: the manifest-declared emit-type set MUST equal the code-registered emit-type set in both directions, or plugin startup fails closed. | `INV-S5` | pending |
+| `INV-PLUGIN-33` | The INV-S5 emit-type set-equality validation applies ONLY to plugins with a non-empty manifest.Crypto.Emits; plugins without crypto.emits skip the Load-pass and validation entirely. | `INV-M1` | pending |
+| `INV-PLUGIN-34` | The code-side emit-type registry MUST contain ALL plugin-owned event types the plugin may emit (not only sensitive ones); host-owned types (e.g. pluginsdk.HostEventTypeSystem) are filtered out before the set-equality comparison. | `INV-M2` | pending |
+| `INV-PLUGIN-35` | Binary plugins with non-empty crypto.emits MUST implement pluginsdk.EmitTypeRegistrar and populate InitResponse.registered_emit_types; a mismatch fails plugin load. | `INV-M3` | pending |
+| `INV-PLUGIN-36` | Lua plugins with non-empty crypto.emits MUST call holomush.register_emit_type(<type>) at top level for every emit type they may produce; the Load-pass captures these calls and missing registrations fail plugin load. | `INV-M4` | pending |
+| `INV-PLUGIN-37` | The INV-S5 validator MUST fire in manager.go::loadPlugin AFTER host.Load returns successfully and BEFORE the plugin is added to the manager's ready plugin cache. | `INV-M5` | pending |
+| `INV-PLUGIN-38` | Lua Load-pass DoString errors MUST fail plugin load with the same wrapper shape as the syntax-check error (oops.In("lua"), operation=load); the Hint string is branch-specific ("INV-S5 capture pass execution error" for crypto plugins). | `INV-M6` | pending |
+| `INV-PLUGIN-39` | Every primitive in the INV-S5 mechanism MUST ship a Go SDK method + Lua hostfunc + parity test together (per parent substrate invariant INV-S3 / INV-PLUGIN-31). | `INV-M7` | pending |
 
 ### `INV-EVENTBUS`
 

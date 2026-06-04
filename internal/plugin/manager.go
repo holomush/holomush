@@ -1048,7 +1048,7 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 		return oops.In("manager").With("plugin", dp.Manifest.Name).With("operation", "load").Wrap(err)
 	}
 
-	// INV-PLUGIN-32: manifest emit-type startup validation. Scope per INV-M1:
+	// INV-PLUGIN-32: manifest emit-type startup validation. Scope per INV-PLUGIN-33:
 	// only plugins with non-empty crypto.emits participate.
 	if dp.Manifest.Crypto != nil && len(dp.Manifest.Crypto.Emits) > 0 {
 		registered, ok := host.PluginEmitRegistry(dp.Manifest.Name)
