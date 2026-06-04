@@ -2120,7 +2120,7 @@ export enum NoPlaintextReason {
   /**
    * NO_PLAINTEXT_REASON_DEK_MISSING means the cold-tier audit row had no dek_ref
    * (DEK reference column missing or NULL). Stamped exclusively by sub-epic F's
-   * operator-read classifier (INV-F16).
+   * operator-read classifier (INV-CRYPTO-66).
    *
    * @generated from enum value: NO_PLAINTEXT_REASON_DEK_MISSING = 4;
    */

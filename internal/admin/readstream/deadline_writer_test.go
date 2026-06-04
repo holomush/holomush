@@ -71,10 +71,10 @@ func TestSendWithDeadline_PassesDeadlineToSetter(t *testing.T) {
 		"first call must set deadline ≤ after+dur; got %v (after+dur=%v)", (*calls)[0], after.Add(dur))
 }
 
-// TestINV_F14_SendWithDeadlineTrips verifies that when send returns
+// TestINV_CRYPTO_64_SendWithDeadlineTrips verifies that when send returns
 // os.ErrDeadlineExceeded (the kernel-level signal that the write deadline
 // tripped at the conn), SendWithDeadline returns ErrWriteDeadlineExceeded.
-func TestINV_F14_SendWithDeadlineTrips(t *testing.T) {
+func TestINV_CRYPTO_64_SendWithDeadlineTrips(t *testing.T) {
 	err := readstream.SendWithDeadline(
 		context.Background(),
 		func(_ string) error { return os.ErrDeadlineExceeded },

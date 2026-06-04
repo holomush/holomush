@@ -1388,7 +1388,7 @@ counterpart here.
 | NO_PLAINTEXT_REASON_AUTHGUARD_DENY | 1 | NO_PLAINTEXT_REASON_AUTHGUARD_DENY means the recipient was not in the DEK&#39;s participant set or lacked the requisite plugin manifest declaration / ABAC grant. Phase 3b AuthGuard deny. |
 | NO_PLAINTEXT_REASON_STALE_DEK | 2 | NO_PLAINTEXT_REASON_STALE_DEK means both the hot and cold tier DEKs were indecipherable — a production-real outcome after a sub-epic E rekey plus DEK destruction (INV-E21 double miss). |
 | NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL | 3 | NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL means a plugin audit-emit hit backpressure (queue full) — a host-side TOCTOU defense. |
-| NO_PLAINTEXT_REASON_DEK_MISSING | 4 | NO_PLAINTEXT_REASON_DEK_MISSING means the cold-tier audit row had no dek_ref (DEK reference column missing or NULL). Stamped exclusively by sub-epic F&#39;s operator-read classifier (INV-F16). |
+| NO_PLAINTEXT_REASON_DEK_MISSING | 4 | NO_PLAINTEXT_REASON_DEK_MISSING means the cold-tier audit row had no dek_ref (DEK reference column missing or NULL). Stamped exclusively by sub-epic F&#39;s operator-read classifier (INV-CRYPTO-66). |
 | NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS | 5 | NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS means a cold-tier audit row references a DEK whose column set does not match the event&#39;s AAD declaration. Stamped exclusively by sub-epic F&#39;s classifier. |
 | NO_PLAINTEXT_REASON_INTERNAL | 6 | NO_PLAINTEXT_REASON_INTERNAL is the catch-all for unexpected decrypt failures not covered by the specific cases above. Stamped exclusively by sub-epic F&#39;s classifier. |
 | NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED | 7 | NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED is a Phase 7 PluginDowngradeFence layer (1) refusal — the host&#39;s read-side fence rejected the row before decrypt, either because the type is in the always-sensitive manifest set and the plugin returned an identity codec (INV-CRYPTO-42), or because the dek_ref is unknown / absent for a non-identity codec (INV-CRYPTO-50). The original event_id is preserved; payload is empty per master INV-26. |
@@ -1489,16 +1489,16 @@ DENY_OPERATOR_READ_JUSTIFICATION_EMPTY when it is absent or whitespace-only.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| session_token | [string](#string) |  | session_token is the bearer token identifying the operator. The handler resolves it to an OperatorSession via SessionStore.GetOperatorSession and then checks that the resolved player holds the crypto.operator ABAC grant (INV-F3) before any data read or audit publish occurs. |
+| session_token | [string](#string) |  | session_token is the bearer token identifying the operator. The handler resolves it to an OperatorSession via SessionStore.GetOperatorSession and then checks that the resolved player holds the crypto.operator ABAC grant (INV-CRYPTO-55) before any data read or audit publish occurs. |
 | subject_pattern | [string](#string) |  | subject_pattern is an optional additional NATS subject filter applied server-side on top of the context-derived subjects. An empty string means no additional filter; the handler uses the context-derived subjects alone. |
 | type_filter | [string](#string) |  | type_filter is an optional event type prefix filter. When non-empty, only events whose type string has this prefix are returned. An empty string means no type filtering. |
 | context | [ContextRef](#holomush-admin-v1-ContextRef) | repeated | context scopes the read to one or more event streams. Each entry maps to a NATS wildcard subject &#34;events.&lt;game&gt;.&lt;type&gt;.&lt;id...&gt;.&gt;&#34; via BuildSubjects (internal/admin/readstream/subjects.go). When empty, a single game-wide wildcard &#34;events.&lt;game&gt;.&gt;&#34; is used. Up to 64 context entries are accepted; ResolveBounds validates type, arity, and ID format per sensitiveTypes. |
-| since | [google.protobuf.Timestamp](https://protobuf.dev/reference/protobuf/google.protobuf/#timestamp) |  | since is the inclusive lower bound of the query window. When absent (nil), the server defaults to now minus the configured DefaultWindow (INV-F6). ResolveBounds rejects since &gt;= until with DENY_OPERATOR_READ_TIME_INVERTED. |
-| until | [google.protobuf.Timestamp](https://protobuf.dev/reference/protobuf/google.protobuf/#timestamp) |  | until is the exclusive upper bound of the query window. When absent (nil), the server defaults to now (INV-F6). ResolveBounds rejects until more than 5 seconds in the future with DENY_OPERATOR_READ_FUTURE_BOUND. |
+| since | [google.protobuf.Timestamp](https://protobuf.dev/reference/protobuf/google.protobuf/#timestamp) |  | since is the inclusive lower bound of the query window. When absent (nil), the server defaults to now minus the configured DefaultWindow (INV-CRYPTO-56). ResolveBounds rejects since &gt;= until with DENY_OPERATOR_READ_TIME_INVERTED. |
+| until | [google.protobuf.Timestamp](https://protobuf.dev/reference/protobuf/google.protobuf/#timestamp) |  | until is the exclusive upper bound of the query window. When absent (nil), the server defaults to now (INV-CRYPTO-56). ResolveBounds rejects until more than 5 seconds in the future with DENY_OPERATOR_READ_FUTURE_BOUND. |
 | limit | [uint32](#uint32) |  | limit caps the maximum number of EventFrame responses the client wants to receive. A value of 0 means no client-imposed limit; the server enforces its own window-size ceiling independently via MaxWindow. |
-| dual_control | [bool](#bool) |  | dual_control requires a second operator to approve the request before the stream begins. When true, the server sends a PendingApproval frame and blocks until approval.Repo.WaitForApproval resolves or the ApprovalTTL elapses (INV-F11/F17). When false, the fast single-control path runs immediately after the capability check. |
+| dual_control | [bool](#bool) |  | dual_control requires a second operator to approve the request before the stream begins. When true, the server sends a PendingApproval frame and blocks until approval.Repo.WaitForApproval resolves or the ApprovalTTL elapses (INV-CRYPTO-61/INV-CRYPTO-67). When false, the fast single-control path runs immediately after the capability check. |
 | dual_control_timeout_seconds | [uint32](#uint32) |  | dual_control_timeout_seconds overrides the server&#39;s configured ApprovalTTL for this request. A value of 0 uses the server&#39;s default. |
-| justification | [string](#string) |  | justification is the operator&#39;s plain-text reason for the read. REQUIRED: ResolveBounds rejects empty or whitespace-only values with DENY_OPERATOR_READ_JUSTIFICATION_EMPTY. Maximum 4096 UTF-8 bytes. Captured verbatim in the pre-data audit payload (INV-F1/F7). |
+| justification | [string](#string) |  | justification is the operator&#39;s plain-text reason for the read. REQUIRED: ResolveBounds rejects empty or whitespace-only values with DENY_OPERATOR_READ_JUSTIFICATION_EMPTY. Maximum 4096 UTF-8 bytes. Captured verbatim in the pre-data audit payload (INV-CRYPTO-53/INV-CRYPTO-57). |
 
 
 
@@ -1515,8 +1515,8 @@ when dual_control=true), exactly one ReadStarted frame once streaming begins,
 zero or more EventFrame frames, and exactly one ReadFinished frame as the
 terminal message. The handler (internal/admin/readstream/handler.go
 handleInternal) enforces the audit invariants: the pre-data audit is emitted
-before the first frame (INV-F1/F2) and the post-data audit is emitted after
-the final frame (INV-F10).
+before the first frame (INV-CRYPTO-53/INV-CRYPTO-54) and the post-data audit is emitted after
+the final frame (INV-CRYPTO-60).
 
 
 | Field | Type | Label | Description |
@@ -1639,10 +1639,10 @@ terminatedByLabel.
 | TERMINATED_BY_UNSPECIFIED | 0 | TERMINATED_BY_UNSPECIFIED is the zero/default value; not used in production — classifyTerminator always resolves to a specific variant. |
 | TERMINATED_BY_CLIENT_EOF | 1 | TERMINATED_BY_CLIENT_EOF indicates the cold-tier scan finished cleanly with no error (streamErr == nil). All requested events were delivered. |
 | TERMINATED_BY_CLIENT_DISCONNECT | 2 | TERMINATED_BY_CLIENT_DISCONNECT indicates the client disconnected mid-stream. Mapped from context.Canceled by classifyTerminator. |
-| TERMINATED_BY_DEADLINE_EXCEEDED | 3 | TERMINATED_BY_DEADLINE_EXCEEDED indicates either the request context deadline was exceeded (context.DeadlineExceeded) or a per-frame write deadline fired (ErrWriteDeadlineExceeded, INV-F14) during streaming. |
+| TERMINATED_BY_DEADLINE_EXCEEDED | 3 | TERMINATED_BY_DEADLINE_EXCEEDED indicates either the request context deadline was exceeded (context.DeadlineExceeded) or a per-frame write deadline fired (ErrWriteDeadlineExceeded, INV-CRYPTO-64) during streaming. |
 | TERMINATED_BY_SERVER_ERROR | 4 | TERMINATED_BY_SERVER_ERROR indicates an unexpected server-side failure (cold-reader error, codec failure, or other unclassified error). Mapped by the classifyTerminator catch-all branch. |
-| TERMINATED_BY_DUAL_CONTROL_TIMEOUT | 5 | TERMINATED_BY_DUAL_CONTROL_TIMEOUT indicates the ApprovalTTL elapsed before a second operator approved the request (INV-F11/F17). Mapped from READSTREAM_DUAL_CONTROL_TIMEOUT oops code. |
-| TERMINATED_BY_AUDIT_EMIT_FAILURE | 6 | TERMINATED_BY_AUDIT_EMIT_FAILURE indicates the pre-data audit publish (EmitStart) failed before any event data was read or sent. Mapped from DENY_AUDIT_PRE_DATA_PUBLISH oops code (INV-F2). No event data was delivered when this value appears. |
+| TERMINATED_BY_DUAL_CONTROL_TIMEOUT | 5 | TERMINATED_BY_DUAL_CONTROL_TIMEOUT indicates the ApprovalTTL elapsed before a second operator approved the request (INV-CRYPTO-61/INV-CRYPTO-67). Mapped from READSTREAM_DUAL_CONTROL_TIMEOUT oops code. |
+| TERMINATED_BY_AUDIT_EMIT_FAILURE | 6 | TERMINATED_BY_AUDIT_EMIT_FAILURE indicates the pre-data audit publish (EmitStart) failed before any event data was read or sent. Mapped from DENY_AUDIT_PRE_DATA_PUBLISH oops code (INV-CRYPTO-54). No event data was delivered when this value appears. |
 
 
  
@@ -2127,7 +2127,7 @@ allowing incremental feature deployment without breaking callers.
 | RekeyAbort | [RekeyAbortRequest](#holomush-admin-v1-RekeyAbortRequest) | [RekeyAbortResponse](#holomush-admin-v1-RekeyAbortResponse) | RekeyAbort cancels an in-progress rekey checkpoint. Requires the crypto.operator capability only; no admin role re-check and no dual-control approval — abort is single-control regardless of site policy (INV-E17). Any crypto.operator session may abort any non-terminal checkpoint, not just the primary operator who started it. Handler: internal/admin/socket/rekey_handler.go. |
 | RekeyStatus | [RekeyStatusRequest](#holomush-admin-v1-RekeyStatusRequest) | [RekeyStatusResponse](#holomush-admin-v1-RekeyStatusResponse) | RekeyStatus returns the current state of a single rekey operation identified by request_id. Requires the crypto.operator capability; no admin role re-check. Reads from the crypto_rekey_checkpoints table via CheckpointStatusReader.GetCheckpoint. Handler: internal/admin/socket/rekey_handler.go. |
 | RekeyList | [RekeyListRequest](#holomush-admin-v1-RekeyListRequest) | [RekeyStatusResponse](#holomush-admin-v1-RekeyStatusResponse) stream | RekeyList streams status records for rekey operations. By default only non-terminal checkpoints are returned; set include_terminal to include completed and aborted rows. Results are capped at 100 rows (any limit above 100 or zero is silently clamped to 100). Requires the crypto.operator capability; no admin role re-check. Handler: internal/admin/socket/rekey_handler.go. |
-| AdminReadStream | [AdminReadStreamRequest](#holomush-admin-v1-AdminReadStreamRequest) | [AdminReadStreamResponse](#holomush-admin-v1-AdminReadStreamResponse) stream | AdminReadStream is the operator break-glass streaming read RPC. Streams EventFrame payloads for the requested context(s) and time bounds, with typed metadata_only and no_plaintext_reason redaction fields for destroyed-DEK and plaintext-suppressed events. When dual_control is set in the request, the handler blocks until a second operator approves via the admin_approvals table before emitting any event frames (INV-F11/F17). Handler: internal/admin/socket/handlers.go (delegated to ReadStreamRPCHandler). |
+| AdminReadStream | [AdminReadStreamRequest](#holomush-admin-v1-AdminReadStreamRequest) | [AdminReadStreamResponse](#holomush-admin-v1-AdminReadStreamResponse) stream | AdminReadStream is the operator break-glass streaming read RPC. Streams EventFrame payloads for the requested context(s) and time bounds, with typed metadata_only and no_plaintext_reason redaction fields for destroyed-DEK and plaintext-suppressed events. When dual_control is set in the request, the handler blocks until a second operator approves via the admin_approvals table before emitting any event frames (INV-CRYPTO-61/INV-CRYPTO-67). Handler: internal/admin/socket/handlers.go (delegated to ReadStreamRPCHandler). |
 
  
 

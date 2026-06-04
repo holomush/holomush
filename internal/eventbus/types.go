@@ -45,7 +45,7 @@ const (
 	NoPlaintextReasonAuditQueueFull NoPlaintextReason = 3
 	// NoPlaintextReasonDEKMissing indicates the cold-tier audit row has no
 	// dek_ref (DEK reference column missing or NULL). Stamped exclusively by
-	// F's operator-read classifier (INV-F16).
+	// F's operator-read classifier (INV-CRYPTO-66).
 	NoPlaintextReasonDEKMissing NoPlaintextReason = 4
 	// NoPlaintextReasonDEKBadColumns indicates the cold-tier audit row
 	// references a DEK whose column set does not match the event's AAD

@@ -45,19 +45,19 @@ const (
 	ReadFinished_TERMINATED_BY_CLIENT_DISCONNECT ReadFinished_TerminatedBy = 2
 	// TERMINATED_BY_DEADLINE_EXCEEDED indicates either the request context
 	// deadline was exceeded (context.DeadlineExceeded) or a per-frame write
-	// deadline fired (ErrWriteDeadlineExceeded, INV-F14) during streaming.
+	// deadline fired (ErrWriteDeadlineExceeded, INV-CRYPTO-64) during streaming.
 	ReadFinished_TERMINATED_BY_DEADLINE_EXCEEDED ReadFinished_TerminatedBy = 3
 	// TERMINATED_BY_SERVER_ERROR indicates an unexpected server-side failure
 	// (cold-reader error, codec failure, or other unclassified error). Mapped
 	// by the classifyTerminator catch-all branch.
 	ReadFinished_TERMINATED_BY_SERVER_ERROR ReadFinished_TerminatedBy = 4
 	// TERMINATED_BY_DUAL_CONTROL_TIMEOUT indicates the ApprovalTTL elapsed
-	// before a second operator approved the request (INV-F11/F17). Mapped
+	// before a second operator approved the request (INV-CRYPTO-61/INV-CRYPTO-67). Mapped
 	// from READSTREAM_DUAL_CONTROL_TIMEOUT oops code.
 	ReadFinished_TERMINATED_BY_DUAL_CONTROL_TIMEOUT ReadFinished_TerminatedBy = 5
 	// TERMINATED_BY_AUDIT_EMIT_FAILURE indicates the pre-data audit publish
 	// (EmitStart) failed before any event data was read or sent. Mapped from
-	// DENY_AUDIT_PRE_DATA_PUBLISH oops code (INV-F2). No event data was
+	// DENY_AUDIT_PRE_DATA_PUBLISH oops code (INV-CRYPTO-54). No event data was
 	// delivered when this value appears.
 	ReadFinished_TERMINATED_BY_AUDIT_EMIT_FAILURE ReadFinished_TerminatedBy = 6
 )
@@ -125,7 +125,7 @@ type AdminReadStreamRequest struct {
 	// session_token is the bearer token identifying the operator. The handler
 	// resolves it to an OperatorSession via SessionStore.GetOperatorSession and
 	// then checks that the resolved player holds the crypto.operator ABAC grant
-	// (INV-F3) before any data read or audit publish occurs.
+	// (INV-CRYPTO-55) before any data read or audit publish occurs.
 	SessionToken string `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
 	// subject_pattern is an optional additional NATS subject filter applied
 	// server-side on top of the context-derived subjects. An empty string means
@@ -142,11 +142,11 @@ type AdminReadStreamRequest struct {
 	// ResolveBounds validates type, arity, and ID format per sensitiveTypes.
 	Context []*ContextRef `protobuf:"bytes,4,rep,name=context,proto3" json:"context,omitempty"`
 	// since is the inclusive lower bound of the query window. When absent (nil),
-	// the server defaults to now minus the configured DefaultWindow (INV-F6).
+	// the server defaults to now minus the configured DefaultWindow (INV-CRYPTO-56).
 	// ResolveBounds rejects since >= until with DENY_OPERATOR_READ_TIME_INVERTED.
 	Since *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=since,proto3" json:"since,omitempty"`
 	// until is the exclusive upper bound of the query window. When absent (nil),
-	// the server defaults to now (INV-F6). ResolveBounds rejects until more than
+	// the server defaults to now (INV-CRYPTO-56). ResolveBounds rejects until more than
 	// 5 seconds in the future with DENY_OPERATOR_READ_FUTURE_BOUND.
 	Until *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=until,proto3" json:"until,omitempty"`
 	// limit caps the maximum number of EventFrame responses the client wants to
@@ -156,7 +156,7 @@ type AdminReadStreamRequest struct {
 	// dual_control requires a second operator to approve the request before the
 	// stream begins. When true, the server sends a PendingApproval frame and
 	// blocks until approval.Repo.WaitForApproval resolves or the ApprovalTTL
-	// elapses (INV-F11/F17). When false, the fast single-control path runs
+	// elapses (INV-CRYPTO-61/INV-CRYPTO-67). When false, the fast single-control path runs
 	// immediately after the capability check.
 	DualControl bool `protobuf:"varint,8,opt,name=dual_control,json=dualControl,proto3" json:"dual_control,omitempty"`
 	// dual_control_timeout_seconds overrides the server's configured ApprovalTTL
@@ -165,7 +165,7 @@ type AdminReadStreamRequest struct {
 	// justification is the operator's plain-text reason for the read. REQUIRED:
 	// ResolveBounds rejects empty or whitespace-only values with
 	// DENY_OPERATOR_READ_JUSTIFICATION_EMPTY. Maximum 4096 UTF-8 bytes.
-	// Captured verbatim in the pre-data audit payload (INV-F1/F7).
+	// Captured verbatim in the pre-data audit payload (INV-CRYPTO-53/INV-CRYPTO-57).
 	Justification string `protobuf:"bytes,10,opt,name=justification,proto3" json:"justification,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -347,8 +347,8 @@ func (x *ContextRef) GetIds() []string {
 // zero or more EventFrame frames, and exactly one ReadFinished frame as the
 // terminal message. The handler (internal/admin/readstream/handler.go
 // handleInternal) enforces the audit invariants: the pre-data audit is emitted
-// before the first frame (INV-F1/F2) and the post-data audit is emitted after
-// the final frame (INV-F10).
+// before the first frame (INV-CRYPTO-53/INV-CRYPTO-54) and the post-data audit is emitted after
+// the final frame (INV-CRYPTO-60).
 type AdminReadStreamResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// payload carries the frame for this response message. Exactly one variant

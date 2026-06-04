@@ -71,13 +71,13 @@ func TestCryptoConfigDefaultsPopulatesOperatorReadFields(t *testing.T) {
 	cfg := config.CryptoConfig{}.Defaults()
 
 	assert.Equal(t, 1*time.Hour, cfg.OperatorReadDefaultWindow,
-		"OperatorReadDefaultWindow MUST default to 1h (INV-F6)")
+		"OperatorReadDefaultWindow MUST default to 1h (INV-CRYPTO-56)")
 	assert.Equal(t, 30*24*time.Hour, cfg.OperatorReadMaxWindow,
-		"OperatorReadMaxWindow MUST default to 30d (INV-F6)")
+		"OperatorReadMaxWindow MUST default to 30d (INV-CRYPTO-56)")
 	assert.Equal(t, 30*time.Second, cfg.OperatorReadWriteDeadline,
-		"OperatorReadWriteDeadline MUST default to 30s (INV-F14)")
+		"OperatorReadWriteDeadline MUST default to 30s (INV-CRYPTO-64)")
 	assert.Equal(t, 5*time.Minute, cfg.OperatorReadApprovalTTL,
-		"OperatorReadApprovalTTL MUST default to 5m (INV-F11)")
+		"OperatorReadApprovalTTL MUST default to 5m (INV-CRYPTO-61)")
 }
 
 // TestCryptoConfigDefaultsPreservesExplicitOperatorReadFields verifies that

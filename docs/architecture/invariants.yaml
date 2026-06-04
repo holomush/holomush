@@ -18,17 +18,17 @@ scopes:
     # Family→scope evidence: bare INV-N (crypto payload/DEK/KEK/AAD) →
     # 2026-04-25-event-payload-crypto-design.md; RB → 2026-05-25-plugin-readback-decrypt-design.md;
     # P7 (crypto half) → 2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md;
-    # reader-options INV-1..6 → 2026-05-05-history-reader-crypto-options-design.md.
-    # See redesign spec §2.1 and bead holomush-hz0v4.14.15. LEFT untouched (closed-world,
-    # flagged on epic .14): INV-F* sub-epic-F family (AdminReadStream operator-read) and
-    # master INV-6/INV-7 emit-time sensitivity-fence (home in internal/plugin/) — both
-    # unclassified, need a dedicated pass before .14.17 final verification.
+    # reader-options INV-1..6 → 2026-05-05-history-reader-crypto-options-design.md;
+    # sub-epic-F AdminReadStream INV-F1..F17 (→53..67) → 2026-05-11-...phase5-sub-epic-f.
+    # See redesign spec §2.1 and beads holomush-hz0v4.14.15/.14.23. NOTE: master INV-6/INV-7
+    # emit-time sensitivity-fence is classified to INV-PLUGIN ('emit gates') in .14.24, NOT here.
     status: migrated
     origin_specs:
       - "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
       - "docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"
       - "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
       - "docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"
+      - "docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"
     owned_paths:
       - "internal/eventbus/crypto/**"
       - "internal/eventbus/history/**"
@@ -89,6 +89,21 @@ scopes:
       - "api/proto/holomush/core/v1/core.proto"
       - "api/proto/holomush/plugin/v1/plugin.proto"
       - "api/proto/holomush/plugin/v1/audit.proto"
+      # INV-F sub-epic-F AdminReadStream (.14.23). admin/readstream/** is already owned above;
+      # these are the non-readstream sites: dual-control approval repo (→67), operator-read
+      # window config (→56/61/64), builtins operator-read golden test (→63), NoPlaintextReason
+      # proto-sync test (→66, EVENTBUS-shared too), the admin proto SOURCES (regen 3 targets),
+      # and the cmd/holomush E2E + wiring tests that exercise the operator-read flow end-to-end.
+      - "internal/admin/approval/repo.go"
+      - "internal/admin/approval/repo_integration_test.go"
+      - "internal/config/config.go"
+      - "internal/core/builtins_operator_read_test.go"
+      - "internal/eventbus/types_proto_sync_test.go"
+      - "api/proto/holomush/admin/v1/read_stream.proto"
+      - "api/proto/holomush/admin/v1/admin.proto"
+      - "cmd/holomush/admin_read_stream_e2e_test.go"
+      - "cmd/holomush/admin_authenticate_e2e_test.go"
+      - "cmd/holomush/readstream_wiring_test.go"
 
   - name: INV-PRIVACY
     description: "Stream history temporal floors, scope gating, guest-session bounds, reattach/Idle arrival-timestamp semantics"
@@ -1160,6 +1175,142 @@ invariants:
     binding: pending
     refs:
       - {file: "internal/eventbus/history/phase7_boundary_meta_test.go", token: "INV-P7-C0"}
+  - id: INV-CRYPTO-53
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"
+    legacy: ["INV-F1@docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"]
+    summary: "AdminReadStream MUST emit the crypto.system.operator_read audit event and observe a successful OperatorReadAuditEmitter.EmitStart
+      ack BEFORE sending any ReadStarted or Event frame."
+    binding: pending
+    refs:
+      - {file: "cmd/holomush/admin_read_stream_e2e_test.go", token: "INV-F1"}
+  - id: INV-CRYPTO-54
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"
+    legacy: ["INV-F2@docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"]
+    summary: "If the pre-data audit publish fails, AdminReadStream MUST return DENY_AUDIT_PRE_DATA_PUBLISH and MUST NOT invoke
+      HistoryReader.QueryHistory."
+    binding: pending
+    refs:
+      - {file: "cmd/holomush/admin_read_stream_e2e_test.go", token: "INV-F2"}
+  - id: INV-CRYPTO-55
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"
+    legacy: ["INV-F3@docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"]
+    summary: "AdminReadStream MUST reject with DENY_OPERATOR_CAPABILITY when the operator lacks crypto.operator, BEFORE any
+      audit emit."
+    binding: pending
+    refs:
+      - {file: "cmd/holomush/admin_read_stream_e2e_test.go", token: "INV-F3"}
+  - id: INV-CRYPTO-56
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"
+    legacy: ["INV-F6@docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"]
+    summary: "(until - since) > MaxWindow MUST return DENY_OPERATOR_READ_WINDOW_TOO_LARGE BEFORE the pre-data audit emit."
+    binding: pending
+    refs:
+      - {file: "cmd/holomush/admin_read_stream_e2e_test.go", token: "INV-F6"}
+      - {file: "cmd/holomush/readstream_wiring_test.go", token: "INV-F6"}
+  - id: INV-CRYPTO-57
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"
+    legacy: ["INV-F7@docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"]
+    summary: "OperatorReadStartPayload MUST persist both the Requested-prefixed (nullable, capturing defaulting) and Resolved-prefixed
+      (always populated) since/until/contexts fields."
+    binding: pending
+    refs:
+  - id: INV-CRYPTO-58
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"
+    legacy: ["INV-F8@docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"]
+    summary: "ReadStarted.request_id, OperatorReadStartPayload.RequestID, the start event ID, and OperatorReadCompletedPayload.RequestID
+      MUST all be equal."
+    binding: pending
+    refs:
+  - id: INV-CRYPTO-59
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"
+    legacy: ["INV-F9@docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"]
+    summary: "The crypto.system.operator_read_completed event's prev_hash MUST equal the recomputed self_hash of its corresponding
+      operator_read start event; both share NATS subject events.<game>.system.operator_read.<request_id>."
+    binding: pending
+    refs:
+      - {file: "cmd/holomush/admin_read_stream_e2e_test.go", token: "INV-F9"}
+  - id: INV-CRYPTO-60
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"
+    legacy: ["INV-F10@docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"]
+    summary: "Completion-audit publish failure MUST NOT raise an error (data already delivered; the pre-data audit is the
+      integrity anchor); it MUST be logged at WARN and counted via holomush_admin_readstream_completed_audit_failures_total."
+    binding: pending
+    refs:
+      - {file: "cmd/holomush/admin_read_stream_e2e_test.go", token: "INV-F10"}
+  - id: INV-CRYPTO-61
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"
+    legacy: ["INV-F11@docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"]
+    summary: "Dual-control: when req.dual_control=true and GetByOpArgsHash returns NOT_FOUND, the handler MUST send exactly
+      one PendingApproval frame and block via Repo.WaitForApproval; no in-process pending-approval registry."
+    binding: pending
+    refs:
+      - {file: "cmd/holomush/admin_read_stream_e2e_test.go", token: "INV-F11"}
+      - {file: "cmd/holomush/readstream_wiring_test.go", token: "INV-F11"}
+  - id: INV-CRYPTO-62
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"
+    legacy: ["INV-F12@docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"]
+    summary: "F's classifier (classify.go::Classify) MUST match its documented matrix; every branch corresponds to a production-verified
+      error producer, and unknown errors MUST surface as NO_PLAINTEXT_REASON_INTERNAL with a WARN log."
+    binding: pending
+    refs:
+      - {file: "cmd/holomush/admin_authenticate_e2e_test.go", token: "INV-F12"}
+      - {file: "cmd/holomush/admin_read_stream_e2e_test.go", token: "INV-F12"}
+  - id: INV-CRYPTO-63
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"
+    legacy: ["INV-F13@docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"]
+    summary: "crypto.system.operator_read and crypto.system.operator_read_completed MUST be registered in internal/core/builtins.go
+      with DisplayTarget == EVENT_CHANNEL_AUDIT_ONLY."
+    binding: pending
+    refs:
+  - id: INV-CRYPTO-64
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"
+    legacy: ["INV-F14@docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"]
+    summary: "A per-frame write deadline (WriteDeadline, default 30s) MUST be enforced via sendWithDeadline; total stream
+      duration MUST NOT be capped."
+    binding: pending
+    refs:
+      - {file: "cmd/holomush/admin_read_stream_e2e_test.go", token: "INV-F14"}
+      - {file: "cmd/holomush/readstream_wiring_test.go", token: "INV-F14"}
+  - id: INV-CRYPTO-65
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"
+    legacy: ["INV-F15@docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"]
+    summary: "F MUST set HistoryQuery.SensitiveOnly=true on every cold-tier query (canonical server-side WHERE dek_ref IS
+      NOT NULL filter); identity-codec rows MUST NOT reach the operator's stream."
+    binding: pending
+    refs:
+      - {file: "cmd/holomush/admin_authenticate_e2e_test.go", token: "INV-F15"}
+      - {file: "cmd/holomush/admin_read_stream_e2e_test.go", token: "INV-F15"}
+  - id: INV-CRYPTO-66
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"
+    legacy: ["INV-F16@docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"]
+    summary: "The NoPlaintextReason enum expansion (4→7) MUST preserve INV-GW-14 parity, and the new values (DEK_MISSING,
+      DEK_BAD_COLUMNS, INTERNAL) MUST NOT be stamped by cold_postgres.go or history/dispatcher.go — F's classifier is the
+      only producer."
+    binding: pending
+    refs:
+  - id: INV-CRYPTO-67
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"
+    legacy: ["INV-F17@docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"]
+    summary: "approval.Repo.GetByOpArgsHash MUST apply all filters server-side (op_kind, op_args_hash, expires_at>now(), approved_at
+      IS NOT NULL, primary_player_id != excludePlayerID); tiebreaker = most recently approved."
+    binding: pending
+    refs:
+      - {file: "cmd/holomush/admin_read_stream_e2e_test.go", token: "INV-F17"}
   # ── INV-PRESENCE ── migrated from I-PRES-N (holomush-hz0v4.14.5).
   # Origin: docs/superpowers/specs/2026-05-19-presence-snapshot-design.md §7.
   # binding: pending across the scope — verification backfill is holomush-hz0v4.11.

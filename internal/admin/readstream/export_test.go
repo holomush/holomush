@@ -101,7 +101,7 @@ func (c *ColdReader) BuildSQLForTest(q ColdQuery) (string, []any, error) {
 
 // BuildMetadataOnlyEventFrameForTest exposes the package-private metadata-only
 // frame builder. Used by handler_test.go to assert that metadata-only frames
-// carry typed redaction fields (INV-F12).
+// carry typed redaction fields (INV-CRYPTO-62).
 func BuildMetadataOnlyEventFrameForTest(row ColdRow, reason eventbus.NoPlaintextReason) *adminv1.AdminReadStreamResponse {
 	return buildMetadataOnlyEventFrame(row, reason)
 }

@@ -70,8 +70,8 @@ func TestEncodeHashPtr_NilForGenesis(t *testing.T) {
 	assert.False(t, hasPrevHash, "genesis payload must have no prev_hash key in JSON")
 }
 
-func TestINV_F7_PayloadPreservesRequestedAndResolved(t *testing.T) {
-	// INV-F7: OperatorReadStartPayload MUST persist both Requested-* (nullable)
+func TestINV_CRYPTO_57_PayloadPreservesRequestedAndResolved(t *testing.T) {
+	// INV-CRYPTO-57: OperatorReadStartPayload MUST persist both Requested-* (nullable)
 	// and Resolved-* (always populated) fields for since/until/contexts.
 	// JSON round-trip must preserve all fields including nullable *time.Time pointers.
 

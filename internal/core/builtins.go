@@ -95,7 +95,7 @@ func registerBuiltinTypes(r *VerbRegistry, hostVersion string) error {
 		// F's AdminReadStream handler at stream-start and stream-end respectively.
 		// AUDIT_ONLY: gRPC Subscribe drops before delivery; audit projection
 		// persists to events_audit. Registered here so RenderingPublisher does
-		// not reject with EMIT_UNKNOWN_VERB (INV-F13).
+		// not reject with EMIT_UNKNOWN_VERB (INV-CRYPTO-63).
 		{Type: "crypto.system.operator_read", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},
 		{Type: "crypto.system.operator_read_completed", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},
 		// Phase 7 PluginDowngradeFence violation audit (host-emit, persistence-only).

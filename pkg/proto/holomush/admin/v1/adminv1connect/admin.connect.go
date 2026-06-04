@@ -138,7 +138,7 @@ type AdminServiceClient interface {
 	// typed metadata_only and no_plaintext_reason redaction fields for
 	// destroyed-DEK and plaintext-suppressed events. When dual_control is set
 	// in the request, the handler blocks until a second operator approves via
-	// the admin_approvals table before emitting any event frames (INV-F11/F17).
+	// the admin_approvals table before emitting any event frames (INV-CRYPTO-61/INV-CRYPTO-67).
 	// Handler: internal/admin/socket/handlers.go (delegated to ReadStreamRPCHandler).
 	AdminReadStream(context.Context, *connect.Request[v1.AdminReadStreamRequest]) (*connect.ServerStreamForClient[v1.AdminReadStreamResponse], error)
 }
@@ -357,7 +357,7 @@ type AdminServiceHandler interface {
 	// typed metadata_only and no_plaintext_reason redaction fields for
 	// destroyed-DEK and plaintext-suppressed events. When dual_control is set
 	// in the request, the handler blocks until a second operator approves via
-	// the admin_approvals table before emitting any event frames (INV-F11/F17).
+	// the admin_approvals table before emitting any event frames (INV-CRYPTO-61/INV-CRYPTO-67).
 	// Handler: internal/admin/socket/handlers.go (delegated to ReadStreamRPCHandler).
 	AdminReadStream(context.Context, *connect.Request[v1.AdminReadStreamRequest], *connect.ServerStream[v1.AdminReadStreamResponse]) error
 }

@@ -22,7 +22,7 @@ type ContextRef struct {
 
 // encodeHash mirrors internal/eventbus/crypto/dek/audit.go::encodeHash
 // (package-private there). MUST produce byte-identical output to maintain
-// cross-chain JCS canonical-form parity (INV-F7).
+// cross-chain JCS canonical-form parity (INV-CRYPTO-57).
 func encodeHash(b []byte) string {
 	return fmt.Sprintf("sha256:%s", hex.EncodeToString(b))
 }
@@ -40,7 +40,7 @@ func encodeHashPtr(b []byte) *string {
 // OperatorReadStartPayload is the JSON-shaped payload of the
 // crypto.system.operator_read audit event.
 //
-// INV-F7: both Requested-* (nullable, capturing defaulting) and Resolved-*
+// INV-CRYPTO-57: both Requested-* (nullable, capturing defaulting) and Resolved-*
 // (always populated) fields for since/until/contexts MUST be present.
 type OperatorReadStartPayload struct {
 	// Operator identity

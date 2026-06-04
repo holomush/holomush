@@ -97,11 +97,11 @@ func TestNoPlaintextReasonEnumParity(t *testing.T) {
 	}
 }
 
-// TestINV_F16_NoPlaintextReasonProtoGoParity is the INV-F16 parity test for
+// TestINV_CRYPTO_66_NoPlaintextReasonProtoGoParity is the INV-CRYPTO-66 parity test for
 // the 4→7 expansion. Asserts all 7 values have matching proto-Go pairs in both
 // directions. This is an alias for the extended TestNoPlaintextReasonEnumParity
 // kept separately so the invariant name appears in test output.
-func TestINV_F16_NoPlaintextReasonProtoGoParity(t *testing.T) {
+func TestINV_CRYPTO_66_NoPlaintextReasonProtoGoParity(t *testing.T) {
 	cases := []struct {
 		name     string
 		goVal    eventbus.NoPlaintextReason
@@ -125,16 +125,16 @@ func TestINV_F16_NoPlaintextReasonProtoGoParity(t *testing.T) {
 	}
 }
 
-// TestINV_F16_HotColdStampersDoNotEmitNewValues asserts that the three new
+// TestINV_CRYPTO_66_HotColdStampersDoNotEmitNewValues asserts that the three new
 // NoPlaintextReason values (DEK_MISSING, DEK_BAD_COLUMNS, INTERNAL) are NOT
 // referenced in the hot/cold tier stampers or subscriber. These values MUST be
-// stamped exclusively by F's operator-read classifier (INV-F16).
+// stamped exclusively by F's operator-read classifier (INV-CRYPTO-66).
 //
 // This is a static-analysis-style test: it reads the source files and fails if
 // any of the new constant names appear. Because Go source is text, even a
 // comment mentioning the constant would flag — intentional, since comments are
 // also specifications.
-func TestINV_F16_HotColdStampersDoNotEmitNewValues(t *testing.T) {
+func TestINV_CRYPTO_66_HotColdStampersDoNotEmitNewValues(t *testing.T) {
 	// Resolve absolute paths via runtime.Caller so the test is stable
 	// regardless of the working directory when invoked.
 	_, thisFile, _, ok := runtime.Caller(0)
@@ -164,7 +164,7 @@ func TestINV_F16_HotColdStampersDoNotEmitNewValues(t *testing.T) {
 			for _, name := range forbidden {
 				assert.NotContains(t, src, name,
 					"hot/cold stamper %s MUST NOT reference new NoPlaintextReason value %s; "+
-						"only F's classifier produces these (INV-F16)", relPath, name)
+						"only F's classifier produces these (INV-CRYPTO-66)", relPath, name)
 			}
 		})
 	}

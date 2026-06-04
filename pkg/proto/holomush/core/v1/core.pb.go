@@ -56,7 +56,7 @@ const (
 	NoPlaintextReason_NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL NoPlaintextReason = 3
 	// NO_PLAINTEXT_REASON_DEK_MISSING means the cold-tier audit row had no dek_ref
 	// (DEK reference column missing or NULL). Stamped exclusively by sub-epic F's
-	// operator-read classifier (INV-F16).
+	// operator-read classifier (INV-CRYPTO-66).
 	NoPlaintextReason_NO_PLAINTEXT_REASON_DEK_MISSING NoPlaintextReason = 4
 	// NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS means a cold-tier audit row references a
 	// DEK whose column set does not match the event's AAD declaration. Stamped

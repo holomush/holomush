@@ -199,7 +199,7 @@ func (f *fakeAuditEmitter) firstCompletedCallID() int64 {
 // stubDEKResolver and stubCodecResolver are inert resolvers for handler
 // unit tests that DO NOT reach DecryptRow. The handler tests focus on
 // flows that succeed or fail BEFORE ColdReader.Read is called
-// (INV-F1/F2/F3/F11); the per-row decrypt classifier matrix is exercised
+// (INV-CRYPTO-53/INV-CRYPTO-54/INV-CRYPTO-55/INV-CRYPTO-61); the per-row decrypt classifier matrix is exercised
 // in decrypt_test.go and the scan-and-stream contract in integration
 // tests (R.17-R.19).
 type stubDEKResolver struct{}
@@ -217,7 +217,7 @@ func (stubCodecResolver) Resolve(_ codec.Name) (codec.Codec, error) {
 // stubColdReader replaces *ColdReader in unit tests. It returns the
 // configured rows + err deterministically and records the last query it
 // received so tests can assert that BuildSubjects + ResolveBounds produced
-// the expected SQL inputs (INV-F8 subjects + INV-F6 bounds round-trip).
+// the expected SQL inputs (INV-CRYPTO-58 subjects + INV-CRYPTO-56 bounds round-trip).
 type stubColdReader struct {
 	mu        sync.Mutex
 	rows      []readstream.ColdRow
@@ -324,13 +324,13 @@ func runHandler(t *testing.T, cfg readstream.Config, req *adminv1.AdminReadStrea
 	return stream, runErr
 }
 
-// ---------- INV-F3: capability check precedes audit ----------
+// ---------- INV-CRYPTO-55: capability check precedes audit ----------
 
-// TestINV_F3_CapabilityCheckPrecedesAudit asserts that the capability check
+// TestINV_CRYPTO_55_CapabilityCheckPrecedesAudit asserts that the capability check
 // runs BEFORE EmitStart and BEFORE any frame send. A player without
 // crypto.operator must see DENY_OPERATOR_CAPABILITY, zero frames sent, and
 // EmitStart NEVER called.
-func TestINV_F3_CapabilityCheckPrecedesAudit(t *testing.T) {
+func TestINV_CRYPTO_55_CapabilityCheckPrecedesAudit(t *testing.T) {
 	cfg := newTestConfig()
 	cfg.Grants = &fakeGrantsResolver{grants: nil} // no grants
 
@@ -361,15 +361,15 @@ func TestSessionLookupFails(t *testing.T) {
 	assert.Equal(t, 0, stream.Len(), "ZERO frames may be sent on session failure")
 }
 
-// ---------- INV-F2: audit-publish failure refuses to stream ----------
+// ---------- INV-CRYPTO-54: audit-publish failure refuses to stream ----------
 
-// TestINV_F2_AuditPublishFailRefuses asserts that an EmitStart failure
+// TestINV_CRYPTO_54_AuditPublishFailRefuses asserts that an EmitStart failure
 // blocks all data emission: handler returns DENY_AUDIT_PRE_DATA_PUBLISH,
 // ZERO frames are sent (no PendingApproval, no ReadStarted, no Event), and
 // ColdReader.Read is never called. (We assert the latter indirectly: the
 // Config carries a ColdReader whose pool is nil — if Read were called it
 // would panic.)
-func TestINV_F2_AuditPublishFailRefuses(t *testing.T) {
+func TestINV_CRYPTO_54_AuditPublishFailRefuses(t *testing.T) {
 	cfg := newTestConfig()
 	emitter := &fakeAuditEmitter{
 		emitStartErr: oops.Code("EMITTER_PUBLISH_FAILED").Errorf("simulated publish failure"),
@@ -386,9 +386,9 @@ func TestINV_F2_AuditPublishFailRefuses(t *testing.T) {
 	assert.Equal(t, 0, stream.Len(), "ZERO frames may be sent when EmitStart fails")
 }
 
-// ---------- INV-F1: pre-data audit ordering ----------
+// ---------- INV-CRYPTO-53: pre-data audit ordering ----------
 
-// TestINV_F1_PreDataAuditOrdering asserts the canonical ordering for the
+// TestINV_CRYPTO_53_PreDataAuditOrdering asserts the canonical ordering for the
 // non-dual-control happy path with a small row set:
 //
 //	EmitStart → ReadStarted frame → Event frames → ReadFinished frame → EmitCompleted
@@ -397,7 +397,7 @@ func TestINV_F2_AuditPublishFailRefuses(t *testing.T) {
 // resolver is never reached because identity-codec rows pass plaintext
 // through directly. The test asserts the EmitStart call-id precedes EVERY
 // frame send and EmitCompleted call-id follows the LAST frame send.
-func TestINV_F1_PreDataAuditOrdering(t *testing.T) {
+func TestINV_CRYPTO_53_PreDataAuditOrdering(t *testing.T) {
 	cfg := newTestConfig()
 	emitter := &fakeAuditEmitter{}
 	cfg.AuditEmitter = emitter
@@ -434,14 +434,14 @@ func TestINV_F1_PreDataAuditOrdering(t *testing.T) {
 	assert.Equal(t, 1, cold.CallCount(), "ColdReader.Read must be called exactly once")
 }
 
-// ---------- INV-F10: completion audit failure does not raise ----------
+// ---------- INV-CRYPTO-60: completion audit failure does not raise ----------
 
-// TestINV_F10_CompletionAuditFailureNotRaised asserts that when
+// TestINV_CRYPTO_60_CompletionAuditFailureNotRaised asserts that when
 // EmitCompleted fails after a clean scan-and-stream run, the failure is
 // logged + metric-counted but NEVER raised back to the operator. The
 // outer handler return value reflects only stream-level errors (which is
 // nil on the happy path used here).
-func TestINV_F10_CompletionAuditFailureNotRaised(t *testing.T) {
+func TestINV_CRYPTO_60_CompletionAuditFailureNotRaised(t *testing.T) {
 	cfg := newTestConfig()
 	completedErr := oops.Code("COMPLETION_PUBLISH_FAILED").Errorf("simulated completion failure")
 	emitter := &fakeAuditEmitter{emitCompletedErr: completedErr}
@@ -453,22 +453,22 @@ func TestINV_F10_CompletionAuditFailureNotRaised(t *testing.T) {
 	after := testutil.ToFloat64(readstream.CompletedAuditFailuresTotal)
 
 	require.NoError(t, err,
-		"handler MUST NOT raise on EmitCompleted failure — return value reflects stream-level errors only (INV-F10)")
+		"handler MUST NOT raise on EmitCompleted failure — return value reflects stream-level errors only (INV-CRYPTO-60)")
 	require.NotErrorIs(t, err, completedErr,
-		"handler MUST NOT return the EmitCompleted error to the operator (INV-F10)")
+		"handler MUST NOT return the EmitCompleted error to the operator (INV-CRYPTO-60)")
 	assert.Equal(t, 1, emitter.CompletedCalls(),
 		"EmitCompleted must be attempted exactly once (best-effort)")
 	assert.Greater(t, after, before,
-		"CompletedAuditFailuresTotal must increment on completion-audit failure (INV-F10)")
+		"CompletedAuditFailuresTotal must increment on completion-audit failure (INV-CRYPTO-60)")
 }
 
-// ---------- INV-F11: dual-control flow ----------
+// ---------- INV-CRYPTO-61: dual-control flow ----------
 
-// TestINV_F11_DualControlBlocksUntilApproval asserts the Open + Wait path:
+// TestINV_CRYPTO_61_DualControlBlocksUntilApproval asserts the Open + Wait path:
 // when no fresh approved row exists, the handler opens a new approval row,
 // emits the PendingApproval frame, waits for approval, then proceeds with
 // EmitStart and ReadStarted.
-func TestINV_F11_DualControlBlocksUntilApproval(t *testing.T) {
+func TestINV_CRYPTO_61_DualControlBlocksUntilApproval(t *testing.T) {
 	cfg := newTestConfig()
 	approverULID := otherPlayerULID
 	openedID := approval.RequestID(ulid.MustParse("01HZB000000000000000000000"))
@@ -509,11 +509,11 @@ func TestINV_F11_DualControlBlocksUntilApproval(t *testing.T) {
 	assert.True(t, isStarted, "second frame MUST be ReadStarted; got %T", frames[1].GetPayload())
 }
 
-// TestINV_F11_DualControlIdempotentReuse asserts the reuse path: when
+// TestINV_CRYPTO_61_DualControlIdempotentReuse asserts the reuse path: when
 // GetByOpArgsHash returns a fresh approved row, NO PendingApproval frame is
 // sent, Open + WaitForApproval are NEVER called, and the handler proceeds
 // directly to EmitStart.
-func TestINV_F11_DualControlIdempotentReuse(t *testing.T) {
+func TestINV_CRYPTO_61_DualControlIdempotentReuse(t *testing.T) {
 	cfg := newTestConfig()
 	approverULID := otherPlayerULID
 	reusedID := approval.RequestID(ulid.MustParse("01HZB000000000000000000001"))
@@ -636,15 +636,15 @@ func TestDualControlNonDeadlineError_EmitsFinishedAndReturnsWrappedErr(t *testin
 		"TerminatedBy must be SERVER_ERROR for non-deadline dual-control failures")
 }
 
-// ---------- INV-F15: cold-tier filters on dek_ref IS NOT NULL ----------
+// ---------- INV-CRYPTO-65: cold-tier filters on dek_ref IS NOT NULL ----------
 
-// TestINV_F15_ColdReaderFiltersByDekRefNotNull asserts that the cold-tier
+// TestINV_CRYPTO_65_ColdReaderFiltersByDekRefNotNull asserts that the cold-tier
 // reader's SQL filters by dek_ref IS NOT NULL — i.e., identity-codec rows
 // (cleartext) are excluded from break-glass reads. The handler delegates
 // to ColdReader.Read; this test verifies the contract at the reader level
 // where the SQL is built. The handler tests above use a stub ColdReader to
 // keep the handler-flow tests independent of the SQL details.
-func TestINV_F15_ColdReaderFiltersByDekRefNotNull(t *testing.T) {
+func TestINV_CRYPTO_65_ColdReaderFiltersByDekRefNotNull(t *testing.T) {
 	r := readstream.NewColdReader(nil)
 	sql, _, err := r.BuildSQLForTest(readstream.ColdQuery{
 		Subjects: []eventbus.Subject{"events.g1.scene.01H.>"},
@@ -653,7 +653,7 @@ func TestINV_F15_ColdReaderFiltersByDekRefNotNull(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Contains(t, sql, "dek_ref IS NOT NULL",
-		"cold-tier SQL must filter by dek_ref IS NOT NULL (INV-F15)")
+		"cold-tier SQL must filter by dek_ref IS NOT NULL (INV-CRYPTO-65)")
 }
 
 // TestHandler_ColdReaderQueryWiring asserts the handler passes
@@ -680,7 +680,7 @@ func TestHandler_ColdReaderQueryWiring(t *testing.T) {
 		"Until must round-trip from the proto request")
 }
 
-// ---------- Typed redaction assertion (INV-F12) ----------
+// ---------- Typed redaction assertion (INV-CRYPTO-62) ----------
 
 // TestEventFrameCarriesTypedRedaction asserts the metadata-only frame
 // builder produces an EventFrame with metadata_only=true and a typed

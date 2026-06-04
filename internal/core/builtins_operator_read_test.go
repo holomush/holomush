@@ -14,12 +14,12 @@ import (
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
-// TestINV_F13_BuiltinEventTypesRegistered asserts that
+// TestINV_CRYPTO_63_BuiltinEventTypesRegistered asserts that
 // crypto.system.operator_read and crypto.system.operator_read_completed are
-// registered with the correct field values by registerBuiltinTypes (INV-F13).
+// registered with the correct field values by registerBuiltinTypes (INV-CRYPTO-63).
 // Both types MUST have Category="system", Format="audit",
 // DisplayTarget=EVENT_CHANNEL_AUDIT_ONLY, Source="builtin".
-func TestINV_F13_BuiltinEventTypesRegistered(t *testing.T) {
+func TestINV_CRYPTO_63_BuiltinEventTypesRegistered(t *testing.T) {
 	r := NewVerbRegistry()
 	require.NoError(t, registerBuiltinTypes(r, "test"))
 
@@ -44,13 +44,13 @@ func TestINV_F13_BuiltinEventTypesRegistered(t *testing.T) {
 }
 
 // TestBuiltinRekeyRowUnchanged is a golden-test assertion that the existing
-// crypto.system.rekey registration is not disturbed by the INV-F13 additions.
+// crypto.system.rekey registration is not disturbed by the INV-CRYPTO-63 additions.
 func TestBuiltinRekeyRowUnchanged(t *testing.T) {
 	r := NewVerbRegistry()
 	require.NoError(t, registerBuiltinTypes(r, "test"))
 
 	reg, ok := r.Lookup("crypto.system.rekey")
-	require.True(t, ok, "crypto.system.rekey must still be registered after INV-F13 additions")
+	require.True(t, ok, "crypto.system.rekey must still be registered after INV-CRYPTO-63 additions")
 	assert.Equal(t, "system", reg.Category)
 	assert.Equal(t, "audit", reg.Format)
 	assert.Equal(t, corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, reg.DisplayTarget)

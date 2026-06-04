@@ -4,7 +4,7 @@
 // handler_test_support.go exposes a narrow test-support API to callers
 // outside the readstream package — specifically, E2E tests in
 // cmd/holomush that need to drive Handler.handleInternal with an
-// injected StreamSender (e.g. to inject a per-frame sleep for INV-F14
+// injected StreamSender (e.g. to inject a per-frame sleep for INV-CRYPTO-64
 // write-deadline tests, or to drive idempotent dual-control reuse with
 // a non-UDS session adapter).
 //

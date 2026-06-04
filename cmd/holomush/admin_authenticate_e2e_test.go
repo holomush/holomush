@@ -742,8 +742,8 @@ var _ = Describe("Admin Authenticate Lifecycle (full-stack E2E)", func() {
 		//   - F-E1:  happy path single context
 		//   - F-E2:  whole-game wildcard with defaulted bounds
 		//   - F-E13: multi-context k-way merge (global timestamp order)
-		//   - F-E14: sensitive-content filter (INV-F15)
-		//   - F-E17: classifier surface (INV-F12 producers)
+		//   - F-E14: sensitive-content filter (INV-CRYPTO-65)
+		//   - F-E17: classifier surface (INV-CRYPTO-62 producers)
 		// =========================================================================
 		runAdminReadStreamScenarios(env)
 	})

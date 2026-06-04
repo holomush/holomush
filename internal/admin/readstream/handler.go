@@ -4,16 +4,16 @@
 // handler.go is the AdminReadStream entry point. It orchestrates the full
 // operator-read flow per ADR-0017:
 //
-//  1. Capability check (INV-F3): the bearer must hold crypto.operator BEFORE
+//  1. Capability check (INV-CRYPTO-55): the bearer must hold crypto.operator BEFORE
 //     any audit publish or data read.
-//  2. ResolveBounds (INV-F6/F7): validate + default + canonicalise the request.
-//  3. Dual-control (INV-F11/F17): on req.DualControl, reuse a fresh approved
+//  2. ResolveBounds (INV-CRYPTO-56/INV-CRYPTO-57): validate + default + canonicalise the request.
+//  3. Dual-control (INV-CRYPTO-61/INV-CRYPTO-67): on req.DualControl, reuse a fresh approved
 //     row from approval.Repo.GetByOpArgsHash or Open + WaitForApproval.
-//  4. Pre-data audit publish (INV-F1/F2): EmitStart MUST succeed BEFORE the
+//  4. Pre-data audit publish (INV-CRYPTO-53/INV-CRYPTO-54): EmitStart MUST succeed BEFORE the
 //     first frame is sent or any cold-tier row is read.
 //  5. scanAndStream: ColdReader.Read → DecryptRow per row → typed frame send
-//     via SendWithDeadline (INV-F12/F14).
-//  6. Post-data audit publish (INV-F10): EmitCompleted is best-effort; its
+//     via SendWithDeadline (INV-CRYPTO-62/INV-CRYPTO-64).
+//  6. Post-data audit publish (INV-CRYPTO-60): EmitCompleted is best-effort; its
 //     failure increments the metric but does NOT raise.
 //
 // The production handler is wired in R.14. R.15 supplies the in-process
@@ -46,7 +46,7 @@ import (
 // from an authenticated operator session. Mirrors the layering-decoupling
 // pattern in internal/admin/socket/rekey_handler.go::OperatorSession but
 // preserves PeerCred (UID/PID) because F's audit payload requires it
-// (INV-F7).
+// (INV-CRYPTO-57).
 type OperatorSession struct {
 	PlayerID       string
 	SessionTokenID string
@@ -79,9 +79,9 @@ type Config struct {
 	// Sessions resolves the session_token to an OperatorSession.
 	Sessions SessionStore
 	// Grants is the ABAC resolver for the crypto.operator capability check
-	// (INV-F3). Passed to access.HasPlayerGrant.
+	// (INV-CRYPTO-55). Passed to access.HasPlayerGrant.
 	Grants access.SubjectResolver
-	// Approvals is the dual-control repository (INV-F11/F17). When
+	// Approvals is the dual-control repository (INV-CRYPTO-61/INV-CRYPTO-67). When
 	// req.DualControl=false, this is never called.
 	Approvals approval.Repo
 	// ColdReader executes the cold-tier read against events_audit. Owned
@@ -92,7 +92,7 @@ type Config struct {
 	DEK DEKResolver
 	// Codecs resolves the codec for per-row decryption (R.11).
 	Codecs CodecResolver
-	// AuditEmitter publishes the start + completed audit events (INV-F1/F2/F10).
+	// AuditEmitter publishes the start + completed audit events (INV-CRYPTO-53/INV-CRYPTO-54/INV-CRYPTO-60).
 	AuditEmitter OperatorReadAuditEmitter
 	// PolicyHash is the canonical "sha256:<hex>" of the active site
 	// policy, captured at bootstrap. Stamped into both audit payloads.
@@ -104,11 +104,11 @@ type Config struct {
 	Logger *slog.Logger
 	// Game is the game ID used to build NATS subjects (BuildSubjects).
 	Game string
-	// MaxWindow caps the (until - since) span (INV-F6).
+	// MaxWindow caps the (until - since) span (INV-CRYPTO-56).
 	MaxWindow time.Duration
-	// DefaultWindow is the size of since-defaulted reads (INV-F6).
+	// DefaultWindow is the size of since-defaulted reads (INV-CRYPTO-56).
 	DefaultWindow time.Duration
-	// WriteDeadline is the per-frame send deadline (INV-F14).
+	// WriteDeadline is the per-frame send deadline (INV-CRYPTO-64).
 	WriteDeadline time.Duration
 	// ApprovalTTL is the dual-control wait budget. Used as the deadline
 	// passed to approval.Repo.WaitForApproval.
@@ -197,7 +197,7 @@ func (c *connectStream) Send(resp *adminv1.AdminReadStreamResponse) error {
 }
 
 // handleInternal runs the full operator-read flow per ADR-0017. The
-// invariant ordering enforced here is INV-CRYPTO-23 / INV-F1 / INV-F2:
+// invariant ordering enforced here is INV-CRYPTO-23 / INV-CRYPTO-53 / INV-CRYPTO-54:
 //
 //	capability check → resolve bounds → (optional) dual-control →
 //	EmitStart → first frame send → cold read → frame stream →
@@ -217,7 +217,7 @@ func (h *Handler) handleInternal(
 		return oops.Wrap(err)
 	}
 
-	// Step 2: capability check (INV-F3 — MUST precede EmitStart).
+	// Step 2: capability check (INV-CRYPTO-55 — MUST precede EmitStart).
 	hasCap, err := access.HasPlayerGrant(ctx, h.cfg.Grants, session.PlayerID, access.CapabilityCryptoOperator)
 	if err != nil {
 		return oops.Code("INGAME_GRANT_LOOKUP_FAILED").
@@ -229,7 +229,7 @@ func (h *Handler) handleInternal(
 			Errorf("crypto.operator capability absent")
 	}
 
-	// Step 3: validate + canonicalise the request shape (INV-F6/F7).
+	// Step 3: validate + canonicalise the request shape (INV-CRYPTO-56/INV-CRYPTO-57).
 	domesticReq := protoToDomesticRequest(req)
 	resolved, flags, err := ResolveBounds(&domesticReq, h.cfg.Clock(), h.cfg.DefaultWindow, h.cfg.MaxWindow)
 	if err != nil {
@@ -245,7 +245,7 @@ func (h *Handler) handleInternal(
 		return oops.Wrap(err)
 	}
 
-	// Step 5: dual-control (INV-F11/F17). On reuse, approvalInfo carries the
+	// Step 5: dual-control (INV-CRYPTO-61/INV-CRYPTO-67). On reuse, approvalInfo carries the
 	// existing row; on Open + Wait, it carries the freshly approved row.
 	var approvalInfo *approvalRecord
 	if req.GetDualControl() {
@@ -265,7 +265,7 @@ func (h *Handler) handleInternal(
 		}
 	}
 
-	// Step 6: build the start payload and emit (INV-F1/F2). After this point
+	// Step 6: build the start payload and emit (INV-CRYPTO-53/INV-CRYPTO-54). After this point
 	// the audit trail has captured the operator's intent.
 	requestID := idgen.New()
 	startPayload := h.buildStartPayload(session, resolved, flags, domesticReq, req, requestID, approvalInfo)
@@ -273,7 +273,7 @@ func (h *Handler) handleInternal(
 		// Build a fresh DENY_AUDIT_PRE_DATA_PUBLISH oops carrying the inner
 		// error's message. oops.Code().Wrap() preserves the DEEPEST code in
 		// the chain — wrapping here would surface EMITTER_PUBLISH_FAILED to
-		// the operator, defeating INV-F2 classification. Use .Errorf with
+		// the operator, defeating INV-CRYPTO-54 classification. Use .Errorf with
 		// inner.Error() so the outer code wins (classifyTerminator + the
 		// audit-emit-failure terminator depend on this).
 		return oops.Code("DENY_AUDIT_PRE_DATA_PUBLISH").
@@ -297,7 +297,7 @@ func (h *Handler) handleInternal(
 	term := classifyTerminator(streamErr)
 	_ = stream.Send(buildFinishedFrame(term, eventsScanned, decryptFails, h.cfg.Clock())) //nolint:errcheck // best-effort terminator send; client may have disconnected and we still record the audit completion
 
-	// Step 10: emit the completed audit event (INV-F10 — failure does NOT
+	// Step 10: emit the completed audit event (INV-CRYPTO-60 — failure does NOT
 	// raise, just logs WARN; metric increments inside EmitCompleted).
 	completedPayload := buildCompletedPayload(requestID, term, eventsScanned, decryptFails, h.cfg.PolicyHash, h.cfg.Clock())
 	if cerr := h.cfg.AuditEmitter.EmitCompleted(ctx, completedPayload, requestID); cerr != nil {
@@ -320,7 +320,7 @@ type approvalRecord struct {
 	ApprovedBy ulid.ULID
 }
 
-// acquireApproval implements the INV-F11/F17 dual-control flow:
+// acquireApproval implements the INV-CRYPTO-61/INV-CRYPTO-67 dual-control flow:
 //
 //   - Reuse: if a fresh approved row exists for (opKind, opArgsHash) authored
 //     by another operator, return it directly. No PendingApproval frame.
@@ -430,7 +430,7 @@ func (h *Handler) scanAndStream( //nolint:gocritic // unnamedResult: three-retur
 	var eventsScanned, decryptFails int64
 	send := stream.Send
 
-	// Per INV-F14: per-frame write deadline. Production requests carry the
+	// Per INV-CRYPTO-64: per-frame write deadline. Production requests carry the
 	// underlying *net.UnixConn via socket.UnixConnFromContext (wired through
 	// http.Server.ConnContext), so SendWithDeadline enforces the deadline at
 	// the kernel I/O layer with no orphan goroutine. Unit tests that bypass
@@ -468,7 +468,7 @@ func (h *Handler) scanAndStream( //nolint:gocritic // unnamedResult: three-retur
 	return eventsScanned, decryptFails, nil
 }
 
-// buildStartPayload assembles the audit start payload. INV-F7: both
+// buildStartPayload assembles the audit start payload. INV-CRYPTO-57: both
 // Requested-* (nullable, captures defaulting) and Resolved-* (always
 // populated) MUST be present.
 func (h *Handler) buildStartPayload(
@@ -661,7 +661,7 @@ func terminatedByLabel(t adminv1.ReadFinished_TerminatedBy) string {
 
 // noPlaintextReasonToProto maps the eventbus.NoPlaintextReason enum (Go
 // internal) to the corev1.NoPlaintextReason proto enum. Mirrors the
-// 1:1 mapping enforced by TestINV_F16_NoPlaintextReasonProtoGoParity.
+// 1:1 mapping enforced by TestINV_CRYPTO_66_NoPlaintextReasonProtoGoParity.
 func noPlaintextReasonToProto(r eventbus.NoPlaintextReason) corev1.NoPlaintextReason {
 	switch r {
 	case eventbus.NoPlaintextReasonAuthGuardDeny:
