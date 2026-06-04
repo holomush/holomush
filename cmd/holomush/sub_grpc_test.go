@@ -136,7 +136,7 @@ func TestGrpcSubsystemWrapPublisherWithoutRegistry(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "GRPC_VERB_REGISTRY_MISSING")
 }
 
-// TestNewHistoryReaderNilPreservesNilAuth asserts INV-6: calling
+// TestNewHistoryReaderNilPreservesNilAuth asserts INV-CRYPTO-5: calling
 // newHistoryReader with nil guard/dekMgr/auditEm must preserve
 // the existing nil-auth behavior (no WithHistoryAuth appended).
 func TestNewHistoryReaderNilPreservesNilAuth(t *testing.T) {
@@ -146,7 +146,7 @@ func TestNewHistoryReaderNilPreservesNilAuth(t *testing.T) {
 }
 
 // TestGRPCSubsystemConfigHasRekeyManagerField asserts that grpcSubsystemConfig
-// carries the three crypto wiring fields added by INV-39 fix (sub-epic E T44+).
+// carries the three crypto wiring fields added by INV-CRYPTO-22 fix (sub-epic E T44+).
 // A nil RekeyManager MUST pass the nil-auth fallback; a non-nil manager MUST
 // cause newHistoryReader to call WithHistoryAuthAndSourceResolver instead of
 // the legacy WithHistoryAuth path (via the Guard/Emitter constructed in Start).
@@ -165,7 +165,7 @@ func TestGRPCSubsystemConfigHasRekeyManagerField(t *testing.T) {
 // it only asserts the reader is constructed without error, which proves the
 // wiring code paths compile and run without panicking.
 //
-// INV-39 production wiring (sub-epic E T44): the FallbackResolver path MUST
+// INV-CRYPTO-22 production wiring (sub-epic E T44): the FallbackResolver path MUST
 // be active when RekeyManager is non-nil in grpcSubsystemConfig.
 func TestNewHistoryReaderWithCryptoDepsBuildsFallbackResolver(t *testing.T) {
 	cfg := eventbus.Config{}.Defaults()

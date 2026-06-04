@@ -518,7 +518,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// clients); the orchestrator enforces that ordering via DependsOn.
 	auditSub := audit.NewSubsystem(eventBusSub, dbSub, audit.Config{})
 
-	// Phase 7 INV-P7-9: build the codec.KeySelector ONCE at boot. The
+	// Phase 7 INV-CRYPTO-45: build the codec.KeySelector ONCE at boot. The
 	// SAME pointer-identity instance is threaded into BOTH the
 	// PluginConsumerManager (audit closure below at the
 	// audit.NewPluginConsumerManager call) AND the history.Reader
@@ -553,7 +553,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			slog.Warn("plugin audit consumer manager: JetStream not available; host projection will handle all audit subjects")
 			return nil, nil
 		}
-		// INV-P7-9: thread the boot-time pluginCodecKeySelector into the
+		// INV-CRYPTO-45: thread the boot-time pluginCodecKeySelector into the
 		// PluginConsumerManager. The SAME instance is also passed to the
 		// gRPC subsystem (grpcSubsystemConfig.KeySelector) for
 		// history.NewReader's WithCodecSelector — pointer-identity is
@@ -628,7 +628,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		GameConfig:     gameConfig,
 		StreamRegistry: streamRegistry,
 		VerbRegistry:   verbRegistry,
-		// Phase 7 INV-P7-9: SAME selector instance the audit closure
+		// Phase 7 INV-CRYPTO-45: SAME selector instance the audit closure
 		// passes into PluginConsumerManager. history.NewReader gets it
 		// via newHistoryReader's WithCodecSelector branch.
 		KeySelector: pluginCodecKeySelector,
@@ -872,7 +872,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			"kek_available", kekProvider != nil)
 	}
 	// Thread the production dek.Manager into the gRPC subsystem so Start()
-	// can construct the AuthGuard + AuditEmitter for INV-39 FallbackResolver.
+	// can construct the AuthGuard + AuditEmitter for INV-CRYPTO-22 FallbackResolver.
 	// When nil (KEK unavailable), the history reader keeps nil-auth passthrough.
 	grpcSub.cfg.RekeyManager = rekeyW.Manager
 

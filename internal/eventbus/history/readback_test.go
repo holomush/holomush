@@ -129,7 +129,7 @@ func encryptedRow(t *testing.T, deps readbackTestDeps, plaintext []byte) *plugin
 
 // TestDecryptPluginRowPlaintextOnCleanRow asserts a clean sensitive row
 // round-trips to plaintext, emits an INV-CRYPTO-11 audit record (INV-CRYPTO-28), and
-// reports OK (INV-CRYPTO-26/4).
+// reports OK (INV-CRYPTO-26/29).
 func TestDecryptPluginRowPlaintextOnCleanRow(t *testing.T) {
 	t.Parallel()
 	deps := newReadbackDeps(t)

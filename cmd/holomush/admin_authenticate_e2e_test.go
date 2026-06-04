@@ -244,7 +244,7 @@ func setupAdminAuthEnv(t *testing.T) *adminAuthEnv {
 	//        (cmd_admin_totp_deps.go::buildKEKProviderFromConfig). The
 	//        file MUST be the one runCoreWithDeps reads, so the
 	//        BootstrapEnroll wrap_key_id matches the runtime KEK
-	//        fingerprint (INV-33 startup integrity check).
+	//        fingerprint (INV-CRYPTO-19 startup integrity check).
 	kekFile := filepath.Join(shortTempDir(t), "master.key.enc")
 	const kekPassphrase = "e2e-test-passphrase-not-for-prod"
 	t.Setenv("HOLOMUSH_KEK_FILE", kekFile)
@@ -374,7 +374,7 @@ func setupAdminAuthEnv(t *testing.T) *adminAuthEnv {
 
 	// T27 Rekey E2E — seed a v1 DEK for the scene context BEFORE boot.
 	// Defined in admin_rekey_e2e_test.go. Uses the same kekProvider so
-	// INV-33 (wrap_key_id fingerprint) is satisfied at runtime.
+	// INV-CRYPTO-19 (wrap_key_id fingerprint) is satisfied at runtime.
 	const rekeySceneCtxType = "scene"
 	const rekeySceneCtxID = "e2e-rekey-t27"
 	seedAdminRekeyDEK(seedCtx, seedPool, kekProvider, rekeySceneCtxType, rekeySceneCtxID)

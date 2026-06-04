@@ -85,7 +85,7 @@ type grpcSubsystemConfig struct {
 	// Required by wrapPublisher (Task 19) which wraps the EventBus publisher.
 	VerbRegistry *core.VerbRegistry
 
-	// RekeyManager is the production dek.Manager for INV-39 hot→cold-tier
+	// RekeyManager is the production dek.Manager for INV-CRYPTO-22 hot→cold-tier
 	// FallbackResolver wiring (sub-epic E T44+). When non-nil, Start()
 	// constructs a full AuthGuard + AuditEmitter pipeline and threads them
 	// into newHistoryReader via WithHistoryAuthAndSourceResolver. When nil
@@ -106,7 +106,7 @@ type grpcSubsystemConfig struct {
 
 	// KeySelector is the SHARED codec.KeySelector instance threaded into
 	// both audit.PluginConsumerManager (via WithKeySelector) and
-	// history.NewReader (via WithCodecSelector). Required by INV-P7-9 —
+	// history.NewReader (via WithCodecSelector). Required by INV-CRYPTO-45 —
 	// the test at test/integration/eventbus_e2e/dispatcher_selector_identity_test.go
 	// asserts pointer-identity between the two. When nil, both paths
 	// fall back to identity decoding.
@@ -338,7 +338,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	owners := cryptowiring.OwnerMapFromManager(managerSource{mgr: pluginManager})
 	router := audit.NewPluginHistoryRouter(pluginAuditClientProvider{mgr: pluginManager})
 
-	// INV-39 wiring: if RekeyManager is set (production shape with KEK wired),
+	// INV-CRYPTO-22 wiring: if RekeyManager is set (production shape with KEK wired),
 	// construct AuthGuard + AuditEmitter for the FallbackResolver path.
 	// AuthGuard and AuditEmitter may be pre-set for test injection; in prod they
 	// are always nil here and built below.
@@ -349,19 +349,19 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		auditEm, auditErr := authguardaudit.NewQueuedEmitter(publisher,
 			authguardaudit.WithGameID(s.cfg.EventBus.GameID()))
 		if auditErr != nil {
-			slog.WarnContext(ctx, "history auth guard: audit emitter construction failed — INV-39 fallback disabled",
+			slog.WarnContext(ctx, "history auth guard: audit emitter construction failed — INV-CRYPTO-22 fallback disabled",
 				"error", auditErr)
 		} else {
 			sessionBridgeEm, bridgeErr := authguardaudit.NewSessionBridgeEmitter(auditEm)
 			if bridgeErr != nil {
-				slog.WarnContext(ctx, "history auth guard: session bridge emitter construction failed — INV-39 fallback disabled",
+				slog.WarnContext(ctx, "history auth guard: session bridge emitter construction failed — INV-CRYPTO-22 fallback disabled",
 					"error", bridgeErr)
 			} else {
 				participantLookup := authguard.NewDEKParticipantLookup(s.cfg.RekeyManager)
 				manifestLookup := authguard.NewPluginManifestLookup(pluginManager)
 				guard, guardErr := authguard.New(participantLookup, manifestLookup, policyEngine, auditEm)
 				if guardErr != nil {
-					slog.WarnContext(ctx, "history auth guard: guard construction failed — INV-39 fallback disabled",
+					slog.WarnContext(ctx, "history auth guard: guard construction failed — INV-CRYPTO-22 fallback disabled",
 						"error", guardErr)
 				} else {
 					historyAuthGuard = authguard.NewSessionBridgeGuard(guard)
@@ -371,7 +371,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		}
 	}
 
-	// Phase 7 INV-P7-7 + INV-P7-15: assemble the PluginDowngradeFence
+	// Phase 7 INV-CRYPTO-42 + INV-CRYPTO-50: assemble the PluginDowngradeFence
 	// inputs from already-loaded deps. pluginManager is the same
 	// pluginSub.Manager() the audit closure used to build the
 	// PluginConsumerManager — its manifests are populated by now
@@ -486,7 +486,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	pluginManager.ConfigureSettingsDeps(playerSettings, characterSettings, gameSettings)
 
 	// Wire the read-back decryptor for the DecryptOwnAuditRows host RPC
-	// (holomush-m7pxs INV-RB-2/6/12). It reuses the SAME OwnerMap (g1
+	// (holomush-m7pxs INV-CRYPTO-27/31/37). It reuses the SAME OwnerMap (g1
 	// ownership gate) and crypto deps (fence set, DEK-existence lookup,
 	// AuthGuard, DEKManager, audit emitter) assembled above for the history
 	// reader, so the snapshot read-back path is authorization-symmetric with
@@ -827,7 +827,7 @@ func (a *focusStreamContributorAdapter) QuerySessionStreams(ctx context.Context,
 // a decrypt but the DEKManager is nil and panics in decodeAuthorizeAndDispatch.
 //
 // When all three are non-nil, WithHistoryAuthAndSourceResolver wires the
-// INV-39 hot→cold FallbackResolver on the hot tier and a SimpleResolver
+// INV-CRYPTO-22 hot→cold FallbackResolver on the hot tier and a SimpleResolver
 // on the cold tier (no further fallback past the cold tier itself). pool
 // may be nil — the FallbackResolver's ColdTierLookup is only invoked on
 // actual reads when a hot-tier DEK miss occurs.
@@ -843,9 +843,9 @@ func newHistoryReader(
 	guard eventbus.SessionAuthGuard, // nil = passthrough (current behavior)
 	dekMgr eventbus.SessionDEKManager, // nil = passthrough (current behavior)
 	auditEm eventbus.SessionAuditEmitter, // nil = passthrough (current behavior)
-	keySelector codec.KeySelector, // nil = identity decoding (Phase 7 INV-P7-9)
-	alwaysSensitive map[string]struct{}, // empty = INV-P7-7 manifest-set check off
-	cryptoKeysLookup history.CryptoKeysLookup, // nil = INV-P7-15 DEK-existence check off
+	keySelector codec.KeySelector, // nil = identity decoding (Phase 7 INV-CRYPTO-45)
+	alwaysSensitive map[string]struct{}, // empty = INV-CRYPTO-42 manifest-set check off
+	cryptoKeysLookup history.CryptoKeysLookup, // nil = INV-CRYPTO-50 DEK-existence check off
 	violationEmitter history.ViolationEmitter, // nil = no plugin_integrity_violation publish
 ) eventbus.HistoryReader {
 	opts := []history.Option{}
@@ -856,18 +856,18 @@ func newHistoryReader(
 		opts = append(opts, history.WithPluginRouter(router))
 	}
 	if keySelector != nil {
-		// INV-P7-9: the SAME selector instance must be threaded into the
+		// INV-CRYPTO-45: the SAME selector instance must be threaded into the
 		// PluginConsumerManager (cmd/holomush/core.go:488 audit closure)
 		// for cross-tier pointer identity. Production wiring constructs
 		// the selector once and passes it via grpcSubsystemConfig.KeySelector.
 		opts = append(opts, history.WithCodecSelector(keySelector))
 	}
-	// Phase 7 INV-P7-7 + INV-P7-15: install the read-side fence around
+	// Phase 7 INV-CRYPTO-42 + INV-CRYPTO-50: install the read-side fence around
 	// plugin-routed history. Both lookup and emitter may be nil in
 	// degraded deployments; the fence's internal nil-handling preserves
 	// the per-row refusal semantics.
 	//
-	// T8 (INV-RB-7): wire the fence's read-back crypto (guard/dek/audit) so a
+	// T8 (INV-CRYPTO-32): wire the fence's read-back crypto (guard/dek/audit) so a
 	// clean plugin-owned row can be DECRYPTED for an authorized routed
 	// participant. These are the SAME guard/dekMgr/auditEm forwarded below to
 	// the tier auth; when crypto is disabled (Crypto.Enabled=false) all three
@@ -883,7 +883,7 @@ func newHistoryReader(
 		))
 	}
 	if guard != nil && dekMgr != nil && auditEm != nil {
-		// INV-39: wire FallbackResolver on hot tier (hot→cold fallback when DEK
+		// INV-CRYPTO-22: wire FallbackResolver on hot tier (hot→cold fallback when DEK
 		// destroyed after Rekey) and SimpleResolver on cold tier (cold IS the
 		// fallback target; a further fallback resolver there would recurse).
 		//
@@ -901,7 +901,7 @@ func newHistoryReader(
 			opts = append(opts, history.WithHistoryAuthAndSourceResolver(guard, dekMgr, auditEm, hotResolver, coldResolver))
 		} else {
 			// Narrow stub (test path or degraded deployment) — wire guard+dekMgr+auditEm
-			// without the FallbackResolver. Reads succeed but INV-39 fallback is inactive.
+			// without the FallbackResolver. Reads succeed but INV-CRYPTO-22 fallback is inactive.
 			opts = append(opts, history.WithHistoryAuth(guard, dekMgr, auditEm))
 		}
 	}

@@ -351,7 +351,7 @@ func (e *adminAuthEnv) RunAdminReadStreamExpectError(args RunAdminReadStreamArgs
 // PG pool using the KEK file path + passphrase exported as env vars by
 // setupAdminAuthEnv. The returned provider unwraps the SAME KEK material
 // that the running server's DEK manager uses, so DEK rows minted here are
-// resolvable in-process by the server's DEK manager (INV-33).
+// resolvable in-process by the server's DEK manager (INV-CRYPTO-19).
 func (e *adminAuthEnv) readstreamKEKProvider(ctx context.Context) kek.Provider {
 	kekFile := os.Getenv("HOLOMUSH_KEK_FILE")
 	Expect(kekFile).NotTo(BeEmpty(), "readstreamKEKProvider: HOLOMUSH_KEK_FILE env var must be set")
@@ -790,7 +790,7 @@ func runAdminReadStreamScenarios(env *adminAuthEnv) {
 
 	// R.18 validation / denial scenarios.
 
-	By("F-E4 (INV-42): audit-emit failure → DENY_AUDIT_PRE_DATA_PUBLISH, zero data frames")
+	By("F-E4 (INV-CRYPTO-23): audit-emit failure → DENY_AUDIT_PRE_DATA_PUBLISH, zero data frames")
 	scenarioFE4AuditEmitFailure(env)
 
 	By("F-E8 (INV-CRYPTO-56): window > MaxWindow → DENY_OPERATOR_READ_WINDOW_TOO_LARGE, zero audit rows")
@@ -1084,10 +1084,10 @@ func scenarioFE17ClassifierSurface(env *adminAuthEnv) {
 // R.18 validation / denial scenarios
 // =============================================================================
 
-// ---- F-E4 (INV-42) ----
+// ---- F-E4 (INV-CRYPTO-23) ----
 
 // scenarioFE4AuditEmitFailure asserts that when EmitStart fails, the handler
-// returns DENY_AUDIT_PRE_DATA_PUBLISH and emits ZERO data frames (INV-42 /
+// returns DENY_AUDIT_PRE_DATA_PUBLISH and emits ZERO data frames (INV-CRYPTO-23 /
 // INV-CRYPTO-54). Because the live server's handler was constructed at boot with
 // the production emitter, this scenario constructs an in-process handler
 // (via buildInProcessReadStreamClient) with a failing audit emitter injected.
@@ -1120,15 +1120,15 @@ func scenarioFE4AuditEmitFailure(env *adminAuthEnv) {
 	Expect(streamErr).To(HaveOccurred(), "F-E4: stream.Err() must be non-nil when EmitStart fails")
 	// ConnectRPC deviation (documented in file header): oops codes are NOT
 	// transmitted over the wire — only CodeUnknown + the Errorf message text.
-	// The substantive invariant is zero data frames (INV-42 / INV-CRYPTO-54), asserted
+	// The substantive invariant is zero data frames (INV-CRYPTO-23 / INV-CRYPTO-54), asserted
 	// below. Oops code coverage lives in handler_test.go::TestINV_CRYPTO_54_AuditPublishFailRefuses.
 	Expect(streamErr.Error()).To(ContainSubstring("audit emit failed"),
 		"F-E4: error message MUST contain the audit-emit-failure text")
 
-	// ZERO data frames: no EventFrame, no ReadStarted (INV-42 / INV-CRYPTO-54).
+	// ZERO data frames: no EventFrame, no ReadStarted (INV-CRYPTO-23 / INV-CRYPTO-54).
 	for _, f := range frames {
 		Expect(f.GetEvent()).To(BeNil(),
-			"F-E4: ZERO EventFrame frames MUST arrive when EmitStart fails (INV-42)")
+			"F-E4: ZERO EventFrame frames MUST arrive when EmitStart fails (INV-CRYPTO-23)")
 		Expect(f.GetStarted()).To(BeNil(),
 			"F-E4: ReadStarted MUST NOT be sent when EmitStart fails")
 	}

@@ -4,7 +4,7 @@
 //go:build integration
 
 // Package crypto_test — Phase 3b integration tests for plugin-decrypt
-// AuthGuard invariants (INV-CRYPTO-9/18/19/20). These tests exercise the
+// AuthGuard invariants (INV-CRYPTO-9/10/11/12). These tests exercise the
 // checkPlugin branch on the subscriber fan-out path using in-process
 // stubs (no binary plugin processes required).
 package crypto_test

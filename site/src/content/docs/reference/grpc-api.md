@@ -1391,7 +1391,7 @@ counterpart here.
 | NO_PLAINTEXT_REASON_DEK_MISSING | 4 | NO_PLAINTEXT_REASON_DEK_MISSING means the cold-tier audit row had no dek_ref (DEK reference column missing or NULL). Stamped exclusively by sub-epic F&#39;s operator-read classifier (INV-CRYPTO-66). |
 | NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS | 5 | NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS means a cold-tier audit row references a DEK whose column set does not match the event&#39;s AAD declaration. Stamped exclusively by sub-epic F&#39;s classifier. |
 | NO_PLAINTEXT_REASON_INTERNAL | 6 | NO_PLAINTEXT_REASON_INTERNAL is the catch-all for unexpected decrypt failures not covered by the specific cases above. Stamped exclusively by sub-epic F&#39;s classifier. |
-| NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED | 7 | NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED is a Phase 7 PluginDowngradeFence layer (1) refusal — the host&#39;s read-side fence rejected the row before decrypt, either because the type is in the always-sensitive manifest set and the plugin returned an identity codec (INV-CRYPTO-42), or because the dek_ref is unknown / absent for a non-identity codec (INV-CRYPTO-50). The original event_id is preserved; payload is empty per master INV-26. |
+| NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED | 7 | NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED is a Phase 7 PluginDowngradeFence layer (1) refusal — the host&#39;s read-side fence rejected the row before decrypt, either because the type is in the always-sensitive manifest set and the plugin returned an identity codec (INV-CRYPTO-42), or because the dek_ref is unknown / absent for a non-identity codec (INV-CRYPTO-50). The original event_id is preserved; payload is empty per master INV-CRYPTO-15. |
 
 
 

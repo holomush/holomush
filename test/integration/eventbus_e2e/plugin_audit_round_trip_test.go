@@ -188,7 +188,7 @@ func readSceneLogRow(t *testing.T, pool *pgxpool.Pool, eventID []byte) roundTrip
 
 // lookupBusEnvelopePayload subscribes to the stream and reads back the
 // envelope for the given event ID, returning Event.payload (the encrypted
-// bytes per INV-49).
+// bytes per INV-CRYPTO-25).
 func lookupBusEnvelopePayload(t *testing.T, bus *testutil.EmbeddedBus, eventID ulid.ULID) []byte {
 	t.Helper()
 	idStr := eventID.String()
