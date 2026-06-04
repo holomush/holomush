@@ -7,7 +7,7 @@ package plugin_test
 
 // Command-introspection runtime-parity integration test (holomush-2zjio.10)
 //
-// INV-2 claim: the binary PluginHostService.ListCommands path and the Lua
+// INV-COMMAND-2 claim: the binary PluginHostService.ListCommands path and the Lua
 // holomush.list_commands host function BOTH delegate to the same
 // commandquery.Querier. For the same character and registry, both runtimes
 // MUST return an identical filtered command-name set, and BOTH must omit a
@@ -114,7 +114,7 @@ const parityCharID = "01HPAR0000000000000000CHAR"
 
 // buildParityQuerier constructs the shared commandquery.Querier for a given
 // engine. Both runtime paths are wired to this querier so their outputs are
-// identical iff both delegate to it (INV-2).
+// identical iff both delegate to it (INV-COMMAND-2).
 func buildParityQuerier(engine accesstypes.AccessPolicyEngine) *commandquery.Querier {
 	GinkgoT().Helper()
 	reg := command.NewRegistry()
@@ -137,7 +137,7 @@ func buildParityQuerier(engine accesstypes.AccessPolicyEngine) *commandquery.Que
 }
 
 // luaNamesForQuerier calls holomush.list_commands via the Lua hostfunc path
-// and returns the sorted command names (the Lua runtime path for INV-2).
+// and returns the sorted command names (the Lua runtime path for INV-COMMAND-2).
 func luaNamesForQuerier(ctx context.Context, q *commandquery.Querier, charID string) ([]string, bool) {
 	GinkgoT().Helper()
 	hf := hostfunc.New(nil, hostfunc.WithCommandQuerier(q))
@@ -173,7 +173,7 @@ func luaNamesForQuerier(ctx context.Context, q *commandquery.Querier, charID str
 
 // binaryNamesForQuerier loads the cmd_introspection_plugin binary, triggers it
 // with the given charID, and returns the sorted command names from the plugin's
-// HandleEvent return value (the binary runtime path for INV-2).
+// HandleEvent return value (the binary runtime path for INV-COMMAND-2).
 //
 // The plugin receives the CommandLister SDK facade wired over
 // PluginHostService.ListCommands (the binary gRPC handler), calls
@@ -243,9 +243,9 @@ var _ = Describe("Command-introspection runtime parity (holomush-2zjio)", func()
 		}
 	})
 
-	// INV-2: both runtimes delegate to the same commandquery.Querier. With an
+	// INV-COMMAND-2: both runtimes delegate to the same commandquery.Querier. With an
 	// AllowAll engine, both must return the full registry (dig + look + say).
-	Describe("INV-2 identical filtered set for AllowAll engine", func() {
+	Describe("INV-COMMAND-2 identical filtered set for AllowAll engine", func() {
 		It("binary plugin ListCommands returns the same set as the Lua host function for the same character", func() {
 			q := buildParityQuerier(policytest.AllowAllEngine())
 
@@ -262,20 +262,20 @@ var _ = Describe("Command-introspection runtime parity (holomush-2zjio)", func()
 			Expect(luaNames).To(ConsistOf("dig", "look", "say"),
 				"Lua runtime must return the full AllowAll registry, not a degraded set")
 
-			// Both runtimes MUST return the same sorted names (INV-2).
+			// Both runtimes MUST return the same sorted names (INV-COMMAND-2).
 			Expect(binNames).To(Equal(luaNames),
 				"binary ListCommands MUST return the same command names as Lua "+
-					"holomush.list_commands for the same character (INV-2 runtime parity): "+
+					"holomush.list_commands for the same character (INV-COMMAND-2 runtime parity): "+
 					"both delegate to the same commandquery.Querier")
 			Expect(binIncomplete).To(Equal(luaIncomplete),
 				"binary and Lua runtimes MUST agree on the 'incomplete' flag")
 		})
 	})
 
-	// INV-2 denial case: a capability-gated command denied by DenyAll must be
+	// INV-COMMAND-2 denial case: a capability-gated command denied by DenyAll must be
 	// absent from BOTH runtimes' results, while the no-capability command must
 	// appear in both.
-	Describe("INV-2 both runtimes omit a capability-gated command the character is denied", func() {
+	Describe("INV-COMMAND-2 both runtimes omit a capability-gated command the character is denied", func() {
 		It("omits denied capability-gated commands and includes no-capability commands in both runtimes", func() {
 			// DenyAll: "say" and "dig" (capability-gated) are denied;
 			// "look" (no capabilities) is always visible.
@@ -299,9 +299,9 @@ var _ = Describe("Command-introspection runtime parity (holomush-2zjio)", func()
 			luaNames, _ := luaNamesForQuerier(ctx, q, parityCharID)
 			binNames, _ := binaryNamesForQuerier(ctx, q, parityCharID)
 
-			// Both runtimes must agree with each other (INV-2).
+			// Both runtimes must agree with each other (INV-COMMAND-2).
 			Expect(binNames).To(Equal(luaNames),
-				"binary and Lua runtimes MUST agree on denied-command filtering (INV-2): "+
+				"binary and Lua runtimes MUST agree on denied-command filtering (INV-COMMAND-2): "+
 					"both runtimes delegate to the same commandquery.Querier")
 
 			// Both must include "look" (no caps) and exclude "say"/"dig" (denied).

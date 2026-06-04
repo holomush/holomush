@@ -18,7 +18,7 @@ import (
 // WithCommandQuerier injects the shared command-query service. The
 // list_commands / get_command_help host functions delegate to it exclusively,
 // providing the single ABAC-filtered enumeration via commandquery.Querier
-// (design spec INV-1: exactly one command-visibility filter). There is no
+// (design spec INV-COMMAND-1: exactly one command-visibility filter). There is no
 // second filter implementation in this package.
 func WithCommandQuerier(q *commandquery.Querier) Option {
 	return func(f *Functions) {
@@ -42,7 +42,7 @@ func WithCommandQuerier(q *commandquery.Querier) Option {
 //   - The error string (second return) is non-nil only when incomplete is true.
 //
 // This function is a thin shim: it parses/validates the character_id, then
-// delegates to commandquery.Querier (INV-1). All ABAC filtering, capability
+// delegates to commandquery.Querier (INV-COMMAND-1). All ABAC filtering, capability
 // AND-logic, and the engine-error circuit breaker live in commandquery.
 func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 	return func(ls *lua.LState) int {
@@ -115,7 +115,7 @@ func listCommandsViaQuerier(ctx context.Context, ls *lua.LState, q *commandquery
 // Args: command_name (string), character_id (string)
 // Returns: (command info table, error string)
 //
-// This function is a thin shim over commandquery.Querier.Help (INV-1). It maps
+// This function is a thin shim over commandquery.Querier.Help (INV-COMMAND-1). It maps
 // the querier's typed errors back to the legacy error strings the Lua help
 // plugin matches on:
 //   - NOT_FOUND          → "command not found: <name>"

@@ -3,7 +3,7 @@
 
 # cmd_introspection_plugin is a test-only binary plugin used by the
 # command_introspection_parity_test.go integration suite to prove
-# INV-2: the binary PluginHostService.ListCommands and the Lua
+# INV-COMMAND-2: the binary PluginHostService.ListCommands and the Lua
 # holomush.list_commands host function delegate to the same
 # commandquery.Querier, returning identical filtered command-name sets.
 #

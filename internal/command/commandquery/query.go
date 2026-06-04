@@ -4,7 +4,7 @@
 // Package commandquery owns the single ABAC-filtered enumeration of registered
 // commands for a subject. The Lua hostfunc bridge, the binary PluginHostService
 // handler, and the CoreService RPC are intended to delegate here so there is
-// exactly one command-visibility filter (design spec INV-1); the delegating
+// exactly one command-visibility filter (design spec INV-COMMAND-1); the delegating
 // adapters land in later tasks of the recognized-command-chip plan.
 package commandquery
 

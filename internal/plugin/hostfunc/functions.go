@@ -70,7 +70,7 @@ type Option func(*Functions)
 // and the requires-gated capability checks (functions.go). Command-visibility
 // filtering does NOT use this engine directly — that flows through the
 // commandquery.Querier wired via WithCommandQuerier / SetCommandQuerier
-// (design spec INV-1: single command-visibility filter).
+// (design spec INV-COMMAND-1: single command-visibility filter).
 func WithEngine(engine types.AccessPolicyEngine) Option {
 	return func(f *Functions) {
 		f.engine = engine
