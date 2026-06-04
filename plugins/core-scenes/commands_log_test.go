@@ -57,7 +57,7 @@ func TestDecodeReplayEntriesRejectsMalformedPayload(t *testing.T) {
 	require.Error(t, err)
 }
 
-// TestHandleLogDeniesNonParticipant pins the INV-S9 gate: a non-participant is
+// TestHandleLogDeniesNonParticipant pins the INV-SCENE-60 gate: a non-participant is
 // denied before any history read (the focus client is never consulted).
 func TestHandleLogDeniesNonParticipant(t *testing.T) {
 	t.Parallel()

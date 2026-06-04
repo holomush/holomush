@@ -1638,7 +1638,7 @@ var _ = Describe("SceneStore", func() {
 
 			ok, err := store.IsParticipant(ctx, row.ID, "char-owner-1")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(ok).To(BeTrue(), "owner MUST pass the INV-S9 gate")
+			Expect(ok).To(BeTrue(), "owner MUST pass the INV-SCENE-60 gate")
 		})
 
 		It("returns true for member", func() {
@@ -1656,10 +1656,10 @@ var _ = Describe("SceneStore", func() {
 
 			ok, err := store.IsParticipant(ctx, row.ID, "char-member-2")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(ok).To(BeTrue(), "member MUST pass the INV-S9 gate")
+			Expect(ok).To(BeTrue(), "member MUST pass the INV-SCENE-60 gate")
 		})
 
-		It("returns false for invited role (NOT a participant for INV-S9 gate)", func() {
+		It("returns false for invited role (NOT a participant for INV-SCENE-60 gate)", func() {
 			store := newTestStore()
 			ctx := context.Background()
 			row := &SceneRow{
@@ -1674,7 +1674,7 @@ var _ = Describe("SceneStore", func() {
 
 			ok, err := store.IsParticipant(ctx, row.ID, "char-invitee-3")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(ok).To(BeFalse(), "invited role MUST NOT count as participant for INV-S9 gate")
+			Expect(ok).To(BeFalse(), "invited role MUST NOT count as participant for INV-SCENE-60 gate")
 		})
 
 		It("returns false for character not in scene", func() {
@@ -1749,14 +1749,14 @@ var _ = Describe("SceneStore", func() {
 
 			result, err := store.ListParticipantsWithPoseMeta(ctx, sceneID)
 			Expect(err).NotTo(HaveOccurred())
-			// Only owner + member — invited MUST be excluded per INV-S9.
+			// Only owner + member — invited MUST be excluded per INV-SCENE-60.
 			Expect(result.Participants).To(HaveLen(2))
 			charIDs := make([]string, 0, 2)
 			for _, p := range result.Participants {
 				charIDs = append(charIDs, p.CharacterID)
 			}
 			Expect(charIDs).To(ConsistOf(owner, member))
-			Expect(charIDs).NotTo(ContainElement(invitee), "invited role MUST be excluded per INV-S9")
+			Expect(charIDs).NotTo(ContainElement(invitee), "invited role MUST be excluded per INV-SCENE-60")
 		})
 
 		It("reflects updated pose metadata after direct column write", func() {

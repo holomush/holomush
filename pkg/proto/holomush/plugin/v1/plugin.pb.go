@@ -493,7 +493,7 @@ type InitResponse struct {
 	// the host's service registry can route requires→provides between plugins.
 	ProvidedServices []string `protobuf:"bytes,1,rep,name=provided_services,json=providedServices,proto3" json:"provided_services,omitempty"`
 	// Set of plugin-owned event types this plugin may emit. Host validates
-	// set-equality against manifest's crypto.emits per INV-S5. Plugins
+	// set-equality against manifest's crypto.emits per INV-PLUGIN-32. Plugins
 	// without crypto.emits leave empty and skip validation; plugins WITH
 	// crypto.emits MUST populate (mismatch fails load).
 	RegisteredEmitTypes []string `protobuf:"bytes,2,rep,name=registered_emit_types,json=registeredEmitTypes,proto3" json:"registered_emit_types,omitempty"`
@@ -680,8 +680,8 @@ type EmitEvent struct {
 	Payload string `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
 	// Per-event sensitivity claim for a return-value emit, validated against the
 	// plugin manifest by event_emitter.go::Emit via EnforceSensitivity
-	// (internal/plugin/sensitivity_fence.go) — INV-6: a sensitivity=never manifest
-	// rejects true; INV-7: a sensitivity=always manifest rejects false. Carries
+	// (internal/plugin/sensitivity_fence.go) — INV-PLUGIN-29: a sensitivity=never manifest
+	// rejects true; INV-PLUGIN-30: a sensitivity=always manifest rejects false. Carries
 	// the same semantics as the active EmitEvent RPC's sensitive field so a binary
 	// plugin's return-value emit cannot silently downgrade to plaintext where the
 	// Lua runtime would encrypt (holomush-av954). Default false for backward
@@ -1265,9 +1265,9 @@ type PluginHostServiceEmitEventRequest struct {
 	// sensitive declares per-event sensitivity at emit time.
 	// Phase 3a's host-side fence at internal/plugin/event_emitter.go::Emit
 	// validates this against the plugin manifest's declared sensitivity:
-	//   - manifest sensitivity=never:  sensitive=true rejected (INV-6).
-	//   - manifest sensitivity=may:    sensitive=true|false honored.
-	//   - manifest sensitivity=always: sensitive=false rejected (INV-7).
+	//   - manifest sensitivity=never:  sensitive=true rejected (INV-PLUGIN-29).
+	//   - manifest sensitivity=may:    sensitive=true/false honored.
+	//   - manifest sensitivity=always: sensitive=false rejected (INV-PLUGIN-30).
 	//
 	// Default false (proto3 zero) for older plugins compiled before this
 	// field existed — matching pre-Phase-3d behavior.

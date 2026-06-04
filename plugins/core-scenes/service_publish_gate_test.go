@@ -41,7 +41,7 @@ func (s *contentTripwireStore) GetPublishedSceneContent(ctx context.Context, id 
 }
 
 // TestGetPublishedSceneDeniesNonParticipantWithoutReadingContent is the
-// load-bearing INV-S9 / INV-SCENE-32 tripwire: a non-participant is denied with
+// load-bearing INV-SCENE-60 / INV-SCENE-32 tripwire: a non-participant is denied with
 // SCENE_PRIVACY_BOUNDARY_BLOCK (PermissionDenied) BEFORE any content read.
 func TestGetPublishedSceneDeniesNonParticipantWithoutReadingContent(t *testing.T) {
 	t.Parallel()
@@ -118,7 +118,7 @@ func TestGetPublishedSceneDenialEmitsPrivacyBoundaryWarn(t *testing.T) {
 	require.Error(t, err)
 
 	out := buf.String()
-	assert.Contains(t, out, "scene privacy boundary block", "the §10 triple-signal WARN MUST fire on an INV-S9 denial")
+	assert.Contains(t, out, "scene privacy boundary block", "the §10 triple-signal WARN MUST fire on an INV-SCENE-60 denial")
 	assert.Contains(t, out, "SCENE_PRIVACY_BOUNDARY_BLOCK")
 	assert.Contains(t, out, "not_participant")
 	assert.Contains(t, out, "scene-3", "the WARN must record the affected scene")
@@ -259,7 +259,7 @@ func TestDownloadPublishedSceneRejectsNonPublishedAttempt(t *testing.T) {
 		"a non-published attempt must not reach the content read")
 }
 
-// TestListScenePublishAttemptsDeniesNonParticipant is the INV-S9 gate on the
+// TestListScenePublishAttemptsDeniesNonParticipant is the INV-SCENE-60 gate on the
 // audit list: a non-participant cannot enumerate a scene's publish attempts
 // (the list itself is participant-only, even though summaries carry no content).
 func TestListScenePublishAttemptsDeniesNonParticipant(t *testing.T) {

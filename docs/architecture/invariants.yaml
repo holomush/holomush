@@ -173,9 +173,11 @@ scopes:
     boundary: "All scene-domain behavior. Cross-cuts multiple Phase specs (P4–P8)."
     # Families P4/P5/P6/FS/FW/Y5INX and the SH publish-driving harness, plus phase-8
     # board-content-warnings bare INV-2/5/6/7. FW subsumed into FS. See redesign spec §2.1
-    # and bead holomush-hz0v4.14.13. NOTE: the INV-S* substrate-contract family
-    # (origin 2026-05-16-social-spaces-substrate-contract.md, ~48 sites in core-scenes)
-    # is a SEPARATE family NOT in this scope — left untouched (closed-world).
+    # and bead holomush-hz0v4.14.13. The INV-S* substrate-contract family
+    # (origin 2026-05-16-social-spaces-substrate-contract.md) was per-token SPLIT in .14.24:
+    # INV-S9 (scene-log privacy, plugin-code-enforced) → INV-SCENE-60 (here); INV-S3/S5
+    # → INV-PLUGIN, INV-S4 → INV-EVENTBUS. S1/S2/S6/S7/S8/S10 are spec-only/process invariants
+    # (no code refs). The bare phase-8 board-content-warnings INV-2/5/6/7 remain SCENE.
     status: migrated
     origin_specs:
       - "docs/superpowers/specs/2026-05-19-scenes-phase-4-streams-and-pose-order-design.md"
@@ -184,6 +186,7 @@ scopes:
       - "docs/superpowers/specs/2026-05-28-focus-delta-coordinator-unification-design.md"
       - "docs/superpowers/specs/2026-05-28-scene-bare-ulid-identity-design.md"
       - "docs/superpowers/specs/2026-05-27-shcyu-harness-publish-driving-design.md"
+      - "docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md"
     owned_paths:
       - "plugins/core-scenes/**"
       - "internal/grpc/focus/**"
@@ -256,6 +259,8 @@ scopes:
       - "docs/superpowers/specs/2026-05-25-wholesystem-plugin-integration-design.md"
       - "docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md"
       - "docs/superpowers/specs/2026-05-29-scenes-phase-8-board-content-warnings-design.md"
+      - "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+      - "docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md"
     owned_paths:
       # PC (plugin-runtime-config): config files are PLUGIN-exclusive.
       - "internal/plugin/config.go"
@@ -288,6 +293,18 @@ scopes:
       # INV-4 audit-wiring sites in internal/access/setup/ (plugin-evaluate, not ABAC-scope).
       - "internal/access/setup/subsystem.go"
       - "internal/access/setup/setup_warn_integ_test.go"
+      # .14.24: emit-time sensitivity fence INV-6/7 (master crypto, →29/30) + INV-S3 runtime
+      # symmetry (→31) + INV-S5 manifest crypto.emits set-equality (→32). Clean, exclusive sites.
+      - "internal/plugin/sensitivity_fence.go"
+      - "internal/plugin/sensitivity_fence_test.go"
+      - "internal/plugin/event_emitter.go"
+      - "internal/plugin/event_emitter_crypto_test.go"
+      - "pkg/plugin/event.go"
+      - "internal/plugin/emit_type_validator.go"
+      - "internal/plugin/hostfunc/stdlib_emit_registry.go"
+      - "pkg/plugin/emit_registry.go"
+      - "pkg/plugin/sdk.go"
+      - "internal/plugin/lua/host_test.go"
     shared_files:
       # PLUGIN+STORE: no_delete grep gate (W9ML-9) lives in a STORE-owned file.
       - "internal/store/no_delete_grep_test.go"
@@ -315,6 +332,20 @@ scopes:
       - "plugins/core-scenes/publish_helpers.go"
       - "plugins/core-scenes/service.go"
       - "plugins/core-scenes/testhelpers_test.go"
+      # .14.24 fence/INV-S sites carrying FOREIGN co-located tokens or owned by other scopes:
+      # crypto.go (CRYPTO), host.go/manager_test.go (CRYPTO), manager_parity_test.go (INV-M7),
+      # inv_p4/p5 coverage (SCENE-owned), plugin.proto (regen), core-scenes/main.go (CRYPTO+SCENE),
+      # other-plugin Lua (core-communication/core-objects). Foreign tokens stay; residual skips shared.
+      - "internal/testsupport/integrationtest/crypto.go"
+      - "internal/plugin/host.go"
+      - "internal/plugin/manager_test.go"
+      - "internal/plugin/goplugin/manager_parity_test.go"
+      - "internal/test/invariants/inv_p4_coverage_meta_test.go"
+      - "internal/test/invariants/inv_p5_coverage_meta_test.go"
+      - "api/proto/holomush/plugin/v1/plugin.proto"
+      - "plugins/core-scenes/main.go"
+      - "plugins/core-communication/main.lua"
+      - "plugins/core-objects/main.lua"
 
   - name: INV-EVENTBUS
     description: "Subject naming, JetStream consumer config, audit projection, delivery contracts, tier routing, rendering
@@ -330,6 +361,7 @@ scopes:
       - "docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md"
       - "docs/superpowers/specs/2026-05-29-colon-style-subject-eradication-design.md"
       - "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
+      - "docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md"
     owned_paths:
       - "internal/eventbus/rendering_publisher*.go"
       - "internal/gateway_invariants/**"
@@ -386,6 +418,11 @@ scopes:
       - "test/integration/plugin/testdata/test_downgrade_attacker/plugin.yaml"
       # Shared integration harness (see CRYPTO.shared_files). Carries GW-5 + P7.
       - "internal/testsupport/integrationtest/harness.go"
+      # .14.24 INV-S4 (NATS dot-style subjects → INV-EVENTBUS-28): SCENE-owned core-scenes
+      # files (plugins/core-scenes/** is SCENE owned_paths) carrying the subject-naming token;
+      # also carry INV-S9 (SCENE) — genuinely multi-scope, so shared here for the EVENTBUS ref.
+      - "plugins/core-scenes/service.go"
+      - "plugins/core-scenes/store.go"
 
   - name: INV-CLUSTER
     description: "Member identity, heartbeats, cache invalidation (cross-replica coordination path), probe-and-pill, clock
@@ -2233,7 +2270,17 @@ invariants:
       - {file: "test/integration/eventbus_e2e/plugin_downgrade_attacker_test.go", token: "INV-P7-10"}
       - {file: "test/integration/plugin/plugin_migration_test.go", token: "INV-P7-10"}
       - {file: "test/integration/plugin/testdata/test_downgrade_attacker/main.go", token: "INV-P7-10"}
-      - {file: "test/integration/plugin/testdata/test_downgrade_attacker/plugin.yaml", token: "INV-P7-10",}
+      - {file: "test/integration/plugin/testdata/test_downgrade_attacker/plugin.yaml", token: "INV-P7-10"}
+  - id: INV-EVENTBUS-28
+    scope: INV-EVENTBUS
+    origin_spec: "docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md"
+    legacy: ["INV-S4@docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md"]
+    summary: "New event subjects MUST use the NATS dot-style form events.<game_id>.<domain>.<entity-id>[.<facet>...]; colon-style
+      is legacy and translated at the EventSink boundary."
+    binding: pending
+    refs:
+      - {file: "plugins/core-scenes/service.go", token: "INV-S4"}
+      - {file: "plugins/core-scenes/store.go", token: "INV-S4",}
 
   # -- INV-SCENE -- migrated from families P4/P5/P6/FS(+FW)/Y5INX/SH + phase-8 bare INV-N (holomush-hz0v4.14.13).
   # Dense by family: P4-1..13->1..13, P5-1..14->14..27, P6-1..10->28..37, FS-1..8->38..45,
@@ -2875,7 +2922,31 @@ invariants:
     refs:
       - {file: "plugins/core-scenes/commands_test.go", token: "INV-7"}
       - {file: "test/integration/scenes/publish_e2e_test.go", token: "INV-7"}
-      - {file: "test/integration/scenes/seed_encrypted_ic_validation_test.go", token: "INV-7",}
+      - {file: "test/integration/scenes/seed_encrypted_ic_validation_test.go", token: "INV-7"}
+  - id: INV-SCENE-60
+    scope: INV-SCENE
+    origin_spec: "docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md"
+    legacy: ["INV-S9@docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md"]
+    summary: "The hard privacy boundary for scene-log reads MUST remain plugin-code-enforced; ABAC MUST NOT be in the path
+      for scene-log reads (a non-participant read fails before the ABAC engine is consulted)."
+    binding: pending
+    refs:
+      - {file: "api/proto/holomush/scene/v1/scene.proto", token: "INV-S9"}
+      - {file: "internal/test/invariants/scene_no_abac_in_getposeorder_test.go", token: "INV-S9"}
+      - {file: "internal/test/invariants/scene_resolver_no_poseorder_leak_test.go", token: "INV-S9"}
+      - {file: "plugins/core-scenes/commands.go", token: "INV-S9"}
+      - {file: "plugins/core-scenes/commands_log_test.go", token: "INV-S9"}
+      - {file: "plugins/core-scenes/commands_publish_test.go", token: "INV-S9"}
+      - {file: "plugins/core-scenes/metrics.go", token: "INV-S9"}
+      - {file: "plugins/core-scenes/plugin.yaml", token: "INV-S9"}
+      - {file: "plugins/core-scenes/publish_service.go", token: "INV-S9"}
+      - {file: "plugins/core-scenes/resolver_test.go", token: "INV-S9"}
+      - {file: "plugins/core-scenes/service.go", token: "INV-S9"}
+      - {file: "plugins/core-scenes/service_publish_gate_test.go", token: "INV-S9"}
+      - {file: "plugins/core-scenes/service_test.go", token: "INV-S9"}
+      - {file: "plugins/core-scenes/store.go", token: "INV-S9"}
+      - {file: "plugins/core-scenes/store_integration_test.go", token: "INV-S9"}
+      - {file: "test/integration/scenes/publish_e2e_test.go", token: "INV-S9",}
 
   # -- INV-PLUGIN -- migrated from families PC/W9ML/WS + pluginauthz bare INV-N (holomush-hz0v4.14.14).
   # P7 SPLIT: PLUGIN gets ZERO P7 tokens (redesign §2.1: crypto half=1,2,5,6,7,9,11,12,15,16; P7-13/14 ride
@@ -3153,3 +3224,72 @@ invariants:
       - {file: "internal/plugin/goplugin/host_settings_test.go", token: "INV-11"}
       - {file: "internal/plugin/lua/settings_ops_adapter_test.go", token: "INV-11"}
       - {file: "internal/plugin/pluginauthz/principal.go", token: "INV-11"}
+  - id: INV-PLUGIN-29
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-6@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "Emitting an event with Sensitive=true whose type is not declared in the plugin's crypto.emits as 'may' or 'always'
+      MUST fail at the emit-time fence with EVENT_SENSITIVITY_NOT_DECLARED (over-claim reject)."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/sensitivity_fence.go", token: "INV-6"}
+      - {file: "internal/plugin/sensitivity_fence_test.go", token: "INV-6"}
+      - {file: "internal/plugin/event_emitter.go", token: "INV-6"}
+      - {file: "internal/plugin/event_emitter_crypto_test.go", token: "INV-6"}
+      - {file: "internal/plugin/lua/host.go", token: "INV-6"}
+      - {file: "api/proto/holomush/plugin/v1/plugin.proto", token: "INV-6"}
+      - {file: "pkg/plugin/event.go", token: "INV-6"}
+      - {file: "internal/testsupport/integrationtest/crypto.go", token: "INV-6"}
+  - id: INV-PLUGIN-30
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-7@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "A plugin declaring an event type as sensitivity:always MUST NOT publish that event with Sensitive=false; the
+      emit-time fence rejects with EVENT_SENSITIVITY_REQUIRED (under-claim reject)."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/sensitivity_fence.go", token: "INV-7"}
+      - {file: "internal/plugin/sensitivity_fence_test.go", token: "INV-7"}
+      - {file: "internal/plugin/event_emitter.go", token: "INV-7"}
+      - {file: "internal/plugin/event_emitter_crypto_test.go", token: "INV-7"}
+      - {file: "internal/plugin/lua/host.go", token: "INV-7"}
+      - {file: "api/proto/holomush/plugin/v1/plugin.proto", token: "INV-7"}
+      - {file: "pkg/plugin/event.go", token: "INV-7"}
+      - {file: "internal/testsupport/integrationtest/crypto.go", token: "INV-7"}
+  - id: INV-PLUGIN-31
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md"
+    legacy: ["INV-S3@docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md"]
+    summary: "Every Plugin Host RPC and SDK primitive MUST ship a Go SDK method AND a Lua hostfunc together; asymmetric capability
+      between the binary and Lua runtimes is forbidden."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/goplugin/manager_parity_test.go", token: "INV-S3"}
+      - {file: "internal/test/invariants/inv_p5_coverage_meta_test.go", token: "INV-S3"}
+  - id: INV-PLUGIN-32
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md"
+    legacy: ["INV-S5@docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md"]
+    summary: "Every plugin declaring crypto.emits MUST pass startup-time set-equality validation: the manifest-declared emit-type
+      set MUST equal the code-registered emit-type set in both directions, or plugin startup fails closed."
+    binding: pending
+    refs:
+      - {file: "api/proto/holomush/plugin/v1/plugin.proto", token: "INV-S5"}
+      - {file: "internal/plugin/emit_type_validator.go", token: "INV-S5"}
+      - {file: "internal/plugin/goplugin/host.go", token: "INV-S5"}
+      - {file: "internal/plugin/goplugin/host_test.go", token: "INV-S5"}
+      - {file: "internal/plugin/goplugin/manager_parity_test.go", token: "INV-S5"}
+      - {file: "internal/plugin/host.go", token: "INV-S5"}
+      - {file: "internal/plugin/hostfunc/functions.go", token: "INV-S5"}
+      - {file: "internal/plugin/hostfunc/stdlib_emit_registry.go", token: "INV-S5"}
+      - {file: "internal/plugin/lua/host.go", token: "INV-S5"}
+      - {file: "internal/plugin/lua/host_test.go", token: "INV-S5"}
+      - {file: "internal/plugin/manager.go", token: "INV-S5"}
+      - {file: "internal/plugin/manager_test.go", token: "INV-S5"}
+      - {file: "internal/test/invariants/inv_p4_coverage_meta_test.go", token: "INV-S5"}
+      - {file: "pkg/plugin/emit_registry.go", token: "INV-S5"}
+      - {file: "pkg/plugin/sdk.go", token: "INV-S5"}
+      - {file: "plugins/core-communication/main.lua", token: "INV-S5"}
+      - {file: "plugins/core-objects/main.lua", token: "INV-S5"}
+      - {file: "plugins/core-scenes/main.go", token: "INV-S5"}
+      - {file: "plugins/core-scenes/main_test.go", token: "INV-S5"}

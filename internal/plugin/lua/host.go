@@ -36,7 +36,7 @@ var (
 type luaPlugin struct {
 	manifest     *plugins.Manifest
 	code         string   // Lua source (compiled at load time in future)
-	emitRegistry []string // INV-S5: populated during Load capture pass; nil when crypto.emits empty
+	emitRegistry []string // INV-PLUGIN-32: populated during Load capture pass; nil when crypto.emits empty
 }
 
 // Host manages Lua plugins.
@@ -217,7 +217,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").With("path", realEntry).Hint("failed to read entry file").Wrap(err)
 	}
 
-	// Branch the Load pass on whether INV-S5 capture is needed.
+	// Branch the Load pass on whether INV-PLUGIN-32 capture is needed.
 	//
 	// Plugins WITHOUT non-empty crypto.emits: existing syntax-check
 	// throwaway state (no hostfuncs). Unchanged from today.
@@ -234,7 +234,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 	defer L.Close()
 
 	if manifest.Crypto != nil && len(manifest.Crypto.Emits) > 0 {
-		// INV-S5 capture pass. Install ONLY register_emit_type so the
+		// INV-PLUGIN-32 capture pass. Install ONLY register_emit_type so the
 		// pass is side-effect-isolated: top-level plugin code can register
 		// emit types but cannot call kv_set, create_location, or any
 		// other holomush.* hostfunc. Exposing the full surface here
@@ -250,7 +250,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		if err := L.DoString(string(code)); err != nil {
 			return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
 				With("entry", manifest.LuaPlugin.Entry).
-				Hint("INV-S5 capture pass execution error").Wrap(err)
+				Hint("INV-PLUGIN-32 capture pass execution error").Wrap(err)
 		}
 		emitRegistry = reg.Types()
 	} else {
@@ -634,7 +634,7 @@ func (h *Host) parseEmitEvents(ret lua.LValue) (emits []pluginsdk.EmitEvent, val
 		// silent false would emit plaintext, defeating the operator-
 		// set sensitivity intent. The host-side downgrade fence at
 		// event_emitter.go::Emit validates correct boolean claims
-		// against the plugin manifest (INV-6 / INV-7).
+		// against the plugin manifest (INV-PLUGIN-29 / INV-PLUGIN-30).
 		sensitive, sensitiveOK := emitTableBool(eventTable, "sensitive")
 		if !sensitiveOK {
 			validationErrs = append(validationErrs,

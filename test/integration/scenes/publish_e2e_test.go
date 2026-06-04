@@ -142,7 +142,7 @@ var _ = Describe("happy-path scene publish lifecycle reaches PUBLISHED with decr
 //
 //   - INV-SCENE-35: GetPublicSceneArchive returns codes.NotFound (opaque) while
 //     the attempt is COLLECTING — the attempt's existence MUST NOT leak.
-//   - INV-S9:   GetPublishedScene returns codes.PermissionDenied for a
+//   - INV-SCENE-60:   GetPublishedScene returns codes.PermissionDenied for a
 //     non-participant after PUBLISHED (plugin-code participant gate;
 //     SCENE_PRIVACY_BOUNDARY_BLOCK → PermissionDenied).
 //   - INV-SCENE-35 (post-publish): GetPublicSceneArchive flips from NOT_FOUND to
@@ -153,7 +153,7 @@ var _ = Describe("happy-path scene publish lifecycle reaches PUBLISHED with decr
 // emitPrivacyBoundaryBlock fires INSIDE the binary subprocess and is NOT
 // capturable in-process from this E2E harness. That signal is unit-covered by
 // plugins/core-scenes/service_privacy_block_test.go (Task D7). This spec
-// asserts only the wire-observable gRPC status codes (INV-S9 / spec §9.1).
+// asserts only the wire-observable gRPC status codes (INV-SCENE-60 / spec §9.1).
 //
 // NOTE: INV-SCENE-34 (AttributeResolverService MUST NOT leak content under any
 // attribute) is unit-covered by
@@ -289,7 +289,7 @@ var _ = Describe("Phase 6 hard-privacy-boundary gate for a non-participant (Char
 		Expect(publishedSceneID).To(Equal(collectingAttemptID),
 			"PUBLISHED attempt must be the same row that was COLLECTING (transition, not replacement)")
 
-		// ── POST-PUBLISH: INV-S9 denial on GetPublishedScene ─────────────────
+		// ── POST-PUBLISH: INV-SCENE-60 denial on GetPublishedScene ─────────────────
 		// Charlie (non-participant) calls GetPublishedScene with the published
 		// attempt id. The plugin-code IsParticipant gate (publish_service.go,
 		// GetPublishedScene step 3) fires BEFORE any content is read and returns
@@ -298,7 +298,7 @@ var _ = Describe("Phase 6 hard-privacy-boundary gate for a non-participant (Char
 		// error from emitPrivacyBoundaryBlock) fires inside the binary subprocess
 		// and is NOT observable here — it is unit-covered by D7
 		// (plugins/core-scenes/service_privacy_block_test.go). This assertion is
-		// the wire-observable contract (INV-S9 / spec §9.1).
+		// the wire-observable contract (INV-SCENE-60 / spec §9.1).
 		_, deniedErr := ts.SceneServiceClient().GetPublishedScene(ctx, &scenev1.GetPublishedSceneRequest{
 			CallerCharacterId: charlie.CharacterID.String(),
 			PublishedSceneId:  publishedSceneID,
@@ -306,7 +306,7 @@ var _ = Describe("Phase 6 hard-privacy-boundary gate for a non-participant (Char
 		deniedSt, deniedOk := status.FromError(deniedErr)
 		Expect(deniedOk).To(BeTrue(), "GetPublishedScene must return a gRPC status error for non-participant Charlie")
 		Expect(deniedSt.Code()).To(Equal(codes.PermissionDenied),
-			"INV-S9: non-participant GetPublishedScene MUST return PermissionDenied (SCENE_PRIVACY_BOUNDARY_BLOCK)")
+			"INV-SCENE-60: non-participant GetPublishedScene MUST return PermissionDenied (SCENE_PRIVACY_BOUNDARY_BLOCK)")
 
 		// ── POST-PUBLISH: INV-SCENE-35 opacity flip on GetPublicSceneArchive ─────
 		// Once PUBLISHED the public archive has NO caller gate (no participant

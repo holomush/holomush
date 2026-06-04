@@ -111,7 +111,7 @@ func decodeReplayEntries(events []pluginsdk.Event) ([]PublishedSceneEntry, error
 // handleLog dispatches the "scene log" sub-commands (spec §6.1; folds in
 // holomush-cb4x): the bare form replays the IC content history as plain text;
 // "export <format>" (E4) renders it to markdown / plain_text / jsonl. Both are
-// participant-gated (INV-S9, plugin-code) and read DECRYPTED content via the
+// participant-gated (INV-SCENE-60, plugin-code) and read DECRYPTED content via the
 // host's QueryStreamHistory — NOT the plugin's own audit QueryHistory, which
 // serves ciphertext. Speaker is the actor character id; name resolution is a
 // follow-up.
@@ -152,7 +152,7 @@ func (p *scenePlugin) handleLogExport(ctx context.Context, req pluginsdk.Command
 	return &pluginsdk.CommandResponse{Status: pluginsdk.CommandOK, Output: string(content)}, nil
 }
 
-// fetchSceneLogEntries resolves the scene, runs the INV-S9 participant gate
+// fetchSceneLogEntries resolves the scene, runs the INV-SCENE-60 participant gate
 // (plugin-code, before any history read), and returns the decoded IC content
 // entries via the host's QueryStreamHistory (decrypted host-side, membership-
 // gated). On any failure it returns a non-nil error CommandResponse for the
@@ -258,7 +258,7 @@ func (p *scenePlugin) handleWithdraw(ctx context.Context, req pluginsdk.CommandR
 }
 
 // handleStatus shows the latest publish attempt's state for a scene (spec §6.1).
-// Participant-gated: GetPublishedScene (B5) enforces the INV-S9 participant gate.
+// Participant-gated: GetPublishedScene (B5) enforces the INV-SCENE-60 participant gate.
 func (p *scenePlugin) handleStatus(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID, err := resolveSceneRef(ctx, p.service.store, req.CharacterID, args)
 	if err != nil {
@@ -1343,7 +1343,7 @@ func (p *scenePlugin) handleEmit(
 //
 // Authorization note: handleOrder is intentionally NOT engine-gated. Pose-order
 // read authorization is enforced at the service layer via store.IsParticipant
-// (INV-S9), which is fail-closed: non-members and invited-only characters both
+// (INV-SCENE-60), which is fail-closed: non-members and invited-only characters both
 // receive PermissionDenied before any scene data is returned. This is the one
 // read path that was deliberately kept as a substrate-level check rather than
 // consolidated into the engine, because the check is already precise, atomic

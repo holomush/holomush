@@ -73,7 +73,7 @@ func TestEmitterDoesNotRunFenceWhenCryptoDisabled(t *testing.T) {
 		Subject:   "scene.01HXXXTESTSCENE000000000",
 		Type:      pluginsdk.EventType("test-plugin:secret"),
 		Payload:   `{}`,
-		Sensitive: false, // would trigger INV-7 if the fence ran
+		Sensitive: false, // would trigger INV-PLUGIN-30 if the fence ran
 	}
 	require.NoError(t, emitter.Emit(context.Background(), "test-plugin", intent),
 		"crypto disabled: fence MUST be skipped")
@@ -131,7 +131,7 @@ func TestEmitterRejectsClaimTrueOnManifestNeverEvent(t *testing.T) {
 		Subject:   "scene.01HXXXTESTSCENE000000000",
 		Type:      pluginsdk.EventType("test-plugin:pose"),
 		Payload:   `{}`,
-		Sensitive: true, // INV-6 over-claim
+		Sensitive: true, // INV-PLUGIN-29 over-claim
 	}
 	err := emitter.Emit(context.Background(), "test-plugin", intent)
 	require.Error(t, err)
@@ -149,7 +149,7 @@ func TestEmitterRejectsClaimFalseOnManifestAlwaysEvent(t *testing.T) {
 		Subject:   "scene.01HXXXTESTSCENE000000000",
 		Type:      pluginsdk.EventType("test-plugin:secret"),
 		Payload:   `{}`,
-		Sensitive: false, // INV-7 under-claim
+		Sensitive: false, // INV-PLUGIN-30 under-claim
 	}
 	err := emitter.Emit(context.Background(), "test-plugin", intent)
 	require.Error(t, err)

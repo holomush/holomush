@@ -45,7 +45,7 @@ func TestApplyConfigRejectsNonPositiveSchedulerInterval(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "SCENE_INIT_FAILED")
 }
 
-// TestPlugin_CryptoEmitsMatchesRegistry pins INV-SCENE-2 / INV-S5: the scene
+// TestPlugin_CryptoEmitsMatchesRegistry pins INV-SCENE-2 / INV-PLUGIN-32: the scene
 // event types in crypto.emits (8 Phase 4 + 6 Phase 6 publication notices)
 // MUST equal the set registered via EmitTypeRegistrar.
 func TestPlugin_CryptoEmitsMatchesRegistry(t *testing.T) {

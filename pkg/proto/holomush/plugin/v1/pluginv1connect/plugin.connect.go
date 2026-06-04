@@ -122,7 +122,7 @@ type PluginServiceClient interface {
 	// hands the plugin its ServiceConfig (DB connection string, required-service
 	// addresses, opaque runtime config) and returns the gRPC service names the
 	// plugin provides plus the emit-type set the host validates against the
-	// manifest's crypto.emits (INV-S5). Bridged by pluginServerAdapter.Init,
+	// manifest's crypto.emits (INV-PLUGIN-32). Bridged by pluginServerAdapter.Init,
 	// which also lazily dials the plugin-host connection for any host-facing
 	// facade (sink/focus/evaluator/decryptor) the provider opts into.
 	Init(context.Context, *connect.Request[v1.InitRequest]) (*connect.Response[v1.InitResponse], error)
@@ -218,7 +218,7 @@ type PluginServiceHandler interface {
 	// hands the plugin its ServiceConfig (DB connection string, required-service
 	// addresses, opaque runtime config) and returns the gRPC service names the
 	// plugin provides plus the emit-type set the host validates against the
-	// manifest's crypto.emits (INV-S5). Bridged by pluginServerAdapter.Init,
+	// manifest's crypto.emits (INV-PLUGIN-32). Bridged by pluginServerAdapter.Init,
 	// which also lazily dials the plugin-host connection for any host-facing
 	// facade (sink/focus/evaluator/decryptor) the provider opts into.
 	Init(context.Context, *connect.Request[v1.InitRequest]) (*connect.Response[v1.InitResponse], error)

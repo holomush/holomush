@@ -18,7 +18,7 @@ import (
 )
 
 // GetPublishedScene returns a publication attempt's full state to a scene
-// participant. It is the canonical INV-S9 participant-gated read, and its
+// participant. It is the canonical INV-SCENE-60 participant-gated read, and its
 // step ordering is LOAD-BEARING (INV-SCENE-32):
 //
 //  1. validate the caller_character_id;
@@ -51,7 +51,7 @@ func (s *SceneServiceImpl) GetPublishedScene(ctx context.Context, req *scenev1.G
 			Errorf("publication not found"))
 	}
 
-	// Step 3 — INV-S9 plugin-code participant gate. No ABAC engine is
+	// Step 3 — INV-SCENE-60 plugin-code participant gate. No ABAC engine is
 	// consulted; the deny path runs BEFORE any content read (INV-SCENE-32).
 	ok, err := s.store.IsParticipant(ctx, pub.SceneID, callerID)
 	if err != nil {
@@ -81,7 +81,7 @@ func (s *SceneServiceImpl) GetPublishedScene(ctx context.Context, req *scenev1.G
 	return assembleParticipantResponse(pub, entries, tally), nil
 }
 
-// emitPrivacyBoundaryBlock fires the spec §10 triple-signal for an INV-S9
+// emitPrivacyBoundaryBlock fires the spec §10 triple-signal for an INV-SCENE-60
 // hard-privacy-boundary denial: a WARN log, a metric, and a span error. It
 // deliberately emits NO IC event — a denial must not surface on any scene
 // stream that could leak the attempt's existence to a non-participant.
@@ -232,7 +232,7 @@ var publishRenderMime = map[string]string{
 }
 
 // DownloadPublishedScene returns a published scene rendered in the requested
-// format to a participant. It uses the SAME load-bearing INV-S9 / INV-SCENE-32
+// format to a participant. It uses the SAME load-bearing INV-SCENE-60 / INV-SCENE-32
 // ordering as GetPublishedScene: caller validation → format validation →
 // header read (no content) → IsParticipant gate (NO ABAC) → PUBLISHED check →
 // content read only on gate pass → render. A non-participant is denied with
@@ -267,7 +267,7 @@ func (s *SceneServiceImpl) DownloadPublishedScene(ctx context.Context, req *scen
 			Errorf("publication not found"))
 	}
 
-	// INV-S9 plugin-code participant gate (NO ABAC); deny BEFORE any content
+	// INV-SCENE-60 plugin-code participant gate (NO ABAC); deny BEFORE any content
 	// read (INV-SCENE-32).
 	isParticipant, err := s.store.IsParticipant(ctx, pub.SceneID, callerID)
 	if err != nil {
@@ -419,7 +419,7 @@ func (s *SceneServiceImpl) DownloadPublicSceneArchive(ctx context.Context, req *
 }
 
 // ListScenePublishAttempts returns the audit list of a scene's publish
-// attempts to a participant. Participant-gated (INV-S9, plugin-code, NO ABAC):
+// attempts to a participant. Participant-gated (INV-SCENE-60, plugin-code, NO ABAC):
 // caller validation → IsParticipant gate on the scene → list. The summaries
 // carry NO content_entries (header only), so there is no content-read step;
 // the gate still runs first so a non-participant cannot enumerate the attempts
@@ -478,7 +478,7 @@ func assembleAttemptsResponse(attempts []PublishedScene) *scenev1.ListScenePubli
 // attempts` policy at command dispatch (spec §8, "ABAC-gated, not name-gated").
 // Like every other scene RPC, this handler trusts the host's authorization and
 // performs NO in-plugin role check — admin is ABAC-gated, never a plugin-code
-// gate (the inverse of INV-S9's hard privacy boundary, which is plugin-code by
+// gate (the inverse of INV-SCENE-60's hard privacy boundary, which is plugin-code by
 // design). Adding an in-handler role check here would create a runtime
 // privilege gradient and duplicate the policy engine.
 func (s *SceneServiceImpl) ExtendScenePublishVoteAttempts(ctx context.Context, req *scenev1.ExtendScenePublishVoteAttemptsRequest) (*scenev1.ExtendScenePublishVoteAttemptsResponse, error) {

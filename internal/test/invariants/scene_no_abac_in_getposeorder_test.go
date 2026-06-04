@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestINV_SCENE_4_NoABACInGetPoseOrder pins INV-SCENE-4 / INV-S9 plugin-code-gate
+// TestINV_SCENE_4_NoABACInGetPoseOrder pins INV-SCENE-4 / INV-SCENE-60 plugin-code-gate
 // discipline: GetPoseOrder MUST NOT consult the ABAC engine. The participant
 // gate is direct (IsParticipant store check), NOT via engine.Evaluate.
 //

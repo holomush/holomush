@@ -47,55 +47,25 @@
   column in invariants.md/yaml records the link. Encountered: hz0v4.14.11
   (2026-06-02) — READY.
 
-- **Multi-family scope migration (EVENTBUS = GW+ROPS+P7-split) is the same shape
-  as single-family but with three legacy specs feeding one scope, and includes a
-  DENSE-with-letter-suffix renumber (GW-3a) (hz0v4.14.12 READY).** Verify per
-  family: GW 1..16 DENSE over spec set {1,2,3,3a,4,5,6,7,8,9,10,11,13,14,15,16}
-  (16 ids; GW-3a→EB-4 shifts 4..11 by one; GW-12 forward-declared, NOT migrated);
-  ROPS 1..8 → 16+N (offset by GW count); P7 SPLIT — only audit-half P7-3/4/10 →
-  25/26/27, P7-1,2,5-9,11-16 STAY as bare INV-P7-N for later CRYPTO/PLUGIN scopes.
-  Checks that held: (1) `awk` ref/legacy match scans give FALSE mismatches on
-  `3a` (splits at `INV-GW-3`), `refs: []`, and `,}` — hand-read the diff, don't
-  trust awk; (2) the per-family coverage test for GW was
-  `TestAllGatewayRegistryInvariantsHaveTests` living INSIDE
-  `internal/gateway_invariants/meta_test.go` (NOT a separate
-  `i_<old>_coverage_test.go`) — retired correctly, generic
-  `TestInvariantTokenBoundariesRejectFalsePositives` KEPT with documented
-  INV-GW-* regex fixtures (residual GW tokens there are intentional, not
-  unmigrated annotations); (3) global partition: 76 owned paths across all
-  scopes, 0 dup, 0 glob/concrete overlap — other scopes (PRIVACY/PRESENCE) may
-  list an EVENTBUS-owned file in THEIR shared_files (correct: shared = rides on
-  another scope's owned file); (4) generated pb.go/_pb.ts + proto sources must be
-  comment-only — filter `^[+-]` minus `(//|*|/*)` → empty. WATCH FOR: stray
-  trailing-comma edits to a NON-migrated scope's flow-mapping (saw `INV-60",}`
-  added to INV-CLUSTER's last ref) — valid YAML, renderer-inert, but out-of-scope
-  noise in a closed-world diff → Low non-blocking. Encountered: hz0v4.14.12
-  (2026-06-02) — READY.
+- **Multi-family scope (EVENTBUS=GW+ROPS+P7-split) + DENSE letter-suffix renumber
+  (GW-3a) (hz0v4.14.12 READY).** GW 1..16 dense over {1,2,3,3a,4..11,13..16};
+  P7 SPLIT (audit-half P7-3/4/10→25/26/27, rest stay bare for later scopes). `awk`
+  ref/legacy scans FALSE-mismatch on `3a`/`refs:[]`/`,}` — hand-read. Per-family
+  coverage test was `TestAllGatewayRegistryInvariantsHaveTests` in
+  `internal/gateway_invariants/meta_test.go`; generic
+  `TestInvariantTokenBoundariesRejectFalsePositives` KEPT (its INV-GW-* fixtures
+  intentional). Global partition: other scopes may list a foreign-owned file in
+  THEIR shared_files. Trailing-comma `,}` noise recurs — Low non-blocking.
 
-- **Largest multi-family scope migration to date (SCENE = P4+P5+P6+FS(+FW)+Y5INX+SH
-  + phase-8 bare 2/5/6/7 → 59 ids across 6 origin specs, 86 files) follows the
-  established shape; all checks held (hz0v4.14.13 READY).** Reusable patterns: (1)
-  the P4/P5 in-place coverage meta-tests (`inv_p4/p5_coverage_meta_test.go`) are
-  `testName`-EXISTENCE checks (go/parser collects Test* func names; table has
-  `{inv, testName}` rows) — robust to rename so long as the `testName:` strings AND
-  any manually-renamed funcs move in lockstep. Distinct from the FRAGILE
-  `// Verifies:`-annotation scanners (those MUST be deleted on migration, per .14.9).
-  Confirm which kind before deciding delete-vs-migrate-in-place. (2) The retired
-  `scenes_phase6_invariants_test.go` SCANNED for `INV-P6-N` substrings (broke on
-  rename); verify the deleted file defined ONLY locals (`phase6Invariants`,
-  `invP6CitationRE`, `TestPhase6...`) and merely USED shared helpers — `rg` the
-  deleted symbols across `test/meta/` → zero dangling. (3) Manual `\b`-unreachable
-  underscore-form renames: `TestINV_P4_4/5→_SCENE_4/5`,
-  `TestStreamScopeFloor_..._INV_P4_9→_SCENE_9` — grep old names → ZERO, and chase
-  their string refs (coverage table) + cross-file doc-comment cite
-  (`late_joiner_temporal_floor_test.go`). (4) Closed-world with co-located foreign
-  families: `INV-S*` substrate (~48 sites, NOT a scope yet) + `INV-S9`/`INV-S5`
-  must survive UNTOUCHED next to rewritten scene tokens (e.g. `INV-S9 / INV-SCENE-32`);
-  crypto's bare `INV-2/5/6/7` elsewhere untouched (scene rewrite is path-scoped).
-  (5) Same renderer-inert `token: "...",}` trailing-comma noise on an out-of-scope
-  line (here INV-P7-10 in EVENTBUS) recurs — Low non-blocking. spec-only refs:[]
-  count must equal exactly the declared spec-only set (FS-2/6/7 + SH-1..5 = 8).
-  Encountered: hz0v4.14.13 (2026-06-02) — READY.
+- **Largest multi-family (SCENE=P4+P5+P6+FS+Y5INX+SH+phase-8 bare → 59 ids, 86
+  files) (hz0v4.14.13 READY).** P4/P5 coverage meta-tests
+  (`inv_p4/p5_coverage_meta_test.go`) are `testName`-EXISTENCE checks (go/parser
+  Test* names; `{inv,testName}` table) — robust to rename if `testName:` strings +
+  renamed funcs move in lockstep; DISTINCT from fragile `// Verifies:` scanners
+  (delete those, per .14.9). Confirm which kind before delete-vs-migrate-in-place.
+  Manual `\b`-unreachable underscore renames (`TestINV_P4_4→_SCENE_4`): grep old →
+  ZERO + chase string refs + cross-file cites. spec-only `refs:[]` count = declared
+  spec-only set exactly. Same `,}` noise — Low non-blocking.
 
 - **Scope with DEFERRED bare-INV-N + foreign tokens uses file-path owned_paths
   (NOT /** globs) to keep the residual walk clean (hz0v4.14.14 PLUGIN READY).**
@@ -198,3 +168,21 @@
   Mechanical search-replace correct part: 35 diffed files all comment/string/test-func
   swaps, dense 53..67, no executable edits, generated artifacts in sync. The DEFECT
   is what was MISSED, not what was changed. Encountered: hz0v4.14.23 (2026-06-03) — NOT READY.
+
+- **INV-S\* substrate-contract per-token SPLIT across THREE scopes + master-crypto
+  fence (hz0v4.14.24 READY).** S3→PLUGIN-31, S5→PLUGIN-32, S4→EVENTBUS-28,
+  S9→SCENE-60; master fence INV-6→PLUGIN-29, INV-7→PLUGIN-30. Checks that held:
+  (1) tri+-overload: 8 fence files (sensitivity_fence{,_test}.go, event_emitter{,_crypto_test}.go,
+  lua/host.go, pkg/plugin/event.go, integrationtest/crypto.go, plugin.proto) → ZERO bare
+  INV-6/7; foreign INV-6/7 LEFT in web frontend (themeStore/commandListStore/composerChip),
+  CI-tooling (tooling_no_mandatory_int_test.go), reader-opts (cmd/holomush/sub_grpc_test.go),
+  settings (goplugin/host_service.go:610), AND phase-8 board-content SCENE-58/59 legacy
+  (a DIFFERENT INV-6/7 namespace — its legacy column STAYS INV-6/7). (2) S1/S2/S6/S7/S8/S10
+  have ZERO code/manifest refs → split is complete; only S3/S4/S5/S9 were ever code-bound.
+  Remaining INV-S* hits are ONLY docs/roadmap.md + site/docs + ADRs (prose, not annotations) +
+  invariants.yaml legacy/refs.token (FROM-anchor). (3) service.go + store.go genuinely
+  multi-scope → carry BOTH INV-EVENTBUS-28 (S4) AND INV-SCENE-60 (S9): EVENTBUS-shared +
+  SCENE-owned, listed in both. (4) checked cmd/ + api/proto/ (prior-pass blind spots, see
+  .14.23) → clean. Dense: PLUGIN 1..32, EVENTBUS 1..28, SCENE 1..60, no dup/gap. Trailing-comma
+  ,} noise recurred (6th time): added 2 (EVENTBUS-28/SCENE-60 last refs), cleaned 2 — Low
+  non-blocking, renderer-inert. Encountered: hz0v4.14.24 (2026-06-04) — READY.

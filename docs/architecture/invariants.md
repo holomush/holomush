@@ -207,6 +207,7 @@ invariants.
 | `INV-SCENE-57` | With no game-configured taxonomy, core-scenes' DefaultCWTaxonomy MUST apply; a fresh game validates/filters correctly with zero operator configuration. | `INV-5` | pending |
 | `INV-SCENE-58` | content.cw_block resolution MUST be the union of GAME, PLAYER, and CHARACTER scope lists (safety-accumulating), not first-match-wins. | `INV-6` | pending |
 | `INV-SCENE-59` | Scene settings/sensitivity access MUST be ABAC-authorized and default-deny: a principal may read/write its own PLAYER/CHARACTER settings; GAME-scope writes require an operator action. | `INV-7` | pending |
+| `INV-SCENE-60` | The hard privacy boundary for scene-log reads MUST remain plugin-code-enforced; ABAC MUST NOT be in the path for scene-log reads (a non-participant read fails before the ABAC engine is consulted). | `INV-S9` | pending |
 
 ### `INV-PLUGIN`
 
@@ -240,6 +241,10 @@ invariants.
 | `INV-PLUGIN-26` | The binary (gRPC) and Lua (hostfunc) surfaces reach identical host evaluation logic via a single shared mapping (runtime parity). | `INV-5` | pending |
 | `INV-PLUGIN-27` | Each settings host RPC MUST ship a Go SDK method AND a Lua hostfunc together (runtime parity); the settings access gate is the single shared path for both runtimes. | `INV-8` | pending |
 | `INV-PLUGIN-28` | Cross-plugin settings isolation MUST be structural: the host binds the plugin partition from the authenticated caller identity (stamped at server construction), never from caller-supplied input; a plugin MUST NOT address another plugin's owner partition. | `INV-11` | pending |
+| `INV-PLUGIN-29` | Emitting an event with Sensitive=true whose type is not declared in the plugin's crypto.emits as 'may' or 'always' MUST fail at the emit-time fence with EVENT_SENSITIVITY_NOT_DECLARED (over-claim reject). | `INV-6` | pending |
+| `INV-PLUGIN-30` | A plugin declaring an event type as sensitivity:always MUST NOT publish that event with Sensitive=false; the emit-time fence rejects with EVENT_SENSITIVITY_REQUIRED (under-claim reject). | `INV-7` | pending |
+| `INV-PLUGIN-31` | Every Plugin Host RPC and SDK primitive MUST ship a Go SDK method AND a Lua hostfunc together; asymmetric capability between the binary and Lua runtimes is forbidden. | `INV-S3` | pending |
+| `INV-PLUGIN-32` | Every plugin declaring crypto.emits MUST pass startup-time set-equality validation: the manifest-declared emit-type set MUST equal the code-registered emit-type set in both directions, or plugin startup fails closed. | `INV-S5` | pending |
 
 ### `INV-EVENTBUS`
 
@@ -272,6 +277,7 @@ invariants.
 | `INV-EVENTBUS-25` | Plugin audit tables MUST add dek_ref BIGINT NULL and dek_version INTEGER NULL columns (mirror-events_audit contract); the columns are nullable, and identity-codec rows store NULL on both. | `INV-P7-3` | pending |
 | `INV-EVENTBUS-26` | Plugin SDK Layer 2: pluginsdk.AuditRow Go struct fields MUST be 1:1 with pluginauditpb.AuditRow proto fields (id, subject, type, timestamp, actor, codec, payload, dek_ref, dek_version). | `INV-P7-4` | pending |
 | `INV-EVENTBUS-27` | Plugin migrations MAY run before or after Phase 7's host migration (no host-side schema change beyond Phases 2–5); the two crypto columns added to plugin tables are nullable and require no new host-side support. | `INV-P7-10` | pending |
+| `INV-EVENTBUS-28` | New event subjects MUST use the NATS dot-style form events.<game_id>.<domain>.<entity-id>[.<facet>...]; colon-style is legacy and translated at the EventSink boundary. | `INV-S4` | pending |
 
 ### `INV-CLUSTER`
 

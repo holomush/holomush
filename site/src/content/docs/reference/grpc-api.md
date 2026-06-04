@@ -2963,7 +2963,7 @@ directly — the host routes it through the PluginEventEmitter.Emit fence.
 | stream | [string](#string) |  | Target stream the event is published to (legacy &#34;prefix:id&#34; form). |
 | type | [string](#string) |  | Event-type discriminator for the emitted event; gated by the manifest&#39;s emits / crypto.emits declarations at the fence. |
 | payload | [string](#string) |  | JSON-encoded payload (max 64 KiB); validated as well-formed JSON at the fence before publish. |
-| sensitive | [bool](#bool) |  | Per-event sensitivity claim for a return-value emit, validated against the plugin manifest by event_emitter.go::Emit via EnforceSensitivity (internal/plugin/sensitivity_fence.go) — INV-6: a sensitivity=never manifest rejects true; INV-7: a sensitivity=always manifest rejects false. Carries the same semantics as the active EmitEvent RPC&#39;s sensitive field so a binary plugin&#39;s return-value emit cannot silently downgrade to plaintext where the Lua runtime would encrypt (holomush-av954). Default false for backward compatibility. |
+| sensitive | [bool](#bool) |  | Per-event sensitivity claim for a return-value emit, validated against the plugin manifest by event_emitter.go::Emit via EnforceSensitivity (internal/plugin/sensitivity_fence.go) — INV-PLUGIN-29: a sensitivity=never manifest rejects true; INV-PLUGIN-30: a sensitivity=always manifest rejects false. Carries the same semantics as the active EmitEvent RPC&#39;s sensitive field so a binary plugin&#39;s return-value emit cannot silently downgrade to plaintext where the Lua runtime would encrypt (holomush-av954). Default false for backward compatibility. |
 
 
 
@@ -3115,7 +3115,7 @@ what it may emit.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | provided_services | [string](#string) | repeated | gRPC service names this plugin implements on the go-plugin transport, so the host&#39;s service registry can route requires→provides between plugins. |
-| registered_emit_types | [string](#string) | repeated | Set of plugin-owned event types this plugin may emit. Host validates set-equality against manifest&#39;s crypto.emits per INV-S5. Plugins without crypto.emits leave empty and skip validation; plugins WITH crypto.emits MUST populate (mismatch fails load). |
+| registered_emit_types | [string](#string) | repeated | Set of plugin-owned event types this plugin may emit. Host validates set-equality against manifest&#39;s crypto.emits per INV-PLUGIN-32. Plugins without crypto.emits leave empty and skip validation; plugins WITH crypto.emits MUST populate (mismatch fails load). |
 
 
 
@@ -3218,7 +3218,7 @@ x-holomush-emit-token header (see PluginHostService.EmitEvent).
 | stream | [string](#string) |  | Target stream (legacy &#34;prefix:id&#34; form); its namespace must be declared in the manifest&#39;s emits list or the fence rejects the emit. |
 | event_type | [string](#string) |  | Event-type discriminator for the emitted event. |
 | payload | [bytes](#bytes) |  | Raw event payload bytes (validated as JSON at the fence). |
-| sensitive | [bool](#bool) |  | sensitive declares per-event sensitivity at emit time. Phase 3a&#39;s host-side fence at internal/plugin/event_emitter.go::Emit validates this against the plugin manifest&#39;s declared sensitivity: - manifest sensitivity=never: sensitive=true rejected (INV-6). - manifest sensitivity=may: sensitive=true|false honored. - manifest sensitivity=always: sensitive=false rejected (INV-7). Default false (proto3 zero) for older plugins compiled before this field existed — matching pre-Phase-3d behavior. |
+| sensitive | [bool](#bool) |  | sensitive declares per-event sensitivity at emit time. Phase 3a&#39;s host-side fence at internal/plugin/event_emitter.go::Emit validates this against the plugin manifest&#39;s declared sensitivity: - manifest sensitivity=never: sensitive=true rejected (INV-PLUGIN-29). - manifest sensitivity=may: sensitive=true/false honored. - manifest sensitivity=always: sensitive=false rejected (INV-PLUGIN-30). Default false (proto3 zero) for older plugins compiled before this field existed — matching pre-Phase-3d behavior. |
 
 
 
@@ -4035,7 +4035,7 @@ below, which the host implements and plugins call back into.
 
 | Method Name | Request Type | Response Type | Description |
 | ----------- | ------------ | ------------- | ------------|
-| Init | [InitRequest](#holomush-plugin-v1-InitRequest) | [InitResponse](#holomush-plugin-v1-InitResponse) | Init is the first call the host makes after the go-plugin handshake. It hands the plugin its ServiceConfig (DB connection string, required-service addresses, opaque runtime config) and returns the gRPC service names the plugin provides plus the emit-type set the host validates against the manifest&#39;s crypto.emits (INV-S5). Bridged by pluginServerAdapter.Init, which also lazily dials the plugin-host connection for any host-facing facade (sink/focus/evaluator/decryptor) the provider opts into. |
+| Init | [InitRequest](#holomush-plugin-v1-InitRequest) | [InitResponse](#holomush-plugin-v1-InitResponse) | Init is the first call the host makes after the go-plugin handshake. It hands the plugin its ServiceConfig (DB connection string, required-service addresses, opaque runtime config) and returns the gRPC service names the plugin provides plus the emit-type set the host validates against the manifest&#39;s crypto.emits (INV-PLUGIN-32). Bridged by pluginServerAdapter.Init, which also lazily dials the plugin-host connection for any host-facing facade (sink/focus/evaluator/decryptor) the provider opts into. |
 | HandleEvent | [HandleEventRequest](#holomush-plugin-v1-HandleEventRequest) | [HandleEventResponse](#holomush-plugin-v1-HandleEventResponse) | HandleEvent delivers one subscribed event to the plugin and collects the events the plugin wants to emit in response. Bridged by pluginServerAdapter.HandleEvent, which converts the proto Event to the SDK Event type, invokes the author&#39;s handler, and converts returned EmitEvents back to the wire. Response emits flow through the host emit fence, not straight to the bus. |
 | HandleCommand | [HandleCommandRequest](#holomush-plugin-v1-HandleCommandRequest) | [HandleCommandResponse](#holomush-plugin-v1-HandleCommandResponse) | HandleCommand delivers a parsed player command to the plugin and returns the command result (output text, status, response emits, and audit hints). Bridged by pluginServerAdapter.HandleCommand; if the plugin registered no command handler the adapter returns an empty response rather than erroring. |
 | QuerySessionStreams | [QuerySessionStreamsRequest](#holomush-plugin-v1-QuerySessionStreamsRequest) | [QuerySessionStreamsResponse](#holomush-plugin-v1-QuerySessionStreamsResponse) | QuerySessionStreams asks the plugin which stream names it wants subscribed for a session being established, before LISTEN/subscription setup. Called exactly once at session establishment, and only for plugins that declare session_streams: true in their manifest. A plugin-reported error degrades gracefully (the host logs and skips that plugin&#39;s contribution). |
@@ -4191,7 +4191,7 @@ and their MIME type.
 
 ### DownloadPublishedSceneRequest
 DownloadPublishedSceneRequest fetches a PUBLISHED attempt rendered to a file
-format, as a participant (participant-gated, INV-S9).
+format, as a participant (participant-gated, INV-SCENE-60).
 
 
 | Field | Type | Label | Description |
@@ -4365,7 +4365,7 @@ failure_reason (the §5.1 two-pair separation).
 
 ### GetPublishedSceneRequest
 GetPublishedSceneRequest reads a publication attempt&#39;s full state as a scene
-participant (participant-gated, INV-S9).
+participant (participant-gated, INV-SCENE-60).
 
 
 | Field | Type | Label | Description |
@@ -4555,7 +4555,7 @@ body.
 
 ### ListScenePublishAttemptsRequest
 ListScenePublishAttemptsRequest lists a scene&#39;s publication attempts as a
-participant (participant-gated, INV-S9).
+participant (participant-gated, INV-SCENE-60).
 
 
 | Field | Type | Label | Description |
@@ -5091,7 +5091,7 @@ has already authorized the command-execute action at dispatch time
 the publish-attempt-budget extension). The plugin itself runs NO ABAC engine
 (SceneServiceImpl holds no policy engine). The sole exceptions are the
 participant-gate reads (GetPoseOrder and the publish reads), which enforce a
-direct plugin-code participation check (INV-S9) precisely because it is a
+direct plugin-code participation check (INV-SCENE-60) precisely because it is a
 hard privacy boundary that must not be delegable.
 
 Implemented by SceneServiceImpl in plugins/core-scenes/service.go and
@@ -5112,16 +5112,16 @@ plugins/core-scenes/publish_service.go.
 | KickFromScene | [KickFromSceneRequest](#holomush-scene-v1-KickFromSceneRequest) | [KickFromSceneResponse](#holomush-scene-v1-KickFromSceneResponse) | KickFromScene removes a target character from a scene (owner-only via ABAC). The scene owner cannot be kicked (codes.FailedPrecondition, enforced both at the service layer and by a store WHERE filter). Emits a leave IC notice with reason=kicked. See service.go::KickFromScene. |
 | TransferOwnership | [TransferOwnershipRequest](#holomush-scene-v1-TransferOwnershipRequest) | [TransferOwnershipResponse](#holomush-scene-v1-TransferOwnershipResponse) | TransferOwnership reassigns scene ownership from the calling owner to a target who MUST already be a member (owner-only via ABAC). The former owner is demoted to member. See service.go::TransferOwnership. |
 | CastPublishVote | [CastPublishVoteRequest](#holomush-scene-v1-CastPublishVoteRequest) | [CastPublishVoteResponse](#holomush-scene-v1-CastPublishVoteResponse) | CastPublishVote is DECLARED BUT NOT SERVED. It is the legacy scene-keyed publish-vote shape, superseded by CastPublishSceneVote (which is keyed by published_scene_id and is the served vote RPC). The plugin provides no handler, so a call returns codes.Unimplemented. |
-| GetPoseOrder | [GetPoseOrderRequest](#holomush-scene-v1-GetPoseOrderRequest) | [GetPoseOrderResponse](#holomush-scene-v1-GetPoseOrderResponse) | GetPoseOrder returns the computed pose-order roster for a scene. Enforces the INV-S9 plugin-code participant gate (caller MUST be an owner or member, NOT merely invited; NO ABAC engine is consulted). The PermissionDenied gate fires before any existence check so a non-participant cannot distinguish a missing scene from one they may not see. See service.go::GetPoseOrder. |
+| GetPoseOrder | [GetPoseOrderRequest](#holomush-scene-v1-GetPoseOrderRequest) | [GetPoseOrderResponse](#holomush-scene-v1-GetPoseOrderResponse) | GetPoseOrder returns the computed pose-order roster for a scene. Enforces the INV-SCENE-60 plugin-code participant gate (caller MUST be an owner or member, NOT merely invited; NO ABAC engine is consulted). The PermissionDenied gate fires before any existence check so a non-participant cannot distinguish a missing scene from one they may not see. See service.go::GetPoseOrder. |
 | StartScenePublish | [StartScenePublishRequest](#holomush-scene-v1-StartScenePublishRequest) | [StartScenePublishResponse](#holomush-scene-v1-StartScenePublishResponse) | StartScenePublish opens a publication attempt for an `ended` scene (publish.go §5 precondition ladder). The scene must be ended, must not already have a published archive (one-and-done) nor an active attempt, and must not have exhausted its attempt budget. Seeds a COLLECTING attempt with a frozen vote roster. See publish_service.go::StartScenePublish. |
 | CastPublishSceneVote | [CastPublishSceneVoteRequest](#holomush-scene-v1-CastPublishSceneVoteRequest) | [CastPublishSceneVoteResponse](#holomush-scene-v1-CastPublishSceneVoteResponse) | CastPublishSceneVote records a roster member&#39;s yes/no vote on an active publication attempt and runs the §4.3 resolution check, which may transition the attempt (COLLECTING→COOLOFF on all-yes, COLLECTING→ ATTEMPT_FAILED on any-no-after-all-voted, or COOLOFF→COLLECTING on a flip to no). A vote on a terminal attempt is rejected. The recorded vote is the durable effect; a failed resolution or emit is logged but does not fail the cast. See publish_service.go::CastPublishSceneVote. |
 | WithdrawScenePublish | [WithdrawScenePublishRequest](#holomush-scene-v1-WithdrawScenePublishRequest) | [WithdrawScenePublishResponse](#holomush-scene-v1-WithdrawScenePublishResponse) | WithdrawScenePublish lets the scene owner abandon an active publication attempt (COLLECTING or COOLOFF), transitioning it to ATTEMPT_FAILED with failure_reason WITHDRAWN. Owner-gated by ABAC AND a defense-in-depth in-handler owner check (the plugin holds the owner attribute, so this closes the direct-RPC gap). See publish_service.go::WithdrawScenePublish. |
-| GetPublishedScene | [GetPublishedSceneRequest](#holomush-scene-v1-GetPublishedSceneRequest) | [GetPublishedSceneResponse](#holomush-scene-v1-GetPublishedSceneResponse) | GetPublishedScene returns a publication attempt&#39;s full state to a scene participant. Enforces the INV-S9 plugin-code participant gate with a load-bearing step order (INV-SCENE-32): header read → participant gate → content read (only for PUBLISHED rows, only after the gate passes). A non-participant is denied with the §10 triple-signal before any content is read. See publish_service.go::GetPublishedScene. |
+| GetPublishedScene | [GetPublishedSceneRequest](#holomush-scene-v1-GetPublishedSceneRequest) | [GetPublishedSceneResponse](#holomush-scene-v1-GetPublishedSceneResponse) | GetPublishedScene returns a publication attempt&#39;s full state to a scene participant. Enforces the INV-SCENE-60 plugin-code participant gate with a load-bearing step order (INV-SCENE-32): header read → participant gate → content read (only for PUBLISHED rows, only after the gate passes). A non-participant is denied with the §10 triple-signal before any content is read. See publish_service.go::GetPublishedScene. |
 | DownloadPublishedScene | [DownloadPublishedSceneRequest](#holomush-scene-v1-DownloadPublishedSceneRequest) | [DownloadPublishedSceneResponse](#holomush-scene-v1-DownloadPublishedSceneResponse) | DownloadPublishedScene returns a PUBLISHED attempt rendered in the requested format (markdown/plain_text/jsonl) to a participant. Same load-bearing participant-gate ordering as GetPublishedScene; only PUBLISHED attempts are downloadable. See publish_service.go::DownloadPublishedScene. |
-| ListScenePublishAttempts | [ListScenePublishAttemptsRequest](#holomush-scene-v1-ListScenePublishAttemptsRequest) | [ListScenePublishAttemptsResponse](#holomush-scene-v1-ListScenePublishAttemptsResponse) | ListScenePublishAttempts returns the audit list of a scene&#39;s publication attempts (header summaries, no content) to a participant. Participant-gated (INV-S9) so a non-participant cannot enumerate attempts. See publish_service.go::ListScenePublishAttempts. |
+| ListScenePublishAttempts | [ListScenePublishAttemptsRequest](#holomush-scene-v1-ListScenePublishAttemptsRequest) | [ListScenePublishAttemptsResponse](#holomush-scene-v1-ListScenePublishAttemptsResponse) | ListScenePublishAttempts returns the audit list of a scene&#39;s publication attempts (header summaries, no content) to a participant. Participant-gated (INV-SCENE-60) so a non-participant cannot enumerate attempts. See publish_service.go::ListScenePublishAttempts. |
 | GetPublicSceneArchive | [GetPublicSceneArchiveRequest](#holomush-scene-v1-GetPublicSceneArchiveRequest) | [GetPublicSceneArchiveResponse](#holomush-scene-v1-GetPublicSceneArchiveResponse) | GetPublishedScene&#39;s PUBLIC counterpart: GetPublicSceneArchive is the unauthenticated read of a published scene. Structurally separate — NO caller validation, NO participant gate, NO ABAC. The only gate is status==PUBLISHED; a missing id OR any non-PUBLISHED attempt returns one opaque NOT_FOUND so existence/progress of an attempt cannot be inferred (INV-SCENE-35). Carries only public-safe fields. See publish_service.go::GetPublicSceneArchive. |
 | DownloadPublicSceneArchive | [DownloadPublicSceneArchiveRequest](#holomush-scene-v1-DownloadPublicSceneArchiveRequest) | [DownloadPublicSceneArchiveResponse](#holomush-scene-v1-DownloadPublicSceneArchiveResponse) | DownloadPublicSceneArchive is the PUBLIC, unauthenticated download of a published scene in the requested format. Same status-gate and opacity contract (INV-SCENE-35) as GetPublicSceneArchive; shares the renderer with DownloadPublishedScene. See publish_service.go::DownloadPublicSceneArchive. |
-| ExtendScenePublishVoteAttempts | [ExtendScenePublishVoteAttemptsRequest](#holomush-scene-v1-ExtendScenePublishVoteAttemptsRequest) | [ExtendScenePublishVoteAttemptsResponse](#holomush-scene-v1-ExtendScenePublishVoteAttemptsResponse) | ExtendScenePublishVoteAttempts raises a scene&#39;s max-publish-attempts budget by a positive amount and emits the extension notice. Admin-only, enforced by the host&#39;s ABAC policy at dispatch — there is deliberately NO in-plugin role check (the inverse of INV-S9&#39;s plugin-code privacy gate). See publish_service.go::ExtendScenePublishVoteAttempts. |
+| ExtendScenePublishVoteAttempts | [ExtendScenePublishVoteAttemptsRequest](#holomush-scene-v1-ExtendScenePublishVoteAttemptsRequest) | [ExtendScenePublishVoteAttemptsResponse](#holomush-scene-v1-ExtendScenePublishVoteAttemptsResponse) | ExtendScenePublishVoteAttempts raises a scene&#39;s max-publish-attempts budget by a positive amount and emits the extension notice. Admin-only, enforced by the host&#39;s ABAC policy at dispatch — there is deliberately NO in-plugin role check (the inverse of INV-SCENE-60&#39;s plugin-code privacy gate). See publish_service.go::ExtendScenePublishVoteAttempts. |
 
  
 

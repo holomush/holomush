@@ -22,10 +22,10 @@ func TestEnforceSensitivity(t *testing.T) {
 		wantErr  string
 	}{
 		{"never + claim=false → never", plugins.SensitivityNever, false, plugins.SensitivityNever, ""},
-		{"never + claim=true → INV-6 reject", plugins.SensitivityNever, true, "", "EVENT_SENSITIVITY_NOT_DECLARED"},
+		{"never + claim=true → INV-PLUGIN-29 reject", plugins.SensitivityNever, true, "", "EVENT_SENSITIVITY_NOT_DECLARED"},
 		{"may + claim=false → never (plaintext)", plugins.SensitivityMay, false, plugins.SensitivityNever, ""},
 		{"may + claim=true → always (encrypt)", plugins.SensitivityMay, true, plugins.SensitivityAlways, ""},
-		{"always + claim=false → INV-7 reject", plugins.SensitivityAlways, false, "", "EVENT_SENSITIVITY_REQUIRED"},
+		{"always + claim=false → INV-PLUGIN-30 reject", plugins.SensitivityAlways, false, "", "EVENT_SENSITIVITY_REQUIRED"},
 		{"always + claim=true → always", plugins.SensitivityAlways, true, plugins.SensitivityAlways, ""},
 	}
 	for _, tt := range tests {

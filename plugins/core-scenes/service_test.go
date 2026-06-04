@@ -1610,7 +1610,7 @@ func TestUpdateScene_NoEmit_OnNonModeUpdate(t *testing.T) {
 	assert.Equal(t, 0, count, "non-mode update MUST NOT emit scene_pose_order_changed_ic")
 }
 
-// TestGetPoseOrder_NotParticipant_PermissionDenied pins the INV-S9
+// TestGetPoseOrder_NotParticipant_PermissionDenied pins the INV-SCENE-60
 // plugin-code gate: a caller who is NOT a current participant of the
 // scene MUST receive PermissionDenied, NOT NotFound. The gate fires
 // before any scene-existence check so the error path does not leak
@@ -1636,10 +1636,10 @@ func TestGetPoseOrder_NotParticipant_PermissionDenied(t *testing.T) {
 	st, ok := status.FromError(err)
 	require.True(t, ok)
 	assert.Equal(t, codes.PermissionDenied, st.Code(),
-		"non-participant MUST receive PermissionDenied (INV-S9 gate)")
+		"non-participant MUST receive PermissionDenied (INV-SCENE-60 gate)")
 }
 
-// TestGetPoseOrder_InvitedRole_PermissionDenied pins INV-S9's
+// TestGetPoseOrder_InvitedRole_PermissionDenied pins INV-SCENE-60's
 // "invited" exclusion: an invited (but not yet accepted) character
 // is NOT a member of the scene for pose-order purposes and MUST be
 // rejected by the gate. fakeStore.IsParticipant treats invited as
@@ -1670,11 +1670,11 @@ func TestGetPoseOrder_InvitedRole_PermissionDenied(t *testing.T) {
 	st, ok := status.FromError(err)
 	require.True(t, ok)
 	assert.Equal(t, codes.PermissionDenied, st.Code(),
-		"invited-but-not-member MUST receive PermissionDenied (INV-S9 gate excludes invited role)")
+		"invited-but-not-member MUST receive PermissionDenied (INV-SCENE-60 gate excludes invited role)")
 }
 
 // TestGetPoseOrder_NoScene_PermissionDenied pins the
-// scene-existence-non-disclosure aspect of INV-S9: a request for a
+// scene-existence-non-disclosure aspect of INV-SCENE-60: a request for a
 // non-existent scene from a non-participant returns PermissionDenied
 // (not NotFound). The IsParticipant gate runs before Get, so the
 // response collapses both "scene does not exist" and "you are not a
@@ -1692,7 +1692,7 @@ func TestGetPoseOrder_NoScene_PermissionDenied(t *testing.T) {
 	st, ok := status.FromError(err)
 	require.True(t, ok)
 	assert.Equal(t, codes.PermissionDenied, st.Code(),
-		"non-existent scene MUST be indistinguishable from non-membership (INV-S9)")
+		"non-existent scene MUST be indistinguishable from non-membership (INV-SCENE-60)")
 }
 
 // TestGetPoseOrder_HappyPath_FreeMode verifies the composition:

@@ -122,9 +122,9 @@ type EmitIntent struct {
 	// Sensitive declares per-event sensitivity at emit time.
 	//
 	// Phase 3a runtime semantics (host-side fence):
-	//   - manifest sensitivity=never:  Sensitive=true rejected (INV-6).
+	//   - manifest sensitivity=never:  Sensitive=true rejected (INV-PLUGIN-29).
 	//   - manifest sensitivity=may:    field decides (false → plaintext, true → encrypted).
-	//   - manifest sensitivity=always: Sensitive=false rejected (INV-7).
+	//   - manifest sensitivity=always: Sensitive=false rejected (INV-PLUGIN-30).
 	//
 	// Default false. Plugins that do not emit sensitive events leave
 	// this zero.
