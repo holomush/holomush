@@ -26,7 +26,7 @@ func (s *stubAuditorForHostfunc) Log(_ context.Context, _ audit.Event) error { r
 var _ pluginauthz.Auditor = (*stubAuditorForHostfunc)(nil)
 
 // TestWithAuditLoggerStoresAuditorInFunctions is a behavioral wiring-guard for
-// holomush-p1tq2.5 / INV-4 on the Lua surface. It verifies that
+// holomush-p1tq2.5 / INV-PLUGIN-25 on the Lua surface. It verifies that
 // hostfunc.WithAuditLogger correctly propagates the given Auditor into the
 // Functions' internal auditor field, confirming that holomush.evaluate Lua
 // calls will emit audit events.
@@ -36,7 +36,7 @@ var _ pluginauthz.Auditor = (*stubAuditorForHostfunc)(nil)
 //	hostfunc.WithAuditLogger(s.cfg.ABAC.AuditLogger())
 //
 // to hostfunc.New. Without this propagation, holomush.evaluate silently drops
-// all audit events regardless of the decision, violating spec §5 / INV-4.
+// all audit events regardless of the decision, violating spec §5 / INV-PLUGIN-25.
 //
 // This test confirms:
 //  1. WithAuditLogger is a valid Option (compile-time guard).
@@ -52,7 +52,7 @@ func TestWithAuditLoggerStoresAuditorInFunctions(t *testing.T) {
 	got := funcs.AuditorForTest()
 	assert.NotNil(t, got,
 		"hostfunc.Functions MUST have a non-nil auditor after WithAuditLogger option is applied; "+
-			"nil means holomush.evaluate never emits audit events (INV-4 regression)")
+			"nil means holomush.evaluate never emits audit events (INV-PLUGIN-25 regression)")
 	assert.Same(t, aud, got,
 		"Functions must store the identical auditor instance passed to WithAuditLogger; "+
 			"a different instance would break audit-log correlation across subsystems")

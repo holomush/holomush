@@ -45,7 +45,7 @@ const shutdownTimeout = 10 * time.Second
 // plugin-declared attribute providers so that per-action resource policies
 // (e.g. resource.scene.*) resolve at evaluation time. AuditLogger satisfies
 // pluginauthz.Auditor and is wired to both Evaluate surfaces (binary and Lua)
-// so that spec §5 / INV-4 ("exactly one host-stamped audit event per
+// so that spec §5 / INV-PLUGIN-25 ("exactly one host-stamped audit event per
 // plugin per-action decision") is satisfied in production.
 type EngineProvider interface {
 	Engine() types.AccessPolicyEngine
@@ -56,7 +56,7 @@ type EngineProvider interface {
 	// AuditLogger returns the audit.Logger from the ABAC stack. It satisfies
 	// pluginauthz.Auditor and is passed to goplugin.WithAuditLogger and
 	// hostfunc.WithAuditLogger so both Evaluate surfaces emit audit events
-	// (INV-4). May return nil when audit logging is disabled.
+	// (INV-PLUGIN-25). May return nil when audit logging is disabled.
 	AuditLogger() pluginauthz.Auditor
 }
 
@@ -178,7 +178,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	capRegistry.Register("holomush.plugin.v1.AuditService", hostfunc.NewAuditCapability())
 
 	// Create hostfunc bridge.
-	// Wire the audit logger so holomush.evaluate Lua calls emit INV-4 host-stamped
+	// Wire the audit logger so holomush.evaluate Lua calls emit INV-PLUGIN-25 host-stamped
 	// audit events. The logger satisfies pluginauthz.Auditor; nil is safe (audit
 	// is skipped) but should not occur in production since ABACSubsystem always
 	// constructs an audit.Logger during Start().
@@ -278,9 +278,9 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		// attribute resolver registered on it is the same one returned by
 		// s.cfg.ABAC.AttributeResolver() below. One engine+resolver pair for both surfaces.
 		goplugin.WithEngine(s.cfg.ABAC.Engine()),
-		// Wire the audit logger so PluginHostService.Evaluate emits INV-4 host-stamped
+		// Wire the audit logger so PluginHostService.Evaluate emits INV-PLUGIN-25 host-stamped
 		// audit events for binary plugins. Same logger instance as the Lua surface above
-		// (both call s.cfg.ABAC.AuditLogger()), satisfying spec §5 / INV-4.
+		// (both call s.cfg.ABAC.AuditLogger()), satisfying spec §5 / INV-PLUGIN-25.
 		goplugin.WithAuditLogger(s.cfg.ABAC.AuditLogger()),
 		// Thread per-plugin config overrides from PluginSubsystemConfig into the
 		// binary host so overrideFor() can look them up at plugin init time.

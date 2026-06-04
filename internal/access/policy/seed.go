@@ -234,7 +234,7 @@ func SeedPolicies() []SeedPolicy {
 			SeedVersion: 1,
 		},
 
-		// --- Phase-5 sub-epic A TOTP-substrate audit namespace deny policies (INV-A16) ---
+		// --- Phase-5 sub-epic A TOTP-substrate audit namespace deny policies (INV-ACCESS-8) ---
 		//
 		// Reserved subject namespace events.<game>.system.crypto_totp.<scope>.<event>
 		// (sub-epic D emits; sub-epic A reserves). Parallel to the audit.* denies above.
@@ -272,9 +272,9 @@ func SeedPolicies() []SeedPolicy {
 			SeedVersion: 1,
 		},
 
-		// --- Phase-5 sub-epic E broad events.*.system.* deny policies (A16 / INV-15 extension) ---
+		// --- Phase-5 sub-epic E broad events.*.system.* deny policies (A16 / INV-ACCESS-7 extension) ---
 		//
-		// Amendment A16 extended INV-15 to deny plugin/character subscribes to ALL
+		// Amendment A16 extended INV-ACCESS-7 to deny plugin/character subscribes to ALL
 		// events.*.system.* namespaces, explicitly including the rekey audit chain
 		// (events.<gameID>.system.rekey.<ct>.<cid>) added in sub-epic E.
 		// These broad seeds future-proof subsequent audit chains (future sub-epics
@@ -285,13 +285,13 @@ func SeedPolicies() []SeedPolicy {
 		// filter remains as defense-in-depth.
 		{
 			Name:        "seed:deny-events-system-read-character",
-			Description: "Characters MUST NOT read events.*.system.* streams (Phase 5 sub-epic E; A16 / INV-15 extension — covers rekey and all future system audit namespaces)",
+			Description: "Characters MUST NOT read events.*.system.* streams (Phase 5 sub-epic E; A16 / INV-ACCESS-7 extension — covers rekey and all future system audit namespaces)",
 			DSLText:     `forbid(principal is character, action in ["read"], resource is stream) when { resource.stream.name like "events.*.system.*" };`,
 			SeedVersion: 1,
 		},
 		{
 			Name:        "seed:deny-events-system-read-plugin",
-			Description: "Plugins MUST NOT read events.*.system.* streams (Phase 5 sub-epic E; A16 / INV-15 extension — covers rekey and all future system audit namespaces)",
+			Description: "Plugins MUST NOT read events.*.system.* streams (Phase 5 sub-epic E; A16 / INV-ACCESS-7 extension — covers rekey and all future system audit namespaces)",
 			DSLText:     `forbid(principal is plugin, action in ["read"], resource is stream) when { resource.stream.name like "events.*.system.*" };`,
 			SeedVersion: 1,
 		},

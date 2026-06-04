@@ -461,7 +461,7 @@ func TestPlayerSettingDeniedWhenPrincipalNotOwningPlayer(t *testing.T) {
 		"PLAYER principal_id MUST equal the token's owning player")
 }
 
-// TestGameSettingOwnerPartitionIsolatedAcrossPlugins is the INV-11 security test:
+// TestGameSettingOwnerPartitionIsolatedAcrossPlugins is the INV-PLUGIN-28 security test:
 // a value written by plug-A under its owner partition is invisible to plug-B,
 // because the owner is bound host-side from the authenticated plugin name.
 func TestGameSettingOwnerPartitionIsolatedAcrossPlugins(t *testing.T) {
@@ -498,5 +498,5 @@ func TestGameSettingOwnerPartitionIsolatedAcrossPlugins(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.False(t, respB.GetFound(),
-		"INV-11: plug-B MUST NOT read plug-A's owner partition")
+		"INV-PLUGIN-28: plug-B MUST NOT read plug-A's owner partition")
 }

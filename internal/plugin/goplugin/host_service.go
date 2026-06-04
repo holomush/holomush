@@ -601,7 +601,7 @@ func (s *pluginHostServiceServer) Evaluate(ctx context.Context, req *pluginv1.Pl
 // Security invariants (holomush-iokti.7):
 //   - The plugin partition is bound host-side from s.pluginName (stamped at
 //     construction, never from the request) via base.Plugin(s.pluginName). Two
-//     plugins with different names address disjoint partitions (INV-11).
+//     plugins with different names address disjoint partitions (INV-PLUGIN-28).
 //   - Scope must be specified; SETTING_SCOPE_UNSPECIFIED fails closed
 //     (InvalidArgument).
 //   - CHARACTER: req.principal_id must equal the acting character's ID (correct
@@ -628,7 +628,7 @@ func (s *pluginHostServiceServer) GetSetting(ctx context.Context, req *pluginv1.
 	// method-level invariants above): it fails closed on a bad token/subject and
 	// enforces principal ownership for PLAYER / CHARACTER. GAME reads are open to
 	// any plugin (no engine check); base.Plugin(s.pluginName) below confines the
-	// read to the caller's own keyspace (INV-11).
+	// read to the caller's own keyspace (INV-PLUGIN-28).
 	base, _, err := s.resolveSettingScope(ctx, req.GetScope(), req.GetPrincipalId())
 	if err != nil {
 		return nil, err
@@ -783,7 +783,7 @@ func (s *pluginHostServiceServer) principalScopedStore(
 // host-vouched expectedOwnerID by delegating to the runtime-neutral shared gate
 // pluginauthz.CheckPrincipalOwnership — the SAME helper the Lua
 // get_setting/set_setting hostfuncs use, so the binary and Lua ownership trust
-// checks cannot diverge (plugin-runtime-symmetry, INV-8). The oops codes the
+// checks cannot diverge (plugin-runtime-symmetry, INV-PLUGIN-27). The oops codes the
 // helper returns are mapped to the gRPC statuses this RPC has always returned:
 // INVALID_PRINCIPAL_ID → InvalidArgument ("invalid principal_id"),
 // PRINCIPAL_NOT_OWNED → PermissionDenied ("permission denied").
@@ -813,7 +813,7 @@ func (s *pluginHostServiceServer) requirePrincipalOwnership(principalID, expecte
 // a GAME-scope write. The subject (token-recovered) must be permitted to "write"
 // the per-plugin resource pluginauthz.SettingsGameWriteResource(s.pluginName).
 // Using the per-plugin resource lets operator policies scope GAME-write per
-// plugin (plugin-runtime-symmetry, INV-8; holomush-iokti.15 Item 2).
+// plugin (plugin-runtime-symmetry, INV-PLUGIN-27; holomush-iokti.15 Item 2).
 // A deny → PermissionDenied; an engine/build failure is logged and surfaced as
 // a generic Internal (no inner-error leak).
 func (s *pluginHostServiceServer) authorizeGameWrite(ctx context.Context, subject string) error {

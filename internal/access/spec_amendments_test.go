@@ -155,7 +155,7 @@ func TestSpecAmendmentsLandedSubEpicE(t *testing.T) {
 		"E_A14_phase5_rekey_checkpoints": "crypto_rekey_checkpoints",
 		// A15: §12 open questions — holomush-ojw1.6 permanent reference
 		"E_A15_ojw1_6_ref": "holomush-ojw1.6",
-		// A16: §10 line 900-901 INV-15 ABAC denial extended to events.*.system.*
+		// A16: §10 line 900-901 INV-ACCESS-7 ABAC denial extended to events.*.system.*
 		"E_A16_abac_events_system_denial": "events.*.system.*",
 	}
 

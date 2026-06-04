@@ -111,7 +111,7 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 		// Phase-3b audit deny policies
 		"seed:deny-audit-read-character",
 		"seed:deny-audit-read-plugin",
-		// Phase-5 sub-epic A TOTP-substrate audit deny policies (INV-A16)
+		// Phase-5 sub-epic A TOTP-substrate audit deny policies (INV-ACCESS-8)
 		"seed:deny-events-system-crypto-totp-read-character",
 		"seed:deny-events-system-crypto-totp-read-plugin",
 		// Phase-5 sub-epic D crypto-policy audit deny policies
@@ -242,7 +242,7 @@ func TestSeedPoliciesScenePoliciesExist(t *testing.T) {
 
 // Phase-3b audit deny policy tests
 //
-// INV-15 (post-Phase-3d Decision 4 reword): ABAC denies subscribe to
+// INV-ACCESS-7 (post-Phase-3d Decision 4 reword): ABAC denies subscribe to
 // audit.* streams for kind={plugin|character}. Per master spec §7.7
 // (amended via Phase 3d grounding doc Appendix A), ABAC at the gRPC
 // subscribe handler boundary is the authoritative isolation gate. The
@@ -251,7 +251,7 @@ func TestSeedPoliciesScenePoliciesExist(t *testing.T) {
 // apply (game-topic NATS is single-principal by architectural design).
 //
 // The two test cases below verify both seed policies exist with the
-// correct DSL — they are the Phase-3d-touchable coverage of INV-15.
+// correct DSL — they are the Phase-3d-touchable coverage of INV-ACCESS-7.
 //
 // Refs: docs/superpowers/specs/2026-05-03-event-payload-crypto-phase3d-grounding.md (Decision 3 + Decision 4)
 
@@ -285,9 +285,9 @@ func TestSeedPoliciesIncludesAuditSubscribeDenyForPlugin(t *testing.T) {
 	assert.True(t, found, "audit.> deny seed policy for plugin MUST be present")
 }
 
-// Phase-5 sub-epic A TOTP-substrate audit deny policy tests (INV-A16)
+// Phase-5 sub-epic A TOTP-substrate audit deny policy tests (INV-ACCESS-8)
 //
-// INV-A16: ABAC denies subscribe to events.*.system.crypto_totp.* streams
+// INV-ACCESS-8: ABAC denies subscribe to events.*.system.crypto_totp.* streams
 // for kind={plugin|character}. Sub-epic D emits these events; sub-epic A
 // reserves the namespace via these seeds.
 
@@ -303,7 +303,7 @@ func TestSeedPoliciesIncludesEventsSystemCryptoTotpDenyForCharacter(t *testing.T
 			break
 		}
 	}
-	assert.True(t, found, "events.*.system.crypto_totp.* deny seed for character MUST be present (INV-A16)")
+	assert.True(t, found, "events.*.system.crypto_totp.* deny seed for character MUST be present (INV-ACCESS-8)")
 }
 
 func TestSeedPoliciesIncludesEventsSystemCryptoTotpDenyForPlugin(t *testing.T) {
@@ -318,12 +318,12 @@ func TestSeedPoliciesIncludesEventsSystemCryptoTotpDenyForPlugin(t *testing.T) {
 			break
 		}
 	}
-	assert.True(t, found, "events.*.system.crypto_totp.* deny seed for plugin MUST be present (INV-A16)")
+	assert.True(t, found, "events.*.system.crypto_totp.* deny seed for plugin MUST be present (INV-ACCESS-8)")
 }
 
 // Phase-5 sub-epic D crypto-policy audit deny policy tests
 //
-// Mirrors INV-A16 for the events.*.system.crypto_policy.* namespace.
+// Mirrors INV-ACCESS-8 for the events.*.system.crypto_policy.* namespace.
 // Sub-epic D emits crypto.policy_set audit events on this subject; these
 // seeds are the ABAC-layer gate parallel to the dispatchDelivery
 // AUDIT_ONLY filter at internal/grpc/server.go (~line 1019).
@@ -358,9 +358,9 @@ func TestSeedPoliciesIncludesEventsSystemCryptoPolicyDenyForPlugin(t *testing.T)
 	assert.True(t, found, "events.*.system.crypto_policy.* deny seed for plugin MUST be present (Phase 5 sub-epic D)")
 }
 
-// Phase-5 sub-epic E broad events.*.system.* deny policy tests (A16 / INV-15 extension)
+// Phase-5 sub-epic E broad events.*.system.* deny policy tests (A16 / INV-ACCESS-7 extension)
 //
-// A16 extended INV-15 to cover all events.*.system.* namespaces, explicitly
+// A16 extended INV-ACCESS-7 to cover all events.*.system.* namespaces, explicitly
 // including the rekey audit chain (events.<gameID>.system.rekey.<ct>.<cid>).
 // The narrow per-namespace seeds (crypto_totp, crypto_policy) are subsumed by
 // these broad seeds, which future-proof against subsequent audit chains.
@@ -380,7 +380,7 @@ func TestSeedPoliciesIncludesEventsSystemRekeyDenyForCharacter(t *testing.T) {
 			break
 		}
 	}
-	assert.True(t, found, "events.*.system.* broad deny seed for character MUST be present (A16 / INV-15)")
+	assert.True(t, found, "events.*.system.* broad deny seed for character MUST be present (A16 / INV-ACCESS-7)")
 }
 
 func TestSeedPoliciesIncludesEventsSystemRekeyDenyForPlugin(t *testing.T) {
@@ -397,7 +397,7 @@ func TestSeedPoliciesIncludesEventsSystemRekeyDenyForPlugin(t *testing.T) {
 			break
 		}
 	}
-	assert.True(t, found, "events.*.system.* broad deny seed for plugin MUST be present (A16 / INV-15)")
+	assert.True(t, found, "events.*.system.* broad deny seed for plugin MUST be present (A16 / INV-ACCESS-7)")
 }
 
 // Phase-5 iwzt history-scope-privacy policy tests

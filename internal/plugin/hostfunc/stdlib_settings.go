@@ -49,7 +49,7 @@ func settingScopeFromString(s string) pluginv1.SettingScope {
 }
 
 // resolveSettingsAccess recovers the acting actor and (for PLAYER scope) the
-// host-vouched owning player from the Lua VM context (INV-1: NEVER from Lua
+// host-vouched owning player from the Lua VM context (INV-PLUGIN-22: NEVER from Lua
 // args), maps the scope string, enforces principal ownership for PLAYER /
 // CHARACTER via the SHARED pluginauthz.CheckPrincipalOwnership gate (the SAME
 // helper the binary host uses, with the SAME expected-owner semantics), and —
@@ -75,7 +75,7 @@ func (f *Functions) resolveSettingsAccess(
 
 	actor, ok := core.ActorFromContext(ctx)
 	if !ok || pluginauthz.ActorSubject(actor) == "" {
-		// No authenticated actor on the call → fail closed (INV-1 / INV-2).
+		// No authenticated actor on the call → fail closed (INV-PLUGIN-22 / INV-PLUGIN-23).
 		return scope, "", "permission denied"
 	}
 
@@ -114,7 +114,7 @@ func (f *Functions) resolveSettingsAccess(
 // the recovered subject must be permitted to "write" the per-plugin resource
 // pluginauthz.SettingsGameWriteResource(pluginName) via the ABAC engine. Using
 // the per-plugin resource keeps binary and Lua identical (plugin-runtime-symmetry,
-// INV-8; holomush-iokti.15 Item 2). A nil engine or a deny → permission denied;
+// INV-PLUGIN-27; holomush-iokti.15 Item 2). A nil engine or a deny → permission denied;
 // engine build errors are logged and surfaced as a generic message (no
 // inner-error leak).
 func (f *Functions) authorizeGameWrite(ctx context.Context, pluginName, subject string) string {

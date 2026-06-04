@@ -47,7 +47,7 @@ func (s *stubAuditorForGoplugin) Log(_ context.Context, _ audit.Event) error { r
 var _ pluginauthz.Auditor = (*stubAuditorForGoplugin)(nil)
 
 // TestWithAuditLoggerStoresAuditorInHost is a behavioral wiring-guard for
-// holomush-p1tq2.5 / INV-4. It verifies that goplugin.WithAuditLogger
+// holomush-p1tq2.5 / INV-PLUGIN-25. It verifies that goplugin.WithAuditLogger
 // correctly propagates the given Auditor into the host's internal auditor
 // field, confirming the PluginHostService.Evaluate path will emit audit
 // events.
@@ -58,7 +58,7 @@ var _ pluginauthz.Auditor = (*stubAuditorForGoplugin)(nil)
 //
 // to goplugin.NewHost. Without this propagation, PluginHostService.Evaluate
 // silently drops all audit events regardless of the decision, violating
-// spec §5 / INV-4.
+// spec §5 / INV-PLUGIN-25.
 //
 // This test confirms:
 //  1. WithAuditLogger is a valid HostOption (compile-time guard).
@@ -74,7 +74,7 @@ func TestWithAuditLoggerStoresAuditorInHost(t *testing.T) {
 	got := host.AuditorForTest()
 	assert.NotNil(t, got,
 		"binary host MUST have a non-nil auditor after WithAuditLogger option is applied; "+
-			"nil means PluginHostService.Evaluate never emits audit events (INV-4 regression)")
+			"nil means PluginHostService.Evaluate never emits audit events (INV-PLUGIN-25 regression)")
 	assert.Same(t, aud, got,
 		"host must store the identical auditor instance passed to WithAuditLogger; "+
 			"a different instance would break audit-log correlation across subsystems")

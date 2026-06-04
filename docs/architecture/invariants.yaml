@@ -223,18 +223,24 @@ scopes:
     description: "Runtime symmetry, manifest validation, hostfunc safety, emit gates, setting isolation, plugin authz"
     boundary: "Plugin-system contracts applicable to both Lua and binary runtimes. Does NOT include: plugin crypto wiring
       (→ INV-CRYPTO)."
-    # Families PC (runtime config), W9ML (plugin identity), WS (whole-system load harness). See redesign spec §2.1.
+    # Families PC (runtime config), W9ML (plugin identity), WS (whole-system load harness),
+    # plugin-host-evaluate INV-1..5 (→22..26), phase-8 settings-authz INV-8/11 (→27/28). See redesign §2.1.
     # P7 split: PLUGIN gets ZERO P7 tokens (§2.1 lines 163-164 — all remaining P7 → CRYPTO .14.15).
-    # The pluginauthz/settings bare INV-1..5/8/11 are DEFERRED to the dedicated bare-INV-N pass
-    # (tri-overloaded shared namespace: plugin-host-evaluate vs command-query vs phase-8-settings;
-    # same class as the INV-15/A16 ABAC tokens flagged on epic .14). pluginauthz/** is NOT owned here.
-    # owned_paths use file-paths (not /** globs) for dirs that hold deferred/foreign bare INV-N
-    # (pluginauthz, wholesystem/census, internal/plugin settings) so the residual walk stays clean.
+    # The pluginauthz/settings bare INV-1..5/8/11 were the tri-overloaded shared namespace
+    # (plugin-host-evaluate vs command-query vs phase-8-settings); migrated PER-SITE in .14.22 — the
+    # plugin-evaluate invariants span pluginauthz/hostfunc/goplugin + audit-wiring setup files, NOT
+    # evaluate.go alone (the earlier .14.14 'evaluate.go ONLY' note undercounted; corrected here).
+    # owned_paths use file-paths (not /** globs) for dirs that hold foreign bare INV-N so the residual
+    # walk stays clean. LEFT untouched (foreign, co-located): command-visibility INV-1 (commands.go/
+    # functions.go/help_integration_test.go/setup/subsystem.go), settings INV-6 (host_service.go),
+    # sensitivity-fence INV-6/7 (lua/host.go — flagged on epic .14 for classification).
     status: migrated
     origin_specs:
       - "docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"
       - "docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"
       - "docs/superpowers/specs/2026-05-25-wholesystem-plugin-integration-design.md"
+      - "docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md"
+      - "docs/superpowers/specs/2026-05-29-scenes-phase-8-board-content-warnings-design.md"
     owned_paths:
       # PC (plugin-runtime-config): config files are PLUGIN-exclusive.
       - "internal/plugin/config.go"
@@ -250,9 +256,32 @@ scopes:
       - "internal/testsupport/integrationtest/invariants_test.go"
       - "internal/testsupport/integrationtest/default_plugins_test.go"
       - "test/integration/wholesystem/abac_test.go"
+      # plugin-host-evaluate INV-1..5 (.14.22): clean, exclusive sites (subject host-derived,
+      # fail-closed, entitlement, single-audit, binary↔Lua parity). evaluate.go itself is shared
+      # (EVENTBUS ROPS-3 co-located); these carry only the migrated plugin-evaluate tokens.
+      - "internal/plugin/pluginauthz/principal.go"
+      - "internal/plugin/hostfunc/evaluate.go"
+      - "internal/plugin/hostfunc/stdlib_settings.go"
+      - "internal/plugin/hostfunc/stdlib_settings_test.go"
+      - "internal/plugin/hostfunc/functions_audit_wiring_test.go"
+      - "internal/plugin/goplugin/host_engine_wiring_test.go"
+      - "internal/plugin/goplugin/host_settings_test.go"
+      - "internal/plugin/goplugin/evaluate_invariants_test.go"
+      - "internal/plugin/lua/settings_ops_adapter.go"
+      - "internal/plugin/lua/settings_ops_adapter_test.go"
+      - "internal/plugin/setup/subsystem_test.go"
+      # INV-4 audit-wiring sites in internal/access/setup/ (plugin-evaluate, not ABAC-scope).
+      - "internal/access/setup/subsystem.go"
+      - "internal/access/setup/setup_warn_integ_test.go"
     shared_files:
       # PLUGIN+STORE: no_delete grep gate (W9ML-9) lives in a STORE-owned file.
       - "internal/store/no_delete_grep_test.go"
+      # .14.22 plugin-evaluate / settings sites carrying co-located FOREIGN bare tokens:
+      # evaluate.go (EVENTBUS ROPS-3), functions.go (command-vis INV-1), host_service.go
+      # (settings INV-6 + SCENE-shared). The foreign tokens stay; residual skips shared files.
+      - "internal/plugin/pluginauthz/evaluate.go"
+      - "internal/plugin/hostfunc/functions.go"
+      - "internal/plugin/goplugin/host_service.go"
       # PLUGIN+(S substrate): goplugin host (PC-8 + foreign INV-S5).
       - "internal/plugin/goplugin/host.go"
       - "internal/plugin/goplugin/host_test.go"
@@ -374,20 +403,34 @@ scopes:
   - name: INV-ACCESS
     description: "ABAC policy evaluation, attribute provider invariants, seed policy shape, authorization decisions"
     boundary: "Access control evaluation. Does NOT include: stream-access gating at gRPC boundary (→ INV-EVENTBUS)."
-    # Family RA (real-ABAC harness). All INV-RA sites are in the integration
-    # harness (internal/testsupport/integrationtest/), not internal/access/. See .14.10.
+    # Family RA (real-ABAC harness, INV-RA-1..6 in the integration harness) + the ABAC
+    # system-stream-deny seed-policy invariants INV-15 (→7) and INV-A16 (→8), migrated in .14.22.
+    # INV-15/A16 are crypto-origin (master crypto §INV-15; phase-5 sub-epic A INV-A16) but their
+    # CODE HOME is the ABAC seed layer (internal/access/policy/), and this scope is "seed policy
+    # shape, authorization decisions" — so they fold here, not into INV-CRYPTO (user-confirmed).
+    # Bare 'A16' prose shorthand (no INV- prefix) is LEFT — \bA16\b would corrupt INV-A16; A16 is
+    # the amendment's human label, INV-ACCESS-8 its canonical id. See .14.10/.14.22.
     status: migrated
     origin_specs:
       - "docs/superpowers/specs/2026-05-26-harness-real-abac-design.md"
+      - "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+      - "docs/superpowers/specs/2026-05-07-event-payload-crypto-phase5-totp-substrate-design.md"
     owned_paths:
-      # The real-ABAC harness files (where INV-RA-1..6 live). NOT internal/access/**
-      # — that has no RA token and harbors a separate unmigrated bare-INV-N family.
+      # The real-ABAC harness files (where INV-RA-1..6 live).
       - "internal/testsupport/integrationtest/real_abac.go"
       - "internal/testsupport/integrationtest/real_abac_test.go"
+      # INV-15/A16 ABAC system-stream-deny seed-policy sites (.14.22). seed.go/seed_test.go
+      # are PRIVACY-shared (I-PRIV-6 co-located) so they are SHARED below, not owned; these two
+      # are ACCESS-exclusive for the deny-policy invariants.
+      - "internal/access/policy/seed_smoke_test.go"
+      - "internal/access/spec_amendments_test.go"
     shared_files:
       # General integration harness (RA-4 pointer-identity ride-along).
       - "internal/testsupport/integrationtest/harness.go"
       - "internal/testsupport/integrationtest/plugins.go"
+      # INV-15/A16 sites also carrying PRIVACY I-PRIV-6 (genuinely multi-scope).
+      - "internal/access/policy/seed.go"
+      - "internal/access/policy/seed_test.go"
 
   - name: INV-SESSION
     description: "Session status lifecycle, connection attachment, focus membership, idle detection"
@@ -1614,7 +1657,29 @@ invariants:
       behavior."
     binding: pending
     refs:
-      - {file: "internal/testsupport/integrationtest/real_abac_test.go", token: "INV-RA-6",}
+      - {file: "internal/testsupport/integrationtest/real_abac_test.go", token: "INV-RA-6"}
+  - id: INV-ACCESS-7
+    scope: INV-ACCESS
+    origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
+    legacy: ["INV-15@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "ABAC denies subscribe to events.*.system.* (and audit.>) streams for kind={plugin|character} at the gRPC subscribe
+      boundary; the Rekey system audit event lands on a subject those principals cannot read."
+    binding: pending
+    refs:
+      - {file: "internal/access/policy/seed.go", token: "INV-15"}
+      - {file: "internal/access/policy/seed_test.go", token: "INV-15"}
+      - {file: "internal/access/policy/seed_smoke_test.go", token: "INV-15"}
+      - {file: "internal/access/spec_amendments_test.go", token: "INV-15"}
+  - id: INV-ACCESS-8
+    scope: INV-ACCESS
+    origin_spec: "docs/superpowers/specs/2026-05-07-event-payload-crypto-phase5-totp-substrate-design.md"
+    legacy: ["INV-A16@docs/superpowers/specs/2026-05-07-event-payload-crypto-phase5-totp-substrate-design.md"]
+    summary: "Two ABAC seed forbid policies MUST deny character and plugin principals from reading events.*.system.crypto_totp.*
+      streams (sub-epic A; A16 extends INV-15's system-namespace deny across crypto audit namespaces)."
+    binding: pending
+    refs:
+      - {file: "internal/access/policy/seed.go", token: "INV-A16"}
+      - {file: "internal/access/policy/seed_test.go", token: "INV-A16",}
 
   # -- INV-CLUSTER -- migrated from bare INV-N (cross-replica coordination) (holomush-hz0v4.14.11).
   # Origin: docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md (master crypto spec; these bare invariants are CLUSTER-scoped per the
@@ -2855,3 +2920,85 @@ invariants:
     binding: pending
     refs:
       - {file: "internal/testsupport/integrationtest/default_plugins_test.go", token: "INV-WS-4"}
+  - id: INV-PLUGIN-22
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md"
+    legacy: ["INV-1@docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md"]
+    summary: "PluginHostService.Evaluate's subject is host-derived from the authenticated actor; there is no subject field
+      on the wire (never sourced from plugin/Lua-supplied data)."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/pluginauthz/evaluate.go", token: "INV-1"}
+      - {file: "internal/plugin/hostfunc/evaluate.go", token: "INV-1"}
+      - {file: "internal/plugin/hostfunc/stdlib_settings.go", token: "INV-1"}
+      - {file: "internal/plugin/goplugin/evaluate_invariants_test.go", token: "INV-1"}
+  - id: INV-PLUGIN-23
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md"
+    legacy: ["INV-2@docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md"]
+    summary: "No authenticated actor bound to the call → Evaluate returns deny + error (fail-closed)."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/pluginauthz/evaluate.go", token: "INV-2"}
+      - {file: "internal/plugin/hostfunc/stdlib_settings.go", token: "INV-2"}
+  - id: INV-PLUGIN-24
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md"
+    legacy: ["INV-3@docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md"]
+    summary: "A resource type the plugin does not own (outside its entitlement, no command carve-out) → rejected."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/pluginauthz/evaluate.go", token: "INV-3"}
+  - id: INV-PLUGIN-25
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md"
+    legacy: ["INV-4@docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md"]
+    summary: "Each Evaluate emits exactly one host-stamped audit event; the audit logger MUST be wired on both the binary
+      (gRPC) and Lua (hostfunc) surfaces."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/pluginauthz/evaluate.go", token: "INV-4"}
+      - {file: "internal/plugin/goplugin/host_engine_wiring_test.go", token: "INV-4"}
+      - {file: "internal/plugin/hostfunc/functions_audit_wiring_test.go", token: "INV-4"}
+      - {file: "internal/plugin/setup/subsystem.go", token: "INV-4"}
+      - {file: "internal/plugin/setup/subsystem_test.go", token: "INV-4"}
+      - {file: "internal/access/setup/subsystem.go", token: "INV-4"}
+      - {file: "internal/access/setup/setup_warn_integ_test.go", token: "INV-4"}
+  - id: INV-PLUGIN-26
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md"
+    legacy: ["INV-5@docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md"]
+    summary: "The binary (gRPC) and Lua (hostfunc) surfaces reach identical host evaluation logic via a single shared mapping
+      (runtime parity)."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/pluginauthz/evaluate.go", token: "INV-5"}
+      - {file: "internal/plugin/goplugin/evaluate_invariants_test.go", token: "INV-5"}
+  - id: INV-PLUGIN-27
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-29-scenes-phase-8-board-content-warnings-design.md"
+    legacy: ["INV-8@docs/superpowers/specs/2026-05-29-scenes-phase-8-board-content-warnings-design.md"]
+    summary: "Each settings host RPC MUST ship a Go SDK method AND a Lua hostfunc together (runtime parity); the settings
+      access gate is the single shared path for both runtimes."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/goplugin/host_service.go", token: "INV-8"}
+      - {file: "internal/plugin/hostfunc/functions.go", token: "INV-8"}
+      - {file: "internal/plugin/hostfunc/stdlib_settings.go", token: "INV-8"}
+      - {file: "internal/plugin/hostfunc/stdlib_settings_test.go", token: "INV-8"}
+      - {file: "internal/plugin/lua/host.go", token: "INV-8"}
+      - {file: "internal/plugin/lua/settings_ops_adapter.go", token: "INV-8"}
+      - {file: "internal/plugin/pluginauthz/principal.go", token: "INV-8"}
+  - id: INV-PLUGIN-28
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-05-29-scenes-phase-8-board-content-warnings-design.md"
+    legacy: ["INV-11@docs/superpowers/specs/2026-05-29-scenes-phase-8-board-content-warnings-design.md"]
+    summary: "Cross-plugin settings isolation MUST be structural: the host binds the plugin partition from the authenticated
+      caller identity (stamped at server construction), never from caller-supplied input; a plugin MUST NOT address another
+      plugin's owner partition."
+    binding: pending
+    refs:
+      - {file: "internal/plugin/goplugin/host_service.go", token: "INV-11"}
+      - {file: "internal/plugin/goplugin/host_settings_test.go", token: "INV-11"}
+      - {file: "internal/plugin/lua/settings_ops_adapter_test.go", token: "INV-11"}
+      - {file: "internal/plugin/pluginauthz/principal.go", token: "INV-11"}

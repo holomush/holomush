@@ -258,7 +258,7 @@ func TestPlayerSettingDeniedWhenPrincipalNotOwningPlayer(t *testing.T) {
 // Lua GET-path TestGetSettingPlayerScopeDeniedWhenNoOwningPlayerOnContext: a
 // PLAYER-scope WRITE with no owning player stamped on the ctx fails closed, and
 // the denied write never reaches the store. Closes the runtime-symmetry test gap
-// (INV-8, holomush-sl0ir.13): the gate is shared (set_setting → resolveSettingsAccess
+// (INV-PLUGIN-27, holomush-sl0ir.13): the gate is shared (set_setting → resolveSettingsAccess
 // → CheckPrincipalOwnership), but the write path lacked an explicit Lua mirror.
 func TestSetSettingPlayerScopeDeniedWhenNoOwningPlayerOnContext(t *testing.T) {
 	L := lua.NewState()
@@ -290,7 +290,7 @@ func TestSetSettingPlayerScopeDeniedWhenNoOwningPlayerOnContext(t *testing.T) {
 // mirror of the binary TestSetSettingPlayerForeignPrincipalDenied: even with an
 // owning player on the ctx, a PLAYER-scope WRITE whose principal_id does NOT
 // equal the vouched owner is denied and never reaches the store
-// (holomush-sl0ir.13 / INV-8).
+// (holomush-sl0ir.13 / INV-PLUGIN-27).
 func TestSetSettingPlayerScopeDeniedWhenPrincipalNotOwningPlayer(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()

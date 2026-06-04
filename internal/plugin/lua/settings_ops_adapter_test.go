@@ -77,7 +77,7 @@ func TestSettingsAdapterIsolatesByOwnerPartition(t *testing.T) {
 		pluginv1.SettingScope_SETTING_SCOPE_CHARACTER, "plug-A", charID,
 		"content.cw_block", []string{"gore"}))
 
-	// A different plugin owner addresses a disjoint partition (INV-11).
+	// A different plugin owner addresses a disjoint partition (INV-PLUGIN-28).
 	_, found, err := adapter.GetSetting(ctx,
 		pluginv1.SettingScope_SETTING_SCOPE_CHARACTER, "plug-B", charID, "content.cw_block")
 	require.NoError(t, err)

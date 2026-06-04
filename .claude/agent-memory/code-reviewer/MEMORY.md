@@ -145,3 +145,29 @@
   grpc-api.md table-row "non-comment" diffs are doc prose; verify each ± pair
   differs ONLY in the token. No `token:",}` trailing-comma noise this time.
   Encountered: hz0v4.14.15 (2026-06-03) — READY.
+
+- **Final bare-INV-N PER-SITE pass (tri-overloaded namespace: same bare number
+  → DIFFERENT outcomes per file) — all checks held (hz0v4.14.22 READY).** The
+  whole point: bare INV-1 → INV-PLUGIN-22 ONLY in plugin-evaluate files
+  (pluginauthz/evaluate.go, hostfunc/evaluate.go, hostfunc/stdlib_settings.go,
+  goplugin/evaluate_invariants_test.go), while command-visibility INV-1 (commands.go,
+  functions.go, setup/subsystem.go) LEFT bare; settings INV-6 (host_service.go) +
+  fence INV-6/7 (lua/host.go) LEFT. Verify per-file, not per-number. Key checks:
+  (1) `rg '\bINV-[0-9]+\b'` over EVERY owned file → ZERO (residual walk = `bareInvRE
+  \bINV-\d+\b` at invariant_registry_test.go:488); foreign bare tokens survive ONLY
+  in shared_files (residual `continue`s on shared, line ~550). (2) checkProvenance
+  (line 492) greps CANONICAL `e.ID` at each ref site, NOT `r.Token` — so refs
+  recording legacy `token: "INV-15"/"INV-A16"/"INV-4"` is the standing FROM-anchor
+  convention, NOT a finding; the canonical token must ALSO be physically present
+  (it is). (3) Cross-scope ownership is legit: access/setup/subsystem.go +
+  setup_warn_integ_test.go are PLUGIN-owned (INV-4 audit-wiring is plugin-evaluate,
+  not ABAC) — confirm each appears ONCE in owned_paths and carries ONLY the migrated
+  token; no scope owns `internal/access/**` glob so TestOwnedPathsPartition is safe.
+  (4) seed.go/seed_test.go genuinely multi-scope (PRIVACY I-PRIV-6 + now ACCESS) →
+  ACCESS-shared not owned; seed_smoke_test.go/spec_amendments_test.go ACCESS-owned.
+  (5) Bare `A16` prose (no INV- prefix) MUST stay — `\bA16\b` rewrite would corrupt
+  `INV-A16`; `INV-A16` → INV-ACCESS-8 cleanly. (6) Zero `.go` executable-line edits;
+  every .go diff line is a comment or test-assertion string-literal token swap.
+  (7) This diff CLEANED a pre-existing `,}` (INV-RA-6 line 1657) but ADDED a new one
+  (INV-A16 line 1682) — 5th recurrence, Low non-blocking, renderer-inert. PLUGIN dense
+  1..28, ACCESS dense 1..8. Encountered: hz0v4.14.22 (2026-06-03) — READY.

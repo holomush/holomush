@@ -135,7 +135,7 @@ func (h *Host) SetFocusCoordinator(fc focus.Coordinator) {
 // underlying hostfunc bridge via a settingsStoresOpsAdapter that satisfies
 // hostfunc.SettingsOps, so the Lua get_setting / set_setting hostfuncs reach the
 // SAME stores the binary GetSetting / SetSetting RPCs use (plugin-runtime-
-// symmetry, INV-8). Implements plugins.SettingsDepsConfigurer; invoked by
+// symmetry, INV-PLUGIN-27). Implements plugins.SettingsDepsConfigurer; invoked by
 // Manager.ConfigureSettingsDeps via findOptional during gRPC subsystem Start.
 //
 // If any store is nil the binding is cleared rather than wrapping a partial set

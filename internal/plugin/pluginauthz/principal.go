@@ -12,11 +12,11 @@ import (
 // writes to for the given plugin. It is the single source of truth shared by
 // the binary (PluginHostService.SetSetting) and Lua (holomush.set_setting)
 // surfaces so the two runtimes cannot drift onto different operator-permission
-// resources (plugin-runtime-symmetry, INV-8). The resource is per-plugin so
+// resources (plugin-runtime-symmetry, INV-PLUGIN-27). The resource is per-plugin so
 // operator policies can scope GAME-write permission per plugin: a grant on
 // "setting:game:core-scenes" authorises only that plugin's GAME writes, not
 // all plugins'. The owner partition already confines the DATA to the plugin's
-// keyspace (INV-11); this scopes the operator POLICY to match.
+// keyspace (INV-PLUGIN-28); this scopes the operator POLICY to match.
 // Only operator subjects are granted "write" on it; a non-operator
 // plugin/character is denied.
 func SettingsGameWriteResource(pluginName string) string {
@@ -28,7 +28,7 @@ func SettingsGameWriteResource(pluginName string) string {
 // act on behalf of. It is the single runtime-neutral ownership gate shared by
 // the binary (PluginHostService.GetSetting/SetSetting) and Lua
 // (holomush.get_setting/set_setting) settings surfaces, so the trust check
-// cannot diverge between runtimes (plugin-runtime-symmetry, INV-8).
+// cannot diverge between runtimes (plugin-runtime-symmetry, INV-PLUGIN-27).
 //
 // Identity recovery legitimately differs per runtime — the binary path recovers
 // the expected owner from the dispatch token (emit_token_store), the Lua path
