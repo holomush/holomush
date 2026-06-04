@@ -814,7 +814,7 @@ func TestSeedSmokePemitAllowedForAdmin(t *testing.T) {
 	assert.True(t, decision.IsAllowed(), "admin should execute pemit; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
-// Phase-5 sub-epic E ABAC-layer enforcement smoke tests (A16 / INV-15 extension)
+// Phase-5 sub-epic E ABAC-layer enforcement smoke tests (A16 / INV-ACCESS-7 extension)
 //
 // These tests verify that the ABAC engine (with seed policies loaded) denies
 // character and plugin principals from reading events.*.system.rekey.* streams.
@@ -841,7 +841,7 @@ func TestSeedSmokeCharacterDeniedEventsSystemRekeyStream(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.False(t, decision.IsAllowed(),
-		"character must NOT read events.*.system.rekey.* stream (ABAC seed gate A16/INV-15); got: %s — %s",
+		"character must NOT read events.*.system.rekey.* stream (ABAC seed gate A16/INV-ACCESS-7); got: %s — %s",
 		decision.Effect(), decision.Reason())
 }
 
@@ -934,6 +934,6 @@ func TestSeedSmokePluginDeniedEventsSystemRekeyStream(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.False(t, decision.IsAllowed(),
-		"plugin must NOT read events.*.system.rekey.* stream (ABAC seed gate A16/INV-15); got: %s — %s",
+		"plugin must NOT read events.*.system.rekey.* stream (ABAC seed gate A16/INV-ACCESS-7); got: %s — %s",
 		decision.Effect(), decision.Reason())
 }

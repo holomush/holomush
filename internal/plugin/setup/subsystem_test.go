@@ -87,7 +87,7 @@ func TestPluginSubsystemHealthStatusReportsDeadBeforeStart(t *testing.T) {
 
 // TestEngineProviderInterfaceRequiresAttributeResolverAndAuditLogger is a
 // compile-time guard. The EngineProvider interface used by PluginSubsystem MUST
-// include AttributeResolver() (holomush-8kkv5.18) and AuditLogger() (INV-4 /
+// include AttributeResolver() (holomush-8kkv5.18) and AuditLogger() (INV-PLUGIN-25 /
 // holomush-p1tq2.5) so that Start() can wire both surfaces. If either method is
 // removed from the interface this line fails to compile — catching the regression
 // before it reaches E2E.
@@ -209,7 +209,7 @@ func (r *recordingAuditor) Log(_ context.Context, event audit.Event) error {
 }
 
 // TestAuditWiringFromEngineProvider is a table-driven wiring-guard for
-// holomush-p1tq2.5 / INV-4. Each row asserts that:
+// holomush-p1tq2.5 / INV-PLUGIN-25. Each row asserts that:
 //  1. fakeEngineProvider.AuditLogger() returns a non-nil auditor (so the
 //     guard is meaningful).
 //  2. The corresponding host/functions constructor accepts the
@@ -220,7 +220,7 @@ func (r *recordingAuditor) Log(_ context.Context, event audit.Event) error {
 // package-level access to host internals via export_test.go.
 //
 // Without this wiring PluginHostService.Evaluate (binary) and holomush.evaluate
-// (Lua) never emit audit events regardless of the decision, violating spec §5 / INV-4.
+// (Lua) never emit audit events regardless of the decision, violating spec §5 / INV-PLUGIN-25.
 func TestAuditWiringFromEngineProvider(t *testing.T) {
 	tests := []struct {
 		name  string

@@ -218,6 +218,13 @@ invariants.
 | `INV-PLUGIN-19` | The whole-system suite MUST assert >=1 cross-plugin-ABAC permit AND >=1 forbid against the real seeded engine. | `INV-WS-2` | pending |
 | `INV-PLUGIN-20` | The whole-system suite MUST NOT be silently skipped in CI: with HOLOMUSH_REQUIRE_PLUGINS set, a missing binary artifact is a hard failure. | `INV-WS-3` | pending |
 | `INV-PLUGIN-21` | WithInTreePlugins() MUST be opt-in: omitting it leaves the harness plugin-free and behaviorally unchanged. | `INV-WS-4` | pending |
+| `INV-PLUGIN-22` | PluginHostService.Evaluate's subject is host-derived from the authenticated actor; there is no subject field on the wire (never sourced from plugin/Lua-supplied data). | `INV-1` | pending |
+| `INV-PLUGIN-23` | No authenticated actor bound to the call → Evaluate returns deny + error (fail-closed). | `INV-2` | pending |
+| `INV-PLUGIN-24` | A resource type the plugin does not own (outside its entitlement, no command carve-out) → rejected. | `INV-3` | pending |
+| `INV-PLUGIN-25` | Each Evaluate emits exactly one host-stamped audit event; the audit logger MUST be wired on both the binary (gRPC) and Lua (hostfunc) surfaces. | `INV-4` | pending |
+| `INV-PLUGIN-26` | The binary (gRPC) and Lua (hostfunc) surfaces reach identical host evaluation logic via a single shared mapping (runtime parity). | `INV-5` | pending |
+| `INV-PLUGIN-27` | Each settings host RPC MUST ship a Go SDK method AND a Lua hostfunc together (runtime parity); the settings access gate is the single shared path for both runtimes. | `INV-8` | pending |
+| `INV-PLUGIN-28` | Cross-plugin settings isolation MUST be structural: the host binds the plugin partition from the authenticated caller identity (stamped at server construction), never from caller-supplied input; a plugin MUST NOT address another plugin's owner partition. | `INV-11` | pending |
 
 ### `INV-EVENTBUS`
 
@@ -276,6 +283,8 @@ invariants.
 | `INV-ACCESS-4` | With WithRealABAC()+WithInTreePlugins(), the attribute.Resolver and attribute.PluginProvider the plugin subsystem registers on are the SAME instances (pointer identity) the engine evaluates against. | `INV-RA-4` | pending |
 | `INV-ACCESS-5` | Every attribute namespace referenced by an installed seed policy has a registered provider under WithRealABAC (no silent default-deny from an unregistered provider). | `INV-RA-5` | pending |
 | `INV-ACCESS-6` | Option order MUST NOT affect the resulting stack: Start(t,A,B) and Start(t,B,A) produce identical permit/deny behavior. | `INV-RA-6` | pending |
+| `INV-ACCESS-7` | ABAC denies subscribe to events.*.system.* (and audit.>) streams for kind={plugin\|character} at the gRPC subscribe boundary; the Rekey system audit event lands on a subject those principals cannot read. | `INV-15` | pending |
+| `INV-ACCESS-8` | Two ABAC seed forbid policies MUST deny character and plugin principals from reading events.*.system.crypto_totp.* streams (sub-epic A; A16 extends INV-15's system-namespace deny across crypto audit namespaces). | `INV-A16` | pending |
 
 ### `INV-SESSION`
 

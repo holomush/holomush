@@ -9,9 +9,9 @@ package goplugin
 // as TestEvaluateForeignResourceTypeRejected etc.) — they are structural locks
 // that break loudly if a future change violates the spec invariants:
 //
-//   INV-1: EvaluateRequest carries NO subject field (subject is host-derived,
+//   INV-PLUGIN-22: EvaluateRequest carries NO subject field (subject is host-derived,
 //          never on the wire).
-//   INV-5: Both the binary (gRPC) surface AND the Lua (hostfunc) surface reject
+//   INV-PLUGIN-26: Both the binary (gRPC) surface AND the Lua (hostfunc) surface reject
 //          a resource type the plugin does not own, proving they both reach the
 //          shared pluginauthz.Evaluate entitlement gate and cannot diverge.
 
@@ -34,14 +34,14 @@ import (
 // TestINV1EvaluateRequestHasNoSubjectField reflects over the proto descriptor of
 // PluginHostServiceEvaluateRequest and asserts no field named "subject" exists.
 // The subject is always host-derived from the dispatch token; placing it on
-// the wire would allow plugins to forge authorization subjects (INV-1).
+// the wire would allow plugins to forge authorization subjects (INV-PLUGIN-22).
 func TestINV1EvaluateRequestHasNoSubjectField(t *testing.T) {
 	md := (&pluginv1.PluginHostServiceEvaluateRequest{}).ProtoReflect().Descriptor()
 	fields := md.Fields()
 	for i := range fields.Len() {
 		name := string(fields.Get(i).Name())
 		assert.NotEqual(t, "subject", name,
-			"EvaluateRequest MUST NOT carry a subject field (INV-1): "+
+			"EvaluateRequest MUST NOT carry a subject field (INV-PLUGIN-22): "+
 				"subject is host-derived from the dispatch token, never plugin-supplied")
 	}
 	// Positive assertion: only the expected fields are present.
@@ -49,7 +49,7 @@ func TestINV1EvaluateRequestHasNoSubjectField(t *testing.T) {
 	// breaks this test even if the name check above is somehow weakened.
 	assert.Equal(t, 2, fields.Len(),
 		"EvaluateRequest MUST have exactly 2 fields (action + resource); "+
-			"adding a subject field violates INV-1")
+			"adding a subject field violates INV-PLUGIN-22")
 }
 
 // TestINV5BothSurfacesRejectForeignResourceTypeViaSharedEntitlementGate asserts

@@ -123,7 +123,7 @@ func WithFocusOps(fo FocusOps) Option {
 
 // WithSettingsOps sets the plugin-partitioned settings store seam for the
 // holomush.get_setting / set_setting host functions (plugin-runtime-symmetry
-// with the binary GetSetting / SetSetting RPCs; INV-8).
+// with the binary GetSetting / SetSetting RPCs; INV-PLUGIN-27).
 func WithSettingsOps(so SettingsOps) Option {
 	return func(f *Functions) { f.settingsOps = so }
 }

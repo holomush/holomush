@@ -4,7 +4,7 @@
 // Package pluginauthz holds the runtime-neutral per-action authorization
 // core shared by the binary (PluginHostService.Evaluate) and Lua
 // (holomush.evaluate) surfaces. Both delegate here so policy/trust
-// behavior cannot diverge between runtimes (INV-5).
+// behavior cannot diverge between runtimes (INV-PLUGIN-26).
 package pluginauthz
 
 import (
@@ -57,7 +57,7 @@ func initCounter() {
 }
 
 // ActorSubject maps a host-stamped Actor to its ABAC subject string. It is
-// the single mapping shared by the binary and Lua surfaces (INV-5) so the
+// the single mapping shared by the binary and Lua surfaces (INV-PLUGIN-26) so the
 // two cannot derive divergent subjects. Returns "" for an unknown/zero
 // actor kind, which Evaluate treats as fail-closed.
 func ActorSubject(a core.Actor) string {
@@ -95,7 +95,7 @@ type Auditor interface {
 }
 
 // Input carries everything the shared core needs. Subject is HOST-DERIVED
-// and MUST NOT originate from plugin-supplied data (INV-1).
+// and MUST NOT originate from plugin-supplied data (INV-PLUGIN-22).
 type Input struct {
 	Engine     types.AccessPolicyEngine
 	Auditor    Auditor
@@ -169,7 +169,7 @@ func Evaluate(ctx context.Context, in Input) (Decision, error) {
 		return Decision{}, err
 	}
 	if in.Subject == "" {
-		// No authenticated actor bound to the call (INV-2).
+		// No authenticated actor bound to the call (INV-PLUGIN-23).
 		err := oops.Code("EVALUATE_NO_SUBJECT").
 			With("plugin", in.PluginName).
 			Errorf("evaluate called without an authenticated subject")
@@ -192,7 +192,7 @@ func Evaluate(ctx context.Context, in Input) (Decision, error) {
 		return Decision{}, err
 	}
 
-	// Entitlement (INV-3): plugin-owned type or the command carve-out.
+	// Entitlement (INV-PLUGIN-24): plugin-owned type or the command carve-out.
 	if resType != commandResourceType && !in.OwnedTypes[resType] {
 		err := oops.Code("EVALUATE_UNENTITLED_TYPE").
 			With("plugin", in.PluginName).With("resource_type", resType).
@@ -232,7 +232,7 @@ func Evaluate(ctx context.Context, in Input) (Decision, error) {
 	}
 	recordEffect(effect)
 
-	// Audit (INV-4): exactly one host-stamped event per evaluation.
+	// Audit (INV-PLUGIN-25): exactly one host-stamped event per evaluation.
 	if in.Auditor != nil {
 		auditEffect := types.EffectDeny
 		if dec.IsAllowed() {

@@ -39,7 +39,7 @@ func TestBuildABACStack_WarnsWhenPropertyRepoMissing(t *testing.T) {
 		LocationRepo:  worldpostgres.NewLocationRepository(pool),
 		ObjectRepo:    worldpostgres.NewObjectRepository(pool),
 		// PropertyRepo + ParentLocationResolver INTENTIONALLY OMITTED — exercises
-		// the 8d. else-branch WARN path. Per holomush-72ou INV-4.
+		// the 8d. else-branch WARN path. Per holomush-72ou INV-PLUGIN-25.
 	})
 	require.NoError(t, err)
 

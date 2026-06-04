@@ -17,7 +17,7 @@ import (
 // to the hostfunc.SettingsOps store seam. It is the permanent Lua delegation
 // seam: it lets the gopher-lua hostfunc layer reach the SAME settings stores the
 // binary PluginHostService uses, so both runtimes drive plugin-partitioned
-// settings through one common store path (plugin-runtime-symmetry, INV-8).
+// settings through one common store path (plugin-runtime-symmetry, INV-PLUGIN-27).
 //
 // All trust checks (actor recovery, principal ownership, GAME-write operator
 // authorization) are performed by the hostfunc layer BEFORE these methods run —

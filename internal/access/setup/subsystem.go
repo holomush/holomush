@@ -189,7 +189,7 @@ func (s *ABACSubsystem) AttributeResolver() *attribute.Resolver {
 // AuditLogger returns the audit logger from the ABAC stack as a
 // pluginauthz.Auditor. The concrete type is *audit.Logger; callers may pass
 // the return value directly to goplugin.WithAuditLogger or
-// hostfunc.WithAuditLogger to satisfy spec §5 / INV-4. Returns nil when
+// hostfunc.WithAuditLogger to satisfy spec §5 / INV-PLUGIN-25. Returns nil when
 // AuditLogger is nil (audit logging disabled), giving callers a clean nil
 // interface value rather than an interface wrapping a nil pointer.
 // Panics if called before Start().

@@ -16,7 +16,7 @@ import (
 // evaluateFn returns the holomush.evaluate(action, resource) Lua host function.
 //
 // Subject is derived from the host-stamped actor on the Lua VM's context
-// (INV-1: NEVER from Lua arguments). Delegates to pluginauthz.Evaluate with
+// (INV-PLUGIN-22: NEVER from Lua arguments). Delegates to pluginauthz.Evaluate with
 // empty OwnedTypes — Lua plugins own no resource types, so entitlement
 // degrades to the command: carve-out (spec §3).
 //
