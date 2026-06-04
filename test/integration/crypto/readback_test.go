@@ -367,7 +367,7 @@ func loadFirstAuditRowAsPluginRow(ctx context.Context, t *testing.T, pool *pgxpo
 // Step 1 tests — snapshot direct-entry path
 // -----------------------------------------------------------------------------
 
-// TestReadbackAuthorizedReturnsPlaintext verifies INV-CRYPTO-26/2/3/4/12:
+// TestReadbackAuthorizedReturnsPlaintext verifies INV-CRYPTO-26/27/28/29/37:
 // an authorized plugin (owner of the subject, readback:true in manifest) calling
 // DecryptOwnRows on its own encrypted row receives the original plaintext, and
 // an INV-CRYPTO-11 plugin-decrypt audit record is emitted (INV-CRYPTO-28).
@@ -406,7 +406,7 @@ func TestReadbackAuthorizedReturnsPlaintext(t *testing.T) {
 	require.NoError(t, err, "INV-CRYPTO-26: DecryptOwnRows must not error for authorized owner")
 	require.Len(t, results, 1)
 
-	// INV-CRYPTO-26/4: clean row yields plaintext, no refusal reason.
+	// INV-CRYPTO-26/29: clean row yields plaintext, no refusal reason.
 	assert.Empty(t, results[0].GetNoPlaintextReason(),
 		"INV-CRYPTO-29: clean owned row must have no refusal reason")
 	// Recovering the exact plaintext proves the snapshot direct-entry path ran

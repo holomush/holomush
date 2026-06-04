@@ -30,7 +30,7 @@ package main
 //   - The DEK for the scene context is seeded by seedAdminRekeyDEK, called
 //     from setupAdminAuthEnv BEFORE runCoreWithDeps, using the kekProvider
 //     that was constructed from the same KEK file the server will load.
-//     This satisfies INV-33 (wrap_key_id fingerprint must match runtime KEK).
+//     This satisfies INV-CRYPTO-19 (wrap_key_id fingerprint must match runtime KEK).
 //   - Two fields are added to adminAuthEnv: rekeySceneContextType and
 //     rekeySceneContextID, populated by seedAdminRekeyDEK.
 
@@ -59,7 +59,7 @@ import (
 // into the already-initialised PG database. It uses kekProv — the same
 // kek.Provider constructed from the test KEK file source that the server
 // will load at boot — so the wrap_key_id fingerprint matches the runtime
-// KEK (INV-33).
+// KEK (INV-CRYPTO-19).
 //
 // pool MUST still be open when this is called. It is the seedPool that
 // setupAdminAuthEnv constructs before closing at step 4. Returns the

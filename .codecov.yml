@@ -55,6 +55,11 @@ ignore:
   # coverage profile doesn't see init-path statements (orchestrator
   # wiring, subsystem registration). Same rationale as plugins/*/main.go.
   - "cmd/holomush/core.go"
+  # The gRPC/history subsystem wiring (history-auth-guard, FallbackResolver,
+  # PluginDowngradeFence assembly). Same production-only-wiring class as
+  # core.go above — E2E boots and exercises it, but the unit coverage profile
+  # can't see the construction-failure WarnContext branches. (holomush-hz0v4.14.26)
+  - "cmd/holomush/sub_grpc.go"
   # Metric stub hooks — intentionally unused no-op call-site anchors
   # awaiting future instrumentation. They exist so future metric wiring
   # has a stable call site; there is no behavior to test.

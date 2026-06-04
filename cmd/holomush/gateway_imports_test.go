@@ -57,7 +57,7 @@ var coreOnlyFiles = map[string]struct{}{
 	"cmd_admin_test.go":      {},
 	"cmd_admin_totp.go":      {},
 	"cmd_admin_totp_deps.go": {},
-	// Phase 7 INV-P7-9 + INV-P7-7 + INV-P7-15 wiring (holomush-1r0v.5).
+	// Phase 7 INV-CRYPTO-45 + INV-CRYPTO-42 + INV-CRYPTO-50 wiring (holomush-1r0v.5).
 	// Constructs the boot-time PluginDowngradeFence helpers (crypto_keys
 	// lookup, violation emitter). Imports eventbus/history + core; core-only
 	// by design (matches crypto_rekey_wiring.go precedent). The KeySelector

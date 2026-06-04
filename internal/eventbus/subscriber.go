@@ -670,14 +670,14 @@ func decodeAndAuthorize(
 			With("codec", string(codecName)).Wrap(err)
 	}
 
-	// Plugin recipient branch: INV-19 — every plugin decrypt MUST produce an
+	// Plugin recipient branch: INV-CRYPTO-11 — every plugin decrypt MUST produce an
 	// audit record. Fail closed if the emitter is absent or fails unexpectedly.
 	if identity.Kind == IdentityKindPlugin {
 		if auditEm == nil {
 			// AuthGuard permitted the read but no emitter is wired — configuration
 			// error. Fail closed rather than deliver plaintext without audit.
 			return Event{}, false, oops.Code("EVENTBUS_AUDIT_EMITTER_NIL").
-				Errorf("AuthGuard permitted plugin decrypt but no DecryptAuditEmitter configured (INV-19)")
+				Errorf("AuthGuard permitted plugin decrypt but no DecryptAuditEmitter configured (INV-CRYPTO-11)")
 		}
 		rec := PluginDecryptRecord{
 			PluginName:       identity.PluginName,
@@ -704,7 +704,7 @@ func decodeAndAuthorize(
 			}
 			return Event{}, false, oops.Code("EVENTBUS_AUDIT_EMIT_FAILED").
 				With("emit_error", emitErr.Error()).
-				Errorf("plugin decrypt audit emit failed — cannot confirm audit landed (INV-19)")
+				Errorf("plugin decrypt audit emit failed — cannot confirm audit landed (INV-CRYPTO-11)")
 		}
 	}
 

@@ -16,7 +16,7 @@ import (
 type EventID = ulid.ULID
 
 // ColdRow holds the row fields from events_audit used to construct an Envelope
-// in the INV-39 fallback path. Populated by cold_postgres.LookupByID.
+// in the INV-CRYPTO-22 fallback path. Populated by cold_postgres.LookupByID.
 type ColdRow struct {
 	EventID    EventID
 	Subject    string
@@ -68,7 +68,7 @@ func NewEnvelopeFromColdRow(row ColdRow) Envelope {
 // the fields in hand directly (not from a cold-tier row). All zero values are
 // valid (identity codec, no DEK, empty payload, no subject/type/timestamp);
 // hot-tier callers that need full envelope metadata SHOULD populate every
-// field rather than relying on zero defaults — INV-25 AAD construction and
+// field rather than relying on zero defaults — INV-CRYPTO-14 AAD construction and
 // the history dispatch path both read Subject and Type.
 type EnvelopeFields struct {
 	EventID    EventID

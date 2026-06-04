@@ -104,6 +104,21 @@ scopes:
       - "cmd/holomush/admin_read_stream_e2e_test.go"
       - "cmd/holomush/admin_authenticate_e2e_test.go"
       - "cmd/holomush/readstream_wiring_test.go"
+      # .14.26 missed-crypto completeness sweep: master/RB/P7 crypto tokens in
+      # internal/eventbus/ root + cmd/holomush wiring/E2E that the .14.15 survey
+      # (scoped to crypto/** + history/**) and the .14.23 cmd/ subset missed. All
+      # genuine crypto annotations mapped to existing INV-CRYPTO ids; these files
+      # carry foreign tokens too (GW/RB-other/reader-opts), so shared not owned.
+      - "internal/eventbus/envelope.go"
+      - "internal/eventbus/subscriber.go"
+      - "internal/eventbus/decode_delivery_test.go"
+      - "cmd/holomush/core.go"
+      - "cmd/holomush/sub_grpc.go"
+      - "cmd/holomush/sub_grpc_test.go"
+      - "cmd/holomush/phase7_fence_wiring.go"
+      - "cmd/holomush/phase7_fence_wiring_test.go"
+      - "cmd/holomush/gateway_imports_test.go"
+      - "cmd/holomush/admin_rekey_e2e_test.go"
 
   - name: INV-PRIVACY
     description: "Stream history temporal floors, scope gating, guest-session bounds, reattach/Idle arrival-timestamp semantics"
@@ -643,6 +658,7 @@ invariants:
     binding: pending
     refs:
       - {file: "internal/eventbus/history/tier_crypto_options_test.go", token: "INV-6"}
+      - {file: "cmd/holomush/sub_grpc_test.go", token: "INV-6"}
   - id: INV-CRYPTO-6
     scope: INV-CRYPTO
     origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
@@ -704,6 +720,8 @@ invariants:
       - {file: "test/integration/privacy/scene_history_readback_test.go", token: "INV-19"}
       - {file: "internal/testsupport/integrationtest/crypto.go", token: "INV-19"}
       - {file: "internal/testsupport/integrationtest/harness.go", token: "INV-19"}
+      - {file: "internal/eventbus/subscriber.go", token: "INV-19"}
+      - {file: "internal/eventbus/decode_delivery_test.go", token: "INV-19"}
   - id: INV-CRYPTO-12
     scope: INV-CRYPTO
     origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
@@ -732,6 +750,7 @@ invariants:
       - {file: "internal/eventbus/crypto/aad/aad_test.go", token: "INV-25"}
       - {file: "internal/eventbus/history/plugin_aad_adapter.go", token: "INV-25"}
       - {file: "test/integration/crypto/emit_test.go", token: "INV-25"}
+      - {file: "internal/eventbus/envelope.go", token: "INV-25"}
   - id: INV-CRYPTO-15
     scope: INV-CRYPTO
     origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
@@ -745,6 +764,7 @@ invariants:
       - {file: "internal/eventbus/history/plugin_downgrade_fence_test.go", token: "INV-26"}
       - {file: "test/integration/crypto/metadata_only_test.go", token: "INV-26"}
       - {file: "internal/eventbus/types.go", token: "INV-26"}
+      - {file: "api/proto/holomush/core/v1/core.proto", token: "INV-26"}
   - id: INV-CRYPTO-16
     scope: INV-CRYPTO
     origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
@@ -788,6 +808,9 @@ invariants:
       - {file: "internal/eventbus/crypto/kek/local_aead.go", token: "INV-33"}
       - {file: "internal/eventbus/crypto/kek/local_aead_integration_test.go", token: "INV-33"}
       - {file: "internal/eventbus/crypto/kek/none.go", token: "INV-33"}
+      - {file: "cmd/holomush/admin_authenticate_e2e_test.go", token: "INV-33"}
+      - {file: "cmd/holomush/admin_read_stream_e2e_test.go", token: "INV-33"}
+      - {file: "cmd/holomush/admin_rekey_e2e_test.go", token: "INV-33"}
   - id: INV-CRYPTO-20
     scope: INV-CRYPTO
     origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
@@ -822,6 +845,10 @@ invariants:
       - {file: "internal/eventbus/history/source/resolver.go", token: "INV-39"}
       - {file: "internal/eventbus/history/tier.go", token: "INV-39"}
       - {file: "test/integration/crypto/rekey_inv39_test.go", token: "INV-39"}
+      - {file: "internal/eventbus/envelope.go", token: "INV-39"}
+      - {file: "cmd/holomush/core.go", token: "INV-39"}
+      - {file: "cmd/holomush/sub_grpc.go", token: "INV-39"}
+      - {file: "cmd/holomush/sub_grpc_test.go", token: "INV-39"}
   - id: INV-CRYPTO-23
     scope: INV-CRYPTO
     origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
@@ -831,6 +858,7 @@ invariants:
     binding: pending
     refs:
       - {file: "internal/admin/readstream/handler.go", token: "INV-42"}
+      - {file: "cmd/holomush/admin_read_stream_e2e_test.go", token: "INV-42"}
   - id: INV-CRYPTO-24
     scope: INV-CRYPTO
     origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
@@ -854,6 +882,7 @@ invariants:
       - {file: "internal/admin/readstream/decrypt.go", token: "INV-49"}
       - {file: "internal/eventbus/history/cold_postgres.go", token: "INV-49"}
       - {file: "test/integration/crypto/inv49_envelope_roundtrip_test.go", token: "INV-49"}
+      - {file: "test/integration/eventbus_e2e/plugin_audit_round_trip_test.go", token: "INV-49"}
   - id: INV-CRYPTO-26
     scope: INV-CRYPTO
     origin_spec: "docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"
@@ -886,6 +915,7 @@ invariants:
       - {file: "internal/plugin/manager_test.go", token: "INV-RB-2"}
       - {file: "plugins/core-scenes/main_test.go", token: "INV-RB-2"}
       - {file: "test/integration/crypto/readback_test.go", token: "INV-RB-2"}
+      - {file: "cmd/holomush/sub_grpc.go", token: "INV-RB-2"}
   - id: INV-CRYPTO-28
     scope: INV-CRYPTO
     origin_spec: "docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"
@@ -948,6 +978,7 @@ invariants:
       - {file: "internal/eventbus/history/tier.go", token: "INV-RB-7"}
       - {file: "test/integration/crypto/readback_test.go", token: "INV-RB-7"}
       - {file: "test/integration/privacy/scene_history_readback_test.go", token: "INV-RB-7"}
+      - {file: "cmd/holomush/sub_grpc.go", token: "INV-RB-7"}
   - id: INV-CRYPTO-33
     scope: INV-CRYPTO
     origin_spec: "docs/superpowers/specs/2026-05-25-plugin-readback-decrypt-design.md"
@@ -1088,6 +1119,10 @@ invariants:
       - {file: "test/integration/plugin/testdata/test_downgrade_attacker/main.go", token: "INV-P7-7"}
       - {file: "test/integration/plugin/testdata/test_downgrade_attacker/plugin.yaml", token: "INV-P7-7"}
       - {file: "test/integration/privacy/scene_history_readback_test.go", token: "INV-P7-7"}
+      - {file: "cmd/holomush/sub_grpc.go", token: "INV-P7-7"}
+      - {file: "cmd/holomush/phase7_fence_wiring.go", token: "INV-P7-7"}
+      - {file: "cmd/holomush/phase7_fence_wiring_test.go", token: "INV-P7-7"}
+      - {file: "cmd/holomush/gateway_imports_test.go", token: "INV-P7-7"}
   - id: INV-CRYPTO-43
     scope: INV-CRYPTO
     origin_spec: "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
@@ -1125,6 +1160,9 @@ invariants:
       - {file: "internal/testsupport/integrationtest/crypto.go", token: "INV-P7-9"}
       - {file: "internal/testsupport/integrationtest/harness.go", token: "INV-P7-9"}
       - {file: "test/integration/eventbus_e2e/dispatcher_selector_identity_test.go", token: "INV-P7-9"}
+      - {file: "cmd/holomush/core.go", token: "INV-P7-9"}
+      - {file: "cmd/holomush/sub_grpc.go", token: "INV-P7-9"}
+      - {file: "cmd/holomush/gateway_imports_test.go", token: "INV-P7-9"}
   - id: INV-CRYPTO-46
     scope: INV-CRYPTO
     origin_spec: "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
@@ -1191,6 +1229,8 @@ invariants:
       - {file: "internal/plugin/cryptowiring/cryptowiring.go", token: "INV-P7-15"}
       - {file: "test/integration/eventbus_e2e/plugin_downgrade_attacker_test.go", token: "INV-P7-15"}
       - {file: "test/integration/privacy/scene_history_readback_test.go", token: "INV-P7-15"}
+      - {file: "cmd/holomush/sub_grpc.go", token: "INV-P7-15"}
+      - {file: "cmd/holomush/gateway_imports_test.go", token: "INV-P7-15"}
   - id: INV-CRYPTO-51
     scope: INV-CRYPTO
     origin_spec: "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"

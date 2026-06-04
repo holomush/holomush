@@ -19,7 +19,7 @@ import (
 
 // newViolationEmitter constructs a ViolationEmitter that publishes
 // `events.<game>.system.plugin_integrity_violation` events on every
-// PluginDowngradeFence INV-P7-7 refusal. The events.> prefix is required
+// PluginDowngradeFence INV-CRYPTO-42 refusal. The events.> prefix is required
 // by INV-E26 (Phase 5 sub-epic E §3.6) — only the EVENTS JetStream
 // SubjectFilter feeds events_audit. The emitter MUST NOT block —
 // the fence already enforces a 100ms ceiling around EmitViolation, but

@@ -530,7 +530,7 @@ func TestDecodeDeliveryAuthGuardPermitDecodeErrorPropagates(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "EVENTBUS_CODEC_DECODE_FAILED")
 }
 
-// --- Round 5: nil-dekMgr and INV-19 error paths ---
+// --- Round 5: nil-dekMgr and INV-CRYPTO-11 error paths ---
 
 // TestDecodeDeliveryNilDEKManagerAfterPermitFailsClosed verifies that when
 // the AuthGuard permits but dekMgr is nil (misconfiguration), decodeAndAuthorize
@@ -555,7 +555,7 @@ func TestDecodeDeliveryNilDEKManagerAfterPermitFailsClosed(t *testing.T) {
 }
 
 // TestDecodeDeliveryPluginIdentityWithNilAuditEmitterFailsClosed verifies
-// INV-19: when a plugin identity receives a permit decision but the audit
+// INV-CRYPTO-11: when a plugin identity receives a permit decision but the audit
 // emitter is nil (configuration error), decodeAndAuthorize must fail closed
 // with EVENTBUS_AUDIT_EMITTER_NIL rather than delivering plaintext without
 // an audit record.

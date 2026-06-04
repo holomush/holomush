@@ -2150,7 +2150,7 @@ export enum NoPlaintextReason {
    * either because the type is in the always-sensitive manifest set and the
    * plugin returned an identity codec (INV-CRYPTO-42), or because the dek_ref is
    * unknown / absent for a non-identity codec (INV-CRYPTO-50). The original event_id
-   * is preserved; payload is empty per master INV-26.
+   * is preserved; payload is empty per master INV-CRYPTO-15.
    *
    * @generated from enum value: NO_PLAINTEXT_REASON_DOWNGRADE_REFUSED = 7;
    */

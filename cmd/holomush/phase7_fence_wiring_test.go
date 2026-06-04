@@ -33,7 +33,7 @@ func (f *fakeRenderingInnerPublisher) Publish(_ context.Context, ev eventbus.Eve
 // path goes through RenderingPublisher, which rejects unregistered event
 // types with EMIT_UNKNOWN_VERB. Without `system:plugin_integrity_violation`
 // in the builtin verb registry, every fence refusal silently drops the
-// documented operator audit signal — INV-P7-7's audit-emit half is dead.
+// documented operator audit signal — INV-CRYPTO-42's audit-emit half is dead.
 //
 // This test wires a production-shaped emitter (newViolationEmitter) over a
 // REAL RenderingPublisher backed by core.BootstrapVerbRegistry, then
@@ -66,7 +66,7 @@ func TestViolationEmitterReachesRenderingPublisher(t *testing.T) {
 		"AUDIT_ROW_DOWNGRADE_DETECTED",
 	)
 	require.NoError(t, err,
-		"INV-P7-7 audit emit MUST succeed through the production RenderingPublisher; "+
+		"INV-CRYPTO-42 audit emit MUST succeed through the production RenderingPublisher; "+
 			"if this fails with EMIT_UNKNOWN_VERB, the system:plugin_integrity_violation "+
 			"verb is missing from internal/core/builtins.go::registerBuiltinTypes")
 
