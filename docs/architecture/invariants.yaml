@@ -636,12 +636,14 @@ scopes:
       - "internal/command/commandquery/**"
       - "internal/plugin/hostfunc/commands.go"
       - "internal/plugin/hostfunc/commands_test.go"
+      - "internal/plugin/help_integration_test.go"
       - "internal/grpc/list_available_commands.go"
       - "test/integration/plugin/command_introspection_parity_test.go"
       - "test/integration/plugin/testdata/cmd_introspection_plugin/main.go"
       - "test/integration/plugin/testdata/cmd_introspection_plugin/plugin.yaml"
     shared_files:
       - "internal/plugin/hostfunc/functions.go"
+      - "internal/plugin/setup/subsystem.go"
       - "internal/testsupport/integrationtest/harness.go"
       - "test/integration/wholesystem/census_test.go"
 
@@ -3451,6 +3453,8 @@ invariants:
       - {file: "internal/plugin/hostfunc/functions.go", token: "INV-1"}
       - {file: "internal/testsupport/integrationtest/harness.go", token: "INV-1"}
       - {file: "test/integration/wholesystem/census_test.go", token: "INV-1"}
+      - {file: "internal/plugin/help_integration_test.go", token: "INV-1"}
+      - {file: "internal/plugin/setup/subsystem.go", token: "INV-1"}
   - id: INV-COMMAND-2
     scope: INV-COMMAND
     origin_spec: "docs/superpowers/specs/2026-05-29-recognized-command-chip-design.md"

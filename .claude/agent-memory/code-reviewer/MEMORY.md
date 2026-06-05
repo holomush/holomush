@@ -194,3 +194,23 @@
   foreign PLUGIN-27/32 / 13-scope / wholesystem-INV-5 tokens, residual-skipped).
   Zero executable edits; dense 1..3; no generated artifact. Encountered:
   hz0v4.14.27 PR B (2026-06-04) — READY.
+
+- **.14.27 PR C: 2 missed command-vis sites + residual-classification doc (the
+  .14.17 completeness record) — READY.** Tiny: help_integration_test.go (→
+  COMMAND owned_paths) + setup/subsystem.go (→ COMMAND shared_files), INV-1 →
+  INV-COMMAND-1 comment-only. CRITICAL leftover-token check HELD: subsystem.go
+  RETAINS INV-PLUGIN-25/3, INV-SCENE-38, INV-EVENTBUS-11 (only its INV-1
+  migrated); help_integration_test.go → zero bare INV-N. Partition: help_int is
+  in COMMAND owned_paths ONCE (no collision); subsystem.go is shared by 4 scopes
+  (SCENE/PLUGIN/EVENTBUS/COMMAND shared_files) — legal (only owned_paths must
+  partition). PR-B's 6 ref files ALL already carry canonical INV-COMMAND-1 (this
+  PR only adds the 2 missed). Doc: the spec-token scan trap (.14.23) — `rg -o
+  'INV-<registered-scope>-N'` over the specfile returned ONLY existing tokens
+  (CRYPTO-1/3/16, PLUGIN-22/33, SCENE-3, COMMAND-1); the dropped slot is written
+  as LEGACY `INV-TS-8` (NOT `INV-STORE-8`), so binding-guard-inert. All residual
+  doc claims verified TRUE against repo: INV-BRANDING/INV-DOCS status:pending +
+  0 entries; world service{,_test}.go INV-1/2/2b genuinely bare & NOT registry-
+  owned; gorules dekmaterial*/codeckeybytesallowlist cite INV-27→canonical
+  INV-CRYPTO-16 (legacy line confirms), filed as bead .14.28 (exists). Guards
+  green (provenance/partition/binding). Encountered: hz0v4.14.27 PR C
+  (2026-06-04) — READY.

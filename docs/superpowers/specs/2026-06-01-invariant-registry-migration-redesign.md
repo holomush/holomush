@@ -298,4 +298,62 @@ Binding backfill (`holomush-hz0v4.11`) remains a follow-up.
 - No bare `INV-N` remains in any `migrated` scope.
 - `task lint` and `task test` are green; per-family meta-tests retired only
   after the guard subsumes them.
+
+## Residual classification (epic `holomush-hz0v4.14.27`, final)
+
+The `.14.26` census surfaced bare `INV-N` tokens in namespaces §2.1 never
+enumerated — per-spec / per-bead **local** numbering. Per the 2026-06-04
+decision (*new scopes for coherent families; exempt one-off / per-bead /
+meta-test local numbering*), the full residual is classified into three
+buckets. This section is the completeness record for `.14.17` — every remaining
+bare `INV-N` in the tree is accounted for here.
+
+### 1. Migrated scopes (12) — done
+
+`INV-CRYPTO`, `INV-PRIVACY`, `INV-PRESENCE`, `INV-SCENE`, `INV-PLUGIN`,
+`INV-EVENTBUS`, `INV-CLUSTER`, `INV-ACCESS`, `INV-SESSION`, `INV-STORE`,
+`INV-TELEMETRY`, and `INV-COMMAND` (new in `.14.27` PR B — the command-surfacing
+family: single visibility filter, runtime parity, self-scoped enumeration).
+`.14.27` also added the `INV-S5` mechanism family `INV-PLUGIN-33..39` (PR A) and
+closed two missed sites (`plugin.proto INV-1 → INV-PLUGIN-22`;
+`help_integration_test.go` + `setup/subsystem.go` command-vis `INV-1 →
+INV-COMMAND-1`, PR C).
+
+### 2. Pending scopes (2) — future per-scope migration, NOT exempt
+
+`INV-BRANDING` (owns `site/src/styles/custom.css`; INV-1/3/5/6/7 brand-token
+invariants from `.claude/rules/branding.md`) and `INV-DOCS` (docs-IA /
+docs-quality invariants in `scripts/check-docs-ia.sh`, `check-docs-quality.sh`,
+and their `scripts/tests/*.bats`). Both are `status: pending` with zero entries,
+so the provenance guard does NOT residual-walk their `owned_paths` — their bare
+`INV-N` is expected, awaiting each scope's own migration pass. These are tracked
+separately from `.14.27`.
+
+### 3. Exempt — out-of-registry local numbering (closed-world LEFT)
+
+Genuinely per-spec / per-bead / per-tool local `INV-N` that does NOT belong to
+any cross-cutting registry family. None of these dirs is owned by a `migrated`
+scope, so none trips the residual guard. Do **not** migrate; do **not** re-flag:
+
+| Namespace | Sites | Why exempt |
+| --- | --- | --- |
+| world ABAC | `internal/world/service{,_test}.go` (INV-1/2/2b, `holomush-72ou`) | bead-local; 3 invariants from one design, not a recurring family |
+| auth config | `internal/auth/player.go` (INV-10) | single token, plugin-config key opacity |
+| settings | `internal/plugin/goplugin/host_service.go` (INV-6) | single token, settings-sharing |
+| web composer | `web/src/lib/**` (composerChip/CommandInput/ModeChip/commandListStore/themeStore INV-1..7) | web-frontend per-feature local numbering (incl. chip-design INV-3/4/6/7, the presentation half of the command-surfacing feature whose backend half is `INV-COMMAND`) |
+| meta-tests | `test/meta/*_test.go` (ci_required_jobs INV-5, depguard INV-1/2/3, proto_doc_comments INV-1..5, pr_prep_fast_lane INV-4, quarantine_registry INV-2, tooling_no_mandatory_int INV-6, inv_binding INV-53 [historical]) | each meta-test numbers its own spec locally |
+| CI / tooling | `Taskfile.yaml`, `scripts/*.sh`, `scripts/tests/*.bats` (INV-N) | per-script local numbering |
+| migration tooling | `cmd/inv-migrate/**`, `cmd/inv-render/**`, `test/meta/invariant_registry_test.go` (INV-3/4/31 regex examples) | the tool's own test fixtures — must NOT self-rewrite |
+| gateway fixtures | `internal/gateway_invariants/meta_test.go` (INV-GW-*) | RETAINED regex fixtures for the boundary matcher |
+| wholesystem | `test/integration/wholesystem/census_test.go` (INV-5) | whole-system plugin-load census, distinct local numbering (co-located foreign, `INV-COMMAND` shared_file) |
+| dropped | `internal/store/spec_meta_test.go` (INV-TS-8) | a deliberately dropped invariant — the `INV-STORE` scope intentionally skips that slot (no successor entry) |
+
+### 4. Deferred miss — `gorules` crypto analyzers
+
+`gorules/analyzers/dekmaterial*` and `codeckeybytesallowlist` cite master
+`INV-27` (dek.Material opacity → canonical `INV-CRYPTO-16`) in their linter `Doc`
+strings and diagnostic messages. This is a genuine *crypto* miss (stale ID in
+user-facing lint output), not cat-B — tracked as its own crypto-sweep bead
+(diagnostic-string change ⇒ crypto-reviewer), out of `.14.27` scope.
+
 <!-- adr-capture: sha256=54306f703f33c26d; session=cli; ts=2026-06-01T15:03:24Z; adrs= -->

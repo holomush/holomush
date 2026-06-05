@@ -194,7 +194,7 @@ func setupHelpTestWithEngine(engine accesstypes.AccessPolicyEngine) (*helpFixtur
 	}
 
 	registry := &mockHelpCommandRegistry{}
-	// Delegate to the single ABAC-filtered enumerator (INV-1). The help plugin's
+	// Delegate to the single ABAC-filtered enumerator (INV-COMMAND-1). The help plugin's
 	// list_commands/get_command_help host functions go through commandquery.Querier;
 	// there is no second filter in hostfunc. nil AliasLister: these fixtures don't
 	// exercise system aliases.
