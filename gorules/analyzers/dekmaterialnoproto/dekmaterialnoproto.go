@@ -3,7 +3,7 @@
 
 // Package dekmaterialnoproto forbids passing dek.Material (or
 // *dek.Material) to google.golang.org/protobuf/proto sinks
-// (proto.Marshal, (MarshalOptions).Marshal). Part of INV-27 (Material
+// (proto.Marshal, (MarshalOptions).Marshal). Part of INV-CRYPTO-16 (Material
 // non-leakage).
 //
 // Forward-defensive: dek.Material does not implement proto.Message
@@ -33,7 +33,7 @@ var sinks = []holomushlint.Sink{
 
 var Analyzer = &analysis.Analyzer{
 	Name:     "dekmaterialnoproto",
-	Doc:      "INV-27: dek.Material MUST NOT be passed to google.golang.org/protobuf/proto",
+	Doc:      "INV-CRYPTO-16: dek.Material MUST NOT be passed to google.golang.org/protobuf/proto",
 	Requires: []*analysis.Analyzer{inspect.Analyzer},
 	Run:      run,
 }
@@ -48,7 +48,7 @@ func run(pass *analysis.Pass) (any, error) {
 		for _, arg := range call.Args {
 			if holomushlint.IsDEKMaterialArg(pass, arg) {
 				pass.Reportf(arg.Pos(),
-					"INV-27: dek.Material MUST NOT be passed to %s — Material is opaque by design (see internal/eventbus/crypto/dek/material.go and bead holomush-46ya for context)",
+					"INV-CRYPTO-16: dek.Material MUST NOT be passed to %s — Material is opaque by design (see internal/eventbus/crypto/dek/material.go and bead holomush-46ya for context)",
 					sinkDescription)
 				return
 			}

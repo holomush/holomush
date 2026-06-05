@@ -30,7 +30,7 @@ const (
 	codecPkg = "github.com/holomush/holomush/internal/eventbus/codec"
 	keyType  = "Key"
 	field    = "Bytes"
-	message  = "INV-27 (residual defense): codec.Key.Bytes reads are restricted to internal/eventbus/codec/... and internal/eventbus/crypto/... — Material exposure goes through dek.Material.AsCodecKey only"
+	message  = "INV-CRYPTO-16 (residual defense): codec.Key.Bytes reads are restricted to internal/eventbus/codec/... and internal/eventbus/crypto/... — Material exposure goes through dek.Material.AsCodecKey only"
 )
 
 var allowlist = []string{
@@ -42,7 +42,7 @@ var allowlist = []string{
 // crypto/ package trees.
 var Analyzer = &analysis.Analyzer{
 	Name:     "codeckeybytesallowlist",
-	Doc:      "INV-27 residual defense: codec.Key.Bytes reads are restricted",
+	Doc:      "INV-CRYPTO-16 residual defense: codec.Key.Bytes reads are restricted",
 	Requires: []*analysis.Analyzer{inspect.Analyzer},
 	Run:      run,
 }

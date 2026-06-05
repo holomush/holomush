@@ -25,9 +25,9 @@ import (
 )
 
 func leakViaMarshal(m *dek.Material) ([]byte, error) {
-	return proto.Marshal(m) // want `INV-27: dek.Material MUST NOT be passed to google.golang.org/protobuf/proto`
+	return proto.Marshal(m) // want `INV-CRYPTO-16: dek.Material MUST NOT be passed to google.golang.org/protobuf/proto`
 }
 
 func leakViaOpts(m *dek.Material) ([]byte, error) {
-	return proto.MarshalOptions{Deterministic: true}.Marshal(m) // want `INV-27: dek.Material MUST NOT be passed to google.golang.org/protobuf/proto`
+	return proto.MarshalOptions{Deterministic: true}.Marshal(m) // want `INV-CRYPTO-16: dek.Material MUST NOT be passed to google.golang.org/protobuf/proto`
 }

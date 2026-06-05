@@ -18,15 +18,15 @@ import (
 )
 
 func leakViaMarshal(m *dek.Material) ([]byte, error) {
-	return json.Marshal(m) // want `INV-27: dek.Material MUST NOT be passed to encoding/json`
+	return json.Marshal(m) // want `INV-CRYPTO-16: dek.Material MUST NOT be passed to encoding/json`
 }
 
 func leakViaMarshalIndent(m *dek.Material) ([]byte, error) {
-	return json.MarshalIndent(m, "", "  ") // want `INV-27: dek.Material MUST NOT be passed to encoding/json`
+	return json.MarshalIndent(m, "", "  ") // want `INV-CRYPTO-16: dek.Material MUST NOT be passed to encoding/json`
 }
 
 func leakViaEncoder(m *dek.Material, w io.Writer) error {
-	return json.NewEncoder(w).Encode(m) // want `INV-27: dek.Material MUST NOT be passed to encoding/json`
+	return json.NewEncoder(w).Encode(m) // want `INV-CRYPTO-16: dek.Material MUST NOT be passed to encoding/json`
 }
 
 // Conversion-wrapped bypass: any(m) wraps the *dek.Material into an
@@ -34,13 +34,13 @@ func leakViaEncoder(m *dek.Material, w io.Writer) error {
 // The analyzer must unwrap conversion-call expressions before the type
 // check. CodeRabbit finding on PR #3457.
 func leakViaAnyConversion(m *dek.Material) ([]byte, error) {
-	return json.Marshal(any(m)) // want `INV-27: dek.Material MUST NOT be passed to encoding/json`
+	return json.Marshal(any(m)) // want `INV-CRYPTO-16: dek.Material MUST NOT be passed to encoding/json`
 }
 
 // Parenthesized conversion: (any)(m) — unwrap ParenExpr around the
 // type-conversion CallExpr too.
 func leakViaParenConversion(m *dek.Material) ([]byte, error) {
-	return json.Marshal((any)(m)) // want `INV-27: dek.Material MUST NOT be passed to encoding/json`
+	return json.Marshal((any)(m)) // want `INV-CRYPTO-16: dek.Material MUST NOT be passed to encoding/json`
 }
 
 // Alias-type bypass: `type AliasedMaterial = dek.Material` is a Go
@@ -50,5 +50,5 @@ func leakViaParenConversion(m *dek.Material) ([]byte, error) {
 type AliasedMaterial = dek.Material
 
 func leakViaAlias(m *AliasedMaterial) ([]byte, error) {
-	return json.Marshal(m) // want `INV-27: dek.Material MUST NOT be passed to encoding/json`
+	return json.Marshal(m) // want `INV-CRYPTO-16: dek.Material MUST NOT be passed to encoding/json`
 }
